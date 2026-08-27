@@ -1,6 +1,6 @@
-// 実機用 TCP トランスポート (POSIX)。ストリームを 4B BE length-prefix でフレーム化。
-//  - 専用 IO スレッド 1 本 (poll ループ + self-pipe 起床)。コールバックは Runloop に post。
-//  - Windows は後日 ifdef (Winsock 化) 前提の書き方に留める。
+// 実機用 TCP トランスポート (POSIX / Winsock2 — 差異は mesh/socket_compat.h に集約)。
+// ストリームを 4B BE length-prefix でフレーム化。
+//  - 専用 IO スレッド 1 本 (poll ループ + wake ペア起床)。コールバックは Runloop に post。
 // スレッド: 公開 API は任意スレッド可 (内部で IO スレッドへ引き渡す)。
 #pragma once
 

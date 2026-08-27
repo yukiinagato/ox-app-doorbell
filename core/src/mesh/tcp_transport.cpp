@@ -1,23 +1,17 @@
 // TCP トランスポートの実装 (tcp_transport.h 参照)。
-// 1 本の IO スレッドが poll() で listen/接続/送受信を面倒みる。self-pipe で起床。
+// 1 本の IO スレッドが poll で listen/接続/送受信を面倒みる。起床は wake ペア
+// (POSIX=socketpair / Windows=ループバック TCP)。ソケット差異は socket_compat.h に集約。
 // フレーム: [len 4B BE][payload]。コールバックはすべて Runloop へ post。
 #include "mesh/tcp_transport.h"
 
-#include <arpa/inet.h>
-#include <fcntl.h>
-#include <netinet/in.h>
-#include <netinet/tcp.h>
-#include <poll.h>
-#include <sys/socket.h>
-#include <unistd.h>
-
-#include <cerrno>
+#include <algorithm>
 #include <cstring>
 #include <deque>
 #include <mutex>
 #include <thread>
 #include <vector>
 
+#include "mesh/socket_compat.h"
 #include "util/log.h"
 
 namespace db {
@@ -38,14 +32,9 @@ bool parseAddr(const std::string& addr, std::string* host, uint16_t* port) {
   return true;
 }
 
-bool setNonBlock(int fd) {
-  int fl = ::fcntl(fd, F_GETFL, 0);
-  return fl >= 0 && ::fcntl(fd, F_SETFL, fl | O_NONBLOCK) == 0;
-}
-
-std::string peerName(int fd) {
+std::string peerName(net::socket_t fd) {
   sockaddr_in a{};
-  socklen_t len = sizeof(a);
+  net::socklen_v len = sizeof(a);
   if (::getpeername(fd, reinterpret_cast<sockaddr*>(&a), &len) != 0) return "";
   char buf[64];
   ::inet_ntop(AF_INET, &a.sin_addr, buf, sizeof(buf));
@@ -64,19 +53,20 @@ class TcpConn;
 
 struct TcpTransport::Impl : public std::enable_shared_from_this<TcpTransport::Impl> {
   Runloop& loop;
+  net::Init winsock;  // Winsock 参照 (POSIX では no-op)。ソケットより先に構築される
   std::mutex mu;
   std::thread io;
   bool started = false;
   bool stopping = false;
-  int wake_pipe[2] = {-1, -1};
+  net::socket_t wake_pipe[2] = {net::kInvalidSocket, net::kInvalidSocket};
   std::deque<std::function<void()>> cmds;  // IO スレッドで実行するコマンド
 
-  int listen_fd = -1;
+  net::socket_t listen_fd = net::kInvalidSocket;
   std::string listen_addr;
   std::function<void(ConnPtr)> on_accept;
 
   struct PendingConnect {
-    int fd;
+    net::socket_t fd;
     std::function<void(ConnPtr)> cb;
     int64_t deadline;
   };
@@ -96,7 +86,7 @@ struct TcpTransport::Impl : public std::enable_shared_from_this<TcpTransport::Im
 // 1 本の TCP 接続。outbox/コールバックは Impl::mu で保護。
 class TcpConn : public IConn, public std::enable_shared_from_this<TcpConn> {
  public:
-  TcpConn(std::shared_ptr<TcpTransport::Impl> impl, int fd, std::string remote)
+  TcpConn(std::shared_ptr<TcpTransport::Impl> impl, net::socket_t fd, std::string remote)
       : impl_(std::move(impl)), fd_(fd), remote_(std::move(remote)) {}
 
   void send(const Bytes& frame) override {
@@ -155,7 +145,7 @@ class TcpConn : public IConn, public std::enable_shared_from_this<TcpConn> {
 
   // ---- IO スレッド側 ----
 
-  int fd() const { return fd_; }
+  net::socket_t fd() const { return fd_; }
   bool wantWrite() {
     std::lock_guard<std::mutex> lk(impl_->mu);
     return !outbox_.empty();
@@ -176,8 +166,8 @@ class TcpConn : public IConn, public std::enable_shared_from_this<TcpConn> {
         chunk = outbox_.front();
         off = out_off_;
       }
-      ssize_t n = ::send(fd_, chunk.data() + off, chunk.size() - off, 0);
-      if (n < 0) return errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR;
+      int n = net::sendSome(fd_, chunk.data() + off, chunk.size() - off);
+      if (n < 0) return net::errWouldBlock(net::lastError());
       std::lock_guard<std::mutex> lk(impl_->mu);
       out_off_ += static_cast<size_t>(n);
       if (out_off_ >= outbox_.front().size()) {
@@ -191,10 +181,10 @@ class TcpConn : public IConn, public std::enable_shared_from_this<TcpConn> {
   bool onReadable() {
     uint8_t buf[65536];
     for (;;) {
-      ssize_t n = ::recv(fd_, buf, sizeof(buf), 0);
+      int n = net::recvSome(fd_, buf, sizeof(buf));
       if (n == 0) return false;  // EOF
       if (n < 0) {
-        if (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR) break;
+        if (net::errWouldBlock(net::lastError())) break;
         return false;
       }
       inbuf_.insert(inbuf_.end(), buf, buf + n);
@@ -260,7 +250,7 @@ class TcpConn : public IConn, public std::enable_shared_from_this<TcpConn> {
  private:
   friend struct TcpTransport::Impl;
   std::shared_ptr<TcpTransport::Impl> impl_;
-  int fd_;
+  net::socket_t fd_;
   std::string remote_;
   bool open_ = true;
   bool closing_ = false;         // 自発 close (flush 後にクローズ)
@@ -278,26 +268,21 @@ class TcpConn : public IConn, public std::enable_shared_from_this<TcpConn> {
 // ---------------------------------------------------------------- Impl
 
 TcpTransport::Impl::~Impl() {
-  if (wake_pipe[0] >= 0) ::close(wake_pipe[0]);
-  if (wake_pipe[1] >= 0) ::close(wake_pipe[1]);
+  if (net::valid(wake_pipe[0])) net::closeSocket(wake_pipe[0]);
+  if (net::valid(wake_pipe[1])) net::closeSocket(wake_pipe[1]);
 }
 
 void TcpTransport::Impl::ensureIoThread() {
   std::lock_guard<std::mutex> lk(mu);
   if (started) return;
-  if (::pipe(wake_pipe) != 0) return;
-  setNonBlock(wake_pipe[0]);
-  setNonBlock(wake_pipe[1]);
+  if (!net::makeWakePair(wake_pipe)) return;
   started = true;
   auto self = shared_from_this();
   io = std::thread([self]() { self->ioMain(); });
 }
 
 void TcpTransport::Impl::wake() {
-  if (wake_pipe[1] >= 0) {
-    const char b = 'w';
-    (void)!::write(wake_pipe[1], &b, 1);
-  }
+  if (net::valid(wake_pipe[1])) net::wakeSignal(wake_pipe[1]);
 }
 
 void TcpTransport::Impl::postCmd(std::function<void()> fn) {
@@ -324,17 +309,17 @@ void TcpTransport::Impl::ioMain() {
     {
       std::unique_lock<std::mutex> lk(mu);
       if (stopping) {  // 全 fd を回収して終了 (markClosed は mu を取るため unlock 後に)
-        const int lfd2 = listen_fd;
-        listen_fd = -1;
+        const net::socket_t lfd2 = listen_fd;
+        listen_fd = net::kInvalidSocket;
         auto pcs = std::move(connecting);
         connecting.clear();
         auto cs = std::move(conns);
         conns.clear();
         lk.unlock();
-        if (lfd2 >= 0) ::close(lfd2);
-        for (auto& pc : pcs) ::close(pc.fd);
+        if (net::valid(lfd2)) net::closeSocket(lfd2);
+        for (auto& pc : pcs) net::closeSocket(pc.fd);
         for (auto& c : cs) {
-          ::close(c->fd());
+          net::closeSocket(c->fd());
           c->markClosed(false);
         }
         return;
@@ -342,14 +327,14 @@ void TcpTransport::Impl::ioMain() {
     }
 
     // poll セット構築
-    std::vector<pollfd> pfds;
+    std::vector<net::pollfd_t> pfds;
     std::vector<std::shared_ptr<TcpConn>> pconns;
-    int lfd;
+    net::socket_t lfd;
     {
       std::lock_guard<std::mutex> lk(mu);
       pfds.push_back({wake_pipe[0], POLLIN, 0});
       lfd = listen_fd;
-      if (lfd >= 0) pfds.push_back({lfd, POLLIN, 0});
+      if (net::valid(lfd)) pfds.push_back({lfd, POLLIN, 0});
       for (auto& pc : connecting) pfds.push_back({pc.fd, POLLOUT, 0});
       pconns = conns;
     }
@@ -360,25 +345,21 @@ void TcpTransport::Impl::ioMain() {
       pfds.push_back({c->fd(), ev, 0});
     }
 
-    ::poll(pfds.data(), static_cast<nfds_t>(pfds.size()), 200);
+    net::poll(pfds.data(), pfds.size(), 200);
 
-    // wake pipe 排水
-    if (pfds[0].revents & POLLIN) {
-      char buf[256];
-      while (::read(wake_pipe[0], buf, sizeof(buf)) > 0) {
-      }
-    }
+    // wake ペア排水
+    if (pfds[0].revents & POLLIN) net::wakeDrain(wake_pipe[0]);
 
     // accept
     size_t idx = 1;
-    if (lfd >= 0) {
+    if (net::valid(lfd)) {
       if (pfds[idx].revents & POLLIN) {
         for (;;) {
-          int fd = ::accept(lfd, nullptr, nullptr);
-          if (fd < 0) break;
-          setNonBlock(fd);
+          net::socket_t fd = ::accept(lfd, nullptr, nullptr);
+          if (!net::valid(fd)) break;
+          net::setNonBlock(fd);
           int yes = 1;
-          ::setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &yes, sizeof(yes));
+          net::setSockOpt(fd, IPPROTO_TCP, TCP_NODELAY, &yes, sizeof(yes));
           auto conn = std::make_shared<TcpConn>(shared_from_this(), fd, peerName(fd));
           std::function<void(ConnPtr)> cb;
           {
@@ -408,13 +389,11 @@ void TcpTransport::Impl::ioMain() {
         }
       }
       if (writable) {
-        int err = 0;
-        socklen_t len = sizeof(err);
-        ::getsockopt(pc.fd, SOL_SOCKET, SO_ERROR, &err, &len);
+        const int err = net::getSockError(pc.fd);
         auto cb = pc.cb;
         if (err == 0) {
           int yes = 1;
-          ::setsockopt(pc.fd, IPPROTO_TCP, TCP_NODELAY, &yes, sizeof(yes));
+          net::setSockOpt(pc.fd, IPPROTO_TCP, TCP_NODELAY, &yes, sizeof(yes));
           auto conn = std::make_shared<TcpConn>(shared_from_this(), pc.fd, peerName(pc.fd));
           {
             std::lock_guard<std::mutex> lk(mu);
@@ -422,11 +401,11 @@ void TcpTransport::Impl::ioMain() {
           }
           loop.post([cb, conn]() { cb(conn); });
         } else {
-          ::close(pc.fd);
+          net::closeSocket(pc.fd);
           loop.post([cb]() { cb(nullptr); });
         }
       } else if (now >= pc.deadline) {
-        ::close(pc.fd);
+        net::closeSocket(pc.fd);
         auto cb = pc.cb;
         loop.post([cb]() { cb(nullptr); });
       } else {
@@ -444,12 +423,12 @@ void TcpTransport::Impl::ioMain() {
       if (ok && (rev & POLLIN)) ok = c->onReadable();
       if (ok && (rev & POLLOUT)) ok = c->onWritable();
       if (ok && c->closingAndDrained()) {  // 自発 close: flush 後にクローズ (通知しない)
-        ::close(c->fd());
+        net::closeSocket(c->fd());
         c->markClosed(false);
         std::lock_guard<std::mutex> lk(mu);
         removeConn(c);
       } else if (!ok) {  // 相手切断/エラー
-        ::close(c->fd());
+        net::closeSocket(c->fd());
         c->markClosed(true);
         std::lock_guard<std::mutex> lk(mu);
         removeConn(c);
@@ -475,10 +454,9 @@ bool TcpTransport::listen(const std::string& addr, std::function<void(ConnPtr)> 
   std::string host;
   uint16_t port = 0;
   if (!parseAddr(addr, &host, &port)) return false;
-  int fd = ::socket(AF_INET, SOCK_STREAM, 0);
-  if (fd < 0) return false;
-  int yes = 1;
-  ::setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes));
+  net::socket_t fd = ::socket(AF_INET, SOCK_STREAM, 0);
+  if (!net::valid(fd)) return false;
+  net::setReuseAddr(fd);
   sockaddr_in a{};
   a.sin_family = AF_INET;
   a.sin_port = htons(port);
@@ -486,14 +464,14 @@ bool TcpTransport::listen(const std::string& addr, std::function<void(ConnPtr)> 
     a.sin_addr.s_addr = htonl(INADDR_ANY);
   }
   if (::bind(fd, reinterpret_cast<sockaddr*>(&a), sizeof(a)) != 0 || ::listen(fd, 16) != 0) {
-    ::close(fd);
+    net::closeSocket(fd);
     return false;
   }
-  setNonBlock(fd);
+  net::setNonBlock(fd);
   {
     std::lock_guard<std::mutex> lk(impl_->mu);
-    if (impl_->listen_fd >= 0) {
-      ::close(fd);
+    if (net::valid(impl_->listen_fd)) {
+      net::closeSocket(fd);
       return false;  // 二重 listen
     }
     impl_->listen_fd = fd;
@@ -509,9 +487,9 @@ void TcpTransport::stopListening() {
   auto impl = impl_;
   impl->postCmd([impl]() {
     std::lock_guard<std::mutex> lk(impl->mu);
-    if (impl->listen_fd >= 0) {
-      ::close(impl->listen_fd);
-      impl->listen_fd = -1;
+    if (net::valid(impl->listen_fd)) {
+      net::closeSocket(impl->listen_fd);
+      impl->listen_fd = net::kInvalidSocket;
     }
     impl->on_accept = nullptr;
   });
@@ -527,26 +505,26 @@ void TcpTransport::connect(const std::string& addr, std::function<void(ConnPtr)>
   impl_->ensureIoThread();
   auto impl = impl_;
   impl->postCmd([impl, host, port, cb]() {
-    int fd = ::socket(AF_INET, SOCK_STREAM, 0);
-    if (fd < 0) {
+    net::socket_t fd = ::socket(AF_INET, SOCK_STREAM, 0);
+    if (!net::valid(fd)) {
       impl->loop.post([cb]() { cb(nullptr); });
       return;
     }
-    setNonBlock(fd);
+    net::setNonBlock(fd);
     sockaddr_in a{};
     a.sin_family = AF_INET;
     a.sin_port = htons(port);
     if (::inet_pton(AF_INET, host.c_str(), &a.sin_addr) != 1) {
-      ::close(fd);
+      net::closeSocket(fd);
       impl->loop.post([cb]() { cb(nullptr); });
       return;
     }
     int r = ::connect(fd, reinterpret_cast<sockaddr*>(&a), sizeof(a));
-    if (r == 0 || errno == EINPROGRESS) {
+    if (r == 0 || net::errConnectInProgress(net::lastError())) {
       std::lock_guard<std::mutex> lk(impl->mu);
       impl->connecting.push_back({fd, cb, steadyMs() + kConnectTimeoutMs});
     } else {
-      ::close(fd);
+      net::closeSocket(fd);
       impl->loop.post([cb]() { cb(nullptr); });
     }
   });

@@ -10,6 +10,7 @@
 #include <string>
 #include <thread>
 
+#include "mesh/socket_compat.h"
 #include "mesh/transport.h"
 #include "util/runloop.h"
 
@@ -36,6 +37,8 @@ class UdpBeacon : public IDiscovery {
   bool openSockets_();
 
   Runloop& loop_;
+  // Winsock 参照 (POSIX では no-op のため maybe_unused)。ソケットより先に構築される
+  [[maybe_unused]] net::Init winsock_;
   std::array<uint8_t, 32> psk_;
   std::string group_;
   uint16_t port_;
@@ -44,8 +47,8 @@ class UdpBeacon : public IDiscovery {
   std::function<void(const DiscoveredPeer&)> on_found_;
   std::string node_id_, adv_addr_;
   uint64_t timer_id_ = 0;
-  int send_fd_ = -1;
-  int recv_fd_ = -1;
+  net::socket_t send_fd_ = net::kInvalidSocket;
+  net::socket_t recv_fd_ = net::kInvalidSocket;
   std::thread recv_thread_;
   std::atomic<bool> stopping_{false};
   std::atomic<int64_t> sent_{0};

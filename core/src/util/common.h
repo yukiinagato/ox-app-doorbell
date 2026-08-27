@@ -18,7 +18,10 @@ inline std::string hexEncode(const Bytes& b) { return hexEncode(b.data(), b.size
 // 不正な16進は false。out は成功時のみ書き換わる。
 bool hexDecode(const std::string& hex, Bytes& out);
 
-// 暗号用途可の乱数 (POSIX: /dev/urandom, Windows: 後日 BCryptGenRandom)
+// 暗号用途可の乱数 (POSIX: /dev/urandom, Windows: BCryptGenRandom)
 Bytes randomBytes(size_t n);
+
+// ディレクトリを 1 階層作成 (既存なら成功扱い)。POSIX は mode 0755。
+bool makeDir(const std::string& path);
 
 }  // namespace db

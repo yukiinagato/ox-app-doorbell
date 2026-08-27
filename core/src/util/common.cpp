@@ -1,8 +1,20 @@
 #include "util/common.h"
 
+#include <cerrno>
 #include <cstdio>
-#include <random>
 #include <stdexcept>
+
+#if defined(_WIN32)
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#include <bcrypt.h>
+#include <direct.h>
+#else
+#include <sys/stat.h>
+#include <sys/types.h>
+#endif
 
 namespace db {
 
@@ -40,10 +52,12 @@ bool hexDecode(const std::string& hex, Bytes& out) {
 
 Bytes randomBytes(size_t n) {
   Bytes out(n);
+  if (n == 0) return out;
 #if defined(_WIN32)
-  // Phase 1 で BCryptGenRandom に差し替える。ホスト開発ではここに来ない。
-  std::random_device rd;
-  for (size_t i = 0; i < n; i++) out[i] = static_cast<uint8_t>(rd());
+  // CNG のシステム既定 RNG (Win7 SP1+)。暗号用途可。
+  NTSTATUS st = BCryptGenRandom(nullptr, out.data(), static_cast<ULONG>(n),
+                                BCRYPT_USE_SYSTEM_PREFERRED_RNG);
+  if (!BCRYPT_SUCCESS(st)) throw std::runtime_error("randomBytes: BCryptGenRandom failed");
 #else
   FILE* f = std::fopen("/dev/urandom", "rb");
   if (!f || std::fread(out.data(), 1, n, f) != n) {
@@ -53,6 +67,14 @@ Bytes randomBytes(size_t n) {
   std::fclose(f);
 #endif
   return out;
+}
+
+bool makeDir(const std::string& path) {
+#if defined(_WIN32)
+  return ::_mkdir(path.c_str()) == 0 || errno == EEXIST;
+#else
+  return ::mkdir(path.c_str(), 0755) == 0 || errno == EEXIST;
+#endif
 }
 
 }  // namespace db

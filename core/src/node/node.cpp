@@ -1,7 +1,5 @@
 #include "node/node.h"
 
-#include <sys/stat.h>
-
 #include <cstring>
 #include <mutex>
 #include <set>
@@ -137,7 +135,7 @@ struct Node::Impl {
     // Store
     std::string db_path = opts.data_dir;
     if (db_path != ":memory:") {
-      ::mkdir(opts.data_dir.c_str(), 0755);  // 既存でもよい
+      makeDir(opts.data_dir);  // 既存でもよい
       db_path = opts.data_dir + "/doorbell.db";
     }
     if (!store.open(db_path)) {

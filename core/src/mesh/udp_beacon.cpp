@@ -1,11 +1,6 @@
 // UDP multicast beacon の実装 (udp_beacon.h 参照)。
 #include "mesh/udp_beacon.h"
 
-#include <arpa/inet.h>
-#include <netinet/in.h>
-#include <sys/socket.h>
-#include <unistd.h>
-
 #include <cstring>
 
 #include "monocypher.h"
@@ -41,23 +36,22 @@ UdpBeacon::~UdpBeacon() { stop(); }
 bool UdpBeacon::openSockets_() {
   // 送信ソケット
   send_fd_ = ::socket(AF_INET, SOCK_DGRAM, 0);
-  if (send_fd_ < 0) return false;
-  unsigned char ttl = 1;  // 同一 L2 のみ
-  ::setsockopt(send_fd_, IPPROTO_IP, IP_MULTICAST_TTL, &ttl, sizeof(ttl));
-  unsigned char loop_on = 1;  // 同一ホスト内テスト用
-  ::setsockopt(send_fd_, IPPROTO_IP, IP_MULTICAST_LOOP, &loop_on, sizeof(loop_on));
+  if (!net::valid(send_fd_)) return false;
+  net::setMulticastTtl(send_fd_, 1);      // 同一 L2 のみ
+  net::setMulticastLoop(send_fd_, true);  // 同一ホスト内テスト用
 
   // 受信ソケット (ポート共有 + multicast join)
   recv_fd_ = ::socket(AF_INET, SOCK_DGRAM, 0);
-  if (recv_fd_ < 0) {
-    ::close(send_fd_);
-    send_fd_ = -1;
+  if (!net::valid(recv_fd_)) {
+    net::closeSocket(send_fd_);
+    send_fd_ = net::kInvalidSocket;
     return false;
   }
   int yes = 1;
-  ::setsockopt(recv_fd_, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes));
+  // multicast 受信ポートは複数プロセスで共有できる必要がある (Windows も SO_REUSEADDR で可)
+  net::setSockOpt(recv_fd_, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes));
 #ifdef SO_REUSEPORT
-  ::setsockopt(recv_fd_, SOL_SOCKET, SO_REUSEPORT, &yes, sizeof(yes));
+  net::setSockOpt(recv_fd_, SOL_SOCKET, SO_REUSEPORT, &yes, sizeof(yes));
 #endif
   sockaddr_in a{};
   a.sin_family = AF_INET;
@@ -65,31 +59,30 @@ bool UdpBeacon::openSockets_() {
   a.sin_addr.s_addr = htonl(INADDR_ANY);
   if (::bind(recv_fd_, reinterpret_cast<sockaddr*>(&a), sizeof(a)) != 0) {
     DB_LOGW("beacon", "bind failed");
-    ::close(recv_fd_);
-    recv_fd_ = -1;
+    net::closeSocket(recv_fd_);
+    recv_fd_ = net::kInvalidSocket;
     // 送信専用でも続行 (受信できないだけ)
     return true;
   }
   ip_mreq mreq{};
   ::inet_pton(AF_INET, group_.c_str(), &mreq.imr_multiaddr);
   mreq.imr_interface.s_addr = htonl(INADDR_ANY);
-  if (::setsockopt(recv_fd_, IPPROTO_IP, IP_ADD_MEMBERSHIP, &mreq, sizeof(mreq)) != 0) {
+  if (!net::setSockOpt(recv_fd_, IPPROTO_IP, IP_ADD_MEMBERSHIP, &mreq, sizeof(mreq))) {
     DB_LOGW("beacon", "multicast join failed");
   }
   // recv タイムアウト (stop の応答性のため)
-  timeval tv{0, 200 * 1000};
-  ::setsockopt(recv_fd_, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+  net::setRecvTimeoutMs(recv_fd_, 200);
   return true;
 }
 
 void UdpBeacon::start(std::function<void(const DiscoveredPeer&)> on_found) {
-  if (send_fd_ < 0 && !openSockets_()) {
+  if (!net::valid(send_fd_) && !openSockets_()) {
     DB_LOGE("beacon", "socket setup failed");
     return;
   }
   on_found_ = std::move(on_found);
   stopping_ = false;
-  if (recv_fd_ >= 0 && !recv_thread_.joinable()) {
+  if (net::valid(recv_fd_) && !recv_thread_.joinable()) {
     recv_thread_ = std::thread([this]() { recvLoop_(); });
   }
 }
@@ -97,7 +90,7 @@ void UdpBeacon::start(std::function<void(const DiscoveredPeer&)> on_found) {
 void UdpBeacon::announce(const std::string& node_id, const std::string& addr) {
   node_id_ = node_id;
   adv_addr_ = addr;
-  if (send_fd_ < 0 && !openSockets_()) return;
+  if (!net::valid(send_fd_) && !openSockets_()) return;
   if (timer_id_) return;  // 既に周期送信中
   sendHello_();
   timer_id_ = loop_.postEvery(period_ms_, [this]() { sendHello_(); });
@@ -114,9 +107,9 @@ void UdpBeacon::sendHello_() {
   dst.sin_family = AF_INET;
   dst.sin_port = htons(port_);
   ::inet_pton(AF_INET, group_.c_str(), &dst.sin_addr);
-  ssize_t n = ::sendto(send_fd_, pkt.data(), pkt.size(), 0,
-                       reinterpret_cast<sockaddr*>(&dst), sizeof(dst));
-  if (n == static_cast<ssize_t>(pkt.size())) {
+  int n = net::sendTo(send_fd_, pkt.data(), pkt.size(),
+                      reinterpret_cast<sockaddr*>(&dst), sizeof(dst));
+  if (n == static_cast<int>(pkt.size())) {
     sent_++;
   } else {
     send_err_++;
@@ -126,7 +119,7 @@ void UdpBeacon::sendHello_() {
 void UdpBeacon::recvLoop_() {
   char buf[2048];
   while (!stopping_) {
-    ssize_t n = ::recvfrom(recv_fd_, buf, sizeof(buf) - 1, 0, nullptr, nullptr);
+    int n = net::recvFrom(recv_fd_, buf, sizeof(buf) - 1);
     if (n <= 0) continue;  // タイムアウト/エラーはループ継続 (stopping_ で抜ける)
     buf[n] = '\0';
     json::Doc doc = json::parse(buf);
@@ -150,13 +143,13 @@ void UdpBeacon::stop() {
     timer_id_ = 0;
   }
   if (recv_thread_.joinable()) recv_thread_.join();
-  if (send_fd_ >= 0) {
-    ::close(send_fd_);
-    send_fd_ = -1;
+  if (net::valid(send_fd_)) {
+    net::closeSocket(send_fd_);
+    send_fd_ = net::kInvalidSocket;
   }
-  if (recv_fd_ >= 0) {
-    ::close(recv_fd_);
-    recv_fd_ = -1;
+  if (net::valid(recv_fd_)) {
+    net::closeSocket(recv_fd_);
+    recv_fd_ = net::kInvalidSocket;
   }
 }
 
