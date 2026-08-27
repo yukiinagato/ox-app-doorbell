@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- WPF 版 App.xaml の Bg/Fg/Dim/Card 相当 -->
+<resources>
+    <color name="bg">#10151B</color>
+    <color name="fg">#F2F5F8</color>
+    <color name="dim">#8FA0B3</color>
+    <color name="card">#243040</color>
+    <color name="accent">#4DA3FF</color>
+    <color name="offline_bg">#B5A21B00</color>
+</resources>

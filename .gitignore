@@ -32,6 +32,7 @@ DerivedData/
 android/.gradle/
 android/local.properties
 android/**/build/
+android/**/.cxx/
 
 # secrets — never commit
 *.keystore

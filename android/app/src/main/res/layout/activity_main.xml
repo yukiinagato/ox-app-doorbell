@@ -1,0 +1,180 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- WPF 版 MainWindow.xaml と同じ 4 状態: 待機 / 呼び出し中 / 返信バナー / オフライン。
+     カメラプレビューは右下の小窓 (訪客確認用・core への NV21 供給が主目的)。 -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/bg">
+
+    <SurfaceView
+        android:id="@+id/camera_preview"
+        android:layout_width="160dp"
+        android:layout_height="120dp"
+        android:layout_gravity="bottom|end"
+        android:layout_margin="16dp"/>
+
+    <!-- ============ 待機 ============ -->
+    <FrameLayout
+        android:id="@+id/idle_view"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent">
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="top|center_horizontal"
+            android:layout_marginTop="48dp"
+            android:gravity="center_horizontal"
+            android:orientation="vertical">
+            <TextView
+                android:id="@+id/clock_text"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="sans-serif-light"
+                android:textColor="@color/fg"
+                android:textSize="72sp"/>
+            <TextView
+                android:id="@+id/date_text"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:textColor="@color/dim"
+                android:textSize="24sp"/>
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:gravity="center_horizontal"
+            android:orientation="vertical">
+            <Button
+                android:id="@+id/call_button"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:minWidth="320dp"
+                android:minHeight="140dp"
+                android:background="@drawable/bg_big_button"
+                android:textColor="@color/fg"
+                android:textSize="40sp"
+                android:textStyle="bold"/>
+            <TextView
+                android:id="@+id/touch_hint"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="20dp"
+                android:text="@string/idle_touch_to_call"
+                android:textColor="@color/dim"
+                android:textSize="22sp"/>
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/node_info"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="bottom|start"
+            android:layout_margin="16dp"
+            android:textColor="@color/dim"
+            android:textSize="13sp"/>
+    </FrameLayout>
+
+    <!-- ============ 呼び出し中 ============ -->
+    <LinearLayout
+        android:id="@+id/calling_view"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@color/bg"
+        android:gravity="center"
+        android:orientation="vertical"
+        android:visibility="gone">
+        <TextView
+            android:id="@+id/calling_text"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/calling_title"
+            android:textColor="@color/fg"
+            android:textSize="48sp"
+            android:textStyle="bold"/>
+        <View
+            android:id="@+id/pulse"
+            android:layout_width="120dp"
+            android:layout_height="120dp"
+            android:layout_marginTop="40dp"
+            android:layout_marginBottom="40dp"
+            android:background="@drawable/pulse_circle"/>
+        <Button
+            android:id="@+id/cancel_button"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="@drawable/bg_card_button"
+            android:paddingLeft="40dp"
+            android:paddingRight="40dp"
+            android:paddingTop="14dp"
+            android:paddingBottom="14dp"
+            android:text="@string/calling_cancel"
+            android:textColor="@color/fg"
+            android:textSize="26sp"/>
+    </LinearLayout>
+
+    <!-- ============ クイック返信バナー (最前面オーバーレイ) ============ -->
+    <LinearLayout
+        android:id="@+id/reply_banner"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:background="@drawable/bg_reply_card"
+        android:gravity="center_horizontal"
+        android:maxWidth="640dp"
+        android:orientation="vertical"
+        android:padding="40dp"
+        android:visibility="gone">
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/reply_banner"
+            android:textColor="@color/dim"
+            android:textSize="20sp"/>
+        <TextView
+            android:id="@+id/reply_text"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:gravity="center"
+            android:textColor="@color/fg"
+            android:textSize="40sp"
+            android:textStyle="bold"/>
+    </LinearLayout>
+
+    <!-- ============ オフライン ============ -->
+    <LinearLayout
+        android:id="@+id/offline_view"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@color/offline_bg"
+        android:gravity="center"
+        android:orientation="vertical"
+        android:visibility="gone">
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/offline_title"
+            android:textColor="#FFFFFF"
+            android:textSize="44sp"
+            android:textStyle="bold"/>
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:text="@string/offline_body"
+            android:textColor="#FFE9D5"
+            android:textSize="24sp"/>
+    </LinearLayout>
+
+    <!-- 隠し管理入口 (右上 200dp を 5 秒内 7 連打) -->
+    <View
+        android:id="@+id/secret_corner"
+        android:layout_width="200dp"
+        android:layout_height="200dp"
+        android:layout_gravity="top|end"
+        android:background="@android:color/transparent"/>
+</FrameLayout>
