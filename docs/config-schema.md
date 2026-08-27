@@ -50,11 +50,35 @@
 
   "sip": {
     "server": "10.0.1.5", "port": 5060, "transport": "udp",
-    "accounts": { "<node_id>": { "user": "door-front", "pass_ref": "secret:sip.<node_id>" } },
+    // accounts.<node_id>.user = その端末の内線番号。門口機 (8001..) と室内機 (201..) の両方が
+    // ここに載る — 通話中の相手映像は user(内線)→node_id→peers[].stream の逆引きで解決する。
+    // answer_mode: "auto"(門口機既定 — 即応答) | "ring"(室内機既定 — 着信 UI で手動応答)
+    "accounts": { "<node_id>": { "user": "door-front", "pass_ref": "secret:sip.<node_id>",
+                                 "answer_mode": "auto" } },
     // DTMF 機能碼 (通話中の相手キー → アクション; 実行体は mesh/MQTT 側)
     "dtmf_actions": { "*1": { "type": "ha_command", "command": "unlock", "door": "self" },
                       "*0": { "type": "hangup" } }
   },
+
+  "display": {                                  // 表示・焼付対策 (全端末既定; devices.<id>.local.display で上書き)
+    "brightness": 70,                           // 0-100 (遠隔調整 — 管理画面のスライダー)
+    "night": { "enabled": true, "from": "22:00", "to": "06:00",
+               "brightness": 15, "red_tint": true },   // 夜間モード (補正済み時計で判定)
+    "screensaver_after_s": 120,                 // 無操作でスクリーンセーバ (時計漂移・低輝度)
+    "pixel_shift_s": 300                        // 待機画面要素を数 px 周期移動 (焼付対策)
+  },
+
+  "emergency": {                                // 室内緊急求助 (SOS)
+    "button_on_roles": ["indoor_panel"],        // SOS ボタンを表示する役割
+    "hold_to_trigger_s": 3,                     // 長押し秒数 (誤操作防止)
+    "alarm_sound": "siren1", "alarm_volume": 100,
+    "sip_call": { "enabled": false, "target_extension": "" },  // 任意: Asterisk でユーザー定義先へ発呼
+    "cancel_requires_pin": true                 // 解除に kiosk PIN
+  },
+  // emergency の既定挙動 (ルール非依存の組込動作): 全ノード警報 UI+サイレン、
+  // Telegram 🚨 を全 households へ、MQTT doorbell/emergency (retain) — HA 側でライト/サイレン/
+  // 発呼など自由に連動。**警察・消防への自動発信は行わない** (通知先は家族と
+  // ユーザー定義の電話先のみ — 判断は人が行う)。
 
   "quick_replies": {                            // クイック返信 (ユーザー編集可能)
     "qr_away":    { "label": { "ja": "ただいま留守にしています", "en": "We are away right now",
@@ -109,7 +133,9 @@
 ## イベント (events テーブル / gossip)
 
 - ID = `(origin_node, origin_seq)` 冪等。型: `press | motion | answered | missed | reply |
-  offline | online | config_changed`
+  offline | online | config_changed | emergency | emergency_cancel`
+- `emergency` payload: `{ "source": "<node_id>", "via": "panel|web|admin" }`。quiet_hours の
+  suppress 対象外 (常に全経路通知)。UI: `{"t":"emergency","active":true|false}`
 - `reply` イベント payload: `{ "reply_id": "qr_away", "text": "…", "via": "telegram|mqtt|web",
   "target_press": "<origin>:<seq>" }`
 - press の notify (LWW マージ): `{ "hlc": "…", "claimed_by": "…", "notified_at": "…",

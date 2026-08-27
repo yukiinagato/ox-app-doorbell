@@ -9,7 +9,8 @@
 | mesh TCP (gossip/sync/cmd) | TCP 47172 | 子機⇔子機 | PSK AEAD |
 | httpd (admin/panel/MJPEG/snapshot) | TCP 47180 | ブラウザ/HA/go2rtc → 子機 | 認証: 管理=パスワード, panel/stream=?k=token |
 | mDNS (将来 HA 発見用) | UDP 5353 | 子機⇔LAN | Phase 1 以降 |
-| SIP | UDP 5060 | 子機 → Asterisk | |
+| SIP (Asterisk 登録 — 電話腿用) | UDP 5060 | 子機 → Asterisk | PBX 障害時も対講は生きる (下行) |
+| SIP 直接対講 (站間, サーバ不要) | UDP 47190 | 室内機/TV ⇔ 門口機 | X-Doorbell-Mode: answer/monitor, mesh 成員 IP 限定 |
 | RTP | UDP 4000-4099 | 子機⇔Asterisk | PJSIP 側で固定レンジ設定 |
 | MQTT | TCP 1883 | leader → HA (Mosquitto) | |
 | HTTPS (Telegram) | TCP 443 | leader → api.telegram.org | 平台 TLS 栈経由 |
