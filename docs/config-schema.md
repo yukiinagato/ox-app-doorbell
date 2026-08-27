@@ -34,7 +34,12 @@
         "ui_lang": "ja", "volume": 80, "screen_brightness": 70,
         "screensaver_after_s": 120,
         "camera": { "device_hint": "", "rotation": 0, "mjpeg_fps": 8,
-                    "mjpeg_quality": 60, "resolution": "640x480" },
+                    "mjpeg_quality": 60, "resolution": "640x480",
+                    // codec: "auto"=硬編 h264 を探測し不可なら mjpeg / "mjpeg" / "h264"
+                    // h264 時は /stream.mp4 (fMP4, 平台 HW encoder) が有効になり
+                    // resolution/fps は h264_* 系で別指定 (Phase 6)
+                    "codec": "auto", "h264_resolution": "1280x720", "h264_fps": 25,
+                    "h264_bitrate_kbps": 1500 },
         "kiosk": { "exit_pin_hash": "<pbkdf2>", "watchdog": true },
         "motion": { "enabled": true, "sensitivity": 40, "min_interval_s": 30 },
         "aec": { "mode": "auto", "tail_ms": 0 }  // 装機標定で書込
