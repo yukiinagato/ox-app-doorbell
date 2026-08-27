@@ -1487,4 +1487,18 @@ void Node::setConfigKey(const std::string& key, const std::string& value_json) {
 
 Runloop& Node::loop() { return *impl_->loop; }
 
+// ---------- SIP 直接呼 (TV 監聴等 — 末尾追記: 並行作業との衝突回避) ----------
+
+void Node::sipCall(const std::string& target, const std::string& mode) {
+  impl_->loop->callSync([&] {
+    if (impl_->sipctl) impl_->sipctl->call(target, mode);
+  });
+}
+
+void Node::sipHangup() {
+  impl_->loop->callSync([&] {
+    if (impl_->sipctl) impl_->sipctl->hangup();
+  });
+}
+
 }  // namespace db

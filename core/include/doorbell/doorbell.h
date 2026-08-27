@@ -74,6 +74,18 @@ DB_API char* db_core_config_json(db_core* c);
 DB_API void db_core_on_camera_frame(db_core* c, const uint8_t* data, int format, int width,
                                     int height, int stride, int64_t ts_ms);
 
+/* SIP 発呼/切断 (Phase 3: TV/室内機の門口監聴)。
+ * target: 内線番号、または "sip:" で始まる完全 URI (Asterisk 非経由の直接呼 —
+ *         例 "sip:10.0.1.5:47190"、宛先は status_json peers[].addrs から解決する)。
+ * mode: NULL/"" = 通常 (双方向) / "monitor" = 一方向監聴 (受け側は自マイク音声のみ送る)。
+ * PJSIP 無効ビルドでは no-op。 */
+DB_API void db_core_sip_call(db_core* c, const char* target, const char* mode);
+DB_API void db_core_sip_hangup(db_core* c);
+
+/* クイック返信の配送 (門口機の面板表示 + TTS + reply イベント)。
+ * reply_id: 設定 quick_replies のキー。door: 対象 door_id ("" = 最新 press の door)。 */
+DB_API void db_core_quick_reply(db_core* c, const char* reply_id, const char* door);
+
 DB_API void db_free(char* p);
 
 DB_API const char* db_core_version(void);

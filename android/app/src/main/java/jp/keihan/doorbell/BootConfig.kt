@@ -8,6 +8,7 @@ import org.json.JSONObject
 class BootConfig private constructor(
     val rawJson: String,
     val name: String,
+    val role: String,
     val door: String,
     val uiLang: String,
     val kiosk: Boolean,
@@ -24,15 +25,17 @@ class BootConfig private constructor(
             } else {
                 try { file.writeText(DEFAULT_JSON) } catch (_: Exception) { }
             }
-            var name = "doorbell"; var door = ""; var lang = "ja"; var kiosk = true
+            var name = "doorbell"; var role = "door_station"; var door = ""
+            var lang = "ja"; var kiosk = true
             try {
                 val d = JSONObject(raw)
                 name = d.optString("name", name)
+                role = d.optString("role", role)
                 door = d.optString("door", door)
                 lang = d.optString("ui_lang", lang)
                 kiosk = d.optBoolean("kiosk", kiosk)
             } catch (_: Exception) { }
-            return BootConfig(raw, name, door, lang, kiosk)
+            return BootConfig(raw, name, role, door, lang, kiosk)
         }
     }
 }

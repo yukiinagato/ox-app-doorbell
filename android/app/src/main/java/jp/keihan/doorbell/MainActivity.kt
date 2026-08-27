@@ -94,7 +94,8 @@ class MainActivity : Activity(), DoorbellCore.Listener {
         })
         requestPermissionsIfNeeded()
 
-        app.core.listener = this
+        // core イベントは App が一次受け — 前面 Activity として転送先に登録する
+        app.activityListener = this
         if (!app.coreOk) showOffline()
         refreshNodeInfo()
     }
@@ -118,7 +119,7 @@ class MainActivity : Activity(), DoorbellCore.Listener {
     }
 
     override fun onDestroy() {
-        app.core.listener = null
+        if (app.activityListener === this) app.activityListener = null
         camera.stop()
         tts?.shutdown()
         super.onDestroy()

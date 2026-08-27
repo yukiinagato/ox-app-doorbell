@@ -118,6 +118,15 @@ int main(int argc, char** argv) {
     else continue;
     i++;
   }
+  // --monitor-call <target>: 起動後に一方向監聴呼を発する (tools/dev_monitor_test.sh 用)。
+  // target は "sip:host:port" の直呼 URI か内線番号。--monitor-delay-ms で発呼待ち (既定 2000)。
+  std::string monitor_call;
+  int monitor_delay_ms = 2000;
+  for (int i = 1; i < argc - 1; i++) {
+    std::string k = argv[i];
+    if (k == "--monitor-call") monitor_call = argv[i + 1];
+    else if (k == "--monitor-delay-ms") monitor_delay_ms = std::atoi(argv[i + 1]);
+  }
   for (int i = 1; i < argc; i++)
     if (std::string(argv[i]) == "--sip-null") o.sip_null_audio = true;
   if (!psk_hex.empty()) {
@@ -170,6 +179,18 @@ int main(int argc, char** argv) {
     });
   }
 
+  // --monitor-call: 遅延後に一方向監聴呼 (X-Doorbell-Mode: monitor) を発する
+  std::thread mon_th;
+  if (!monitor_call.empty()) {
+    mon_th = std::thread([&node, monitor_call, monitor_delay_ms] {
+      struct timespec t{monitor_delay_ms / 1000,
+                        static_cast<long>(monitor_delay_ms % 1000) * 1000 * 1000};
+      nanosleep(&t, nullptr);
+      DB_LOGI("host", "monitor-call -> " + monitor_call);
+      node.sipCall(monitor_call, "monitor");
+    });
+  }
+
   std::printf("node %s  admin: http://127.0.0.1:%d/admin/  (Ctrl+C で終了)\n",
               node.nodeId().substr(0, 8).c_str(), o.http_port);
   std::signal(SIGINT, onSig);
@@ -179,6 +200,7 @@ int main(int argc, char** argv) {
     nanosleep(&ts, nullptr);
   }
   if (fake_th.joinable()) fake_th.join();
+  if (mon_th.joinable()) mon_th.join();
   node.stop();
   return 0;
 }

@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- TV ランチャー用バナー (320x180) — 簡易プレースホルダ (ベル + アプリ名)。 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="320dp"
+    android:height="180dp"
+    android:viewportWidth="320"
+    android:viewportHeight="180">
+    <path
+        android:fillColor="#1A2733"
+        android:pathData="M0,0h320v180h-320z"/>
+    <!-- ベル -->
+    <path
+        android:fillColor="#F5A623"
+        android:pathData="M96,118c0,-6 4,-8 4,-20c0,-16 8,-26 20,-28v-4c0,-3 3,-6 6,-6s6,3 6,6v4c12,2 20,12 20,28c0,12 4,14 4,20z"/>
+    <path
+        android:fillColor="#F5A623"
+        android:pathData="M118,124a8,8 0 0,0 16,0z"/>
+    <!-- 文字は図形で単純化 (DOORBELL 相当の帯) -->
+    <path
+        android:fillColor="#E8EDF2"
+        android:pathData="M168,84h96v12h-96z"/>
+    <path
+        android:fillColor="#8FA3B5"
+        android:pathData="M168,104h72v8h-72z"/>
+</vector>

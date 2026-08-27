@@ -234,6 +234,28 @@ Java_jp_keihan_doorbell_DoorbellCore_nativeOnCameraFrame(JNIEnv* env, jobject, j
   env->ReleaseByteArrayElements(data, p, JNI_ABORT);  // 読み取りのみ — 書き戻し不要
 }
 
+extern "C" JNIEXPORT void JNICALL
+Java_jp_keihan_doorbell_DoorbellCore_nativeSipCall(JNIEnv* env, jobject, jlong h, jstring target,
+                                                   jstring mode) {
+  Bridge* b = fromHandle(h);
+  if (b && b->core)
+    db_core_sip_call(b->core, toUtf8(env, target).c_str(), toUtf8(env, mode).c_str());
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_jp_keihan_doorbell_DoorbellCore_nativeSipHangup(JNIEnv*, jobject, jlong h) {
+  Bridge* b = fromHandle(h);
+  if (b && b->core) db_core_sip_hangup(b->core);
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_jp_keihan_doorbell_DoorbellCore_nativeQuickReply(JNIEnv* env, jobject, jlong h,
+                                                      jstring reply_id, jstring door) {
+  Bridge* b = fromHandle(h);
+  if (b && b->core)
+    db_core_quick_reply(b->core, toUtf8(env, reply_id).c_str(), toUtf8(env, door).c_str());
+}
+
 extern "C" JNIEXPORT jstring JNICALL
 Java_jp_keihan_doorbell_DoorbellCore_nativeVersion(JNIEnv* env, jobject) {
   return env->NewStringUTF(db_core_version());

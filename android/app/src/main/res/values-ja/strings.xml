@@ -152,4 +152,11 @@
     <string name="ring_answer">応答</string>
     <string name="ring_ignore">無視</string>
     <string name="ring_incoming">%1$s で呼び出し中</string>
+    <string name="incoming_close">閉じる</string>
+    <string name="incoming_listening">門口の音声を再生中</string>
+    <string name="incoming_no_video">門口機の映像がありません</string>
+    <string name="incoming_sent">送信しました</string>
+    <string name="incoming_title">呼び出し中</string>
+    <string name="svc_channel">常駐サービス</string>
+    <string name="svc_running">ドアホン子機 稼働中</string>
 </resources>

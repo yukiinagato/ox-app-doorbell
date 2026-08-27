@@ -89,6 +89,12 @@ class Node {
   // via: "panel" | "web" | "admin"。PIN 検証 (解除時の kiosk PIN 等) は呼び出し側の責務。
   void setEmergency(bool active, const std::string& via);
 
+  // SIP 発呼/切断 (TV 監聴等の平台殻向け)。target: 内線番号 or "sip:" 完全 URI (直接呼)。
+  // mode: "" = 通常 / "monitor" = 一方向監聴 (受け側は自マイク音声のみ送る) / "answer"。
+  // sipctl 未初期化・PJSIP 無効ビルドでは no-op (ログのみ)。
+  void sipCall(const std::string& target, const std::string& mode = "");
+  void sipHangup();
+
   // カメラ生フレーム投入 (capi db_core_on_camera_frame / 採集スレッドから; 任意スレッド可)。
   // format: doorbell.h と同じ 0=NV21, 1=NV12, 2=YUY2, 3=BGRA。データはここで 1 回コピー。
   void pushCameraFrame(const uint8_t* data, int format, int width, int height, int stride,

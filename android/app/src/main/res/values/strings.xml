@@ -152,4 +152,11 @@
     <string name="ring_answer">Answer</string>
     <string name="ring_ignore">Ignore</string>
     <string name="ring_incoming">Visitor at %1$s</string>
+    <string name="incoming_close">Close</string>
+    <string name="incoming_listening">Live door audio on</string>
+    <string name="incoming_no_video">No video from door station</string>
+    <string name="incoming_sent">Reply sent</string>
+    <string name="incoming_title">Visitor calling</string>
+    <string name="svc_channel">Resident service</string>
+    <string name="svc_running">Doorbell node running</string>
 </resources>
