@@ -36,11 +36,14 @@ typedef struct db_platform {
   int (*secure_put)(void* user, const char* key, const char* value);
   /* ログ転送 (level: 0=debug..3=error)。NULL なら stderr のみ */
   void (*log_line)(void* user, int level, const char* line);
+  /* TTS 朗読 (クイック返信の読み上げ)。lang: "ja" 等。NULL なら chime 音のみ */
+  void (*tts_speak)(void* user, const char* text, const char* lang);
 } db_platform;
 
 /* core → 殻 への UI イベント通知 (JSON)。例:
  * {"t":"state","state":"idle|calling|in_call|degraded|offline"}
- * {"t":"chime","sound":"ding1"} {"t":"config_changed"} {"t":"peers_changed"} */
+ * {"t":"chime","sound":"ding1"} {"t":"config_changed"} {"t":"peers_changed"}
+ * {"t":"reply","text":"ただいま留守にしています","ttl_s":30}  — クイック返信の面板表示 */
 typedef void (*db_ui_event_cb)(void* user, const char* event_json);
 
 /* 生成: data_dir は書込可能ディレクトリ。boot_json は初期設定

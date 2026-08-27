@@ -20,6 +20,7 @@
   <data name="admin_password" xml:space="preserve"><value>Admin password</value></data>
   <data name="admin_pin_prompt" xml:space="preserve"><value>Enter PIN</value></data>
   <data name="admin_pin_wrong" xml:space="preserve"><value>Wrong PIN</value></data>
+  <data name="admin_quick_replies" xml:space="preserve"><value>Quick replies</value></data>
   <data name="admin_rules" xml:space="preserve"><value>Call rules</value></data>
   <data name="admin_sync_state" xml:space="preserve"><value>Synced to {0}/{1} nodes</value></data>
   <data name="admin_system" xml:space="preserve"><value>System</value></data>
@@ -43,6 +44,10 @@
   <data name="panel_calling" xml:space="preserve"><value>Calling → notified</value></data>
   <data name="panel_no_audio_note" xml:space="preserve"><value>No voice at this door (notify only)</value></data>
   <data name="panel_title" xml:space="preserve"><value>Call panel</value></data>
+  <data name="reply_answered" xml:space="preserve"><value>Replied ({0})</value></data>
+  <data name="reply_banner" xml:space="preserve"><value>Message from resident</value></data>
+  <data name="reply_choose" xml:space="preserve"><value>Choose a quick reply</value></data>
+  <data name="reply_sent" xml:space="preserve"><value>Sent: {0}</value></data>
   <data name="ring_answer" xml:space="preserve"><value>Answer</value></data>
   <data name="ring_ignore" xml:space="preserve"><value>Ignore</value></data>
   <data name="ring_incoming" xml:space="preserve"><value>Visitor at {0}</value></data>

@@ -15,6 +15,7 @@
 "admin.password" = "管理パスワード";
 "admin.pin_prompt" = "PIN を入力してください";
 "admin.pin_wrong" = "PIN が違います";
+"admin.quick_replies" = "クイック返信";
 "admin.rules" = "呼出ルール";
 "admin.sync_state" = "同期状態: %@/%@ 台に反映済み";
 "admin.system" = "システム";
@@ -38,6 +39,10 @@
 "panel.calling" = "呼び出し中→通知済み";
 "panel.no_audio_note" = "この玄関では通話できません (通知のみ)";
 "panel.title" = "呼出パネル";
+"reply.answered" = "応答済み (%@)";
+"reply.banner" = "住人からのメッセージ";
+"reply.choose" = "クイック返信を選択";
+"reply.sent" = "送信しました: %@";
 "ring.answer" = "応答";
 "ring.ignore" = "無視";
 "ring.incoming" = "%@ で呼び出し中";

@@ -16,6 +16,7 @@
     <string name="admin_password">Admin password</string>
     <string name="admin_pin_prompt">Enter PIN</string>
     <string name="admin_pin_wrong">Wrong PIN</string>
+    <string name="admin_quick_replies">Quick replies</string>
     <string name="admin_rules">Call rules</string>
     <string name="admin_sync_state">Synced to %1$s/%2$s nodes</string>
     <string name="admin_system">System</string>
@@ -39,6 +40,10 @@
     <string name="panel_calling">Calling → notified</string>
     <string name="panel_no_audio_note">No voice at this door (notify only)</string>
     <string name="panel_title">Call panel</string>
+    <string name="reply_answered">Replied (%1$s)</string>
+    <string name="reply_banner">Message from resident</string>
+    <string name="reply_choose">Choose a quick reply</string>
+    <string name="reply_sent">Sent: %1$s</string>
     <string name="ring_answer">Answer</string>
     <string name="ring_ignore">Ignore</string>
     <string name="ring_incoming">Visitor at %1$s</string>

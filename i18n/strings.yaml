@@ -49,6 +49,12 @@ event.motion: { ja: "{door} で動きを検知 ({time})", en: "Motion at {door} 
 event.offline: { ja: "⚠ {device} オフライン (最終応答 {time})", en: "⚠ {device} offline (last seen {time})", zh: "⚠ {device} 离线 (最后在线 {time})" }
 event.online: { ja: "{device} オンライン復帰", en: "{device} back online", zh: "{device} 恢复在线" }
 
+reply.banner: { ja: "住人からのメッセージ", en: "Message from resident", zh: "住户留言" }
+reply.sent: { ja: "送信しました: {text}", en: "Sent: {text}", zh: "已发送: {text}" }
+reply.choose: { ja: "クイック返信を選択", en: "Choose a quick reply", zh: "选择快捷回复" }
+reply.answered: { ja: "応答済み ({text})", en: "Replied ({text})", zh: "已回复 ({text})" }
+admin.quick_replies: { ja: "クイック返信", en: "Quick replies", zh: "快捷回复" }
+
 panel.title: { ja: "呼出パネル", en: "Call panel", zh: "呼叫面板" }
 panel.calling: { ja: "呼び出し中→通知済み", en: "Calling → notified", zh: "呼叫中→已通知" }
 panel.no_audio_note: { ja: "この玄関では通話できません (通知のみ)", en: "No voice at this door (notify only)", zh: "此门口无法通话（仅通知）" }

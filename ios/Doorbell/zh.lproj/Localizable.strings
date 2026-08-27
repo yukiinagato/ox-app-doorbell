@@ -15,6 +15,7 @@
 "admin.password" = "管理密码";
 "admin.pin_prompt" = "请输入 PIN";
 "admin.pin_wrong" = "PIN 错误";
+"admin.quick_replies" = "快捷回复";
 "admin.rules" = "呼叫规则";
 "admin.sync_state" = "已同步 %@/%@ 台";
 "admin.system" = "系统";
@@ -38,6 +39,10 @@
 "panel.calling" = "呼叫中→已通知";
 "panel.no_audio_note" = "此门口无法通话（仅通知）";
 "panel.title" = "呼叫面板";
+"reply.answered" = "已回复 (%@)";
+"reply.banner" = "住户留言";
+"reply.choose" = "选择快捷回复";
+"reply.sent" = "已发送: %@";
 "ring.answer" = "接听";
 "ring.ignore" = "忽略";
 "ring.incoming" = "%@ 有访客";

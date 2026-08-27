@@ -20,6 +20,7 @@
   <data name="admin_password" xml:space="preserve"><value>管理密码</value></data>
   <data name="admin_pin_prompt" xml:space="preserve"><value>请输入 PIN</value></data>
   <data name="admin_pin_wrong" xml:space="preserve"><value>PIN 错误</value></data>
+  <data name="admin_quick_replies" xml:space="preserve"><value>快捷回复</value></data>
   <data name="admin_rules" xml:space="preserve"><value>呼叫规则</value></data>
   <data name="admin_sync_state" xml:space="preserve"><value>已同步 {0}/{1} 台</value></data>
   <data name="admin_system" xml:space="preserve"><value>系统</value></data>
@@ -43,6 +44,10 @@
   <data name="panel_calling" xml:space="preserve"><value>呼叫中→已通知</value></data>
   <data name="panel_no_audio_note" xml:space="preserve"><value>此门口无法通话（仅通知）</value></data>
   <data name="panel_title" xml:space="preserve"><value>呼叫面板</value></data>
+  <data name="reply_answered" xml:space="preserve"><value>已回复 ({0})</value></data>
+  <data name="reply_banner" xml:space="preserve"><value>住户留言</value></data>
+  <data name="reply_choose" xml:space="preserve"><value>选择快捷回复</value></data>
+  <data name="reply_sent" xml:space="preserve"><value>已发送: {0}</value></data>
   <data name="ring_answer" xml:space="preserve"><value>接听</value></data>
   <data name="ring_ignore" xml:space="preserve"><value>忽略</value></data>
   <data name="ring_incoming" xml:space="preserve"><value>{0} 有访客</value></data>

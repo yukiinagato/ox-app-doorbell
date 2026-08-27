@@ -15,6 +15,7 @@
 "admin.password" = "Admin password";
 "admin.pin_prompt" = "Enter PIN";
 "admin.pin_wrong" = "Wrong PIN";
+"admin.quick_replies" = "Quick replies";
 "admin.rules" = "Call rules";
 "admin.sync_state" = "Synced to %@/%@ nodes";
 "admin.system" = "System";
@@ -38,6 +39,10 @@
 "panel.calling" = "Calling → notified";
 "panel.no_audio_note" = "No voice at this door (notify only)";
 "panel.title" = "Call panel";
+"reply.answered" = "Replied (%@)";
+"reply.banner" = "Message from resident";
+"reply.choose" = "Choose a quick reply";
+"reply.sent" = "Sent: %@";
 "ring.answer" = "Answer";
 "ring.ignore" = "Ignore";
 "ring.incoming" = "Visitor at %@";

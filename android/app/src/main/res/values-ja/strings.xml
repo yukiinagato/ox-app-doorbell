@@ -16,6 +16,7 @@
     <string name="admin_password">管理パスワード</string>
     <string name="admin_pin_prompt">PIN を入力してください</string>
     <string name="admin_pin_wrong">PIN が違います</string>
+    <string name="admin_quick_replies">クイック返信</string>
     <string name="admin_rules">呼出ルール</string>
     <string name="admin_sync_state">同期状態: %1$s/%2$s 台に反映済み</string>
     <string name="admin_system">システム</string>
@@ -39,6 +40,10 @@
     <string name="panel_calling">呼び出し中→通知済み</string>
     <string name="panel_no_audio_note">この玄関では通話できません (通知のみ)</string>
     <string name="panel_title">呼出パネル</string>
+    <string name="reply_answered">応答済み (%1$s)</string>
+    <string name="reply_banner">住人からのメッセージ</string>
+    <string name="reply_choose">クイック返信を選択</string>
+    <string name="reply_sent">送信しました: %1$s</string>
     <string name="ring_answer">応答</string>
     <string name="ring_ignore">無視</string>
     <string name="ring_incoming">%1$s で呼び出し中</string>

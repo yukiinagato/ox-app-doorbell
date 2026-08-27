@@ -16,6 +16,7 @@
     <string name="admin_password">管理密码</string>
     <string name="admin_pin_prompt">请输入 PIN</string>
     <string name="admin_pin_wrong">PIN 错误</string>
+    <string name="admin_quick_replies">快捷回复</string>
     <string name="admin_rules">呼叫规则</string>
     <string name="admin_sync_state">已同步 %1$s/%2$s 台</string>
     <string name="admin_system">系统</string>
@@ -39,6 +40,10 @@
     <string name="panel_calling">呼叫中→已通知</string>
     <string name="panel_no_audio_note">此门口无法通话（仅通知）</string>
     <string name="panel_title">呼叫面板</string>
+    <string name="reply_answered">已回复 (%1$s)</string>
+    <string name="reply_banner">住户留言</string>
+    <string name="reply_choose">选择快捷回复</string>
+    <string name="reply_sent">已发送: %1$s</string>
     <string name="ring_answer">接听</string>
     <string name="ring_ignore">忽略</string>
     <string name="ring_incoming">%1$s 有访客</string>
