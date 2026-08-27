@@ -10,6 +10,7 @@
 #include "mesh/tcp_transport.h"
 #include "mesh/udp_beacon.h"
 #include "monocypher.h"
+#include "sipctl/sipctl.h"
 #ifdef _WIN32
 #include "media/camera_win.h"
 #endif
@@ -64,6 +65,7 @@ struct Node::Impl {
   std::unique_ptr<IDiscovery> discovery;
   std::unique_ptr<Mesh> mesh;
   std::unique_ptr<Httpd> httpd;
+  std::unique_ptr<SipCtl> sipctl;
   FrameBus frame_bus;  // 帧総線 (任意スレッドから push / 需要駆動 JPEG)
 #ifdef _WIN32
   std::unique_ptr<CameraWin> camera;  // door_station のみ起動
@@ -77,6 +79,13 @@ struct Node::Impl {
   // press の追跡 (クイック返信の宛先解決・回執)
   std::string last_press_door;
   std::map<std::string, std::pair<std::string, uint64_t>> last_press_by_door;
+
+  // SIP 状態 (loop 上でのみ触る)
+  SipRegState sip_reg = SipRegState::Idle;
+  SipCallState sip_call = SipCallState::Idle;
+  std::string dtmf_buf;          // 通話中の DTMF 機能碼バッファ
+  uint64_t dtmf_timer = 0;       // 3 秒無入力クリア
+  uint64_t sip_reapply_timer = 0;  // 設定変更のデバウンス (連続する sip.* 差分で再起動を繰り返さない)
 
   // コールバック (任意スレッドから差し替え可)
   std::mutex cb_mu;
@@ -168,6 +177,144 @@ struct Node::Impl {
       httpd->setJpegProvider([this] { return frame_bus.latestJpeg(); }, c.fps);
   }
 
+  // ---------- SIP ----------
+  // 設定源: config の sip.server/port/transport + sip.accounts.<node_id>.{user,pass}。
+  // アカウント未設定時は boot 上書き (NodeOptions.sip_user/sip_pass) を使う。
+  // MVP は平文 pass — TODO(Phase2): secure_store (pass_ref) 経由に切り替え。
+  SipSettings sipSettings() {
+    SipSettings s;
+    cJSON* sip = json::get(cfg.get(), "sip");
+    s.server = json::getString(sip, "server");
+    s.port = static_cast<int>(json::getInt(sip, "port", 5060));
+    s.transport = json::getString(sip, "transport", "udp");
+    cJSON* acct = cfgAt("sip.accounts." + node_id);
+    s.user = json::getString(acct, "user");
+    s.password = json::getString(acct, "pass");
+    if (s.user.empty()) s.user = opts.sip_user;
+    if (s.password.empty()) s.password = opts.sip_pass;
+    s.display_name = opts.name;
+    s.null_audio = opts.sip_null_audio;
+    // AEC 遅延は装機標定 (devices.<self>.local.aec.tail_ms) があれば上書き
+    cJSON* aec = cfgAt("devices." + node_id + ".local.aec");
+    int tail = aec ? static_cast<int>(json::getInt(aec, "tail_ms", 0)) : 0;
+    if (tail > 0) s.ec_tail_ms = tail;
+    return s;
+  }
+
+  // sip.* の差分は複数キーで届く — 300ms デバウンスしてから updateSettings (再登録)
+  void scheduleSipReapply() {
+    if (!sipctl) return;
+    if (sip_reapply_timer) loop->cancel(sip_reapply_timer);
+    sip_reapply_timer = loop->postDelayed(300, [this] {
+      sip_reapply_timer = 0;
+      if (sipctl) sipctl->updateSettings(sipSettings());
+    });
+  }
+
+  void onSipReg(SipRegState st, const std::string& reason) {
+    sip_reg = st;
+    auto o = json::obj();
+    json::set(o.get(), "t", "sip");
+    json::setBool(o.get(), "registered", st == SipRegState::Registered);
+    json::set(o.get(), "state", sipRegName(st));
+    if (!reason.empty()) json::set(o.get(), "reason", reason);
+    uiNotify(json::dump(o.get()));
+  }
+
+  void onSipCall(SipCallState st, const std::string& remote) {
+    sip_call = st;
+    // UI 状態機: calling / in_call / idle (Ended は過渡 — 通知しない)
+    const char* s = nullptr;
+    switch (st) {
+      case SipCallState::Calling: s = "calling"; break;
+      case SipCallState::InCall: s = "in_call"; break;
+      case SipCallState::Idle: s = "idle"; break;
+      case SipCallState::Ended: break;
+    }
+    if (st == SipCallState::Idle) {
+      dtmf_buf.clear();
+      if (dtmf_timer) {
+        loop->cancel(dtmf_timer);
+        dtmf_timer = 0;
+      }
+    }
+    if (!s) return;
+    auto o = json::obj();
+    json::set(o.get(), "t", "state");
+    json::set(o.get(), "state", s);
+    if (!remote.empty()) json::set(o.get(), "remote", remote);
+    uiNotify(json::dump(o.get()));
+  }
+
+  // DTMF 機能碼: 受信 digit をバッファし sip.dtmf_actions のキー (例 "*1") と照合。
+  // 3 秒無入力でクリア。
+  void onSipDtmf(char digit) {
+    if (dtmf_timer) loop->cancel(dtmf_timer);
+    dtmf_timer = loop->postDelayed(3000, [this] {
+      dtmf_timer = 0;
+      dtmf_buf.clear();
+    });
+    dtmf_buf.push_back(digit);
+    cJSON* acts = cfgAt("sip.dtmf_actions");
+    if (!acts) return;
+    cJSON* hit = json::get(acts, dtmf_buf.c_str());
+    if (hit) {
+      execDtmfAction(dtmf_buf, hit);
+      dtmf_buf.clear();
+      return;
+    }
+    // どのキーの接頭辞でもない → 打ち直し扱い (今回の digit から再開)
+    bool prefix = false;
+    cJSON* it = nullptr;
+    cJSON_ArrayForEach(it, acts) {
+      if (it->string && std::strncmp(it->string, dtmf_buf.c_str(), dtmf_buf.size()) == 0)
+        prefix = true;
+    }
+    if (!prefix) {
+      dtmf_buf.assign(1, digit);
+      cJSON_ArrayForEach(it, acts) {
+        if (it->string && std::strncmp(it->string, dtmf_buf.c_str(), 1) == 0) return;
+      }
+      dtmf_buf.clear();
+    }
+  }
+
+  void execDtmfAction(const std::string& code, cJSON* action) {
+    std::string type = json::getString(action, "type");
+    DB_LOGI(kTag, "dtmf 機能碼 " + code + " -> " + type);
+    if (type == "hangup") {
+      if (sipctl) sipctl->hangup();
+    } else if (type == "ha_command") {
+      // Phase 2 で MQTT bridge へ配線 — 今はイベント記録のみ
+      auto p = json::parse(json::dump(action));
+      json::set(p.get(), "code", code);
+      DB_LOGI(kTag, "ha_command (Phase 2 で MQTT へ): " + json::dump(p.get()));
+      std::string door = opts.door.empty() ? last_press_door : opts.door;
+      events->append("dtmf_action", door, node_id, json::dump(p.get()));
+    } else {
+      DB_LOGW(kTag, "未知の dtmf アクション: " + type);
+    }
+  }
+
+  static const char* sipRegName(SipRegState s) {
+    switch (s) {
+      case SipRegState::Idle: return "idle";
+      case SipRegState::Registering: return "registering";
+      case SipRegState::Registered: return "registered";
+      case SipRegState::Failed: return "failed";
+    }
+    return "?";
+  }
+  static const char* sipCallName(SipCallState s) {
+    switch (s) {
+      case SipCallState::Idle: return "idle";
+      case SipCallState::Calling: return "calling";
+      case SipCallState::InCall: return "in_call";
+      case SipCallState::Ended: return "ended";
+    }
+    return "?";
+  }
+
   std::string labelIn(const cJSON* label_obj, const std::string& lang) {
     if (!label_obj) return "";
     std::string v = json::getString(label_obj, lang.c_str());
@@ -214,6 +361,10 @@ struct Node::Impl {
       if (httpd && e.key.compare(0, 8, "devices.") == 0 &&
           e.key.find(node_id) != std::string::npos)
         applyCameraSettings();
+      // SIP 設定 (sip.* / 自機の aec) の変更 → デバウンス後に再登録
+      if (e.key.compare(0, 4, "sip.") == 0 ||
+          (e.key.compare(0, 8, "devices.") == 0 && e.key.find(node_id) != std::string::npos))
+        scheduleSipReapply();
       uiNotify("{\"t\":\"config_changed\"}");
     });
     events->onEvent([this](const EventRecord& ev, bool is_local) { onEvent(ev, is_local); });
@@ -255,6 +406,20 @@ struct Node::Impl {
     rebuildCfg();
     seedConfig();
     mesh->start();
+
+    // SIP (sipctl)。server 未設定なら start は no-op — 設定が届いたら再適用される。
+    {
+      SipCtl::Callbacks scb;
+      scb.on_reg_state = [this](SipRegState st, const std::string& reason) {
+        onSipReg(st, reason);
+      };
+      scb.on_call_state = [this](SipCallState st, const std::string& remote) {
+        onSipCall(st, remote);
+      };
+      scb.on_dtmf = [this](char d) { onSipDtmf(d); };
+      sipctl.reset(new SipCtl(*loop, std::move(scb)));
+      sipctl->start(sipSettings());
+    }
 
     if (opts.http_port > 0) {
       httpd.reset(new Httpd(*loop));
@@ -350,15 +515,21 @@ struct Node::Impl {
           uiNotify(json::dump(o.get()));
         }
       } else if (a.type == "sip_call") {
-        // 発呼するのは押された門口機本人だけ (Phase 1 で PJSIP へ配線)
+        // 発呼するのは押された門口機本人だけ
         if (is_local && ev.origin == node_id && ev.type == "press") {
           std::string ext = json::getString(p.get(), "target_extension", "600");
-          DB_LOGI(kTag, "sip_call -> " + ext + " (Phase 1 で PJSIP 接続)");
-          auto o = json::obj();
-          json::set(o.get(), "t", "state");
-          json::set(o.get(), "state", "calling");
-          json::set(o.get(), "target", ext);
-          uiNotify(json::dump(o.get()));
+          if (sipctl && sipctl->regState() == SipRegState::Registered) {
+            DB_LOGI(kTag, "sip_call -> " + ext);
+            sipctl->call(ext);  // calling/in_call の uiNotify は on_call_state 経由
+          } else {
+            // SIP 未登録 → 降級 (chime/telegram/ha_event はルール経由で従来どおり発火)
+            DB_LOGW(kTag, "sip_call -> " + ext + " スキップ (SIP 未登録) — 降級");
+            auto o = json::obj();
+            json::set(o.get(), "t", "state");
+            json::set(o.get(), "state", "degraded");
+            json::set(o.get(), "target", ext);
+            uiNotify(json::dump(o.get()));
+          }
         }
       } else if (a.type == "telegram" || a.type == "ha_event") {
         // leader だけが外部へ送る (Phase 2 で bridge へ配線)
@@ -474,6 +645,10 @@ struct Node::Impl {
     json::set(self, "role", opts.role);
     json::set(self, "door", opts.door);
     json::set(self, "version", opts.sw_version);
+    cJSON* sip = json::addObj(o.get(), "sip");
+    json::setBool(sip, "registered", sip_reg == SipRegState::Registered);
+    json::set(sip, "state", sipRegName(sip_reg));
+    json::set(sip, "call", sipCallName(sip_call));
     cJSON* leaders = json::addObj(o.get(), "leaders");
     if (mesh) {
       json::set(leaders, "telegram", mesh->leaderFor("telegram"));
@@ -678,6 +853,18 @@ void Node::stop() {
   // カメラ採集スレッドを先に止める (frame_bus への push を止めてから httpd を畳む)
   if (impl_->camera) impl_->camera->stop();
 #endif
+  // 停止順: sipctl → httpd → mesh
+  impl_->loop->callSync([&] {
+    if (impl_->sip_reapply_timer) {
+      impl_->loop->cancel(impl_->sip_reapply_timer);
+      impl_->sip_reapply_timer = 0;
+    }
+    if (impl_->dtmf_timer) {
+      impl_->loop->cancel(impl_->dtmf_timer);
+      impl_->dtmf_timer = 0;
+    }
+    if (impl_->sipctl) impl_->sipctl->stop();  // 通話切断 → 登録解除 → pjsua_destroy
+  });
   // httpd は runloop の外から止める (worker が callSync 待ちのまま mg_stop すると死锁)
   if (impl_->httpd) impl_->httpd->stop();
   impl_->loop->callSync([&] {

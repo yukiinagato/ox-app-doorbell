@@ -1,7 +1,7 @@
 // Node — 組み立てルート。1 プロセス 1 台の「子機」全体:
 //   Store + LwwMap + EventLog + RuleEngine + Mesh + Httpd を配線し、
 //   ボタン押下 → イベント → ルール評価 → アクション配送 (chime/クイック返信/…) を回す。
-// SIP / カメラは Phase 1 (sipctl / 帧総線) — ここではフックのみ。
+// SIP は sipctl (PJSIP) を配線済み — sip_call アクション / 着信自動応答 / DTMF 機能碼。
 // スレッド: 公開 API はどのスレッドからでも可 (内部で Runloop へ marshal)。
 #pragma once
 
@@ -35,6 +35,10 @@ struct NodeOptions {
   std::string sw_version = "0.1.0";
   int http_port = 0;               // 0 = HTTP 無効
   bool seed_default_config = true; // 設定が空なら既定値 (quick_replies 等) を書く
+  // SIP boot 上書き (boot.json 由来。config sip.accounts.<self> が未設定の時に使う)
+  std::string sip_user;
+  std::string sip_pass;
+  bool sip_null_audio = false;     // テスト/ヘッドレス: null 音声デバイス
   // mesh タイミング上書き (テスト用; 0 = 既定)
   MeshSettings mesh_timing_template{};
   bool use_mesh_timing_template = false;

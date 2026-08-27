@@ -12,6 +12,28 @@ endif()
 # テスト/ホストランナーは POSIX 前提 — Windows クロス時は -DDB_BUILD_TESTS=OFF で外す
 option(DB_BUILD_TESTS "テストとホスト開発ランナーをビルドする" ON)
 
+# ---------- PJSIP (SIP 通話) ----------
+# ON かつ third_party/pjsip/host のホストビルドが存在する時だけ実装 (sipctl.cpp) をリンクする。
+# それ以外 (mingw クロス等) は常に未登録のスタブ (sipctl_stub.cpp)。
+option(DB_WITH_PJSIP "PJSIP 統合 (sipctl 実装をリンクする)" ON)
+set(PJSIP_HOST_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/third_party/pjsip/host)
+set(DB_PJSIP_OK OFF)
+if(DB_WITH_PJSIP AND NOT WIN32 AND NOT CMAKE_CROSSCOMPILING
+   AND EXISTS ${PJSIP_HOST_ROOT}/include/pjsua-lib/pjsua.h)
+  # ライブラリ名の三つ組接尾辞 (例 arm-apple-darwin25.5.0) を libpj-*.a から特定
+  file(GLOB _pj_core ${PJSIP_HOST_ROOT}/lib/libpj-*.a)
+  if(_pj_core)
+    list(GET _pj_core 0 _pj_core0)
+    get_filename_component(_pj_name ${_pj_core0} NAME)
+    string(REGEX REPLACE "^libpj-(.*)\\.a$" "\\1" PJ_TRIPLE ${_pj_name})
+    set(DB_PJSIP_OK ON)
+    message(STATUS "PJSIP: ${PJSIP_HOST_ROOT} (${PJ_TRIPLE})")
+  endif()
+endif()
+if(NOT DB_PJSIP_OK)
+  message(STATUS "PJSIP: 無効 (sipctl はスタブ)")
+endif()
+
 # ---------- third_party (警告抑制のため別ターゲット) ----------
 add_library(db_third_party STATIC
   third_party/sqlite/sqlite3.c
@@ -60,9 +82,37 @@ if(NOT WIN32)
   # Windows 専用: Media Foundation カメラ採集
   list(REMOVE_ITEM DB_CORE_SRC ${CMAKE_CURRENT_SOURCE_DIR}/src/media/camera_win.cpp)
 endif()
+# sipctl: 実装かスタブのどちらか一方だけをリンク
+if(DB_PJSIP_OK)
+  list(REMOVE_ITEM DB_CORE_SRC ${CMAKE_CURRENT_SOURCE_DIR}/src/sipctl/sipctl_stub.cpp)
+else()
+  list(REMOVE_ITEM DB_CORE_SRC ${CMAKE_CURRENT_SOURCE_DIR}/src/sipctl/sipctl.cpp)
+endif()
 add_library(doorbell_core STATIC ${DB_CORE_SRC} ${WEBUI_GEN})
 target_include_directories(doorbell_core PUBLIC include src)
 target_link_libraries(doorbell_core PUBLIC db_third_party)
+if(DB_PJSIP_OK)
+  target_compile_definitions(doorbell_core PRIVATE DB_HAVE_PJSIP
+    PJ_AUTOCONF=1 PJ_IS_BIG_ENDIAN=0 PJ_IS_LITTLE_ENDIAN=1)  # libpjproject.pc の Cflags と同じ
+  target_include_directories(doorbell_core PRIVATE ${PJSIP_HOST_ROOT}/include)
+  # libpjproject.pc の Libs / Libs.private と同順 (pkg-config 非依存で確実に)
+  set(PJ_LIB_NAMES pjsua2 pjsua pjsip-ua pjsip-simple pjsip pjmedia-codec pjmedia-videodev
+      pjmedia-audiodev pjmedia pjnath pjlib-util pj
+      srtp resample gsmcodec speex ilbccodec g7221codec webrtc)
+  set(PJ_LIBS "")
+  foreach(_n ${PJ_LIB_NAMES})
+    set(_p ${PJSIP_HOST_ROOT}/lib/lib${_n}-${PJ_TRIPLE}.a)
+    if(EXISTS ${_p})
+      list(APPEND PJ_LIBS ${_p})
+    endif()
+  endforeach()
+  target_link_libraries(doorbell_core PUBLIC ${PJ_LIBS})
+  if(APPLE)
+    target_link_libraries(doorbell_core PUBLIC
+      "-framework CoreAudio" "-framework CoreServices" "-framework AudioUnit"
+      "-framework AudioToolbox" "-framework Foundation" "-framework AppKit")
+  endif()
+endif()
 if(WIN32)
   # camera_win: Media Foundation SourceReader + COM
   target_link_libraries(doorbell_core PUBLIC mfplat mf mfreadwrite mfuuid ole32)
