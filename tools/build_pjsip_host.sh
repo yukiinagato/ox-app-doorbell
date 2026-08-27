@@ -15,7 +15,10 @@ if [[ ! -f build.mak ]]; then
     CFLAGS="-O2 -fPIC" CXXFLAGS="-O2 -fPIC" >/dev/null
 fi
 make dep >/dev/null 2>&1 || true
-make -j8 >/dev/null
+# pjsip の Makefile は完全な並列安全ではない (g722 等でディレクトリ生成競合) —
+# 並列で走らせてから串行で補完する
+make -j8 >/dev/null 2>&1 || true
+make >/dev/null
 make install >/dev/null
 echo "ok: $PREFIX"
 ls "$PREFIX/lib" | head -5
