@@ -154,11 +154,6 @@
     <string name="idle_touch_to_call">Touch to call</string>
     <string name="incall_end">End</string>
     <string name="incall_title">In call</string>
-    <string name="incoming_close">Close</string>
-    <string name="incoming_listening">Live door audio on</string>
-    <string name="incoming_no_video">No video from door station</string>
-    <string name="incoming_sent">Reply sent</string>
-    <string name="incoming_title">Visitor calling</string>
     <string name="notify_test">Doorbell test notification</string>
     <string name="offline_body">Calling unavailable. Please knock.</string>
     <string name="offline_reconnect">Reconnecting in %1$ss</string>
@@ -183,6 +178,4 @@
     <string name="ring_monitoring">Live door audio on</string>
     <string name="ring_no_video">No video from door station</string>
     <string name="ring_purpose_badge">Purpose: %1$s</string>
-    <string name="svc_channel">Resident service</string>
-    <string name="svc_running">Doorbell node running</string>
 </resources>

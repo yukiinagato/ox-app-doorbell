@@ -151,11 +151,6 @@
 "idle.touch_to_call" = "タッチして呼び出してください";
 "incall.end" = "終了";
 "incall.title" = "通話中";
-"incoming.close" = "閉じる";
-"incoming.listening" = "門口の音声を再生中";
-"incoming.no_video" = "門口機の映像がありません";
-"incoming.sent" = "送信しました";
-"incoming.title" = "呼び出し中";
 "notify.test" = "ドアホン テスト通知";
 "offline.body" = "呼び出しできません。直接ノックしてください。";
 "offline.reconnect" = "再接続まで %@ 秒";
@@ -180,5 +175,3 @@
 "ring.monitoring" = "門口の音声を再生中";
 "ring.no_video" = "門口機の映像がありません";
 "ring.purpose_badge" = "用件: %@";
-"svc.channel" = "常駐サービス";
-"svc.running" = "ドアホン子機 稼働中";

@@ -156,11 +156,6 @@
   <data name="idle_touch_to_call" xml:space="preserve"><value>触摸屏幕呼叫</value></data>
   <data name="incall_end" xml:space="preserve"><value>结束</value></data>
   <data name="incall_title" xml:space="preserve"><value>通话中</value></data>
-  <data name="incoming_close" xml:space="preserve"><value>关闭</value></data>
-  <data name="incoming_listening" xml:space="preserve"><value>正在播放门口声音</value></data>
-  <data name="incoming_no_video" xml:space="preserve"><value>没有门口机画面</value></data>
-  <data name="incoming_sent" xml:space="preserve"><value>已发送</value></data>
-  <data name="incoming_title" xml:space="preserve"><value>有访客呼叫</value></data>
   <data name="notify_test" xml:space="preserve"><value>门铃测试通知</value></data>
   <data name="offline_body" xml:space="preserve"><value>无法呼叫，请直接敲门。</value></data>
   <data name="offline_reconnect" xml:space="preserve"><value>{0} 秒后重连</value></data>
@@ -185,6 +180,4 @@
   <data name="ring_monitoring" xml:space="preserve"><value>正在播放门口声音</value></data>
   <data name="ring_no_video" xml:space="preserve"><value>没有门口机画面</value></data>
   <data name="ring_purpose_badge" xml:space="preserve"><value>目的: {0}</value></data>
-  <data name="svc_channel" xml:space="preserve"><value>常驻服务</value></data>
-  <data name="svc_running" xml:space="preserve"><value>门铃节点运行中</value></data>
 </root>

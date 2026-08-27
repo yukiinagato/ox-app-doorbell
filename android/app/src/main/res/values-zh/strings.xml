@@ -154,11 +154,6 @@
     <string name="idle_touch_to_call">触摸屏幕呼叫</string>
     <string name="incall_end">结束</string>
     <string name="incall_title">通话中</string>
-    <string name="incoming_close">关闭</string>
-    <string name="incoming_listening">正在播放门口声音</string>
-    <string name="incoming_no_video">没有门口机画面</string>
-    <string name="incoming_sent">已发送</string>
-    <string name="incoming_title">有访客呼叫</string>
     <string name="notify_test">门铃测试通知</string>
     <string name="offline_body">无法呼叫，请直接敲门。</string>
     <string name="offline_reconnect">%1$s 秒后重连</string>
@@ -183,6 +178,4 @@
     <string name="ring_monitoring">正在播放门口声音</string>
     <string name="ring_no_video">没有门口机画面</string>
     <string name="ring_purpose_badge">目的: %1$s</string>
-    <string name="svc_channel">常驻服务</string>
-    <string name="svc_running">门铃节点运行中</string>
 </resources>

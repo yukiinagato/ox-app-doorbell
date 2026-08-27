@@ -151,11 +151,6 @@
 "idle.touch_to_call" = "Touch to call";
 "incall.end" = "End";
 "incall.title" = "In call";
-"incoming.close" = "Close";
-"incoming.listening" = "Live door audio on";
-"incoming.no_video" = "No video from door station";
-"incoming.sent" = "Reply sent";
-"incoming.title" = "Visitor calling";
 "notify.test" = "Doorbell test notification";
 "offline.body" = "Calling unavailable. Please knock.";
 "offline.reconnect" = "Reconnecting in %@s";
@@ -180,5 +175,3 @@
 "ring.monitoring" = "Live door audio on";
 "ring.no_video" = "No video from door station";
 "ring.purpose_badge" = "Purpose: %@";
-"svc.channel" = "Resident service";
-"svc.running" = "Doorbell node running";

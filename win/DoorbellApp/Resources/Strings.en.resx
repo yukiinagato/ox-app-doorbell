@@ -156,11 +156,6 @@
   <data name="idle_touch_to_call" xml:space="preserve"><value>Touch to call</value></data>
   <data name="incall_end" xml:space="preserve"><value>End</value></data>
   <data name="incall_title" xml:space="preserve"><value>In call</value></data>
-  <data name="incoming_close" xml:space="preserve"><value>Close</value></data>
-  <data name="incoming_listening" xml:space="preserve"><value>Live door audio on</value></data>
-  <data name="incoming_no_video" xml:space="preserve"><value>No video from door station</value></data>
-  <data name="incoming_sent" xml:space="preserve"><value>Reply sent</value></data>
-  <data name="incoming_title" xml:space="preserve"><value>Visitor calling</value></data>
   <data name="notify_test" xml:space="preserve"><value>Doorbell test notification</value></data>
   <data name="offline_body" xml:space="preserve"><value>Calling unavailable. Please knock.</value></data>
   <data name="offline_reconnect" xml:space="preserve"><value>Reconnecting in {0}s</value></data>
@@ -185,6 +180,4 @@
   <data name="ring_monitoring" xml:space="preserve"><value>Live door audio on</value></data>
   <data name="ring_no_video" xml:space="preserve"><value>No video from door station</value></data>
   <data name="ring_purpose_badge" xml:space="preserve"><value>Purpose: {0}</value></data>
-  <data name="svc_channel" xml:space="preserve"><value>Resident service</value></data>
-  <data name="svc_running" xml:space="preserve"><value>Doorbell node running</value></data>
 </root>
