@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<!-- 長時間放置での JS 停止/メモリリークからの自愈 (iPad 1 Safari 対策) -->
+<meta http-equiv="refresh" content="300">
+<title>呼出パネル</title>
+<!--
+  Web 版門口子機 (iOS 5 Safari / iPad 1 対応)。ES5 のみ・XHR 短輪詢。
+  flexbox / WebSocket / 矢印関数 / let / const / template literal 禁止。
+  API 契約は同ディレクトリの API.md。?k=<panel token> を全 API に引き継ぐ。
+  ?mock=1 で XHR せず内蔵サンプルデータ描画 (file:// 検証用 — 描画は実データと同一関数)。
+-->
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body { background: #101418; color: #e8edf2;
+         font-family: "Hiragino Sans", "Yu Gothic UI", sans-serif; }
+  /* テーブルレイアウト (flexbox 不可) で縦方向を 帯/主領域/脚注 に分割 */
+  #layout { display: table; width: 100%; height: 100%; border-collapse: collapse; }
+  #layout > div { display: table-row; }
+  #layout > div > div { display: table-cell; vertical-align: middle; }
+  #offlineBand { display: none; background: #ff6b6b; color: #2a0505; text-align: center;
+                 font-size: 26px; font-weight: bold; padding: 12px; }
+  #replyBanner { display: none; background: #5dd39e; color: #06281a; text-align: center;
+                 padding: 18px 12px; }
+  #replyBanner .cap { font-size: 22px; }
+  #replyBanner .txt { font-size: 44px; font-weight: bold; line-height: 1.3; }
+  #main { text-align: center; padding: 10px; height: 100%; }
+  h1 { font-size: 30px; color: #8a97a5; font-weight: normal; padding: 8px 0 4px; }
+  #hint { font-size: 22px; color: #8a97a5; padding-bottom: 10px; }
+  /* 巨大呼出ボタン: 1〜4 個は縦積み全幅、5〜8 個は 2 列 (inline-block) */
+  .doorBtn { display: inline-block; vertical-align: top; background: #1a2027;
+             border: 3px solid #4da3ff; border-radius: 18px; color: #e8edf2;
+             font-family: inherit; font-size: 52px; font-weight: bold;
+             width: 94%; margin: 8px 1%; padding: 34px 8px; cursor: pointer; }
+  .doorBtn.half { width: 46%; font-size: 40px; padding: 40px 8px; }
+  .doorBtn:active { background: #4da3ff; color: #04121f; }
+  #callingView { display: none; }
+  #callingView .big { font-size: 56px; font-weight: bold; color: #4da3ff;
+                      padding: 30px 10px; line-height: 1.4; }
+  #callingView .door { font-size: 34px; color: #8a97a5; }
+  #note { background: #1a2027; border-top: 1px solid #2a333d; color: #ffb454;
+          text-align: center; font-size: 24px; padding: 14px 10px; }
+</style>
+</head>
+<body>
+<div id="layout">
+  <!-- 帯類は inline style で隠す (#layout > div > div の table-cell 指定が
+       CSS の #id 単独指定より詳細度で勝つため) -->
+  <div><div id="offlineBand" style="display:none">オフライン — 再接続中…</div></div>
+  <div><div id="replyBanner" style="display:none">
+    <div class="cap">住人からのメッセージ</div>
+    <div class="txt" id="replyText"></div>
+  </div></div>
+  <div style="height:100%"><div id="main">
+    <h1 id="title">呼出パネル</h1>
+    <div id="hint">ボタンを押すと住人に通知します</div>
+    <div id="doorList"></div>
+    <div id="callingView">
+      <div class="door" id="callingDoor"></div>
+      <div class="big" id="callingMsg">呼び出し中→通知済み</div>
+    </div>
+  </div></div>
+  <div><div id="note">この玄関では通話できません (通知のみ)</div></div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+  var POLL_MS = 2000;         // 状態輪詢間隔
+  var CALLING_MS = 30000;     // 「呼び出し中」表示 → 待機へ戻るまで
+  var REPLY_MS = 30000;       // 返信バナー表示時間
+  var OFFLINE_AFTER = 5;      // XHR 連続失敗この回数で「オフライン」帯
+
+  function $(id) { return document.getElementById(id); }
+  function esc(s) {
+    var d = document.createElement("div");
+    d.appendChild(document.createTextNode(s == null ? "" : String(s)));
+    return d.innerHTML;
+  }
+  function qs(name) {
+    var m = window.location.search.match(new RegExp("[?&]" + name + "=([^&]*)"));
+    return m ? decodeURIComponent(m[1].replace(/\+/g, "%20")) : "";
+  }
+
+  var TOKEN = qs("k");
+  var MOCK = qs("mock") === "1";
+
+  // ---- i18n (失敗時はハードコード ja のまま。mock/file:// では取得しない) ----
+  var I18N = {};
+  function t(k, def) { return I18N[k] || def; }
+  function applyI18n() {
+    $("title").innerHTML = esc(t("panel.title", "呼出パネル"));
+    $("hint").innerHTML = esc(t("panel.press_hint", "ボタンを押すと住人に通知します"));
+    $("note").innerHTML = esc(t("panel.no_audio_note", "この玄関では通話できません (通知のみ)"));
+    $("offlineBand").innerHTML = esc(t("panel.offline", "オフライン — 再接続中…"));
+    $("callingMsg").innerHTML = esc(t("panel.calling", "呼び出し中→通知済み"));
+  }
+  if (!MOCK) {
+    xhr("GET", "/locale/ja.json", null, function (st, j) {
+      if (st === 200 && j) { I18N = j; applyI18n(); }
+    });
+  }
+
+  function xhr(method, path, formBody, cb) {
+    var x = new XMLHttpRequest();
+    x.open(method, path, true);
+    if (formBody) x.setRequestHeader("Content-Type", "application/x-www-form-urlencoded");
+    x.onreadystatechange = function () {
+      if (x.readyState !== 4) return;
+      var j = null;
+      try { j = JSON.parse(x.responseText); } catch (e) {}
+      cb(x.status, j);
+    };
+    try { x.send(formBody || null); } catch (e2) { cb(0, null); }
+  }
+
+  // ---- mock データ (描画は実データと同一の render() を通す) ----
+  var mockTick = 0;
+  var mockState = {
+    doors: [
+      { id: "d_front", label: "正面玄関", calling: false },
+      { id: "d_back", label: "裏口", calling: false },
+      { id: "d_garage", label: "ガレージ", calling: false }
+    ],
+    events: [], reply: null, server_ts: 0
+  };
+  function fetchState(cb) {
+    if (MOCK) {
+      mockTick++;
+      // 15 秒後に模擬返信を 1 回流す (バナー動作確認用)
+      if (mockTick === Math.round(15000 / POLL_MS)) {
+        mockState.reply = { text: "すぐ行きます", ts: mockTick };
+      }
+      mockState.server_ts = mockTick;
+      cb(200, mockState);
+      return;
+    }
+    xhr("GET", "/api/panel/state?k=" + encodeURIComponent(TOKEN), null, cb);
+  }
+  function sendPress(doorId, cb) {
+    if (MOCK) { cb(200, { ok: true }); return; }
+    xhr("POST", "/api/panel/press",
+        "door=" + encodeURIComponent(doorId) + "&k=" + encodeURIComponent(TOKEN), cb);
+  }
+
+  // ---- 呼出ボタン描画 (1〜8 個自適応: ≤4 は縦積み全幅、5+ は 2 列) ----
+  var lastDoorsJson = "";
+  function renderDoors(doors) {
+    var jsonNow = "";
+    for (var i = 0; i < doors.length; i++) jsonNow += doors[i].id + "|" + doors[i].label + ";";
+    if (jsonNow === lastDoorsJson) return;  // 変化なしなら再構築しない (押下中の消失防止)
+    lastDoorsJson = jsonNow;
+    var list = $("doorList");
+    list.innerHTML = "";
+    var half = doors.length > 4;
+    for (var k = 0; k < doors.length; k++) {
+      var b = document.createElement("button");
+      b.className = "doorBtn" + (half ? " half" : "");
+      b.setAttribute("data-door", doors[k].id);
+      b.setAttribute("data-label", doors[k].label);
+      b.innerHTML = esc(doors[k].label);
+      b.onclick = onPress;
+      list.appendChild(b);
+    }
+  }
+
+  // ---- 押下 → 呼び出し中表示 30 秒 → 待機へ ----
+  var callingTimer = null;
+  function onPress() {
+    var id = this.getAttribute("data-door");
+    var label = this.getAttribute("data-label");
+    sendPress(id, function () {});  // 応答は待たず即座に表示遷移 (老人・訪客向け即反応)
+    $("callingDoor").innerHTML = esc(label);
+    $("doorList").style.display = "none";
+    $("hint").style.display = "none";
+    $("callingView").style.display = "block";
+    if (callingTimer) clearTimeout(callingTimer);
+    callingTimer = setTimeout(function () {
+      $("callingView").style.display = "none";
+      $("doorList").style.display = "block";
+      $("hint").style.display = "block";
+    }, CALLING_MS);
+  }
+
+  // ---- クイック返信バナー (state.reply の ts が前回より新しければ 30 秒表示) ----
+  var lastReplyTs = -1;  // -1 = 初回 poll 前 (初回に載っている古い返信は既読扱い)
+  var replyTimer = null;
+  function renderReply(reply) {
+    if (lastReplyTs === -1) { lastReplyTs = (reply && reply.ts) || 0; return; }
+    if (!reply || !reply.ts || reply.ts <= lastReplyTs) return;
+    lastReplyTs = reply.ts;
+    $("replyText").innerHTML = esc(reply.text);
+    $("replyBanner").style.display = "table-cell";
+    if (replyTimer) clearTimeout(replyTimer);
+    replyTimer = setTimeout(function () {
+      $("replyBanner").style.display = "none";
+    }, REPLY_MS);
+  }
+
+  // ---- 輪詢 + オフライン検知 (連続失敗 5 回で帯表示、以降も再試行継続) ----
+  var failCount = 0;
+  function render(state) {
+    renderDoors(state.doors || []);
+    renderReply(state.reply);
+  }
+  function poll() {
+    fetchState(function (st, j) {
+      if (st === 200 && j) {
+        failCount = 0;
+        $("offlineBand").style.display = "none";
+        render(j);
+      } else {
+        failCount++;
+        if (failCount >= OFFLINE_AFTER) $("offlineBand").style.display = "table-cell";
+      }
+      setTimeout(poll, POLL_MS);
+    });
+  }
+  poll();
+})();
+</script>
+</body>
+</html>

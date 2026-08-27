@@ -37,7 +37,11 @@
 "offline.reconnect" = "%@ 秒后重连";
 "offline.title" = "系统离线";
 "panel.calling" = "呼叫中→已通知";
+"panel.monitor_title" = "受铃监视";
 "panel.no_audio_note" = "此门口无法通话（仅通知）";
+"panel.offline" = "离线 — 重连中…";
+"panel.press_hint" = "按下按钮即可通知住户";
+"panel.tap_sound" = "点按以启用声音";
 "panel.title" = "呼叫面板";
 "reply.answered" = "已回复 (%@)";
 "reply.banner" = "住户留言";
