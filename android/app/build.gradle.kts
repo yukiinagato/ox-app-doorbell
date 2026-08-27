@@ -17,11 +17,12 @@ android {
 
     externalNativeBuild {
       cmake {
-        // core は POSIX ビルド可能 — テスト/ホストランナー/PJSIP は外す (PJSIP は Phase 3 後半)
+        // core は POSIX ビルド可能 — テスト/ホストランナーは外す。
+        // PJSIP は tools/build_pjsip_android.sh のプリビルドがあれば有効 (無ければスタブ)。
         arguments += listOf(
           "-DANDROID_STL=c++_static",
           "-DDB_BUILD_TESTS=OFF",
-          "-DDB_WITH_PJSIP=OFF")
+          "-DDB_WITH_PJSIP=ON")
         targets += "doorbell"   // libdoorbell.so (C ABI + JNI グルー) だけを APK に入れる
       }
     }

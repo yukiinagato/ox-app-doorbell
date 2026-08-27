@@ -146,6 +146,87 @@ TEST_CASE("sip: 誤パスワード → 10 秒以内に Failed") {
   CHECK(!f.waitReg(SipRegState::Registered, 500));  // 登録されてしまわない
 }
 
+// ---------- 直接呼 (Asterisk 非経由) + モニタ呼 ----------
+// 単一 pjsua の自己ループ (自分の待受ポートへ INVITE) で UA↔UA 直呼相当を検証する:
+// 発信レッグが主呼、着信レッグがモニタ受理側になる。2 プロセス版 (実際に門口機が
+// Asterisk 通話中のところへ別ノードから監聴する) は tools/dev_monitor_test.sh。
+
+namespace {
+// server 無し (登録なし) + 固定 direct_port の直接呼設定
+SipSettings directSettings(int direct_port) {
+  SipSettings s;
+  s.null_audio = true;
+  s.direct_port = direct_port;
+  return s;
+}
+
+bool waitMonitorCount(SipFix& f, int want, int ms) {
+  for (int i = 0; i < ms / 50; i++) {
+    int n = 0;
+    f.on([&] { n = f.sip->monitorCount(); });
+    if (n == want) return true;
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+  }
+  return false;
+}
+}  // namespace
+
+TEST_CASE("sip: 直接呼 X-Doorbell-Mode: monitor → モニタ受理 (一方向) + RTP") {
+  if (!sipTestEnabled()) return;
+  const int port = 47380 + (::getpid() % 17);  // 他プロセスの 47190 と衝突しない開発用ポート
+  SipFix f;
+  f.on([&] { f.sip->start(directSettings(port)); });
+  f.on([&] { CHECK(f.sip->regState() == SipRegState::Idle); });  // 登録なしで稼働
+
+  // 自己ループ直呼 (monitor 明示): 発信=主呼 / 着信=モニタ
+  f.on([&] { f.sip->call("sip:127.0.0.1:" + std::to_string(port), "monitor"); });
+  REQUIRE(f.waitCall(SipCallState::InCall, 5000));
+  REQUIRE(waitMonitorCount(f, 1, 3000));
+
+  std::this_thread::sleep_for(std::chrono::seconds(2));
+  int64_t tx = 0, rx = 0;
+  f.on([&] { f.sip->rtpStats(&tx, &rx); });
+  std::printf("[sip] 直接呼 RTP tx=%lld rx=%lld (2 秒)\n", static_cast<long long>(tx),
+              static_cast<long long>(rx));
+  CHECK(tx > 30);  // 主呼 (マイク→モニタ側) の送信
+  CHECK(rx > 30);  // モニタ側レッグからの受信 (受け側では conf へ流していない)
+
+  f.on([&] { f.sip->hangup(); });
+  REQUIRE(f.waitCall(SipCallState::Ended, 5000));
+  CHECK(waitMonitorCount(f, 0, 3000));
+}
+
+TEST_CASE("sip: 直接呼ヘッダ無し — 主呼進行中の着信はモニタ (フォールバック)") {
+  if (!sipTestEnabled()) return;
+  const int port = 47380 + (::getpid() % 17);
+  SipFix f;
+  f.on([&] { f.sip->start(directSettings(port)); });
+  // ヘッダ無し自己ループ: make_call 直後に主呼が立つ → 着信時は busy → モニタ扱い
+  f.on([&] { f.sip->call("sip:127.0.0.1:" + std::to_string(port)); });
+  REQUIRE(f.waitCall(SipCallState::InCall, 5000));
+  REQUIRE(waitMonitorCount(f, 1, 3000));
+  f.on([&] { f.sip->hangup(); });
+  REQUIRE(f.waitCall(SipCallState::Ended, 5000));
+  CHECK(waitMonitorCount(f, 0, 3000));
+}
+
+TEST_CASE("sip: 直接呼 X-Doorbell-Mode: answer は主呼進行中 486") {
+  if (!sipTestEnabled()) return;
+  const int port = 47380 + (::getpid() % 17);
+  SipFix f;
+  f.on([&] { f.sip->start(directSettings(port)); });
+  // answer 明示の自己ループ: 着信時に主呼 (発信レッグ) が既にある → 486 → 呼全体が終了
+  f.on([&] { f.sip->call("sip:127.0.0.1:" + std::to_string(port), "answer"); });
+  REQUIRE(f.waitCall(SipCallState::Ended, 5000));
+  CHECK(waitMonitorCount(f, 0, 500));
+  bool in_call = false;
+  {
+    std::lock_guard<std::mutex> lk(f.mu);
+    in_call = std::find(f.calls.begin(), f.calls.end(), SipCallState::InCall) != f.calls.end();
+  }
+  CHECK(!in_call);  // 双方向で繋がってしまわない
+}
+
 // ---------- Node 統合 (実 TCP Node + trigger_rule sip_call) ----------
 
 namespace {

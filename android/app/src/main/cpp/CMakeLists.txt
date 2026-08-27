@@ -4,7 +4,9 @@ cmake_minimum_required(VERSION 3.22)
 project(doorbell_android C CXX)
 
 set(DB_BUILD_TESTS OFF CACHE BOOL "" FORCE)
-set(DB_WITH_PJSIP OFF CACHE BOOL "" FORCE)
+# PJSIP: tools/build_pjsip_android.sh の ABI 別プリビルドがあれば sipctl 実装、無ければ
+# 自動でスタブへフォールバック (core/CMakeLists.txt の EXISTS 判定)。
+set(DB_WITH_PJSIP ON CACHE BOOL "" FORCE)
 
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../../../../../core ${CMAKE_BINARY_DIR}/core)
 

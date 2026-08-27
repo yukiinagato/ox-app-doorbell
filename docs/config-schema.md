@@ -37,7 +37,14 @@
                     "mjpeg_quality": 60, "resolution": "640x480" },
         "kiosk": { "exit_pin_hash": "<pbkdf2>", "watchdog": true },
         "motion": { "enabled": true, "sensitivity": 40, "min_interval_s": 30 },
-        "aec": { "mode": "auto", "tail_ms": 0 }  // 装機標定で書込
+        "aec": { "mode": "auto", "tail_ms": 0 },  // 装機標定で書込
+        // TV 監視器 (Android TV 常駐 app) の目印。運用ノート:
+        //   - role=indoor_panel + tv:true。chime で来客モニタ画面が前台に被さり、
+        //     門口ライブ映像 (MJPEG) + 門口マイクの直接監聴 (sip.direct_port へ
+        //     X-Doorbell-Mode: monitor の直呼 — Asterisk 不要・dialplan 変更不要)。
+        //   - D-pad でクイック返信 (quick_replies を order 順に表示)。
+        //   - 導入手順: deploy/provision/android/provision.md の「Android TV」節。
+        "tv": false
       }
     }
   },
@@ -51,6 +58,11 @@
   "sip": {
     "server": "10.0.1.5", "port": 5060, "transport": "udp",
     "accounts": { "<node_id>": { "user": "door-front", "pass_ref": "secret:sip.<node_id>" } },
+    // 直接呼 (Asterisk 非経由) の待受 UDP ポート。各子機の sipctl が固定 listen し、
+    // 室内機/TV はここへ "sip:<host>:47190" で直接 INVITE する (PBX 障害時も対講/監聴が
+    // 生きる自愈方針)。X-Doorbell-Mode: monitor = 一方向監聴 / answer = 双方向。
+    // server や自機 accounts が未設定でも直接呼だけは動く。
+    "direct_port": 47190,
     // DTMF 機能碼 (通話中の相手キー → アクション; 実行体は mesh/MQTT 側)
     "dtmf_actions": { "*1": { "type": "ha_command", "command": "unlock", "door": "self" },
                       "*0": { "type": "hangup" } }

@@ -13,21 +13,28 @@ endif()
 option(DB_BUILD_TESTS "テストとホスト開発ランナーをビルドする" ON)
 
 # ---------- PJSIP (SIP 通話) ----------
-# ON かつ third_party/pjsip/host のホストビルドが存在する時だけ実装 (sipctl.cpp) をリンクする。
-# それ以外 (mingw クロス等) は常に未登録のスタブ (sipctl_stub.cpp)。
+# ON かつプリビルドが存在する時だけ実装 (sipctl.cpp) をリンクする:
+#   - ホスト (macOS/Linux): third_party/pjsip/host   (tools/build_pjsip_host.sh)
+#   - Android:             third_party/pjsip/android/<ABI> (tools/build_pjsip_android.sh)
+# それ以外 (mingw クロス等・プリビルド無し) は常に未登録のスタブ (sipctl_stub.cpp)。
 option(DB_WITH_PJSIP "PJSIP 統合 (sipctl 実装をリンクする)" ON)
-set(PJSIP_HOST_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/third_party/pjsip/host)
 set(DB_PJSIP_OK OFF)
-if(DB_WITH_PJSIP AND NOT WIN32 AND NOT CMAKE_CROSSCOMPILING
-   AND EXISTS ${PJSIP_HOST_ROOT}/include/pjsua-lib/pjsua.h)
-  # ライブラリ名の三つ組接尾辞 (例 arm-apple-darwin25.5.0) を libpj-*.a から特定
-  file(GLOB _pj_core ${PJSIP_HOST_ROOT}/lib/libpj-*.a)
+set(PJSIP_ROOT "")
+if(DB_WITH_PJSIP AND ANDROID)
+  set(PJSIP_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/third_party/pjsip/android/${ANDROID_ABI})
+elseif(DB_WITH_PJSIP AND NOT WIN32 AND NOT CMAKE_CROSSCOMPILING)
+  set(PJSIP_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/third_party/pjsip/host)
+endif()
+if(PJSIP_ROOT AND EXISTS ${PJSIP_ROOT}/include/pjsua-lib/pjsua.h)
+  # ライブラリ名の三つ組接尾辞 (例 arm-apple-darwin25.5.0 / aarch64-unknown-linux-android)
+  # を libpj-*.a から特定
+  file(GLOB _pj_core ${PJSIP_ROOT}/lib/libpj-*.a)
   if(_pj_core)
     list(GET _pj_core 0 _pj_core0)
     get_filename_component(_pj_name ${_pj_core0} NAME)
     string(REGEX REPLACE "^libpj-(.*)\\.a$" "\\1" PJ_TRIPLE ${_pj_name})
     set(DB_PJSIP_OK ON)
-    message(STATUS "PJSIP: ${PJSIP_HOST_ROOT} (${PJ_TRIPLE})")
+    message(STATUS "PJSIP: ${PJSIP_ROOT} (${PJ_TRIPLE})")
   endif()
 endif()
 if(NOT DB_PJSIP_OK)
@@ -100,14 +107,14 @@ target_link_libraries(doorbell_core PUBLIC db_third_party)
 if(DB_PJSIP_OK)
   target_compile_definitions(doorbell_core PRIVATE DB_HAVE_PJSIP
     PJ_AUTOCONF=1 PJ_IS_BIG_ENDIAN=0 PJ_IS_LITTLE_ENDIAN=1)  # libpjproject.pc の Cflags と同じ
-  target_include_directories(doorbell_core PRIVATE ${PJSIP_HOST_ROOT}/include)
+  target_include_directories(doorbell_core PRIVATE ${PJSIP_ROOT}/include)
   # libpjproject.pc の Libs / Libs.private と同順 (pkg-config 非依存で確実に)
   set(PJ_LIB_NAMES pjsua2 pjsua pjsip-ua pjsip-simple pjsip pjmedia-codec pjmedia-videodev
       pjmedia-audiodev pjmedia pjnath pjlib-util pj
       srtp resample gsmcodec speex ilbccodec g7221codec webrtc)
   set(PJ_LIBS "")
   foreach(_n ${PJ_LIB_NAMES})
-    set(_p ${PJSIP_HOST_ROOT}/lib/lib${_n}-${PJ_TRIPLE}.a)
+    set(_p ${PJSIP_ROOT}/lib/lib${_n}-${PJ_TRIPLE}.a)
     if(EXISTS ${_p})
       list(APPEND PJ_LIBS ${_p})
     endif()
@@ -117,6 +124,9 @@ if(DB_PJSIP_OK)
     target_link_libraries(doorbell_core PUBLIC
       "-framework CoreAudio" "-framework CoreServices" "-framework AudioUnit"
       "-framework AudioToolbox" "-framework Foundation" "-framework AppKit")
+  elseif(ANDROID)
+    # 音声バックエンドは OpenSL ES (tools/build_pjsip_android.sh の config_site 参照)
+    target_link_libraries(doorbell_core PUBLIC OpenSLES)
   endif()
 endif()
 if(WIN32)

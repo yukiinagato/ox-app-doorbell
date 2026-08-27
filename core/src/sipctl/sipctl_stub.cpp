@@ -26,14 +26,16 @@ void SipCtl::start(const SipSettings& settings) {
 void SipCtl::stop() {}
 void SipCtl::updateSettings(const SipSettings&) {}
 
-void SipCtl::call(const std::string& extension) {
-  DB_LOGW(kTag, "call(" + extension + "): PJSIP 無効ビルド — no-op");
+void SipCtl::call(const std::string& target, const std::string&) {
+  DB_LOGW(kTag, "call(" + target + "): PJSIP 無効ビルド — no-op");
 }
 void SipCtl::hangup() {}
 void SipCtl::answer() {}
+void SipCtl::setAllowedSources(const std::vector<std::string>&) {}
 
 SipRegState SipCtl::regState() const { return SipRegState::Idle; }
 SipCallState SipCtl::callState() const { return SipCallState::Idle; }
+int SipCtl::monitorCount() const { return 0; }
 
 void SipCtl::rtpStats(int64_t* tx_pkts, int64_t* rx_pkts) const {
   if (tx_pkts) *tx_pkts = 0;

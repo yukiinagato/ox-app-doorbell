@@ -56,6 +56,24 @@ class DoorbellCore {
         if (handle != 0L) nativeOnCameraFrame(handle, data, format, width, height, stride, tsMs)
     }
 
+    /**
+     * SIP 発呼。target: 内線番号 or "sip:host:port" 完全 URI (Asterisk 非経由の直接呼)。
+     * mode: "" = 通常 (双方向) / "monitor" = 一方向監聴 (門口マイクを聞くだけ)。
+     * PJSIP 無効ビルド (プリビルド無し) では no-op。
+     */
+    fun sipCall(target: String, mode: String = "") {
+        if (handle != 0L) nativeSipCall(handle, target, mode)
+    }
+
+    fun sipHangup() {
+        if (handle != 0L) nativeSipHangup(handle)
+    }
+
+    /** クイック返信の配送 (門口機の面板表示 + TTS)。door 空 = 最新 press の door。 */
+    fun quickReply(replyId: String, door: String) {
+        if (handle != 0L) nativeQuickReply(handle, replyId, door)
+    }
+
     fun version(): String = nativeVersion()
 
     private fun parse(s: String?): JSONObject? =
@@ -96,6 +114,9 @@ class DoorbellCore {
     private external fun nativeConfigJson(handle: Long): String?
     private external fun nativeOnCameraFrame(handle: Long, data: ByteArray, format: Int,
                                              width: Int, height: Int, stride: Int, tsMs: Long)
+    private external fun nativeSipCall(handle: Long, target: String, mode: String)
+    private external fun nativeSipHangup(handle: Long)
+    private external fun nativeQuickReply(handle: Long, replyId: String, door: String)
     private external fun nativeVersion(): String
 
     companion object {

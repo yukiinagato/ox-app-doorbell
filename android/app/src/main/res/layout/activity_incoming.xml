@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 来客モニタ画面 (TV/室内機): 全画面ライブ映像 + 右側クイック返信列。
+     D-pad (TV リモコン) とタッチ両対応 — ボタンは focusable、初期フォーカスは先頭返信。 -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/bg">
+
+    <!-- 門口ライブ映像 (MJPEG 自前デコード) -->
+    <ImageView
+        android:id="@+id/live_view"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:contentDescription="@string/incoming_title"
+        android:scaleType="fitCenter"/>
+
+    <TextView
+        android:id="@+id/no_video_text"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:text="@string/incoming_no_video"
+        android:textColor="@color/dim"
+        android:textSize="24sp"/>
+
+    <!-- 左上: 門口名 + 状態 -->
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|start"
+        android:layout_margin="24dp"
+        android:background="@drawable/bg_reply_card"
+        android:orientation="vertical"
+        android:padding="20dp">
+        <TextView
+            android:id="@+id/door_label"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="@color/fg"
+            android:textSize="34sp"
+            android:textStyle="bold"/>
+        <TextView
+            android:id="@+id/status_text"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="@string/incoming_title"
+            android:textColor="@color/accent"
+            android:textSize="22sp"/>
+        <TextView
+            android:id="@+id/audio_hint"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:text="@string/incoming_listening"
+            android:textColor="@color/dim"
+            android:textSize="16sp"
+            android:visibility="gone"/>
+    </LinearLayout>
+
+    <!-- 右側: クイック返信 (縦並び) + 閉じる -->
+    <ScrollView
+        android:layout_width="340dp"
+        android:layout_height="match_parent"
+        android:layout_gravity="end"
+        android:fillViewport="true"
+        android:scrollbars="none">
+        <LinearLayout
+            android:id="@+id/reply_list"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="vertical"
+            android:padding="24dp">
+            <!-- クイック返信ボタンはコードで挿入 (config quick_replies を order 順) -->
+            <Button
+                android:id="@+id/close_button"
+                android:layout_width="match_parent"
+                android:layout_height="64dp"
+                android:layout_marginTop="24dp"
+                android:background="@drawable/bg_tv_button"
+                android:focusable="true"
+                android:text="@string/incoming_close"
+                android:textColor="@color/dim"
+                android:textSize="20sp"/>
+        </LinearLayout>
+    </ScrollView>
+
+    <!-- 送信済み表示 (3 秒 → クローズ) -->
+    <TextView
+        android:id="@+id/sent_text"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:background="@drawable/bg_reply_card"
+        android:padding="32dp"
+        android:text="@string/incoming_sent"
+        android:textColor="@color/fg"
+        android:textSize="30sp"
+        android:visibility="gone"/>
+</FrameLayout>

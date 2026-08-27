@@ -183,6 +183,20 @@ DB_API void db_core_on_camera_frame(db_core* c, const uint8_t* data, int format,
   c->node->pushCameraFrame(data, format, width, height, stride, ts_ms);
 }
 
+DB_API void db_core_sip_call(db_core* c, const char* target, const char* mode) {
+  if (!c || !c->node || !target || !*target) return;
+  c->node->sipCall(target, mode ? mode : "");
+}
+
+DB_API void db_core_sip_hangup(db_core* c) {
+  if (c && c->node) c->node->sipHangup();
+}
+
+DB_API void db_core_quick_reply(db_core* c, const char* reply_id, const char* door) {
+  if (!c || !c->node || !reply_id || !*reply_id) return;
+  c->node->sendQuickReply(reply_id, "", door ? door : "", "app");
+}
+
 DB_API void db_free(char* p) { std::free(p); }
 
 DB_API const char* db_core_version(void) { return "0.1.0"; }

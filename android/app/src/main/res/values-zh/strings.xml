@@ -51,4 +51,11 @@
     <string name="ring_answer">接听</string>
     <string name="ring_ignore">忽略</string>
     <string name="ring_incoming">%1$s 有访客</string>
+    <string name="incoming_close">关闭</string>
+    <string name="incoming_listening">正在播放门口声音</string>
+    <string name="incoming_no_video">没有门口机画面</string>
+    <string name="incoming_sent">已发送</string>
+    <string name="incoming_title">有访客呼叫</string>
+    <string name="svc_channel">常驻服务</string>
+    <string name="svc_running">门铃节点运行中</string>
 </resources>
