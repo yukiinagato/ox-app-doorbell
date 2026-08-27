@@ -39,3 +39,7 @@ android/**/.cxx/
 *.p12
 *.mobileprovision
 deploy/**/secrets*
+
+# python
+__pycache__/
+*.pyc

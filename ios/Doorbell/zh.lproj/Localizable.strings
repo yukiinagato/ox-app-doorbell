@@ -151,6 +151,11 @@
 "idle.touch_to_call" = "触摸屏幕呼叫";
 "incall.end" = "结束";
 "incall.title" = "通话中";
+"incoming.close" = "关闭";
+"incoming.listening" = "正在播放门口声音";
+"incoming.no_video" = "没有门口机画面";
+"incoming.sent" = "已发送";
+"incoming.title" = "有访客呼叫";
 "notify.test" = "门铃测试通知";
 "offline.body" = "无法呼叫，请直接敲门。";
 "offline.reconnect" = "%@ 秒后重连";
@@ -175,3 +180,5 @@
 "ring.monitoring" = "正在播放门口声音";
 "ring.no_video" = "没有门口机画面";
 "ring.purpose_badge" = "目的: %@";
+"svc.channel" = "常驻服务";
+"svc.running" = "门铃节点运行中";

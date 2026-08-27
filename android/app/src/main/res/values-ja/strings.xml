@@ -154,6 +154,11 @@
     <string name="idle_touch_to_call">タッチして呼び出してください</string>
     <string name="incall_end">終了</string>
     <string name="incall_title">通話中</string>
+    <string name="incoming_close">閉じる</string>
+    <string name="incoming_listening">門口の音声を再生中</string>
+    <string name="incoming_no_video">門口機の映像がありません</string>
+    <string name="incoming_sent">送信しました</string>
+    <string name="incoming_title">呼び出し中</string>
     <string name="notify_test">ドアホン テスト通知</string>
     <string name="offline_body">呼び出しできません。直接ノックしてください。</string>
     <string name="offline_reconnect">再接続まで %1$s 秒</string>
@@ -178,4 +183,6 @@
     <string name="ring_monitoring">門口の音声を再生中</string>
     <string name="ring_no_video">門口機の映像がありません</string>
     <string name="ring_purpose_badge">用件: %1$s</string>
+    <string name="svc_channel">常駐サービス</string>
+    <string name="svc_running">ドアホン子機 稼働中</string>
 </resources>

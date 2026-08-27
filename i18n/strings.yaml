@@ -194,3 +194,12 @@ admin.purposes: { ja: "用件", en: "Purposes", zh: "来访目的" }
 admin.languages: { ja: "訪客言語", en: "Visitor languages", zh: "访客语言" }
 admin.audio_none: { ja: "音声なし (TTS)", en: "No audio (TTS)", zh: "无音频 (用 TTS)" }
 admin.audio_play: { ja: "試聴", en: "Play", zh: "试听" }
+
+# ---- Android 来鈴/常駐サービス (生成物へ直書きされていたものを単一ソースへ回収) ----
+incoming.title: { ja: "呼び出し中", en: "Visitor calling", zh: "有访客呼叫" }
+incoming.listening: { ja: "門口の音声を再生中", en: "Live door audio on", zh: "正在播放门口声音" }
+incoming.no_video: { ja: "門口機の映像がありません", en: "No video from door station", zh: "没有门口机画面" }
+incoming.sent: { ja: "送信しました", en: "Reply sent", zh: "已发送" }
+incoming.close: { ja: "閉じる", en: "Close", zh: "关闭" }
+svc.channel: { ja: "常駐サービス", en: "Resident service", zh: "常驻服务" }
+svc.running: { ja: "ドアホン子機 稼働中", en: "Doorbell node running", zh: "门铃节点运行中" }
