@@ -107,6 +107,27 @@ namespace DoorbellApp.Core
             catch { return null; }
         }
 
+        public Dictionary<string, object> Config()
+        {
+            if (_core == IntPtr.Zero) return null;
+            string s = CoreInterop.TakeUtf8(CoreInterop.db_core_config_json(_core));
+            if (s == null) return null;
+            try { return _json.Deserialize<Dictionary<string, object>>(s); }
+            catch { return null; }
+        }
+
+        /// <summary>設定ツリーをドットパスで辿る ("doors.d_front.label.ja" 等)。無ければ null。</summary>
+        public static object Dig(Dictionary<string, object> root, string dotpath)
+        {
+            object cur = root;
+            foreach (var part in dotpath.Split('.'))
+            {
+                var d = cur as Dictionary<string, object>;
+                if (d == null || !d.TryGetValue(part, out cur)) return null;
+            }
+            return cur;
+        }
+
         public void Dispose()
         {
             if (_core != IntPtr.Zero)

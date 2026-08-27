@@ -89,6 +89,15 @@ namespace DoorbellApp
                     NodeInfo.Text = node["name"] + " · v" + node["version"];
             }
             catch { }
+            // 呼び出しボタンにドアの表示名 (設定 doors.<door>.label.<lang>) を反映
+            if (!string.IsNullOrEmpty(App.Boot.Door))
+            {
+                var cfg = App.Core.Config();
+                var label = CoreClient.Dig(cfg, "doors." + App.Boot.Door + ".label." + App.Boot.UiLang)
+                            ?? CoreClient.Dig(cfg, "doors." + App.Boot.Door + ".label.ja");
+                if (label != null)
+                    CallButton.Content = L10n.T("idle.call_button", label.ToString());
+            }
         }
 
         // ---------- 状態遷移 ----------

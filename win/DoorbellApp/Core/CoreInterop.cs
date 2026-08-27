@@ -70,6 +70,9 @@ namespace DoorbellApp.Core
         public static extern IntPtr db_core_status_json(IntPtr core);
 
         [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
+        public static extern IntPtr db_core_config_json(IntPtr core);
+
+        [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
         public static extern void db_core_on_camera_frame(IntPtr core, IntPtr data, int format,
             int width, int height, int stride, long tsMs);
 
