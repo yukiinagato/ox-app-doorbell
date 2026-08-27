@@ -1,0 +1,15 @@
+# 開発用 Asterisk (SIP 結合テスト用 — 本番はユーザー自身の Asterisk)
+#   docker compose up -d
+#   門口機: SIP server=ホストIP, user=8001, pass=devpass8001, 呼出先=600 (応答→音声→エコー)
+services:
+  asterisk:
+    image: andrius/asterisk:20.20.1_debian-trixie
+    container_name: doorbell-dev-asterisk
+    restart: unless-stopped
+    ports:
+      - "5060:5060/udp"
+      - "10000-10020:10000-10020/udp"
+    volumes:
+      - ./conf/pjsip.conf:/etc/asterisk/pjsip.conf:ro
+      - ./conf/extensions.conf:/etc/asterisk/extensions.conf:ro
+      - ./conf/rtp.conf:/etc/asterisk/rtp.conf:ro

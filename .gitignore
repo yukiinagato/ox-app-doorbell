@@ -2,6 +2,8 @@
 /build/
 /build-*/
 /core/build/
+# pjsip は fetch スクリプトで取得 (SHA256 ピンのみ追跡)
+/core/third_party/pjsip/
 cmake-build-*/
 *.o
 *.obj
