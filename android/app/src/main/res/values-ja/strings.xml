@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="admin_add_device">デバイスを追加</string>
+    <string name="admin_clock_warn">時刻未同期</string>
+    <string name="admin_dashboard">ダッシュボード</string>
+    <string name="admin_devices">デバイス</string>
+    <string name="admin_doors">ドア／建物</string>
+    <string name="admin_events">イベント履歴</string>
+    <string name="admin_integrations">統合</string>
+    <string name="admin_leader">リーダー</string>
+    <string name="admin_locked">10分間ロックされました</string>
+    <string name="admin_login">ログイン</string>
+    <string name="admin_notify">通知</string>
+    <string name="admin_offline">オフライン</string>
+    <string name="admin_online">オンライン</string>
+    <string name="admin_password">管理パスワード</string>
+    <string name="admin_pin_prompt">PIN を入力してください</string>
+    <string name="admin_pin_wrong">PIN が違います</string>
+    <string name="admin_rules">呼出ルール</string>
+    <string name="admin_sync_state">同期状態: %1$s/%2$s 台に反映済み</string>
+    <string name="admin_system">システム</string>
+    <string name="admin_title">管理</string>
+    <string name="app_name">ドアホン</string>
+    <string name="calling_cancel">取消し</string>
+    <string name="calling_no_answer">応答がありません</string>
+    <string name="calling_title">呼び出し中…</string>
+    <string name="degraded_notified">呼び出し済み・応答をお待ちください</string>
+    <string name="event_motion">%1$s で動きを検知 (%2$s)</string>
+    <string name="event_offline">⚠ %1$s オフライン (最終応答 %2$s)</string>
+    <string name="event_online">%1$s オンライン復帰</string>
+    <string name="event_press">%1$s に来客です (%2$s)</string>
+    <string name="idle_call_button">%1$s 呼出</string>
+    <string name="idle_touch_to_call">タッチして呼び出してください</string>
+    <string name="incall_end">終了</string>
+    <string name="incall_title">通話中</string>
+    <string name="offline_body">呼び出しできません。直接ノックしてください。</string>
+    <string name="offline_reconnect">再接続まで %1$s 秒</string>
+    <string name="offline_title">システムオフライン</string>
+    <string name="panel_calling">呼び出し中→通知済み</string>
+    <string name="panel_no_audio_note">この玄関では通話できません (通知のみ)</string>
+    <string name="panel_title">呼出パネル</string>
+    <string name="ring_answer">応答</string>
+    <string name="ring_ignore">無視</string>
+    <string name="ring_incoming">%1$s で呼び出し中</string>
+</resources>

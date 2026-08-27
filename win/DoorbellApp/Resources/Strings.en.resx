@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <data name="admin_add_device" xml:space="preserve"><value>Add device</value></data>
+  <data name="admin_clock_warn" xml:space="preserve"><value>Clock not synced</value></data>
+  <data name="admin_dashboard" xml:space="preserve"><value>Dashboard</value></data>
+  <data name="admin_devices" xml:space="preserve"><value>Devices</value></data>
+  <data name="admin_doors" xml:space="preserve"><value>Doors &amp; Buildings</value></data>
+  <data name="admin_events" xml:space="preserve"><value>Event history</value></data>
+  <data name="admin_integrations" xml:space="preserve"><value>Integrations</value></data>
+  <data name="admin_leader" xml:space="preserve"><value>Leader</value></data>
+  <data name="admin_locked" xml:space="preserve"><value>Locked for 10 minutes</value></data>
+  <data name="admin_login" xml:space="preserve"><value>Log in</value></data>
+  <data name="admin_notify" xml:space="preserve"><value>Notifications</value></data>
+  <data name="admin_offline" xml:space="preserve"><value>Offline</value></data>
+  <data name="admin_online" xml:space="preserve"><value>Online</value></data>
+  <data name="admin_password" xml:space="preserve"><value>Admin password</value></data>
+  <data name="admin_pin_prompt" xml:space="preserve"><value>Enter PIN</value></data>
+  <data name="admin_pin_wrong" xml:space="preserve"><value>Wrong PIN</value></data>
+  <data name="admin_rules" xml:space="preserve"><value>Call rules</value></data>
+  <data name="admin_sync_state" xml:space="preserve"><value>Synced to {0}/{1} nodes</value></data>
+  <data name="admin_system" xml:space="preserve"><value>System</value></data>
+  <data name="admin_title" xml:space="preserve"><value>Admin</value></data>
+  <data name="app_name" xml:space="preserve"><value>Doorbell</value></data>
+  <data name="calling_cancel" xml:space="preserve"><value>Cancel</value></data>
+  <data name="calling_no_answer" xml:space="preserve"><value>No answer</value></data>
+  <data name="calling_title" xml:space="preserve"><value>Calling…</value></data>
+  <data name="degraded_notified" xml:space="preserve"><value>Notified — please wait</value></data>
+  <data name="event_motion" xml:space="preserve"><value>Motion at {0} ({1})</value></data>
+  <data name="event_offline" xml:space="preserve"><value>⚠ {0} offline (last seen {1})</value></data>
+  <data name="event_online" xml:space="preserve"><value>{0} back online</value></data>
+  <data name="event_press" xml:space="preserve"><value>Visitor at {0} ({1})</value></data>
+  <data name="idle_call_button" xml:space="preserve"><value>Call {0}</value></data>
+  <data name="idle_touch_to_call" xml:space="preserve"><value>Touch to call</value></data>
+  <data name="incall_end" xml:space="preserve"><value>End</value></data>
+  <data name="incall_title" xml:space="preserve"><value>In call</value></data>
+  <data name="offline_body" xml:space="preserve"><value>Calling unavailable. Please knock.</value></data>
+  <data name="offline_reconnect" xml:space="preserve"><value>Reconnecting in {0}s</value></data>
+  <data name="offline_title" xml:space="preserve"><value>System offline</value></data>
+  <data name="panel_calling" xml:space="preserve"><value>Calling → notified</value></data>
+  <data name="panel_no_audio_note" xml:space="preserve"><value>No voice at this door (notify only)</value></data>
+  <data name="panel_title" xml:space="preserve"><value>Call panel</value></data>
+  <data name="ring_answer" xml:space="preserve"><value>Answer</value></data>
+  <data name="ring_ignore" xml:space="preserve"><value>Ignore</value></data>
+  <data name="ring_incoming" xml:space="preserve"><value>Visitor at {0}</value></data>
+</root>

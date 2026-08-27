@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="admin_add_device">Add device</string>
+    <string name="admin_clock_warn">Clock not synced</string>
+    <string name="admin_dashboard">Dashboard</string>
+    <string name="admin_devices">Devices</string>
+    <string name="admin_doors">Doors &amp; Buildings</string>
+    <string name="admin_events">Event history</string>
+    <string name="admin_integrations">Integrations</string>
+    <string name="admin_leader">Leader</string>
+    <string name="admin_locked">Locked for 10 minutes</string>
+    <string name="admin_login">Log in</string>
+    <string name="admin_notify">Notifications</string>
+    <string name="admin_offline">Offline</string>
+    <string name="admin_online">Online</string>
+    <string name="admin_password">Admin password</string>
+    <string name="admin_pin_prompt">Enter PIN</string>
+    <string name="admin_pin_wrong">Wrong PIN</string>
+    <string name="admin_rules">Call rules</string>
+    <string name="admin_sync_state">Synced to %1$s/%2$s nodes</string>
+    <string name="admin_system">System</string>
+    <string name="admin_title">Admin</string>
+    <string name="app_name">Doorbell</string>
+    <string name="calling_cancel">Cancel</string>
+    <string name="calling_no_answer">No answer</string>
+    <string name="calling_title">Calling…</string>
+    <string name="degraded_notified">Notified — please wait</string>
+    <string name="event_motion">Motion at %1$s (%2$s)</string>
+    <string name="event_offline">⚠ %1$s offline (last seen %2$s)</string>
+    <string name="event_online">%1$s back online</string>
+    <string name="event_press">Visitor at %1$s (%2$s)</string>
+    <string name="idle_call_button">Call %1$s</string>
+    <string name="idle_touch_to_call">Touch to call</string>
+    <string name="incall_end">End</string>
+    <string name="incall_title">In call</string>
+    <string name="offline_body">Calling unavailable. Please knock.</string>
+    <string name="offline_reconnect">Reconnecting in %1$ss</string>
+    <string name="offline_title">System offline</string>
+    <string name="panel_calling">Calling → notified</string>
+    <string name="panel_no_audio_note">No voice at this door (notify only)</string>
+    <string name="panel_title">Call panel</string>
+    <string name="ring_answer">Answer</string>
+    <string name="ring_ignore">Ignore</string>
+    <string name="ring_incoming">Visitor at %1$s</string>
+</resources>

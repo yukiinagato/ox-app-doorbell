@@ -1,0 +1,54 @@
+# 文言の単一ソース (ja が原文)。形式は 1 行 1 キーの制限付き YAML:
+#   key.path: { ja: "…", en: "…", zh: "…" }
+# プレースホルダは {name} 形式。tools/gen_i18n.py が各プラットフォーム形式へ変換する。
+
+app.name: { ja: "ドアホン", en: "Doorbell", zh: "门铃" }
+
+idle.call_button: { ja: "{unit} 呼出", en: "Call {unit}", zh: "呼叫 {unit}" }
+idle.touch_to_call: { ja: "タッチして呼び出してください", en: "Touch to call", zh: "触摸屏幕呼叫" }
+
+calling.title: { ja: "呼び出し中…", en: "Calling…", zh: "呼叫中…" }
+calling.cancel: { ja: "取消し", en: "Cancel", zh: "取消" }
+calling.no_answer: { ja: "応答がありません", en: "No answer", zh: "无人应答" }
+
+incall.title: { ja: "通話中", en: "In call", zh: "通话中" }
+incall.end: { ja: "終了", en: "End", zh: "结束" }
+
+degraded.notified: { ja: "呼び出し済み・応答をお待ちください", en: "Notified — please wait", zh: "已通知，请稍候" }
+offline.title: { ja: "システムオフライン", en: "System offline", zh: "系统离线" }
+offline.body: { ja: "呼び出しできません。直接ノックしてください。", en: "Calling unavailable. Please knock.", zh: "无法呼叫，请直接敲门。" }
+offline.reconnect: { ja: "再接続まで {sec} 秒", en: "Reconnecting in {sec}s", zh: "{sec} 秒后重连" }
+
+ring.incoming: { ja: "{door} で呼び出し中", en: "Visitor at {door}", zh: "{door} 有访客" }
+ring.answer: { ja: "応答", en: "Answer", zh: "接听" }
+ring.ignore: { ja: "無視", en: "Ignore", zh: "忽略" }
+
+admin.title: { ja: "管理", en: "Admin", zh: "管理" }
+admin.pin_prompt: { ja: "PIN を入力してください", en: "Enter PIN", zh: "请输入 PIN" }
+admin.pin_wrong: { ja: "PIN が違います", en: "Wrong PIN", zh: "PIN 错误" }
+admin.locked: { ja: "10分間ロックされました", en: "Locked for 10 minutes", zh: "已锁定 10 分钟" }
+admin.login: { ja: "ログイン", en: "Log in", zh: "登录" }
+admin.password: { ja: "管理パスワード", en: "Admin password", zh: "管理密码" }
+admin.dashboard: { ja: "ダッシュボード", en: "Dashboard", zh: "仪表盘" }
+admin.devices: { ja: "デバイス", en: "Devices", zh: "设备" }
+admin.doors: { ja: "ドア／建物", en: "Doors & Buildings", zh: "门口/建筑" }
+admin.rules: { ja: "呼出ルール", en: "Call rules", zh: "呼叫规则" }
+admin.notify: { ja: "通知", en: "Notifications", zh: "通知" }
+admin.integrations: { ja: "統合", en: "Integrations", zh: "集成" }
+admin.events: { ja: "イベント履歴", en: "Event history", zh: "事件记录" }
+admin.system: { ja: "システム", en: "System", zh: "系统" }
+admin.add_device: { ja: "デバイスを追加", en: "Add device", zh: "添加设备" }
+admin.sync_state: { ja: "同期状態: {n}/{total} 台に反映済み", en: "Synced to {n}/{total} nodes", zh: "已同步 {n}/{total} 台" }
+admin.leader: { ja: "リーダー", en: "Leader", zh: "主节点" }
+admin.online: { ja: "オンライン", en: "Online", zh: "在线" }
+admin.offline: { ja: "オフライン", en: "Offline", zh: "离线" }
+admin.clock_warn: { ja: "時刻未同期", en: "Clock not synced", zh: "时钟未同步" }
+
+event.press: { ja: "{door} に来客です ({time})", en: "Visitor at {door} ({time})", zh: "{door} 有访客 ({time})" }
+event.motion: { ja: "{door} で動きを検知 ({time})", en: "Motion at {door} ({time})", zh: "{door} 检测到移动 ({time})" }
+event.offline: { ja: "⚠ {device} オフライン (最終応答 {time})", en: "⚠ {device} offline (last seen {time})", zh: "⚠ {device} 离线 (最后在线 {time})" }
+event.online: { ja: "{device} オンライン復帰", en: "{device} back online", zh: "{device} 恢复在线" }
+
+panel.title: { ja: "呼出パネル", en: "Call panel", zh: "呼叫面板" }
+panel.calling: { ja: "呼び出し中→通知済み", en: "Calling → notified", zh: "呼叫中→已通知" }
+panel.no_audio_note: { ja: "この玄関では通話できません (通知のみ)", en: "No voice at this door (notify only)", zh: "此门口无法通话（仅通知）" }

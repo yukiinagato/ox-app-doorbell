@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <data name="admin_add_device" xml:space="preserve"><value>添加设备</value></data>
+  <data name="admin_clock_warn" xml:space="preserve"><value>时钟未同步</value></data>
+  <data name="admin_dashboard" xml:space="preserve"><value>仪表盘</value></data>
+  <data name="admin_devices" xml:space="preserve"><value>设备</value></data>
+  <data name="admin_doors" xml:space="preserve"><value>门口/建筑</value></data>
+  <data name="admin_events" xml:space="preserve"><value>事件记录</value></data>
+  <data name="admin_integrations" xml:space="preserve"><value>集成</value></data>
+  <data name="admin_leader" xml:space="preserve"><value>主节点</value></data>
+  <data name="admin_locked" xml:space="preserve"><value>已锁定 10 分钟</value></data>
+  <data name="admin_login" xml:space="preserve"><value>登录</value></data>
+  <data name="admin_notify" xml:space="preserve"><value>通知</value></data>
+  <data name="admin_offline" xml:space="preserve"><value>离线</value></data>
+  <data name="admin_online" xml:space="preserve"><value>在线</value></data>
+  <data name="admin_password" xml:space="preserve"><value>管理密码</value></data>
+  <data name="admin_pin_prompt" xml:space="preserve"><value>请输入 PIN</value></data>
+  <data name="admin_pin_wrong" xml:space="preserve"><value>PIN 错误</value></data>
+  <data name="admin_rules" xml:space="preserve"><value>呼叫规则</value></data>
+  <data name="admin_sync_state" xml:space="preserve"><value>已同步 {0}/{1} 台</value></data>
+  <data name="admin_system" xml:space="preserve"><value>系统</value></data>
+  <data name="admin_title" xml:space="preserve"><value>管理</value></data>
+  <data name="app_name" xml:space="preserve"><value>门铃</value></data>
+  <data name="calling_cancel" xml:space="preserve"><value>取消</value></data>
+  <data name="calling_no_answer" xml:space="preserve"><value>无人应答</value></data>
+  <data name="calling_title" xml:space="preserve"><value>呼叫中…</value></data>
+  <data name="degraded_notified" xml:space="preserve"><value>已通知，请稍候</value></data>
+  <data name="event_motion" xml:space="preserve"><value>{0} 检测到移动 ({1})</value></data>
+  <data name="event_offline" xml:space="preserve"><value>⚠ {0} 离线 (最后在线 {1})</value></data>
+  <data name="event_online" xml:space="preserve"><value>{0} 恢复在线</value></data>
+  <data name="event_press" xml:space="preserve"><value>{0} 有访客 ({1})</value></data>
+  <data name="idle_call_button" xml:space="preserve"><value>呼叫 {0}</value></data>
+  <data name="idle_touch_to_call" xml:space="preserve"><value>触摸屏幕呼叫</value></data>
+  <data name="incall_end" xml:space="preserve"><value>结束</value></data>
+  <data name="incall_title" xml:space="preserve"><value>通话中</value></data>
+  <data name="offline_body" xml:space="preserve"><value>无法呼叫，请直接敲门。</value></data>
+  <data name="offline_reconnect" xml:space="preserve"><value>{0} 秒后重连</value></data>
+  <data name="offline_title" xml:space="preserve"><value>系统离线</value></data>
+  <data name="panel_calling" xml:space="preserve"><value>呼叫中→已通知</value></data>
+  <data name="panel_no_audio_note" xml:space="preserve"><value>此门口无法通话（仅通知）</value></data>
+  <data name="panel_title" xml:space="preserve"><value>呼叫面板</value></data>
+  <data name="ring_answer" xml:space="preserve"><value>接听</value></data>
+  <data name="ring_ignore" xml:space="preserve"><value>忽略</value></data>
+  <data name="ring_incoming" xml:space="preserve"><value>{0} 有访客</value></data>
+</root>

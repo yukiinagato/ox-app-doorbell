@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="admin_add_device">添加设备</string>
+    <string name="admin_clock_warn">时钟未同步</string>
+    <string name="admin_dashboard">仪表盘</string>
+    <string name="admin_devices">设备</string>
+    <string name="admin_doors">门口/建筑</string>
+    <string name="admin_events">事件记录</string>
+    <string name="admin_integrations">集成</string>
+    <string name="admin_leader">主节点</string>
+    <string name="admin_locked">已锁定 10 分钟</string>
+    <string name="admin_login">登录</string>
+    <string name="admin_notify">通知</string>
+    <string name="admin_offline">离线</string>
+    <string name="admin_online">在线</string>
+    <string name="admin_password">管理密码</string>
+    <string name="admin_pin_prompt">请输入 PIN</string>
+    <string name="admin_pin_wrong">PIN 错误</string>
+    <string name="admin_rules">呼叫规则</string>
+    <string name="admin_sync_state">已同步 %1$s/%2$s 台</string>
+    <string name="admin_system">系统</string>
+    <string name="admin_title">管理</string>
+    <string name="app_name">门铃</string>
+    <string name="calling_cancel">取消</string>
+    <string name="calling_no_answer">无人应答</string>
+    <string name="calling_title">呼叫中…</string>
+    <string name="degraded_notified">已通知，请稍候</string>
+    <string name="event_motion">%1$s 检测到移动 (%2$s)</string>
+    <string name="event_offline">⚠ %1$s 离线 (最后在线 %2$s)</string>
+    <string name="event_online">%1$s 恢复在线</string>
+    <string name="event_press">%1$s 有访客 (%2$s)</string>
+    <string name="idle_call_button">呼叫 %1$s</string>
+    <string name="idle_touch_to_call">触摸屏幕呼叫</string>
+    <string name="incall_end">结束</string>
+    <string name="incall_title">通话中</string>
+    <string name="offline_body">无法呼叫，请直接敲门。</string>
+    <string name="offline_reconnect">%1$s 秒后重连</string>
+    <string name="offline_title">系统离线</string>
+    <string name="panel_calling">呼叫中→已通知</string>
+    <string name="panel_no_audio_note">此门口无法通话（仅通知）</string>
+    <string name="panel_title">呼叫面板</string>
+    <string name="ring_answer">接听</string>
+    <string name="ring_ignore">忽略</string>
+    <string name="ring_incoming">%1$s 有访客</string>
+</resources>

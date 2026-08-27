@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <data name="admin_add_device" xml:space="preserve"><value>デバイスを追加</value></data>
+  <data name="admin_clock_warn" xml:space="preserve"><value>時刻未同期</value></data>
+  <data name="admin_dashboard" xml:space="preserve"><value>ダッシュボード</value></data>
+  <data name="admin_devices" xml:space="preserve"><value>デバイス</value></data>
+  <data name="admin_doors" xml:space="preserve"><value>ドア／建物</value></data>
+  <data name="admin_events" xml:space="preserve"><value>イベント履歴</value></data>
+  <data name="admin_integrations" xml:space="preserve"><value>統合</value></data>
+  <data name="admin_leader" xml:space="preserve"><value>リーダー</value></data>
+  <data name="admin_locked" xml:space="preserve"><value>10分間ロックされました</value></data>
+  <data name="admin_login" xml:space="preserve"><value>ログイン</value></data>
+  <data name="admin_notify" xml:space="preserve"><value>通知</value></data>
+  <data name="admin_offline" xml:space="preserve"><value>オフライン</value></data>
+  <data name="admin_online" xml:space="preserve"><value>オンライン</value></data>
+  <data name="admin_password" xml:space="preserve"><value>管理パスワード</value></data>
+  <data name="admin_pin_prompt" xml:space="preserve"><value>PIN を入力してください</value></data>
+  <data name="admin_pin_wrong" xml:space="preserve"><value>PIN が違います</value></data>
+  <data name="admin_rules" xml:space="preserve"><value>呼出ルール</value></data>
+  <data name="admin_sync_state" xml:space="preserve"><value>同期状態: {0}/{1} 台に反映済み</value></data>
+  <data name="admin_system" xml:space="preserve"><value>システム</value></data>
+  <data name="admin_title" xml:space="preserve"><value>管理</value></data>
+  <data name="app_name" xml:space="preserve"><value>ドアホン</value></data>
+  <data name="calling_cancel" xml:space="preserve"><value>取消し</value></data>
+  <data name="calling_no_answer" xml:space="preserve"><value>応答がありません</value></data>
+  <data name="calling_title" xml:space="preserve"><value>呼び出し中…</value></data>
+  <data name="degraded_notified" xml:space="preserve"><value>呼び出し済み・応答をお待ちください</value></data>
+  <data name="event_motion" xml:space="preserve"><value>{0} で動きを検知 ({1})</value></data>
+  <data name="event_offline" xml:space="preserve"><value>⚠ {0} オフライン (最終応答 {1})</value></data>
+  <data name="event_online" xml:space="preserve"><value>{0} オンライン復帰</value></data>
+  <data name="event_press" xml:space="preserve"><value>{0} に来客です ({1})</value></data>
+  <data name="idle_call_button" xml:space="preserve"><value>{0} 呼出</value></data>
+  <data name="idle_touch_to_call" xml:space="preserve"><value>タッチして呼び出してください</value></data>
+  <data name="incall_end" xml:space="preserve"><value>終了</value></data>
+  <data name="incall_title" xml:space="preserve"><value>通話中</value></data>
+  <data name="offline_body" xml:space="preserve"><value>呼び出しできません。直接ノックしてください。</value></data>
+  <data name="offline_reconnect" xml:space="preserve"><value>再接続まで {0} 秒</value></data>
+  <data name="offline_title" xml:space="preserve"><value>システムオフライン</value></data>
+  <data name="panel_calling" xml:space="preserve"><value>呼び出し中→通知済み</value></data>
+  <data name="panel_no_audio_note" xml:space="preserve"><value>この玄関では通話できません (通知のみ)</value></data>
+  <data name="panel_title" xml:space="preserve"><value>呼出パネル</value></data>
+  <data name="ring_answer" xml:space="preserve"><value>応答</value></data>
+  <data name="ring_ignore" xml:space="preserve"><value>無視</value></data>
+  <data name="ring_incoming" xml:space="preserve"><value>{0} で呼び出し中</value></data>
+</root>
