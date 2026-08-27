@@ -78,12 +78,27 @@ class Node {
   // HTTPS 実装の注入 (Telegram ブリッジが使う)。start 前後どちらでも可・任意スレッド可。
   void setHttpsFn(HttpsFn fn);
 
-  // ボタン押下 (門口機 UI / /api/press / panel から)
-  void press(const std::string& door_id);
+  // ボタン押下 (門口機 UI / /api/press / panel から)。purpose: visit_purposes のキー
+  // ("" = 用件なしの汎用按鈴)。payload には purpose と訪客言語 (選択済みの場合) が載る。
+  void press(const std::string& door_id, const std::string& purpose = "");
   // クイック返信の配送 (reply_id は config quick_replies のキー、free_text 優先)
-  // door_id 空 = 最新 press の door。via: "web" | "telegram" | "mqtt" | "app"
+  // door_id 空 = 最新 press の door。via: "web" | "telegram" | "mqtt" | "app" | "auto"
+  // 文言は該当 door の訪客言語で表示/TTS (訳が無ければ ja へ回落)。quick_replies.<id>.audio
+  // にキャッシュ済みカスタム音声があれば TTS の代わりにそれを使う (uiNotify に audio_path)。
   void sendQuickReply(const std::string& reply_id, const std::string& free_text,
                       const std::string& door_id, const std::string& via);
+
+  // 訪客言語切替 (門口機の言語ボタン / panel / admin)。door_id 空 = 自機担当 door。
+  // visitor_lang イベントとして全ノードへ複製され、各ノードが
+  // {"t":"visitor_lang","door":…,"lang":…} を uiNotify する。lang "ja" = 即時復帰。
+  // ui.visitor_lang_revert_s 秒の無操作で自動的に ja へ戻る (これもイベント)。
+  void setVisitorLang(const std::string& door_id, const std::string& lang);
+
+  // 統一資産: data を assets/ へ保存し台帳 (config assets.<hash>) へ登録して hash を返す。
+  // 3MB 超・許可外 type (image/jpeg image/png audio/mpeg audio/wav) は "" (登録しない)。
+  std::string addAsset(const Bytes& data, const std::string& type, const std::string& label);
+  // hash の資産がローカルキャッシュにあればそのファイルパス、無ければ ""。
+  std::string assetPath(const std::string& hash);
 
   // SOS 緊急モード。active=true で発報 / false で解除 (emergency / emergency_cancel
   // イベントを追加 — 全ノードへ複製され、各ノードが {"t":"emergency"} を uiNotify する)。

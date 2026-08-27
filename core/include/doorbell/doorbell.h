@@ -48,7 +48,12 @@ typedef struct db_platform {
 /* core → 殻 への UI イベント通知 (JSON)。例:
  * {"t":"state","state":"idle|calling|in_call|degraded|offline"}
  * {"t":"chime","sound":"ding1"} {"t":"config_changed"} {"t":"peers_changed"}
- * {"t":"reply","text":"ただいま留守にしています","ttl_s":30}  — クイック返信の面板表示 */
+ * {"t":"reply","text":"ただいま留守にしています","ttl_s":30,"lang":"ja"}
+ *   — クイック返信の面板表示。カスタム音声がキャッシュ済みなら "audio_path" (ローカル
+ *     ファイル) が付く: 殻はそれを再生し TTS はしない (無ければ tts_speak が呼ばれる)。
+ * {"t":"chime",...,"audio_path":"..."} — sound "asset:<sha256>" のカスタム音 (キャッシュ済時)
+ * {"t":"visitor_lang","door":"d_front","lang":"en"} — 訪客言語の切替/復帰 (全ノード)
+ * {"t":"asset_ready","hash":"<sha256>"} — 統一資産のキャッシュ完了 (背景画像等の再読込合図) */
 typedef void (*db_ui_event_cb)(void* user, const char* event_json);
 
 /* 生成: data_dir は書込可能ディレクトリ。boot_json は初期設定
@@ -63,6 +68,17 @@ DB_API void db_core_set_ui_callback(db_core* c, db_ui_event_cb cb, void* user);
 
 /* 呼出ボタン押下 (door_id は設定に基づく)。 */
 DB_API void db_core_press(db_core* c, const char* door_id);
+
+/* 用件付き按鈴 (訪客の用件ボタン 1 タップ)。purpose: 設定 visit_purposes のキー
+ * (NULL/"" = 用件なし = db_core_press と同じ)。press イベント payload に
+ * "purpose" と選択中の訪客言語 "visitor_lang" が載る。 */
+DB_API void db_core_press_purpose(db_core* c, const char* door_id, const char* purpose);
+
+/* 訪客言語切替 (門口機の言語ボタン)。door NULL/"" = 自機担当 door。
+ * lang: "en" 等 (設定 ui.languages が候補)。"ja" で即時復帰。
+ * ui.visitor_lang_revert_s 秒の無操作で自動的に ja へ戻る。全ノードの殻に
+ * {"t":"visitor_lang","door":…,"lang":…} が届く。 */
+DB_API void db_core_set_visitor_lang(db_core* c, const char* door, const char* lang);
 
 /* ノード表・リーダー・SIP 状態などのスナップショット JSON。db_free で解放。 */
 DB_API char* db_core_status_json(db_core* c);

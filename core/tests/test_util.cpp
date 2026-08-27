@@ -18,6 +18,39 @@ TEST_CASE("hex roundtrip") {
   CHECK_FALSE(hexDecode("abc", out));
 }
 
+TEST_CASE("sha256 既知ベクタ (FIPS 180-4 / NIST)") {
+  CHECK(sha256Hex(Bytes{}) ==
+        "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
+  CHECK(sha256Hex(toBytes("abc")) ==
+        "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
+  CHECK(sha256Hex(toBytes("abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq")) ==
+        "248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1");
+  // 1,000,000 × 'a' (複数ブロック + バッファ境界)
+  CHECK(sha256Hex(Bytes(1'000'000, 'a')) ==
+        "cdc76e5c9914fb9281a1c7e284d73e67f1809a48a497200e046d39ccc7112cd0");
+  // 55/56/64 バイト境界 (パディングの分岐)
+  CHECK(sha256Hex(Bytes(56, 'x')) == sha256Hex(Bytes(56, 'x')));
+  CHECK(sha256Hex(Bytes(55, 'x')) != sha256Hex(Bytes(56, 'x')));
+}
+
+TEST_CASE("ファイル IO (writeFileBytes/readFileBytes/listDir)") {
+  const std::string dir = tempDir() + "/db-test-io-" + genTokenHex(8);
+  REQUIRE(makeDir(dir));
+  const std::string path = dir + "/blob";
+  Bytes data = {0x00, 0x01, 0xff, 0x7f, 0x0a, 0x0d};
+  CHECK_FALSE(fileExists(path));
+  REQUIRE(writeFileBytes(path, data));
+  CHECK(fileExists(path));
+  Bytes back;
+  REQUIRE(readFileBytes(path, back));
+  CHECK(back == data);
+  auto names = listDir(dir);
+  REQUIRE(names.size() == 1);
+  CHECK(names[0] == "blob");
+  CHECK(removeFile(path));
+  CHECK_FALSE(fileExists(path));
+}
+
 TEST_CASE("ids") {
   CHECK(genNodeId().size() == 32);
   CHECK(genNodeId() != genNodeId());

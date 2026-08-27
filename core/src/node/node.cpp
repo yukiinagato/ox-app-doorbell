@@ -90,6 +90,33 @@ int64_t floorDiv(int64_t a, int64_t b) {
   if ((a % b) != 0 && ((a < 0) != (b < 0))) --q;
   return q;
 }
+
+// ---- 統一資産 (docs/config-schema.md assets) ----
+constexpr size_t kAssetMaxBytes = 3 * 1024 * 1024;        // wav/mp3/画像 ≤3MB
+constexpr int64_t kAssetGcGraceMs = 10 * 60 * 1000;       // 無参照資産の削除猶予 (10 分)
+constexpr const char* kAssetTypes[] = {"image/jpeg", "image/png", "audio/mpeg", "audio/wav"};
+
+bool assetTypeAllowed(const std::string& type) {
+  for (const char* t : kAssetTypes)
+    if (type == t) return true;
+  return false;
+}
+
+// 64 桁小文字 hex (sha256) か — /asset/<hash> のパス走査対策も兼ねる
+bool isSha256HexStr(const std::string& s) {
+  if (s.size() != 64) return false;
+  for (char c : s) {
+    if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'))) return false;
+  }
+  return true;
+}
+
+// "asset:<sha256>" 形式 (chime sound / emergency.alarm_sound) から hash を取り出す ("" = 非該当)
+std::string assetRefHash(const std::string& v) {
+  if (v.rfind("asset:", 0) != 0) return "";
+  std::string h = v.substr(6);
+  return isSha256HexStr(h) ? h : "";
+}
 }  // namespace
 
 struct Node::Impl {
@@ -155,6 +182,17 @@ struct Node::Impl {
   // 表示制御 (loop 上でのみ触る): 直近に通知した display JSON + 30 秒周期の再評価タイマー
   std::string last_display_json;
   uint64_t display_timer = 0;
+
+  // 統一資産キャッシュ (loop 上でのみ触る)。実体は assets_dir/<sha256>。
+  std::string assets_dir;                       // data_dir/assets (":memory:" はテンポラリ)
+  std::set<std::string> asset_fetching;         // mesh から取得中の hash (重複取得防止)
+  std::map<std::string, int64_t> asset_unref_since;  // GC 猶予: hash → 無参照を初観測した mono
+  uint64_t asset_prefetch_timer = 0;            // config 変更のデバウンス
+
+  // 訪客言語 (loop 上でのみ触る): door → 選択中言語 (主言語 ja は保持しない = 空)。
+  // 復帰タイマーは visitor_lang イベントを起こしたノードだけが張る (復帰イベントの重複防止)。
+  std::map<std::string, std::string> visitor_lang_by_door;
+  std::map<std::string, uint64_t> visitor_lang_revert_timer;  // door → timer id
 
   // SOS 緊急モード (loop 上でのみ触る): 現在状態 = emergency / emergency_cancel の hlc 最大側
   bool emergency_active = false;
@@ -263,6 +301,211 @@ struct Node::Impl {
     mc.min_interval_s = static_cast<int>(json::getInt(m, "min_interval_s", 30));
     std::lock_guard<std::mutex> lk(motion_mu);
     motion.setConfig(mc);
+  }
+
+  // ---------- 統一資産 (mesh blob 配布 + 能動キャッシュ) ----------
+  // 実体は assets_dir/<sha256>。台帳は config assets.<hash> = {size,type,origin,label}。
+  // 設定変更 (+起動/peers 変化) で参照中 hash を能動プリフェッチ — 再生/表示は常にローカル。
+
+  std::string assetFilePath(const std::string& hash) { return assets_dir + "/" + hash; }
+
+  bool assetCached(const std::string& hash) {
+    return isSha256HexStr(hash) && fileExists(assetFilePath(hash));
+  }
+
+  // 設定が参照している資産 hash を収集する (プリフェッチ/GC の基準):
+  //   display.theme.bg_image / devices.*.local.theme.bg_image /
+  //   quick_replies.*.audio.* / trigger_rules の chime sound "asset:*" /
+  //   emergency.alarm_sound "asset:*"
+  std::set<std::string> referencedAssets() {
+    std::set<std::string> out;
+    auto addHash = [&out](const std::string& h) {
+      if (isSha256HexStr(h)) out.insert(h);
+    };
+    addHash(json::getString(cfgAt("display.theme"), "bg_image"));
+    cJSON* devices = json::get(cfg.get(), "devices");
+    cJSON* dev = nullptr;
+    cJSON_ArrayForEach(dev, devices) {
+      addHash(json::getString(json::get(json::get(dev, "local"), "theme"), "bg_image"));
+    }
+    cJSON* qrs = json::get(cfg.get(), "quick_replies");
+    cJSON* qr = nullptr;
+    cJSON_ArrayForEach(qr, qrs) {
+      cJSON* audio = json::get(qr, "audio");
+      cJSON* a = nullptr;
+      cJSON_ArrayForEach(a, audio) {
+        if (cJSON_IsString(a)) addHash(a->valuestring);
+      }
+    }
+    cJSON* rules_obj = json::get(cfg.get(), "trigger_rules");
+    cJSON* rule = nullptr;
+    cJSON_ArrayForEach(rule, rules_obj) {
+      cJSON* action = nullptr;
+      cJSON_ArrayForEach(action, json::get(rule, "actions")) {
+        addHash(assetRefHash(json::getString(action, "sound")));
+      }
+    }
+    addHash(assetRefHash(json::getString(json::get(cfg.get(), "emergency"), "alarm_sound")));
+    return out;
+  }
+
+  // config 差分は複数キーで届く — 200ms デバウンスしてから前取り評価
+  void schedulePrefetch() {
+    if (!started) return;
+    if (asset_prefetch_timer) loop->cancel(asset_prefetch_timer);
+    asset_prefetch_timer = loop->postDelayed(200, [this] {
+      asset_prefetch_timer = 0;
+      prefetchAssets();
+    });
+  }
+
+  // 参照中で未キャッシュの資産を mesh から取得 + 参照が消えた資産の猶予付き GC
+  void prefetchAssets() {
+    if (!mesh) return;
+    std::set<std::string> refs = referencedAssets();
+    // GC: 保持対象 = 参照中 ∪ 台帳掲載 (台帳から消された資産だけが回収対象)
+    std::set<std::string> keep = refs;
+    cJSON* ledger = json::get(cfg.get(), "assets");
+    cJSON* it = nullptr;
+    cJSON_ArrayForEach(it, ledger) {
+      if (it->string && isSha256HexStr(it->string)) keep.insert(it->string);
+    }
+    const int64_t now_mono = clock->monoMs();
+    for (const std::string& name : listDir(assets_dir)) {
+      if (!isSha256HexStr(name)) continue;  // .tmp 等は触らない
+      if (keep.count(name)) {
+        asset_unref_since.erase(name);
+        continue;
+      }
+      auto u = asset_unref_since.find(name);
+      if (u == asset_unref_since.end()) {
+        asset_unref_since[name] = now_mono;  // 猶予開始
+      } else if (now_mono - u->second >= kAssetGcGraceMs) {
+        DB_LOGI(kTag, "asset GC: " + name.substr(0, 12) + "…");
+        removeFile(assetFilePath(name));
+        asset_unref_since.erase(u);
+      }
+    }
+    // 前取り
+    for (const std::string& hash : refs) {
+      if (assetCached(hash) || asset_fetching.count(hash)) continue;
+      asset_fetching.insert(hash);
+      std::weak_ptr<char> w = alive;
+      mesh->fetchBlob(hash, [this, w, hash](Bytes data) {
+        if (w.expired()) return;
+        asset_fetching.erase(hash);
+        if (data.empty()) return;  // 保持ノード不在 — 次の config/peers 変化で再試行
+        if (sha256Hex(data) != hash) {
+          DB_LOGW(kTag, "asset 検証失敗 (hash 不一致): " + hash.substr(0, 12) + "…");
+          return;
+        }
+        if (!writeFileBytes(assetFilePath(hash), data)) {
+          DB_LOGW(kTag, "asset 保存失敗: " + assetFilePath(hash));
+          return;
+        }
+        DB_LOGI(kTag, "asset キャッシュ完了: " + hash.substr(0, 12) + "… (" +
+                          std::to_string(data.size()) + "B)");
+        auto o = json::obj();
+        json::set(o.get(), "t", "asset_ready");
+        json::set(o.get(), "hash", hash);
+        uiNotify(json::dump(o.get()));
+      });
+    }
+  }
+
+  // 資産の登録 (POST /api/assets / Node::addAsset)。検証 → 保存 → 台帳へ。失敗は ""。
+  std::string addAssetOnLoop(const Bytes& data, const std::string& type,
+                             const std::string& label) {
+    if (data.empty() || data.size() > kAssetMaxBytes || !assetTypeAllowed(type)) return "";
+    const std::string hash = sha256Hex(data);
+    if (!fileExists(assetFilePath(hash)) && !writeFileBytes(assetFilePath(hash), data)) {
+      DB_LOGE(kTag, "asset 保存失敗: " + assetFilePath(hash));
+      return "";
+    }
+    auto o = json::obj();
+    json::set(o.get(), "size", static_cast<int64_t>(data.size()));
+    json::set(o.get(), "type", type);
+    json::set(o.get(), "origin", node_id);
+    if (!label.empty()) json::set(o.get(), "label", label);
+    config->set("assets." + hash, json::dump(o.get()));
+    return hash;
+  }
+
+  // chime の uiNotify。sound "asset:<hash>" のカスタム音はキャッシュ済みなら
+  // ローカルファイルパス (audio_path) を添える — 無ければ殻が既定音へ回落する。
+  void notifyChime(const std::string& sound, const std::string& door) {
+    auto o = json::obj();
+    json::set(o.get(), "t", "chime");
+    json::set(o.get(), "sound", sound);
+    if (!door.empty()) json::set(o.get(), "door", door);
+    const std::string hash = assetRefHash(sound);
+    if (!hash.empty() && assetCached(hash)) json::set(o.get(), "audio_path", assetFilePath(hash));
+    uiNotify(json::dump(o.get()));
+  }
+
+  // ---------- 訪客言語 ----------
+  // 状態はイベント (visitor_lang) 由来 — 全ノードが onEvent で追随する。
+  // 主言語 (ja) は「未選択」と同義でマップに持たない。
+
+  std::string visitorLangFor(const std::string& door) {
+    auto it = visitor_lang_by_door.find(door);
+    return it == visitor_lang_by_door.end() ? "ja" : it->second;
+  }
+
+  int visitorRevertS() {
+    return static_cast<int>(json::getInt(json::get(cfg.get(), "ui"), "visitor_lang_revert_s", 60));
+  }
+
+  void doSetVisitorLang(const std::string& door_arg, const std::string& lang) {
+    std::string door = door_arg;
+    if (door.empty()) door = opts.door.empty() ? last_press_door : opts.door;
+    if (door.empty() || lang.empty()) {
+      DB_LOGW(kTag, "setVisitorLang: door/lang 不足");
+      return;
+    }
+    if (visitorLangFor(door) == lang) return;  // 変化なし (連打/復帰の重複防止)
+    auto p = json::obj();
+    json::set(p.get(), "lang", lang);
+    events->append("visitor_lang", door, node_id, json::dump(p.get()));
+  }
+
+  void cancelVisitorRevert(const std::string& door) {
+    auto t = visitor_lang_revert_timer.find(door);
+    if (t == visitor_lang_revert_timer.end()) return;
+    loop->cancel(t->second);
+    visitor_lang_revert_timer.erase(t);
+  }
+
+  // 復帰タイマーを張り直す (発信ノードのみが呼ぶ)
+  void armVisitorRevert(const std::string& door) {
+    cancelVisitorRevert(door);
+    const int s = visitorRevertS();
+    if (s <= 0) return;  // 0 以下 = 自動復帰しない
+    visitor_lang_revert_timer[door] =
+        loop->postDelayed(static_cast<int64_t>(s) * 1000, [this, door] {
+          visitor_lang_revert_timer.erase(door);
+          if (visitor_lang_by_door.count(door)) doSetVisitorLang(door, "ja");
+        });
+  }
+
+  // visitor_lang イベント受理毎 (ローカル発・複製受信の両方)
+  void applyVisitorLangEvent(const EventRecord& ev, bool is_local) {
+    auto p = json::parse(ev.payload_json.empty() ? "{}" : ev.payload_json);
+    const std::string lang = p ? json::getString(p.get(), "lang") : "";
+    if (ev.door.empty() || lang.empty()) return;
+    if (lang == "ja") {
+      visitor_lang_by_door.erase(ev.door);
+      cancelVisitorRevert(ev.door);
+    } else {
+      visitor_lang_by_door[ev.door] = lang;
+      cancelVisitorRevert(ev.door);  // 他ノード発の切替で自分の古いタイマーは無効
+      if (is_local && ev.origin == node_id) armVisitorRevert(ev.door);
+    }
+    auto o = json::obj();
+    json::set(o.get(), "t", "visitor_lang");
+    json::set(o.get(), "door", ev.door);
+    json::set(o.get(), "lang", lang);
+    uiNotify(json::dump(o.get()));
   }
 
   // ---------- 表示制御 (display) ----------
@@ -700,6 +943,12 @@ struct Node::Impl {
     epoch = ep ? std::stoull(*ep) + 1 : 1;
     store.metaSet("epoch", std::to_string(epoch));
 
+    // 統一資産のキャッシュ置き場 (":memory:" Store はテンポラリへ)
+    assets_dir = (opts.data_dir == ":memory:")
+                     ? tempDir() + "/doorbell-assets-" + node_id
+                     : opts.data_dir + "/assets";
+    makeDir(assets_dir);
+
     hlc.reset(new HlcClock(*clock, node_id.substr(0, 8)));
     config.reset(new LwwMap(node_id, *hlc));
     config->load(store.configLoadAll());
@@ -723,6 +972,8 @@ struct Node::Impl {
       scheduleBridgeReapply();
       // 表示制御 (display.* / devices.<self>.local.display.*) — 変化時だけ uiNotify される
       if (started) evalDisplay();
+      // 統一資産: 参照が増えた/減った可能性 — デバウンスして前取り+GC を評価
+      schedulePrefetch();
       uiNotify("{\"t\":\"config_changed\"}");
     });
     events->onEvent([this](const EventRecord& ev, bool is_local) { onEvent(ev, is_local); });
@@ -746,6 +997,7 @@ struct Node::Impl {
     Mesh::Callbacks cbs;
     cbs.on_peers_changed = [this] {
       updateSipAllowedSources();  // 直接 INVITE の許可 IP を mesh 成員に追随させる
+      schedulePrefetch();         // 新しい peer が保持ノードかもしれない — 未取得資産を再試行
       uiNotify("{\"t\":\"peers_changed\"}");
     };
     cbs.on_leader_changed = [this](const std::string& duty, const std::string& leader) {
@@ -769,6 +1021,12 @@ struct Node::Impl {
                         *events, ms, cbs));
     // 他ノードからの快照要求 (SNAP_REQ — Telegram 写真用) には最新 JPEG で応える
     mesh->setSnapshotProvider([this] { return frame_bus.latestJpeg(); });
+    // 資産 blob 要求 (BLOB_REQ) にはローカルキャッシュから応える
+    mesh->setBlobProvider([this](const std::string& hash) {
+      Bytes b;
+      if (isSha256HexStr(hash)) readFileBytes(assetFilePath(hash), b);
+      return b;
+    });
 
     rebuildCfg();
 
@@ -876,6 +1134,7 @@ struct Node::Impl {
     started = true;
     evalDisplay(/*force=*/true);
     emergencyNotifyUi();
+    prefetchAssets();  // 起動時: 参照中で未キャッシュの資産を前取り
     DB_LOGI(kTag, "node " + node_id.substr(0, 8) + " (" + opts.name + ") started");
     return true;
   }
@@ -900,6 +1159,27 @@ struct Node::Impl {
       qr("qr_no", "結構です", "Not interested", "不需要，谢谢", 2);
       qr("qr_wrong", "お間違いのようです", "Wrong address", "您可能找错地方了", 3);
       qr("qr_wait", "少々お待ちください", "One moment please", "请稍等", 4);
+      // 訪客言語 (門口機の言語切替に出す言語 + 無操作復帰秒)
+      config->set("ui.languages", "[\"ja\",\"en\",\"zh\"]");
+      config->set("ui.visitor_lang_revert_s", "60");
+      // 訪客の用件ボタン (既定 seed — docs/config-schema.md visit_purposes)
+      auto vp = [&](const char* id, const char* ja, const char* en, const char* zh,
+                    const char* icon, int order) {
+        auto o = json::obj();
+        cJSON* label = json::addObj(o.get(), "label");
+        json::set(label, "ja", ja);
+        json::set(label, "en", en);
+        json::set(label, "zh", zh);
+        json::set(o.get(), "icon", icon);
+        json::set(o.get(), "order", static_cast<int64_t>(order));
+        config->set(std::string("visit_purposes.") + id, json::dump(o.get()));
+      };
+      vp("p_visit", "訪問", "Visit", "访客", "🏠", 1);
+      vp("p_delivery", "宅配便", "Delivery", "快递", "📦", 2);
+      vp("p_mail", "郵便", "Mail", "邮件", "✉️", 3);
+      vp("p_sales", "営業・集金", "Sales", "推销/收费", "💼", 4);
+      vp("p_work", "検針・工事", "Utility", "检修/施工", "🔧", 5);
+      vp("p_other", "その他", "Other", "其他", "❓", 6);
       // パネルアクセストークン (webui/panel/API.md — 管理画面から差替可)
       config->set("panel.tokens", "[\"" + genTokenHex(16) + "\"]");
     }
@@ -922,6 +1202,8 @@ struct Node::Impl {
       last_press_by_door[ev.door] = {ev.origin, ev.seq};
       // パネル表示用の呼出窓 (30 秒 or 返信で解除)
       if (!ev.door.empty()) door_calling_until[ev.door] = clock->monoMs() + 30'000;
+      // 按鈴 = 訪客の操作 — 自分が復帰タイマーを持つ door なら無操作カウントを仕切り直す
+      if (visitor_lang_revert_timer.count(ev.door)) armVisitorRevert(ev.door);
     } else if (ev.type == "reply") {
       auto p = json::parse(ev.payload_json);
       if (p) {
@@ -932,6 +1214,9 @@ struct Node::Impl {
     } else if (ev.type == "emergency" || ev.type == "emergency_cancel") {
       // 全ノードで状態再計算 (複製で自然に届く)。変化時 uiNotify + Telegram は中で行う。
       applyEmergencyEvent(ev);
+    } else if (ev.type == "visitor_lang") {
+      // 全ノードで door→言語 を追随 + uiNotify (復帰タイマーは発信ノードだけが張る)
+      applyVisitorLangEvent(ev, is_local);
     }
     {
       auto o = json::obj();
@@ -939,6 +1224,15 @@ struct Node::Impl {
       json::set(o.get(), "type", ev.type);
       json::set(o.get(), "door", ev.door);
       json::set(o.get(), "device", ev.device);
+      if (ev.type == "press") {  // 来鈴バッジ用: 用件 + 訪客言語を同梱 (payload 由来)
+        auto p = json::parse(ev.payload_json.empty() ? "{}" : ev.payload_json);
+        if (p) {
+          const std::string purpose = json::getString(p.get(), "purpose");
+          const std::string vlang = json::getString(p.get(), "visitor_lang");
+          if (!purpose.empty()) json::set(o.get(), "purpose", purpose);
+          if (!vlang.empty()) json::set(o.get(), "visitor_lang", vlang);
+        }
+      }
       uiNotify(json::dump(o.get()));
     }
     auto actions = rules.evaluate(ev, hlc->correctedWallMs(), tzOffsetMin());
@@ -958,12 +1252,16 @@ struct Node::Impl {
             if (cJSON_IsString(it) && node_id == it->valuestring) mine = true;
           }
         }
-        if (mine) {
-          auto o = json::obj();
-          json::set(o.get(), "t", "chime");
-          json::set(o.get(), "sound", json::getString(p.get(), "sound", "ding1"));
-          json::set(o.get(), "door", ev.door);
-          uiNotify(json::dump(o.get()));
+        if (mine) notifyChime(json::getString(p.get(), "sound", "ding1"), ev.door);
+      } else if (a.type == "auto_reply") {
+        // 用件別の自動応対 (例: 宅配 → 置き配案内)。該当 door の門口機だけが実行する
+        // (1 door 1 門口機 = exactly-once。表示+音声+reply イベントは quickReply と同経路)。
+        if (opts.role == "door_station" && !ev.door.empty() && ev.door == opts.door) {
+          const std::string rid = json::getString(p.get(), "reply_id");
+          if (!rid.empty()) {
+            DB_LOGI(kTag, "auto_reply -> " + rid);
+            quickReply(rid, "", ev.door, "auto");
+          }
         }
       } else if (a.type == "sip_call") {
         // 発呼するのは押された門口機本人だけ
@@ -1011,19 +1309,26 @@ struct Node::Impl {
     if (!c) return;
     std::string cmd = json::getString(c.get(), "cmd");
     if (cmd == "chime") {
-      auto o = json::obj();
-      json::set(o.get(), "t", "chime");
-      json::set(o.get(), "sound", json::getString(c.get(), "sound", "ding1"));
-      uiNotify(json::dump(o.get()));
+      notifyChime(json::getString(c.get(), "sound", "ding1"), json::getString(c.get(), "door"));
     } else if (cmd == "show_reply") {
       std::string text = json::getString(c.get(), "text");
+      const std::string lang = json::getString(c.get(), "lang", "ja");
+      // カスタム音声 (quick_replies.<id>.audio.<lang> の sha256)。キャッシュ済みなら
+      // ローカルパスを uiNotify に添えて殻に再生させる — TTS はしない。
+      // 未キャッシュなら TTS へ回落 (音声の優先度: キャッシュ済 audio → TTS → 殻の提示音)。
+      const std::string audio = json::getString(c.get(), "audio");
+      const bool audio_ok = !audio.empty() && assetCached(audio);
       auto o = json::obj();
       json::set(o.get(), "t", "reply");
       json::set(o.get(), "text", text);
       json::set(o.get(), "ttl_s", json::getInt(c.get(), "ttl_s", 30));
+      json::set(o.get(), "lang", lang);
+      if (audio_ok) {
+        json::set(o.get(), "audio", audio);
+        json::set(o.get(), "audio_path", assetFilePath(audio));
+      }
       uiNotify(json::dump(o.get()));
-      if (json::getBool(c.get(), "speak", true))
-        tts(text, json::getString(c.get(), "lang", "ja"));
+      if (!audio_ok && json::getBool(c.get(), "speak", true)) tts(text, lang);
     } else {
       DB_LOGW(kTag, "unknown command from " + from.substr(0, 8) + ": " + cmd);
     }
@@ -1033,13 +1338,21 @@ struct Node::Impl {
   void quickReply(const std::string& reply_id, const std::string& free_text,
                   const std::string& door_arg, const std::string& via) {
     std::string door = door_arg.empty() ? last_press_door : door_arg;
+    // 文言/音声は該当 door の訪客言語に追従 (訳が無ければ ja へ回落 — labelIn)
+    const std::string lang = visitorLangFor(door);
     std::string text = free_text;
     bool speak = true;
+    std::string audio;  // quick_replies.<id>.audio.<lang> の sha256 (無ければ ja へ回落)
     if (text.empty() && !reply_id.empty()) {
       cJSON* q = cfgAt("quick_replies." + reply_id);
       if (q) {
-        text = labelIn(json::get(q, "label"), "ja");
+        text = labelIn(json::get(q, "label"), lang);
         speak = json::getBool(q, "speak", true);
+        if (cJSON* au = json::get(q, "audio")) {
+          audio = json::getString(au, lang.c_str());
+          if (audio.empty()) audio = json::getString(au, "ja");
+          if (!isSha256HexStr(audio)) audio.clear();
+        }
       }
     }
     if (text.empty()) {
@@ -1055,7 +1368,8 @@ struct Node::Impl {
     json::set(c.get(), "text", text);
     json::setBool(c.get(), "speak", speak);
     json::set(c.get(), "ttl_s", ttl);
-    json::set(c.get(), "lang", "ja");
+    json::set(c.get(), "lang", lang);
+    if (!audio.empty()) json::set(c.get(), "audio", audio);
     std::string cmd = json::dump(c.get());
 
     cJSON* devices = json::get(cfg.get(), "devices");
@@ -1126,6 +1440,25 @@ struct Node::Impl {
     json::setItem(o.get(), "display", displayDoc(displayState()));
     cJSON* em = json::addObj(o.get(), "emergency");
     json::setBool(em, "active", emergency_active);
+    // 統一資産のキャッシュ被覆率 (台帳掲載のうちローカルにある数 — 管理画面用)
+    {
+      int64_t total = 0, cached = 0;
+      cJSON* ledger = json::get(cfg.get(), "assets");
+      cJSON* a = nullptr;
+      cJSON_ArrayForEach(a, ledger) {
+        if (!a->string) continue;
+        total++;
+        if (assetCached(a->string)) cached++;
+      }
+      cJSON* as = json::addObj(o.get(), "assets");
+      json::set(as, "cached", cached);
+      json::set(as, "total", total);
+    }
+    // 訪客言語の現在状態 (door → 選択中言語; 主言語 ja の door は載らない)
+    {
+      cJSON* vl = json::addObj(o.get(), "visitor_lang");
+      for (const auto& kv : visitor_lang_by_door) json::set(vl, kv.first.c_str(), kv.second);
+    }
     cJSON* arr = json::addArr(o.get(), "peers");
     if (mesh) {
       for (const auto& p : mesh->peers()) {
@@ -1174,10 +1507,11 @@ struct Node::Impl {
     // "/" (リダイレクトのみ) は gate 側で例外扱い — prefix リストに "/" を入れると全公開になる
     // /api/panel/* と /snapshot-proxy /call-frame はハンドラ内で panel token (?k=) を検証する。
     // /peer-frame.jpg は /snapshot.jpg と同格の LAN 公開 (殻の輪詢用 — webui/panel/API.md)
+    // /asset/ はハンドラ内で管理セッション or panel token を検証する (gate は素通し)。
     httpd->setAuth([this](const HttpReq& r) { return r.uri == "/" || checkSession(r); },
                    {"/api/login", "/locale/", "/panel/", "/admin/", "/stream.mjpeg",
                     "/snapshot.jpg", "/api/panel/", "/snapshot-proxy", "/call-frame",
-                    "/peer-frame.jpg"});
+                    "/peer-frame.jpg", "/asset/"});
 
     httpd->route("GET", "/", [](const HttpReq&) {
       HttpResp r;
@@ -1328,7 +1662,56 @@ struct Node::Impl {
     httpd->route("POST", "/api/press", [this](const HttpReq& req) {
       auto b = json::parse(req.body);
       std::string door = b ? json::getString(b.get(), "door") : "";
-      doPress(door);
+      std::string purpose = b ? json::getString(b.get(), "purpose") : "";
+      if (!purpose.empty() && !cfgAt("visit_purposes." + purpose))
+        return HttpResp::json("{\"ok\":false,\"err\":\"unknown purpose\"}", 400);
+      doPress(door, purpose);
+      return HttpResp::json("{\"ok\":true}");
+    });
+
+    // 統一資産の登録 (管理セッション)。body = 実体 (raw)、?type=&label=。
+    // 3MB 超・許可外 type は 4xx。応答: {"ok":true,"hash":"<sha256>"}。
+    httpd->route("POST", "/api/assets", [this](const HttpReq& req) {
+      const std::string type = req.param("type");
+      if (!assetTypeAllowed(type))
+        return HttpResp::json("{\"ok\":false,\"err\":\"bad type\"}", 415);
+      if (req.body.empty()) return HttpResp::json("{\"ok\":false,\"err\":\"empty body\"}", 400);
+      if (req.body.size() > kAssetMaxBytes)
+        return HttpResp::json("{\"ok\":false,\"err\":\"too large\"}", 413);
+      Bytes data(req.body.begin(), req.body.end());
+      const std::string hash = addAssetOnLoop(data, type, req.param("label"));
+      if (hash.empty()) return HttpResp::json("{\"ok\":false,\"err\":\"store failed\"}", 500);
+      auto o = json::obj();
+      json::setBool(o.get(), "ok", true);
+      json::set(o.get(), "hash", hash);
+      return HttpResp::json(json::dump(o.get()));
+    });
+
+    // 資産の取得 (管理セッション or panel token ?k=)。ローカルキャッシュから返す/404。
+    // 内容アドレス (sha256) なので不変 — 長期キャッシュ可。
+    httpd->route("GET", "/asset/*", [this](const HttpReq& req) {
+      if (!checkSession(req) && !panelTokenOk(req))
+        return HttpResp::json("{\"ok\":false,\"err\":\"bad token\"}", 403);
+      const std::string hash = req.uri.substr(7);  // "/asset/" 以降
+      if (!isSha256HexStr(hash))
+        return HttpResp::json("{\"ok\":false,\"err\":\"bad hash\"}", 400);
+      Bytes data;
+      if (!readFileBytes(assetFilePath(hash), data))
+        return HttpResp::json("{\"ok\":false,\"err\":\"not cached\"}", 404);
+      HttpResp r;
+      r.content_type = json::getString(cfgAt("assets." + hash), "type",
+                                       "application/octet-stream");
+      r.body.assign(data.begin(), data.end());
+      r.headers["Cache-Control"] = "max-age=31536000, immutable";
+      return r;
+    });
+
+    // 訪客言語切替 (管理セッション)。{"door":…,"lang":…} — door 省略 = 自機担当 door。
+    httpd->route("POST", "/api/visitor-lang", [this](const HttpReq& req) {
+      auto b = json::parse(req.body);
+      std::string lang = b ? json::getString(b.get(), "lang") : "";
+      if (lang.empty()) return HttpResp::json("{\"ok\":false,\"err\":\"no lang\"}", 400);
+      doSetVisitorLang(b ? json::getString(b.get(), "door") : "", lang);
       return HttpResp::json("{\"ok\":true}");
     });
 
@@ -1373,6 +1756,9 @@ struct Node::Impl {
         json::set(e, "label", label.empty() ? std::string(it->string) : label);
         auto c = door_calling_until.find(it->string);
         json::setBool(e, "calling", c != door_calling_until.end() && c->second > now_mono);
+        // 訪客言語バッジ (選択中のみ — 主言語 ja は載らない)
+        auto vl = visitor_lang_by_door.find(it->string);
+        if (vl != visitor_lang_by_door.end()) json::set(e, "visitor_lang", vl->second);
       }
       cJSON* evs = json::addArr(o.get(), "events");
       for (const auto& ev : store.recentEvents(10)) {
@@ -1381,6 +1767,13 @@ struct Node::Impl {
         json::set(e, "door", ev.door);
         json::set(e, "device", ev.device);
         json::set(e, "wall_ms", ev.wall_ms);
+        if (ev.type == "press" && !ev.payload_json.empty()) {  // 用件バッジ + 言語バッジ
+          auto p = json::parse(ev.payload_json);
+          const std::string purpose = p ? json::getString(p.get(), "purpose") : "";
+          const std::string vlang = p ? json::getString(p.get(), "visitor_lang") : "";
+          if (!purpose.empty()) json::set(e, "purpose", purpose);
+          if (!vlang.empty()) json::set(e, "visitor_lang", vlang);
+        }
       }
       if (last_reply_ts > 0) {
         cJSON* r = json::addObj(o.get(), "reply");
@@ -1398,7 +1791,22 @@ struct Node::Impl {
       std::string door = req.param("door");
       if (door.empty() || !cfgAt("doors." + door))
         return HttpResp::json("{\"ok\":false,\"err\":\"unknown door\"}", 400);
-      doPress(door);
+      std::string purpose = req.param("purpose");
+      if (!purpose.empty() && !cfgAt("visit_purposes." + purpose))
+        return HttpResp::json("{\"ok\":false,\"err\":\"unknown purpose\"}", 400);
+      doPress(door, purpose);
+      return HttpResp::json("{\"ok\":true}");
+    });
+
+    // 訪客言語切替 (panel token)。?door=&lang= — door 省略 = 自機担当 door。
+    httpd->route("POST", "/api/panel/visitor-lang", [this](const HttpReq& req) {
+      if (!panelTokenOk(req)) return HttpResp::json("{\"ok\":false,\"err\":\"bad token\"}", 403);
+      const std::string lang = req.param("lang");
+      if (lang.empty()) return HttpResp::json("{\"ok\":false,\"err\":\"no lang\"}", 400);
+      const std::string door = req.param("door");
+      if (!door.empty() && !cfgAt("doors." + door))
+        return HttpResp::json("{\"ok\":false,\"err\":\"unknown door\"}", 400);
+      doSetVisitorLang(door, lang);
       return HttpResp::json("{\"ok\":true}");
     });
 
@@ -1569,9 +1977,15 @@ struct Node::Impl {
     }
   }
 
-  void doPress(const std::string& door_arg) {
+  // purpose: visit_purposes のキー ("" = 用件なしの汎用按鈴)。payload には purpose と
+  // 選択中の訪客言語を同梱する (docs/config-schema.md — Telegram/HA/panel の展示面が使う)。
+  void doPress(const std::string& door_arg, const std::string& purpose) {
     std::string door = door_arg.empty() ? opts.door : door_arg;
-    events->append("press", door, node_id, "{}");
+    auto p = json::obj();
+    if (!purpose.empty()) json::set(p.get(), "purpose", purpose);
+    const std::string vlang = visitorLangFor(door);
+    if (vlang != "ja") json::set(p.get(), "visitor_lang", vlang);
+    events->append("press", door, node_id, json::dump(p.get()));
   }
 };
 
@@ -1632,6 +2046,12 @@ void Node::stop() {
       impl_->loop->cancel(impl_->display_timer);
       impl_->display_timer = 0;
     }
+    if (impl_->asset_prefetch_timer) {
+      impl_->loop->cancel(impl_->asset_prefetch_timer);
+      impl_->asset_prefetch_timer = 0;
+    }
+    for (auto& kv : impl_->visitor_lang_revert_timer) impl_->loop->cancel(kv.second);
+    impl_->visitor_lang_revert_timer.clear();
     if (impl_->tg) impl_->tg->stop();          // 輪詢/キュー駆動を止める (キューは永続)
     if (impl_->bridge) impl_->bridge->stop();  // availability=offline (retain) → DISCONNECT
     if (impl_->sipctl) impl_->sipctl->stop();  // 通話切断 → 登録解除 → pjsua_destroy
@@ -1660,8 +2080,27 @@ void Node::setHttpsFn(HttpsFn fn) {
   impl_->https_fn = std::move(fn);
 }
 
-void Node::press(const std::string& door_id) {
-  impl_->loop->callSync([&] { impl_->doPress(door_id); });
+void Node::press(const std::string& door_id, const std::string& purpose) {
+  impl_->loop->callSync([&] { impl_->doPress(door_id, purpose); });
+}
+
+void Node::setVisitorLang(const std::string& door_id, const std::string& lang) {
+  impl_->loop->callSync([&] { impl_->doSetVisitorLang(door_id, lang); });
+}
+
+std::string Node::addAsset(const Bytes& data, const std::string& type,
+                           const std::string& label) {
+  std::string hash;
+  impl_->loop->callSync([&] { hash = impl_->addAssetOnLoop(data, type, label); });
+  return hash;
+}
+
+std::string Node::assetPath(const std::string& hash) {
+  std::string path;
+  impl_->loop->callSync([&] {
+    if (impl_->assetCached(hash)) path = impl_->assetFilePath(hash);
+  });
+  return path;
 }
 
 void Node::pushCameraFrame(const uint8_t* data, int format, int width, int height, int stride,

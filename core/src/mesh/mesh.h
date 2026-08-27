@@ -8,7 +8,7 @@
 //  - 同期: SYNC_REQ/RESP で LwwMap (vv) と EventLog (heads) の push-pull anti-entropy
 //  - 配対: JOIN_REQ (PIN の HMAC チャレンジ) → PSK/seeds/設定スナップショット配布
 // メッセージ種別 (1B): 設計 §1.4 準拠 + EVENT(即時push)/COMMAND/SNAP(快照取得)/
-//   BLOB系(将来OTA用予約)
+//   BLOB_REQ/RESP(統一資産の blob 転送 — 上限 3MB, base64 チャンク)
 // スレッド: 全 API・全コールバックは Runloop 上。
 #pragma once
 
@@ -111,6 +111,16 @@ class Mesh {
   // node_id の最新 JPEG を取得 (SNAP_REQ/SNAP_RESP, base64, 上限 300KB, 5 秒タイムアウト)。
   // 自分宛は provider を直接呼ぶ。直連チャネルが無い/失敗/超過は空 Bytes。
   void fetchSnapshot(const std::string& node_id, std::function<void(Bytes jpeg)> cb);
+
+  // --- 資産 blob (統一資産システム — docs/config-schema.md assets) ---
+  // 自ノードの blob 供給者 (hash → 実体; 空 = 持っていない)。Node が assets/ を配線する。
+  // BLOB_REQ への応答に使う (SNAP_REQ の一般化)。
+  void setBlobProvider(std::function<Bytes(const std::string& hash)> provider);
+  // hash の blob を取得 (BLOB_REQ/BLOB_RESP, base64 チャンク, 上限 3MB)。
+  // 自分の provider が持っていればそれを返し、無ければ直連 peer を順に試して
+  // 最初に持っているノードから取る。全滅/超過/タイムアウトは空 Bytes。
+  // ハッシュの検証は呼び出し側 (Node) の責務。
+  void fetchBlob(const std::string& hash, std::function<void(Bytes data)> cb);
 
   // --- 配対 (設計 §1.6) ---
   struct JoinToken {

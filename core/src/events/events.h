@@ -19,7 +19,8 @@ class Store;
 struct EventRecord {
   std::string origin;     // 発生ノード node_id
   uint64_t seq = 0;       // origin 内の単調連番 (1 始まり)
-  std::string type;       // press | motion | answered | missed | offline | online | config_changed
+  std::string type;       // press | motion | answered | missed | reply | offline | online |
+                          // config_changed | emergency | emergency_cancel | visitor_lang
   std::string door;       // door_id ("" 可: offline 等は device ベース)
   std::string device;     // 対象 device (node_id)
   std::string hlc;        // 順序付け
@@ -64,9 +65,9 @@ class EventLog {
 // config JSON (materialize 済み全文) の trigger_rules / quiet_hours を評価し、
 // イベントに対して実行すべきアクション一覧を返す。純関数的 (状態は設定のみ)。
 struct Action {
-  std::string type;         // sip_call | telegram | ha_event | chime
+  std::string type;         // sip_call | telegram | ha_event | chime | auto_reply
   std::string params_json;  // 例: {"target_extension":"600"} / {"households":[...],"with_snapshot":true}
-                            //     / {"devices":[...],"sound":"ding1"}
+                            //     / {"devices":[...],"sound":"ding1"} / {"reply_id":"qr_okihai"}
 };
 
 class RuleEngine {

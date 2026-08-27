@@ -99,7 +99,9 @@ std::string canonicalType(const std::string& t) {
 
 // when 節のマッチ判定。doors 省略 = 全ドア。devices は "all" か配列。
 // イベント側は ev.door / ev.device を見る (offline/online は device ベース)。
-bool whenMatch(const cJSON* when, const EventRecord& ev) {
+// purposes 配列があれば press payload の "purpose" が含まれる時だけマッチ
+// (用件なしの汎用按鈴 = purpose 空 は purposes 指定ルールに掛からない)。
+bool whenMatch(const cJSON* when, const EventRecord& ev, const std::string& purpose) {
   if (!cJSON_IsObject(when)) return false;
   if (canonicalType(json::getString(when, "type")) != canonicalType(ev.type)) return false;
   const cJSON* doors = json::get(when, "doors");
@@ -112,6 +114,8 @@ bool whenMatch(const cJSON* when, const EventRecord& ev) {
       if (!listContains(devices, ev.device)) return false;
     }
   }
+  const cJSON* purposes = json::get(when, "purposes");
+  if (cJSON_IsArray(purposes) && !listContains(purposes, purpose)) return false;
   return true;
 }
 
@@ -160,6 +164,13 @@ std::vector<Action> RuleEngine::evaluate(const EventRecord& ev, int64_t correcte
   const cJSON* rules = json::get(config_.get(), "trigger_rules");
   if (!cJSON_IsObject(rules)) return out;
 
+  // press payload の用件 (when.purposes の分岐用 — 無ければ空)
+  std::string purpose;
+  if (!ev.payload_json.empty()) {
+    json::Doc payload = json::parse(ev.payload_json);
+    if (payload) purpose = json::getString(payload.get(), "purpose");
+  }
+
   // ルール ID 昇順で決定的な結果順にする (JSON の出現順に依存しない)
   std::vector<std::pair<std::string, const cJSON*>> ordered;
   const cJSON* it = nullptr;
@@ -174,7 +185,7 @@ std::vector<Action> RuleEngine::evaluate(const EventRecord& ev, int64_t correcte
     const cJSON* rule = entry.second;
     if (!cJSON_IsObject(rule)) continue;
     if (!json::getBool(rule, "enabled", true)) continue;  // 無効ルールはスキップ
-    if (!whenMatch(json::get(rule, "when"), ev)) continue;
+    if (!whenMatch(json::get(rule, "when"), ev, purpose)) continue;
     if (!scheduleMatch(json::get(rule, "schedule"), day, minute)) continue;
 
     const cJSON* action = nullptr;

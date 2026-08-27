@@ -27,10 +27,12 @@ constexpr size_t kSyncEventLimit = 200;              // 1 応答の最大イベ�
 constexpr int kEventTtl = 2;                         // EVENT 即時 push の flood TTL
 constexpr int64_t kSnapTimeoutMs = 5000;             // 快照取得タイムアウト
 constexpr size_t kSnapMaxBytes = 300 * 1024;         // 快照 JPEG 上限 (超過は失敗扱い)
+constexpr int64_t kBlobTimeoutMs = 10000;            // blob 取得タイムアウト (1 peer あたり)
+constexpr size_t kBlobMaxBytes = 3 * 1024 * 1024;    // blob 上限 (資産 3MB — config-schema)
+constexpr size_t kBlobChunkBytes = 256 * 1024;       // 1 チャンクの生バイト数 (base64 で +1/3)
 
 // 予約メッセージ型 (将来 OTA 用 — 実装はまだ無い)
 [[maybe_unused]] constexpr const char* kMsgVersionAnnounce = "VERSION_ANNOUNCE";
-[[maybe_unused]] constexpr const char* kMsgFetchBlob = "FETCH_BLOB";
 
 // ---- シリアライズ ----
 
@@ -212,6 +214,20 @@ struct Mesh::Impl {
   std::map<uint64_t, SnapWait> snap_waits;  // rid → 応答待ち
   uint64_t snap_rid = 0;
 
+  // ---- 資産 blob (BLOB_REQ/RESP — SNAP の一般化) ----
+  std::function<Bytes(const std::string&)> blob_provider;  // hash → 実体 (Node が配線)
+  struct BlobWait {                       // 1 peer への 1 取得試行 (失敗で次の peer へ)
+    std::string hash;
+    std::vector<std::string> remaining;   // まだ試していない peer (順に試す)
+    std::map<uint64_t, Bytes> chunks;     // seq → 生バイト
+    uint64_t total_chunks = 0;            // 応答が宣言したチャンク数 (0 = 未着)
+    size_t total_bytes = 0;               // 受領済み生バイト (上限監視)
+    std::function<void(Bytes)> cb;
+    uint64_t timeout_id = 0;
+  };
+  std::map<uint64_t, BlobWait> blob_waits;  // rid → 取得試行
+  uint64_t blob_rid = 0;
+
   std::vector<uint64_t> timers;
   uint64_t sync_rr = 0;  // anti-entropy の相手選択 (決定的 round-robin)
   // 生存トークン: post 済みラムダ/接続コールバックが Impl 破棄後に this へ触れないための弱参照
@@ -293,12 +309,17 @@ struct Mesh::Impl {
       ib->conn->close();
     }
     inbound.clear();
-    // 快照待ちは失敗で解決してから捨てる (呼び出し側を待たせ続けない)
+    // 快照/blob 待ちは失敗で解決してから捨てる (呼び出し側を待たせ続けない)
     for (auto& kv : snap_waits) {
       loop.cancel(kv.second.timeout_id);
       if (kv.second.cb) kv.second.cb(Bytes());
     }
     snap_waits.clear();
+    for (auto& kv : blob_waits) {
+      loop.cancel(kv.second.timeout_id);
+      if (kv.second.cb) kv.second.cb(Bytes());
+    }
+    blob_waits.clear();
     if (join) abortJoin("stopped");
     tp.stopListening();
     if (disc) disc->stop();
@@ -973,6 +994,135 @@ struct Mesh::Impl {
     if (done) done(std::move(jpeg));
   }
 
+  // ------------------------------------------------------------------ 資産 blob
+  // BLOB_REQ{rid,hash} → 保持ノードが BLOB_RESP{rid,hash,found,seq,n,data(base64)} を
+  // チャンク列で返す (found:false は 1 通)。取得側は直連 peer を順に試す (1 試行 1 rid)。
+
+  void fetchBlob(const std::string& hash, std::function<void(Bytes)> cb) {
+    if (hash.empty()) {
+      loop.post([cb] { cb(Bytes()); });
+      return;
+    }
+    // 自分が持っていれば provider から直接
+    if (blob_provider) {
+      Bytes local = blob_provider(hash);
+      if (!local.empty() && local.size() <= kBlobMaxBytes) {
+        loop.post([cb, local] { cb(local); });
+        return;
+      }
+    }
+    std::vector<std::string> candidates;  // 直連 peer (map 順 = node_id 順で決定的)
+    for (const auto& kv : chans) candidates.push_back(kv.first);
+    tryNextBlobPeer(hash, std::move(candidates), std::move(cb));
+  }
+
+  void tryNextBlobPeer(const std::string& hash, std::vector<std::string> remaining,
+                       std::function<void(Bytes)> cb) {
+    // 先頭から、直連チャネルが今も生きている peer を選ぶ
+    std::shared_ptr<SecureChannel> ch;
+    while (!remaining.empty() && !ch) {
+      auto it = chans.find(remaining.front());
+      remaining.erase(remaining.begin());
+      if (it != chans.end()) ch = it->second;
+    }
+    if (!ch) {  // 候補が尽きた
+      DB_LOGW("mesh", "fetchBlob: 誰も持っていない " + hash.substr(0, 12));
+      loop.post([cb] { cb(Bytes()); });
+      return;
+    }
+    const uint64_t rid = ++blob_rid;
+    BlobWait& w = blob_waits[rid];
+    w.hash = hash;
+    w.remaining = std::move(remaining);
+    w.cb = std::move(cb);
+    std::weak_ptr<char> wa = alive;
+    w.timeout_id = loop.postDelayed(kBlobTimeoutMs, [this, wa, rid] {
+      if (wa.expired()) return;
+      failBlobAttempt(rid, /*cancel_timer=*/false);
+    });
+    auto o = json::obj();
+    json::set(o.get(), "t", "BLOB_REQ");
+    json::set(o.get(), "rid", static_cast<int64_t>(rid));
+    json::set(o.get(), "hash", hash);
+    ch->sendMessage(json::dump(o.get()));
+  }
+
+  // 現在の試行を失敗にして次の peer へ。候補が尽きたら空 Bytes で解決。
+  void failBlobAttempt(uint64_t rid, bool cancel_timer) {
+    auto it = blob_waits.find(rid);
+    if (it == blob_waits.end()) return;
+    if (cancel_timer) loop.cancel(it->second.timeout_id);
+    auto hash = std::move(it->second.hash);
+    auto remaining = std::move(it->second.remaining);
+    auto cb = std::move(it->second.cb);
+    blob_waits.erase(it);
+    tryNextBlobPeer(hash, std::move(remaining), std::move(cb));
+  }
+
+  void handleBlobReq(SecureChannel& ch, const cJSON* doc) {
+    const int64_t rid = json::getInt(doc, "rid");
+    const std::string hash = json::getString(doc, "hash");
+    Bytes data = blob_provider ? blob_provider(hash) : Bytes();
+    if (data.empty() || data.size() > kBlobMaxBytes) {  // 持っていない/上限超
+      auto o = json::obj();
+      json::set(o.get(), "t", "BLOB_RESP");
+      json::set(o.get(), "rid", rid);
+      json::set(o.get(), "hash", hash);
+      json::setBool(o.get(), "found", false);
+      ch.sendMessage(json::dump(o.get()));
+      return;
+    }
+    const uint64_t n = (data.size() + kBlobChunkBytes - 1) / kBlobChunkBytes;
+    for (uint64_t i = 0; i < n; i++) {
+      const size_t off = static_cast<size_t>(i) * kBlobChunkBytes;
+      const size_t len = std::min(kBlobChunkBytes, data.size() - off);
+      auto o = json::obj();
+      json::set(o.get(), "t", "BLOB_RESP");
+      json::set(o.get(), "rid", rid);
+      json::set(o.get(), "hash", hash);
+      json::setBool(o.get(), "found", true);
+      json::set(o.get(), "seq", static_cast<int64_t>(i));
+      json::set(o.get(), "n", static_cast<int64_t>(n));
+      json::set(o.get(), "data", base64Encode(data.data() + off, len));
+      ch.sendMessage(json::dump(o.get()));
+    }
+  }
+
+  void handleBlobResp(const cJSON* doc) {
+    const uint64_t rid = static_cast<uint64_t>(json::getInt(doc, "rid"));
+    auto it = blob_waits.find(rid);
+    if (it == blob_waits.end()) return;  // タイムアウト済み/未知
+    BlobWait& w = it->second;
+    if (json::getString(doc, "hash") != w.hash) return;  // 不整合応答は無視
+    if (!json::getBool(doc, "found", false)) {           // この peer は持っていない → 次へ
+      failBlobAttempt(rid, /*cancel_timer=*/true);
+      return;
+    }
+    const uint64_t seq = static_cast<uint64_t>(json::getInt(doc, "seq"));
+    const uint64_t n = static_cast<uint64_t>(json::getInt(doc, "n"));
+    Bytes chunk;
+    if (n == 0 || seq >= n || !base64Decode(json::getString(doc, "data"), chunk) ||
+        (w.total_chunks != 0 && w.total_chunks != n)) {
+      failBlobAttempt(rid, /*cancel_timer=*/true);  // 形式不正 → 次の peer へ
+      return;
+    }
+    w.total_chunks = n;
+    if (!w.chunks.count(seq)) w.total_bytes += chunk.size();
+    if (w.total_bytes > kBlobMaxBytes) {  // 上限超過 (異常応答)
+      failBlobAttempt(rid, /*cancel_timer=*/true);
+      return;
+    }
+    w.chunks[seq] = std::move(chunk);
+    if (w.chunks.size() < w.total_chunks) return;  // まだ揃っていない
+    Bytes data;
+    data.reserve(w.total_bytes);
+    for (auto& c : w.chunks) data.insert(data.end(), c.second.begin(), c.second.end());
+    loop.cancel(w.timeout_id);
+    auto done = std::move(w.cb);
+    blob_waits.erase(it);
+    if (done) done(std::move(data));
+  }
+
   // ------------------------------------------------------------------ メッセージ分配
 
   void handleMessage(const std::shared_ptr<SecureChannel>& ch, const std::string& msg) {
@@ -1008,6 +1158,10 @@ struct Mesh::Impl {
       handleSnapReq(*ch, doc.get());
     } else if (t == "SNAP_RESP") {
       handleSnapResp(doc.get());
+    } else if (t == "BLOB_REQ") {
+      handleBlobReq(*ch, doc.get());
+    } else if (t == "BLOB_RESP") {
+      handleBlobResp(doc.get());
     } else if (t == "CMD") {
       if (cbs.on_command) {
         cbs.on_command(json::getString(doc.get(), "from"), json::getString(doc.get(), "cmd"));
@@ -1292,6 +1446,14 @@ void Mesh::setSnapshotProvider(std::function<Bytes()> provider) {
 
 void Mesh::fetchSnapshot(const std::string& node_id, std::function<void(Bytes)> cb) {
   impl_->fetchSnapshot(node_id, std::move(cb));
+}
+
+void Mesh::setBlobProvider(std::function<Bytes(const std::string&)> provider) {
+  impl_->blob_provider = std::move(provider);
+}
+
+void Mesh::fetchBlob(const std::string& hash, std::function<void(Bytes)> cb) {
+  impl_->fetchBlob(hash, std::move(cb));
 }
 
 Mesh::JoinToken Mesh::createJoinToken() {

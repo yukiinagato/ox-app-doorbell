@@ -167,6 +167,14 @@ DB_API void db_core_press(db_core* c, const char* door_id) {
   if (c && c->node) c->node->press(door_id ? door_id : "");
 }
 
+DB_API void db_core_press_purpose(db_core* c, const char* door_id, const char* purpose) {
+  if (c && c->node) c->node->press(door_id ? door_id : "", purpose ? purpose : "");
+}
+
+DB_API void db_core_set_visitor_lang(db_core* c, const char* door, const char* lang) {
+  if (c && c->node && lang && *lang) c->node->setVisitorLang(door ? door : "", lang);
+}
+
 DB_API char* db_core_status_json(db_core* c) {
   if (!c || !c->node) return nullptr;
   return dupString(c->node->statusJson());
