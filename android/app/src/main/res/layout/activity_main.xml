@@ -1,10 +1,22 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- WPF 版 MainWindow.xaml と同じ 4 状態: 待機 / 呼び出し中 / 返信バナー / オフライン。
+     待機画面は上から 時計 / 大ボタン (用件なしの汎用呼出) / 用件ボタン / 訪客言語バー。
+     テーマ背景 (theme_bg) は最背面、夜間 red_tint (night_tint) は最前面に重なる。
      カメラプレビューは右下の小窓 (訪客確認用・core への NV21 供給が主目的)。 -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/root_view"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@color/bg">
+
+    <!-- テーマ背景画像 (display.theme.bg_image / devices.<self>.local.theme.bg_image) -->
+    <ImageView
+        android:id="@+id/theme_bg"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:contentDescription="@null"
+        android:scaleType="centerCrop"
+        android:visibility="gone"/>
 
     <SurfaceView
         android:id="@+id/camera_preview"
@@ -14,16 +26,17 @@
         android:layout_margin="16dp"/>
 
     <!-- ============ 待機 ============ -->
-    <FrameLayout
+    <LinearLayout
         android:id="@+id/idle_view"
         android:layout_width="match_parent"
-        android:layout_height="match_parent">
+        android:layout_height="match_parent"
+        android:orientation="vertical">
 
         <LinearLayout
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_gravity="top|center_horizontal"
-            android:layout_marginTop="48dp"
+            android:layout_gravity="center_horizontal"
+            android:layout_marginTop="32dp"
             android:gravity="center_horizontal"
             android:orientation="vertical">
             <TextView
@@ -32,51 +45,94 @@
                 android:layout_height="wrap_content"
                 android:fontFamily="sans-serif-light"
                 android:textColor="@color/fg"
-                android:textSize="72sp"/>
+                android:textSize="64sp"/>
             <TextView
                 android:id="@+id/date_text"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="4dp"
                 android:textColor="@color/dim"
-                android:textSize="24sp"/>
+                android:textSize="22sp"/>
         </LinearLayout>
 
         <LinearLayout
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="center"
-            android:gravity="center_horizontal"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:gravity="center"
             android:orientation="vertical">
             <Button
                 android:id="@+id/call_button"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:minWidth="320dp"
-                android:minHeight="140dp"
+                android:minHeight="130dp"
                 android:background="@drawable/bg_big_button"
                 android:textColor="@color/fg"
-                android:textSize="40sp"
+                android:textSize="38sp"
                 android:textStyle="bold"/>
             <TextView
                 android:id="@+id/touch_hint"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="20dp"
+                android:layout_marginTop="16dp"
                 android:text="@string/idle_touch_to_call"
                 android:textColor="@color/dim"
                 android:textSize="22sp"/>
         </LinearLayout>
 
-        <TextView
-            android:id="@+id/node_info"
-            android:layout_width="wrap_content"
+        <!-- ==== 用件ボタン (config visit_purposes を order 順・3 列。狭い画面は横スクロール) ==== -->
+        <LinearLayout
+            android:id="@+id/purpose_section"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_gravity="bottom|start"
-            android:layout_margin="16dp"
-            android:textColor="@color/dim"
-            android:textSize="13sp"/>
-    </FrameLayout>
+            android:gravity="center_horizontal"
+            android:orientation="vertical"
+            android:visibility="gone">
+            <TextView
+                android:id="@+id/purpose_hint"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="8dp"
+                android:text="@string/idle_choose_purpose"
+                android:textColor="@color/dim"
+                android:textSize="18sp"/>
+            <HorizontalScrollView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:paddingLeft="16dp"
+                android:paddingRight="16dp"
+                android:scrollbars="none">
+                <GridLayout
+                    android:id="@+id/purpose_grid"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:columnCount="3"/>
+            </HorizontalScrollView>
+        </LinearLayout>
+
+        <!-- ==== 訪客言語バー (config ui.languages) + ノード情報 ==== -->
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:padding="12dp">
+            <LinearLayout
+                android:id="@+id/lang_bar"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_horizontal"
+                android:orientation="horizontal"
+                android:visibility="gone"/>
+            <TextView
+                android:id="@+id/node_info"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="bottom|start"
+                android:textColor="@color/dim"
+                android:textSize="13sp"/>
+        </FrameLayout>
+    </LinearLayout>
 
     <!-- ============ 呼び出し中 ============ -->
     <LinearLayout
@@ -91,9 +147,10 @@
             android:id="@+id/calling_text"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:gravity="center"
             android:text="@string/calling_title"
             android:textColor="@color/fg"
-            android:textSize="48sp"
+            android:textSize="44sp"
             android:textStyle="bold"/>
         <View
             android:id="@+id/pulse"
@@ -129,6 +186,7 @@
         android:padding="40dp"
         android:visibility="gone">
         <TextView
+            android:id="@+id/reply_caption"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="@string/reply_banner"
@@ -155,6 +213,7 @@
         android:orientation="vertical"
         android:visibility="gone">
         <TextView
+            android:id="@+id/offline_title"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="@string/offline_title"
@@ -162,6 +221,7 @@
             android:textSize="44sp"
             android:textStyle="bold"/>
         <TextView
+            android:id="@+id/offline_body"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="14dp"
@@ -177,4 +237,14 @@
         android:layout_height="200dp"
         android:layout_gravity="top|end"
         android:background="@android:color/transparent"/>
+
+    <!-- 夜間モード red tint (最前面・非タッチ。背景画像が明るくても夜間は暗くなる) -->
+    <View
+        android:id="@+id/night_tint"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#33FF2200"
+        android:clickable="false"
+        android:focusable="false"
+        android:visibility="gone"/>
 </FrameLayout>

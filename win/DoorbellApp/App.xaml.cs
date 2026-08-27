@@ -35,6 +35,10 @@ namespace DoorbellApp
                 Shutdown(1);
                 return;
             }
+            // 文言解決 (i18n_overrides の前段) を core 設定と結線してから画面を作る
+            Texts.SetConfig(Core.Config());
+            Texts.SetLang(Boot.UiLang);
+
             var w = new MainWindow();
             MainWindow = w;
             w.Show();

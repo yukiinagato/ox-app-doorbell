@@ -12,6 +12,7 @@ class BootConfig private constructor(
     val door: String,
     val uiLang: String,
     val kiosk: Boolean,
+    val httpPort: Int,   // 自機 httpd (資産取得 /asset/<hash> に使う)
 ) {
     companion object {
         private const val DEFAULT_JSON =
@@ -26,7 +27,7 @@ class BootConfig private constructor(
                 try { file.writeText(DEFAULT_JSON) } catch (_: Exception) { }
             }
             var name = "doorbell"; var role = "door_station"; var door = ""
-            var lang = "ja"; var kiosk = true
+            var lang = "ja"; var kiosk = true; var httpPort = 47180
             try {
                 val d = JSONObject(raw)
                 name = d.optString("name", name)
@@ -34,8 +35,9 @@ class BootConfig private constructor(
                 door = d.optString("door", door)
                 lang = d.optString("ui_lang", lang)
                 kiosk = d.optBoolean("kiosk", kiosk)
+                httpPort = d.optInt("http_port", httpPort)
             } catch (_: Exception) { }
-            return BootConfig(raw, name, role, door, lang, kiosk)
+            return BootConfig(raw, name, role, door, lang, kiosk, httpPort)
         }
     }
 }

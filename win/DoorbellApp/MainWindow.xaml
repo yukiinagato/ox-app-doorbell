@@ -4,7 +4,14 @@
         Title="ドアホン" Background="{StaticResource Bg}"
         WindowStyle="None" ResizeMode="NoResize" WindowState="Maximized"
         Topmost="False" Cursor="Arrow" FontFamily="Yu Gothic UI, Meiryo UI, Segoe UI">
-    <Grid>
+    <Grid ClipToBounds="True">
+        <!-- ============ テーマ背景 (display.theme / devices.<self>.local.theme) ============
+             bg_color は Window.Background に、bg_image は自機 httpd の /asset/<hash> から
+             取得して UniformToFill (中央クリップ) で最背面に敷く。夜間 red_tint は最前面の
+             NightTint がそのまま上に重なる (背景が明るくても夜間は暗くなる)。 -->
+        <Image x:Name="ThemeBgImage" Stretch="UniformToFill" Visibility="Collapsed"
+               IsHitTestVisible="False"/>
+
         <!-- ============ 待機 ============ -->
         <!-- 焼付対策: コンテナ全体を pixel_shift_s 毎に ±8px 平行移動する (IdleShift) -->
         <Grid x:Name="IdleView">
@@ -15,8 +22,9 @@
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
                 <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
-            <StackPanel Grid.Row="0" Margin="0,60,0,0" HorizontalAlignment="Center">
+            <StackPanel Grid.Row="0" Margin="0,40,0,0" HorizontalAlignment="Center">
                 <TextBlock x:Name="ClockText" FontSize="72" FontWeight="Light"
                            Foreground="{StaticResource Fg}" HorizontalAlignment="Center"/>
                 <TextBlock x:Name="DateText" FontSize="26" Foreground="{StaticResource Dim}"
@@ -45,12 +53,28 @@
                     </StackPanel>
                 </Border>
             </StackPanel>
-            <DockPanel Grid.Row="2" Margin="20,0,20,14" LastChildFill="False">
+            <!-- ==== 用件ボタン (config visit_purposes を order 順・2-3 列) ====
+                 1 タップで用件付き按鈴 (db_core_press_purpose)。狭い画面では横スクロール。
+                 ラベルは訪客言語に追従する (BuildPurposeButtons を言語切替でも再実行)。 -->
+            <StackPanel x:Name="PurposeSection" Grid.Row="2" Visibility="Collapsed"
+                        Margin="0,0,0,12">
+                <TextBlock x:Name="PurposeHint" FontSize="20" Foreground="{StaticResource Dim}"
+                           HorizontalAlignment="Center" Margin="0,0,0,10"/>
+                <ScrollViewer HorizontalScrollBarVisibility="Auto"
+                              VerticalScrollBarVisibility="Disabled" Margin="20,0">
+                    <UniformGrid x:Name="PurposeGrid" Columns="3" HorizontalAlignment="Center"/>
+                </ScrollViewer>
+            </StackPanel>
+
+            <!-- ==== 訪客言語バー (config ui.languages) + ノード情報 ==== -->
+            <Grid Grid.Row="3" Margin="20,0,20,14">
+                <StackPanel x:Name="LangBar" Orientation="Horizontal"
+                            HorizontalAlignment="Center" Visibility="Collapsed"/>
                 <TextBlock x:Name="NodeInfo" FontSize="14" Foreground="{StaticResource Dim}"
-                           DockPanel.Dock="Left"/>
+                           HorizontalAlignment="Left" VerticalAlignment="Bottom"/>
                 <Ellipse x:Name="MeshDot" Width="12" Height="12" Fill="#5DD39E"
-                         DockPanel.Dock="Right" VerticalAlignment="Center"/>
-            </DockPanel>
+                         HorizontalAlignment="Right" VerticalAlignment="Center"/>
+            </Grid>
             <!-- 隠し管理入口 (右上 200x200 を 5 秒内 7 連打) -->
             <Border Width="200" Height="200" Background="Transparent"
                     HorizontalAlignment="Right" VerticalAlignment="Top"
@@ -106,10 +130,27 @@
                 <StackPanel>
                     <TextBlock x:Name="IncomingTitle" FontSize="34" FontWeight="Bold"
                                Foreground="{StaticResource Fg}"/>
+                    <!-- 用件 / 訪客言語バッジ (press イベント payload 由来) -->
+                    <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                        <Border x:Name="PurposeBadge" Visibility="Collapsed" Background="#2A3A4C"
+                                CornerRadius="8" Padding="12,4">
+                            <TextBlock x:Name="PurposeBadgeText" FontSize="20"
+                                       Foreground="{StaticResource Fg}"/>
+                        </Border>
+                        <Border x:Name="LangBadge" Visibility="Collapsed" Background="#2A3A4C"
+                                CornerRadius="8" Padding="12,4" Margin="10,0,0,0">
+                            <TextBlock x:Name="LangBadgeText" FontSize="20"
+                                       Foreground="{StaticResource Fg}"/>
+                        </Border>
+                    </StackPanel>
                     <TextBlock x:Name="IncomingHint" FontSize="18" Foreground="{StaticResource Dim}"
                                Margin="0,6,0,0" Visibility="Collapsed"/>
                 </StackPanel>
             </Border>
+            <!-- クイック返信 (config quick_replies を order 順・ラベルは訪客言語) -->
+            <WrapPanel x:Name="QuickReplyPanel" Orientation="Horizontal"
+                       HorizontalAlignment="Center" VerticalAlignment="Bottom"
+                       Margin="40,0,40,130" MaxWidth="1200"/>
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Center"
                         VerticalAlignment="Bottom" Margin="0,0,0,44">
                 <Button x:Name="AnswerButton" FontSize="30" FontWeight="Bold" Padding="56,20"

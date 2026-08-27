@@ -27,6 +27,17 @@ class App : Application(), DoorbellCore.Listener {
     @Volatile
     var activityListener: DoorbellCore.Listener? = null
 
+    // 直近 press の付帯情報 (来鈴画面のバッジ/返信ラベル言語に使う)
+    @Volatile
+    var lastPressDoor = ""
+        private set
+    @Volatile
+    var lastPurpose = ""
+        private set
+    @Volatile
+    var lastVisitorLang = ""
+        private set
+
     override fun onCreate() {
         super.onCreate()
         boot = BootConfig.load(File(filesDir, "boot.json"))
@@ -76,10 +87,21 @@ class App : Application(), DoorbellCore.Listener {
 
     override fun onUiEvent(ev: JSONObject) {
         activityListener?.onUiEvent(ev)
+        // press イベント (chime より先に届く — node.cpp は event 通知 → ルール評価の順) から
+        // 用件/訪客言語を控えておき、続く chime で来鈴画面へ渡す (バッジ + 返信ラベル言語)。
+        if (ev.optString("t") == "event" && ev.optString("type") == "press") {
+            lastPressDoor = ev.optString("door")
+            lastPurpose = ev.optString("purpose")
+            lastVisitorLang = ev.optString("visitor_lang")
+        }
         // 来客 (chime) → モニタ画面。門口機自身 (door_station) は MainActivity が門口 UI
         // なので出さない — 室内機/TV (indoor_panel) のみ。
         if (ev.optString("t") == "chime" && boot.role != "door_station") {
-            IncomingActivity.launch(this, ev.optString("door"))
+            val door = ev.optString("door")
+            val same = door.isEmpty() || lastPressDoor.isEmpty() || door == lastPressDoor
+            IncomingActivity.launch(this, door,
+                                    if (same) lastPurpose else "",
+                                    if (same) lastVisitorLang else "")
         }
     }
 

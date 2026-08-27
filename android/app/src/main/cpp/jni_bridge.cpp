@@ -201,6 +201,22 @@ Java_jp_keihan_doorbell_DoorbellCore_nativePress(JNIEnv* env, jobject, jlong h, 
   if (b && b->core) db_core_press(b->core, toUtf8(env, door_id).c_str());
 }
 
+extern "C" JNIEXPORT void JNICALL
+Java_jp_keihan_doorbell_DoorbellCore_nativePressPurpose(JNIEnv* env, jobject, jlong h,
+                                                        jstring door_id, jstring purpose) {
+  Bridge* b = fromHandle(h);
+  if (b && b->core)
+    db_core_press_purpose(b->core, toUtf8(env, door_id).c_str(), toUtf8(env, purpose).c_str());
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_jp_keihan_doorbell_DoorbellCore_nativeSetVisitorLang(JNIEnv* env, jobject, jlong h,
+                                                          jstring door, jstring lang) {
+  Bridge* b = fromHandle(h);
+  if (b && b->core)
+    db_core_set_visitor_lang(b->core, toUtf8(env, door).c_str(), toUtf8(env, lang).c_str());
+}
+
 extern "C" JNIEXPORT jstring JNICALL
 Java_jp_keihan_doorbell_DoorbellCore_nativeStatusJson(JNIEnv* env, jobject, jlong h) {
   Bridge* b = fromHandle(h);

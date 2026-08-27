@@ -98,6 +98,21 @@ namespace DoorbellApp.Core
 
         public void Press(string doorId) { if (_core != IntPtr.Zero) CoreInterop.db_core_press(_core, doorId ?? ""); }
 
+        /// <summary>用件ボタンからの按鈴 (config visit_purposes の id)。</summary>
+        public void PressPurpose(string doorId, string purpose)
+        { if (_core != IntPtr.Zero) CoreInterop.db_core_press_purpose(_core, doorId ?? "", purpose ?? ""); }
+
+        /// <summary>訪客言語の切替。全ノードへ複製され {"t":"visitor_lang"} が返ってくる。</summary>
+        public void SetVisitorLang(string door, string lang)
+        { if (_core != IntPtr.Zero) CoreInterop.db_core_set_visitor_lang(_core, door ?? "", lang ?? "ja"); }
+
+        /// <summary>クイック返信 (門口機へ配送 — 表示 + カスタム音声/TTS は core が決める)。</summary>
+        public void QuickReply(string replyId, string door)
+        { if (_core != IntPtr.Zero && !string.IsNullOrEmpty(replyId)) CoreInterop.db_core_quick_reply(_core, replyId, door ?? ""); }
+
+        /// <summary>殻からの TTS 発話 (カスタム音声の再生に失敗した時の回落先)。</summary>
+        public void SpeakText(string text, string lang) { Speak(text, lang); }
+
         /// <summary>SOS 緊急モード。true=発報 / false=解除 (解除前の PIN 検証は呼び出し側)。</summary>
         public void Emergency(bool active) { if (_core != IntPtr.Zero) CoreInterop.db_core_emergency(_core, active ? 1 : 0); }
 

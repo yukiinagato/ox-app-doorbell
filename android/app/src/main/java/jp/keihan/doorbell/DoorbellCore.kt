@@ -46,6 +46,16 @@ class DoorbellCore {
         if (handle != 0L) nativePress(handle, doorId)
     }
 
+    /** 用件ボタンからの按鈴 (config visit_purposes の id — press payload に載る)。 */
+    fun pressPurpose(doorId: String, purpose: String) {
+        if (handle != 0L) nativePressPurpose(handle, doorId, purpose)
+    }
+
+    /** 訪客言語の切替 ("ja" で即時復帰)。全ノードへ複製され visitor_lang イベントが返る。 */
+    fun setVisitorLang(door: String, lang: String) {
+        if (handle != 0L) nativeSetVisitorLang(handle, door, lang)
+    }
+
     fun status(): JSONObject? = parse(if (handle != 0L) nativeStatusJson(handle) else null)
 
     fun config(): JSONObject? = parse(if (handle != 0L) nativeConfigJson(handle) else null)
@@ -110,6 +120,8 @@ class DoorbellCore {
     private external fun nativeDestroy(handle: Long)
     private external fun nativeSetUiCallback(handle: Long, enabled: Boolean)
     private external fun nativePress(handle: Long, doorId: String)
+    private external fun nativePressPurpose(handle: Long, doorId: String, purpose: String)
+    private external fun nativeSetVisitorLang(handle: Long, door: String, lang: String)
     private external fun nativeStatusJson(handle: Long): String?
     private external fun nativeConfigJson(handle: Long): String?
     private external fun nativeOnCameraFrame(handle: Long, data: ByteArray, format: Int,
