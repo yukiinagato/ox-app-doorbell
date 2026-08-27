@@ -2,6 +2,7 @@
 // macOS/Linux 上で Node を起動して mesh/管理画面/API を触るためのツール。
 //   ./doorbell_host --data /tmp/n1 --name front --role door_station --door d_front \
 //                   --listen 127.0.0.1:47172 --http 47180 --psk <64hex> [--seed host:port]
+// 資産投入: --add-asset <file> [--asset-type <mime>] [--asset-label <name>] (hash を stdout へ)
 #include <unistd.h>
 
 #include <csignal>
@@ -148,11 +149,16 @@ int main(int argc, char** argv) {
   for (int i = 1; i < argc; i++)
     if (std::string(argv[i]) == "--fake-camera") fake_camera = true;
 
-  // --add-asset <file>: 起動後にファイルを統一資産として登録し hash を印字する
-  // (管理画面を使わずに背景画像/カスタム音声を投入する開発用。複数指定可)。
-  std::vector<std::string> add_assets;
-  for (int i = 1; i < argc - 1; i++)
-    if (std::string(argv[i]) == "--add-asset") add_assets.push_back(argv[i + 1]);
+  // --add-asset <file> [--asset-type <mime>] [--asset-label <name>]:
+  // 起動後にファイルを統一資産として登録し hash を stdout へ出す (開発で背景画像や
+  // カスタム音声を投入して試すため)。type 省略時は拡張子から推定する。
+  std::string add_asset_path, asset_type, asset_label;
+  for (int i = 1; i < argc - 1; i++) {
+    std::string k = argv[i];
+    if (k == "--add-asset") add_asset_path = argv[i + 1];
+    else if (k == "--asset-type") asset_type = argv[i + 1];
+    else if (k == "--asset-label") asset_label = argv[i + 1];
+  }
 
   db::Node node(o);
   node.setHttpsFn(curlHttps);  // Telegram ブリッジ用 (leader 就任 + bot_token 設定時のみ使われる)
@@ -164,36 +170,6 @@ int main(int argc, char** argv) {
     std::fprintf(stderr, "start 失敗\n");
     return 1;
   }
-  // --add-asset: 拡張子から MIME を決めて登録 (許可外/3MB 超は core 側が弾く)
-  for (const std::string& path : add_assets) {
-    db::Bytes data;
-    if (!db::readFileBytes(path, data)) {
-      std::fprintf(stderr, "--add-asset: 読めない: %s\n", path.c_str());
-      continue;
-    }
-    const size_t dot = path.rfind('.');
-    std::string ext = dot == std::string::npos ? "" : path.substr(dot + 1);
-    for (char& c : ext) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-    std::string type;
-    if (ext == "jpg" || ext == "jpeg") type = "image/jpeg";
-    else if (ext == "png") type = "image/png";
-    else if (ext == "mp3") type = "audio/mpeg";
-    else if (ext == "wav") type = "audio/wav";
-    if (type.empty()) {
-      std::fprintf(stderr, "--add-asset: 未対応の拡張子: %s (jpg/png/mp3/wav)\n", path.c_str());
-      continue;
-    }
-    const size_t slash = path.find_last_of("/\\");
-    const std::string label = slash == std::string::npos ? path : path.substr(slash + 1);
-    const std::string hash = node.addAsset(data, type, label);
-    if (hash.empty()) {
-      std::fprintf(stderr, "--add-asset: 登録失敗 (3MB 超?): %s\n", path.c_str());
-    } else {
-      std::printf("asset %s  %s  (%zu bytes, %s)\n", hash.c_str(), label.c_str(), data.size(),
-                  type.c_str());
-    }
-  }
-
   // --fake-camera: 合成グラデーション (静止 — 動体検知は発火しない) を 2fps で push。
   // カメラの無い開発機で snapshot/Telegram 写真経路を通すため。
   std::thread fake_th;
@@ -228,6 +204,44 @@ int main(int argc, char** argv) {
       DB_LOGI("host", monitor_mode + "-call -> " + monitor_call);
       node.sipCall(monitor_call, monitor_mode);
     });
+  }
+
+  // 資産投入 (起動直後 — 台帳 assets.<hash> は CRDT で他ノードへ複製される)
+  if (!add_asset_path.empty()) {
+    db::Bytes data;
+    if (!db::readFileBytes(add_asset_path, data)) {
+      std::fprintf(stderr, "--add-asset: 読めない: %s\n", add_asset_path.c_str());
+    } else {
+      if (asset_type.empty()) {  // 拡張子から推定 (許可 type のみ)
+        const std::string p = add_asset_path;
+        auto ends = [&p](const char* s) {
+          const size_t n = std::strlen(s);
+          return p.size() >= n && p.compare(p.size() - n, n, s) == 0;
+        };
+        if (ends(".jpg") || ends(".jpeg")) asset_type = "image/jpeg";
+        else if (ends(".png")) asset_type = "image/png";
+        else if (ends(".mp3")) asset_type = "audio/mpeg";
+        else if (ends(".wav")) asset_type = "audio/wav";
+      }
+      if (asset_label.empty()) {
+        const size_t slash = add_asset_path.find_last_of('/');
+        asset_label = slash == std::string::npos ? add_asset_path
+                                                 : add_asset_path.substr(slash + 1);
+      }
+      const std::string hash = node.addAsset(data, asset_type, asset_label);
+      if (hash.empty()) {
+        std::fprintf(stderr,
+                     "--add-asset: 登録拒否 (3MB 超 or 許可外 type: '%s')\n"
+                     "  許可 type: image/jpeg image/png audio/mpeg audio/wav"
+                     " — --asset-type で明示指定できます\n",
+                     asset_type.c_str());
+      } else {
+        // パイプ (`... --add-asset f.jpg | head -1`) でも即読めるよう明示 flush
+        std::printf("asset %s  (%zu bytes, %s, \"%s\")\n", hash.c_str(), data.size(),
+                    asset_type.c_str(), asset_label.c_str());
+        std::fflush(stdout);
+      }
+    }
   }
 
   std::printf("node %s  admin: http://127.0.0.1:%d/admin/  (Ctrl+C で終了)\n",

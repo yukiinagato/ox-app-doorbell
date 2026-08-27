@@ -232,3 +232,27 @@
 - スナップショット/カメラは MQTT に載せない — 実画は go2rtc、静止画は HA generic camera
   が門口機の `/snapshot.jpg` を直接取る (`deploy/ha/` 参照)。
 - MVP は認証 `user`/`pass` 平文 (`pass_ref` の secure store 化は sip と同時に対応予定)。
+
+## 統一資産 API / 訪客言語 API (実装で確定した細部)
+
+- `POST /api/assets?type=<mime>&label=<name>` (管理セッション必須) — body は生バイト列。
+  許可 type は `image/jpeg` `image/png` `audio/mpeg` `audio/wav` のみ、上限 3MB。
+  応答 `{"hash":"<sha256>"}`。空 body=400 / 許可外 type=415 / 上限超=413 / 未ログイン=401。
+  登録すると台帳 `assets.<hash>` = `{size,type,origin,label}` が書かれ CRDT で全ノードへ複製される。
+- `GET /asset/<sha256>` — 管理セッション **または** panel token (`?k=`) で取得可 (403/404)。
+  `<sha256>` は 64 桁小文字 hex 固定で、それ以外は 400 (パス走査対策)。
+- 前取りは「台帳に載った時」ではなく「設定から参照された時」— 参照元は
+  `display.theme.bg_image` / `devices.*.local.theme.bg_image` / `quick_replies.*.audio.*` /
+  chime の `sound:"asset:<hash>"` / `emergency.alarm_sound`。取得完了で
+  `{"t":"asset_ready","hash":"<sha256>"}` を uiNotify (殻はこれで再描画/再読込する)。
+  `/api/status` の `assets: {cached,total}` がノード毎のキャッシュ被覆率。
+- `POST /api/panel/visitor-lang?lang=<ja|en|zh>[&door=<id>]` (panel token) — door 省略時は
+  自機担当 door。`lang=ja` は即時復帰。無操作 `ui.visitor_lang_revert_s` 秒で自動的に ja へ戻る
+  (押鈴で計時やり直し)。現在値は `/api/panel/state` の各 door の `visitor_lang`
+  (ja のときはキー自体が出ない) と `/api/status` の `visitor_lang.<door>`。
+- 開発投入: `doorbell_host --add-asset <file> [--asset-type <mime>] [--asset-label <name>]`
+  (type 省略時は拡張子から推定、hash を stdout へ)。
+- MQTT 追加分: press の event payload は `{"event_type":"press","purpose":…,"visitor_lang":…}`
+  (purpose/visitor_lang は該当時のみ)。`<base>/<door_id>/attrs` に
+  `{"visitor_lang":"ja|en|zh"}` を retain で発行し、`sensor.doorbell_<door>_visitor_lang` として
+  discovery する。Telegram の press 通知は先頭行に `{icon} {用件名}` と訪客言語バッジ `🌐 EN`。
