@@ -77,6 +77,18 @@
                       "*0": { "type": "hangup" } }
   },
 
+  "ui": {
+    "languages": ["ja", "en", "zh"],            // 門口機の訪客言語切替に出す言語
+    "visitor_lang_revert_s": 60                 // 無操作でこの秒数後に主言語 (ja) へ自動復帰
+  },
+  // 文言の実行時上書き (組込 resx/strings.xml より優先)。管理画面「文言」タブ /
+  // 室内機の簡易エディタから編集 → CRDT 即時 push (LAN 内ミリ秒級) → 門口機が再描画。
+  // プレースホルダ {name} は編集側で整合検証。キーは i18n/strings.yaml と同一。
+  "i18n_overrides": {
+    "ja": { "idle.touch_to_call": "タッチして呼び出してください" },
+    "en": {}
+  },
+
   "theme_assets": {                             // 背景画像などの blob 台帳 (実体は各ノードの assets/ に
     "<sha256>": { "size": 123456, "type": "image/jpeg",   // キャッシュ。origin から mesh FETCH_BLOB で取得)
                   "origin": "<node_id>", "label": "桜.jpg" }
