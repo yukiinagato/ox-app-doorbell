@@ -114,6 +114,7 @@ int main(int argc, char** argv) {
     else if (k == "--psk") psk_hex = v;
     else if (k == "--sip-user") o.sip_user = v;
     else if (k == "--sip-pass") o.sip_pass = v;
+    else if (k == "--caps") o.caps_json = v;
     else continue;
     i++;
   }
