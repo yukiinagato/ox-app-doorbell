@@ -1,0 +1,2 @@
+/usr/bin/ar qc libdb_third_party.a CMakeFiles/db_third_party.dir/third_party/sqlite/sqlite3.c.o CMakeFiles/db_third_party.dir/third_party/civetweb/civetweb.c.o CMakeFiles/db_third_party.dir/third_party/cjson/cJSON.c.o CMakeFiles/db_third_party.dir/third_party/monocypher/monocypher.c.o "CMakeFiles/db_third_party.dir/third_party/monocypher/monocypher-ed25519.c.o"
+/usr/bin/ranlib libdb_third_party.a

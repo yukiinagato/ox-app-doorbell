@@ -54,6 +54,12 @@ if(NOT MSVC)
   target_compile_options(doorbell_core PRIVATE -Wall -Wextra -Wno-unused-parameter)
 endif()
 
+# ---------- ホスト開発ランナー ----------
+if(NOT WIN32)
+  add_executable(doorbell_host host/main.cpp)
+  target_link_libraries(doorbell_host PRIVATE doorbell_core)
+endif()
+
 # ---------- tests ----------
 enable_testing()
 file(GLOB DB_TEST_SRC CONFIGURE_DEPENDS tests/*.cpp)

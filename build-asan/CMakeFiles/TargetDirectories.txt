@@ -1,0 +1,6 @@
+/Users/ox/Documents/project/app-doorbell/build-asan/CMakeFiles/db_third_party.dir
+/Users/ox/Documents/project/app-doorbell/build-asan/CMakeFiles/doorbell_core.dir
+/Users/ox/Documents/project/app-doorbell/build-asan/CMakeFiles/doorbell_tests.dir
+/Users/ox/Documents/project/app-doorbell/build-asan/CMakeFiles/test.dir
+/Users/ox/Documents/project/app-doorbell/build-asan/CMakeFiles/edit_cache.dir
+/Users/ox/Documents/project/app-doorbell/build-asan/CMakeFiles/rebuild_cache.dir
