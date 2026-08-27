@@ -59,6 +59,12 @@ if(WIN32)
     _WIN32_WINNT=0x0601 WIN32_LEAN_AND_MEAN NOMINMAX CJSON_HIDE_SYMBOLS)
   # ws2_32: civetweb とメッシュ / iphlpapi: civetweb / bcrypt: randomBytes
   target_link_libraries(db_third_party PUBLIC ws2_32 iphlpapi bcrypt)
+elseif(ANDROID)
+  # bionic は pthread 内蔵で NDK に libpthread は存在しない。log は __android_log_print 用。
+  target_link_libraries(db_third_party PUBLIC log ${CMAKE_DL_LIBS})
+  # 32bit bionic は API 24 未満で fseeko/ftello が未宣言 (minSdk 21)。webui 資産は埋め込みで
+  # 2GB 超のファイル配信は無いため fseek/ftell で代用する (civetweb 用)。
+  target_compile_definitions(db_third_party PRIVATE fseeko=fseek ftello=ftell)
 else()
   target_link_libraries(db_third_party PUBLIC pthread ${CMAKE_DL_LIBS})
 endif()
