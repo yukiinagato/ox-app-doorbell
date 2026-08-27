@@ -17,6 +17,7 @@
 #include "mesh/udp_beacon.h"
 #include "store/store.h"
 #include "util/clock.h"
+#include "util/common.h"
 #include "util/hlc.h"
 #include "util/json.h"
 #include "util/log.h"
@@ -429,6 +430,53 @@ TEST_CASE("mesh: fetchSnapshot — 他ノードの JPEG 取得 / provider 無し
     got = std::move(b);
   });
   REQUIRE(f.runUntil([&] { return called == 1; }, 6000));
+  CHECK(got.empty());
+}
+
+TEST_CASE("mesh: fetchBlob — 保持ノードから複数チャンク取得 / 自機は provider 直 / 不在は空") {
+  Fleet f;
+  f.add(kIdA, "A", capsJson(10));
+  f.add(kIdB, "B", capsJson(9));
+  f.add(kIdC, "C", capsJson(8));
+  const std::vector<std::string> ids = {kIdA, kIdB, kIdC};
+  REQUIRE(f.runUntil([&] { return f.mutualAlive(ids); }, 3000));
+
+  // 700KB = 1 チャンク (256KB) を超える資産。C だけが保持している。
+  Bytes blob(700 * 1024);
+  for (size_t i = 0; i < blob.size(); i++) blob[i] = static_cast<uint8_t>((i * 31 + 7) & 0xff);
+  const std::string hash = sha256Hex(blob);
+  f.at(kIdC).mesh->setBlobProvider(
+      [&](const std::string& h) { return h == hash ? blob : Bytes(); });
+  // B は何も持たない — A は found:false を受けて次の候補 (C) へ進む
+  f.at(kIdB).mesh->setBlobProvider([](const std::string&) { return Bytes(); });
+
+  int called = 0;
+  Bytes got;
+  f.at(kIdA).mesh->fetchBlob(hash, [&](Bytes b) {
+    called++;
+    got = std::move(b);
+  });
+  REQUIRE(f.runUntil([&] { return called == 1; }, 5000));
+  CHECK(got.size() == blob.size());
+  CHECK(got == blob);              // チャンク再組立てがバイト等価
+  CHECK(sha256Hex(got) == hash);   // 内容ハッシュが一致 (呼び出し側の検証と同じ)
+
+  // 自分が持っている hash は mesh 往復せず provider 直呼びで返る
+  called = 0;
+  f.at(kIdC).mesh->fetchBlob(hash, [&](Bytes b) {
+    called++;
+    got = std::move(b);
+  });
+  REQUIRE(f.runUntil([&] { return called == 1; }, 500));
+  CHECK(got == blob);
+
+  // 誰も持っていない hash は (候補を試し切って) 空で必ず解決する
+  called = 0;
+  f.at(kIdA).mesh->fetchBlob(std::string(64, '0'), [&](Bytes b) {
+    called++;
+    got = std::move(b);
+  });
+  REQUIRE(f.runUntil([&] { return called == 1; }, 5000));
   CHECK(got.empty());
 }
 

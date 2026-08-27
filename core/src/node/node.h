@@ -9,6 +9,7 @@
 #include <functional>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "crdt/lww_map.h"
@@ -99,6 +100,16 @@ class Node {
   std::string addAsset(const Bytes& data, const std::string& type, const std::string& label);
   // hash の資産がローカルキャッシュにあればそのファイルパス、無ければ ""。
   std::string assetPath(const std::string& hash);
+
+  // 文言解決 (i18n)。通知文・音声案内など「コアが自前で組む文字列」の単一入口。
+  // 解決順: config i18n_overrides.<lang>.<key> → i18n_overrides.ja.<key> → 内蔵既定表
+  // (i18n/strings.yaml の ja/en/zh 相当を node.cpp にハードコード) → key 自身。
+  // args は {name} プレースホルダの置換対 ({{"door","正面玄関"},{"time","14:03"}} 等)。
+  // 殻 (WPF/Android/webui) は自前の resx/strings.xml を持つので通常これを使う必要は無い —
+  // i18n_overrides を反映した文言が欲しい時だけ呼ぶ。
+  using TextArgs = std::vector<std::pair<std::string, std::string>>;
+  std::string text(const std::string& key, const std::string& lang,
+                   const TextArgs& args = {}) const;
 
   // SOS 緊急モード。active=true で発報 / false で解除 (emergency / emergency_cancel
   // イベントを追加 — 全ノードへ複製され、各ノードが {"t":"emergency"} を uiNotify する)。

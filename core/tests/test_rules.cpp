@@ -224,6 +224,68 @@ TEST_CASE("rules: actions params の passthrough (type 除去)") {
   CHECK(acts[1].params_json == "{}");  // 追加フィールド無し
 }
 
+TEST_CASE("rules: when.purposes の用件別分岐 + auto_reply アクション") {
+  RuleEngine re;
+  // ルール ID 昇順で評価される: r1_delivery → r2_any → r3_multi
+  re.setConfig(R"({
+    "trigger_rules": {
+      "r1_delivery": { "enabled": true,
+        "when": { "type": "button", "purposes": ["p_delivery"] },
+        "actions": [ { "type": "auto_reply", "reply_id": "qr_okihai" } ] },
+      "r2_any": { "enabled": true,
+        "when": { "type": "button" },
+        "actions": [ { "type": "telegram", "households": ["h_ox"] } ] },
+      "r3_multi": { "enabled": true,
+        "when": { "type": "button", "purposes": ["p_sales", "p_mail"] },
+        "actions": [ { "type": "chime", "sound": "ding2" } ] }
+    }
+  })");
+  const int64_t noon = wallAtLocal(kThu, 12, 0, 0);
+
+  auto pressWith = [](const char* payload) {
+    EventRecord ev = makeEv("press", "d_front", "");
+    ev.payload_json = payload;
+    return ev;
+  };
+
+  struct Row {
+    const char* payload;
+    const char* want;
+  };
+  const Row rows[] = {
+      // 用件あり: 該当 purposes ルール + purposes 省略ルール (= 全用件) の両方が出る
+      {R"({"purpose":"p_delivery"})", "auto_reply,telegram"},
+      {R"({"purpose":"p_sales"})", "telegram,chime"},
+      {R"({"purpose":"p_mail"})", "telegram,chime"},
+      // 用件なしの汎用按鈴は purposes 指定ルールに掛からない
+      {R"({"purpose":""})", "telegram"},
+      {"{}", "telegram"},
+      {"", "telegram"},
+      // 未知の用件も同様 (掛かるのは purposes 省略ルールだけ)
+      {R"({"purpose":"p_unknown"})", "telegram"},
+      // 訪客言語が同梱されていても判定には影響しない
+      {R"({"purpose":"p_delivery","visitor_lang":"en"})", "auto_reply,telegram"},
+  };
+  for (const auto& r : rows) {
+    CAPTURE(r.payload);
+    CHECK(typesOf(re.evaluate(pressWith(r.payload), noon, 0)) == r.want);
+  }
+
+  // auto_reply の params は type 除去のうえ reply_id が渡る (Node が quickReply に使う)
+  const auto acts = re.evaluate(pressWith(R"({"purpose":"p_delivery"})"), noon, 0);
+  REQUIRE(acts.size() == 2);
+  CHECK(acts[0].type == "auto_reply");
+  auto p = json::parse(acts[0].params_json);
+  REQUIRE(p);
+  CHECK(json::getString(p.get(), "reply_id") == "qr_okihai");
+  CHECK(json::get(p.get(), "type") == nullptr);
+
+  // 用件は press 以外の種別 (motion 等) の payload には無い → purposes 指定は掛からない
+  EventRecord mo = makeEv("motion", "d_front", "");
+  mo.payload_json = R"({"changed_pct":12.5})";
+  CHECK(typesOf(re.evaluate(mo, noon, 0)) == "");
+}
+
 TEST_CASE("rules: 壊れた設定 JSON は空設定として扱う") {
   RuleEngine re;
   const EventRecord bt = makeEv("press", "d_front", "");

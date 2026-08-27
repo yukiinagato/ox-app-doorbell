@@ -125,6 +125,8 @@
 "emergency.cancel" = "解除";
 "emergency.hold_hint" = "長押しで発報 (%@ 秒)";
 "emergency.notified" = "家族に通知しました";
+"emergency.notify_off" = "✅ 緊急解除";
+"emergency.notify_on" = "🚨 緊急事態です — %@ から発報 (%@)";
 "emergency.title" = "緊急事態";
 "event.motion" = "%@ で動きを検知 (%@)";
 "event.offline" = "⚠ %@ オフライン (最終応答 %@)";
@@ -134,6 +136,7 @@
 "idle.touch_to_call" = "タッチして呼び出してください";
 "incall.end" = "終了";
 "incall.title" = "通話中";
+"notify.test" = "ドアホン テスト通知";
 "offline.body" = "呼び出しできません。直接ノックしてください。";
 "offline.reconnect" = "再接続まで %@ 秒";
 "offline.title" = "システムオフライン";

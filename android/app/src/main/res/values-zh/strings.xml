@@ -126,6 +126,8 @@
     <string name="emergency_cancel">解除警报</string>
     <string name="emergency_hold_hint">长按 %1$s 秒触发</string>
     <string name="emergency_notified">已通知家人</string>
+    <string name="emergency_notify_off">✅ 警报已解除</string>
+    <string name="emergency_notify_on">🚨 紧急情况 — 由 %1$s 触发 (%2$s)</string>
     <string name="emergency_title">紧急情况</string>
     <string name="event_motion">%1$s 检测到移动 (%2$s)</string>
     <string name="event_offline">⚠ %1$s 离线 (最后在线 %2$s)</string>
@@ -135,6 +137,7 @@
     <string name="idle_touch_to_call">触摸屏幕呼叫</string>
     <string name="incall_end">结束</string>
     <string name="incall_title">通话中</string>
+    <string name="notify_test">门铃测试通知</string>
     <string name="offline_body">无法呼叫，请直接敲门。</string>
     <string name="offline_reconnect">%1$s 秒后重连</string>
     <string name="offline_title">系统离线</string>
@@ -155,11 +158,4 @@
     <string name="ring_monitor">监听</string>
     <string name="ring_monitoring">正在播放门口声音</string>
     <string name="ring_no_video">没有门口机画面</string>
-    <string name="incoming_close">关闭</string>
-    <string name="incoming_listening">正在播放门口声音</string>
-    <string name="incoming_no_video">没有门口机画面</string>
-    <string name="incoming_sent">已发送</string>
-    <string name="incoming_title">有访客呼叫</string>
-    <string name="svc_channel">常驻服务</string>
-    <string name="svc_running">门铃节点运行中</string>
 </resources>

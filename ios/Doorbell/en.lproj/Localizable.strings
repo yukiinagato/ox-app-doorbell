@@ -125,6 +125,8 @@
 "emergency.cancel" = "Cancel alarm";
 "emergency.hold_hint" = "Hold %@s to trigger";
 "emergency.notified" = "Family has been notified";
+"emergency.notify_off" = "✅ Emergency cleared";
+"emergency.notify_on" = "🚨 Emergency — triggered by %@ (%@)";
 "emergency.title" = "EMERGENCY";
 "event.motion" = "Motion at %@ (%@)";
 "event.offline" = "⚠ %@ offline (last seen %@)";
@@ -134,6 +136,7 @@
 "idle.touch_to_call" = "Touch to call";
 "incall.end" = "End";
 "incall.title" = "In call";
+"notify.test" = "Doorbell test notification";
 "offline.body" = "Calling unavailable. Please knock.";
 "offline.reconnect" = "Reconnecting in %@s";
 "offline.title" = "System offline";

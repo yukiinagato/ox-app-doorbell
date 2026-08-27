@@ -525,3 +525,78 @@ TEST_CASE("telegram: SOS 緊急 — leader が 🚨/✅ を全 chat へ (quiet_h
   a.node->stop();
   b.node->stop();
 }
+
+TEST_CASE("telegram: press 通知に用件見出し + 訪客言語バッジ (visit_purposes / visitor_lang)") {
+  TgFleet f;
+  auto& a = f.add("A:1", "front", "door_station", "d_front", true, tgCaps(10));
+  REQUIRE(a.node->start());
+  seedTgConfig(*a.node, /*with_snapshot=*/false);
+  f.run(1500);
+
+  // 用件なし・主言語 → 見出し行は付かない (従来の 1 行のまま)
+  a.node->press("");
+  REQUIRE(f.runUntil([&] { return a.https.count("sendMessage") == 1; }, 3000));
+  {
+    auto bd = json::parse(a.https.last("sendMessage")->body);
+    REQUIRE(bd);
+    const std::string text = json::getString(bd.get(), "text");
+    CHECK(text.rfind("正面玄関に来客です (", 0) == 0);  // 見出し行なし = 本文が先頭
+    CHECK(text.find('\n') == std::string::npos);
+  }
+
+  // 訪客が英語を選び宅配ボタンで按鈴 → 「📦 宅配便 🌐 EN」+ 本文
+  a.node->setVisitorLang("d_front", "en");
+  f.run(300);
+  a.node->press("", "p_delivery");
+  REQUIRE(f.runUntil([&] { return a.https.count("sendMessage") == 2; }, 3000));
+  {
+    const std::string text =
+        json::getString(json::parse(a.https.last("sendMessage")->body).get(), "text");
+    CHECK(text.rfind("📦 宅配便 🌐 EN\n", 0) == 0);   // 見出し行が先頭
+    CHECK(text.find("正面玄関に来客です") != std::string::npos);  // 本文は通知言語 (ja) のまま
+  }
+
+  // 用件のみ (言語は ja へ復帰) → バッジ無しの見出しだけ
+  a.node->setVisitorLang("d_front", "ja");
+  f.run(300);
+  a.node->press("", "p_mail");
+  REQUIRE(f.runUntil([&] { return a.https.count("sendMessage") == 3; }, 3000));
+  {
+    const std::string text =
+        json::getString(json::parse(a.https.last("sendMessage")->body).get(), "text");
+    CHECK(text.rfind("✉️ 郵便\n", 0) == 0);
+    CHECK(text.find("🌐") == std::string::npos);
+  }
+
+  a.node->stop();
+}
+
+TEST_CASE("telegram: motion/offline の文言が i18n_overrides で差し替わる (Node::text 経由)") {
+  TgFleet f;
+  auto& a = f.add("A:1", "front", "door_station", "d_front", true, tgCaps(10));
+  REQUIRE(a.node->start());
+  a.node->setConfigKey("doors.d_front", "{\"label\":{\"ja\":\"正面玄関\"}}");
+  a.node->setConfigKey("households.h_ox", "{\"telegram_chat_ids\":[111]}");
+  a.node->setConfigKey("integrations.telegram.bot_token", "\"TESTTOKEN\"");
+  a.node->setConfigKey("trigger_rules.r_motion",
+                       std::string("{\"enabled\":true,\"when\":{\"type\":\"motion\"},") +
+                           "\"actions\":[{\"type\":\"telegram\",\"households\":[\"h_ox\"]}]}");
+  f.run(1500);
+
+  // 既定 (内蔵表)
+  a.node->loop().callSync([] {});
+  a.node->press("");  // press にはルールが無い — motion を直接起こす代わりに text() で確認
+  CHECK(a.node->text("event.motion", "ja", {{"door", "正面玄関"}, {"time", "09:13"}}) ==
+        "正面玄関 で動きを検知 (09:13)");
+
+  // i18n_overrides で上書き → ブリッジの文面も追従する
+  a.node->setConfigKey("i18n_overrides.ja",
+                       "{\"event.motion\":\"🚶 {door} に動きあり {time}\","
+                       "\"event.online\":\"{device} 復帰\"}");
+  f.run(500);
+  CHECK(a.node->text("event.motion", "ja", {{"door", "正面玄関"}, {"time", "09:13"}}) ==
+        "🚶 正面玄関 に動きあり 09:13");
+  CHECK(a.node->text("event.online", "ja", {{"device", "front"}}) == "front 復帰");
+
+  a.node->stop();
+}

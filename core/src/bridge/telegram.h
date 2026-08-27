@@ -50,6 +50,10 @@ class TelegramBridge {
     std::function<std::string()> hlc_tick;
     // 押鈴ノードの最新 JPEG (Mesh::fetchSnapshot — 自分宛も可)。cb は Runloop 上で呼ぶこと。
     std::function<void(const std::string& node_id, std::function<void(Bytes)> cb)> fetch_snapshot;
+    // 文言解決 (Node::text — i18n_overrides → 内蔵既定 → key)。未注入なら key をそのまま使う。
+    std::function<std::string(const std::string& key, const std::string& lang,
+                              const std::vector<std::pair<std::string, std::string>>& args)>
+        text;
   };
 
   TelegramBridge(Runloop& loop, Store& store, Hooks hooks);
@@ -88,14 +92,23 @@ class TelegramBridge {
  private:
   // ---- 設定参照 ----
   cJSON* cfgAt(const std::string& dotpath) const;
+  std::string labelIn(const cJSON* label_obj, const std::string& lang) const;
   std::string labelJa(const cJSON* label_obj) const;
   std::string doorLabel(const std::string& door_id) const;
   std::string deviceName(const std::string& node_id) const;
   int tzOffsetMin() const;
+  // 通知の言語 (integrations.telegram.lang、既定 ja) — 住人が読む側の言語。
+  // 訪客言語 (press payload の visitor_lang) とは別物: 後者はバッジで併記する。
+  std::string notifyLang() const;
+  // Node::text の薄い包み (hooks_.text 未注入なら key 自身)
+  std::string tr(const std::string& key,
+                 const std::vector<std::pair<std::string, std::string>>& args = {}) const;
 
   // ---- 本文組み立て ----
-  std::string pressCaption(const EventRecord& ev) const;  // text_template.ja の {door}/{time}
-  std::string eventText(const EventRecord& ev) const;     // motion/offline/online の ja 文言
+  std::string pressCaption(const EventRecord& ev) const;  // 用件見出し + text_template/{door}/{time}
+  // press payload の purpose/visitor_lang から「📦 宅配便 🌐 EN」の見出し行を作る ("" = 不要)
+  std::string purposeHeadline(const EventRecord& ev) const;
+  std::string eventText(const EventRecord& ev) const;     // motion/offline/online (Node::text 経由)
   std::string replyMarkupJson(const std::string& door_id) const;  // quick_replies → inline_keyboard
   std::vector<std::string> resolveChats(const cJSON* households) const;  // 展開・去重
   std::string hhmm(int64_t wall_ms) const;

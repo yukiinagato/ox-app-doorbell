@@ -130,6 +130,8 @@
   <data name="emergency_cancel" xml:space="preserve"><value>解除警报</value></data>
   <data name="emergency_hold_hint" xml:space="preserve"><value>长按 {0} 秒触发</value></data>
   <data name="emergency_notified" xml:space="preserve"><value>已通知家人</value></data>
+  <data name="emergency_notify_off" xml:space="preserve"><value>✅ 警报已解除</value></data>
+  <data name="emergency_notify_on" xml:space="preserve"><value>🚨 紧急情况 — 由 {0} 触发 ({1})</value></data>
   <data name="emergency_title" xml:space="preserve"><value>紧急情况</value></data>
   <data name="event_motion" xml:space="preserve"><value>{0} 检测到移动 ({1})</value></data>
   <data name="event_offline" xml:space="preserve"><value>⚠ {0} 离线 (最后在线 {1})</value></data>
@@ -139,6 +141,7 @@
   <data name="idle_touch_to_call" xml:space="preserve"><value>触摸屏幕呼叫</value></data>
   <data name="incall_end" xml:space="preserve"><value>结束</value></data>
   <data name="incall_title" xml:space="preserve"><value>通话中</value></data>
+  <data name="notify_test" xml:space="preserve"><value>门铃测试通知</value></data>
   <data name="offline_body" xml:space="preserve"><value>无法呼叫，请直接敲门。</value></data>
   <data name="offline_reconnect" xml:space="preserve"><value>{0} 秒后重连</value></data>
   <data name="offline_title" xml:space="preserve"><value>系统离线</value></data>

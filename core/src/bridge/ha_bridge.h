@@ -36,6 +36,9 @@ class HaBridge {
     std::function<std::vector<std::pair<std::string, bool>>()> node_alive;
     // SOS 緊急モードの現在状態 (Node が hlc 最大側で計算) — <base>/emergency (retain) の発行元
     std::function<bool()> emergency_active;
+    // 各 door の現在の訪客言語 (door_id, lang)。未選択の door は含まれない (= 主言語 ja)。
+    // <base>/<door_id>/attrs (retain) の発行元 — HA 側で「英語の訪客」自動化が書けるように。
+    std::function<std::vector<std::pair<std::string, std::string>>()> visitor_langs;
   };
 
   HaBridge(Runloop& loop, Hooks hooks);
@@ -64,6 +67,9 @@ class HaBridge {
   void publishDiscovery();
   void publishState();
   void publishEmergency();
+  // <base>/<door_id>/attrs (retain) — 現在の訪客言語。door_id 空 = 全 door を発行。
+  void publishDoorAttrs(const std::string& door_id = "");
+  std::string visitorLangOf(const std::string& door_id) const;  // 未選択は "ja"
   void pub(const std::string& topic, const std::string& payload, bool retain);
 
   // discovery 部品

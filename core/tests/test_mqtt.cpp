@@ -437,6 +437,41 @@ TEST_CASE("mqtt: Node 統合 — discovery(retain)/press/reply/HA 再起動再�
     return false;
   }));
 
+  // --- 訪客言語 → <base>/<door>/attrs (retain) + press payload の purpose/visitor_lang ---
+  REQUIRE(sub.waitMsgs(hasRetained(prefix + "/sensor/doorbell_d_front_visitor_lang/config")));
+  // 初期値は主言語 ja (retain — 後から購読しても現在値が判る)
+  REQUIRE(sub.waitMsgs([&](const std::vector<TestCli::Msg>& m) {
+    for (const auto& x : m)
+      if (x.topic == base + "/d_front/attrs" && x.retain) {
+        auto d = json::parse(x.payload);
+        if (d && json::getString(d.get(), "visitor_lang") == "ja") return true;
+      }
+    return false;
+  }));
+  node.setVisitorLang("d_front", "en");
+  REQUIRE(sub.waitMsgs([&](const std::vector<TestCli::Msg>& m) {
+    for (const auto& x : m)
+      if (x.topic == base + "/d_front/attrs") {
+        auto d = json::parse(x.payload);
+        if (d && json::getString(d.get(), "visitor_lang") == "en") return true;
+      }
+    return false;
+  }));
+  // 用件付き按鈴 → event payload に purpose と visitor_lang が載る (HA の用件別自動化用)
+  node.press("", "p_delivery");
+  REQUIRE(sub.waitMsgs([&](const std::vector<TestCli::Msg>& m) {
+    for (const auto& x : m)
+      if (x.topic == base + "/d_front/event" && !x.retain) {
+        auto d = json::parse(x.payload);
+        if (d && json::getString(d.get(), "event_type") == "press" &&
+            json::getString(d.get(), "purpose") == "p_delivery" &&
+            json::getString(d.get(), "visitor_lang") == "en")
+          return true;
+      }
+    return false;
+  }));
+  node.setVisitorLang("d_front", "ja");  // 後続の検証に影響させない
+
   // --- reply/set → uiNotify reply (via=mqtt で quickReply が回る) ---
   sub.cli->publish(base + "/d_front/reply/set", "qr_away", false);
   REQUIRE(waitFor([&] {

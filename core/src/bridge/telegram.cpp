@@ -2,6 +2,7 @@
 #include "bridge/telegram.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cinttypes>
 #include <cstdio>
 
@@ -80,17 +81,34 @@ cJSON* TelegramBridge::cfgAt(const std::string& dotpath) const {
   return cur;
 }
 
-std::string TelegramBridge::labelJa(const cJSON* label_obj) const {
+// label オブジェクト → 指定言語 (無ければ ja → 先頭のいずれか)
+std::string TelegramBridge::labelIn(const cJSON* label_obj, const std::string& lang) const {
   if (!label_obj) return "";
-  std::string v = json::getString(label_obj, "ja");
+  std::string v = json::getString(label_obj, lang.c_str());
+  if (v.empty()) v = json::getString(label_obj, "ja");
   if (v.empty()) v = json::getString(label_obj, "en");
   if (v.empty() && label_obj->child && cJSON_IsString(label_obj->child))
     v = label_obj->child->valuestring;
   return v;
 }
 
+std::string TelegramBridge::labelJa(const cJSON* label_obj) const {
+  return labelIn(label_obj, "ja");
+}
+
+std::string TelegramBridge::notifyLang() const {
+  std::string l = json::getString(cfgAt("integrations.telegram"), "lang");
+  return l.empty() ? "ja" : l;
+}
+
+std::string TelegramBridge::tr(const std::string& key,
+                               const std::vector<std::pair<std::string, std::string>>& args) const {
+  if (!hooks_.text) return key;
+  return hooks_.text(key, notifyLang(), args);
+}
+
 std::string TelegramBridge::doorLabel(const std::string& door_id) const {
-  std::string v = labelJa(json::get(cfgAt("doors." + door_id), "label"));
+  std::string v = labelIn(json::get(cfgAt("doors." + door_id), "label"), notifyLang());
   return v.empty() ? door_id : v;
 }
 
@@ -123,22 +141,52 @@ std::string TelegramBridge::hhmm(int64_t wall_ms) const {
   return buf;
 }
 
+// press payload の purpose/visitor_lang → 見出し行「📦 宅配便 🌐 EN」("" = どちらも無し)。
+// 用件名は visit_purposes.<id>.label.<通知言語>、バッジは訪客言語 (ja 以外の時だけ)。
+std::string TelegramBridge::purposeHeadline(const EventRecord& ev) const {
+  auto p = json::parse(ev.payload_json.empty() ? "{}" : ev.payload_json);
+  if (!p) return "";
+  std::string head;
+  const std::string purpose = json::getString(p.get(), "purpose");
+  if (!purpose.empty()) {
+    cJSON* vp = cfgAt("visit_purposes." + purpose);
+    // 台帳に無い用件 id でも黙って落とさず id を出す (設定削除後の履歴通知など)
+    std::string label = labelIn(json::get(vp, "label"), notifyLang());
+    if (label.empty()) label = purpose;
+    const std::string icon = json::getString(vp, "icon");
+    head = icon.empty() ? label : icon + " " + label;
+  }
+  const std::string vlang = json::getString(p.get(), "visitor_lang");
+  if (!vlang.empty() && vlang != "ja") {
+    std::string badge = "🌐 ";
+    for (char c : vlang) badge.push_back(static_cast<char>(std::toupper(static_cast<unsigned char>(c))));
+    head = head.empty() ? badge : head + " " + badge;
+  }
+  return head;
+}
+
 std::string TelegramBridge::pressCaption(const EventRecord& ev) const {
-  // ev.wall_ms は HLC 物理部 = 補正済み壁時計 (発生時刻)
-  std::string t = json::getString(cfgAt("integrations.telegram.text_template"), "ja",
-                                  kDefaultTemplateJa);
+  // ev.wall_ms は HLC 物理部 = 補正済み壁時計 (発生時刻)。
+  // 本文は text_template.<通知言語> (旧構成の ja のみも拾う) → 無ければ Node::text の event.press。
+  const std::string lang = notifyLang();
+  cJSON* tpl = cfgAt("integrations.telegram.text_template");
+  std::string t = json::getString(tpl, lang.c_str());
+  if (t.empty()) t = json::getString(tpl, "ja");
+  if (t.empty()) t = hooks_.text ? tr("event.press") : std::string(kDefaultTemplateJa);
   replaceAll(t, "{door}", doorLabel(ev.door));
   replaceAll(t, "{time}", hhmm(ev.wall_ms));
-  return t;
+  // 用件 + 訪客言語バッジを見出し行として前置 (一目で「宅配が来た」と分かるように)
+  const std::string head = purposeHeadline(ev);
+  return head.empty() ? t : head + "\n" + t;
 }
 
 std::string TelegramBridge::eventText(const EventRecord& ev) const {
-  // i18n の event.* (ja) 相当をハードコード (i18n/strings.yaml 参照)
+  // 文言は Node::text 経由 (config i18n_overrides で上書き可能)
   if (ev.type == "motion")
-    return doorLabel(ev.door) + " で動きを検知 (" + hhmm(ev.wall_ms) + ")";
+    return tr("event.motion", {{"door", doorLabel(ev.door)}, {"time", hhmm(ev.wall_ms)}});
   if (ev.type == "offline")
-    return "⚠ " + deviceName(ev.device) + " オフライン (最終応答 " + hhmm(ev.wall_ms) + ")";
-  if (ev.type == "online") return deviceName(ev.device) + " オンライン復帰";
+    return tr("event.offline", {{"device", deviceName(ev.device)}, {"time", hhmm(ev.wall_ms)}});
+  if (ev.type == "online") return tr("event.online", {{"device", deviceName(ev.device)}});
   return "";
 }
 
@@ -153,7 +201,7 @@ std::string TelegramBridge::replyMarkupJson(const std::string& door_id) const {
   cJSON* it = nullptr;
   cJSON_ArrayForEach(it, qrs) {
     if (!it->string) continue;
-    std::string label = labelJa(json::get(it, "label"));
+    std::string label = labelIn(json::get(it, "label"), notifyLang());
     if (label.empty()) continue;
     btns.push_back({json::getInt(it, "order", 1000), it->string, label});
   }
@@ -277,7 +325,7 @@ void TelegramBridge::sendTestMessage(const std::string& chat_id_or_empty) {
   }
   for (const auto& c : chats) {
     auto pl = json::obj();
-    json::set(pl.get(), "text", "ドアホン テスト通知");
+    json::set(pl.get(), "text", tr("notify.test"));
     enqueue("message", c, json::dump(pl.get()), Bytes());
   }
   pump();
@@ -294,8 +342,9 @@ void TelegramBridge::sendEmergency(bool active, const std::string& source_node,
     return;
   }
   const std::string text =
-      active ? "🚨 緊急事態です — " + deviceName(source_node) + " から発報 (" + hhmm(wall_ms) + ")"
-             : "✅ 緊急解除";
+      active ? tr("emergency.notify_on", {{"device", deviceName(source_node)},
+                                          {"time", hhmm(wall_ms)}})
+             : tr("emergency.notify_off");
   for (const auto& c : chats) {
     auto pl = json::obj();
     json::set(pl.get(), "text", text);
@@ -690,7 +739,12 @@ void TelegramBridge::handleCallbackQuery(const cJSON* cq) {
   if (!press) return;
   auto n = json::parse(press->notify_json.empty() ? "{}" : press->notify_json);
   cJSON* ids = n ? json::get(n.get(), "telegram_msg_ids") : nullptr;
-  const std::string caption = pressCaption(*press) + "\n✅ 応答済み";
+  // 「✅ 応答済み (…)」— reply.answered は {text} 付きだが、ここで判っているのは
+  // reply_id だけなのでラベルを引いて填める (無ければ id をそのまま)
+  std::string rlabel = labelIn(json::get(cfgAt("quick_replies." + reply_id), "label"), notifyLang());
+  if (rlabel.empty()) rlabel = reply_id;
+  const std::string caption =
+      pressCaption(*press) + "\n✅ " + tr("reply.answered", {{"text", rlabel}});
   const cJSON* it = nullptr;
   cJSON_ArrayForEach(it, ids) {
     if (!it->string || !cJSON_IsNumber(it)) continue;

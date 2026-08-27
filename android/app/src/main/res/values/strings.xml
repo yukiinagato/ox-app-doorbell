@@ -126,6 +126,8 @@
     <string name="emergency_cancel">Cancel alarm</string>
     <string name="emergency_hold_hint">Hold %1$ss to trigger</string>
     <string name="emergency_notified">Family has been notified</string>
+    <string name="emergency_notify_off">✅ Emergency cleared</string>
+    <string name="emergency_notify_on">🚨 Emergency — triggered by %1$s (%2$s)</string>
     <string name="emergency_title">EMERGENCY</string>
     <string name="event_motion">Motion at %1$s (%2$s)</string>
     <string name="event_offline">⚠ %1$s offline (last seen %2$s)</string>
@@ -135,6 +137,7 @@
     <string name="idle_touch_to_call">Touch to call</string>
     <string name="incall_end">End</string>
     <string name="incall_title">In call</string>
+    <string name="notify_test">Doorbell test notification</string>
     <string name="offline_body">Calling unavailable. Please knock.</string>
     <string name="offline_reconnect">Reconnecting in %1$ss</string>
     <string name="offline_title">System offline</string>
@@ -155,11 +158,4 @@
     <string name="ring_monitor">Monitor</string>
     <string name="ring_monitoring">Live door audio on</string>
     <string name="ring_no_video">No video from door station</string>
-    <string name="incoming_close">Close</string>
-    <string name="incoming_listening">Live door audio on</string>
-    <string name="incoming_no_video">No video from door station</string>
-    <string name="incoming_sent">Reply sent</string>
-    <string name="incoming_title">Visitor calling</string>
-    <string name="svc_channel">Resident service</string>
-    <string name="svc_running">Doorbell node running</string>
 </resources>

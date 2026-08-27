@@ -213,6 +213,20 @@ void HaBridge::publishDiscovery() {
       pub(prefix_ + "/binary_sensor/doorbell_" + sid + "_motion/config", json::dump(o.get()),
           true);
     }
+    {
+      // 訪客言語 sensor (<base>/<door>/attrs の visitor_lang を実体化 — 未選択は "ja")
+      auto o = json::obj();
+      json::set(o.get(), "name", "訪客言語");
+      json::set(o.get(), "state_topic", base_ + "/" + did + "/attrs");
+      json::set(o.get(), "value_template", "{{ value_json.visitor_lang }}");
+      json::set(o.get(), "json_attributes_topic", base_ + "/" + did + "/attrs");
+      addAvailability(o.get(), did);
+      json::set(o.get(), "unique_id", "doorbell_" + sid + "_visitor_lang");
+      json::set(o.get(), "object_id", "doorbell_" + sid + "_visitor_lang");
+      setDoorDevice(o.get(), did);
+      pub(prefix_ + "/sensor/doorbell_" + sid + "_visitor_lang/config", json::dump(o.get()),
+          true);
+    }
   }
 
   // --- 各 device: connectivity (防盗の「端末オフライン」を HA 実体化) ---
@@ -312,6 +326,7 @@ void HaBridge::publishState() {
     pub(base_ + "/" + did + "/availability", on ? "online" : "offline", true);
   }
   publishEmergency();
+  publishDoorAttrs();  // 全 door の訪客言語 (retain — 再接続/HA 再起動でも状態が残る)
 }
 
 // SOS 現在状態 (Node が hlc 最大側で計算) を retain で発行 — 接続/再発行/遷移時に呼ぶ
@@ -320,13 +335,53 @@ void HaBridge::publishEmergency() {
   pub(base_ + "/emergency", on ? "ON" : "OFF", true);
 }
 
+std::string HaBridge::visitorLangOf(const std::string& door_id) const {
+  if (!hooks_.visitor_langs) return "ja";
+  for (const auto& kv : hooks_.visitor_langs())
+    if (kv.first == door_id) return kv.second;
+  return "ja";  // 未選択 = 主言語
+}
+
+// door の付随属性 (現在の訪客言語) を retain で発行。press の event payload とは別に
+// 「今この門口に立っている訪客の言語」を状態として持たせる (HA の自動化条件に使える)。
+void HaBridge::publishDoorAttrs(const std::string& door_id) {
+  auto one = [this](const std::string& did) {
+    auto o = json::obj();
+    json::set(o.get(), "visitor_lang", visitorLangOf(did));
+    pub(base_ + "/" + did + "/attrs", json::dump(o.get()), true);
+  };
+  if (!door_id.empty()) {
+    one(door_id);
+    return;
+  }
+  cJSON* doors = json::get(cfg_.get(), "doors");
+  cJSON* it = nullptr;
+  cJSON_ArrayForEach(it, doors) {
+    if (it->string) one(it->string);
+  }
+}
+
 // ---------------------------------------------------------------- イベント → 発行
 
 void HaBridge::onEvent(const EventRecord& ev) {
   if (!client_ || !connected_) return;  // 未接続中のイベントは流さない (retain 状態は再接続時に再発行)
   if (ev.type == "press") {
     if (ev.door.empty()) return;
-    pub(base_ + "/" + ev.door + "/event", "{\"event_type\":\"press\"}", false);
+    // event payload に用件と訪客言語を同梱 (MQTT event platform は event_type 以外の
+    // キーをイベント属性として通す) — HA 側で「宅配だけ通知しない」等の自動化が書ける。
+    auto o = json::obj();
+    json::set(o.get(), "event_type", "press");
+    auto p = json::parse(ev.payload_json.empty() ? "{}" : ev.payload_json);
+    if (p) {
+      const std::string purpose = json::getString(p.get(), "purpose");
+      const std::string vlang = json::getString(p.get(), "visitor_lang");
+      if (!purpose.empty()) json::set(o.get(), "purpose", purpose);
+      if (!vlang.empty()) json::set(o.get(), "visitor_lang", vlang);
+    }
+    pub(base_ + "/" + ev.door + "/event", json::dump(o.get()), false);
+  } else if (ev.type == "visitor_lang") {
+    if (ev.door.empty()) return;
+    publishDoorAttrs(ev.door);  // 状態は Node が先に更新済み — 現在値を retain で流す
   } else if (ev.type == "motion") {
     if (ev.door.empty()) return;
     pub(base_ + "/" + ev.door + "/motion", "ON", false);  // OFF は off_delay で自動復帰

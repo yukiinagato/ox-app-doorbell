@@ -58,6 +58,10 @@ emergency.button: { ja: "緊急", en: "SOS", zh: "紧急" }
 emergency.hold_hint: { ja: "長押しで発報 ({sec} 秒)", en: "Hold {sec}s to trigger", zh: "长按 {sec} 秒触发" }
 emergency.cancel: { ja: "解除", en: "Cancel alarm", zh: "解除警报" }
 emergency.notified: { ja: "家族に通知しました", en: "Family has been notified", zh: "已通知家人" }
+# 外部通知 (Telegram) の文言 — core の Node::text が内蔵既定として持つ
+emergency.notify_on: { ja: "🚨 緊急事態です — {device} から発報 ({time})", en: "🚨 Emergency — triggered by {device} ({time})", zh: "🚨 紧急情况 — 由 {device} 触发 ({time})" }
+emergency.notify_off: { ja: "✅ 緊急解除", en: "✅ Emergency cleared", zh: "✅ 警报已解除" }
+notify.test: { ja: "ドアホン テスト通知", en: "Doorbell test notification", zh: "门铃测试通知" }
 
 reply.banner: { ja: "住人からのメッセージ", en: "Message from resident", zh: "住户留言" }
 reply.sent: { ja: "送信しました: {text}", en: "Sent: {text}", zh: "已发送: {text}" }

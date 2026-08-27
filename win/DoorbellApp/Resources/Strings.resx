@@ -130,6 +130,8 @@
   <data name="emergency_cancel" xml:space="preserve"><value>解除</value></data>
   <data name="emergency_hold_hint" xml:space="preserve"><value>長押しで発報 ({0} 秒)</value></data>
   <data name="emergency_notified" xml:space="preserve"><value>家族に通知しました</value></data>
+  <data name="emergency_notify_off" xml:space="preserve"><value>✅ 緊急解除</value></data>
+  <data name="emergency_notify_on" xml:space="preserve"><value>🚨 緊急事態です — {0} から発報 ({1})</value></data>
   <data name="emergency_title" xml:space="preserve"><value>緊急事態</value></data>
   <data name="event_motion" xml:space="preserve"><value>{0} で動きを検知 ({1})</value></data>
   <data name="event_offline" xml:space="preserve"><value>⚠ {0} オフライン (最終応答 {1})</value></data>
@@ -139,6 +141,7 @@
   <data name="idle_touch_to_call" xml:space="preserve"><value>タッチして呼び出してください</value></data>
   <data name="incall_end" xml:space="preserve"><value>終了</value></data>
   <data name="incall_title" xml:space="preserve"><value>通話中</value></data>
+  <data name="notify_test" xml:space="preserve"><value>ドアホン テスト通知</value></data>
   <data name="offline_body" xml:space="preserve"><value>呼び出しできません。直接ノックしてください。</value></data>
   <data name="offline_reconnect" xml:space="preserve"><value>再接続まで {0} 秒</value></data>
   <data name="offline_title" xml:space="preserve"><value>システムオフライン</value></data>

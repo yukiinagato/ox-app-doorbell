@@ -130,6 +130,8 @@
   <data name="emergency_cancel" xml:space="preserve"><value>Cancel alarm</value></data>
   <data name="emergency_hold_hint" xml:space="preserve"><value>Hold {0}s to trigger</value></data>
   <data name="emergency_notified" xml:space="preserve"><value>Family has been notified</value></data>
+  <data name="emergency_notify_off" xml:space="preserve"><value>✅ Emergency cleared</value></data>
+  <data name="emergency_notify_on" xml:space="preserve"><value>🚨 Emergency — triggered by {0} ({1})</value></data>
   <data name="emergency_title" xml:space="preserve"><value>EMERGENCY</value></data>
   <data name="event_motion" xml:space="preserve"><value>Motion at {0} ({1})</value></data>
   <data name="event_offline" xml:space="preserve"><value>⚠ {0} offline (last seen {1})</value></data>
@@ -139,6 +141,7 @@
   <data name="idle_touch_to_call" xml:space="preserve"><value>Touch to call</value></data>
   <data name="incall_end" xml:space="preserve"><value>End</value></data>
   <data name="incall_title" xml:space="preserve"><value>In call</value></data>
+  <data name="notify_test" xml:space="preserve"><value>Doorbell test notification</value></data>
   <data name="offline_body" xml:space="preserve"><value>Calling unavailable. Please knock.</value></data>
   <data name="offline_reconnect" xml:space="preserve"><value>Reconnecting in {0}s</value></data>
   <data name="offline_title" xml:space="preserve"><value>System offline</value></data>

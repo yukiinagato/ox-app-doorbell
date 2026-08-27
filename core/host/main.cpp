@@ -7,6 +7,7 @@
 #include <csignal>
 #include <cstdio>
 #include <cstdlib>
+#include <cctype>
 #include <cstring>
 #include <string>
 #include <thread>
@@ -147,6 +148,12 @@ int main(int argc, char** argv) {
   for (int i = 1; i < argc; i++)
     if (std::string(argv[i]) == "--fake-camera") fake_camera = true;
 
+  // --add-asset <file>: 起動後にファイルを統一資産として登録し hash を印字する
+  // (管理画面を使わずに背景画像/カスタム音声を投入する開発用。複数指定可)。
+  std::vector<std::string> add_assets;
+  for (int i = 1; i < argc - 1; i++)
+    if (std::string(argv[i]) == "--add-asset") add_assets.push_back(argv[i + 1]);
+
   db::Node node(o);
   node.setHttpsFn(curlHttps);  // Telegram ブリッジ用 (leader 就任 + bot_token 設定時のみ使われる)
   node.setUiEventCb([](const std::string& ev) { DB_LOGI("ui", ev); });
@@ -157,6 +164,36 @@ int main(int argc, char** argv) {
     std::fprintf(stderr, "start 失敗\n");
     return 1;
   }
+  // --add-asset: 拡張子から MIME を決めて登録 (許可外/3MB 超は core 側が弾く)
+  for (const std::string& path : add_assets) {
+    db::Bytes data;
+    if (!db::readFileBytes(path, data)) {
+      std::fprintf(stderr, "--add-asset: 読めない: %s\n", path.c_str());
+      continue;
+    }
+    const size_t dot = path.rfind('.');
+    std::string ext = dot == std::string::npos ? "" : path.substr(dot + 1);
+    for (char& c : ext) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    std::string type;
+    if (ext == "jpg" || ext == "jpeg") type = "image/jpeg";
+    else if (ext == "png") type = "image/png";
+    else if (ext == "mp3") type = "audio/mpeg";
+    else if (ext == "wav") type = "audio/wav";
+    if (type.empty()) {
+      std::fprintf(stderr, "--add-asset: 未対応の拡張子: %s (jpg/png/mp3/wav)\n", path.c_str());
+      continue;
+    }
+    const size_t slash = path.find_last_of("/\\");
+    const std::string label = slash == std::string::npos ? path : path.substr(slash + 1);
+    const std::string hash = node.addAsset(data, type, label);
+    if (hash.empty()) {
+      std::fprintf(stderr, "--add-asset: 登録失敗 (3MB 超?): %s\n", path.c_str());
+    } else {
+      std::printf("asset %s  %s  (%zu bytes, %s)\n", hash.c_str(), label.c_str(), data.size(),
+                  type.c_str());
+    }
+  }
+
   // --fake-camera: 合成グラデーション (静止 — 動体検知は発火しない) を 2fps で push。
   // カメラの無い開発機で snapshot/Telegram 写真経路を通すため。
   std::thread fake_th;

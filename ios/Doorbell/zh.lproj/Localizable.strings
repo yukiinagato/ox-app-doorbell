@@ -125,6 +125,8 @@
 "emergency.cancel" = "解除警报";
 "emergency.hold_hint" = "长按 %@ 秒触发";
 "emergency.notified" = "已通知家人";
+"emergency.notify_off" = "✅ 警报已解除";
+"emergency.notify_on" = "🚨 紧急情况 — 由 %@ 触发 (%@)";
 "emergency.title" = "紧急情况";
 "event.motion" = "%@ 检测到移动 (%@)";
 "event.offline" = "⚠ %@ 离线 (最后在线 %@)";
@@ -134,6 +136,7 @@
 "idle.touch_to_call" = "触摸屏幕呼叫";
 "incall.end" = "结束";
 "incall.title" = "通话中";
+"notify.test" = "门铃测试通知";
 "offline.body" = "无法呼叫，请直接敲门。";
 "offline.reconnect" = "%@ 秒后重连";
 "offline.title" = "系统离线";

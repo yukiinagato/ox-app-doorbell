@@ -117,6 +117,56 @@ std::string assetRefHash(const std::string& v) {
   std::string h = v.substr(6);
   return isSha256HexStr(h) ? h : "";
 }
+
+// ---------- 内蔵既定文言 (Node::text の最終回落) ----------
+// i18n/strings.yaml (文言の単一ソース) のうち「コアが自前で組む通知文」だけを写した表。
+// 殻の UI 文言 (idle.* / admin.* 等) は各殻の resx/strings.xml が持つのでここには置かない。
+// 追加する時は i18n/strings.yaml 側にも必ず同じキーを足すこと。
+struct BuiltinText {
+  const char* key;
+  const char* ja;
+  const char* en;
+  const char* zh;
+};
+constexpr BuiltinText kBuiltinTexts[] = {
+    {"event.press", "{door} に来客です ({time})", "Visitor at {door} ({time})",
+     "{door} 有访客 ({time})"},
+    {"event.motion", "{door} で動きを検知 ({time})", "Motion at {door} ({time})",
+     "{door} 检测到移动 ({time})"},
+    {"event.offline", "⚠ {device} オフライン (最終応答 {time})",
+     "⚠ {device} offline (last seen {time})", "⚠ {device} 离线 (最后在线 {time})"},
+    {"event.online", "{device} オンライン復帰", "{device} back online", "{device} 恢复在线"},
+    {"emergency.title", "緊急事態", "EMERGENCY", "紧急情况"},
+    {"emergency.notified", "家族に通知しました", "Family has been notified", "已通知家人"},
+    {"emergency.notify_on", "🚨 緊急事態です — {device} から発報 ({time})",
+     "🚨 Emergency — triggered by {device} ({time})", "🚨 紧急情况 — 由 {device} 触发 ({time})"},
+    {"emergency.notify_off", "✅ 緊急解除", "✅ Emergency cleared", "✅ 警报已解除"},
+    {"reply.answered", "応答済み ({text})", "Replied ({text})", "已回复 ({text})"},
+    {"notify.test", "ドアホン テスト通知", "Doorbell test notification", "门铃测试通知"},
+};
+
+// 内蔵既定表の引き (見つからなければ nullptr)。lang は ja/en/zh 以外なら ja 扱い。
+const char* builtinText(const std::string& key, const std::string& lang) {
+  for (const auto& t : kBuiltinTexts) {
+    if (key != t.key) continue;
+    if (lang == "en") return t.en;
+    if (lang == "zh") return t.zh;
+    return t.ja;
+  }
+  return nullptr;
+}
+
+// "{name}" プレースホルダの全置換
+void substArgs(std::string& s, const std::vector<std::pair<std::string, std::string>>& args) {
+  for (const auto& kv : args) {
+    const std::string ph = "{" + kv.first + "}";
+    size_t pos = 0;
+    while ((pos = s.find(ph, pos)) != std::string::npos) {
+      s.replace(pos, ph.size(), kv.second);
+      pos += kv.second.size();
+    }
+  }
+}
 }  // namespace
 
 struct Node::Impl {
@@ -919,6 +969,27 @@ struct Node::Impl {
     return v;
   }
 
+  // ---------- 文言解決 (Node::text の実体 — loop 上でのみ) ----------
+  // i18n_overrides.<lang>.<key> → i18n_overrides.ja.<key> → 内蔵既定表 → key 自身。
+  // i18n_overrides のキーはドットを含む平キー ("event.press") — cfgAt で降りずに直接引く。
+  std::string textOnLoop(const std::string& key, const std::string& lang_arg,
+                         const std::vector<std::pair<std::string, std::string>>& args) {
+    const std::string lang = lang_arg.empty() ? "ja" : lang_arg;
+    std::string out;
+    cJSON* ov = json::get(cfg.get(), "i18n_overrides");
+    if (ov) {
+      out = json::getString(json::get(ov, lang.c_str()), key.c_str());
+      if (out.empty() && lang != "ja") out = json::getString(json::get(ov, "ja"), key.c_str());
+    }
+    if (out.empty()) {
+      const char* b = builtinText(key, lang);
+      if (b) out = b;
+    }
+    if (out.empty()) out = key;  // 未知キーはキー自身 (欠落を画面上で見つけやすくする)
+    substArgs(out, args);
+    return out;
+  }
+
   // ---------- 起動 ----------
   bool init() {
     // Store
@@ -1042,6 +1113,10 @@ struct Node::Impl {
         return v;
       };
       hooks.emergency_active = [this] { return emergency_active; };
+      hooks.visitor_langs = [this] {
+        return std::vector<std::pair<std::string, std::string>>(visitor_lang_by_door.begin(),
+                                                                visitor_lang_by_door.end());
+      };
       bridge.reset(new HaBridge(*loop, std::move(hooks)));
     }
 
@@ -1069,6 +1144,10 @@ struct Node::Impl {
         } else {
           loop->post([cb] { cb(Bytes()); });
         }
+      };
+      th.text = [this](const std::string& key, const std::string& lang,
+                       const std::vector<std::pair<std::string, std::string>>& args) {
+        return textOnLoop(key, lang, args);  // ブリッジは loop 上でしか呼ばない
       };
       tg.reset(new TelegramBridge(*loop, store, std::move(th)));
     }
@@ -2093,6 +2172,13 @@ std::string Node::addAsset(const Bytes& data, const std::string& type,
   std::string hash;
   impl_->loop->callSync([&] { hash = impl_->addAssetOnLoop(data, type, label); });
   return hash;
+}
+
+std::string Node::text(const std::string& key, const std::string& lang,
+                       const TextArgs& args) const {
+  std::string out;
+  impl_->loop->callSync([&] { out = impl_->textOnLoop(key, lang, args); });
+  return out;
 }
 
 std::string Node::assetPath(const std::string& hash) {
