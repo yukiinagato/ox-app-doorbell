@@ -210,21 +210,38 @@ TEST_CASE("sip: 直接呼ヘッダ無し — 主呼進行中の着信はモニ�
   CHECK(waitMonitorCount(f, 0, 3000));
 }
 
-TEST_CASE("sip: 直接呼 X-Doorbell-Mode: answer は主呼進行中 486") {
+TEST_CASE("sip: 直接呼 X-Doorbell-Mode: answer — 未確立の主呼を取消して双方向接管") {
   if (!sipTestEnabled()) return;
   const int port = 47380 + (::getpid() % 17);
   SipFix f;
   f.on([&] { f.sip->start(directSettings(port)); });
-  // answer 明示の自己ループ: 着信時に主呼 (発信レッグ) が既にある → 486 → 呼全体が終了
+  // answer 明示の自己ループ: 着信時に主呼 (発信レッグ, CALLING=未確立) が既にある →
+  // 接管規則 (a): 旧主呼をキャンセルし着信を新主呼として双方向応答 (モニタにはならない)。
+  // 自己ループでは旧主呼のキャンセルが自分の INVITE の取消でもあるため、双方向確立
+  // (InCall) 後に BYE で終了する — InCall を経由すること・モニタ 0 本のままを確認する。
   f.on([&] { f.sip->call("sip:127.0.0.1:" + std::to_string(port), "answer"); });
-  REQUIRE(f.waitCall(SipCallState::Ended, 5000));
+  REQUIRE(f.waitCall(SipCallState::InCall, 5000));  // 接管で双方向応答された
+  REQUIRE(f.waitCall(SipCallState::Ended, 5000));   // 旧主呼キャンセルの後始末 (BYE)
+  CHECK(waitMonitorCount(f, 0, 500));               // 降級していない
+}
+
+TEST_CASE("sip: setAllowedSources — 許可外送信元の直接 INVITE は 403") {
+  if (!sipTestEnabled()) return;
+  const int port = 47380 + (::getpid() % 17);
+  SipFix f;
+  f.on([&] { f.sip->start(directSettings(port)); });
+  f.on([&] { f.sip->setAllowedSources({"10.255.255.1"}); });  // 127.0.0.1 を含まない
+  f.on([&] { f.sip->call("sip:127.0.0.1:" + std::to_string(port), "monitor"); });
+  REQUIRE(f.waitCall(SipCallState::Ended, 5000));  // 403 で呼全体が終了
   CHECK(waitMonitorCount(f, 0, 500));
   bool in_call = false;
   {
     std::lock_guard<std::mutex> lk(f.mu);
     in_call = std::find(f.calls.begin(), f.calls.end(), SipCallState::InCall) != f.calls.end();
   }
-  CHECK(!in_call);  // 双方向で繋がってしまわない
+  CHECK(!in_call);  // 受理されない
+  // 後続テストのために許可リストを空へ戻す (start/stop をまたいで保持される仕様)
+  f.on([&] { f.sip->setAllowedSources({}); });
 }
 
 // ---------- Node 統合 (実 TCP Node + trigger_rule sip_call) ----------

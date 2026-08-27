@@ -50,6 +50,31 @@ std::string hostOf(const std::string& addr) {
   return p == std::string::npos ? addr : addr.substr(0, p);
 }
 
+// SIP の remote 表示 (例 "\"Door\" <sip:201@10.0.1.5>" / "sip:192.168.1.7:47190") から
+// user と host を取り出す。user 無し (直接呼) は user 空。IPv4 LAN 前提 (IPv6 括弧は非対応)。
+bool parseSipRemote(const std::string& remote, std::string* user, std::string* host) {
+  std::string uri = remote;
+  size_t lt = uri.find('<');
+  if (lt != std::string::npos) {
+    size_t gt = uri.find('>', lt);
+    uri = uri.substr(lt + 1, gt == std::string::npos ? std::string::npos : gt - lt - 1);
+  }
+  size_t s = uri.find("sip:");
+  if (s == std::string::npos) return false;
+  uri = uri.substr(s + 4);
+  size_t sc = uri.find(';');  // ;transport= 等のパラメータ除去
+  if (sc != std::string::npos) uri = uri.substr(0, sc);
+  size_t at = uri.find('@');
+  if (at != std::string::npos) {
+    *user = uri.substr(0, at);
+    uri = uri.substr(at + 1);
+  } else {
+    user->clear();
+  }
+  *host = hostOf(uri);
+  return !host->empty();
+}
+
 // "HH:MM" → 通算分。不正な書式は -1 (rule_engine と同じ規則)。
 int parseHhmm(const std::string& s) {
   int h = 0, m = 0;
@@ -112,6 +137,13 @@ struct Node::Impl {
   // SIP 状態 (loop 上でのみ触る)
   SipRegState sip_reg = SipRegState::Idle;
   SipCallState sip_call = SipCallState::Idle;
+  // 通話中の相手 (対称 MJPEG 双方向映像用 — onSipCall InCall で解決)
+  std::string sip_peer_node;    // 相手の node_id ("" = 特定不能: PSTN/Groundwire 等)
+  std::string sip_peer_stream;  // 相手のライブ映像 URL (http://<host>:47180/stream.mjpeg)
+  // 網頁通話の相手映像スロット (POST /call-frame が置き、殻が /peer-frame.jpg で輪詢する。
+  // FrameBus とは別 — 自機カメラの絵と混ぜない。loop 上でのみ触る)
+  Bytes peer_frame;
+  int64_t peer_frame_mono = 0;  // 受信時刻 (monoMs)。3 秒で腐る
   std::string dtmf_buf;          // 通話中の DTMF 機能碼バッファ
   uint64_t dtmf_timer = 0;       // 3 秒無入力クリア
   uint64_t sip_reapply_timer = 0;  // 設定変更のデバウンス (連続する sip.* 差分で再起動を繰り返さない)
@@ -360,6 +392,14 @@ struct Node::Impl {
     if (s.password.empty()) s.password = opts.sip_pass;
     s.display_name = opts.name;
     s.null_audio = opts.sip_null_audio;
+    // 応答モード (config-schema sip.accounts.<id>.answer_mode):
+    //   "auto" = 即応答 (門口機既定) / "ring" = 着信 UI で手動応答 (室内機向け)。
+    // 未設定は従来どおり auto (SipSettings 既定)。
+    std::string am = json::getString(acct, "answer_mode");
+    if (am == "ring") s.auto_answer = false;
+    else if (am == "auto") s.auto_answer = true;
+    // 直接呼の待受ポート (既定 47190 — docs/network-ports.md)
+    s.direct_port = static_cast<int>(json::getInt(sip, "direct_port", s.direct_port));
     // AEC 遅延は装機標定 (devices.<self>.local.aec.tail_ms) があれば上書き
     cJSON* aec = cfgAt("devices." + node_id + ".local.aec");
     int tail = aec ? static_cast<int>(json::getInt(aec, "tail_ms", 0)) : 0;
@@ -375,6 +415,66 @@ struct Node::Impl {
       sip_reapply_timer = 0;
       if (sipctl) sipctl->updateSettings(sipSettings());
     });
+  }
+
+  // 直接 INVITE の許可送信元 = mesh 成員 (dead 以外) の実アドレス host 群 + 自 host。
+  // peers 変化毎に更新する (計画書 §12: mesh 成員 IP 白名単 + 403)。
+  // suspect も含める: 一時的な heartbeat 遅延で通話中の対講が拒否されないように。
+  void updateSipAllowedSources() {
+    if (!sipctl || !mesh) return;
+    std::vector<std::string> ips;
+    ips.push_back("127.0.0.1");  // 自機ループバック (単機テスト/自己監視)
+    for (const auto& p : mesh->peers()) {
+      if (p.status == "dead") continue;
+      for (const auto& a : p.addrs) ips.push_back(hostOf(a));
+    }
+    sipctl->setAllowedSources(ips);
+  }
+
+  // 通話相手の node_id と MJPEG URL を解決する (対称双方向映像):
+  //   - Asterisk 経由 (host == sip.server): remote user (内線) → sip.accounts.* の user 逆引き
+  //   - 直接呼: remote host → mesh peers[].addrs の host 照合
+  // 特定できない相手 (PSTN/Groundwire/網頁内線) は両方空のまま → 映像なし
+  // (門口機は /peer-frame.jpg の輪詢に降級 — 網頁通話の「映像も送る」経路)。
+  void resolveCallPeer(const std::string& remote, std::string* node, std::string* stream) {
+    node->clear();
+    stream->clear();
+    std::string user, host;
+    if (!parseSipRemote(remote, &user, &host) || !mesh) return;
+    const std::string server = json::getString(json::get(cfg.get(), "sip"), "server");
+    if (!user.empty() && !server.empty() && host == server) {
+      // 内線 → node_id (config-schema: 門口機と室内機の両方が sip.accounts に載る)
+      cJSON* accounts = cfgAt("sip.accounts");
+      cJSON* it = nullptr;
+      cJSON_ArrayForEach(it, accounts) {
+        if (it->string && json::getString(it, "user") == user) {
+          *node = it->string;
+          break;
+        }
+      }
+    } else {
+      // 直接呼: 送信元 host を peers の実アドレスと照合
+      for (const auto& p : mesh->peers()) {
+        if (p.id == node_id) continue;
+        for (const auto& a : p.addrs) {
+          if (hostOf(a) == host) {
+            *node = p.id;
+            break;
+          }
+        }
+        if (!node->empty()) break;
+      }
+    }
+    if (node->empty() || *node == node_id) {
+      node->clear();
+      return;
+    }
+    for (const auto& p : mesh->peers()) {
+      if (p.id == *node && p.status != "dead" && !p.addrs.empty()) {
+        *stream = "http://" + hostOf(p.addrs[0]) + ":47180/stream.mjpeg";
+        return;
+      }
+    }
   }
 
   // ---------- HA MQTT ブリッジ ----------
@@ -476,12 +576,26 @@ struct Node::Impl {
         loop->cancel(dtmf_timer);
         dtmf_timer = 0;
       }
+      // 通話相手情報と網頁通話の相手映像スロットは通話と共に消える
+      sip_peer_node.clear();
+      sip_peer_stream.clear();
+      peer_frame.clear();
+      peer_frame_mono = 0;
+    }
+    if (st == SipCallState::InCall) {
+      // 相手を特定して映像 URL を添える (答接管で門口機側が in_call になる時も同経路)。
+      // 殻はこの URL を描画するだけ — 解決できない相手 (PSTN 等) は peer_stream 無し。
+      resolveCallPeer(remote, &sip_peer_node, &sip_peer_stream);
     }
     if (!s) return;
     auto o = json::obj();
     json::set(o.get(), "t", "state");
     json::set(o.get(), "state", s);
     if (!remote.empty()) json::set(o.get(), "remote", remote);
+    if (st == SipCallState::InCall && !sip_peer_node.empty()) {
+      json::set(o.get(), "peer_node", sip_peer_node);
+      if (!sip_peer_stream.empty()) json::set(o.get(), "peer_stream", sip_peer_stream);
+    }
     uiNotify(json::dump(o.get()));
   }
 
@@ -630,7 +744,10 @@ struct Node::Impl {
     ms.sw_version = opts.sw_version;
     ms.caps_json = opts.caps_json;
     Mesh::Callbacks cbs;
-    cbs.on_peers_changed = [this] { uiNotify("{\"t\":\"peers_changed\"}"); };
+    cbs.on_peers_changed = [this] {
+      updateSipAllowedSources();  // 直接 INVITE の許可 IP を mesh 成員に追随させる
+      uiNotify("{\"t\":\"peers_changed\"}");
+    };
     cbs.on_leader_changed = [this](const std::string& duty, const std::string& leader) {
       // leader 交代は即座に反映 (自分が就任 → 開始 / 退任 → 停止)
       if (duty == "mqtt_bridge") reevalBridge();
@@ -642,6 +759,7 @@ struct Node::Impl {
       uiNotify(json::dump(o.get()));
     };
     cbs.on_peer_alive_changed = [this](const std::string& id, bool alive) {
+      updateSipAllowedSources();
       onPeerAlive(id, alive);
     };
     cbs.on_command = [this](const std::string& from, const std::string& cmd) {
@@ -714,6 +832,7 @@ struct Node::Impl {
       scb.on_dtmf = [this](char d) { onSipDtmf(d); };
       sipctl.reset(new SipCtl(*loop, std::move(scb)));
       sipctl->start(sipSettings());
+      updateSipAllowedSources();  // 初期 peers (自分含む) を許可リストへ
     }
 
     if (opts.http_port > 0) {
@@ -986,6 +1105,14 @@ struct Node::Impl {
     json::setBool(sip, "registered", sip_reg == SipRegState::Registered);
     json::set(sip, "state", sipRegName(sip_reg));
     json::set(sip, "call", sipCallName(sip_call));
+    if (!sip_peer_node.empty()) json::set(sip, "peer_node", sip_peer_node);
+    if (!sip_peer_stream.empty()) json::set(sip, "peer_stream", sip_peer_stream);
+    if (sipctl) {  // 直近通話の RTP 送受 (診断/実測テスト用 — tools/dev_intercom_test.sh)
+      int64_t tx = 0, rx = 0;
+      sipctl->rtpStats(&tx, &rx);
+      json::set(sip, "rtp_tx", tx);
+      json::set(sip, "rtp_rx", rx);
+    }
     cJSON* leaders = json::addObj(o.get(), "leaders");
     if (mesh) {
       json::set(leaders, "telegram", mesh->leaderFor("telegram"));
@@ -1045,10 +1172,12 @@ struct Node::Impl {
                        Bytes(assets[i].data, assets[i].data + assets[i].len));
 
     // "/" (リダイレクトのみ) は gate 側で例外扱い — prefix リストに "/" を入れると全公開になる
-    // /api/panel/* と /snapshot-proxy はハンドラ内で panel token (?k=) を検証する
+    // /api/panel/* と /snapshot-proxy /call-frame はハンドラ内で panel token (?k=) を検証する。
+    // /peer-frame.jpg は /snapshot.jpg と同格の LAN 公開 (殻の輪詢用 — webui/panel/API.md)
     httpd->setAuth([this](const HttpReq& r) { return r.uri == "/" || checkSession(r); },
                    {"/api/login", "/locale/", "/panel/", "/admin/", "/stream.mjpeg",
-                    "/snapshot.jpg", "/api/panel/", "/snapshot-proxy"});
+                    "/snapshot.jpg", "/api/panel/", "/snapshot-proxy", "/call-frame",
+                    "/peer-frame.jpg"});
 
     httpd->route("GET", "/", [](const HttpReq&) {
       HttpResp r;
@@ -1321,6 +1450,100 @@ struct Node::Impl {
         }
       }
       return HttpResp::json("{\"ok\":false,\"err\":\"station offline\"}", 503);
+    });
+
+    // ---------- 網頁通話 (webui/panel/call.html — 契約は webui/panel/API.md) ----------
+
+    // 網頁通話の設定/宛先解決。webrtc = config integrations.webrtc (未設定なら通話ボタン無効)。
+    // doors[].extension = その door の担当門口機の内線 (sip.accounts.<node_id>.user)。
+    httpd->route("GET", "/api/panel/call-info", [this](const HttpReq& req) {
+      if (!panelTokenOk(req)) return HttpResp::json("{\"ok\":false,\"err\":\"bad token\"}", 403);
+      auto o = json::obj();
+      json::setBool(o.get(), "ok", true);
+      cJSON* w = json::addObj(o.get(), "webrtc");
+      cJSON* wc = cfgAt("integrations.webrtc");
+      json::set(w, "ws_url", json::getString(wc, "ws_url"));
+      json::set(w, "sip_user", json::getString(wc, "sip_user"));
+      json::set(w, "sip_pass", json::getString(wc, "sip_pass"));
+      json::set(w, "server", json::getString(json::get(cfg.get(), "sip"), "server"));
+      cJSON* doors = json::addObj(o.get(), "doors");
+      cJSON* dcfg = json::get(cfg.get(), "doors");
+      cJSON* it = nullptr;
+      cJSON_ArrayForEach(it, dcfg) {
+        if (!it->string) continue;
+        cJSON* e = json::addObj(doors, it->string);
+        // 担当門口機 (door_station) の node_id → 内線 + 実アドレス
+        std::string station;
+        cJSON* devices = json::get(cfg.get(), "devices");
+        cJSON* dev = nullptr;
+        cJSON_ArrayForEach(dev, devices) {
+          if (dev->string && json::getString(dev, "role") == "door_station" &&
+              json::getString(dev, "door") == it->string) {
+            station = dev->string;
+            break;
+          }
+        }
+        if (station.empty()) continue;
+        json::set(e, "extension", json::getString(cfgAt("sip.accounts." + station), "user"));
+        if (station == node_id) {
+          json::set(e, "station", "");  // 自機 — 相対 URL でよい
+          json::setBool(e, "online", true);
+        } else if (mesh) {
+          for (const auto& p : mesh->peers()) {
+            if (p.id == station && !p.addrs.empty()) {
+              json::set(e, "station", "http://" + hostOf(p.addrs[0]) + ":47180");
+              json::setBool(e, "online", p.status != "dead");
+            }
+          }
+        }
+      }
+      return HttpResp::json(json::dump(o.get()));
+    });
+
+    // ブラウザ → 門口機の「相手映像」フレーム投入 (通話中のみ受理)。
+    // body = JPEG 1 枚 (getUserMedia→canvas)。門口機殻は /peer-frame.jpg を輪詢して描画する。
+    // 他ホストのパネルページからの直接 POST を許すため CORS を返す (preflight は下の OPTIONS)。
+    httpd->route("POST", "/call-frame", [this](const HttpReq& req) {
+      auto cors = [](HttpResp r) {
+        r.headers["Access-Control-Allow-Origin"] = "*";
+        return r;
+      };
+      if (!panelTokenOk(req))
+        return cors(HttpResp::json("{\"ok\":false,\"err\":\"bad token\"}", 403));
+      const std::string door = req.param("door");
+      if (opts.role != "door_station" || (!door.empty() && door != opts.door))
+        return cors(HttpResp::json("{\"ok\":false,\"err\":\"not this station\"}", 404));
+      if (sip_call != SipCallState::InCall)
+        return cors(HttpResp::json("{\"ok\":false,\"err\":\"not in call\"}", 409));
+      // JPEG 以外は拒否 (SOI マーカ検査 — Content-Type は信用しない)
+      if (req.body.size() < 4 || static_cast<uint8_t>(req.body[0]) != 0xFF ||
+          static_cast<uint8_t>(req.body[1]) != 0xD8)
+        return cors(HttpResp::json("{\"ok\":false,\"err\":\"not jpeg\"}", 400));
+      peer_frame.assign(req.body.begin(), req.body.end());
+      peer_frame_mono = clock->monoMs();
+      return cors(HttpResp::json("{\"ok\":true}"));
+    });
+    httpd->route("OPTIONS", "/call-frame", [](const HttpReq&) {
+      HttpResp r;  // CORS preflight (fetch が Content-Type: image/jpeg で送るため必要)
+      r.status = 204;
+      r.body = "";
+      r.headers["Access-Control-Allow-Origin"] = "*";
+      r.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS";
+      r.headers["Access-Control-Allow-Headers"] = "Content-Type";
+      r.headers["Access-Control-Max-Age"] = "600";
+      return r;
+    });
+
+    // 網頁通話相手の最新フレーム (通話中の門口機殻が輪詢)。3 秒より古いフレームは 404
+    // (相手が映像送信を止めた/通話が終わった — 殻は「映像なし」表示へ戻る)。
+    httpd->route("GET", "/peer-frame.jpg", [this](const HttpReq&) {
+      if (peer_frame.empty() || clock->monoMs() - peer_frame_mono > 3000)
+        return HttpResp::json("{\"ok\":false,\"err\":\"no frame\"}", 404);
+      HttpResp r;
+      r.content_type = "image/jpeg";
+      r.body.assign(peer_frame.begin(), peer_frame.end());
+      r.headers["Cache-Control"] = "no-store";
+      return r;
     });
   }
 

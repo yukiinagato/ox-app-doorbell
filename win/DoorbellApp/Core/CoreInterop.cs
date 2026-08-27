@@ -86,6 +86,15 @@ namespace DoorbellApp.Core
         [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
         public static extern void db_core_emergency(IntPtr core, int active);
 
+        /// <summary>SIP 発呼。target=内線 or "sip:host:port" 直呼 URI。mode=""/"monitor"/"answer"。</summary>
+        [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
+        public static extern void db_core_sip_call(IntPtr core,
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string target,
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string mode);
+
+        [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
+        public static extern void db_core_sip_hangup(IntPtr core);
+
         /// <summary>core が返した char* を UTF-8 として読み、db_free で解放する。</summary>
         public static string TakeUtf8(IntPtr p)
         {

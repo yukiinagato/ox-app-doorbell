@@ -151,3 +151,6 @@
 "ring.answer" = "Answer";
 "ring.ignore" = "Ignore";
 "ring.incoming" = "Visitor at %@";
+"ring.monitor" = "Monitor";
+"ring.monitoring" = "Live door audio on";
+"ring.no_video" = "No video from door station";

@@ -22,6 +22,9 @@ offline.reconnect: { ja: "再接続まで {sec} 秒", en: "Reconnecting in {sec}
 ring.incoming: { ja: "{door} で呼び出し中", en: "Visitor at {door}", zh: "{door} 有访客" }
 ring.answer: { ja: "応答", en: "Answer", zh: "接听" }
 ring.ignore: { ja: "無視", en: "Ignore", zh: "忽略" }
+ring.monitor: { ja: "モニタ", en: "Monitor", zh: "监听" }
+ring.monitoring: { ja: "門口の音声を再生中", en: "Live door audio on", zh: "正在播放门口声音" }
+ring.no_video: { ja: "門口機の映像がありません", en: "No video from door station", zh: "没有门口机画面" }
 
 admin.title: { ja: "管理", en: "Admin", zh: "管理" }
 admin.pin_prompt: { ja: "PIN を入力してください", en: "Enter PIN", zh: "请输入 PIN" }

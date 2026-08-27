@@ -152,6 +152,9 @@
     <string name="ring_answer">応答</string>
     <string name="ring_ignore">無視</string>
     <string name="ring_incoming">%1$s で呼び出し中</string>
+    <string name="ring_monitor">モニタ</string>
+    <string name="ring_monitoring">門口の音声を再生中</string>
+    <string name="ring_no_video">門口機の映像がありません</string>
     <string name="incoming_close">閉じる</string>
     <string name="incoming_listening">門口の音声を再生中</string>
     <string name="incoming_no_video">門口機の映像がありません</string>

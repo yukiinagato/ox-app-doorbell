@@ -156,4 +156,7 @@
   <data name="ring_answer" xml:space="preserve"><value>Answer</value></data>
   <data name="ring_ignore" xml:space="preserve"><value>Ignore</value></data>
   <data name="ring_incoming" xml:space="preserve"><value>Visitor at {0}</value></data>
+  <data name="ring_monitor" xml:space="preserve"><value>Monitor</value></data>
+  <data name="ring_monitoring" xml:space="preserve"><value>Live door audio on</value></data>
+  <data name="ring_no_video" xml:space="preserve"><value>No video from door station</value></data>
 </root>

@@ -93,6 +93,51 @@
             </StackPanel>
         </Border>
 
+        <!-- ============ 来鈴 (室内機: press イベント受信で全画面) ============
+             門口ライブ (MJPEG 自前デコード — MjpegStreamer) + 応答/モニタ/無視。
+             応答 = 門口機へ直呼 (sip:<host>:47190, X-Doorbell-Mode: answer)。
+             reply イベント / 30 秒タイムアウトで自動クローズ。 -->
+        <Grid x:Name="IncomingView" Visibility="Collapsed" Background="#000000">
+            <Image x:Name="IncomingLive" Stretch="Uniform"/>
+            <TextBlock x:Name="IncomingNoVideo" FontSize="24" Foreground="{StaticResource Dim}"
+                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            <Border Background="#C0141B22" CornerRadius="14" Padding="28,16"
+                    HorizontalAlignment="Left" VerticalAlignment="Top" Margin="24">
+                <StackPanel>
+                    <TextBlock x:Name="IncomingTitle" FontSize="34" FontWeight="Bold"
+                               Foreground="{StaticResource Fg}"/>
+                    <TextBlock x:Name="IncomingHint" FontSize="18" Foreground="{StaticResource Dim}"
+                               Margin="0,6,0,0" Visibility="Collapsed"/>
+                </StackPanel>
+            </Border>
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center"
+                        VerticalAlignment="Bottom" Margin="0,0,0,44">
+                <Button x:Name="AnswerButton" FontSize="30" FontWeight="Bold" Padding="56,20"
+                        Background="#1E8E4E" Foreground="#FFFFFF" BorderThickness="0"
+                        Click="OnAnswerClick"/>
+                <Button x:Name="MonitorButton" FontSize="30" Padding="44,20" Margin="24,0,0,0"
+                        Background="{StaticResource Card}" Foreground="{StaticResource Fg}"
+                        BorderBrush="{StaticResource Dim}" Click="OnMonitorClick"/>
+                <Button x:Name="IgnoreButton" FontSize="30" Padding="44,20" Margin="24,0,0,0"
+                        Background="{StaticResource Card}" Foreground="{StaticResource Dim}"
+                        BorderBrush="{StaticResource Dim}" Click="OnIgnoreClick"/>
+            </StackPanel>
+        </Grid>
+
+        <!-- ============ 通話中 (相手映像 = 対称 MJPEG / 網頁通話は /peer-frame.jpg 輪詢) ============ -->
+        <Grid x:Name="InCallView" Visibility="Collapsed" Background="#000000">
+            <Image x:Name="PeerVideo" Stretch="Uniform"/>
+            <Border Background="#C0141B22" CornerRadius="14" Padding="28,12"
+                    HorizontalAlignment="Left" VerticalAlignment="Top" Margin="24">
+                <TextBlock x:Name="InCallTitle" FontSize="30" FontWeight="Bold"
+                           Foreground="{StaticResource Fg}"/>
+            </Border>
+            <Button x:Name="EndCallButton" FontSize="30" FontWeight="Bold" Padding="64,20"
+                    Background="#C0392B" Foreground="#FFFFFF" BorderThickness="0"
+                    HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,44"
+                    Click="OnEndCallClick"/>
+        </Grid>
+
         <!-- ============ スクリーンセーバ (無操作 screensaver_after_s — 黒背景 + 漂う時計) ============ -->
         <Canvas x:Name="ScreensaverView" Visibility="Collapsed" Background="#000000">
             <StackPanel x:Name="SaverBlock" Canvas.Left="120" Canvas.Top="120">

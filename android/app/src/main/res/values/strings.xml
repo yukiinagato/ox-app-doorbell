@@ -152,6 +152,9 @@
     <string name="ring_answer">Answer</string>
     <string name="ring_ignore">Ignore</string>
     <string name="ring_incoming">Visitor at %1$s</string>
+    <string name="ring_monitor">Monitor</string>
+    <string name="ring_monitoring">Live door audio on</string>
+    <string name="ring_no_video">No video from door station</string>
     <string name="incoming_close">Close</string>
     <string name="incoming_listening">Live door audio on</string>
     <string name="incoming_no_video">No video from door station</string>

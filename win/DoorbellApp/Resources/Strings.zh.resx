@@ -156,4 +156,7 @@
   <data name="ring_answer" xml:space="preserve"><value>接听</value></data>
   <data name="ring_ignore" xml:space="preserve"><value>忽略</value></data>
   <data name="ring_incoming" xml:space="preserve"><value>{0} 有访客</value></data>
+  <data name="ring_monitor" xml:space="preserve"><value>监听</value></data>
+  <data name="ring_monitoring" xml:space="preserve"><value>正在播放门口声音</value></data>
+  <data name="ring_no_video" xml:space="preserve"><value>没有门口机画面</value></data>
 </root>

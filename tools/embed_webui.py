@@ -7,6 +7,7 @@
     webui/admin/<f>         → /admin/<f>
     webui/panel/<name>.html → /panel/<name>
     webui/panel/<f>         → /panel/<f>   (css/js 等)
+    webui/panel/<dir>/<f>   → /panel/<dir>/<f>   (vendor/ の同梱ライブラリ等 — 1 階層のみ)
     (strings.yaml)          → /locale/{ja,en,zh}.json
 """
 import json
@@ -38,6 +39,18 @@ def collect():
             continue
         for fn in sorted(os.listdir(base)):
             full = os.path.join(base, fn)
+            if os.path.isdir(full) and sub == "panel":
+                # 1 階層のサブディレクトリ (vendor/ 等) はそのままのパスで配信
+                for fn2 in sorted(os.listdir(full)):
+                    full2 = os.path.join(full, fn2)
+                    if not os.path.isfile(full2):
+                        continue
+                    ext2 = os.path.splitext(fn2)[1].lower()
+                    with open(full2, "rb") as f:
+                        data = f.read()
+                    assets.append((f"/panel/{fn}/{fn2}",
+                                   CTYPES.get(ext2, "application/octet-stream"), data))
+                continue
             if not os.path.isfile(full):
                 continue
             ext = os.path.splitext(fn)[1].lower()

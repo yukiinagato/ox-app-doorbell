@@ -160,3 +160,69 @@ TEST_CASE("panel API: token 認証 / state / press / snapshot-proxy / 動体検�
 
   node.stop();
 }
+
+TEST_CASE("panel API: call-frame / peer-frame.jpg / call-info (網頁通話契約)") {
+  std::mt19937 rng(static_cast<uint32_t>(::getpid()) ^ 0xca11u);
+  int mesh_port = panelFreePort(rng);
+  int http_port = panelFreePort(rng);
+  REQUIRE(mesh_port > 0);
+  REQUIRE(http_port > 0);
+
+  NodeOptions o;
+  o.data_dir = ":memory:";
+  o.name = "callframe-test";
+  o.role = "door_station";
+  o.door = "d_front";
+  o.listen_addr = "127.0.0.1:" + std::to_string(mesh_port);
+  o.psk.fill(0x78);
+  o.enable_beacon = false;
+  o.http_port = http_port;
+  Node node(o);
+  REQUIRE(node.start());
+  node.setConfigKey("doors.d_front", "{\"label\":{\"ja\":\"正面玄関\"}}");
+  node.setConfigKey("sip.accounts." + node.nodeId(), "{\"user\":\"8001\"}");
+  node.setConfigKey("integrations.webrtc",
+                    "{\"ws_url\":\"ws://10.0.1.5:8088/ws\",\"sip_user\":\"260\","
+                    "\"sip_pass\":\"pw\"}");
+
+  auto cfg = json::parse(node.configJson());
+  REQUIRE(cfg);
+  cJSON* toks = json::get(json::get(cfg.get(), "panel"), "tokens");
+  REQUIRE(cJSON_GetArraySize(toks) == 1);
+  std::string k = cJSON_GetArrayItem(toks, 0)->valuestring;
+
+  // JPEG もどき (SOI + 適当な本文)
+  std::string jpg = "\xFF\xD8\xFF\xE0 fake-jpeg-body";
+
+  // token 無し → 403 (CORS は付く)
+  std::string r = panelReq(http_port, "POST", "/call-frame?door=d_front", jpg, "image/jpeg");
+  CHECK(r.find("403") != std::string::npos);
+  CHECK(r.find("Access-Control-Allow-Origin: *") != std::string::npos);
+  // 通話中でない → 409 not in call
+  r = panelReq(http_port, "POST", "/call-frame?door=d_front&k=" + k, jpg, "image/jpeg");
+  CHECK(r.find("409") != std::string::npos);
+  CHECK(r.find("not in call") != std::string::npos);
+  // 他 door 宛 → 404 not this station
+  r = panelReq(http_port, "POST", "/call-frame?door=d_other&k=" + k, jpg, "image/jpeg");
+  CHECK(r.find("404") != std::string::npos);
+  // CORS preflight
+  r = panelReq(http_port, "OPTIONS", "/call-frame");
+  CHECK(r.find("204") != std::string::npos);
+  CHECK(r.find("Access-Control-Allow-Methods: POST, OPTIONS") != std::string::npos);
+
+  // peer-frame.jpg: フレーム無し → 404 (通話外もこれ)
+  r = panelReq(http_port, "GET", "/peer-frame.jpg");
+  CHECK(r.find("404") != std::string::npos);
+
+  // call-info: webrtc 設定 + d_front の内線 (自機 station="") が返る
+  r = panelReq(http_port, "GET", "/api/panel/call-info?k=" + k);
+  CHECK(r.find("HTTP/1.1 200") == 0);
+  CHECK(r.find("ws://10.0.1.5:8088/ws") != std::string::npos);
+  CHECK(r.find("\"sip_user\":\"260\"") != std::string::npos);
+  CHECK(r.find("\"extension\":\"8001\"") != std::string::npos);
+  CHECK(r.find("\"online\":true") != std::string::npos);
+  // token 無しは 403
+  CHECK(panelReq(http_port, "GET", "/api/panel/call-info").find("403") != std::string::npos);
+
+  node.stop();
+}

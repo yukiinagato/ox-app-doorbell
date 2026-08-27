@@ -2,13 +2,17 @@
 //   - 門口ライブ映像: statusJson peers[].stream (MJPEG) を自前デコード (MjpegStreamer)
 //   - 門口音声: core の SIP で門口機の待受 (udp 47190) へ Asterisk 非経由の直接監聴呼
 //     (X-Doorbell-Mode: monitor) — 門口機側はマイクのみ一方向で流す。閉じる時に hangup。
+//   - 応答: 監聴呼を切って X-Doorbell-Mode: answer の直呼 — 門口機は鳴っている電話腿を
+//     取り消して双方向応答する (計画書 §12)。通話中は映像を表示し続け「終了」で切る。
 //   - クイック返信: config quick_replies を order 順に縦並び。D-pad フォーカス/タッチ両対応。
 // TV リモコン: BACK で閉じる。返信送信後は「送信しました」→ 3 秒でクローズ。
+// 锁屏対策: showWhenLocked/turnScreenOn (API27+ は manifest + setter、以前は window flags)。
 package jp.keihan.doorbell
 
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -27,6 +31,9 @@ class IncomingActivity : Activity() {
     private var door = ""
     private var streamer: MjpegStreamer? = null
     private var sipCalling = false
+    private var inCall = false           // 応答 (双方向) 確立後 = 「終了」ボタン
+    private var peerHost: String? = null // 門口機の mesh 実アドレス host (直呼宛先)
+    private var directPort = DIRECT_PORT
     private val autoClose = Runnable { finish() }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -34,6 +41,16 @@ class IncomingActivity : Activity() {
         app = application as App
         door = intent?.getStringExtra(EXTRA_DOOR) ?: ""
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        // 万一ロック中でも来鈴画面を表示する (DO 端末は App 側で keyguard 自体を無効化済み)
+        if (Build.VERSION.SDK_INT >= 27) {
+            setShowWhenLocked(true)
+            setTurnScreenOn(true)
+        } else {
+            @Suppress("DEPRECATION")
+            window.addFlags(WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+                WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or
+                WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD)
+        }
         setContentView(R.layout.activity_incoming)
 
         val cfg = app.core.config()
@@ -47,10 +64,17 @@ class IncomingActivity : Activity() {
         buildReplyButtons(cfg)
         findViewById<Button>(R.id.close_button).setOnClickListener { finish() }
 
-        // 門口機 peer の解決 (映像 URL + 直接監聴呼の宛先 host)
+        // 門口機 peer の解決 (映像 URL + 直接監聴呼/応答呼の宛先 host)
         val peer = findDoorPeer(st)
+        peerHost = resolvePeerHost(peer)
+        directPort = (app.core.dig(cfg, "sip.direct_port") as? Number)?.toInt() ?: DIRECT_PORT
         startVideo(peer)
-        startAudio(cfg, peer)
+        startAudio()
+
+        // 応答 (双方向) — 宛先不明なら無効化
+        val answer = findViewById<Button>(R.id.answer_button)
+        answer.isEnabled = peerHost != null
+        answer.setOnClickListener { onAnswerClick(answer) }
 
         // 応対されないまま放置された時の安全弁 (映像/監聴を持続させない)
         ui.postDelayed(autoClose, AUTO_CLOSE_MS)
@@ -58,9 +82,9 @@ class IncomingActivity : Activity() {
 
     override fun onNewIntent(intent: Intent?) {
         super.onNewIntent(intent)
-        // 同じ画面が出ている間の再チャイム → タイマだけ張り直す
+        // 同じ画面が出ている間の再チャイム → タイマだけ張り直す (通話中は張らない)
         ui.removeCallbacks(autoClose)
-        ui.postDelayed(autoClose, AUTO_CLOSE_MS)
+        if (!inCall) ui.postDelayed(autoClose, AUTO_CLOSE_MS)
     }
 
     override fun onDestroy() {
@@ -103,17 +127,41 @@ class IncomingActivity : Activity() {
 
     // ---------- 門口音声 (直接監聴呼) ----------
 
-    private fun startAudio(cfg: JSONObject?, peer: JSONObject?) {
-        val host = peerHost(peer) ?: return
-        // 直接呼の待受ポート (sipctl の SipSettings.direct_port 既定と一致)
-        val port = (app.core.dig(cfg, "sip.direct_port") as? Number)?.toInt() ?: DIRECT_PORT
-        app.core.sipCall("sip:$host:$port", "monitor")
+    private fun startAudio() {
+        val host = peerHost ?: return
+        app.core.sipCall("sip:$host:$directPort", "monitor")
         sipCalling = true
         findViewById<TextView>(R.id.audio_hint).visibility = View.VISIBLE
     }
 
+    // ---------- 応答 (双方向通話 — answer 接管) ----------
+
+    /** 応答: 監聴呼を切ってから answer 直呼 (主呼は同時に 1 本)。通話中の再押下 = 終了。 */
+    private fun onAnswerClick(btn: Button) {
+        val host = peerHost ?: return
+        if (inCall) {  // 「終了」
+            app.core.sipHangup()
+            sipCalling = false
+            finish()
+            return
+        }
+        inCall = true
+        ui.removeCallbacks(autoClose)  // 通話中は自動クローズしない (映像は表示継続)
+        btn.text = getString(R.string.incall_end)
+        findViewById<TextView>(R.id.status_text).text = getString(R.string.incall_title)
+        findViewById<TextView>(R.id.audio_hint).visibility = View.GONE
+        if (sipCalling) {
+            // 監聴呼が立っている → hangup してから少し待って answer (Idle 遷移待ち)
+            app.core.sipHangup()
+            ui.postDelayed({ app.core.sipCall("sip:$host:$directPort", "answer") }, 400)
+        } else {
+            app.core.sipCall("sip:$host:$directPort", "answer")
+        }
+        sipCalling = true
+    }
+
     /** peer の addrs[0] "host:port" → host (Asterisk 非経由 — mesh の実アドレスを使う) */
-    private fun peerHost(peer: JSONObject?): String? {
+    private fun resolvePeerHost(peer: JSONObject?): String? {
         val addrs = peer?.optJSONArray("addrs") ?: return null
         if (addrs.length() == 0) return null
         val a = addrs.optString(0)
@@ -160,7 +208,7 @@ class IncomingActivity : Activity() {
         app.core.quickReply(replyId, door)
         findViewById<TextView>(R.id.sent_text).visibility = View.VISIBLE
         ui.removeCallbacks(autoClose)
-        ui.postDelayed(autoClose, 3000)
+        if (!inCall) ui.postDelayed(autoClose, 3000)  // 通話中は返信後も画面を保つ
     }
 
     private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()

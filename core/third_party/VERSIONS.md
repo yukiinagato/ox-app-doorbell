@@ -10,5 +10,6 @@
 | stb | image_write 1.16 / image 2.30 (master 取得 2026-08-28) | github.com/nothings/stb | Public Domain / MIT | stb/ (stb_image_write.h; stb_image.h はテスト検証のみ) |
 | pjsip | (Phase 1) 2.15.1 予定 | github.com/pjsip/pjproject | GPLv2+ | — |
 | libjpeg-turbo | (Phase 1) | github.com/libjpeg-turbo | BSD | — |
+| jssip | 3.13.8 | registry.npmjs.org/jssip/-/jssip-3.13.8.tgz (npm tarball, sha256 9ba24b71c6…) + events@3.3.0 を esbuild 0.25.9 で単一 IIFE 化 | MIT | webui/panel/vendor/jssip.min.js (網頁通話 call.html 用) |
 
 更新手順: 同一固定版を再取得し差分レビューの上で置換。改変禁止（パッチが要る場合は `patches/` に分離）。

@@ -151,3 +151,6 @@
 "ring.answer" = "接听";
 "ring.ignore" = "忽略";
 "ring.incoming" = "%@ 有访客";
+"ring.monitor" = "监听";
+"ring.monitoring" = "正在播放门口声音";
+"ring.no_video" = "没有门口机画面";

@@ -72,6 +72,18 @@
             android:gravity="center_vertical"
             android:orientation="vertical"
             android:padding="24dp">
+            <!-- 応答 (双方向通話 — 門口機へ直呼 X-Doorbell-Mode: answer)。通話中は「終了」になる -->
+            <Button
+                android:id="@+id/answer_button"
+                android:layout_width="match_parent"
+                android:layout_height="72dp"
+                android:layout_marginBottom="16dp"
+                android:background="@drawable/bg_tv_button"
+                android:focusable="true"
+                android:text="@string/ring_answer"
+                android:textColor="@color/accent"
+                android:textSize="24sp"
+                android:textStyle="bold"/>
             <!-- クイック返信ボタンはコードで挿入 (config quick_replies を order 順) -->
             <Button
                 android:id="@+id/close_button"

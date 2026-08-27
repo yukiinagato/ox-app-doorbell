@@ -101,6 +101,12 @@ namespace DoorbellApp.Core
         /// <summary>SOS 緊急モード。true=発報 / false=解除 (解除前の PIN 検証は呼び出し側)。</summary>
         public void Emergency(bool active) { if (_core != IntPtr.Zero) CoreInterop.db_core_emergency(_core, active ? 1 : 0); }
 
+        /// <summary>SIP 発呼。target: 内線番号 or "sip:host:port" (直呼)。mode: ""/"monitor"/"answer"。</summary>
+        public void SipCall(string target, string mode)
+        { if (_core != IntPtr.Zero && !string.IsNullOrEmpty(target)) CoreInterop.db_core_sip_call(_core, target, mode ?? ""); }
+
+        public void SipHangup() { if (_core != IntPtr.Zero) CoreInterop.db_core_sip_hangup(_core); }
+
         public Dictionary<string, object> Status()
         {
             if (_core == IntPtr.Zero) return null;

@@ -22,6 +22,8 @@ namespace DoorbellApp
             DataDir = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "Doorbell");
             Directory.CreateDirectory(DataDir);
+            // 前回の管理解錠 flag を掃除 — 再起動でロック状態 (watchdog 前台守衛有効) に戻る
+            try { File.Delete(Path.Combine(DataDir, "admin_unlocked.flag")); } catch { }
             Boot = BootConfig.Load(Path.Combine(DataDir, "boot.json"));
             L10n.SetLanguage(Boot.UiLang);
 

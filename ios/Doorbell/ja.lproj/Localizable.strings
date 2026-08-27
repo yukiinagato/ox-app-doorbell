@@ -151,3 +151,6 @@
 "ring.answer" = "応答";
 "ring.ignore" = "無視";
 "ring.incoming" = "%@ で呼び出し中";
+"ring.monitor" = "モニタ";
+"ring.monitoring" = "門口の音声を再生中";
+"ring.no_video" = "門口機の映像がありません";

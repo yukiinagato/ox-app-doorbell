@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>通話パネル</title>
+<!--
+  網頁通話ページ (現代ブラウザ専用 — legacy iPad 1 は door.html/monitor.html を使う)。
+  - 音声: JsSIP (vendor/jssip.min.js — 自包含, CDN 不使用) で Asterisk の WebSocket
+    (config integrations.webrtc.ws_url) 経由、門口機の内線へ発呼する。
+    Asterisk 側設定は deploy/asterisk/webrtc.md。未設定なら通話ボタンは無効。
+  - 映像 (受け): 門口機の /stream.mjpeg を <img> で直接表示 (cross-origin <img> は可)。
+  - 映像 (送り): 「映像も送る」= getUserMedia → canvas → JPEG を門口機の
+    POST /call-frame?door=&k= へ 2fps で送る (門口機殻は /peer-frame.jpg を輪詢して描画)。
+    getUserMedia はセキュアコンテキスト必須 (webrtc.md §1 — HTTPS か localhost)。
+  - API 契約は同ディレクトリの API.md (/api/panel/state, /api/panel/call-info, /call-frame)。
+  - ?k=<panel token> を全 API へ引き継ぐ。?mock=1 = XHR/JsSIP 無しで描画確認。
+-->
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body { background: #101418; color: #e8edf2; display: flex; flex-direction: column;
+         font-family: "Hiragino Sans", "Yu Gothic UI", sans-serif; }
+  header { display: flex; align-items: baseline; gap: 16px; padding: 12px 16px 4px; }
+  h1 { font-size: 24px; color: #8a97a5; font-weight: normal; }
+  #regState { font-size: 14px; color: #5d6b79; }
+  #offlineBand { display: none; background: #ff6b6b; color: #2a0505; text-align: center;
+                 font-size: 22px; font-weight: bold; padding: 10px; }
+  #doorTabs { display: flex; flex-wrap: wrap; gap: 8px; padding: 8px 16px; }
+  #doorTabs button { font-size: 20px; padding: 10px 22px; border-radius: 10px;
+                     border: 1px solid #2a333d; background: #1a2027; color: #e8edf2;
+                     cursor: pointer; }
+  #doorTabs button.sel { background: #274261; border-color: #4da3ff; }
+  #doorTabs button .st { font-size: 13px; color: #8a97a5; display: block; }
+  main { flex: 1; display: flex; flex-direction: column; align-items: center;
+         padding: 8px 16px 16px; min-height: 0; }
+  #videoBox { position: relative; width: 100%; max-width: 960px; flex: 1; min-height: 240px;
+              background: #000; border-radius: 12px; overflow: hidden;
+              display: flex; align-items: center; justify-content: center; }
+  #liveImg { width: 100%; height: 100%; object-fit: contain; }
+  #noVideo { position: absolute; color: #5d6b79; font-size: 20px; }
+  #selfPreview { position: absolute; right: 10px; bottom: 10px; width: 160px;
+                 border-radius: 8px; border: 1px solid #2a333d; display: none; }
+  #controls { display: flex; align-items: center; gap: 18px; padding: 14px 0 4px;
+              flex-wrap: wrap; justify-content: center; }
+  #callBtn { font-size: 26px; font-weight: bold; padding: 14px 56px; border-radius: 14px;
+             border: 0; background: #1e8e4e; color: #fff; cursor: pointer; }
+  #callBtn.hang { background: #c0392b; }
+  #callBtn:disabled { background: #2a333d; color: #5d6b79; cursor: default; }
+  #videoToggle { font-size: 18px; color: #aab6c2; display: flex; align-items: center;
+                 gap: 8px; cursor: pointer; }
+  #status { font-size: 18px; color: #8a97a5; min-height: 24px; padding-bottom: 10px;
+            text-align: center; }
+  #status.err { color: #ff8f85; }
+  #status a { color: #4da3ff; }
+</style>
+</head>
+<body>
+<div id="offlineBand">オフライン — 再接続中…</div>
+<header><h1>通話パネル</h1><span id="regState"></span></header>
+<div id="doorTabs"></div>
+<main>
+  <div id="videoBox">
+    <img id="liveImg" alt="">
+    <div id="noVideo">映像なし</div>
+    <video id="selfPreview" muted autoplay playsinline></video>
+  </div>
+  <div id="controls">
+    <button id="callBtn" disabled>通話</button>
+    <label id="videoToggle"><input type="checkbox" id="sendVideo"> 映像も送る</label>
+  </div>
+  <div id="status"></div>
+</main>
+<audio id="remoteAudio" autoplay></audio>
+
+<script src="vendor/jssip.min.js"></script>
+<script>
+"use strict";
+const qs = new URLSearchParams(location.search);
+const K = qs.get("k") || "";
+const MOCK = qs.get("mock") === "1";
+
+const els = {
+  tabs: document.getElementById("doorTabs"),
+  live: document.getElementById("liveImg"),
+  noVideo: document.getElementById("noVideo"),
+  self: document.getElementById("selfPreview"),
+  call: document.getElementById("callBtn"),
+  sendVideo: document.getElementById("sendVideo"),
+  status: document.getElementById("status"),
+  reg: document.getElementById("regState"),
+  offline: document.getElementById("offlineBand"),
+  audio: document.getElementById("remoteAudio"),
+};
+// stream 接続不可 (門口機オフライン等) → 「映像なし」表示へ
+els.live.onerror = () => { els.live.style.display = "none"; els.noVideo.style.display = ""; };
+els.live.onload = () => { els.live.style.display = ""; els.noVideo.style.display = "none"; };
+
+let doors = [];        // [{id,label,extension,station,online}]
+let selected = null;   // door オブジェクト
+let webrtc = null;     // {ws_url,sip_user,sip_pass,server}
+let ua = null;         // JsSIP.UA
+let session = null;    // 進行中の RTCSession
+let registered = false;
+let frameTimer = null; // 映像送信 (500ms = 2fps)
+let camStream = null;
+
+function setStatus(msg, isErr) {
+  els.status.innerHTML = msg || "";
+  els.status.className = isErr ? "err" : "";
+}
+
+// ---------- door 一覧 ----------
+function renderTabs() {
+  els.tabs.innerHTML = "";
+  for (const d of doors) {
+    const b = document.createElement("button");
+    b.textContent = d.label;
+    const st = document.createElement("span");
+    st.className = "st";
+    st.textContent = d.extension ? ("内線 " + d.extension) : "内線なし";
+    b.appendChild(st);
+    if (selected && selected.id === d.id) b.classList.add("sel");
+    b.onclick = () => selectDoor(d);
+    els.tabs.appendChild(b);
+  }
+}
+
+function selectDoor(d) {
+  if (session) return;  // 通話中は切替不可
+  selected = d;
+  renderTabs();
+  // 門口ライブ (MJPEG — station が空 = このノード自身)
+  if (MOCK) {
+    els.live.style.display = "none";
+    els.noVideo.style.display = "";
+  } else {
+    els.live.style.display = "";
+    els.live.src = (d.station || "") + "/stream.mjpeg";
+    els.noVideo.style.display = "none";
+  }
+  updateCallButton();
+}
+
+function updateCallButton() {
+  if (session) { els.call.disabled = false; return; }
+  if (!webrtc || !webrtc.ws_url) {
+    els.call.disabled = true;
+    setStatus("通話には Asterisk の WebRTC 設定 (integrations.webrtc.ws_url) が必要です — " +
+              "リポジトリの deploy/asterisk/webrtc.md 参照");
+    return;
+  }
+  if (!selected || !selected.extension) {
+    els.call.disabled = true;
+    if (selected) setStatus("この玄関には内線 (sip.accounts) が未設定です");
+    return;
+  }
+  els.call.disabled = !registered && !MOCK;
+}
+
+// ---------- JsSIP ----------
+function initUa() {
+  if (MOCK || !webrtc || !webrtc.ws_url || !webrtc.sip_user) return;
+  try {
+    const socket = new JsSIP.WebSocketInterface(webrtc.ws_url);
+    ua = new JsSIP.UA({
+      sockets: [socket],
+      uri: "sip:" + webrtc.sip_user + "@" + (webrtc.server || location.hostname),
+      password: webrtc.sip_pass || "",
+      register: true,
+    });
+    ua.on("registered", () => { registered = true; els.reg.textContent = "内線 " +
+        webrtc.sip_user + " 登録済み"; updateCallButton(); });
+    ua.on("unregistered", () => { registered = false; els.reg.textContent = "未登録";
+        updateCallButton(); });
+    ua.on("registrationFailed", (e) => { registered = false;
+        els.reg.textContent = "登録失敗 (" + (e.cause || "?") + ")"; updateCallButton(); });
+    ua.start();
+  } catch (e) {
+    setStatus("JsSIP 初期化失敗: " + e, true);
+  }
+}
+
+function startCall() {
+  if (!ua || !selected || !selected.extension) return;
+  setStatus("呼び出し中…");
+  els.call.textContent = "終了";
+  els.call.classList.add("hang");
+  session = ua.call("sip:" + selected.extension + "@" + (webrtc.server || location.hostname), {
+    mediaConstraints: { audio: true, video: false },
+  });
+  session.on("confirmed", () => {
+    setStatus("通話中");
+    if (els.sendVideo.checked) startSendingVideo();
+  });
+  session.on("ended", endCall);
+  session.on("failed", (e) => { setStatus("通話失敗 (" + (e.cause || "?") + ")", true); endCall(); });
+  session.connection.addEventListener("track", (ev) => {
+    if (ev.streams && ev.streams[0]) els.audio.srcObject = ev.streams[0];
+  });
+}
+
+function endCall() {
+  if (session) { try { if (!session.isEnded()) session.terminate(); } catch (e) { } }
+  session = null;
+  stopSendingVideo();
+  els.call.textContent = "通話";
+  els.call.classList.remove("hang");
+  updateCallButton();
+}
+
+els.call.onclick = () => {
+  if (MOCK) {  // 描画確認: 状態遷移だけ再現
+    if (els.call.textContent === "通話") { els.call.textContent = "終了";
+      els.call.classList.add("hang"); setStatus("通話中 (mock)"); }
+    else { els.call.textContent = "通話"; els.call.classList.remove("hang"); setStatus(""); }
+    return;
+  }
+  if (session) endCall();
+  else startCall();
+};
+
+// ---------- 「映像も送る」 (canvas → JPEG POST /call-frame) ----------
+async function startSendingVideo() {
+  if (frameTimer || !selected) return;
+  try {
+    camStream = await navigator.mediaDevices.getUserMedia({
+      video: { width: { ideal: 320 }, height: { ideal: 240 } }, audio: false });
+  } catch (e) {
+    setStatus("カメラ取得失敗 (" + e.name + ") — HTTPS/localhost が必要 (webrtc.md §1)", true);
+    els.sendVideo.checked = false;
+    return;
+  }
+  els.self.srcObject = camStream;
+  els.self.style.display = "block";
+  const canvas = document.createElement("canvas");
+  const target = (selected.station || "") + "/call-frame?door=" +
+      encodeURIComponent(selected.id) + "&k=" + encodeURIComponent(K);
+  let busy = false;
+  frameTimer = setInterval(() => {
+    if (busy || !session) return;
+    const v = els.self;
+    if (!v.videoWidth) return;
+    canvas.width = 320;
+    canvas.height = Math.round(320 * v.videoHeight / v.videoWidth) || 240;
+    canvas.getContext("2d").drawImage(v, 0, 0, canvas.width, canvas.height);
+    canvas.toBlob((blob) => {
+      if (!blob) return;
+      busy = true;
+      fetch(target, { method: "POST", body: blob,
+                      headers: { "Content-Type": "image/jpeg" } })
+        .catch(() => { })
+        .finally(() => { busy = false; });
+    }, "image/jpeg", 0.7);
+  }, 500);  // 2fps — 門口機側 /peer-frame.jpg は 3 秒で腐る契約
+}
+
+function stopSendingVideo() {
+  if (frameTimer) { clearInterval(frameTimer); frameTimer = null; }
+  if (camStream) { for (const t of camStream.getTracks()) t.stop(); camStream = null; }
+  els.self.style.display = "none";
+  els.self.srcObject = null;
+}
+
+els.sendVideo.onchange = () => {
+  if (els.sendVideo.checked) { if (session || MOCK) startSendingVideo(); }
+  else stopSendingVideo();
+};
+
+// ---------- 起動 ----------
+async function load() {
+  if (MOCK) {
+    doors = [
+      { id: "d_front", label: "正面玄関", extension: "8001", station: "", online: true },
+      { id: "d_back", label: "勝手口", extension: "", station: "", online: false },
+    ];
+    webrtc = { ws_url: "ws://mock:8088/ws", sip_user: "260", server: "mock" };
+    registered = true;
+    els.reg.textContent = "内線 260 登録済み (mock)";
+    selectDoor(doors[0]);
+    return;
+  }
+  try {
+    const [st, ci] = await Promise.all([
+      fetch("/api/panel/state?k=" + encodeURIComponent(K)).then(r => r.json()),
+      fetch("/api/panel/call-info?k=" + encodeURIComponent(K)).then(r => r.json()),
+    ]);
+    els.offline.style.display = "none";
+    webrtc = ci.webrtc || null;
+    doors = (st.doors || []).map(d => {
+      const info = (ci.doors || {})[d.id] || {};
+      return { id: d.id, label: d.label, extension: info.extension || "",
+               station: info.station || "", online: info.online !== false };
+    });
+    renderTabs();
+    if (!selected && doors.length) selectDoor(doors[0]);
+    else updateCallButton();
+    if (!ua) initUa();
+  } catch (e) {
+    els.offline.style.display = "block";
+    setTimeout(load, 5000);
+  }
+}
+load();
+</script>
+</body>
+</html>

@@ -156,4 +156,7 @@
   <data name="ring_answer" xml:space="preserve"><value>応答</value></data>
   <data name="ring_ignore" xml:space="preserve"><value>無視</value></data>
   <data name="ring_incoming" xml:space="preserve"><value>{0} で呼び出し中</value></data>
+  <data name="ring_monitor" xml:space="preserve"><value>モニタ</value></data>
+  <data name="ring_monitoring" xml:space="preserve"><value>門口の音声を再生中</value></data>
+  <data name="ring_no_video" xml:space="preserve"><value>門口機の映像がありません</value></data>
 </root>

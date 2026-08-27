@@ -86,6 +86,64 @@ SOS 緊急モードの**発報のみ** (解除は不可)。
 - monitor.html は **UA 判定をしない**。`<body data-live="1">` を手動で付けた場合のみ
   この URL を使い、`<img>` の src を据え置く (それ以外は snapshot 輪詢)。
 
+## GET /api/panel/call-info?k=\<token\>  (網頁通話 — call.html 用)
+
+網頁通話ページの設定/宛先解決 (現代ブラウザ専用 — legacy 面板は使わない)。応答:
+
+```json
+{
+  "ok": true,
+  "webrtc": { "ws_url": "ws://10.0.1.5:8088/ws", "sip_user": "260",
+              "sip_pass": "…", "server": "10.0.1.5" },
+  "doors": {
+    "d_front": { "extension": "8001", "station": "http://10.0.1.7:47180", "online": true }
+  }
+}
+```
+
+- `webrtc` — config `integrations.webrtc` の写し + `sip.server`。`ws_url` 空 =
+  Asterisk 未設定 → クライアントは通話ボタンを無効化し理由を表示する。
+- `doors.<id>.extension` — その door 担当門口機の内線 (`sip.accounts.<node_id>.user`)。
+  空 = 通話不可 (映像のみ)。
+- `doors.<id>.station` — 担当門口機の origin (`http://<host>:47180`)。**空文字 = このノード
+  自身が担当** (相対 URL でよい)。`/stream.mjpeg` の表示と `/call-frame` の POST 先に使う。
+- 担当門口機が devices に無い door は `doors` に載らない。
+
+## POST /call-frame?door=\<id\>&k=\<token\>  (ブラウザ → 門口機の相手映像)
+
+網頁通話中のブラウザが自分のカメラ画 (getUserMedia → canvas) を門口機へ流し込む口。
+**担当門口機のノードへ直接 POST する** (`call-info` の `station` origin。CORS 対応 —
+preflight OPTIONS も同パスで応える)。
+
+- Body: JPEG 1 枚そのまま (Content-Type: image/jpeg)。SOI マーカ検査あり (`400 not jpeg`)。
+- 受理条件: panel token 一致 (`403`)、宛先がこのノード担当の door (`404 not this station`)、
+  **SIP 通話中のみ** (`409 not in call` — 通話外の流し込みは捨てる)。
+- 推奨レート 2fps (500ms)。フレームは「peer frame スロット」(FrameBus とは別) に置かれ、
+  最新 1 枚だけ保持される。
+
+## GET /peer-frame.jpg  (門口機殻の相手映像輪詢)
+
+門口機の殻が通話中画面の「相手映像」に使う。`peer_stream` (UI イベント参照) が解決できた
+通話では不要 — 解決できない相手 (網頁通話・電話) のときに自機のこの URL を輪詢する。
+
+- 認証免除 (LAN 公開 — `/snapshot.jpg` と同格)。Cache-Control: no-store。
+- `/call-frame` で最後に受けたフレームを返す。**3 秒より古いと `404`** (相手が送信を
+  止めた/通話終了 — 殻は「映像なし」表示へ戻る)。
+
+### UI イベント (殻向け — 対称双方向映像の契約)
+
+SIP 通話確立時の `{"t":"state","state":"in_call"}` に相手解決結果が載る:
+
+```json
+{ "t":"state", "state":"in_call", "remote":"\"indoor\" <sip:201@10.0.1.5>",
+  "peer_node":"<node_id>", "peer_stream":"http://10.0.1.8:47180/stream.mjpeg" }
+```
+
+- 解決経路: 直接呼 = remote host → mesh peers[].addrs 照合 / Asterisk 経由 =
+  remote user (内線) → `sip.accounts.*` の user 逆引き。
+- `peer_stream` 無し = 相手特定不能 (PSTN/Groundwire/網頁内線) → 門口機殻は
+  `/peer-frame.jpg` 輪詢に降級、室内機殻は映像なし。
+
 ## クライアント側挙動 (参考・実装済み)
 
 | 項目 | door.html | monitor.html |

@@ -33,7 +33,21 @@ namespace DoorbellApp
         private readonly DispatcherTimer _pixelShift = new DispatcherTimer();
         private readonly DispatcherTimer _saverDrift = new DispatcherTimer();
         private readonly DispatcherTimer _sosTimer = new DispatcherTimer();
+        private readonly DispatcherTimer _incomingTimeout = new DispatcherTimer();  // 来鈴 30s
+        private readonly DispatcherTimer _answerDelay = new DispatcherTimer();      // 監聴→応答の切替待ち
+        private readonly DispatcherTimer _peerPoll = new DispatcherTimer();         // /peer-frame.jpg 輪詢
         private readonly Random _rng = new Random();
+
+        // ---- 来鈴/通話 (室内対講) ----
+        private MjpegStreamer _incomingStreamer;   // 来鈴画面の門口ライブ
+        private MjpegStreamer _inCallStreamer;     // 通話中の相手映像 (対称 MJPEG)
+        private string _incomingDoor = "";
+        private string _incomingHost;              // 直呼宛先 (門口機の mesh 実アドレス host)
+        private string _incomingStreamUrl;
+        private string _sipMode = "";              // "" | "monitor" | "answer"
+        private bool _inCall;
+        private bool _peerPollBusy;
+        private int _directPort = 47190;           // config sip.direct_port (docs/network-ports.md)
         private int _secretTaps;
         private DateTime _secretFirst = DateTime.MinValue;
         private KioskHooks _kiosk;
@@ -86,6 +100,16 @@ namespace DoorbellApp
             _sosTimer.Interval = TimeSpan.FromMilliseconds(50);
             _sosTimer.Tick += (s, e) => OnSosTick();
 
+            // 来鈴: 応答されないまま 30 秒で自動クローズ (映像/監聴を持続させない)
+            _incomingTimeout.Interval = TimeSpan.FromSeconds(30);
+            _incomingTimeout.Tick += (s, e) => CloseIncoming(true);
+            // 監聴中に応答: hangup → 400ms 待って answer 直呼 (主呼は同時に 1 本)
+            _answerDelay.Interval = TimeSpan.FromMilliseconds(400);
+            _answerDelay.Tick += (s, e) => { _answerDelay.Stop(); PlaceAnswerCall(); };
+            // 網頁通話の相手映像 (peer_stream 未解決時に自機の /peer-frame.jpg を輪詢)
+            _peerPoll.Interval = TimeSpan.FromMilliseconds(500);
+            _peerPoll.Tick += (s, e) => PollPeerFrame();
+
             // 無操作検出 (Preview 系は全 view のタッチ/クリック/キーで発火する)
             PreviewMouseDown += (s, e) => OnActivity();
             PreviewTouchDown += (s, e) => OnActivity();
@@ -133,6 +157,12 @@ namespace DoorbellApp
             EmergencyTitle.Text = L10n.T("emergency.title");
             EmergencyNote.Text = L10n.T("emergency.notified");
             EmergencyCancelButton.Content = L10n.T("emergency.cancel");
+            AnswerButton.Content = L10n.T("ring.answer");
+            MonitorButton.Content = L10n.T("ring.monitor");
+            IgnoreButton.Content = L10n.T("ring.ignore");
+            IncomingNoVideo.Text = L10n.T("ring.no_video");
+            InCallTitle.Text = L10n.T("incall.title");
+            EndCallButton.Content = L10n.T("incall.end");
         }
 
         private void OnClockTick()
@@ -143,6 +173,8 @@ namespace DoorbellApp
                 IdleView.Visibility == Visibility.Visible &&
                 CallingView.Visibility != Visibility.Visible &&
                 OfflineView.Visibility != Visibility.Visible &&
+                IncomingView.Visibility != Visibility.Visible &&
+                InCallView.Visibility != Visibility.Visible &&
                 (DateTime.Now - _lastActivity).TotalSeconds > _screensaverAfterS)
                 EnterScreensaver();
         }
@@ -186,6 +218,13 @@ namespace DoorbellApp
                     CallButton.Content = L10n.T("idle.call_button", label.ToString());
             }
             RefreshSosConfig(cfg);
+            // 直呼待受ポート (config sip.direct_port — 既定 47190)
+            var dp = CoreClient.Dig(cfg, "sip.direct_port");
+            if (dp != null)
+            {
+                int p;
+                if (int.TryParse(dp.ToString(), out p) && p > 0) _directPort = p;
+            }
         }
 
         // ---------- 表示制御 ----------
@@ -499,9 +538,18 @@ namespace DoorbellApp
             {
                 case "state":
                     var stv = ev.Str("state");
-                    if (stv == "calling") ShowCalling();
-                    else if (stv == "idle") ShowIdle();
-                    else if (stv == "in_call") CallingText.Text = L10n.T("incall.title");
+                    if (stv == "calling") { if (App.Boot.Role == "door_station") ShowCalling(); }
+                    else if (stv == "idle") OnSipIdle();
+                    else if (stv == "in_call") OnSipInCall(ev);
+                    break;
+                case "event":
+                    // 受鈴室内面板: press で来鈴画面 (門口ライブ + 応答/モニタ/無視)。
+                    // reply (誰かが応対 — 複製イベントで全ノードに届く) で来鈴画面を畳む
+                    if (App.Boot.Role == "indoor_panel" && ev.Str("type") == "press")
+                        ShowIncoming(ev.Str("door"));
+                    else if (ev.Str("type") == "reply" && !_inCall &&
+                             IncomingView.Visibility == Visibility.Visible)
+                        CloseIncoming(true);
                     break;
                 case "chime":
                     ExitScreensaver();
@@ -509,6 +557,9 @@ namespace DoorbellApp
                     break;
                 case "reply":
                     ExitScreensaver();
+                    // 誰かが応対した → 来鈴画面は閉じる (監聴中なら切る)
+                    if (IncomingView.Visibility == Visibility.Visible && !_inCall)
+                        CloseIncoming(true);
                     ReplyText.Text = ev.Str("text");
                     ReplyBanner.Visibility = Visibility.Visible;
                     double ttl = 30;
@@ -540,6 +591,239 @@ namespace DoorbellApp
             }
         }
 
+        // ---------- 来鈴 / 室内対講 (計画書 §12: 三モード通話) ----------
+
+        private static string DictStr(Dictionary<string, object> d, string key)
+        {
+            object v;
+            return d != null && d.TryGetValue(key, out v) && v != null ? v.ToString() : "";
+        }
+
+        /// <summary>statusJson peers[] からこの door 担当の door_station (自分以外・生存) を返す。</summary>
+        private static Dictionary<string, object> FindDoorPeer(Dictionary<string, object> st, string door)
+        {
+            var peers = (st != null && st.ContainsKey("peers"))
+                ? st["peers"] as System.Collections.IEnumerable : null;
+            if (peers == null) return null;
+            foreach (var o in peers)
+            {
+                var p = o as Dictionary<string, object>;
+                if (p == null) continue;
+                object self;
+                if (p.TryGetValue("self", out self) && self is bool && (bool)self) continue;
+                if (DictStr(p, "role") != "door_station") continue;
+                if (!string.IsNullOrEmpty(door) && DictStr(p, "door") != door) continue;
+                if (DictStr(p, "status") == "dead") continue;
+                return p;
+            }
+            return null;
+        }
+
+        /// <summary>peer の addrs[0] "host:port" → host (mesh の実アドレス — Asterisk 非経由)。</summary>
+        private static string PeerHost(Dictionary<string, object> peer)
+        {
+            var addrs = (peer != null && peer.ContainsKey("addrs"))
+                ? peer["addrs"] as System.Collections.IEnumerable : null;
+            if (addrs == null) return null;
+            foreach (var a in addrs)
+            {
+                string s = a as string;
+                if (string.IsNullOrEmpty(s)) continue;
+                int i = s.LastIndexOf(':');
+                return i > 0 ? s.Substring(0, i) : s;
+            }
+            return null;
+        }
+
+        /// <summary>来鈴画面 (indoor_panel が press イベント受信時)。</summary>
+        private void ShowIncoming(string door)
+        {
+            if (_emergencyActive || _inCall) return;  // 警報中/通話中は画面を奪わない
+            if (IncomingView.Visibility == Visibility.Visible)
+            {
+                // 同じ画面が出ている間の再チャイム → タイマだけ張り直す (監聴等は継続)
+                _incomingTimeout.Stop();
+                _incomingTimeout.Start();
+                return;
+            }
+            ExitScreensaver();
+            _incomingDoor = door ?? "";
+            var cfg = App.Core.Config();
+            object label = CoreClient.Dig(cfg, "doors." + _incomingDoor + ".label." + App.Boot.UiLang)
+                           ?? CoreClient.Dig(cfg, "doors." + _incomingDoor + ".label.ja")
+                           ?? (object)_incomingDoor;
+            IncomingTitle.Text = L10n.T("ring.incoming", label);
+            IncomingHint.Visibility = Visibility.Collapsed;
+
+            // 門口機 peer 解決 (映像 URL + 直呼宛先 host)
+            var peer = FindDoorPeer(App.Core.Status(), _incomingDoor);
+            _incomingHost = PeerHost(peer);
+            _incomingStreamUrl = DictStr(peer, "stream");
+            AnswerButton.IsEnabled = !string.IsNullOrEmpty(_incomingHost);
+
+            // 門口ライブ (MJPEG)。URL 不明なら「映像なし」のまま
+            if (_incomingStreamer != null) { _incomingStreamer.Stop(); _incomingStreamer = null; }
+            IncomingLive.Source = null;
+            IncomingNoVideo.Visibility = Visibility.Visible;
+            if (!string.IsNullOrEmpty(_incomingStreamUrl))
+            {
+                _incomingStreamer = new MjpegStreamer(_incomingStreamUrl, bmp =>
+                    Dispatcher.BeginInvoke(new Action(() =>
+                    {
+                        IncomingNoVideo.Visibility = Visibility.Collapsed;
+                        IncomingLive.Source = bmp;
+                    })));
+                _incomingStreamer.Start();
+            }
+
+            IncomingView.Visibility = Visibility.Visible;
+            _incomingTimeout.Stop();
+            _incomingTimeout.Start();  // 30 秒で自動クローズ (再チャイムで張り直し)
+        }
+
+        private void CloseIncoming(bool hangup)
+        {
+            _incomingTimeout.Stop();
+            _answerDelay.Stop();
+            if (_incomingStreamer != null) { _incomingStreamer.Stop(); _incomingStreamer = null; }
+            IncomingView.Visibility = Visibility.Collapsed;
+            IncomingLive.Source = null;
+            AnswerButton.IsEnabled = true;
+            if (hangup && _sipMode != "" && !_inCall)
+            {
+                App.Core.SipHangup();
+                _sipMode = "";
+            }
+        }
+
+        private void OnAnswerClick(object sender, RoutedEventArgs e)
+        {
+            if (string.IsNullOrEmpty(_incomingHost)) return;  // 門口機不明 — 応答不可
+            AnswerButton.IsEnabled = false;                   // 二重発呼防止
+            if (_sipMode == "monitor")
+            {
+                // 監聴呼を切ってから応答 (主呼は同時に 1 本 — sipctl の契約)
+                App.Core.SipHangup();
+                _answerDelay.Stop();
+                _answerDelay.Start();
+                return;
+            }
+            PlaceAnswerCall();
+        }
+
+        /// <summary>門口機へ直呼 (X-Doorbell-Mode: answer)。門口機側は電話腿を取消して双方向応答する。</summary>
+        private void PlaceAnswerCall()
+        {
+            _sipMode = "answer";
+            App.Core.SipCall("sip:" + _incomingHost + ":" + _directPort, "answer");
+        }
+
+        private void OnMonitorClick(object sender, RoutedEventArgs e)
+        {
+            if (string.IsNullOrEmpty(_incomingHost) || _sipMode != "") return;
+            _sipMode = "monitor";
+            App.Core.SipCall("sip:" + _incomingHost + ":" + _directPort, "monitor");
+            IncomingHint.Text = L10n.T("ring.monitoring");
+            IncomingHint.Visibility = Visibility.Visible;
+        }
+
+        private void OnIgnoreClick(object sender, RoutedEventArgs e) => CloseIncoming(true);
+
+        private void OnEndCallClick(object sender, RoutedEventArgs e)
+        {
+            App.Core.SipHangup();  // state idle が来て CloseInCall される (即時にも畳む)
+            CloseInCall();
+        }
+
+        /// <summary>SIP in_call — 役割ごとに通話中画面へ。ev.peer_stream = 相手映像 (対称 MJPEG)。</summary>
+        private void OnSipInCall(UiEvent ev)
+        {
+            _inCall = true;
+            _incomingTimeout.Stop();
+            CallingText.Text = L10n.T("incall.title");  // CallingView 用 (映像なしの門口機)
+            string stream = ev.Str("peer_stream");
+            if (App.Boot.Role == "door_station")
+            {
+                _callTimeout.Stop();
+                if (!string.IsNullOrEmpty(stream))
+                {
+                    ShowInCall(stream);        // 双方向映像の門口側 (相手 = 室内機)
+                }
+                else
+                {
+                    // 相手不明 (電話/網頁) — 網頁通話なら自機 /peer-frame.jpg にフレームが来る
+                    _peerPollBusy = false;
+                    _peerPoll.Start();
+                }
+            }
+            else if (_sipMode == "answer")
+            {
+                // 室内機の応答が確立。相手映像 = peer_stream (無ければ来鈴と同じ門口 stream)
+                if (string.IsNullOrEmpty(stream)) stream = _incomingStreamUrl;
+                CloseIncoming(false);
+                ShowInCall(stream);
+            }
+            // _sipMode == "monitor" は来鈴画面のまま (映像 + 監聴継続)
+        }
+
+        private void OnSipIdle()
+        {
+            bool wasInCall = _inCall;
+            _inCall = false;
+            _sipMode = "";
+            CloseInCall();
+            if (wasInCall && IncomingView.Visibility == Visibility.Visible)
+                CloseIncoming(false);  // 応答通話が終わった → 来鈴画面も畳む
+            if (App.Boot.Role == "door_station") ShowIdle();
+        }
+
+        private void ShowInCall(string streamUrl)
+        {
+            ExitScreensaver();
+            if (_inCallStreamer != null) { _inCallStreamer.Stop(); _inCallStreamer = null; }
+            PeerVideo.Source = null;
+            if (!string.IsNullOrEmpty(streamUrl))
+            {
+                _inCallStreamer = new MjpegStreamer(streamUrl, bmp =>
+                    Dispatcher.BeginInvoke(new Action(() => PeerVideo.Source = bmp)));
+                _inCallStreamer.Start();
+            }
+            InCallView.Visibility = Visibility.Visible;
+        }
+
+        private void CloseInCall()
+        {
+            _peerPoll.Stop();
+            if (_inCallStreamer != null) { _inCallStreamer.Stop(); _inCallStreamer = null; }
+            PeerVideo.Source = null;
+            InCallView.Visibility = Visibility.Collapsed;
+        }
+
+        /// <summary>網頁通話の相手映像: 自機 httpd の /peer-frame.jpg を輪詢 (通話中のみ)。</summary>
+        private void PollPeerFrame()
+        {
+            if (!_inCall || _peerPollBusy) return;
+            _peerPollBusy = true;
+            Task.Run(() =>
+            {
+                byte[] jpg = null;
+                try
+                {
+                    using (var wc = new System.Net.WebClient())
+                        jpg = wc.DownloadData("http://127.0.0.1:47180/peer-frame.jpg");
+                }
+                catch { /* フレーム無し (404) = 相手が映像を送っていない */ }
+                var bmp = jpg != null ? MjpegStreamer.Decode(jpg) : null;
+                Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    _peerPollBusy = false;
+                    if (!_inCall || bmp == null) return;
+                    if (InCallView.Visibility != Visibility.Visible) ShowInCall(null);
+                    PeerVideo.Source = bmp;
+                }));
+            });
+        }
+
         // ---------- 操作 ----------
         private void OnCallClick(object sender, RoutedEventArgs e)
         {
@@ -568,6 +852,13 @@ namespace DoorbellApp
                 WindowState = WindowState.Normal;
                 WindowStyle = WindowStyle.SingleBorderWindow;
                 ResizeMode = ResizeMode.CanResize;
+                // watchdog の前台守衛を止める (存在中は引き戻さない — 再起動で自動削除)
+                try
+                {
+                    File.WriteAllText(Path.Combine(App.DataDir, "admin_unlocked.flag"),
+                                      DateTime.Now.ToString("s"));
+                }
+                catch { /* 書けなくても解錠自体は成立 */ }
             }
         }
     }

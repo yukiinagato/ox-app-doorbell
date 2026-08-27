@@ -268,12 +268,40 @@ void SipCtl::Impl::s_on_incoming_call(pjsua_acc_id, pjsua_call_id call_id,
     return;
   }
   // 一方向モニタか双方向かの判別:
-  //   X-Doorbell-Mode: monitor → モニタ / answer → 双方向 / ヘッダ無し →
+  //   X-Doorbell-Mode: monitor → モニタ / answer → 双方向 (接管あり — 下記) / ヘッダ無し →
   //   主呼進行中ならモニタ・アイドルなら従来の双方向自動応答 (逆呼び)。
   // (Alert-Info 等の標準ヘッダによる判別は将来拡張 — 現状は自前ヘッダ + フォールバック)
   const std::string mode = doorbellMode(rdata);
   const bool busy = im->call_id.load() != PJSUA_INVALID_ID;
-  const bool want_monitor = (mode == "monitor") || (mode.empty() && busy);
+  bool want_monitor = (mode == "monitor") || (mode.empty() && busy);
+
+  // answer 接管 (室内機の応答): 主呼が進行中でも
+  //   a) 未確立 (Asterisk への電話腿がまだ鳴っている) → 主呼をキャンセルし、この着信を
+  //      新しい主呼として双方向応答する — 訪客は室内機と話すことになった。
+  //   b) 確立済み (電話で誰かが既に応答した) → 奪わずモニタとして受理 (一方向降級)。
+  if (mode == "answer" && busy) {
+    pjsua_call_id cur = im->call_id.load();
+    pjsua_call_info mi;
+    const bool confirmed = cur != PJSUA_INVALID_ID &&
+                           pjsua_call_get_info(cur, &mi) == PJ_SUCCESS &&
+                           mi.state == PJSIP_INV_STATE_CONFIRMED;
+    if (confirmed) {
+      DB_LOGI(kTag, "answer 着信だが主呼 #" + std::to_string(cur) +
+                        " は応答済み — モニタへ降級");
+      want_monitor = true;  // (b) 下のモニタ受理経路へ
+    } else if (cur != PJSUA_INVALID_ID &&
+               im->call_id.compare_exchange_strong(cur, call_id)) {
+      // (a) 接管: 先に主呼を差し替えてから旧主呼を切る — 旧主呼の DISCONNECTED が
+      // 主呼状態機 (postCall) に Ended を流さないため。新主呼の CONFIRMED で
+      // on_call_state が InCall (remote = 発呼元) を通知する。
+      DB_LOGI(kTag, "answer 接管: 未確立の主呼 #" + std::to_string(cur) +
+                        " をキャンセルし着信 #" + std::to_string(call_id) + " と双方向応答");
+      pjsua_call_hangup(cur, 0, nullptr, nullptr);
+      pjsua_call_answer(call_id, PJSIP_SC_OK, nullptr, nullptr);
+      return;
+    }
+    // CAS 失敗 (主呼が同時に消えた) → 下の通常経路 (アイドル扱い) へ
+  }
 
   if (want_monitor) {
     // モニタ呼: auto_answer 有効時のみ、上限 kMaxMonitorCalls 本まで追加受理
@@ -292,14 +320,15 @@ void SipCtl::Impl::s_on_incoming_call(pjsua_acc_id, pjsua_call_id call_id,
     return;
   }
 
-  // 双方向 (主呼として受理)。主呼進行中に mode=answer が来た場合は 486 (将来: 会議化)。
+  // 双方向 (主呼として受理)
   int expected = PJSUA_INVALID_ID;
   if (!im->call_id.compare_exchange_strong(expected, call_id)) {
     pjsua_call_answer(call_id, PJSIP_SC_BUSY_HERE, nullptr, nullptr);  // 通話中 → 486
     return;
   }
-  // 逆呼び (双方向): auto_answer なら 200 応答。st は start/stop 間で不変。
-  if (im->st.auto_answer) {
+  // mode=answer は呼び手が双方向を明示している → 即応答。
+  // 逆呼び (ヘッダ無し) は auto_answer なら 200 応答。st は start/stop 間で不変。
+  if (mode == "answer" || im->st.auto_answer) {
     pjsua_call_answer(call_id, PJSIP_SC_OK, nullptr, nullptr);
   } else {
     pjsua_call_answer(call_id, PJSIP_SC_RINGING, nullptr, nullptr);

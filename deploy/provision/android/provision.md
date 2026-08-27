@@ -32,6 +32,10 @@ adb shell dpm set-device-owner jp.keihan.doorbell/.AdminReceiver
   already set` → 手順 1 の初期化をやり直す (既存アカウント/既存 DO が残っている)。
 - Device Owner にすると本アプリが `setLockTaskPackages` + `startLockTask` で
   **完全ピン留め** される: ステータスバー・ホーム・戻る・最近のアプリが全て無効。
+- **ロック画面**: DO なら起動時に自動で無効化される (`setKeyguardDisabled` + 給電中常時点灯 +
+  システム更新弾窗の延期)。**非 DO 端末は 設定 → セキュリティ → 画面ロック = なし を手動設定**
+  すること (锁屏に入ると来鈴画面が遮られる — 来鈴 Activity 自体は showWhenLocked で
+  锁屏上にも出るが、平時の待機画面は覆われる)。
 
 ## 4. boot.json 配置
 

@@ -119,12 +119,14 @@ int main(int argc, char** argv) {
     i++;
   }
   // --monitor-call <target>: 起動後に一方向監聴呼を発する (tools/dev_monitor_test.sh 用)。
+  // --answer-call <target>: 同・双方向接管呼 (X-Doorbell-Mode: answer — dev_intercom_test.sh 用)。
   // target は "sip:host:port" の直呼 URI か内線番号。--monitor-delay-ms で発呼待ち (既定 2000)。
-  std::string monitor_call;
+  std::string monitor_call, monitor_mode = "monitor";
   int monitor_delay_ms = 2000;
   for (int i = 1; i < argc - 1; i++) {
     std::string k = argv[i];
     if (k == "--monitor-call") monitor_call = argv[i + 1];
+    else if (k == "--answer-call") { monitor_call = argv[i + 1]; monitor_mode = "answer"; }
     else if (k == "--monitor-delay-ms") monitor_delay_ms = std::atoi(argv[i + 1]);
   }
   for (int i = 1; i < argc; i++)
@@ -179,15 +181,15 @@ int main(int argc, char** argv) {
     });
   }
 
-  // --monitor-call: 遅延後に一方向監聴呼 (X-Doorbell-Mode: monitor) を発する
+  // --monitor-call / --answer-call: 遅延後に X-Doorbell-Mode 付きの直呼を発する
   std::thread mon_th;
   if (!monitor_call.empty()) {
-    mon_th = std::thread([&node, monitor_call, monitor_delay_ms] {
+    mon_th = std::thread([&node, monitor_call, monitor_mode, monitor_delay_ms] {
       struct timespec t{monitor_delay_ms / 1000,
                         static_cast<long>(monitor_delay_ms % 1000) * 1000 * 1000};
       nanosleep(&t, nullptr);
-      DB_LOGI("host", "monitor-call -> " + monitor_call);
-      node.sipCall(monitor_call, "monitor");
+      DB_LOGI("host", monitor_mode + "-call -> " + monitor_call);
+      node.sipCall(monitor_call, monitor_mode);
     });
   }
 
