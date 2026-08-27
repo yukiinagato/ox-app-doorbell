@@ -132,6 +132,10 @@ int main(int argc, char** argv) {
   }
   if (o.advertise_addr.empty()) o.advertise_addr = o.listen_addr;
 
+  bool fake_camera = false;
+  for (int i = 1; i < argc; i++)
+    if (std::string(argv[i]) == "--fake-camera") fake_camera = true;
+
   db::Node node(o);
   node.setHttpsFn(curlHttps);  // Telegram ブリッジ用 (leader 就任 + bot_token 設定時のみ使われる)
   node.setUiEventCb([](const std::string& ev) { DB_LOGI("ui", ev); });
@@ -142,6 +146,30 @@ int main(int argc, char** argv) {
     std::fprintf(stderr, "start 失敗\n");
     return 1;
   }
+  // --fake-camera: 合成グラデーション (静止 — 動体検知は発火しない) を 2fps で push。
+  // カメラの無い開発機で snapshot/Telegram 写真経路を通すため。
+  std::thread fake_th;
+  if (fake_camera) {
+    fake_th = std::thread([&node] {
+      const int w = 640, h = 480;
+      std::vector<uint8_t> f(static_cast<size_t>(w) * h * 4);
+      for (int y = 0; y < h; y++)
+        for (int x = 0; x < w; x++) {
+          size_t i = (static_cast<size_t>(y) * w + x) * 4;
+          f[i] = static_cast<uint8_t>(255 * x / w);        // B
+          f[i + 1] = static_cast<uint8_t>(255 * y / h);    // G
+          f[i + 2] = 140;                                  // R
+          f[i + 3] = 255;
+        }
+      int64_t ts = 0;
+      while (!g_stop) {
+        node.pushCameraFrame(f.data(), 3 /*BGRA*/, w, h, w * 4, ts += 500);
+        struct timespec t { 0, 500 * 1000 * 1000 };
+        nanosleep(&t, nullptr);
+      }
+    });
+  }
+
   std::printf("node %s  admin: http://127.0.0.1:%d/admin/  (Ctrl+C で終了)\n",
               node.nodeId().substr(0, 8).c_str(), o.http_port);
   std::signal(SIGINT, onSig);
@@ -150,6 +178,7 @@ int main(int argc, char** argv) {
     struct timespec ts { 0, 200 * 1000 * 1000 };
     nanosleep(&ts, nullptr);
   }
+  if (fake_th.joinable()) fake_th.join();
   node.stop();
   return 0;
 }
