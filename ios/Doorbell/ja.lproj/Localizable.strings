@@ -37,7 +37,11 @@
 "offline.reconnect" = "再接続まで %@ 秒";
 "offline.title" = "システムオフライン";
 "panel.calling" = "呼び出し中→通知済み";
+"panel.monitor_title" = "受鈴モニター";
 "panel.no_audio_note" = "この玄関では通話できません (通知のみ)";
+"panel.offline" = "オフライン — 再接続中…";
+"panel.press_hint" = "ボタンを押すと住人に通知します";
+"panel.tap_sound" = "タップして音を有効化";
 "panel.title" = "呼出パネル";
 "reply.answered" = "応答済み (%@)";
 "reply.banner" = "住人からのメッセージ";

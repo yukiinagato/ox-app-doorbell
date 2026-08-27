@@ -37,7 +37,11 @@
 "offline.reconnect" = "Reconnecting in %@s";
 "offline.title" = "System offline";
 "panel.calling" = "Calling → notified";
+"panel.monitor_title" = "Ring monitor";
 "panel.no_audio_note" = "No voice at this door (notify only)";
+"panel.offline" = "Offline — reconnecting…";
+"panel.press_hint" = "Press a button to notify the resident";
+"panel.tap_sound" = "Tap to enable sound";
 "panel.title" = "Call panel";
 "reply.answered" = "Replied (%@)";
 "reply.banner" = "Message from resident";

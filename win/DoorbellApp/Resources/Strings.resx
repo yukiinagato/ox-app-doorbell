@@ -42,7 +42,11 @@
   <data name="offline_reconnect" xml:space="preserve"><value>再接続まで {0} 秒</value></data>
   <data name="offline_title" xml:space="preserve"><value>システムオフライン</value></data>
   <data name="panel_calling" xml:space="preserve"><value>呼び出し中→通知済み</value></data>
+  <data name="panel_monitor_title" xml:space="preserve"><value>受鈴モニター</value></data>
   <data name="panel_no_audio_note" xml:space="preserve"><value>この玄関では通話できません (通知のみ)</value></data>
+  <data name="panel_offline" xml:space="preserve"><value>オフライン — 再接続中…</value></data>
+  <data name="panel_press_hint" xml:space="preserve"><value>ボタンを押すと住人に通知します</value></data>
+  <data name="panel_tap_sound" xml:space="preserve"><value>タップして音を有効化</value></data>
   <data name="panel_title" xml:space="preserve"><value>呼出パネル</value></data>
   <data name="reply_answered" xml:space="preserve"><value>応答済み ({0})</value></data>
   <data name="reply_banner" xml:space="preserve"><value>住人からのメッセージ</value></data>

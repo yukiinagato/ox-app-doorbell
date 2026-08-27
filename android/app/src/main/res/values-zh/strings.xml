@@ -38,7 +38,11 @@
     <string name="offline_reconnect">%1$s 秒后重连</string>
     <string name="offline_title">系统离线</string>
     <string name="panel_calling">呼叫中→已通知</string>
+    <string name="panel_monitor_title">受铃监视</string>
     <string name="panel_no_audio_note">此门口无法通话（仅通知）</string>
+    <string name="panel_offline">离线 — 重连中…</string>
+    <string name="panel_press_hint">按下按钮即可通知住户</string>
+    <string name="panel_tap_sound">点按以启用声音</string>
     <string name="panel_title">呼叫面板</string>
     <string name="reply_answered">已回复 (%1$s)</string>
     <string name="reply_banner">住户留言</string>

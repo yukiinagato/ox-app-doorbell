@@ -38,7 +38,11 @@
     <string name="offline_reconnect">再接続まで %1$s 秒</string>
     <string name="offline_title">システムオフライン</string>
     <string name="panel_calling">呼び出し中→通知済み</string>
+    <string name="panel_monitor_title">受鈴モニター</string>
     <string name="panel_no_audio_note">この玄関では通話できません (通知のみ)</string>
+    <string name="panel_offline">オフライン — 再接続中…</string>
+    <string name="panel_press_hint">ボタンを押すと住人に通知します</string>
+    <string name="panel_tap_sound">タップして音を有効化</string>
     <string name="panel_title">呼出パネル</string>
     <string name="reply_answered">応答済み (%1$s)</string>
     <string name="reply_banner">住人からのメッセージ</string>

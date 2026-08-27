@@ -58,3 +58,7 @@ admin.quick_replies: { ja: "クイック返信", en: "Quick replies", zh: "快�
 panel.title: { ja: "呼出パネル", en: "Call panel", zh: "呼叫面板" }
 panel.calling: { ja: "呼び出し中→通知済み", en: "Calling → notified", zh: "呼叫中→已通知" }
 panel.no_audio_note: { ja: "この玄関では通話できません (通知のみ)", en: "No voice at this door (notify only)", zh: "此门口无法通话（仅通知）" }
+panel.monitor_title: { ja: "受鈴モニター", en: "Ring monitor", zh: "受铃监视" }
+panel.offline: { ja: "オフライン — 再接続中…", en: "Offline — reconnecting…", zh: "离线 — 重连中…" }
+panel.tap_sound: { ja: "タップして音を有効化", en: "Tap to enable sound", zh: "点按以启用声音" }
+panel.press_hint: { ja: "ボタンを押すと住人に通知します", en: "Press a button to notify the resident", zh: "按下按钮即可通知住户" }

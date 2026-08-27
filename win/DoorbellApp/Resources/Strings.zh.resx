@@ -42,7 +42,11 @@
   <data name="offline_reconnect" xml:space="preserve"><value>{0} 秒后重连</value></data>
   <data name="offline_title" xml:space="preserve"><value>系统离线</value></data>
   <data name="panel_calling" xml:space="preserve"><value>呼叫中→已通知</value></data>
+  <data name="panel_monitor_title" xml:space="preserve"><value>受铃监视</value></data>
   <data name="panel_no_audio_note" xml:space="preserve"><value>此门口无法通话（仅通知）</value></data>
+  <data name="panel_offline" xml:space="preserve"><value>离线 — 重连中…</value></data>
+  <data name="panel_press_hint" xml:space="preserve"><value>按下按钮即可通知住户</value></data>
+  <data name="panel_tap_sound" xml:space="preserve"><value>点按以启用声音</value></data>
   <data name="panel_title" xml:space="preserve"><value>呼叫面板</value></data>
   <data name="reply_answered" xml:space="preserve"><value>已回复 ({0})</value></data>
   <data name="reply_banner" xml:space="preserve"><value>住户留言</value></data>

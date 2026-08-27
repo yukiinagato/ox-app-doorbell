@@ -38,7 +38,11 @@
     <string name="offline_reconnect">Reconnecting in %1$ss</string>
     <string name="offline_title">System offline</string>
     <string name="panel_calling">Calling → notified</string>
+    <string name="panel_monitor_title">Ring monitor</string>
     <string name="panel_no_audio_note">No voice at this door (notify only)</string>
+    <string name="panel_offline">Offline — reconnecting…</string>
+    <string name="panel_press_hint">Press a button to notify the resident</string>
+    <string name="panel_tap_sound">Tap to enable sound</string>
     <string name="panel_title">Call panel</string>
     <string name="reply_answered">Replied (%1$s)</string>
     <string name="reply_banner">Message from resident</string>

@@ -42,7 +42,11 @@
   <data name="offline_reconnect" xml:space="preserve"><value>Reconnecting in {0}s</value></data>
   <data name="offline_title" xml:space="preserve"><value>System offline</value></data>
   <data name="panel_calling" xml:space="preserve"><value>Calling → notified</value></data>
+  <data name="panel_monitor_title" xml:space="preserve"><value>Ring monitor</value></data>
   <data name="panel_no_audio_note" xml:space="preserve"><value>No voice at this door (notify only)</value></data>
+  <data name="panel_offline" xml:space="preserve"><value>Offline — reconnecting…</value></data>
+  <data name="panel_press_hint" xml:space="preserve"><value>Press a button to notify the resident</value></data>
+  <data name="panel_tap_sound" xml:space="preserve"><value>Tap to enable sound</value></data>
   <data name="panel_title" xml:space="preserve"><value>Call panel</value></data>
   <data name="reply_answered" xml:space="preserve"><value>Replied ({0})</value></data>
   <data name="reply_banner" xml:space="preserve"><value>Message from resident</value></data>

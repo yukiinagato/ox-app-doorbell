@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>受鈴モニター</title>
+<!--
+  受鈴表示面板 (iOS 5 Safari / iPad 1 対応)。ES5 のみ・XHR 短輪詢。
+  flexbox / WebSocket / 矢印関数 / let / const / template literal 禁止。
+  API 契約は同ディレクトリの API.md。?k=<panel token> を全 API に引き継ぐ。
+  ?mock=1 で XHR せず内蔵サンプルデータ描画 (file:// 検証用 — 描画は実データと同一関数)。
+  MJPEG 昇格: UA 判定はしない。<body data-live="1"> を手動で付けた場合のみ
+  /snapshot-proxy?…&live=1 (MJPEG) を使う (詳細は API.md)。
+-->
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body { background: #101418; color: #e8edf2;
+         font-family: "Hiragino Sans", "Yu Gothic UI", sans-serif; }
+  #soundBand { display: none; background: #ffb454; color: #3a2200; text-align: center;
+               font-size: 26px; font-weight: bold; padding: 14px; cursor: pointer; }
+  #offlineBand { display: none; background: #ff6b6b; color: #2a0505; text-align: center;
+                 font-size: 26px; font-weight: bold; padding: 12px; }
+  h1 { font-size: 24px; color: #8a97a5; font-weight: normal; padding: 12px 16px 4px; }
+  /* 平時: スナップショット並び (inline-block) + イベント履歴テーブル */
+  #snapGrid { padding: 8px 12px; }
+  .snapCard { display: inline-block; vertical-align: top; background: #1a2027;
+              border: 1px solid #2a333d; border-radius: 10px; padding: 10px;
+              margin: 6px; width: 46%; }
+  .snapCard .lbl { font-size: 22px; padding-bottom: 6px; }
+  .snapCard img { width: 100%; background: #000; border-radius: 6px; min-height: 120px; }
+  #evCard { background: #1a2027; border: 1px solid #2a333d; border-radius: 10px;
+            margin: 8px 18px 24px; padding: 12px; }
+  table { width: 100%; border-collapse: collapse; font-size: 20px; }
+  th, td { text-align: left; padding: 8px; border-bottom: 1px solid #242d36; }
+  th { color: #8a97a5; font-weight: normal; font-size: 16px; }
+  .dim { color: #8a97a5; }
+  /* 呼出中: 全画面表示 (position:fixed — iOS5 で可) */
+  #callView { display: none; position: absolute; left: 0; top: 0; width: 100%;
+              height: 100%; background: #101418; text-align: center; z-index: 10; }
+  #callView .msg { font-size: 58px; font-weight: bold; color: #ffb454;
+                   padding: 26px 10px; line-height: 1.3; }
+  #callView img { width: 92%; max-width: 900px; background: #000; border-radius: 10px; }
+</style>
+</head>
+<body>
+<div id="soundBand">タップして音を有効化</div>
+<div id="offlineBand">オフライン — 再接続中…</div>
+<h1 id="title">受鈴モニター</h1>
+<div id="snapGrid"></div>
+<div id="evCard"><table>
+  <thead><tr><th>時刻</th><th>種別</th><th>ドア</th></tr></thead>
+  <tbody id="evBody"></tbody>
+</table></div>
+<div id="callView">
+  <div class="msg" id="callMsg"></div>
+  <img id="callImg" alt="">
+</div>
+
+<script>
+(function () {
+  "use strict";
+  var POLL_MS = 2000;       // 状態輪詢間隔
+  var SNAP_MS = 5000;       // 平時スナップショット差替間隔
+  var OFFLINE_AFTER = 5;    // XHR 連続失敗この回数で「オフライン」帯
+
+  function $(id) { return document.getElementById(id); }
+  function esc(s) {
+    var d = document.createElement("div");
+    d.appendChild(document.createTextNode(s == null ? "" : String(s)));
+    return d.innerHTML;
+  }
+  function qs(name) {
+    var m = window.location.search.match(new RegExp("[?&]" + name + "=([^&]*)"));
+    return m ? decodeURIComponent(m[1].replace(/\+/g, "%20")) : "";
+  }
+  function fmtTime(ms) {
+    if (!ms) return "-";
+    var d = new Date(ms);
+    function p(n) { return n < 10 ? "0" + n : n; }
+    return p(d.getMonth() + 1) + "/" + p(d.getDate()) + " " +
+           p(d.getHours()) + ":" + p(d.getMinutes());
+  }
+
+  var TOKEN = qs("k");
+  var MOCK = qs("mock") === "1";
+  // MJPEG 手動昇格 (UA 判定はしない — API.md 参照)
+  var LIVE = document.body.getAttribute("data-live") === "1";
+
+  // ---- i18n (失敗時はハードコード ja のまま) ----
+  var I18N = {};
+  function t(k, def) { return I18N[k] || def; }
+  if (!MOCK) {
+    xhr("GET", "/locale/ja.json", null, function (st, j) {
+      if (st === 200 && j) {
+        I18N = j;
+        $("title").innerHTML = esc(t("panel.monitor_title", "受鈴モニター"));
+        $("soundBand").innerHTML = esc(t("panel.tap_sound", "タップして音を有効化"));
+        $("offlineBand").innerHTML = esc(t("panel.offline", "オフライン — 再接続中…"));
+      }
+    });
+  }
+
+  function xhr(method, path, formBody, cb) {
+    var x = new XMLHttpRequest();
+    x.open(method, path, true);
+    if (formBody) x.setRequestHeader("Content-Type", "application/x-www-form-urlencoded");
+    x.onreadystatechange = function () {
+      if (x.readyState !== 4) return;
+      var j = null;
+      try { j = JSON.parse(x.responseText); } catch (e) {}
+      cb(x.status, j);
+    };
+    try { x.send(formBody || null); } catch (e2) { cb(0, null); }
+  }
+
+  // ---- mock データ (描画は実データと同一の render() を通す) ----
+  var mockTick = 0;
+  function mockState() {
+    mockTick++;
+    var calling = mockTick > 8 && mockTick < 20;  // 16〜40 秒目に模擬呼出
+    return {
+      doors: [
+        { id: "d_front", label: "正面玄関", calling: calling },
+        { id: "d_back", label: "裏口", calling: false }
+      ],
+      events: [
+        { type: "press", door: "正面玄関", wall_ms: 1756300000000 },
+        { type: "motion", door: "裏口", wall_ms: 1756290000000 }
+      ],
+      reply: null, server_ts: mockTick
+    };
+  }
+  // 1x1 灰色 GIF (mock では snapshot を取得できないための代替)
+  var GRAY = "data:image/gif;base64,R0lGODlhAQABAIAAADg4OAAAACwAAAAAAQABAAACAkQBADs=";
+  function snapshotUrl(doorId, ts) {
+    if (MOCK) return GRAY;
+    return "/snapshot-proxy?door=" + encodeURIComponent(doorId) +
+           "&k=" + encodeURIComponent(TOKEN) + (LIVE ? "&live=1" : "&t=" + ts);
+  }
+  function fetchState(cb) {
+    if (MOCK) { cb(200, mockState()); return; }
+    xhr("GET", "/api/panel/state?k=" + encodeURIComponent(TOKEN), null, cb);
+  }
+
+  // ---- ベストエフォート鈴声: 最初のタッチで <audio> を解錠、以降 play() ----
+  var audio = null;
+  var audioUnlocked = false;
+  try {
+    audio = new Audio();
+    audio.src = "data:audio/wav;base64,UklGRsQPAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YaAPAAB/vuHWo2AqGzp4ud/ZqWYuGzZytN3brmwyGzJsrtvdtHI2HC5mqdjeuXg7HCtgo9XgvX5AHihandLgwoVFHyVVl87hxotKISNPkcrhypFPIyFKi8bgzpdVJiBFhcHf0Z1bKR9Af73e1KJgLB48eLjd1qhmMB44crLb2a1sNB40bK3Y27JyOB4wZqjW3Ld4PB8tYaLT3bx/QSAqW5zQ3sCFRiIoVpbM3sSLSyMlUJDI3siQUCYkS4rE3syWVigiR4TA3c+cWyshQn+73NKhYS4gPnm22tSnZzIgOnOx2NasbTYgNm2s1tixczohMmen1Nq2eT4hL2Gh0du6fkMiLFybztu/hEgkKleWytzDik0mKFKQxtzGkFIoJk2KwtvKllcrJUiEvtrNm1wtJER+udnPoWIxIz95tdjSpmg0IztzsNbUq204Izhtq9TWsHM8IzRopdHXtHlAJDFioM/YuX5EJS9dm8vZvYRJJixYlcjZwYpOKCpTj8TZxI9TKihOisDZyJVYLSdJhLzYy5pdMCZFf7jXzaBjMyVBebPV0KVoNiU9c67U0qpuOiU6bqrS065zPSY2aKTP1bN5QiYzY5/M1rd+RicxXprJ1ruESikuWZTG17+KTyssVI/C18KPVC0rT4q/1saUWS8pS4S71cmaXjIpR3+21MufYzUoQ3my082kaTgoP3St0c+objwoPG6oz9GtdD8oOGmjzdKxeUMpNmSeytO1fkgqM1+Zx9S5hEwrMVqUxNS9iVEtL1WPwNTAj1UvLVGJvdTElFoxLEyEudPGmV80K0h+tdLJnmQ3KkR5sNHLo2k6KkF0rM/Np289Kj5vp83PrHRBKzpqosvQsHlFKzhlncjRtH9JLDVgmMXRuIRNLjNbk8LSu4lSLzFWjr/Sv45WMTBSibvRwpNbNC5OhLfRxJhgNi1Kf7PPx51lOS1Gea/OyaFqPC1DdKrMy6ZvPy0/b6bLzKp0Qy08aqHIza55Ry46ZZzGzrJ+Sy83YZjDz7aETzA1XJPAz7mJUzIzWI69z72OWDQyU4m5z8CSXDYxT4S1zsKXYTgwS3+xzcWcZjsvSHmtzMegaz4vRHWpysilcEEvQXClyMqpdUUwPmugxsutekgwPGacxMyxfkwxOmKXwcy0g1AyOF2Svs24iFU0NlmNu827jVk2NFWIt8y+kl04M1GDtMzAlmI7Mk1/sMvCm2c9Mkp6rMnEn2tAMkZ1qMjGpHBDMkNwo8bHqHVHMkFrn8TJq3pKMz5nm8HJr35ONDxilr/Ks4NSNTpekbzKtohWNjhajbnKuY1aODdWiLXKu5FeOjZSg7LJvpZjPTVPf1k+ND1XfKK+ycGog15BNDtUd527ycOriGJENTlQc5m4yMSvjGdHNjhNbpS0xsWykWtKNzdKapCxxca1lXBOOTZHZoutw8e4mXRSOzZEYYepwce6nnlWPTZCXYKlv8e8oX1aQDZAWn2hvMe+pYJeQjY+VnmducbAqYZiRTc8UnSZt8XCrItmSDg7T3CVs8TDr49rSzk6TGyQsMPEspNvTzs5SWiMrcHEtZhzUj05R2OHqb/FuJx4Vj84RGCDpb3Fup98WkE4Qlx+obvEvKOBXkQ5QFh6nbjEvaeFYkY5P1V2mbXDv6qJZkk6PVJylbLCwK2Oakw8PE9tka/BwbCSblA9PExpjKy/wrKWc1M/O0lliKi9wrWad1dBO0dihKW7wrede1pDO0VegKG5wrmhgF5FO0Nae523wrukhGJIPEFXd5m0wbyniGZKPUBUc5WxwL2rjGpNPj9Rb5Guv76tkG5QPz5Oa42rvb+wlHJUQT5MZ4movMCymHZXQj1KZIWkusC1m3pbRD1HYIGhuMC2n39eRz5GXXydtb+4ooNiST5EWXiZs7+6pYdmTD9DVnSVsL67qItqTkBCU3GRrb28q45uUUFBUW2Nqru9rZJyVUJATmmJp7q9sJZ2WERATGWFpLi9spl6W0ZASmKBoLa9tJ1+X0hASF9+nbS9tqCBYkpAR1x6mbG8t6OFZk1BRVl2la+7uKaJalBCRFZykqy6uamNbVJDQ1Nujqm5uquQcVVEQ1Friqa4uq2UdVlGQk9nhqO2u6+XeVxIQk1kgqC0u7GbfV9KQkthfpyyurOegGNMQ0lee5mwurShhGZOQ0hbd5WtubakiGpRREdYc5KruLemi21URUZWcI6ot7epj3FWR0VTbIqltrirknRZSEVRaYeitLitlnhcSkVPZoOfsrivmXxgTEVNY3+csLiwnH9jTkVMYHyYrriyn4NmUEZLXXiVrLezoYdqUkZJWnWSqra0pIptVUdJWHGOp7W1po1xV0lIVm6LpLS1qJF0WkpIVGuHobK2qpR4XUxHUmiEnrG2rJd7YE1HUGWAm6+2rpp/Y09ITmJ9mK21r52CZlFITV95lau1sJ+FalRJTF12kqi0saKJbVZKS1pzjqazsqSMcFhLSlhwi6Oys6aPdFtMSlZsiKCws6iSd15NSlRphJ6vs6qVemFPSlJngZuts6uYfmRRSlFkfpirs62bgWdTSlBhepWpsq6dhGpVS09fd5Knsq+fh21XTE5cdI6lsbCiinBaTU1acYuisLCkjnNcTk1YboigrrGmkHdfT0xWa4WdrbGnk3piUUxVaIKaq7Gpln1kU0xTZn+esKqRb1RNXHucr6uUclZNWniZrq2WdVhNWHWWrK2ZeFtNV3KTq66be11OVW+Qqa6efl9PVG2OqK+ggmJQU2qLpq+ihWVRUmeIpK+kiGdSUWWFoa6limpTUGKBn66njW1VUGB/na2okHBXUF58mqypk3NYT1x5mKuqlXZaUFp2laqrmHlcUFlzkqmsmnxfUFdwkKesnH5hUVZujaWsnoFjUlVriqSsoIRmU1Roh6KsoodpVFNmhKCso4prVlNkgZ2rpYxuV1Jif5urpo9xWVJgfJmqp5JzWlJeeZapqJR2XFJcdpSoqZZ5XlJbdJGmqZh8YFNZcY+lqpp+Y1RYboyjqpyBZVRXbImiqp6EZ1VWaoegqqCHalZWZ4SeqaGJbFhVZYGcqaOMb1lVY3+aqKSOcVtVYnyXp6WQdFxUYHmVpqaTd15VXneTpaaVeWBVXXSQpKeXfGJVXHKOo6eZf2RWWm+LoaebgWZXWW2JoKechGlYWWuGnqeehmtZWGmEnKefiW1aV2eBmqagi3BbV2V+mKahjXJdV2N8lqWij3VeV2J6lKSjkndgV2B3kaOklHpiV191j6KklXxkWF5yjaGll39mWF1wip+lmYFoWVxuiJ6lmoNqWltshpylnIZsW1pqg5qknYhuXFpogZiknopxXlpnf5ajn4xzX1llfJSjoI51YFljepKioZB4YlpieJChoZJ6ZFphdY6gopR8Zlpgc4yeopZ/Z1tfcYqdopeBaVxeb4ecopmDa1xdbYWaopqFbV1da4OYopuHb19caoGXoZyJcmBcaH6VoZ2LdGFcZ3yToJ6NdmJcZXqRn5+PeGRcZHiPnp+RemZcY3aNnZ+SfGddYnSLnKCUf2ldYXKJm6CVgWteYHCHmqCXg21fYG+FmKCYhW9gX22Dl5+Zh3FhX2uBlZ+aiXJiX2p+k56binRjXmh8kZ6cjHdlXmd6kJ2cjnlmX2Z5jpydj3tnX2V3jJudkX1pX2R1ipqdkn5rYGNziJmdlIBsYGJxhpedlYJuYWJwhJadloRwYmFugpWdl4ZyY2FtgJOcmIhzZGFrf5KcmYp1ZWFqfZCbmYt3Z2Fpe46bmo15aGFoeY2amo57aWFnd4uZm5B9a2JmdomYm5F/bGJldIeXm5KAbmNlcoaVm5OCb2RkcYSUm5SEcWRkcIKTmpWFc2VkboCRmpaHdGZjbX6QmZeJdmdjbH2PmZeKeGlja3uNmJiLeWpkanmLl5iNe2tkaXiKl5iOfWxkaHaIlpiPfm5laHWHlZiQgG9lZ3OFk5iRgnFmZ3KDkpiSg3JnZnGCkZiThXRoZnCAkJeUhnVpZm9/cmlmaXJ+ipOXlYyAdGpmaHB8iZKXlY2CdWtmaG97h5GWlY6Dd2xnaG55hpCWlY+EeG5oaG14hI+VlZCGem9oaG13g42UlZGHe3BpaGx1gYyTlZGIfXJqaGt0gIuTlZKJfnNraGtzfomSlZKKgHRsaGtyfYiRlJOLgXZtaWpxe4ePlJOMgnduaWpweoWOk5ONg3lvampveYSNk5OOhXpwa2pveIKMkpOPhntya2pud4GLkZOPh31zbGpudoCKkZOQiH50bWptdX6IkJKQiX91bmttdH2Hj5KQioB2b2ttc3yGjpKQi4J4cGxscnuFjZGRi4N5cWxscXqDjJGRjIR6cm1scXmCi5CRjIV7c21scHiBio+QjYZ9dG5tcHeAiY+QjYd+dW9tb3Z/h46Qjod/dnBtb3V+ho2QjoiAd3Fub3V9hYyPjomBeHFub3R8hIuPjomCeXJub3N7g4qOjoqDenNvb3N6gomOjoqEfHRwb3J5gYiNjouEfXVwb3J4gIeMjouFfnZxb3J3f4aMjouGf3dycHF3foWLjYyHf3hycHF2fYSKjYyHgHlzcHF2fISJjIyIgXp0cXF1e4OJjIyIgnt1cXF1e4KIi4yJg3x2cnF0eoGHi4yJg312cnJ0eYCGiouJhH13c3J0eX+FiouJhX54dHJ0eH6EiYuJhX95dHJ0eH6EiIqJhoB6dXN0d32DiIqJhoF7dnN0d3yCh4qJhoF7dnR0d3yBhomJh4J8d3R0dnuBhomJh4J9eHV0dnqAhYiJh4N+eXV0dnp/hIiJh4N+eXZ0dnp+g4eIh4R/enZ1dnl+g4aIh4R/e3d1dnl9goaIh4SAe3d1dnl9gYWHh4WAfHh2dnh8gYWHh4WBfHl2dnh8gISGh4WBfXl3dnh7gIOGh4WCfnp3d3h7f4OGhoWCfnp4d3h7f4KFhoWCf3t4d3h7foKFhoWDf3t5d3h6foGEhYWDf3x5eHh6fYGEhYWDgHx6eHh6fYCDhYWDgH16eXl6fYCDhISDgH17eXl6fH+ChISDgX57eXl6fH+Cg4SDgX58enl6fH+Bg4SDgX98enp6fH6Bg4ODgX98e3p6fH6AgoODgX99e3p7fH6AgoOCgX99e3t7fH6AgYKCgX9+fHt7fH1/gYKCgYB+fHt7fH1/gYKCgYB+fXx7fH1/gIGBgYB+fXx8fH1/gIGBgYB+fXx8fH1+gIGBgYB/fX18fX1+f4CBgIB/fn19fX1+f4CAgIB/fn19fX1+f4CAgH9/fn59fX5+f3+AgH9/fn5+fn5+f39/f39/fn5+fn5+f39/f39/fn5+fn5+f39/f39/fn5+fn5+";
+    $("soundBand").style.display = "block";
+  } catch (e) { audio = null; }
+  function unlockAudio() {
+    if (!audio || audioUnlocked) return;
+    try { audio.play(); audio.pause(); audioUnlocked = true; } catch (e) {}
+    $("soundBand").style.display = "none";
+  }
+  document.addEventListener("touchstart", unlockAudio, false);
+  document.addEventListener("click", unlockAudio, false);
+  function ring() {
+    if (!audio || !audioUnlocked) return;
+    try { audio.currentTime = 0; audio.play(); } catch (e) {}  // 失敗しても無害に
+  }
+
+  // ---- 平時: スナップショット並び (5 秒毎に単純 img 差替) + イベント履歴 ----
+  var lastDoorsKey = "";
+  function renderSnapGrid(doors) {
+    var key = "";
+    for (var i = 0; i < doors.length; i++) key += doors[i].id + "|" + doors[i].label + ";";
+    if (key === lastDoorsKey) return;
+    lastDoorsKey = key;
+    var grid = $("snapGrid");
+    grid.innerHTML = "";
+    for (var k = 0; k < doors.length; k++) {
+      var card = document.createElement("div");
+      card.className = "snapCard";
+      card.innerHTML = "<div class='lbl'>" + esc(doors[k].label) + "</div><img alt=''>";
+      var img = card.getElementsByTagName("img")[0];
+      img.setAttribute("data-door", doors[k].id);
+      img.src = snapshotUrl(doors[k].id, +new Date());
+      grid.appendChild(card);
+    }
+  }
+  setInterval(function () {  // 平時のみ差替 (MJPEG 昇格時は src 据え置き)
+    if (LIVE || $("callView").style.display === "block") return;
+    var imgs = $("snapGrid").getElementsByTagName("img");
+    for (var i = 0; i < imgs.length; i++)
+      imgs[i].src = snapshotUrl(imgs[i].getAttribute("data-door"), +new Date());
+  }, SNAP_MS);
+
+  function renderEvents(events) {
+    var rows = "";
+    for (var i = 0; i < events.length && i < 10; i++) {
+      var e = events[i];
+      rows += "<tr><td class='dim'>" + fmtTime(e.wall_ms) + "</td><td>" + esc(e.type) +
+              "</td><td>" + esc(e.door || e.device || "") + "</td></tr>";
+    }
+    $("evBody").innerHTML = rows;
+  }
+
+  // ---- 呼出中: 全画面 + スナップショット (2 秒毎の輪詢に同期して差替) ----
+  var callingDoorId = null;
+  function renderCall(doors) {
+    var calling = null;
+    for (var i = 0; i < doors.length; i++) if (doors[i].calling) { calling = doors[i]; break; }
+    if (calling) {
+      var msg = t("ring.incoming", "{door} で呼び出し中").replace("{door}", calling.label);
+      $("callMsg").innerHTML = esc(msg);
+      var img = $("callImg");
+      if (callingDoorId !== calling.id) ring();  // 新規呼出のみ鳴らす
+      if (!LIVE || callingDoorId !== calling.id)
+        img.src = snapshotUrl(calling.id, +new Date());
+      callingDoorId = calling.id;
+      $("callView").style.display = "block";
+    } else {
+      callingDoorId = null;
+      $("callView").style.display = "none";
+    }
+  }
+
+  // ---- 輪詢 + オフライン検知 (連続失敗 5 回で帯表示、以降も再試行継続) ----
+  var failCount = 0;
+  function render(state) {
+    renderSnapGrid(state.doors || []);
+    renderEvents(state.events || []);
+    renderCall(state.doors || []);
+  }
+  function poll() {
+    fetchState(function (st, j) {
+      if (st === 200 && j) {
+        failCount = 0;
+        $("offlineBand").style.display = "none";
+        render(j);
+      } else {
+        failCount++;
+        if (failCount >= OFFLINE_AFTER) $("offlineBand").style.display = "block";
+      }
+      setTimeout(poll, POLL_MS);
+    });
+  }
+  poll();
+})();
+</script>
+</body>
+</html>
