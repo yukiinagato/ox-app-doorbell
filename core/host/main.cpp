@@ -32,9 +32,13 @@ int main(int argc, char** argv) {
     else if (k == "--http") o.http_port = std::atoi(v.c_str());
     else if (k == "--seed") o.seed_peers.push_back(v);
     else if (k == "--psk") psk_hex = v;
+    else if (k == "--sip-user") o.sip_user = v;
+    else if (k == "--sip-pass") o.sip_pass = v;
     else continue;
     i++;
   }
+  for (int i = 1; i < argc; i++)
+    if (std::string(argv[i]) == "--sip-null") o.sip_null_audio = true;
   if (!psk_hex.empty()) {
     db::Bytes psk;
     if (!db::hexDecode(psk_hex, psk) || psk.size() != 32) {
