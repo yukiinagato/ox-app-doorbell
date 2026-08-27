@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ドアホン管理</title>
+<style>
+  :root { --bg:#101418; --card:#1a2027; --fg:#e8edf2; --dim:#8a97a5; --acc:#4da3ff; --warn:#ffb454; --err:#ff6b6b; --ok:#5dd39e; }
+  * { box-sizing:border-box; margin:0; }
+  body { background:var(--bg); color:var(--fg); font-family:"Hiragino Sans","Yu Gothic UI",system-ui,sans-serif; font-size:15px; }
+  header { display:flex; align-items:center; gap:12px; padding:10px 16px; background:var(--card); border-bottom:1px solid #2a333d; }
+  header h1 { font-size:17px; font-weight:600; }
+  header .node { color:var(--dim); font-size:12px; margin-left:auto; }
+  nav { display:flex; gap:4px; padding:8px 12px; flex-wrap:wrap; }
+  nav button { background:none; border:1px solid #2a333d; color:var(--fg); padding:7px 14px; border-radius:8px; cursor:pointer; font-size:14px; }
+  nav button.on { background:var(--acc); border-color:var(--acc); color:#04121f; font-weight:600; }
+  main { padding:12px 16px 40px; max-width:960px; margin:0 auto; }
+  .card { background:var(--card); border:1px solid #2a333d; border-radius:10px; padding:14px; margin-bottom:12px; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th,td { text-align:left; padding:6px 8px; border-bottom:1px solid #242d36; }
+  th { color:var(--dim); font-weight:500; }
+  .ok { color:var(--ok); } .warn { color:var(--warn); } .err { color:var(--err); } .dim { color:var(--dim); }
+  .tag { display:inline-block; padding:1px 8px; border-radius:99px; font-size:11px; border:1px solid #2a333d; }
+  textarea { width:100%; min-height:300px; background:#0c1014; color:var(--fg); border:1px solid #2a333d; border-radius:8px; padding:10px; font:12px/1.5 ui-monospace,Menlo,monospace; }
+  input[type=password],input[type=text] { background:#0c1014; color:var(--fg); border:1px solid #2a333d; border-radius:8px; padding:9px 12px; font-size:15px; width:100%; }
+  .btn { background:var(--acc); color:#04121f; border:none; border-radius:8px; padding:9px 18px; font-size:14px; font-weight:600; cursor:pointer; }
+  #login { max-width:340px; margin:14vh auto; }
+  #login h2 { margin-bottom:14px; font-size:16px; }
+  #login .row { margin-bottom:10px; }
+  .hidden { display:none !important; }
+  #msg { position:fixed; bottom:14px; left:50%; transform:translateX(-50%); background:#243040; padding:8px 18px; border-radius:8px; font-size:13px; opacity:0; transition:opacity .2s; }
+</style>
+</head>
+<body>
+<div id="login" class="card hidden">
+  <h2 data-i18n="admin.login">ログイン</h2>
+  <div class="row"><input id="pw" type="password" placeholder="管理パスワード" data-i18n-ph="admin.password"></div>
+  <button class="btn" id="loginBtn" data-i18n="admin.login">ログイン</button>
+  <div id="loginErr" class="err" style="margin-top:8px"></div>
+</div>
+
+<div id="app" class="hidden">
+  <header>
+    <h1 data-i18n="app.name">ドアホン</h1><span class="tag" data-i18n="admin.title">管理</span>
+    <span class="node" id="nodeInfo"></span>
+  </header>
+  <nav>
+    <button data-tab="dash" class="on" data-i18n="admin.dashboard">ダッシュボード</button>
+    <button data-tab="events" data-i18n="admin.events">イベント履歴</button>
+    <button data-tab="config" data-i18n="admin.system">システム</button>
+  </nav>
+  <main>
+    <section id="tab-dash">
+      <div class="card"><table id="peersTbl">
+        <thead><tr><th>ノード</th><th>役割</th><th>状態</th><th>duty</th><th>版</th><th>アドレス</th></tr></thead>
+        <tbody></tbody></table></div>
+      <div id="liveGrid" style="display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:12px"></div>
+    </section>
+    <section id="tab-events" class="hidden">
+      <div class="card"><table id="evTbl">
+        <thead><tr><th>時刻</th><th>種別</th><th>ドア/機器</th><th>詳細</th></tr></thead>
+        <tbody></tbody></table></div>
+    </section>
+    <section id="tab-config" class="hidden">
+      <div class="card">
+        <p class="dim" style="margin-bottom:8px">設定 (materialize 済み全文・読取)。個別書込は key と JSON 値で:</p>
+        <textarea id="cfgView" readonly></textarea>
+        <div style="display:flex; gap:8px; margin-top:10px">
+          <input id="cfgKey" type="text" placeholder="doors.d_front.label" style="flex:1">
+          <input id="cfgVal" type="text" placeholder='{"ja":"正面玄関"}' style="flex:2">
+          <button class="btn" id="cfgSet">書込</button>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+<div id="msg"></div>
+
+<script>
+(function () {
+  "use strict";
+  var I18N = {};
+  function t(k, def) { return I18N[k] || def || k; }
+  function $(s) { return document.querySelector(s); }
+  function show(el, on) { el.classList[on ? "remove" : "add"]("hidden"); }
+  function msg(s) { var m = $("#msg"); m.textContent = s; m.style.opacity = 1; setTimeout(function(){ m.style.opacity = 0; }, 2200); }
+  function esc(s) { var d = document.createElement("div"); d.textContent = s == null ? "" : String(s); return d.innerHTML; }
+
+  function api(method, path, body, cb) {
+    var x = new XMLHttpRequest();
+    x.open(method, path, true);
+    x.setRequestHeader("X-Requested-With", "doorbell-admin");
+    if (body) x.setRequestHeader("Content-Type", "application/json");
+    x.onreadystatechange = function () {
+      if (x.readyState !== 4) return;
+      if (x.status === 401) { show($("#app"), false); show($("#login"), true); return; }
+      var j = null; try { j = JSON.parse(x.responseText); } catch (e) {}
+      cb(x.status, j);
+    };
+    x.send(body ? JSON.stringify(body) : null);
+  }
+
+  // ---- i18n (埋め込み locale; 失敗時はハードコード ja のまま) ----
+  api("GET", "/locale/ja.json", null, function (st, j) {
+    if (st === 200 && j) {
+      I18N = j;
+      var els = document.querySelectorAll("[data-i18n]");
+      for (var i = 0; i < els.length; i++) els[i].textContent = t(els[i].getAttribute("data-i18n"), els[i].textContent);
+    }
+  });
+
+  // ---- login ----
+  $("#loginBtn").onclick = function () {
+    api("POST", "/api/login", { password: $("#pw").value }, function (st) {
+      if (st === 200) { show($("#login"), false); show($("#app"), true); refresh(); }
+      else $("#loginErr").textContent = t("admin.pin_wrong", "パスワードが違います");
+    });
+  };
+  $("#pw").addEventListener("keydown", function (e) { if (e.key === "Enter") $("#loginBtn").click(); });
+
+  // ---- tabs ----
+  var tabs = document.querySelectorAll("nav button");
+  for (var i = 0; i < tabs.length; i++) tabs[i].onclick = function () {
+    for (var j = 0; j < tabs.length; j++) tabs[j].classList.remove("on");
+    this.classList.add("on");
+    var name = this.getAttribute("data-tab");
+    var secs = ["dash", "events", "config"];
+    for (var k = 0; k < secs.length; k++) show($("#tab-" + secs[k]), secs[k] === name);
+    refresh();
+  };
+
+  function fmtTime(ms) { if (!ms) return "-"; var d = new Date(ms); function p(n){return n<10?"0"+n:n;}
+    return d.getFullYear()+"-"+p(d.getMonth()+1)+"-"+p(d.getDate())+" "+p(d.getHours())+":"+p(d.getMinutes())+":"+p(d.getSeconds()); }
+
+  function refresh() {
+    api("GET", "/api/status", null, function (st, j) {
+      if (st !== 200 || !j) return;
+      $("#nodeInfo").textContent = (j.node && (j.node.name || j.node.id) || "") + " · v" + (j.node && j.node.version || "?");
+      var rows = "";
+      var peers = j.peers || [];
+      for (var i = 0; i < peers.length; i++) {
+        var p = peers[i];
+        var stCls = p.status === "alive" ? "ok" : (p.status === "suspect" ? "warn" : "err");
+        var duties = [];
+        if (j.leaders) { for (var d in j.leaders) if (j.leaders[d] === p.id) duties.push(d); }
+        rows += "<tr><td>" + esc(p.name || p.id.slice(0, 8)) + (p.self ? " <span class='tag'>self</span>" : "") +
+          "</td><td>" + esc(p.role || "") + "</td><td class='" + stCls + "'>" + esc(p.status) +
+          "</td><td>" + esc(duties.join(",")) + "</td><td>" + esc(p.sw || "") +
+          "</td><td class='dim'>" + esc((p.addrs || []).join(" ")) + "</td></tr>";
+      }
+      $("#peersTbl tbody").innerHTML = rows;
+      // ライブ映像 (door_station の MJPEG を直接 <img> で受ける。src は据え置き —
+      // 毎回差し替えるとストリームが切れるため、新規/消滅のみ反映)
+      var grid = $("#liveGrid"), want = {};
+      for (var li = 0; li < peers.length; li++) {
+        var pp = peers[li];
+        if (pp.stream && pp.status === "alive") want[pp.id] = pp;
+      }
+      var cards = grid.querySelectorAll("[data-node]");
+      for (var ci = 0; ci < cards.length; ci++) {
+        var id = cards[ci].getAttribute("data-node");
+        if (!want[id]) grid.removeChild(cards[ci]); else delete want[id];
+      }
+      for (var nid in want) {
+        var p2 = want[nid], card = document.createElement("div");
+        card.className = "card"; card.setAttribute("data-node", nid);
+        card.innerHTML = "<div class='dim' style='margin-bottom:6px'>" + esc(p2.door_label || p2.name || nid.slice(0, 8)) +
+          "</div><img style='width:100%; border-radius:6px; background:#000; min-height:160px' alt='live'>";
+        card.querySelector("img").src = p2.stream;
+        grid.appendChild(card);
+      }
+    });
+    api("GET", "/api/events?limit=50", null, function (st, j) {
+      if (st !== 200 || !j) return;
+      var rows = "", evs = j.events || [];
+      for (var i = 0; i < evs.length; i++) {
+        var e = evs[i];
+        rows += "<tr><td class='dim'>" + fmtTime(e.wall_ms) + "</td><td>" + esc(e.type) +
+          "</td><td>" + esc(e.door || e.device || "") + "</td><td class='dim'>" + esc(e.payload || "") + "</td></tr>";
+      }
+      $("#evTbl tbody").innerHTML = rows;
+    });
+    api("GET", "/api/config", null, function (st, j) {
+      if (st === 200 && j) $("#cfgView").value = JSON.stringify(j, null, 2);
+    });
+  }
+
+  $("#cfgSet").onclick = function () {
+    var key = $("#cfgKey").value.trim(), val = $("#cfgVal").value.trim();
+    if (!key || !val) return;
+    api("POST", "/api/config", { key: key, value: val }, function (st) {
+      msg(st === 200 ? "OK" : "NG (" + st + ")");
+      refresh();
+    });
+  };
+
+  // 起動: 認証状態を status で確認
+  api("GET", "/api/status", null, function (st) {
+    if (st === 200) { show($("#app"), true); refresh(); setInterval(refresh, 5000); }
+    else { show($("#login"), true); }
+  });
+})();
+</script>
+</body>
+</html>
