@@ -1,0 +1,86 @@
+# Home Assistant 側の設定断片 (configuration.yaml / automations)
+# 門铃実体 (event/binary_sensor/camera) は leader ノードが MQTT Discovery で自動登録する。
+# ここに書くのは「HA 側でしか作れない」連携: HomeKit Bridge、看門狗、actionable 通知。
+
+# ---------- HomeKit Bridge: 玄関カメラ + 門鈴を Apple 家庭 App へ ----------
+# 事前に go2rtc.yaml のストリームが camera.genkan_front 等として HA に入っていること
+# (go2rtc/WebRTC 統合、または generic camera: rtsp://<go2rtc>:8554/genkan_front)。
+homekit:
+  filter:
+    include_entities:
+      - camera.genkan_front
+      - camera.genkan_annex
+  entity_config:
+    camera.genkan_front:
+      name: "正面玄関"
+      # MQTT Discovery が作る event entity (device_class: doorbell)。
+      # 実際の entity_id は 設定 > デバイス で確認して合わせること (日本語名は slug 化される)。
+      linked_doorbell_sensor: event.seimen_genkan_doorbell
+      support_audio: false        # MJPEG 源に音声なし — 通話は電話で (設計方針)
+    camera.genkan_annex:
+      name: "離れ玄関"
+      linked_doorbell_sensor: event.hanare_genkan_doorbell
+      support_audio: false
+
+automation:
+  # ---------- 必配: mesh 全滅の看門狗 (leader の LWT が offline のまま 2 分) ----------
+  - alias: "doorbell: ブリッジ消失アラート"
+    trigger:
+      - platform: state
+        entity_id: binary_sensor.doorbell_bridge_online   # MQTT Discovery が作る availability 由来
+        to: "off"
+        for: "00:02:00"
+    action:
+      - service: notify.mobile_app_iphone
+        data:
+          title: "ドアホン"
+          message: "ドアホン網が応答しません (停電/ネット断?)"
+          data: { push: { sound: { name: default, critical: 1, volume: 1.0 } } }
+
+  # ---------- iPhone への按鈴通知 + クイック返信ボタン (actionable notification) ----------
+  - alias: "doorbell: 按鈴 → 通知 (返信ボタン付き)"
+    trigger:
+      - platform: state
+        entity_id: event.seimen_genkan_doorbell
+    action:
+      - service: notify.mobile_app_iphone
+        data:
+          title: "来客"
+          message: "正面玄関に来客です"
+          data:
+            image: "/api/camera_proxy/camera.genkan_front"
+            push: { sound: { name: default, critical: 1, volume: 1.0 } }
+            actions:
+              - { action: "DOORBELL_REPLY_AWAY",  title: "留守にしています" }
+              - { action: "DOORBELL_REPLY_NO",    title: "結構です" }
+              - { action: "DOORBELL_REPLY_WAIT",  title: "少々お待ちください" }
+
+  # 通知ボタン → MQTT reply topic → 門口機の面板表示 + TTS
+  - alias: "doorbell: 通知アクション → 返信"
+    trigger:
+      - platform: event
+        event_type: mobile_app_notification_action
+        event_data: { action: "DOORBELL_REPLY_AWAY" }
+        id: qr_away
+      - platform: event
+        event_type: mobile_app_notification_action
+        event_data: { action: "DOORBELL_REPLY_NO" }
+        id: qr_no
+      - platform: event
+        event_type: mobile_app_notification_action
+        event_data: { action: "DOORBELL_REPLY_WAIT" }
+        id: qr_wait
+    action:
+      - service: mqtt.publish
+        data:
+          topic: "doorbell/d_front/reply/set"
+          payload: "{{ trigger.id }}"        # reply_id (app 側 quick_replies のキー)
+
+  # ---------- DTMF/通話中の開錠は app→MQTT 側から来る (参考: 受け口) ----------
+  - alias: "doorbell: 開錠コマンド"
+    trigger:
+      - platform: mqtt
+        topic: "doorbell/cmd/unlock"
+    action:
+      - service: lock.unlock
+        target: { entity_id: lock.genkan }

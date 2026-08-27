@@ -1,0 +1,15 @@
+# go2rtc 設定 (HA の go2rtc アドオン / 内蔵 go2rtc に取り込む)
+# 門口機の MJPEG を HA 主機側で H.264 へ転码する — 旧端末側は JPEG を出すだけ。
+# `#hardware` は環境に合わせて: Intel = そのまま / RPi = #hardware=v4l2m2m / 無ければ外す (soft)
+
+streams:
+  genkan_front:
+    - ffmpeg:http://10.0.1.11:47180/stream.mjpeg#video=h264#hardware
+  genkan_annex:
+    - ffmpeg:http://10.0.1.12:47180/stream.mjpeg#video=h264#hardware
+
+# メモ:
+# - 門口機側で認証を有効にした場合は URL に ?k=<panel_token> を付ける。
+# - go2rtc は消費者がいる時だけ ffmpeg を起動する。HomeKit 通知の初動を速くしたい
+#   主玄関は「常駐転码」を推奨 (HA 側の camera を preload する / go2rtc の consumer を
+#   常設する等、環境に合わせて)。
