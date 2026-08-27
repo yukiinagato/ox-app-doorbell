@@ -25,6 +25,8 @@ namespace {
 constexpr int64_t kJoinTokenTtlMs = 10 * 60 * 1000;  // 配対トークン 10 分
 constexpr size_t kSyncEventLimit = 200;              // 1 応答の最大イベント数
 constexpr int kEventTtl = 2;                         // EVENT 即時 push の flood TTL
+constexpr int64_t kSnapTimeoutMs = 5000;             // 快照取得タイムアウト
+constexpr size_t kSnapMaxBytes = 300 * 1024;         // 快照 JPEG 上限 (超過は失敗扱い)
 
 // 予約メッセージ型 (将来 OTA 用 — 実装はまだ無い)
 [[maybe_unused]] constexpr const char* kMsgVersionAnnounce = "VERSION_ANNOUNCE";
@@ -201,6 +203,15 @@ struct Mesh::Impl {
   };
   std::shared_ptr<JoinRun> join;
 
+  // ---- 快照 ----
+  std::function<Bytes()> snap_provider;  // 自ノードの最新 JPEG (Node が配線)
+  struct SnapWait {
+    std::function<void(Bytes)> cb;
+    uint64_t timeout_id = 0;
+  };
+  std::map<uint64_t, SnapWait> snap_waits;  // rid → 応答待ち
+  uint64_t snap_rid = 0;
+
   std::vector<uint64_t> timers;
   uint64_t sync_rr = 0;  // anti-entropy の相手選択 (決定的 round-robin)
   // 生存トークン: post 済みラムダ/接続コールバックが Impl 破棄後に this へ触れないための弱参照
@@ -282,6 +293,12 @@ struct Mesh::Impl {
       ib->conn->close();
     }
     inbound.clear();
+    // 快照待ちは失敗で解決してから捨てる (呼び出し側を待たせ続けない)
+    for (auto& kv : snap_waits) {
+      loop.cancel(kv.second.timeout_id);
+      if (kv.second.cb) kv.second.cb(Bytes());
+    }
+    snap_waits.clear();
     if (join) abortJoin("stopped");
     tp.stopListening();
     if (disc) disc->stop();
@@ -900,6 +917,62 @@ struct Mesh::Impl {
     for (auto& kv : chans) kv.second->sendMessage(msg);
   }
 
+  // ------------------------------------------------------------------ 快照
+
+  void fetchSnapshot(const std::string& node_id, std::function<void(Bytes)> cb) {
+    if (node_id == st.node_id) {  // 自分の快照は provider を直接
+      Bytes jpeg = snap_provider ? snap_provider() : Bytes();
+      if (jpeg.size() > kSnapMaxBytes) jpeg.clear();
+      loop.post([cb, jpeg] { cb(jpeg); });
+      return;
+    }
+    auto it = chans.find(node_id);
+    if (it == chans.end()) {  // 直連チャネル無し (MVP: 中継しない) → 即失敗
+      DB_LOGW("mesh", "fetchSnapshot: no direct channel to " + node_id.substr(0, 8));
+      loop.post([cb] { cb(Bytes()); });
+      return;
+    }
+    const uint64_t rid = ++snap_rid;
+    SnapWait& w = snap_waits[rid];
+    w.cb = std::move(cb);
+    std::weak_ptr<char> wa = alive;
+    w.timeout_id = loop.postDelayed(kSnapTimeoutMs, [this, wa, rid] {
+      if (wa.expired()) return;
+      auto sit = snap_waits.find(rid);
+      if (sit == snap_waits.end()) return;
+      auto done = std::move(sit->second.cb);
+      snap_waits.erase(sit);
+      if (done) done(Bytes());
+    });
+    auto o = json::obj();
+    json::set(o.get(), "t", "SNAP_REQ");
+    json::set(o.get(), "rid", static_cast<int64_t>(rid));
+    it->second->sendMessage(json::dump(o.get()));
+  }
+
+  void handleSnapReq(SecureChannel& ch, const cJSON* doc) {
+    const int64_t rid = json::getInt(doc, "rid");
+    Bytes jpeg = snap_provider ? snap_provider() : Bytes();
+    if (jpeg.size() > kSnapMaxBytes) jpeg.clear();  // 上限超は失敗扱い (空応答)
+    auto o = json::obj();
+    json::set(o.get(), "t", "SNAP_RESP");
+    json::set(o.get(), "rid", rid);
+    json::set(o.get(), "jpeg", base64Encode(jpeg));  // 空 = 提供不可
+    ch.sendMessage(json::dump(o.get()));
+  }
+
+  void handleSnapResp(const cJSON* doc) {
+    const uint64_t rid = static_cast<uint64_t>(json::getInt(doc, "rid"));
+    auto it = snap_waits.find(rid);
+    if (it == snap_waits.end()) return;  // タイムアウト済み/未知
+    loop.cancel(it->second.timeout_id);
+    auto done = std::move(it->second.cb);
+    snap_waits.erase(it);
+    Bytes jpeg;
+    base64Decode(json::getString(doc, "jpeg"), jpeg);
+    if (done) done(std::move(jpeg));
+  }
+
   // ------------------------------------------------------------------ メッセージ分配
 
   void handleMessage(const std::shared_ptr<SecureChannel>& ch, const std::string& msg) {
@@ -931,6 +1004,10 @@ struct Mesh::Impl {
       handleClaim(doc.get());
     } else if (t == "EVENT") {
       handleEvent(*ch, doc.get());
+    } else if (t == "SNAP_REQ") {
+      handleSnapReq(*ch, doc.get());
+    } else if (t == "SNAP_RESP") {
+      handleSnapResp(doc.get());
     } else if (t == "CMD") {
       if (cbs.on_command) {
         cbs.on_command(json::getString(doc.get(), "from"), json::getString(doc.get(), "cmd"));
@@ -1208,6 +1285,14 @@ void Mesh::sendCommand(const std::string& node_id, const std::string& cmd_json) 
 }
 
 void Mesh::broadcastCommand(const std::string& cmd_json) { impl_->broadcastCommand(cmd_json); }
+
+void Mesh::setSnapshotProvider(std::function<Bytes()> provider) {
+  impl_->snap_provider = std::move(provider);
+}
+
+void Mesh::fetchSnapshot(const std::string& node_id, std::function<void(Bytes)> cb) {
+  impl_->fetchSnapshot(node_id, std::move(cb));
+}
 
 Mesh::JoinToken Mesh::createJoinToken() {
   impl_->token.pin = genPin6();

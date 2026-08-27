@@ -50,6 +50,73 @@ bool hexDecode(const std::string& hex, Bytes& out) {
   return true;
 }
 
+static const char* kB64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+std::string base64Encode(const uint8_t* data, size_t len) {
+  std::string out;
+  out.reserve(((len + 2) / 3) * 4);
+  size_t i = 0;
+  for (; i + 3 <= len; i += 3) {
+    uint32_t v = (data[i] << 16) | (data[i + 1] << 8) | data[i + 2];
+    out.push_back(kB64[(v >> 18) & 0x3f]);
+    out.push_back(kB64[(v >> 12) & 0x3f]);
+    out.push_back(kB64[(v >> 6) & 0x3f]);
+    out.push_back(kB64[v & 0x3f]);
+  }
+  const size_t rest = len - i;
+  if (rest == 1) {
+    uint32_t v = data[i] << 16;
+    out.push_back(kB64[(v >> 18) & 0x3f]);
+    out.push_back(kB64[(v >> 12) & 0x3f]);
+    out.push_back('=');
+    out.push_back('=');
+  } else if (rest == 2) {
+    uint32_t v = (data[i] << 16) | (data[i + 1] << 8);
+    out.push_back(kB64[(v >> 18) & 0x3f]);
+    out.push_back(kB64[(v >> 12) & 0x3f]);
+    out.push_back(kB64[(v >> 6) & 0x3f]);
+    out.push_back('=');
+  }
+  return out;
+}
+
+static int b64Val(char c) {
+  if (c >= 'A' && c <= 'Z') return c - 'A';
+  if (c >= 'a' && c <= 'z') return c - 'a' + 26;
+  if (c >= '0' && c <= '9') return c - '0' + 52;
+  if (c == '+') return 62;
+  if (c == '/') return 63;
+  return -1;
+}
+
+bool base64Decode(const std::string& b64, Bytes& out) {
+  if (b64.size() % 4 != 0) return false;
+  Bytes tmp;
+  tmp.reserve(b64.size() / 4 * 3);
+  for (size_t i = 0; i < b64.size(); i += 4) {
+    int pad = 0;
+    uint32_t v = 0;
+    for (int k = 0; k < 4; k++) {
+      const char c = b64[i + k];
+      if (c == '=') {  // '=' は末尾ブロックの後ろ 2 文字のみ許可
+        if (i + 4 != b64.size() || k < 2) return false;
+        pad++;
+        v <<= 6;
+        continue;
+      }
+      if (pad > 0) return false;  // '=' の後に通常文字は不可
+      const int d = b64Val(c);
+      if (d < 0) return false;
+      v = (v << 6) | static_cast<uint32_t>(d);
+    }
+    tmp.push_back(static_cast<uint8_t>((v >> 16) & 0xff));
+    if (pad < 2) tmp.push_back(static_cast<uint8_t>((v >> 8) & 0xff));
+    if (pad < 1) tmp.push_back(static_cast<uint8_t>(v & 0xff));
+  }
+  out = std::move(tmp);
+  return true;
+}
+
 Bytes randomBytes(size_t n) {
   Bytes out(n);
   if (n == 0) return out;

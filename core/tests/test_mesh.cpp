@@ -381,6 +381,57 @@ TEST_CASE("mesh: sendCommand / broadcastCommand → on_command") {
   CHECK(f.at(kIdA).commands[0].first == kIdC);
 }
 
+TEST_CASE("mesh: fetchSnapshot — 他ノードの JPEG 取得 / provider 無しは空 / 5s タイムアウト") {
+  Fleet f;
+  f.add(kIdA, "A", capsJson(10));
+  f.add(kIdB, "B", capsJson(9));
+  const std::vector<std::string> ids = {kIdA, kIdB};
+  REQUIRE(f.runUntil([&] { return f.mutualAlive(ids); }, 3000));
+
+  // B に快照供給者を登録 (FrameBus の代わりに固定バイト列)
+  const Bytes jpeg = {0xff, 0xd8, 0xff, 0xe0, 0x01, 0x02, 0x03, 0xff, 0xd9};
+  f.at(kIdB).mesh->setSnapshotProvider([&jpeg] { return jpeg; });
+
+  // A → B: SNAP_REQ/SNAP_RESP (base64 往復) で同一バイト列が返る
+  int called = 0;
+  Bytes got;
+  f.at(kIdA).mesh->fetchSnapshot(kIdB, [&](Bytes b) {
+    called++;
+    got = std::move(b);
+  });
+  REQUIRE(f.runUntil([&] { return called == 1; }, 2000));
+  CHECK(got == jpeg);
+
+  // 自分宛は provider 直呼び (B 自身)
+  called = 0;
+  f.at(kIdB).mesh->fetchSnapshot(kIdB, [&](Bytes b) {
+    called++;
+    got = std::move(b);
+  });
+  REQUIRE(f.runUntil([&] { return called == 1; }, 500));
+  CHECK(got == jpeg);
+
+  // provider 未登録の A へ要求 → 空 (失敗) が即応答で返る
+  called = 0;
+  f.at(kIdB).mesh->fetchSnapshot(kIdA, [&](Bytes b) {
+    called++;
+    got = std::move(b);
+  });
+  REQUIRE(f.runUntil([&] { return called == 1; }, 2000));
+  CHECK(got.empty());
+
+  // B が黙って死んだ場合は 5s タイムアウトで空が返る (先に接続だけ残った瞬間を狙うのは
+  // 難しいので、チャネル断→即失敗 or タイムアウトのどちらでも「空で必ず解決」を確認)
+  called = 0;
+  f.net.killNode("B");
+  f.at(kIdA).mesh->fetchSnapshot(kIdB, [&](Bytes b) {
+    called++;
+    got = std::move(b);
+  });
+  REQUIRE(f.runUntil([&] { return called == 1; }, 6000));
+  CHECK(got.empty());
+}
+
 // ---------------------------------------------------------------- 分断と治癒
 
 TEST_CASE("mesh: partition → 分区毎に独立 leader、heal → 収束・イベント不重不漏") {

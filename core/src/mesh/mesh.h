@@ -7,7 +7,8 @@
 //  - 選主: 無投票の確定的順序 (cap_rank 降順 → node_id) + CLAIM lease
 //  - 同期: SYNC_REQ/RESP で LwwMap (vv) と EventLog (heads) の push-pull anti-entropy
 //  - 配対: JOIN_REQ (PIN の HMAC チャレンジ) → PSK/seeds/設定スナップショット配布
-// メッセージ種別 (1B): 設計 §1.4 準拠 + EVENT(即時push)/COMMAND/BLOB系(将来OTA用予約)
+// メッセージ種別 (1B): 設計 §1.4 準拠 + EVENT(即時push)/COMMAND/SNAP(快照取得)/
+//   BLOB系(将来OTA用予約)
 // スレッド: 全 API・全コールバックは Runloop 上。
 #pragma once
 
@@ -102,6 +103,14 @@ class Mesh {
   void pushConfigDelta(const std::vector<LwwEntry>& entries);
   void sendCommand(const std::string& node_id, const std::string& cmd_json);
   void broadcastCommand(const std::string& cmd_json);
+
+  // --- 快照 (Telegram 通知の写真用) ---
+  // 自ノードの最新 JPEG 供給者を登録 (Node が FrameBus::latestJpeg を配線)。
+  // 空 Bytes = 提供不可 (カメラ無し等)。SNAP_REQ への応答に使う。
+  void setSnapshotProvider(std::function<Bytes()> provider);
+  // node_id の最新 JPEG を取得 (SNAP_REQ/SNAP_RESP, base64, 上限 300KB, 5 秒タイムアウト)。
+  // 自分宛は provider を直接呼ぶ。直連チャネルが無い/失敗/超過は空 Bytes。
+  void fetchSnapshot(const std::string& node_id, std::function<void(Bytes jpeg)> cb);
 
   // --- 配対 (設計 §1.6) ---
   struct JoinToken {

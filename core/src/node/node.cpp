@@ -6,6 +6,7 @@
 #include <set>
 
 #include "bridge/ha_bridge.h"
+#include "bridge/telegram.h"
 #include "httpd/webui_assets.h"
 #include "media/frame_bus.h"
 #include "mesh/tcp_transport.h"
@@ -68,6 +69,7 @@ struct Node::Impl {
   std::unique_ptr<Httpd> httpd;
   std::unique_ptr<SipCtl> sipctl;
   std::unique_ptr<HaBridge> bridge;  // HA MQTT ブリッジ (leader 時のみ接続)
+  std::unique_ptr<TelegramBridge> tg;  // Telegram ブリッジ (leader 時のみ送信)
   FrameBus frame_bus;  // 帧総線 (任意スレッドから push / 需要駆動 JPEG)
 #ifdef _WIN32
   std::unique_ptr<CameraWin> camera;  // door_station のみ起動
@@ -90,10 +92,17 @@ struct Node::Impl {
   uint64_t sip_reapply_timer = 0;  // 設定変更のデバウンス (連続する sip.* 差分で再起動を繰り返さない)
   uint64_t bridge_reapply_timer = 0;  // 同・HA ブリッジ用 (config 差分は複数キーで届く)
 
+  // Telegram leader の就任遷移検出 (就任時に未通知 press を拾い直す)
+  bool tg_was_active = false;
+
   // コールバック (任意スレッドから差し替え可)
   std::mutex cb_mu;
   UiEventCb ui_cb;
   TtsCb tts_cb;
+  HttpsFn https_fn;
+
+  // 生存トークン: HttpsFn done (任意スレッド) が Impl 破棄後の loop へ触れないための弱参照
+  std::shared_ptr<char> alive = std::make_shared<char>(0);
 
   // 管理セッション (civetweb スレッドの auth gate とも共有)
   std::mutex sess_mu;
@@ -225,11 +234,65 @@ struct Node::Impl {
   }
 
   void scheduleBridgeReapply() {
-    if (!bridge) return;
+    if (!bridge && !tg) return;
     if (bridge_reapply_timer) loop->cancel(bridge_reapply_timer);
     bridge_reapply_timer = loop->postDelayed(300, [this] {
       bridge_reapply_timer = 0;
       reevalBridge();
+      reevalTelegram();
+    });
+  }
+
+  // ---------- Telegram ブリッジ ----------
+  // 有効条件 = config integrations.telegram.bot_token 非空 かつ 自分が telegram leader。
+  // MVP は平文 bot_token — TODO(Phase2 後半): bot_token_ref (secure store) 対応。
+  void reevalTelegram() {
+    if (!tg) return;
+    const std::string token =
+        json::getString(cfgAt("integrations.telegram"), "bot_token");
+    const bool active = !token.empty() && mesh && mesh->isLeader("telegram");
+    tg->configure(json::dump(cfg.get()), node_id, active);
+    // 就任遷移で未通知 press を拾い直す (設計 §1.5「宁重勿漏」: 前 leader が claim だけ
+    // 残して死んだ press をここで回収する。notified_at 済みは bridge 側で弾かれる)
+    if (active && !tg_was_active) rescanPendingTelegram();
+    tg_was_active = active;
+  }
+
+  void rescanPendingTelegram() {
+    const int64_t cutoff = hlc->correctedWallMs() - 15 * 60 * 1000;  // 直近 15 分のみ
+    for (const auto& ev : store.recentEvents(50)) {
+      if (ev.type != "press" || ev.wall_ms < cutoff) continue;
+      auto n = json::parse(ev.notify_json.empty() ? "{}" : ev.notify_json);
+      if (n && !json::getString(n.get(), "notified_at").empty()) continue;  // 通知済み
+      if (n && json::get(n.get(), "replied")) continue;                     // 応対済み
+      for (const auto& a : rules.evaluate(ev, hlc->correctedWallMs(), tzOffsetMin())) {
+        if (a.type == "telegram") tg->onAction(ev, a.params_json);
+      }
+    }
+  }
+
+  // ---------- HTTPS (Telegram ブリッジ用) ----------
+  // HttpsFn (done は任意スレッド) を Runloop 上の done に変換する。未注入なら即失敗。
+  void httpsCall(const std::string& method, const std::string& url, const std::string& headers,
+                 const Bytes& body, std::function<void(int, std::string)> done) {
+    HttpsFn fn;
+    {
+      std::lock_guard<std::mutex> lk(cb_mu);
+      fn = https_fn;
+    }
+    if (!fn) {
+      loop->post([done] { done(-1, ""); });
+      return;
+    }
+    std::weak_ptr<char> w = alive;
+    Runloop* lp = loop;
+    fn(method, url, headers, body, [w, lp, done](int status, std::string resp) {
+      // 任意スレッド → Runloop へ。Node 破棄後の応答は捨てる
+      // (capi は destroy 前に在飛の SPI 呼び出しの完了を待つ — doorbell_capi.cpp)。
+      if (w.expired()) return;
+      lp->post([w, done, status, resp] {
+        if (!w.expired()) done(status, resp);
+      });
     });
   }
 
@@ -412,8 +475,9 @@ struct Node::Impl {
     Mesh::Callbacks cbs;
     cbs.on_peers_changed = [this] { uiNotify("{\"t\":\"peers_changed\"}"); };
     cbs.on_leader_changed = [this](const std::string& duty, const std::string& leader) {
-      // mqtt_bridge の leader 交代は即座に反映 (自分が就任 → 接続 / 退任 → 切断)
+      // leader 交代は即座に反映 (自分が就任 → 開始 / 退任 → 停止)
       if (duty == "mqtt_bridge") reevalBridge();
+      if (duty == "telegram") reevalTelegram();
       auto o = json::obj();
       json::set(o.get(), "t", "leader");
       json::set(o.get(), "duty", duty);
@@ -428,6 +492,8 @@ struct Node::Impl {
     };
     mesh.reset(new Mesh(*loop, *clock, *hlc, *transport, discovery.get(), store, *config,
                         *events, ms, cbs));
+    // 他ノードからの快照要求 (SNAP_REQ — Telegram 写真用) には最新 JPEG で応える
+    mesh->setSnapshotProvider([this] { return frame_bus.latestJpeg(); });
 
     rebuildCfg();
 
@@ -445,9 +511,38 @@ struct Node::Impl {
       bridge.reset(new HaBridge(*loop, std::move(hooks)));
     }
 
+    // Telegram ブリッジ (送信するのは telegram leader だけ — reevalTelegram が判断)
+    {
+      TelegramBridge::Hooks th;
+      th.https = [this](const std::string& m, const std::string& u, const std::string& h,
+                        Bytes body, std::function<void(int, std::string)> done) {
+        httpsCall(m, u, h, body, std::move(done));
+      };
+      th.on_reply = [this](const std::string& rid, const std::string& text,
+                           const std::string& door) { quickReply(rid, text, door, "telegram"); };
+      th.get_event = [this](const std::string& o, uint64_t s) { return store.eventGet(o, s); };
+      th.merge_notify = [this](const std::string& o, uint64_t s, const std::string& nj) {
+        if (!events->mergeNotify(o, s, nj)) return;
+        // 回執は SYNC 差分に乗らない (既知イベントは deltaSince が送らない) —
+        // EVENT 再広播で全ノードへ複製する (受信側は mergeNotify で取り込む)
+        auto ev = store.eventGet(o, s);
+        if (ev && mesh) mesh->broadcastEvent(*ev);
+      };
+      th.hlc_tick = [this] { return hlc->tick(); };
+      th.fetch_snapshot = [this](const std::string& nid, std::function<void(Bytes)> cb) {
+        if (mesh) {
+          mesh->fetchSnapshot(nid, std::move(cb));
+        } else {
+          loop->post([cb] { cb(Bytes()); });
+        }
+      };
+      tg.reset(new TelegramBridge(*loop, store, std::move(th)));
+    }
+
     seedConfig();
     mesh->start();
     reevalBridge();  // 単機構成で既に leader の場合に備えて一度評価
+    reevalTelegram();
 
     // SIP (sipctl)。server 未設定なら start は no-op — 設定が届いたら再適用される。
     {
@@ -573,16 +668,18 @@ struct Node::Impl {
             uiNotify(json::dump(o.get()));
           }
         }
-      } else if (a.type == "telegram" || a.type == "ha_event") {
-        // leader だけが外部へ送る (telegram は Phase 2 第二弾で bridge へ配線。
-        // ha_event: MQTT への発行はルールと独立に下の bridge->onEvent で行う)
-        std::string duty = a.type == "telegram" ? "telegram" : "mqtt_bridge";
-        if (mesh && mesh->isLeader(duty))
-          DB_LOGI(kTag, a.type + " dispatch: " + ev.type + " " + ev.door);
+      } else if (a.type == "telegram") {
+        // leader だけが外部へ送る (claim による重複防止は bridge 側 — telegram.cpp §1.5)
+        if (tg && mesh && mesh->isLeader("telegram")) tg->onAction(ev, a.params_json);
+      } else if (a.type == "ha_event") {
+        // MQTT への発行はルールと独立に下の bridge->onEvent で行う (leader gate も同様)
       }
     }
     // HA MQTT ブリッジへ (リーダー時のみ — press/motion/offline/online/dtmf_action を発行)
     if (bridge && mesh && mesh->isLeader("mqtt_bridge")) bridge->onEvent(ev);
+    // Telegram ブリッジへ (press の追跡は非 leader でも必要。reply の「✅」通知と
+    // 送信可否は bridge 内の active 判定に任せる)
+    if (tg) tg->onEvent(ev);
   }
 
   // 生死変化 → offline/online イベント。重複防止: alive 集合の中で node_id 最大の者だけが記録
@@ -701,6 +798,8 @@ struct Node::Impl {
     }
     cJSON* br = json::addObj(o.get(), "bridge");
     json::set(br, "mqtt", bridge ? bridge->mqttStatus() : "inactive");
+    // telegram には常接続の概念が無い (毎回 HTTPS) — active | inactive の 2 値
+    json::set(br, "telegram", tg ? tg->status() : "inactive");
     cJSON* arr = json::addArr(o.get(), "peers");
     if (mesh) {
       for (const auto& p : mesh->peers()) {
@@ -914,6 +1013,7 @@ void Node::stop() {
       impl_->loop->cancel(impl_->bridge_reapply_timer);
       impl_->bridge_reapply_timer = 0;
     }
+    if (impl_->tg) impl_->tg->stop();          // 輪詢/キュー駆動を止める (キューは永続)
     if (impl_->bridge) impl_->bridge->stop();  // availability=offline (retain) → DISCONNECT
     if (impl_->sipctl) impl_->sipctl->stop();  // 通話切断 → 登録解除 → pjsua_destroy
   });
@@ -934,6 +1034,11 @@ void Node::setUiEventCb(UiEventCb cb) {
 void Node::setTtsCb(TtsCb cb) {
   std::lock_guard<std::mutex> lk(impl_->cb_mu);
   impl_->tts_cb = std::move(cb);
+}
+
+void Node::setHttpsFn(HttpsFn fn) {
+  std::lock_guard<std::mutex> lk(impl_->cb_mu);
+  impl_->https_fn = std::move(fn);
 }
 
 void Node::press(const std::string& door_id) {

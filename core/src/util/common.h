@@ -18,6 +18,12 @@ inline std::string hexEncode(const Bytes& b) { return hexEncode(b.data(), b.size
 // 不正な16進は false。out は成功時のみ書き換わる。
 bool hexDecode(const std::string& hex, Bytes& out);
 
+// 標準 base64 (RFC 4648, パディングあり)。mesh の快照転送 (SNAP_RESP) 等のバイナリ→JSON 用。
+std::string base64Encode(const uint8_t* data, size_t len);
+inline std::string base64Encode(const Bytes& b) { return base64Encode(b.data(), b.size()); }
+// 不正な文字/長さは false。out は成功時のみ書き換わる。
+bool base64Decode(const std::string& b64, Bytes& out);
+
 // 暗号用途可の乱数 (POSIX: /dev/urandom, Windows: BCryptGenRandom)
 Bytes randomBytes(size_t n);
 

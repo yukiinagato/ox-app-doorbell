@@ -1,9 +1,13 @@
 // C ABI 実装 (include/doorbell/doorbell.h)。平台殻はここだけを呼ぶ。
 #include "doorbell/doorbell.h"
 
+#include <condition_variable>
 #include <cstdlib>
 #include <cstring>
+#include <memory>
+#include <mutex>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "node/node.h"
@@ -13,11 +17,36 @@
 
 using namespace db;
 
+// SPI https_request (同期) の在飛計数。destroy 時に完了を待つ
+// (detach したスレッドが破棄済みの Node/loop へ done を返さないため)。
+struct HttpsInflight {
+  std::mutex mu;
+  std::condition_variable cv;
+  int count = 0;
+
+  void add() {
+    std::lock_guard<std::mutex> lk(mu);
+    count++;
+  }
+  void done() {
+    {
+      std::lock_guard<std::mutex> lk(mu);
+      count--;
+    }
+    cv.notify_all();
+  }
+  void waitIdle() {
+    std::unique_lock<std::mutex> lk(mu);
+    cv.wait(lk, [this] { return count == 0; });
+  }
+};
+
 struct db_core {
   std::unique_ptr<Node> node;
   db_platform plat{};
   db_ui_event_cb ui_cb = nullptr;
   void* ui_user = nullptr;
+  std::shared_ptr<HttpsInflight> https_inflight = std::make_shared<HttpsInflight>();
 };
 
 static char* dupString(const std::string& s) {
@@ -70,6 +99,29 @@ DB_API db_core* db_core_create(const db_platform* platform, const char* data_dir
     });
   }
   c->node.reset(new Node(std::move(opts)));
+  if (c->plat.https_request) {
+    // 同期 SPI を専用スレッドで呼んで非同期 HttpsFn に変換する (Telegram ブリッジ用)。
+    // done は任意スレッド可の契約 (Node 側で Runloop へ marshal される)。
+    void* user = c->plat.user;
+    auto fn = c->plat.https_request;
+    auto inflight = c->https_inflight;
+    c->node->setHttpsFn([user, fn, inflight](
+                            const std::string& method, const std::string& url,
+                            const std::string& headers_json, const Bytes& body,
+                            std::function<void(int, std::string)> done) {
+      inflight->add();
+      std::thread([user, fn, inflight, method, url, headers_json, body, done] {
+        char* resp = nullptr;
+        int status = 0;
+        int rc = fn(user, method.c_str(), url.c_str(), headers_json.c_str(),
+                    body.empty() ? nullptr : body.data(), body.size(), &resp, &status);
+        std::string resp_body = resp ? resp : "";
+        if (resp) std::free(resp);  // 契約: resp_body_out は core が db_free (=free) する
+        done(rc == 0 ? status : -1, std::move(resp_body));
+        inflight->done();
+      }).detach();
+    });
+  }
   if (c->plat.tts_speak) {
     void* user = c->plat.user;
     auto fn = c->plat.tts_speak;
@@ -92,6 +144,9 @@ DB_API void db_core_stop(db_core* c) {
 DB_API void db_core_destroy(db_core* c) {
   if (!c) return;
   setLogSink(nullptr);
+  // 在飛の https_request (getUpdates 長輪詢を含む — 最大 ~30 秒) の完了を待ってから
+  // Node を破棄する。done は Node 内の弱参照で捨てられるが loop 自体の生存が要る。
+  c->https_inflight->waitIdle();
   delete c;
 }
 

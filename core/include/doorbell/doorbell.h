@@ -27,7 +27,12 @@ typedef struct db_core db_core;
 /* プラットフォーム提供機能 (SPI)。不要なものは NULL 可 (機能が無効になる)。 */
 typedef struct db_platform {
   void* user;
-  /* HTTPS (Telegram 等)。resp_body_out は core が db_free する。戻り 0=成功 */
+  /* HTTPS (Telegram 等)。同期呼び — core が専用スレッドから呼ぶのでブロックしてよい
+   * (Telegram getUpdates 長輪詢では最大 ~30 秒ブロックする)。
+   * headers_json: {"Content-Type":"..."} 形式。body は body_len バイト (0 可, バイナリ可)。
+   * resp_body_out: malloc した応答本文 (core が db_free する)。*http_status_out: HTTP 状態。
+   * 戻り 0=成功 (HTTP 4xx/5xx でも応答が取れれば 0)、負=トランスポート失敗。
+   * 注意: 在飛の呼び出しがある間 db_core_destroy はその完了を待つ。 */
   int (*https_request)(void* user, const char* method, const char* url,
                        const char* headers_json, const uint8_t* body, size_t body_len,
                        char** resp_body_out, int* http_status_out);

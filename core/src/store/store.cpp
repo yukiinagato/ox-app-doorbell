@@ -37,12 +37,23 @@ class Stmt {
     sqlite3_bind_text(st_, i, v.c_str(), -1, SQLITE_TRANSIENT);
   }
   void bind(int i, int64_t v) { sqlite3_bind_int64(st_, i, v); }
+  void bindBlob(int i, const Bytes& v) {
+    sqlite3_bind_blob(st_, i, v.empty() ? "" : reinterpret_cast<const char*>(v.data()),
+                      static_cast<int>(v.size()), SQLITE_TRANSIENT);
+  }
   int step() { return st_ ? sqlite3_step(st_) : SQLITE_ERROR; }
   std::string colText(int i) {
     const unsigned char* t = sqlite3_column_text(st_, i);
     return t ? reinterpret_cast<const char*>(t) : "";
   }
   int64_t colInt(int i) { return sqlite3_column_int64(st_, i); }
+  Bytes colBlob(int i) {
+    const void* p = sqlite3_column_blob(st_, i);
+    const int n = sqlite3_column_bytes(st_, i);
+    if (!p || n <= 0) return {};
+    const uint8_t* b = static_cast<const uint8_t*>(p);
+    return Bytes(b, b + n);
+  }
 
  private:
   sqlite3* db_ = nullptr;
@@ -121,7 +132,10 @@ bool Store::migrate() {
       "CREATE TABLE IF NOT EXISTS events("
       "  origin TEXT, seq INT, type TEXT, door TEXT, device TEXT, hlc TEXT, wall_ms INT,"
       "  payload_json TEXT, notify_json TEXT, PRIMARY KEY(origin, seq));"
-      "CREATE INDEX IF NOT EXISTS idx_events_hlc ON events(hlc);";
+      "CREATE INDEX IF NOT EXISTS idx_events_hlc ON events(hlc);"
+      "CREATE TABLE IF NOT EXISTS tg_queue("
+      "  id INTEGER PRIMARY KEY AUTOINCREMENT, kind TEXT, chat_id TEXT, payload TEXT,"
+      "  snapshot BLOB, attempts INT, next_retry_ms INT, created_ms INT);";
   if (!exec(ddl)) return false;
   // schema_version は meta に記録 (将来の段階的マイグレーションの起点)
   if (!metaGet("schema_version")) metaSet("schema_version", std::to_string(kSchemaVersion));
@@ -298,6 +312,84 @@ size_t Store::pruneEvents(size_t max_events, int64_t cutoff_wall_ms) {
     }
   }
   return deleted;
+}
+
+// --- tg_queue ---
+
+namespace {
+// tg_queue 行 (id,kind,chat_id,payload,snapshot,attempts,next_retry_ms,created_ms) を復元
+Store::TgQueueItem rowToTgItem(Stmt& st) {
+  Store::TgQueueItem it;
+  it.id = st.colInt(0);
+  it.kind = st.colText(1);
+  it.chat_id = st.colText(2);
+  it.payload = st.colText(3);
+  it.snapshot = st.colBlob(4);
+  it.attempts = static_cast<int>(st.colInt(5));
+  it.next_retry_ms = st.colInt(6);
+  it.created_ms = st.colInt(7);
+  return it;
+}
+constexpr const char* kTgCols = "id,kind,chat_id,payload,snapshot,attempts,next_retry_ms,created_ms";
+}  // namespace
+
+int64_t Store::tgQueuePut(const TgQueueItem& item) {
+  if (!db_) return 0;
+  Stmt st(db_,
+          "INSERT INTO tg_queue(kind,chat_id,payload,snapshot,attempts,next_retry_ms,created_ms)"
+          " VALUES(?1,?2,?3,?4,?5,?6,?7)");
+  if (!st.ok()) return 0;
+  st.bind(1, item.kind);
+  st.bind(2, item.chat_id);
+  st.bind(3, item.payload);
+  st.bindBlob(4, item.snapshot);
+  st.bind(5, static_cast<int64_t>(item.attempts));
+  st.bind(6, item.next_retry_ms);
+  st.bind(7, item.created_ms);
+  if (st.step() != SQLITE_DONE) return 0;
+  return sqlite3_last_insert_rowid(db_);
+}
+
+std::vector<Store::TgQueueItem> Store::tgQueueDue(int64_t now_ms, size_t limit) {
+  std::vector<TgQueueItem> out;
+  Stmt st(db_, ("SELECT " + std::string(kTgCols) +
+                " FROM tg_queue WHERE next_retry_ms<=?1 ORDER BY id ASC LIMIT ?2").c_str());
+  if (!st.ok()) return out;
+  st.bind(1, now_ms);
+  st.bind(2, static_cast<int64_t>(limit));
+  while (st.step() == SQLITE_ROW) out.push_back(rowToTgItem(st));
+  return out;
+}
+
+void Store::tgQueueRetry(int64_t id, int attempts, int64_t next_retry_ms) {
+  Stmt st(db_, "UPDATE tg_queue SET attempts=?2, next_retry_ms=?3 WHERE id=?1");
+  if (!st.ok()) return;
+  st.bind(1, id);
+  st.bind(2, static_cast<int64_t>(attempts));
+  st.bind(3, next_retry_ms);
+  st.step();
+}
+
+void Store::tgQueueDelete(int64_t id) {
+  Stmt st(db_, "DELETE FROM tg_queue WHERE id=?1");
+  if (!st.ok()) return;
+  st.bind(1, id);
+  st.step();
+}
+
+size_t Store::tgQueuePrune(int64_t cutoff_created_ms) {
+  if (!db_) return 0;
+  Stmt st(db_, "DELETE FROM tg_queue WHERE created_ms<?1");
+  if (!st.ok()) return 0;
+  st.bind(1, cutoff_created_ms);
+  if (st.step() != SQLITE_DONE) return 0;
+  return static_cast<size_t>(sqlite3_changes(db_));
+}
+
+size_t Store::tgQueueCount() {
+  Stmt st(db_, "SELECT COUNT(*) FROM tg_queue");
+  if (!st.ok() || st.step() != SQLITE_ROW) return 0;
+  return static_cast<size_t>(st.colInt(0));
 }
 
 }  // namespace db

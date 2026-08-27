@@ -58,6 +58,13 @@ class Node {
   // ui_event: doorbell.h の db_ui_event_cb 相当 (JSON)。tts: SPI tts_speak 相当 (null 可)。
   using UiEventCb = std::function<void(const std::string& event_json)>;
   using TtsCb = std::function<void(const std::string& text, const std::string& lang)>;
+  // HTTPS 送信 (Telegram 等 — コアは TLS を持たない)。非同期: 実装は即座に返り、
+  // 完了時に done を任意スレッドから呼んでよい (内部で Runloop へ marshal される)。
+  // status < 0 = トランスポート失敗。実装元: capi db_platform.https_request /
+  // host ランナーの curl / テストのモック。
+  using HttpsFn = std::function<void(
+      const std::string& method, const std::string& url, const std::string& headers_json,
+      const Bytes& body, std::function<void(int status, std::string resp_body)> done)>;
 
   Node(NodeOptions opts, NodeDeps deps = {});
   ~Node();
@@ -67,6 +74,8 @@ class Node {
 
   void setUiEventCb(UiEventCb cb);
   void setTtsCb(TtsCb cb);
+  // HTTPS 実装の注入 (Telegram ブリッジが使う)。start 前後どちらでも可・任意スレッド可。
+  void setHttpsFn(HttpsFn fn);
 
   // ボタン押下 (門口機 UI / /api/press / panel から)
   void press(const std::string& door_id);

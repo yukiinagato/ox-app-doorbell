@@ -2,18 +2,98 @@
 // macOS/Linux 上で Node を起動して mesh/管理画面/API を触るためのツール。
 //   ./doorbell_host --data /tmp/n1 --name front --role door_station --door d_front \
 //                   --listen 127.0.0.1:47172 --http 47180 --psk <64hex> [--seed host:port]
+#include <unistd.h>
+
 #include <csignal>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "node/node.h"
 #include "util/common.h"
+#include "util/json.h"
 #include "util/log.h"
 
 static volatile std::sig_atomic_t g_stop = 0;
 static void onSig(int) { g_stop = 1; }
+
+// シェル単引用 ('...' 内の ' は '\'' に割る)
+static std::string shq(const std::string& s) {
+  std::string out = "'";
+  for (char c : s) {
+    if (c == '\'') out += "'\\''";
+    else out.push_back(c);
+  }
+  out += "'";
+  return out;
+}
+
+// HTTPS: curl コマンド実装 (開発ランナー用 — Mac 上で本物の Telegram への手動テストが
+// できる)。実機殻では db_platform.https_request (WinHTTP/OkHttp/URLSession) が同役。
+// done は任意スレッド可の契約なので専用スレッドで呼ぶ。
+static void curlHttps(const std::string& method, const std::string& url,
+                      const std::string& headers_json, const db::Bytes& body,
+                      std::function<void(int, std::string)> done) {
+  std::thread([method, url, headers_json, body, done] {
+    char body_path[] = "/tmp/db-https-body-XXXXXX";
+    char resp_path[] = "/tmp/db-https-resp-XXXXXX";
+    int bfd = ::mkstemp(body_path);
+    int rfd = ::mkstemp(resp_path);
+    if (bfd < 0 || rfd < 0) {
+      if (bfd >= 0) ::close(bfd);
+      if (rfd >= 0) ::close(rfd);
+      done(-1, "");
+      return;
+    }
+    ::close(rfd);
+    if (!body.empty() &&
+        ::write(bfd, body.data(), body.size()) != static_cast<ssize_t>(body.size())) {
+      ::close(bfd);
+      ::unlink(body_path);
+      ::unlink(resp_path);
+      done(-1, "");
+      return;
+    }
+    ::close(bfd);
+
+    // 応答本文はファイルへ、stdout には HTTP 状態コードだけを書かせる
+    std::string cmd = "curl -sS --max-time 40 -o " + shq(resp_path) +
+                      " -w '%{http_code}' -X " + shq(method);
+    auto hdrs = db::json::parse(headers_json.empty() ? "{}" : headers_json);
+    cJSON* h = nullptr;
+    cJSON_ArrayForEach(h, hdrs.get()) {
+      if (h->string && cJSON_IsString(h))
+        cmd += " -H " + shq(std::string(h->string) + ": " + h->valuestring);
+    }
+    if (!body.empty()) cmd += " --data-binary @" + shq(body_path);
+    cmd += " " + shq(url);
+
+    int status = -1;
+    std::string resp;
+    FILE* p = ::popen(cmd.c_str(), "r");
+    if (p) {
+      char code[16] = {0};
+      size_t n = std::fread(code, 1, sizeof(code) - 1, p);
+      const int rc = ::pclose(p);
+      if (rc == 0 && n > 0) status = std::atoi(code);
+      if (status > 0) {
+        FILE* rf = std::fopen(resp_path, "rb");
+        if (rf) {
+          char buf[4096];
+          size_t m;
+          while ((m = std::fread(buf, 1, sizeof(buf), rf)) > 0) resp.append(buf, m);
+          std::fclose(rf);
+        }
+      }
+    }
+    ::unlink(body_path);
+    ::unlink(resp_path);
+    done(status > 0 ? status : -1, std::move(resp));
+  }).detach();
+}
 
 int main(int argc, char** argv) {
   db::NodeOptions o;
@@ -52,6 +132,7 @@ int main(int argc, char** argv) {
   if (o.advertise_addr.empty()) o.advertise_addr = o.listen_addr;
 
   db::Node node(o);
+  node.setHttpsFn(curlHttps);  // Telegram ブリッジ用 (leader 就任 + bot_token 設定時のみ使われる)
   node.setUiEventCb([](const std::string& ev) { DB_LOGI("ui", ev); });
   node.setTtsCb([](const std::string& text, const std::string& lang) {
     DB_LOGI("tts", "[" + lang + "] " + text);
