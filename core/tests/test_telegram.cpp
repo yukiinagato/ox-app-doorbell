@@ -2,6 +2,7 @@
 // InMemNet + SimClock 共有 Runloop で複数 Node を決定的にシミュレーションする
 // (test_node.cpp と同じ流儀)。
 #include <array>
+#include <map>
 #include <memory>
 #include <string>
 #include <vector>
@@ -31,6 +32,8 @@ struct MockHttps {
   int64_t next_msg_id = 100;
   bool drop = false;     // true: done を呼ばない (応答が永遠に来ない)
   int fail_status = 0;   // >0: 全リクエストへこの status で失敗応答
+  // API メソッド別の固定応答 (status, body) — 例: editMessageCaption だけ 400 にする
+  std::map<std::string, std::pair<int, std::string>> respond_by_api;
   std::string pending_updates = "[]";  // getUpdates が一度だけ返す result 配列
 
   Node::HttpsFn fn() {
@@ -38,6 +41,12 @@ struct MockHttps {
                   const Bytes& b, std::function<void(int, std::string)> done) {
       reqs.push_back({m, u, h, std::string(b.begin(), b.end())});
       if (drop) return;
+      for (const auto& r : respond_by_api) {
+        if (u.find("/" + r.first) != std::string::npos) {
+          done(r.second.first, r.second.second);
+          return;
+        }
+      }
       if (fail_status > 0) {
         done(fail_status, "{\"ok\":false}");
         return;
@@ -400,10 +409,21 @@ TEST_CASE("telegram: getUpdates 長輪詢 — callback_query → quickReply/TTS 
   }
   REQUIRE(f.runUntil([&] { return a.https.count("editMessageReplyMarkup") == 1; }, 2000));
   {
-    auto bd = json::parse(a.https.last("editMessageReplyMarkup")->body);
+    const HttpsReq* rr = a.https.last("editMessageReplyMarkup");
+    CHECK(rr->url.rfind("https://api.telegram.org/botTESTTOKEN/editMessageReplyMarkup", 0) == 0);
+    CHECK(rr->headers.find("application/json") != std::string::npos);
+    auto bd = json::parse(rr->body);
     REQUIRE(bd);
     CHECK(json::getString(bd.get(), "chat_id") == "111");
     CHECK(json::getInt(bd.get(), "message_id") == 100);
+    // 撤去は空オブジェクトではなく {"inline_keyboard":[]} で送る
+    // (空 {} は必須欄 inline_keyboard を欠き Telegram が 400 を返す)
+    cJSON* markup = json::get(bd.get(), "reply_markup");
+    REQUIRE(markup);
+    cJSON* kb = json::get(markup, "inline_keyboard");
+    REQUIRE(kb);
+    CHECK(cJSON_IsArray(kb));
+    CHECK(cJSON_GetArraySize(kb) == 0);
   }
   // caption 末尾に「✅ 応答済み」追記 (失敗容認だがリクエストは飛ぶ)
   REQUIRE(f.runUntil([&] { return a.https.count("editMessageCaption") == 1; }, 2000));
@@ -425,4 +445,82 @@ TEST_CASE("telegram: getUpdates 長輪詢 — callback_query → quickReply/TTS 
   }, 2000));
 
   a.node->stop();
+}
+
+TEST_CASE("telegram: sendMessage 降級分の caption 追記 — 400 なら editMessageText へ降級") {
+  TgFleet f;
+  auto& a = f.add("A:1", "front", "door_station", "d_front", true, tgCaps(10));
+  REQUIRE(a.node->start());
+  seedTgConfig(*a.node, /*with_snapshot=*/false, /*poll_updates=*/true);
+  f.run(1500);
+
+  // 実 Telegram の応答を模す: 文字メッセージに editMessageCaption を打つと 400
+  a.https.respond_by_api["editMessageCaption"] = {
+      400,
+      "{\"ok\":false,\"error_code\":400,"
+      "\"description\":\"Bad Request: there is no caption in the message to edit\"}"};
+
+  a.node->press("");  // with_snapshot=false → sendMessage (msg_id=100)
+  REQUIRE(f.runUntil([&] { return a.https.count("sendMessage") == 1; }, 3000));
+
+  a.https.pending_updates =
+      "[{\"update_id\":9,\"callback_query\":{\"id\":\"cbq2\","
+      "\"data\":\"qr|qr_away|d_front\","
+      "\"message\":{\"message_id\":100,\"chat\":{\"id\":111}}}}]";
+
+  // editMessageCaption 400 → editMessageText に同文で降級
+  REQUIRE(f.runUntil([&] { return a.https.count("editMessageCaption") == 1; }, 5000));
+  REQUIRE(f.runUntil([&] { return a.https.count("editMessageText") == 1; }, 2000));
+  {
+    auto bd = json::parse(a.https.last("editMessageText")->body);
+    REQUIRE(bd);
+    CHECK(json::getString(bd.get(), "chat_id") == "111");
+    CHECK(json::getInt(bd.get(), "message_id") == 100);
+    CHECK(json::getString(bd.get(), "text").find("正面玄関に来客です") != std::string::npos);
+    CHECK(json::getString(bd.get(), "text").find("✅ 応答済み") != std::string::npos);
+  }
+
+  a.node->stop();
+}
+
+TEST_CASE("telegram: SOS 緊急 — leader が 🚨/✅ を全 chat へ (quiet_hours 非依存)") {
+  TgFleet f;
+  // A が telegram leader。B (発報側) は wan 無しで不適格。
+  auto& a = f.add("A:1", "front", "door_station", "d_front", true, tgCaps(20));
+  auto& b = f.add("B:1", "kitchen", "indoor_panel", "", false, tgCaps(10, /*wan=*/false));
+  REQUIRE(a.node->start());
+  REQUIRE(b.node->start());
+  seedTgConfig(*a.node, /*with_snapshot=*/false);
+  // 終日の quiet_hours で telegram を suppress — 緊急はルール非依存の組込動作なので影響しない
+  a.node->setConfigKey(
+      "quiet_hours.default",
+      "{\"windows\":[{\"from\":\"00:00\",\"to\":\"24:00\"}],\"suppress\":[\"telegram\",\"chime\"]}");
+  f.run(2000);  // 合流 + 設定複製 + A が leader
+
+  // B が発報 → leader A だけが 🚨 を送る (発報元の端末名入り)
+  b.node->setEmergency(true, "panel");
+  REQUIRE(f.runUntil([&] { return a.https.count("sendMessage") == 1; }, 5000));
+  CHECK(b.https.count("sendMessage") == 0);
+  {
+    auto bd = json::parse(a.https.last("sendMessage")->body);
+    REQUIRE(bd);
+    CHECK(json::getString(bd.get(), "chat_id") == "111");
+    const std::string text = json::getString(bd.get(), "text");
+    CHECK(text.find("🚨 緊急事態です") != std::string::npos);
+    CHECK(text.find("kitchen から発報") != std::string::npos);
+  }
+
+  // 解除 (A 側から) → ✅ 緊急解除
+  a.node->setEmergency(false, "admin");
+  REQUIRE(f.runUntil([&] { return a.https.count("sendMessage") == 2; }, 5000));
+  CHECK(json::getString(json::parse(a.https.last("sendMessage")->body).get(), "text") ==
+        "✅ 緊急解除");
+
+  // 遷移が無ければ再送しない
+  f.run(5000);
+  CHECK(a.https.count("sendMessage") == 2);
+  CHECK(b.https.count("sendMessage") == 0);
+
+  a.node->stop();
+  b.node->stop();
 }

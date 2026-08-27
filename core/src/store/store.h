@@ -50,6 +50,8 @@ class Store {
                                        size_t limit);
   // 新しい順に limit 件 (管理画面用)
   std::vector<EventRecord> recentEvents(size_t limit);
+  // 指定 2 型のうち hlc 最大の 1 件 (緊急モードの状態復元用)。無ければ nullopt。
+  std::optional<EventRecord> latestEventOfTypes(const std::string& t1, const std::string& t2);
   // 上限管理: 件数 > max_events または hlc物理部が cutoff_wall_ms より古いものを削除
   size_t pruneEvents(size_t max_events, int64_t cutoff_wall_ms);
 

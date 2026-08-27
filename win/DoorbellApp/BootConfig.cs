@@ -12,6 +12,7 @@ namespace DoorbellApp
     {
         public string RawJson = "{}";
         public string Name = "doorbell";
+        public string Role = "door_station";
         public string Door = "";
         public string UiLang = "ja";
         public bool Kiosk = true;
@@ -36,6 +37,7 @@ namespace DoorbellApp
                 if (d != null)
                 {
                     if (d.TryGetValue("name", out var n) && n != null) c.Name = n.ToString();
+                    if (d.TryGetValue("role", out var ro) && ro != null) c.Role = ro.ToString();
                     if (d.TryGetValue("door", out var dr) && dr != null) c.Door = dr.ToString();
                     if (d.TryGetValue("ui_lang", out var l) && l != null) c.UiLang = l.ToString();
                     if (d.TryGetValue("kiosk", out var k) && k is bool kb) c.Kiosk = kb;

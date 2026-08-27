@@ -462,6 +462,42 @@ TEST_CASE("mqtt: Node 統合 — discovery(retain)/press/reply/HA 再起動再�
     return false;
   }));
 
+  // --- SOS 緊急モード: discovery (safety) + <base>/emergency retain の ON/OFF ---
+  REQUIRE(sub.waitMsgs(hasRetained(prefix + "/binary_sensor/doorbell_emergency/config")));
+  {
+    bool checked = false;
+    for (const auto& m : sub.snapshot()) {
+      if (m.topic != prefix + "/binary_sensor/doorbell_emergency/config" || checked) continue;
+      auto d = json::parse(m.payload);
+      REQUIRE(d);
+      CHECK(json::getString(d.get(), "device_class") == "safety");
+      CHECK(json::getString(d.get(), "state_topic") == base + "/emergency");
+      CHECK(json::getString(d.get(), "unique_id") == "doorbell_emergency");
+      checked = true;
+    }
+    CHECK(checked);
+  }
+  // 初期状態 OFF (retain — 後から購読した sub に retained として届いている)
+  REQUIRE(sub.waitMsgs([&](const std::vector<TestCli::Msg>& m) {
+    for (const auto& x : m)
+      if (x.topic == base + "/emergency" && x.payload == "OFF" && x.retain) return true;
+    return false;
+  }));
+  // 発報 → ON / 解除 → OFF
+  node.setEmergency(true, "admin");
+  REQUIRE(sub.waitMsgs([&](const std::vector<TestCli::Msg>& m) {
+    for (const auto& x : m)
+      if (x.topic == base + "/emergency" && x.payload == "ON") return true;
+    return false;
+  }));
+  node.setEmergency(false, "admin");
+  REQUIRE(sub.waitMsgs([&](const std::vector<TestCli::Msg>& m) {
+    size_t off = 0;
+    for (const auto& x : m)
+      if (x.topic == base + "/emergency" && x.payload == "OFF") off++;
+    return off >= 2;  // 初期 OFF + 解除 OFF
+  }));
+
   // --- HA 再起動 (homeassistant/status = online) → discovery 再発行 ---
   sub.cli->publish(prefix + "/status", "online", false);
   REQUIRE(sub.waitMsgs([&](const std::vector<TestCli::Msg>& m) {

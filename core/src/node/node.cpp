@@ -1,5 +1,6 @@
 #include "node/node.h"
 
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <mutex>
@@ -47,6 +48,22 @@ bool pskIsZero(const std::array<uint8_t, 32>& psk) {
 std::string hostOf(const std::string& addr) {
   auto p = addr.rfind(':');
   return p == std::string::npos ? addr : addr.substr(0, p);
+}
+
+// "HH:MM" → 通算分。不正な書式は -1 (rule_engine と同じ規則)。
+int parseHhmm(const std::string& s) {
+  int h = 0, m = 0;
+  char tail = 0;
+  if (std::sscanf(s.c_str(), "%d:%d%c", &h, &m, &tail) != 2) return -1;
+  if (h < 0 || h > 24 || m < 0 || m > 59) return -1;
+  return h * 60 + m;
+}
+
+// 負値でも床方向へ丸める除算 (rule_engine と同じ — 現地時刻の分計算用)
+int64_t floorDiv(int64_t a, int64_t b) {
+  int64_t q = a / b;
+  if ((a % b) != 0 && ((a < 0) != (b < 0))) --q;
+  return q;
 }
 }  // namespace
 
@@ -102,6 +119,14 @@ struct Node::Impl {
 
   // Telegram leader の就任遷移検出 (就任時に未通知 press を拾い直す)
   bool tg_was_active = false;
+
+  // 表示制御 (loop 上でのみ触る): 直近に通知した display JSON + 30 秒周期の再評価タイマー
+  std::string last_display_json;
+  uint64_t display_timer = 0;
+
+  // SOS 緊急モード (loop 上でのみ触る): 現在状態 = emergency / emergency_cancel の hlc 最大側
+  bool emergency_active = false;
+  std::string emergency_hlc;
 
   // コールバック (任意スレッドから差し替え可)
   std::mutex cb_mu;
@@ -206,6 +231,116 @@ struct Node::Impl {
     mc.min_interval_s = static_cast<int>(json::getInt(m, "min_interval_s", 30));
     std::lock_guard<std::mutex> lk(motion_mu);
     motion.setConfig(mc);
+  }
+
+  // ---------- 表示制御 (display) ----------
+  // 実効値 = config display.* を基底に devices.<self>.local.display.* で上書き
+  // (スカラーはキー単位、night はオブジェクト単位で上書き)。night の窓判定は
+  // rule_engine と同じ規則 (補正済み壁時計 + tz_offset_min、from <= t < to、日跨ぎ対応)。
+  struct DisplayState {
+    int brightness = 70;
+    bool night = false;
+    bool red_tint = false;
+    int screensaver_after_s = 120;
+    int pixel_shift_s = 300;
+  };
+
+  DisplayState displayState() {
+    cJSON* base = json::get(cfg.get(), "display");
+    cJSON* ovr = cfgAt("devices." + node_id + ".local.display");
+    auto num = [&](const char* key, int64_t def) {
+      if (ovr && json::get(ovr, key)) return json::getInt(ovr, key, def);
+      return json::getInt(base, key, def);
+    };
+    DisplayState d;
+    d.brightness = static_cast<int>(num("brightness", 70));
+    d.screensaver_after_s = static_cast<int>(num("screensaver_after_s", 120));
+    d.pixel_shift_s = static_cast<int>(num("pixel_shift_s", 300));
+    cJSON* night = ovr ? json::get(ovr, "night") : nullptr;
+    if (!night) night = json::get(base, "night");
+    if (night && json::getBool(night, "enabled", true)) {
+      const int from = parseHhmm(json::getString(night, "from", "22:00"));
+      const int to = parseHhmm(json::getString(night, "to", "06:00"));
+      if (from >= 0 && to >= 0 && from != to) {
+        const int64_t local =
+            hlc->correctedWallMs() + static_cast<int64_t>(tzOffsetMin()) * 60'000LL;
+        const int64_t day = floorDiv(local, 86'400'000LL);
+        const int minute = static_cast<int>((local - day * 86'400'000LL) / 60'000LL);
+        d.night = (from < to) ? (from <= minute && minute < to)
+                              : (minute >= from || minute < to);  // 日跨ぎ窓
+      }
+      if (d.night) {
+        d.brightness = static_cast<int>(json::getInt(night, "brightness", 15));
+        d.red_tint = json::getBool(night, "red_tint", true);
+      }
+    }
+    return d;
+  }
+
+  // display オブジェクトの中身 (uiNotify と status_json で共用)
+  json::Doc displayDoc(const DisplayState& d) {
+    auto o = json::obj();
+    json::set(o.get(), "brightness", static_cast<int64_t>(d.brightness));
+    json::setBool(o.get(), "night", d.night);
+    json::setBool(o.get(), "red_tint", d.red_tint);
+    json::set(o.get(), "screensaver_after_s", static_cast<int64_t>(d.screensaver_after_s));
+    json::set(o.get(), "pixel_shift_s", static_cast<int64_t>(d.pixel_shift_s));
+    return o;
+  }
+
+  // 30 秒周期 + config_changed + 起動直後に評価し、変化時だけ uiNotify する
+  void evalDisplay(bool force = false) {
+    auto o = displayDoc(displayState());
+    json::set(o.get(), "t", "display");
+    std::string j = json::dump(o.get());
+    if (!force && j == last_display_json) return;
+    last_display_json = j;
+    uiNotify(j);
+  }
+
+  // ---------- SOS 緊急モード ----------
+  // 現在状態 = emergency / emergency_cancel の hlc 最大側 (HLC 文字列は辞書順比較可)。
+  // quiet_hours・trigger_rules に依存しない組込動作 — Telegram/MQTT へは常に流れる。
+  void emergencyNotifyUi() {
+    auto o = json::obj();
+    json::set(o.get(), "t", "emergency");
+    json::setBool(o.get(), "active", emergency_active);
+    uiNotify(json::dump(o.get()));
+  }
+
+  // 起動時: Store から状態を復元する (Telegram へは送らない — 遷移ではない)。
+  // 復元した hlc は observe する — 再起動で壁時計が巻き戻っていても、以後の
+  // ローカル発報/解除が必ず復元済み状態より新しい HLC を刻めるようにする。
+  void restoreEmergency() {
+    auto ev = store.latestEventOfTypes("emergency", "emergency_cancel");
+    if (!ev) return;
+    hlc->observe(ev->hlc);
+    emergency_hlc = ev->hlc;
+    emergency_active = (ev->type == "emergency");
+  }
+
+  // emergency / emergency_cancel イベント受理毎 (ローカル発・複製受信の両方)。
+  // 変化時: 全ノードで uiNotify、leader なら Telegram 🚨/✅ (bridge 側の active 判定に任せる)。
+  void applyEmergencyEvent(const EventRecord& ev) {
+    if (ev.hlc <= emergency_hlc) return;  // 古い/巻き戻しイベントは無視
+    emergency_hlc = ev.hlc;
+    const bool now = (ev.type == "emergency");
+    if (now == emergency_active) return;
+    emergency_active = now;
+    emergencyNotifyUi();
+    if (tg) {
+      auto p = json::parse(ev.payload_json.empty() ? "{}" : ev.payload_json);
+      std::string source = p ? json::getString(p.get(), "source") : "";
+      if (source.empty()) source = ev.device;
+      tg->sendEmergency(now, source, ev.wall_ms);
+    }
+  }
+
+  void doEmergency(bool active, const std::string& via) {
+    auto p = json::obj();
+    json::set(p.get(), "source", node_id);
+    json::set(p.get(), "via", via);
+    events->append(active ? "emergency" : "emergency_cancel", "", node_id, json::dump(p.get()));
   }
 
   // ---------- SIP ----------
@@ -472,6 +607,8 @@ struct Node::Impl {
         scheduleSipReapply();
       // HA ブリッジは設定全文 (mqtt 接続先/doors/devices/…) に依存 — デバウンスして再評価
       scheduleBridgeReapply();
+      // 表示制御 (display.* / devices.<self>.local.display.*) — 変化時だけ uiNotify される
+      if (started) evalDisplay();
       uiNotify("{\"t\":\"config_changed\"}");
     });
     events->onEvent([this](const EventRecord& ev, bool is_local) { onEvent(ev, is_local); });
@@ -528,6 +665,7 @@ struct Node::Impl {
           for (const auto& p : mesh->peers()) v.push_back({p.id, p.status != "dead"});
         return v;
       };
+      hooks.emergency_active = [this] { return emergency_active; };
       bridge.reset(new HaBridge(*loop, std::move(hooks)));
     }
 
@@ -611,7 +749,14 @@ struct Node::Impl {
       camera->start(c.hint, c.w, c.h);
     }
 #endif
+    // 表示制御: 30 秒周期の再評価 + 起動直後の 1 回発行 (壳が初期状態を受け取れる)
+    display_timer = loop->postEvery(30'000, [this] { evalDisplay(); });
+    // SOS: 状態を Store から復元し、初期状態も 1 回発行する (再起動後のイベント再生に相当)
+    restoreEmergency();
+
     started = true;
+    evalDisplay(/*force=*/true);
+    emergencyNotifyUi();
     DB_LOGI(kTag, "node " + node_id.substr(0, 8) + " (" + opts.name + ") started");
     return true;
   }
@@ -665,6 +810,9 @@ struct Node::Impl {
         last_reply_ts = hlc->correctedWallMs();
       }
       if (!ev.door.empty()) door_calling_until.erase(ev.door);
+    } else if (ev.type == "emergency" || ev.type == "emergency_cancel") {
+      // 全ノードで状態再計算 (複製で自然に届く)。変化時 uiNotify + Telegram は中で行う。
+      applyEmergencyEvent(ev);
     }
     {
       auto o = json::obj();
@@ -847,6 +995,10 @@ struct Node::Impl {
     json::set(br, "mqtt", bridge ? bridge->mqttStatus() : "inactive");
     // telegram には常接続の概念が無い (毎回 HTTPS) — active | inactive の 2 値
     json::set(br, "telegram", tg ? tg->status() : "inactive");
+    // 表示制御の実効値 (管理画面用) + SOS 現在状態
+    json::setItem(o.get(), "display", displayDoc(displayState()));
+    cJSON* em = json::addObj(o.get(), "emergency");
+    json::setBool(em, "active", emergency_active);
     cJSON* arr = json::addArr(o.get(), "peers");
     if (mesh) {
       for (const auto& p : mesh->peers()) {
@@ -1059,6 +1211,15 @@ struct Node::Impl {
       return HttpResp::json("{\"ok\":true}");
     });
 
+    // SOS 緊急モード (管理セッション)。{"active":true|false} — 発報も解除も可。
+    httpd->route("POST", "/api/emergency", [this](const HttpReq& req) {
+      auto b = json::parse(req.body);
+      if (!b || !json::get(b.get(), "active"))
+        return HttpResp::json("{\"ok\":false,\"err\":\"no active\"}", 400);
+      doEmergency(json::getBool(b.get(), "active"), "admin");
+      return HttpResp::json("{\"ok\":true}");
+    });
+
     httpd->route("GET", "/api/logs", [](const HttpReq&) {
       auto o = json::obj();
       cJSON* arr = json::addArr(o.get(), "logs");
@@ -1109,6 +1270,17 @@ struct Node::Impl {
       if (door.empty() || !cfgAt("doors." + door))
         return HttpResp::json("{\"ok\":false,\"err\":\"unknown door\"}", 400);
       doPress(door);
+      return HttpResp::json("{\"ok\":true}");
+    });
+
+    // SOS 発報 (panel token)。トリガのみ — 解除は不可 (403; 解除は kiosk PIN 経由の
+    // db_core_emergency か管理セッションの /api/emergency のみ)。
+    httpd->route("POST", "/api/panel/emergency", [this](const HttpReq& req) {
+      if (!panelTokenOk(req)) return HttpResp::json("{\"ok\":false,\"err\":\"bad token\"}", 403);
+      const std::string act = req.param("active");
+      if (act == "0" || act == "false")
+        return HttpResp::json("{\"ok\":false,\"err\":\"cancel not allowed\"}", 403);
+      doEmergency(true, "web");
       return HttpResp::json("{\"ok\":true}");
     });
 
@@ -1233,6 +1405,10 @@ void Node::stop() {
       impl_->loop->cancel(impl_->bridge_reapply_timer);
       impl_->bridge_reapply_timer = 0;
     }
+    if (impl_->display_timer) {
+      impl_->loop->cancel(impl_->display_timer);
+      impl_->display_timer = 0;
+    }
     if (impl_->tg) impl_->tg->stop();          // 輪詢/キュー駆動を止める (キューは永続)
     if (impl_->bridge) impl_->bridge->stop();  // availability=offline (retain) → DISCONNECT
     if (impl_->sipctl) impl_->sipctl->stop();  // 通話切断 → 登録解除 → pjsua_destroy
@@ -1287,6 +1463,10 @@ void Node::pushCameraFrame(const uint8_t* data, int format, int width, int heigh
 void Node::sendQuickReply(const std::string& reply_id, const std::string& free_text,
                           const std::string& door_id, const std::string& via) {
   impl_->loop->callSync([&] { impl_->quickReply(reply_id, free_text, door_id, via); });
+}
+
+void Node::setEmergency(bool active, const std::string& via) {
+  impl_->loop->callSync([&] { impl_->doEmergency(active, via); });
 }
 
 std::string Node::statusJson() {

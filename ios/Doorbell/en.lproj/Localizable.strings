@@ -121,6 +121,11 @@
 "day.tue" = "Tue";
 "day.wed" = "Wed";
 "degraded.notified" = "Notified — please wait";
+"emergency.button" = "SOS";
+"emergency.cancel" = "Cancel alarm";
+"emergency.hold_hint" = "Hold %@s to trigger";
+"emergency.notified" = "Family has been notified";
+"emergency.title" = "EMERGENCY";
 "event.motion" = "Motion at %@ (%@)";
 "event.offline" = "⚠ %@ offline (last seen %@)";
 "event.online" = "%@ back online";

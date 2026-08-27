@@ -162,7 +162,9 @@
   door 毎に `event.doorbell_<door_id>` (device_class doorbell) と
   `binary_sensor.doorbell_<door_id>_motion` (off_delay 30)、device 毎に
   `binary_sensor.doorbell_node_<node_id 先頭8桁>` (connectivity — 防盗の端末断)、
-  加えて `binary_sensor.doorbell_bridge_online` (LWT 由来、deploy/ha の看門狗が参照)。
+  加えて `binary_sensor.doorbell_bridge_online` (LWT 由来、deploy/ha の看門狗が参照) と
+  `binary_sensor.doorbell_emergency` (device_class safety、state_topic `<base>/emergency`
+  retain — SOS 緊急モード。ON/OFF は emergency / emergency_cancel の hlc 最大側)。
 - スナップショット/カメラは MQTT に載せない — 実画は go2rtc、静止画は HA generic camera
   が門口機の `/snapshot.jpg` を直接取る (`deploy/ha/` 参照)。
 - MVP は認証 `user`/`pass` 平文 (`pass_ref` の secure store 化は sip と同時に対応予定)。

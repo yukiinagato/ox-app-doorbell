@@ -84,6 +84,11 @@ class Node {
   void sendQuickReply(const std::string& reply_id, const std::string& free_text,
                       const std::string& door_id, const std::string& via);
 
+  // SOS 緊急モード。active=true で発報 / false で解除 (emergency / emergency_cancel
+  // イベントを追加 — 全ノードへ複製され、各ノードが {"t":"emergency"} を uiNotify する)。
+  // via: "panel" | "web" | "admin"。PIN 検証 (解除時の kiosk PIN 等) は呼び出し側の責務。
+  void setEmergency(bool active, const std::string& via);
+
   // カメラ生フレーム投入 (capi db_core_on_camera_frame / 採集スレッドから; 任意スレッド可)。
   // format: doorbell.h と同じ 0=NV21, 1=NV12, 2=YUY2, 3=BGRA。データはここで 1 回コピー。
   void pushCameraFrame(const uint8_t* data, int format, int width, int height, int stride,

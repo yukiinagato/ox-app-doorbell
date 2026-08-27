@@ -126,6 +126,11 @@
   <data name="day_tue" xml:space="preserve"><value>Tue</value></data>
   <data name="day_wed" xml:space="preserve"><value>Wed</value></data>
   <data name="degraded_notified" xml:space="preserve"><value>Notified — please wait</value></data>
+  <data name="emergency_button" xml:space="preserve"><value>SOS</value></data>
+  <data name="emergency_cancel" xml:space="preserve"><value>Cancel alarm</value></data>
+  <data name="emergency_hold_hint" xml:space="preserve"><value>Hold {0}s to trigger</value></data>
+  <data name="emergency_notified" xml:space="preserve"><value>Family has been notified</value></data>
+  <data name="emergency_title" xml:space="preserve"><value>EMERGENCY</value></data>
   <data name="event_motion" xml:space="preserve"><value>Motion at {0} ({1})</value></data>
   <data name="event_offline" xml:space="preserve"><value>⚠ {0} offline (last seen {1})</value></data>
   <data name="event_online" xml:space="preserve"><value>{0} back online</value></data>

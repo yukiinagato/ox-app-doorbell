@@ -6,7 +6,11 @@
         Topmost="False" Cursor="Arrow" FontFamily="Yu Gothic UI, Meiryo UI, Segoe UI">
     <Grid>
         <!-- ============ 待機 ============ -->
+        <!-- 焼付対策: コンテナ全体を pixel_shift_s 毎に ±8px 平行移動する (IdleShift) -->
         <Grid x:Name="IdleView">
+            <Grid.RenderTransform>
+                <TranslateTransform x:Name="IdleShift"/>
+            </Grid.RenderTransform>
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
@@ -23,6 +27,23 @@
                         MinWidth="420" MinHeight="180" Click="OnCallClick"/>
                 <TextBlock x:Name="TouchHint" FontSize="24" Foreground="{StaticResource Dim}"
                            HorizontalAlignment="Center" Margin="0,26,0,0"/>
+                <!-- SOS: role が emergency.button_on_roles に含まれる時のみ表示。
+                     長押し hold_to_trigger_s 秒で発報 (誤操作防止 — 進捗バー表示) -->
+                <Border x:Name="SosButton" Visibility="Collapsed" Background="#C0392B"
+                        CornerRadius="16" Margin="0,44,0,0" Padding="56,18" Cursor="Hand"
+                        HorizontalAlignment="Center"
+                        MouseLeftButtonDown="OnSosDown" MouseLeftButtonUp="OnSosUp"
+                        MouseLeave="OnSosLeave">
+                    <StackPanel>
+                        <TextBlock x:Name="SosText" FontSize="32" FontWeight="Bold"
+                                   Foreground="#FFFFFF" HorizontalAlignment="Center"/>
+                        <TextBlock x:Name="SosHint" FontSize="14" Foreground="#FFD9D2"
+                                   HorizontalAlignment="Center" Margin="0,4,0,0"/>
+                        <ProgressBar x:Name="SosProgress" Height="6" Width="200" Margin="0,10,0,0"
+                                     Minimum="0" Maximum="100" Value="0" Foreground="#FFFFFF"
+                                     Background="#802A21" BorderThickness="0"/>
+                    </StackPanel>
+                </Border>
             </StackPanel>
             <DockPanel Grid.Row="2" Margin="20,0,20,14" LastChildFill="False">
                 <TextBlock x:Name="NodeInfo" FontSize="14" Foreground="{StaticResource Dim}"
@@ -71,5 +92,33 @@
                            HorizontalAlignment="Center" Margin="0,16,0,0"/>
             </StackPanel>
         </Border>
+
+        <!-- ============ スクリーンセーバ (無操作 screensaver_after_s — 黒背景 + 漂う時計) ============ -->
+        <Canvas x:Name="ScreensaverView" Visibility="Collapsed" Background="#000000">
+            <StackPanel x:Name="SaverBlock" Canvas.Left="120" Canvas.Top="120">
+                <TextBlock x:Name="SaverClock" FontSize="64" FontWeight="Light"
+                           Foreground="#39424C"/>
+                <TextBlock x:Name="SaverDate" FontSize="20" Foreground="#242B33"
+                           Margin="0,6,0,0"/>
+            </StackPanel>
+        </Canvas>
+
+        <!-- ============ 緊急事態 (SOS — 自端末発報 / 他端末発報の受信で表示) ============ -->
+        <Grid x:Name="EmergencyView" Visibility="Collapsed" Background="#C62828">
+            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                <TextBlock x:Name="EmergencyTitle" FontSize="110" FontWeight="Bold"
+                           Foreground="#FFFFFF" HorizontalAlignment="Center"/>
+                <TextBlock x:Name="EmergencyNote" FontSize="30" Foreground="#FFE3DE"
+                           HorizontalAlignment="Center" Margin="0,18,0,0"/>
+                <Button x:Name="EmergencyCancelButton" FontSize="30" Padding="64,18"
+                        Margin="0,64,0,0" Background="#7F1D1D" Foreground="#FFFFFF"
+                        BorderBrush="#FFFFFF" HorizontalAlignment="Center"
+                        Click="OnEmergencyCancelClick"/>
+            </StackPanel>
+        </Grid>
+
+        <!-- ============ 夜間モード red tint (最前面・非ヒットテスト) ============ -->
+        <Border x:Name="NightTint" Visibility="Collapsed" Background="#33FF2200"
+                IsHitTestVisible="False"/>
     </Grid>
 </Window>

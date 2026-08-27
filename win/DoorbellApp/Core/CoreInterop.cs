@@ -82,6 +82,10 @@ namespace DoorbellApp.Core
         [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
         public static extern IntPtr db_core_version();
 
+        /// <summary>SOS 緊急モード。active=1 発報 / 0 解除 (PIN 検証は殻の責務)。</summary>
+        [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
+        public static extern void db_core_emergency(IntPtr core, int active);
+
         /// <summary>core が返した char* を UTF-8 として読み、db_free で解放する。</summary>
         public static string TakeUtf8(IntPtr p)
         {

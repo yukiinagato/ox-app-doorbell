@@ -51,6 +51,19 @@
 - 応答: `{"ok":true}` / `403` (token 不正) / `{"ok":false,"err":"…"}` (door 不明など)
 - 効果は既存 `/api/press` (`doPress`) と同じ: 呼出イベント発火・通知経路へ。
 
+## POST /api/panel/emergency
+
+SOS 緊急モードの**発報のみ** (解除は不可)。
+
+- Content-Type: `application/x-www-form-urlencoded`、Body: `k=<token>`
+- 応答: `{"ok":true}` / `403` (token 不正)
+- `active=0` (または `active=false`) を付けた解除要求は `403` +
+  `{"ok":false,"err":"cancel not allowed"}` — 解除は kiosk PIN 経由の端末操作
+  (`db_core_emergency(0)`) か管理セッションの `POST /api/emergency` のみ。
+- 効果: `emergency` イベントが全ノードへ複製され、各端末が警報 UI + サイレン、
+  Telegram 🚨 (全 households)、MQTT `doorbell/emergency` (retain) が発火する。
+  quiet_hours の影響は受けない (組込動作)。
+
 ## GET /snapshot-proxy?door=\<id\>&k=\<token\>
 
 その door の担当子機 (door_station) の**最新 JPEG 1 枚**を返す。

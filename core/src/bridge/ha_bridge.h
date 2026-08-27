@@ -34,6 +34,8 @@ class HaBridge {
         on_reply;
     // 各ノードの生死スナップショット (node_id, online) — Node が mesh->peers() から作る
     std::function<std::vector<std::pair<std::string, bool>>()> node_alive;
+    // SOS 緊急モードの現在状態 (Node が hlc 最大側で計算) — <base>/emergency (retain) の発行元
+    std::function<bool()> emergency_active;
   };
 
   HaBridge(Runloop& loop, Hooks hooks);
@@ -44,7 +46,8 @@ class HaBridge {
   // 接続設定が変われば再接続、discovery 内容だけ変われば接続のまま再発行する。
   void configure(const std::string& cfg_json, const std::string& node_id, bool active);
 
-  // Node::onEvent から (リーダー時のみ)。press/motion/offline/online/dtmf_action を発行。
+  // Node::onEvent から (リーダー時のみ)。press/motion/offline/online/dtmf_action/
+  // emergency(_cancel) を発行。
   void onEvent(const EventRecord& ev);
 
   // graceful 停止: availability=offline (retain) を吐いてから DISCONNECT (Node::stop から)。
@@ -60,6 +63,7 @@ class HaBridge {
   void onMessage(const std::string& topic, const std::string& payload);
   void publishDiscovery();
   void publishState();
+  void publishEmergency();
   void pub(const std::string& topic, const std::string& payload, bool retain);
 
   // discovery 部品

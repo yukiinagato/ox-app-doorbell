@@ -122,6 +122,11 @@
     <string name="day_tue">Tue</string>
     <string name="day_wed">Wed</string>
     <string name="degraded_notified">Notified — please wait</string>
+    <string name="emergency_button">SOS</string>
+    <string name="emergency_cancel">Cancel alarm</string>
+    <string name="emergency_hold_hint">Hold %1$ss to trigger</string>
+    <string name="emergency_notified">Family has been notified</string>
+    <string name="emergency_title">EMERGENCY</string>
     <string name="event_motion">Motion at %1$s (%2$s)</string>
     <string name="event_offline">⚠ %1$s offline (last seen %2$s)</string>
     <string name="event_online">%1$s back online</string>

@@ -122,6 +122,11 @@
     <string name="day_tue">二</string>
     <string name="day_wed">三</string>
     <string name="degraded_notified">已通知，请稍候</string>
+    <string name="emergency_button">紧急</string>
+    <string name="emergency_cancel">解除警报</string>
+    <string name="emergency_hold_hint">长按 %1$s 秒触发</string>
+    <string name="emergency_notified">已通知家人</string>
+    <string name="emergency_title">紧急情况</string>
     <string name="event_motion">%1$s 检测到移动 (%2$s)</string>
     <string name="event_offline">⚠ %1$s 离线 (最后在线 %2$s)</string>
     <string name="event_online">%1$s 恢复在线</string>

@@ -126,6 +126,11 @@
   <data name="day_tue" xml:space="preserve"><value>二</value></data>
   <data name="day_wed" xml:space="preserve"><value>三</value></data>
   <data name="degraded_notified" xml:space="preserve"><value>已通知，请稍候</value></data>
+  <data name="emergency_button" xml:space="preserve"><value>紧急</value></data>
+  <data name="emergency_cancel" xml:space="preserve"><value>解除警报</value></data>
+  <data name="emergency_hold_hint" xml:space="preserve"><value>长按 {0} 秒触发</value></data>
+  <data name="emergency_notified" xml:space="preserve"><value>已通知家人</value></data>
+  <data name="emergency_title" xml:space="preserve"><value>紧急情况</value></data>
   <data name="event_motion" xml:space="preserve"><value>{0} 检测到移动 ({1})</value></data>
   <data name="event_offline" xml:space="preserve"><value>⚠ {0} 离线 (最后在线 {1})</value></data>
   <data name="event_online" xml:space="preserve"><value>{0} 恢复在线</value></data>

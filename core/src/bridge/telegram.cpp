@@ -251,6 +251,17 @@ void TelegramBridge::configure(const std::string& cfg_json, const std::string& n
   }
 }
 
+// 全 households の chat_ids を展開・去重 (resolveChats が担う)
+std::vector<std::string> TelegramBridge::allHouseholdChats() const {
+  auto ids = json::arr();
+  cJSON* hs = cfgAt("households");
+  cJSON* it = nullptr;
+  cJSON_ArrayForEach(it, hs) {
+    if (it->string) json::push(ids.get(), json::Doc(cJSON_CreateString(it->string)));
+  }
+  return resolveChats(ids.get());
+}
+
 // 管理画面のテスト送信 — 通常キュー経由の sendMessage (失敗時のバックオフも共通)
 void TelegramBridge::sendTestMessage(const std::string& chat_id_or_empty) {
   if (!active_) return;
@@ -258,14 +269,7 @@ void TelegramBridge::sendTestMessage(const std::string& chat_id_or_empty) {
   if (!chat_id_or_empty.empty()) {
     chats.push_back(chat_id_or_empty);
   } else {
-    // 全 households の chat_ids へ (resolveChats が展開・去重する)
-    auto ids = json::arr();
-    cJSON* hs = cfgAt("households");
-    cJSON* it = nullptr;
-    cJSON_ArrayForEach(it, hs) {
-      if (it->string) json::push(ids.get(), json::Doc(cJSON_CreateString(it->string)));
-    }
-    chats = resolveChats(ids.get());
+    chats = allHouseholdChats();
   }
   if (chats.empty()) {
     DB_LOGW(kTag, "テスト送信: 宛先 chat_id が無い — スキップ");
@@ -274,6 +278,27 @@ void TelegramBridge::sendTestMessage(const std::string& chat_id_or_empty) {
   for (const auto& c : chats) {
     auto pl = json::obj();
     json::set(pl.get(), "text", "ドアホン テスト通知");
+    enqueue("message", c, json::dump(pl.get()), Bytes());
+  }
+  pump();
+}
+
+// SOS 緊急モードの遷移通知 — quiet_hours/ルール非依存の組込動作 (バイパス系は設けず
+// 通常キュー kind="message" を再利用。失敗時バックオフ/24h 破棄も共通)。
+void TelegramBridge::sendEmergency(bool active, const std::string& source_node,
+                                   int64_t wall_ms) {
+  if (!active_) return;  // 送るのは telegram leader だけ (Node は全ノードから呼ぶ)
+  auto chats = allHouseholdChats();
+  if (chats.empty()) {
+    DB_LOGW(kTag, "緊急通知: 宛先 chat_id が無い — スキップ");
+    return;
+  }
+  const std::string text =
+      active ? "🚨 緊急事態です — " + deviceName(source_node) + " から発報 (" + hhmm(wall_ms) + ")"
+             : "✅ 緊急解除";
+  for (const auto& c : chats) {
+    auto pl = json::obj();
+    json::set(pl.get(), "text", text);
     enqueue("message", c, json::dump(pl.get()), Bytes());
   }
   pump();
@@ -298,18 +323,50 @@ std::string TelegramBridge::apiUrl(const std::string& method) const {
   return kApiBase + token_ + "/" + method;
 }
 
-// 応答不問の単発 POST (answerCallbackQuery / editMessage* — 失敗容認)
+// 応答不問の単発 POST (answerCallbackQuery / editMessage* — 失敗容認)。
+// 失敗時は応答 body もログへ (Telegram の 400 は description に原因が載る)。
 void TelegramBridge::postJson(const std::string& api_method, const json::Doc& body_obj) {
   if (!hooks_.https) return;
   const std::string body = json::dump(body_obj.get());
   std::weak_ptr<char> w = alive_;
   const std::string m = api_method;
   hooks_.https("POST", apiUrl(api_method), "{\"Content-Type\":\"application/json\"}",
-               toBytes(body), [w, m](int status, std::string) {
+               toBytes(body), [w, m](int status, std::string resp) {
                  if (w.expired()) return;
                  if (status < 200 || status >= 300)
-                   DB_LOGW(kTag, m + " 失敗 (status=" + std::to_string(status) + ") — 容認");
+                   DB_LOGW(kTag, m + " 失敗 (status=" + std::to_string(status) +
+                                     ", body=" + resp.substr(0, 300) + ") — 容認");
                });
+}
+
+// caption 追記。写真通知 (sendPhoto) には editMessageCaption、sendMessage に降級した通知には
+// caption が無く 400 "there is no caption in the message to edit" になる — その場合だけ
+// editMessageText へ降級して同文を書く (通知の文面 = caption なので text 全置換で等価)。
+void TelegramBridge::editCaptionOrText(const std::string& chat_id, int64_t message_id,
+                                       const std::string& text) {
+  if (!hooks_.https) return;
+  auto o = json::obj();
+  json::set(o.get(), "chat_id", chat_id);
+  json::set(o.get(), "message_id", message_id);
+  json::set(o.get(), "caption", text);
+  const std::string body = json::dump(o.get());
+  std::weak_ptr<char> w = alive_;
+  hooks_.https(
+      "POST", apiUrl("editMessageCaption"), "{\"Content-Type\":\"application/json\"}",
+      toBytes(body), [this, w, chat_id, message_id, text](int status, std::string resp) {
+        if (w.expired()) return;
+        if (status >= 200 && status < 300) return;
+        if (status == 400) {  // caption の無いメッセージ → editMessageText に降級
+          auto t = json::obj();
+          json::set(t.get(), "chat_id", chat_id);
+          json::set(t.get(), "message_id", message_id);
+          json::set(t.get(), "text", text);
+          postJson("editMessageText", t);
+          return;
+        }
+        DB_LOGW(kTag, "editMessageCaption 失敗 (status=" + std::to_string(status) +
+                          ", body=" + resp.substr(0, 300) + ") — 容認");
+      });
 }
 
 // ---------------------------------------------------------------- イベント
@@ -642,17 +699,14 @@ void TelegramBridge::handleCallbackQuery(const cJSON* cq) {
       auto o = json::obj();
       json::set(o.get(), "chat_id", std::string(it->string));
       json::set(o.get(), "message_id", mid);
-      json::addObj(o.get(), "reply_markup");  // 空 reply_markup = ボタン撤去
+      // ボタン撤去 = inline_keyboard を空配列にした InlineKeyboardMarkup を送る。
+      // 空オブジェクト {} は必須欄 inline_keyboard を欠き 400 Bad Request になる (実機で確認)。
+      cJSON* markup = json::addObj(o.get(), "reply_markup");
+      json::addArr(markup, "inline_keyboard");
       postJson("editMessageReplyMarkup", o);
     }
-    {
-      // sendMessage に降級した通知には caption が無い — その場合の失敗も容認
-      auto o = json::obj();
-      json::set(o.get(), "chat_id", std::string(it->string));
-      json::set(o.get(), "message_id", mid);
-      json::set(o.get(), "caption", caption);
-      postJson("editMessageCaption", o);
-    }
+    // caption 追記 (sendMessage 降級分は editMessageText へ自動降級)
+    editCaptionOrText(it->string, mid, caption);
   }
   // TODO(v1.1): 自由文返信 (bot へのテキストリプライ) — message.reply_to_message から
   // 該当 press を特定し quickReply(free_text) へ配線する。

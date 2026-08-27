@@ -282,6 +282,17 @@ std::vector<EventRecord> Store::recentEvents(size_t limit) {
   return out;
 }
 
+std::optional<EventRecord> Store::latestEventOfTypes(const std::string& t1,
+                                                    const std::string& t2) {
+  Stmt st(db_, ("SELECT " + std::string(kEventCols) +
+                " FROM events WHERE type=?1 OR type=?2 ORDER BY hlc DESC LIMIT 1").c_str());
+  if (!st.ok()) return std::nullopt;
+  st.bind(1, t1);
+  st.bind(2, t2);
+  if (st.step() != SQLITE_ROW) return std::nullopt;
+  return rowToEvent(st);
+}
+
 size_t Store::pruneEvents(size_t max_events, int64_t cutoff_wall_ms) {
   if (!db_) return 0;
   size_t deleted = 0;

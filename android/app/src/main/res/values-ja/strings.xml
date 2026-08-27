@@ -122,6 +122,11 @@
     <string name="day_tue">火</string>
     <string name="day_wed">水</string>
     <string name="degraded_notified">呼び出し済み・応答をお待ちください</string>
+    <string name="emergency_button">緊急</string>
+    <string name="emergency_cancel">解除</string>
+    <string name="emergency_hold_hint">長押しで発報 (%1$s 秒)</string>
+    <string name="emergency_notified">家族に通知しました</string>
+    <string name="emergency_title">緊急事態</string>
     <string name="event_motion">%1$s で動きを検知 (%2$s)</string>
     <string name="event_offline">⚠ %1$s オフライン (最終応答 %2$s)</string>
     <string name="event_online">%1$s オンライン復帰</string>

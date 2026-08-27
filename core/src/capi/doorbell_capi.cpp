@@ -187,4 +187,8 @@ DB_API void db_free(char* p) { std::free(p); }
 
 DB_API const char* db_core_version(void) { return "0.1.0"; }
 
+DB_API void db_core_emergency(db_core* c, int active) {
+  if (c && c->node) c->node->setEmergency(active != 0, "panel");
+}
+
 }  // extern "C"

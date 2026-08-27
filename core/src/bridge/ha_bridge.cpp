@@ -240,6 +240,24 @@ void HaBridge::publishDiscovery() {
     pub(prefix_ + "/binary_sensor/" + sid + "/config", json::dump(o.get()), true);
   }
 
+  // --- SOS 緊急モード (組込動作 — quiet_hours/ルール非依存。HA 側でライト/サイレン連動) ---
+  {
+    auto o = json::obj();
+    json::set(o.get(), "name", "緊急事態");
+    json::set(o.get(), "device_class", "safety");
+    json::set(o.get(), "state_topic", base_ + "/emergency");
+    addAvailability(o.get(), "");  // bridge のみ
+    json::set(o.get(), "unique_id", "doorbell_emergency");
+    json::set(o.get(), "object_id", "doorbell_emergency");
+    cJSON* dev = json::addObj(o.get(), "device");
+    cJSON* ids = json::addArr(dev, "identifiers");
+    json::push(ids, json::Doc(cJSON_CreateString("doorbell_bridge")));
+    json::set(dev, "name", "Doorbell Mesh");
+    json::set(dev, "manufacturer", "Keihan");
+    json::set(dev, "model", "MeshBridge");
+    pub(prefix_ + "/binary_sensor/doorbell_emergency/config", json::dump(o.get()), true);
+  }
+
   // --- ブリッジ生存 sensor (deploy/ha の看門狗 automation が参照) ---
   {
     auto o = json::obj();
@@ -293,6 +311,13 @@ void HaBridge::publishState() {
     }
     pub(base_ + "/" + did + "/availability", on ? "online" : "offline", true);
   }
+  publishEmergency();
+}
+
+// SOS 現在状態 (Node が hlc 最大側で計算) を retain で発行 — 接続/再発行/遷移時に呼ぶ
+void HaBridge::publishEmergency() {
+  const bool on = hooks_.emergency_active && hooks_.emergency_active();
+  pub(base_ + "/emergency", on ? "ON" : "OFF", true);
 }
 
 // ---------------------------------------------------------------- イベント → 発行
@@ -313,6 +338,9 @@ void HaBridge::onEvent(const EventRecord& ev) {
     // その node が door 担当なら door の可用性も更新
     const std::string door = json::getString(cfgAt("devices." + nid), "door");
     if (!door.empty()) pub(base_ + "/" + door + "/availability", on ? "online" : "offline", true);
+  } else if (ev.type == "emergency" || ev.type == "emergency_cancel") {
+    // 状態は Node が hlc 最大側で計算済み (このイベント処理より先に更新される) — 現在値を発行
+    publishEmergency();
   } else if (ev.type == "dtmf_action") {
     auto p = json::parse(ev.payload_json);
     if (!p || json::getString(p.get(), "type") != "ha_command") return;

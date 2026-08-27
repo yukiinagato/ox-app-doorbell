@@ -78,6 +78,11 @@ DB_API void db_free(char* p);
 
 DB_API const char* db_core_version(void);
 
+/* SOS 緊急モード (Phase 3)。active=1 で発報 / 0 で解除。emergency / emergency_cancel
+ * イベントが全ノードへ複製され、各殻に {"t":"emergency","active":bool} が届く。
+ * 解除時の PIN 検証 (kiosk PIN 等) は殻の責務 — core は検証しない。 */
+DB_API void db_core_emergency(db_core* c, int active);
+
 #ifdef __cplusplus
 }
 #endif

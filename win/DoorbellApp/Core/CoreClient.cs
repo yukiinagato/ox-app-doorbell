@@ -98,6 +98,9 @@ namespace DoorbellApp.Core
 
         public void Press(string doorId) { if (_core != IntPtr.Zero) CoreInterop.db_core_press(_core, doorId ?? ""); }
 
+        /// <summary>SOS 緊急モード。true=発報 / false=解除 (解除前の PIN 検証は呼び出し側)。</summary>
+        public void Emergency(bool active) { if (_core != IntPtr.Zero) CoreInterop.db_core_emergency(_core, active ? 1 : 0); }
+
         public Dictionary<string, object> Status()
         {
             if (_core == IntPtr.Zero) return null;

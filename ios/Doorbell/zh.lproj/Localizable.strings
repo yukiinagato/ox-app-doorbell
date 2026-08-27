@@ -121,6 +121,11 @@
 "day.tue" = "二";
 "day.wed" = "三";
 "degraded.notified" = "已通知，请稍候";
+"emergency.button" = "紧急";
+"emergency.cancel" = "解除警报";
+"emergency.hold_hint" = "长按 %@ 秒触发";
+"emergency.notified" = "已通知家人";
+"emergency.title" = "紧急情况";
 "event.motion" = "%@ 检测到移动 (%@)";
 "event.offline" = "⚠ %@ 离线 (最后在线 %@)";
 "event.online" = "%@ 恢复在线";

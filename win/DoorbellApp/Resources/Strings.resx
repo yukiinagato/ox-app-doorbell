@@ -126,6 +126,11 @@
   <data name="day_tue" xml:space="preserve"><value>火</value></data>
   <data name="day_wed" xml:space="preserve"><value>水</value></data>
   <data name="degraded_notified" xml:space="preserve"><value>呼び出し済み・応答をお待ちください</value></data>
+  <data name="emergency_button" xml:space="preserve"><value>緊急</value></data>
+  <data name="emergency_cancel" xml:space="preserve"><value>解除</value></data>
+  <data name="emergency_hold_hint" xml:space="preserve"><value>長押しで発報 ({0} 秒)</value></data>
+  <data name="emergency_notified" xml:space="preserve"><value>家族に通知しました</value></data>
+  <data name="emergency_title" xml:space="preserve"><value>緊急事態</value></data>
   <data name="event_motion" xml:space="preserve"><value>{0} で動きを検知 ({1})</value></data>
   <data name="event_offline" xml:space="preserve"><value>⚠ {0} オフライン (最終応答 {1})</value></data>
   <data name="event_online" xml:space="preserve"><value>{0} オンライン復帰</value></data>

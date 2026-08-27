@@ -74,6 +74,11 @@ class TelegramBridge {
   // 非 active / 宛先なしは何もしない (可否判定は Node 側が先に行う)。
   void sendTestMessage(const std::string& chat_id_or_empty);
 
+  // SOS 緊急モードの遷移通知 (Node::applyEmergencyEvent から — 全ノードが呼ぶが送るのは
+  // active な leader だけ)。quiet_hours/ルール非依存の組込動作 — 全 households の全 chat_id へ
+  // 「🚨 …」/「✅ 緊急解除」を通常キュー経由 (kind="message") で送る。
+  void sendEmergency(bool active, const std::string& source_node, int64_t wall_ms);
+
   // graceful 停止 (Node::stop から)。キューは永続なので未送信分は次回 active 時に再開。
   void stop();
 
@@ -118,6 +123,11 @@ class TelegramBridge {
   // ---- HTTPS ----
   std::string apiUrl(const std::string& method) const;
   void postJson(const std::string& api_method, const json::Doc& body_obj);  // 応答不問の単発
+  // caption 追記 (写真通知)。sendMessage に降級した通知には caption が無く 400 になる —
+  // その場合は editMessageText へ降級して同文を書く (どちらも失敗容認)。
+  void editCaptionOrText(const std::string& chat_id, int64_t message_id, const std::string& text);
+  // 全 households の telegram_chat_ids を展開・去重 (テスト送信/緊急通知用)
+  std::vector<std::string> allHouseholdChats() const;
 
   int64_t nowWallMs() const;
   bool pollEnabled() const;

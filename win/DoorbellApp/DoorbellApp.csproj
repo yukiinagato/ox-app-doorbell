@@ -18,6 +18,8 @@
     <!-- JSON (JavaScriptSerializer) と TTS (System.Speech) — .NET Framework 同梱、外部依存ゼロ -->
     <Reference Include="System.Web.Extensions" />
     <Reference Include="System.Speech" />
+    <!-- WMI (WmiMonitorBrightnessMethods — 遠隔輝度) も同梱アセンブリ -->
+    <Reference Include="System.Management" />
   </ItemGroup>
   <ItemGroup>
     <!-- ネイティブ core DLL (win/build.cmd が core のビルド産物をここへ配置する) -->

@@ -49,6 +49,13 @@ event.motion: { ja: "{door} で動きを検知 ({time})", en: "Motion at {door} 
 event.offline: { ja: "⚠ {device} オフライン (最終応答 {time})", en: "⚠ {device} offline (last seen {time})", zh: "⚠ {device} 离线 (最后在线 {time})" }
 event.online: { ja: "{device} オンライン復帰", en: "{device} back online", zh: "{device} 恢复在线" }
 
+# ---- SOS 緊急モード ----
+emergency.title: { ja: "緊急事態", en: "EMERGENCY", zh: "紧急情况" }
+emergency.button: { ja: "緊急", en: "SOS", zh: "紧急" }
+emergency.hold_hint: { ja: "長押しで発報 ({sec} 秒)", en: "Hold {sec}s to trigger", zh: "长按 {sec} 秒触发" }
+emergency.cancel: { ja: "解除", en: "Cancel alarm", zh: "解除警报" }
+emergency.notified: { ja: "家族に通知しました", en: "Family has been notified", zh: "已通知家人" }
+
 reply.banner: { ja: "住人からのメッセージ", en: "Message from resident", zh: "住户留言" }
 reply.sent: { ja: "送信しました: {text}", en: "Sent: {text}", zh: "已发送: {text}" }
 reply.choose: { ja: "クイック返信を選択", en: "Choose a quick reply", zh: "选择快捷回复" }

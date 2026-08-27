@@ -121,6 +121,11 @@
 "day.tue" = "火";
 "day.wed" = "水";
 "degraded.notified" = "呼び出し済み・応答をお待ちください";
+"emergency.button" = "緊急";
+"emergency.cancel" = "解除";
+"emergency.hold_hint" = "長押しで発報 (%@ 秒)";
+"emergency.notified" = "家族に通知しました";
+"emergency.title" = "緊急事態";
 "event.motion" = "%@ で動きを検知 (%@)";
 "event.offline" = "⚠ %@ オフライン (最終応答 %@)";
 "event.online" = "%@ オンライン復帰";
