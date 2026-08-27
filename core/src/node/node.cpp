@@ -615,7 +615,7 @@ struct Node::Impl {
 
     // トランスポート
     if (!transport) transport.reset(new TcpTransport(*loop));
-    if (!discovery && !pskIsZero(opts.psk))
+    if (!discovery && opts.enable_beacon && !pskIsZero(opts.psk))
       discovery.reset(new UdpBeacon(*loop, opts.psk));
 
     // Mesh

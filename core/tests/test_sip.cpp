@@ -286,6 +286,7 @@ TEST_CASE("sip: Node 統合 — press → trigger_rule sip_call → calling → 
   o.door = "d_front";
   o.listen_addr = "127.0.0.1:" + std::to_string(mesh_port);
   o.psk.fill(0x5a);
+  o.enable_beacon = false;  // 実 beacon 禁止 (稼働 fleet への迷入防止)
   o.http_port = 0;
   o.sip_user = "8001";  // boot 上書き (config sip.accounts 未設定)
   o.sip_pass = "devpass8001";

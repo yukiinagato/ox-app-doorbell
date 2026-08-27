@@ -90,6 +90,7 @@ TEST_CASE("panel API: token 認証 / state / press / snapshot-proxy / 動体検�
   o.door = "d_front";
   o.listen_addr = "127.0.0.1:" + std::to_string(mesh_port);
   o.psk.fill(0x77);
+  o.enable_beacon = false;  // 実 beacon 禁止 (稼働 fleet への迷入防止)
   o.http_port = http_port;
   Node node(o);
   REQUIRE(node.start());

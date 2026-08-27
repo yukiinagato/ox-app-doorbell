@@ -335,6 +335,7 @@ TEST_CASE("media: Node 統合 — pushCameraFrame → /snapshot.jpg・/stream.mj
   o.door = "d_front";
   o.listen_addr = "127.0.0.1:" + std::to_string(mesh_port);
   o.psk.fill(0x5a);
+  o.enable_beacon = false;  // 実 beacon 禁止 (稼働 fleet への迷入防止)
   o.http_port = http_port;
   Node node(o);
   REQUIRE(node.start());

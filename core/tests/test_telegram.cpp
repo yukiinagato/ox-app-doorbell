@@ -136,6 +136,7 @@ struct TgFleet {
     o.listen_addr = addr;
     o.advertise_addr = addr;
     o.psk = psk;
+    o.enable_beacon = false;  // 実 beacon 禁止 (稼働 fleet への迷入防止)
     o.http_port = 0;
     o.caps_json = caps;
     o.seed_default_config = seed_cfg;

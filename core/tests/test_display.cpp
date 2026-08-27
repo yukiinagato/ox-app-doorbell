@@ -34,6 +34,7 @@ struct DispFleet {
     o.listen_addr = "A:1";
     o.advertise_addr = "A:1";
     o.psk = psk;
+    o.enable_beacon = false;  // 実 beacon 禁止 (稼働 fleet への迷入防止)
     o.http_port = 0;
     o.seed_default_config = true;
     MeshSettings m;

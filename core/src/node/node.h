@@ -31,6 +31,7 @@ struct NodeOptions {
   std::string advertise_addr;      // 他ノードへ教える自アドレス
   std::vector<std::string> seed_peers;
   std::array<uint8_t, 32> psk{};   // 全ゼロ = 未配対 (joinCluster 待ち)
+  bool enable_beacon = true;       // 実 UDP beacon。テストは必ず false (稼働中 fleet への迷入防止)
   std::string caps_json = "{}";
   std::string sw_version = "0.1.0";
   int http_port = 0;               // 0 = HTTP 無効

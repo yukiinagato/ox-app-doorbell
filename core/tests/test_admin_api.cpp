@@ -153,6 +153,7 @@ TEST_CASE("admin API: session gate + config delete/import + join-token + panel-t
   o.door = "d_front";
   o.listen_addr = "127.0.0.1:" + std::to_string(mesh_port);
   o.psk.fill(0x33);
+  o.enable_beacon = false;  // 実 beacon 禁止 (稼働 fleet への迷入防止)
   o.http_port = http_port;
   Node node(o);
   REQUIRE(node.start());
@@ -239,6 +240,7 @@ TEST_CASE("admin API: /api/test/telegram (モック HttpsFn)") {
   o.door = "d_front";
   o.listen_addr = "127.0.0.1:" + std::to_string(mesh_port);
   o.psk.fill(0x34);
+  o.enable_beacon = false;  // 実 beacon 禁止 (稼働 fleet への迷入防止)
   o.http_port = http_port;
   o.caps_json = adminTgCaps();
   o.mesh_timing_template = adminTiming();
@@ -309,6 +311,7 @@ TEST_CASE("admin API: /api/test/telegram は非 leader なら err") {
   o.role = "indoor_panel";
   o.listen_addr = "127.0.0.1:" + std::to_string(mesh_port);
   o.psk.fill(0x35);
+  o.enable_beacon = false;  // 実 beacon 禁止 (稼働 fleet への迷入防止)
   o.http_port = http_port;
   o.caps_json = "{}";  // telegram duty 不適格 → leader に決してならない
   o.mesh_timing_template = adminTiming();
