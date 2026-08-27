@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "util/hlc.h"
+#include "util/json.h"
 
 namespace db {
 
@@ -81,6 +82,7 @@ class RuleEngine {
 
  private:
   std::string config_json_;
+  json::Doc config_;  // setConfig でパース済みのツリー (evaluate 毎の再パースを避ける)
 };
 
 }  // namespace db
