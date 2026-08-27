@@ -89,14 +89,18 @@
     "en": {}
   },
 
-  "theme_assets": {                             // 背景画像などの blob 台帳 (実体は各ノードの assets/ に
-    "<sha256>": { "size": 123456, "type": "image/jpeg",   // キャッシュ。origin から mesh FETCH_BLOB で取得)
+  // 統一資産台帳: 背景画像 + カスタム音声 (wav/mp3 ≤3MB) の blob 目録。実体は各ノードの
+  // assets/ ディレクトリ。**設定変更時に各ノードが参照中の hash を能動的に前取り**
+  // (mesh FETCH_BLOB — 保持ノードならどこからでも) → 再生/表示は常にローカルファイル =
+  // ミリ秒級。管理画面はノード毎のキャッシュ被覆率を表示。
+  "assets": {
+    "<sha256>": { "size": 123456, "type": "image/jpeg | audio/mpeg | audio/wav",
                   "origin": "<node_id>", "label": "桜.jpg" }
   },
 
   "display": {                                  // 表示・焼付対策 (全端末既定; devices.<id>.local.display で上書き)
     // theme: 門口機の背景 (室内機/管理画面から「推送」= この設定を書くだけ。CRDT で即時同期)
-    "theme": { "bg_color": "#101418", "bg_image": null },   // bg_image: theme_assets の sha256 or null
+    "theme": { "bg_color": "#101418", "bg_image": null },   // bg_image: assets の sha256 or null
     "brightness": 70,                           // 0-100 (遠隔調整 — 管理画面のスライダー)
     "night": { "enabled": true, "from": "22:00", "to": "06:00",
                "brightness": 15, "red_tint": true },   // 夜間モード (補正済み時計で判定)
@@ -132,6 +136,10 @@
   // 新アクション { "type": "auto_reply", "reply_id": "qr_okihai" } = 門口機が自動で
   // クイック返信を表示+TTS (例: 宅配→「置き配をお願いします」+ 電話は鳴らさない)。
 
+  // quick_replies 各項は任意で "audio": {"ja": "<sha256>", "en": "<sha256>"} を持てる —
+  // 訪客言語に合わせたカスタム音声で再生 (優先度: キャッシュ済 audio → 系統 TTS → 提示音)。
+  // auto_reply アクションも同じ音声を継承。chime の sound は "asset:<sha256>" 形式で
+  // カスタム音対応、emergency.alarm_sound も同様。
   "quick_replies": {                            // クイック返信 (ユーザー編集可能)
     "qr_away":    { "label": { "ja": "ただいま留守にしています", "en": "We are away right now",
                                "zh": "现在不在家" }, "speak": true, "order": 1 },
