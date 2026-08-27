@@ -16,6 +16,11 @@
     <string name="admin_add_window">時間帯を追加</string>
     <string name="admin_all">すべて</string>
     <string name="admin_always">常時</string>
+    <string name="admin_assets">資産 (画像・音声)</string>
+    <string name="admin_assets_cached">キャッシュ: %1$s/%2$s 台</string>
+    <string name="admin_assets_upload">アップロード</string>
+    <string name="admin_audio_none">音声なし (TTS)</string>
+    <string name="admin_audio_play">試聴</string>
     <string name="admin_bot_token">Bot token (書込のみ・表示されません)</string>
     <string name="admin_building_assign">所属建物</string>
     <string name="admin_buildings">建物</string>
@@ -56,6 +61,7 @@
     <string name="admin_label_en">ラベル (英語)</string>
     <string name="admin_label_ja">ラベル (日本語)</string>
     <string name="admin_label_zh">ラベル (中国語)</string>
+    <string name="admin_languages">訪客言語</string>
     <string name="admin_leader">リーダー</string>
     <string name="admin_locked">10分間ロックされました</string>
     <string name="admin_login">ログイン</string>
@@ -74,6 +80,7 @@
     <string name="admin_pin_wrong">PIN が違います</string>
     <string name="admin_poll_updates">返信ボタンを受信 (getUpdates)</string>
     <string name="admin_port">ポート</string>
+    <string name="admin_purposes">用件</string>
     <string name="admin_qr_speak">読み上げ</string>
     <string name="admin_quick_replies">クイック返信</string>
     <string name="admin_quiet_hours">静音時間帯</string>
@@ -99,7 +106,13 @@
     <string name="admin_target_ext">内線番号</string>
     <string name="admin_test_send">テスト送信</string>
     <string name="admin_test_sent">テスト通知を送信しました</string>
+    <string name="admin_texts">文言</string>
+    <string name="admin_texts_hint">空欄なら既定文言を使用します</string>
     <string name="admin_tg_chat_ids">Telegram chat ID (カンマ区切り)</string>
+    <string name="admin_theme">テーマ (背景)</string>
+    <string name="admin_theme_bg_color">背景色</string>
+    <string name="admin_theme_bg_image">背景画像</string>
+    <string name="admin_theme_preview">プレビュー</string>
     <string name="admin_title">管理</string>
     <string name="admin_transport">トランスポート</string>
     <string name="admin_tz_offset">タイムゾーン (UTC からの分)</string>
@@ -134,6 +147,8 @@
     <string name="event_online">%1$s オンライン復帰</string>
     <string name="event_press">%1$s に来客です (%2$s)</string>
     <string name="idle_call_button">%1$s 呼出</string>
+    <string name="idle_choose_purpose">ご用件をお選びください</string>
+    <string name="idle_language">言語</string>
     <string name="idle_touch_to_call">タッチして呼び出してください</string>
     <string name="incall_end">終了</string>
     <string name="incall_title">通話中</string>
@@ -148,6 +163,7 @@
     <string name="panel_press_hint">ボタンを押すと住人に通知します</string>
     <string name="panel_tap_sound">タップして音を有効化</string>
     <string name="panel_title">呼出パネル</string>
+    <string name="purpose_sent">%1$s で呼び出しました</string>
     <string name="reply_answered">応答済み (%1$s)</string>
     <string name="reply_banner">住人からのメッセージ</string>
     <string name="reply_choose">クイック返信を選択</string>
@@ -155,7 +171,9 @@
     <string name="ring_answer">応答</string>
     <string name="ring_ignore">無視</string>
     <string name="ring_incoming">%1$s で呼び出し中</string>
+    <string name="ring_lang_badge">訪客言語: %1$s</string>
     <string name="ring_monitor">モニタ</string>
     <string name="ring_monitoring">門口の音声を再生中</string>
     <string name="ring_no_video">門口機の映像がありません</string>
+    <string name="ring_purpose_badge">用件: %1$s</string>
 </resources>

@@ -20,6 +20,11 @@
   <data name="admin_add_window" xml:space="preserve"><value>時間帯を追加</value></data>
   <data name="admin_all" xml:space="preserve"><value>すべて</value></data>
   <data name="admin_always" xml:space="preserve"><value>常時</value></data>
+  <data name="admin_assets" xml:space="preserve"><value>資産 (画像・音声)</value></data>
+  <data name="admin_assets_cached" xml:space="preserve"><value>キャッシュ: {0}/{1} 台</value></data>
+  <data name="admin_assets_upload" xml:space="preserve"><value>アップロード</value></data>
+  <data name="admin_audio_none" xml:space="preserve"><value>音声なし (TTS)</value></data>
+  <data name="admin_audio_play" xml:space="preserve"><value>試聴</value></data>
   <data name="admin_bot_token" xml:space="preserve"><value>Bot token (書込のみ・表示されません)</value></data>
   <data name="admin_building_assign" xml:space="preserve"><value>所属建物</value></data>
   <data name="admin_buildings" xml:space="preserve"><value>建物</value></data>
@@ -60,6 +65,7 @@
   <data name="admin_label_en" xml:space="preserve"><value>ラベル (英語)</value></data>
   <data name="admin_label_ja" xml:space="preserve"><value>ラベル (日本語)</value></data>
   <data name="admin_label_zh" xml:space="preserve"><value>ラベル (中国語)</value></data>
+  <data name="admin_languages" xml:space="preserve"><value>訪客言語</value></data>
   <data name="admin_leader" xml:space="preserve"><value>リーダー</value></data>
   <data name="admin_locked" xml:space="preserve"><value>10分間ロックされました</value></data>
   <data name="admin_login" xml:space="preserve"><value>ログイン</value></data>
@@ -78,6 +84,7 @@
   <data name="admin_pin_wrong" xml:space="preserve"><value>PIN が違います</value></data>
   <data name="admin_poll_updates" xml:space="preserve"><value>返信ボタンを受信 (getUpdates)</value></data>
   <data name="admin_port" xml:space="preserve"><value>ポート</value></data>
+  <data name="admin_purposes" xml:space="preserve"><value>用件</value></data>
   <data name="admin_qr_speak" xml:space="preserve"><value>読み上げ</value></data>
   <data name="admin_quick_replies" xml:space="preserve"><value>クイック返信</value></data>
   <data name="admin_quiet_hours" xml:space="preserve"><value>静音時間帯</value></data>
@@ -103,7 +110,13 @@
   <data name="admin_target_ext" xml:space="preserve"><value>内線番号</value></data>
   <data name="admin_test_send" xml:space="preserve"><value>テスト送信</value></data>
   <data name="admin_test_sent" xml:space="preserve"><value>テスト通知を送信しました</value></data>
+  <data name="admin_texts" xml:space="preserve"><value>文言</value></data>
+  <data name="admin_texts_hint" xml:space="preserve"><value>空欄なら既定文言を使用します</value></data>
   <data name="admin_tg_chat_ids" xml:space="preserve"><value>Telegram chat ID (カンマ区切り)</value></data>
+  <data name="admin_theme" xml:space="preserve"><value>テーマ (背景)</value></data>
+  <data name="admin_theme_bg_color" xml:space="preserve"><value>背景色</value></data>
+  <data name="admin_theme_bg_image" xml:space="preserve"><value>背景画像</value></data>
+  <data name="admin_theme_preview" xml:space="preserve"><value>プレビュー</value></data>
   <data name="admin_title" xml:space="preserve"><value>管理</value></data>
   <data name="admin_transport" xml:space="preserve"><value>トランスポート</value></data>
   <data name="admin_tz_offset" xml:space="preserve"><value>タイムゾーン (UTC からの分)</value></data>
@@ -138,6 +151,8 @@
   <data name="event_online" xml:space="preserve"><value>{0} オンライン復帰</value></data>
   <data name="event_press" xml:space="preserve"><value>{0} に来客です ({1})</value></data>
   <data name="idle_call_button" xml:space="preserve"><value>{0} 呼出</value></data>
+  <data name="idle_choose_purpose" xml:space="preserve"><value>ご用件をお選びください</value></data>
+  <data name="idle_language" xml:space="preserve"><value>言語</value></data>
   <data name="idle_touch_to_call" xml:space="preserve"><value>タッチして呼び出してください</value></data>
   <data name="incall_end" xml:space="preserve"><value>終了</value></data>
   <data name="incall_title" xml:space="preserve"><value>通話中</value></data>
@@ -152,6 +167,7 @@
   <data name="panel_press_hint" xml:space="preserve"><value>ボタンを押すと住人に通知します</value></data>
   <data name="panel_tap_sound" xml:space="preserve"><value>タップして音を有効化</value></data>
   <data name="panel_title" xml:space="preserve"><value>呼出パネル</value></data>
+  <data name="purpose_sent" xml:space="preserve"><value>{0} で呼び出しました</value></data>
   <data name="reply_answered" xml:space="preserve"><value>応答済み ({0})</value></data>
   <data name="reply_banner" xml:space="preserve"><value>住人からのメッセージ</value></data>
   <data name="reply_choose" xml:space="preserve"><value>クイック返信を選択</value></data>
@@ -159,7 +175,9 @@
   <data name="ring_answer" xml:space="preserve"><value>応答</value></data>
   <data name="ring_ignore" xml:space="preserve"><value>無視</value></data>
   <data name="ring_incoming" xml:space="preserve"><value>{0} で呼び出し中</value></data>
+  <data name="ring_lang_badge" xml:space="preserve"><value>訪客言語: {0}</value></data>
   <data name="ring_monitor" xml:space="preserve"><value>モニタ</value></data>
   <data name="ring_monitoring" xml:space="preserve"><value>門口の音声を再生中</value></data>
   <data name="ring_no_video" xml:space="preserve"><value>門口機の映像がありません</value></data>
+  <data name="ring_purpose_badge" xml:space="preserve"><value>用件: {0}</value></data>
 </root>

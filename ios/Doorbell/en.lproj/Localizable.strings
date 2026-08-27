@@ -15,6 +15,11 @@
 "admin.add_window" = "Add window";
 "admin.all" = "All";
 "admin.always" = "Always";
+"admin.assets" = "Assets";
+"admin.assets_cached" = "Cached on %@/%@ nodes";
+"admin.assets_upload" = "Upload";
+"admin.audio_none" = "No audio (TTS)";
+"admin.audio_play" = "Play";
 "admin.bot_token" = "Bot token (write-only)";
 "admin.building_assign" = "Building";
 "admin.buildings" = "Buildings";
@@ -55,6 +60,7 @@
 "admin.label_en" = "Label (English)";
 "admin.label_ja" = "Label (Japanese)";
 "admin.label_zh" = "Label (Chinese)";
+"admin.languages" = "Visitor languages";
 "admin.leader" = "Leader";
 "admin.locked" = "Locked for 10 minutes";
 "admin.login" = "Log in";
@@ -73,6 +79,7 @@
 "admin.pin_wrong" = "Wrong PIN";
 "admin.poll_updates" = "Receive replies (getUpdates)";
 "admin.port" = "Port";
+"admin.purposes" = "Purposes";
 "admin.qr_speak" = "Speak aloud";
 "admin.quick_replies" = "Quick replies";
 "admin.quiet_hours" = "Quiet hours";
@@ -98,7 +105,13 @@
 "admin.target_ext" = "Extension";
 "admin.test_send" = "Send test";
 "admin.test_sent" = "Test message queued";
+"admin.texts" = "Texts";
+"admin.texts_hint" = "Leave blank to use the default";
 "admin.tg_chat_ids" = "Telegram chat IDs (comma separated)";
+"admin.theme" = "Theme";
+"admin.theme_bg_color" = "Background color";
+"admin.theme_bg_image" = "Background image";
+"admin.theme_preview" = "Preview";
 "admin.title" = "Admin";
 "admin.transport" = "Transport";
 "admin.tz_offset" = "TZ offset (minutes from UTC)";
@@ -133,6 +146,8 @@
 "event.online" = "%@ back online";
 "event.press" = "Visitor at %@ (%@)";
 "idle.call_button" = "Call %@";
+"idle.choose_purpose" = "Please choose your purpose";
+"idle.language" = "Language";
 "idle.touch_to_call" = "Touch to call";
 "incall.end" = "End";
 "incall.title" = "In call";
@@ -147,6 +162,7 @@
 "panel.press_hint" = "Press a button to notify the resident";
 "panel.tap_sound" = "Tap to enable sound";
 "panel.title" = "Call panel";
+"purpose.sent" = "Called as %@";
 "reply.answered" = "Replied (%@)";
 "reply.banner" = "Message from resident";
 "reply.choose" = "Choose a quick reply";
@@ -154,6 +170,8 @@
 "ring.answer" = "Answer";
 "ring.ignore" = "Ignore";
 "ring.incoming" = "Visitor at %@";
+"ring.lang_badge" = "Visitor language: %@";
 "ring.monitor" = "Monitor";
 "ring.monitoring" = "Live door audio on";
 "ring.no_video" = "No video from door station";
+"ring.purpose_badge" = "Purpose: %@";

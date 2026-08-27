@@ -16,6 +16,11 @@
     <string name="admin_add_window">Add window</string>
     <string name="admin_all">All</string>
     <string name="admin_always">Always</string>
+    <string name="admin_assets">Assets</string>
+    <string name="admin_assets_cached">Cached on %1$s/%2$s nodes</string>
+    <string name="admin_assets_upload">Upload</string>
+    <string name="admin_audio_none">No audio (TTS)</string>
+    <string name="admin_audio_play">Play</string>
     <string name="admin_bot_token">Bot token (write-only)</string>
     <string name="admin_building_assign">Building</string>
     <string name="admin_buildings">Buildings</string>
@@ -56,6 +61,7 @@
     <string name="admin_label_en">Label (English)</string>
     <string name="admin_label_ja">Label (Japanese)</string>
     <string name="admin_label_zh">Label (Chinese)</string>
+    <string name="admin_languages">Visitor languages</string>
     <string name="admin_leader">Leader</string>
     <string name="admin_locked">Locked for 10 minutes</string>
     <string name="admin_login">Log in</string>
@@ -74,6 +80,7 @@
     <string name="admin_pin_wrong">Wrong PIN</string>
     <string name="admin_poll_updates">Receive replies (getUpdates)</string>
     <string name="admin_port">Port</string>
+    <string name="admin_purposes">Purposes</string>
     <string name="admin_qr_speak">Speak aloud</string>
     <string name="admin_quick_replies">Quick replies</string>
     <string name="admin_quiet_hours">Quiet hours</string>
@@ -99,7 +106,13 @@
     <string name="admin_target_ext">Extension</string>
     <string name="admin_test_send">Send test</string>
     <string name="admin_test_sent">Test message queued</string>
+    <string name="admin_texts">Texts</string>
+    <string name="admin_texts_hint">Leave blank to use the default</string>
     <string name="admin_tg_chat_ids">Telegram chat IDs (comma separated)</string>
+    <string name="admin_theme">Theme</string>
+    <string name="admin_theme_bg_color">Background color</string>
+    <string name="admin_theme_bg_image">Background image</string>
+    <string name="admin_theme_preview">Preview</string>
     <string name="admin_title">Admin</string>
     <string name="admin_transport">Transport</string>
     <string name="admin_tz_offset">TZ offset (minutes from UTC)</string>
@@ -134,6 +147,8 @@
     <string name="event_online">%1$s back online</string>
     <string name="event_press">Visitor at %1$s (%2$s)</string>
     <string name="idle_call_button">Call %1$s</string>
+    <string name="idle_choose_purpose">Please choose your purpose</string>
+    <string name="idle_language">Language</string>
     <string name="idle_touch_to_call">Touch to call</string>
     <string name="incall_end">End</string>
     <string name="incall_title">In call</string>
@@ -148,6 +163,7 @@
     <string name="panel_press_hint">Press a button to notify the resident</string>
     <string name="panel_tap_sound">Tap to enable sound</string>
     <string name="panel_title">Call panel</string>
+    <string name="purpose_sent">Called as %1$s</string>
     <string name="reply_answered">Replied (%1$s)</string>
     <string name="reply_banner">Message from resident</string>
     <string name="reply_choose">Choose a quick reply</string>
@@ -155,7 +171,9 @@
     <string name="ring_answer">Answer</string>
     <string name="ring_ignore">Ignore</string>
     <string name="ring_incoming">Visitor at %1$s</string>
+    <string name="ring_lang_badge">Visitor language: %1$s</string>
     <string name="ring_monitor">Monitor</string>
     <string name="ring_monitoring">Live door audio on</string>
     <string name="ring_no_video">No video from door station</string>
+    <string name="ring_purpose_badge">Purpose: %1$s</string>
 </resources>

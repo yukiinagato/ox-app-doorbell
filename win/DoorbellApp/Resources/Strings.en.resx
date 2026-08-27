@@ -20,6 +20,11 @@
   <data name="admin_add_window" xml:space="preserve"><value>Add window</value></data>
   <data name="admin_all" xml:space="preserve"><value>All</value></data>
   <data name="admin_always" xml:space="preserve"><value>Always</value></data>
+  <data name="admin_assets" xml:space="preserve"><value>Assets</value></data>
+  <data name="admin_assets_cached" xml:space="preserve"><value>Cached on {0}/{1} nodes</value></data>
+  <data name="admin_assets_upload" xml:space="preserve"><value>Upload</value></data>
+  <data name="admin_audio_none" xml:space="preserve"><value>No audio (TTS)</value></data>
+  <data name="admin_audio_play" xml:space="preserve"><value>Play</value></data>
   <data name="admin_bot_token" xml:space="preserve"><value>Bot token (write-only)</value></data>
   <data name="admin_building_assign" xml:space="preserve"><value>Building</value></data>
   <data name="admin_buildings" xml:space="preserve"><value>Buildings</value></data>
@@ -60,6 +65,7 @@
   <data name="admin_label_en" xml:space="preserve"><value>Label (English)</value></data>
   <data name="admin_label_ja" xml:space="preserve"><value>Label (Japanese)</value></data>
   <data name="admin_label_zh" xml:space="preserve"><value>Label (Chinese)</value></data>
+  <data name="admin_languages" xml:space="preserve"><value>Visitor languages</value></data>
   <data name="admin_leader" xml:space="preserve"><value>Leader</value></data>
   <data name="admin_locked" xml:space="preserve"><value>Locked for 10 minutes</value></data>
   <data name="admin_login" xml:space="preserve"><value>Log in</value></data>
@@ -78,6 +84,7 @@
   <data name="admin_pin_wrong" xml:space="preserve"><value>Wrong PIN</value></data>
   <data name="admin_poll_updates" xml:space="preserve"><value>Receive replies (getUpdates)</value></data>
   <data name="admin_port" xml:space="preserve"><value>Port</value></data>
+  <data name="admin_purposes" xml:space="preserve"><value>Purposes</value></data>
   <data name="admin_qr_speak" xml:space="preserve"><value>Speak aloud</value></data>
   <data name="admin_quick_replies" xml:space="preserve"><value>Quick replies</value></data>
   <data name="admin_quiet_hours" xml:space="preserve"><value>Quiet hours</value></data>
@@ -103,7 +110,13 @@
   <data name="admin_target_ext" xml:space="preserve"><value>Extension</value></data>
   <data name="admin_test_send" xml:space="preserve"><value>Send test</value></data>
   <data name="admin_test_sent" xml:space="preserve"><value>Test message queued</value></data>
+  <data name="admin_texts" xml:space="preserve"><value>Texts</value></data>
+  <data name="admin_texts_hint" xml:space="preserve"><value>Leave blank to use the default</value></data>
   <data name="admin_tg_chat_ids" xml:space="preserve"><value>Telegram chat IDs (comma separated)</value></data>
+  <data name="admin_theme" xml:space="preserve"><value>Theme</value></data>
+  <data name="admin_theme_bg_color" xml:space="preserve"><value>Background color</value></data>
+  <data name="admin_theme_bg_image" xml:space="preserve"><value>Background image</value></data>
+  <data name="admin_theme_preview" xml:space="preserve"><value>Preview</value></data>
   <data name="admin_title" xml:space="preserve"><value>Admin</value></data>
   <data name="admin_transport" xml:space="preserve"><value>Transport</value></data>
   <data name="admin_tz_offset" xml:space="preserve"><value>TZ offset (minutes from UTC)</value></data>
@@ -138,6 +151,8 @@
   <data name="event_online" xml:space="preserve"><value>{0} back online</value></data>
   <data name="event_press" xml:space="preserve"><value>Visitor at {0} ({1})</value></data>
   <data name="idle_call_button" xml:space="preserve"><value>Call {0}</value></data>
+  <data name="idle_choose_purpose" xml:space="preserve"><value>Please choose your purpose</value></data>
+  <data name="idle_language" xml:space="preserve"><value>Language</value></data>
   <data name="idle_touch_to_call" xml:space="preserve"><value>Touch to call</value></data>
   <data name="incall_end" xml:space="preserve"><value>End</value></data>
   <data name="incall_title" xml:space="preserve"><value>In call</value></data>
@@ -152,6 +167,7 @@
   <data name="panel_press_hint" xml:space="preserve"><value>Press a button to notify the resident</value></data>
   <data name="panel_tap_sound" xml:space="preserve"><value>Tap to enable sound</value></data>
   <data name="panel_title" xml:space="preserve"><value>Call panel</value></data>
+  <data name="purpose_sent" xml:space="preserve"><value>Called as {0}</value></data>
   <data name="reply_answered" xml:space="preserve"><value>Replied ({0})</value></data>
   <data name="reply_banner" xml:space="preserve"><value>Message from resident</value></data>
   <data name="reply_choose" xml:space="preserve"><value>Choose a quick reply</value></data>
@@ -159,7 +175,9 @@
   <data name="ring_answer" xml:space="preserve"><value>Answer</value></data>
   <data name="ring_ignore" xml:space="preserve"><value>Ignore</value></data>
   <data name="ring_incoming" xml:space="preserve"><value>Visitor at {0}</value></data>
+  <data name="ring_lang_badge" xml:space="preserve"><value>Visitor language: {0}</value></data>
   <data name="ring_monitor" xml:space="preserve"><value>Monitor</value></data>
   <data name="ring_monitoring" xml:space="preserve"><value>Live door audio on</value></data>
   <data name="ring_no_video" xml:space="preserve"><value>No video from door station</value></data>
+  <data name="ring_purpose_badge" xml:space="preserve"><value>Purpose: {0}</value></data>
 </root>

@@ -174,3 +174,23 @@ panel.monitor_title: { ja: "受鈴モニター", en: "Ring monitor", zh: "受铃
 panel.offline: { ja: "オフライン — 再接続中…", en: "Offline — reconnecting…", zh: "离线 — 重连中…" }
 panel.tap_sound: { ja: "タップして音を有効化", en: "Tap to enable sound", zh: "点按以启用声音" }
 panel.press_hint: { ja: "ボタンを押すと住人に通知します", en: "Press a button to notify the resident", zh: "按下按钮即可通知住户" }
+
+# ---- 批次② UI (テーマ/言語/用件/資産) ----
+idle.choose_purpose: { ja: "ご用件をお選びください", en: "Please choose your purpose", zh: "请选择来访目的" }
+idle.language: { ja: "言語", en: "Language", zh: "语言" }
+purpose.sent: { ja: "{purpose} で呼び出しました", en: "Called as {purpose}", zh: "已按 {purpose} 呼叫" }
+ring.purpose_badge: { ja: "用件: {purpose}", en: "Purpose: {purpose}", zh: "目的: {purpose}" }
+ring.lang_badge: { ja: "訪客言語: {lang}", en: "Visitor language: {lang}", zh: "访客语言: {lang}" }
+admin.assets: { ja: "資産 (画像・音声)", en: "Assets", zh: "资源 (图片/音频)" }
+admin.assets_upload: { ja: "アップロード", en: "Upload", zh: "上传" }
+admin.assets_cached: { ja: "キャッシュ: {n}/{total} 台", en: "Cached on {n}/{total} nodes", zh: "已缓存 {n}/{total} 台" }
+admin.theme: { ja: "テーマ (背景)", en: "Theme", zh: "主题 (背景)" }
+admin.theme_bg_color: { ja: "背景色", en: "Background color", zh: "背景色" }
+admin.theme_bg_image: { ja: "背景画像", en: "Background image", zh: "背景图片" }
+admin.theme_preview: { ja: "プレビュー", en: "Preview", zh: "预览" }
+admin.texts: { ja: "文言", en: "Texts", zh: "文案" }
+admin.texts_hint: { ja: "空欄なら既定文言を使用します", en: "Leave blank to use the default", zh: "留空则使用默认文案" }
+admin.purposes: { ja: "用件", en: "Purposes", zh: "来访目的" }
+admin.languages: { ja: "訪客言語", en: "Visitor languages", zh: "访客语言" }
+admin.audio_none: { ja: "音声なし (TTS)", en: "No audio (TTS)", zh: "无音频 (用 TTS)" }
+admin.audio_play: { ja: "試聴", en: "Play", zh: "试听" }

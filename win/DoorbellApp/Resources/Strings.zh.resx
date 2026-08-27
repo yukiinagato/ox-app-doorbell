@@ -20,6 +20,11 @@
   <data name="admin_add_window" xml:space="preserve"><value>添加时间段</value></data>
   <data name="admin_all" xml:space="preserve"><value>全部</value></data>
   <data name="admin_always" xml:space="preserve"><value>全天</value></data>
+  <data name="admin_assets" xml:space="preserve"><value>资源 (图片/音频)</value></data>
+  <data name="admin_assets_cached" xml:space="preserve"><value>已缓存 {0}/{1} 台</value></data>
+  <data name="admin_assets_upload" xml:space="preserve"><value>上传</value></data>
+  <data name="admin_audio_none" xml:space="preserve"><value>无音频 (用 TTS)</value></data>
+  <data name="admin_audio_play" xml:space="preserve"><value>试听</value></data>
   <data name="admin_bot_token" xml:space="preserve"><value>Bot token (仅写入)</value></data>
   <data name="admin_building_assign" xml:space="preserve"><value>所属建筑</value></data>
   <data name="admin_buildings" xml:space="preserve"><value>建筑</value></data>
@@ -60,6 +65,7 @@
   <data name="admin_label_en" xml:space="preserve"><value>标签 (英语)</value></data>
   <data name="admin_label_ja" xml:space="preserve"><value>标签 (日语)</value></data>
   <data name="admin_label_zh" xml:space="preserve"><value>标签 (中文)</value></data>
+  <data name="admin_languages" xml:space="preserve"><value>访客语言</value></data>
   <data name="admin_leader" xml:space="preserve"><value>主节点</value></data>
   <data name="admin_locked" xml:space="preserve"><value>已锁定 10 分钟</value></data>
   <data name="admin_login" xml:space="preserve"><value>登录</value></data>
@@ -78,6 +84,7 @@
   <data name="admin_pin_wrong" xml:space="preserve"><value>PIN 错误</value></data>
   <data name="admin_poll_updates" xml:space="preserve"><value>接收回复按钮 (getUpdates)</value></data>
   <data name="admin_port" xml:space="preserve"><value>端口</value></data>
+  <data name="admin_purposes" xml:space="preserve"><value>来访目的</value></data>
   <data name="admin_qr_speak" xml:space="preserve"><value>朗读</value></data>
   <data name="admin_quick_replies" xml:space="preserve"><value>快捷回复</value></data>
   <data name="admin_quiet_hours" xml:space="preserve"><value>静音时段</value></data>
@@ -103,7 +110,13 @@
   <data name="admin_target_ext" xml:space="preserve"><value>分机号</value></data>
   <data name="admin_test_send" xml:space="preserve"><value>发送测试</value></data>
   <data name="admin_test_sent" xml:space="preserve"><value>已发送测试通知</value></data>
+  <data name="admin_texts" xml:space="preserve"><value>文案</value></data>
+  <data name="admin_texts_hint" xml:space="preserve"><value>留空则使用默认文案</value></data>
   <data name="admin_tg_chat_ids" xml:space="preserve"><value>Telegram chat ID (逗号分隔)</value></data>
+  <data name="admin_theme" xml:space="preserve"><value>主题 (背景)</value></data>
+  <data name="admin_theme_bg_color" xml:space="preserve"><value>背景色</value></data>
+  <data name="admin_theme_bg_image" xml:space="preserve"><value>背景图片</value></data>
+  <data name="admin_theme_preview" xml:space="preserve"><value>预览</value></data>
   <data name="admin_title" xml:space="preserve"><value>管理</value></data>
   <data name="admin_transport" xml:space="preserve"><value>传输</value></data>
   <data name="admin_tz_offset" xml:space="preserve"><value>时区偏移 (相对 UTC 分钟)</value></data>
@@ -138,6 +151,8 @@
   <data name="event_online" xml:space="preserve"><value>{0} 恢复在线</value></data>
   <data name="event_press" xml:space="preserve"><value>{0} 有访客 ({1})</value></data>
   <data name="idle_call_button" xml:space="preserve"><value>呼叫 {0}</value></data>
+  <data name="idle_choose_purpose" xml:space="preserve"><value>请选择来访目的</value></data>
+  <data name="idle_language" xml:space="preserve"><value>语言</value></data>
   <data name="idle_touch_to_call" xml:space="preserve"><value>触摸屏幕呼叫</value></data>
   <data name="incall_end" xml:space="preserve"><value>结束</value></data>
   <data name="incall_title" xml:space="preserve"><value>通话中</value></data>
@@ -152,6 +167,7 @@
   <data name="panel_press_hint" xml:space="preserve"><value>按下按钮即可通知住户</value></data>
   <data name="panel_tap_sound" xml:space="preserve"><value>点按以启用声音</value></data>
   <data name="panel_title" xml:space="preserve"><value>呼叫面板</value></data>
+  <data name="purpose_sent" xml:space="preserve"><value>已按 {0} 呼叫</value></data>
   <data name="reply_answered" xml:space="preserve"><value>已回复 ({0})</value></data>
   <data name="reply_banner" xml:space="preserve"><value>住户留言</value></data>
   <data name="reply_choose" xml:space="preserve"><value>选择快捷回复</value></data>
@@ -159,7 +175,9 @@
   <data name="ring_answer" xml:space="preserve"><value>接听</value></data>
   <data name="ring_ignore" xml:space="preserve"><value>忽略</value></data>
   <data name="ring_incoming" xml:space="preserve"><value>{0} 有访客</value></data>
+  <data name="ring_lang_badge" xml:space="preserve"><value>访客语言: {0}</value></data>
   <data name="ring_monitor" xml:space="preserve"><value>监听</value></data>
   <data name="ring_monitoring" xml:space="preserve"><value>正在播放门口声音</value></data>
   <data name="ring_no_video" xml:space="preserve"><value>没有门口机画面</value></data>
+  <data name="ring_purpose_badge" xml:space="preserve"><value>目的: {0}</value></data>
 </root>
