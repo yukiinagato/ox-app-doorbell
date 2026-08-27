@@ -77,7 +77,14 @@
                       "*0": { "type": "hangup" } }
   },
 
+  "theme_assets": {                             // 背景画像などの blob 台帳 (実体は各ノードの assets/ に
+    "<sha256>": { "size": 123456, "type": "image/jpeg",   // キャッシュ。origin から mesh FETCH_BLOB で取得)
+                  "origin": "<node_id>", "label": "桜.jpg" }
+  },
+
   "display": {                                  // 表示・焼付対策 (全端末既定; devices.<id>.local.display で上書き)
+    // theme: 門口機の背景 (室内機/管理画面から「推送」= この設定を書くだけ。CRDT で即時同期)
+    "theme": { "bg_color": "#101418", "bg_image": null },   // bg_image: theme_assets の sha256 or null
     "brightness": 70,                           // 0-100 (遠隔調整 — 管理画面のスライダー)
     "night": { "enabled": true, "from": "22:00", "to": "06:00",
                "brightness": 15, "red_tint": true },   // 夜間モード (補正済み時計で判定)
