@@ -115,6 +115,23 @@
 - press の notify (LWW マージ): `{ "hlc": "…", "claimed_by": "…", "notified_at": "…",
   "telegram_msg_ids": {"<chat_id>": msg_id}, "replied": {"reply_id": "qr_away", "by": "telegram"} }`
 
-## MQTT (Phase 2)
+## MQTT (Phase 2 — 実装済み)
 
 計画書の topic 表 + `doorbell/<door_id>/reply/set` (購読; payload = reply_id または自由文)。
+実装: `core/src/bridge/` (mqtt_client = 自前 MQTT 3.1.1 QoS0、ha_bridge = HA 統合)。
+
+- 有効条件: `integrations.mqtt.host` 非空 かつ mesh の `mqtt_bridge` duty leader。
+  leader 交代・設定変更で自動 start/stop。`/api/status` に `bridge.mqtt =
+  connected|disconnected|inactive`。
+- 接続時: LWT=`<base>/bridge/availability`=offline(retain) → online(retain) →
+  全 discovery (retain) → 現在状態 (door/node availability) → 購読
+  (`<prefix>/status`・`<base>/+/reply/set`・`<base>/cmd/ack`)。`<prefix>/status`="online"
+  (HA 再起動) で discovery+状態を全再発行。
+- Discovery entity (object_id/unique_id は ASCII、日本語は name のみ):
+  door 毎に `event.doorbell_<door_id>` (device_class doorbell) と
+  `binary_sensor.doorbell_<door_id>_motion` (off_delay 30)、device 毎に
+  `binary_sensor.doorbell_node_<node_id 先頭8桁>` (connectivity — 防盗の端末断)、
+  加えて `binary_sensor.doorbell_bridge_online` (LWT 由来、deploy/ha の看門狗が参照)。
+- スナップショット/カメラは MQTT に載せない — 実画は go2rtc、静止画は HA generic camera
+  が門口機の `/snapshot.jpg` を直接取る (`deploy/ha/` 参照)。
+- MVP は認証 `user`/`pass` 平文 (`pass_ref` の secure store 化は sip と同時に対応予定)。

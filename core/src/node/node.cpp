@@ -5,6 +5,7 @@
 #include <mutex>
 #include <set>
 
+#include "bridge/ha_bridge.h"
 #include "httpd/webui_assets.h"
 #include "media/frame_bus.h"
 #include "mesh/tcp_transport.h"
@@ -66,6 +67,7 @@ struct Node::Impl {
   std::unique_ptr<Mesh> mesh;
   std::unique_ptr<Httpd> httpd;
   std::unique_ptr<SipCtl> sipctl;
+  std::unique_ptr<HaBridge> bridge;  // HA MQTT ブリッジ (leader 時のみ接続)
   FrameBus frame_bus;  // 帧総線 (任意スレッドから push / 需要駆動 JPEG)
 #ifdef _WIN32
   std::unique_ptr<CameraWin> camera;  // door_station のみ起動
@@ -86,6 +88,7 @@ struct Node::Impl {
   std::string dtmf_buf;          // 通話中の DTMF 機能碼バッファ
   uint64_t dtmf_timer = 0;       // 3 秒無入力クリア
   uint64_t sip_reapply_timer = 0;  // 設定変更のデバウンス (連続する sip.* 差分で再起動を繰り返さない)
+  uint64_t bridge_reapply_timer = 0;  // 同・HA ブリッジ用 (config 差分は複数キーで届く)
 
   // コールバック (任意スレッドから差し替え可)
   std::mutex cb_mu;
@@ -208,6 +211,25 @@ struct Node::Impl {
     sip_reapply_timer = loop->postDelayed(300, [this] {
       sip_reapply_timer = 0;
       if (sipctl) sipctl->updateSettings(sipSettings());
+    });
+  }
+
+  // ---------- HA MQTT ブリッジ ----------
+  // 有効条件 = config integrations.mqtt.host 非空 かつ 自分が mqtt_bridge leader。
+  // リーダー交代 (on_leader_changed) と設定変更 (デバウンス) で再評価する。
+  void reevalBridge() {
+    if (!bridge) return;
+    const std::string host = json::getString(cfgAt("integrations.mqtt"), "host");
+    const bool active = !host.empty() && mesh && mesh->isLeader("mqtt_bridge");
+    bridge->configure(json::dump(cfg.get()), node_id, active);
+  }
+
+  void scheduleBridgeReapply() {
+    if (!bridge) return;
+    if (bridge_reapply_timer) loop->cancel(bridge_reapply_timer);
+    bridge_reapply_timer = loop->postDelayed(300, [this] {
+      bridge_reapply_timer = 0;
+      reevalBridge();
     });
   }
 
@@ -365,6 +387,8 @@ struct Node::Impl {
       if (e.key.compare(0, 4, "sip.") == 0 ||
           (e.key.compare(0, 8, "devices.") == 0 && e.key.find(node_id) != std::string::npos))
         scheduleSipReapply();
+      // HA ブリッジは設定全文 (mqtt 接続先/doors/devices/…) に依存 — デバウンスして再評価
+      scheduleBridgeReapply();
       uiNotify("{\"t\":\"config_changed\"}");
     });
     events->onEvent([this](const EventRecord& ev, bool is_local) { onEvent(ev, is_local); });
@@ -388,6 +412,8 @@ struct Node::Impl {
     Mesh::Callbacks cbs;
     cbs.on_peers_changed = [this] { uiNotify("{\"t\":\"peers_changed\"}"); };
     cbs.on_leader_changed = [this](const std::string& duty, const std::string& leader) {
+      // mqtt_bridge の leader 交代は即座に反映 (自分が就任 → 接続 / 退任 → 切断)
+      if (duty == "mqtt_bridge") reevalBridge();
       auto o = json::obj();
       json::set(o.get(), "t", "leader");
       json::set(o.get(), "duty", duty);
@@ -404,8 +430,24 @@ struct Node::Impl {
                         *events, ms, cbs));
 
     rebuildCfg();
+
+    // HA MQTT ブリッジ (接続するのは leader 就任後 — reevalBridge が判断)
+    {
+      HaBridge::Hooks hooks;
+      hooks.on_reply = [this](const std::string& rid, const std::string& text,
+                              const std::string& door) { quickReply(rid, text, door, "mqtt"); };
+      hooks.node_alive = [this] {
+        std::vector<std::pair<std::string, bool>> v;
+        if (mesh)
+          for (const auto& p : mesh->peers()) v.push_back({p.id, p.status != "dead"});
+        return v;
+      };
+      bridge.reset(new HaBridge(*loop, std::move(hooks)));
+    }
+
     seedConfig();
     mesh->start();
+    reevalBridge();  // 単機構成で既に leader の場合に備えて一度評価
 
     // SIP (sipctl)。server 未設定なら start は no-op — 設定が届いたら再適用される。
     {
@@ -532,12 +574,15 @@ struct Node::Impl {
           }
         }
       } else if (a.type == "telegram" || a.type == "ha_event") {
-        // leader だけが外部へ送る (Phase 2 で bridge へ配線)
+        // leader だけが外部へ送る (telegram は Phase 2 第二弾で bridge へ配線。
+        // ha_event: MQTT への発行はルールと独立に下の bridge->onEvent で行う)
         std::string duty = a.type == "telegram" ? "telegram" : "mqtt_bridge";
         if (mesh && mesh->isLeader(duty))
-          DB_LOGI(kTag, a.type + " dispatch (Phase 2): " + ev.type + " " + ev.door);
+          DB_LOGI(kTag, a.type + " dispatch: " + ev.type + " " + ev.door);
       }
     }
+    // HA MQTT ブリッジへ (リーダー時のみ — press/motion/offline/online/dtmf_action を発行)
+    if (bridge && mesh && mesh->isLeader("mqtt_bridge")) bridge->onEvent(ev);
   }
 
   // 生死変化 → offline/online イベント。重複防止: alive 集合の中で node_id 最大の者だけが記録
@@ -654,6 +699,8 @@ struct Node::Impl {
       json::set(leaders, "telegram", mesh->leaderFor("telegram"));
       json::set(leaders, "mqtt_bridge", mesh->leaderFor("mqtt_bridge"));
     }
+    cJSON* br = json::addObj(o.get(), "bridge");
+    json::set(br, "mqtt", bridge ? bridge->mqttStatus() : "inactive");
     cJSON* arr = json::addArr(o.get(), "peers");
     if (mesh) {
       for (const auto& p : mesh->peers()) {
@@ -863,6 +910,11 @@ void Node::stop() {
       impl_->loop->cancel(impl_->dtmf_timer);
       impl_->dtmf_timer = 0;
     }
+    if (impl_->bridge_reapply_timer) {
+      impl_->loop->cancel(impl_->bridge_reapply_timer);
+      impl_->bridge_reapply_timer = 0;
+    }
+    if (impl_->bridge) impl_->bridge->stop();  // availability=offline (retain) → DISCONNECT
     if (impl_->sipctl) impl_->sipctl->stop();  // 通話切断 → 登録解除 → pjsua_destroy
   });
   // httpd は runloop の外から止める (worker が callSync 待ちのまま mg_stop すると死锁)

@@ -1,6 +1,26 @@
 # Home Assistant 側の設定断片 (configuration.yaml / automations)
-# 門铃実体 (event/binary_sensor/camera) は leader ノードが MQTT Discovery で自動登録する。
-# ここに書くのは「HA 側でしか作れない」連携: HomeKit Bridge、看門狗、actionable 通知。
+# 門铃実体 (event/binary_sensor) は leader ノードが MQTT Discovery で自動登録する。
+# entity_id は ASCII の object_id から決まり予測可能: 例
+#   event.doorbell_d_front                    (呼び鈴, device_class: doorbell)
+#   binary_sensor.doorbell_d_front_motion     (動体検知, off_delay 30s)
+#   binary_sensor.doorbell_node_<node_id 先頭8桁>  (端末オンライン, connectivity)
+#   binary_sensor.doorbell_bridge_online      (ブリッジ生存 = LWT 由来)
+# 日本語名は entity/device の name にだけ載る (doors.<id>.label.ja)。
+#
+# カメラ/スナップショットは MQTT に載せない (設計方針):
+#   - 実画 (ライブ) は go2rtc が門口機の MJPEG を H.264 化 → HA へ (go2rtc.yaml 参照)
+#   - 静止画は HA の generic camera が門口機の /snapshot.jpg を直接取る (下の camera: 参照)
+
+# ---------- 静止画: 門口機の /snapshot.jpg を直接取る generic camera ----------
+# 通知の image や camera_proxy 用。ライブは go2rtc 側 (camera.genkan_front 等) を使う。
+camera:
+  - platform: generic
+    name: genkan_front_still
+    still_image_url: "http://10.0.1.11:47180/snapshot.jpg"
+    # 門口機側で認証を有効にした場合: still_image_url に ?k=<panel_token> を付ける
+  - platform: generic
+    name: genkan_annex_still
+    still_image_url: "http://10.0.1.12:47180/snapshot.jpg"
 
 # ---------- HomeKit Bridge: 玄関カメラ + 門鈴を Apple 家庭 App へ ----------
 # 事前に go2rtc.yaml のストリームが camera.genkan_front 等として HA に入っていること
@@ -13,13 +33,13 @@ homekit:
   entity_config:
     camera.genkan_front:
       name: "正面玄関"
-      # MQTT Discovery が作る event entity (device_class: doorbell)。
-      # 実際の entity_id は 設定 > デバイス で確認して合わせること (日本語名は slug 化される)。
-      linked_doorbell_sensor: event.seimen_genkan_doorbell
+      # MQTT Discovery が作る event entity (device_class: doorbell)。object_id が
+      # ASCII 固定なので entity_id は door_id から予測できる。
+      linked_doorbell_sensor: event.doorbell_d_front
       support_audio: false        # MJPEG 源に音声なし — 通話は電話で (設計方針)
     camera.genkan_annex:
       name: "離れ玄関"
-      linked_doorbell_sensor: event.hanare_genkan_doorbell
+      linked_doorbell_sensor: event.doorbell_d_annex
       support_audio: false
 
 automation:
@@ -27,7 +47,7 @@ automation:
   - alias: "doorbell: ブリッジ消失アラート"
     trigger:
       - platform: state
-        entity_id: binary_sensor.doorbell_bridge_online   # MQTT Discovery が作る availability 由来
+        entity_id: binary_sensor.doorbell_bridge_online   # Discovery 登録済 (LWT 由来)
         to: "off"
         for: "00:02:00"
     action:
@@ -41,14 +61,15 @@ automation:
   - alias: "doorbell: 按鈴 → 通知 (返信ボタン付き)"
     trigger:
       - platform: state
-        entity_id: event.seimen_genkan_doorbell
+        entity_id: event.doorbell_d_front
     action:
       - service: notify.mobile_app_iphone
         data:
           title: "来客"
           message: "正面玄関に来客です"
           data:
-            image: "/api/camera_proxy/camera.genkan_front"
+            # 静止画は generic camera (上の genkan_front_still) 経由 — MQTT は通らない
+            image: "/api/camera_proxy/camera.genkan_front_still"
             push: { sound: { name: default, critical: 1, volume: 1.0 } }
             actions:
               - { action: "DOORBELL_REPLY_AWAY",  title: "留守にしています" }
@@ -56,6 +77,7 @@ automation:
               - { action: "DOORBELL_REPLY_WAIT",  title: "少々お待ちください" }
 
   # 通知ボタン → MQTT reply topic → 門口機の面板表示 + TTS
+  # payload は quick_replies のキー (qr_away 等) か自由文 — どちらでも通る
   - alias: "doorbell: 通知アクション → 返信"
     trigger:
       - platform: event
@@ -76,7 +98,19 @@ automation:
           topic: "doorbell/d_front/reply/set"
           payload: "{{ trigger.id }}"        # reply_id (app 側 quick_replies のキー)
 
+  # ---------- 端末オフライン (防盗) の通知例 ----------
+  - alias: "doorbell: 門口機オフライン"
+    trigger:
+      - platform: state
+        entity_id: binary_sensor.doorbell_node_4d80f37a   # 設定 > デバイス で確認して合わせる
+        to: "off"
+        for: "00:01:00"
+    action:
+      - service: notify.mobile_app_iphone
+        data: { title: "ドアホン", message: "正面玄関の門口機がオフラインです" }
+
   # ---------- DTMF/通話中の開錠は app→MQTT 側から来る (参考: 受け口) ----------
+  # 通話中に "*1" (sip.dtmf_actions の ha_command) → doorbell/cmd/unlock {"door":"d_front"}
   - alias: "doorbell: 開錠コマンド"
     trigger:
       - platform: mqtt
