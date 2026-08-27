@@ -968,6 +968,82 @@ struct Node::Impl {
       return HttpResp::json("{\"ok\":true}");
     });
 
+    // 設定キー削除 (LwwMap tombstone — materialize からも消える)
+    httpd->route("POST", "/api/config/delete", [this](const HttpReq& req) {
+      auto b = json::parse(req.body);
+      std::string key = b ? json::getString(b.get(), "key") : "";
+      if (key.empty()) return HttpResp::json("{\"ok\":false,\"err\":\"no key\"}", 400);
+      config->remove(key);
+      return HttpResp::json("{\"ok\":true}");
+    });
+
+    // 設定インポート: {entries:[{key,value},...]} を順に setKey。value は任意の JSON 値
+    // (エクスポートは既存 GET /api/config — フラット化は管理画面側の責務)。
+    httpd->route("POST", "/api/config/import", [this](const HttpReq& req) {
+      auto b = json::parse(req.body);
+      cJSON* entries = b ? json::get(b.get(), "entries") : nullptr;
+      if (!entries || !cJSON_IsArray(entries))
+        return HttpResp::json("{\"ok\":false,\"err\":\"no entries\"}", 400);
+      int64_t n = 0;
+      cJSON* it = nullptr;
+      cJSON_ArrayForEach(it, entries) {
+        std::string key = json::getString(it, "key");
+        cJSON* v = json::get(it, "value");
+        if (key.empty() || !v) continue;
+        setKey(key, json::dump(v));
+        n++;
+      }
+      auto o = json::obj();
+      json::setBool(o.get(), "ok", true);
+      json::set(o.get(), "n", n);
+      return HttpResp::json(json::dump(o.get()));
+    });
+
+    // デバイス追加用の配対トークン発行 (PIN 6 桁・10 分有効 — mesh §1.6)
+    httpd->route("POST", "/api/join-token", [this](const HttpReq&) {
+      if (!mesh) return HttpResp::json("{\"ok\":false,\"err\":\"no mesh\"}", 503);
+      auto t = mesh->createJoinToken();
+      auto o = json::obj();
+      json::setBool(o.get(), "ok", true);
+      json::set(o.get(), "pin", t.pin);
+      json::set(o.get(), "expires_s", (t.expires_mono - clock->monoMs()) / 1000);
+      return HttpResp::json(json::dump(o.get()));
+    });
+
+    // Telegram テスト送信。chat_id 省略 = 全 households へ。
+    // 送れない理由 (leader でない / bot_token 未設定 / 宛先なし) は err コードで返す。
+    httpd->route("POST", "/api/test/telegram", [this](const HttpReq& req) {
+      auto b = json::parse(req.body);
+      std::string chat = b ? json::getString(b.get(), "chat_id") : "";
+      if (json::getString(cfgAt("integrations.telegram"), "bot_token").empty())
+        return HttpResp::json("{\"ok\":false,\"err\":\"no_token\"}");
+      if (!tg || !mesh || !mesh->isLeader("telegram"))
+        return HttpResp::json("{\"ok\":false,\"err\":\"not_leader\"}");
+      if (chat.empty()) {
+        // 宛先の存在確認 (展開は bridge 側と同じ households.*.telegram_chat_ids)
+        bool any = false;
+        cJSON* hs = json::get(cfg.get(), "households");
+        cJSON* h = nullptr;
+        cJSON_ArrayForEach(h, hs) {
+          cJSON* ids = json::get(h, "telegram_chat_ids");
+          if (ids && cJSON_GetArraySize(ids) > 0) any = true;
+        }
+        if (!any) return HttpResp::json("{\"ok\":false,\"err\":\"no_chat\"}");
+      }
+      tg->sendTestMessage(chat);
+      return HttpResp::json("{\"ok\":true}");
+    });
+
+    // パネル token のローテート (旧 token は即失効 — panel.tokens を新 1 件に差し替え)
+    httpd->route("POST", "/api/panel-token/rotate", [this](const HttpReq&) {
+      std::string tok = genTokenHex(16);
+      config->set("panel.tokens", "[\"" + tok + "\"]");
+      auto o = json::obj();
+      json::setBool(o.get(), "ok", true);
+      json::set(o.get(), "token", tok);
+      return HttpResp::json(json::dump(o.get()));
+    });
+
     httpd->route("POST", "/api/press", [this](const HttpReq& req) {
       auto b = json::parse(req.body);
       std::string door = b ? json::getString(b.get(), "door") : "";

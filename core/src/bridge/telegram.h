@@ -69,6 +69,11 @@ class TelegramBridge {
   // motion/offline/online: sendMessage 投入 (文言はハードコード ja)。
   void onAction(const EventRecord& ev, const std::string& params_json);
 
+  // 管理画面の「テスト送信」(POST /api/test/telegram)。文言は固定「ドアホン テスト通知」。
+  // chat_id_or_empty 空 = 全 households の telegram_chat_ids へ (去重済み)。
+  // 非 active / 宛先なしは何もしない (可否判定は Node 側が先に行う)。
+  void sendTestMessage(const std::string& chat_id_or_empty);
+
   // graceful 停止 (Node::stop から)。キューは永続なので未送信分は次回 active 時に再開。
   void stop();
 

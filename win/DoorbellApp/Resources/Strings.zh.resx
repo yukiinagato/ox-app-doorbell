@@ -4,31 +4,127 @@
   <resheader name="version"><value>2.0</value></resheader>
   <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
   <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <data name="admin_act_chime" xml:space="preserve"><value>门铃声</value></data>
+  <data name="admin_act_ha" xml:space="preserve"><value>HA 事件</value></data>
+  <data name="admin_act_sip" xml:space="preserve"><value>SIP 呼叫</value></data>
+  <data name="admin_act_telegram" xml:space="preserve"><value>Telegram 通知</value></data>
+  <data name="admin_actions" xml:space="preserve"><value>动作</value></data>
+  <data name="admin_add" xml:space="preserve"><value>添加</value></data>
+  <data name="admin_add_action" xml:space="preserve"><value>添加动作</value></data>
+  <data name="admin_add_building" xml:space="preserve"><value>添加建筑</value></data>
   <data name="admin_add_device" xml:space="preserve"><value>添加设备</value></data>
+  <data name="admin_add_door" xml:space="preserve"><value>添加门口</value></data>
+  <data name="admin_add_household" xml:space="preserve"><value>添加通知对象</value></data>
+  <data name="admin_add_reply" xml:space="preserve"><value>添加回复</value></data>
+  <data name="admin_add_rule" xml:space="preserve"><value>添加规则</value></data>
+  <data name="admin_add_window" xml:space="preserve"><value>添加时间段</value></data>
+  <data name="admin_all" xml:space="preserve"><value>全部</value></data>
+  <data name="admin_always" xml:space="preserve"><value>全天</value></data>
+  <data name="admin_bot_token" xml:space="preserve"><value>Bot token (仅写入)</value></data>
+  <data name="admin_building_assign" xml:space="preserve"><value>所属建筑</value></data>
+  <data name="admin_buildings" xml:space="preserve"><value>建筑</value></data>
+  <data name="admin_cam_fps" xml:space="preserve"><value>帧率 (fps)</value></data>
+  <data name="admin_cam_hint" xml:space="preserve"><value>摄像头指定</value></data>
+  <data name="admin_cam_quality" xml:space="preserve"><value>JPEG 质量</value></data>
+  <data name="admin_cam_resolution" xml:space="preserve"><value>分辨率</value></data>
+  <data name="admin_camera" xml:space="preserve"><value>摄像头</value></data>
+  <data name="admin_cancel" xml:space="preserve"><value>取消</value></data>
+  <data name="admin_caps_override" xml:space="preserve"><value>能力覆盖 (JSON)</value></data>
   <data name="admin_clock_warn" xml:space="preserve"><value>时钟未同步</value></data>
+  <data name="admin_confirm_delete" xml:space="preserve"><value>要删除 {0} 吗？</value></data>
   <data name="admin_dashboard" xml:space="preserve"><value>仪表盘</value></data>
+  <data name="admin_delete" xml:space="preserve"><value>删除</value></data>
+  <data name="admin_dev_name" xml:space="preserve"><value>名称</value></data>
+  <data name="admin_dev_role" xml:space="preserve"><value>角色</value></data>
   <data name="admin_devices" xml:space="preserve"><value>设备</value></data>
+  <data name="admin_disabled" xml:space="preserve"><value>禁用</value></data>
+  <data name="admin_door_assign" xml:space="preserve"><value>负责门口</value></data>
+  <data name="admin_door_list" xml:space="preserve"><value>门口</value></data>
   <data name="admin_doors" xml:space="preserve"><value>门口/建筑</value></data>
+  <data name="admin_edit" xml:space="preserve"><value>编辑</value></data>
+  <data name="admin_enabled" xml:space="preserve"><value>启用</value></data>
+  <data name="admin_err_no_chat" xml:space="preserve"><value>没有配置 chat ID</value></data>
+  <data name="admin_err_no_token" xml:space="preserve"><value>未设置 bot token</value></data>
+  <data name="admin_err_not_leader" xml:space="preserve"><value>此设备不是 telegram 主节点</value></data>
   <data name="admin_events" xml:space="preserve"><value>事件记录</value></data>
+  <data name="admin_export" xml:space="preserve"><value>导出</value></data>
+  <data name="admin_filter_type" xml:space="preserve"><value>按类型筛选</value></data>
+  <data name="admin_host" xml:space="preserve"><value>主机</value></data>
+  <data name="admin_households" xml:space="preserve"><value>通知对象</value></data>
+  <data name="admin_import" xml:space="preserve"><value>导入</value></data>
+  <data name="admin_import_hint" xml:space="preserve"><value>粘贴导出的 JSON（拆平后逐项写入）</value></data>
+  <data name="admin_imported" xml:space="preserve"><value>已写入 {0} 项</value></data>
   <data name="admin_integrations" xml:space="preserve"><value>集成</value></data>
+  <data name="admin_join_hint" xml:space="preserve"><value>在新设备上输入此 PIN 与地址（10 分钟有效）</value></data>
+  <data name="admin_join_pin" xml:space="preserve"><value>配对 PIN</value></data>
+  <data name="admin_label_en" xml:space="preserve"><value>标签 (英语)</value></data>
+  <data name="admin_label_ja" xml:space="preserve"><value>标签 (日语)</value></data>
+  <data name="admin_label_zh" xml:space="preserve"><value>标签 (中文)</value></data>
   <data name="admin_leader" xml:space="preserve"><value>主节点</value></data>
   <data name="admin_locked" xml:space="preserve"><value>已锁定 10 分钟</value></data>
   <data name="admin_login" xml:space="preserve"><value>登录</value></data>
+  <data name="admin_logs" xml:space="preserve"><value>日志</value></data>
+  <data name="admin_motion" xml:space="preserve"><value>移动侦测</value></data>
+  <data name="admin_motion_interval" xml:space="preserve"><value>最小间隔 (秒)</value></data>
+  <data name="admin_motion_sensitivity" xml:space="preserve"><value>灵敏度</value></data>
+  <data name="admin_never_suppress" xml:space="preserve"><value>始终允许</value></data>
   <data name="admin_notify" xml:space="preserve"><value>通知</value></data>
   <data name="admin_offline" xml:space="preserve"><value>离线</value></data>
   <data name="admin_online" xml:space="preserve"><value>在线</value></data>
+  <data name="admin_panel_token" xml:space="preserve"><value>面板 token</value></data>
+  <data name="admin_pass" xml:space="preserve"><value>密码</value></data>
   <data name="admin_password" xml:space="preserve"><value>管理密码</value></data>
   <data name="admin_pin_prompt" xml:space="preserve"><value>请输入 PIN</value></data>
   <data name="admin_pin_wrong" xml:space="preserve"><value>PIN 错误</value></data>
+  <data name="admin_poll_updates" xml:space="preserve"><value>接收回复按钮 (getUpdates)</value></data>
+  <data name="admin_port" xml:space="preserve"><value>端口</value></data>
+  <data name="admin_qr_speak" xml:space="preserve"><value>朗读</value></data>
   <data name="admin_quick_replies" xml:space="preserve"><value>快捷回复</value></data>
+  <data name="admin_quiet_hours" xml:space="preserve"><value>静音时段</value></data>
+  <data name="admin_raw_config" xml:space="preserve"><value>配置 (原始 JSON，只读)</value></data>
+  <data name="admin_role_door" xml:space="preserve"><value>门口机</value></data>
+  <data name="admin_role_indoor" xml:space="preserve"><value>室内机</value></data>
+  <data name="admin_rotate" xml:space="preserve"><value>轮换</value></data>
+  <data name="admin_rotate_confirm" xml:space="preserve"><value>旧 token 将立即失效，继续吗？</value></data>
+  <data name="admin_rule_devices" xml:space="preserve"><value>目标设备</value></data>
+  <data name="admin_rule_doors" xml:space="preserve"><value>目标门口</value></data>
+  <data name="admin_rule_when" xml:space="preserve"><value>触发条件</value></data>
   <data name="admin_rules" xml:space="preserve"><value>呼叫规则</value></data>
+  <data name="admin_save" xml:space="preserve"><value>保存</value></data>
+  <data name="admin_save_failed" xml:space="preserve"><value>保存失败</value></data>
+  <data name="admin_saved" xml:space="preserve"><value>已保存</value></data>
+  <data name="admin_schedule" xml:space="preserve"><value>时间表</value></data>
+  <data name="admin_sip_accounts" xml:space="preserve"><value>SIP 账号 (每设备)</value></data>
+  <data name="admin_sip_extensions" xml:space="preserve"><value>SIP 分机 (逗号分隔)</value></data>
+  <data name="admin_sound" xml:space="preserve"><value>铃声</value></data>
+  <data name="admin_suppress" xml:space="preserve"><value>抑制</value></data>
   <data name="admin_sync_state" xml:space="preserve"><value>已同步 {0}/{1} 台</value></data>
   <data name="admin_system" xml:space="preserve"><value>系统</value></data>
+  <data name="admin_target_ext" xml:space="preserve"><value>分机号</value></data>
+  <data name="admin_test_send" xml:space="preserve"><value>发送测试</value></data>
+  <data name="admin_test_sent" xml:space="preserve"><value>已发送测试通知</value></data>
+  <data name="admin_tg_chat_ids" xml:space="preserve"><value>Telegram chat ID (逗号分隔)</value></data>
   <data name="admin_title" xml:space="preserve"><value>管理</value></data>
+  <data name="admin_transport" xml:space="preserve"><value>传输</value></data>
+  <data name="admin_tz_offset" xml:space="preserve"><value>时区偏移 (相对 UTC 分钟)</value></data>
+  <data name="admin_ui_lang" xml:space="preserve"><value>显示语言</value></data>
+  <data name="admin_user" xml:space="preserve"><value>用户</value></data>
+  <data name="admin_when_button" xml:space="preserve"><value>按铃</value></data>
+  <data name="admin_when_motion" xml:space="preserve"><value>移动侦测</value></data>
+  <data name="admin_when_offline" xml:space="preserve"><value>设备离线</value></data>
+  <data name="admin_windows" xml:space="preserve"><value>时间段</value></data>
+  <data name="admin_with_snapshot" xml:space="preserve"><value>附照片</value></data>
   <data name="app_name" xml:space="preserve"><value>门铃</value></data>
   <data name="calling_cancel" xml:space="preserve"><value>取消</value></data>
   <data name="calling_no_answer" xml:space="preserve"><value>无人应答</value></data>
   <data name="calling_title" xml:space="preserve"><value>呼叫中…</value></data>
+  <data name="day_fri" xml:space="preserve"><value>五</value></data>
+  <data name="day_mon" xml:space="preserve"><value>一</value></data>
+  <data name="day_sat" xml:space="preserve"><value>六</value></data>
+  <data name="day_sun" xml:space="preserve"><value>日</value></data>
+  <data name="day_thu" xml:space="preserve"><value>四</value></data>
+  <data name="day_tue" xml:space="preserve"><value>二</value></data>
+  <data name="day_wed" xml:space="preserve"><value>三</value></data>
   <data name="degraded_notified" xml:space="preserve"><value>已通知，请稍候</value></data>
   <data name="event_motion" xml:space="preserve"><value>{0} 检测到移动 ({1})</value></data>
   <data name="event_offline" xml:space="preserve"><value>⚠ {0} 离线 (最后在线 {1})</value></data>

@@ -4,31 +4,127 @@
   <resheader name="version"><value>2.0</value></resheader>
   <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
   <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <data name="admin_act_chime" xml:space="preserve"><value>Chime</value></data>
+  <data name="admin_act_ha" xml:space="preserve"><value>HA event</value></data>
+  <data name="admin_act_sip" xml:space="preserve"><value>SIP call</value></data>
+  <data name="admin_act_telegram" xml:space="preserve"><value>Telegram</value></data>
+  <data name="admin_actions" xml:space="preserve"><value>Actions</value></data>
+  <data name="admin_add" xml:space="preserve"><value>Add</value></data>
+  <data name="admin_add_action" xml:space="preserve"><value>Add action</value></data>
+  <data name="admin_add_building" xml:space="preserve"><value>Add building</value></data>
   <data name="admin_add_device" xml:space="preserve"><value>Add device</value></data>
+  <data name="admin_add_door" xml:space="preserve"><value>Add door</value></data>
+  <data name="admin_add_household" xml:space="preserve"><value>Add recipient</value></data>
+  <data name="admin_add_reply" xml:space="preserve"><value>Add reply</value></data>
+  <data name="admin_add_rule" xml:space="preserve"><value>Add rule</value></data>
+  <data name="admin_add_window" xml:space="preserve"><value>Add window</value></data>
+  <data name="admin_all" xml:space="preserve"><value>All</value></data>
+  <data name="admin_always" xml:space="preserve"><value>Always</value></data>
+  <data name="admin_bot_token" xml:space="preserve"><value>Bot token (write-only)</value></data>
+  <data name="admin_building_assign" xml:space="preserve"><value>Building</value></data>
+  <data name="admin_buildings" xml:space="preserve"><value>Buildings</value></data>
+  <data name="admin_cam_fps" xml:space="preserve"><value>Frame rate (fps)</value></data>
+  <data name="admin_cam_hint" xml:space="preserve"><value>Device hint</value></data>
+  <data name="admin_cam_quality" xml:space="preserve"><value>JPEG quality</value></data>
+  <data name="admin_cam_resolution" xml:space="preserve"><value>Resolution</value></data>
+  <data name="admin_camera" xml:space="preserve"><value>Camera</value></data>
+  <data name="admin_cancel" xml:space="preserve"><value>Cancel</value></data>
+  <data name="admin_caps_override" xml:space="preserve"><value>Capability override (JSON)</value></data>
   <data name="admin_clock_warn" xml:space="preserve"><value>Clock not synced</value></data>
+  <data name="admin_confirm_delete" xml:space="preserve"><value>Delete {0}?</value></data>
   <data name="admin_dashboard" xml:space="preserve"><value>Dashboard</value></data>
+  <data name="admin_delete" xml:space="preserve"><value>Delete</value></data>
+  <data name="admin_dev_name" xml:space="preserve"><value>Name</value></data>
+  <data name="admin_dev_role" xml:space="preserve"><value>Role</value></data>
   <data name="admin_devices" xml:space="preserve"><value>Devices</value></data>
+  <data name="admin_disabled" xml:space="preserve"><value>Disabled</value></data>
+  <data name="admin_door_assign" xml:space="preserve"><value>Assigned door</value></data>
+  <data name="admin_door_list" xml:space="preserve"><value>Doors</value></data>
   <data name="admin_doors" xml:space="preserve"><value>Doors &amp; Buildings</value></data>
+  <data name="admin_edit" xml:space="preserve"><value>Edit</value></data>
+  <data name="admin_enabled" xml:space="preserve"><value>Enabled</value></data>
+  <data name="admin_err_no_chat" xml:space="preserve"><value>No chat IDs configured</value></data>
+  <data name="admin_err_no_token" xml:space="preserve"><value>Bot token is not set</value></data>
+  <data name="admin_err_not_leader" xml:space="preserve"><value>This node is not the telegram leader</value></data>
   <data name="admin_events" xml:space="preserve"><value>Event history</value></data>
+  <data name="admin_export" xml:space="preserve"><value>Export</value></data>
+  <data name="admin_filter_type" xml:space="preserve"><value>Filter by type</value></data>
+  <data name="admin_host" xml:space="preserve"><value>Host</value></data>
+  <data name="admin_households" xml:space="preserve"><value>Recipients</value></data>
+  <data name="admin_import" xml:space="preserve"><value>Import</value></data>
+  <data name="admin_import_hint" xml:space="preserve"><value>Paste exported JSON (flattened and written key by key)</value></data>
+  <data name="admin_imported" xml:space="preserve"><value>Imported {0} entries</value></data>
   <data name="admin_integrations" xml:space="preserve"><value>Integrations</value></data>
+  <data name="admin_join_hint" xml:space="preserve"><value>Enter this PIN and the address on the new device (valid 10 min)</value></data>
+  <data name="admin_join_pin" xml:space="preserve"><value>Join PIN</value></data>
+  <data name="admin_label_en" xml:space="preserve"><value>Label (English)</value></data>
+  <data name="admin_label_ja" xml:space="preserve"><value>Label (Japanese)</value></data>
+  <data name="admin_label_zh" xml:space="preserve"><value>Label (Chinese)</value></data>
   <data name="admin_leader" xml:space="preserve"><value>Leader</value></data>
   <data name="admin_locked" xml:space="preserve"><value>Locked for 10 minutes</value></data>
   <data name="admin_login" xml:space="preserve"><value>Log in</value></data>
+  <data name="admin_logs" xml:space="preserve"><value>Logs</value></data>
+  <data name="admin_motion" xml:space="preserve"><value>Motion detection</value></data>
+  <data name="admin_motion_interval" xml:space="preserve"><value>Min interval (s)</value></data>
+  <data name="admin_motion_sensitivity" xml:space="preserve"><value>Sensitivity</value></data>
+  <data name="admin_never_suppress" xml:space="preserve"><value>Never suppress</value></data>
   <data name="admin_notify" xml:space="preserve"><value>Notifications</value></data>
   <data name="admin_offline" xml:space="preserve"><value>Offline</value></data>
   <data name="admin_online" xml:space="preserve"><value>Online</value></data>
+  <data name="admin_panel_token" xml:space="preserve"><value>Panel token</value></data>
+  <data name="admin_pass" xml:space="preserve"><value>Password</value></data>
   <data name="admin_password" xml:space="preserve"><value>Admin password</value></data>
   <data name="admin_pin_prompt" xml:space="preserve"><value>Enter PIN</value></data>
   <data name="admin_pin_wrong" xml:space="preserve"><value>Wrong PIN</value></data>
+  <data name="admin_poll_updates" xml:space="preserve"><value>Receive replies (getUpdates)</value></data>
+  <data name="admin_port" xml:space="preserve"><value>Port</value></data>
+  <data name="admin_qr_speak" xml:space="preserve"><value>Speak aloud</value></data>
   <data name="admin_quick_replies" xml:space="preserve"><value>Quick replies</value></data>
+  <data name="admin_quiet_hours" xml:space="preserve"><value>Quiet hours</value></data>
+  <data name="admin_raw_config" xml:space="preserve"><value>Config (raw JSON, read-only)</value></data>
+  <data name="admin_role_door" xml:space="preserve"><value>Door station</value></data>
+  <data name="admin_role_indoor" xml:space="preserve"><value>Indoor panel</value></data>
+  <data name="admin_rotate" xml:space="preserve"><value>Rotate</value></data>
+  <data name="admin_rotate_confirm" xml:space="preserve"><value>The old token becomes invalid immediately. Continue?</value></data>
+  <data name="admin_rule_devices" xml:space="preserve"><value>Target devices</value></data>
+  <data name="admin_rule_doors" xml:space="preserve"><value>Target doors</value></data>
+  <data name="admin_rule_when" xml:space="preserve"><value>Trigger</value></data>
   <data name="admin_rules" xml:space="preserve"><value>Call rules</value></data>
+  <data name="admin_save" xml:space="preserve"><value>Save</value></data>
+  <data name="admin_save_failed" xml:space="preserve"><value>Save failed</value></data>
+  <data name="admin_saved" xml:space="preserve"><value>Saved</value></data>
+  <data name="admin_schedule" xml:space="preserve"><value>Schedule</value></data>
+  <data name="admin_sip_accounts" xml:space="preserve"><value>SIP accounts (per device)</value></data>
+  <data name="admin_sip_extensions" xml:space="preserve"><value>SIP extensions (comma separated)</value></data>
+  <data name="admin_sound" xml:space="preserve"><value>Sound</value></data>
+  <data name="admin_suppress" xml:space="preserve"><value>Suppress</value></data>
   <data name="admin_sync_state" xml:space="preserve"><value>Synced to {0}/{1} nodes</value></data>
   <data name="admin_system" xml:space="preserve"><value>System</value></data>
+  <data name="admin_target_ext" xml:space="preserve"><value>Extension</value></data>
+  <data name="admin_test_send" xml:space="preserve"><value>Send test</value></data>
+  <data name="admin_test_sent" xml:space="preserve"><value>Test message queued</value></data>
+  <data name="admin_tg_chat_ids" xml:space="preserve"><value>Telegram chat IDs (comma separated)</value></data>
   <data name="admin_title" xml:space="preserve"><value>Admin</value></data>
+  <data name="admin_transport" xml:space="preserve"><value>Transport</value></data>
+  <data name="admin_tz_offset" xml:space="preserve"><value>TZ offset (minutes from UTC)</value></data>
+  <data name="admin_ui_lang" xml:space="preserve"><value>UI language</value></data>
+  <data name="admin_user" xml:space="preserve"><value>User</value></data>
+  <data name="admin_when_button" xml:space="preserve"><value>Button press</value></data>
+  <data name="admin_when_motion" xml:space="preserve"><value>Motion</value></data>
+  <data name="admin_when_offline" xml:space="preserve"><value>Device offline</value></data>
+  <data name="admin_windows" xml:space="preserve"><value>Time windows</value></data>
+  <data name="admin_with_snapshot" xml:space="preserve"><value>With snapshot</value></data>
   <data name="app_name" xml:space="preserve"><value>Doorbell</value></data>
   <data name="calling_cancel" xml:space="preserve"><value>Cancel</value></data>
   <data name="calling_no_answer" xml:space="preserve"><value>No answer</value></data>
   <data name="calling_title" xml:space="preserve"><value>Calling…</value></data>
+  <data name="day_fri" xml:space="preserve"><value>Fri</value></data>
+  <data name="day_mon" xml:space="preserve"><value>Mon</value></data>
+  <data name="day_sat" xml:space="preserve"><value>Sat</value></data>
+  <data name="day_sun" xml:space="preserve"><value>Sun</value></data>
+  <data name="day_thu" xml:space="preserve"><value>Thu</value></data>
+  <data name="day_tue" xml:space="preserve"><value>Tue</value></data>
+  <data name="day_wed" xml:space="preserve"><value>Wed</value></data>
   <data name="degraded_notified" xml:space="preserve"><value>Notified — please wait</value></data>
   <data name="event_motion" xml:space="preserve"><value>Motion at {0} ({1})</value></data>
   <data name="event_offline" xml:space="preserve"><value>⚠ {0} offline (last seen {1})</value></data>

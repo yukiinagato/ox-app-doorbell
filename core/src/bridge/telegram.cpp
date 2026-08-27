@@ -251,6 +251,34 @@ void TelegramBridge::configure(const std::string& cfg_json, const std::string& n
   }
 }
 
+// 管理画面のテスト送信 — 通常キュー経由の sendMessage (失敗時のバックオフも共通)
+void TelegramBridge::sendTestMessage(const std::string& chat_id_or_empty) {
+  if (!active_) return;
+  std::vector<std::string> chats;
+  if (!chat_id_or_empty.empty()) {
+    chats.push_back(chat_id_or_empty);
+  } else {
+    // 全 households の chat_ids へ (resolveChats が展開・去重する)
+    auto ids = json::arr();
+    cJSON* hs = cfgAt("households");
+    cJSON* it = nullptr;
+    cJSON_ArrayForEach(it, hs) {
+      if (it->string) json::push(ids.get(), json::Doc(cJSON_CreateString(it->string)));
+    }
+    chats = resolveChats(ids.get());
+  }
+  if (chats.empty()) {
+    DB_LOGW(kTag, "テスト送信: 宛先 chat_id が無い — スキップ");
+    return;
+  }
+  for (const auto& c : chats) {
+    auto pl = json::obj();
+    json::set(pl.get(), "text", "ドアホン テスト通知");
+    enqueue("message", c, json::dump(pl.get()), Bytes());
+  }
+  pump();
+}
+
 void TelegramBridge::stop() {
   active_ = false;
   if (pump_timer_) {

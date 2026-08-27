@@ -55,6 +55,104 @@ reply.choose: { ja: "クイック返信を選択", en: "Choose a quick reply", z
 reply.answered: { ja: "応答済み ({text})", en: "Replied ({text})", zh: "已回复 ({text})" }
 admin.quick_replies: { ja: "クイック返信", en: "Quick replies", zh: "快捷回复" }
 
+# ---- 管理画面 (フル SPA) ----
+admin.households: { ja: "通知先", en: "Recipients", zh: "通知对象" }
+admin.add: { ja: "追加", en: "Add", zh: "添加" }
+admin.edit: { ja: "編集", en: "Edit", zh: "编辑" }
+admin.delete: { ja: "削除", en: "Delete", zh: "删除" }
+admin.save: { ja: "保存", en: "Save", zh: "保存" }
+admin.cancel: { ja: "キャンセル", en: "Cancel", zh: "取消" }
+admin.confirm_delete: { ja: "{name} を削除しますか?", en: "Delete {name}?", zh: "要删除 {name} 吗？" }
+admin.saved: { ja: "保存しました", en: "Saved", zh: "已保存" }
+admin.save_failed: { ja: "保存に失敗しました", en: "Save failed", zh: "保存失败" }
+admin.enabled: { ja: "有効", en: "Enabled", zh: "启用" }
+admin.disabled: { ja: "無効", en: "Disabled", zh: "禁用" }
+admin.buildings: { ja: "建物", en: "Buildings", zh: "建筑" }
+admin.door_list: { ja: "ドア", en: "Doors", zh: "门口" }
+admin.add_building: { ja: "建物を追加", en: "Add building", zh: "添加建筑" }
+admin.add_door: { ja: "ドアを追加", en: "Add door", zh: "添加门口" }
+admin.label_ja: { ja: "ラベル (日本語)", en: "Label (Japanese)", zh: "标签 (日语)" }
+admin.label_en: { ja: "ラベル (英語)", en: "Label (English)", zh: "标签 (英语)" }
+admin.label_zh: { ja: "ラベル (中国語)", en: "Label (Chinese)", zh: "标签 (中文)" }
+admin.building_assign: { ja: "所属建物", en: "Building", zh: "所属建筑" }
+admin.dev_name: { ja: "名前", en: "Name", zh: "名称" }
+admin.dev_role: { ja: "役割", en: "Role", zh: "角色" }
+admin.role_door: { ja: "門口機", en: "Door station", zh: "门口机" }
+admin.role_indoor: { ja: "室内機", en: "Indoor panel", zh: "室内机" }
+admin.door_assign: { ja: "担当ドア", en: "Assigned door", zh: "负责门口" }
+admin.camera: { ja: "カメラ", en: "Camera", zh: "摄像头" }
+admin.cam_fps: { ja: "フレームレート (fps)", en: "Frame rate (fps)", zh: "帧率 (fps)" }
+admin.cam_quality: { ja: "JPEG 品質", en: "JPEG quality", zh: "JPEG 质量" }
+admin.cam_resolution: { ja: "解像度", en: "Resolution", zh: "分辨率" }
+admin.cam_hint: { ja: "カメラ指定 (device hint)", en: "Device hint", zh: "摄像头指定" }
+admin.motion: { ja: "動体検知", en: "Motion detection", zh: "移动侦测" }
+admin.motion_sensitivity: { ja: "感度", en: "Sensitivity", zh: "灵敏度" }
+admin.motion_interval: { ja: "最小間隔 (秒)", en: "Min interval (s)", zh: "最小间隔 (秒)" }
+admin.ui_lang: { ja: "表示言語", en: "UI language", zh: "显示语言" }
+admin.caps_override: { ja: "能力上書き (JSON)", en: "Capability override (JSON)", zh: "能力覆盖 (JSON)" }
+admin.add_rule: { ja: "ルールを追加", en: "Add rule", zh: "添加规则" }
+admin.rule_when: { ja: "条件", en: "Trigger", zh: "触发条件" }
+admin.when_button: { ja: "呼出ボタン", en: "Button press", zh: "按铃" }
+admin.when_motion: { ja: "動体検知", en: "Motion", zh: "移动侦测" }
+admin.when_offline: { ja: "デバイス離線", en: "Device offline", zh: "设备离线" }
+admin.rule_doors: { ja: "対象ドア", en: "Target doors", zh: "目标门口" }
+admin.rule_devices: { ja: "対象デバイス", en: "Target devices", zh: "目标设备" }
+admin.all: { ja: "すべて", en: "All", zh: "全部" }
+admin.schedule: { ja: "スケジュール", en: "Schedule", zh: "时间表" }
+admin.always: { ja: "常時", en: "Always", zh: "全天" }
+admin.windows: { ja: "時間帯", en: "Time windows", zh: "时间段" }
+admin.add_window: { ja: "時間帯を追加", en: "Add window", zh: "添加时间段" }
+admin.actions: { ja: "アクション", en: "Actions", zh: "动作" }
+admin.add_action: { ja: "アクションを追加", en: "Add action", zh: "添加动作" }
+admin.act_sip: { ja: "SIP 発呼", en: "SIP call", zh: "SIP 呼叫" }
+admin.act_telegram: { ja: "Telegram 通知", en: "Telegram", zh: "Telegram 通知" }
+admin.act_ha: { ja: "HA イベント", en: "HA event", zh: "HA 事件" }
+admin.act_chime: { ja: "チャイム", en: "Chime", zh: "门铃声" }
+admin.target_ext: { ja: "内線番号", en: "Extension", zh: "分机号" }
+admin.with_snapshot: { ja: "写真付き", en: "With snapshot", zh: "附照片" }
+admin.sound: { ja: "サウンド", en: "Sound", zh: "铃声" }
+admin.add_reply: { ja: "返信を追加", en: "Add reply", zh: "添加回复" }
+admin.qr_speak: { ja: "読み上げ", en: "Speak aloud", zh: "朗读" }
+admin.add_household: { ja: "通知先を追加", en: "Add recipient", zh: "添加通知对象" }
+admin.tg_chat_ids: { ja: "Telegram chat ID (カンマ区切り)", en: "Telegram chat IDs (comma separated)", zh: "Telegram chat ID (逗号分隔)" }
+admin.sip_extensions: { ja: "SIP 内線 (カンマ区切り)", en: "SIP extensions (comma separated)", zh: "SIP 分机 (逗号分隔)" }
+admin.host: { ja: "ホスト", en: "Host", zh: "主机" }
+admin.port: { ja: "ポート", en: "Port", zh: "端口" }
+admin.user: { ja: "ユーザー", en: "User", zh: "用户" }
+admin.pass: { ja: "パスワード", en: "Password", zh: "密码" }
+admin.bot_token: { ja: "Bot token (書込のみ・表示されません)", en: "Bot token (write-only)", zh: "Bot token (仅写入)" }
+admin.poll_updates: { ja: "返信ボタンを受信 (getUpdates)", en: "Receive replies (getUpdates)", zh: "接收回复按钮 (getUpdates)" }
+admin.test_send: { ja: "テスト送信", en: "Send test", zh: "发送测试" }
+admin.test_sent: { ja: "テスト通知を送信しました", en: "Test message queued", zh: "已发送测试通知" }
+admin.err_not_leader: { ja: "この端末は telegram leader ではありません", en: "This node is not the telegram leader", zh: "此设备不是 telegram 主节点" }
+admin.err_no_token: { ja: "bot token が未設定です", en: "Bot token is not set", zh: "未设置 bot token" }
+admin.err_no_chat: { ja: "宛先 chat ID がありません", en: "No chat IDs configured", zh: "没有配置 chat ID" }
+admin.transport: { ja: "トランスポート", en: "Transport", zh: "传输" }
+admin.sip_accounts: { ja: "SIP アカウント (デバイス毎)", en: "SIP accounts (per device)", zh: "SIP 账号 (每设备)" }
+admin.tz_offset: { ja: "タイムゾーン (UTC からの分)", en: "TZ offset (minutes from UTC)", zh: "时区偏移 (相对 UTC 分钟)" }
+admin.quiet_hours: { ja: "静音時間帯", en: "Quiet hours", zh: "静音时段" }
+admin.suppress: { ja: "抑制する", en: "Suppress", zh: "抑制" }
+admin.never_suppress: { ja: "常に許可", en: "Never suppress", zh: "始终允许" }
+admin.filter_type: { ja: "種別で絞り込み", en: "Filter by type", zh: "按类型筛选" }
+admin.export: { ja: "エクスポート", en: "Export", zh: "导出" }
+admin.import: { ja: "インポート", en: "Import", zh: "导入" }
+admin.import_hint: { ja: "エクスポートした JSON を貼り付けてください (フラット化して書き込みます)", en: "Paste exported JSON (flattened and written key by key)", zh: "粘贴导出的 JSON（拆平后逐项写入）" }
+admin.imported: { ja: "{n} 件を書き込みました", en: "Imported {n} entries", zh: "已写入 {n} 项" }
+admin.panel_token: { ja: "パネル token", en: "Panel token", zh: "面板 token" }
+admin.rotate: { ja: "ローテート", en: "Rotate", zh: "轮换" }
+admin.rotate_confirm: { ja: "旧 token は即時無効になります。よろしいですか?", en: "The old token becomes invalid immediately. Continue?", zh: "旧 token 将立即失效，继续吗？" }
+admin.join_pin: { ja: "追加 PIN", en: "Join PIN", zh: "配对 PIN" }
+admin.join_hint: { ja: "新しい端末でこの PIN と接続先を入力してください (10 分有効)", en: "Enter this PIN and the address on the new device (valid 10 min)", zh: "在新设备上输入此 PIN 与地址（10 分钟有效）" }
+admin.logs: { ja: "ログ", en: "Logs", zh: "日志" }
+admin.raw_config: { ja: "設定 (生 JSON・読取)", en: "Config (raw JSON, read-only)", zh: "配置 (原始 JSON，只读)" }
+day.mon: { ja: "月", en: "Mon", zh: "一" }
+day.tue: { ja: "火", en: "Tue", zh: "二" }
+day.wed: { ja: "水", en: "Wed", zh: "三" }
+day.thu: { ja: "木", en: "Thu", zh: "四" }
+day.fri: { ja: "金", en: "Fri", zh: "五" }
+day.sat: { ja: "土", en: "Sat", zh: "六" }
+day.sun: { ja: "日", en: "Sun", zh: "日" }
+
 panel.title: { ja: "呼出パネル", en: "Call panel", zh: "呼叫面板" }
 panel.calling: { ja: "呼び出し中→通知済み", en: "Calling → notified", zh: "呼叫中→已通知" }
 panel.no_audio_note: { ja: "この玄関では通話できません (通知のみ)", en: "No voice at this door (notify only)", zh: "此门口无法通话（仅通知）" }
