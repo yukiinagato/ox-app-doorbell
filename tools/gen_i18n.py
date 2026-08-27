@@ -100,7 +100,10 @@ def to_android(s):
 def gen_android(entries):
     for lang in LANGS:
         suffix = "" if lang == "en" else f"-{lang}"  # values/ は既定 (en), values-ja, values-zh
-        lines = ['<?xml version="1.0" encoding="utf-8"?>', "<resources>"]
+        lines = ['<?xml version="1.0" encoding="utf-8"?>',
+                 "<!-- tools/gen_i18n.py が i18n/strings.yaml から生成 — 直接編集禁止",
+                 "     (ここへ書いた文言は次の生成で消える。追加は strings.yaml へ) -->",
+                 "<resources>"]
         for k in sorted(entries):
             name = k.replace(".", "_")
             lines.append(f'    <string name="{name}">{xml_escape(to_android(text(entries, k, lang)))}</string>')

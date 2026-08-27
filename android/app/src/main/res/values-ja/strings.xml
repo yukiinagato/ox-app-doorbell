@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- tools/gen_i18n.py が i18n/strings.yaml から生成 — 直接編集禁止
+     (ここへ書いた文言は次の生成で消える。追加は strings.yaml へ) -->
 <resources>
     <string name="admin_act_chime">チャイム</string>
     <string name="admin_act_ha">HA イベント</string>
