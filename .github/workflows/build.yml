@@ -1,0 +1,95 @@
+# 各平台ネイティブアプリの CI ビルド
+#  - core: macOS でフルテスト (SIP/MQTT 結合テストは環境依存のため skip される)
+#  - windows: core DLL (x64/x86, MSVC) + watchdog + WPF アプリ → 成果物
+#  - android: assembleDebug (pjsip 未同梱時は SIP スタブ) → APK 成果物
+#  - ios: Phase 4 (Xcode プロジェクト作成後に追加)
+name: build
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  core-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure & build
+        run: |
+          cmake -S core -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo -DDB_WITH_PJSIP=OFF
+          cmake --build build -j4
+      - name: Tests
+        run: ./build/doorbell_tests
+
+  core-linux:
+    # 参考ビルド (Linux は正式ターゲット外 — 移植性の早期検知用)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure & build & test
+        run: |
+          cmake -S core -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo -DDB_WITH_PJSIP=OFF
+          cmake --build build -j4
+          ./build/doorbell_tests
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: microsoft/setup-msbuild@v2
+      - name: core DLL x64
+        run: |
+          cmake -S core -B build-x64 -A x64 -DDB_BUILD_TESTS=OFF
+          cmake --build build-x64 --config Release -j
+      - name: core DLL x86
+        run: |
+          cmake -S core -B build-x86 -A Win32 -DDB_BUILD_TESTS=OFF
+          cmake --build build-x86 --config Release -j
+      - name: Place DLLs
+        shell: cmd
+        run: |
+          mkdir win\DoorbellApp\lib\win-x64 2>nul
+          mkdir win\DoorbellApp\lib\win-x86 2>nul
+          copy /y build-x64\Release\doorbell.dll win\DoorbellApp\lib\win-x64\
+          copy /y build-x86\Release\doorbell.dll win\DoorbellApp\lib\win-x86\
+      - name: watchdog
+        run: |
+          cmake -S win/watchdog -B build-watchdog -A x64
+          cmake --build build-watchdog --config Release -j
+      - name: WPF app
+        run: msbuild win\DoorbellApp.sln /restore /p:Configuration=Release /m
+      - name: Collect artifact
+        shell: cmd
+        run: |
+          mkdir dist
+          xcopy /e /i /y win\DoorbellApp\bin\Release\net48 dist\DoorbellApp
+          copy /y build-watchdog\Release\doorbell-watchdog.exe dist\
+      - uses: actions/upload-artifact@v4
+        with:
+          name: doorbell-windows
+          path: dist/
+          retention-days: 14
+
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - name: SDK components
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
+            "ndk;27.1.12297006" "cmake;3.22.1" "platforms;android-35" "build-tools;35.0.0"
+      - name: assembleDebug
+        working-directory: android
+        run: ./gradlew --no-daemon assembleDebug
+      - uses: actions/upload-artifact@v4
+        with:
+          name: doorbell-android-debug
+          path: android/app/build/outputs/apk/debug/*.apk
+          retention-days: 14
