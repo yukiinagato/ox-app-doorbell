@@ -71,6 +71,11 @@ class Node {
   void sendQuickReply(const std::string& reply_id, const std::string& free_text,
                       const std::string& door_id, const std::string& via);
 
+  // カメラ生フレーム投入 (capi db_core_on_camera_frame / 採集スレッドから; 任意スレッド可)。
+  // format: doorbell.h と同じ 0=NV21, 1=NV12, 2=YUY2, 3=BGRA。データはここで 1 回コピー。
+  void pushCameraFrame(const uint8_t* data, int format, int width, int height, int stride,
+                       int64_t ts_ms);
+
   std::string statusJson();        // /api/status と同じ内容
   std::string configJson();        // materialize 済み設定全文
   // 設定書き込み (管理 API /api/config と同経路)。value_json はパース不能なら JSON 文字列扱い。

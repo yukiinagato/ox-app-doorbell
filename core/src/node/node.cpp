@@ -1,13 +1,18 @@
 #include "node/node.h"
 
+#include <cstdlib>
 #include <cstring>
 #include <mutex>
 #include <set>
 
 #include "httpd/webui_assets.h"
+#include "media/frame_bus.h"
 #include "mesh/tcp_transport.h"
 #include "mesh/udp_beacon.h"
 #include "monocypher.h"
+#ifdef _WIN32
+#include "media/camera_win.h"
+#endif
 #include "util/common.h"
 #include "util/ids.h"
 #include "util/json.h"
@@ -59,6 +64,10 @@ struct Node::Impl {
   std::unique_ptr<IDiscovery> discovery;
   std::unique_ptr<Mesh> mesh;
   std::unique_ptr<Httpd> httpd;
+  FrameBus frame_bus;  // 帧総線 (任意スレッドから push / 需要駆動 JPEG)
+#ifdef _WIN32
+  std::unique_ptr<CameraWin> camera;  // door_station のみ起動
+#endif
 
   json::Doc cfg;  // materialize 済み設定 (loop 上でのみ触る)
   std::string node_id;
@@ -122,6 +131,43 @@ struct Node::Impl {
     return cur;
   }
 
+  // devices.<self>.local.camera の実効値 (無ければ既定 8/60/640x480)
+  struct CamCfg {
+    int fps = 8;
+    int quality = 60;
+    int w = 640, h = 480;
+    std::string hint;
+  };
+  CamCfg cameraCfg() {
+    CamCfg c;
+    cJSON* cam = cfgAt("devices." + node_id + ".local.camera");
+    if (cam) {
+      c.fps = static_cast<int>(json::getInt(cam, "mjpeg_fps", 8));
+      c.quality = static_cast<int>(json::getInt(cam, "mjpeg_quality", 60));
+      c.hint = json::getString(cam, "device_hint");
+      std::string res = json::getString(cam, "resolution", "640x480");
+      size_t x = res.find('x');
+      if (x != std::string::npos) {
+        int w = std::atoi(res.c_str());
+        int h = std::atoi(res.c_str() + x + 1);
+        if (w > 0 && h > 0) {
+          c.w = w;
+          c.h = h;
+        }
+      }
+    }
+    if (c.fps <= 0) c.fps = 8;
+    return c;
+  }
+
+  // fps/quality/解像度を FrameBus + httpd へ反映 (起動時と config_changed 時)
+  void applyCameraSettings() {
+    CamCfg c = cameraCfg();
+    frame_bus.setJpegParams(c.quality, c.w);
+    if (httpd)
+      httpd->setJpegProvider([this] { return frame_bus.latestJpeg(); }, c.fps);
+  }
+
   std::string labelIn(const cJSON* label_obj, const std::string& lang) {
     if (!label_obj) return "";
     std::string v = json::getString(label_obj, lang.c_str());
@@ -164,6 +210,10 @@ struct Node::Impl {
       store.configPut(e);
       rebuildCfg();
       if (is_local && mesh) mesh->pushConfigDelta({e});
+      // 自機のカメラ設定 (fps/quality/解像度) の変更は即反映
+      if (httpd && e.key.compare(0, 8, "devices.") == 0 &&
+          e.key.find(node_id) != std::string::npos)
+        applyCameraSettings();
       uiNotify("{\"t\":\"config_changed\"}");
     });
     events->onEvent([this](const EventRecord& ev, bool is_local) { onEvent(ev, is_local); });
@@ -213,7 +263,16 @@ struct Node::Impl {
         DB_LOGE(kTag, "httpd start failed on port " + std::to_string(opts.http_port));
         return false;
       }
+      applyCameraSettings();  // /snapshot.jpg・/stream.mjpeg の JPEG 提供者を配線
     }
+#ifdef _WIN32
+    // Windows の門口機はカメラ採集 (Media Foundation) を起動。失敗はログのみ。
+    if (opts.role == "door_station") {
+      CamCfg c = cameraCfg();
+      camera.reset(new CameraWin(frame_bus));
+      camera->start(c.hint, c.w, c.h);
+    }
+#endif
     started = true;
     DB_LOGI(kTag, "node " + node_id.substr(0, 8) + " (" + opts.name + ") started");
     return true;
@@ -615,6 +674,10 @@ bool Node::start() {
 void Node::stop() {
   if (!impl_ || !impl_->started) return;
   impl_->started = false;
+#ifdef _WIN32
+  // カメラ採集スレッドを先に止める (frame_bus への push を止めてから httpd を畳む)
+  if (impl_->camera) impl_->camera->stop();
+#endif
   // httpd は runloop の外から止める (worker が callSync 待ちのまま mg_stop すると死锁)
   if (impl_->httpd) impl_->httpd->stop();
   impl_->loop->callSync([&] {
@@ -636,6 +699,21 @@ void Node::setTtsCb(TtsCb cb) {
 
 void Node::press(const std::string& door_id) {
   impl_->loop->callSync([&] { impl_->doPress(door_id); });
+}
+
+void Node::pushCameraFrame(const uint8_t* data, int format, int width, int height, int stride,
+                           int64_t ts_ms) {
+  if (!data || width <= 0 || height <= 0) return;
+  size_t n = rawFrameBytes(format, width, height, stride);
+  if (n == 0) return;  // 未知 format
+  RawFrame f;
+  f.format = format;
+  f.w = width;
+  f.h = height;
+  f.stride = stride;
+  f.ts_ms = ts_ms;
+  f.data.assign(data, data + n);  // コピーはこの 1 回だけ
+  impl_->frame_bus.push(std::move(f));
 }
 
 void Node::sendQuickReply(const std::string& reply_id, const std::string& free_text,

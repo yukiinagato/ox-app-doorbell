@@ -21,7 +21,8 @@ add_library(db_third_party STATIC
   third_party/monocypher/monocypher-ed25519.c
 )
 target_include_directories(db_third_party PUBLIC
-  third_party/sqlite third_party/civetweb third_party/cjson third_party/monocypher)
+  third_party/sqlite third_party/civetweb third_party/cjson third_party/monocypher
+  third_party/stb)
 target_compile_definitions(db_third_party PUBLIC
   # civetweb: TLS/CGI/ファイルシステム配信は使わない (資産は埋め込み)
   NO_SSL NO_CGI NO_CACHING
@@ -55,9 +56,17 @@ add_custom_command(OUTPUT ${WEBUI_GEN}
 
 # ---------- doorbell_core ----------
 file(GLOB_RECURSE DB_CORE_SRC CONFIGURE_DEPENDS src/*.cpp)
+if(NOT WIN32)
+  # Windows 専用: Media Foundation カメラ採集
+  list(REMOVE_ITEM DB_CORE_SRC ${CMAKE_CURRENT_SOURCE_DIR}/src/media/camera_win.cpp)
+endif()
 add_library(doorbell_core STATIC ${DB_CORE_SRC} ${WEBUI_GEN})
 target_include_directories(doorbell_core PUBLIC include src)
 target_link_libraries(doorbell_core PUBLIC db_third_party)
+if(WIN32)
+  # camera_win: Media Foundation SourceReader + COM
+  target_link_libraries(doorbell_core PUBLIC mfplat mf mfreadwrite mfuuid ole32)
+endif()
 if(NOT MSVC)
   target_compile_options(doorbell_core PRIVATE -Wall -Wextra -Wno-unused-parameter)
 endif()

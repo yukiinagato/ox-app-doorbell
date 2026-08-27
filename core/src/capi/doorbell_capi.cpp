@@ -124,14 +124,8 @@ DB_API char* db_core_config_json(db_core* c) {
 
 DB_API void db_core_on_camera_frame(db_core* c, const uint8_t* data, int format, int width,
                                     int height, int stride, int64_t ts_ms) {
-  // Phase 1: 帧総線 (MJPEG/動検/SIP ビデオ) へ配線する。現状は受け流し。
-  (void)c;
-  (void)data;
-  (void)format;
-  (void)width;
-  (void)height;
-  (void)stride;
-  (void)ts_ms;
+  if (!c || !c->node) return;
+  c->node->pushCameraFrame(data, format, width, height, stride, ts_ms);
 }
 
 DB_API void db_free(char* p) { std::free(p); }
