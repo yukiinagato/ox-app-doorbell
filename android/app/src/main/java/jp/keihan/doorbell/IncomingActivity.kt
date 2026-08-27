@@ -5,6 +5,9 @@
 //   - 応答: 監聴呼を切って X-Doorbell-Mode: answer の直呼 — 門口機は鳴っている電話腿を
 //     取り消して双方向応答する (計画書 §12)。通話中は映像を表示し続け「終了」で切る。
 //   - クイック返信: config quick_replies を order 順に縦並び。D-pad フォーカス/タッチ両対応。
+//     ラベルは**訪客言語** (quick_replies.<id>.label.<visitor_lang> — 無ければ ja) で出す。
+//   - 用件 / 訪客言語バッジ: press イベント payload 由来 (「📦 宅配便」「🌐 EN」)。住人が読む
+//     ものなので用件名は室内側の言語 (boot.ui_lang) で表示する。
 // TV リモコン: BACK で閉じる。返信送信後は「送信しました」→ 3 秒でクローズ。
 // 锁屏対策: showWhenLocked/turnScreenOn (API27+ は manifest + setter、以前は window flags)。
 package jp.keihan.doorbell
@@ -28,7 +31,10 @@ class IncomingActivity : Activity() {
 
     private val ui = Handler(Looper.getMainLooper())
     private lateinit var app: App
+    private lateinit var texts: Texts
     private var door = ""
+    private var purpose = ""             // press payload の用件 id (バッジ用)
+    private var visitorLang = ""         // press payload の訪客言語 (返信ラベル/バッジ用)
     private var streamer: MjpegStreamer? = null
     private var sipCalling = false
     private var inCall = false           // 応答 (双方向) 確立後 = 「終了」ボタン
@@ -40,6 +46,8 @@ class IncomingActivity : Activity() {
         super.onCreate(savedInstanceState)
         app = application as App
         door = intent?.getStringExtra(EXTRA_DOOR) ?: ""
+        purpose = intent?.getStringExtra(EXTRA_PURPOSE) ?: ""
+        visitorLang = intent?.getStringExtra(EXTRA_LANG) ?: ""
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         // 万一ロック中でも来鈴画面を表示する (DO 端末は App 側で keyguard 自体を無効化済み)
         if (Build.VERSION.SDK_INT >= 27) {
@@ -55,14 +63,27 @@ class IncomingActivity : Activity() {
 
         val cfg = app.core.config()
         val st = app.core.status()
+        texts = Texts(this)
+        texts.setConfig(cfg)
+        texts.setLang(app.boot.uiLang)   // 室内側の言語 (住人が読む面)
 
         // 門口名 (doors.<door>.label.<lang> → ja → door id)
         val label = app.core.dig(cfg, "doors.$door.label.${app.boot.uiLang}")
             ?: app.core.dig(cfg, "doors.$door.label.ja") ?: door
         findViewById<TextView>(R.id.door_label).text = label.toString()
+        findViewById<TextView>(R.id.status_text).text =
+            texts.t("reply.choose", R.string.reply_choose)
+        findViewById<TextView>(R.id.audio_hint).text =
+            texts.t("ring.monitoring", R.string.ring_monitoring)
+        findViewById<TextView>(R.id.no_video_text).text =
+            texts.t("ring.no_video", R.string.ring_no_video)
+        updateBadges(cfg)
+
+        val close = findViewById<Button>(R.id.close_button)
+        close.text = texts.t("ring.ignore", R.string.ring_ignore)
+        close.setOnClickListener { finish() }
 
         buildReplyButtons(cfg)
-        findViewById<Button>(R.id.close_button).setOnClickListener { finish() }
 
         // 門口機 peer の解決 (映像 URL + 直接監聴呼/応答呼の宛先 host)
         val peer = findDoorPeer(st)
@@ -73,6 +94,7 @@ class IncomingActivity : Activity() {
 
         // 応答 (双方向) — 宛先不明なら無効化
         val answer = findViewById<Button>(R.id.answer_button)
+        answer.text = texts.t("ring.answer", R.string.ring_answer)
         answer.isEnabled = peerHost != null
         answer.setOnClickListener { onAnswerClick(answer) }
 
@@ -82,7 +104,16 @@ class IncomingActivity : Activity() {
 
     override fun onNewIntent(intent: Intent?) {
         super.onNewIntent(intent)
-        // 同じ画面が出ている間の再チャイム → タイマだけ張り直す (通話中は張らない)
+        // 同じ画面が出ている間の再チャイム → 用件/言語を更新しタイマを張り直す (通話中は張らない)
+        val p = intent?.getStringExtra(EXTRA_PURPOSE)
+        val l = intent?.getStringExtra(EXTRA_LANG)
+        if (p != null || l != null) {
+            purpose = p ?: ""
+            visitorLang = l ?: ""
+            val cfg = app.core.config()
+            updateBadges(cfg)
+            buildReplyButtons(cfg)
+        }
         ui.removeCallbacks(autoClose)
         if (!inCall) ui.postDelayed(autoClose, AUTO_CLOSE_MS)
     }
@@ -92,6 +123,44 @@ class IncomingActivity : Activity() {
         streamer?.stop()
         if (sipCalling) app.core.sipHangup()
         super.onDestroy()
+    }
+
+    // ---------- 用件 / 訪客言語バッジ ----------
+
+    private fun updateBadges(cfg: JSONObject?) {
+        val purposeBadge = findViewById<TextView>(R.id.purpose_badge)
+        val langBadge = findViewById<TextView>(R.id.lang_badge)
+
+        val e = if (purpose.isEmpty()) null
+                else app.core.dig(cfg, "visit_purposes.$purpose") as? JSONObject
+        if (purpose.isEmpty()) {
+            purposeBadge.visibility = View.GONE
+        } else {
+            val label = labelOf(e, app.boot.uiLang, purpose)
+            val icon = e?.optString("icon").orEmpty()
+            purposeBadge.text = if (icon.isEmpty()) label else "$icon $label"
+            purposeBadge.contentDescription =
+                texts.t("ring.purpose_badge", R.string.ring_purpose_badge, label)
+            purposeBadge.visibility = View.VISIBLE
+        }
+
+        if (visitorLang.isEmpty() || visitorLang == "ja") {
+            langBadge.visibility = View.GONE
+        } else {
+            langBadge.text = "🌐 " + visitorLang.uppercase()
+            langBadge.contentDescription = texts.t("ring.lang_badge", R.string.ring_lang_badge,
+                                                   Texts.langDisplayName(visitorLang))
+            langBadge.visibility = View.VISIBLE
+        }
+    }
+
+    /** ラベル多言語解決 (label.<lang> → label.ja → 既定)。 */
+    private fun labelOf(e: JSONObject?, lang: String, fallback: String): String {
+        val l = e?.optJSONObject("label") ?: return fallback
+        val s = l.optString(lang)
+        if (s.isNotEmpty()) return s
+        val ja = l.optString("ja")
+        return if (ja.isNotEmpty()) ja else fallback
     }
 
     // ---------- 門口機 peer ----------
@@ -147,8 +216,9 @@ class IncomingActivity : Activity() {
         }
         inCall = true
         ui.removeCallbacks(autoClose)  // 通話中は自動クローズしない (映像は表示継続)
-        btn.text = getString(R.string.incall_end)
-        findViewById<TextView>(R.id.status_text).text = getString(R.string.incall_title)
+        btn.text = texts.t("incall.end", R.string.incall_end)
+        findViewById<TextView>(R.id.status_text).text =
+            texts.t("incall.title", R.string.incall_title)
         findViewById<TextView>(R.id.audio_hint).visibility = View.GONE
         if (sipCalling) {
             // 監聴呼が立っている → hangup してから少し待って answer (Idle 遷移待ち)
@@ -175,18 +245,24 @@ class IncomingActivity : Activity() {
     private fun buildReplyButtons(cfg: JSONObject?) {
         val list = findViewById<LinearLayout>(R.id.reply_list)
         val close = findViewById<Button>(R.id.close_button)
+        val answer = findViewById<Button>(R.id.answer_button)
+        // 前回分を除去 (再チャイムで訪客言語が変わることがある — answer/close は残す)
+        var i = list.childCount - 1
+        while (i >= 0) {
+            val v = list.getChildAt(i)
+            if (v !== close && v !== answer) list.removeViewAt(i)
+            i--
+        }
         val replies = (app.core.dig(cfg, "quick_replies") as? JSONObject) ?: return
-        // order 昇順
+        // ラベルは訪客言語 (訳が無ければ ja へ回落)
+        val lang = if (visitorLang.isEmpty()) "ja" else visitorLang
         val ids = replies.keys().asSequence().toMutableList()
-        ids.sortBy { (replies.optJSONObject(it)?.optInt("order", 999)) ?: 999 }
+        ids.sortWith(compareBy({ replies.optJSONObject(it)?.optInt("order", 999) ?: 999 }, { it }))
         var first: Button? = null
         for ((idx, id) in ids.withIndex()) {
             val q = replies.optJSONObject(id) ?: continue
-            val label = q.optJSONObject("label")?.let {
-                it.optString(app.boot.uiLang).ifEmpty { it.optString("ja") }
-            } ?: id
             val b = Button(this)
-            b.text = label
+            b.text = labelOf(q, lang, id)
             b.textSize = 22f
             @Suppress("DEPRECATION")  // minSdk 21 (Context.getColor は API 23+)
             b.setTextColor(resources.getColor(R.color.fg))
@@ -196,7 +272,8 @@ class IncomingActivity : Activity() {
             val lp = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, dp(72))
             if (idx > 0) lp.topMargin = dp(16)
-            b.setOnClickListener { sendReply(id) }
+            b.layoutParams = lp
+            b.setOnClickListener { sendReply(id, b.text.toString()) }
             list.addView(b, list.childCount - 1)  // close_button の手前へ
             if (first == null) first = b
         }
@@ -204,9 +281,11 @@ class IncomingActivity : Activity() {
         (first ?: close).requestFocus()
     }
 
-    private fun sendReply(replyId: String) {
+    private fun sendReply(replyId: String, label: String) {
         app.core.quickReply(replyId, door)
-        findViewById<TextView>(R.id.sent_text).visibility = View.VISIBLE
+        val sent = findViewById<TextView>(R.id.sent_text)
+        sent.text = texts.t("reply.sent", R.string.reply_sent, label)
+        sent.visibility = View.VISIBLE
         ui.removeCallbacks(autoClose)
         if (!inCall) ui.postDelayed(autoClose, 3000)  // 通話中は返信後も画面を保つ
     }
@@ -215,16 +294,20 @@ class IncomingActivity : Activity() {
 
     companion object {
         private const val EXTRA_DOOR = "door"
+        private const val EXTRA_PURPOSE = "purpose"
+        private const val EXTRA_LANG = "visitor_lang"
         private const val AUTO_CLOSE_MS = 90_000L
         private const val DIRECT_PORT = 47190  // docs/network-ports.md / sipctl.h と一致
 
         /** chime イベントから起動 (App — core スレッドから呼ばれるため NEW_TASK)。 */
-        fun launch(ctx: Context, door: String) {
+        fun launch(ctx: Context, door: String, purpose: String = "", visitorLang: String = "") {
             try {
                 ctx.startActivity(
                     Intent(ctx, IncomingActivity::class.java)
                         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                        .putExtra(EXTRA_DOOR, door))
+                        .putExtra(EXTRA_DOOR, door)
+                        .putExtra(EXTRA_PURPOSE, purpose)
+                        .putExtra(EXTRA_LANG, visitorLang))
             } catch (_: Exception) {
                 // バックグラウンド起動制限 (SYSTEM_ALERT_WINDOW 未付与) — provision.md 参照
             }

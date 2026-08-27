@@ -28,7 +28,8 @@ class DoorbellService : Service() {
         val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
         if (Build.VERSION.SDK_INT >= 26) {
             nm.createNotificationChannel(
-                NotificationChannel(CHANNEL_ID, getString(R.string.svc_channel),
+                // 常駐通知のチャンネル名は app 名で足りる (i18n/strings.yaml に専用キーは無い)
+                NotificationChannel(CHANNEL_ID, getString(R.string.app_name),
                                     NotificationManager.IMPORTANCE_MIN))
         }
         val pi = PendingIntent.getActivity(
@@ -38,7 +39,6 @@ class DoorbellService : Service() {
         val b = if (Build.VERSION.SDK_INT >= 26)
             Notification.Builder(this, CHANNEL_ID) else Notification.Builder(this)
         return b.setContentTitle(getString(R.string.app_name))
-            .setContentText(getString(R.string.svc_running))
             .setSmallIcon(android.R.drawable.sym_def_app_icon)
             .setContentIntent(pi)
             .setOngoing(true)

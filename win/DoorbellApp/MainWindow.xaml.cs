@@ -18,6 +18,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
+using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using DoorbellApp.Core;
 using DoorbellApp.Kiosk;
@@ -64,6 +65,19 @@ namespace DoorbellApp
         private static readonly Brush NightClockBrush = Frozen(new SolidColorBrush(Color.FromRgb(0x8B, 0x24, 0x1C)));
         private static readonly Brush SaverClockBrush = Frozen(new SolidColorBrush(Color.FromRgb(0x39, 0x42, 0x4C)));
 
+        // ---- 個性化 (テーマ / 訪客言語 / 用件 / カスタム音声) ----
+        private Dictionary<string, object> _cfg;   // 直近の core 設定 (config_changed で差替)
+        private string _nodeId = "";               // 自機 node_id (devices.<id>.local.theme 用)
+        private string _panelToken = "";           // config panel.tokens[0] (/asset の ?k=)
+        private string _visitorLang = "ja";        // 門口機の表示言語 (訪客言語)
+        private string _themeColor;                // 適用済み bg_color
+        private string _themeHash;                 // 適用済み bg_image (sha256)
+        private MediaPlayer _audio;                // reply/chime の audio_path 再生
+        private Action _audioFallback;             // 再生失敗時の回落 (TTS / 内蔵音)
+        private string _callTitleOverride;         // 用件付き按鈴の「{用件} で呼び出しました」
+        private string _incomingPurpose = "";      // 来鈴中の用件 id (バッジ用)
+        private string _incomingLang = "";         // 来鈴中の訪客言語 (返信ラベル/バッジ用)
+
         // ---- SOS ----
         private bool _emergencyActive;
         private double _sosHoldS = 3;
@@ -76,6 +90,8 @@ namespace DoorbellApp
         public MainWindow()
         {
             InitializeComponent();
+            _visitorLang = App.Boot.UiLang;
+            RefreshConfigCache();
             ApplyStrings();
 
             _clock.Interval = TimeSpan.FromSeconds(1);
@@ -84,7 +100,7 @@ namespace DoorbellApp
             UpdateClock();
 
             _callTimeout.Interval = TimeSpan.FromSeconds(30);
-            _callTimeout.Tick += (s, e) => { _callTimeout.Stop(); ShowIdle(L10n.T("calling.no_answer")); };
+            _callTimeout.Tick += (s, e) => { _callTimeout.Stop(); ShowIdle(Texts.T("calling.no_answer")); };
             _replyTimeout.Tick += (s, e) => { _replyTimeout.Stop(); ReplyBanner.Visibility = Visibility.Collapsed; };
 
             // 焼付対策: pixel_shift_s 毎に待機画面コンテナを ±8px 移動
@@ -142,27 +158,39 @@ namespace DoorbellApp
         private static bool IsTrue(string v) =>
             v == "True" || v == "true" || v == "1";
 
+        /// <summary>全画面の文言を現在言語で貼り直す (Texts = i18n_overrides → resx の順で解決)。
+        /// 訪客言語の切替でも呼ばれる。</summary>
         private void ApplyStrings()
         {
-            Title = L10n.T("app.name");
-            CallButton.Content = L10n.T("idle.call_button", "").Trim();
-            TouchHint.Text = L10n.T("idle.touch_to_call");
-            CallingText.Text = L10n.T("calling.title");
-            CancelButton.Content = L10n.T("calling.cancel");
-            ReplyCaption.Text = L10n.T("reply.banner");
-            OfflineTitle.Text = L10n.T("offline.title");
-            OfflineBody.Text = L10n.T("offline.body");
-            SosText.Text = L10n.T("emergency.button");
-            SosHint.Text = L10n.T("emergency.hold_hint", _sosHoldS);
-            EmergencyTitle.Text = L10n.T("emergency.title");
-            EmergencyNote.Text = L10n.T("emergency.notified");
-            EmergencyCancelButton.Content = L10n.T("emergency.cancel");
-            AnswerButton.Content = L10n.T("ring.answer");
-            MonitorButton.Content = L10n.T("ring.monitor");
-            IgnoreButton.Content = L10n.T("ring.ignore");
-            IncomingNoVideo.Text = L10n.T("ring.no_video");
-            InCallTitle.Text = L10n.T("incall.title");
-            EndCallButton.Content = L10n.T("incall.end");
+            Title = Texts.T("app.name");
+            CallButton.Content = Texts.T("idle.call_button", DoorLabel(App.Boot.Door)).Trim();
+            TouchHint.Text = Texts.T("idle.touch_to_call");
+            PurposeHint.Text = Texts.T("idle.choose_purpose");
+            CallingText.Text = Texts.T("calling.title");
+            CancelButton.Content = Texts.T("calling.cancel");
+            ReplyCaption.Text = Texts.T("reply.banner");
+            OfflineTitle.Text = Texts.T("offline.title");
+            OfflineBody.Text = Texts.T("offline.body");
+            SosText.Text = Texts.T("emergency.button");
+            SosHint.Text = Texts.T("emergency.hold_hint", _sosHoldS);
+            EmergencyTitle.Text = Texts.T("emergency.title");
+            EmergencyNote.Text = Texts.T("emergency.notified");
+            EmergencyCancelButton.Content = Texts.T("emergency.cancel");
+            AnswerButton.Content = Texts.T("ring.answer");
+            MonitorButton.Content = Texts.T("ring.monitor");
+            IgnoreButton.Content = Texts.T("ring.ignore");
+            IncomingNoVideo.Text = Texts.T("ring.no_video");
+            InCallTitle.Text = Texts.T("incall.title");
+            EndCallButton.Content = Texts.T("incall.end");
+        }
+
+        /// <summary>ドアの表示名 (doors.&lt;door&gt;.label.&lt;lang&gt; → ja → door id)。</summary>
+        private string DoorLabel(string door)
+        {
+            if (string.IsNullOrEmpty(door)) return "";
+            var label = CoreClient.Dig(_cfg, "doors." + door + ".label." + Texts.Lang)
+                        ?? CoreClient.Dig(_cfg, "doors." + door + ".label.ja");
+            return label != null ? label.ToString() : door;
         }
 
         private void OnClockTick()
@@ -194,36 +222,383 @@ namespace DoorbellApp
 
         private void RefreshNodeInfo()
         {
+            RefreshConfigCache();
             var st = App.Core.Status();
-            var cfg = App.Core.Config();
             if (st != null)
             {
                 try
                 {
                     var node = st["node"] as Dictionary<string, object>;
                     if (node != null)
+                    {
                         NodeInfo.Text = node["name"] + " · v" + node["version"];
+                        object id;
+                        if (node.TryGetValue("id", out id) && id != null) _nodeId = id.ToString();
+                    }
                 }
                 catch { }
                 // 初期表示状態 (起動直後の {"t":"display"}/{"t":"emergency"} は購読前に流れている
                 // ことがある — status_json の同梱値で追い付く)
                 ApplyDisplayFromStatus(st);
             }
-            // 呼び出しボタンにドアの表示名 (設定 doors.<door>.label.<lang>) を反映
-            if (!string.IsNullOrEmpty(App.Boot.Door) && cfg != null)
+            // 訪客言語の現在値 (status_json visitor_lang.<door>) — 再起動後の追い付き
+            if (st != null && App.Boot.Role == "door_station" && !string.IsNullOrEmpty(App.Boot.Door))
             {
-                var label = CoreClient.Dig(cfg, "doors." + App.Boot.Door + ".label." + App.Boot.UiLang)
-                            ?? CoreClient.Dig(cfg, "doors." + App.Boot.Door + ".label.ja");
-                if (label != null)
-                    CallButton.Content = L10n.T("idle.call_button", label.ToString());
+                var vl = CoreClient.Dig(st, "visitor_lang." + App.Boot.Door);
+                SetVisitorLang(vl != null ? vl.ToString() : "ja");
             }
-            RefreshSosConfig(cfg);
+            RefreshSosConfig(_cfg);
             // 直呼待受ポート (config sip.direct_port — 既定 47190)
-            var dp = CoreClient.Dig(cfg, "sip.direct_port");
+            var dp = CoreClient.Dig(_cfg, "sip.direct_port");
             if (dp != null)
             {
                 int p;
                 if (int.TryParse(dp.ToString(), out p) && p > 0) _directPort = p;
+            }
+            // 個性化 (テーマ / 用件 / 言語バー) — 文言は言語追従なので最後に貼り直す
+            ApplyTheme();
+            BuildPurposeButtons();
+            BuildLangBar();
+            ApplyStrings();
+        }
+
+        // ---------- 個性化 (テーマ / 訪客言語 / 用件) ----------
+
+        /// <summary>core 設定のキャッシュ更新 (Texts の上書き文言もここで差し替える)。</summary>
+        private void RefreshConfigCache()
+        {
+            _cfg = App.Core.Config();
+            Texts.SetConfig(_cfg);
+            _panelToken = FirstPanelToken(_cfg);
+        }
+
+        /// <summary>config panel.tokens[0] (資産取得 /asset/&lt;hash&gt;?k= に使う)。</summary>
+        private static string FirstPanelToken(Dictionary<string, object> cfg)
+        {
+            var toks = CoreClient.Dig(cfg, "panel.tokens") as System.Collections.IEnumerable;
+            if (toks == null || toks is string) return "";
+            foreach (var t in toks)
+                if (t != null && !string.IsNullOrEmpty(t.ToString())) return t.ToString();
+            return "";
+        }
+
+        /// <summary>設定値を「端末別 (devices.&lt;self&gt;.local.theme.*) → 全体 (display.theme.*)」の
+        /// 優先順で引く。</summary>
+        private string ThemeValue(string leaf)
+        {
+            object v = null;
+            if (!string.IsNullOrEmpty(_nodeId))
+                v = CoreClient.Dig(_cfg, "devices." + _nodeId + ".local.theme." + leaf);
+            if (v == null) v = CoreClient.Dig(_cfg, "display.theme." + leaf);
+            return v != null ? v.ToString() : null;
+        }
+
+        /// <summary>テーマ適用: bg_color を背景に、bg_image (sha256) を最背面へ敷く。</summary>
+        private void ApplyTheme()
+        {
+            string color = ThemeValue("bg_color");
+            if (color != _themeColor)
+            {
+                _themeColor = color;
+                if (!string.IsNullOrEmpty(color))
+                {
+                    try
+                    {
+                        var c = (Color)ColorConverter.ConvertFromString(color);
+                        Background = Frozen(new SolidColorBrush(c));
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine("テーマ背景色が不正 (無視): " + color + " " + ex.Message);
+                    }
+                }
+                else
+                {
+                    Background = (Brush)FindResource("Bg");
+                }
+            }
+
+            string hash = ThemeValue("bg_image");
+            if (string.IsNullOrEmpty(hash))
+            {
+                _themeHash = null;
+                ThemeBgImage.Source = null;
+                ThemeBgImage.Visibility = Visibility.Collapsed;
+                return;
+            }
+            if (hash == _themeHash && ThemeBgImage.Source != null) return;  // 適用済み
+            _themeHash = hash;
+            LoadThemeImage(hash);
+        }
+
+        /// <summary>背景画像を自機 httpd から取得 (未キャッシュなら 404 — asset_ready で再試行)。</summary>
+        private void LoadThemeImage(string hash)
+        {
+            string url = "http://127.0.0.1:" + App.Boot.HttpPort + "/asset/" + hash;
+            if (!string.IsNullOrEmpty(_panelToken)) url += "?k=" + _panelToken;
+            Task.Run(() =>
+            {
+                byte[] data = null;
+                try
+                {
+                    using (var wc = new System.Net.WebClient())
+                        data = wc.DownloadData(url);
+                }
+                catch (Exception ex)
+                {
+                    // 未取得 (mesh 前取り待ち) — {"t":"asset_ready"} を待って再試行する
+                    Debug.WriteLine("背景画像の取得失敗 (asset_ready 待ち): " + ex.Message);
+                }
+                if (data == null) return;
+                Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    if (_themeHash != hash) return;  // 途中で設定が変わった
+                    try
+                    {
+                        var bmp = new BitmapImage();
+                        bmp.BeginInit();
+                        bmp.CacheOption = BitmapCacheOption.OnLoad;
+                        bmp.StreamSource = new MemoryStream(data);
+                        bmp.EndInit();
+                        bmp.Freeze();
+                        ThemeBgImage.Source = bmp;
+                        ThemeBgImage.Visibility = Visibility.Visible;
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine("背景画像のデコード失敗 (無視): " + ex.Message);
+                    }
+                }));
+            });
+        }
+
+        /// <summary>設定のオブジェクト直下のキー一覧を order 昇順 (同値は id 順) で返す。</summary>
+        private static List<string> SortedByOrder(Dictionary<string, object> map)
+        {
+            var ids = new List<string>();
+            if (map == null) return ids;
+            ids.AddRange(map.Keys);
+            ids.Sort((a, b) =>
+            {
+                int c = OrderOf(map, a).CompareTo(OrderOf(map, b));
+                return c != 0 ? c : string.CompareOrdinal(a, b);
+            });
+            return ids;
+        }
+
+        private static int OrderOf(Dictionary<string, object> map, string id)
+        {
+            var e = map[id] as Dictionary<string, object>;
+            object v;
+            if (e != null && e.TryGetValue("order", out v) && v != null)
+            {
+                int i;
+                if (int.TryParse(v.ToString(), out i)) return i;
+            }
+            return 999;
+        }
+
+        /// <summary>ラベル多言語解決 (label.&lt;lang&gt; → label.ja → 既定)。</summary>
+        private static string LabelOf(Dictionary<string, object> entry, string lang, string fallback)
+        {
+            var label = entry != null && entry.ContainsKey("label")
+                ? entry["label"] as Dictionary<string, object> : null;
+            if (label != null)
+            {
+                object v;
+                if (label.TryGetValue(lang, out v) && v != null && !string.IsNullOrEmpty(v.ToString()))
+                    return v.ToString();
+                if (label.TryGetValue("ja", out v) && v != null && !string.IsNullOrEmpty(v.ToString()))
+                    return v.ToString();
+            }
+            return fallback;
+        }
+
+        /// <summary>用件ボタン (config visit_purposes)。門口機の待機画面にだけ出す。</summary>
+        private void BuildPurposeButtons()
+        {
+            PurposeGrid.Children.Clear();
+            var purposes = CoreClient.Dig(_cfg, "visit_purposes") as Dictionary<string, object>;
+            if (App.Boot.Role != "door_station" || purposes == null || purposes.Count == 0)
+            {
+                PurposeSection.Visibility = Visibility.Collapsed;
+                return;
+            }
+            foreach (var id in SortedByOrder(purposes))
+            {
+                var entry = purposes[id] as Dictionary<string, object>;
+                string label = LabelOf(entry, Texts.Lang, id);
+                object icon;
+                string iconText = entry != null && entry.TryGetValue("icon", out icon) && icon != null
+                    ? icon.ToString() : "";
+                PurposeGrid.Children.Add(MakePurposeButton(id, iconText, label));
+            }
+            PurposeSection.Visibility = Visibility.Visible;
+        }
+
+        private Button MakePurposeButton(string id, string icon, string label)
+        {
+            var panel = new StackPanel { HorizontalAlignment = HorizontalAlignment.Center };
+            if (!string.IsNullOrEmpty(icon))
+                panel.Children.Add(new TextBlock
+                {
+                    Text = icon,
+                    FontSize = 34,
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                });
+            panel.Children.Add(new TextBlock
+            {
+                Text = label,
+                FontSize = 22,
+                TextWrapping = TextWrapping.Wrap,
+                TextAlignment = TextAlignment.Center,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                Foreground = (Brush)FindResource("Fg"),
+            });
+            var b = new Button
+            {
+                Content = panel,
+                MinWidth = 190,
+                MinHeight = 110,
+                Margin = new Thickness(8),
+                Padding = new Thickness(12, 10, 12, 10),
+                Background = (Brush)FindResource("Card"),
+                Foreground = (Brush)FindResource("Fg"),
+                BorderBrush = (Brush)FindResource("Dim"),
+                Cursor = Cursors.Hand,
+                Tag = id,
+            };
+            b.Click += OnPurposeClick;
+            return b;
+        }
+
+        private void OnPurposeClick(object sender, RoutedEventArgs e)
+        {
+            var b = sender as Button;
+            if (b == null) return;
+            string id = b.Tag as string;
+            if (string.IsNullOrEmpty(id)) return;
+            var purposes = CoreClient.Dig(_cfg, "visit_purposes") as Dictionary<string, object>;
+            var entry = purposes != null && purposes.ContainsKey(id)
+                ? purposes[id] as Dictionary<string, object> : null;
+            string label = LabelOf(entry, Texts.Lang, id);
+            App.Core.PressPurpose(App.Boot.Door, id);
+            ShowCalling(Texts.T("purpose.sent", label));
+        }
+
+        /// <summary>訪客言語バー (config ui.languages)。門口機の待機画面下部。</summary>
+        private void BuildLangBar()
+        {
+            LangBar.Children.Clear();
+            var langs = CoreClient.Dig(_cfg, "ui.languages") as System.Collections.IEnumerable;
+            var list = new List<string>();
+            if (langs != null && !(langs is string))
+                foreach (var l in langs)
+                    if (l != null && !string.IsNullOrEmpty(l.ToString())) list.Add(l.ToString());
+            if (App.Boot.Role != "door_station" || list.Count < 2)
+            {
+                LangBar.Visibility = Visibility.Collapsed;
+                return;
+            }
+            foreach (var lang in list)
+            {
+                var b = new Button
+                {
+                    Content = LangDisplayName(lang),
+                    FontSize = 20,
+                    Padding = new Thickness(22, 8, 22, 8),
+                    Margin = new Thickness(6, 0, 6, 0),
+                    Background = (Brush)FindResource("Card"),
+                    Foreground = (Brush)FindResource("Dim"),
+                    BorderBrush = (Brush)FindResource("Dim"),
+                    Cursor = Cursors.Hand,
+                    Tag = lang,
+                };
+                b.Click += OnLangClick;
+                LangBar.Children.Add(b);
+            }
+            LangBar.Visibility = Visibility.Visible;
+            UpdateLangBarSelection();
+        }
+
+        /// <summary>言語の自言語表記 (訪客が自分の言語を見つけられるように)。</summary>
+        private static string LangDisplayName(string lang)
+        {
+            switch (lang)
+            {
+                case "ja": return "日本語";
+                case "en": return "English";
+                case "zh": return "中文";
+                default: return lang;
+            }
+        }
+
+        private void UpdateLangBarSelection()
+        {
+            foreach (var child in LangBar.Children)
+            {
+                var b = child as Button;
+                if (b == null) continue;
+                bool on = (b.Tag as string) == _visitorLang;
+                b.Background = on ? (Brush)FindResource("Accent") : (Brush)FindResource("Card");
+                b.Foreground = on ? Brushes.Black : (Brush)FindResource("Dim");
+            }
+        }
+
+        private void OnLangClick(object sender, RoutedEventArgs e)
+        {
+            var b = sender as Button;
+            if (b == null) return;
+            string lang = b.Tag as string;
+            App.Core.SetVisitorLang(App.Boot.Door, lang);  // 複製で visitor_lang が返ってくる
+            SetVisitorLang(lang);                          // 体感優先で先に切り替える (冪等)
+        }
+
+        /// <summary>表示言語を切り替えて訪客向け文言を貼り直す (自操作・他端末・自動復帰の共通経路)。</summary>
+        private void SetVisitorLang(string lang)
+        {
+            if (string.IsNullOrEmpty(lang)) lang = "ja";
+            if (_visitorLang == lang) return;
+            _visitorLang = lang;
+            Texts.SetLang(lang);
+            ApplyStrings();
+            BuildPurposeButtons();
+            UpdateLangBarSelection();
+        }
+
+        // ---------- カスタム音声 (reply / chime の audio_path) ----------
+
+        /// <summary>資産のローカルファイルを再生。失敗時は fallback (TTS / 内蔵音) へ回落する。</summary>
+        private void PlayAudio(string path, Action fallback)
+        {
+            if (string.IsNullOrEmpty(path) || !File.Exists(path))
+            {
+                _audioFallback = null;
+                if (fallback != null) fallback();
+                return;
+            }
+            _audioFallback = fallback;
+            try
+            {
+                if (_audio == null)
+                {
+                    _audio = new MediaPlayer();
+                    _audio.MediaFailed += (s, e) =>
+                    {
+                        Debug.WriteLine("カスタム音声の再生失敗 (回落): " + e.ErrorException);
+                        var fb = _audioFallback;
+                        _audioFallback = null;
+                        if (fb != null) fb();
+                    };
+                }
+                _audio.Open(new Uri(path));
+                _audio.Play();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("カスタム音声を開けない (回落): " + ex.Message);
+                _audioFallback = null;
+                if (fallback != null) fallback();
             }
         }
 
@@ -378,7 +753,7 @@ namespace DoorbellApp
                 double d;
                 if (double.TryParse(hold.ToString(), out d) && d > 0) _sosHoldS = d;
             }
-            SosHint.Text = L10n.T("emergency.hold_hint", _sosHoldS);
+            SosHint.Text = Texts.T("emergency.hold_hint", _sosHoldS);
 
             var pin = CoreClient.Dig(cfg, "emergency.cancel_requires_pin");
             _cancelRequiresPin = !(pin is bool) || (bool)pin;  // 既定 true
@@ -514,15 +889,20 @@ namespace DoorbellApp
         // ---------- 状態遷移 ----------
         private void ShowIdle(string hint = null)
         {
+            _callTitleOverride = null;
             CallingView.Visibility = Visibility.Collapsed;
             OfflineView.Visibility = Visibility.Collapsed;
             IdleView.Visibility = Visibility.Visible;
             if (hint != null) TouchHint.Text = hint;
         }
 
-        private void ShowCalling()
+        /// <summary>呼び出し中画面。title 指定時は「{用件} で呼び出しました」等に差し替える
+        /// (core からの state=calling で上書きされないよう _callTitleOverride に覚える)。</summary>
+        private void ShowCalling(string title = null)
         {
             ExitScreensaver();
+            if (title != null) _callTitleOverride = title;
+            CallingText.Text = _callTitleOverride ?? Texts.T("calling.title");
             IdleView.Visibility = Visibility.Collapsed;
             CallingView.Visibility = Visibility.Visible;
             _callTimeout.Stop();
@@ -546,20 +926,48 @@ namespace DoorbellApp
                     // 受鈴室内面板: press で来鈴画面 (門口ライブ + 応答/モニタ/無視)。
                     // reply (誰かが応対 — 複製イベントで全ノードに届く) で来鈴画面を畳む
                     if (App.Boot.Role == "indoor_panel" && ev.Str("type") == "press")
-                        ShowIncoming(ev.Str("door"));
+                        ShowIncoming(ev);
                     else if (ev.Str("type") == "reply" && !_inCall &&
                              IncomingView.Visibility == Visibility.Visible)
                         CloseIncoming(true);
                     break;
                 case "chime":
                     ExitScreensaver();
-                    SystemSounds.Exclamation.Play();  // TODO(Phase1後半): 同梱 wav の再生
+                    // カスタム音 (assets の audio_path) があればそれを、無ければ内蔵音
+                    PlayAudio(ev.Str("audio_path"), () => SystemSounds.Exclamation.Play());
+                    break;
+                case "visitor_lang":
+                    // 訪客言語の切替 (自操作の複製 / 他端末からの変更 / 無操作復帰)
+                    if (App.Boot.Role == "door_station" &&
+                        (ev.Str("door") == App.Boot.Door || string.IsNullOrEmpty(ev.Str("door"))))
+                        SetVisitorLang(ev.Str("lang"));
+                    // 来鈴中の室内機は返信ラベル/バッジを追随させる
+                    if (IncomingView.Visibility == Visibility.Visible &&
+                        ev.Str("door") == _incomingDoor)
+                    {
+                        _incomingLang = ev.Str("lang");
+                        UpdateIncomingBadges();
+                        BuildQuickReplies();
+                    }
+                    break;
+                case "asset_ready":
+                    // 前取り完了 — 背景画像が待ちだったら読み直す
+                    if (!string.IsNullOrEmpty(_themeHash) && ev.Str("hash") == _themeHash &&
+                        ThemeBgImage.Source == null)
+                        LoadThemeImage(_themeHash);
                     break;
                 case "reply":
                     ExitScreensaver();
                     // 誰かが応対した → 来鈴画面は閉じる (監聴中なら切る)
                     if (IncomingView.Visibility == Visibility.Visible && !_inCall)
                         CloseIncoming(true);
+                    // カスタム音声があれば再生 (無い時は core が TTS 済み — 二重発話しない)
+                    if (!string.IsNullOrEmpty(ev.Str("audio_path")))
+                    {
+                        string spoken = ev.Str("text");
+                        string spokenLang = ev.Str("lang");
+                        PlayAudio(ev.Str("audio_path"), () => App.Core.SpeakText(spoken, spokenLang));
+                    }
                     ReplyText.Text = ev.Str("text");
                     ReplyBanner.Visibility = Visibility.Visible;
                     double ttl = 30;
@@ -635,24 +1043,30 @@ namespace DoorbellApp
             return null;
         }
 
-        /// <summary>来鈴画面 (indoor_panel が press イベント受信時)。</summary>
-        private void ShowIncoming(string door)
+        /// <summary>来鈴画面 (indoor_panel が press イベント受信時)。用件/訪客言語は
+        /// press イベント payload 由来 (バッジ表示 + クイック返信のラベル言語)。</summary>
+        private void ShowIncoming(UiEvent ev)
         {
             if (_emergencyActive || _inCall) return;  // 警報中/通話中は画面を奪わない
+            string door = ev.Str("door");
             if (IncomingView.Visibility == Visibility.Visible)
             {
                 // 同じ画面が出ている間の再チャイム → タイマだけ張り直す (監聴等は継続)
+                _incomingPurpose = ev.Str("purpose");
+                _incomingLang = ev.Str("visitor_lang");
+                UpdateIncomingBadges();
+                BuildQuickReplies();
                 _incomingTimeout.Stop();
                 _incomingTimeout.Start();
                 return;
             }
             ExitScreensaver();
             _incomingDoor = door ?? "";
-            var cfg = App.Core.Config();
-            object label = CoreClient.Dig(cfg, "doors." + _incomingDoor + ".label." + App.Boot.UiLang)
-                           ?? CoreClient.Dig(cfg, "doors." + _incomingDoor + ".label.ja")
-                           ?? (object)_incomingDoor;
-            IncomingTitle.Text = L10n.T("ring.incoming", label);
+            _incomingPurpose = ev.Str("purpose");
+            _incomingLang = ev.Str("visitor_lang");
+            IncomingTitle.Text = Texts.T("ring.incoming", DoorLabel(_incomingDoor));
+            UpdateIncomingBadges();
+            BuildQuickReplies();
             IncomingHint.Visibility = Visibility.Collapsed;
 
             // 門口機 peer 解決 (映像 URL + 直呼宛先 host)
@@ -679,6 +1093,85 @@ namespace DoorbellApp
             IncomingView.Visibility = Visibility.Visible;
             _incomingTimeout.Stop();
             _incomingTimeout.Start();  // 30 秒で自動クローズ (再チャイムで張り直し)
+        }
+
+        /// <summary>来鈴画面の用件バッジ (「📦 宅配便」) と訪客言語バッジ (「🌐 EN」)。</summary>
+        private void UpdateIncomingBadges()
+        {
+            var purposes = CoreClient.Dig(_cfg, "visit_purposes") as Dictionary<string, object>;
+            var entry = purposes != null && !string.IsNullOrEmpty(_incomingPurpose) &&
+                        purposes.ContainsKey(_incomingPurpose)
+                ? purposes[_incomingPurpose] as Dictionary<string, object> : null;
+            if (string.IsNullOrEmpty(_incomingPurpose))
+            {
+                PurposeBadge.Visibility = Visibility.Collapsed;
+            }
+            else
+            {
+                // バッジは室内側の言語 (住人が読む) — 訪客言語ではない
+                string label = LabelOf(entry, App.Boot.UiLang, _incomingPurpose);
+                object icon;
+                string iconText = entry != null && entry.TryGetValue("icon", out icon) && icon != null
+                    ? icon.ToString() + " " : "";
+                PurposeBadgeText.Text = iconText + label;
+                PurposeBadge.ToolTip = Texts.T("ring.purpose_badge", label);
+                PurposeBadge.Visibility = Visibility.Visible;
+            }
+
+            if (string.IsNullOrEmpty(_incomingLang) || _incomingLang == "ja")
+            {
+                LangBadge.Visibility = Visibility.Collapsed;
+            }
+            else
+            {
+                LangBadgeText.Text = "🌐 " + _incomingLang.ToUpperInvariant();
+                LangBadge.ToolTip = Texts.T("ring.lang_badge", LangDisplayName(_incomingLang));
+                LangBadge.Visibility = Visibility.Visible;
+            }
+        }
+
+        /// <summary>クイック返信ボタン (config quick_replies を order 順)。ラベルは訪客言語
+        /// (quick_replies.&lt;id&gt;.label.&lt;visitor_lang&gt; — 無ければ ja)。</summary>
+        private void BuildQuickReplies()
+        {
+            QuickReplyPanel.Children.Clear();
+            var replies = CoreClient.Dig(_cfg, "quick_replies") as Dictionary<string, object>;
+            if (replies == null || replies.Count == 0)
+            {
+                QuickReplyPanel.Visibility = Visibility.Collapsed;
+                return;
+            }
+            string lang = string.IsNullOrEmpty(_incomingLang) ? "ja" : _incomingLang;
+            foreach (var id in SortedByOrder(replies))
+            {
+                var entry = replies[id] as Dictionary<string, object>;
+                var b = new Button
+                {
+                    Content = LabelOf(entry, lang, id),
+                    FontSize = 22,
+                    Padding = new Thickness(26, 12, 26, 12),
+                    Margin = new Thickness(8),
+                    Background = (Brush)FindResource("Card"),
+                    Foreground = (Brush)FindResource("Fg"),
+                    BorderBrush = (Brush)FindResource("Dim"),
+                    Cursor = Cursors.Hand,
+                    Tag = id,
+                };
+                b.Click += OnQuickReplyClick;
+                QuickReplyPanel.Children.Add(b);
+            }
+            QuickReplyPanel.Visibility = Visibility.Visible;
+        }
+
+        private void OnQuickReplyClick(object sender, RoutedEventArgs e)
+        {
+            var b = sender as Button;
+            if (b == null) return;
+            App.Core.QuickReply(b.Tag as string, _incomingDoor);
+            IncomingHint.Text = Texts.T("reply.sent", b.Content);
+            IncomingHint.Visibility = Visibility.Visible;
+            // 画面は複製されてくる reply イベント (= 応対済み) で畳む — 届かなくても
+            // _incomingTimeout の安全弁がある
         }
 
         private void CloseIncoming(bool hangup)
@@ -723,7 +1216,7 @@ namespace DoorbellApp
             if (string.IsNullOrEmpty(_incomingHost) || _sipMode != "") return;
             _sipMode = "monitor";
             App.Core.SipCall("sip:" + _incomingHost + ":" + _directPort, "monitor");
-            IncomingHint.Text = L10n.T("ring.monitoring");
+            IncomingHint.Text = Texts.T("ring.monitoring");
             IncomingHint.Visibility = Visibility.Visible;
         }
 
@@ -740,7 +1233,7 @@ namespace DoorbellApp
         {
             _inCall = true;
             _incomingTimeout.Stop();
-            CallingText.Text = L10n.T("incall.title");  // CallingView 用 (映像なしの門口機)
+            CallingText.Text = Texts.T("incall.title");  // CallingView 用 (映像なしの門口機)
             string stream = ev.Str("peer_stream");
             if (App.Boot.Role == "door_station")
             {

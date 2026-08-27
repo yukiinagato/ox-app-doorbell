@@ -16,6 +16,7 @@ namespace DoorbellApp
         public string Door = "";
         public string UiLang = "ja";
         public bool Kiosk = true;
+        public int HttpPort = 47180;   // 自機 httpd (資産取得 /asset/<hash> に使う)
 
         public static BootConfig Load(string path)
         {
@@ -41,6 +42,11 @@ namespace DoorbellApp
                     if (d.TryGetValue("door", out var dr) && dr != null) c.Door = dr.ToString();
                     if (d.TryGetValue("ui_lang", out var l) && l != null) c.UiLang = l.ToString();
                     if (d.TryGetValue("kiosk", out var k) && k is bool kb) c.Kiosk = kb;
+                    if (d.TryGetValue("http_port", out var hp) && hp != null)
+                    {
+                        int p;
+                        if (int.TryParse(hp.ToString(), out p) && p > 0) c.HttpPort = p;
+                    }
                 }
             }
             catch { }

@@ -66,6 +66,24 @@ namespace DoorbellApp.Core
         public static extern void db_core_press(IntPtr core,
             [MarshalAs(UnmanagedType.LPUTF8Str)] string doorId);
 
+        /// <summary>用件付きの按鈴 (visit_purposes.&lt;id&gt;)。press イベント payload に purpose が載る。</summary>
+        [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
+        public static extern void db_core_press_purpose(IntPtr core,
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string doorId,
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string purpose);
+
+        /// <summary>訪客言語の切替 (lang="ja" で即時復帰)。visitor_lang イベントが全ノードへ複製される。</summary>
+        [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
+        public static extern void db_core_set_visitor_lang(IntPtr core,
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string door,
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string lang);
+
+        /// <summary>クイック返信の配送 (門口機の面板表示 + 音声)。door 空 = 最新 press の door。</summary>
+        [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
+        public static extern void db_core_quick_reply(IntPtr core,
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string replyId,
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string door);
+
         [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
         public static extern IntPtr db_core_status_json(IntPtr core);
 
