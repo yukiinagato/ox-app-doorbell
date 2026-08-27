@@ -116,6 +116,22 @@
   // 発呼など自由に連動。**警察・消防への自動発信は行わない** (通知先は家族と
   // ユーザー定義の電話先のみ — 判断は人が行う)。
 
+  "visit_purposes": {                           // 訪客の用件ボタン (ユーザー編集可能; 既定 seed 下記)
+    // 門口機では用件ボタン 1 タップ = その用件付きの按鈴 (宅配員は 1 動作で完了)。
+    // 大ボタン「呼出」は用件なしの汎用按鈴。ラベルは訪客言語に追従。
+    "p_visit":    { "label": { "ja": "訪問",       "en": "Visit",    "zh": "访客" }, "icon": "🏠", "order": 1 },
+    "p_delivery": { "label": { "ja": "宅配便",     "en": "Delivery", "zh": "快递" }, "icon": "📦", "order": 2 },
+    "p_mail":     { "label": { "ja": "郵便",       "en": "Mail",     "zh": "邮件" }, "icon": "✉️", "order": 3 },
+    "p_sales":    { "label": { "ja": "営業・集金", "en": "Sales",    "zh": "推销/收费" }, "icon": "💼", "order": 4 },
+    "p_work":     { "label": { "ja": "検針・工事", "en": "Utility",  "zh": "检修/施工" }, "icon": "🔧", "order": 5 },
+    "p_other":    { "label": { "ja": "その他",     "en": "Other",    "zh": "其他" }, "icon": "❓", "order": 6 }
+  },
+  // press イベント payload に "purpose": "<id>" が載る。展示面: 室内/TV 来鈴バッジ・
+  // Telegram (アイコン+用件名)・HA event payload・panel state・管理画面。
+  // ルール連携: trigger_rules.when.purposes: ["p_delivery"] で用件別分岐、
+  // 新アクション { "type": "auto_reply", "reply_id": "qr_okihai" } = 門口機が自動で
+  // クイック返信を表示+TTS (例: 宅配→「置き配をお願いします」+ 電話は鳴らさない)。
+
   "quick_replies": {                            // クイック返信 (ユーザー編集可能)
     "qr_away":    { "label": { "ja": "ただいま留守にしています", "en": "We are away right now",
                                "zh": "现在不在家" }, "speak": true, "order": 1 },
@@ -161,6 +177,11 @@
     "telegram": { "bot_token_ref": "secret:tg_bot",
                   "poll_updates": true,          // inline ボタン返信の getUpdates 長輪詢 (leader)
                   "text_template": { "ja": "{door} に来客です ({time})" } },
+    // 網頁通話 (webui/panel/call.html — 任意機能)。ブラウザは SIP/UDP を話せないため
+    // Asterisk を WebRTC ゲートウェイに使う (deploy/asterisk/webrtc.md)。
+    // ws_url 空 = 通話ボタン無効 (映像閲覧・映像送信は SIP と独立に動く)。
+    // sip_user/sip_pass = ブラウザ用内線 (webrtc.md の [260] テンプレート)。
+    "webrtc": { "ws_url": "ws://10.0.1.5:8088/ws", "sip_user": "260", "sip_pass": "…" },
     "tz_offset_min": 540                         // JST。スケジュール判定に使用
   }
 }
