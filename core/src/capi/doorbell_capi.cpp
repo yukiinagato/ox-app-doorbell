@@ -117,6 +117,11 @@ DB_API char* db_core_status_json(db_core* c) {
   return dupString(c->node->statusJson());
 }
 
+DB_API char* db_core_config_json(db_core* c) {
+  if (!c || !c->node) return nullptr;
+  return dupString(c->node->configJson());
+}
+
 DB_API void db_core_on_camera_frame(db_core* c, const uint8_t* data, int format, int width,
                                     int height, int stride, int64_t ts_ms) {
   // Phase 1: 帧総線 (MJPEG/動検/SIP ビデオ) へ配線する。現状は受け流し。

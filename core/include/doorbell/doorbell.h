@@ -62,6 +62,9 @@ DB_API void db_core_press(db_core* c, const char* door_id);
 /* ノード表・リーダー・SIP 状態などのスナップショット JSON。db_free で解放。 */
 DB_API char* db_core_status_json(db_core* c);
 
+/* materialize 済み設定全文 JSON (doors/quick_replies 等の表示に使う)。db_free で解放。 */
+DB_API char* db_core_config_json(db_core* c);
+
 /* カメラフレーム push (Phase 1)。format: 0=NV21, 1=NV12, 2=YUY2, 3=BGRA */
 DB_API void db_core_on_camera_frame(db_core* c, const uint8_t* data, int format, int width,
                                     int height, int stride, int64_t ts_ms);
