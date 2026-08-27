@@ -5,16 +5,19 @@
 #pragma once
 
 #include <atomic>
+#include <functional>
 #include <string>
 #include <thread>
 
-namespace db {
+#include "media/frame_bus.h"
 
-class FrameBus;
+namespace db {
 
 class CameraWin {
  public:
-  explicit CameraWin(FrameBus& bus) : bus_(bus) {}
+  // sink: 採集スレッドから 1 フレーム毎に呼ばれる (Node が動体検知 + FrameBus へ配る)
+  using FrameSink = std::function<void(RawFrame&&)>;
+  explicit CameraWin(FrameSink sink) : sink_(std::move(sink)) {}
   ~CameraWin() { stop(); }
 
   CameraWin(const CameraWin&) = delete;
@@ -30,7 +33,7 @@ class CameraWin {
  private:
   void run(std::string hint, int tw, int th);
 
-  FrameBus& bus_;
+  FrameSink sink_;
   std::thread th_;
   std::atomic<bool> running_{false};
 };

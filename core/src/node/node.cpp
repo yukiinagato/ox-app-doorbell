@@ -9,6 +9,7 @@
 #include "bridge/telegram.h"
 #include "httpd/webui_assets.h"
 #include "media/frame_bus.h"
+#include "media/motion_detector.h"
 #include "mesh/tcp_transport.h"
 #include "mesh/udp_beacon.h"
 #include "monocypher.h"
@@ -71,6 +72,13 @@ struct Node::Impl {
   std::unique_ptr<HaBridge> bridge;  // HA MQTT ブリッジ (leader 時のみ接続)
   std::unique_ptr<TelegramBridge> tg;  // Telegram ブリッジ (leader 時のみ送信)
   FrameBus frame_bus;  // 帧総線 (任意スレッドから push / 需要駆動 JPEG)
+  // 動体検知 (feed は採集スレッド — 設定変更と競合するため motion_mu_ で保護)
+  MotionDetector motion;
+  std::mutex motion_mu;
+  // パネル状態 (loop 上でのみ触る): door → 呼出表示窓の期限 (mono ms)、最新クイック返信
+  std::map<std::string, int64_t> door_calling_until;
+  std::string last_reply_text;
+  int64_t last_reply_ts = 0;
 #ifdef _WIN32
   std::unique_ptr<CameraWin> camera;  // door_station のみ起動
 #endif
@@ -187,6 +195,17 @@ struct Node::Impl {
     frame_bus.setJpegParams(c.quality, c.w);
     if (httpd)
       httpd->setJpegProvider([this] { return frame_bus.latestJpeg(); }, c.fps);
+  }
+
+  // 動体検知設定 (devices.<self>.local.motion) を反映 (起動時と config_changed 時)
+  void applyMotionSettings() {
+    cJSON* m = cfgAt("devices." + node_id + ".local.motion");
+    MotionConfig mc;
+    mc.enabled = json::getBool(m, "enabled", true);
+    mc.sensitivity = static_cast<int>(json::getInt(m, "sensitivity", 40));
+    mc.min_interval_s = static_cast<int>(json::getInt(m, "min_interval_s", 30));
+    std::lock_guard<std::mutex> lk(motion_mu);
+    motion.setConfig(mc);
   }
 
   // ---------- SIP ----------
@@ -443,9 +462,10 @@ struct Node::Impl {
       rebuildCfg();
       if (is_local && mesh) mesh->pushConfigDelta({e});
       // 自機のカメラ設定 (fps/quality/解像度) の変更は即反映
-      if (httpd && e.key.compare(0, 8, "devices.") == 0 &&
-          e.key.find(node_id) != std::string::npos)
-        applyCameraSettings();
+      if (e.key.compare(0, 8, "devices.") == 0 && e.key.find(node_id) != std::string::npos) {
+        if (httpd) applyCameraSettings();
+        applyMotionSettings();
+      }
       // SIP 設定 (sip.* / 自機の aec) の変更 → デバウンス後に再登録
       if (e.key.compare(0, 4, "sip.") == 0 ||
           (e.key.compare(0, 8, "devices.") == 0 && e.key.find(node_id) != std::string::npos))
@@ -567,11 +587,27 @@ struct Node::Impl {
       }
       applyCameraSettings();  // /snapshot.jpg・/stream.mjpeg の JPEG 提供者を配線
     }
+    // 動体検知: 発火 (採集スレッド) → loop へ → motion イベント (door 担当の門口機のみ)
+    motion.onMotion([this](int64_t /*ts_ms*/, double changed_pct) {
+      loop->post([this, changed_pct] {
+        if (!started || opts.role != "door_station" || opts.door.empty()) return;
+        auto p = json::obj();
+        json::set(p.get(), "changed_pct", changed_pct);
+        events->append("motion", opts.door, node_id, json::dump(p.get()));
+      });
+    });
+    applyMotionSettings();
 #ifdef _WIN32
     // Windows の門口機はカメラ採集 (Media Foundation) を起動。失敗はログのみ。
     if (opts.role == "door_station") {
       CamCfg c = cameraCfg();
-      camera.reset(new CameraWin(frame_bus));
+      camera.reset(new CameraWin([this](RawFrame&& f) {
+        {
+          std::lock_guard<std::mutex> lk(motion_mu);
+          motion.feed(f);
+        }
+        frame_bus.push(std::move(f));
+      }));
       camera->start(c.hint, c.w, c.h);
     }
 #endif
@@ -600,6 +636,8 @@ struct Node::Impl {
       qr("qr_no", "結構です", "Not interested", "不需要，谢谢", 2);
       qr("qr_wrong", "お間違いのようです", "Wrong address", "您可能找错地方了", 3);
       qr("qr_wait", "少々お待ちください", "One moment please", "请稍等", 4);
+      // パネルアクセストークン (webui/panel/API.md — 管理画面から差替可)
+      config->set("panel.tokens", "[\"" + genTokenHex(16) + "\"]");
     }
     // 自機のエントリ (差分がある時だけ書く — 起動毎の無駄な gossip を避ける)
     auto dev = json::obj();
@@ -618,6 +656,15 @@ struct Node::Impl {
     if (ev.type == "press") {
       last_press_door = ev.door;
       last_press_by_door[ev.door] = {ev.origin, ev.seq};
+      // パネル表示用の呼出窓 (30 秒 or 返信で解除)
+      if (!ev.door.empty()) door_calling_until[ev.door] = clock->monoMs() + 30'000;
+    } else if (ev.type == "reply") {
+      auto p = json::parse(ev.payload_json);
+      if (p) {
+        last_reply_text = json::getString(p.get(), "text");
+        last_reply_ts = hlc->correctedWallMs();
+      }
+      if (!ev.door.empty()) door_calling_until.erase(ev.door);
     }
     {
       auto o = json::obj();
@@ -846,9 +893,10 @@ struct Node::Impl {
                        Bytes(assets[i].data, assets[i].data + assets[i].len));
 
     // "/" (リダイレクトのみ) は gate 側で例外扱い — prefix リストに "/" を入れると全公開になる
+    // /api/panel/* と /snapshot-proxy はハンドラ内で panel token (?k=) を検証する
     httpd->setAuth([this](const HttpReq& r) { return r.uri == "/" || checkSession(r); },
                    {"/api/login", "/locale/", "/panel/", "/admin/", "/stream.mjpeg",
-                    "/snapshot.jpg"});
+                    "/snapshot.jpg", "/api/panel/", "/snapshot-proxy"});
 
     httpd->route("GET", "/", [](const HttpReq&) {
       HttpResp r;
@@ -942,6 +990,102 @@ struct Node::Impl {
         json::push(arr, json::Doc(cJSON_CreateString(l.c_str())));
       return HttpResp::json(json::dump(o.get()));
     });
+
+    // ---------- パネル API (webui/panel/API.md が契約; 認証は panel token ?k=) ----------
+    httpd->route("GET", "/api/panel/state", [this](const HttpReq& req) {
+      if (!panelTokenOk(req)) return HttpResp::json("{\"ok\":false,\"err\":\"bad token\"}", 403);
+      auto o = json::obj();
+      cJSON* doors = json::addArr(o.get(), "doors");
+      int64_t now_mono = clock->monoMs();
+      cJSON* dcfg = json::get(cfg.get(), "doors");
+      cJSON* it = nullptr;
+      cJSON_ArrayForEach(it, dcfg) {
+        if (!it->string) continue;
+        cJSON* e = json::pushObj(doors);
+        json::set(e, "id", it->string);
+        std::string label = labelIn(json::get(it, "label"), "ja");
+        json::set(e, "label", label.empty() ? std::string(it->string) : label);
+        auto c = door_calling_until.find(it->string);
+        json::setBool(e, "calling", c != door_calling_until.end() && c->second > now_mono);
+      }
+      cJSON* evs = json::addArr(o.get(), "events");
+      for (const auto& ev : store.recentEvents(10)) {
+        cJSON* e = json::pushObj(evs);
+        json::set(e, "type", ev.type);
+        json::set(e, "door", ev.door);
+        json::set(e, "device", ev.device);
+        json::set(e, "wall_ms", ev.wall_ms);
+      }
+      if (last_reply_ts > 0) {
+        cJSON* r = json::addObj(o.get(), "reply");
+        json::set(r, "text", last_reply_text);
+        json::set(r, "ts", last_reply_ts);
+      } else {
+        json::setItem(o.get(), "reply", json::Doc(cJSON_CreateNull()));
+      }
+      json::set(o.get(), "server_ts", hlc->correctedWallMs());
+      return HttpResp::json(json::dump(o.get()));
+    });
+
+    httpd->route("POST", "/api/panel/press", [this](const HttpReq& req) {
+      if (!panelTokenOk(req)) return HttpResp::json("{\"ok\":false,\"err\":\"bad token\"}", 403);
+      std::string door = req.param("door");
+      if (door.empty() || !cfgAt("doors." + door))
+        return HttpResp::json("{\"ok\":false,\"err\":\"unknown door\"}", 400);
+      doPress(door);
+      return HttpResp::json("{\"ok\":true}");
+    });
+
+    httpd->route("GET", "/snapshot-proxy", [this](const HttpReq& req) {
+      if (!panelTokenOk(req)) return HttpResp::json("{\"ok\":false,\"err\":\"bad token\"}", 403);
+      std::string door = req.param("door");
+      // その door を担当する door_station を設定から探す
+      std::string target;
+      cJSON* devices = json::get(cfg.get(), "devices");
+      cJSON* it = nullptr;
+      cJSON_ArrayForEach(it, devices) {
+        if (!it->string) continue;
+        if (json::getString(it, "role") == "door_station" && json::getString(it, "door") == door) {
+          target = it->string;
+          break;
+        }
+      }
+      if (target.empty()) return HttpResp::json("{\"ok\":false,\"err\":\"no station\"}", 404);
+      if (target == node_id) {
+        Bytes jpg = frame_bus.latestJpeg();
+        if (jpg.empty()) return HttpResp::json("{\"ok\":false,\"err\":\"no frame\"}", 503);
+        HttpResp r;
+        r.content_type = "image/jpeg";
+        r.body.assign(jpg.begin(), jpg.end());
+        r.headers["Cache-Control"] = "no-store";
+        return r;
+      }
+      // 他ノード担当: 子機の認証免除 /snapshot.jpg へ 302 (契約で許容された方式)
+      if (mesh) {
+        for (const auto& p : mesh->peers()) {
+          if (p.id == target && !p.addrs.empty()) {
+            HttpResp r;
+            r.status = 302;
+            r.headers["Location"] = "http://" + hostOf(p.addrs[0]) + ":47180/snapshot.jpg";
+            r.headers["Cache-Control"] = "no-store";
+            return r;
+          }
+        }
+      }
+      return HttpResp::json("{\"ok\":false,\"err\":\"station offline\"}", 503);
+    });
+  }
+
+  // panel token (?k= / form k=) を config panel.tokens と照合
+  bool panelTokenOk(const HttpReq& req) {
+    std::string k = req.param("k");
+    if (k.empty()) return false;
+    cJSON* toks = cfgAt("panel.tokens");
+    cJSON* it = nullptr;
+    cJSON_ArrayForEach(it, toks) {
+      if (cJSON_IsString(it) && k == it->valuestring) return true;
+    }
+    return false;
   }
 
   void setKey(const std::string& key, const std::string& value) {
@@ -1057,6 +1201,10 @@ void Node::pushCameraFrame(const uint8_t* data, int format, int width, int heigh
   f.stride = stride;
   f.ts_ms = ts_ms;
   f.data.assign(data, data + n);  // コピーはこの 1 回だけ
+  {
+    std::lock_guard<std::mutex> lk(impl_->motion_mu);
+    impl_->motion.feed(f);  // 動体検知 (発火は onMotion → loop へ post)
+  }
   impl_->frame_bus.push(std::move(f));
 }
 

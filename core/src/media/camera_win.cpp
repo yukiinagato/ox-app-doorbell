@@ -281,7 +281,7 @@ void CameraWin::run(std::string hint, int tw, int th) {
             f.ts_ms = ts / 10000;  // 100ns → ms
             f.data.assign(p, p + curlen);
             buf->Unlock();
-            bus_.push(std::move(f));
+            sink_(std::move(f));
           }
         }
       }
