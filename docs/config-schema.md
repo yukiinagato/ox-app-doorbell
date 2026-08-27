@@ -198,7 +198,7 @@
 ## イベント (events テーブル / gossip)
 
 - ID = `(origin_node, origin_seq)` 冪等。型: `press | motion | answered | missed | reply |
-  offline | online | config_changed | emergency | emergency_cancel`
+  offline | online | config_changed | emergency | emergency_cancel | visitor_lang`
 - `emergency` payload: `{ "source": "<node_id>", "via": "panel|web|admin" }`。quiet_hours の
   suppress 対象外 (常に全経路通知)。UI: `{"t":"emergency","active":true|false}`
 - `visitor_lang` (訪客が門口機で言語を切替): payload `{ "lang": "en" }`。press の payload にも
@@ -241,6 +241,9 @@
   登録すると台帳 `assets.<hash>` = `{size,type,origin,label}` が書かれ CRDT で全ノードへ複製される。
 - `GET /asset/<sha256>` — 管理セッション **または** panel token (`?k=`) で取得可 (403/404)。
   `<sha256>` は 64 桁小文字 hex 固定で、それ以外は 400 (パス走査対策)。
+- `DELETE /api/assets/<sha256>` (管理セッション) — 台帳 `assets.<hash>` を tombstone にし、
+  自ノードのローカルキャッシュも即削除する。他ノードは台帳消滅 (CRDT 複製) を見て
+  猶予付き GC で自然に回収する。
 - 前取りは「台帳に載った時」ではなく「設定から参照された時」— 参照元は
   `display.theme.bg_image` / `devices.*.local.theme.bg_image` / `quick_replies.*.audio.*` /
   chime の `sound:"asset:<hash>"` / `emergency.alarm_sound`。取得完了で

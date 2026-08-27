@@ -115,6 +115,39 @@ TEST_CASE("panel API: token 認証 / state / press / snapshot-proxy / 動体検�
   CHECK(st.find("\"calling\":false") != std::string::npos);
   CHECK(st.find("\"reply\":null") != std::string::npos);
 
+  // state: purposes (order 昇順 — 先頭は p_visit) + languages (ui.languages seed)
+  {
+    size_t body_at = st.find("\r\n\r\n");
+    REQUIRE(body_at != std::string::npos);
+    auto sj = json::parse(st.substr(body_at + 4));
+    REQUIRE(sj);
+    cJSON* ps = json::get(sj.get(), "purposes");
+    REQUIRE(cJSON_IsArray(ps));
+    REQUIRE(cJSON_GetArraySize(ps) == 6);  // 既定 seed 6 種
+    cJSON* first = cJSON_GetArrayItem(ps, 0);
+    CHECK(json::getString(first, "id") == "p_visit");
+    CHECK(json::getString(first, "icon") == "🏠");
+    CHECK(json::getString(json::get(first, "label"), "en") == "Visit");
+    cJSON* langs = json::get(sj.get(), "languages");
+    REQUIRE(cJSON_IsArray(langs));
+    CHECK(cJSON_GetArraySize(langs) == 3);  // ja/en/zh
+  }
+
+  // i18n: 上書きが無ければ overrides={}。設定すると全文が返る (panel token 必須)
+  CHECK(panelReq(http_port, "GET", "/api/panel/i18n").find("403") != std::string::npos);
+  {
+    std::string r = panelReq(http_port, "GET", "/api/panel/i18n?k=" + k);
+    CHECK(r.find("HTTP/1.1 200") == 0);
+    CHECK(r.find("\"overrides\":{}") != std::string::npos);
+  }
+  node.setConfigKey("i18n_overrides.ja",
+                    "{\"idle.touch_to_call\":\"タッチして呼び出してください\"}");
+  {
+    std::string r = panelReq(http_port, "GET", "/api/panel/i18n?k=" + k);
+    CHECK(r.find("タッチして呼び出してください") != std::string::npos);
+    CHECK(r.find("\"languages\"") != std::string::npos);
+  }
+
   // press (form) → calling=true + events に press
   CHECK(panelReq(http_port, "POST", "/api/panel/press", "door=d_front&k=" + k,
                  "application/x-www-form-urlencoded")
@@ -124,6 +157,16 @@ TEST_CASE("panel API: token 認証 / state / press / snapshot-proxy / 動体検�
   CHECK(st.find("\"press\"") != std::string::npos);
   // 不明 door は 400
   CHECK(panelReq(http_port, "POST", "/api/panel/press", "door=nope&k=" + k,
+                 "application/x-www-form-urlencoded")
+            .find("400") != std::string::npos);
+  // 用件付き按鈴 → state の events (press 行) に purpose が載る。不明 purpose は 400
+  CHECK(panelReq(http_port, "POST", "/api/panel/press",
+                 "door=d_front&purpose=p_delivery&k=" + k,
+                 "application/x-www-form-urlencoded")
+            .find("{\"ok\":true}") != std::string::npos);
+  st = panelReq(http_port, "GET", "/api/panel/state?k=" + k);
+  CHECK(st.find("\"purpose\":\"p_delivery\"") != std::string::npos);
+  CHECK(panelReq(http_port, "POST", "/api/panel/press", "door=d_front&purpose=p_nope&k=" + k,
                  "application/x-www-form-urlencoded")
             .find("400") != std::string::npos);
 

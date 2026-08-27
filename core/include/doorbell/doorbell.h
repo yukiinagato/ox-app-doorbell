@@ -53,7 +53,12 @@ typedef struct db_platform {
  *     ファイル) が付く: 殻はそれを再生し TTS はしない (無ければ tts_speak が呼ばれる)。
  * {"t":"chime",...,"audio_path":"..."} — sound "asset:<sha256>" のカスタム音 (キャッシュ済時)
  * {"t":"visitor_lang","door":"d_front","lang":"en"} — 訪客言語の切替/復帰 (全ノード)
- * {"t":"asset_ready","hash":"<sha256>"} — 統一資産のキャッシュ完了 (背景画像等の再読込合図) */
+ * {"t":"asset_ready","hash":"<sha256>"} — 統一資産のキャッシュ完了 (背景画像等の再読込合図)
+ * {"t":"display",...,"theme":{"bg_color":"#101418","bg_image":"<sha256>|null",
+ *   "bg_image_path":"<ローカルパス>|null"}} — 待機画面テーマ。殻は bg_image_path を
+ *   そのまま描画する (null = 未キャッシュ — asset_ready 後に display が再発行される)
+ * {"t":"emergency","active":true,"alarm_sound":"siren1|asset:<sha256>","alarm_volume":100,
+ *   "audio_path":"..."} — 警報音。audio_path はカスタム音キャッシュ済時のみ (無ければ内蔵音) */
 typedef void (*db_ui_event_cb)(void* user, const char* event_json);
 
 /* 生成: data_dir は書込可能ディレクトリ。boot_json は初期設定

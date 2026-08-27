@@ -144,6 +144,64 @@ SIP 通話確立時の `{"t":"state","state":"in_call"}` に相手解決結果�
 - `peer_stream` 無し = 相手特定不能 (PSTN/Groundwire/網頁内線) → 門口機殻は
   `/peer-frame.jpg` 輪詢に降級、室内機殻は映像なし。
 
+## 個性化 (訪客言語・用件・統一資産) の追加契約
+
+### GET /api/panel/state の追加欄
+
+- `doors[].visitor_lang` — その door で訪客が選択中の言語 ("en" 等)。主言語 (ja) の間は
+  キー自体が無い。門口ページは言語バーの現在値に、monitor は言語バッジに使う。
+- `events[]` の press 行に `purpose` (visit_purposes のキー) と `visitor_lang` (該当時のみ)。
+- `purposes[]` — 訪客の用件ボタン (order 昇順)。例:
+  `{ "id": "p_delivery", "icon": "📦", "order": 2,
+     "label": { "ja": "宅配便", "en": "Delivery", "zh": "快递" } }`
+  門口ページは大ボタン「呼出」の下にこの一覧を描画し、タップ = その用件付きの按鈴
+  (press に `purpose=<id>` を添える)。ラベルは全言語同梱 — 言語切替時の再取得は不要。
+- `languages[]` — 訪客言語切替に出す言語 (config `ui.languages`、既定 `["ja","en","zh"]`)。
+
+### POST /api/panel/press の追加パラメータ
+
+- `purpose=<visit_purposes のキー>` (任意 — 省略は用件なしの汎用按鈴)。未知の purpose は
+  `400` + `{"ok":false,"err":"unknown purpose"}`。
+
+### POST /api/panel/visitor-lang
+
+- Body (form): `lang=<ja|en|zh>&k=<token>[&door=<id>]`。door 省略 = そのノードの担当 door。
+- `lang=ja` は即時復帰。無操作 `ui.visitor_lang_revert_s` 秒 (既定 60) で自動的に ja へ
+  戻る (按鈴で計時やり直し)。切替は `visitor_lang` イベントとして全ノードへ複製される。
+
+### GET /api/panel/i18n?k=\<token\>
+
+パネルページの文言解決 (実行時上書きと言語一覧)。読込時に 1 回取得する (輪詢しない)。
+
+```json
+{ "ok": true, "languages": ["ja", "en", "zh"],
+  "overrides": { "ja": { "idle.touch_to_call": "タッチして呼び出してください" } } }
+```
+
+- `overrides` = config `i18n_overrides` の全文 (無ければ `{}`)。ルックアップ順は
+  上書き → ページ内蔵文言 → キー自身 (core の Node::text と同順)。
+
+### GET /asset/\<sha256\>?k=\<token\>
+
+統一資産 (背景画像/カスタム音声) の実体。panel token または管理セッション。
+内容アドレスなので不変 — `Cache-Control: immutable` 付き (詳細は docs/config-schema.md の
+「統一資産 API」)。原生殻は原則 core がキャッシュしたローカルパス (UI イベントの
+`audio_path` / `theme.bg_image_path`) を直接使い、この URL は web パネル/管理画面用。
+
+### UI イベント追加 (殻向け — 個性化の契約)
+
+- `{"t":"display",…,"theme":{"bg_color":"#101418","bg_image":"<sha256>|null",
+  "bg_image_path":"<ローカル絶対パス>|null"}}` — 待機画面テーマ (`display.theme` を
+  `devices.<id>.local.theme` がキー単位で上書きした実効値)。`bg_image_path` null =
+  未キャッシュ — キャッシュ完了 (`asset_ready`) 後に display が再発行される。
+- `{"t":"emergency","active":true,"alarm_sound":"siren1|asset:<sha256>",
+  "alarm_volume":100,"audio_path":"…"}` — 警報音。`audio_path` はカスタム音キャッシュ済時のみ。
+- `{"t":"reply",…,"lang":"en","audio":"<sha256>","audio_path":"…"}` — クイック返信は
+  訪客言語のラベルで表示。`audio_path` があればそれを再生し TTS はしない。
+- `{"t":"chime","sound":"asset:<sha256>","audio_path":"…"}` — カスタム鈴音。
+- `{"t":"visitor_lang","door":"d_front","lang":"en"}` — 言語バッジの即時更新 (全ノード)。
+- `{"t":"asset_ready","hash":"<sha256>"}` — 資産キャッシュ完了 (画像/音声の再読込合図)。
+
 ## クライアント側挙動 (参考・実装済み)
 
 | 項目 | door.html | monitor.html |

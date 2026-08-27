@@ -1,10 +1,12 @@
 #include "node/node.h"
 
+#include <algorithm>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <mutex>
 #include <set>
+#include <tuple>
 
 #include "bridge/ha_bridge.h"
 #include "bridge/telegram.h"
@@ -459,6 +461,8 @@ struct Node::Impl {
         json::set(o.get(), "t", "asset_ready");
         json::set(o.get(), "hash", hash);
         uiNotify(json::dump(o.get()));
+        // テーマ背景がこの資産だった場合に bg_image_path が null → パスへ解決される
+        evalDisplay();
       });
     }
   }
@@ -562,12 +566,16 @@ struct Node::Impl {
   // 実効値 = config display.* を基底に devices.<self>.local.display.* で上書き
   // (スカラーはキー単位、night はオブジェクト単位で上書き)。night の窓判定は
   // rule_engine と同じ規則 (補正済み壁時計 + tz_offset_min、from <= t < to、日跨ぎ対応)。
+  // theme (待機画面の背景) は display.theme を基底に devices.<self>.local.theme が
+  // キー単位で上書き — 室内機/管理画面は config を書くだけで「推送」になる (CRDT 即時同期)。
   struct DisplayState {
     int brightness = 70;
     bool night = false;
     bool red_tint = false;
     int screensaver_after_s = 120;
     int pixel_shift_s = 300;
+    std::string bg_color = "#101418";  // theme 背景色
+    std::string bg_image;              // theme 背景画像 (assets の sha256; "" = 無し)
   };
 
   DisplayState displayState() {
@@ -581,6 +589,18 @@ struct Node::Impl {
     d.brightness = static_cast<int>(num("brightness", 70));
     d.screensaver_after_s = static_cast<int>(num("screensaver_after_s", 120));
     d.pixel_shift_s = static_cast<int>(num("pixel_shift_s", 300));
+    {  // テーマ (devices.<self>.local.theme がキー単位で display.theme を上書き)
+      cJSON* tbase = json::get(base, "theme");
+      cJSON* tovr = cfgAt("devices." + node_id + ".local.theme");
+      auto str = [&](const char* key) {
+        if (tovr && json::get(tovr, key)) return json::getString(tovr, key);
+        return json::getString(tbase, key);
+      };
+      const std::string c = str("bg_color");
+      if (!c.empty()) d.bg_color = c;
+      d.bg_image = str("bg_image");
+      if (!isSha256HexStr(d.bg_image)) d.bg_image.clear();  // null/不正は「画像なし」
+    }
     cJSON* night = ovr ? json::get(ovr, "night") : nullptr;
     if (!night) night = json::get(base, "night");
     if (night && json::getBool(night, "enabled", true)) {
@@ -602,7 +622,9 @@ struct Node::Impl {
     return d;
   }
 
-  // display オブジェクトの中身 (uiNotify と status_json で共用)
+  // display オブジェクトの中身 (uiNotify と status_json で共用)。
+  // theme.bg_image_path は「キャッシュ済みならローカル絶対パス / まだなら null」—
+  // 殻はパスを描画するだけでよい (未キャッシュ分は asset_ready 後に display が再発行される)。
   json::Doc displayDoc(const DisplayState& d) {
     auto o = json::obj();
     json::set(o.get(), "brightness", static_cast<int64_t>(d.brightness));
@@ -610,6 +632,19 @@ struct Node::Impl {
     json::setBool(o.get(), "red_tint", d.red_tint);
     json::set(o.get(), "screensaver_after_s", static_cast<int64_t>(d.screensaver_after_s));
     json::set(o.get(), "pixel_shift_s", static_cast<int64_t>(d.pixel_shift_s));
+    cJSON* theme = json::addObj(o.get(), "theme");
+    json::set(theme, "bg_color", d.bg_color);
+    if (!d.bg_image.empty()) {
+      json::set(theme, "bg_image", d.bg_image);
+      if (assetCached(d.bg_image)) {
+        json::set(theme, "bg_image_path", assetFilePath(d.bg_image));
+      } else {
+        json::setItem(theme, "bg_image_path", json::Doc(cJSON_CreateNull()));
+      }
+    } else {
+      json::setItem(theme, "bg_image", json::Doc(cJSON_CreateNull()));
+      json::setItem(theme, "bg_image_path", json::Doc(cJSON_CreateNull()));
+    }
     return o;
   }
 
@@ -630,6 +665,15 @@ struct Node::Impl {
     auto o = json::obj();
     json::set(o.get(), "t", "emergency");
     json::setBool(o.get(), "active", emergency_active);
+    // 警報音: emergency.alarm_sound ("siren1" 等の内蔵名 or "asset:<sha256>") + 音量。
+    // カスタム音がキャッシュ済みなら audio_path (chime と同じ流儀 — 無ければ殻は内蔵音)。
+    cJSON* em = json::get(cfg.get(), "emergency");
+    const std::string sound = json::getString(em, "alarm_sound", "siren1");
+    json::set(o.get(), "alarm_sound", sound);
+    json::set(o.get(), "alarm_volume", json::getInt(em, "alarm_volume", 100));
+    const std::string hash = assetRefHash(sound);
+    if (!hash.empty() && assetCached(hash))
+      json::set(o.get(), "audio_path", assetFilePath(hash));
     uiNotify(json::dump(o.get()));
   }
 
@@ -1785,6 +1829,20 @@ struct Node::Impl {
       return r;
     });
 
+    // 資産の削除 (管理セッション)。台帳 assets.<hash> を tombstone + ローカルキャッシュを
+    // 即削除する。他ノードは台帳消滅 (CRDT 複製) を見て猶予付き GC で自然に回収する。
+    // まだ設定から参照中の hash も削除できる (参照側は次回プリフェッチで保持ノード不在に
+    // なるだけ — 掃除は管理者の責務)。
+    httpd->route("DELETE", "/api/assets/*", [this](const HttpReq& req) {
+      const std::string hash = req.uri.substr(std::string("/api/assets/").size());
+      if (!isSha256HexStr(hash))
+        return HttpResp::json("{\"ok\":false,\"err\":\"bad hash\"}", 400);
+      config->remove("assets." + hash);
+      removeFile(assetFilePath(hash));
+      asset_unref_since.erase(hash);
+      return HttpResp::json("{\"ok\":true}");
+    });
+
     // 訪客言語切替 (管理セッション)。{"door":…,"lang":…} — door 省略 = 自機担当 door。
     httpd->route("POST", "/api/visitor-lang", [this](const HttpReq& req) {
       auto b = json::parse(req.body);
@@ -1861,7 +1919,71 @@ struct Node::Impl {
       } else {
         json::setItem(o.get(), "reply", json::Doc(cJSON_CreateNull()));
       }
+      // 訪客の用件ボタン (order 昇順 — 門口ページの描画用。ラベルは全言語同梱で
+      // 言語切替時の再取得を不要にする)
+      {
+        struct P {
+          int64_t order;
+          std::string id;
+          const cJSON* obj;
+        };
+        std::vector<P> ps;
+        cJSON* vps = json::get(cfg.get(), "visit_purposes");
+        cJSON* vp = nullptr;
+        cJSON_ArrayForEach(vp, vps) {
+          if (vp->string) ps.push_back({json::getInt(vp, "order", 1000), vp->string, vp});
+        }
+        std::sort(ps.begin(), ps.end(), [](const P& a, const P& b) {
+          return std::tie(a.order, a.id) < std::tie(b.order, b.id);
+        });
+        cJSON* arr = json::addArr(o.get(), "purposes");
+        for (const P& p : ps) {
+          cJSON* e = json::pushObj(arr);
+          json::set(e, "id", p.id);
+          json::set(e, "icon", json::getString(p.obj, "icon"));
+          json::set(e, "order", p.order);
+          if (cJSON* label = json::get(p.obj, "label"))
+            json::setItem(e, "label", json::Doc(cJSON_Duplicate(label, 1)));
+        }
+      }
+      // 訪客言語切替に出す言語 (config ui.languages — 無ければ ja のみ)
+      {
+        cJSON* arr = json::addArr(o.get(), "languages");
+        cJSON* langs = cfgAt("ui.languages");
+        if (cJSON_IsArray(langs)) {
+          cJSON* l = nullptr;
+          cJSON_ArrayForEach(l, langs) {
+            if (cJSON_IsString(l)) json::push(arr, json::Doc(cJSON_CreateString(l->valuestring)));
+          }
+        }
+        if (cJSON_GetArraySize(arr) == 0)
+          json::push(arr, json::Doc(cJSON_CreateString("ja")));
+      }
       json::set(o.get(), "server_ts", hlc->correctedWallMs());
+      return HttpResp::json(json::dump(o.get()));
+    });
+
+    // パネルページの文言解決 (i18n_overrides の全文 + 言語一覧)。読込時 1 回取得する —
+    // ルックアップ順は overrides.<lang>.<key> → ページ内蔵文言 → キー (Node::text と同順)。
+    httpd->route("GET", "/api/panel/i18n", [this](const HttpReq& req) {
+      if (!panelTokenOk(req)) return HttpResp::json("{\"ok\":false,\"err\":\"bad token\"}", 403);
+      auto o = json::obj();
+      json::setBool(o.get(), "ok", true);
+      cJSON* arr = json::addArr(o.get(), "languages");
+      cJSON* langs = cfgAt("ui.languages");
+      if (cJSON_IsArray(langs)) {
+        cJSON* l = nullptr;
+        cJSON_ArrayForEach(l, langs) {
+          if (cJSON_IsString(l)) json::push(arr, json::Doc(cJSON_CreateString(l->valuestring)));
+        }
+      }
+      if (cJSON_GetArraySize(arr) == 0) json::push(arr, json::Doc(cJSON_CreateString("ja")));
+      cJSON* ov = json::get(cfg.get(), "i18n_overrides");
+      if (ov) {
+        json::setItem(o.get(), "overrides", json::Doc(cJSON_Duplicate(ov, 1)));
+      } else {
+        json::addObj(o.get(), "overrides");
+      }
       return HttpResp::json(json::dump(o.get()));
     });
 

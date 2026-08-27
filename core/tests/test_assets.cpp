@@ -64,6 +64,15 @@ struct AFleet {
       }
       return h;
     }
+    // 直近の t 通知 (無ければ nullptr Doc)
+    json::Doc lastUi(const std::string& t) const {
+      json::Doc out;
+      for (const auto& e : ui) {
+        auto d = json::parse(e);
+        if (d && json::getString(d.get(), "t") == t) out = std::move(d);
+      }
+      return out;
+    }
   };
   std::vector<std::unique_ptr<N>> nodes;
 
@@ -162,6 +171,38 @@ TEST_CASE("assets: addAsset → config 複製 → 他ノードが自動プリフ
   f.run(1000);
   CHECK(b.uiCount("asset_ready") == 1);
 
+  // テーマ推送: display UI イベントに theme が合流し、キャッシュ完了後は
+  // bg_image_path がローカルパスへ解決されている (殻はパスを描画するだけ)
+  {
+    auto d = b.lastUi("display");
+    REQUIRE(d);
+    cJSON* theme = json::get(d.get(), "theme");
+    REQUIRE(theme);
+    CHECK(json::getString(theme, "bg_color") == "#101418");  // 既定色
+    CHECK(json::getString(theme, "bg_image") == hash);
+    CHECK(json::getString(theme, "bg_image_path") == bpath);
+  }
+  // status_json の display にも同じ theme が同梱される
+  {
+    auto st = json::parse(b.node->statusJson());
+    REQUIRE(st);
+    cJSON* theme = json::get(json::get(st.get(), "display"), "theme");
+    REQUIRE(theme);
+    CHECK(json::getString(theme, "bg_image_path") == bpath);
+  }
+  // 端末別上書き (devices.<B>.local.theme) がキー単位で display.theme に勝つ
+  a.node->setConfigKey("devices." + b.node->nodeId() + ".local.theme.bg_color",
+                       "\"#223344\"");
+  f.run(800);
+  {
+    auto d = b.lastUi("display");
+    REQUIRE(d);
+    cJSON* theme = json::get(d.get(), "theme");
+    REQUIRE(theme);
+    CHECK(json::getString(theme, "bg_color") == "#223344");
+    CHECK(json::getString(theme, "bg_image") == hash);  // 画像は基底 (display.theme) のまま
+  }
+
   a.node->stop();
   b.node->stop();
 }
@@ -190,6 +231,31 @@ TEST_CASE("assets: 1MB 級 (複数チャンク) の blob 転送") {
   CHECK(got.size() == wav.size());
   CHECK(got == wav);
   CHECK(b.lastAssetReady() == hash);
+
+  // SOS 発報: {"t":"emergency"} に警報音が同梱され、カスタム音はキャッシュ済みなので
+  // 各ノードが自分のローカルパスを audio_path として受け取る
+  a.node->setEmergency(true, "panel");
+  f.run(500);
+  {
+    auto e = b.lastUi("emergency");
+    REQUIRE(e);
+    CHECK(json::getBool(e.get(), "active"));
+    CHECK(json::getString(e.get(), "alarm_sound") == "asset:" + hash);
+    CHECK(json::getInt(e.get(), "alarm_volume", -1) == 100);  // 既定音量
+    CHECK(json::getString(e.get(), "audio_path") == bpath);
+  }
+  {
+    auto e = a.lastUi("emergency");
+    REQUIRE(e);
+    CHECK(json::getString(e.get(), "audio_path") == a.node->assetPath(hash));
+  }
+  a.node->setEmergency(false, "panel");
+  f.run(500);
+  {
+    auto e = b.lastUi("emergency");
+    REQUIRE(e);
+    CHECK(!json::getBool(e.get(), "active"));
+  }
 
   a.node->stop();
   b.node->stop();
@@ -349,6 +415,20 @@ TEST_CASE("assets: HTTP API (POST /api/assets / GET /asset/<hash>)") {
     INFO("path=" << p << " resp=" << r.substr(0, 40));
     CHECK(r.rfind("HTTP/1.1 200", 0) != 0);      // 実体は決して返さない
     CHECK(r.find("root:") == std::string::npos);  // /etc/passwd の内容が漏れていない
+  }
+
+  // 削除: 未ログイン 401 / 不正 hash 400 / 正常 200 → 台帳 tombstone + キャッシュ即削除
+  CHECK(assetReq(http_port, "DELETE", "/api/assets/" + hash).rfind("HTTP/1.1 401", 0) == 0);
+  CHECK(assetReq(http_port, "DELETE", "/api/assets/xyz", "", cookie)
+            .rfind("HTTP/1.1 400", 0) == 0);
+  CHECK(assetReq(http_port, "DELETE", "/api/assets/" + hash, "", cookie)
+            .rfind("HTTP/1.1 200", 0) == 0);
+  CHECK(node.assetPath(hash) == "");  // ローカルキャッシュも即消える
+  CHECK(assetReq(http_port, "GET", "/asset/" + hash, "", cookie).rfind("HTTP/1.1 404", 0) == 0);
+  {
+    auto cfg2 = json::parse(node.configJson());
+    REQUIRE(cfg2);
+    CHECK(json::get(json::get(cfg2.get(), "assets"), hash.c_str()) == nullptr);
   }
 
   node.stop();
