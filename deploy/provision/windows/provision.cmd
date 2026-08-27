@@ -48,6 +48,24 @@ powercfg /change hibernate-timeout-ac 0 >nul 2>&1
 echo ==== 5) WER 無効 ====
 reg add "HKLM\SOFTWARE\Microsoft\Windows\Windows Error Reporting" /v DontShowUI /t REG_DWORD /d 1 /f >nul
 
+echo ==== 6) Windows Update の出包封鎖 (kiosk 家電化) ====
+rem 自動更新を完全停止 — 門口機は勝手に更新・再起動・弾窗してはならない。
+rem セキュリティ更新は保守時に手動適用する運用 (docs/ops 参照)。
+reg add "HKLM\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU" /v NoAutoUpdate /t REG_DWORD /d 1 /f >nul
+reg add "HKLM\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU" /v NoAutoRebootWithLoggedOnUsers /t REG_DWORD /d 1 /f >nul
+rem 再起動通知/更新トースト UX を抑制 (Win10+; Win7 では無視される)
+reg add "HKLM\SOFTWARE\Microsoft\WindowsUpdate\UX\Settings" /v RestartNotificationsAllowed2 /t REG_DWORD /d 0 /f >nul 2>&1
+reg add "HKLM\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate" /v SetAutoRestartNotificationDisable /t REG_DWORD /d 1 /f >nul
+rem UpdateOrchestrator の再起動タスクを無効化 (新しいビルドでは拒否されることがある — best effort)
+schtasks /Change /TN "\Microsoft\Windows\UpdateOrchestrator\Reboot" /DISABLE >nul 2>&1
+schtasks /Change /TN "\Microsoft\Windows\UpdateOrchestrator\Reboot_Battery" /DISABLE >nul 2>&1
+rem 更に強硬にする場合 (任意 — 保守手順の理解の上で): sc config wuauserv start= disabled
+
+echo ==== 7) その他の弾窗源 ====
+rem OneDrive/ストア自動起動・「Windows へようこそ」等 (kiosk アカウント側は kiosk-enable.cmd)
+reg add "HKLM\SOFTWARE\Policies\Microsoft\Windows\CloudContent" /v DisableWindowsConsumerFeatures /t REG_DWORD /d 1 /f >nul
+reg add "HKLM\SOFTWARE\Policies\Microsoft\WindowsStore" /v AutoDownload /t REG_DWORD /d 2 /f >nul 2>&1
+
 echo.
 echo 完了。次: kiosk ユーザーでログインし kiosk-enable.cmd を実行 (シェル置換)。
 endlocal

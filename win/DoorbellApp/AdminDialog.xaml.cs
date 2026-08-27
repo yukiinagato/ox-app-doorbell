@@ -1,27 +1,72 @@
 // 隠し管理入口の PIN ダイアログ。5 回失敗で 10 分ロック (プロセス内)。
+// 入力は描画テンキーのみ (実体キーボードの無い門口機前提)。物理キーボードがあれば
+// 数字キー/Enter/Backspace も受ける (Window の KeyDown)。
 // PIN の照合先: %ProgramData%\Doorbell\exit_pin.txt の SHA-256 hex (無ければ既定 PIN "000000" +
-// 初回設置手順で必ず変更するよう docs に記載)。TODO(Phase1後半): fleet 設定の kiosk.exit_pin_hash と統合。
+// 初回設置手順で必ず変更するよう docs に記載)。TODO: fleet 設定の kiosk.exit_pin_hash と統合。
 using System;
 using System.IO;
 using System.Security.Cryptography;
 using System.Text;
 using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Input;
 using DoorbellApp.Util;
 
 namespace DoorbellApp
 {
     public partial class AdminDialog : Window
     {
+        private const int MaxLen = 6;
         private static int _fails;
         private static DateTime _lockedUntil = DateTime.MinValue;
+        private string _pin = "";
 
         public AdminDialog()
         {
             InitializeComponent();
             Prompt.Text = L10n.T("admin.pin_prompt");
-            OkBtn.Content = "OK";
             CancelBtn.Content = L10n.T("calling.cancel");
-            Pin.Focus();
+            KeyDown += OnPhysicalKey;
+            UpdateDisplay();
+        }
+
+        private void UpdateDisplay() => PinDisplay.Text = new string('●', _pin.Length);
+
+        private void OnPad(object sender, RoutedEventArgs e)
+        {
+            var tag = (sender as Button)?.Tag as string;
+            if (string.IsNullOrEmpty(tag)) return;
+            HandleKey(tag);
+        }
+
+        private void OnPhysicalKey(object sender, KeyEventArgs e)
+        {
+            // 物理キーボードがある環境の補助 (数字/テンキー/Enter/BS)
+            if (e.Key >= Key.D0 && e.Key <= Key.D9) HandleKey(((int)(e.Key - Key.D0)).ToString());
+            else if (e.Key >= Key.NumPad0 && e.Key <= Key.NumPad9)
+                HandleKey(((int)(e.Key - Key.NumPad0)).ToString());
+            else if (e.Key == Key.Back) HandleKey("back");
+            else if (e.Key == Key.Enter) HandleKey("ok");
+            else if (e.Key == Key.Escape) DialogResult = false;
+        }
+
+        private void HandleKey(string tag)
+        {
+            if (tag == "back")
+            {
+                if (_pin.Length > 0) _pin = _pin.Substring(0, _pin.Length - 1);
+            }
+            else if (tag == "ok")
+            {
+                Submit();
+                return;
+            }
+            else if (_pin.Length < MaxLen)
+            {
+                _pin += tag;
+            }
+            ErrorText.Text = "";
+            UpdateDisplay();
         }
 
         private static string Sha256Hex(string s)
@@ -35,11 +80,13 @@ namespace DoorbellApp
             }
         }
 
-        private void OnOk(object sender, RoutedEventArgs e)
+        private void Submit()
         {
             if (DateTime.Now < _lockedUntil)
             {
                 ErrorText.Text = L10n.T("admin.locked");
+                _pin = "";
+                UpdateDisplay();
                 return;
             }
             string expected = Sha256Hex("000000");
@@ -49,7 +96,7 @@ namespace DoorbellApp
                 if (File.Exists(f)) expected = File.ReadAllText(f).Trim();
             }
             catch { }
-            if (Sha256Hex(Pin.Password) == expected)
+            if (Sha256Hex(_pin) == expected)
             {
                 _fails = 0;
                 DialogResult = true;
@@ -65,7 +112,8 @@ namespace DoorbellApp
             {
                 ErrorText.Text = L10n.T("admin.pin_wrong");
             }
-            Pin.Clear();
+            _pin = "";
+            UpdateDisplay();
         }
 
         private void OnCancel(object sender, RoutedEventArgs e) => DialogResult = false;

@@ -22,6 +22,12 @@ rem サインアウトメニュー非表示
 reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer" /v NoLogoff /t REG_DWORD /d 1 /f
 rem 通知/エッジスワイプ抑制 (Win8+; Win7 では無視される)
 reg add "HKCU\Software\Policies\Microsoft\Windows\EdgeUI" /v AllowEdgeSwipe /t REG_DWORD /d 0 /f >nul 2>&1
+rem トースト通知・通知センターを kiosk ユーザーで全停止 (更新促し等の弾窗源)
+reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\PushNotifications" /v ToastEnabled /t REG_DWORD /d 0 /f >nul 2>&1
+reg add "HKCU\Software\Policies\Microsoft\Windows\Explorer" /v DisableNotificationCenter /t REG_DWORD /d 1 /f >nul 2>&1
+rem 「Windows へようこそ」/ヒント表示の抑制 (Win10+)
+reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" /v SubscribedContent-310093Enabled /t REG_DWORD /d 0 /f >nul 2>&1
+reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" /v SoftLandingEnabled /t REG_DWORD /d 0 /f >nul 2>&1
 
 echo 完了。サインアウト→再ログインで kiosk になります。
 echo 自動ログオン設定は管理者で: netplwiz または autologon-enable.cmd を使用。
