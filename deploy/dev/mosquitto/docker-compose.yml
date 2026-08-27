@@ -1,0 +1,12 @@
+# 開発用 Mosquitto (MQTT ブリッジ結合テスト用 — 本番は HA の Mosquitto アドオン)
+#   docker compose up -d
+#   購読確認: docker exec doorbell-dev-mqtt mosquitto_sub -t '#' -v
+services:
+  mosquitto:
+    image: eclipse-mosquitto:2.0
+    container_name: doorbell-dev-mqtt
+    restart: unless-stopped
+    ports:
+      - "1883:1883"
+    volumes:
+      - ./mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
