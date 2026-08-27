@@ -172,6 +172,10 @@
   offline | online | config_changed | emergency | emergency_cancel`
 - `emergency` payload: `{ "source": "<node_id>", "via": "panel|web|admin" }`。quiet_hours の
   suppress 対象外 (常に全経路通知)。UI: `{"t":"emergency","active":true|false}`
+- `visitor_lang` (訪客が門口機で言語を切替): payload `{ "lang": "en" }`。press の payload にも
+  `visitor_lang` を同梱 (選択済みの場合)。展示面: 室内機/TV 来鈴画面の言語バッジ・
+  /api/panel/state・Telegram 通知の「🌐 EN」・HA attrs topic。**クイック返信はこの言語の
+  ラベルで表示+TTS** (訳が無ければ ja へ回落)。revert タイマー超過で ja へ戻り解除。
 - `reply` イベント payload: `{ "reply_id": "qr_away", "text": "…", "via": "telegram|mqtt|web",
   "target_press": "<origin>:<seq>" }`
 - press の notify (LWW マージ): `{ "hlc": "…", "claimed_by": "…", "notified_at": "…",
