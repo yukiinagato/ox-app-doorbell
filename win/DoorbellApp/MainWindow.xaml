@@ -1,0 +1,75 @@
+<Window x:Class="DoorbellApp.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="ドアホン" Background="{StaticResource Bg}"
+        WindowStyle="None" ResizeMode="NoResize" WindowState="Maximized"
+        Topmost="False" Cursor="Arrow" FontFamily="Yu Gothic UI, Meiryo UI, Segoe UI">
+    <Grid>
+        <!-- ============ 待機 ============ -->
+        <Grid x:Name="IdleView">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+            <StackPanel Grid.Row="0" Margin="0,60,0,0" HorizontalAlignment="Center">
+                <TextBlock x:Name="ClockText" FontSize="72" FontWeight="Light"
+                           Foreground="{StaticResource Fg}" HorizontalAlignment="Center"/>
+                <TextBlock x:Name="DateText" FontSize="26" Foreground="{StaticResource Dim}"
+                           HorizontalAlignment="Center" Margin="0,4,0,0"/>
+            </StackPanel>
+            <StackPanel Grid.Row="1" VerticalAlignment="Center" HorizontalAlignment="Center">
+                <Button x:Name="CallButton" Style="{StaticResource BigButton}"
+                        MinWidth="420" MinHeight="180" Click="OnCallClick"/>
+                <TextBlock x:Name="TouchHint" FontSize="24" Foreground="{StaticResource Dim}"
+                           HorizontalAlignment="Center" Margin="0,26,0,0"/>
+            </StackPanel>
+            <DockPanel Grid.Row="2" Margin="20,0,20,14" LastChildFill="False">
+                <TextBlock x:Name="NodeInfo" FontSize="14" Foreground="{StaticResource Dim}"
+                           DockPanel.Dock="Left"/>
+                <Ellipse x:Name="MeshDot" Width="12" Height="12" Fill="#5DD39E"
+                         DockPanel.Dock="Right" VerticalAlignment="Center"/>
+            </DockPanel>
+            <!-- 隠し管理入口 (右上 200x200 を 5 秒内 7 連打) -->
+            <Border Width="200" Height="200" Background="Transparent"
+                    HorizontalAlignment="Right" VerticalAlignment="Top"
+                    MouseLeftButtonDown="OnSecretCorner"/>
+        </Grid>
+
+        <!-- ============ 呼び出し中 ============ -->
+        <Grid x:Name="CallingView" Visibility="Collapsed" Background="{StaticResource Bg}">
+            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                <TextBlock x:Name="CallingText" FontSize="56" FontWeight="Bold"
+                           Foreground="{StaticResource Fg}" HorizontalAlignment="Center"/>
+                <Ellipse x:Name="Pulse" Width="140" Height="140" Margin="0,50"
+                         Stroke="#4DA3FF" StrokeThickness="6" HorizontalAlignment="Center"/>
+                <Button x:Name="CancelButton" FontSize="28" Padding="40,16"
+                        Background="{StaticResource Card}" Foreground="{StaticResource Fg}"
+                        BorderBrush="{StaticResource Dim}" Click="OnCancelClick"/>
+            </StackPanel>
+        </Grid>
+
+        <!-- ============ クイック返信バナー (最前面オーバーレイ) ============ -->
+        <Border x:Name="ReplyBanner" Visibility="Collapsed" VerticalAlignment="Center"
+                HorizontalAlignment="Center" Background="#243040" CornerRadius="20"
+                Padding="60,40" MaxWidth="900">
+            <StackPanel>
+                <TextBlock x:Name="ReplyCaption" FontSize="22" Foreground="{StaticResource Dim}"
+                           HorizontalAlignment="Center"/>
+                <TextBlock x:Name="ReplyText" FontSize="46" FontWeight="Bold" TextWrapping="Wrap"
+                           Foreground="{StaticResource Fg}" HorizontalAlignment="Center"
+                           Margin="0,14,0,0" TextAlignment="Center"/>
+            </StackPanel>
+        </Border>
+
+        <!-- ============ オフライン ============ -->
+        <Border x:Name="OfflineView" Visibility="Collapsed" Background="#B5A21B00">
+            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                <TextBlock x:Name="OfflineTitle" FontSize="52" FontWeight="Bold"
+                           Foreground="#FFF" HorizontalAlignment="Center"/>
+                <TextBlock x:Name="OfflineBody" FontSize="28" Foreground="#FFE9D5"
+                           HorizontalAlignment="Center" Margin="0,16,0,0"/>
+            </StackPanel>
+        </Border>
+    </Grid>
+</Window>

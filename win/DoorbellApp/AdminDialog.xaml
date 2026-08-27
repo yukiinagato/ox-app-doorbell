@@ -1,0 +1,19 @@
+<Window x:Class="DoorbellApp.AdminDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="管理" Width="380" SizeToContent="Height" WindowStartupLocation="CenterOwner"
+        Background="{StaticResource Bg}" WindowStyle="ToolWindow" Topmost="True"
+        FontFamily="Yu Gothic UI, Meiryo UI, Segoe UI">
+    <StackPanel Margin="24">
+        <TextBlock x:Name="Prompt" FontSize="18" Foreground="{StaticResource Fg}"/>
+        <PasswordBox x:Name="Pin" FontSize="28" Margin="0,14,0,0" MaxLength="6"
+                     Background="#0C1014" Foreground="{StaticResource Fg}" BorderBrush="#2A333D"/>
+        <TextBlock x:Name="ErrorText" FontSize="14" Foreground="#FF6B6B" Margin="0,8,0,0"/>
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
+            <Button x:Name="CancelBtn" FontSize="16" Padding="20,8" Margin="0,0,10,0"
+                    Background="{StaticResource Card}" Foreground="{StaticResource Fg}" Click="OnCancel"/>
+            <Button x:Name="OkBtn" FontSize="16" Padding="20,8"
+                    Background="{StaticResource Accent}" Foreground="#04121F" Click="OnOk"/>
+        </StackPanel>
+    </StackPanel>
+</Window>

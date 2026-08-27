@@ -1,0 +1,10 @@
+cmake_minimum_required(VERSION 3.16)
+project(doorbell_watchdog CXX)
+set(CMAKE_CXX_STANDARD 17)
+add_executable(doorbell-watchdog main.cpp)
+target_compile_definitions(doorbell-watchdog PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN)
+if(MSVC)
+  # 静的 CRT — 配布先にランタイム不要
+  set_property(TARGET doorbell-watchdog PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded")
+  target_link_options(doorbell-watchdog PRIVATE /ENTRY:wmainCRTStartup /SUBSYSTEM:CONSOLE)
+endif()

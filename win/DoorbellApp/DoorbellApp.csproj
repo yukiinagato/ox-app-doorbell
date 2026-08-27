@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- .NET Framework 4.8 WPF (Win7 SP1〜Win11 単一パッケージ)。SDK スタイルで VS2022/dotnet build 両対応 -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net48</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <LangVersion>7.3</LangVersion>
+    <Prefer32Bit>false</Prefer32Bit>
+    <NeutralLanguage>ja</NeutralLanguage>
+    <RootNamespace>DoorbellApp</RootNamespace>
+    <AssemblyName>DoorbellApp</AssemblyName>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
+    <Version>0.1.0</Version>
+    <EnableDefaultEmbeddedResourceItems>true</EnableDefaultEmbeddedResourceItems>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- JSON (JavaScriptSerializer) と TTS (System.Speech) — .NET Framework 同梱、外部依存ゼロ -->
+    <Reference Include="System.Web.Extensions" />
+    <Reference Include="System.Speech" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- ネイティブ core DLL (win/build.cmd が core のビルド産物をここへ配置する) -->
+    <None Include="lib\**\*.dll" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

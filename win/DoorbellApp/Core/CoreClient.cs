@@ -1,0 +1,122 @@
+// core のライフサイクルと UI イベント配送。デリゲートを field に保持して GC から守る。
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Globalization;
+using System.Runtime.InteropServices;
+using System.Speech.Synthesis;
+using System.Web.Script.Serialization;
+
+namespace DoorbellApp.Core
+{
+    public sealed class UiEvent
+    {
+        public string T;                       // state / chime / reply / event / config_changed / ...
+        public Dictionary<string, object> Data;
+        public string Str(string key) =>
+            Data != null && Data.TryGetValue(key, out var v) && v != null ? v.ToString() : "";
+    }
+
+    public sealed class CoreClient : IDisposable
+    {
+        private IntPtr _core;
+        private CoreInterop.UiEventCb _uiCb;       // rooted
+        private CoreInterop.LogLineCb _logCb;      // rooted
+        private CoreInterop.TtsSpeakCb _ttsCb;     // rooted
+        private GCHandle _platPin;
+        private SpeechSynthesizer _tts;
+        private readonly JavaScriptSerializer _json = new JavaScriptSerializer();
+
+        /// <summary>core からの UI イベント (呼び出しスレッドは core 内部 — 受け側で Dispatcher へ)。</summary>
+        public event Action<UiEvent> UiEventReceived;
+
+        public bool Start(string dataDir, string bootJson)
+        {
+            CoreInterop.Preload();
+            try { _tts = new SpeechSynthesizer(); } catch { _tts = null; /* 音声なし環境 */ }
+
+            _logCb = (user, level, line) =>
+                Debug.WriteLine("[core] " + CoreInterop.ReadUtf8(line));
+            _ttsCb = (user, text, lang) => Speak(CoreInterop.ReadUtf8(text), CoreInterop.ReadUtf8(lang));
+            var plat = new CoreInterop.DbPlatform
+            {
+                user = IntPtr.Zero,
+                https_request = IntPtr.Zero,
+                secure_get = IntPtr.Zero,
+                secure_put = IntPtr.Zero,
+                log_line = Marshal.GetFunctionPointerForDelegate(_logCb),
+                tts_speak = Marshal.GetFunctionPointerForDelegate(_ttsCb),
+            };
+            _core = CoreInterop.db_core_create(ref plat, dataDir, bootJson);
+            if (_core == IntPtr.Zero) return false;
+
+            _uiCb = (user, ev) =>
+            {
+                string s = CoreInterop.ReadUtf8(ev);
+                try
+                {
+                    var d = _json.Deserialize<Dictionary<string, object>>(s);
+                    var e = new UiEvent { T = d != null && d.ContainsKey("t") ? d["t"] as string : "", Data = d };
+                    UiEventReceived?.Invoke(e);
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine("ui event parse error: " + ex.Message + " " + s);
+                }
+            };
+            CoreInterop.db_core_set_ui_callback(_core, _uiCb, IntPtr.Zero);
+            return CoreInterop.db_core_start(_core) == 0;
+        }
+
+        private void Speak(string text, string lang)
+        {
+            if (_tts == null || string.IsNullOrEmpty(text)) return;
+            try
+            {
+                // 日本語音声があれば選ぶ (Haruka 等)。無ければ既定音声のまま読む。
+                try
+                {
+                    var culture = new CultureInfo(string.IsNullOrEmpty(lang) ? "ja-JP" :
+                        (lang == "ja" ? "ja-JP" : lang));
+                    foreach (var v in _tts.GetInstalledVoices())
+                        if (v.Enabled && v.VoiceInfo.Culture.TwoLetterISOLanguageName ==
+                            culture.TwoLetterISOLanguageName)
+                        {
+                            _tts.SelectVoice(v.VoiceInfo.Name);
+                            break;
+                        }
+                }
+                catch { }
+                _tts.SpeakAsyncCancelAll();
+                _tts.SpeakAsync(text);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("tts error: " + ex.Message);
+            }
+        }
+
+        public void Press(string doorId) { if (_core != IntPtr.Zero) CoreInterop.db_core_press(_core, doorId ?? ""); }
+
+        public Dictionary<string, object> Status()
+        {
+            if (_core == IntPtr.Zero) return null;
+            string s = CoreInterop.TakeUtf8(CoreInterop.db_core_status_json(_core));
+            if (s == null) return null;
+            try { return _json.Deserialize<Dictionary<string, object>>(s); }
+            catch { return null; }
+        }
+
+        public void Dispose()
+        {
+            if (_core != IntPtr.Zero)
+            {
+                CoreInterop.db_core_stop(_core);
+                CoreInterop.db_core_destroy(_core);
+                _core = IntPtr.Zero;
+            }
+            if (_platPin.IsAllocated) _platPin.Free();
+            _tts?.Dispose();
+        }
+    }
+}
