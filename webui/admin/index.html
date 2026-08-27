@@ -58,6 +58,43 @@
   #modal { position:fixed; inset:0; background:rgba(4,8,12,.62); z-index:20; overflow:auto; padding:5vh 12px; }
   .mbox { max-width:640px; margin:0 auto; }
   .mbtns { display:flex; gap:8px; margin-top:14px; }
+  /* ---- 批次② 個性化エディタ (資産 / テーマ / 文言 / 用件) ---- */
+  .scrollx { overflow-x:auto; }
+  .agrid { display:grid; grid-template-columns:repeat(auto-fill,minmax(210px,1fr)); gap:10px; }
+  .acard { background:#141a21; border:1px solid #2a333d; border-radius:9px; padding:9px; }
+  .athumb { width:100%; height:92px; border-radius:6px; background:#0c1014 center/cover no-repeat;
+            display:block; }
+  .acard audio { width:100%; margin-top:6px; }
+  .acard .lbl { font-size:13px; margin:6px 0 2px; word-break:break-all; }
+  .refs { font-size:11px; line-height:1.5; }
+  .prog { height:6px; background:#0c1014; border-radius:4px; overflow:hidden; margin-top:8px;
+          display:none; }
+  .prog > div { height:100%; width:0; background:var(--acc); }
+  input[type=file] { background:none; border:none; padding:0; font-size:13px; }
+  input[type=color] { width:56px; height:36px; padding:2px; vertical-align:middle; }
+  .swatches { display:inline-block; vertical-align:middle; margin-left:8px; }
+  .sw { width:24px; height:24px; border-radius:6px; border:1px solid #2a333d; padding:0;
+        cursor:pointer; margin-right:4px; vertical-align:middle; }
+  /* 待機画面のミニプレビュー (時計・呼出ボタン・用件ボタンの矩形) */
+  .tprev { position:relative; width:300px; height:210px; border-radius:12px; overflow:hidden;
+           border:1px solid #2a333d; background:#101418 center/cover no-repeat; color:#fff;
+           text-shadow:0 1px 3px rgba(0,0,0,.75); text-align:center; }
+  .tprev .inner { position:absolute; inset:0; display:flex; flex-direction:column;
+                  align-items:center; justify-content:center; gap:9px; }
+  .tprev .pclock { font-size:28px; font-weight:700; letter-spacing:1px; }
+  .tprev .pcall { width:66%; padding:13px 0; border:2px solid var(--acc); border-radius:12px;
+                  background:rgba(16,20,24,.5); font-size:15px; font-weight:700; }
+  .tprev .pprow { display:flex; gap:6px; }
+  .tprev .pp { width:32px; height:32px; border-radius:8px; background:rgba(16,20,24,.5);
+               border:1px solid rgba(255,255,255,.28); font-size:15px; line-height:30px; }
+  .i18ntbl th { white-space:nowrap; }
+  .i18ntbl td { vertical-align:top; }
+  .i18ntbl textarea { min-height:0; height:36px; resize:vertical; padding:7px 8px;
+                      font:13px/1.4 "Hiragino Sans","Yu Gothic UI",system-ui,sans-serif; }
+  .i18ntbl .k { font-family:ui-monospace,Menlo,monospace; font-size:12px; white-space:nowrap;
+                padding-top:14px; }
+  .iconpick { margin-top:6px; }
+  .iconpick button { font-size:17px; padding:3px 8px; margin:0 4px 4px 0; }
 </style>
 </head>
 <body>
@@ -79,6 +116,10 @@
     <button data-tab="devices" data-i18n="admin.devices">デバイス</button>
     <button data-tab="rules" data-i18n="admin.rules">呼出ルール</button>
     <button data-tab="qr" data-i18n="admin.quick_replies">クイック返信</button>
+    <button data-tab="purposes" data-i18n="admin.purposes">用件</button>
+    <button data-tab="texts" data-i18n="admin.texts">文言</button>
+    <button data-tab="theme" data-i18n="admin.theme">テーマ</button>
+    <button data-tab="assets" data-i18n="admin.assets">資産</button>
     <button data-tab="households" data-i18n="admin.households">通知先</button>
     <button data-tab="integrations" data-i18n="admin.integrations">統合</button>
     <button data-tab="events" data-i18n="admin.events">イベント履歴</button>
@@ -96,6 +137,10 @@
     <section id="tab-devices" class="hidden"></section>
     <section id="tab-rules" class="hidden"></section>
     <section id="tab-qr" class="hidden"></section>
+    <section id="tab-purposes" class="hidden"></section>
+    <section id="tab-texts" class="hidden"></section>
+    <section id="tab-theme" class="hidden"></section>
+    <section id="tab-assets" class="hidden"></section>
     <section id="tab-households" class="hidden"></section>
     <section id="tab-integrations" class="hidden"></section>
     <section id="tab-events" class="hidden"></section>
