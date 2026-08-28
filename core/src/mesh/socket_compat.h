@@ -55,35 +55,11 @@ constexpr socket_t kInvalidSocket = -1;
 
 inline bool valid(socket_t s) { return s != kInvalidSocket; }
 
-// 実際の非ループバック ローカルアドレスを列挙する (advertise/表示用)。
-// includeV6=true で グローバル IPv6 も含める (リンクローカル fe80:: は除外)。
-// Windows は簡易対応 (空を返す — advertise_addr の明示設定を推奨)。
-inline std::vector<std::string> localAddresses(bool includeV6) {
-  std::vector<std::string> out;
-#if !defined(_WIN32)
-  struct ifaddrs* head = nullptr;
-  if (getifaddrs(&head) != 0 || head == nullptr) return out;
-  for (struct ifaddrs* p = head; p != nullptr; p = p->ifa_next) {
-    if (p->ifa_addr == nullptr) continue;
-    if (!(p->ifa_flags & IFF_UP)) continue;
-    if (p->ifa_flags & IFF_LOOPBACK) continue;
-    int fam = p->ifa_addr->sa_family;
-    char buf[INET6_ADDRSTRLEN] = {0};
-    if (fam == AF_INET) {
-      auto* sin = reinterpret_cast<struct sockaddr_in*>(p->ifa_addr);
-      if (::inet_ntop(AF_INET, &sin->sin_addr, buf, sizeof(buf))) out.emplace_back(buf);
-    } else if (includeV6 && fam == AF_INET6) {
-      auto* s6 = reinterpret_cast<struct sockaddr_in6*>(p->ifa_addr);
-      if (IN6_IS_ADDR_LINKLOCAL(&s6->sin6_addr)) continue;  // fe80:: は到達性が乏しい
-      if (::inet_ntop(AF_INET6, &s6->sin6_addr, buf, sizeof(buf))) out.emplace_back(buf);
-    }
-  }
-  freeifaddrs(head);
-#else
-  (void)includeV6;
+// getifaddrs は POSIX だが Android では API24+ でしか宣言されない (minSdk 21 → 不可)。
+// 使える環境でだけ列挙し、他 (Windows / Android<24) はルート法へ回落する。
+#if !defined(_WIN32) && !(defined(__ANDROID__) && __ANDROID_API__ < 24)
+#define DB_HAVE_GETIFADDRS 1
 #endif
-  return out;
-}
 
 // ルーティング経由で主 IPv4 を得る (UDP connect → getsockname)。
 // パケットは飛ばさない。getifaddrs が使えない環境でも効く堅牢な方法。
@@ -111,6 +87,38 @@ inline std::string primaryIPv4ViaRoute() {
 #else
   return std::string();
 #endif
+}
+
+// 実際の非ループバック ローカルアドレスを列挙する (advertise/表示用)。
+// includeV6=true で グローバル IPv6 も含める (リンクローカル fe80:: は除外)。
+// getifaddrs が無い環境 (Windows / Android<24) は主 IPv4 のみをルート法で返す。
+inline std::vector<std::string> localAddresses(bool includeV6) {
+  std::vector<std::string> out;
+#if defined(DB_HAVE_GETIFADDRS)
+  struct ifaddrs* head = nullptr;
+  if (getifaddrs(&head) != 0 || head == nullptr) return out;
+  for (struct ifaddrs* p = head; p != nullptr; p = p->ifa_next) {
+    if (p->ifa_addr == nullptr) continue;
+    if (!(p->ifa_flags & IFF_UP)) continue;
+    if (p->ifa_flags & IFF_LOOPBACK) continue;
+    int fam = p->ifa_addr->sa_family;
+    char buf[INET6_ADDRSTRLEN] = {0};
+    if (fam == AF_INET) {
+      auto* sin = reinterpret_cast<struct sockaddr_in*>(p->ifa_addr);
+      if (::inet_ntop(AF_INET, &sin->sin_addr, buf, sizeof(buf))) out.emplace_back(buf);
+    } else if (includeV6 && fam == AF_INET6) {
+      auto* s6 = reinterpret_cast<struct sockaddr_in6*>(p->ifa_addr);
+      if (IN6_IS_ADDR_LINKLOCAL(&s6->sin6_addr)) continue;  // fe80:: は到達性が乏しい
+      if (::inet_ntop(AF_INET6, &s6->sin6_addr, buf, sizeof(buf))) out.emplace_back(buf);
+    }
+  }
+  freeifaddrs(head);
+#else
+  (void)includeV6;
+  std::string ip = primaryIPv4ViaRoute();  // getifaddrs 無し → 主 IPv4 のみ
+  if (!ip.empty()) out.push_back(ip);
+#endif
+  return out;
 }
 
 // 主 IPv4。getifaddrs → 失敗ならルート法。両方失敗で空。
