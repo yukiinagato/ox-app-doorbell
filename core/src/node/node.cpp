@@ -4,7 +4,10 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <atomic>
+#include <chrono>
 #include <mutex>
+#include <thread>
 #include <set>
 #include <tuple>
 
@@ -14,6 +17,7 @@
 #include "media/frame_bus.h"
 #include "media/motion_detector.h"
 #include "media/video_track.h"
+#include "mesh/socket_compat.h"
 #include "mesh/tcp_transport.h"
 #include "mesh/udp_beacon.h"
 #include "monocypher.h"
@@ -271,6 +275,16 @@ struct Node::Impl {
   // 管理セッション (civetweb スレッドの auth gate とも共有)
   std::mutex sess_mu;
   std::set<std::string> sessions;
+
+  // ---------- 疎通監視 (debug 画面用) ----------
+  // 全て runloop 上でのみ触る (背景スレッド無し = iOS の suspend/resume と衝突しない)。
+  Node::DeviceInfoFn device_info_fn;      // 端末情報 SPI (gateway/wifi/battery)。cache 読取で速い
+  std::string device_info_json;            // 直近 device_info (gateway/wifi/battery)
+  std::string net_leader_addr;             // leader ノードの host (mesh から。空=自機/不明)
+  std::vector<std::pair<std::string, std::string>> net_custom;  // (label, "host:port") config 由来
+  uint64_t net_refresh_timer = 0;          // leader/custom スナップショット更新 (loop)
+  uint64_t net_probe_timer = 0;            // 疎通プローブ (1 tick 1 target)
+  size_t net_tick = 0;                     // round-robin index
 
   // ---------- helpers ----------
   void uiNotify(const std::string& event_json) {
@@ -1133,7 +1147,22 @@ struct Node::Impl {
     ms.node_id = node_id;
     ms.epoch = epoch;
     ms.listen_addr = opts.listen_addr;
-    ms.advertise_addr = opts.advertise_addr.empty() ? opts.listen_addr : opts.advertise_addr;
+    // advertise_addr 未指定なら実 LAN IPv4 を自動検出 (0.0.0.0 を配らない)。
+    ms.advertise_addr = opts.advertise_addr;
+    if (ms.advertise_addr.empty()) {
+      std::string ip = db::net::primaryIPv4();
+      auto colon = opts.listen_addr.rfind(':');
+      std::string port = colon != std::string::npos ? opts.listen_addr.substr(colon + 1) : "47172";
+      ms.advertise_addr = ip.empty() ? opts.listen_addr : (ip + ":" + port);
+    }
+    {  // 診断: アドレス検出の内訳をログ
+      auto v4 = db::net::localAddresses(false);
+      auto all = db::net::localAddresses(true);
+      DB_LOGI(kTag, "addr-detect: getifaddrs v4=" + std::to_string(v4.size()) +
+                        " all=" + std::to_string(all.size()) +
+                        " route=" + db::net::primaryIPv4ViaRoute() +
+                        " advertise=" + ms.advertise_addr);
+    }
     ms.seed_peers = opts.seed_peers;
     ms.psk = opts.psk;
     ms.role = opts.role;
@@ -1607,6 +1636,137 @@ struct Node::Impl {
     return "";
   }
 
+  // ---------- 疎通監視 (debug 画面) ----------
+  // loop 上: leader/custom ターゲットのスナップショットを更新 (mesh/config は loop 専有)
+  // leader/custom ターゲット + device_info を更新 (runloop 上。mutex 不要)。
+  void netRefreshSnapshot() {
+    std::string leader_host;
+    if (mesh) {
+      std::string lid = mesh->leaderFor("telegram");
+      if (lid.empty()) lid = mesh->leaderFor("mqtt_bridge");
+      if (!lid.empty() && lid != node_id) {
+        for (const auto& p : mesh->peers())
+          if (p.id == lid && !p.addrs.empty()) { leader_host = hostOf(p.addrs[0]); break; }
+      }
+    }
+    std::vector<std::pair<std::string, std::string>> custom;
+    cJSON* arr = cfgAt("debug.ping_targets");
+    if (arr && cJSON_IsArray(arr)) {
+      cJSON* it = nullptr;
+      cJSON_ArrayForEach(it, arr) {
+        std::string host, label;
+        int port = 80;
+        if (cJSON_IsString(it)) { host = it->valuestring; label = host; }
+        else if (cJSON_IsObject(it)) {
+          host = json::getString(it, "host");
+          label = json::getString(it, "label", host);
+          cJSON* pj = json::get(it, "port");
+          if (pj && cJSON_IsNumber(pj)) port = pj->valueint;
+        }
+        if (!host.empty()) custom.push_back({label, host + ":" + std::to_string(port)});
+      }
+    }
+    net_leader_addr = leader_host;
+    net_custom = std::move(custom);
+    // device_info も更新 (SPI は cache 読取で速い — ブロックしない)
+    if (device_info_fn) {
+      std::string di = device_info_fn();
+      if (!di.empty()) device_info_json = di;
+    }
+  }
+
+  // 現在のターゲット一覧 (gateway + leader + custom)。runloop 上。
+  std::vector<std::pair<std::string, std::pair<std::string, int>>> netTargets() {
+    std::vector<std::pair<std::string, std::pair<std::string, int>>> targets;
+    std::string gw;
+    if (!device_info_json.empty()) {
+      json::Doc d = json::parse(device_info_json);
+      if (d) gw = json::getString(d.get(), "gateway");
+    }
+    if (!gw.empty()) targets.push_back({"gateway", {gw, 80}});
+    if (!net_leader_addr.empty()) targets.push_back({"leader", {net_leader_addr, 47172}});
+    for (auto& c : net_custom) {
+      std::string hp = c.second;
+      auto cpos = hp.rfind(':');
+      std::string h = cpos == std::string::npos ? hp : hp.substr(0, cpos);
+      int pt = cpos == std::string::npos ? 80 : std::atoi(hp.substr(cpos + 1).c_str());
+      targets.push_back({c.first, {h, pt}});
+    }
+    return targets;
+  }
+
+  // 1 tick で 1 ターゲットだけ短時間プローブ (runloop を最大 800ms しかブロックしない)。
+  // 背景スレッドを使わない = iOS の suspend/resume watchdog と衝突しない。
+  void netProbeTick() {
+    auto targets = netTargets();
+    if (targets.empty()) return;
+    auto& t = targets[net_tick % targets.size()];
+    net_tick++;
+    int rtt = -1;
+    bool ok = net::tcpProbe(t.second.first, t.second.second, 800, &rtt);
+    Store::NetProbe pr;
+    pr.ts_ms = clock->wallMs();
+    pr.target = t.first;
+    pr.host = t.second.first + ":" + std::to_string(t.second.second);
+    pr.ok = ok;
+    pr.rtt_ms = rtt;
+    store.netProbePut(pr);
+    if ((net_tick % 20) == 0) store.netProbePrune(clock->wallMs() - 7LL * 24 * 3600 * 1000);
+  }
+
+  void startNetMonitor() {
+    netRefreshSnapshot();
+    net_refresh_timer = loop->postEvery(20'000, [this] { netRefreshSnapshot(); });
+    net_probe_timer = loop->postEvery(6'000, [this] { netProbeTick(); });
+  }
+
+  void stopNetMonitor() {
+    if (net_refresh_timer) { loop->cancel(net_refresh_timer); net_refresh_timer = 0; }
+    if (net_probe_timer) { loop->cancel(net_probe_timer); net_probe_timer = 0; }
+  }
+
+  std::string debugJsonOnLoop() {
+    auto o = json::obj();
+    json::set(o.get(), "node", node_id);
+    json::set(o.get(), "version", opts.sw_version);
+    json::set(o.get(), "role", opts.role);
+    cJSON* addrs = json::addArr(o.get(), "addresses");
+    for (const auto& a : db::net::localAddresses(true))
+      json::push(addrs, json::Doc(cJSON_CreateString(a.c_str())));
+    {
+      json::Doc d = device_info_json.empty() ? json::Doc(nullptr) : json::parse(device_info_json);
+      if (d) json::setItem(o.get(), "device", std::move(d));
+    }
+    {  // 触発統計: 累計 press 回数 (全履歴 COUNT) + 最新 press
+      cJSON* trig = json::addObj(o.get(), "triggers");
+      int64_t total = 0;  // O(1): meta の累計カウンタを読むだけ
+      auto pc = store.metaGet("stat_press_total");
+      if (pc) { try { total = std::stoll(*pc); } catch (...) { total = 0; } }
+      json::set(trig, "total_press", total);
+      auto last = store.latestEventOfTypes("press", "press");
+      if (last) {
+        cJSON* l = json::addObj(trig, "last");
+        json::set(l, "door", last->door);
+        json::set(l, "device", last->device);
+        json::set(l, "wall_ms", last->wall_ms);
+        json::set(l, "payload", last->payload_json);
+      }
+    }
+    {  // 疎通履歴 24h
+      int64_t since = clock->wallMs() - 24LL * 3600 * 1000;
+      cJSON* probes = json::addArr(o.get(), "net_probes");
+      for (const auto& p : store.netProbesSince(since, 5000)) {
+        cJSON* e = json::pushObj(probes);
+        json::set(e, "ts", p.ts_ms);
+        json::set(e, "target", p.target);
+        json::set(e, "host", p.host);
+        json::setBool(e, "ok", p.ok);
+        json::set(e, "rtt", static_cast<int64_t>(p.rtt_ms));
+      }
+    }
+    return json::dump(o.get());
+  }
+
   // ---------- status ----------
   std::string statusJsonOnLoop() {
     auto o = json::obj();
@@ -1616,6 +1776,12 @@ struct Node::Impl {
     json::set(self, "role", opts.role);
     json::set(self, "door", opts.door);
     json::set(self, "version", opts.sw_version);
+    // 本機の全ローカルアドレス (IPv4 + グローバル IPv6) — 表示/デバッグ用。
+    {
+      cJSON* la = json::addArr(self, "local_addrs");
+      for (const auto& a : db::net::localAddresses(true))
+        json::push(la, json::Doc(cJSON_CreateString(a.c_str())));
+    }
     cJSON* sip = json::addObj(o.get(), "sip");
     json::setBool(sip, "registered", sip_reg == SipRegState::Registered);
     json::set(sip, "state", sipRegName(sip_reg));
@@ -1777,6 +1943,9 @@ struct Node::Impl {
 
     httpd->route("GET", "/api/status",
                  [this](const HttpReq&) { return HttpResp::json(statusJsonOnLoop()); });
+
+    httpd->route("GET", "/api/debug",
+                 [this](const HttpReq&) { return HttpResp::json(debugJsonOnLoop()); });
 
     httpd->route("GET", "/api/events", [this](const HttpReq& req) {
       size_t limit = 50;
@@ -2412,6 +2581,11 @@ void Node::setHttpsFn(HttpsFn fn) {
   impl_->https_fn = std::move(fn);
 }
 
+void Node::setDeviceInfoFn(DeviceInfoFn fn) {
+  // 監視スレッド開始前に呼ばれる想定 (capi の create 時)。
+  impl_->device_info_fn = std::move(fn);
+}
+
 void Node::press(const std::string& door_id, const std::string& purpose) {
   impl_->loop->callSync([&] { impl_->doPress(door_id, purpose); });
 }
@@ -2482,6 +2656,12 @@ void Node::setEmergency(bool active, const std::string& via) {
 std::string Node::statusJson() {
   std::string out;
   impl_->loop->callSync([&] { out = impl_->statusJsonOnLoop(); });
+  return out;
+}
+
+std::string Node::debugJson() {
+  std::string out;
+  impl_->loop->callSync([&] { out = impl_->debugJsonOnLoop(); });
   return out;
 }
 

@@ -57,8 +57,9 @@ target_include_directories(db_third_party PUBLIC
   third_party/sqlite third_party/civetweb third_party/cjson third_party/monocypher
   third_party/stb)
 target_compile_definitions(db_third_party PUBLIC
-  # civetweb: TLS/CGI/ファイルシステム配信は使わない (資産は埋め込み)
-  NO_SSL NO_CGI NO_CACHING
+  # civetweb: TLS/CGI/ファイルシステム配信は使わない (資産は埋め込み)。
+  # USE_IPV6: HTTP 管理服务を IPv4/IPv6 双栈で待受 ("+port" で両対応・IPV6_V6ONLY 無し)
+  NO_SSL NO_CGI NO_CACHING USE_IPV6
   # sqlite 縮小
   SQLITE_OMIT_LOAD_EXTENSION SQLITE_DQS=0 SQLITE_DEFAULT_WAL_SYNCHRONOUS=1
   SQLITE_THREADSAFE=1
@@ -109,6 +110,11 @@ endif()
 add_library(doorbell_core STATIC ${DB_CORE_SRC} ${WEBUI_GEN})
 target_include_directories(doorbell_core PUBLIC include src)
 target_link_libraries(doorbell_core PUBLIC db_third_party)
+# ビルドID を capi にだけ注入 (変更時は doorbell_capi.cpp のみ再コンパイル)。
+if(DEFINED DB_BUILD_ID_ARG)
+  set_property(SOURCE src/capi/doorbell_capi.cpp APPEND
+    PROPERTY COMPILE_DEFINITIONS DB_BUILD_ID="${DB_BUILD_ID_ARG}")
+endif()
 if(DB_PJSIP_OK)
   target_compile_definitions(doorbell_core PRIVATE DB_HAVE_PJSIP
     PJ_AUTOCONF=1 PJ_IS_BIG_ENDIAN=0 PJ_IS_LITTLE_ENDIAN=1)  # libpjproject.pc の Cflags と同じ

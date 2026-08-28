@@ -18,6 +18,9 @@
 #else
 #include <arpa/inet.h>
 #include <fcntl.h>
+#include <ifaddrs.h>
+#include <net/if.h>
+#include <netdb.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <poll.h>
@@ -27,8 +30,13 @@
 #endif
 
 #include <cerrno>
+#include <chrono>
 #include <climits>
 #include <cstddef>
+#include <cstdio>
+#include <cstring>
+#include <string>
+#include <vector>
 
 namespace db {
 namespace net {
@@ -46,6 +54,72 @@ constexpr socket_t kInvalidSocket = -1;
 #endif
 
 inline bool valid(socket_t s) { return s != kInvalidSocket; }
+
+// 実際の非ループバック ローカルアドレスを列挙する (advertise/表示用)。
+// includeV6=true で グローバル IPv6 も含める (リンクローカル fe80:: は除外)。
+// Windows は簡易対応 (空を返す — advertise_addr の明示設定を推奨)。
+inline std::vector<std::string> localAddresses(bool includeV6) {
+  std::vector<std::string> out;
+#if !defined(_WIN32)
+  struct ifaddrs* head = nullptr;
+  if (getifaddrs(&head) != 0 || head == nullptr) return out;
+  for (struct ifaddrs* p = head; p != nullptr; p = p->ifa_next) {
+    if (p->ifa_addr == nullptr) continue;
+    if (!(p->ifa_flags & IFF_UP)) continue;
+    if (p->ifa_flags & IFF_LOOPBACK) continue;
+    int fam = p->ifa_addr->sa_family;
+    char buf[INET6_ADDRSTRLEN] = {0};
+    if (fam == AF_INET) {
+      auto* sin = reinterpret_cast<struct sockaddr_in*>(p->ifa_addr);
+      if (::inet_ntop(AF_INET, &sin->sin_addr, buf, sizeof(buf))) out.emplace_back(buf);
+    } else if (includeV6 && fam == AF_INET6) {
+      auto* s6 = reinterpret_cast<struct sockaddr_in6*>(p->ifa_addr);
+      if (IN6_IS_ADDR_LINKLOCAL(&s6->sin6_addr)) continue;  // fe80:: は到達性が乏しい
+      if (::inet_ntop(AF_INET6, &s6->sin6_addr, buf, sizeof(buf))) out.emplace_back(buf);
+    }
+  }
+  freeifaddrs(head);
+#else
+  (void)includeV6;
+#endif
+  return out;
+}
+
+// ルーティング経由で主 IPv4 を得る (UDP connect → getsockname)。
+// パケットは飛ばさない。getifaddrs が使えない環境でも効く堅牢な方法。
+inline std::string primaryIPv4ViaRoute() {
+#if !defined(_WIN32)
+  int fd = ::socket(AF_INET, SOCK_DGRAM, 0);
+  if (fd < 0) return std::string();
+  struct sockaddr_in dst;
+  std::memset(&dst, 0, sizeof(dst));
+  dst.sin_family = AF_INET;
+  dst.sin_port = htons(9);  // discard
+  ::inet_pton(AF_INET, "8.8.8.8", &dst.sin_addr);  // 既定経路の送信元 IP を解決させる
+  std::string out;
+  if (::connect(fd, reinterpret_cast<struct sockaddr*>(&dst), sizeof(dst)) == 0) {
+    struct sockaddr_in local;
+    std::memset(&local, 0, sizeof(local));
+    socklen_t len = sizeof(local);
+    if (::getsockname(fd, reinterpret_cast<struct sockaddr*>(&local), &len) == 0) {
+      char buf[INET_ADDRSTRLEN] = {0};
+      if (::inet_ntop(AF_INET, &local.sin_addr, buf, sizeof(buf))) out = buf;
+    }
+  }
+  ::close(fd);
+  return out;
+#else
+  return std::string();
+#endif
+}
+
+// 主 IPv4。getifaddrs → 失敗ならルート法。両方失敗で空。
+inline std::string primaryIPv4() {
+  auto v = localAddresses(false);
+  if (!v.empty()) return v.front();
+  return primaryIPv4ViaRoute();
+}
+// (tcpProbe は closeSocket/setNonBlock/poll 定義後に置く — 下方)
 
 // Winsock 初期化の RAII (POSIX では何もしない)。
 // WSAStartup/WSACleanup は OS 側で参照カウントされるため、
@@ -97,6 +171,52 @@ inline int poll(pollfd_t* fds, size_t n, int timeout_ms) {
 #else
   return ::poll(fds, static_cast<nfds_t>(n), timeout_ms);
 #endif
+}
+
+// TCP 接続で到達性 + RTT を測る (ICMP 不要 = 特権不要・全 OS で動く)。
+// 接続成功 or 拒否(RST) は「到達」(host は生きている)。timeout は未到達。
+// host は IPv4/IPv6 リテラルでもホスト名でも可 (getaddrinfo)。rtt_ms に往復 ms (未到達で -1)。
+inline bool tcpProbe(const std::string& host, int port, int timeout_ms, int* rtt_ms) {
+  if (rtt_ms) *rtt_ms = -1;
+  struct addrinfo hints;
+  std::memset(&hints, 0, sizeof(hints));
+  hints.ai_family = AF_UNSPEC;
+  hints.ai_socktype = SOCK_STREAM;
+  char portstr[16];
+  std::snprintf(portstr, sizeof(portstr), "%d", port);
+  struct addrinfo* res = nullptr;
+  if (::getaddrinfo(host.c_str(), portstr, &hints, &res) != 0 || res == nullptr) return false;
+  bool reachable = false;
+  auto t0 = std::chrono::steady_clock::now();
+  for (struct addrinfo* p = res; p != nullptr && !reachable; p = p->ai_next) {
+    socket_t fd = ::socket(p->ai_family, p->ai_socktype, p->ai_protocol);
+    if (!valid(fd)) continue;
+    setNonBlock(fd);
+    int rc = ::connect(fd, p->ai_addr, static_cast<socklen_v>(p->ai_addrlen));
+    if (rc == 0) {
+      reachable = true;
+    } else {
+      pollfd_t pfd;
+      std::memset(&pfd, 0, sizeof(pfd));
+      pfd.fd = fd;
+      pfd.events = POLLOUT;
+      int pr = net::poll(&pfd, 1, timeout_ms);
+      if (pr > 0) {
+        int err = 0;
+        socklen_v len = sizeof(err);
+        ::getsockopt(fd, SOL_SOCKET, SO_ERROR, reinterpret_cast<char*>(&err), &len);
+        // 接続成功(0) も 拒否(ECONNREFUSED) も「host 到達」とみなす
+        if (err == 0 || err == ECONNREFUSED) reachable = true;
+      }
+    }
+    closeSocket(fd);
+  }
+  auto t1 = std::chrono::steady_clock::now();
+  ::freeaddrinfo(res);
+  if (reachable && rtt_ms)
+    *rtt_ms = static_cast<int>(
+        std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0).count());
+  return reachable;
 }
 
 // 直前のソケット呼び出しのエラーコード (呼び出し直後に取ること)

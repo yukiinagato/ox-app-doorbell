@@ -17,6 +17,18 @@
 
 using namespace db;
 
+// ---- バージョン ----
+// 基底バージョン + ビルドID (DB_BUILD_ID はビルドスクリプトが -D で注入。
+// 未定義ならローカルビルド扱い)。毎ビルドで変わるので実機で反映を確認できる。
+#ifndef DB_VERSION_BASE
+#define DB_VERSION_BASE "0.2.0"
+#endif
+#ifdef DB_BUILD_ID
+#define DB_VERSION_FULL DB_VERSION_BASE "+" DB_BUILD_ID
+#else
+#define DB_VERSION_FULL DB_VERSION_BASE "+dev"
+#endif
+
 // SPI https_request (同期) の在飛計数。destroy 時に完了を待つ
 // (detach したスレッドが破棄済みの Node/loop へ done を返さないため)。
 struct HttpsInflight {
@@ -73,6 +85,7 @@ DB_API db_core* db_core_create(const db_platform* platform, const char* data_dir
   opts.advertise_addr = json::getString(b.get(), "advertise_addr");
   opts.http_port = static_cast<int>(json::getInt(b.get(), "http_port", 47180));
   opts.caps_json = json::getString(b.get(), "caps", "{}");
+  opts.sw_version = DB_VERSION_FULL;  // 表示/mesh 伝播用 (status.node.version)
   if (cJSON* seeds = json::get(b.get(), "seed_peers")) {
     cJSON* it = nullptr;
     cJSON_ArrayForEach(it, seeds) {
@@ -129,6 +142,17 @@ DB_API db_core* db_core_create(const db_platform* platform, const char* data_dir
       fn(user, text.c_str(), lang.c_str());
     });
   }
+  if (c->plat.device_info) {
+    void* user = c->plat.user;
+    auto fn = c->plat.device_info;
+    c->node->setDeviceInfoFn([user, fn]() -> std::string {
+      char* out = nullptr;
+      int rc = fn(user, &out);
+      std::string s = (rc == 0 && out) ? out : "";
+      if (out) std::free(out);  // 契約: out は core が db_free (=free)
+      return s;
+    });
+  }
   return c;
 }
 
@@ -180,6 +204,11 @@ DB_API char* db_core_status_json(db_core* c) {
   return dupString(c->node->statusJson());
 }
 
+DB_API char* db_core_debug_json(db_core* c) {
+  if (!c || !c->node) return nullptr;
+  return dupString(c->node->debugJson());
+}
+
 DB_API char* db_core_config_json(db_core* c) {
   if (!c || !c->node) return nullptr;
   return dupString(c->node->configJson());
@@ -207,7 +236,7 @@ DB_API void db_core_quick_reply(db_core* c, const char* reply_id, const char* do
 
 DB_API void db_free(char* p) { std::free(p); }
 
-DB_API const char* db_core_version(void) { return "0.1.0"; }
+DB_API const char* db_core_version(void) { return DB_VERSION_FULL; }
 
 DB_API void db_core_emergency(db_core* c, int active) {
   if (c && c->node) c->node->setEmergency(active != 0, "panel");

@@ -4,6 +4,15 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ドアホン管理</title>
+<script>
+  /* UI スタイルを描画前に適用 (切替時のちらつき防止)。既定 = modern */
+  (function () {
+    try {
+      var u = localStorage.getItem("db_admin_ui");
+      if (u) document.documentElement.setAttribute("data-ui", u);
+    } catch (e) {}
+  })();
+</script>
 <style>
   :root { --bg:#101418; --card:#1a2027; --fg:#e8edf2; --dim:#8a97a5; --acc:#4da3ff; --warn:#ffb454; --err:#ff6b6b; --ok:#5dd39e; }
   * { box-sizing:border-box; margin:0; }
@@ -12,8 +21,10 @@
   header h1 { font-size:17px; font-weight:600; }
   header .node { color:var(--dim); font-size:12px; margin-left:auto; }
   nav { display:flex; gap:4px; padding:8px 12px; flex-wrap:wrap; }
-  nav button { background:none; border:1px solid #2a333d; color:var(--fg); padding:7px 14px; border-radius:8px; cursor:pointer; font-size:14px; }
+  nav button { background:none; border:1px solid #2a333d; color:var(--fg); padding:7px 14px; border-radius:8px; cursor:pointer; font-size:14px; display:inline-flex; align-items:center; gap:6px; }
   nav button.on { background:var(--acc); border-color:var(--acc); color:#04121f; font-weight:600; }
+  .ic { width:1.05em; height:1.05em; vertical-align:-0.16em; fill:currentColor; flex:none; }
+  .btn .ic, .btn2 .ic { vertical-align:-0.16em; }
   main { padding:12px 16px 40px; max-width:960px; margin:0 auto; }
   .card { background:var(--card); border:1px solid #2a333d; border-radius:10px; padding:14px; margin-bottom:12px; }
   .card h2 { font-size:15px; font-weight:600; margin-bottom:8px; }
@@ -27,6 +38,8 @@
   .chip { display:inline-block; padding:2px 10px; margin:2px 4px 2px 0; border-radius:99px; font-size:12px; background:#243040; }
   textarea { width:100%; min-height:300px; background:#0c1014; color:var(--fg); border:1px solid #2a333d; border-radius:8px; padding:10px; font:12px/1.5 ui-monospace,Menlo,monospace; }
   input,select { background:#0c1014; color:var(--fg); border:1px solid #2a333d; border-radius:8px; padding:9px 12px; font-size:15px; }
+  .dropzone { border:2px dashed #2a333d; border-radius:10px; padding:18px; text-align:center; color:var(--dim); margin:8px 0; cursor:pointer; user-select:none; transition:border-color .12s, background .12s; }
+  .dropzone.drag { border-color:var(--acc); background:rgba(90,200,250,0.08); color:var(--fg); }
   input[type=password],input[type=text],input[type=number],input[type=time] { width:100%; }
   input[type=checkbox],input[type=radio] { width:auto; }
   .btn { background:var(--acc); color:#04121f; border:none; border-radius:8px; padding:9px 18px; font-size:14px; font-weight:600; cursor:pointer; }
@@ -95,9 +108,113 @@
                 padding-top:14px; }
   .iconpick { margin-top:6px; }
   .iconpick button { font-size:17px; padding:3px 8px; margin:0 4px 4px 0; }
+
+  /* ============================================================
+     retro — 90年代 Windows 3.1/95 グレー GUI テーマ (data-ui="retro")
+     立体ベベル(左上白・右下黒) / 直角 / 硬い45度ドロップ影 / MS Sans 風
+     ============================================================ */
+  [data-ui="retro"] body {
+    background:#008080;  /* あの Win95 デスクトップのティール */
+    color:#000;
+    font-family:"MS Sans Serif","Tahoma","Segoe UI",system-ui,sans-serif;
+    font-size:13px;
+    /* アンチエイリアス無効 = 90年代のカクカクした縁取り */
+    -webkit-font-smoothing:none;
+    -moz-osx-font-smoothing:unset;
+    font-smooth:never;
+    text-rendering:optimizeSpeed;
+  }
+  /* 直角化 (全要素) */
+  [data-ui="retro"] * { border-radius:0 !important; }
+  /* ベベル: 盛り上がり(raised) と 沈み(sunken) を box-shadow で表現 */
+  [data-ui="retro"] .card,
+  [data-ui="retro"] nav button,
+  [data-ui="retro"] .btn,
+  [data-ui="retro"] .btn2,
+  [data-ui="retro"] .tag,
+  [data-ui="retro"] .chip,
+  [data-ui="retro"] .acard,
+  [data-ui="retro"] .sw,
+  [data-ui="retro"] .mbox {
+    background:#c0c0c0; color:#000; border:none;
+    box-shadow: inset -1px -1px 0 #000, inset 1px 1px 0 #dfdfdf,
+                inset -2px -2px 0 #808080, inset 2px 2px 0 #fff;
+  }
+  /* カード/ウィンドウには硬い45度ドロップ影を追加 */
+  [data-ui="retro"] .card,
+  [data-ui="retro"] .mbox,
+  [data-ui="retro"] .acard {
+    box-shadow: inset -1px -1px 0 #000, inset 1px 1px 0 #dfdfdf,
+                inset -2px -2px 0 #808080, inset 2px 2px 0 #fff,
+                4px 4px 0 0 rgba(0,0,0,.5);
+    padding:12px;
+  }
+  /* 沈みフィールド: 入力・テキストエリア・ログ・ドロップ域・サムネ */
+  [data-ui="retro"] input,
+  [data-ui="retro"] select,
+  [data-ui="retro"] textarea,
+  [data-ui="retro"] .dropzone,
+  [data-ui="retro"] .athumb,
+  [data-ui="retro"] .prog,
+  [data-ui="retro"] pre.mono {
+    background:#fff; color:#000; border:none;
+    box-shadow: inset 1px 1px 0 #808080, inset -1px -1px 0 #fff,
+                inset 2px 2px 0 #000, inset -2px -2px 0 #dfdfdf;
+  }
+  [data-ui="retro"] input[type=file] { background:none; box-shadow:none; }
+  [data-ui="retro"] input[type=checkbox],
+  [data-ui="retro"] input[type=radio] { box-shadow:none; }
+  /* タイトルバー: ヘッダを藏青 + 白文字 (Win95 のアクティブタイトル) */
+  [data-ui="retro"] header {
+    background:#000080; color:#fff; border-bottom:2px solid #000;
+    box-shadow: 0 2px 0 0 rgba(0,0,0,.5);
+  }
+  [data-ui="retro"] header h1 { color:#fff; }
+  [data-ui="retro"] header .tag { background:#000080; color:#fff; box-shadow:none; border:1px solid #fff; }
+  [data-ui="retro"] header .node { color:#c0d0ff; }
+  /* ナビ: グレーのベベルボタン。選択中は沈んだ見た目 */
+  [data-ui="retro"] nav { gap:2px; padding:6px 10px; }
+  [data-ui="retro"] nav button { color:#000; padding:5px 12px; font-size:13px; }
+  [data-ui="retro"] nav button.on {
+    background:#c0c0c0; color:#000; font-weight:700;
+    box-shadow: inset 1px 1px 0 #808080, inset -1px -1px 0 #fff,
+                inset 2px 2px 0 #000, inset -2px -2px 0 #dfdfdf;
+  }
+  /* ボタン押下で沈む */
+  [data-ui="retro"] .btn:active,
+  [data-ui="retro"] .btn2:active,
+  [data-ui="retro"] nav button:active {
+    box-shadow: inset 1px 1px 0 #808080, inset -1px -1px 0 #fff,
+                inset 2px 2px 0 #000, inset -2px -2px 0 #dfdfdf;
+  }
+  [data-ui="retro"] .btn { color:#000; font-weight:700; padding:7px 16px; }
+  [data-ui="retro"] .btn2 { color:#000; padding:4px 10px; }
+  /* 状態色: グレー地で読める濃色に */
+  [data-ui="retro"] .ok   { color:#006000; }
+  [data-ui="retro"] .warn { color:#8a5000; }
+  [data-ui="retro"] .err  { color:#a00000; }
+  [data-ui="retro"] .dim  { color:#404040; }
+  [data-ui="retro"] .btn2.danger { color:#a00000; }
+  /* テーブル: 罫線をグレーの立体感に */
+  [data-ui="retro"] th, [data-ui="retro"] td { border-bottom:1px solid #808080; }
+  [data-ui="retro"] th { color:#000080; font-weight:700; }
+  [data-ui="retro"] main { color:#000; }
+  [data-ui="retro"] .card h2 { color:#000080; font-weight:700; }
+  /* モーダル背景・トースト */
+  [data-ui="retro"] #modal { background:rgba(0,0,64,.35); }
+  [data-ui="retro"] #msg {
+    background:#c0c0c0; color:#000;
+    box-shadow: inset -1px -1px 0 #000, inset 1px 1px 0 #fff, 4px 4px 0 0 rgba(0,0,0,.5);
+  }
+  [data-ui="retro"] .pin { color:#000080; }
+  [data-ui="retro"] .dropzone.drag { background:#e8e8ff; }
+  /* リンク的アクセント文字 */
+  [data-ui="retro"] a { color:#000080; }
 </style>
 </head>
 <body>
+<!-- retro/pixel アイコン: Pixelarticons by Gerrit Halfmann (MIT) — webui/admin/pixelarticons.LICENSE -->
+<svg xmlns="http://www.w3.org/2000/svg" style="display:none" aria-hidden="true"><symbol id="i-home" viewBox="0 0 24 24"><path d="M4 20h16v2H4zm16-10h2v10h-2zM2 10h2v10H2zm2-2h2v2H4zm2-2h2v2H6zm2-2h2v2H8zm2-2h4v2h-4zm4 2h2v2h-2zm2 2h2v2h-2zm2 2h2v2h-2zM8 14h2v6H8zm2-2h4v2h-4zm4 2h2v6h-2z"/></symbol><symbol id="i-building" viewBox="0 0 24 24"><path d="M5 2h14v2H5zm0 18h14v2H5zM3 4h2v16H3zm16 0h2v16h-2zM7 6h2v2H7zm4 0h2v2h-2zm4 0h2v2h-2zm-8 4h2v2H7zm4 0h2v2h-2zm4 0h2v2h-2zm-8 4h2v2H7zm4 0h2v2h-2zm-1 4h4v2h-4zm5-4h2v2h-2z"/></symbol><symbol id="i-tablet" viewBox="0 0 24 24"><path d="M5 2h14v2H5zm0 18h14v2H5zM3 4h2v16H3zm16 0h2v16h-2zm-8 12h2v2h-2z"/></symbol><symbol id="i-sliders" viewBox="0 0 24 24"><path d="M8 14H7v6H5v-6H2v-2h6v2Zm5 6h-2V10h2v10Zm9-2h-3v2h-2v-2h-1v-2h6v2Zm-3-4h-2V4h2v10ZM7 10H5V4h2v6Zm6-4h2v2H9V6h2V4h2v2Z"/></symbol><symbol id="i-message-reply" viewBox="0 0 24 24"><path d="M4 18h2v2H4v2H2V4h2v14Zm6 0H6v-2h4v2Zm6-6h4v2h-4v4h-2v-2h-2v-2h-2v-2h2v-2h2V8h2v4Zm6 4h-2v-2h2v2Zm0-6h-2V4h2v6Zm-2-6H4V2h16v2Z"/></symbol><symbol id="i-list-box" viewBox="0 0 24 24"><path d="M4 2h16v2H4zm2 5h2v2H6zm4 0h8v2h-8zm-4 4h2v2H6zm4 0h8v2h-8zm-4 4h2v2H6zm4 0h8v2h-8zm-6 5h16v2H4zM2 4h2v16H2zm18 0h2v16h-2z"/></symbol><symbol id="i-note" viewBox="0 0 24 24"><path d="M2 4h2v16H2zm18 0h2v12h-2zM4 2h16v2H4zm14 14h2v2h-2zm-2 2h2v2h-2zM4 20h12v2H4zm10-8h6v2h-6zm-2 2h2v6h-2z"/></symbol><symbol id="i-brush" viewBox="0 0 24 24"><path d="M7 2h10v2H7zM5 4h2v10H5zm12-2h2v12h-2z"/> <path d="M13 2h2v6h-2zM9 2h2v4H9zm-4 8h14v2H5zm2 4h10v2H7zm2 2h2v4H9zm4 0h2v4h-2zm-4 4h6v2H9z"/></symbol><symbol id="i-image" viewBox="0 0 24 24"><path d="M4 2h16v2H4zm0 18h16v2H4zM2 4h2v16H2zm18 0h2v16h-2zm-4 8h2v2h-2zm-2 2h2v2h-2zm4 0h2v2h-2zm-8 0h2v2h-2zm2 2h2v2h-2zm2 2h2v2h-2z"/> <path d="M20 16h2v2h-2zM8 16h2v2H8zm-2 2h2v2H6zM8 6h2v2H8zM6 8h2v2H6zm2 2h2v2H8zm2-2h2v2h-2z"/></symbol><symbol id="i-users" viewBox="0 0 24 24"><path d="M5 2h6v2H5zm10 0h4v2h-4zM5 10h6v2H5zm10 0h4v2h-4zm4-6h2v6h-2zm-8 0h2v6h-2zM3 4h2v6H3zM0 18h2v4H0zm14 0h2v4h-2zm8 0h2v4h-2zM4 14h8v2H4zm12 0h4v2h-4zM2 16h2v2H2zm10 0h2v2h-2zm8 0h2v2h-2z"/></symbol><symbol id="i-link" viewBox="0 0 24 24"><path d="M4 6h7v2H4zm0 10h7v2H4zM2 8h2v8H2zm18-2h-7v2h7zm0 10h-7v2h7zm2-8h-2v8h2zM7 11h10v2H7z"/></symbol><symbol id="i-clock" viewBox="0 0 24 24"><path d="M6 2h12v2H6zM2 6h2v12H2zm18 0h2v12h-2zm-2-2h2v2h-2zM4 4h2v2H4zm2 18h12v-2H6zm12-2h2v-2h-2zM4 20h2v-2H4zm7-14h2v7h-2zm2 7h2v2h-2zm2 2h2v2h-2z"/></symbol><symbol id="i-settings-2" viewBox="0 0 24 24"><path d="M4 14h2v6H4zm6 0h2v6h-2zm-4-2h4v2H6zm0 8h4v2H6zm-4-4h2v2H2zm20-8h-4V6h4z"/> <path d="M10 16h12v2H10zm4-8H2V6h12zm6-4v2h-2V4zm0 6V8h-2v2zm-6-8h4v2h-4zm0 10h4v-2h-4zm-2-8h2v2h-2zm0 6h2V8h-2z"/></symbol><symbol id="i-copy" viewBox="0 0 24 24"><path d="M8 6h12v2H8zM4 2h12v2H4zm2 6h2v12H6zM2 4h2v12H2zm6 16h12v2H8zM20 8h2v12h-2zm-4-4h2v2h-2zM4 16h2v2H4z"/></symbol><symbol id="i-reload" viewBox="0 0 24 24"><path d="M16 4h2v6h-2zm-2-2h2v2h-2zm0 2h2v8h-2zM4 8H2v5h2z"/> <path d="M4 6h16v2H4zm4 14H6v-6h2zm2 2H8v-2h2zm0-2H8v-8h2zm10-4h2v-5h-2z"/> <path d="M20 18H4v-2h16z"/></symbol><symbol id="i-trash" viewBox="0 0 24 24"><path d="M18 22H6V20H18V22ZM9 6H15V4H17V6H22V8H20V20H18V8H6V20H4V8H2V6H7V4H9V6ZM15 4H9V2H15V4Z"/></symbol><symbol id="i-download" viewBox="0 0 24 24"><path d="M21 15v4h-2v-4zm-2 4v2H5v-2zM5 15v4H3v-4zm8-12v14h-2V3z"/> <path d="M7 11v2h10v-2zm2 2v2h2v-2zm4 0v2h2v-2z"/> <path d="M15 11v2h2v-2z"/></symbol><symbol id="i-upload" viewBox="0 0 24 24"><path d="M19 21H5v-2h14v2ZM5 19H3v-4h2v4Zm16 0h-2v-4h2v4ZM13 5h2v2h2v2h-4v8h-2V9H7V7h2V5h2V3h2v2Z"/></symbol><symbol id="i-plus" viewBox="0 0 24 24"><path d="M13 11h7v2h-7v7h-2v-7H4v-2h7V4h2v7Z"/></symbol><symbol id="i-close" viewBox="0 0 24 24"><path d="M7 19H5V17H7V19ZM19 19H17V17H19V19ZM9 15V17H7V15H9ZM17 17H15V15H17V17ZM11 15H9V13H11V15ZM15 15H13V13H15V15ZM13 13H11V11H13V13ZM11 11H9V9H11V11ZM15 11H13V9H15V11ZM9 9H7V7H9V9ZM17 9H15V7H17V9ZM7 7H5V5H7V7ZM19 7H17V5H19V7Z"/></symbol><symbol id="i-check" viewBox="0 0 24 24"><path d="M10 18H8v-2h2v2Zm-2-2H6v-2h2v2Zm4-2v2h-2v-2h2Zm-6 0H4v-2h2v2Zm8 0h-2v-2h2v2Zm2-2h-2v-2h2v2Zm2-2h-2V8h2v2Zm2-2h-2V6h2v2Z"/></symbol><symbol id="i-info-box" viewBox="0 0 24 24"><path d="M4 2h16v2H4zm0 18h16v2H4zM2 4h2v16H2zm18 0h2v16h-2zm-9 5h2V7h-2zm0 8h2v-6h-2z"/></symbol></svg>
 <div id="login" class="card hidden">
   <h2 data-i18n="admin.login">ログイン</h2>
   <div class="row"><input id="pw" type="password" placeholder="管理パスワード" data-i18n-ph="admin.password"></div>
@@ -109,25 +226,35 @@
   <header>
     <h1 data-i18n="app.name">ドアホン</h1><span class="tag" data-i18n="admin.title">管理</span>
     <span class="node" id="nodeInfo"></span>
+    <select id="langSel" title="言語 / Language" style="margin-left:12px; padding:5px 8px; font-size:13px">
+      <option value="ja">日本語</option>
+      <option value="en">English</option>
+      <option value="zh">中文</option>
+    </select>
+    <select id="uiSel" title="UI スタイル / Style" style="margin-left:6px; padding:5px 8px; font-size:13px">
+      <option value="modern">Modern</option>
+      <option value="retro">Retro (90s)</option>
+    </select>
   </header>
   <nav>
-    <button data-tab="dash" class="on" data-i18n="admin.dashboard">ダッシュボード</button>
-    <button data-tab="doors" data-i18n="admin.doors">ドア／建物</button>
-    <button data-tab="devices" data-i18n="admin.devices">デバイス</button>
-    <button data-tab="rules" data-i18n="admin.rules">呼出ルール</button>
-    <button data-tab="qr" data-i18n="admin.quick_replies">クイック返信</button>
-    <button data-tab="purposes" data-i18n="admin.purposes">用件</button>
-    <button data-tab="texts" data-i18n="admin.texts">文言</button>
-    <button data-tab="theme" data-i18n="admin.theme">テーマ</button>
-    <button data-tab="assets" data-i18n="admin.assets">資産</button>
-    <button data-tab="households" data-i18n="admin.households">通知先</button>
-    <button data-tab="integrations" data-i18n="admin.integrations">統合</button>
-    <button data-tab="events" data-i18n="admin.events">イベント履歴</button>
-    <button data-tab="system" data-i18n="admin.system">システム</button>
+    <button data-tab="dash" class="on"><svg class="ic"><use href="#i-home"/></svg><span data-i18n="admin.dashboard">ダッシュボード</span></button>
+    <button data-tab="doors"><svg class="ic"><use href="#i-building"/></svg><span data-i18n="admin.doors">ドア／建物</span></button>
+    <button data-tab="devices"><svg class="ic"><use href="#i-tablet"/></svg><span data-i18n="admin.devices">デバイス</span></button>
+    <button data-tab="rules"><svg class="ic"><use href="#i-sliders"/></svg><span data-i18n="admin.rules">呼出ルール</span></button>
+    <button data-tab="qr"><svg class="ic"><use href="#i-message-reply"/></svg><span data-i18n="admin.quick_replies">クイック返信</span></button>
+    <button data-tab="purposes"><svg class="ic"><use href="#i-list-box"/></svg><span data-i18n="admin.purposes">用件</span></button>
+    <button data-tab="texts"><svg class="ic"><use href="#i-note"/></svg><span data-i18n="admin.texts">文言</span></button>
+    <button data-tab="theme"><svg class="ic"><use href="#i-brush"/></svg><span data-i18n="admin.theme">テーマ</span></button>
+    <button data-tab="assets"><svg class="ic"><use href="#i-image"/></svg><span data-i18n="admin.assets">資産</span></button>
+    <button data-tab="households"><svg class="ic"><use href="#i-users"/></svg><span data-i18n="admin.households">通知先</span></button>
+    <button data-tab="integrations"><svg class="ic"><use href="#i-link"/></svg><span data-i18n="admin.integrations">統合</span></button>
+    <button data-tab="events"><svg class="ic"><use href="#i-clock"/></svg><span data-i18n="admin.events">イベント履歴</span></button>
+    <button data-tab="system"><svg class="ic"><use href="#i-settings-2"/></svg><span data-i18n="admin.system">システム</span></button>
   </nav>
   <main>
     <section id="tab-dash">
       <div class="card"><div class="dim" id="bridgeInfo" style="margin-bottom:8px"></div>
+        <div class="dim mono" id="localAddrs" style="margin-bottom:8px; font-size:12px"></div>
         <table id="peersTbl">
         <thead><tr><th>ノード</th><th>役割</th><th>状態</th><th>duty</th><th>版</th><th>アドレス</th></tr></thead>
         <tbody></tbody></table></div>

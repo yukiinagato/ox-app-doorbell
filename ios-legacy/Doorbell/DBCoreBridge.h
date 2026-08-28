@@ -29,6 +29,8 @@ typedef void (^DBUiEventHandler)(NSDictionary *ev);
 - (void)emergency:(BOOL)active;
 
 - (NSDictionary *)status;
+- (NSDictionary *)debugInfo;
+- (NSDictionary *)deviceInfoNow;  // gateway/wifi/battery を今取得 (main スレッド)
 - (NSDictionary *)config;
 
 // 提示音 (reply/chime のカスタム音声再生失敗時の回落先でも使う)。

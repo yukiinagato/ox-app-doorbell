@@ -25,9 +25,12 @@ done
 [[ -n "$CMAKE" ]] || { echo "error: cmake が見つからない (brew install cmake)"; exit 1; }
 
 echo "== configure (armv7 / iOS 5.1) =="
+BUILD_ID="$(date -u +%Y%m%d-%H%M%SZ)"
+echo "   build id: $BUILD_ID"
 "$CMAKE" -S "$CORE" -B "$BUILD_DIR" \
   -DCMAKE_TOOLCHAIN_FILE="$CORE/cmake/ios5-armv7.cmake" \
-  -DCMAKE_BUILD_TYPE=Release
+  -DCMAKE_BUILD_TYPE=Release \
+  -DDB_BUILD_ID_ARG="$BUILD_ID"
 
 echo "== build doorbell_core =="
 "$CMAKE" --build "$BUILD_DIR" --target doorbell_core -j "$(sysctl -n hw.ncpu)"

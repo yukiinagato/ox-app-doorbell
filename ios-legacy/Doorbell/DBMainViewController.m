@@ -5,6 +5,7 @@
 #import "DBConfigUtil.h"
 #import "DBSirenPlayer.h"
 #import "DBAdminPinViewController.h"
+#import "DBInfoViewController.h"
 #import <AudioToolbox/AudioToolbox.h>
 
 @interface DBMainViewController () <UIAlertViewDelegate>
@@ -69,6 +70,7 @@ static UIColor *DBNightClk(void) { return [UIColor colorWithRed:0.545 green:0.14
   UILabel *_emergencyNote;
   UIButton *_emergencyCancel;
   UIButton *_secretCorner;
+  UIButton *_infoButton;  // 角の ⓘ → 本機情報/デバッグ
 }
 
 - (id)initWithCore:(DBCoreBridge *)core boot:(DBBootConfig *)boot {
@@ -126,6 +128,7 @@ static UIColor *DBNightClk(void) { return [UIColor colorWithRed:0.545 green:0.14
   [_emergencyNote release];
   [_emergencyCancel release];
   [_secretCorner release];
+  [_infoButton release];
   [super dealloc];
 }
 
@@ -225,6 +228,23 @@ static UIColor *DBNightClk(void) { return [UIColor colorWithRed:0.545 green:0.14
   _secretCorner = [[UIButton buttonWithType:UIButtonTypeCustom] retain];
   [_secretCorner addTarget:self action:@selector(onSecretCorner) forControlEvents:UIControlEventTouchUpInside];
   [self.view addSubview:_secretCorner];
+
+  // 左下の ⓘ — 本機情報/デバッグ画面 (PIN 要求)。
+  _infoButton = [[UIButton buttonWithType:UIButtonTypeInfoLight] retain];
+  [_infoButton addTarget:self action:@selector(onInfo) forControlEvents:UIControlEventTouchUpInside];
+  [self.view addSubview:_infoButton];
+
+  // iOS5: UILabel が既定で不透明白背景で描画される個体があるため、全ラベルを透明化。
+  [self clearLabelBackgrounds:self.view];
+}
+
+// この画面のラベルは全て透明背景にする (入れ子含め再帰)。
+// (この個体では UILabel 既定背景が不透明白のため明示的に clearColor を設定)
+- (void)clearLabelBackgrounds:(UIView *)v {
+  for (UIView *sub in v.subviews) {
+    if ([sub isKindOfClass:[UILabel class]]) sub.backgroundColor = [UIColor clearColor];
+    [self clearLabelBackgrounds:sub];
+  }
 }
 
 - (void)buildReplyBanner {
@@ -307,7 +327,8 @@ static UIColor *DBNightClk(void) { return [UIColor colorWithRed:0.545 green:0.14
   _statusLabel.frame = CGRectMake(0, cy + 88, sz.width, 26);
   _eventsLabel.frame = CGRectMake(20, cy + 130, sz.width - 40, 180);
 
-  _nodeInfo.frame = CGRectMake(16, sz.height - 30, sz.width * 0.6, 20);
+  _infoButton.frame = CGRectMake(14, sz.height - 42, 34, 34);
+  _nodeInfo.frame = CGRectMake(54, sz.height - 30, sz.width * 0.6, 20);
   CGFloat sosW = 150, sosH = 62;
   _sosButton.frame = CGRectMake(sz.width - sosW - 20, sz.height - sosH - 20, sosW, sosH);
   _sosProgress.frame = CGRectMake(sz.width - sosW - 20, sz.height - sosH - 30, sosW, 4);
@@ -649,6 +670,20 @@ static UIColor *DBNightClk(void) { return [UIColor colorWithRed:0.545 green:0.14
   DBMainViewController *__unsafe_unretained weakSelf = self;
   dlg.onUnlocked = ^{ [weakSelf showAdminInfo]; };
   [self presentViewController:dlg animated:YES completion:nil];
+}
+
+- (void)onInfo {
+  // 管理 PIN を要求してから debug 画面を開く。
+  DBAdminPinViewController *dlg = [[[DBAdminPinViewController alloc] initWithTexts:_texts] autorelease];
+  DBMainViewController *__unsafe_unretained weakSelf = self;
+  dlg.onUnlocked = ^{ [weakSelf presentInfo]; };
+  [self presentViewController:dlg animated:YES completion:nil];
+}
+
+- (void)presentInfo {
+  DBInfoViewController *vc = [[[DBInfoViewController alloc] initWithCore:_core boot:_boot] autorelease];
+  vc.modalTransitionStyle = UIModalTransitionStyleCoverVertical;
+  [self presentViewController:vc animated:YES completion:nil];
 }
 
 - (void)showAdminInfo {

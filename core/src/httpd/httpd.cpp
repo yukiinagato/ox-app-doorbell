@@ -457,22 +457,31 @@ Httpd::~Httpd() { stop(); }
 bool Httpd::start(int port) {
   if (impl_->ctx) return false;  // 二重 start は不可
   impl_->stopping = false;
-  std::string ports = std::to_string(port);
-  const char* opts[] = {"listening_ports", ports.c_str(),
-                        "num_threads",     "4",
-                        "tcp_nodelay",     "1",
-                        nullptr};
+  std::string p = std::to_string(port);
   struct mg_callbacks cb;
   std::memset(&cb, 0, sizeof(cb));
-  struct mg_context* ctx = mg_start(&cb, nullptr, opts);
+  auto tryStart = [&](const std::string& ports) -> struct mg_context* {
+    const char* opts[] = {"listening_ports", ports.c_str(),
+                          "num_threads",     "4",
+                          "tcp_nodelay",     "1",
+                          nullptr};
+    return mg_start(&cb, nullptr, opts);
+  };
+  // IPv4 と IPv6 を「別々のリスナー」で張る ("47180,[::]:47180")。
+  // 単一 dual-stack ソケット ("+port") は iOS5 kernel で bind は通るが accept できない
+  // (silent failure)。別ソケットなら IPv4 は確実に動き、IPv6 は best-effort で追加。
+  std::string dual = p + ",[::]:" + p;
+  struct mg_context* ctx = tryStart(dual);
+  std::string mode = dual;
+  if (!ctx) { ctx = tryStart(p); mode = p; }  // IPv6 を張れない環境は IPv4 のみ
   if (!ctx) {
-    DB_LOGE("httpd", "mg_start failed port=" + ports);
+    DB_LOGE("httpd", "mg_start failed port=" + p);
     return false;
   }
   impl_->ctx = ctx;
   impl_->port = port;
   mg_set_request_handler(ctx, "/", &requestHandler, impl_.get());
-  DB_LOGI("httpd", "listening on :" + ports);
+  DB_LOGI("httpd", "listening on " + mode);
   return true;
 }
 

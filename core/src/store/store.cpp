@@ -135,10 +135,16 @@ bool Store::migrate() {
       "CREATE INDEX IF NOT EXISTS idx_events_hlc ON events(hlc);"
       "CREATE TABLE IF NOT EXISTS tg_queue("
       "  id INTEGER PRIMARY KEY AUTOINCREMENT, kind TEXT, chat_id TEXT, payload TEXT,"
-      "  snapshot BLOB, attempts INT, next_retry_ms INT, created_ms INT);";
+      "  snapshot BLOB, attempts INT, next_retry_ms INT, created_ms INT);"
+      "CREATE TABLE IF NOT EXISTS net_probe("
+      "  ts_ms INT, target TEXT, host TEXT, ok INT, rtt_ms INT);"
+      "CREATE INDEX IF NOT EXISTS idx_net_probe_ts ON net_probe(ts_ms);";
   if (!exec(ddl)) return false;
   // schema_version は meta に記録 (将来の段階的マイグレーションの起点)
   if (!metaGet("schema_version")) metaSet("schema_version", std::to_string(kSchemaVersion));
+  // 累計触発カウンタの初回バックフィル (既存 press をカウント。以後は eventPut が +1)
+  if (!metaGet("stat_press_total"))
+    metaSet("stat_press_total", std::to_string(countEventsOfType("press")));
   return true;
 }
 
@@ -218,7 +224,15 @@ bool Store::eventPut(const EventRecord& e) {
   st.bind(8, e.payload_json);
   st.bind(9, e.notify_json);
   if (st.step() != SQLITE_DONE) return false;
-  return sqlite3_changes(db_) > 0;  // 既存 (origin,seq) は IGNORE され 0 件
+  bool inserted = sqlite3_changes(db_) > 0;  // 既存 (origin,seq) は IGNORE され 0 件
+  if (inserted && e.type == "press") {
+    // 累計触発カウンタを O(1) で維持 (毎回 COUNT(*) を走らせない・prune でも減らない)
+    long long n = 0;
+    auto cur = metaGet("stat_press_total");
+    if (cur) { try { n = std::stoll(*cur); } catch (...) { n = 0; } }
+    metaSet("stat_press_total", std::to_string(n + 1));
+  }
+  return inserted;
 }
 
 bool Store::eventExists(const std::string& origin, uint64_t seq) {
@@ -270,6 +284,15 @@ std::vector<EventRecord> Store::eventsSince(const std::map<std::string, uint64_t
     out.push_back(std::move(e));
   }
   return out;
+}
+
+size_t Store::countEventsOfType(const std::string& type) {
+  if (!db_) return 0;
+  Stmt st(db_, "SELECT COUNT(*) FROM events WHERE type=?1");
+  if (!st.ok()) return 0;
+  st.bind(1, type);
+  if (st.step() != SQLITE_ROW) return 0;
+  return static_cast<size_t>(st.colInt(0));
 }
 
 std::vector<EventRecord> Store::recentEvents(size_t limit) {
@@ -401,6 +424,48 @@ size_t Store::tgQueueCount() {
   Stmt st(db_, "SELECT COUNT(*) FROM tg_queue");
   if (!st.ok() || st.step() != SQLITE_ROW) return 0;
   return static_cast<size_t>(st.colInt(0));
+}
+
+// --- net_probe ---
+void Store::netProbePut(const NetProbe& p) {
+  if (!db_) return;
+  Stmt st(db_, "INSERT INTO net_probe(ts_ms,target,host,ok,rtt_ms) VALUES(?1,?2,?3,?4,?5)");
+  if (!st.ok()) return;
+  st.bind(1, p.ts_ms);
+  st.bind(2, p.target);
+  st.bind(3, p.host);
+  st.bind(4, static_cast<int64_t>(p.ok ? 1 : 0));
+  st.bind(5, static_cast<int64_t>(p.rtt_ms));
+  st.step();
+}
+
+std::vector<Store::NetProbe> Store::netProbesSince(int64_t since_ms, size_t limit) {
+  std::vector<NetProbe> out;
+  if (!db_) return out;
+  Stmt st(db_, "SELECT ts_ms,target,host,ok,rtt_ms FROM net_probe"
+               " WHERE ts_ms>=?1 ORDER BY ts_ms ASC LIMIT ?2");
+  if (!st.ok()) return out;
+  st.bind(1, since_ms);
+  st.bind(2, static_cast<int64_t>(limit));
+  while (st.step() == SQLITE_ROW) {
+    NetProbe p;
+    p.ts_ms = st.colInt(0);
+    p.target = st.colText(1);
+    p.host = st.colText(2);
+    p.ok = st.colInt(3) != 0;
+    p.rtt_ms = static_cast<int>(st.colInt(4));
+    out.push_back(std::move(p));
+  }
+  return out;
+}
+
+size_t Store::netProbePrune(int64_t cutoff_ms) {
+  if (!db_) return 0;
+  Stmt st(db_, "DELETE FROM net_probe WHERE ts_ms<?1");
+  if (!st.ok()) return 0;
+  st.bind(1, cutoff_ms);
+  if (st.step() != SQLITE_DONE) return 0;
+  return static_cast<size_t>(sqlite3_changes(db_));
 }
 
 }  // namespace db

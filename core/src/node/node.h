@@ -78,6 +78,10 @@ class Node {
   void setTtsCb(TtsCb cb);
   // HTTPS 実装の注入 (Telegram ブリッジが使う)。start 前後どちらでも可・任意スレッド可。
   void setHttpsFn(HttpsFn fn);
+  // 端末情報 SPI (gateway/wifi/battery の JSON を返す。任意スレッドから同期呼・ブロック可)。
+  // 疎通監視スレッドが定期的に呼ぶ。null 可 (wifi/battery/gateway 無しで動作)。
+  using DeviceInfoFn = std::function<std::string()>;
+  void setDeviceInfoFn(DeviceInfoFn fn);
 
   // ボタン押下 (門口機 UI / /api/press / panel から)。purpose: visit_purposes のキー
   // ("" = 用件なしの汎用按鈴)。payload には purpose と訪客言語 (選択済みの場合) が載る。
@@ -136,6 +140,7 @@ class Node {
   bool videoEncoderWanted();
 
   std::string statusJson();        // /api/status と同じ内容
+  std::string debugJson();         // /api/debug (アドレス/wifi/電池/触発/疎通履歴)
   std::string configJson();        // materialize 済み設定全文
   // 設定書き込み (管理 API /api/config と同経路)。value_json はパース不能なら JSON 文字列扱い。
   void setConfigKey(const std::string& key, const std::string& value_json);

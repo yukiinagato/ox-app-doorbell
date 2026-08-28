@@ -85,11 +85,17 @@ jobs:
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
             "ndk;27.1.12297006" "cmake;3.22.1" "platforms;android-35" "build-tools;35.0.0"
-      - name: assembleDebug
+      - name: assembleDebug (直接インストール可能な APK)
         working-directory: android
         run: ./gradlew --no-daemon assembleDebug
+      - name: Collect installable APK
+        run: |
+          mkdir -p dist
+          # debug APK は debug keystore で署名済み = adb install / 側載でそのまま入る
+          cp android/app/build/outputs/apk/debug/*.apk "dist/doorbell.apk"
+          ls -l dist/
       - uses: actions/upload-artifact@v4
         with:
-          name: doorbell-android-debug
-          path: android/app/build/outputs/apk/debug/*.apk
-          retention-days: 14
+          name: doorbell-android-apk
+          path: dist/doorbell.apk
+          retention-days: 30

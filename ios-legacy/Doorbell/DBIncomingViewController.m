@@ -219,6 +219,17 @@ static const NSTimeInterval kAutoCloseS = 30;
   _openButton.enabled = NO;
   _ignoreButton = [[self makeButton:NO] retain];
   [_ignoreButton addTarget:self action:@selector(onIgnore) forControlEvents:UIControlEventTouchUpInside];
+
+  // iOS5: 背景色未指定の UILabel が不透明白で描画される個体対策 (バッジは温存)。
+  [self clearLabelBackgrounds:self.view];
+}
+
+- (void)clearLabelBackgrounds:(UIView *)v {
+  for (UIView *sub in v.subviews) {
+    if ([sub isKindOfClass:[UILabel class]] && sub != _purposeBadge && sub != _langBadge)
+      sub.backgroundColor = [UIColor clearColor];
+    [self clearLabelBackgrounds:sub];
+  }
 }
 
 - (UIButton *)makeButton:(BOOL)prominent {

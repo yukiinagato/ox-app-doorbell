@@ -5,11 +5,23 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>ja</string>
 	<key>CFBundleDisplayName</key>
-	<string>Doorbell</string>
+	<string>ドアホン</string>
 	<key>CFBundleExecutable</key>
 	<string>Doorbell</string>
 	<key>CFBundleIdentifier</key>
 	<string>jp.keihan.doorbell</string>
+	<key>CFBundleIconFile</key>
+	<string>Icon-72.png</string>
+	<key>CFBundleIconFiles</key>
+	<array>
+		<string>Icon-72.png</string>
+		<string>Icon-72@2x.png</string>
+		<string>icon.png</string>
+	</array>
+	<key>CFBundleSupportedPlatforms</key>
+	<array>
+		<string>iPhoneOS</string>
+	</array>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
@@ -17,7 +29,7 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>0.1.0</string>
+	<string>0.2.0</string>
 	<key>CFBundleVersion</key>
 	<string>1</string>
 	<key>LSRequiresIPhoneOS</key>
@@ -48,6 +60,17 @@
 	<key>UIRequiredDeviceCapabilities</key>
 	<array>
 		<string>armv7</string>
+	</array>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>jp.keihan.doorbell</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>doorbell</string>
+			</array>
+		</dict>
 	</array>
 </dict>
 </plist>

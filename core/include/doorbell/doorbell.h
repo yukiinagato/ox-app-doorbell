@@ -43,6 +43,14 @@ typedef struct db_platform {
   void (*log_line)(void* user, int level, const char* line);
   /* TTS 朗読 (クイック返信の読み上げ)。lang: "ja" 等。NULL なら chime 音のみ */
   void (*tts_speak)(void* user, const char* text, const char* lang);
+  /* 端末情報 (debug 画面用)。JSON 文字列を malloc して *out_json に返す (core が db_free)。
+   * 各プラットフォームが取得できる範囲だけ埋める (欠けは省略可)。形式:
+   *   {"gateway":"10.10.38.1",
+   *    "wifi":{"ssid":"..","bssid":"..","rssi":-55,"link_mbps":72},
+   *    "battery":{"level":0.83,"state":"charging|unplugged|full","health":"..%"}}
+   * gateway は core の疎通監視 (ping) 対象にも使う。NULL なら wifi/battery/gateway 無し。
+   * 定期的に (core が) 呼ぶ。ブロック可 (別スレッドから)。戻り 0=成功。 */
+  int (*device_info)(void* user, char** out_json);
 } db_platform;
 
 /* core → 殻 への UI イベント通知 (JSON)。例:
@@ -87,6 +95,9 @@ DB_API void db_core_set_visitor_lang(db_core* c, const char* door, const char* l
 
 /* ノード表・リーダー・SIP 状態などのスナップショット JSON。db_free で解放。 */
 DB_API char* db_core_status_json(db_core* c);
+
+/* debug 画面用 JSON (アドレス/wifi/電池/触発統計/疎通履歴)。core が db_free。 */
+DB_API char* db_core_debug_json(db_core* c);
 
 /* materialize 済み設定全文 JSON (doors/quick_replies 等の表示に使う)。db_free で解放。 */
 DB_API char* db_core_config_json(db_core* c);

@@ -457,12 +457,40 @@ if (typeof document !== "undefined") (function () {
     return m ? decodeURIComponent(m[1]) : "";
   }
   var MOCK = qs("mock") === "1";
-  var LANG = qs("lang") || "ja";
+  function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+  function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+  var LANG = qs("lang") || lsGet("db_admin_lang") || "ja";
 
   var I18N = {};
   function t(k, def) { return I18N[k] || def || k; }
   function fmt(s, vars) {
     return s.replace(/\{(\w+)\}/g, function (m, n) { return vars[n] !== undefined ? vars[n] : m; });
+  }
+  // Pixelarticons(MIT) スプライトのアイコンを返す。currentColor 継承。
+  function icon(n) { return "<svg class='ic'><use href='#i-" + n + "'/></svg>"; }
+  // クリップボードへコピー (navigator.clipboard 優先・不可なら textarea + execCommand 回落)。
+  // 成否をボタン文言で一瞬フィードバックする。
+  function copyText(text, btn) {
+    function flash(ok) {
+      if (!btn) return;
+      var orig = btn.getAttribute("data-orig") || btn.innerHTML;
+      btn.setAttribute("data-orig", orig);
+      btn.textContent = ok ? t("admin.copied", "コピーしました") : t("admin.copy_failed", "コピー失敗");
+      setTimeout(function () { btn.innerHTML = orig; }, 1200);
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function () { flash(true); },
+                                               function () { fallback(); });
+    } else { fallback(); }
+    function fallback() {
+      try {
+        var ta = document.createElement("textarea");
+        ta.value = text; ta.style.position = "fixed"; ta.style.opacity = "0";
+        document.body.appendChild(ta); ta.select();
+        var ok = document.execCommand("copy");
+        document.body.removeChild(ta); flash(ok);
+      } catch (e) { flash(false); }
+    }
   }
   function $(s) { return document.querySelector(s); }
   function $all(s, root) {
@@ -556,7 +584,9 @@ if (typeof document !== "undefined") (function () {
     reply: { display_ttl_s: 30 }
   };
   var MOCK_STATUS = {
-    node: { id: MOCK_ID1, name: "front-panel", role: "door_station", version: "0.1.0" },
+    node: { id: MOCK_ID1, name: "front-panel", role: "door_station", version: "0.1.0",
+            local_addrs: ["10.10.38.147", "240b:250:a0c4:5710:daa2:5eff:fe65:ff19",
+                          "fd40:174a:3820:10:daa2:5eff:fe65:ff19"] },
     sip: { registered: false, state: "idle", call: "idle" },
     leaders: { telegram: MOCK_ID1, mqtt_bridge: MOCK_ID1 },
     bridge: { mqtt: "connected", telegram: "active" },
@@ -1001,6 +1031,15 @@ if (typeof document !== "undefined") (function () {
     $("#bridgeInfo").textContent =
       "MQTT: " + (br.mqtt || "-") + " / Telegram: " + (br.telegram || "-") +
       (j.sip ? " / SIP: " + j.sip.state : "");
+    // 本機の全ローカルアドレス (IPv4 + 全 IPv6)
+    var la = (j.node && j.node.local_addrs) || [];
+    var laEl = $("#localAddrs");
+    if (laEl) {
+      if (la.length) {
+        laEl.innerHTML = icon("info-box") + " " + t("admin.local_addrs", "本機アドレス") + ": " +
+          la.map(function (a) { return esc(a); }).join("　");
+      } else { laEl.textContent = ""; }
+    }
     // ライブ映像 (src は据え置き — 差し替えるとストリームが切れる)。
     // stream_mp4 を持つ門口機は MSE (fMP4 — Phase 6a) で滑らか表示、
     // 未対応/失敗/503 (auto で硬編なし) は従来の MJPEG <img> へ自動回落。
@@ -1977,7 +2016,7 @@ if (typeof document !== "undefined") (function () {
     // エクスポート / インポート
     h += "<div class='card'><h2>" + esc(t("admin.export", "エクスポート")) + " / " +
          esc(t("admin.import", "インポート")) + "</h2>" +
-         "<button class='btn small' id='sysExport'>" + esc(t("admin.export", "エクスポート")) +
+         "<button class='btn small' id='sysExport'>" + icon("download") + " " + esc(t("admin.export", "エクスポート")) +
          "</button><div class='dim fhint' style='margin:10px 0 4px'>" +
          esc(t("admin.import_hint", "エクスポートした JSON を貼り付けてください")) + "</div>" +
          "<textarea id='sysImport' style='min-height:110px' placeholder='{ \"doors\": … }'></textarea>" +
@@ -2005,7 +2044,9 @@ if (typeof document !== "undefined") (function () {
          "<button class='btn' id='cfgSet'>書込</button></div></div>";
     // ログ
     h += "<div class='card'><h2>" + esc(t("admin.logs", "ログ")) + "</h2>" +
-         "<button class='btn2' id='logBtn'>↻</button><pre id='logOut' class='mono' " +
+         "<button class='btn2' id='logBtn'>" + icon("reload") + "</button> " +
+         "<button class='btn2' id='logCopy'>" + icon("copy") + " " + esc(t("admin.copy", "コピー")) + "</button>" +
+         "<pre id='logOut' class='mono' " +
          "style='white-space:pre-wrap; font-size:11px; margin-top:8px'></pre></div>";
     el.innerHTML = h;
 
@@ -2070,6 +2111,9 @@ if (typeof document !== "undefined") (function () {
       api("GET", "/api/logs", null, function (st, j) {
         if (st === 200 && j) $("#logOut").textContent = (j.logs || []).join("\n");
       });
+    };
+    $("#logCopy").onclick = function () {
+      copyText($("#logOut").textContent || "", $("#logCopy"));
     };
     $("#logBtn").onclick();
   }
@@ -2414,6 +2458,45 @@ if (typeof document !== "undefined") (function () {
   }
 
   /* ---------------- 13. 資産 (画像・音声) ---------------- */
+  // 画像を上限バイト以内へ自動縮小 (canvas 再エンコード)。品質→寸法の順に落とす。
+  // 成功で JPEG の File を、失敗で (null, err) を返す。画像以外は呼ばない。
+  function compressImageToLimit(file, maxBytes, cb) {
+    if (typeof document.createElement("canvas").toBlob !== "function")
+      return cb(null, "この端末では自動縮小できません");
+    var url = URL.createObjectURL(file);
+    var img = new Image();
+    img.onerror = function () { URL.revokeObjectURL(url); cb(null, "画像を読めませんでした"); };
+    img.onload = function () {
+      URL.revokeObjectURL(url);
+      var w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
+      var maxDim = 1920;  // まず長辺を 1920px 以内へ
+      var scale = Math.min(1, maxDim / Math.max(w, h));
+      function attempt(sc, q) {
+        var cw = Math.max(1, Math.round(w * sc)), ch = Math.max(1, Math.round(h * sc));
+        var cv = document.createElement("canvas");
+        cv.width = cw; cv.height = ch;
+        var ctx = cv.getContext("2d");
+        ctx.fillStyle = "#000"; ctx.fillRect(0, 0, cw, ch);  // 透過は黒地に合成
+        ctx.drawImage(img, 0, 0, cw, ch);
+        cv.toBlob(function (blob) {
+          if (!blob) return cb(null, "縮小に失敗しました");
+          if (blob.size <= maxBytes) {
+            var base = (file.name || "image").replace(/\.[^.]+$/, "") || "image";
+            var out;
+            try { out = new File([blob], base + ".jpg", { type: "image/jpeg" }); }
+            catch (e) { blob.name = base + ".jpg"; out = blob; }  // File 未対応環境
+            return cb(out, null);
+          }
+          if (q > 0.45) return attempt(sc, q - 0.1);        // まず品質を落とす
+          if (sc > 0.12) return attempt(sc * 0.8, 0.8);     // 次に寸法を落とす
+          cb(null, "縮小しても上限に収まりませんでした");   // 下限に到達
+        }, "image/jpeg", q);
+      }
+      attempt(scale, 0.85);
+    };
+    img.src = url;
+  }
+
   // 生バイト列を投げるので api() (JSON 専用) は通さない。進捗は upload.onprogress。
   function uploadAsset(file, label, onProgress, cb) {
     var type = L.assetTypeOf(file.name, file.type);
@@ -2461,11 +2544,13 @@ if (typeof document !== "undefined") (function () {
     // アップロード
     var h = "<div class='card'><h2>" + esc(t("admin.assets_upload", "アップロード")) + "</h2>" +
             "<div class='grid2'><div class='frow'><label class='flab'>ファイル " +
-            "(jpg / png / mp3 / wav・3MB まで)</label>" +
+            "(jpg / png は自動縮小 · mp3 / wav は 3MB まで)</label>" +
             "<input type='file' id='asFile' accept='image/jpeg,image/png,audio/mpeg,audio/wav'>" +
             "</div><div class='frow'><label class='flab'>ラベル (省略時はファイル名)</label>" +
             "<input type='text' id='asLabel'></div></div>" +
-            "<button class='btn small' id='asUp'>" +
+            "<div id='asDrop' class='dropzone'>" +
+            esc(t("admin.drop_here", "ここにファイルをドラッグ&ドロップ / クリックで選択")) + "</div>" +
+            "<button class='btn small' id='asUp'>" + icon("upload") + " " +
             esc(t("admin.assets_upload", "アップロード")) + "</button>" +
             "<div class='prog' id='asProg'><div></div></div>" +
             "<div class='dim fhint' id='asOut'></div></div>";
@@ -2517,28 +2602,69 @@ if (typeof document !== "undefined") (function () {
     el.innerHTML = h;
 
     var prog = $("#asProg"), bar = prog.firstChild, out = $("#asOut");
-    $("#asUp").onclick = function () {
-      var f = $("#asFile").files && $("#asFile").files[0];
+    function handleFile(f) {
       if (!f) { msg("ファイルを選んでください"); return; }
+      var isImage = /^image\//.test(f.type) || /\.(jpe?g|png)$/i.test(f.name);
+      function doUpload(fileToSend, note) {
+        prog.style.display = "block";
+        bar.style.width = "0";
+        out.className = "dim fhint";
+        out.textContent = (note ? note + " · " : "") + "送信中…";
+        uploadAsset(fileToSend, $("#asLabel").value, function (p) {
+          bar.style.width = Math.round(p * 100) + "%";
+        }, function (ok, info) {
+          prog.style.display = "none";
+          out.className = ok ? "ok fhint" : "err fhint";
+          out.textContent = ok ? (note ? note + " · " : "") + "登録しました: " + info
+                               : "失敗: " + info;
+          if (ok) { msg(t("admin.saved", "保存しました")); refreshAll(); }
+        });
+      }
       if (f.size > L.ASSET_MAX_BYTES) {
-        out.className = "warn fhint";
-        out.textContent = "3MB を超えています (" + L.fmtBytes(f.size) +
-                          ") — 縮小してからアップロードしてください";
+        if (!isImage) {  // 音声は自動縮小不可 → 従来どおり拒否
+          out.className = "warn fhint";
+          out.textContent = "3MB を超えています (" + L.fmtBytes(f.size) +
+                            ") — 音声は縮小してからアップロードしてください";
+          return;
+        }
+        // 画像は自動縮小して送る
+        out.className = "dim fhint";
+        out.textContent = "3MB 超 (" + L.fmtBytes(f.size) + ") — 自動縮小中…";
+        compressImageToLimit(f, L.ASSET_MAX_BYTES, function (small, err) {
+          if (!small) {
+            out.className = "err fhint";
+            out.textContent = "自動縮小に失敗: " + (err || "不明");
+            return;
+          }
+          doUpload(small, "自動縮小 " + L.fmtBytes(f.size) + "→" + L.fmtBytes(small.size));
+        });
         return;
       }
-      prog.style.display = "block";
-      bar.style.width = "0";
-      out.className = "dim fhint";
-      out.textContent = "送信中…";
-      uploadAsset(f, $("#asLabel").value, function (p) {
-        bar.style.width = Math.round(p * 100) + "%";
-      }, function (ok, info) {
-        prog.style.display = "none";
-        out.className = ok ? "ok fhint" : "err fhint";
-        out.textContent = ok ? "登録しました: " + info : "失敗: " + info;
-        if (ok) { msg(t("admin.saved", "保存しました")); refreshAll(); }
-      });
+      doUpload(f, null);
+    }
+    $("#asUp").onclick = function () {
+      handleFile($("#asFile").files && $("#asFile").files[0]);
     };
+    // ドラッグ&ドロップ + クリックでファイル選択
+    var dz = $("#asDrop");
+    if (dz) {
+      dz.onclick = function () { $("#asFile").click(); };
+      ["dragenter", "dragover"].forEach(function (ev) {
+        dz.addEventListener(ev, function (e) {
+          e.preventDefault(); e.stopPropagation(); dz.classList.add("drag");
+        });
+      });
+      ["dragleave", "dragend"].forEach(function (ev) {
+        dz.addEventListener(ev, function (e) {
+          e.preventDefault(); e.stopPropagation(); dz.classList.remove("drag");
+        });
+      });
+      dz.addEventListener("drop", function (e) {
+        e.preventDefault(); e.stopPropagation(); dz.classList.remove("drag");
+        var files = e.dataTransfer && e.dataTransfer.files;
+        if (files && files.length) handleFile(files[0]);
+      });
+    }
     bindActs(el, {
       del: function (hash) {
         var used = (refs[hash] || []);
@@ -2614,6 +2740,31 @@ if (typeof document !== "undefined") (function () {
       });
     }
   });
+
+  /* ---- 言語切替 (再読込。セッションは cookie 継続なので再ログイン不要) ---- */
+  (function () {
+    var sel = $("#langSel");
+    if (!sel) return;
+    sel.value = LANG;
+    sel.onchange = function () {
+      lsSet("db_admin_lang", sel.value);
+      var q = "?lang=" + encodeURIComponent(sel.value) + (MOCK ? "&mock=1" : "");
+      window.location.search = q;
+    };
+  })();
+
+  /* ---- UI スタイル切替 (純 CSS: data-ui 属性。再読込不要で即時反映) ---- */
+  (function () {
+    var sel = $("#uiSel");
+    if (!sel) return;
+    sel.value = document.documentElement.getAttribute("data-ui") || "modern";
+    sel.onchange = function () {
+      var v = sel.value;
+      if (v === "modern") document.documentElement.removeAttribute("data-ui");
+      else document.documentElement.setAttribute("data-ui", v);
+      lsSet("db_admin_ui", v);
+    };
+  })();
 
   /* ---- login ---- */
   $("#loginBtn").onclick = function () {

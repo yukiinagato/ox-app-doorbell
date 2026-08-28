@@ -72,14 +72,19 @@ static NSTimeInterval sLockedUntil = 0;
   NSArray *keys = [NSArray arrayWithObjects:@"1", @"2", @"3", @"4", @"5", @"6",
                    @"7", @"8", @"9", @"back", @"0", @"ok", nil];
   for (NSString *key in keys) {
-    UIButton *b = [UIButton buttonWithType:UIButtonTypeSystem];
+    // iOS5: UIButtonTypeSystem は存在せず値1=RoundedRect にフォールバックし
+    // 白い既定背景を描く → 白文字が見えない。Custom を使い自前の背景で描く。
+    UIButton *b = [UIButton buttonWithType:UIButtonTypeCustom];
     NSString *label = key;
     if ([key isEqualToString:@"back"]) label = @"⌫";
     else if ([key isEqualToString:@"ok"]) label = @"OK";
     [b setTitle:label forState:UIControlStateNormal];
     b.titleLabel.font = [UIFont systemFontOfSize:26];
     [b setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-    b.backgroundColor = [UIColor colorWithWhite:1 alpha:0.12];
+    b.backgroundColor = [UIColor colorWithRed:0.18 green:0.22 blue:0.28 alpha:1];
+    [b setBackgroundImage:nil forState:UIControlStateNormal];
+    b.layer.borderWidth = 1;
+    b.layer.borderColor = [UIColor colorWithWhite:1 alpha:0.18].CGColor;
     b.layer.cornerRadius = 10;
     b.accessibilityIdentifier = key;
     [b addTarget:self action:@selector(onKey:) forControlEvents:UIControlEventTouchUpInside];
@@ -87,12 +92,22 @@ static NSTimeInterval sLockedUntil = 0;
     [_keyButtons addObject:b];
   }
 
-  _cancelButton = [UIButton buttonWithType:UIButtonTypeSystem];
+  _cancelButton = [UIButton buttonWithType:UIButtonTypeCustom];  // iOS5: System=白背景RoundedRect回避
   [_cancelButton setTitle:[_texts ts:@"calling.cancel"] forState:UIControlStateNormal];
   _cancelButton.titleLabel.font = [UIFont systemFontOfSize:20];
-  [_cancelButton setTitleColor:[UIColor colorWithWhite:1 alpha:0.6] forState:UIControlStateNormal];
+  [_cancelButton setTitleColor:[UIColor colorWithWhite:1 alpha:0.7] forState:UIControlStateNormal];
   [_cancelButton addTarget:self action:@selector(onCancel) forControlEvents:UIControlEventTouchUpInside];
   [_card addSubview:_cancelButton];
+
+  // iOS5: 背景色未指定の UILabel が不透明白で描画される個体対策。
+  [self clearLabelBackgrounds:self.view];
+}
+
+- (void)clearLabelBackgrounds:(UIView *)v {
+  for (UIView *sub in v.subviews) {
+    if ([sub isKindOfClass:[UILabel class]]) sub.backgroundColor = [UIColor clearColor];
+    [self clearLabelBackgrounds:sub];
+  }
 }
 
 - (void)viewDidLayoutSubviews {

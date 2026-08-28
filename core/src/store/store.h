@@ -50,6 +50,8 @@ class Store {
                                        size_t limit);
   // 新しい順に limit 件 (管理画面用)
   std::vector<EventRecord> recentEvents(size_t limit);
+  // 指定 type のイベント総数 (例: "press" = 累計触発回数)
+  size_t countEventsOfType(const std::string& type);
   // 指定 2 型のうち hlc 最大の 1 件 (緊急モードの状態復元用)。無ければ nullopt。
   std::optional<EventRecord> latestEventOfTypes(const std::string& t1, const std::string& t2);
   // 上限管理: 件数 > max_events または hlc物理部が cutoff_wall_ms より古いものを削除
@@ -66,6 +68,19 @@ class Store {
     int64_t next_retry_ms = 0;  // これ以降に再試行 (壁時計 ms)
     int64_t created_ms = 0;     // 投入時刻 (壁時計 ms; 24h 破棄の基準)
   };
+  // --- net_probe (疎通監視の時系列 — debug 画面用。7日保持) ---
+  struct NetProbe {
+    int64_t ts_ms = 0;       // 壁時計 ms
+    std::string target;      // ラベル (gateway / leader / <custom name>)
+    std::string host;        // 実際に叩いた host:port
+    bool ok = false;         // 到達 (TCP 接続 or RST) したか
+    int rtt_ms = -1;         // 往復 ms。-1 = タイムアウト (未到達)
+  };
+  void netProbePut(const NetProbe& p);
+  // since_ms 以降を古い順に limit 件 (折線グラフ用)
+  std::vector<NetProbe> netProbesSince(int64_t since_ms, size_t limit);
+  size_t netProbePrune(int64_t cutoff_ms);  // ts_ms < cutoff を物理削除
+
   int64_t tgQueuePut(const TgQueueItem& item);  // 採番した id を返す (失敗 0)
   // next_retry_ms <= now_ms のものを古い順に limit 件まで
   std::vector<TgQueueItem> tgQueueDue(int64_t now_ms, size_t limit);

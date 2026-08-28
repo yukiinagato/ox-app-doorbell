@@ -10,6 +10,7 @@
 ROOT      := $(abspath $(dir $(lastword $(MAKEFILE_LIST)))/..)
 SRC_DIR   := $(ROOT)/ios-legacy/Doorbell
 MINISIP   := $(ROOT)/ios-legacy/mini_sip
+QR        := $(ROOT)/ios-legacy/qr
 CORE_INC  := $(ROOT)/core/include
 LIB_DIR   := $(ROOT)/ios-legacy/lib
 TC_LIB    := $(ROOT)/tools/toolchain/ios5-armv7/lib
@@ -28,22 +29,24 @@ SYSROOT   := -isysroot $(SDK)
 
 # ObjC は MRC (libarclite が現代 Xcode に無く ARC 不可)。
 CFLAGS    := $(ARCH) $(MINVER) $(SYSROOT) -Wall -O2 -I$(MINISIP) -I$(CORE_INC)
-OBJCFLAGS := $(ARCH) $(MINVER) $(SYSROOT) -Wall -O2 -fno-objc-arc -I$(SRC_DIR) -I$(CORE_INC) -I$(MINISIP)
+OBJCFLAGS := $(ARCH) $(MINVER) $(SYSROOT) -Wall -O2 -fno-objc-arc -I$(SRC_DIR) -I$(CORE_INC) -I$(MINISIP) -I$(QR)
 
 FRAMEWORKS := -framework Foundation -framework UIKit -framework CoreGraphics \
               -framework QuartzCore -framework CFNetwork -framework AudioToolbox \
               -framework CoreAudio -framework AVFoundation -framework Security \
-              -framework CoreFoundation
+              -framework CoreFoundation -framework SystemConfiguration
 # 静的 C++ ランタイム (順序: c++ → c++abi → unwind → builtins)。libdoorbell_all.a が要求。
 RTLIBS := $(TC_LIB)/libc++.a $(TC_LIB)/libc++abi.a $(TC_LIB)/libunwind.a $(CLANG_RT)
 
 OBJC_SRCS := $(wildcard $(SRC_DIR)/*.m)
 C_SRCS    := $(MINISIP)/minisip.c $(MINISIP)/sip.c $(MINISIP)/sdp.c \
              $(MINISIP)/rtp.c $(MINISIP)/g711.c
+QR_SRCS   := $(QR)/qrcodegen.c
 
 OBJC_OBJS := $(patsubst $(SRC_DIR)/%.m,$(OBJ)/%.o,$(OBJC_SRCS))
 C_OBJS    := $(patsubst $(MINISIP)/%.c,$(OBJ)/minisip_%.o,$(C_SRCS))
-ALL_OBJS  := $(OBJC_OBJS) $(C_OBJS)
+QR_OBJS   := $(patsubst $(QR)/%.c,$(OBJ)/qr_%.o,$(QR_SRCS))
+ALL_OBJS  := $(OBJC_OBJS) $(C_OBJS) $(QR_OBJS)
 
 EXE := $(APP)/Doorbell
 
@@ -60,13 +63,19 @@ $(OBJ)/%.o: $(SRC_DIR)/%.m | $(OBJ)
 $(OBJ)/minisip_%.o: $(MINISIP)/%.c | $(OBJ)
 	$(CLANG) $(CFLAGS) -c $< -o $@
 
-$(EXE): $(ALL_OBJS)
+$(OBJ)/qr_%.o: $(QR)/%.c | $(OBJ)
+	$(CLANG) $(CFLAGS) -c $< -o $@
+
+# libdoorbell_all.a を依存に含める — core 再ビルド時に app を確実に再リンクする
+# (これが無いと .m 未変更時に core 変更が app に入らない)。
+$(EXE): $(ALL_OBJS) $(LIB_DIR)/libdoorbell_all.a
 	@mkdir -p $(APP)
 	$(CLANG) $(ARCH) $(MINVER) $(SYSROOT) -o $@ \
 	  $(ALL_OBJS) $(LIB_DIR)/libdoorbell_all.a $(RTLIBS) $(FRAMEWORKS)
 
 app: $(EXE)
 	@cp $(SRC_DIR)/Info.plist $(APP)/Info.plist
+	@cp $(SRC_DIR)/Resources/*.png $(APP)/ 2>/dev/null || true
 	@$(LDID) -S $(EXE)
 	@echo "ok: $(APP)"
 
