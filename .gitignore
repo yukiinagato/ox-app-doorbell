@@ -46,3 +46,6 @@ deploy/**/secrets*
 # python
 __pycache__/
 *.pyc
+
+# ローカル IDE/エージェント設定
+/.claude/

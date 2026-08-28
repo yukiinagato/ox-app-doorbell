@@ -1,30 +1,49 @@
-# app-doorbell — 多平台原生门铃系统
+# ox-app-doorbell
 
-自宅（複数棟・複数玄関、同一 LAN）向けドアホンシステム。旧型・低スペック端末を玄関子機として再利用する。
+**日本語** | [English](#english) | [中文](#中文)
 
-- **doorbell-core**（C++17, C ABI）: P2P 自愈 mesh（確定的リーダー選出 + HLC + LWW-CRDT 設定複製）、SIP(PJSIP)、MJPEG 配信、内蔵管理画面(CivetWeb)、HA MQTT ブリッジ、Telegram 通知
-- **プラットフォーム殻**: Windows (WPF/.NET FW 4.8, Win7 SP1+) / Android (Kotlin, minSdk 21 + legacy 19) / iOS (Swift, iOS 12 + legacy 9) / Web legacy (iOS 5 Safari 対応ページ)
-- **統合**: Home Assistant (MQTT Discovery + go2rtc + HomeKit Bridge)、Asterisk + ひかり電話（通話は電話網へ）、Telegram Bot
+自宅 (複数棟・複数玄関) 向けのサーバレス自愈ドアホンシステム。旧型の Windows タブレット
+(Toughpad)・Android・iOS 端末を玄関子機/室内機として再利用する。P2P メッシュが真実源で、
+Home Assistant / Asterisk が落ちても呼出・対講・通知は動き続ける。
 
-実行計画: `~/.claude/plans/windows-toughpad-android-ios-app-home-a-quizzical-plum.md`
+- 📖 ドキュメント: [docs/ja/overview.md](docs/ja/overview.md) (全体像) ·
+  [docs/ja/deployment.md](docs/ja/deployment.md) (導入手順) ·
+  [docs/ja/config-schema.md](docs/ja/config-schema.md) (設定リファレンス)
+- 🔧 ビルド: `cmake -S core -B build && cmake --build build && ./build/doorbell_tests`
+  — 各平台アプリは GitHub Actions が自動ビルド (Artifacts から取得可)
+- 🗣 文書は日本語 (`docs/ja/`, `*.ja.md`) が正、英語 (`docs/en/`) と中文 (`docs/zh/`) は同期訳。
+  コード内コメントは日本語で統一。アプリ UI は日/英/中対応 (`i18n/strings.yaml`)。
 
-## リポジトリ構成
+---
 
-```
-core/       C++17 共有コア（vendored: pjsip*, libjpeg-turbo*, civetweb, monocypher, sqlite, cJSON, doctest）
-win/        WPF 子機 + watchdog + InnoSetup
-android/    Kotlin 子機 (flavors: main/legacy)
-ios/        Swift 子機 (targets: iOS12/iOS9)
-webui/      管理 SPA + /panel/* legacy ページ（core に埋め込み）
-i18n/       strings.yaml（ja 主）→ tools/gen_i18n.py で各形式生成
-tools/      生成・ビルド・署名スクリプト
-deploy/     Asterisk / HA / provisioning 設定サンプル
-docs/       設置・運用・再署名 runbook
-```
-(* pjsip / libjpeg-turbo は Phase 1 で vendoring)
+## English
 
-## ビルド（core, ホスト開発用）
+A serverless, self-healing intercom/doorbell system for a multi-building home, built to
+reuse old low-spec Windows tablets (Toughpad), Android and iOS devices as door stations
+and indoor monitors. A P2P mesh is the source of truth — calls, intercom and
+notifications keep working even if Home Assistant or Asterisk goes down.
 
-```
-cmake -S core -B build && cmake --build build -j && ctest --test-dir build
-```
+- 📖 Docs: [docs/en/overview.md](docs/en/overview.md) (architecture) ·
+  [docs/en/deployment.md](docs/en/deployment.md) (rollout guide) ·
+  [docs/en/config-schema.md](docs/en/config-schema.md) (config reference)
+- 🔧 Build: `cmake -S core -B build && cmake --build build && ./build/doorbell_tests`
+  — platform apps are built by GitHub Actions (grab them from Artifacts)
+- 🗣 Japanese docs (`docs/ja/`, `*.ja.md`) are canonical; English (`docs/en/`) and
+  Chinese (`docs/zh/`) are kept in sync. Code comments are Japanese by convention.
+  The app UI itself is trilingual (`i18n/strings.yaml`).
+
+---
+
+## 中文
+
+面向多栋建筑住宅的无服务器自愈门铃/对讲系统，把旧的低配 Windows 平板（Toughpad）、
+Android、iOS 设备改造成门口机与室内机。P2P 网格是唯一真实源——即使 Home Assistant
+或 Asterisk 宕机，呼叫、对讲和通知照常工作。
+
+- 📖 文档：[docs/zh/overview.md](docs/zh/overview.md)（系统全景）·
+  [docs/zh/deployment.md](docs/zh/deployment.md)（部署清单）·
+  [docs/zh/config-schema.md](docs/zh/config-schema.md)（配置参考）
+- 🔧 构建：`cmake -S core -B build && cmake --build build && ./build/doorbell_tests`
+  ——各平台 app 由 GitHub Actions 自动构建（从 Artifacts 下载）
+- 🗣 文档以日文（`docs/ja/`、`*.ja.md`）为正本，英文（`docs/en/`）与中文（`docs/zh/`）
+  为同步译本。代码注释统一日文。应用 UI 本身支持日/英/中（`i18n/strings.yaml`）。
