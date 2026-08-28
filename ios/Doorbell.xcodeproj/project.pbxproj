@@ -1,0 +1,520 @@
+// !$*UTF8*$!
+// Doorbell iOS/tvOS (Phase 4) — 素の .xcodeproj (生成ツール不使用)。
+// ターゲット:
+//   Doorbell   (iOS 12+)  門口機/室内機両用 (boot.json の role で分岐)
+//   DoorbellTV (tvOS 15+) 監視端 (来鈴の全画面被せ + Siri Remote クイック返信)
+// core は run-script (scripts/build_core.sh) が CMake で現プラットフォーム向けに静的ビルド
+// して libdoorbell_all.a に束ねる — xcodebuild -project だけで完結する (CI 前提)。
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 55;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		FB0000000000000000000021 /* CoreBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000002 /* CoreBridge.swift */; };
+		FB0000000000000000000022 /* BootConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000003 /* BootConfig.swift */; };
+		FB0000000000000000000023 /* Texts.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000004 /* Texts.swift */; };
+		FB0000000000000000000024 /* ConfigUtil.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000005 /* ConfigUtil.swift */; };
+		FB0000000000000000000025 /* MjpegClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000006 /* MjpegClient.swift */; };
+		FB0000000000000000000026 /* SirenPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000007 /* SirenPlayer.swift */; };
+		FB0000000000000000000027 /* AdminPinViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000008 /* AdminPinViewController.swift */; };
+		FB0000000000000000000028 /* IncomingViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000009 /* IncomingViewController.swift */; };
+		FB0000000000000000000029 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA000000000000000000000A /* AppDelegate.swift */; };
+		FB000000000000000000002A /* MainViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA000000000000000000000B /* MainViewController.swift */; };
+		FB000000000000000000002B /* CameraFeeder.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA000000000000000000000C /* CameraFeeder.swift */; };
+		FB000000000000000000002C /* VideoEncoderVT.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA000000000000000000000D /* VideoEncoderVT.swift */; };
+		FB000000000000000000002D /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = FA000000000000000000000F /* LaunchScreen.storyboard */; };
+		FB000000000000000000002E /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = EA0000000000000000000001 /* Localizable.strings */; };
+		FB0000000000000000000041 /* CoreBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000002 /* CoreBridge.swift */; };
+		FB0000000000000000000042 /* BootConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000003 /* BootConfig.swift */; };
+		FB0000000000000000000043 /* Texts.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000004 /* Texts.swift */; };
+		FB0000000000000000000044 /* ConfigUtil.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000005 /* ConfigUtil.swift */; };
+		FB0000000000000000000045 /* MjpegClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000006 /* MjpegClient.swift */; };
+		FB0000000000000000000046 /* SirenPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000007 /* SirenPlayer.swift */; };
+		FB0000000000000000000047 /* AdminPinViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000008 /* AdminPinViewController.swift */; };
+		FB0000000000000000000048 /* IncomingViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000009 /* IncomingViewController.swift */; };
+		FB0000000000000000000049 /* TVAppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000010 /* TVAppDelegate.swift */; };
+		FB000000000000000000004A /* TVMainViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000011 /* TVMainViewController.swift */; };
+		FB000000000000000000004B /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = EA0000000000000000000001 /* Localizable.strings */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		FA0000000000000000000001 /* BridgingHeader.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = BridgingHeader.h; sourceTree = "<group>"; };
+		FA0000000000000000000002 /* CoreBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoreBridge.swift; sourceTree = "<group>"; };
+		FA0000000000000000000003 /* BootConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BootConfig.swift; sourceTree = "<group>"; };
+		FA0000000000000000000004 /* Texts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Texts.swift; sourceTree = "<group>"; };
+		FA0000000000000000000005 /* ConfigUtil.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigUtil.swift; sourceTree = "<group>"; };
+		FA0000000000000000000006 /* MjpegClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MjpegClient.swift; sourceTree = "<group>"; };
+		FA0000000000000000000007 /* SirenPlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SirenPlayer.swift; sourceTree = "<group>"; };
+		FA0000000000000000000008 /* AdminPinViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdminPinViewController.swift; sourceTree = "<group>"; };
+		FA0000000000000000000009 /* IncomingViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IncomingViewController.swift; sourceTree = "<group>"; };
+		FA000000000000000000000A /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		FA000000000000000000000B /* MainViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainViewController.swift; sourceTree = "<group>"; };
+		FA000000000000000000000C /* CameraFeeder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraFeeder.swift; sourceTree = "<group>"; };
+		FA000000000000000000000D /* VideoEncoderVT.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoEncoderVT.swift; sourceTree = "<group>"; };
+		FA000000000000000000000E /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		FA000000000000000000000F /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = "<group>"; };
+		FA0000000000000000000010 /* TVAppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TVAppDelegate.swift; sourceTree = "<group>"; };
+		FA0000000000000000000011 /* TVMainViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TVMainViewController.swift; sourceTree = "<group>"; };
+		FA0000000000000000000012 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		FA0000000000000000000013 /* ja */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = ja; path = ja.lproj/Localizable.strings; sourceTree = "<group>"; };
+		FA0000000000000000000014 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/Localizable.strings; sourceTree = "<group>"; };
+		FA0000000000000000000015 /* zh */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = zh; path = zh.lproj/Localizable.strings; sourceTree = "<group>"; };
+		FA0000000000000000000016 /* Doorbell.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Doorbell.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		FA0000000000000000000017 /* DoorbellTV.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DoorbellTV.app; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		DC0000000000000000000001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		DC0000000000000000000002 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		AB0000000000000000000001 = {
+			isa = PBXGroup;
+			children = (
+				AB0000000000000000000002 /* Doorbell */,
+				AB0000000000000000000003 /* DoorbellTV */,
+				AB0000000000000000000004 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		AB0000000000000000000002 /* Doorbell */ = {
+			isa = PBXGroup;
+			children = (
+				FA0000000000000000000001 /* BridgingHeader.h */,
+				FA000000000000000000000A /* AppDelegate.swift */,
+				FA000000000000000000000B /* MainViewController.swift */,
+				FA0000000000000000000009 /* IncomingViewController.swift */,
+				FA0000000000000000000008 /* AdminPinViewController.swift */,
+				FA0000000000000000000002 /* CoreBridge.swift */,
+				FA0000000000000000000003 /* BootConfig.swift */,
+				FA0000000000000000000004 /* Texts.swift */,
+				FA0000000000000000000005 /* ConfigUtil.swift */,
+				FA0000000000000000000006 /* MjpegClient.swift */,
+				FA0000000000000000000007 /* SirenPlayer.swift */,
+				FA000000000000000000000C /* CameraFeeder.swift */,
+				FA000000000000000000000D /* VideoEncoderVT.swift */,
+				EA0000000000000000000001 /* Localizable.strings */,
+				FA000000000000000000000F /* LaunchScreen.storyboard */,
+				FA000000000000000000000E /* Info.plist */,
+			);
+			path = Doorbell;
+			sourceTree = "<group>";
+		};
+		AB0000000000000000000003 /* DoorbellTV */ = {
+			isa = PBXGroup;
+			children = (
+				FA0000000000000000000010 /* TVAppDelegate.swift */,
+				FA0000000000000000000011 /* TVMainViewController.swift */,
+				FA0000000000000000000012 /* Info.plist */,
+			);
+			path = DoorbellTV;
+			sourceTree = "<group>";
+		};
+		AB0000000000000000000004 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				FA0000000000000000000016 /* Doorbell.app */,
+				FA0000000000000000000017 /* DoorbellTV.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		CA0000000000000000000001 /* Doorbell */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = EC0000000000000000000002 /* Build configuration list for PBXNativeTarget "Doorbell" */;
+			buildPhases = (
+				DD0000000000000000000001 /* Build doorbell-core (CMake) */,
+				DA0000000000000000000001 /* Sources */,
+				DC0000000000000000000001 /* Frameworks */,
+				DB0000000000000000000001 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = Doorbell;
+			productName = Doorbell;
+			productReference = FA0000000000000000000016 /* Doorbell.app */;
+			productType = "com.apple.product-type.application";
+		};
+		CA0000000000000000000002 /* DoorbellTV */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = EC0000000000000000000003 /* Build configuration list for PBXNativeTarget "DoorbellTV" */;
+			buildPhases = (
+				DD0000000000000000000002 /* Build doorbell-core (CMake) */,
+				DA0000000000000000000002 /* Sources */,
+				DC0000000000000000000002 /* Frameworks */,
+				DB0000000000000000000002 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = DoorbellTV;
+			productName = DoorbellTV;
+			productReference = FA0000000000000000000017 /* DoorbellTV.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		CB0000000000000000000001 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastUpgradeCheck = 1500;
+				TargetAttributes = {
+					CA0000000000000000000001 = {
+						CreatedOnToolsVersion = 15.0;
+					};
+					CA0000000000000000000002 = {
+						CreatedOnToolsVersion = 15.0;
+					};
+				};
+			};
+			buildConfigurationList = EC0000000000000000000001 /* Build configuration list for PBXProject "Doorbell" */;
+			compatibilityVersion = "Xcode 13.0";
+			developmentRegion = ja;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				ja,
+				en,
+				zh,
+				Base,
+			);
+			mainGroup = AB0000000000000000000001;
+			productRefGroup = AB0000000000000000000004 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				CA0000000000000000000001 /* Doorbell */,
+				CA0000000000000000000002 /* DoorbellTV */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		DB0000000000000000000001 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				FB000000000000000000002D /* LaunchScreen.storyboard in Resources */,
+				FB000000000000000000002E /* Localizable.strings in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		DB0000000000000000000002 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				FB000000000000000000004B /* Localizable.strings in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		DD0000000000000000000001 /* Build doorbell-core (CMake) */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Build doorbell-core (CMake)";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "exec \"$SRCROOT/scripts/build_core.sh\"\n";
+		};
+		DD0000000000000000000002 /* Build doorbell-core (CMake) */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Build doorbell-core (CMake)";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "exec \"$SRCROOT/scripts/build_core.sh\"\n";
+		};
+/* End PBXShellScriptBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		DA0000000000000000000001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				FB0000000000000000000029 /* AppDelegate.swift in Sources */,
+				FB000000000000000000002A /* MainViewController.swift in Sources */,
+				FB0000000000000000000028 /* IncomingViewController.swift in Sources */,
+				FB0000000000000000000027 /* AdminPinViewController.swift in Sources */,
+				FB0000000000000000000021 /* CoreBridge.swift in Sources */,
+				FB0000000000000000000022 /* BootConfig.swift in Sources */,
+				FB0000000000000000000023 /* Texts.swift in Sources */,
+				FB0000000000000000000024 /* ConfigUtil.swift in Sources */,
+				FB0000000000000000000025 /* MjpegClient.swift in Sources */,
+				FB0000000000000000000026 /* SirenPlayer.swift in Sources */,
+				FB000000000000000000002B /* CameraFeeder.swift in Sources */,
+				FB000000000000000000002C /* VideoEncoderVT.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		DA0000000000000000000002 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				FB0000000000000000000049 /* TVAppDelegate.swift in Sources */,
+				FB000000000000000000004A /* TVMainViewController.swift in Sources */,
+				FB0000000000000000000048 /* IncomingViewController.swift in Sources */,
+				FB0000000000000000000047 /* AdminPinViewController.swift in Sources */,
+				FB0000000000000000000041 /* CoreBridge.swift in Sources */,
+				FB0000000000000000000042 /* BootConfig.swift in Sources */,
+				FB0000000000000000000043 /* Texts.swift in Sources */,
+				FB0000000000000000000044 /* ConfigUtil.swift in Sources */,
+				FB0000000000000000000045 /* MjpegClient.swift in Sources */,
+				FB0000000000000000000046 /* SirenPlayer.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXVariantGroup section */
+		EA0000000000000000000001 /* Localizable.strings */ = {
+			isa = PBXVariantGroup;
+			children = (
+				FA0000000000000000000013 /* ja */,
+				FA0000000000000000000014 /* en */,
+				FA0000000000000000000015 /* zh */,
+			);
+			name = Localizable.strings;
+			sourceTree = "<group>";
+		};
+/* End PBXVariantGroup section */
+
+/* Begin XCBuildConfiguration section */
+		EB0000000000000000000101 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = x86_64;
+				"EXCLUDED_ARCHS[sdk=appletvsimulator*]" = x86_64;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		EB0000000000000000000102 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = x86_64;
+				"EXCLUDED_ARCHS[sdk=appletvsimulator*]" = x86_64;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		EB0000000000000000000201 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				HEADER_SEARCH_PATHS = "$(SRCROOT)/../core/include";
+				INFOPLIST_FILE = Doorbell/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 12.0;
+				LIBRARY_SEARCH_PATHS = "$(SRCROOT)/build/core/$(PLATFORM_NAME)";
+				OTHER_LDFLAGS = (
+					"-ldoorbell_all",
+					"-lc++",
+					"-framework", AVFoundation,
+					"-framework", AudioToolbox,
+					"-framework", CoreAudio,
+					"-framework", CoreMedia,
+					"-framework", CoreVideo,
+					"-framework", VideoToolbox,
+					"-framework", CFNetwork,
+					"-framework", Security,
+					"-framework", UIKit,
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = jp.keihan.doorbell;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_OBJC_BRIDGING_HEADER = Doorbell/BridgingHeader.h;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		EB0000000000000000000202 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				HEADER_SEARCH_PATHS = "$(SRCROOT)/../core/include";
+				INFOPLIST_FILE = Doorbell/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 12.0;
+				LIBRARY_SEARCH_PATHS = "$(SRCROOT)/build/core/$(PLATFORM_NAME)";
+				OTHER_LDFLAGS = (
+					"-ldoorbell_all",
+					"-lc++",
+					"-framework", AVFoundation,
+					"-framework", AudioToolbox,
+					"-framework", CoreAudio,
+					"-framework", CoreMedia,
+					"-framework", CoreVideo,
+					"-framework", VideoToolbox,
+					"-framework", CFNetwork,
+					"-framework", Security,
+					"-framework", UIKit,
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = jp.keihan.doorbell;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_OBJC_BRIDGING_HEADER = Doorbell/BridgingHeader.h;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		EB0000000000000000000301 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				HEADER_SEARCH_PATHS = "$(SRCROOT)/../core/include";
+				INFOPLIST_FILE = DoorbellTV/Info.plist;
+				LIBRARY_SEARCH_PATHS = "$(SRCROOT)/build/core/$(PLATFORM_NAME)";
+				OTHER_LDFLAGS = (
+					"-ldoorbell_all",
+					"-lc++",
+					"-framework", AVFoundation,
+					"-framework", AudioToolbox,
+					"-framework", CoreMedia,
+					"-framework", CoreVideo,
+					"-framework", Security,
+					"-framework", UIKit,
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = jp.keihan.doorbell.tv;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = appletvos;
+				SWIFT_OBJC_BRIDGING_HEADER = Doorbell/BridgingHeader.h;
+				TARGETED_DEVICE_FAMILY = 3;
+				TVOS_DEPLOYMENT_TARGET = 15.0;
+			};
+			name = Debug;
+		};
+		EB0000000000000000000302 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				HEADER_SEARCH_PATHS = "$(SRCROOT)/../core/include";
+				INFOPLIST_FILE = DoorbellTV/Info.plist;
+				LIBRARY_SEARCH_PATHS = "$(SRCROOT)/build/core/$(PLATFORM_NAME)";
+				OTHER_LDFLAGS = (
+					"-ldoorbell_all",
+					"-lc++",
+					"-framework", AVFoundation,
+					"-framework", AudioToolbox,
+					"-framework", CoreMedia,
+					"-framework", CoreVideo,
+					"-framework", Security,
+					"-framework", UIKit,
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = jp.keihan.doorbell.tv;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = appletvos;
+				SWIFT_OBJC_BRIDGING_HEADER = Doorbell/BridgingHeader.h;
+				TARGETED_DEVICE_FAMILY = 3;
+				TVOS_DEPLOYMENT_TARGET = 15.0;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		EC0000000000000000000001 /* Build configuration list for PBXProject "Doorbell" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				EB0000000000000000000101 /* Debug */,
+				EB0000000000000000000102 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		EC0000000000000000000002 /* Build configuration list for PBXNativeTarget "Doorbell" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				EB0000000000000000000201 /* Debug */,
+				EB0000000000000000000202 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		EC0000000000000000000003 /* Build configuration list for PBXNativeTarget "DoorbellTV" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				EB0000000000000000000301 /* Debug */,
+				EB0000000000000000000302 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = CB0000000000000000000001 /* Project object */;
+}

@@ -41,9 +41,9 @@
 
 | 機能 | Windows(WPF) | Android | iOS | Web |
 |---|---|---|---|---|
-| 門口機フル | ✅ | ✅ | Phase 4 | door.html (音声なし) |
-| 室内対講 | ✅ | ✅ | Phase 4 | call.html (現代ブラウザ) |
-| TV 監視 | — | ✅(TV) | AppleTV=HomeKit / tvOS app=Phase4 | — |
+| 門口機フル | ✅ | ✅ | ✅ | door.html (音声なし) |
+| 室内対講 | ✅ | ✅ | ✅ | call.html (現代ブラウザ) |
+| TV 監視 | — | ✅(TV) | AppleTV=HomeKit / tvOS app=✅(映像のみ — SIP 監聴は TODO) | — |
 | kiosk 硬化 | シェル置換+守衛+テンキー | Device Owner+守衛 | 監督 SAM | — |
 | 錠前防止 | SetThreadExecutionState | keyguard 無効+STAY_ON | isIdleTimerDisabled | — |
 | 旧機下限 | Win7 SP1 | 5.0 (4.4 legacy) | 12 (9 legacy) | iOS5 Safari |
@@ -54,6 +54,9 @@
 - ホスト実機模擬: `./build/doorbell_host --help` (Mac/Linux で子機を起こす)
 - 各平台アプリは GitHub Actions (`.github/workflows/build.yml`) で CI ビルド →
   Windows/Android 成果物を Artifacts からダウンロード可。
+- iOS/tvOS: `xcodebuild -project ios/Doorbell.xcodeproj -scheme Doorbell|DoorbellTV`
+  (core は run-script が CMake で自動ビルド。SIP は先に `tools/build_pjsip_ios.sh`。
+  署名/kiosk/配布は deploy/provision/ios/provision.md)
 - 開発用スタック: `deploy/dev/{asterisk,mosquitto}/docker-compose.yml`
 
 ## 設定 = 単一の CRDT

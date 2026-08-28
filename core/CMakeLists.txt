@@ -16,12 +16,16 @@ option(DB_BUILD_TESTS "テストとホスト開発ランナーをビルドする
 # ON かつプリビルドが存在する時だけ実装 (sipctl.cpp) をリンクする:
 #   - ホスト (macOS/Linux): third_party/pjsip/host   (tools/build_pjsip_host.sh)
 #   - Android:             third_party/pjsip/android/<ABI> (tools/build_pjsip_android.sh)
-# それ以外 (mingw クロス等・プリビルド無し) は常に未登録のスタブ (sipctl_stub.cpp)。
+#   - iOS:                 third_party/pjsip/ios/<platform> (tools/build_pjsip_ios.sh —
+#                          platform は iphoneos / iphonesimulator)
+# それ以外 (mingw クロス・tvOS・プリビルド無し) は常に未登録のスタブ (sipctl_stub.cpp)。
 option(DB_WITH_PJSIP "PJSIP 統合 (sipctl 実装をリンクする)" ON)
 set(DB_PJSIP_OK OFF)
 set(PJSIP_ROOT "")
 if(DB_WITH_PJSIP AND ANDROID)
   set(PJSIP_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/third_party/pjsip/android/${ANDROID_ABI})
+elseif(DB_WITH_PJSIP AND CMAKE_SYSTEM_NAME STREQUAL "iOS")
+  set(PJSIP_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/third_party/pjsip/ios/${DB_APPLE_PLATFORM})
 elseif(DB_WITH_PJSIP AND NOT WIN32 AND NOT CMAKE_CROSSCOMPILING)
   set(PJSIP_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/third_party/pjsip/host)
 endif()
@@ -121,7 +125,14 @@ if(DB_PJSIP_OK)
     endif()
   endforeach()
   target_link_libraries(doorbell_core PUBLIC ${PJ_LIBS})
-  if(APPLE)
+  if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
+    # 音声バックエンドは CoreAudio (AudioUnit)。VoiceProcessingIO (AEC 内蔵) は
+    # coreaudio_dev が実行時に検出して使う。静的 lib なのでここは使用要求の記録 —
+    # 実リンクは Xcode 側 (OTHER_LDFLAGS) でも同じ枠組を張る。
+    target_link_libraries(doorbell_core PUBLIC
+      "-framework CoreAudio" "-framework AudioToolbox" "-framework AVFoundation"
+      "-framework CFNetwork" "-framework Foundation")
+  elseif(APPLE)
     target_link_libraries(doorbell_core PUBLIC
       "-framework CoreAudio" "-framework CoreServices" "-framework AudioUnit"
       "-framework AudioToolbox" "-framework Foundation" "-framework AppKit")
@@ -145,11 +156,14 @@ endif()
 # (ホストでのエクスポート面検証用)。DOORBELL_DLL で db_* に dllexport が付く。
 # capi は doorbell_core (静的) にも素のまま入っているが、ここで dllexport 付きの
 # 定義が先に立つためアーカイブ側は引かれない。
-add_library(doorbell SHARED src/capi/doorbell_capi.cpp)
-target_link_libraries(doorbell PRIVATE doorbell_core)
-target_compile_definitions(doorbell PRIVATE DOORBELL_DLL)
-if(WIN32)
-  set_target_properties(doorbell PROPERTIES PREFIX "")  # libdoorbell.dll → doorbell.dll
+if(NOT CMAKE_SYSTEM_NAME MATCHES "^(iOS|tvOS)$")
+  # iOS/tvOS の殻 (Swift) は静的 doorbell_core を直リンクする — 共有 lib は作らない
+  add_library(doorbell SHARED src/capi/doorbell_capi.cpp)
+  target_link_libraries(doorbell PRIVATE doorbell_core)
+  target_compile_definitions(doorbell PRIVATE DOORBELL_DLL)
+  if(WIN32)
+    set_target_properties(doorbell PROPERTIES PREFIX "")  # libdoorbell.dll → doorbell.dll
+  endif()
 endif()
 
 # ---------- ホスト開発ランナー ----------

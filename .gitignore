@@ -34,6 +34,9 @@ android/local.properties
 android/**/build/
 android/**/.cxx/
 
+# ios (run-script が CMake で生成する core 静的 lib 置き場)
+ios/build/
+
 # secrets — never commit
 *.keystore
 *.p12
