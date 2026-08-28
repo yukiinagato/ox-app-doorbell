@@ -1,7 +1,10 @@
 # build outputs
 /build/
 /build-*/
+/build-ios5/
 /core/build/
+# iOS5/armv7 (旧 iPad) core クロスビルドの成果物置き場 (build_core_ios5.sh)
+/ios-legacy/lib/
 # pjsip は fetch スクリプトで取得 (SHA256 ピンのみ追跡)
 /core/third_party/pjsip/
 cmake-build-*/
