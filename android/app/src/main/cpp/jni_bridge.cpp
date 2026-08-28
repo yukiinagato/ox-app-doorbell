@@ -251,6 +251,27 @@ Java_jp_keihan_doorbell_DoorbellCore_nativeOnCameraFrame(JNIEnv* env, jobject, j
 }
 
 extern "C" JNIEXPORT void JNICALL
+Java_jp_keihan_doorbell_DoorbellCore_nativeOnEncodedFrame(JNIEnv* env, jobject, jlong h,
+                                                          jbyteArray annexb, jboolean is_key,
+                                                          jlong ts_ms) {
+  Bridge* b = fromHandle(h);
+  if (!b || !b->core || !annexb) return;
+  const jsize len = env->GetArrayLength(annexb);
+  if (len <= 0) return;
+  jbyte* p = env->GetByteArrayElements(annexb, nullptr);
+  if (!p) return;
+  db_core_on_encoded_frame(b->core, reinterpret_cast<const uint8_t*>(p),
+                           static_cast<size_t>(len), is_key ? 1 : 0, ts_ms);
+  env->ReleaseByteArrayElements(annexb, p, JNI_ABORT);  // 読み取りのみ — 書き戻し不要
+}
+
+extern "C" JNIEXPORT jboolean JNICALL
+Java_jp_keihan_doorbell_DoorbellCore_nativeVideoEncoderWanted(JNIEnv*, jobject, jlong h) {
+  Bridge* b = fromHandle(h);
+  return (b && b->core && db_core_video_encoder_wanted(b->core)) ? JNI_TRUE : JNI_FALSE;
+}
+
+extern "C" JNIEXPORT void JNICALL
 Java_jp_keihan_doorbell_DoorbellCore_nativeSipCall(JNIEnv* env, jobject, jlong h, jstring target,
                                                    jstring mode) {
   Bridge* b = fromHandle(h);

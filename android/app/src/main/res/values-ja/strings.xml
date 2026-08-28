@@ -26,7 +26,11 @@
     <string name="admin_bot_token">Bot token (書込のみ・表示されません)</string>
     <string name="admin_building_assign">所属建物</string>
     <string name="admin_buildings">建物</string>
+    <string name="admin_cam_codec">映像コーデック</string>
     <string name="admin_cam_fps">フレームレート (fps)</string>
+    <string name="admin_cam_h264_bitrate">H.264 ビットレート (kbps)</string>
+    <string name="admin_cam_h264_fps">H.264 フレームレート (fps)</string>
+    <string name="admin_cam_h264_resolution">H.264 解像度</string>
     <string name="admin_cam_hint">カメラ指定 (device hint)</string>
     <string name="admin_cam_quality">JPEG 品質</string>
     <string name="admin_cam_resolution">解像度</string>
@@ -34,6 +38,7 @@
     <string name="admin_cancel">キャンセル</string>
     <string name="admin_caps_override">能力上書き (JSON)</string>
     <string name="admin_clock_warn">時刻未同期</string>
+    <string name="admin_codec_auto">自動 (対応機なら H.264)</string>
     <string name="admin_confirm_delete">%1$s を削除しますか?</string>
     <string name="admin_dashboard">ダッシュボード</string>
     <string name="admin_delete">削除</string>

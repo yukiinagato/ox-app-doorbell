@@ -116,6 +116,23 @@ DB_API const char* db_core_version(void);
  * 解除時の PIN 検証 (kiosk PIN 等) は殻の責務 — core は検証しない。 */
 DB_API void db_core_emergency(db_core* c, int active);
 
+/* ---- H.264 流暢档 (Phase 6a) ----
+ * コアは符号化済みデータを fMP4 に箱詰めして /stream.mp4 で配るだけ —
+ * エンコードは殻/平台層の HW エンコーダ (Android MediaCodec / iOS VideoToolbox。
+ * Windows のみ core 内の Media Foundation が camera_win と同居)。 */
+
+/* 符号化フレーム投入 (任意スレッド可)。annexb: 1 アクセスユニット分の H.264 AnnexB
+ * (start code 区切り。SPS/PPS 同梱可 — コアが抽出する。MediaCodec の CODEC_CONFIG
+ * 出力だけを渡してもよい)。is_keyframe: IDR を含むなら 1。ts_ms: エンコーダの提示時刻。
+ * config camera.codec が mjpeg の間は無視される。 */
+DB_API void db_core_on_encoded_frame(db_core* c, const uint8_t* annexb, size_t len,
+                                     int is_keyframe, int64_t ts_ms);
+
+/* 殻がエンコーダを回すべきか (省電力: 購読者ゼロならエンコードしない)。
+ * config camera.codec が h264/auto かつ /stream.mp4 の購読者がいる時 1、それ以外 0。
+ * 殻は 5 秒毎程度にこれを確認してエンコーダの起動/停止を切り替える。 */
+DB_API int db_core_video_encoder_wanted(db_core* c);
+
 #ifdef __cplusplus
 }
 #endif

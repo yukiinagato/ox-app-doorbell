@@ -1,15 +1,27 @@
 # go2rtc 設定 (HA の go2rtc アドオン / 内蔵 go2rtc に取り込む)
-# 門口機の MJPEG を HA 主機側で H.264 へ転码する — 旧端末側は JPEG を出すだけ。
+#
+# 子機の設定 camera.codec によってソースの書き方が変わる (Phase 6a):
+#   - codec = h264 / auto (対応機):  /stream.mp4 (fMP4, 子機側 HW エンコード済み)
+#       → `#video=copy` でそのまま通す — **HA 側の転码は不要** (CPU ほぼゼロ)。
+#   - codec = mjpeg (旧機・既定回落): /stream.mjpeg を HA 主機側で H.264 へ転码する
+#       — 旧端末側は JPEG を出すだけ。
 # `#hardware` は環境に合わせて: Intel = そのまま / RPi = #hardware=v4l2m2m / 無ければ外す (soft)
 
 streams:
+  # ---- codec=h264 の門口機 (転码不要 — copy で箱の詰め替えのみ) ----
   genkan_front:
-    - ffmpeg:http://10.0.1.11:47180/stream.mjpeg#video=h264#hardware
+    - ffmpeg:http://10.0.1.11:47180/stream.mp4#video=copy
+
+  # ---- codec=mjpeg の門口機 (従来どおり HA 側で転码) ----
   genkan_annex:
     - ffmpeg:http://10.0.1.12:47180/stream.mjpeg#video=h264#hardware
 
 # メモ:
-# - 門口機側で認証を有効にした場合は URL に ?k=<panel_token> を付ける。
-# - go2rtc は消費者がいる時だけ ffmpeg を起動する。HomeKit 通知の初動を速くしたい
-#   主玄関は「常駐転码」を推奨 (HA 側の camera を preload する / go2rtc の consumer を
-#   常設する等、環境に合わせて)。
+# - /stream.mp4 は購読者が付いてから子機のエンコーダが起動する (最大 ~5 秒 + 初期化)。
+#   go2rtc は初回チャンク待ちに寛容だが、HomeKit 通知の初動を最速にしたい主玄関は
+#   従来どおり「常駐消費」を推奨 (consumer を常設すれば子機側エンコーダも回り続ける)。
+# - codec=auto の子機で硬編が無い場合 /stream.mp4 は 503 になる — その子機は
+#   /stream.mjpeg のソース行 (genkan_annex の形) に書き換えること。
+# - 門口機側で認証を有効にした場合は URL に ?k=<panel_token> を付ける
+#   (/stream.mp4 も /stream.mjpeg と同じ扱い)。
+# - go2rtc は消費者がいる時だけ ffmpeg を起動する。詳細は同ディレクトリの README.md。

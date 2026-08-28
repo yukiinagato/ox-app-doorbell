@@ -16,15 +16,24 @@ class CameraFeeder(private val core: DoorbellCore) {
     private var width = 0
     private var height = 0
 
-    /** 前面カメラ (無ければ背面) を開いてプレビュー開始。失敗時 false。 */
-    fun start(holder: SurfaceHolder): Boolean {
+    /** H.264 硬編への分岐先 (Phase 6a)。稼働中のみ feed される (null = 分岐なし)。
+     *  MainActivity が wanted ポーリングで start/stop を切り替える。 */
+    @Volatile
+    var encoder: VideoEncoder? = null
+
+    /**
+     * 前面カメラ (無ければ背面) を開いてプレビュー開始。失敗時 false。
+     * targetW/H: プレビュー解像度の目標。codec=h264/auto では h264_resolution を渡す
+     * (MJPEG 側は core の frame_bus が max_width へ縮小するので大きくても無害)。
+     */
+    fun start(holder: SurfaceHolder, targetW: Int = 640, targetH: Int = 480): Boolean {
         stop()
         val id = pickCameraId()
         if (id < 0) return false
         return try {
             val cam = Camera.open(id)
             val params = cam.parameters
-            val size = pickPreviewSize(params)
+            val size = pickPreviewSize(params, targetW, targetH)
             params.setPreviewSize(size.width, size.height)
             params.previewFormat = ImageFormat.NV21
             // 门口機は静止画質より安定性 — fps 固定はせず端末既定に任せる
@@ -36,8 +45,11 @@ class CameraFeeder(private val core: DoorbellCore) {
             repeat(3) { cam.addCallbackBuffer(ByteArray(bufSize)) }
             cam.setPreviewCallbackWithBuffer { data, c ->
                 if (data != null) {
+                    val now = System.currentTimeMillis()
                     // NV21: y ストライド = width (Camera1 のバッファは詰めて格納される)
-                    core.onCameraFrame(data, 0, width, height, width, System.currentTimeMillis())
+                    core.onCameraFrame(data, 0, width, height, width, now)
+                    // H.264 硬編への分岐 (稼働中のみ — encoder 側で fps 間引き)
+                    encoder?.feed(data, width, height, now)
                     c.addCallbackBuffer(data)  // バッファ返却 (使い回し)
                 }
             }
@@ -72,9 +84,9 @@ class CameraFeeder(private val core: DoorbellCore) {
         return fallback
     }
 
-    /** 640x480 に最も近いプレビューサイズを選ぶ (旧端末の帯域・CPU を考慮)。 */
-    private fun pickPreviewSize(params: Camera.Parameters): Camera.Size {
-        val target = 640 * 480
+    /** 目標 (既定 640x480) に最も近いプレビューサイズを選ぶ (旧端末の帯域・CPU を考慮)。 */
+    private fun pickPreviewSize(params: Camera.Parameters, tw: Int, th: Int): Camera.Size {
+        val target = tw * th
         return params.supportedPreviewSizes.minByOrNull { abs(it.width * it.height - target) }
             ?: params.previewSize
     }

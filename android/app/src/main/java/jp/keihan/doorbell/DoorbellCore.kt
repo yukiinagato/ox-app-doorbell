@@ -66,6 +66,15 @@ class DoorbellCore {
         if (handle != 0L) nativeOnCameraFrame(handle, data, format, width, height, stride, tsMs)
     }
 
+    /** 符号化済み H.264 (AnnexB) push — VideoEncoder から。core が fMP4 化して /stream.mp4 へ。 */
+    fun onEncodedFrame(annexb: ByteArray, isKeyframe: Boolean, tsMs: Long) {
+        if (handle != 0L) nativeOnEncodedFrame(handle, annexb, isKeyframe, tsMs)
+    }
+
+    /** エンコーダを回すべきか (codec=h264/auto かつ /stream.mp4 購読者あり)。5 秒毎に確認する。 */
+    fun videoEncoderWanted(): Boolean =
+        handle != 0L && nativeVideoEncoderWanted(handle)
+
     /**
      * SIP 発呼。target: 内線番号 or "sip:host:port" 完全 URI (Asterisk 非経由の直接呼)。
      * mode: "" = 通常 (双方向) / "monitor" = 一方向監聴 (門口マイクを聞くだけ)。
@@ -126,6 +135,9 @@ class DoorbellCore {
     private external fun nativeConfigJson(handle: Long): String?
     private external fun nativeOnCameraFrame(handle: Long, data: ByteArray, format: Int,
                                              width: Int, height: Int, stride: Int, tsMs: Long)
+    private external fun nativeOnEncodedFrame(handle: Long, annexb: ByteArray,
+                                              isKeyframe: Boolean, tsMs: Long)
+    private external fun nativeVideoEncoderWanted(handle: Long): Boolean
     private external fun nativeSipCall(handle: Long, target: String, mode: String)
     private external fun nativeSipHangup(handle: Long)
     private external fun nativeQuickReply(handle: Long, replyId: String, door: String)

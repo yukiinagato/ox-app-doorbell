@@ -92,8 +92,9 @@ add_custom_command(OUTPUT ${WEBUI_GEN}
 # ---------- doorbell_core ----------
 file(GLOB_RECURSE DB_CORE_SRC CONFIGURE_DEPENDS src/*.cpp)
 if(NOT WIN32)
-  # Windows 専用: Media Foundation カメラ採集
+  # Windows 専用: Media Foundation カメラ採集 + H.264 エンコード
   list(REMOVE_ITEM DB_CORE_SRC ${CMAKE_CURRENT_SOURCE_DIR}/src/media/camera_win.cpp)
+  list(REMOVE_ITEM DB_CORE_SRC ${CMAKE_CURRENT_SOURCE_DIR}/src/media/encoder_win.cpp)
 endif()
 # sipctl: 実装かスタブのどちらか一方だけをリンク
 if(DB_PJSIP_OK)
@@ -131,7 +132,9 @@ if(DB_PJSIP_OK)
 endif()
 if(WIN32)
   # camera_win: Media Foundation SourceReader + COM
-  target_link_libraries(doorbell_core PUBLIC mfplat mf mfreadwrite mfuuid ole32)
+  # encoder_win: MFTEnumEx/encoder MFT (mfplat) + ICodecAPI (strmiids) + VARIANT (oleaut32)
+  target_link_libraries(doorbell_core PUBLIC mfplat mf mfreadwrite mfuuid ole32
+    oleaut32 strmiids)
 endif()
 if(NOT MSVC)
   target_compile_options(doorbell_core PRIVATE -Wall -Wextra -Wno-unused-parameter)

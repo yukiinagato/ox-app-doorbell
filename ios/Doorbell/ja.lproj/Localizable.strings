@@ -23,7 +23,11 @@
 "admin.bot_token" = "Bot token (書込のみ・表示されません)";
 "admin.building_assign" = "所属建物";
 "admin.buildings" = "建物";
+"admin.cam_codec" = "映像コーデック";
 "admin.cam_fps" = "フレームレート (fps)";
+"admin.cam_h264_bitrate" = "H.264 ビットレート (kbps)";
+"admin.cam_h264_fps" = "H.264 フレームレート (fps)";
+"admin.cam_h264_resolution" = "H.264 解像度";
 "admin.cam_hint" = "カメラ指定 (device hint)";
 "admin.cam_quality" = "JPEG 品質";
 "admin.cam_resolution" = "解像度";
@@ -31,6 +35,7 @@
 "admin.cancel" = "キャンセル";
 "admin.caps_override" = "能力上書き (JSON)";
 "admin.clock_warn" = "時刻未同期";
+"admin.codec_auto" = "自動 (対応機なら H.264)";
 "admin.confirm_delete" = "%@ を削除しますか?";
 "admin.dashboard" = "ダッシュボード";
 "admin.delete" = "削除";

@@ -105,7 +105,12 @@ var AdminLogic = (function () {
     e.push({ key: base + ".local.camera",
              value: { device_hint: f.cam_hint || "", mjpeg_fps: num(f.cam_fps, 8),
                       mjpeg_quality: num(f.cam_quality, 60),
-                      resolution: f.cam_resolution || "640x480" } });
+                      resolution: f.cam_resolution || "640x480",
+                      // H.264 流暢档 (Phase 6a — docs/config-schema.md camera.codec 節)
+                      codec: f.cam_codec || "auto",
+                      h264_resolution: f.cam_h264_resolution || "1280x720",
+                      h264_fps: num(f.cam_h264_fps, 25),
+                      h264_bitrate_kbps: num(f.cam_h264_bitrate, 1500) } });
     e.push({ key: base + ".local.motion",
              value: { enabled: !!f.motion_enabled, sensitivity: num(f.motion_sensitivity, 40),
                       min_interval_s: num(f.motion_interval, 30) } });
@@ -494,7 +499,9 @@ if (typeof document !== "undefined") (function () {
       d[MOCK_ID1] = { name: "front-panel", role: "door_station", door: "d_front",
                       local: { ui_lang: "ja",
                                camera: { device_hint: "", mjpeg_fps: 8, mjpeg_quality: 60,
-                                         resolution: "640x480" },
+                                         resolution: "640x480", codec: "auto",
+                                         h264_resolution: "1280x720", h264_fps: 25,
+                                         h264_bitrate_kbps: 1500 },
                                theme: { bg_color: "#1c1030" },  // 端末別: 色だけ上書き
                                motion: { enabled: true, sensitivity: 40, min_interval_s: 30 } } };
       d[MOCK_ID2] = { name: "living", role: "indoor_panel" };
@@ -994,7 +1001,9 @@ if (typeof document !== "undefined") (function () {
     $("#bridgeInfo").textContent =
       "MQTT: " + (br.mqtt || "-") + " / Telegram: " + (br.telegram || "-") +
       (j.sip ? " / SIP: " + j.sip.state : "");
-    // ライブ映像 (src は据え置き — 差し替えるとストリームが切れる)
+    // ライブ映像 (src は据え置き — 差し替えるとストリームが切れる)。
+    // stream_mp4 を持つ門口機は MSE (fMP4 — Phase 6a) で滑らか表示、
+    // 未対応/失敗/503 (auto で硬編なし) は従来の MJPEG <img> へ自動回落。
     var grid = $("#liveGrid"), want = {};
     for (var li = 0; li < peers.length; li++) {
       var pp = peers[li];
@@ -1003,18 +1012,114 @@ if (typeof document !== "undefined") (function () {
     var cards = $all("[data-node]", grid);
     for (var ci = 0; ci < cards.length; ci++) {
       var id = cards[ci].getAttribute("data-node");
-      if (!want[id]) grid.removeChild(cards[ci]); else delete want[id];
+      if (!want[id]) {
+        stopLiveStream(id);
+        grid.removeChild(cards[ci]);
+      } else {
+        delete want[id];
+      }
     }
     for (var nid in want) {
       var p2 = want[nid], card = document.createElement("div");
       card.className = "card";
       card.setAttribute("data-node", nid);
       card.innerHTML = "<div class='dim' style='margin-bottom:6px'>" +
-        esc(p2.door_label || p2.name || nid.slice(0, 8)) +
-        "</div><img style='width:100%; border-radius:6px; background:#000; min-height:160px' alt='live'>";
-      card.querySelector("img").src = p2.stream;
+        esc(p2.door_label || p2.name || nid.slice(0, 8)) + "</div>";
+      var mediaCss = "width:100%; border-radius:6px; background:#000; min-height:160px";
+      if (MSE_OK && p2.stream_mp4 && !liveMseFailed[nid]) {
+        var v = document.createElement("video");
+        v.muted = true;
+        v.autoplay = true;
+        v.setAttribute("muted", "");
+        v.setAttribute("playsinline", "");
+        v.style.cssText = mediaCss;
+        card.appendChild(v);
+        liveStreams[nid] = attachMse(v, p2.stream_mp4, liveMseFail(nid, card));
+      } else {
+        var img = document.createElement("img");
+        img.alt = "live";
+        img.style.cssText = mediaCss;
+        img.src = p2.stream;
+        card.appendChild(img);
+      }
       grid.appendChild(card);
     }
+  }
+
+  /* ---- H.264 流暢档 (MSE) — 管理ダッシュボードの live グリッド用 ----
+     feature-detect の中に隔離: 非対応ブラウザは MSE_OK=false で従来 MJPEG のみ。 */
+  var MSE_OK = !!(window.MediaSource && window.fetch && window.ReadableStream &&
+                  window.URL && window.URL.createObjectURL);
+  var liveStreams = {};    // node_id → {stop}
+  var liveMseFailed = {};  // node_id → true (MJPEG へ回落済み)
+
+  function stopLiveStream(id) {
+    if (liveStreams[id]) { try { liveStreams[id].stop(); } catch (e) {} delete liveStreams[id]; }
+  }
+  function liveMseFail(id, card) {
+    return function () {
+      liveMseFailed[id] = true;
+      stopLiveStream(id);
+      if (card.parentNode) card.parentNode.removeChild(card);  // 次の描画で img へ再構築
+    };
+  }
+
+  // /stream.mp4 を fetch ReadableStream → SourceBuffer へ逐次 append (monitor.html と同型)
+  function attachMse(video, url, onFail) {
+    var stopped = false, reader = null;
+    function fail() {
+      if (stopped) return;
+      stopped = true;
+      try { if (reader) reader.cancel(); } catch (e) {}
+      onFail();
+    }
+    video.onerror = fail;
+    var ms = new MediaSource();
+    ms.addEventListener("sourceopen", function () {
+      var sb;
+      try { sb = ms.addSourceBuffer('video/mp4; codecs="avc1.42E01E"'); }
+      catch (e) { fail(); return; }
+      var queue = [];
+      sb.addEventListener("error", fail);
+      sb.addEventListener("updateend", pump);
+      function pump() {
+        if (stopped || sb.updating) return;
+        try {
+          if (sb.buffered.length && video.currentTime - sb.buffered.start(0) > 30) {
+            sb.remove(0, video.currentTime - 10);
+            return;
+          }
+          if (queue.length) sb.appendBuffer(queue.shift());
+        } catch (e2) { fail(); }
+      }
+      fetch(url).then(function (resp) {
+        if (!resp.ok || !resp.body) { fail(); return; }
+        reader = resp.body.getReader();
+        (function read() {
+          reader.read().then(function (r) {
+            if (stopped) return;
+            if (r.done) { fail(); return; }
+            queue.push(r.value);
+            pump();
+            try {  // ライブ端へ追従
+              if (sb.buffered.length) {
+                var end = sb.buffered.end(sb.buffered.length - 1);
+                if (end - video.currentTime > 3) video.currentTime = end - 0.5;
+              }
+            } catch (e3) {}
+            read();
+          }, fail);
+        })();
+      }, fail);
+    });
+    video.src = window.URL.createObjectURL(ms);
+    var p = video.play && video.play();
+    if (p && p.catch) p.catch(function () {});
+    return { stop: function () {
+      stopped = true;
+      try { if (reader) reader.cancel(); } catch (e) {}
+      try { video.src = ""; } catch (e2) {}
+    } };
   }
 
   /* ---------------- 2. ドア/建物 ---------------- */
@@ -1132,6 +1237,19 @@ if (typeof document !== "undefined") (function () {
       { id: "cam_resolution", label: t("admin.cam_resolution", "解像度"),
         value: cam.resolution || "640x480", ph: "640x480" },
       { id: "cam_hint", label: t("admin.cam_hint", "カメラ指定"), value: cam.device_hint },
+      // H.264 流暢档 (Phase 6a): auto=硬編があれば h264、なければ mjpeg 回落
+      { id: "cam_codec", label: t("admin.cam_codec", "映像コーデック"), type: "select",
+        value: cam.codec || "auto",
+        options: [{ v: "auto", label: t("admin.codec_auto", "自動 (対応機なら H.264)") },
+                  { v: "mjpeg", label: "MJPEG" },
+                  { v: "h264", label: "H.264" }] },
+      { id: "cam_h264_resolution", label: t("admin.cam_h264_resolution", "H.264 解像度"),
+        value: cam.h264_resolution || "1280x720", ph: "1280x720" },
+      { id: "cam_h264_fps", label: t("admin.cam_h264_fps", "H.264 フレームレート"),
+        type: "number", value: cam.h264_fps !== undefined ? cam.h264_fps : 25 },
+      { id: "cam_h264_bitrate", label: t("admin.cam_h264_bitrate", "H.264 ビットレート (kbps)"),
+        type: "number",
+        value: cam.h264_bitrate_kbps !== undefined ? cam.h264_bitrate_kbps : 1500 },
       { id: "motion_enabled", label: t("admin.motion", "動体検知"), type: "check",
         value: mo.enabled !== false },
       { id: "motion_sensitivity", label: t("admin.motion_sensitivity", "感度"), type: "number",

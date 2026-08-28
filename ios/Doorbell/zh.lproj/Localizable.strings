@@ -23,7 +23,11 @@
 "admin.bot_token" = "Bot token (仅写入)";
 "admin.building_assign" = "所属建筑";
 "admin.buildings" = "建筑";
+"admin.cam_codec" = "视频编码";
 "admin.cam_fps" = "帧率 (fps)";
+"admin.cam_h264_bitrate" = "H.264 码率 (kbps)";
+"admin.cam_h264_fps" = "H.264 帧率 (fps)";
+"admin.cam_h264_resolution" = "H.264 分辨率";
 "admin.cam_hint" = "摄像头指定";
 "admin.cam_quality" = "JPEG 质量";
 "admin.cam_resolution" = "分辨率";
@@ -31,6 +35,7 @@
 "admin.cancel" = "取消";
 "admin.caps_override" = "能力覆盖 (JSON)";
 "admin.clock_warn" = "时钟未同步";
+"admin.codec_auto" = "自动 (支持则 H.264)";
 "admin.confirm_delete" = "要删除 %@ 吗？";
 "admin.dashboard" = "仪表盘";
 "admin.delete" = "删除";

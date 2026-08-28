@@ -11,6 +11,10 @@
   ?mock=1 で XHR せず内蔵サンプルデータ描画 (file:// 検証用 — 描画は実データと同一関数)。
   MJPEG 昇格: UA 判定はしない。<body data-live="1"> を手動で付けた場合のみ
   /snapshot-proxy?…&live=1 (MJPEG) を使う (詳細は API.md)。
+  H.264 流暢档 (Phase 6a): doors[].stream_mp4 (fMP4) があり MediaSource+fetch が
+  使えるブラウザだけ <video> + MSE で滑らか表示。判定は実行時 feature-detect のみ
+  (iPad 1 は MSE_OK=false で従来どおり)。構文は全て ES5 のまま (旧 Safari が
+  ページ全体を parse できること)。失敗/503/未対応は従来経路へ自動回落。
 -->
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -28,7 +32,8 @@
               border: 1px solid #2a333d; border-radius: 10px; padding: 10px;
               margin: 6px; width: 46%; }
   .snapCard .lbl { font-size: 22px; padding-bottom: 6px; }
-  .snapCard img { width: 100%; background: #000; border-radius: 6px; min-height: 120px; }
+  .snapCard img, .snapCard video { width: 100%; background: #000; border-radius: 6px;
+                                   min-height: 120px; }
   #evCard { background: #1a2027; border: 1px solid #2a333d; border-radius: 10px;
             margin: 8px 18px 24px; padding: 12px; }
   table { width: 100%; border-collapse: collapse; font-size: 20px; }
@@ -40,7 +45,8 @@
               height: 100%; background: #101418; text-align: center; z-index: 10; }
   #callView .msg { font-size: 58px; font-weight: bold; color: #ffb454;
                    padding: 26px 10px; line-height: 1.3; }
-  #callView img { width: 92%; max-width: 900px; background: #000; border-radius: 10px; }
+  #callView img, #callView video { width: 92%; max-width: 900px; background: #000;
+                                   border-radius: 10px; }
 </style>
 </head>
 <body>
@@ -55,6 +61,8 @@
 <div id="callView">
   <div class="msg" id="callMsg"></div>
   <img id="callImg" alt="">
+  <!-- H.264 流暢档 (MSE 対応ブラウザのみ表示 — iPad 1 では常に非表示のまま) -->
+  <video id="callVideo" style="display:none" muted playsinline autoplay></video>
 </div>
 
 <script>
@@ -86,6 +94,105 @@
   var MOCK = qs("mock") === "1";
   // MJPEG 手動昇格 (UA 判定はしない — API.md 参照)
   var LIVE = document.body.getAttribute("data-live") === "1";
+
+  // ---- H.264 流暢档 (MSE) — feature-detect の中に完全隔離 ----
+  // iPad 1 (iOS 5) は MediaSource も fetch も無い → MSE_OK=false で以降のコードは
+  // 一切走らない (構文自体は ES5 なので parse は常に安全)。
+  var MSE_OK = !!(window.MediaSource && window.fetch && window.ReadableStream &&
+                  window.URL && window.URL.createObjectURL);
+  var mseFailed = {};    // door id → true (エラー/503/未対応 → 従来経路へ回落済み)
+  var gridStreams = {};  // door id → {stop}
+  var callStream = null;
+
+  function useMse(d) { return MSE_OK && !MOCK && d.stream_mp4 && !mseFailed[d.id]; }
+
+  function makeVideo() {
+    var v = document.createElement("video");
+    v.muted = true;         // 自動再生許可の条件 (音声トラックは元々無い)
+    v.autoplay = true;
+    v.setAttribute("muted", "");
+    v.setAttribute("playsinline", "");
+    v.setAttribute("autoplay", "");
+    return v;
+  }
+
+  // /stream.mp4 (fMP4) を fetch ReadableStream で読み SourceBuffer へ逐次 append。
+  // init+fragment の境界は意識しない (MSE は分割 append を許容する)。
+  // 失敗はすべて onFail へ — 呼び出し側が従来の <img> へ回落する。
+  function attachMse(video, url, onFail) {
+    var stopped = false;
+    var reader = null;
+    function fail() {
+      if (stopped) return;
+      stopped = true;
+      try { if (reader) reader.cancel(); } catch (e) {}
+      onFail();
+    }
+    video.onerror = fail;
+    var ms = new MediaSource();
+    ms.addEventListener("sourceopen", function () {
+      var sb;
+      // codec 文字列は総称でよい (実デコードは avcC を見る — Chrome/Safari/FF とも)
+      try { sb = ms.addSourceBuffer('video/mp4; codecs="avc1.42E01E"'); }
+      catch (e) { fail(); return; }
+      var queue = [];
+      sb.addEventListener("error", fail);
+      sb.addEventListener("updateend", pump);
+      function pump() {
+        if (stopped || sb.updating) return;
+        try {
+          // ライブ専用: 溜まった過去バッファを間引く (メモリ膨張防止)
+          if (sb.buffered.length && video.currentTime - sb.buffered.start(0) > 30) {
+            sb.remove(0, video.currentTime - 10);
+            return;  // updateend で再開
+          }
+          if (queue.length) sb.appendBuffer(queue.shift());
+        } catch (e2) { fail(); }
+      }
+      fetch(url).then(function (resp) {
+        if (!resp.ok || !resp.body) { fail(); return; }
+        reader = resp.body.getReader();
+        (function read() {
+          reader.read().then(function (r) {
+            if (stopped) return;
+            if (r.done) { fail(); return; }
+            queue.push(r.value);
+            pump();
+            try {  // ライブ端へ追従 (3 秒より遅れたら跳ぶ)
+              if (sb.buffered.length) {
+                var end = sb.buffered.end(sb.buffered.length - 1);
+                if (end - video.currentTime > 3) video.currentTime = end - 0.5;
+              }
+            } catch (e3) {}
+            read();
+          }, fail);
+        })();
+      }, fail);
+    });
+    video.src = window.URL.createObjectURL(ms);
+    var p = video.play && video.play();
+    if (p && p.catch) p.catch(function () {});  // 自動再生拒否は onerror/回落に任せる
+    return { stop: function () {
+      stopped = true;
+      try { if (reader) reader.cancel(); } catch (e) {}
+      try { video.src = ""; } catch (e2) {}
+    } };
+  }
+
+  function mseFailHandler(id) {
+    return function () {
+      mseFailed[id] = true;  // この door は従来経路 (スナップショット輪詢) へ
+      lastDoorsKey = "";     // 次の輪詢でグリッド再構築
+    };
+  }
+
+  function stopGridStreams() {
+    for (var id in gridStreams) { try { gridStreams[id].stop(); } catch (e) {} }
+    gridStreams = {};
+  }
+  function stopCallStream() {
+    if (callStream) { try { callStream.stop(); } catch (e) {} callStream = null; }
+  }
 
   // ---- i18n (失敗時はハードコード ja のまま) ----
   var I18N = {};
@@ -164,21 +271,33 @@
   }
 
   // ---- 平時: スナップショット並び (5 秒毎に単純 img 差替) + イベント履歴 ----
+  // MSE 対応ブラウザで stream_mp4 を持つ door は <video> ライブ (失敗で img へ回落)。
   var lastDoorsKey = "";
   function renderSnapGrid(doors) {
     var key = "";
-    for (var i = 0; i < doors.length; i++) key += doors[i].id + "|" + doors[i].label + ";";
+    for (var i = 0; i < doors.length; i++)
+      key += doors[i].id + "|" + doors[i].label + "|" + (useMse(doors[i]) ? "v" : "s") + ";";
     if (key === lastDoorsKey) return;
     lastDoorsKey = key;
+    stopGridStreams();
     var grid = $("snapGrid");
     grid.innerHTML = "";
     for (var k = 0; k < doors.length; k++) {
+      var d = doors[k];
       var card = document.createElement("div");
       card.className = "snapCard";
-      card.innerHTML = "<div class='lbl'>" + esc(doors[k].label) + "</div><img alt=''>";
-      var img = card.getElementsByTagName("img")[0];
-      img.setAttribute("data-door", doors[k].id);
-      img.src = snapshotUrl(doors[k].id, +new Date());
+      card.innerHTML = "<div class='lbl'>" + esc(d.label) + "</div>";
+      if (useMse(d)) {
+        var v = makeVideo();
+        card.appendChild(v);
+        gridStreams[d.id] = attachMse(v, d.stream_mp4, mseFailHandler(d.id));
+      } else {
+        var img = document.createElement("img");
+        img.alt = "";
+        img.setAttribute("data-door", d.id);
+        img.src = snapshotUrl(d.id, +new Date());
+        card.appendChild(img);
+      }
       grid.appendChild(card);
     }
   }
@@ -200,21 +319,38 @@
   }
 
   // ---- 呼出中: 全画面 + スナップショット (2 秒毎の輪詢に同期して差替) ----
+  // MSE 可なら <video> ライブ、それ以外は従来の img (MSE 失敗時も自動でこちらへ)。
   var callingDoorId = null;
   function renderCall(doors) {
     var calling = null;
     for (var i = 0; i < doors.length; i++) if (doors[i].calling) { calling = doors[i]; break; }
+    var img = $("callImg");
+    var vid = $("callVideo");
     if (calling) {
       var msg = t("ring.incoming", "{door} で呼び出し中").replace("{door}", calling.label);
       $("callMsg").innerHTML = esc(msg);
-      var img = $("callImg");
       if (callingDoorId !== calling.id) ring();  // 新規呼出のみ鳴らす
-      if (!LIVE || callingDoorId !== calling.id)
-        img.src = snapshotUrl(calling.id, +new Date());
+      if (useMse(calling)) {
+        img.style.display = "none";
+        vid.style.display = "";
+        if (callingDoorId !== calling.id || !callStream) {
+          stopCallStream();
+          callStream = attachMse(vid, calling.stream_mp4, mseFailHandler(calling.id));
+        }
+      } else {
+        stopCallStream();
+        vid.style.display = "none";
+        img.style.display = "";
+        if (!LIVE || callingDoorId !== calling.id)
+          img.src = snapshotUrl(calling.id, +new Date());
+      }
       callingDoorId = calling.id;
       $("callView").style.display = "block";
     } else {
       callingDoorId = null;
+      stopCallStream();
+      vid.style.display = "none";
+      img.style.display = "";
       $("callView").style.display = "none";
     }
   }

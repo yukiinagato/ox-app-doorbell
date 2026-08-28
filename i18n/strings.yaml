@@ -99,6 +99,11 @@ admin.cam_fps: { ja: "フレームレート (fps)", en: "Frame rate (fps)", zh: 
 admin.cam_quality: { ja: "JPEG 品質", en: "JPEG quality", zh: "JPEG 质量" }
 admin.cam_resolution: { ja: "解像度", en: "Resolution", zh: "分辨率" }
 admin.cam_hint: { ja: "カメラ指定 (device hint)", en: "Device hint", zh: "摄像头指定" }
+admin.cam_codec: { ja: "映像コーデック", en: "Video codec", zh: "视频编码" }
+admin.codec_auto: { ja: "自動 (対応機なら H.264)", en: "Auto (H.264 if supported)", zh: "自动 (支持则 H.264)" }
+admin.cam_h264_resolution: { ja: "H.264 解像度", en: "H.264 resolution", zh: "H.264 分辨率" }
+admin.cam_h264_fps: { ja: "H.264 フレームレート (fps)", en: "H.264 frame rate (fps)", zh: "H.264 帧率 (fps)" }
+admin.cam_h264_bitrate: { ja: "H.264 ビットレート (kbps)", en: "H.264 bitrate (kbps)", zh: "H.264 码率 (kbps)" }
 admin.motion: { ja: "動体検知", en: "Motion detection", zh: "移动侦测" }
 admin.motion_sensitivity: { ja: "感度", en: "Sensitivity", zh: "灵敏度" }
 admin.motion_interval: { ja: "最小間隔 (秒)", en: "Min interval (s)", zh: "最小间隔 (秒)" }

@@ -21,6 +21,9 @@ namespace {
 
 constexpr int64_t kHandlerTimeoutMs = 5000;  // route ハンドラの同期待ち上限
 constexpr size_t kMaxBodyBytes = 8 * 1024 * 1024;  // 暴走防止
+// /stream.mp4: init segment の初回待ち上限 (エンコーダは購読者が付いてから起動する —
+// 殻の wanted ポーリング (5s) + エンコーダ初期化 + 最初の SPS/PPS 到着ぶんを見込む)
+constexpr int kMp4FirstChunkTimeoutMs = 15000;
 
 int hexVal(char c) {
   if (c >= '0' && c <= '9') return c - '0';
@@ -181,6 +184,7 @@ struct Httpd::Impl {
   std::map<std::string, Asset> statics;
   std::function<Bytes()> jpeg_provider;
   int stream_fps = 8;
+  std::function<Mp4Pull()> mp4_provider;
   std::function<bool(const HttpReq&)> gate;
   std::vector<std::string> public_prefixes;
 };
@@ -267,6 +271,65 @@ int handleStream(struct mg_connection* conn, Httpd::Impl* impl) {
   return 200;
 }
 
+// /stream.mp4: fMP4 ライブ配信。provider からセッション (pull) を得て、
+// init segment → fragment を逐次 mg_write する。切断/停止/購読終了で終わる。
+// pull は ~500ms 上限でブロックする契約 (httpd.h) — 停止フラグを小刻みに見られる。
+int handleStreamMp4(struct mg_connection* conn, Httpd::Impl* impl) {
+  std::function<Httpd::Mp4Pull()> provider;
+  {
+    std::lock_guard<std::mutex> lk(impl->mu);
+    provider = impl->mp4_provider;
+  }
+  Httpd::Mp4Pull pull = provider ? provider() : nullptr;
+  if (!pull) {
+    writeResp(conn, HttpResp::text("h264 stream not available", 503));
+    return 503;
+  }
+  // 初回チャンク (init segment) が来るまでヘッダを書かない — 来なければ 503
+  Bytes chunk;
+  bool ended = false;
+  const auto deadline = std::chrono::steady_clock::now() +
+                        std::chrono::milliseconds(kMp4FirstChunkTimeoutMs);
+  for (;;) {
+    if (impl->stopping.load()) {
+      writeResp(conn, HttpResp::text("shutting down", 503));
+      return 503;
+    }
+    chunk = pull(&ended);
+    if (!chunk.empty() || ended) break;
+    if (std::chrono::steady_clock::now() >= deadline) break;
+  }
+  if (chunk.empty()) {
+    writeResp(conn, HttpResp::text("no h264 source", 503));
+    return 503;
+  }
+  const char* head =
+      "HTTP/1.1 200 OK\r\n"
+      "Content-Type: video/mp4\r\n"
+      "Cache-Control: no-store\r\n"
+      "Connection: close\r\n\r\n";
+  if (mg_write(conn, head, std::strlen(head)) <= 0) return 200;
+  for (;;) {
+    if (!chunk.empty()) {
+      if (mg_write(conn, chunk.data(), chunk.size()) <= 0) break;
+    } else {
+      // 新 fragment 無し (pull タイムアウト) — 8 バイトの `free` box を書いて
+      // 切断を検出する (ISOBMFF の頂層 free box は MSE/ffmpeg とも読み飛ばす)。
+      // これが無いと「クライアントが切ったのにフレームが来ない」間ループが
+      // 終われず、購読者数が減らない → エンコーダが止まらない。
+      static const uint8_t kFreeBox[8] = {0, 0, 0, 8, 'f', 'r', 'e', 'e'};
+      if (mg_write(conn, kFreeBox, sizeof(kFreeBox)) <= 0) break;
+    }
+    if (ended || impl->stopping.load()) break;
+    {
+      std::lock_guard<std::mutex> lk(impl->mu);
+      if (!impl->mp4_provider) break;  // stop() で外された
+    }
+    chunk = pull(&ended);
+  }
+  return 200;
+}
+
 // route ハンドラを Runloop へ marshal して同期実行。タイムアウトは 503
 // (ハンドラは後で走っても良い — 結果は破棄。共有状態は shared_ptr で寿命安全に)。
 HttpResp runOnLoop(Httpd::Impl* impl, const Httpd::Handler& h, const HttpReq& req) {
@@ -348,8 +411,9 @@ int requestHandler(struct mg_connection* conn, void* cbdata) {
     return 200;
   }
 
-  // --- 3. /stream.mjpeg ---
+  // --- 3. /stream.mjpeg・/stream.mp4 ---
   if (req.uri == "/stream.mjpeg") return handleStream(conn, impl);
+  if (req.uri == "/stream.mp4") return handleStreamMp4(conn, impl);
 
   // --- 4. route: 完全一致優先 → 前缀 ("...*") の最長一致 ---
   Httpd::Handler h;
@@ -420,6 +484,7 @@ void Httpd::stop() {
     // (provider の寿命が Httpd より先に尽きないことも保証される)
     std::lock_guard<std::mutex> lk(impl_->mu);
     impl_->jpeg_provider = nullptr;
+    impl_->mp4_provider = nullptr;
   }
   mg_stop(impl_->ctx);  // 進行中の接続完了を待つ
   impl_->ctx = nullptr;
@@ -451,6 +516,11 @@ void Httpd::setJpegProvider(std::function<Bytes()> provider, int stream_fps) {
   std::lock_guard<std::mutex> lk(impl_->mu);
   impl_->jpeg_provider = std::move(provider);
   impl_->stream_fps = stream_fps;
+}
+
+void Httpd::setMp4Provider(std::function<Mp4Pull()> provider) {
+  std::lock_guard<std::mutex> lk(impl_->mu);
+  impl_->mp4_provider = std::move(provider);
 }
 
 void Httpd::setAuth(std::function<bool(const HttpReq&)> gate,

@@ -80,6 +80,7 @@ class MainActivity : Activity(), DoorbellCore.Listener {
     private var tts: TextToSpeech? = null
     private var ttsReady = false
     private val camera by lazy { CameraFeeder(app.core) }
+    private val videoEncoder by lazy { VideoEncoder(app.core) }
     private var surfaceReady = false
 
     private var secretTaps = 0
@@ -104,6 +105,23 @@ class MainActivity : Activity(), DoorbellCore.Listener {
         showIdle(texts.t("calling.no_answer", R.string.calling_no_answer))
     }
     private val replyTimeout = Runnable { replyBanner.visibility = View.GONE }
+    // H.264 硬編の稼働制御 (Phase 6a): /stream.mp4 の購読者がいる間だけエンコーダを回す
+    // (5 秒毎に db_core_video_encoder_wanted を確認 — 購読者ゼロ = エンコードゼロで省電力)
+    private val encoderPoll = object : Runnable {
+        override fun run() {
+            val wanted = app.coreOk && app.core.videoEncoderWanted()
+            if (wanted && !videoEncoder.isRunning) {
+                val cam = cameraLocalCfg()
+                videoEncoder.start(cam?.optInt("h264_fps", 25) ?: 25,
+                                   cam?.optInt("h264_bitrate_kbps", 1500) ?: 1500)
+                camera.encoder = videoEncoder
+            } else if (!wanted && videoEncoder.isRunning) {
+                camera.encoder = null
+                videoEncoder.stop()
+            }
+            ui.postDelayed(this, 5000)
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -151,12 +169,16 @@ class MainActivity : Activity(), DoorbellCore.Listener {
         super.onResume()
         enterImmersive()
         ui.post(clockTick)
+        ui.post(encoderPoll)
         enterKioskIfConfigured()
         maybeStartCamera()
     }
 
     override fun onPause() {
         ui.removeCallbacks(clockTick)
+        ui.removeCallbacks(encoderPoll)
+        camera.encoder = null
+        videoEncoder.stop()
         super.onPause()
     }
 
@@ -167,6 +189,8 @@ class MainActivity : Activity(), DoorbellCore.Listener {
 
     override fun onDestroy() {
         if (app.activityListener === this) app.activityListener = null
+        camera.encoder = null
+        videoEncoder.stop()
         camera.stop()
         tts?.shutdown()
         try { audio?.release() } catch (_: Exception) { }
@@ -665,8 +689,31 @@ class MainActivity : Activity(), DoorbellCore.Listener {
         Build.VERSION.SDK_INT < 23 ||
         checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
 
+    /** devices.<self>.local.camera の設定オブジェクト (無ければ null)。 */
+    private fun cameraLocalCfg(): JSONObject? =
+        if (nodeId.isEmpty()) null
+        else app.core.dig(cfg, "devices.$nodeId.local.camera") as? JSONObject
+
     private fun maybeStartCamera() {
-        if (surfaceReady && hasCameraPermission()) camera.start(preview.holder)
+        if (!surfaceReady || !hasCameraPermission()) return
+        // codec=h264/auto の間は h264_resolution を採集目標にする (Phase 6a)。
+        // MJPEG 側は core の frame_bus が縮小するので大きくても無害。
+        // 設定変更後の反映は次のカメラ再起動時 (surface 再生成 / onResume)。
+        val cam = cameraLocalCfg()
+        var tw = 640
+        var th = 480
+        if (cam?.optString("codec", "auto") != "mjpeg") {
+            val res = cam?.optString("h264_resolution", "1280x720") ?: "1280x720"
+            val x = res.indexOf('x')
+            if (x > 0) {
+                tw = res.substring(0, x).toIntOrNull() ?: 1280
+                th = res.substring(x + 1).toIntOrNull() ?: 720
+            } else {
+                tw = 1280
+                th = 720
+            }
+        }
+        camera.start(preview.holder, tw, th)
     }
 
     companion object {

@@ -213,4 +213,15 @@ DB_API void db_core_emergency(db_core* c, int active) {
   if (c && c->node) c->node->setEmergency(active != 0, "panel");
 }
 
+DB_API void db_core_on_encoded_frame(db_core* c, const uint8_t* annexb, size_t len,
+                                     int is_keyframe, int64_t ts_ms) {
+  if (!c || !c->node || !annexb || len == 0) return;
+  c->node->pushEncodedFrame(annexb, len, is_keyframe != 0, ts_ms);
+}
+
+DB_API int db_core_video_encoder_wanted(db_core* c) {
+  if (!c || !c->node) return 0;
+  return c->node->videoEncoderWanted() ? 1 : 0;
+}
+
 }  // extern "C"

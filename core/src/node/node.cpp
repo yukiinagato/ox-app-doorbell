@@ -13,12 +13,14 @@
 #include "httpd/webui_assets.h"
 #include "media/frame_bus.h"
 #include "media/motion_detector.h"
+#include "media/video_track.h"
 #include "mesh/tcp_transport.h"
 #include "mesh/udp_beacon.h"
 #include "monocypher.h"
 #include "sipctl/sipctl.h"
 #ifdef _WIN32
 #include "media/camera_win.h"
+#include "media/encoder_win.h"
 #endif
 #include "util/common.h"
 #include "util/ids.h"
@@ -193,6 +195,9 @@ struct Node::Impl {
   std::unique_ptr<HaBridge> bridge;  // HA MQTT ブリッジ (leader 時のみ接続)
   std::unique_ptr<TelegramBridge> tg;  // Telegram ブリッジ (leader 時のみ送信)
   FrameBus frame_bus;  // 帧総線 (任意スレッドから push / 需要駆動 JPEG)
+  // H.264 流暢档 (Phase 6a): 符号化フレームの共有点 (/stream.mp4 の源)。
+  // エンコードは殻/平台層 — コアは箱詰め (fMP4) と配信だけ。
+  VideoTrack video_track;
   // 動体検知 (feed は採集スレッド — 設定変更と競合するため motion_mu_ で保護)
   MotionDetector motion;
   std::mutex motion_mu;
@@ -202,6 +207,10 @@ struct Node::Impl {
   int64_t last_reply_ts = 0;
 #ifdef _WIN32
   std::unique_ptr<CameraWin> camera;  // door_station のみ起動
+  // Windows の H.264 硬編は core 内 (camera_win と同居 — 殻に採集ループが無いため)。
+  // wanted (購読者あり) の間だけ回す — encoder_timer が 5 秒毎に判定する。
+  std::unique_ptr<EncoderWin> encoder;
+  uint64_t encoder_timer = 0;
 #endif
 
   json::Doc cfg;  // materialize 済み設定 (loop 上でのみ触る)
@@ -307,13 +316,29 @@ struct Node::Impl {
     return cur;
   }
 
-  // devices.<self>.local.camera の実効値 (無ければ既定 8/60/640x480)
+  // devices.<self>.local.camera の実効値 (無ければ既定 8/60/640x480 + auto/720p25/1500k)
   struct CamCfg {
     int fps = 8;
     int quality = 60;
     int w = 640, h = 480;
     std::string hint;
+    // H.264 流暢档 (docs/config-schema.md camera.codec 節)
+    std::string codec = "auto";  // auto | mjpeg | h264
+    int h264_w = 1280, h264_h = 720;
+    int h264_fps = 25;
+    int h264_kbps = 1500;
+    bool h264Enabled() const { return codec != "mjpeg"; }  // auto = 硬編があれば
   };
+  static void parseRes(const std::string& res, int* w, int* h) {
+    size_t x = res.find('x');
+    if (x == std::string::npos) return;
+    int pw = std::atoi(res.c_str());
+    int ph = std::atoi(res.c_str() + x + 1);
+    if (pw > 0 && ph > 0) {
+      *w = pw;
+      *h = ph;
+    }
+  }
   CamCfg cameraCfg() {
     CamCfg c;
     cJSON* cam = cfgAt("devices." + node_id + ".local.camera");
@@ -321,27 +346,29 @@ struct Node::Impl {
       c.fps = static_cast<int>(json::getInt(cam, "mjpeg_fps", 8));
       c.quality = static_cast<int>(json::getInt(cam, "mjpeg_quality", 60));
       c.hint = json::getString(cam, "device_hint");
-      std::string res = json::getString(cam, "resolution", "640x480");
-      size_t x = res.find('x');
-      if (x != std::string::npos) {
-        int w = std::atoi(res.c_str());
-        int h = std::atoi(res.c_str() + x + 1);
-        if (w > 0 && h > 0) {
-          c.w = w;
-          c.h = h;
-        }
-      }
+      parseRes(json::getString(cam, "resolution", "640x480"), &c.w, &c.h);
+      c.codec = json::getString(cam, "codec", "auto");
+      if (c.codec != "mjpeg" && c.codec != "h264") c.codec = "auto";
+      parseRes(json::getString(cam, "h264_resolution", "1280x720"), &c.h264_w, &c.h264_h);
+      c.h264_fps = static_cast<int>(json::getInt(cam, "h264_fps", 25));
+      c.h264_kbps = static_cast<int>(json::getInt(cam, "h264_bitrate_kbps", 1500));
     }
     if (c.fps <= 0) c.fps = 8;
+    if (c.h264_fps <= 0) c.h264_fps = 25;
+    if (c.h264_kbps <= 0) c.h264_kbps = 1500;
     return c;
   }
 
-  // fps/quality/解像度を FrameBus + httpd へ反映 (起動時と config_changed 時)
+  // fps/quality/解像度を FrameBus + httpd + video_track へ反映 (起動時と config_changed 時)
   void applyCameraSettings() {
     CamCfg c = cameraCfg();
     frame_bus.setJpegParams(c.quality, c.w);
     if (httpd)
       httpd->setJpegProvider([this] { return frame_bus.latestJpeg(); }, c.fps);
+    // codec=mjpeg → track 停止 (購読者は切断・殻の wanted も 0 になる)。
+    // auto/h264 → 有効化 (auto で硬編が無い端末は殻が push しないだけ —
+    // /stream.mp4 は init 待ちタイムアウトの 503 になりクライアントは MJPEG へ回落)。
+    video_track.setEnabled(c.h264Enabled());
   }
 
   // 動体検知設定 (devices.<self>.local.motion) を反映 (起動時と config_changed 時)
@@ -922,6 +949,9 @@ struct Node::Impl {
     if (st == SipCallState::InCall) {
       // 相手を特定して映像 URL を添える (答接管で門口機側が in_call になる時も同経路)。
       // 殻はこの URL を描画するだけ — 解決できない相手 (PSTN 等) は peer_stream 無し。
+      // TODO(Phase 6b): 站間通話画面の H.264 硬解。相手が h264 提供中なら
+      // peer_stream_mp4 (= <origin>/stream.mp4) も添えて、殻が MediaCodec/
+      // VideoToolbox/MF で硬解描画する。今回 (6a) は従来どおり MJPEG のみ。
       resolveCallPeer(remote, &sip_peer_node, &sip_peer_stream);
     }
     if (!s) return;
@@ -1239,14 +1269,38 @@ struct Node::Impl {
     // Windows の門口機はカメラ採集 (Media Foundation) を起動。失敗はログのみ。
     if (opts.role == "door_station") {
       CamCfg c = cameraCfg();
+      // H.264 硬編 (encoder_win — MF encoder MFT)。出力 AnnexB は video_track へ。
+      // 未稼働中の feed は即 return するので採集経路への負担はない。
+      encoder.reset(new EncoderWin([this](const uint8_t* p, size_t n, bool key, int64_t ts) {
+        video_track.push(p, n, key, ts);
+      }));
       camera.reset(new CameraWin([this](RawFrame&& f) {
         {
           std::lock_guard<std::mutex> lk(motion_mu);
           motion.feed(f);
         }
+        if (encoder) encoder->feed(f);  // 稼働中のみ消費 (NV12 変換もエンコーダ側)
         frame_bus.push(std::move(f));
       }));
-      camera->start(c.hint, c.w, c.h);
+      // codec=h264/auto の間は h264_resolution を採集目標にする (MJPEG 側は
+      // frame_bus の max_width 縮小で従来解像度のまま — 二重採集はしない)。
+      int tw = c.h264Enabled() ? c.h264_w : c.w;
+      int th = c.h264Enabled() ? c.h264_h : c.h;
+      camera->start(c.hint, tw, th);
+      // wanted (購読者あり) の間だけエンコーダを回す (5 秒毎判定 — 省電力)
+      encoder_timer = loop->postEvery(5'000, [this] {
+        if (!encoder) return;
+        bool want = video_track.enabled() && video_track.subscriberCount() > 0;
+        if (want && !encoder->running()) {
+          CamCfg cc = cameraCfg();
+          EncoderWin::Params p;
+          p.fps = cc.h264_fps;
+          p.bitrate_kbps = cc.h264_kbps;
+          encoder->start(p);
+        } else if (!want && encoder->running()) {
+          encoder->stop();
+        }
+      });
     }
 #endif
     // 表示制御: 30 秒周期の再評価 + 起動直後の 1 回発行 (壳が初期状態を受け取れる)
@@ -1529,6 +1583,30 @@ struct Node::Impl {
     }
   }
 
+  // door の担当門口機 (door_station) の node_id ("" = 不在)
+  std::string doorStation(const std::string& door_id) {
+    cJSON* devices = json::get(cfg.get(), "devices");
+    cJSON* dev = nullptr;
+    cJSON_ArrayForEach(dev, devices) {
+      if (dev->string && json::getString(dev, "role") == "door_station" &&
+          json::getString(dev, "door") == door_id) {
+        return dev->string;
+      }
+    }
+    return "";
+  }
+
+  // node の httpd origin ("http://<host>:47180")。自機 = "" (相対 URL でよい)、不明 = 見つからず ""。
+  // 呼び出し側は自機かどうかを nid == node_id で区別すること。
+  std::string nodeOrigin(const std::string& nid) {
+    if (nid == node_id || !mesh) return "";
+    for (const auto& p : mesh->peers()) {
+      if (p.id == nid && !p.addrs.empty())
+        return "http://" + hostOf(p.addrs[0]) + ":47180";
+    }
+    return "";
+  }
+
   // ---------- status ----------
   std::string statusJsonOnLoop() {
     auto o = json::obj();
@@ -1563,6 +1641,17 @@ struct Node::Impl {
     json::setItem(o.get(), "display", displayDoc(displayState()));
     cJSON* em = json::addObj(o.get(), "emergency");
     json::setBool(em, "active", emergency_active);
+    // 自機の H.264 流暢档の状態 (管理画面/診断用)。active = SPS/PPS 受領済み =
+    // 実際に配信できる状態 (auto で硬編が無い端末は codec=auto でも active=false のまま)。
+    {
+      CamCfg cc = cameraCfg();
+      cJSON* v = json::addObj(o.get(), "video");
+      json::set(v, "codec", cc.codec);
+      json::setBool(v, "active", video_track.active());
+      json::set(v, "subscribers", static_cast<int64_t>(video_track.subscriberCount()));
+      std::string cs = video_track.codecString();
+      if (!cs.empty()) json::set(v, "codec_str", cs);
+    }
     // 統一資産のキャッシュ被覆率 (台帳掲載のうちローカルにある数 — 管理画面用)
     {
       int64_t total = 0, cached = 0;
@@ -1605,6 +1694,15 @@ struct Node::Impl {
           }
           if (json::getString(dev, "role") == "door_station" && !p.addrs.empty()) {
             json::set(e, "stream", "http://" + hostOf(p.addrs[0]) + ":47180/stream.mjpeg");
+            // H.264 流暢档 (Phase 6a): codec が h264/auto の門口機は /stream.mp4 も持つ。
+            // auto で硬編が無い端末は接続時に 503 → クライアントは MJPEG へ自動回落する
+            // (远端の実際の可否は config からは分からないため URL は楽観的に載せる)。
+            cJSON* cam = json::get(json::get(dev, "local"), "camera");
+            std::string codec = json::getString(cam, "codec", "auto");
+            if (codec != "mjpeg") {
+              json::set(e, "stream_mp4",
+                        "http://" + hostOf(p.addrs[0]) + ":47180/stream.mp4");
+            }
           }
         }
       }
@@ -1633,8 +1731,16 @@ struct Node::Impl {
     // /asset/ はハンドラ内で管理セッション or panel token を検証する (gate は素通し)。
     httpd->setAuth([this](const HttpReq& r) { return r.uri == "/" || checkSession(r); },
                    {"/api/login", "/locale/", "/panel/", "/admin/", "/stream.mjpeg",
-                    "/snapshot.jpg", "/api/panel/", "/snapshot-proxy", "/call-frame",
-                    "/peer-frame.jpg", "/asset/"});
+                    "/stream.mp4", "/snapshot.jpg", "/api/panel/", "/snapshot-proxy",
+                    "/call-frame", "/peer-frame.jpg", "/asset/"});
+
+    // /stream.mp4 (fMP4 ライブ — 認証は /stream.mjpeg と同扱いの LAN 公開 + 任意 ?k=)。
+    // 接続毎に video_track の購読を張る。Reader の破棄 (= 切断) が購読解除。
+    httpd->setMp4Provider([this]() -> Httpd::Mp4Pull {
+      if (!video_track.enabled()) return nullptr;  // codec=mjpeg → 503
+      auto reader = video_track.subscribe();
+      return [reader](bool* ended) { return reader->pull(500, ended); };
+    });
 
     httpd->route("GET", "/", [](const HttpReq&) {
       HttpResp r;
@@ -1896,6 +2002,21 @@ struct Node::Impl {
         // 訪客言語バッジ (選択中のみ — 主言語 ja は載らない)
         auto vl = visitor_lang_by_door.find(it->string);
         if (vl != visitor_lang_by_door.end()) json::set(e, "visitor_lang", vl->second);
+        // H.264 流暢档 (Phase 6a): 担当門口機の codec が h264/auto なら /stream.mp4 の
+        // URL を載せる (monitor.html の MSE 用)。auto で硬編が無い端末は接続 503 →
+        // クライアントは従来のスナップショット輪詢へ自動回落する。
+        std::string station = doorStation(it->string);
+        if (!station.empty()) {
+          cJSON* cam = json::get(json::get(cfgAt("devices." + station), "local"), "camera");
+          if (json::getString(cam, "codec", "auto") != "mjpeg") {
+            if (station == node_id) {
+              json::set(e, "stream_mp4", "/stream.mp4");  // 自機担当 — 相対 URL
+            } else {
+              std::string origin = nodeOrigin(station);
+              if (!origin.empty()) json::set(e, "stream_mp4", origin + "/stream.mp4");
+            }
+          }
+        }
       }
       cJSON* evs = json::addArr(o.get(), "events");
       for (const auto& ev : store.recentEvents(10)) {
@@ -2228,7 +2349,11 @@ void Node::stop() {
 #ifdef _WIN32
   // カメラ採集スレッドを先に止める (frame_bus への push を止めてから httpd を畳む)
   if (impl_->camera) impl_->camera->stop();
+  if (impl_->encoder) impl_->encoder->stop();
 #endif
+  // /stream.mp4 の購読者を全員起こして切断させる (httpd->stop の mg_stop が
+  // 進行中接続の完了を待つため、先に終わらせておく)
+  impl_->video_track.stop();
   // 停止順: sipctl → httpd → mesh
   impl_->loop->callSync([&] {
     if (impl_->sip_reapply_timer) {
@@ -2251,6 +2376,12 @@ void Node::stop() {
       impl_->loop->cancel(impl_->asset_prefetch_timer);
       impl_->asset_prefetch_timer = 0;
     }
+#ifdef _WIN32
+    if (impl_->encoder_timer) {
+      impl_->loop->cancel(impl_->encoder_timer);
+      impl_->encoder_timer = 0;
+    }
+#endif
     for (auto& kv : impl_->visitor_lang_revert_timer) impl_->loop->cancel(kv.second);
     impl_->visitor_lang_revert_timer.clear();
     if (impl_->tg) impl_->tg->stop();          // 輪詢/キュー駆動を止める (キューは永続)
@@ -2328,6 +2459,15 @@ void Node::pushCameraFrame(const uint8_t* data, int format, int width, int heigh
     impl_->motion.feed(f);  // 動体検知 (発火は onMotion → loop へ post)
   }
   impl_->frame_bus.push(std::move(f));
+}
+
+void Node::pushEncodedFrame(const uint8_t* annexb, size_t len, bool key, int64_t ts_ms) {
+  // VideoTrack は自前ロック — 高頻度呼び出しなので loop へは marshal しない
+  impl_->video_track.push(annexb, len, key, ts_ms);
+}
+
+bool Node::videoEncoderWanted() {
+  return impl_->video_track.enabled() && impl_->video_track.subscriberCount() > 0;
 }
 
 void Node::sendQuickReply(const std::string& reply_id, const std::string& free_text,

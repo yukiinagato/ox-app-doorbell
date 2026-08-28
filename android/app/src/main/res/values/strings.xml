@@ -26,7 +26,11 @@
     <string name="admin_bot_token">Bot token (write-only)</string>
     <string name="admin_building_assign">Building</string>
     <string name="admin_buildings">Buildings</string>
+    <string name="admin_cam_codec">Video codec</string>
     <string name="admin_cam_fps">Frame rate (fps)</string>
+    <string name="admin_cam_h264_bitrate">H.264 bitrate (kbps)</string>
+    <string name="admin_cam_h264_fps">H.264 frame rate (fps)</string>
+    <string name="admin_cam_h264_resolution">H.264 resolution</string>
     <string name="admin_cam_hint">Device hint</string>
     <string name="admin_cam_quality">JPEG quality</string>
     <string name="admin_cam_resolution">Resolution</string>
@@ -34,6 +38,7 @@
     <string name="admin_cancel">Cancel</string>
     <string name="admin_caps_override">Capability override (JSON)</string>
     <string name="admin_clock_warn">Clock not synced</string>
+    <string name="admin_codec_auto">Auto (H.264 if supported)</string>
     <string name="admin_confirm_delete">Delete %1$s?</string>
     <string name="admin_dashboard">Dashboard</string>
     <string name="admin_delete">Delete</string>

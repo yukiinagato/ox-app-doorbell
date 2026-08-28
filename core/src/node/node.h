@@ -127,6 +127,14 @@ class Node {
   void pushCameraFrame(const uint8_t* data, int format, int width, int height, int stride,
                        int64_t ts_ms);
 
+  // 符号化済み H.264 (AnnexB) 投入 (capi db_core_on_encoded_frame / Windows は encoder_win
+  // から; 任意スレッド可)。fMP4 化して /stream.mp4 購読者へ配る。codec=mjpeg 中は無視。
+  void pushEncodedFrame(const uint8_t* annexb, size_t len, bool key, int64_t ts_ms);
+
+  // 殻がエンコーダを回すべきか (capi db_core_video_encoder_wanted; 任意スレッド可)。
+  // config camera.codec が h264/auto かつ /stream.mp4 購読者 > 0 の時 true。
+  bool videoEncoderWanted();
+
   std::string statusJson();        // /api/status と同じ内容
   std::string configJson();        // materialize 済み設定全文
   // 設定書き込み (管理 API /api/config と同経路)。value_json はパース不能なら JSON 文字列扱い。

@@ -28,7 +28,11 @@
   <data name="admin_bot_token" xml:space="preserve"><value>Bot token (write-only)</value></data>
   <data name="admin_building_assign" xml:space="preserve"><value>Building</value></data>
   <data name="admin_buildings" xml:space="preserve"><value>Buildings</value></data>
+  <data name="admin_cam_codec" xml:space="preserve"><value>Video codec</value></data>
   <data name="admin_cam_fps" xml:space="preserve"><value>Frame rate (fps)</value></data>
+  <data name="admin_cam_h264_bitrate" xml:space="preserve"><value>H.264 bitrate (kbps)</value></data>
+  <data name="admin_cam_h264_fps" xml:space="preserve"><value>H.264 frame rate (fps)</value></data>
+  <data name="admin_cam_h264_resolution" xml:space="preserve"><value>H.264 resolution</value></data>
   <data name="admin_cam_hint" xml:space="preserve"><value>Device hint</value></data>
   <data name="admin_cam_quality" xml:space="preserve"><value>JPEG quality</value></data>
   <data name="admin_cam_resolution" xml:space="preserve"><value>Resolution</value></data>
@@ -36,6 +40,7 @@
   <data name="admin_cancel" xml:space="preserve"><value>Cancel</value></data>
   <data name="admin_caps_override" xml:space="preserve"><value>Capability override (JSON)</value></data>
   <data name="admin_clock_warn" xml:space="preserve"><value>Clock not synced</value></data>
+  <data name="admin_codec_auto" xml:space="preserve"><value>Auto (H.264 if supported)</value></data>
   <data name="admin_confirm_delete" xml:space="preserve"><value>Delete {0}?</value></data>
   <data name="admin_dashboard" xml:space="preserve"><value>Dashboard</value></data>
   <data name="admin_delete" xml:space="preserve"><value>Delete</value></data>

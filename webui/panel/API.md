@@ -39,6 +39,11 @@
 
 - `doors[]` — 全ドア (config `doors.*`)。`label` は表示言語解決済みの文字列。
   `calling` は「呼出が発生し、まだ応答/タイムアウトしていない」間 true。
+- `doors[].stream_mp4` — H.264 流暢档 (Phase 6a)。担当門口機の `camera.codec` が
+  h264/auto のときのみ載る fMP4 ライブの URL (自機担当なら相対 `/stream.mp4`、
+  他ノード担当なら `http://<host>:47180/stream.mp4`)。monitor.html は MediaSource+fetch
+  が使えるブラウザでのみこれを MSE 再生し、未対応/失敗/503 (auto で硬編なし) は従来の
+  スナップショット輪詢へ自動回落する。iPad 1 はキー自体を無視するだけ。
 - `events[]` — 直近 10 件 (既存 `/api/events` と同スキーマの縮小版。`payload` は不要)。
 - `reply` — 最新クイック返信 (`text` + `ts` ms)。無ければ `null`。
   クライアントは `ts` の単調増加のみ比較する (初回受信分は既読扱い)。

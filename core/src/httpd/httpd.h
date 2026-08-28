@@ -2,6 +2,7 @@
 //   /admin/*        管理 SPA (埋め込み静的資産; webui から生成)
 //   /api/*          JSON REST (ハンドラは Runloop 上で実行 — 本クラスが marshal する)
 //   /stream.mjpeg   multipart/x-mixed-replace (Phase 0 はスタブ静止画)
+//   /stream.mp4     fMP4 ライブ (H.264 硬編有効時のみ — Phase 6a)
 //   /snapshot.jpg   最新 JPEG
 //   /panel/*        legacy Web 前端 (Phase 5; 予約)
 // 認証: setAuth のゲートに通らないリクエストは 401 (public_prefixes は素通し)。
@@ -62,6 +63,15 @@ class Httpd {
   // 最新 JPEG の提供者 (任意スレッドから呼ばれる — スレッドセーフに実装すること)。
   // 空 vector = フレーム無し (503)。/stream.mjpeg は fps 間隔でこれをポーリングする。
   void setJpegProvider(std::function<Bytes()> provider, int stream_fps = 8);
+
+  // /stream.mp4 (fMP4 ライブ — Phase 6a) のセッション提供者。リクエスト毎に provider が
+  // 呼ばれ pull 関数を返す (null = h264 無効 → 503)。pull は「次に書くべきバイト列」を
+  // 返す: 初回は init segment、以降は media fragment。空 vector = まだ無い (呼び直し可)、
+  // *ended=true = 購読終了 (切断する)。pull のブロックは ~500ms 上限で実装すること
+  // (停止・切断への応答性)。init が最初に来るまでは応答ヘッダを書かない
+  // (kMp4FirstChunkTimeoutMs 待って来なければ 503)。
+  using Mp4Pull = std::function<Bytes(bool* ended)>;
+  void setMp4Provider(std::function<Mp4Pull()> provider);
 
   // 認証ゲート (Runloop 外で呼ばれる; 状態を触るなら自前で同期すること)。
   // 未設定なら全公開 (テスト用)。
