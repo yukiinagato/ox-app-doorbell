@@ -61,7 +61,7 @@
 "admin.imported" = "Imported %@ entries";
 "admin.integrations" = "Integrations";
 "admin.join_hint" = "Enter this PIN and the address on the new device (valid 10 min)";
-"admin.join_pin" = "Join PIN";
+"admin.join_pin" = "Add via PIN";
 "admin.label_en" = "Label (English)";
 "admin.label_ja" = "Label (Japanese)";
 "admin.label_zh" = "Label (Chinese)";
@@ -77,6 +77,14 @@
 "admin.notify" = "Notifications";
 "admin.offline" = "Offline";
 "admin.online" = "Online";
+"admin.pair_approve" = "Approve";
+"admin.pair_approving" = "Adding…";
+"admin.pair_hint" = "Automatically finds and adds unconfigured devices on the same LAN. The QR shown on a new device does the same.";
+"admin.pair_invited" = "Invitation sent";
+"admin.pair_mode" = "Pairing mode (10 min)";
+"admin.pair_mode_left" = "Auto-add ON — %@:%@ left";
+"admin.pair_mode_on" = "Pairing mode started (10 min)";
+"admin.pair_none" = "No devices waiting";
 "admin.panel_token" = "Panel token";
 "admin.pass" = "Password";
 "admin.password" = "Admin password";

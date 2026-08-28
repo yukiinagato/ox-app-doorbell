@@ -214,6 +214,24 @@ DB_API char* db_core_config_json(db_core* c) {
   return dupString(c->node->configJson());
 }
 
+DB_API char* db_core_pairing_json(db_core* c) {
+  if (!c || !c->node) return nullptr;
+  return dupString(c->node->pairingJson());
+}
+
+DB_API void db_core_join_cluster(db_core* c, const char* host, const char* pin) {
+  if (!c || !c->node || !host || !*host || !pin || !*pin) return;
+  c->node->joinCluster(host, pin);
+}
+
+DB_API void db_core_pairing_mode(db_core* c, int seconds) {
+  if (c && c->node) c->node->setPairingMode(seconds);
+}
+
+DB_API void db_core_invite_device(db_core* c, const char* id) {
+  if (c && c->node && id && *id) c->node->inviteDevice(id);
+}
+
 DB_API void db_core_on_camera_frame(db_core* c, const uint8_t* data, int format, int width,
                                     int height, int stride, int64_t ts_ms) {
   if (!c || !c->node) return;

@@ -64,7 +64,7 @@
     <string name="admin_imported">%1$s 件を書き込みました</string>
     <string name="admin_integrations">統合</string>
     <string name="admin_join_hint">新しい端末でこの PIN と接続先を入力してください (10 分有効)</string>
-    <string name="admin_join_pin">追加 PIN</string>
+    <string name="admin_join_pin">PIN で追加</string>
     <string name="admin_label_en">ラベル (英語)</string>
     <string name="admin_label_ja">ラベル (日本語)</string>
     <string name="admin_label_zh">ラベル (中国語)</string>
@@ -80,6 +80,14 @@
     <string name="admin_notify">通知</string>
     <string name="admin_offline">オフライン</string>
     <string name="admin_online">オンライン</string>
+    <string name="admin_pair_approve">承認</string>
+    <string name="admin_pair_approving">追加中…</string>
+    <string name="admin_pair_hint">同じ LAN 上の未設定デバイスを自動で見つけて追加します。新機の画面に出る QR も同じ働きです。</string>
+    <string name="admin_pair_invited">招待を送りました</string>
+    <string name="admin_pair_mode">配対モード (10 分)</string>
+    <string name="admin_pair_mode_left">自動追加 ON — 残り %1$s:%2$s</string>
+    <string name="admin_pair_mode_on">配対モードを開始しました (10 分)</string>
+    <string name="admin_pair_none">待機中のデバイスはありません</string>
     <string name="admin_panel_token">パネル token</string>
     <string name="admin_pass">パスワード</string>
     <string name="admin_password">管理パスワード</string>

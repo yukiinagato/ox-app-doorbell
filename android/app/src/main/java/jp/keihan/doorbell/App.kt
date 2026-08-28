@@ -94,6 +94,9 @@ class App : Application(), DoorbellCore.Listener {
             lastPurpose = ev.optString("purpose")
             lastVisitorLang = ev.optString("visitor_lang")
         }
+        // 配対成功 (INVITE 受理 / PIN 参加) → boot.json に PSK/seeds を永続化。
+        // 現行プロセスは取得済み PSK で seed 直結・gossip 済み (再起動不要)、次回起動で beacon も再鍵。
+        if (ev.optString("t") == "paired") onPaired(ev)
         // 来客 (chime) → モニタ画面。門口機自身 (door_station) は MainActivity が門口 UI
         // なので出さない — 室内機/TV (indoor_panel) のみ。
         if (ev.optString("t") == "chime" && boot.role != "door_station") {
@@ -102,6 +105,23 @@ class App : Application(), DoorbellCore.Listener {
             IncomingActivity.launch(this, door,
                                     if (same) lastPurpose else "",
                                     if (same) lastVisitorLang else "")
+        }
+    }
+
+    private fun onPaired(ev: JSONObject) {
+        val pskHex = ev.optString("psk_hex")
+        val seeds = ArrayList<String>()
+        ev.optJSONArray("seeds")?.let { arr ->
+            for (i in 0 until arr.length()) arr.optString(i).takeIf { it.isNotEmpty() }
+                ?.let { seeds.add(it) }
+        }
+        val js = BootConfig.persistPsk(File(filesDir, "boot.json"), pskHex, seeds)
+        if (js != null) {
+            boot = BootConfig.load(File(filesDir, "boot.json"))  // メモリ側も更新
+            Log.i(TAG, "paired: boot.json に PSK/seeds を保存しました")
+        }
+        android.os.Handler(mainLooper).post {
+            android.widget.Toast.makeText(this, "配対しました", android.widget.Toast.LENGTH_LONG).show()
         }
     }
 

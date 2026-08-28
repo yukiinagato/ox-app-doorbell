@@ -64,7 +64,7 @@
     <string name="admin_imported">Imported %1$s entries</string>
     <string name="admin_integrations">Integrations</string>
     <string name="admin_join_hint">Enter this PIN and the address on the new device (valid 10 min)</string>
-    <string name="admin_join_pin">Join PIN</string>
+    <string name="admin_join_pin">Add via PIN</string>
     <string name="admin_label_en">Label (English)</string>
     <string name="admin_label_ja">Label (Japanese)</string>
     <string name="admin_label_zh">Label (Chinese)</string>
@@ -80,6 +80,14 @@
     <string name="admin_notify">Notifications</string>
     <string name="admin_offline">Offline</string>
     <string name="admin_online">Online</string>
+    <string name="admin_pair_approve">Approve</string>
+    <string name="admin_pair_approving">Adding…</string>
+    <string name="admin_pair_hint">Automatically finds and adds unconfigured devices on the same LAN. The QR shown on a new device does the same.</string>
+    <string name="admin_pair_invited">Invitation sent</string>
+    <string name="admin_pair_mode">Pairing mode (10 min)</string>
+    <string name="admin_pair_mode_left">Auto-add ON — %1$s:%2$s left</string>
+    <string name="admin_pair_mode_on">Pairing mode started (10 min)</string>
+    <string name="admin_pair_none">No devices waiting</string>
     <string name="admin_panel_token">Panel token</string>
     <string name="admin_pass">Password</string>
     <string name="admin_password">Admin password</string>

@@ -80,6 +80,10 @@ class Mesh {
     std::function<void(const EventRecord&)> on_event;
     // COMMAND 受信 ({"cmd":"chime","sound":"ding1"} 等)
     std::function<void(const std::string& from, const std::string& cmd_json)> on_command;
+    // 近隣の未配対デバイス一覧が変化した (承認 UI 更新用)
+    std::function<void()> on_pending_changed;
+    // INVITE 受理 / PIN 参加で PSK を取得した (Node が boot 設定へ永続化 + 再起動)
+    std::function<void()> on_paired;
   };
 
   Mesh(Runloop& loop, IClock& clock, HlcClock& hlc, ITransport& transport,
@@ -132,6 +136,13 @@ class Mesh {
   // psk が未設定 (全ゼロ) の状態で呼ぶ。
   void joinCluster(const std::string& host_addr, const std::string& pin,
                    std::function<void(bool ok, const std::string& err)> done);
+
+  // --- 配対 (発見 → 招待 push; QR/承認/配対モード。§1.6 拡張) ---
+  bool isPaired() const;            // 全ゼロ PSK = 未配対
+  std::string pairingSelfJson();    // 未配対の当機の告知内容 (QR に載せる id/addr/pk)
+  std::string pendingJson();        // 近隣で発見した未配対デバイス一覧 + 配対モード状態
+  void inviteDevice(const std::string& id);  // 一覧の 1 台へ {psk,seeds,cfg} を封緘 push
+  void setPairingMode(int64_t ttl_ms);       // 配対モードを ttl_ms 間 ON (発見即自動招待)
 
   const MeshSettings& settings() const { return settings_; }
 

@@ -95,6 +95,26 @@ class DoorbellCore {
 
     fun version(): String = nativeVersion()
 
+    // ---------- 配対 (発見/招待) ----------
+
+    /** 配対 UI 用: {paired, self, pair_qr, pending:{devices,pairing_mode}}。 */
+    fun pairingInfo(): JSONObject? = parse(if (handle != 0L) nativePairingJson(handle) else null)
+
+    /** 未配対機側: PIN + seed で能動参加。結果は onUiEvent の t:"join_result"/t:"paired"。 */
+    fun joinCluster(host: String, pin: String) {
+        if (handle != 0L) nativeJoinCluster(handle, host, pin)
+    }
+
+    /** 配対済み機側: 配対モードを seconds 秒 ON (期間中の未配対機を自動招待)。 */
+    fun setPairingMode(seconds: Int) {
+        if (handle != 0L) nativePairingMode(handle, seconds)
+    }
+
+    /** 配対済み機側: pending の 1 台 (node_id) を承認・招待。 */
+    fun inviteDevice(nodeId: String) {
+        if (handle != 0L) nativeInviteDevice(handle, nodeId)
+    }
+
     private fun parse(s: String?): JSONObject? =
         try { if (s == null) null else JSONObject(s) } catch (_: Exception) { null }
 
@@ -142,6 +162,10 @@ class DoorbellCore {
     private external fun nativeSipHangup(handle: Long)
     private external fun nativeQuickReply(handle: Long, replyId: String, door: String)
     private external fun nativeVersion(): String
+    private external fun nativePairingJson(handle: Long): String?
+    private external fun nativeJoinCluster(handle: Long, host: String, pin: String)
+    private external fun nativePairingMode(handle: Long, seconds: Int)
+    private external fun nativeInviteDevice(handle: Long, nodeId: String)
 
     companion object {
         init {

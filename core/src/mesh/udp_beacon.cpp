@@ -96,7 +96,24 @@ void UdpBeacon::announce(const std::string& node_id, const std::string& addr) {
   timer_id_ = loop_.postEvery(period_ms_, [this]() { sendHello_(); });
 }
 
+void UdpBeacon::setPairAnnounce(bool on, const std::string& name, const std::string& role,
+                                const std::string& pk) {
+  pair_name_ = name;
+  pair_role_ = role;
+  pair_pk_ = pk;
+  pair_on_.store(on);
+}
+
+void UdpBeacon::setPairFound(std::function<void(const PairBeacon&)> cb) {
+  on_pair_found_ = std::move(cb);
+}
+
 void UdpBeacon::sendHello_() {
+  // 未配対ノードは PSK を持たない → 集群 HELLO ではなく平文 PAIR-ANNOUNCE を撒く。
+  if (pair_on_.load()) {
+    sendPairAnnounce_();
+    return;
+  }
   auto o = json::obj();
   json::set(o.get(), "v", int64_t{1});
   json::set(o.get(), "id", node_id_);
@@ -116,6 +133,29 @@ void UdpBeacon::sendHello_() {
   }
 }
 
+void UdpBeacon::sendPairAnnounce_() {
+  auto o = json::obj();
+  json::set(o.get(), "v", int64_t{1});
+  json::set(o.get(), "pair", int64_t{1});  // 未配対告知の目印 (MAC なし)
+  json::set(o.get(), "id", node_id_);
+  json::set(o.get(), "addr", adv_addr_);
+  json::set(o.get(), "name", pair_name_);
+  json::set(o.get(), "role", pair_role_);
+  json::set(o.get(), "pk", pair_pk_);
+  const std::string pkt = json::dump(o.get());
+  sockaddr_in dst{};
+  dst.sin_family = AF_INET;
+  dst.sin_port = htons(port_);
+  ::inet_pton(AF_INET, group_.c_str(), &dst.sin_addr);
+  int n = net::sendTo(send_fd_, pkt.data(), pkt.size(), reinterpret_cast<sockaddr*>(&dst),
+                      sizeof(dst));
+  if (n == static_cast<int>(pkt.size())) {
+    sent_++;
+  } else {
+    send_err_++;
+  }
+}
+
 void UdpBeacon::recvLoop_() {
   char buf[2048];
   while (!stopping_) {
@@ -126,10 +166,20 @@ void UdpBeacon::recvLoop_() {
     if (!doc) continue;
     const std::string id = json::getString(doc.get(), "id");
     const std::string addr = json::getString(doc.get(), "addr");
-    const std::string mac = json::getString(doc.get(), "mac");
     if (id.empty() || addr.empty()) continue;
-    if (id == node_id_) continue;                       // 自分の HELLO
-    if (mac != beaconMac(psk_, id, addr)) continue;     // 他クラスタ/改竄 → 無視
+    if (id == node_id_) continue;  // 自分の告知
+    // 未配対デバイスの PAIR-ANNOUNCE (MAC なし — PSK 非依存)
+    if (json::getInt(doc.get(), "pair", 0) == 1) {
+      auto cb = on_pair_found_;
+      if (cb) {
+        PairBeacon pb{id, addr, json::getString(doc.get(), "name"),
+                      json::getString(doc.get(), "role"), json::getString(doc.get(), "pk")};
+        loop_.post([cb, pb]() { cb(pb); });
+      }
+      continue;
+    }
+    const std::string mac = json::getString(doc.get(), "mac");
+    if (mac != beaconMac(psk_, id, addr)) continue;  // 他クラスタ/改竄 → 無視
     DiscoveredPeer p{id, addr};
     auto cb = on_found_;
     if (cb) loop_.post([cb, p]() { cb(p); });

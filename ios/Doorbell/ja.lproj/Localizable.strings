@@ -61,7 +61,7 @@
 "admin.imported" = "%@ 件を書き込みました";
 "admin.integrations" = "統合";
 "admin.join_hint" = "新しい端末でこの PIN と接続先を入力してください (10 分有効)";
-"admin.join_pin" = "追加 PIN";
+"admin.join_pin" = "PIN で追加";
 "admin.label_en" = "ラベル (英語)";
 "admin.label_ja" = "ラベル (日本語)";
 "admin.label_zh" = "ラベル (中国語)";
@@ -77,6 +77,14 @@
 "admin.notify" = "通知";
 "admin.offline" = "オフライン";
 "admin.online" = "オンライン";
+"admin.pair_approve" = "承認";
+"admin.pair_approving" = "追加中…";
+"admin.pair_hint" = "同じ LAN 上の未設定デバイスを自動で見つけて追加します。新機の画面に出る QR も同じ働きです。";
+"admin.pair_invited" = "招待を送りました";
+"admin.pair_mode" = "配対モード (10 分)";
+"admin.pair_mode_left" = "自動追加 ON — 残り %@:%@";
+"admin.pair_mode_on" = "配対モードを開始しました (10 分)";
+"admin.pair_none" = "待機中のデバイスはありません";
 "admin.panel_token" = "パネル token";
 "admin.pass" = "パスワード";
 "admin.password" = "管理パスワード";

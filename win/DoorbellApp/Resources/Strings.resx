@@ -66,7 +66,7 @@
   <data name="admin_imported" xml:space="preserve"><value>{0} 件を書き込みました</value></data>
   <data name="admin_integrations" xml:space="preserve"><value>統合</value></data>
   <data name="admin_join_hint" xml:space="preserve"><value>新しい端末でこの PIN と接続先を入力してください (10 分有効)</value></data>
-  <data name="admin_join_pin" xml:space="preserve"><value>追加 PIN</value></data>
+  <data name="admin_join_pin" xml:space="preserve"><value>PIN で追加</value></data>
   <data name="admin_label_en" xml:space="preserve"><value>ラベル (英語)</value></data>
   <data name="admin_label_ja" xml:space="preserve"><value>ラベル (日本語)</value></data>
   <data name="admin_label_zh" xml:space="preserve"><value>ラベル (中国語)</value></data>
@@ -82,6 +82,14 @@
   <data name="admin_notify" xml:space="preserve"><value>通知</value></data>
   <data name="admin_offline" xml:space="preserve"><value>オフライン</value></data>
   <data name="admin_online" xml:space="preserve"><value>オンライン</value></data>
+  <data name="admin_pair_approve" xml:space="preserve"><value>承認</value></data>
+  <data name="admin_pair_approving" xml:space="preserve"><value>追加中…</value></data>
+  <data name="admin_pair_hint" xml:space="preserve"><value>同じ LAN 上の未設定デバイスを自動で見つけて追加します。新機の画面に出る QR も同じ働きです。</value></data>
+  <data name="admin_pair_invited" xml:space="preserve"><value>招待を送りました</value></data>
+  <data name="admin_pair_mode" xml:space="preserve"><value>配対モード (10 分)</value></data>
+  <data name="admin_pair_mode_left" xml:space="preserve"><value>自動追加 ON — 残り {0}:{1}</value></data>
+  <data name="admin_pair_mode_on" xml:space="preserve"><value>配対モードを開始しました (10 分)</value></data>
+  <data name="admin_pair_none" xml:space="preserve"><value>待機中のデバイスはありません</value></data>
   <data name="admin_panel_token" xml:space="preserve"><value>パネル token</value></data>
   <data name="admin_pass" xml:space="preserve"><value>パスワード</value></data>
   <data name="admin_password" xml:space="preserve"><value>管理パスワード</value></data>

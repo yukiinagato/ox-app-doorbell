@@ -53,14 +53,37 @@
 }
 
 - (void)onUiEvent:(NSDictionary *)ev {
+  NSString *t = [DBConfigUtil evStr:ev key:@"t"];
   // 来客 (press イベントの複製) → 来鈴画面。門口機自身 (door_station) は出さない。
-  if ([[DBConfigUtil evStr:ev key:@"t"] isEqualToString:@"event"] &&
+  if ([t isEqualToString:@"event"] &&
       [[DBConfigUtil evStr:ev key:@"type"] isEqualToString:@"press"] &&
       ![_boot.role isEqualToString:@"door_station"]) {
     [self presentIncomingDoor:[DBConfigUtil evStr:ev key:@"door"]
                       purpose:[DBConfigUtil evStr:ev key:@"purpose"]
                   visitorLang:[DBConfigUtil evStr:ev key:@"visitor_lang"]];
+  } else if ([t isEqualToString:@"paired"]) {
+    [self onPaired:ev];
   }
+}
+
+// 配対成功 (INVITE 受理 / PIN 参加)。boot.json に PSK/seeds を永続化する。
+// 現行プロセスは取得済み PSK で seed 直結・gossip 済み (再起動不要)。次回起動で beacon も再鍵。
+- (void)onPaired:(NSDictionary *)ev {
+  NSString *pskHex = [DBConfigUtil evStr:ev key:@"psk_hex"];
+  id sids = [ev objectForKey:@"seeds"];
+  NSArray *seeds = [sids isKindOfClass:[NSArray class]] ? sids : nil;
+  NSString *js = [DBBootConfig persistPsk:pskHex seeds:seeds];
+  if ([js length] > 0) {
+    _boot.rawJson = js;  // 次回 load 用にメモリ側も更新
+    NSLog(@"[doorbell] paired: boot.json に PSK/seeds を保存しました");
+  }
+  UIAlertView *a = [[UIAlertView alloc] initWithTitle:@"配対しました"
+                                              message:@"このデバイスをクラスタに追加しました。"
+                                             delegate:nil
+                                    cancelButtonTitle:@"OK"
+                                    otherButtonTitles:nil];
+  [a show];
+  [a release];
 }
 
 - (void)presentIncomingDoor:(NSString *)door purpose:(NSString *)purpose

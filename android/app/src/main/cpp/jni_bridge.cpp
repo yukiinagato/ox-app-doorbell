@@ -297,3 +297,34 @@ extern "C" JNIEXPORT jstring JNICALL
 Java_jp_keihan_doorbell_DoorbellCore_nativeVersion(JNIEnv* env, jobject) {
   return env->NewStringUTF(db_core_version());
 }
+
+// --- 配対 (発見/招待) ---
+extern "C" JNIEXPORT jstring JNICALL
+Java_jp_keihan_doorbell_DoorbellCore_nativePairingJson(JNIEnv* env, jobject, jlong h) {
+  Bridge* b = fromHandle(h);
+  if (!b || !b->core) return nullptr;
+  char* s = db_core_pairing_json(b->core);
+  jstring out = toJString(env, b, s);
+  db_free(s);
+  return out;
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_jp_keihan_doorbell_DoorbellCore_nativeJoinCluster(JNIEnv* env, jobject, jlong h, jstring host,
+                                                       jstring pin) {
+  Bridge* b = fromHandle(h);
+  if (b && b->core)
+    db_core_join_cluster(b->core, toUtf8(env, host).c_str(), toUtf8(env, pin).c_str());
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_jp_keihan_doorbell_DoorbellCore_nativePairingMode(JNIEnv*, jobject, jlong h, jint seconds) {
+  Bridge* b = fromHandle(h);
+  if (b && b->core) db_core_pairing_mode(b->core, static_cast<int>(seconds));
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_jp_keihan_doorbell_DoorbellCore_nativeInviteDevice(JNIEnv* env, jobject, jlong h, jstring id) {
+  Bridge* b = fromHandle(h);
+  if (b && b->core) db_core_invite_device(b->core, toUtf8(env, id).c_str());
+}

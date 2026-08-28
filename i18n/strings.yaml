@@ -160,8 +160,16 @@ admin.imported: { ja: "{n} 件を書き込みました", en: "Imported {n} entri
 admin.panel_token: { ja: "パネル token", en: "Panel token", zh: "面板 token" }
 admin.rotate: { ja: "ローテート", en: "Rotate", zh: "轮换" }
 admin.rotate_confirm: { ja: "旧 token は即時無効になります。よろしいですか?", en: "The old token becomes invalid immediately. Continue?", zh: "旧 token 将立即失效，继续吗？" }
-admin.join_pin: { ja: "追加 PIN", en: "Join PIN", zh: "配对 PIN" }
+admin.join_pin: { ja: "PIN で追加", en: "Add via PIN", zh: "用 PIN 添加" }
 admin.join_hint: { ja: "新しい端末でこの PIN と接続先を入力してください (10 分有効)", en: "Enter this PIN and the address on the new device (valid 10 min)", zh: "在新设备上输入此 PIN 与地址（10 分钟有效）" }
+admin.pair_hint: { ja: "同じ LAN 上の未設定デバイスを自動で見つけて追加します。新機の画面に出る QR も同じ働きです。", en: "Automatically finds and adds unconfigured devices on the same LAN. The QR shown on a new device does the same.", zh: "自动发现同一局域网内未配置的设备并添加。新设备屏幕上的二维码也是同样作用。" }
+admin.pair_mode: { ja: "配対モード (10 分)", en: "Pairing mode (10 min)", zh: "配对模式（10 分钟）" }
+admin.pair_mode_on: { ja: "配対モードを開始しました (10 分)", en: "Pairing mode started (10 min)", zh: "已开启配对模式（10 分钟）" }
+admin.pair_mode_left: { ja: "自動追加 ON — 残り {m}:{s}", en: "Auto-add ON — {m}:{s} left", zh: "自动添加已开启 — 剩余 {m}:{s}" }
+admin.pair_none: { ja: "待機中のデバイスはありません", en: "No devices waiting", zh: "暂无等待中的设备" }
+admin.pair_approve: { ja: "承認", en: "Approve", zh: "批准" }
+admin.pair_approving: { ja: "追加中…", en: "Adding…", zh: "添加中…" }
+admin.pair_invited: { ja: "招待を送りました", en: "Invitation sent", zh: "已发送邀请" }
 admin.logs: { ja: "ログ", en: "Logs", zh: "日志" }
 admin.raw_config: { ja: "設定 (生 JSON・読取)", en: "Config (raw JSON, read-only)", zh: "配置 (原始 JSON，只读)" }
 day.mon: { ja: "月", en: "Mon", zh: "一" }

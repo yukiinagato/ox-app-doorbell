@@ -66,7 +66,7 @@
   <data name="admin_imported" xml:space="preserve"><value>Imported {0} entries</value></data>
   <data name="admin_integrations" xml:space="preserve"><value>Integrations</value></data>
   <data name="admin_join_hint" xml:space="preserve"><value>Enter this PIN and the address on the new device (valid 10 min)</value></data>
-  <data name="admin_join_pin" xml:space="preserve"><value>Join PIN</value></data>
+  <data name="admin_join_pin" xml:space="preserve"><value>Add via PIN</value></data>
   <data name="admin_label_en" xml:space="preserve"><value>Label (English)</value></data>
   <data name="admin_label_ja" xml:space="preserve"><value>Label (Japanese)</value></data>
   <data name="admin_label_zh" xml:space="preserve"><value>Label (Chinese)</value></data>
@@ -82,6 +82,14 @@
   <data name="admin_notify" xml:space="preserve"><value>Notifications</value></data>
   <data name="admin_offline" xml:space="preserve"><value>Offline</value></data>
   <data name="admin_online" xml:space="preserve"><value>Online</value></data>
+  <data name="admin_pair_approve" xml:space="preserve"><value>Approve</value></data>
+  <data name="admin_pair_approving" xml:space="preserve"><value>Adding…</value></data>
+  <data name="admin_pair_hint" xml:space="preserve"><value>Automatically finds and adds unconfigured devices on the same LAN. The QR shown on a new device does the same.</value></data>
+  <data name="admin_pair_invited" xml:space="preserve"><value>Invitation sent</value></data>
+  <data name="admin_pair_mode" xml:space="preserve"><value>Pairing mode (10 min)</value></data>
+  <data name="admin_pair_mode_left" xml:space="preserve"><value>Auto-add ON — {0}:{1} left</value></data>
+  <data name="admin_pair_mode_on" xml:space="preserve"><value>Pairing mode started (10 min)</value></data>
+  <data name="admin_pair_none" xml:space="preserve"><value>No devices waiting</value></data>
   <data name="admin_panel_token" xml:space="preserve"><value>Panel token</value></data>
   <data name="admin_pass" xml:space="preserve"><value>Password</value></data>
   <data name="admin_password" xml:space="preserve"><value>Admin password</value></data>

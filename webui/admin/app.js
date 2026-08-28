@@ -513,6 +513,10 @@ if (typeof document !== "undefined") (function () {
   /* ---------------- mock データ (?mock=1 — 描画は実データと同一関数を通す) ---------------- */
   var MOCK_ID1 = "a1b2c3d4e5f60718293a4b5c6d7e8f90";
   var MOCK_ID2 = "0f1e2d3c4b5a69788766554433221100";
+  // 配対デモ状態 (mock)
+  var MOCK_PAIRMODE = 0;  // 配対モード期限 (ms epoch)
+  var MOCK_PENDING = [{ id: "newpad01aa22bb33cc44dd55ee66ff7788", name: "indoor_panel · newpad",
+                        role: "indoor_panel", addr: "10.10.38.55:47172", age_s: 2 }];
   // 資産 hash は sha256 = 64 桁 hex (実 API と同じ桁数でないとリンクの見た目が変わる)
   var MOCK_IMG = "11223344556677889900aabbccddeeff11223344556677889900aabbccddeeff";
   var MOCK_WAV = "99887766554433221100ffeeddccbbaa99887766554433221100ffeeddccbbaa";
@@ -664,6 +668,12 @@ if (typeof document !== "undefined") (function () {
       if (p === "/api/logs") return ok({ logs: ["I mock: これは mock ログです"] });
       if (p.indexOf("/locale/") === 0)
         return ok(MOCK_LOCALE[p.slice(8).replace(/\.json$/, "")] || {});
+      if (p === "/api/pairing") return ok({ paired: true, role: "door_station",
+        pair_qr: "doorbell-pair:10.10.38.9:47172|" + MOCK_ID1 + "|" + "de".repeat(32),
+        self: { id: MOCK_ID1, addr: "10.10.38.9:47172", pk: "de".repeat(32) },
+        pending: { pairing_mode: MOCK_PAIRMODE > Date.now(),
+          pairing_mode_left_s: Math.max(0, Math.round((MOCK_PAIRMODE - Date.now()) / 1000)),
+          devices: MOCK_PENDING } });
       return setTimeout(function () { cb(404, null); }, 0);
     }
     if (method === "DELETE" && p.indexOf("/api/assets/") === 0) {
@@ -694,6 +704,11 @@ if (typeof document !== "undefined") (function () {
       return ok({ ok: true, n: n });
     }
     if (p === "/api/join-token") return ok({ ok: true, pin: "482913", expires_s: 600 });
+    if (p === "/api/pairing/mode") { MOCK_PAIRMODE = Date.now() + 600000; return ok({ ok: true, seconds: 600 }); }
+    if (p === "/api/pairing/invite") {
+      MOCK_PENDING = MOCK_PENDING.filter(function (d) { return d.id !== (body && body.id); });
+      return ok({ ok: true });
+    }
     if (p === "/api/test/telegram") return ok({ ok: true });
     if (p === "/api/panel-token/rotate") {
       var tok = "mock" + Math.random().toString(16).slice(2, 10);
@@ -2031,10 +2046,19 @@ if (typeof document !== "undefined") (function () {
            esc(base + "/panel/monitor?k=" + tok) + "' target='_blank'>/panel/monitor?k=…</a></div>";
     h += "<button class='btn2' id='tokRotate' style='margin-top:8px'>" +
          esc(t("admin.rotate", "ローテート")) + "</button></div>";
-    // デバイス追加 (join token)
+    // デバイス配対 (自動発見 + 承認 / 配対モード / PIN)
     h += "<div class='card'><h2>" + esc(t("admin.add_device", "デバイスを追加")) + "</h2>" +
-         "<button class='btn small' id='joinBtn'>" + esc(t("admin.join_pin", "追加 PIN")) +
-         "</button><div id='joinOut'></div></div>";
+         "<div class='dim fhint' style='margin-bottom:8px'>" +
+         esc(t("admin.pair_hint", "同じ LAN 上の未設定デバイスを自動で見つけて追加します。" +
+                                  "新機の画面に出る QR も同じ働きです。")) + "</div>" +
+         "<div id='pairPending'></div>" +
+         "<div style='display:flex; gap:8px; align-items:center; margin-top:10px; flex-wrap:wrap'>" +
+         "<button class='btn2 small' id='pairModeBtn'>" +
+         esc(t("admin.pair_mode", "配対モード (10 分)")) + "</button>" +
+         "<span class='dim' id='pairModeStat'></span></div>" +
+         "<div style='margin-top:12px; border-top:1px solid var(--line,#2a333d); padding-top:10px'>" +
+         "<button class='btn2 small' id='joinBtn'>" + esc(t("admin.join_pin", "PIN で追加")) +
+         "</button><div id='joinOut'></div></div></div>";
     // 生設定 + 個別書込 (旧 UI 踏襲)
     h += "<div class='card'><h2>" + esc(t("admin.raw_config", "設定 (生 JSON)")) + "</h2>" +
          "<textarea id='cfgView' readonly></textarea>" +
@@ -2116,6 +2140,61 @@ if (typeof document !== "undefined") (function () {
       copyText($("#logOut").textContent || "", $("#logCopy"));
     };
     $("#logBtn").onclick();
+    if ($("#pairModeBtn")) $("#pairModeBtn").onclick = function () {
+      api("POST", "/api/pairing/mode", { seconds: 600 }, function (st, j) {
+        if (st === 200 && j && j.ok) {
+          msg(t("admin.pair_mode_on", "配対モードを開始しました (10 分)"));
+          refreshPairing();
+        } else msg(t("admin.save_failed", "失敗"));
+      });
+    };
+    refreshPairing();
+  }
+
+  // 配対パネル更新 (System タブが開いている時だけ /api/pairing を叩き #pairPending を差し替える)
+  function refreshPairing() {
+    if (S.tab !== "system") return;
+    api("GET", "/api/pairing", null, function (st, j) {
+      if (st !== 200 || !j) return;
+      var box = $("#pairPending");
+      if (!box) return;
+      var pend = j.pending || {}, devs = pend.devices || [];
+      var h = "";
+      if (!devs.length) {
+        h = "<div class='dim' style='padding:6px 0'>" +
+            esc(t("admin.pair_none", "待機中のデバイスはありません")) + "</div>";
+      } else {
+        for (var i = 0; i < devs.length; i++) {
+          var d = devs[i];
+          h += "<div style='display:flex; justify-content:space-between; align-items:center; " +
+               "padding:8px; border:1px solid var(--line,#2a333d); border-radius:8px; " +
+               "margin-bottom:6px'><div><div>" + esc(d.name || d.id) +
+               "</div><div class='dim mono' style='font-size:11px'>" + esc(d.role || "") +
+               " · " + esc(d.addr || "") + "</div></div>" +
+               "<button class='btn small pairApprove' data-id='" + esc(d.id) + "'>" +
+               esc(t("admin.pair_approve", "承認")) + "</button></div>";
+        }
+      }
+      box.innerHTML = h;
+      $all(".pairApprove").forEach(function (b) {
+        b.onclick = function () {
+          b.disabled = true;
+          b.textContent = t("admin.pair_approving", "追加中…");
+          api("POST", "/api/pairing/invite", { id: b.getAttribute("data-id") }, function (s2, j2) {
+            if (s2 === 200 && j2 && j2.ok) msg(t("admin.pair_invited", "招待を送りました"));
+            else { b.disabled = false; msg(t("admin.save_failed", "失敗")); }
+          });
+        };
+      });
+      var stat = $("#pairModeStat");
+      if (stat) {
+        if (pend.pairing_mode) {
+          var s = pend.pairing_mode_left_s || 0;
+          stat.textContent = fmt(t("admin.pair_mode_left", "自動追加 ON — 残り {m}:{s}"),
+            { m: Math.floor(s / 60), s: ("0" + (s % 60)).slice(-2) });
+        } else stat.textContent = "";
+      }
+    });
   }
 
   /* ---------------- 10. 用件 (visit_purposes) + 訪客言語 (ui.*) ---------------- */
@@ -2726,6 +2805,7 @@ if (typeof document !== "undefined") (function () {
       if (S.tab === "devices") renderDevices();
     });
     if (S.tab === "events") refreshEvents(renderEvents);
+    if (S.tab === "system") refreshPairing();  // 未配対デバイスの自動発見を追随
   }
 
   /* ---- i18n ---- */

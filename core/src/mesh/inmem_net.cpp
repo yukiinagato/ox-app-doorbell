@@ -24,6 +24,7 @@ struct NetState {
   Runloop& loop;
   std::map<std::string, std::function<void(ConnPtr)>> listeners;   // listen addr → on_accept
   std::map<std::string, std::function<void(const DiscoveredPeer&)>> discoveries;  // addr → cb
+  std::map<std::string, std::function<void(const PairBeacon&)>> pair_found;  // addr → 配対発見 cb
   std::set<std::string> killed;
   std::map<std::string, int> group;  // partition (空 = 全通)
   double drop_prob = 0.0;
@@ -202,11 +203,36 @@ class InMemDiscovery : public IDiscovery {
     }
     auto it = net_->discoveries.find(addr_);
     if (it != net_->discoveries.end()) net_->discoveries.erase(it);
+    auto pit = net_->pair_found.find(addr_);
+    if (pit != net_->pair_found.end()) net_->pair_found.erase(pit);
+  }
+
+  void setPairAnnounce(bool on, const std::string& name, const std::string& role,
+                       const std::string& pk) override {
+    pair_on_ = on;
+    pair_name_ = name;
+    pair_role_ = role;
+    pair_pk_ = pk;
+  }
+
+  void setPairFound(std::function<void(const PairBeacon&)> cb) override {
+    net_->pair_found[addr_] = std::move(cb);
   }
 
  private:
   void broadcast_() {
     if (net_->killed.count(addr_)) return;
+    if (pair_on_) {  // 未配対 → PAIR-ANNOUNCE を撒く (集群 HELLO は出さない)
+      for (auto& kv : net_->pair_found) {
+        if (kv.first == addr_) continue;
+        if (!net_->reachable(addr_, kv.first)) continue;
+        if (net_->dropFrame()) continue;
+        PairBeacon pb{node_id_, adv_addr_, pair_name_, pair_role_, pair_pk_};
+        auto cb = kv.second;
+        net_->loop.post([cb, pb]() { cb(pb); });
+      }
+      return;
+    }
     for (auto& kv : net_->discoveries) {
       if (kv.first == addr_) continue;
       if (!net_->reachable(addr_, kv.first)) continue;
@@ -220,6 +246,8 @@ class InMemDiscovery : public IDiscovery {
   std::shared_ptr<NetState> net_;
   std::string addr_;
   std::string node_id_, adv_addr_;
+  bool pair_on_ = false;
+  std::string pair_name_, pair_role_, pair_pk_;
   uint64_t timer_id_ = 0;
 };
 
@@ -266,6 +294,7 @@ void InMemNet::killNode(const std::string& addr) {
   net.killed.insert(addr);
   net.listeners.erase(addr);
   net.discoveries.erase(addr);
+  net.pair_found.erase(addr);
   severIf(net, [&addr](const std::string& a, const std::string& b) { return a == addr || b == addr; });
 }
 

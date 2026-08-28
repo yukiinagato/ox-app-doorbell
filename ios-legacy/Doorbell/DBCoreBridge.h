@@ -33,6 +33,12 @@ typedef void (^DBUiEventHandler)(NSDictionary *ev);
 - (NSDictionary *)deviceInfoNow;  // gateway/wifi/battery を今取得 (main スレッド)
 - (NSDictionary *)config;
 
+// 配対 (発見/招待)。pairingInfo: {paired, self, pair_qr, pending:{devices,pairing_mode}}
+- (NSDictionary *)pairingInfo;
+- (void)joinCluster:(NSString *)host pin:(NSString *)pin;  // 未配対機側: PIN 参加
+- (void)setPairingMode:(int)seconds;  // 配対済み機側: 配対モード ON
+- (void)inviteDevice:(NSString *)nodeId;  // 配対済み機側: 待機機を承認
+
 // 提示音 (reply/chime のカスタム音声再生失敗時の回落先でも使う)。
 - (void)chimeFallback;
 

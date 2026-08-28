@@ -102,6 +102,17 @@ DB_API char* db_core_debug_json(db_core* c);
 /* materialize 済み設定全文 JSON (doors/quick_replies 等の表示に使う)。db_free で解放。 */
 DB_API char* db_core_config_json(db_core* c);
 
+/* 配対 (発見/招待; mesh §1.6 拡張)。db_free で解放。
+ * pairing_json: {paired, self:{id,addr,pk,...}, pair_qr, pending:{devices[],pairing_mode}}。
+ *   未配対機は self/pair_qr を QR 表示、配対済み機は pending を承認 UI に出す。 */
+DB_API char* db_core_pairing_json(db_core* c);
+/* 未配対機側: PIN + seed で能動参加。結果は ui コールバックで t:"join_result"/t:"paired"。 */
+DB_API void db_core_join_cluster(db_core* c, const char* host, const char* pin);
+/* 配対済み機側: 配対モードを seconds 秒 ON (期間中の未配対機を自動招待)。 */
+DB_API void db_core_pairing_mode(db_core* c, int seconds);
+/* 配対済み機側: pending の 1 台 (node_id) を承認・招待。 */
+DB_API void db_core_invite_device(db_core* c, const char* id);
+
 /* カメラフレーム push (Phase 1)。format: 0=NV21, 1=NV12, 2=YUY2, 3=BGRA */
 DB_API void db_core_on_camera_frame(db_core* c, const uint8_t* data, int format, int width,
                                     int height, int stride, int64_t ts_ms);

@@ -64,7 +64,7 @@
     <string name="admin_imported">已写入 %1$s 项</string>
     <string name="admin_integrations">集成</string>
     <string name="admin_join_hint">在新设备上输入此 PIN 与地址（10 分钟有效）</string>
-    <string name="admin_join_pin">配对 PIN</string>
+    <string name="admin_join_pin">用 PIN 添加</string>
     <string name="admin_label_en">标签 (英语)</string>
     <string name="admin_label_ja">标签 (日语)</string>
     <string name="admin_label_zh">标签 (中文)</string>
@@ -80,6 +80,14 @@
     <string name="admin_notify">通知</string>
     <string name="admin_offline">离线</string>
     <string name="admin_online">在线</string>
+    <string name="admin_pair_approve">批准</string>
+    <string name="admin_pair_approving">添加中…</string>
+    <string name="admin_pair_hint">自动发现同一局域网内未配置的设备并添加。新设备屏幕上的二维码也是同样作用。</string>
+    <string name="admin_pair_invited">已发送邀请</string>
+    <string name="admin_pair_mode">配对模式（10 分钟）</string>
+    <string name="admin_pair_mode_left">自动添加已开启 — 剩余 %1$s:%2$s</string>
+    <string name="admin_pair_mode_on">已开启配对模式（10 分钟）</string>
+    <string name="admin_pair_none">暂无等待中的设备</string>
     <string name="admin_panel_token">面板 token</string>
     <string name="admin_pass">密码</string>
     <string name="admin_password">管理密码</string>

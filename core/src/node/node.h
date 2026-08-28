@@ -142,6 +142,12 @@ class Node {
   std::string statusJson();        // /api/status と同じ内容
   std::string debugJson();         // /api/debug (アドレス/wifi/電池/触発/疎通履歴)
   std::string configJson();        // materialize 済み設定全文
+
+  // --- 配対 (発見/招待; capi db_core_pairing_*) ---
+  std::string pairingJson();       // {paired, self:{QR 情報}, pair_qr, pending:{待機一覧+モード}}
+  void joinCluster(const std::string& host, const std::string& pin);  // PIN 参加 (未配対機側)
+  void setPairingMode(int seconds);          // 配対モード ON (配対済み機側)
+  void inviteDevice(const std::string& id);  // 待機デバイスを承認・招待
   // 設定書き込み (管理 API /api/config と同経路)。value_json はパース不能なら JSON 文字列扱い。
   void setConfigKey(const std::string& key, const std::string& value_json);
   const std::string& nodeId() const { return node_id_; }

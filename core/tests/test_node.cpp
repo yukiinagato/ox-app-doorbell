@@ -61,7 +61,7 @@ struct NFleet {
   std::vector<std::unique_ptr<N>> nodes;
 
   N& add(const std::string& addr, const std::string& name, const std::string& role,
-         const std::string& door, bool seed_cfg) {
+         const std::string& door, bool seed_cfg, bool zero_psk = false) {
     NodeOptions o;
     o.data_dir = ":memory:";
     o.name = name;
@@ -69,7 +69,7 @@ struct NFleet {
     o.door = door;
     o.listen_addr = addr;
     o.advertise_addr = addr;
-    o.psk = psk;
+    o.psk = zero_psk ? std::array<uint8_t, 32>{} : psk;
     o.enable_beacon = false;  // 実 beacon 禁止 (稼働 fleet への迷入防止)
     o.http_port = 0;
     o.seed_default_config = seed_cfg;
@@ -128,6 +128,72 @@ TEST_CASE("node: 2台が合流し既定設定が複製される") {
 
   a.node->stop();
   b.node->stop();
+}
+
+TEST_CASE("node: 配対 — 未配対機を発見 → 招待 → PSK 取得 (paired uiNotify + 設定複製)") {
+  NFleet f;
+  auto& host = f.add("A:1", "front", "door_station", "d_front", /*seed_cfg=*/true);
+  auto& joiner = f.add("J:1", "newpad", "indoor_panel", "", /*seed_cfg=*/false,
+                       /*zero_psk=*/true);
+  REQUIRE(host.node->start());
+  REQUIRE(joiner.node->start());
+
+  // pairingJson は入れ子オブジェクトとして整形される (文字列化しない)
+  auto pj0 = json::parse(joiner.node->pairingJson());
+  REQUIRE(pj0);
+  CHECK(json::getBool(pj0.get(), "paired") == false);
+  cJSON* self = json::get(pj0.get(), "self");
+  REQUIRE(self);  // 入れ子オブジェクト (setItem)
+  CHECK(json::getString(self, "pk").size() == 64);
+  CHECK(json::getString(pj0.get(), "pair_qr").rfind("doorbell-pair:", 0) == 0);
+
+  // host が未配対機を発見して pending に載せる
+  REQUIRE([&] {
+    for (int i = 0; i < 200; i++) {
+      f.run(50);
+      auto pj = json::parse(host.node->pairingJson());
+      cJSON* pend = pj ? json::get(pj.get(), "pending") : nullptr;
+      cJSON* devs = pend ? json::get(pend, "devices") : nullptr;
+      cJSON* it = nullptr;
+      cJSON_ArrayForEach(it, devs) {
+        if (json::getString(it, "id") == joiner.node->nodeId()) return true;
+      }
+    }
+    return false;
+  }());
+
+  // 管理者が承認 → 招待 push → joiner が PSK 取得
+  host.node->inviteDevice(joiner.node->nodeId());
+  REQUIRE([&] {
+    for (int i = 0; i < 200; i++) {
+      f.run(50);
+      if (joiner.uiCount("paired") >= 1) return true;
+    }
+    return false;
+  }());
+  // paired イベントに psk_hex/seeds が載る (殻が boot.json 永続化に使う)
+  std::string psk_hex;
+  for (const auto& e : joiner.ui) {
+    auto d = json::parse(e);
+    if (d && json::getString(d.get(), "t") == "paired") psk_hex = json::getString(d.get(), "psk_hex");
+  }
+  CHECK(psk_hex.size() == 64);
+  CHECK(psk_hex != std::string(64, '0'));  // 全ゼロでない = 実 PSK
+  // pairingJson が paired=true になり、既定設定 (host が seed した quick_replies) が届く
+  auto pj1 = json::parse(joiner.node->pairingJson());
+  CHECK(json::getBool(pj1.get(), "paired") == true);
+  REQUIRE([&] {
+    for (int i = 0; i < 200; i++) {
+      f.run(50);
+      auto cfg = json::parse(joiner.node->configJson());
+      cJSON* qr = cfg ? json::get(json::get(cfg.get(), "quick_replies"), "qr_away") : nullptr;
+      if (qr) return true;
+    }
+    return false;
+  }());
+
+  host.node->stop();
+  joiner.node->stop();
 }
 
 TEST_CASE("node: press → ルール評価 → chime/sip/イベント複製が exactly-once") {

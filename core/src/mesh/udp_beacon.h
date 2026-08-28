@@ -27,12 +27,17 @@ class UdpBeacon : public IDiscovery {
   void announce(const std::string& node_id, const std::string& addr) override;
   void stop() override;
 
+  void setPairAnnounce(bool on, const std::string& name, const std::string& role,
+                       const std::string& pk) override;
+  void setPairFound(std::function<void(const PairBeacon&)> cb) override;
+
   // 煙試験用の観測点 (CI ではループバック multicast が不安定なため送信可否のみ見る)
   int64_t sentCount() const { return sent_.load(); }
   int64_t sendErrorCount() const { return send_err_.load(); }
 
  private:
   void sendHello_();
+  void sendPairAnnounce_();
   void recvLoop_();
   bool openSockets_();
 
@@ -45,7 +50,12 @@ class UdpBeacon : public IDiscovery {
   int64_t period_ms_;
 
   std::function<void(const DiscoveredPeer&)> on_found_;
+  std::function<void(const PairBeacon&)> on_pair_found_;
   std::string node_id_, adv_addr_;
+  // 配対告知 (未配対時のみ). recv スレッドは on_pair_found_ を読むだけ、
+  // pair_* 文字列と pair_on_ は Runloop スレッド (announce/sendHello_) のみが触る。
+  std::atomic<bool> pair_on_{false};
+  std::string pair_name_, pair_role_, pair_pk_;
   uint64_t timer_id_ = 0;
   net::socket_t send_fd_ = net::kInvalidSocket;
   net::socket_t recv_fd_ = net::kInvalidSocket;

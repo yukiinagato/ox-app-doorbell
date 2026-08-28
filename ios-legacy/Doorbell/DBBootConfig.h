@@ -20,4 +20,8 @@
 + (NSString *)dataDir;
 + (DBBootConfig *)load;
 
+// 配対成功時: boot.json に psk_hex + seed_peers を書き込む (既存 seeds と和集合)。
+// 返り値 = 更新後の rawJson (次回起動でこの PSK を使う)。失敗時 nil。
++ (NSString *)persistPsk:(NSString *)pskHex seeds:(NSArray *)seeds;
+
 @end

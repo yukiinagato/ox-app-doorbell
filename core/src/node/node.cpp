@@ -46,11 +46,6 @@ std::string hashPassword(const std::string& pw, const std::string& salt_hex) {
   return hexEncode(out, sizeof(out));
 }
 
-bool pskIsZero(const std::array<uint8_t, 32>& psk) {
-  for (uint8_t b : psk)
-    if (b) return false;
-  return true;
-}
 
 // "host:port" → host
 std::string hostOf(const std::string& addr) {
@@ -1139,8 +1134,9 @@ struct Node::Impl {
 
     // トランスポート
     if (!transport) transport.reset(new TcpTransport(*loop));
-    if (!discovery && opts.enable_beacon && !pskIsZero(opts.psk))
-      discovery.reset(new UdpBeacon(*loop, opts.psk));
+    // beacon は未配対機でも生成する — PAIR-ANNOUNCE (平文・PSK 非依存) で自身を広告し、
+    // 集群ノードの承認/配対モードで招待を受け取るため (配対 §1.6 拡張)。
+    if (!discovery && opts.enable_beacon) discovery.reset(new UdpBeacon(*loop, opts.psk));
 
     // Mesh
     MeshSettings ms = opts.use_mesh_timing_template ? opts.mesh_timing_template : MeshSettings{};
@@ -1191,6 +1187,9 @@ struct Node::Impl {
     cbs.on_command = [this](const std::string& from, const std::string& cmd) {
       onCommand(from, cmd);
     };
+    cbs.on_pending_changed = [this] { uiNotify("{\"t\":\"pending_changed\"}"); };
+    // INVITE 受理 / PIN 参加で PSK を取得した → 殻に新 boot 設定を渡して永続化 + 再起動させる。
+    cbs.on_paired = [this] { onBecamePaired(); };
     mesh.reset(new Mesh(*loop, *clock, *hlc, *transport, discovery.get(), store, *config,
                         *events, ms, cbs));
     // 他ノードからの快照要求 (SNAP_REQ — Telegram 写真用) には最新 JPEG で応える
@@ -1725,6 +1724,46 @@ struct Node::Impl {
     if (net_probe_timer) { loop->cancel(net_probe_timer); net_probe_timer = 0; }
   }
 
+  // ---------- 配対 (発見/招待) ----------
+
+  // 配対 UI 用: 自身の告知情報 (QR) + 近隣の未配対デバイス一覧 + 配対モード状態。
+  std::string pairingJsonOnLoop() {
+    auto o = json::obj();
+    if (!mesh) return json::dump(o.get());
+    json::setBool(o.get(), "paired", mesh->isPaired());
+    json::set(o.get(), "role", opts.role);
+    // 自身の告知 (未配対時に QR へ載せる id/addr/pk) — QR 文字列も組んで渡す
+    json::Doc self = json::parse(mesh->pairingSelfJson());
+    if (self) {
+      // QR ペイロード: doorbell-pair:<addr>|<id>|<pk> (管理端末が読み取り invite する)
+      const std::string qr = "doorbell-pair:" + json::getString(self.get(), "addr") + "|" +
+                             json::getString(self.get(), "id") + "|" +
+                             json::getString(self.get(), "pk");
+      json::set(o.get(), "pair_qr", qr);
+      json::setItem(o.get(), "self", std::move(self));  // 入れ子オブジェクトとして添付
+    }
+    // 近隣の未配対デバイス + 配対モード
+    json::Doc pend = json::parse(mesh->pendingJson());
+    if (pend) json::setItem(o.get(), "pending", std::move(pend));
+    return json::dump(o.get());
+  }
+
+  // INVITE 受理 / PIN 参加で PSK を取得 → 殻へ新 boot 設定を通知 (殻が boot.json 永続化 + 再起動)。
+  void onBecamePaired() {
+    if (!mesh) return;
+    const auto& s = mesh->settings();
+    auto o = json::obj();
+    json::set(o.get(), "t", "paired");
+    json::set(o.get(), "psk_hex", hexEncode(s.psk.data(), s.psk.size()));
+    json::set(o.get(), "psk_id", s.psk_id);
+    cJSON* seeds = json::addArr(o.get(), "seeds");
+    for (const auto& a : s.seed_peers)
+      json::push(seeds, json::Doc(cJSON_CreateString(a.c_str())));
+    DB_LOGI(kTag, "paired: PSK 取得 (seeds=" + std::to_string(s.seed_peers.size()) +
+                      ") — 殻へ boot 永続化 + 再起動を要求");
+    uiNotify(json::dump(o.get()));
+  }
+
   std::string debugJsonOnLoop() {
     auto o = json::obj();
     json::set(o.get(), "node", node_id);
@@ -2021,6 +2060,52 @@ struct Node::Impl {
       json::set(o.get(), "pin", t.pin);
       json::set(o.get(), "expires_s", (t.expires_mono - clock->monoMs()) / 1000);
       return HttpResp::json(json::dump(o.get()));
+    });
+
+    // --- 配対 (発見/招待; 管理セッション必須) ---
+    // 自身の告知 QR + 近隣の未配対デバイス一覧 + 配対モード状態
+    httpd->route("GET", "/api/pairing",
+                 [this](const HttpReq&) { return HttpResp::json(pairingJsonOnLoop()); });
+    // 配対モードを ON (既定 600 秒 = 10 分)。期間中に現れた未配対機を自動招待。
+    httpd->route("POST", "/api/pairing/mode", [this](const HttpReq& req) {
+      if (!mesh) return HttpResp::json("{\"ok\":false,\"err\":\"no_mesh\"}", 503);
+      auto b = json::parse(req.body);
+      int64_t sec = b ? json::getInt(b.get(), "seconds", 600) : 600;
+      if (sec < 0) sec = 0;
+      if (sec > 3600) sec = 3600;
+      mesh->setPairingMode(sec * 1000);
+      auto o = json::obj();
+      json::setBool(o.get(), "ok", true);
+      json::set(o.get(), "seconds", sec);
+      return HttpResp::json(json::dump(o.get()));
+    });
+    // 一覧の 1 台を承認 → {psk,seeds,cfg} を封緘 push
+    httpd->route("POST", "/api/pairing/invite", [this](const HttpReq& req) {
+      if (!mesh) return HttpResp::json("{\"ok\":false,\"err\":\"no_mesh\"}", 503);
+      auto b = json::parse(req.body);
+      std::string id = b ? json::getString(b.get(), "id") : "";
+      if (id.empty()) return HttpResp::json("{\"ok\":false,\"err\":\"no_id\"}", 400);
+      mesh->inviteDevice(id);
+      return HttpResp::json("{\"ok\":true}");
+    });
+    // 未配対機側: PIN + seed で能動的に参加 (管理 UI から。QR/承認と併存)
+    httpd->route("POST", "/api/pairing/join", [this](const HttpReq& req) {
+      if (!mesh) return HttpResp::json("{\"ok\":false,\"err\":\"no_mesh\"}", 503);
+      if (mesh->isPaired()) return HttpResp::json("{\"ok\":false,\"err\":\"already_paired\"}", 409);
+      auto b = json::parse(req.body);
+      std::string host = b ? json::getString(b.get(), "host") : "";
+      std::string pin = b ? json::getString(b.get(), "pin") : "";
+      if (host.empty() || pin.empty())
+        return HttpResp::json("{\"ok\":false,\"err\":\"need host+pin\"}", 400);
+      // 結果は非同期 (uiNotify t:paired / t:join_result)。ここでは受理のみ返す。
+      mesh->joinCluster(host, pin, [this](bool ok, const std::string& err) {
+        auto o = json::obj();
+        json::set(o.get(), "t", "join_result");
+        json::setBool(o.get(), "ok", ok);
+        json::set(o.get(), "err", err);
+        uiNotify(json::dump(o.get()));
+      });
+      return HttpResp::json("{\"ok\":true,\"pending\":true}");
     });
 
     // Telegram テスト送信。chat_id 省略 = 全 households へ。
@@ -2673,6 +2758,38 @@ std::string Node::configJson() {
 
 void Node::setConfigKey(const std::string& key, const std::string& value_json) {
   impl_->loop->callSync([&] { impl_->setKey(key, value_json); });
+}
+
+std::string Node::pairingJson() {
+  std::string out;
+  impl_->loop->callSync([&] { out = impl_->pairingJsonOnLoop(); });
+  return out;
+}
+
+void Node::joinCluster(const std::string& host, const std::string& pin) {
+  impl_->loop->callSync([&] {
+    if (impl_->mesh && !impl_->mesh->isPaired()) {
+      impl_->mesh->joinCluster(host, pin, [this](bool ok, const std::string& err) {
+        auto o = json::obj();
+        json::set(o.get(), "t", "join_result");
+        json::setBool(o.get(), "ok", ok);
+        json::set(o.get(), "err", err);
+        impl_->uiNotify(json::dump(o.get()));
+      });
+    }
+  });
+}
+
+void Node::setPairingMode(int seconds) {
+  impl_->loop->callSync([&] {
+    if (impl_->mesh) impl_->mesh->setPairingMode(static_cast<int64_t>(seconds) * 1000);
+  });
+}
+
+void Node::inviteDevice(const std::string& id) {
+  impl_->loop->callSync([&] {
+    if (impl_->mesh) impl_->mesh->inviteDevice(id);
+  });
 }
 
 Runloop& Node::loop() { return *impl_->loop; }

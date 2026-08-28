@@ -85,6 +85,8 @@ struct Fleet {
     std::vector<std::pair<std::string, bool>> alive_changes;
     std::vector<std::pair<std::string, std::string>> leader_changes;
     std::vector<std::pair<std::string, std::string>> commands;
+    int pending_changes = 0;  // Mesh cbs.on_pending_changed
+    int paired_count = 0;     // Mesh cbs.on_paired (INVITE/PIN で PSK 取得)
     // mesh は最後 (先に破棄されるように)
     std::unique_ptr<Mesh> mesh;
 
@@ -148,6 +150,8 @@ struct Fleet {
     cbs.on_command = [np](const std::string& from, const std::string& cmd) {
       np->commands.emplace_back(from, cmd);
     };
+    cbs.on_pending_changed = [np] { np->pending_changes++; };
+    cbs.on_paired = [np] { np->paired_count++; };
     n->mesh = std::make_unique<Mesh>(loop, clock, *n->hlc, *n->tp, n->disc.get(), n->store,
                                      *n->config, *n->events, st, cbs);
     // ローカル設定書き込みは即 delta push (Node 層の役割の代替)
@@ -805,6 +809,81 @@ TEST_CASE("mesh: TcpTransport 実物スモーク — 127.0.0.1 で握手 + PING 
     nb->mesh->stop();
   });
   loop.stop();
+}
+
+// ---------------------------------------------------------------- 配対 (発見/招待)
+
+// pendingJson から待機デバイス id の一覧を取り出す
+std::vector<std::string> pendingIds(const std::string& js) {
+  std::vector<std::string> out;
+  json::Doc d = json::parse(js);
+  if (!d) return out;
+  const cJSON* arr = json::get(d.get(), "devices");
+  const cJSON* it = nullptr;
+  cJSON_ArrayForEach(it, arr) { out.push_back(json::getString(it, "id")); }
+  return out;
+}
+
+TEST_CASE("mesh: 配対発見 → inviteDevice で未配対機が PSK/設定を取得し合流 (承認フロー)") {
+  Fleet f;
+  // 配対済みの集群ノード (beacon 有効)
+  Fleet::Node& host = f.add(kIdA, "A", capsJson(10), {{}, /*beacon=*/true});
+  host.config->set("cluster.name", "\"京阪ハウス\"");
+  host.config->set("doors.front.label", "\"正面玄関\"");
+  // 未配対機 (全ゼロ PSK, beacon 有効 → PAIR-ANNOUNCE を撒く)
+  Fleet::Node& joiner = f.add(kIdJ, "J", capsJson(3), {{}, /*beacon=*/true, 1, /*zero_psk=*/true});
+  CHECK_FALSE(joiner.mesh->isPaired());
+  CHECK(host.mesh->isPaired());
+
+  // host が未配対機を発見して一覧化
+  REQUIRE(f.runUntil([&] {
+    auto ids = pendingIds(host.mesh->pendingJson());
+    return std::find(ids.begin(), ids.end(), kIdJ) != ids.end();
+  }, 3000));
+  CHECK(host.pending_changes >= 1);
+
+  // 管理者が承認 → INVITE push
+  host.mesh->inviteDevice(kIdJ);
+  REQUIRE(f.runUntil([&] { return joiner.mesh->isPaired(); }, 3000));
+  CHECK(joiner.paired_count >= 1);
+  // 設定スナップショットが適用済み
+  CHECK(joiner.config->get("cluster.name") == std::optional<std::string>("\"京阪ハウス\""));
+  CHECK(joiner.config->get("doors.front.label") == std::optional<std::string>("\"正面玄関\""));
+  // 取得した PSK で正規接続へ移行し相互 alive
+  REQUIRE(f.runUntil([&] { return f.mutualAlive({kIdA, kIdJ}); }, 4000));
+  // 合流後の設定変更も同期される
+  host.config->set("cluster.tz", "\"Asia/Tokyo\"");
+  REQUIRE(f.runUntil([&] {
+    return joiner.config->get("cluster.tz") == std::optional<std::string>("\"Asia/Tokyo\"");
+  }, 3000));
+}
+
+TEST_CASE("mesh: 配対モード — 期間中に現れた未配対機を自動招待") {
+  Fleet f;
+  Fleet::Node& host = f.add(kIdA, "A", capsJson(10), {{}, /*beacon=*/true});
+  host.config->set("cluster.name", "\"京阪ハウス\"");
+  // 配対モードを 10 分 ON (この時点では待機デバイス無し)
+  host.mesh->setPairingMode(10 * 60 * 1000);
+
+  // 後から未配対機が出現 → onPairFound で自動招待される
+  Fleet::Node& joiner = f.add(kIdJ, "J", capsJson(3), {{}, /*beacon=*/true, 1, /*zero_psk=*/true});
+  REQUIRE(f.runUntil([&] { return joiner.mesh->isPaired(); }, 4000));
+  CHECK(joiner.config->get("cluster.name") == std::optional<std::string>("\"京阪ハウス\""));
+  REQUIRE(f.runUntil([&] { return f.mutualAlive({kIdA, kIdJ}); }, 4000));
+}
+
+TEST_CASE("mesh: 未配対機は自分では招待できない (isPaired ガード)") {
+  Fleet f;
+  // 2 台とも未配対
+  Fleet::Node& a = f.add(kIdA, "A", capsJson(10), {{}, /*beacon=*/true, 1, /*zero_psk=*/true});
+  Fleet::Node& b = f.add(kIdJ, "J", capsJson(3), {{}, /*beacon=*/true, 1, /*zero_psk=*/true});
+  f.run(1000);
+  // 互いを pending に入れない (未配対は setPairFound しない)
+  CHECK(pendingIds(a.mesh->pendingJson()).empty());
+  CHECK(pendingIds(b.mesh->pendingJson()).empty());
+  a.mesh->inviteDevice(kIdJ);  // no-op のはず
+  f.run(1000);
+  CHECK_FALSE(b.mesh->isPaired());
 }
 
 // ---------------------------------------------------------------- beacon 煙試験

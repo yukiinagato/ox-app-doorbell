@@ -46,6 +46,16 @@ struct DiscoveredPeer {
   std::string addr;
 };
 
+// 未配対デバイスの平文告知 (配対 §1.6 拡張)。PSK を持たないので MAC は付かない。
+// pk = X25519 公開鍵 hex — 招待側はこれに向けて {psk,seeds,cfg} を封緘する。
+struct PairBeacon {
+  std::string id;
+  std::string addr;
+  std::string name;  // 表示名 (機種/役割)
+  std::string role;
+  std::string pk;    // X25519 公開鍵 (64 hex)
+};
+
 class IDiscovery {
  public:
   virtual ~IDiscovery() = default;
@@ -53,6 +63,13 @@ class IDiscovery {
   // 自分の存在を周期告知 (実装側が Runloop タイマーで回す)
   virtual void announce(const std::string& node_id, const std::string& addr) = 0;
   virtual void stop() = 0;
+
+  // --- 配対発見 (既定 no-op — 実装は UdpBeacon / InMemDiscovery) ---
+  // 未配対時: 周期告知を PAIR-ANNOUNCE に切り替える (on=true)。paired 化後は off。
+  virtual void setPairAnnounce(bool /*on*/, const std::string& /*name*/,
+                               const std::string& /*role*/, const std::string& /*pk*/) {}
+  // 近隣の未配対デバイス発見コールバック (paired ノードのみ設定)。
+  virtual void setPairFound(std::function<void(const PairBeacon&)> /*cb*/) {}
 };
 
 }  // namespace db

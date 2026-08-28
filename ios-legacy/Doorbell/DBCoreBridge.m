@@ -468,4 +468,23 @@ static void DBUiEventCb(void *user, const char *event_json) {
   return [self takeJson:db_core_config_json(_core)];
 }
 
+// --- 配対 (発見/招待) ---
+- (NSDictionary *)pairingInfo {
+  if (_core == NULL) return nil;
+  return [self takeJson:db_core_pairing_json(_core)];
+}
+
+- (void)joinCluster:(NSString *)host pin:(NSString *)pin {
+  if (_core && [host length] > 0 && [pin length] > 0)
+    db_core_join_cluster(_core, [host UTF8String], [pin UTF8String]);
+}
+
+- (void)setPairingMode:(int)seconds {
+  if (_core) db_core_pairing_mode(_core, seconds);
+}
+
+- (void)inviteDevice:(NSString *)nodeId {
+  if (_core && [nodeId length] > 0) db_core_invite_device(_core, [nodeId UTF8String]);
+}
+
 @end

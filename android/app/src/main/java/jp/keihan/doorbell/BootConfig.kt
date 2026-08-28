@@ -39,5 +39,30 @@ class BootConfig private constructor(
             } catch (_: Exception) { }
             return BootConfig(raw, name, role, door, lang, kiosk, httpPort)
         }
+
+        /**
+         * 配対成功時: boot.json に psk_hex + seed_peers を書き込む (既存 seeds と和集合)。
+         * 返り値 = 更新後の rawJson (次回起動でこの PSK を使う)。失敗時 null。
+         */
+        fun persistPsk(file: File, pskHex: String, seeds: List<String>): String? {
+            if (pskHex.length != 64) return null
+            val cur = if (file.exists()) {
+                try { file.readText() } catch (_: Exception) { DEFAULT_JSON }
+            } else DEFAULT_JSON
+            return try {
+                val d = JSONObject(cur)
+                d.put("psk_hex", pskHex)
+                val merged = LinkedHashSet<String>()
+                d.optJSONArray("seed_peers")?.let { arr ->
+                    for (i in 0 until arr.length()) arr.optString(i).takeIf { it.isNotEmpty() }
+                        ?.let { merged.add(it) }
+                }
+                for (s in seeds) if (s.isNotEmpty()) merged.add(s)
+                if (merged.isNotEmpty()) d.put("seed_peers", org.json.JSONArray(merged.toList()))
+                val js = d.toString()
+                file.writeText(js)
+                js
+            } catch (_: Exception) { null }
+        }
     }
 }

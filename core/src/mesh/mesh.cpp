@@ -205,6 +205,18 @@ struct Mesh::Impl {
   };
   std::shared_ptr<JoinRun> join;
 
+  // ---- 配対 (発見 → 招待 push; QR/承認/配対モード) ----
+  std::array<uint8_t, 32> pair_sk_{};   // 未配対時の一時 X25519 秘密鍵
+  std::array<uint8_t, 32> pair_pk_{};   // 対応公開鍵 (PAIR-ANNOUNCE / QR で公開)
+  bool pair_keys_ready_ = false;
+  struct Pending {
+    std::string id, addr, name, role, pk;
+    int64_t last_seen = 0;
+  };
+  std::map<std::string, Pending> pending_;  // id → 近隣の未配対デバイス
+  int64_t pairing_mode_until_ = 0;          // >now = 配対モード中 (発見即自動招待)
+  static constexpr int64_t kPendingTtlMs = 30000;  // これ以上告知が途絶えたら一覧から除去
+
   // ---- 快照 ----
   std::function<Bytes()> snap_provider;  // 自ノードの最新 JPEG (Node が配線)
   struct SnapWait {
@@ -274,6 +286,20 @@ struct Mesh::Impl {
     tp.listen(st.listen_addr, [this](ConnPtr c) { onAccept(std::move(c)); });
     if (disc) {
       disc->start([this](const DiscoveredPeer& p) { onDiscovered(p); });
+      // 告知モードは announce() より前に確定させる — announce の初回同期送信で
+      // 未配対機が誤って集群 HELLO を撒き、相手に幽霊 peer を作らせないため。
+      std::weak_ptr<char> w = alive;
+      if (isPaired()) {
+        // 配対済み: 近隣の未配対デバイスを発見して一覧化 (承認/配対モードで招待)
+        disc->setPairFound([this, w](const PairBeacon& pb) {
+          if (!w.expired() && running) onPairFound(pb);
+        });
+      } else {
+        // 未配対: 集群 HELLO ではなく PAIR-ANNOUNCE を撒いて招待を待つ
+        ensurePairKeys();
+        disc->setPairAnnounce(true, pairName(), st.role,
+                              hexEncode(pair_pk_.data(), pair_pk_.size()));
+      }
       disc->announce(st.node_id, st.advertise_addr);
     }
 
@@ -1219,21 +1245,7 @@ struct Mesh::Impl {
         return;
       }
       // 検証 OK → K で暗号化した {psk, seeds, 設定スナップショット} を配布
-      auto payload = json::obj();
-      json::set(payload.get(), "psk", hexEncode(st.psk.data(), st.psk.size()));
-      json::set(payload.get(), "psk_id", st.psk_id);
-      cJSON* seeds = json::addArr(payload.get(), "seeds");
-      std::set<std::string> seen;
-      auto addSeed = [&](const std::string& a) {
-        if (!a.empty() && seen.insert(a).second) {
-          json::push(seeds, json::Doc(cJSON_CreateString(a.c_str())));
-        }
-      };
-      addSeed(st.advertise_addr);
-      for (const auto& a : st.seed_peers) addSeed(a);
-      cJSON* cfg = json::addArr(payload.get(), "cfg");
-      for (const auto& e : config.all()) json::push(cfg, entryToJson(e));
-      const std::string plain = json::dump(payload.get());
+      const std::string plain = buildJoinPayloadJson();
       Bytes nonce = randomBytes(24);
       Bytes out(16 + plain.size());  // mac(16) || cipher
       crypto_aead_lock(out.data() + 16, out.data(), k.data(), nonce.data(), nullptr, 0,
@@ -1244,7 +1256,70 @@ struct Mesh::Impl {
       json::set(o.get(), "c", hexEncode(out));
       sendJoinFrame(ib->conn, o.get());
       token.active = false;  // 成功で消費
+    } else if (t == "INVITE") {
+      // 逆方向配対: 集群ノードが未配対の当機へ {psk,seeds,cfg} を封緘 push (QR/承認/配対モード)。
+      // 封緘鍵 = BLAKE2b(X25519(pair_sk, epk))。pair_sk は当機の一時鍵 (PAIR-ANNOUNCE/QR で pk を公開)。
+      if (isPaired() || !pair_keys_ready_) return;  // 既配対 or 未告知 → 無視
+      Bytes epk, nonce, enc;
+      if (!hexDecode(json::getString(doc.get(), "epk"), epk) || epk.size() != 32 ||
+          !hexDecode(json::getString(doc.get(), "n"), nonce) || nonce.size() != 24 ||
+          !hexDecode(json::getString(doc.get(), "c"), enc) || enc.size() < 16) {
+        return;
+      }
+      std::array<uint8_t, 32> shared{}, key{};
+      crypto_x25519(shared.data(), pair_sk_.data(), epk.data());
+      crypto_blake2b(key.data(), 32, shared.data(), shared.size());
+      Bytes plain(enc.size() - 16);
+      if (crypto_aead_unlock(plain.data(), enc.data(), key.data(), nonce.data(), nullptr, 0,
+                             enc.data() + 16, plain.size()) != 0) {
+        return;  // 別鍵/改竄 — 静かに捨てる (LAN 上の他者の招待かも)
+      }
+      json::Doc payload = json::parse(std::string(plain.begin(), plain.end()));
+      if (!payload || !applyJoinPayload(payload.get())) return;
+      onBecamePaired();  // 永続化 + 再鍵 (Node へ通知)
     }
+  }
+
+  // JOIN_OK / INVITE 共通: 配布ペイロード {psk, psk_id, seeds[], cfg[]} を組む
+  std::string buildJoinPayloadJson() {
+    auto payload = json::obj();
+    json::set(payload.get(), "psk", hexEncode(st.psk.data(), st.psk.size()));
+    json::set(payload.get(), "psk_id", st.psk_id);
+    cJSON* seeds = json::addArr(payload.get(), "seeds");
+    std::set<std::string> seen;
+    auto addSeed = [&](const std::string& a) {
+      if (!a.empty() && seen.insert(a).second) {
+        json::push(seeds, json::Doc(cJSON_CreateString(a.c_str())));
+      }
+    };
+    addSeed(st.advertise_addr);
+    for (const auto& a : st.seed_peers) addSeed(a);
+    cJSON* cfg = json::addArr(payload.get(), "cfg");
+    for (const auto& e : config.all()) json::push(cfg, entryToJson(e));
+    return json::dump(payload.get());
+  }
+
+  // JOIN_OK / INVITE 共通: 受領した平文ペイロードを適用 (psk/seeds/cfg)。
+  bool applyJoinPayload(const cJSON* payload) {
+    Bytes psk;
+    if (!hexDecode(json::getString(payload, "psk"), psk) || psk.size() != 32) return false;
+    std::copy(psk.begin(), psk.end(), st.psk.begin());
+    st.psk_id = json::getString(payload, "psk_id", st.psk_id);
+    const cJSON* a = nullptr;
+    cJSON_ArrayForEach(a, json::get(payload, "seeds")) {
+      if (!cJSON_IsString(a)) continue;
+      const std::string addr = a->valuestring;
+      if (isSelfAddr(addr)) continue;
+      if (std::find(st.seed_peers.begin(), st.seed_peers.end(), addr) == st.seed_peers.end()) {
+        st.seed_peers.push_back(addr);
+      }
+      rememberAddr(addr, "");
+    }
+    const cJSON* e = nullptr;
+    cJSON_ArrayForEach(e, json::get(payload, "cfg")) {
+      config.applyRemote(entryFromJson(e));
+    }
+    return true;
   }
 
   // ------------------------------------------------------------------ 配対 joiner
@@ -1275,6 +1350,153 @@ struct Mesh::Impl {
 
   void abortJoin(const std::string& err) {
     if (join) finishJoin(join, false, err);
+  }
+
+  // ------------------------------------------------------------------ 配対 (発見/招待)
+
+  bool isPaired() const {
+    for (uint8_t b : st.psk)
+      if (b) return true;  // 全ゼロ PSK = 未配対
+    return false;
+  }
+
+  void ensurePairKeys() {
+    if (pair_keys_ready_) return;
+    Bytes sk = randomBytes(32);
+    std::copy(sk.begin(), sk.end(), pair_sk_.begin());
+    crypto_x25519_public_key(pair_pk_.data(), pair_sk_.data());
+    pair_keys_ready_ = true;
+  }
+
+  std::string pairName() const {
+    // 表示名: 役割 + node_id 先頭 (Node が node_id に機器名を渡す想定)
+    return st.role + " · " + (st.node_id.size() > 6 ? st.node_id.substr(0, 6) : st.node_id);
+  }
+
+  // 未配対の当機が撒く告知内容 (QR にも同じ pk を載せる)
+  std::string pairingSelfJson() {
+    ensurePairKeys();
+    auto o = json::obj();
+    json::setBool(o.get(), "paired", isPaired());
+    json::set(o.get(), "id", st.node_id);
+    json::set(o.get(), "addr", st.advertise_addr);
+    json::set(o.get(), "name", pairName());
+    json::set(o.get(), "role", st.role);
+    json::set(o.get(), "pk", hexEncode(pair_pk_.data(), pair_pk_.size()));
+    return json::dump(o.get());
+  }
+
+  // 近隣で発見した未配対デバイス一覧 (期限切れは除去)
+  std::string pendingJson() {
+    const int64_t t = now();
+    for (auto it = pending_.begin(); it != pending_.end();) {
+      if (t - it->second.last_seen > kPendingTtlMs) {
+        it = pending_.erase(it);
+      } else {
+        ++it;
+      }
+    }
+    auto o = json::obj();
+    json::setBool(o.get(), "pairing_mode", t < pairing_mode_until_);
+    json::set(o.get(), "pairing_mode_left_s",
+              t < pairing_mode_until_ ? (pairing_mode_until_ - t) / 1000 : int64_t{0});
+    cJSON* arr = json::addArr(o.get(), "devices");
+    for (const auto& kv : pending_) {
+      auto d = json::obj();
+      json::set(d.get(), "id", kv.second.id);
+      json::set(d.get(), "addr", kv.second.addr);
+      json::set(d.get(), "name", kv.second.name);
+      json::set(d.get(), "role", kv.second.role);
+      json::set(d.get(), "age_s", (t - kv.second.last_seen) / 1000);
+      json::push(arr, std::move(d));
+    }
+    return json::dump(o.get());
+  }
+
+  void onPairFound(const PairBeacon& pb) {
+    if (!isPaired()) return;  // 未配対ノードは招待できない
+    if (pb.id == st.node_id) return;
+    if (pb.pk.size() != 64) return;  // X25519 公開鍵 hex でない
+    auto pit = peers.find(pb.id);
+    if (pit != peers.end() && pit->second.info.connected) return;  // 既に接続済み集群成員
+    auto it = pending_.find(pb.id);
+    const bool isNew = it == pending_.end();
+    pending_[pb.id] = Pending{pb.id, pb.addr, pb.name, pb.role, pb.pk, now()};
+    if (now() < pairing_mode_until_) {
+      inviteDevice(pb.id);  // 配対モード中は自動招待
+    }
+    if (isNew && cbs.on_pending_changed) cbs.on_pending_changed();
+  }
+
+  // 配対モードを ttl_ms 間 ON にし、現在の待機デバイスを即招待
+  void setPairingMode(int64_t ttl_ms) {
+    pairing_mode_until_ = now() + ttl_ms;
+    std::vector<std::string> ids;
+    for (const auto& kv : pending_) ids.push_back(kv.first);
+    for (const auto& id : ids) inviteDevice(id);
+  }
+
+  // 集群 → 未配対デバイスへ {psk,seeds,cfg} を封緘 push (QR 承認/一覧承認/配対モード共通)
+  void inviteDevice(const std::string& id) {
+    if (!isPaired()) return;
+    auto it = pending_.find(id);
+    if (it == pending_.end()) return;
+    Pending p = it->second;
+    Bytes pk;
+    if (!hexDecode(p.pk, pk) || pk.size() != 32) return;
+    // X25519 一時鍵 → 共有 → BLAKE2b で封緘鍵
+    Bytes esk = randomBytes(32);
+    std::array<uint8_t, 32> epk{}, shared{}, key{};
+    crypto_x25519_public_key(epk.data(), esk.data());
+    crypto_x25519(shared.data(), esk.data(), pk.data());
+    crypto_blake2b(key.data(), 32, shared.data(), shared.size());
+    const std::string plain = buildJoinPayloadJson();
+    Bytes nonce = randomBytes(24);
+    Bytes out(16 + plain.size());  // mac(16) || cipher
+    crypto_aead_lock(out.data() + 16, out.data(), key.data(), nonce.data(), nullptr, 0,
+                     reinterpret_cast<const uint8_t*>(plain.data()), plain.size());
+    auto o = json::obj();
+    json::set(o.get(), "t", "INVITE");
+    json::set(o.get(), "epk", hexEncode(epk.data(), epk.size()));
+    json::set(o.get(), "n", hexEncode(nonce));
+    json::set(o.get(), "c", hexEncode(out));
+    const std::string s = json::dump(o.get());
+    Bytes frame;  // kFrameJoin || JSON (SecureChannel を通さない平文フレーム)
+    frame.reserve(1 + s.size());
+    frame.push_back(kFrameJoin);
+    frame.insert(frame.end(), s.begin(), s.end());
+    std::weak_ptr<char> w = alive;
+    tp.connect(p.addr, [this, w, frame](ConnPtr conn) {
+      if (w.expired() || !conn) {
+        if (conn) conn->close();
+        return;
+      }
+      conn->setCallbacks([](const Bytes&) {}, [] {});
+      conn->send(frame);
+      // 相手が適用する猶予を与えてから閉じる
+      std::weak_ptr<char> w2 = alive;
+      loop.postDelayed(1500, [w2, conn] {
+        if (!w2.expired()) conn->close();
+      });
+    });
+  }
+
+  // 未配対 → 配対済みへの遷移 (INVITE 受理 / PIN 参加成功時)。
+  // beacon 告知を切替え、Node へ永続化 + 再鍵 (実機は再起動) を依頼。
+  void onBecamePaired() {
+    if (disc) {
+      disc->setPairAnnounce(false, "", "", "");
+      std::weak_ptr<char> w = alive;
+      disc->setPairFound([this, w](const PairBeacon& pb) {
+        if (!w.expired() && running) onPairFound(pb);
+      });
+    }
+    pending_.clear();
+    pairing_mode_until_ = 0;
+    postGuarded([this] {
+      if (running) maintain();  // 新 PSK で正規接続へ
+    });
+    if (cbs.on_paired) cbs.on_paired();
   }
 
   void joinCluster(const std::string& host_addr, const std::string& pin,
@@ -1362,28 +1584,12 @@ struct Mesh::Impl {
         finishJoin(j, false, "bad_payload");
         return;
       }
-      Bytes psk;
-      if (!hexDecode(json::getString(payload.get(), "psk"), psk) || psk.size() != 32) {
+      if (!applyJoinPayload(payload.get())) {
         finishJoin(j, false, "bad_payload");
         return;
       }
-      std::copy(psk.begin(), psk.end(), st.psk.begin());
-      st.psk_id = json::getString(payload.get(), "psk_id", st.psk_id);
-      const cJSON* a = nullptr;
-      cJSON_ArrayForEach(a, json::get(payload.get(), "seeds")) {
-        if (!cJSON_IsString(a)) continue;
-        const std::string addr = a->valuestring;
-        if (isSelfAddr(addr)) continue;
-        if (std::find(st.seed_peers.begin(), st.seed_peers.end(), addr) == st.seed_peers.end()) {
-          st.seed_peers.push_back(addr);
-        }
-        rememberAddr(addr, "");
-      }
-      const cJSON* e = nullptr;
-      cJSON_ArrayForEach(e, json::get(payload.get(), "cfg")) {
-        config.applyRemote(entryFromJson(e));  // 設定スナップショットの適用
-      }
       finishJoin(j, true, "");
+      onBecamePaired();  // PIN 参加でも永続化 + 再鍵 (Node へ通知)
     } else if (t == "JOIN_ERR") {
       finishJoin(j, false, json::getString(doc.get(), "err", "error"));
     }
@@ -1466,6 +1672,12 @@ Mesh::JoinToken Mesh::createJoinToken() {
   t.expires_mono = impl_->token.expires_mono;
   return t;
 }
+
+bool Mesh::isPaired() const { return impl_->isPaired(); }
+std::string Mesh::pairingSelfJson() { return impl_->pairingSelfJson(); }
+std::string Mesh::pendingJson() { return impl_->pendingJson(); }
+void Mesh::inviteDevice(const std::string& id) { impl_->inviteDevice(id); }
+void Mesh::setPairingMode(int64_t ttl_ms) { impl_->setPairingMode(ttl_ms); }
 
 void Mesh::joinCluster(const std::string& host_addr, const std::string& pin,
                        std::function<void(bool, const std::string&)> done) {

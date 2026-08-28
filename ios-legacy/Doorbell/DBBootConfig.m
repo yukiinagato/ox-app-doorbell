@@ -45,6 +45,34 @@ static NSString *const kDefaultJson =
   return dir;
 }
 
++ (NSString *)persistPsk:(NSString *)pskHex seeds:(NSArray *)seeds {
+  if ([pskHex length] != 64) return nil;
+  NSString *path = [[self dataDir] stringByAppendingPathComponent:@"boot.json"];
+  NSString *cur = [NSString stringWithContentsOfFile:path encoding:NSUTF8StringEncoding error:NULL];
+  if ([cur length] == 0) cur = kDefaultJson;
+  NSData *data = [cur dataUsingEncoding:NSUTF8StringEncoding];
+  id obj = data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:NULL] : nil;
+  NSMutableDictionary *d = [obj isKindOfClass:[NSDictionary class]]
+                               ? [[obj mutableCopy] autorelease]
+                               : [NSMutableDictionary dictionary];
+  [d setObject:pskHex forKey:@"psk_hex"];
+  // seeds は既存と和集合 (自機アドレスは core 側で isSelfAddr 除外される)
+  NSMutableArray *merged = [NSMutableArray array];
+  id existing = [d objectForKey:@"seed_peers"];
+  if ([existing isKindOfClass:[NSArray class]]) {
+    for (id s in (NSArray *)existing)
+      if ([s isKindOfClass:[NSString class]] && ![merged containsObject:s]) [merged addObject:s];
+  }
+  for (id s in (seeds ?: [NSArray array]))
+    if ([s isKindOfClass:[NSString class]] && ![merged containsObject:s]) [merged addObject:s];
+  if ([merged count] > 0) [d setObject:merged forKey:@"seed_peers"];
+  NSData *out = [NSJSONSerialization dataWithJSONObject:d options:0 error:NULL];
+  if (out == nil) return nil;
+  NSString *js = [[[NSString alloc] initWithData:out encoding:NSUTF8StringEncoding] autorelease];
+  [js writeToFile:path atomically:YES encoding:NSUTF8StringEncoding error:NULL];
+  return js;
+}
+
 + (DBBootConfig *)load {
   DBBootConfig *c = [[[DBBootConfig alloc] init] autorelease];
   NSString *path = [[self dataDir] stringByAppendingPathComponent:@"boot.json"];
