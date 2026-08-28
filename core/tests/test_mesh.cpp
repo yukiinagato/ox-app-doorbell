@@ -858,6 +858,28 @@ TEST_CASE("mesh: 配対発見 → inviteDevice で未配対機が PSK/設定を�
   }, 3000));
 }
 
+TEST_CASE("mesh: inviteDeviceDirect — 発見なしで addr+pk 直接招待 (QR スキャン相当)") {
+  Fleet f;
+  // beacon 無し → host は joiner を発見できない。QR で得た addr+pk のみで招待する。
+  Fleet::Node& host = f.add(kIdA, "A", capsJson(10), {{}, /*beacon=*/false});
+  host.config->set("cluster.name", "\"京阪ハウス\"");
+  Fleet::Node& joiner = f.add(kIdJ, "J", capsJson(3), {{}, /*beacon=*/false, 1, /*zero_psk=*/true});
+  f.run(100);
+  CHECK(pendingIds(host.mesh->pendingJson()).empty());  // 未発見
+
+  // joiner の告知情報 (QR に載る addr/pk) を取り出す
+  json::Doc self = json::parse(joiner.mesh->pairingSelfJson());
+  REQUIRE(self);
+  const std::string addr = json::getString(self.get(), "addr");
+  const std::string pk = json::getString(self.get(), "pk");
+  CHECK(pk.size() == 64);
+
+  host.mesh->inviteDeviceDirect(addr, pk);
+  REQUIRE(f.runUntil([&] { return joiner.mesh->isPaired(); }, 3000));
+  CHECK(joiner.config->get("cluster.name") == std::optional<std::string>("\"京阪ハウス\""));
+  REQUIRE(f.runUntil([&] { return f.mutualAlive({kIdA, kIdJ}); }, 4000));
+}
+
 TEST_CASE("mesh: 配対モード — 期間中に現れた未配対機を自動招待") {
   Fleet f;
   Fleet::Node& host = f.add(kIdA, "A", capsJson(10), {{}, /*beacon=*/true});

@@ -6,6 +6,7 @@
 #import "DBSirenPlayer.h"
 #import "DBAdminPinViewController.h"
 #import "DBInfoViewController.h"
+#import "DBPairingViewController.h"
 #import <AudioToolbox/AudioToolbox.h>
 
 @interface DBMainViewController () <UIAlertViewDelegate>
@@ -149,6 +150,23 @@ static UIColor *DBNightClk(void) { return [UIColor colorWithRed:0.545 green:0.14
                                                userInfo:nil
                                                 repeats:YES];
   [self updateClock];
+}
+
+- (void)viewDidAppear:(BOOL)animated {
+  [super viewDidAppear:animated];
+  [self maybePresentPairing];
+}
+
+// 未配対 (全ゼロ PSK) なら門口/室内 UI ではなく配対引導を全画面で出す。
+- (void)maybePresentPairing {
+  if (self.presentedViewController) return;  // 既に何か表示中
+  NSDictionary *p = [_core pairingInfo];
+  if (![p isKindOfClass:[NSDictionary class]]) return;      // core 未起動等 → 触らない
+  if ([[p objectForKey:@"paired"] boolValue]) return;       // 配対済み
+  DBPairingViewController *vc =
+      [[[DBPairingViewController alloc] initWithCore:_core boot:_boot] autorelease];
+  vc.modalPresentationStyle = UIModalPresentationFullScreen;
+  [self presentViewController:vc animated:NO completion:nil];
 }
 
 - (void)onActivity {

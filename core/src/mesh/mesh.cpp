@@ -1436,14 +1436,22 @@ struct Mesh::Impl {
     for (const auto& id : ids) inviteDevice(id);
   }
 
-  // 集群 → 未配対デバイスへ {psk,seeds,cfg} を封緘 push (QR 承認/一覧承認/配対モード共通)
+  // 集群 → 未配対デバイスへ {psk,seeds,cfg} を封緘 push (一覧承認/配対モード)
   void inviteDevice(const std::string& id) {
-    if (!isPaired()) return;
     auto it = pending_.find(id);
     if (it == pending_.end()) return;
-    Pending p = it->second;
+    sendInvite(it->second.addr, it->second.pk);
+  }
+
+  // QR/入力から得た addr+pk へ直接招待 (発見前でも可 — 跨網段/QR スキャン用)
+  void inviteDeviceDirect(const std::string& addr, const std::string& pk) {
+    sendInvite(addr, pk);
+  }
+
+  void sendInvite(const std::string& addr, const std::string& pk_hex) {
+    if (!isPaired() || addr.empty()) return;
     Bytes pk;
-    if (!hexDecode(p.pk, pk) || pk.size() != 32) return;
+    if (!hexDecode(pk_hex, pk) || pk.size() != 32) return;
     // X25519 一時鍵 → 共有 → BLAKE2b で封緘鍵
     Bytes esk = randomBytes(32);
     std::array<uint8_t, 32> epk{}, shared{}, key{};
@@ -1466,7 +1474,7 @@ struct Mesh::Impl {
     frame.push_back(kFrameJoin);
     frame.insert(frame.end(), s.begin(), s.end());
     std::weak_ptr<char> w = alive;
-    tp.connect(p.addr, [this, w, frame](ConnPtr conn) {
+    tp.connect(addr, [this, w, frame](ConnPtr conn) {
       if (w.expired() || !conn) {
         if (conn) conn->close();
         return;
@@ -1677,6 +1685,9 @@ bool Mesh::isPaired() const { return impl_->isPaired(); }
 std::string Mesh::pairingSelfJson() { return impl_->pairingSelfJson(); }
 std::string Mesh::pendingJson() { return impl_->pendingJson(); }
 void Mesh::inviteDevice(const std::string& id) { impl_->inviteDevice(id); }
+void Mesh::inviteDeviceDirect(const std::string& addr, const std::string& pk) {
+  impl_->inviteDeviceDirect(addr, pk);
+}
 void Mesh::setPairingMode(int64_t ttl_ms) { impl_->setPairingMode(ttl_ms); }
 
 void Mesh::joinCluster(const std::string& host_addr, const std::string& pin,

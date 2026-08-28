@@ -8,4 +8,6 @@
 
 @interface DBInfoViewController : UIViewController
 - (id)initWithCore:(DBCoreBridge *)core boot:(DBBootConfig *)boot;
+// QR 生成 (スレッド安全な CGBitmap 描画)。配対引導画面でも再利用する。
++ (UIImage *)qrImageForString:(NSString *)s targetPx:(CGFloat)px;
 @end

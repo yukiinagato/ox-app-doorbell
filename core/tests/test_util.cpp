@@ -1,4 +1,7 @@
+#include <cstdlib>
+
 #include "doctest.h"
+#include "doorbell/doorbell.h"
 #include "util/common.h"
 #include "util/hlc.h"
 #include "util/ids.h"
@@ -6,6 +9,26 @@
 #include "util/runloop.h"
 
 using namespace db;
+
+TEST_CASE("db_core_qr_encode: 有効な QR 行列を返す (空入力は NULL)") {
+  int size = -1;
+  CHECK(db_core_qr_encode("", &size) == nullptr);
+  CHECK(size == 0);
+  unsigned char* m = db_core_qr_encode("doorbell-pair:10.0.1.5:47172|abc123|deadbeef", &size);
+  REQUIRE(m != nullptr);
+  CHECK(size >= 21);          // QR 最小 (version 1) は 21x21
+  CHECK((size % 2) == 1);     // QR は常に奇数辺
+  // 左上ファインダは 7x7 の枠 — (0,0) と (6,6) は暗、(1,1) は明 (枠の内側)
+  CHECK(m[0 * size + 0] == 1);
+  CHECK(m[6 * size + 6] == 1);
+  CHECK(m[1 * size + 1] == 0);
+  // 全モジュールは 0/1 のみ
+  bool onlyBinary = true;
+  for (int i = 0; i < size * size; i++)
+    if (m[i] > 1) onlyBinary = false;
+  CHECK(onlyBinary);
+  db_free(reinterpret_cast<char*>(m));
+}
 
 TEST_CASE("hex roundtrip") {
   Bytes b = {0x00, 0xff, 0x12, 0xab};

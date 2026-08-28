@@ -2088,6 +2088,29 @@ struct Node::Impl {
       mesh->inviteDevice(id);
       return HttpResp::json("{\"ok\":true}");
     });
+    // QR スキャンからの直接招待。body: {qr:"doorbell-pair:<addr>|<id>|<pk>"} または {addr,id,pk}
+    httpd->route("POST", "/api/pairing/invite-direct", [this](const HttpReq& req) {
+      if (!mesh) return HttpResp::json("{\"ok\":false,\"err\":\"no_mesh\"}", 503);
+      auto b = json::parse(req.body);
+      std::string addr = b ? json::getString(b.get(), "addr") : "";
+      std::string id = b ? json::getString(b.get(), "id") : "";
+      std::string pk = b ? json::getString(b.get(), "pk") : "";
+      std::string qr = b ? json::getString(b.get(), "qr") : "";
+      if (!qr.empty()) {  // "doorbell-pair:<addr>|<id>|<pk>" を分解
+        const std::string kPrefix = "doorbell-pair:";
+        if (qr.rfind(kPrefix, 0) == 0) qr = qr.substr(kPrefix.size());
+        auto p1 = qr.find('|'), p2 = qr.rfind('|');
+        if (p1 != std::string::npos && p2 != std::string::npos && p2 > p1) {
+          addr = qr.substr(0, p1);
+          id = qr.substr(p1 + 1, p2 - p1 - 1);
+          pk = qr.substr(p2 + 1);
+        }
+      }
+      if (addr.empty() || pk.size() != 64)
+        return HttpResp::json("{\"ok\":false,\"err\":\"bad_qr\"}", 400);
+      mesh->inviteDeviceDirect(addr, pk);
+      return HttpResp::json("{\"ok\":true}");
+    });
     // 未配対機側: PIN + seed で能動的に参加 (管理 UI から。QR/承認と併存)
     httpd->route("POST", "/api/pairing/join", [this](const HttpReq& req) {
       if (!mesh) return HttpResp::json("{\"ok\":false,\"err\":\"no_mesh\"}", 503);
@@ -2789,6 +2812,14 @@ void Node::setPairingMode(int seconds) {
 void Node::inviteDevice(const std::string& id) {
   impl_->loop->callSync([&] {
     if (impl_->mesh) impl_->mesh->inviteDevice(id);
+  });
+}
+
+void Node::inviteDeviceDirect(const std::string& addr, const std::string& id,
+                              const std::string& pk) {
+  (void)id;  // id は将来のログ/照合用 (招待自体は addr+pk で成立)
+  impl_->loop->callSync([&] {
+    if (impl_->mesh) impl_->mesh->inviteDeviceDirect(addr, pk);
   });
 }
 

@@ -167,11 +167,22 @@ class MainActivity : Activity(), DoorbellCore.Listener {
 
     override fun onResume() {
         super.onResume()
+        // 未配対 (全ゼロ PSK) なら門口/室内 UI ではなく配対引導を出す。
+        if (maybeShowPairing()) return
         enterImmersive()
         ui.post(clockTick)
         ui.post(encoderPoll)
         enterKioskIfConfigured()
         maybeStartCamera()
+    }
+
+    /** 未配対なら PairingActivity を起動して true。配対済み/判定不能は false。 */
+    private fun maybeShowPairing(): Boolean {
+        if (!app.coreOk) return false
+        val paired = app.core.pairingInfo()?.optBoolean("paired") ?: return false
+        if (paired) return false
+        startActivity(android.content.Intent(this, PairingActivity::class.java))
+        return true
     }
 
     override fun onPause() {

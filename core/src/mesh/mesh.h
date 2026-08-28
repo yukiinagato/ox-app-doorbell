@@ -142,6 +142,8 @@ class Mesh {
   std::string pairingSelfJson();    // 未配対の当機の告知内容 (QR に載せる id/addr/pk)
   std::string pendingJson();        // 近隣で発見した未配対デバイス一覧 + 配対モード状態
   void inviteDevice(const std::string& id);  // 一覧の 1 台へ {psk,seeds,cfg} を封緘 push
+  // QR/入力から得た addr+pk へ直接招待 (発見前でも可 — 跨網段/QR スキャン用)
+  void inviteDeviceDirect(const std::string& addr, const std::string& pk);
   void setPairingMode(int64_t ttl_ms);       // 配対モードを ttl_ms 間 ON (発見即自動招待)
 
   const MeshSettings& settings() const { return settings_; }

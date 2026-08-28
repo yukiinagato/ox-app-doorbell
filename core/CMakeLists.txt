@@ -52,10 +52,11 @@ add_library(db_third_party STATIC
   third_party/cjson/cJSON.c
   third_party/monocypher/monocypher.c
   third_party/monocypher/monocypher-ed25519.c
+  third_party/qrcodegen/qrcodegen.c
 )
 target_include_directories(db_third_party PUBLIC
   third_party/sqlite third_party/civetweb third_party/cjson third_party/monocypher
-  third_party/stb)
+  third_party/qrcodegen third_party/stb)
 target_compile_definitions(db_third_party PUBLIC
   # civetweb: TLS/CGI/ファイルシステム配信は使わない (資産は埋め込み)。
   # USE_IPV6: HTTP 管理服务を IPv4/IPv6 双栈で待受 ("+port" で両対応・IPV6_V6ONLY 無し)

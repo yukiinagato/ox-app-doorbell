@@ -73,6 +73,13 @@
             android:showWhenLocked="true"
             android:turnScreenOn="true"/>
 
+        <!-- 未配対時の配対引導 (自機 QR 表示 + PIN 参加)。paired で自動終了。 -->
+        <activity
+            android:name=".PairingActivity"
+            android:configChanges="orientation|screenSize|keyboardHidden|screenLayout"
+            android:exported="false"
+            android:launchMode="singleTop"/>
+
         <!-- 常駐前台サービス: 通知 1 本で core プロセスを生かし続ける (TV/タブレット共通) -->
         <service
             android:name=".DoorbellService"

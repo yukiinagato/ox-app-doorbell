@@ -8,6 +8,7 @@
 
 #include <cstring>
 #include <string>
+#include <vector>
 
 #include "doorbell/doorbell.h"
 
@@ -327,4 +328,21 @@ extern "C" JNIEXPORT void JNICALL
 Java_jp_keihan_doorbell_DoorbellCore_nativeInviteDevice(JNIEnv* env, jobject, jlong h, jstring id) {
   Bridge* b = fromHandle(h);
   if (b && b->core) db_core_invite_device(b->core, toUtf8(env, id).c_str());
+}
+
+// QR エンコード (core 共通実装)。戻り値 int[]: [0]=一辺のモジュール数, [1..]=行優先 0/1。失敗 null。
+extern "C" JNIEXPORT jintArray JNICALL
+Java_jp_keihan_doorbell_DoorbellCore_nativeQrEncode(JNIEnv* env, jobject, jstring text) {
+  const std::string t = toUtf8(env, text);
+  int size = 0;
+  unsigned char* m = db_core_qr_encode(t.c_str(), &size);
+  if (!m) return nullptr;
+  if (size <= 0) { db_free(reinterpret_cast<char*>(m)); return nullptr; }
+  std::vector<jint> buf(1 + static_cast<size_t>(size) * size);
+  buf[0] = size;
+  for (int i = 0; i < size * size; i++) buf[1 + i] = m[i];
+  db_free(reinterpret_cast<char*>(m));
+  jintArray arr = env->NewIntArray(static_cast<jsize>(buf.size()));
+  if (arr) env->SetIntArrayRegion(arr, 0, static_cast<jsize>(buf.size()), buf.data());
+  return arr;
 }

@@ -1,6 +1,8 @@
 // C ABI 実装 (include/doorbell/doorbell.h)。平台殻はここだけを呼ぶ。
 #include "doorbell/doorbell.h"
 
+#include "qrcodegen.h"
+
 #include <condition_variable>
 #include <cstdlib>
 #include <cstring>
@@ -230,6 +232,33 @@ DB_API void db_core_pairing_mode(db_core* c, int seconds) {
 
 DB_API void db_core_invite_device(db_core* c, const char* id) {
   if (c && c->node && id && *id) c->node->inviteDevice(id);
+}
+
+DB_API void db_core_invite_direct(db_core* c, const char* addr, const char* id, const char* pk) {
+  if (c && c->node && addr && *addr && id && *id && pk && *pk)
+    c->node->inviteDeviceDirect(addr, id, pk);
+}
+
+// QR エンコード (発見に依存しない自機告知/管理 URL 表示用の共通実装 — 各殻が描画)。
+// 戻り値: size*size バイト (行優先, 1=暗)。*out_size = 一辺のモジュール数。失敗 NULL。db_free。
+DB_API unsigned char* db_core_qr_encode(const char* text, int* out_size) {
+  if (out_size) *out_size = 0;
+  if (!text || !*text) return nullptr;
+  std::vector<uint8_t> qr(qrcodegen_BUFFER_LEN_MAX), tmp(qrcodegen_BUFFER_LEN_MAX);
+  if (!qrcodegen_encodeText(text, tmp.data(), qr.data(), qrcodegen_Ecc_MEDIUM,
+                            qrcodegen_VERSION_MIN, qrcodegen_VERSION_MAX, qrcodegen_Mask_AUTO,
+                            true)) {
+    return nullptr;
+  }
+  const int size = qrcodegen_getSize(qr.data());
+  if (size <= 0) return nullptr;
+  auto* out = static_cast<unsigned char*>(std::malloc(static_cast<size_t>(size) * size));
+  if (!out) return nullptr;
+  for (int y = 0; y < size; y++)
+    for (int x = 0; x < size; x++)
+      out[y * size + x] = qrcodegen_getModule(qr.data(), x, y) ? 1 : 0;
+  if (out_size) *out_size = size;
+  return out;
 }
 
 DB_API void db_core_on_camera_frame(db_core* c, const uint8_t* data, int format, int width,

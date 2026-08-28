@@ -112,6 +112,12 @@ DB_API void db_core_join_cluster(db_core* c, const char* host, const char* pin);
 DB_API void db_core_pairing_mode(db_core* c, int seconds);
 /* 配対済み機側: pending の 1 台 (node_id) を承認・招待。 */
 DB_API void db_core_invite_device(db_core* c, const char* id);
+/* 配対済み機側: QR/入力から得た addr+id+pk へ直接招待 (発見に依存しない — 跨網段/QR 用)。 */
+DB_API void db_core_invite_direct(db_core* c, const char* addr, const char* id, const char* pk);
+
+/* QR エンコード (自機告知 pair_qr / 管理 URL の表示用共通実装)。戻り値は size*size バイト
+ * (行優先・1=暗)、*out_size に一辺のモジュール数。失敗 NULL。db_free((char*)p) で解放。 */
+DB_API unsigned char* db_core_qr_encode(const char* text, int* out_size);
 
 /* カメラフレーム push (Phase 1)。format: 0=NV21, 1=NV12, 2=YUY2, 3=BGRA */
 DB_API void db_core_on_camera_frame(db_core* c, const uint8_t* data, int format, int width,
