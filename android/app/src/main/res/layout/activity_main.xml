@@ -26,77 +26,90 @@
         android:layout_margin="16dp"/>
 
     <!-- ============ 待機 ============ -->
+    <!-- weight で各段を画面高に比例配分 = どんな画面でも縦方向がはみ出さない。
+         大ボタンは match_parent + 左右マージン + maxWidth で横方向もはみ出さない。
+         訪客は一切スクロール不要で全要素が見え・押せる。 -->
     <LinearLayout
         android:id="@+id/idle_view"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:orientation="vertical">
+        android:orientation="vertical"
+        android:paddingBottom="6dp">
 
+        <!-- 時計 (上段) -->
         <LinearLayout
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="center_horizontal"
-            android:layout_marginTop="32dp"
-            android:gravity="center_horizontal"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="2"
+            android:gravity="center"
             android:orientation="vertical">
             <TextView
                 android:id="@+id/clock_text"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:fontFamily="sans-serif-light"
+                android:maxLines="1"
                 android:textColor="@color/fg"
-                android:textSize="64sp"/>
+                android:textSize="60sp"/>
             <TextView
                 android:id="@+id/date_text"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
+                android:layout_marginTop="2dp"
+                android:maxLines="1"
                 android:textColor="@color/dim"
-                android:textSize="22sp"/>
+                android:textSize="20sp"/>
         </LinearLayout>
 
+        <!-- 大ボタン (中段・最大) -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="0dp"
-            android:layout_weight="1"
+            android:layout_weight="4"
             android:gravity="center"
             android:orientation="vertical">
             <Button
                 android:id="@+id/call_button"
-                android:layout_width="wrap_content"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:minWidth="320dp"
-                android:minHeight="130dp"
+                android:layout_marginLeft="48dp"
+                android:layout_marginRight="48dp"
+                android:maxWidth="560dp"
+                android:minHeight="88dp"
                 android:background="@drawable/bg_big_button"
+                android:maxLines="2"
                 android:textColor="@color/fg"
-                android:textSize="38sp"
+                android:textSize="34sp"
                 android:textStyle="bold"/>
             <TextView
                 android:id="@+id/touch_hint"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="16dp"
+                android:layout_marginTop="10dp"
+                android:maxLines="1"
                 android:text="@string/idle_touch_to_call"
                 android:textColor="@color/dim"
-                android:textSize="22sp"/>
+                android:textSize="18sp"/>
         </LinearLayout>
 
-        <!-- ==== 用件ボタン (config visit_purposes を order 順・3 列。狭い画面は横スクロール) ==== -->
+        <!-- ==== 用件ボタン (config visit_purposes を order 順・3 列) ==== -->
         <LinearLayout
             android:id="@+id/purpose_section"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:gravity="center_horizontal"
+            android:layout_height="0dp"
+            android:layout_weight="2"
+            android:gravity="center"
             android:orientation="vertical"
             android:visibility="gone">
             <TextView
                 android:id="@+id/purpose_hint"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginBottom="8dp"
+                android:layout_marginBottom="6dp"
+                android:maxLines="1"
                 android:text="@string/idle_choose_purpose"
                 android:textColor="@color/dim"
-                android:textSize="18sp"/>
+                android:textSize="16sp"/>
             <HorizontalScrollView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
@@ -111,17 +124,17 @@
             </HorizontalScrollView>
         </LinearLayout>
 
-        <!-- ==== 訪客言語バー (config ui.languages) + ノード情報 ==== -->
+        <!-- ==== 訪客言語バー (config ui.languages) + ノード情報 (下段) ==== -->
         <FrameLayout
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:padding="12dp">
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:padding="8dp">
             <LinearLayout
                 android:id="@+id/lang_bar"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_gravity="center_horizontal"
+                android:layout_gravity="center"
                 android:orientation="horizontal"
                 android:visibility="gone"/>
             <TextView
@@ -129,8 +142,9 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_gravity="bottom|start"
+                android:maxLines="1"
                 android:textColor="@color/dim"
-                android:textSize="13sp"/>
+                android:textSize="12sp"/>
         </FrameLayout>
     </LinearLayout>
 
