@@ -47,6 +47,8 @@
 - iOS: `deploy/provision/ios/provision.zh.md`（受监督 + Single App Mode、Ad Hoc 签名与逐年更新）
 - iPad 1 等 legacy 设备: 用 Safari 把 `http://<任意节点>:47180/panel/door?k=<token>`
   存为 Web 快捷方式（`monitor` 同理）。自动锁定设为「无」
+- 若要把 iPad 1 (A1219, iOS5.1.1) 越狱成原生节点，请参见
+  `deploy/provision/ios/ipad1-jailbreak.md`（完整 core・音频・开锁，接外麦还能对讲）
 
 ## 4. HA / HomeKit
 

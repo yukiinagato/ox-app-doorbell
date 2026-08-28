@@ -40,6 +40,6 @@ At night the screen dims and shifts red; after prolonged inactivity it drops to 
 - **Auto-reply only what you can promise.** "Please leave the package" is a good auto-reply; never auto-play "Coming right away".
 - **Custom recordings** are easier to understand than TTS and give the house its own character. Recordings can be registered per visitor language (Assets/Quick replies in [Usage-Admin](Usage-Admin-en)).
 - **Camera angle and height**: the snapshots in Telegram notifications and the event history come from the door station's front camera. Mount it at a height that captures faces, facing away from backlight.
-- At an entrance with no audio (e.g. an iPad 1 running the web door.html), the panel shows "Calls are not available at this entrance (notification only)". Put a native-app device at any entrance that needs calling.
+- At an entrance with no audio (e.g. a non-jailbroken iPad 1 running the web door.html), the panel shows "Calls are not available at this entrance (notification only)". Put a native-app device at any entrance that needs calling. (A jailbroken iPad 1 becomes an audio node, but with no camera it is unsuited to the door-station role that films visitors; for its indoor use see [FAQ Q14](FAQ-en).)
 
 Related: for the feature overview see [Features](Features-en); for the residents' side of the picture see [Usage-Residents](Usage-Residents-en).

@@ -9,7 +9,7 @@
 
 - **背景**: 设备横跨 Win7 Toughpad 到最新 iPhone。单一编解码器无法兼顾。
 - **选项**: (a) 全部 MJPEG、(b) 全部 H.264、(c) 双层。
-- **决定**: (c)。基调是 MJPEG (`/stream.mjpeg`) —— 所有设备、所有浏览器（含 iPad 1）都能显示。
+- **决定**: (c)。基调是 MJPEG (`/stream.mjpeg`) —— 所有设备、所有浏览器（含 iPad 1 的越狱原生 app / Safari）都能显示。
   只有拥有硬编的设备用 `codec: auto/h264` 追加 HW 编码 fMP4 (`/stream.mp4`)。
 - **理由**: MJPEG 连旧机的 CPU 都能解码，且毫无实现依赖。H.264 档只把
   720p 流畅通话画质和「HA 免转码 (go2rtc `#video=copy`)」给到支持的设备。

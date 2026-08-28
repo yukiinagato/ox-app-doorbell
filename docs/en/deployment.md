@@ -50,6 +50,8 @@ Any platform works, but an always-powered door station (Toughpad recommended) is
 - Legacy devices such as iPad 1: in Safari open
   `http://<any node>:47180/panel/door?k=<token>` and save it as a Web Clip (same for `monitor`).
   Set Auto-Lock = Never
+- To jailbreak an iPad 1 (A1219, iOS5.1.1) into a native node, see
+  `deploy/provision/ios/ipad1-jailbreak.md` (full core, audio, unlock; two-way talk with an external mic)
 
 ## 4. HA / HomeKit
 

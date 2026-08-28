@@ -104,3 +104,7 @@ go2rtc + HA の HomeKit Bridge 経由で、iPhone の家庭 App に門鈴通知�
 
 `door.html` (押鈴) / `monitor.html` (受鈴) は iPad 1 の iOS 5 Safari でも動きます。
 `call.html` (双方向通話) は現代ブラウザ + Asterisk WebRTC ゲートウェイ (任意機能) が必要です。
+
+iPad 1 は網頁パネルに留まらず、越獄して自前ビルドの原生 app を入れれば**完全な原生ノード**
+(映像を見る・音声を聞く・クイック返信・開錠、外付けマイクで対講) にできます。手順は
+[deploy/provision/ios/ipad1-jailbreak.md](https://github.com/yukiinagato/ox-app-doorbell/blob/main/deploy/provision/ios/ipad1-jailbreak.md)。

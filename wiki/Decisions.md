@@ -9,7 +9,7 @@
 
 - **背景**: 端末は Win7 Toughpad から最新 iPhone まで。単一コーデックでは両立しません。
 - **選択肢**: (a) 全部 MJPEG、(b) 全部 H.264、(c) 二層。
-- **決定**: (c)。基調は MJPEG (`/stream.mjpeg`) — 全端末・全ブラウザ (iPad 1 含む) で映る。
+- **決定**: (c)。基調は MJPEG (`/stream.mjpeg`) — 全端末・全ブラウザ (iPad 1 の越獄原生 app / Safari 含む) で映る。
   硬編を持つ端末だけ `codec: auto/h264` で HW エンコード fMP4 (`/stream.mp4`) を追加。
 - **理由**: MJPEG は旧機の CPU でもデコードでき、実装依存が皆無。H.264 档は
   720p の滑らかな通話画質と「HA 転码不要 (go2rtc `#video=copy`)」を対応機にだけ与える。

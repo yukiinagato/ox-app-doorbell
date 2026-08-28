@@ -28,8 +28,12 @@
 - Windows: WPF + .NET Framework 4.8 —— 一直到 **Windows 7 SP1 的 Toughpad** 都能跑。
 - Android: minSdk 21 (Android 5.0)。面向 4.4 有 legacy 通道。
 - iOS: iOS 12 及以上（面向 9 有 legacy）。报废的 iPhone/iPad 可以变成门口机、室内机。
-- 再往下: 即使是 **iPad 1 (iOS 5 Safari)**，把网页面板 (door.html / monitor.html)
-  做成 Web Clip，也能当按铃和接铃监视器用。
+- 再往下: **iPad 1 (A1219, iOS 5.1.1)** 也能成为一等节点。把它越狱并装上自行构建的原生 app，
+  它就是搭载完整 C++ 核心的网格节点 —— 可以查看门口视频、听声音、快捷回复、开锁（接外麦还能对讲）。
+  唯一的上限是物理性的: 没有摄像头，所以无法发送自己的视频；没有内置麦克风，所以不接外麦时仅收听
+  ([ipad1-jailbreak](https://github.com/yukiinagato/ox-app-doorbell/blob/main/deploy/provision/ios/ipad1-jailbreak.md))。
+  如果不想越狱，传统方式依然保留: 把网页面板 (door.html / monitor.html) 做成 Web Clip，
+  当按铃和接铃监视器用。
 - 影像也是同一思想: 基调是「到哪儿都能显示」的 MJPEG。H.264 是只有支持的设备才用的上位档，
   不支持的设备只是默默降回 MJPEG（参见[决策记录](Decisions-zh)）。
 

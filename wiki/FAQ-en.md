@@ -65,7 +65,11 @@ Admin UI "System" → Export gives you the full JSON from any node. Day-to-day s
 
 ### Q14. What can an iPad 1 (iOS 5) do?
 
-Open the web panels in Safari and add them as Web Clips: `door.html` = ring panel (no audio, notification only), `monitor.html` = call monitor. Two-way calling (`call.html`) needs a modern browser + the WebRTC gateway, so it is not possible. Set auto-lock to "never" and keep it permanently powered.
+Two options.
+
+**(A) Jailbreak it into a native node (recommended, full features)**: jailbreak the iPad 1 (A1219, iOS 5.1.1) and install the self-built native app, and it becomes a **first-class node of the doorbell mesh** with the full C++ core on board — you can see the live video at the door, hear the door's audio, send quick replies, and unlock; two-way talk also works if you plug in an external mic (a TRRS headset / dock mic). The hardware limits, honestly: **no camera, so it cannot send your own video**, and **no built-in mic, so without an external mic it is "listen only"**. Steps: [deploy/provision/ios/ipad1-jailbreak.md](https://github.com/yukiinagato/ox-app-doorbell/blob/main/deploy/provision/ios/ipad1-jailbreak.md).
+
+**(B) Don't want to jailbreak → the traditional web panel (best-effort)**: open the web panels in Safari and add them as Web Clips: `door.html` = ring panel (no audio, notification only), `monitor.html` = call monitor. Two-way calling (`call.html`) needs a modern browser + the WebRTC gateway, so it is not possible. Either way, set auto-lock to "never" and keep it permanently powered.
 
 ### Q15. What are the minimum supported OS versions?
 

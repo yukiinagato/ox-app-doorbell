@@ -46,7 +46,14 @@
 | TV 監視 | — | ✅(TV) | AppleTV=HomeKit / tvOS app=✅(映像のみ — SIP モニタリングは TODO) | — |
 | kiosk 堅牢化 | シェル置換+監視+テンキー | Device Owner+監視 | 監督 SAM | — |
 | 画面ロック防止 | SetThreadExecutionState | keyguard 無効+STAY_ON | isIdleTimerDisabled | — |
-| 旧機下限 | Win7 SP1 | 5.0 (4.4 legacy) | 12 (9 legacy) | iOS5 Safari |
+| 旧機下限 | Win7 SP1 | 5.0 (4.4 legacy) | 12 (9 legacy)、越獄で iPad 1/iOS5.1.1 も原生ノード | iOS5 Safari |
+
+> **iPad 1 (A1219, iOS5.1.1) 越獄原生ノード**: 越獄して自前ビルドの原生 app を入れると、
+> 完全な C++ コアを積んだ一等ノードになる — 門口の映像を見る・音声を聞く・クイック返信・開錠、
+> 外付けマイクで対講も可。ハードウェア上限: カメラ無し=自分の映像は送れない、内蔵マイク無し=
+> 外麦なしだと聞く専用。手順は
+> [deploy/provision/ios/ipad1-jailbreak.md](https://github.com/yukiinagato/ox-app-doorbell/blob/main/deploy/provision/ios/ipad1-jailbreak.md)。
+> 越獄しない場合は Web 版 (door.html/monitor.html) が best-effort で使える。
 
 ## リポジトリ構成 & ビルド
 

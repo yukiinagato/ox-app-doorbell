@@ -28,8 +28,13 @@
 - Windows: WPF + .NET Framework 4.8 — **Windows 7 SP1 の Toughpad** まで動きます。
 - Android: minSdk 21 (Android 5.0)。4.4 向けには legacy 経路。
 - iOS: iOS 12 以降 (9 向け legacy)。廃品 iPhone/iPad が門口機・室内機になります。
-- そのさらに下: **iPad 1 (iOS 5 Safari)** でも、網頁パネル (door.html / monitor.html) を
-  Web クリップにすれば押鈴と受鈴モニタとして働けます。
+- そのさらに下: **iPad 1 (A1219, iOS 5.1.1)** も一等ノードになります。越獄して自前ビルドの
+  原生 app を入れれば、完全な C++ コアを積んだメッシュノード — 門口の映像を見る・音声を聞く・
+  クイック返信・開錠まで可能 (外付けマイクで対講も可)。カメラが無いので自分の映像は送れず、
+  内蔵マイクが無いので外麦なしだと聞く専用、という上限だけは物理的な制約です
+  ([ipad1-jailbreak](https://github.com/yukiinagato/ox-app-doorbell/blob/main/deploy/provision/ios/ipad1-jailbreak.md))。
+  越獄したくなければ、網頁パネル (door.html / monitor.html) を Web クリップにして
+  押鈴と受鈴モニタとして使う従来の道も残っています。
 - 映像も同じ思想です: 基調は「どこでも映る」MJPEG。H.264 は対応機だけが使う上位档で、
   非対応機は黙って MJPEG に降りるだけです ([Decisions](Decisions) 参照)。
 

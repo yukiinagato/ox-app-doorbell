@@ -45,6 +45,8 @@
 - iOS: `deploy/provision/ios/provision.ja.md` (監督 + Single App Mode、Ad Hoc 署名と年次更新)
 - iPad 1 等の legacy: Safari で `http://<任意ノード>:47180/panel/door?k=<token>` を
   Web クリップ化 (`monitor` も同様)。自動ロック=なし に設定
+- iPad 1 (A1219, iOS5.1.1) を越獄して原生ノード化する場合は
+  `deploy/provision/ios/ipad1-jailbreak.md` (完全 core・音声・開錠、外付けマイクで対講) を参照
 
 ## 4. HA / HomeKit
 

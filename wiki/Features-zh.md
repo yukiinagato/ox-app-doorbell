@@ -104,3 +104,7 @@ Telegram 内联按钮 / HA / 网页发送 → 在门口机大字显示 + 朗读�
 
 `door.html`（按铃）/ `monitor.html`（接铃）在 iPad 1 的 iOS 5 Safari 上也能运行。
 `call.html`（双向通话）需要现代浏览器 + Asterisk WebRTC 网关（可选功能）。
+
+iPad 1 不必止步于网页面板: 把它越狱并装上自行构建的原生 app，就能成为**完整的原生节点**
+（查看视频・听声音・快捷回复・开锁，接外麦还能对讲）。步骤见
+[deploy/provision/ios/ipad1-jailbreak.md](https://github.com/yukiinagato/ox-app-doorbell/blob/main/deploy/provision/ios/ipad1-jailbreak.md)。

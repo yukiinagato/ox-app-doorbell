@@ -21,7 +21,7 @@ The device at your entrance does not need to be new. In fact, the devices "sleep
 - Windows: WPF + .NET Framework 4.8 — runs all the way down to a **Windows 7 SP1 Toughpad**.
 - Android: minSdk 21 (Android 5.0). A legacy path exists for 4.4.
 - iOS: iOS 12 and later (legacy path for 9). Retired iPhones/iPads become door stations and indoor stations.
-- Even below that: an **iPad 1 (iOS 5 Safari)** can serve as a ring panel and a call monitor, by adding the web panels (door.html / monitor.html) as Web Clips.
+- Even below that: an **iPad 1 (A1219, iOS 5.1.1)** becomes a first-class node too. Jailbreak it and install the self-built native app, and it is a mesh node with the full C++ core on board — see the door video, hear the audio, send quick replies, and unlock (two-way talk with an external mic). The only limits are physical: no camera, so it cannot send its own video, and no built-in mic, so it is listen-only without an external mic ([ipad1-jailbreak](https://github.com/yukiinagato/ox-app-doorbell/blob/main/deploy/provision/ios/ipad1-jailbreak.md)). If you would rather not jailbreak, the traditional path remains: add the web panels (door.html / monitor.html) as Web Clips to use it as a ring panel and a call monitor.
 - Video follows the same philosophy: the baseline is MJPEG, which "displays everywhere". H.264 is an upper tier used only by capable devices; incapable ones silently fall back to MJPEG (see [Decisions](Decisions-en)).
 
 ## 3. Native on every platform — why not Electron

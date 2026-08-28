@@ -48,7 +48,13 @@
 | TV 监视 | — | ✅(TV) | AppleTV=HomeKit / tvOS app=✅（仅视频 — SIP 监听为 TODO） | — |
 | kiosk 加固 | 替换 shell+守卫+数字键盘 | Device Owner+守卫 | 受监督 SAM | — |
 | 防锁屏 | SetThreadExecutionState | 禁用 keyguard+STAY_ON | isIdleTimerDisabled | — |
-| 旧机下限 | Win7 SP1 | 5.0 (4.4 legacy) | 12 (9 legacy) | iOS5 Safari |
+| 旧机下限 | Win7 SP1 | 5.0 (4.4 legacy) | 12 (9 legacy)，越狱后 iPad 1/iOS5.1.1 也是原生节点 | iOS5 Safari |
+
+> **iPad 1 (A1219, iOS5.1.1) 越狱原生节点**: 把它越狱并装上自行构建的原生 app，就成为搭载
+> 完整 C++ 核心的一等节点 —— 查看门口视频、听声音、快捷回复、开锁，接外麦还能对讲。硬件上限:
+> 没有摄像头=无法发送自己的视频，没有内置麦克风=不接外麦时仅收听。步骤见
+> [deploy/provision/ios/ipad1-jailbreak.md](https://github.com/yukiinagato/ox-app-doorbell/blob/main/deploy/provision/ios/ipad1-jailbreak.md)。
+> 不越狱时，Web 版 (door.html/monitor.html) 可作 best-effort 使用。
 
 ## 仓库结构 & 构建
 

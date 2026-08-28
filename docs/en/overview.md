@@ -52,7 +52,9 @@ Every node runs the shared C++ core (doorbell-core) and connects as an equal pee
 | TV monitoring | — | ✅ (TV) | AppleTV=HomeKit / tvOS app=✅ (video only — SIP listen-in is TODO) | — |
 | Kiosk hardening | shell replacement + guard + keypad | Device Owner + guard | supervised SAM | — |
 | Screen-lock prevention | SetThreadExecutionState | keyguard disabled + STAY_ON | isIdleTimerDisabled | — |
-| Oldest supported | Win7 SP1 | 5.0 (4.4 legacy) | 12 (9 legacy) | iOS5 Safari |
+| Oldest supported | Win7 SP1 | 5.0 (4.4 legacy) | 12 (9 legacy); jailbroken iPad 1 / iOS5.1.1 is a native node too | iOS5 Safari |
+
+> **iPad 1 (A1219, iOS5.1.1) jailbroken native node**: jailbreak it and install the self-built native app and it becomes a first-class node with the full C++ core — see the door video, hear the audio, send quick replies, unlock; two-way talk with an external mic. Hardware limits: no camera = it cannot send its own video, no built-in mic = listen-only without an external mic. Steps: [deploy/provision/ios/ipad1-jailbreak.md](https://github.com/yukiinagato/ox-app-doorbell/blob/main/deploy/provision/ios/ipad1-jailbreak.md). Without a jailbreak, the Web version (door.html/monitor.html) is usable best-effort.
 
 ## Repository layout & builds
 

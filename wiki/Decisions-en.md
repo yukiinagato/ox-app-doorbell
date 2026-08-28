@@ -9,7 +9,7 @@ For philosophy-level discussion see [Design-Philosophy](Design-Philosophy-en); f
 
 - **Context**: devices range from a Win7 Toughpad to the latest iPhone. No single codec covers both ends.
 - **Options**: (a) MJPEG everywhere, (b) H.264 everywhere, (c) two tiers.
-- **Decision**: (c). The baseline is MJPEG (`/stream.mjpeg`) — displays on every device and browser (iPad 1 included). Only devices with a hardware encoder add HW-encoded fMP4 (`/stream.mp4`) via `codec: auto/h264`.
+- **Decision**: (c). The baseline is MJPEG (`/stream.mjpeg`) — displays on every device and browser (the iPad 1's jailbroken native app / Safari included). Only devices with a hardware encoder add HW-encoded fMP4 (`/stream.mp4`) via `codec: auto/h264`.
 - **Rationale**: MJPEG decodes even on old-device CPUs and has zero implementation quirks. The H.264 tier grants smooth 720p call quality and "no HA transcoding (go2rtc `#video=copy`)" to capable devices only. `auto` silently falls back to MJPEG when hardware-encoder probing fails — the degradation ladder itself.
 
 ## D2: Station-to-station intercom over direct SIP (PBX-independent)

@@ -80,3 +80,5 @@ Background images and custom recordings (≤3MB) are tracked in a sha256 ledger,
 
 `door.html` (ring) / `monitor.html` (call monitor) work even on an iPad 1 with iOS 5 Safari.
 `call.html` (two-way calling) requires a modern browser + the Asterisk WebRTC gateway (an optional feature).
+
+An iPad 1 need not stop at the web panel: jailbreak it and install the self-built native app and it becomes a **full native node** (see video, hear audio, quick replies, unlock; two-way talk with an external mic). Steps: [deploy/provision/ios/ipad1-jailbreak.md](https://github.com/yukiinagato/ox-app-doorbell/blob/main/deploy/provision/ios/ipad1-jailbreak.md).

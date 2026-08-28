@@ -96,9 +96,19 @@ PSTN→HGW 的腿 DTMF 常常是 inband，依赖机型。先实测 Asterisk 的 
 
 ### Q14. iPad 1 (iOS 5) 能做什么?
 
-用 Safari 打开网页面板并做成 Web Clip 的话: `door.html` = 按铃面板（无音频、
-仅通知），`monitor.html` = 接铃监视。双向通话 (`call.html`) 需要现代浏览器 +
-WebRTC 网关所以不行。把自动锁定设为「无」，常时供电使用。
+有两种方式。
+
+**(A) 越狱成原生节点（推荐・完整功能）**: 把 iPad 1 (A1219, iOS 5.1.1) 越狱并装上
+自行构建的原生 app，它就成为搭载完整 C++ 核心的**门铃网格一等节点** —— 可以查看门口的
+实时视频、听门口的声音、快捷回复、开锁；插入外接麦克风（TRRS 耳麦/dock 麦克风）还能对讲。
+硬件上限如实相告: **没有摄像头，所以无法发送自己的视频**，**没有内置麦克风，所以不接
+外麦时为「仅收听」**。步骤见
+[deploy/provision/ios/ipad1-jailbreak.md](https://github.com/yukiinagato/ox-app-doorbell/blob/main/deploy/provision/ios/ipad1-jailbreak.md)。
+
+**(B) 不想越狱 → 传统网页面板（best-effort）**: 用 Safari 打开网页面板并做成 Web Clip:
+`door.html` = 按铃面板（无音频、仅通知），`monitor.html` = 接铃监视。双向通话
+(`call.html`) 需要现代浏览器 + WebRTC 网关所以不行。无论哪种方式，都把自动锁定设为
+「无」，常时供电使用。
 
 ### Q15. 支持的最低 OS 是?
 

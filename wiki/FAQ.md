@@ -96,9 +96,20 @@ mesh に入れなくなります)。(2) SIP パスワードと Telegram bot toke
 
 ### Q14. iPad 1 (iOS 5) で何ができる?
 
-Safari で網頁パネルを開き Web クリップ化すれば: `door.html` = 押鈴パネル (音声なし・
-通知のみ)、`monitor.html` = 受鈴モニタ。双方向通話 (`call.html`) は現代ブラウザ +
-WebRTC ゲートウェイが必要なので不可。自動ロックを「なし」にして常時給電で使います。
+2 通りあります。
+
+**(A) 越獄して原生ノードにする (推奨・完全機能)**: iPad 1 (A1219, iOS 5.1.1) を
+越獄して自前ビルドの原生 app を入れると、完全な C++ コアを積んだ**門铃メッシュの
+一等ノード**になります — 門口のライブ映像を見る・門口の音声を聞く・クイック返信・
+開錠まで可能で、外付けマイク (TRRS ヘッドセット/dock マイク) を挿せば対講もできます。
+ただしハードウェア上限は正直に: **カメラが無いので自分の映像は送れず**、**内蔵マイクが
+無いので外麦なしだと「聞く専用」** です。手順は
+[deploy/provision/ios/ipad1-jailbreak.md](https://github.com/yukiinagato/ox-app-doorbell/blob/main/deploy/provision/ios/ipad1-jailbreak.md)。
+
+**(B) 越獄したくない → 従来の網頁パネル (best-effort)**: Safari で網頁パネルを開き
+Web クリップ化すれば `door.html` = 押鈴パネル (音声なし・通知のみ)、`monitor.html` =
+受鈴モニタとして使えます。双方向通話 (`call.html`) は現代ブラウザ + WebRTC ゲートウェイが
+必要なので不可。いずれの場合も自動ロックを「なし」にして常時給電で使います。
 
 ### Q15. 対応する最低 OS は?
 
