@@ -84,12 +84,16 @@
   <data name="admin_online" xml:space="preserve"><value>Online</value></data>
   <data name="admin_pair_approve" xml:space="preserve"><value>Approve</value></data>
   <data name="admin_pair_approving" xml:space="preserve"><value>Adding…</value></data>
+  <data name="admin_pair_found" xml:space="preserve"><value>Make this the primary (create new)</value></data>
+  <data name="admin_pair_found_confirm" xml:space="preserve"><value>Make this device the primary and create a new cluster?</value></data>
+  <data name="admin_pair_found_ok" xml:space="preserve"><value>This device is now the primary</value></data>
   <data name="admin_pair_hint" xml:space="preserve"><value>Automatically finds and adds unconfigured devices on the same LAN. The QR shown on a new device does the same.</value></data>
   <data name="admin_pair_invited" xml:space="preserve"><value>Invitation sent</value></data>
   <data name="admin_pair_mode" xml:space="preserve"><value>Pairing mode (10 min)</value></data>
   <data name="admin_pair_mode_left" xml:space="preserve"><value>Auto-add ON — {0}:{1} left</value></data>
   <data name="admin_pair_mode_on" xml:space="preserve"><value>Pairing mode started (10 min)</value></data>
   <data name="admin_pair_none" xml:space="preserve"><value>No devices waiting</value></data>
+  <data name="admin_pair_self_unpaired" xml:space="preserve"><value>This device hasn't joined a cluster yet. If it's your first device, create a new one here.</value></data>
   <data name="admin_panel_token" xml:space="preserve"><value>Panel token</value></data>
   <data name="admin_pass" xml:space="preserve"><value>Password</value></data>
   <data name="admin_password" xml:space="preserve"><value>Admin password</value></data>

@@ -330,6 +330,12 @@ Java_jp_keihan_doorbell_DoorbellCore_nativeInviteDevice(JNIEnv* env, jobject, jl
   if (b && b->core) db_core_invite_device(b->core, toUtf8(env, id).c_str());
 }
 
+extern "C" JNIEXPORT jboolean JNICALL
+Java_jp_keihan_doorbell_DoorbellCore_nativeFoundCluster(JNIEnv*, jobject, jlong h) {
+  Bridge* b = fromHandle(h);
+  return (b && b->core && db_core_found_cluster(b->core)) ? JNI_TRUE : JNI_FALSE;
+}
+
 // QR エンコード (core 共通実装)。戻り値 int[]: [0]=一辺のモジュール数, [1..]=行優先 0/1。失敗 null。
 extern "C" JNIEXPORT jintArray JNICALL
 Java_jp_keihan_doorbell_DoorbellCore_nativeQrEncode(JNIEnv* env, jobject, jstring text) {

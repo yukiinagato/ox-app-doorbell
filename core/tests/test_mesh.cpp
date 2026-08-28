@@ -894,6 +894,54 @@ TEST_CASE("mesh: 配対モード — 期間中に現れた未配対機を自動�
   REQUIRE(f.runUntil([&] { return f.mutualAlive({kIdA, kIdJ}); }, 4000));
 }
 
+TEST_CASE("mesh: foundCluster — 未配対は token 発行不可、親機化で実 PSK 生成し参加成立") {
+  Fleet f;
+  // 未配対の端末 (全ゼロ PSK)
+  Fleet::Node& founder =
+      f.add(kIdA, "A", capsJson(10), {{}, /*beacon=*/false, 1, /*zero_psk=*/true});
+  CHECK_FALSE(founder.mesh->isPaired());
+  // 未配対では join token を発行できない (全ゼロ PSK を配らない)
+  CHECK(founder.mesh->createJoinToken().pin.empty());
+
+  // 親機になる → 実 PSK 生成・配対済みに
+  CHECK(founder.mesh->foundCluster());
+  CHECK(founder.mesh->isPaired());
+  CHECK(founder.paired_count >= 1);
+  CHECK_FALSE(founder.mesh->foundCluster());  // 二度目は false
+  founder.config->set("cluster.name", "\"京阪ハウス\"");
+
+  // 発行できるようになった token で別の未配対機が参加 → 非ゼロ PSK を取得
+  auto token = founder.mesh->createJoinToken();
+  CHECK(token.pin.size() == 6);
+  Fleet::Node& joiner =
+      f.add(kIdJ, "J", capsJson(3), {{}, /*beacon=*/false, 1, /*zero_psk=*/true});
+  std::vector<std::pair<bool, std::string>> res;
+  joiner.mesh->joinCluster("A", token.pin, [&](bool ok, const std::string& e) {
+    res.emplace_back(ok, e);
+  });
+  REQUIRE(f.runUntil([&] { return !res.empty(); }, 2000));
+  CHECK(res[0].first);
+  CHECK(joiner.mesh->isPaired());  // 非ゼロ PSK
+  CHECK(joiner.config->get("cluster.name") == std::optional<std::string>("\"京阪ハウス\""));
+}
+
+TEST_CASE("mesh: 未配対ホストは参加を拒否する (host_unpaired)") {
+  Fleet f;
+  Fleet::Node& host =
+      f.add(kIdA, "A", capsJson(10), {{}, /*beacon=*/false, 1, /*zero_psk=*/true});
+  Fleet::Node& joiner =
+      f.add(kIdJ, "J", capsJson(3), {{}, /*beacon=*/false, 1, /*zero_psk=*/true});
+  // host は未配対なので token も出せない。強引に PIN を渡しても host が拒否する。
+  std::vector<std::pair<bool, std::string>> res;
+  joiner.mesh->joinCluster("A", "123456", [&](bool ok, const std::string& e) {
+    res.emplace_back(ok, e);
+  });
+  REQUIRE(f.runUntil([&] { return !res.empty(); }, 2000));
+  CHECK_FALSE(res[0].first);
+  CHECK(res[0].second == "host_unpaired");
+  CHECK_FALSE(joiner.mesh->isPaired());
+}
+
 TEST_CASE("mesh: 未配対機は自分では招待できない (isPaired ガード)") {
   Fleet f;
   // 2 台とも未配対

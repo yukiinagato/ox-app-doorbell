@@ -170,6 +170,10 @@ admin.pair_none: { ja: "待機中のデバイスはありません", en: "No dev
 admin.pair_approve: { ja: "承認", en: "Approve", zh: "批准" }
 admin.pair_approving: { ja: "追加中…", en: "Adding…", zh: "添加中…" }
 admin.pair_invited: { ja: "招待を送りました", en: "Invitation sent", zh: "已发送邀请" }
+admin.pair_self_unpaired: { ja: "この端末はまだクラスタに参加していません。最初の 1 台ならここで新規作成してください。", en: "This device hasn't joined a cluster yet. If it's your first device, create a new one here.", zh: "此设备尚未加入集群。若是第一台，请在此新建。" }
+admin.pair_found: { ja: "この端末を親機にする (新規作成)", en: "Make this the primary (create new)", zh: "将此设备设为主机（新建）" }
+admin.pair_found_confirm: { ja: "この端末を親機にして新しいクラスタを作成しますか?", en: "Make this device the primary and create a new cluster?", zh: "将此设备设为主机并新建集群吗？" }
+admin.pair_found_ok: { ja: "この端末を親機にしました", en: "This device is now the primary", zh: "已将此设备设为主机" }
 admin.logs: { ja: "ログ", en: "Logs", zh: "日志" }
 admin.raw_config: { ja: "設定 (生 JSON・読取)", en: "Config (raw JSON, read-only)", zh: "配置 (原始 JSON，只读)" }
 day.mon: { ja: "月", en: "Mon", zh: "一" }

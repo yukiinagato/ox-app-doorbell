@@ -230,6 +230,11 @@ DB_API void db_core_pairing_mode(db_core* c, int seconds) {
   if (c && c->node) c->node->setPairingMode(seconds);
 }
 
+DB_API int db_core_found_cluster(db_core* c) {
+  if (!c || !c->node) return 0;
+  return c->node->foundCluster() ? 1 : 0;
+}
+
 DB_API void db_core_invite_device(db_core* c, const char* id) {
   if (c && c->node && id && *id) c->node->inviteDevice(id);
 }

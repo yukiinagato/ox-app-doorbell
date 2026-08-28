@@ -79,12 +79,16 @@
 "admin.online" = "在线";
 "admin.pair_approve" = "批准";
 "admin.pair_approving" = "添加中…";
+"admin.pair_found" = "将此设备设为主机（新建）";
+"admin.pair_found_confirm" = "将此设备设为主机并新建集群吗？";
+"admin.pair_found_ok" = "已将此设备设为主机";
 "admin.pair_hint" = "自动发现同一局域网内未配置的设备并添加。新设备屏幕上的二维码也是同样作用。";
 "admin.pair_invited" = "已发送邀请";
 "admin.pair_mode" = "配对模式（10 分钟）";
 "admin.pair_mode_left" = "自动添加已开启 — 剩余 %@:%@";
 "admin.pair_mode_on" = "已开启配对模式（10 分钟）";
 "admin.pair_none" = "暂无等待中的设备";
+"admin.pair_self_unpaired" = "此设备尚未加入集群。若是第一台，请在此新建。";
 "admin.panel_token" = "面板 token";
 "admin.pass" = "密码";
 "admin.password" = "管理密码";

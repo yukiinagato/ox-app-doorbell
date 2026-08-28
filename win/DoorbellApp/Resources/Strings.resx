@@ -84,12 +84,16 @@
   <data name="admin_online" xml:space="preserve"><value>オンライン</value></data>
   <data name="admin_pair_approve" xml:space="preserve"><value>承認</value></data>
   <data name="admin_pair_approving" xml:space="preserve"><value>追加中…</value></data>
+  <data name="admin_pair_found" xml:space="preserve"><value>この端末を親機にする (新規作成)</value></data>
+  <data name="admin_pair_found_confirm" xml:space="preserve"><value>この端末を親機にして新しいクラスタを作成しますか?</value></data>
+  <data name="admin_pair_found_ok" xml:space="preserve"><value>この端末を親機にしました</value></data>
   <data name="admin_pair_hint" xml:space="preserve"><value>同じ LAN 上の未設定デバイスを自動で見つけて追加します。新機の画面に出る QR も同じ働きです。</value></data>
   <data name="admin_pair_invited" xml:space="preserve"><value>招待を送りました</value></data>
   <data name="admin_pair_mode" xml:space="preserve"><value>配対モード (10 分)</value></data>
   <data name="admin_pair_mode_left" xml:space="preserve"><value>自動追加 ON — 残り {0}:{1}</value></data>
   <data name="admin_pair_mode_on" xml:space="preserve"><value>配対モードを開始しました (10 分)</value></data>
   <data name="admin_pair_none" xml:space="preserve"><value>待機中のデバイスはありません</value></data>
+  <data name="admin_pair_self_unpaired" xml:space="preserve"><value>この端末はまだクラスタに参加していません。最初の 1 台ならここで新規作成してください。</value></data>
   <data name="admin_panel_token" xml:space="preserve"><value>パネル token</value></data>
   <data name="admin_pass" xml:space="preserve"><value>パスワード</value></data>
   <data name="admin_password" xml:space="preserve"><value>管理パスワード</value></data>

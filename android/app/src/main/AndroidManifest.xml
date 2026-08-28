@@ -54,13 +54,22 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LEANBACK_LAUNCHER"/>
             </intent-filter>
-            <!-- kiosk: HOME に設定して起動器を置き換える (provision.md) -->
+        </activity>
+
+        <!-- kiosk: HOME 化 (起動器置き換え, provision.md) は別 alias に分離する。
+             MAIN/LAUNCHER と同一 activity に HOME を付けると一部 OEM ランチャーが
+             「ホームアプリ」扱いしてドロワーから隠す (= アイコンが見えない) ため。 -->
+        <activity-alias
+            android:name=".HomeAlias"
+            android:targetActivity=".MainActivity"
+            android:exported="true"
+            android:enabled="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.HOME"/>
                 <category android:name="android.intent.category.DEFAULT"/>
             </intent-filter>
-        </activity>
+        </activity-alias>
 
         <!-- 来客モニタ画面: chime イベントで前台に被さる (門口ライブ映像 + 監聴 + クイック返信)。
              D-pad (TV リモコン) とタッチの両対応。 -->

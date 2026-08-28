@@ -705,6 +705,8 @@ if (typeof document !== "undefined") (function () {
     }
     if (p === "/api/join-token") return ok({ ok: true, pin: "482913", expires_s: 600 });
     if (p === "/api/pairing/mode") { MOCK_PAIRMODE = Date.now() + 600000; return ok({ ok: true, seconds: 600 }); }
+    if (p === "/api/pairing/found") return ok({ ok: true });
+    if (p === "/api/pairing/invite-direct") return ok({ ok: true });
     if (p === "/api/pairing/invite") {
       MOCK_PENDING = MOCK_PENDING.filter(function (d) { return d.id !== (body && body.id); });
       return ok({ ok: true });
@@ -2158,6 +2160,29 @@ if (typeof document !== "undefined") (function () {
       if (st !== 200 || !j) return;
       var box = $("#pairPending");
       if (!box) return;
+      // このノード自身が未配対なら、承認/PIN は使えない — 親機化 (新規作成) を促す
+      if (j.paired === false) {
+        box.innerHTML =
+          "<div class='dim' style='padding:6px 0'>" +
+          esc(t("admin.pair_self_unpaired",
+                 "この端末はまだクラスタに参加していません。最初の 1 台ならここで新規作成してください。")) +
+          "</div><button class='btn small' id='pairFoundBtn'>" +
+          esc(t("admin.pair_found", "この端末を親機にする (新規作成)")) + "</button>";
+        var fb = $("#pairFoundBtn");
+        if (fb) fb.onclick = function () {
+          if (!window.confirm(t("admin.pair_found_confirm",
+                                "この端末を親機にして新しいクラスタを作成しますか?"))) return;
+          api("POST", "/api/pairing/found", {}, function (s2, j2) {
+            if (s2 === 200 && j2 && j2.ok) {
+              msg(t("admin.pair_found_ok", "この端末を親機にしました"));
+              refreshPairing();
+            } else msg(t("admin.save_failed", "失敗"));
+          });
+        };
+        var st2 = $("#pairModeStat");
+        if (st2) st2.textContent = "";
+        return;
+      }
       var pend = j.pending || {}, devs = pend.devices || [];
       var h = "";
       if (!devs.length) {

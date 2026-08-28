@@ -145,6 +145,7 @@ class Node {
 
   // --- 配対 (発見/招待; capi db_core_pairing_*) ---
   std::string pairingJson();       // {paired, self:{QR 情報}, pair_qr, pending:{待機一覧+モード}}
+  bool foundCluster();             // 未配対時: この端末を親機にする (新規 PSK 生成)
   void joinCluster(const std::string& host, const std::string& pin);  // PIN 参加 (未配対機側)
   void setPairingMode(int seconds);          // 配対モード ON (配対済み機側)
   void inviteDevice(const std::string& id);  // 待機デバイスを承認・招待

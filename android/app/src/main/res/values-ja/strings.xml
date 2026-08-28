@@ -82,12 +82,16 @@
     <string name="admin_online">オンライン</string>
     <string name="admin_pair_approve">承認</string>
     <string name="admin_pair_approving">追加中…</string>
+    <string name="admin_pair_found">この端末を親機にする (新規作成)</string>
+    <string name="admin_pair_found_confirm">この端末を親機にして新しいクラスタを作成しますか?</string>
+    <string name="admin_pair_found_ok">この端末を親機にしました</string>
     <string name="admin_pair_hint">同じ LAN 上の未設定デバイスを自動で見つけて追加します。新機の画面に出る QR も同じ働きです。</string>
     <string name="admin_pair_invited">招待を送りました</string>
     <string name="admin_pair_mode">配対モード (10 分)</string>
     <string name="admin_pair_mode_left">自動追加 ON — 残り %1$s:%2$s</string>
     <string name="admin_pair_mode_on">配対モードを開始しました (10 分)</string>
     <string name="admin_pair_none">待機中のデバイスはありません</string>
+    <string name="admin_pair_self_unpaired">この端末はまだクラスタに参加していません。最初の 1 台ならここで新規作成してください。</string>
     <string name="admin_panel_token">パネル token</string>
     <string name="admin_pass">パスワード</string>
     <string name="admin_password">管理パスワード</string>

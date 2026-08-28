@@ -2055,10 +2055,22 @@ struct Node::Impl {
     httpd->route("POST", "/api/join-token", [this](const HttpReq&) {
       if (!mesh) return HttpResp::json("{\"ok\":false,\"err\":\"no mesh\"}", 503);
       auto t = mesh->createJoinToken();
+      if (t.pin.empty())  // 未配対 → 発行不可 (全ゼロ PSK を配らない)
+        return HttpResp::json("{\"ok\":false,\"err\":\"host_unpaired\"}", 409);
       auto o = json::obj();
       json::setBool(o.get(), "ok", true);
       json::set(o.get(), "pin", t.pin);
       json::set(o.get(), "expires_s", (t.expires_mono - clock->monoMs()) / 1000);
+      return HttpResp::json(json::dump(o.get()));
+    });
+
+    // このノードを新規クラスタの親機にする (未配対時のみ — 新規 PSK 生成)
+    httpd->route("POST", "/api/pairing/found", [this](const HttpReq&) {
+      if (!mesh) return HttpResp::json("{\"ok\":false,\"err\":\"no_mesh\"}", 503);
+      bool ok = mesh->foundCluster();
+      auto o = json::obj();
+      json::setBool(o.get(), "ok", ok);
+      if (!ok) json::set(o.get(), "err", "already_paired");
       return HttpResp::json(json::dump(o.get()));
     });
 
@@ -2787,6 +2799,14 @@ std::string Node::pairingJson() {
   std::string out;
   impl_->loop->callSync([&] { out = impl_->pairingJsonOnLoop(); });
   return out;
+}
+
+bool Node::foundCluster() {
+  bool ok = false;
+  impl_->loop->callSync([&] {
+    if (impl_->mesh) ok = impl_->mesh->foundCluster();
+  });
+  return ok;
 }
 
 void Node::joinCluster(const std::string& host, const std::string& pin) {

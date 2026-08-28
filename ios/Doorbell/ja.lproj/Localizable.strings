@@ -79,12 +79,16 @@
 "admin.online" = "オンライン";
 "admin.pair_approve" = "承認";
 "admin.pair_approving" = "追加中…";
+"admin.pair_found" = "この端末を親機にする (新規作成)";
+"admin.pair_found_confirm" = "この端末を親機にして新しいクラスタを作成しますか?";
+"admin.pair_found_ok" = "この端末を親機にしました";
 "admin.pair_hint" = "同じ LAN 上の未設定デバイスを自動で見つけて追加します。新機の画面に出る QR も同じ働きです。";
 "admin.pair_invited" = "招待を送りました";
 "admin.pair_mode" = "配対モード (10 分)";
 "admin.pair_mode_left" = "自動追加 ON — 残り %@:%@";
 "admin.pair_mode_on" = "配対モードを開始しました (10 分)";
 "admin.pair_none" = "待機中のデバイスはありません";
+"admin.pair_self_unpaired" = "この端末はまだクラスタに参加していません。最初の 1 台ならここで新規作成してください。";
 "admin.panel_token" = "パネル token";
 "admin.pass" = "パスワード";
 "admin.password" = "管理パスワード";

@@ -1209,6 +1209,10 @@ struct Mesh::Impl {
     if (!doc) return;
     const std::string t = json::getString(doc.get(), "t");
     if (t == "JOIN_REQ1") {
+      if (!isPaired()) {  // 未配対ノードは全ゼロ PSK を配ってしまう — 参加を拒否
+        sendJoinErr(ib->conn, "host_unpaired");
+        return;
+      }
       if (!token.active) {
         sendJoinErr(ib->conn, "no_token");
         return;
@@ -1426,6 +1430,17 @@ struct Mesh::Impl {
       inviteDevice(pb.id);  // 配対モード中は自動招待
     }
     if (isNew && cbs.on_pending_changed) cbs.on_pending_changed();
+  }
+
+  // このノードを新規クラスタの親機にする (未配対時のみ)。ランダム PSK を生成し配対済みに遷移。
+  // これが無いと全端末が「招待待ち」のまま誰も PSK を持たず、集群を始められない。
+  bool foundCluster() {
+    if (isPaired()) return false;  // 既に配対済み
+    Bytes psk = randomBytes(32);
+    std::copy(psk.begin(), psk.end(), st.psk.begin());
+    if (st.psk_id.empty()) st.psk_id = "k1";
+    onBecamePaired();  // 永続化 (on_paired) + beacon 再鍵 + maintain
+    return true;
   }
 
   // 配対モードを ttl_ms 間 ON にし、現在の待機デバイスを即招待
@@ -1671,6 +1686,7 @@ void Mesh::fetchBlob(const std::string& hash, std::function<void(Bytes)> cb) {
 }
 
 Mesh::JoinToken Mesh::createJoinToken() {
+  if (!impl_->isPaired()) return JoinToken{};  // 未配対では発行不可 (pin 空)
   impl_->token.pin = genPin6();
   impl_->token.expires_mono = impl_->now() + kJoinTokenTtlMs;
   impl_->token.fails = 0;
@@ -1682,6 +1698,7 @@ Mesh::JoinToken Mesh::createJoinToken() {
 }
 
 bool Mesh::isPaired() const { return impl_->isPaired(); }
+bool Mesh::foundCluster() { return impl_->foundCluster(); }
 std::string Mesh::pairingSelfJson() { return impl_->pairingSelfJson(); }
 std::string Mesh::pendingJson() { return impl_->pendingJson(); }
 void Mesh::inviteDevice(const std::string& id) { impl_->inviteDevice(id); }

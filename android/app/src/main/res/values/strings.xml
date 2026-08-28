@@ -82,12 +82,16 @@
     <string name="admin_online">Online</string>
     <string name="admin_pair_approve">Approve</string>
     <string name="admin_pair_approving">Adding…</string>
+    <string name="admin_pair_found">Make this the primary (create new)</string>
+    <string name="admin_pair_found_confirm">Make this device the primary and create a new cluster?</string>
+    <string name="admin_pair_found_ok">This device is now the primary</string>
     <string name="admin_pair_hint">Automatically finds and adds unconfigured devices on the same LAN. The QR shown on a new device does the same.</string>
     <string name="admin_pair_invited">Invitation sent</string>
     <string name="admin_pair_mode">Pairing mode (10 min)</string>
     <string name="admin_pair_mode_left">Auto-add ON — %1$s:%2$s left</string>
     <string name="admin_pair_mode_on">Pairing mode started (10 min)</string>
     <string name="admin_pair_none">No devices waiting</string>
+    <string name="admin_pair_self_unpaired">This device hasn\'t joined a cluster yet. If it\'s your first device, create a new one here.</string>
     <string name="admin_panel_token">Panel token</string>
     <string name="admin_pass">Password</string>
     <string name="admin_password">Admin password</string>

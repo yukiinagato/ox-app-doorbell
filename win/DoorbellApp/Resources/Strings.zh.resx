@@ -84,12 +84,16 @@
   <data name="admin_online" xml:space="preserve"><value>在线</value></data>
   <data name="admin_pair_approve" xml:space="preserve"><value>批准</value></data>
   <data name="admin_pair_approving" xml:space="preserve"><value>添加中…</value></data>
+  <data name="admin_pair_found" xml:space="preserve"><value>将此设备设为主机（新建）</value></data>
+  <data name="admin_pair_found_confirm" xml:space="preserve"><value>将此设备设为主机并新建集群吗？</value></data>
+  <data name="admin_pair_found_ok" xml:space="preserve"><value>已将此设备设为主机</value></data>
   <data name="admin_pair_hint" xml:space="preserve"><value>自动发现同一局域网内未配置的设备并添加。新设备屏幕上的二维码也是同样作用。</value></data>
   <data name="admin_pair_invited" xml:space="preserve"><value>已发送邀请</value></data>
   <data name="admin_pair_mode" xml:space="preserve"><value>配对模式（10 分钟）</value></data>
   <data name="admin_pair_mode_left" xml:space="preserve"><value>自动添加已开启 — 剩余 {0}:{1}</value></data>
   <data name="admin_pair_mode_on" xml:space="preserve"><value>已开启配对模式（10 分钟）</value></data>
   <data name="admin_pair_none" xml:space="preserve"><value>暂无等待中的设备</value></data>
+  <data name="admin_pair_self_unpaired" xml:space="preserve"><value>此设备尚未加入集群。若是第一台，请在此新建。</value></data>
   <data name="admin_panel_token" xml:space="preserve"><value>面板 token</value></data>
   <data name="admin_pass" xml:space="preserve"><value>密码</value></data>
   <data name="admin_password" xml:space="preserve"><value>管理密码</value></data>

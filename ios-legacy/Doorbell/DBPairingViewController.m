@@ -4,6 +4,9 @@
 #import "DBBootConfig.h"
 #import "DBInfoViewController.h"
 
+@interface DBPairingViewController () <UIAlertViewDelegate>
+@end
+
 @implementation DBPairingViewController {
   DBCoreBridge *_core;
   DBBootConfig *_boot;
@@ -16,6 +19,9 @@
   UITextField *_host;
   UITextField *_pin;
   UIButton *_join;
+  UILabel *_foundSep;
+  UILabel *_foundHint;
+  UIButton *_found;
   NSString *_lastQr;
   NSTimer *_poll;
 }
@@ -44,6 +50,9 @@
   [_host release];
   [_pin release];
   [_join release];
+  [_foundSep release];
+  [_foundHint release];
+  [_found release];
   [_lastQr release];
   [super dealloc];
 }
@@ -116,6 +125,31 @@
   [_join addTarget:self action:@selector(onJoin) forControlEvents:UIControlEventTouchUpInside];
   [_scroll addSubview:_join];
 
+  _foundSep = [[UILabel alloc] init];
+  _foundSep.text = @"── はじめての 1 台 ──";
+  _foundSep.textColor = [UIColor colorWithWhite:0.4 alpha:1];
+  _foundSep.backgroundColor = [UIColor clearColor];
+  _foundSep.font = [UIFont systemFontOfSize:13];
+  _foundSep.textAlignment = NSTextAlignmentCenter;
+  [_scroll addSubview:_foundSep];
+
+  _foundHint = [[UILabel alloc] init];
+  _foundHint.numberOfLines = 0;
+  _foundHint.text = @"まだどの端末も設定していない場合は、この端末を親機にして新しく始めます。";
+  _foundHint.textColor = [UIColor colorWithWhite:0.65 alpha:1];
+  _foundHint.backgroundColor = [UIColor clearColor];
+  _foundHint.font = [UIFont systemFontOfSize:13];
+  _foundHint.textAlignment = NSTextAlignmentCenter;
+  [_scroll addSubview:_foundHint];
+
+  _found = [[UIButton buttonWithType:UIButtonTypeCustom] retain];
+  [_found setTitle:@"この端末で新規作成" forState:UIControlStateNormal];
+  [_found setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+  _found.backgroundColor = [UIColor colorWithWhite:0.25 alpha:1];
+  _found.layer.cornerRadius = 8;
+  [_found addTarget:self action:@selector(onFound) forControlEvents:UIControlEventTouchUpInside];
+  [_scroll addSubview:_found];
+
   DBPairingViewController *__unsafe_unretained weakSelf = self;
   [_core addHandler:@"pairing" handler:^(NSDictionary *ev) { [weakSelf onUiEvent:ev]; }];
 
@@ -142,7 +176,10 @@
   CGFloat fx = (w - fw) / 2;
   _host.frame = CGRectMake(fx, y, fw, 40); y += 48;
   _pin.frame = CGRectMake(fx, y, fw, 40); y += 48;
-  _join.frame = CGRectMake(fx, y, fw, 46); y += 46 + 40;
+  _join.frame = CGRectMake(fx, y, fw, 46); y += 46 + 28;
+  _foundSep.frame = CGRectMake(pad, y, cw, 20); y += 28;
+  _foundHint.frame = CGRectMake(pad, y, cw, 40); y += 46;
+  _found.frame = CGRectMake(fx, y, fw, 46); y += 46 + 40;
   _scroll.contentSize = CGSizeMake(w, y);
 }
 
@@ -205,6 +242,24 @@
   [_poll invalidate];
   _poll = nil;
   [self dismissViewControllerAnimated:YES completion:nil];
+}
+
+- (void)onFound {
+  UIAlertView *a = [[UIAlertView alloc]
+          initWithTitle:@"新規クラスタを作成"
+                message:@"この端末を親機にして新しく始めますか?\n(既存のクラスタに参加する場合は、管理画面で承認してください)"
+               delegate:self
+      cancelButtonTitle:@"キャンセル"
+      otherButtonTitles:@"作成", nil];
+  [a show];
+  [a release];
+}
+
+- (void)alertView:(UIAlertView *)alertView clickedButtonAtIndex:(NSInteger)buttonIndex {
+  if (buttonIndex == alertView.cancelButtonIndex) return;
+  if ([_core foundCluster]) {
+    [self dismissPaired];  // 親機化 → 即 dismiss (paired イベントも届く)
+  }
 }
 
 - (void)onJoin {

@@ -139,6 +139,7 @@ class Mesh {
 
   // --- 配対 (発見 → 招待 push; QR/承認/配対モード。§1.6 拡張) ---
   bool isPaired() const;            // 全ゼロ PSK = 未配対
+  bool foundCluster();             // 未配対時: 新規 PSK 生成し親機になる (true=実施)
   std::string pairingSelfJson();    // 未配対の当機の告知内容 (QR に載せる id/addr/pk)
   std::string pendingJson();        // 近隣で発見した未配対デバイス一覧 + 配対モード状態
   void inviteDevice(const std::string& id);  // 一覧の 1 台へ {psk,seeds,cfg} を封緘 push

@@ -118,6 +118,9 @@ class DoorbellCore {
     /** QR エンコード (core 共通)。戻り値 [0]=一辺のモジュール数, [1..]=行優先 0/1。失敗 null。 */
     fun qrEncode(text: String): IntArray? = if (text.isEmpty()) null else nativeQrEncode(text)
 
+    /** 未配対時: この端末を新規クラスタの親機にする (ランダム PSK 生成)。true=実施。 */
+    fun foundCluster(): Boolean = handle != 0L && nativeFoundCluster(handle)
+
     private fun parse(s: String?): JSONObject? =
         try { if (s == null) null else JSONObject(s) } catch (_: Exception) { null }
 
@@ -170,6 +173,7 @@ class DoorbellCore {
     private external fun nativePairingMode(handle: Long, seconds: Int)
     private external fun nativeInviteDevice(handle: Long, nodeId: String)
     private external fun nativeQrEncode(text: String): IntArray?
+    private external fun nativeFoundCluster(handle: Long): Boolean
 
     companion object {
         init {

@@ -108,6 +108,9 @@ DB_API char* db_core_config_json(db_core* c);
 DB_API char* db_core_pairing_json(db_core* c);
 /* 未配対機側: PIN + seed で能動参加。結果は ui コールバックで t:"join_result"/t:"paired"。 */
 DB_API void db_core_join_cluster(db_core* c, const char* host, const char* pin);
+/* 未配対機側: この端末を新規クラスタの親機にする (ランダム PSK 生成)。1=実施, 0=既配対/失敗。
+ * 成功時 ui コールバックに t:"paired" が届く (殻が boot.json 永続化)。 */
+DB_API int db_core_found_cluster(db_core* c);
 /* 配対済み機側: 配対モードを seconds 秒 ON (期間中の未配対機を自動招待)。 */
 DB_API void db_core_pairing_mode(db_core* c, int seconds);
 /* 配対済み機側: pending の 1 台 (node_id) を承認・招待。 */

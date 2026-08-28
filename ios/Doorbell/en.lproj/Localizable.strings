@@ -79,12 +79,16 @@
 "admin.online" = "Online";
 "admin.pair_approve" = "Approve";
 "admin.pair_approving" = "Adding…";
+"admin.pair_found" = "Make this the primary (create new)";
+"admin.pair_found_confirm" = "Make this device the primary and create a new cluster?";
+"admin.pair_found_ok" = "This device is now the primary";
 "admin.pair_hint" = "Automatically finds and adds unconfigured devices on the same LAN. The QR shown on a new device does the same.";
 "admin.pair_invited" = "Invitation sent";
 "admin.pair_mode" = "Pairing mode (10 min)";
 "admin.pair_mode_left" = "Auto-add ON — %@:%@ left";
 "admin.pair_mode_on" = "Pairing mode started (10 min)";
 "admin.pair_none" = "No devices waiting";
+"admin.pair_self_unpaired" = "This device hasn't joined a cluster yet. If it's your first device, create a new one here.";
 "admin.panel_token" = "Panel token";
 "admin.pass" = "Password";
 "admin.password" = "Admin password";

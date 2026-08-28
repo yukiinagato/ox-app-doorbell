@@ -73,15 +73,17 @@ class PairingActivity : Activity(), DoorbellCore.Listener {
         finish()
     }
 
-    // ---------- core イベント (App から転送 — main スレッド) ----------
+    // ---------- core イベント (App から core 内部スレッドで転送 → main へ marshal) ----------
     override fun onUiEvent(ev: JSONObject) {
-        when (ev.optString("t")) {
-            "paired" -> finishPaired()  // App.onPaired が boot.json を永続化済み
-            "join_result" -> {
-                val ok = ev.optBoolean("ok")
-                if (ok) finishPaired()
-                else Toast.makeText(this, "参加できませんでした: ${ev.optString("err")}",
-                                    Toast.LENGTH_LONG).show()
+        ui.post {
+            when (ev.optString("t")) {
+                "paired" -> finishPaired()  // App.onPaired が boot.json を永続化済み
+                "join_result" -> {
+                    val ok = ev.optBoolean("ok")
+                    if (ok) finishPaired()
+                    else Toast.makeText(this, "参加できませんでした: ${ev.optString("err")}",
+                                        Toast.LENGTH_LONG).show()
+                }
             }
         }
     }
@@ -190,7 +192,40 @@ class PairingActivity : Activity(), DoorbellCore.Listener {
         }, LinearLayout.LayoutParams(dp(280), ViewGroup.LayoutParams.WRAP_CONTENT).apply {
             topMargin = dp(12)
         })
+
+        // 最初の 1 台向け: 新規クラスタを作成 (この端末を親機に)
+        root.addView(TextView(this).apply {
+            text = "── はじめての 1 台 ──"
+            setTextColor(Color.parseColor("#63758A")); textSize = 13f
+            setPadding(0, dp(24), 0, dp(10))
+        })
+        root.addView(TextView(this).apply {
+            text = "まだどの端末も設定していない場合は、この端末を親機にして新しく始めます。"
+            setTextColor(Color.parseColor("#9FB0C0")); textSize = 13f
+            gravity = Gravity.CENTER
+            setPadding(dp(8), 0, dp(8), dp(10))
+        })
+        root.addView(Button(this).apply {
+            text = "この端末で新規作成"
+            setOnClickListener { onFoundClick() }
+        }, LinearLayout.LayoutParams(dp(280), ViewGroup.LayoutParams.WRAP_CONTENT))
         return scroll
+    }
+
+    private fun onFoundClick() {
+        android.app.AlertDialog.Builder(this)
+            .setTitle("新規クラスタを作成")
+            .setMessage("この端末を親機にして新しく始めますか?\n(既存のクラスタに参加する場合は、代わりに管理画面で承認してください)")
+            .setPositiveButton("作成") { _, _ ->
+                if (app.core.foundCluster()) {
+                    Toast.makeText(this, "この端末を親機にしました", Toast.LENGTH_SHORT).show()
+                    finishPaired()
+                } else {
+                    Toast.makeText(this, "作成できませんでした", Toast.LENGTH_SHORT).show()
+                }
+            }
+            .setNegativeButton("キャンセル", null)
+            .show()
     }
 
     private fun onJoinClick() {

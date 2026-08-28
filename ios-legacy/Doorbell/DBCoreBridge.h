@@ -36,6 +36,7 @@ typedef void (^DBUiEventHandler)(NSDictionary *ev);
 // 配対 (発見/招待)。pairingInfo: {paired, self, pair_qr, pending:{devices,pairing_mode}}
 - (NSDictionary *)pairingInfo;
 - (void)joinCluster:(NSString *)host pin:(NSString *)pin;  // 未配対機側: PIN 参加
+- (BOOL)foundCluster;  // 未配対機側: この端末を親機にする (新規 PSK 生成)
 - (void)setPairingMode:(int)seconds;  // 配対済み機側: 配対モード ON
 - (void)inviteDevice:(NSString *)nodeId;  // 配対済み機側: 待機機を承認
 

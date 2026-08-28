@@ -483,6 +483,10 @@ static void DBUiEventCb(void *user, const char *event_json) {
   if (_core) db_core_pairing_mode(_core, seconds);
 }
 
+- (BOOL)foundCluster {
+  return (_core && db_core_found_cluster(_core) != 0) ? YES : NO;
+}
+
 - (void)inviteDevice:(NSString *)nodeId {
   if (_core && [nodeId length] > 0) db_core_invite_device(_core, [nodeId UTF8String]);
 }
