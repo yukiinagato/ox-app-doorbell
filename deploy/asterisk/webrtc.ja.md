@@ -1,12 +1,12 @@
 # ブラウザ通話 (WebRTC) — Asterisk 側設定 (**任意機能**)
 
-**位置づけ**: 室内機アプリ (Windows/Android/iOS/TV) ⇔ 門口機の対講は Asterisk を
-経由しない直接 SIP (UDP 47190) で行う — PBX が落ちても対講は生きる。
-この文書は「**ブラウザ (網頁面板) から通話したい場合だけ**」必要な追加設定。
+**位置づけ**: 室内機アプリ (Windows/Android/iOS/TV) ⇔ 門口機の通話は Asterisk を
+経由しない直接 SIP (UDP 47190) で行う — PBX が落ちても通話は生きる。
+この文書は「**ブラウザ (Web パネル) から通話したい場合だけ**」必要な追加設定。
 ブラウザは SIP/UDP を直接話せないため WebRTC ゲートウェイとして Asterisk を使う。
-網頁通話を使わないならこの設定は不要。
+Web 通話を使わないならこの設定は不要。
 
-網頁面板の双方向音声は「ブラウザ = Asterisk の内線」方式 (JsSIP + WebSocket)。
+Web パネルの双方向音声は「ブラウザ = Asterisk の内線」方式 (JsSIP + WebSocket)。
 門口機側は変更不要 — ブラウザから門口機の内線 (8001 等) へ普通に発呼するだけ。
 
 ## 1. 重要な前提: セキュアコンテキスト
@@ -51,7 +51,7 @@ webrtc=yes                  ; use_avpf/ice_support/dtls 一式の短縮 (Asteris
 dtls_auto_generate_cert=yes ; 自己署名 DTLS 証明書を自動生成
 dtmf_mode=rfc4733
 
-;---- 網頁面板用内線 (端末台数ぶん増やす) ----
+;---- Web パネル用内線 (端末台数ぶん増やす) ----
 [260](browser)
 auth=260
 aors=260
@@ -65,9 +65,9 @@ max_contacts=3              ; 複数ブラウザ同時ログイン許容
 
 - `webrtc=yes` は Asterisk 15+ (20 は OK)。opus は codec_opus モジュール
   (標準バンドル、`module show like opus` で確認)。ブラウザ⇔門口機は
-  opus⇔ulaw を Asterisk が転码する (サーバ負担、通話 1-2 本なら無視できる)。
-- extensions.conf は変更不要 — 260 は from-internal で `8001` (門口機直呼) や
-  `0…` (光電話出局) をそのまま拨れる。
+  opus⇔ulaw を Asterisk がトランスコードする (サーバ負担、通話 1-2 本なら無視できる)。
+- extensions.conf は変更不要 — 260 は from-internal で `8001` (門口機への直接発呼) や
+  `0…` (ひかり電話への外線発信) をそのまま発信できる。
 
 ## 4. 動作確認
 

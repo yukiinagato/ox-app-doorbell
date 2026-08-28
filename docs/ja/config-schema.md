@@ -35,20 +35,20 @@
         "screensaver_after_s": 120,
         "camera": { "device_hint": "", "rotation": 0, "mjpeg_fps": 8,
                     "mjpeg_quality": 60, "resolution": "640x480",
-                    // codec: "auto"=硬編 h264 を探測し不可なら mjpeg / "mjpeg" / "h264"
-                    // h264 時は /stream.mp4 (fMP4, 平台 HW encoder) が有効になり
+                    // codec: "auto"=ハードウェアエンコード (h264) を検出し不可なら mjpeg / "mjpeg" / "h264"
+                    // h264 時は /stream.mp4 (fMP4, プラットフォームの HW エンコーダ) が有効になり
                     // resolution/fps は h264_* 系で別指定 (Phase 6)
                     "codec": "auto", "h264_resolution": "1280x720", "h264_fps": 25,
                     "h264_bitrate_kbps": 1500 },
         "kiosk": { "exit_pin_hash": "<pbkdf2>", "watchdog": true },
         "motion": { "enabled": true, "sensitivity": 40, "min_interval_s": 30 },
-        "aec": { "mode": "auto", "tail_ms": 0 },  // 装機標定で書込
-        // TV 監視器 (Android TV 常駐 app) の目印。運用ノート:
-        //   - role=indoor_panel + tv:true。chime で来客モニタ画面が前台に被さり、
-        //     門口ライブ映像 (MJPEG) + 門口マイクの直接監聴 (sip.direct_port へ
-        //     X-Doorbell-Mode: monitor の直呼 — Asterisk 不要・dialplan 変更不要)。
+        "aec": { "mode": "auto", "tail_ms": 0 },  // 設置時キャリブレーションで書込
+        // TV モニタ端末 (Android TV 常駐 app) の目印。運用ノート:
+        //   - role=indoor_panel + tv:true。chime で来客モニタ画面が前面に重なり、
+        //     門口機のライブ映像 (MJPEG) + 門口機のマイクの直接モニタリング (sip.direct_port へ
+        //     X-Doorbell-Mode: monitor の直接発呼 — Asterisk 不要・dialplan 変更不要)。
         //   - D-pad でクイック返信 (quick_replies を order 順に表示)。
-        //   - 導入手順: deploy/provision/android/provision.md の「Android TV」節。
+        //   - 導入手順: deploy/provision/android/provision.ja.md の「Android TV」節。
         "tv": false
       }
     }
@@ -67,18 +67,18 @@
     // answer_mode: "auto"(門口機既定 — 即応答) | "ring"(室内機既定 — 着信 UI で手動応答)
     "accounts": { "<node_id>": { "user": "door-front", "pass_ref": "secret:sip.<node_id>",
                                  "answer_mode": "auto" } },
-    // 直接呼 (Asterisk 非経由) の待受 UDP ポート。各子機の sipctl が固定 listen し、
-    // 室内機/TV はここへ "sip:<host>:47190" で直接 INVITE する (PBX 障害時も対講/監聴が
-    // 生きる自愈方針)。X-Doorbell-Mode: monitor = 一方向監聴 / answer = 双方向。
-    // server や自機 accounts が未設定でも直接呼だけは動く。
+    // 直接発呼 (Asterisk 非経由) の待受 UDP ポート。各子機の sipctl が固定 listen し、
+    // 室内機/TV はここへ "sip:<host>:47190" で直接 INVITE する (PBX 障害時も通話/モニタリングが
+    // 生きる自己修復方針)。X-Doorbell-Mode: monitor = 一方向モニタリング / answer = 双方向。
+    // server や自機 accounts が未設定でも直接発呼だけは動く。
     "direct_port": 47190,
-    // DTMF 機能碼 (通話中の相手キー → アクション; 実行体は mesh/MQTT 側)
+    // DTMF 機能コード (通話中の相手キー → アクション; 実行体は mesh/MQTT 側)
     "dtmf_actions": { "*1": { "type": "ha_command", "command": "unlock", "door": "self" },
                       "*0": { "type": "hangup" } }
   },
 
   "ui": {
-    "languages": ["ja", "en", "zh"],            // 門口機の訪客言語切替に出す言語
+    "languages": ["ja", "en", "zh"],            // 門口機の来訪者言語切替に出す言語
     "visitor_lang_revert_s": 60                 // 無操作でこの秒数後に主言語 (ja) へ自動復帰
   },
   // 文言の実行時上書き (組込 resx/strings.xml より優先)。管理画面「文言」タブ /
@@ -90,21 +90,21 @@
   },
 
   // 統一資産台帳: 背景画像 + カスタム音声 (wav/mp3 ≤3MB) の blob 目録。実体は各ノードの
-  // assets/ ディレクトリ。**設定変更時に各ノードが参照中の hash を能動的に前取り**
+  // assets/ ディレクトリ。**設定変更時に各ノードが参照中の hash を能動的にプリフェッチ**
   // (mesh FETCH_BLOB — 保持ノードならどこからでも) → 再生/表示は常にローカルファイル =
-  // ミリ秒級。管理画面はノード毎のキャッシュ被覆率を表示。
+  // ミリ秒級。管理画面はノード毎のキャッシュカバー率を表示。
   "assets": {
     "<sha256>": { "size": 123456, "type": "image/jpeg | audio/mpeg | audio/wav",
                   "origin": "<node_id>", "label": "桜.jpg" }
   },
 
   "display": {                                  // 表示・焼付対策 (全端末既定; devices.<id>.local.display で上書き)
-    // theme: 門口機の背景 (室内機/管理画面から「推送」= この設定を書くだけ。CRDT で即時同期)
+    // theme: 門口機の背景 (室内機/管理画面から「プッシュ配信」= この設定を書くだけ。CRDT で即時同期)
     "theme": { "bg_color": "#101418", "bg_image": null },   // bg_image: assets の sha256 or null
     "brightness": 70,                           // 0-100 (遠隔調整 — 管理画面のスライダー)
     "night": { "enabled": true, "from": "22:00", "to": "06:00",
                "brightness": 15, "red_tint": true },   // 夜間モード (補正済み時計で判定)
-    "screensaver_after_s": 120,                 // 無操作でスクリーンセーバ (時計漂移・低輝度)
+    "screensaver_after_s": 120,                 // 無操作でスクリーンセーバ (時計表示の移動・低輝度)
     "pixel_shift_s": 300                        // 待機画面要素を数 px 周期移動 (焼付対策)
   },
 
@@ -120,9 +120,9 @@
   // 発呼など自由に連動。**警察・消防への自動発信は行わない** (通知先は家族と
   // ユーザー定義の電話先のみ — 判断は人が行う)。
 
-  "visit_purposes": {                           // 訪客の用件ボタン (ユーザー編集可能; 既定 seed 下記)
-    // 門口機では用件ボタン 1 タップ = その用件付きの按鈴 (宅配員は 1 動作で完了)。
-    // 大ボタン「呼出」は用件なしの汎用按鈴。ラベルは訪客言語に追従。
+  "visit_purposes": {                           // 来訪者の用件ボタン (ユーザー編集可能; 既定 seed 下記)
+    // 門口機では用件ボタン 1 タップ = その用件付きの呼出 (宅配員は 1 動作で完了)。
+    // 大ボタン「呼出」は用件なしの汎用呼出。ラベルは来訪者言語に追従。
     "p_visit":    { "label": { "ja": "訪問",       "en": "Visit",    "zh": "访客" }, "icon": "🏠", "order": 1 },
     "p_delivery": { "label": { "ja": "宅配便",     "en": "Delivery", "zh": "快递" }, "icon": "📦", "order": 2 },
     "p_mail":     { "label": { "ja": "郵便",       "en": "Mail",     "zh": "邮件" }, "icon": "✉️", "order": 3 },
@@ -130,14 +130,14 @@
     "p_work":     { "label": { "ja": "検針・工事", "en": "Utility",  "zh": "检修/施工" }, "icon": "🔧", "order": 5 },
     "p_other":    { "label": { "ja": "その他",     "en": "Other",    "zh": "其他" }, "icon": "❓", "order": 6 }
   },
-  // press イベント payload に "purpose": "<id>" が載る。展示面: 室内/TV 来鈴バッジ・
+  // press イベント payload に "purpose": "<id>" が載る。表示先: 室内/TV 着信バッジ・
   // Telegram (アイコン+用件名)・HA event payload・panel state・管理画面。
   // ルール連携: trigger_rules.when.purposes: ["p_delivery"] で用件別分岐、
   // 新アクション { "type": "auto_reply", "reply_id": "qr_okihai" } = 門口機が自動で
   // クイック返信を表示+TTS (例: 宅配→「置き配をお願いします」+ 電話は鳴らさない)。
 
   // quick_replies 各項は任意で "audio": {"ja": "<sha256>", "en": "<sha256>"} を持てる —
-  // 訪客言語に合わせたカスタム音声で再生 (優先度: キャッシュ済 audio → 系統 TTS → 提示音)。
+  // 来訪者言語に合わせたカスタム音声で再生 (優先度: キャッシュ済 audio → システム TTS → 通知音)。
   // auto_reply アクションも同じ音声を継承。chime の sound は "asset:<sha256>" 形式で
   // カスタム音対応、emergency.alarm_sound も同様。
   "quick_replies": {                            // クイック返信 (ユーザー編集可能)
@@ -150,7 +150,7 @@
     "qr_wait":    { "label": { "ja": "少々お待ちください", "en": "One moment please",
                                "zh": "请稍等" }, "speak": true, "order": 4 }
   },
-  "reply": { "display_ttl_s": 30 },             // 面板表示時間
+  "reply": { "display_ttl_s": 30 },             // パネル表示時間
 
   "trigger_rules": {
     "r1": { "enabled": true,
@@ -183,12 +183,12 @@
               "pass_ref": "secret:mqtt", "discovery_prefix": "homeassistant",
               "base_topic": "doorbell" },
     "telegram": { "bot_token_ref": "secret:tg_bot",
-                  "poll_updates": true,          // inline ボタン返信の getUpdates 長輪詢 (leader)
+                  "poll_updates": true,          // inline ボタン返信の getUpdates ロングポーリング (leader)
                   "text_template": { "ja": "{door} に来客です ({time})" } },
-    // 網頁通話 (webui/panel/call.html — 任意機能)。ブラウザは SIP/UDP を話せないため
-    // Asterisk を WebRTC ゲートウェイに使う (deploy/asterisk/webrtc.md)。
+    // Web 通話 (webui/panel/call.html — 任意機能)。ブラウザは SIP/UDP を話せないため
+    // Asterisk を WebRTC ゲートウェイに使う (deploy/asterisk/webrtc.ja.md)。
     // ws_url 空 = 通話ボタン無効 (映像閲覧・映像送信は SIP と独立に動く)。
-    // sip_user/sip_pass = ブラウザ用内線 (webrtc.md の [260] テンプレート)。
+    // sip_user/sip_pass = ブラウザ用内線 (webrtc.ja.md の [260] テンプレート)。
     "webrtc": { "ws_url": "ws://10.0.1.5:8088/ws", "sip_user": "260", "sip_pass": "…" },
     "tz_offset_min": 540                         // JST。スケジュール判定に使用
   }
@@ -201,10 +201,10 @@
   offline | online | config_changed | emergency | emergency_cancel | visitor_lang`
 - `emergency` payload: `{ "source": "<node_id>", "via": "panel|web|admin" }`。quiet_hours の
   suppress 対象外 (常に全経路通知)。UI: `{"t":"emergency","active":true|false}`
-- `visitor_lang` (訪客が門口機で言語を切替): payload `{ "lang": "en" }`。press の payload にも
-  `visitor_lang` を同梱 (選択済みの場合)。展示面: 室内機/TV 来鈴画面の言語バッジ・
+- `visitor_lang` (来訪者が門口機で言語を切替): payload `{ "lang": "en" }`。press の payload にも
+  `visitor_lang` を同梱 (選択済みの場合)。表示先: 室内機/TV 着信画面の言語バッジ・
   /api/panel/state・Telegram 通知の「🌐 EN」・HA attrs topic。**クイック返信はこの言語の
-  ラベルで表示+TTS** (訳が無ければ ja へ回落)。revert タイマー超過で ja へ戻り解除。
+  ラベルで表示+TTS** (訳が無ければ ja へフォールバック)。revert タイマー超過で ja へ戻り解除。
 - `reply` イベント payload: `{ "reply_id": "qr_away", "text": "…", "via": "telegram|mqtt|web",
   "target_press": "<origin>:<seq>" }`
 - press の notify (LWW マージ): `{ "hlc": "…", "claimed_by": "…", "notified_at": "…",
@@ -225,15 +225,15 @@
 - Discovery entity (object_id/unique_id は ASCII、日本語は name のみ):
   door 毎に `event.doorbell_<door_id>` (device_class doorbell) と
   `binary_sensor.doorbell_<door_id>_motion` (off_delay 30)、device 毎に
-  `binary_sensor.doorbell_node_<node_id 先頭8桁>` (connectivity — 防盗の端末断)、
-  加えて `binary_sensor.doorbell_bridge_online` (LWT 由来、deploy/ha の看門狗が参照) と
+  `binary_sensor.doorbell_node_<node_id 先頭8桁>` (connectivity — 盗難対策の端末切断検知)、
+  加えて `binary_sensor.doorbell_bridge_online` (LWT 由来、deploy/ha のウォッチドッグが参照) と
   `binary_sensor.doorbell_emergency` (device_class safety、state_topic `<base>/emergency`
   retain — SOS 緊急モード。ON/OFF は emergency / emergency_cancel の hlc 最大側)。
-- スナップショット/カメラは MQTT に載せない — 実画は go2rtc、静止画は HA generic camera
+- スナップショット/カメラは MQTT に載せない — ライブ映像は go2rtc、静止画は HA generic camera
   が門口機の `/snapshot.jpg` を直接取る (`deploy/ha/` 参照)。
 - MVP は認証 `user`/`pass` 平文 (`pass_ref` の secure store 化は sip と同時に対応予定)。
 
-## 統一資産 API / 訪客言語 API (実装で確定した細部)
+## 統一資産 API / 来訪者言語 API (実装で確定した細部)
 
 - `POST /api/assets?type=<mime>&label=<name>` (管理セッション必須) — body は生バイト列。
   許可 type は `image/jpeg` `image/png` `audio/mpeg` `audio/wav` のみ、上限 3MB。
@@ -244,18 +244,18 @@
 - `DELETE /api/assets/<sha256>` (管理セッション) — 台帳 `assets.<hash>` を tombstone にし、
   自ノードのローカルキャッシュも即削除する。他ノードは台帳消滅 (CRDT 複製) を見て
   猶予付き GC で自然に回収する。
-- 前取りは「台帳に載った時」ではなく「設定から参照された時」— 参照元は
+- プリフェッチは「台帳に載った時」ではなく「設定から参照された時」— 参照元は
   `display.theme.bg_image` / `devices.*.local.theme.bg_image` / `quick_replies.*.audio.*` /
   chime の `sound:"asset:<hash>"` / `emergency.alarm_sound`。取得完了で
-  `{"t":"asset_ready","hash":"<sha256>"}` を uiNotify (殻はこれで再描画/再読込する)。
-  `/api/status` の `assets: {cached,total}` がノード毎のキャッシュ被覆率。
+  `{"t":"asset_ready","hash":"<sha256>"}` を uiNotify (UI シェルはこれで再描画/再読込する)。
+  `/api/status` の `assets: {cached,total}` がノード毎のキャッシュカバー率。
 - `POST /api/panel/visitor-lang?lang=<ja|en|zh>[&door=<id>]` (panel token) — door 省略時は
   自機担当 door。`lang=ja` は即時復帰。無操作 `ui.visitor_lang_revert_s` 秒で自動的に ja へ戻る
-  (押鈴で計時やり直し)。現在値は `/api/panel/state` の各 door の `visitor_lang`
+  (呼出で計時やり直し)。現在値は `/api/panel/state` の各 door の `visitor_lang`
   (ja のときはキー自体が出ない) と `/api/status` の `visitor_lang.<door>`。
 - 開発投入: `doorbell_host --add-asset <file> [--asset-type <mime>] [--asset-label <name>]`
   (type 省略時は拡張子から推定、hash を stdout へ)。
 - MQTT 追加分: press の event payload は `{"event_type":"press","purpose":…,"visitor_lang":…}`
   (purpose/visitor_lang は該当時のみ)。`<base>/<door_id>/attrs` に
   `{"visitor_lang":"ja|en|zh"}` を retain で発行し、`sensor.doorbell_<door>_visitor_lang` として
-  discovery する。Telegram の press 通知は先頭行に `{icon} {用件名}` と訪客言語バッジ `🌐 EN`。
+  discovery する。Telegram の press 通知は先頭行に `{icon} {用件名}` と来訪者言語バッジ `🌐 EN`。

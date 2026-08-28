@@ -1,8 +1,8 @@
-# iOS 子機のプロビジョニング (監督 SAM kiosk / Ad Hoc 配布) + tvOS 監視端
+# iOS 子機のプロビジョニング (監督 SAM kiosk / Ad Hoc 配布) + tvOS 監視端末
 
 対象: `ios/` の iOS アプリ (`jp.keihan.doorbell` — 門口機/室内機両用) と
-tvOS アプリ (`jp.keihan.doorbell.tv` — 監視端)。iOS 12 以降の廃品 iPhone/iPad を
-門口機・室内機に転用する。Android 版 `deploy/provision/android/provision.md` に相当。
+tvOS アプリ (`jp.keihan.doorbell.tv` — 監視端末)。iOS 12 以降の廃品 iPhone/iPad を
+門口機・室内機に転用する。Android 版 `deploy/provision/android/provision.ja.md` に相当。
 
 ## 0. ビルドと署名の全体像
 
@@ -30,11 +30,11 @@ tvOS アプリ (`jp.keihan.doorbell.tv` — 監視端)。iOS 12 以降の廃品 
    初期化が必要** — Apple Configurator で「デバイスを準備」する時に消去される。
 2. 初期セットアップは Apple Configurator の「準備」ウィザードに任せる
    (Apple ID サインインはスキップ)。
-3. Wi-Fi を宅内 LAN に接続 (メッシュは同一セグメント前提 — docs/network-ports.md)。
+3. Wi-Fi を宅内 LAN に接続 (メッシュは同一セグメント前提 — docs/ja/network-ports.md)。
 4. 設定 → 画面表示と明るさ → **自動ロック = なし** (監督端末のみ選べる)。
    アプリ側でも `isIdleTimerDisabled` で消灯を防ぐが、二重に保険を掛ける。
 
-## 2. 監督化 + SAM (Single App Mode) — kiosk 硬化
+## 2. 監督化 + SAM (Single App Mode) — kiosk 堅牢化
 
 iOS には Android の Device Owner に相当する常駐 kiosk 化として
 **監督デバイスの Single App Mode** を使う (ガイドアクセスは手動解除できるため非常用)。
@@ -46,10 +46,10 @@ Apple Configurator (Mac App Store から無料) で:
 2. アプリ (Ad Hoc ipa) を「追加」→ App からインストール。
 3. **Single App Mode**: 「操作」→「詳細」→「シングル App モードを開始」→ Doorbell を選択。
    以後、再起動してもこのアプリしか動かない (ホーム/通知センター/コントロールセンターは
-   すべて封鎖)。解除も Configurator から (物理アクセス + 監督証明書が要る = 防盗)。
+   すべて封鎖)。解除も Configurator から (物理アクセス + 監督証明書が要る = 盗難対策)。
 4. 推奨の追加プロファイル (Configurator → プロファイル作成):
    - ソフトウェアアップデートの延期 (門口機が勝手に更新画面へ落ちない)
-   - パスコード不要化 (来鈴画面が锁屏に遮られない — SAM 中はそもそも锁屏に落ちない)
+   - パスコード不要化 (着信画面がロック画面に遮られない — SAM 中はそもそもロック画面に落ちない)
 
 アプリ内の隠し管理入口 (右上 7 連打 → PIN テンキー) は SAM 中でも使える —
 既定 PIN は `000000` (`<data_dir>/exit_pin.txt` に SHA-256 hex を書いて必ず変更)。
@@ -78,31 +78,31 @@ UDP beacon による自動発見は当てにしない。同一 L2 に seed 1 台
 初回起動時に「ローカルネットワーク」権限ダイアログが出る — **必ず許可** (拒否すると
 mesh に一切つながらない。設定 → プライバシー → ローカルネットワークで後から変更可)。
 
-## 4. tvOS 監視端 (DoorbellTV)
+## 4. tvOS 監視端末 (DoorbellTV)
 
 - Apple TV 4K/HD (tvOS 15+)。`-scheme DoorbellTV` でビルド、Ad Hoc は iOS と同様
   (Apple TV は Xcode → Devices and Simulators でネットワーク経由ペアリング)。
-- 役割は Android TV と同じ: role=indoor_panel の常駐監視端。来客で全画面来鈴
-  (門口ライブ MJPEG + クイック返信を Siri Remote で選ぶ)。SOS 警報の全画面表示 + サイレン +
+- 役割は Android TV と同じ: role=indoor_panel の常駐監視端末。来客で全画面着信
+  (門口機のライブ MJPEG + クイック返信を Siri Remote で選ぶ)。SOS 警報の全画面表示 + サイレン +
   PIN 解除 (リモコンで描画テンキー操作) も出る。
 - **制約**:
-  - tvOS 向け pjsip は未整備 — **監聴/応答 (SIP 音声) は不可、映像+クイック返信のみ**
+  - tvOS 向け pjsip は未整備 — **モニタリング/応答 (SIP 音声) は不可、映像+クイック返信のみ**
     (ios/Doorbell/IncomingViewController.swift の TODO 参照)。音声が要る TV は
     Android TV 版か、AppleTV では go2rtc → HomeKit 経由 (deploy/ha/) を使う。
   - tvOS はローカル恒久ストレージが無い (Caches は OS が随時掃除する)。boot.json 相当は
     UserDefaults に保持し、CRDT 設定・イベント DB は Caches — 消えても mesh から自動復元
-    される (自愈)。単独台だけで長期のイベント履歴を持ちたい用途には使わない。
+    される (自己修復)。単独台だけで長期のイベント履歴を持ちたい用途には使わない。
   - フォアグラウンド前提 (tvOS アプリはバックグラウンド常駐不可)。ホームに戻されたら
-    受鈴しない — 運用は「Doorbell TV を出しっぱなし」+ 設定 → 一般 →
+    着信を受けられない — 運用は「Doorbell TV を出しっぱなし」+ 設定 → 一般 →
     スクリーンセーバ = 開始しない。
 
 ## 5. 動作確認チェックリスト
 
 1. 起動 → 待機画面 (時計 + 呼出ボタン)。左下に `名前 · vX.Y.Z` が出る。
 2. 管理 webui (別ノード) のダッシュボードに本端末が Online で載る (mesh 合流)。
-3. 門口機: 呼出タップ → 室内機/TV に来鈴画面 + チャイム。用件ボタン/言語バーも確認。
-4. 室内機: クイック返信 → 門口機に大字表示 + 読み上げ (AVSpeechSynthesizer)。
-5. 室内機: モニタ → 門口音声が聞こえる / 応答 → 双方向通話 (VoiceProcessingIO の AEC で
+3. 門口機: 呼出タップ → 室内機/TV に着信画面 + チャイム。用件ボタン/言語バーも確認。
+4. 室内機: クイック返信 → 門口機に大きな文字での表示 + 読み上げ (AVSpeechSynthesizer)。
+5. 室内機: モニタ → 門口機の音声が聞こえる / 応答 → 双方向通話 (VoiceProcessingIO の AEC で
    スピーカーフォン可)。
 6. SOS 長押し → 全ノード警報 + サイレン → PIN 解除。
 7. 電源断→復電で自動復帰 (SAM が自動再起動) を確認。

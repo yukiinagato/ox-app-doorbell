@@ -1,6 +1,6 @@
 # Windows ビルド環境 (Apple Silicon Mac + ローカル VM)
 
-方針: 開発の反復はローカル VM、(任意で) リリース産物は GitHub Actions。
+方針: 開発の反復はローカル VM、(任意で) リリース成果物は GitHub Actions。
 Docker は不可 — macOS の Docker は Linux コンテナのみで、WPF/.NET Framework の
 ビルドチェーンは Windows にしか存在しない。
 
@@ -14,7 +14,7 @@ Docker は不可 — macOS の Docker は Linux コンテナのみで、WPF/.NET
 
 - Windows 11 ARM64 を導入 (Microsoft 公式の Insider/ISO 経由、または Parallels の自動取得)。
 - ARM64 Windows は x86/x64 アプリをエミュレーション実行できる — Toughpad 向け x86/x64
-  産物のビルドとテストは VM 内で可能。
+  成果物のビルドとテストは VM 内で可能。
 
 ## 2. VM に入れるもの
 
@@ -23,7 +23,7 @@ Docker は不可 — macOS の Docker は Linux コンテナのみで、WPF/.NET
    - 「C++ によるデスクトップ開発」(MSVC v143, CMake, Windows 10 SDK)
    - 個別コンポーネント: 「MSVC v141 - VS2017 C++ x64/x86 ビルドツール」
      (Win7 実機向けの保険。ARM64 上ではエミュレーション実行で遅いが可)
-2. **Git**、(任意) **Claude Code** — VM 内でも接力できるように。
+2. **Git**、(任意) **Claude Code** — VM 内でも作業を引き継げるように。
 3. **Inno Setup 6** (インストーラ作成、Phase 1 後半)。
 
 ## 3. リポジトリ共有
@@ -54,5 +54,5 @@ cmake -S core -B build-win64 -DCMAKE_TOOLCHAIN_FILE=core/cmake/mingw-w64.cmake &
 ## 6. Toughpad 実機検証 (最終)
 
 - Win7 機: .NET Framework 4.8 オフラインインストーラ + TLS1.2 有効化パッチが前提
-  (provision スクリプトが設定)。v143 産物が動かない場合のみ v141 ビルドに切替。
-- AEC 標定・カメラ列挙・kiosk (シェル置換) は実機でのみ最終確認できる。
+  (provision スクリプトが設定)。v143 成果物が動かない場合のみ v141 ビルドに切替。
+- AEC キャリブレーション・カメラ列挙・kiosk (シェル置換) は実機でのみ最終確認できる。
