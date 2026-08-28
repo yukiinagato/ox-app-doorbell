@@ -49,3 +49,9 @@ __pycache__/
 
 # ローカル IDE/エージェント設定
 /.claude/
+
+# 抽取的 iOS SDK (从用户的 Xcode DMG,不进 git)
+/tools/sdk/
+/tools/toolchain/
+# LLVM ソース (build_libcxx_ios5.sh がダウンロード/展開。成果物も巨大 → git に入れない)
+/tools/llvm-src/
