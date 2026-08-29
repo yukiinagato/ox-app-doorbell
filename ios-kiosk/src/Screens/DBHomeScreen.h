@@ -11,6 +11,7 @@
 - (void)refreshFromCore;                  // config/status/主題/SOS/display 全更新
 - (void)appendEvent:(NSDictionary *)ev;   // イベント履歴行を追加
 - (void)playChime:(NSDictionary *)ev;     // chime (カスタム音 → 失敗時システム音)
+- (void)stopChime;                        // 門口機の取消で再生中の来鈴音を停止
 - (void)showReplyBanner:(NSDictionary *)ev;
 - (void)applyDisplayEvent:(NSDictionary *)ev;
 - (void)showEmergencyEvent:(NSDictionary *)ev;

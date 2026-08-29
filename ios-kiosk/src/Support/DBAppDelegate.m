@@ -1,6 +1,7 @@
 #import "DBAppDelegate.h"
 #import "../Core/DBBootConfig.h"
 #import "../Core/DBCoreBridge.h"
+#import "../Media/DBH264Player.h"
 #import "../Screens/DBRouter.h"
 #import "DBWatchdog.h"
 
@@ -20,6 +21,7 @@
   DBBootConfig *_boot;
   DBRouter *_router;
   DBWatchdog *_watchdog;
+  DBH264Player *_h264Test;  // doorbell://h264test 用 (全screen 再生テスト)
 }
 @synthesize window = _window;
 
@@ -86,7 +88,7 @@
     return YES;
   }
   if ([host isEqualToString:@"home"]) {
-    [_router showHomeAnimated:NO];
+    [self h264TestStop];
     return YES;
   }
   if ([host isEqualToString:@"info"]) {
@@ -110,7 +112,40 @@
     });
     return YES;
   }
+  if ([host hasPrefix:@"h264test"]) {
+    // H.264 fMP4 直播の全画面テスト。host = "h264test<ip>" 形式
+    // (uiopen doorbell://h264test10.10.39.174)。IP 省略時は 127.0.0.1。
+    NSString *ip = nil;
+    if ([host length] > 8) ip = [host substringFromIndex:8];
+    if ([ip length] == 0) ip = @"127.0.0.1";
+    NSString *url = [NSString stringWithFormat:@"http://%@:47180/stream.mp4", ip];
+    NSLog(@"[doorbell] h264test: %@", url);
+    [_h264Test stop];
+    _h264Test = nil;
+    UIView *container = _router.containerView;
+    __weak DBAppDelegate *wself = self;
+    _h264Test = [[DBH264Player alloc] initWithURL:url container:container
+                                          onState:^(DBH264PlayerState st) {
+      NSLog(@"[doorbell] h264test state=%ld", (long)st);
+      if (st == DBH264PlayerFailed) {
+        DBAppDelegate *s = wself;
+        if (s) [s h264TestStop];
+      }
+    }];
+    [_h264Test start];
+    return YES;
+  }
+  if ([host isEqualToString:@"h264stop"]) {
+    [self h264TestStop];
+    return YES;
+  }
   return YES;
+}
+
+- (void)h264TestStop {
+  [_h264Test stop];
+  _h264Test = nil;
+  [_router showHomeAnimated:NO];
 }
 
 #pragma mark - UI 診断ダンプ (kiosk 黑画面調査用 — Documents に PNG + view tree)

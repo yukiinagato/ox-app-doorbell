@@ -79,9 +79,17 @@ static NSTimeInterval sLockedUntil = 0;
   for (NSString *key in keys) {
     UIButton *b = [self keyButton];
     NSString *label = key;
-    if ([key isEqualToString:@"back"]) label = @"⌫";
-    else if ([key isEqualToString:@"ok"]) label = @"OK";
+    if ([key isEqualToString:@"back"]) {
+      label = @"DEL";  // iOS5 の ⌫ 字形は A5 標準フォントで四角く崩れるため文字にする
+      [b setTitleColor:[UIColor colorWithRed:1.0 green:0.55 blue:0.45 alpha:1]
+              forState:UIControlStateNormal];
+    } else if ([key isEqualToString:@"ok"]) {
+      label = @"OK";
+      b.backgroundColor = [UIColor colorWithRed:0.13 green:0.55 blue:0.28 alpha:1];
+      b.layer.borderColor = [UIColor clearColor].CGColor;
+    }
     [b setTitle:label forState:UIControlStateNormal];
+    b.titleLabel.font = [UIFont boldSystemFontOfSize:28];
     b.accessibilityIdentifier = key;
     [b addTarget:self action:@selector(onKey:) forControlEvents:UIControlEventTouchUpInside];
     [_card addSubview:b];

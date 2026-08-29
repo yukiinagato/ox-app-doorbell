@@ -38,6 +38,7 @@
            @"ring.answer": @"応答",
            @"ring.monitor": @"聞く",
            @"ring.ignore": @"無視",
+           @"ring.cancelled": @"訪客が呼び出しを取消しました",
            @"ring.monitoring": @"門口の音声を聞いています",
            @"ring.purpose_badge": @"用件: {label}",
            @"ring.lang_badge": @"訪客言語: {lang}",
@@ -70,6 +71,7 @@
            @"ring.answer": @"Answer",
            @"ring.monitor": @"Listen",
            @"ring.ignore": @"Ignore",
+           @"ring.cancelled": @"Visitor cancelled the call",
            @"ring.monitoring": @"Listening to the door",
            @"ring.purpose_badge": @"Purpose: {label}",
            @"ring.lang_badge": @"Visitor language: {lang}",
@@ -109,6 +111,7 @@
            @"ring.answer": @"应答",
            @"ring.monitor": @"监听",
            @"ring.ignore": @"忽略",
+           @"ring.cancelled": @"访客已取消，画面将暂时保留",
            @"ring.monitoring": @"正在监听门口",
            @"ring.purpose_badge": @"事由：{label}",
            @"ring.lang_badge": @"访客语言：{lang}",
@@ -198,4 +201,3 @@
 }
 
 @end
-

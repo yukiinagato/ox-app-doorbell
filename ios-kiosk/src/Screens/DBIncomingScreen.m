@@ -4,11 +4,13 @@
 #import "../Core/DBConfigUtil.h"
 #import "../Core/DBCoreBridge.h"
 #import "../Core/DBTexts.h"
+#import "../Media/DBH264Player.h"
 #import "../Net/DBMjpegClient.h"
 #import "../Support/DBAppDelegate.h"
 #import "DBRouter.h"
 
 static const NSTimeInterval kAutoCloseS = 30;
+static const NSTimeInterval kCancelledCloseS = 15;
 
 @implementation DBIncomingScreen {
   DBCoreBridge *_core;
@@ -20,11 +22,14 @@ static const NSTimeInterval kAutoCloseS = 30;
 
   NSDictionary *_cfg;
   DBMjpegClient *_streamer;
+  DBH264Player *_h264;         // H.264 fMP4 (/stream.mp4) 再生 — 成功時はこちら優先
   NSString *_incomingStreamUrl;
+  NSString *_incomingStreamMp4Url;
   NSString *_peerHost;
   NSInteger _directPort;
   NSString *_sipMode;  // "" | "monitor" | "answer"
   BOOL _inCall;
+  BOOL _cancelled;
   NSTimer *_autoCloseTimer;
   NSInteger _snapshotGen;  // 背景収集の世代 (古い結果破棄)
 
@@ -55,6 +60,7 @@ static const NSTimeInterval kAutoCloseS = 30;
     _purpose = @"";
     _visitorLang = @"";
     _incomingStreamUrl = @"";
+    _incomingStreamMp4Url = @"";
     _sipMode = @"";
     _directPort = 47190;
     _replyButtons = [[NSMutableArray alloc] init];
@@ -166,8 +172,15 @@ static const NSTimeInterval kAutoCloseS = 30;
   _purpose = [purpose copy];
   _visitorLang = [lang copy];
   _inCall = NO;
+  _cancelled = NO;
+  _statusLabel.font = [UIFont systemFontOfSize:20];
+  _statusLabel.textColor = [UIColor colorWithWhite:1 alpha:0.7];
+  _statusLabel.backgroundColor = [UIColor clearColor];
+  _statusLabel.textAlignment = NSTextAlignmentLeft;
+  _statusLabel.layer.cornerRadius = 0;
   _peerHost = nil;
   _incomingStreamUrl = @"";
+  _incomingStreamMp4Url = @"";
   _answerButton.enabled = NO;
   _monitorButton.enabled = NO;
   _noVideoLabel.hidden = NO;
@@ -223,6 +236,8 @@ static const NSTimeInterval kAutoCloseS = 30;
                          : [DBConfigUtil peerHost:peer];
       NSString *url = peer ? [DBConfigUtil str:peer path:@"stream"] : nil;
       s->_incomingStreamUrl = url ?: @"";
+      NSString *mp4 = peer ? [DBConfigUtil str:peer path:@"stream_mp4"] : nil;
+      s->_incomingStreamMp4Url = mp4 ?: @"";
       NSDictionary *replies = [DBConfigUtil dig:cfg path:@"quick_replies"];
       NSLog(@"[doorbell][DBG] incoming: peer=%@ stream=%@ replies=%lu",
             s->_peerHost ?: @"-", s->_incomingStreamUrl,
@@ -241,7 +256,7 @@ static const NSTimeInterval kAutoCloseS = 30;
   NSString *label = [DBConfigUtil labelOf:doorEntry lang:_boot.uiLang fallback:_door];
   _titleLabel.text = [_texts t:@"ring.incoming", label, nil];
   _noVideoLabel.text = [_texts ts:@"ring.no_video"];
-  _statusLabel.text = [_texts ts:@"reply.choose"];
+  _statusLabel.text = [_texts ts:(_cancelled ? @"ring.cancelled" : @"reply.choose")];
   [_answerButton setTitle:(_inCall ? [_texts ts:@"incall.end"] : [_texts ts:@"ring.answer"])
                  forState:UIControlStateNormal];
   [_monitorButton setTitle:[_texts ts:@"ring.monitor"] forState:UIControlStateNormal];
@@ -260,7 +275,11 @@ static const NSTimeInterval kAutoCloseS = 30;
     NSString *label = [DBConfigUtil labelOf:entry lang:_boot.uiLang fallback:_purpose];
     NSString *icon = [entry objectForKey:@"icon"];
     if (![icon isKindOfClass:[NSString class]]) icon = @"";
-    _purposeBadge.text = [icon length] == 0 ? label : [NSString stringWithFormat:@" %@ %@ ", icon, label];
+    NSString *purposeText = [_texts t:@"ring.purpose_badge", label, nil];
+    _purposeBadge.text = [icon length] == 0
+                             ? purposeText
+                             : [NSString stringWithFormat:@" %@  %@ ", icon, purposeText];
+    _purposeBadge.backgroundColor = [UIColor colorWithRed:1.0 green:0.80 blue:0.25 alpha:1];
     _purposeBadge.hidden = NO;
   }
   if ([_visitorLang length] == 0 || [_visitorLang isEqualToString:@"ja"]) {
@@ -297,12 +316,52 @@ static const NSTimeInterval kAutoCloseS = 30;
 
 #pragma mark - 映像
 
-- (void)startVideo:(NSString *)url {
-  [_streamer stop];
-  _streamer = nil;
+/* 二股方式 (実機検証に基づく):
+ *  - MJPEG を**即時**開始 (A5 の软件解码だが 8fps なら軽い — ユーザは即座に映像が見える)
+ *  - 同時に H.264 (/stream.mp4 → ローカル HLS → HW デコード) を立上げ
+ *  - H.264 が PLAYING になったら MJPEG を止めて切替 (HW 解码で滑らか+省電力)
+ *  - H.264 失敗時は MJPEG 継続 (黒画面にはならない) */
+- (void)startVideo:(NSString *)mjpegUrl {
+  [self stopVideoPlayers];
   _noVideoLabel.hidden = NO;
   _liveView.image = nil;
-  NSLog(@"[doorbell][DBG] incoming: startVideo url=%@", url ?: @"(null)");
+  NSLog(@"[doorbell][DBG] incoming: startVideo mp4=%@ mjpeg=%@",
+        _incomingStreamMp4Url, mjpegUrl ?: @"(null)");
+
+  /* 1) MJPEG 即時開始 (H.264 の準備中の表示) */
+  [self startMjpegOnly:mjpegUrl];
+
+  /* 2) H.264 を後追いで立上げ (就緒したら切替) */
+  if ([_incomingStreamMp4Url length] > 0) {
+    __weak DBIncomingScreen *wself = self;
+    _h264 = [[DBH264Player alloc] initWithURL:_incomingStreamMp4Url
+                                    container:_liveView
+                                      onState:^(DBH264PlayerState st) {
+      DBIncomingScreen *s = wself;
+      if (!s || !s.superview) return;
+      if (st == DBH264PlayerPlaying) {
+        /* HW 解码に切替 — MJPEG は停止 (受信停止のみ, 画像は player が覆う) */
+        [s->_streamer stop];
+        s->_streamer = nil;
+        s->_noVideoLabel.hidden = YES;
+        NSLog(@"[doorbell] incoming: switched to H.264 live");
+      } else if (st == DBH264PlayerFailed) {
+        /* MJPEG 継続 (既に動いている) — H.264 view だけ下ろす */
+        [s->_h264 stop];
+        s->_h264 = nil;
+        NSLog(@"[doorbell] incoming: H.264 NG → MJPEG 継続");
+        if (!s->_streamer) [s startMjpegOnly:s->_incomingStreamUrl];
+        if (!s->_streamer) s->_noVideoLabel.hidden = NO;
+      }
+    }];
+    [_h264 start];
+  }
+}
+
+/* MJPEG のみ開始 (H.264 非対応 door / H.264 失敗後の再開)。
+ * 既に動いている冪等呼びは何もしない。 */
+- (void)startMjpegOnly:(NSString *)url {
+  if (_streamer) return;
   if ([url length] == 0) return;
   __weak DBIncomingScreen *wself = self;
   _streamer = [[DBMjpegClient alloc] initWithURLString:url
@@ -316,14 +375,50 @@ static const NSTimeInterval kAutoCloseS = 30;
   [_streamer start];
 }
 
+- (void)stopVideoPlayers {
+  [_streamer stop];
+  _streamer = nil;
+  [_h264 stop];
+  _h264 = nil;
+}
+
 #pragma mark - タイマ
 
 - (void)restartAutoClose {
   [_autoCloseTimer invalidate];
   _autoCloseTimer =
-      [NSTimer scheduledTimerWithTimeInterval:kAutoCloseS target:self
+      [NSTimer scheduledTimerWithTimeInterval:(_cancelled ? kCancelledCloseS : kAutoCloseS)
+                                       target:self
                                      selector:@selector(closeSelf)
                                      userInfo:nil repeats:NO];
+}
+
+- (void)handleCallCancelled:(NSDictionary *)ev {
+  NSString *door = [DBConfigUtil evStr:ev key:@"door"];
+  if ([door length] > 0 && [_door length] > 0 && ![door isEqualToString:_door]) return;
+  if (_inCall) return;
+  _cancelled = YES;
+  _statusLabel.text = [_texts ts:@"ring.cancelled"];
+  _statusLabel.font = [UIFont boldSystemFontOfSize:24];
+  _statusLabel.textColor = [UIColor whiteColor];
+  _statusLabel.backgroundColor = [UIColor colorWithRed:0.78 green:0.14 blue:0.12 alpha:1];
+  _statusLabel.textAlignment = NSTextAlignmentCenter;
+  _statusLabel.layer.cornerRadius = 8;
+  _statusLabel.clipsToBounds = YES;
+  [self setNeedsLayout];
+  [self restartAutoClose];
+  NSLog(@"[doorbell] call cancelled: chime stopped; incoming remains for %.0fs",
+        kCancelledCloseS);
+}
+
+- (void)handlePurposeSelected:(NSDictionary *)ev {
+  NSString *door = [DBConfigUtil evStr:ev key:@"door"];
+  if ([door length] > 0 && [_door length] > 0 && ![door isEqualToString:_door]) return;
+  NSString *purpose = [DBConfigUtil evStr:ev key:@"purpose"];
+  if ([purpose length] == 0) return;
+  _purpose = [purpose copy];
+  [self updateBadges];
+  [self setNeedsLayout];
 }
 
 - (void)closeSelf {
@@ -348,8 +443,7 @@ static const NSTimeInterval kAutoCloseS = 30;
 - (void)onScreenWillDisappear {
   [_autoCloseTimer invalidate];
   _autoCloseTimer = nil;
-  [_streamer stop];
-  _streamer = nil;
+  [self stopVideoPlayers];
   if ([_sipMode length] > 0) {
     [_router sipHangup];
     _sipMode = @"";
@@ -460,8 +554,8 @@ static const NSTimeInterval kAutoCloseS = 30;
   BOOL portrait = sz.height > sz.width;
   CGFloat m = 24;
   // バッジ列
-  _titleLabel.frame = CGRectMake(m, 18, sz.width - 2 * m - 220, 40);
-  _purposeBadge.frame = CGRectMake(sz.width - m - 220, 18, 130, 40);
+  _titleLabel.frame = CGRectMake(m, 18, sz.width - 2 * m - 310, 40);
+  _purposeBadge.frame = CGRectMake(sz.width - m - 310, 18, 220, 40);
   _langBadge.frame = CGRectMake(sz.width - m - 80, 18, 80, 40);
 
   CGFloat topY = 72;
@@ -484,8 +578,9 @@ static const NSTimeInterval kAutoCloseS = 30;
   _noVideoLabel.frame = _liveView.frame;
 
   CGFloat y = rightY;
-  _statusLabel.frame = CGRectMake(rightX, y, rightW, 28);
-  y += 36;
+  CGFloat statusH = _cancelled ? 52 : 28;
+  _statusLabel.frame = CGRectMake(rightX, y, rightW, statusH);
+  y += statusH + 8;
   // reply ボタン群
   CGFloat ry = 0;
   for (UIButton *b in _replyButtons) {
@@ -507,5 +602,3 @@ static const NSTimeInterval kAutoCloseS = 30;
 }
 
 @end
-
-

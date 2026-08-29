@@ -602,6 +602,10 @@ static UIColor *DBNightClk(void) { return [UIColor colorWithRed:0.545 green:0.14
   if (![_audio playAssetPath:path]) AudioServicesPlaySystemSound((SystemSoundID)1013);
 }
 
+- (void)stopChime {
+  [_audio stop];
+}
+
 - (void)showReplyBanner:(NSDictionary *)ev {
   NSString *path = [DBConfigUtil evStr:ev key:@"audio_path"];
   if ([path length] > 0) {
@@ -652,7 +656,6 @@ static UIColor *DBNightClk(void) { return [UIColor colorWithRed:0.545 green:0.14
 }
 
 @end
-
 
 
 

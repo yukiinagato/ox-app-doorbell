@@ -1,0 +1,316 @@
+#import "DBH264Player.h"
+#import "DBTsMux.h"
+#import "../Net/DBFmp4Demux.h"
+#import "../Net/DBHlsServer.h"
+#import <MediaPlayer/MediaPlayer.h>
+
+void DBH264Dbg(NSString *fmt, ...) NS_FORMAT_FUNCTION(1, 2);
+void DBH264Dbg(NSString *fmt, ...) {
+  static NSLock *lock = nil;
+  static dispatch_once_t once;
+  dispatch_once(&once, ^{ lock = [[NSLock alloc] init]; });
+  [lock lock];
+  va_list ap;
+  va_start(ap, fmt);
+  NSString *line = [[NSString alloc] initWithFormat:fmt arguments:ap];
+  va_end(ap);
+  FILE *f = fopen("/var/mobile/Documents/h264-dbg.log", "a");
+  if (f) {
+    fprintf(f, "%s\n", [line UTF8String]);
+    fclose(f);
+  }
+  NSLog(@"%@", line);
+  [lock unlock];
+}
+
+@interface DBH264Player () <DBFmp4DemuxDelegate>
+- (void)startMovieOnMain;
+- (void)failOnMain:(NSString *)reason;
+@end
+
+static BOOL AvccHasIdr(NSData *avcc) {
+  const uint8_t *p = (const uint8_t *)[avcc bytes];
+  NSUInteger len = [avcc length], off = 0;
+  while (off + 4 <= len) {
+    uint32_t n = ((uint32_t)p[off] << 24) | ((uint32_t)p[off + 1] << 16) |
+                 ((uint32_t)p[off + 2] << 8) | p[off + 3];
+    off += 4;
+    if (n == 0 || off + n > len) return NO;
+    if ((p[off] & 0x1F) == 5) return YES;
+    off += n;
+  }
+  return NO;
+}
+
+static void SegSink(void *ctx, const uint8_t *data, size_t len);
+
+@implementation DBH264Player {
+  NSString *_url;
+  UIView *_container;
+  void (^_onState)(DBH264PlayerState);
+  DBFmp4Demux *_demux;
+  DBHlsServer *_server;
+  MPMoviePlayerController *_player;
+  DBTsMux *_mux;
+  uint64_t _segSeq;
+  NSMutableData *_seg;
+  int64_t _segStartMs;
+  NSData *_sps, *_pps;
+  DBH264PlayerState _state;
+  BOOL _movieStartScheduled;
+  NSUInteger _generation;
+}
+
+static void SegSink(void *ctx, const uint8_t *data, size_t len) {
+  DBH264Player *player = (__bridge DBH264Player *)ctx;
+  [player->_seg appendBytes:data length:len];
+}
+
++ (BOOL)hardwareSupported { return YES; }
+
+- (id)initWithURL:(NSString *)url container:(UIView *)container
+          onState:(void (^)(DBH264PlayerState))onState {
+  self = [super init];
+  if (self) {
+    _url = [url copy];
+    _container = container;
+    _onState = [onState copy];
+    _state = DBH264PlayerIdle;
+  }
+  return self;
+}
+
+- (DBH264PlayerState)state { return _state; }
+
+- (void)setStateOnMain:(DBH264PlayerState)state {
+  NSAssert([NSThread isMainThread], @"H.264 state/UI must stay on main");
+  if (_state == state) return;
+  _state = state;
+  if (_onState && (state == DBH264PlayerPlaying || state == DBH264PlayerFailed))
+    _onState(state);
+}
+
+- (void)start {
+  if (![NSThread isMainThread]) {
+    dispatch_async(dispatch_get_main_queue(), ^{ [self start]; });
+    return;
+  }
+  if (_demux || _state != DBH264PlayerIdle) return;
+  if ([_url length] == 0 || !_container) {
+    [self setStateOnMain:DBH264PlayerFailed];
+    return;
+  }
+
+  _generation++;
+  const NSUInteger generation = _generation;
+  _mux = dbtsmux_create(SegSink, (__bridge void *)self);
+  if (!_mux) {
+    [self setStateOnMain:DBH264PlayerFailed];
+    return;
+  }
+  _server = [[DBHlsServer alloc] init];
+  if (![_server start]) {
+    dbtsmux_free(_mux);
+    _mux = NULL;
+    [self setStateOnMain:DBH264PlayerFailed];
+    return;
+  }
+
+  [self setStateOnMain:DBH264PlayerLoading];
+  DBH264Dbg(@"[h264] start fMP4 -> HLS: %@", _url);
+  _demux = [[DBFmp4Demux alloc] initWithURLString:_url delegate:self];
+  [_demux start];
+
+  __weak DBH264Player *weakSelf = self;
+  dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(15.0 * NSEC_PER_SEC)),
+                 dispatch_get_main_queue(), ^{
+    DBH264Player *player = weakSelf;
+    if (player && player->_generation == generation &&
+        player->_state == DBH264PlayerLoading)
+      [player failOnMain:@"startup timeout"];
+  });
+}
+
+- (NSData *)annexbFromAvcc:(NSData *)avcc {
+  NSMutableData *out = [NSMutableData dataWithCapacity:[avcc length] + 32];
+  static const uint8_t sc[4] = {0, 0, 0, 1};
+  const uint8_t *p = (const uint8_t *)[avcc bytes];
+  NSUInteger len = [avcc length], off = 0;
+  while (off + 4 <= len) {
+    uint32_t n = ((uint32_t)p[off] << 24) | ((uint32_t)p[off + 1] << 16) |
+                 ((uint32_t)p[off + 2] << 8) | p[off + 3];
+    off += 4;
+    if (n == 0 || off + n > len) return nil;
+    [out appendBytes:sc length:sizeof(sc)];
+    [out appendBytes:p + off length:n];
+    off += n;
+  }
+  return off == len ? out : nil;
+}
+
+- (void)fmp4DemuxReady:(DBFmp4Demux *)demux sps:(NSData *)sps pps:(NSData *)pps {
+  (void)demux;
+  if (!_mux) return;
+  _sps = [sps copy];
+  _pps = [pps copy];
+  dbtsmux_set_sps_pps(_mux, (const uint8_t *)[_sps bytes], [_sps length],
+                      (const uint8_t *)[_pps bytes], [_pps length]);
+  DBH264Dbg(@"[h264] demux ready sps=%lu pps=%lu",
+            (unsigned long)[sps length], (unsigned long)[pps length]);
+}
+
+- (void)finishSegmentAt:(int64_t)nextStartMs {
+  if (![_seg length]) return;
+  int64_t duration = nextStartMs - _segStartMs;
+  if (duration <= 0) return;
+  [_server addSegment:[_seg copy] durationMs:duration];
+  _segSeq++;
+  DBH264Dbg(@"[h264] segment %llu (%lu bytes, %lld ms)",
+            (unsigned long long)_segSeq, (unsigned long)[_seg length],
+            (long long)duration);
+  _seg = nil;
+
+  if (!_movieStartScheduled && [_server segmentCount] >= 2) {
+    _movieStartScheduled = YES;
+    dispatch_async(dispatch_get_main_queue(), ^{ [self startMovieOnMain]; });
+  }
+}
+
+- (void)fmp4Demux:(DBFmp4Demux *)demux sample:(NSData *)avcc key:(BOOL)key
+             dtsMs:(int64_t)dtsMs durMs:(int64_t)durMs {
+  (void)demux; (void)durMs;
+  if (!_mux || !_sps || !_pps) return;
+  BOOL isKey = key || AvccHasIdr(avcc);
+
+  // Every HLS segment must start with an IDR. Close the old segment before
+  // feeding the keyframe that starts the next segment.
+  if (!_seg) {
+    if (!isKey) return;
+    _seg = [[NSMutableData alloc] init];
+    _segStartMs = dtsMs;
+    dbtsmux_begin_segment(_mux);
+  } else if (isKey && dtsMs - _segStartMs >= 1500) {
+    [self finishSegmentAt:dtsMs];
+    _seg = [[NSMutableData alloc] init];
+    _segStartMs = dtsMs;
+    dbtsmux_begin_segment(_mux);
+  }
+
+  NSData *annexb = [self annexbFromAvcc:avcc];
+  if (![annexb length]) return;
+  dbtsmux_feed_au(_mux, (const uint8_t *)[annexb bytes], [annexb length],
+                  dtsMs, dtsMs, isKey);
+}
+
+- (void)startMovieOnMain {
+  NSAssert([NSThread isMainThread], @"MPMoviePlayer must start on main");
+  if (_state != DBH264PlayerLoading || _player) return;
+
+  _player = [[MPMoviePlayerController alloc]
+      initWithContentURL:[NSURL URLWithString:[_server playlistUrl]]];
+  _player.controlStyle = MPMovieControlStyleNone;
+  _player.movieSourceType = MPMovieSourceTypeStreaming;
+  _player.scalingMode = MPMovieScalingModeAspectFit;
+  _player.shouldAutoplay = YES;
+  _player.view.backgroundColor = [UIColor blackColor];
+  _player.view.autoresizingMask =
+      UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+  _player.view.frame = _container.bounds;
+  _player.view.hidden = YES;  // Keep MJPEG visible until playback really begins.
+  [_container addSubview:_player.view];
+
+  NSNotificationCenter *nc = [NSNotificationCenter defaultCenter];
+  [nc addObserver:self selector:@selector(onMpLoadState:)
+             name:MPMoviePlayerLoadStateDidChangeNotification object:_player];
+  [nc addObserver:self selector:@selector(onMpPlaybackState:)
+             name:MPMoviePlayerPlaybackStateDidChangeNotification object:_player];
+  [nc addObserver:self selector:@selector(onMpFinish:)
+             name:MPMoviePlayerPlaybackDidFinishNotification object:_player];
+  [_player prepareToPlay];
+  [_player play];
+  DBH264Dbg(@"[h264] movie start: %@", [_server playlistUrl]);
+}
+
+- (void)promoteMovieIfPlaying {
+  if (_state != DBH264PlayerLoading || !_player) return;
+  if (_player.playbackState != MPMoviePlaybackStatePlaying) return;
+  _player.view.hidden = NO;
+  [self setStateOnMain:DBH264PlayerPlaying];
+}
+
+- (void)onMpLoadState:(NSNotification *)note {
+  (void)note;
+  DBH264Dbg(@"[h264] load=%ld playback=%ld", (long)_player.loadState,
+            (long)_player.playbackState);
+  [self promoteMovieIfPlaying];
+}
+
+- (void)onMpPlaybackState:(NSNotification *)note {
+  (void)note;
+  [self promoteMovieIfPlaying];
+}
+
+- (void)onMpFinish:(NSNotification *)note {
+  NSNumber *reason = [[note userInfo]
+      objectForKey:MPMoviePlayerPlaybackDidFinishReasonUserInfoKey];
+  DBH264Dbg(@"[h264] movie finished reason=%@", reason ?: @"unknown");
+  if (_state != DBH264PlayerIdle) [self failOnMain:@"movie playback ended"];
+}
+
+- (void)fmp4DemuxFailed:(DBFmp4Demux *)demux {
+  (void)demux;
+  dispatch_async(dispatch_get_main_queue(), ^{
+    if (self->_state != DBH264PlayerIdle) [self failOnMain:@"fMP4 stream failed"];
+  });
+}
+
+- (void)failOnMain:(NSString *)reason {
+  NSAssert([NSThread isMainThread], @"H.264 failure must be delivered on main");
+  if (_state == DBH264PlayerIdle || _state == DBH264PlayerFailed) return;
+  DBH264Dbg(@"[h264] failed: %@", reason);
+  if (_player) _player.view.hidden = YES;
+  [self setStateOnMain:DBH264PlayerFailed];
+}
+
+- (void)stop {
+  if (![NSThread isMainThread]) {
+    dispatch_sync(dispatch_get_main_queue(), ^{ [self stop]; });
+    return;
+  }
+  _generation++;
+  _state = DBH264PlayerIdle;
+
+  DBFmp4Demux *demux = _demux;
+  _demux = nil;
+  [demux stop];  // waits until any in-flight delegate callback has returned
+
+  if (_player) {
+    [[NSNotificationCenter defaultCenter] removeObserver:self name:nil object:_player];
+    [_player stop];
+    [_player.view removeFromSuperview];
+    _player = nil;
+  }
+  if (_mux) {
+    dbtsmux_free(_mux);
+    _mux = NULL;
+  }
+  [_server stop];
+  _server = nil;
+  _seg = nil;
+  _sps = nil;
+  _pps = nil;
+  _movieStartScheduled = NO;
+  _segSeq = 0;
+}
+
+- (void)dealloc {
+  [_demux stop];
+  if (_mux) dbtsmux_free(_mux);
+  if (_player) {
+    [[NSNotificationCenter defaultCenter] removeObserver:self name:nil object:_player];
+    [_player stop];
+  }
+  [_server stop];
+}
+
+@end

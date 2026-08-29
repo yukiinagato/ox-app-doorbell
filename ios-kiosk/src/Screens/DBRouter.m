@@ -206,6 +206,18 @@
                     lang:[DBConfigUtil evStr:ev key:@"visitor_lang"]];
       return;
     }
+    if ([type isEqualToString:@"call_cancelled"] &&
+        ![_boot.role isEqualToString:@"door_station"]) {
+      [[self home] stopChime];
+      if (_current == _incoming) [_incoming handleCallCancelled:ev];
+      [_home appendEvent:ev];
+      return;
+    }
+    if ([type isEqualToString:@"purpose_selected"] && _current == _incoming) {
+      [_incoming handlePurposeSelected:ev];
+      [_home appendEvent:ev];
+      return;
+    }
     [_home appendEvent:ev];
   } else if ([t isEqualToString:@"chime"]) {
     [_home playChime:ev];
@@ -252,4 +264,3 @@
 }
 
 @end
-

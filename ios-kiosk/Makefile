@@ -23,6 +23,8 @@ OBJ       := $(BUILD)/obj
 APP       := $(BUILD)/Doorbell.app
 
 CLANG     := $(shell xcrun -f clang)
+CXX       := $(shell xcrun -f clang++)
+MACOS_SDK := $(shell xcrun --sdk macosx --show-sdk-path)
 CLANG_RT  := $(shell xcrun clang -print-resource-dir)/lib/darwin/libclang_rt.ios.a
 LDID      := $(shell command -v ldid 2>/dev/null || echo /opt/homebrew/bin/ldid)
 
@@ -41,23 +43,26 @@ FRAMEWORKS := -framework Foundation -framework UIKit -framework CoreGraphics \
               -framework QuartzCore -framework CFNetwork -framework AudioToolbox \
               -framework CoreAudio -framework AVFoundation -framework Security \
               -framework CoreFoundation -framework SystemConfiguration \
-              -framework ImageIO
+              -framework ImageIO -framework MediaPlayer
 # 静的 C++ ランタイム (順序: c++ → c++abi → unwind → builtins)。libdoorbell_all.a が要求。
 RTLIBS := $(TC_LIB)/libc++.a $(TC_LIB)/libc++abi.a $(TC_LIB)/libunwind.a $(CLANG_RT)
 
 OBJC_SRCS := $(shell find $(SRC_DIR) -name '*.m' | sort)
+CPP_SRCS  := $(shell find $(SRC_DIR) -name '*.cpp' | sort)
 C_SRCS    := $(MINISIP)/minisip.c $(MINISIP)/sip.c $(MINISIP)/sdp.c \
              $(MINISIP)/rtp.c $(MINISIP)/g711.c
 QR_SRCS   := $(QR)/qrcodegen.c
 
 OBJC_OBJS := $(patsubst $(SRC_DIR)/%.m,$(OBJ)/%.o,$(OBJC_SRCS))
+CPP_OBJS  := $(patsubst $(SRC_DIR)/%.cpp,$(OBJ)/%.o,$(CPP_SRCS))
 C_OBJS    := $(patsubst $(MINISIP)/%.c,$(OBJ)/minisip_%.o,$(C_SRCS))
 QR_OBJS   := $(patsubst $(QR)/%.c,$(OBJ)/qr_%.o,$(QR_SRCS))
-ALL_OBJS  := $(OBJC_OBJS) $(C_OBJS) $(QR_OBJS)
+ALL_OBJS  := $(OBJC_OBJS) $(CPP_OBJS) $(C_OBJS) $(QR_OBJS)
 
 EXE := $(APP)/Doorbell
+HOST_TS_TEST := $(BUILD)/host/test_ts_mux
 
-.PHONY: all app verify clean
+.PHONY: all app test verify clean
 
 all: app
 
@@ -67,6 +72,10 @@ $(OBJ):
 $(OBJ)/%.o: $(SRC_DIR)/%.m | $(OBJ)
 	@mkdir -p $(dir $@)
 	$(CLANG) $(OBJCFLAGS) -c $< -o $@
+
+$(OBJ)/%.o: $(SRC_DIR)/%.cpp | $(OBJ)
+	@mkdir -p $(dir $@)
+	$(CLANG) $(ARCH) $(MINVER) $(SYSROOT) -Wall -O2 -std=c++11 -I$(CORE_INC) -c $< -o $@
 
 $(OBJ)/minisip_%.o: $(MINISIP)/%.c | $(OBJ)
 	$(CLANG) $(CFLAGS) -c $< -o $@
@@ -85,6 +94,15 @@ app: $(EXE)
 	@cp $(SRC_DIR)/Resources/*.png $(APP)/ 2>/dev/null || true
 	@$(LDID) -S $(EXE)
 	@echo "ok: $(APP)"
+
+$(HOST_TS_TEST): $(KIOSK)/tests/test_ts_mux.cpp $(SRC_DIR)/Media/DBTsMux.cpp \
+                 $(SRC_DIR)/Media/DBTsMux.h
+	@mkdir -p $(dir $@)
+	$(CXX) -isysroot $(MACOS_SDK) -std=c++11 -Wall -Wextra -Werror -O2 \
+	  $(KIOSK)/tests/test_ts_mux.cpp $(SRC_DIR)/Media/DBTsMux.cpp -o $@
+
+test: $(HOST_TS_TEST)
+	$(HOST_TS_TEST)
 
 verify: app
 	@echo "-- lipo -info --"; lipo -info $(EXE)

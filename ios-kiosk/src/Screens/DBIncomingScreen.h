@@ -19,5 +19,7 @@
 // core イベント (表示中のみ router が転送)
 - (void)handleReplyEvent:(NSDictionary *)ev;
 - (void)handleVisitorLangEvent:(NSDictionary *)ev;
+- (void)handlePurposeSelected:(NSDictionary *)ev;
+- (void)handleCallCancelled:(NSDictionary *)ev;
 
 @end

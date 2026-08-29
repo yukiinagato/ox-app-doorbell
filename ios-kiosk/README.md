@@ -28,8 +28,8 @@ ios-kiosk/
     ├── main.m
     ├── Support/                # DBAppDelegate (+最小 root VC), DBWatchdog
     ├── Core/                   # DBCoreBridge (core C ABI 包装), DBBootConfig, DBConfigUtil, DBTexts (ja/en/zh)
-    ├── Net/                    # DBMjpegClient (socket 线程 + 后台解码)
-    ├── Media/                  # DBSipSession (mini SIP 包装), DBAudioIO (RemoteIO), DBSiren, DBQrCode
+    ├── Net/                    # MJPEG/fMP4 客户端 + 本机 loopback HLS server
+    ├── Media/                  # SIP/音频/警铃/QR + fMP4→MPEG-TS→MPMoviePlayer H.264 路径
     └── Screens/                # DBScreen 基类, DBRouter (状态机), DBHomeScreen,
                                 # DBIncomingScreen, DBPinOverlay, DBInfoScreen, DBPairingScreen
 ```
@@ -59,6 +59,7 @@ core 内部线程 ──ui event cb──▶ DBCoreBridge (marshal) ──▶ DB
 
 ```bash
 bash ios-kiosk/scripts/build_app.sh        # → ios-kiosk/build/Doorbell.app
+make -C ios-kiosk test                     # MPEG-TS PAT/PMT/PES/continuity 主机端测试
 bash ios-kiosk/scripts/install_via_ssh.sh  # USB (iproxy 2222) 或传 iPad IP 走 WiFi
 ```
 
