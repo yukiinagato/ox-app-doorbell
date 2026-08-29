@@ -295,7 +295,15 @@ struct Node::Impl {
 
   // ---------- helpers ----------
   void uiNotify(const std::string& event_json) {
-    scheduleSnapshotRefresh();
+    // イベント配送より先に快照を更新する — 受信側がイベントを見て status/config を
+    // 読み直したとき、必ずイベント時点以降の状態が見える (遅延更新だと古い快照を
+    // 読んだきり再通知が来ず、UI が停滞する)。loop 外から呼ばれた場合 (sipctl 等) は
+    // loop 上の状態に触れないよう post に退避。started 前後は init/stop が面倒を見る。
+    if (started && loop->onLoopThread()) {
+      refreshSnapshots();
+    } else {
+      scheduleSnapshotRefresh();
+    }
     UiEventCb cb;
     {
       std::lock_guard<std::mutex> lk(cb_mu);
@@ -322,10 +330,25 @@ struct Node::Impl {
     std::lock_guard<std::mutex> lk(snap_mu);
     if (snap_scheduled) return;
     snap_scheduled = true;
-    loop->postDelayed(30, [this] { refreshSnapshots(); });
+    if (!loop->post([this] { refreshSnapshots(); })) snap_scheduled = false;  // 停止後は放棄
+  }
+
+  // video_track へ push し、inactive→active 遷移 (SPS/PPS 受領 = init segment 完成) を
+  // 快照へ反映する。status.video.active は uiNotify を伴わず変わる数少ない状態のため、
+  // ここで拾わないと 2 秒周期タイマーまで快照が古いまま。エンコーダスレッドから
+  // 呼ばれるので schedule (post) 経由で loop に退避する。
+  void pushVideoTrack(const uint8_t* p, size_t n, bool key, int64_t ts) {
+    bool was = video_track.active();
+    video_track.push(p, n, key, ts);
+    if (!was && video_track.active()) scheduleSnapshotRefresh();
   }
 
   void refreshSnapshots() {
+    if (!started) {  // stop の解体中に残った予約を実行しない (init は started=true 後に呼ぶ)
+      std::lock_guard<std::mutex> lk(snap_mu);
+      snap_scheduled = false;
+      return;
+    }
     std::string status = statusJsonOnLoop();
     std::string config_json = config->materializeJson();
     std::string pairing = pairingJsonOnLoop();
@@ -1331,7 +1354,7 @@ struct Node::Impl {
       // H.264 硬編 (encoder_win — MF encoder MFT)。出力 AnnexB は video_track へ。
       // 未稼働中の feed は即 return するので採集経路への負担はない。
       encoder.reset(new EncoderWin([this](const uint8_t* p, size_t n, bool key, int64_t ts) {
-        video_track.push(p, n, key, ts);
+        pushVideoTrack(p, n, key, ts);
       }));
       camera.reset(new CameraWin([this](RawFrame&& f) {
         {
@@ -2798,7 +2821,7 @@ void Node::pushCameraFrame(const uint8_t* data, int format, int width, int heigh
 
 void Node::pushEncodedFrame(const uint8_t* annexb, size_t len, bool key, int64_t ts_ms) {
   // VideoTrack は自前ロック — 高頻度呼び出しなので loop へは marshal しない
-  impl_->video_track.push(annexb, len, key, ts_ms);
+  impl_->pushVideoTrack(annexb, len, key, ts_ms);
 }
 
 bool Node::videoEncoderWanted() {
