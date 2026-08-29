@@ -133,9 +133,9 @@ void DBH264Dbg(NSString *fmt, ...);
 
 - (void)fmp4DemuxReady:(DBFmp4Demux *)demux sps:(NSData *)sps pps:(NSData *)pps {
   _videoView.serverToClientOffsetMs = [demux serverToClientOffsetMs];
-  // Hard live edge: leave ~15ms for the 640x360 BGRA upload and never display
+  // Hard live edge: leave ~30ms for the 640x360 BGRA upload and never display
   // a frame which can no longer meet the 100ms glass-to-glass budget.
-  _videoView.maxQueueAgeMs = 85;
+  _videoView.maxQueueAgeMs = 70;
   if (![_videoView startWithSps:sps pps:pps]) {
     DBH264Dbg(@"[vt] decoder start failed");
     [self setState:DBLowLatencyPlayerFailed];
