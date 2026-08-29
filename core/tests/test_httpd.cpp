@@ -236,7 +236,7 @@ TEST_CASE("httpd: snapshot + stream") {
   CHECK(get(port, "/stream.mjpeg").status == 503);
 
   const std::string jpeg = "\xff\xd8JPEGDATA\xff\xd9";
-  httpd.setJpegProvider([&] { return toBytes(jpeg); }, 30);
+  httpd.setJpegProvider([&](int64_t*) { return toBytes(jpeg); }, 30);
 
   auto snap = get(port, "/snapshot.jpg");
   CHECK(snap.status == 200);

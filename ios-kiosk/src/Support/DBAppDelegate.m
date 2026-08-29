@@ -2,8 +2,12 @@
 #import "../Core/DBBootConfig.h"
 #import "../Core/DBCoreBridge.h"
 #import "../Media/DBH264Player.h"
+#import "../Media/DBLowLatencyH264Player.h"
+#import "../Net/DBMjpegClient.h"
 #import "../Screens/DBRouter.h"
 #import "DBWatchdog.h"
+
+void DBH264Dbg(NSString *fmt, ...);
 
 // 回転を受け付けるだけの最小 root VC。画面遷移は UIViewController を使わない
 // (present/dismiss モーダル機構が iOS 5.1 の主要 crash 源のため構造から排除)。
@@ -22,6 +26,9 @@
   DBRouter *_router;
   DBWatchdog *_watchdog;
   DBH264Player *_h264Test;  // doorbell://h264test 用 (全screen 再生テスト)
+  DBLowLatencyH264Player *_vtTest;  // doorbell://vttest<ip> 用
+  DBMjpegClient *_mjpegTest;
+  UIImageView *_mjpegTestView;
 }
 @synthesize window = _window;
 
@@ -135,6 +142,43 @@
     [_h264Test start];
     return YES;
   }
+  if ([host hasPrefix:@"vttest"]) {
+    NSString *ip = [host length] > 6 ? [host substringFromIndex:6] : nil;
+    if (![ip length]) ip = @"127.0.0.1";
+    NSString *stream = [NSString stringWithFormat:@"http://%@:47180/stream.mp4", ip];
+    [self h264TestStop];
+    UIView *container = _router.containerView;
+    __weak DBAppDelegate *wself = self;
+    _vtTest = [[DBLowLatencyH264Player alloc] initWithURL:stream container:container
+                                                  onState:^(DBLowLatencyPlayerState state) {
+      DBH264Dbg(@"[vt] test state=%ld", (long)state);
+      if (state == DBLowLatencyPlayerFailed) {
+        DBAppDelegate *delegate = wself;
+        if (delegate) [delegate h264TestStop];
+      }
+    }];
+    [_vtTest start];
+    return YES;
+  }
+  if ([host hasPrefix:@"mjpegtest"]) {
+    NSString *ip = [host length] > 9 ? [host substringFromIndex:9] : nil;
+    if (![ip length]) ip = @"127.0.0.1";
+    [self h264TestStop];
+    UIView *container = _router.containerView;
+    _mjpegTestView = [[UIImageView alloc] initWithFrame:container.bounds];
+    _mjpegTestView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    _mjpegTestView.contentMode = UIViewContentModeScaleAspectFit;
+    _mjpegTestView.backgroundColor = [UIColor blackColor];
+    [container addSubview:_mjpegTestView];
+    __weak DBAppDelegate *wself = self;
+    NSString *url = [NSString stringWithFormat:@"http://%@:47180/stream.mjpeg", ip];
+    _mjpegTest = [[DBMjpegClient alloc] initWithURLString:url onFrame:^(UIImage *image) {
+      DBAppDelegate *delegate = wself;
+      if (delegate) delegate->_mjpegTestView.image = image;
+    }];
+    [_mjpegTest start];
+    return YES;
+  }
   if ([host isEqualToString:@"h264stop"]) {
     [self h264TestStop];
     return YES;
@@ -145,6 +189,12 @@
 - (void)h264TestStop {
   [_h264Test stop];
   _h264Test = nil;
+  [_vtTest stop];
+  _vtTest = nil;
+  [_mjpegTest stop];
+  _mjpegTest = nil;
+  [_mjpegTestView removeFromSuperview];
+  _mjpegTestView = nil;
   [_router showHomeAnimated:NO];
 }
 

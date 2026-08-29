@@ -36,6 +36,7 @@ never displayed; stored in the platform secure store).
       "local": {                                // per-device settings (also replicated — editable remotely)
         "ui_lang": "ja", "volume": 80, "screen_brightness": 70,
         "screensaver_after_s": 120,
+        "video": { "playback": "low_latency" }, // low_latency (default) / hls / mjpeg
         "camera": { "device_hint": "", "rotation": 0, "mjpeg_fps": 8,
                     "mjpeg_quality": 60, "resolution": "640x480",
                     // codec: "auto" = probe for HW h264, fall back to mjpeg / "mjpeg" / "h264"
@@ -86,6 +87,7 @@ never displayed; stored in the platform secure store).
 
   "ui": {
     "languages": ["ja", "en", "zh"],            // languages offered on the door station's visitor language switcher
+    "ringtone": "ding1",                          // ding1 / ding2 / classic / asset:<sha256>
     "visitor_lang_revert_s": 60                 // revert to the primary language (ja) after this many idle seconds
   },
   // Runtime overrides for wording (take precedence over the built-in resx/strings.xml). Edit from

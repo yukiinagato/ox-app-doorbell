@@ -182,7 +182,7 @@ struct Httpd::Impl {
     Bytes content;
   };
   std::map<std::string, Asset> statics;
-  std::function<Bytes()> jpeg_provider;
+  std::function<Bytes(int64_t*)> jpeg_provider;
   int stream_fps = 8;
   std::function<Mp4Pull()> mp4_provider;
   std::function<bool(const HttpReq&)> gate;
@@ -232,7 +232,7 @@ void writeResp(struct mg_connection* conn, const HttpResp& r) {
 // /stream.mjpeg: provider を fps 間隔でポーリングして multipart 送信。
 // 書込失敗 (切断)・stop() (provider が外れる) で終了。
 int handleStream(struct mg_connection* conn, Httpd::Impl* impl) {
-  std::function<Bytes()> prov;
+  std::function<Bytes(int64_t*)> prov;
   int fps;
   {
     std::lock_guard<std::mutex> lk(impl->mu);
@@ -243,10 +243,14 @@ int handleStream(struct mg_connection* conn, Httpd::Impl* impl) {
     writeResp(conn, HttpResp::text("no frame source", 503));
     return 503;
   }
-  const char* head =
+  const auto server_wall_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+      std::chrono::system_clock::now().time_since_epoch()).count();
+  char head[256];
+  std::snprintf(head, sizeof(head),
       "HTTP/1.1 200 OK\r\n"
       "Content-Type: multipart/x-mixed-replace; boundary=frame\r\n"
-      "Connection: close\r\n\r\n";
+      "X-Doorbell-Server-Time-Ms: %lld\r\n"
+      "Connection: close\r\n\r\n", static_cast<long long>(server_wall_ms));
   if (mg_write(conn, head, std::strlen(head)) <= 0) return 200;
   const auto interval = std::chrono::milliseconds(1000 / (fps > 0 ? fps : 8));
   for (;;) {
@@ -256,12 +260,14 @@ int handleStream(struct mg_connection* conn, Httpd::Impl* impl) {
       prov = impl->jpeg_provider;
     }
     if (!prov) break;  // stop() で外された
-    Bytes frame = prov();
+    int64_t capture_ms = 0;
+    Bytes frame = prov(&capture_ms);
     if (!frame.empty()) {  // 空 = フレーム無し → 今回はスキップ (重複送信は可)
-      char part[128];
+      char part[192];
       std::snprintf(part, sizeof(part),
-                    "--frame\r\nContent-Type: image/jpeg\r\nContent-Length: %u\r\n\r\n",
-                    static_cast<unsigned>(frame.size()));
+                    "--frame\r\nContent-Type: image/jpeg\r\nContent-Length: %u\r\n"
+                    "X-Doorbell-Capture-Time-Ms: %lld\r\n\r\n",
+                    static_cast<unsigned>(frame.size()), static_cast<long long>(capture_ms));
       if (mg_write(conn, part, std::strlen(part)) <= 0) break;
       if (mg_write(conn, frame.data(), frame.size()) <= 0) break;
       if (mg_write(conn, "\r\n", 2) <= 0) break;
@@ -303,11 +309,16 @@ int handleStreamMp4(struct mg_connection* conn, Httpd::Impl* impl) {
     writeResp(conn, HttpResp::text("no h264 source", 503));
     return 503;
   }
-  const char* head =
+  const auto server_wall_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+      std::chrono::system_clock::now().time_since_epoch()).count();
+  char head[256];
+  std::snprintf(head, sizeof(head),
       "HTTP/1.1 200 OK\r\n"
       "Content-Type: video/mp4\r\n"
       "Cache-Control: no-store\r\n"
-      "Connection: close\r\n\r\n";
+      "X-Doorbell-Server-Time-Ms: %lld\r\n"
+      "Connection: close\r\n\r\n",
+      static_cast<long long>(server_wall_ms));
   if (mg_write(conn, head, std::strlen(head)) <= 0) return 200;
   for (;;) {
     if (!chunk.empty()) {
@@ -394,12 +405,12 @@ int requestHandler(struct mg_connection* conn, void* cbdata) {
 
   // --- 2. /snapshot.jpg ---
   if (req.uri == "/snapshot.jpg") {
-    std::function<Bytes()> prov;
+    std::function<Bytes(int64_t*)> prov;
     {
       std::lock_guard<std::mutex> lk(impl->mu);
       prov = impl->jpeg_provider;
     }
-    Bytes frame = prov ? prov() : Bytes{};
+    Bytes frame = prov ? prov(nullptr) : Bytes{};
     if (frame.empty()) {
       writeResp(conn, HttpResp::text("no frame", 503));
       return 503;
@@ -521,7 +532,7 @@ void Httpd::setStatic(const std::string& path, const std::string& content_type, 
   impl_->statics[path] = Impl::Asset{content_type, std::move(content)};
 }
 
-void Httpd::setJpegProvider(std::function<Bytes()> provider, int stream_fps) {
+void Httpd::setJpegProvider(std::function<Bytes(int64_t*)> provider, int stream_fps) {
   std::lock_guard<std::mutex> lk(impl_->mu);
   impl_->jpeg_provider = std::move(provider);
   impl_->stream_fps = stream_fps;

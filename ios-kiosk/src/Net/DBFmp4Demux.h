@@ -15,7 +15,7 @@
 - (void)fmp4DemuxReady:(DBFmp4Demux *)demux sps:(NSData *)sps pps:(NSData *)pps;
 // sample (1 access unit, AVCC)。main 以外のスレッドで逐次。durMs は推定表示間隔。
 - (void)fmp4Demux:(DBFmp4Demux *)demux sample:(NSData *)avcc key:(BOOL)key
-             dtsMs:(int64_t)dtsMs durMs:(int64_t)durMs;
+         captureMs:(int64_t)captureMs dtsMs:(int64_t)dtsMs durMs:(int64_t)durMs;
 - (void)fmp4DemuxFailed:(DBFmp4Demux *)demux;  // トランスポート/解析致命傷 (1 回)
 @end
 
@@ -24,5 +24,7 @@
 - (id)initWithURLString:(NSString *)url delegate:(id<DBFmp4DemuxDelegate>)delegate;
 - (void)start;  // 冪等
 - (void)stop;   // 冪等。socket shutdown してスレッドを起床
+// client epoch ms - server epoch ms, estimated from the response header.
+- (int64_t)serverToClientOffsetMs;
 
 @end

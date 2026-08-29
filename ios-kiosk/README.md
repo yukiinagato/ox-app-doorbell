@@ -60,7 +60,8 @@ core 内部线程 ──ui event cb──▶ DBCoreBridge (marshal) ──▶ DB
 ```bash
 bash ios-kiosk/scripts/build_app.sh        # → ios-kiosk/build/Doorbell.app
 make -C ios-kiosk test                     # MPEG-TS PAT/PMT/PES/continuity 主机端测试
-bash ios-kiosk/scripts/install_via_ssh.sh  # USB (iproxy 2222) 或传 iPad IP 走 WiFi
+bash ios-kiosk/scripts/install_via_ssh.sh  # USB (iproxy 2222) 或传 iPad IP 走 WiFi；已有 app 时快速更新
+bash ios-kiosk/scripts/install_via_ssh.sh --full  # 强制 uicache + respring
 ```
 
-安装脚本已固化安全顺序: killall SpringBoard → **rm -rf 旧 bundle (换新 inode, 防 dyld SIGKILL 熔断)** → scp → SHA1 照合 → `su mobile -c uicache` → respring。装完必须**实际点图标**验证 (uiopen 能启动 ≠ 图标正常)。
+安装脚本会先把新 bundle 上传到 staging 路径。检测到已有 app 时，只停止 Doorbell、**删除旧 bundle 后移动 staging bundle (换新 inode，防 dyld SIGKILL 熔断)**，再启动新 app，不重启 SpringBoard。首次安装或指定 `--full` 时才执行 `uicache` 和 respring；修改图标、名称等系统缓存信息时应使用 `--full`。

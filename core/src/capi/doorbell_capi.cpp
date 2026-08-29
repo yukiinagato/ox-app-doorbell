@@ -198,6 +198,14 @@ DB_API void db_core_press_purpose(db_core* c, const char* door_id, const char* p
   if (c && c->node) c->node->press(door_id ? door_id : "", purpose ? purpose : "");
 }
 
+DB_API void db_core_select_purpose(db_core* c, const char* door_id, const char* purpose) {
+  if (c && c->node) c->node->selectPurpose(door_id ? door_id : "", purpose ? purpose : "");
+}
+
+DB_API void db_core_cancel_call(db_core* c, const char* door_id) {
+  if (c && c->node) c->node->cancelCall(door_id ? door_id : "");
+}
+
 DB_API void db_core_set_visitor_lang(db_core* c, const char* door, const char* lang) {
   if (c && c->node && lang && *lang) c->node->setVisitorLang(door ? door : "", lang);
 }

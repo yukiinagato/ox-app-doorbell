@@ -11,12 +11,36 @@ namespace db {
 
 namespace {
 constexpr const char* kTag = "video";
-constexpr int64_t kMaxFragmentMs = 500;  // フラグメント上限 (GOP がこれより長い時の分割点)
 
 uint32_t clampDur(int64_t d) {
   if (d < 1) return 1;        // 非増加 ts (時計巻き戻り等) でも前進させる
   if (d > 1000) return 1000;  // 長すぎる間隙 (エンコーダ停止明け) は 1s に丸める
   return static_cast<uint32_t>(d);
+}
+
+// Private top-level box consumed by the kiosk's direct decoder. Generic fMP4
+// players safely skip it. Payload: sample_count (u32), then capture epoch ms
+// (u64) for each sample in the following moof/mdat.
+Bytes withCaptureTimes(Bytes fragment, const std::vector<fmp4::Sample>& samples) {
+  Bytes out;
+  const uint32_t size = static_cast<uint32_t>(12 + samples.size() * 8);
+  out.reserve(size + fragment.size());
+  auto put32 = [&out](uint32_t v) {
+    out.push_back(static_cast<uint8_t>(v >> 24));
+    out.push_back(static_cast<uint8_t>(v >> 16));
+    out.push_back(static_cast<uint8_t>(v >> 8));
+    out.push_back(static_cast<uint8_t>(v));
+  };
+  put32(size);
+  out.insert(out.end(), {'d', 'b', 't', 's'});
+  put32(static_cast<uint32_t>(samples.size()));
+  for (const auto& sample : samples) {
+    uint64_t v = static_cast<uint64_t>(sample.ts_ms);
+    for (int i = 7; i >= 0; --i)
+      out.push_back(static_cast<uint8_t>(v >> (i * 8)));
+  }
+  out.insert(out.end(), fragment.begin(), fragment.end());
+  return out;
 }
 }  // namespace
 
@@ -100,17 +124,20 @@ void VideoTrack::push(const uint8_t* annexb, size_t len, bool key, int64_t ts_ms
   sample.key = sample.key || key;
   sample.ts_ms = ts_ms;
 
-  // フラグメント確定: キーフレーム到来 (=1 GOP) or 500ms 超過の早い方。
-  // 新サンプルの ts で末尾サンプルの dur が決まるため「次が来た時に閉じる」方式。
-  if (!s.pending.empty() &&
-      (sample.key || ts_ms - s.pending.front().ts_ms >= kMaxFragmentMs)) {
+  // Low-latency live mode: close the previous access unit as soon as the next
+  // timestamp arrives. This keeps standards-compliant fMP4, while eliminating
+  // the old 500ms/GOP batching delay. HLS can still group these samples into
+  // its own segments; the direct iOS 5 decoder consumes them one frame at a time.
+  if (!s.pending.empty()) {
     uint64_t total = 0;
     for (size_t i = 0; i < s.pending.size(); i++) {
       int64_t next_ts = (i + 1 < s.pending.size()) ? s.pending[i + 1].ts_ms : ts_ms;
       s.pending[i].dur = clampDur(next_ts - s.pending[i].ts_ms);
       total += s.pending[i].dur;
     }
-    s.frag = fmp4::buildFragment(static_cast<uint32_t>(++s.frag_seq), s.base_dt, s.pending);
+    s.frag = withCaptureTimes(
+        fmp4::buildFragment(static_cast<uint32_t>(++s.frag_seq), s.base_dt, s.pending),
+        s.pending);
     s.base_dt += total;  // base-media-decode-time の連続性 (tfdt)
     s.pending.clear();
     s.cv.notify_all();

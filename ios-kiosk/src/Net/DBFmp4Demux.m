@@ -51,7 +51,12 @@ static BOOL sendAll(int fd, const void *bytes, size_t length) {
   uint32_t _trunCount;
   uint32_t _firstFlags;
   BOOL _firstFlagsSet;
+  int64_t _captureMs[DB_MAX_SAMPLES_PER_MOOF];
+  uint32_t _captureCount;
+  int64_t _serverToClientOffsetMs;
 }
+
+- (int64_t)serverToClientOffsetMs { return _serverToClientOffsetMs; }
 
 - (id)initWithURLString:(NSString *)url delegate:(id<DBFmp4DemuxDelegate>)delegate {
   self = [super init];
@@ -176,6 +181,20 @@ static BOOL sendAll(int fd, const void *bytes, size_t length) {
     close(s);
     return NO;
   }
+  for (NSString *line in [head componentsSeparatedByString:@"\r\n"]) {
+    if ([[line lowercaseString] hasPrefix:@"x-doorbell-server-time-ms:"]) {
+      NSArray *parts = [line componentsSeparatedByString:@":"];
+      if ([parts count] >= 2) {
+        int64_t serverMs = [[[parts subarrayWithRange:NSMakeRange(1, [parts count] - 1)]
+            componentsJoinedByString:@":"] longLongValue];
+        int64_t clientMs = (int64_t)([[NSDate date] timeIntervalSince1970] * 1000.0);
+        if (serverMs > 0) _serverToClientOffsetMs = clientMs - serverMs;
+        DBH264Dbg(@"[fmp4] clock offset client-server=%lldms",
+                  (long long)_serverToClientOffsetMs);
+      }
+      break;
+    }
+  }
   DBH264Dbg(@"[fmp4] %@", [[head componentsSeparatedByString:@"\r\n"] objectAtIndex:0]);
   *fd = s;
   return YES;
@@ -209,7 +228,15 @@ static BOOL sendAll(int fd, const void *bytes, size_t length) {
                 (char)((type >> 16) & 0xFF), (char)((type >> 8) & 0xFF),
                 (char)(type & 0xFF), (unsigned long long)size, _trunCount);
     }
-    if (type == 'moov' && !_readySent) {
+    if (type == 'dbts') {
+      if (bodyLen < 4) { [self failLocked]; return; }
+      uint32_t count = rd32(body);
+      if (count > DB_MAX_SAMPLES_PER_MOOF || bodyLen < 4 + (uint64_t)count * 8) {
+        [self failLocked]; return;
+      }
+      _captureCount = count;
+      for (uint32_t i = 0; i < count; ++i) _captureMs[i] = (int64_t)rd64(body + 4 + i * 8);
+    } else if (type == 'moov' && !_readySent) {
       [self parseInitLocked:body len:bodyLen];
       static int moovLog = 0;
       if (!moovLog) { moovLog = 1; DBH264Dbg(@"[fmp4] moov parsed (ready=%d)", _readySent); }
@@ -401,13 +428,16 @@ static BOOL sendAll(int fd, const void *bytes, size_t length) {
     if (d) {
       NSData *s = [NSData dataWithBytes:p + off length:(NSUInteger)sz];
       /* cbQueue 上で直接配送 (main に積むと A5 で追いつかない) */
-      [d fmp4Demux:self sample:s key:key dtsMs:(int64_t)dts durMs:(int64_t)_trun[i].dur];
+      int64_t captureMs = i < _captureCount ? _captureMs[i] : 0;
+      [d fmp4Demux:self sample:s key:key captureMs:captureMs
+             dtsMs:(int64_t)dts durMs:(int64_t)_trun[i].dur];
     }
     off += sz;
     dts += _trun[i].dur;
   }
   _outDtsMs = dts;
   _trunCount = 0;
+  _captureCount = 0;
   return YES;
 }
 

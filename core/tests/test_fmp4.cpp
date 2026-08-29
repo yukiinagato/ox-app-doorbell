@@ -1,7 +1,7 @@
 // fMP4 マキサ (fmp4) + VideoTrack + /stream.mp4 配信のテスト。
 //  - 合成 NAL (ビット書きで組んだ正規 SPS / ダミー PPS/IDR/non-IDR) で決定的に:
 //    AnnexB 分割・SPS 解像度・AVCC 変換・box 構造 (サイズ/fourcc 階層/trun/avcC)
-//  - VideoTrack: フラグメント戦略 (1 GOP or 500ms)・購読者管理・base decode time 連続
+//  - VideoTrack: 逐幀 fragment・採集時刻・購読者管理・base decode time 連続
 //  - Node 統合: 実 TCP + HTTP で GET /stream.mp4 (ftyp から始まり moof が続く) と
 //    encoder wanted 制御 (購読者ゼロ = エンコードしない)
 //  - `which ffprobe` が存在すれば実 parse 検証 (無ければ skip)
@@ -417,7 +417,7 @@ TEST_CASE("fmp4: fragment の box 構造 (mfhd 連番・tfdt・trun・mdat)") {
   CHECK(std::memcmp(&frag[mdat.payload], samples[0].data.data(), samples[0].data.size()) == 0);
 }
 
-TEST_CASE("video_track: フラグメント戦略 (1 GOP / 500ms) と base decode time 連続") {
+TEST_CASE("video_track: 逐幀 fragment・採集時刻 dbts・base decode time 連続") {
   VideoTrack track;
   track.setEnabled(true);
   CHECK(!track.active());
@@ -438,23 +438,19 @@ TEST_CASE("video_track: フラグメント戦略 (1 GOP / 500ms) と base decode
   CHECK(!ended);
   CHECK(std::memcmp(&init[4], "ftyp", 4) == 0);
 
-  // non-IDR ×2 (同一 GOP 内・500ms 未満) → まだ確定しない
+  // 次の access unit 到来時に直前の 1 幀を即時確定する。
   Bytes p1 = annexb({makeSlice(false, 8)});
   track.push(p1.data(), p1.size(), false, 1100);
-  track.push(p1.data(), p1.size(), false, 1200);
-  Bytes none = reader->pull(10, &ended);
-  CHECK(none.empty());
-  CHECK(!ended);
-
-  // key2 到来 → GOP 確定 (3 サンプル: 1000/1100/1200, dur 100/100/300)
-  Bytes k2 = annexb({makeSlice(true, 30)});
-  track.push(k2.data(), k2.size(), true, 1500);
   Bytes frag1 = reader->pull(100, &ended);
   REQUIRE(!frag1.empty());
   {
     auto top = childBoxes(frag1, 0, frag1.size());
-    REQUIRE(top.size() == 2);
-    auto in_moof = childBoxes(frag1, top[0].payload, top[0].off + top[0].size);
+    REQUIRE(top.size() == 3);
+    CHECK(top[0].type == "dbts");
+    CHECK(be32(frag1, top[0].payload) == 1);
+    CHECK(be64(frag1, top[0].payload + 4) == 1000);
+    CHECK(top[1].type == "moof");
+    auto in_moof = childBoxes(frag1, top[1].payload, top[1].off + top[1].size);
     const Box* mfhd = findBox(in_moof, "mfhd");
     CHECK(be32(frag1, mfhd->payload + 4) == 1);
     auto in_traf = childBoxes(frag1, findBox(in_moof, "traf")->payload,
@@ -462,22 +458,21 @@ TEST_CASE("video_track: フラグメント戦略 (1 GOP / 500ms) と base decode
     const Box* tfdt = findBox(in_traf, "tfdt");
     CHECK(be64(frag1, tfdt->payload + 4) == 0);  // 初回 base_dt = 0
     const Box* trun = findBox(in_traf, "trun");
-    CHECK(be32(frag1, trun->payload + 4) == 3);  // 3 サンプル
+    CHECK(be32(frag1, trun->payload + 4) == 1);
+    CHECK(be32(frag1, trun->payload + 12) == 100);  // 1100 - 1000
   }
 
-  // 500ms 超過でも確定する (キーフレーム無しの長 GOP): 1500..2100
-  track.push(p1.data(), p1.size(), false, 1700);
-  track.push(p1.data(), p1.size(), false, 2100);  // 1500 から 600ms → key2 側が確定
+  track.push(p1.data(), p1.size(), false, 1200);
   Bytes frag2 = reader->pull(100, &ended);
   REQUIRE(!frag2.empty());
   {
     auto top = childBoxes(frag2, 0, frag2.size());
-    auto in_moof = childBoxes(frag2, top[0].payload, top[0].off + top[0].size);
+    CHECK(be64(frag2, top[0].payload + 4) == 1100);
+    auto in_moof = childBoxes(frag2, top[1].payload, top[1].off + top[1].size);
     auto in_traf = childBoxes(frag2, findBox(in_moof, "traf")->payload,
                               findBox(in_moof, "traf")->off + findBox(in_moof, "traf")->size);
-    // base_dt = 前 fragment の合計 dur (100+100+300=500) — 連続
-    CHECK(be64(frag2, findBox(in_traf, "tfdt")->payload + 4) == 500);
-    CHECK(be32(frag2, findBox(in_traf, "trun")->payload + 4) == 2);  // 1500,1700
+    CHECK(be64(frag2, findBox(in_traf, "tfdt")->payload + 4) == 100);
+    CHECK(be32(frag2, findBox(in_traf, "trun")->payload + 4) == 1);
   }
 
   // 無効化 → 購読者は ended、状態は破棄
@@ -508,7 +503,8 @@ TEST_CASE("video_track: 遅い購読者は直近 fragment のみ受け取る (�
   Bytes frag = reader->pull(100, &ended);
   REQUIRE(!frag.empty());
   auto top = childBoxes(frag, 0, frag.size());
-  auto in_moof = childBoxes(frag, top[0].payload, top[0].off + top[0].size);
+  REQUIRE(top.size() == 3);
+  auto in_moof = childBoxes(frag, top[1].payload, top[1].off + top[1].size);
   CHECK(be32(frag, findBox(in_moof, "mfhd")->payload + 4) == 3);
   CHECK(reader->pull(10, &ended).empty());
   CHECK(!ended);

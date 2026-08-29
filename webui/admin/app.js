@@ -102,6 +102,8 @@ var AdminLogic = (function () {
     e.push({ key: base + ".role", value: f.role || "door_station" });
     e.push({ key: base + ".door", value: f.door || "" });
     e.push({ key: base + ".local.ui_lang", value: f.ui_lang || "ja" });
+    e.push({ key: base + ".local.video.playback",
+             value: f.video_playback || "low_latency" });
     e.push({ key: base + ".local.camera",
              value: { device_hint: f.cam_hint || "", mjpeg_fps: num(f.cam_fps, 8),
                       mjpeg_quality: num(f.cam_quality, 60),
@@ -225,7 +227,7 @@ var AdminLogic = (function () {
 
   // 資産 hash → 使用箇所の表示文字列配列。走査範囲は core の referencedAssets と同じ:
   //   display.theme.bg_image / devices.*.local.theme.bg_image / quick_replies.*.audio.* /
-  //   trigger_rules.*.actions[].sound / emergency.alarm_sound
+  //   ui.ringtone / trigger_rules.*.actions[].sound / emergency.alarm_sound
   function assetRefs(cfg) {
     var out = {};
     function add(h, where) {
@@ -244,6 +246,7 @@ var AdminLogic = (function () {
       var au = qrs[qid].audio || {};
       for (var lg in au) add(au[lg], "quick_replies." + qid + " (" + lg + ")");
     }
+    add(assetRefHash((cfg.ui || {}).ringtone), "ui.ringtone");
     var rs = cfg.trigger_rules || {};
     for (var rid in rs) {
       var acts = rs[rid].actions || [];
@@ -928,6 +931,30 @@ if (typeof document !== "undefined") (function () {
     audioEl.play();
   }
 
+  var ringtoneCtx = null;
+  function playPresetRingtone(name) {
+    var AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) { msg("このブラウザは内蔵音の試聴に対応していません"); return; }
+    if (!ringtoneCtx) ringtoneCtx = new AC();
+    var seq = name === "classic" ? [[659, 0, .55], [523, .72, .55], [784, 1.42, .55]] :
+              name === "ding2" ? [[659, 0, .38], [988, .58, .57]] :
+              [[880, 0, .42], [1175, .50, .70]];
+    var now = ringtoneCtx.currentTime + .03;
+    seq.forEach(function (s) {
+      var osc = ringtoneCtx.createOscillator(), gain = ringtoneCtx.createGain();
+      osc.frequency.value = s[0];
+      gain.gain.setValueAtTime(0.0001, now + s[1]);
+      gain.gain.exponentialRampToValueAtTime(0.22, now + s[1] + .02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + s[1] + s[2]);
+      osc.connect(gain); gain.connect(ringtoneCtx.destination);
+      osc.start(now + s[1]); osc.stop(now + s[1] + s[2] + .02);
+    });
+  }
+  function playRingtone(value) {
+    if (value && value.indexOf("asset:") === 0) playAsset(value.slice(6));
+    else playPresetRingtone(value || "ding1");
+  }
+
   // icon 候補ボタン / audio 試聴ボタンの結線 (openForm 後に呼ぶ)
   function bindIconPick(root) {
     $all("[data-iconpick]", root).forEach(function (b) {
@@ -1009,6 +1036,19 @@ if (typeof document !== "undefined") (function () {
     var o = [{ v: "", label: emptyLabel }];
     assetIds(kind).forEach(function (h) {
       o.push({ v: h, label: assetLabel(h) + " (" + h.slice(0, 8) + ")" });
+    });
+    return o;
+  }
+
+  var RINGTONE_PRESETS = [
+    { v: "ding1", label: "Ding Dong" },
+    { v: "ding2", label: "Double Chime" },
+    { v: "classic", label: "Classic Bell" }
+  ];
+  function ringtoneOptions() {
+    var o = RINGTONE_PRESETS.slice();
+    assetIds("audio").forEach(function (h) {
+      o.push({ v: "asset:" + h, label: "♫ " + assetLabel(h) + " (" + h.slice(0, 8) + ")" });
     });
     return o;
   }
@@ -1272,7 +1312,7 @@ if (typeof document !== "undefined") (function () {
   /* ---------------- 3. デバイス ---------------- */
   function editDevice(id) {
     var d = cfgObj("devices")[id] || {};
-    var lo = d.local || {}, cam = lo.camera || {}, mo = lo.motion || {};
+    var lo = d.local || {}, cam = lo.camera || {}, mo = lo.motion || {}, video = lo.video || {};
     var fields = [
       { id: "nid", label: "ID", type: "static", value: id },
       { id: "name", label: t("admin.dev_name", "名前"), value: d.name },
@@ -1286,6 +1326,13 @@ if (typeof document !== "undefined") (function () {
         value: lo.ui_lang || "ja",
         options: [{ v: "ja", label: "日本語" }, { v: "en", label: "English" },
                   { v: "zh", label: "中文" }] },
+      { id: "video_playback", label: t("admin.video_playback", "室内機の映像再生方式"),
+        type: "select", value: video.playback || "low_latency",
+        options: [
+          { v: "low_latency", label: t("admin.video_low_latency", "低遅延 H.264 (推奨)") },
+          { v: "hls", label: t("admin.video_hls", "HLS (互換)") },
+          { v: "mjpeg", label: "MJPEG" }
+        ] },
       { id: "cam_fps", label: t("admin.cam_fps", "フレームレート"), type: "number",
         value: cam.mjpeg_fps !== undefined ? cam.mjpeg_fps : 8 },
       { id: "cam_quality", label: t("admin.cam_quality", "JPEG 品質"), type: "number",
@@ -1423,8 +1470,16 @@ if (typeof document !== "undefined") (function () {
                   "' value='" + esc(devs[m].v) + "'" +
                   ((a.devices instanceof Array ? a.devices : []).indexOf(devs[m].v) >= 0 ?
                    " checked" : "") + "> " + esc(devs[m].label) + "</label>";
-      params += "</span> <input type='text' data-ra='sound' data-idx='" + idx + "' value='" +
-                esc(a.sound || "ding1") + "' style='width:90px' placeholder='ding1'>";
+      params += "</span><div class='dim fhint'>" +
+                esc(t("admin.all", "すべて")) + " = チェックなし</div>";
+      var ro = ringtoneOptions();
+      params += " <select data-ra='sound' data-idx='" + idx + "'>";
+      for (var ri = 0; ri < ro.length; ri++)
+        params += "<option value='" + esc(ro[ri].v) + "'" +
+                  (ro[ri].v === (a.sound || "ding1") ? " selected" : "") + ">" +
+                  esc(ro[ri].label) + "</option>";
+      params += "</select> <button class='btn2' data-ringplay='" + idx + "'>▶ " +
+                esc(t("admin.audio_play", "試聴")) + "</button>";
     }
     return "<div class='arow' data-arow='" + idx + "'>" + sel + " " + params +
            " <button class='btn2 danger' data-ra='del' data-idx='" + idx + "'>×</button></div>";
@@ -1562,10 +1617,11 @@ if (typeof document !== "undefined") (function () {
           var ws2 = row.querySelector("[data-ra='with_snapshot']");
           a.with_snapshot = ws2 ? ws2.checked : false;
         } else if (a.type === "chime") {
-          a.devices = [];
+          var selectedDevices = [];
           $all("[data-ra='devices']", row).forEach(function (el) {
-            if (el.checked) a.devices.push(el.value);
+            if (el.checked) selectedDevices.push(el.value);
           });
+          if (selectedDevices.length) a.devices = selectedDevices;
           var se = row.querySelector("[data-ra='sound']");
           a.sound = se ? se.value : "ding1";
         }
@@ -1605,6 +1661,14 @@ if (typeof document !== "undefined") (function () {
           collectState(m);
           st.actions.splice(parseInt(b.getAttribute("data-idx"), 10), 1);
           rerender(m);
+        };
+      });
+      $all("[data-ringplay]", m).forEach(function (b) {
+        b.onclick = function () {
+          var row = b.parentNode;
+          while (row && !row.getAttribute("data-arow")) row = row.parentNode;
+          var sel = row && row.querySelector("[data-ra='sound']");
+          playRingtone(sel ? sel.value : "ding1");
         };
       });
       $all("[data-rw='del']", m).forEach(function (b) {
@@ -2645,8 +2709,23 @@ if (typeof document !== "undefined") (function () {
     var ids = assetIds("");
     var st = S.status.assets || {};
 
+    // 室内機の全体既定鈴音 (呼出ルール未設定時にも使用)。
+    var ringtone = (cfgObj("ui").ringtone || "ding1");
+    var ringOpts = ringtoneOptions(), ringSelect = "";
+    for (var rix = 0; rix < ringOpts.length; rix++)
+      ringSelect += "<option value='" + esc(ringOpts[rix].v) + "'" +
+                    (ringOpts[rix].v === ringtone ? " selected" : "") + ">" +
+                    esc(ringOpts[rix].label) + "</option>";
+    var h = "<div class='card'><h2>室内機の呼出音</h2>" +
+            "<div class='frow'><label class='flab'>鈴声</label><select id='ringtoneSelect'>" +
+            ringSelect + "</select> <button class='btn2' id='ringtonePreview'>▶ " +
+            esc(t("admin.audio_play", "試聴")) + "</button> " +
+            "<button class='btn small' id='ringtoneSave'>" + esc(t("admin.save", "保存")) +
+            "</button><div class='dim fhint'>プリセット、または下でアップロードした音声を選択できます。</div>" +
+            "</div></div>";
+
     // アップロード
-    var h = "<div class='card'><h2>" + esc(t("admin.assets_upload", "アップロード")) + "</h2>" +
+    h += "<div class='card'><h2>" + esc(t("admin.assets_upload", "アップロード")) + "</h2>" +
             "<div class='grid2'><div class='frow'><label class='flab'>ファイル " +
             "(jpg / png は自動縮小 · mp3 / wav は 3MB まで)</label>" +
             "<input type='file' id='asFile' accept='image/jpeg,image/png,audio/mpeg,audio/wav'>" +
@@ -2704,6 +2783,11 @@ if (typeof document !== "undefined") (function () {
       h += "</div></div>";
     }
     el.innerHTML = h;
+
+    $("#ringtonePreview").onclick = function () { playRingtone($("#ringtoneSelect").value); };
+    $("#ringtoneSave").onclick = function () {
+      saveAndRefresh([{ key: "ui.ringtone", value: $("#ringtoneSelect").value }], null);
+    };
 
     var prog = $("#asProg"), bar = prog.firstChild, out = $("#asOut");
     function handleFile(f) {

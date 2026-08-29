@@ -1,4 +1,5 @@
 #import "DBMjpegClient.h"
+void DBH264Dbg(NSString *fmt, ...);
 #import <ImageIO/ImageIO.h>
 #import <arpa/inet.h>
 #import <netdb.h>
@@ -20,8 +21,11 @@ static const CGFloat kMaxPixel = 640;                  // 解码後の一辺上�
   dispatch_queue_t _decodeQueue;
   NSLock *_frameLock;
   NSData *_pendingJpeg;        // _frameLock 保護
+  int64_t _pendingCaptureMs;   // _pendingJpeg と対
   BOOL _decodeBusy;            // _frameLock 保護
   CFAbsoluteTime _lastFrameAt; // decode queue 専用
+  int64_t _serverToClientOffsetMs;
+  NSUInteger _latencyFrame;
 }
 
 - (id)initWithURLString:(NSString *)urlString onFrame:(DBMjpegFrameHandler)onFrame {
@@ -71,6 +75,7 @@ static const CGFloat kMaxPixel = 640;                  // 解码後の一辺上�
   int fd = -1;
   NSMutableData *buf = [NSMutableData data];
   NSInteger expecting = -1;
+  int64_t expectingCaptureMs = 0;
   if (![self connect:&fd]) return NO;
   _sock = fd;
   if (!_running) {
@@ -92,7 +97,7 @@ static const CGFloat kMaxPixel = 640;                  // 解码後の一辺上�
       [buf setLength:0];
       expecting = -1;
     }
-    if (![self extractFramesFrom:buf expecting:&expecting]) break;
+    if (![self extractFramesFrom:buf expecting:&expecting capture:&expectingCaptureMs]) break;
   }
 
   [self closeSock:&fd];
@@ -109,19 +114,28 @@ static const CGFloat kMaxPixel = 640;                  // 解码後の一辺上�
 
 // バッファから multipart part を取り出せた分だけ offerFrame へ。
 // 戻り NO = 致命的 (プロトコル崩れ) → 再接続。
-- (BOOL)extractFramesFrom:(NSMutableData *)buf expecting:(NSInteger *)expecting {
+- (BOOL)extractFramesFrom:(NSMutableData *)buf expecting:(NSInteger *)expecting
+                  capture:(int64_t *)expectingCapture {
   while (YES) {
     if (*expecting < 0) {
       NSUInteger headerLen = 0, consumed = 0;
       if (![self findHeaderEnd:buf headerLen:&headerLen consumed:&consumed]) return YES;
       NSInteger len = [self contentLengthOf:buf headerLen:headerLen];
+      int64_t serverMs = [self longHeader:@"x-doorbell-server-time-ms"
+                                   inData:buf headerLen:headerLen];
+      if (serverMs > 0) {
+        int64_t nowMs = (int64_t)([[NSDate date] timeIntervalSince1970] * 1000.0);
+        _serverToClientOffsetMs = nowMs - serverMs;
+      }
+      *expectingCapture = [self longHeader:@"x-doorbell-capture-time-ms"
+                                    inData:buf headerLen:headerLen];
       [buf replaceBytesInRange:NSMakeRange(0, consumed) withBytes:NULL length:0];
       if (len > 0 && (NSUInteger)len <= kMaxFrame) {
         *expecting = len;
       } else {
         // content-length 無し/異常 → マーカ走査で 1 枚拾う (server 実装差の許容)
         NSData *jpeg = [self scanOneJpeg:buf];
-        if (jpeg) [self offerFrame:jpeg];
+        if (jpeg) [self offerFrame:jpeg captureMs:*expectingCapture];
         else if ([buf length] > kMaxFrame) [buf setLength:0];
       }
       continue;
@@ -130,7 +144,8 @@ static const CGFloat kMaxPixel = 640;                  // 解码後の一辺上�
     NSData *jpeg = [buf subdataWithRange:NSMakeRange(0, (NSUInteger)*expecting)];
     [buf replaceBytesInRange:NSMakeRange(0, (NSUInteger)*expecting) withBytes:NULL length:0];
     *expecting = -1;
-    [self offerFrame:jpeg];
+    [self offerFrame:jpeg captureMs:*expectingCapture];
+    *expectingCapture = 0;
   }
 }
 #pragma mark - 接続
@@ -257,6 +272,25 @@ static const CGFloat kMaxPixel = 640;                  // 解码後の一辺上�
   }
   return len;
 }
+
+- (int64_t)longHeader:(NSString *)wanted inData:(NSMutableData *)buf
+             headerLen:(NSUInteger)headerLen {
+  NSData *hd = [buf subdataWithRange:NSMakeRange(0, headerLen)];
+  NSString *header = [[NSString alloc] initWithData:hd encoding:NSASCIIStringEncoding];
+  for (NSString *rawLine in [header componentsSeparatedByString:@"\n"]) {
+    NSString *line = [rawLine stringByTrimmingCharactersInSet:
+        [NSCharacterSet whitespaceAndNewlineCharacterSet]];
+    NSRange colon = [line rangeOfString:@":"];
+    if (colon.location == NSNotFound) continue;
+    NSString *key = [[[line substringToIndex:colon.location]
+        stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]] lowercaseString];
+    if ([key isEqualToString:wanted]) {
+      return [[[line substringFromIndex:colon.location + 1]
+          stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]] longLongValue];
+    }
+  }
+  return 0;
+}
 // content-length 無し server 用: SOI(FFD8) から EOI(FFD9) までを 1 枚として拾う。
 - (NSData *)scanOneJpeg:(NSMutableData *)buf {
   const uint8_t soi[2] = {0xFF, 0xD8};
@@ -280,12 +314,13 @@ static const CGFloat kMaxPixel = 640;                  // 解码後の一辺上�
 
 #pragma mark - デコード (最新フレーム優先)
 
-- (void)offerFrame:(NSData *)jpeg {
+- (void)offerFrame:(NSData *)jpeg captureMs:(int64_t)captureMs {
   if (!_running) return;
   CFAbsoluteTime now = CFAbsoluteTimeGetCurrent();
   if (now - _lastFrameAt < kFrameInterval) return;  // fps 上限
   [_frameLock lock];
   _pendingJpeg = [jpeg copy];
+  _pendingCaptureMs = captureMs;
   BOOL busy = _decodeBusy;
   _decodeBusy = YES;
   [_frameLock unlock];
@@ -301,7 +336,9 @@ static const CGFloat kMaxPixel = 640;                  // 解码後の一辺上�
   while (YES) {
     [_frameLock lock];
     NSData *jpeg = _pendingJpeg;
+    int64_t captureMs = _pendingCaptureMs;
     _pendingJpeg = nil;
+    _pendingCaptureMs = 0;
     if (!jpeg) {
       _decodeBusy = NO;
       [_frameLock unlock];
@@ -314,7 +351,16 @@ static const CGFloat kMaxPixel = 640;                  // 解码後の一辺上�
       DBMjpegClient *__weak wself = self;
       dispatch_async(dispatch_get_main_queue(), ^{
         DBMjpegClient *s = wself;
-        if (s && s->_running && s->_onFrame) s->_onFrame(img);
+        if (s && s->_running && s->_onFrame) {
+          if (captureMs > 0) {
+            int64_t nowMs = (int64_t)([[NSDate date] timeIntervalSince1970] * 1000.0);
+            int64_t latency = nowMs - captureMs - s->_serverToClientOffsetMs;
+            if (latency >= 0 && latency < 10000)
+              DBH264Dbg(@"[mjpeg-latency] frame=%lu e2e=%lldms",
+                        (unsigned long)++s->_latencyFrame, (long long)latency);
+          }
+          s->_onFrame(img);
+        }
       });
     }
   }
@@ -339,6 +385,4 @@ static const CGFloat kMaxPixel = 640;                  // 解码後の一辺上�
 }
 
 @end
-
-
 

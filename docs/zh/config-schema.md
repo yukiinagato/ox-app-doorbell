@@ -35,6 +35,7 @@
       "local": {                                // 每设备配置（同样会复制 — 可远程修改）
         "ui_lang": "ja", "volume": 80, "screen_brightness": 70,
         "screensaver_after_s": 120,
+        "video": { "playback": "low_latency" }, // low_latency（默认）/ hls / mjpeg
         "camera": { "device_hint": "", "rotation": 0, "mjpeg_fps": 8,
                     "mjpeg_quality": 60, "resolution": "640x480",
                     // codec: "auto"=探测硬编 h264，不可用则退回 mjpeg / "mjpeg" / "h264"
@@ -81,6 +82,7 @@
 
   "ui": {
     "languages": ["ja", "en", "zh"],            // 门口机访客语言切换里展示的语言
+    "ringtone": "ding1",                          // ding1 / ding2 / classic / asset:<sha256>
     "visitor_lang_revert_s": 60                 // 无操作达此秒数后自动回到主语言 (ja)
   },
   // 文案的运行时覆盖（优先于内置 resx/strings.xml）。在管理页面「文案」标签 /

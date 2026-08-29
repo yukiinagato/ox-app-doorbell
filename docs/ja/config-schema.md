@@ -33,6 +33,7 @@
       "local": {                                // 端末別設定 (これも複製 — 遠隔変更可)
         "ui_lang": "ja", "volume": 80, "screen_brightness": 70,
         "screensaver_after_s": 120,
+        "video": { "playback": "low_latency" }, // low_latency（既定）/ hls / mjpeg
         "camera": { "device_hint": "", "rotation": 0, "mjpeg_fps": 8,
                     "mjpeg_quality": 60, "resolution": "640x480",
                     // codec: "auto"=ハードウェアエンコード (h264) を検出し不可なら mjpeg / "mjpeg" / "h264"
@@ -79,6 +80,7 @@
 
   "ui": {
     "languages": ["ja", "en", "zh"],            // 門口機の来訪者言語切替に出す言語
+    "ringtone": "ding1",                          // ding1 / ding2 / classic / asset:<sha256>
     "visitor_lang_revert_s": 60                 // 無操作でこの秒数後に主言語 (ja) へ自動復帰
   },
   // 文言の実行時上書き (組込 resx/strings.xml より優先)。管理画面「文言」タブ /

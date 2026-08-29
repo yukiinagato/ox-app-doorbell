@@ -133,9 +133,12 @@ void FrameBus::push(RawFrame&& f) {
   seq_++;
 }
 
-Bytes FrameBus::latestJpeg() {
+Bytes FrameBus::latestJpeg() { return latestJpeg(nullptr); }
+
+Bytes FrameBus::latestJpeg(int64_t* capture_ts_ms) {
   std::lock_guard<std::mutex> lk(mu_);
   if (seq_ == 0) return {};
+  if (capture_ts_ms) *capture_ts_ms = latest_.ts_ms;
   if (encoded_seq_ == seq_) return jpeg_cache_;  // 同一フレーム → キャッシュ
 
   // 1) RGB24 へ変換

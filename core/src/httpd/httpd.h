@@ -62,7 +62,7 @@ class Httpd {
 
   // 最新 JPEG の提供者 (任意スレッドから呼ばれる — スレッドセーフに実装すること)。
   // 空 vector = フレーム無し (503)。/stream.mjpeg は fps 間隔でこれをポーリングする。
-  void setJpegProvider(std::function<Bytes()> provider, int stream_fps = 8);
+  void setJpegProvider(std::function<Bytes(int64_t*)> provider, int stream_fps = 8);
 
   // /stream.mp4 (fMP4 ライブ — Phase 6a) のセッション提供者。リクエスト毎に provider が
   // 呼ばれ pull 関数を返す (null = h264 無効 → 503)。pull は「次に書くべきバイト列」を

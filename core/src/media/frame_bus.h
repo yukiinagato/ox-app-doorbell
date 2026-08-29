@@ -38,6 +38,7 @@ class FrameBus {
   // 最新フレームの JPEG。フレーム無しなら空。
   // 前回エンコードと同じフレームならキャッシュを返す (エンコードしない)。
   Bytes latestJpeg();
+  Bytes latestJpeg(int64_t* capture_ts_ms);
 
   // quality: 1-100 / max_width: 超えたら 1/2 縮小を繰り返す (0 = 無制限)
   void setJpegParams(int quality, int max_width);

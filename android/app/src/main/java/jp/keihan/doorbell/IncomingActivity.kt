@@ -45,6 +45,7 @@ class IncomingActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         app = application as App
+        app.incomingActivity = this
         door = intent?.getStringExtra(EXTRA_DOOR) ?: ""
         purpose = intent?.getStringExtra(EXTRA_PURPOSE) ?: ""
         visitorLang = intent?.getStringExtra(EXTRA_LANG) ?: ""
@@ -119,10 +120,23 @@ class IncomingActivity : Activity() {
     }
 
     override fun onDestroy() {
+        if (app.incomingActivity === this) app.incomingActivity = null
         ui.removeCallbacksAndMessages(null)
         streamer?.stop()
         if (sipCalling) app.core.sipHangup()
         super.onDestroy()
+    }
+
+    /** 室外機の取消後も映像画面は残し、短い猶予後にだけ閉じる。 */
+    fun onCallCancelled(cancelledDoor: String) {
+        if (cancelledDoor.isNotEmpty() && door.isNotEmpty() && cancelledDoor != door) return
+        runOnUiThread {
+            if (isFinishing || inCall) return@runOnUiThread
+            findViewById<TextView>(R.id.status_text).text =
+                texts.t("ring.cancelled", R.string.ring_cancelled)
+            ui.removeCallbacks(autoClose)
+            ui.postDelayed(autoClose, CANCELLED_CLOSE_MS)
+        }
     }
 
     // ---------- 用件 / 訪客言語バッジ ----------
@@ -259,19 +273,22 @@ class IncomingActivity : Activity() {
         val ids = replies.keys().asSequence().toMutableList()
         ids.sortWith(compareBy({ replies.optJSONObject(it)?.optInt("order", 999) ?: 999 }, { it }))
         var first: Button? = null
+        val replyTextSize = if (ids.size >= 5) 16f else 19f
         for ((idx, id) in ids.withIndex()) {
             val q = replies.optJSONObject(id) ?: continue
             val b = Button(this)
             b.text = labelOf(q, lang, id)
-            b.textSize = 22f
+            b.textSize = replyTextSize
+            b.maxLines = 2
             @Suppress("DEPRECATION")  // minSdk 21 (Context.getColor は API 23+)
             b.setTextColor(resources.getColor(R.color.fg))
             b.background = getDrawable(R.drawable.bg_tv_button)
             b.isFocusable = true
             b.isAllCaps = false
             val lp = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, dp(72))
-            if (idx > 0) lp.topMargin = dp(16)
+                LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f)
+            lp.topMargin = dp(4)
+            lp.bottomMargin = dp(4)
             b.layoutParams = lp
             b.setOnClickListener { sendReply(id, b.text.toString()) }
             list.addView(b, list.childCount - 1)  // close_button の手前へ
@@ -297,6 +314,7 @@ class IncomingActivity : Activity() {
         private const val EXTRA_PURPOSE = "purpose"
         private const val EXTRA_LANG = "visitor_lang"
         private const val AUTO_CLOSE_MS = 90_000L
+        private const val CANCELLED_CLOSE_MS = 15_000L
         private const val DIRECT_PORT = 47190  // docs/network-ports.md / sipctl.h と一致
 
         /** chime イベントから起動 (App — core スレッドから呼ばれるため NEW_TASK)。 */

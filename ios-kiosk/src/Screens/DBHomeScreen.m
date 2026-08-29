@@ -599,7 +599,8 @@ static UIColor *DBNightClk(void) { return [UIColor colorWithRed:0.545 green:0.14
 
 - (void)playChime:(NSDictionary *)ev {
   NSString *path = [DBConfigUtil evStr:ev key:@"audio_path"];
-  if (![_audio playAssetPath:path]) AudioServicesPlaySystemSound((SystemSoundID)1013);
+  NSString *sound = [DBConfigUtil evStr:ev key:@"sound"];
+  [_audio playChimeSound:([sound length] ? sound : @"ding1") assetPath:path];
 }
 
 - (void)stopChime {
@@ -656,7 +657,6 @@ static UIColor *DBNightClk(void) { return [UIColor colorWithRed:0.545 green:0.14
 }
 
 @end
-
 
 
 

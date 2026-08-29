@@ -43,7 +43,8 @@ FRAMEWORKS := -framework Foundation -framework UIKit -framework CoreGraphics \
               -framework QuartzCore -framework CFNetwork -framework AudioToolbox \
               -framework CoreAudio -framework AVFoundation -framework Security \
               -framework CoreFoundation -framework SystemConfiguration \
-              -framework ImageIO -framework MediaPlayer
+              -framework ImageIO -framework MediaPlayer -framework CoreMedia \
+              -framework CoreVideo -framework OpenGLES -framework GLKit
 # 静的 C++ ランタイム (順序: c++ → c++abi → unwind → builtins)。libdoorbell_all.a が要求。
 RTLIBS := $(TC_LIB)/libc++.a $(TC_LIB)/libc++abi.a $(TC_LIB)/libunwind.a $(CLANG_RT)
 

@@ -3,6 +3,7 @@
 /build-*/
 /build-ios5/
 /core/build/
+/core/build-*/
 # iOS5/armv7 (旧 iPad) core クロスビルドの成果物置き場 (build_core_ios5.sh)
 /ios-legacy/lib/
 # iOS5/armv7 殻 (.app) のビルド成果物 (build_app.sh)

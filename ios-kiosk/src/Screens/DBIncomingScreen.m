@@ -5,6 +5,7 @@
 #import "../Core/DBCoreBridge.h"
 #import "../Core/DBTexts.h"
 #import "../Media/DBH264Player.h"
+#import "../Media/DBLowLatencyH264Player.h"
 #import "../Net/DBMjpegClient.h"
 #import "../Support/DBAppDelegate.h"
 #import "DBRouter.h"
@@ -23,6 +24,8 @@ static const NSTimeInterval kCancelledCloseS = 15;
   NSDictionary *_cfg;
   DBMjpegClient *_streamer;
   DBH264Player *_h264;         // H.264 fMP4 (/stream.mp4) 再生 — 成功時はこちら優先
+  DBLowLatencyH264Player *_lowLatency;
+  NSString *_videoPlayback;    // low_latency (default) | hls | mjpeg
   NSString *_incomingStreamUrl;
   NSString *_incomingStreamMp4Url;
   NSString *_peerHost;
@@ -62,6 +65,7 @@ static const NSTimeInterval kCancelledCloseS = 15;
     _incomingStreamUrl = @"";
     _incomingStreamMp4Url = @"";
     _sipMode = @"";
+    _videoPlayback = @"low_latency";
     _directPort = 47190;
     _replyButtons = [[NSMutableArray alloc] init];
     [self buildUi];
@@ -238,6 +242,13 @@ static const NSTimeInterval kCancelledCloseS = 15;
       s->_incomingStreamUrl = url ?: @"";
       NSString *mp4 = peer ? [DBConfigUtil str:peer path:@"stream_mp4"] : nil;
       s->_incomingStreamMp4Url = mp4 ?: @"";
+      NSString *selfId = [DBConfigUtil str:st path:@"node.id"];
+      NSString *playbackPath = [selfId length]
+          ? [NSString stringWithFormat:@"devices.%@.local.video.playback", selfId] : nil;
+      NSString *playback = playbackPath ? [DBConfigUtil str:cfg path:playbackPath] : nil;
+      if (![playback isEqualToString:@"hls"] && ![playback isEqualToString:@"mjpeg"])
+        playback = @"low_latency";
+      s->_videoPlayback = playback;
       NSDictionary *replies = [DBConfigUtil dig:cfg path:@"quick_replies"];
       NSLog(@"[doorbell][DBG] incoming: peer=%@ stream=%@ replies=%lu",
             s->_peerHost ?: @"-", s->_incomingStreamUrl,
@@ -316,23 +327,41 @@ static const NSTimeInterval kCancelledCloseS = 15;
 
 #pragma mark - 映像
 
-/* 二股方式 (実機検証に基づく):
- *  - MJPEG を**即時**開始 (A5 の软件解码だが 8fps なら軽い — ユーザは即座に映像が見える)
- *  - 同時に H.264 (/stream.mp4 → ローカル HLS → HW デコード) を立上げ
- *  - H.264 が PLAYING になったら MJPEG を止めて切替 (HW 解码で滑らか+省電力)
- *  - H.264 失敗時は MJPEG 継続 (黒画面にはならない) */
+/* 管理員可選播放方式:
+ *  low_latency (default): fMP4 逐幀 → VideoToolbox → OpenGL, 不經 HLS 緩衝
+ *  hls: 原有 fMP4 → 本機 HLS → MPMoviePlayer 路徑
+ *  mjpeg: 只使用 MJPEG。H.264 失敗時始終回落到 MJPEG，避免黑屏。 */
 - (void)startVideo:(NSString *)mjpegUrl {
   [self stopVideoPlayers];
   _noVideoLabel.hidden = NO;
   _liveView.image = nil;
-  NSLog(@"[doorbell][DBG] incoming: startVideo mp4=%@ mjpeg=%@",
-        _incomingStreamMp4Url, mjpegUrl ?: @"(null)");
+  NSLog(@"[doorbell][DBG] incoming: startVideo mode=%@ mp4=%@ mjpeg=%@",
+        _videoPlayback, _incomingStreamMp4Url, mjpegUrl ?: @"(null)");
 
   /* 1) MJPEG 即時開始 (H.264 の準備中の表示) */
   [self startMjpegOnly:mjpegUrl];
 
-  /* 2) H.264 を後追いで立上げ (就緒したら切替) */
-  if ([_incomingStreamMp4Url length] > 0) {
+  if ([_videoPlayback isEqualToString:@"mjpeg"] ||
+      [_incomingStreamMp4Url length] == 0) return;
+
+  __weak DBIncomingScreen *wself = self;
+  if ([_videoPlayback isEqualToString:@"low_latency"]) {
+    _lowLatency = [[DBLowLatencyH264Player alloc] initWithURL:_incomingStreamMp4Url
+        container:_liveView onState:^(DBLowLatencyPlayerState st) {
+      DBIncomingScreen *s = wself;
+      if (!s || !s.superview) return;
+      if (st == DBLowLatencyPlayerPlaying) {
+        [s->_streamer stop]; s->_streamer = nil;
+        s->_noVideoLabel.hidden = YES;
+        NSLog(@"[doorbell] incoming: switched to low-latency H.264");
+      } else if (st == DBLowLatencyPlayerFailed) {
+        [s->_lowLatency stop]; s->_lowLatency = nil;
+        if (!s->_streamer) [s startMjpegOnly:s->_incomingStreamUrl];
+        NSLog(@"[doorbell] incoming: low-latency H.264 NG → MJPEG");
+      }
+    }];
+    [_lowLatency start];
+  } else {
     __weak DBIncomingScreen *wself = self;
     _h264 = [[DBH264Player alloc] initWithURL:_incomingStreamMp4Url
                                     container:_liveView
@@ -380,6 +409,8 @@ static const NSTimeInterval kCancelledCloseS = 15;
   _streamer = nil;
   [_h264 stop];
   _h264 = nil;
+  [_lowLatency stop];
+  _lowLatency = nil;
 }
 
 #pragma mark - タイマ

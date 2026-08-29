@@ -182,8 +182,8 @@ static void SegSink(void *ctx, const uint8_t *data, size_t len) {
 }
 
 - (void)fmp4Demux:(DBFmp4Demux *)demux sample:(NSData *)avcc key:(BOOL)key
-             dtsMs:(int64_t)dtsMs durMs:(int64_t)durMs {
-  (void)demux; (void)durMs;
+         captureMs:(int64_t)captureMs dtsMs:(int64_t)dtsMs durMs:(int64_t)durMs {
+  (void)demux; (void)captureMs; (void)durMs;
   if (!_mux || !_sps || !_pps) return;
   BOOL isKey = key || AvccHasIdr(avcc);
 

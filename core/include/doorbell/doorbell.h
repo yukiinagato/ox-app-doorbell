@@ -87,6 +87,12 @@ DB_API void db_core_press(db_core* c, const char* door_id);
  * "purpose" と選択中の訪客言語 "visitor_lang" が載る。 */
 DB_API void db_core_press_purpose(db_core* c, const char* door_id, const char* purpose);
 
+/* 呼出済みイベントへの用件追記。purpose_selected を複製するが呼出ルールは再実行しない。 */
+DB_API void db_core_select_purpose(db_core* c, const char* door_id, const char* purpose);
+
+/* 室外機の取消。call_cancelled を全ノードへ複製する。 */
+DB_API void db_core_cancel_call(db_core* c, const char* door_id);
+
 /* 訪客言語切替 (門口機の言語ボタン)。door NULL/"" = 自機担当 door。
  * lang: "en" 等 (設定 ui.languages が候補)。"ja" で即時復帰。
  * ui.visitor_lang_revert_s 秒の無操作で自動的に ja へ戻る。全ノードの殻に

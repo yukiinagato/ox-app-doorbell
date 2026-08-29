@@ -4,6 +4,9 @@
 - **git push 到 GitHub 必须用户明确提出后才执行**。本地 commit 可以做, push 不要主动做。
 - **等待要轮询, 不要死 sleep**：每 ~1s 检查一次条件 (CI 完成、文件出现、进程存活等),
   满足立即继续; 固定 sleep 只作为超时上限。
+- **【用户明确指示】ios-kiosk 只运行在越狱 iOS 设备上, 完全不用考虑 App Store 审核**：
+  私有 API、私有框架 (dlopen/dlsym)、塞 ffmpeg 等第三方库都可以; "怎么高效就怎么实现"。
+  系统/公开 API 不支持的功能, 优先考虑私有框架与底层手段, 而不是绕路。
 
 设备: iPad1,1, iOS 5.1.1 (9B206), 越狱 (OpenSSH + AppSync Unified), USB/SSH root@ipad 密码 alpine。
 无摄像头、无内置麦克风。常供电 kiosk。
