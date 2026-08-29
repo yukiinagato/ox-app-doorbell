@@ -107,3 +107,26 @@
 - 闪退根因 = 上述 CA commit 内 present 的 iOS 5.1 UIKit bug, 已修复并装机验证
   (reboot 后 uiopen 启动, 45s+ 无新崩溃)。
 - 19:52-19:56 的 dyld SIGKILL 全部是安装时序/LaunchServices 状态问题, 与代码无关。
+
+## ios-kiosk 重写版 (2026-08-29 深夜, 全面重构后新增的坑)
+- **`dict[@"key"]` 下标语法是 iOS 6+**。iOS 5.1 实机直接
+  `objectForKeyedSubscript: unrecognized selector` 起动即死 (编译器不报错!)。
+  → ios-kiosk 全库禁用下标语法, 一律 `objectForKey:`/`setObject:forKey:`。
+- **`[UIButton buttonWithType:...]` 生成后再调 `init`/`initWithFrame:` 在 iOS 5 是
+  assertion 崩溃** ("unsafe to initWithFrame: already initialized UIButton")。
+  → buttonWithType 创建后只能 setFrame, 绝不再 init。
+- **ARC 在 armv7 + min iOS 5.1 完全可用** (`-fobjc-arc`; 所需 runtime 符号 iOS 5.0+ 全有,
+  clang 按 deployment target 不发 iOS 8+ 的 objc_alloc)。旧 Makefile "ARC 不可"是误判。
+  ios-kiosk 全库 ARC。
+- **core JSON 快照绝不在 main 线程同步取**: 起动直后的 config_changed/peers_changed storm ×
+  core 内部锁 → main 被 15s+ 塞死 → watchdog 自杀 (表现为"UI 没反应/闪退")。
+  → ios-kiosk: 背景直列 queue 收集 (dirty 合并) + main 只反映。
+- **看门狗自杀重启会触发 SpringBoard "failed to launch too many times" 熔断吗?** 不会
+  (_exit 是正常退出), 但崩溃风暴 (如上述下标语法) 会 → 需 reboot 清状态再验证。
+- **多开 idevicesyslog 会互抢连接且抓不到新行** (ASL 缓冲回放会混入旧行) → 验证前
+  `pkill -f idevicesyslog`, 并用设备端 `date` 对齐时间戳过滤。
+- **探活新手段**: Mac 侧 `iproxy 8180 47180` 后 `curl http://localhost:8180/` —
+  内嵌 core httpd 有响应 (302/unauthorized 均算活) = app 进程存活, 无需截图。
+- ios-kiosk 版结构: 屏幕 = UIView + DBRouter 单点切换 (无 present/dismiss/UIAlertView),
+  MJPEG = BSD socket 线程收流 + 后台解码 (main 只 blit)。详见 ios-kiosk/README.md。
+
