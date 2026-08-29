@@ -1,5 +1,10 @@
 # iPad 1 (iOS 5.1.1) 门铃 app 构建/调试踩坑记录
 
+## 工作规约 (用户要求, 必须遵守)
+- **git push 到 GitHub 必须用户明确提出后才执行**。本地 commit 可以做, push 不要主动做。
+- **等待要轮询, 不要死 sleep**：每 ~1s 检查一次条件 (CI 完成、文件出现、进程存活等),
+  满足立即继续; 固定 sleep 只作为超时上限。
+
 设备: iPad1,1, iOS 5.1.1 (9B206), 越狱 (OpenSSH + AppSync Unified), USB/SSH root@ipad 密码 alpine。
 无摄像头、无内置麦克风。常供电 kiosk。
 
