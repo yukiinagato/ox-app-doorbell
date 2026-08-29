@@ -87,8 +87,11 @@ int main() {
   const size_t es = 14;
   const uint8_t startCode[] = {0x00, 0x00, 0x00, 0x01};
   assert(memcmp(&pes[es], startCode, sizeof(startCode)) == 0);
-  assert(pes[es + 4] == 0x67);
-  const size_t ppsAt = es + 4 + sizeof(sps);
+  assert(pes[es + 4] == 0x09 && pes[es + 5] == 0xF0);  // AUD
+  const size_t spsAt = es + 6;
+  assert(memcmp(&pes[spsAt], startCode, sizeof(startCode)) == 0);
+  assert(pes[spsAt + 4] == 0x67);
+  const size_t ppsAt = spsAt + 4 + sizeof(sps);
   assert(memcmp(&pes[ppsAt], startCode, sizeof(startCode)) == 0);
   assert(pes[ppsAt + 4] == 0x68);
   const size_t auAt = ppsAt + 4 + sizeof(pps);

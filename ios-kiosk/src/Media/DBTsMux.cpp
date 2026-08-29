@@ -155,12 +155,16 @@ void dbtsmux_feed_au(DBTsMux *m, const uint8_t *au, size_t len,
                      int64_t pts_ms, int64_t dts_ms, int key) {
   if (!m || !au || len == 0 || len > kMaxAccessUnitBytes) return;
 
+  // Old iOS HLS hardware decoders are much stricter than desktop ffmpeg about
+  // Annex-B access-unit boundaries. Prefix every PES with an AUD (nal_unit 9)
+  // so each picture can be submitted to the decoder unambiguously.
+  const size_t aud_bytes = 6;  // 00 00 00 01 09 F0
   const size_t parameter_bytes =
       (key && m->sps_len && m->pps_len) ? m->sps_len + m->pps_len + 8 : 0;
   const int has_dts = dts_ms != pts_ms;
   const size_t optional_header = has_dts ? 10 : 5;
   const size_t pes_header = 9 + optional_header;
-  const size_t es_len = parameter_bytes + len;
+  const size_t es_len = aud_bytes + parameter_bytes + len;
   const size_t total = pes_header + es_len;
   if (!ensure_pes_capacity(m, total)) return;
 
@@ -185,6 +189,9 @@ void dbtsmux_feed_au(DBTsMux *m, const uint8_t *au, size_t len,
 
   size_t off = pes_header;
   static const uint8_t sc[4] = {0, 0, 0, 1};
+  static const uint8_t aud[2] = {0x09, 0xF0};
+  memcpy(p + off, sc, sizeof(sc)); off += sizeof(sc);
+  memcpy(p + off, aud, sizeof(aud)); off += sizeof(aud);
   if (parameter_bytes) {
     memcpy(p + off, sc, sizeof(sc)); off += sizeof(sc);
     memcpy(p + off, m->sps, m->sps_len); off += m->sps_len;

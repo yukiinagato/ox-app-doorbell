@@ -6,6 +6,13 @@
 #import <string.h>
 #import <unistd.h>
 
+void DBH264Dbg(NSString *fmt, ...);
+
+// Playlist stays short for iOS 5, while old segments remain fetchable long
+// enough for the A4-era media pipeline to finish probing before its first GET.
+static const NSUInteger kPlaylistSegmentCount = 5;
+static const NSUInteger kRetainedSegmentCount = 18;
+
 static BOOL sendAll(int fd, const void *bytes, size_t length) {
   const uint8_t *p = (const uint8_t *)bytes;
   size_t sent = 0;
@@ -28,6 +35,7 @@ static BOOL sendAll(int fd, const void *bytes, size_t length) {
   NSMutableArray *_segs;      // NSData (TS)
   NSMutableArray *_durs;      // NSNumber ms
   uint64_t _firstSeq;         // _segs[0] の通し番号 (0 始まり)
+  long long _targetDuration;  // HLS target duration must not decrease
   NSLock *_lock;
   volatile BOOL _running;
 }
@@ -40,6 +48,7 @@ static BOOL sendAll(int fd, const void *bytes, size_t length) {
     _durs = [[NSMutableArray alloc] init];
     _lock = [[NSLock alloc] init];
     _firstSeq = 0;
+    _targetDuration = 2;
   }
   return self;
 }
@@ -92,6 +101,7 @@ static BOOL sendAll(int fd, const void *bytes, size_t length) {
   [_segs removeAllObjects];
   [_durs removeAllObjects];
   _firstSeq = 0;
+  _targetDuration = 2;
   [_lock unlock];
 }
 
@@ -137,8 +147,12 @@ static BOOL sendAll(int fd, const void *bytes, size_t length) {
     char method[8] = {0};
     char requestPath[1024] = {0};
     if (sscanf(req, "%7s %1023s", method, requestPath) != 2 ||
-        strcmp(method, "GET") != 0) requestPath[0] = 0;
+        (strcmp(method, "GET") != 0 && strcmp(method, "HEAD") != 0))
+      requestPath[0] = 0;
     NSString *path = [NSString stringWithUTF8String:requestPath] ?: @"";
+    NSRange query = [path rangeOfString:@"?"];
+    if (query.location != NSNotFound) path = [path substringToIndex:query.location];
+    BOOL headOnly = strcmp(method, "HEAD") == 0;
 
     NSData *body = nil;
     NSString *ctype = nil;
@@ -162,7 +176,7 @@ static BOOL sendAll(int fd, const void *bytes, size_t length) {
                           @"Cache-Control: no-store\r\n\r\n",
                           ctype, (unsigned long)[body length]];
       NSData *h = [resp dataUsingEncoding:NSUTF8StringEncoding];
-      if (sendAll(fd, [h bytes], [h length]))
+      if (sendAll(fd, [h bytes], [h length]) && !headOnly)
         sendAll(fd, [body bytes], [body length]);
     } else {
       [resp appendString:@"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n"
@@ -170,6 +184,8 @@ static BOOL sendAll(int fd, const void *bytes, size_t length) {
       NSData *h = [resp dataUsingEncoding:NSUTF8StringEncoding];
       sendAll(fd, [h bytes], [h length]);
     }
+    DBH264Dbg(@"[hls] %s %@ -> %d (%lu bytes)", method, path,
+              body ? 200 : 404, (unsigned long)[body length]);
     close(fd);
   }
 }
@@ -178,15 +194,13 @@ static BOOL sendAll(int fd, const void *bytes, size_t length) {
   [_lock lock];
   NSMutableData *out = [NSMutableData data];
   NSMutableString *s = [NSMutableString string];
-  int64_t maxDurationMs = 1000;
-  for (NSNumber *duration in _durs)
-    if ([duration longLongValue] > maxDurationMs) maxDurationMs = [duration longLongValue];
-  long long targetDuration = (maxDurationMs + 999) / 1000;
-  if (targetDuration < 2) targetDuration = 2;
   [s appendFormat:@"#EXTM3U\r\n#EXT-X-VERSION:3\r\n#EXT-X-TARGETDURATION:%lld\r\n",
-                  targetDuration];
-  [s appendFormat:@"#EXT-X-MEDIA-SEQUENCE:%llu\r\n", (unsigned long long)_firstSeq];
-  for (NSUInteger i = 0; i < [_segs count]; i++) {
+                  _targetDuration];
+  NSUInteger count = [_segs count];
+  NSUInteger start = count > kPlaylistSegmentCount ? count - kPlaylistSegmentCount : 0;
+  [s appendFormat:@"#EXT-X-MEDIA-SEQUENCE:%llu\r\n",
+                  (unsigned long long)(_firstSeq + start)];
+  for (NSUInteger i = start; i < count; i++) {
     double d = [[_durs objectAtIndex:i] doubleValue] / 1000.0;
     if (d < 0.1) d = 0.1;
     [s appendFormat:@"#EXTINF:%.3f,\r\n/seg%llu.ts\r\n", d,
@@ -218,7 +232,10 @@ static BOOL sendAll(int fd, const void *bytes, size_t length) {
   [_lock lock];
   [_segs addObject:ts];
   [_durs addObject:[NSNumber numberWithDouble:(double)durationMs]];
-  while ([_segs count] > 5) {
+  long long target = (durationMs + 999) / 1000;
+  if (target < 2) target = 2;
+  if (target > _targetDuration) _targetDuration = target;
+  while ([_segs count] > kRetainedSegmentCount) {
     [_segs removeObjectAtIndex:0];
     [_durs removeObjectAtIndex:0];
     _firstSeq++;

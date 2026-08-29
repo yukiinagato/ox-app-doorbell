@@ -103,6 +103,12 @@ class VideoEncoder(private val core: DoorbellCore) {
             fmt.setInteger(MediaFormat.KEY_BIT_RATE, bitrateKbps * 1000)
             fmt.setInteger(MediaFormat.KEY_FRAME_RATE, fps)
             fmt.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, GOP_S)
+            // iPad 1 / iOS 5 のハードウェアデコーダは High Profile を受けられない。
+            // profile/level を省略すると一部の Android encoder が High を選ぶため、
+            // 互換性のある Baseline Level 3.1 を明示する。文字列 key を使うのは
+            // minSdk 21 で MediaFormat.KEY_LEVEL の API 差を踏まないため。
+            fmt.setInteger("profile", MediaCodecInfo.CodecProfileLevel.AVCProfileBaseline)
+            fmt.setInteger("level", MediaCodecInfo.CodecProfileLevel.AVCLevel31)
             val c = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_VIDEO_AVC)
             c.configure(fmt, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
             c.start()
@@ -161,6 +167,6 @@ class VideoEncoder(private val core: DoorbellCore) {
 
     companion object {
         private const val TAG = "doorbell-encoder"
-        private const val GOP_S = 2  // キーフレーム間隔 (秒) — MSE 参加者の初描画待ちに直結
+        private const val GOP_S = 1  // 秒。HLS の初期 3 セグメント待ちと遅延を抑える
     }
 }

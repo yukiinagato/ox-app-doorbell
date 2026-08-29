@@ -122,7 +122,9 @@ static void SegSink(void *ctx, const uint8_t *data, size_t len) {
   [_demux start];
 
   __weak DBH264Player *weakSelf = self;
-  dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(15.0 * NSEC_PER_SEC)),
+  // Encoder startup is demand-driven and the first three IDR-aligned HLS
+  // segments can legitimately take more than 15 seconds on the door station.
+  dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(30.0 * NSEC_PER_SEC)),
                  dispatch_get_main_queue(), ^{
     DBH264Player *player = weakSelf;
     if (player && player->_generation == generation &&
@@ -170,7 +172,10 @@ static void SegSink(void *ctx, const uint8_t *data, size_t len) {
             (long long)duration);
   _seg = nil;
 
-  if (!_movieStartScheduled && [_server segmentCount] >= 2) {
+  // A live HLS playlist needs enough media for the iOS 5 player to choose a
+  // stable start point; two segments frequently leaves it probing an entry
+  // that rolls out before the first media request.
+  if (!_movieStartScheduled && [_server segmentCount] >= 3) {
     _movieStartScheduled = YES;
     dispatch_async(dispatch_get_main_queue(), ^{ [self startMovieOnMain]; });
   }
