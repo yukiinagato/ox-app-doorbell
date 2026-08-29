@@ -25,6 +25,15 @@
 - `killall SpringBoard` (root) 可用; iOS 2-6 装进 /Applications 后 respring/重启即可看到图标。
 
 ## 安装 / 启动的坑 (重要!)
+- **安装必须按此顺序** (install_via_ssh.sh 已按此实现, 勿改回):
+  1. `killall SpringBoard` (防"拷贝中被 resume"竞态)
+  2. scp 拷贝
+  3. chmod + **核对设备端 `openssl sha1` 与本地 `shasum` 一致**
+  4. `su mobile -c /usr/bin/uicache` (root 会报 "cannot open cache file") — **必须确认输出 `uicache-ok`**
+  5. `killall SpringBoard` (用新缓存 respring)
+  6. 让用户**实际点图标**验证 (uiopen 能启动 ≠ 图标点按正常!)
+- **uicache 被中断 (SSH 断连/respring 打断) 后的状态**：`uiopen` 可能仍能启动 (有迷惑性！),
+  但之后**点图标全部 dyld SIGKILL** → 重启 iPad 清状态, 重新按正确顺序装。
 - **绝不在 app 可能被 SpringBoard resume 时覆盖二进制**: scp 覆盖中 SpringBoard 拉起 app
   → SIGKILL (EXC_CRASH, 死在 dyld), 且 LaunchServices 状态会坏掉 → 之后**所有合法启动
   (含 uiopen) 都在 dyld 阶段被 SIGKILL**。现象上像"app 必闪退"。
@@ -34,7 +43,8 @@
   ios-legacy/Doorbell/Info.plist)。
 - 验证 app 是否存活: 看 /var/mobile/Library/Logs/CrashReporter/ 有无新 Doorbell_*.plist
   (失败模式 = 启动后 1-2 秒内出新 log; 15-45s 无新 log = 存活)。
-- `idevicescreenshot` 在 iOS 5 上不可用 (需挂 Developer Disk Image)。
+- `idevicescreenshot` 在 iOS 5 上不可用 (需挂 Developer Disk Image); 5.1.1 的 IPSW 里没有
+  DDI, Legacy-iOS-Kit 自带的 iOS_DDI 只有现代 iOS 的 → 别走截图这条路。
 
 ## 崩溃日志分析
 - 位置 `/var/mobile/Library/Logs/CrashReporter/`。
