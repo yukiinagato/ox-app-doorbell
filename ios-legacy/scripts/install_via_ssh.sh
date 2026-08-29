@@ -29,9 +29,19 @@ else
 fi
 
 OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=10 -o HostKeyAlgorithms=+ssh-rsa"
+echo "=== SpringBoard 停止 (コピー中に SpringBoard が resume するのを防ぐ) ==="
+# これを先にやらないと、コピー中に SpringBoard が app を resume して SIGKILL (dyld) +
+# LaunchServices 状態が壊れ、以後アイコンタップ起動が全部 dyld SIGKILL になる。
+run_ssh $OPTS -p "$PORT" "$SSHHOST" "/usr/bin/killall SpringBoard >/dev/null 2>&1; sleep 2; true"
 echo "=== /Applications へ配置 ==="
 run_ssh $OPTS -p "$PORT" "$SSHHOST" "mkdir -p /Applications"
 run_scp $OPTS -P "$PORT" -r "$APP" "$SSHHOST:/Applications/"
-echo "=== 権限 + uicache ==="
-run_ssh $OPTS -p "$PORT" "$SSHHOST" "chmod +x /Applications/Doorbell.app/Doorbell; uicache || (killall SpringBoard)"
-echo "完了。ホーム画面に「ドアホン」が出るはず (出なければ端末を再起動)。"
+echo "=== 権限 + 整合性確認 ==="
+run_ssh $OPTS -p "$PORT" "$SSHHOST" "chmod +x /Applications/Doorbell.app/Doorbell; openssl sha1 /Applications/Doorbell.app/Doorbell"
+shasum "$APP/Doorbell" | awk '{print "local  SHA1:", $1}'
+echo "=== uicache (必ず mobile ユーザで実行 — root はキャッシュを開けない) ==="
+# SpringBoard を止める前に必ず完了させる (ここが失敗/中断するとアイコン起動が壊れる)。
+run_ssh $OPTS -p "$PORT" "$SSHHOST" "su mobile -c /usr/bin/uicache && echo uicache-ok"
+echo "=== respring (新鮮なキャッシュで起動) ==="
+run_ssh $OPTS -p "$PORT" "$SSHHOST" "/usr/bin/killall SpringBoard >/dev/null 2>&1; true"
+echo "完了。ホーム画面の「ドアホン」アイコンをタップして起動すること (uiopen だけでなく実タップでも)。出なければ端末を再起動。"
