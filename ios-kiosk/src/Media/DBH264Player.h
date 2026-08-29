@@ -1,5 +1,6 @@
 #import <UIKit/UIKit.h>
 #import <MediaPlayer/MediaPlayer.h>
+#import "DBVideoStats.h"
 
 // doorbell-core の fMP4 ライブをローカル HLS に変換し、iOS 5 標準の
 // MPMoviePlayerController でハードウェア再生する。失敗時は呼び出し側が MJPEG に戻す。
@@ -22,5 +23,6 @@ typedef NS_ENUM(NSInteger, DBH264PlayerState) {
 - (void)start;   // 冪等
 - (void)stop;    // 冪等。movie player 解放 + 通知停止
 - (DBH264PlayerState)state;
+- (DBVideoStats)videoStats;  // HLS playback-position based estimate; main thread
 
 @end

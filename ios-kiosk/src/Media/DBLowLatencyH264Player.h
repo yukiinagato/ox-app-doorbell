@@ -1,4 +1,5 @@
 #import <UIKit/UIKit.h>
+#import "DBVideoStats.h"
 
 typedef NS_ENUM(NSInteger, DBLowLatencyPlayerState) {
   DBLowLatencyPlayerIdle = 0,
@@ -15,5 +16,6 @@ typedef NS_ENUM(NSInteger, DBLowLatencyPlayerState) {
 - (void)start;
 - (void)stop;
 - (DBLowLatencyPlayerState)state;
+- (DBVideoStats)videoStats;  // displayed-frame stats; main thread
 
 @end

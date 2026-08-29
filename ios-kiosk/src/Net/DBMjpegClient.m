@@ -4,6 +4,7 @@ void DBH264Dbg(NSString *fmt, ...);
 #import <arpa/inet.h>
 #import <netdb.h>
 #import <netinet/in.h>
+#import <math.h>
 #import <sys/socket.h>
 #import <sys/time.h>
 #import <unistd.h>
@@ -26,6 +27,11 @@ static const CGFloat kMaxPixel = 640;                  // 解码後の一辺上�
   CFAbsoluteTime _lastFrameAt; // decode queue 専用
   int64_t _serverToClientOffsetMs;
   NSUInteger _latencyFrame;
+  int64_t _currentLatencyMs;
+  int64_t _previousLatencyMs;
+  double _jitterMs;
+  double _framesPerSecond;
+  CFAbsoluteTime _lastStatsFrameAt;
 }
 
 - (id)initWithURLString:(NSString *)urlString onFrame:(DBMjpegFrameHandler)onFrame {
@@ -45,8 +51,19 @@ static const CGFloat kMaxPixel = 640;                  // 解码後の一辺上�
   [self stop];
 }
 
+- (DBVideoStats)videoStats {
+  return DBVideoStatsMake(_latencyFrame > 0, (NSInteger)_currentLatencyMs,
+                          (NSInteger)(_jitterMs + 0.5), (CGFloat)_framesPerSecond);
+}
+
 - (void)start {
   if (_running) return;
+  _latencyFrame = 0;
+  _currentLatencyMs = 0;
+  _previousLatencyMs = 0;
+  _jitterMs = 0;
+  _framesPerSecond = 0;
+  _lastStatsFrameAt = 0;
   _running = YES;
   [NSThread detachNewThreadSelector:@selector(threadMain) toTarget:self withObject:nil];
 }
@@ -352,12 +369,29 @@ static const CGFloat kMaxPixel = 640;                  // 解码後の一辺上�
       dispatch_async(dispatch_get_main_queue(), ^{
         DBMjpegClient *s = wself;
         if (s && s->_running && s->_onFrame) {
+          CFAbsoluteTime frameAt = CFAbsoluteTimeGetCurrent();
+          if (s->_lastStatsFrameAt > 0) {
+            CFAbsoluteTime dt = frameAt - s->_lastStatsFrameAt;
+            if (dt > 0.005 && dt < 2.0) {
+              double instantFps = 1.0 / dt;
+              s->_framesPerSecond = s->_framesPerSecond > 0
+                  ? s->_framesPerSecond * 0.8 + instantFps * 0.2 : instantFps;
+            }
+          }
+          s->_lastStatsFrameAt = frameAt;
           if (captureMs > 0) {
             int64_t nowMs = (int64_t)([[NSDate date] timeIntervalSince1970] * 1000.0);
             int64_t latency = nowMs - captureMs - s->_serverToClientOffsetMs;
-            if (latency >= 0 && latency < 10000)
+            if (latency >= 0 && latency < 10000) {
+              if (s->_latencyFrame > 0) {
+                double variation = fabs((double)(latency - s->_previousLatencyMs));
+                s->_jitterMs += (variation - s->_jitterMs) / 8.0;
+              }
+              s->_currentLatencyMs = latency;
+              s->_previousLatencyMs = latency;
               DBH264Dbg(@"[mjpeg-latency] frame=%lu e2e=%lldms",
                         (unsigned long)++s->_latencyFrame, (long long)latency);
+            }
           }
           s->_onFrame(img);
         }
@@ -385,4 +419,3 @@ static const CGFloat kMaxPixel = 640;                  // 解码後の一辺上�
 }
 
 @end
-

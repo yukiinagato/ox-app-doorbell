@@ -1,4 +1,5 @@
 #import <UIKit/UIKit.h>
+#import "../Media/DBVideoStats.h"
 
 // MJPEG (multipart/x-mixed-replace) 受信クライアント — ios-kiosk 版。
 //
@@ -16,5 +17,6 @@ typedef void (^DBMjpegFrameHandler)(UIImage *image);  // main スレッドで呼
 - (id)initWithURLString:(NSString *)urlString onFrame:(DBMjpegFrameHandler)onFrame;
 - (void)start;  // 冪等
 - (void)stop;   // 冪等。socket を shutdown してスレッドを即起床させる
+- (DBVideoStats)videoStats;  // decoded/displayed-frame stats; main thread
 
 @end

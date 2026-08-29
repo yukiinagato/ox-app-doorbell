@@ -13,6 +13,11 @@
 static const NSTimeInterval kAutoCloseS = 30;
 static const NSTimeInterval kCancelledCloseS = 15;
 
+@interface DBIncomingScreen ()
+- (void)startVideoStatsTimer;
+- (void)updateVideoStats:(NSTimer *)timer;
+@end
+
 @implementation DBIncomingScreen {
   DBCoreBridge *_core;
   DBBootConfig *_boot;
@@ -34,11 +39,14 @@ static const NSTimeInterval kCancelledCloseS = 15;
   BOOL _inCall;
   BOOL _cancelled;
   NSTimer *_autoCloseTimer;
+  NSTimer *_videoStatsTimer;
   NSInteger _snapshotGen;  // 背景収集の世代 (古い結果破棄)
+  NSString *_activeVideoTransport;
 
   // UI
   UIImageView *_liveView;
   UILabel *_noVideoLabel;
+  UILabel *_videoStatsLabel;
   UILabel *_titleLabel;
   UILabel *_purposeBadge;
   UILabel *_langBadge;
@@ -66,6 +74,7 @@ static const NSTimeInterval kCancelledCloseS = 15;
     _incomingStreamMp4Url = @"";
     _sipMode = @"";
     _videoPlayback = @"low_latency";
+    _activeVideoTransport = @"NO STREAM";
     _directPort = 47190;
     _replyButtons = [[NSMutableArray alloc] init];
     [self buildUi];
@@ -105,6 +114,18 @@ static const NSTimeInterval kCancelledCloseS = 15;
   _noVideoLabel.textColor = [UIColor colorWithWhite:1 alpha:0.45];
   _noVideoLabel.textAlignment = NSTextAlignmentCenter;
   [self addSubview:_noVideoLabel];
+
+  _videoStatsLabel = [[UILabel alloc] init];
+  _videoStatsLabel.font = [UIFont fontWithName:@"Menlo-Bold" size:15];
+  if (!_videoStatsLabel.font) _videoStatsLabel.font = [UIFont boldSystemFontOfSize:15];
+  _videoStatsLabel.textColor = [UIColor colorWithRed:0.55 green:1.0 blue:0.65 alpha:1];
+  _videoStatsLabel.backgroundColor = [UIColor colorWithWhite:0 alpha:0.72];
+  _videoStatsLabel.layer.cornerRadius = 6;
+  _videoStatsLabel.clipsToBounds = YES;
+  _videoStatsLabel.adjustsFontSizeToFitWidth = YES;
+  _videoStatsLabel.minimumFontSize = 11;
+  _videoStatsLabel.accessibilityIdentifier = @"video_stream_stats";
+  [self addSubview:_videoStatsLabel];
 
   _titleLabel = [[UILabel alloc] init];
   _titleLabel.font = [UIFont boldSystemFontOfSize:30];
@@ -168,6 +189,7 @@ static const NSTimeInterval kCancelledCloseS = 15;
   [self addSubview:_ignoreButton];
 
   [self clearLabelBackgrounds:self];
+  _videoStatsLabel.backgroundColor = [UIColor colorWithWhite:0 alpha:0.72];
 }
 #pragma mark - 準備 / 表示内容
 
@@ -333,6 +355,8 @@ static const NSTimeInterval kCancelledCloseS = 15;
  *  mjpeg: 只使用 MJPEG。H.264 失敗時始終回落到 MJPEG，避免黑屏。 */
 - (void)startVideo:(NSString *)mjpegUrl {
   [self stopVideoPlayers];
+  _activeVideoTransport = [mjpegUrl length] > 0 ? @"MJPEG" : @"NO STREAM";
+  [self updateVideoStats:nil];
   _noVideoLabel.hidden = NO;
   _liveView.image = nil;
   NSLog(@"[doorbell][DBG] incoming: startVideo mode=%@ mp4=%@ mjpeg=%@",
@@ -352,11 +376,15 @@ static const NSTimeInterval kCancelledCloseS = 15;
       if (!s || !s.superview) return;
       if (st == DBLowLatencyPlayerPlaying) {
         [s->_streamer stop]; s->_streamer = nil;
+        s->_activeVideoTransport = @"H.264 LOW-LAT";
         s->_noVideoLabel.hidden = YES;
+        [s updateVideoStats:nil];
         NSLog(@"[doorbell] incoming: switched to low-latency H.264");
       } else if (st == DBLowLatencyPlayerFailed) {
         [s->_lowLatency stop]; s->_lowLatency = nil;
         if (!s->_streamer) [s startMjpegOnly:s->_incomingStreamUrl];
+        s->_activeVideoTransport = s->_streamer ? @"MJPEG" : @"NO STREAM";
+        [s updateVideoStats:nil];
         NSLog(@"[doorbell] incoming: low-latency H.264 NG → MJPEG");
       }
     }];
@@ -372,7 +400,9 @@ static const NSTimeInterval kCancelledCloseS = 15;
         /* HW 解码に切替 — MJPEG は停止 (受信停止のみ, 画像は player が覆う) */
         [s->_streamer stop];
         s->_streamer = nil;
+        s->_activeVideoTransport = @"HLS H.264";
         s->_noVideoLabel.hidden = YES;
+        [s updateVideoStats:nil];
         NSLog(@"[doorbell] incoming: switched to H.264 live");
       } else if (st == DBH264PlayerFailed) {
         /* MJPEG 継続 (既に動いている) — H.264 view だけ下ろす */
@@ -380,6 +410,8 @@ static const NSTimeInterval kCancelledCloseS = 15;
         s->_h264 = nil;
         NSLog(@"[doorbell] incoming: H.264 NG → MJPEG 継続");
         if (!s->_streamer) [s startMjpegOnly:s->_incomingStreamUrl];
+        s->_activeVideoTransport = s->_streamer ? @"MJPEG" : @"NO STREAM";
+        [s updateVideoStats:nil];
         if (!s->_streamer) s->_noVideoLabel.hidden = NO;
       }
     }];
@@ -398,6 +430,9 @@ static const NSTimeInterval kCancelledCloseS = 15;
     // main スレッド。すでに解码済みなので blit のみ (重くない)。
     DBIncomingScreen *s = wself;
     if (!s) return;
+    if ((!s->_lowLatency || [s->_lowLatency state] != DBLowLatencyPlayerPlaying) &&
+        (!s->_h264 || [s->_h264 state] != DBH264PlayerPlaying))
+      s->_activeVideoTransport = @"MJPEG";
     s->_noVideoLabel.hidden = YES;
     s->_liveView.image = img;
   }];
@@ -411,6 +446,42 @@ static const NSTimeInterval kCancelledCloseS = 15;
   _h264 = nil;
   [_lowLatency stop];
   _lowLatency = nil;
+}
+
+#pragma mark - 映像統計
+
+- (void)startVideoStatsTimer {
+  [_videoStatsTimer invalidate];
+  _videoStatsTimer = [NSTimer timerWithTimeInterval:0.30 target:self
+                                            selector:@selector(updateVideoStats:)
+                                            userInfo:nil repeats:YES];
+  [[NSRunLoop mainRunLoop] addTimer:_videoStatsTimer forMode:NSRunLoopCommonModes];
+  [self updateVideoStats:nil];
+}
+
+- (void)updateVideoStats:(NSTimer *)timer {
+  (void)timer;
+  DBVideoStats stats = DBVideoStatsMake(NO, 0, 0, 0);
+  if ([_activeVideoTransport isEqualToString:@"H.264 LOW-LAT"] && _lowLatency)
+    stats = [_lowLatency videoStats];
+  else if ([_activeVideoTransport isEqualToString:@"HLS H.264"] && _h264)
+    stats = [_h264 videoStats];
+  else if ([_activeVideoTransport isEqualToString:@"MJPEG"] && _streamer)
+    stats = [_streamer videoStats];
+
+  NSString *transport = [_activeVideoTransport length] ? _activeVideoTransport : @"NO STREAM";
+  if (stats.valid) {
+    _videoStatsLabel.text = [NSString stringWithFormat:
+        @"  %@  |  LAT %ld ms  |  JIT %ld ms  |  %.1f fps  ", transport,
+        (long)stats.latencyMs, (long)stats.jitterMs, (double)stats.framesPerSecond];
+    _videoStatsLabel.textColor = stats.latencyMs < 800
+        ? [UIColor colorWithRed:0.55 green:1.0 blue:0.65 alpha:1]
+        : [UIColor colorWithRed:1.0 green:0.55 blue:0.35 alpha:1];
+  } else {
+    _videoStatsLabel.text = [NSString stringWithFormat:
+        @"  %@  |  LAT -- ms  |  JIT -- ms  |  -- fps  ", transport];
+    _videoStatsLabel.textColor = [UIColor colorWithWhite:1 alpha:0.75];
+  }
 }
 
 #pragma mark - タイマ
@@ -459,6 +530,7 @@ static const NSTimeInterval kCancelledCloseS = 15;
 }
 
 - (void)onScreenWillAppear {
+  [self startVideoStatsTimer];
   // 黒画面/表示異常の調査: 来鈴画面が出て 4 秒後の実体を Documents に吐く
   __weak DBIncomingScreen *wself = self;
   dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(4.0 * NSEC_PER_SEC)),
@@ -474,6 +546,8 @@ static const NSTimeInterval kCancelledCloseS = 15;
 - (void)onScreenWillDisappear {
   [_autoCloseTimer invalidate];
   _autoCloseTimer = nil;
+  [_videoStatsTimer invalidate];
+  _videoStatsTimer = nil;
   [self stopVideoPlayers];
   if ([_sipMode length] > 0) {
     [_router sipHangup];
@@ -607,6 +681,10 @@ static const NSTimeInterval kCancelledCloseS = 15;
     rightW = sz.width - rightX - m;
   }
   _noVideoLabel.frame = _liveView.frame;
+  CGFloat statsW = MIN(videoW - 16, 590);
+  _videoStatsLabel.frame = CGRectMake(CGRectGetMinX(_liveView.frame) + 8,
+                                      CGRectGetMinY(_liveView.frame) + 8,
+                                      statsW, 30);
 
   CGFloat y = rightY;
   CGFloat statusH = _cancelled ? 52 : 28;

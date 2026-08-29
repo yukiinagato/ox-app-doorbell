@@ -2,6 +2,7 @@
 
 #import "DBVtVideoView.h"
 #import "../Net/DBFmp4Demux.h"
+#import <math.h>
 
 void DBH264Dbg(NSString *fmt, ...);
 
@@ -20,6 +21,11 @@ void DBH264Dbg(NSString *fmt, ...);
   NSUInteger _latencyCount;
   int64_t _latencySum;
   int64_t _latencyMax;
+  int64_t _currentLatencyMs;
+  int64_t _previousLatencyMs;
+  double _jitterMs;
+  double _framesPerSecond;
+  CFAbsoluteTime _lastStatsFrameAt;
 }
 
 - (id)initWithURL:(NSString *)url container:(UIView *)container
@@ -34,6 +40,11 @@ void DBH264Dbg(NSString *fmt, ...);
 }
 
 - (DBLowLatencyPlayerState)state { return _state; }
+
+- (DBVideoStats)videoStats {
+  return DBVideoStatsMake(_latencyCount > 0, (NSInteger)_currentLatencyMs,
+                          (NSInteger)(_jitterMs + 0.5), (CGFloat)_framesPerSecond);
+}
 
 - (void)setState:(DBLowLatencyPlayerState)state {
   if (![NSThread isMainThread]) {
@@ -53,6 +64,15 @@ void DBH264Dbg(NSString *fmt, ...);
   }
   if (_demux || _state != DBLowLatencyPlayerIdle || ![_url length] || !_container) return;
   _generation++;
+  _lastCaptureMs = 0;
+  _latencyCount = 0;
+  _latencySum = 0;
+  _latencyMax = 0;
+  _currentLatencyMs = 0;
+  _previousLatencyMs = 0;
+  _jitterMs = 0;
+  _framesPerSecond = 0;
+  _lastStatsFrameAt = 0;
   NSUInteger generation = _generation;
   _videoView = [[DBVtVideoView alloc] initWithFrame:_container.bounds];
   _videoView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
@@ -67,6 +87,20 @@ void DBH264Dbg(NSString *fmt, ...);
       int64_t nowMs = (int64_t)([[NSDate date] timeIntervalSince1970] * 1000.0);
       int64_t latency = nowMs - captureMs - [player->_demux serverToClientOffsetMs];
       if (latency >= 0 && latency < 10000) {
+        CFAbsoluteTime frameAt = CFAbsoluteTimeGetCurrent();
+        if (player->_latencyCount > 0) {
+          double variation = fabs((double)(latency - player->_previousLatencyMs));
+          player->_jitterMs += (variation - player->_jitterMs) / 8.0;
+          CFAbsoluteTime dt = frameAt - player->_lastStatsFrameAt;
+          if (dt > 0.005 && dt < 2.0) {
+            double instantFps = 1.0 / dt;
+            player->_framesPerSecond = player->_framesPerSecond > 0
+                ? player->_framesPerSecond * 0.8 + instantFps * 0.2 : instantFps;
+          }
+        }
+        player->_currentLatencyMs = latency;
+        player->_previousLatencyMs = latency;
+        player->_lastStatsFrameAt = frameAt;
         player->_latencyCount++;
         player->_latencySum += latency;
         if (latency > player->_latencyMax) player->_latencyMax = latency;

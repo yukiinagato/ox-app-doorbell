@@ -3,6 +3,7 @@
 #import "../Net/DBFmp4Demux.h"
 #import "../Net/DBHlsServer.h"
 #import <MediaPlayer/MediaPlayer.h>
+#import <math.h>
 
 void DBH264Dbg(NSString *fmt, ...) NS_FORMAT_FUNCTION(1, 2);
 void DBH264Dbg(NSString *fmt, ...) {
@@ -59,6 +60,14 @@ static void SegSink(void *ctx, const uint8_t *data, size_t len);
   DBH264PlayerState _state;
   BOOL _movieStartScheduled;
   NSUInteger _generation;
+  NSLock *_statsLock;
+  int64_t _statsBaseDtsMs;
+  int64_t _statsLatestDtsMs;
+  int64_t _statsLatestCaptureMs;
+  double _statsFramesPerSecond;
+  NSUInteger _reportedLatencyCount;
+  int64_t _reportedLatencyMs;
+  double _reportedJitterMs;
 }
 
 static void SegSink(void *ctx, const uint8_t *data, size_t len) {
@@ -76,11 +85,42 @@ static void SegSink(void *ctx, const uint8_t *data, size_t len) {
     _container = container;
     _onState = [onState copy];
     _state = DBH264PlayerIdle;
+    _statsLock = [[NSLock alloc] init];
+    _statsBaseDtsMs = -1;
   }
   return self;
 }
 
 - (DBH264PlayerState)state { return _state; }
+
+- (DBVideoStats)videoStats {
+  NSAssert([NSThread isMainThread], @"HLS stats must be read on main");
+  [_statsLock lock];
+  int64_t baseDts = _statsBaseDtsMs;
+  int64_t latestDts = _statsLatestDtsMs;
+  int64_t latestCapture = _statsLatestCaptureMs;
+  double fps = _statsFramesPerSecond;
+  [_statsLock unlock];
+  if (_state != DBH264PlayerPlaying || !_player || baseDts < 0 ||
+      latestCapture <= 0) return DBVideoStatsMake(NO, 0, 0, (CGFloat)fps);
+
+  NSTimeInterval playbackS = _player.currentPlaybackTime;
+  if (!isfinite(playbackS) || playbackS < 0) return DBVideoStatsMake(NO, 0, 0, (CGFloat)fps);
+  int64_t displayedDts = baseDts + (int64_t)(playbackS * 1000.0);
+  int64_t behindLiveMs = latestDts > displayedDts ? latestDts - displayedDts : 0;
+  int64_t nowMs = (int64_t)([[NSDate date] timeIntervalSince1970] * 1000.0);
+  int64_t latency = nowMs - latestCapture - [_demux serverToClientOffsetMs] + behindLiveMs;
+  if (latency < 0 || latency >= 120000)
+    return DBVideoStatsMake(NO, 0, 0, (CGFloat)fps);
+  if (_reportedLatencyCount > 0) {
+    double variation = fabs((double)(latency - _reportedLatencyMs));
+    _reportedJitterMs += (variation - _reportedJitterMs) / 8.0;
+  }
+  _reportedLatencyMs = latency;
+  _reportedLatencyCount++;
+  return DBVideoStatsMake(YES, (NSInteger)latency,
+                          (NSInteger)(_reportedJitterMs + 0.5), (CGFloat)fps);
+}
 
 - (void)setStateOnMain:(DBH264PlayerState)state {
   NSAssert([NSThread isMainThread], @"H.264 state/UI must stay on main");
@@ -103,6 +143,15 @@ static void SegSink(void *ctx, const uint8_t *data, size_t len) {
 
   _generation++;
   const NSUInteger generation = _generation;
+  [_statsLock lock];
+  _statsBaseDtsMs = -1;
+  _statsLatestDtsMs = 0;
+  _statsLatestCaptureMs = 0;
+  _statsFramesPerSecond = 0;
+  [_statsLock unlock];
+  _reportedLatencyCount = 0;
+  _reportedLatencyMs = 0;
+  _reportedJitterMs = 0;
   _mux = dbtsmux_create(SegSink, (__bridge void *)self);
   if (!_mux) {
     [self setStateOnMain:DBH264PlayerFailed];
@@ -183,9 +232,21 @@ static void SegSink(void *ctx, const uint8_t *data, size_t len) {
 
 - (void)fmp4Demux:(DBFmp4Demux *)demux sample:(NSData *)avcc key:(BOOL)key
          captureMs:(int64_t)captureMs dtsMs:(int64_t)dtsMs durMs:(int64_t)durMs {
-  (void)demux; (void)captureMs; (void)durMs;
+  (void)demux;
   if (!_mux || !_sps || !_pps) return;
   BOOL isKey = key || AvccHasIdr(avcc);
+
+  [_statsLock lock];
+  if (captureMs > 0) {
+    _statsLatestCaptureMs = captureMs;
+    _statsLatestDtsMs = dtsMs;
+  }
+  if (durMs > 0) {
+    double instantFps = 1000.0 / (double)durMs;
+    _statsFramesPerSecond = _statsFramesPerSecond > 0
+        ? _statsFramesPerSecond * 0.9 + instantFps * 0.1 : instantFps;
+  }
+  [_statsLock unlock];
 
   // Every HLS segment must start with an IDR. Close the old segment before
   // feeding the keyframe that starts the next segment.
@@ -193,6 +254,9 @@ static void SegSink(void *ctx, const uint8_t *data, size_t len) {
     if (!isKey) return;
     _seg = [[NSMutableData alloc] init];
     _segStartMs = dtsMs;
+    [_statsLock lock];
+    if (_statsBaseDtsMs < 0) _statsBaseDtsMs = dtsMs;
+    [_statsLock unlock];
     dbtsmux_begin_segment(_mux);
   } else if (isKey && dtsMs - _segStartMs >= 1500) {
     [self finishSegmentAt:dtsMs];
@@ -306,6 +370,15 @@ static void SegSink(void *ctx, const uint8_t *data, size_t len) {
   _pps = nil;
   _movieStartScheduled = NO;
   _segSeq = 0;
+  [_statsLock lock];
+  _statsBaseDtsMs = -1;
+  _statsLatestDtsMs = 0;
+  _statsLatestCaptureMs = 0;
+  _statsFramesPerSecond = 0;
+  [_statsLock unlock];
+  _reportedLatencyCount = 0;
+  _reportedLatencyMs = 0;
+  _reportedJitterMs = 0;
 }
 
 - (void)dealloc {

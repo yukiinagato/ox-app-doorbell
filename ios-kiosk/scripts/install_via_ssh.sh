@@ -93,6 +93,10 @@ if [ "$FULL_INSTALL" -eq 1 ]; then
   run_ssh "${OPTS[@]}" -p "$PORT" "$SSHHOST" "/usr/bin/killall SpringBoard >/dev/null 2>&1; true"
   echo "完了。ホーム画面の「ドアホン」アイコンを実際にタップして起動してください。"
 else
+  # SpringBoard may auto-resume the old process image between the first kill and
+  # the atomic bundle swap. Kill once more after placement so uiopen must load
+  # the just-verified executable rather than an unlinked old inode.
+  run_ssh "${OPTS[@]}" -p "$PORT" "$SSHHOST" "/usr/bin/killall Doorbell >/dev/null 2>&1; sleep 1; true"
   echo "=== 更新した app を起動 ==="
   run_ssh "${OPTS[@]}" -p "$PORT" "$SSHHOST" "su mobile -c '/usr/bin/uiopen doorbell://' >/dev/null 2>&1 || true"
   echo "完了。SpringBoard は再起動していません。app が開かなければアイコンをタップしてください。"
