@@ -12,4 +12,5 @@
 // 全タッチを無操作検出へ流す window。
 @interface DBActivityWindow : UIWindow
 @property(nonatomic, copy) void (^onActivity)(void);
+@property(nonatomic, copy) void (^onButtonTap)(void);
 @end

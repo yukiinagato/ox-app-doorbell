@@ -27,5 +27,9 @@
   <ItemGroup>
     <!-- ネイティブ core DLL (win/build.cmd が core のビルド産物をここへ配置する) -->
     <None Include="lib\**\*.dll" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\assets\audio\*.mp3">
+      <Link>Audio\%(Filename)%(Extension)</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
 </Project>

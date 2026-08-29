@@ -52,6 +52,8 @@ android {
   kotlinOptions {
     jvmTarget = "17"
   }
+
+  sourceSets.getByName("main").assets.srcDir("../../assets")
 }
 
 // 外部ライブラリは意図的にゼロ (Kotlin stdlib のみ)。UI は View/XML、通信・JSON は core 側。

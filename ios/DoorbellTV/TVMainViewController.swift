@@ -179,6 +179,13 @@ final class TVMainViewController: UIViewController {
 
     private func onUiEvent(_ ev: [String: Any]) {
         switch ConfigUtil.evStr(ev, "t") {
+        case "chime":
+            let path = ConfigUtil.evStr(ev, "audio_path")
+            if path.isEmpty {
+                audio.playConfigured(ConfigUtil.evStr(ev, "sound"))
+            } else {
+                audio.playAsset(path: path, fallback: nil)
+            }
         case "reply":
             replyText.text = ConfigUtil.evStr(ev, "text")
             replyBanner.isHidden = false

@@ -4,6 +4,7 @@
 #import "DBConfigUtil.h"
 #import "DBMainViewController.h"
 #import "DBIncomingViewController.h"
+#import "DBSirenPlayer.h"
 #import <unistd.h>
 #import <stdlib.h>
 
@@ -28,12 +29,24 @@ static void WDAppendLog(NSString *line) {
 
 @implementation DBActivityWindow
 @synthesize onActivity = _onActivity;
+@synthesize onButtonTap = _onButtonTap;
 - (void)sendEvent:(UIEvent *)event {
   if (event.type == UIEventTypeTouches && _onActivity) _onActivity();
   [super sendEvent:event];
+  if (event.type != UIEventTypeTouches || !_onButtonTap) return;
+  for (UITouch *touch in [event allTouches]) {
+    if (touch.phase != UITouchPhaseEnded) continue;
+    UIView *view = touch.view;
+    while (view && ![view isKindOfClass:[UIButton class]]) view = view.superview;
+    if ([view isKindOfClass:[UIButton class]] && [(UIButton *)view isEnabled]) {
+      _onButtonTap();
+      break;
+    }
+  }
 }
 - (void)dealloc {
   [_onActivity release];
+  [_onButtonTap release];
   [super dealloc];
 }
 @end
@@ -42,6 +55,9 @@ static void WDAppendLog(NSString *line) {
   DBCoreBridge *_core;
   DBBootConfig *_boot;
   DBMainViewController *_main;
+  DBSirenPlayer *_effects;
+  DBSirenPlayer *_launchAudio;
+  NSDictionary *_soundConfig;
 }
 @synthesize window = _window;
 
@@ -52,6 +68,9 @@ static void WDAppendLog(NSString *line) {
 
   // 失敗しても UI は起動する (オフライン表示)。
   [_core startWithDataDir:[DBBootConfig dataDir] bootJson:_boot.rawJson];
+  _soundConfig = [[_core config] retain];
+  _effects = [[DBSirenPlayer alloc] init];
+  _launchAudio = [[DBSirenPlayer alloc] init];
 
   DBAppDelegate *__unsafe_unretained weakSelf = self;
   [_core addHandler:@"app" handler:^(NSDictionary *ev) { [weakSelf onUiEvent:ev]; }];
@@ -60,16 +79,27 @@ static void WDAppendLog(NSString *line) {
   _main = [[DBMainViewController alloc] initWithCore:_core boot:_boot];
   DBMainViewController *__unsafe_unretained weakMain = _main;
   win.onActivity = ^{ [weakMain onActivity]; };
+  DBAppDelegate *__unsafe_unretained weakEffects = self;
+  win.onButtonTap = ^{ [weakEffects playButtonSound]; };
   win.rootViewController = _main;
   [win makeKeyAndVisible];
   self.window = win;
   [win release];
 
   application.idleTimerDisabled = YES;  // keep-awake (kiosk)
+  NSString *launch = [DBConfigUtil dig:_soundConfig path:@"ui.launch_sound"];
+  [_launchAudio playConfigured:[launch isKindOfClass:[NSString class]] ? launch : @"title_display"
+                        dataDir:[DBBootConfig dataDir] loop:NO];
 
   // UI ウォッチドッグ起動 (メイン runloop が回り始めた後で良い)
   [NSThread detachNewThreadSelector:@selector(wdThreadMain) toTarget:self withObject:nil];
   return YES;
+}
+
+- (void)playButtonSound {
+  NSString *value = [DBConfigUtil dig:_soundConfig path:@"ui.button_sound"];
+  [_effects playConfigured:[value isKindOfClass:[NSString class]] ? value : @"button_click"
+                    dataDir:[DBBootConfig dataDir] loop:NO];
 }
 
 #pragma mark - UI ウォッチドッグ
@@ -120,6 +150,18 @@ static void WDAppendLog(NSString *line) {
 
 - (void)onUiEvent:(NSDictionary *)ev {
   NSString *t = [DBConfigUtil evStr:ev key:@"t"];
+  NSString *type = [DBConfigUtil evStr:ev key:@"type"];
+  if ([t isEqualToString:@"config_changed"]) {
+    NSDictionary *cfg = [_core config];
+    [_soundConfig release];
+    _soundConfig = [cfg retain];
+  }
+  if ([t isEqualToString:@"event"] && ![_boot.role isEqualToString:@"door_station"] &&
+      ([type isEqualToString:@"call_cancelled"] || [type isEqualToString:@"purpose_selected"])) {
+    NSString *value = [DBConfigUtil dig:_soundConfig path:@"ui.update_sound"];
+    [_effects playConfigured:[value isKindOfClass:[NSString class]] ? value : @"indoor_update"
+                      dataDir:[DBBootConfig dataDir] loop:NO];
+  }
   // 来客 (press イベントの複製) → 来鈴画面。門口機自身 (door_station) は出さない。
   if ([t isEqualToString:@"event"] &&
       [[DBConfigUtil evStr:ev key:@"type"] isEqualToString:@"press"] &&
@@ -167,6 +209,9 @@ static void WDAppendLog(NSString *line) {
   [_core release];
   [_boot release];
   [_main release];
+  [_effects release];
+  [_launchAudio release];
+  [_soundConfig release];
   [_window release];
   [super dealloc];
 }

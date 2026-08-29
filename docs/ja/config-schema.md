@@ -80,7 +80,12 @@
 
   "ui": {
     "languages": ["ja", "en", "zh"],            // 門口機の来訪者言語切替に出す言語
-    "ringtone": "ding1",                          // ding1 / ding2 / classic / asset:<sha256>
+    "launch_sound": "title_display",             // 起動音。空文字 = 再生しない
+    "call_sound": "outdoor_call_alert",          // 門口機の呼出確認音。空文字 = 再生しない
+    "call_sound_loop": false,                     // 応答または 30 秒タイムアウトまで循環
+    "button_sound": "button_click",              // その他のボタン音。空文字 = 再生しない
+    "update_sound": "indoor_update",             // 呼出取消/訪問目的など追加通知の音
+    "ringtone": "school_chime",                  // school_chime / ding1 / ding2 / classic / asset:<sha256>
     "visitor_lang_revert_s": 60                 // 無操作でこの秒数後に主言語 (ja) へ自動復帰
   },
   // 文言の実行時上書き (組込 resx/strings.xml より優先)。管理画面「文言」タブ /

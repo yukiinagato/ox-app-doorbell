@@ -7,6 +7,8 @@
 
 // 資産ローカルファイルを 1 回再生。失敗時は失敗を返す (呼び出し側が回落)。
 - (BOOL)playAssetPath:(NSString *)path;
+// ui.*_sound の値 (内蔵 preset / asset:<sha256> / 空文字) を再生。
+- (BOOL)playConfigured:(NSString *)value dataDir:(NSString *)dataDir loop:(BOOL)loop;
 // 警報開始。customPath 優先、無ければ内蔵サイレン。volume 0-100。
 - (void)startSiren:(NSString *)customPath volume:(NSInteger)volume;
 - (void)stop;

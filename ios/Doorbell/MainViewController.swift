@@ -28,6 +28,7 @@ final class MainViewController: UIViewController {
     private var themeColor: String?          // 適用済み bg_color
     private var themeHash: String?           // 適用済み bg_image (sha256)
     private let audio = SirenPlayer()        // reply/chime の audio_path + サイレン
+    private let callFeedbackAudio = SirenPlayer()
     private var callTitleOverride: String?   // 用件付き按鈴の「{用件} で呼び出しました」
 
     // ---- 表示制御の実効値 (core {"t":"display"} / status_json.display 由来) ----
@@ -215,6 +216,7 @@ final class MainViewController: UIViewController {
         callButton.setTitleColor(.black, for: .normal)
         callButton.backgroundColor = MainViewController.accentColor
         callButton.layer.cornerRadius = 18
+        callButton.accessibilityIdentifier = "call_primary"
         callButton.contentEdgeInsets = UIEdgeInsets(top: 26, left: 60, bottom: 26, right: 60)
         callButton.addTarget(self, action: #selector(onCallClick), for: .touchUpInside)
 
@@ -890,6 +892,7 @@ final class MainViewController: UIViewController {
     // MARK: - 状態遷移
 
     private func showIdle(hint: String? = nil) {
+        callFeedbackAudio.stop()
         callTitleOverride = nil
         callTimeoutTimer?.invalidate()
         pulse.layer.removeAllAnimations()
@@ -933,13 +936,20 @@ final class MainViewController: UIViewController {
             } else if st == "idle" {
                 onSipIdle()
             } else if st == "in_call" {
+                callFeedbackAudio.stop()
                 onSipInCall(ev)
             }
         case "chime":
             exitScreensaver()
             // カスタム音 (assets の audio_path) があればそれを、無ければ内蔵チャイム音
             let path = ConfigUtil.evStr(ev, "audio_path")
-            audio.playAsset(path: path) { AudioServicesPlaySystemSound(1013) }
+            if path.isEmpty {
+                audio.playConfigured(ConfigUtil.evStr(ev, "sound")) {
+                    AudioServicesPlaySystemSound(1013)
+                }
+            } else {
+                audio.playAsset(path: path) { AudioServicesPlaySystemSound(1013) }
+            }
         case "reply":
             exitScreensaver()
             // カスタム音声があれば再生 (無い時は core が TTS 済み — 二重発話しない)
@@ -1069,6 +1079,9 @@ final class MainViewController: UIViewController {
     // MARK: - 操作
 
     @objc private func onCallClick() {
+        let sound = (ConfigUtil.dig(cfg, "ui.call_sound") as? String) ?? "outdoor_call_alert"
+        let loop = ConfigUtil.bool(cfg, "ui.call_sound_loop", false)
+        callFeedbackAudio.playConfigured(sound, loops: loop)
         core.press(door: boot.door)
         showCalling()
     }

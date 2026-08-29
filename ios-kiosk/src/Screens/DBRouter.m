@@ -4,6 +4,7 @@
 #import "../Core/DBConfigUtil.h"
 #import "../Core/DBCoreBridge.h"
 #import "../Core/DBTexts.h"
+#import "../Media/DBSiren.h"
 #import "DBHomeScreen.h"
 #import "DBIncomingScreen.h"
 #import "DBInfoScreen.h"
@@ -23,6 +24,9 @@
   DBPairingScreen *_pairing;
   DBPinOverlay *_pin;
   DBSipSession *_sip;
+  DBSiren *_effects;
+  DBSiren *_launchAudio;
+  NSDictionary *_soundConfig;
 }
 
 @synthesize core = _core;
@@ -37,6 +41,8 @@
     _core = core;
     _boot = boot;
     _texts = [[DBTexts alloc] init];
+    _effects = [[DBSiren alloc] init];
+    _launchAudio = [[DBSiren alloc] init];
     [_texts setLang:_boot.uiLang];
     _container = [[UIView alloc] initWithFrame:[UIScreen mainScreen].bounds];
     _container.backgroundColor = [UIColor blackColor];
@@ -70,6 +76,50 @@
 
 - (void)start {
   [self showHomeAnimated:NO];
+  [self refreshSoundConfig];
+}
+
+- (void)refreshSoundConfig {
+  __weak DBRouter *wself = self;
+  DBCoreBridge *core = _core;
+  dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+    NSDictionary *cfg = [core config];
+    dispatch_async(dispatch_get_main_queue(), ^{
+      DBRouter *s = wself;
+      if (s && [cfg isKindOfClass:[NSDictionary class]]) s->_soundConfig = cfg;
+    });
+  });
+}
+
+- (NSString *)soundValue:(NSString *)key fallback:(NSString *)fallback {
+  id value = [DBConfigUtil dig:_soundConfig path:[@"ui." stringByAppendingString:key]];
+  return [value isKindOfClass:[NSString class]] ? value : fallback;
+}
+
+- (void)playLaunchSound {
+  // 設定取得より先に起動タイマーが発火しても既定音を誤再生しないよう、
+  // 起動音だけは直前に core の最新設定を取得してから鳴らす。
+  __weak DBRouter *wself = self;
+  DBCoreBridge *core = _core;
+  dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+    NSDictionary *cfg = [core config];
+    dispatch_async(dispatch_get_main_queue(), ^{
+      DBRouter *s = wself;
+      if (!s) return;
+      if ([cfg isKindOfClass:[NSDictionary class]]) s->_soundConfig = cfg;
+      [s->_launchAudio playConfiguredSound:[s soundValue:@"launch_sound"
+                                                    fallback:@"title_display"]
+                                         loop:NO];
+    });
+  });
+}
+
+- (void)playButtonSound {
+  [_effects playConfiguredSound:[self soundValue:@"button_sound" fallback:@"button_click"] loop:NO];
+}
+
+- (void)playUpdateSound {
+  [_effects playConfiguredSound:[self soundValue:@"update_sound" fallback:@"indoor_update"] loop:NO];
 }
 
 - (void)transitionTo:(DBScreen *)next animated:(BOOL)animated {
@@ -208,13 +258,16 @@
     }
     if ([type isEqualToString:@"call_cancelled"] &&
         ![_boot.role isEqualToString:@"door_station"]) {
+      [self playUpdateSound];
       [[self home] stopChime];
       if (_current == _incoming) [_incoming handleCallCancelled:ev];
       [_home appendEvent:ev];
       return;
     }
-    if ([type isEqualToString:@"purpose_selected"] && _current == _incoming) {
-      [_incoming handlePurposeSelected:ev];
+    if ([type isEqualToString:@"purpose_selected"] &&
+        ![_boot.role isEqualToString:@"door_station"]) {
+      [self playUpdateSound];
+      if (_current == _incoming) [_incoming handlePurposeSelected:ev];
       [_home appendEvent:ev];
       return;
     }
@@ -244,6 +297,8 @@
     if (_current == _pairing) [_pairing handleJoinResult:ev];
   } else if ([t isEqualToString:@"peers_changed"] || [t isEqualToString:@"config_changed"] ||
              [t isEqualToString:@"asset_ready"]) {
+    if ([t isEqualToString:@"config_changed"] || [t isEqualToString:@"asset_ready"])
+      [self refreshSoundConfig];
     if (_current == _home) [_home refreshFromCore];
     if (_current == _pairing) [_pairing reload];
   }

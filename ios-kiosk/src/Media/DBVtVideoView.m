@@ -148,12 +148,12 @@ static BOOL DbSpsSize(NSData *spsData, int *widthOut, int *heightOut) {
   return YES;
 }
 
-typedef struct { int64_t captureMs; } DbFrameContext;
 static void DbVtOutput(void *, void *, OSStatus, DbVTDecodeInfoFlags,
                        CVImageBufferRef, CMTime, CMTime);
 
 @interface DBVtVideoView () <GLKViewDelegate>
 - (void)acceptDecoded:(CVPixelBufferRef)pixel captureMs:(int64_t)captureMs;
+- (int64_t)takeCaptureMsForDts:(int64_t)dtsMs;
 @end
 
 @implementation DBVtVideoView {
@@ -166,6 +166,7 @@ static void DbVtOutput(void *, void *, OSStatus, DbVTDecodeInfoFlags,
   size_t _uploadWidth;
   size_t _uploadHeight;
   NSLock *_frameLock;
+  NSMutableDictionary *_captureMsByDts;
   NSUInteger _decodedFrames;
   NSUInteger _droppedFrames;
 }
@@ -175,6 +176,7 @@ static void DbVtOutput(void *, void *, OSStatus, DbVTDecodeInfoFlags,
   self = [super initWithFrame:frame context:context];
   if (self) {
     _frameLock = [[NSLock alloc] init];
+    _captureMsByDts = [[NSMutableDictionary alloc] init];
     self.delegate = self;
     self.enableSetNeedsDisplay = YES;
     self.drawableColorFormat = GLKViewDrawableColorFormatRGB565;
@@ -256,16 +258,38 @@ static void DbVtOutput(void *, void *, OSStatus, DbVTDecodeInfoFlags,
       _format, 1, 1, &timing, 1, &length, &sample);
   CFRelease(block);
   if (status || !sample) { _droppedFrames++; return; }
-  DbFrameContext *context = malloc(sizeof(*context));
-  if (context) context->captureMs = captureMs;
+  // Do not pass an owned malloc pointer as sourceFrameRefCon.  The iOS 5
+  // decoder can invoke its output callback synchronously and still return an
+  // error from VTDecompressionSessionDecodeFrame.  Freeing the pointer in both
+  // paths caused the intermittent heap corruption seen as unrelated UIKit,
+  // CoreGraphics and Foundation crashes.  PTS is already the stream DTS, so a
+  // locked lookup gives the callback the capture timestamp without ambiguous
+  // cross-callback ownership.
+  NSNumber *dtsKey = [NSNumber numberWithLongLong:dtsMs];
+  [_frameLock lock];
+  [_captureMsByDts setObject:[NSNumber numberWithLongLong:captureMs] forKey:dtsKey];
+  [_frameLock unlock];
   DbVTDecodeInfoFlags info = 0;
-  status = DbVTDecode(_session, sample, 1, context, &info);
+  status = DbVTDecode(_session, sample, 1, NULL, &info);
   CFRelease(sample);
   if (status) {
-    free(context);
+    // A synchronous error callback may already have removed this key; removing
+    // it again is intentionally harmless.
+    [_frameLock lock];
+    [_captureMsByDts removeObjectForKey:dtsKey];
+    [_frameLock unlock];
     _droppedFrames++;
     if (_droppedFrames < 8) DBH264Dbg(@"[vt] decode status=%d info=%u", (int)status, info);
   }
+}
+
+- (int64_t)takeCaptureMsForDts:(int64_t)dtsMs {
+  NSNumber *key = [NSNumber numberWithLongLong:dtsMs];
+  [_frameLock lock];
+  NSNumber *capture = [_captureMsByDts objectForKey:key];
+  [_captureMsByDts removeObjectForKey:key];
+  [_frameLock unlock];
+  return capture ? [capture longLongValue] : 0;
 }
 
 - (void)acceptDecoded:(CVPixelBufferRef)pixel captureMs:(int64_t)captureMs {
@@ -300,12 +324,14 @@ static void DbVtOutput(void *, void *, OSStatus, DbVTDecodeInfoFlags,
 static void DbVtOutput(void *refCon, void *frameRefCon, OSStatus status,
                        DbVTDecodeInfoFlags flags, CVImageBufferRef image,
                        CMTime pts, CMTime duration) {
-  (void)flags; (void)pts; (void)duration;
-  DbFrameContext *context = frameRefCon;
-  int64_t captureMs = context ? context->captureMs : 0;
-  free(context);
+  (void)frameRefCon; (void)flags; (void)duration;
+  DBVtVideoView *view = (__bridge DBVtVideoView *)refCon;
+  int64_t dtsMs = 0;
+  if ((pts.flags & kCMTimeFlags_Valid) && pts.timescale != 0)
+    dtsMs = (int64_t)(CMTimeGetSeconds(pts) * 1000.0 + 0.5);
+  int64_t captureMs = [view takeCaptureMsForDts:dtsMs];
   if (!status && image)
-    [(__bridge DBVtVideoView *)refCon acceptDecoded:image captureMs:captureMs];
+    [view acceptDecoded:image captureMs:captureMs];
   else if (status)
     DBH264Dbg(@"[vt] output status=%d", (int)status);
 }
@@ -393,6 +419,7 @@ static void DbVtOutput(void *refCon, void *frameRefCon, OSStatus status,
   if (_format) { CFRelease(_format); _format = NULL; }
   [_frameLock lock];
   if (_latest) { CVBufferRelease(_latest); _latest = NULL; }
+  [_captureMsByDts removeAllObjects];
   [_frameLock unlock];
 }
 

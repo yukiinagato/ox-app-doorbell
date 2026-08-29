@@ -1,4 +1,5 @@
 #import "DBSiren.h"
+#import "../Core/DBBootConfig.h"
 #import <math.h>
 
 @implementation DBSiren {
@@ -24,8 +25,38 @@
   return [p play];
 }
 
++ (NSString *)fileNameForPreset:(NSString *)value {
+  if ([value isEqualToString:@"outdoor_call_alert"]) return @"outdoor_call_alert.mp3";
+  if ([value isEqualToString:@"button_click"]) return @"button_click.mp3";
+  if ([value isEqualToString:@"school_chime"]) return @"学校のチャイム.mp3";
+  if ([value isEqualToString:@"indoor_update"]) return @"indoor_update.mp3";
+  if ([value isEqualToString:@"title_display"]) return @"title_display.mp3";
+  return nil;
+}
+
+- (BOOL)playConfiguredSound:(NSString *)value loop:(BOOL)loop {
+  if (![value isKindOfClass:[NSString class]] || [value length] == 0) return NO;
+  NSString *path = nil;
+  if ([value hasPrefix:@"asset:"] && [value length] == 70) {
+    path = [[[DBBootConfig dataDir] stringByAppendingPathComponent:@"assets"]
+        stringByAppendingPathComponent:[value substringFromIndex:6]];
+  } else {
+    NSString *name = [[self class] fileNameForPreset:value];
+    if (name) path = [[NSBundle mainBundle] pathForResource:[name stringByDeletingPathExtension]
+                                                     ofType:[name pathExtension]];
+  }
+  if ([path length] == 0 || ![[NSFileManager defaultManager] fileExistsAtPath:path]) return NO;
+  AVAudioPlayer *p =
+      [[AVAudioPlayer alloc] initWithContentsOfURL:[NSURL fileURLWithPath:path] error:NULL];
+  if (!p) return NO;
+  [self swapPlayer:p];
+  p.numberOfLoops = loop ? -1 : 0;
+  return [p play];
+}
+
 - (void)playChimeSound:(NSString *)sound assetPath:(NSString *)path {
   if ([self playAssetPath:path]) return;
+  if ([self playConfiguredSound:sound loop:NO]) return;
   AVAudioPlayer *p = [[AVAudioPlayer alloc] initWithData:[[self class] chimeWav:sound] error:NULL];
   if (p == nil) return;
   [self swapPlayer:p];

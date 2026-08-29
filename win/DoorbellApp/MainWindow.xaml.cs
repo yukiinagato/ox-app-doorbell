@@ -73,6 +73,9 @@ namespace DoorbellApp
         private string _themeColor;                // 適用済み bg_color
         private string _themeHash;                 // 適用済み bg_image (sha256)
         private MediaPlayer _audio;                // reply/chime の audio_path 再生
+        private MediaPlayer _effects;              // ボタン / 追加通知
+        private MediaPlayer _callFeedback;         // 門口の呼出確認音
+        private MediaPlayer _launchAudio;          // 起動音
         private Action _audioFallback;             // 再生失敗時の回落 (TTS / 内蔵音)
         private string _callTitleOverride;         // 用件付き按鈴の「{用件} で呼び出しました」
         private string _incomingPurpose = "";      // 来鈴中の用件 id (バッジ用)
@@ -130,6 +133,11 @@ namespace DoorbellApp
             PreviewMouseDown += (s, e) => OnActivity();
             PreviewTouchDown += (s, e) => OnActivity();
             PreviewKeyDown += (s, e) => OnActivity();
+            AddHandler(Button.ClickEvent, new RoutedEventHandler((s, e) =>
+            {
+                if (!ReferenceEquals(e.OriginalSource, CallButton))
+                    _effects = PlayConfigured(_effects, SoundValue("button_sound", "button_click"), false);
+            }));
 
             App.Core.UiEventReceived += ev => Dispatcher.BeginInvoke(new Action(() => OnUiEvent(ev)));
 
@@ -143,6 +151,8 @@ namespace DoorbellApp
                 }
                 KioskHooks.KeepDisplayOn();
                 RefreshNodeInfo();
+                _launchAudio = PlayConfigured(_launchAudio,
+                    SoundValue("launch_sound", "title_display"), false);
             };
             Closing += (s, e) =>
             {
@@ -602,6 +612,76 @@ namespace DoorbellApp
             }
         }
 
+        private string SoundValue(string key, string fallback)
+        {
+            var value = CoreClient.Dig(_cfg, "ui." + key);
+            return value is string ? (string)value : fallback;
+        }
+
+        private bool ConfigBool(string path, bool fallback)
+        {
+            var value = CoreClient.Dig(_cfg, path);
+            return value is bool ? (bool)value : fallback;
+        }
+
+        private static string BundledSoundFile(string value)
+        {
+            switch (value)
+            {
+                case "outdoor_call_alert": return "outdoor_call_alert.mp3";
+                case "button_click": return "button_click.mp3";
+                case "school_chime": return "学校のチャイム.mp3";
+                case "indoor_update": return "indoor_update.mp3";
+                case "title_display": return "title_display.mp3";
+                default: return null;
+            }
+        }
+
+        private MediaPlayer PlayConfigured(MediaPlayer current, string value, bool loop,
+                                           Action fallback = null)
+        {
+            StopPlayer(ref current);
+            if (string.IsNullOrEmpty(value)) return null;
+            string path = null;
+            if (value.StartsWith("asset:") && value.Length == 70)
+                path = Path.Combine(App.DataDir, "assets", value.Substring(6));
+            else
+            {
+                var filename = BundledSoundFile(value);
+                if (filename != null)
+                    path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Audio", filename);
+            }
+            if (string.IsNullOrEmpty(path) || !File.Exists(path))
+            {
+                fallback?.Invoke();
+                return null;
+            }
+            try
+            {
+                var player = new MediaPlayer();
+                player.MediaEnded += (s, e) =>
+                {
+                    if (loop) { player.Position = TimeSpan.Zero; player.Play(); }
+                };
+                player.MediaFailed += (s, e) => fallback?.Invoke();
+                player.Open(new Uri(path));
+                player.Play();
+                return player;
+            }
+            catch
+            {
+                fallback?.Invoke();
+                return null;
+            }
+        }
+
+        private static void StopPlayer(ref MediaPlayer player)
+        {
+            if (player == null) return;
+            try { player.Stop(); player.Close(); } catch { }
+            player = null;
+        }
+
         // ---------- 表示制御 ----------
         private static int DictInt(Dictionary<string, object> d, string key, int def)
         {
@@ -889,6 +969,7 @@ namespace DoorbellApp
         // ---------- 状態遷移 ----------
         private void ShowIdle(string hint = null)
         {
+            StopPlayer(ref _callFeedback);
             _callTitleOverride = null;
             CallingView.Visibility = Visibility.Collapsed;
             OfflineView.Visibility = Visibility.Collapsed;
@@ -920,7 +1001,7 @@ namespace DoorbellApp
                     var stv = ev.Str("state");
                     if (stv == "calling") { if (App.Boot.Role == "door_station") ShowCalling(); }
                     else if (stv == "idle") OnSipIdle();
-                    else if (stv == "in_call") OnSipInCall(ev);
+                    else if (stv == "in_call") { StopPlayer(ref _callFeedback); OnSipInCall(ev); }
                     break;
                 case "event":
                     // 受鈴室内面板: press で来鈴画面 (門口ライブ + 応答/モニタ/無視)。
@@ -930,11 +1011,20 @@ namespace DoorbellApp
                     else if (ev.Str("type") == "reply" && !_inCall &&
                              IncomingView.Visibility == Visibility.Visible)
                         CloseIncoming(true);
+                    if (App.Boot.Role == "indoor_panel" &&
+                        (ev.Str("type") == "call_cancelled" || ev.Str("type") == "purpose_selected"))
+                        _effects = PlayConfigured(_effects,
+                            SoundValue("update_sound", "indoor_update"), false);
+                    if (ev.Str("type") == "call_cancelled") StopPlayer(ref _callFeedback);
                     break;
                 case "chime":
                     ExitScreensaver();
                     // カスタム音 (assets の audio_path) があればそれを、無ければ内蔵音
-                    PlayAudio(ev.Str("audio_path"), () => SystemSounds.Exclamation.Play());
+                    if (!string.IsNullOrEmpty(ev.Str("audio_path")))
+                        PlayAudio(ev.Str("audio_path"), () => SystemSounds.Exclamation.Play());
+                    else
+                        _audio = PlayConfigured(_audio, ev.Str("sound"), false,
+                            () => SystemSounds.Exclamation.Play());
                     break;
                 case "visitor_lang":
                     // 訪客言語の切替 (自操作の複製 / 他端末からの変更 / 無操作復帰)
@@ -1320,6 +1410,9 @@ namespace DoorbellApp
         // ---------- 操作 ----------
         private void OnCallClick(object sender, RoutedEventArgs e)
         {
+            _callFeedback = PlayConfigured(_callFeedback,
+                SoundValue("call_sound", "outdoor_call_alert"),
+                ConfigBool("ui.call_sound_loop", false));
             App.Core.Press(App.Boot.Door);
             ShowCalling();
         }

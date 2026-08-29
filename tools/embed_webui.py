@@ -26,6 +26,7 @@ CTYPES = {
     ".svg": "image/svg+xml",
     ".png": "image/png",
     ".jpg": "image/jpeg",
+    ".mp3": "audio/mpeg",
     ".wav": "audio/wav",
     ".ico": "image/x-icon",
 }
@@ -64,6 +65,19 @@ def collect():
             else:
                 url = f"/{sub}/{fn}"
             assets.append((url, ctype, data))
+    # 全クライアント共通の内蔵音。学校チャイムの実ファイル名は要件どおり保持し、
+    # URL だけ ASCII の安定した preset id にする。
+    audio_files = {
+        "outdoor_call_alert.mp3": "outdoor_call_alert.mp3",
+        "button_click.mp3": "button_click.mp3",
+        "学校のチャイム.mp3": "school_chime.mp3",
+        "indoor_update.mp3": "indoor_update.mp3",
+        "title_display.mp3": "title_display.mp3",
+    }
+    audio_base = os.path.join(ROOT, "assets", "audio")
+    for filename, url_name in audio_files.items():
+        with open(os.path.join(audio_base, filename), "rb") as f:
+            assets.append((f"/audio/{url_name}", CTYPES[".mp3"], f.read()))
     # locale は strings.yaml から直接 (ソースツリーの生成物に依存しない)
     entries = gen_i18n.parse(gen_i18n.SRC)
     for lang in gen_i18n.LANGS:

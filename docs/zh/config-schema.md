@@ -82,7 +82,12 @@
 
   "ui": {
     "languages": ["ja", "en", "zh"],            // 门口机访客语言切换里展示的语言
-    "ringtone": "ding1",                          // ding1 / ding2 / classic / asset:<sha256>
+    "launch_sound": "title_display",             // 启动音；空字符串 = 不播放
+    "call_sound": "outdoor_call_alert",          // 室外机呼出确认音；空字符串 = 不播放
+    "call_sound_loop": false,                     // 循环到住客回应或 30 秒超时
+    "button_sound": "button_click",              // 其他按钮音；空字符串 = 不播放
+    "update_sound": "indoor_update",             // 取消呼出/访问目的等追加消息音
+    "ringtone": "school_chime",                  // school_chime / ding1 / ding2 / classic / asset:<sha256>
     "visitor_lang_revert_s": 60                 // 无操作达此秒数后自动回到主语言 (ja)
   },
   // 文案的运行时覆盖（优先于内置 resx/strings.xml）。在管理页面「文案」标签 /

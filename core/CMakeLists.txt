@@ -85,7 +85,8 @@ endif()
 # ---------- webui 埋め込み資産 (ビルド時生成) ----------
 find_package(Python3 COMPONENTS Interpreter REQUIRED)
 file(GLOB_RECURSE WEBUI_FILES CONFIGURE_DEPENDS
-  ${CMAKE_CURRENT_SOURCE_DIR}/../webui/admin/* ${CMAKE_CURRENT_SOURCE_DIR}/../webui/panel/*)
+  ${CMAKE_CURRENT_SOURCE_DIR}/../webui/admin/* ${CMAKE_CURRENT_SOURCE_DIR}/../webui/panel/*
+  ${CMAKE_CURRENT_SOURCE_DIR}/../assets/audio/*)
 set(WEBUI_GEN ${CMAKE_BINARY_DIR}/gen/webui_assets.cpp)
 add_custom_command(OUTPUT ${WEBUI_GEN}
   COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../tools/embed_webui.py ${WEBUI_GEN}

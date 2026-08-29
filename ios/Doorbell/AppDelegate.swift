@@ -17,6 +17,9 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
     var window: UIWindow?
     let core = CoreBridge()
     private(set) var boot = BootConfig()
+    private let effects = SirenPlayer()
+    private let launchAudio = SirenPlayer()
+    private var soundConfig: [String: Any]?
 
     func application(_ application: UIApplication,
                      didFinishLaunchingWithOptions launchOptions:
@@ -32,15 +35,22 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
 
         // 失敗しても UI は起動する (オフライン表示)。ログは os_log (subsystem jp.keihan.doorbell)。
         _ = core.start(dataDir: BootConfig.dataDir(), bootJson: boot.rawJson)
+        soundConfig = core.config()
 
         core.addHandler("app") { [weak self] ev in self?.onUiEvent(ev) }
 
         let win = ActivityWindow(frame: UIScreen.main.bounds)
+        win.onControlTap = { [weak self] control in
+            guard control.accessibilityIdentifier != "call_primary" else { return }
+            self?.effects.playConfigured(self?.soundValue("button_sound", "button_click") ?? "")
+        }
         let main = MainViewController(core: core, boot: boot)
         win.onActivity = { [weak main] in main?.onActivity() }
         win.rootViewController = main
         win.makeKeyAndVisible()
         window = win
+
+        launchAudio.playConfigured(soundValue("launch_sound", "title_display"))
 
         application.isIdleTimerDisabled = true  // keep-awake (kiosk)
         return true
@@ -53,6 +63,14 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
     // MARK: - core イベント (main queue — CoreBridge が marshal 済み)
 
     private func onUiEvent(_ ev: [String: Any]) {
+        let type = ConfigUtil.evStr(ev, "type")
+        if ConfigUtil.evStr(ev, "t") == "event", boot.role != "door_station",
+           type == "call_cancelled" || type == "purpose_selected" {
+            effects.playConfigured(soundValue("update_sound", "indoor_update"))
+        }
+        if ConfigUtil.evStr(ev, "t") == "config_changed" {
+            soundConfig = core.config()
+        }
         // 来客 (press イベントの複製 — WPF MainWindow と同じ流儀) → 来鈴画面。
         // 用件/訪客言語は press payload 由来 (バッジ + 返信ラベル言語)。
         // 門口機自身 (door_station) は MainViewController が門口 UI なので出さない。
@@ -62,6 +80,10 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
                             purpose: ConfigUtil.evStr(ev, "purpose"),
                             visitorLang: ConfigUtil.evStr(ev, "visitor_lang"))
         }
+    }
+
+    private func soundValue(_ key: String, _ fallback: String) -> String {
+        return (ConfigUtil.dig(soundConfig, "ui.\(key)") as? String) ?? fallback
     }
 
     private func presentIncoming(door: String, purpose: String, visitorLang: String) {
@@ -81,9 +103,19 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
 /// 全タッチを無操作検出へ流す window (スクリーンセーバ解除用 — WPF Preview* 相当)。
 final class ActivityWindow: UIWindow {
     var onActivity: (() -> Void)?
+    var onControlTap: ((UIControl) -> Void)?
 
     override func sendEvent(_ event: UIEvent) {
         if event.type == .touches { onActivity?() }
         super.sendEvent(event)
+        guard event.type == .touches else { return }
+        for touch in event.allTouches ?? [] where touch.phase == .ended {
+            var view: UIView? = touch.view
+            while view != nil, !(view is UIControl) { view = view?.superview }
+            if let control = view as? UIControl, control.isEnabled {
+                onControlTap?(control)
+                break
+            }
+        }
     }
 }

@@ -101,6 +101,9 @@ class MainActivity : Activity(), DoorbellCore.Listener {
     private var themeColor: String? = null   // 適用済み bg_color
     private var themeHash: String? = null    // 適用済み bg_image (sha256)
     private var audio: MediaPlayer? = null   // reply/chime の audio_path 再生
+    private var effectAudio: MediaPlayer? = null
+    private var callFeedbackAudio: MediaPlayer? = null
+    private var launchAudio: MediaPlayer? = null
     private var chimeTone: ToneGenerator? = null
     private var callTitleOverride: String? = null  // 用件付き按鈴の「{用件} で呼び出しました」
 
@@ -147,14 +150,15 @@ class MainActivity : Activity(), DoorbellCore.Listener {
         applyStrings()
 
         callButton.setOnClickListener { onCallClick() }
-        purposeSkipButton.setOnClickListener { showCalling() }
+        purposeSkipButton.setOnClickListener { playButtonSound(); showCalling() }
         cancelButton.setOnClickListener {
+            playButtonSound()
             ui.removeCallbacks(callTimeout)
             app.core.cancelCall(app.boot.door)
             showIdle()
         }
         // 隠し管理入口 (右上 200dp を 5 秒内 7 連打)
-        findViewById<View>(R.id.secret_corner).setOnClickListener { onSecretCorner() }
+        findViewById<View>(R.id.secret_corner).setOnClickListener { playButtonSound(); onSecretCorner() }
 
         tts = TextToSpeech(this) { status -> ttsReady = status == TextToSpeech.SUCCESS }
 
@@ -175,6 +179,7 @@ class MainActivity : Activity(), DoorbellCore.Listener {
         app.activityListener = this
         if (!app.coreOk) showOffline()
         refreshNodeInfo()
+        ui.postDelayed({ playLaunchSound() }, 350)
     }
 
     override fun onResume() {
@@ -220,6 +225,9 @@ class MainActivity : Activity(), DoorbellCore.Listener {
         tts?.shutdown()
         try { audio?.release() } catch (_: Exception) { }
         audio = null
+        releasePlayer(effectAudio); effectAudio = null
+        releasePlayer(callFeedbackAudio); callFeedbackAudio = null
+        releasePlayer(launchAudio); launchAudio = null
         stopRinging()
         super.onDestroy()
     }
@@ -504,6 +512,7 @@ class MainActivity : Activity(), DoorbellCore.Listener {
     }
 
     private fun onPurposeClick(id: String, label: String) {
+        playButtonSound()
         app.core.selectPurpose(app.boot.door, id)
         showCalling(texts.t("purpose.sent", R.string.purpose_sent, label))
     }
@@ -559,6 +568,7 @@ class MainActivity : Activity(), DoorbellCore.Listener {
     }
 
     private fun onLangClick(lang: String) {
+        playButtonSound()
         app.core.setVisitorLang(app.boot.door, lang)  // 複製で visitor_lang が返ってくる
         setVisitorLang(lang)                          // 体感優先で先に切り替える (冪等)
     }
@@ -577,6 +587,7 @@ class MainActivity : Activity(), DoorbellCore.Listener {
     // ---------- 状態遷移 ----------
 
     private fun showIdle(hint: String? = null) {
+        stopCallFeedback()
         choosingPurpose = false
         ui.removeCallbacks(purposeTimeout)
         callTitleOverride = null
@@ -658,11 +669,15 @@ class MainActivity : Activity(), DoorbellCore.Listener {
             "state" -> when (ev.optString("state")) {
                 "calling" -> showCalling()
                 "idle" -> showIdle()
-                "in_call" -> callingText.text = texts.t("incall.title", R.string.incall_title)
+                "in_call" -> {
+                    stopCallFeedback()
+                    callingText.text = texts.t("incall.title", R.string.incall_title)
+                }
             }
             // カスタム音 (assets の audio_path) があればそれを、無ければ内蔵トーン
             "chime" -> playAudio(ev.optString("audio_path")) {
-                playChimeTone(ev.optString("sound", "ding1"))
+                val sound = ev.optString("sound", "ding1")
+                if (!playConfiguredInto(sound, false) { audio = it }) playChimeTone(sound)
             }
             "reply" -> {
                 // カスタム音声があれば再生 (無い時は core が TTS 済み — 二重発話しない)
@@ -696,7 +711,12 @@ class MainActivity : Activity(), DoorbellCore.Listener {
             }
             "display" -> applyNightTint(ev.optBoolean("night"), ev.optBoolean("red_tint"))
             "peers_changed", "config_changed" -> refreshNodeInfo()
-            "event" -> if (ev.optString("type") == "call_cancelled") stopRinging()
+            "event" -> {
+                val type = ev.optString("type")
+                if (type == "call_cancelled") stopRinging()
+                if (app.boot.role != "door_station" &&
+                    (type == "call_cancelled" || type == "purpose_selected")) playUpdateSound()
+            }
         }
     }
 
@@ -756,14 +776,106 @@ class MainActivity : Activity(), DoorbellCore.Listener {
 
     /** 呼出ボタンが受理されたことを訪客へ即時に伝える短い確認音。 */
     private fun playCallFeedback() {
-        try {
-            val tone = ToneGenerator(AudioManager.STREAM_MUSIC, 75)
-            tone.startTone(ToneGenerator.TONE_PROP_ACK, 140)
-            ui.postDelayed({ try { tone.release() } catch (_: Exception) { } }, 220)
-        } catch (_: Exception) { }
+        stopCallFeedback()
+        val value = configuredSound("call_sound", "outdoor_call_alert")
+        if (value.isEmpty()) return
+        val loop = (app.core.dig(cfg, "ui.call_sound_loop") as? Boolean) ?: false
+        if (!playConfiguredInto(value, loop) { callFeedbackAudio = it }) {
+            try {
+                val tone = ToneGenerator(AudioManager.STREAM_MUSIC, 75)
+                tone.startTone(ToneGenerator.TONE_PROP_ACK, 140)
+                ui.postDelayed({ try { tone.release() } catch (_: Exception) { } }, 220)
+            } catch (_: Exception) { }
+        }
+    }
+
+    private fun configuredSound(key: String, fallback: String): String {
+        val value = app.core.dig(cfg, "ui.$key")
+        return if (value is String) value else fallback
+    }
+
+    private fun bundledSoundFile(value: String): String? = when (value) {
+        "outdoor_call_alert" -> "outdoor_call_alert.mp3"
+        "button_click" -> "button_click.mp3"
+        "school_chime" -> "学校のチャイム.mp3"
+        "indoor_update" -> "indoor_update.mp3"
+        "title_display" -> "title_display.mp3"
+        else -> null
+    }
+
+    private fun makeConfiguredPlayer(value: String, loop: Boolean): MediaPlayer? {
+        if (value.isEmpty()) return null
+        return try {
+            val mp = MediaPlayer()
+            if (value.startsWith("asset:") && value.length == 70) {
+                val file = File(File(filesDir, "assets"), value.substring(6))
+                if (!file.exists()) { mp.release(); return null }
+                mp.setDataSource(file.absolutePath)
+            } else {
+                val name = bundledSoundFile(value) ?: run { mp.release(); return null }
+                assets.openFd("audio/$name").use { fd ->
+                    mp.setDataSource(fd.fileDescriptor, fd.startOffset, fd.length)
+                }
+            }
+            mp.isLooping = loop
+            mp.prepare()
+            mp
+        } catch (e: Exception) {
+            Log.w(TAG, "内蔵/設定音声を開けない: $value ($e)")
+            null
+        }
+    }
+
+    private fun playConfiguredInto(value: String, loop: Boolean,
+                                   assign: (MediaPlayer?) -> Unit): Boolean {
+        val mp = makeConfiguredPlayer(value, loop) ?: return false
+        assign(mp)
+        mp.setOnCompletionListener {
+            if (!it.isLooping) {
+                try { it.release() } catch (_: Exception) { }
+                assign(null)
+            }
+        }
+        mp.start()
+        return true
+    }
+
+    private fun releasePlayer(player: MediaPlayer?) {
+        try { player?.stop() } catch (_: Exception) { }
+        try { player?.release() } catch (_: Exception) { }
+    }
+
+    private fun playButtonSound() {
+        releasePlayer(effectAudio)
+        effectAudio = null
+        playConfiguredInto(configuredSound("button_sound", "button_click"), false) {
+            effectAudio = it
+        }
+    }
+
+    private fun playUpdateSound() {
+        releasePlayer(effectAudio)
+        effectAudio = null
+        playConfiguredInto(configuredSound("update_sound", "indoor_update"), false) {
+            effectAudio = it
+        }
+    }
+
+    private fun playLaunchSound() {
+        releasePlayer(launchAudio)
+        launchAudio = null
+        playConfiguredInto(configuredSound("launch_sound", "title_display"), false) {
+            launchAudio = it
+        }
+    }
+
+    private fun stopCallFeedback() {
+        releasePlayer(callFeedbackAudio)
+        callFeedbackAudio = null
     }
 
     private fun stopRinging() {
+        stopCallFeedback()
         try { audio?.stop() } catch (_: Exception) { }
         try { audio?.release() } catch (_: Exception) { }
         audio = null

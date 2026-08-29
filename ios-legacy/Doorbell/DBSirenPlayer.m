@@ -29,6 +29,31 @@
   return [p play];
 }
 
+- (BOOL)playConfigured:(NSString *)value dataDir:(NSString *)dataDir loop:(BOOL)loop {
+  if ([value length] == 0) return NO;
+  NSString *path = nil;
+  if ([value hasPrefix:@"asset:"] && [value length] == 70) {
+    path = [[dataDir stringByAppendingPathComponent:@"assets"]
+        stringByAppendingPathComponent:[value substringFromIndex:6]];
+  } else {
+    NSDictionary *files = [NSDictionary dictionaryWithObjectsAndKeys:
+        @"outdoor_call_alert.mp3", @"outdoor_call_alert",
+        @"button_click.mp3", @"button_click",
+        @"学校のチャイム.mp3", @"school_chime",
+        @"indoor_update.mp3", @"indoor_update",
+        @"title_display.mp3", @"title_display", nil];
+    NSString *filename = [files objectForKey:value];
+    if (filename) path = [[[NSBundle mainBundle] resourcePath] stringByAppendingPathComponent:filename];
+  }
+  if ([path length] == 0 || ![[NSFileManager defaultManager] fileExistsAtPath:path]) return NO;
+  AVAudioPlayer *p = [[[AVAudioPlayer alloc] initWithContentsOfURL:[NSURL fileURLWithPath:path]
+                                                             error:NULL] autorelease];
+  if (!p) return NO;
+  [self swapPlayer:p];
+  p.numberOfLoops = loop ? -1 : 0;
+  return [p play];
+}
+
 - (void)startSiren:(NSString *)customPath volume:(NSInteger)volume {
   float vol = (float)MAX(0, MIN(100, volume)) / 100.0f;
   if ([customPath length] > 0 && [[NSFileManager defaultManager] fileExistsAtPath:customPath]) {

@@ -17,6 +17,7 @@ void DBH264Dbg(NSString *fmt, ...);
   DBVtVideoView *_videoView;
   DBLowLatencyPlayerState _state;
   NSUInteger _generation;
+  BOOL _waitingForKeyframe;
   int64_t _lastCaptureMs;
   NSUInteger _latencyCount;
   int64_t _latencySum;
@@ -73,6 +74,7 @@ void DBH264Dbg(NSString *fmt, ...);
   _jitterMs = 0;
   _framesPerSecond = 0;
   _lastStatsFrameAt = 0;
+  _waitingForKeyframe = YES;
   NSUInteger generation = _generation;
   _videoView = [[DBVtVideoView alloc] initWithFrame:_container.bounds];
   _videoView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
@@ -144,7 +146,15 @@ void DBH264Dbg(NSString *fmt, ...);
 
 - (void)fmp4Demux:(DBFmp4Demux *)demux sample:(NSData *)avcc key:(BOOL)key
          captureMs:(int64_t)captureMs dtsMs:(int64_t)dtsMs durMs:(int64_t)durMs {
-  (void)demux; (void)key;
+  (void)demux;
+  // A live fMP4 connection commonly begins between GOPs.  Feeding P/B frames
+  // before the first IDR makes the iOS 5 hardware decoder enter its synchronous
+  // error callback path.  Join only at a random-access point.
+  if (_waitingForKeyframe) {
+    if (!key) return;
+    _waitingForKeyframe = NO;
+    DBH264Dbg(@"[vt] first keyframe received");
+  }
   [_videoView pushSample:avcc captureMs:captureMs dtsMs:dtsMs durMs:durMs];
 }
 
@@ -160,6 +170,7 @@ void DBH264Dbg(NSString *fmt, ...);
   }
   _generation++;
   _state = DBLowLatencyPlayerIdle;
+  _waitingForKeyframe = YES;
   DBFmp4Demux *demux = _demux;
   _demux = nil;
   [demux stop];

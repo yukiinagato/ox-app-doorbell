@@ -93,6 +93,7 @@ $(EXE): $(ALL_OBJS) $(LIB_DIR)/libdoorbell_all.a
 app: $(EXE)
 	@cp $(SRC_DIR)/Info.plist $(APP)/Info.plist
 	@cp $(SRC_DIR)/Resources/*.png $(APP)/ 2>/dev/null || true
+	@cp $(ROOT)/assets/audio/*.mp3 $(APP)/
 	@$(LDID) -S $(EXE)
 	@echo "ok: $(APP)"
 

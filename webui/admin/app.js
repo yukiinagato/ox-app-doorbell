@@ -227,7 +227,7 @@ var AdminLogic = (function () {
 
   // 資産 hash → 使用箇所の表示文字列配列。走査範囲は core の referencedAssets と同じ:
   //   display.theme.bg_image / devices.*.local.theme.bg_image / quick_replies.*.audio.* /
-  //   ui.ringtone / trigger_rules.*.actions[].sound / emergency.alarm_sound
+  //   ui の各 sound / trigger_rules.*.actions[].sound / emergency.alarm_sound
   function assetRefs(cfg) {
     var out = {};
     function add(h, where) {
@@ -246,7 +246,9 @@ var AdminLogic = (function () {
       var au = qrs[qid].audio || {};
       for (var lg in au) add(au[lg], "quick_replies." + qid + " (" + lg + ")");
     }
-    add(assetRefHash((cfg.ui || {}).ringtone), "ui.ringtone");
+    var ui = cfg.ui || {};
+    ["ringtone", "launch_sound", "call_sound", "button_sound", "update_sound"].forEach(
+      function (key) { add(assetRefHash(ui[key]), "ui." + key); });
     var rs = cfg.trigger_rules || {};
     for (var rid in rs) {
       var acts = rs[rid].actions || [];
@@ -556,7 +558,10 @@ if (typeof document !== "undefined") (function () {
       p_sales: { label: { ja: "営業・集金", en: "Sales", zh: "推销/收费" }, icon: "💼", order: 4 },
       p_work: { label: { ja: "検針・工事", en: "Utility", zh: "检修/施工" }, icon: "🔧", order: 5 },
       p_other: { label: { ja: "その他", en: "Other", zh: "其他" }, icon: "❓", order: 6 } },
-    ui: { languages: ["ja", "en", "zh"], visitor_lang_revert_s: 60 },
+    ui: { languages: ["ja", "en", "zh"], visitor_lang_revert_s: 60,
+          launch_sound: "title_display", call_sound: "outdoor_call_alert",
+          call_sound_loop: false, button_sound: "button_click",
+          update_sound: "indoor_update", ringtone: "school_chime" },
     i18n_overrides: { ja: { "idle.touch_to_call": "タッチして呼び出してください" } },
     display: { theme: { bg_color: "#12202c", bg_image: MOCK_IMG }, brightness: 70,
                screensaver_after_s: 120, pixel_shift_s: 300 },
@@ -951,8 +956,18 @@ if (typeof document !== "undefined") (function () {
     });
   }
   function playRingtone(value) {
-    if (value && value.indexOf("asset:") === 0) playAsset(value.slice(6));
-    else playPresetRingtone(value || "ding1");
+    if (!value) { msg("音声なし"); return; }
+    if (value.indexOf("asset:") === 0) { playAsset(value.slice(6)); return; }
+    if (BUILTIN_AUDIO[value]) {
+      if (MOCK) { msg("mock: " + value + " を再生"); return; }
+      if (!audioEl) audioEl = new Audio();
+      audioEl.pause();
+      audioEl.src = "/audio/" + BUILTIN_AUDIO[value];
+      audioEl.currentTime = 0;
+      audioEl.play();
+      return;
+    }
+    playPresetRingtone(value);
   }
 
   // icon 候補ボタン / audio 試聴ボタンの結線 (openForm 後に呼ぶ)
@@ -1043,8 +1058,31 @@ if (typeof document !== "undefined") (function () {
   var RINGTONE_PRESETS = [
     { v: "ding1", label: "Ding Dong" },
     { v: "ding2", label: "Double Chime" },
-    { v: "classic", label: "Classic Bell" }
+    { v: "classic", label: "Classic Bell" },
+    { v: "school_chime", label: "学校のチャイム" }
   ];
+  var SOUND_PRESETS = [
+    { v: "outdoor_call_alert", label: "警告音1（室外機呼出）" },
+    { v: "button_click", label: "カーソル移動4（ボタン）" },
+    { v: "school_chime", label: "学校のチャイム" },
+    { v: "indoor_update", label: "決定ボタン23（追加メッセージ）" },
+    { v: "title_display", label: "タイトル表示（起動）" }
+  ];
+  var BUILTIN_AUDIO = {
+    outdoor_call_alert: "outdoor_call_alert.mp3",
+    button_click: "button_click.mp3",
+    school_chime: "school_chime.mp3",
+    indoor_update: "indoor_update.mp3",
+    title_display: "title_display.mp3"
+  };
+  function soundOptions(includeNone) {
+    var o = includeNone ? [{ v: "", label: "再生しない" }] : [];
+    o = o.concat(SOUND_PRESETS);
+    assetIds("audio").forEach(function (h) {
+      o.push({ v: "asset:" + h, label: "♫ " + assetLabel(h) + " (" + h.slice(0, 8) + ")" });
+    });
+    return o;
+  }
   function ringtoneOptions() {
     var o = RINGTONE_PRESETS.slice();
     assetIds("audio").forEach(function (h) {
@@ -2710,20 +2748,34 @@ if (typeof document !== "undefined") (function () {
     var ids = assetIds("");
     var st = S.status.assets || {};
 
-    // 室内機の全体既定鈴音 (呼出ルール未設定時にも使用)。
-    var ringtone = (cfgObj("ui").ringtone || "ding1");
-    var ringOpts = ringtoneOptions(), ringSelect = "";
-    for (var rix = 0; rix < ringOpts.length; rix++)
-      ringSelect += "<option value='" + esc(ringOpts[rix].v) + "'" +
-                    (ringOpts[rix].v === ringtone ? " selected" : "") + ">" +
-                    esc(ringOpts[rix].label) + "</option>";
-    var h = "<div class='card'><h2>室内機の呼出音</h2>" +
-            "<div class='frow'><label class='flab'>鈴声</label><select id='ringtoneSelect'>" +
-            ringSelect + "</select> <button class='btn2' id='ringtonePreview'>▶ " +
-            esc(t("admin.audio_play", "試聴")) + "</button> " +
-            "<button class='btn small' id='ringtoneSave'>" + esc(t("admin.save", "保存")) +
-            "</button><div class='dim fhint'>プリセット、または下でアップロードした音声を選択できます。</div>" +
-            "</div></div>";
+    var uiCfg = cfgObj("ui");
+    function selectHtml(id, value, opts) {
+      var out = "<select id='" + id + "'>";
+      for (var i = 0; i < opts.length; i++)
+        out += "<option value='" + esc(opts[i].v) + "'" +
+               (opts[i].v === value ? " selected" : "") + ">" + esc(opts[i].label) + "</option>";
+      return out + "</select> <button class='btn2' data-soundpreview='" + id + "'>▶ " +
+             esc(t("admin.audio_play", "試聴")) + "</button>";
+    }
+    var h = "<div class='card'><h2>サウンド管理</h2><div class='grid2'>" +
+      "<div class='frow'><label class='flab'>App 起動音</label>" +
+      selectHtml("launchSound", uiCfg.launch_sound === undefined ? "title_display" : uiCfg.launch_sound,
+                 soundOptions(true)) + "</div>" +
+      "<div class='frow'><label class='flab'>室外機の呼出音</label>" +
+      selectHtml("callSound", uiCfg.call_sound === undefined ? "outdoor_call_alert" : uiCfg.call_sound,
+                 soundOptions(true)) +
+      "<label class='check'><input id='callSoundLoop' type='checkbox'" +
+      (uiCfg.call_sound_loop ? " checked" : "") + "> 住客の応答または30秒のタイムアウトまで循環</label></div>" +
+      "<div class='frow'><label class='flab'>その他のボタン音</label>" +
+      selectHtml("buttonSound", uiCfg.button_sound === undefined ? "button_click" : uiCfg.button_sound,
+                 soundOptions(true)) + "</div>" +
+      "<div class='frow'><label class='flab'>室内機の鈴声</label>" +
+      selectHtml("ringtoneSelect", uiCfg.ringtone || "school_chime", ringtoneOptions()) + "</div>" +
+      "<div class='frow'><label class='flab'>追加メッセージ通知音</label>" +
+      selectHtml("updateSound", uiCfg.update_sound === undefined ? "indoor_update" : uiCfg.update_sound,
+                 soundOptions(true)) + "</div></div>" +
+      "<button class='btn small' id='soundSettingsSave'>" + esc(t("admin.save", "保存")) + "</button>" +
+      "<div class='dim fhint'>内蔵プリセット、アップロードした音声、または「再生しない」を選択できます。</div></div>";
 
     // アップロード
     h += "<div class='card'><h2>" + esc(t("admin.assets_upload", "アップロード")) + "</h2>" +
@@ -2785,9 +2837,18 @@ if (typeof document !== "undefined") (function () {
     }
     el.innerHTML = h;
 
-    $("#ringtonePreview").onclick = function () { playRingtone($("#ringtoneSelect").value); };
-    $("#ringtoneSave").onclick = function () {
-      saveAndRefresh([{ key: "ui.ringtone", value: $("#ringtoneSelect").value }], null);
+    $all("[data-soundpreview]", el).forEach(function (b) {
+      b.onclick = function () { playRingtone($(b.getAttribute("data-soundpreview")).value); };
+    });
+    $("#soundSettingsSave").onclick = function () {
+      saveAndRefresh([
+        { key: "ui.launch_sound", value: $("#launchSound").value },
+        { key: "ui.call_sound", value: $("#callSound").value },
+        { key: "ui.call_sound_loop", value: $("#callSoundLoop").checked },
+        { key: "ui.button_sound", value: $("#buttonSound").value },
+        { key: "ui.ringtone", value: $("#ringtoneSelect").value },
+        { key: "ui.update_sound", value: $("#updateSound").value }
+      ], null);
     };
 
     var prog = $("#asProg"), bar = prog.firstChild, out = $("#asOut");

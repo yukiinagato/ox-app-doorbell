@@ -41,6 +41,11 @@
 - (void)sipHangup;
 - (void)sipSendDtmf:(NSString *)digits;
 
+// 全画面共通の UI 効果音。
+- (void)playLaunchSound;
+- (void)playButtonSound;
+- (void)playUpdateSound;
+
 // core イベント入口 (main スレッド)
 - (void)onCoreEvent:(NSDictionary *)ev;
 

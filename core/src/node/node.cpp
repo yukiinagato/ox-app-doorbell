@@ -457,8 +457,8 @@ struct Node::Impl {
 
   // 設定が参照している資産 hash を収集する (プリフェッチ/GC の基準):
   //   display.theme.bg_image / devices.*.local.theme.bg_image /
-  //   quick_replies.*.audio.* / trigger_rules の chime sound "asset:*" /
-  //   emergency.alarm_sound "asset:*"
+  //   quick_replies.*.audio.* / ui の各 sound / trigger_rules の chime sound
+  //   "asset:*" / emergency.alarm_sound "asset:*"
   std::set<std::string> referencedAssets() {
     std::set<std::string> out;
     auto addHash = [&out](const std::string& h) {
@@ -479,7 +479,12 @@ struct Node::Impl {
         if (cJSON_IsString(a)) addHash(a->valuestring);
       }
     }
-    addHash(assetRefHash(json::getString(json::get(cfg.get(), "ui"), "ringtone")));
+    cJSON* ui = json::get(cfg.get(), "ui");
+    addHash(assetRefHash(json::getString(ui, "ringtone")));
+    addHash(assetRefHash(json::getString(ui, "launch_sound")));
+    addHash(assetRefHash(json::getString(ui, "call_sound")));
+    addHash(assetRefHash(json::getString(ui, "button_sound")));
+    addHash(assetRefHash(json::getString(ui, "update_sound")));
     cJSON* rules_obj = json::get(cfg.get(), "trigger_rules");
     cJSON* rule = nullptr;
     cJSON_ArrayForEach(rule, rules_obj) {
@@ -1424,6 +1429,12 @@ struct Node::Impl {
       // 訪客言語 (門口機の言語切替に出す言語 + 無操作復帰秒)
       config->set("ui.languages", "[\"ja\",\"en\",\"zh\"]");
       config->set("ui.visitor_lang_revert_s", "60");
+      config->set("ui.launch_sound", "\"title_display\"");
+      config->set("ui.call_sound", "\"outdoor_call_alert\"");
+      config->set("ui.call_sound_loop", "false");
+      config->set("ui.button_sound", "\"button_click\"");
+      config->set("ui.update_sound", "\"indoor_update\"");
+      config->set("ui.ringtone", "\"school_chime\"");
       // 訪客の用件ボタン (既定 seed — docs/config-schema.md visit_purposes)
       auto vp = [&](const char* id, const char* ja, const char* en, const char* zh,
                     const char* icon, int order) {
@@ -2400,6 +2411,18 @@ struct Node::Impl {
         json::set(r, "ts", last_reply_ts);
       } else {
         json::setItem(o.get(), "reply", json::Doc(cJSON_CreateNull()));
+      }
+      // Web パネルもネイティブ殻と同じ音設定を使う。asset:* は /asset/<hash>?k= で
+      // パネル token 認証され、内蔵 preset は /audio/<id>.mp3 から取得する。
+      {
+        cJSON* sounds = json::addObj(o.get(), "sounds");
+        cJSON* ui = json::get(cfg.get(), "ui");
+        json::set(sounds, "launch", json::getString(ui, "launch_sound", "title_display"));
+        json::set(sounds, "call", json::getString(ui, "call_sound", "outdoor_call_alert"));
+        json::setBool(sounds, "call_loop", json::getBool(ui, "call_sound_loop", false));
+        json::set(sounds, "button", json::getString(ui, "button_sound", "button_click"));
+        json::set(sounds, "update", json::getString(ui, "update_sound", "indoor_update"));
+        json::set(sounds, "ringtone", json::getString(ui, "ringtone", "school_chime"));
       }
       // 訪客の用件ボタン (order 昇順 — 門口ページの描画用。ラベルは全言語同梱で
       // 言語切替時の再取得を不要にする)

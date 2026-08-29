@@ -628,7 +628,10 @@ static UIColor *DBNightClk(void) { return [UIColor colorWithRed:0.545 green:0.14
   NSString *t = [DBConfigUtil evStr:ev key:@"t"];
   if ([t isEqualToString:@"chime"]) {
     NSString *path = [DBConfigUtil evStr:ev key:@"audio_path"];
-    if (![_audio playAssetPath:path]) AudioServicesPlaySystemSound((SystemSoundID)1013);
+    if (![_audio playAssetPath:path] &&
+        ![_audio playConfigured:[DBConfigUtil evStr:ev key:@"sound"]
+                         dataDir:[DBBootConfig dataDir] loop:NO])
+      AudioServicesPlaySystemSound((SystemSoundID)1013);
   } else if ([t isEqualToString:@"event"]) {
     [self appendEvent:ev];
   } else if ([t isEqualToString:@"reply"]) {

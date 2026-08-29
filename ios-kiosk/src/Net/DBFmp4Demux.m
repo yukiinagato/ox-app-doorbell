@@ -407,7 +407,7 @@ static BOOL sendAll(int fd, const void *bytes, size_t length) {
 }
 
 // mdat payload を trun 表に従って切り出し AVCC sample として delegate へ。
-// sample_flags bit16-17 (sample_depends_on) == 2 が I 帧。
+// sample_flags bit24-25 (sample_depends_on) == 2 が I 帧。
 - (BOOL)emitSamplesLocked:(const uint8_t *)p len:(uint64_t)len {
   static int elog = 0;
   if (!elog) {
@@ -424,7 +424,7 @@ static BOOL sendAll(int fd, const void *bytes, size_t length) {
     uint64_t sz = _trun[i].size;
     if (off + sz > len) return NO;
     uint32_t flg = (i == 0 && _firstFlagsSet) ? _firstFlags : _trun[i].flg;
-    BOOL key = ((flg >> 16) & 0x3) == 2;
+    BOOL key = ((flg >> 24) & 0x3) == 2;
     if (d) {
       NSData *s = [NSData dataWithBytes:p + off length:(NSUInteger)sz];
       /* cbQueue 上で直接配送 (main に積むと A5 で追いつかない) */

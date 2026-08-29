@@ -29,6 +29,38 @@ final class SirenPlayer {
         }
     }
 
+    private static let bundledFiles: [String: String] = [
+        "outdoor_call_alert": "outdoor_call_alert.mp3",
+        "button_click": "button_click.mp3",
+        "school_chime": "学校のチャイム.mp3",
+        "indoor_update": "indoor_update.mp3",
+        "title_display": "title_display.mp3"
+    ]
+
+    /// ui.*_sound の値 (内蔵 preset / asset:<sha256> / 空文字) を再生する。
+    func playConfigured(_ value: String, dataDir: String = BootConfig.dataDir(),
+                        loops: Bool = false, fallback: (() -> Void)? = nil) {
+        guard !value.isEmpty else { return }
+        var url: URL?
+        if value.hasPrefix("asset:"), value.count == 70 {
+            let hash = String(value.dropFirst(6))
+            let path = URL(fileURLWithPath: dataDir).appendingPathComponent("assets")
+                .appendingPathComponent(hash).path
+            if FileManager.default.fileExists(atPath: path) { url = URL(fileURLWithPath: path) }
+        } else if let filename = SirenPlayer.bundledFiles[value] {
+            url = Bundle.main.url(forResource: (filename as NSString).deletingPathExtension,
+                                  withExtension: (filename as NSString).pathExtension)
+        }
+        guard let soundUrl = url, let p = try? AVAudioPlayer(contentsOf: soundUrl) else {
+            fallback?()
+            return
+        }
+        player?.stop()
+        player = p
+        p.numberOfLoops = loops ? -1 : 0
+        if !p.play() { fallback?() }
+    }
+
     // MARK: - サイレン
 
     /// 警報開始。customPath (emergency の audio_path) 優先、無ければ内蔵サイレン。

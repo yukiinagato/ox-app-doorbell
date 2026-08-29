@@ -20,6 +20,25 @@ void DBH264Dbg(NSString *fmt, ...);
 }
 @end
 
+@interface DBEffectWindow : UIWindow
+@property(nonatomic, copy) void (^onButtonTap)(void);
+@end
+@implementation DBEffectWindow
+- (void)sendEvent:(UIEvent *)event {
+  [super sendEvent:event];
+  if (event.type != UIEventTypeTouches || !_onButtonTap) return;
+  for (UITouch *touch in [event allTouches]) {
+    if (touch.phase != UITouchPhaseEnded) continue;
+    UIView *view = touch.view;
+    while (view && ![view isKindOfClass:[UIButton class]]) view = view.superview;
+    if ([view isKindOfClass:[UIButton class]] && [(UIButton *)view isEnabled]) {
+      _onButtonTap();
+      break;
+    }
+  }
+}
+@end
+
 @implementation DBAppDelegate {
   DBCoreBridge *_core;
   DBBootConfig *_boot;
@@ -44,7 +63,9 @@ void DBH264Dbg(NSString *fmt, ...);
   DBRouter *router = _router;  // app 生涯で生存するため strong キャプチャで安全
   [_core addHandler:@"app" handler:^(NSDictionary *ev) { [router onCoreEvent:ev]; }];
 
-  UIWindow *win = [[UIWindow alloc] initWithFrame:[UIScreen mainScreen].bounds];
+  DBEffectWindow *win = [[DBEffectWindow alloc] initWithFrame:[UIScreen mainScreen].bounds];
+  __weak DBRouter *effectRouter = _router;
+  win.onButtonTap = ^{ [effectRouter playButtonSound]; };
   DBRootController *root = [[DBRootController alloc] initWithNibName:nil bundle:nil];
   UIView *container = _router.containerView;
   container.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
@@ -56,6 +77,8 @@ void DBH264Dbg(NSString *fmt, ...);
   application.idleTimerDisabled = YES;  // keep-awake (kiosk)
 
   [_router start];
+  dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.6 * NSEC_PER_SEC)),
+                 dispatch_get_main_queue(), ^{ [_router playLaunchSound]; });
 
   // UI ウォッチドッグ (main runloop が回り始めた後で良い)
   DBRouter *r = _router;

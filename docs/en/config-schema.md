@@ -87,7 +87,12 @@ never displayed; stored in the platform secure store).
 
   "ui": {
     "languages": ["ja", "en", "zh"],            // languages offered on the door station's visitor language switcher
-    "ringtone": "ding1",                          // ding1 / ding2 / classic / asset:<sha256>
+    "launch_sound": "title_display",             // startup sound; empty string disables it
+    "call_sound": "outdoor_call_alert",          // door-station call acknowledgement; empty disables it
+    "call_sound_loop": false,                     // loop until reply or the 30-second timeout
+    "button_sound": "button_click",              // all other buttons; empty disables it
+    "update_sound": "indoor_update",             // cancellation/purpose and other visitor updates
+    "ringtone": "school_chime",                  // school_chime / ding1 / ding2 / classic / asset:<sha256>
     "visitor_lang_revert_s": 60                 // revert to the primary language (ja) after this many idle seconds
   },
   // Runtime overrides for wording (take precedence over the built-in resx/strings.xml). Edit from
