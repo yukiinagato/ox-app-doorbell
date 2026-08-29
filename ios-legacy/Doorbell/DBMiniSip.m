@@ -59,6 +59,10 @@ static void DBSipOnState(ms_state st, void *user);
   if (_thread != nil) return;
   _stop = NO;
   [_audioForCb start];
+  // スレッド生存期間中は自己保持する (dealloc が poll スレッド走行中に走るのを防ぐ)。
+  // threadMain の最後で release する。これが無いと 2 回目の呼出時に解放済みオブジェクトへ
+  // コールバックが飛び UI が凍結/破壊される (MRC)。
+  [self retain];
   _thread = [[NSThread alloc] initWithTarget:self selector:@selector(threadMain) object:nil];
   [_thread start];
 }
@@ -87,11 +91,13 @@ static void DBSipOnState(ms_state st, void *user);
 
   const char *modeC = [_mode length] > 0 ? [_mode UTF8String] : "";
   _session = ms_call([_host UTF8String], _port, modeC, &cbs);
+  // ms_call が NULL の場合 (接続失敗):
   if (_session == NULL) {
     [self performSelectorOnMainThread:@selector(deliverState:)
                            withObject:[NSNumber numberWithInt:DBMiniSipEnded]
                         waitUntilDone:NO];
     [pool release];
+    [self release];  // start() で retain した分
     return;
   }
 
@@ -112,6 +118,7 @@ static void DBSipOnState(ms_state st, void *user);
   ms_free(_session);
   _session = NULL;
   [pool release];
+  [self release];  // start() で retain した分 (これ以降 self には触れない)
 }
 
 - (void)deliverState:(NSNumber *)state {

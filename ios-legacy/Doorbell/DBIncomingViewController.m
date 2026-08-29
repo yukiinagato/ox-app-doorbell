@@ -68,6 +68,7 @@ static const NSTimeInterval kAutoCloseS = 30;
   [_autoCloseTimer invalidate];
   [_streamer stop];
   [_streamer release];
+  _sip.delegate = nil;  // 解放済み delegate への状態配送を防ぐ (assign 参照)
   [_sip release];
   [_core release];
   [_boot release];
@@ -135,6 +136,7 @@ static const NSTimeInterval kAutoCloseS = 30;
   [_streamer stop];
   if ([_sipMode length] > 0) {
     [_sip hangup];
+    _sip.delegate = nil;  // 画面は閉じる — 後発の状態配送を捨てる
     [_sipMode release];
     _sipMode = [@"" retain];
   }
@@ -403,6 +405,7 @@ static const NSTimeInterval kAutoCloseS = 30;
   _answerButton.enabled = NO;   // 二重発呼防止
   [_autoCloseTimer invalidate]; // 応答操作中は自動クローズしない
   if ([_sipMode isEqualToString:@"monitor"]) {
+    _sip.delegate = nil;  // 旧セッションの状態コールバックを捨てる ( Ended 誤 close 防止)
     [_sip hangup];
     [_sip release];
     _sip = nil;
@@ -428,7 +431,8 @@ static const NSTimeInterval kAutoCloseS = 30;
 }
 
 - (void)startSip:(NSString *)mode {
-  [_sip release];
+  _sip.delegate = nil;  // 旧セッションが生きたままでも解放済み delegate を触らない
+  [_sip release];       // DBMiniSip はスレッド完走まで自己保持するので安全
   _sip = [[DBMiniSip alloc] initWithHost:_peerHost port:_directPort mode:mode
                               micEnabled:_boot.micEnabled];
   _sip.delegate = self;
