@@ -84,7 +84,7 @@ static NSTimeInterval sLockedUntil = 0;
     [_keyButtons addObject:b];
   }
 
-  _cancelButton = [[UIButton buttonWithType:UIButtonTypeCustom] init];
+  _cancelButton = [UIButton buttonWithType:UIButtonTypeCustom];
   [_cancelButton setTitle:[_texts ts:@"calling.cancel"] forState:UIControlStateNormal];
   _cancelButton.titleLabel.font = [UIFont systemFontOfSize:18];
   [_cancelButton setTitleColor:[UIColor colorWithWhite:1 alpha:0.7] forState:UIControlStateNormal];

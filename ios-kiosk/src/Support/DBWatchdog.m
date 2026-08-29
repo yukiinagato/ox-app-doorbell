@@ -37,9 +37,9 @@ static void WDAppendLog(NSString *line) {
 }
 
 - (void)wdThreadMain {
-  @autoreleasepool {
-    [NSThread sleepForTimeInterval:5.0];  // 起動直後の猶予
-    while (YES) {
+  [NSThread sleepForTimeInterval:5.0];  // 起動直後の猶予
+  while (YES) {
+    @autoreleasepool {  // 一巡ごとに解放 (ループが一生抜けないため外側に置かない)
       [NSThread sleepForTimeInterval:3.0];
       gWdPong = 0;
       [self performSelectorOnMainThread:@selector(wdPong) withObject:nil waitUntilDone:NO];

@@ -99,16 +99,24 @@
 }
 
 // 未配対 (全ゼロ PSK) なら配対引導を出す (home が見えてから少し待つ)。
+// pairingInfo の取得も main で行わない (core のロックを main で触らない原則)。
 - (void)checkPairingDeferred {
   __weak DBRouter *wself = self;
+  DBCoreBridge *core = _core;
   dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.8 * NSEC_PER_SEC)),
                  dispatch_get_main_queue(), ^{
     DBRouter *s = wself;
     if (!s || s->_current != s->_home || !s->_home) return;
-    NSDictionary *p = [s->_core pairingInfo];
-    if (![p isKindOfClass:[NSDictionary class]]) return;  // core 未起動等 → 触らない
-    if ([[p objectForKey:@"paired"] boolValue]) return;   // 配対済み
-    [s showPairing];
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+      NSDictionary *p = [core pairingInfo];
+      dispatch_async(dispatch_get_main_queue(), ^{
+        DBRouter *s2 = wself;
+        if (!s2 || s2->_current != s2->_home) return;
+        if (![p isKindOfClass:[NSDictionary class]]) return;  // core 未起動等 → 触らない
+        if ([[p objectForKey:@"paired"] boolValue]) return;   // 配対済み
+        [s2 showPairing];
+      });
+    });
   });
 }
 

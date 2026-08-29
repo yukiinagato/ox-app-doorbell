@@ -47,17 +47,17 @@ static NSString *const kDefaultJson =
   NSMutableDictionary *d = [obj isKindOfClass:[NSDictionary class]]
                                ? [obj mutableCopy]
                                : [NSMutableDictionary dictionary];
-  d[@"psk_hex"] = pskHex;
+  [d setObject:pskHex forKey:@"psk_hex"];
   // seeds は既存と和集合 (自機アドレスは core 側で isSelfAddr 除外される)
   NSMutableArray *merged = [NSMutableArray array];
-  id existing = d[@"seed_peers"];
+  id existing = [d objectForKey:@"seed_peers"];
   if ([existing isKindOfClass:[NSArray class]]) {
     for (id s in (NSArray *)existing)
       if ([s isKindOfClass:[NSString class]] && ![merged containsObject:s]) [merged addObject:s];
   }
   for (id s in (seeds ?: @[]))
     if ([s isKindOfClass:[NSString class]] && ![merged containsObject:s]) [merged addObject:s];
-  if ([merged count] > 0) d[@"seed_peers"] = merged;
+  if ([merged count] > 0) [d setObject:merged forKey:@"seed_peers"];
   NSData *out = [NSJSONSerialization dataWithJSONObject:d options:0 error:NULL];
   if (out == nil) return nil;
   NSString *js = [[NSString alloc] initWithData:out encoding:NSUTF8StringEncoding];
@@ -82,16 +82,17 @@ static NSString *const kDefaultJson =
   if ([obj isKindOfClass:[NSDictionary class]]) {
     NSDictionary *d = obj;
     id v;
-    if ((v = d[@"name"]) && [v isKindOfClass:[NSString class]]) c.name = v;
-    if ((v = d[@"role"]) && [v isKindOfClass:[NSString class]]) c.role = v;
-    if ((v = d[@"door"]) && [v isKindOfClass:[NSString class]]) c.door = v;
-    if ((v = d[@"ui_lang"]) && [v isKindOfClass:[NSString class]]) c.uiLang = v;
-    if ((v = d[@"kiosk"]) && [v isKindOfClass:[NSNumber class]]) c.kiosk = [v boolValue];
-    if ((v = d[@"http_port"]) && [v isKindOfClass:[NSNumber class]] && [v integerValue] > 0)
+    if ((v = [d objectForKey:@"name"]) && [v isKindOfClass:[NSString class]]) c.name = v;
+    if ((v = [d objectForKey:@"role"]) && [v isKindOfClass:[NSString class]]) c.role = v;
+    if ((v = [d objectForKey:@"door"]) && [v isKindOfClass:[NSString class]]) c.door = v;
+    if ((v = [d objectForKey:@"ui_lang"]) && [v isKindOfClass:[NSString class]]) c.uiLang = v;
+    if ((v = [d objectForKey:@"kiosk"]) && [v isKindOfClass:[NSNumber class]]) c.kiosk = [v boolValue];
+    if ((v = [d objectForKey:@"http_port"]) && [v isKindOfClass:[NSNumber class]] &&
+        [v integerValue] > 0)
       c.httpPort = [v integerValue];
-    if ((v = d[@"door_host"]) && [v isKindOfClass:[NSString class]]) c.doorHost = v;
-    if ((v = d[@"mic"]) && [v isKindOfClass:[NSNumber class]]) c.micEnabled = [v boolValue];
-    id sip = d[@"sip"];
+    if ((v = [d objectForKey:@"door_host"]) && [v isKindOfClass:[NSString class]]) c.doorHost = v;
+    if ((v = [d objectForKey:@"mic"]) && [v isKindOfClass:[NSNumber class]]) c.micEnabled = [v boolValue];
+    id sip = [d objectForKey:@"sip"];
     if ([sip isKindOfClass:[NSDictionary class]]) {
       id dp = [(NSDictionary *)sip objectForKey:@"direct_port"];
       if ([dp isKindOfClass:[NSNumber class]] && [dp integerValue] > 0)

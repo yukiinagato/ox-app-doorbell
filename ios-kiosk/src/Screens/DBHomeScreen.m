@@ -45,6 +45,11 @@ static UIColor *DBNightClk(void) { return [UIColor colorWithRed:0.545 green:0.14
   NSInteger _secretTaps;
   NSDate *_secretFirst;
 
+  // core スナップショットの非同期収集 (main を塞がない)
+  dispatch_queue_t _refreshQueue;
+  BOOL _refreshBusy;   // _refreshQueue 実行中
+  BOOL _refreshDirty;  // 実行中に再要求が来た
+
   // UI
   UIImageView *_themeBg;
   UILabel *_clockLabel;
@@ -85,6 +90,7 @@ static UIColor *DBNightClk(void) { return [UIColor colorWithRed:0.545 green:0.14
     _cancelRequiresPin = YES;
     _sosDownAt = [NSDate distantPast];
     _secretFirst = [NSDate distantPast];
+    _refreshQueue = dispatch_queue_create("doorbell.home.refresh", DISPATCH_QUEUE_SERIAL);
     [self buildUi];
   }
   return self;
@@ -174,7 +180,7 @@ static UIColor *DBNightClk(void) { return [UIColor colorWithRed:0.545 green:0.14
           forControlEvents:UIControlEventTouchUpInside];
   [self addSubview:_secretCorner];
 
-  _infoButton = [[UIButton buttonWithType:UIButtonTypeCustom] init];
+  _infoButton = [UIButton buttonWithType:UIButtonTypeCustom];
   [_infoButton setTitle:@"ⓘ" forState:UIControlStateNormal];
   _infoButton.titleLabel.font = [UIFont systemFontOfSize:22];
   [_infoButton setTitleColor:[UIColor colorWithWhite:1 alpha:0.4] forState:UIControlStateNormal];
@@ -238,7 +244,7 @@ static UIColor *DBNightClk(void) { return [UIColor colorWithRed:0.545 green:0.14
   _emergencyNote.textAlignment = NSTextAlignmentCenter;
   _emergencyNote.numberOfLines = 0;
   [_emergencyView addSubview:_emergencyNote];
-  _emergencyCancel = [[UIButton buttonWithType:UIButtonTypeCustom] init];
+  _emergencyCancel = [UIButton buttonWithType:UIButtonTypeCustom];
   _emergencyCancel.titleLabel.font = [UIFont boldSystemFontOfSize:26];
   [_emergencyCancel setTitleColor:[UIColor colorWithRed:0.55 green:0.05 blue:0.04 alpha:1]
                          forState:UIControlStateNormal];
@@ -337,12 +343,45 @@ static UIColor *DBNightClk(void) { return [UIColor colorWithRed:0.545 green:0.14
 }
 
 - (void)refreshFromCore {
-  _cfg = [_core config];
-  [_texts setConfig:_cfg];
-  [_texts setLang:_boot.uiLang];
-  _panelToken = [self firstPanelToken];
+  // main スレッドでは重い core 呼び出しをしない (起動直後のイベント storm で
+  // core 内部ロックにより main が詰まり UI 無反応になるため — 実機で観測)。
+  // 背景の直列 queue で JSON を収集し、main で反映する。実行中の再要求は dirty 合併。
+  @synchronized(self) {
+    if (_refreshBusy) {
+      _refreshDirty = YES;
+      return;
+    }
+    _refreshBusy = YES;
+  }
+  DBCoreBridge *core = _core;
+  __weak DBHomeScreen *wself = self;
+  dispatch_async(_refreshQueue, ^{
+    NSDictionary *cfg = [core config];
+    NSDictionary *st = [core status];
+    dispatch_async(dispatch_get_main_queue(), ^{
+      DBHomeScreen *s = wself;
+      if (!s) return;
+      BOOL dirty = NO;
+      @synchronized(s) {
+        dirty = s->_refreshDirty;
+        s->_refreshDirty = NO;
+        if (!dirty) s->_refreshBusy = NO;
+      }
+      [s applyCoreSnapshotWithConfig:cfg status:st];
+      if (dirty) [s refreshFromCore];
+    });
+  });
+}
 
-  NSDictionary *st = [_core status];
+// main スレッド。背景で収集済みのスナップショットを UI へ反映。
+- (void)applyCoreSnapshotWithConfig:(NSDictionary *)cfg status:(NSDictionary *)st {
+  if (cfg) {
+    _cfg = cfg;
+    [_texts setConfig:_cfg];
+    [_texts setLang:_boot.uiLang];
+    _panelToken = [self firstPanelToken];
+  }
+
   if (st) {
     NSDictionary *node = [st objectForKey:@"node"];
     if ([node isKindOfClass:[NSDictionary class]]) {

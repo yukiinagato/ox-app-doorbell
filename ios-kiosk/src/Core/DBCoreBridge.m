@@ -157,9 +157,10 @@ static BOOL DBKeychainPut(NSString *key, NSString *value) {
   NSData *data = [value dataUsingEncoding:NSUTF8StringEncoding];
   if (data == nil) data = [NSData data];
   NSMutableDictionary *add = [base mutableCopy];
-  add[(__bridge id)kSecValueData] = data;
+  [add setObject:data forKey:(__bridge id)kSecValueData];
   // 端末ロック中 (再起動直後) でも core が読めるように
-  add[(__bridge id)kSecAttrAccessible] = (__bridge id)kSecAttrAccessibleAfterFirstUnlock;
+  [add setObject:(__bridge id)kSecAttrAccessibleAfterFirstUnlock
+          forKey:(__bridge id)kSecAttrAccessible];
   OSStatus st = SecItemAdd((__bridge CFDictionaryRef)add, NULL);
   if (st == errSecDuplicateItem) {
     NSDictionary *upd = @{(__bridge id)kSecValueData : data};
@@ -339,7 +340,8 @@ static void DBUiEventCb(void *user, const char *event_json) {
 }
 
 - (void)addHandler:(NSString *)key handler:(DBUiEventHandler)handler {
-  _handlers[key] = handler;
+  if (key == nil || handler == nil) return;
+  [_handlers setObject:handler forKey:key];
 }
 
 - (void)removeHandler:(NSString *)key {
@@ -441,7 +443,7 @@ static void DBUiEventCb(void *user, const char *event_json) {
 - (NSDictionary *)deviceInfoNow {
   NSMutableDictionary *root = [NSMutableDictionary dictionary];
   NSString *gw = DBDefaultGatewayIPv4();
-  if (gw) root[@"gateway"] = gw;
+  if (gw) [root setObject:gw forKey:@"gateway"];
   NSArray *ifs = CFBridgingRelease(CNCopySupportedInterfaces());
   if (ifs) {
     for (NSString *ifn in ifs) {
@@ -450,9 +452,9 @@ static void DBUiEventCb(void *user, const char *event_json) {
         NSMutableDictionary *w = [NSMutableDictionary dictionary];
         id ssid = [info objectForKey:(id)kCNNetworkInfoKeySSID];
         id bssid = [info objectForKey:(id)kCNNetworkInfoKeyBSSID];
-        if (ssid) w[@"ssid"] = ssid;
-        if (bssid) w[@"bssid"] = bssid;
-        if ([w count]) root[@"wifi"] = w;
+        if (ssid) [w setObject:ssid forKey:@"ssid"];
+        if (bssid) [w setObject:bssid forKey:@"bssid"];
+        if ([w count]) [root setObject:w forKey:@"wifi"];
       }
     }
   }
@@ -467,9 +469,9 @@ static void DBUiEventCb(void *user, const char *event_json) {
     default: break;
   }
   NSMutableDictionary *bat = [NSMutableDictionary dictionary];
-  if (lvl >= 0) bat[@"level"] = [NSNumber numberWithFloat:lvl];
-  bat[@"state"] = state;
-  root[@"battery"] = bat;
+  if (lvl >= 0) [bat setObject:[NSNumber numberWithFloat:lvl] forKey:@"level"];
+  [bat setObject:state forKey:@"state"];
+  [root setObject:bat forKey:@"battery"];
   return root;
 }
 
