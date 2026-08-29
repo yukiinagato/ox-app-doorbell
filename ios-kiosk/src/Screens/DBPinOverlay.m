@@ -35,38 +35,42 @@ static NSTimeInterval sLockedUntil = 0;
 
 - (UIButton *)keyButton {
   UIButton *b = [UIButton buttonWithType:UIButtonTypeCustom];  // iOS5: System=白背景回避
-  b.titleLabel.font = [UIFont systemFontOfSize:26];
+  b.titleLabel.font = [UIFont boldSystemFontOfSize:30];
   [b setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-  b.backgroundColor = [UIColor colorWithRed:0.18 green:0.22 blue:0.28 alpha:1];
+  [b setTitleColor:[UIColor whiteColor] forState:UIControlStateHighlighted];
+  b.backgroundColor = [UIColor colorWithRed:0.24 green:0.28 blue:0.35 alpha:1];
   [b setBackgroundImage:nil forState:UIControlStateNormal];
   b.layer.borderWidth = 1;
-  b.layer.borderColor = [UIColor colorWithWhite:1 alpha:0.18].CGColor;
-  b.layer.cornerRadius = 10;
+  b.layer.borderColor = [UIColor colorWithWhite:1 alpha:0.30].CGColor;
+  b.layer.cornerRadius = 12;
   return b;
 }
 
 - (void)buildUi {
   _card = [[UIView alloc] init];
-  _card.backgroundColor = [UIColor colorWithRed:0.10 green:0.12 blue:0.16 alpha:1];
+  _card.backgroundColor = [UIColor colorWithRed:0.09 green:0.10 blue:0.14 alpha:1];
   _card.layer.cornerRadius = 14;
   [self addSubview:_card];
 
   _title = [[UILabel alloc] init];
   _title.text = [_texts ts:@"admin.pin_prompt"];
-  _title.font = [UIFont boldSystemFontOfSize:24];
+  _title.font = [UIFont boldSystemFontOfSize:26];
   _title.textColor = [UIColor whiteColor];
   _title.textAlignment = NSTextAlignmentCenter;
   [_card addSubview:_title];
 
   _display = [[UILabel alloc] init];
-  _display.font = [UIFont systemFontOfSize:34];
+  _display.font = [UIFont boldSystemFontOfSize:48];
   _display.textColor = [UIColor whiteColor];
   _display.textAlignment = NSTextAlignmentCenter;
+  _display.backgroundColor = [UIColor colorWithWhite:1 alpha:0.06];
+  _display.layer.cornerRadius = 8;
+  _display.clipsToBounds = YES;
   [_card addSubview:_display];
 
   _errorLabel = [[UILabel alloc] init];
-  _errorLabel.font = [UIFont systemFontOfSize:17];
-  _errorLabel.textColor = [UIColor colorWithRed:0.88 green:0.36 blue:0.30 alpha:1];
+  _errorLabel.font = [UIFont boldSystemFontOfSize:18];
+  _errorLabel.textColor = [UIColor colorWithRed:1.0 green:0.45 blue:0.38 alpha:1];
   _errorLabel.textAlignment = NSTextAlignmentCenter;
   _errorLabel.text = @" ";
   [_card addSubview:_errorLabel];
@@ -86,11 +90,18 @@ static NSTimeInterval sLockedUntil = 0;
 
   _cancelButton = [UIButton buttonWithType:UIButtonTypeCustom];
   [_cancelButton setTitle:[_texts ts:@"calling.cancel"] forState:UIControlStateNormal];
-  _cancelButton.titleLabel.font = [UIFont systemFontOfSize:18];
-  [_cancelButton setTitleColor:[UIColor colorWithWhite:1 alpha:0.7] forState:UIControlStateNormal];
+  _cancelButton.titleLabel.font = [UIFont systemFontOfSize:19];
+  [_cancelButton setTitleColor:[UIColor colorWithWhite:1 alpha:0.75] forState:UIControlStateNormal];
   [_cancelButton addTarget:self action:@selector(onCancel)
           forControlEvents:UIControlEventTouchUpInside];
   [_card addSubview:_cancelButton];
+
+  // この個体 (iPad1 iOS5) は UILabel 既定背景が不透明白 — 白文字が白地に消える。
+  // DBHomeScreen/DBIncomingScreen と同様に全ラベル背景を透明化する (PIN 可読性の根因修正)。
+  [self clearLabelBackgrounds:self];
+  // clearLabelBackgrounds は UILabel 全部を透明化するため、PIN 表示枠だけ clear 後に
+  // 改めて薄い背景を敷く (入力桁が見えやすい + 枠位置が分かる)。
+  _display.backgroundColor = [UIColor colorWithWhite:1 alpha:0.07];
 }
 - (void)layoutSubviews {
   [super layoutSubviews];
@@ -98,13 +109,13 @@ static NSTimeInterval sLockedUntil = 0;
   CGFloat cardW = 380, cardH = 500;
   _card.frame = CGRectMake((self.bounds.size.width - cardW) / 2,
                            (self.bounds.size.height - cardH) / 2, cardW, cardH);
-  CGFloat pad = 22, y = 22;
-  _title.frame = CGRectMake(pad, y, cardW - 2 * pad, 30);
+  CGFloat pad = 22, y = 20;
+  _title.frame = CGRectMake(pad, y, cardW - 2 * pad, 32);
   y += 40;
-  _display.frame = CGRectMake(pad, y, cardW - 2 * pad, 44);
-  y += 50;
-  _errorLabel.frame = CGRectMake(pad, y, cardW - 2 * pad, 22);
-  y += 32;
+  _display.frame = CGRectMake(pad + 8, y, cardW - 2 * pad - 16, 60);
+  y += 68;
+  _errorLabel.frame = CGRectMake(pad, y, cardW - 2 * pad, 24);
+  y += 30;
   CGFloat gap = 8;
   CGFloat keyW = (cardW - 2 * pad - 2 * gap) / 3;
   CGFloat keyH = 64;
@@ -120,6 +131,13 @@ static NSTimeInterval sLockedUntil = 0;
 #pragma mark - 出入
 
 - (void)presentInView:(UIView *)parent then:(void (^)(void))onUnlocked {
+  if (self.superview) {  // 既に表示中 — 二重 overlay を避けて入力だけリセット
+    _onUnlocked = onUnlocked;
+    [_pin setString:@""];
+    _display.text = @"";
+    _errorLabel.text = @" ";
+    return;
+  }
   _onUnlocked = onUnlocked;
   _pin = [[NSMutableString alloc] init];
   _display.text = @"";

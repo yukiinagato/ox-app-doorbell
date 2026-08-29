@@ -281,6 +281,8 @@ static void DBUiEventCb(void *user, const char *event_json) {
   NSTimer *_diTimer;               // メインで定期更新
   dispatch_queue_t _coreQueue;     // core C ABI 直列化キー (db_core_*_json は並行呼び不可 —
                                    // 実機で 2 スレッド同時呼びが use-after-free で SIGSEGV)。
+  NSLock *_cfgLock;                // _lastConfig 保護
+  NSDictionary *_lastConfig;       // 直近取得成功の config (画面の即時表示用)
 }
 
 - (id)init {
@@ -290,6 +292,7 @@ static void DBUiEventCb(void *user, const char *event_json) {
     _diLock = [[NSLock alloc] init];
     _deviceInfoCache = @"";
     _coreQueue = dispatch_queue_create("doorbell.core", DISPATCH_QUEUE_SERIAL);
+    _cfgLock = [[NSLock alloc] init];
   }
   return self;
 }
@@ -415,7 +418,15 @@ static void DBUiEventCb(void *user, const char *event_json) {
 
 - (NSDictionary *)takeJson:(char *)p {
   if (p == NULL) return nil;
-  NSData *data = [NSData dataWithBytes:p length:strlen(p)];
+  size_t n = strlen(p);
+  // 破損バッファ対策: JSON として自明に不正なものは解析せず証跡を残して棄てる
+  // (実機 2 件の SIGSEGV は NSJSONSerialization 解析中 — core 返却値の内容保全が目的)。
+  if (n < 2 || p[0] != '{' || n > 8 * 1024 * 1024) {
+    NSLog(@"[doorbell][DBG] takeJson: SUSPECT buffer len=%zu head='%.96s'", n, p);
+    db_free(p);
+    return nil;
+  }
+  NSData *data = [NSData dataWithBytes:p length:n];
   db_free(p);
   id obj = [NSJSONSerialization JSONObjectWithData:data options:0 error:NULL];
   return [obj isKindOfClass:[NSDictionary class]] ? obj : nil;
@@ -449,7 +460,20 @@ static void DBUiEventCb(void *user, const char *event_json) {
   dispatch_sync(_coreQueue, ^{
     if (core) out = [self takeJson:db_core_config_json(core)];
   });
+  if (out) {  // 最後に成功した config を要約キャッシュ (来鈴画面の即時表示用)
+    [_cfgLock lock];
+    _lastConfig = out;
+    [_cfgLock unlock];
+  }
   return out;
+}
+
+// 直近で取得成功した config (無ければ nil)。呼び出しは任意スレッド可。
+- (NSDictionary *)lastConfig {
+  [_cfgLock lock];
+  NSDictionary *c = _lastConfig;
+  [_cfgLock unlock];
+  return c;
 }
 
 // --- 配対 (発見/招待) ---

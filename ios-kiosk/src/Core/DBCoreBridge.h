@@ -26,6 +26,9 @@ typedef void (^DBUiEventHandler)(NSDictionary *ev);
 - (void)addHandler:(NSString *)key handler:(DBUiEventHandler)handler;
 - (void)removeHandler:(NSString *)key;
 
+// 直近で取得成功した config (無ければ nil)。呼び出しは任意スレッド可。
+- (NSDictionary *)lastConfig;
+
 // 操作 API (doorbell.h)
 - (void)press:(NSString *)door;
 - (void)pressPurpose:(NSString *)door purpose:(NSString *)purpose;

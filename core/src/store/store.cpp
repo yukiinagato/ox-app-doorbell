@@ -83,7 +83,8 @@ constexpr const char* kEventCols =
 Store::~Store() { close(); }
 
 bool Store::open(const std::string& path) {
-  close();
+  std::lock_guard<std::mutex> lk(mu_);
+  closeLocked();
   // 開いて WAL + busy_timeout を設定し、スキーマを流す。どこかで失敗したら破損とみなす。
   auto tryOpen = [&]() -> bool {
     if (sqlite3_open(path.c_str(), &db_) != SQLITE_OK) return false;
@@ -92,7 +93,7 @@ bool Store::open(const std::string& path) {
     return migrate();
   };
   if (tryOpen()) return true;
-  close();
+  closeLocked();  // 旧: close() — mu_ 二重ロック (macOS デッドロック / iOS5 で破壊) だった
   if (path == ":memory:") return false;
   // 既存ファイルをバックアップして再作成 (WAL/SHM の残骸は捨てる)
   std::string backup = path + ".corrupt-" + std::to_string(static_cast<long long>(std::time(nullptr)));
@@ -101,11 +102,17 @@ bool Store::open(const std::string& path) {
   std::remove((path + "-shm").c_str());
   DB_LOGW(kTag, "DB を開けないためバックアップして再作成: " + backup);
   if (tryOpen()) return true;
-  close();
+  closeLocked();  // 同上
   return false;
 }
 
 void Store::close() {
+  std::lock_guard<std::mutex> lk(mu_);
+  closeLocked();
+}
+
+// mu_ 保持中に呼ぶこと (open/close 内部用)
+void Store::closeLocked() {
   if (db_) {
     sqlite3_close(db_);
     db_ = nullptr;
@@ -141,16 +148,22 @@ bool Store::migrate() {
       "CREATE INDEX IF NOT EXISTS idx_net_probe_ts ON net_probe(ts_ms);";
   if (!exec(ddl)) return false;
   // schema_version は meta に記録 (将来の段階的マイグレーションの起点)
-  if (!metaGet("schema_version")) metaSet("schema_version", std::to_string(kSchemaVersion));
+  // 注意: ここは open() が mu_ を保持している内側。Locked 版を使うこと
+  // (旧実装は公開版 metaGet/metaSet を呼び、非再帰 mutex を二重ロック —
+  //  macOS では即デッドロック、iOS5 では通ってしまい SQLite 並行進入 → メモリ破壊)。
+  if (!metaGetLocked("schema_version"))
+    metaSetLocked("schema_version", std::to_string(kSchemaVersion));
   // 累計触発カウンタの初回バックフィル (既存 press をカウント。以後は eventPut が +1)
-  if (!metaGet("stat_press_total"))
-    metaSet("stat_press_total", std::to_string(countEventsOfType("press")));
+  if (!metaGetLocked("stat_press_total"))
+    metaSetLocked("stat_press_total",
+                  std::to_string(countEventsOfTypeLocked("press")));
   return true;
 }
 
 // --- meta ---
 
-std::optional<std::string> Store::metaGet(const std::string& key) {
+// mu_ 保持中に呼ぶ内部版。ロック取得なし (migrate / eventPut 専用)。
+std::optional<std::string> Store::metaGetLocked(const std::string& key) {
   Stmt st(db_, "SELECT value FROM meta WHERE key=?1");
   if (!st.ok()) return std::nullopt;
   st.bind(1, key);
@@ -158,7 +171,7 @@ std::optional<std::string> Store::metaGet(const std::string& key) {
   return st.colText(0);
 }
 
-void Store::metaSet(const std::string& key, const std::string& value) {
+void Store::metaSetLocked(const std::string& key, const std::string& value) {
   Stmt st(db_, "INSERT OR REPLACE INTO meta(key,value) VALUES(?1,?2)");
   if (!st.ok()) return;
   st.bind(1, key);
@@ -166,9 +179,20 @@ void Store::metaSet(const std::string& key, const std::string& value) {
   st.step();
 }
 
+std::optional<std::string> Store::metaGet(const std::string& key) {
+  std::lock_guard<std::mutex> lk(mu_);
+  return metaGetLocked(key);
+}
+
+void Store::metaSet(const std::string& key, const std::string& value) {
+  std::lock_guard<std::mutex> lk(mu_);
+  metaSetLocked(key, value);
+}
+
 // --- config ---
 
 void Store::configPut(const LwwEntry& e) {
+  std::lock_guard<std::mutex> lk(mu_);
   Stmt st(db_,
           "INSERT OR REPLACE INTO config(key,value_json,deleted,hlc,author,seq)"
           " VALUES(?1,?2,?3,?4,?5,?6)");
@@ -183,6 +207,7 @@ void Store::configPut(const LwwEntry& e) {
 }
 
 void Store::configDelete(const std::string& key) {
+  std::lock_guard<std::mutex> lk(mu_);
   Stmt st(db_, "DELETE FROM config WHERE key=?1");
   if (!st.ok()) return;
   st.bind(1, key);
@@ -190,6 +215,7 @@ void Store::configDelete(const std::string& key) {
 }
 
 std::vector<LwwEntry> Store::configLoadAll() {
+  std::lock_guard<std::mutex> lk(mu_);
   std::vector<LwwEntry> out;
   Stmt st(db_, "SELECT key,value_json,deleted,hlc,author,seq FROM config ORDER BY key");
   if (!st.ok()) return out;
@@ -209,6 +235,7 @@ std::vector<LwwEntry> Store::configLoadAll() {
 // --- events ---
 
 bool Store::eventPut(const EventRecord& e) {
+  std::lock_guard<std::mutex> lk(mu_);
   if (!db_) return false;
   Stmt st(db_,
           "INSERT OR IGNORE INTO events(origin,seq,type,door,device,hlc,wall_ms,"
@@ -227,15 +254,18 @@ bool Store::eventPut(const EventRecord& e) {
   bool inserted = sqlite3_changes(db_) > 0;  // 既存 (origin,seq) は IGNORE され 0 件
   if (inserted && e.type == "press") {
     // 累計触発カウンタを O(1) で維持 (毎回 COUNT(*) を走らせない・prune でも減らない)
+    // 注意: ここは mu_ 保持中 — 公開版 metaGet/metaSet は二重ロックになるので Locked 版を使う
+    // (旧実装の二重ロックは macOS でデッドロック / iOS5 で SQLite 並行進入・メモリ破壊)。
     long long n = 0;
-    auto cur = metaGet("stat_press_total");
+    auto cur = metaGetLocked("stat_press_total");
     if (cur) { try { n = std::stoll(*cur); } catch (...) { n = 0; } }
-    metaSet("stat_press_total", std::to_string(n + 1));
+    metaSetLocked("stat_press_total", std::to_string(n + 1));
   }
   return inserted;
 }
 
 bool Store::eventExists(const std::string& origin, uint64_t seq) {
+  std::lock_guard<std::mutex> lk(mu_);
   Stmt st(db_, "SELECT 1 FROM events WHERE origin=?1 AND seq=?2");
   if (!st.ok()) return false;
   st.bind(1, origin);
@@ -245,6 +275,7 @@ bool Store::eventExists(const std::string& origin, uint64_t seq) {
 
 void Store::eventSetNotify(const std::string& origin, uint64_t seq,
                            const std::string& notify_json) {
+  std::lock_guard<std::mutex> lk(mu_);
   Stmt st(db_, "UPDATE events SET notify_json=?3 WHERE origin=?1 AND seq=?2");
   if (!st.ok()) return;
   st.bind(1, origin);
@@ -254,6 +285,7 @@ void Store::eventSetNotify(const std::string& origin, uint64_t seq,
 }
 
 std::optional<EventRecord> Store::eventGet(const std::string& origin, uint64_t seq) {
+  std::lock_guard<std::mutex> lk(mu_);
   Stmt st(db_, ("SELECT " + std::string(kEventCols) +
                 " FROM events WHERE origin=?1 AND seq=?2").c_str());
   if (!st.ok()) return std::nullopt;
@@ -264,6 +296,7 @@ std::optional<EventRecord> Store::eventGet(const std::string& origin, uint64_t s
 }
 
 std::map<std::string, uint64_t> Store::eventHeads() {
+  std::lock_guard<std::mutex> lk(mu_);
   std::map<std::string, uint64_t> out;
   Stmt st(db_, "SELECT origin, MAX(seq) FROM events GROUP BY origin");
   if (!st.ok()) return out;
@@ -273,6 +306,7 @@ std::map<std::string, uint64_t> Store::eventHeads() {
 
 std::vector<EventRecord> Store::eventsSince(const std::map<std::string, uint64_t>& remote_heads,
                                             size_t limit) {
+  std::lock_guard<std::mutex> lk(mu_);
   // hlc 昇順で走査し、remote_heads が既に知る (origin, seq<=head) を飛ばして limit 件まで。
   std::vector<EventRecord> out;
   Stmt st(db_, ("SELECT " + std::string(kEventCols) + " FROM events ORDER BY hlc ASC").c_str());
@@ -287,6 +321,12 @@ std::vector<EventRecord> Store::eventsSince(const std::map<std::string, uint64_t
 }
 
 size_t Store::countEventsOfType(const std::string& type) {
+  std::lock_guard<std::mutex> lk(mu_);
+  return countEventsOfTypeLocked(type);
+}
+
+// mu_ 保持中に呼ぶ内部版 (migrate 専用)。
+size_t Store::countEventsOfTypeLocked(const std::string& type) {
   if (!db_) return 0;
   Stmt st(db_, "SELECT COUNT(*) FROM events WHERE type=?1");
   if (!st.ok()) return 0;
@@ -296,6 +336,7 @@ size_t Store::countEventsOfType(const std::string& type) {
 }
 
 std::vector<EventRecord> Store::recentEvents(size_t limit) {
+  std::lock_guard<std::mutex> lk(mu_);
   std::vector<EventRecord> out;
   Stmt st(db_, ("SELECT " + std::string(kEventCols) +
                 " FROM events ORDER BY hlc DESC LIMIT ?1").c_str());
@@ -307,6 +348,7 @@ std::vector<EventRecord> Store::recentEvents(size_t limit) {
 
 std::optional<EventRecord> Store::latestEventOfTypes(const std::string& t1,
                                                     const std::string& t2) {
+  std::lock_guard<std::mutex> lk(mu_);
   Stmt st(db_, ("SELECT " + std::string(kEventCols) +
                 " FROM events WHERE type=?1 OR type=?2 ORDER BY hlc DESC LIMIT 1").c_str());
   if (!st.ok()) return std::nullopt;
@@ -317,6 +359,7 @@ std::optional<EventRecord> Store::latestEventOfTypes(const std::string& t1,
 }
 
 size_t Store::pruneEvents(size_t max_events, int64_t cutoff_wall_ms) {
+  std::lock_guard<std::mutex> lk(mu_);
   if (!db_) return 0;
   size_t deleted = 0;
   // 1) hlc 物理部 (先頭 12 hex, HlcClock::format と同表現) が cutoff より古いもの
@@ -368,6 +411,7 @@ constexpr const char* kTgCols = "id,kind,chat_id,payload,snapshot,attempts,next_
 }  // namespace
 
 int64_t Store::tgQueuePut(const TgQueueItem& item) {
+  std::lock_guard<std::mutex> lk(mu_);
   if (!db_) return 0;
   Stmt st(db_,
           "INSERT INTO tg_queue(kind,chat_id,payload,snapshot,attempts,next_retry_ms,created_ms)"
@@ -385,6 +429,7 @@ int64_t Store::tgQueuePut(const TgQueueItem& item) {
 }
 
 std::vector<Store::TgQueueItem> Store::tgQueueDue(int64_t now_ms, size_t limit) {
+  std::lock_guard<std::mutex> lk(mu_);
   std::vector<TgQueueItem> out;
   Stmt st(db_, ("SELECT " + std::string(kTgCols) +
                 " FROM tg_queue WHERE next_retry_ms<=?1 ORDER BY id ASC LIMIT ?2").c_str());
@@ -396,6 +441,7 @@ std::vector<Store::TgQueueItem> Store::tgQueueDue(int64_t now_ms, size_t limit) 
 }
 
 void Store::tgQueueRetry(int64_t id, int attempts, int64_t next_retry_ms) {
+  std::lock_guard<std::mutex> lk(mu_);
   Stmt st(db_, "UPDATE tg_queue SET attempts=?2, next_retry_ms=?3 WHERE id=?1");
   if (!st.ok()) return;
   st.bind(1, id);
@@ -405,6 +451,7 @@ void Store::tgQueueRetry(int64_t id, int attempts, int64_t next_retry_ms) {
 }
 
 void Store::tgQueueDelete(int64_t id) {
+  std::lock_guard<std::mutex> lk(mu_);
   Stmt st(db_, "DELETE FROM tg_queue WHERE id=?1");
   if (!st.ok()) return;
   st.bind(1, id);
@@ -412,6 +459,7 @@ void Store::tgQueueDelete(int64_t id) {
 }
 
 size_t Store::tgQueuePrune(int64_t cutoff_created_ms) {
+  std::lock_guard<std::mutex> lk(mu_);
   if (!db_) return 0;
   Stmt st(db_, "DELETE FROM tg_queue WHERE created_ms<?1");
   if (!st.ok()) return 0;
@@ -421,6 +469,7 @@ size_t Store::tgQueuePrune(int64_t cutoff_created_ms) {
 }
 
 size_t Store::tgQueueCount() {
+  std::lock_guard<std::mutex> lk(mu_);
   Stmt st(db_, "SELECT COUNT(*) FROM tg_queue");
   if (!st.ok() || st.step() != SQLITE_ROW) return 0;
   return static_cast<size_t>(st.colInt(0));
@@ -428,6 +477,7 @@ size_t Store::tgQueueCount() {
 
 // --- net_probe ---
 void Store::netProbePut(const NetProbe& p) {
+  std::lock_guard<std::mutex> lk(mu_);
   if (!db_) return;
   Stmt st(db_, "INSERT INTO net_probe(ts_ms,target,host,ok,rtt_ms) VALUES(?1,?2,?3,?4,?5)");
   if (!st.ok()) return;
@@ -440,6 +490,7 @@ void Store::netProbePut(const NetProbe& p) {
 }
 
 std::vector<Store::NetProbe> Store::netProbesSince(int64_t since_ms, size_t limit) {
+  std::lock_guard<std::mutex> lk(mu_);
   std::vector<NetProbe> out;
   if (!db_) return out;
   Stmt st(db_, "SELECT ts_ms,target,host,ok,rtt_ms FROM net_probe"
@@ -460,6 +511,7 @@ std::vector<Store::NetProbe> Store::netProbesSince(int64_t since_ms, size_t limi
 }
 
 size_t Store::netProbePrune(int64_t cutoff_ms) {
+  std::lock_guard<std::mutex> lk(mu_);
   if (!db_) return 0;
   Stmt st(db_, "DELETE FROM net_probe WHERE ts_ms<?1");
   if (!st.ok()) return 0;

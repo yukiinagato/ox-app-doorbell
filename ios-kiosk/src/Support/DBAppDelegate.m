@@ -63,6 +63,35 @@
   [_core stop];
 }
 
+// URL scheme (doorbell://)。kiosk の遠隔補助入口:
+//   doorbell://pin   → PIN 覆盖層を開く (遠隔から admin 操作を開始できる。実機 UI 試験にも使う)
+//   doorbell://shot  → diagDump (PNG + view tree を Documents へ — DDI 無しの実機 UI 取証)
+//   doorbell://home  → home 画面へ戻す
+// iOS 4.2+ の delegate 簽名 (iOS 5.1 で呼ばれるもの)。
+- (BOOL)application:(UIApplication *)application
+            openURL:(NSURL *)url
+  sourceApplication:(NSString *)source
+         annotation:(id)annotation {
+  (void)application; (void)source; (void)annotation;
+  NSString *host = [url host] ?: @"";
+  if ([host length] == 0) host = [[url path] stringByTrimmingCharactersInSet:
+                                     [NSCharacterSet characterSetWithCharactersInString:@"/"]];
+  NSLog(@"[doorbell] openURL: %@ → host='%@'", url, host);
+  if ([host isEqualToString:@"pin"]) {
+    [_router requestPinThen:nil];
+    return YES;
+  }
+  if ([host isEqualToString:@"shot"]) {
+    [self diagDump];
+    return YES;
+  }
+  if ([host isEqualToString:@"home"]) {
+    [_router showHomeAnimated:NO];
+    return YES;
+  }
+  return YES;
+}
+
 #pragma mark - UI 診断ダンプ (kiosk 黑画面調査用 — Documents に PNG + view tree)
 
 // 起動 6 秒後に 1 回: keyWindow を PNG 化して Documents へ。

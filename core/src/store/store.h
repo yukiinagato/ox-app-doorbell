@@ -1,10 +1,12 @@
-// SQLite 永続化層 (WAL)。テーブル: meta / config / events / tg_queue。
-// スレッド: Runloop 上でのみ (SQLITE_THREADSAFE でも直列前提)。
+// SQLite 永続化層 (WAL)。テーブル: meta / config / events / tg_queue / net_probe。
+// スレッド: 内部で全 public メソッドを mutex 直列化するためどのスレッドから呼んでも
+// 安全 (httpd の civetweb ワーカ / Runloop / 殻の背景 thread が混在しても可)。
 // 破損時は自動でバックアップ後に再生成 (mesh から再同期できる設計のため損失許容)。
 #pragma once
 
 #include <cstdint>
 #include <map>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <vector>
@@ -91,8 +93,18 @@ class Store {
 
  private:
   bool exec(const char* sql);
-  bool migrate();
+  bool migrate();  // mu_ 保持中に呼ぶこと (open のみ)
+  void closeLocked();  // mu_ 保持中に呼ぶ
+  // --- mu_ 保持中に呼ぶ内部版 (公開版はこのラッパ + ロック) ---
+  // 注意: これらをロック取得なしで直接呼べるのは mu_ を保持しているスレッドだけ。
+  // 公開版を mu_ 保持中に呼ぶと非再帰 mutex の二重ロックになり、macOS では即デッドロック、
+  // iOS 5 (armv7) の旧 pthread では通ってしまい SQLite が並行進入 → 返却メモリ破壊
+  // (殻側 NSJSONSerialization SIGSEGV / takeJson SUSPECT buffer の実害) になる。
+  std::optional<std::string> metaGetLocked(const std::string& key);
+  void metaSetLocked(const std::string& key, const std::string& value);
+  size_t countEventsOfTypeLocked(const std::string& type);
   sqlite3* db_ = nullptr;
+  mutable std::mutex mu_;  // 単一接続の直列化 (httpd ワーカ等の並行呼び対策)
 };
 
 }  // namespace db

@@ -144,6 +144,7 @@ static const CGFloat kMaxPixel = 640;                  // 解码後の一辺上�
   NSString *path = _url.path;
   if ([path length] == 0) path = @"/";
   if ([_url query]) path = [NSString stringWithFormat:@"%@?%@", path, [_url query]];
+  NSLog(@"[doorbell][DBG] mjpeg: connect %@:%ld%@", host, (long)port, path);
 
   struct addrinfo hints, *res = NULL;
   memset(&hints, 0, sizeof(hints));
@@ -193,7 +194,10 @@ static const CGFloat kMaxPixel = 640;                  // 解码後の一辺上�
     break;
   }
   freeaddrinfo(res);
-  if (s < 0) return NO;
+  if (s < 0) {
+    NSLog(@"[doorbell][DBG] mjpeg: connect FAILED (errno=%d)", errno);
+    return NO;
+  }
 
   NSMutableString *req = [NSMutableString string];
   [req appendFormat:@"GET %@ HTTP/1.0\r\n", path];
@@ -290,6 +294,10 @@ static const CGFloat kMaxPixel = 640;                  // 解码後の一辺上�
 }
 
 - (void)drainDecode {
+  static dispatch_once_t firstFrameLog;
+  dispatch_once(&firstFrameLog, ^{
+    NSLog(@"[doorbell][DBG] mjpeg: first frame decoded+delivered");
+  });
   while (YES) {
     [_frameLock lock];
     NSData *jpeg = _pendingJpeg;

@@ -5,6 +5,7 @@
 #import "../Core/DBCoreBridge.h"
 #import "../Core/DBTexts.h"
 #import "../Net/DBMjpegClient.h"
+#import "../Support/DBAppDelegate.h"
 #import "DBRouter.h"
 
 static const NSTimeInterval kAutoCloseS = 30;
@@ -172,6 +173,13 @@ static const NSTimeInterval kAutoCloseS = 30;
   _noVideoLabel.hidden = NO;
   _liveView.image = nil;
   [self startVideo:nil];  // 前のストリーム停止
+  // 最後に取得成功した config があれば即時表示 (来鈴直後でも返信ボタンが出る)。
+  NSDictionary *cached = [_core lastConfig];
+  if (cached) {
+    _cfg = cached;
+    [_texts setConfig:_cfg];
+    [_texts setLang:_boot.uiLang];
+  }
   [self applyContent];
   [self restartAutoClose];
   [self fetchAndApplyCoreSnapshot];
@@ -185,17 +193,23 @@ static const NSTimeInterval kAutoCloseS = 30;
   [self fetchAndApplyCoreSnapshot];
 }
 
-// core (status/config JSON) は main で取らない。背景収集 → main で peer 解決と反映。
+// core JSON は main で取らない。背景収集 → main で peer 解決と反映。
 - (void)fetchAndApplyCoreSnapshot {
   NSInteger gen = ++_snapshotGen;
   DBCoreBridge *core = _core;
   __weak DBIncomingScreen *wself = self;
+  NSLog(@"[doorbell][DBG] incoming: fetch start gen=%ld", (long)gen);
   dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
     NSDictionary *cfg = [core config];
     NSDictionary *st = [core status];
+    NSLog(@"[doorbell][DBG] incoming: fetch done gen=%ld cfg=%@ st=%@",
+          (long)gen, cfg ? @"ok" : @"nil", st ? @"ok" : @"nil");
     dispatch_async(dispatch_get_main_queue(), ^{
       DBIncomingScreen *s = wself;
-      if (!s || s->_snapshotGen != gen || !s.superview) return;  // 古い/画面外は破棄
+      if (!s || s->_snapshotGen != gen || !s.superview) {
+        NSLog(@"[doorbell][DBG] incoming: fetch DISCARDED (gen/superview)");
+        return;
+      }
       s->_cfg = cfg;
       [s->_texts setConfig:cfg];
       [s->_texts setLang:s->_boot.uiLang];
@@ -209,6 +223,10 @@ static const NSTimeInterval kAutoCloseS = 30;
                          : [DBConfigUtil peerHost:peer];
       NSString *url = peer ? [DBConfigUtil str:peer path:@"stream"] : nil;
       s->_incomingStreamUrl = url ?: @"";
+      NSDictionary *replies = [DBConfigUtil dig:cfg path:@"quick_replies"];
+      NSLog(@"[doorbell][DBG] incoming: peer=%@ stream=%@ replies=%lu",
+            s->_peerHost ?: @"-", s->_incomingStreamUrl,
+            (unsigned long)[replies count]);
       s->_answerButton.enabled = (s->_peerHost != nil);
       s->_monitorButton.enabled = (s->_peerHost != nil);
       [s startVideo:s->_incomingStreamUrl];
@@ -284,6 +302,7 @@ static const NSTimeInterval kAutoCloseS = 30;
   _streamer = nil;
   _noVideoLabel.hidden = NO;
   _liveView.image = nil;
+  NSLog(@"[doorbell][DBG] incoming: startVideo url=%@", url ?: @"(null)");
   if ([url length] == 0) return;
   __weak DBIncomingScreen *wself = self;
   _streamer = [[DBMjpegClient alloc] initWithURLString:url
@@ -314,6 +333,16 @@ static const NSTimeInterval kAutoCloseS = 30;
 }
 
 - (void)onScreenWillAppear {
+  // 黒画面/表示異常の調査: 来鈴画面が出て 4 秒後の実体を Documents に吐く
+  __weak DBIncomingScreen *wself = self;
+  dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(4.0 * NSEC_PER_SEC)),
+                 dispatch_get_main_queue(), ^{
+    DBIncomingScreen *s = wself;
+    if (s && s.superview) {
+      DBAppDelegate *ad = (DBAppDelegate *)[UIApplication sharedApplication].delegate;
+      [ad diagDump];
+    }
+  });
 }
 
 - (void)onScreenWillDisappear {
