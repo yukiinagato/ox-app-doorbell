@@ -90,6 +90,10 @@ class Node {
   // ボタン押下 (門口機 UI / /api/press / panel から)。purpose: visit_purposes のキー
   // ("" = 用件なしの汎用按鈴)。payload には purpose と訪客言語 (選択済みの場合) が載る。
   void press(const std::string& door_id, const std::string& purpose = "");
+  // 既に発生した呼出への用件追記。purpose_selected を複製し、呼出ルールは再実行しない。
+  void selectPurpose(const std::string& door_id, const std::string& purpose);
+  // 室外機からの呼出取消。call_cancelled を複製し、室内機の鳴動だけを停止させる。
+  void cancelCall(const std::string& door_id);
   // クイック返信の配送 (reply_id は config quick_replies のキー、free_text 優先)
   // door_id 空 = 最新 press の door。via: "web" | "telegram" | "mqtt" | "app" | "auto"
   // 文言は該当 door の訪客言語で表示/TTS (訳が無ければ ja へ回落)。quick_replies.<id>.audio

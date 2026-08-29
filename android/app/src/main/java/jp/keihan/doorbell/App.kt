@@ -27,6 +27,9 @@ class App : Application(), DoorbellCore.Listener {
     @Volatile
     var activityListener: DoorbellCore.Listener? = null
 
+    @Volatile
+    var incomingActivity: IncomingActivity? = null
+
     // 直近 press の付帯情報 (来鈴画面のバッジ/返信ラベル言語に使う)
     @Volatile
     var lastPressDoor = ""
@@ -93,6 +96,19 @@ class App : Application(), DoorbellCore.Listener {
             lastPressDoor = ev.optString("door")
             lastPurpose = ev.optString("purpose")
             lastVisitorLang = ev.optString("visitor_lang")
+        }
+        if (ev.optString("t") == "event" && ev.optString("type") == "purpose_selected") {
+            val door = ev.optString("door")
+            if (lastPressDoor.isEmpty() || door == lastPressDoor) {
+                lastPressDoor = door
+                lastPurpose = ev.optString("purpose")
+                if (boot.role != "door_station") {
+                    IncomingActivity.launch(this, door, lastPurpose, lastVisitorLang)
+                }
+            }
+        }
+        if (ev.optString("t") == "event" && ev.optString("type") == "call_cancelled") {
+            incomingActivity?.onCallCancelled(ev.optString("door"))
         }
         // 配対成功 (INVITE 受理 / PIN 参加) → boot.json に PSK/seeds を永続化。
         // 現行プロセスは取得済み PSK で seed 直結・gossip 済み (再起動不要)、次回起動で beacon も再鍵。

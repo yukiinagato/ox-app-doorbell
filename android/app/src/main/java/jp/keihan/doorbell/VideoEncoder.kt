@@ -161,6 +161,7 @@ class VideoEncoder(private val core: DoorbellCore) {
 
     companion object {
         private const val TAG = "doorbell-encoder"
-        private const val GOP_S = 2  // キーフレーム間隔 (秒) — MSE 参加者の初描画待ちに直結
+        private const val GOP_S = 1  // キーフレーム間隔 (秒) — MediaCodec は帧数で数える
+                                     // (実測 fps ~11 なので ≈2s 間隔に。HLS セグメント長もこれに従う)
     }
 }

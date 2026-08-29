@@ -479,6 +479,7 @@ struct Node::Impl {
         if (cJSON_IsString(a)) addHash(a->valuestring);
       }
     }
+    addHash(assetRefHash(json::getString(json::get(cfg.get(), "ui"), "ringtone")));
     cJSON* rules_obj = json::get(cfg.get(), "trigger_rules");
     cJSON* rule = nullptr;
     cJSON_ArrayForEach(rule, rules_obj) {
@@ -1478,6 +1479,8 @@ struct Node::Impl {
     } else if (ev.type == "visitor_lang") {
       // 全ノードで door→言語 を追随 + uiNotify (復帰タイマーは発信ノードだけが張る)
       applyVisitorLangEvent(ev, is_local);
+    } else if (ev.type == "call_cancelled") {
+      if (!ev.door.empty()) door_calling_until.erase(ev.door);
     }
     {
       auto o = json::obj();
@@ -1485,7 +1488,7 @@ struct Node::Impl {
       json::set(o.get(), "type", ev.type);
       json::set(o.get(), "door", ev.door);
       json::set(o.get(), "device", ev.device);
-      if (ev.type == "press") {  // 来鈴バッジ用: 用件 + 訪客言語を同梱 (payload 由来)
+      if (ev.type == "press" || ev.type == "purpose_selected") {
         auto p = json::parse(ev.payload_json.empty() ? "{}" : ev.payload_json);
         if (p) {
           const std::string purpose = json::getString(p.get(), "purpose");
@@ -1497,9 +1500,12 @@ struct Node::Impl {
       uiNotify(json::dump(o.get()));
     }
     auto actions = rules.evaluate(ev, hlc->correctedWallMs(), tzOffsetMin());
+    bool chime_notified = false;
+    bool chime_action_seen = false;
     for (const auto& a : actions) {
       auto p = json::parse(a.params_json.empty() ? "{}" : a.params_json);
       if (a.type == "chime") {
+        chime_action_seen = true;
         // devices 配列に自分が含まれる (または "all") 時だけ自分が鳴る
         bool mine = false;
         cJSON* devs = json::get(p.get(), "devices");
@@ -1508,12 +1514,16 @@ struct Node::Impl {
         } else if (cJSON_IsString(devs)) {
           mine = std::string(devs->valuestring) == "all";
         } else if (cJSON_IsArray(devs)) {
+          if (cJSON_GetArraySize(devs) == 0) mine = (opts.role == "indoor_panel");
           cJSON* it = nullptr;
           cJSON_ArrayForEach(it, devs) {
             if (cJSON_IsString(it) && node_id == it->valuestring) mine = true;
           }
         }
-        if (mine) notifyChime(json::getString(p.get(), "sound", "ding1"), ev.door);
+        if (mine) {
+          notifyChime(json::getString(p.get(), "sound", "ding1"), ev.door);
+          chime_notified = true;
+        }
       } else if (a.type == "auto_reply") {
         // 用件別の自動応対 (例: 宅配 → 置き配案内)。該当 door の門口機だけが実行する
         // (1 door 1 門口機 = exactly-once。表示+音声+reply イベントは quickReply と同経路)。
@@ -1547,6 +1557,12 @@ struct Node::Impl {
       } else if (a.type == "ha_event") {
         // MQTT への発行はルールと独立に下の bridge->onEvent で行う (leader gate も同様)
       }
+    }
+    // 呼出ルールをまだ設定していない家庭でも、室内パネルは必ず鳴る。
+    // 明示 chime がこの端末で実行された場合は二重再生しない。全体既定は ui.ringtone。
+    if (ev.type == "press" && opts.role == "indoor_panel" && !chime_action_seen &&
+        !chime_notified) {
+      notifyChime(json::getString(json::get(cfg.get(), "ui"), "ringtone", "ding1"), ev.door);
     }
     // HA MQTT ブリッジへ (リーダー時のみ — press/motion/offline/online/dtmf_action を発行)
     if (bridge && mesh && mesh->isLeader("mqtt_bridge")) bridge->onEvent(ev);
@@ -2654,6 +2670,19 @@ struct Node::Impl {
     if (vlang != "ja") json::set(p.get(), "visitor_lang", vlang);
     events->append("press", door, node_id, json::dump(p.get()));
   }
+
+  void doSelectPurpose(const std::string& door_arg, const std::string& purpose) {
+    if (purpose.empty() || !cfgAt("visit_purposes." + purpose)) return;
+    const std::string door = door_arg.empty() ? opts.door : door_arg;
+    auto p = json::obj();
+    json::set(p.get(), "purpose", purpose);
+    events->append("purpose_selected", door, node_id, json::dump(p.get()));
+  }
+
+  void doCancelCall(const std::string& door_arg) {
+    const std::string door = door_arg.empty() ? opts.door : door_arg;
+    events->append("call_cancelled", door, node_id, "{}");
+  }
 };
 
 // ---------------- 公開 API ----------------
@@ -2770,6 +2799,17 @@ void Node::press(const std::string& door_id, const std::string& purpose) {
   std::string d = door_id;
   std::string p = purpose;
   impl_->loop->post([this, d, p] { impl_->doPress(d, p); });
+}
+
+void Node::selectPurpose(const std::string& door_id, const std::string& purpose) {
+  std::string d = door_id;
+  std::string p = purpose;
+  impl_->loop->post([this, d, p] { impl_->doSelectPurpose(d, p); });
+}
+
+void Node::cancelCall(const std::string& door_id) {
+  std::string d = door_id;
+  impl_->loop->post([this, d] { impl_->doCancelCall(d); });
 }
 
 void Node::setVisitorLang(const std::string& door_id, const std::string& lang) {

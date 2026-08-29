@@ -2,7 +2,7 @@
 <!-- WPF 版 MainWindow.xaml と同じ 4 状態: 待機 / 呼び出し中 / 返信バナー / オフライン。
      待機画面は上から 時計 / 大ボタン (用件なしの汎用呼出) / 用件ボタン / 訪客言語バー。
      テーマ背景 (theme_bg) は最背面、夜間 red_tint (night_tint) は最前面に重なる。
-     カメラプレビューは右下の小窓 (訪客確認用・core への NV21 供給が主目的)。 -->
+     カメラ Surface は采集維持のため 1dp で残すが、室外機 UI にはプレビュー表示しない。 -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/root_view"
     android:layout_width="match_parent"
@@ -20,10 +20,11 @@
 
     <SurfaceView
         android:id="@+id/camera_preview"
-        android:layout_width="160dp"
-        android:layout_height="120dp"
-        android:layout_gravity="bottom|end"
-        android:layout_margin="16dp"/>
+        android:layout_width="1dp"
+        android:layout_height="1dp"
+        android:alpha="0"
+        android:layout_gravity="top|end"
+        android:layout_margin="0dp"/>
 
     <!-- ============ 待機 ============ -->
     <!-- weight で各段を画面高に比例配分 = どんな画面でも縦方向がはみ出さない。
@@ -34,13 +35,17 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:orientation="vertical"
-        android:paddingBottom="6dp">
+        android:paddingLeft="12dp"
+        android:paddingTop="4dp"
+        android:paddingRight="12dp"
+        android:paddingBottom="4dp">
 
         <!-- 時計 (上段) -->
         <LinearLayout
+            android:id="@+id/idle_header"
             android:layout_width="match_parent"
             android:layout_height="0dp"
-            android:layout_weight="2"
+            android:layout_weight="1.35"
             android:gravity="center"
             android:orientation="vertical">
             <TextView
@@ -50,46 +55,47 @@
                 android:fontFamily="sans-serif-light"
                 android:maxLines="1"
                 android:textColor="@color/fg"
-                android:textSize="60sp"/>
+                android:textSize="42sp"/>
             <TextView
                 android:id="@+id/date_text"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="2dp"
+                android:layout_marginTop="0dp"
                 android:maxLines="1"
                 android:textColor="@color/dim"
-                android:textSize="20sp"/>
+                android:textSize="15sp"/>
         </LinearLayout>
 
         <!-- 大ボタン (中段・最大) -->
         <LinearLayout
+            android:id="@+id/call_section"
             android:layout_width="match_parent"
             android:layout_height="0dp"
-            android:layout_weight="4"
+            android:layout_weight="2.15"
             android:gravity="center"
             android:orientation="vertical">
             <Button
                 android:id="@+id/call_button"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginLeft="48dp"
-                android:layout_marginRight="48dp"
+                android:layout_marginLeft="36dp"
+                android:layout_marginRight="36dp"
                 android:maxWidth="560dp"
-                android:minHeight="88dp"
+                android:minHeight="64dp"
                 android:background="@drawable/bg_big_button"
                 android:maxLines="2"
                 android:textColor="@color/fg"
-                android:textSize="34sp"
+                android:textSize="28sp"
                 android:textStyle="bold"/>
             <TextView
                 android:id="@+id/touch_hint"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="10dp"
+                android:layout_marginTop="4dp"
                 android:maxLines="1"
                 android:text="@string/idle_touch_to_call"
                 android:textColor="@color/dim"
-                android:textSize="18sp"/>
+                android:textSize="15sp"/>
         </LinearLayout>
 
         <!-- ==== 用件ボタン (config visit_purposes を order 順・3 列) ==== -->
@@ -97,7 +103,7 @@
             android:id="@+id/purpose_section"
             android:layout_width="match_parent"
             android:layout_height="0dp"
-            android:layout_weight="2"
+            android:layout_weight="2.25"
             android:gravity="center"
             android:orientation="vertical"
             android:visibility="gone">
@@ -105,36 +111,56 @@
                 android:id="@+id/purpose_hint"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginBottom="6dp"
+                android:layout_marginBottom="2dp"
                 android:maxLines="1"
                 android:text="@string/idle_choose_purpose"
                 android:textColor="@color/dim"
-                android:textSize="16sp"/>
-            <HorizontalScrollView
+                android:textSize="14sp"/>
+            <TextView
+                android:id="@+id/purpose_auto_hint"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:paddingLeft="16dp"
-                android:paddingRight="16dp"
-                android:scrollbars="none">
-                <GridLayout
-                    android:id="@+id/purpose_grid"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:columnCount="3"/>
-            </HorizontalScrollView>
+                android:layout_marginBottom="4dp"
+                android:maxLines="1"
+                android:text="@string/purpose_ringing_hint"
+                android:textColor="@color/accent"
+                android:textSize="13sp"/>
+            <GridLayout
+                android:id="@+id/purpose_grid"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:alignmentMode="alignMargins"
+                android:columnCount="3"
+                android:paddingLeft="12dp"
+                android:paddingRight="12dp"
+                android:useDefaultMargins="false"/>
+            <Button
+                android:id="@+id/purpose_skip_button"
+                android:layout_width="match_parent"
+                android:layout_height="56dp"
+                android:layout_marginLeft="16dp"
+                android:layout_marginTop="10dp"
+                android:layout_marginRight="16dp"
+                android:background="@drawable/bg_big_button"
+                android:maxLines="2"
+                android:text="@string/purpose_call_without_selection"
+                android:textColor="@color/fg"
+                android:textSize="20sp"
+                android:textStyle="bold"/>
         </LinearLayout>
 
         <!-- ==== 訪客言語バー (config ui.languages) + ノード情報 (下段) ==== -->
         <FrameLayout
             android:layout_width="match_parent"
             android:layout_height="0dp"
-            android:layout_weight="1"
-            android:padding="8dp">
+            android:layout_weight="0.9"
+            android:padding="4dp">
             <LinearLayout
                 android:id="@+id/lang_bar"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_gravity="center"
+                android:baselineAligned="false"
                 android:orientation="horizontal"
                 android:visibility="gone"/>
             <TextView

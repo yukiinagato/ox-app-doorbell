@@ -211,6 +211,21 @@ Java_jp_keihan_doorbell_DoorbellCore_nativePressPurpose(JNIEnv* env, jobject, jl
 }
 
 extern "C" JNIEXPORT void JNICALL
+Java_jp_keihan_doorbell_DoorbellCore_nativeSelectPurpose(JNIEnv* env, jobject, jlong h,
+                                                         jstring door_id, jstring purpose) {
+  Bridge* b = fromHandle(h);
+  if (b && b->core)
+    db_core_select_purpose(b->core, toUtf8(env, door_id).c_str(), toUtf8(env, purpose).c_str());
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_jp_keihan_doorbell_DoorbellCore_nativeCancelCall(JNIEnv* env, jobject, jlong h,
+                                                      jstring door_id) {
+  Bridge* b = fromHandle(h);
+  if (b && b->core) db_core_cancel_call(b->core, toUtf8(env, door_id).c_str());
+}
+
+extern "C" JNIEXPORT void JNICALL
 Java_jp_keihan_doorbell_DoorbellCore_nativeSetVisitorLang(JNIEnv* env, jobject, jlong h,
                                                           jstring door, jstring lang) {
   Bridge* b = fromHandle(h);

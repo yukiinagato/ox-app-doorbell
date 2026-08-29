@@ -56,6 +56,8 @@ class MainActivity : Activity(), DoorbellCore.Listener {
     private lateinit var themeBg: ImageView
     private lateinit var nightTint: View
     private lateinit var idleView: View
+    private lateinit var idleHeader: View
+    private lateinit var callSection: View
     private lateinit var clockText: TextView
     private lateinit var dateText: TextView
     private lateinit var callButton: Button
@@ -63,7 +65,9 @@ class MainActivity : Activity(), DoorbellCore.Listener {
     private lateinit var nodeInfo: TextView
     private lateinit var purposeSection: View
     private lateinit var purposeHint: TextView
+    private lateinit var purposeAutoHint: TextView
     private lateinit var purposeGrid: GridLayout
+    private lateinit var purposeSkipButton: Button
     private lateinit var langBar: LinearLayout
     private lateinit var callingView: View
     private lateinit var callingText: TextView
@@ -92,9 +96,12 @@ class MainActivity : Activity(), DoorbellCore.Listener {
     private var nodeId = ""                  // 自機 node_id (devices.<id>.local.theme 用)
     private var panelToken = ""              // config panel.tokens[0] (/asset の ?k=)
     private var visitorLang = "ja"           // 門口機の表示言語 (訪客言語)
+    private var hasPurposes = false           // 第二屏へ出す用件があるか
+    private var choosingPurpose = false       // 待機第一屏 / 用件第二屏
     private var themeColor: String? = null   // 適用済み bg_color
     private var themeHash: String? = null    // 適用済み bg_image (sha256)
     private var audio: MediaPlayer? = null   // reply/chime の audio_path 再生
+    private var chimeTone: ToneGenerator? = null
     private var callTitleOverride: String? = null  // 用件付き按鈴の「{用件} で呼び出しました」
 
     // ---------- タイマ (WPF DispatcherTimer 相当) ----------
@@ -103,6 +110,9 @@ class MainActivity : Activity(), DoorbellCore.Listener {
     }
     private val callTimeout = Runnable {
         showIdle(texts.t("calling.no_answer", R.string.calling_no_answer))
+    }
+    private val purposeTimeout = Runnable {
+        if (choosingPurpose) showCalling()
     }
     private val replyTimeout = Runnable { replyBanner.visibility = View.GONE }
     // H.264 硬編の稼働制御 (Phase 6a): /stream.mp4 の購読者がいる間だけエンコーダを回す
@@ -137,8 +147,10 @@ class MainActivity : Activity(), DoorbellCore.Listener {
         applyStrings()
 
         callButton.setOnClickListener { onCallClick() }
+        purposeSkipButton.setOnClickListener { showCalling() }
         cancelButton.setOnClickListener {
             ui.removeCallbacks(callTimeout)
+            app.core.cancelCall(app.boot.door)
             showIdle()
         }
         // 隠し管理入口 (右上 200dp を 5 秒内 7 連打)
@@ -172,6 +184,7 @@ class MainActivity : Activity(), DoorbellCore.Listener {
         enterImmersive()
         ui.post(clockTick)
         ui.post(encoderPoll)
+        if (choosingPurpose) ui.postDelayed(purposeTimeout, PURPOSE_TIMEOUT_MS)
         enterKioskIfConfigured()
         maybeStartCamera()
     }
@@ -188,6 +201,7 @@ class MainActivity : Activity(), DoorbellCore.Listener {
     override fun onPause() {
         ui.removeCallbacks(clockTick)
         ui.removeCallbacks(encoderPoll)
+        ui.removeCallbacks(purposeTimeout)
         camera.encoder = null
         videoEncoder.stop()
         super.onPause()
@@ -206,11 +220,16 @@ class MainActivity : Activity(), DoorbellCore.Listener {
         tts?.shutdown()
         try { audio?.release() } catch (_: Exception) { }
         audio = null
+        stopRinging()
         super.onDestroy()
     }
 
     @Deprecated("kiosk 中は戻れない")
     override fun onBackPressed() {
+        if (choosingPurpose) {
+            showCalling()
+            return
+        }
         if (!app.boot.kiosk || adminUnlocked) super.onBackPressed()
     }
 
@@ -219,6 +238,8 @@ class MainActivity : Activity(), DoorbellCore.Listener {
         themeBg = findViewById(R.id.theme_bg)
         nightTint = findViewById(R.id.night_tint)
         idleView = findViewById(R.id.idle_view)
+        idleHeader = findViewById(R.id.idle_header)
+        callSection = findViewById(R.id.call_section)
         clockText = findViewById(R.id.clock_text)
         dateText = findViewById(R.id.date_text)
         callButton = findViewById(R.id.call_button)
@@ -226,7 +247,9 @@ class MainActivity : Activity(), DoorbellCore.Listener {
         nodeInfo = findViewById(R.id.node_info)
         purposeSection = findViewById(R.id.purpose_section)
         purposeHint = findViewById(R.id.purpose_hint)
+        purposeAutoHint = findViewById(R.id.purpose_auto_hint)
         purposeGrid = findViewById(R.id.purpose_grid)
+        purposeSkipButton = findViewById(R.id.purpose_skip_button)
         langBar = findViewById(R.id.lang_bar)
         callingView = findViewById(R.id.calling_view)
         callingText = findViewById(R.id.calling_text)
@@ -309,6 +332,9 @@ class MainActivity : Activity(), DoorbellCore.Listener {
             texts.t("idle.call_button", R.string.idle_call_button, doorLabel(app.boot.door)).trim()
         touchHint.text = texts.t("idle.touch_to_call", R.string.idle_touch_to_call)
         purposeHint.text = texts.t("idle.choose_purpose", R.string.idle_choose_purpose)
+        purposeAutoHint.text = texts.t("purpose.ringing_hint", R.string.purpose_ringing_hint)
+        purposeSkipButton.text = texts.t("purpose.call_without_selection",
+                                         R.string.purpose_call_without_selection)
         callingText.text = texts.t("calling.title", R.string.calling_title)
         cancelButton.text = texts.t("calling.cancel", R.string.calling_cancel)
         replyCaption.text = texts.t("reply.banner", R.string.reply_banner)
@@ -428,19 +454,38 @@ class MainActivity : Activity(), DoorbellCore.Listener {
         purposeGrid.removeAllViews()
         val purposes = app.core.dig(cfg, "visit_purposes") as? JSONObject
         if (app.boot.role != "door_station" || purposes == null || purposes.length() == 0) {
+            hasPurposes = false
             purposeSection.visibility = View.GONE
             return
         }
-        for (id in sortedByOrder(purposes)) {
+        hasPurposes = true
+        val ids = sortedByOrder(purposes)
+        val widthDp = resources.displayMetrics.widthPixels / resources.displayMetrics.density
+        val columns = when {
+            ids.size <= 1 -> 1
+            widthDp < 520f -> 2
+            else -> minOf(3, ids.size)
+        }
+        purposeGrid.columnCount = columns
+        val rows = (ids.size + columns - 1) / columns
+        val buttonHeight = when {
+            rows >= 3 -> 44
+            rows == 2 -> 50
+            else -> 64
+        }
+        val textSize = if (rows >= 2 || columns == 2) 14f else 16f
+        for ((index, id) in ids.withIndex()) {
             val e = purposes.optJSONObject(id)
             val label = labelOf(e, texts.lang, id)
             val icon = e?.optString("icon").orEmpty()
             val b = Button(this)
-            b.text = if (icon.isEmpty()) label else "$icon\n$label"
-            b.textSize = 17f
+            b.text = if (icon.isEmpty()) label else "$icon  $label"
+            b.textSize = textSize
             b.isAllCaps = false
             b.setSingleLine(false)
-            b.maxLines = 3
+            b.maxLines = 2
+            b.gravity = android.view.Gravity.CENTER
+            b.setPadding(dp(8), 0, dp(8), 0)
             @Suppress("DEPRECATION")  // minSdk 21 (Context.getColor / getDrawable は API 23+)
             b.setTextColor(resources.getColor(R.color.fg))
             @Suppress("DEPRECATION")
@@ -448,16 +493,18 @@ class MainActivity : Activity(), DoorbellCore.Listener {
             b.isFocusable = true
             b.setOnClickListener { onPurposeClick(id, label) }
             val lp = GridLayout.LayoutParams()
-            lp.width = dp(176)
-            lp.height = dp(92)
-            lp.setMargins(dp(6), dp(6), dp(6), dp(6))
+            lp.rowSpec = GridLayout.spec(index / columns)
+            lp.columnSpec = GridLayout.spec(index % columns, 1f)
+            lp.width = 0
+            lp.height = dp(buttonHeight)
+            lp.setMargins(dp(4), dp(3), dp(4), dp(3))
             purposeGrid.addView(b, lp)
         }
-        purposeSection.visibility = View.VISIBLE
+        purposeSection.visibility = if (choosingPurpose) View.VISIBLE else View.GONE
     }
 
     private fun onPurposeClick(id: String, label: String) {
-        app.core.pressPurpose(app.boot.door, id)
+        app.core.selectPurpose(app.boot.door, id)
         showCalling(texts.t("purpose.sent", R.string.purpose_sent, label))
     }
 
@@ -479,19 +526,26 @@ class MainActivity : Activity(), DoorbellCore.Listener {
         for (l in list) {
             val b = Button(this)
             b.text = Texts.langDisplayName(l)
-            b.textSize = 18f
+            b.textSize = 15f
             b.isAllCaps = false
             b.isFocusable = true
+            b.gravity = android.view.Gravity.CENTER
+            b.includeFontPadding = false
+            b.minWidth = 0
+            b.minHeight = 0
+            b.minimumWidth = 0
+            b.minimumHeight = 0
+            b.setPadding(0, 0, 0, 0)
             b.tag = l
             @Suppress("DEPRECATION")  // minSdk 21 (getDrawable(id) は API 21 でも使える旧 API)
             b.background = resources.getDrawable(R.drawable.bg_tv_button)
             b.setOnClickListener { onLangClick(l) }
-            val lp = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(52))
-            lp.leftMargin = dp(6)
-            lp.rightMargin = dp(6)
+            val lp = LinearLayout.LayoutParams(dp(104), dp(42))
+            lp.leftMargin = dp(4)
+            lp.rightMargin = dp(4)
             langBar.addView(b, lp)
         }
-        langBar.visibility = View.VISIBLE
+        langBar.visibility = if (choosingPurpose) View.VISIBLE else View.GONE
         updateLangBarSelection()
     }
 
@@ -523,13 +577,34 @@ class MainActivity : Activity(), DoorbellCore.Listener {
     // ---------- 状態遷移 ----------
 
     private fun showIdle(hint: String? = null) {
+        choosingPurpose = false
+        ui.removeCallbacks(purposeTimeout)
         callTitleOverride = null
         ui.removeCallbacks(callTimeout)
         pulse.clearAnimation()
         callingView.visibility = View.GONE
         offlineView.visibility = View.GONE
         idleView.visibility = View.VISIBLE
+        idleHeader.visibility = View.VISIBLE
+        callSection.visibility = View.VISIBLE
+        purposeSection.visibility = View.GONE
+        langBar.visibility = View.GONE
         if (hint != null) touchHint.text = hint
+    }
+
+    /** 呼び出し済みの第二屏。用件は任意で、未選択でも呼出自体は成立している。 */
+    private fun showPurposeChooser() {
+        if (!hasPurposes) {
+            showCalling()
+            return
+        }
+        choosingPurpose = true
+        idleHeader.visibility = View.GONE
+        callSection.visibility = View.GONE
+        purposeSection.visibility = View.VISIBLE
+        langBar.visibility = if (langBar.childCount > 0) View.VISIBLE else View.GONE
+        ui.removeCallbacks(purposeTimeout)
+        ui.postDelayed(purposeTimeout, PURPOSE_TIMEOUT_MS)
     }
 
     /**
@@ -537,6 +612,8 @@ class MainActivity : Activity(), DoorbellCore.Listener {
      * (core からの state=calling で上書きされないよう callTitleOverride に覚える)。
      */
     private fun showCalling(title: String? = null) {
+        choosingPurpose = false
+        ui.removeCallbacks(purposeTimeout)
         if (title != null) callTitleOverride = title
         callingText.text = callTitleOverride ?: texts.t("calling.title", R.string.calling_title)
         idleView.visibility = View.GONE
@@ -584,7 +661,9 @@ class MainActivity : Activity(), DoorbellCore.Listener {
                 "in_call" -> callingText.text = texts.t("incall.title", R.string.incall_title)
             }
             // カスタム音 (assets の audio_path) があればそれを、無ければ内蔵トーン
-            "chime" -> playAudio(ev.optString("audio_path")) { playChimeTone() }
+            "chime" -> playAudio(ev.optString("audio_path")) {
+                playChimeTone(ev.optString("sound", "ding1"))
+            }
             "reply" -> {
                 // カスタム音声があれば再生 (無い時は core が TTS 済み — 二重発話しない)
                 val path = ev.optString("audio_path")
@@ -617,6 +696,7 @@ class MainActivity : Activity(), DoorbellCore.Listener {
             }
             "display" -> applyNightTint(ev.optBoolean("night"), ev.optBoolean("red_tint"))
             "peers_changed", "config_changed" -> refreshNodeInfo()
+            "event" -> if (ev.optString("type") == "call_cancelled") stopRinging()
         }
     }
 
@@ -653,18 +733,51 @@ class MainActivity : Activity(), DoorbellCore.Listener {
         }
     }
 
-    private fun playChimeTone() {
+    private fun playChimeTone(sound: String) {
         try {
-            ToneGenerator(AudioManager.STREAM_NOTIFICATION, 90)
-                .startTone(ToneGenerator.TONE_PROP_BEEP2, 400)
+            try { chimeTone?.release() } catch (_: Exception) { }
+            val tone = ToneGenerator(AudioManager.STREAM_NOTIFICATION, 90)
+            chimeTone = tone
+            val kind = when (sound) {
+                "ding2" -> ToneGenerator.TONE_PROP_BEEP
+                "classic" -> ToneGenerator.TONE_SUP_RINGTONE
+                else -> ToneGenerator.TONE_PROP_BEEP2
+            }
+            val duration = if (sound == "classic") 1400 else if (sound == "ding2") 700 else 450
+            tone.startTone(kind, duration)
+            ui.postDelayed({
+                if (chimeTone === tone) {
+                    try { tone.release() } catch (_: Exception) { }
+                    chimeTone = null
+                }
+            }, (duration + 100).toLong())
         } catch (_: Exception) { }
+    }
+
+    /** 呼出ボタンが受理されたことを訪客へ即時に伝える短い確認音。 */
+    private fun playCallFeedback() {
+        try {
+            val tone = ToneGenerator(AudioManager.STREAM_MUSIC, 75)
+            tone.startTone(ToneGenerator.TONE_PROP_ACK, 140)
+            ui.postDelayed({ try { tone.release() } catch (_: Exception) { } }, 220)
+        } catch (_: Exception) { }
+    }
+
+    private fun stopRinging() {
+        try { audio?.stop() } catch (_: Exception) { }
+        try { audio?.release() } catch (_: Exception) { }
+        audio = null
+        try { chimeTone?.stopTone() } catch (_: Exception) { }
+        try { chimeTone?.release() } catch (_: Exception) { }
+        chimeTone = null
     }
 
     // ---------- 操作 ----------
 
     private fun onCallClick() {
+        playCallFeedback()
         app.core.press(app.boot.door)
-        showCalling()
+        showPurposeChooser()
     }
 
     private fun onSecretCorner() {
@@ -729,5 +842,6 @@ class MainActivity : Activity(), DoorbellCore.Listener {
 
     companion object {
         private const val TAG = "doorbell-ui"
+        private const val PURPOSE_TIMEOUT_MS = 15_000L
     }
 }
