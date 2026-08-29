@@ -77,13 +77,8 @@
     _boot.rawJson = js;  // 次回 load 用にメモリ側も更新
     NSLog(@"[doorbell] paired: boot.json に PSK/seeds を保存しました");
   }
-  UIAlertView *a = [[UIAlertView alloc] initWithTitle:@"配対しました"
-                                              message:@"このデバイスをクラスタに追加しました。"
-                                             delegate:nil
-                                    cancelButtonTitle:@"OK"
-                                    otherButtonTitles:nil];
-  [a show];
-  [a release];
+  // フィードバックは配対引導ページが自動で閉じることで伝わる。ここで UIAlertView を出すと
+  // 同一イベント配送中に引導 VC の dismiss と重なり over-release で落ちる (iOS5) ため出さない。
 }
 
 - (void)presentIncomingDoor:(NSString *)door purpose:(NSString *)purpose

@@ -2,6 +2,7 @@
 #import "DBTexts.h"
 #import "DBBootConfig.h"
 #import <CommonCrypto/CommonDigest.h>
+#import <dispatch/dispatch.h>
 
 static const NSInteger kMaxLen = 6;
 static NSInteger sFails = 0;
@@ -169,10 +170,15 @@ static NSTimeInterval sLockedUntil = 0;
 
   if ([[[self class] sha256Hex:_pin] isEqualToString:expected]) {
     sFails = 0;
-    DBAdminUnlockHandler cb = [[_onUnlocked retain] autorelease];
-    [self dismissViewControllerAnimated:YES completion:^{
+    DBAdminUnlockHandler cb = [[_onUnlocked copy] autorelease];
+    [self dismissViewControllerAnimated:YES completion:nil];
+    // iOS 5.1 では dismiss の completion (CA commit コンテキスト) 内で即 present すると
+    // UIKit の状態機が中途半端なまま EXC_BAD_ACCESS で落ちる (現代 iOS は warning のみ)。
+    // よって cb は dismissal 完了後の次 runloop へ deferred してから呼ぶ。
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.7 * NSEC_PER_SEC)),
+                   dispatch_get_main_queue(), ^{
       if (cb) cb();
-    }];
+    });
     return;
   }
   sFails++;

@@ -28,7 +28,7 @@ else
   PORT=2222; HOST=localhost; SSHHOST="root@localhost"
 fi
 
-OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=10"
+OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=10 -o HostKeyAlgorithms=+ssh-rsa"
 echo "=== /Applications へ配置 ==="
 run_ssh $OPTS -p "$PORT" "$SSHHOST" "mkdir -p /Applications"
 run_scp $OPTS -P "$PORT" -r "$APP" "$SSHHOST:/Applications/"

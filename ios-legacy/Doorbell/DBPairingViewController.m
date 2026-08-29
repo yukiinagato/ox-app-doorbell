@@ -24,6 +24,7 @@
   UIButton *_found;
   NSString *_lastQr;
   NSTimer *_poll;
+  BOOL _dismissed;
 }
 
 - (id)initWithCore:(DBCoreBridge *)core boot:(DBBootConfig *)boot {
@@ -198,12 +199,12 @@
   if ([qr isKindOfClass:[NSString class]] && [qr length] > 0 && ![qr isEqualToString:_lastQr]) {
     [_lastQr release];
     _lastQr = [qr retain];
-    // iPad1 の QR 生成は重い → 背景で作り main で反映 (デバッグ画面と同流儀)
-    UIImageView *__unsafe_unretained wqr = _qr;
+    // iPad1 の QR 生成は重い → 背景で作り main で反映 (デバッグ画面と同流儀)。
+    // block が self を retain するので _qr は完了まで有効 (dangling 回避)。
     NSString *qrCopy = [qr copy];
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
       UIImage *img = [DBInfoViewController qrImageForString:qrCopy targetPx:480];
-      dispatch_async(dispatch_get_main_queue(), ^{ wqr.image = img; });
+      dispatch_async(dispatch_get_main_queue(), ^{ self->_qr.image = img; });
       [qrCopy release];
     });
   }
@@ -221,10 +222,11 @@
 - (void)onUiEvent:(NSDictionary *)ev {
   NSString *t = [ev objectForKey:@"t"];
   if ([t isEqualToString:@"paired"]) {
-    [self dismissPaired];
+    // イベント配送ループの最中に dismiss/dealloc すると再入で落ちる → 次の runloop へ遅延
+    [self performSelector:@selector(dismissPaired) withObject:nil afterDelay:0];
   } else if ([t isEqualToString:@"join_result"]) {
     if ([[ev objectForKey:@"ok"] boolValue]) {
-      [self dismissPaired];
+      [self performSelector:@selector(dismissPaired) withObject:nil afterDelay:0];
     } else {
       UIAlertView *a = [[UIAlertView alloc]
               initWithTitle:@"参加できませんでした"
@@ -239,6 +241,8 @@
 }
 
 - (void)dismissPaired {
+  if (_dismissed) return;  // poll と paired イベントの二重呼び出しガード
+  _dismissed = YES;
   [_poll invalidate];
   _poll = nil;
   [self dismissViewControllerAnimated:YES completion:nil];
