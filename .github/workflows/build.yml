@@ -80,6 +80,12 @@ jobs:
         with:
           distribution: temurin
           java-version: "21"
+      # GitHub hosted runner は毎回初期化されるため、debug keystore を固定キャッシュする。
+      # これが無いと CI ごとに署名が変わり、実機で adb install -r できない。
+      - uses: actions/cache@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: doorbell-android-debug-keystore-v1
       - name: SDK components
         run: |
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null
