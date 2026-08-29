@@ -1,0 +1,92 @@
+#import "DBSiren.h"
+#import <math.h>
+
+@implementation DBSiren {
+  AVAudioPlayer *_player;
+}
+
+- (void)dealloc {
+  [_player stop];
+}
+
+- (void)swapPlayer:(AVAudioPlayer *)p {
+  [_player stop];
+  _player = p;
+}
+
+- (BOOL)playAssetPath:(NSString *)path {
+  if ([path length] == 0 || ![[NSFileManager defaultManager] fileExistsAtPath:path]) return NO;
+  AVAudioPlayer *p =
+      [[AVAudioPlayer alloc] initWithContentsOfURL:[NSURL fileURLWithPath:path] error:NULL];
+  if (p == nil) return NO;
+  [self swapPlayer:p];
+  p.numberOfLoops = 0;
+  return [p play];
+}
+
+- (void)startSiren:(NSString *)customPath volume:(NSInteger)volume {
+  float vol = (float)MAX(0, MIN(100, volume)) / 100.0f;
+  if ([customPath length] > 0 &&
+      [[NSFileManager defaultManager] fileExistsAtPath:customPath]) {
+    AVAudioPlayer *p = [[AVAudioPlayer alloc] initWithContentsOfURL:[NSURL fileURLWithPath:customPath]
+                                                              error:NULL];
+    if (p) {
+      [self swapPlayer:p];
+      p.numberOfLoops = -1;
+      p.volume = vol;
+      if ([p play]) return;
+    }
+  }
+  AVAudioPlayer *p = [[AVAudioPlayer alloc] initWithData:[[self class] sirenWav] error:NULL];
+  if (p == nil) return;
+  [self swapPlayer:p];
+  p.numberOfLoops = -1;
+  p.volume = vol;
+  [p play];
+}
+
+- (void)stop {
+  [_player stop];
+  _player = nil;
+}
+
+// 880/660Hz 交互 2 秒の警報音 (22.05kHz 16bit mono PCM WAV)。
++ (NSData *)sirenWav {
+  const int rate = 22050;
+  const int seconds = 2;
+  const int n = rate * seconds;
+  const int dataLen = n * 2;
+  NSMutableData *d = [NSMutableData dataWithCapacity:44 + dataLen];
+  void (^le32)(uint32_t) = ^(uint32_t v) {
+    uint32_t x = CFSwapInt32HostToLittle(v);
+    [d appendBytes:&x length:4];
+  };
+  void (^le16)(uint16_t) = ^(uint16_t v) {
+    uint16_t x = CFSwapInt16HostToLittle(v);
+    [d appendBytes:&x length:2];
+  };
+  [d appendBytes:"RIFF" length:4];
+  le32(36 + dataLen);
+  [d appendBytes:"WAVE" length:4];
+  [d appendBytes:"fmt " length:4];
+  le32(16);
+  le16(1);          // PCM
+  le16(1);          // mono
+  le32(rate);
+  le32(rate * 2);   // byte rate
+  le16(2);          // block align
+  le16(16);         // bits
+  [d appendBytes:"data" length:4];
+  le32(dataLen);
+  for (int i = 0; i < n; i++) {
+    double t = (double)i / (double)rate;
+    double freq = ((i / (rate / 2)) % 2 == 0) ? 880.0 : 660.0;  // 0.5 秒毎に交互
+    double env = MIN(1.0, (double)MIN(i, n - i) / ((double)rate * 0.02));  // クリック防止
+    short s = (short)(sin(2 * M_PI * freq * t) * 0.6 * (double)SHRT_MAX * env);
+    uint16_t x = CFSwapInt16HostToLittle((uint16_t)s);
+    [d appendBytes:&x length:2];
+  }
+  return d;
+}
+
+@end

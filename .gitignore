@@ -60,3 +60,5 @@ __pycache__/
 /tools/toolchain/
 # LLVM ソース (build_libcxx_ios5.sh がダウンロード/展開。成果物も巨大 → git に入れない)
 /tools/llvm-src/
+/ios-kiosk/build/
+/ios-kiosk/lib/
