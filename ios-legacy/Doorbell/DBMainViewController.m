@@ -320,7 +320,8 @@ static UIColor *DBNightClk(void) { return [UIColor colorWithRed:0.545 green:0.14
   _emergencyNote.textAlignment = NSTextAlignmentCenter;
   _emergencyNote.numberOfLines = 0;
   [_emergencyView addSubview:_emergencyNote];
-  _emergencyCancel = [[UIButton buttonWithType:UIButtonTypeSystem] retain];
+  // iOS5: System だと白背景 RoundedRect が描かれ bg/文字色が見えなくなる → Custom
+  _emergencyCancel = [[UIButton buttonWithType:UIButtonTypeCustom] retain];
   _emergencyCancel.titleLabel.font = [UIFont boldSystemFontOfSize:26];
   [_emergencyCancel setTitleColor:[UIColor colorWithRed:0.55 green:0.05 blue:0.04 alpha:1]
                          forState:UIControlStateNormal];

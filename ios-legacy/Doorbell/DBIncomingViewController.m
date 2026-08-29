@@ -233,7 +233,8 @@ static const NSTimeInterval kAutoCloseS = 30;
 }
 
 - (UIButton *)makeButton:(BOOL)prominent {
-  UIButton *b = [UIButton buttonWithType:UIButtonTypeSystem];
+  // iOS5: System は RoundedRect の白背景グラデ画像を描くため bg 色が効かず白文字が消える → Custom
+  UIButton *b = [UIButton buttonWithType:UIButtonTypeCustom];
   b.titleLabel.font = [UIFont boldSystemFontOfSize:22];
   b.titleLabel.adjustsFontSizeToFitWidth = YES;
   b.titleLabel.minimumFontSize = 13;  // iOS5: minimumScaleFactor は 6+
@@ -340,7 +341,7 @@ static const NSTimeInterval kAutoCloseS = 30;
   NSString *lang = [_visitorLang length] == 0 ? @"ja" : _visitorLang;
   for (NSString *rid in [DBConfigUtil sortedByOrder:replies]) {
     NSDictionary *entry = [replies objectForKey:rid];
-    UIButton *b = [UIButton buttonWithType:UIButtonTypeSystem];
+    UIButton *b = [UIButton buttonWithType:UIButtonTypeCustom];  // iOS5: System=白背景回避
     [b setTitle:[DBConfigUtil labelOf:entry lang:lang fallback:rid] forState:UIControlStateNormal];
     b.titleLabel.font = [UIFont systemFontOfSize:22];
     b.titleLabel.adjustsFontSizeToFitWidth = YES;
