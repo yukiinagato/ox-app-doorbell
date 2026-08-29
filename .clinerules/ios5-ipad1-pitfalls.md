@@ -47,6 +47,27 @@
   presentViewController → EXC_BAD_ACCESS (SIGSEGV at 0x8) 必崩** (新 iOS 只是 warning)。
   修复: DBAdminPinViewController.m submit() 里回调改为
   `dispatch_after(0.7s, main queue)` 脱离 CA commit 再执行。别改回 completion 里直接回调。
+- **iOS 5.1: `UIButtonTypeSystem` = RoundedRect，会绘制系统浅色渐变背景图**，
+  显式设置的 backgroundColor 被压在渐变图下不生效 → 深色底+白字的设计里白字完全看不见
+  (来电画面/应急画面的按钮)。所有自绘按钮一律用 `UIButtonTypeCustom`。
+  修复: DBIncomingViewController.m makeButton/buildReplyButtons、
+  DBMainViewController.m _emergencyCancel (b2b5158)。
+  全库排查法: `grep -n 'buttonWithType:' ios-legacy/Doorbell/*.m`
+  (注意 DBAdminPinViewController/DBInfoViewController/DBPairingViewController 已全部 Custom)。
+- **MRC: DBMiniSip 的 poll 线程存活期间对象可能被 dealloc** → SIP 线程稍后
+  (ms_hangup BYE 重传可达数秒) 通过 DBSipOnState 向主线程 dispatch 已释放对象的
+  delegate 回调 → 堆破坏 → **第二次呼出 UI 冻结 (无 crash log)**。
+  修复 (2026-08-29): start() 里 [self retain]、threadMain 末尾 [self release] (线程完走前
+  对象不死)；Incoming 在 dealloc/viewDidDisappear/onAnswer/startSip 释放 _sip 前置
+  `delegate = nil`。assign 型 delegate 的类都要按此模式处理。
+
+## 调试手段备忘 (本次验证用)
+- **没有 admin 密码也能远程触发动作**：panel token 在设备 doorbell.db 的
+  `panel.tokens` (scp 回本地 sqlite3 读) → `POST http://127.0.0.1:47180/api/panel/press?k=<token>`
+  (但需要 config 里有 doors.*，当前集群 door 为空串时用不了；/api/press 需 admin 会话)。
+- **idevicesyslog 在 iOS 5 可用 (无需 DDI)**，抓 UIKit 的
+  "Attempt to present while a presentation is in progress" 警告可确认 present/dismiss 竞态。
+- 冻结类问题不会有 crash log；验证存活 = 启动后 15-45s 内 CrashReporter 无新文件。
 
 ## 设备状态结论 (2026-08-29 调试)
 - 闪退根因 = 上述 CA commit 内 present 的 iOS 5.1 UIKit bug, 已修复并装机验证
