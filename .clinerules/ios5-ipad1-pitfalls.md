@@ -78,6 +78,17 @@
 - **idevicesyslog 在 iOS 5 可用 (无需 DDI)**，抓 UIKit 的
   "Attempt to present while a presentation is in progress" 警告可确认 present/dismiss 竞态。
 - 冻结类问题不会有 crash log；验证存活 = 启动后 15-45s 内 CrashReporter 无新文件。
+- **UI 看门狗 (2026-08-29 引入, DBAppDelegate)**：后台线程每 3s ping 主线程，无响应
+  连续 3 次 (~15s) → 写 `/var/mobile/Documents/doorbell-hangs.log` → 遗留
+  `( sleep 1; uiopen doorbell:// ) &` 子进程 → `_exit(0)` 自杀 → SpringBoard 1s 后重新拉起
+  app。kiosk 上"UI 冻结=崩溃"，必须有自愈。hangs.log 是冻结类问题的关键取证来源
+  (crash log 不会记录 hang)。误触发阈值: 3s 轮询 + 5s 等待 × 3 次，主线程最长合法
+  阻塞 (MJPEG 解码/音頻停止) 远小于此，安全。
+- **DDI (截图) 现状**：Xcode_5.1.dmg 的 DeviceSupport 只有 4.2/4.3/5.0/5.1/6.0/6.1/7.0/7.1，
+  **没有 5.1.1 (9B206)**；把 5.1 的 DDI 挂到 5.1.1 上 → ideviceimagemounter "can't mount"
+  (签名按 build 校验)。要截图需 Apple 开发者站下载 Xcode 4.6.3 DMG 取
+  "5.1.1 (9B206)/DeveloperDiskImage.dmg" 再 ideviceimagemounter。
+  (`ideviceimagemounter /tmp/ddi51.dmg /tmp/ddi51.dmg.signature`)
 
 ## 设备状态结论 (2026-08-29 调试)
 - 闪退根因 = 上述 CA commit 内 present 的 iOS 5.1 UIKit bug, 已修复并装机验证
