@@ -35,7 +35,10 @@ echo "=== app/SpringBoard 停止 (コピー中に resume するのを防ぐ) ===
 # 先に app 本体も殺す (respring 後の自動再開を防ぐ。killall は ps 無しで使える)。
 run_ssh $OPTS -p "$PORT" "$SSHHOST" "/usr/bin/killall Doorbell >/dev/null 2>&1; /usr/bin/killall SpringBoard >/dev/null 2>&1; sleep 2; true"
 echo "=== /Applications へ配置 ==="
-run_ssh $OPTS -p "$PORT" "$SSHHOST" "mkdir -p /Applications"
+# 旧 bundle は必ず削除してからコピーする (新 inode)。稼働中/ 既知の inode へ原子上書きすると
+# カーネルの署名ページキャッシュと衝突し、以後すべての起動が dyld で SIGKILL される
+# (reboot するまで治らない — 2026-08-29 実機で確認)。
+run_ssh $OPTS -p "$PORT" "$SSHHOST" "mkdir -p /Applications; /bin/rm -rf /Applications/Doorbell.app"
 run_scp $OPTS -P "$PORT" -r "$APP" "$SSHHOST:/Applications/"
 echo "=== 権限 + 整合性確認 ==="
 run_ssh $OPTS -p "$PORT" "$SSHHOST" "chmod +x /Applications/Doorbell.app/Doorbell; openssl sha1 /Applications/Doorbell.app/Doorbell"

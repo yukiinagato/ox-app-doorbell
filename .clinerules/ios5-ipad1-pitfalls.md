@@ -43,6 +43,14 @@
   → SIGKILL (EXC_CRASH, 死在 dyld), 且 LaunchServices 状态会坏掉 → 之后**所有合法启动
   (含 uiopen) 都在 dyld 阶段被 SIGKILL**。现象上像"app 必闪退"。
   → 解法: **重启 iPad** 清状态即可恢复, app 本身没问题。
+- **【最重要】绝不在同一 inode 上原位覆盖二进制 (scp 直接覆盖)**：内核按 inode 缓存
+  代码签名页，原位覆盖后该 inode 的签名状态损坏 → **之后每一次启动都在 dyld 被 SIGKILL，
+  且 SpringBoard 会触发 "failed to launch too many times" 熔断**（此后 uiopen 只是假象地
+  "无反应"，不会真正拉起进程——别把"无新 crash log"当存活！）。除 reboot 外的解法：
+  **先 `rm -rf /Applications/Doorbell.app` 删掉旧 bundle（换新 inode）再拷贝**，立即恢复，
+  无需重启 (2026-08-29 实机验证)。install_via_ssh.sh 已固化此步骤。
+- 熔断器触发时 "uiopen 验证" 会假阴性：判断存活要看 syslog 里
+  `UIKitApplication:jp.keihan.doorbell ... Exited: Killed: 9` 与 `Throttling respawn`。
 - 从 SSH 直接执行 app 二进制 (`su mobile -c /Applications/.../Doorbell`) 会被系统 SIGKILL —
   iOS 5 只允许 SpringBoard 拉起。**远程启动用 `uiopen doorbell://`** (URL scheme 已加进
   ios-legacy/Doorbell/Info.plist)。
