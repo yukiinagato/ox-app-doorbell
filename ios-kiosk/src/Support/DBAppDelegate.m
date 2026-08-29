@@ -89,6 +89,27 @@
     [_router showHomeAnimated:NO];
     return YES;
   }
+  if ([host isEqualToString:@"info"]) {
+    // debug/情報画面を直接開く (実機検証用 — 物理接触 or root SSH 前提の入口)
+    [_router showInfo];
+    return YES;
+  }
+  if ([host isEqualToString:@"stress"]) {
+    // core JSON 取得の連続圧 (store 二重ロック修正の実機検証用)。
+    // SUSPECT buffer / SIGSEGV が出なければ修正成立。
+    DBCoreBridge *c = _core;
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+      for (int i = 0; i < 60; i++) {
+        (void)[c status];
+        (void)[c debugInfo];
+        (void)[c config];
+        if (i % 10 == 0) NSLog(@"[doorbell] stress %d/60", i);
+        [NSThread sleepForTimeInterval:0.05];
+      }
+      NSLog(@"[doorbell] stress done (60 rounds, no crash)");
+    });
+    return YES;
+  }
   return YES;
 }
 
