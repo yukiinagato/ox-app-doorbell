@@ -139,8 +139,9 @@ final class TVMainViewController: UIViewController {
 
     private func updateClock() {
         let cal = Calendar(identifier: .gregorian)
-        let c = cal.dateComponents([.year, .month, .day, .hour, .minute, .weekday], from: Date())
-        clockLabel.text = String(format: "%02d:%02d", c.hour ?? 0, c.minute ?? 0)
+        let c = cal.dateComponents([.year, .month, .day, .hour, .minute, .second, .weekday], from: Date())
+        clockLabel.text = String(format: "%02d:%02d:%02d", c.hour ?? 0, c.minute ?? 0,
+                                 c.second ?? 0)
         let yobi = ["日", "月", "火", "水", "木", "金", "土"]
         dateLabel.text = String(format: "%d年%d月%d日 (%@)", c.year ?? 0, c.month ?? 0,
                                 c.day ?? 0, yobi[((c.weekday ?? 1) - 1) % 7])

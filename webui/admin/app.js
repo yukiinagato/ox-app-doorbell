@@ -2567,7 +2567,7 @@ if (typeof document !== "undefined") (function () {
     h += "<div class='frow'><label class='flab'>" +
          esc(t("admin.theme_preview", "プレビュー")) + "</label>" +
          "<div class='tprev' id='thPrev'><div class='inner'>" +
-         "<div class='pclock' id='thClock'>--:--</div>" +
+         "<div class='pclock' id='thClock'>--:--:--</div>" +
          // idle.call_button は "{unit} 呼出" — プレビューでは実際のドア名を入れる
          "<div class='pcall'>" +
          esc(fmt(t("idle.call_button", "{unit} 呼出"),
@@ -2589,7 +2589,8 @@ if (typeof document !== "undefined") (function () {
     var now = new Date();
     $("#thClock").textContent =
       (now.getHours() < 10 ? "0" : "") + now.getHours() + ":" +
-      (now.getMinutes() < 10 ? "0" : "") + now.getMinutes();
+      (now.getMinutes() < 10 ? "0" : "") + now.getMinutes() + ":" +
+      (now.getSeconds() < 10 ? "0" : "") + now.getSeconds();
 
     function paint() {
       var p = $("#thPrev");

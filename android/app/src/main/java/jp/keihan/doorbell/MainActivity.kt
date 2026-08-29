@@ -294,8 +294,8 @@ class MainActivity : Activity(), DoorbellCore.Listener {
 
     private fun updateClock() {
         val now = Calendar.getInstance()
-        clockText.text = String.format(Locale.US, "%02d:%02d",
-            now.get(Calendar.HOUR_OF_DAY), now.get(Calendar.MINUTE))
+        clockText.text = String.format(Locale.US, "%02d:%02d:%02d",
+            now.get(Calendar.HOUR_OF_DAY), now.get(Calendar.MINUTE), now.get(Calendar.SECOND))
         val yobi = arrayOf("日", "月", "火", "水", "木", "金", "土")
         dateText.text = String.format(Locale.US, "%d年%d月%d日 (%s)",
             now.get(Calendar.YEAR), now.get(Calendar.MONTH) + 1, now.get(Calendar.DAY_OF_MONTH),

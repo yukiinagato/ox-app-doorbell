@@ -322,9 +322,11 @@ static UIColor *DBNightClk(void) { return [UIColor colorWithRed:0.545 green:0.14
   NSCalendar *cal = [[NSCalendar alloc] initWithCalendarIdentifier:NSGregorianCalendar];
   NSDateComponents *c =
       [cal components:(NSYearCalendarUnit | NSMonthCalendarUnit | NSDayCalendarUnit |
-                       NSHourCalendarUnit | NSMinuteCalendarUnit | NSWeekdayCalendarUnit)
+                       NSHourCalendarUnit | NSMinuteCalendarUnit | NSSecondCalendarUnit |
+                       NSWeekdayCalendarUnit)
              fromDate:[NSDate date]];
-  _clockLabel.text = [NSString stringWithFormat:@"%02ld:%02ld", (long)c.hour, (long)c.minute];
+  _clockLabel.text = [NSString stringWithFormat:@"%02ld:%02ld:%02ld", (long)c.hour,
+                                                (long)c.minute, (long)c.second];
   NSArray *yobi = @[@"日", @"月", @"火", @"水", @"木", @"金", @"土"];
   _dateLabel.text = [NSString stringWithFormat:@"%ld年%ld月%ld日 (%@)", (long)c.year, (long)c.month,
                      (long)c.day, [yobi objectAtIndex:((c.weekday - 1) % 7)]];
@@ -432,9 +434,10 @@ static UIColor *DBNightClk(void) { return [UIColor colorWithRed:0.545 green:0.14
   NSString *door = [DBConfigUtil evStr:ev key:@"door"];
   NSCalendar *cal = [[NSCalendar alloc] initWithCalendarIdentifier:NSGregorianCalendar];
   NSDateComponents *c =
-      [cal components:(NSHourCalendarUnit | NSMinuteCalendarUnit) fromDate:[NSDate date]];
-  NSString *line = [NSString stringWithFormat:@"%02ld:%02ld  %@ %@", (long)c.hour, (long)c.minute,
-                    type, door];
+      [cal components:(NSHourCalendarUnit | NSMinuteCalendarUnit | NSSecondCalendarUnit)
+             fromDate:[NSDate date]];
+  NSString *line = [NSString stringWithFormat:@"%02ld:%02ld:%02ld  %@ %@", (long)c.hour,
+                    (long)c.minute, (long)c.second, type, door];
   [_events insertObject:line atIndex:0];
   while ([_events count] > 8) [_events removeLastObject];
   _eventsLabel.text = [_events componentsJoinedByString:@"\n"];
@@ -657,6 +660,5 @@ static UIColor *DBNightClk(void) { return [UIColor colorWithRed:0.545 green:0.14
 }
 
 @end
-
 
 

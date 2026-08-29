@@ -210,7 +210,7 @@ namespace DoorbellApp
         private void UpdateClock()
         {
             var now = DateTime.Now;
-            ClockText.Text = now.ToString("HH:mm");
+            ClockText.Text = now.ToString("HH:mm:ss");
             string[] yobi = { "日", "月", "火", "水", "木", "金", "土" };
             DateText.Text = now.ToString("yyyy年M月d日") + " (" + yobi[(int)now.DayOfWeek] + ")";
             if (_screensaverOn)
