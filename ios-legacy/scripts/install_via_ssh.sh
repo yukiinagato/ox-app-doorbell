@@ -29,10 +29,11 @@ else
 fi
 
 OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=10 -o HostKeyAlgorithms=+ssh-rsa"
-echo "=== SpringBoard 停止 (コピー中に SpringBoard が resume するのを防ぐ) ==="
+echo "=== app/SpringBoard 停止 (コピー中に resume するのを防ぐ) ==="
 # これを先にやらないと、コピー中に SpringBoard が app を resume して SIGKILL (dyld) +
 # LaunchServices 状態が壊れ、以後アイコンタップ起動が全部 dyld SIGKILL になる。
-run_ssh $OPTS -p "$PORT" "$SSHHOST" "/usr/bin/killall SpringBoard >/dev/null 2>&1; sleep 2; true"
+# 先に app 本体も殺す (respring 後の自動再開を防ぐ。killall は ps 無しで使える)。
+run_ssh $OPTS -p "$PORT" "$SSHHOST" "/usr/bin/killall Doorbell >/dev/null 2>&1; /usr/bin/killall SpringBoard >/dev/null 2>&1; sleep 2; true"
 echo "=== /Applications へ配置 ==="
 run_ssh $OPTS -p "$PORT" "$SSHHOST" "mkdir -p /Applications"
 run_scp $OPTS -P "$PORT" -r "$APP" "$SSHHOST:/Applications/"
