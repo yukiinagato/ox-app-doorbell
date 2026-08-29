@@ -42,8 +42,8 @@ never displayed; stored in the platform secure store).
                     // codec: "auto" = probe for HW h264, fall back to mjpeg / "mjpeg" / "h264"
                     // with h264, /stream.mp4 (fMP4, platform HW encoder) becomes available and
                     // resolution/fps are set separately via the h264_* keys (Phase 6)
-                    "codec": "auto", "h264_resolution": "1280x720", "h264_fps": 25,
-                    "h264_bitrate_kbps": 1500 },
+                    "codec": "auto", "h264_resolution": "640x360", "h264_fps": 30,
+                    "h264_bitrate_kbps": 700 },
         "kiosk": { "exit_pin_hash": "<pbkdf2>", "watchdog": true },
         "motion": { "enabled": true, "sensitivity": 40, "min_interval_s": 30 },
         "aec": { "mode": "auto", "tail_ms": 0 },  // written by on-device calibration

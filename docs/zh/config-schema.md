@@ -41,8 +41,8 @@
                     // codec: "auto"=探测硬编 h264，不可用则退回 mjpeg / "mjpeg" / "h264"
                     // h264 时启用 /stream.mp4（fMP4，平台 HW encoder），
                     // resolution/fps 用 h264_* 系列单独指定 (Phase 6)
-                    "codec": "auto", "h264_resolution": "1280x720", "h264_fps": 25,
-                    "h264_bitrate_kbps": 1500 },
+                    "codec": "auto", "h264_resolution": "640x360", "h264_fps": 30,
+                    "h264_bitrate_kbps": 700 },
         "kiosk": { "exit_pin_hash": "<pbkdf2>", "watchdog": true },
         "motion": { "enabled": true, "sensitivity": 40, "min_interval_s": 30 },
         "aec": { "mode": "auto", "tail_ms": 0 },  // 装机标定时写入

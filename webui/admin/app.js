@@ -110,9 +110,9 @@ var AdminLogic = (function () {
                       resolution: f.cam_resolution || "640x480",
                       // H.264 流暢档 (Phase 6a — docs/config-schema.md camera.codec 節)
                       codec: f.cam_codec || "auto",
-                      h264_resolution: f.cam_h264_resolution || "1280x720",
-                      h264_fps: num(f.cam_h264_fps, 25),
-                      h264_bitrate_kbps: num(f.cam_h264_bitrate, 1500) } });
+                      h264_resolution: f.cam_h264_resolution || "640x360",
+                      h264_fps: num(f.cam_h264_fps, 30),
+                      h264_bitrate_kbps: num(f.cam_h264_bitrate, 700) } });
     e.push({ key: base + ".local.motion",
              value: { enabled: !!f.motion_enabled, sensitivity: num(f.motion_sensitivity, 40),
                       min_interval_s: num(f.motion_interval, 30) } });
@@ -535,8 +535,8 @@ if (typeof document !== "undefined") (function () {
                       local: { ui_lang: "ja",
                                camera: { device_hint: "", mjpeg_fps: 8, mjpeg_quality: 60,
                                          resolution: "640x480", codec: "auto",
-                                         h264_resolution: "1280x720", h264_fps: 25,
-                                         h264_bitrate_kbps: 1500 },
+                                         h264_resolution: "640x360", h264_fps: 30,
+                                         h264_bitrate_kbps: 700 },
                                theme: { bg_color: "#1c1030" },  // 端末別: 色だけ上書き
                                motion: { enabled: true, sensitivity: 40, min_interval_s: 30 } } };
       d[MOCK_ID2] = { name: "living", role: "indoor_panel" };
@@ -1347,12 +1347,12 @@ if (typeof document !== "undefined") (function () {
                   { v: "mjpeg", label: "MJPEG" },
                   { v: "h264", label: "H.264" }] },
       { id: "cam_h264_resolution", label: t("admin.cam_h264_resolution", "H.264 解像度"),
-        value: cam.h264_resolution || "1280x720", ph: "1280x720" },
+        value: cam.h264_resolution || "640x360", ph: "640x360" },
       { id: "cam_h264_fps", label: t("admin.cam_h264_fps", "H.264 フレームレート"),
-        type: "number", value: cam.h264_fps !== undefined ? cam.h264_fps : 25 },
+        type: "number", value: cam.h264_fps !== undefined ? cam.h264_fps : 30 },
       { id: "cam_h264_bitrate", label: t("admin.cam_h264_bitrate", "H.264 ビットレート (kbps)"),
         type: "number",
-        value: cam.h264_bitrate_kbps !== undefined ? cam.h264_bitrate_kbps : 1500 },
+        value: cam.h264_bitrate_kbps !== undefined ? cam.h264_bitrate_kbps : 700 },
       { id: "motion_enabled", label: t("admin.motion", "動体検知"), type: "check",
         value: mo.enabled !== false },
       { id: "motion_sensitivity", label: t("admin.motion_sensitivity", "感度"), type: "number",

@@ -122,8 +122,8 @@ class MainActivity : Activity(), DoorbellCore.Listener {
             val wanted = app.coreOk && app.core.videoEncoderWanted()
             if (wanted && !videoEncoder.isRunning) {
                 val cam = cameraLocalCfg()
-                videoEncoder.start(cam?.optInt("h264_fps", 25) ?: 25,
-                                   cam?.optInt("h264_bitrate_kbps", 1500) ?: 1500)
+                videoEncoder.start(cam?.optInt("h264_fps", 30) ?: 30,
+                                   cam?.optInt("h264_bitrate_kbps", 700) ?: 700)
                 camera.encoder = videoEncoder
             } else if (!wanted && videoEncoder.isRunning) {
                 camera.encoder = null
@@ -827,17 +827,19 @@ class MainActivity : Activity(), DoorbellCore.Listener {
         var tw = 640
         var th = 480
         if (cam?.optString("codec", "auto") != "mjpeg") {
-            val res = cam?.optString("h264_resolution", "1280x720") ?: "1280x720"
+            val res = cam?.optString("h264_resolution", "640x360") ?: "640x360"
             val x = res.indexOf('x')
             if (x > 0) {
-                tw = res.substring(0, x).toIntOrNull() ?: 1280
-                th = res.substring(x + 1).toIntOrNull() ?: 720
+                tw = res.substring(0, x).toIntOrNull() ?: 640
+                th = res.substring(x + 1).toIntOrNull() ?: 360
             } else {
-                tw = 1280
-                th = 720
+                tw = 640
+                th = 360
             }
         }
-        camera.start(preview.holder, tw, th)
+        val targetFps = if (cam?.optString("codec", "auto") != "mjpeg")
+            (cam?.optInt("h264_fps", 30) ?: 30) else 0
+        camera.start(preview.holder, tw, th, targetFps)
     }
 
     companion object {

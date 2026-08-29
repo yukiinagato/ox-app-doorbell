@@ -39,8 +39,8 @@
                     // codec: "auto"=ハードウェアエンコード (h264) を検出し不可なら mjpeg / "mjpeg" / "h264"
                     // h264 時は /stream.mp4 (fMP4, プラットフォームの HW エンコーダ) が有効になり
                     // resolution/fps は h264_* 系で別指定 (Phase 6)
-                    "codec": "auto", "h264_resolution": "1280x720", "h264_fps": 25,
-                    "h264_bitrate_kbps": 1500 },
+                    "codec": "auto", "h264_resolution": "640x360", "h264_fps": 30,
+                    "h264_bitrate_kbps": 700 },
         "kiosk": { "exit_pin_hash": "<pbkdf2>", "watchdog": true },
         "motion": { "enabled": true, "sensitivity": 40, "min_interval_s": 30 },
         "aec": { "mode": "auto", "tail_ms": 0 },  // 設置時キャリブレーションで書込

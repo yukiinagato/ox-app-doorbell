@@ -1,7 +1,8 @@
 // H.264 ハードウェアエンコード (MediaCodec, API 21+) — Phase 6a の流暢档。
 // CameraFeeder の NV21 プレビューフレームを NV12 へ変換して食わせ、AnnexB 出力を
 // core (nativeOnEncodedFrame → fMP4 → /stream.mp4) へ流す。
-// 稼働制御は MainActivity の 5 秒毎ポーリング (core.videoEncoderWanted() —
+// 出力は専用スレッドで連続 drain し、次のカメラ callback まで待たせない。
+// 稼働制御は MainActivity のポーリング (core.videoEncoderWanted() —
 // /stream.mp4 の購読者がいる間だけ回す。購読者ゼロ = エンコードゼロで省電力)。
 package jp.keihan.doorbell
 
@@ -12,14 +13,18 @@ import android.util.Log
 
 class VideoEncoder(private val core: DoorbellCore) {
 
+    @Volatile
     private var codec: MediaCodec? = null
     private var width = 0
     private var height = 0
-    private var fps = 25
-    private var bitrateKbps = 1500
+    private var fps = 30
+    private var bitrateKbps = 700
     private var lastFeedMs = 0L
     private var configData: ByteArray? = null   // CODEC_CONFIG (SPS/PPS) — キーフレームに前置
     private var nv12: ByteArray? = null         // NV21→NV12 変換の使い回しバッファ
+    @Volatile
+    private var drainRunning = false
+    private var drainThread: Thread? = null
     @Volatile
     private var started = false                 // start()..stop() の間 true (稼働指示)
     private var failed = false                  // createCodec 失敗 (次の start まで再試行しない)
@@ -31,12 +36,13 @@ class VideoEncoder(private val core: DoorbellCore) {
      *  (feed で最初のフレームが来た時に configure する — ここではパラメータ記憶のみ)。 */
     @Synchronized
     fun start(fps: Int, bitrateKbps: Int) {
-        this.fps = if (fps > 0) fps else 25
-        this.bitrateKbps = if (bitrateKbps > 0) bitrateKbps else 1500
+        this.fps = if (fps > 0) fps else 30
+        this.bitrateKbps = if (bitrateKbps > 0) bitrateKbps else 700
         // 既に走っていてパラメータだけ変わった場合は作り直す (次の feed で再 configure)
         releaseCodec()
         width = 0
         height = 0
+        lastFeedMs = 0L
         failed = false
         started = true
     }
@@ -48,17 +54,28 @@ class VideoEncoder(private val core: DoorbellCore) {
     }
 
     private fun releaseCodec() {
-        try {
-            codec?.stop()
-            codec?.release()
-        } catch (_: Exception) { }
+        val c = codec
         codec = null
+        drainRunning = false
+        try {
+            c?.stop()  // dequeueOutputBuffer を即時解除
+        } catch (_: Exception) { }
+        try {
+            drainThread?.join(250)
+        } catch (_: InterruptedException) {
+            Thread.currentThread().interrupt()
+        }
+        drainThread = null
+        try {
+            c?.release()
+        } catch (_: Exception) { }
         configData = null
     }
 
     /**
      * カメラスレッドから NV21 フレームを投入。fps 間引き → NV12 変換 → 入力バッファ →
-     * 出力ドレーン (同期モード — Camera1 のコールバック頻度なら十分軽い)。
+     * 出力は専用 thread が連続ドレーンする。入力が詰まった場合は古い映像を
+     * 待たず現在フレームを捨てる (ライブ専用)。
      * MediaCodec が使えない端末 (硬編なし) では null のまま = 何も流れない
      * (codec=auto の想定回落: /stream.mp4 は 503 → クライアントが MJPEG へ)。
      */
@@ -80,6 +97,7 @@ class VideoEncoder(private val core: DoorbellCore) {
             codec = c
             width = w
             height = h
+            startOutputDrain(c)
         }
         try {
             val inIdx = c.dequeueInputBuffer(0)
@@ -88,7 +106,6 @@ class VideoEncoder(private val core: DoorbellCore) {
             buf.clear()
             buf.put(nv21ToNv12(data, w, h))
             c.queueInputBuffer(inIdx, 0, w * h * 3 / 2, tsMs * 1000, 0)
-            drain(c)
         } catch (e: Exception) {
             Log.w(TAG, "encode failed: $e")
             releaseCodec()  // 次のフレームで作り直す
@@ -110,6 +127,16 @@ class VideoEncoder(private val core: DoorbellCore) {
             fmt.setInteger("profile", MediaCodecInfo.CodecProfileLevel.AVCProfileBaseline)
             fmt.setInteger("level", MediaCodecInfo.CodecProfileLevel.AVCLevel31)
             val c = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_VIDEO_AVC)
+            val encCaps = c.codecInfo.getCapabilitiesForType(MediaFormat.MIMETYPE_VIDEO_AVC)
+                .encoderCapabilities
+            if (encCaps.isBitrateModeSupported(
+                    MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_CBR)) {
+                fmt.setInteger(MediaFormat.KEY_BITRATE_MODE,
+                    MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_CBR)
+            }
+            // Encoder latency hint (frames). Optional keys are ignored by codecs which
+            // do not implement them; the active output format is logged for verification.
+            if (android.os.Build.VERSION.SDK_INT >= 26) fmt.setInteger("latency", 0)
             c.configure(fmt, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
             c.start()
             Log.i(TAG, "h264 encoder start ${w}x$h @${fps}fps ${bitrateKbps}kbps")
@@ -121,12 +148,36 @@ class VideoEncoder(private val core: DoorbellCore) {
         }
     }
 
-    /** 出力バッファを全部吸い出して core へ (AnnexB — MediaCodec の AVC 出力は start code 付き)。 */
-    private fun drain(c: MediaCodec) {
-        val info = MediaCodec.BufferInfo()
-        while (true) {
-            val outIdx = c.dequeueOutputBuffer(info, 0)
-            if (outIdx < 0) break
+    /**
+     * MediaCodec の出力を常時待ち受ける。旧実装の dequeue(timeout=0) は出力が
+     * 数 ms 遅れただけで次の camera callback (33--60ms 後) まで放置していた。
+     */
+    private fun startOutputDrain(c: MediaCodec) {
+        drainRunning = true
+        drainThread = Thread({
+            val info = MediaCodec.BufferInfo()
+            while (drainRunning && codec === c) {
+                try {
+                    val outIdx = c.dequeueOutputBuffer(info, 5_000)
+                    if (outIdx >= 0) {
+                        handleOutput(c, outIdx, info)
+                    } else if (outIdx == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
+                        Log.i(TAG, "h264 output format ${c.outputFormat}")
+                    }
+                } catch (e: Exception) {
+                    if (drainRunning && codec === c) Log.w(TAG, "output drain failed: $e")
+                    break
+                }
+            }
+        }, "doorbell-h264-output").also {
+            it.priority = Thread.MAX_PRIORITY
+            it.start()
+        }
+    }
+
+    /** AnnexB output → core. MediaCodec の AVC 出力は start code 付き。 */
+    private fun handleOutput(c: MediaCodec, outIdx: Int, info: MediaCodec.BufferInfo) {
+        try {
             val buf = c.getOutputBuffer(outIdx)
             if (buf != null && info.size > 0) {
                 val bytes = ByteArray(info.size)
@@ -143,6 +194,7 @@ class VideoEncoder(private val core: DoorbellCore) {
                     core.onEncodedFrame(out, key, info.presentationTimeUs / 1000)
                 }
             }
+        } finally {
             c.releaseOutputBuffer(outIdx, false)
         }
     }

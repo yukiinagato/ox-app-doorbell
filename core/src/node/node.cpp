@@ -379,7 +379,7 @@ struct Node::Impl {
     return cur;
   }
 
-  // devices.<self>.local.camera の実効値 (無ければ既定 8/60/640x480 + auto/720p25/1500k)
+  // devices.<self>.local.camera の実効値 (無ければ 8/60/640x480 + ultra-low-latency)
   struct CamCfg {
     int fps = 8;
     int quality = 60;
@@ -387,9 +387,9 @@ struct Node::Impl {
     std::string hint;
     // H.264 流暢档 (docs/config-schema.md camera.codec 節)
     std::string codec = "auto";  // auto | mjpeg | h264
-    int h264_w = 1280, h264_h = 720;
-    int h264_fps = 25;
-    int h264_kbps = 1500;
+    int h264_w = 640, h264_h = 360;
+    int h264_fps = 30;
+    int h264_kbps = 700;
     bool h264Enabled() const { return codec != "mjpeg"; }  // auto = 硬編があれば
   };
   static void parseRes(const std::string& res, int* w, int* h) {
@@ -412,13 +412,13 @@ struct Node::Impl {
       parseRes(json::getString(cam, "resolution", "640x480"), &c.w, &c.h);
       c.codec = json::getString(cam, "codec", "auto");
       if (c.codec != "mjpeg" && c.codec != "h264") c.codec = "auto";
-      parseRes(json::getString(cam, "h264_resolution", "1280x720"), &c.h264_w, &c.h264_h);
-      c.h264_fps = static_cast<int>(json::getInt(cam, "h264_fps", 25));
-      c.h264_kbps = static_cast<int>(json::getInt(cam, "h264_bitrate_kbps", 1500));
+      parseRes(json::getString(cam, "h264_resolution", "640x360"), &c.h264_w, &c.h264_h);
+      c.h264_fps = static_cast<int>(json::getInt(cam, "h264_fps", 30));
+      c.h264_kbps = static_cast<int>(json::getInt(cam, "h264_bitrate_kbps", 700));
     }
     if (c.fps <= 0) c.fps = 8;
-    if (c.h264_fps <= 0) c.h264_fps = 25;
-    if (c.h264_kbps <= 0) c.h264_kbps = 1500;
+    if (c.h264_fps <= 0) c.h264_fps = 30;
+    if (c.h264_kbps <= 0) c.h264_kbps = 700;
     return c;
   }
 

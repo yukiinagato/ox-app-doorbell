@@ -56,7 +56,9 @@ struct VideoTrack::State {
   Bytes init;  // init segment (SPS+PPS が揃った時点で生成)
   std::string codec_str;
 
-  std::vector<fmp4::Sample> pending;  // 進行中フラグメントのサンプル (dur 未確定)
+  int64_t last_ts_ms = 0;             // 直前 access unit の採集時刻
+  uint32_t frame_dur_ms = 33;         // 直前区間から推定 (初回のみ 30fps 扱い)
+  bool have_last_ts = false;
   uint64_t frag_seq = 0;              // 直近 fragment の連番 (1 始まり)
   Bytes frag;                         // 直近 fragment (リングは 1 本のみ — ライブ専用)
   uint64_t base_dt = 0;               // 次 fragment の base media decode time (ms 累計)
@@ -68,7 +70,9 @@ struct VideoTrack::State {
     pps.clear();
     init.clear();
     codec_str.clear();
-    pending.clear();
+    last_ts_ms = 0;
+    frame_dur_ms = 33;
+    have_last_ts = false;
     frag_seq = 0;
     frag.clear();
     base_dt = 0;
@@ -124,25 +128,22 @@ void VideoTrack::push(const uint8_t* annexb, size_t len, bool key, int64_t ts_ms
   sample.key = sample.key || key;
   sample.ts_ms = ts_ms;
 
-  // Low-latency live mode: close the previous access unit as soon as the next
-  // timestamp arrives. This keeps standards-compliant fMP4, while eliminating
-  // the old 500ms/GOP batching delay. HLS can still group these samples into
-  // its own segments; the direct iOS 5 decoder consumes them one frame at a time.
-  if (!s.pending.empty()) {
-    uint64_t total = 0;
-    for (size_t i = 0; i < s.pending.size(); i++) {
-      int64_t next_ts = (i + 1 < s.pending.size()) ? s.pending[i + 1].ts_ms : ts_ms;
-      s.pending[i].dur = clampDur(next_ts - s.pending[i].ts_ms);
-      total += s.pending[i].dur;
-    }
-    s.frag = withCaptureTimes(
-        fmp4::buildFragment(static_cast<uint32_t>(++s.frag_seq), s.base_dt, s.pending),
-        s.pending);
-    s.base_dt += total;  // base-media-decode-time の連続性 (tfdt)
-    s.pending.clear();
-    s.cv.notify_all();
-  }
-  s.pending.push_back(std::move(sample));
+  // Ultra-low-latency live mode: publish the current access unit immediately.
+  // Its duration is inferred from the previous capture interval. Waiting for
+  // the next timestamp made every frame one whole frame late (33--60ms on the
+  // door station), while duration is only timeline metadata for this live path.
+  if (s.have_last_ts) s.frame_dur_ms = clampDur(ts_ms - s.last_ts_ms);
+  sample.dur = s.frame_dur_ms;
+  s.last_ts_ms = ts_ms;
+  s.have_last_ts = true;
+
+  std::vector<fmp4::Sample> current;
+  current.push_back(std::move(sample));
+  s.frag = withCaptureTimes(
+      fmp4::buildFragment(static_cast<uint32_t>(++s.frag_seq), s.base_dt, current),
+      current);
+  s.base_dt += current[0].dur;  // base-media-decode-time の連続性 (tfdt)
+  s.cv.notify_all();
 }
 
 void VideoTrack::stop() {

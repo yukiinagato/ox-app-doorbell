@@ -316,8 +316,20 @@ static void DbVtOutput(void *refCon, void *frameRefCon, OSStatus status,
   CVPixelBufferRef pixel = _latest ? CVBufferRetain(_latest) : NULL;
   int64_t captureMs = _latestCaptureMs;
   [_frameLock unlock];
-  glClearColor(0, 0, 0, 1); glClear(GL_COLOR_BUFFER_BIT);
   if (!pixel) return;
+  // The main thread may have stalled after decoder callback. Re-check age at
+  // the last possible moment; preserving the previous texture is preferable
+  // to visibly moving backwards to an already stale frame.
+  if (_maxQueueAgeMs > 0 && captureMs > 0) {
+    int64_t nowMs = (int64_t)([[NSDate date] timeIntervalSince1970] * 1000.0);
+    int64_t age = nowMs - captureMs - _serverToClientOffsetMs;
+    if (age > _maxQueueAgeMs) {
+      _droppedFrames++;
+      CVBufferRelease(pixel);
+      return;
+    }
+  }
+  glClearColor(0, 0, 0, 1); glClear(GL_COLOR_BUFFER_BIT);
   size_t width = CVPixelBufferGetWidth(pixel), height = CVPixelBufferGetHeight(pixel);
   // iOS 5's CVOpenGLESTextureCache reports success for VideoToolbox BGRA
   // buffers but produces an all-white texture on the iPad 1 (SGX535). Upload

@@ -80,7 +80,7 @@ class DoorbellCore {
         if (handle != 0L) nativeOnEncodedFrame(handle, annexb, isKeyframe, tsMs)
     }
 
-    /** エンコーダを回すべきか (codec=h264/auto かつ /stream.mp4 購読者あり)。5 秒毎に確認する。 */
+    /** エンコーダを回すべきか (codec=h264/auto かつ /stream.mp4 購読者あり)。 */
     fun videoEncoderWanted(): Boolean =
         handle != 0L && nativeVideoEncoderWanted(handle)
 

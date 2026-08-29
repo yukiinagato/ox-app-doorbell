@@ -426,7 +426,7 @@ TEST_CASE("video_track: 逐幀 fragment・採集時刻 dbts・base decode time �
   auto reader = track.subscribe();
   CHECK(track.subscriberCount() == 1);
 
-  // key1 (SPS/PPS 同梱) → init 生成。まだ fragment は無い
+  // key1 (SPS/PPS 同梱) → init と現在幀の fragment を同時生成。
   Bytes k1 = annexb({sps, pps, makeSlice(true, 30)});
   track.push(k1.data(), k1.size(), true, 1000);
   CHECK(track.active());
@@ -438,7 +438,7 @@ TEST_CASE("video_track: 逐幀 fragment・採集時刻 dbts・base decode time �
   CHECK(!ended);
   CHECK(std::memcmp(&init[4], "ftyp", 4) == 0);
 
-  // 次の access unit 到来時に直前の 1 幀を即時確定する。
+  // init 取得時点の key1 はライブ端として捨て、現在の p1 が即時届く。
   Bytes p1 = annexb({makeSlice(false, 8)});
   track.push(p1.data(), p1.size(), false, 1100);
   Bytes frag1 = reader->pull(100, &ended);
@@ -448,18 +448,18 @@ TEST_CASE("video_track: 逐幀 fragment・採集時刻 dbts・base decode time �
     REQUIRE(top.size() == 3);
     CHECK(top[0].type == "dbts");
     CHECK(be32(frag1, top[0].payload) == 1);
-    CHECK(be64(frag1, top[0].payload + 4) == 1000);
+    CHECK(be64(frag1, top[0].payload + 4) == 1100);
     CHECK(top[1].type == "moof");
     auto in_moof = childBoxes(frag1, top[1].payload, top[1].off + top[1].size);
     const Box* mfhd = findBox(in_moof, "mfhd");
-    CHECK(be32(frag1, mfhd->payload + 4) == 1);
+    CHECK(be32(frag1, mfhd->payload + 4) == 2);
     auto in_traf = childBoxes(frag1, findBox(in_moof, "traf")->payload,
                               findBox(in_moof, "traf")->off + findBox(in_moof, "traf")->size);
     const Box* tfdt = findBox(in_traf, "tfdt");
-    CHECK(be64(frag1, tfdt->payload + 4) == 0);  // 初回 base_dt = 0
+    CHECK(be64(frag1, tfdt->payload + 4) == 33);  // key1 は初回推定 33ms
     const Box* trun = findBox(in_traf, "trun");
     CHECK(be32(frag1, trun->payload + 4) == 1);
-    CHECK(be32(frag1, trun->payload + 12) == 100);  // 1100 - 1000
+    CHECK(be32(frag1, trun->payload + 12) == 100);  // 1100 - 1000 の前区間
   }
 
   track.push(p1.data(), p1.size(), false, 1200);
@@ -467,11 +467,11 @@ TEST_CASE("video_track: 逐幀 fragment・採集時刻 dbts・base decode time �
   REQUIRE(!frag2.empty());
   {
     auto top = childBoxes(frag2, 0, frag2.size());
-    CHECK(be64(frag2, top[0].payload + 4) == 1100);
+    CHECK(be64(frag2, top[0].payload + 4) == 1200);
     auto in_moof = childBoxes(frag2, top[1].payload, top[1].off + top[1].size);
     auto in_traf = childBoxes(frag2, findBox(in_moof, "traf")->payload,
                               findBox(in_moof, "traf")->off + findBox(in_moof, "traf")->size);
-    CHECK(be64(frag2, findBox(in_traf, "tfdt")->payload + 4) == 100);
+    CHECK(be64(frag2, findBox(in_traf, "tfdt")->payload + 4) == 133);
     CHECK(be32(frag2, findBox(in_traf, "trun")->payload + 4) == 1);
   }
 
@@ -496,16 +496,16 @@ TEST_CASE("video_track: 遅い購読者は直近 fragment のみ受け取る (�
   bool ended = false;
   REQUIRE(!reader->pull(100, &ended).empty());  // init
 
-  // 購読者が読まない間に fragment を 3 本作る (key 毎に前の 1 本が確定)
+  // 購読者が読まない間に現在幀の fragment を 3 本作る。
   Bytes kk = annexb({makeSlice(true, 16)});
   for (int i = 1; i <= 3; i++) track.push(kk.data(), kk.size(), true, i * 600);
-  // → 直近 1 本 (seq=3) だけが返り、次は無い
+  // → key 初回分を含む直近 1 本 (seq=4) だけが返り、次は無い
   Bytes frag = reader->pull(100, &ended);
   REQUIRE(!frag.empty());
   auto top = childBoxes(frag, 0, frag.size());
   REQUIRE(top.size() == 3);
   auto in_moof = childBoxes(frag, top[1].payload, top[1].off + top[1].size);
-  CHECK(be32(frag, findBox(in_moof, "mfhd")->payload + 4) == 3);
+  CHECK(be32(frag, findBox(in_moof, "mfhd")->payload + 4) == 4);
   CHECK(reader->pull(10, &ended).empty());
   CHECK(!ended);
 

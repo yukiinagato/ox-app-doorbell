@@ -3,7 +3,7 @@
 //   /stream.mp4 の各購読者 (Reader) が init segment + 以降の fragment を順に受け取る。
 // リングは直近 fragment のみ (ライブ専用 — 録画はしない)。遅い購読者は fragment を
 // 取りこぼす (次のキーフレームで自然回復 — MSE は RAP まで描画を待つだけ)。
-// フラグメント戦略: 1 access unit/fragment (次フレーム到来時に即時確定)。
+// フラグメント戦略: 1 access unit/fragment (現在フレームを到着時に即時確定)。
 // 各 fragment 前の `dbts` box に室外機の採集 epoch-ms を格納する。
 // スレッド: 全メソッド任意スレッド可 (mutex + condition_variable)。
 #pragma once
