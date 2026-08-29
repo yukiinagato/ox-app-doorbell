@@ -33,6 +33,13 @@
 
 namespace db {
 
+std::string sanitizeCaps(const std::string& caps_json, bool has_https) {
+  auto doc = json::parse(caps_json);
+  if (!doc || !cJSON_IsObject(doc.get())) return caps_json;
+  if (!has_https) json::setBool(doc.get(), "tls12", false);
+  return json::dump(doc.get());
+}
+
 namespace {
 constexpr const char* kTag = "node";
 
@@ -45,7 +52,6 @@ std::string hashPassword(const std::string& pw, const std::string& salt_hex) {
   crypto_blake2b(out, sizeof(out), buf.data(), buf.size());
   return hexEncode(out, sizeof(out));
 }
-
 
 // "host:port" → host
 std::string hostOf(const std::string& addr) {
@@ -216,6 +222,12 @@ struct Node::Impl {
   std::string node_id;
   uint64_t epoch = 1;
   bool started = false;
+  std::mutex snap_mu;
+  std::string status_snap;
+  std::string config_snap;
+  std::string pairing_snap;
+  bool snap_scheduled = false;  // snap_mu 保護
+  uint64_t snapshot_timer = 0;
 
   // press の追跡 (クイック返信の宛先解決・回執)
   std::string last_press_door;
@@ -283,6 +295,7 @@ struct Node::Impl {
 
   // ---------- helpers ----------
   void uiNotify(const std::string& event_json) {
+    scheduleSnapshotRefresh();
     UiEventCb cb;
     {
       std::lock_guard<std::mutex> lk(cb_mu);
@@ -303,6 +316,24 @@ struct Node::Impl {
   int tzOffsetMin() {
     const cJSON* integ = json::get(cfg.get(), "integrations");
     return static_cast<int>(json::getInt(integ, "tz_offset_min", 540));  // 既定 JST
+  }
+
+  void scheduleSnapshotRefresh() {
+    std::lock_guard<std::mutex> lk(snap_mu);
+    if (snap_scheduled) return;
+    snap_scheduled = true;
+    loop->postDelayed(30, [this] { refreshSnapshots(); });
+  }
+
+  void refreshSnapshots() {
+    std::string status = statusJsonOnLoop();
+    std::string config_json = config->materializeJson();
+    std::string pairing = pairingJsonOnLoop();
+    std::lock_guard<std::mutex> lk(snap_mu);
+    status_snap = std::move(status);
+    config_snap = std::move(config_json);
+    pairing_snap = std::move(pairing);
+    snap_scheduled = false;
   }
 
   void rebuildCfg() {
@@ -1337,6 +1368,8 @@ struct Node::Impl {
     restoreEmergency();
 
     started = true;
+    snapshot_timer = loop->postEvery(2'000, [this] { refreshSnapshots(); });
+    refreshSnapshots();
     evalDisplay(/*force=*/true);
     emergencyNotifyUi();
     prefetchAssets();  // 起動時: 参照中で未キャッシュの資産を前取り
@@ -2661,6 +2694,10 @@ void Node::stop() {
       impl_->loop->cancel(impl_->display_timer);
       impl_->display_timer = 0;
     }
+    if (impl_->snapshot_timer) {
+      impl_->loop->cancel(impl_->snapshot_timer);
+      impl_->snapshot_timer = 0;
+    }
     if (impl_->asset_prefetch_timer) {
       impl_->loop->cancel(impl_->asset_prefetch_timer);
       impl_->asset_prefetch_timer = 0;
@@ -2707,11 +2744,15 @@ void Node::setDeviceInfoFn(DeviceInfoFn fn) {
 }
 
 void Node::press(const std::string& door_id, const std::string& purpose) {
-  impl_->loop->callSync([&] { impl_->doPress(door_id, purpose); });
+  std::string d = door_id;
+  std::string p = purpose;
+  impl_->loop->post([this, d, p] { impl_->doPress(d, p); });
 }
 
 void Node::setVisitorLang(const std::string& door_id, const std::string& lang) {
-  impl_->loop->callSync([&] { impl_->doSetVisitorLang(door_id, lang); });
+  std::string d = door_id;
+  std::string l = lang;
+  impl_->loop->post([this, d, l] { impl_->doSetVisitorLang(d, l); });
 }
 
 std::string Node::addAsset(const Bytes& data, const std::string& type,
@@ -2766,17 +2807,23 @@ bool Node::videoEncoderWanted() {
 
 void Node::sendQuickReply(const std::string& reply_id, const std::string& free_text,
                           const std::string& door_id, const std::string& via) {
-  impl_->loop->callSync([&] { impl_->quickReply(reply_id, free_text, door_id, via); });
+  std::string rid = reply_id;
+  std::string txt = free_text;
+  std::string d = door_id;
+  std::string v = via;
+  impl_->loop->post([this, rid, txt, d, v] { impl_->quickReply(rid, txt, d, v); });
 }
 
 void Node::setEmergency(bool active, const std::string& via) {
-  impl_->loop->callSync([&] { impl_->doEmergency(active, via); });
+  bool a = active;
+  std::string v = via;
+  impl_->loop->post([this, a, v] { impl_->doEmergency(a, v); });
 }
 
 std::string Node::statusJson() {
-  std::string out;
-  impl_->loop->callSync([&] { out = impl_->statusJsonOnLoop(); });
-  return out;
+  std::lock_guard<std::mutex> lk(impl_->snap_mu);
+  if (impl_->status_snap.empty()) return "{}";
+  return impl_->status_snap;
 }
 
 std::string Node::debugJson() {
@@ -2786,9 +2833,9 @@ std::string Node::debugJson() {
 }
 
 std::string Node::configJson() {
-  std::string out;
-  impl_->loop->callSync([&] { out = impl_->config->materializeJson(); });
-  return out;
+  std::lock_guard<std::mutex> lk(impl_->snap_mu);
+  if (impl_->config_snap.empty()) return "{}";
+  return impl_->config_snap;
 }
 
 void Node::setConfigKey(const std::string& key, const std::string& value_json) {
@@ -2796,9 +2843,9 @@ void Node::setConfigKey(const std::string& key, const std::string& value_json) {
 }
 
 std::string Node::pairingJson() {
-  std::string out;
-  impl_->loop->callSync([&] { out = impl_->pairingJsonOnLoop(); });
-  return out;
+  std::lock_guard<std::mutex> lk(impl_->snap_mu);
+  if (impl_->pairing_snap.empty()) return "{}";
+  return impl_->pairing_snap;
 }
 
 bool Node::foundCluster() {
@@ -2810,9 +2857,11 @@ bool Node::foundCluster() {
 }
 
 void Node::joinCluster(const std::string& host, const std::string& pin) {
-  impl_->loop->callSync([&] {
+  std::string h = host;
+  std::string p = pin;
+  impl_->loop->post([this, h, p] {
     if (impl_->mesh && !impl_->mesh->isPaired()) {
-      impl_->mesh->joinCluster(host, pin, [this](bool ok, const std::string& err) {
+      impl_->mesh->joinCluster(h, p, [this](bool ok, const std::string& err) {
         auto o = json::obj();
         json::set(o.get(), "t", "join_result");
         json::setBool(o.get(), "ok", ok);
@@ -2824,22 +2873,26 @@ void Node::joinCluster(const std::string& host, const std::string& pin) {
 }
 
 void Node::setPairingMode(int seconds) {
-  impl_->loop->callSync([&] {
-    if (impl_->mesh) impl_->mesh->setPairingMode(static_cast<int64_t>(seconds) * 1000);
+  int s = seconds;
+  impl_->loop->post([this, s] {
+    if (impl_->mesh) impl_->mesh->setPairingMode(static_cast<int64_t>(s) * 1000);
   });
 }
 
 void Node::inviteDevice(const std::string& id) {
-  impl_->loop->callSync([&] {
-    if (impl_->mesh) impl_->mesh->inviteDevice(id);
+  std::string did = id;
+  impl_->loop->post([this, did] {
+    if (impl_->mesh) impl_->mesh->inviteDevice(did);
   });
 }
 
 void Node::inviteDeviceDirect(const std::string& addr, const std::string& id,
                               const std::string& pk) {
   (void)id;  // id は将来のログ/照合用 (招待自体は addr+pk で成立)
-  impl_->loop->callSync([&] {
-    if (impl_->mesh) impl_->mesh->inviteDeviceDirect(addr, pk);
+  std::string a = addr;
+  std::string p = pk;
+  impl_->loop->post([this, a, p] {
+    if (impl_->mesh) impl_->mesh->inviteDeviceDirect(a, p);
   });
 }
 

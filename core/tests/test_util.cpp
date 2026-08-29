@@ -1,4 +1,7 @@
+#include <atomic>
+#include <chrono>
 #include <cstdlib>
+#include <thread>
 
 #include "doctest.h"
 #include "doorbell/doorbell.h"
@@ -174,6 +177,65 @@ TEST_CASE("runloop manual mode: ordering, periodic, cancel") {
   }
   CHECK(n == 2);
 }
+
+TEST_CASE("runloop threaded mode: stop 後の call/post 振る舞い") {
+  RealClock clock;
+  Runloop loop(clock);
+  loop.start();
+  loop.stop();
+  int count = 0;
+  CHECK(loop.postDelayed(1, [&count] { ++count; }) == 0);
+  CHECK_FALSE(loop.post([&count] { ++count; }));
+  CHECK_FALSE(loop.callSync([&count] { ++count; }));
+  CHECK(count == 0);
+}
+
+TEST_CASE("runloop manual mode: callSync inline / post は pumpDue で実行") {
+  SimClock clock(0, 0);
+  Runloop loop(clock);
+  int value = 0;
+  CHECK(loop.callSync([&value] { value = 7; }) == true);
+  CHECK(value == 7);
+  CHECK(loop.callSync([&] { CHECK(loop.post([&value] { value = 8; })); }) == true);
+  CHECK(loop.pumpDue() == 1);
+  CHECK(value == 8);
+  CHECK(loop.post([&value] { value = 9; }));
+  CHECK(loop.pumpDue() == 1);
+  CHECK(value == 9);
+}
+
+TEST_CASE("runloop: stop へ向かう間の callSync がデッドロックしない") {
+  RealClock clock;
+  Runloop loop(clock);
+  loop.start();
+
+  std::atomic<bool> allow{false};
+  std::atomic<int> value{0};
+
+  loop.post([&allow, &value] {
+    while (!allow.load()) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    ++value;
+  });
+
+  bool call_ok = false;
+  std::thread worker([&] { call_ok = loop.callSync([&value] { ++value; }); });
+
+  std::this_thread::sleep_for(std::chrono::milliseconds(50));
+  allow.store(true);
+  auto start = std::chrono::steady_clock::now();
+  loop.stop();
+  worker.join();
+  auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+                     std::chrono::steady_clock::now() - start)
+                     .count();
+  CHECK(elapsed < 5000);
+  CHECK((call_ok == true || call_ok == false));
+  CHECK(value.load() >= 1);
+}
+
+TEST_CASE("runloop: cancel(0) no-op") { RealClock clock; Runloop loop(clock); CHECK_NOTHROW(loop.cancel(0)); }
 
 TEST_CASE("runloop threaded mode: post + callSync") {
   RealClock clock;

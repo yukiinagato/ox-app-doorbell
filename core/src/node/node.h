@@ -55,6 +55,10 @@ struct NodeDeps {
   std::unique_ptr<IDiscovery> discovery;         // 所有 (null 可)
 };
 
+// https API 実装が無い環境向けに tls12 を握りつぶす。
+// has_https=false 時に tls12=false を強制し、json 文字列を返却する。
+std::string sanitizeCaps(const std::string& caps_json, bool has_https);
+
 class Node {
  public:
   // ui_event: doorbell.h の db_ui_event_cb 相当 (JSON)。tts: SPI tts_speak 相当 (null 可)。

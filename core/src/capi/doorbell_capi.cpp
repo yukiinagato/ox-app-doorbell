@@ -87,6 +87,7 @@ DB_API db_core* db_core_create(const db_platform* platform, const char* data_dir
   opts.advertise_addr = json::getString(b.get(), "advertise_addr");
   opts.http_port = static_cast<int>(json::getInt(b.get(), "http_port", 47180));
   opts.caps_json = json::getString(b.get(), "caps", "{}");
+  opts.caps_json = sanitizeCaps(opts.caps_json, platform && platform->https_request != nullptr);
   opts.sw_version = DB_VERSION_FULL;  // 表示/mesh 伝播用 (status.node.version)
   if (cJSON* seeds = json::get(b.get(), "seed_peers")) {
     cJSON* it = nullptr;

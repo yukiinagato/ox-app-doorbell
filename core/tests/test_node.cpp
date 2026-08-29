@@ -130,6 +130,48 @@ TEST_CASE("node: 2台が合流し既定設定が複製される") {
   b.node->stop();
 }
 
+TEST_CASE("node: start 後に status / config のスナップショット JSON が取得できる") {
+  NFleet f;
+  auto& a = f.add("A:1", "front", "door_station", "d_front", true);
+  REQUIRE(a.node->start());
+  std::string status = a.node->statusJson();
+  std::string config = a.node->configJson();
+  CHECK(status != "{}");
+  CHECK(config != "{}");
+  CHECK(json::parse(status));
+  CHECK(json::parse(config));
+  a.node->stop();
+}
+
+TEST_CASE("node: setConfigKey の反映がスナップショット経由で遅延反映される") {
+  NFleet f;
+  auto& a = f.add("A:1", "front", "door_station", "d_front", true);
+  REQUIRE(a.node->start());
+  a.node->setConfigKey("ui.snapshot_test", "\"updated\"");
+  f.clock.advance(35);
+  f.run(40);
+  auto cfg = json::parse(a.node->configJson());
+  REQUIRE(cfg);
+  CHECK(json::getString(json::get(cfg.get(), "ui"), "snapshot_test") == "updated");
+  a.node->stop();
+}
+
+TEST_CASE("sanitizeCaps: tls12 だけ環境で抑制") {
+  auto caps1 = sanitizeCaps(R"({"tls12":true,"wan":true})", false);
+  auto j1 = json::parse(caps1);
+  REQUIRE(j1);
+  CHECK(json::getBool(j1.get(), "tls12") == false);
+  CHECK(json::getBool(j1.get(), "wan") == true);
+
+  auto caps2 = sanitizeCaps(R"({"tls12":true,"wan":true})", true);
+  auto j2 = json::parse(caps2);
+  REQUIRE(j2);
+  CHECK(json::getBool(j2.get(), "tls12") == true);
+
+  CHECK(sanitizeCaps("not-json", false) == "not-json");
+  CHECK(sanitizeCaps("not-json", true) == "not-json");
+}
+
 TEST_CASE("node: 配対 — 未配対機を発見 → 招待 → PSK 取得 (paired uiNotify + 設定複製)") {
   NFleet f;
   auto& host = f.add("A:1", "front", "door_station", "d_front", /*seed_cfg=*/true);

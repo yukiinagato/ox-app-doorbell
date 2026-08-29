@@ -10,9 +10,11 @@
 #include <cstdint>
 #include <functional>
 #include <map>
+#include <memory>
 #include <mutex>
 #include <set>
 #include <thread>
+#include <vector>
 
 #include "util/clock.h"
 
@@ -29,17 +31,17 @@ class Runloop {
   void start();
   void stop();
 
-  void post(std::function<void()> fn) { postDelayed(0, std::move(fn)); }
-  // 戻り値はタイマーID (cancel 用)。period_ms>0 なら繰り返し。
+  bool post(std::function<void()> fn) { return postDelayed(0, std::move(fn)) != 0; }
+  // 戻り値はタイマーID (cancel 用)。0 は停止中/無効。period_ms>0 なら繰り返し。
   uint64_t postDelayed(int64_t delay_ms, std::function<void()> fn, int64_t period_ms = 0);
   uint64_t postEvery(int64_t period_ms, std::function<void()> fn) {
     return postDelayed(period_ms, std::move(fn), period_ms);
   }
   void cancel(uint64_t id);
 
-  // 他スレッドから同期実行 (ループスレッド上なら inline 実行、
-  // manual モード = ループスレッド無しでも inline 実行)。
-  void callSync(const std::function<void()>& fn);
+  // 他スレッドから同期実行。manual/ループ内なら inline。実行できたら true を返す。
+  // Running で queue へ待機し、停止状態では false。
+  bool callSync(const std::function<void()>& fn);
   bool onLoopThread() const;
 
   IClock& clock() { return clock_; }
@@ -57,6 +59,13 @@ class Runloop {
     std::function<void()> fn;
   };
   using Key = std::pair<int64_t, uint64_t>;  // (due_mono, order) — 決定的順序
+  struct SyncWaiter {
+    std::mutex m;
+    std::condition_variable cv;
+    bool done = false;
+    bool aborted = false;
+  };
+  enum class State { Manual, Running, Stopping, Stopped };
 
   void loopMain();
   bool runOne_(std::unique_lock<std::mutex>& lk);  // due タスクを1件実行
@@ -68,8 +77,8 @@ class Runloop {
   std::set<uint64_t> cancelled_;  // 実行中に cancel された繰り返しタスク
   uint64_t next_id_ = 1;
   uint64_t next_order_ = 1;
-  bool running_ = false;
-  bool stop_requested_ = false;
+  State state_ = State::Manual;
+  std::vector<std::weak_ptr<SyncWaiter>> sync_waiters_;
   std::thread thread_;
   std::thread::id loop_tid_{};
 };
