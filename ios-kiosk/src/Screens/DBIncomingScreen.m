@@ -25,6 +25,7 @@ static const NSTimeInterval kAutoCloseS = 30;
   NSString *_sipMode;  // "" | "monitor" | "answer"
   BOOL _inCall;
   NSTimer *_autoCloseTimer;
+  NSInteger _snapshotGen;  // 背景収集の世代 (古い結果破棄)
 
   // UI
   UIImageView *_liveView;
@@ -163,35 +164,58 @@ static const NSTimeInterval kAutoCloseS = 30;
   _door = [door copy];
   _purpose = [purpose copy];
   _visitorLang = [lang copy];
-
-  _cfg = [_core config];
-  [_texts setConfig:_cfg];
-  [_texts setLang:_boot.uiLang];
-  _directPort = [DBConfigUtil intVal:_cfg path:@"sip.direct_port" def:47190];
-  if (_boot.directPort > 0) _directPort = _boot.directPort;
-
-  // 門口機 peer 解決 (映像 URL + 直呼宛先 host)。boot.door_host 優先。
-  NSDictionary *peer = [DBConfigUtil findDoorPeer:[_core status] door:_door];
-  NSString *host = [_boot.doorHost length] > 0 ? _boot.doorHost : [DBConfigUtil peerHost:peer];
-  _peerHost = host;
-  NSString *url = peer ? [DBConfigUtil str:peer path:@"stream"] : nil;
-  _incomingStreamUrl = url ? url : @"";
-  _answerButton.enabled = (_peerHost != nil);
-  _monitorButton.enabled = (_peerHost != nil);
-  [self startVideo:_incomingStreamUrl];
-
   _inCall = NO;
+  _peerHost = nil;
+  _incomingStreamUrl = @"";
+  _answerButton.enabled = NO;
+  _monitorButton.enabled = NO;
+  _noVideoLabel.hidden = NO;
+  _liveView.image = nil;
+  [self startVideo:nil];  // 前のストリーム停止
   [self applyContent];
   [self restartAutoClose];
+  [self fetchAndApplyCoreSnapshot];
 }
 
 - (void)refreshPurpose:(NSString *)purpose lang:(NSString *)lang {
   _purpose = [purpose copy];
   _visitorLang = [lang copy];
-  _cfg = [_core config];
-  [_texts setConfig:_cfg];
   [self applyContent];
   if (!_inCall) [self restartAutoClose];
+  [self fetchAndApplyCoreSnapshot];
+}
+
+// core (status/config JSON) は main で取らない。背景収集 → main で peer 解決と反映。
+- (void)fetchAndApplyCoreSnapshot {
+  NSInteger gen = ++_snapshotGen;
+  DBCoreBridge *core = _core;
+  __weak DBIncomingScreen *wself = self;
+  dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+    NSDictionary *cfg = [core config];
+    NSDictionary *st = [core status];
+    dispatch_async(dispatch_get_main_queue(), ^{
+      DBIncomingScreen *s = wself;
+      if (!s || s->_snapshotGen != gen || !s.superview) return;  // 古い/画面外は破棄
+      s->_cfg = cfg;
+      [s->_texts setConfig:cfg];
+      [s->_texts setLang:s->_boot.uiLang];
+      s->_directPort = [DBConfigUtil intVal:cfg path:@"sip.direct_port" def:47190];
+      if (s->_boot.directPort > 0) s->_directPort = s->_boot.directPort;
+
+      // 門口機 peer 解決 (映像 URL + 直呼宛先 host)。boot.door_host 優先。
+      NSDictionary *peer = [DBConfigUtil findDoorPeer:st door:s->_door];
+      s->_peerHost = ([s->_boot.doorHost length] > 0)
+                         ? s->_boot.doorHost
+                         : [DBConfigUtil peerHost:peer];
+      NSString *url = peer ? [DBConfigUtil str:peer path:@"stream"] : nil;
+      s->_incomingStreamUrl = url ?: @"";
+      s->_answerButton.enabled = (s->_peerHost != nil);
+      s->_monitorButton.enabled = (s->_peerHost != nil);
+      [s startVideo:s->_incomingStreamUrl];
+      [s applyContent];
+      [s restartAutoClose];
+    });
+  });
 }
 
 - (void)applyContent {

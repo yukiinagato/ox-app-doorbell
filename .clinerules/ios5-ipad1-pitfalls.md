@@ -118,15 +118,27 @@
 - **ARC 在 armv7 + min iOS 5.1 完全可用** (`-fobjc-arc`; 所需 runtime 符号 iOS 5.0+ 全有,
   clang 按 deployment target 不发 iOS 8+ 的 objc_alloc)。旧 Makefile "ARC 不可"是误判。
   ios-kiosk 全库 ARC。
+- **readonly 属性的 ivar 名与属性名不一致时必须显式 `@synthesize xxx = _yyy`**:
+  DBRouter 声明 `containerView` 而实现里只写 ivar `_container` 又不 synthesize → clang
+  自动合成一个**新的空 ivar `_containerView`**, getter 返回 nil → AppDelegate 拿到 nil,
+  真正装满屏幕的容器变成孤儿 → **整机黑屏但进程活着、core 正常** (报错都没有!)。
+  用 App 内 renderInContext 把 keyWindow 渲染成 PNG 存 Documents 再 scp 回来定位。
 - **core JSON 快照绝不在 main 线程同步取**: 起动直后的 config_changed/peers_changed storm ×
   core 内部锁 → main 被 15s+ 塞死 → watchdog 自杀 (表现为"UI 没反应/闪退")。
-  → ios-kiosk: 背景直列 queue 收集 (dirty 合并) + main 只反映。
+  且不只起动时——**mesh 对不可达节点超时期间 (起动后 ~2min), 配对轮询等任何 main 上的
+  `db_core_*_json` 都会被拖住** → ios-kiosk 最终规则: **main 线程零 core JSON 调用**,
+  全部背景收集 (home 刷新/pairing 轮询/incoming prepare/info 屏) + main 只反映。
+- **越狱 iPad1 反复 respring 可能让 launchd 崩溃** (EXC_BAD_ACCESS SIGILL, 实机
+  launchd_2026-08-29-225758) → 之后 uiopen 假启动/黑屏。装完 reboot 最稳。
 - **看门狗自杀重启会触发 SpringBoard "failed to launch too many times" 熔断吗?** 不会
   (_exit 是正常退出), 但崩溃风暴 (如上述下标语法) 会 → 需 reboot 清状态再验证。
 - **多开 idevicesyslog 会互抢连接且抓不到新行** (ASL 缓冲回放会混入旧行) → 验证前
   `pkill -f idevicesyslog`, 并用设备端 `date` 对齐时间戳过滤。
 - **探活新手段**: Mac 侧 `iproxy 8180 47180` 后 `curl http://localhost:8180/` —
   内嵌 core httpd 有响应 (302/unauthorized 均算活) = app 进程存活, 无需截图。
+- **UI 实体取证新手段 (无需 DDI)**: App 内 `[window.layer renderInContext:]` 渲染成 PNG +
+  `recursiveDescription` 存 /var/mobile/Documents, scp 回 Mac 直接看。比 DDI 挂载
+  (5.1 DDI 在 9B206 上 can't mount, 4.6.3 的也一样) 靠谱得多, 还能看到 view 层级。
 - ios-kiosk 版结构: 屏幕 = UIView + DBRouter 单点切换 (无 present/dismiss/UIAlertView),
   MJPEG = BSD socket 线程收流 + 后台解码 (main 只 blit)。详见 ios-kiosk/README.md。
 

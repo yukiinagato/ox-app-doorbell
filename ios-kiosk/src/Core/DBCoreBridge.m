@@ -279,6 +279,8 @@ static void DBUiEventCb(void *user, const char *event_json) {
   NSString *_deviceInfoCache;      // device_info JSON (メインスレッドで更新)
   NSLock *_diLock;                 // _deviceInfoCache 保護
   NSTimer *_diTimer;               // メインで定期更新
+  dispatch_queue_t _coreQueue;     // core C ABI 直列化キー (db_core_*_json は並行呼び不可 —
+                                   // 実機で 2 スレッド同時呼びが use-after-free で SIGSEGV)。
 }
 
 - (id)init {
@@ -287,6 +289,7 @@ static void DBUiEventCb(void *user, const char *event_json) {
     _handlers = [[NSMutableDictionary alloc] init];
     _diLock = [[NSLock alloc] init];
     _deviceInfoCache = @"";
+    _coreQueue = dispatch_queue_create("doorbell.core", DISPATCH_QUEUE_SERIAL);
   }
   return self;
 }
@@ -364,24 +367,50 @@ static void DBUiEventCb(void *user, const char *event_json) {
 }
 
 - (void)press:(NSString *)door {
-  if (_core) db_core_press(_core, [door UTF8String]);
+  if (_core == NULL || door == nil) return;
+  __block db_core *core = _core;
+  NSString *d = [door copy];
+  dispatch_async(_coreQueue, ^{
+    if (core) db_core_press(core, [d UTF8String]);
+  });
 }
 
 - (void)pressPurpose:(NSString *)door purpose:(NSString *)purpose {
-  if (_core) db_core_press_purpose(_core, [door UTF8String], [purpose UTF8String]);
+  if (_core == NULL || door == nil || purpose == nil) return;
+  __block db_core *core = _core;
+  NSString *d = [door copy];
+  NSString *pp = [purpose copy];
+  dispatch_async(_coreQueue, ^{
+    if (core) db_core_press_purpose(core, [d UTF8String], [pp UTF8String]);
+  });
 }
 
 - (void)setVisitorLang:(NSString *)door lang:(NSString *)lang {
-  if (_core) db_core_set_visitor_lang(_core, [door UTF8String], [lang UTF8String]);
+  if (_core == NULL || door == nil || lang == nil) return;
+  __block db_core *core = _core;
+  NSString *d = [door copy];
+  NSString *l = [lang copy];
+  dispatch_async(_coreQueue, ^{
+    if (core) db_core_set_visitor_lang(core, [d UTF8String], [l UTF8String]);
+  });
 }
 
 - (void)quickReply:(NSString *)replyId door:(NSString *)door {
-  if (_core && [replyId length] > 0)
-    db_core_quick_reply(_core, [replyId UTF8String], [door UTF8String]);
+  if (_core == NULL || replyId == nil || [replyId length] == 0) return;
+  __block db_core *core = _core;
+  NSString *rid = [replyId copy];
+  NSString *d = [door copy];
+  dispatch_async(_coreQueue, ^{
+    if (core) db_core_quick_reply(core, [rid UTF8String], [d UTF8String]);
+  });
 }
 
 - (void)emergency:(BOOL)active {
-  if (_core) db_core_emergency(_core, active ? 1 : 0);
+  if (_core == NULL) return;
+  __block db_core *core = _core;
+  dispatch_async(_coreQueue, ^{
+    if (core) db_core_emergency(core, active ? 1 : 0);
+  });
 }
 
 - (NSDictionary *)takeJson:(char *)p {
@@ -392,42 +421,83 @@ static void DBUiEventCb(void *user, const char *event_json) {
   return [obj isKindOfClass:[NSDictionary class]] ? obj : nil;
 }
 
+// スナップショット系は coreQueue 上で直列に (呼び出し元は main 以外であること)。
 - (NSDictionary *)status {
   if (_core == NULL) return nil;
-  return [self takeJson:db_core_status_json(_core)];
+  __block db_core *core = _core;
+  __block NSDictionary *out = nil;
+  dispatch_sync(_coreQueue, ^{
+    if (core) out = [self takeJson:db_core_status_json(core)];
+  });
+  return out;
 }
 
 - (NSDictionary *)debugInfo {
   if (_core == NULL) return nil;
-  return [self takeJson:db_core_debug_json(_core)];
+  __block db_core *core = _core;
+  __block NSDictionary *out = nil;
+  dispatch_sync(_coreQueue, ^{
+    if (core) out = [self takeJson:db_core_debug_json(core)];
+  });
+  return out;
 }
 
 - (NSDictionary *)config {
   if (_core == NULL) return nil;
-  return [self takeJson:db_core_config_json(_core)];
+  __block db_core *core = _core;
+  __block NSDictionary *out = nil;
+  dispatch_sync(_coreQueue, ^{
+    if (core) out = [self takeJson:db_core_config_json(core)];
+  });
+  return out;
 }
 
 // --- 配対 (発見/招待) ---
 - (NSDictionary *)pairingInfo {
   if (_core == NULL) return nil;
-  return [self takeJson:db_core_pairing_json(_core)];
+  __block db_core *core = _core;
+  __block NSDictionary *out = nil;
+  dispatch_sync(_coreQueue, ^{
+    if (core) out = [self takeJson:db_core_pairing_json(core)];
+  });
+  return out;
 }
 
 - (void)joinCluster:(NSString *)host pin:(NSString *)pin {
-  if (_core && [host length] > 0 && [pin length] > 0)
-    db_core_join_cluster(_core, [host UTF8String], [pin UTF8String]);
+  if (_core == NULL || host == nil || pin == nil) return;
+  __block db_core *core = _core;
+  NSString *h = [host copy];
+  NSString *pp = [pin copy];
+  dispatch_async(_coreQueue, ^{
+    if (core) db_core_join_cluster(core, [h UTF8String], [pp UTF8String]);
+  });
 }
 
 - (void)setPairingMode:(int)seconds {
-  if (_core) db_core_pairing_mode(_core, seconds);
+  if (_core == NULL) return;
+  __block db_core *core = _core;
+  dispatch_async(_coreQueue, ^{
+    if (core) db_core_pairing_mode(core, seconds);
+  });
 }
 
 - (BOOL)foundCluster {
-  return (_core && db_core_found_cluster(_core) != 0) ? YES : NO;
+  if (_core == NULL) return NO;
+  __block db_core *core = _core;
+  __block BOOL ok = NO;
+  dispatch_sync(_coreQueue, ^{
+    ok = (core && db_core_found_cluster(core) != 0) ? YES : NO;
+  });
+  return ok;
 }
 
 - (void)inviteDevice:(NSString *)nodeId {
-  if (_core && [nodeId length] > 0) db_core_invite_device(_core, [nodeId UTF8String]);
+  if (_core == NULL || nodeId == nil) return;
+  __block db_core *core = _core;
+  NSString *idStr = [nodeId copy];
+  dispatch_async(_coreQueue, ^{
+    if (core) db_core_invite_device(core, [idStr UTF8String]);
+  });
 }
 
 // core の監視スレッドが読む (ロック済みコピー)。

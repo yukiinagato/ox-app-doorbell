@@ -28,6 +28,8 @@
 @synthesize core = _core;
 @synthesize boot = _boot;
 @synthesize texts = _texts;
+@synthesize containerView = _container;  // ← これが無いと自動合成で _containerView (nil) が
+                                         //   生成され、AppDelegate は nil を受け取る (黒画面の根因)。
 
 - (id)initWithBridge:(DBCoreBridge *)core boot:(DBBootConfig *)boot {
   self = [super init];

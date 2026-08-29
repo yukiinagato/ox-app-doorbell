@@ -140,11 +140,25 @@ static BOOL DBPortListening(int port) {
 }
 #pragma mark - データ収集 / 更新
 
+// core JSON は main で取らない。背景収集 → main で組み立て (deviceInfoNow は main 専用)。
 - (void)reload {
+  DBCoreBridge *core = _core;
+  __weak DBInfoScreen *wself = self;
+  dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+    NSDictionary *st = [core status];
+    NSDictionary *dbg = [core debugInfo];
+    dispatch_async(dispatch_get_main_queue(), ^{
+      DBInfoScreen *s = wself;
+      if (!s || !s.superview) return;
+      [s applyCollectedStatus:st debug:dbg];
+    });
+  });
+}
+
+- (void)applyCollectedStatus:(NSDictionary *)st debug:(NSDictionary *)dbg {
   [_v4 removeAllObjects];
   [_v6 removeAllObjects];
 
-  NSDictionary *st = [_core status];
   NSDictionary *node = [st objectForKey:@"node"];
   if (![node isKindOfClass:[NSDictionary class]]) node = nil;
 
@@ -199,7 +213,6 @@ static BOOL DBPortListening(int port) {
   [info appendFormat:@"sip   %ld : UDP (直接呼)", (long)_boot.directPort];
 
   // 触発統計
-  NSDictionary *dbg = [_core debugInfo];
   NSDictionary *trig =
       [dbg isKindOfClass:[NSDictionary class]] ? [dbg objectForKey:@"triggers"] : nil;
   if ([trig isKindOfClass:[NSDictionary class]]) {

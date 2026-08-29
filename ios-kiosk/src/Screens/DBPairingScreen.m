@@ -22,6 +22,7 @@
   NSString *_lastQr;
   NSTimer *_poll;
   BOOL _confirmingFound;  // 親機化の 2 段確認
+  BOOL _fetchBusy;        // 背景収集実行中 (重複 poll 防止)
 }
 
 - (id)initWithRouter:(DBRouter *)router {
@@ -153,22 +154,37 @@
   _poll = nil;
 }
 
+// core 呼び出しは main で行わない (mesh タイムアウト中に core ロックで main が
+// 数秒〜15s+ 塞がる — 実機で watchdog 発火を確認)。背景収集 → main 反映。
 - (void)onPoll {
-  NSDictionary *p = [[_router core] pairingInfo];
-  if ([p isKindOfClass:[NSDictionary class]] && [[p objectForKey:@"paired"] boolValue]) {
-    // 配対済み → router の paired イベントが boot.json 永続化と自動 close を行う。
-    // poll 側は closed を出すだけ (二重 close は router 側で冪等)。
-    [_router closePairingAnimated:YES];
-  } else {
-    [self reload];
-  }
+  if (_fetchBusy) return;
+  _fetchBusy = YES;
+  DBCoreBridge *core = [_router core];  // block が強参照で保持 (ARC)
+  __weak DBPairingScreen *wself = self;
+  dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+    NSDictionary *p = [core pairingInfo];
+    dispatch_async(dispatch_get_main_queue(), ^{
+      DBPairingScreen *s = wself;
+      if (!s) return;
+      s->_fetchBusy = NO;
+      if (!s.superview) return;
+      if ([p isKindOfClass:[NSDictionary class]] && [[p objectForKey:@"paired"] boolValue]) {
+        // 配対済み → router の paired イベントが永続化と自動 close を行う (冪等)。
+        [s.router closePairingAnimated:YES];
+      } else {
+        [s applyPairingInfo:p];
+      }
+    });
+  });
 }
 
 - (void)reload {
-  DBCoreBridge *core = [_router core];
-  NSDictionary *p = [core pairingInfo];
-  if (![p isKindOfClass:[NSDictionary class]]) return;
+  [self onPoll];
+}
 
+// main スレッド。背景収集済みの pairingInfo を反映。
+- (void)applyPairingInfo:(NSDictionary *)p {
+  if (![p isKindOfClass:[NSDictionary class]]) return;
   NSDictionary *selfInfo = [p objectForKey:@"self"];
   NSString *name = [selfInfo isKindOfClass:[NSDictionary class]]
                        ? [DBConfigUtil evStr:selfInfo key:@"name"]
