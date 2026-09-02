@@ -8,6 +8,8 @@
 // encryption is layered above them by SecureChannel.
 #pragma once
 
+#include <array>
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <string>
@@ -51,13 +53,29 @@ struct DiscoveredPeer {
 
 
 // Unauthenticated discovery metadata for an unpaired device. pk is the X25519 public key used to
-// seal an invitation; cluster secrets never appear in the beacon.
+// seal an invitation; cluster secrets never appear in the beacon. model/platform/sw are advisory
+// device-card fields so the inviting shell can name the device a user is about to add.
 struct PairBeacon {
   std::string id;
   std::string addr;
   std::string name;
   std::string role;
   std::string pk;
+  std::string model;
+  std::string platform;
+  std::string sw;
+};
+
+
+// What an unpaired device announces about itself. Announcing stops as soon as the device pairs.
+struct PairAnnounce {
+  bool on = false;
+  std::string name;
+  std::string role;
+  std::string pk;
+  std::string model;
+  std::string platform;
+  std::string sw;
 };
 
 class IDiscovery {
@@ -70,10 +88,13 @@ class IDiscovery {
 
 
 
-  virtual void setPairAnnounce(bool /*on*/, const std::string& /*name*/,
-                               const std::string& /*role*/, const std::string& /*pk*/) {}
+  virtual void setPairAnnounce(const PairAnnounce& /*announce*/) {}
 
   virtual void setPairFound(std::function<void(const PairBeacon&)> /*cb*/) {}
+
+  // Rekey authenticated discovery in place. A node that pairs at runtime must MAC its HELLO with
+  // the live cluster key; implementations are called from Runloop and may have a receive thread.
+  virtual void setPsk(const std::array<uint8_t, 32>& /*psk*/) {}
 };
 
 }  // namespace db

@@ -35,6 +35,8 @@ struct MeshSettings {
   std::string role = "door_station";  // door_station | indoor_panel
   std::string door;                  // Operational door identity; empty for indoor panels.
   std::string sw_version = "0.0.1";
+  std::string model = "unknown";     // Device-card hardware model announced while unpaired.
+  std::string platform = "unknown";  // Device-card platform announced while unpaired.
   std::string caps_json = "{}";  // {"tls12":bool,"wan":bool,"mains_power":bool,
                                  //  "mqtt_reachable":bool,"wall_clock_sane":bool,"cpu_score":int}
   std::string ui_manifest_json = "{}";
@@ -90,6 +92,23 @@ class Mesh {
     std::function<void()> on_pending_changed;
 
     std::function<void()> on_paired;
+
+    // Result of one manual invitation: ok after the invitee acknowledges the join frame,
+    // otherwise err is "no_ack" or a transport reason.
+    std::function<void(const std::string& id, bool ok, const std::string& err)> on_invite_result;
+
+    // A formerly pending device finished its secure handshake and is now a cluster member.
+    std::function<void(const std::string& id, const std::string& name, const std::string& role)>
+        on_device_joined;
+
+    std::function<void(bool active, int64_t left_s, int auto_added_count)> on_pairing_mode_changed;
+
+    std::function<void(bool active, int64_t expires_s, int attempts_left)> on_join_token_changed;
+
+    // The local (unpaired) node refused an invitation; reason is a stable error code.
+    std::function<void(const std::string& reason)> on_invite_rejected;
+
+    std::function<void()> on_unpaired;
   };
 
   Mesh(Runloop& loop, IClock& clock, HlcClock& hlc, ITransport& transport,
@@ -152,12 +171,22 @@ class Mesh {
 
   bool isPaired() const;
   bool foundCluster();  // Generates a new cluster key only while unpaired.
+  // True when this node created the cluster rather than joining one. Node persists it in store
+  // metadata so the badge survives a restart.
+  bool isFounder() const;
   std::string pairingSelfJson();
   std::string pendingJson();
+  // {"active":bool,"expires_s":int,"attempts_left":int,"host":"<addr>","pin":"<6>"}.
+  // pin appears only while the token is active.
+  std::string tokenJson();
   void inviteDevice(const std::string& id);
 
   void inviteDeviceDirect(const std::string& addr, const std::string& pk);
+  // Drop one pending device and ignore its announcements for a short while.
+  void denyDevice(const std::string& id);
   void setPairingMode(int64_t ttl_ms);
+  // Leave the cluster: zero the PSK, drop cluster state, and start announcing for pairing again.
+  void unpair();
 
   const MeshSettings& settings() const { return settings_; }
 

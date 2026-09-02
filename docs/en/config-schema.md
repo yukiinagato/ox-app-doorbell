@@ -376,6 +376,86 @@ its last-known-good style. The Web manifest remains local to the node serving Ad
 replicated per-peer Web catalog; Admin cannot infer a remote/offline Web surface from a native
 manifest.
 
+## Pairing state and events
+
+`GET /api/pairing` and `db_core_pairing_json` return the same snapshot, rebuilt on every call so
+countdowns tick. Shells render `pairing.state` and never infer it from `paired` /
+`persistence_ready`:
+
+| `state` | Meaning | Next action for the shell |
+|---|---|---|
+| `unpaired` | No PSK. The device announces itself for pairing. | Onboarding: searching + own Add QR |
+| `joining` | A PIN join or an arriving invitation is being applied. | Spinner |
+| `persist_error` | PSK is in memory but `secure_put` failed. | Error + retry (`POST /api/pairing/retry-persist`) |
+| `ready` | PSK persisted; member of a cluster. | Main UI + membership |
+| `revoked` | Removed by an administrator. | Message, then wipe → `unpaired` |
+
+```jsonc
+{
+  "state": "ready", "paired": true, "persistence_ready": true,
+  "is_founder": true,                                // persisted in store meta (pairing.is_founder)
+  "psk_source": "secure_store",                      // secure_store | boot_plaintext | none
+  "psk_ref": "secret:mesh.psk",                      // null unless psk_source is secure_store
+  "role": "door_station",
+  "self": {"id":…, "addr":…, "name":…, "role":…, "pk":…,
+           "model":"Pixel 4a", "platform":"android", "sw":"0.1.0"},
+  "pair_qr": "doorbell-pair:<addr>|<id>|<pk>",
+  "home": {"member_count": 2, "connected_count": 2},
+  "token": {"active": true, "expires_s": 180, "attempts_left": 3,
+            "host": "10.0.1.5:47172", "pin": "418205"},   // pin present only while active
+  "pending": {
+    "pairing_mode": false, "pairing_mode_left_s": 0, "auto_added_count": 0,
+    "devices": [{"id":…, "addr":…, "name":…, "role":…, "model":…, "platform":…, "sw":…,
+                 "age_s": 3, "invite_state": "sent", "attempts": 1, "last_error": ""}]
+  }
+}
+```
+
+`invite_state` is `none | sent | acked | joined | failed`. A manual invitation retries three times
+at two-second intervals and then fails with `no_ack`; an automatic one (bulk add) is sent once. A
+pending entry is removed when its device completes the secure handshake.
+
+Pairing UI events (uiNotify, distinct from the replicated event log below):
+
+| Event | Payload | When |
+|---|---|---|
+| `pairing_state` | `{state, is_founder, psk_source}` | Every state change. The one shells key off. |
+| `pending_changed` | — | Pending device added, removed, expired, or a field changed |
+| `invite_result` | `{id, ok, err}` | End of a manual invitation (`err`: `no_ack`, `host_unpaired`, `unknown_device`, `bad_pk`, `no_addr`, or the invitee's rejection reason) |
+| `device_joined` | `{id, name, role}` | A pending device established its secure channel |
+| `pairing_mode_changed` | `{active, left_s, auto_added_count}` | Bulk-add start, stop, or expiry |
+| `join_token_changed` | `{active, expires_s, attempts_left}` | PIN mint, expiry, or burn after three failures |
+| `invite_rejected` | `{reason}` | On the *invited* device (`already_paired`, `no_pair_key`, `bad_payload`, `decrypt_failed`, `host_zero_psk`, `local_persist_failed`) |
+| `qr_scan_state` | `{active}` | `db_core_qr_scan_start` / `stop` / the 120 s auto-stop |
+| `qr_scanned` | `{text, invited}` | A decoded QR (2 s debounce per distinct payload); `invited` is true when a `doorbell-pair:` payload was auto-invited |
+| `join_result` | `{ok, err}` | Emitted **before** `paired` / `pairing_state` (`err`: `already_paired`, `bad_pin`, `expired`, `no_token`, `host_unpaired`, `bad_payload`, `host_zero_psk`, `local_persist_failed`, `persist_failed`) |
+| `paired` | `{psk_ref, psk_id, seeds}` | Only after `secure_put` succeeded; never carries the PSK |
+| `pairing_persistence_error` | `{reason}` | `secure_put` failed; state becomes `persist_error` |
+| `pairing_revoked` | `{by}` | Administrator removed this device |
+
+Pairing HTTP routes all require an admin session (they are not public prefixes); older routes are
+kept for existing shells. `GET /api/pairing` returns the snapshot above.
+`POST /api/pairing/start {seconds}` opens the bulk-add window and mints a PIN in one step
+(`{ok,host,pin,expires_s}`; 409 `host_unpaired` while unpaired). `/stop` closes the bulk-add window
+and leaves a live PIN alone, so a device already typing the code is not locked out. `/deny {id}`
+drops one pending device and ignores it for ten minutes (400 `no_id`). `/retry-persist` re-runs
+`secure_put` after `persist_error` and is an idempotent success on a node that is already `ready`.
+`/unpair` leaves the cluster. `/scan {text}` is the paste fallback for a browser without a camera
+in a secure context (400 `bad_qr`). `POST /api/pairing/mode` on an unpaired node answers 409
+`host_unpaired` instead of `ok`.
+
+`psk_source` is `none` only when no key is configured; a node holding a key that was supplied
+without a declared provenance reports `boot_plaintext`.
+
+`boot.json` may carry `model` and `platform`; they are announced in the pairing beacon and shown
+on the device card the inviter renders. The `db_platform_v2` SPI gained an optional trailing
+`secure_delete(user, key)`; a shell that still reports the pre-`secure_delete` `struct_size` keeps
+working and simply leaves an orphaned secret behind on unpair.
+
+Deferred to a later rework (TODO): a cluster fingerprint/identity shown next to the membership
+count, persisting `pair_sk` so a device's Add QR survives a reboot, and a cap on how many devices
+one bulk-add window may auto-add.
+
 ## Events (events table / gossip)
 
 - ID = `(origin_node, origin_seq)`, idempotent. Types include `press | purpose_selected |

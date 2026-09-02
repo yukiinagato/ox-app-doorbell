@@ -4,10 +4,13 @@
 #include <array>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <random>
 #include <string>
 #include <utility>
 #include <vector>
+
+#include "monocypher.h"
 
 #include "crdt/lww_map.h"
 #include "doctest.h"
@@ -70,6 +73,8 @@ struct Opt {
   std::vector<std::string> addrs;
   std::string role = "door_station";
   std::string door;
+  std::string model;
+  std::string platform;
 };
 
 
@@ -95,6 +100,17 @@ struct Fleet {
     std::vector<std::pair<std::string, std::string>> commands;
     int pending_changes = 0;  // Mesh cbs.on_pending_changed
     int paired_count = 0;
+    struct InviteResult {
+      std::string id;
+      bool ok = false;
+      std::string err;
+    };
+    std::vector<InviteResult> invite_results;
+    std::vector<std::string> joined;          // cbs.on_device_joined ids
+    std::vector<std::string> invite_rejects;  // cbs.on_invite_rejected reasons
+    std::vector<std::string> token_changes;   // "active:expires_s:attempts_left"
+    std::vector<std::string> mode_changes;    // "active:left_s:auto_added_count"
+    int unpaired_count = 0;
 
     std::unique_ptr<Mesh> mesh;
 
@@ -137,6 +153,8 @@ struct Fleet {
     st.psk = opt.zero_psk ? std::array<uint8_t, 32>{} : psk;
     st.role = opt.role;
     st.door = opt.door;
+    if (!opt.model.empty()) st.model = opt.model;
+    if (!opt.platform.empty()) st.platform = opt.platform;
     st.caps_json = caps;
     st.heartbeat_ms = 30;
     st.suspect_ms = 90;
@@ -163,6 +181,25 @@ struct Fleet {
     };
     cbs.on_pending_changed = [np] { np->pending_changes++; };
     cbs.on_paired = [np] { np->paired_count++; };
+    cbs.on_invite_result = [np](const std::string& id, bool ok, const std::string& err) {
+      np->invite_results.push_back({id, ok, err});
+    };
+    cbs.on_device_joined = [np](const std::string& id, const std::string&, const std::string&) {
+      np->joined.push_back(id);
+    };
+    cbs.on_invite_rejected = [np](const std::string& reason) {
+      np->invite_rejects.push_back(reason);
+    };
+    cbs.on_join_token_changed = [np](bool active, int64_t expires_s, int attempts_left) {
+      np->token_changes.push_back(std::string(active ? "1" : "0") + ":" +
+                                  std::to_string(expires_s) + ":" +
+                                  std::to_string(attempts_left));
+    };
+    cbs.on_pairing_mode_changed = [np](bool active, int64_t left_s, int added) {
+      np->mode_changes.push_back(std::string(active ? "1" : "0") + ":" + std::to_string(left_s) +
+                                 ":" + std::to_string(added));
+    };
+    cbs.on_unpaired = [np] { np->unpaired_count++; };
     n->mesh = std::make_unique<Mesh>(loop, clock, *n->hlc, *n->tp, n->disc.get(), n->store,
                                      *n->config, *n->events, st, cbs);
 
@@ -1569,6 +1606,350 @@ TEST_CASE("mesh: an unpaired node cannot issue invitations") {
 }
 
 
+
+namespace {
+
+const cJSON* pendingDevice(const std::string& js, const std::string& id) {
+  static json::Doc held;
+  held = json::parse(js);
+  if (!held) return nullptr;
+  const cJSON* it = nullptr;
+  cJSON_ArrayForEach(it, json::get(held.get(), "devices")) {
+    if (json::getString(it, "id") == id) return it;
+  }
+  return nullptr;
+}
+
+}  // namespace
+
+TEST_CASE("mesh: an acknowledged invitation reports invite_result, then device_joined") {
+  Fleet f;
+  Fleet::Node& host = f.add(kIdA, "A", capsJson(10), {{}, /*beacon=*/true});
+  Fleet::Node& joiner = f.add(kIdJ, "J", capsJson(3),
+                              {{}, /*beacon=*/true, 1, /*zero_psk=*/true, {}, "indoor_panel", "",
+                               "iPad mini 3", "ios"});
+
+  REQUIRE(f.runUntil([&] { return pendingDevice(host.mesh->pendingJson(), kIdJ) != nullptr; },
+                     3000));
+  // C8: the device card is filled from the beacon, not guessed by the shell.
+  const cJSON* card = pendingDevice(host.mesh->pendingJson(), kIdJ);
+  REQUIRE(card);
+  CHECK(json::getString(card, "model") == "iPad mini 3");
+  CHECK(json::getString(card, "platform") == "ios");
+  CHECK(json::getString(card, "role") == "indoor_panel");
+  CHECK(json::getString(card, "invite_state") == "none");
+
+  host.mesh->inviteDevice(kIdJ);
+  REQUIRE(f.runUntil([&] { return !host.invite_results.empty(); }, 4000));
+  CHECK(host.invite_results[0].ok);
+  CHECK(host.invite_results[0].id == kIdJ);
+  CHECK(host.invite_results[0].err == "");
+  CHECK(joiner.mesh->isPaired());
+
+  // The positive confirmation is the secure channel, not the acknowledgement.
+  REQUIRE(f.runUntil([&] { return !host.joined.empty(); }, 5000));
+  CHECK(host.joined[0] == kIdJ);
+  CHECK(pendingIds(host.mesh->pendingJson()).empty());
+}
+
+TEST_CASE("mesh: a manual invitation to a silent device retries and then reports no_ack") {
+  Fleet f;
+  Fleet::Node& host = f.add(kIdA, "A", capsJson(10), {{}, /*beacon=*/true});
+  f.add(kIdJ, "J", capsJson(3), {{}, /*beacon=*/true, 1, /*zero_psk=*/true});
+  REQUIRE(f.runUntil([&] { return pendingDevice(host.mesh->pendingJson(), kIdJ) != nullptr; },
+                     3000));
+
+  f.net.killNode("J");
+  host.mesh->inviteDevice(kIdJ);
+  REQUIRE(f.runUntil([&] { return !host.invite_results.empty(); }, 20000));
+  CHECK_FALSE(host.invite_results[0].ok);
+  CHECK(host.invite_results[0].err == "no_ack");
+  CHECK(host.invite_results[0].id == kIdJ);
+
+  const cJSON* card = pendingDevice(host.mesh->pendingJson(), kIdJ);
+  REQUIRE(card);
+  CHECK(json::getString(card, "invite_state") == "failed");
+  CHECK(json::getInt(card, "attempts", 0) == 3);
+  CHECK(json::getString(card, "last_error") == "no_ack");
+}
+
+TEST_CASE("mesh: denyDevice drops a pending device and keeps ignoring its announcements") {
+  Fleet f;
+  Fleet::Node& host = f.add(kIdA, "A", capsJson(10), {{}, /*beacon=*/true});
+  f.add(kIdJ, "J", capsJson(3), {{}, /*beacon=*/true, 1, /*zero_psk=*/true});
+  REQUIRE(f.runUntil([&] { return pendingDevice(host.mesh->pendingJson(), kIdJ) != nullptr; },
+                     3000));
+
+  host.mesh->denyDevice(kIdJ);
+  CHECK(pendingIds(host.mesh->pendingJson()).empty());
+  f.run(2000);
+  CHECK(pendingIds(host.mesh->pendingJson()).empty());
+}
+
+TEST_CASE("mesh: an invitation to an already paired device is rejected, not ignored") {
+  Fleet f;
+  Fleet::Node& host = f.add(kIdA, "A", capsJson(10), {{}, /*beacon=*/false});
+  Fleet::Node& other = f.add(kIdB, "B", capsJson(5), {{}, /*beacon=*/false});
+  f.run(100);
+
+  json::Doc self = json::parse(other.mesh->pairingSelfJson());
+  REQUIRE(self);
+  host.mesh->inviteDeviceDirect(json::getString(self.get(), "addr"),
+                                json::getString(self.get(), "pk"));
+  REQUIRE(f.runUntil([&] { return !host.invite_results.empty(); }, 4000));
+  CHECK_FALSE(host.invite_results[0].ok);
+  CHECK(host.invite_results[0].err == "already_paired");
+  REQUIRE_FALSE(other.invite_rejects.empty());
+  CHECK(other.invite_rejects[0] == "already_paired");
+}
+
+TEST_CASE("mesh: unpair clears the key, drops peers, and allows joining another cluster") {
+  Fleet f;
+  Fleet::Node& host = f.add(kIdA, "A", capsJson(10), {{}, /*beacon=*/true});
+  Fleet::Node& joiner = f.add(kIdJ, "J", capsJson(3), {{}, /*beacon=*/true, 1,
+                                                       /*zero_psk=*/true});
+  REQUIRE(f.runUntil([&] { return pendingDevice(host.mesh->pendingJson(), kIdJ) != nullptr; },
+                     3000));
+  host.mesh->inviteDevice(kIdJ);
+  REQUIRE(f.runUntil([&] { return f.mutualAlive({kIdA, kIdJ}); }, 5000));
+
+  joiner.mesh->unpair();
+  CHECK_FALSE(joiner.mesh->isPaired());
+  CHECK(joiner.unpaired_count == 1);
+  CHECK(joiner.mesh->peers().size() == 1);  // only itself
+  CHECK(joiner.mesh->createJoinToken().pin.empty());
+
+  // Announcing resumes, so the same node can be added again without a restart.
+  REQUIRE(f.runUntil([&] { return pendingDevice(host.mesh->pendingJson(), kIdJ) != nullptr; },
+                     4000));
+  host.mesh->inviteDevice(kIdJ);
+  REQUIRE(f.runUntil([&] { return joiner.mesh->isPaired(); }, 4000));
+  REQUIRE(f.runUntil([&] { return f.mutualAlive({kIdA, kIdJ}); }, 6000));
+}
+
+TEST_CASE("mesh: JOIN_OK is refused once an invitation has already paired the node") {
+  Fleet f;
+  Fleet::Node& host = f.add(kIdA, "A", capsJson(10), {{}, /*beacon=*/false});
+  Fleet::Node& joiner = f.add(kIdJ, "J", capsJson(3), {{}, /*beacon=*/false, 1,
+                                                       /*zero_psk=*/true});
+  auto token = host.mesh->createJoinToken();
+
+  std::vector<std::pair<bool, std::string>> res;
+  joiner.mesh->joinCluster("A", token.pin, [&](bool ok, const std::string& err) {
+    res.emplace_back(ok, err);
+  });
+  // The node pairs by another route while the code join is still in flight.
+  CHECK(joiner.mesh->foundCluster());
+  REQUIRE(f.runUntil([&] { return !res.empty(); }, 3000));
+  CHECK_FALSE(res[0].first);
+  CHECK(res[0].second == "already_paired");
+  CHECK(joiner.paired_count == 1);  // no duplicate paired notification
+}
+
+TEST_CASE("mesh: joinCluster on a paired node answers already_paired") {
+  Fleet f;
+  Fleet::Node& host = f.add(kIdA, "A", capsJson(10), {{}, /*beacon=*/false});
+  std::vector<std::pair<bool, std::string>> res;
+  host.mesh->joinCluster("A", "123456", [&](bool ok, const std::string& err) {
+    res.emplace_back(ok, err);
+  });
+  REQUIRE(f.runUntil([&] { return !res.empty(); }, 2000));
+  CHECK_FALSE(res[0].first);
+  CHECK(res[0].second == "already_paired");
+}
+
+TEST_CASE("mesh: an invitation carrying an all-zero cluster key is rejected") {
+  Fleet f;
+  Fleet::Node& joiner = f.add(kIdJ, "J", capsJson(3), {{}, /*beacon=*/false, 1,
+                                                       /*zero_psk=*/true});
+  f.run(50);
+  json::Doc self = json::parse(joiner.mesh->pairingSelfJson());
+  REQUIRE(self);
+  Bytes pk;
+  REQUIRE(hexDecode(json::getString(self.get(), "pk"), pk));
+  REQUIRE(pk.size() == 32);
+
+  // Seal a well-formed invitation whose PSK is all zeros, exactly what a broken or hostile
+  // inviter would send.
+  Bytes esk = randomBytes(32);
+  std::array<uint8_t, 32> epk{}, shared{}, key{};
+  crypto_x25519_public_key(epk.data(), esk.data());
+  crypto_x25519(shared.data(), esk.data(), pk.data());
+  crypto_blake2b(key.data(), 32, shared.data(), shared.size());
+  const std::string plain =
+      "{\"psk\":\"" + std::string(64, '0') + "\",\"psk_id\":\"k1\",\"seeds\":[],\"cfg\":[]}";
+  Bytes nonce = randomBytes(24);
+  Bytes sealed(16 + plain.size());
+  crypto_aead_lock(sealed.data() + 16, sealed.data(), key.data(), nonce.data(), nullptr, 0,
+                   reinterpret_cast<const uint8_t*>(plain.data()), plain.size());
+  auto o = json::obj();
+  json::set(o.get(), "t", "INVITE");
+  json::set(o.get(), "epk", hexEncode(epk.data(), epk.size()));
+  json::set(o.get(), "n", hexEncode(nonce));
+  json::set(o.get(), "c", hexEncode(sealed));
+  const std::string body = json::dump(o.get());
+  Bytes frame;
+  frame.push_back(kFrameJoin);
+  frame.insert(frame.end(), body.begin(), body.end());
+
+  auto sender = f.net.makeTransport("X");
+  sender->connect("J", [&](ConnPtr conn) {
+    REQUIRE(conn);
+    conn->setCallbacks([](const Bytes&) {}, [] {});
+    conn->send(frame);
+  });
+  REQUIRE(f.runUntil([&] { return !joiner.invite_rejects.empty(); }, 3000));
+  CHECK(joiner.invite_rejects[0] == "host_zero_psk");
+  CHECK_FALSE(joiner.mesh->isPaired());
+}
+
+TEST_CASE("mesh: the join token reports its countdown, attempts, and expiry") {
+  Fleet f;
+  Fleet::Node& host = f.add(kIdA, "A", capsJson(10), {{}, /*beacon=*/false});
+  Fleet::Node& joiner = f.add(kIdJ, "J", capsJson(3), {{}, /*beacon=*/false, 1,
+                                                       /*zero_psk=*/true});
+
+  json::Doc idle = json::parse(host.mesh->tokenJson());
+  REQUIRE(idle);
+  CHECK_FALSE(json::getBool(idle.get(), "active"));
+  CHECK(json::get(idle.get(), "pin") == nullptr);
+
+  auto token = host.mesh->createJoinToken();
+  REQUIRE(host.token_changes.size() == 1);
+  json::Doc live = json::parse(host.mesh->tokenJson());
+  REQUIRE(live);
+  CHECK(json::getBool(live.get(), "active"));
+  CHECK(json::getString(live.get(), "pin") == token.pin);
+  CHECK(json::getString(live.get(), "host") == "A");
+  CHECK(json::getInt(live.get(), "attempts_left", 0) == 3);
+  const int64_t first = json::getInt(live.get(), "expires_s", 0);
+  CHECK(first > 590);
+
+  f.run(5000);
+  json::Doc later = json::parse(host.mesh->tokenJson());
+  CHECK(json::getInt(later.get(), "expires_s", 0) < first);
+
+  std::vector<std::pair<bool, std::string>> res;
+  const std::string wrong = token.pin == "000000" ? "000001" : "000000";
+  joiner.mesh->joinCluster("A", wrong, [&](bool ok, const std::string& e) {
+    res.emplace_back(ok, e);
+  });
+  REQUIRE(f.runUntil([&] { return !res.empty(); }, 2000));
+  CHECK(res[0].second == "bad_pin");
+  json::Doc burned = json::parse(host.mesh->tokenJson());
+  CHECK(json::getInt(burned.get(), "attempts_left", 0) == 2);
+
+  f.run(10 * 60 * 1000 + 2000);
+  json::Doc expired = json::parse(host.mesh->tokenJson());
+  CHECK_FALSE(json::getBool(expired.get(), "active"));
+  CHECK(json::get(expired.get(), "pin") == nullptr);
+  // Mint, one bad attempt, and expiry all reach the shell.
+  CHECK(host.token_changes.size() >= 3);
+  CHECK(host.token_changes.back().rfind("0:", 0) == 0);
+}
+
+TEST_CASE("mesh: pairing mode reports start, stop, and how many devices it added") {
+  Fleet f;
+  Fleet::Node& host = f.add(kIdA, "A", capsJson(10), {{}, /*beacon=*/true});
+  host.mesh->setPairingMode(10 * 60 * 1000);
+  REQUIRE(host.mode_changes.size() == 1);
+  CHECK(host.mode_changes[0].rfind("1:", 0) == 0);
+
+  Fleet::Node& joiner = f.add(kIdJ, "J", capsJson(3), {{}, /*beacon=*/true, 1,
+                                                       /*zero_psk=*/true});
+  REQUIRE(f.runUntil([&] { return joiner.mesh->isPaired(); }, 4000));
+  REQUIRE(f.runUntil([&] { return !host.joined.empty(); }, 5000));
+
+  json::Doc pending = json::parse(host.mesh->pendingJson());
+  REQUIRE(pending);
+  CHECK(json::getBool(pending.get(), "pairing_mode"));
+  CHECK(json::getInt(pending.get(), "auto_added_count", 0) == 1);
+
+  host.mesh->setPairingMode(0);
+  json::Doc off = json::parse(host.mesh->pendingJson());
+  CHECK_FALSE(json::getBool(off.get(), "pairing_mode"));
+  REQUIRE(host.mode_changes.size() >= 2);
+  CHECK(host.mode_changes.back().rfind("0:", 0) == 0);
+}
+
+TEST_CASE("mesh: discovery is rekeyed when a node creates or joins a cluster at runtime") {
+  Fleet f;
+  // Both nodes start unpaired, so neither can be discovered by the other yet.
+  Fleet::Node& founder = f.add(kIdA, "A", capsJson(10), {{}, /*beacon=*/true, 1,
+                                                         /*zero_psk=*/true});
+  Fleet::Node& other = f.add(kIdJ, "J", capsJson(3), {{}, /*beacon=*/true, 1,
+                                                      /*zero_psk=*/true});
+  f.run(500);
+  CHECK(founder.peer(kIdJ).id.empty());
+
+  REQUIRE(founder.mesh->foundCluster());
+  REQUIRE(f.runUntil([&] { return pendingDevice(founder.mesh->pendingJson(), kIdJ) != nullptr; },
+                     3000));
+  founder.mesh->inviteDevice(kIdJ);
+  REQUIRE(f.runUntil([&] { return other.mesh->isPaired(); }, 4000));
+
+  // Without the beacon rekey the two would never find each other until a restart.
+  REQUIRE(f.runUntil([&] { return f.mutualAlive({kIdA, kIdJ}); }, 6000));
+}
+
+TEST_CASE("udp_beacon: a keyed HELLO is discovered and a zero-key HELLO is ignored") {
+  RealClock clock;
+  Runloop loop(clock);
+  loop.start();
+  const uint16_t port = 47191;
+  const auto psk = mkPsk(0x37);
+  UdpBeacon beacon(loop, psk, "239.255.71.72", port, 1000);
+  std::vector<std::string> found;
+  std::mutex mu;
+  beacon.start([&](const DiscoveredPeer& p) {
+    std::lock_guard<std::mutex> lk(mu);
+    found.push_back(p.node_id);
+  });
+  loop.callSync([&] { beacon.announce(kIdA, "127.0.0.1:47172"); });
+
+  auto mac = [](const std::array<uint8_t, 32>& key, const std::string& id,
+                const std::string& addr) {
+    static const uint8_t kTag[6] = {'b', 'e', 'a', 'c', 'o', 'n'};
+    crypto_blake2b_ctx ctx;
+    crypto_blake2b_keyed_init(&ctx, 32, key.data(), key.size());
+    crypto_blake2b_update(&ctx, kTag, sizeof(kTag));
+    crypto_blake2b_update(&ctx, reinterpret_cast<const uint8_t*>(id.data()), id.size());
+    crypto_blake2b_update(&ctx, reinterpret_cast<const uint8_t*>(addr.data()), addr.size());
+    uint8_t out[32];
+    crypto_blake2b_final(&ctx, out);
+    return hexEncode(out, 16);
+  };
+  auto hello = [&](const std::string& id, const std::string& addr, const std::string& m) {
+    auto o = json::obj();
+    json::set(o.get(), "v", int64_t{1});
+    json::set(o.get(), "id", id);
+    json::set(o.get(), "addr", addr);
+    json::set(o.get(), "mac", m);
+    return json::dump(o.get());
+  };
+
+  int fd = ::socket(AF_INET, SOCK_DGRAM, 0);
+  REQUIRE(fd >= 0);
+  sockaddr_in dst{};
+  dst.sin_family = AF_INET;
+  dst.sin_port = htons(port);
+  ::inet_pton(AF_INET, "127.0.0.1", &dst.sin_addr);
+
+  const std::array<uint8_t, 32> zero{};
+  const std::string spoof = hello(kIdC, "10.0.0.9:47172", mac(zero, kIdC, "10.0.0.9:47172"));
+  const std::string real = hello(kIdB, "10.0.0.8:47172", mac(psk, kIdB, "10.0.0.8:47172"));
+  ::sendto(fd, spoof.data(), spoof.size(), 0, reinterpret_cast<sockaddr*>(&dst), sizeof(dst));
+  ::sendto(fd, real.data(), real.size(), 0, reinterpret_cast<sockaddr*>(&dst), sizeof(dst));
+  ::usleep(400 * 1000);
+  ::close(fd);
+  beacon.stop();
+  loop.stop();
+
+  std::lock_guard<std::mutex> lk(mu);
+  CHECK(std::find(found.begin(), found.end(), kIdC) == found.end());
+  WARN_MESSAGE(std::find(found.begin(), found.end(), kIdB) != found.end(),
+               "loopback UDP delivery unavailable in this environment");
+}
 
 TEST_CASE("udp_beacon: multicast smoke test sends without errors") {
   RealClock clock;

@@ -92,10 +92,15 @@ add_library(db_third_party STATIC
   third_party/monocypher/monocypher.c
   third_party/monocypher/monocypher-ed25519.c
   third_party/qrcodegen/qrcodegen.c
+  # quirc (ISC): QR recognition for pairing. Encoding stays with qrcodegen.
+  third_party/quirc/quirc.c
+  third_party/quirc/identify.c
+  third_party/quirc/decode.c
+  third_party/quirc/version_db.c
 )
 target_include_directories(db_third_party PUBLIC
   third_party/sqlite third_party/civetweb third_party/cjson third_party/monocypher
-  third_party/qrcodegen third_party/stb)
+  third_party/qrcodegen third_party/quirc third_party/stb)
 target_compile_definitions(db_third_party PUBLIC
   # Assets are embedded, so civetweb does not need TLS, CGI, or filesystem serving.
   # USE_IPV6 makes the HTTP service listen on both IPv4 and IPv6 with a "+port".

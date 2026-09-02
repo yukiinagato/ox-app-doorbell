@@ -1232,3 +1232,518 @@ TEST_CASE("node: real TCP and HTTP API smoke test covers login, status, press, a
 
   node.stop();
 }
+
+
+// ---------------------------------------------------------------------------
+// Pairing contract: the authoritative state, its events, and the recovery paths.
+// ---------------------------------------------------------------------------
+
+namespace {
+
+json::Doc pairingDoc(Node& node) { return json::parse(node.pairingJson()); }
+
+std::string pairingState(Node& node) {
+  auto d = pairingDoc(node);
+  return d ? json::getString(d.get(), "state") : "";
+}
+
+// Last value of one field across every event of a type, or "" when never emitted.
+std::string lastEventField(const std::vector<std::string>& ui, const std::string& type,
+                           const std::string& field) {
+  std::string out;
+  for (const auto& e : ui) {
+    auto d = json::parse(e);
+    if (!d || json::getString(d.get(), "t") != type) continue;
+    out = json::getString(d.get(), field.c_str());
+  }
+  return out;
+}
+
+}  // namespace
+
+TEST_CASE("pairing: an unpaired node reports the unpaired state and its own device card") {
+  NFleet f;
+  auto& node = f.add("A:1", "front", "door_station", "d_front", true, /*zero_psk=*/true);
+  REQUIRE(node.node->start());
+  f.run(50);
+
+  auto d = pairingDoc(*node.node);
+  REQUIRE(d);
+  CHECK(json::getString(d.get(), "state") == "unpaired");
+  CHECK_FALSE(json::getBool(d.get(), "paired"));
+  CHECK_FALSE(json::getBool(d.get(), "is_founder"));
+  CHECK(json::getString(d.get(), "psk_source") == "none");
+  CHECK(cJSON_IsNull(json::get(d.get(), "psk_ref")));
+  const cJSON* self = json::get(d.get(), "self");
+  REQUIRE(self);
+  CHECK(json::getString(self, "model") == "unknown");
+  CHECK(json::getString(self, "platform") == "unknown");
+  CHECK_FALSE(json::getString(self, "sw").empty());
+  const cJSON* token = json::get(d.get(), "token");
+  REQUIRE(token);
+  CHECK_FALSE(json::getBool(token, "active"));
+  CHECK(json::get(token, "pin") == nullptr);
+  const cJSON* home = json::get(d.get(), "home");
+  REQUIRE(home);
+  CHECK(json::getInt(home, "member_count", 0) == 1);
+  node.node->stop();
+}
+
+TEST_CASE("pairing: creating a cluster reports ready, the founder badge, and secure storage") {
+  NFleet f;
+  auto& node = f.add("A:1", "front", "door_station", "d_front", true, /*zero_psk=*/true);
+  std::map<std::string, std::string> secrets;
+  node.node->setSecureStore(
+      [&](const std::string& key) {
+        auto it = secrets.find(key);
+        return it == secrets.end() ? std::string() : it->second;
+      },
+      [&](const std::string& key, const std::string& value) {
+        secrets[key] = value;
+        return true;
+      });
+  REQUIRE(node.node->start());
+  CHECK(node.node->foundCluster());
+  f.run(50);
+
+  CHECK(node.uiCount("paired") == 1);
+  CHECK(node.uiCount("pairing_state") >= 1);
+  CHECK(lastEventField(node.ui, "pairing_state", "state") == "ready");
+  CHECK(lastEventField(node.ui, "pairing_state", "psk_source") == "secure_store");
+
+  auto d = pairingDoc(*node.node);
+  REQUIRE(d);
+  CHECK(json::getString(d.get(), "state") == "ready");
+  CHECK(json::getBool(d.get(), "is_founder"));
+  CHECK(json::getString(d.get(), "psk_source") == "secure_store");
+  CHECK(json::getString(d.get(), "psk_ref") == "secret:mesh.psk");
+  CHECK(secrets["mesh.psk"].size() == 64);
+  node.node->stop();
+}
+
+TEST_CASE("pairing: the snapshot is rebuilt on every call so countdowns tick") {
+  NFleet f;
+  auto& node = f.add("A:1", "front", "door_station", "d_front", true);
+  REQUIRE(node.node->start());
+  auto started = json::parse(node.node->startPairingJson(600));
+  REQUIRE(started);
+  REQUIRE(json::getBool(started.get(), "ok"));
+
+  auto first = pairingDoc(*node.node);
+  REQUIRE(first);
+  const cJSON* token = json::get(first.get(), "token");
+  REQUIRE(token);
+  CHECK(json::getBool(token, "active"));
+  CHECK(json::getString(token, "pin").size() == 6);
+  CHECK(json::getString(token, "host") == "A:1");
+  const int64_t before = json::getInt(token, "expires_s", 0);
+  const int64_t mode_before =
+      json::getInt(json::get(first.get(), "pending"), "pairing_mode_left_s", 0);
+  CHECK(before > 0);
+
+  f.run(5000);
+  auto later = pairingDoc(*node.node);
+  REQUIRE(later);
+  CHECK(json::getInt(json::get(later.get(), "token"), "expires_s", 0) < before);
+  CHECK(json::getInt(json::get(later.get(), "pending"), "pairing_mode_left_s", 0) < mode_before);
+  node.node->stop();
+}
+
+TEST_CASE("pairing: a secure-store failure is retried without rejoining the cluster") {
+  NFleet f;
+  auto& node = f.add("A:1", "front", "door_station", "d_front", true, /*zero_psk=*/true);
+  bool store_ok = false;
+  std::map<std::string, std::string> secrets;
+  node.node->setSecureStore(
+      [&](const std::string&) { return std::string(); },
+      [&](const std::string& key, const std::string& value) {
+        if (!store_ok) return false;
+        secrets[key] = value;
+        return true;
+      });
+  REQUIRE(node.node->start());
+  CHECK(node.node->foundCluster());
+  f.run(50);
+
+  CHECK(node.uiCount("paired") == 0);
+  CHECK(node.uiCount("pairing_persistence_error") == 1);
+  CHECK(lastEventField(node.ui, "pairing_state", "state") == "persist_error");
+  CHECK(pairingState(*node.node) == "persist_error");
+
+  CHECK_FALSE(node.node->retryPairingPersistence());
+  CHECK(node.uiCount("pairing_persistence_error") == 2);
+
+  store_ok = true;
+  CHECK(node.node->retryPairingPersistence());
+  f.run(20);
+  CHECK(node.uiCount("paired") == 1);
+  CHECK(lastEventField(node.ui, "pairing_state", "state") == "ready");
+  CHECK(pairingState(*node.node) == "ready");
+  CHECK(secrets["mesh.psk"].size() == 64);
+  for (const auto& event : node.ui) CHECK(event.find("psk_hex") == std::string::npos);
+  node.node->stop();
+}
+
+TEST_CASE("pairing: unpair clears the stored secret and returns to the unpaired state") {
+  NFleet f;
+  auto& node = f.add("A:1", "front", "door_station", "d_front", true, /*zero_psk=*/true);
+  std::map<std::string, std::string> secrets;
+  std::vector<std::string> deleted;
+  node.node->setSecureStore(
+      [&](const std::string& key) {
+        auto it = secrets.find(key);
+        return it == secrets.end() ? std::string() : it->second;
+      },
+      [&](const std::string& key, const std::string& value) {
+        secrets[key] = value;
+        return true;
+      });
+  node.node->setSecureDelete([&](const std::string& key) {
+    deleted.push_back(key);
+    secrets.erase(key);
+    return true;
+  });
+  REQUIRE(node.node->start());
+  CHECK(node.node->foundCluster());
+  f.run(50);
+  CHECK(pairingState(*node.node) == "ready");
+
+  node.node->unpair();
+  f.run(20);
+  CHECK(pairingState(*node.node) == "unpaired");
+  CHECK(lastEventField(node.ui, "pairing_state", "state") == "unpaired");
+  REQUIRE(deleted.size() == 1);
+  CHECK(deleted[0] == "mesh.psk");
+  CHECK(secrets.find("mesh.psk") == secrets.end());
+
+  auto d = pairingDoc(*node.node);
+  REQUIRE(d);
+  CHECK_FALSE(json::getBool(d.get(), "paired"));
+  CHECK_FALSE(json::getBool(d.get(), "is_founder"));
+  CHECK(json::getString(d.get(), "psk_source") == "none");
+  node.node->stop();
+}
+
+TEST_CASE("pairing: a platform without secure deletion still unpairs") {
+  NFleet f;
+  auto& node = f.add("A:1", "front", "door_station", "d_front", true, /*zero_psk=*/true);
+  node.node->setSecureStore([](const std::string&) { return std::string(); },
+                            [](const std::string&, const std::string&) { return true; });
+  REQUIRE(node.node->start());
+  CHECK(node.node->foundCluster());
+  f.run(20);
+  node.node->unpair();
+  f.run(20);
+  CHECK(pairingState(*node.node) == "unpaired");
+  node.node->stop();
+}
+
+TEST_CASE("pairing: joining while already paired reports already_paired instead of silence") {
+  NFleet f;
+  auto& node = f.add("A:1", "front", "door_station", "d_front", true);
+  REQUIRE(node.node->start());
+  node.node->joinCluster("B:1", "123456");
+  f.run(200);
+  CHECK(node.uiCount("join_result") == 1);
+  CHECK(lastEventField(node.ui, "join_result", "err") == "already_paired");
+  CHECK(pairingState(*node.node) == "ready");
+  node.node->stop();
+}
+
+TEST_CASE("pairing: an administrator revocation unpairs the device") {
+  NFleet f;
+  auto& panel = f.add("P:1", "panel", "indoor_panel", "", /*seed_cfg=*/true);
+  auto& door = f.add("D:1", "front", "door_station", "d_front", /*seed_cfg=*/false);
+  door.node->setSecureStore([](const std::string&) { return std::string(); },
+                            [](const std::string&, const std::string&) { return true; });
+  REQUIRE(panel.node->start());
+  REQUIRE(door.node->start());
+  REQUIRE([&] {
+    for (int i = 0; i < 200; i++) {
+      f.run(50);
+      auto st = json::parse(panel.node->statusJson());
+      const cJSON* it = nullptr;
+      cJSON_ArrayForEach(it, json::get(st.get(), "peers")) {
+        if (json::getString(it, "id") == door.node->nodeId() &&
+            json::getString(it, "status") == "alive")
+          return true;
+      }
+    }
+    return false;
+  }());
+
+  panel.node->removeDevice(door.node->nodeId());
+  REQUIRE([&] {
+    for (int i = 0; i < 200; i++) {
+      f.run(50);
+      if (door.uiCount("pairing_revoked") >= 1) return true;
+    }
+    return false;
+  }());
+  f.run(100);
+  CHECK(pairingState(*door.node) == "unpaired");
+  CHECK(lastEventField(door.ui, "pairing_state", "state") == "unpaired");
+  panel.node->stop();
+  door.node->stop();
+}
+
+TEST_CASE("pairing: an invited device reports invite_result, device_joined, and membership") {
+  NFleet f;
+  auto& host = f.add("A:1", "front", "door_station", "d_front", /*seed_cfg=*/true);
+  auto& joiner = f.add("J:1", "newpad", "indoor_panel", "", /*seed_cfg=*/false,
+                       /*zero_psk=*/true);
+  joiner.node->setSecureStore([](const std::string&) { return std::string(); },
+                              [](const std::string&, const std::string&) { return true; });
+  REQUIRE(host.node->start());
+  REQUIRE(joiner.node->start());
+
+  REQUIRE([&] {
+    for (int i = 0; i < 200; i++) {
+      f.run(50);
+      auto d = pairingDoc(*host.node);
+      const cJSON* it = nullptr;
+      cJSON_ArrayForEach(it, json::get(json::get(d.get(), "pending"), "devices")) {
+        if (json::getString(it, "id") == joiner.node->nodeId()) return true;
+      }
+    }
+    return false;
+  }());
+
+  host.node->inviteDevice(joiner.node->nodeId());
+  REQUIRE([&] {
+    for (int i = 0; i < 200; i++) {
+      f.run(50);
+      if (host.uiCount("device_joined") >= 1) return true;
+    }
+    return false;
+  }());
+  CHECK(host.uiCount("invite_result") >= 1);
+  CHECK(lastEventField(host.ui, "invite_result", "id") == joiner.node->nodeId());
+  CHECK(lastEventField(host.ui, "device_joined", "id") == joiner.node->nodeId());
+  CHECK(lastEventField(joiner.ui, "pairing_state", "state") == "ready");
+
+  auto d = pairingDoc(*host.node);
+  REQUIRE(d);
+  CHECK(json::getInt(json::get(d.get(), "home"), "member_count", 0) == 2);
+  CHECK(json::getInt(json::get(d.get(), "home"), "connected_count", 0) == 2);
+  host.node->stop();
+  joiner.node->stop();
+}
+
+TEST_CASE("pairing: a scanned QR payload invites the device it names") {
+  NFleet f;
+  auto& host = f.add("A:1", "front", "door_station", "d_front", /*seed_cfg=*/true);
+  auto& joiner = f.add("J:1", "newpad", "indoor_panel", "", /*seed_cfg=*/false,
+                       /*zero_psk=*/true);
+  joiner.node->setSecureStore([](const std::string&) { return std::string(); },
+                              [](const std::string&, const std::string&) { return true; });
+  REQUIRE(host.node->start());
+  REQUIRE(joiner.node->start());
+  f.run(100);
+
+  auto jd = pairingDoc(*joiner.node);
+  REQUIRE(jd);
+  const std::string qr = json::getString(jd.get(), "pair_qr");
+  CHECK(qr.rfind("doorbell-pair:", 0) == 0);
+
+  CHECK_FALSE(host.node->inviteFromQrText("https://example.invalid/not-a-pairing-code"));
+  CHECK(host.node->inviteFromQrText(qr));
+  REQUIRE([&] {
+    for (int i = 0; i < 200; i++) {
+      f.run(50);
+      if (joiner.uiCount("paired") >= 1) return true;
+    }
+    return false;
+  }());
+  CHECK(pairingState(*joiner.node) == "ready");
+  host.node->stop();
+  joiner.node->stop();
+}
+
+TEST_CASE("pairing: denying a device removes it from the pending list") {
+  NFleet f;
+  auto& host = f.add("A:1", "front", "door_station", "d_front", /*seed_cfg=*/true);
+  auto& joiner = f.add("J:1", "newpad", "indoor_panel", "", /*seed_cfg=*/false,
+                       /*zero_psk=*/true);
+  REQUIRE(host.node->start());
+  REQUIRE(joiner.node->start());
+  auto pendingCount = [&] {
+    auto d = pairingDoc(*host.node);
+    return cJSON_GetArraySize(json::get(json::get(d.get(), "pending"), "devices"));
+  };
+  REQUIRE([&] {
+    for (int i = 0; i < 200; i++) {
+      f.run(50);
+      if (pendingCount() > 0) return true;
+    }
+    return false;
+  }());
+
+  host.node->denyDevice(joiner.node->nodeId());
+  f.run(500);
+  CHECK(pendingCount() == 0);
+  host.node->stop();
+  joiner.node->stop();
+}
+
+TEST_CASE("pairing: a PIN join reports join_result before paired and never fakes success") {
+  // ui イベントの中で type と一致する最初の位置。順序の検証に使う。
+  auto indexOf = [](const std::vector<std::string>& ui, const std::string& type) {
+    for (size_t i = 0; i < ui.size(); i++) {
+      auto d = json::parse(ui[i]);
+      if (d && json::getString(d.get(), "t") == type) return static_cast<int>(i);
+    }
+    return -1;
+  };
+  // 真偽値フィールド用。lastEventField は文字列専用なので流用できない。
+  auto lastEventBool = [](const std::vector<std::string>& ui, const std::string& type,
+                          const char* field) {
+    bool out = false;
+    for (const auto& e : ui) {
+      auto d = json::parse(e);
+      if (!d || json::getString(d.get(), "t") != type) continue;
+      out = json::getBool(d.get(), field);
+    }
+    return out;
+  };
+
+  SUBCASE("a secure-store failure is reported as persist_failed, not as a joined cluster") {
+    NFleet f;
+    auto& host = f.add("A:1", "front", "door_station", "d_front", /*seed_cfg=*/true);
+    auto& joiner = f.add("J:1", "newpad", "indoor_panel", "", /*seed_cfg=*/false,
+                         /*zero_psk=*/true);
+    joiner.node->setSecureStore([](const std::string&) { return std::string(); },
+                                [](const std::string&, const std::string&) { return false; });
+    REQUIRE(host.node->start());
+    auto started = json::parse(host.node->startPairingJson(600));
+    REQUIRE(started);
+    REQUIRE(json::getBool(started.get(), "ok"));
+    // PIN だけを試すので「まとめて追加」は切る。付けたままだと自動招待が先に成立して
+    // どちらの経路で参加したのか分からなくなる。
+    host.node->setPairingMode(0);
+    f.run(20);
+
+    // 招待が届かないことを確かめてから新端末を起動する。
+    REQUIRE(joiner.node->start());
+    f.run(50);
+    CHECK(pairingState(*joiner.node) == "unpaired");
+
+    joiner.node->joinCluster("A:1", json::getString(started.get(), "pin"));
+    REQUIRE([&] {
+      for (int i = 0; i < 200; i++) {
+        f.run(50);
+        if (joiner.uiCount("join_result") >= 1) return true;
+      }
+      return false;
+    }());
+    CHECK(joiner.uiCount("join_result") == 1);
+    CHECK_FALSE(lastEventBool(joiner.ui, "join_result", "ok"));
+    CHECK(lastEventField(joiner.ui, "join_result", "err") == "persist_failed");
+    CHECK(joiner.uiCount("paired") == 0);
+    CHECK(joiner.uiCount("pairing_persistence_error") == 1);
+    CHECK(pairingState(*joiner.node) == "persist_error");
+    for (const auto& event : joiner.ui) CHECK(event.find("psk_hex") == std::string::npos);
+
+    // C7: 再試行が通れば join をやり直さずに ready になる。
+    joiner.node->setSecureStore([](const std::string&) { return std::string(); },
+                                [](const std::string&, const std::string&) { return true; });
+    CHECK(joiner.node->retryPairingPersistence());
+    f.run(50);
+    CHECK(joiner.uiCount("paired") == 1);
+    CHECK(pairingState(*joiner.node) == "ready");
+    host.node->stop();
+    joiner.node->stop();
+  }
+
+  SUBCASE("a successful join emits join_result ahead of paired and pairing_state ready") {
+    NFleet f;
+    auto& host = f.add("A:1", "front", "door_station", "d_front", /*seed_cfg=*/true);
+    auto& joiner = f.add("J:1", "newpad", "indoor_panel", "", /*seed_cfg=*/false,
+                         /*zero_psk=*/true);
+    joiner.node->setSecureStore([](const std::string&) { return std::string(); },
+                                [](const std::string&, const std::string&) { return true; });
+    REQUIRE(host.node->start());
+    auto started = json::parse(host.node->startPairingJson(600));
+    REQUIRE(started);
+    REQUIRE(json::getBool(started.get(), "ok"));
+    // PIN だけを試すので「まとめて追加」は切る。付けたままだと自動招待が先に成立して
+    // どちらの経路で参加したのか分からなくなる。
+    host.node->setPairingMode(0);
+    f.run(20);
+
+    // 招待が届かないことを確かめてから新端末を起動する。
+    REQUIRE(joiner.node->start());
+    f.run(50);
+    CHECK(pairingState(*joiner.node) == "unpaired");
+
+    joiner.node->joinCluster("A:1", json::getString(started.get(), "pin"));
+    REQUIRE([&] {
+      for (int i = 0; i < 200; i++) {
+        f.run(50);
+        if (joiner.uiCount("paired") >= 1) return true;
+      }
+      return false;
+    }());
+    const int join_at = indexOf(joiner.ui, "join_result");
+    const int paired_at = indexOf(joiner.ui, "paired");
+    REQUIRE(join_at >= 0);
+    REQUIRE(paired_at >= 0);
+    CHECK(join_at < paired_at);
+    CHECK(lastEventBool(joiner.ui, "join_result", "ok"));
+    CHECK(lastEventField(joiner.ui, "pairing_state", "state") == "ready");
+    CHECK_FALSE(json::getBool(pairingDoc(*joiner.node).get(), "is_founder"));
+    host.node->stop();
+    joiner.node->stop();
+  }
+
+  SUBCASE("a wrong PIN reports bad_pin and leaves the node unpaired") {
+    NFleet f;
+    auto& host = f.add("A:1", "front", "door_station", "d_front", /*seed_cfg=*/true);
+    auto& joiner = f.add("J:1", "newpad", "indoor_panel", "", /*seed_cfg=*/false,
+                         /*zero_psk=*/true);
+    REQUIRE(host.node->start());
+    REQUIRE(json::getBool(json::parse(host.node->startPairingJson(600)).get(), "ok"));
+    // PIN だけを試すので「まとめて追加」は切る。付けたままだと自動招待が先に成立して
+    // どちらの経路で参加したのか分からなくなる。
+    host.node->setPairingMode(0);
+    f.run(20);
+
+    // 招待が届かないことを確かめてから新端末を起動する。
+    REQUIRE(joiner.node->start());
+    f.run(50);
+    CHECK(pairingState(*joiner.node) == "unpaired");
+
+    joiner.node->joinCluster("A:1", "000000");
+    REQUIRE([&] {
+      for (int i = 0; i < 200; i++) {
+        f.run(50);
+        if (joiner.uiCount("join_result") >= 1) return true;
+      }
+      return false;
+    }());
+    CHECK_FALSE(lastEventBool(joiner.ui, "join_result", "ok"));
+    CHECK(lastEventField(joiner.ui, "join_result", "err") == "bad_pin");
+    CHECK(joiner.uiCount("paired") == 0);
+    CHECK(pairingState(*joiner.node) == "unpaired");
+    CHECK(lastEventField(joiner.ui, "pairing_state", "state") == "unpaired");
+    host.node->stop();
+    joiner.node->stop();
+  }
+}
+
+TEST_CASE("pairing: pairing mode is refused while the node is not in a cluster") {
+  NFleet f;
+  auto& node = f.add("A:1", "front", "door_station", "d_front", true, /*zero_psk=*/true);
+  REQUIRE(node.node->start());
+  auto started = json::parse(node.node->startPairingJson(600));
+  REQUIRE(started);
+  CHECK_FALSE(json::getBool(started.get(), "ok"));
+  CHECK(json::getString(started.get(), "err") == "host_unpaired");
+
+  node.node->setPairingMode(600);
+  f.run(50);
+  auto d = pairingDoc(*node.node);
+  REQUIRE(d);
+  CHECK_FALSE(json::getBool(json::get(d.get(), "pending"), "pairing_mode"));
+  node.node->stop();
+}

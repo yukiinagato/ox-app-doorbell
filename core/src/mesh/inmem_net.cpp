@@ -25,6 +25,8 @@ struct NetState {
   std::map<std::string, std::function<void(ConnPtr)>> listeners;   // listen addr → on_accept
   std::map<std::string, std::function<void(const DiscoveredPeer&)>> discoveries;  // addr → cb
   std::map<std::string, std::function<void(const PairBeacon&)>> pair_found;
+  // Mirrors the UDP beacon MAC: a HELLO is delivered only between nodes that share a cluster key.
+  std::map<std::string, std::array<uint8_t, 32>> disc_psk;
   std::set<std::string> killed;
   std::map<std::string, int> group;
   double drop_prob = 0.0;
@@ -205,37 +207,49 @@ class InMemDiscovery : public IDiscovery {
     if (it != net_->discoveries.end()) net_->discoveries.erase(it);
     auto pit = net_->pair_found.find(addr_);
     if (pit != net_->pair_found.end()) net_->pair_found.erase(pit);
+    auto kit = net_->disc_psk.find(addr_);
+    if (kit != net_->disc_psk.end()) net_->disc_psk.erase(kit);
   }
 
-  void setPairAnnounce(bool on, const std::string& name, const std::string& role,
-                       const std::string& pk) override {
-    pair_on_ = on;
-    pair_name_ = name;
-    pair_role_ = role;
-    pair_pk_ = pk;
-  }
+  void setPairAnnounce(const PairAnnounce& announce) override { pair_ = announce; }
 
   void setPairFound(std::function<void(const PairBeacon&)> cb) override {
     net_->pair_found[addr_] = std::move(cb);
   }
 
+  void setPsk(const std::array<uint8_t, 32>& psk) override {
+    psk_ = psk;
+    net_->disc_psk[addr_] = psk;
+  }
+
  private:
+  static bool usable(const std::array<uint8_t, 32>& psk) {
+    for (uint8_t b : psk)
+      if (b) return true;
+    return false;
+  }
+
   void broadcast_() {
     if (net_->killed.count(addr_)) return;
-    if (pair_on_) {
+    if (pair_.on) {
       for (auto& kv : net_->pair_found) {
-        if (kv.first == addr_) continue;
+        if (kv.first == addr_ || !kv.second) continue;
         if (!net_->reachable(addr_, kv.first)) continue;
         if (net_->dropFrame()) continue;
-        PairBeacon pb{node_id_, adv_addr_, pair_name_, pair_role_, pair_pk_};
+        PairBeacon pb{node_id_, adv_addr_, pair_.name, pair_.role,
+                      pair_.pk,  pair_.model, pair_.platform, pair_.sw};
         auto cb = kv.second;
         net_->loop.post([cb, pb]() { cb(pb); });
       }
       return;
     }
+    // Only a keyed HELLO is discoverable, and only by a receiver holding the same key.
+    if (!usable(psk_)) return;
     for (auto& kv : net_->discoveries) {
-      if (kv.first == addr_) continue;
+      if (kv.first == addr_ || !kv.second) continue;
       if (!net_->reachable(addr_, kv.first)) continue;
+      auto peer_key = net_->disc_psk.find(kv.first);
+      if (peer_key == net_->disc_psk.end() || peer_key->second != psk_) continue;
       if (net_->dropFrame()) continue;
       DiscoveredPeer p{node_id_, adv_addr_};
       auto cb = kv.second;
@@ -246,8 +260,8 @@ class InMemDiscovery : public IDiscovery {
   std::shared_ptr<NetState> net_;
   std::string addr_;
   std::string node_id_, adv_addr_;
-  bool pair_on_ = false;
-  std::string pair_name_, pair_role_, pair_pk_;
+  PairAnnounce pair_;
+  std::array<uint8_t, 32> psk_{};
   uint64_t timer_id_ = 0;
 };
 
@@ -295,6 +309,7 @@ void InMemNet::killNode(const std::string& addr) {
   net.listeners.erase(addr);
   net.discoveries.erase(addr);
   net.pair_found.erase(addr);
+  net.disc_psk.erase(addr);
   severIf(net, [&addr](const std::string& a, const std::string& b) { return a == addr || b == addr; });
 }
 
