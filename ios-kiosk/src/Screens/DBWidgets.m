@@ -56,7 +56,24 @@ NSString *DBHexFromColor(UIColor *color) {
 
 @implementation DBThemeBackdrop
 
-+ (CGFloat)darkeningAlpha { return 0.45; }
+// Spec 5.1 wants the picture legible behind cards and text, not a wash. Just
+// over 60 % black keeps the photograph readable as a photograph while the ink
+// rule still finds contrast for every region over it.
++ (CGFloat)darkeningAlpha { return 0.62; }
+
++ (CGFloat)maximumLongSide { return 512; }
+
+// The prepared bitmap keeps the panel's aspect ratio but never exceeds 512 pt
+// on its long side: the view scales it back up with aspect fill, which maps
+// one to one because the ratio matches, and an SGX535 holds a quarter of the
+// texture it used to.
++ (CGSize)preparedSizeForViewSize:(CGSize)size {
+  CGFloat longSide = MAX(size.width, size.height);
+  if (longSide <= 0 || longSide <= [self maximumLongSide]) return size;
+  CGFloat scale = [self maximumLongSide] / longSide;
+  return CGSizeMake(MAX(1, floorf((float)(size.width * scale))),
+                    MAX(1, floorf((float)(size.height * scale))));
+}
 
 + (NSMutableDictionary *)cache {
   static NSMutableDictionary *cache = nil;
@@ -82,13 +99,15 @@ NSString *DBHexFromColor(UIColor *color) {
   UIImage *source = data ? [UIImage imageWithData:data] : nil;
   if (source == nil || source.size.width <= 0 || source.size.height <= 0) return nil;
 
-  // One draw at panel size, scale 1: the iPad 1 is not a Retina device and a
-  // 2x context would quadruple the texture for nothing.
-  UIGraphicsBeginImageContextWithOptions(size, YES, 1.0);
-  CGRect fill = DBAspectFitRectForFill(source.size, size);
+  // One draw, scale 1: the iPad 1 is not a Retina device and a 2x context would
+  // quadruple the texture for nothing.
+  CGSize preparedSize = [self preparedSizeForViewSize:size];
+  UIGraphicsBeginImageContextWithOptions(preparedSize, YES, 1.0);
+  CGRect fill = DBAspectFitRectForFill(source.size, preparedSize);
   [source drawInRect:fill];
   [[UIColor colorWithWhite:0 alpha:[self darkeningAlpha]] set];
-  UIRectFillUsingBlendMode(CGRectMake(0, 0, size.width, size.height), kCGBlendModeNormal);
+  UIRectFillUsingBlendMode(CGRectMake(0, 0, preparedSize.width, preparedSize.height),
+                           kCGBlendModeNormal);
   UIImage *prepared = UIGraphicsGetImageFromCurrentImageContext();
   UIGraphicsEndImageContext();
   if (prepared == nil) return nil;
@@ -979,6 +998,10 @@ static const CGFloat kFleetPadX = 9;
 
 #pragma mark - admin QR
 
+// The address label shrinks between these before anything is dropped.
+static const CGFloat kQrUrlMaxPt = 15;
+static const CGFloat kQrUrlMinPt = 9;
+
 @implementation DBAdminQrView {
   UIImageView *_image;
   UILabel *_urlLabel;
@@ -1009,9 +1032,15 @@ static const CGFloat kFleetPadX = 9;
 
     _urlLabel = [[UILabel alloc] init];
     _urlLabel.backgroundColor = [UIColor clearColor];
-    _urlLabel.font = [UIFont systemFontOfSize:15];
-    _urlLabel.numberOfLines = 2;
-    _urlLabel.lineBreakMode = NSLineBreakByCharWrapping;
+    _urlLabel.font = [UIFont systemFontOfSize:kQrUrlMaxPt];
+    // One line across the whole remaining width, shrinking to 9 pt before it
+    // gives up. Character wrapping used to put the address on a second line
+    // that the row is not tall enough to show, which is why it arrived as
+    // "http://10.10.38.147:47180/admi".
+    _urlLabel.numberOfLines = 1;
+    _urlLabel.lineBreakMode = NSLineBreakByTruncatingTail;
+    _urlLabel.adjustsFontSizeToFitWidth = YES;
+    _urlLabel.minimumFontSize = kQrUrlMinPt;
     [self addSubview:_urlLabel];
   }
   return self;
@@ -1030,8 +1059,9 @@ static const CGFloat kFleetPadX = 9;
     _urlLabel.text = @"";
     return;
   }
-  _urlLabel.text = url;
-  if ([_url isEqualToString:url] && _image.image != nil) return;
+  BOOL sameUrl = [_url isEqualToString:url];
+  [self setNeedsLayout];
+  if (sameUrl && _image.image != nil) return;
   _url = [url copy];
   NSInteger generation = ++_generation;
   NSString *want = [url copy];
@@ -1048,6 +1078,20 @@ static const CGFloat kFleetPadX = 9;
   });
 }
 
+// The address a person has to read off the screen, in the longest form that
+// fits the width at the smallest font we allow. The host and port are the part
+// they actually have to type, so the path goes first and the scheme second;
+// only a width too narrow for the host alone can truncate inside it.
+- (NSString *)addressForWidth:(CGFloat)width {
+  NSArray *candidates = [DBAdminAddress formsForUrl:_url];
+  if ([candidates count] == 0) return @"";
+  UIFont *smallest = [UIFont systemFontOfSize:kQrUrlMinPt];
+  for (NSString *candidate in candidates) {
+    if ([candidate sizeWithFont:smallest].width <= width) return candidate;
+  }
+  return [candidates lastObject];
+}
+
 - (void)layoutSubviews {
   [super layoutSubviews];
   CGSize size = self.bounds.size;
@@ -1058,6 +1102,7 @@ static const CGFloat kFleetPadX = 9;
   _caption.frame = CGRectMake(textX, (size.height - side) / 2, textW, 26);
   // The address gets the whole remaining width on one line.
   _urlLabel.frame = CGRectMake(textX, (size.height - side) / 2 + 28, textW, 24);
+  _urlLabel.text = [self addressForWidth:textW];
 }
 
 @end

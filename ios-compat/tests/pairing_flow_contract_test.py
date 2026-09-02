@@ -247,6 +247,22 @@ class ReadabilityContracts(unittest.TestCase):
         # the main thread; the sampler then measures what is actually drawn.
         self.assertIn("DBThemeBackdrop cachedBackdropForKey:want size:size", load)
         self.assertIn("DBThemeBackdrop backdropForData:data key:want size:size", load)
+        # The prepared bitmap is bounded and the darkening is deep enough to
+        # read text over a bright wallpaper. Spec 5.1 wants the picture, so a
+        # flat ground has to say which fault put it there.
+        self.assertIn("+ (CGFloat)maximumLongSide { return 512; }", widgets)
+        self.assertIn("+ (CGFloat)darkeningAlpha { return 0.62; }", widgets)
+        self.assertIn("preparedSizeForViewSize:size", widgets)
+        for reason in ('@"safe_mode"', '@"no_theme_image_configured"',
+                       '@"theme_asset_fetch_failed"', '@"theme_asset_decode_failed"'):
+            self.assertIn(reason, home)
+        # The admin address is one line that shrinks before it truncates, and
+        # the host is the last thing to go.
+        self.assertIn("_urlLabel.numberOfLines = 1;", widgets)
+        self.assertIn("_urlLabel.adjustsFontSizeToFitWidth = YES;", widgets)
+        self.assertIn("_urlLabel.minimumFontSize = kQrUrlMinPt;", widgets)
+        self.assertIn("static const CGFloat kQrUrlMinPt = 9;", widgets)
+        self.assertIn("- (NSString *)addressForWidth:", widgets)
         # ...and a sampler built for another view size is ignored, so a
         # rotation falls back rather than reading the wrong pixels.
         self.assertIn("- (DBBackgroundSampler *)samplerForViewSize:", widgets)

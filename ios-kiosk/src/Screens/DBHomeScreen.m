@@ -120,6 +120,7 @@ static const NSInteger kRecentCallLimit = 20;
   NSString *_nodeId;
   NSString *_themeHash;
   NSString *_themeAverageHex;   // Whole-image average, the fallback background.
+  NSString *_themeFallbackReason;   // Why the picture is not on screen.
   UIImage *_themeImage;
   DBBackgroundSampler *_sampler;   // Per-region sampling of the theme image.
   CGSize _samplerSize;
@@ -608,8 +609,20 @@ static const NSInteger kRecentCallLimit = 20;
   _offlineBody.textColor = _palette.mutedInk;
 }
 
+// Why the dashboard is on a flat ground rather than the theme picture. The two
+// answers look identical on screen and are entirely different faults, so the
+// panel says which one it is exactly once per transition.
+- (void)noteThemeFallback:(NSString *)reason {
+  if ([_themeFallbackReason isEqualToString:reason]) return;
+  _themeFallbackReason = [reason copy];
+  if ([reason length] > 0)
+    NSLog(@"[doorbell] dashboard is on the flat auto background: %@", reason);
+}
+
 - (void)applyTheme {
   if (_safeMode) {
+    // Safe mode disables custom visuals by contract; the picture is one.
+    [self noteThemeFallback:@"safe_mode"];
     _themeHash = nil;
     _themeAverageHex = nil;
     _themeImage = nil;
@@ -623,6 +636,7 @@ static const NSInteger kRecentCallLimit = 20;
   UIColor *parsed = color ? [DBConfigUtil parseHexColor:color] : nil;
   NSString *hash = [self themeValue:@"bg_image"];
   if ([hash length] == 0) {
+    [self noteThemeFallback:@"no_theme_image_configured"];
     _themeHash = nil;
     _themeAverageHex = nil;
     _themeImage = nil;
@@ -650,14 +664,17 @@ static const NSInteger kRecentCallLimit = 20;
     // One decode, at panel size, darkened once and cached per picture and
     // size; the sampler then measures the very pixels that are on screen.
     UIImage *backdrop = [DBThemeBackdrop cachedBackdropForKey:want size:size];
+    NSData *data = nil;
     if (backdrop == nil) {
-      NSData *data = [NSData dataWithContentsOfURL:url];
+      data = [NSData dataWithContentsOfURL:url];
       backdrop = [DBThemeBackdrop backdropForData:data key:want size:size];
     }
     NSString *average = [DBUiPalette averageHexForImage:backdrop];
     dispatch_async(dispatch_get_main_queue(), ^{
       DBHomeScreen *screen = weakSelf;
       if (!screen || ![screen->_themeHash isEqualToString:want]) return;
+      [screen noteThemeFallback:(backdrop != nil) ? @""
+          : ([data length] == 0 ? @"theme_asset_fetch_failed" : @"theme_asset_decode_failed")];
       screen->_themeBg.image = backdrop;
       screen->_themeBg.hidden = (backdrop == nil);
       screen->_themeAverageHex = average;
