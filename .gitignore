@@ -39,6 +39,8 @@ android/.gradle/
 android/local.properties
 android/**/build/
 android/**/.cxx/
+# Kotlin build tooling session state (AGP 8 / Kotlin 2 writes this next to the module).
+android/.kotlin/
 
 # ios (run-script が CMake で生成する core 静的 lib 置き場)
 ios/build/

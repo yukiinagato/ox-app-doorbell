@@ -49,6 +49,8 @@ class RuntimeSupervisor(private val app: App) {
     private var encoderExhausted = false
     private var encoderRetryAtMs = 0L
     private var cameraRetryAtMs = 0L
+    // While a foreground QR scanner owns the preview, the supervisor leaves the camera alone.
+    @Volatile private var scannerActive = false
     private var lastHelperHeartbeatMs = 0L
     private var lastRuntimeHeartbeatMs = 0L
     private var lastCapabilityPublishMs = 0L
@@ -123,6 +125,42 @@ class RuntimeSupervisor(private val app: App) {
     fun onPermissionsChanged() {
         handler.post { if (running && isCoreReady) ensureCamera() }
     }
+
+    /**
+     * Lend the Camera1 capture path to a foreground QR scanner so it can show a preview while
+     * frames keep reaching Core. A door station's headless capture is restarted on release.
+     * The result is reported on the caller's handler.
+     */
+    fun acquireScannerPreview(holder: android.view.SurfaceHolder, done: (Boolean) -> Unit) {
+        handler.post {
+            if (!hasCameraPermission()) {
+                scannerActive = false
+                done(false)
+                return@post
+            }
+            restartCamera()
+            scannerActive = true
+            val started = camera.start(holder, SCANNER_WIDTH, SCANNER_HEIGHT, 0, preferBack = true)
+            if (!started) {
+                scannerActive = false
+                cameraRetryAtMs = 0L
+            }
+            done(started)
+        }
+    }
+
+    /** Return the capture path to its normal owner. */
+    fun releaseScannerPreview() {
+        handler.post {
+            if (!scannerActive) return@post
+            scannerActive = false
+            restartCamera()
+            if (running && isCoreReady) ensureCamera()
+        }
+    }
+
+    /** A device with no usable camera hides the scan entry point instead of failing later. */
+    fun hasCamera(): Boolean = CameraFeeder.deviceHasCamera()
 
     fun onConfigChanged() {
         handler.post {
@@ -258,6 +296,7 @@ class RuntimeSupervisor(private val app: App) {
         app.checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
 
     private fun ensureCamera() {
+        if (scannerActive) return
         if (app.boot.role != "door_station" || cameraStarted) return
         if (SystemClock.elapsedRealtime() < cameraRetryAtMs) return
         if (!hasCameraPermission()) {
@@ -284,6 +323,7 @@ class RuntimeSupervisor(private val app: App) {
     }
 
     private fun updateEncoderDemand() {
+        if (scannerActive) return
         if (!cameraStarted || app.boot.role != "door_station") return
         if (safeMode) {
             camera.encoder = null
@@ -603,6 +643,9 @@ class RuntimeSupervisor(private val app: App) {
     companion object {
         private const val TAG = "doorbell-runtime"
         private const val CAMERA_RETRY_MS = 5_000L
+        // The core QR decoder wants detail, not frame rate; this survives legacy19 hardware.
+        private const val SCANNER_WIDTH = 640
+        private const val SCANNER_HEIGHT = 480
         private const val MEMORY_CODEC_PAUSE_MS = 30_000L
         private const val HELPER_HEARTBEAT_MS = 5_000L
         private const val RUNTIME_HEARTBEAT_MS = 10_000L

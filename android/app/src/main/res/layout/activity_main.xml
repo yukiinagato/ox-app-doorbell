@@ -297,6 +297,31 @@
         android:focusable="false"
         android:visibility="gone"/>
 
+    <!-- Persistent "not set up" banner; visible until the cluster state is ready. -->
+    <TextView
+        android:id="@+id/pairing_banner"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|start"
+        android:layout_marginStart="16dp"
+        android:layout_marginLeft="16dp"
+        android:layout_marginEnd="130dp"
+        android:layout_marginRight="130dp"
+        android:layout_marginBottom="16dp"
+        android:background="#243244"
+        android:clickable="true"
+        android:focusable="true"
+        android:minHeight="48dp"
+        android:gravity="center_vertical"
+        android:paddingLeft="14dp"
+        android:paddingTop="10dp"
+        android:paddingRight="14dp"
+        android:paddingBottom="10dp"
+        android:text="@string/pair_not_set_up_banner"
+        android:textColor="#FFFFFF"
+        android:textSize="15sp"
+        android:visibility="gone"/>
+
     <Button
         android:id="@+id/sos_button"
         android:layout_width="wrap_content"

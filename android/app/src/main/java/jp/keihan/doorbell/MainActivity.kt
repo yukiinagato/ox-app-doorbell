@@ -56,6 +56,7 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
     private lateinit var callButton: Button
     private lateinit var touchHint: TextView
     private lateinit var nodeInfo: TextView
+    private lateinit var pairingBanner: TextView
     private lateinit var purposeSection: View
     private lateinit var purposeHint: TextView
     private lateinit var purposeAutoHint: TextView
@@ -158,13 +159,21 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
         SosHoldTrigger.bind(sosButton, ui, { app.coreOk }) { app.commitEmergency(true) }
         // Hidden maintenance entry: seven taps in the top-right corner within five seconds.
         findViewById<View>(R.id.secret_corner).setOnClickListener { playButtonSound(); onSecretCorner() }
+        // The membership status is the visible, documented way into the Add-device panel.
+        nodeInfo.setOnClickListener {
+            AdminPinDialog.show(this, filesDir) { openAddDevice() }
+        }
+        pairingBanner.setOnClickListener {
+            app.resumePairingSetup()
+            PairingActivity.launch(this)
+        }
 
         tts = TextToSpeech(this) { status -> ttsReady = status == TextToSpeech.SUCCESS }
 
         requestPermissionsIfNeeded()
 
-        // Register as the foreground destination for events owned by App.
-        app.activityListener = this
+        // The foreground registration itself happens in onResume so a screen opened above this
+        // one (pairing, maintenance) can never leave the main UI without Core events.
         if (!app.coreOk) showOffline() else restoreCurrentCallUi()
         refreshNodeInfo()
         restoreRequestedCall(intent)
@@ -187,8 +196,12 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
             return
         }
         setupLaunchRequested = false
+        // Re-register on every resume: a pairing or maintenance screen closing above this one
+        // must hand the event stream back, or chimes and display events are lost until restart.
+        app.bindForeground(this)
         // Keep unenrolled devices in the pairing flow.
         if (maybeShowPairing()) return
+        refreshMembership()
         enterImmersive()
         ui.post(clockTick)
         if (choosingPurpose) ui.postDelayed(purposeTimeout, PURPOSE_TIMEOUT_MS)
@@ -202,23 +215,83 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
         }
     }
 
-    /** Opens pairing until both the mesh transition and secure persistence have completed. */
+    /**
+     * Opens onboarding until Core reports "ready" and the shell holds its own durable secure
+     * reference. Once the operator chose "set up later" the main UI stays visible and only the
+     * banner remains, so there is no relaunch loop.
+     */
     private fun maybeShowPairing(): Boolean {
         if (!app.coreOk) return false
-        val pairing = app.core.pairingInfo() ?: return false
-        if (app.pairingPersistence.canMarkReady(
-                pairing.optBoolean("paired"),
-                pairing.optBoolean("persistence_ready"),
-                BootConfig.hasSecureMeshReference(app.boot.rawJson),
-            )) return false
-        startActivity(android.content.Intent(this, PairingActivity::class.java))
+        if (app.core.pairingInfo() == null) return false
+        if (app.pairingReady()) return false
+        if (app.pairingDeferred) return false
+        PairingActivity.launch(this)
         return true
+    }
+
+    /** Membership status replaces the raw node identifier, and opens the Add-device panel. */
+    private fun refreshMembership() {
+        val ready = app.pairingReady()
+        pairingBanner.visibility = if (ready) View.GONE else View.VISIBLE
+        if (!ready) {
+            pairingBanner.text = texts.t(
+                "pair.not_set_up_banner", R.string.pair_not_set_up_banner,
+            )
+            nodeInfo.text = texts.t("pair.not_set_up_banner", R.string.pair_not_set_up_banner)
+            return
+        }
+        val pairing = app.core.pairingInfo()
+        val parts = ArrayList<String>(3)
+        parts.add(texts.t("pair.membership", R.string.pair_membership,
+                          PairingModel.memberCount(pairing).toString()))
+        parts.add(texts.t("pair.membership_connected", R.string.pair_membership_connected,
+                          PairingModel.connectedCount(pairing).toString()))
+        if (PairingModel.isFounder(pairing))
+            parts.add(texts.t("pair.created_badge", R.string.pair_created_badge))
+        nodeInfo.text = parts.joinToString(" · ")
+    }
+
+    /** Everything behind the admin password: information, adding devices, setup, kiosk exit. */
+    private fun showMaintenanceMenu() {
+        val labels = arrayOf<CharSequence>(
+            texts.t("admin.menu_info", R.string.admin_menu_info),
+            texts.t("admin.menu_add_device", R.string.admin_menu_add_device),
+            texts.t("admin.menu_boot_setup", R.string.admin_menu_boot_setup),
+            texts.t("admin.menu_exit_kiosk", R.string.admin_menu_exit_kiosk),
+        )
+        android.app.AlertDialog.Builder(this)
+            .setTitle(texts.t("admin.menu_title", R.string.admin_menu_title))
+            .setItems(labels) { _, which ->
+                when (which) {
+                    0 -> DeviceInfoActivity.launch(this)
+                    1 -> openAddDevice()
+                    2 -> startActivity(BootSetupActivity.reentryIntent(this))
+                    3 -> exitKiosk()
+                }
+            }
+            .setNegativeButton(texts.t("admin.menu_close", R.string.admin_menu_close), null)
+            .show()
+    }
+
+    private fun openAddDevice() {
+        if (app.pairingReady()) AddDeviceActivity.launch(this)
+        else {
+            app.resumePairingSetup()
+            PairingActivity.launch(this)
+        }
+    }
+
+    private fun exitKiosk() {
+        adminUnlocked = true
+        app.runtime.kioskController.leaveForMaintenance(this)
+        finish()
     }
 
     override fun onPause() {
         sensorManager.unregisterListener(this)
         ui.removeCallbacks(clockTick)
         ui.removeCallbacks(purposeTimeout)
+        app.unbindForeground(this)
         super.onPause()
     }
 
@@ -263,7 +336,7 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
     }
 
     override fun onDestroy() {
-        if (app.activityListener === this) app.activityListener = null
+        app.unbindForeground(this)
         tts?.shutdown()
         try { audio?.release() } catch (_: Exception) { }
         audio = null
@@ -300,6 +373,7 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
         callButton = findViewById(R.id.call_button)
         touchHint = findViewById(R.id.touch_hint)
         nodeInfo = findViewById(R.id.node_info)
+        pairingBanner = findViewById(R.id.pairing_banner)
         purposeSection = findViewById(R.id.purpose_section)
         purposeHint = findViewById(R.id.purpose_hint)
         purposeAutoHint = findViewById(R.id.purpose_auto_hint)
@@ -353,10 +427,8 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
         refreshConfigCache()
         val st = app.core.status()
         val node = st?.optJSONObject("node")
-        if (node != null) {
-            nodeInfo.text = node.optString("name") + " · v" + node.optString("version")
-            nodeId = node.optString("id")
-        }
+        if (node != null) nodeId = node.optString("id")
+        refreshMembership()
         // Recover replicated visitor language from status after restart.
         if (st != null && app.boot.role == "door_station" && app.boot.door.isNotEmpty()) {
             val vl = app.core.dig(st, "visitor_lang.${app.boot.door}")
@@ -828,6 +900,9 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
         when (ev.optString("t")) {
             "runtime" -> {
                 if (ev.optString("state") == "ready") {
+                    // Core only publishes pairing state once its runtime is up, so the
+                    // membership check is repeated here rather than only in onResume.
+                    if (maybeShowPairing()) return
                     refreshNodeInfo()
                     restoreCurrentCallUi()
                     restoreRequestedCall(intent)
@@ -842,6 +917,7 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
                     releasePlayer(launchAudio); launchAudio = null
                 }
             }
+            "pairing_state", "pairing_revoked", "peers_changed" -> refreshMembership()
             "safe_mode" -> {
                 if (ev.optBoolean("active")) {
                     pulse.clearAnimation()
@@ -1191,11 +1267,7 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
         if (now - secretFirstMs > 5000) { secretFirstMs = now; secretTaps = 0 }
         if (++secretTaps < 7) return
         secretTaps = 0
-        AdminPinDialog.show(this, filesDir) {
-            adminUnlocked = true
-            app.runtime.kioskController.leaveForMaintenance(this)
-            finish()
-        }
+        AdminPinDialog.show(this, filesDir) { showMaintenanceMenu() }
     }
 
     private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()

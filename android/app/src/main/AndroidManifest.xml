@@ -79,10 +79,36 @@
             android:exported="false"
             android:launchMode="singleTop"/>
 
-        <!-- Pairing UI for QR display and PIN-based enrollment. -->
+        <!-- Onboarding for a device that is not a cluster member yet. -->
         <activity
             android:name=".PairingActivity"
             android:configChanges="orientation|screenSize|keyboardHidden|screenLayout"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:launchMode="singleTop"
+            android:windowSoftInputMode="adjustResize"/>
+
+        <!-- Add-device panel: nearby list, Pairing PIN card, bulk add, own QR. -->
+        <activity
+            android:name=".AddDeviceActivity"
+            android:configChanges="orientation|screenSize|keyboardHidden|screenLayout"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:launchMode="singleTop"/>
+
+        <!-- Add-QR scanner; decoding happens in Core, not in a bundled library. -->
+        <activity
+            android:name=".QrScanActivity"
+            android:configChanges="orientation|screenSize|keyboardHidden|screenLayout"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:launchMode="singleTop"/>
+
+        <!-- Diagnostics behind the admin password. -->
+        <activity
+            android:name=".DeviceInfoActivity"
+            android:configChanges="orientation|screenSize|keyboardHidden|screenLayout"
+            android:excludeFromRecents="true"
             android:exported="false"
             android:launchMode="singleTop"/>
 

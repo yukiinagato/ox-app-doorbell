@@ -157,6 +157,12 @@ Delete it?</value></data>
   <data name="admin_locked" xml:space="preserve"><value>Admin password entry locked for 10 minutes</value></data>
   <data name="admin_login" xml:space="preserve"><value>Log in</value></data>
   <data name="admin_logs" xml:space="preserve"><value>Logs</value></data>
+  <data name="admin_menu_add_device" xml:space="preserve"><value>Add a device</value></data>
+  <data name="admin_menu_boot_setup" xml:space="preserve"><value>Initial setup</value></data>
+  <data name="admin_menu_close" xml:space="preserve"><value>Close</value></data>
+  <data name="admin_menu_exit_kiosk" xml:space="preserve"><value>Exit kiosk</value></data>
+  <data name="admin_menu_info" xml:space="preserve"><value>Device information / Debug</value></data>
+  <data name="admin_menu_title" xml:space="preserve"><value>Maintenance</value></data>
   <data name="admin_mock_audio_play" xml:space="preserve"><value>mock: playing {0}</value></data>
   <data name="admin_motion" xml:space="preserve"><value>Motion detection</value></data>
   <data name="admin_motion_interval" xml:space="preserve"><value>Min interval (s)</value></data>
@@ -469,6 +475,7 @@ Delete it?</value></data>
   <data name="pair_err_timeout" xml:space="preserve"><value>No response. Try again</value></data>
   <data name="pair_err_unknown" xml:space="preserve"><value>Couldn't complete that. Please try again</value></data>
   <data name="pair_err_detail" xml:space="preserve"><value>Details: {0}</value></data>
+  <data name="pair_join_required" xml:space="preserve"><value>Enter the address and the Pairing PIN</value></data>
   <data name="pair_join_with_code" xml:space="preserve"><value>Join with a Pairing PIN</value></data>
   <data name="pair_joined" xml:space="preserve"><value>Joined the Cluster</value></data>
   <data name="pair_joining" xml:space="preserve"><value>Joining the Cluster…</value></data>
@@ -484,7 +491,9 @@ Delete it?</value></data>
   <data name="pair_qr_caption" xml:space="preserve"><value>Scan this QR from another device to add this one</value></data>
   <data name="pair_retry" xml:space="preserve"><value>Retry</value></data>
   <data name="pair_revoked" xml:space="preserve"><value>This device was removed from the Cluster</value></data>
+  <data name="pair_scan_camera_denied" xml:space="preserve"><value>Camera access is not allowed. Grant camera permission in the device settings.</value></data>
   <data name="pair_scan_hint" xml:space="preserve"><value>Point at the Add QR shown on the new device</value></data>
+  <data name="pair_scan_no_camera" xml:space="preserve"><value>This device has no camera. Scan from another device, or use a Pairing PIN.</value></data>
   <data name="pair_scan_qr" xml:space="preserve"><value>Scan QR</value></data>
   <data name="pair_searching" xml:space="preserve"><value>Looking for nearby devices…</value></data>
   <data name="pair_searching_hint" xml:space="preserve"><value>Press &quot;Add&quot; on a device already in the Cluster, or on the admin page</value></data>
