@@ -483,6 +483,8 @@ Delete it?</string>
     <string name="pair_retry">Retry</string>
     <string name="pair_revoked">This device was removed from the Cluster</string>
     <string name="pair_scan_hint">Point at the Add QR shown on the new device</string>
+    <string name="pair_scan_no_camera">This device\'s camera is unavailable. Scan from a device with a camera, or use a Pairing PIN instead</string>
+    <string name="pair_scan_opening">Starting the camera…</string>
     <string name="pair_scan_qr">Scan QR</string>
     <string name="pair_searching">Looking for nearby devices…</string>
     <string name="pair_searching_hint">Press &quot;Add&quot; on a device already in the Cluster, or on the admin page</string>

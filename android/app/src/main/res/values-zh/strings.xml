@@ -483,6 +483,8 @@
     <string name="pair_retry">重试</string>
     <string name="pair_revoked">此设备已从集群中移除</string>
     <string name="pair_scan_hint">请对准新设备上显示的添加二维码</string>
+    <string name="pair_scan_no_camera">无法使用此设备的摄像头。请改用带摄像头的设备扫描，或使用配对 PIN</string>
+    <string name="pair_scan_opening">正在启动摄像头…</string>
     <string name="pair_scan_qr">扫描二维码</string>
     <string name="pair_searching">正在查找附近设备…</string>
     <string name="pair_searching_hint">请在已加入集群的设备或管理页面上点击“添加”</string>

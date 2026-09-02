@@ -478,6 +478,8 @@
 "pair.retry" = "Retry";
 "pair.revoked" = "This device was removed from the Cluster";
 "pair.scan_hint" = "Point at the Add QR shown on the new device";
+"pair.scan_no_camera" = "This device's camera is unavailable. Scan from a device with a camera, or use a Pairing PIN instead";
+"pair.scan_opening" = "Starting the camera…";
 "pair.scan_qr" = "Scan QR";
 "pair.searching" = "Looking for nearby devices…";
 "pair.searching_hint" = "Press \"Add\" on a device already in the Cluster, or on the admin page";

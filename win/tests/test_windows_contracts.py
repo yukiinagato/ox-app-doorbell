@@ -34,6 +34,8 @@ class WindowsContracts(unittest.TestCase):
     def test_xaml_and_resources_are_well_formed(self):
         for path in [WIN / "DoorbellApp" / "MainWindow.xaml",
                      WIN / "DoorbellApp" / "App.xaml",
+                     WIN / "DoorbellApp" / "AdminDialog.xaml",
+                     *sorted((WIN / "DoorbellApp" / "Pairing").glob("*.xaml")),
                      *sorted((WIN / "DoorbellApp" / "Resources").glob("*.resx"))]:
             with self.subTest(path=path.name):
                 ET.parse(path)
@@ -43,13 +45,20 @@ class WindowsContracts(unittest.TestCase):
         fields = re.findall(r"public (?:uint|IntPtr) (\w+);",
                             source[source.index("struct DbPlatformV2"):source.index(
                                 "delegate void LogLineCb")])
+        # Fields are only appended; secure_delete is the newest and must stay last.
         self.assertEqual(fields, ["struct_size", "version", "user", "https_request",
                                  "secure_get", "secure_put", "log_line", "tts_speak",
-                                 "device_info", "release_buffer"])
+                                 "device_info", "release_buffer", "secure_delete"])
         client = read("win/DoorbellApp/Core/CoreClient.cs")
         self.assertIn("Marshal.SizeOf(typeof(CoreInterop.DbPlatformV2))", client)
         self.assertIn("Marshal.FreeHGlobal(buffer)", client)
         self.assertIn("db_core_create_v2", client)
+        self.assertIn("secure_delete = Marshal.GetFunctionPointerForDelegate(_secureDeleteCb)",
+                      client)
+        self.assertRegex(client, r"_secureDeleteCb = [\s\S]*?_secretStore\.Delete\("
+                                 r"[\s\S]*?\? 0 : -1")
+        self.assertIn("public bool Delete(string key)",
+                      read("win/DoorbellApp/Core/DpapiSecretStore.cs"))
 
     def test_native_zero_success_is_not_inverted(self):
         client = read("win/DoorbellApp/Core/CoreClient.cs")
@@ -396,7 +405,8 @@ class WindowsContracts(unittest.TestCase):
                          window.index("private void OnIgnoreClick")]
         self.assertNotIn("App.SafeMode", answer)
         self.assertNotIn("App.SafeMode", monitor)
-        self.assertIn("if (!App.SafeMode && !string.IsNullOrEmpty(_incomingStreamMp4Url))",
+        # Safe mode never starts H.264; the guard moved into StartIncomingH264.
+        self.assertIn("if (App.SafeMode || string.IsNullOrEmpty(_incomingStreamMp4Url)) return;",
                       window)
         self.assertIn("})), App.SafeMode);", window)
         self.assertIn("MjpegStreamer.Decode(jpg, App.SafeMode ? 640 : 0)", window)
@@ -498,6 +508,106 @@ class WindowsContracts(unittest.TestCase):
         self.assertIn("5ULL * 60ULL * 1000ULL", policy)
         self.assertIn("{{2, 5, 10, 30, 60}}", policy)
         self.assertIn("kSafeModeThreshold = 3", policy)
+
+    def test_pairing_surfaces_bind_the_core_contract(self):
+        interop = read("win/DoorbellApp/Core/CoreInterop.cs")
+        client = read("win/DoorbellApp/Core/CoreClient.cs")
+        for symbol in ["db_core_start_pairing_json", "db_core_invite_direct",
+                       "db_core_deny_device", "db_core_retry_pairing_persistence",
+                       "db_core_unpair", "db_core_qr_encode", "db_core_qr_decode",
+                       "db_core_qr_scan_start", "db_core_qr_scan_stop",
+                       "db_core_on_camera_frame"]:
+            with self.subTest(symbol=symbol):
+                self.assertIn(symbol, interop)
+                self.assertIn(symbol, client)
+        for wrapper in ["public Dictionary<string, object> StartPairing(int seconds)",
+                        "public void InviteDirect(string addr, string nodeId, "
+                        "string publicKeyHex)",
+                        "public void DenyDevice(string nodeId)",
+                        "public bool RetryPairingPersistence()",
+                        "public void Unpair()",
+                        "public static byte[] QrEncode(string text, out int size)",
+                        "public static string QrDecodeGray(byte[] gray, int width, int height)",
+                        "public void QrScanStart()", "public void QrScanStop()"]:
+            with self.subTest(wrapper=wrapper):
+                self.assertIn(wrapper, client)
+        # The probe proves the same exports exist in both architectures of the shipped DLL.
+        probe = read("win/abi-probe/main.cpp")
+        self.assertIn("9 * sizeof(void*)", probe)
+        self.assertIn("db_core_qr_scan_start", probe)
+
+    def test_onboarding_renders_core_state_and_never_infers_it(self):
+        window = read("win/DoorbellApp/MainWindow.xaml.cs")
+        view = read("win/DoorbellApp/Pairing/PairingOnboardingView.xaml.cs")
+        snapshot = read("win/DoorbellApp/Pairing/PairingSnapshot.cs")
+        # An empty snapshot is "unknown", never "unpaired".
+        self.assertIn("if (!snapshot.Known) return;", window)
+        self.assertIn("if (!snapshot.Known) return;", view)
+        self.assertIn('root.ContainsKey("state")', snapshot)
+        self.assertIn("bool ready = _pairing.IsReady;", window)
+        self.assertIn("if (!ready && !_pairingSkipped && !PairingOverlay.IsActive) "
+                      "ShowPairingOverlay();", window)
+        self.assertIn("PairBanner.Visibility", window)
+        self.assertIn("OpenAddDevicePanel", window)
+        gate = window[window.index("private void OpenAddDevicePanel"):
+                      window.index("private void OnSecretCorner")]
+        self.assertIn("if (App.Boot.Kiosk && !_adminUnlocked)", gate)
+        self.assertIn("new AdminDialog { Owner = this }", gate)
+        # persist_error is only cleared by a successful retry, never by another button.
+        self.assertIn("bool secondaryAllowed = !persistError && !ready && !joiningState;", view)
+        self.assertIn("App.Core.RetryPairingPersistence()", view)
+        self.assertIn("App.Core.FoundCluster()", view)
+        self.assertIn("Mode.CreateConfirm", view)
+        keypad = read("win/DoorbellApp/Pairing/PairingKeypad.xaml")
+        for digit in "0123456789":
+            self.assertIn('Content="%s" Tag="%s"' % (digit, digit), keypad)
+
+    def test_add_device_panel_confirms_with_device_joined(self):
+        panel = read("win/DoorbellApp/Pairing/AddDeviceWindow.xaml.cs")
+        row = read("win/DoorbellApp/Pairing/PendingDeviceRow.cs")
+        invite = panel[panel.index('case "invite_result":'):panel.index('case "device_joined":')]
+        # invite_result only reports failures; success still shows "adding".
+        self.assertIn("if (row != null && !EventBool(ev, \"ok\")) row.MarkFailed", invite)
+        self.assertNotIn("MarkAdded", invite)
+        joined = panel[panel.index('case "device_joined":'):panel.index('case "pending_changed":')]
+        self.assertIn("row.MarkAdded();", joined)
+        self.assertIn("App.Core.DenyDevice(id)", panel)
+        self.assertIn("App.Core.Unpair()", panel)
+        self.assertIn("ClearConfirmPanel", panel)
+        self.assertIn("PairingText.AddAllOn", panel)
+        self.assertIn('Texts.T("pair.add_all_stop")', panel)
+        self.assertIn('Texts.T("pair.add_all_warning")', panel)
+        self.assertIn('Texts.T("pair.adding")', row)
+        self.assertIn('Texts.T("pair.added")', row)
+        self.assertIn('Texts.T("pair.add_failed")', row)
+
+    def test_qr_scanner_uses_the_core_decoder_and_reports_no_camera(self):
+        scanner = read("win/DoorbellApp/Pairing/QrScanWindow.xaml.cs")
+        feed = read("win/DoorbellApp/Pairing/PairingCameraFeed.cs")
+        self.assertIn("App.Core.QrScanStart();", scanner)
+        self.assertIn("App.Core.QrScanStop();", scanner)
+        self.assertIn('case "qr_scanned":', scanner)
+        self.assertIn('Texts.T("pair.scan_hint")', scanner)
+        self.assertIn('Texts.T("pair.scan_no_camera")', scanner)
+        self.assertIn("ShowCameraUnavailable();", scanner)
+        self.assertIn("Viewfinder", read("win/DoorbellApp/Pairing/QrScanWindow.xaml"))
+        # Frames reach the core decoder through the documented camera entry point.
+        self.assertIn("App.Core.PushCameraFrame(bgra, 3, width, height, width * 4, now)", feed)
+        self.assertIn("/stream.mjpeg", feed)
+
+    def test_pairing_surfaces_use_only_generated_resource_keys(self):
+        resources = read("win/DoorbellApp/Resources/Strings.resx")
+        available = set(re.findall(r'<data name="([^"]+)"', resources))
+        sources = sorted((WIN / "DoorbellApp" / "Pairing").glob("*.cs"))
+        sources.append(WIN / "DoorbellApp" / "MainWindow.xaml.cs")
+        for path in sources:
+            text = path.read_text(encoding="utf-8")
+            for key in re.findall(r'Texts\.T\("(pair\.[a-z0-9_.]+)"', text):
+                # "pair.err." is completed at runtime from the core error code.
+                if key.endswith("."):
+                    continue
+                with self.subTest(path=path.name, key=key):
+                    self.assertIn(key.replace(".", "_"), available)
 
 
 if __name__ == "__main__":

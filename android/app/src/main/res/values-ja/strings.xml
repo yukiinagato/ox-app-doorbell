@@ -483,6 +483,8 @@
     <string name="pair_retry">再試行</string>
     <string name="pair_revoked">この端末はクラスタから削除されました</string>
     <string name="pair_scan_hint">新しい端末に表示された追加用 QR に合わせてください</string>
+    <string name="pair_scan_no_camera">この端末のカメラを利用できません。カメラ付きの端末で読み取るか、ペアリング PIN をお使いください</string>
+    <string name="pair_scan_opening">カメラを起動しています…</string>
     <string name="pair_scan_qr">QR を読み取る</string>
     <string name="pair_searching">近くの端末を探しています…</string>
     <string name="pair_searching_hint">クラスタに参加済みの端末か管理画面で「追加」を押してください</string>

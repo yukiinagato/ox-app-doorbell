@@ -478,6 +478,8 @@
 "pair.retry" = "再試行";
 "pair.revoked" = "この端末はクラスタから削除されました";
 "pair.scan_hint" = "新しい端末に表示された追加用 QR に合わせてください";
+"pair.scan_no_camera" = "この端末のカメラを利用できません。カメラ付きの端末で読み取るか、ペアリング PIN をお使いください";
+"pair.scan_opening" = "カメラを起動しています…";
 "pair.scan_qr" = "QR を読み取る";
 "pair.searching" = "近くの端末を探しています…";
 "pair.searching_hint" = "クラスタに参加済みの端末か管理画面で「追加」を押してください";

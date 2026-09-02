@@ -82,6 +82,20 @@ namespace DoorbellApp.Core
             }
         }
 
+        /// <summary>Removes one secret. Missing entries are treated as already deleted.</summary>
+        public bool Delete(string key)
+        {
+            try
+            {
+                string path = PathFor(key);
+                if (File.Exists(path)) File.Delete(path);
+                return true;
+            }
+            catch (IOException) { return false; }
+            catch (UnauthorizedAccessException) { return false; }
+            catch (ArgumentException) { return false; }
+        }
+
         private void HardenDirectory()
         {
             var security = new DirectorySecurity();

@@ -80,12 +80,26 @@ namespace DoorbellApp
                 _heartbeat == null ? 0L : _heartbeat.LastSignalWallMs, _uiRunning);
         }
 
+        /// <summary>Drops psk_ref and seed_peers from boot.json after an unpair or a revoke.</summary>
+        internal static void ClearPairingBootReference()
+        {
+            if (Boot == null || string.IsNullOrEmpty(Boot.PskRef)) return;
+            if (BootConfig.ClearPairingReference(Boot.FilePath))
+                Boot = BootConfig.Load(Boot.FilePath);
+        }
+
         private void OnCoreLifecycleEvent(UiEvent ev)
         {
             if (ev == null) return;
             if (ev.T == "pairing_persistence_error")
             {
                 ReportPairingPersistenceFailure("Core secure-store callback failed");
+                return;
+            }
+            if (ev.T == "pairing_state")
+            {
+                // Leaving the Cluster must not leave a boot reference to a secret that is gone.
+                if (ev.Str("state") == "unpaired") ClearPairingBootReference();
                 return;
             }
             if (ev.T != "paired" || ev.Data == null) return;

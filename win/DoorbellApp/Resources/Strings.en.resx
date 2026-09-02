@@ -485,6 +485,8 @@ Delete it?</value></data>
   <data name="pair_retry" xml:space="preserve"><value>Retry</value></data>
   <data name="pair_revoked" xml:space="preserve"><value>This device was removed from the Cluster</value></data>
   <data name="pair_scan_hint" xml:space="preserve"><value>Point at the Add QR shown on the new device</value></data>
+  <data name="pair_scan_no_camera" xml:space="preserve"><value>This device's camera is unavailable. Scan from a device with a camera, or use a Pairing PIN instead</value></data>
+  <data name="pair_scan_opening" xml:space="preserve"><value>Starting the camera…</value></data>
   <data name="pair_scan_qr" xml:space="preserve"><value>Scan QR</value></data>
   <data name="pair_searching" xml:space="preserve"><value>Looking for nearby devices…</value></data>
   <data name="pair_searching_hint" xml:space="preserve"><value>Press &quot;Add&quot; on a device already in the Cluster, or on the admin page</value></data>

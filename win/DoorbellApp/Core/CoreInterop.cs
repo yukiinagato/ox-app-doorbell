@@ -27,6 +27,9 @@ namespace DoorbellApp.Core
             public IntPtr tts_speak;
             public IntPtr device_info;
             public IntPtr release_buffer;
+            // Appended in this ABI generation. NULL is legal and means core keeps an orphaned
+            // secret when pairing is cleared, so struct_size must always be sizeof(this struct).
+            public IntPtr secure_delete;
         }
 
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
@@ -45,6 +48,9 @@ namespace DoorbellApp.Core
 
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         public delegate int SecurePutCb(IntPtr user, IntPtr keyUtf8, IntPtr valueUtf8);
+
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        public delegate int SecureDeleteCb(IntPtr user, IntPtr keyUtf8);
 
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         public delegate int DeviceInfoCb(IntPtr user, IntPtr jsonOut);
@@ -163,6 +169,41 @@ namespace DoorbellApp.Core
         [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
         public static extern void db_core_invite_device(IntPtr core,
             [MarshalAs(UnmanagedType.LPUTF8Str)] string nodeId);
+
+        [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
+        public static extern IntPtr db_core_start_pairing_json(IntPtr core, int seconds);
+
+        [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
+        public static extern void db_core_invite_direct(IntPtr core,
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string addr,
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string nodeId,
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string publicKeyHex);
+
+        [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
+        public static extern void db_core_deny_device(IntPtr core,
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string nodeId);
+
+        [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
+        public static extern int db_core_retry_pairing_persistence(IntPtr core);
+
+        [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
+        public static extern void db_core_unpair(IntPtr core);
+
+        // Returns size*size row-major bytes where one means dark. Release with db_free.
+        [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
+        public static extern IntPtr db_core_qr_encode(
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string text, out int outSize);
+
+        // 0 on success (release textOut with db_free), 1 when no code was found, -1 on bad input.
+        [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
+        public static extern int db_core_qr_decode(byte[] gray, int width, int height,
+                                                   out IntPtr textOut);
+
+        [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
+        public static extern void db_core_qr_scan_start(IntPtr core);
+
+        [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
+        public static extern void db_core_qr_scan_stop(IntPtr core);
 
         [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
         public static extern void db_core_set_capabilities_json(IntPtr core,
