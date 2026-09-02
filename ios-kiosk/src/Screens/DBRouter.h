@@ -3,7 +3,7 @@
 #import "../Media/DBSipListener.h"
 
 @class DBCoreBridge, DBBootConfig, DBTexts, DBScreen, DBHomeScreen, DBDoorScreen,
-       DBIncomingScreen;
+       DBIncomingScreen, DBSettingsScreen, DBHistoryScreen;
 
 
 // Main-thread screen state machine and sole owner of the active SIP session. Screens are retained
@@ -34,6 +34,14 @@
 - (void)closeIncomingAnimated:(BOOL)animated;
 - (void)showInfo;
 - (void)closeInfoAnimated:(BOOL)animated;
+
+// Native settings (spec §3) and the full-screen call history (spec §5.1).
+// Callers gate both behind the admin password on a door station; the indoor
+// 管理 entry does the same.
+- (void)showSettings;
+- (void)closeSettingsAnimated:(BOOL)animated;
+- (void)showHistory;
+- (void)closeHistoryAnimated:(BOOL)animated;
 - (void)showPairing;
 - (void)closePairingAnimated:(BOOL)animated;
 
@@ -44,6 +52,12 @@
 // The user chose 「あとで設定」. Onboarding stops re-appearing on its own; the
 // Home screen shows the persistent pair.not_set_up_banner instead.
 - (void)pairingDeferredByUser;
+
+// Revoke is a factory reset of this device's cluster identity and setup
+// (spec §5.4): the Keychain PSK, the boot.json pairing fields, and the
+// name/role/door/setup_complete choice all go, then the device returns to
+// first-run setup.
+- (void)factoryResetForRevocation:(NSString *)reason;
 
 
 - (void)requestPinThen:(void (^)(void))action;

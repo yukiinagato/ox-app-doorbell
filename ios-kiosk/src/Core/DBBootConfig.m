@@ -138,6 +138,83 @@ static BOOL DBValidPskHex(NSString *value) {
       ? json : nil;
 }
 
++ (BOOL)isLocalWritableKey:(NSString *)key {
+  return [key isEqualToString:@"ui_lang"] || [key isEqualToString:@"keepalive_helper"] ||
+         [key isEqualToString:@"diagnostic_dumps"];
+}
+
++ (BOOL)isValidLocalValue:(NSString *)value forKey:(NSString *)key {
+  if (![value isKindOfClass:[NSString class]]) return NO;
+  if ([key isEqualToString:@"ui_lang"])
+    return [value isEqualToString:@"ja"] || [value isEqualToString:@"en"] ||
+           [value isEqualToString:@"zh"];
+  if ([key isEqualToString:@"keepalive_helper"])
+    return [value isEqualToString:@"off"] || [value isEqualToString:@"auto"] ||
+           [value isEqualToString:@"on"];
+  if ([key isEqualToString:@"diagnostic_dumps"])
+    return [value isEqualToString:@"true"] || [value isEqualToString:@"false"];
+  return NO;
+}
+
++ (NSString *)localJsonFromJson:(NSString *)json key:(NSString *)key value:(NSString *)value {
+  if (![self isLocalWritableKey:key] || ![self isValidLocalValue:value forKey:key]) return nil;
+  NSString *source = [json length] > 0 ? json : DBDefaultJson();
+  NSData *data = [source dataUsingEncoding:NSUTF8StringEncoding];
+  id obj = data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:NULL] : nil;
+  if (![obj isKindOfClass:[NSDictionary class]]) return nil;
+  NSMutableDictionary *d = [obj mutableCopy];
+  if ([key isEqualToString:@"diagnostic_dumps"])
+    [d setObject:[NSNumber numberWithBool:[value isEqualToString:@"true"]] forKey:key];
+  else
+    [d setObject:value forKey:key];
+  NSData *out = [NSJSONSerialization dataWithJSONObject:d options:0 error:NULL];
+  if (out == nil) return nil;
+  return [[NSString alloc] initWithData:out encoding:NSUTF8StringEncoding];
+}
+
++ (NSString *)persistLocalValue:(NSString *)value forKey:(NSString *)key {
+  NSString *path = [[self dataDir] stringByAppendingPathComponent:@"boot.json"];
+  NSString *current = [NSString stringWithContentsOfFile:path
+                                                 encoding:NSUTF8StringEncoding
+                                                    error:NULL];
+  NSString *json = [self localJsonFromJson:current key:key value:value];
+  if ([json length] == 0) return nil;
+  return [json writeToFile:path atomically:YES encoding:NSUTF8StringEncoding error:NULL]
+      ? json : nil;
+}
+
++ (NSString *)factoryResetJsonFromJson:(NSString *)json {
+  NSString *source = [json length] > 0 ? json : DBDefaultJson();
+  NSData *data = [source dataUsingEncoding:NSUTF8StringEncoding];
+  id obj = data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:NULL] : nil;
+  if (![obj isKindOfClass:[NSDictionary class]]) return nil;
+  NSMutableDictionary *d = [obj mutableCopy];
+  // Cluster identity.
+  [d removeObjectForKey:@"psk_hex"];
+  [d removeObjectForKey:@"psk_ref"];
+  [d removeObjectForKey:@"seed_peers"];
+  // Local identity chosen during setup. Keeping it would silently re-announce
+  // the old name and role to whatever cluster this device joins next.
+  [d removeObjectForKey:@"name"];
+  [d removeObjectForKey:@"role"];
+  [d removeObjectForKey:@"door"];
+  [d setObject:[NSNumber numberWithBool:NO] forKey:@"setup_complete"];
+  NSData *out = [NSJSONSerialization dataWithJSONObject:d options:0 error:NULL];
+  if (out == nil) return nil;
+  return [[NSString alloc] initWithData:out encoding:NSUTF8StringEncoding];
+}
+
++ (NSString *)clearPairingAndSetup {
+  NSString *path = [[self dataDir] stringByAppendingPathComponent:@"boot.json"];
+  NSString *current = [NSString stringWithContentsOfFile:path
+                                                 encoding:NSUTF8StringEncoding
+                                                    error:NULL];
+  NSString *json = [self factoryResetJsonFromJson:current];
+  if ([json length] == 0) return nil;
+  return [json writeToFile:path atomically:YES encoding:NSUTF8StringEncoding error:NULL]
+      ? json : nil;
+}
+
 + (DBBootConfig *)loadConfiguration {
   DBBootConfig *c = [[DBBootConfig alloc] init];
   NSString *path = [[self dataDir] stringByAppendingPathComponent:@"boot.json"];

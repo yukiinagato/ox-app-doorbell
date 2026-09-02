@@ -1,6 +1,7 @@
 #import "DBPinOverlay.h"
 
 #import "../Core/DBBootConfig.h"
+#import "../Core/DBCoreBridge.h"
 #import "../Core/DBTexts.h"
 #import "DBRouter.h"
 #import <CommonCrypto/CommonDigest.h>
@@ -11,6 +12,7 @@ static NSTimeInterval sLockedUntil = 0;
 
 @implementation DBPinOverlay {
   DBTexts *_texts;
+  DBCoreBridge *_core;
   NSMutableString *_pin;
   UILabel *_display;
   UILabel *_errorLabel;
@@ -25,6 +27,7 @@ static NSTimeInterval sLockedUntil = 0;
   self = [super initWithFrame:[UIScreen mainScreen].bounds];
   if (self) {
     _texts = router.texts;
+    _core = router.core;
     _pin = [[NSMutableString alloc] init];
     _keyButtons = [[NSMutableArray alloc] init];
     self.backgroundColor = [UIColor colorWithWhite:0 alpha:0.75];
@@ -190,6 +193,56 @@ static NSTimeInterval sLockedUntil = 0;
   _display.text = dots;
 }
 
+// The device 管理パスワード and the web admin password are one cluster-wide
+// secret (spec §5.5). Core owns the constant-time comparison and the lockout
+// counter it shares with /api/login, so this overlay must never keep a second,
+// weaker credential once Core can answer.
+//
+// Migration of the per-node exit_pin.txt digest: it is accepted exactly once,
+// and only while the cluster has no password at all -- proven by Core accepting
+// it as the first password. Then the file is deleted. If the cluster already
+// has a password, a stale device digest is not a second way in.
++ (NSString *)localDigestPath {
+  return [[DBBootConfig dataDir] stringByAppendingPathComponent:@"exit_pin.txt"];
+}
+
++ (NSString *)localDigest {
+  NSString *stored = [NSString stringWithContentsOfFile:[self localDigestPath]
+                                               encoding:NSUTF8StringEncoding error:NULL];
+  NSString *trimmed = [stored stringByTrimmingCharactersInSet:
+      [NSCharacterSet whitespaceAndNewlineCharacterSet]];
+  return [trimmed length] > 0 ? trimmed : [self sha256Hex:@"000000"];
+}
+
++ (void)retireLocalDigest {
+  NSString *path = [self localDigestPath];
+  if (![[NSFileManager defaultManager] fileExistsAtPath:path]) return;
+  if ([[NSFileManager defaultManager] removeItemAtPath:path error:NULL])
+    NSLog(@"[doorbell][admin] retired the local admin digest; the cluster password "
+           "is now the only credential");
+}
+
+- (BOOL)acceptsEnteredPassword:(NSString *)entered {
+  BOOL localMatches =
+      [[[self class] sha256Hex:entered] isEqualToString:[[self class] localDigest]];
+  if (![DBCoreBridge supportsAdminPassword]) {
+    // Core predates the shared password: keep the local digest as the gate.
+    return localMatches;
+  }
+  if ([_core verifyAdminPassword:entered]) {
+    [[self class] retireLocalDigest];
+    return YES;
+  }
+  if (!localMatches) return NO;
+  // Core rejected it but the device's own digest matches: adopt it as the
+  // cluster password. Core accepts an empty "current" only while none is set,
+  // so a cluster that already has one refuses here and the stale digest dies.
+  if ([_core setAdminPasswordFrom:@"" to:entered] != 0) return NO;
+  [[self class] retireLocalDigest];
+  NSLog(@"[doorbell][admin] migrated the local admin digest to the cluster password");
+  return YES;
+}
+
 - (void)submit {
   if ([NSDate timeIntervalSinceReferenceDate] < sLockedUntil) {
     _errorLabel.text = [_texts ts:@"admin.locked"];
@@ -197,16 +250,7 @@ static NSTimeInterval sLockedUntil = 0;
     _display.text = @"";
     return;
   }
-  NSString *expected = [[self class] sha256Hex:@"000000"];
-  NSString *pinFile = [[DBBootConfig dataDir] stringByAppendingPathComponent:@"exit_pin.txt"];
-  NSString *s = [NSString stringWithContentsOfFile:pinFile
-                                          encoding:NSUTF8StringEncoding
-                                             error:NULL];
-  NSString *trimmed =
-      [s stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-  if ([trimmed length] > 0) expected = trimmed;
-
-  if ([[[self class] sha256Hex:_pin] isEqualToString:expected]) {
+  if ([self acceptsEnteredPassword:_pin]) {
     sFails = 0;
     void (^cb)(void) = _onUnlocked;
     _onUnlocked = nil;

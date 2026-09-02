@@ -75,6 +75,17 @@ swiftc \
   -framework Foundation -o "$OUT/live_edge_gate_test"
 
 "$CC" -fobjc-arc -Wall -Wextra -Werror -O2 -isysroot "$MACOS_SDK" \
+  -I"$REPO_ROOT/ios-kiosk/src/Core" -I"$REPO_ROOT/ios-kiosk/src/Support" \
+  "$REPO_ROOT/ios-kiosk/src/Core/DBUiTheme.m" \
+  "$REPO_ROOT/ios-kiosk/src/Core/DBSosSlideModel.m" \
+  "$REPO_ROOT/ios-kiosk/src/Core/DBCallHistoryModel.m" \
+  "$REPO_ROOT/ios-kiosk/src/Core/DBNoticeModel.m" \
+  "$REPO_ROOT/ios-kiosk/src/Core/DBBootConfig.m" \
+  "$REPO_ROOT/ios-kiosk/src/Support/DBSafeModeRecovery.m" \
+  "$REPO_ROOT/ios-compat/tests/native_settings_ux_test.m" \
+  -framework Foundation -o "$OUT/native_settings_ux_test"
+
+"$CC" -fobjc-arc -Wall -Wextra -Werror -O2 -isysroot "$MACOS_SDK" \
   -I"$REPO_ROOT/ios-kiosk/src/Core" \
   "$REPO_ROOT/ios-kiosk/src/Core/DBRefreshCoalescer.m" \
   "$REPO_ROOT/ios-kiosk/src/Core/DBBackoffPolicy.m" \
@@ -92,10 +103,12 @@ swiftc \
 "$OUT/recovery_policy_test"
 "$OUT/live_edge_gate_test"
 "$OUT/pairing_ux_test"
+"$OUT/native_settings_ux_test"
 python3 "$REPO_ROOT/ios-compat/tests/ios9_armv7_profile_test.py"
 python3 "$REPO_ROOT/ios-compat/tests/semantic_ui_contract_test.py"
 python3 "$REPO_ROOT/ios-compat/tests/sos_presentation_contract_test.py"
 python3 "$REPO_ROOT/ios-compat/tests/recovery_safe_mode_contract_test.py"
+python3 "$REPO_ROOT/ios-compat/tests/pairing_flow_contract_test.py"
 # Root keepalive helper: daemon behaviour plus the staged-package/installer rails.
 if [[ -n "${DB_SKIP_HELPER_HOST_TESTS:-}" ]]; then
   echo "helper host tests skipped (DB_SKIP_HELPER_HOST_TESTS set; the keepalive-helper job owns them)"

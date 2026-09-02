@@ -12,6 +12,7 @@
 #import "../Screens/DBIncomingScreen.h"
 #import "DBWatchdog.h"
 #import "DBRecoveryClient.h"
+#import "DBSafeModeRecovery.h"
 #import "doorbell/doorbell.h"
 
 void DBH264Dbg(NSString *fmt, ...);
@@ -441,6 +442,9 @@ static BOOL DBNativeKioskHealthy(void) {
   BOOL _localSafeMode;
   BOOL _helperSafeModeActive;
   NSUInteger _safeModeRecoveryGeneration;
+  NSTimer *_safeModeRecoveryTimer;
+  NSTimeInterval _safeModeEnteredAt;
+  NSTimeInterval _lastHeartbeatAt;
   BOOL _secureStoreAvailable;
   NSUInteger _memoryPressureCount;
   NSString *_lastMemoryPressureSource;
@@ -544,6 +548,7 @@ static BOOL DBNativeKioskHealthy(void) {
 
   [_router start];
   if (_localSafeMode) {
+    _safeModeEnteredAt = [[NSDate date] timeIntervalSince1970];
     [_router setSafeMode:YES reason:@"crash_loop_3_in_5m"];
     [self armLocalSafeModeRecovery];
   }
@@ -571,7 +576,10 @@ static BOOL DBNativeKioskHealthy(void) {
     if (helperSafe) {
       if (delegate) delegate->_safeModeRecoveryGeneration++;
       [[NSUserDefaults standardUserDefaults] setBool:YES forKey:DBRecoverySafeModeKey];
-      if (delegate) delegate->_localSafeMode = YES;
+      if (delegate) {
+        delegate->_localSafeMode = YES;
+        delegate->_safeModeEnteredAt = [[NSDate date] timeIntervalSince1970];
+      }
       [recoveryRouter setSafeMode:YES reason:@"root_helper_crash_loop"];
     } else if (delegate && helperWasSafe && delegate->_localSafeMode) {
       [delegate armLocalSafeModeRecovery];
@@ -624,24 +632,71 @@ static BOOL DBNativeKioskHealthy(void) {
   return YES;
 }
 
+// The kiosk's local safe mode disables every H.264 strategy, so a latch that
+// never clears leaves an indoor panel on MJPEG for good (follow-up recorded in
+// docs/evidence/ios5-ipad1-keepalive-helper-qualification-2026-09-02.md).
+// The old recovery was a bare five-minute dispatch_after that neither required
+// a live run loop nor survived a restart. It is now a ten-minute window of
+// measured health, re-evaluated every thirty seconds: the runtime heartbeat
+// must keep advancing, no new unclean launch may be charged, and the root
+// helper must not be holding its own latch.
 - (void)armLocalSafeModeRecovery {
   if (!_localSafeMode || _helperSafeModeActive) return;
-  NSUInteger generation = ++_safeModeRecoveryGeneration;
-  __weak DBAppDelegate *weakSelf = self;
-  dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(300 * NSEC_PER_SEC)),
-                 dispatch_get_main_queue(), ^{
-    DBAppDelegate *delegate = weakSelf;
-    if (!delegate || generation != delegate->_safeModeRecoveryGeneration ||
-        !delegate->_localSafeMode || delegate->_helperSafeModeActive)
-      return;
-    DBMarkHealthyRuntime();
-    delegate->_localSafeMode = NO;
-    [delegate->_router setSafeMode:NO reason:@"healthy_runtime_5m"];
-    [delegate->_core setRuntimeCapabilities:DBShellCapabilities(
-        delegate->_boot, delegate->_secureStoreAvailable, NO)];
-    [delegate publishRuntimeHealth:nil];
-    NSLog(@"[doorbell][recovery] exited local safe mode after 5m healthy runtime");
-  });
+  _safeModeRecoveryGeneration++;
+  if (_safeModeEnteredAt <= 0) _safeModeEnteredAt = [[NSDate date] timeIntervalSince1970];
+  if (_safeModeRecoveryTimer) return;
+  _safeModeRecoveryTimer =
+      [NSTimer scheduledTimerWithTimeInterval:30.0 target:self
+                                     selector:@selector(evaluateLocalSafeModeRecovery:)
+                                     userInfo:nil repeats:YES];
+}
+
+// Unclean launches recorded after the latch was taken. Within one healthy
+// process this is zero; a launch charged during the window restarts it.
+- (NSUInteger)crashesChargedSinceSafeModeEntry {
+  if (_safeModeEnteredAt <= 0) return 0;
+  NSArray *launches =
+      [[NSUserDefaults standardUserDefaults] arrayForKey:DBRecoveryLaunchesKey] ?: @[];
+  NSUInteger charged = 0;
+  for (id entry in launches) {
+    if (![entry isKindOfClass:[NSNumber class]]) continue;
+    if ([(NSNumber *)entry doubleValue] > _safeModeEnteredAt) charged++;
+  }
+  return charged;
+}
+
+- (NSString *)localSafeModeRecoveryState {
+  return [DBSafeModeRecovery stateForActive:_localSafeMode
+                                  enteredAt:_safeModeEnteredAt
+                            lastHeartbeatAt:_lastHeartbeatAt
+                          crashesSinceEntry:[self crashesChargedSinceSafeModeEntry]
+                       helperSafeModeActive:_helperSafeModeActive
+                                        now:[[NSDate date] timeIntervalSince1970]];
+}
+
+- (void)evaluateLocalSafeModeRecovery:(NSTimer *)timer {
+  (void)timer;
+  if (!_localSafeMode) {
+    [_safeModeRecoveryTimer invalidate];
+    _safeModeRecoveryTimer = nil;
+    return;
+  }
+  NSTimeInterval now = [[NSDate date] timeIntervalSince1970];
+  if (![DBSafeModeRecovery shouldClearSafeModeEnteredAt:_safeModeEnteredAt
+                                       lastHeartbeatAt:_lastHeartbeatAt
+                                     crashesSinceEntry:[self crashesChargedSinceSafeModeEntry]
+                                  helperSafeModeActive:_helperSafeModeActive
+                                                   now:now])
+    return;
+  [_safeModeRecoveryTimer invalidate];
+  _safeModeRecoveryTimer = nil;
+  DBMarkHealthyRuntime();
+  _localSafeMode = NO;
+  _safeModeEnteredAt = 0;
+  [_router setSafeMode:NO reason:@"healthy_runtime_10m"];
+  [_core setRuntimeCapabilities:DBShellCapabilities(_boot, _secureStoreAvailable, NO)];
+  [self publishRuntimeHealth:nil];
+  NSLog(@"[doorbell][recovery] exited local safe mode after 10m healthy runtime");
 }
 
 - (void)startBootstrapRecoveryClient {
@@ -676,6 +731,28 @@ static BOOL DBNativeKioskHealthy(void) {
   self.window = window;
 }
 
+- (void)restartIntoBootstrapSetup {
+  [_nativeKioskProbeTimer invalidate];
+  _nativeKioskProbeTimer = nil;
+  [_runtimeHeartbeatTimer invalidate];
+  _runtimeHeartbeatTimer = nil;
+  [_safeModeRecoveryTimer invalidate];
+  _safeModeRecoveryTimer = nil;
+  // The watchdog has no stop entry point by design (it must survive normal UI
+  // churn); dropping the reference is what the bootstrap branch already does.
+  _watchdog = nil;
+  [_recovery stop];
+  _recovery = nil;
+  _recoveryStarted = NO;
+  [[NSNotificationCenter defaultCenter] removeObserver:self];
+  [_core stop];
+  _core = nil;
+  _router = nil;
+  _boot = [DBBootConfig loadConfiguration];
+  [self startBootstrapRecoveryClient];
+  [self showBootstrapSetup:[UIApplication sharedApplication]];
+}
+
 - (void)publishUIStyleRuntimeStatus:(NSNotification *)notification {
   (void)notification;
   [_core setRuntimeStatusSection:@"ui_style" value:[DBSemanticStyle runtimeReport]];
@@ -686,6 +763,8 @@ static BOOL DBNativeKioskHealthy(void) {
   NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
   NSTimeInterval wallSeconds = [[NSDate date] timeIntervalSince1970];
   long long heartbeatMs = wallSeconds > 0 ? (long long)(wallSeconds * 1000.0) : 0;
+  // The safe-mode auto-clear only counts a window the run loop actually served.
+  _lastHeartbeatAt = wallSeconds;
   NSInteger generation = [defaults integerForKey:DBRecoveryGenerationKey];
   NSString *lastExit = DBBoundedRuntimeToken(
       [defaults stringForKey:DBRecoveryLastExitReasonKey]);
@@ -698,12 +777,19 @@ static BOOL DBNativeKioskHealthy(void) {
     @"media" : _localSafeMode ? @"degraded" : @"available",
     @"ui" : self.window ? @"running" : @"starting",
   };
+  // 本機情報 renders these two fields, so the operator can see why safe mode is
+  // still on and how long is left before it clears itself.
+  NSString *recoveryState = [self localSafeModeRecoveryState];
+  double recoveryRemaining = _localSafeMode
+      ? [DBSafeModeRecovery remainingSecondsEnteredAt:_safeModeEnteredAt now:wallSeconds] : 0;
   NSDictionary *processRecovery = @{
     @"schema_version" : @1,
     @"generation" : @(MAX((NSInteger)0, generation)),
     @"safe_mode" : @(_localSafeMode),
     @"crash_count_5m" : @([launches count]),
     @"last_exit_reason" : lastExit,
+    @"recovery_state" : recoveryState,
+    @"recovery_remaining_s" : @(recoveryRemaining),
   };
   NSDictionary *memoryPressure = @{
     @"schema_version" : @1,
@@ -718,6 +804,8 @@ static BOOL DBNativeKioskHealthy(void) {
     @"heartbeat_ms" : [NSNumber numberWithLongLong:heartbeatMs],
     @"last_exit_reason" : lastExit,
     @"safe_mode" : @(_localSafeMode),
+    @"safe_mode_state" : recoveryState,
+    @"safe_mode_remaining_s" : @(recoveryRemaining),
     @"crash_count_5m" : @([launches count]),
     @"codec_health" : _localSafeMode ? @"safe_mode_low_resolution_mjpeg"
                                         : @"unknown_until_stream",
@@ -845,6 +933,7 @@ static BOOL DBNativeKioskHealthy(void) {
   [[NSURLCache sharedURLCache] removeAllCachedResponses];
   [_recovery noteMemoryPressure];
   _localSafeMode = YES;
+  _safeModeEnteredAt = [[NSDate date] timeIntervalSince1970];
   NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
   [defaults setBool:YES forKey:DBRecoverySafeModeKey];
   [defaults setObject:@"memory_pressure" forKey:DBRecoveryLastExitReasonKey];

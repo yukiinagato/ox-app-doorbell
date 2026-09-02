@@ -9,6 +9,8 @@
 #import <arpa/inet.h>
 #import <sys/socket.h>
 #import <sys/sysctl.h>
+#import <dlfcn.h>
+#import "DBNoticeModel.h"
 #import "doorbell/doorbell.h"
 
 
@@ -16,6 +18,7 @@
 - (void)dispatchEvent:(NSDictionary *)ev;
 - (void)speakOnMain:(NSString *)text;
 - (NSString *)cachedDeviceInfoJson;
+- (NSString *)cachedPowerStateJson;
 @end
 
 
@@ -127,6 +130,25 @@ static int DBDeviceInfo(void *user, char **out_json) {
       }
     }
     return rc;
+  }
+}
+
+// Battery and mains state for ABI v2's power_state. UIDevice is documented as
+// main-thread-affine, so the reading is cached on the main run loop exactly
+// like device_info and this callback only copies the cached document.
+static int DBPowerState(void *user, char **out_json) {
+  if (out_json == NULL || user == NULL) return -1;
+  @autoreleasepool {
+    DBCoreBridge *me = (__bridge DBCoreBridge *)user;
+    NSString *cached = [me cachedPowerStateJson];
+    if ([cached length] == 0) return -1;
+    const char *s = [cached UTF8String];
+    size_t n = strlen(s);
+    char *buf = (char *)malloc(n + 1);
+    if (buf == NULL) return -1;
+    memcpy(buf, s, n + 1);
+    *out_json = buf;
+    return 0;
   }
 }
 
@@ -288,6 +310,8 @@ static void DBUiEventCb(void *user, const char *event_json) {
   db_core *_core;
   NSMutableDictionary *_handlers;
   NSString *_deviceInfoCache;
+  NSString *_powerStateCache;
+  NSDictionary *_powerState;
   NSLock *_diLock;
   NSTimer *_diTimer;
   dispatch_queue_t _coreQueue;
@@ -307,6 +331,7 @@ static void DBUiEventCb(void *user, const char *event_json) {
     _handlers = [[NSMutableDictionary alloc] init];
     _diLock = [[NSLock alloc] init];
     _deviceInfoCache = @"";
+    _powerStateCache = @"";
     _coreQueue = dispatch_queue_create("doorbell.core", DISPATCH_QUEUE_SERIAL);
     _cfgLock = [[NSLock alloc] init];
     _runtimeStatus = [[NSMutableDictionary alloc] init];
@@ -328,6 +353,7 @@ static void DBUiEventCb(void *user, const char *event_json) {
   // startWithDataDir is invoked on the main thread, so prime the UIKit-backed
   // device-info cache before Core can issue its first worker-thread callback.
   [self refreshDeviceInfo];
+  [self refreshPowerState];
   db_platform_v2 plat;
   memset(&plat, 0, sizeof(plat));
   plat.struct_size = sizeof(plat);
@@ -339,6 +365,7 @@ static void DBUiEventCb(void *user, const char *event_json) {
   plat.secure_put = DBSecurePut;
   plat.device_info = DBDeviceInfo;
   plat.release_buffer = DBReleaseBuffer;
+  plat.power_state = DBPowerState;
   plat.user = (__bridge void *)self;
 
   _core = db_core_create_v2(&plat, [dataDir UTF8String], [bootJson UTF8String]);
@@ -352,7 +379,7 @@ static void DBUiEventCb(void *user, const char *event_json) {
   // Refresh the callback cache periodically on the main run loop.
   _diTimer = [NSTimer scheduledTimerWithTimeInterval:10.0
                                               target:self
-                                            selector:@selector(refreshDeviceInfo)
+                                            selector:@selector(refreshRuntimeReadings)
                                             userInfo:nil
                                              repeats:YES];
   return YES;
@@ -878,6 +905,428 @@ static void DBUiEventCb(void *user, const char *event_json) {
   [_diLock lock];
   _deviceInfoCache = s;
   [_diLock unlock];
+}
+
+- (void)refreshRuntimeReadings {
+  [self refreshDeviceInfo];
+  [self refreshPowerState];
+}
+
+// ---- power state (ABI v2 power_state) ----
+
+- (void)refreshPowerState {
+  UIDevice *device = [UIDevice currentDevice];
+  device.batteryMonitoringEnabled = YES;
+  float level = device.batteryLevel;
+  UIDeviceBatteryState state = device.batteryState;
+  // A negative level means the device does not report a battery at all.
+  NSInteger percent = level < 0 ? -1 : (NSInteger)lroundf(level * 100.0f);
+  if (percent > 100) percent = 100;
+  BOOL charging = (state == UIDeviceBatteryStateCharging);
+  BOOL mains = charging || (state == UIDeviceBatteryStateFull);
+  if (state == UIDeviceBatteryStateUnknown && percent < 0) {
+    // No battery hardware reading at all: report mains, which is what a
+    // permanently docked panel actually is.
+    mains = YES;
+  }
+  NSDictionary *root = [NSDictionary dictionaryWithObjectsAndKeys:
+      [NSNumber numberWithInteger:percent], @"battery_pct",
+      [NSNumber numberWithBool:charging], @"charging",
+      [NSNumber numberWithBool:mains], @"mains", nil];
+  NSData *json = [NSJSONSerialization dataWithJSONObject:root options:0 error:NULL];
+  NSString *encoded =
+      json ? [[NSString alloc] initWithData:json encoding:NSUTF8StringEncoding] : @"";
+  [_diLock lock];
+  _powerStateCache = encoded;
+  _powerState = root;
+  [_diLock unlock];
+}
+
+- (NSString *)cachedPowerStateJson {
+  [_diLock lock];
+  NSString *s = _powerStateCache;
+  [_diLock unlock];
+  return s;
+}
+
+- (NSDictionary *)powerStateNow {
+  [_diLock lock];
+  NSDictionary *state = _powerState;
+  [_diLock unlock];
+  return state;
+}
+
+// ---- time, audio, announcements, history ----
+
+- (NSDictionary *)localTimeJson:(long long)wallMs {
+  __block NSDictionary *out = nil;
+  dispatch_sync(_coreQueue, ^{
+    if (self->_core)
+      out = [self takeJson:db_core_local_time_json(self->_core, (int64_t)wallMs)];
+  });
+  return out;
+}
+
+- (BOOL)timeSyncNow {
+  __block BOOL started = NO;
+  dispatch_sync(_coreQueue, ^{
+    if (self->_core) started = db_core_time_sync_now(self->_core) != 0;
+  });
+  return started;
+}
+
+- (NSDictionary *)audioJsonForDevice:(NSString *)deviceId {
+  NSString *identifier = [deviceId copy] ?: @"";
+  __block NSDictionary *out = nil;
+  dispatch_sync(_coreQueue, ^{
+    if (self->_core)
+      out = [self takeJson:db_core_audio_json(self->_core, [identifier UTF8String])];
+  });
+  return out;
+}
+
+- (BOOL)setNotice:(NSString *)text forDoor:(NSString *)door expiresMs:(long long)expiresMs {
+  if ([door length] == 0 || [text length] == 0) return NO;
+  NSString *d = [door copy];
+  NSString *t = [text copy];
+  __block BOOL ok = NO;
+  dispatch_sync(_coreQueue, ^{
+    if (self->_core)
+      ok = db_core_set_door_notice(self->_core, [d UTF8String], [t UTF8String],
+                                   (int64_t)expiresMs) == 0;
+  });
+  return ok;
+}
+
+- (BOOL)clearNoticeForDoor:(NSString *)door {
+  if ([door length] == 0) return NO;
+  NSString *d = [door copy];
+  __block BOOL ok = NO;
+  dispatch_sync(_coreQueue, ^{
+    if (self->_core) ok = db_core_clear_door_notice(self->_core, [d UTF8String]) == 0;
+  });
+  return ok;
+}
+
+- (int)openDoor:(NSString *)door {
+  if ([door length] == 0) return -1;
+  NSString *d = [door copy];
+  __block int status = -1;
+  dispatch_sync(_coreQueue, ^{
+    if (self->_core) status = db_core_open_door(self->_core, [d UTF8String]);
+  });
+  return status;
+}
+
+- (NSDictionary *)callLogSince:(long long)sinceMs limit:(NSInteger)limit {
+  int bounded = (int)MAX(1, MIN(500, limit));
+  __block NSDictionary *out = nil;
+  dispatch_sync(_coreQueue, ^{
+    if (self->_core)
+      out = [self takeJson:db_core_call_log_json(self->_core, (int64_t)sinceMs, bounded)];
+  });
+  return out;
+}
+
+- (BOOL)markCallLogSeenUpTo:(NSString *)hlc {
+  NSString *watermark = [hlc copy] ?: @"";
+  __block BOOL ok = NO;
+  dispatch_sync(_coreQueue, ^{
+    if (self->_core)
+      ok = db_core_call_log_mark_seen(self->_core,
+                                      [watermark length] > 0 ? [watermark UTF8String] : NULL) == 0;
+  });
+  return ok;
+}
+
+- (NSString *)coreVersion {
+  const char *version = db_core_version();
+  return version ? [NSString stringWithUTF8String:version] : @"";
+}
+
+// ---- Optional Core exports (spec §5.4, §5.5) ----
+//
+// These land on the core branch after the shell work starts, so every one is
+// resolved once at run time instead of at link time. A missing symbol is a
+// documented state, never a crash: the caller degrades and says so, and the
+// shell never falls back to a weaker path (a local password digest, or opening
+// the bulk-add pairing window) just because an export is absent.
+typedef int (*DBAdminVerifyFn)(db_core *, const char *);
+typedef int (*DBAdminSetFn)(db_core *, const char *, const char *);
+typedef int (*DBSetConfigFn)(db_core *, const char *, const char *);
+typedef int (*DBConfigBatchFn)(db_core *, const char *);
+typedef int (*DBDeleteConfigFn)(db_core *, const char *);
+typedef int (*DBSetGlobalNoticeFn)(db_core *, const char *, int64_t);
+typedef int (*DBClearGlobalNoticeFn)(db_core *);
+typedef char *(*DBCallLogV2Fn)(db_core *, int64_t, int64_t, int);
+typedef int (*DBMicMuteFn)(db_core *, int);
+
+static void *DBCoreSymbol(const char *name) {
+  void *symbol = dlsym(RTLD_DEFAULT, name);
+  if (symbol == NULL) NSLog(@"[doorbell][core] optional export %s is absent", name);
+  return symbol;
+}
+
+// ---- Pairing PIN minting (spec §5.4) ----
+//
+// Minting the join PIN must not open the 「まとめて追加」 window, so it uses a
+// separate export. It is resolved at run time: an older Core simply has no
+// symbol, and the shell then keeps the PIN card empty instead of silently
+// opening the bulk-add window, which would be the dangerous fallback.
+typedef char *(*DBMintJoinTokenFn)(db_core *, int);
+
+static DBMintJoinTokenFn DBMintJoinToken(void) {
+  static DBMintJoinTokenFn fn = NULL;
+  static dispatch_once_t once;
+  dispatch_once(&once, ^{
+    fn = (DBMintJoinTokenFn)dlsym(RTLD_DEFAULT, "db_core_mint_join_token_json");
+    if (fn == NULL)
+      NSLog(@"[doorbell][pairing] core has no db_core_mint_join_token_json; "
+             "the PIN card stays empty");
+  });
+  return fn;
+}
+
++ (BOOL)supportsJoinTokenMinting {
+  return DBMintJoinToken() != NULL;
+}
+
+- (NSDictionary *)mintJoinTokenWithSeconds:(int)seconds {
+  DBMintJoinTokenFn mint = DBMintJoinToken();
+  if (mint == NULL) return nil;
+  __block NSDictionary *out = nil;
+  dispatch_sync(_coreQueue, ^{
+    if (self->_core) out = [self takeJson:mint(self->_core, seconds)];
+  });
+  return out;
+}
+
+#pragma mark - one cluster-wide admin password (spec §5.5)
+
+static DBAdminVerifyFn DBAdminVerify(void) {
+  static DBAdminVerifyFn fn = NULL;
+  static dispatch_once_t once;
+  dispatch_once(&once, ^{
+    fn = (DBAdminVerifyFn)DBCoreSymbol("db_core_admin_password_verify");
+  });
+  return fn;
+}
+
+static DBAdminSetFn DBAdminSet(void) {
+  static DBAdminSetFn fn = NULL;
+  static dispatch_once_t once;
+  dispatch_once(&once, ^{ fn = (DBAdminSetFn)DBCoreSymbol("db_core_admin_password_set"); });
+  return fn;
+}
+
++ (BOOL)supportsAdminPassword {
+  return DBAdminVerify() != NULL;
+}
+
+- (BOOL)verifyAdminPassword:(NSString *)password {
+  DBAdminVerifyFn verify = DBAdminVerify();
+  if (verify == NULL || password == nil) return NO;
+  NSString *value = [password copy];
+  __block BOOL ok = NO;
+  // Core owns the constant-time comparison and the shared lockout counter, so
+  // the shell must not add a second, weaker check of its own.
+  dispatch_sync(_coreQueue, ^{
+    if (self->_core) ok = verify(self->_core, [value UTF8String]) > 0;
+  });
+  return ok;
+}
+
+- (int)setAdminPasswordFrom:(NSString *)current to:(NSString *)replacement {
+  DBAdminSetFn set = DBAdminSet();
+  if (set == NULL) return -100;
+  NSString *from = [current copy] ?: @"";
+  NSString *to = [replacement copy] ?: @"";
+  __block int status = -1;
+  dispatch_sync(_coreQueue, ^{
+    if (self->_core) status = set(self->_core, [from UTF8String], [to UTF8String]);
+  });
+  return status;
+}
+
+#pragma mark - native configuration writes (spec §5.5)
+
+static DBSetConfigFn DBSetConfig(void) {
+  static DBSetConfigFn fn = NULL;
+  static dispatch_once_t once;
+  dispatch_once(&once, ^{ fn = (DBSetConfigFn)DBCoreSymbol("db_core_set_config_json"); });
+  return fn;
+}
+
+static DBConfigBatchFn DBConfigBatch(void) {
+  static DBConfigBatchFn fn = NULL;
+  static dispatch_once_t once;
+  dispatch_once(&once, ^{ fn = (DBConfigBatchFn)DBCoreSymbol("db_core_config_batch_json"); });
+  return fn;
+}
+
+static DBDeleteConfigFn DBDeleteConfig(void) {
+  static DBDeleteConfigFn fn = NULL;
+  static dispatch_once_t once;
+  dispatch_once(&once, ^{ fn = (DBDeleteConfigFn)DBCoreSymbol("db_core_delete_config_key"); });
+  return fn;
+}
+
++ (BOOL)supportsConfigWrites {
+  return DBSetConfig() != NULL;
+}
+
+- (int)setConfigKey:(NSString *)key valueJson:(NSString *)valueJson {
+  DBSetConfigFn set = DBSetConfig();
+  if (set == NULL) return -100;
+  if ([key length] == 0 || valueJson == nil) return -1;
+  NSString *k = [key copy];
+  NSString *v = [valueJson copy];
+  __block int status = -1;
+  dispatch_sync(_coreQueue, ^{
+    if (self->_core) status = set(self->_core, [k UTF8String], [v UTF8String]);
+  });
+  return status;
+}
+
+// A JSON document is required, so a plain string is quoted here rather than in
+// every caller.
+- (int)setConfigKey:(NSString *)key stringValue:(NSString *)value {
+  NSData *encoded = [NSJSONSerialization dataWithJSONObject:@[ value ?: @"" ]
+                                                    options:0 error:NULL];
+  if (encoded == nil) return -1;
+  NSString *array = [[NSString alloc] initWithData:encoded encoding:NSUTF8StringEncoding];
+  if ([array length] < 2) return -1;
+  NSString *quoted = [array substringWithRange:NSMakeRange(1, [array length] - 2)];
+  return [self setConfigKey:key valueJson:quoted];
+}
+
+- (int)setConfigKey:(NSString *)key numberValue:(NSInteger)value {
+  return [self setConfigKey:key
+                  valueJson:[NSString stringWithFormat:@"%ld", (long)value]];
+}
+
+- (int)setConfigKey:(NSString *)key boolValue:(BOOL)value {
+  return [self setConfigKey:key valueJson:(value ? @"true" : @"false")];
+}
+
+- (int)deleteConfigKey:(NSString *)key {
+  DBDeleteConfigFn remove = DBDeleteConfig();
+  if (remove == NULL) return -100;
+  if ([key length] == 0) return -1;
+  NSString *k = [key copy];
+  __block int status = -1;
+  dispatch_sync(_coreQueue, ^{
+    if (self->_core) status = remove(self->_core, [k UTF8String]);
+  });
+  return status;
+}
+
+- (int)writeConfigBatch:(NSArray *)ops {
+  DBConfigBatchFn batch = DBConfigBatch();
+  if (batch == NULL) return -100;
+  if (![ops isKindOfClass:[NSArray class]] || [ops count] == 0) return -1;
+  NSData *encoded = [NSJSONSerialization
+      dataWithJSONObject:[NSDictionary dictionaryWithObject:ops forKey:@"ops"]
+                 options:0 error:NULL];
+  if (encoded == nil) return -1;
+  NSString *json = [[NSString alloc] initWithData:encoded encoding:NSUTF8StringEncoding];
+  __block int status = -1;
+  dispatch_sync(_coreQueue, ^{
+    if (self->_core) status = batch(self->_core, [json UTF8String]);
+  });
+  return status;
+}
+
+#pragma mark - global announcement, history paging, mic mute (spec §5.5)
+
+static DBSetGlobalNoticeFn DBSetGlobalNotice(void) {
+  static DBSetGlobalNoticeFn fn = NULL;
+  static dispatch_once_t once;
+  dispatch_once(&once, ^{
+    fn = (DBSetGlobalNoticeFn)DBCoreSymbol("db_core_set_global_notice");
+  });
+  return fn;
+}
+
+static DBClearGlobalNoticeFn DBClearGlobalNotice(void) {
+  static DBClearGlobalNoticeFn fn = NULL;
+  static dispatch_once_t once;
+  dispatch_once(&once, ^{
+    fn = (DBClearGlobalNoticeFn)DBCoreSymbol("db_core_clear_global_notice");
+  });
+  return fn;
+}
+
+- (BOOL)setGlobalNotice:(NSString *)text expiresMs:(long long)expiresMs {
+  if ([text length] == 0) return NO;
+  NSString *value = [text copy];
+  DBSetGlobalNoticeFn set = DBSetGlobalNotice();
+  if (set != NULL) {
+    __block BOOL ok = NO;
+    dispatch_sync(_coreQueue, ^{
+      if (self->_core) ok = set(self->_core, [value UTF8String], (int64_t)expiresMs) == 0;
+    });
+    return ok;
+  }
+  // Older Core: the door API addresses the cluster-wide announcement with "*".
+  return [self setNotice:value forDoor:DBNoticeTargetGlobal expiresMs:expiresMs];
+}
+
+- (BOOL)clearGlobalNotice {
+  DBClearGlobalNoticeFn clear = DBClearGlobalNotice();
+  if (clear != NULL) {
+    __block BOOL ok = NO;
+    dispatch_sync(_coreQueue, ^{
+      if (self->_core) ok = clear(self->_core) == 0;
+    });
+    return ok;
+  }
+  return [self clearNoticeForDoor:DBNoticeTargetGlobal];
+}
+
+static DBCallLogV2Fn DBCallLogV2(void) {
+  static DBCallLogV2Fn fn = NULL;
+  static dispatch_once_t once;
+  dispatch_once(&once, ^{ fn = (DBCallLogV2Fn)DBCoreSymbol("db_core_call_log_json_v2"); });
+  return fn;
+}
+
+- (NSDictionary *)callLogSince:(long long)sinceMs beforeMs:(long long)beforeMs
+                         limit:(NSInteger)limit {
+  DBCallLogV2Fn paged = DBCallLogV2();
+  int bounded = (int)MAX(1, MIN(500, limit));
+  if (paged == NULL) {
+    // Older Core has no cursor: read a wider window and let the history model
+    // slice the page. Bounded by the same 500-row ceiling either way.
+    return [self callLogSince:sinceMs limit:limit];
+  }
+  __block NSDictionary *out = nil;
+  dispatch_sync(_coreQueue, ^{
+    if (self->_core)
+      out = [self takeJson:paged(self->_core, (int64_t)sinceMs, (int64_t)beforeMs, bounded)];
+  });
+  return out;
+}
+
+static DBMicMuteFn DBMicMute(void) {
+  static DBMicMuteFn fn = NULL;
+  static dispatch_once_t once;
+  dispatch_once(&once, ^{ fn = (DBMicMuteFn)DBCoreSymbol("db_core_sip_set_mic_muted"); });
+  return fn;
+}
+
++ (BOOL)supportsMicMute {
+  return DBMicMute() != NULL;
+}
+
+- (int)setMicMuted:(BOOL)muted {
+  DBMicMuteFn mute = DBMicMute();
+  if (mute == NULL) return -100;
+  __block int status = -1;
+  dispatch_sync(_coreQueue, ^{
+    if (self->_core) status = mute(self->_core, muted ? 1 : 0);
+  });
+  return status;
 }
 
 @end

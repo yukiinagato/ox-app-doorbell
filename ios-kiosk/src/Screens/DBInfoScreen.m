@@ -182,9 +182,36 @@ static BOOL DBPortListening(int port) {
                       [DBConfigUtil evStr:node key:@"name"],
                       [DBConfigUtil evStr:node key:@"id"] ?: @"-"];
   [info appendFormat:@"%@ : %@\n", [texts ts:@"info.role"], _boot.role];
-  [info appendFormat:@"%@ : %@\n", [texts ts:@"info.version"],
+  // Every screen shows core and app versions side by side (spec §5.1).
+  [info appendFormat:@"%@ : %@\n", [texts ts:@"info.core_version"],
+                      [_core coreVersion] ?: @"-"];
+  [info appendFormat:@"%@ : %@\n", [texts ts:@"info.app_version"],
                       [[NSBundle mainBundle] objectForInfoDictionaryKey:
                                             @"CFBundleShortVersionString"] ?: @"-"];
+  // The kiosk's local safe mode is no longer an invisible latch: the state and
+  // the remaining healthy window are shown here.
+  NSString *safeModeState = [DBConfigUtil str:st path:@"runtime.safe_mode_state"];
+  if ([safeModeState length] == 0 || [safeModeState isEqualToString:@"off"]) {
+    [info appendFormat:@"%@ : %@\n", [texts ts:@"info.safe_mode"],
+                        [texts ts:@"info.safe_mode_off"]];
+  } else if ([safeModeState isEqualToString:@"heartbeat_stalled"]) {
+    [info appendFormat:@"%@ : %@\n", [texts ts:@"info.safe_mode"],
+                        [texts ts:@"info.safe_mode_heartbeat"]];
+  } else if ([safeModeState isEqualToString:@"crash_charged"]) {
+    [info appendFormat:@"%@ : %@\n", [texts ts:@"info.safe_mode"],
+                        [texts ts:@"info.safe_mode_crash"]];
+  } else if ([safeModeState isEqualToString:@"helper_latched"]) {
+    [info appendFormat:@"%@ : %@\n", [texts ts:@"info.safe_mode"],
+                        [texts ts:@"info.safe_mode_helper"]];
+  } else {
+    double remaining = [DBConfigUtil doubleVal:st path:@"runtime.safe_mode_remaining_s"
+                                           def:600];
+    long minutes = (long)((remaining + 59) / 60);
+    if (minutes < 1) minutes = 1;
+    [info appendFormat:@"%@ : %@\n", [texts ts:@"info.safe_mode"],
+                        [texts t:@"info.safe_mode_wait",
+                             [NSString stringWithFormat:@"%ld", minutes], nil]];
+  }
   [info appendFormat:@"%@ : %@\n", [texts ts:@"info.microphone"],
                       [texts ts:_boot.micEnabled ? @"info.external_present" : @"info.absent"]];
   [info appendFormat:@"%@ : %@\n", [texts ts:@"info.camera"],

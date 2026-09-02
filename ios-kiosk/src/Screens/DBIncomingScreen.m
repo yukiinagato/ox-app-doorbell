@@ -12,8 +12,15 @@
 #import "../Media/DBQrCode.h"
 #import "../Net/DBMjpegClient.h"
 #import "../Net/DBSnapshotPoller.h"
+#import "../Core/DBNoticeModel.h"
+#import "../Core/DBUiTheme.h"
 #import "../Support/DBAppDelegate.h"
+#import "DBNoticeDialog.h"
 #import "DBRouter.h"
+#import "DBWidgets.h"
+
+// The debug line is remembered per device (spec §5.2).
+static NSString *const kDebugLineHiddenKey = @"DBIncomingDebugLineHidden";
 
 static const NSTimeInterval kLegacyAutoCloseS = 30;
 static const NSTimeInterval kCancelledCloseS = 15;
@@ -125,6 +132,20 @@ static BOOL DBSameString(NSString *a, NSString *b) {
   UIButton *_monitorButton;
   UIButton *_openButton;
   UIButton *_ignoreButton;
+  UIButton *_micButton;
+  UIButton *_repliesButton;
+  DBNoticeChip *_noticeChip;
+  DBNoticeDialog *_noticeDialog;
+  DBUiPalette *_palette;
+  NSDictionary *_display;   // status.display: core-resolved appearance and theme.
+  NSDictionary *_doorUnlock;  // status.doors.<id>.unlock
+  BOOL _monitorAudioOn;
+  BOOL _micMuted;
+  BOOL _repliesVisible;
+  BOOL _debugLineHidden;
+  BOOL _unlockConfigured;
+  BOOL _unlockVisible;
+  UIButton *_debugLineTap;
   UIButton *_adminQrButton;
   UILabel *_adminUrlLabel;
   UIView *_qrPickerOverlay;
@@ -157,6 +178,7 @@ static BOOL DBSameString(NSString *a, NSString *b) {
     _replyButtons = [[NSMutableArray alloc] init];
     _adminHosts = @[];
     _qrPickerButtons = [[NSMutableArray alloc] init];
+    _debugLineHidden = [[NSUserDefaults standardUserDefaults] boolForKey:kDebugLineHiddenKey];
     [self buildUi];
   }
   return self;
@@ -271,6 +293,30 @@ static BOOL DBSameString(NSString *a, NSString *b) {
           forControlEvents:UIControlEventTouchUpInside];
   [self addSubview:_ignoreButton];
 
+  // One control row (spec §5.1): モニター ON/OFF · 応答/通話終了 · マイク · 開錠 ·
+  // クイック返信. Every entry shows its own state instead of a silent toggle.
+  _micButton = [self makeButton:NO];
+  [_micButton addTarget:self action:@selector(onMic)
+       forControlEvents:UIControlEventTouchUpInside];
+  [self addSubview:_micButton];
+
+  _repliesButton = [self makeButton:NO];
+  [_repliesButton addTarget:self action:@selector(onToggleReplies)
+           forControlEvents:UIControlEventTouchUpInside];
+  [self addSubview:_repliesButton];
+
+  _noticeChip = [[DBNoticeChip alloc] initWithFrame:CGRectZero];
+  [_noticeChip addTarget:self action:@selector(onNoticeChip)
+        forControlEvents:UIControlEventTouchUpInside];
+  [self addSubview:_noticeChip];
+
+  // Tapping the debug line hides it; the choice is remembered per device.
+  _debugLineTap = [UIButton buttonWithType:UIButtonTypeCustom];
+  _debugLineTap.backgroundColor = [UIColor clearColor];
+  [_debugLineTap addTarget:self action:@selector(onToggleDebugLine)
+          forControlEvents:UIControlEventTouchUpInside];
+  [self addSubview:_debugLineTap];
+
   _adminQrButton = [UIButton buttonWithType:UIButtonTypeCustom];
   _adminQrButton.backgroundColor = [UIColor whiteColor];
   _adminQrButton.layer.cornerRadius = 8;
@@ -363,6 +409,10 @@ static BOOL DBSameString(NSString *a, NSString *b) {
   _mediaSource = nil;
   _answerButton.enabled = NO;
   _monitorButton.enabled = NO;
+  _monitorAudioOn = NO;
+  _micMuted = NO;
+  // A ringing call shows the quick replies straight away; monitoring does not.
+  _repliesVisible = YES;
   _noVideoLabel.hidden = NO;
   _liveView.image = nil;
 
@@ -395,7 +445,8 @@ static BOOL DBSameString(NSString *a, NSString *b) {
   [_router sipHangup];
   _sipMode = @"";
   _monitorOnly = YES;
-  _liveView.contentMode = UIViewContentModeScaleAspectFill;
+  // Letterboxed, never cropped: a portrait door camera stays portrait.
+  _liveView.contentMode = UIViewContentModeScaleAspectFit;
   _liveView.clipsToBounds = YES;
   _selectedPeerId = [[DBConfigUtil evStr:peer key:@"id"] copy];
   _selectedPeerName = [[DBConfigUtil evStr:peer key:@"name"] copy];
@@ -425,6 +476,9 @@ static BOOL DBSameString(NSString *a, NSString *b) {
   [self updateAdminAddressesFromPeer:peer];
   _answerButton.enabled = NO;
   _monitorButton.enabled = ([_peerHost length] > 0);
+  _monitorAudioOn = NO;
+  _micMuted = NO;
+  _repliesVisible = NO;
   _noVideoLabel.hidden = NO;
   _liveView.image = nil;
   NSDictionary *cached = [_core lastConfig];
@@ -547,8 +601,8 @@ static BOOL DBSameString(NSString *a, NSString *b) {
           NSString *resolvedName = [DBConfigUtil evStr:peer key:@"name"];
           if ([resolvedId length] > 0) s->_selectedPeerId = resolvedId;
           if ([resolvedName length] > 0) s->_selectedPeerName = resolvedName;
-          [s updateAdminAddressesFromPeer:peer];
         }
+        [s updateAdminAddressesFromPeer:peer];
       } else if (!s->_monitorOnly) {
         s->_peerHost = ([s->_boot.doorHost length] > 0) ? s->_boot.doorHost : nil;
         s->_mediaSource = [DBMediaSource sourceForPeer:nil config:cfg boot:s->_boot door:s->_door
@@ -559,6 +613,12 @@ static BOOL DBSameString(NSString *a, NSString *b) {
       }
       NSString *selfId = [DBConfigUtil str:st path:@"node.id"];
       s->_nodeId = [selfId copy] ?: @"";
+      NSDictionary *display = [st objectForKey:@"display"];
+      if ([display isKindOfClass:[NSDictionary class]]) s->_display = display;
+      // Core reports whether an unlock action exists and whether the button
+      // should be shown, so the shell never has to guess from configuration.
+      s->_doorUnlock = [DBConfigUtil dig:st path:[NSString stringWithFormat:
+          @"doors.%@.unlock", s->_door ?: @""]];
       NSString *playbackPath = [selfId length]
           ? [NSString stringWithFormat:@"devices.%@.local.video.playback", selfId] : nil;
       NSString *playback = playbackPath ? [DBConfigUtil str:cfg path:playbackPath] : nil;
@@ -606,17 +666,111 @@ static BOOL DBSameString(NSString *a, NSString *b) {
                                    : [_texts ts:(_cancelled ? @"ring.cancelled" : @"reply.choose")];
   [_answerButton setTitle:(_inCall ? [_texts ts:@"incall.end"] : [_texts ts:@"ring.answer"])
                  forState:UIControlStateNormal];
-  [_monitorButton setTitle:[_texts ts:@"ring.monitor"] forState:UIControlStateNormal];
+  // The monitor and mic entries are stateful toggles with a visible on/off
+  // state, not silent buttons (spec §5.1).
+  [_monitorButton setTitle:[_texts ts:(_monitorAudioOn ? @"ring.monitor_on"
+                                                       : @"ring.monitor_off")]
+                  forState:UIControlStateNormal];
+  [_micButton setTitle:[_texts ts:(_micMuted ? @"ring.mic_off" : @"ring.mic_on")]
+              forState:UIControlStateNormal];
+  [_repliesButton setTitle:[_texts ts:@"admin.quick_replies"] forState:UIControlStateNormal];
   [_openButton setTitle:[_texts ts:@"ring.open_door"] forState:UIControlStateNormal];
   [_ignoreButton setTitle:[_texts ts:(_monitorOnly ? @"monitor.close" : @"ring.ignore")]
                   forState:UIControlStateNormal];
   _answerButton.hidden = _monitorOnly;
-  _openButton.hidden = _monitorOnly;
-  _purposeBadge.hidden = _monitorOnly;
+  _micButton.hidden = _monitorOnly;
   _langBadge.hidden = _monitorOnly;
+  [self refreshUnlockVisibility];
+  [self refreshNoticeChip];
+  [self applyPalette];
   [self updateBadges];
   [self buildReplyButtons];
   [self applySemanticStyles];
+  [self setNeedsLayout];
+}
+
+// The unlock button is an admin decision (spec §5.2). It defaults to on when an
+// unlock action exists and off when it does not, and an explicit setting wins.
+// Core reports doors.<id>.unlock = {configured, command, show_button, source}:
+// show_button defaults to configured and an administrator may force either
+// answer (spec §5.2). An older core leaves the button on its configured state.
+- (void)refreshUnlockVisibility {
+  _unlockConfigured = [DBConfigUtil boolVal:_doorUnlock path:@"configured" def:NO];
+  _unlockVisible = [DBConfigUtil boolVal:_doorUnlock path:@"show_button"
+                                     def:_unlockConfigured];
+  _openButton.hidden = !_unlockVisible;
+}
+
+- (void)refreshNoticeChip {
+  long long nowMs = (long long)([[NSDate date] timeIntervalSince1970] * 1000.0);
+  NSDictionary *notice = [DBNoticeModel effectiveNoticeForDoor:_door config:_cfg nowMs:nowMs];
+  [_noticeChip setChipTitle:[_texts ts:@"notice.chip"] active:(notice != nil)];
+  _noticeChip.hidden = ([_door length] == 0);
+}
+
+- (void)applyPalette {
+  _palette = [DBUiPalette paletteForConfig:_cfg deviceId:_nodeId display:_display
+                             backgroundHex:nil minuteOfDay:[self minuteOfDay]];
+  [_noticeChip applyPalette:_palette];
+  _adminUrlLabel.textColor = [_palette.ink colorWithAlphaComponent:0.85];
+}
+
+- (NSInteger)minuteOfDay {
+  NSDictionary *local = [_core localTimeJson:0];
+  NSInteger hh = [DBConfigUtil intVal:local path:@"hh" def:-1];
+  if (hh < 0) return 12 * 60;
+  return hh * 60 + [DBConfigUtil intVal:local path:@"mm" def:0];
+}
+
+- (void)onNoticeChip {
+  if ([_door length] == 0) return;
+  if (!_noticeDialog) _noticeDialog = [[DBNoticeDialog alloc] initWithRouter:_router];
+  NSMutableArray *doorIds = [NSMutableArray array];
+  NSMutableDictionary *labels = [NSMutableDictionary dictionary];
+  NSDictionary *doors = [DBConfigUtil dig:_cfg path:@"doors"];
+  if ([doors isKindOfClass:[NSDictionary class]]) {
+    for (NSString *identifier in [DBConfigUtil sortedByOrder:doors]) {
+      [doorIds addObject:identifier];
+      [labels setObject:[DBConfigUtil labelOf:[doors objectForKey:identifier]
+                                         lang:_boot.uiLang fallback:identifier]
+                 forKey:identifier];
+    }
+  }
+  __weak DBIncomingScreen *weakSelf = self;
+  // Opened from a door's own screen, so that door is preselected.
+  [_noticeDialog presentInView:self config:_cfg doorIds:doorIds doorLabels:labels
+               preselectedDoor:_door palette:_palette onFinished:^(BOOL changed) {
+    DBIncomingScreen *screen = weakSelf;
+    if (screen && changed) [screen refreshFromCore];
+  }];
+}
+
+- (void)onMic {
+  BOOL muted = !_micMuted;
+  if ([DBCoreBridge supportsMicMute]) {
+    // Core mutes the capture path in place and reports status.call.mic_muted,
+    // so the call is never torn down to change the microphone.
+    if ([_core setMicMuted:muted] != 0) return;
+  } else if ([_sipMode isEqualToString:@"answer"] && [_peerHost length] > 0) {
+    // Older Core: MiniSIP owns the microphone for the whole session, so muting
+    // is expressed by restarting the answered leg in listen-only mode.
+    [_router sipStart:_peerHost port:(int)_directPort
+                 mode:(muted ? @"monitor" : @"answer")];
+  }
+  _micMuted = muted;
+  [self applyContent];
+}
+
+- (void)onToggleReplies {
+  _repliesVisible = !_repliesVisible;
+  [self setNeedsLayout];
+}
+
+- (void)onToggleDebugLine {
+  _debugLineHidden = !_debugLineHidden;
+  [[NSUserDefaults standardUserDefaults] setBool:_debugLineHidden forKey:kDebugLineHiddenKey];
+  [[NSUserDefaults standardUserDefaults] synchronize];
+  _videoStatsLabel.hidden = _debugLineHidden;
   [self setNeedsLayout];
 }
 
@@ -759,7 +913,9 @@ static BOOL DBSameString(NSString *a, NSString *b) {
 
 - (void)updateAdminQr {
   NSInteger gen = ++_adminQrGen;
-  BOOL available = _monitorOnly && [_adminHosts count] > 0;
+  // The door station's admin QR stays visible in a corner of the incoming
+  // screen too (spec §5.2, round 5), not only while actively monitoring.
+  BOOL available = ([_adminHosts count] > 0);
   _adminQrButton.hidden = !available;
   _adminUrlLabel.hidden = !available;
   if (!available) {
@@ -1295,18 +1451,25 @@ static BOOL DBSameString(NSString *a, NSString *b) {
     }
   }
 
+  // Unobtrusive debug line (spec §5.2): codec/strategy, end-to-end latency,
+  // jitter, fps, dropped. Tapping it hides it, remembered per device.
   NSString *transport = [_activeVideoTransport length] ? _activeVideoTransport : @"NO STREAM";
+  NSString *strategy = [_currentVideoStrategy length] ? _currentVideoStrategy : @"-";
+  NSUInteger dropped = _lowLatency ? [_lowLatency droppedFrames] : 0;
+  _videoStatsLabel.hidden = _debugLineHidden;
   if (stats.valid) {
     _videoStatsLabel.text = [NSString stringWithFormat:
-        @"  %@  |  LAT %ld ms  |  JIT %ld ms  |  %.1f fps  ", transport,
-        (long)stats.latencyMs, (long)stats.jitterMs, (double)stats.framesPerSecond];
+        @"  %@/%@ · %ld ms · jit %ld ms · %.1f fps · drop %lu  ", transport, strategy,
+        (long)stats.latencyMs, (long)stats.jitterMs, (double)stats.framesPerSecond,
+        (unsigned long)dropped];
     _videoStatsLabel.textColor = stats.latencyMs < 800
-        ? [UIColor colorWithRed:0.55 green:1.0 blue:0.65 alpha:1]
-        : [UIColor colorWithRed:1.0 green:0.55 blue:0.35 alpha:1];
+        ? [UIColor colorWithWhite:1 alpha:0.68]
+        : [UIColor colorWithRed:1.0 green:0.65 blue:0.45 alpha:0.85];
   } else {
     _videoStatsLabel.text = [NSString stringWithFormat:
-        @"  %@  |  LAT -- ms  |  JIT -- ms  |  -- fps  ", transport];
-    _videoStatsLabel.textColor = [UIColor colorWithWhite:1 alpha:0.75];
+        @"  %@/%@ · -- ms · jit -- ms · -- fps · drop %lu  ", transport, strategy,
+        (unsigned long)dropped];
+    _videoStatsLabel.textColor = [UIColor colorWithWhite:1 alpha:0.55];
   }
   [self publishVideoRuntime:stats force:NO];
 }
@@ -1603,11 +1766,24 @@ static BOOL DBSameString(NSString *a, NSString *b) {
 }
 
 - (void)onMonitor {
-  if (_peerHost == nil || [_sipMode length] > 0) return;
+  if (_peerHost == nil) return;
+  // モニター is a stateful ON/OFF toggle for door audio; the answered call is
+  // never torn down by it.
+  if (_monitorAudioOn && [_sipMode isEqualToString:@"monitor"]) {
+    [_router sipHangup];
+    _sipMode = @"";
+    _monitorAudioOn = NO;
+    _hintLabel.hidden = YES;
+    [self applyContent];
+    return;
+  }
+  if ([_sipMode length] > 0 && ![_sipMode isEqualToString:@"monitor"]) return;
   _sipMode = @"monitor";
+  _monitorAudioOn = YES;
   [self startSip:@"monitor"];
   _hintLabel.text = [_texts ts:@"ring.monitoring"];
   _hintLabel.hidden = NO;
+  [self applyContent];
 }
 
 - (void)beginMonitorAudio {
@@ -1621,8 +1797,12 @@ static BOOL DBSameString(NSString *a, NSString *b) {
 }
 
 - (void)onOpenDoor {
-  [_router sipSendDtmf:@"*1"];
-  _hintLabel.text = [_texts ts:@"ring.open_door"];
+  // db_core_open_door publishes the configured unlock action; -3 means nothing
+  // is configured anywhere. Shown but unconfigured must explain itself, because
+  // a silent no-op reads as a broken lock (spec §5.2).
+  int status = [_core openDoor:_door];
+  _hintLabel.text = (status == 0) ? [_texts ts:@"ring.unlock_sent"]
+                                  : [_texts ts:@"ring.unlock_unconfigured"];
   _hintLabel.hidden = NO;
 }
 
@@ -1705,176 +1885,168 @@ static BOOL DBSameString(NSString *a, NSString *b) {
 
 #pragma mark - layout
 
-- (void)layoutSubviews {
-  [super layoutSubviews];
-  CGSize sz = self.bounds.size;
-  [self layoutQrPicker:sz];
-  BOOL portrait = sz.height > sz.width;
-  CGFloat m = 24;
-  if (_monitorOnly) {
-    // Active monitoring maximizes video while keeping controls in a separate rail.
-    // Wide layouts use a side rail and compact layouts use a bottom rail.
-    CGFloat edge = 14;
-    CGFloat gap = 14;
-    BOOL rotatedPortrait = (_videoRotation == 90 || _videoRotation == 270);
-    _titleLabel.backgroundColor = [UIColor clearColor];
-    _titleLabel.layer.cornerRadius = 0;
-    _statusLabel.backgroundColor = [UIColor clearColor];
-    _hintLabel.backgroundColor = [UIColor clearColor];
-    BOOL showAdminQr = [_adminHosts count] > 0;
-    _adminQrButton.hidden = !showAdminQr;
-    _adminUrlLabel.hidden = !showAdminQr;
-    _titleLabel.numberOfLines = 0;
-    _titleLabel.lineBreakMode = NSLineBreakByWordWrapping;
-    _statusLabel.numberOfLines = 0;
-    if (!portrait && sz.width >= 700 && rotatedPortrait) {
-      CGFloat railW = MIN(210, MAX(184, sz.width * 0.20));
-      CGFloat videoW = sz.width - edge * 2 - gap - railW;
-      _liveView.frame = CGRectMake(edge, edge, videoW, sz.height - edge * 2);
-      _noVideoLabel.frame = _liveView.frame;
-      CGFloat x = CGRectGetMaxX(_liveView.frame) + gap;
-      CGFloat w = sz.width - x - edge;
-      // Portrait video leaves enough vertical room for multiline device and status text.
-      _titleLabel.font = [UIFont boldSystemFontOfSize:27];
-      _titleLabel.adjustsFontSizeToFitWidth = NO;
-      _titleLabel.frame = CGRectMake(x, edge, w, 104);
-      _videoStatsLabel.font = [UIFont fontWithName:@"Menlo-Bold" size:13];
-      if (!_videoStatsLabel.font) _videoStatsLabel.font = [UIFont boldSystemFontOfSize:13];
-      _videoStatsLabel.adjustsFontSizeToFitWidth = NO;
-      _videoStatsLabel.numberOfLines = 0;
-      _videoStatsLabel.lineBreakMode = NSLineBreakByWordWrapping;
-      _videoStatsLabel.frame = CGRectMake(x, 126, w, 76);
-      _statusLabel.frame = CGRectMake(x, 214, w, 42);
-      _hintLabel.frame = CGRectMake(x, 266, w, 44);
-      CGFloat qrSide = MIN(132, w);
-      _adminQrButton.frame = CGRectMake(x + (w - qrSide) / 2, 322, qrSide, qrSide);
-      _adminUrlLabel.frame = CGRectMake(x, 462, w, 66);
-      CGFloat buttonH = 66;
-      CGFloat bottom = sz.height - edge - buttonH;
-      _monitorButton.frame = CGRectMake(x, bottom - buttonH - 14, w, buttonH);
-      _ignoreButton.frame = CGRectMake(x, bottom, w, buttonH);
-    } else {
-      _titleLabel.font = [UIFont boldSystemFontOfSize:30];
-      _titleLabel.adjustsFontSizeToFitWidth = YES;
-      _videoStatsLabel.font = [UIFont fontWithName:@"Menlo-Bold" size:15];
-      if (!_videoStatsLabel.font) _videoStatsLabel.font = [UIFont boldSystemFontOfSize:15];
-      _videoStatsLabel.adjustsFontSizeToFitWidth = YES;
-      _videoStatsLabel.numberOfLines = 1;
-      // Landscape video uses the full width and places controls in the bottom rail.
-      CGFloat railH = (!portrait && sz.width >= 700) ? 174 : 196;
-      CGFloat videoH = MAX(200, sz.height - edge * 2 - gap - railH);
-      _liveView.frame = CGRectMake(edge, edge, sz.width - edge * 2, videoH);
-      _noVideoLabel.frame = _liveView.frame;
-      CGFloat y = CGRectGetMaxY(_liveView.frame) + gap;
-      if (!portrait && sz.width >= 700) {
-        CGFloat titleW = MIN(350, sz.width * 0.34);
-        _titleLabel.frame = CGRectMake(edge, y, titleW, 52);
-        // Keep latency information directly below the title group in landscape.
-        _videoStatsLabel.font = [UIFont fontWithName:@"Menlo-Bold" size:13];
-        if (!_videoStatsLabel.font) _videoStatsLabel.font = [UIFont boldSystemFontOfSize:13];
-        _videoStatsLabel.adjustsFontSizeToFitWidth = NO;
-        _videoStatsLabel.numberOfLines = 0;
-        _videoStatsLabel.lineBreakMode = NSLineBreakByWordWrapping;
-        _videoStatsLabel.frame = CGRectMake(edge, y + 56, titleW, 50);
-        _statusLabel.frame = CGRectMake(edge, y + 110, titleW, 22);
-        _hintLabel.frame = CGRectMake(edge, y + 134, titleW, 24);
+// The door camera's aspect drives the video slot: a portrait stream is shown
+// portrait, letterboxed, never cropped or stretched (spec §5.1). The image's
+// own size wins; before the first frame the reported sensor rotation decides.
+- (CGSize)videoContentSize {
+  UIImage *frame = _liveView.image;
+  if (frame != nil && frame.size.width > 0 && frame.size.height > 0) return frame.size;
+  BOOL rotatedPortrait = (_videoRotation == 90 || _videoRotation == 270);
+  return rotatedPortrait ? CGSizeMake(3, 4) : CGSizeMake(4, 3);
+}
 
-        CGFloat qrSide = 124;
-        CGFloat qrX = edge + titleW + gap;
-        _adminQrButton.frame = CGRectMake(qrX, y + 2, qrSide, qrSide);
-        _adminUrlLabel.frame = CGRectMake(qrX - 8, y + 130, qrSide + 16, 30);
+- (void)layoutVideoInSlot:(CGRect)slot {
+  CGRect frame = DBAspectFitRect(slot, [self videoContentSize]);
+  _liveView.frame = frame;
+  _noVideoLabel.frame = frame;
+  // The debug line sits inside the video slot's bottom edge and never covers
+  // the picture's centre.
+  CGFloat statsWidth = MIN(CGRectGetWidth(slot) - 16, 460);
+  CGRect stats = CGRectMake(CGRectGetMinX(slot) + 8,
+                            CGRectGetMaxY(slot) - 30, statsWidth, 24);
+  _videoStatsLabel.frame = stats;
+  _debugLineTap.frame = CGRectInset(stats, -6, -6);
+}
 
-        CGFloat bx = qrX + qrSide + gap;
-        CGFloat buttonW = (sz.width - bx - edge - gap) / 2;
-        _monitorButton.frame = CGRectMake(bx, y + 44, buttonW, 66);
-        _ignoreButton.frame = CGRectMake(bx + buttonW + gap, y + 44, buttonW, 66);
-      } else {
-        _titleLabel.frame = CGRectMake(edge, y, sz.width * 0.46, 48);
-        _videoStatsLabel.frame = CGRectMake(edge, y + 56, sz.width * 0.55, 36);
-        _statusLabel.frame = CGRectMake(edge, y + 100, sz.width * 0.46, 32);
-        _hintLabel.frame = CGRectMake(edge, y + 136, sz.width * 0.55, 50);
-        _adminQrButton.frame = CGRectMake(sz.width * 0.48, y + 8, 82, 82);
-        _adminUrlLabel.frame = CGRectMake(sz.width * 0.46, y + 94, 112, 44);
-        CGFloat buttonW = (sz.width * 0.40 - gap) / 2;
-        CGFloat bx = sz.width - edge - buttonW * 2 - gap;
-        _monitorButton.frame = CGRectMake(bx, y + 70, buttonW, 66);
-        _ignoreButton.frame = CGRectMake(bx + buttonW + gap, y + 70, buttonW, 66);
-      }
-    }
-    _answerButton.frame = CGRectZero;
-    _openButton.frame = CGRectZero;
-    _purposeBadge.frame = CGRectZero;
-    _langBadge.frame = CGRectZero;
-    _replyStack.frame = CGRectZero;
+- (NSArray *)visibleControlButtons {
+  NSMutableArray *buttons = [NSMutableArray array];
+  [buttons addObject:_monitorButton];
+  if (!_answerButton.hidden) [buttons addObject:_answerButton];
+  if (!_micButton.hidden) [buttons addObject:_micButton];
+  if (!_openButton.hidden) [buttons addObject:_openButton];
+  if ([_replyButtons count] > 0) [buttons addObject:_repliesButton];
+  [buttons addObject:_ignoreButton];
+  return buttons;
+}
+
+- (void)layoutControlRow:(CGRect)row {
+  NSArray *buttons = [self visibleControlButtons];
+  NSUInteger count = [buttons count];
+  if (count == 0) return;
+  CGFloat gap = 10;
+  CGFloat width = (CGRectGetWidth(row) - gap * (count - 1)) / count;
+  CGFloat x = CGRectGetMinX(row);
+  for (UIButton *button in buttons) {
+    button.frame = CGRectMake(x, CGRectGetMinY(row), width, CGRectGetHeight(row));
+    x += width + gap;
+  }
+  for (UIButton *button in @[ _monitorButton, _answerButton, _micButton, _openButton,
+                              _repliesButton, _ignoreButton ]) {
+    if (![buttons containsObject:button]) button.frame = CGRectZero;
+  }
+}
+
+- (void)layoutAdminQr:(CGSize)size {
+  BOOL show = ([_adminHosts count] > 0);
+  _adminQrButton.hidden = !show;
+  _adminUrlLabel.hidden = !show;
+  if (!show) {
+    _adminQrButton.frame = CGRectZero;
+    _adminUrlLabel.frame = CGRectZero;
     return;
   }
+  // Small, in the corner, same component as the dashboard footer.
+  CGFloat side = 84;
+  _adminQrButton.frame = CGRectMake(size.width - side - 14, 14, side, side);
+  _adminUrlLabel.frame = CGRectMake(size.width - side - 30, 14 + side + 2, side + 16, 28);
+}
+
+- (void)layoutSubviews {
+  [super layoutSubviews];
+  CGSize size = self.bounds.size;
+  [self layoutQrPicker:size];
+  _noticeDialog.frame = self.bounds;
+  BOOL portrait = size.height > size.width;
+  CGFloat margin = 20;
+  CGFloat controlHeight = 62;
+  CGFloat gap = 14;
+
   _titleLabel.backgroundColor = [UIColor clearColor];
   _titleLabel.layer.cornerRadius = 0;
-  _statusLabel.backgroundColor = [UIColor clearColor];
+  _statusLabel.backgroundColor = _cancelled ? _statusLabel.backgroundColor
+                                            : [UIColor clearColor];
   _hintLabel.backgroundColor = [UIColor clearColor];
-  _titleLabel.font = [UIFont boldSystemFontOfSize:30];
+  _titleLabel.font = [UIFont boldSystemFontOfSize:portrait ? 26 : 30];
   _titleLabel.numberOfLines = 2;
-  _titleLabel.adjustsFontSizeToFitWidth = YES;
-  _videoStatsLabel.font = [UIFont fontWithName:@"Menlo-Bold" size:15];
-  if (!_videoStatsLabel.font) _videoStatsLabel.font = [UIFont boldSystemFontOfSize:15];
-  _videoStatsLabel.numberOfLines = 1;
-  _videoStatsLabel.adjustsFontSizeToFitWidth = YES;
-  _statusLabel.numberOfLines = 1;
-  _adminQrButton.hidden = YES;
-  _adminUrlLabel.hidden = YES;
-  _adminQrButton.frame = CGRectZero;
-  _adminUrlLabel.frame = CGRectZero;
-  _qrPickerOverlay.hidden = YES;
 
-  _titleLabel.frame = CGRectMake(m, 18, sz.width - 2 * m - 310, 40);
-  _purposeBadge.frame = CGRectMake(sz.width - m - 310, 18, 220, 40);
-  _langBadge.frame = CGRectMake(sz.width - m - 80, 18, 80, 40);
+  [self layoutAdminQr:size];
+  CGFloat headerRight = _adminQrButton.hidden ? size.width - margin
+                                              : CGRectGetMinX(_adminQrButton.frame) - 12;
 
-  CGFloat topY = 72;
-  CGFloat videoW, videoH, rightX, rightY, rightW;
-  if (portrait) {
-    videoW = sz.width - 2 * m;
-    videoH = sz.height * 0.38;
-    _liveView.frame = CGRectMake(m, topY, videoW, videoH);
-    rightX = m;
-    rightY = topY + videoH + 16;
-    rightW = sz.width - 2 * m;
+  // Header: notice chip, door name, then the fixed-height purpose slot.
+  CGFloat headerY = 16;
+  if (_noticeChip.hidden) {
+    _noticeChip.frame = CGRectZero;
   } else {
-    videoW = sz.width * 0.58;
-    videoH = sz.height - topY - 18;
-    _liveView.frame = CGRectMake(m, topY, videoW, videoH);
-    rightX = m + videoW + m;
-    rightY = topY;
-    rightW = sz.width - rightX - m;
+    CGSize chipFit = [_noticeChip sizeThatFits:CGSizeMake(260, 34)];
+    CGFloat chipWidth = MIN(240, MAX(120, chipFit.width + 14));
+    _noticeChip.frame = CGRectMake(margin, headerY, chipWidth, 34);
+    headerY += 42;
   }
-  _noVideoLabel.frame = _liveView.frame;
-  CGFloat statsW = MIN(videoW - 16, 590);
-  _videoStatsLabel.frame = CGRectMake(CGRectGetMinX(_liveView.frame) + 8,
-                                      CGRectGetMinY(_liveView.frame) + 8,
-                                      statsW, 30);
+  _titleLabel.frame = CGRectMake(margin, headerY, MAX(0, headerRight - margin), 44);
+  headerY += 48;
 
-  CGFloat y = rightY;
-  CGFloat statusH = _cancelled ? 52 : 28;
-  _statusLabel.frame = CGRectMake(rightX, y, rightW, statusH);
-  y += statusH + 8;
-
-  CGFloat ry = 0;
-  for (UIButton *b in _replyButtons) {
-    b.frame = CGRectMake(0, ry, rightW, 56);
-    ry += 56 + 12;
+  // The purpose slot keeps its height even while empty, so the layout never
+  // jumps when the visitor's purpose arrives after the ring (spec §5.2).
+  CGFloat purposeSlotHeight = _monitorOnly ? 0 : 38;
+  if (purposeSlotHeight > 0) {
+    _purposeBadge.frame = CGRectMake(margin, headerY, MIN(320, size.width - 2 * margin), 34);
+    _langBadge.frame = CGRectMake(margin + MIN(320, size.width - 2 * margin) + 10, headerY,
+                                  80, 34);
+    headerY += purposeSlotHeight + 6;
+  } else {
+    _purposeBadge.frame = CGRectZero;
+    _langBadge.frame = CGRectZero;
   }
-  _replyStack.frame = CGRectMake(rightX, y, rightW, ry);
-  y += ry + 4;
-  _hintLabel.frame = CGRectMake(rightX, y, rightW, 50);
 
+  CGFloat contentTop = headerY;
+  CGFloat bottom = size.height - margin;
+  CGFloat controlY = bottom - controlHeight;
+  CGFloat statusHeight = _cancelled ? 52 : 28;
 
-  CGFloat rowH = 60, gap = 12;
-  CGFloat bottom = sz.height - 18 - rowH;
-  CGFloat bw = (rightW - 3 * gap) / 4;
-  _answerButton.frame = CGRectMake(rightX + 0 * (bw + gap), bottom, bw, rowH);
-  _monitorButton.frame = CGRectMake(rightX + 1 * (bw + gap), bottom, bw, rowH);
-  _openButton.frame = CGRectMake(rightX + 2 * (bw + gap), bottom, bw, rowH);
-  _ignoreButton.frame = CGRectMake(rightX + 3 * (bw + gap), bottom, bw, rowH);
+  BOOL sideBySide = !portrait && size.width >= 700 && !_monitorOnly &&
+                    (_repliesVisible && [_replyButtons count] > 0);
+  CGFloat replyWidth = sideBySide ? MIN(320, size.width * 0.32) : 0;
+  CGFloat videoRight = size.width - margin - (sideBySide ? replyWidth + gap : 0);
+  CGRect videoSlot = CGRectMake(margin, contentTop, MAX(80, videoRight - margin),
+                                MAX(80, controlY - contentTop - gap - statusHeight - 8));
+  [self layoutVideoInSlot:videoSlot];
+
+  _statusLabel.frame = CGRectMake(margin, CGRectGetMaxY(videoSlot) + 6,
+                                  MAX(0, videoRight - margin), statusHeight);
+  _hintLabel.frame = CGRectMake(margin, CGRectGetMaxY(_statusLabel.frame),
+                                MAX(0, videoRight - margin), 24);
+  _hintLabel.numberOfLines = 1;
+
+  // Quick replies: a column beside the video when there is room, otherwise a
+  // scrollable stack over the lower half. The control row never moves.
+  BOOL showReplies = _repliesVisible && [_replyButtons count] > 0;
+  if (!showReplies) {
+    _replyStack.frame = CGRectZero;
+    for (UIButton *button in _replyButtons) button.frame = CGRectZero;
+  } else if (sideBySide) {
+    CGFloat x = videoRight + gap;
+    CGFloat y = 0;
+    for (UIButton *button in _replyButtons) {
+      button.frame = CGRectMake(0, y, replyWidth, 54);
+      y += 54 + 10;
+    }
+    _replyStack.frame = CGRectMake(x, contentTop, replyWidth,
+                                   MAX(0, controlY - contentTop - gap));
+  } else {
+    CGFloat stackWidth = size.width - 2 * margin;
+    CGFloat y = 0;
+    for (UIButton *button in _replyButtons) {
+      button.frame = CGRectMake(0, y, stackWidth, 50);
+      y += 50 + 8;
+    }
+    CGFloat stackHeight = MIN(y, MAX(60, controlY - contentTop - gap));
+    _replyStack.frame = CGRectMake(margin, controlY - gap - stackHeight, stackWidth,
+                                   stackHeight);
+  }
+
+  [self layoutControlRow:CGRectMake(margin, controlY, size.width - 2 * margin,
+                                    controlHeight)];
 }
 
 @end

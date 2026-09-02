@@ -7,7 +7,9 @@
 #import "../Core/DBTexts.h"
 #import "../Media/DBSiren.h"
 #import "../Media/DBSipListener.h"
+#import "DBHistoryScreen.h"
 #import "DBHomeScreen.h"
+#import "DBSettingsScreen.h"
 #import "DBDoorScreen.h"
 #import "DBIncomingScreen.h"
 #import "DBInfoScreen.h"
@@ -16,6 +18,7 @@
 #import "DBPairingScreen.h"
 #import "DBPinOverlay.h"
 #import "DBScreen.h"
+#import "../Support/DBAppDelegate.h"
 
 static BOOL DBEmergencyUsesChannel(NSDictionary *event, NSString *wanted) {
   id channels = [event objectForKey:@"channels"];
@@ -79,6 +82,8 @@ static BOOL DBCoreSipBackendCompiled(void) {
   DBDoorScreen *_door;
   DBIncomingScreen *_incoming;
   DBInfoScreen *_info;
+  DBSettingsScreen *_settings;
+  DBHistoryScreen *_history;
   DBPairingScreen *_pairing;
   DBAddDeviceScreen *_addDevice;
   BOOL _pairingDeferred;
@@ -179,6 +184,16 @@ static BOOL DBCoreSipBackendCompiled(void) {
 - (DBInfoScreen *)info {
   if (!_info) _info = [[DBInfoScreen alloc] initWithRouter:self];
   return _info;
+}
+
+- (DBSettingsScreen *)settings {
+  if (!_settings) _settings = [[DBSettingsScreen alloc] initWithRouter:self];
+  return _settings;
+}
+
+- (DBHistoryScreen *)history {
+  if (!_history) _history = [[DBHistoryScreen alloc] initWithRouter:self];
+  return _history;
 }
 
 - (DBPairingScreen *)pairing {
@@ -624,6 +639,50 @@ static BOOL DBCoreSipBackendCompiled(void) {
 
 - (void)closeInfoAnimated:(BOOL)animated {
   if (_current == _info) [self showHomeAnimated:animated];
+}
+
+- (void)showSettings {
+  [[self settings] reload];
+  [self transitionTo:_settings animated:YES];
+}
+
+- (void)closeSettingsAnimated:(BOOL)animated {
+  if (_current == _settings) [self showHomeAnimated:animated];
+}
+
+- (void)showHistory {
+  [[self history] reload];
+  [self transitionTo:_history animated:YES];
+}
+
+- (void)closeHistoryAnimated:(BOOL)animated {
+  if (_current != _history) return;
+  // Settings owns the history entry when it opened it; otherwise the dashboard
+  // does. Returning to the primary screen is correct in both cases because the
+  // settings screen reloads itself when it reappears.
+  [self showHomeAnimated:animated];
+}
+
+- (void)factoryResetForRevocation:(NSString *)reason {
+  NSLog(@"[doorbell][pairing] factory reset after %@", reason ?: @"revocation");
+  // Order matters: Core zeroes and removes its own copy of the pairing key
+  // first, then the shell overwrites the Keychain entry it owns, and only then
+  // is the profile rewritten. A crash between the steps leaves a device that
+  // is unpaired rather than one that still advertises stale membership.
+  [_core unpair];
+  [_core storeSecret:@"mesh.psk" value:@""];
+  NSString *json = [DBBootConfig clearPairingAndSetup];
+  if ([json length] > 0) {
+    _boot.rawJson = json;
+    _boot.legacyPskHex = @"";
+    _boot.name = @"";
+    _boot.role = @"indoor_panel";
+    _boot.door = @"";
+    _boot.setupRequired = YES;
+  }
+  id delegate = [UIApplication sharedApplication].delegate;
+  if ([delegate respondsToSelector:@selector(restartIntoBootstrapSetup)])
+    [delegate performSelector:@selector(restartIntoBootstrapSetup)];
 }
 
 - (void)showPairing {
@@ -1153,10 +1212,31 @@ static BOOL DBCoreSipBackendCompiled(void) {
         !_pairingDeferred && [self currentIsPrimaryScreen])
       [self showPairing];
   } else if ([t isEqualToString:@"pairing_revoked"]) {
+    // Revocation is a factory reset, not just a lost key (spec §5.4): a device
+    // that was removed from the cluster must not keep announcing the name,
+    // role, and door it was given there.
     _pairingDeferred = NO;
     [[self pairing] handleRevoked:ev];
+    [self factoryResetForRevocation:@"pairing_revoked"];
+  } else if ([t isEqualToString:@"notice_changed"]) {
+    // An announcement changed anywhere in the cluster: the dashboard chip, the
+    // door tiles, the visitor screen, and an open monitor all re-read it.
     if (_home) [_home refreshFromCore];
-    if (_current != _pairing && [self currentIsPrimaryScreen]) [self showPairing];
+    if (_door) [_door refreshFromCore];
+    if (_current == _incoming) [_incoming refreshFromCore];
+    if (_current == _settings) [_settings reload];
+  } else if ([t isEqualToString:@"time_changed"]) {
+    // The zone or the applied NTP correction moved; every clock is redrawn and
+    // already recorded timestamps are left alone.
+    if (_home) [_home refreshFromCore];
+    if (_door) [_door refreshFromCore];
+    if (_current == _settings) [_settings reload];
+    if (_current == _history) [_history reload];
+  } else if ([t isEqualToString:@"power_changed"]) {
+    if (_home) [_home refreshFromCore];
+    if (_door) [_door refreshFromCore];
+  } else if ([t isEqualToString:@"call_log_changed"]) {
+    if (_home) [_home refreshFromCore];
   } else if ([t isEqualToString:@"pending_changed"]) {
     if (_current == _addDevice) [_addDevice handlePendingChanged:ev];
   } else if ([t isEqualToString:@"invite_result"]) {
