@@ -37,7 +37,7 @@ final class ThemeInkTests: XCTestCase {
                                 "auto_ink": ["footer": "light"],
                                 "auto_background": ["source": "color", "color": "#101010"]])
         for ground in [InkGround.palette(darkGround), .themeColor(darkGround),
-                       .sampled(lightGround)] {
+                       .sampled(.uniform(lightGround))] {
             let decision = decide(contract, ground: ground)
             XCTAssertEqual(decision.source, .admin)
             assertColor(decision.ink, UIColor(red: 1, green: 0, blue: 0, alpha: 1))
@@ -89,12 +89,12 @@ final class ThemeInkTests: XCTestCase {
         let contract = display(["bg_image": "sha256:abc",
                                 "auto_ink": ["footer": "light"],
                                 "auto_background": ["source": "image", "color": "#101010"]])
-        let decision = decide(contract, ground: .sampled(lightGround))
+        let decision = decide(contract, ground: .sampled(.uniform(lightGround)))
         XCTAssertEqual(decision.source, .localRegion)
         assertColor(decision.ink, DoorbellPalette.light.ink,
                     "a light region takes the dark ink whatever Core published")
 
-        let onDark = decide(contract, ground: .sampled(darkGround))
+        let onDark = decide(contract, ground: .sampled(.uniform(darkGround)))
         XCTAssertEqual(onDark.source, .localRegion)
         assertColor(onDark.ink, DoorbellPalette.dark.ink)
     }
@@ -144,7 +144,7 @@ final class ThemeInkTests: XCTestCase {
                                 "auto_background": ["source": "image_unsampled",
                                                     "reason": "pixels_above_cap"]])
         let wallpaper = UIColor(red: 0xBB / 255, green: 0xBB / 255, blue: 0xB4 / 255, alpha: 1)
-        let decision = decide(contract, ground: .sampled(wallpaper))
+        let decision = decide(contract, ground: .sampled(.uniform(wallpaper)))
         XCTAssertEqual(decision.source, .localRegion)
         assertColor(decision.ink, DoorbellPalette.light.ink)
         XCTAssertGreaterThan(Double(DoorbellTheme.contrast(decision.ink, wallpaper)), 4.5)
@@ -200,13 +200,13 @@ final class ThemeInkTests: XCTestCase {
     /// The outline is a fallback, not decoration: it appears only below the 4.5:1 body-text
     /// target, and it is the opposite ink at 40 %.
     func testShadowAppearsOnlyBelowTheBodyTextTarget() {
-        let readable = decide(nil, ground: .sampled(darkGround))
+        let readable = decide(nil, ground: .sampled(.uniform(darkGround)))
         XCTAssertNil(readable.shadow)
 
         // Around the crossover neither ink reaches 4.5:1, which is precisely when the outline is
         // the only thing keeping the text readable.
         let midGround = UIColor(white: 0.5, alpha: 1)
-        let marginal = decide(nil, ground: .sampled(midGround))
+        let marginal = decide(nil, ground: .sampled(.uniform(midGround)))
         assertColor(marginal.ink, DoorbellPalette.light.ink)
         XCTAssertLessThan(DoorbellTheme.contrast(marginal.ink, midGround), 4.5)
         guard let shadow = marginal.shadow else {
@@ -280,6 +280,77 @@ final class ThemeInkTests: XCTestCase {
         let decision = skin.decision("footer", in: CGRect(x: 0, y: 0, width: 100, height: 20))
         XCTAssertEqual(decision.source, .core)
         assertColor(decision.ink, DoorbellPalette.dark.ink)
+    }
+
+    // MARK: - The outline answers the whole region, not its average
+
+    /// A region that is one colour throughout needs no outline once its ink clears 4.5:1.
+    func testAUniformRegionThatClearsAAKeepsNoOutline() {
+        let wallpaper = UIColor(red: 0xBB / 255, green: 0xBB / 255, blue: 0xB4 / 255, alpha: 1)
+        let decision = decide(nil, ground: .sampled(.uniform(wallpaper)))
+        assertColor(decision.ink, DoorbellPalette.light.ink, "#BBBBB4 takes the dark ink")
+        XCTAssertGreaterThan(Double(DoorbellTheme.contrast(decision.ink, wallpaper)), 4.5)
+        XCTAssertNil(decision.shadow)
+    }
+
+    /// The device finding: a hint line crossing a pale wall and a dark jacket. The average is the
+    /// same #BBBBB4 wall that needs no outline on its own, and the ink chosen from that average is
+    /// still right — but it disappears over the jacket, so the outline has to come from the
+    /// darkest and lightest patch rather than the average.
+    func testARegionSpanningLightAndDarkTakesTheOutline() {
+        let wall = UIColor(red: 0xBB / 255, green: 0xBB / 255, blue: 0xB4 / 255, alpha: 1)
+        let jacket = UIColor(white: 0.08, alpha: 1)
+        let sample = BackgroundSample(average: wall,
+                                      minLuminance: DoorbellTheme.luminance(jacket),
+                                      maxLuminance: DoorbellTheme.luminance(wall))
+        let decision = decide(nil, ground: .sampled(sample))
+
+        assertColor(decision.ink, DoorbellPalette.light.ink,
+                    "the average still chooses the ink")
+        XCTAssertGreaterThan(Double(DoorbellTheme.contrast(decision.ink, wall)), 4.5,
+                             "against the average alone this pair would have looked settled")
+        XCTAssertLessThan(Double(sample.worstContrast(decision.ink)), 4.5,
+                          "over the jacket it is not")
+
+        guard let shadow = decision.shadow else {
+            return XCTFail("an ink that fails over part of its own region needs the outline")
+        }
+        var white: CGFloat = 0, alpha: CGFloat = 0
+        XCTAssertTrue(shadow.getWhite(&white, alpha: &alpha))
+        XCTAssertEqual(Double(alpha), 0.4, accuracy: 0.001)
+        XCTAssertEqual(Double(white), 1, accuracy: 0.001, "a dark ink is outlined in white")
+    }
+
+    /// The same rule off a real picture: a band straddling the light and dark halves is outlined,
+    /// and a band wholly inside the light half is not.
+    func testTheOutlineFollowsTheRegionOnADrawnPicture() {
+        let background = ThemeBackgroundView()
+        background.frame = CGRect(x: 0, y: 0, width: 320, height: 480)
+        background.setBackgroundImage(twoToneImage(size: CGSize(width: 64, height: 96)))
+        let skin = DoorbellSkin(palette: .dark, display: display(["bg_image": "sha256:abc"]),
+                                background: darkGround, decorated: true, config: nil, nodeId: "",
+                                sampler: background)
+
+        let straddling = skin.decision("hint", in: CGRect(x: 20, y: 200, width: 280, height: 80))
+        XCTAssertEqual(straddling.source, .localRegion)
+        XCTAssertNotNil(straddling.shadow,
+                        "a band across both halves fails over one of them")
+
+        let inTheLight = skin.decision("clock", in: CGRect(x: 20, y: 20, width: 280, height: 60))
+        assertColor(inTheLight.ink, DoorbellPalette.light.ink)
+        XCTAssertNil(inTheLight.shadow, "a band wholly on the bright half reads on its own")
+    }
+
+    /// A sample answers for both extremes, whichever side the ink sits on.
+    func testWorstContrastTakesTheNearerExtreme() {
+        let sample = BackgroundSample(average: UIColor(white: 0.5, alpha: 1),
+                                      minLuminance: DoorbellTheme.luminance(.black),
+                                      maxLuminance: DoorbellTheme.luminance(.white))
+        XCTAssertEqual(Double(sample.worstContrast(.white)), 1, accuracy: 0.0001)
+        XCTAssertEqual(Double(sample.worstContrast(.black)), 1, accuracy: 0.0001)
+
+        let flat = BackgroundSample.uniform(.black)
+        XCTAssertEqual(Double(flat.worstContrast(.white)), 21, accuracy: 0.0001)
     }
 
     // MARK: - Re-deciding when the picture or the layout moves

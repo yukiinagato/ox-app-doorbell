@@ -80,6 +80,30 @@ enum InkSource: String {
     case local
 }
 
+/// What the shell measured under one text region: the average colour, which chooses the ink, and
+/// the darkest and lightest patch of the same ≤16x16 sample, which decide whether that ink still
+/// needs its outline. A hint line crossing a pale wall and a dark jacket averages to something the
+/// light ink clears comfortably and then vanishes over the jacket.
+struct BackgroundSample {
+    let average: UIColor
+    let minLuminance: CGFloat
+    let maxLuminance: CGFloat
+
+    /// A ground with no variation in it: a flat theme colour, or the palette's own background.
+    static func uniform(_ color: UIColor) -> BackgroundSample {
+        let level = DoorbellTheme.luminance(color)
+        return BackgroundSample(average: color, minLuminance: level, maxLuminance: level)
+    }
+
+    /// The worst contrast an ink reaches anywhere in the region. Contrast falls away on both
+    /// sides of the ink's own luminance, so the worst patch is always one of the two extremes.
+    func worstContrast(_ ink: UIColor) -> CGFloat {
+        let level = DoorbellTheme.luminance(ink)
+        return min(DoorbellTheme.ratio(level, minLuminance),
+                   DoorbellTheme.ratio(level, maxLuminance))
+    }
+}
+
 /// The ground one text region sits on, and how much this shell knows about it. The three cases
 /// are §5's precedence: only a picture the shell drew and sampled under the region displaces
 /// Core's published per-region ink.
@@ -89,11 +113,24 @@ enum InkGround {
     /// A flat theme colour. Core measured exactly this, so its per-region ink is authoritative.
     case themeColor(UIColor)
     /// The theme picture this shell drew, measured under the region.
-    case sampled(UIColor)
+    case sampled(BackgroundSample)
 
+    /// The colour the ink is chosen against.
     var color: UIColor {
         switch self {
-        case .palette(let color), .themeColor(let color), .sampled(let color): return color
+        case .palette(let color), .themeColor(let color): return color
+        case .sampled(let sample): return sample.average
+        }
+    }
+
+    /// The worst contrast an ink reaches anywhere on this ground. A flat colour has only itself;
+    /// a sampled picture answers for its darkest and lightest patch.
+    func worstContrast(_ ink: UIColor) -> CGFloat {
+        switch self {
+        case .palette(let color), .themeColor(let color):
+            return DoorbellTheme.contrast(ink, color)
+        case .sampled(let sample):
+            return sample.worstContrast(ink)
         }
     }
 }
@@ -152,8 +189,12 @@ struct DoorbellSkin {
     /// The full decision for one region. `rect`, in the background view's own coordinates, is the
     /// area the text covers; nil measures the whole ground.
     func decision(_ region: String, in rect: CGRect?) -> InkDecision {
+        return decision(region, on: ground(in: rect))
+    }
+
+    private func decision(_ region: String, on ground: InkGround) -> InkDecision {
         return DoorbellTheme.decideInk(display: display, config: config, nodeId: nodeId,
-                                       region: region, ground: ground(in: rect), palette: palette)
+                                       region: region, ground: ground, palette: palette)
     }
 
     /// A picture on screen is the ground, whatever Core managed to measure of it: Core holds one
@@ -163,7 +204,7 @@ struct DoorbellSkin {
         guard let sampler = sampler, sampler.drawsImage else {
             return decorated ? .themeColor(background) : .palette(background)
         }
-        return .sampled(sampler.sampledBackground(in: rect) ?? background)
+        return .sampled(sampler.sample(in: rect) ?? .uniform(background))
     }
 
     /// The quiet variant of a region's ink. Over a decoration it is the same ink moved towards
@@ -173,8 +214,12 @@ struct DoorbellSkin {
     }
 
     func muted(_ region: String, in rect: CGRect?) -> UIColor {
-        let decision = self.decision(region, in: rect)
-        if case .palette = ground(in: rect), decision.source != .admin {
+        let ground = self.ground(in: rect)
+        return muted(decision(region, on: ground), on: ground)
+    }
+
+    private func muted(_ decision: InkDecision, on ground: InkGround) -> UIColor {
+        if case .palette = ground, decision.source != .admin {
             return palette.inkMuted
         }
         return DoorbellTheme.solid(decision.ink.withAlphaComponent(0.74),
@@ -189,12 +234,14 @@ struct DoorbellSkin {
         paint(region, to: label, quiet: quiet)
     }
 
-    /// Paints one label from the geometry it has right now.
+    /// Paints one label from the geometry it has right now. The outline is decided against the
+    /// colour actually painted, quiet variant included, and against the whole ground rather than
+    /// its average.
     func paint(_ region: String, to label: UILabel, quiet: Bool) {
-        let rect = sampler?.regionRect(of: label)
-        let decision = self.decision(region, in: rect)
-        DoorbellTheme.applyInk(quiet ? muted(region, in: rect) : decision.ink,
-                               over: decision.background, to: label)
+        let ground = self.ground(in: sampler?.regionRect(of: label))
+        let decision = self.decision(region, on: ground)
+        DoorbellTheme.applyInk(quiet ? muted(decision, on: ground) : decision.ink, over: ground,
+                               to: label)
     }
 
     // MARK: - Text on a card this shell painted
@@ -337,8 +384,8 @@ final class ThemeBackgroundView: UIImageView {
     private func skin(display: [String: Any]?, config: [String: Any]?, nodeId: String,
                       palette: DoorbellPalette, host: UIView, decorated: Bool) -> DoorbellSkin {
         var background = host.backgroundColor ?? palette.background
-        if drawsImage, let sampled = sampledBackground(in: nil) {
-            background = sampled
+        if drawsImage, let sampled = sample(in: nil) {
+            background = sampled.average
         } else if let published = DoorbellTheme.publishedBackground(display: display),
                   DoorbellTheme.publishedBackgroundIsGround(display: display) {
             background = published
@@ -358,16 +405,16 @@ final class ThemeBackgroundView: UIImageView {
         return (rect.width > 0 && rect.height > 0) ? rect : nil
     }
 
-    /// The colour behind one rectangle of this view, measured on the picture actually drawn.
+    /// What lies behind one rectangle of this view, measured on the picture actually drawn.
     /// `rect` is in this view's coordinates; nil measures the whole picture. The area is reduced
-    /// to at most 16x16 samples before averaging, as the cross-platform rule requires.
-    func sampledBackground(in rect: CGRect?) -> UIColor? {
+    /// to at most 16x16 patches, as the cross-platform rule requires.
+    func sample(in rect: CGRect?) -> BackgroundSample? {
         guard drawsImage, let proxy = proxy() else { return nil }
         let area = rect.map {
             CGRect(x: $0.minX * proxy.scale, y: $0.minY * proxy.scale,
                    width: $0.width * proxy.scale, height: $0.height * proxy.scale)
         }
-        return DoorbellTheme.averageColor(of: proxy.image, in: area)
+        return DoorbellTheme.sample(of: proxy.image, in: area)
     }
 
     /// The drawn picture reduced to a small copy in view space: aspect-filled into the same
@@ -531,10 +578,16 @@ enum DoorbellTheme {
     static func luminance(_ color: UIColor) -> CGFloat {
         var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
         guard color.getRed(&r, green: &g, blue: &b, alpha: &a) else { return 0 }
+        return luminance(red: r, green: g, blue: b)
+    }
+
+    /// WCAG 2.x relative luminance of an opaque sRGB triple. Taken per patch while sampling, so it
+    /// works on raw components rather than only on a `UIColor`.
+    static func luminance(red: CGFloat, green: CGFloat, blue: CGFloat) -> CGFloat {
         func linear(_ v: CGFloat) -> CGFloat {
             return v <= 0.03928 ? v / 12.92 : pow((v + 0.055) / 1.055, 2.4)
         }
-        return 0.2126 * linear(r) + 0.7152 * linear(g) + 0.0722 * linear(b)
+        return 0.2126 * linear(red) + 0.7152 * linear(green) + 0.0722 * linear(blue)
     }
 
     /// Flattens a translucent colour onto an opaque one. Used wherever a surface that used to
@@ -549,23 +602,24 @@ enum DoorbellTheme {
     }
 
     static func contrast(_ first: UIColor, _ second: UIColor) -> CGFloat {
-        let a = luminance(first), b = luminance(second)
-        return (max(a, b) + 0.05) / (min(a, b) + 0.05)
+        return ratio(luminance(first), luminance(second))
     }
 
-    /// Average colour of an image region, used when the theme background is a picture. The area is
-    /// reduced to at most 16x16 samples before averaging, as the cross-platform rule requires.
-    static func averageColor(of image: UIImage, in rect: CGRect? = nil) -> UIColor? {
-        guard let cg = image.cgImage else { return nil }
-        return averageColor(of: cg, in: rect)
+    /// WCAG contrast ratio between two relative luminances, for the patch extremes a region
+    /// sample carries as numbers rather than colours.
+    static func ratio(_ first: CGFloat, _ second: CGFloat) -> CGFloat {
+        return (max(first, second) + 0.05) / (min(first, second) + 0.05)
     }
 
-    static func averageColor(of image: CGImage, in rect: CGRect? = nil) -> UIColor? {
+    /// One region of an image reduced to at most 16x16 patches, as the cross-platform rule
+    /// requires: the average that chooses the ink, and the darkest and lightest patch, which say
+    /// whether that ink survives the whole region rather than only its average.
+    static func sample(of image: CGImage, in rect: CGRect? = nil) -> BackgroundSample? {
         let full = CGRect(x: 0, y: 0, width: image.width, height: image.height)
         let area = (rect.map { full.intersection($0) } ?? full).integral
         guard area.width >= 1, area.height >= 1,
               let cropped = image.cropping(to: area) else { return nil }
-        // A band the width of a footer is averaged across its own shape rather than squared off.
+        // A band the width of a footer is sampled across its own shape rather than squared off.
         let width = min(16, Int(area.width)), height = min(16, Int(area.height))
         var pixels = [UInt8](repeating: 0, count: width * height * 4)
         guard let context = CGContext(data: &pixels, width: width, height: height,
@@ -575,12 +629,20 @@ enum DoorbellTheme {
         else { return nil }
         context.draw(cropped, in: CGRect(x: 0, y: 0, width: width, height: height))
         var r = 0, g = 0, b = 0
+        var lowest = CGFloat.greatestFiniteMagnitude, highest = -CGFloat.greatestFiniteMagnitude
         for index in stride(from: 0, to: pixels.count, by: 4) {
             r += Int(pixels[index]); g += Int(pixels[index + 1]); b += Int(pixels[index + 2])
+            let patch = luminance(red: CGFloat(pixels[index]) / 255,
+                                  green: CGFloat(pixels[index + 1]) / 255,
+                                  blue: CGFloat(pixels[index + 2]) / 255)
+            lowest = min(lowest, patch)
+            highest = max(highest, patch)
         }
         let count = CGFloat(width * height)
-        return UIColor(red: CGFloat(r) / 255 / count, green: CGFloat(g) / 255 / count,
-                       blue: CGFloat(b) / 255 / count, alpha: 1)
+        let average = UIColor(red: CGFloat(r) / 255 / count, green: CGFloat(g) / 255 / count,
+                              blue: CGFloat(b) / 255 / count, alpha: 1)
+        guard lowest <= highest else { return .uniform(average) }
+        return BackgroundSample(average: average, minLuminance: lowest, maxLuminance: highest)
     }
 
     /// The rectangle an aspect-fill picture occupies inside a viewport: scaled up until it covers,
@@ -626,25 +688,22 @@ enum DoorbellTheme {
         let background = ground.color
         if let override = inkOverride(display: display, config: config, nodeId: nodeId,
                                       region: region) {
-            return decision(ink: override, background: background, source: .admin)
+            return decision(ink: override, ground: ground, source: .admin)
         }
         switch ground {
         case .palette:
-            return decision(ink: palette.ink, background: background, source: .local)
+            return decision(ink: palette.ink, ground: ground, source: .local)
         case .sampled:
-            return decision(ink: automaticInk(on: background), background: background,
+            return decision(ink: automaticInk(on: background), ground: ground,
                             source: .localRegion)
         case .themeColor:
             switch ConfigUtil.str(display, "theme.auto_ink.\(region)") {
             case "dark"?:
-                return decision(ink: DoorbellPalette.light.ink, background: background,
-                                source: .core)
+                return decision(ink: DoorbellPalette.light.ink, ground: ground, source: .core)
             case "light"?:
-                return decision(ink: DoorbellPalette.dark.ink, background: background,
-                                source: .core)
+                return decision(ink: DoorbellPalette.dark.ink, ground: ground, source: .core)
             default:
-                return decision(ink: automaticInk(on: background), background: background,
-                                source: .local)
+                return decision(ink: automaticInk(on: background), ground: ground, source: .local)
             }
         }
     }
@@ -659,11 +718,14 @@ enum DoorbellTheme {
         return contrast(dark, background) >= contrast(light, background) ? dark : light
     }
 
-    /// The outline is added only when the chosen ink still misses the 4.5:1 body-text target
-    /// against its own ground; it is the opposite ink at 40 %.
-    private static func decision(ink: UIColor, background: UIColor,
+    /// The outline is added when the chosen ink misses the 4.5:1 body-text target against any
+    /// patch of the region, not merely against its average: a hint line crossing a pale wall and
+    /// a dark jacket averaged fine on the device and disappeared over the jacket. It is the
+    /// opposite ink at 40 %.
+    private static func decision(ink: UIColor, ground: InkGround,
                                  source: InkSource) -> InkDecision {
-        guard contrast(ink, background) < 4.5 else {
+        let background = ground.color
+        guard ground.worstContrast(ink) < 4.5 else {
             return InkDecision(ink: ink, background: background, source: source, shadow: nil)
         }
         let opposite = luminance(ink) >= 0.5 ? UIColor.black : UIColor.white
@@ -701,10 +763,10 @@ enum DoorbellTheme {
         return color(hex: ConfigUtil.str(display, "theme.auto_background.color"))
     }
 
-    /// A one-pixel outline is added only when the chosen ink still misses AA against the region
-    /// background; it uses the opposite ink at 40 %.
-    static func applyInk(_ ink: UIColor, over background: UIColor, to label: UILabel) {
-        let decided = decision(ink: ink, background: background, source: .local)
+    /// A one-pixel outline is added when the chosen ink misses AA anywhere on the ground under
+    /// the region; it uses the opposite ink at 40 %.
+    static func applyInk(_ ink: UIColor, over ground: InkGround, to label: UILabel) {
+        let decided = decision(ink: ink, ground: ground, source: .local)
         label.textColor = decided.ink
         label.shadowColor = decided.shadow
         label.shadowOffset = decided.shadow == nil ? .zero : CGSize(width: 0, height: 1)
