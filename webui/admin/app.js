@@ -4115,8 +4115,12 @@ if (typeof document !== "undefined") (function () {
   }
 
   var pbReceiver = "", pbSource = "";
-  var PB_LABELS = { h264_low_latency: t("admin.video_low_latency"),
-                    h264_hls: t("admin.video_hls"), mjpeg: "MJPEG" };
+  /* Resolved at render time: I18N is fetched after this script runs. */
+  function pbLabel(id) {
+    if (id === "h264_low_latency") return t("admin.video_low_latency");
+    if (id === "h264_hls") return t("admin.video_hls");
+    return id === "mjpeg" ? "MJPEG" : id;
+  }
 
   function playbackRowsHtml(profile, tbodyId) {
     var p = L.normalizePlaybackProfile(profile), h = "";
@@ -4126,7 +4130,7 @@ if (typeof document !== "undefined") (function () {
            "<td class='ops'><button class='btn2 small' data-pb-up>↑</button> " +
            "<button class='btn2 small' data-pb-down>↓</button></td>" +
            "<td><label><input type='checkbox' data-pb-enabled" +
-           (s.enabled ? " checked" : "") + "> " + esc(PB_LABELS[s.id] || s.id) +
+           (s.enabled ? " checked" : "") + "> " + esc(pbLabel(s.id)) +
            (s.id === "h264_hls" ? " <span class='dim'>(iPad1 App)</span>" : "") +
            "</label></td><td><input type='number' min='100' max='60000' step='100' " +
            "data-pb-start value='" + esc(s.startup_timeout_ms) + "' style='width:100px'> ms</td>" +
@@ -4143,7 +4147,7 @@ if (typeof document !== "undefined") (function () {
   }
 
   function collectPlaybackRows(id) {
-    var rows = $all("[data-pb-row]", $(id)), out = [], enabled = 0;
+    var rows = $all("[data-pb-row]", $("#" + id)), out = [], enabled = 0;
     for (var i = 0; i < rows.length; i++) {
       var start = parseInt(rows[i].querySelector("[data-pb-start]").value, 10);
       var stall = parseInt(rows[i].querySelector("[data-pb-stall]").value, 10);
@@ -4161,17 +4165,17 @@ if (typeof document !== "undefined") (function () {
   }
 
   function updatePlaybackEstimate(id) {
-    var rows = $all("[data-pb-row]", $(id)), ms = 0;
+    var rows = $all("[data-pb-row]", $("#" + id)), ms = 0;
     for (var i = 0; i < rows.length; i++) {
       if (!rows[i].querySelector("[data-pb-enabled]").checked) continue;
       if (rows[i].getAttribute("data-id") === "mjpeg") break;
       ms += parseInt(rows[i].querySelector("[data-pb-start]").value, 10) || 0;
     }
-    var out = $(id + "Estimate"); if (out) out.textContent = String(ms);
+    var out = $("#" + id + "Estimate"); if (out) out.textContent = String(ms);
   }
 
   function bindPlaybackRows(id) {
-    var body = $(id), dragged = null;
+    var body = $("#" + id), dragged = null;
     if (!body) return;
     $all("[data-pb-row]", body).forEach(function (row) {
       row.ondragstart = function (e) {
@@ -4340,22 +4344,22 @@ if (typeof document !== "undefined") (function () {
                   ui: function (id) { editDeviceUi(id, "native"); },
                   webui: function (id) { editDeviceUi(id, "web"); } });
     bindPlaybackRows("pbGlobalRows");
-    if ($("pbPairRows")) bindPlaybackRows("pbPairRows");
-    $("pbGlobalSave").onclick = function () {
+    if ($("#pbPairRows")) bindPlaybackRows("pbPairRows");
+    $("#pbGlobalSave").onclick = function () {
       var p = collectPlaybackRows("pbGlobalRows");
       if (p) saveAndRefresh(L.playbackProfileEntries("", "", p, vp.global), null);
     };
-    $("pbPairLoad").onclick = function () {
-      pbReceiver = $("pbReceiver").value; pbSource = $("pbSource").value;
+    $("#pbPairLoad").onclick = function () {
+      pbReceiver = $("#pbReceiver").value; pbSource = $("#pbSource").value;
       if (!pbReceiver || !pbSource) { window.alert(t("admin.choose_playback_pair")); return; }
       renderDevices();
     };
-    if ($("pbPairSave")) $("pbPairSave").onclick = function () {
+    if ($("#pbPairSave")) $("#pbPairSave").onclick = function () {
       var p = collectPlaybackRows("pbPairRows");
       var pair = (((vp.pairs || {})[pbReceiver] || {})[pbSource]) || {};
       if (p) saveAndRefresh(L.playbackProfileEntries(pbReceiver, pbSource, p, pair), null);
     };
-    if ($("pbPairDelete")) $("pbPairDelete").onclick = function () {
+    if ($("#pbPairDelete")) $("#pbPairDelete").onclick = function () {
       saveAndRefresh(null, ["video_playback.pairs." + pbReceiver + "." + pbSource]);
     };
   }
@@ -6964,7 +6968,7 @@ if (typeof document !== "undefined") (function () {
     el.innerHTML = h;
 
     $all("[data-soundpreview]", el).forEach(function (b) {
-      b.onclick = function () { playRingtone($(b.getAttribute("data-soundpreview")).value); };
+      b.onclick = function () { playRingtone($("#" + b.getAttribute("data-soundpreview")).value); };
     });
     $("#soundSettingsSave").onclick = function () {
       saveAndRefresh([
