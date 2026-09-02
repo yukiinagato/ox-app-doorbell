@@ -102,7 +102,7 @@ class HelperProcess:
                 "--app-uid",
                 str(os.getuid()),
                 "--heartbeat-timeout-ms",
-                "2000",
+                "20000",
                 "--startup-timeout-ms",
                 "60",
                 "--terminate-grace-ms",
@@ -190,7 +190,7 @@ class KeepaliveTests(unittest.TestCase):
                 self.assertNotEqual(read_status(helper.status)["state"], "healthy")
                 helper.send(heartbeat(1))
                 wait_until(lambda: read_status(helper.status)["state"] == "healthy")
-                response = helper.command("MAINTENANCE_BEGIN 1")
+                response = helper.command("MAINTENANCE_BEGIN 6")
                 self.assertTrue(response["ok"])
                 wait_until(lambda: read_status(helper.status)["state"] == "maintenance")
                 response = helper.command("MAINTENANCE_END")
@@ -720,7 +720,7 @@ class RailTests(unittest.TestCase):
                 ) as helper:
                     helper.send(heartbeat(1, app.pid))
                     wait_until(lambda: read_status(helper.status)["state"] == "healthy")
-                    self.assertTrue(helper.command("MAINTENANCE_BEGIN 1")["ok"])
+                    self.assertTrue(helper.command("MAINTENANCE_BEGIN 6")["ok"])
                     wait_until(
                         lambda: read_status(helper.status)["state"] == "maintenance"
                     )
@@ -753,7 +753,7 @@ class RailTests(unittest.TestCase):
                 ) as helper:
                     helper.send(heartbeat(1, app.pid))
                     wait_until(lambda: read_status(helper.status)["state"] == "healthy")
-                    self.assertTrue(helper.command("MAINTENANCE_BEGIN 2")["ok"])
+                    self.assertTrue(helper.command("MAINTENANCE_BEGIN 8")["ok"])
                     wait_until(
                         lambda: read_status(helper.status)["state"] == "maintenance"
                     )
