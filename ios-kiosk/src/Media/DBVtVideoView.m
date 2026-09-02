@@ -1,5 +1,6 @@
 #import "DBVtVideoView.h"
 
+#import "DBLiveEdgeGate.h"
 #import <CoreMedia/CoreMedia.h>
 #import <CoreVideo/CVOpenGLESTextureCache.h>
 #import <OpenGLES/ES1/gl.h>
@@ -229,6 +230,8 @@ static void DbVtOutput(void *, void *, OSStatus, DbVTDecodeInfoFlags,
   CVOpenGLESTextureCacheRef _textureCache;
   CVPixelBufferRef _latest;
   int64_t _latestCaptureMs;
+  BOOL _latestDisplayed;
+  DBLiveEdgeGate _liveEdge;
   GLuint _uploadTexture;
   size_t _uploadWidth;
   size_t _uploadHeight;
@@ -246,6 +249,10 @@ static void DbVtOutput(void *, void *, OSStatus, DbVTDecodeInfoFlags,
   if (self) {
     _frameLock = [[NSLock alloc] init];
     _captureMsByDts = [[NSMutableDictionary alloc] init];
+    // Until the demux reports a trusted server clock, nothing is dropped.
+    DBLiveEdgeGateInit(&_liveEdge, DB_LIVE_EDGE_DEFAULT_START_MS,
+                       DB_LIVE_EDGE_DEFAULT_FLOOR_MS,
+                       DB_LIVE_EDGE_DEFAULT_CEILING_MS, false);
     self.delegate = self;
     self.enableSetNeedsDisplay = YES;
     // The decoder compositor is a UIKit sibling. Keep this GLKView transparent
@@ -296,6 +303,32 @@ static void DbVtOutput(void *, void *, OSStatus, DbVTDecodeInfoFlags,
   NSUInteger value = ++_droppedFrames;
   [_frameLock unlock];
   return value;
+}
+
+- (void)configureLiveEdgeStartMs:(int64_t)startMs
+                         floorMs:(int64_t)floorMs
+                       ceilingMs:(int64_t)ceilingMs
+                    clockTrusted:(BOOL)clockTrusted {
+  [_frameLock lock];
+  DBLiveEdgeGateInit(&_liveEdge, startMs, floorMs, ceilingMs,
+                     clockTrusted ? true : false);
+  int64_t seeded = DBLiveEdgeGateCurrentMs(&_liveEdge);
+  [_frameLock unlock];
+  DBH264Dbg(@"[vt] live edge seed=%lldms floor=%lldms ceiling=%lldms clock=%@",
+            (long long)seeded, (long long)(floorMs > 0 ? floorMs : DB_LIVE_EDGE_DEFAULT_FLOOR_MS),
+            (long long)(ceilingMs > 0 ? ceilingMs : DB_LIVE_EDGE_DEFAULT_CEILING_MS),
+            clockTrusted ? @"trusted" : @"unknown (age gate disabled)");
+}
+
+- (int64_t)liveEdgeMs {
+  [_frameLock lock];
+  int64_t value = DBLiveEdgeGateCurrentMs(&_liveEdge);
+  [_frameLock unlock];
+  return value;
+}
+
+static int64_t DbNowMs(void) {
+  return (int64_t)([[NSDate date] timeIntervalSince1970] * 1000.0);
 }
 
 - (void)setCompatibilityOutputView:(UIImageView *)view {
@@ -405,16 +438,6 @@ static void DbVtOutput(void *, void *, OSStatus, DbVTDecodeInfoFlags,
 }
 
 - (void)acceptDecoded:(CVPixelBufferRef)pixel captureMs:(int64_t)captureMs {
-  if (_maxQueueAgeMs > 0 && captureMs > 0) {
-    int64_t nowMs = (int64_t)([[NSDate date] timeIntervalSince1970] * 1000.0);
-    int64_t age = nowMs - captureMs - _serverToClientOffsetMs;
-    if (age > _maxQueueAgeMs) {
-      NSUInteger dropped = [self recordDroppedFrame];
-      if (dropped < 8)
-        DBH264Dbg(@"[vt] drop stale decoded frame age=%lldms", (long long)age);
-      return;
-    }
-  }
   if ([self decodedFrames] == 0) {
     OSType fmt = CVPixelBufferGetPixelFormatType(pixel);
     DBH264Dbg(@"[vt] output pixel=%c%c%c%c %lux%lu planes=%lu stride=%lu",
@@ -424,12 +447,43 @@ static void DbVtOutput(void *, void *, OSStatus, DbVTDecodeInfoFlags,
               (unsigned long)CVPixelBufferGetPlaneCount(pixel),
               (unsigned long)CVPixelBufferGetBytesPerRow(pixel));
   }
+  int64_t nowMs = DbNowMs();
+  BOOL stale = NO;
+  BOOL superseded = NO;
+  int64_t age = 0;
   [_frameLock lock];
-  if (_latest) CVBufferRelease(_latest);
-  _latest = CVBufferRetain(pixel);
-  _latestCaptureMs = captureMs;
-  _decodedFrames++;
+  if (captureMs > 0) {
+    age = nowMs - captureMs - _serverToClientOffsetMs;
+    // This frame is the newest one we hold unless VideoToolbox emitted output
+    // out of order, which is the only case where something newer is already
+    // queued behind it. The live edge may reject it only then; otherwise it is
+    // the sole frame available and dropping it would blank the display.
+    BOOL newerQueued = (_latest != NULL && !_latestDisplayed &&
+                        _latestCaptureMs > captureMs);
+    stale = DBLiveEdgeGateShouldDrop(&_liveEdge, age, newerQueued ? true : false);
+  }
+  if (stale) {
+    DBLiveEdgeGateNoteDropped(&_liveEdge);
+  } else {
+    // Replacing a frame that was decoded but never painted is the real
+    // catch-up drop on this device: the display side simply could not keep up.
+    superseded = (_latest != NULL && !_latestDisplayed);
+    if (superseded) DBLiveEdgeGateNoteDropped(&_liveEdge);
+    if (_latest) CVBufferRelease(_latest);
+    _latest = CVBufferRetain(pixel);
+    _latestCaptureMs = captureMs;
+    _latestDisplayed = NO;
+    _decodedFrames++;
+  }
   [_frameLock unlock];
+  if (stale || superseded) {
+    NSUInteger dropped = [self recordDroppedFrame];
+    if (dropped < 8)
+      DBH264Dbg(@"[vt] drop %@ frame age=%lldms edge=%lldms",
+                stale ? @"stale decoded" : @"undisplayed", (long long)age,
+                (long long)[self liveEdgeMs]);
+  }
+  if (stale) return;
   dispatch_async(dispatch_get_main_queue(), ^{ [self setNeedsDisplay]; });
 }
 
@@ -453,19 +507,19 @@ static void DbVtOutput(void *refCon, void *frameRefCon, OSStatus status,
   [_frameLock lock];
   CVPixelBufferRef pixel = _latest ? CVBufferRetain(_latest) : NULL;
   int64_t captureMs = _latestCaptureMs;
+  BOOL alreadyDisplayed = _latestDisplayed;
   [_frameLock unlock];
   if (!pixel) return;
-  // The main thread may have stalled after decoder callback. Re-check age at
-  // the last possible moment; preserving the previous texture is preferable
-  // to visibly moving backwards to an already stale frame.
-  if (_maxQueueAgeMs > 0 && captureMs > 0) {
-    int64_t nowMs = (int64_t)([[NSDate date] timeIntervalSince1970] * 1000.0);
-    int64_t age = nowMs - captureMs - _serverToClientOffsetMs;
-    if (age > _maxQueueAgeMs) {
-      [self recordDroppedFrame];
-      CVBufferRelease(pixel);
-      return;
-    }
+  // No second age gate here. Whatever we hold at this point is by definition
+  // the newest decoded frame available, so rejecting it could only blank the
+  // display and keep the player from ever reporting a displayed frame: the
+  // regression this path shipped with. The live edge is enforced in
+  // acceptDecoded:, which is the only place a newer frame can already exist.
+  if (alreadyDisplayed) {
+    // Nothing new since the last draw (a layout-driven redraw). Skip the
+    // expensive SGX535 upload and keep the frame that is already on screen.
+    CVBufferRelease(pixel);
+    return;
   }
   glClearColor(0, 0, 0, 0); glClear(GL_COLOR_BUFFER_BIT);
   size_t width = CVPixelBufferGetWidth(pixel), height = CVPixelBufferGetHeight(pixel);
@@ -544,6 +598,13 @@ static void DbVtOutput(void *refCon, void *frameRefCon, OSStatus status,
     if (colorSpace) CGColorSpaceRelease(colorSpace);
     if (provider) CGDataProviderRelease(provider);
     if (bytes) CFRelease(bytes);
+    // Feed the adaptive live edge with the age this device really achieves.
+    int64_t displayedAge = captureMs > 0
+        ? DbNowMs() - captureMs - _serverToClientOffsetMs : 0;
+    [_frameLock lock];
+    _latestDisplayed = YES;
+    DBLiveEdgeGateNoteDisplayed(&_liveEdge, displayedAge, captureMs > 0);
+    [_frameLock unlock];
     if (_onDisplayedFrame) _onDisplayedFrame(captureMs);
   }
   if (lock == kCVReturnSuccess)
@@ -560,6 +621,7 @@ static void DbVtOutput(void *refCon, void *frameRefCon, OSStatus status,
   if (_format) { CFRelease(_format); _format = NULL; }
   [_frameLock lock];
   if (_latest) { CVBufferRelease(_latest); _latest = NULL; }
+  _latestDisplayed = NO;
   [_captureMsByDts removeAllObjects];
   [_frameLock unlock];
   _compatImageView.image = nil;

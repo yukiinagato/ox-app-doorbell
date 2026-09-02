@@ -20,7 +20,11 @@
 - (id)initWithURLString:(NSString *)url delegate:(id<DBFmp4DemuxDelegate>)delegate;
 - (void)start;
 - (void)stop;
-// client epoch ms - server epoch ms, estimated from the response header.
+// client epoch ms - server epoch ms, estimated from the response header and
+// compensated for half the request/response round trip.
 - (int64_t)serverToClientOffsetMs;
+// NO when the header was missing or implausible. Callers must then not treat
+// a frame's computed age as meaningful.
+- (BOOL)clockOffsetTrusted;
 
 @end

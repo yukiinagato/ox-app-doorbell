@@ -1,4 +1,5 @@
 #import "DBFmp4Demux.h"
+#import "../Media/DBLiveEdgeGate.h"
 void DBH264Dbg(NSString *fmt, ...);
 #import <arpa/inet.h>
 #import <errno.h>
@@ -55,9 +56,11 @@ static BOOL sendAll(int fd, const void *bytes, size_t length) {
   int64_t _captureMs[DB_MAX_SAMPLES_PER_MOOF];
   uint32_t _captureCount;
   int64_t _serverToClientOffsetMs;
+  BOOL _clockOffsetTrusted;
 }
 
 - (int64_t)serverToClientOffsetMs { return _serverToClientOffsetMs; }
+- (BOOL)clockOffsetTrusted { return _clockOffsetTrusted; }
 
 - (id)initWithURLString:(NSString *)url delegate:(id<DBFmp4DemuxDelegate>)delegate {
   self = [super init];
@@ -183,6 +186,7 @@ static BOOL sendAll(int fd, const void *bytes, size_t length) {
       @"GET %@ HTTP/1.1\r\nHost: %@:%ld\r\nUser-Agent: doorbell-kiosk\r\n"
        "Accept: video/mp4\r\nConnection: close\r\n\r\n", path, host, (long)port];
   NSData *rd = [req dataUsingEncoding:NSUTF8StringEncoding];
+  int64_t requestSentMs = (int64_t)([[NSDate date] timeIntervalSince1970] * 1000.0);
   if (!sendAll(s, [rd bytes], [rd length])) {
     DBH264Dbg(@"[fmp4] request write failed errno=%d", errno);
     close(s);
@@ -208,26 +212,38 @@ static BOOL sendAll(int fd, const void *bytes, size_t length) {
       return NO;
     }
   }
+  int64_t responseAtMs = (int64_t)([[NSDate date] timeIntervalSince1970] * 1000.0);
   NSString *head = [[NSString alloc] initWithData:hdr encoding:NSISOLatin1StringEncoding];
   if (![head hasPrefix:@"HTTP/1.1 200 "] && ![head hasPrefix:@"HTTP/1.0 200 "]) {
     DBH264Dbg(@"[fmp4] HTTP rejected: %@", [[head componentsSeparatedByString:@"\r\n"] objectAtIndex:0]);
     close(s);
     return NO;
   }
+  _serverToClientOffsetMs = 0;
+  _clockOffsetTrusted = NO;
   for (NSString *line in [head componentsSeparatedByString:@"\r\n"]) {
     if ([[line lowercaseString] hasPrefix:@"x-doorbell-server-time-ms:"]) {
       NSArray *parts = [line componentsSeparatedByString:@":"];
       if ([parts count] >= 2) {
         int64_t serverMs = [[[parts subarrayWithRange:NSMakeRange(1, [parts count] - 1)]
             componentsJoinedByString:@":"] longLongValue];
-        int64_t clientMs = (int64_t)([[NSDate date] timeIntervalSince1970] * 1000.0);
-        if (serverMs > 0) _serverToClientOffsetMs = clientMs - serverMs;
-        DBH264Dbg(@"[fmp4] clock offset client-server=%lldms",
-                  (long long)_serverToClientOffsetMs);
+        // One-shot HTTP header: compensate half the round trip and refuse an
+        // implausible result rather than gating the live edge on garbage.
+        int64_t offset = 0;
+        _clockOffsetTrusted = DBClockOffsetEstimateMs(serverMs, requestSentMs,
+                                                      responseAtMs, &offset)
+                                  ? YES : NO;
+        _serverToClientOffsetMs = offset;
+        DBH264Dbg(@"[fmp4] clock offset client-server=%lldms rtt=%lldms trusted=%d",
+                  (long long)_serverToClientOffsetMs,
+                  (long long)(responseAtMs - requestSentMs),
+                  (int)_clockOffsetTrusted);
       }
       break;
     }
   }
+  if (!_clockOffsetTrusted)
+    DBH264Dbg(@"[fmp4] no usable server clock; live-edge age gate disabled");
   DBH264Dbg(@"[fmp4] %@", [[head componentsSeparatedByString:@"\r\n"] objectAtIndex:0]);
   *fd = s;
   return YES;

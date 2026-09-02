@@ -64,11 +64,16 @@ static BOOL DBSameString(NSString *a, NSString *b) {
   DBLowLatencyH264Player *_lowLatency;
   NSString *_videoPlayback;    // low_latency (default) | hls | mjpeg
   NSArray *_videoStrategies;   // Effective Core strategies in priority order.
+  // As delivered by Core, before startVideo: reorders H.264 ahead of the
+  // availability layer. Comparing the reordered list against a fresh snapshot
+  // would report a media change on every poll and restart a healthy pipeline.
+  NSArray *_videoStrategiesSource;
   NSInteger _videoStrategyIndex;
   NSInteger _videoSessionGen;
   NSInteger _videoAttemptGen;
   NSString *_currentVideoStrategy;
   BOOL _videoStrategyPlaying;
+  BOOL _mjpegAvailabilityDisabled;  // Profile turned the MJPEG layer off.
   UIImage *_pendingMjpegFrame;
   NSString *_incomingStreamUrl;
   NSString *_incomingStreamMp4Url;
@@ -357,14 +362,26 @@ static BOOL DBSameString(NSString *a, NSString *b) {
   _monitorButton.enabled = NO;
   _noVideoLabel.hidden = NO;
   _liveView.image = nil;
-  [self startVideo:nil];
 
+  // Resolve the media plan from the cached config first. fetchAndApplyCoreSnapshot
+  // below hops to a background queue for [core config]/[core status]; starting
+  // video only after it returns used to serialize the MJPEG availability layer
+  // behind that round trip, which is the whole first-glass budget on iPad 1.
+  // Start now with the last known URLs; the snapshot refresh restarts the
+  // pipeline only if the effective media plan actually changed.
   NSDictionary *cached = [_core lastConfig];
   if (cached) {
     _cfg = cached;
     [_texts setConfig:_cfg];
     [_texts setLang:_boot.uiLang];
   }
+  _mediaSource = [DBMediaSource sourceForPeer:nil config:_cfg boot:_boot door:_door
+                                     deviceID:nil];
+  _incomingStreamUrl = _mediaSource.mjpegURL;
+  _incomingStreamMp4Url = _mediaSource.mp4URL;
+  _videoMetaUrl = _mediaSource.videoMetaURL;
+  [self startVideo:_incomingStreamUrl];
+
   [self applyContent];
   [self restartAutoClose];
   [self fetchAndApplyCoreSnapshot];
@@ -499,7 +516,7 @@ static BOOL DBSameString(NSString *a, NSString *b) {
       NSString *oldSnapshot = [s->_mediaSource.snapshotURL copy] ?: @"";
       NSString *oldMeta = [s->_videoMetaUrl copy] ?: @"";
       NSString *oldPlayback = [s->_videoPlayback copy] ?: @"";
-      NSArray *oldStrategies = [s->_videoStrategies copy] ?: @[];
+      NSArray *oldStrategies = [s->_videoStrategiesSource copy] ?: @[];
       s->_cfg = cfg;
       [s->_texts setConfig:cfg];
       [s->_texts setLang:s->_boot.uiLang];
@@ -554,6 +571,7 @@ static BOOL DBSameString(NSString *a, NSString *b) {
           !DBSameString(oldPlayback, playback ?: @"") ||
           ![oldStrategies isEqualToArray:nextStrategies];
       s->_videoStrategies = nextStrategies;
+      s->_videoStrategiesSource = nextStrategies;
       s->_answerButton.enabled = (!s->_monitorOnly && !s->_awaitingSupersededIdle &&
                                   s->_peerHost != nil);
       s->_monitorButton.enabled = (s->_peerHost != nil);
@@ -832,6 +850,11 @@ static BOOL DBSameString(NSString *a, NSString *b) {
 - (NSArray *)videoStrategiesFromProfile:(NSDictionary *)profile legacy:(NSString *)legacy {
   id raw = [profile objectForKey:@"strategies"];
   NSMutableArray *out = [NSMutableArray array];
+  // The MJPEG availability layer runs whenever an MJPEG URL exists, whatever
+  // the strategy order, unless a profile explicitly disables the MJPEG
+  // strategy. A profile that simply omits mjpeg must not leave the screen with
+  // nothing to paint while H.264 probes.
+  _mjpegAvailabilityDisabled = NO;
   if ([raw isKindOfClass:[NSArray class]]) {
     for (id value in (NSArray *)raw) {
       if (![value isKindOfClass:[NSDictionary class]]) continue;
@@ -839,7 +862,9 @@ static BOOL DBSameString(NSString *a, NSString *b) {
       NSString *sid = [DBConfigUtil evStr:s key:@"id"];
       BOOL known = [sid isEqualToString:@"h264_low_latency"] ||
                    [sid isEqualToString:@"h264_hls"] || [sid isEqualToString:@"mjpeg"];
-      if (known && [DBConfigUtil evBool:s key:@"enabled"]) [out addObject:s];
+      BOOL enabled = [DBConfigUtil evBool:s key:@"enabled"];
+      if ([sid isEqualToString:@"mjpeg"] && !enabled) _mjpegAvailabilityDisabled = YES;
+      if (known && enabled) [out addObject:s];
     }
   }
   if ([out count]) return out;
@@ -863,6 +888,7 @@ static BOOL DBSameString(NSString *a, NSString *b) {
     }] : @[];
   } else if (![_videoStrategies count]) {
     _videoStrategies = [self videoStrategiesFromProfile:nil legacy:_videoPlayback];
+    _videoStrategiesSource = _videoStrategies;
   }
   if (!_safeMode && [_incomingStreamMp4Url length] > 0) {
     NSMutableArray *h264 = [NSMutableArray array];
@@ -899,12 +925,12 @@ static BOOL DBSameString(NSString *a, NSString *b) {
     [self startSnapshotFallback];
     return;
   }
-  // MJPEG is the availability layer while an H.264 decoder waits for its first IDR.
-  BOOL hasMjpeg = NO;
-  for (NSDictionary *s in _videoStrategies)
-    if ([[DBConfigUtil evStr:s key:@"id"] isEqualToString:@"mjpeg"]) hasMjpeg = YES;
-  if (hasMjpeg && ![[DBConfigUtil evStr:[_videoStrategies objectAtIndex:0] key:@"id"]
-                       isEqualToString:@"mjpeg"])
+  // MJPEG is the availability layer while an H.264 decoder waits for its first
+  // IDR and while it proves it can sustain a frame rate. Start it whenever an
+  // MJPEG URL exists — regardless of where mjpeg sits in the strategy order,
+  // and even when the profile omits the mjpeg strategy entirely — unless the
+  // profile explicitly disabled it.
+  if ([_incomingStreamUrl length] > 0 && !_mjpegAvailabilityDisabled)
     [self startMjpegPrewarm];
   [self advanceVideoStrategy:@"session_start"];
 }
@@ -1030,6 +1056,9 @@ static BOOL DBSameString(NSString *a, NSString *b) {
   [_h264 stop]; _h264 = nil;
   _videoStrategyPlaying = NO;
   _activeVideoTransport = @"MJPEG / H.264 RETRY";
+  // Never sit on a dead H.264 attempt with no availability layer running.
+  if (!_streamer && [_incomingStreamUrl length] > 0 && !_mjpegAvailabilityDisabled)
+    [self startMjpegPrewarm];
   if (_pendingMjpegFrame) {
     _liveView.image = _pendingMjpegFrame;
     _noVideoLabel.hidden = YES;
@@ -1089,8 +1118,21 @@ static BOOL DBSameString(NSString *a, NSString *b) {
         [s updateVideoStats:nil];
       } else if (st == DBLowLatencyPlayerFailed) {
         [s retryCurrentH264:@"decoder_error"];
+      } else if (st == DBLowLatencyPlayerStalled) {
+        // The player already uncovered the MJPEG layer; repaint it and retry.
+        [s retryCurrentH264:@"display_stall"];
       }
     }];
+    // Optional fleet knobs; absent keys keep the safe adaptive defaults.
+    id startKnob = [strategy objectForKey:@"live_edge_start_ms"];
+    id floorKnob = [strategy objectForKey:@"live_edge_min_ms"];
+    id ceilingKnob = [strategy objectForKey:@"live_edge_max_ms"];
+    if ([startKnob isKindOfClass:[NSNumber class]])
+      _lowLatency.liveEdgeStartMs = (int64_t)[startKnob longLongValue];
+    if ([floorKnob isKindOfClass:[NSNumber class]])
+      _lowLatency.liveEdgeFloorMs = (int64_t)[floorKnob longLongValue];
+    if ([ceilingKnob isKindOfClass:[NSNumber class]])
+      _lowLatency.liveEdgeCeilingMs = (int64_t)[ceilingKnob longLongValue];
     [_lowLatency start];
   } else if ([sid isEqualToString:@"h264_hls"]) {
     __weak DBIncomingScreen *wself = self;
