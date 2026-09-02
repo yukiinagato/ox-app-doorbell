@@ -1,11 +1,25 @@
 using System;
 using System.Collections.Generic;
+using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using DoorbellApp.Core;
 
 namespace DoorbellApp.Util
 {
+    /// <summary>
+    /// The ink one text region is drawn in, and whether it still needs the thin outline that
+    /// keeps it legible when even the better ink misses the 4.5:1 body-text target.
+    /// </summary>
+    internal sealed class InkDecision
+    {
+        public Color Ink;
+        public Color Shadow;
+        public bool NeedsShadow;
+        /// <summary>Where it came from: "admin", "core", "local_region", or "local".</summary>
+        public string Source = "local";
+    }
+
     /// <summary>One advisory record for a colour pair that misses its WCAG 2.1 target.</summary>
     internal sealed class ContrastAdvisory
     {
@@ -104,23 +118,85 @@ namespace DoorbellApp.Util
         }
 
         /// <summary>
-        /// Ink for one semantic region. Precedence: per-device override, cluster override, the
-        /// core-published automatic decision, then the local luminance rule.
+        /// Average only the part of a background image that lies under one element. Core computes
+        /// its automatic ink from the whole image because it has no layout geometry, which reads
+        /// white over a light corner; the shell has the geometry, so it refines per region.
         /// </summary>
-        public static Color Ink(Dictionary<string, object> display, string regionId,
-                                Color background)
+        public static bool TryAverageRegion(BitmapSource source, Int32Rect crop,
+                                            out Color average)
         {
-            Color parsed;
-            // Core already folded the per-device and cluster overrides into theme.ink_override.
-            object value = CoreClient.Dig(display, "theme.ink_override." + regionId);
-            if (value != null && TryParse(value.ToString(), out parsed)) return parsed;
+            average = Colors.Black;
+            if (source == null || crop.Width <= 0 || crop.Height <= 0) return false;
+            try
+            {
+                return TryAverage(new CroppedBitmap(source, crop), out average);
+            }
+            catch (ArgumentException) { return false; }
+            catch (InvalidOperationException) { return false; }
+        }
 
-            object auto = CoreClient.Dig(display, "theme.auto_ink." + regionId);
-            string token = auto == null ? "" : auto.ToString();
-            if (token == "light") return LightInk;
-            if (token == "dark") return DarkInk;
-            // Older core, or a region it does not know: the same WCAG rule, computed locally.
-            return Luminance(background) >= 0.5 ? DarkInk : LightInk;
+        /// <summary>
+        /// Map an element's rectangle in window coordinates onto the pixels of a background drawn
+        /// with Stretch=UniformToFill, which scales to cover and centres the overflow.
+        /// </summary>
+        public static Int32Rect MapUniformToFill(BitmapSource source, Size viewport, Rect element)
+        {
+            if (source == null || viewport.Width <= 0 || viewport.Height <= 0)
+                return Int32Rect.Empty;
+            double imageWidth = source.PixelWidth;
+            double imageHeight = source.PixelHeight;
+            if (imageWidth <= 0 || imageHeight <= 0) return Int32Rect.Empty;
+            double scale = Math.Max(viewport.Width / imageWidth, viewport.Height / imageHeight);
+            if (scale <= 0) return Int32Rect.Empty;
+            double offsetX = (viewport.Width - imageWidth * scale) / 2.0;
+            double offsetY = (viewport.Height - imageHeight * scale) / 2.0;
+            double left = (element.X - offsetX) / scale;
+            double top = (element.Y - offsetY) / scale;
+            double right = left + element.Width / scale;
+            double bottom = top + element.Height / scale;
+            int x = (int)Math.Floor(Math.Max(0, Math.Min(imageWidth - 1, left)));
+            int y = (int)Math.Floor(Math.Max(0, Math.Min(imageHeight - 1, top)));
+            int width = (int)Math.Ceiling(Math.Max(1, Math.Min(imageWidth - x, right - left)));
+            int height = (int)Math.Ceiling(Math.Max(1, Math.Min(imageHeight - y, bottom - top)));
+            return new Int32Rect(x, y, width, height);
+        }
+
+        /// <summary>
+        /// The ink for one text region. An administrator override wins over everything. Core's
+        /// per-region value wins next, but only when the caller is looking at the very background
+        /// core measured: over a background image core holds one whole-image average and the ABI
+        /// invites the shell to refine per region, and text over a card or a call screen sits on
+        /// a surface core knows nothing about. Both of those cases pass decideLocally, and the
+        /// background handed in decides. The outline is added only when the chosen ink still
+        /// misses the 4.5:1 body-text target.
+        /// </summary>
+        public static InkDecision Decide(Dictionary<string, object> display, string regionId,
+                                         Color background, bool decideLocally)
+        {
+            var decision = new InkDecision();
+            Color parsed;
+            object over = CoreClient.Dig(display, "theme.ink_override." + regionId);
+            if (over != null && TryParse(over.ToString(), out parsed))
+            {
+                decision.Ink = parsed;
+                decision.Source = "admin";
+            }
+            else
+            {
+                object auto = decideLocally ? null
+                    : CoreClient.Dig(display, "theme.auto_ink." + regionId);
+                string token = auto == null ? "" : auto.ToString();
+                if (token == "light") { decision.Ink = LightInk; decision.Source = "core"; }
+                else if (token == "dark") { decision.Ink = DarkInk; decision.Source = "core"; }
+                else
+                {
+                    decision.Ink = Luminance(background) >= 0.5 ? DarkInk : LightInk;
+                    decision.Source = decideLocally ? "local_region" : "local";
+                }
+            }
+            decision.Shadow = Luminance(decision.Ink) >= 0.5 ? DarkInk : LightInk;
+            decision.NeedsShadow = Ratio(decision.Ink, background) < 4.5;
+            return decision;
         }
 
         /// <summary>
@@ -133,15 +209,6 @@ namespace DoorbellApp.Util
             background = Colors.Black;
             object value = CoreClient.Dig(display, "theme.auto_background.color");
             return value != null && TryParse(value.ToString(), out background);
-        }
-
-        /// <summary>
-        /// True when the chosen ink needs the 40 % opposite-ink outline, that is when it does not
-        /// reach the 4.5:1 body-text target against the sampled background.
-        /// </summary>
-        public static bool NeedsOutline(Color ink, Color background)
-        {
-            return Ratio(ink, background) < 4.5;
         }
 
         /// <summary>

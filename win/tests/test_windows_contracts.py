@@ -830,11 +830,12 @@ class WindowsContracts(unittest.TestCase):
         self.assertIn("return ScheduleAppearance(config, localTime);", appearance)
         self.assertIn('"display.appearance_schedule.dark_from"', appearance)
         self.assertIn('"devices." + nodeId + ".local.display.appearance"', appearance)
-        # Core's published decision wins; the local computation is the fallback.
-        ink = contrast[contrast.index("public static Color Ink("):
-                       contrast.index("public static bool NeedsOutline")]
-        self.assertLess(ink.index("ink_override"), ink.index("auto_ink"))
-        self.assertIn("Luminance(background) >= 0.5 ? DarkInk : LightInk", ink)
+        # An admin override wins over everything, then core's published decision, then the
+        # local rule; the local rule is the same WCAG threshold.
+        decide = contrast[contrast.index("public static InkDecision Decide("):
+                          contrast.index("public static bool TryContractBackground")]
+        self.assertLess(decide.index("ink_override"), decide.index("auto_ink"))
+        self.assertIn("Luminance(background) >= 0.5 ? DarkInk : LightInk", decide)
         button = contrast[contrast.index("public static Color CallButton("):
                           contrast.index("public static Color LocalAccent")]
         self.assertLess(button.index("call_button_bg"), button.index("auto_accent"))
@@ -846,6 +847,99 @@ class WindowsContracts(unittest.TestCase):
         # Palette swaps only reach the UI when every consumer uses DynamicResource.
         self.assertNotIn("{StaticResource Bg}", read("win/DoorbellApp/MainWindow.xaml"))
         self.assertIn('<SolidColorBrush x:Key="Line"', app_xaml)
+
+    def test_ink_is_refined_per_region_over_a_background_image(self):
+        contrast = read("win/DoorbellApp/Util/ThemeContrast.cs")
+        shell = read("win/DoorbellApp/MainWindow.Shell.cs")
+        # Core has no layout geometry, so its auto_ink is one whole-image average. The shell has
+        # the geometry and samples only the pixels under each element.
+        self.assertIn("public static bool TryAverageRegion(BitmapSource source, Int32Rect crop,",
+                      contrast)
+        self.assertIn("public static Int32Rect MapUniformToFill(", contrast)
+        # The mapping matches Stretch=UniformToFill: scale to cover, centre the overflow.
+        mapping = contrast[contrast.index("public static Int32Rect MapUniformToFill("):
+                           contrast.index("public static InkDecision Decide(")]
+        self.assertIn("Math.Max(viewport.Width / imageWidth, viewport.Height / imageHeight)",
+                      mapping)
+        self.assertIn("(viewport.Width - imageWidth * scale) / 2.0", mapping)
+        # Downscale to at most 16x16 before averaging, per the spec's sampling rule.
+        average = contrast[contrast.index("public static bool TryAverage(BitmapSource source"):
+                           contrast.index("public static bool TryAverageRegion")]
+        self.assertIn("16.0 / Math.Max(1, source.PixelWidth)", average)
+        self.assertIn("0.2126 * Channel(color.R)", contrast)
+        # A per-region sample, and any opaque surface core never saw, decide locally.
+        decide = contrast[contrast.index("public static InkDecision Decide("):
+                          contrast.index("public static bool TryContractBackground")]
+        self.assertIn("object auto = decideLocally ? null", decide)
+        self.assertIn("decision.NeedsShadow = Ratio(decision.Ink, background) < 4.5;", decide)
+        under = shell[shell.index("private Color BackgroundUnder("):
+                      shell.index("private static Color? SurfaceColour(")]
+        self.assertIn("decideLocally = true;", under)
+        self.assertIn("ThemeContrast.MapUniformToFill(bitmap,", under)
+        self.assertIn("element.TransformToAncestor(this).Transform(new Point(0, 0))", under)
+        # The outline is 40 % of the opposite ink and only appears when contrast falls short.
+        outline = shell[shell.index("private static DropShadowEffect OutlineFor("):
+                        shell.index("private Color BackgroundUnder(")]
+        self.assertIn("Opacity = 0.4", outline)
+        self.assertIn("decision.NeedsShadow ? OutlineFor(decision.Shadow) : null", shell)
+        # Every region the spec lists, across the dashboard, visitor screen and call screens.
+        applied = shell[shell.index("private void ApplyAutoInk()"):
+                        shell.index("private void InkText(")]
+        for element, region in (("ClockText", "RegionClock"), ("DashClock", "RegionClock"),
+                                ("DateText", "RegionDate"), ("DashDate", "RegionDate"),
+                                ("TouchHint", "RegionHint"), ("NodeInfo", "RegionFooter"),
+                                ("VisitorVersionLine", "RegionFooter"),
+                                ("VisitorNoticeText", "RegionNotice"),
+                                ("MembershipText", "RegionStatusLine"),
+                                ("IncomingTitle", "RegionStatusLine"),
+                                ("InCallTitle", "RegionStatusLine"),
+                                ("IncomingHint", "RegionHint")):
+            with self.subTest(element=element):
+                self.assertIn("InkText(%s, %s," % (element, region), applied)
+        self.assertIn("foreach (TextBlock label in _tileLabels) InkText(label, RegionTileLabel",
+                      applied)
+        # Region ids are core's own list.
+        for region in ("clock", "date", "status_line", "hint", "tile_label", "footer", "notice"):
+            with self.subTest(region=region):
+                self.assertIn('= "%s";' % region, shell)
+
+    def test_the_footer_and_the_sos_slider_never_overlap(self):
+        shell = read("win/DoorbellApp/MainWindow.Shell.cs")
+        xaml = read("win/DoorbellApp/MainWindow.xaml")
+        # The reserved space is derived from the slider's real footprint, not a hardcoded column.
+        self.assertIn('x:Name="DashboardSosColumn" Width="0"', xaml)
+        self.assertNotIn('<ColumnDefinition Width="250"/>', xaml)
+        numbers = dict(re.findall(
+            r"private const double (\w+) = ([0-9.]+);", shell))
+        for name in ("SosBarWidth", "SosBarHeight", "SosBarMargin", "SosBarBottom",
+                     "SosClearance", "FooterMinimumWidth"):
+            self.assertIn(name, numbers)
+        reserved_width = (float(numbers["SosBarWidth"]) + float(numbers["SosBarMargin"]) +
+                          float(numbers["SosClearance"]))
+        reserved_height = (float(numbers["SosBarHeight"]) + float(numbers["SosBarBottom"]) +
+                           float(numbers["SosClearance"]))
+        # Whichever way it is placed, the reservation is strictly larger than the slider plus its
+        # margin, so the footer cannot reach it.
+        self.assertGreater(reserved_width,
+                           float(numbers["SosBarWidth"]) + float(numbers["SosBarMargin"]))
+        self.assertGreater(reserved_height,
+                           float(numbers["SosBarHeight"]) + float(numbers["SosBarBottom"]))
+        layout = shell[shell.index("private void LayOutSosAndFooters("):]
+        # Beside the footer only when the footer still gets its minimum width; otherwise the
+        # slider becomes a full-width band and the footers reserve height above it.
+        self.assertIn("portrait || width < SosReservedWidth + FooterMinimumWidth", layout)
+        self.assertIn("DashboardSosColumn.Width = new GridLength(reserveWidth);", layout)
+        self.assertIn("DashboardFooter.Margin = new Thickness(0, 0, 0, reserveHeight);", layout)
+        self.assertIn("VisitorFooter.Margin = new Thickness(0, 12, reserveWidth, reserveHeight);",
+                      layout)
+        # Exactly one of the two reservations is ever non-zero.
+        self.assertIn("double reserveWidth = sosVisible && !sosBelow ? SosReservedWidth : 0;",
+                      layout)
+        self.assertIn("double reserveHeight = sosBelow ? SosReservedHeight : 0;", layout)
+        self.assertIn("LayOutSosAndFooters(width, portrait);", shell)
+        # Sampling needs arranged bounds, so the ink pass runs after the layout it triggered.
+        self.assertIn("DispatcherPriority.Loaded", shell)
+        self.assertIn("QueueInkPass();", shell)
 
     def test_coloured_labels_keep_their_padding(self):
         # Any text drawn on a coloured background gets at least 6 vertical / 12 horizontal

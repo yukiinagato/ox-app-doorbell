@@ -182,7 +182,8 @@
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="250"/>
+                        <!-- Width is reserved at runtime from the SOS slider's real footprint. -->
+                        <ColumnDefinition x:Name="DashboardSosColumn" Width="0"/>
                     </Grid.ColumnDefinitions>
                     <Border x:Name="AdminLinkCard" Grid.Column="0" Cursor="Hand"
                             Background="{DynamicResource Card}" CornerRadius="10" Padding="12,6"
