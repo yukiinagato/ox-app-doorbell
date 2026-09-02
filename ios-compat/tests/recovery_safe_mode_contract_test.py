@@ -399,7 +399,10 @@ class RecoverySafeModeContracts(unittest.TestCase):
         self.assertIn("presentPurposeAlertForActiveCall:YES", door)
 
     def test_emergency_colors_are_contrast_checked_and_report_fallback(self):
-        modern_util = read("ios/Doorbell/ConfigUtil.swift")
+        # The colour half of ConfigUtil lives in its own file so the parsing half stays
+        # host-compilable for the Swift call-revision test below; the rule it enforces is
+        # unchanged.
+        modern_util = read("ios/Doorbell/ConfigUtilColors.swift")
         modern_ui = read("ios/Doorbell/MainViewController.swift")
         modern_report = read("ios/Doorbell/AppDelegate.swift")
         compat_util = read("ios-kiosk/src/Core/DBConfigUtil.m")

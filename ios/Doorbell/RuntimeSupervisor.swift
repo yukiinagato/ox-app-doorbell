@@ -455,9 +455,24 @@ final class ScreenshotResponder {
 
     private func poll() {
         guard FileManager.default.fileExists(atPath: requestPath) else { return }
+        let body = (try? String(contentsOfFile: requestPath, encoding: .utf8)) ?? ""
         // The request is consumed first: a capture that fails must not leave the file behind for
         // this to spin on once a second.
         try? FileManager.default.removeItem(atPath: requestPath)
+
+        // A panel left alone goes to its screensaver, and from then on every capture is a black
+        // screen with a clock on it. `wake` asks for what a finger would have done, idle timer
+        // included; an empty request captures whatever is actually on screen.
+        guard body.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "wake" else {
+            capture()
+            return
+        }
+        NotificationCenter.default.post(name: .doorbellWakeScreen, object: nil)
+        // One turn of the run loop, so the screen the capture renders is the woken one.
+        DispatchQueue.main.async { [weak self] in self?.capture() }
+    }
+
+    private func capture() {
         guard let window = ScreenshotResponder.keyWindow(),
               let png = ScreenshotResponder.render(window) else {
             IOSAvailability.logDebug("screenshot: no key window to capture")

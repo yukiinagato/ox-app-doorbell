@@ -28,6 +28,9 @@ final class VisitorScreenView: UIView {
     private var noticeExpanded = false
     private var noticeText = ""
     private var isLandscape = false
+    /// Whether this device's role offers the SOS slider. Remembered because `applyLayout` takes
+    /// the whole stack apart and puts it back.
+    private var sosVisible = true
     private var skin = DoorbellSkin.plain(.dark)
 
     init(texts: Texts, callButton: UIButton, langBar: UIView, purposeSection: UIView,
@@ -118,8 +121,10 @@ final class VisitorScreenView: UIView {
         let wide = min(size.width, size.height) >= 768
         isLandscape = landscape
 
-        for view in root.arrangedSubviews { root.removeArrangedSubview(view) }
-        for view in root.arrangedSubviews { view.removeFromSuperview() }
+        for view in root.arrangedSubviews.reversed() {
+            root.removeArrangedSubview(view)
+            view.removeFromSuperview()
+        }
         for view in [noticeColumn, actionColumn] {
             for child in view.arrangedSubviews {
                 view.removeArrangedSubview(child)
@@ -162,6 +167,7 @@ final class VisitorScreenView: UIView {
             root.addArrangedSubview(columns)
             root.addArrangedSubview(footerLabel)
             root.addArrangedSubview(sosControl)
+            sosControl.isHidden = !sosVisible
             return
         }
 
@@ -175,6 +181,7 @@ final class VisitorScreenView: UIView {
         root.addArrangedSubview(UIView())
         root.addArrangedSubview(footerLabel)
         root.addArrangedSubview(sosControl)
+        sosControl.isHidden = !sosVisible
     }
 
     /// Wraps a control that must keep its own size inside a full-width row.
@@ -231,6 +238,7 @@ final class VisitorScreenView: UIView {
     }
 
     func setSosVisible(_ visible: Bool) {
+        sosVisible = visible
         sosControl.isHidden = !visible
     }
 
