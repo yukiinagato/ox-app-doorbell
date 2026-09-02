@@ -232,8 +232,10 @@ final class DashboardView: UIView {
 
     func refreshNoticeState() {
         let nowMs = DoorbellClock.nowMs(core)
+        let status = core.status()
         for (door, tile) in tiles {
-            let notice = DoorbellNotice.effective(config: config, door: door, nowMs: nowMs)
+            let notice = DoorbellNotice.effective(status: status, config: config, door: door,
+                                                  nowMs: nowMs)
             tile.updateNotice(active: notice != nil, palette: palette)
         }
     }
@@ -262,7 +264,8 @@ final class DashboardView: UIView {
             guard let tile = tiles[door] else { continue }
             let entry = ConfigUtil.dig(config, "doors.\(door)") as? [String: Any]
             let peer = ConfigUtil.findDoorPeer(status, door: door)
-            let notice = DoorbellNotice.effective(config: config, door: door, nowMs: nowMs)
+            let notice = DoorbellNotice.effective(status: status, config: config, door: door,
+                                                  nowMs: nowMs)
             tile.apply(label: ConfigUtil.labelOf(entry, boot.uiLang, door),
                        online: peer != nil,
                        noticeActive: notice != nil,

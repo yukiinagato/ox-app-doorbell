@@ -26,6 +26,20 @@ struct DoorbellNotice {
         return expiresMs == 0 || expiresMs > nowMs
     }
 
+    /// The announcement one door actually shows, as Core resolved it: `status.doors.<id>.notice`
+    /// already applies the rule that a door-specific message overrides the house-wide one and
+    /// carries the scope it came from.
+    static func effective(status: [String: Any]?, config: [String: Any]?, door: String,
+                          nowMs: Int64) -> DoorbellNotice? {
+        if !door.isEmpty,
+           let resolved = ConfigUtil.dig(status, "doors.\(door).notice") as? [String: Any],
+           let notice = parse(resolved,
+                              isGlobal: ConfigUtil.str(resolved, "scope") == "global") {
+            return notice.isActive(nowMs: nowMs) ? notice : nil
+        }
+        return effective(config: config, door: door, nowMs: nowMs)
+    }
+
     /// Effective announcement for one door. Core prunes expired values on its own tick; the
     /// deadline is re-checked here so a shell never shows a notice a second past its expiry.
     static func effective(config: [String: Any]?, door: String, nowMs: Int64) -> DoorbellNotice? {
@@ -158,6 +172,9 @@ final class NoticeDialogViewController: UIViewController {
     private let clearButton = UIButton(type: .system)
 
     private var palette = DoorbellPalette.dark
+
+    /// Core addresses the house-wide announcement as the door "*".
+    private static let globalTarget = "*"
 
     /// `door` empty selects the home-wide target.
     init(core: CoreBridge, texts: Texts, httpPort: Int, lang: String, door: String) {
@@ -417,12 +434,16 @@ final class NoticeDialogViewController: UIViewController {
             ? texts.t("notice.saved") : texts.t("notice.failed"))
     }
 
-    /// The home-wide announcement has its own Core entry point; where that is not published yet
-    /// it is ordinary replicated configuration and goes through the same atomic batch the web
-    /// admin uses. A door with its own announcement keeps showing it either way.
+    /// The house-wide announcement goes through the same Core entry point as a door's, addressed
+    /// as "*". Only a Core that predates that target falls back to writing the key directly.
     private func publishGlobal(text: String, expiresMs: Int64) {
         if let published = core.setGlobalNotice(text: text, expiresMs: expiresMs) {
             finish(published ? texts.t("notice.saved") : texts.t("notice.failed"))
+            return
+        }
+        if core.setDoorNotice(door: NoticeDialogViewController.globalTarget, text: text,
+                              expiresMs: expiresMs) {
+            finish(texts.t("notice.saved"))
             return
         }
         var nodeId = ""
@@ -447,6 +468,10 @@ final class NoticeDialogViewController: UIViewController {
         if selectedDoor.isEmpty {
             if let cleared = core.clearGlobalNotice() {
                 finish(cleared ? texts.t("notice.cleared") : texts.t("notice.failed"))
+                return
+            }
+            if core.clearDoorNotice(door: NoticeDialogViewController.globalTarget) {
+                finish(texts.t("notice.cleared"))
                 return
             }
             clearButton.isEnabled = false

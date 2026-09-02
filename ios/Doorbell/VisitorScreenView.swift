@@ -218,33 +218,20 @@ final class VisitorScreenView: UIView {
     /// Applies the palette and the computed call-button colour. The button colour comes from
     /// Core's `auto_accent` when it is published, from the administrator's override when there is
     /// one, and from the local complement computation otherwise.
-    func applyTheme(palette: DoorbellPalette, config: [String: Any]?, nodeId: String,
+    func applyTheme(palette: DoorbellPalette, display: [String: Any]?,
                     effectiveBackground: UIColor) {
         self.palette = palette
-        DoorbellTheme.applyInk(DoorbellTheme.ink(config: config, nodeId: nodeId, region: "clock",
-                                                 background: effectiveBackground,
-                                                 palette: palette),
-                               over: effectiveBackground, to: clockLabel)
-        DoorbellTheme.applyInk(DoorbellTheme.ink(config: config, nodeId: nodeId, region: "date",
-                                                 background: effectiveBackground,
-                                                 palette: palette),
-                               over: effectiveBackground, to: dateLabel)
-        DoorbellTheme.applyInk(DoorbellTheme.ink(config: config, nodeId: nodeId, region: "hint",
-                                                 background: effectiveBackground,
-                                                 palette: palette),
-                               over: effectiveBackground, to: hintLabel)
-        DoorbellTheme.applyInk(DoorbellTheme.ink(config: config, nodeId: nodeId,
-                                                 region: "status_line",
-                                                 background: effectiveBackground,
-                                                 palette: palette),
-                               over: effectiveBackground, to: footerLabel)
-        DoorbellTheme.applyInk(DoorbellTheme.ink(config: config, nodeId: nodeId, region: "notice",
-                                                 background: effectiveBackground,
-                                                 palette: palette),
-                               over: effectiveBackground, to: noticeLabel)
+        let regions: [(String, UILabel)] = [("clock", clockLabel), ("date", dateLabel),
+                                            ("hint", hintLabel), ("status_line", footerLabel),
+                                            ("notice", noticeLabel)]
+        for (region, label) in regions {
+            let ink = DoorbellTheme.ink(display: display, region: region,
+                                        background: effectiveBackground, palette: palette)
+            DoorbellTheme.applyInk(ink, over: effectiveBackground, to: label)
+        }
         noticeExpand.setTitleColor(noticeLabel.textColor, for: .normal)
 
-        let colors = DoorbellTheme.callButtonColors(config: config, nodeId: nodeId,
+        let colors = DoorbellTheme.callButtonColors(display: display,
                                                     background: effectiveBackground)
         callButton.backgroundColor = colors.fill
         callButton.setTitleColor(colors.ink, for: .normal)

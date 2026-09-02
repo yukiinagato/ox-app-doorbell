@@ -240,8 +240,9 @@ final class TVMainViewController: UIViewController {
                 if !ConfigUtil.evBool(em, "active") { hideEmergency() }
             }
         }
-        palette = DoorbellPalette.of(DoorbellTheme.appearance(config: cfg, nodeId: nodeId,
-                                                              localTime: core.localTime()))
+        let display = core.status()?["display"] as? [String: Any]
+        palette = DoorbellPalette.of(DoorbellTheme.appearance(
+            display: display, config: cfg, nodeId: nodeId, localTime: core.localTime()))
         view.backgroundColor = palette.background
         dashboard.reload(config: cfg, palette: palette)
         // An Apple TV has no battery of its own; the version line simply omits it.

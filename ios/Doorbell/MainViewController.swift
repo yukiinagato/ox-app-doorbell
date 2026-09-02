@@ -88,6 +88,7 @@ final class MainViewController: UIViewController {
     private var dashboard: DashboardView?
     private var visitorScreen: VisitorScreenView?
     private var palette = DoorbellPalette.dark
+    private var displayDoc: [String: Any]?
     private let callingView = UIView()
     private let pulse = UIView()
     private let callingText = UILabel()
@@ -667,8 +668,8 @@ final class MainViewController: UIViewController {
     /// Recomputes the appearance and hands the current snapshot to whichever home screen this
     /// device shows. Both are pure renderers: they never read Core state on their own.
     private func refreshHomeSurfaces() {
-        palette = DoorbellPalette.of(DoorbellTheme.appearance(config: cfg, nodeId: nodeId,
-                                                              localTime: core.localTime()))
+        palette = DoorbellPalette.of(DoorbellTheme.appearance(
+            display: displayDoc, config: cfg, nodeId: nodeId, localTime: core.localTime()))
         applyTheme()
         applyVolumes()
         updateClock()
@@ -677,7 +678,8 @@ final class MainViewController: UIViewController {
             dashboard.updateMembership(membershipLabel.text ?? "", hidden: membershipLabel.isHidden)
         }
         if let visitor = visitorScreen {
-            let notice = DoorbellNotice.effective(config: cfg, door: boot.door,
+            let notice = DoorbellNotice.effective(status: core.status(), config: cfg,
+                                                  door: boot.door,
                                                   nowMs: DoorbellClock.nowMs(core))
             visitor.updateNotice(notice)
             visitor.updateHint(texts.t("door.hint_call"))
@@ -686,7 +688,7 @@ final class MainViewController: UIViewController {
             visitor.updateFooter(DoorbellTheme.versionLine(
                 name: label.isEmpty ? boot.name : label,
                 coreVersion: DoorbellTheme.coreVersion(), texts: texts, power: power))
-            visitor.applyTheme(palette: palette, config: cfg, nodeId: nodeId,
+            visitor.applyTheme(palette: palette, display: displayDoc,
                                effectiveBackground: effectiveThemeBackground())
         }
     }
@@ -694,6 +696,10 @@ final class MainViewController: UIViewController {
     /// The background a text region actually sits on: the theme image's average colour when one is
     /// displayed, the theme colour otherwise. It is what the automatic ink rule measures.
     private func effectiveThemeBackground() -> UIColor {
+        // Core measures the served theme, image included, so every shell agrees on one answer.
+        if let published = DoorbellTheme.publishedBackground(display: displayDoc) {
+            return published
+        }
         if !themeBg.isHidden, let image = themeBg.image,
            let average = DoorbellTheme.averageColor(of: image) {
             return average
@@ -968,6 +974,9 @@ final class MainViewController: UIViewController {
 
 
     private func applyDisplayValues(_ d: [String: Any]) {
+        // Core's display contract carries the resolved appearance and the automatic theme; both
+        // home screens paint from it rather than each deriving its own answer.
+        displayDoc = d
         brightness = ConfigUtil.int(d, "brightness", brightness)
         night = ConfigUtil.evBool(d, "night")
         redTint = ConfigUtil.evBool(d, "red_tint")
@@ -1271,6 +1280,7 @@ final class MainViewController: UIViewController {
             }
         case "display":
             applyDisplayValues(ev)
+            refreshHomeSurfaces()
         case "emergency":
             presentEmergency(ev)
         case "peers_changed", "config_changed":

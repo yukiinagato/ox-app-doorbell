@@ -63,6 +63,31 @@ enum DoorbellTheme {
 
     // MARK: - Appearance resolution
 
+    /// Core resolves the appearance for the whole cluster and publishes it in the display
+    /// contract; the shell only decides whether to follow the operating system when Core says it
+    /// may. The configuration path below is the fallback for a Core that predates the contract.
+    static func appearance(display: [String: Any]?, config: [String: Any]?, nodeId: String,
+                           localTime: [String: Any]?) -> DoorbellAppearance {
+        if let effective = ConfigUtil.str(display, "appearance.effective") {
+            let resolved: DoorbellAppearance = effective == "light" ? .light : .dark
+            guard ConfigUtil.bool(display, "appearance.follow_system", false) else {
+                return resolved
+            }
+            return systemAppearance() ?? resolved
+        }
+        return appearance(config: config, nodeId: nodeId, localTime: localTime)
+    }
+
+    /// The operating system's own light/dark setting, or nil on a runtime that has none.
+    static func systemAppearance() -> DoorbellAppearance? {
+        if #available(iOS 13.0, tvOS 13.0, *) {
+            let style = UITraitCollection.current.userInterfaceStyle
+            if style == .dark { return .dark }
+            if style == .light { return .light }
+        }
+        return nil
+    }
+
     /// Resolves `display.appearance` (with the per-device override) into a concrete appearance.
     /// `auto_system` needs a system dark mode; on a runtime that has none it degrades to the
     /// schedule, exactly like the iPad 1 kiosk and old Android shells do.
@@ -78,12 +103,7 @@ enum DoorbellTheme {
         case "dark": return .dark
         case "auto_schedule": return scheduled(config: config, localTime: localTime)
         default:
-            if #available(iOS 13.0, tvOS 13.0, *) {
-                let style = UITraitCollection.current.userInterfaceStyle
-                if style == .dark { return .dark }
-                if style == .light { return .light }
-            }
-            return scheduled(config: config, localTime: localTime)
+            return systemAppearance() ?? scheduled(config: config, localTime: localTime)
         }
     }
 
@@ -163,25 +183,25 @@ enum DoorbellTheme {
                        blue: CGFloat(b) / 255 / count, alpha: 1)
     }
 
-    /// Ink for one semantic region. Core's `display.theme.auto_ink` wins; an administrator's
-    /// `ink_override` wins over both. Without either, the luminance of the region background
-    /// decides, which is the same rule Core applies.
-    static func ink(config: [String: Any]?, nodeId: String, region: String,
-                    background: UIColor, palette: DoorbellPalette) -> UIColor {
-        if !nodeId.isEmpty,
-           let override = color(hex: ConfigUtil.str(
-                config, "devices.\(nodeId).local.theme.ink_override.\(region)")) {
+    /// Ink for one semantic text region. Core publishes the administrator's overrides and the
+    /// automatic decision in the display contract; without them the same luminance rule runs
+    /// locally, so an older Core still produces legible text.
+    static func ink(display: [String: Any]?, region: String, background: UIColor,
+                    palette: DoorbellPalette) -> UIColor {
+        if let override = color(hex: ConfigUtil.str(display, "theme.ink_override.\(region)")) {
             return override
         }
-        if let override = color(hex: ConfigUtil.str(config,
-                                                    "display.theme.ink_override.\(region)")) {
-            return override
-        }
-        if let published = ConfigUtil.str(config, "display.theme.auto_ink.\(region)") {
+        if let published = ConfigUtil.str(display, "theme.auto_ink.\(region)") {
             if published == "dark" { return DoorbellPalette.light.ink }
             if published == "light" { return DoorbellPalette.dark.ink }
         }
         return luminance(background) >= 0.5 ? DoorbellPalette.light.ink : DoorbellPalette.dark.ink
+    }
+
+    /// The background a text region actually sits on, as Core measured it (an image is averaged
+    /// there); nil when the contract is absent and the shell must measure locally.
+    static func publishedBackground(display: [String: Any]?) -> UIColor? {
+        return color(hex: ConfigUtil.str(display, "theme.auto_background.color"))
     }
 
     /// A one-pixel outline is added only when the chosen ink still misses AA against the region
@@ -237,21 +257,21 @@ enum DoorbellTheme {
         return contrast(.black, background) >= contrast(.white, background) ? .black : .white
     }
 
-    /// Effective call-button colour: administrator override first, then Core's published value,
-    /// then the local computation. The returned ink always matches the fill.
-    static func callButtonColors(config: [String: Any]?, nodeId: String,
+    /// The call button as Core resolved it: `call_button_bg` already has the administrator's
+    /// override applied, and the text colour must come from `call_button_ink` — on a mid-luminance
+    /// background no colour both separates and carries white text, and Core returns the best
+    /// compromise rather than an unreadable button. Without the contract the same arithmetic runs
+    /// locally.
+    static func callButtonColors(display: [String: Any]?,
                                  background: UIColor) -> (fill: UIColor, ink: UIColor) {
-        if !nodeId.isEmpty,
-           let override = color(hex: ConfigUtil.str(
-                config, "devices.\(nodeId).local.theme.call_button_bg")) {
-            return (override, readableInk(on: override))
-        }
-        if let override = color(hex: ConfigUtil.str(config, "display.theme.call_button_bg")) {
-            return (override, readableInk(on: override))
-        }
-        if let published = color(hex: ConfigUtil.str(config,
-                                                     "display.theme.auto_accent.call_button")) {
-            return (published, readableInk(on: published))
+        if let fill = color(hex: ConfigUtil.str(display, "theme.call_button_bg")) {
+            let published = ConfigUtil.str(display, "theme.call_button_ink")
+                ?? ConfigUtil.str(display, "theme.auto_accent.call_button_ink")
+            if let published = published {
+                return (fill, published == "dark" ? DoorbellPalette.light.ink
+                    : DoorbellPalette.dark.ink)
+            }
+            return (fill, readableInk(on: fill))
         }
         return autoAccent(on: background)
     }

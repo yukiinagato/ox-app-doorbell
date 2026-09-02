@@ -394,6 +394,13 @@ final class CoreBridge {
         return db_core_set_door_notice(c, door, text, expiresMs) == 0
     }
 
+    /// Trigger the configured unlock action. 0 queued the action, -3 means nothing is configured
+    /// anywhere, and the shell must say so rather than reporting a silent success.
+    func openDoor(_ door: String) -> Int32 {
+        guard let c = core, !door.isEmpty else { return -1 }
+        return db_core_open_door(c, door)
+    }
+
     @discardableResult
     func clearDoorNotice(door: String) -> Bool {
         guard let c = core, !door.isEmpty else { return false }

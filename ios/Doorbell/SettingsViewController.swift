@@ -685,13 +685,15 @@ final class DoorSettingsViewController: SettingsChildViewController {
                                     })
             }
             result.append(.toggle(title: texts.t("settings.unlock_show_button"),
-                                  detail: unlockDetail(),
-                                  value: DoorUnlock.showsButton(config: config, door: door),
+                                  detail: unlockDetail(door),
+                                  value: DoorUnlock.showsButton(status: core.status(),
+                                                                config: config, door: door),
                                   identifier: "door_unlock_\(door)") { [weak self] value in
                                       self?.write([.set("doors.\(door).unlock.show_button",
                                                         value)])
                                   })
-            let notice = DoorbellNotice.effective(config: config, door: door, nowMs: nowMs)
+            let notice = DoorbellNotice.effective(status: core.status(), config: config,
+                                                  door: door, nowMs: nowMs)
             result.append(.action(title: texts.t("notice.title"),
                                   detail: notice?.text ?? texts.t("notice.none"),
                                   identifier: "door_notice_\(door)") { [weak self] in
@@ -701,9 +703,9 @@ final class DoorSettingsViewController: SettingsChildViewController {
         return result
     }
 
-    private func unlockDetail() -> String {
-        return DoorUnlock.isConfigured(config: config) ? "" :
-            texts.t("door.unlock_not_configured")
+    private func unlockDetail(_ door: String) -> String {
+        return DoorUnlock.isConfigured(status: core.status(), config: config, door: door)
+            ? "" : texts.t("door.unlock_not_configured")
     }
 
     private func openNotice(door: String) {
@@ -863,28 +865,37 @@ final class WebAdminViewController: SettingsChildViewController {
     }
 }
 
-/// Whether the 開錠 control is offered, and whether it would actually do anything. Visibility is
-/// an administrator setting; the default follows whether an unlock action exists at all.
+/// Whether the 開錠 control is offered, and whether it would actually do anything. Core resolves
+/// both and publishes them as `status.doors.<id>.unlock`; the configuration fallback below only
+/// matters on a Core that predates that contract.
 enum DoorUnlock {
-    static func isConfigured(config: [String: Any]?) -> Bool {
+    static func isConfigured(status: [String: Any]?, config: [String: Any]?,
+                             door: String) -> Bool {
+        if !door.isEmpty,
+           let value = ConfigUtil.dig(status, "doors.\(door).unlock.configured") as? NSNumber {
+            return value.boolValue
+        }
         guard let actions = ConfigUtil.dig(config, "sip.dtmf_actions") as? [String: Any] else {
             return false
         }
         for value in actions.values {
             let entry = value as? [String: Any]
-            let type = ConfigUtil.str(entry, "type") ?? ""
-            let command = ConfigUtil.str(entry, "command") ?? ""
-            if type == "hangup" { continue }
-            if command == "unlock" || type == "ha_command" || type == "mqtt" { return true }
+            if ConfigUtil.str(entry, "type") == "ha_command",
+               !(ConfigUtil.str(entry, "command") ?? "").isEmpty { return true }
         }
         return false
     }
 
-    static func showsButton(config: [String: Any]?, door: String) -> Bool {
+    static func showsButton(status: [String: Any]?, config: [String: Any]?,
+                            door: String) -> Bool {
+        if !door.isEmpty,
+           let value = ConfigUtil.dig(status, "doors.\(door).unlock.show_button") as? NSNumber {
+            return value.boolValue
+        }
         if !door.isEmpty,
            let explicit = ConfigUtil.dig(config, "doors.\(door).unlock.show_button") as? NSNumber {
             return explicit.boolValue
         }
-        return isConfigured(config: config)
+        return isConfigured(status: status, config: config, door: door)
     }
 }

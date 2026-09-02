@@ -110,6 +110,8 @@ for reason in ("settings.web_only_upload", "settings.web_only_wording",
     assert reason.replace("_", "_") in strings
 
 # --- announcements ---------------------------------------------------------
+assert 'ConfigUtil.dig(status, "doors.\\(door).notice")' in notice, \
+    "the resolved announcement comes from status, where Core applied the precedence"
 assert 'ConfigUtil.dig(config, "doors.\\(door).notice")' in notice
 assert '"notice.global"' in notice, "the home-wide announcement lives in notice.global"
 assert 'ConfigUtil.dig(config, "notice.presets")' in notice, "presets are administrator-editable"
@@ -142,7 +144,8 @@ assert "applyVideoAspect" in incoming and "liveView.heightAnchor.constraint(equa
 assert "ring.monitor_on" in incoming and "ring.mic_on" in incoming
 assert "incoming.debug_line_hidden" in incoming, "the debug line's state is remembered"
 assert "AdminQrView(core: core, boot: boot, texts: texts, compact: true)" in incoming
-assert "DoorUnlock.showsButton(config: cfg, door: door)" in incoming
+assert "DoorUnlock.showsButton(status: core.status(), config: cfg,\n" in incoming
+assert "core.openDoor(door)" in incoming, "unlock uses Core's own open-door action"
 assert "door.unlock_not_configured" in incoming, "an unconfigured unlock must explain itself"
 
 # --- dashboard -------------------------------------------------------------
@@ -162,11 +165,16 @@ assert "UIEdgeInsets(top: 6, left: 12, bottom: 6, right: 12)" in theme, \
 assert "func twoPart(" in theme and "primarySize * 0.8" in theme, \
     "a two-part label renders its second line smaller"
 assert "0.2126" in theme and "func contrast(" in theme
-assert "display.theme.auto_ink" in theme and "display.theme.auto_accent" in theme
-assert "ink_override" in theme and "call_button_bg" in theme
+# The automatic theme is computed by Core and delivered in the display contract; it is never
+# stored, so a shell that read it from configuration would find nothing.
+assert '"theme.auto_ink.\\(region)"' in theme and '"theme.ink_override.\\(region)"' in theme
+assert '"theme.call_button_bg"' in theme and '"theme.call_button_ink"' in theme, \
+    "the button's text colour must come from Core, not be recomputed"
+assert '"theme.auto_background.color"' in theme
+assert '"appearance.effective"' in theme and '"appearance.follow_system"' in theme
 assert "func contrastWarning(" in theme and "theme.contrast_warning" in strings, \
     "a colour that fails WCAG is warned about, never rejected"
-assert "auto_schedule" in theme and "prefers" not in theme
+assert "auto_schedule" in theme
 assert "core v" in theme and "app v" in theme, "both versions appear in the identity line"
 assert "power.charging" in theme
 

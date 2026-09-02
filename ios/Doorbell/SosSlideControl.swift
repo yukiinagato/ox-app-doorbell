@@ -53,6 +53,9 @@ final class SosSlideControl: UIControl {
 
         track.backgroundColor = UIColor(red: 0.55, green: 0.10, blue: 0.09, alpha: 1)
         track.layer.cornerRadius = 14
+        // The track and everything drawn on it are decoration: the control itself has to receive
+        // the touch, or hit testing would hand the drag to a subview and nothing would track.
+        track.isUserInteractionEnabled = false
         track.translatesAutoresizingMaskIntoConstraints = false
         addSubview(track)
 
@@ -89,8 +92,9 @@ final class SosSlideControl: UIControl {
         cancelButton.isHidden = true
         cancelButton.translatesAutoresizingMaskIntoConstraints = false
         cancelButton.addTarget(self, action: #selector(cancelCountdown),
-                               for: .primaryActionTriggered)
-        track.addSubview(cancelButton)
+                               for: .touchUpInside)
+        // The cancel control stays outside the decoration so it can still be pressed.
+        addSubview(cancelButton)
 
         let leading = thumb.leadingAnchor.constraint(equalTo: track.leadingAnchor, constant: 5)
         thumbLeading = leading
@@ -176,6 +180,9 @@ final class SosSlideControl: UIControl {
 
     override func endTracking(_ touch: UITouch?, with event: UIEvent?) {
         dragging = false
+        // The final touch position decides, not the accumulated one: a quick flick delivers few
+        // intermediate moves, and the gesture must still count as "slid to the end".
+        if let touch = touch { move(to: touch.location(in: track).x) }
         let travel = maximumTravel()
         let value = travel > 0 ? (thumbLeading?.constant ?? 5) / travel : 0
         if value >= 0.9 {

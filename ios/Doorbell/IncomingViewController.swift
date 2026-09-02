@@ -55,6 +55,7 @@ final class IncomingViewController: UIViewController {
     private var replyExpanded = false
     private var videoAspect: NSLayoutConstraint?
     private var palette = DoorbellPalette.dark
+    private var displayDoc: [String: Any]?
 
     private static let debugHiddenKey = "incoming.debug_line_hidden"
 
@@ -434,15 +435,17 @@ final class IncomingViewController: UIViewController {
         #if os(tvOS)
         unlockButton.isHidden = true
         #else
-        unlockButton.isHidden = !DoorUnlock.showsButton(config: cfg, door: door)
+        unlockButton.isHidden = !DoorUnlock.showsButton(status: core.status(), config: cfg,
+                                                        door: door)
         #endif
     }
 
     private func updateNoticeChip() {
-        let notice = DoorbellNotice.effective(config: cfg, door: door,
+        let notice = DoorbellNotice.effective(status: core.status(), config: cfg, door: door,
                                               nowMs: DoorbellClock.nowMs(core))
-        palette = DoorbellPalette.of(DoorbellTheme.appearance(config: cfg, nodeId: nodeId,
-                                                             localTime: core.localTime()))
+        displayDoc = core.status()?["display"] as? [String: Any]
+        palette = DoorbellPalette.of(DoorbellTheme.appearance(
+            display: displayDoc, config: cfg, nodeId: nodeId, localTime: core.localTime()))
         applyPalette()
         noticeChip.update(active: notice != nil, palette: palette)
         adminQr.palette = palette
@@ -683,13 +686,11 @@ final class IncomingViewController: UIViewController {
             + " · \(stats.fps) fps · drop \(stats.dropped)"
     }
 
+    /// The existing open-door action. Core answers -3 when nothing is configured anywhere, which
+    /// is the case the owner asked to be explained rather than silently ignored.
     @objc private func onUnlock() {
-        guard DoorUnlock.isConfigured(config: cfg) else {
-            hintLabel.text = texts.t("door.unlock_not_configured")
-            hintLabel.isHidden = false
-            return
-        }
-        hintLabel.text = core.sipSendDtmf("*1") ? texts.t("ring.unlock_sent")
+        let result = core.openDoor(door)
+        hintLabel.text = result == 0 ? texts.t("ring.unlock_sent")
             : texts.t("door.unlock_not_configured")
         hintLabel.isHidden = false
     }
@@ -782,7 +783,7 @@ final class IncomingViewController: UIViewController {
                 updateBadges()
                 buildReplyButtons()
             }
-        case "notice_changed", "config_changed":
+        case "notice_changed", "config_changed", "display":
             cfg = core.config()
             updateNoticeChip()
             updateUnlockVisibility()
