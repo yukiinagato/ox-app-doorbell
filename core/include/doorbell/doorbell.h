@@ -173,6 +173,13 @@ DB_API char* db_core_debug_json(db_core* c);
  * idle-screen badge shows. Returns NULL on invalid arguments; release the result with db_free. */
 DB_API char* db_core_call_log_json(db_core* c, int64_t since_ms, int limit);
 
+/* Paging variant of db_core_call_log_json. before_ms is an exclusive upper bound on a row's
+ * timestamp and zero disables it, matching GET /api/call-log?before_ms. To page backwards, pass
+ * the "ts" of the oldest row already held; a short page means the history is exhausted. The
+ * result shape is identical. Release with db_free. */
+DB_API char* db_core_call_log_json_v2(db_core* c, int64_t since_ms, int64_t before_ms,
+                                      int limit);
+
 /* Move the device-local seen watermark so the missed-call badge clears. up_to_hlc is a row "hlc"
  * from db_core_call_log_json; NULL or an empty string marks every currently known call as seen.
  * The watermark is never replicated and never moves backwards. Returns 0 on success and a
@@ -184,6 +191,38 @@ DB_API int db_core_call_log_mark_seen(db_core* c, const char* up_to_hlc);
 /* Return fully materialized configuration JSON. Release with db_free. */
 DB_API char* db_core_config_json(db_core* c);
 
+/* ---- Configuration writes ----
+ * These mirror POST /api/config, /api/config/batch and /api/config/delete exactly: the same
+ * validation, the same result documents, and the same advisory warnings. A native shell uses
+ * them instead of talking to its own loopback HTTP server.
+ *
+ * db_core_set_config_json writes one key. value_json is the JSON encoding of the value; a
+ * document that does not parse as JSON is stored as a string, matching the HTTP endpoint.
+ * Returns 0 when the write committed, -1 on invalid arguments, and -2 when core rejected or
+ * could not persist it. Use db_core_config_batch_json when the reason matters. Any readability
+ * warning the write produced is available immediately afterwards from
+ * db_core_last_write_warnings_json, which returns the same array the batch form embeds (an empty
+ * array when there is nothing to report). Release the result with db_free.
+ *
+ * db_core_config_batch_json applies up to 256 operations as one atomic commit. ops_json is
+ * either the array of operations or the {"ops":[...]} envelope the HTTP endpoint takes; each
+ * entry is {"op":"set","key":"…","value":<json>} or {"op":"delete","key":"…"}. Returns
+ *   {"ok":true,"n":3,"revision":"<hlc>","hlc":"<hlc>","warnings":[…]}
+ * or {"ok":false,"err":"…"} where err is one of no ops, too many ops, bad op, bad op or key,
+ * duplicate key, set without value, config_persistence_failed, or a validation message. Nothing
+ * is written unless every operation validates. Release the result with db_free.
+ *
+ * warnings is present only when a colour falls short of WCAG 2.1 AA. Each entry is
+ * {"key":"…","property":"foreground","contrast":3.1,"message_key":"theme.low_contrast"}. The
+ * write succeeded: show the measured ratio, do not treat it as a failure.
+ *
+ * db_core_delete_config_key tombstones one key. Returns 0 on success, -1 on invalid arguments,
+ * and -2 when the tombstone could not be persisted. */
+DB_API int db_core_set_config_json(db_core* c, const char* key, const char* value_json);
+DB_API char* db_core_last_write_warnings_json(db_core* c);
+DB_API char* db_core_config_batch_json(db_core* c, const char* ops_json);
+DB_API int db_core_delete_config_key(db_core* c, const char* key);
+
 /* ---- Time service ----
  * Core never sets the operating-system clock. When time.ntp.enabled is on and a sync succeeded
  * within three intervals, core adds its measured offset to every wall-clock reading: the HLC,
@@ -192,7 +231,10 @@ DB_API char* db_core_config_json(db_core* c);
  *    "offset_ms":0,"measured_offset_ms":0,"last_sync_ms":0,"rtt_ms":0,"server":"",
  *    "interval_s":900,"offset_min":540,"syncing":false,"err":"…","local":{…}}
  * where offset_ms is the correction actually applied (zero while the source is system) and
- * measured_offset_ms is the last measurement regardless.
+ * measured_offset_ms is the last measurement regardless. status.time.zones lists every zone
+ * identifier core can resolve, grouped by region ({"Asia":["Asia/Tokyo",…],…}); a native picker
+ * builds its list from that rather than from its own table, so it can never offer a zone the
+ * save would reject.
  *
  * Render a wall-clock instant in the configured IANA zone. wall_ms of zero means "now"; the zone
  * comes from a table bundled in core, so a shell on a platform without a usable tz database is
@@ -238,6 +280,7 @@ DB_API int db_core_set_door_notice(db_core* c, const char* door, const char* tex
 /* Remove the announcement for one door, or the cluster-wide one with "*". Clearing an absent
  * announcement succeeds. */
 DB_API int db_core_clear_door_notice(db_core* c, const char* door);
+
 
 /* ---- Door unlock ----
  * Trigger the configured unlock action for one door. This is the existing feature-code path: it
@@ -389,6 +432,46 @@ DB_API void db_core_set_video_sensor_rotation(db_core* c, int degrees);
 DB_API void db_core_sip_call(db_core* c, const char* target, const char* mode);
 DB_API void db_core_sip_hangup(db_core* c);
 DB_API int db_core_sip_send_dtmf(db_core* c, const char* digits);
+
+/* Microphone mute for the talk control. The flag is remembered across calls and reapplied when
+ * media becomes active, so muting before answering stays muted. It is recorded even in builds
+ * without a SIP backend, because the shell's toggle still has a position to render. Reported as
+ * status.call = {"state":"idle|calling|in_call|ended","mic_muted":bool}. Returns 0. */
+DB_API int db_core_sip_set_mic_muted(db_core* c, int muted);
+
+/* ---- Administrator password ----
+ * One password for the whole cluster: the same secret opens the web admin and the device-side
+ * settings screen. It is stored as a salted digest in replicated configuration
+ * (admin.password_hash), never as plaintext, so an offline device verifies against the copy it
+ * already holds instead of asking the leader. Shells must use these calls rather than a local
+ * digest file or their own loopback HTTP request.
+ *
+ * db_core_admin_password_verify compares in constant time and shares one lockout counter with
+ * POST /api/login: five failures anywhere pause every surface for ten minutes. It returns a
+ * positive value when accepted, 0 when wrong, -1 while locked out, -2 when the cluster has no
+ * password yet, and -3 on invalid arguments.
+ *
+ * A cluster with no password (-2) must never be blocked out of its own device. In particular an
+ * unset password must not stand between a household and a running SOS alarm: read
+ * status.emergency.cancel_requires_password, which core computes as
+ * emergency.cancel_requires_pin AND a password actually being set, and never gate the clear
+ * control on emergency.cancel_requires_pin alone. status.emergency.admin_password_set reports
+ * the second half on its own.
+ *
+ * db_core_admin_password_set changes it. An empty current is accepted only while the cluster has
+ * no password -- that is the trust-on-first-use path the first web login already takes; once one
+ * exists, current must verify. new_pw is 4..128 characters. Returns 0 on success, -1 on invalid
+ * arguments, -2 when current is wrong, -3 while locked out, and -4 when the new digest could not
+ * be persisted. A successful change invalidates every existing admin session.
+ *
+ * Migration: before this existed, each node kept its own digest in local storage, and a kiosk
+ * kept a separate exit code. That local digest stays authoritative until the first successful
+ * verification, which republishes it as the cluster password. A shell that still holds its own
+ * exit_pin digest must stop consulting it once db_core_admin_password_verify returns 1 or -3,
+ * and delete it, so one password change cannot leave a device with a stale second way in. */
+DB_API int db_core_admin_password_verify(db_core* c, const char* pw);
+DB_API int db_core_admin_password_set(db_core* c, const char* current_or_empty,
+                                      const char* new_pw);
 
 /* Deliver an unscoped announcement to the door UI, TTS, and event stream. Empty door selects the
  * door from the latest press; while a schema-v2 call is active this legacy entry point fails

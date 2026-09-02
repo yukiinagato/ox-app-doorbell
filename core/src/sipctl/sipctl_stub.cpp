@@ -2,6 +2,8 @@
 
 #include "sipctl/sipctl.h"
 
+#include <atomic>
+
 #include "util/log.h"
 
 namespace db {
@@ -16,6 +18,9 @@ constexpr const char* kTag = "sipctl";
 struct SipCtl::Impl {
   Runloop& loop;
   Callbacks cbs;
+  // Recorded even without a backend so status.call.mic_muted still reports what the shell asked
+  // for on a display-only build.
+  std::atomic<bool> mic_muted{false};
   explicit Impl(Runloop& l, Callbacks c) : loop(l), cbs(std::move(c)) {}
 };
 
@@ -41,6 +46,9 @@ void SipCtl::hangup() {}
 void SipCtl::answer() {}
 bool SipCtl::sendDtmf(const std::string&) { return false; }
 void SipCtl::setAllowedSources(const std::vector<std::string>&) {}
+
+void SipCtl::setMicMuted(bool muted) { impl_->mic_muted.store(muted); }
+bool SipCtl::micMuted() const { return impl_->mic_muted.load(); }
 
 SipRegState SipCtl::regState() const { return SipRegState::Idle; }
 SipCallState SipCtl::callState() const { return SipCallState::Idle; }

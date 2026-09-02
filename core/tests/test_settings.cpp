@@ -626,3 +626,41 @@ TEST_CASE("video: the publish-side counters describe what this node produced") {
   CHECK(json::getInt(counters.get(), "frame_interval_ms") > 0);
   CHECK(json::getInt(counters.get(), "fps_x10") > 0);
 }
+
+TEST_CASE("purposes: a disabled purpose is kept but never offered to a visitor") {
+  SettingsNode fleet("door_station", "d_front");
+  fleet.node->setConfigKey("doors.d_front", "{\"label\":{\"ja\":\"正面玄関\"}}");
+
+  // The flag is a boolean and nothing else.
+  fleet.node->setConfigKey("visit_purposes.p_sales.enabled", "\"no\"");
+  CHECK(fleet.at("visit_purposes.p_sales.enabled") == nullptr);
+  fleet.node->setConfigKey("visit_purposes.p_sales.enabled", "false");
+  const cJSON* flag = fleet.at("visit_purposes.p_sales.enabled");
+  REQUIRE(cJSON_IsBool(flag));
+  CHECK_FALSE(cJSON_IsTrue(flag));
+  // Switching a purpose off keeps its wording, icon and order for when it comes back.
+  CHECK(fleet.at("visit_purposes.p_sales.label") != nullptr);
+  CHECK(fleet.at("visit_purposes.p_sales.icon") != nullptr);
+
+  // A door station still showing the disabled button is stale. The call goes through -- the
+  // visitor should never be punished for that -- but it carries no purpose.
+  const std::string stale_call = fleet.node->pressV2("d_front", "p_sales");
+  REQUIRE_FALSE(stale_call.empty());
+  bool carried_purpose = false;
+  for (const auto& event : fleet.ui) {
+    auto parsed = json::parse(event);
+    if (parsed && json::getString(parsed.get(), "purpose") == "p_sales") carried_purpose = true;
+  }
+  CHECK_FALSE(carried_purpose);
+  REQUIRE(fleet.node->cancelCallV2("d_front", stale_call, "visitor"));
+
+  // A visitor cannot attach a disabled purpose to a call, while an enabled one still works.
+  const std::string call = fleet.node->pressV2("d_front", "p_delivery");
+  CHECK_FALSE(call.empty());
+  CHECK_FALSE(fleet.node->selectPurposeV2("d_front", call, "p_sales"));
+  CHECK(fleet.node->selectPurposeV2("d_front", call, "p_mail"));
+
+  // Re-enabling restores it without the administrator retyping anything.
+  fleet.node->setConfigKey("visit_purposes.p_sales.enabled", "true");
+  CHECK(fleet.node->selectPurposeV2("d_front", call, "p_sales"));
+}

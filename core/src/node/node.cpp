@@ -60,6 +60,16 @@ std::string hashPassword(const std::string& pw, const std::string& salt_hex) {
   return hexEncode(out, sizeof(out));
 }
 
+// Comparison whose duration does not depend on where two digests first differ.
+bool constantTimeEquals(const std::string& a, const std::string& b) {
+  if (a.size() != b.size()) return false;
+  unsigned char diff = 0;
+  for (size_t i = 0; i < a.size(); i++)
+    diff = static_cast<unsigned char>(diff | (static_cast<unsigned char>(a[i]) ^
+                                              static_cast<unsigned char>(b[i])));
+  return diff == 0;
+}
+
 // "host:port" → host
 std::string hostOf(const std::string& addr) {
   auto p = addr.rfind(':');
@@ -1479,9 +1489,43 @@ bool emergencyTriggerValid(const std::string& key, const cJSON* value, std::stri
   return true;
 }
 
+// visit_purposes.<id>.enabled hides a purpose from the visitor without deleting it, so the
+// wording and ordering survive being switched off and back on.
+bool visitPurposeValid(const std::string& key, const cJSON* value, std::string* error) {
+  if (key.rfind("visit_purposes", 0) != 0) return true;
+  const std::string suffix = ".enabled";
+  const bool is_enabled_leaf =
+      key.size() > suffix.size() &&
+      key.compare(key.size() - suffix.size(), suffix.size(), suffix) == 0;
+  if (is_enabled_leaf) {
+    if (cJSON_IsBool(value)) return true;
+    *error = key + " must be a boolean";
+    return false;
+  }
+  if (!cJSON_IsObject(value)) return true;
+  // A whole-purpose or whole-container write may carry the flag inline.
+  const cJSON* enabled = json::get(value, "enabled");
+  if (enabled && !cJSON_IsBool(enabled)) {
+    *error = key + ".enabled must be a boolean";
+    return false;
+  }
+  if (key != "visit_purposes") return true;
+  const cJSON* purpose = nullptr;
+  cJSON_ArrayForEach(purpose, value) {
+    const cJSON* flag = json::get(purpose, "enabled");
+    if (flag && !cJSON_IsBool(flag)) {
+      *error = "visit_purposes." + std::string(purpose->string ? purpose->string : "") +
+               ".enabled must be a boolean";
+      return false;
+    }
+  }
+  return true;
+}
+
 bool configWriteValid(const std::string& key, const cJSON* value, std::string* error,
                       std::vector<ConfigWarning>* warnings = nullptr) {
   if (!secretContractValid(key, value, error)) return false;
+  if (!visitPurposeValid(key, value, error)) return false;
   if (!eventRetentionValid(key, value, error)) return false;
   if (!timeConfigValid(key, value, error)) return false;
   if (!audioVolumeValid(key, value, error)) return false;
@@ -1992,6 +2036,15 @@ struct Node::Impl {
 
   std::mutex sess_mu;
   std::mutex admin_credential_mu;
+  // One lockout counter for every surface that checks the administrator password: the web login,
+  // the C ABI a native settings screen uses, and anything else added later. Five failures buy a
+  // ten-minute pause, so a four-digit code cannot be walked through from the LAN.
+  // Remembered when there is no SIP backend to hold it, so the toggle keeps its position.
+  bool mic_muted_without_sip = false;
+  int admin_auth_failures = 0;
+  int64_t admin_lockout_until_mono = 0;
+  static constexpr int kAdminAuthMaxFailures = 5;
+  static constexpr int64_t kAdminLockoutMs = 10 * 60 * 1000;
   std::set<std::string> sessions;
   struct PanelCredentialBinding {
     std::string generation;
@@ -2560,6 +2613,18 @@ struct Node::Impl {
     json::set(out.get(), "offset_min", static_cast<int64_t>(tzOffsetMin()));
     json::setBool(out.get(), "syncing", time_sync_busy);
     if (!time_state.last_error.empty()) json::set(out.get(), "err", time_state.last_error);
+    // The identifiers core can actually resolve, grouped the way a picker lists them. A shell
+    // that offered a zone outside this table would show a setting core rejects on save.
+    {
+      cJSON* zones = json::addObj(out.get(), "zones");
+      for (size_t i = 0; i < tz::zoneCount(); i++) {
+        const std::string id = tz::zoneIdAt(i);
+        const std::string region = tz::regionOf(id);
+        cJSON* group = json::get(zones, region.c_str());
+        if (!group) group = json::addArr(zones, region.c_str());
+        json::push(group, json::Doc(cJSON_CreateString(id.c_str())));
+      }
+    }
     auto local = json::parse(localTimeJsonOnLoop(0));
     json::setItem(out.get(), "local", local ? std::move(local) : json::obj());
     return out;
@@ -2756,6 +2821,12 @@ struct Node::Impl {
     json::set(out.get(), "created_ms", hlc->correctedWallMs());
     json::set(out.get(), "expires_ms", expires_ms > 0 ? expires_ms : static_cast<int64_t>(0));
     return out;
+  }
+
+  // A purpose a visitor may still choose: configured and not switched off by an administrator.
+  bool purposeSelectable(const std::string& purpose) {
+    const cJSON* entry = cfgAt("visit_purposes." + purpose);
+    return entry != nullptr && json::getBool(entry, "enabled", true);
   }
 
   bool doorExists(const std::string& door) const {
@@ -7229,6 +7300,13 @@ struct Node::Impl {
       json::set(sip, "rtp_tx", tx);
       json::set(sip, "rtp_rx", rx);
     }
+    {
+      // What the talk controls render: the call state plus the microphone toggle. It is
+      // reported even without a SIP backend, because the shell's toggle still has a position.
+      cJSON* call = json::addObj(o.get(), "call");
+      json::set(call, "state", sipCallName(sip_call));
+      json::setBool(call, "mic_muted", sipctl ? sipctl->micMuted() : mic_muted_without_sip);
+    }
     cJSON* leaders = json::addObj(o.get(), "leaders");
     if (mesh) {
       json::set(leaders, "telegram", mesh->leaderFor("telegram"));
@@ -7263,6 +7341,16 @@ struct Node::Impl {
     cJSON* em = json::addObj(o.get(), "emergency");
     json::setBool(em, "active", emergency_active);
     json::set(em, "hlc", emergency_hlc);
+    {
+      // Clearing a running alarm must never depend on a password the cluster does not have.
+      // Core resolves the two facts together so no shell can gate on a credential that was
+      // never set: a household that has not chosen a password can always silence its own SOS.
+      const bool configured = json::getBool(json::get(cfg.get(), "emergency"),
+                                            "cancel_requires_pin", true);
+      const bool have_password = adminCredentialOnLoop().present;
+      json::setBool(em, "cancel_requires_password", configured && have_password);
+      json::setBool(em, "admin_password_set", have_password);
+    }
     json::setItem(o.get(), "runtime", runtimeStatusDoc());
     auto manifest = json::parse(ui_manifest_json);
     json::setItem(o.get(), "ui_manifest", manifest ? std::move(manifest) : json::obj());
@@ -7468,6 +7556,234 @@ struct Node::Impl {
     }
   }
 
+  // ---------- administrator password ----------
+  // One password for the whole cluster: the same secret opens the web admin and the device-side
+  // settings screen. It is stored as a salted digest in replicated configuration, so an offline
+  // device verifies against the copy it already holds instead of asking the leader.
+  struct AdminCredential {
+    std::string salt;
+    std::string hash;
+    bool present = false;
+    bool from_local_meta = false;
+  };
+
+  AdminCredential adminCredentialOnLoop() {
+    AdminCredential out;
+    const cJSON* record = json::get(json::get(cfg.get(), "admin"), "password_hash");
+    out.salt = json::getString(record, "salt");
+    out.hash = json::getString(record, "hash");
+    if (!out.salt.empty() && !out.hash.empty()) {
+      out.present = true;
+      return out;
+    }
+    // Before the cluster-wide password existed, each node kept its own digest in local meta.
+    // It stays authoritative until the first successful verification migrates it.
+    auto salt = store.metaGet("admin_pw_salt");
+    auto hash = store.metaGet("admin_pw_hash");
+    if (salt && hash && !salt->empty() && !hash->empty()) {
+      out.salt = *salt;
+      out.hash = *hash;
+      out.present = true;
+      out.from_local_meta = true;
+    }
+    return out;
+  }
+
+  AdminCredential adminCredential() {
+    AdminCredential out;
+    loop->callSync([&] { out = adminCredentialOnLoop(); });
+    return out;
+  }
+
+  // Replicate the digest and keep the local meta copy in step, so a downgrade to an older build
+  // still finds a working password on this node.
+  bool storeAdminCredentialOnLoop(const std::string& password) {
+    const std::string salt = genTokenHex(16);
+    const std::string hash = hashPassword(password, salt);
+    // The local durable write comes first: a session must never be issued for a password that
+    // did not survive, and a half-written credential must not leave the cluster holding a digest
+    // this node cannot reproduce.
+    if (!store.metaSetBatch({{"admin_pw_salt", salt}, {"admin_pw_hash", hash}})) return false;
+    auto record = json::obj();
+    json::set(record.get(), "salt", salt);
+    json::set(record.get(), "hash", hash);
+    json::set(record.get(), "algo", "blake2b-256");
+    json::set(record.get(), "updated_ms", hlc->correctedWallMs());
+    config->mutate({{"admin.password_hash", json::dump(record.get()), false}});
+    if (!config->lastMutationCommitted()) {
+      // The password works on this node; the cluster copy is retried on the next verification.
+      DB_LOGW(kTag, "administrator password stored locally but not replicated");
+      return false;
+    }
+    return true;
+  }
+
+  // 1 accepted, 0 wrong, -1 locked out, -2 no cluster password set yet.
+  int verifyAdminPassword(const std::string& password) {
+    const AdminCredential credential = adminCredential();
+    std::lock_guard<std::mutex> lk(admin_credential_mu);
+    const int64_t now = clock->monoMs();
+    if (admin_lockout_until_mono > now) return -1;
+    if (!credential.present) return -2;
+    if (password.empty()) return 0;
+    if (!constantTimeEquals(hashPassword(password, credential.salt), credential.hash)) {
+      if (++admin_auth_failures >= kAdminAuthMaxFailures) {
+        admin_auth_failures = 0;
+        admin_lockout_until_mono = now + kAdminLockoutMs;
+        DB_LOGW(kTag, "administrator password locked out for ten minutes after repeated failures");
+      }
+      return 0;
+    }
+    admin_auth_failures = 0;
+    admin_lockout_until_mono = 0;
+    if (credential.from_local_meta) {  // first correct entry after the upgrade
+      // First correct entry after the upgrade: publish the digest so every device shares it.
+      const std::string accepted = password;
+      loop->callSync([&] { storeAdminCredentialOnLoop(accepted); });
+      DB_LOGI(kTag, "migrated the local administrator digest to replicated configuration");
+    }
+    return 1;
+  }
+
+  // 0 changed, -1 bad arguments, -2 current password wrong, -3 locked out, -4 not persisted.
+  int setAdminPassword(const std::string& current, const std::string& next) {
+    if (next.size() < 4 || next.size() > 128) return -1;
+    const AdminCredential credential = adminCredential();
+    if (credential.present) {
+      // An empty current password is accepted only while the cluster has none.
+      const int verified = verifyAdminPassword(current);
+      if (verified == -1) return -3;
+      if (verified <= 0) return -2;
+    }
+    bool ok = false;
+    loop->callSync([&] { ok = storeAdminCredentialOnLoop(next); });
+    if (!ok) return -4;
+    {
+      std::lock_guard<std::mutex> lk(admin_credential_mu);
+      admin_auth_failures = 0;
+      admin_lockout_until_mono = 0;
+    }
+    // A password change invalidates every session established with the old one.
+    std::lock_guard<std::mutex> lk(sess_mu);
+    sessions.clear();
+    return 0;
+  }
+
+  // ---------- configuration writes ----------
+  // One implementation for the HTTP endpoints and the C ABI, so a native shell that writes
+  // through the ABI gets byte-for-byte the same validation, result shape, and advisory warnings
+  // as the Admin page. status_out receives the HTTP status the same request would have produced.
+  // The warnings from the most recent single-key write, so db_core_set_config_json can stay an
+  // int and a shell can still surface the readability finding.
+  std::mutex last_warnings_mu;
+  std::string last_write_warnings_json = "[]";
+
+  void rememberWarnings(const std::vector<ConfigWarning>& warnings) {
+    auto out = json::obj();
+    attachWarnings(out.get(), warnings);
+    const cJSON* list = json::get(out.get(), "warnings");
+    std::string encoded = list ? json::dump(list) : "[]";
+    std::lock_guard<std::mutex> lk(last_warnings_mu);
+    last_write_warnings_json = std::move(encoded);
+  }
+
+  std::string setConfigJsonOnLoop(const std::string& key, const std::string& value_json,
+                                  int* status_out) {
+    auto fail = [&](const char* error, int status) {
+      if (status_out) *status_out = status;
+      auto out = json::obj();
+      json::setBool(out.get(), "ok", false);
+      json::set(out.get(), "err", error);
+      return json::dump(out.get());
+    };
+    if (key.empty() || key.size() > 512 || key.front() == '.' || key.back() == '.' ||
+        key.find("..") != std::string::npos)
+      return fail("no key", 400);
+    auto parsed = json::parse(value_json);
+    if (!parsed) parsed = json::Doc(cJSON_CreateString(value_json.c_str()));
+    std::string error;
+    std::vector<ConfigWarning> warnings;
+    if (!configWriteValidEffective(key, parsed.get(), &error, &warnings))
+      return fail(error.c_str(), 400);
+    if (!setKey(key, value_json)) return fail("config_persistence_failed", 500);
+    if (status_out) *status_out = 200;
+    rememberWarnings(warnings);
+    auto out = json::obj();
+    json::setBool(out.get(), "ok", true);
+    attachWarnings(out.get(), warnings);
+    return json::dump(out.get());
+  }
+
+  // ops_json is either the array of operations or the {"ops":[...]} envelope the HTTP endpoint
+  // takes, so the same document works for both callers.
+  std::string configBatchJsonOnLoop(const std::string& ops_json, int* status_out) {
+    auto fail = [&](const char* error, int status) {
+      if (status_out) *status_out = status;
+      auto out = json::obj();
+      json::setBool(out.get(), "ok", false);
+      json::set(out.get(), "err", error);
+      return json::dump(out.get());
+    };
+    auto body = json::parse(ops_json);
+    const cJSON* ops = nullptr;
+    if (body && cJSON_IsArray(body.get())) ops = body.get();
+    else if (body) ops = json::get(body.get(), "ops");
+    if (!cJSON_IsArray(ops) || cJSON_GetArraySize(ops) == 0) return fail("no ops", 400);
+    if (cJSON_GetArraySize(ops) > 256) return fail("too many ops", 413);
+    std::vector<LwwMutation> mutations;
+    std::vector<ConfigWarning> warnings;
+    std::set<std::string> keys;
+    const cJSON* op = nullptr;
+    cJSON_ArrayForEach(op, ops) {
+      if (!cJSON_IsObject(op)) return fail("bad op", 400);
+      const std::string kind = json::getString(op, "op");
+      const std::string key = json::getString(op, "key");
+      if ((kind != "set" && kind != "delete") || key.empty() || key.size() > 512 ||
+          key.front() == '.' || key.back() == '.' || key.find("..") != std::string::npos)
+        return fail("bad op or key", 400);
+      if (!keys.insert(key).second) return fail("duplicate key", 400);
+      LwwMutation mutation;
+      mutation.key = key;
+      mutation.deleted = kind == "delete";
+      if (!mutation.deleted) {
+        const cJSON* value = json::get(op, "value");
+        if (!value) return fail("set without value", 400);
+        std::string error;
+        if (!configWriteValidEffective(key, value, &error, &warnings))
+          return fail(error.c_str(), 400);
+        mutation.value_json = json::dump(value);
+      }
+      mutations.push_back(std::move(mutation));
+    }
+    const auto changed = config->mutate(mutations);
+    if (!config->lastMutationCommitted()) return fail("config_persistence_failed", 500);
+    if (status_out) *status_out = 200;
+    auto result = json::obj();
+    json::setBool(result.get(), "ok", true);
+    json::set(result.get(), "n", static_cast<int64_t>(changed.size()));
+    if (!changed.empty()) {
+      json::set(result.get(), "revision", changed.back().hlc);
+      json::set(result.get(), "hlc", changed.back().hlc);  // one-release compatibility alias
+    }
+    attachWarnings(result.get(), warnings);
+    return json::dump(result.get());
+  }
+
+  std::string deleteConfigKeyJsonOnLoop(const std::string& key, int* status_out) {
+    auto fail = [&](const char* error, int status) {
+      if (status_out) *status_out = status;
+      auto out = json::obj();
+      json::setBool(out.get(), "ok", false);
+      json::set(out.get(), "err", error);
+      return json::dump(out.get());
+    };
+    if (key.empty()) return fail("no key", 400);
+    config->remove(key);
+    if (!config->lastMutationCommitted()) return fail("config_persistence_failed", 500);
+    if (status_out) *status_out = 200;
+    return "{\"ok\":true}";
+  }
+
   // Extract "<id>" from "/api/doors/<id><suffix>". Returns an empty string for any other shape,
   // so the prefix route cannot be used to reach an unrelated door resource.
   static std::string doorPathDoor(const std::string& uri, const std::string& suffix) {
@@ -7613,20 +7929,20 @@ struct Node::Impl {
       auto b = json::parse(req.body);
       std::string pw = b ? json::getString(b.get(), "password") : "";
       if (pw.empty()) return HttpResp::json("{\"ok\":false}", 401);
-      {
-        std::lock_guard<std::mutex> auth_lock(admin_credential_mu);
-        auto salt = store.metaGet("admin_pw_salt");
-        auto hash = store.metaGet("admin_pw_hash");
-        if (!salt || !hash) {
-          std::string s = genTokenHex(16);
-          if (!store.metaSetBatch({{"admin_pw_salt", s},
-                                   {"admin_pw_hash", hashPassword(pw, s)}}))
-            return HttpResp::json(
-                "{\"ok\":false,\"err\":\"credential_persistence_failed\"}", 500);
-          DB_LOGI(kTag, "initialized the administrator password");
-        } else if (hashPassword(pw, *salt) != *hash) {
-          return HttpResp::json("{\"ok\":false}", 401);
-        }
+      // Same credential, same lockout counter as the device-side settings screen.
+      const int verified = verifyAdminPassword(pw);
+      if (verified == -1)
+        return HttpResp::json("{\"ok\":false,\"err\":\"locked\"}", 429);
+      if (verified == -2) {
+        // Trust on first use: the first password offered on any surface becomes the cluster's.
+        bool stored = false;
+        loop->callSync([&] { stored = storeAdminCredentialOnLoop(pw); });
+        if (!stored)
+          return HttpResp::json(
+              "{\"ok\":false,\"err\":\"credential_persistence_failed\"}", 500);
+        DB_LOGI(kTag, "initialized the cluster administrator password");
+      } else if (verified <= 0) {
+        return HttpResp::json("{\"ok\":false}", 401);
       }
       std::string tok = genTokenHex(16);
       {
@@ -7794,95 +8110,26 @@ struct Node::Impl {
     httpd->route("POST", "/api/config", [this](const HttpReq& req) {
       auto b = json::parse(req.body);
       if (!b) return HttpResp::json("{\"ok\":false,\"err\":\"bad json\"}", 400);
-      std::string key = json::getString(b.get(), "key");
-      std::string value = json::getString(b.get(), "value");
-      if (key.empty()) return HttpResp::json("{\"ok\":false,\"err\":\"no key\"}", 400);
-      auto parsed = json::parse(value);
-      if (!parsed) parsed = json::Doc(cJSON_CreateString(value.c_str()));
-      std::string style_error;
-      std::vector<ConfigWarning> warnings;
-      if (!configWriteValidEffective(key, parsed.get(), &style_error, &warnings)) {
-        auto out = json::obj();
-        json::setBool(out.get(), "ok", false);
-        json::set(out.get(), "err", style_error);
-        return HttpResp::json(json::dump(out.get()), 400);
-      }
-      if (!setKey(key, value))
-        return HttpResp::json(
-            "{\"ok\":false,\"err\":\"config_persistence_failed\"}", 500);
-      auto out = json::obj();
-      json::setBool(out.get(), "ok", true);
-      attachWarnings(out.get(), warnings);
-      return HttpResp::json(json::dump(out.get()));
+      const std::string key = json::getString(b.get(), "key");
+      const std::string value = json::getString(b.get(), "value");
+      int status = 200;
+      const std::string result = setConfigJsonOnLoop(key, value, &status);
+      return HttpResp::json(result, status);
     });
 
     httpd->route("POST", "/api/config/batch", [this](const HttpReq& req) {
-      auto body = json::parse(req.body);
-      cJSON* ops = body ? json::get(body.get(), "ops") : nullptr;
-      if (!cJSON_IsArray(ops) || cJSON_GetArraySize(ops) == 0)
-        return HttpResp::json("{\"ok\":false,\"err\":\"no ops\"}", 400);
-      if (cJSON_GetArraySize(ops) > 256)
-        return HttpResp::json("{\"ok\":false,\"err\":\"too many ops\"}", 413);
-      std::vector<LwwMutation> mutations;
-      std::vector<ConfigWarning> warnings;
-      std::set<std::string> keys;
-      cJSON* op = nullptr;
-      cJSON_ArrayForEach(op, ops) {
-        if (!cJSON_IsObject(op))
-          return HttpResp::json("{\"ok\":false,\"err\":\"bad op\"}", 400);
-        const std::string kind = json::getString(op, "op");
-        const std::string key = json::getString(op, "key");
-        if ((kind != "set" && kind != "delete") || key.empty() || key.size() > 512 ||
-            key.front() == '.' || key.back() == '.' || key.find("..") != std::string::npos)
-          return HttpResp::json("{\"ok\":false,\"err\":\"bad op or key\"}", 400);
-        if (!keys.insert(key).second)
-          return HttpResp::json("{\"ok\":false,\"err\":\"duplicate key\"}", 400);
-        LwwMutation mutation;
-        mutation.key = key;
-        mutation.deleted = kind == "delete";
-        if (!mutation.deleted) {
-          cJSON* value = json::get(op, "value");
-          if (!value)
-            return HttpResp::json("{\"ok\":false,\"err\":\"set without value\"}", 400);
-          std::string style_error;
-          if (!configWriteValidEffective(key, value, &style_error, &warnings)) {
-            auto out = json::obj();
-            json::setBool(out.get(), "ok", false);
-            json::set(out.get(), "err", style_error);
-            return HttpResp::json(json::dump(out.get()), 400);
-          }
-          mutation.value_json = json::dump(value);
-        }
-        mutations.push_back(std::move(mutation));
-      }
-      const auto changed = config->mutate(mutations);
-      if (!config->lastMutationCommitted())
-        return HttpResp::json(
-            "{\"ok\":false,\"err\":\"config_persistence_failed\"}", 500);
-      auto result = json::obj();
-      json::setBool(result.get(), "ok", true);
-      json::set(result.get(), "n", static_cast<int64_t>(changed.size()));
-      if (!changed.empty()) {
-        json::set(result.get(), "revision", changed.back().hlc);
-        json::set(result.get(), "hlc", changed.back().hlc);  // one-release compatibility alias
-      }
-      attachWarnings(result.get(), warnings);
-      return HttpResp::json(json::dump(result.get()));
+      int status = 200;
+      const std::string result = configBatchJsonOnLoop(req.body, &status);
+      return HttpResp::json(result, status);
     });
-
 
     httpd->route("POST", "/api/config/delete", [this](const HttpReq& req) {
       auto b = json::parse(req.body);
-      std::string key = b ? json::getString(b.get(), "key") : "";
-      if (key.empty()) return HttpResp::json("{\"ok\":false,\"err\":\"no key\"}", 400);
-      config->remove(key);
-      if (!config->lastMutationCommitted())
-        return HttpResp::json(
-            "{\"ok\":false,\"err\":\"config_persistence_failed\"}", 500);
-      return HttpResp::json("{\"ok\":true}");
+      const std::string key = b ? json::getString(b.get(), "key") : "";
+      int status = 200;
+      const std::string result = deleteConfigKeyJsonOnLoop(key, &status);
+      return HttpResp::json(result, status);
     });
-
-
 
     httpd->route("POST", "/api/config/import", [this](const HttpReq& req) {
       auto b = json::parse(req.body);
@@ -8144,7 +8391,7 @@ struct Node::Impl {
       auto b = json::parse(req.body);
       std::string door = b ? json::getString(b.get(), "door") : "";
       std::string purpose = b ? json::getString(b.get(), "purpose") : "";
-      if (!purpose.empty() && !cfgAt("visit_purposes." + purpose))
+      if (!purpose.empty() && !purposeSelectable(purpose))
         return HttpResp::json("{\"ok\":false,\"err\":\"unknown purpose\"}", 400);
       const std::string call_id = doPress(door, purpose);
       if (call_id.empty())
@@ -8569,7 +8816,9 @@ struct Node::Impl {
         cJSON* vps = json::get(cfg.get(), "visit_purposes");
         cJSON* vp = nullptr;
         cJSON_ArrayForEach(vp, vps) {
-          if (vp->string) ps.push_back({json::getInt(vp, "order", 1000), vp->string, vp});
+          // A disabled purpose stays in configuration but is never offered to a visitor.
+          if (vp->string && json::getBool(vp, "enabled", true))
+            ps.push_back({json::getInt(vp, "order", 1000), vp->string, vp});
         }
         std::sort(ps.begin(), ps.end(), [](const P& a, const P& b) {
           return std::tie(a.order, a.id) < std::tie(b.order, b.id);
@@ -8694,7 +8943,7 @@ struct Node::Impl {
       if (door.empty() || !cfgAt("doors." + door))
         return HttpResp::json("{\"ok\":false,\"err\":\"unknown door\"}", 400);
       std::string purpose = req.param("purpose");
-      if (!purpose.empty() && !cfgAt("visit_purposes." + purpose))
+      if (!purpose.empty() && !purposeSelectable(purpose))
         return HttpResp::json("{\"ok\":false,\"err\":\"unknown purpose\"}", 400);
       const std::string call_id = doPress(door, purpose);
       if (call_id.empty())
@@ -9054,8 +9303,12 @@ struct Node::Impl {
     return config->lastMutationCommitted();
   }
 
-  std::string doPress(const std::string& door_arg, const std::string& purpose) {
+  std::string doPress(const std::string& door_arg, const std::string& purpose_arg) {
     std::string door = door_arg.empty() ? opts.door : door_arg;
+    // A door station showing a purpose an administrator has since switched off is stale. Ring
+    // anyway, without the purpose: refusing the call outright would punish the visitor for it.
+    const std::string purpose =
+        (!purpose_arg.empty() && purposeSelectable(purpose_arg)) ? purpose_arg : std::string();
     auto existing = active_calls.find(door);
     if (existing != active_calls.end() && existing->second.state == "in_call")
       return existing->second.call_id;
@@ -9080,7 +9333,7 @@ struct Node::Impl {
 
   bool doSelectPurpose(const std::string& door_arg, const std::string& call_id,
                        const std::string& purpose) {
-    if (purpose.empty() || !cfgAt("visit_purposes." + purpose)) return false;
+    if (purpose.empty() || !purposeSelectable(purpose)) return false;
     const std::string door = door_arg.empty() ? opts.door : door_arg;
     auto it = active_calls.find(door);
     if (it == active_calls.end() || it->second.call_id != call_id ||
@@ -9666,8 +9919,13 @@ std::string Node::statusJson() {
 }
 
 std::string Node::callLogJson(int64_t since_ms, int limit) {
+  return callLogJson(since_ms, 0, limit);
+}
+
+std::string Node::callLogJson(int64_t since_ms, int64_t before_ms, int limit) {
   Store::CallLogQuery query;
   query.since_ms = since_ms > 0 ? since_ms : 0;
+  query.before_ms = before_ms > 0 ? before_ms : 0;
   query.limit = limit > 0 ? static_cast<size_t>(limit) : kCallLogDefaultLimit;
   query.limit = std::min<size_t>(query.limit, kCallLogMaxLimit);
   std::string out;
@@ -9737,6 +9995,33 @@ bool Node::openDoor(const std::string& door) {
   bool ok = false;
   impl_->loop->callSync([&] { ok = impl_->openDoorOnLoop(door); });
   return ok;
+}
+
+std::string Node::lastWriteWarningsJson() {
+  std::lock_guard<std::mutex> lk(impl_->last_warnings_mu);
+  return impl_->last_write_warnings_json;
+}
+
+std::string Node::setConfigJson(const std::string& key, const std::string& value_json) {
+  std::string out;
+  if (!impl_->loop->callSync(
+          [&] { out = impl_->setConfigJsonOnLoop(key, value_json, nullptr); }))
+    return R"({"ok":false,"err":"not_started"})";
+  return out;
+}
+
+std::string Node::configBatchJson(const std::string& ops_json) {
+  std::string out;
+  if (!impl_->loop->callSync([&] { out = impl_->configBatchJsonOnLoop(ops_json, nullptr); }))
+    return R"({"ok":false,"err":"not_started"})";
+  return out;
+}
+
+std::string Node::deleteConfigKeyJson(const std::string& key) {
+  std::string out;
+  if (!impl_->loop->callSync([&] { out = impl_->deleteConfigKeyJsonOnLoop(key, nullptr); }))
+    return R"({"ok":false,"err":"not_started"})";
+  return out;
 }
 
 void Node::setConfigKey(const std::string& key, const std::string& value_json) {
@@ -9896,6 +10181,33 @@ void Node::sipHangup() {
   impl_->loop->callSync([&] {
     if (impl_->sipctl) impl_->sipctl->hangup();
   });
+}
+
+void Node::setSipMicMuted(bool muted) {
+  impl_->loop->callSync([&] {
+    impl_->mic_muted_without_sip = muted;
+    if (impl_->sipctl) impl_->sipctl->setMicMuted(muted);
+    // Rebuild the published snapshot before returning: a toggle that reads its own state back
+    // immediately must not see the previous position.
+    if (impl_->started && impl_->loop->onLoopThread()) impl_->refreshSnapshots();
+    else impl_->scheduleSnapshotRefresh();
+  });
+}
+
+bool Node::sipMicMuted() {
+  bool muted = false;
+  impl_->loop->callSync([&] {
+    muted = impl_->sipctl ? impl_->sipctl->micMuted() : impl_->mic_muted_without_sip;
+  });
+  return muted;
+}
+
+int Node::verifyAdminPassword(const std::string& password) {
+  return impl_->verifyAdminPassword(password);
+}
+
+int Node::setAdminPassword(const std::string& current, const std::string& next) {
+  return impl_->setAdminPassword(current, next);
 }
 
 bool Node::sipSendDtmf(const std::string& digits) {

@@ -80,6 +80,11 @@ class SipCtl {
   // Restrict direct INVITEs by source IP. Empty allows all sources.
   void setAllowedSources(const std::vector<std::string>& ips);
 
+  // Microphone mute for the talk control. The flag is remembered across calls and reapplied
+  // when media becomes active, so muting before answering stays muted.
+  void setMicMuted(bool muted);
+  bool micMuted() const;
+
   SipRegState regState() const;
   SipCallState callState() const;
   int monitorCount() const;

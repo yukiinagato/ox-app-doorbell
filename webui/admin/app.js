@@ -1335,6 +1335,265 @@ var AdminLogic = (function () {
     };
   }
 
+
+  /* ---------------- Batch 2 round 2/4: appearance, auto theme, notices, unlock ------------- */
+
+  /* The semantic text regions core publishes an automatic ink decision for. Mirrors kInkRegions
+   * in core/src/node/node.cpp; webui/tests/settings.test.js checks the two lists match. */
+  var INK_REGIONS = ["clock", "date", "status_line", "hint", "tile_label", "footer", "notice"];
+  var APPEARANCE_MODES = ["auto_system", "auto_schedule", "light", "dark"];
+
+  function rgbOf(hex) {
+    if (!colorOk(hex)) return null;
+    return { r: parseInt(hex.substr(1, 2), 16), g: parseInt(hex.substr(3, 2), 16),
+             b: parseInt(hex.substr(5, 2), 16) };
+  }
+  function hexOf(rgb) {
+    function pair(v) {
+      var n = Math.max(0, Math.min(255, Math.round(v)));
+      return (n < 16 ? "0" : "") + n.toString(16).toUpperCase();
+    }
+    return "#" + pair(rgb.r) + pair(rgb.g) + pair(rgb.b);
+  }
+
+  function toHsl(rgb) {
+    var r = rgb.r / 255, g = rgb.g / 255, b = rgb.b / 255;
+    var max = Math.max(r, g, b), min = Math.min(r, g, b), delta = max - min;
+    var l = (max + min) / 2;
+    if (delta <= 0) return { h: 0, s: 0, l: l };
+    var s = l > 0.5 ? delta / (2 - max - min) : delta / (max + min);
+    var h;
+    if (max === r) h = 60 * (((g - b) / delta + 6) % 6);
+    else if (max === g) h = 60 * ((b - r) / delta + 2);
+    else h = 60 * ((r - g) / delta + 4);
+    return { h: h, s: s, l: l };
+  }
+
+  function fromHsl(hsl) {
+    var h = (((hsl.h % 360) + 360) % 360) / 360;
+    var s = Math.max(0, Math.min(1, hsl.s)), l = Math.max(0, Math.min(1, hsl.l));
+    if (s <= 0) { var grey = Math.round(l * 255); return { r: grey, g: grey, b: grey }; }
+    var q = l < 0.5 ? l * (1 + s) : l + s - l * s, p = 2 * l - q;
+    function channel(t) {
+      if (t < 0) t += 1;
+      if (t > 1) t -= 1;
+      if (t < 1 / 6) return p + (q - p) * 6 * t;
+      if (t < 1 / 2) return q;
+      if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
+      return p;
+    }
+    return { r: Math.round(channel(h + 1 / 3) * 255), g: Math.round(channel(h) * 255),
+             b: Math.round(channel(h - 1 / 3) * 255) };
+  }
+
+  /* Y >= 0.5 means the background is light, so the ink on it must be dark. */
+  function autoInk(background) { return luminance(background) >= 0.5 ? "dark" : "light"; }
+
+  /* Mirrors db::color::autoAccent so the Theme tab can preview a background the operator has
+   * not saved yet. Core recomputes and republishes the same value once the write lands. */
+  function autoAccent(background, text) {
+    var bg = rgbOf(background);
+    if (!bg) return "#7F5E3D";
+    var textHex = colorOk(text) ? text : "#FFFFFF";
+    var backgroundY = luminance(background), textY = luminance(textHex);
+    var base = toHsl(bg);
+    var hue = (base.h + 180) % 360, saturation = Math.max(base.s, 0.35);
+    function ratio(a, b) { return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05); }
+    function satisfies(candidate) {
+      var y = luminance(candidate);
+      return ratio(y, backgroundY) >= 3 && ratio(textY, y) >= 4.5;
+    }
+    function score(candidate) {
+      var y = luminance(candidate);
+      return Math.min(ratio(y, backgroundY), Math.max(ratio(1, y), ratio(0, y)));
+    }
+    var darkFirst = backgroundY >= 0.5, best = hexOf(fromHsl({ h: hue, s: saturation, l: base.l }));
+    var bestScore = -1;
+    for (var pass = 0; pass < 2; pass++) {
+      var downward = (pass === 0) === darkFirst;
+      for (var step = 1; step <= 100; step++) {
+        var l = base.l + (downward ? -0.01 : 0.01) * step;
+        if (l < 0 || l > 1) break;
+        var candidate = hexOf(fromHsl({ h: hue, s: saturation, l: l }));
+        if (satisfies(candidate)) return candidate;
+        var candidateScore = score(candidate);
+        if (candidateScore > bestScore) { bestScore = candidateScore; best = candidate; }
+      }
+    }
+    return best;
+  }
+
+  /* What the Theme tab renders: core's published decision when it has one, otherwise the same
+   * decision computed locally from the background the form currently shows. */
+  function themeAutoModel(status, backgroundHex) {
+    var theme = isObj(status) && isObj(status.display) && isObj(status.display.theme)
+      ? status.display.theme : {};
+    var published = isObj(theme.auto_accent) ? theme.auto_accent : {};
+    var background = colorOk(backgroundHex) ? backgroundHex :
+      (isObj(theme.auto_background) && colorOk(theme.auto_background.color)
+        ? theme.auto_background.color : "#101418");
+    var usePublished = !colorOk(backgroundHex) && colorOk(published.call_button);
+    var button = usePublished ? published.call_button : autoAccent(background, "#FFFFFF");
+    return {
+      background: background,
+      source: isObj(theme.auto_background) && theme.auto_background.source === "image"
+        ? "image" : "color",
+      ink: autoInk(background),
+      callButton: button,
+      callButtonInk: autoInk(button),
+      inkOverride: isObj(theme.ink_override) ? theme.ink_override : {}
+    };
+  }
+
+  /* Appearance. The schedule is only meaningful for auto_schedule, but it is stored either way
+   * so switching modes back and forth does not lose the times. */
+  function appearanceEntries(scope, f) {
+    var mode = APPEARANCE_MODES.indexOf(String(f.mode)) >= 0 ? String(f.mode) : "auto_system";
+    var base = scope ? "devices." + scope + ".local.display" : "display";
+    var entries = [{ key: base + ".appearance", value: mode }];
+    if (f.dark_from && f.light_from && !scope)
+      entries.push({ key: "display.appearance_schedule",
+                     value: { dark_from: String(f.dark_from), light_from: String(f.light_from) } });
+    return entries;
+  }
+
+  function appearanceModel(status, cfg, scope) {
+    var display = isObj(status) && isObj(status.display) ? status.display : {};
+    var reported = isObj(display.appearance) ? display.appearance : {};
+    var base = isObj(cfg) && isObj(cfg.display) ? cfg.display : {};
+    var device = scope && isObj(cfg) && isObj(cfg.devices) && isObj(cfg.devices[scope]) &&
+      isObj(cfg.devices[scope].local) && isObj(cfg.devices[scope].local.display)
+      ? cfg.devices[scope].local.display : {};
+    var configured = scope && typeof device.appearance === "string" ? device.appearance :
+      (typeof base.appearance === "string" ? base.appearance : "auto_system");
+    if (APPEARANCE_MODES.indexOf(configured) < 0) configured = "auto_system";
+    var schedule = isObj(base.appearance_schedule) ? base.appearance_schedule : {};
+    return {
+      configured: configured,
+      effective: reported.effective === "dark" ? "dark" : "light",
+      followSystem: reported.follow_system === true,
+      darkFrom: typeof schedule.dark_from === "string" ? schedule.dark_from : "19:00",
+      lightFrom: typeof schedule.light_from === "string" ? schedule.light_from : "06:30"
+    };
+  }
+
+  /* Ink and call-button overrides live in the same theme object as the background, so they are
+   * written through one entry. An empty value deletes the override and returns the region to
+   * automatic rather than storing a colour that happens to match. */
+  function themeColorEntries(scope, f, existing) {
+    var key = themeKey(scope), value = editableClone(existing);
+    if (f.call_button_auto || !colorOk(f.call_button_bg)) delete value.call_button_bg;
+    else value.call_button_bg = f.call_button_bg;
+    var ink = {};
+    var proposed = isObj(f.ink_override) ? f.ink_override : {};
+    for (var i = 0; i < INK_REGIONS.length; i++) {
+      var region = INK_REGIONS[i];
+      if (colorOk(proposed[region])) ink[region] = proposed[region];
+    }
+    if (hasOwnKeys(ink)) value.ink_override = ink;
+    else delete value.ink_override;
+    // Never write back what core computed; those fields are read-only.
+    delete value.auto_ink;
+    delete value.auto_accent;
+    delete value.auto_background;
+    delete value.call_button_ink;
+    if (!hasOwnKeys(value)) return { entries: [], dels: [key] };
+    return { entries: [{ key: key, value: value }], dels: [] };
+  }
+
+  var NOTICE_PRESET_MAX = 8;
+
+  /* notice.presets is an ordinary array an administrator edits; the dialogs render whatever is
+   * there. Rejects the same shapes core rejects so the form fails before the round trip. */
+  function noticePresetEntries(presets) {
+    if (!(presets instanceof Array)) throw new Error("notice.presets");
+    if (presets.length > NOTICE_PRESET_MAX) throw new Error("notice.presets_max");
+    var seen = {}, out = [];
+    for (var i = 0; i < presets.length; i++) {
+      var id = String((presets[i] || {}).id || "");
+      var text = String((presets[i] || {}).text == null ? "" : presets[i].text)
+        .replace(/^\s+|\s+$/g, "");
+      if (!/^[A-Za-z0-9_-]{1,32}$/.test(id)) throw new Error("notice.preset_id");
+      if (own(seen, id)) throw new Error("notice.preset_id");
+      seen[id] = true;
+      var length = countCharacters(text);
+      if (!length || length > NOTICE_MAX_CHARS) throw new Error("notice.preset_text");
+      out.push({ id: id, text: text });
+    }
+    return [{ key: "notice.presets", value: out }];
+  }
+
+  function noticePresetList(cfg) {
+    var presets = isObj(cfg) && isObj(cfg.notice) && cfg.notice.presets instanceof Array
+      ? cfg.notice.presets : [];
+    var out = [];
+    for (var i = 0; i < presets.length && out.length < NOTICE_PRESET_MAX; i++) {
+      var entry = presets[i];
+      if (!isObj(entry)) continue;
+      var id = String(entry.id || ""), text = String(entry.text == null ? "" : entry.text);
+      if (!/^[A-Za-z0-9_-]{1,32}$/.test(id) || !text) continue;
+      out.push({ id: id, text: text });
+    }
+    return out;
+  }
+
+  /* The announcement a door actually shows: its own if it has one, otherwise the cluster-wide
+   * message. Mirrors the resolution core reports in status.doors.<id>.notice. */
+  function effectiveNoticeModel(door, cfg, nowMs) {
+    var doors = isObj(cfg) ? cfg.doors : null;
+    var specific = noticeModel(door, doors, nowMs);
+    if (specific.active) { specific.scope = "door"; return specific; }
+    var global = isObj(cfg) && isObj(cfg.notice) ? cfg.notice.global : null;
+    var wrapped = noticeModel("global", { global: { notice: global } }, nowMs);
+    wrapped.scope = wrapped.active ? "global" : "none";
+    return wrapped;
+  }
+
+  /* doors.<id>.unlock.show_button is a three-way choice: leave it to core (show the control when
+   * an unlock action exists), always show it, or always hide it. */
+  function doorUnlockEntries(door, mode, existing) {
+    var key = "doors." + door + ".unlock";
+    var value = editableClone(existing);
+    if (mode === "show") value.show_button = true;
+    else if (mode === "hide") value.show_button = false;
+    else delete value.show_button;
+    if (!hasOwnKeys(value)) return { entries: [], dels: [key] };
+    return { entries: [{ key: key, value: value }], dels: [] };
+  }
+
+  function doorUnlockModel(door, cfg, status) {
+    var configured = isObj(cfg) && isObj(cfg.doors) && isObj(cfg.doors[door]) &&
+      isObj(cfg.doors[door].unlock) ? cfg.doors[door].unlock : {};
+    var reported = isObj(status) && isObj(status.doors) && isObj(status.doors[door]) &&
+      isObj(status.doors[door].unlock) ? status.doors[door].unlock : {};
+    var mode = configured.show_button === true ? "show" :
+               (configured.show_button === false ? "hide" : "auto");
+    return {
+      mode: mode,
+      configured: reported.configured === true,
+      showButton: reported.show_button === true,
+      command: typeof reported.command === "string" ? reported.command : ""
+    };
+  }
+
+  /* Readability findings that came back with a successful write. */
+  function writeWarnings(result) {
+    var list = isObj(result) && result.warnings instanceof Array ? result.warnings : [];
+    var out = [];
+    for (var i = 0; i < list.length; i++) {
+      var item = list[i];
+      if (!isObj(item)) continue;
+      out.push({
+        key: String(item.key || ""),
+        property: String(item.property || ""),
+        contrast: num(item.contrast, 0),
+        message_key: typeof item.message_key === "string" ? item.message_key :
+          "theme.low_contrast"
+      });
+    }
+    return out;
+  }
+
   function tzEntries(min) {
     return [{ key: "integrations.tz_offset_min", value: num(min, 540) }];
   }
@@ -2091,6 +2350,14 @@ var AdminLogic = (function () {
     NOTICE_EXPIRY_PRESETS: NOTICE_EXPIRY_PRESETS, noticeExpiryMs: noticeExpiryMs,
     noticePayload: noticePayload, noticeModel: noticeModel, countCharacters: countCharacters,
     SOS_TRIGGER_MODES: SOS_TRIGGER_MODES, sosEntries: sosEntries, powerModel: powerModel,
+    INK_REGIONS: INK_REGIONS, APPEARANCE_MODES: APPEARANCE_MODES,
+    autoInk: autoInk, autoAccent: autoAccent, themeAutoModel: themeAutoModel,
+    appearanceEntries: appearanceEntries, appearanceModel: appearanceModel,
+    themeColorEntries: themeColorEntries,
+    NOTICE_PRESET_MAX: NOTICE_PRESET_MAX, noticePresetEntries: noticePresetEntries,
+    noticePresetList: noticePresetList, effectiveNoticeModel: effectiveNoticeModel,
+    doorUnlockEntries: doorUnlockEntries, doorUnlockModel: doorUnlockModel,
+    writeWarnings: writeWarnings,
     webSosEntries: webSosEntries, runtimeHealthRows: runtimeHealthRows,
     flattenConfig: flattenConfig, applyKey: applyKey, deleteKey: deleteKey,
     newId: newId, safeId: safeId,
