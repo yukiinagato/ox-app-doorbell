@@ -16,6 +16,25 @@ UIColor *DBColorFromHex(NSString *hex, UIColor *fallback);
 CGRect DBAspectFitRect(CGRect available, CGSize contentSize);
 NSString *DBHexFromColor(UIColor *color);
 
+// The cluster's theme picture, prepared once for this panel.
+//
+// A full-size decode per layout is not affordable on an SGX535 with 256 MB, and
+// a bright wallpaper behind text is unreadable however the ink is chosen. The
+// backdrop is therefore decoded once per (image, size), scaled to the panel
+// with aspect fill and darkened, then reused. The same darkened image is what
+// the ink sampler measures, so the contrast decision matches what is on screen.
+@interface DBThemeBackdrop : NSObject
+
+// Decodes and prepares off the main thread. key identifies the picture, which
+// is the asset hash. Returns nil when the data is not an image.
++ (UIImage *)backdropForData:(NSData *)data key:(NSString *)key size:(CGSize)size;
+// The prepared image when this exact picture and size were already built.
++ (UIImage *)cachedBackdropForKey:(NSString *)key size:(CGSize)size;
+// How far the picture is darkened, so callers can describe it.
++ (CGFloat)darkeningAlpha;
+
+@end
+
 // A low-resolution copy of the theme background exactly as it is drawn on
 // screen, so each text region can be measured against the pixels actually
 // behind it. Core averages the whole image because it has no layout geometry;
@@ -47,6 +66,7 @@ NSString *DBHexFromColor(UIColor *color);
 @property(nonatomic, readonly, copy) NSString *surfaceHex;
 @property(nonatomic, readonly) UIColor *surface;
 @property(nonatomic, readonly) UIColor *elevated;   // tiles, rows, chips
+@property(nonatomic, readonly) UIColor *chipPlate; // opaque enough for a picture
 @property(nonatomic, readonly) UIColor *separator;
 @property(nonatomic, readonly) UIColor *ink;
 @property(nonatomic, readonly) UIColor *mutedInk;
@@ -76,6 +96,11 @@ NSString *DBHexFromColor(UIColor *color);
 // override still wins, and core's per-region value is used when the background
 // is a flat colour, where core's answer is exact.
 - (void)setBackgroundSampler:(DBBackgroundSampler *)sampler;
+// NO for a screen that paints its own chrome instead of the cluster's theme
+// picture, such as the incoming/monitor page. Core's published per-region ink
+// describes the theme background, so a screen that does not draw it must not
+// take that answer: on the device it made the call title dark grey on black.
+- (void)setUsesThemeBackground:(BOOL)usesThemeBackground;
 - (UIColor *)inkForRegion:(NSString *)region frame:(CGRect)frame;
 - (BOOL)needsShadowForRegion:(NSString *)region frame:(CGRect)frame;
 // Applies both to one label in a single call, which is what every screen wants.

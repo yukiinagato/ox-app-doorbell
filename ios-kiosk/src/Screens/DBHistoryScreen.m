@@ -304,6 +304,25 @@ static const NSInteger kPageSize = 50;
   return day;
 }
 
+// A node id is not something to show a resident: it is resolved to the device
+// name, and a name that cannot be resolved is left out rather than printed as
+// forty hex characters.
+- (NSString *)deviceNameForId:(NSString *)identifier {
+  if ([identifier length] == 0) return @"";
+  NSString *name = [DBConfigUtil str:_cfg
+      path:[NSString stringWithFormat:@"devices.%@.name", identifier]];
+  if ([name length] > 0) return name;
+  NSDictionary *peer = [DBConfigUtil findPeer:_status nodeId:identifier];
+  name = [DBConfigUtil evStr:peer key:@"name"];
+  if ([name length] > 0) return name;
+  NSString *selfName = [DBConfigUtil str:_status path:@"node.name"];
+  if ([[DBConfigUtil str:_status path:@"node.id"] isEqualToString:identifier] &&
+      [selfName length] > 0)
+    return selfName;
+  // An id that resolves to nothing is noise, not information.
+  return [identifier length] > 24 ? @"" : identifier;
+}
+
 - (NSString *)outcomeTextForRow:(NSDictionary *)row {
   NSString *outcome = [DBConfigUtil evStr:row key:@"outcome"];
   if ([outcome isEqualToString:@"answered"]) return [_texts ts:@"history.outcome_answered"];
@@ -336,7 +355,7 @@ static const NSInteger kPageSize = 50;
 
   NSMutableArray *detail = [NSMutableArray array];
   [detail addObject:[self outcomeTextForRow:row]];
-  NSString *answeredBy = [DBConfigUtil evStr:row key:@"answered_by"];
+  NSString *answeredBy = [self deviceNameForId:[DBConfigUtil evStr:row key:@"answered_by"]];
   if ([answeredBy length] > 0)
     [detail addObject:[_texts t:@"history.answered_by", answeredBy, nil]];
   NSString *duration = [DBCallHistoryModel durationTextForMs:

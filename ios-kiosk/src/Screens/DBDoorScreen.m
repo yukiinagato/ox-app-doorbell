@@ -159,6 +159,12 @@ typedef enum {
   UIButton *_noticeExpand;
   BOOL _noticeExpanded;
   UILabel *_versionLabel;
+  UIImageView *_themeBg;
+  NSString *_themeHash;
+  CGSize _themeImageSize;
+  DBBackgroundSampler *_sampler;
+  CGSize _samplerSize;
+  BOOL _samplerBuilding;
   NSDictionary *_display;   // status.display: core-resolved appearance and theme.
   NSDictionary *_status;
   DBSosSlider *_sos;
@@ -219,6 +225,17 @@ typedef enum {
 
 - (void)buildUI {
   self.backgroundColor = [UIColor colorWithRed:0.04 green:0.05 blue:0.07 alpha:1];
+
+  // The cluster's theme picture sits behind everything, prepared once for this
+  // panel and darkened, with the per-region ink measured against it.
+  _themeBg = [[UIImageView alloc] initWithFrame:self.bounds];
+  _themeBg.autoresizingMask = UIViewAutoresizingFlexibleWidth |
+      UIViewAutoresizingFlexibleHeight;
+  _themeBg.contentMode = UIViewContentModeScaleAspectFill;
+  _themeBg.clipsToBounds = YES;
+  _themeBg.opaque = YES;
+  _themeBg.hidden = YES;
+  [self addSubview:_themeBg];
 
   _cameraPreviewView = [[UIImageView alloc] initWithFrame:self.bounds];
   _cameraPreviewView.autoresizingMask = UIViewAutoresizingFlexibleWidth |
@@ -437,6 +454,65 @@ typedef enum {
 // The call button colour is computed from the effective background: hue rotated
 // by 180 degrees and lightness moved until it separates, with the local
 // fallback used whenever core published no auto_accent (spec §5.2).
+- (NSString *)themeValue:(NSString *)leaf {
+  if ([_deviceID length] > 0) {
+    NSString *value = [DBConfigUtil str:_cfg path:[NSString stringWithFormat:
+        @"devices.%@.local.theme.%@", _deviceID, leaf]];
+    if (value) return value;
+  }
+  return [DBConfigUtil str:_cfg path:[NSString stringWithFormat:@"display.theme.%@", leaf]];
+}
+
+- (void)refreshThemeBackdrop {
+  if (_safeMode) {
+    _themeHash = nil;
+    _themeBg.image = nil;
+    _themeBg.hidden = YES;
+    _sampler = nil;
+    return;
+  }
+  NSString *hash = [self themeValue:@"bg_image"];
+  CGSize size = self.bounds.size;
+  if ([hash length] == 0) {
+    _themeHash = nil;
+    _themeBg.image = nil;
+    _themeBg.hidden = YES;
+    _sampler = nil;
+    return;
+  }
+  if ([_themeHash isEqualToString:hash] && _themeBg.image != nil &&
+      CGSizeEqualToSize(_themeImageSize, size))
+    return;
+  if (size.width <= 0 || size.height <= 0) return;
+  _themeHash = [hash copy];
+  _themeImageSize = size;
+  NSString *want = [hash copy];
+  NSString *urlString = [NSString stringWithFormat:@"http://127.0.0.1:%ld/asset/%@",
+                         (long)_boot.httpPort, hash];
+  NSURL *url = [NSURL URLWithString:urlString];
+  if (url == nil) return;
+  __weak DBDoorScreen *weakSelf = self;
+  dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_LOW, 0), ^{
+    UIImage *backdrop = [DBThemeBackdrop cachedBackdropForKey:want size:size];
+    if (backdrop == nil) {
+      NSData *data = [NSData dataWithContentsOfURL:url];
+      backdrop = [DBThemeBackdrop backdropForData:data key:want size:size];
+    }
+    DBBackgroundSampler *sampler = [DBBackgroundSampler samplerWithImage:backdrop
+                                                                viewSize:size];
+    dispatch_async(dispatch_get_main_queue(), ^{
+      DBDoorScreen *screen = weakSelf;
+      if (!screen || ![screen->_themeHash isEqualToString:want]) return;
+      screen->_themeBg.image = backdrop;
+      screen->_themeBg.hidden = (backdrop == nil);
+      screen->_sampler = sampler;
+      screen->_samplerSize = size;
+      [screen->_palette setBackgroundSampler:sampler];
+      [screen applyRegionInk];
+    });
+  });
+}
+
 - (void)applyVisitorTheme {
   NSString *background = [DBConfigUtil str:_cfg path:[NSString stringWithFormat:
       @"devices.%@.local.theme.bg_color", _deviceID]];
@@ -444,16 +520,21 @@ typedef enum {
     background = [DBConfigUtil str:_cfg path:@"display.theme.bg_color"];
   _palette = [DBUiPalette paletteForConfig:_cfg deviceId:_deviceID display:_display
                              backgroundHex:background minuteOfDay:[self minuteOfDay]];
+  [self refreshThemeBackdrop];
+  [_palette setBackgroundSampler:_sampler];
   UIColor *surface = _palette.surface;
-  if (_cameraPreviewView.hidden) self.backgroundColor = surface;
+  if (_cameraPreviewView.hidden && _themeBg.hidden) self.backgroundColor = surface;
   // The per-region colours land after layout, when each frame is known.
   [self applyRegionInk];
   [_sos applyPalette:_palette];
   [_sos applyConfig:_cfg texts:_texts];
+  [self updateLanguageSelection];
 
   // The call button's colour is applied at the end of applySemanticStyles, so
   // the semantic baseline cannot paint over the computed accent.
 
+  // The same rule as every other shell: the bar is drawn when the cluster's
+  // emergency.button_on_roles names this role.
   BOOL showSos = NO;
   id roles = [DBConfigUtil dig:_cfg path:@"emergency.button_on_roles"];
   if ([roles isKindOfClass:[NSArray class]]) {
@@ -461,6 +542,10 @@ typedef enum {
       if ([role isKindOfClass:[NSString class]] &&
           [(NSString *)role isEqualToString:@"door_station"])
         showSos = YES;
+  }
+  if (showSos != !_sos.hidden) {
+    NSLog(@"[doorbell][sos] door station bar %@ (button_on_roles=%@)",
+          showSos ? @"shown" : @"hidden", roles ?: @"<unset>");
   }
   _sos.hidden = !showSos;
 
@@ -923,8 +1008,17 @@ typedef enum {
   DBApplyDoorButtonStyle(_cancelButton, [self styleForSemanticID:cancelID],
                          white, red, 14);
   NSDictionary *purposeStyle = [self styleForSemanticID:@"purpose.button"];
-  for (UIButton *button in _purposeButtons)
-    DBApplyDoorButtonStyle(button, purposeStyle, white, neutral, 14);
+  UIColor *chipInk = _palette ? _palette.ink : white;
+  UIColor *chipPlate = _palette ? _palette.chipPlate : neutral;
+  for (UIButton *button in _purposeButtons) {
+    DBApplyDoorButtonStyle(button, purposeStyle, chipInk, chipPlate, 14);
+    // An explicit semantic override still wins; otherwise the chip follows the
+    // measured ground, because white on a light wallpaper is unreadable.
+    if ([purposeStyle objectForKey:@"background"] == nil && _palette != nil) {
+      button.backgroundColor = chipPlate;
+      [button setTitleColor:chipInk forState:UIControlStateNormal];
+    }
+  }
   DBApplyDoorButtonStyle(_emergencyCancel, [self styleForSemanticID:@"sos.cancel"],
                          white, neutral, 14);
 }
@@ -941,8 +1035,8 @@ typedef enum {
     NSString *identifier = [_purposeIds objectAtIndex:(NSUInteger)i];
     NSDictionary *entry = [purposes objectForKey:identifier];
     NSString *label = [DBConfigUtil labelOf:entry lang:_visitorLang fallback:identifier];
-    NSString *icon = [entry objectForKey:@"icon"];
-    if (![icon isKindOfClass:[NSString class]]) icon = @"";
+    NSString *icon = [DBPurposeModel displayIconForConfiguredIcon:
+        [entry objectForKey:@"icon"]];
     NSString *title = [icon length] ? [NSString stringWithFormat:@"%@\n%@", icon, label] : label;
     UIButton *button = [self buttonWithTitle:title primary:NO];
     button.tag = i;
@@ -985,9 +1079,14 @@ typedef enum {
     UIButton *button = [_languageButtons objectAtIndex:(NSUInteger)i];
     NSString *lang = [_languages objectAtIndex:(NSUInteger)i];
     BOOL selected = [lang isEqualToString:_visitorLang];
+    // The unselected chips follow the measured ground; the selected one keeps
+    // its own blue, which reads on either.
     button.backgroundColor = selected
         ? [UIColor colorWithRed:0.18 green:0.52 blue:0.78 alpha:1]
-        : [UIColor colorWithWhite:1 alpha:0.12];
+        : (_palette ? _palette.chipPlate : [UIColor colorWithWhite:1 alpha:0.12]);
+    [button setTitleColor:(selected ? [UIColor whiteColor]
+                                    : (_palette ? _palette.ink : [UIColor whiteColor]))
+                 forState:UIControlStateNormal];
   }
 }
 

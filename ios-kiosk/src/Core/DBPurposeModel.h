@@ -21,6 +21,14 @@
 + (NSArray *)allPurposeIdsInConfig:(NSDictionary *)config;
 + (NSArray *)enabledPurposeIdsInConfig:(NSDictionary *)config;
 
+// iOS 5 predates emoji as we know them: a modern codepoint renders as an empty
+// box and a composed sequence renders as a box plus stray marks, which is what
+// 宅配便 and 郵便 showed on the panel. Anything outside the Basic Multilingual
+// Plane is dropped, variation selectors and joiners are stripped, and what is
+// left is a glyph this device can actually draw -- or nothing, which reads
+// better than a box next to a perfectly good label.
++ (NSString *)displayIconForConfiguredIcon:(NSString *)icon;
+
 // The configuration key the settings toggle writes.
 + (NSString *)enabledKeyForPurpose:(NSString *)purposeId;
 

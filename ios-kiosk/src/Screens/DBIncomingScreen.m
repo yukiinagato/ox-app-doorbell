@@ -14,6 +14,7 @@
 #import "../Net/DBSnapshotPoller.h"
 #import "../Core/DBCallReturnCountdown.h"
 #import "../Core/DBNoticeModel.h"
+#import "../Core/DBPurposeModel.h"
 #import "../Core/DBUiTheme.h"
 #import "../Support/DBAppDelegate.h"
 #import "DBNoticeDialog.h"
@@ -750,8 +751,11 @@ static BOOL DBSameString(NSString *a, NSString *b) {
 }
 
 - (void)applyPalette {
+  // The incoming page keeps its own near-black chrome so video reads well; it
+  // never draws the theme picture, so its ink is measured against that chrome.
   _palette = [DBUiPalette paletteForConfig:_cfg deviceId:_nodeId display:_display
-                             backgroundHex:nil minuteOfDay:[self minuteOfDay]];
+                             backgroundHex:@"#0A0D12" minuteOfDay:[self minuteOfDay]];
+  [_palette setUsesThemeBackground:NO];
   [_noticeChip applyPalette:_palette];
   [self applyRegionInk];
 }
@@ -933,8 +937,8 @@ static BOOL DBSameString(NSString *a, NSString *b) {
     NSDictionary *entry =
         [DBConfigUtil dig:_cfg path:[NSString stringWithFormat:@"visit_purposes.%@", _purpose]];
     NSString *label = [DBConfigUtil labelOf:entry lang:_boot.uiLang fallback:_purpose];
-    NSString *icon = [entry objectForKey:@"icon"];
-    if (![icon isKindOfClass:[NSString class]]) icon = @"";
+    NSString *icon = [DBPurposeModel displayIconForConfiguredIcon:
+        [entry objectForKey:@"icon"]];
     NSString *purposeText = [_texts t:@"ring.purpose_badge", label, nil];
     _purposeBadge.text = [icon length] == 0
                              ? purposeText

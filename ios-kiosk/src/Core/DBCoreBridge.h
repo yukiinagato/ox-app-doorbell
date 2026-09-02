@@ -119,6 +119,11 @@ typedef void (^DBUiEventHandler)(NSDictionary *ev);
 // (spec §5.4). Returns nil on an older Core that lacks the export.
 - (NSDictionary *)mintJoinTokenWithSeconds:(int)seconds;
 + (BOOL)supportsJoinTokenMinting;
+// Validates a scanned pairing code through core, which checks the expiry
+// against corrected cluster time. Returns nil when the export is absent, and
+// the caller then parses locally.
+- (NSDictionary *)parsePairUri:(NSString *)uri;
++ (BOOL)supportsPairUriParsing;
 
 // ---- One cluster-wide admin password (spec §5.5) ----
 // The device 管理パスワード and the web admin password are the same secret,

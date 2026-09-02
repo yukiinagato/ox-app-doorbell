@@ -8,6 +8,8 @@
 #import "../Media/DBH264Player.h"
 #import "../Media/DBLowLatencyH264Player.h"
 #import "../Net/DBMjpegClient.h"
+#import "../Core/DBPairUri.h"
+#import "../Screens/DBPairingScreen.h"
 #import "../Screens/DBRouter.h"
 #import "../Screens/DBIncomingScreen.h"
 #import "DBWatchdog.h"
@@ -619,6 +621,15 @@ static BOOL DBNativeKioskHealthy(void) {
   _runtimeHeartbeatTimer = [NSTimer scheduledTimerWithTimeInterval:10.0
       target:self selector:@selector(publishRuntimeHealth:) userInfo:nil repeats:YES];
   [self startScreenshotHookIfEnabled];
+  if (_boot.debugScreenshots && [_boot.debugStartScreen length] > 0) {
+    // After the first layout, so the screen it opens is fully drawn.
+    DBRouter *startRouter = _router;
+    NSString *startScreen = [_boot.debugStartScreen copy];
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.0 * NSEC_PER_SEC)),
+                   dispatch_get_main_queue(), ^{
+      [startRouter showDebugStartScreen:startScreen];
+    });
+  }
   [self publishRuntimeHealth:nil];
   dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(300 * NSEC_PER_SEC)),
                  dispatch_get_main_queue(), ^{
@@ -1008,6 +1019,20 @@ static NSString *const DBScreenshotOutputPath = @"/var/mobile/Documents/screensh
   }
   // ASCII only: ASL mangles a multi-byte arrow into one dash per character.
   NSLog(@"[doorbell] openURL: %@ -> host='%@'", url, host);
+  if ([host isEqualToString:@"pair"]) {
+    // A scanned invitation, or one opened from another app. Core validates it
+    // when it can, because it checks the expiry against corrected cluster
+    // time; the shell parser is the fallback before core has started.
+    NSString *text = [url absoluteString];
+    DBPairUri *invitation = [DBPairUri fromCoreDocument:[_core parsePairUri:text]];
+    if (invitation == nil) {
+      invitation = [DBPairUri parse:text
+                               nowS:(long long)[[NSDate date] timeIntervalSince1970]];
+    }
+    [_router showPairing];
+    [[_router pairing] presentInvitation:invitation];
+    return YES;
+  }
   if ([host isEqualToString:@"pin"]) {
     [_router requestPinThen:nil];
     return YES;

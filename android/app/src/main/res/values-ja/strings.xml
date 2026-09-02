@@ -580,6 +580,12 @@
     <string name="pair_err_timeout">応答がありませんでした。もう一度お試しください</string>
     <string name="pair_err_unknown">追加できませんでした。もう一度お試しください</string>
     <string name="pair_err_detail">詳細: %1$s</string>
+    <string name="pair_invitation_confirm">%1$s に参加しますか？</string>
+    <string name="pair_invitation_confirm_unnamed">このクラスタに参加しますか？</string>
+    <string name="pair_invitation_expired">この招待は期限切れです。相手の端末で新しいコードを表示してください</string>
+    <string name="pair_invitation_invalid">この招待を読み取れませんでした</string>
+    <string name="pair_invitation_replace">この端末は別のクラスタに参加しています。参加すると今の設定は消えます</string>
+    <string name="pair_invitation_title">招待を読み取りました</string>
     <string name="pair_invite_cluster">クラスタ: %1$s</string>
     <string name="pair_invite_expired">この招待は期限切れです。相手の端末で新しいコードを発行してください</string>
     <string name="pair_invite_invalid">この招待は読み取れませんでした</string>

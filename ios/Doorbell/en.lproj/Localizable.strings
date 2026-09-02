@@ -575,6 +575,12 @@
 "pair.err.timeout" = "No response. Try again";
 "pair.err.unknown" = "Couldn't complete that. Please try again";
 "pair.err_detail" = "Details: %@";
+"pair.invitation_confirm" = "Join %@?";
+"pair.invitation_confirm_unnamed" = "Join this Cluster?";
+"pair.invitation_expired" = "This invitation has expired. Show a new code on the other device";
+"pair.invitation_invalid" = "This invitation could not be read";
+"pair.invitation_replace" = "This device is already in another Cluster. Joining erases its current setup";
+"pair.invitation_title" = "Invitation scanned";
 "pair.invite_cluster" = "Cluster: %@";
 "pair.invite_expired" = "This invitation has expired. Get a new one on the other device";
 "pair.invite_invalid" = "This invitation could not be read";

@@ -54,3 +54,47 @@ commit SDKs, signing material, generated static archives, jailbreak credentials,
 containing secrets. A successful host build is not iOS 5 hardware qualification; complete the
 cold-boot, audio, call lifecycle, recovery, long-run, and rollback checks in the maintainer runbook
 before marking a release hardware-certified.
+
+## Attaching a debugger (iPad 1)
+
+A shipped build is not debuggable: the entitlements carry no `get-task-allow`,
+so `debugserver` exits without a word when it tries to attach. Build a
+debuggable copy explicitly:
+
+```
+bash ios-kiosk/scripts/build_app.sh --debug-entitlements
+SSHPASS=alpine DB_IOS_UDID=<udid> bash ios-kiosk/scripts/install_via_ssh.sh
+```
+
+Then mount the developer disk image once (`ios-compat/scripts/mount_ddi.sh`,
+which also gives `idevicescreenshot`), and attach:
+
+```
+iproxy -u <udid> 2225:22 &
+ssh -p 2225 root@127.0.0.1 \
+  -oKexAlgorithms=+diffie-hellman-group1-sha1 -oHostKeyAlgorithms=+ssh-rsa \
+  -oCiphers=+aes128-cbc,3des-cbc -oMACs=+hmac-sha1 -oPubkeyAuthentication=no \
+  'launchctl list | grep UIKitApplication:jp.ox.doorbell'      # the PID
+ssh ... '(/Developer/usr/bin/debugserver 127.0.0.1:12345 --attach=<pid> &)'
+iproxy -u <udid> 12345:12345 &
+lldb --batch -o 'target create ios-kiosk/build/Doorbell.app/Doorbell' \
+     -o 'gdb-remote 127.0.0.1:12345' -o 'thread backtrace all' -o 'process detach'
+```
+
+The device has no `head`, `tail`, `awk`, `ps` or `nohup`; use `sed -n '1,20p'`
+and `( cmd & )`. When a backtrace is not available, `idevicesyslog` is often
+enough on its own: the 2026-09-03 listener storm was diagnosed entirely from
+the log, because a wedged process still prints.
+
+## Screenshots without touch injection
+
+iOS 5 has no screencap and libimobiledevice cannot inject touches, so the app
+draws itself on request. Both keys live in `boot.json` and cost nothing when
+absent:
+
+- `"debug_screenshots": true` — poll once a second for
+  `/var/mobile/Documents/screenshot.request`, render the key window to
+  `/var/mobile/Documents/screenshot.png`, and delete the request.
+- `"debug_start_screen": "dashboard|incoming|settings|history|pairing|visitor"`
+  — open that screen at launch, bypassing the admin password. Honoured only
+  while `debug_screenshots` is true.

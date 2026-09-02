@@ -41,6 +41,12 @@
 // Remote screenshot hook for verification on a device with no screencap.
 // Absent by default, so an ordinary install polls nothing at all.
 @property(nonatomic, assign) BOOL debugScreenshots;
+
+// Opens one screen at launch so every page can be photographed on a device
+// with no touch injection. Honoured only while debugScreenshots is on, so it
+// cannot strand a real panel on the settings page.
+// dashboard | incoming | settings | history | pairing | visitor
+@property(nonatomic, copy) NSString *debugStartScreen;
 @property(nonatomic, assign) BOOL setupRequired;
 @property(nonatomic, copy) NSString *suggestedDoor;
 
