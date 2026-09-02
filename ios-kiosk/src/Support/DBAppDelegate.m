@@ -411,6 +411,7 @@ static BOOL DBNativeKioskHealthy(void) {
 
 @interface DBAppDelegate ()
 - (void)showBootstrapSetup:(UIApplication *)application;
+- (void)startBootstrapRecoveryClient;
 - (void)refreshRecoveryConfiguration;
 - (void)refreshNativeKioskMeasurement;
 - (void)nativeKioskProbeTimerFired:(NSTimer *)timer;
@@ -451,8 +452,19 @@ static BOOL DBNativeKioskHealthy(void) {
     didFinishLaunchingWithOptions:(NSDictionary *)launchOptions {
   _boot = [DBBootConfig loadConfiguration];
   if (_boot.setupRequired) {
+    // The unprovisioned branch used to return before any recovery client existed,
+    // so a provisioned root helper saw no heartbeat, concluded the launch had
+    // failed, and relaunched the app on every startup timeout for as long as
+    // bootstrap setup stayed open. Announce liveness from this branch too.
+    [self startBootstrapRecoveryClient];
     [self showBootstrapSetup:application];
     return YES;
+  }
+  // Setup completion re-enters this method; retire the bootstrap-only client first.
+  if (_recovery) {
+    [_recovery stop];
+    _recovery = nil;
+    _recoveryStarted = NO;
   }
   _localSafeMode = DBPrepareLocalRecoveryState();
   _core = [[DBCoreBridge alloc] init];
@@ -630,6 +642,21 @@ static BOOL DBNativeKioskHealthy(void) {
     [delegate publishRuntimeHealth:nil];
     NSLog(@"[doorbell][recovery] exited local safe mode after 5m healthy runtime");
   });
+}
+
+- (void)startBootstrapRecoveryClient {
+  if (_recovery) return;
+  _recovery = [[DBRecoveryClient alloc] initWithPolicy:_boot.keepaliveHelperPolicy
+                                                  role:_boot.role
+                                         stateProvider:^NSString * {
+    return @"bootstrap_setup";
+  }];
+  _recoveryRequestedMode = [_boot.keepaliveHelperPolicy copy] ?: @"off";
+  _recoveryConfigSource = @"bootstrap_setup_boot_fallback";
+  _recoveryStarted = YES;
+  // No Core exists on this branch, so there is no runtime status sink to publish
+  // into; the client only announces `started` plus its periodic heartbeat.
+  [_recovery start];
 }
 
 - (void)showBootstrapSetup:(UIApplication *)application {

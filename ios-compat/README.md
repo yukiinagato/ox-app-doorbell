@@ -108,11 +108,15 @@ The app can send a main-run-loop heartbeat to
 `/var/run/doorbell-keepalive.sock` when `keepalive_helper` is `auto` or `on`.
 The fixed-purpose receiver is implemented at `tools/helper/doorbell_keepalive.c`
 with non-root macOS/Linux tests, bounded maintenance leases, fixed launch
-profiles, atomic status, restart backoff, and crash-loop safe mode. It remains
-opt-in and unqualified on iOS hardware. A reproducible armv7/iOS 5.1 DEB now
-stages the binary and inactive launchd template without enabling the service;
-see `helper/README.md`. Current release and recovery claims must not depend on
-it until the exact root-owned installation and device gates pass.
+profiles, atomic status, restart backoff, and crash-loop safe mode. It defers the
+first launch until SpringBoard exists, adopts a running app that has not begun
+heartbeating, honours a root-owned kill switch, and stops launching altogether
+after a bounded number of safe-mode launches. It remains opt-in and unqualified
+on iOS hardware. A reproducible armv7/iOS 5.1 DEB now stages the binary and
+inactive launchd template without enabling the service; see `helper/README.md`
+for the rails and the fourteen-item device qualification checklist. Current
+release and recovery claims must not depend on it until the exact root-owned
+installation and device gates pass.
 
 The archival `ios-legacy` tree is intentionally retained unchanged until all migration
 gates pass: host tests, deterministic artifact comparison, iOS 5 armv7 link,

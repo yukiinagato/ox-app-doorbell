@@ -42,3 +42,22 @@ snapshot，否則回報 audio-only。JPEG 不 forward 到 Core。本機 crash/OO
 為準。optional iOS 5/rooted-Android helper 已實作並通過 host test。iOS 5 lane 有不會啟用 launchd 的
 可重現 staged DEB，但兩個平台仍採獨立 provisioning，實機 qualification 尚未完成。root service、
 UID/socket permission、maintenance lease、safe mode、rollback 與 soak 通過前不得依賴。
+
+iOS 5 helper 會先等待 SpringBoard 才 launch。launchd 在 cold boot 時比 window server 早數分鐘啟動
+helper，其間 `uiopen` 會無聲失敗，因此以 bounded boot grace 與 process table gate 延後第一次
+launch；這段等待不計 failure，也不推進 backoff。launcher 以非 0 結束時回報為 `launcher_failed`，
+而非 startup timeout。
+
+尚未開始 heartbeat 但已在執行的 app（例如 bootstrap setup 中）以 process presence 偵測，回報為
+`launch_pending_no_heartbeat`，既不重新 launch 也不計為 failure。app 端也會從 bootstrap setup
+branch 送出 `started`。
+
+系統要求的結束不是 crash。`stopping` heartbeat 之後的結束與 maintenance lease 期間的結束都會重新
+launch，且不消耗 failure slot。app upgrade 會自動取得 maintenance lease，因此安裝不會被 helper 視為
+crash loop。
+
+有兩道絕對 rail：root 所有的 kill switch file（`/var/db/doorbell-keepalive.disable`）在下一個
+supervision tick 將 mode 強制為 `off`，但不改寫已持久化的 mode；safe mode 中 launch 超過 10 次後
+helper 完全停止 launch（`launch_inhibited`），僅繼續回應 status 與 control。刪除 root 所有的
+safe-mode marker 可同時解除兩者；iOS 5 的 datagram socket 沒有 peer credential，這是受支援的解除
+方式。

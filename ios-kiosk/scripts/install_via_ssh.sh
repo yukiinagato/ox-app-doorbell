@@ -73,6 +73,21 @@ OPTS=(-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTime
 REMOTE_APP="/Applications/Doorbell.app"
 REMOTE_STAGE="/Applications/.Doorbell.app.deploying"
 MAINTENANCE_MARKER="/var/mobile/Documents/.doorbell-maintenance-restart"
+HELPER_BIN="/usr/local/libexec/doorbell-keepalive"
+HELPER_SOCKET="/var/run/doorbell-keepalive.sock"
+
+# Killing Doorbell without telling a provisioned root helper looks exactly like a
+# crash: the helper relaunches the old image mid-swap and burns safe-mode failure
+# slots. Take a bounded maintenance lease first and release it at the end. Both
+# calls are no-ops when the helper is absent, which is the default.
+helper_maintenance() {
+  run_ssh "${OPTS[@]}" -p "$PORT" "$SSHHOST" \
+    "if [ -S '$HELPER_SOCKET' ] && [ -x '$HELPER_BIN' ]; then \
+       '$HELPER_BIN' --control $1 --socket '$HELPER_SOCKET' >/dev/null 2>&1 || true; \
+     fi; true"
+}
+maintenance_begin() { helper_maintenance "begin --seconds 300"; }
+maintenance_end() { helper_maintenance "end"; }
 REMOTE_STATE="$(run_ssh "${OPTS[@]}" -p "$PORT" "$SSHHOST" "if [ -d '$REMOTE_APP' ]; then echo installed; else echo missing; fi")"
 if [ "$REMOTE_STATE" = "missing" ]; then
   FULL_INSTALL=1
@@ -88,6 +103,9 @@ fi
 echo "=== Transferring staged bundle ==="
 run_ssh "${OPTS[@]}" -p "$PORT" "$SSHHOST" "mkdir -p /Applications; /bin/rm -rf '$REMOTE_STAGE'"
 run_scp "${OPTS[@]}" -O -P "$PORT" -r "$APP" "$SSHHOST:$REMOTE_STAGE"
+
+echo "=== Pausing any root keepalive helper for the swap ==="
+maintenance_begin
 
 if [ "$FULL_INSTALL" -eq 1 ]; then
   echo "=== Stopping the app and SpringBoard ==="
@@ -109,6 +127,8 @@ if [ "$FULL_INSTALL" -eq 1 ]; then
   run_ssh "${OPTS[@]}" -p "$PORT" "$SSHHOST" "su mobile -c /usr/bin/uicache && echo uicache-ok"
   echo "=== respring ==="
   run_ssh "${OPTS[@]}" -p "$PORT" "$SSHHOST" "/usr/bin/killall SpringBoard >/dev/null 2>&1; true"
+  echo "=== Releasing the keepalive maintenance lease ==="
+  maintenance_end
   echo "Installation complete. Tap the Doorbell icon on the Home screen to launch it."
 else
   # SpringBoard may auto-resume the old process image between the first kill and
@@ -117,5 +137,7 @@ else
   run_ssh "${OPTS[@]}" -p "$PORT" "$SSHHOST" "touch '$MAINTENANCE_MARKER'; /usr/bin/killall Doorbell >/dev/null 2>&1; sleep 1; true"
   echo "=== Launching the updated app ==="
   run_ssh "${OPTS[@]}" -p "$PORT" "$SSHHOST" "su mobile -c '/usr/bin/uiopen doorbell://' >/dev/null 2>&1 || true"
+  echo "=== Releasing the keepalive maintenance lease ==="
+  maintenance_end
   echo "Update complete without restarting SpringBoard. Tap the icon if the app did not open."
 fi

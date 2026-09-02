@@ -58,3 +58,19 @@ app. Android `DISABLE` is a transient disarm permitted in `auto`, not a persiste
   reproducible staged DEB that deliberately leaves launchd disabled; both platforms remain
   separately provisioned and hardware-unqualified. Do not depend on it until the exact root-owned
   service, app UID/socket permissions, maintenance lease, safe mode, rollback, and device soak pass.
+- The iOS 5 helper waits for SpringBoard before it launches anything. launchd starts it at boot
+  minutes before a window server exists, and `uiopen` fails silently until then, so a bounded boot
+  grace and a process-table gate defer the first launch without charging a failure. A launcher that
+  exits nonzero is reported as `launcher_failed` rather than as a startup timeout.
+- A running app that has not begun heartbeating — bootstrap setup, for example — is detected by
+  process presence and reported as `launch_pending_no_heartbeat`. It is neither relaunched nor
+  counted as a failure. The app also announces `started` from the bootstrap-setup branch.
+- Exits the system asked for are not crashes. A `stopping` heartbeat or a death under a maintenance
+  lease relaunches without consuming a failure slot. App upgrades take a maintenance lease
+  automatically, so an install no longer looks like a crash loop to a provisioned helper.
+- Two absolute rails bound the helper. A root-owned kill-switch file
+  (`/var/db/doorbell-keepalive.disable`) forces mode `off` on the next supervision tick without
+  rewriting the persisted mode, and after ten launches in safe mode the helper stops launching
+  entirely (`launch_inhibited`) while still answering status and control. Removing the root-owned
+  safe-mode marker clears both; on iOS 5 that is the supported clear, since datagram sockets there
+  expose no peer credentials.
