@@ -96,6 +96,8 @@ python3 "$REPO_ROOT/ios-compat/tests/ios9_armv7_profile_test.py"
 python3 "$REPO_ROOT/ios-compat/tests/semantic_ui_contract_test.py"
 python3 "$REPO_ROOT/ios-compat/tests/sos_presentation_contract_test.py"
 python3 "$REPO_ROOT/ios-compat/tests/recovery_safe_mode_contract_test.py"
+python3 "$REPO_ROOT/ios-compat/tests/native_settings_contract_test.py"
+python3 "$REPO_ROOT/ios-compat/tests/pairing_flow_contract_test.py"
 # Root keepalive helper: daemon behaviour plus the staged-package/installer rails.
 if [[ -n "${DB_SKIP_HELPER_HOST_TESTS:-}" ]]; then
   echo "helper host tests skipped (DB_SKIP_HELPER_HOST_TESTS set; the keepalive-helper job owns them)"

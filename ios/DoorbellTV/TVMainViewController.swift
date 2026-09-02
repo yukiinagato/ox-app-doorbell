@@ -29,6 +29,11 @@ final class TVMainViewController: UIViewController {
     private let emergencyNote = UILabel()
     private let emergencyCancel = UIButton(type: .system)
 
+    private lazy var sosSlider = SosSlideControl(texts: texts)
+    private lazy var dashboard = DashboardView(core: core, boot: boot, texts: texts,
+                                               sosControl: sosSlider)
+    private var palette = DoorbellPalette.dark
+
     private var clockTimer: Timer?
     private var replyTimer: Timer?
     private var pairingObserver: NSObjectProtocol?
@@ -88,11 +93,22 @@ final class TVMainViewController: UIViewController {
         membershipButton.accessibilityIdentifier = "membership_status"
         membershipButton.addTarget(self, action: #selector(openPairing),
                                    for: .primaryActionTriggered)
-        let stack = UIStackView(arrangedSubviews: [clockLabel, dateLabel, statusLabel,
-                                                   monitorButton, membershipButton])
+        // The living-room screen shows the same dashboard as an indoor panel; the focus engine
+        // reaches every control on it, and the two TV-only entries stay in a row underneath.
+        dashboard.onOpenAdmin = { [weak self] in self?.onAdminEntry() }
+        dashboard.onOpenHistory = { [weak self] in self?.openHistory() }
+        dashboard.onOpenDoor = { [weak self] _ in self?.openMonitor() }
+        dashboard.onOpenNotice = { [weak self] door in self?.openNotice(door: door) }
+        sosSlider.onTriggered = { [weak self] in self?.core.emergency(true) }
+
+        let tvRow = UIStackView(arrangedSubviews: [monitorButton, membershipButton])
+        tvRow.axis = .horizontal
+        tvRow.spacing = 30
+        tvRow.alignment = .center
+
+        let stack = UIStackView(arrangedSubviews: [dashboard, tvRow])
         stack.axis = .vertical
-        stack.spacing = 16
-        stack.alignment = .center
+        stack.spacing = 20
         stack.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(stack)
 
@@ -140,8 +156,10 @@ final class TVMainViewController: UIViewController {
 
         let g = view.safeAreaLayoutGuide
         NSLayoutConstraint.activate([
-            stack.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            stack.centerYAnchor.constraint(equalTo: view.centerYAnchor),
+            stack.topAnchor.constraint(equalTo: g.topAnchor, constant: 30),
+            stack.bottomAnchor.constraint(equalTo: nodeInfo.topAnchor, constant: -16),
+            stack.leadingAnchor.constraint(equalTo: g.leadingAnchor, constant: 60),
+            stack.trailingAnchor.constraint(equalTo: g.trailingAnchor, constant: -60),
             nodeInfo.leadingAnchor.constraint(equalTo: g.leadingAnchor, constant: 40),
             nodeInfo.bottomAnchor.constraint(equalTo: g.bottomAnchor, constant: -30),
             replyBanner.topAnchor.constraint(equalTo: g.topAnchor, constant: 40),
@@ -170,14 +188,40 @@ final class TVMainViewController: UIViewController {
         emergencyCancel.setTitle(texts.t("emergency.cancel"), for: .normal)
     }
 
+    /// The clock follows the cluster zone and Core's time correction, exactly as it does on the
+    /// hand-held shells.
     private func updateClock() {
-        let cal = Calendar(identifier: .gregorian)
-        let c = cal.dateComponents([.year, .month, .day, .hour, .minute, .second, .weekday], from: Date())
-        clockLabel.text = String(format: "%02d:%02d:%02d", c.hour ?? 0, c.minute ?? 0,
-                                 c.second ?? 0)
-        let yobi = ["日", "月", "火", "水", "木", "金", "土"]
-        dateLabel.text = String(format: "%d年%d月%d日 (%@)", c.year ?? 0, c.month ?? 0,
-                                c.day ?? 0, yobi[((c.weekday ?? 1) - 1) % 7])
+        guard let reading = DoorbellClock.read(core) else { return }
+        clockLabel.text = reading.hhmmss
+        dateLabel.text = DoorbellClock.longDate(reading, lang: texts.lang)
+        dashboard.updateClock()
+    }
+
+    /// The TV reaches settings from the dashboard's 管理 entry, still behind the admin password.
+    private func onAdminEntry() {
+        guard presentedViewController == nil else { return }
+        let dialog = AdminPinViewController(texts: texts, core: core)
+        dialog.onUnlocked = { [weak self] in self?.showSettings() }
+        present(dialog, animated: true)
+    }
+
+    private func showSettings() {
+        guard presentedViewController == nil else { return }
+        let settings = SettingsViewController(core: core, boot: boot, texts: texts)
+        settings.onOpenAddDevice = { [weak self] in self?.openPairing() }
+        present(settings, animated: true)
+    }
+
+    private func openHistory() {
+        guard presentedViewController == nil else { return }
+        present(CallHistoryViewController(core: core, texts: texts, lang: texts.lang),
+                animated: true)
+    }
+
+    private func openNotice(door: String) {
+        guard presentedViewController == nil else { return }
+        present(NoticeDialogViewController(core: core, texts: texts, httpPort: boot.httpPort,
+                                           lang: texts.lang, door: door), animated: true)
     }
 
     private func refreshNodeInfo() {
@@ -196,7 +240,13 @@ final class TVMainViewController: UIViewController {
                 if !ConfigUtil.evBool(em, "active") { hideEmergency() }
             }
         }
+        palette = DoorbellPalette.of(DoorbellTheme.appearance(config: cfg, nodeId: nodeId,
+                                                              localTime: core.localTime()))
+        view.backgroundColor = palette.background
+        dashboard.reload(config: cfg, palette: palette)
+        // An Apple TV has no battery of its own; the version line simply omits it.
         applyStrings()
+        updateClock()
     }
 
 
@@ -220,8 +270,10 @@ final class TVMainViewController: UIViewController {
             }
         case "emergency":
             presentEmergency(ev)
-        case "peers_changed", "config_changed":
+        case "peers_changed", "config_changed", "notice_changed", "time_changed":
             refreshNodeInfo()
+        case "call_log_changed":
+            dashboard.refreshHistory()
         case "pairing_state", "paired", "device_joined", "pending_changed":
             refreshPairingStatus()
         default:
@@ -256,7 +308,7 @@ final class TVMainViewController: UIViewController {
             NotificationCenter.default.post(name: .doorbellOpenPairing, object: nil)
             return
         }
-        let dlg = AdminPinViewController(texts: texts)
+        let dlg = AdminPinViewController(texts: texts, core: core)
         dlg.onUnlocked = { [weak self] in
             guard let self = self, self.presentedViewController == nil else { return }
             self.present(AddDeviceViewController(core: self.core, boot: self.boot,
@@ -296,7 +348,8 @@ final class TVMainViewController: UIViewController {
         showEmergency(visual: visual)
         let sound = ConfigUtil.evStr(ev, "alarm_sound")
         let path = ConfigUtil.evStr(ev, "audio_path")
-        let volume = min(100, max(0, ConfigUtil.int(ev, "alarm_volume", 100)))
+        let volume = min(100, max(0, ConfigUtil.int(core.audioVolumes(), "sos",
+                                                    ConfigUtil.int(ev, "alarm_volume", 100))))
         let soundApplied = volume > 0 && (!sound.isEmpty || !path.isEmpty)
         if soundApplied {
             audio.startSiren(customPath: path, volume: volume)
@@ -372,7 +425,7 @@ final class TVMainViewController: UIViewController {
 
     @objc private func onEmergencyCancel() {
         if cancelRequiresPin {
-            let dlg = AdminPinViewController(texts: texts)
+            let dlg = AdminPinViewController(texts: texts, core: core)
             dlg.onUnlocked = { [weak self] in
                 guard let self = self, self.core.emergency(false) else { return }
                 self.hideEmergency()

@@ -482,13 +482,15 @@ final class PairingViewController: UIViewController {
 
     /// After creating a cluster the code card must already be live, so the user can add the next
     /// device without hunting for a menu. The screen never auto-dismisses here.
+    /// After 「この端末で新規作成」 the founder shows the PIN card and its own QR, and nothing is
+    /// added automatically: minting a PIN is separate from opening the bulk-add window.
     private func startCodeCard() {
-        // Core's start-pairing entry point mints the PIN *and* opens the bulk-add window in one
-        // step. The two are separate controls here, and bulk add must stay behind its own
-        // warning, so the window is closed again immediately: per the pairing contract, stopping
-        // it leaves a live PIN alone.
-        _ = core.startPairing(seconds: 600)
-        core.pairingMode(seconds: 0)
+        guard core.supportsMintJoinToken else {
+            errorLabel.text = texts.t("pair.pin_unavailable")
+            errorLabel.isHidden = false
+            return
+        }
+        _ = core.mintJoinToken(seconds: 600)
         refresh(PairingSnapshot.load(core))
     }
 

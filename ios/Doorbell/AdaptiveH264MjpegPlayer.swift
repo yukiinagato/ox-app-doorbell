@@ -23,6 +23,23 @@ final class AdaptiveH264MjpegPlayer: NSObject {
     private var observingItem = false
     private var rotation = 0
 
+    /// Reported whenever the source's picture geometry becomes known or changes, already rotated
+    /// the way it is displayed. The incoming screen sizes its video box from this so a portrait
+    /// door camera is shown portrait instead of being letterboxed into a landscape frame.
+    var onVideoSize: ((CGSize) -> Void)?
+
+    private var frameTimestamps: [CFTimeInterval] = []
+    private var lastReportedSize: CGSize = .zero
+
+    /// What the unobtrusive debug line on the incoming screen shows.
+    struct Stats {
+        var codec = "-"
+        var latencyMs = 0
+        var jitterMs = 0
+        var fps = 0
+        var dropped = 0
+    }
+
     private static let firstFrameTimeout: TimeInterval = 3
     private static let retryInterval: TimeInterval = 5
 
@@ -79,6 +96,8 @@ final class AdaptiveH264MjpegPlayer: NSObject {
             guard let self = self, self.running else { return }
             self.mjpegView.image = image
             self.applyMjpegTransform(degrees, image: image)
+            self.noteFrame()
+            self.reportSize(image.size, degrees: degrees)
             if !self.h264Visible { self.noVideoLabel.isHidden = true }
         }
         mjpeg?.start()
@@ -213,6 +232,57 @@ final class AdaptiveH264MjpegPlayer: NSObject {
                 self.applyH264Transform()
             }
         }.resume()
+    }
+
+    /// Frame arrival times over the last two seconds drive both the frame rate and the jitter the
+    /// debug line reports; nothing else in the player depends on them.
+    private func noteFrame() {
+        let now = CACurrentMediaTime()
+        frameTimestamps.append(now)
+        while let first = frameTimestamps.first, now - first > 2 { frameTimestamps.removeFirst() }
+    }
+
+    private func reportSize(_ size: CGSize, degrees: Int) {
+        guard size.width > 0, size.height > 0 else { return }
+        let value = ((degrees % 360) + 360) % 360
+        let displayed = (value == 90 || value == 270)
+            ? CGSize(width: size.height, height: size.width) : size
+        guard displayed != lastReportedSize else { return }
+        lastReportedSize = displayed
+        onVideoSize?(displayed)
+    }
+
+    /// Live counters for the incoming screen's debug line. Everything here is measured, never
+    /// guessed: an unavailable number stays zero rather than being invented.
+    func statsSnapshot() -> Stats {
+        var stats = Stats()
+        stats.codec = h264Visible ? "h264" : (mjpeg != nil ? "mjpeg" : "-")
+        if frameTimestamps.count >= 2 {
+            let intervals = zip(frameTimestamps.dropFirst(), frameTimestamps).map { $0 - $1 }
+            let mean = intervals.reduce(0, +) / Double(intervals.count)
+            if mean > 0 { stats.fps = Int((1 / mean).rounded()) }
+            let variance = intervals.reduce(0) { $0 + ($1 - mean) * ($1 - mean) }
+                / Double(intervals.count)
+            stats.jitterMs = Int((variance.squareRoot() * 1000).rounded())
+            if let last = frameTimestamps.last {
+                stats.latencyMs = Int(((CACurrentMediaTime() - last) * 1000).rounded())
+            }
+        }
+        guard h264Visible, let item = playerItem else { return stats }
+        if let event = item.accessLog()?.events.last {
+            stats.dropped = max(0, event.numberOfDroppedVideoFrames)
+        }
+        // Distance from the live edge is the only latency AVPlayer exposes for a live fMP4 feed.
+        if let range = item.seekableTimeRanges.last?.timeRangeValue {
+            let edge = CMTimeGetSeconds(CMTimeRangeGetEnd(range))
+            let now = CMTimeGetSeconds(item.currentTime())
+            if edge.isFinite, now.isFinite, edge >= now {
+                stats.latencyMs = Int(((edge - now) * 1000).rounded())
+            }
+        }
+        let size = item.presentationSize
+        if size.width > 0, size.height > 0 { reportSize(size, degrees: rotation) }
+        return stats
     }
 
     private func applyMjpegTransform(_ degrees: Int, image: UIImage) {

@@ -17,6 +17,7 @@ final class TVAppDelegate: UIResponder, UIApplicationDelegate {
     private var pairingDeferred = false
     private var pairingGateTimer: Timer?
     private var openPairingObserver: NSObjectProtocol?
+    private var resetObserver: NSObjectProtocol?
 
     func application(_ application: UIApplication,
                      didFinishLaunchingWithOptions launchOptions:
@@ -56,6 +57,11 @@ final class TVAppDelegate: UIResponder, UIApplicationDelegate {
                 self?.pairingDeferred = false
                 self?.presentPairingGate()
             }
+        }
+        if resetObserver == nil {
+            resetObserver = NotificationCenter.default.addObserver(
+                forName: .doorbellResetLocalPairing, object: nil, queue: .main
+            ) { [weak self] _ in self?.resetLocalPairing() }
         }
         evaluatePairingGate()
         pairingGateTimer = IOSAvailability.scheduledTimer(withTimeInterval: 3, repeats: true) {
@@ -99,6 +105,44 @@ final class TVAppDelegate: UIResponder, UIApplicationDelegate {
             NotificationCenter.default.post(name: .doorbellPairingChanged, object: nil)
             self?.evaluatePairingGate()
         }
+    }
+
+    /// Leaving the cluster, or being removed from it, returns the device to its first-run state:
+    /// the stored key, the pairing fields and its own identity all go, and the pairing gate is
+    /// what comes back.
+    private func resetLocalPairing() {
+        pairingGate?.dismiss(animated: false)
+        pairingGate = nil
+        pairingDeferred = false
+        pairingGateTimer?.invalidate()
+        pairingGateTimer = nil
+        runtime?.stop(clean: false)
+        runtime = nil
+        core.stop()
+        guard Keychain.removeAll(), BootConfig.clearPersistedState() else {
+            IOSAvailability.logDebug("local pairing reset failed")
+            return
+        }
+        if let id = Bundle.main.bundleIdentifier {
+            UserDefaults.standard.removePersistentDomain(forName: id)
+        }
+        UserDefaults.standard.synchronize()
+        boot = BootConfig.load()
+        _ = core.start(dataDir: BootConfig.dataDir(), bootJson: boot.rawJson)
+        runtime = RuntimeSupervisor(core: core, boot: boot)
+        runtime?.start()
+        if let win = window {
+            win.rootViewController = TVMainViewController(
+                core: core, boot: boot,
+                deviceAlertReporter: { [weak self] report in
+                    self?.runtime?.recordDeviceAlert(report)
+                })
+            win.makeKeyAndVisible()
+        }
+        pairingGateTimer = IOSAvailability.scheduledTimer(withTimeInterval: 3, repeats: true) {
+            [weak self] _ in self?.evaluatePairingGate()
+        }
+        presentPairingGate()
     }
 
     func applicationWillTerminate(_ application: UIApplication) {

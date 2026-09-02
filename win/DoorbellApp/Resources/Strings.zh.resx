@@ -359,6 +359,11 @@
   <data name="day_tue" xml:space="preserve"><value>二</value></data>
   <data name="day_wed" xml:space="preserve"><value>三</value></data>
   <data name="degraded_notified" xml:space="preserve"><value>已通知，请稍候</value></data>
+  <data name="door_hint_call" xml:space="preserve"><value>按下按钮即可呼叫住户</value></data>
+  <data name="door_lang_switch" xml:space="preserve"><value>语言</value></data>
+  <data name="door_notice_for_this" xml:space="preserve"><value>在此门口机发布公告</value></data>
+  <data name="door_unlock_not_configured" xml:space="preserve"><value>尚未配置开锁动作</value></data>
+  <data name="door_view" xml:space="preserve"><value>查看</value></data>
   <data name="emergency_active_detail" xml:space="preserve"><value>紧急模式已触发</value></data>
   <data name="emergency_button" xml:space="preserve"><value>紧急</value></data>
   <data name="emergency_cancel" xml:space="preserve"><value>解除警报</value></data>
@@ -375,12 +380,17 @@
   <data name="history_answered_by" xml:space="preserve"><value>{0} 接听</value></data>
   <data name="history_duration" xml:space="preserve"><value>通话 {0}</value></data>
   <data name="history_empty" xml:space="preserve"><value>暂无呼叫</value></data>
+  <data name="history_filter_all" xml:space="preserve"><value>全部</value></data>
+  <data name="history_filter_door" xml:space="preserve"><value>{0}</value></data>
+  <data name="history_filter_missed" xml:space="preserve"><value>未接</value></data>
+  <data name="history_load_more" xml:space="preserve"><value>加载更多</value></data>
   <data name="history_mark_seen" xml:space="preserve"><value>全部标为已读</value></data>
   <data name="history_missed_badge" xml:space="preserve"><value>{0} 个未接</value></data>
   <data name="history_outcome_answered" xml:space="preserve"><value>已接听</value></data>
   <data name="history_outcome_cancelled" xml:space="preserve"><value>已取消</value></data>
   <data name="history_outcome_missed" xml:space="preserve"><value>未接</value></data>
   <data name="history_outcome_replied" xml:space="preserve"><value>已回复</value></data>
+  <data name="history_see_all" xml:space="preserve"><value>查看全部</value></data>
   <data name="history_title" xml:space="preserve"><value>呼叫记录</value></data>
   <data name="history_today" xml:space="preserve"><value>今天</value></data>
   <data name="history_unread_banner" xml:space="preserve"><value>有 {0} 个未接来电</value></data>
@@ -444,8 +454,10 @@
   <data name="monitor_open" xml:space="preserve"><value>查看门口机</value></data>
   <data name="monitor_title" xml:space="preserve"><value>{0} 实时画面</value></data>
   <data name="notice_active" xml:space="preserve"><value>显示中</value></data>
+  <data name="notice_chip" xml:space="preserve"><value>公告</value></data>
   <data name="notice_clear" xml:space="preserve"><value>取消</value></data>
   <data name="notice_cleared" xml:space="preserve"><value>公告已取消</value></data>
+  <data name="notice_edit" xml:space="preserve"><value>编辑</value></data>
   <data name="notice_empty" xml:space="preserve"><value>请输入内容</value></data>
   <data name="notice_expires_at" xml:space="preserve"><value>截止</value></data>
   <data name="notice_expiry" xml:space="preserve"><value>显示期限</value></data>
@@ -456,13 +468,18 @@
   <data name="notice_expiry_until_cleared" xml:space="preserve"><value>直到取消</value></data>
   <data name="notice_failed" xml:space="preserve"><value>无法保存公告</value></data>
   <data name="notice_from" xml:space="preserve"><value>发布者</value></data>
+  <data name="notice_global_button" xml:space="preserve"><value>公告（全部门口）</value></data>
   <data name="notice_none" xml:space="preserve"><value>没有公告</value></data>
   <data name="notice_preset_absent" xml:space="preserve"><value>现在不在家</value></data>
   <data name="notice_preset_construction" xml:space="preserve"><value>施工中，如有需要请呼叫</value></data>
   <data name="notice_preset_delivery" xml:space="preserve"><value>快递请送到侧门</value></data>
+  <data name="notice_presets" xml:space="preserve"><value>常用语句</value></data>
   <data name="notice_preview" xml:space="preserve"><value>门口的显示效果</value></data>
   <data name="notice_publish" xml:space="preserve"><value>显示</value></data>
   <data name="notice_saved" xml:space="preserve"><value>公告已显示</value></data>
+  <data name="notice_target" xml:space="preserve"><value>显示位置</value></data>
+  <data name="notice_target_door" xml:space="preserve"><value>仅 {0}</value></data>
+  <data name="notice_target_global" xml:space="preserve"><value>全部门口</value></data>
   <data name="notice_text" xml:space="preserve"><value>内容</value></data>
   <data name="notice_title" xml:space="preserve"><value>公告</value></data>
   <data name="notice_too_long" xml:space="preserve"><value>内容最多 200 个字符（当前 {0} 个）</value></data>
@@ -482,6 +499,7 @@
   <data name="pair_address_example" xml:space="preserve"><value>例如: 10.0.1.5:47172</value></data>
   <data name="pair_address_label" xml:space="preserve"><value>连接地址</value></data>
   <data name="pair_clear_confirm" xml:space="preserve"><value>此设备将退出集群并清除其全部设置。此操作无法撤销。</value></data>
+  <data name="pair_clear_resets_device" xml:space="preserve"><value>将此设备恢复初始状态并移出</value></data>
   <data name="pair_clear_title" xml:space="preserve"><value>清除此设备的配对</value></data>
   <data name="pair_code_attempts_left" xml:space="preserve"><value>剩余 {0} 次</value></data>
   <data name="pair_code_expired" xml:space="preserve"><value>已过期 — 生成新码</value></data>
@@ -537,6 +555,7 @@
   <data name="pair_panel_title" xml:space="preserve"><value>添加设备</value></data>
   <data name="pair_persist_error_body" xml:space="preserve"><value>无法写入此设备的安全存储区。请检查可用空间和权限后重试。</value></data>
   <data name="pair_persist_error_title" xml:space="preserve"><value>无法保存设置</value></data>
+  <data name="pair_pin_unavailable" xml:space="preserve"><value>此核心版本无法生成 PIN</value></data>
   <data name="pair_qr_caption" xml:space="preserve"><value>用另一台设备扫描此二维码即可添加</value></data>
   <data name="pair_qr_pending" xml:space="preserve"><value>正在准备添加二维码…</value></data>
   <data name="pair_retry" xml:space="preserve"><value>重试</value></data>
@@ -667,13 +686,69 @@
   <data name="ring_ignore" xml:space="preserve"><value>忽略</value></data>
   <data name="ring_incoming" xml:space="preserve"><value>{0} 有访客</value></data>
   <data name="ring_lang_badge" xml:space="preserve"><value>访客语言: {0}</value></data>
+  <data name="ring_mic_off" xml:space="preserve"><value>麦克风 关</value></data>
+  <data name="ring_mic_on" xml:space="preserve"><value>麦克风 开</value></data>
+  <data name="ring_mic_unavailable" xml:space="preserve"><value>此版本无法切换麦克风</value></data>
   <data name="ring_monitor" xml:space="preserve"><value>监听</value></data>
+  <data name="ring_monitor_off" xml:space="preserve"><value>监听 关</value></data>
+  <data name="ring_monitor_on" xml:space="preserve"><value>监听 开</value></data>
   <data name="ring_monitoring" xml:space="preserve"><value>正在播放门口声音</value></data>
   <data name="ring_no_video" xml:space="preserve"><value>没有门口机画面</value></data>
   <data name="ring_open_door" xml:space="preserve"><value>开门</value></data>
   <data name="ring_purpose_badge" xml:space="preserve"><value>目的: {0}</value></data>
+  <data name="ring_quick_reply" xml:space="preserve"><value>快捷回复</value></data>
   <data name="ring_unlock" xml:space="preserve"><value>开锁</value></data>
   <data name="ring_unlock_sent" xml:space="preserve"><value>已发送开锁信号</value></data>
+  <data name="settings_appearance" xml:space="preserve"><value>外观</value></data>
+  <data name="settings_appearance_auto_schedule" xml:space="preserve"><value>按时间切换</value></data>
+  <data name="settings_appearance_auto_system" xml:space="preserve"><value>跟随设备设置</value></data>
+  <data name="settings_appearance_dark" xml:space="preserve"><value>深色</value></data>
+  <data name="settings_appearance_dark_from" xml:space="preserve"><value>深色开始时间</value></data>
+  <data name="settings_appearance_light" xml:space="preserve"><value>浅色</value></data>
+  <data name="settings_appearance_light_from" xml:space="preserve"><value>浅色开始时间</value></data>
+  <data name="settings_change_password" xml:space="preserve"><value>更改管理密码</value></data>
+  <data name="settings_close" xml:space="preserve"><value>关闭</value></data>
+  <data name="settings_cluster_members" xml:space="preserve"><value>家中的设备</value></data>
+  <data name="settings_device_door" xml:space="preserve"><value>负责门口</value></data>
+  <data name="settings_device_name" xml:space="preserve"><value>名称</value></data>
+  <data name="settings_device_role" xml:space="preserve"><value>角色</value></data>
+  <data name="settings_password_changed" xml:space="preserve"><value>管理密码已更改</value></data>
+  <data name="settings_password_current" xml:space="preserve"><value>当前密码</value></data>
+  <data name="settings_password_failed" xml:space="preserve"><value>无法更改管理密码</value></data>
+  <data name="settings_password_new" xml:space="preserve"><value>新密码</value></data>
+  <data name="settings_password_shared" xml:space="preserve"><value>此设备与网页管理使用同一密码</value></data>
+  <data name="settings_purpose_shown" xml:space="preserve"><value>向访客显示</value></data>
+  <data name="settings_quiet_hours" xml:space="preserve"><value>静音时段</value></data>
+  <data name="settings_role_restart_notice" xml:space="preserve"><value>更改角色后，下次打开应用时生效</value></data>
+  <data name="settings_rule_enabled" xml:space="preserve"><value>开启</value></data>
+  <data name="settings_save_failed" xml:space="preserve"><value>无法保存</value></data>
+  <data name="settings_saved" xml:space="preserve"><value>已保存</value></data>
+  <data name="settings_section_cluster" xml:space="preserve"><value>集群</value></data>
+  <data name="settings_section_device" xml:space="preserve"><value>本设备</value></data>
+  <data name="settings_section_doors" xml:space="preserve"><value>门口</value></data>
+  <data name="settings_section_history" xml:space="preserve"><value>呼叫记录</value></data>
+  <data name="settings_section_info" xml:space="preserve"><value>本机信息</value></data>
+  <data name="settings_section_purposes" xml:space="preserve"><value>来访目的</value></data>
+  <data name="settings_section_rules" xml:space="preserve"><value>通知与规则</value></data>
+  <data name="settings_section_time" xml:space="preserve"><value>时间</value></data>
+  <data name="settings_section_volume" xml:space="preserve"><value>音量</value></data>
+  <data name="settings_section_web" xml:space="preserve"><value>打开网页管理</value></data>
+  <data name="settings_telegram" xml:space="preserve"><value>Telegram</value></data>
+  <data name="settings_theme_bg_color" xml:space="preserve"><value>背景色</value></data>
+  <data name="settings_theme_bg_image" xml:space="preserve"><value>背景图片</value></data>
+  <data name="settings_theme_image_none" xml:space="preserve"><value>不使用图片</value></data>
+  <data name="settings_title" xml:space="preserve"><value>设置</value></data>
+  <data name="settings_ui_lang" xml:space="preserve"><value>显示语言</value></data>
+  <data name="settings_unlock_show_button" xml:space="preserve"><value>显示开锁按钮</value></data>
+  <data name="settings_video_playback" xml:space="preserve"><value>视频接收方式</value></data>
+  <data name="settings_video_rotation" xml:space="preserve"><value>视频方向</value></data>
+  <data name="settings_volume_inherit" xml:space="preserve"><value>使用集群默认值</value></data>
+  <data name="settings_web_only_raw_config" xml:space="preserve"><value>请在网页管理中导出与导入配置</value></data>
+  <data name="settings_web_only_rule_actions" xml:space="preserve"><value>请在网页管理中编辑规则动作</value></data>
+  <data name="settings_web_only_secrets" xml:space="preserve"><value>请在各设备的网页管理中输入连接凭据</value></data>
+  <data name="settings_web_only_upload" xml:space="preserve"><value>请在网页管理中添加图片</value></data>
+  <data name="settings_web_only_wording" xml:space="preserve"><value>请在网页管理中修改文案</value></data>
+  <data name="settings_web_push" xml:space="preserve"><value>Web Push</value></data>
   <data name="setup_confirm_new_cluster" xml:space="preserve"><value>再次点击以新建集群（如需加入现有集群请取消）</value></data>
   <data name="setup_door" xml:space="preserve"><value>门口 ID</value></data>
   <data name="setup_door_hint" xml:space="preserve"><value>仅限字母、数字、- 和 _</value></data>
@@ -705,6 +780,7 @@ PIN：{1}</value></data>
   <data name="sos_alarm_sound" xml:space="preserve"><value>警报声</value></data>
   <data name="sos_alarm_volume" xml:space="preserve"><value>警报音量</value></data>
   <data name="sos_button_on_roles" xml:space="preserve"><value>显示 SOS 的设备</value></data>
+  <data name="sos_cancel_countdown" xml:space="preserve"><value>取消</value></data>
   <data name="sos_cancel_requires_pin" xml:space="preserve"><value>解除时要求管理密码</value></data>
   <data name="sos_countdown" xml:space="preserve"><value>{0} 秒后发出求助</value></data>
   <data name="sos_countdown_s" xml:space="preserve"><value>可取消的倒计时（秒）</value></data>
@@ -712,6 +788,8 @@ PIN：{1}</value></data>
   <data name="sos_mode_hold" xml:space="preserve"><value>长按触发（旧方式）</value></data>
   <data name="sos_mode_slide" xml:space="preserve"><value>滑动触发</value></data>
   <data name="sos_slide_hint" xml:space="preserve"><value>向右滑动求助</value></data>
+  <data name="sos_slide_two_line" xml:space="preserve"><value>滑动求助
+{0} 秒后发出</value></data>
   <data name="sos_title" xml:space="preserve"><value>SOS</value></data>
   <data name="sos_trigger_mode" xml:space="preserve"><value>触发方式</value></data>
   <data name="sound_button_click" xml:space="preserve"><value>光标移动 4（按钮）</value></data>
@@ -720,6 +798,7 @@ PIN：{1}</value></data>
   <data name="sound_outdoor_call_alert" xml:space="preserve"><value>警报音 1（门口机呼叫）</value></data>
   <data name="sound_school_chime" xml:space="preserve"><value>学校铃声</value></data>
   <data name="sound_title_display" xml:space="preserve"><value>标题显示（启动）</value></data>
+  <data name="theme_contrast_warning" xml:space="preserve"><value>可能不易阅读（{0}:1）</value></data>
   <data name="time_err_bad_reply" xml:space="preserve"><value>服务器的响应无效</value></data>
   <data name="time_err_bad_server" xml:space="preserve"><value>服务器条目格式不正确</value></data>
   <data name="time_err_implausible" xml:space="preserve"><value>测得的时间不可信，已丢弃</value></data>
@@ -758,4 +837,8 @@ PIN：{1}</value></data>
   <data name="volume_preview" xml:space="preserve"><value>试听</value></data>
   <data name="volume_sos" xml:space="preserve"><value>SOS</value></data>
   <data name="volume_title" xml:space="preserve"><value>音量</value></data>
+  <data name="web_admin_leader" xml:space="preserve"><value>主节点的管理页面</value></data>
+  <data name="web_admin_no_address" xml:space="preserve"><value>还没有管理页面地址</value></data>
+  <data name="web_admin_open" xml:space="preserve"><value>打开网页管理</value></data>
+  <data name="web_admin_scan_hint" xml:space="preserve"><value>请用手机扫描此二维码</value></data>
 </root>

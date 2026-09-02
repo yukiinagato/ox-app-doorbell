@@ -1,0 +1,252 @@
+import UIKit
+
+/// Door-station visitor screen. It hosts the controls `MainViewController` already owns — the call
+/// button, the language row and the purpose buttons — and adds the layout the owner approved:
+/// a large `HH:MM:SS` clock with the date, a text-only announcement, the language row in the
+/// middle in portrait and directly above the call button in landscape, a single-sentence hint, and
+/// a footer with the door name, both versions and the battery. There is no way into settings from
+/// here; the hidden corner plus the admin password remains the only route.
+final class VisitorScreenView: UIView {
+
+    private let texts: Texts
+    private let clockLabel = UILabel()
+    private let dateLabel = UILabel()
+    private let noticeLabel = UILabel()
+    private let noticeExpand = UIButton(type: .system)
+    private let hintLabel = UILabel()
+    private let footerLabel = UILabel()
+
+    private let callButton: UIButton
+    private let langBar: UIView
+    private let purposeSection: UIView
+    private let sosControl: SosSlideControl
+
+    private let root = UIStackView()
+    private let noticeColumn = UIStackView()
+    private let actionColumn = UIStackView()
+
+    private var noticeExpanded = false
+    private var noticeText = ""
+    private var isLandscape = false
+    private var palette = DoorbellPalette.dark
+
+    init(texts: Texts, callButton: UIButton, langBar: UIView, purposeSection: UIView,
+         sosControl: SosSlideControl) {
+        self.texts = texts
+        self.callButton = callButton
+        self.langBar = langBar
+        self.purposeSection = purposeSection
+        self.sosControl = sosControl
+        super.init(frame: .zero)
+        build()
+    }
+
+    required init?(coder: NSCoder) { fatalError("not supported") }
+
+    private func build() {
+        translatesAutoresizingMaskIntoConstraints = false
+
+        clockLabel.font = UIFont.monospacedDigitSystemFont(ofSize: 96, weight: .light)
+        clockLabel.textAlignment = .center
+        clockLabel.adjustsFontSizeToFitWidth = true
+        clockLabel.minimumScaleFactor = 0.4
+        clockLabel.accessibilityIdentifier = "visitor_clock"
+
+        dateLabel.font = .systemFont(ofSize: 24)
+        dateLabel.textAlignment = .center
+
+        // A visitor is shown the message and nothing else: no author, no expiry.
+        noticeLabel.font = .systemFont(ofSize: 22)
+        noticeLabel.numberOfLines = 2
+        noticeLabel.textAlignment = .center
+        noticeLabel.accessibilityIdentifier = "visitor_notice"
+        noticeExpand.setTitle("▾", for: .normal)
+        noticeExpand.titleLabel?.font = .systemFont(ofSize: 22, weight: .bold)
+        noticeExpand.accessibilityIdentifier = "visitor_notice_expand"
+        noticeExpand.addTarget(self, action: #selector(toggleNotice), for: .primaryActionTriggered)
+        noticeExpand.heightAnchor.constraint(greaterThanOrEqualToConstant: 44).isActive = true
+
+        hintLabel.font = .systemFont(ofSize: 20)
+        hintLabel.textAlignment = .center
+        hintLabel.numberOfLines = 2
+        hintLabel.accessibilityIdentifier = "visitor_hint"
+
+        footerLabel.font = .monospacedDigitSystemFont(ofSize: 13, weight: .medium)
+        footerLabel.textAlignment = .center
+        footerLabel.numberOfLines = 0
+        footerLabel.accessibilityIdentifier = "app_version"
+
+        let noticeRow = UIStackView(arrangedSubviews: [noticeLabel, noticeExpand])
+        noticeRow.axis = .horizontal
+        noticeRow.spacing = 8
+        noticeRow.alignment = .center
+
+        noticeColumn.axis = .vertical
+        noticeColumn.spacing = 8
+        noticeColumn.addArrangedSubview(noticeRow)
+
+        actionColumn.axis = .vertical
+        actionColumn.spacing = 18
+        actionColumn.alignment = .center
+
+        root.axis = .vertical
+        root.spacing = 18
+        root.alignment = .fill
+        root.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(root)
+        NSLayoutConstraint.activate([
+            root.topAnchor.constraint(equalTo: topAnchor),
+            root.bottomAnchor.constraint(equalTo: bottomAnchor),
+            root.leadingAnchor.constraint(equalTo: leadingAnchor),
+            root.trailingAnchor.constraint(equalTo: trailingAnchor),
+        ])
+        applyLayout(for: CGSize(width: 768, height: 1024))
+    }
+
+    /// Both orientations are computed from the current size, never fixed. Portrait stacks
+    /// clock → notice → language → call → hint → footer; landscape splits the notice into the left
+    /// column and keeps the language row immediately above the call button on the right.
+    func applyLayout(for size: CGSize) {
+        let landscape = size.width > size.height
+        let wide = min(size.width, size.height) >= 768
+        isLandscape = landscape
+
+        for view in root.arrangedSubviews { root.removeArrangedSubview(view) }
+        for view in root.arrangedSubviews { view.removeFromSuperview() }
+        for view in [noticeColumn, actionColumn] {
+            for child in view.arrangedSubviews {
+                view.removeArrangedSubview(child)
+                child.removeFromSuperview()
+            }
+        }
+
+        let clockColumn = UIStackView(arrangedSubviews: [clockLabel, dateLabel])
+        clockColumn.axis = .vertical
+        clockColumn.spacing = 4
+
+        let noticeRow = UIStackView(arrangedSubviews: [noticeLabel, noticeExpand])
+        noticeRow.axis = .horizontal
+        noticeRow.spacing = 8
+        noticeRow.alignment = .center
+        noticeColumn.addArrangedSubview(noticeRow)
+
+        clockLabel.font = UIFont.monospacedDigitSystemFont(
+            ofSize: wide ? 108 : (landscape ? 72 : 76), weight: .light)
+        hintLabel.font = .systemFont(ofSize: wide ? 22 : 18)
+        callButton.titleLabel?.font = .systemFont(ofSize: wide ? 40 : 30, weight: .bold)
+        #if !os(tvOS)
+        let vertical: CGFloat = wide ? 34 : 24
+        callButton.contentEdgeInsets = UIEdgeInsets(top: vertical, left: 60, bottom: vertical,
+                                                    right: 60)
+        #endif
+
+        if landscape {
+            // With a notice on screen, the language row belongs directly above the call button.
+            actionColumn.addArrangedSubview(langBar)
+            actionColumn.addArrangedSubview(callButton)
+            actionColumn.addArrangedSubview(hintLabel)
+            actionColumn.addArrangedSubview(purposeSection)
+            let columns = UIStackView(arrangedSubviews: [
+                stackVertically([clockColumn, noticeColumn, UIView()]), actionColumn])
+            columns.axis = .horizontal
+            columns.spacing = 28
+            columns.distribution = .fillEqually
+            columns.alignment = .center
+            root.addArrangedSubview(columns)
+            root.addArrangedSubview(footerLabel)
+            root.addArrangedSubview(sosControl)
+            return
+        }
+
+        root.addArrangedSubview(clockColumn)
+        root.addArrangedSubview(noticeColumn)
+        root.addArrangedSubview(langBar)
+        actionColumn.addArrangedSubview(callButton)
+        actionColumn.addArrangedSubview(hintLabel)
+        actionColumn.addArrangedSubview(purposeSection)
+        root.addArrangedSubview(actionColumn)
+        root.addArrangedSubview(UIView())
+        root.addArrangedSubview(footerLabel)
+        root.addArrangedSubview(sosControl)
+    }
+
+    private func stackVertically(_ views: [UIView]) -> UIStackView {
+        let stack = UIStackView(arrangedSubviews: views)
+        stack.axis = .vertical
+        stack.spacing = 16
+        return stack
+    }
+
+    // MARK: - Content
+
+    func updateClock(_ reading: DoorbellClock.Reading, lang: String) {
+        clockLabel.text = reading.hhmmss
+        dateLabel.text = DoorbellClock.longDate(reading, lang: lang)
+    }
+
+    func updateNotice(_ notice: DoorbellNotice?) {
+        noticeText = notice?.text ?? ""
+        let hasNotice = !noticeText.isEmpty
+        noticeColumn.isHidden = !hasNotice
+        noticeLabel.text = noticeText
+        noticeExpand.isHidden = !hasNotice || noticeText.count < 40
+        applyNoticeLines()
+    }
+
+    private func applyNoticeLines() {
+        noticeLabel.numberOfLines = noticeExpanded ? 0 : 2
+        noticeExpand.setTitle(noticeExpanded ? "▴" : "▾", for: .normal)
+    }
+
+    @objc private func toggleNotice() {
+        noticeExpanded.toggle()
+        applyNoticeLines()
+    }
+
+    func updateHint(_ text: String) {
+        hintLabel.text = text
+    }
+
+    func updateFooter(_ text: String) {
+        footerLabel.text = text
+    }
+
+    func setSosVisible(_ visible: Bool) {
+        sosControl.isHidden = !visible
+    }
+
+    /// Applies the palette and the computed call-button colour. The button colour comes from
+    /// Core's `auto_accent` when it is published, from the administrator's override when there is
+    /// one, and from the local complement computation otherwise.
+    func applyTheme(palette: DoorbellPalette, config: [String: Any]?, nodeId: String,
+                    effectiveBackground: UIColor) {
+        self.palette = palette
+        DoorbellTheme.applyInk(DoorbellTheme.ink(config: config, nodeId: nodeId, region: "clock",
+                                                 background: effectiveBackground,
+                                                 palette: palette),
+                               over: effectiveBackground, to: clockLabel)
+        DoorbellTheme.applyInk(DoorbellTheme.ink(config: config, nodeId: nodeId, region: "date",
+                                                 background: effectiveBackground,
+                                                 palette: palette),
+                               over: effectiveBackground, to: dateLabel)
+        DoorbellTheme.applyInk(DoorbellTheme.ink(config: config, nodeId: nodeId, region: "hint",
+                                                 background: effectiveBackground,
+                                                 palette: palette),
+                               over: effectiveBackground, to: hintLabel)
+        DoorbellTheme.applyInk(DoorbellTheme.ink(config: config, nodeId: nodeId,
+                                                 region: "status_line",
+                                                 background: effectiveBackground,
+                                                 palette: palette),
+                               over: effectiveBackground, to: footerLabel)
+        DoorbellTheme.applyInk(DoorbellTheme.ink(config: config, nodeId: nodeId, region: "notice",
+                                                 background: effectiveBackground,
+                                                 palette: palette),
+                               over: effectiveBackground, to: noticeLabel)
+        noticeExpand.setTitleColor(noticeLabel.textColor, for: .normal)
+
+        let colors = DoorbellTheme.callButtonColors(config: config, nodeId: nodeId,
+                                                    background: effectiveBackground)
+        callButton.backgroundColor = colors.fill
+        callButton.setTitleColor(colors.ink, for: .normal)
+    }
+}

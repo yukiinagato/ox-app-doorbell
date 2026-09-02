@@ -1,0 +1,411 @@
+import UIKit
+
+/// Indoor home screen. Everything the household needs at a glance: the household clock, who is
+/// in the cluster, unanswered calls, one tile per door with a recent still, the recent call list,
+/// the admin QR that is always visible, and the SOS slider.
+///
+/// The view owns no call state; `MainViewController` hosts it and routes every action.
+final class DashboardView: UIView {
+
+    var onOpenAdmin: (() -> Void)?
+    var onOpenHistory: (() -> Void)?
+    var onOpenDoor: ((String) -> Void)?
+    var onOpenNotice: ((String) -> Void)?
+
+    private let core: CoreBridge
+    private let boot: BootConfig
+    private let texts: Texts
+
+    private let clockLabel = UILabel()
+    private let dateLabel = UILabel()
+    private let membershipPill = PaddedLabel()
+    private let missedBadge = PaddedLabel()
+    private let adminButton = UIButton(type: .system)
+    private let noticeButton = UIButton(type: .system)
+    private let historyHeader = UILabel()
+    private let seeAllButton = UIButton(type: .system)
+    private let tilesStack = UIStackView()
+    private let recentCalls: RecentCallsView
+    private let adminQr: AdminQrView
+    private let versionLabel = UILabel()
+    let sosControl: SosSlideControl
+
+    private let columns = UIStackView()
+    private let leftColumn = UIStackView()
+    private let rightColumn = UIStackView()
+
+    private var config: [String: Any]?
+    private var palette = DoorbellPalette.dark
+    private var tiles: [String: DoorTileView] = [:]
+    private var stillTimer: Timer?
+
+    init(core: CoreBridge, boot: BootConfig, texts: Texts, sosControl: SosSlideControl) {
+        self.core = core
+        self.boot = boot
+        self.texts = texts
+        self.recentCalls = RecentCallsView(core: core, texts: texts, lang: boot.uiLang)
+        self.adminQr = AdminQrView(core: core, boot: boot, texts: texts, compact: false)
+        self.sosControl = sosControl
+        super.init(frame: .zero)
+        build()
+    }
+
+    required init?(coder: NSCoder) { fatalError("not supported") }
+
+    deinit { stillTimer?.invalidate() }
+
+    // MARK: - Construction
+
+    private func build() {
+        translatesAutoresizingMaskIntoConstraints = false
+
+        clockLabel.font = UIFont.monospacedDigitSystemFont(ofSize: 64, weight: .light)
+        clockLabel.accessibilityIdentifier = "dashboard_clock"
+        dateLabel.font = .systemFont(ofSize: 20)
+
+        DoorbellTheme.pill(membershipPill, background: palette.surface, ink: palette.ink,
+                           fontSize: 15)
+        membershipPill.accessibilityIdentifier = "membership_status"
+        DoorbellTheme.pill(missedBadge, background: palette.danger, ink: .white, fontSize: 15)
+        missedBadge.accessibilityIdentifier = "missed_badge"
+        missedBadge.isHidden = true
+        missedBadge.isUserInteractionEnabled = true
+        missedBadge.addGestureRecognizer(
+            UITapGestureRecognizer(target: self, action: #selector(openHistory)))
+
+        style(adminButton, title: texts.t("admin.title"), filled: false)
+        adminButton.accessibilityIdentifier = "dashboard_admin"
+        adminButton.addTarget(self, action: #selector(openAdmin), for: .primaryActionTriggered)
+
+        style(noticeButton, title: texts.t("notice.global_button"), filled: false)
+        noticeButton.accessibilityIdentifier = "dashboard_notice_global"
+        noticeButton.addTarget(self, action: #selector(openGlobalNotice),
+                               for: .primaryActionTriggered)
+
+        let clockColumn = UIStackView(arrangedSubviews: [clockLabel, dateLabel])
+        clockColumn.axis = .vertical
+        clockColumn.spacing = 2
+
+        let statusRow = UIStackView(arrangedSubviews: [membershipPill, missedBadge, UIView(),
+                                                        adminButton])
+        statusRow.axis = .horizontal
+        statusRow.spacing = 12
+        statusRow.alignment = .center
+
+        tilesStack.axis = .vertical
+        tilesStack.spacing = 12
+
+        historyHeader.text = texts.t("history.title")
+        historyHeader.font = .systemFont(ofSize: 19, weight: .semibold)
+        style(seeAllButton, title: texts.t("history.see_all"), filled: false)
+        seeAllButton.accessibilityIdentifier = "dashboard_see_all"
+        seeAllButton.addTarget(self, action: #selector(openHistory), for: .primaryActionTriggered)
+        let historyRow = UIStackView(arrangedSubviews: [historyHeader, UIView(), seeAllButton])
+        historyRow.axis = .horizontal
+        historyRow.spacing = 12
+        historyRow.alignment = .center
+
+        versionLabel.font = .monospacedDigitSystemFont(ofSize: 13, weight: .medium)
+        versionLabel.accessibilityIdentifier = "app_version"
+        versionLabel.numberOfLines = 0
+
+
+        leftColumn.axis = .vertical
+        leftColumn.spacing = 14
+        for view in [clockColumn, statusRow, tilesStack, noticeButton] {
+            leftColumn.addArrangedSubview(view)
+        }
+        leftColumn.addArrangedSubview(UIView())
+
+        rightColumn.axis = .vertical
+        rightColumn.spacing = 12
+        for view in [historyRow, recentCalls, adminQr, versionLabel, sosControl] {
+            rightColumn.addArrangedSubview(view)
+        }
+        recentCalls.heightAnchor.constraint(greaterThanOrEqualToConstant: 160).isActive = true
+
+        columns.axis = .horizontal
+        columns.spacing = 24
+        columns.alignment = .fill
+        columns.distribution = .fillEqually
+        columns.addArrangedSubview(leftColumn)
+        columns.addArrangedSubview(rightColumn)
+        columns.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(columns)
+        NSLayoutConstraint.activate([
+            columns.topAnchor.constraint(equalTo: topAnchor),
+            columns.bottomAnchor.constraint(equalTo: bottomAnchor),
+            columns.leadingAnchor.constraint(equalTo: leadingAnchor),
+            columns.trailingAnchor.constraint(equalTo: trailingAnchor),
+        ])
+
+        stillTimer = IOSAvailability.scheduledTimer(withTimeInterval: 5, repeats: true) {
+            [weak self] _ in self?.refreshStills()
+        }
+    }
+
+    private func style(_ button: UIButton, title: String, filled: Bool) {
+        button.setTitle(title, for: .normal)
+        button.titleLabel?.font = .systemFont(ofSize: 18, weight: .semibold)
+        button.titleLabel?.numberOfLines = 0
+        button.titleLabel?.textAlignment = .center
+        button.layer.cornerRadius = 10
+        #if !os(tvOS)
+        button.contentEdgeInsets = UIEdgeInsets(top: 10, left: 18, bottom: 10, right: 18)
+        #endif
+        button.heightAnchor.constraint(greaterThanOrEqualToConstant: 44).isActive = true
+    }
+
+    // MARK: - Layout
+
+    /// Portrait stacks the tiles above the call list; landscape puts them side by side. The
+    /// decision is made from the size the view is about to have, never from a fixed orientation.
+    func applyLayout(for size: CGSize) {
+        let portrait = size.height > size.width
+        columns.axis = portrait ? .vertical : .horizontal
+        columns.distribution = portrait ? .fill : .fillEqually
+        clockLabel.font = UIFont.monospacedDigitSystemFont(ofSize: portrait ? 48 : 64,
+                                                           weight: .light)
+    }
+
+    // MARK: - Content
+
+    func reload(config: [String: Any]?, palette: DoorbellPalette) {
+        self.config = config
+        self.palette = palette
+        applyPalette()
+        rebuildTiles()
+        recentCalls.reload(config: config, palette: palette)
+        adminQr.palette = palette
+        adminQr.reload()
+        refreshMissedBadge()
+        refreshVersionLine()
+        refreshNoticeState()
+        sosControl.countdownSeconds = ConfigUtil.int(config, "emergency.trigger.countdown_s", 3)
+        sosControl.refreshStrings()
+        refreshStills()
+    }
+
+    private func applyPalette() {
+        clockLabel.textColor = palette.ink
+        dateLabel.textColor = palette.inkMuted
+        historyHeader.textColor = palette.ink
+        versionLabel.textColor = palette.inkMuted
+        DoorbellTheme.pill(membershipPill, background: palette.surface, ink: palette.ink,
+                           fontSize: 15)
+        DoorbellTheme.pill(missedBadge, background: palette.danger,
+                           ink: DoorbellTheme.readableInk(on: palette.danger), fontSize: 15)
+        for button in [adminButton, noticeButton, seeAllButton] {
+            button.setTitleColor(palette.ink, for: .normal)
+            button.backgroundColor = palette.surface
+        }
+    }
+
+    func updateClock() {
+        guard let reading = DoorbellClock.read(core) else { return }
+        clockLabel.text = reading.hhmmss
+        dateLabel.text = DoorbellClock.longDate(reading, lang: boot.uiLang)
+    }
+
+    func updateMembership(_ text: String, hidden: Bool) {
+        membershipPill.text = text
+        membershipPill.isHidden = hidden
+    }
+
+    func refreshMissedBadge() {
+        let unread = CallHistory.unreadMissed(core)
+        missedBadge.isHidden = unread <= 0
+        missedBadge.text = texts.t("history.missed_badge", "\(unread)")
+    }
+
+    func refreshHistory() {
+        recentCalls.reload(config: config, palette: palette)
+        refreshMissedBadge()
+    }
+
+    private func refreshVersionLine() {
+        let power = (core.status()?["self"] as? [String: Any])?["power"] as? [String: Any]
+        versionLabel.text = DoorbellTheme.versionLine(name: boot.name,
+                                                      coreVersion: DoorbellTheme.coreVersion(),
+                                                      texts: texts, power: power)
+    }
+
+    func refreshNoticeState() {
+        let nowMs = DoorbellClock.nowMs(core)
+        for (door, tile) in tiles {
+            let notice = DoorbellNotice.effective(config: config, door: door, nowMs: nowMs)
+            tile.updateNotice(active: notice != nil, palette: palette)
+        }
+    }
+
+    // MARK: - Door tiles
+
+    private func rebuildTiles() {
+        let doors = (ConfigUtil.dig(config, "doors") as? [String: Any])
+            .map { ConfigUtil.sortedByOrder($0) } ?? []
+        let existing = Set(tiles.keys)
+        if existing != Set(doors) {
+            for view in tilesStack.arrangedSubviews { view.removeFromSuperview() }
+            tiles = [:]
+            for door in doors {
+                let tile = DoorTileView(texts: texts)
+                tile.door = door
+                tile.onOpen = { [weak self] in self?.onOpenDoor?(door) }
+                tile.onNotice = { [weak self] in self?.onOpenNotice?(door) }
+                tiles[door] = tile
+                tilesStack.addArrangedSubview(tile)
+            }
+        }
+        let status = core.status()
+        let nowMs = DoorbellClock.nowMs(core)
+        for door in doors {
+            guard let tile = tiles[door] else { continue }
+            let entry = ConfigUtil.dig(config, "doors.\(door)") as? [String: Any]
+            let peer = ConfigUtil.findDoorPeer(status, door: door)
+            let notice = DoorbellNotice.effective(config: config, door: door, nowMs: nowMs)
+            tile.apply(label: ConfigUtil.labelOf(entry, boot.uiLang, door),
+                       online: peer != nil,
+                       noticeActive: notice != nil,
+                       palette: palette)
+        }
+    }
+
+    /// Live stills, five seconds apart, from the door station's own snapshot endpoint. An
+    /// unreachable door greys out instead of freezing on a stale frame.
+    private func refreshStills() {
+        let status = core.status()
+        for (door, tile) in tiles {
+            guard let peer = ConfigUtil.findDoorPeer(status, door: door),
+                  let url = snapshotUrl(peer: peer) else {
+                tile.setStill(nil)
+                continue
+            }
+            tile.loadStill(from: url)
+        }
+    }
+
+    private func snapshotUrl(peer: [String: Any]) -> URL? {
+        if let stream = ConfigUtil.str(peer, "stream"),
+           var components = URLComponents(string: stream) {
+            components.path = "/snapshot.jpg"
+            components.query = nil
+            if let url = components.url { return url }
+        }
+        guard let host = ConfigUtil.peerHost(peer) else { return nil }
+        return URL(string: "http://\(host):47180/snapshot.jpg")
+    }
+
+    // MARK: - Actions
+
+    @objc private func openAdmin() { onOpenAdmin?() }
+
+    @objc private func openHistory() { onOpenHistory?() }
+
+    @objc private func openGlobalNotice() { onOpenNotice?("") }
+}
+
+/// One door: its most recent still, its name, whether it is reachable, and whether an
+/// announcement is showing there.
+final class DoorTileView: UIView {
+
+    var door = ""
+    var onOpen: (() -> Void)?
+    var onNotice: (() -> Void)?
+
+    private let still = UIImageView()
+    private let nameLabel = UILabel()
+    private let stateLabel = UILabel()
+    private let noticeChip: NoticeChipView
+    private let openButton = UIButton(type: .system)
+    private var pendingUrl: URL?
+    private let session: URLSession
+    private let texts: Texts
+
+    init(texts: Texts) {
+        self.texts = texts
+        self.noticeChip = NoticeChipView(texts: texts)
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.timeoutIntervalForRequest = 4
+        self.session = URLSession(configuration: configuration)
+        super.init(frame: .zero)
+        translatesAutoresizingMaskIntoConstraints = false
+        accessibilityIdentifier = "door_tile"
+        layer.cornerRadius = 12
+        clipsToBounds = true
+
+        still.contentMode = .scaleAspectFill
+        still.clipsToBounds = true
+        still.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(still)
+
+        nameLabel.font = .systemFont(ofSize: 19, weight: .semibold)
+        stateLabel.font = .systemFont(ofSize: 14)
+
+        openButton.setTitle(texts.t("door.view"), for: .normal)
+        openButton.titleLabel?.font = .systemFont(ofSize: 17, weight: .semibold)
+        openButton.addTarget(self, action: #selector(open), for: .primaryActionTriggered)
+        openButton.heightAnchor.constraint(greaterThanOrEqualToConstant: 44).isActive = true
+
+        noticeChip.onTap = { [weak self] in self?.onNotice?() }
+
+        let textColumn = UIStackView(arrangedSubviews: [nameLabel, stateLabel])
+        textColumn.axis = .vertical
+        textColumn.spacing = 1
+
+        noticeChip.setContentHuggingPriority(.required, for: .horizontal)
+        noticeChip.setContentCompressionResistancePriority(.required, for: .horizontal)
+        let row = UIStackView(arrangedSubviews: [textColumn, UIView(), noticeChip, openButton])
+        row.axis = .horizontal
+        row.spacing = 10
+        row.alignment = .center
+        row.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(row)
+
+        NSLayoutConstraint.activate([
+            still.topAnchor.constraint(equalTo: topAnchor),
+            still.leadingAnchor.constraint(equalTo: leadingAnchor),
+            still.widthAnchor.constraint(equalToConstant: 132),
+            still.heightAnchor.constraint(equalToConstant: 84),
+            still.bottomAnchor.constraint(lessThanOrEqualTo: bottomAnchor),
+            row.topAnchor.constraint(equalTo: topAnchor, constant: 8),
+            row.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -8),
+            row.leadingAnchor.constraint(equalTo: still.trailingAnchor, constant: 12),
+            row.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
+            heightAnchor.constraint(greaterThanOrEqualToConstant: 92),
+        ])
+    }
+
+    required init?(coder: NSCoder) { fatalError("not supported") }
+
+    func apply(label: String, online: Bool, noticeActive: Bool, palette: DoorbellPalette) {
+        nameLabel.text = label
+        nameLabel.textColor = palette.ink
+        stateLabel.text = online ? "" : texts.t("admin.offline")
+        stateLabel.textColor = palette.inkMuted
+        backgroundColor = palette.surface
+        still.alpha = online ? 1 : 0.35
+        openButton.setTitleColor(palette.ink, for: .normal)
+        noticeChip.update(active: noticeActive, palette: palette)
+    }
+
+    func updateNotice(active: Bool, palette: DoorbellPalette) {
+        noticeChip.update(active: active, palette: palette)
+    }
+
+    func setStill(_ image: UIImage?) {
+        still.image = image
+    }
+
+    func loadStill(from url: URL) {
+        pendingUrl = url
+        session.dataTask(with: url) { [weak self] data, _, _ in
+            guard let data = data, let image = UIImage(data: data) else { return }
+            DispatchQueue.main.async {
+                guard let self = self, self.pendingUrl == url else { return }
+                self.still.image = image
+            }
+        }.resume()
+    }
+
+    @objc private func open() { onOpen?() }
+}

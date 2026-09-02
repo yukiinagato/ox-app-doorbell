@@ -47,6 +47,7 @@ final class AddDeviceViewController: UIViewController {
     private lazy var addAllButton = PairingTheme.button(texts.t("pair.add_all"))
     private let addAllWarning = UILabel()
     private let addAllStatus = UILabel()
+    private let codeUnavailable = UILabel()
     private lazy var addAllStop = PairingTheme.button(texts.t("pair.add_all_stop"))
     private lazy var scanButton = PairingTheme.button(texts.t("pair.scan_qr"))
     private let scanUnavailable = UILabel()
@@ -155,6 +156,11 @@ final class AddDeviceViewController: UIViewController {
         codeButton.accessibilityIdentifier = "add_device_code"
         codeCard.onNewCode = { [weak self] in self?.startCode() }
         codeCard.isHidden = true
+        codeUnavailable.font = .systemFont(ofSize: PairingTheme.smallSize, weight: .semibold)
+        codeUnavailable.textColor = PairingTheme.danger
+        codeUnavailable.numberOfLines = 0
+        codeUnavailable.accessibilityIdentifier = "add_device_code_unavailable"
+        codeUnavailable.isHidden = true
 
         addAllWarning.text = texts.t("pair.add_all_warning")
         addAllWarning.font = .systemFont(ofSize: PairingTheme.smallSize)
@@ -201,7 +207,8 @@ final class AddDeviceViewController: UIViewController {
         members.alignment = .leading
 
         for element in [title, members, unpairedNotice, createButton, nearbyTitle, nearbyStack,
-                        emptyRow, codeButton, codeCard, addAllButton, addAllWarning,
+                        emptyRow, codeButton, codeUnavailable, codeCard, addAllButton,
+                        addAllWarning,
                         addAllStatus, addAllStop, scanButton, scanUnavailable, qrCard,
                         unpairButton, closeButton] as [UIView] {
             contentStack.addArrangedSubview(element)
@@ -397,13 +404,16 @@ final class AddDeviceViewController: UIViewController {
         present(alert, animated: true)
     }
 
+    /// Minting a PIN never opens the bulk-add window: that is a separate control with its own
+    /// warning. A Core without the dedicated entry point says so instead of silently starting to
+    /// add every device it can see.
     @objc private func startCode() {
-        // Core's start-pairing entry point mints the PIN *and* opens the bulk-add window in one
-        // step. The two are separate controls here, and bulk add must stay behind its own
-        // warning, so the window is closed again immediately: per the pairing contract, stopping
-        // it leaves a live PIN alone.
-        _ = core.startPairing(seconds: 600)
-        core.pairingMode(seconds: 0)
+        guard core.supportsMintJoinToken else {
+            codeUnavailable.text = texts.t("pair.pin_unavailable")
+            codeUnavailable.isHidden = false
+            return
+        }
+        _ = core.mintJoinToken(seconds: 600)
         refresh()
     }
 
@@ -462,15 +472,19 @@ final class AddDeviceViewController: UIViewController {
 
     private func confirmUnpairSecondStep() {
         let second = UIAlertController(title: texts.t("pair.clear_title"),
-                                       message: texts.t("pair.clear_confirm"),
+                                       message: texts.t("pair.clear_confirm") + "\n"
+                                        + texts.t("pair.clear_resets_device"),
                                        preferredStyle: .alert)
         second.addAction(UIAlertAction(title: texts.t("admin.cancel"), style: .cancel))
         second.addAction(UIAlertAction(title: texts.t("pair.clear_title"),
                                        style: .destructive) { [weak self] _ in
             guard let self = self else { return }
+            // Leaving the cluster resets this device completely — the stored key, the pairing
+            // fields and its own name, role and door — and it comes back on the first-run screen.
             self.core.unpair()
-            _ = BootConfig.clearPairing()
-            self.dismiss(animated: true)
+            self.dismiss(animated: true) {
+                NotificationCenter.default.post(name: .doorbellResetLocalPairing, object: nil)
+            }
         })
         present(second, animated: true)
     }

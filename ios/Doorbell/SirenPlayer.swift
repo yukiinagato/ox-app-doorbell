@@ -5,6 +5,16 @@ final class SirenPlayer {
 
     private var player: AVAudioPlayer?
 
+    /// Effective level (0-100) for this player's kind of sound. Core resolves the device override
+    /// and the cluster default; the shell only applies the number it is given.
+    var volume: Int = 100 {
+        didSet { player?.volume = SirenPlayer.gain(volume) }
+    }
+
+    private static func gain(_ percent: Int) -> Float {
+        return Float(max(0, min(100, percent))) / 100.0
+    }
+
 
     func playAsset(path: String, fallback: (() -> Void)?) {
         guard !path.isEmpty, FileManager.default.fileExists(atPath: path) else {
@@ -15,6 +25,7 @@ final class SirenPlayer {
             let p = try AVAudioPlayer(contentsOf: URL(fileURLWithPath: path))
             player = p
             p.numberOfLoops = 0
+            p.volume = SirenPlayer.gain(volume)
             if !p.play() { fallback?() }
         } catch {
             fallback?()
@@ -49,6 +60,7 @@ final class SirenPlayer {
         player?.stop()
         player = p
         p.numberOfLoops = loops ? -1 : 0
+        p.volume = SirenPlayer.gain(volume)
         if !p.play() { fallback?() }
     }
 

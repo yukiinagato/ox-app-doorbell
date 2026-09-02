@@ -3,6 +3,7 @@
 // synchronous. Buffers returned through db_platform_v2 output pointers are malloc-owned and
 // released through release_buffer.
 import AVFoundation
+import Darwin
 import Foundation
 import UIKit
 
@@ -15,6 +16,8 @@ final class CoreBridge {
     private let deviceInfoCacheLock = NSLock()
     private var deviceInfoCacheJSON =
         "{\"schema_version\":1,\"platform\":\"apple\",\"battery_state\":\"unknown\"}"
+    private let powerStateCacheLock = NSLock()
+    private var powerStateCacheJSON = CoreBridge.noBatteryPowerJSON
 
     private var handlers: [String: UiEventHandler] = [:]
 
@@ -24,6 +27,7 @@ final class CoreBridge {
     func start(dataDir: String, bootJson: String) -> Bool {
         if core != nil { return true }
         refreshDeviceInfoCache()
+        refreshPowerStateCache()
         let user = Unmanaged.passUnretained(self).toOpaque()
         var plat = db_platform_v2()
         plat.struct_size = UInt32(MemoryLayout<db_platform_v2>.size)
@@ -66,6 +70,15 @@ final class CoreBridge {
             return valueOut.pointee == nil ? -1 : 0
         }
         plat.release_buffer = { _, buffer in free(buffer) }
+        // Battery and mains state. Core polls this about once a minute from a worker thread, so
+        // the UIDevice reading is sampled on main and handed over as an immutable snapshot.
+        plat.power_state = { user, valueOut in
+            guard let user = user, let valueOut = valueOut else { return -1 }
+            let me = Unmanaged<CoreBridge>.fromOpaque(user).takeUnretainedValue()
+            me.schedulePowerStateRefresh()
+            valueOut.pointee = strdup(me.cachedPowerStateJSON())
+            return valueOut.pointee == nil ? -1 : 0
+        }
 
         core = db_core_create_v2(&plat, dataDir, bootJson)
         guard let c = core else { return false }
@@ -225,9 +238,30 @@ final class CoreBridge {
         if let c = core { db_core_pairing_mode(c, max(0, seconds)) }
     }
 
+    /// Opens the bulk-add window *and* mints a PIN. It backs the explicit 「まとめて追加」 control
+    /// only; the Pairing-PIN card uses `mintJoinToken` so showing a PIN never starts auto-adding.
     func startPairing(seconds: Int32 = 600) -> [String: Any]? {
         guard let c = core else { return nil }
         return takeJson(db_core_start_pairing_json(c, max(1, seconds)))
+    }
+
+    /// Mints or refreshes the join PIN without opening pairing mode. Core publishes this as
+    /// `db_core_mint_join_token_json`; it is resolved at runtime so a shell built against an older
+    /// Core still links, and `supportsMintJoinToken` tells the UI to say so rather than falling
+    /// back to the bulk-add entry point.
+    private typealias MintJoinTokenFn = @convention(c) (OpaquePointer?, Int32)
+        -> UnsafeMutablePointer<CChar>?
+    private static let mintJoinTokenFn: MintJoinTokenFn? = {
+        guard let symbol = dlsym(UnsafeMutableRawPointer(bitPattern: -2),
+                                 "db_core_mint_join_token_json") else { return nil }
+        return unsafeBitCast(symbol, to: MintJoinTokenFn.self)
+    }()
+
+    var supportsMintJoinToken: Bool { return CoreBridge.mintJoinTokenFn != nil }
+
+    func mintJoinToken(seconds: Int32 = 600) -> [String: Any]? {
+        guard let c = core, let fn = CoreBridge.mintJoinTokenFn else { return nil }
+        return takeJson(fn(c, max(1, seconds)))
     }
 
     func removeDevice(_ id: String) {
@@ -327,6 +361,239 @@ final class CoreBridge {
         utt.voice = AVSpeechSynthesisVoice(language: code)
         synth.stopSpeaking(at: .immediate)
         synth.speak(utt)
+    }
+
+
+    // MARK: - Time, audio and announcements
+
+    /// Wall-clock instant rendered in the cluster's IANA zone. `wallMs` of zero means "now".
+    /// Every clock in the shells goes through this so a device with a wrong OS clock, or one in
+    /// another zone, still shows the household's time.
+    func localTime(wallMs: Int64 = 0) -> [String: Any]? {
+        guard let c = core else { return nil }
+        return takeJson(db_core_local_time_json(c, wallMs))
+    }
+
+    /// Start one immediate SNTP round. Returns false when NTP is off or Core is not started.
+    @discardableResult
+    func timeSyncNow() -> Bool {
+        guard let c = core else { return false }
+        return db_core_time_sync_now(c) != 0
+    }
+
+    /// Effective call/sos/idle volumes for one device; empty selects this node.
+    func audioVolumes(deviceId: String = "") -> [String: Any]? {
+        guard let c = core else { return nil }
+        return takeJson(db_core_audio_json(c, deviceId))
+    }
+
+    /// Publish a replicated announcement. `expiresMs` of zero means "until cleared".
+    @discardableResult
+    func setDoorNotice(door: String, text: String, expiresMs: Int64) -> Bool {
+        guard let c = core, !door.isEmpty, !text.isEmpty else { return false }
+        return db_core_set_door_notice(c, door, text, expiresMs) == 0
+    }
+
+    @discardableResult
+    func clearDoorNotice(door: String) -> Bool {
+        guard let c = core, !door.isEmpty else { return false }
+        return db_core_clear_door_notice(c, door) == 0
+    }
+
+    /// Call history newest first. `sinceMs` is an inclusive lower bound; paging backwards uses
+    /// the oldest row already shown as the next `beforeMs` and filters locally, because the ABI
+    /// exposes only a lower bound.
+    func callLog(sinceMs: Int64 = 0, limit: Int = 50) -> [String: Any]? {
+        guard let c = core else { return nil }
+        return takeJson(db_core_call_log_json(c, sinceMs, Int32(limit)))
+    }
+
+    /// Paged history. Core's v2 entry point takes the upper bound the 「さらに読み込む」 button
+    /// needs; without it the caller trims a wider window itself.
+    private typealias CallLogV2Fn = @convention(c) (OpaquePointer?, Int64, Int64, Int32)
+        -> UnsafeMutablePointer<CChar>?
+    private static let callLogV2Fn: CallLogV2Fn? = symbol("db_core_call_log_json_v2")
+        .map { unsafeBitCast($0, to: CallLogV2Fn.self) }
+
+    var supportsCallLogPaging: Bool { return CoreBridge.callLogV2Fn != nil }
+
+    func callLogPage(sinceMs: Int64, beforeMs: Int64, limit: Int) -> [String: Any]? {
+        guard let c = core, let fn = CoreBridge.callLogV2Fn else { return nil }
+        return takeJson(fn(c, sinceMs, beforeMs, Int32(limit)))
+    }
+
+    @discardableResult
+    func markCallLogSeen(upToHlc: String = "") -> Bool {
+        guard let c = core else { return false }
+        return db_core_call_log_mark_seen(c, upToHlc.isEmpty ? nil : upToHlc) == 0
+    }
+
+    /// Microphone mute during an established dialog. Core does not publish this entry point yet,
+    /// so it is resolved at runtime: a build whose Core exports it mutes for real, and an older
+    /// Core reports that the control is unavailable instead of silently doing nothing.
+    private typealias SipMicMuteFn = @convention(c) (OpaquePointer?, Int32) -> Int32
+    private static let sipMicMute: SipMicMuteFn? = symbol("db_core_sip_set_mic_muted")
+        .map { unsafeBitCast($0, to: SipMicMuteFn.self) }
+
+    var supportsMicMute: Bool { return CoreBridge.sipMicMute != nil }
+
+    @discardableResult
+    func setMicMuted(_ muted: Bool) -> Bool {
+        guard let c = core, let fn = CoreBridge.sipMicMute else { return false }
+        return fn(c, muted ? 1 : 0) == 0
+    }
+
+    // MARK: - Configuration writes
+
+    /// Programmatic configuration writes. Core validates them exactly as the web admin's
+    /// `/api/config/batch` does, which is why the shells are allowed to use them directly. The
+    /// three entry points are resolved at runtime: a Core that does not export them yet leaves
+    /// `supportsConfigWrite` false and the settings screens fall back to the HTTP endpoint.
+    private typealias SetConfigKeyFn = @convention(c) (OpaquePointer?, UnsafePointer<CChar>?,
+                                                       UnsafePointer<CChar>?) -> Void
+    private typealias DeleteConfigKeyFn = @convention(c) (OpaquePointer?, UnsafePointer<CChar>?)
+        -> Void
+    private typealias ConfigBatchFn = @convention(c) (OpaquePointer?, UnsafePointer<CChar>?)
+        -> UnsafeMutablePointer<CChar>?
+
+    private static func symbol(_ name: String) -> UnsafeMutableRawPointer? {
+        return dlsym(UnsafeMutableRawPointer(bitPattern: -2), name)
+    }
+
+    private static let setConfigKeyFn: SetConfigKeyFn? = symbol("db_core_set_config_json")
+        .map { unsafeBitCast($0, to: SetConfigKeyFn.self) }
+    private static let deleteConfigKeyFn: DeleteConfigKeyFn? = symbol("db_core_delete_config_key")
+        .map { unsafeBitCast($0, to: DeleteConfigKeyFn.self) }
+    private static let configBatchFn: ConfigBatchFn? = symbol("db_core_config_batch_json")
+        .map { unsafeBitCast($0, to: ConfigBatchFn.self) }
+
+    /// True when Core can apply a whole batch, or at least every single key, without HTTP.
+    var supportsConfigWrite: Bool {
+        return CoreBridge.configBatchFn != nil ||
+            (CoreBridge.setConfigKeyFn != nil && CoreBridge.deleteConfigKeyFn != nil)
+    }
+
+    /// Applies the batch through Core. Returns nil when Core cannot do it, so the caller can fall
+    /// back; the batch entry point is preferred because it is the only atomic one.
+    func applyConfigBatch(_ opsJson: String, operations: [(key: String, value: String?)]) -> Bool? {
+        guard let c = core else { return nil }
+        if let batch = CoreBridge.configBatchFn {
+            guard let raw = batch(c, opsJson) else { return false }
+            defer { db_free(raw) }
+            let data = Data(bytes: UnsafeRawPointer(raw), count: strlen(raw))
+            let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+            return ConfigUtil.bool(object, "ok", false)
+        }
+        guard let set = CoreBridge.setConfigKeyFn,
+              let remove = CoreBridge.deleteConfigKeyFn else { return nil }
+        for operation in operations {
+            if let value = operation.value {
+                set(c, operation.key, value)
+            } else {
+                remove(c, operation.key)
+            }
+        }
+        return true
+    }
+
+    // MARK: - Administrator password
+
+    /// The device code and the web admin password are one cluster-wide secret, verified by Core
+    /// against the replicated salted hash. Core rate-limits and locks out; the shell only asks.
+    private typealias AdminVerifyFn = @convention(c) (OpaquePointer?, UnsafePointer<CChar>?)
+        -> Int32
+    private typealias AdminSetFn = @convention(c) (OpaquePointer?, UnsafePointer<CChar>?,
+                                                   UnsafePointer<CChar>?) -> Int32
+    private static let adminVerifyFn: AdminVerifyFn? = symbol("db_core_admin_password_verify")
+        .map { unsafeBitCast($0, to: AdminVerifyFn.self) }
+    private static let adminSetFn: AdminSetFn? = symbol("db_core_admin_password_set")
+        .map { unsafeBitCast($0, to: AdminSetFn.self) }
+
+    var supportsAdminPassword: Bool { return CoreBridge.adminVerifyFn != nil }
+
+    /// nil when Core cannot answer, so the caller can fall back to the legacy local digest.
+    func verifyAdminPassword(_ password: String) -> Bool? {
+        guard let c = core, let verify = CoreBridge.adminVerifyFn else { return nil }
+        return verify(c, password) == 0
+    }
+
+    var supportsAdminPasswordChange: Bool { return CoreBridge.adminSetFn != nil }
+
+    /// `current` may be empty on an installation that has never set the password.
+    @discardableResult
+    func setAdminPassword(current: String, new: String) -> Bool {
+        guard let c = core, let set = CoreBridge.adminSetFn, !new.isEmpty else { return false }
+        return set(c, current, new) == 0
+    }
+
+    // MARK: - Global announcement
+
+    private typealias SetGlobalNoticeFn = @convention(c) (OpaquePointer?, UnsafePointer<CChar>?,
+                                                          Int64) -> Int32
+    private typealias ClearGlobalNoticeFn = @convention(c) (OpaquePointer?) -> Int32
+    private static let setGlobalNoticeFn: SetGlobalNoticeFn? = symbol("db_core_set_global_notice")
+        .map { unsafeBitCast($0, to: SetGlobalNoticeFn.self) }
+    private static let clearGlobalNoticeFn: ClearGlobalNoticeFn? =
+        symbol("db_core_clear_global_notice")
+            .map { unsafeBitCast($0, to: ClearGlobalNoticeFn.self) }
+
+    var supportsGlobalNotice: Bool { return CoreBridge.setGlobalNoticeFn != nil }
+
+    /// nil when Core has no entry point yet, so the caller can write the key instead.
+    func setGlobalNotice(text: String, expiresMs: Int64) -> Bool? {
+        guard let c = core, let set = CoreBridge.setGlobalNoticeFn, !text.isEmpty else {
+            return nil
+        }
+        return set(c, text, expiresMs) == 0
+    }
+
+    func clearGlobalNotice() -> Bool? {
+        guard let c = core, let clear = CoreBridge.clearGlobalNoticeFn else { return nil }
+        return clear(c) == 0
+    }
+
+    // MARK: - Power state
+
+    private static let noBatteryPowerJSON =
+        "{\"battery_pct\":-1,\"charging\":false,\"mains\":true}"
+
+    private func cachedPowerStateJSON() -> String {
+        powerStateCacheLock.lock()
+        let snapshot = powerStateCacheJSON
+        powerStateCacheLock.unlock()
+        return snapshot
+    }
+
+    private func schedulePowerStateRefresh() {
+        DispatchQueue.main.async { [weak self] in self?.refreshPowerStateCache() }
+    }
+
+    /// Samples UIDevice on the main thread. tvOS has no battery, so it reports mains power and a
+    /// negative percentage, which Core renders as "no battery" rather than "unknown".
+    func refreshPowerStateCache() {
+        guard Thread.isMainThread else {
+            schedulePowerStateRefresh()
+            return
+        }
+        #if os(tvOS)
+        let object: [String: Any] = ["battery_pct": -1, "charging": false, "mains": true]
+        #else
+        UIDevice.current.isBatteryMonitoringEnabled = true
+        let state = UIDevice.current.batteryState
+        let level = UIDevice.current.batteryLevel
+        let charging = state == .charging
+        let mains = state == .charging || state == .full
+        let object: [String: Any] = [
+            "battery_pct": level < 0 ? -1 : Int((level * 100).rounded()),
+            "charging": charging,
+            "mains": mains,
+        ]
+        #endif
+        guard let data = try? JSONSerialization.data(withJSONObject: object),
+              let json = String(data: data, encoding: .utf8) else { return }
+        powerStateCacheLock.lock()
+        powerStateCacheJSON = json
+        powerStateCacheLock.unlock()
     }
 
 

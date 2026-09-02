@@ -784,3 +784,86 @@ power.charging: { ja: "充電中", en: "Charging", zh: "充电中" }
 power.mains: { ja: "電源に接続", en: "On mains power", zh: "已接电源" }
 power.no_battery: { ja: "電池なし", en: "No battery", zh: "无电池" }
 power.unknown: { ja: "未対応", en: "Not reported", zh: "未上报" }
+
+settings.title: { ja: "設定", en: "Settings", zh: "设置" }
+settings.section_device: { ja: "この端末", en: "This device", zh: "本设备" }
+settings.section_volume: { ja: "音量", en: "Volume", zh: "音量" }
+settings.section_time: { ja: "時刻", en: "Time", zh: "时间" }
+settings.section_doors: { ja: "門口", en: "Doors", zh: "门口" }
+settings.section_purposes: { ja: "用件", en: "Visit purposes", zh: "来访目的" }
+settings.section_rules: { ja: "通知とルール", en: "Notifications and rules", zh: "通知与规则" }
+settings.section_cluster: { ja: "クラスタ", en: "Cluster", zh: "集群" }
+settings.section_history: { ja: "呼出履歴", en: "Call history", zh: "呼叫记录" }
+settings.section_web: { ja: "Web 管理を開く", en: "Open the web admin", zh: "打开网页管理" }
+settings.section_info: { ja: "本機情報", en: "Device information", zh: "本机信息" }
+settings.device_name: { ja: "名前", en: "Name", zh: "名称" }
+settings.device_role: { ja: "役割", en: "Role", zh: "角色" }
+settings.device_door: { ja: "担当ドア", en: "Assigned door", zh: "负责门口" }
+settings.role_restart_notice: { ja: "役割を変えると、アプリを開き直したときに切り替わります", en: "A new role takes effect the next time the app is opened", zh: "更改角色后，下次打开应用时生效" }
+settings.ui_lang: { ja: "表示言語", en: "Display language", zh: "显示语言" }
+settings.video_playback: { ja: "映像の受け取りかた", en: "How video is received", zh: "视频接收方式" }
+settings.video_rotation: { ja: "映像の向き", en: "Video orientation", zh: "视频方向" }
+settings.theme_bg_color: { ja: "背景色", en: "Background colour", zh: "背景色" }
+settings.theme_bg_image: { ja: "背景画像", en: "Background image", zh: "背景图片" }
+settings.theme_image_none: { ja: "画像を使わない", en: "No image", zh: "不使用图片" }
+settings.appearance: { ja: "外観", en: "Appearance", zh: "外观" }
+settings.appearance_auto_system: { ja: "端末の設定に合わせる", en: "Follow the device setting", zh: "跟随设备设置" }
+settings.appearance_auto_schedule: { ja: "時刻で切り替える", en: "Switch by time of day", zh: "按时间切换" }
+settings.appearance_light: { ja: "ライト", en: "Light", zh: "浅色" }
+settings.appearance_dark: { ja: "ダーク", en: "Dark", zh: "深色" }
+settings.appearance_dark_from: { ja: "ダークにする時刻", en: "Dark from", zh: "深色开始时间" }
+settings.appearance_light_from: { ja: "ライトにする時刻", en: "Light from", zh: "浅色开始时间" }
+settings.volume_inherit: { ja: "クラスタの既定に合わせる", en: "Use the cluster default", zh: "使用集群默认值" }
+settings.purpose_shown: { ja: "訪客に表示する", en: "Offer it to visitors", zh: "向访客显示" }
+settings.rule_enabled: { ja: "有効", en: "On", zh: "开启" }
+settings.quiet_hours: { ja: "静かな時間帯", en: "Quiet hours", zh: "静音时段" }
+settings.telegram: { ja: "Telegram", en: "Telegram", zh: "Telegram" }
+settings.web_push: { ja: "Web Push", en: "Web Push", zh: "Web Push" }
+settings.cluster_members: { ja: "参加している機器", en: "Devices in this home", zh: "家中的设备" }
+settings.unlock_show_button: { ja: "開錠ボタンを表示する", en: "Show the unlock button", zh: "显示开锁按钮" }
+settings.saved: { ja: "保存しました", en: "Saved", zh: "已保存" }
+settings.save_failed: { ja: "保存できませんでした", en: "Couldn't save", zh: "无法保存" }
+settings.close: { ja: "閉じる", en: "Close", zh: "关闭" }
+settings.web_only_upload: { ja: "画像の追加は Web 管理から行います", en: "Add images from the web admin", zh: "请在网页管理中添加图片" }
+settings.web_only_wording: { ja: "文言の書き換えは Web 管理から行います", en: "Reword the interface from the web admin", zh: "请在网页管理中修改文案" }
+settings.web_only_rule_actions: { ja: "ルールの動作は Web 管理から編集します", en: "Edit what a rule does from the web admin", zh: "请在网页管理中编辑规则动作" }
+settings.web_only_secrets: { ja: "接続の認証情報は各端末の Web 管理で入力します", en: "Enter connection credentials in each device's web admin", zh: "请在各设备的网页管理中输入连接凭据" }
+settings.web_only_raw_config: { ja: "設定の書き出しと読み込みは Web 管理から行います", en: "Export and import configuration from the web admin", zh: "请在网页管理中导出与导入配置" }
+web_admin.open: { ja: "Web 管理を開く", en: "Open the web admin", zh: "打开网页管理" }
+web_admin.scan_hint: { ja: "スマホでこの QR を読み取ってください", en: "Scan this code with a phone", zh: "请用手机扫描此二维码" }
+web_admin.leader: { ja: "リーダー機の管理ページ", en: "Leader's admin page", zh: "主节点的管理页面" }
+web_admin.no_address: { ja: "管理ページのアドレスがありません", en: "No admin address yet", zh: "还没有管理页面地址" }
+door.hint_call: { ja: "ボタンを押すと住人を呼び出します", en: "Press the button to call the household", zh: "按下按钮即可呼叫住户" }
+door.lang_switch: { ja: "表示言語", en: "Language", zh: "语言" }
+door.view: { ja: "見る", en: "View", zh: "查看" }
+door.notice_for_this: { ja: "この門口機にお知らせ", en: "Announce at this door", zh: "在此门口机发布公告" }
+door.unlock_not_configured: { ja: "開錠の動作が設定されていません", en: "No unlock action is configured", zh: "尚未配置开锁动作" }
+notice.chip: { ja: "お知らせ", en: "Announcement", zh: "公告" }
+notice.global_button: { ja: "お知らせ（全体）", en: "Announcement (all doors)", zh: "公告（全部门口）" }
+notice.target: { ja: "表示する場所", en: "Where it shows", zh: "显示位置" }
+notice.target_global: { ja: "全体", en: "All doors", zh: "全部门口" }
+notice.target_door: { ja: "{door} のみ", en: "{door} only", zh: "仅 {door}" }
+notice.edit: { ja: "編集", en: "Edit", zh: "编辑" }
+notice.presets: { ja: "よく使う文", en: "Saved phrases", zh: "常用语句" }
+history.see_all: { ja: "すべて見る", en: "See all", zh: "查看全部" }
+history.filter_all: { ja: "すべて", en: "All", zh: "全部" }
+history.filter_missed: { ja: "不在着信", en: "Missed", zh: "未接" }
+history.filter_door: { ja: "{door}", en: "{door}", zh: "{door}" }
+history.load_more: { ja: "さらに読み込む", en: "Load more", zh: "加载更多" }
+sos.slide_two_line: { ja: "スライドで SOS\n{n} 秒後に発報", en: "Slide for SOS\nSends in {n}s", zh: "滑动求助\n{n} 秒后发出" }
+sos.cancel_countdown: { ja: "取り消す", en: "Cancel", zh: "取消" }
+theme.contrast_warning: { ja: "読みにくい可能性があります（{ratio}:1）", en: "This may be hard to read ({ratio}:1)", zh: "可能不易阅读（{ratio}:1）" }
+ring.monitor_on: { ja: "モニター ON", en: "Monitor on", zh: "监听 开" }
+ring.monitor_off: { ja: "モニター OFF", en: "Monitor off", zh: "监听 关" }
+ring.mic_on: { ja: "マイク ON", en: "Mic on", zh: "麦克风 开" }
+ring.mic_off: { ja: "マイク OFF", en: "Mic off", zh: "麦克风 关" }
+ring.mic_unavailable: { ja: "この版ではマイクの切り替えができません", en: "Muting the microphone isn't available in this build", zh: "此版本无法切换麦克风" }
+ring.quick_reply: { ja: "クイック返信", en: "Quick reply", zh: "快捷回复" }
+pair.pin_unavailable: { ja: "この版のコアでは PIN を発行できません", en: "This core build cannot mint a PIN", zh: "此核心版本无法生成 PIN" }
+pair.clear_resets_device: { ja: "この端末を初期状態に戻して外します", en: "This resets the device and removes it", zh: "将此设备恢复初始状态并移出" }
+settings.change_password: { ja: "管理パスワードを変更", en: "Change the admin password", zh: "更改管理密码" }
+settings.password_current: { ja: "今のパスワード", en: "Current password", zh: "当前密码" }
+settings.password_new: { ja: "新しいパスワード", en: "New password", zh: "新密码" }
+settings.password_changed: { ja: "管理パスワードを変更しました", en: "The admin password was changed", zh: "管理密码已更改" }
+settings.password_failed: { ja: "管理パスワードを変更できませんでした", en: "Couldn't change the admin password", zh: "无法更改管理密码" }
+settings.password_shared: { ja: "この端末と Web 管理で同じパスワードを使います", en: "The same password is used here and in the web admin", zh: "此设备与网页管理使用同一密码" }
