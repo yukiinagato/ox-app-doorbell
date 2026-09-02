@@ -95,6 +95,14 @@ class RecoverySafeModeContracts(unittest.TestCase):
         self.assertIn("_snapshotPoller.lowResourceMode = _safeMode", incoming)
         self.assertIn("maximumPixel = _lowResourceMode", mjpeg)
         self.assertIn("maximumPixel = _lowResourceMode", snapshot)
+        # The dashboard keeps its door still in safe mode, bounded smaller and
+        # taken less often. A panel latched in safe mode by the root helper can
+        # stay there for hours, and a black door tile is worse than a stale one.
+        home = read("ios-kiosk/src/Screens/DBHomeScreen.m")
+        self.assertNotIn("if (_safeMode || self.superview == nil) return;", home)
+        self.assertIn("kSafeModeSnapshotMaxSide", home)
+        self.assertIn("_safeMode ? kSafeModeSnapshotMaxSide : kSnapshotMaxSide", home)
+        self.assertIn("_snapshotTick % kSafeModeSnapshotEveryNTicks", home)
 
     def test_ios5_local_safe_mode_exits_after_a_healthy_window(self):
         app = read("ios-kiosk/src/Support/DBAppDelegate.m")

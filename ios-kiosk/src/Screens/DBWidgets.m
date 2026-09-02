@@ -530,6 +530,133 @@ static const NSInteger kProxyEdge = 64;
 
 #pragma mark - padded label
 
+@implementation DBFleetCounter {
+  NSString *_value;
+  UIColor *_ink;
+  UIColor *_fill;
+}
+
+@synthesize glyph = _glyph, value = _value, ink = _ink, fill = _fill;
+
+static const CGFloat kFleetGlyphSide = 20;
+static const CGFloat kFleetGlyphGap = 6;
+static const CGFloat kFleetPadX = 9;
+
+- (id)initWithFrame:(CGRect)frame {
+  self = [super initWithFrame:frame];
+  if (self) {
+    self.backgroundColor = [UIColor clearColor];
+    self.opaque = NO;
+    self.layer.cornerRadius = 10;
+    self.isAccessibilityElement = YES;
+    _value = @"";
+    _ink = [UIColor blackColor];
+    _fill = [UIColor clearColor];
+  }
+  return self;
+}
+
+- (UIFont *)valueFont {
+  return [UIFont boldSystemFontOfSize:18];
+}
+
+- (void)setGlyph:(DBFleetGlyph)glyph {
+  if (_glyph == glyph) return;
+  _glyph = glyph;
+  [self setNeedsDisplay];
+}
+
+- (void)setValue:(NSString *)value {
+  NSString *next = value ?: @"";
+  if ([_value isEqualToString:next]) return;
+  _value = [next copy];
+  [self setNeedsDisplay];
+}
+
+- (void)setInk:(UIColor *)ink {
+  _ink = ink;
+  [self setNeedsDisplay];
+}
+
+- (void)setFill:(UIColor *)fill {
+  _fill = fill;
+  self.backgroundColor = fill;
+}
+
+- (CGFloat)widthThatFits {
+  CGSize text = [_value sizeWithFont:[self valueFont]];
+  return kFleetPadX * 2 + kFleetGlyphSide + kFleetGlyphGap + ceilf((float)text.width);
+}
+
+// Three glyphs, all drawn on a 20x20 box in the current ink so they follow the
+// palette exactly like the text beside them.
+- (void)drawGlyphInRect:(CGRect)box {
+  CGFloat unit = box.size.width / 20.0;
+  CGFloat line = MAX((CGFloat)1.5, 1.6f * unit);
+  [_ink setStroke];
+  [_ink setFill];
+  if (_glyph == DBFleetGlyphCluster) {
+    // Three nodes joined by links: the cluster as a whole.
+    CGFloat radius = 2.8f * unit;
+    CGPoint nodes[3] = {
+      CGPointMake(box.origin.x + 10 * unit, box.origin.y + 4 * unit),
+      CGPointMake(box.origin.x + 4 * unit, box.origin.y + 15 * unit),
+      CGPointMake(box.origin.x + 16 * unit, box.origin.y + 15 * unit),
+    };
+    UIBezierPath *links = [UIBezierPath bezierPath];
+    for (int i = 0; i < 3; i++) {
+      [links moveToPoint:nodes[i]];
+      [links addLineToPoint:nodes[(i + 1) % 3]];
+    }
+    links.lineWidth = line;
+    [links stroke];
+    for (int i = 0; i < 3; i++) {
+      UIBezierPath *node = [UIBezierPath bezierPathWithOvalInRect:
+          CGRectMake(nodes[i].x - radius, nodes[i].y - radius, radius * 2, radius * 2)];
+      [node fill];
+    }
+    return;
+  }
+  if (_glyph == DBFleetGlyphDoorStation) {
+    // A doorway with a call button: the outdoor station.
+    UIBezierPath *door = [UIBezierPath bezierPathWithRoundedRect:
+        CGRectMake(box.origin.x + 4 * unit, box.origin.y + 2 * unit, 12 * unit, 16 * unit)
+                                                   cornerRadius:2 * unit];
+    door.lineWidth = line;
+    [door stroke];
+    UIBezierPath *button = [UIBezierPath bezierPathWithOvalInRect:
+        CGRectMake(box.origin.x + 11.4f * unit, box.origin.y + 8.4f * unit,
+                   3.2f * unit, 3.2f * unit)];
+    [button fill];
+    return;
+  }
+  // A wall panel: a screen with a speaker slot under it.
+  UIBezierPath *panel = [UIBezierPath bezierPathWithRoundedRect:
+      CGRectMake(box.origin.x + 2 * unit, box.origin.y + 4 * unit, 16 * unit, 12 * unit)
+                                                  cornerRadius:2 * unit];
+  panel.lineWidth = line;
+  [panel stroke];
+  UIBezierPath *slot = [UIBezierPath bezierPathWithRoundedRect:
+      CGRectMake(box.origin.x + 6.5f * unit, box.origin.y + 12 * unit, 7 * unit, 1.8f * unit)
+                                                 cornerRadius:0.9f * unit];
+  [slot fill];
+}
+
+- (void)drawRect:(CGRect)rect {
+  (void)rect;
+  CGSize size = self.bounds.size;
+  CGFloat glyphY = floorf((float)((size.height - kFleetGlyphSide) / 2));
+  [self drawGlyphInRect:CGRectMake(kFleetPadX, glyphY, kFleetGlyphSide, kFleetGlyphSide)];
+  UIFont *font = [self valueFont];
+  CGSize text = [_value sizeWithFont:font];
+  [_ink set];
+  [_value drawAtPoint:CGPointMake(kFleetPadX + kFleetGlyphSide + kFleetGlyphGap,
+                                  floorf((float)((size.height - text.height) / 2)))
+             withFont:font];
+}
+
+@end
+
 @implementation DBPillLabel
 
 @synthesize contentInsets = _contentInsets;

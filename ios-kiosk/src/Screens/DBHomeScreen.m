@@ -4,6 +4,8 @@
 #import "../Core/DBCallHistoryModel.h"
 #import "../Core/DBConfigUtil.h"
 #import "../Core/DBCoreBridge.h"
+#import "../Core/DBDoorTileModel.h"
+#import "../Core/DBFleetCounts.h"
 #import "../Core/DBNoticeModel.h"
 #import "../Core/DBPairingModel.h"
 #import "../Core/DBRefreshCoalescer.h"
@@ -25,14 +27,23 @@ static CGRect DBRectFromArray(NSArray *rect) {
 }
 
 static const NSTimeInterval kSnapshotIntervalS = 5.0;
+// Safe mode keeps the door picture, smaller and less often. It is already the
+// bounded low-resolution snapshot the safe-mode contract asks for, and a panel
+// latched in safe mode for hours must not sit in front of a black door tile.
+static const CGFloat kSnapshotMaxSide = 320;
+static const CGFloat kSafeModeSnapshotMaxSide = 160;
+static const NSInteger kSafeModeSnapshotEveryNTicks = 3;
 static const NSInteger kRecentCallLimit = 20;
 
 // One door tile: a five-second still, the door label, and the announcement chip.
 @interface DBDoorTile : UIButton
-// Stable identity across status polls, so a tile is created once per door.
-@property(nonatomic, copy) NSString *peerKey;
+// Stable identity across status polls, so a tile is created once per door. The
+// door id is that identity: a door outlives the station serving it, and keying
+// on the peer threw the still away every time the serving node changed.
 @property(nonatomic, copy) NSString *doorId;
 @property(nonatomic, strong) NSDictionary *peer;
+@property(nonatomic, copy) NSString *snapshotURL;
+@property(nonatomic) BOOL online;
 @property(nonatomic, readonly) UIImageView *still;
 @property(nonatomic, readonly) DBPillLabel *caption;
 @property(nonatomic, readonly) DBNoticeChip *noticeChip;
@@ -40,15 +51,15 @@ static const NSInteger kRecentCallLimit = 20;
 @end
 
 @implementation DBDoorTile {
-  NSString *_peerKey;
   UIImageView *_still;
   DBPillLabel *_caption;
   DBNoticeChip *_noticeChip;
   UILabel *_offlineLabel;
 }
 
-@synthesize peerKey = _peerKey, doorId = _doorId, peer = _peer, still = _still,
-            caption = _caption, noticeChip = _noticeChip, offlineLabel = _offlineLabel;
+@synthesize doorId = _doorId, peer = _peer, snapshotURL = _snapshotURL, online = _online,
+            still = _still, caption = _caption, noticeChip = _noticeChip,
+            offlineLabel = _offlineLabel;
 
 - (id)initWithFrame:(CGRect)frame {
   self = [super initWithFrame:frame];
@@ -114,7 +125,7 @@ static const NSInteger kRecentCallLimit = 20;
   CGSize _samplerSize;
   CGSize _themeImageSize;
   BOOL _samplerBuilding;
-  NSArray *_doorPeers;
+  NSArray *_doorTileInfos;
   NSArray *_recentRows;
   NSInteger _unreadMissed;
   NSInteger _tzOffsetMinutes;
@@ -132,6 +143,7 @@ static const NSInteger kRecentCallLimit = 20;
   NSTimer *_snapshotTimer;
   NSTimer *_peersTimer;
   NSInteger _snapshotGeneration;
+  NSInteger _snapshotTick;
 
   NSInteger _secretTaps;
   NSDate *_secretFirst;
@@ -143,7 +155,7 @@ static const NSInteger kRecentCallLimit = 20;
   UIImageView *_themeBg;
   UILabel *_clockLabel;
   UILabel *_dateLabel;
-  DBPillLabel *_membershipPill;
+  NSArray *_fleetCounters;   // Three DBFleetCounter, left to right.
   UIButton *_membershipButton;
   DBPillLabel *_missedBadge;
   UIButton *_missedButton;
@@ -182,7 +194,7 @@ static const NSInteger kRecentCallLimit = 20;
     _boot = router.boot;
     _texts = router.texts;
     _audio = [[DBSiren alloc] init];
-    _doorPeers = [NSArray array];
+    _doorTileInfos = [NSArray array];
     _recentRows = [NSArray array];
     _doorTiles = [[NSMutableArray alloc] init];
     _recentLabels = [[NSMutableArray alloc] init];
@@ -230,10 +242,19 @@ static const NSInteger kRecentCallLimit = 20;
   _dateLabel.font = [UIFont systemFontOfSize:28];
   [self addSubview:_dateLabel];
 
-  _membershipPill = [[DBPillLabel alloc] initWithFrame:CGRectZero];
-  _membershipPill.font = [UIFont systemFontOfSize:19];
-  _membershipPill.numberOfLines = 2;
-  [self addSubview:_membershipPill];
+  // Three compact counters instead of one sentence: at a glance the owner wants
+  // how many devices there are and how many of each kind are answering.
+  NSMutableArray *counters = [NSMutableArray array];
+  DBFleetGlyph glyphs[3] = { DBFleetGlyphCluster, DBFleetGlyphDoorStation,
+                             DBFleetGlyphIndoorPanel };
+  for (NSUInteger i = 0; i < 3; i++) {
+    DBFleetCounter *counter = [[DBFleetCounter alloc] initWithFrame:CGRectZero];
+    counter.glyph = glyphs[i];
+    counter.userInteractionEnabled = NO;
+    [self addSubview:counter];
+    [counters addObject:counter];
+  }
+  _fleetCounters = counters;
   _membershipButton = [UIButton buttonWithType:UIButtonTypeCustom];
   [_membershipButton addTarget:self action:@selector(onMembership)
               forControlEvents:UIControlEventTouchUpInside];
@@ -498,7 +519,8 @@ static const NSInteger kRecentCallLimit = 20;
   if (status) {
     _status = status;
     _nodeId = [DBConfigUtil str:status path:@"node.id"] ?: @"";
-    _doorPeers = [DBConfigUtil doorPeers:status];
+    _doorTileInfos = [DBDoorTileModel tilesFromStatus:status config:_cfg boot:_boot];
+    [self updateFleetCounters];
     NSDictionary *display = [status objectForKey:@"display"];
     if ([display isKindOfClass:[NSDictionary class]]) {
       _display = display;
@@ -530,20 +552,7 @@ static const NSInteger kRecentCallLimit = 20;
 - (void)applyPairingSnapshot:(NSDictionary *)pairing {
   NSString *state = [DBPairingModel stateFromPairingInfo:pairing];
   if (![state isEqualToString:DBPairingStateUnknown]) _pairingState = state;
-  NSInteger members = [DBConfigUtil intVal:pairing path:@"home.member_count" def:0];
-  NSInteger connected = [DBConfigUtil intVal:pairing path:@"home.connected_count" def:0];
-  BOOL founder = [DBConfigUtil boolVal:pairing path:@"is_founder" def:NO];
   BOOL ready = [_pairingState isEqualToString:@"ready"];
-  if (ready && members > 0) {
-    NSMutableArray *parts = [NSMutableArray array];
-    [parts addObject:[_texts t:@"pair.membership",
-                          [NSString stringWithFormat:@"%ld", (long)members], nil]];
-    [parts addObject:[_texts t:@"pair.membership_connected",
-                          [NSString stringWithFormat:@"%ld", (long)connected], nil]];
-    if (founder) [parts addObject:[_texts ts:@"pair.created_badge"]];
-    // One separator everywhere, as the other shells use.
-    _membershipPill.text = [parts componentsJoinedByString:@" · "];
-  }
   BOOL showBanner = !ready && ![_pairingState isEqualToString:DBPairingStateUnknown];
   [_pairBanner setTitle:[_texts ts:@"pair.not_set_up_banner"] forState:UIControlStateNormal];
   _pairBanner.hidden = !showBanner;
@@ -580,8 +589,10 @@ static const NSInteger kRecentCallLimit = 20;
   [_palette setBackgroundSampler:_sampler];
   [self applyRegionInk];
 
-  _membershipPill.backgroundColor = _palette.elevated;
-  _membershipPill.textColor = _palette.ink;
+  for (DBFleetCounter *counter in _fleetCounters) {
+    counter.fill = _palette.elevated;
+    counter.ink = _palette.ink;
+  }
   _missedBadge.backgroundColor = _palette.danger;
   _missedBadge.textColor = _palette.dangerInk;
   _adminButton.backgroundColor = _palette.elevated;
@@ -727,55 +738,82 @@ static const NSInteger kRecentCallLimit = 20;
 // decode, which is the hitch the owner sees on the dashboard. Tiles are now
 // created once per door and updated in place; only a membership change touches
 // the view tree.
+- (void)updateFleetCounters {
+  if ([_fleetCounters count] != 3) return;
+  DBFleetCounts *counts = [DBFleetCounts countsFromStatus:_status config:_cfg];
+  NSString *devices = [NSString stringWithFormat:@"%ld", (long)counts.devices];
+  NSString *doors = [NSString stringWithFormat:@"%ld/%ld", (long)counts.doorStationsOnline,
+                     (long)counts.doorStations];
+  NSString *panels = [NSString stringWithFormat:@"%ld/%ld", (long)counts.panelsOnline,
+                      (long)counts.panels];
+  DBFleetCounter *first = [_fleetCounters objectAtIndex:0];
+  DBFleetCounter *second = [_fleetCounters objectAtIndex:1];
+  DBFleetCounter *third = [_fleetCounters objectAtIndex:2];
+  first.value = devices;
+  second.value = doors;
+  third.value = panels;
+  // The glyphs carry the meaning on screen; a screen reader gets the sentence.
+  first.accessibilityLabel = [_texts t:@"dash.count_devices", devices, nil];
+  second.accessibilityLabel = [_texts t:@"dash.count_door_stations",
+      [NSString stringWithFormat:@"%ld", (long)counts.doorStationsOnline],
+      [NSString stringWithFormat:@"%ld", (long)counts.doorStations], nil];
+  third.accessibilityLabel = [_texts t:@"dash.count_panels",
+      [NSString stringWithFormat:@"%ld", (long)counts.panelsOnline],
+      [NSString stringWithFormat:@"%ld", (long)counts.panels], nil];
+  [self setNeedsLayout];
+}
+
 - (void)rebuildDoorTiles {
   NSMutableArray *live = [NSMutableArray array];
   NSMutableArray *keys = [NSMutableArray array];
-  for (NSDictionary *peer in _doorPeers) {
-    NSString *key = [DBConfigUtil evStr:peer key:@"id"];
-    if ([key length] == 0) key = [DBConfigUtil evStr:peer key:@"door"];
-    [keys addObject:key ?: @""];
-  }
+  for (DBDoorTileInfo *info in _doorTileInfos) [keys addObject:info.doorId];
   // Drop tiles whose door left the cluster.
   for (NSInteger i = (NSInteger)[_doorTiles count] - 1; i >= 0; i--) {
     DBDoorTile *tile = [_doorTiles objectAtIndex:(NSUInteger)i];
-    if (![keys containsObject:tile.peerKey ?: @""]) {
+    if (![keys containsObject:tile.doorId ?: @""]) {
       [tile removeFromSuperview];
       [_doorTiles removeObjectAtIndex:(NSUInteger)i];
     }
   }
   long long nowMs = (long long)([[NSDate date] timeIntervalSince1970] * 1000.0);
   NSInteger index = 0;
-  for (NSDictionary *peer in _doorPeers) {
-    NSString *key = [keys objectAtIndex:(NSUInteger)index];
+  for (DBDoorTileInfo *info in _doorTileInfos) {
     DBDoorTile *tile = nil;
     for (DBDoorTile *candidate in _doorTiles) {
-      if ([(candidate.peerKey ?: @"") isEqualToString:key]) {
+      if ([(candidate.doorId ?: @"") isEqualToString:info.doorId]) {
         tile = candidate;
         break;
       }
     }
     if (tile == nil) {
       tile = [[DBDoorTile alloc] initWithFrame:CGRectZero];
-      tile.peerKey = key;
+      tile.doorId = info.doorId;
       [tile addTarget:self action:@selector(onDoorTile:)
      forControlEvents:UIControlEventTouchUpInside];
       [self addSubview:tile];
       [_doorTiles addObject:tile];
     }
     [live addObject:tile];
-    tile.peer = peer;
-    tile.doorId = [DBConfigUtil evStr:peer key:@"door"];
+    tile.peer = info.peer;
+    tile.snapshotURL = info.snapshotURL;
+    tile.online = info.online;
     tile.tag = index++;
     tile.backgroundColor = _palette.elevated;
-    NSString *name = [DBConfigUtil evStr:peer key:@"door_label"];
-    if ([name length] == 0) name = [DBConfigUtil evStr:peer key:@"name"];
-    if ([name length] == 0) name = tile.doorId;
+    NSDictionary *doorEntry = [DBConfigUtil dig:_cfg
+        path:[NSString stringWithFormat:@"doors.%@", info.doorId]];
+    NSString *name = [DBConfigUtil labelOf:doorEntry lang:_boot.uiLang fallback:@""];
+    if ([name length] == 0) name = info.label;
+    if ([name length] == 0) name = [DBConfigUtil evStr:info.peer key:@"name"];
+    if ([name length] == 0) name = info.doorId;
     tile.caption.text = name;
     tile.caption.backgroundColor = [UIColor colorWithWhite:0 alpha:0.55];
     tile.caption.textColor = [UIColor whiteColor];
     tile.offlineLabel.textColor = _palette.mutedInk;
     tile.offlineLabel.text = [_texts ts:@"dash.tile_offline"];
-    tile.offlineLabel.hidden = (tile.still.image != nil);
+    // The badge reports the door station, never the state of the still cache.
+    // A tile whose first JPEG has not landed yet is online with a black frame.
+    tile.offlineLabel.hidden = info.online;
+    if (!info.online) tile.still.image = nil;
     NSDictionary *notice = [DBNoticeModel effectiveNoticeForDoor:tile.doorId config:_cfg
                                                             nowMs:nowMs];
     [tile.noticeChip applyPalette:_palette];
@@ -818,35 +856,42 @@ static const NSInteger kRecentCallLimit = 20;
 #pragma mark - door stills
 
 - (void)refreshSnapshots {
-  if (_safeMode || self.superview == nil) return;
+  if (self.superview == nil) return;
+  _snapshotTick++;
+  if (_safeMode && (_snapshotTick % kSafeModeSnapshotEveryNTicks) != 0) return;
+  CGFloat maxSide = _safeMode ? kSafeModeSnapshotMaxSide : kSnapshotMaxSide;
   NSInteger generation = ++_snapshotGeneration;
   for (DBDoorTile *tile in _doorTiles) {
-    NSString *host = [DBConfigUtil peerHost:tile.peer];
-    if ([host length] == 0) continue;
-    NSString *urlString = [NSString stringWithFormat:@"http://%@:47180/snapshot.jpg",
-                           [DBConfigUtil urlHost:host]];
-    NSURL *url = [NSURL URLWithString:urlString];
+    // The still comes off the serving peer's own media origin, resolved once in
+    // DBMediaSource; the dashboard never guesses a host or a port of its own.
+    if (!tile.online || [tile.snapshotURL length] == 0) continue;
+    NSURL *url = [NSURL URLWithString:tile.snapshotURL];
     if (url == nil) continue;
     __weak DBDoorTile *weakTile = tile;
     __weak DBHomeScreen *weakSelf = self;
-    // One still per door every five seconds, fetched and downscaled entirely
-    // off the main thread: a full-size JPEG decode on the main run loop of an
-    // iPad 1 is visible as a dropped clock second.
+    // One still per door every five seconds (fifteen in safe mode), fetched and
+    // downscaled entirely off the main thread: a full-size JPEG decode on the
+    // main run loop of an iPad 1 is visible as a dropped clock second.
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_LOW, 0), ^{
       NSURLRequest *request = [NSURLRequest requestWithURL:url
                                               cachePolicy:NSURLRequestReloadIgnoringLocalCacheData
                                           timeoutInterval:3.0];
       NSURLResponse *response = nil;
+      NSError *error = nil;
       NSData *data = [NSURLConnection sendSynchronousRequest:request returningResponse:&response
-                                                       error:NULL];
+                                                       error:&error];
       UIImage *image = data ? [UIImage imageWithData:data] : nil;
-      UIImage *thumbnail = [DBHomeScreen thumbnailForImage:image maxSide:320];
+      UIImage *thumbnail = [DBHomeScreen thumbnailForImage:image maxSide:maxSide];
+      // A door that is online but never shows a picture is otherwise silent.
+      if (thumbnail == nil) {
+        NSLog(@"[doorbell] still fetch failed for %@: %lu bytes, image=%d, %@", url,
+              (unsigned long)[data length], image != nil, error ?: (id)@"no error");
+      }
       dispatch_async(dispatch_get_main_queue(), ^{
         DBHomeScreen *screen = weakSelf;
         DBDoorTile *strongTile = weakTile;
         if (!screen || !strongTile || screen->_snapshotGeneration != generation) return;
-        if (thumbnail != nil) strongTile.still.image = thumbnail;
-        strongTile.offlineLabel.hidden = (strongTile.still.image != nil);
+        if (thumbnail != nil && strongTile.online) strongTile.still.image = thumbnail;
       });
     });
   }
@@ -1195,15 +1240,21 @@ static const NSInteger kRecentCallLimit = 20;
     rightX -= missedWidth + 10;
   }
 
-  // Two lines rather than an ellipsis: the membership line is the only place
-  // that says how many devices are connected.
-  CGFloat membershipWidth = MIN(size.width * 0.52, size.width - pad * 2);
-  CGSize membershipFit = [_membershipPill sizeThatFits:CGSizeMake(membershipWidth, 80)];
-  CGFloat membershipHeight = MAX(34, MIN(70, membershipFit.height));
-  _membershipPill.frame = CGRectMake(size.width - pad - membershipWidth,
-                                     CGRectGetMaxY(_adminButton.frame) + 8,
-                                     membershipWidth, membershipHeight);
-  _membershipButton.frame = _membershipPill.frame;
+  // One row of counters, right aligned under the admin button. Each sizes to
+  // its own glyph and number, so a three-digit fleet does not clip.
+  CGFloat counterHeight = 34;
+  CGFloat counterTop = CGRectGetMaxY(_adminButton.frame) + 8;
+  CGFloat counterGap = 8;
+  CGFloat counterRight = size.width - pad;
+  for (NSInteger i = (NSInteger)[_fleetCounters count] - 1; i >= 0; i--) {
+    DBFleetCounter *counter = [_fleetCounters objectAtIndex:(NSUInteger)i];
+    CGFloat width = [counter widthThatFits];
+    counter.frame = CGRectMake(counterRight - width, counterTop, width, counterHeight);
+    counterRight -= width + counterGap;
+  }
+  CGFloat countersLeft = counterRight + counterGap;
+  _membershipButton.frame = CGRectMake(countersLeft, counterTop,
+                                       MAX(0, size.width - pad - countersLeft), counterHeight);
 
   CGFloat bannerHeight = 0;
   if (_pairBanner.hidden) {

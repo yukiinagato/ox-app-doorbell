@@ -110,6 +110,24 @@ NSString *DBHexFromColor(UIColor *color);
 
 @end
 
+// The three cluster counters in the dashboard header: total devices, door
+// stations online/total, indoor panels online/total. Each is a glyph drawn in
+// code -- no image asset, no emoji, nothing an iOS 5 font may lack -- followed
+// by its number.
+typedef enum {
+  DBFleetGlyphCluster = 0,
+  DBFleetGlyphDoorStation,
+  DBFleetGlyphIndoorPanel,
+} DBFleetGlyph;
+
+@interface DBFleetCounter : UIView
+@property(nonatomic, assign) DBFleetGlyph glyph;
+@property(nonatomic, copy) NSString *value;
+@property(nonatomic, strong) UIColor *ink;
+@property(nonatomic, strong) UIColor *fill;
+- (CGFloat)widthThatFits;
+@end
+
 // Coloured background text always gets 6/12 padding and a radius (spec §0.7).
 @interface DBPillLabel : UILabel
 @property(nonatomic, assign) UIEdgeInsets contentInsets;
