@@ -422,6 +422,44 @@ static void TestPerRegionBackgroundSampling(void) {
 
   Require(![DBUiTheme needsInkShadowForInk:wallpaperInk background:@"#BBBBB4"],
           @"a legible pair takes no shadow");
+
+  // Device-verified on Android and now the fleet rule: the shadow is gated on
+  // the darkest and lightest patch of the region's sample, not on its average.
+  // A uniform wallpaper is one patch, so nothing changes there.
+  Require(![DBUiTheme needsInkShadowForInk:wallpaperInk background:@"#BBBBB4"
+                                   darkest:@"#BBBBB4" lightest:@"#BBBBB4"],
+          @"a uniform midtone region takes the dark ink and no shadow");
+
+  // A hint line crossing a pale wall and a dark jacket: the average reads well
+  // against the chosen ink and the line still vanishes over the jacket.
+  NSString *paleWall = @"#EDEDED";
+  NSString *darkJacket = @"#23201C";
+  DBRgb mixed;
+  mixed.r = (0xED + 0x23) / 510.0;
+  mixed.g = (0xED + 0x20) / 510.0;
+  mixed.b = (0xED + 0x1C) / 510.0;
+  NSString *twoToneAverage = [DBUiTheme hexFromRgb:mixed];
+  NSString *twoToneInk =
+      [DBUiTheme inkHexForSampledLuminance:[DBUiTheme relativeLuminance:mixed]];
+  Require([twoToneInk isEqualToString:[DBUiTheme darkInkHex]],
+          @"the average still picks the ink, and here that is the dark one");
+  Require(![DBUiTheme needsInkShadowForInk:twoToneInk background:twoToneAverage],
+          @"which reads fine against the average, so the old test passed");
+  Require([DBUiTheme contrastBetweenHex:twoToneInk andHex:darkJacket] < 4.5,
+          @"but not against the dark patch");
+  Require([DBUiTheme needsInkShadowForInk:twoToneInk background:twoToneAverage
+                                  darkest:darkJacket lightest:paleWall],
+          @"so a two-tone region takes the opposite-ink shadow");
+
+  // A light ink over a region whose lightest patch is nearly white is the
+  // mirror image of the same defect.
+  Require([DBUiTheme needsInkShadowForInk:[DBUiTheme lightInkHex] background:@"#3A3A3A"
+                                  darkest:@"#101010" lightest:@"#E8E8E8"],
+          @"and so does the light-ink mirror of it");
+  // Absent extremes fall back to the average alone, for a region never sampled.
+  Require(![DBUiTheme needsInkShadowForInk:wallpaperInk background:@"#BBBBB4"
+                                   darkest:nil lightest:nil],
+          @"a region with no sample is judged on its average alone");
   // The only case that does is a background sitting at the crossover, where
   // even the better ink is short of AA: #767676 measures Y = 0.18 and gives
   // about 4.1:1 either way.
