@@ -90,6 +90,9 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
     /** Resolved appearance for this screen; recomputed on every config or time change. */
     private var palette: Palette = Palette.DARK
 
+    private var lastClockText = ""
+    private var lastClockDate = ""
+
     /** Appearance and automatic theme as core published them; null on an older core. */
     private var coreDisplay: CoreDisplay = CoreDisplay(null, null)
 
@@ -489,7 +492,14 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
             return
         }
         val now = clusterClock.now()
-        clockText.text = now.clockText()
+        // Once a second, so only touch the views when the rendered value actually changed.
+        val clockValue = now.clockText()
+        if (clockValue != lastClockText) {
+            lastClockText = clockValue
+            clockText.text = clockValue
+        }
+        if (now.date == lastClockDate) return
+        lastClockDate = now.date
         val parts = now.date.split("-")
         dateText.text = if (parts.size != 3) now.date else String.format(
             Locale.US, "%s年%s月%s日 (%s)",
@@ -512,6 +522,10 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
         )
         dashboardHost.visibility = View.VISIBLE
         idleView.visibility = View.GONE
+        // The hidden 7-tap corner is the door station's only way into settings. An indoor panel
+        // has a visible 管理 button, and the invisible 200 dp target sat on top of the dashboard's
+        // header, swallowing taps meant for 管理 and すべて見る.
+        findViewById<View>(R.id.secret_corner).visibility = View.GONE
     }
 
     /**
@@ -539,7 +553,46 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
             notice != null, widthDp, heightDp,
         )
         applyFooterLayout(widthDp, heightDp)
+        scheduleGroupSpacing()
         scheduleRegionInk()
+    }
+
+    /**
+     * Breathing room between the visitor screen's groups, measured rather than assumed: the gap
+     * comes out of whatever vertical slack is actually left once the groups have been laid out, so
+     * a short screen keeps the tight layout it needs.
+     */
+    private fun scheduleGroupSpacing() {
+        if (dashboard != null) return
+        visitorSplit.post {
+            if (isFinishing || dashboard != null) return@post
+            for (column in arrayOf(visitorColumnA, visitorColumnB)) {
+                if (column.visibility != View.VISIBLE || column.childCount < 2) continue
+                var content = 0
+                for (index in 0 until column.childCount) {
+                    val child = column.getChildAt(index)
+                    if (child.visibility == View.GONE) continue
+                    content += child.height
+                }
+                val density = resources.displayMetrics.density
+                val gap = VisitorLayout.groupGapDp(
+                    (column.height / density).toInt(),
+                    (content / density).toInt(),
+                    column.childCount,
+                )
+                var changed = false
+                for (index in 1 until column.childCount) {
+                    val child = column.getChildAt(index)
+                    val params = child.layoutParams as? LinearLayout.LayoutParams ?: continue
+                    val margin = dp(gap)
+                    if (params.topMargin == margin) continue
+                    params.topMargin = margin
+                    child.layoutParams = params
+                    changed = true
+                }
+                if (changed) column.requestLayout()
+            }
+        }
     }
 
     /**
@@ -747,8 +800,9 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
 
     /** Reapply all labels after a visitor-language change. */
     private fun applyStrings() {
-        callButton.text =
-            texts.t("idle.call_button", R.string.idle_call_button, doorLabel(app.boot.door)).trim()
+        // Just the verb. A visitor has no use for the device or door identifier, and it made the
+        // button read "DOORBELL-ANDROID 呼出" on the Moto; the door name lives in the footer.
+        callButton.text = texts.t("door.call_action", R.string.door_call_action)
         touchHint.text = texts.t("door.hint_call", R.string.door_hint_call)
         purposeHint.text = texts.t("idle.choose_purpose", R.string.idle_choose_purpose)
         purposeAutoHint.text = texts.t("calling.title", R.string.calling_title)
@@ -1007,6 +1061,21 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
 
     // ---------- Call state transitions ----------
 
+    /**
+     * True on an indoor panel, where the home screen is the dashboard and the door-station call
+     * flow has no screen of its own. Without this the dashboard is built and then immediately
+     * covered by the visitor idle view, which is what put a door station's call button on an
+     * indoor panel.
+     */
+    private val showsDashboard: Boolean get() = dashboard != null
+
+    /** Put the dashboard back in front after any call-flow transition. */
+    private fun restoreRoleHome() {
+        idleView.visibility = View.GONE
+        callingView.visibility = View.GONE
+        dashboardHost.visibility = View.VISIBLE
+    }
+
     private fun showIdle(hint: String? = null) {
         stopCallFeedback()
         choosingPurpose = false
@@ -1014,8 +1083,13 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
         callTitleOverride = null
         ui.removeCallbacks(callTimeout)
         pulse.clearAnimation()
-        callingView.visibility = View.GONE
         offlineView.visibility = View.GONE
+        if (showsDashboard) {
+            restoreRoleHome()
+            updateCallActionLabel()
+            return
+        }
+        callingView.visibility = View.GONE
         idleView.visibility = View.VISIBLE
         idleHeader.visibility = View.VISIBLE
         callSection.visibility = View.VISIBLE
@@ -1027,6 +1101,7 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
     }
 
     private fun showPurposeChooser() {
+        if (showsDashboard) return
         choosingPurpose = true
         idleView.visibility = View.VISIBLE
         callingView.visibility = View.GONE
@@ -1046,6 +1121,7 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
 
     /** Show ringing while preserving an explicit purpose confirmation title. */
     private fun showCalling(title: String? = null) {
+        if (showsDashboard) return
         choosingPurpose = false
         ui.removeCallbacks(purposeTimeout)
         if (title != null) callTitleOverride = title
@@ -1063,6 +1139,7 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
     }
 
     private fun showEstablished() {
+        if (showsDashboard) return
         choosingPurpose = false
         ui.removeCallbacks(purposeTimeout)
         ui.removeCallbacks(callTimeout)

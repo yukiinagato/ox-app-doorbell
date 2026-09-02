@@ -366,6 +366,7 @@
 "day.tue" = "Tue";
 "day.wed" = "Wed";
 "degraded.notified" = "Notified — please wait";
+"door.call_action" = "Call";
 "door.hint_call" = "Press the button to call the residents";
 "door.lang_switch" = "Language";
 "door.notice_for_this" = "Announce at this door";
@@ -578,10 +579,13 @@
 "pair.invite_title" = "Cluster invitation";
 "pair.join_required" = "Enter the address and the Pairing PIN";
 "pair.join_submit" = "Join";
+"pair.join_this_cluster" = "Join this cluster";
 "pair.join_with_code" = "Join with a Pairing PIN";
 "pair.joined" = "Joined the Cluster";
 "pair.joining" = "Joining the Cluster…";
 "pair.later" = "Set up later";
+"pair.link_from" = "Invitation to %@";
+"pair.link_leave_current" = "This device is already in another cluster. Joining erases all of its current settings.";
 "pair.membership" = "Cluster · %@ devices";
 "pair.membership_connected" = "%@ connected";
 "pair.mint_unsupported" = "This device's core can't issue a Pairing PIN yet. Update it";
@@ -602,6 +606,7 @@
 "pair.revoked" = "This device was removed from the Cluster";
 "pair.role_door_station" = "Door station";
 "pair.role_indoor_panel" = "Indoor panel";
+"pair.scan_button" = "Scan QR";
 "pair.scan_camera_denied" = "Camera access is not allowed. Grant camera permission in the device settings.";
 "pair.scan_cancel" = "Cancel";
 "pair.scan_denied" = "Couldn't open the camera. Check the browser's camera permission";

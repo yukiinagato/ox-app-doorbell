@@ -341,6 +341,13 @@ class DoorbellCore(context: Context) {
         if (handle != 0L) nativeQrScanStop(handle)
     }
 
+    /**
+     * Parse a doorbell:// pairing link with core's own parser. Null when this core has no such
+     * export, and the shell then uses its own parse, which is the same grammar.
+     */
+    fun parsePairUri(uri: String): JSONObject? =
+        if (uri.isEmpty()) null else parse(nativeParsePairUriJson(uri))
+
     /** Encode QR data as [side length, row-major module values...]. */
     fun qrEncode(text: String): IntArray? = if (text.isEmpty()) null else nativeQrEncode(text)
 
@@ -513,6 +520,7 @@ class DoorbellCore(context: Context) {
     private external fun nativeQrScanStart(handle: Long)
     private external fun nativeQrScanStop(handle: Long)
     private external fun nativeQrEncode(text: String): IntArray?
+    private external fun nativeParsePairUriJson(uri: String): String?
     private external fun nativeFoundCluster(handle: Long): Boolean
 
     companion object {

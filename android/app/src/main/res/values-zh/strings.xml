@@ -371,6 +371,7 @@
     <string name="day_tue">二</string>
     <string name="day_wed">三</string>
     <string name="degraded_notified">已通知，请稍候</string>
+    <string name="door_call_action">呼叫</string>
     <string name="door_hint_call">按下按钮即可呼叫住户</string>
     <string name="door_lang_switch">语言</string>
     <string name="door_notice_for_this">在此门口机发布公告</string>
@@ -583,10 +584,13 @@
     <string name="pair_invite_title">集群邀请</string>
     <string name="pair_join_required">请输入连接地址和配对 PIN</string>
     <string name="pair_join_submit">加入</string>
+    <string name="pair_join_this_cluster">加入此集群</string>
     <string name="pair_join_with_code">使用配对 PIN 加入</string>
     <string name="pair_joined">已加入集群</string>
     <string name="pair_joining">正在加入集群…</string>
     <string name="pair_later">稍后设置</string>
+    <string name="pair_link_from">加入 %1$s 的邀请</string>
+    <string name="pair_link_leave_current">此设备已加入其他集群。加入将清除其当前的全部设置。</string>
     <string name="pair_membership">集群 · %1$s 台</string>
     <string name="pair_membership_connected">%1$s 台已连接</string>
     <string name="pair_mint_unsupported">此设备的内核尚不支持生成配对 PIN，请更新</string>
@@ -607,6 +611,7 @@
     <string name="pair_revoked">此设备已从集群中移除</string>
     <string name="pair_role_door_station">门口机</string>
     <string name="pair_role_indoor_panel">室内机</string>
+    <string name="pair_scan_button">扫描二维码</string>
     <string name="pair_scan_camera_denied">未获得摄像头权限。请在设备设置中允许使用摄像头。</string>
     <string name="pair_scan_cancel">取消</string>
     <string name="pair_scan_denied">无法打开摄像头。请检查浏览器的摄像头权限</string>

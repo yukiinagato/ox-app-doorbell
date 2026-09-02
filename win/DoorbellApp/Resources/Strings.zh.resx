@@ -373,6 +373,7 @@
   <data name="day_tue" xml:space="preserve"><value>二</value></data>
   <data name="day_wed" xml:space="preserve"><value>三</value></data>
   <data name="degraded_notified" xml:space="preserve"><value>已通知，请稍候</value></data>
+  <data name="door_call_action" xml:space="preserve"><value>呼叫</value></data>
   <data name="door_hint_call" xml:space="preserve"><value>按下按钮即可呼叫住户</value></data>
   <data name="door_lang_switch" xml:space="preserve"><value>语言</value></data>
   <data name="door_notice_for_this" xml:space="preserve"><value>在此门口机发布公告</value></data>
@@ -585,10 +586,13 @@
   <data name="pair_invite_title" xml:space="preserve"><value>集群邀请</value></data>
   <data name="pair_join_required" xml:space="preserve"><value>请输入连接地址和配对 PIN</value></data>
   <data name="pair_join_submit" xml:space="preserve"><value>加入</value></data>
+  <data name="pair_join_this_cluster" xml:space="preserve"><value>加入此集群</value></data>
   <data name="pair_join_with_code" xml:space="preserve"><value>使用配对 PIN 加入</value></data>
   <data name="pair_joined" xml:space="preserve"><value>已加入集群</value></data>
   <data name="pair_joining" xml:space="preserve"><value>正在加入集群…</value></data>
   <data name="pair_later" xml:space="preserve"><value>稍后设置</value></data>
+  <data name="pair_link_from" xml:space="preserve"><value>加入 {0} 的邀请</value></data>
+  <data name="pair_link_leave_current" xml:space="preserve"><value>此设备已加入其他集群。加入将清除其当前的全部设置。</value></data>
   <data name="pair_membership" xml:space="preserve"><value>集群 · {0} 台</value></data>
   <data name="pair_membership_connected" xml:space="preserve"><value>{0} 台已连接</value></data>
   <data name="pair_mint_unsupported" xml:space="preserve"><value>此设备的内核尚不支持生成配对 PIN，请更新</value></data>
@@ -609,6 +613,7 @@
   <data name="pair_revoked" xml:space="preserve"><value>此设备已从集群中移除</value></data>
   <data name="pair_role_door_station" xml:space="preserve"><value>门口机</value></data>
   <data name="pair_role_indoor_panel" xml:space="preserve"><value>室内机</value></data>
+  <data name="pair_scan_button" xml:space="preserve"><value>扫描二维码</value></data>
   <data name="pair_scan_camera_denied" xml:space="preserve"><value>未获得摄像头权限。请在设备设置中允许使用摄像头。</value></data>
   <data name="pair_scan_cancel" xml:space="preserve"><value>取消</value></data>
   <data name="pair_scan_denied" xml:space="preserve"><value>无法打开摄像头。请检查浏览器的摄像头权限</value></data>

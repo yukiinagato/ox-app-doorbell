@@ -8,6 +8,7 @@ package jp.ox.doorbell
 import android.app.Activity
 import android.app.AlertDialog
 import android.content.Intent
+import android.os.Build
 import android.graphics.Color
 import android.os.Bundle
 import android.os.Handler
@@ -52,6 +53,7 @@ class PairingActivity : Activity(), DoorbellCore.Listener {
     private lateinit var hostField: EditText
     private lateinit var pinDisplay: TextView
     private lateinit var joinSubmit: Button
+    private lateinit var scanButton: Button
     private lateinit var joinError: TextView
 
     private lateinit var createdCard: LinearLayout
@@ -92,6 +94,7 @@ class PairingActivity : Activity(), DoorbellCore.Listener {
         setContentView(buildUi())
         applyStrings()
         refresh()
+        consumePairLinkIntent(intent)
     }
 
     override fun onResume() {
@@ -180,7 +183,8 @@ class PairingActivity : Activity(), DoorbellCore.Listener {
         identityView.text = listOf(name, model, addr).filter { it.isNotEmpty() }
             .joinToString("\n")
 
-        val qr = p?.optString("pair_qr").orEmpty()
+        // Core's doorbell:// link when it publishes one, else the legacy payload.
+        val qr = PairUri.qrPayload(p)
         if (qr.isNotEmpty() && qr != lastQr) {
             val bmp = PairingUi.qrBitmap(app.core, qr, QR_PX)
             if (bmp != null) {
@@ -366,6 +370,117 @@ class PairingActivity : Activity(), DoorbellCore.Listener {
         target.visibility = if (message.isEmpty()) View.GONE else View.VISIBLE
     }
 
+    private fun hasCamera(): Boolean =
+        packageManager.hasSystemFeature(android.content.pm.PackageManager.FEATURE_CAMERA) ||
+            packageManager.hasSystemFeature(
+                android.content.pm.PackageManager.FEATURE_CAMERA_FRONT,
+            )
+
+    /** The existing core-backed scanner; its decoded text comes back through qr_scanned. */
+    private fun openScanner() {
+        if (Build.VERSION.SDK_INT >= 23 &&
+            checkSelfPermission(android.Manifest.permission.CAMERA) !=
+            android.content.pm.PackageManager.PERMISSION_GRANTED
+        ) {
+            requestPermissions(arrayOf(android.Manifest.permission.CAMERA), CAMERA_REQUEST)
+            return
+        }
+        startActivityForResult(Intent(this, QrScanActivity::class.java), SCAN_REQUEST)
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != SCAN_REQUEST || resultCode != RESULT_OK) return
+        handlePairLink(data?.getStringExtra(QrScanActivity.EXTRA_SCANNED_TEXT))
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray,
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode != CAMERA_REQUEST) return
+        if (grantResults.isNotEmpty() &&
+            grantResults[0] == android.content.pm.PackageManager.PERMISSION_GRANTED
+        ) startActivityForResult(Intent(this, QrScanActivity::class.java), SCAN_REQUEST)
+        else showInlineError(
+            texts.t("pair.scan_camera_denied", R.string.pair_scan_camera_denied),
+        )
+    }
+
+    override fun onNewIntent(intent: Intent?) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        consumePairLinkIntent(intent)
+    }
+
+    /** A doorbell:// link from the launcher, another app, or a QR read by any camera app. */
+    private fun consumePairLinkIntent(intent: Intent?) {
+        val data = intent?.data ?: return
+        if (!PairUri.looksLikePairLink(data.toString())) return
+        intent.data = null
+        handlePairLink(data.toString())
+    }
+
+    // ---------- doorbell:// links ----------
+
+    /** A link that arrived from the launcher, another app, or the in-app scanner. */
+    private fun handlePairLink(value: String?) {
+        val nowMs = System.currentTimeMillis()
+        // Core's parser when it exports one, so both sides agree on what a link means.
+        val result = PairUri.fromCore(app.core.parsePairUri(value.orEmpty()), nowMs)
+            ?: PairUri.parse(value, nowMs)
+        if (result is PairUriResult.Invalid) {
+            showInlineError(
+                texts.t(
+                    PairLinkPolicy.messageKey(result.error),
+                    PairingModel.errorResource(errorCodeFor(result.error)),
+                ),
+            )
+            return
+        }
+        val invite = (result as PairUriResult.Ok).invite
+        when (PairLinkPolicy.actionFor(result, app.pairingReady())) {
+            PairLinkAction.REJECT -> return
+            PairLinkAction.CONFIRM_LEAVE_CURRENT -> AlertDialog.Builder(this)
+                .setTitle(texts.t("pair.join_this_cluster", R.string.pair_join_this_cluster))
+                .setMessage(
+                    texts.t("pair.link_leave_current", R.string.pair_link_leave_current),
+                )
+                .setPositiveButton(
+                    texts.t("pair.join_this_cluster", R.string.pair_join_this_cluster),
+                ) { _, _ -> confirmPairLink(invite) }
+                .setNegativeButton(texts.t("admin.cancel", R.string.admin_cancel), null)
+                .show()
+            PairLinkAction.CONFIRM -> confirmPairLink(invite)
+        }
+    }
+
+    /** Pre-fill the join card and leave one confirm button for the operator to press. */
+    private fun confirmPairLink(invite: PairInvite) {
+        if (joinCard.visibility != View.VISIBLE) toggleJoinCard()
+        hostField.setText(invite.host)
+        pin = invite.pin
+        renderPin()
+        joinError.visibility = View.GONE
+        if (invite.cluster.isNotEmpty())
+            statusView.text =
+                texts.t("pair.link_from", R.string.pair_link_from, invite.cluster)
+        // One button to press: the confirm on the join card, relabelled for the invitation.
+        joinSubmit.text =
+            texts.t("pair.join_this_cluster", R.string.pair_join_this_cluster)
+        joinSubmit.isEnabled = !joinInFlight && pin.length == PIN_LENGTH
+        joinSubmit.requestFocus()
+    }
+
+    private fun errorCodeFor(error: PairUriError): String = when (error) {
+        PairUriError.EXPIRED -> "expired"
+        PairUriError.BAD_PIN -> "bad_pin"
+        PairUriError.BAD_HOST -> "connect_failed"
+        PairUriError.NOT_A_PAIR_LINK -> "bad_qr"
+    }
+
     // ---------- actions ----------
 
     private fun onJoinSubmit() {
@@ -449,6 +564,9 @@ class PairingActivity : Activity(), DoorbellCore.Listener {
         createButton.text = texts.t("pair.create_home", R.string.pair_create_home)
         laterButton.text = texts.t("pair.later", R.string.pair_later)
         joinSubmit.text = texts.t("pair.join_with_code", R.string.pair_join_with_code)
+        scanButton.text = texts.t("pair.scan_button", R.string.pair_scan_button)
+        // No camera, no button; core does the decoding, so there is no library to be missing.
+        scanButton.visibility = if (hasCamera()) View.VISIBLE else View.GONE
         hostField.hint = texts.t("pair.address_label", R.string.pair_address_label) + " " +
             texts.t("pair.address_example", R.string.pair_address_example)
         createdTitle.text = texts.t("pair.created", R.string.pair_created) + " ✓"
@@ -523,6 +641,8 @@ class PairingActivity : Activity(), DoorbellCore.Listener {
         actionBlock = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         joinButton = PairingUi.button(this, "") { toggleJoinCard() }
         actionBlock.addView(joinButton, PairingUi.matchWrap())
+        scanButton = PairingUi.button(this, "") { openScanner() }
+        actionBlock.addView(scanButton, PairingUi.matchWrap().apply { topMargin = dp(8) })
         actionBlock.addView(PairingUi.spacer(this, 8))
         createButton = PairingUi.button(this, "") { onCreateCluster() }
         actionBlock.addView(createButton, PairingUi.matchWrap())
@@ -713,6 +833,8 @@ class PairingActivity : Activity(), DoorbellCore.Listener {
         private const val PIN_LENGTH = 6
         private const val QR_DP = 260
         private const val QR_PX = 720
+        private const val CAMERA_REQUEST = 41
+        private const val SCAN_REQUEST = 42
 
         /** Reopen onboarding from the main UI banner or the maintenance menu. */
         fun launch(activity: Activity) {

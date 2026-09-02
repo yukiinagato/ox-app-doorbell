@@ -1036,3 +1036,8 @@ settings.password_length: { ja: "パスワードは {min}〜{max} 文字にし�
 admin.password_set_prompt: { ja: "管理パスワードを設定", en: "Set the admin password", zh: "设置管理密码" }
 admin.password_too_short: { ja: "4 文字以上にしてください", en: "Use at least four characters", zh: "请至少输入四位" }
 idle.call: { ja: "呼出", en: "Call", zh: "呼叫" }
+door.call_action: { ja: "呼出", en: "Call", zh: "呼叫" }
+pair.join_this_cluster: { ja: "この集まりに参加", en: "Join this cluster", zh: "加入此集群" }
+pair.scan_button: { ja: "QR を読み取る", en: "Scan QR", zh: "扫描二维码" }
+pair.link_from: { ja: "{cluster} への招待", en: "Invitation to {cluster}", zh: "加入 {cluster} 的邀请" }
+pair.link_leave_current: { ja: "この端末は既に別の集まりに参加しています。参加すると現在の設定はすべて消去されます。", en: "This device is already in another cluster. Joining erases all of its current settings.", zh: "此设备已加入其他集群。加入将清除其当前的全部设置。" }

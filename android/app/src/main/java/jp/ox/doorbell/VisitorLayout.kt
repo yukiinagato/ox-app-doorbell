@@ -25,6 +25,25 @@ internal object VisitorLayout {
     fun callButtonHeightDp(widthDp: Int): Int = if (widthDp >= TABLET_MIN_DP) 96 else 72
 
     /**
+     * The gap between the visitor screen's groups (clock, announcement, language row, call
+     * button). Breathing room is added only out of genuine slack: [contentDp] is what the groups
+     * measured without any gaps, so a short screen keeps the tight layout rather than pushing the
+     * call button off the bottom.
+     */
+    fun groupGapDp(availableDp: Int, contentDp: Int, groups: Int): Int {
+        if (groups <= 1) return 0
+        val slack = availableDp - contentDp
+        if (slack <= 0) return 0
+        // Spend at most two thirds of the slack, so the layout never ends up flush to the edges.
+        val perGap = (slack * 2 / 3) / (groups - 1)
+        for (step in SPACING_SCALE) if (perGap >= step) return step
+        return 0
+    }
+
+    /** The 4 dp-based spacing scale, largest first. */
+    val SPACING_SCALE = intArrayOf(32, 24, 16, 12, 8, 4)
+
+    /**
      * Whether the footer stacks the version line above the SOS slider.
      *
      * They must never overlap or clip each other: the observed failure was the version line cut
