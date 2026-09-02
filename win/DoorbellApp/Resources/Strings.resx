@@ -479,12 +479,15 @@
   <data name="pair_nearby_title" xml:space="preserve"><value>近くの端末</value></data>
   <data name="pair_nearby_waiting_since" xml:space="preserve"><value>{0} 秒前から待機</value></data>
   <data name="pair_not_set_up_banner" xml:space="preserve"><value>クラスタ未設定 — タップして追加</value></data>
+  <data name="pair_panel_title" xml:space="preserve"><value>端末を追加</value></data>
   <data name="pair_persist_error_body" xml:space="preserve"><value>端末の安全な保存領域に書き込めませんでした。空き容量と権限を確認して再試行してください。</value></data>
   <data name="pair_persist_error_title" xml:space="preserve"><value>設定を保存できませんでした</value></data>
   <data name="pair_qr_caption" xml:space="preserve"><value>別の端末でこの QR を読み取ると追加できます</value></data>
   <data name="pair_retry" xml:space="preserve"><value>再試行</value></data>
   <data name="pair_revoked" xml:space="preserve"><value>この端末はクラスタから削除されました</value></data>
+  <data name="pair_scan_denied" xml:space="preserve"><value>カメラを使用できません。設定アプリでこのアプリにカメラの使用を許可してください</value></data>
   <data name="pair_scan_hint" xml:space="preserve"><value>新しい端末に表示された追加用 QR に合わせてください</value></data>
+  <data name="pair_scan_no_camera" xml:space="preserve"><value>この端末にはカメラがありません。相手の端末で追加用 QR を読み取ってください</value></data>
   <data name="pair_scan_qr" xml:space="preserve"><value>QR を読み取る</value></data>
   <data name="pair_searching" xml:space="preserve"><value>近くの端末を探しています…</value></data>
   <data name="pair_searching_hint" xml:space="preserve"><value>クラスタに参加済みの端末か管理画面で「追加」を押してください</value></data>

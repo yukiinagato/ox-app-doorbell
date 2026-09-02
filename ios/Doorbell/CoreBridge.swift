@@ -238,6 +238,40 @@ final class CoreBridge {
         if let c = core, !id.isEmpty { db_core_invite_device(c, id) }
     }
 
+    /// Invite an address/id/public-key triple straight from a scanned Add QR, bypassing discovery.
+    func inviteDirect(addr: String, id: String, pk: String) {
+        guard let c = core, !addr.isEmpty, !id.isEmpty, !pk.isEmpty else { return }
+        db_core_invite_direct(c, addr, id, pk)
+    }
+
+    /// Drop one pending device and ignore its announcements for a while.
+    func denyDevice(_ id: String) {
+        if let c = core, !id.isEmpty { db_core_deny_device(c, id) }
+    }
+
+    /// Re-run the secure-store write after state `persist_error`. Core emits `pairing_state`
+    /// either way, so the caller renders the event rather than this return value alone.
+    @discardableResult
+    func retryPairingPersistence() -> Bool {
+        guard let c = core else { return false }
+        return db_core_retry_pairing_persistence(c) != 0
+    }
+
+    /// Leave the cluster: Core zeroes the PSK, deletes the stored secret and reports `unpaired`.
+    func unpair() {
+        if let c = core { db_core_unpair(c) }
+    }
+
+    /// Encode a QR payload as `size` * `size` row-major modules where a non-zero byte is dark.
+    func qrEncode(_ text: String) -> (bytes: [UInt8], size: Int)? {
+        guard !text.isEmpty else { return nil }
+        var size: Int32 = 0
+        guard let raw = db_core_qr_encode(text, &size), size > 0 else { return nil }
+        defer { db_free(UnsafeMutableRawPointer(raw).assumingMemoryBound(to: CChar.self)) }
+        let count = Int(size) * Int(size)
+        return (Array(UnsafeBufferPointer(start: raw, count: count)), Int(size))
+    }
+
     func setCapabilities(_ value: [String: Any]) {
         withJson(value) { json in
             if let c = core { db_core_set_capabilities_json(c, json) }
@@ -421,6 +455,9 @@ enum Keychain {
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: key,
+            // The cluster key is device-bound: it must never ride iCloud Keychain to another
+            // device, which would silently clone cluster membership.
+            kSecAttrSynchronizable as String: false,
             kSecReturnData as String: true,
             kSecMatchLimit as String: kSecMatchLimitOne,
         ]
@@ -435,6 +472,7 @@ enum Keychain {
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: key,
+            kSecAttrSynchronizable as String: false,
         ]
         let data = value.data(using: .utf8) ?? Data()
         var add = base
@@ -442,8 +480,14 @@ enum Keychain {
         add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
         let status = SecItemAdd(add as CFDictionary, nil)
         if status == errSecDuplicateItem {
+            // An item written by an older build may carry a weaker accessibility class, so the
+            // update re-applies it instead of only replacing the bytes.
+            let attributes: [String: Any] = [
+                kSecValueData as String: data,
+                kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock,
+            ]
             return SecItemUpdate(base as CFDictionary,
-                                 [kSecValueData as String: data] as CFDictionary) == errSecSuccess
+                                 attributes as CFDictionary) == errSecSuccess
         }
         return status == errSecSuccess
     }
@@ -452,6 +496,7 @@ enum Keychain {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
+            kSecAttrSynchronizable as String: kSecAttrSynchronizableAny,
         ]
         let status = SecItemDelete(query as CFDictionary)
         return status == errSecSuccess || status == errSecItemNotFound

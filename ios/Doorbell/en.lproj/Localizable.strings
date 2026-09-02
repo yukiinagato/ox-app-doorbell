@@ -472,12 +472,15 @@
 "pair.nearby_title" = "Nearby devices";
 "pair.nearby_waiting_since" = "waiting %@s";
 "pair.not_set_up_banner" = "Not set up — tap to add";
+"pair.panel_title" = "Add a device";
 "pair.persist_error_body" = "This device couldn't write to its secure storage. Check free space and permissions, then try again.";
 "pair.persist_error_title" = "Couldn't save settings";
 "pair.qr_caption" = "Scan this QR from another device to add this one";
 "pair.retry" = "Retry";
 "pair.revoked" = "This device was removed from the Cluster";
+"pair.scan_denied" = "The camera is not available. Allow camera access for this app in Settings";
 "pair.scan_hint" = "Point at the Add QR shown on the new device";
+"pair.scan_no_camera" = "This device has no camera. Scan the Add QR from the other device instead";
 "pair.scan_qr" = "Scan QR";
 "pair.searching" = "Looking for nearby devices…";
 "pair.searching_hint" = "Press \"Add\" on a device already in the Cluster, or on the admin page";

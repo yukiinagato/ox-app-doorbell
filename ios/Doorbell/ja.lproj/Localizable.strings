@@ -472,12 +472,15 @@
 "pair.nearby_title" = "近くの端末";
 "pair.nearby_waiting_since" = "%@ 秒前から待機";
 "pair.not_set_up_banner" = "クラスタ未設定 — タップして追加";
+"pair.panel_title" = "端末を追加";
 "pair.persist_error_body" = "端末の安全な保存領域に書き込めませんでした。空き容量と権限を確認して再試行してください。";
 "pair.persist_error_title" = "設定を保存できませんでした";
 "pair.qr_caption" = "別の端末でこの QR を読み取ると追加できます";
 "pair.retry" = "再試行";
 "pair.revoked" = "この端末はクラスタから削除されました";
+"pair.scan_denied" = "カメラを使用できません。設定アプリでこのアプリにカメラの使用を許可してください";
 "pair.scan_hint" = "新しい端末に表示された追加用 QR に合わせてください";
+"pair.scan_no_camera" = "この端末にはカメラがありません。相手の端末で追加用 QR を読み取ってください";
 "pair.scan_qr" = "QR を読み取る";
 "pair.searching" = "近くの端末を探しています…";
 "pair.searching_hint" = "クラスタに参加済みの端末か管理画面で「追加」を押してください";

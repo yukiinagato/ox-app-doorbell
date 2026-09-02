@@ -116,7 +116,7 @@ final class DebugInfoViewController: UIViewController {
         refreshButton.addTarget(self, action: #selector(refresh), for: .touchUpInside)
         refreshButton.accessibilityIdentifier = "debug_info_refresh"
 
-        pairingButton.setTitle(texts.t("admin.pair_mode"), for: .normal)
+        pairingButton.setTitle(texts.t("pair.panel_title"), for: .normal)
         pairingButton.addTarget(self, action: #selector(openPairing), for: .touchUpInside)
         pairingButton.accessibilityIdentifier = "debug_info_pairing"
 

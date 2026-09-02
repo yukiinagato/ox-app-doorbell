@@ -86,6 +86,17 @@
 		F90000000000000000000032 /* 学校のチャイム.mp3 in Resources */ = {isa = PBXBuildFile; fileRef = FA000000000000000000001A /* 学校のチャイム.mp3 */; };
 		F90000000000000000000033 /* indoor_update.mp3 in Resources */ = {isa = PBXBuildFile; fileRef = FA000000000000000000001B /* indoor_update.mp3 */; };
 		F90000000000000000000034 /* title_display.mp3 in Resources */ = {isa = PBXBuildFile; fileRef = FA000000000000000000001C /* title_display.mp3 */; };
+		FB0000000000000000000060 /* PairingSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000025 /* PairingSupport.swift */; };
+		FB0000000000000000000061 /* PairingSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000025 /* PairingSupport.swift */; };
+		F90000000000000000000060 /* PairingSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000025 /* PairingSupport.swift */; };
+		FB0000000000000000000062 /* PairingViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000026 /* PairingViewController.swift */; };
+		FB0000000000000000000063 /* PairingViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000026 /* PairingViewController.swift */; };
+		F90000000000000000000062 /* PairingViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000026 /* PairingViewController.swift */; };
+		FB0000000000000000000064 /* AddDeviceViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000027 /* AddDeviceViewController.swift */; };
+		FB0000000000000000000065 /* AddDeviceViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000027 /* AddDeviceViewController.swift */; };
+		F90000000000000000000064 /* AddDeviceViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000027 /* AddDeviceViewController.swift */; };
+		FB0000000000000000000066 /* PairingScannerViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000028 /* PairingScannerViewController.swift */; };
+		F90000000000000000000066 /* PairingScannerViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000028 /* PairingScannerViewController.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -125,6 +136,10 @@
 		FA0000000000000000000022 /* CallRevisionLifecycle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CallRevisionLifecycle.swift; sourceTree = "<group>"; };
 		FA0000000000000000000023 /* DebugInfoViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugInfoViewController.swift; sourceTree = "<group>"; };
 		FA0000000000000000000024 /* AdaptiveH264MjpegPlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdaptiveH264MjpegPlayer.swift; sourceTree = "<group>"; };
+		FA0000000000000000000025 /* PairingSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PairingSupport.swift; sourceTree = "<group>"; };
+		FA0000000000000000000026 /* PairingViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PairingViewController.swift; sourceTree = "<group>"; };
+		FA0000000000000000000027 /* AddDeviceViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddDeviceViewController.swift; sourceTree = "<group>"; };
+		FA0000000000000000000028 /* PairingScannerViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PairingScannerViewController.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -173,6 +188,10 @@
 				FA0000000000000000000023 /* DebugInfoViewController.swift */,
 				FA0000000000000000000024 /* AdaptiveH264MjpegPlayer.swift */,
 				FA0000000000000000000008 /* AdminPinViewController.swift */,
+				FA0000000000000000000025 /* PairingSupport.swift */,
+				FA0000000000000000000026 /* PairingViewController.swift */,
+				FA0000000000000000000027 /* AddDeviceViewController.swift */,
+				FA0000000000000000000028 /* PairingScannerViewController.swift */,
 				FA0000000000000000000002 /* CoreBridge.swift */,
 				FA000000000000000000001D /* RuntimeSupervisor.swift */,
 				FA000000000000000000001E /* MonitorViewController.swift */,
@@ -453,6 +472,10 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				FB0000000000000000000060 /* PairingSupport.swift in Sources */,
+				FB0000000000000000000062 /* PairingViewController.swift in Sources */,
+				FB0000000000000000000064 /* AddDeviceViewController.swift in Sources */,
+				FB0000000000000000000066 /* PairingScannerViewController.swift in Sources */,
 				FB0000000000000000000029 /* AppDelegate.swift in Sources */,
 				FB000000000000000000002A /* MainViewController.swift in Sources */,
 				FB0000000000000000000028 /* IncomingViewController.swift in Sources */,
@@ -479,6 +502,9 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				FB0000000000000000000061 /* PairingSupport.swift in Sources */,
+				FB0000000000000000000063 /* PairingViewController.swift in Sources */,
+				FB0000000000000000000065 /* AddDeviceViewController.swift in Sources */,
 				FB0000000000000000000049 /* TVAppDelegate.swift in Sources */,
 				FB000000000000000000004A /* TVMainViewController.swift in Sources */,
 				FB0000000000000000000048 /* IncomingViewController.swift in Sources */,
@@ -502,6 +528,10 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				F90000000000000000000060 /* PairingSupport.swift in Sources */,
+				F90000000000000000000062 /* PairingViewController.swift in Sources */,
+				F90000000000000000000064 /* AddDeviceViewController.swift in Sources */,
+				F90000000000000000000066 /* PairingScannerViewController.swift in Sources */,
 				F90000000000000000000029 /* AppDelegate.swift in Sources */,
 				F9000000000000000000002A /* MainViewController.swift in Sources */,
 				F90000000000000000000028 /* IncomingViewController.swift in Sources */,

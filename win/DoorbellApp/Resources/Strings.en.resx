@@ -479,12 +479,15 @@ Delete it?</value></data>
   <data name="pair_nearby_title" xml:space="preserve"><value>Nearby devices</value></data>
   <data name="pair_nearby_waiting_since" xml:space="preserve"><value>waiting {0}s</value></data>
   <data name="pair_not_set_up_banner" xml:space="preserve"><value>Not set up — tap to add</value></data>
+  <data name="pair_panel_title" xml:space="preserve"><value>Add a device</value></data>
   <data name="pair_persist_error_body" xml:space="preserve"><value>This device couldn't write to its secure storage. Check free space and permissions, then try again.</value></data>
   <data name="pair_persist_error_title" xml:space="preserve"><value>Couldn't save settings</value></data>
   <data name="pair_qr_caption" xml:space="preserve"><value>Scan this QR from another device to add this one</value></data>
   <data name="pair_retry" xml:space="preserve"><value>Retry</value></data>
   <data name="pair_revoked" xml:space="preserve"><value>This device was removed from the Cluster</value></data>
+  <data name="pair_scan_denied" xml:space="preserve"><value>The camera is not available. Allow camera access for this app in Settings</value></data>
   <data name="pair_scan_hint" xml:space="preserve"><value>Point at the Add QR shown on the new device</value></data>
+  <data name="pair_scan_no_camera" xml:space="preserve"><value>This device has no camera. Scan the Add QR from the other device instead</value></data>
   <data name="pair_scan_qr" xml:space="preserve"><value>Scan QR</value></data>
   <data name="pair_searching" xml:space="preserve"><value>Looking for nearby devices…</value></data>
   <data name="pair_searching_hint" xml:space="preserve"><value>Press &quot;Add&quot; on a device already in the Cluster, or on the admin page</value></data>

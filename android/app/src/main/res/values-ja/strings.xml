@@ -477,12 +477,15 @@
     <string name="pair_nearby_title">近くの端末</string>
     <string name="pair_nearby_waiting_since">%1$s 秒前から待機</string>
     <string name="pair_not_set_up_banner">クラスタ未設定 — タップして追加</string>
+    <string name="pair_panel_title">端末を追加</string>
     <string name="pair_persist_error_body">端末の安全な保存領域に書き込めませんでした。空き容量と権限を確認して再試行してください。</string>
     <string name="pair_persist_error_title">設定を保存できませんでした</string>
     <string name="pair_qr_caption">別の端末でこの QR を読み取ると追加できます</string>
     <string name="pair_retry">再試行</string>
     <string name="pair_revoked">この端末はクラスタから削除されました</string>
+    <string name="pair_scan_denied">カメラを使用できません。設定アプリでこのアプリにカメラの使用を許可してください</string>
     <string name="pair_scan_hint">新しい端末に表示された追加用 QR に合わせてください</string>
+    <string name="pair_scan_no_camera">この端末にはカメラがありません。相手の端末で追加用 QR を読み取ってください</string>
     <string name="pair_scan_qr">QR を読み取る</string>
     <string name="pair_searching">近くの端末を探しています…</string>
     <string name="pair_searching_hint">クラスタに参加済みの端末か管理画面で「追加」を押してください</string>

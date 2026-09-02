@@ -472,12 +472,15 @@
 "pair.nearby_title" = "附近设备";
 "pair.nearby_waiting_since" = "已等待 %@ 秒";
 "pair.not_set_up_banner" = "未设置 — 点击添加";
+"pair.panel_title" = "添加设备";
 "pair.persist_error_body" = "无法写入此设备的安全存储区。请检查可用空间和权限后重试。";
 "pair.persist_error_title" = "无法保存设置";
 "pair.qr_caption" = "用另一台设备扫描此二维码即可添加";
 "pair.retry" = "重试";
 "pair.revoked" = "此设备已从集群中移除";
+"pair.scan_denied" = "无法使用相机。请在系统设置中允许本应用使用相机";
 "pair.scan_hint" = "请对准新设备上显示的添加二维码";
+"pair.scan_no_camera" = "此设备没有相机。请改用另一台设备扫描添加二维码";
 "pair.scan_qr" = "扫描二维码";
 "pair.searching" = "正在查找附近设备…";
 "pair.searching_hint" = "请在已加入集群的设备或管理页面上点击“添加”";
