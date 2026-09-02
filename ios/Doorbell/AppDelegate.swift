@@ -23,11 +23,20 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
     private var pairingGate: PairingViewController?
     private var pairingDeferred = false
     private var pairingGateTimer: Timer?
+    private var lastPairingFingerprint = ""
+    private var screenshots: ScreenshotResponder?
 
     func application(_ application: UIApplication,
                      didFinishLaunchingWithOptions launchOptions:
                         [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         boot = BootConfig.load()
+        IOSAvailability.cacheScreenScale()
+        IOSAvailability.PerfProbe.enabled = boot.debugTimings
+        if boot.debugScreenshots {
+            let responder = ScreenshotResponder(dataDir: BootConfig.dataDir())
+            screenshots = responder
+            responder.start()
+        }
         if resetObserver == nil {
             resetObserver = NotificationCenter.default.addObserver(
                 forName: .doorbellResetLocalPairing, object: nil, queue: .main
@@ -66,9 +75,18 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
 
     func application(_ app: UIApplication, open url: URL,
                      options: [UIApplication.OpenURLOptionsKey: Any] = [:]) -> Bool {
-        guard url.scheme?.lowercased() == "doorbell", url.host?.lowercased() == "debug" else {
-            return false
+        guard url.scheme?.lowercased() == "doorbell" else { return false }
+        if url.host?.lowercased() == PairUri.action {
+            // The pairing screen owns the decision: it is the surface that can show the cluster
+            // being joined, say why an invitation cannot be used, and warn about leaving a
+            // cluster this device is already in.
+            pairingDeferred = false
+            presentPairingGate()
+            NotificationCenter.default.post(name: .doorbellPairInvitation,
+                                            object: url.absoluteString)
+            return true
         }
+        guard url.host?.lowercased() == "debug" else { return false }
         switch url.path.lowercased() {
         case "/ping", "/status":
             IOSAvailability.logDebug(debugSummary())
@@ -141,7 +159,13 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         guard core.isRunning else { return }
         let snapshot = PairingSnapshot.load(core)
         guard snapshot.hasSnapshot else { return }
-        NotificationCenter.default.post(name: .doorbellPairingChanged, object: nil)
+        // Only a real change is announced. Posting unconditionally woke every observer twenty
+        // times a minute to re-parse the same pairing document and rebuild the same string.
+        let fingerprint = snapshot.changeFingerprint
+        if fingerprint != lastPairingFingerprint {
+            lastPairingFingerprint = fingerprint
+            NotificationCenter.default.post(name: .doorbellPairingChanged, object: nil)
+        }
         guard snapshot.state.blocksMainUi else {
             // A member device starts over with a clean slate: a later revocation must gate again.
             pairingDeferred = false

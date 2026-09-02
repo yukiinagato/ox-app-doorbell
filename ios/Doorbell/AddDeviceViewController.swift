@@ -43,7 +43,7 @@ final class AddDeviceViewController: UIViewController {
     private let nearbyEmpty = UILabel()
     private let nearbySpinner = IOSAvailability.activityIndicator(large: false)
     private lazy var codeButton = PairingTheme.button(texts.t("pair.add_with_code"), filled: true)
-    private lazy var codeCard = PairingCodeCardView(texts: texts)
+    private lazy var codeCard = PairingCodeCardView(texts: texts, core: core)
     private lazy var addAllButton = PairingTheme.button(texts.t("pair.add_all"))
     private let addAllWarning = UILabel()
     private let addAllStatus = UILabel()

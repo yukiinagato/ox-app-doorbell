@@ -26,8 +26,10 @@ final class IncomingViewController: UIViewController {
     private var lifecycleAnswered = false
     private var lifecycleEnded = false
     private var safeMode = UserDefaults.standard.bool(forKey: "runtime.safe_mode")
-    private var autoCloseTimer: Timer?
     private var answerDelayTimer: Timer?
+    /// When this panel returns to its home page, and the number beside the title that says so.
+    private var returnCountdown = IncomingReturnCountdown(seconds: 0)
+    private let returnButton = UIButton(type: .system)
 
     private let themeBg = ThemeBackgroundView()
     private let videoBackdrop = UIView()
@@ -62,8 +64,6 @@ final class IncomingViewController: UIViewController {
 
     private static let debugHiddenKey = "incoming.debug_line_hidden"
 
-    private static let autoCloseS: TimeInterval = 30
-    private static let cancelledCloseS: TimeInterval = 15
     private static let handlerKey = "incoming"
 
     init(core: CoreBridge, boot: BootConfig, door: String, purpose: String, visitorLang: String,
@@ -112,8 +112,11 @@ final class IncomingViewController: UIViewController {
             [weak self] _ in
             self?.refreshDebugLine()
             self?.syncMicFromStatus()
+            self?.tickReturnCountdown()
         }
-        restartAutoClose()
+        returnCountdown = IncomingReturnCountdown(
+            seconds: IncomingReturnCountdown.seconds(status: core.status()))
+        updateReturnCountdown()
     }
 
     override func viewDidLayoutSubviews() {
@@ -127,7 +130,6 @@ final class IncomingViewController: UIViewController {
         core.removeHandler(IncomingViewController.handlerKey)
         debugTimer?.invalidate()
         debugTimer = nil
-        autoCloseTimer?.invalidate()
         answerDelayTimer?.invalidate()
         videoPlayer?.stop()
         videoPlayer = nil
@@ -161,7 +163,7 @@ final class IncomingViewController: UIViewController {
         if update == .answerSuperseded { demoteSupersededAnswer() }
         cfg = core.config()
         applyContent()
-        if !inCall { restartAutoClose() }
+        if !inCall { restartReturnCountdown() }
     }
 
     /// Switch all media and SIP targets when another door rings while this view is visible.
@@ -181,7 +183,7 @@ final class IncomingViewController: UIViewController {
             if update == .answerSuperseded { demoteSupersededAnswer() }
             cfg = core.config()
             applyContent()
-            if !inCall { restartAutoClose() }
+            if !inCall { restartReturnCountdown() }
             return
         }
         guard !inCall else { return }
@@ -209,7 +211,7 @@ final class IncomingViewController: UIViewController {
         incomingStreamMp4Url = peer.flatMap { ConfigUtil.str($0, "stream_mp4") } ?? ""
         answerButton.isEnabled = peerHost != nil
         startVideo(url: incomingStreamUrl)
-        restartAutoClose()
+        restartReturnCountdown()
     }
 
 
@@ -256,6 +258,21 @@ final class IncomingViewController: UIViewController {
         langBadge.layer.cornerRadius = 8
         langBadge.clipsToBounds = true
 
+        // The return countdown reads as the title's own "(60)" suffix but is a control: it is a
+        // button so it carries a real tap target and an accessibility label, and it keeps its
+        // natural width beside a title that is allowed to shrink.
+        returnButton.titleLabel?.font = .monospacedDigitSystemFont(ofSize: 30, weight: .bold)
+        returnButton.setTitleColor(.white, for: .normal)
+        returnButton.isHidden = true
+        returnButton.accessibilityIdentifier = "ring_return_countdown"
+        returnButton.accessibilityLabel = texts.t("ring.return_countdown_a11y")
+        returnButton.addTarget(self, action: #selector(onCancelReturnCountdown),
+                               for: .primaryActionTriggered)
+        returnButton.setContentCompressionResistancePriority(.required, for: .horizontal)
+        returnButton.setContentHuggingPriority(.required, for: .horizontal)
+        returnButton.heightAnchor.constraint(greaterThanOrEqualToConstant: 44).isActive = true
+        returnButton.widthAnchor.constraint(greaterThanOrEqualToConstant: 60).isActive = true
+
         titleLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         purposeBadge.setContentCompressionResistancePriority(.required, for: .horizontal)
         langBadge.setContentCompressionResistancePriority(.required, for: .horizontal)
@@ -264,8 +281,8 @@ final class IncomingViewController: UIViewController {
         // tap opens the same dialog the dashboard uses, with this door already selected.
         noticeChip.onTap = { [weak self] in self?.openNoticeDialog() }
 
-        let badgeRow = UIStackView(arrangedSubviews: [titleLabel, langBadge, UIView(),
-                                                      noticeChip])
+        let badgeRow = UIStackView(arrangedSubviews: [titleLabel, returnButton, langBadge,
+                                                      UIView(), noticeChip])
         badgeRow.axis = .horizontal
         badgeRow.spacing = 12
         badgeRow.alignment = .center
@@ -498,6 +515,7 @@ final class IncomingViewController: UIViewController {
         skin = themeBg.apply(display: displayDoc, config: cfg, nodeId: nodeId, palette: palette,
                              httpPort: boot.httpPort, host: view)
         skin.apply("status_line", to: titleLabel)
+        returnButton.setTitleColor(titleLabel.textColor, for: .normal)
         skin.apply("hint", to: statusLabel, quiet: true)
         skin.apply("footer", to: debugLine, quiet: true)
         // Over the video's black frame, not over the theme background.
@@ -614,16 +632,46 @@ final class IncomingViewController: UIViewController {
     }
 
 
-    private func restartAutoClose() {
-        autoCloseTimer?.invalidate()
-        autoCloseTimer = IOSAvailability.scheduledTimer(withTimeInterval: IncomingViewController.autoCloseS,
-                                              repeats: false) { [weak self] _ in
-            self?.close()
+    /// A call arrived, or the screen went back to ringing: the return starts over.
+    private func restartReturnCountdown() {
+        returnCountdown.restart()
+        updateReturnCountdown()
+    }
+
+    /// The call ended. The panel is unattended again, so the full countdown runs once more rather
+    /// than the screen vanishing under whoever just hung up.
+    private func resumeReturnCountdown() {
+        returnCountdown.resumeAfterCall()
+        updateReturnCountdown()
+    }
+
+    private func tickReturnCountdown() {
+        guard returnCountdown.tick() else {
+            updateReturnCountdown()
+            return
+        }
+        updateReturnCountdown()
+        close()
+    }
+
+    /// The number is a control, not decoration: a resident who taps it is reading the screen and
+    /// wants it to stay.
+    @objc private func onCancelReturnCountdown() {
+        returnCountdown.stop()
+        updateReturnCountdown()
+    }
+
+    private func updateReturnCountdown() {
+        switch returnCountdown.display {
+        case .hidden:
+            returnButton.isHidden = true
+        case .seconds(let left):
+            returnButton.isHidden = false
+            returnButton.setTitle("(\(left))", for: .normal)
         }
     }
 
     private func close() {
-        autoCloseTimer?.invalidate()
         dismiss(animated: true)
     }
 
@@ -648,12 +696,15 @@ final class IncomingViewController: UIViewController {
             core.sipHangup()
             reportEndedIfNeeded()
             sipMode = ""
-            close()
+            inCall = false
+            resumeReturnCountdown()
+            updateToggleTitles()
             return
         }
         revisionLifecycle.beginAnswer()
         answerButton.isEnabled = false
-        autoCloseTimer?.invalidate()
+        returnCountdown.pauseForCall()
+        updateReturnCountdown()
         if sipMode == "monitor" {
             monitorOn = false
             core.sipHangup()
@@ -765,7 +816,7 @@ final class IncomingViewController: UIViewController {
             ? texts.t("reply.sent", sender.currentTitle ?? "")
             : texts.t("reply.failed")
         hintLabel.isHidden = false
-        if accepted && !inCall { restartAutoClose() }
+        if accepted && !inCall { restartReturnCountdown() }
     }
 
 
@@ -784,14 +835,14 @@ final class IncomingViewController: UIViewController {
                     updateToggleTitles()
                     updateUnlockVisibility()
                     statusLabel.text = texts.t("reply.choose")
-                    restartAutoClose()
+                    restartReturnCountdown()
                     return
                 }
                 let was = inCall
                 if was { reportEndedIfNeeded() }
                 inCall = false
                 sipMode = ""
-                if was { close() }
+                if was { resumeReturnCountdown() }
             }
         case "reply":
             let d = ConfigUtil.evStr(ev, "door")
@@ -828,13 +879,12 @@ final class IncomingViewController: UIViewController {
                 }
             } else if type == "call_ended", eventStageRevision >= stageRevision {
                 reportEndedIfNeeded()
-                close()
+                resumeReturnCountdown()
             } else if type == "call_cancelled", !inCall {
+                // The visitor gave up, but a resident may still be walking towards the panel and
+                // the live view is what they are coming for. The page stays until the return
+                // countdown ends or somebody leaves it by hand.
                 statusLabel.text = texts.t("ring.cancelled")
-                autoCloseTimer?.invalidate()
-                autoCloseTimer = IOSAvailability.scheduledTimer(
-                    withTimeInterval: IncomingViewController.cancelledCloseS,
-                    repeats: false) { [weak self] _ in self?.close() }
             }
         case "visitor_lang":
             let d = ConfigUtil.evStr(ev, "door")
@@ -869,7 +919,8 @@ final class IncomingViewController: UIViewController {
             lifecycleAnswered = core.reportCallAnswered(door: door, callId: callId,
                                                          stageRevision: stageRevision)
         }
-        autoCloseTimer?.invalidate()
+        returnCountdown.pauseForCall()
+        updateReturnCountdown()
         answerButton.isEnabled = true
         updateToggleTitles()
         updateUnlockVisibility()

@@ -410,6 +410,7 @@ Delete it?</string>
     <string name="history_unread_banner">%1$s missed calls</string>
     <string name="history_yesterday">Yesterday</string>
     <string name="idle_call_button">Call %1$s</string>
+    <string name="idle_call_button_verb">Call</string>
     <string name="idle_choose_purpose">Please choose your purpose</string>
     <string name="idle_language">Language</string>
     <string name="idle_touch_to_call">Touch to call</string>
@@ -571,6 +572,14 @@ Delete it?</string>
     <string name="pair_err_timeout">No response. Try again</string>
     <string name="pair_err_unknown">Couldn\'t complete that. Please try again</string>
     <string name="pair_err_detail">Details: %1$s</string>
+    <string name="pair_invite_cluster">Cluster: %1$s</string>
+    <string name="pair_invite_expired">This invitation has expired. Get a new one on the other device</string>
+    <string name="pair_invite_invalid">This invitation could not be read</string>
+    <string name="pair_invite_join">Join this cluster</string>
+    <string name="pair_invite_leave_current">This device is already in a Cluster. Joining will leave it and erase all of this device\'s settings.</string>
+    <string name="pair_invite_missing_host">This invitation carries no address</string>
+    <string name="pair_invite_missing_pin">This invitation carries no Pairing PIN</string>
+    <string name="pair_invite_title">Cluster invitation</string>
     <string name="pair_join_required">Enter the address and the Pairing PIN</string>
     <string name="pair_join_submit">Join</string>
     <string name="pair_join_with_code">Join with a Pairing PIN</string>
@@ -748,6 +757,7 @@ On</string>
     <string name="ring_purpose_badge">Purpose: %1$s</string>
     <string name="ring_quick_replies">Quick replies</string>
     <string name="ring_quick_reply">Quick reply</string>
+    <string name="ring_return_countdown_a11y">Seconds until this panel returns home (tap to stop)</string>
     <string name="ring_unlock">Unlock</string>
     <string name="ring_unlock_sent">Unlock signal sent</string>
     <string name="ring_unlock_unconfigured">No unlock action is configured for this door</string>

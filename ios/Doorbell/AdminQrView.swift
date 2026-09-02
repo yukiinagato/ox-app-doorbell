@@ -78,8 +78,8 @@ final class AdminQrView: UIView {
 
     /// Rebuilds the QR when the node's reachable address changes. Rendering is cheap enough to run
     /// inline, and the encoder is Core's, so every shell produces the same payload.
-    func reload() {
-        let url = adminUrl()
+    func reload(status: [String: Any]? = nil) {
+        let url = adminUrl(status: status)
         guard url != renderedUrl else { return }
         renderedUrl = url
         guard !url.isEmpty else {
@@ -88,19 +88,34 @@ final class AdminQrView: UIView {
             return
         }
         urlLabel.text = url
-        imageView.image = PairingQR.image(core: core, text: url,
-                                          points: compact ? 128 : 320)
+        // Encoding is a nested module loop and a bitmap context. It only runs when the address
+        // actually changed, but when it does it has no business blocking a frame.
+        let points: CGFloat = compact ? 128 : 320
+        let core = self.core
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let image = PairingQR.image(core: core, text: url, points: points)
+            DispatchQueue.main.async {
+                guard let self = self, self.renderedUrl == url else { return }
+                self.imageView.image = image
+            }
+        }
     }
 
     /// This node's own admin page. IPv4 is preferred because it is what a phone camera can act on
     /// without extra typing; IPv6 is used only when there is nothing else.
-    private func adminUrl() -> String {
+    /// `status` is the snapshot the page already took. Fetching another one here — plus the
+    /// debug document — meant two more Core round-trips and two more JSON parses on every reload,
+    /// to almost always arrive at the address it had last time.
+    private func adminUrl(status: [String: Any]? = nil) -> String {
         var addresses = Set<String>()
-        if let node = core.status()?["node"] as? [String: Any],
+        let snapshot = status ?? core.status()
+        if let node = snapshot?["node"] as? [String: Any],
            let local = node["local_addrs"] as? [String] {
             for value in local where !value.isEmpty { addresses.insert(value) }
         }
-        if let debug = core.debugInfo(), let list = debug["addresses"] as? [String] {
+        // The debug document is only consulted when the status carried no usable address.
+        if addresses.filter({ !$0.contains(":") }).isEmpty,
+           let debug = core.debugInfo(), let list = debug["addresses"] as? [String] {
             for value in list where !value.isEmpty { addresses.insert(value) }
         }
         let ipv4 = addresses.filter { !$0.contains(":") }.sorted()

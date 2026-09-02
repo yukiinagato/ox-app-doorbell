@@ -1,3 +1,4 @@
+import ImageIO
 import UIKit
 
 /// Indoor home screen. Everything the household needs at a glance: the household clock, who is
@@ -173,20 +174,29 @@ final class DashboardView: UIView {
     /// `skin` carries both halves of the answer: the household's theme background, which this
     /// panel paints like the door station does, and the light/dark palette that owns the cards
     /// laid on top of it.
+    /// One reload, one snapshot. Every part of this page used to fetch `core.status()` for
+    /// itself — five parses of the same JSON, microseconds apart, on the main thread.
     func reload(config: [String: Any]?, skin: DoorbellSkin) {
+        IOSAvailability.PerfProbe.measure("dashboard.reload") {
+            reloadBody(config: config, skin: skin)
+        }
+    }
+
+    private func reloadBody(config: [String: Any]?, skin: DoorbellSkin) {
         self.config = config
         self.skin = skin
+        let status = core.status()
+        let nowMs = DoorbellClock.nowMs(core)
         applySkin()
-        rebuildTiles()
+        rebuildTiles(status: status, nowMs: nowMs)
         recentCalls.reload(config: config, skin: skin)
         adminQr.skin = skin
-        adminQr.reload()
+        adminQr.reload(status: status)
         refreshMissedBadge()
-        refreshVersionLine()
-        refreshNoticeState()
+        refreshVersionLine(status: status)
         sosControl.countdownSeconds = ConfigUtil.int(config, "emergency.trigger.countdown_s", 3)
         sosControl.refreshStrings()
-        refreshStills()
+        refreshStills(status: status)
     }
 
     /// The clock, the date, the section heading and the identity line sit straight on the theme
@@ -230,8 +240,9 @@ final class DashboardView: UIView {
         refreshMissedBadge()
     }
 
-    private func refreshVersionLine() {
-        let power = (core.status()?["self"] as? [String: Any])?["power"] as? [String: Any]
+    private func refreshVersionLine(status: [String: Any]? = nil) {
+        let snapshot = status ?? core.status()
+        let power = (snapshot?["self"] as? [String: Any])?["power"] as? [String: Any]
         versionLabel.text = DoorbellTheme.versionLine(name: boot.name,
                                                       coreVersion: DoorbellTheme.coreVersion(),
                                                       texts: texts, power: power)
@@ -249,7 +260,7 @@ final class DashboardView: UIView {
 
     // MARK: - Door tiles
 
-    private func rebuildTiles() {
+    private func rebuildTiles(status: [String: Any]?, nowMs: Int64) {
         let doors = (ConfigUtil.dig(config, "doors") as? [String: Any])
             .map { ConfigUtil.sortedByOrder($0) } ?? []
         let existing = Set(tiles.keys)
@@ -265,8 +276,6 @@ final class DashboardView: UIView {
                 tilesStack.addArrangedSubview(tile)
             }
         }
-        let status = core.status()
-        let nowMs = DoorbellClock.nowMs(core)
         for door in doors {
             guard let tile = tiles[door] else { continue }
             let entry = ConfigUtil.dig(config, "doors.\(door)") as? [String: Any]
@@ -282,10 +291,16 @@ final class DashboardView: UIView {
 
     /// Live stills, five seconds apart, from the door station's own snapshot endpoint. An
     /// unreachable door greys out instead of freezing on a stale frame.
-    private func refreshStills() {
-        let status = core.status()
+    private func refreshStills(status: [String: Any]? = nil) {
+        IOSAvailability.PerfProbe.measure("dashboard.stills") {
+            refreshStillsBody(status: status)
+        }
+    }
+
+    private func refreshStillsBody(status: [String: Any]?) {
+        let snapshot = status ?? core.status()
         for (door, tile) in tiles {
-            guard let peer = ConfigUtil.findDoorPeer(status, door: door),
+            guard let peer = ConfigUtil.findDoorPeer(snapshot, door: door),
                   let url = snapshotUrl(peer: peer) else {
                 tile.setStill(nil)
                 continue
@@ -328,6 +343,8 @@ final class DoorTileView: UIView {
     private let noticeChip: NoticeChipView
     private let openButton = UIButton(type: .system)
     private var pendingUrl: URL?
+    /// The last frame actually painted, so an unchanged scene costs nothing.
+    private var lastStillData: Data?
     private let session: URLSession
     private let texts: Texts
 
@@ -391,13 +408,19 @@ final class DoorTileView: UIView {
     /// Core measured for the theme background — an administrator's `tile_label` override still
     /// wins, because that is a colour somebody chose on purpose.
     func apply(label: String, online: Bool, noticeActive: Bool, skin: DoorbellSkin) {
-        nameLabel.text = label
-        nameLabel.textColor = skin.cardInk("tile_label")
-        stateLabel.text = online ? "" : texts.t("admin.offline")
-        stateLabel.textColor = skin.cardMuted("tile_label")
-        backgroundColor = skin.surface
-        still.alpha = online ? 1 : 0.35
-        openButton.setTitleColor(skin.cardInk("tile_label"), for: .normal)
+        if nameLabel.text != label { nameLabel.text = label }
+        let state = online ? "" : texts.t("admin.offline")
+        if stateLabel.text != state { stateLabel.text = state }
+        let ink = skin.cardInk("tile_label")
+        if nameLabel.textColor != ink {
+            nameLabel.textColor = ink
+            openButton.setTitleColor(ink, for: .normal)
+        }
+        let muted = skin.cardMuted("tile_label")
+        if stateLabel.textColor != muted { stateLabel.textColor = muted }
+        if backgroundColor != skin.surface { backgroundColor = skin.surface }
+        let alpha: CGFloat = online ? 1 : 0.35
+        if still.alpha != alpha { still.alpha = alpha }
         noticeChip.update(active: noticeActive, palette: skin.palette)
     }
 
@@ -406,18 +429,41 @@ final class DoorTileView: UIView {
     }
 
     func setStill(_ image: UIImage?) {
+        lastStillData = nil
         still.image = image
     }
 
     func loadStill(from url: URL) {
         pendingUrl = url
         session.dataTask(with: url) { [weak self] data, _, _ in
-            guard let data = data, let image = UIImage(data: data) else { return }
+            guard let self = self, let data = data, !data.isEmpty else { return }
+            guard data != self.lastStillData else { return }
+            guard let image = DoorTileView.thumbnail(from: data, fitting: self.still.bounds.size)
+            else { return }
             DispatchQueue.main.async {
-                guard let self = self, self.pendingUrl == url else { return }
+                guard self.pendingUrl == url else { return }
+                self.lastStillData = data
                 self.still.image = image
             }
         }.resume()
+    }
+
+    /// Decodes straight to the size the tile draws at. `UIImage(data:)` only records the bytes and
+    /// leaves the real work — a full-resolution JPEG decode and downscale — to the main thread at
+    /// commit time, which is exactly the periodic hitch this page had.
+    private static func thumbnail(from data: Data, fitting size: CGSize) -> UIImage? {
+        let side = max(size.width, size.height)
+        let pixels = Int((side > 0 ? side : 132) * IOSAvailability.screenScale())
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
+        let options: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceShouldCacheImmediately: true,
+            kCGImageSourceThumbnailMaxPixelSize: max(32, pixels),
+        ]
+        guard let thumb = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
+        else { return nil }
+        return UIImage(cgImage: thumb)
     }
 
     @objc private func open() { onOpen?() }

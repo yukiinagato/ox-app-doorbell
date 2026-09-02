@@ -102,6 +102,60 @@ enum IOSAvailability {
         logCore(level: 1, message: "[debug] \(message)")
     }
 
+    /// The screen's scale, captured on the main thread and cached. Background work that has to
+    /// size a bitmap needs it, and `UIScreen` may only be read from the main thread.
+    private static var cachedScreenScale: CGFloat = 0
+
+    static func cacheScreenScale() {
+        cachedScreenScale = UIScreen.main.scale
+    }
+
+    static func screenScale() -> CGFloat {
+        return cachedScreenScale > 0 ? cachedScreenScale : 2
+    }
+
+    /// Main-thread cost of one named section, accumulated and reported as a summary rather than a
+    /// line per call: on an old panel the logging itself would otherwise be the stall being
+    /// measured. Off unless `boot.json` asks for it, so a shipped panel pays nothing.
+    struct PerfProbe {
+        static var enabled = false
+        private static var totals: [String: (calls: Int, seconds: Double)] = [:]
+        private static var lastReport = CFAbsoluteTimeGetCurrent()
+        private static let reportEverySeconds: Double = 15
+
+        static func measure<T>(_ name: String, _ body: () -> T) -> T {
+            guard enabled else { return body() }
+            let started = CFAbsoluteTimeGetCurrent()
+            let result = body()
+            record(name, CFAbsoluteTimeGetCurrent() - started)
+            return result
+        }
+
+        static func record(_ name: String, _ seconds: Double) {
+            guard enabled else { return }
+            var entry = totals[name] ?? (calls: 0, seconds: 0)
+            entry.calls += 1
+            entry.seconds += seconds
+            totals[name] = entry
+            let now = CFAbsoluteTimeGetCurrent()
+            guard now - lastReport >= reportEverySeconds else { return }
+            lastReport = now
+            report()
+        }
+
+        static func report() {
+            let window = totals.keys.sorted().map { name -> String in
+                let entry = totals[name] ?? (calls: 0, seconds: 0)
+                let mean = entry.calls > 0 ? entry.seconds / Double(entry.calls) * 1000 : 0
+                return String(format: "%@ n=%d mean=%.2fms total=%.1fms", name, entry.calls,
+                              mean, entry.seconds * 1000)
+            }
+            totals = [:]
+            guard !window.isEmpty else { return }
+            logDebug("perf " + window.joined(separator: " | "))
+        }
+    }
+
     static func jsonData(withJSONObject object: Any,
                          prettyPrinted: Bool) throws -> Data {
         var options: JSONSerialization.WritingOptions = prettyPrinted ? [.prettyPrinted] : []

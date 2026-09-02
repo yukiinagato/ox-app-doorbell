@@ -412,6 +412,7 @@ Delete it?</value></data>
   <data name="history_unread_banner" xml:space="preserve"><value>{0} missed calls</value></data>
   <data name="history_yesterday" xml:space="preserve"><value>Yesterday</value></data>
   <data name="idle_call_button" xml:space="preserve"><value>Call {0}</value></data>
+  <data name="idle_call_button_verb" xml:space="preserve"><value>Call</value></data>
   <data name="idle_choose_purpose" xml:space="preserve"><value>Please choose your purpose</value></data>
   <data name="idle_language" xml:space="preserve"><value>Language</value></data>
   <data name="idle_touch_to_call" xml:space="preserve"><value>Touch to call</value></data>
@@ -573,6 +574,14 @@ Delete it?</value></data>
   <data name="pair_err_timeout" xml:space="preserve"><value>No response. Try again</value></data>
   <data name="pair_err_unknown" xml:space="preserve"><value>Couldn't complete that. Please try again</value></data>
   <data name="pair_err_detail" xml:space="preserve"><value>Details: {0}</value></data>
+  <data name="pair_invite_cluster" xml:space="preserve"><value>Cluster: {0}</value></data>
+  <data name="pair_invite_expired" xml:space="preserve"><value>This invitation has expired. Get a new one on the other device</value></data>
+  <data name="pair_invite_invalid" xml:space="preserve"><value>This invitation could not be read</value></data>
+  <data name="pair_invite_join" xml:space="preserve"><value>Join this cluster</value></data>
+  <data name="pair_invite_leave_current" xml:space="preserve"><value>This device is already in a Cluster. Joining will leave it and erase all of this device's settings.</value></data>
+  <data name="pair_invite_missing_host" xml:space="preserve"><value>This invitation carries no address</value></data>
+  <data name="pair_invite_missing_pin" xml:space="preserve"><value>This invitation carries no Pairing PIN</value></data>
+  <data name="pair_invite_title" xml:space="preserve"><value>Cluster invitation</value></data>
   <data name="pair_join_required" xml:space="preserve"><value>Enter the address and the Pairing PIN</value></data>
   <data name="pair_join_submit" xml:space="preserve"><value>Join</value></data>
   <data name="pair_join_with_code" xml:space="preserve"><value>Join with a Pairing PIN</value></data>
@@ -750,6 +759,7 @@ On</value></data>
   <data name="ring_purpose_badge" xml:space="preserve"><value>Purpose: {0}</value></data>
   <data name="ring_quick_replies" xml:space="preserve"><value>Quick replies</value></data>
   <data name="ring_quick_reply" xml:space="preserve"><value>Quick reply</value></data>
+  <data name="ring_return_countdown_a11y" xml:space="preserve"><value>Seconds until this panel returns home (tap to stop)</value></data>
   <data name="ring_unlock" xml:space="preserve"><value>Unlock</value></data>
   <data name="ring_unlock_sent" xml:space="preserve"><value>Unlock signal sent</value></data>
   <data name="ring_unlock_unconfigured" xml:space="preserve"><value>No unlock action is configured for this door</value></data>

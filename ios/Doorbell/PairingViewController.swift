@@ -29,6 +29,8 @@ final class PairingViewController: UIViewController {
     private var screen = Screen.status
     private var snapshot = PairingSnapshot(nil)
     private var joinInFlight = false
+    /// The invitation currently filled into the form, if the form came from a link or a scan.
+    private var pendingInvitation: PairUri?
     private var createConfirmed = false
     private var finishing = false
     private var pollTimer: Timer?
@@ -44,7 +46,7 @@ final class PairingViewController: UIViewController {
     private let errorLabel = UILabel()
     private let detailLabel = UILabel()
     private lazy var qrCard = PairingQrCardView(core: core, texts: texts)
-    private lazy var codeCard = PairingCodeCardView(texts: texts)
+    private lazy var codeCard = PairingCodeCardView(texts: texts, core: core)
 
     private let actionStack = UIStackView()
     private lazy var joinButton = PairingTheme.button(texts.t("pair.join_with_code"))
@@ -198,8 +200,12 @@ final class PairingViewController: UIViewController {
             contentStack.addArrangedSubview(element)
             element.translatesAutoresizingMaskIntoConstraints = false
         }
-        for wide in [titleLabel, identityLabel, hintLabel, errorLabel, detailLabel, codeCard,
-                     codeEntryCard, actionStack] as [UIView] {
+        // Every element that carries text takes the whole column. `contentStack` centres its
+        // children, so anything left out of this list is laid out at its intrinsic width instead:
+        // a multi-line label inside a horizontal row has no useful intrinsic width and collapses
+        // to a couple of characters per line, which is what the status row did on an iPad mini.
+        for wide in [titleLabel, identityLabel, statusRow, hintLabel, errorLabel, detailLabel,
+                     qrCard, codeCard, codeEntryCard, actionStack] as [UIView] {
             wide.widthAnchor.constraint(equalTo: contentStack.widthAnchor).isActive = true
         }
         contentStack.widthAnchor.constraint(
@@ -207,6 +213,9 @@ final class PairingViewController: UIViewController {
         contentStack.widthAnchor.constraint(greaterThanOrEqualToConstant:
                                             PairingTheme.qrSize).isActive = true
 
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(onInvitation(_:)),
+            name: .doorbellPairInvitation, object: nil)
 #if os(iOS)
         NotificationCenter.default.addObserver(
             self, selector: #selector(keyboardWillChange(_:)),
@@ -427,7 +436,79 @@ final class PairingViewController: UIViewController {
     }
 
 
+    // MARK: - Invitations that arrive as a doorbell://pair link
+
+    @objc private func onInvitation(_ note: Notification) {
+        guard let text = note.object as? String else { return }
+        present(invitation: text)
+    }
+
+    /// An invitation the user has already acted on, by tapping a link or pointing the camera at a
+    /// QR. The screen fills in what it carries and asks once; it never makes somebody retype an
+    /// address and a PIN they are holding in their hand.
+    func present(invitation text: String) {
+        let nowS = Int64(Date().timeIntervalSince1970)
+        switch PairUri.parse(text, nowS: nowS) {
+        case .failure(let reason):
+            showInvitationProblem(reason)
+        case .success(let invitation):
+            offer(invitation)
+        }
+    }
+
+    private func showInvitationProblem(_ reason: PairUri.Failure) {
+        view.endEditing(true)
+        screen = .status
+        let key: String
+        switch reason {
+        case .expired: key = "pair.invite_expired"
+        case .missingPin: key = "pair.invite_missing_pin"
+        case .missingHost: key = "pair.invite_missing_host"
+        case .notAPairUri: key = "pair.invite_invalid"
+        }
+        errorLabel.text = texts.t(key)
+        errorLabel.isHidden = false
+        detailLabel.isHidden = true
+        refresh(snapshot)
+    }
+
+    private func offer(_ invitation: PairUri) {
+        // Joining from a device that is already in a cluster is a destructive move: it leaves the
+        // cluster and wipes this device's settings. That is worth one deliberate confirmation.
+        guard !snapshot.paired else {
+            let alert = UIAlertController(title: texts.t("pair.invite_title"),
+                                          message: texts.t("pair.invite_leave_current"),
+                                          preferredStyle: .alert)
+            alert.addAction(UIAlertAction(title: texts.t("admin.cancel"), style: .cancel))
+            alert.addAction(UIAlertAction(title: texts.t("pair.invite_join"),
+                                          style: .destructive) { [weak self] _ in
+                NotificationCenter.default.post(name: .doorbellResetLocalPairing, object: nil)
+                self?.fill(invitation)
+            })
+            present(alert, animated: true)
+            return
+        }
+        fill(invitation)
+    }
+
+    /// Prefills the join form and leaves one button to press.
+    private func fill(_ invitation: PairUri) {
+        clearError()
+        pendingInvitation = invitation
+        hostField.text = invitation.host
+        pinField.text = invitation.pin
+        screen = .codeEntry
+        submitButton.setTitle(texts.t("pair.invite_join"), for: .normal)
+        if !invitation.cluster.isEmpty {
+            detailLabel.text = texts.t("pair.invite_cluster", invitation.cluster)
+            detailLabel.isHidden = false
+        }
+        refresh(snapshot)
+    }
+
     @objc private func showCodeEntry() {
+        pendingInvitation = nil
+        submitButton.setTitle(texts.t("pair.join_with_code"), for: .normal)
         clearError()
         screen = .codeEntry
         refresh(snapshot)
@@ -451,6 +532,13 @@ final class PairingViewController: UIViewController {
             errorLabel.text = texts.t("setup.join_required")
             errorLabel.isHidden = false
             detailLabel.isHidden = true
+            return
+        }
+        if let invitation = pendingInvitation, invitation.expiresAtS > 0,
+           Int64(Date().timeIntervalSince1970) >= invitation.expiresAtS {
+            // It was valid when it arrived and is not any more; a stale PIN would only burn one
+            // of the token's few attempts.
+            showInvitationProblem(.expired)
             return
         }
         clearError()

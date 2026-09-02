@@ -405,6 +405,7 @@
 "history.unread_banner" = "不在着信が %@ 件あります";
 "history.yesterday" = "昨日";
 "idle.call_button" = "%@ 呼出";
+"idle.call_button_verb" = "呼出";
 "idle.choose_purpose" = "ご用件をお選びください";
 "idle.language" = "言語";
 "idle.touch_to_call" = "タッチして呼び出してください";
@@ -566,6 +567,14 @@
 "pair.err.timeout" = "応答がありませんでした。もう一度お試しください";
 "pair.err.unknown" = "追加できませんでした。もう一度お試しください";
 "pair.err_detail" = "詳細: %@";
+"pair.invite_cluster" = "クラスタ: %@";
+"pair.invite_expired" = "この招待は期限切れです。相手の端末で新しいコードを発行してください";
+"pair.invite_invalid" = "この招待は読み取れませんでした";
+"pair.invite_join" = "この集まりに参加";
+"pair.invite_leave_current" = "この端末はすでに別のクラスタに参加しています。参加すると現在のクラスタから離脱し、この端末の設定はすべて消去されます。";
+"pair.invite_missing_host" = "この招待に接続先が含まれていません";
+"pair.invite_missing_pin" = "この招待にペアリング PIN が含まれていません";
+"pair.invite_title" = "クラスタへの招待";
 "pair.join_required" = "接続先とペアリング PIN を入力してください";
 "pair.join_submit" = "参加";
 "pair.join_with_code" = "ペアリング PIN で参加";
@@ -739,6 +748,7 @@
 "ring.purpose_badge" = "用件: %@";
 "ring.quick_replies" = "クイック返信";
 "ring.quick_reply" = "クイック返信";
+"ring.return_countdown_a11y" = "自動で戻るまでの秒数（タップで解除）";
 "ring.unlock" = "解錠";
 "ring.unlock_sent" = "解錠信号を送信しました";
 "ring.unlock_unconfigured" = "この門口機には開錠の操作が設定されていません";

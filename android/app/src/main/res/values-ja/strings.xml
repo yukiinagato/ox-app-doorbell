@@ -410,6 +410,7 @@
     <string name="history_unread_banner">不在着信が %1$s 件あります</string>
     <string name="history_yesterday">昨日</string>
     <string name="idle_call_button">%1$s 呼出</string>
+    <string name="idle_call_button_verb">呼出</string>
     <string name="idle_choose_purpose">ご用件をお選びください</string>
     <string name="idle_language">言語</string>
     <string name="idle_touch_to_call">タッチして呼び出してください</string>
@@ -571,6 +572,14 @@
     <string name="pair_err_timeout">応答がありませんでした。もう一度お試しください</string>
     <string name="pair_err_unknown">追加できませんでした。もう一度お試しください</string>
     <string name="pair_err_detail">詳細: %1$s</string>
+    <string name="pair_invite_cluster">クラスタ: %1$s</string>
+    <string name="pair_invite_expired">この招待は期限切れです。相手の端末で新しいコードを発行してください</string>
+    <string name="pair_invite_invalid">この招待は読み取れませんでした</string>
+    <string name="pair_invite_join">この集まりに参加</string>
+    <string name="pair_invite_leave_current">この端末はすでに別のクラスタに参加しています。参加すると現在のクラスタから離脱し、この端末の設定はすべて消去されます。</string>
+    <string name="pair_invite_missing_host">この招待に接続先が含まれていません</string>
+    <string name="pair_invite_missing_pin">この招待にペアリング PIN が含まれていません</string>
+    <string name="pair_invite_title">クラスタへの招待</string>
     <string name="pair_join_required">接続先とペアリング PIN を入力してください</string>
     <string name="pair_join_submit">参加</string>
     <string name="pair_join_with_code">ペアリング PIN で参加</string>
@@ -748,6 +757,7 @@ ON</string>
     <string name="ring_purpose_badge">用件: %1$s</string>
     <string name="ring_quick_replies">クイック返信</string>
     <string name="ring_quick_reply">クイック返信</string>
+    <string name="ring_return_countdown_a11y">自動で戻るまでの秒数（タップで解除）</string>
     <string name="ring_unlock">解錠</string>
     <string name="ring_unlock_sent">解錠信号を送信しました</string>
     <string name="ring_unlock_unconfigured">この門口機には開錠の操作が設定されていません</string>

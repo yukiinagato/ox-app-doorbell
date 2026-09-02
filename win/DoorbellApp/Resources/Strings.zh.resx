@@ -412,6 +412,7 @@
   <data name="history_unread_banner" xml:space="preserve"><value>有 {0} 个未接来电</value></data>
   <data name="history_yesterday" xml:space="preserve"><value>昨天</value></data>
   <data name="idle_call_button" xml:space="preserve"><value>呼叫 {0}</value></data>
+  <data name="idle_call_button_verb" xml:space="preserve"><value>呼叫</value></data>
   <data name="idle_choose_purpose" xml:space="preserve"><value>请选择来访目的</value></data>
   <data name="idle_language" xml:space="preserve"><value>语言</value></data>
   <data name="idle_touch_to_call" xml:space="preserve"><value>触摸屏幕呼叫</value></data>
@@ -573,6 +574,14 @@
   <data name="pair_err_timeout" xml:space="preserve"><value>没有收到响应。请重试</value></data>
   <data name="pair_err_unknown" xml:space="preserve"><value>操作未能完成，请重试</value></data>
   <data name="pair_err_detail" xml:space="preserve"><value>详情: {0}</value></data>
+  <data name="pair_invite_cluster" xml:space="preserve"><value>集群: {0}</value></data>
+  <data name="pair_invite_expired" xml:space="preserve"><value>此邀请已过期。请在对方设备上生成新的邀请</value></data>
+  <data name="pair_invite_invalid" xml:space="preserve"><value>无法读取此邀请</value></data>
+  <data name="pair_invite_join" xml:space="preserve"><value>加入此集群</value></data>
+  <data name="pair_invite_leave_current" xml:space="preserve"><value>此设备已加入其他集群。加入将退出当前集群并清除此设备的全部设置。</value></data>
+  <data name="pair_invite_missing_host" xml:space="preserve"><value>此邀请不包含连接地址</value></data>
+  <data name="pair_invite_missing_pin" xml:space="preserve"><value>此邀请不包含配对 PIN</value></data>
+  <data name="pair_invite_title" xml:space="preserve"><value>集群邀请</value></data>
   <data name="pair_join_required" xml:space="preserve"><value>请输入连接地址和配对 PIN</value></data>
   <data name="pair_join_submit" xml:space="preserve"><value>加入</value></data>
   <data name="pair_join_with_code" xml:space="preserve"><value>使用配对 PIN 加入</value></data>
@@ -750,6 +759,7 @@
   <data name="ring_purpose_badge" xml:space="preserve"><value>目的: {0}</value></data>
   <data name="ring_quick_replies" xml:space="preserve"><value>快捷回复</value></data>
   <data name="ring_quick_reply" xml:space="preserve"><value>快捷回复</value></data>
+  <data name="ring_return_countdown_a11y" xml:space="preserve"><value>自动返回主页的秒数（点按可取消）</value></data>
   <data name="ring_unlock" xml:space="preserve"><value>开锁</value></data>
   <data name="ring_unlock_sent" xml:space="preserve"><value>已发送开锁信号</value></data>
   <data name="ring_unlock_unconfigured" xml:space="preserve"><value>此门口尚未配置开锁操作</value></data>

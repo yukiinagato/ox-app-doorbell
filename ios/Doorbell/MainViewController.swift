@@ -575,9 +575,10 @@ final class MainViewController: UIViewController {
 
 
     private func applyStrings() {
-        callButton.setTitle(
-            texts.t("idle.call_button", doorLabel(boot.door))
-                .trimmingCharacters(in: .whitespaces), for: .normal)
+        // The visitor is standing at this unit, so naming it on the button says nothing they do
+        // not already know, and on a narrow panel the id is what pushes the label onto a second
+        // line. The button carries the verb alone; the door's name stays in the footer.
+        callButton.setTitle(texts.t("idle.call_button_verb"), for: .normal)
         touchHint.text = texts.t("idle.touch_to_call")
         monitorButton.setTitle(texts.t("monitor.open"), for: .normal)
         purposeHint.text = texts.t("idle.choose_purpose")
@@ -664,6 +665,10 @@ final class MainViewController: UIViewController {
     /// Recomputes the appearance and hands the current snapshot to whichever home screen this
     /// device shows. Both are pure renderers: they never read Core state on their own.
     private func refreshHomeSurfaces() {
+        IOSAvailability.PerfProbe.measure("home.refresh") { refreshHomeSurfacesBody() }
+    }
+
+    private func refreshHomeSurfacesBody() {
         palette = DoorbellPalette.of(DoorbellTheme.appearance(
             display: displayDoc, config: cfg, nodeId: nodeId, localTime: core.localTime()))
         let skin = applyTheme()
