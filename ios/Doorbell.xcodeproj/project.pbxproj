@@ -19,10 +19,14 @@
 		AC0000000000000000000012 /* PairUriTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC0000000000000000000011 /* PairUriTests.swift */; };
 		AC0000000000000000000014 /* VisitorScreenLayoutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC0000000000000000000013 /* VisitorScreenLayoutTests.swift */; };
 		AC0000000000000000000016 /* MonitorRetryPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC0000000000000000000015 /* MonitorRetryPolicyTests.swift */; };
+		AC0000000000000000000018 /* SosVisibilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC0000000000000000000017 /* SosVisibilityTests.swift */; };
 		FB0000000000000000000021 /* CoreBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000002 /* CoreBridge.swift */; };
 		FB0000000000000000000022 /* BootConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000003 /* BootConfig.swift */; };
 		FB0000000000000000000023 /* Texts.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000004 /* Texts.swift */; };
 		FB0000000000000000000024 /* ConfigUtil.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000005 /* ConfigUtil.swift */; };
+		AD0000000000000000000001 /* ConfigUtilColors.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD0000000000000000000004 /* ConfigUtilColors.swift */; };
+		AD0000000000000000000002 /* ConfigUtilColors.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD0000000000000000000004 /* ConfigUtilColors.swift */; };
+		AD0000000000000000000003 /* ConfigUtilColors.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD0000000000000000000004 /* ConfigUtilColors.swift */; };
 		FB0000000000000000000025 /* MjpegClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000006 /* MjpegClient.swift */; };
 		FB0000000000000000000026 /* SirenPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000007 /* SirenPlayer.swift */; };
 		FB0000000000000000000027 /* AdminPinViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000008 /* AdminPinViewController.swift */; };
@@ -156,11 +160,13 @@
 		AC0000000000000000000011 /* PairUriTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PairUriTests.swift; sourceTree = "<group>"; };
 		AC0000000000000000000013 /* VisitorScreenLayoutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VisitorScreenLayoutTests.swift; sourceTree = "<group>"; };
 		AC0000000000000000000015 /* MonitorRetryPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MonitorRetryPolicyTests.swift; sourceTree = "<group>"; };
+		AC0000000000000000000017 /* SosVisibilityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SosVisibilityTests.swift; sourceTree = "<group>"; };
 		FA0000000000000000000001 /* BridgingHeader.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = BridgingHeader.h; sourceTree = "<group>"; };
 		FA0000000000000000000002 /* CoreBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoreBridge.swift; sourceTree = "<group>"; };
 		FA0000000000000000000003 /* BootConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BootConfig.swift; sourceTree = "<group>"; };
 		FA0000000000000000000004 /* Texts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Texts.swift; sourceTree = "<group>"; };
 		FA0000000000000000000005 /* ConfigUtil.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigUtil.swift; sourceTree = "<group>"; };
+		AD0000000000000000000004 /* ConfigUtilColors.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigUtilColors.swift; sourceTree = "<group>"; };
 		FA0000000000000000000006 /* MjpegClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MjpegClient.swift; sourceTree = "<group>"; };
 		FA0000000000000000000007 /* SirenPlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SirenPlayer.swift; sourceTree = "<group>"; };
 		FA0000000000000000000008 /* AdminPinViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdminPinViewController.swift; sourceTree = "<group>"; };
@@ -286,6 +292,7 @@
 				FA0000000000000000000003 /* BootConfig.swift */,
 				FA0000000000000000000004 /* Texts.swift */,
 				FA0000000000000000000005 /* ConfigUtil.swift */,
+				AD0000000000000000000004 /* ConfigUtilColors.swift */,
 				FA0000000000000000000006 /* MjpegClient.swift */,
 				FA0000000000000000000007 /* SirenPlayer.swift */,
 				FA000000000000000000000C /* CameraFeeder.swift */,
@@ -316,6 +323,7 @@
 				AC0000000000000000000011 /* PairUriTests.swift */,
 				AC0000000000000000000013 /* VisitorScreenLayoutTests.swift */,
 				AC0000000000000000000015 /* MonitorRetryPolicyTests.swift */,
+				AC0000000000000000000017 /* SosVisibilityTests.swift */,
 			);
 			path = DoorbellTests;
 			sourceTree = "<group>";
@@ -600,6 +608,7 @@
 				AC0000000000000000000012 /* PairUriTests.swift in Sources */,
 				AC0000000000000000000014 /* VisitorScreenLayoutTests.swift in Sources */,
 				AC0000000000000000000016 /* MonitorRetryPolicyTests.swift in Sources */,
+				AC0000000000000000000018 /* SosVisibilityTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -637,6 +646,7 @@
 				FB0000000000000000000022 /* BootConfig.swift in Sources */,
 				FB0000000000000000000023 /* Texts.swift in Sources */,
 				FB0000000000000000000024 /* ConfigUtil.swift in Sources */,
+				AD0000000000000000000001 /* ConfigUtilColors.swift in Sources */,
 				FB0000000000000000000025 /* MjpegClient.swift in Sources */,
 				FB0000000000000000000026 /* SirenPlayer.swift in Sources */,
 				FB000000000000000000002B /* CameraFeeder.swift in Sources */,
@@ -676,6 +686,7 @@
 				FB0000000000000000000042 /* BootConfig.swift in Sources */,
 				FB0000000000000000000043 /* Texts.swift in Sources */,
 				FB0000000000000000000044 /* ConfigUtil.swift in Sources */,
+				AD0000000000000000000002 /* ConfigUtilColors.swift in Sources */,
 				FB0000000000000000000045 /* MjpegClient.swift in Sources */,
 				FB0000000000000000000046 /* SirenPlayer.swift in Sources */,
 			);
@@ -714,6 +725,7 @@
 				F90000000000000000000022 /* BootConfig.swift in Sources */,
 				F90000000000000000000023 /* Texts.swift in Sources */,
 				F90000000000000000000024 /* ConfigUtil.swift in Sources */,
+				AD0000000000000000000003 /* ConfigUtilColors.swift in Sources */,
 				F90000000000000000000025 /* MjpegClient.swift in Sources */,
 				F90000000000000000000026 /* SirenPlayer.swift in Sources */,
 				F9000000000000000000002B /* CameraFeeder.swift in Sources */,
