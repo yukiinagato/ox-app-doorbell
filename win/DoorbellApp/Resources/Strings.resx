@@ -361,6 +361,9 @@
   <data name="calling_no_answer" xml:space="preserve"><value>応答がありません</value></data>
   <data name="calling_title" xml:space="preserve"><value>呼び出し中…</value></data>
   <data name="dash_admin" xml:space="preserve"><value>管理</value></data>
+  <data name="dash_count_devices" xml:space="preserve"><value>クラスタの端末 {0} 台</value></data>
+  <data name="dash_count_door_stations" xml:space="preserve"><value>門口機 {0}/{1} 台オンライン</value></data>
+  <data name="dash_count_indoor_panels" xml:space="preserve"><value>室内機 {0}/{1} 台オンライン</value></data>
   <data name="dash_doors" xml:space="preserve"><value>門口機</value></data>
   <data name="dash_last_answer" xml:space="preserve"><value>最終応答 {0}</value></data>
   <data name="dash_no_doors" xml:space="preserve"><value>門口機がまだ登録されていません</value></data>

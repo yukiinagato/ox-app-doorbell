@@ -58,7 +58,16 @@ internal class DashboardView(
 
     private val clockText = ShellUi.text(activity, "", 40f, palette.ink)
     private val dateText = ShellUi.text(activity, "", 14f, palette.muted)
-    private val membershipPill = ShellUi.pill(activity, "", palette.surfaceAlt, palette.muted)
+    /** One icon-and-number counter in the header. */
+    private class Counter(val root: LinearLayout, val icon: ImageView, val value: TextView)
+
+    private val countersRow = LinearLayout(activity).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+    }
+    private val deviceCount = counter(R.drawable.ic_count_cluster)
+    private val doorCount = counter(R.drawable.ic_count_door_station)
+    private val panelCount = counter(R.drawable.ic_count_indoor_panel)
     private val missedBadge = ShellUi.pill(activity, "", palette.dangerSoft, palette.dangerInk)
     private lateinit var adminButton: Button
     private lateinit var noticeButton: Button
@@ -166,7 +175,8 @@ internal class DashboardView(
         nodeId = status?.optJSONObject("node")?.optString("id").orEmpty()
         texts.setConfig(config)
         coreDisplay = CoreDisplays.parse(status?.optJSONObject("display"))
-        val now = clock.now()
+        clock.refreshIfStale()
+        val now = clock.cached()
         // Core resolves the appearance in the cluster time zone; auto_system still consults the
         // platform, and an older core falls back to the local computation.
         val appearance = coreDisplay.appearance
@@ -184,9 +194,19 @@ internal class DashboardView(
         applyArrangement()
     }
 
-    /** Called once a second by the host so the clock keeps ticking without a full refresh. */
+    /**
+     * Called once a second by the host. Formats from the cached anchor and never touches core, so
+     * a busy run loop cannot hold the second hand back; the anchor itself is renewed on a worker.
+     */
     fun tickClock() {
-        updateClock(clock.now())
+        clock.refreshIfStale()
+        updateClock(clock.cached())
+    }
+
+    /** Core says the time moved, so the next tick re-reads it rather than projecting. */
+    fun onTimeChanged() {
+        clock.invalidate()
+        clock.refreshIfStale()
     }
 
     // ---------- construction ----------
@@ -225,11 +245,11 @@ internal class DashboardView(
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
-        // The pill is the one header control that may give up width, so a long cluster line
-        // shortens instead of pushing 不在着信 and 管理 off the screen.
-        membershipPill.maxLines = 1
-        membershipPill.ellipsize = android.text.TextUtils.TruncateAt.END
-        headerActions.addView(membershipPill, chipParams())
+        for (counter in listOf(deviceCount, doorCount, panelCount))
+            countersRow.addView(counter.root, LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+            ).apply { leftMargin = if (counter === deviceCount) 0 else ShellUi.dp(activity, 10) })
+        headerActions.addView(countersRow, chipParams())
         headerActions.addView(missedBadge, chipParams())
         missedBadge.isFocusable = true
         missedBadge.isClickable = true
@@ -317,6 +337,29 @@ internal class DashboardView(
         sosSlider.onTrigger = { app.commitEmergency(true) }
     }
 
+    /**
+     * A counter: a small vector icon and a number. Drawn rather than written out, so the header
+     * stays readable at a glance and in any language; the spoken label carries the words.
+     */
+    private fun counter(iconRes: Int): Counter {
+        val icon = ImageView(activity).apply {
+            setImageResource(iconRes)
+            scaleType = ImageView.ScaleType.FIT_CENTER
+        }
+        val value = ShellUi.text(activity, "", 13f, palette.muted, bold = true)
+        val root = LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            addView(icon, LinearLayout.LayoutParams(
+                ShellUi.dp(activity, 16), ShellUi.dp(activity, 16),
+            ))
+            addView(value, LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+            ).apply { leftMargin = ShellUi.dp(activity, 4) })
+        }
+        return Counter(root, icon, value)
+    }
+
     private fun chipParams(): LinearLayout.LayoutParams = LinearLayout.LayoutParams(
         ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
     ).apply { leftMargin = ShellUi.dp(activity, 8) }
@@ -329,8 +372,10 @@ internal class DashboardView(
         root.setBackgroundColor(ShellUi.opaque(palette.ground))
         // A new palette means every region's decision was taken against a colour that has gone.
         regionInkApplied.clear()
-        membershipPill.background = ShellUi.rounded(activity, palette.surfaceAlt, 999, palette.line)
-        membershipPill.setTextColor(ShellUi.opaque(palette.muted))
+        for (counter in listOf(deviceCount, doorCount, panelCount)) {
+            counter.value.setTextColor(ShellUi.opaque(palette.muted))
+            counter.icon.setColorFilter(ShellUi.opaque(palette.muted))
+        }
         missedBadge.background = ShellUi.rounded(activity, palette.dangerSoft, 999)
         missedBadge.setTextColor(ShellUi.opaque(palette.dangerInk))
         adminButton.background = ShellUi.rounded(activity, palette.surfaceAlt, 10)
@@ -505,10 +550,20 @@ internal class DashboardView(
     private var lastClock = ""
     private var lastDate = ""
 
+    /** When the clock label last actually changed, for the tick-interval measurement. */
+    private var lastClockAtMs = 0L
+
     /** Called once a second: only touches a TextView when the rendered value actually changed. */
     private fun updateClock(now: ClusterTime) {
         val clockValue = now.clockText()
         if (clockValue != lastClock) {
+            // How long the displayed second actually lasted. A 1 Hz tick should read ~1000 ms;
+            // anything much larger means the tick was blocked before it got here.
+            val at = android.os.SystemClock.elapsedRealtime()
+            if (lastClockAtMs != 0L)
+                android.util.Log.i(CLOCK_TAG, "label $lastClock -> $clockValue after " +
+                    "${at - lastClockAtMs} ms")
+            lastClockAtMs = at
             lastClock = clockValue
             clockText.text = clockValue
         }
@@ -531,13 +586,21 @@ internal class DashboardView(
     }
 
     private fun updateHeader() {
-        val pairing = app.core.pairingInfo()
-        membershipPill.text = listOf(
-            texts.t("pair.membership", R.string.pair_membership,
-                    PairingModel.memberCount(pairing).toString()),
-            texts.t("pair.membership_connected", R.string.pair_membership_connected,
-                    PairingModel.connectedCount(pairing).toString()),
-        ).joinToString(" · ")
+        val counts = FleetCounting.of(status, config, app.boot.role, nodeId)
+        deviceCount.value.text = counts.devices.toString()
+        deviceCount.root.contentDescription = texts.t(
+            "dash.count_devices", R.string.dash_count_devices, counts.devices.toString(),
+        )
+        doorCount.value.text = "${counts.doorStations.online}/${counts.doorStations.total}"
+        doorCount.root.contentDescription = texts.t(
+            "dash.count_door_stations", R.string.dash_count_door_stations,
+            counts.doorStations.online.toString(), counts.doorStations.total.toString(),
+        )
+        panelCount.value.text = "${counts.panels.online}/${counts.panels.total}"
+        panelCount.root.contentDescription = texts.t(
+            "dash.count_indoor_panels", R.string.dash_count_indoor_panels,
+            counts.panels.online.toString(), counts.panels.total.toString(),
+        )
         missedBadge.text = texts.t("history.missed_badge", R.string.history_missed_badge,
                                    unreadMissed.toString())
         missedBadge.visibility = if (unreadMissed > 0) View.VISIBLE else View.GONE
@@ -598,7 +661,7 @@ internal class DashboardView(
      * door several times a second, and that was the hitch on the home page.
      */
     private fun buildTiles() {
-        val doors = doorIds()
+        val doors = tileDoorIds()
         if (tiles.keys.toList() != doors) {
             tileColumn.removeAllViews()
             tiles.clear()
@@ -627,7 +690,7 @@ internal class DashboardView(
                 )
             }
         }
-        val nowMs = clock.now().wallMs
+        val nowMs = clock.cached().wallMs
         for ((door, tile) in tiles) updateTile(door, tile, NoticeModel.resolve(
             status, config, door, nowMs,
         ))
@@ -937,28 +1000,28 @@ internal class DashboardView(
         header.gravity = if (stacked) Gravity.START else Gravity.CENTER_VERTICAL
         val clockParams = clockBox.layoutParams as LinearLayout.LayoutParams
         val actionParams = headerActions.layoutParams as LinearLayout.LayoutParams
-        val pillParams = membershipPill.layoutParams as LinearLayout.LayoutParams
+        val countersParams = countersRow.layoutParams as LinearLayout.LayoutParams
         if (stacked) {
             clockParams.width = ViewGroup.LayoutParams.MATCH_PARENT
             clockParams.weight = 0f
             actionParams.width = ViewGroup.LayoutParams.MATCH_PARENT
             actionParams.topMargin = ShellUi.dp(activity, 8)
-            // The pill absorbs the row's slack and shortens when there is none.
-            pillParams.width = 0
-            pillParams.weight = 1f
-            pillParams.leftMargin = 0
+            // The counters absorb the row's slack; they never need to shrink.
+            countersParams.width = ViewGroup.LayoutParams.WRAP_CONTENT
+            countersParams.weight = 1f
+            countersParams.leftMargin = 0
         } else {
             clockParams.width = 0
             clockParams.weight = 1f
             actionParams.width = ViewGroup.LayoutParams.WRAP_CONTENT
             actionParams.topMargin = 0
-            pillParams.width = ViewGroup.LayoutParams.WRAP_CONTENT
-            pillParams.weight = 0f
-            pillParams.leftMargin = ShellUi.dp(activity, 8)
+            countersParams.width = ViewGroup.LayoutParams.WRAP_CONTENT
+            countersParams.weight = 0f
+            countersParams.leftMargin = ShellUi.dp(activity, 8)
         }
         clockBox.layoutParams = clockParams
         headerActions.layoutParams = actionParams
-        membershipPill.layoutParams = pillParams
+        countersRow.layoutParams = countersParams
     }
 
     private fun applyStillHeight(heightPx: Int) {
@@ -1041,10 +1104,20 @@ internal class DashboardView(
         }
     }
 
+    /** Every configured door. The announcement dialog and the monitor list use all of them. */
     private fun doorIds(): List<String> {
         val doors = app.core.dig(config, "doors") as? JSONObject ?: return emptyList()
         return doors.keys().asSequence().sorted().toList()
     }
+
+    /**
+     * The doors that get a tile. A tile is a picture and a 見る action, so a station that reports
+     * caps.camera false is left out of the column -- there is nothing to show and nothing to
+     * watch. The door itself stays reachable everywhere it matters: the monitor list, the
+     * announcement dialog, and unlock all still address it.
+     */
+    private fun tileDoorIds(): List<String> =
+        doorIds().filter { DoorStations.tileVisible(status, config, it) }
 
     private fun doorLabel(door: String): String {
         if (door.isEmpty()) return ""
@@ -1065,6 +1138,7 @@ internal class DashboardView(
 
     private companion object {
         const val TAG = "doorbell-dash"
+        const val CLOCK_TAG = "doorbell-clock"
         const val STILL_INTERVAL_MS = 5_000L
         val WEEKDAYS = arrayOf("日", "月", "火", "水", "木", "金", "土")
     }

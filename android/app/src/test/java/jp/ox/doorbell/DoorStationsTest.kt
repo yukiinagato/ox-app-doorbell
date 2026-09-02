@@ -2,6 +2,8 @@ package jp.ox.doorbell
 
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -184,6 +186,55 @@ class DoorStationsTest {
         assertEquals("", DoorStations.stillUrl(JSONObject("""{"id":"x"}""")))
         assertEquals("", DoorStations.stillUrl(JSONObject("""{"stream":null}""")))
         assertEquals("", DoorStations.stillUrl(null))
+    }
+
+    // ---------- a station with no camera gets no tile ----------
+
+    @Test
+    fun aStationThatReportsNoCameraGetsNoTile() {
+        val st = status("""[{"id":"$stationId","role":"door_station","door":"$door",
+                            "status":"alive","caps":{"camera":false}}]""")
+        assertFalse(DoorStations.tileVisible(st, null, door))
+        assertFalse(DoorStations.hasCamera(DoorStations.peerFor(st, null, door)))
+    }
+
+    @Test
+    fun aStationWithACameraKeepsItsTile() {
+        val st = status("""[{"id":"$stationId","role":"door_station","door":"$door",
+                            "status":"alive","caps":{"camera":true}}]""")
+        assertTrue(DoorStations.tileVisible(st, null, door))
+        assertTrue(DoorStations.hasCamera(DoorStations.peerFor(st, null, door)))
+    }
+
+    /** An older peer never published the capability, and must not lose its tile for that. */
+    @Test
+    fun aStationThatSaysNothingAboutACameraKeepsItsTile() {
+        val noKey = status("""[{"id":"$stationId","role":"door_station","door":"$door",
+                               "status":"alive","caps":{"audio":true}}]""")
+        assertTrue(DoorStations.tileVisible(noKey, null, door))
+
+        val noCaps = status("[${peer()}]")
+        assertTrue(DoorStations.tileVisible(noCaps, null, door))
+
+        val nulled = status("""[{"id":"$stationId","role":"door_station","door":"$door",
+                                "status":"alive","caps":{"camera":null}}]""")
+        assertTrue(DoorStations.tileVisible(nulled, null, door))
+
+        assertTrue(DoorStations.hasCamera(null))
+    }
+
+    /** A door with no station at all keeps its tile, which is what says "no station". */
+    @Test
+    fun aDoorWithNoStationKeepsItsTile() {
+        assertTrue(DoorStations.tileVisible(status("[]"), null, door))
+    }
+
+    /** A station that is down keeps its tile: it has a camera, it is simply not answering. */
+    @Test
+    fun anOfflineStationWithACameraKeepsItsTile() {
+        val st = status("""[{"id":"$stationId","role":"door_station","door":"$door",
+                            "status":"offline","caps":{"camera":true}}]""")
+        assertTrue(DoorStations.tileVisible(st, null, door))
     }
 
     // ---------- served_by reading ----------

@@ -361,6 +361,9 @@
   <data name="calling_no_answer" xml:space="preserve"><value>无人应答</value></data>
   <data name="calling_title" xml:space="preserve"><value>呼叫中…</value></data>
   <data name="dash_admin" xml:space="preserve"><value>管理</value></data>
+  <data name="dash_count_devices" xml:space="preserve"><value>集群内 {0} 台设备</value></data>
+  <data name="dash_count_door_stations" xml:space="preserve"><value>门口机 {0}/{1} 台在线</value></data>
+  <data name="dash_count_indoor_panels" xml:space="preserve"><value>室内机 {0}/{1} 台在线</value></data>
   <data name="dash_doors" xml:space="preserve"><value>门口机</value></data>
   <data name="dash_last_answer" xml:space="preserve"><value>最后接听 {0}</value></data>
   <data name="dash_no_doors" xml:space="preserve"><value>尚未添加门口机</value></data>

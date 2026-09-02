@@ -491,7 +491,8 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
             it.tickClock()
             return
         }
-        val now = clusterClock.now()
+        clusterClock.refreshIfStale()
+        val now = clusterClock.cached()
         // Once a second, so only touch the views when the rendered value actually changed.
         val clockValue = now.clockText()
         if (clockValue != lastClockText) {
@@ -1345,6 +1346,10 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
             }
             // Cluster time, battery, and announcements each redraw only what they affect.
             "time_changed" -> {
+                // The correction moved, so the projected clock is wrong until it is re-anchored.
+                clusterClock.invalidate()
+                clusterClock.refreshIfStale()
+                dashboard?.onTimeChanged()
                 updateClock()
                 applyAppearance()
                 dashboard?.refresh()
