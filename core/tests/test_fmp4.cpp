@@ -706,6 +706,25 @@ TEST_CASE("fmp4: Node serves encoded frames through GET /stream.mp4") {
 }
 
 TEST_CASE("fmp4: authenticated same-origin proxy streams from an alive mesh peer") {
+  // The panel proxies to a peer on the conventional HTTP port, so the door must own
+  // 47180. Another test process (or a running node) on this host makes that
+  // impossible; skip rather than fail so parallel runs stay deterministic.
+  {
+    int probe = ::socket(AF_INET, SOCK_STREAM, 0);
+    REQUIRE(probe >= 0);
+    int one = 1;
+    ::setsockopt(probe, SOL_SOCKET, SO_REUSEADDR, &one, sizeof(one));
+    sockaddr_in addr{};
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = htonl(INADDR_ANY);
+    addr.sin_port = htons(47180);
+    const bool busy = ::bind(probe, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) != 0;
+    ::close(probe);
+    if (busy) {
+      MESSAGE("port 47180 is busy on this host; skipping the same-origin proxy case");
+      return;
+    }
+  }
   std::mt19937 rng(static_cast<uint32_t>(::getpid()) ^ 0x51a9u);
   std::vector<int> reserved{47180};
   auto distinctPort = [&] {
