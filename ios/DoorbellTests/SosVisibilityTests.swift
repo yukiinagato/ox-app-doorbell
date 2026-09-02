@@ -57,6 +57,68 @@ final class SosVisibilityTests: XCTestCase {
 
     // MARK: - The screen keeps the answer
 
+    /// The exact configuration the mini 3 was running when it drew a slider it should not have:
+    /// `emergency.trigger.*` present, `emergency.button_on_roles` absent. Nothing that walks the
+    /// door station's visitor screen may find an SOS slider in it.
+    func testTheDoorStationVisitorScreenHasNoSliderInItsHierarchy() {
+        let deviceConfig: [String: Any] = [
+            "emergency": ["trigger": ["countdown_s": 3, "mode": "slide"]],
+        ]
+        XCTAssertFalse(ConfigUtil.sosButtonVisible(config: deviceConfig, role: "door_station"))
+
+        for size in [CGSize(width: 768, height: 1024), CGSize(width: 1024, height: 768)] {
+            let screen = makeVisitorScreen(config: deviceConfig, role: "door_station", size: size)
+            XCTAssertTrue(SosVisibilityTests.sliders(in: screen.view).isEmpty,
+                          "\(size): a door station's screen carries no SOS slider at all")
+        }
+
+        // The same screen for an indoor panel does carry one, so the assertion above is not
+        // passing because the search is broken.
+        for size in [CGSize(width: 768, height: 1024), CGSize(width: 1024, height: 768)] {
+            let screen = makeVisitorScreen(config: deviceConfig, role: "indoor_panel", size: size)
+            XCTAssertEqual(SosVisibilityTests.sliders(in: screen.view).count, 1, "\(size)")
+            XCTAssertFalse(screen.sos.isHidden)
+        }
+    }
+
+    private struct BuiltScreen {
+        let view: VisitorScreenView
+        let sos: SosSlideControl
+    }
+
+    /// Builds the visitor screen the way `MainViewController` does, taking the slider's presence
+    /// from the same predicate the shell uses.
+    private func makeVisitorScreen(config: [String: Any], role: String,
+                                   size: CGSize) -> BuiltScreen {
+        let texts = Texts()
+        let sos = SosSlideControl(texts: texts)
+        let view = VisitorScreenView(texts: texts, callButton: UIButton(type: .system),
+                                     langBar: UIStackView(),
+                                     purposeSection: UIStackView(), sosControl: sos)
+        let host = UIView(frame: CGRect(origin: .zero, size: size))
+        host.addSubview(view)
+        NSLayoutConstraint.activate([
+            view.topAnchor.constraint(equalTo: host.topAnchor),
+            view.bottomAnchor.constraint(equalTo: host.bottomAnchor),
+            view.leadingAnchor.constraint(equalTo: host.leadingAnchor),
+            view.trailingAnchor.constraint(equalTo: host.trailingAnchor),
+        ])
+        view.setSosVisible(ConfigUtil.sosButtonVisible(config: config, role: role))
+        view.applyLayout(for: size)
+        host.layoutIfNeeded()
+        return BuiltScreen(view: view, sos: sos)
+    }
+
+    /// Every SOS slider anywhere under `root`, however it got there.
+    private static func sliders(in root: UIView) -> [SosSlideControl] {
+        var found: [SosSlideControl] = []
+        for child in root.subviews {
+            if let slider = child as? SosSlideControl { found.append(slider) }
+            found += sliders(in: child)
+        }
+        return found
+    }
+
     /// `applyLayout` takes the whole stack apart and puts it back, which is the path that could
     /// otherwise put the slider back on a door station after a rotation.
     func testTheVisitorScreenKeepsTheSliderHiddenAcrossARotation() {
