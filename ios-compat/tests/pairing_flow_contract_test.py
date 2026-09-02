@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Source contract for the round-6 pairing decisions (spec §5.4) on the kiosk.
+"""Source contract for the round-6 and round-7 decisions (spec §5.4, §5.5).
 
 Two rules the UI must not blur:
   1. Minting the Pairing PIN is separate from 「まとめて追加」. The PIN card and
@@ -89,6 +89,58 @@ class PairingFlowContracts(unittest.TestCase):
         self.assertIn("[_core stop]", restart)
         self.assertIn("[_recovery stop]", restart)
         self.assertIn("showBootstrapSetup", restart)
+
+
+class AdminPasswordAndWriteContracts(unittest.TestCase):
+    """One cluster-wide admin password and native config writes (spec §5.5)."""
+
+    def test_the_admin_gate_is_the_cluster_password_and_the_digest_is_migrated(self):
+        overlay = read("ios-kiosk/src/Screens/DBPinOverlay.m")
+        bridge = read("ios-kiosk/src/Core/DBCoreBridge.m")
+
+        accept = overlay[overlay.index("- (BOOL)acceptsEnteredPassword:"):
+                         overlay.index("- (void)submit {")]
+        # Core owns the comparison and the lockout it shares with /api/login.
+        self.assertIn("[DBCoreBridge supportsAdminPassword]", accept)
+        self.assertIn("[_core verifyAdminPassword:entered]", accept)
+        self.assertIn("retireLocalDigest", accept)
+        # The old per-node digest is accepted only while the cluster has no
+        # password at all, proven by Core accepting it as the first one.
+        self.assertIn('setAdminPasswordFrom:@"" to:entered', accept)
+        self.assertIn("if (!localMatches) return NO;", accept)
+        # ...and then the file is gone, so it is never a second credential.
+        retire = overlay[overlay.index("+ (void)retireLocalDigest"):
+                         overlay.index("- (BOOL)acceptsEnteredPassword:")]
+        self.assertIn("removeItemAtPath:path", retire)
+        self.assertIn('DBCoreSymbol("db_core_admin_password_verify")', bridge)
+        self.assertIn("dlsym(RTLD_DEFAULT, name)", bridge)
+
+    def test_native_settings_write_through_the_core_abi(self):
+        settings = read("ios-kiosk/src/Screens/DBSettingsScreen.m")
+        bridge = read("ios-kiosk/src/Core/DBCoreBridge.m")
+        dialog = read("ios-kiosk/src/Screens/DBNoticeDialog.m")
+        history = read("ios-kiosk/src/Screens/DBHistoryScreen.m")
+        incoming = read("ios-kiosk/src/Screens/DBIncomingScreen.m")
+
+        for symbol in ("db_core_set_config_json", "db_core_config_batch_json",
+                       "db_core_delete_config_key", "db_core_set_global_notice",
+                       "db_core_clear_global_notice", "db_core_call_log_json_v2",
+                       "db_core_sip_set_mic_muted"):
+            self.assertIn('DBCoreSymbol("%s")' % symbol, bridge)
+
+        # No loopback HTTP anywhere in the settings path.
+        self.assertNotIn("api/config", settings)
+        self.assertNotIn("api/login", settings)
+        self.assertIn("[_core setConfigKey:", settings)
+        self.assertIn("[_core deleteConfigKey:", settings)
+        # A Core without the export says so instead of claiming a save.
+        self.assertIn("status == -100", settings)
+
+        self.assertIn("[_core setGlobalNotice:", dialog)
+        self.assertIn("[_core clearGlobalNotice]", dialog)
+        self.assertIn("callLogSince:0 beforeMs:beforeMs", history)
+        self.assertIn("[DBCoreBridge supportsMicMute]", incoming)
+        self.assertIn("[_core setMicMuted:muted]", incoming)
 
 
 if __name__ == "__main__":

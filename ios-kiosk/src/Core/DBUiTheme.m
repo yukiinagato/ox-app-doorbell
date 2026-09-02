@@ -196,6 +196,84 @@ static DBRgb DBHslToRgb(double h, double s, double l) {
   return (now >= darkFrom || now < lightFrom) ? @"dark" : @"light";
 }
 
++ (NSString *)appearanceModeForConfig:(NSDictionary *)config
+                             deviceId:(NSString *)deviceId
+                              display:(NSDictionary *)display
+                          minuteOfDay:(NSInteger)minuteOfDay {
+  // A device override is a local decision and still wins over core's answer.
+  NSString *deviceChoice = [deviceId length] > 0
+      ? DBThemeString(config, [NSString stringWithFormat:
+            @"devices.%@.local.display.appearance", deviceId])
+      : nil;
+  NSString *normalizedDevice = deviceChoice ? [self normalizedAppearance:deviceChoice] : nil;
+  if ([normalizedDevice isEqualToString:@"light"] || [normalizedDevice isEqualToString:@"dark"])
+    return normalizedDevice;
+  NSString *effective = DBThemeString(display, @"appearance.effective");
+  if ([effective isEqualToString:@"light"] || [effective isEqualToString:@"dark"])
+    return effective;
+  return [self appearanceModeForConfig:config deviceId:deviceId minuteOfDay:minuteOfDay];
+}
+
++ (NSString *)autoBackgroundHexInDisplay:(NSDictionary *)display {
+  NSString *hex = DBThemeString(display, @"theme.auto_background.color");
+  DBRgb probe;
+  return (hex && [self parseHex:hex into:&probe]) ? hex : nil;
+}
+
++ (NSString *)inkHexForRegion:(NSString *)region
+                       config:(NSDictionary *)config
+                     deviceId:(NSString *)deviceId
+                      display:(NSDictionary *)display
+                backgroundHex:(NSString *)backgroundHex
+               appearanceMode:(NSString *)appearanceMode {
+  if ([region length] == 0) region = DBUiRegionStatusLine;
+  DBRgb probe;
+  if ([deviceId length] > 0) {
+    NSString *override = DBThemeString(config, [NSString stringWithFormat:
+        @"devices.%@.local.theme.ink_override.%@", deviceId, region]);
+    if (override && [self parseHex:override into:&probe]) return override;
+  }
+  NSString *published = DBThemeString(display, [NSString stringWithFormat:
+      @"theme.ink_override.%@", region]);
+  if (published && [self parseHex:published into:&probe]) return published;
+  NSString *auto_ink = DBThemeString(display, [NSString stringWithFormat:
+      @"theme.auto_ink.%@", region]);
+  if ([auto_ink isEqualToString:@"light"]) return kDarkInk;
+  if ([auto_ink isEqualToString:@"dark"]) return kLightInk;
+  return [self inkHexForRegion:region config:config deviceId:deviceId
+                 backgroundHex:backgroundHex appearanceMode:appearanceMode];
+}
+
++ (NSString *)callButtonHexForConfig:(NSDictionary *)config
+                            deviceId:(NSString *)deviceId
+                             display:(NSDictionary *)display
+                       backgroundHex:(NSString *)backgroundHex {
+  DBRgb probe;
+  if ([deviceId length] > 0) {
+    NSString *override = DBThemeString(config, [NSString stringWithFormat:
+        @"devices.%@.local.theme.call_button_bg", deviceId]);
+    if (override && [self parseHex:override into:&probe]) return override;
+  }
+  NSString *resolved = DBThemeString(display, @"theme.call_button_bg");
+  if (resolved && [self parseHex:resolved into:&probe]) return resolved;
+  NSString *auto_accent = DBThemeString(display, @"theme.auto_accent.call_button");
+  if (auto_accent && [self parseHex:auto_accent into:&probe]) return auto_accent;
+  return [self callButtonHexForConfig:config deviceId:deviceId backgroundHex:backgroundHex];
+}
+
++ (NSString *)callButtonInkHexForConfig:(NSDictionary *)config
+                               deviceId:(NSString *)deviceId
+                                display:(NSDictionary *)display
+                          backgroundHex:(NSString *)backgroundHex {
+  NSString *ink = DBThemeString(display, @"theme.call_button_ink");
+  if ([ink length] == 0) ink = DBThemeString(display, @"theme.auto_accent.call_button_ink");
+  if ([ink isEqualToString:@"light"]) return kDarkInk;
+  if ([ink isEqualToString:@"dark"]) return kLightInk;
+  return [self accentTextHexForAccentHex:
+      [self callButtonHexForConfig:config deviceId:deviceId display:display
+                     backgroundHex:backgroundHex]];
+}
+
 + (NSString *)lightInkHex { return kDarkInk; }
 + (NSString *)darkInkHex { return kLightInk; }
 

@@ -158,6 +158,7 @@ typedef enum {
   UIButton *_noticeExpand;
   BOOL _noticeExpanded;
   UILabel *_versionLabel;
+  NSDictionary *_display;   // status.display: core-resolved appearance and theme.
   DBSosSlider *_sos;
   DBUiPalette *_palette;
   NSTimer *_clockTimer;
@@ -438,8 +439,8 @@ typedef enum {
       @"devices.%@.local.theme.bg_color", _deviceID]];
   if ([background length] == 0)
     background = [DBConfigUtil str:_cfg path:@"display.theme.bg_color"];
-  _palette = [DBUiPalette paletteForConfig:_cfg deviceId:_deviceID backgroundHex:background
-                               minuteOfDay:[self minuteOfDay]];
+  _palette = [DBUiPalette paletteForConfig:_cfg deviceId:_deviceID display:_display
+                             backgroundHex:background minuteOfDay:[self minuteOfDay]];
   UIColor *surface = _palette.surface;
   if (_cameraPreviewView.hidden) self.backgroundColor = surface;
   _clockLabel.textColor = [_palette inkForRegion:DBUiRegionClock];
@@ -515,6 +516,8 @@ typedef enum {
       if (!screen || generation != screen->_snapshotGeneration) return;
       [screen applyPairingSnapshot:pairing];
       screen->_cfg = config;
+      NSDictionary *display = [status objectForKey:@"display"];
+      if ([display isKindOfClass:[NSDictionary class]]) screen->_display = display;
       [screen->_texts setConfig:config];
       NSString *langPath = [NSString stringWithFormat:@"visitor_lang.%@", screen->_boot.door];
       NSString *lang = [DBConfigUtil str:status path:langPath];

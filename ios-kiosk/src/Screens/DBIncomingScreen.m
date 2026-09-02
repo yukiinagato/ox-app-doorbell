@@ -137,6 +137,8 @@ static BOOL DBSameString(NSString *a, NSString *b) {
   DBNoticeChip *_noticeChip;
   DBNoticeDialog *_noticeDialog;
   DBUiPalette *_palette;
+  NSDictionary *_display;   // status.display: core-resolved appearance and theme.
+  NSDictionary *_doorUnlock;  // status.doors.<id>.unlock
   BOOL _monitorAudioOn;
   BOOL _micMuted;
   BOOL _repliesVisible;
@@ -611,6 +613,12 @@ static BOOL DBSameString(NSString *a, NSString *b) {
       }
       NSString *selfId = [DBConfigUtil str:st path:@"node.id"];
       s->_nodeId = [selfId copy] ?: @"";
+      NSDictionary *display = [st objectForKey:@"display"];
+      if ([display isKindOfClass:[NSDictionary class]]) s->_display = display;
+      // Core reports whether an unlock action exists and whether the button
+      // should be shown, so the shell never has to guess from configuration.
+      s->_doorUnlock = [DBConfigUtil dig:st path:[NSString stringWithFormat:
+          @"doors.%@.unlock", s->_door ?: @""]];
       NSString *playbackPath = [selfId length]
           ? [NSString stringWithFormat:@"devices.%@.local.video.playback", selfId] : nil;
       NSString *playback = playbackPath ? [DBConfigUtil str:cfg path:playbackPath] : nil;
@@ -683,15 +691,13 @@ static BOOL DBSameString(NSString *a, NSString *b) {
 
 // The unlock button is an admin decision (spec §5.2). It defaults to on when an
 // unlock action exists and off when it does not, and an explicit setting wins.
+// Core reports doors.<id>.unlock = {configured, command, show_button, source}:
+// show_button defaults to configured and an administrator may force either
+// answer (spec §5.2). An older core leaves the button on its configured state.
 - (void)refreshUnlockVisibility {
-  NSString *dtmfPath = [NSString stringWithFormat:@"doors.%@.unlock.dtmf", _door];
-  NSString *actionPath = [NSString stringWithFormat:@"doors.%@.unlock.action", _door];
-  _unlockConfigured = ([[DBConfigUtil str:_cfg path:dtmfPath] length] > 0 ||
-                       [[DBConfigUtil str:_cfg path:actionPath] length] > 0 ||
-                       [DBConfigUtil dig:_cfg path:[NSString stringWithFormat:
-                           @"doors.%@.dtmf_actions", _door]] != nil);
-  NSString *showPath = [NSString stringWithFormat:@"doors.%@.unlock.show_button", _door];
-  _unlockVisible = [DBConfigUtil boolVal:_cfg path:showPath def:_unlockConfigured];
+  _unlockConfigured = [DBConfigUtil boolVal:_doorUnlock path:@"configured" def:NO];
+  _unlockVisible = [DBConfigUtil boolVal:_doorUnlock path:@"show_button"
+                                     def:_unlockConfigured];
   _openButton.hidden = !_unlockVisible;
 }
 
@@ -703,8 +709,8 @@ static BOOL DBSameString(NSString *a, NSString *b) {
 }
 
 - (void)applyPalette {
-  _palette = [DBUiPalette paletteForConfig:_cfg deviceId:_nodeId backgroundHex:nil
-                               minuteOfDay:[self minuteOfDay]];
+  _palette = [DBUiPalette paletteForConfig:_cfg deviceId:_nodeId display:_display
+                             backgroundHex:nil minuteOfDay:[self minuteOfDay]];
   [_noticeChip applyPalette:_palette];
   _adminUrlLabel.textColor = [_palette.ink colorWithAlphaComponent:0.85];
 }
@@ -740,12 +746,18 @@ static BOOL DBSameString(NSString *a, NSString *b) {
 }
 
 - (void)onMic {
-  _micMuted = !_micMuted;
-  // MiniSIP owns the microphone for the whole session, so muting is expressed
-  // by restarting the answered leg in listen-only mode and back.
-  if ([_sipMode isEqualToString:@"answer"] && [_peerHost length] > 0)
+  BOOL muted = !_micMuted;
+  if ([DBCoreBridge supportsMicMute]) {
+    // Core mutes the capture path in place and reports status.call.mic_muted,
+    // so the call is never torn down to change the microphone.
+    if ([_core setMicMuted:muted] != 0) return;
+  } else if ([_sipMode isEqualToString:@"answer"] && [_peerHost length] > 0) {
+    // Older Core: MiniSIP owns the microphone for the whole session, so muting
+    // is expressed by restarting the answered leg in listen-only mode.
     [_router sipStart:_peerHost port:(int)_directPort
-                 mode:(_micMuted ? @"monitor" : @"answer")];
+                 mode:(muted ? @"monitor" : @"answer")];
+  }
+  _micMuted = muted;
   [self applyContent];
 }
 
@@ -1785,15 +1797,12 @@ static BOOL DBSameString(NSString *a, NSString *b) {
 }
 
 - (void)onOpenDoor {
-  // Shown but unconfigured must explain itself; a silent no-op would read as a
-  // broken lock (spec §5.2).
-  if (!_unlockConfigured) {
-    _hintLabel.text = [_texts ts:@"ring.unlock_unconfigured"];
-    _hintLabel.hidden = NO;
-    return;
-  }
-  [_router sipSendDtmf:@"*1"];
-  _hintLabel.text = [_texts ts:@"ring.unlock_sent"];
+  // db_core_open_door publishes the configured unlock action; -3 means nothing
+  // is configured anywhere. Shown but unconfigured must explain itself, because
+  // a silent no-op reads as a broken lock (spec §5.2).
+  int status = [_core openDoor:_door];
+  _hintLabel.text = (status == 0) ? [_texts ts:@"ring.unlock_sent"]
+                                  : [_texts ts:@"ring.unlock_unconfigured"];
   _hintLabel.hidden = NO;
 }
 

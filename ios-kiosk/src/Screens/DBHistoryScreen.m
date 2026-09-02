@@ -20,13 +20,14 @@ static const NSInteger kPageSize = 50;
   DBTexts *_texts;
   DBUiPalette *_palette;
   NSDictionary *_cfg;
+  NSDictionary *_status;
   NSString *_nodeId;
 
   NSArray *_allRows;      // Everything fetched so far, newest first.
   NSArray *_sections;     // Rendered day sections for the active filter.
   NSString *_filter;
   NSInteger _tzOffsetMinutes;
-  NSInteger _loadedLimit;
+  long long _nextBeforeMs;  // Paging cursor: rows strictly older than this.
   BOOL _mayHaveMore;
   BOOL _loading;
   NSInteger _loadGeneration;
@@ -52,7 +53,7 @@ static const NSInteger kPageSize = 50;
     _allRows = [NSArray array];
     _sections = [NSArray array];
     _filterButtons = [[NSMutableArray alloc] init];
-    _loadedLimit = kPageSize;
+    _nextBeforeMs = 0;
     _tzOffsetMinutes = 0;
     _nodeId = @"";
     [self buildUi];
@@ -118,42 +119,51 @@ static const NSInteger kPageSize = 50;
 }
 
 - (void)reload {
-  _loadedLimit = kPageSize;
+  _nextBeforeMs = 0;
+  _allRows = [NSArray array];
   [self loadPageAndMarkSeen:YES];
 }
 
 - (void)onLoadMore {
-  if (_loading || !_mayHaveMore) return;
-  // Core's history export is bounded by a row count, so the next page is one
-  // larger read and the model keeps the paging cursor honest.
-  _loadedLimit = MIN(500, _loadedLimit + kPageSize);
+  if (_loading || !_mayHaveMore || _nextBeforeMs <= 0) return;
   [self loadPageAndMarkSeen:NO];
 }
 
+// One page of fifty, strictly older than the cursor. Core's v2 export takes the
+// cursor directly; on an older Core the model slices the wider read instead, so
+// 「さらに読み込む」 behaves the same either way.
 - (void)loadPageAndMarkSeen:(BOOL)markSeen {
   if (_loading) return;
   _loading = YES;
   NSInteger generation = ++_loadGeneration;
-  NSInteger limit = _loadedLimit;
+  long long beforeMs = _nextBeforeMs;
+  NSArray *existing = _allRows;
   DBCoreBridge *core = _core;
   __weak DBHistoryScreen *weakSelf = self;
   dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-    NSDictionary *log = [core callLogSince:0 limit:limit];
+    NSInteger read = beforeMs > 0 ? MIN(500, (NSInteger)[existing count] + kPageSize)
+                                  : kPageSize;
+    NSDictionary *log = [core callLogSince:0 beforeMs:beforeMs limit:read];
     NSDictionary *cfg = [core config];
     NSDictionary *status = [core status];
     NSDictionary *localTime = [core localTimeJson:0];
-    NSArray *rows = [DBCallHistoryModel rowsFromLog:log];
-    NSString *newest = [DBCallHistoryModel newestHlcInRows:rows];
+    NSArray *fetched = [DBCallHistoryModel rowsFromLog:log];
+    NSArray *page = [DBCallHistoryModel pageRows:fetched beforeMs:beforeMs limit:kPageSize];
+    NSArray *merged = [DBCallHistoryModel mergeRows:existing withPage:page];
+    NSString *newest = [DBCallHistoryModel newestHlcInRows:merged];
     if (markSeen && [newest length] > 0) [core markCallLogSeenUpTo:newest];
     dispatch_async(dispatch_get_main_queue(), ^{
       DBHistoryScreen *screen = weakSelf;
       if (!screen || screen->_loadGeneration != generation) return;
       screen->_loading = NO;
       screen->_cfg = cfg;
+      screen->_status = status;
       screen->_nodeId = [DBConfigUtil str:status path:@"node.id"] ?: @"";
       screen->_tzOffsetMinutes = [DBConfigUtil intVal:localTime path:@"offset_min" def:0];
-      screen->_allRows = rows;
-      screen->_mayHaveMore = ((NSInteger)[rows count] >= limit);
+      screen->_allRows = merged;
+      screen->_mayHaveMore = [DBCallHistoryModel pageMayHaveMore:page limit:kPageSize];
+      long long cursor = [DBCallHistoryModel nextBeforeMsForPage:page];
+      if (cursor > 0) screen->_nextBeforeMs = cursor;
       [screen applyPalette];
       [screen rebuildFilters];
       [screen applyStrings];
@@ -163,8 +173,9 @@ static const NSInteger kPageSize = 50;
 }
 
 - (void)applyPalette {
-  _palette = [DBUiPalette paletteForConfig:_cfg deviceId:_nodeId backgroundHex:nil
-                               minuteOfDay:[self minuteOfDay]];
+  _palette = [DBUiPalette paletteForConfig:_cfg deviceId:_nodeId
+                                   display:[DBConfigUtil dig:_status path:@"display"]
+                             backgroundHex:nil minuteOfDay:[self minuteOfDay]];
   self.backgroundColor = _palette.surface;
   _title.textColor = _palette.ink;
   _empty.textColor = _palette.mutedInk;

@@ -59,6 +59,10 @@ typedef void (^DBUiEventHandler)(NSDictionary *ev);
 // the global target into the concrete door list first.
 - (BOOL)setNotice:(NSString *)text forDoor:(NSString *)door expiresMs:(long long)expiresMs;
 - (BOOL)clearNoticeForDoor:(NSString *)door;
+// Trigger the door's configured unlock action. Returns Core's status: 0 queued,
+// -3 when nothing is configured, other negatives for bad arguments. The shell
+// must say so on -3 instead of reporting a silent success.
+- (int)openDoor:(NSString *)door;
 // Call history. sinceMs of zero reads the whole retained history.
 - (NSDictionary *)callLogSince:(long long)sinceMs limit:(NSInteger)limit;
 - (BOOL)markCallLogSeenUpTo:(NSString *)hlc;
@@ -107,6 +111,44 @@ typedef void (^DBUiEventHandler)(NSDictionary *ev);
 // (spec §5.4). Returns nil on an older Core that lacks the export.
 - (NSDictionary *)mintJoinTokenWithSeconds:(int)seconds;
 + (BOOL)supportsJoinTokenMinting;
+
+// ---- One cluster-wide admin password (spec §5.5) ----
+// The device 管理パスワード and the web admin password are the same secret,
+// stored as a salted hash in replicated configuration. Verification is
+// constant-time and rate-limited inside Core and is shared with /api/login, so
+// an offline device checks the replicated hash it already holds.
++ (BOOL)supportsAdminPassword;
+- (BOOL)verifyAdminPassword:(NSString *)password;
+// current may be empty when no password has been set yet. Returns 0 on success.
+- (int)setAdminPasswordFrom:(NSString *)current to:(NSString *)replacement;
+
+// ---- Native configuration writes (spec §5.5) ----
+// Same validation and advisory colour warnings as the web admin. value must be
+// a JSON document; a bare string is written as a JSON string. Returns 0 on
+// success, and a negative value that includes "unsupported" when this Core
+// predates the export.
++ (BOOL)supportsConfigWrites;
+- (int)setConfigKey:(NSString *)key valueJson:(NSString *)valueJson;
+- (int)setConfigKey:(NSString *)key stringValue:(NSString *)value;
+- (int)setConfigKey:(NSString *)key numberValue:(NSInteger)value;
+- (int)setConfigKey:(NSString *)key boolValue:(BOOL)value;
+- (int)deleteConfigKey:(NSString *)key;
+// ops are {op:"set"|"delete", key, value} entries, applied as one transaction.
+- (int)writeConfigBatch:(NSArray *)ops;
+
+// The cluster-wide announcement (notice.global), which a door-specific one
+// always overrides.
+- (BOOL)setGlobalNotice:(NSString *)text expiresMs:(long long)expiresMs;
+- (BOOL)clearGlobalNotice;
+
+// Call history with a paging cursor: rows strictly older than beforeMs. Falls
+// back to the one-argument export on an older Core.
+- (NSDictionary *)callLogSince:(long long)sinceMs beforeMs:(long long)beforeMs
+                         limit:(NSInteger)limit;
+
+// Microphone mute for the active call; also reported as status.call.mic_muted.
++ (BOOL)supportsMicMute;
+- (int)setMicMuted:(BOOL)muted;
 - (void)removeDevice:(NSString *)nodeId;
 - (void)inviteDevice:(NSString *)nodeId;
 // Short-lived blocklist for one pending device (the "無視" action).

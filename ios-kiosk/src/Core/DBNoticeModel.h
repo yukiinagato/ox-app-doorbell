@@ -4,7 +4,7 @@
 // A door-specific notice wins over the cluster-wide notice.global, and an
 // expired notice is treated as absent even before core prunes it.
 
-FOUNDATION_EXPORT NSString *const DBNoticeTargetGlobal;   // "" — all doors
+FOUNDATION_EXPORT NSString *const DBNoticeTargetGlobal;   // "*" — the cluster-wide notice
 FOUNDATION_EXPORT const NSUInteger DBNoticeMaxTextLength;  // 200
 FOUNDATION_EXPORT const NSUInteger DBNoticeMaxPresets;     // 8
 

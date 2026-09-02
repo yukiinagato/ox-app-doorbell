@@ -35,8 +35,12 @@ NSString *DBHexFromColor(UIColor *color);
 
 // backgroundHex is the effective background behind the text: the theme colour,
 // or the sampled average of the theme image when one is loaded.
+// display is status.display: core resolves the appearance, the averaged
+// background, the per-region ink and the call-button colour there, so every
+// shell agrees. Pass nil for an older core and the palette computes locally.
 + (DBUiPalette *)paletteForConfig:(NSDictionary *)config
                          deviceId:(NSString *)deviceId
+                          display:(NSDictionary *)display
                     backgroundHex:(NSString *)backgroundHex
                       minuteOfDay:(NSInteger)minuteOfDay;
 

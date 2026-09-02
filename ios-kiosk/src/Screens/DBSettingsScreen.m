@@ -8,6 +8,7 @@
 #import "../Core/DBUiTheme.h"
 #import "../Support/DBSafeModeRecovery.h"
 #import "DBNoticeDialog.h"
+#import "DBNumericKeypad.h"
 #import "DBRouter.h"
 #import "DBWidgets.h"
 
@@ -38,7 +39,22 @@ static DBSettingsRow *DBRow(NSString *title, NSString *value, NSString *action,
   return row;
 }
 
-@interface DBSettingsScreen () <UITableViewDataSource, UITableViewDelegate>
+// Core validates the zone against its own bundled table and rejects anything
+// else, so this list only has to cover the zones an installation is likely to
+// pick; the search field accepts any identifier the operator types.
+static NSArray *DBCommonTimeZones(void) {
+  return [NSArray arrayWithObjects:
+      @"Asia/Tokyo", @"Asia/Seoul", @"Asia/Shanghai", @"Asia/Taipei", @"Asia/Hong_Kong",
+      @"Asia/Singapore", @"Asia/Bangkok", @"Asia/Jakarta", @"Asia/Manila",
+      @"Asia/Kolkata", @"Asia/Dubai", @"Europe/London", @"Europe/Paris", @"Europe/Berlin",
+      @"Europe/Madrid", @"Europe/Rome", @"Europe/Amsterdam", @"Europe/Moscow",
+      @"America/New_York", @"America/Chicago", @"America/Denver", @"America/Los_Angeles",
+      @"America/Sao_Paulo", @"Australia/Sydney", @"Australia/Perth", @"Pacific/Auckland",
+      @"Pacific/Honolulu", @"UTC", nil];
+}
+
+@interface DBSettingsScreen () <UITableViewDataSource, UITableViewDelegate,
+                                UITableViewDataSource, UITextFieldDelegate>
 @end
 
 @implementation DBSettingsScreen {
@@ -61,6 +77,23 @@ static DBSettingsRow *DBRow(NSString *title, NSString *value, NSString *action,
   UITableView *_table;
   DBAdminQrView *_qr;
   UILabel *_toast;
+
+  // Editors. Numbers use the drawn keypad because the iOS 5 system keyboard has
+  // no usable IME here and would cover the field.
+  UIView *_keypadOverlay;
+  UILabel *_keypadTitle;
+  DBNumericKeypad *_keypad;
+  NSString *_pendingNumberKey;
+  NSInteger _pendingNumberMin;
+  NSInteger _pendingNumberMax;
+
+  UIView *_pickerOverlay;
+  UITextField *_pickerSearch;
+  UITableView *_pickerTable;
+  UIButton *_pickerCancel;
+  NSArray *_pickerAll;
+  NSArray *_pickerFiltered;
+  NSString *_pickerKey;
 }
 
 - (id)initWithRouter:(DBRouter *)router {
@@ -108,6 +141,52 @@ static DBSettingsRow *DBRow(NSString *title, NSString *value, NSString *action,
   _toast.font = [UIFont systemFontOfSize:16];
   _toast.textAlignment = NSTextAlignmentCenter;
   [self addSubview:_toast];
+
+  _keypadOverlay = [[UIView alloc] init];
+  _keypadOverlay.backgroundColor = [UIColor colorWithWhite:0 alpha:0.86];
+  _keypadOverlay.hidden = YES;
+  [self addSubview:_keypadOverlay];
+  _keypadTitle = [[UILabel alloc] init];
+  _keypadTitle.backgroundColor = [UIColor clearColor];
+  _keypadTitle.textColor = [UIColor whiteColor];
+  _keypadTitle.textAlignment = NSTextAlignmentCenter;
+  _keypadTitle.font = [UIFont boldSystemFontOfSize:22];
+  [_keypadOverlay addSubview:_keypadTitle];
+  _keypad = [[DBNumericKeypad alloc] initWithSubmitTitle:@""];
+  _keypad.maxLength = 5;
+  __weak DBSettingsScreen *weakSelf = self;
+  _keypad.onSubmit = ^(NSString *value) {
+    DBSettingsScreen *screen = weakSelf;
+    if (screen) [screen commitPendingNumber:value];
+  };
+  [_keypadOverlay addSubview:_keypad];
+
+  _pickerOverlay = [[UIView alloc] init];
+  _pickerOverlay.backgroundColor = [UIColor colorWithWhite:0 alpha:0.9];
+  _pickerOverlay.hidden = YES;
+  [self addSubview:_pickerOverlay];
+  _pickerSearch = [[UITextField alloc] init];
+  _pickerSearch.borderStyle = UITextBorderStyleRoundedRect;
+  _pickerSearch.font = [UIFont systemFontOfSize:19];
+  _pickerSearch.autocorrectionType = UITextAutocorrectionTypeNo;
+  _pickerSearch.autocapitalizationType = UITextAutocapitalizationTypeNone;
+  _pickerSearch.returnKeyType = UIReturnKeyDone;
+  _pickerSearch.delegate = self;
+  [_pickerSearch addTarget:self action:@selector(onPickerSearchChanged)
+          forControlEvents:UIControlEventEditingChanged];
+  [_pickerOverlay addSubview:_pickerSearch];
+  _pickerTable = [[UITableView alloc] initWithFrame:CGRectZero style:UITableViewStylePlain];
+  _pickerTable.dataSource = self;
+  _pickerTable.delegate = self;
+  _pickerTable.rowHeight = 54;
+  [_pickerOverlay addSubview:_pickerTable];
+  _pickerCancel = [UIButton buttonWithType:UIButtonTypeCustom];
+  _pickerCancel.titleLabel.font = [UIFont boldSystemFontOfSize:18];
+  _pickerCancel.layer.cornerRadius = 8;
+  _pickerCancel.clipsToBounds = YES;
+  [_pickerCancel addTarget:self action:@selector(onPickerCancel)
+          forControlEvents:UIControlEventTouchUpInside];
+  [_pickerOverlay addSubview:_pickerCancel];
 }
 
 - (void)onScreenWillAppear {
@@ -151,8 +230,9 @@ static DBSettingsRow *DBRow(NSString *title, NSString *value, NSString *action,
 }
 
 - (void)applyPalette {
-  _palette = [DBUiPalette paletteForConfig:_cfg deviceId:_nodeId backgroundHex:nil
-                               minuteOfDay:[self minuteOfDay]];
+  _palette = [DBUiPalette paletteForConfig:_cfg deviceId:_nodeId
+                                   display:[DBConfigUtil dig:_status path:@"display"]
+                             backgroundHex:nil minuteOfDay:[self minuteOfDay]];
   self.backgroundColor = _palette.surface;
   _title.textColor = _palette.ink;
   _toast.textColor = _palette.mutedInk;
@@ -207,12 +287,15 @@ static DBSettingsRow *DBRow(NSString *title, NSString *value, NSString *action,
                         [DBTexts langDisplayName:_boot.uiLang], @"ui_lang", nil)];
   [rows addObject:DBRow([_texts ts:@"settings.helper_mode"],
                         _boot.keepaliveHelperPolicy ?: @"off", @"helper_mode", nil)];
-  NSString *appearance = [DBUiTheme appearanceModeForConfig:_cfg deviceId:_nodeId
-                                                minuteOfDay:[self minuteOfDay]];
-  [rows addObject:[self webOnlyRow:[_texts ts:@"settings.appearance"]
-                             value:[_texts ts:([appearance isEqualToString:@"light"]
-                                                   ? @"settings.appearance_light"
-                                                   : @"settings.appearance_dark")]]];
+  NSString *configured = [DBConfigUtil str:_cfg path:@"display.appearance"] ?: @"auto_system";
+  NSString *effective = [DBUiTheme appearanceModeForConfig:_cfg deviceId:_nodeId
+                                                   display:[DBConfigUtil dig:_status
+                                                                       path:@"display"]
+                                               minuteOfDay:[self minuteOfDay]];
+  [rows addObject:DBRow([_texts ts:@"settings.appearance"],
+                        [self appearanceLabel:configured effective:effective],
+                        @"cycle",
+                        @"display.appearance|auto_schedule,light,dark")];
   NSString *playback = [DBConfigUtil str:_cfg path:[NSString stringWithFormat:
       @"devices.%@.local.video.playback", _nodeId]] ?: @"low_latency";
   [rows addObject:[self webOnlyRow:[_texts ts:@"settings.video_playback"] value:playback]];
@@ -222,8 +305,11 @@ static DBSettingsRow *DBRow(NSString *title, NSString *value, NSString *action,
   [rows addObject:[self webOnlyRow:[_texts ts:@"settings.theme_bg"]
                              value:([self themeBackgroundHex] ?: @"")]];
   [rows addObject:[self webOnlyRow:[_texts ts:@"settings.web_only_upload"] value:@""]];
-  if (_boot.kiosk)
-    [rows addObject:DBRow([_texts ts:@"settings.exit_kiosk"], @"", @"exit_kiosk", nil)];
+  [rows addObject:[self webOnlyRow:[_texts ts:@"settings.web_only_labels"] value:@""]];
+  // No キオスクを終了 row here: on this jailbroken iPad the app *is* the kiosk,
+  // so there is no mode to leave -- terminating it only makes the watchdog or
+  // the root helper relaunch it. A row that cannot do what it says is worse
+  // than no row (spec §5.2, no decorative controls).
   return rows;
 }
 
@@ -239,29 +325,62 @@ static DBSettingsRow *DBRow(NSString *title, NSString *value, NSString *action,
       [NSArray arrayWithObjects:@"call", @"volume.call", nil],
       [NSArray arrayWithObjects:@"sos", @"volume.sos", nil],
       [NSArray arrayWithObjects:@"idle", @"volume.idle", nil], nil];
+  BOOL anyDeviceOverride = NO;
   for (NSArray *level in levels) {
-    NSString *key = [level objectAtIndex:0];
-    NSInteger value = [DBConfigUtil intVal:_audio path:key def:-1];
-    [rows addObject:[self webOnlyRow:[_texts ts:[level objectAtIndex:1]]
-                               value:(value < 0 ? @"" : [NSString stringWithFormat:@"%ld",
-                                                          (long)value])]];
+    NSString *level_id = [level objectAtIndex:0];
+    NSInteger effective = [DBConfigUtil intVal:_audio path:level_id def:-1];
+    NSString *deviceKey = [NSString stringWithFormat:
+        @"devices.%@.local.audio.volume.%@", _nodeId, level_id];
+    BOOL overridden = ([DBConfigUtil dig:_cfg path:deviceKey] != nil);
+    if (overridden) anyDeviceOverride = YES;
+    NSInteger clusterValue = [DBConfigUtil intVal:_cfg
+        path:[NSString stringWithFormat:@"audio.volume.%@", level_id] def:-1];
+    NSMutableString *value = [NSMutableString stringWithFormat:@"%ld",
+        (long)(effective < 0 ? 0 : effective)];
+    if (!overridden && clusterValue >= 0)
+      [value appendFormat:@"  (%@)", [_texts t:@"volume.cluster_default",
+          [NSString stringWithFormat:@"%ld", (long)clusterValue], nil]];
+    // Writing the device key overrides; clearing it inherits again.
+    [rows addObject:DBRow([_texts ts:[level objectAtIndex:1]], value, @"number",
+                          [NSString stringWithFormat:@"%@|0|100", deviceKey])];
+  }
+  if (anyDeviceOverride) {
+    [rows addObject:DBRow([_texts ts:@"settings.inherit"], @"", @"inherit",
+                          [NSString stringWithFormat:@"devices.%@.local.audio.volume",
+                                                     _nodeId])];
   }
   return rows;
+}
+
+- (NSString *)appearanceLabel:(NSString *)configured effective:(NSString *)effective {
+  if ([configured isEqualToString:@"light"]) return [_texts ts:@"settings.appearance_light"];
+  if ([configured isEqualToString:@"dark"]) return [_texts ts:@"settings.appearance_dark"];
+  return [NSString stringWithFormat:@"%@  ·  %@", [_texts ts:@"settings.appearance_schedule"],
+      [_texts ts:([effective isEqualToString:@"light"] ? @"settings.appearance_light"
+                                                       : @"settings.appearance_dark")]];
 }
 
 - (NSArray *)timeRows {
   NSMutableArray *rows = [NSMutableArray array];
   NSString *zone = [DBConfigUtil str:_status path:@"time.zone"];
   if ([zone length] == 0) zone = [DBConfigUtil str:_cfg path:@"time.zone"];
-  [rows addObject:[self webOnlyRow:[_texts ts:@"time.zone"] value:(zone ?: @"")]];
+  [rows addObject:DBRow([_texts ts:@"time.zone"], (zone ?: @""), @"zone", @"time.zone")];
   NSString *source = [DBConfigUtil str:_status path:@"time.source"] ?: @"system";
   [rows addObject:DBRow([_texts ts:@"time.source"],
                         [_texts ts:([source isEqualToString:@"ntp"] ? @"time.source_ntp"
                                                                     : @"time.source_system")],
                         @"", nil)];
-  BOOL ntpOn = [DBConfigUtil boolVal:_status path:@"time.enabled" def:NO];
-  [rows addObject:[self webOnlyRow:[_texts ts:@"time.ntp_enabled"]
-                             value:[_texts ts:(ntpOn ? @"settings.on" : @"settings.off")]]];
+  BOOL ntpOn = [DBConfigUtil boolVal:_cfg path:@"time.ntp.enabled" def:NO];
+  [rows addObject:DBRow([_texts ts:@"time.ntp_enabled"],
+                        [_texts ts:(ntpOn ? @"settings.on" : @"settings.off")],
+                        @"toggle",
+                        [NSString stringWithFormat:@"time.ntp.enabled|%d", ntpOn ? 1 : 0])];
+  NSInteger interval = [DBConfigUtil intVal:_cfg path:@"time.ntp.interval_s" def:900];
+  [rows addObject:DBRow([_texts ts:@"time.interval_s"],
+                        [NSString stringWithFormat:@"%ld", (long)interval], @"number",
+                        @"time.ntp.interval_s|60|86400")];
+  // Host names cannot be typed on a drawn numeric keypad, so the server list
+  // stays a web-admin field.
   id servers = [DBConfigUtil dig:_cfg path:@"time.ntp.servers"];
   if ([servers isKindOfClass:[NSArray class]])
     [rows addObject:[self webOnlyRow:[_texts ts:@"time.servers"]
@@ -291,11 +410,16 @@ static DBSettingsRow *DBRow(NSString *title, NSString *value, NSString *action,
                             notice ? [DBNoticeModel noticeText:notice]
                                    : [_texts ts:@"notice.none"],
                             @"notice", door)];
-      BOOL showUnlock = [DBConfigUtil boolVal:_cfg
-          path:[NSString stringWithFormat:@"doors.%@.unlock.show_button", door] def:NO];
-      [rows addObject:[self webOnlyRow:[_texts ts:@"settings.unlock_button"]
-                                 value:[_texts ts:(showUnlock ? @"settings.on"
-                                                              : @"settings.off")]]];
+      NSDictionary *unlock = [DBConfigUtil dig:_status
+          path:[NSString stringWithFormat:@"doors.%@.unlock", door]];
+      BOOL configuredUnlock = [DBConfigUtil boolVal:unlock path:@"configured" def:NO];
+      BOOL showUnlock = [DBConfigUtil boolVal:unlock path:@"show_button"
+                                          def:configuredUnlock];
+      [rows addObject:DBRow([_texts ts:@"settings.unlock_button"],
+                            [_texts ts:(showUnlock ? @"settings.on" : @"settings.off")],
+                            @"toggle",
+                            [NSString stringWithFormat:@"doors.%@.unlock.show_button|%d",
+                                                       door, showUnlock ? 1 : 0])];
     }
   }
   [rows addObject:DBRow([_texts ts:@"dash.notice_global"], @"", @"notice", @"")];
@@ -309,10 +433,11 @@ static DBSettingsRow *DBRow(NSString *title, NSString *value, NSString *action,
     for (NSString *purpose in [DBConfigUtil sortedByOrder:purposes]) {
       NSDictionary *entry = [purposes objectForKey:purpose];
       BOOL enabled = [DBConfigUtil boolVal:entry path:@"enabled" def:YES];
-      [rows addObject:[self webOnlyRow:[DBConfigUtil labelOf:entry lang:_boot.uiLang
-                                                    fallback:purpose]
-                                 value:[_texts ts:(enabled ? @"settings.on"
-                                                           : @"settings.off")]]];
+      [rows addObject:DBRow([DBConfigUtil labelOf:entry lang:_boot.uiLang fallback:purpose],
+                            [_texts ts:(enabled ? @"settings.on" : @"settings.off")],
+                            @"toggle",
+                            [NSString stringWithFormat:@"visit_purposes.%@.enabled|%d",
+                                                       purpose, enabled ? 1 : 0])];
     }
   }
   return rows;
@@ -467,11 +592,136 @@ static DBSettingsRow *DBRow(NSString *title, NSString *value, NSString *action,
   }];
 }
 
+// Every cluster write goes through Core's C ABI, which applies the same
+// validation and advisory colour warnings as the web admin (spec §5.5). A Core
+// that predates the export answers -100 and the row says so rather than
+// pretending the value was saved.
+- (BOOL)reportWriteStatus:(int)status {
+  if (status == 0) {
+    [self showToast:[_texts ts:@"settings.saved"]];
+    [self reload];
+    return YES;
+  }
+  [self showToast:[_texts ts:(status == -100 ? @"settings.web_only"
+                                             : @"settings.save_failed")]];
+  return NO;
+}
+
+- (void)commitPendingNumber:(NSString *)value {
+  _keypadOverlay.hidden = YES;
+  if ([_pendingNumberKey length] == 0) return;
+  NSInteger number = [value integerValue];
+  if ([value length] == 0 || number < _pendingNumberMin || number > _pendingNumberMax) {
+    [self showToast:[_texts ts:@"settings.save_failed"]];
+    return;
+  }
+  [self reportWriteStatus:[_core setConfigKey:_pendingNumberKey numberValue:number]];
+  _pendingNumberKey = nil;
+}
+
+- (void)promptNumberForRow:(DBSettingsRow *)row {
+  NSArray *parts = [row.argument componentsSeparatedByString:@"|"];
+  if ([parts count] != 3) return;
+  _pendingNumberKey = [[parts objectAtIndex:0] copy];
+  _pendingNumberMin = [[parts objectAtIndex:1] integerValue];
+  _pendingNumberMax = [[parts objectAtIndex:2] integerValue];
+  _keypadTitle.text = [NSString stringWithFormat:@"%@  (%ld–%ld)", row.title,
+                       (long)_pendingNumberMin, (long)_pendingNumberMax];
+  [_keypad setSubmitTitle:[_texts ts:@"admin.save"]];
+  [_keypad clear];
+  _keypadOverlay.hidden = NO;
+  [self bringSubviewToFront:_keypadOverlay];
+  [self setNeedsLayout];
+}
+
+- (void)toggleForRow:(DBSettingsRow *)row {
+  NSArray *parts = [row.argument componentsSeparatedByString:@"|"];
+  if ([parts count] != 2) return;
+  BOOL current = [[parts objectAtIndex:1] integerValue] != 0;
+  [self reportWriteStatus:[_core setConfigKey:[parts objectAtIndex:0] boolValue:!current]];
+}
+
+- (void)cycleForRow:(DBSettingsRow *)row {
+  NSArray *parts = [row.argument componentsSeparatedByString:@"|"];
+  if ([parts count] != 2) return;
+  NSString *key = [parts objectAtIndex:0];
+  NSArray *values = [[parts objectAtIndex:1] componentsSeparatedByString:@","];
+  if ([values count] == 0) return;
+  NSString *current = [DBConfigUtil str:_cfg path:key] ?: @"";
+  NSUInteger index = [values indexOfObject:current];
+  NSString *next = [values objectAtIndex:(index == NSNotFound ? 0
+                                                              : (index + 1) % [values count])];
+  [self reportWriteStatus:[_core setConfigKey:key stringValue:next]];
+}
+
+- (void)inheritForRow:(DBSettingsRow *)row {
+  // Clearing the device key restores inheritance from the cluster default.
+  [self reportWriteStatus:[_core deleteConfigKey:row.argument]];
+}
+
+- (void)presentZonePickerForKey:(NSString *)key {
+  _pickerKey = [key copy];
+  _pickerAll = DBCommonTimeZones();
+  _pickerFiltered = _pickerAll;
+  _pickerSearch.text = @"";
+  _pickerSearch.placeholder = [_texts ts:@"settings.zone_search"];
+  [_pickerCancel setTitle:[_texts ts:@"admin.cancel"] forState:UIControlStateNormal];
+  _pickerCancel.backgroundColor = _palette.elevated;
+  [_pickerCancel setTitleColor:_palette.ink forState:UIControlStateNormal];
+  _pickerTable.backgroundColor = _palette.surface;
+  _pickerTable.separatorColor = _palette.separator;
+  [_pickerTable reloadData];
+  _pickerOverlay.hidden = NO;
+  [self bringSubviewToFront:_pickerOverlay];
+  [self setNeedsLayout];
+}
+
+- (void)onPickerSearchChanged {
+  NSString *query = [_pickerSearch.text stringByTrimmingCharactersInSet:
+      [NSCharacterSet whitespaceAndNewlineCharacterSet]];
+  if ([query length] == 0) {
+    _pickerFiltered = _pickerAll;
+  } else {
+    NSMutableArray *matches = [NSMutableArray array];
+    for (NSString *zone in _pickerAll) {
+      if ([zone rangeOfString:query options:NSCaseInsensitiveSearch].location != NSNotFound)
+        [matches addObject:zone];
+    }
+    // Anything the operator types is offered too: Core owns the real table and
+    // rejects an identifier it does not know.
+    if ([matches count] == 0 && [query rangeOfString:@"/"].location != NSNotFound)
+      [matches addObject:query];
+    _pickerFiltered = matches;
+  }
+  [_pickerTable reloadData];
+}
+
+- (BOOL)textFieldShouldReturn:(UITextField *)textField {
+  [textField resignFirstResponder];
+  return YES;
+}
+
+- (void)onPickerCancel {
+  [_pickerSearch resignFirstResponder];
+  _pickerOverlay.hidden = YES;
+  _pickerKey = nil;
+}
+
 - (void)performAction:(DBSettingsRow *)row {
   NSString *action = row.action;
   if ([action length] == 0) return;
   if ([action isEqualToString:@"web"]) {
     [self showToast:[_texts ts:@"settings.web_only"]];
+  } else if ([action isEqualToString:@"number"]) {
+    [self promptNumberForRow:row];
+  } else if ([action isEqualToString:@"toggle"]) {
+    [self toggleForRow:row];
+  } else if ([action isEqualToString:@"cycle"]) {
+    [self cycleForRow:row];
+  } else if ([action isEqualToString:@"inherit"]) {
+    [self inheritForRow:row];
+  } else if ([action isEqualToString:@"zone"]) {
+    [self presentZonePickerForKey:row.argument];
   } else if ([action isEqualToString:@"ui_lang"]) {
     [self cycleLocalKey:@"ui_lang"
                  values:[NSArray arrayWithObjects:@"ja", @"en", @"zh", nil]
@@ -501,8 +751,6 @@ static DBSettingsRow *DBRow(NSString *title, NSString *value, NSString *action,
     [_router showHistory];
   } else if ([action isEqualToString:@"info"]) {
     [_router showInfo];
-  } else if ([action isEqualToString:@"exit_kiosk"]) {
-    [self showToast:[_texts ts:@"settings.web_only"]];
   }
 }
 
@@ -513,25 +761,39 @@ static DBSettingsRow *DBRow(NSString *title, NSString *value, NSString *action,
 #pragma mark - table
 
 - (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView {
-  (void)tableView;
+  if (tableView == _pickerTable) return 1;
   return (NSInteger)[_sections count];
 }
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
-  (void)tableView;
+  if (tableView == _pickerTable) return (NSInteger)[_pickerFiltered count];
   if (section < 0 || section >= (NSInteger)[_sections count]) return 0;
   return (NSInteger)[[[_sections objectAtIndex:(NSUInteger)section]
       objectForKey:@"rows"] count];
 }
 
 - (NSString *)tableView:(UITableView *)tableView titleForHeaderInSection:(NSInteger)section {
-  (void)tableView;
+  if (tableView == _pickerTable) return nil;
   if (section < 0 || section >= (NSInteger)[_sections count]) return nil;
   return [[_sections objectAtIndex:(NSUInteger)section] objectForKey:@"title"];
 }
 
 - (UITableViewCell *)tableView:(UITableView *)tableView
          cellForRowAtIndexPath:(NSIndexPath *)indexPath {
+  if (tableView == _pickerTable) {
+    static NSString *zoneIdentifier = @"zone";
+    UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:zoneIdentifier];
+    if (cell == nil)
+      cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleDefault
+                                    reuseIdentifier:zoneIdentifier];
+    if (indexPath.row < (NSInteger)[_pickerFiltered count])
+      cell.textLabel.text = [_pickerFiltered objectAtIndex:(NSUInteger)indexPath.row];
+    cell.textLabel.font = [UIFont systemFontOfSize:19];
+    cell.textLabel.textColor = _palette.ink;
+    cell.textLabel.backgroundColor = [UIColor clearColor];
+    cell.backgroundColor = _palette.elevated;
+    return cell;
+  }
   static NSString *identifier = @"setting";
   UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:identifier];
   if (cell == nil) {
@@ -559,6 +821,14 @@ static DBSettingsRow *DBRow(NSString *title, NSString *value, NSString *action,
 
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
   [tableView deselectRowAtIndexPath:indexPath animated:YES];
+  if (tableView == _pickerTable) {
+    if (indexPath.row >= (NSInteger)[_pickerFiltered count]) return;
+    NSString *zone = [_pickerFiltered objectAtIndex:(NSUInteger)indexPath.row];
+    NSString *key = _pickerKey;
+    [self onPickerCancel];
+    if ([key length] > 0) [self reportWriteStatus:[_core setConfigKey:key stringValue:zone]];
+    return;
+  }
   [self performAction:[self rowAt:indexPath]];
 }
 
@@ -576,6 +846,22 @@ static DBSettingsRow *DBRow(NSString *title, NSString *value, NSString *action,
   _toast.frame = CGRectMake(CGRectGetMaxX(_qr.frame) + 12, size.height - footer + 30,
                             MAX(0, size.width - CGRectGetMaxX(_qr.frame) - 12 - pad), 30);
   _noticeDialog.frame = self.bounds;
+
+  _keypadOverlay.frame = self.bounds;
+  CGFloat keypadWidth = MIN(320, size.width - 80);
+  CGFloat keypadHeight = [DBNumericKeypad heightForWidth:keypadWidth];
+  CGFloat keypadY = MAX(60, (size.height - keypadHeight) / 2);
+  _keypadTitle.frame = CGRectMake(0, keypadY - 46, size.width, 34);
+  _keypad.frame = CGRectMake((size.width - keypadWidth) / 2, keypadY, keypadWidth,
+                             keypadHeight);
+
+  _pickerOverlay.frame = self.bounds;
+  CGFloat pickerWidth = MIN(520, size.width - 60);
+  CGFloat pickerX = (size.width - pickerWidth) / 2;
+  _pickerSearch.frame = CGRectMake(pickerX, 40, pickerWidth, 46);
+  _pickerCancel.frame = CGRectMake(pickerX, size.height - 66, pickerWidth, 46);
+  _pickerTable.frame = CGRectMake(pickerX, 96, pickerWidth,
+                                  MAX(80, size.height - 96 - 80));
 }
 
 @end

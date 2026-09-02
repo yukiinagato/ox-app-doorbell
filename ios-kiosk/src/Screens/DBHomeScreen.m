@@ -94,6 +94,7 @@ static const NSInteger kRecentCallLimit = 20;
 
   NSDictionary *_cfg;
   NSDictionary *_status;
+  NSDictionary *_display;   // status.display: core-resolved appearance and theme.
   NSString *_nodeId;
   NSString *_themeHash;
   NSString *_themeAverageHex;   // Sampled average behind the text regions.
@@ -479,7 +480,10 @@ static const NSInteger kRecentCallLimit = 20;
     _nodeId = [DBConfigUtil str:status path:@"node.id"] ?: @"";
     _doorPeers = [DBConfigUtil doorPeers:status];
     NSDictionary *display = [status objectForKey:@"display"];
-    if ([display isKindOfClass:[NSDictionary class]]) [self applyDisplayEvent:display];
+    if ([display isKindOfClass:[NSDictionary class]]) {
+      _display = display;
+      [self applyDisplayEvent:display];
+    }
   }
   if (log) {
     _recentRows = [DBCallHistoryModel pageRows:[DBCallHistoryModel rowsFromLog:log]
@@ -541,8 +545,8 @@ static const NSInteger kRecentCallLimit = 20;
   // The ink rule samples the effective background: the theme image's average
   // when one is loaded, otherwise the theme colour, otherwise the mode surface.
   NSString *background = _themeAverageHex ?: [self themeValue:@"bg_color"];
-  _palette = [DBUiPalette paletteForConfig:_cfg deviceId:_nodeId backgroundHex:background
-                               minuteOfDay:[self minuteOfDay]];
+  _palette = [DBUiPalette paletteForConfig:_cfg deviceId:_nodeId display:_display
+                             backgroundHex:background minuteOfDay:[self minuteOfDay]];
   if (_themeBg.hidden) self.backgroundColor = _palette.surface;
 
   _clockLabel.textColor = [_palette inkForRegion:DBUiRegionClock];
@@ -965,6 +969,11 @@ static const NSInteger kRecentCallLimit = 20;
 }
 
 - (void)applyDisplayEvent:(NSDictionary *)display {
+  // The event carries the same contract as status.display, including the
+  // resolved appearance and the automatic theme decision.
+  if ([display objectForKey:@"theme"] != nil ||
+      [display objectForKey:@"appearance"] != nil)
+    _display = display;
   _brightness = [DBConfigUtil intVal:display path:@"brightness" def:_brightness];
   _night = [DBConfigUtil evBool:display key:@"night"];
   _redTint = [DBConfigUtil evBool:display key:@"red_tint"];

@@ -1,6 +1,6 @@
 #import "DBNoticeModel.h"
 
-NSString *const DBNoticeTargetGlobal = @"";
+NSString *const DBNoticeTargetGlobal = @"*";
 const NSUInteger DBNoticeMaxTextLength = 200;
 const NSUInteger DBNoticeMaxPresets = 8;
 

@@ -35,7 +35,15 @@ FOUNDATION_EXPORT NSString *const DBUiRegionTileLabel;
 // Returns "light" or "dark". minutes are local minutes past midnight.
 + (NSString *)appearanceModeForConfig:(NSDictionary *)config
                              deviceId:(NSString *)deviceId
-                        minuteOfDay:(NSInteger)minuteOfDay;
+                          minuteOfDay:(NSInteger)minuteOfDay;
+// Core resolves the schedule in the configured time zone and reports it as
+// status.display.appearance; the shell uses that when present and falls back to
+// its own evaluation only for an older core. follow_system is treated as the
+// schedule here because iOS 5 has no system light/dark setting.
++ (NSString *)appearanceModeForConfig:(NSDictionary *)config
+                             deviceId:(NSString *)deviceId
+                              display:(NSDictionary *)display
+                          minuteOfDay:(NSInteger)minuteOfDay;
 + (NSString *)normalizedAppearance:(NSString *)appearance;
 + (NSInteger)minuteOfDayFromClock:(NSString *)hhmm fallback:(NSInteger)fallback;
 
@@ -58,6 +66,17 @@ FOUNDATION_EXPORT NSString *const DBUiRegionTileLabel;
                      deviceId:(NSString *)deviceId
                 backgroundHex:(NSString *)backgroundHex
                appearanceMode:(NSString *)appearanceMode;
+// Same order, but reading core's computed display.theme first: auto_ink and the
+// administrator's ink_override both arrive there already resolved.
++ (NSString *)inkHexForRegion:(NSString *)region
+                       config:(NSDictionary *)config
+                     deviceId:(NSString *)deviceId
+                      display:(NSDictionary *)display
+                backgroundHex:(NSString *)backgroundHex
+               appearanceMode:(NSString *)appearanceMode;
+// The effective background core measured (an averaged theme image, or the
+// theme colour). Returns nil when core published none.
++ (NSString *)autoBackgroundHexInDisplay:(NSDictionary *)display;
 // A 1 px shadow of the opposite ink is only added below the AA text threshold.
 + (BOOL)needsInkShadowForInk:(NSString *)inkHex background:(NSString *)backgroundHex;
 
@@ -71,6 +90,18 @@ FOUNDATION_EXPORT NSString *const DBUiRegionTileLabel;
 + (NSString *)callButtonHexForConfig:(NSDictionary *)config
                             deviceId:(NSString *)deviceId
                        backgroundHex:(NSString *)backgroundHex;
+// display.theme.call_button_bg already folds the administrator's override into
+// the computed accent, and call_button_ink says what to draw on it: on a
+// mid-luminance background no colour both separates and carries white text, so
+// core returns the best compromise rather than an unreadable button.
++ (NSString *)callButtonHexForConfig:(NSDictionary *)config
+                            deviceId:(NSString *)deviceId
+                             display:(NSDictionary *)display
+                       backgroundHex:(NSString *)backgroundHex;
++ (NSString *)callButtonInkHexForConfig:(NSDictionary *)config
+                               deviceId:(NSString *)deviceId
+                                display:(NSDictionary *)display
+                          backgroundHex:(NSString *)backgroundHex;
 
 // ---- deliberate line breaks (§5.1) ----
 // Authored labels carry "\n"; the second part renders smaller and muted.

@@ -378,8 +378,11 @@
 }
 
 - (NSArray *)targetDoors {
+  // Core addresses the cluster-wide announcement with "*" and stores it at
+  // notice.global; a door-specific one always overrides it, so 全体 must never
+  // be written by looping over the doors.
   if ([_target length] > 0) return [NSArray arrayWithObject:_target];
-  return _doorIds;
+  return [NSArray arrayWithObject:DBNoticeTargetGlobal];
 }
 
 - (void)onPublish {
@@ -399,8 +402,12 @@
       : [DBNoticeModel expiryMsForPreset:_expiryPreset nowMs:nowMs
                         endOfDayOffsetMs:[self endOfDayOffsetMs]];
   BOOL allOk = YES;
-  for (NSString *door in doors)
-    if (![_core setNotice:text forDoor:door expiresMs:expires]) allOk = NO;
+  for (NSString *door in doors) {
+    BOOL ok = [door isEqualToString:DBNoticeTargetGlobal]
+        ? [_core setGlobalNotice:text expiresMs:expires]
+        : [_core setNotice:text forDoor:door expiresMs:expires];
+    if (!ok) allOk = NO;
+  }
   _changed = _changed || allOk;
   _status.text = [_texts ts:(allOk ? @"notice.saved" : @"notice.failed")];
   if (allOk) [self dismiss];
@@ -409,8 +416,11 @@
 - (void)onClear {
   NSArray *doors = [self targetDoors];
   BOOL allOk = ([doors count] > 0);
-  for (NSString *door in doors)
-    if (![_core clearNoticeForDoor:door]) allOk = NO;
+  for (NSString *door in doors) {
+    BOOL ok = [door isEqualToString:DBNoticeTargetGlobal]
+        ? [_core clearGlobalNotice] : [_core clearNoticeForDoor:door];
+    if (!ok) allOk = NO;
+  }
   _changed = _changed || allOk;
   _status.text = [_texts ts:(allOk ? @"notice.cleared" : @"notice.failed")];
   if (allOk) [self dismiss];

@@ -224,6 +224,70 @@ static void TestDeliberateLineBreaksAndVersionLine(void) {
               == NSNotFound, @"a device without a battery shows no battery text");
 }
 
+// Core computes the appearance, the averaged background, the per-region ink and
+// the call-button colour once and publishes them as status.display, so every
+// shell agrees instead of each deriving its own (batch-2 core delta).
+static void TestCoreResolvedDisplayContractWins(void) {
+  NSDictionary *config = @{ @"display" : @{ @"appearance" : @"auto_schedule" } };
+  NSDictionary *display = @{
+    @"appearance" : @{ @"configured" : @"auto_schedule", @"effective" : @"light",
+                       @"follow_system" : @NO },
+    @"theme" : @{
+      @"auto_background" : @{ @"color" : @"#9BD748", @"source" : @"image" },
+      @"auto_ink" : @{ @"clock" : @"dark" },
+      @"auto_accent" : @{ @"call_button" : @"#391142", @"call_button_ink" : @"dark" },
+      @"call_button_bg" : @"#391142",
+      @"call_button_ink" : @"dark" } };
+
+  // Midnight would be dark by the schedule; core says light and core wins.
+  Require([[DBUiTheme appearanceModeForConfig:config deviceId:@"n1" display:display
+                                  minuteOfDay:23 * 60] isEqualToString:@"light"],
+          @"core's resolved appearance is used as is");
+  Require([[DBUiTheme appearanceModeForConfig:config deviceId:@"n1" display:nil
+                                  minuteOfDay:23 * 60] isEqualToString:@"dark"],
+          @"an older core without the contract falls back to the local schedule");
+  NSDictionary *forced = @{
+    @"display" : @{ @"appearance" : @"auto_schedule" },
+    @"devices" : @{ @"n1" : @{ @"local" : @{ @"display" : @{ @"appearance" : @"dark" } } } } };
+  Require([[DBUiTheme appearanceModeForConfig:forced deviceId:@"n1" display:display
+                                  minuteOfDay:12 * 60] isEqualToString:@"dark"],
+          @"a device override is a local decision and still wins");
+
+  Require([[DBUiTheme autoBackgroundHexInDisplay:display] isEqualToString:@"#9BD748"],
+          @"the measured background is read from the contract");
+  Require([DBUiTheme autoBackgroundHexInDisplay:nil] == nil,
+          @"and is absent on an older core");
+
+  Require([[DBUiTheme inkHexForRegion:DBUiRegionClock config:[NSDictionary dictionary]
+                             deviceId:@"n1" display:display backgroundHex:@"#0B0E12"
+                       appearanceMode:@"dark"] isEqualToString:[DBUiTheme darkInkHex]],
+          @"core's per-region ink decision wins over the local sample");
+  NSDictionary *adminInk = @{ @"theme" : @{ @"auto_ink" : @{ @"clock" : @"dark" },
+                                            @"ink_override" : @{ @"clock" : @"#FF0000" } } };
+  Require([[DBUiTheme inkHexForRegion:DBUiRegionClock config:[NSDictionary dictionary]
+                             deviceId:@"n1" display:adminInk backgroundHex:@"#0B0E12"
+                       appearanceMode:@"dark"] isEqualToString:@"#FF0000"],
+          @"an administrator's override arrives already resolved");
+
+  Require([[DBUiTheme callButtonHexForConfig:[NSDictionary dictionary] deviceId:@"n1"
+                                     display:display backgroundHex:@"#9BD748"]
+              isEqualToString:@"#391142"], @"the call button colour comes from core");
+  // The ink is taken from the contract, never re-derived: on a mid-luminance
+  // background core returns the best compromise rather than an unreadable pair.
+  Require([[DBUiTheme callButtonInkHexForConfig:[NSDictionary dictionary] deviceId:@"n1"
+                                        display:display backgroundHex:@"#9BD748"]
+              isEqualToString:[DBUiTheme darkInkHex]], @"and so does its text colour");
+  NSDictionary *deviceAccent = @{ @"devices" : @{ @"n1" : @{ @"local" : @{
+      @"theme" : @{ @"call_button_bg" : @"#123456" } } } } };
+  Require([[DBUiTheme callButtonHexForConfig:deviceAccent deviceId:@"n1" display:display
+                               backgroundHex:@"#9BD748"] isEqualToString:@"#123456"],
+          @"a per-device colour still wins");
+  Require([[DBUiTheme callButtonHexForConfig:[NSDictionary dictionary] deviceId:@"n1"
+                                     display:nil backgroundHex:@"#9BD748"]
+              isEqualToString:[DBUiTheme autoAccentForBackgroundHex:@"#9BD748"]],
+          @"an older core is served by the local computation");
+}
+
 static void TestVideoAspectIsPreserved(void) {
   // A portrait door camera in a landscape slot is letterboxed, never cropped.
   NSArray *portrait = [DBUiTheme aspectFitRectForContentWidth:480 contentHeight:640
@@ -424,6 +488,14 @@ static void TestNoticePrecedenceExpiryAndPresets(void) {
   Require([[DBNoticeModel noticeText:annex] isEqualToString:@"全体のお知らせ"],
           @"a door without its own notice shows the global one");
 
+  // Core addresses the cluster-wide announcement with "*", stored at
+  // notice.global; the shell must never emulate it by writing every door.
+  Require([DBNoticeTargetGlobal isEqualToString:@"*"], @"the global target is \"*\"");
+  NSDictionary *viaGlobal = [DBNoticeModel effectiveNoticeForDoor:DBNoticeTargetGlobal
+                                                            config:config nowMs:now];
+  Require([[DBNoticeModel noticeText:viaGlobal] isEqualToString:@"全体のお知らせ"],
+          @"the global target resolves to notice.global");
+
   NSArray *active = [DBNoticeModel doorsWithActiveNoticeInConfig:config nowMs:now];
   Require([active count] == 1 && [[active objectAtIndex:0] isEqualToString:@"d_front"],
           @"only doors with a live notice get the tile chip");
@@ -563,6 +635,7 @@ int main(void) {
     TestAppearanceScheduleReplacesSystemDarkMode();
     TestComputedCallButtonColour();
     TestDeliberateLineBreaksAndVersionLine();
+    TestCoreResolvedDisplayContractWins();
     TestVideoAspectIsPreserved();
     TestSosSlideCountdownStateMachine();
     TestHistoryPagingFilteringAndGrouping();

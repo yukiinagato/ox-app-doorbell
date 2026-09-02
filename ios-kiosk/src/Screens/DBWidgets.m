@@ -44,6 +44,7 @@ NSString *DBHexFromColor(UIColor *color) {
 
 @implementation DBUiPalette {
   NSDictionary *_config;
+  NSDictionary *_display;
   NSString *_deviceId;
   NSString *_mode;
   NSString *_surfaceHex;
@@ -54,17 +55,26 @@ NSString *DBHexFromColor(UIColor *color) {
 
 + (DBUiPalette *)paletteForConfig:(NSDictionary *)config
                          deviceId:(NSString *)deviceId
+                          display:(NSDictionary *)display
                     backgroundHex:(NSString *)backgroundHex
                       minuteOfDay:(NSInteger)minuteOfDay {
   DBUiPalette *palette = [[DBUiPalette alloc] init];
   palette->_config = config;
+  palette->_display = display;
   palette->_deviceId = [deviceId copy] ?: @"";
   palette->_mode = [[DBUiTheme appearanceModeForConfig:config deviceId:deviceId
+                                               display:display
                                            minuteOfDay:minuteOfDay] copy];
+  // Core measured the effective background, including averaging a theme image;
+  // a caller's own sample is only used when core published none.
+  NSString *effective = [DBUiTheme autoBackgroundHexInDisplay:display];
   DBRgb probe;
-  palette->_surfaceHex = [DBUiTheme parseHex:backgroundHex into:&probe]
-      ? [backgroundHex copy]
-      : [[DBUiTheme surfaceHexForMode:palette->_mode] copy];
+  if ([effective length] > 0)
+    palette->_surfaceHex = [effective copy];
+  else
+    palette->_surfaceHex = [DBUiTheme parseHex:backgroundHex into:&probe]
+        ? [backgroundHex copy]
+        : [[DBUiTheme surfaceHexForMode:palette->_mode] copy];
   return palette;
 }
 
@@ -97,14 +107,14 @@ NSString *DBHexFromColor(UIColor *color) {
 
 - (UIColor *)accent {
   NSString *hex = [DBUiTheme callButtonHexForConfig:_config deviceId:_deviceId
-                                      backgroundHex:_surfaceHex];
+                                            display:_display backgroundHex:_surfaceHex];
   return DBColorFromHex(hex, [UIColor colorWithRed:0.12 green:0.44 blue:0.70 alpha:1]);
 }
 
 - (UIColor *)accentInk {
-  NSString *accentHex = [DBUiTheme callButtonHexForConfig:_config deviceId:_deviceId
-                                            backgroundHex:_surfaceHex];
-  return DBColorFromHex([DBUiTheme accentTextHexForAccentHex:accentHex],
+  return DBColorFromHex([DBUiTheme callButtonInkHexForConfig:_config deviceId:_deviceId
+                                                     display:_display
+                                               backgroundHex:_surfaceHex],
                         [UIColor whiteColor]);
 }
 
@@ -126,16 +136,18 @@ NSString *DBHexFromColor(UIColor *color) {
                         : [UIColor whiteColor];
 }
 
+- (NSString *)inkHexForRegion:(NSString *)region {
+  return [DBUiTheme inkHexForRegion:region config:_config deviceId:_deviceId
+                            display:_display backgroundHex:_surfaceHex appearanceMode:_mode];
+}
+
 - (UIColor *)inkForRegion:(NSString *)region {
-  NSString *hex = [DBUiTheme inkHexForRegion:region config:_config deviceId:_deviceId
-                               backgroundHex:_surfaceHex appearanceMode:_mode];
-  return DBColorFromHex(hex, [self ink]);
+  return DBColorFromHex([self inkHexForRegion:region], [self ink]);
 }
 
 - (BOOL)needsShadowForRegion:(NSString *)region {
-  NSString *hex = [DBUiTheme inkHexForRegion:region config:_config deviceId:_deviceId
-                               backgroundHex:_surfaceHex appearanceMode:_mode];
-  return [DBUiTheme needsInkShadowForInk:hex background:_surfaceHex];
+  return [DBUiTheme needsInkShadowForInk:[self inkHexForRegion:region]
+                              background:_surfaceHex];
 }
 
 + (NSString *)averageHexForImage:(UIImage *)image {

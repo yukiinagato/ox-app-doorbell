@@ -10,6 +10,7 @@
 #import <sys/socket.h>
 #import <sys/sysctl.h>
 #import <dlfcn.h>
+#import "DBNoticeModel.h"
 #import "doorbell/doorbell.h"
 
 
@@ -1007,6 +1008,16 @@ static void DBUiEventCb(void *user, const char *event_json) {
   return ok;
 }
 
+- (int)openDoor:(NSString *)door {
+  if ([door length] == 0) return -1;
+  NSString *d = [door copy];
+  __block int status = -1;
+  dispatch_sync(_coreQueue, ^{
+    if (self->_core) status = db_core_open_door(self->_core, [d UTF8String]);
+  });
+  return status;
+}
+
 - (NSDictionary *)callLogSince:(long long)sinceMs limit:(NSInteger)limit {
   int bounded = (int)MAX(1, MIN(500, limit));
   __block NSDictionary *out = nil;
@@ -1031,6 +1042,29 @@ static void DBUiEventCb(void *user, const char *event_json) {
 - (NSString *)coreVersion {
   const char *version = db_core_version();
   return version ? [NSString stringWithUTF8String:version] : @"";
+}
+
+// ---- Optional Core exports (spec §5.4, §5.5) ----
+//
+// These land on the core branch after the shell work starts, so every one is
+// resolved once at run time instead of at link time. A missing symbol is a
+// documented state, never a crash: the caller degrades and says so, and the
+// shell never falls back to a weaker path (a local password digest, or opening
+// the bulk-add pairing window) just because an export is absent.
+typedef int (*DBAdminVerifyFn)(db_core *, const char *);
+typedef int (*DBAdminSetFn)(db_core *, const char *, const char *);
+typedef int (*DBSetConfigFn)(db_core *, const char *, const char *);
+typedef int (*DBConfigBatchFn)(db_core *, const char *);
+typedef int (*DBDeleteConfigFn)(db_core *, const char *);
+typedef int (*DBSetGlobalNoticeFn)(db_core *, const char *, int64_t);
+typedef int (*DBClearGlobalNoticeFn)(db_core *);
+typedef char *(*DBCallLogV2Fn)(db_core *, int64_t, int64_t, int);
+typedef int (*DBMicMuteFn)(db_core *, int);
+
+static void *DBCoreSymbol(const char *name) {
+  void *symbol = dlsym(RTLD_DEFAULT, name);
+  if (symbol == NULL) NSLog(@"[doorbell][core] optional export %s is absent", name);
+  return symbol;
 }
 
 // ---- Pairing PIN minting (spec §5.4) ----
@@ -1065,6 +1099,234 @@ static DBMintJoinTokenFn DBMintJoinToken(void) {
     if (self->_core) out = [self takeJson:mint(self->_core, seconds)];
   });
   return out;
+}
+
+#pragma mark - one cluster-wide admin password (spec §5.5)
+
+static DBAdminVerifyFn DBAdminVerify(void) {
+  static DBAdminVerifyFn fn = NULL;
+  static dispatch_once_t once;
+  dispatch_once(&once, ^{
+    fn = (DBAdminVerifyFn)DBCoreSymbol("db_core_admin_password_verify");
+  });
+  return fn;
+}
+
+static DBAdminSetFn DBAdminSet(void) {
+  static DBAdminSetFn fn = NULL;
+  static dispatch_once_t once;
+  dispatch_once(&once, ^{ fn = (DBAdminSetFn)DBCoreSymbol("db_core_admin_password_set"); });
+  return fn;
+}
+
++ (BOOL)supportsAdminPassword {
+  return DBAdminVerify() != NULL;
+}
+
+- (BOOL)verifyAdminPassword:(NSString *)password {
+  DBAdminVerifyFn verify = DBAdminVerify();
+  if (verify == NULL || password == nil) return NO;
+  NSString *value = [password copy];
+  __block BOOL ok = NO;
+  // Core owns the constant-time comparison and the shared lockout counter, so
+  // the shell must not add a second, weaker check of its own.
+  dispatch_sync(_coreQueue, ^{
+    if (self->_core) ok = verify(self->_core, [value UTF8String]) > 0;
+  });
+  return ok;
+}
+
+- (int)setAdminPasswordFrom:(NSString *)current to:(NSString *)replacement {
+  DBAdminSetFn set = DBAdminSet();
+  if (set == NULL) return -100;
+  NSString *from = [current copy] ?: @"";
+  NSString *to = [replacement copy] ?: @"";
+  __block int status = -1;
+  dispatch_sync(_coreQueue, ^{
+    if (self->_core) status = set(self->_core, [from UTF8String], [to UTF8String]);
+  });
+  return status;
+}
+
+#pragma mark - native configuration writes (spec §5.5)
+
+static DBSetConfigFn DBSetConfig(void) {
+  static DBSetConfigFn fn = NULL;
+  static dispatch_once_t once;
+  dispatch_once(&once, ^{ fn = (DBSetConfigFn)DBCoreSymbol("db_core_set_config_json"); });
+  return fn;
+}
+
+static DBConfigBatchFn DBConfigBatch(void) {
+  static DBConfigBatchFn fn = NULL;
+  static dispatch_once_t once;
+  dispatch_once(&once, ^{ fn = (DBConfigBatchFn)DBCoreSymbol("db_core_config_batch_json"); });
+  return fn;
+}
+
+static DBDeleteConfigFn DBDeleteConfig(void) {
+  static DBDeleteConfigFn fn = NULL;
+  static dispatch_once_t once;
+  dispatch_once(&once, ^{ fn = (DBDeleteConfigFn)DBCoreSymbol("db_core_delete_config_key"); });
+  return fn;
+}
+
++ (BOOL)supportsConfigWrites {
+  return DBSetConfig() != NULL;
+}
+
+- (int)setConfigKey:(NSString *)key valueJson:(NSString *)valueJson {
+  DBSetConfigFn set = DBSetConfig();
+  if (set == NULL) return -100;
+  if ([key length] == 0 || valueJson == nil) return -1;
+  NSString *k = [key copy];
+  NSString *v = [valueJson copy];
+  __block int status = -1;
+  dispatch_sync(_coreQueue, ^{
+    if (self->_core) status = set(self->_core, [k UTF8String], [v UTF8String]);
+  });
+  return status;
+}
+
+// A JSON document is required, so a plain string is quoted here rather than in
+// every caller.
+- (int)setConfigKey:(NSString *)key stringValue:(NSString *)value {
+  NSData *encoded = [NSJSONSerialization dataWithJSONObject:@[ value ?: @"" ]
+                                                    options:0 error:NULL];
+  if (encoded == nil) return -1;
+  NSString *array = [[NSString alloc] initWithData:encoded encoding:NSUTF8StringEncoding];
+  if ([array length] < 2) return -1;
+  NSString *quoted = [array substringWithRange:NSMakeRange(1, [array length] - 2)];
+  return [self setConfigKey:key valueJson:quoted];
+}
+
+- (int)setConfigKey:(NSString *)key numberValue:(NSInteger)value {
+  return [self setConfigKey:key
+                  valueJson:[NSString stringWithFormat:@"%ld", (long)value]];
+}
+
+- (int)setConfigKey:(NSString *)key boolValue:(BOOL)value {
+  return [self setConfigKey:key valueJson:(value ? @"true" : @"false")];
+}
+
+- (int)deleteConfigKey:(NSString *)key {
+  DBDeleteConfigFn remove = DBDeleteConfig();
+  if (remove == NULL) return -100;
+  if ([key length] == 0) return -1;
+  NSString *k = [key copy];
+  __block int status = -1;
+  dispatch_sync(_coreQueue, ^{
+    if (self->_core) status = remove(self->_core, [k UTF8String]);
+  });
+  return status;
+}
+
+- (int)writeConfigBatch:(NSArray *)ops {
+  DBConfigBatchFn batch = DBConfigBatch();
+  if (batch == NULL) return -100;
+  if (![ops isKindOfClass:[NSArray class]] || [ops count] == 0) return -1;
+  NSData *encoded = [NSJSONSerialization
+      dataWithJSONObject:[NSDictionary dictionaryWithObject:ops forKey:@"ops"]
+                 options:0 error:NULL];
+  if (encoded == nil) return -1;
+  NSString *json = [[NSString alloc] initWithData:encoded encoding:NSUTF8StringEncoding];
+  __block int status = -1;
+  dispatch_sync(_coreQueue, ^{
+    if (self->_core) status = batch(self->_core, [json UTF8String]);
+  });
+  return status;
+}
+
+#pragma mark - global announcement, history paging, mic mute (spec §5.5)
+
+static DBSetGlobalNoticeFn DBSetGlobalNotice(void) {
+  static DBSetGlobalNoticeFn fn = NULL;
+  static dispatch_once_t once;
+  dispatch_once(&once, ^{
+    fn = (DBSetGlobalNoticeFn)DBCoreSymbol("db_core_set_global_notice");
+  });
+  return fn;
+}
+
+static DBClearGlobalNoticeFn DBClearGlobalNotice(void) {
+  static DBClearGlobalNoticeFn fn = NULL;
+  static dispatch_once_t once;
+  dispatch_once(&once, ^{
+    fn = (DBClearGlobalNoticeFn)DBCoreSymbol("db_core_clear_global_notice");
+  });
+  return fn;
+}
+
+- (BOOL)setGlobalNotice:(NSString *)text expiresMs:(long long)expiresMs {
+  if ([text length] == 0) return NO;
+  NSString *value = [text copy];
+  DBSetGlobalNoticeFn set = DBSetGlobalNotice();
+  if (set != NULL) {
+    __block BOOL ok = NO;
+    dispatch_sync(_coreQueue, ^{
+      if (self->_core) ok = set(self->_core, [value UTF8String], (int64_t)expiresMs) == 0;
+    });
+    return ok;
+  }
+  // Older Core: the door API addresses the cluster-wide announcement with "*".
+  return [self setNotice:value forDoor:DBNoticeTargetGlobal expiresMs:expiresMs];
+}
+
+- (BOOL)clearGlobalNotice {
+  DBClearGlobalNoticeFn clear = DBClearGlobalNotice();
+  if (clear != NULL) {
+    __block BOOL ok = NO;
+    dispatch_sync(_coreQueue, ^{
+      if (self->_core) ok = clear(self->_core) == 0;
+    });
+    return ok;
+  }
+  return [self clearNoticeForDoor:DBNoticeTargetGlobal];
+}
+
+static DBCallLogV2Fn DBCallLogV2(void) {
+  static DBCallLogV2Fn fn = NULL;
+  static dispatch_once_t once;
+  dispatch_once(&once, ^{ fn = (DBCallLogV2Fn)DBCoreSymbol("db_core_call_log_json_v2"); });
+  return fn;
+}
+
+- (NSDictionary *)callLogSince:(long long)sinceMs beforeMs:(long long)beforeMs
+                         limit:(NSInteger)limit {
+  DBCallLogV2Fn paged = DBCallLogV2();
+  int bounded = (int)MAX(1, MIN(500, limit));
+  if (paged == NULL) {
+    // Older Core has no cursor: read a wider window and let the history model
+    // slice the page. Bounded by the same 500-row ceiling either way.
+    return [self callLogSince:sinceMs limit:limit];
+  }
+  __block NSDictionary *out = nil;
+  dispatch_sync(_coreQueue, ^{
+    if (self->_core)
+      out = [self takeJson:paged(self->_core, (int64_t)sinceMs, (int64_t)beforeMs, bounded)];
+  });
+  return out;
+}
+
+static DBMicMuteFn DBMicMute(void) {
+  static DBMicMuteFn fn = NULL;
+  static dispatch_once_t once;
+  dispatch_once(&once, ^{ fn = (DBMicMuteFn)DBCoreSymbol("db_core_sip_set_mic_muted"); });
+  return fn;
+}
+
++ (BOOL)supportsMicMute {
+  return DBMicMute() != NULL;
+}
+
+- (int)setMicMuted:(BOOL)muted {
+  DBMicMuteFn mute = DBMicMute();
+  if (mute == NULL) return -100;
+  __block int status = -1;
+  dispatch_sync(_coreQueue, ^{
+    if (self->_core) status = mute(self->_core, muted ? 1 : 0);
+  });
+  return status;
 }
 
 @end
