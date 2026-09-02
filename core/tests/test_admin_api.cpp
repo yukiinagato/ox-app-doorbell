@@ -1647,3 +1647,70 @@ TEST_CASE("admin API: the cluster-wide notice, the unlock trigger, and PIN minti
 
   node.stop();
 }
+
+TEST_CASE("admin API: a door station with no working camera keeps serving HTTP after a press") {
+  // Real-device finding: an iPad 1 door station with no usable camera served pairing and
+  // POST /api/press, then port 47180 stopped accepting entirely -- refused even on loopback --
+  // while the mesh port stayed open, the process kept running and nothing crashed.
+  std::mt19937 rng(static_cast<uint32_t>(::getpid()) ^ 0x3f0du);
+  const int mesh_port = adminFreePort(rng);
+  const int http_port = adminFreePort(rng);
+  REQUIRE(mesh_port > 0);
+  REQUIRE(http_port > 0);
+
+  NodeOptions options;
+  options.data_dir = ":memory:";
+  options.name = "no-camera";
+  options.role = "door_station";
+  options.door = "door-ipad1";
+  options.listen_addr = "127.0.0.1:" + std::to_string(mesh_port);
+  options.psk.fill(0x5c);
+  options.enable_beacon = false;
+  options.http_port = http_port;
+  options.mesh_timing_template = adminTiming();
+  options.use_mesh_timing_template = true;
+  Node node(options);
+  REQUIRE(node.start());
+  const std::string session = adminLogin(http_port);
+
+  // No camera: the snapshot source never yields a frame.
+  CHECK(adminReq(http_port, "GET", "/snapshot.jpg").find("HTTP/1.1 503") == 0);
+
+  auto press = bodyJson(adminReq(http_port, "POST", "/api/press",
+                                 "{\"door\":\"door-ipad1\"}", session));
+  REQUIRE(press);
+  CHECK(json::getBool(press.get(), "ok"));
+
+  // The listener must still answer afterwards, repeatedly, on every kind of route.
+  for (int i = 0; i < 5; i++) {
+    auto status = bodyJson(adminReq(http_port, "GET", "/api/status", "", session));
+    REQUIRE(status);
+    CHECK(json::getString(json::get(status.get(), "node"), "role") == "door_station");
+    CHECK(adminReq(http_port, "GET", "/video-meta").find("HTTP/1.1 200") == 0);
+  }
+
+  // A live view against a camera-less station must not pin a worker thread for good. Several
+  // viewers open and go away; the port has to keep accepting throughout.
+  for (int round = 0; round < 6; round++) {
+    int fd = ::socket(AF_INET, SOCK_STREAM, 0);
+    REQUIRE(fd >= 0);
+    sockaddr_in address{};
+    address.sin_family = AF_INET;
+    address.sin_port = htons(static_cast<uint16_t>(http_port));
+    address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    REQUIRE(::connect(fd, reinterpret_cast<sockaddr*>(&address), sizeof(address)) == 0);
+    const std::string request =
+        "GET /stream.mjpeg HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n";
+    ::send(fd, request.data(), request.size(), 0);
+    // Abandon it the way a panel that navigates away does.
+    ::close(fd);
+    auto status = bodyJson(adminReq(http_port, "GET", "/api/status", "", session));
+    REQUIRE(status);
+    CHECK(json::getString(json::get(status.get(), "node"), "door") == "door-ipad1");
+  }
+
+  // And the press path itself is still usable, which is what the operator was locked out of.
+  CHECK(adminReq(http_port, "POST", "/api/press", "{\"door\":\"door-ipad1\"}", session)
+            .find("HTTP/1.1 200") == 0);
+  node.stop();
+}

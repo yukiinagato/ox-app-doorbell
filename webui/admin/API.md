@@ -446,3 +446,19 @@ role — `auto` on a door station, `ring` on an indoor panel — so `outcome: "a
 `answered_by` in the call log mean a person answered. Setting
 `sip.accounts.<node_id>.answer_mode` to `auto` on an indoor panel is a deliberate intercom
 choice, and the history then attributes calls to that device.
+
+## Live streams and the HTTP worker pool
+
+`/stream.mjpeg`, `/stream.mp4` and `/stream-proxy.mp4` hold one HTTP worker thread each for as
+long as the stream runs. The pool is sized for that (16 workers), so ordinary API traffic is not
+starved by the live views a house has open. A door station whose camera produces no frames now
+probes its stream sockets every two seconds and releases the connection after thirty idle
+seconds — without that, a stream with no frames never touched the socket, never noticed a client
+that had gone away, and pinned its worker permanently. Four such connections used to make the
+port refuse everything while the process and the mesh carried on normally.
+
+Handler exceptions are contained at both boundaries: one that escapes a route handler answers
+`500` instead of unwinding the runloop that owns calls, the mesh and every timer, and one that
+reaches the civetweb C frame answers `500` instead of terminating the process. A handler that
+exceeds its five-second budget is logged with its URI, because a stalled runloop shows up there
+first, one worker at a time.
