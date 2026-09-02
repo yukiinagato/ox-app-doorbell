@@ -119,13 +119,13 @@ def gzip_tar(epoch: int, build) -> bytes:
 
 def control_archive(version: str, epoch: int) -> bytes:
     control = (
-        "Package: jp.keihan.doorbell.compat.ios9\n"
+        "Package: jp.ox.doorbell.compat.ios9\n"
         "Name: Doorbell iOS 9 Compatibility\n"
         f"Version: {version}\n"
         "Architecture: iphoneos-arm\n"
         "Description: Doorbell compatibility shell (armv7/iOS 9.0, real PJSIP)\n"
-        "Maintainer: keihan <support@keihan.co>\n"
-        "Author: keihan\n"
+        "Maintainer: ox\n"
+        "Author: ox\n"
         "Section: Utilities\n"
         "Depends: firmware (>= 9.0)\n"
     ).encode("utf-8")

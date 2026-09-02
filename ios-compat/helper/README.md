@@ -14,7 +14,7 @@ create or load an active LaunchDaemon.
 - Production `--profile` values select compiled argument vectors only: iOS 5 executes
   `/usr/bin/uiopen doorbell://` as the configured app UID; Android executes
   `/system/bin/app_process /system/bin com.android.commands.am.Am startservice --user 0 -n
-  jp.keihan.doorbell/.DoorbellService` with fixed `CLASSPATH=/system/framework/am.jar`. It does not
+  jp.ox.doorbell/.DoorbellService` with fixed `CLASSPATH=/system/framework/am.jar`. It does not
   invoke the Android `am` shell wrapper. Before launch, the fixed target must be a root-owned,
   non-writable, non-symlink ELF/Mach-O executable; scripts are rejected.
 - The socket is created mode `0660`. The root-owned service configuration supplies the installed
@@ -258,7 +258,7 @@ be integrated with an explicit SELinux domain and the installed app UID for the 
 
 ## Installation and rollback
 
-`jp.keihan.doorbell.keepalive.plist.example` is a root-owned iOS LaunchDaemon template. The DEB
+`jp.ox.doorbell.keepalive.plist.example` is a root-owned iOS LaunchDaemon template. The DEB
 stages the verified helper as `/usr/local/libexec/doorbell-keepalive` mode `0755` and the inactive
 template under `/usr/local/share/doorbell/`; it deliberately does not write
 `/Library/LaunchDaemons`. Use a commissioned, non-default SSH password:

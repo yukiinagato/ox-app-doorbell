@@ -284,7 +284,7 @@ extern "C" JNIEXPORT jint JNI_OnLoad(JavaVM* vm, void*) {
 }
 
 extern "C" JNIEXPORT jlong JNICALL
-Java_jp_keihan_doorbell_DoorbellCore_nativeCreate(JNIEnv* env, jobject thiz, jstring data_dir,
+Java_jp_ox_doorbell_DoorbellCore_nativeCreate(JNIEnv* env, jobject thiz, jstring data_dir,
                                                   jstring boot_json) {
   auto* b = new Bridge();
   b->obj = env->NewGlobalRef(thiz);
@@ -350,26 +350,26 @@ Java_jp_keihan_doorbell_DoorbellCore_nativeCreate(JNIEnv* env, jobject thiz, jst
 }
 
 extern "C" JNIEXPORT jstring JNICALL
-Java_jp_keihan_doorbell_DoorbellCore_nativeBackendJson(JNIEnv* env, jobject) {
+Java_jp_ox_doorbell_DoorbellCore_nativeBackendJson(JNIEnv* env, jobject) {
   const std::string json = std::string("{\"platform_abi\":2,\"sip\":\"pjsip\",\"pjsip_tier\":\"") +
                            DB_ANDROID_PJSIP_TIER_NAME + "\"}";
   return env->NewStringUTF(json.c_str());
 }
 
 extern "C" JNIEXPORT jint JNICALL
-Java_jp_keihan_doorbell_DoorbellCore_nativeStart(JNIEnv*, jobject, jlong h) {
+Java_jp_ox_doorbell_DoorbellCore_nativeStart(JNIEnv*, jobject, jlong h) {
   Bridge* b = fromHandle(h);
   return b && b->core ? db_core_start(b->core) : -1;
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_jp_keihan_doorbell_DoorbellCore_nativeStop(JNIEnv*, jobject, jlong h) {
+Java_jp_ox_doorbell_DoorbellCore_nativeStop(JNIEnv*, jobject, jlong h) {
   Bridge* b = fromHandle(h);
   if (b && b->core) db_core_stop(b->core);
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_jp_keihan_doorbell_DoorbellCore_nativeDestroy(JNIEnv* env, jobject, jlong h) {
+Java_jp_ox_doorbell_DoorbellCore_nativeDestroy(JNIEnv* env, jobject, jlong h) {
   Bridge* b = fromHandle(h);
   if (!b) return;
   if (b->core) db_core_destroy(b->core);
@@ -380,7 +380,7 @@ Java_jp_keihan_doorbell_DoorbellCore_nativeDestroy(JNIEnv* env, jobject, jlong h
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_jp_keihan_doorbell_DoorbellCore_nativeSetUiCallback(JNIEnv*, jobject, jlong h,
+Java_jp_ox_doorbell_DoorbellCore_nativeSetUiCallback(JNIEnv*, jobject, jlong h,
                                                          jboolean enabled) {
   Bridge* b = fromHandle(h);
   if (b && b->core)
@@ -388,13 +388,13 @@ Java_jp_keihan_doorbell_DoorbellCore_nativeSetUiCallback(JNIEnv*, jobject, jlong
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_jp_keihan_doorbell_DoorbellCore_nativePress(JNIEnv* env, jobject, jlong h, jstring door_id) {
+Java_jp_ox_doorbell_DoorbellCore_nativePress(JNIEnv* env, jobject, jlong h, jstring door_id) {
   Bridge* b = fromHandle(h);
   if (b && b->core) db_core_press(b->core, toUtf8(env, door_id).c_str());
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_jp_keihan_doorbell_DoorbellCore_nativePressPurpose(JNIEnv* env, jobject, jlong h,
+Java_jp_ox_doorbell_DoorbellCore_nativePressPurpose(JNIEnv* env, jobject, jlong h,
                                                         jstring door_id, jstring purpose) {
   Bridge* b = fromHandle(h);
   if (b && b->core)
@@ -402,7 +402,7 @@ Java_jp_keihan_doorbell_DoorbellCore_nativePressPurpose(JNIEnv* env, jobject, jl
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_jp_keihan_doorbell_DoorbellCore_nativeSelectPurpose(JNIEnv* env, jobject, jlong h,
+Java_jp_ox_doorbell_DoorbellCore_nativeSelectPurpose(JNIEnv* env, jobject, jlong h,
                                                          jstring door_id, jstring purpose) {
   Bridge* b = fromHandle(h);
   if (b && b->core)
@@ -410,14 +410,14 @@ Java_jp_keihan_doorbell_DoorbellCore_nativeSelectPurpose(JNIEnv* env, jobject, j
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_jp_keihan_doorbell_DoorbellCore_nativeCancelCall(JNIEnv* env, jobject, jlong h,
+Java_jp_ox_doorbell_DoorbellCore_nativeCancelCall(JNIEnv* env, jobject, jlong h,
                                                       jstring door_id) {
   Bridge* b = fromHandle(h);
   if (b && b->core) db_core_cancel_call(b->core, toUtf8(env, door_id).c_str());
 }
 
 extern "C" JNIEXPORT jstring JNICALL
-Java_jp_keihan_doorbell_DoorbellCore_nativePressV2(JNIEnv* env, jobject, jlong h,
+Java_jp_ox_doorbell_DoorbellCore_nativePressV2(JNIEnv* env, jobject, jlong h,
                                                    jstring door_id, jstring purpose) {
   Bridge* b = fromHandle(h);
   if (!b || !b->core) return nullptr;
@@ -430,7 +430,7 @@ Java_jp_keihan_doorbell_DoorbellCore_nativePressV2(JNIEnv* env, jobject, jlong h
 }
 
 extern "C" JNIEXPORT jint JNICALL
-Java_jp_keihan_doorbell_DoorbellCore_nativeSelectPurposeV2(
+Java_jp_ox_doorbell_DoorbellCore_nativeSelectPurposeV2(
     JNIEnv* env, jobject, jlong h, jstring door_id, jstring call_id, jstring purpose) {
   Bridge* b = fromHandle(h);
   if (!b || !b->core) return -1;
@@ -442,7 +442,7 @@ Java_jp_keihan_doorbell_DoorbellCore_nativeSelectPurposeV2(
 }
 
 extern "C" JNIEXPORT jint JNICALL
-Java_jp_keihan_doorbell_DoorbellCore_nativeCancelCallV2(
+Java_jp_ox_doorbell_DoorbellCore_nativeCancelCallV2(
     JNIEnv* env, jobject, jlong h, jstring door_id, jstring call_id, jstring reason) {
   Bridge* b = fromHandle(h);
   if (!b || !b->core) return -1;
@@ -453,7 +453,7 @@ Java_jp_keihan_doorbell_DoorbellCore_nativeCancelCallV2(
 }
 
 extern "C" JNIEXPORT jint JNICALL
-Java_jp_keihan_doorbell_DoorbellCore_nativeReportCallAnsweredV2(
+Java_jp_ox_doorbell_DoorbellCore_nativeReportCallAnsweredV2(
     JNIEnv* env, jobject, jlong h, jstring door_id, jstring call_id, jint stage_revision) {
   Bridge* b = fromHandle(h);
   if (!b || !b->core) return -1;
@@ -464,7 +464,7 @@ Java_jp_keihan_doorbell_DoorbellCore_nativeReportCallAnsweredV2(
 }
 
 extern "C" JNIEXPORT jint JNICALL
-Java_jp_keihan_doorbell_DoorbellCore_nativeReportCallEndedV2(
+Java_jp_ox_doorbell_DoorbellCore_nativeReportCallEndedV2(
     JNIEnv* env, jobject, jlong h, jstring door_id, jstring call_id, jint stage_revision,
     jstring reason) {
   Bridge* b = fromHandle(h);
@@ -477,7 +477,7 @@ Java_jp_keihan_doorbell_DoorbellCore_nativeReportCallEndedV2(
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_jp_keihan_doorbell_DoorbellCore_nativeReportCallRecovery(
+Java_jp_ox_doorbell_DoorbellCore_nativeReportCallRecovery(
     JNIEnv* env, jobject, jlong h, jstring call_id, jboolean restored) {
   Bridge* b = fromHandle(h);
   if (!b || !b->core) return;
@@ -486,7 +486,7 @@ Java_jp_keihan_doorbell_DoorbellCore_nativeReportCallRecovery(
 }
 
 extern "C" JNIEXPORT jboolean JNICALL
-Java_jp_keihan_doorbell_DoorbellCore_nativeEmergencyV2(JNIEnv*, jobject, jlong h,
+Java_jp_ox_doorbell_DoorbellCore_nativeEmergencyV2(JNIEnv*, jobject, jlong h,
                                                         jboolean active) {
   Bridge* b = fromHandle(h);
   return b && b->core && db_core_emergency_v2(b->core, active == JNI_TRUE ? 1 : 0) != 0
@@ -494,7 +494,7 @@ Java_jp_keihan_doorbell_DoorbellCore_nativeEmergencyV2(JNIEnv*, jobject, jlong h
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_jp_keihan_doorbell_DoorbellCore_nativeSetVisitorLang(JNIEnv* env, jobject, jlong h,
+Java_jp_ox_doorbell_DoorbellCore_nativeSetVisitorLang(JNIEnv* env, jobject, jlong h,
                                                           jstring door, jstring lang) {
   Bridge* b = fromHandle(h);
   if (b && b->core)
@@ -502,7 +502,7 @@ Java_jp_keihan_doorbell_DoorbellCore_nativeSetVisitorLang(JNIEnv* env, jobject, 
 }
 
 extern "C" JNIEXPORT jstring JNICALL
-Java_jp_keihan_doorbell_DoorbellCore_nativeStatusJson(JNIEnv* env, jobject, jlong h) {
+Java_jp_ox_doorbell_DoorbellCore_nativeStatusJson(JNIEnv* env, jobject, jlong h) {
   Bridge* b = fromHandle(h);
   if (!b || !b->core) return nullptr;
   char* s = db_core_status_json(b->core);
@@ -512,7 +512,7 @@ Java_jp_keihan_doorbell_DoorbellCore_nativeStatusJson(JNIEnv* env, jobject, jlon
 }
 
 extern "C" JNIEXPORT jstring JNICALL
-Java_jp_keihan_doorbell_DoorbellCore_nativeConfigJson(JNIEnv* env, jobject, jlong h) {
+Java_jp_ox_doorbell_DoorbellCore_nativeConfigJson(JNIEnv* env, jobject, jlong h) {
   Bridge* b = fromHandle(h);
   if (!b || !b->core) return nullptr;
   char* s = db_core_config_json(b->core);
@@ -522,28 +522,28 @@ Java_jp_keihan_doorbell_DoorbellCore_nativeConfigJson(JNIEnv* env, jobject, jlon
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_jp_keihan_doorbell_DoorbellCore_nativeSetCapabilitiesJson(JNIEnv* env, jobject, jlong h,
+Java_jp_ox_doorbell_DoorbellCore_nativeSetCapabilitiesJson(JNIEnv* env, jobject, jlong h,
                                                                jstring json) {
   Bridge* b = fromHandle(h);
   if (b && b->core) db_core_set_capabilities_json(b->core, toUtf8(env, json).c_str());
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_jp_keihan_doorbell_DoorbellCore_nativeSetRuntimeStatusJson(JNIEnv* env, jobject, jlong h,
+Java_jp_ox_doorbell_DoorbellCore_nativeSetRuntimeStatusJson(JNIEnv* env, jobject, jlong h,
                                                                 jstring json) {
   Bridge* b = fromHandle(h);
   if (b && b->core) db_core_set_runtime_status_json(b->core, toUtf8(env, json).c_str());
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_jp_keihan_doorbell_DoorbellCore_nativeSetUiManifestJson(JNIEnv* env, jobject, jlong h,
+Java_jp_ox_doorbell_DoorbellCore_nativeSetUiManifestJson(JNIEnv* env, jobject, jlong h,
                                                              jstring json) {
   Bridge* b = fromHandle(h);
   if (b && b->core) db_core_set_ui_manifest_json(b->core, toUtf8(env, json).c_str());
 }
 
 extern "C" JNIEXPORT jstring JNICALL
-Java_jp_keihan_doorbell_DoorbellCore_nativeCapabilitiesJson(JNIEnv* env, jobject, jlong h) {
+Java_jp_ox_doorbell_DoorbellCore_nativeCapabilitiesJson(JNIEnv* env, jobject, jlong h) {
   Bridge* b = fromHandle(h);
   if (!b || !b->core) return nullptr;
   char* s = db_core_capabilities_json(b->core);
@@ -553,7 +553,7 @@ Java_jp_keihan_doorbell_DoorbellCore_nativeCapabilitiesJson(JNIEnv* env, jobject
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_jp_keihan_doorbell_DoorbellCore_nativeOnCameraFrame(JNIEnv* env, jobject, jlong h,
+Java_jp_ox_doorbell_DoorbellCore_nativeOnCameraFrame(JNIEnv* env, jobject, jlong h,
                                                          jbyteArray data, jint format, jint width,
                                                          jint height, jint stride, jlong ts_ms) {
   Bridge* b = fromHandle(h);
@@ -566,14 +566,14 @@ Java_jp_keihan_doorbell_DoorbellCore_nativeOnCameraFrame(JNIEnv* env, jobject, j
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_jp_keihan_doorbell_DoorbellCore_nativeSetVideoSensorRotation(JNIEnv*, jobject, jlong h,
+Java_jp_ox_doorbell_DoorbellCore_nativeSetVideoSensorRotation(JNIEnv*, jobject, jlong h,
                                                                   jint degrees) {
   Bridge* b = fromHandle(h);
   if (b && b->core) db_core_set_video_sensor_rotation(b->core, static_cast<int>(degrees));
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_jp_keihan_doorbell_DoorbellCore_nativeOnEncodedFrame(JNIEnv* env, jobject, jlong h,
+Java_jp_ox_doorbell_DoorbellCore_nativeOnEncodedFrame(JNIEnv* env, jobject, jlong h,
                                                           jbyteArray annexb, jboolean is_key,
                                                           jlong ts_ms) {
   Bridge* b = fromHandle(h);
@@ -588,13 +588,13 @@ Java_jp_keihan_doorbell_DoorbellCore_nativeOnEncodedFrame(JNIEnv* env, jobject, 
 }
 
 extern "C" JNIEXPORT jboolean JNICALL
-Java_jp_keihan_doorbell_DoorbellCore_nativeVideoEncoderWanted(JNIEnv*, jobject, jlong h) {
+Java_jp_ox_doorbell_DoorbellCore_nativeVideoEncoderWanted(JNIEnv*, jobject, jlong h) {
   Bridge* b = fromHandle(h);
   return (b && b->core && db_core_video_encoder_wanted(b->core)) ? JNI_TRUE : JNI_FALSE;
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_jp_keihan_doorbell_DoorbellCore_nativeSipCall(JNIEnv* env, jobject, jlong h, jstring target,
+Java_jp_ox_doorbell_DoorbellCore_nativeSipCall(JNIEnv* env, jobject, jlong h, jstring target,
                                                    jstring mode) {
   Bridge* b = fromHandle(h);
   if (b && b->core)
@@ -602,13 +602,13 @@ Java_jp_keihan_doorbell_DoorbellCore_nativeSipCall(JNIEnv* env, jobject, jlong h
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_jp_keihan_doorbell_DoorbellCore_nativeSipHangup(JNIEnv*, jobject, jlong h) {
+Java_jp_ox_doorbell_DoorbellCore_nativeSipHangup(JNIEnv*, jobject, jlong h) {
   Bridge* b = fromHandle(h);
   if (b && b->core) db_core_sip_hangup(b->core);
 }
 
 extern "C" JNIEXPORT jint JNICALL
-Java_jp_keihan_doorbell_DoorbellCore_nativeSipSendDtmf(JNIEnv* env, jobject, jlong h,
+Java_jp_ox_doorbell_DoorbellCore_nativeSipSendDtmf(JNIEnv* env, jobject, jlong h,
                                                        jstring digits) {
   Bridge* b = fromHandle(h);
   if (!b || !b->core) return -1;
@@ -617,7 +617,7 @@ Java_jp_keihan_doorbell_DoorbellCore_nativeSipSendDtmf(JNIEnv* env, jobject, jlo
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_jp_keihan_doorbell_DoorbellCore_nativeQuickReply(JNIEnv* env, jobject, jlong h,
+Java_jp_ox_doorbell_DoorbellCore_nativeQuickReply(JNIEnv* env, jobject, jlong h,
                                                       jstring reply_id, jstring door) {
   Bridge* b = fromHandle(h);
   if (b && b->core)
@@ -625,7 +625,7 @@ Java_jp_keihan_doorbell_DoorbellCore_nativeQuickReply(JNIEnv* env, jobject, jlon
 }
 
 extern "C" JNIEXPORT jboolean JNICALL
-Java_jp_keihan_doorbell_DoorbellCore_nativeQuickReplyV2(
+Java_jp_ox_doorbell_DoorbellCore_nativeQuickReplyV2(
     JNIEnv* env, jobject, jlong h, jstring reply_id, jstring door, jstring call_id,
     jint stage_revision) {
   Bridge* b = fromHandle(h);
@@ -639,12 +639,12 @@ Java_jp_keihan_doorbell_DoorbellCore_nativeQuickReplyV2(
 }
 
 extern "C" JNIEXPORT jstring JNICALL
-Java_jp_keihan_doorbell_DoorbellCore_nativeVersion(JNIEnv* env, jobject) {
+Java_jp_ox_doorbell_DoorbellCore_nativeVersion(JNIEnv* env, jobject) {
   return env->NewStringUTF(db_core_version());
 }
 
 extern "C" JNIEXPORT jstring JNICALL
-Java_jp_keihan_doorbell_DoorbellCore_nativeDebugJson(JNIEnv* env, jobject, jlong h) {
+Java_jp_ox_doorbell_DoorbellCore_nativeDebugJson(JNIEnv* env, jobject, jlong h) {
   Bridge* b = fromHandle(h);
   if (!b || !b->core) return nullptr;
   char* s = db_core_debug_json(b->core);
@@ -655,7 +655,7 @@ Java_jp_keihan_doorbell_DoorbellCore_nativeDebugJson(JNIEnv* env, jobject, jlong
 
 // Pairing discovery and invitation.
 extern "C" JNIEXPORT jstring JNICALL
-Java_jp_keihan_doorbell_DoorbellCore_nativePairingJson(JNIEnv* env, jobject, jlong h) {
+Java_jp_ox_doorbell_DoorbellCore_nativePairingJson(JNIEnv* env, jobject, jlong h) {
   Bridge* b = fromHandle(h);
   if (!b || !b->core) return nullptr;
   char* s = db_core_pairing_json(b->core);
@@ -665,7 +665,7 @@ Java_jp_keihan_doorbell_DoorbellCore_nativePairingJson(JNIEnv* env, jobject, jlo
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_jp_keihan_doorbell_DoorbellCore_nativeJoinCluster(JNIEnv* env, jobject, jlong h, jstring host,
+Java_jp_ox_doorbell_DoorbellCore_nativeJoinCluster(JNIEnv* env, jobject, jlong h, jstring host,
                                                        jstring pin) {
   Bridge* b = fromHandle(h);
   if (b && b->core)
@@ -673,25 +673,25 @@ Java_jp_keihan_doorbell_DoorbellCore_nativeJoinCluster(JNIEnv* env, jobject, jlo
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_jp_keihan_doorbell_DoorbellCore_nativePairingMode(JNIEnv*, jobject, jlong h, jint seconds) {
+Java_jp_ox_doorbell_DoorbellCore_nativePairingMode(JNIEnv*, jobject, jlong h, jint seconds) {
   Bridge* b = fromHandle(h);
   if (b && b->core) db_core_pairing_mode(b->core, static_cast<int>(seconds));
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_jp_keihan_doorbell_DoorbellCore_nativeInviteDevice(JNIEnv* env, jobject, jlong h, jstring id) {
+Java_jp_ox_doorbell_DoorbellCore_nativeInviteDevice(JNIEnv* env, jobject, jlong h, jstring id) {
   Bridge* b = fromHandle(h);
   if (b && b->core) db_core_invite_device(b->core, toUtf8(env, id).c_str());
 }
 
 extern "C" JNIEXPORT jboolean JNICALL
-Java_jp_keihan_doorbell_DoorbellCore_nativeFoundCluster(JNIEnv*, jobject, jlong h) {
+Java_jp_ox_doorbell_DoorbellCore_nativeFoundCluster(JNIEnv*, jobject, jlong h) {
   Bridge* b = fromHandle(h);
   return (b && b->core && db_core_found_cluster(b->core)) ? JNI_TRUE : JNI_FALSE;
 }
 
 extern "C" JNIEXPORT jstring JNICALL
-Java_jp_keihan_doorbell_DoorbellCore_nativeStartPairingJson(JNIEnv* env, jobject, jlong h,
+Java_jp_ox_doorbell_DoorbellCore_nativeStartPairingJson(JNIEnv* env, jobject, jlong h,
                                                             jint seconds) {
   Bridge* b = fromHandle(h);
   if (!b || !b->core) return nullptr;
@@ -702,7 +702,7 @@ Java_jp_keihan_doorbell_DoorbellCore_nativeStartPairingJson(JNIEnv* env, jobject
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_jp_keihan_doorbell_DoorbellCore_nativeInviteDirect(JNIEnv* env, jobject, jlong h, jstring addr,
+Java_jp_ox_doorbell_DoorbellCore_nativeInviteDirect(JNIEnv* env, jobject, jlong h, jstring addr,
                                                         jstring id, jstring pk) {
   Bridge* b = fromHandle(h);
   if (b && b->core)
@@ -711,38 +711,38 @@ Java_jp_keihan_doorbell_DoorbellCore_nativeInviteDirect(JNIEnv* env, jobject, jl
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_jp_keihan_doorbell_DoorbellCore_nativeDenyDevice(JNIEnv* env, jobject, jlong h, jstring id) {
+Java_jp_ox_doorbell_DoorbellCore_nativeDenyDevice(JNIEnv* env, jobject, jlong h, jstring id) {
   Bridge* b = fromHandle(h);
   if (b && b->core) db_core_deny_device(b->core, toUtf8(env, id).c_str());
 }
 
 extern "C" JNIEXPORT jboolean JNICALL
-Java_jp_keihan_doorbell_DoorbellCore_nativeRetryPairingPersistence(JNIEnv*, jobject, jlong h) {
+Java_jp_ox_doorbell_DoorbellCore_nativeRetryPairingPersistence(JNIEnv*, jobject, jlong h) {
   Bridge* b = fromHandle(h);
   return (b && b->core && db_core_retry_pairing_persistence(b->core)) ? JNI_TRUE : JNI_FALSE;
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_jp_keihan_doorbell_DoorbellCore_nativeUnpair(JNIEnv*, jobject, jlong h) {
+Java_jp_ox_doorbell_DoorbellCore_nativeUnpair(JNIEnv*, jobject, jlong h) {
   Bridge* b = fromHandle(h);
   if (b && b->core) db_core_unpair(b->core);
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_jp_keihan_doorbell_DoorbellCore_nativeQrScanStart(JNIEnv*, jobject, jlong h) {
+Java_jp_ox_doorbell_DoorbellCore_nativeQrScanStart(JNIEnv*, jobject, jlong h) {
   Bridge* b = fromHandle(h);
   if (b && b->core) db_core_qr_scan_start(b->core);
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_jp_keihan_doorbell_DoorbellCore_nativeQrScanStop(JNIEnv*, jobject, jlong h) {
+Java_jp_ox_doorbell_DoorbellCore_nativeQrScanStop(JNIEnv*, jobject, jlong h) {
   Bridge* b = fromHandle(h);
   if (b && b->core) db_core_qr_scan_stop(b->core);
 }
 
 // Core QR encoding returns [side length, row-major module values...] or null.
 extern "C" JNIEXPORT jintArray JNICALL
-Java_jp_keihan_doorbell_DoorbellCore_nativeQrEncode(JNIEnv* env, jobject, jstring text) {
+Java_jp_ox_doorbell_DoorbellCore_nativeQrEncode(JNIEnv* env, jobject, jstring text) {
   const std::string t = toUtf8(env, text);
   int size = 0;
   unsigned char* m = db_core_qr_encode(t.c_str(), &size);

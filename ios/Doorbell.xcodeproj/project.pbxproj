@@ -639,7 +639,7 @@
 					"-framework", Security,
 					"-framework", UIKit,
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = jp.keihan.doorbell;
+				PRODUCT_BUNDLE_IDENTIFIER = jp.ox.doorbell;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_OBJC_BRIDGING_HEADER = Doorbell/BridgingHeader.h;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -668,7 +668,7 @@
 					"-framework", Security,
 					"-framework", UIKit,
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = jp.keihan.doorbell;
+				PRODUCT_BUNDLE_IDENTIFIER = jp.ox.doorbell;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_OBJC_BRIDGING_HEADER = Doorbell/BridgingHeader.h;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -692,7 +692,7 @@
 					"-framework", Security,
 					"-framework", UIKit,
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = jp.keihan.doorbell.tv;
+				PRODUCT_BUNDLE_IDENTIFIER = jp.ox.doorbell.tv;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = appletvos;
 				SWIFT_OBJC_BRIDGING_HEADER = Doorbell/BridgingHeader.h;
@@ -718,7 +718,7 @@
 					"-framework", Security,
 					"-framework", UIKit,
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = jp.keihan.doorbell.tv;
+				PRODUCT_BUNDLE_IDENTIFIER = jp.ox.doorbell.tv;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = appletvos;
 				SWIFT_OBJC_BRIDGING_HEADER = Doorbell/BridgingHeader.h;
@@ -751,7 +751,7 @@
 					"-framework", Security,
 					"-framework", UIKit,
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = jp.keihan.doorbell;
+				PRODUCT_BUNDLE_IDENTIFIER = jp.ox.doorbell;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
 				SUPPORTED_PLATFORMS = iphoneos;
@@ -789,7 +789,7 @@
 					"-framework", Security,
 					"-framework", UIKit,
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = jp.keihan.doorbell;
+				PRODUCT_BUNDLE_IDENTIFIER = jp.ox.doorbell;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
 				SUPPORTED_PLATFORMS = iphoneos;

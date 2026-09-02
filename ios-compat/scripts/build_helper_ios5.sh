@@ -9,7 +9,7 @@ HELPER="$ARTIFACT_DIR/doorbell-keepalive"
 PACKAGE="$ARTIFACT_DIR/doorbell-keepalive.deb"
 MANIFEST="$ARTIFACT_DIR/manifest.json"
 SOURCE="$REPO_ROOT/tools/helper/doorbell_keepalive.c"
-TEMPLATE="$REPO_ROOT/ios-compat/helper/jp.keihan.doorbell.keepalive.plist.example"
+TEMPLATE="$REPO_ROOT/ios-compat/helper/jp.ox.doorbell.keepalive.plist.example"
 SDK="$REPO_ROOT/tools/sdk/iPhoneOS7.1.sdk"
 
 [[ -f "$SOURCE" && -f "$TEMPLATE" && -d "$SDK" ]] || {

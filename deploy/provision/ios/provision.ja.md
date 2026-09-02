@@ -1,7 +1,7 @@
 # iOS 子機のプロビジョニング (監督 SAM kiosk / Ad Hoc 配布) + tvOS 監視端末
 
-対象: `ios/` の iOS アプリ (`jp.keihan.doorbell` — 門口機/室内機両用) と
-tvOS アプリ (`jp.keihan.doorbell.tv` — 監視端末)。iOS 12 以降の廃品 iPhone/iPad を
+対象: `ios/` の iOS アプリ (`jp.ox.doorbell` — 門口機/室内機両用) と
+tvOS アプリ (`jp.ox.doorbell.tv` — 監視端末)。iOS 12 以降の廃品 iPhone/iPad を
 門口機・室内機に転用する。Android 版 `deploy/provision/android/provision.ja.md` に相当。
 
 ## 0. ビルドと署名の全体像

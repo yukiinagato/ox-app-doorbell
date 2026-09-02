@@ -56,7 +56,7 @@ def heartbeat(sequence: int, pid: int | None = None, event: str = "heartbeat") -
             "protocol": 1,
             "event": event,
             "pid": pid or os.getpid(),
-            "bundle_id": "jp.keihan.doorbell",
+            "bundle_id": "jp.ox.doorbell",
             "app_version": "test",
             "role": "test",
             "policy": "auto",

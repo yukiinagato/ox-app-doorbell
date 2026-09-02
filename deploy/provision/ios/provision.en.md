@@ -1,7 +1,7 @@
 # Provisioning iOS Stations (supervised SAM kiosk / Ad Hoc distribution) + tvOS monitor
 
-Target: the iOS app in `ios/` (`jp.keihan.doorbell` — serves as both door station and indoor
-panel) and the tvOS app (`jp.keihan.doorbell.tv` — a monitor). Repurpose scrap iPhones/iPads
+Target: the iOS app in `ios/` (`jp.ox.doorbell` — serves as both door station and indoor
+panel) and the tvOS app (`jp.ox.doorbell.tv` — a monitor). Repurpose scrap iPhones/iPads
 running iOS 12+ as door stations and indoor panels. Counterpart of the Android procedure
 `deploy/provision/android/provision.en.md`.
 

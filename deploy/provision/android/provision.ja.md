@@ -1,6 +1,6 @@
 # Android 門口機のプロビジョニング (kiosk / Device Owner)
 
-対象: `android/` の門口機アプリ (`jp.keihan.doorbell`)。minSdk 21 — Android 5.0 以降の
+対象: `android/` の門口機アプリ (`jp.ox.doorbell`)。minSdk 21 — Android 5.0 以降の
 廃品タブレット・スマホを門口機に転用する。Windows 版の
 `deploy/provision/windows/provision.cmd` に相当する手順。
 
@@ -33,10 +33,10 @@ API 19 allowlist は空なので、install/probe 成功だけでは supported Ki
 ## 3. Device Owner 化 (完全 kiosk に必須)
 
 ```sh
-adb shell dpm set-device-owner jp.keihan.doorbell/.AdminReceiver
+adb shell dpm set-device-owner jp.ox.doorbell/.AdminReceiver
 ```
 
-成功すると `Success: Device owner set to package jp.keihan.doorbell` と表示される。
+成功すると `Success: Device owner set to package jp.ox.doorbell` と表示される。
 
 - `java.lang.IllegalStateException: Trying to set the device owner, but device owner is
   already set` → 手順 1 の初期化をやり直す (既存アカウント/既存 DO が残っている)。
@@ -63,14 +63,14 @@ adb shell dpm set-device-owner jp.keihan.doorbell/.AdminReceiver
 `psk_ref` だけをコピーしても、秘密の設定やペアリングは完了しない。
 
 ```sh
-adb shell "run-as jp.keihan.doorbell cat files/boot.json"   # 確認 (debug ビルドのみ run-as 可)
+adb shell "run-as jp.ox.doorbell cat files/boot.json"   # 確認 (debug ビルドのみ run-as 可)
 cat > boot.json <<'EOF'
 { "name": "genkan-front", "role": "door_station", "door": "d_front",
   "listen_port": 47172, "http_port": 47180, "psk_ref": "secret:mesh.psk",
   "seed_peers": ["10.0.1.10:47172"], "ui_lang": "ja", "kiosk": true }
 EOF
 adb push boot.json /sdcard/boot.json
-adb shell "run-as jp.keihan.doorbell cp /sdcard/boot.json files/boot.json"
+adb shell "run-as jp.ox.doorbell cp /sdcard/boot.json files/boot.json"
 adb shell rm /sdcard/boot.json
 ```
 
@@ -85,7 +85,7 @@ MainActivity は `android.intent.category.HOME` を持つ。kiosk=true ならば
 ```sh
 # 既定ホームに設定 (機種の設定 UI: 設定→アプリ→既定のアプリ→ホームアプリ → ドアホン)
 # DO 化済みなら adb からも可:
-adb shell cmd package set-home-activity jp.keihan.doorbell/.MainActivity
+adb shell cmd package set-home-activity jp.ox.doorbell/.MainActivity
 adb reboot   # 再起動して自動起動 (BOOT_COMPLETED + HOME) を確認
 ```
 
@@ -97,7 +97,7 @@ adb reboot   # 再起動して自動起動 (BOOT_COMPLETED + HOME) を確認
 
 ```sh
 printf '%s' '123456' | shasum -a 256 | cut -d' ' -f1 > exit_pin.txt
-adb push exit_pin.txt /sdcard/ && adb shell "run-as jp.keihan.doorbell cp /sdcard/exit_pin.txt files/"
+adb push exit_pin.txt /sdcard/ && adb shell "run-as jp.ox.doorbell cp /sdcard/exit_pin.txt files/"
 ```
 
 - 5 回失敗で 10 分ロック (プロセス内)。成功で lock task を解除しアプリを閉じる。
@@ -105,9 +105,9 @@ adb push exit_pin.txt /sdcard/ && adb shell "run-as jp.keihan.doorbell cp /sdcar
 ## 7. kiosk を完全に外す (撤去時)
 
 ```sh
-adb shell dpm remove-active-admin jp.keihan.doorbell/.AdminReceiver   # DO 解除 (API による)
+adb shell dpm remove-active-admin jp.ox.doorbell/.AdminReceiver   # DO 解除 (API による)
 # 解除できない機種は端末初期化が確実
-adb uninstall jp.keihan.doorbell
+adb uninstall jp.ox.doorbell
 ```
 
 ## 8. Android TV (室内モニタ端末)
@@ -137,7 +137,7 @@ cat > boot.json <<'EOF'
   "seed_peers": ["10.0.1.10:47172"], "ui_lang": "ja", "kiosk": false }
 EOF
 adb push boot.json /sdcard/boot.json
-adb shell "run-as jp.keihan.doorbell cp /sdcard/boot.json files/boot.json"   # debug ビルド
+adb shell "run-as jp.ox.doorbell cp /sdcard/boot.json files/boot.json"   # debug ビルド
 adb shell rm /sdcard/boot.json
 ```
 
@@ -150,9 +150,9 @@ Android 10+ はバックグラウンドからの画面起動を制限する。TV
 を許可すると免除される (adb だけで完結):
 
 ```sh
-adb shell appops set jp.keihan.doorbell SYSTEM_ALERT_WINDOW allow
+adb shell appops set jp.ox.doorbell SYSTEM_ALERT_WINDOW allow
 # モニタリングに SIP は使わないが確認: 通知 (常駐サービス用, Android 13+)
-adb shell pm grant jp.keihan.doorbell android.permission.POST_NOTIFICATIONS 2>/dev/null || true
+adb shell pm grant jp.ox.doorbell android.permission.POST_NOTIFICATIONS 2>/dev/null || true
 ```
 
 Device Owner にできる TV (初期化直後) なら §3 の DO 化でも良いが、TV は視聴が主用途

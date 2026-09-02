@@ -3,10 +3,10 @@
 <plist version="1.0">
 <dict>
     <key>application-identifier</key>
-    <string>jp.keihan.doorbell</string>
+    <string>jp.ox.doorbell</string>
     <key>keychain-access-groups</key>
     <array>
-        <string>jp.keihan.doorbell</string>
+        <string>jp.ox.doorbell</string>
     </array>
 </dict>
 </plist>

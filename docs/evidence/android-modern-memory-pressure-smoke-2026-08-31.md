@@ -7,11 +7,11 @@ claim. It verifies the current Android application's controlled response to a re
 ## Test identity
 
 - device: moto g64y 5G (`cancunf`), Android 14 / API 34
-- application: `jp.keihan.doorbell` version `0.3.0`, modern debug build
+- application: `jp.ox.doorbell` version `0.3.0`, modern debug build
 - installed APK SHA-256:
   `2fcf83e008a1e3e11dc50cfe6183f76a9422214815c2ebaff2e9a23d1514bce3`
 - configured role: `door_station`
-- trigger: `adb shell am send-trim-memory jp.keihan.doorbell RUNNING_CRITICAL`
+- trigger: `adb shell am send-trim-memory jp.ox.doorbell RUNNING_CRITICAL`
 
 ## Passed observations
 

@@ -9,7 +9,7 @@
 	<key>CFBundleExecutable</key>
 	<string>Doorbell</string>
 	<key>CFBundleIdentifier</key>
-	<string>jp.keihan.doorbell.compat.ios9</string>
+	<string>jp.ox.doorbell.compat.ios9</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
@@ -24,7 +24,7 @@
 	<array>
 		<dict>
 			<key>CFBundleURLName</key>
-			<string>jp.keihan.doorbell.compat.ios9</string>
+			<string>jp.ox.doorbell.compat.ios9</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
 				<string>doorbell</string>

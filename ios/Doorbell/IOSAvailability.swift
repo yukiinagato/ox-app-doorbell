@@ -92,7 +92,7 @@ enum IOSAvailability {
 #if IOS9_COMPAT
         NSLog("[core][%d] %@", level, message)
 #else
-        let log = OSLog(subsystem: "jp.keihan.doorbell", category: "core")
+        let log = OSLog(subsystem: "jp.ox.doorbell", category: "core")
         let type: OSLogType = level >= 3 ? .error : (level >= 2 ? .default : .info)
         os_log("%{public}s", log: log, type: type, message)
 #endif

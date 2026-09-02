@@ -448,7 +448,7 @@ final class CoreBridge {
 
 
 enum Keychain {
-    private static let service = "jp.keihan.doorbell.secure"
+    private static let service = "jp.ox.doorbell.secure"
 
     static func get(_ key: String) -> String? {
         let query: [String: Any] = [

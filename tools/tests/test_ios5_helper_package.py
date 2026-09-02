@@ -66,16 +66,16 @@ class Ios5HelperPackageTests(unittest.TestCase):
             self.assertIn("./usr/local/libexec/doorbell-keepalive", data)
             self.assertEqual(data["./usr/local/libexec/doorbell-keepalive"].mode, 0o755)
             self.assertIn(
-                "./usr/local/share/doorbell/jp.keihan.doorbell.keepalive.plist", data
+                "./usr/local/share/doorbell/jp.ox.doorbell.keepalive.plist", data
             )
-            self.assertNotIn("./Library/LaunchDaemons/jp.keihan.doorbell.keepalive.plist", data)
+            self.assertNotIn("./Library/LaunchDaemons/jp.ox.doorbell.keepalive.plist", data)
 
     def test_installer_requires_explicit_enable_and_uses_fixed_paths(self) -> None:
         installer = (ROOT / "ios-compat" / "scripts" / "install_helper_ios5.sh").read_text()
         self.assertIn('DB_CONFIRM_ROOT_HELPER:-}" == "YES"', installer)
         self.assertIn("refusing to replace a different active helper definition", installer)
         self.assertIn("/usr/local/libexec/doorbell-keepalive", installer)
-        self.assertIn("/Library/LaunchDaemons/jp.keihan.doorbell.keepalive.plist", installer)
+        self.assertIn("/Library/LaunchDaemons/jp.ox.doorbell.keepalive.plist", installer)
         self.assertIn("set SSHPASS to the device's commissioned root SSH password", installer)
         self.assertNotIn("SSHPASS:-alpine", installer)
         self.assertNotIn("rm -rf", installer)
@@ -105,7 +105,7 @@ class Ios5HelperPackageTests(unittest.TestCase):
 
     def test_launchd_template_declares_the_kill_switch_and_log_bound(self) -> None:
         template = (
-            ROOT / "ios-compat" / "helper" / "jp.keihan.doorbell.keepalive.plist.example"
+            ROOT / "ios-compat" / "helper" / "jp.ox.doorbell.keepalive.plist.example"
         ).read_text()
         self.assertIn("--disable-file", template)
         self.assertIn("/var/db/doorbell-keepalive.disable", template)

@@ -83,8 +83,8 @@ SSH_OPTIONS=(
 )
 SSH=(sshpass -e ssh "${SSH_OPTIONS[@]}" -p "$DEVICE_PORT" "root@$DEVICE_HOST")
 REMOTE_PACKAGE="/var/root/doorbell-keepalive.deb"
-ACTIVE_PLIST="/Library/LaunchDaemons/jp.keihan.doorbell.keepalive.plist"
-STAGED_PLIST="/usr/local/share/doorbell/jp.keihan.doorbell.keepalive.plist"
+ACTIVE_PLIST="/Library/LaunchDaemons/jp.ox.doorbell.keepalive.plist"
+STAGED_PLIST="/usr/local/share/doorbell/jp.ox.doorbell.keepalive.plist"
 HELPER_BIN="/usr/local/libexec/doorbell-keepalive"
 HELPER_SOCKET="/var/run/doorbell-keepalive.sock"
 STATUS_FILE="/var/run/doorbell-keepalive-status.json"
@@ -104,7 +104,7 @@ status() {
     "if [ -f '$STATUS_FILE' ]; then sed -n '1,80p' '$STATUS_FILE'; "\
     "else echo helper-status-unavailable; fi; "\
     "echo '--- launchctl (advisory) ---'; "\
-    "launchctl list 2>&1 | grep jp.keihan.doorbell.keepalive || echo not-listed"
+    "launchctl list 2>&1 | grep jp.ox.doorbell.keepalive || echo not-listed"
 }
 
 # The status file is rewritten on every state change, so a recent mtime proves the

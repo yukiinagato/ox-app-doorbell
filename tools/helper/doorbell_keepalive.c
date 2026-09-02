@@ -366,7 +366,7 @@ static bool db_parse_message(const char *data, size_t length, db_message *messag
     } else if (strcmp(key, "bundle_id") == 0) {
       if (!db_set_seen(&seen, DB_SEEN_BUNDLE) ||
           !db_parse_string(&parser, string_value, sizeof(string_value)) ||
-          strcmp(string_value, "jp.keihan.doorbell") != 0) return false;
+          strcmp(string_value, "jp.ox.doorbell") != 0) return false;
     } else if (strcmp(key, "app_version") == 0) {
       if (!db_set_seen(&seen, DB_SEEN_APP_VERSION) ||
           !db_parse_string(&parser, string_value, 81) || string_value[0] == '\0')
@@ -945,7 +945,7 @@ static bool db_launch_app(db_state *state, uint64_t now) {
       (char *)"/system/bin/app_process", (char *)"/system/bin",
       (char *)"com.android.commands.am.Am", (char *)"startservice",
       (char *)"--user", (char *)"0", (char *)"-n",
-      (char *)"jp.keihan.doorbell/.DoorbellService", NULL};
+      (char *)"jp.ox.doorbell/.DoorbellService", NULL};
   char *const *arguments = NULL;
   const char *executable = NULL;
   bool drop_identity = false;

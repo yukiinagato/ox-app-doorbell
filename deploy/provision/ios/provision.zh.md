@@ -1,7 +1,7 @@
 # iOS 子机的部署（受监督 SAM kiosk / Ad Hoc 分发）+ tvOS 监视端
 
-对象: `ios/` 的 iOS App（`jp.keihan.doorbell` — 门口机/室内机两用）与
-tvOS App（`jp.keihan.doorbell.tv` — 监视端）。把 iOS 12 及以上的废旧 iPhone/iPad
+对象: `ios/` 的 iOS App（`jp.ox.doorbell` — 门口机/室内机两用）与
+tvOS App（`jp.ox.doorbell.tv` — 监视端）。把 iOS 12 及以上的废旧 iPhone/iPad
 转用为门口机、室内机。相当于 Android 版 `deploy/provision/android/provision.zh.md`。
 
 ## 0. 构建与签名的全貌

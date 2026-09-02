@@ -392,7 +392,7 @@ static NSDictionary *DBRecoveryControlCommand(NSString *command) {
   }
 
   NSBundle *bundle = [NSBundle mainBundle];
-  NSString *bundleID = [bundle bundleIdentifier] ?: @"jp.keihan.doorbell";
+  NSString *bundleID = [bundle bundleIdentifier] ?: @"jp.ox.doorbell";
   NSString *version = [[bundle infoDictionary] objectForKey:@"CFBundleVersion"] ?: @"unknown";
   NSString *state = _stateProvider ? _stateProvider() : @"unknown";
   if (![state isKindOfClass:[NSString class]] || [state length] == 0) state = @"unknown";

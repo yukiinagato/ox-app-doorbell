@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[2]
 class NativeAssetContract(unittest.TestCase):
     def test_native_theme_requests_do_not_use_panel_credentials(self):
         sources = [
-            "android/app/src/main/java/jp/keihan/doorbell/MainActivity.kt",
+            "android/app/src/main/java/jp/ox/doorbell/MainActivity.kt",
             "ios/Doorbell/MainViewController.swift",
             "ios-kiosk/src/Screens/DBHomeScreen.m",
             "win/DoorbellApp/MainWindow.xaml.cs",

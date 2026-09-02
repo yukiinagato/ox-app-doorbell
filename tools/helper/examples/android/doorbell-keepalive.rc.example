@@ -1,4 +1,4 @@
-# Replace 12345 with the installed jp.keihan.doorbell UID and install the
+# Replace 12345 with the installed jp.ox.doorbell UID and install the
 # binary, socket directory policy, and SELinux policy as one reviewed image.
 service doorbell_keepalive /system/xbin/doorbell-keepalive --socket /dev/socket/doorbell_keeper --status /data/misc/doorbell/keepalive-status.json --marker /data/misc/doorbell/keepalive-safe-mode.json --mode-file /data/misc/doorbell/keepalive-mode --mode auto --profile android --app-uid 12345 --socket-gid 12345
     class late_start

@@ -26,7 +26,7 @@ class QuickReplyV2Contract(unittest.TestCase):
 
     def test_incoming_screens_send_exact_call_identity_and_report_rejection(self):
         expectations = {
-            "android/app/src/main/java/jp/keihan/doorbell/IncomingActivity.kt":
+            "android/app/src/main/java/jp/ox/doorbell/IncomingActivity.kt":
                 "quickReplyV2(replyId, door, callId, stageRevision)",
             "ios/Doorbell/IncomingViewController.swift":
                 "door: door, callId: callId,",

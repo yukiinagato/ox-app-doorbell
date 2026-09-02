@@ -46,13 +46,13 @@ def gzip_tar(build) -> bytes:
 
 def control_archive(version: str) -> bytes:
     control = (
-        "Package: jp.keihan.doorbell\n"
+        "Package: jp.ox.doorbell\n"
         "Name: Doorbell\n"
         f"Version: {version}\n"
         "Architecture: iphoneos-arm\n"
         "Description: Doorbell mesh intercom compatibility kiosk (armv7/iOS 5.1)\n"
-        "Maintainer: keihan <support@keihan.co>\n"
-        "Author: keihan\n"
+        "Maintainer: ox\n"
+        "Author: ox\n"
         "Section: Utilities\n"
         "Depends: firmware (>= 5.0)\n"
     ).encode()

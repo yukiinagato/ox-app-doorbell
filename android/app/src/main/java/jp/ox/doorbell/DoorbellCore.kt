@@ -1,0 +1,374 @@
+// Kotlin wrapper for libdoorbell.so. Native callbacks arrive on Core-owned threads; listeners
+// must marshal UI work to the main looper.
+package jp.ox.doorbell
+
+import android.content.Context
+import org.json.JSONObject
+
+class DoorbellCore(context: Context) {
+    private val secureStore = AndroidSecureStore(context)
+    private val deviceInfo = AndroidDeviceInfo(context)
+    val secureStoreAvailable: Boolean = secureStore.selfTest()
+
+    interface Listener {
+        /** Versioned JSON UI event from a Core-owned thread. */
+        fun onUiEvent(ev: JSONObject)
+        /** TTS request for a quick reply, delivered on a Core-owned thread. */
+        fun onTts(text: String, lang: String)
+    }
+
+    @Volatile
+    var listener: Listener? = null
+
+    @Volatile
+    private var handle: Long = 0
+
+    val isCreated: Boolean get() = handle != 0L
+
+    /** Create and start Core after verifying the ABI and real SIP backend. */
+    @Synchronized
+    fun start(dataDir: String, bootJson: String): Boolean {
+        if (handle != 0L) return true
+        val backend = backend()
+        if (backend.optInt("platform_abi") != 2 || backend.optString("sip") != "pjsip")
+            return false
+        handle = nativeCreate(dataDir, bootJson)
+        if (handle == 0L) return false
+        nativeSetUiCallback(handle, true)
+        if (nativeStart(handle) != 0) {
+            destroy()
+            return false
+        }
+        return true
+    }
+
+    @Synchronized
+    fun destroy() {
+        if (handle == 0L) return
+        nativeSetUiCallback(handle, false)
+        nativeStop(handle)
+        nativeDestroy(handle)
+        handle = 0
+    }
+
+    fun press(doorId: String) {
+        if (handle != 0L) nativePress(handle, doorId)
+    }
+
+    /** Legacy press API carrying a configured visit-purpose identifier. */
+    fun pressPurpose(doorId: String, purpose: String) {
+        if (handle != 0L) nativePressPurpose(handle, doorId, purpose)
+    }
+
+    /** Legacy purpose-selection API retained for one compatibility cycle. */
+    fun selectPurpose(doorId: String, purpose: String) {
+        if (handle != 0L) nativeSelectPurpose(handle, doorId, purpose)
+    }
+
+    fun cancelCall(doorId: String) {
+        if (handle != 0L) nativeCancelCall(handle, doorId)
+    }
+
+    fun pressV2(doorId: String, purpose: String = ""): String? {
+        val value = if (handle != 0L) nativePressV2(handle, doorId, purpose) else null
+        return value?.takeIf { it.isNotEmpty() }
+    }
+
+    fun selectPurposeV2(doorId: String, callId: String, purpose: String): Boolean =
+        handle != 0L && nativeSelectPurposeV2(handle, doorId, callId, purpose) == 0
+
+    fun cancelCallV2(doorId: String, callId: String, reason: String): Boolean =
+        handle != 0L && nativeCancelCallV2(handle, doorId, callId, reason) == 0
+
+    fun reportCallAnsweredV2(doorId: String, callId: String, stageRevision: Int): Boolean =
+        handle != 0L &&
+            nativeReportCallAnsweredV2(handle, doorId, callId, stageRevision) == 0
+
+    fun reportCallEndedV2(
+        doorId: String,
+        callId: String,
+        stageRevision: Int,
+        reason: String,
+    ): Boolean = handle != 0L &&
+        nativeReportCallEndedV2(handle, doorId, callId, stageRevision, reason) == 0
+
+    fun reportCallRecovery(callId: String, restored: Boolean) {
+        if (handle != 0L) nativeReportCallRecovery(handle, callId, restored)
+    }
+
+    fun emergency(active: Boolean): Boolean =
+        handle != 0L && nativeEmergencyV2(handle, active)
+
+    /** Set the replicated visitor language for a door. */
+    fun setVisitorLang(door: String, lang: String) {
+        if (handle != 0L) nativeSetVisitorLang(handle, door, lang)
+    }
+
+    fun status(): JSONObject? = parse(if (handle != 0L) nativeStatusJson(handle) else null)
+
+    /** Diagnostic snapshot for the maintenance information screen. */
+    fun debugInfo(): JSONObject? = parse(if (handle != 0L) nativeDebugJson(handle) else null)
+
+    fun config(): JSONObject? = parse(if (handle != 0L) nativeConfigJson(handle) else null)
+
+    fun capabilities(): JSONObject? =
+        parse(if (handle != 0L) nativeCapabilitiesJson(handle) else null)
+
+    fun backend(): JSONObject = parse(nativeBackendJson()) ?: JSONObject()
+
+    fun setCapabilities(value: JSONObject) {
+        if (handle != 0L) nativeSetCapabilitiesJson(handle, value.toString())
+    }
+
+    fun setRuntimeStatus(value: JSONObject) {
+        if (handle != 0L) nativeSetRuntimeStatusJson(handle, value.toString())
+    }
+
+    fun setUiManifest(value: JSONObject) {
+        if (handle != 0L) nativeSetUiManifestJson(handle, value.toString())
+    }
+
+    /** Push a camera frame: 0=NV21, 1=NV12, 2=YUY2, 3=BGRA. */
+    fun onCameraFrame(data: ByteArray, format: Int, width: Int, height: Int, stride: Int,
+                      tsMs: Long) {
+        if (handle != 0L) nativeOnCameraFrame(handle, data, format, width, height, stride, tsMs)
+    }
+
+    /** Publishes the door station sensor angle; a configured fixed angle wins in Core. */
+    fun setVideoSensorRotation(degrees: Int) {
+        if (handle != 0L) nativeSetVideoSensorRotation(handle, degrees)
+    }
+
+    /** Push an Annex-B H.264 access unit for Core's fMP4 stream. */
+    fun onEncodedFrame(annexb: ByteArray, isKeyframe: Boolean, tsMs: Long) {
+        if (handle != 0L) nativeOnEncodedFrame(handle, annexb, isKeyframe, tsMs)
+    }
+
+    /** Whether Core currently needs the H.264 encoder. */
+    fun videoEncoderWanted(): Boolean =
+        handle != 0L && nativeVideoEncoderWanted(handle)
+
+    /**
+     * Place a SIP call to an extension or complete SIP URI. Empty mode is bidirectional;
+     * "monitor" is receive-only audio.
+     */
+    fun sipCall(target: String, mode: String = "") {
+        if (handle != 0L) nativeSipCall(handle, target, mode)
+    }
+
+    fun sipHangup() {
+        if (handle != 0L) nativeSipHangup(handle)
+    }
+
+    fun sipSendDtmf(digits: String): Boolean =
+        handle != 0L && nativeSipSendDtmf(handle, digits) == 0
+
+    /** Deliver a display/TTS quick reply; an empty door selects the latest visitor call. */
+    fun quickReply(replyId: String, door: String) {
+        if (handle != 0L) nativeQuickReply(handle, replyId, door)
+    }
+
+    /** Deliver a reply only to the exact active visitor-call revision. */
+    fun quickReplyV2(replyId: String, door: String, callId: String,
+                     stageRevision: Int): Boolean =
+        handle != 0L && replyId.isNotEmpty() && callId.isNotEmpty() && stageRevision >= 0 &&
+            nativeQuickReplyV2(handle, replyId, door, callId, stageRevision)
+
+    fun version(): String = nativeVersion()
+
+    // Pairing discovery and invitation.
+
+    /** Pairing state for the enrollment UI. */
+    fun pairingInfo(): JSONObject? = parse(if (handle != 0L) nativePairingJson(handle) else null)
+
+    /** Join from an unpaired node using a seed address and PIN. */
+    fun joinCluster(host: String, pin: String) {
+        if (handle != 0L) nativeJoinCluster(handle, host, pin)
+    }
+
+    /** Enable pairing mode for the requested duration; zero seconds closes the window. */
+    fun setPairingMode(seconds: Int) {
+        if (handle != 0L) nativePairingMode(handle, seconds)
+    }
+
+    /**
+     * Open the bulk-add window and mint a Pairing PIN in one step. The result carries
+     * ok, host, pin, and expires_s, or ok=false with err.
+     */
+    fun startPairing(seconds: Int): JSONObject? =
+        parse(if (handle != 0L) nativeStartPairingJson(handle, seconds) else null)
+
+    /** Approve and invite one pending node. */
+    fun inviteDevice(nodeId: String) {
+        if (handle != 0L) nativeInviteDevice(handle, nodeId)
+    }
+
+    /** Invite an address, ID, and public key directly, as carried by an Add QR. */
+    fun inviteDirect(addr: String, nodeId: String, pk: String) {
+        if (handle != 0L) nativeInviteDirect(handle, addr, nodeId, pk)
+    }
+
+    /** Drop one pending device and ignore its announcements for a while. */
+    fun denyDevice(nodeId: String) {
+        if (handle != 0L) nativeDenyDevice(handle, nodeId)
+    }
+
+    /** Re-run the secure-store write after pairing state "persist_error". */
+    fun retryPairingPersistence(): Boolean =
+        handle != 0L && nativeRetryPairingPersistence(handle)
+
+    /** Leave the cluster and drop the stored pre-shared key. */
+    fun unpair() {
+        if (handle != 0L) nativeUnpair(handle)
+    }
+
+    /** Decode camera frames already delivered through [onCameraFrame] until stopped. */
+    fun qrScanStart() {
+        if (handle != 0L) nativeQrScanStart(handle)
+    }
+
+    fun qrScanStop() {
+        if (handle != 0L) nativeQrScanStop(handle)
+    }
+
+    /** Encode QR data as [side length, row-major module values...]. */
+    fun qrEncode(text: String): IntArray? = if (text.isEmpty()) null else nativeQrEncode(text)
+
+    /** Bootstrap a new cluster from this unpaired device. */
+    fun foundCluster(): Boolean = handle != 0L && nativeFoundCluster(handle)
+
+    private fun parse(s: String?): JSONObject? =
+        try { if (s == null) null else JSONObject(s) } catch (_: Exception) { null }
+
+    /** Traverse the configuration tree by dotted path. */
+    fun dig(root: JSONObject?, dotpath: String): Any? {
+        var cur: Any? = root ?: return null
+        for (part in dotpath.split(".")) {
+            val o = cur as? JSONObject ?: return null
+            cur = o.opt(part) ?: return null
+        }
+        return cur
+    }
+
+    // JNI callbacks from Core-owned threads.
+
+    @Suppress("unused")
+    private fun onUiEventFromNative(json: String) {
+        val ev = try { JSONObject(json) } catch (_: Exception) { return }
+        listener?.onUiEvent(ev)
+    }
+
+    @Suppress("unused")
+    private fun onTtsFromNative(text: String, lang: String) {
+        listener?.onTts(text, lang)
+    }
+
+    @Suppress("unused")
+    private fun onHttpsRequestFromNative(
+        method: String,
+        url: String,
+        headersJson: String,
+        body: ByteArray,
+    ): ByteArray? = AndroidHttpsClient.request(method, url, headersJson, body)
+
+    @Suppress("unused")
+    private fun onSecureGetFromNative(key: String): String? = secureStore.get(key)
+
+    @Suppress("unused")
+    private fun onSecurePutFromNative(key: String, value: String): Boolean =
+        secureStore.put(key, value)
+
+    @Suppress("unused")
+    private fun onSecureDeleteFromNative(key: String): Boolean = secureStore.delete(key)
+
+    @Suppress("unused")
+    private fun onDeviceInfoFromNative(): String = deviceInfo.snapshot()
+
+    fun isOnMainsPower(): Boolean = deviceInfo.isOnMainsPower()
+
+    internal fun putPlatformSecret(key: String, value: String): Boolean =
+        secureStore.put(key, value)
+
+    internal fun platformDeviceInfo(): JSONObject = parse(deviceInfo.snapshot()) ?: JSONObject()
+
+    // ---------- native ----------
+
+    private external fun nativeCreate(dataDir: String, bootJson: String): Long
+    private external fun nativeBackendJson(): String
+    private external fun nativeStart(handle: Long): Int
+    private external fun nativeStop(handle: Long)
+    private external fun nativeDestroy(handle: Long)
+    private external fun nativeSetUiCallback(handle: Long, enabled: Boolean)
+    private external fun nativePress(handle: Long, doorId: String)
+    private external fun nativePressPurpose(handle: Long, doorId: String, purpose: String)
+    private external fun nativeSelectPurpose(handle: Long, doorId: String, purpose: String)
+    private external fun nativeCancelCall(handle: Long, doorId: String)
+    private external fun nativePressV2(handle: Long, doorId: String, purpose: String): String?
+    private external fun nativeSelectPurposeV2(
+        handle: Long,
+        doorId: String,
+        callId: String,
+        purpose: String,
+    ): Int
+    private external fun nativeCancelCallV2(
+        handle: Long,
+        doorId: String,
+        callId: String,
+        reason: String,
+    ): Int
+    private external fun nativeReportCallAnsweredV2(
+        handle: Long,
+        doorId: String,
+        callId: String,
+        stageRevision: Int,
+    ): Int
+    private external fun nativeReportCallEndedV2(
+        handle: Long,
+        doorId: String,
+        callId: String,
+        stageRevision: Int,
+        reason: String,
+    ): Int
+    private external fun nativeReportCallRecovery(handle: Long, callId: String, restored: Boolean)
+    private external fun nativeEmergencyV2(handle: Long, active: Boolean): Boolean
+    private external fun nativeSetVisitorLang(handle: Long, door: String, lang: String)
+    private external fun nativeStatusJson(handle: Long): String?
+    private external fun nativeConfigJson(handle: Long): String?
+    private external fun nativeSetCapabilitiesJson(handle: Long, json: String)
+    private external fun nativeSetRuntimeStatusJson(handle: Long, json: String)
+    private external fun nativeSetUiManifestJson(handle: Long, json: String)
+    private external fun nativeCapabilitiesJson(handle: Long): String?
+    private external fun nativeOnCameraFrame(handle: Long, data: ByteArray, format: Int,
+                                             width: Int, height: Int, stride: Int, tsMs: Long)
+    private external fun nativeSetVideoSensorRotation(handle: Long, degrees: Int)
+    private external fun nativeOnEncodedFrame(handle: Long, annexb: ByteArray,
+                                              isKeyframe: Boolean, tsMs: Long)
+    private external fun nativeVideoEncoderWanted(handle: Long): Boolean
+    private external fun nativeSipCall(handle: Long, target: String, mode: String)
+    private external fun nativeSipHangup(handle: Long)
+    private external fun nativeSipSendDtmf(handle: Long, digits: String): Int
+    private external fun nativeQuickReply(handle: Long, replyId: String, door: String)
+    private external fun nativeQuickReplyV2(handle: Long, replyId: String, door: String,
+                                            callId: String, stageRevision: Int): Boolean
+    private external fun nativeVersion(): String
+    private external fun nativeDebugJson(handle: Long): String?
+    private external fun nativePairingJson(handle: Long): String?
+    private external fun nativeJoinCluster(handle: Long, host: String, pin: String)
+    private external fun nativePairingMode(handle: Long, seconds: Int)
+    private external fun nativeStartPairingJson(handle: Long, seconds: Int): String?
+    private external fun nativeInviteDevice(handle: Long, nodeId: String)
+    private external fun nativeInviteDirect(handle: Long, addr: String, nodeId: String, pk: String)
+    private external fun nativeDenyDevice(handle: Long, nodeId: String)
+    private external fun nativeRetryPairingPersistence(handle: Long): Boolean
+    private external fun nativeUnpair(handle: Long)
+    private external fun nativeQrScanStart(handle: Long)
+    private external fun nativeQrScanStop(handle: Long)
+    private external fun nativeQrEncode(text: String): IntArray?
+    private external fun nativeFoundCluster(handle: Long): Boolean
+
+    companion object {
+        init {
+            System.loadLibrary("doorbell")
+        }
+    }
+}

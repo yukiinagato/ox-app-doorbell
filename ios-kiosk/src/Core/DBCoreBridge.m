@@ -137,7 +137,7 @@ static void DBReleaseBuffer(void *user, void *buffer) {
   free(buffer);
 }
 
-static NSString *const kKeychainService = @"jp.keihan.doorbell.secure";
+static NSString *const kKeychainService = @"jp.ox.doorbell.secure";
 
 // ---- Keychain (SPI secure_get/put) ----
 static NSString *DBKeychainGet(NSString *key) {

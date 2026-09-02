@@ -2,7 +2,7 @@
 
 # Android 门口机的部署（kiosk / Device Owner）
 
-对象: `android/` 的门口机 App（`jp.keihan.doorbell`）。minSdk 21 — 把 Android 5.0 及以上的
+对象: `android/` 的门口机 App（`jp.ox.doorbell`）。minSdk 21 — 把 Android 5.0 及以上的
 废旧平板/手机转用为门口机。相当于 Windows 版的
 `deploy/provision/windows/provision.cmd` 的步骤。
 
@@ -35,10 +35,10 @@ install/probe 成功不會成為 supported KitKat SKU。
 ## 3. Device Owner 化（完全 kiosk 必需）
 
 ```sh
-adb shell dpm set-device-owner jp.keihan.doorbell/.AdminReceiver
+adb shell dpm set-device-owner jp.ox.doorbell/.AdminReceiver
 ```
 
-成功时显示 `Success: Device owner set to package jp.keihan.doorbell`。
+成功时显示 `Success: Device owner set to package jp.ox.doorbell`。
 
 - `java.lang.IllegalStateException: Trying to set the device owner, but device owner is
   already set` → 重做步骤 1 的初始化（残留了已有账号/已有 DO）。
@@ -62,14 +62,14 @@ App 首次启动会在 `filesDir/boot.json` 生成默认值。Core 启动前必�
 之后才可在 `boot.json` 中使用下列非秘密引用。只复制 `psk_ref` 不会写入秘密，也不会完成配对。
 
 ```sh
-adb shell "run-as jp.keihan.doorbell cat files/boot.json"   # 确认（仅 debug 构建可 run-as）
+adb shell "run-as jp.ox.doorbell cat files/boot.json"   # 确认（仅 debug 构建可 run-as）
 cat > boot.json <<'EOF'
 { "name": "genkan-front", "role": "door_station", "door": "d_front",
   "listen_port": 47172, "http_port": 47180, "psk_ref": "secret:mesh.psk",
   "seed_peers": ["10.0.1.10:47172"], "ui_lang": "ja", "kiosk": true }
 EOF
 adb push boot.json /sdcard/boot.json
-adb shell "run-as jp.keihan.doorbell cp /sdcard/boot.json files/boot.json"
+adb shell "run-as jp.ox.doorbell cp /sdcard/boot.json files/boot.json"
 adb shell rm /sdcard/boot.json
 ```
 
@@ -84,7 +84,7 @@ MainActivity 带有 `android.intent.category.HOME`。若 kiosk=true:
 ```sh
 # 设为默认主屏（机型自带设置 UI: 设置→应用→默认应用→主屏应用 → 门铃）
 # 已 DO 化的话也可以用 adb:
-adb shell cmd package set-home-activity jp.keihan.doorbell/.MainActivity
+adb shell cmd package set-home-activity jp.ox.doorbell/.MainActivity
 adb reboot   # 重启并确认自动启动 (BOOT_COMPLETED + HOME)
 ```
 
@@ -96,7 +96,7 @@ adb reboot   # 重启并确认自动启动 (BOOT_COMPLETED + HOME)
 
 ```sh
 printf '%s' '123456' | shasum -a 256 | cut -d' ' -f1 > exit_pin.txt
-adb push exit_pin.txt /sdcard/ && adb shell "run-as jp.keihan.doorbell cp /sdcard/exit_pin.txt files/"
+adb push exit_pin.txt /sdcard/ && adb shell "run-as jp.ox.doorbell cp /sdcard/exit_pin.txt files/"
 ```
 
 - 失败 5 次锁定 10 分钟（进程内）。成功则解除 lock task 并关闭 App。
@@ -104,9 +104,9 @@ adb push exit_pin.txt /sdcard/ && adb shell "run-as jp.keihan.doorbell cp /sdcar
 ## 7. 完全撤除 kiosk（拆机时）
 
 ```sh
-adb shell dpm remove-active-admin jp.keihan.doorbell/.AdminReceiver   # 解除 DO (依 API 而定)
+adb shell dpm remove-active-admin jp.ox.doorbell/.AdminReceiver   # 解除 DO (依 API 而定)
 # 解除不了的机型，恢复出厂设置最可靠
-adb uninstall jp.keihan.doorbell
+adb uninstall jp.ox.doorbell
 ```
 
 ## 8. Android TV（室内监视器）
@@ -136,7 +136,7 @@ cat > boot.json <<'EOF'
   "seed_peers": ["10.0.1.10:47172"], "ui_lang": "ja", "kiosk": false }
 EOF
 adb push boot.json /sdcard/boot.json
-adb shell "run-as jp.keihan.doorbell cp /sdcard/boot.json files/boot.json"   # debug 构建
+adb shell "run-as jp.ox.doorbell cp /sdcard/boot.json files/boot.json"   # debug 构建
 adb shell rm /sdcard/boot.json
 ```
 
@@ -149,9 +149,9 @@ Android 10+ 限制从后台启动界面。在 TV 上允许「显示在其他应�
 即可豁免（仅用 adb 就能完成）:
 
 ```sh
-adb shell appops set jp.keihan.doorbell SYSTEM_ALERT_WINDOW allow
+adb shell appops set jp.ox.doorbell SYSTEM_ALERT_WINDOW allow
 # 监听不用 SIP，但确认一下: 通知（常驻服务用, Android 13+）
-adb shell pm grant jp.keihan.doorbell android.permission.POST_NOTIFICATIONS 2>/dev/null || true
+adb shell pm grant jp.ox.doorbell android.permission.POST_NOTIFICATIONS 2>/dev/null || true
 ```
 
 能做 Device Owner 的 TV（刚初始化）也可以按 §3 做 DO 化，但 TV 主要用途是看电视，

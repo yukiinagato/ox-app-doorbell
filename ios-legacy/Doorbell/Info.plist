@@ -9,7 +9,7 @@
 	<key>CFBundleExecutable</key>
 	<string>Doorbell</string>
 	<key>CFBundleIdentifier</key>
-	<string>jp.keihan.doorbell</string>
+	<string>jp.ox.doorbell</string>
 	<key>CFBundleIconFile</key>
 	<string>Icon-72.png</string>
 	<key>CFBundleIconFiles</key>
@@ -36,7 +36,7 @@
 	<array>
 		<dict>
 			<key>CFBundleURLName</key>
-			<string>jp.keihan.doorbell</string>
+			<string>jp.ox.doorbell</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
 				<string>doorbell</string>
@@ -76,7 +76,7 @@
 	<array>
 		<dict>
 			<key>CFBundleURLName</key>
-			<string>jp.keihan.doorbell</string>
+			<string>jp.ox.doorbell</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
 				<string>doorbell</string>

@@ -22,13 +22,13 @@ cp -R "$APP" "$STAGE/pkg/Applications/"
 find "$STAGE/pkg" \( -name '.DS_Store' -o -name '._*' \) -delete 2>/dev/null || true
 
 cat > "$STAGE/pkg/DEBIAN/control" <<EOF
-Package: jp.keihan.doorbell
+Package: jp.ox.doorbell
 Name: ドアホン
 Version: $VERSION
 Architecture: iphoneos-arm
 Description: Doorbell mesh intercom node (armv7/iOS5.1, full C++17 core + mini-SIP)
-Maintainer: keihan <support@keihan.co>
-Author: keihan
+Maintainer: ox
+Author: ox
 Section: Utilities
 Depends: firmware (>= 5.0)
 EOF

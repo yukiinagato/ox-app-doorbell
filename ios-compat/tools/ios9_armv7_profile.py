@@ -138,7 +138,7 @@ def validate_info(
     path = repository / INFO_RELATIVE
     info = load_plist(path)
     expected = {
-        "CFBundleIdentifier": "jp.keihan.doorbell.compat.ios9",
+        "CFBundleIdentifier": "jp.ox.doorbell.compat.ios9",
         "MinimumOSVersion": "9.0",
         "UIDeviceFamily": [1, 2],
         "UIRequiredDeviceCapabilities": ["armv7"],

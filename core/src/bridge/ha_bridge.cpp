@@ -169,7 +169,7 @@ void HaBridge::setDoorDevice(cJSON* o, const std::string& door_id) {
   json::push(ids, json::Doc(cJSON_CreateString(("doorbell_" + sanitizeId(door_id)).c_str())));
   std::string name = labelJa(json::get(door, "label"));
   json::set(dev, "name", name.empty() ? door_id : name);
-  json::set(dev, "manufacturer", "Keihan");
+  json::set(dev, "manufacturer", "ox");
   json::set(dev, "model", "DoorStation");
   const std::string bld = json::getString(door, "building");
   if (!bld.empty()) {
@@ -249,7 +249,7 @@ void HaBridge::publishDiscovery() {
     cJSON* ids = json::addArr(dev, "identifiers");
     json::push(ids, json::Doc(cJSON_CreateString(sid.c_str())));
     json::set(dev, "name", name.empty() ? nid.substr(0, 8) : name);
-    json::set(dev, "manufacturer", "Keihan");
+    json::set(dev, "manufacturer", "ox");
     json::set(dev, "model", "DoorStation");
     pub(prefix_ + "/binary_sensor/" + sid + "/config", json::dump(o.get()), true);
   }
@@ -267,7 +267,7 @@ void HaBridge::publishDiscovery() {
     cJSON* ids = json::addArr(dev, "identifiers");
     json::push(ids, json::Doc(cJSON_CreateString("doorbell_bridge")));
     json::set(dev, "name", "Doorbell Mesh");
-    json::set(dev, "manufacturer", "Keihan");
+    json::set(dev, "manufacturer", "ox");
     json::set(dev, "model", "MeshBridge");
     pub(prefix_ + "/binary_sensor/doorbell_emergency/config", json::dump(o.get()), true);
   }
@@ -287,7 +287,7 @@ void HaBridge::publishDiscovery() {
     cJSON* ids = json::addArr(dev, "identifiers");
     json::push(ids, json::Doc(cJSON_CreateString("doorbell_bridge")));
     json::set(dev, "name", "Doorbell Mesh");
-    json::set(dev, "manufacturer", "Keihan");
+    json::set(dev, "manufacturer", "ox");
     json::set(dev, "model", "MeshBridge");
     pub(prefix_ + "/binary_sensor/doorbell_bridge_online/config", json::dump(o.get()), true);
   }

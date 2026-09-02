@@ -2,7 +2,7 @@
 
 # Provisioning an Android Door Station (kiosk / Device Owner)
 
-Target: the door-station app in `android/` (`jp.keihan.doorbell`). minSdk 21 — repurpose scrap
+Target: the door-station app in `android/` (`jp.ox.doorbell`). minSdk 21 — repurpose scrap
 tablets/phones running Android 5.0+ as door stations. This is the counterpart of the Windows
 procedure `deploy/provision/windows/provision.cmd`.
 
@@ -38,10 +38,10 @@ passes.
 ## 3. Becoming Device Owner (required for full kiosk)
 
 ```sh
-adb shell dpm set-device-owner jp.keihan.doorbell/.AdminReceiver
+adb shell dpm set-device-owner jp.ox.doorbell/.AdminReceiver
 ```
 
-On success it prints `Success: Device owner set to package jp.keihan.doorbell`.
+On success it prints `Success: Device owner set to package jp.ox.doorbell`.
 
 - `java.lang.IllegalStateException: Trying to set the device owner, but device owner is
   already set` → redo the factory reset from step 1 (an existing account/DO remains).
@@ -71,14 +71,14 @@ platform secure store. Only then may `boot.json` contain the non-secret referenc
 Copying `psk_ref` alone does not provision or pair the device.
 
 ```sh
-adb shell "run-as jp.keihan.doorbell cat files/boot.json"   # 確認 (debug ビルドのみ run-as 可)
+adb shell "run-as jp.ox.doorbell cat files/boot.json"   # 確認 (debug ビルドのみ run-as 可)
 cat > boot.json <<'EOF'
 { "name": "genkan-front", "role": "door_station", "door": "d_front",
   "listen_port": 47172, "http_port": 47180, "psk_ref": "secret:mesh.psk",
   "seed_peers": ["10.0.1.10:47172"], "ui_lang": "ja", "kiosk": true }
 EOF
 adb push boot.json /sdcard/boot.json
-adb shell "run-as jp.keihan.doorbell cp /sdcard/boot.json files/boot.json"
+adb shell "run-as jp.ox.doorbell cp /sdcard/boot.json files/boot.json"
 adb shell rm /sdcard/boot.json
 ```
 
@@ -93,7 +93,7 @@ MainActivity carries `android.intent.category.HOME`. If kiosk=true:
 ```sh
 # 既定ホームに設定 (機種の設定 UI: 設定→アプリ→既定のアプリ→ホームアプリ → ドアホン)
 # DO 化済みなら adb からも可:
-adb shell cmd package set-home-activity jp.keihan.doorbell/.MainActivity
+adb shell cmd package set-home-activity jp.ox.doorbell/.MainActivity
 adb reboot   # 再起動して自動起動 (BOOT_COMPLETED + HOME) を確認
 ```
 
@@ -106,7 +106,7 @@ adb reboot   # 再起動して自動起動 (BOOT_COMPLETED + HOME) を確認
 
 ```sh
 printf '%s' '123456' | shasum -a 256 | cut -d' ' -f1 > exit_pin.txt
-adb push exit_pin.txt /sdcard/ && adb shell "run-as jp.keihan.doorbell cp /sdcard/exit_pin.txt files/"
+adb push exit_pin.txt /sdcard/ && adb shell "run-as jp.ox.doorbell cp /sdcard/exit_pin.txt files/"
 ```
 
 - 5 failures lock it for 10 minutes (in-process). On success, the lock task is released and the
@@ -115,9 +115,9 @@ adb push exit_pin.txt /sdcard/ && adb shell "run-as jp.keihan.doorbell cp /sdcar
 ## 7. Removing kiosk entirely (decommissioning)
 
 ```sh
-adb shell dpm remove-active-admin jp.keihan.doorbell/.AdminReceiver   # DO 解除 (API による)
+adb shell dpm remove-active-admin jp.ox.doorbell/.AdminReceiver   # DO 解除 (API による)
 # 解除できない機種は端末初期化が確実
-adb uninstall jp.keihan.doorbell
+adb uninstall jp.ox.doorbell
 ```
 
 ## 8. Android TV (indoor monitor)
@@ -148,7 +148,7 @@ cat > boot.json <<'EOF'
   "seed_peers": ["10.0.1.10:47172"], "ui_lang": "ja", "kiosk": false }
 EOF
 adb push boot.json /sdcard/boot.json
-adb shell "run-as jp.keihan.doorbell cp /sdcard/boot.json files/boot.json"   # debug ビルド
+adb shell "run-as jp.ox.doorbell cp /sdcard/boot.json files/boot.json"   # debug ビルド
 adb shell rm /sdcard/boot.json
 ```
 
@@ -161,9 +161,9 @@ Android 10+ restricts starting screens from the background. On a TV, granting "D
 apps" exempts the app (doable entirely via adb):
 
 ```sh
-adb shell appops set jp.keihan.doorbell SYSTEM_ALERT_WINDOW allow
+adb shell appops set jp.ox.doorbell SYSTEM_ALERT_WINDOW allow
 # 監聴に SIP は使わないが確認: 通知 (常駐サービス用, Android 13+)
-adb shell pm grant jp.keihan.doorbell android.permission.POST_NOTIFICATIONS 2>/dev/null || true
+adb shell pm grant jp.ox.doorbell android.permission.POST_NOTIFICATIONS 2>/dev/null || true
 ```
 
 For a TV that can become Device Owner (right after a factory reset), §3's DO route also works, but

@@ -45,14 +45,14 @@ def gzip_tar(build) -> bytes:
 
 def control_archive(version: str) -> bytes:
     control = (
-        "Package: jp.keihan.doorbell.keepalive\n"
+        "Package: jp.ox.doorbell.keepalive\n"
         "Name: Doorbell Keepalive Helper (staged)\n"
         f"Version: {version}\n"
         "Architecture: iphoneos-arm\n"
         "Description: Opt-in fixed-purpose Doorbell supervisor for armv7/iOS 5.1; "
         "installation does not enable the root service\n"
-        "Maintainer: keihan <support@keihan.co>\n"
-        "Author: keihan\n"
+        "Maintainer: ox\n"
+        "Author: ox\n"
         "Section: Utilities\n"
         "Depends: firmware (>= 5.0)\n"
     ).encode()
@@ -60,13 +60,13 @@ def control_archive(version: str) -> bytes:
 set -e
 chown root:wheel /usr/local/libexec/doorbell-keepalive
 chmod 0755 /usr/local/libexec/doorbell-keepalive
-chown root:wheel /usr/local/share/doorbell/jp.keihan.doorbell.keepalive.plist
-chmod 0644 /usr/local/share/doorbell/jp.keihan.doorbell.keepalive.plist
+chown root:wheel /usr/local/share/doorbell/jp.ox.doorbell.keepalive.plist
+chmod 0644 /usr/local/share/doorbell/jp.ox.doorbell.keepalive.plist
 exit 0
 """
     prerm = b"""#!/bin/sh
 set -e
-if [ -e /Library/LaunchDaemons/jp.keihan.doorbell.keepalive.plist ]; then
+if [ -e /Library/LaunchDaemons/jp.ox.doorbell.keepalive.plist ]; then
   echo "disable the Doorbell helper before removing its staged package" >&2
   exit 1
 fi
@@ -103,7 +103,7 @@ def data_archive(helper: Path, launchd_template: Path) -> bytes:
         )
         archive.addfile(
             virtual_file(
-                "./usr/local/share/doorbell/jp.keihan.doorbell.keepalive.plist",
+                "./usr/local/share/doorbell/jp.ox.doorbell.keepalive.plist",
                 template,
                 0o644,
             ),

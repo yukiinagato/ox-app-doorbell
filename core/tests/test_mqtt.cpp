@@ -414,7 +414,7 @@ TEST_CASE("mqtt: Node handles retained discovery, press, reply, and HA republish
       cJSON* dev = json::get(d.get(), "device");
       REQUIRE(dev);
       CHECK(json::getString(dev, "name") == "正面玄関");
-      CHECK(json::getString(dev, "manufacturer") == "Keihan");
+      CHECK(json::getString(dev, "manufacturer") == "ox");
       CHECK(json::getString(dev, "suggested_area") == "母屋");
       checked = true;
     }

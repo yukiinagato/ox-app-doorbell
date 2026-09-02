@@ -125,7 +125,7 @@ static int DBDeviceInfo(void *user, char **out_json) {
   return rc;
 }
 
-static NSString *const kKeychainService = @"jp.keihan.doorbell.secure";
+static NSString *const kKeychainService = @"jp.ox.doorbell.secure";
 
 @interface DBCoreBridge ()
 - (void)dispatchEvent:(NSDictionary *)ev;

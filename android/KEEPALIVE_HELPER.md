@@ -10,7 +10,7 @@ The helper has no TCP listener, shell, arbitrary executable/argv input, or OS re
 
 ```text
 CLASSPATH=/system/framework/am.jar
-/system/bin/app_process /system/bin com.android.commands.am.Am startservice --user 0 -n jp.keihan.doorbell/.DoorbellService
+/system/bin/app_process /system/bin com.android.commands.am.Am startservice --user 0 -n jp.ox.doorbell/.DoorbellService
 ```
 
 `--mode-file` persists `off|auto|on`; command-line `--mode` is only its first-run default. `MODE

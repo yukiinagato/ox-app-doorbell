@@ -72,9 +72,9 @@ class WindowsContracts(unittest.TestCase):
         client = read("win/DoorbellApp/Core/CoreClient.cs")
         window = read("win/DoorbellApp/MainWindow.xaml.cs")
         android_core = read(
-            "android/app/src/main/java/jp/keihan/doorbell/DoorbellCore.kt")
+            "android/app/src/main/java/jp/ox/doorbell/DoorbellCore.kt")
         android_jni = read("android/app/src/main/cpp/jni_bridge.cpp")
-        android_app = read("android/app/src/main/java/jp/keihan/doorbell/App.kt")
+        android_app = read("android/app/src/main/java/jp/ox/doorbell/App.kt")
         self.assertIn("db_core_emergency_v2", interop)
         self.assertIn("public bool Emergency(bool active)", client)
         cancel = window[window.index("private void OnEmergencyCancelClick"):
@@ -154,7 +154,7 @@ class WindowsContracts(unittest.TestCase):
         windows_paired = windows_app[windows_app.index("private void OnCoreLifecycleEvent"):
                                      windows_app.index(
                                          "private void ReportPairingPersistenceFailure")]
-        android_app = read("android/app/src/main/java/jp/keihan/doorbell/App.kt")
+        android_app = read("android/app/src/main/java/jp/ox/doorbell/App.kt")
         android_paired = android_app[android_app.index("private fun onPaired"):
                                      android_app.index(
                                          "private fun migrateLegacyPairingSecret")]
@@ -167,34 +167,34 @@ class WindowsContracts(unittest.TestCase):
         self.assertIn('eventType == "pairing_persistence_error"', android_app)
         self.assertIn("pairingPersistence.recordFailure()", android_app)
         android_boot = read(
-            "android/app/src/main/java/jp/keihan/doorbell/BootConfig.kt")
+            "android/app/src/main/java/jp/ox/doorbell/BootConfig.kt")
         self.assertIn('d.remove("psk_hex")', android_boot)
         self.assertIn('d.put("psk_ref", "secret:mesh.psk")', android_boot)
         self.assertIn("writeAndRename(backup, js)", android_boot)
         self.assertIn("writeAndRename(file, js)", android_boot)
         android_core = read(
-            "android/app/src/main/java/jp/keihan/doorbell/DoorbellCore.kt")
+            "android/app/src/main/java/jp/ox/doorbell/DoorbellCore.kt")
         secure_put = android_core[android_core.index("private fun onSecurePutFromNative"):
                                   android_core.index("private fun onDeviceInfoFromNative")]
         self.assertIn("secureStore.put(key, value)", secure_put)
         # The onboarding screen decides "ready" only through App.pairingReady(), which is the
         # single caller of the persistence gate; the screen itself never inspects the plaintext.
         pairing_ui = read(
-            "android/app/src/main/java/jp/keihan/doorbell/PairingActivity.kt")
+            "android/app/src/main/java/jp/ox/doorbell/PairingActivity.kt")
         self.assertIn("app.pairingReady()", pairing_ui)
         self.assertNotIn("psk_hex", pairing_ui)
-        android_app = read("android/app/src/main/java/jp/keihan/doorbell/App.kt")
+        android_app = read("android/app/src/main/java/jp/ox/doorbell/App.kt")
         ready = android_app[android_app.index("fun pairingReady()"):]
         ready = ready[:ready.index("\n    }\n")]
         self.assertIn("pairingPersistence.canMarkReady", ready)
 
     def test_android_helper_policy_uses_only_the_fixed_local_protocol(self):
         client = read(
-            "android/app/src/main/java/jp/keihan/doorbell/RootKeepaliveClient.kt")
+            "android/app/src/main/java/jp/ox/doorbell/RootKeepaliveClient.kt")
         supervisor = read(
-            "android/app/src/main/java/jp/keihan/doorbell/RuntimeSupervisor.kt")
+            "android/app/src/main/java/jp/ox/doorbell/RuntimeSupervisor.kt")
         controller = read(
-            "android/app/src/main/java/jp/keihan/doorbell/KioskController.kt")
+            "android/app/src/main/java/jp/ox/doorbell/KioskController.kt")
         self.assertIn('const val SOCKET_NAME = "doorbell_keeper"', client)
         for command in ["STATUS", "MODE (off|auto|on)", "ENABLE", "DISABLE",
                         "KICK [1-9][0-9]*", "PAUSE_LEASE"]:

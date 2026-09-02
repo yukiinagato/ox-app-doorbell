@@ -38,14 +38,14 @@ require(doorbellTier == "modern" || doorbellTier == "legacy19") {
 val doorbellNdk = if (doorbellTier == "legacy19") "25.2.9519653" else "27.1.12297006"
 
 android {
-  namespace = "jp.keihan.doorbell"
+  namespace = "jp.ox.doorbell"
   compileSdk = 35
   // AGP exposes ndkVersion at module scope, not per product flavor.  CI and
   // provisioning therefore build one selected tier per Gradle invocation.
   ndkVersion = doorbellNdk
 
   defaultConfig {
-    applicationId = "jp.keihan.doorbell"
+    applicationId = "jp.ox.doorbell"
     minSdk = 19
     targetSdk = 35
     versionCode = 1

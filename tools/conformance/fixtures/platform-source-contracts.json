@@ -11,7 +11,7 @@
     },
     {
       "id": "android-targeted-chime-routing",
-      "path": "android/app/src/main/java/jp/keihan/doorbell/App.kt",
+      "path": "android/app/src/main/java/jp/ox/doorbell/App.kt",
       "ordered_literals": [
         "if (eventType == \"event\") handleLifecycleEvent(ev)",
         "if (eventType == \"chime\" && boot.role != \"door_station\")",
@@ -20,7 +20,7 @@
     },
     {
       "id": "android-bounded-chime-replay-gate",
-      "path": "android/app/src/main/java/jp/keihan/doorbell/ChimeGate.kt",
+      "path": "android/app/src/main/java/jp/ox/doorbell/ChimeGate.kt",
       "ordered_literals": [
         "schemaVersion < 2 || callId.isEmpty()",
         "expiresAtMs > 0L && expiresAtMs <= nowMs",
@@ -31,7 +31,7 @@
     },
     {
       "id": "android-sos-channel-and-ttl-projection",
-      "path": "android/app/src/main/java/jp/keihan/doorbell/EmergencyAlertController.kt",
+      "path": "android/app/src/main/java/jp/ox/doorbell/EmergencyAlertController.kt",
       "ordered_literals": [
         "val inApp = value.uses(CHANNEL_IN_APP)",
         "val systemNotification = value.uses(CHANNEL_SYSTEM_NOTIFICATION)",
