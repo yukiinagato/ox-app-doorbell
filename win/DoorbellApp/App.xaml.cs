@@ -15,6 +15,7 @@ namespace DoorbellApp
         public static BootConfig Boot { get; private set; }
         public static bool SafeMode { get; private set; }
         private WatchdogHeartbeat _heartbeat;
+        private CameraProbe _cameraProbe;
         private RuntimeProcessState _runtimeProcess;
         private DispatcherTimer _runtimeStatusTimer;
         private bool _uiRunning;
@@ -56,6 +57,9 @@ namespace DoorbellApp
                 return;
             }
             _heartbeat = new WatchdogHeartbeat();
+            // The capture device may appear or disappear while the app runs, so caps.camera is
+            // watched rather than sampled once at startup.
+            _cameraProbe = new CameraProbe(Boot.HttpPort, OnCameraAvailabilityChanged);
             Core.PublishRuntimeContracts(Boot.Role, SafeMode);
             PublishRuntimeHealth();
             Texts.SetConfig(Core.Config());
@@ -70,6 +74,17 @@ namespace DoorbellApp
                 TimeSpan.FromSeconds(10), DispatcherPriority.Background,
                 (sender, args) => PublishRuntimeHealth(), Dispatcher);
             _runtimeStatusTimer.Start();
+        }
+
+        /// <summary>
+        /// Runs on the probe's own timer thread. CoreClient serialises native access, so the
+        /// republish needs no dispatcher hop.
+        /// </summary>
+        private void OnCameraAvailabilityChanged(bool available)
+        {
+            if (Core == null) return;
+            Core.CameraAvailable = available;
+            Core.PublishRuntimeContracts(Boot.Role, SafeMode);
         }
 
         private void PublishRuntimeHealth()
@@ -216,6 +231,7 @@ namespace DoorbellApp
             _runtimeProcess?.RecordExit("clean_exit");
             _uiRunning = false;
             PublishRuntimeHealth();
+            _cameraProbe?.Dispose();
             _heartbeat?.Dispose();
             Core?.Dispose();
             base.OnExit(e);

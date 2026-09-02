@@ -805,6 +805,57 @@ class WindowsContracts(unittest.TestCase):
         notice = read("win/DoorbellApp/MainWindow.Notice.cs")
         self.assertIn('CoreClient.Dig(_cfg, "doors") as Dictionary<string, object>', notice)
 
+    def test_the_shell_publishes_whether_it_can_serve_frames(self):
+        probe = read("win/DoorbellApp/Core/CameraProbe.cs")
+        contracts = read("win/DoorbellApp/Core/RuntimeContracts.cs")
+        client = read("win/DoorbellApp/Core/CoreClient.cs")
+        app = read("win/DoorbellApp/App.xaml.cs")
+
+        # caps.camera is advertised, and it is the probe's answer rather than a constant.
+        self.assertIn('{ "camera", camera },', contracts)
+        self.assertIn("bool micMute,\n                                                     "
+                      "          bool camera)", contracts)
+        self.assertIn("_cameraAvailable)));", client)
+        self.assertIn("public bool CameraAvailable", client)
+
+        # Core owns the capture on Windows and republishes it locally, so the shell asks the very
+        # endpoint a door tile fetches instead of opening the device a second time.
+        self.assertIn('"/snapshot.jpg"', probe)
+        self.assertNotIn("MediaCapture", probe)
+        rule = probe[probe.index("private bool Probe()"):probe.index("public void Dispose()")]
+        self.assertIn("response.StatusCode == HttpStatusCode.OK &&", rule)
+        self.assertIn("response.ContentLength != 0", rule)
+        self.assertIn("catch (WebException ex)", rule)
+        self.assertIn("return false;", rule)
+
+        def available(status, content_length):
+            """The rule as implemented: only a 200 carrying a frame counts."""
+            if status != 200:
+                return False          # 503 "no frame", or the server is not up
+            return content_length != 0
+
+        # Both values, from the two answers core actually gives.
+        self.assertTrue(available(200, 51234))
+        self.assertFalse(available(503, 8))
+        self.assertFalse(available(200, 0))
+
+        # A device appearing or disappearing flips the capability instead of stranding a tile.
+        self.assertIn("TimeSpan.FromMilliseconds(IntervalMs)", probe)
+        poll = probe[probe.index("private void Poll(object state)"):
+                     probe.index("private bool Probe()")]
+        self.assertIn("Interlocked.Exchange(ref _state, next) == next) return;", poll)
+        self.assertIn("handler(next == Present)", poll)
+        # Nothing is advertised before the first answer.
+        self.assertIn("private int _state = Unknown;", probe)
+        self.assertIn("Volatile.Read(ref _state) == Present", probe)
+        # The flip republishes the contracts.
+        self.assertIn("new CameraProbe(Boot.HttpPort, OnCameraAvailabilityChanged)", app)
+        changed = app[app.index("private void OnCameraAvailabilityChanged("):
+                      app.index("private void PublishRuntimeHealth()")]
+        self.assertIn("Core.CameraAvailable = available;", changed)
+        self.assertIn("Core.PublishRuntimeContracts(Boot.Role, SafeMode);", changed)
+        self.assertIn("_cameraProbe?.Dispose();", app)
+
     def test_the_dashboard_counts_devices_by_role(self):
         dashboard = read("win/DoorbellApp/MainWindow.Dashboard.cs")
         xaml = read("win/DoorbellApp/MainWindow.xaml")
