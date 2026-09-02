@@ -1395,8 +1395,15 @@ var AdminLogic = (function () {
              b: Math.round(channel(h - 1 / 3) * 255) };
   }
 
-  /* Y >= 0.5 means the background is light, so the ink on it must be dark. */
-  function autoInk(background) { return luminance(background) >= 0.5 ? "dark" : "light"; }
+  /* The ink token that reads better here: whichever of dark or light has the higher WCAG
+   * contrast against the background. The two ratios cross at Y = 0.1791, not at mid luminance --
+   * splitting at 0.5 put light text on a light grey photograph. Mirrors db::color::autoInk. */
+  function autoInk(background) {
+    var y = luminance(background);
+    var darkInk = (y + 0.05) / 0.05;
+    var lightInk = 1.05 / (y + 0.05);
+    return darkInk >= lightInk ? "dark" : "light";
+  }
 
   /* Mirrors db::color::autoAccent so the Theme tab can preview a background the operator has
    * not saved yet. Core recomputes and republishes the same value once the write lands. */

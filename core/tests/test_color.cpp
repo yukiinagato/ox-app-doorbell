@@ -77,16 +77,39 @@ TEST_CASE("color: HSL conversion round-trips and reports the expected hue") {
   }
 }
 
-TEST_CASE("color: automatic ink flips at the WCAG mid luminance") {
-  // Y >= 0.5 means the background is light, so the ink drawn on it must be dark.
+TEST_CASE("color: automatic ink picks whichever token has the higher contrast") {
+  // The rule is not "is the background light?" but "which ink reads better on it?". The two
+  // ratios cross at Y = 0.1791, well below mid luminance.
   CHECK(std::string(autoInk(hex("#9BD748"))) == "dark");   // Y 0.560
   CHECK(std::string(autoInk(kWhite)) == "dark");
   CHECK(std::string(autoInk(hex("#101418"))) == "light");  // the default dark theme
   CHECK(std::string(autoInk(kBlack)) == "light");
-  CHECK(std::string(autoInk(hex("#808080"))) == "light");  // Y 0.216 is below the threshold
+  // The reported regression: a light grey photograph at Y 0.494. Splitting at mid luminance
+  // called for light ink at 1.93:1 when dark ink scores 9.58:1 on the same background.
+  CHECK(std::string(autoInk(hex("#BBBBB4"))) == "dark");
+  CHECK(contrastRatio(kBlack, hex("#BBBBB4")) > contrastRatio(kWhite, hex("#BBBBB4")));
+  // A true mid-dark still wants light ink, so the rule has not simply moved everything to dark.
+  CHECK(std::string(autoInk(hex("#404040"))) == "light");  // Y 0.051
+  CHECK(contrastRatio(kWhite, hex("#404040")) > contrastRatio(kBlack, hex("#404040")));
+  // Mid grey is past the crossover and is better served by dark ink, which the old rule missed.
+  CHECK(std::string(autoInk(hex("#808080"))) == "dark");   // Y 0.216
+  // Either side of the crossover, one step of grey apart.
+  CHECK(std::string(autoInk(hex("#767676"))) == "dark");   // Y 0.18116, black 4.62 / white 4.54
+  CHECK(std::string(autoInk(hex("#757575"))) == "light");  // Y 0.17789, black 4.56 / white 4.61
   // A light photograph and a dark photograph produce opposite inks.
   CHECK(std::string(autoInk(hex("#E8E2D5"))) == "dark");
   CHECK(std::string(autoInk(hex("#2A2118"))) == "light");
+
+  // Whatever the answer, it is the better of the two; that is the whole contract.
+  for (const char* sample : {"#9BD748", "#101418", "#BBBBB4", "#404040", "#808080", "#767676",
+                             "#757575", "#E8E2D5", "#2A2118", "#FFFFFF", "#000000"}) {
+    const Rgb background = hex(sample);
+    CAPTURE(sample);
+    const bool dark = std::string(autoInk(background)) == "dark";
+    const double chosen = contrastRatio(dark ? kBlack : kWhite, background);
+    const double other = contrastRatio(dark ? kWhite : kBlack, background);
+    CHECK(chosen >= other);
+  }
 }
 
 TEST_CASE("color: the computed call button satisfies both contrast constraints") {
@@ -102,7 +125,11 @@ TEST_CASE("color: the computed call button satisfies both contrast constraints")
     CHECK(contrastRatio(button, background) >= 3.0);
     // (b) white text stays readable on the button
     CHECK(contrastRatio(kWhite, button) >= 4.5);
-    CHECK(std::string(accentInk(button)) == "light");
+    // The ink the shell is told to draw clears the same bar. Just above the ink crossover both
+    // tokens qualify and accentInk reports the better one, so the property is what is asserted
+    // here rather than a fixed answer.
+    const std::string ink = accentInk(button);
+    CHECK(contrastRatio(ink == "light" ? kWhite : kBlack, button) >= 4.5);
     // The hue is the background's, rotated half a turn. Grey has no hue to rotate.
     const Hsl base = toHsl(background);
     if (base.s > 0.01) {

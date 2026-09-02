@@ -340,6 +340,10 @@ unconfigured, say so on the tap.
 semantic region, `auto_accent` (`call_button` plus `call_button_ink`), the `ink_override` map, and
 the effective `call_button_bg` / `call_button_ink`.
 
+`auto_ink` names the ink token to draw on the background: whichever of dark or light has the
+higher WCAG contrast ratio against it. The two ratios cross at relative luminance 0.1791, not at
+mid luminance. When even the better ink is below 4.5:1 the shell adds the 40% opposite-ink shadow.
+
 `auto_background.source` is `color` when no background image is configured, `image` when one was
 sampled, and `image_unsampled` when an image **is** configured but core could not sample it — with
 a `reason` of `too_large` (past core's 16 MP decoded-pixel budget), `decode_failed`, or `missing`

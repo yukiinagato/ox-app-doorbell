@@ -482,6 +482,28 @@ transient and costs about three bytes per pixel (roughly 48 MB at the cap) and i
 immediately. A shell on hardware that cannot afford that should sample locally regardless; the
 `source` field is what tells it core has not.
 
+### Choosing the ink
+
+`auto_ink` names the ink token to draw on the background: **whichever of dark or light has the
+higher WCAG contrast ratio against the sampled luminance**. The two ratios cross at Y = 0.1791,
+not at mid luminance, so a background that merely looks middling already wants dark ink.
+
+Splitting at Y >= 0.5 was the earlier rule and it fails in the band between the two thresholds: a
+light grey photograph averaging `#BBBBB4` sits at Y 0.494, where white ink scores 1.93:1 and dark
+ink 9.58:1. Worked vectors, which `core/tests/test_color.cpp` pins:
+
+| background | Y | dark ink | light ink | `auto_ink` |
+|---|---|---|---|---|
+| `#BBBBB4` | 0.494 | 10.88:1 | 1.93:1 | `dark` |
+| `#808080` | 0.216 | 5.32:1 | 3.95:1 | `dark` |
+| `#767676` | 0.1812 | 4.62:1 | 4.54:1 | `dark` |
+| `#757575` | 0.1779 | 4.56:1 | 4.61:1 | `light` |
+| `#404040` | 0.051 | 2.03:1 | 10.37:1 | `light` |
+
+The 1 px 40% opposite-ink shadow stays, as the fallback for when even the better ink is below
+4.5:1. Shells that sample locally (because `source` is `image_unsampled`, or because the hardware
+cannot afford core's decode) apply the same rule, so the fleet agrees on one answer.
+
 ## Time, power, and announcements
 
 The bundled time-zone table lives in `core/src/util/tz.{h,cpp}` and covers the zones the settings
