@@ -30,6 +30,7 @@
 #include "media/camera_win.h"
 #include "media/encoder_win.h"
 #endif
+#include "util/color.h"
 #include "util/common.h"
 #include "util/ids.h"
 #include "util/json.h"
@@ -189,7 +190,30 @@ bool safetyUiElement(const std::string& element) {
       element == "maintenance.exit";
 }
 
-bool uiStyleOverrideValid(const std::string& key, const cJSON* value, std::string* error) {
+// A readability finding that does not block the write. Custom colours are the operator's
+// choice: core reports the measured WCAG ratio and saves anyway, so a deliberate low-contrast
+// theme is possible and an accidental one is visible.
+struct ConfigWarning {
+  std::string key;
+  std::string property;
+  double contrast = 0;
+  std::string message_key;
+};
+
+void addContrastWarning(std::vector<ConfigWarning>* warnings, const std::string& key,
+                        const std::string& property, double ratio) {
+  if (!warnings) return;
+  ConfigWarning warning;
+  warning.key = key;
+  warning.property = property;
+  // One decimal is what the UI shows; keeping more invites a diff on every render.
+  warning.contrast = std::floor(ratio * 10.0 + 0.5) / 10.0;
+  warning.message_key = "theme.low_contrast";
+  warnings->push_back(std::move(warning));
+}
+
+bool uiStyleOverrideValid(const std::string& key, const cJSON* value, std::string* error,
+                          std::vector<ConfigWarning>* warnings = nullptr) {
   const std::string marker = ".local.ui.elements.";
   const size_t marker_pos = key.find(marker);
   if (key.compare(0, 8, "devices.") != 0 || marker_pos == std::string::npos) return true;
@@ -242,24 +266,21 @@ bool uiStyleOverrideValid(const std::string& key, const cJSON* value, std::strin
   auto contrast = [](double a, double b) {
     return (std::max(a, b) + 0.05) / (std::min(a, b) + 0.05);
   };
-  if (foreground >= 0 && background >= 0 && contrast(foreground, background) < 4.5) {
-    *error = "foreground/background contrast must be at least 4.5:1";
-    return false;
-  }
-  if (accent >= 0 && background >= 0 && contrast(accent, background) < 3.0) {
-    *error = "accent/background contrast must be at least 3:1";
-    return false;
-  }
-  if (border >= 0 && background >= 0 && contrast(border, background) < 3.0) {
-    *error = "border/background contrast must be at least 3:1";
-    return false;
-  }
+  // WCAG 2.1 AA: 4.5:1 for text, 3:1 for large text and UI components. A shortfall is reported,
+  // not refused; the operator sees the measured ratio inline and decides.
+  if (foreground >= 0 && background >= 0 && contrast(foreground, background) < 4.5)
+    addContrastWarning(warnings, key, "foreground", contrast(foreground, background));
+  if (accent >= 0 && background >= 0 && contrast(accent, background) < 3.0)
+    addContrastWarning(warnings, key, "accent", contrast(accent, background));
+  if (border >= 0 && background >= 0 && contrast(border, background) < 3.0)
+    addContrastWarning(warnings, key, "border", contrast(border, background));
   return true;
 }
 
 bool uiStyleViewportValid(const std::string& key, const cJSON* value, const cJSON* viewport,
-                          std::string* error) {
-  if (!uiStyleOverrideValid(key, value, error)) return false;
+                          std::string* error,
+                          std::vector<ConfigWarning>* warnings = nullptr) {
+  if (!uiStyleOverrideValid(key, value, error, warnings)) return false;
   if (key.find(".local.ui.elements.") == std::string::npos) return true;
   const double scale_min = json::get(viewport, "scale_min") &&
           cJSON_IsNumber(json::get(viewport, "scale_min"))
@@ -1159,6 +1180,136 @@ size_t utf8Length(const std::string& text) {
   return count;
 }
 
+// The announcement record shared by doors.<id>.notice and notice.global.
+bool noticeRecordValid(const cJSON* value, const std::string& path, std::string* error) {
+  if (cJSON_IsNull(value)) return true;
+  if (!objectHasOnly(value, {"text", "from_device", "created_ms", "expires_ms"}, path, error))
+    return false;
+  const cJSON* text = json::get(value, "text");
+  if (!cJSON_IsString(text) || utf8Length(text->valuestring) == 0 ||
+      utf8Length(text->valuestring) > 200) {
+    *error = "announcement text must be between 1 and 200 characters";
+    return false;
+  }
+  const cJSON* from_device = json::get(value, "from_device");
+  if (from_device && !cJSON_IsString(from_device)) {
+    *error = "announcement from_device must be a string";
+    return false;
+  }
+  for (const char* field : {"created_ms", "expires_ms"}) {
+    const cJSON* stamp = json::get(value, field);
+    if (stamp && !wholeNumberInRange(stamp, 0, 4'102'444'800'000LL)) {
+      *error = std::string("announcement ") + field + " must be a whole millisecond timestamp";
+      return false;
+    }
+  }
+  return true;
+}
+
+bool simpleIdValid(const std::string& id, size_t max_len) {
+  if (id.empty() || id.size() > max_len) return false;
+  for (char c : id) {
+    const bool allowed = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+                         (c >= '0' && c <= '9') || c == '_' || c == '-';
+    if (!allowed) return false;
+  }
+  return true;
+}
+
+// notice.global (the cluster-wide announcement a door-specific one overrides) and
+// notice.presets, the administrator-editable list the announcement dialogs render.
+bool noticeConfigValid(const std::string& key, const cJSON* value, std::string* error) {
+  auto presets_valid = [&error](const cJSON* presets) {
+    if (!cJSON_IsArray(presets)) {
+      *error = "notice.presets must be an array of {id, text} entries";
+      return false;
+    }
+    if (cJSON_GetArraySize(presets) > 8) {
+      *error = "notice.presets holds at most 8 entries";
+      return false;
+    }
+    std::set<std::string> seen;
+    const cJSON* entry = nullptr;
+    cJSON_ArrayForEach(entry, presets) {
+      if (!objectHasOnly(entry, {"id", "text"}, "notice.presets entry", error)) return false;
+      const std::string id = json::getString(entry, "id");
+      const std::string text = json::getString(entry, "text");
+      if (!simpleIdValid(id, 32)) {
+        *error = "a notice preset id must be 1..32 characters of letters, digits, _ or -";
+        return false;
+      }
+      if (!seen.insert(id).second) {
+        *error = "duplicate notice preset id: " + id;
+        return false;
+      }
+      if (utf8Length(text) == 0 || utf8Length(text) > 200) {
+        *error = "notice preset text must be between 1 and 200 characters";
+        return false;
+      }
+    }
+    return true;
+  };
+  if (key == "notice") {
+    if (!objectHasOnly(value, {"global", "presets"}, "notice", error)) return false;
+    const cJSON* global = json::get(value, "global");
+    if (global && !noticeRecordValid(global, "notice.global", error)) return false;
+    const cJSON* presets = json::get(value, "presets");
+    return !presets || presets_valid(presets);
+  }
+  if (key == "notice.global") return noticeRecordValid(value, key, error);
+  if (key == "notice.presets") return presets_valid(value);
+  if (key.rfind("notice.", 0) == 0) {
+    *error = "unknown announcement configuration key " + key;
+    return false;
+  }
+  return true;
+}
+
+// doors.<id>.unlock.show_button decides whether the unlock control appears; the door may also
+// name the command the unlock action publishes.
+bool doorUnlockValid(const std::string& key, const cJSON* value, std::string* error) {
+  auto object_valid = [&error](const cJSON* unlock, const std::string& path) {
+    if (cJSON_IsNull(unlock)) return true;
+    if (!objectHasOnly(unlock, {"show_button", "command"}, path, error)) return false;
+    const cJSON* show = json::get(unlock, "show_button");
+    if (show && !cJSON_IsBool(show)) {
+      *error = path + ".show_button must be a boolean";
+      return false;
+    }
+    const cJSON* command = json::get(unlock, "command");
+    if (command && (!cJSON_IsString(command) || !simpleIdValid(command->valuestring, 32))) {
+      *error = path + ".command must be 1..32 characters of letters, digits, _ or -";
+      return false;
+    }
+    return true;
+  };
+  if (key.rfind("doors.", 0) != 0) return true;
+  const std::string show_suffix = ".unlock.show_button";
+  const std::string command_suffix = ".unlock.command";
+  const std::string unlock_suffix = ".unlock";
+  auto ends_with = [&key](const std::string& suffix) {
+    return key.size() > suffix.size() &&
+           key.compare(key.size() - suffix.size(), suffix.size(), suffix) == 0;
+  };
+  if (ends_with(show_suffix)) {
+    if (cJSON_IsBool(value)) return true;
+    *error = key + " must be a boolean";
+    return false;
+  }
+  if (ends_with(command_suffix)) {
+    if (cJSON_IsString(value) && simpleIdValid(value->valuestring, 32)) return true;
+    *error = key + " must be 1..32 characters of letters, digits, _ or -";
+    return false;
+  }
+  if (ends_with(unlock_suffix)) return object_valid(value, key);
+  // A whole-door write may carry the object inline.
+  if (cJSON_IsObject(value)) {
+    const cJSON* embedded = json::get(value, "unlock");
+    if (embedded) return object_valid(embedded, key + ".unlock");
+  }
+  return true;
+}
+
 // doors.<id>.notice: {text, from_device, created_ms, expires_ms} or null to clear.
 bool doorNoticeValid(const std::string& key, const cJSON* value, std::string* error) {
   const std::string suffix = ".notice";
@@ -1172,24 +1323,126 @@ bool doorNoticeValid(const std::string& key, const cJSON* value, std::string* er
     if (!embedded || cJSON_IsNull(embedded)) return true;
     return doorNoticeValid(key + ".notice", embedded, error);
   }
-  if (cJSON_IsNull(value)) return true;
-  if (!objectHasOnly(value, {"text", "from_device", "created_ms", "expires_ms"}, key, error))
+  return noticeRecordValid(value, key, error);
+}
+
+// The semantic regions the automatic ink decision is published for. They are the ids the shells
+// already use for text drawn straight onto the theme background.
+const char* const kInkRegions[] = {"clock",      "date",   "status_line", "hint",
+                                   "tile_label", "footer", "notice"};
+
+bool inkRegionKnown(const std::string& region) {
+  for (const char* known : kInkRegions) {
+    if (region == known) return true;
+  }
+  return false;
+}
+
+bool hhmmValid(const cJSON* value) {
+  return cJSON_IsString(value) && parseHhmm(value->valuestring) >= 0;
+}
+
+// display.appearance and its schedule, at cluster scope and per device.
+bool appearanceValid(const std::string& key, const cJSON* value, std::string* error) {
+  auto mode_valid = [&error](const cJSON* mode) {
+    const std::string text = cJSON_IsString(mode) ? mode->valuestring : "";
+    if (text == "auto_system" || text == "auto_schedule" || text == "light" || text == "dark")
+      return true;
+    *error = "appearance must be auto_system, auto_schedule, light, or dark";
     return false;
-  const cJSON* text = json::get(value, "text");
-  if (!cJSON_IsString(text) || utf8Length(text->valuestring) == 0 ||
-      utf8Length(text->valuestring) > 200) {
-    *error = "door notice text must be between 1 and 200 characters";
+  };
+  auto schedule_valid = [&error](const cJSON* schedule, const std::string& path) {
+    if (!objectHasOnly(schedule, {"dark_from", "light_from"}, path, error)) return false;
+    for (const char* field : {"dark_from", "light_from"}) {
+      const cJSON* at = json::get(schedule, field);
+      if (at && !hhmmValid(at)) {
+        *error = path + "." + field + " must be a HH:MM time of day";
+        return false;
+      }
+    }
+    return true;
+  };
+  const std::string mode_suffix = "display.appearance";
+  const std::string schedule_suffix = "display.appearance_schedule";
+  auto ends_with = [&key](const std::string& suffix) {
+    return key.size() >= suffix.size() &&
+           key.compare(key.size() - suffix.size(), suffix.size(), suffix) == 0;
+  };
+  if (ends_with(schedule_suffix)) return schedule_valid(value, key);
+  if (ends_with(mode_suffix)) return mode_valid(value);
+  // A display container write may carry either inline.
+  if (ends_with("display") && cJSON_IsObject(value)) {
+    const cJSON* mode = json::get(value, "appearance");
+    if (mode && !mode_valid(mode)) return false;
+    const cJSON* schedule = json::get(value, "appearance_schedule");
+    return !schedule || schedule_valid(schedule, key + ".appearance_schedule");
+  }
+  return true;
+}
+
+// display.theme.* and devices.<id>.local.theme.*: the automatic ink and accent overrides. Colour
+// format is enforced; readability is reported as a warning, never a rejection.
+bool themeOverrideValid(const std::string& key, const cJSON* value, std::string* error) {
+  const std::string ink_marker = "theme.ink_override";
+  const std::string button_suffix = "theme.call_button_bg";
+  auto ends_with = [&key](const std::string& suffix) {
+    return key.size() >= suffix.size() &&
+           key.compare(key.size() - suffix.size(), suffix.size(), suffix) == 0;
+  };
+  auto color_valid = [&error](const cJSON* color, const std::string& path) {
+    double luminance = 0;
+    int alpha = 255;
+    if (cJSON_IsString(color) && parseStyleColor(color->valuestring, &luminance, &alpha))
+      return true;
+    *error = path + " must be #RRGGBB";
+    return false;
+  };
+  auto ink_map_valid = [&error, &color_valid](const cJSON* map, const std::string& path) {
+    if (cJSON_IsNull(map)) return true;
+    if (!cJSON_IsObject(map)) {
+      *error = path + " must be an object of region ids";
+      return false;
+    }
+    const cJSON* item = nullptr;
+    cJSON_ArrayForEach(item, map) {
+      const std::string region = item->string ? item->string : "";
+      if (!inkRegionKnown(region)) {
+        *error = path + " has no region " + region;
+        return false;
+      }
+      if (!color_valid(item, path + "." + region)) return false;
+    }
+    return true;
+  };
+  // The published results are computed, never stored.
+  if (key.find("theme.auto_ink") != std::string::npos ||
+      key.find("theme.auto_accent") != std::string::npos) {
+    *error = "auto_ink and auto_accent are computed by core and cannot be written";
     return false;
   }
-  const cJSON* from_device = json::get(value, "from_device");
-  if (from_device && !cJSON_IsString(from_device)) {
-    *error = "door notice from_device must be a string";
-    return false;
+  const size_t ink_pos = key.find(ink_marker);
+  if (ink_pos != std::string::npos) {
+    const std::string tail = key.substr(ink_pos + ink_marker.size());
+    if (tail.empty()) return ink_map_valid(value, key);
+    if (tail[0] != '.') return true;
+    const std::string region = tail.substr(1);
+    if (!inkRegionKnown(region)) {
+      *error = "unknown ink region " + region;
+      return false;
+    }
+    return cJSON_IsNull(value) ? true : color_valid(value, key);
   }
-  for (const char* field : {"created_ms", "expires_ms"}) {
-    const cJSON* stamp = json::get(value, field);
-    if (stamp && !wholeNumberInRange(stamp, 0, 4'102'444'800'000LL)) {
-      *error = std::string("door notice ") + field + " must be a whole millisecond timestamp";
+  if (ends_with(button_suffix))
+    return cJSON_IsNull(value) ? true : color_valid(value, key);
+  // A theme container write may carry either inline.
+  if (ends_with("theme") && cJSON_IsObject(value)) {
+    const cJSON* button = json::get(value, "call_button_bg");
+    if (button && !cJSON_IsNull(button) && !color_valid(button, key + ".call_button_bg"))
+      return false;
+    const cJSON* ink = json::get(value, "ink_override");
+    if (ink && !ink_map_valid(ink, key + ".ink_override")) return false;
+    if (json::get(value, "auto_ink") || json::get(value, "auto_accent")) {
+      *error = "auto_ink and auto_accent are computed by core and cannot be written";
       return false;
     }
   }
@@ -1226,12 +1479,17 @@ bool emergencyTriggerValid(const std::string& key, const cJSON* value, std::stri
   return true;
 }
 
-bool configWriteValid(const std::string& key, const cJSON* value, std::string* error) {
+bool configWriteValid(const std::string& key, const cJSON* value, std::string* error,
+                      std::vector<ConfigWarning>* warnings = nullptr) {
   if (!secretContractValid(key, value, error)) return false;
   if (!eventRetentionValid(key, value, error)) return false;
   if (!timeConfigValid(key, value, error)) return false;
   if (!audioVolumeValid(key, value, error)) return false;
   if (!doorNoticeValid(key, value, error)) return false;
+  if (!noticeConfigValid(key, value, error)) return false;
+  if (!doorUnlockValid(key, value, error)) return false;
+  if (!appearanceValid(key, value, error)) return false;
+  if (!themeOverrideValid(key, value, error)) return false;
   if (!emergencyTriggerValid(key, value, error)) return false;
   if (!panelTokenGenerationValid(key, value, error)) return false;
   if (key == "web_push.subscriptions") {
@@ -1264,7 +1522,7 @@ bool configWriteValid(const std::string& key, const cJSON* value, std::string* e
       return false;
     }
   }
-  if (!uiStyleOverrideValid(key, value, error)) return false;
+  if (!uiStyleOverrideValid(key, value, error, warnings)) return false;
   const std::string helper_suffix = ".local.recovery.helper_mode";
   if (key.rfind("devices.", 0) == 0 && key.size() >= helper_suffix.size() &&
       key.compare(key.size() - helper_suffix.size(), helper_suffix.size(), helper_suffix) == 0) {
@@ -2470,6 +2728,27 @@ struct Node::Impl {
   }
 
   // ---------- announcements ----------
+  // "*" addresses the cluster-wide announcement stored at notice.global. A door-specific
+  // announcement always wins over it, so a station can override the house-wide message.
+  static bool isGlobalNoticeTarget(const std::string& door) { return door == "*"; }
+
+  std::string noticeKeyFor(const std::string& door) const {
+    return isGlobalNoticeTarget(door) ? std::string("notice.global")
+                                      : "doors." + door + ".notice";
+  }
+
+  // The announcement a given door actually shows, with the scope it came from.
+  json::Doc effectiveDoorNoticeDoc(const std::string& door) {
+    const cJSON* specific =
+        json::get(json::get(json::get(cfg.get(), "doors"), door.c_str()), "notice");
+    const cJSON* global = json::get(json::get(cfg.get(), "notice"), "global");
+    const cJSON* chosen = cJSON_IsObject(specific) ? specific : global;
+    if (!cJSON_IsObject(chosen)) return {};
+    auto out = json::Doc(cJSON_Duplicate(chosen, 1));
+    if (out) json::set(out.get(), "scope", cJSON_IsObject(specific) ? "door" : "global");
+    return out;
+  }
+
   json::Doc doorNoticeDoc(const std::string& text, int64_t expires_ms) const {
     auto out = json::obj();
     json::set(out.get(), "text", text);
@@ -2484,10 +2763,11 @@ struct Node::Impl {
   }
 
   bool setDoorNoticeOnLoop(const std::string& door, const std::string& text, int64_t expires_ms) {
-    if (door.empty() || !doorExists(door)) return false;
+    if (door.empty()) return false;
+    if (!isGlobalNoticeTarget(door) && !doorExists(door)) return false;
     auto value = doorNoticeDoc(text, expires_ms);
     std::string error;
-    const std::string key = "doors." + door + ".notice";
+    const std::string key = noticeKeyFor(door);
     if (!configWriteValid(key, value.get(), &error)) {
       DB_LOGW(kTag, "rejected door notice for " + door + " (" + error + ")");
       return false;
@@ -2498,10 +2778,66 @@ struct Node::Impl {
 
   bool clearDoorNoticeOnLoop(const std::string& door) {
     if (door.empty()) return false;
-    const std::string key = "doors." + door + ".notice";
-    if (!json::get(json::get(json::get(cfg.get(), "doors"), door.c_str()), "notice")) return true;
+    const std::string key = noticeKeyFor(door);
+    const cJSON* current =
+        isGlobalNoticeTarget(door)
+            ? json::get(json::get(cfg.get(), "notice"), "global")
+            : json::get(json::get(json::get(cfg.get(), "doors"), door.c_str()), "notice");
+    if (!current) return true;
     config->mutate({{key, "", true}});
     return config->lastMutationCommitted();
+  }
+
+  // ---------- door unlock ----------
+  // The unlock action is the existing feature-code path: a configured ha_command that the MQTT
+  // bridge republishes as <base>/cmd/<command>. A door may name its own command; otherwise the
+  // first ha_command among the SIP feature codes is used. An empty result means no unlock action
+  // is configured anywhere, which the shells must say out loud rather than silently doing nothing.
+  std::string unlockCommandFor(const std::string& door) {
+    const std::string configured =
+        json::getString(json::get(cfgAt("doors." + door), "unlock"), "command");
+    if (!configured.empty()) return configured;
+    const cJSON* actions = cfgAt("sip.dtmf_actions");
+    const cJSON* action = nullptr;
+    cJSON_ArrayForEach(action, actions) {
+      if (json::getString(action, "type") != "ha_command") continue;
+      const std::string command = json::getString(action, "command");
+      if (!command.empty()) return command;
+    }
+    return "";
+  }
+
+  json::Doc doorUnlockDoc(const std::string& door) {
+    const std::string command = unlockCommandFor(door);
+    const cJSON* unlock = json::get(cfgAt("doors." + door), "unlock");
+    const cJSON* configured_visibility = json::get(unlock, "show_button");
+    auto out = json::obj();
+    json::setBool(out.get(), "configured", !command.empty());
+    json::set(out.get(), "command", command);
+    // Default: show the control exactly when it can do something. An administrator may force
+    // either answer, including showing it on a door that has no action yet.
+    const bool show = cJSON_IsBool(configured_visibility) ? cJSON_IsTrue(configured_visibility)
+                                                          : !command.empty();
+    json::setBool(out.get(), "show_button", show);
+    json::set(out.get(), "source", cJSON_IsBool(configured_visibility) ? "admin" : "default");
+    return out;
+  }
+
+  // Trigger the configured unlock action for one door. Returns false when nothing is configured,
+  // so the caller can explain instead of reporting a success that did nothing.
+  bool openDoorOnLoop(const std::string& door_arg) {
+    const std::string door = door_arg.empty() ? opts.door : door_arg;
+    if (door.empty() || !doorExists(door)) return false;
+    const std::string command = unlockCommandFor(door);
+    if (command.empty()) return false;
+    auto payload = json::obj();
+    json::set(payload.get(), "type", "ha_command");
+    json::set(payload.get(), "command", command);
+    json::set(payload.get(), "door", door);
+    json::set(payload.get(), "via", "api");
+    const EventRecord recorded =
+        events->append("dtmf_action", door, node_id, json::dump(payload.get()));
+    return recorded.seq != 0;
   }
 
   // Drop announcements whose expiry has passed. Any node may prune; the tombstone replicates and
@@ -2518,6 +2854,11 @@ struct Node::Impl {
       const int64_t expires = json::getInt(notice, "expires_ms", 0);
       if (expires > 0 && now >= expires)
         expired.push_back({std::string("doors.") + door->string + ".notice", "", true});
+    }
+    const cJSON* global = json::get(json::get(cfg.get(), "notice"), "global");
+    if (cJSON_IsObject(global)) {
+      const int64_t expires = json::getInt(global, "expires_ms", 0);
+      if (expires > 0 && now >= expires) expired.push_back({"notice.global", "", true});
     }
     if (expired.empty()) return;
     config->mutate(expired);
@@ -3100,7 +3441,94 @@ struct Node::Impl {
     int pixel_shift_s = 300;
     std::string bg_color = "#101418";
     std::string bg_image;
+    // Light/dark appearance. configured is what an administrator chose; effective is what core
+    // resolves from the schedule. follow_system is true for auto_system, where the shell uses
+    // the operating system's own setting and falls back to effective when it has none (iOS 5
+    // and Android before 10 have no system dark mode at all).
+    std::string appearance_configured = "auto_system";
+    std::string appearance_effective = "light";
+    bool appearance_follow_system = true;
+    std::string dark_from = "19:00";
+    std::string light_from = "06:30";
   };
+
+  // The dark window runs from dark_from to light_from in the configured time zone, so a
+  // cluster in Tokyo and a shell that has just booted agree without either consulting the OS.
+  std::string scheduledAppearance(const std::string& dark_from, const std::string& light_from) {
+    const int dark = parseHhmm(dark_from);
+    const int light = parseHhmm(light_from);
+    if (dark < 0 || light < 0 || dark == light) return "light";
+    const int64_t local =
+        hlc->correctedWallMs() + static_cast<int64_t>(tzOffsetMin()) * 60'000LL;
+    const int64_t day = floorDiv(local, 86'400'000LL);
+    const int minute = static_cast<int>((local - day * 86'400'000LL) / 60'000LL);
+    const bool is_dark = dark < light ? (minute >= dark && minute < light)
+                                      : (minute >= dark || minute < light);
+    return is_dark ? "dark" : "light";
+  }
+
+  // The colour the theme actually renders behind text: the average of the background image when
+  // one is cached and decodable, otherwise the theme colour.
+  struct ThemeAuto {
+    std::string background = "#101418";
+    std::string source = "color";
+    std::string ink = "light";
+    std::string call_button = "#7F5E3D";
+    std::string call_button_ink = "light";
+  };
+  ThemeAuto theme_auto;
+  std::string theme_auto_input;
+
+  std::string themeBgColorOnLoop() {
+    const cJSON* base = json::get(cfg.get(), "display");
+    const cJSON* theme_base = json::get(base, "theme");
+    const cJSON* theme_ovr = cfgAt("devices." + node_id + ".local.theme");
+    std::string value = json::getString(theme_ovr, "bg_color");
+    if (value.empty()) value = json::getString(theme_base, "bg_color");
+    return value.empty() ? std::string("#101418") : value;
+  }
+
+  std::string themeBgImageOnLoop() {
+    const cJSON* base = json::get(cfg.get(), "display");
+    const cJSON* theme_base = json::get(base, "theme");
+    const cJSON* theme_ovr = cfgAt("devices." + node_id + ".local.theme");
+    std::string hash = json::getString(theme_ovr, "bg_image");
+    if (hash.empty()) hash = json::getString(theme_base, "bg_image");
+    return isSha256HexStr(hash) ? hash : "";
+  }
+
+  // Recomputed only when the effective background changes; decoding an image on every status
+  // poll would be pointless work on the oldest hardware in the fleet.
+  const ThemeAuto& themeAutoState() {
+    const std::string bg_color = themeBgColorOnLoop();
+    const std::string bg_image = themeBgImageOnLoop();
+    const std::string input = bg_color + "|" + bg_image;
+    if (input == theme_auto_input) return theme_auto;
+    theme_auto_input = input;
+    ThemeAuto next;
+    color::Rgb background;
+    bool have_background = false;
+    if (!bg_image.empty() && assetCached(bg_image) &&
+        color::averageImageColor(assetFilePath(bg_image), &background)) {
+      next.source = "image";
+      have_background = true;
+    }
+    if (!have_background && color::parseHex(bg_color, &background)) {
+      next.source = "color";
+      have_background = true;
+    }
+    if (!have_background) color::parseHex("#101418", &background);
+    next.background = color::formatHex(background);
+    next.ink = color::autoInk(background);
+    const color::Rgb white{255, 255, 255};
+    const color::Rgb button = color::autoAccent(background, white);
+    next.call_button = color::formatHex(button);
+    next.call_button_ink = color::accentInk(button);
+    theme_auto = next;
+    return theme_auto;
+  }
+
+  std::string effectiveThemeBackground() { return themeAutoState().background; }
 
   DisplayState displayState() {
     cJSON* base = json::get(cfg.get(), "display");
@@ -3124,6 +3552,23 @@ struct Node::Impl {
       if (!c.empty()) d.bg_color = c;
       d.bg_image = str("bg_image");
       if (!isSha256HexStr(d.bg_image)) d.bg_image.clear();
+    }
+    {
+      // A per-device appearance wins over the cluster default, exactly like brightness.
+      const cJSON* configured = ovr ? json::get(ovr, "appearance") : nullptr;
+      if (!cJSON_IsString(configured)) configured = json::get(base, "appearance");
+      if (cJSON_IsString(configured)) d.appearance_configured = configured->valuestring;
+      const cJSON* schedule = ovr ? json::get(ovr, "appearance_schedule") : nullptr;
+      if (!cJSON_IsObject(schedule)) schedule = json::get(base, "appearance_schedule");
+      d.dark_from = json::getString(schedule, "dark_from", d.dark_from);
+      d.light_from = json::getString(schedule, "light_from", d.light_from);
+      d.appearance_follow_system = d.appearance_configured == "auto_system";
+      if (d.appearance_configured == "light" || d.appearance_configured == "dark") {
+        d.appearance_effective = d.appearance_configured;
+        d.appearance_follow_system = false;
+      } else {
+        d.appearance_effective = scheduledAppearance(d.dark_from, d.light_from);
+      }
     }
     cJSON* night = ovr ? json::get(ovr, "night") : nullptr;
     if (!night) night = json::get(base, "night");
@@ -3156,6 +3601,15 @@ struct Node::Impl {
     json::setBool(o.get(), "red_tint", d.red_tint);
     json::set(o.get(), "screensaver_after_s", static_cast<int64_t>(d.screensaver_after_s));
     json::set(o.get(), "pixel_shift_s", static_cast<int64_t>(d.pixel_shift_s));
+    {
+      cJSON* appearance = json::addObj(o.get(), "appearance");
+      json::set(appearance, "configured", d.appearance_configured);
+      json::set(appearance, "effective", d.appearance_effective);
+      json::setBool(appearance, "follow_system", d.appearance_follow_system);
+      cJSON* schedule = json::addObj(appearance, "schedule");
+      json::set(schedule, "dark_from", d.dark_from);
+      json::set(schedule, "light_from", d.light_from);
+    }
     cJSON* theme = json::addObj(o.get(), "theme");
     json::set(theme, "bg_color", d.bg_color);
     if (!d.bg_image.empty()) {
@@ -3169,7 +3623,53 @@ struct Node::Impl {
       json::setItem(theme, "bg_image", json::Doc(cJSON_CreateNull()));
       json::setItem(theme, "bg_image_path", json::Doc(cJSON_CreateNull()));
     }
+    themeAutoDoc(theme);
     return o;
+  }
+
+  // Automatic contrast, published once by core so every shell in the cluster draws the same ink
+  // and the same call button instead of each deriving its own from the same background.
+  void themeAutoDoc(cJSON* theme) {
+    const ThemeAuto& automatic = themeAutoState();
+    cJSON* background = json::addObj(theme, "auto_background");
+    json::set(background, "color", automatic.background);
+    json::set(background, "source", automatic.source);
+
+    const cJSON* theme_base = json::get(json::get(cfg.get(), "display"), "theme");
+    const cJSON* theme_ovr = cfgAt("devices." + node_id + ".local.theme");
+    auto override_for = [&](const char* field) -> const cJSON* {
+      const cJSON* value = json::get(theme_ovr, field);
+      if (value && !cJSON_IsNull(value)) return value;
+      value = json::get(theme_base, field);
+      return (value && !cJSON_IsNull(value)) ? value : nullptr;
+    };
+
+    cJSON* auto_ink = json::addObj(theme, "auto_ink");
+    for (const char* region : kInkRegions) json::set(auto_ink, region, automatic.ink);
+
+    cJSON* accent = json::addObj(theme, "auto_accent");
+    json::set(accent, "call_button", automatic.call_button);
+    json::set(accent, "call_button_ink", automatic.call_button_ink);
+
+    // The overrides an administrator set, and the values a shell should actually paint.
+    cJSON* ink_override = json::addObj(theme, "ink_override");
+    const cJSON* configured_ink = override_for("ink_override");
+    const cJSON* item = nullptr;
+    cJSON_ArrayForEach(item, configured_ink) {
+      if (item->string && cJSON_IsString(item) && inkRegionKnown(item->string))
+        json::set(ink_override, item->string, item->valuestring);
+    }
+    const cJSON* configured_button = override_for("call_button_bg");
+    std::string effective_button = automatic.call_button;
+    std::string effective_button_ink = automatic.call_button_ink;
+    color::Rgb parsed;
+    if (cJSON_IsString(configured_button) && color::parseHex(configured_button->valuestring,
+                                                             &parsed)) {
+      effective_button = color::formatHex(parsed);
+      effective_button_ink = color::accentInk(parsed);
+    }
+    json::set(theme, "call_button_bg", effective_button);
+    json::set(theme, "call_button_ink", effective_button_ink);
   }
 
 
@@ -4366,8 +4866,10 @@ struct Node::Impl {
   }
 
   bool configWriteValidEffective(const std::string& key, const cJSON* value,
-                                 std::string* error) {
-    if (!configWriteValid(key, value, error)) return false;
+                                 std::string* error,
+                                 std::vector<ConfigWarning>* warnings = nullptr) {
+    if (!configWriteValid(key, value, error, warnings)) return false;
+    themeContrastWarnings(key, value, warnings);
     const std::string marker = ".local.ui.elements.";
     const size_t marker_pos = key.find(marker);
     if (marker_pos == std::string::npos || !cJSON_IsObject(value)) return true;
@@ -4443,7 +4945,43 @@ struct Node::Impl {
     overlay(defaults);
     overlay(cfgAt(key));
     overlay(value);
-    return uiStyleViewportValid(key, resolved.get(), json::get(manifest.get(), "viewport"), error);
+    return uiStyleViewportValid(key, resolved.get(), json::get(manifest.get(), "viewport"),
+                                error, warnings);
+  }
+
+  // Readability of the theme colours an administrator sets by hand, measured against the
+  // effective background of the node being configured. Reported, never enforced.
+  void themeContrastWarnings(const std::string& key, const cJSON* value,
+                             std::vector<ConfigWarning>* warnings) {
+    if (!warnings) return;
+    if (key.find("theme.call_button_bg") == std::string::npos &&
+        key.find("theme.ink_override") == std::string::npos)
+      return;
+    color::Rgb background;
+    if (!color::parseHex(effectiveThemeBackground(), &background)) return;
+    auto measure = [&](const cJSON* item, const std::string& warning_key,
+                       const std::string& property, double floor_ratio) {
+      color::Rgb candidate;
+      if (!cJSON_IsString(item) || !color::parseHex(item->valuestring, &candidate)) return;
+      const double ratio = color::contrastRatio(candidate, background);
+      if (ratio < floor_ratio) addContrastWarning(warnings, warning_key, property, ratio);
+    };
+    if (key.find("theme.call_button_bg") != std::string::npos) {
+      // A call button is a large UI component: WCAG 2.1 AA asks 3:1 against its surroundings.
+      measure(value, key, "call_button_bg", 3.0);
+      return;
+    }
+    const std::string marker = "theme.ink_override";
+    const size_t pos = key.find(marker);
+    const std::string tail = key.substr(pos + marker.size());
+    if (tail.empty()) {
+      const cJSON* item = nullptr;
+      cJSON_ArrayForEach(item, value) {
+        if (item->string) measure(item, key + "." + item->string, item->string, 4.5);
+      }
+      return;
+    }
+    if (tail[0] == '.') measure(value, key, tail.substr(1), 4.5);
   }
 
   void applyEffectiveCaps() {
@@ -4578,6 +5116,9 @@ struct Node::Impl {
         notice_doors.insert(
             e.key.substr(6, e.key.size() - 6 - notice_suffix.size()));
       }
+      // The cluster-wide announcement changes what every door shows, so it is reported as the
+      // wildcard target rather than as one door.
+      if (e.key == "notice" || e.key == "notice.global") notice_doors.insert("*");
     }
     for (const auto& e : effective_entries) {
       const bool self_device = e.key.compare(0, 8, "devices.") == 0 &&
@@ -4611,7 +5152,9 @@ struct Node::Impl {
       json::set(notice_event.get(), "t", "notice_changed");
       json::set(notice_event.get(), "door", door);
       const cJSON* current =
-          json::get(json::get(json::get(cfg.get(), "doors"), door.c_str()), "notice");
+          isGlobalNoticeTarget(door)
+              ? json::get(json::get(cfg.get(), "notice"), "global")
+              : json::get(json::get(json::get(cfg.get(), "doors"), door.c_str()), "notice");
       json::setBool(notice_event.get(), "active", cJSON_IsObject(current));
       uiNotify(json::dump(notice_event.get()));
     }
@@ -5108,6 +5651,25 @@ struct Node::Impl {
       }
       if (!store.metaSet("seed_sos_rules_v1", "1")) return false;
     }
+    // The announcement presets are ordinary configuration an administrator edits or deletes; the
+    // meta marker keeps a deletion deleted instead of reseeding it on every restart.
+    if (!store.metaGet("seed_notice_presets_v1")) {
+      if (!json::get(json::get(cfg.get(), "notice"), "presets")) {
+        auto presets = json::arr();
+        auto add = [&presets](const char* id, const char* text) {
+          cJSON* entry = json::pushObj(presets.get());
+          json::set(entry, "id", id);
+          json::set(entry, "text", text);
+        };
+        add("np_absent", "不在です。荷物は玄関前へお願いします");
+        add("np_back_door", "裏口へお回りください");
+        add("np_construction", "工事中です。足元にご注意ください");
+        config->mutate({{"notice.presets", json::dump(presets.get()), false}});
+        if (!config->lastMutationCommitted()) return false;
+      }
+      if (!store.metaSet("seed_notice_presets_v1", "1")) return false;
+    }
+
     // A missed call is worth a notification on the indoor surfaces only; a door station must not
     // alert the visitor. The rule is an ordinary trigger_rules entry, so the Admin rules tab can
     // disable or retarget it, and the meta marker keeps a deletion deleted across restarts.
@@ -6348,16 +6910,17 @@ struct Node::Impl {
 
 
   // Start pairing mode and mint a PIN in one step: {ok,host,pin,expires_s}.
-  std::string startPairingJsonOnLoop(int seconds) {
-    const int bounded_seconds = std::max(1, std::min(seconds, 3600));
+  // Mint or refresh the join PIN and nothing else. Pairing mode stays closed, so a device that
+  // is already announcing itself is not auto-invited by the act of showing a PIN.
+  std::string mintJoinTokenJsonOnLoop(int seconds) {
     auto result = json::obj();
     if (!mesh || !mesh->isPaired()) {
       json::setBool(result.get(), "ok", false);
       json::set(result.get(), "err", "host_unpaired");
       return json::dump(result.get());
     }
-    mesh->setPairingMode(static_cast<int64_t>(bounded_seconds) * 1000);
-    const auto token = mesh->createJoinToken();
+    const int64_t ttl_ms = seconds > 0 ? static_cast<int64_t>(seconds) * 1000 : 0;
+    const auto token = mesh->createJoinToken(ttl_ms);
     json::Doc self = json::parse(mesh->pairingSelfJson());
     const std::string host = self ? json::getString(self.get(), "addr") : "";
     if (token.pin.empty() || host.empty()) {
@@ -6371,6 +6934,20 @@ struct Node::Impl {
                 std::max<int64_t>(0, (token.expires_mono - clock->monoMs()) / 1000));
     }
     return json::dump(result.get());
+  }
+
+  // The explicit "add several devices" window: open pairing mode, then mint a PIN so the same
+  // card can show both. Only the bulk-add button reaches this.
+  std::string startPairingJsonOnLoop(int seconds) {
+    const int bounded_seconds = std::max(1, std::min(seconds, 3600));
+    if (!mesh || !mesh->isPaired()) {
+      auto result = json::obj();
+      json::setBool(result.get(), "ok", false);
+      json::set(result.get(), "err", "host_unpaired");
+      return json::dump(result.get());
+    }
+    mesh->setPairingMode(static_cast<int64_t>(bounded_seconds) * 1000);
+    return mintJoinTokenJsonOnLoop(0);
   }
 
 
@@ -6720,6 +7297,21 @@ struct Node::Impl {
       json::set(v, "rotation", static_cast<int64_t>(effective_video_rotation.load()));
       std::string cs = video_track.codecString();
       if (!cs.empty()) json::set(v, "codec_str", cs);
+      // Publish-side counters for the incoming-screen debug line. Latency, jitter and displayed
+      // frames are measured by each receiver's own player and are reported through its runtime
+      // status; core only knows what this node produced and handed out.
+      const VideoTrack::Stats stats = video_track.stats();
+      cJSON* publish = json::addObj(v, "publish");
+      json::set(publish, "frames", static_cast<int64_t>(stats.frames));
+      json::set(publish, "keyframes", static_cast<int64_t>(stats.keyframes));
+      json::set(publish, "fragments", static_cast<int64_t>(stats.fragments));
+      json::set(publish, "dropped_forward", static_cast<int64_t>(stats.dropped_forward));
+      json::set(publish, "frame_interval_ms",
+                static_cast<int64_t>(stats.frame_interval_ms));
+      json::set(publish, "fps_x10",
+                stats.frame_interval_ms > 0
+                    ? static_cast<int64_t>(10000 / stats.frame_interval_ms)
+                    : static_cast<int64_t>(0));
     }
 
     {
@@ -6734,6 +7326,25 @@ struct Node::Impl {
       cJSON* as = json::addObj(o.get(), "assets");
       json::set(as, "cached", cached);
       json::set(as, "total", total);
+    }
+
+    {
+      cJSON* doors = json::addObj(o.get(), "doors");
+      const cJSON* configured_doors = json::get(cfg.get(), "doors");
+      const cJSON* door = nullptr;
+      cJSON_ArrayForEach(door, configured_doors) {
+        if (!door->string) continue;
+        const std::string id = door->string;
+        cJSON* entry = json::addObj(doors, id.c_str());
+        json::set(entry, "label", labelIn(json::get(door, "label"), "ja"));
+        auto notice = effectiveDoorNoticeDoc(id);
+        if (notice) json::setItem(entry, "notice", std::move(notice));
+        else json::setItem(entry, "notice", json::Doc(cJSON_CreateNull()));
+        json::setItem(entry, "unlock", doorUnlockDoc(id));
+      }
+      cJSON* notice_config = json::addObj(o.get(), "notice");
+      const cJSON* global = json::get(json::get(cfg.get(), "notice"), "global");
+      json::setBool(notice_config, "global_active", cJSON_IsObject(global));
     }
 
     {
@@ -6844,11 +7455,23 @@ struct Node::Impl {
   }
 
   // ---------- HTTP ----------
-  // Extract "<id>" from "/api/doors/<id>/notice". Returns an empty string for any other shape,
+  // Readability findings ride along with a successful write so the admin can show them inline.
+  static void attachWarnings(cJSON* out, const std::vector<ConfigWarning>& warnings) {
+    if (warnings.empty()) return;
+    cJSON* list = json::addArr(out, "warnings");
+    for (const auto& warning : warnings) {
+      cJSON* item = json::pushObj(list);
+      json::set(item, "key", warning.key);
+      json::set(item, "property", warning.property);
+      json::set(item, "contrast", warning.contrast);
+      json::set(item, "message_key", warning.message_key);
+    }
+  }
+
+  // Extract "<id>" from "/api/doors/<id><suffix>". Returns an empty string for any other shape,
   // so the prefix route cannot be used to reach an unrelated door resource.
-  static std::string doorNoticePathDoor(const std::string& uri) {
+  static std::string doorPathDoor(const std::string& uri, const std::string& suffix) {
     const std::string prefix = "/api/doors/";
-    const std::string suffix = "/notice";
     const std::string path = uri.substr(0, uri.find('?'));
     if (path.rfind(prefix, 0) != 0) return "";
     if (path.size() <= prefix.size() + suffix.size()) return "";
@@ -6862,6 +7485,10 @@ struct Node::Impl {
       if (!allowed) return "";
     }
     return door;
+  }
+
+  static std::string doorNoticePathDoor(const std::string& uri) {
+    return doorPathDoor(uri, "/notice");
   }
 
   bool checkSession(const HttpReq& req) {
@@ -6894,9 +7521,9 @@ struct Node::Impl {
                     // The call history is readable by a panel credential and by an admin
                     // session; both handlers below re-check the caller explicitly.
                     "/api/call-log",
-                    // Announcements accept an indoor panel credential as well as an admin
-                    // session. The handlers re-check the caller explicitly.
-                    "/api/doors/"});
+                    // Announcements and the unlock trigger accept an indoor panel credential
+                    // as well as an admin session. The handlers re-check the caller explicitly.
+                    "/api/doors/", "/api/notice"});
 
     // /stream.mp4 follows the same LAN-public policy as /stream.mjpeg.
 
@@ -7173,7 +7800,8 @@ struct Node::Impl {
       auto parsed = json::parse(value);
       if (!parsed) parsed = json::Doc(cJSON_CreateString(value.c_str()));
       std::string style_error;
-      if (!configWriteValidEffective(key, parsed.get(), &style_error)) {
+      std::vector<ConfigWarning> warnings;
+      if (!configWriteValidEffective(key, parsed.get(), &style_error, &warnings)) {
         auto out = json::obj();
         json::setBool(out.get(), "ok", false);
         json::set(out.get(), "err", style_error);
@@ -7182,7 +7810,10 @@ struct Node::Impl {
       if (!setKey(key, value))
         return HttpResp::json(
             "{\"ok\":false,\"err\":\"config_persistence_failed\"}", 500);
-      return HttpResp::json("{\"ok\":true}");
+      auto out = json::obj();
+      json::setBool(out.get(), "ok", true);
+      attachWarnings(out.get(), warnings);
+      return HttpResp::json(json::dump(out.get()));
     });
 
     httpd->route("POST", "/api/config/batch", [this](const HttpReq& req) {
@@ -7193,6 +7824,7 @@ struct Node::Impl {
       if (cJSON_GetArraySize(ops) > 256)
         return HttpResp::json("{\"ok\":false,\"err\":\"too many ops\"}", 413);
       std::vector<LwwMutation> mutations;
+      std::vector<ConfigWarning> warnings;
       std::set<std::string> keys;
       cJSON* op = nullptr;
       cJSON_ArrayForEach(op, ops) {
@@ -7213,7 +7845,7 @@ struct Node::Impl {
           if (!value)
             return HttpResp::json("{\"ok\":false,\"err\":\"set without value\"}", 400);
           std::string style_error;
-          if (!configWriteValidEffective(key, value, &style_error)) {
+          if (!configWriteValidEffective(key, value, &style_error, &warnings)) {
             auto out = json::obj();
             json::setBool(out.get(), "ok", false);
             json::set(out.get(), "err", style_error);
@@ -7234,6 +7866,7 @@ struct Node::Impl {
         json::set(result.get(), "revision", changed.back().hlc);
         json::set(result.get(), "hlc", changed.back().hlc);  // one-release compatibility alias
       }
+      attachWarnings(result.get(), warnings);
       return HttpResp::json(json::dump(result.get()));
     });
 
@@ -7289,16 +7922,17 @@ struct Node::Impl {
     });
 
 
-    httpd->route("POST", "/api/join-token", [this](const HttpReq&) {
+    // Showing a PIN is not the same decision as opening the bulk-add window, so this route mints
+    // only. Use POST /api/pairing/start for the bulk-add window.
+    httpd->route("POST", "/api/join-token", [this](const HttpReq& req) {
       if (!mesh) return HttpResp::json("{\"ok\":false,\"err\":\"no mesh\"}", 503);
-      auto t = mesh->createJoinToken();
-      if (t.pin.empty())
-        return HttpResp::json("{\"ok\":false,\"err\":\"host_unpaired\"}", 409);
-      auto o = json::obj();
-      json::setBool(o.get(), "ok", true);
-      json::set(o.get(), "pin", t.pin);
-      json::set(o.get(), "expires_s", (t.expires_mono - clock->monoMs()) / 1000);
-      return HttpResp::json(json::dump(o.get()));
+      auto body = json::parse(req.body);
+      const int seconds =
+          body ? static_cast<int>(json::getInt(body.get(), "seconds", 0)) : 0;
+      const std::string result = mintJoinTokenJsonOnLoop(seconds);
+      auto parsed = json::parse(result);
+      const bool ok = parsed && json::getBool(parsed.get(), "ok");
+      return HttpResp::json(result, ok ? 200 : 409);
     });
 
 
@@ -7644,6 +8278,20 @@ struct Node::Impl {
     // Announcements. An indoor panel posts with its panel credential; the Admin doors tab posts
     // with the administrator session.
     httpd->route("POST", "/api/doors/*", [this](const HttpReq& req) {
+      // The existing unlock capability: trigger the configured unlock action for this door. It
+      // publishes the same ha_command the SIP feature code does, so an installation that already
+      // wired a relay to <base>/cmd/unlock needs no new configuration.
+      const std::string unlock_door = doorPathDoor(req.uri, "/open");
+      if (!unlock_door.empty()) {
+        if (!checkSession(req) && !panelTokenOk(req))
+          return HttpResp::json("{\"ok\":false,\"err\":\"forbidden\"}", 403);
+        if (!doorExists(unlock_door))
+          return HttpResp::json("{\"ok\":false,\"err\":\"unknown_door\"}", 404);
+        if (!openDoorOnLoop(unlock_door))
+          return HttpResp::json(
+              "{\"ok\":false,\"err\":\"unlock_not_configured\"}", 409);
+        return HttpResp::json("{\"ok\":true}");
+      }
       const std::string door = doorNoticePathDoor(req.uri);
       if (door.empty()) return HttpResp::json("{\"ok\":false,\"err\":\"not_found\"}", 404);
       if (!checkSession(req) && !panelTokenOk(req))
@@ -7655,6 +8303,30 @@ struct Node::Impl {
       const int64_t ttl_s = json::getInt(body.get(), "ttl_s", 0);
       if (expires <= 0 && ttl_s > 0) expires = hlc->correctedWallMs() + ttl_s * 1000LL;
       if (!setDoorNoticeOnLoop(door, text, expires))
+        return HttpResp::json("{\"ok\":false,\"err\":\"rejected\"}", 400);
+      return HttpResp::json("{\"ok\":true}");
+    });
+
+    // The cluster-wide announcement. A door-specific one overrides it, so this is the
+    // "everywhere" target of the announcement dialog rather than a bulk per-door write.
+    httpd->route("POST", "/api/notice", [this](const HttpReq& req) {
+      if (!checkSession(req) && !panelTokenOk(req))
+        return HttpResp::json("{\"ok\":false,\"err\":\"forbidden\"}", 403);
+      auto body = json::parse(req.body);
+      if (!body) return HttpResp::json("{\"ok\":false,\"err\":\"bad_body\"}", 400);
+      const std::string text = json::getString(body.get(), "text");
+      int64_t expires = json::getInt(body.get(), "expires_ms", 0);
+      const int64_t ttl_s = json::getInt(body.get(), "ttl_s", 0);
+      if (expires <= 0 && ttl_s > 0) expires = hlc->correctedWallMs() + ttl_s * 1000LL;
+      if (!setDoorNoticeOnLoop("*", text, expires))
+        return HttpResp::json("{\"ok\":false,\"err\":\"rejected\"}", 400);
+      return HttpResp::json("{\"ok\":true}");
+    });
+
+    httpd->route("DELETE", "/api/notice", [this](const HttpReq& req) {
+      if (!checkSession(req) && !panelTokenOk(req))
+        return HttpResp::json("{\"ok\":false,\"err\":\"forbidden\"}", 403);
+      if (!clearDoorNoticeOnLoop("*"))
         return HttpResp::json("{\"ok\":false,\"err\":\"rejected\"}", 400);
       return HttpResp::json("{\"ok\":true}");
     });
@@ -9061,6 +9733,12 @@ bool Node::clearDoorNotice(const std::string& door) {
   return ok;
 }
 
+bool Node::openDoor(const std::string& door) {
+  bool ok = false;
+  impl_->loop->callSync([&] { ok = impl_->openDoorOnLoop(door); });
+  return ok;
+}
+
 void Node::setConfigKey(const std::string& key, const std::string& value_json) {
   auto parsed = json::parse(value_json);
   if (!parsed) parsed = json::Doc(cJSON_CreateString(value_json.c_str()));
@@ -9178,6 +9856,12 @@ void Node::removeDevice(const std::string& target) {
 std::string Node::startPairingJson(int seconds) {
   std::string out;
   impl_->loop->callSync([&] { out = impl_->startPairingJsonOnLoop(seconds); });
+  return out;
+}
+
+std::string Node::mintJoinTokenJson(int seconds) {
+  std::string out;
+  impl_->loop->callSync([&] { out = impl_->mintJoinTokenJsonOnLoop(seconds); });
   return out;
 }
 

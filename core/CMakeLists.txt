@@ -97,6 +97,8 @@ add_library(db_third_party STATIC
   third_party/quirc/identify.c
   third_party/quirc/decode.c
   third_party/quirc/version_db.c
+  # Theme background averaging decodes one uploaded image; nothing else needs a decoder.
+  third_party/stb/stb_image_impl.c
 )
 target_include_directories(db_third_party PUBLIC
   third_party/sqlite third_party/civetweb third_party/cjson third_party/monocypher

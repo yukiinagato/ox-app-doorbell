@@ -18,9 +18,10 @@
 #include "media/frame_bus.h"
 #include "node/node.h"
 
-#define STB_IMAGE_IMPLEMENTATION
+// The implementation lives in third_party/stb/stb_image_impl.c so the whole build shares one
+// decoder. A second copy here would win the link and silently narrow the test binary to the
+// formats this file happened to enable.
 #define STBI_NO_STDIO
-#define STBI_ONLY_JPEG
 #include "stb_image.h"
 
 using namespace db;
