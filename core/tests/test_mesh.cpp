@@ -631,7 +631,7 @@ TEST_CASE("mesh: malformed config wire snapshots are rejected atomically") {
       fleet.add(kIdB, "B", capsJson(9), {{}, /*beacon=*/false});
   auto peer = connectRawPeer(fleet, kIdC, "raw-C", "B");
   REQUIRE(fleet.runUntil([&] { return peer->established; }, 1000));
-  REQUIRE(peer->channel != nullptr);
+  REQUIRE(static_cast<bool>(peer->channel));
 
   int case_number = 0;
   auto rejected = [&](const std::string& name,
@@ -743,8 +743,8 @@ TEST_CASE("mesh: malformed live events are neither persisted nor forwarded") {
   auto sender = connectRawPeer(fleet, kIdC, "raw-C", "B");
   auto observer = connectRawPeer(fleet, kIdD, "raw-D", "B");
   REQUIRE(fleet.runUntil([&] { return sender->established && observer->established; }, 1000));
-  REQUIRE(sender->channel != nullptr);
-  REQUIRE(observer->channel != nullptr);
+  REQUIRE(static_cast<bool>(sender->channel));
+  REQUIRE(static_cast<bool>(observer->channel));
 
   auto rejected = [&](const std::string& name,
                       const std::function<void(cJSON*)>& make_invalid) {
@@ -841,7 +841,7 @@ TEST_CASE("mesh: sync event arrays decode completely before any state is applied
       fleet.add(kIdB, "B", capsJson(9), {{}, /*beacon=*/false});
   auto peer = connectRawPeer(fleet, kIdC, "raw-C", "B");
   REQUIRE(fleet.runUntil([&] { return peer->established; }, 1000));
-  REQUIRE(peer->channel != nullptr);
+  REQUIRE(static_cast<bool>(peer->channel));
 
   auto malformed = wireConfigSnapshot("wire.event.reject");
   cJSON* malformed_events = json::get(malformed.get(), "ev");
@@ -895,7 +895,7 @@ TEST_CASE("mesh: heartbeat and claim counters reject unsafe wire numbers") {
       fleet.add(kIdB, "B", capsJson(9), {{}, /*beacon=*/false});
   auto peer = connectRawPeer(fleet, kIdC, "raw-C", "B");
   REQUIRE(fleet.runUntil([&] { return peer->established; }, 1000));
-  REQUIRE(peer->channel != nullptr);
+  REQUIRE(static_cast<bool>(peer->channel));
   REQUIRE(receiver.peer(kIdC).id == kIdC);
 
   auto ping = [](double epoch, double heartbeat) {
@@ -1794,7 +1794,7 @@ TEST_CASE("mesh: an invitation carrying an all-zero cluster key is rejected") {
 
   auto sender = f.net.makeTransport("X");
   sender->connect("J", [&](ConnPtr conn) {
-    REQUIRE(conn);
+    REQUIRE(static_cast<bool>(conn));
     conn->setCallbacks([](const Bytes&) {}, [] {});
     conn->send(frame);
   });
