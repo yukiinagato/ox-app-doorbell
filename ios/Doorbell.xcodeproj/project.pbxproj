@@ -14,6 +14,9 @@
 
 /* Begin PBXBuildFile section */
 		AC0000000000000000000004 /* ThemeInkTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC0000000000000000000003 /* ThemeInkTests.swift */; };
+		AC000000000000000000000E /* IncomingReturnCountdownTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC000000000000000000000D /* IncomingReturnCountdownTests.swift */; };
+		AC0000000000000000000010 /* HomePerformanceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC000000000000000000000F /* HomePerformanceTests.swift */; };
+		AC0000000000000000000012 /* PairUriTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC0000000000000000000011 /* PairUriTests.swift */; };
 		FB0000000000000000000021 /* CoreBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000002 /* CoreBridge.swift */; };
 		FB0000000000000000000022 /* BootConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000003 /* BootConfig.swift */; };
 		FB0000000000000000000023 /* Texts.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000004 /* Texts.swift */; };
@@ -146,6 +149,9 @@
 /* Begin PBXFileReference section */
 		AC0000000000000000000002 /* DoorbellTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DoorbellTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		AC0000000000000000000003 /* ThemeInkTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThemeInkTests.swift; sourceTree = "<group>"; };
+		AC000000000000000000000D /* IncomingReturnCountdownTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IncomingReturnCountdownTests.swift; sourceTree = "<group>"; };
+		AC000000000000000000000F /* HomePerformanceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomePerformanceTests.swift; sourceTree = "<group>"; };
+		AC0000000000000000000011 /* PairUriTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PairUriTests.swift; sourceTree = "<group>"; };
 		FA0000000000000000000001 /* BridgingHeader.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = BridgingHeader.h; sourceTree = "<group>"; };
 		FA0000000000000000000002 /* CoreBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoreBridge.swift; sourceTree = "<group>"; };
 		FA0000000000000000000003 /* BootConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BootConfig.swift; sourceTree = "<group>"; };
@@ -301,6 +307,9 @@
 			isa = PBXGroup;
 			children = (
 				AC0000000000000000000003 /* ThemeInkTests.swift */,
+				AC000000000000000000000D /* IncomingReturnCountdownTests.swift */,
+				AC000000000000000000000F /* HomePerformanceTests.swift */,
+				AC0000000000000000000011 /* PairUriTests.swift */,
 			);
 			path = DoorbellTests;
 			sourceTree = "<group>";
@@ -580,6 +589,9 @@
 			buildActionMask = 2147483647;
 			files = (
 				AC0000000000000000000004 /* ThemeInkTests.swift in Sources */,
+				AC000000000000000000000E /* IncomingReturnCountdownTests.swift in Sources */,
+				AC0000000000000000000010 /* HomePerformanceTests.swift in Sources */,
+				AC0000000000000000000012 /* PairUriTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

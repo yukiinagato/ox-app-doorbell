@@ -19,6 +19,10 @@ sound.title_display: { ja: "タイトル表示（起動）", en: "Title display 
 sound.none: { ja: "再生しない", en: "Do not play", zh: "不播放" }
 
 idle.call_button: { ja: "{unit} 呼出", en: "Call {unit}", zh: "呼叫 {unit}" }
+# The door station's own call button names the action and nothing else: a visitor at the door
+# is already standing at the unit, so its id on the button is noise, and on a narrow panel it
+# is what pushes the label into a second line.
+idle.call_button_verb: { ja: "呼出", en: "Call", zh: "呼叫" }
 idle.touch_to_call: { ja: "タッチして呼び出してください", en: "Touch to call", zh: "触摸屏幕呼叫" }
 
 calling.title: { ja: "呼び出し中…", en: "Calling…", zh: "呼叫中…" }
@@ -39,6 +43,9 @@ ring.answer: { ja: "応答", en: "Answer", zh: "接听" }
 ring.ignore: { ja: "無視", en: "Ignore", zh: "忽略" }
 ring.monitor: { ja: "モニタ", en: "Monitor", zh: "监听" }
 ring.monitoring: { ja: "門口の音声を再生中", en: "Live door audio on", zh: "正在播放门口声音" }
+# The number beside the incoming-call title: how long until this panel returns to its home
+# page. Tapping it stops the return, so it is announced as the control it is.
+ring.return_countdown_a11y: { ja: "自動で戻るまでの秒数（タップで解除）", en: "Seconds until this panel returns home (tap to stop)", zh: "自动返回主页的秒数（点按可取消）" }
 ring.cancelled: { ja: "訪客が呼び出しを取り消しました", en: "The visitor cancelled the call", zh: "访客已取消呼叫" }
 ring.unlock: { ja: "解錠", en: "Unlock", zh: "开锁" }
 ring.unlock_sent: { ja: "解錠信号を送信しました", en: "Unlock signal sent", zh: "已发送开锁信号" }
@@ -668,6 +675,16 @@ pair.enter_address_and_code: { ja: "接続先とペアリング PIN を入力し
 pair.role_door_station: { ja: "門口機", en: "Door station", zh: "门口机" }
 pair.role_indoor_panel: { ja: "室内機", en: "Indoor panel", zh: "室内机" }
 # エラーコード → 表示文言 (全シェル共通)。生のコードは「詳細」行以外に出さない。
+# An invitation arriving as a doorbell://pair link, whether tapped or scanned. One button: the
+# user has already chosen by opening it, so the screen confirms rather than asking again.
+pair.invite_title: { ja: "クラスタへの招待", en: "Cluster invitation", zh: "集群邀请" }
+pair.invite_join: { ja: "この集まりに参加", en: "Join this cluster", zh: "加入此集群" }
+pair.invite_cluster: { ja: "クラスタ: {name}", en: "Cluster: {name}", zh: "集群: {name}" }
+pair.invite_expired: { ja: "この招待は期限切れです。相手の端末で新しいコードを発行してください", en: "This invitation has expired. Get a new one on the other device", zh: "此邀请已过期。请在对方设备上生成新的邀请" }
+pair.invite_invalid: { ja: "この招待は読み取れませんでした", en: "This invitation could not be read", zh: "无法读取此邀请" }
+pair.invite_missing_pin: { ja: "この招待にペアリング PIN が含まれていません", en: "This invitation carries no Pairing PIN", zh: "此邀请不包含配对 PIN" }
+pair.invite_missing_host: { ja: "この招待に接続先が含まれていません", en: "This invitation carries no address", zh: "此邀请不包含连接地址" }
+pair.invite_leave_current: { ja: "この端末はすでに別のクラスタに参加しています。参加すると現在のクラスタから離脱し、この端末の設定はすべて消去されます。", en: "This device is already in a Cluster. Joining will leave it and erase all of this device's settings.", zh: "此设备已加入其他集群。加入将退出当前集群并清除此设备的全部设置。" }
 pair.err_detail: { ja: "詳細: {code}", en: "Details: {code}", zh: "详情: {code}" }
 pair.err.bad_pin: { ja: "ペアリング PIN が違います", en: "Wrong Pairing PIN", zh: "配对 PIN 不正确" }
 pair.err.expired: { ja: "ペアリング PIN の期限が切れました。相手の端末で新しいコードを発行してください", en: "The Pairing PIN expired. Get a new one on the other device", zh: "配对 PIN 已过期。请在对方设备上生成新的配对 PIN" }

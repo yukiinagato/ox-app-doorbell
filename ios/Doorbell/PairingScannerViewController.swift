@@ -150,6 +150,16 @@ final class PairingScannerViewController: UIViewController,
         for object in metadataObjects {
             guard let code = object as? AVMetadataMachineReadableCodeObject,
                   let value = code.stringValue else { continue }
+            // An invitation QR carries the same doorbell://pair link a tapped one does, so both
+            // arrive at the one screen that knows how to confirm it.
+            if value.lowercased().hasPrefix("\(PairUri.scheme)://\(PairUri.action)") {
+                delivered = true
+                session.stopRunning()
+                dismiss(animated: true) {
+                    NotificationCenter.default.post(name: .doorbellPairInvitation, object: value)
+                }
+                return
+            }
             guard let payload = PairingQR.parse(value) else {
                 // Keep scanning: a foreign QR is a mis-aim, not a failure of the flow.
                 messageLabel.textColor = PairingTheme.danger

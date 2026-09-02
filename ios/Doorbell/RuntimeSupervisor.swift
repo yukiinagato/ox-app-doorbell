@@ -1,4 +1,5 @@
 import AVFoundation
+import ImageIO
 import Foundation
 import UIKit
 
@@ -413,5 +414,92 @@ final class RuntimeSupervisor {
                 "ui": "running",
             ],
         ])
+    }
+}
+
+/// Remote screenshot hook, for verifying a panel that has no capture tool of its own.
+///
+/// A jailbroken iPad mini 3 has no screencap binary and the Mac has no developer image for it, so
+/// the only way to see what the app is actually drawing is to have the app draw it into a file.
+/// Dropping `screenshot.request` next to `boot.json` produces `screenshot.png` beside it; the
+/// request file is removed so the next one is unambiguous. The kiosk shell answers the same
+/// contract, so one script drives both.
+///
+/// Nothing here runs unless `boot.json` carries `"debug_screenshots": true`: the timer is never
+/// scheduled, so a shipped panel does not touch the file system for this at all.
+final class ScreenshotResponder {
+
+    private let requestPath: String
+    private let imagePath: String
+    private var timer: Timer?
+
+    init(dataDir: String) {
+        let dir = dataDir as NSString
+        requestPath = dir.appendingPathComponent("screenshot.request")
+        imagePath = dir.appendingPathComponent("screenshot.png")
+    }
+
+    deinit { stop() }
+
+    func start() {
+        guard timer == nil else { return }
+        timer = IOSAvailability.scheduledTimer(withTimeInterval: 1, repeats: true) {
+            [weak self] _ in self?.poll()
+        }
+    }
+
+    func stop() {
+        timer?.invalidate()
+        timer = nil
+    }
+
+    private func poll() {
+        guard FileManager.default.fileExists(atPath: requestPath) else { return }
+        // The request is consumed first: a capture that fails must not leave the file behind for
+        // this to spin on once a second.
+        try? FileManager.default.removeItem(atPath: requestPath)
+        guard let window = ScreenshotResponder.keyWindow(),
+              let png = ScreenshotResponder.render(window) else {
+            IOSAvailability.logDebug("screenshot: no key window to capture")
+            return
+        }
+        do {
+            try png.write(to: URL(fileURLWithPath: imagePath), options: .atomic)
+            IOSAvailability.logDebug("screenshot: wrote \(png.count) bytes to \(imagePath)")
+        } catch {
+            IOSAvailability.logDebug("screenshot: could not write \(imagePath)")
+        }
+    }
+
+    private static func keyWindow() -> UIWindow? {
+        if let key = UIApplication.shared.keyWindow { return key }
+        return UIApplication.shared.windows.first { !$0.isHidden }
+    }
+
+    /// `drawHierarchy` is what captures a live view tree, including anything drawn by the render
+    /// server; `layer.render(in:)` misses visual effects and some media layers.
+    private static func render(_ window: UIWindow) -> Data? {
+        let bounds = window.bounds
+        guard bounds.width >= 1, bounds.height >= 1 else { return nil }
+        if #available(iOS 10.0, tvOS 10.0, *) {
+            let renderer = UIGraphicsImageRenderer(bounds: bounds)
+            let image = renderer.image { _ in
+                window.drawHierarchy(in: bounds, afterScreenUpdates: true)
+            }
+            return image.pngData()
+        }
+        UIGraphicsBeginImageContextWithOptions(bounds.size, false, 0)
+        defer { UIGraphicsEndImageContext() }
+        window.drawHierarchy(in: bounds, afterScreenUpdates: true)
+        guard let image = UIGraphicsGetImageFromCurrentImageContext(),
+              let cg = image.cgImage else { return nil }
+        // The modern spelling is unavailable before iOS 10, and the free function it replaced is
+        // gone from the current SDK; ImageIO encodes the same PNG on both runtimes.
+        let data = NSMutableData()
+        guard let destination = CGImageDestinationCreateWithData(
+            data, "public.png" as CFString, 1, nil) else { return nil }
+        CGImageDestinationAddImage(destination, cg, nil)
+        guard CGImageDestinationFinalize(destination) else { return nil }
+        return data as Data
     }
 }
