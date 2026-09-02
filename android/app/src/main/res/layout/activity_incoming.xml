@@ -126,6 +126,7 @@
         <!-- The admin QR stays visible in a corner; opening the page still needs the password. -->
         <LinearLayout
             android:id="@+id/admin_qr_slot"
+            android:orientation="horizontal"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_gravity="bottom|start"
