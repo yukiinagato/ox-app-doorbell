@@ -223,6 +223,15 @@ final class CoreBridge {
         takeJson(core.map { db_core_pairing_json($0) } ?? nil)
     }
 
+    /// Core's own reading of a scanned `doorbell://pair` code, so every shell accepts and refuses
+    /// exactly the same invitations. Core checks the expiry against corrected cluster time when it
+    /// is running, which a shell cannot do. Nil when Core is not up yet — a code can be scanned
+    /// before it is — and the caller falls back to its own parse.
+    func parsePairUri(_ uri: String) -> [String: Any]? {
+        guard let c = core, !uri.isEmpty else { return nil }
+        return takeJson(db_core_parse_pair_uri_json(c, uri))
+    }
+
     func joinCluster(host: String, pin: String) {
         guard let c = core, !host.isEmpty, !pin.isEmpty else { return }
         db_core_join_cluster(c, host, pin)

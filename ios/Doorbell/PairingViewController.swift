@@ -447,8 +447,7 @@ final class PairingViewController: UIViewController {
     /// QR. The screen fills in what it carries and asks once; it never makes somebody retype an
     /// address and a PIN they are holding in their hand.
     func present(invitation text: String) {
-        let nowS = Int64(Date().timeIntervalSince1970)
-        switch PairUri.parse(text, nowS: nowS) {
+        switch PairUri.parse(text, core: core) {
         case .failure(let reason):
             showInvitationProblem(reason)
         case .success(let invitation):

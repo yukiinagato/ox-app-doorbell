@@ -17,18 +17,18 @@ final class DashboardView: UIView {
     private let boot: BootConfig
     private let texts: Texts
 
-    private let clockLabel = UILabel()
-    private let dateLabel = UILabel()
+    private let clockLabel = HaloLabel()
+    private let dateLabel = HaloLabel()
     private let membershipPill = PaddedLabel()
     private let missedBadge = PaddedLabel()
     private let adminButton = UIButton(type: .system)
     private let noticeButton = UIButton(type: .system)
-    private let historyHeader = UILabel()
+    private let historyHeader = HaloLabel()
     private let seeAllButton = UIButton(type: .system)
     private let tilesStack = UIStackView()
     private let recentCalls: RecentCallsView
     private let adminQr: AdminQrView
-    private let versionLabel = UILabel()
+    private let versionLabel = HaloLabel()
     let sosControl: SosSlideControl
 
     private let columns = UIStackView()

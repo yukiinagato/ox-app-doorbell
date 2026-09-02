@@ -350,7 +350,15 @@ class RecoverySafeModeContracts(unittest.TestCase):
         self.assertIn(".answerSuperseded", modern_refresh)
         self.assertIn("demoteSupersededAnswer()", modern_refresh)
         self.assertIn("consumeSupersededIdle()", modern_idle)
-        self.assertIn("restartAutoClose()", modern_idle)
+        # The losing answer leg goes back to the ringing screen instead of closing it. What it
+        # restarts is the indoor return countdown, which replaced the flat 30 s auto-close: the
+        # panel keeps the live view and goes home on its own clock, and the visitor hanging up
+        # does not take the screen away from a resident who is still walking towards it.
+        self.assertIn("restartReturnCountdown()", modern_idle)
+        self.assertNotIn("close()", modern_idle)
+        self.assertNotIn("restartAutoClose()", modern_idle)
+        # A dialog that simply ended hands the screen back to the same countdown, from the top.
+        self.assertIn("resumeReturnCountdown()", modern_idle)
         self.assertIn("return", modern_idle)
         self.assertNotIn("beginAnswer", modern_monitor)
 

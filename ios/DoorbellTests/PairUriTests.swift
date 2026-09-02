@@ -124,6 +124,38 @@ final class PairUriTests: XCTestCase {
         XCTAssertEqual(invitation.host, snapshot.tokenHost)
     }
 
+    // MARK: - Core is the authority when it is running
+
+    /// Core reads the code for every shell, and judges the expiry against corrected cluster time,
+    /// which a shell cannot do. Its refusals are named in `err`.
+    func testCoreRefusalNamesAreUnderstood() {
+        XCTAssertEqual(PairUri.Failure(coreError: "bad_scheme"), .notAPairUri)
+        XCTAssertEqual(PairUri.Failure(coreError: "missing_pin"), .missingPin)
+        XCTAssertEqual(PairUri.Failure(coreError: "missing_host"), .missingHost)
+        XCTAssertEqual(PairUri.Failure(coreError: "expired"), .expired)
+        XCTAssertEqual(PairUri.Failure(coreError: "something_newer"), .notAPairUri,
+                       "a refusal this build has never seen is still a refusal")
+        XCTAssertEqual(PairUri.Failure(coreError: ""), .notAPairUri)
+    }
+
+    /// With Core not running — a code can be scanned before it starts — the shell's own reading
+    /// stands in, and it has to agree with Core on the same input.
+    func testTheLocalReadingStandsInWhenCoreIsNotRunning() {
+        let core = CoreBridge()
+        XCTAssertNil(core.parsePairUri(uri()), "a stopped core answers nothing")
+        guard case .success(let invitation) = PairUri.parse(uri(), core: core, nowS: now) else {
+            return XCTFail("the fallback must still read a good invitation")
+        }
+        XCTAssertEqual(invitation.pin, "482913")
+        XCTAssertEqual(invitation.host, "10.0.1.5:47172")
+
+        guard case .failure(let reason) = PairUri.parse(uri(exp: now - 1), core: core,
+                                                        nowS: now) else {
+            return XCTFail("the fallback must still refuse an expired one")
+        }
+        XCTAssertEqual(reason, .expired)
+    }
+
     /// A Core that predates the field publishes no invitation, and the card falls back to the
     /// address and PIN it already showed.
     func testACoreWithoutTheFieldPublishesNoInvitation() {

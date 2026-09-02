@@ -293,10 +293,10 @@ enum PairingTheme {
 /// The pairing invitation a QR carries: `doorbell://pair?host=<ip:port>&pin=<6 digits>
 /// &exp=<unix seconds>&cluster=<name>`.
 ///
-/// Core owns this format and is adding `db_core_parse_pair_uri_json` so every shell agrees on one
-/// reading of it. That export does not exist in this checkout yet, so the parsing below is the
-/// shell's own and must become a thin wrapper around the Core call the moment it lands — the
-/// failure cases here are named to match what that call is specified to return.
+/// Core owns this format and reads it for every shell through `db_core_parse_pair_uri_json`,
+/// which additionally judges the expiry against corrected cluster time. `parse(_:core:)` asks Core
+/// first and only falls back to the local reading below when Core is not running — a code can be
+/// scanned before it has started, and an older Core does not export the call at all.
 struct PairUri: Equatable {
     let host: String
     let pin: String
@@ -307,17 +307,41 @@ struct PairUri: Equatable {
     /// Why an invitation cannot be acted on. Each is shown to the user in its own words rather
     /// than as one "invalid code".
     enum Failure: String, Error, Equatable {
-        case notAPairUri = "not_a_pair_uri"
+        case notAPairUri = "bad_scheme"
         case missingHost = "missing_host"
         case missingPin = "missing_pin"
         case expired = "expired"
+
+        /// Core names the refusal in the `err` field; an unknown name from a newer Core is read as
+        /// "this code is not one we can act on" rather than crashing or silently accepting it.
+        init(coreError: String) {
+            self = Failure(rawValue: coreError) ?? .notAPairUri
+        }
     }
 
     static let scheme = "doorbell"
     static let action = "pair"
 
-    /// `nowS` is the wall clock to judge the expiry against, so the caller decides whose clock
-    /// counts and a test does not depend on the machine's.
+    /// The reading the shell acts on: Core's when it can give one, the local one otherwise.
+    static func parse(_ text: String, core: CoreBridge,
+                      nowS: Int64 = Int64(Date().timeIntervalSince1970))
+        -> Result<PairUri, Failure> {
+        guard let answer = core.parsePairUri(text) else { return parse(text, nowS: nowS) }
+        guard ConfigUtil.evBool(answer, "ok") else {
+            return .failure(Failure(coreError: ConfigUtil.evStr(answer, "err")))
+        }
+        let host = ConfigUtil.evStr(answer, "host")
+        let pin = ConfigUtil.evStr(answer, "pin")
+        guard !host.isEmpty else { return .failure(.missingHost) }
+        guard !pin.isEmpty else { return .failure(.missingPin) }
+        return .success(PairUri(host: host, pin: pin,
+                                expiresAtS: Int64(ConfigUtil.int(answer, "exp", 0)),
+                                cluster: ConfigUtil.evStr(answer, "cluster")))
+    }
+
+    /// The shell's own reading, used only when Core cannot answer. `nowS` is the wall clock to
+    /// judge the expiry against, so the caller decides whose clock counts and a test does not
+    /// depend on the machine's.
     static func parse(_ text: String, nowS: Int64) -> Result<PairUri, Failure> {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let components = URLComponents(string: trimmed),

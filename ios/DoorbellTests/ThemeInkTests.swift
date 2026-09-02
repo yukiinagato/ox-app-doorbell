@@ -225,20 +225,20 @@ final class ThemeInkTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(Double(DoorbellTheme.outlineBlurRadius), 2)
         XCTAssertGreaterThanOrEqual(Double(DoorbellTheme.outlineOpacity), 0.8)
 
-        let label = UILabel()
+        let label = HaloLabel()
         let midGround = UIColor(white: 0.5, alpha: 1)
         DoorbellTheme.applyInk(DoorbellPalette.light.ink,
                                over: .sampled(.uniform(midGround)), to: label)
-        XCTAssertEqual(label.layer.shadowOpacity, DoorbellTheme.outlineOpacity)
-        XCTAssertEqual(label.layer.shadowRadius, DoorbellTheme.outlineBlurRadius)
-        XCTAssertEqual(label.layer.shadowOffset, .zero)
+        var alpha: CGFloat = 0
+        XCTAssertTrue(label.halo?.getWhite(nil, alpha: &alpha) ?? false)
+        XCTAssertEqual(Double(alpha), Double(DoorbellTheme.outlineOpacity), accuracy: 0.001)
         XCTAssertNil(label.shadowColor, "the flat label shadow is not used any more")
 
         // An ink that reads on its own carries no halo at all.
         DoorbellTheme.applyInk(DoorbellPalette.dark.ink,
                                over: .sampled(.uniform(UIColor(white: 0.02, alpha: 1))),
                                to: label)
-        XCTAssertEqual(label.layer.shadowOpacity, 0)
+        XCTAssertNil(label.halo)
     }
 
     // MARK: - Sampling the picture the shell actually draws
@@ -448,4 +448,81 @@ final class ThemeInkTests: XCTestCase {
         UIRectFill(CGRect(x: 0, y: size.height / 2, width: size.width, height: size.height / 2))
         return UIGraphicsGetImageFromCurrentImageContext() ?? UIImage()
     }
+
+    /// Renders a view exactly the way the screenshot hook renders the key window, and returns the
+    /// grey level of every pixel. `drawHierarchy` is used rather than `layer.render(in:)` because
+    /// only the former draws layer shadows.
+    static func grey(of view: UIView) -> [CGFloat]? {
+        let bounds = view.bounds
+        guard bounds.width >= 1, bounds.height >= 1 else { return nil }
+        UIGraphicsBeginImageContextWithOptions(bounds.size, true, 1)
+        defer { UIGraphicsEndImageContext() }
+        guard view.drawHierarchy(in: bounds, afterScreenUpdates: true),
+              let image = UIGraphicsGetImageFromCurrentImageContext()?.cgImage else { return nil }
+        let width = image.width, height = image.height
+        var raw = [UInt8](repeating: 0, count: width * height * 4)
+        guard let context = CGContext(data: &raw, width: width, height: height,
+                                      bitsPerComponent: 8, bytesPerRow: width * 4,
+                                      space: CGColorSpaceCreateDeviceRGB(),
+                                      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+        else { return nil }
+        context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+        var levels: [CGFloat] = []
+        levels.reserveCapacity(width * height)
+        for index in stride(from: 0, to: raw.count, by: 4) {
+            let sum = Int(raw[index]) + Int(raw[index + 1]) + Int(raw[index + 2])
+            levels.append(CGFloat(sum) / 765)
+        }
+        return levels
+    }
+
+    // MARK: - The halo has to actually appear in pixels
+
+    /// Twice now the halo has been "set" and invisible on the panel. This renders a label the same
+    /// way the screenshot hook renders the window and looks for the light pixels, so a halo that
+    /// does not draw fails here instead of on the device.
+    func testTheHaloRendersAroundTheGlyphs() {
+        // A ground with a black patch in it: the dark ink cannot clear 4.5:1 against that, so the
+        // decision must ask for a white halo.
+        let sample = BackgroundSample(average: UIColor(white: 0.85, alpha: 1),
+                                      minLuminance: DoorbellTheme.luminance(.black),
+                                      maxLuminance: DoorbellTheme.luminance(.white))
+
+        let withHalo = ThemeInkTests.litPixels { label in
+            DoorbellTheme.applyInk(DoorbellPalette.light.ink, over: .sampled(sample), to: label)
+            XCTAssertNotNil(label.halo, "the decision must ask for a halo")
+        }
+        // The same glyphs with the halo suppressed: the baseline is whatever anti-aliasing lights
+        // on its own, so the test calibrates itself instead of trusting a number I picked.
+        let without = ThemeInkTests.litPixels { label in
+            DoorbellTheme.applyInk(DoorbellPalette.light.ink, over: .sampled(sample), to: label)
+            label.halo = nil
+        }
+
+        XCTAssertLessThan(without, 60, "dark text on grey lights almost nothing by itself")
+        XCTAssertGreaterThan(withHalo, without * 4,
+                             "the halo has to dominate the anti-aliasing, not hide in it")
+    }
+
+    /// Draws one glyph through `configure` over a mid-grey ground and counts the pixels clearly
+    /// lighter than that ground — which, with dark ink, can only be halo.
+    private static func litPixels(_ configure: (HaloLabel) -> Void) -> Int {
+        let label = HaloLabel()
+        label.text = "8"
+        label.font = .systemFont(ofSize: 64, weight: .bold)
+        label.textAlignment = .center
+        label.frame = CGRect(x: 0, y: 0, width: 120, height: 100)
+        configure(label)
+
+        let host = UIView(frame: label.bounds)
+        host.backgroundColor = UIColor(white: 0.5, alpha: 1)
+        host.addSubview(label)
+        let window = UIWindow(frame: host.bounds)
+        window.addSubview(host)
+        window.makeKeyAndVisible()
+        window.layoutIfNeeded()
+        return (ThemeInkTests.grey(of: host) ?? []).filter { $0 > 0.72 }.count
+    }
+
+
 }

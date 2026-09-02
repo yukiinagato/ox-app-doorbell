@@ -36,10 +36,10 @@ final class IncomingViewController: UIViewController {
     private let liveView = UIImageView()
     private let h264View = UIView()
     private let noVideoLabel = UILabel()
-    private let titleLabel = UILabel()
+    private let titleLabel = HaloLabel()
     private let purposeBadge = PaddedLabel()
     private let langBadge = PaddedLabel()
-    private let statusLabel = UILabel()
+    private let statusLabel = HaloLabel()
     private let hintLabel = UILabel()
     private let replyStack = UIStackView()
     private let answerButton = UIButton(type: .system)
@@ -51,7 +51,7 @@ final class IncomingViewController: UIViewController {
     private lazy var noticeChip = NoticeChipView(texts: texts)
     private lazy var adminQr = AdminQrView(core: core, boot: boot, texts: texts, compact: true)
     private let purposeSlot = UIView()
-    private let debugLine = UILabel()
+    private let debugLine = HaloLabel()
     private var debugTimer: Timer?
     private var micMuted = false
     private var debugCollapsed = false

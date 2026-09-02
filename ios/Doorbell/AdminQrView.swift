@@ -17,8 +17,8 @@ final class AdminQrView: UIView {
     private let texts: Texts
     private let compact: Bool
     private let imageView = UIImageView()
-    private let urlLabel = UILabel()
-    private let captionLabel = UILabel()
+    private let urlLabel = HaloLabel()
+    private let captionLabel = HaloLabel()
     private var renderedUrl = ""
 
     init(core: CoreBridge, boot: BootConfig, texts: Texts, compact: Bool) {

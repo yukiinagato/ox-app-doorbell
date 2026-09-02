@@ -9,12 +9,12 @@ import UIKit
 final class VisitorScreenView: UIView {
 
     private let texts: Texts
-    private let clockLabel = UILabel()
-    private let dateLabel = UILabel()
-    private let noticeLabel = UILabel()
+    private let clockLabel = HaloLabel()
+    private let dateLabel = HaloLabel()
+    private let noticeLabel = HaloLabel()
     private let noticeExpand = UIButton(type: .system)
-    private let hintLabel = UILabel()
-    private let footerLabel = UILabel()
+    private let hintLabel = HaloLabel()
+    private let footerLabel = HaloLabel()
 
     private let callButton: UIButton
     private let langBar: UIView
@@ -87,7 +87,10 @@ final class VisitorScreenView: UIView {
 
         actionColumn.axis = .vertical
         actionColumn.spacing = 18
-        actionColumn.alignment = .center
+        // Children take the column's width: that is what bounds the purpose grid to the column it
+        // sits in, and what gives the three language chips one row of equal widths in landscape
+        // as well as portrait. Only the call button is centred at its own size.
+        actionColumn.alignment = .fill
 
         // The bar keeps its own height; the spacer above it is what absorbs the slack.
         sosControl.setContentHuggingPriority(.required, for: .vertical)
@@ -147,7 +150,7 @@ final class VisitorScreenView: UIView {
         if landscape {
             // With a notice on screen, the language row belongs directly above the call button.
             actionColumn.addArrangedSubview(langBar)
-            actionColumn.addArrangedSubview(callButton)
+            actionColumn.addArrangedSubview(centred(callButton))
             actionColumn.addArrangedSubview(hintLabel)
             actionColumn.addArrangedSubview(purposeSection)
             let columns = UIStackView(arrangedSubviews: [
@@ -165,13 +168,25 @@ final class VisitorScreenView: UIView {
         root.addArrangedSubview(clockColumn)
         root.addArrangedSubview(noticeColumn)
         root.addArrangedSubview(langBar)
-        actionColumn.addArrangedSubview(callButton)
+        actionColumn.addArrangedSubview(centred(callButton))
         actionColumn.addArrangedSubview(hintLabel)
         actionColumn.addArrangedSubview(purposeSection)
         root.addArrangedSubview(actionColumn)
         root.addArrangedSubview(UIView())
         root.addArrangedSubview(footerLabel)
         root.addArrangedSubview(sosControl)
+    }
+
+    /// Wraps a control that must keep its own size inside a full-width row.
+    private func centred(_ view: UIView) -> UIView {
+        let row = UIStackView(arrangedSubviews: [UIView(), view, UIView()])
+        row.axis = .horizontal
+        row.alignment = .center
+        row.distribution = .fill
+        if let first = row.arrangedSubviews.first, let last = row.arrangedSubviews.last {
+            first.widthAnchor.constraint(equalTo: last.widthAnchor).isActive = true
+        }
+        return row
     }
 
     private func stackVertically(_ views: [UIView]) -> UIStackView {

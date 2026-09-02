@@ -15,6 +15,7 @@ final class VisitorScreenLayoutTests: XCTestCase {
         let langBar: UIStackView
         let sos: SosSlideControl
         let purposeHint: UILabel
+        let purposeButtons: [UIButton]
     }
 
     /// Builds the screen with the controls `MainViewController` would hand it, laid out at `size`
@@ -35,8 +36,38 @@ final class VisitorScreenLayoutTests: XCTestCase {
         let purposeHint = UILabel()
         purposeHint.text = texts.t("idle.choose_purpose")
         purposeHint.isHidden = true
-        let purposeSection = UIStackView(arrangedSubviews: [purposeHint])
+
+        // Six purposes in two rows of three, the shape the door station actually shows.
+        let grid = UIStackView()
+        grid.axis = .vertical
+        grid.spacing = 12
+        grid.alignment = .fill
+        grid.translatesAutoresizingMaskIntoConstraints = false
+        var buttons: [UIButton] = []
+        for index in 0..<6 {
+            if index % 3 == 0 {
+                let row = UIStackView()
+                row.axis = .horizontal
+                row.spacing = 12
+                row.distribution = .fillEqually
+                grid.addArrangedSubview(row)
+            }
+            let button = UIButton(type: .system)
+            button.setTitle("purpose \(index)", for: .normal)
+            let minimum = button.widthAnchor.constraint(greaterThanOrEqualToConstant: 96)
+            minimum.priority = UILayoutPriority(999)
+            minimum.isActive = true
+            button.heightAnchor.constraint(equalToConstant: 92).isActive = true
+            (grid.arrangedSubviews.last as? UIStackView)?.addArrangedSubview(button)
+            buttons.append(button)
+        }
+        let gridWidth = grid.widthAnchor.constraint(equalToConstant: 552)
+        gridWidth.priority = UILayoutPriority(750)
+        gridWidth.isActive = true
+
+        let purposeSection = UIStackView(arrangedSubviews: [purposeHint, grid])
         purposeSection.axis = .vertical
+        purposeSection.alignment = .center
 
         let sos = SosSlideControl(texts: texts)
         let view = VisitorScreenView(texts: texts, callButton: UIButton(type: .system),
@@ -52,7 +83,8 @@ final class VisitorScreenLayoutTests: XCTestCase {
         ])
         view.applyLayout(for: size)
         host.layoutIfNeeded()
-        return Screen(view: view, langBar: langBar, sos: sos, purposeHint: purposeHint)
+        return Screen(view: view, langBar: langBar, sos: sos, purposeHint: purposeHint,
+                      purposeButtons: buttons)
     }
 
     // MARK: - The SOS bar is a bar
@@ -100,6 +132,36 @@ final class VisitorScreenLayoutTests: XCTestCase {
             for width in widths {
                 XCTAssertEqual(width, first, accuracy: 1,
                                "\(name): every chip is the same width")
+            }
+        }
+    }
+
+    // MARK: - The purpose grid fits its column
+
+    /// The third column was cut off at the right edge in landscape: the buttons had a fixed
+    /// width and three of them were wider than the column they sat in.
+    func testEveryPurposeButtonLiesInsideTheScreen() {
+        for (name, size) in [("portrait", portrait), ("landscape", landscape)] {
+            let screen = makeScreen(size)
+            let bounds = CGRect(origin: .zero, size: size)
+            for (index, button) in screen.purposeButtons.enumerated() {
+                let frame = button.convert(button.bounds, to: screen.view)
+                XCTAssertGreaterThanOrEqual(frame.minX, -0.5, "\(name): button \(index) left")
+                XCTAssertLessThanOrEqual(frame.maxX, bounds.maxX + 0.5,
+                                         "\(name): button \(index) is cut off at the right")
+                XCTAssertGreaterThan(frame.width, 0, "\(name): button \(index) has a width")
+            }
+        }
+    }
+
+    /// Every column is the same width, so the grid reads as a grid.
+    func testThePurposeColumnsAreEqualWidth() {
+        for (name, size) in [("portrait", portrait), ("landscape", landscape)] {
+            let screen = makeScreen(size)
+            let widths = screen.purposeButtons.map { $0.bounds.width }
+            guard let first = widths.first else { return XCTFail("\(name): no buttons") }
+            for width in widths {
+                XCTAssertEqual(width, first, accuracy: 1, "\(name): equal columns")
             }
         }
     }

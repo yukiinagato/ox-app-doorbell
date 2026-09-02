@@ -98,9 +98,10 @@ struct IncomingReturnCountdown: Equatable {
         isStopped = total == 0
     }
 
-    /// `call.indoor.return_s` as Core publishes it in the runtime status. A Core that predates the
-    /// field, or a value that is not a number, falls back to the documented default rather than to
-    /// no countdown at all.
+    /// `status.call.return_s`, as Core publishes it. `call.indoor.return_s` is accepted first as
+    /// the more specific spelling should Core ever nest it. A Core that predates the field, or a
+    /// value that is not a number, falls back to the documented default rather than to no
+    /// countdown at all.
     ///
     /// The dotted lookup is spelled out here rather than borrowed from `ConfigUtil`: this file is
     /// pure Foundation and is compiled into all three application targets, and a helper that is

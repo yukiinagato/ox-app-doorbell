@@ -84,6 +84,9 @@ final class MainViewController: UIViewController {
     /// view, which has no hint of its own, still shows it.
     private let purposeHint = UILabel()
     private let purposeGrid = UIStackView()
+    /// The grid never grows past this, however wide the panel is; below it the columns share
+    /// whatever width the layout actually offers.
+    private static let purposeGridMaxWidth: CGFloat = 552
     private let langBar = UIStackView()
     private lazy var sosSlider = SosSlideControl(texts: texts)
     private var dashboard: DashboardView?
@@ -340,10 +343,18 @@ final class MainViewController: UIViewController {
         purposeHint.textAlignment = .center
         purposeGrid.axis = .vertical
         purposeGrid.spacing = 12
-        purposeGrid.alignment = .center
+        // Rows take the grid's width and divide it; the grid takes the width it is given, up to a
+        // comfortable maximum. Fixed-width buttons overflowed the landscape column and the third
+        // one was cut off at the screen edge.
+        purposeGrid.alignment = .fill
         purposeSection.axis = .vertical
         purposeSection.spacing = 12
         purposeSection.alignment = .center
+        purposeGrid.translatesAutoresizingMaskIntoConstraints = false
+        let gridWidth = purposeGrid.widthAnchor.constraint(
+            equalToConstant: MainViewController.purposeGridMaxWidth)
+        gridWidth.priority = UILayoutPriority(750)
+        gridWidth.isActive = true
         purposeSection.addArrangedSubview(purposeHint)
         purposeSection.addArrangedSubview(purposeGrid)
 
@@ -849,6 +860,7 @@ final class MainViewController: UIViewController {
                 row = UIStackView()
                 row!.axis = .horizontal
                 row!.spacing = 12
+                row!.distribution = .fillEqually
                 purposeGrid.addArrangedSubview(row!)
             }
             let entry = purposes[id] as? [String: Any]
@@ -862,11 +874,20 @@ final class MainViewController: UIViewController {
             b.setTitleColor(idleSkin.cardInk("tile_label"), for: .normal)
             b.backgroundColor = idleSkin.surface
             b.layer.cornerRadius = 12
-            b.widthAnchor.constraint(equalToConstant: 176).isActive = true
+            // The row divides its width equally, so a button only needs a floor it may not
+            // shrink below and a fixed height.
+            let minimum = b.widthAnchor.constraint(greaterThanOrEqualToConstant: 96)
+            minimum.priority = UILayoutPriority(999)
+            minimum.isActive = true
             b.heightAnchor.constraint(equalToConstant: 92).isActive = true
             b.accessibilityIdentifier = "purpose_\(id)"
             b.addTarget(self, action: #selector(onPurposeClick(_:)), for: .touchUpInside)
             row!.addArrangedSubview(b)
+        }
+        // A last row with one or two purposes in it keeps the column width of a full row rather
+        // than stretching its buttons across the grid.
+        if let last = row, last.arrangedSubviews.count % 3 != 0 {
+            for _ in last.arrangedSubviews.count..<3 { last.addArrangedSubview(UIView()) }
         }
         purposeSection.isHidden = false
     }
