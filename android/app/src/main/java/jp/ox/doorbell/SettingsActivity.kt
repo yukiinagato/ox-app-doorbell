@@ -98,8 +98,12 @@ class SettingsActivity : Activity(), DoorbellCore.Listener {
         nodeId = status?.optJSONObject("node")?.optString("id").orEmpty()
     }
 
-    private fun resolvePalette(): Palette =
-        Appearance.resolve(config, nodeId, systemDarkMode(this), clock.now().minuteOfDay())
+    private fun resolvePalette(): Palette {
+        val appearance = CoreDisplays.parse(status?.optJSONObject("display")).appearance
+        if (appearance != null)
+            return Appearance.palette(CoreDisplays.isDark(appearance, systemDarkMode(this)))
+        return Appearance.resolve(config, nodeId, systemDarkMode(this), clock.now().minuteOfDay())
+    }
 
     private fun buildShell(): View {
         val root = LinearLayout(this).apply {
@@ -214,19 +218,23 @@ class SettingsActivity : Activity(), DoorbellCore.Listener {
             currentString("devices.$nodeId.local.recovery.helper_mode", "auto"),
         ))
 
-        // Appearance: light and dark on every UI, with the schedule shown in place.
+        // Appearance: light and dark on every UI, with the schedule core resolves shown in place.
+        val published = CoreDisplays.parse(status?.optJSONObject("display")).appearance
         val schedule = app.core.dig(config, "display.appearance_schedule") as? JSONObject
-        val darkFrom = schedule?.optString("dark_from").orEmpty().ifEmpty { "19:00" }
-        val lightFrom = schedule?.optString("light_from").orEmpty().ifEmpty { "06:30" }
+        val darkFrom = published?.darkFrom
+            ?: schedule?.optString("dark_from").orEmpty().ifEmpty { "19:00" }
+        val lightFrom = published?.lightFrom
+            ?: schedule?.optString("light_from").orEmpty().ifEmpty { "06:30" }
         card.row(choiceRow(
             texts.t("settings.appearance", R.string.settings_appearance),
             "devices.$nodeId.local.display.appearance",
             listOf("auto_system", "auto_schedule", "light", "dark"),
             { appearanceLabel(it) },
-            currentString(
-                "devices.$nodeId.local.display.appearance",
-                currentString("display.appearance", "auto_system"),
-            ),
+            published?.configured
+                ?: currentString(
+                    "devices.$nodeId.local.display.appearance",
+                    currentString("display.appearance", "auto_system"),
+                ),
             note = texts.t("settings.appearance_range", R.string.settings_appearance_range,
                            darkFrom, lightFrom),
         ))
@@ -333,7 +341,7 @@ class SettingsActivity : Activity(), DoorbellCore.Listener {
         }
         val nowMs = clock.now().wallMs
         for (door in doors) {
-            val notice = NoticeModel.effective(config, door, nowMs)
+            val notice = NoticeModel.resolve(status, config, door, nowMs)
             val value = notice?.text ?: texts.t("notice.none", R.string.notice_none)
             card.row(ShellUi.row(this, palette, doorLabel(door), value) {
                 NoticeDialog.show(this, app, texts, palette, door, doors, ::doorLabel) {
@@ -341,10 +349,15 @@ class SettingsActivity : Activity(), DoorbellCore.Listener {
                     render()
                 }
             })
+            // Core reports the effective visibility and whether an action exists at all; the
+            // toggle writes the administrator's explicit answer.
+            val unlock = DoorUnlocks.read(status, door)
             card.row(toggleRow(
                 texts.t("settings.unlock_button", R.string.settings_unlock_button),
                 "doors.$door.unlock.show_button",
-                unlockButtonVisible(config, door),
+                unlock.showButton,
+                if (unlock.configured) ""
+                else texts.t("ring.unlock_unconfigured", R.string.ring_unlock_unconfigured),
             ))
         }
         card.row(webOnlyRow(
@@ -949,24 +962,6 @@ class SettingsActivity : Activity(), DoorbellCore.Listener {
                     pendingSession = null
                 }
             }
-        }
-
-        /** doors.<id>.unlock.show_button, defaulting to true only when an action is configured. */
-        fun unlockButtonVisible(config: JSONObject?, door: String): Boolean {
-            val entry = config?.optJSONObject("doors")?.optJSONObject(door)
-            val unlock = entry?.optJSONObject("unlock")
-            if (unlock != null && unlock.has("show_button"))
-                return unlock.optBoolean("show_button", false)
-            return unlockConfigured(config, door)
-        }
-
-        /** Whether the door has any unlock action wired up at all. */
-        fun unlockConfigured(config: JSONObject?, door: String): Boolean {
-            val unlock = config?.optJSONObject("doors")?.optJSONObject(door)
-                ?.optJSONObject("unlock") ?: return false
-            for (key in listOf("action", "relay", "dtmf", "url", "gpio"))
-                if (unlock.optString(key).isNotEmpty()) return true
-            return false
         }
     }
 }

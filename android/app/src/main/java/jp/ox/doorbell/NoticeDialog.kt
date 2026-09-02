@@ -39,11 +39,12 @@ internal object NoticeDialog {
         onChanged: () -> Unit,
     ) {
         val config = app.core.config()
+        val coreStatus = app.core.status()
         val nowMs = app.core.localTime()?.optLong("wall_ms", 0L)
             ?.takeIf { it > 0L } ?: System.currentTimeMillis()
         var target = if (preselectDoor.isEmpty()) NoticeTarget.GLOBAL else NoticeTarget.DOOR
         var expiry = ExpiryChoice.UNTIL_CLEARED
-        val existing = NoticeModel.effective(config, preselectDoor, nowMs)
+        val existing = NoticeModel.resolve(coreStatus, config, preselectDoor, nowMs)
 
         val pad = ShellUi.dp(activity, 16)
         val root = LinearLayout(activity).apply {
@@ -274,6 +275,6 @@ internal object NoticeDialog {
     }
 
     /** Read the announcement rendered on a screen right now, honouring the door override. */
-    fun current(config: JSONObject?, door: String, nowMs: Long): Notice? =
-        NoticeModel.effective(config, door, nowMs)
+    fun current(status: JSONObject?, config: JSONObject?, door: String, nowMs: Long): Notice? =
+        NoticeModel.resolve(status, config, door, nowMs)
 }

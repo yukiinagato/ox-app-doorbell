@@ -120,13 +120,24 @@ class DoorbellCore(context: Context) {
     fun audio(deviceId: String = ""): JSONObject? =
         parse(if (handle != 0L) nativeAudioJson(handle, deviceId) else null)
 
-    /** Publish a replicated announcement for one door. expiresMs of zero means until cleared. */
+    /**
+     * Publish a replicated announcement. expiresMs of zero means until cleared, and a door of
+     * [GLOBAL_DOOR] writes the cluster-wide announcement at notice.global, which a door-specific
+     * value always overrides.
+     */
     fun setDoorNotice(door: String, text: String, expiresMs: Long): Boolean =
         handle != 0L && door.isNotEmpty() &&
             nativeSetDoorNotice(handle, door, text, expiresMs) == 0
 
     fun clearDoorNotice(door: String): Boolean =
         handle != 0L && door.isNotEmpty() && nativeClearDoorNotice(handle, door) == 0
+
+    /**
+     * Trigger the configured unlock action for one door. Returns core's result: zero when the
+     * action was queued and [DoorUnlocks.NOT_CONFIGURED] when nothing is configured anywhere.
+     */
+    fun openDoor(door: String): Int =
+        if (handle != 0L && door.isNotEmpty()) nativeOpenDoor(handle, door) else -1
 
     /** Call history newest first. sinceMs is an inclusive lower bound; zero is the whole log. */
     fun callLog(sinceMs: Long = 0L, limit: Int = 50): JSONObject? =
@@ -230,15 +241,11 @@ class DoorbellCore(context: Context) {
 
     /**
      * Mint or refresh the Pairing PIN **without** opening the bulk-add window. This is what the
-     * PIN card uses; [startPairing] is reserved for the explicit 「まとめて追加」 button and its
-     * warning. Returns null when the running core predates the export, and callers then fall back
-     * to [startPairing] followed by closing the window again.
+     * founder's PIN card uses; [startPairing] belongs only to the explicit 「まとめて追加」 button
+     * and its warning. seconds is clamped by core to 30..600; zero keeps core's default.
      */
     fun mintJoinToken(seconds: Int): JSONObject? =
         parse(if (handle != 0L) nativeMintJoinTokenJson(handle, seconds) else null)
-
-    /** Whether the running core exports the PIN-only minting entry point. */
-    fun mintJoinTokenSupported(): Boolean = nativeMintJoinTokenSupported()
 
     /** Approve and invite one pending node. */
     fun inviteDevice(nodeId: String) {
@@ -392,6 +399,7 @@ class DoorbellCore(context: Context) {
         expiresMs: Long,
     ): Int
     private external fun nativeClearDoorNotice(handle: Long, door: String): Int
+    private external fun nativeOpenDoor(handle: Long, door: String): Int
     private external fun nativeCallLogJson(handle: Long, sinceMs: Long, limit: Int): String?
     private external fun nativeCallLogMarkSeen(handle: Long, upToHlc: String): Int
     private external fun nativeConfigJson(handle: Long): String?
@@ -418,7 +426,6 @@ class DoorbellCore(context: Context) {
     private external fun nativePairingMode(handle: Long, seconds: Int)
     private external fun nativeStartPairingJson(handle: Long, seconds: Int): String?
     private external fun nativeMintJoinTokenJson(handle: Long, seconds: Int): String?
-    private external fun nativeMintJoinTokenSupported(): Boolean
     private external fun nativeInviteDevice(handle: Long, nodeId: String)
     private external fun nativeInviteDirect(handle: Long, addr: String, nodeId: String, pk: String)
     private external fun nativeDenyDevice(handle: Long, nodeId: String)
@@ -430,6 +437,9 @@ class DoorbellCore(context: Context) {
     private external fun nativeFoundCluster(handle: Long): Boolean
 
     companion object {
+        /** The door identifier that addresses the cluster-wide announcement (notice.global). */
+        const val GLOBAL_DOOR = "*"
+
         init {
             System.loadLibrary("doorbell")
         }

@@ -2,7 +2,6 @@
 // its own threads; this layer attaches them to the JVM and Kotlin marshals UI work to main.
 // A pthread TLS destructor detaches threads at exit to avoid per-callback attach churn.
 #include <android/log.h>
-#include <dlfcn.h>
 #include <jni.h>
 #include <pthread.h>
 
@@ -850,25 +849,25 @@ Java_jp_ox_doorbell_DoorbellCore_nativeCallLogMarkSeen(JNIEnv* env, jobject, jlo
 // ---- Round 6: Pairing PIN minting without opening the bulk-add window ----
 //
 // db_core_mint_join_token_json mints or refreshes the Pairing PIN and, unlike
-// db_core_start_pairing_json, leaves pairing mode closed. It is resolved at run time so this shell
-// still links and runs against a core built before the export existed; the Kotlin side falls back
-// to the old call and closes the window again when the symbol is missing.
+// db_core_start_pairing_json, leaves pairing mode closed. Core is compiled into this same shared
+// object, so the export is always present and is called directly: a run-time lookup that failed
+// would silently push the PIN card onto the bulk-add path, which is precisely what §5.4 forbids.
 extern "C" JNIEXPORT jstring JNICALL
 Java_jp_ox_doorbell_DoorbellCore_nativeMintJoinTokenJson(JNIEnv* env, jobject, jlong h,
                                                          jint seconds) {
   Bridge* b = fromHandle(h);
   if (!b || !b->core) return nullptr;
-  using MintFn = char* (*)(db_core*, int);
-  static MintFn mint = reinterpret_cast<MintFn>(
-      dlsym(RTLD_DEFAULT, "db_core_mint_join_token_json"));
-  if (!mint) return nullptr;
-  char* s = mint(b->core, static_cast<int>(seconds));
+  char* s = db_core_mint_join_token_json(b->core, static_cast<int>(seconds));
   jstring out = toJString(env, b, s);
   db_free(s);
   return out;
 }
 
-extern "C" JNIEXPORT jboolean JNICALL
-Java_jp_ox_doorbell_DoorbellCore_nativeMintJoinTokenSupported(JNIEnv*, jobject) {
-  return dlsym(RTLD_DEFAULT, "db_core_mint_join_token_json") != nullptr ? JNI_TRUE : JNI_FALSE;
+// Trigger the configured unlock action for one door. Zero means queued; -3 means nothing is
+// configured anywhere, which the shell says out loud instead of reporting a silent success.
+extern "C" JNIEXPORT jint JNICALL
+Java_jp_ox_doorbell_DoorbellCore_nativeOpenDoor(JNIEnv* env, jobject, jlong h, jstring door) {
+  Bridge* b = fromHandle(h);
+  if (!b || !b->core) return -1;
+  return db_core_open_door(b->core, toUtf8(env, door).c_str());
 }

@@ -385,9 +385,7 @@ class AddDeviceActivity : Activity(), DoorbellCore.Listener {
         codeCardOpen = true
         codeCard.visibility = View.VISIBLE
         Thread {
-            val result = JoinTokenMinting.mint(
-                app.core, PairingModel.PAIRING_WINDOW_S, bulkOwnedByUser(),
-            )
+            val result = JoinTokenMinting.mint(app.core, PairingModel.PAIRING_WINDOW_S)
             ui.post {
                 mintInFlight = false
                 if (result == null || !result.optBoolean("ok")) {

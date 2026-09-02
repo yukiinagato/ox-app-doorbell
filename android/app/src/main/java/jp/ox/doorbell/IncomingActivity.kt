@@ -42,6 +42,7 @@ class IncomingActivity : Activity() {
     private lateinit var sosSlider: SosSlideView
     private var palette: Palette = Palette.DARK
     private var cachedConfig: JSONObject? = null
+    private var cachedStatus: JSONObject? = null
 
     /** モニター ON/OFF: whether the door's audio is being played on this panel. */
     private var monitorOn = true
@@ -101,13 +102,17 @@ class IncomingActivity : Activity() {
         val cfg = app.core.config()
         val st = app.core.status()
         cachedConfig = cfg
+        cachedStatus = st
         texts = Texts(this)
         texts.setConfig(cfg)
         texts.setLang(app.boot.uiLang)
         clusterClock = ClusterClock(app.core)
         debugVisible = getSharedPreferences(PREFS, MODE_PRIVATE)
             .getBoolean(PREF_DEBUG_VISIBLE, true)
-        palette = Appearance.resolve(
+        val appearance = CoreDisplays.parse(st?.optJSONObject("display")).appearance
+        palette = if (appearance != null)
+            Appearance.palette(CoreDisplays.isDark(appearance, systemDarkMode(this)))
+        else Appearance.resolve(
             cfg,
             st?.optJSONObject("node")?.optString("id").orEmpty(),
             systemDarkMode(this),
@@ -230,6 +235,7 @@ class IncomingActivity : Activity() {
         val st = app.core.status()
         texts.setConfig(cfg)
         cachedConfig = cfg
+        cachedStatus = st
         findViewById<TextView>(R.id.door_label).text = doorLabel()
         findViewById<TextView>(R.id.status_text).text =
             texts.t("reply.choose", R.string.reply_choose)
@@ -684,9 +690,11 @@ class IncomingActivity : Activity() {
         reply.text = texts.t("ring.quick_reply", R.string.ring_quick_reply)
         val unlock = findViewById<Button>(R.id.unlock_button)
         unlock.text = texts.t("ring.unlock", R.string.ring_unlock)
-        unlock.visibility = if (SettingsActivity.unlockButtonVisible(cfg, door)) View.VISIBLE
+        // Core decides whether the control appears at all, so it is hidden before it is ever
+        // pressed when an administrator turned it off or nothing is configured.
+        unlock.visibility = if (DoorUnlocks.read(cachedStatus, door).showButton) View.VISIBLE
             else View.GONE
-        unlock.setOnClickListener { onUnlockClick(cfg) }
+        unlock.setOnClickListener { onUnlockClick() }
         updateControlLabels()
     }
 
@@ -736,26 +744,35 @@ class IncomingActivity : Activity() {
     }
 
     /**
-     * 開錠 stays on this screen. When the administrator shows the button but no unlock action is
-     * configured, pressing it says so rather than silently doing nothing.
+     * 開錠 stays on this screen and triggers core's configured feature-code action. When an
+     * administrator shows the button but nothing is configured, core answers -3 and that is said
+     * out loud rather than reported as a silent success.
      */
-    private fun onUnlockClick(cfg: JSONObject?) {
-        if (!SettingsActivity.unlockConfigured(cfg, door)) {
-            toast(texts.t("ring.unlock_unconfigured", R.string.ring_unlock_unconfigured))
-            return
-        }
-        val digits = (app.core.dig(cfg, "doors.$door.unlock.dtmf") as? String).orEmpty()
-        val sent = if (digits.isNotEmpty()) app.core.sipSendDtmf(digits) else false
-        toast(
-            if (sent) texts.t("ring.unlock_sent", R.string.ring_unlock_sent)
-            else texts.t("ring.unlock_unconfigured", R.string.ring_unlock_unconfigured),
-        )
+    private fun onUnlockClick() {
+        Thread({
+            val result = app.core.openDoor(door)
+            ui.post {
+                if (isFinishing) return@post
+                toast(
+                    when {
+                        DoorUnlocks.queued(result) ->
+                            texts.t("ring.unlock_sent", R.string.ring_unlock_sent)
+                        DoorUnlocks.unconfigured(result) -> texts.t(
+                            "ring.unlock_unconfigured", R.string.ring_unlock_unconfigured,
+                        )
+                        else -> texts.t("admin.save_failed", R.string.admin_save_failed)
+                    },
+                )
+            }
+        }, "doorbell-open-door").apply { isDaemon = true }.start()
     }
 
     /** A compact chip with a dot while an announcement is showing; tap opens the popover. */
     private fun buildNoticeChip() {
         val chip = findViewById<TextView>(R.id.notice_chip)
-        val notice = NoticeModel.effective(cachedConfig, door, clusterClock.now().wallMs)
+        val notice = NoticeModel.resolve(
+            cachedStatus, cachedConfig, door, clusterClock.now().wallMs,
+        )
         val active = notice != null
         chip.text = (if (active) "● " else "") +
             texts.t("notice.title", R.string.notice_title)
@@ -795,6 +812,7 @@ class IncomingActivity : Activity() {
 
     private fun refreshNotice() {
         cachedConfig = app.core.config()
+        cachedStatus = app.core.status()
         texts.setConfig(cachedConfig)
         buildNoticeChip()
     }

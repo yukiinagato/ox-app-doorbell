@@ -39,6 +39,7 @@ internal class DashboardView(
     private var config: JSONObject? = null
     private var status: JSONObject? = null
     private var nodeId = ""
+    private var coreDisplay: CoreDisplay = CoreDisplay(null, null)
 
     private val clockText = ShellUi.text(activity, "", 40f, palette.ink)
     private val dateText = ShellUi.text(activity, "", 14f, palette.muted)
@@ -104,8 +105,14 @@ internal class DashboardView(
         status = if (app.coreOk) app.core.status() else null
         nodeId = status?.optJSONObject("node")?.optString("id").orEmpty()
         texts.setConfig(config)
+        coreDisplay = CoreDisplays.parse(status?.optJSONObject("display"))
         val now = clock.now()
-        palette = Appearance.resolve(config, nodeId, systemDarkMode(activity), now.minuteOfDay())
+        // Core resolves the appearance in the cluster time zone; auto_system still consults the
+        // platform, and an older core falls back to the local computation.
+        val appearance = coreDisplay.appearance
+        palette = if (appearance != null)
+            Appearance.palette(CoreDisplays.isDark(appearance, systemDarkMode(activity)))
+        else Appearance.resolve(config, nodeId, systemDarkMode(activity), now.minuteOfDay())
         applyPalette()
         updateClock(now)
         updateHeader()
@@ -342,7 +349,7 @@ internal class DashboardView(
         }
         val nowMs = clock.now().wallMs
         for (door in doors) tileColumn.addView(
-            tileView(door, NoticeModel.effective(config, door, nowMs)),
+            tileView(door, NoticeModel.resolve(status, config, door, nowMs)),
             ShellUi.matchWrap().apply { topMargin = ShellUi.dp(activity, 8) },
         )
     }

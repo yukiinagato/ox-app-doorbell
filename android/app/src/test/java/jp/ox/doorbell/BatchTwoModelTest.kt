@@ -190,19 +190,70 @@ class BatchTwoModelTest {
         val config = noticeConfig("玄関だけ", null, 0L)
         assertEquals(
             setOf("d_front"),
-            NoticeModel.activeDoors(config, listOf("d_front", "d_back"), 1_000L),
+            NoticeModel.activeDoors(null, config, listOf("d_front", "d_back"), 1_000L),
         )
     }
 
     @Test
-    fun globalTargetsEveryConfiguredDoorAndTheDoorTargetOnlyItsOwn() {
+    fun coresResolvedAnnouncementIsRenderedRatherThanMergedInTheShell() {
+        // status.doors.<id>.notice already carries the value that door shows, with its scope.
+        val status = JSONObject(
+            """
+            {"doors":{"d_front":{"notice":{"text":"裏口へお回りください","scope":"door",
+                                           "expires_ms":0}},
+                      "d_back":{"notice":{"text":"ただいま留守にしています","scope":"global",
+                                          "expires_ms":0}},
+                      "d_side":{"notice":null}}}
+            """.trimIndent(),
+        )
+        val front = NoticeModel.fromStatus(status, "d_front", 1_000L)!!
+        assertEquals("裏口へお回りください", front.text)
+        assertTrue(front.doorSpecific)
+        val back = NoticeModel.fromStatus(status, "d_back", 1_000L)!!
+        assertEquals("ただいま留守にしています", back.text)
+        assertFalse(back.doorSpecific)
+        assertNull(NoticeModel.fromStatus(status, "d_side", 1_000L))
+        assertNull(NoticeModel.fromStatus(null, "d_front", 1_000L))
+    }
+
+    @Test
+    fun anExpiredResolvedAnnouncementIsTreatedAsAbsent() {
+        val status = JSONObject(
+            """{"doors":{"d_front":{"notice":{"text":"期限切れ","scope":"door",
+                                              "expires_ms":500}}}}""",
+        )
+        assertNull(NoticeModel.fromStatus(status, "d_front", 1_000L))
+        assertNotNull(NoticeModel.fromStatus(status, "d_front", 400L))
+    }
+
+    @Test
+    fun theShellFallsBackToConfigurationOnlyWhenCorePublishesNoResolvedValue() {
+        val config = noticeConfig("設定から", "全体", 0L)
+        assertEquals("設定から", NoticeModel.resolve(null, config, "d_front", 1_000L)!!.text)
+        val status = JSONObject(
+            """{"doors":{"d_front":{"notice":{"text":"coreから","scope":"door",
+                                              "expires_ms":0}}}}""",
+        )
+        assertEquals("coreから", NoticeModel.resolve(status, config, "d_front", 1_000L)!!.text)
+    }
+
+    @Test
+    fun globalIsOneWriteToTheClusterWideAnnouncementAndADoorWritesOnlyItsOwn() {
         val doors = listOf("d_front", "d_back")
-        assertEquals(doors, NoticeModel.writeTargets(NoticeTarget.GLOBAL, "d_front", doors))
+        // Core stores the cluster-wide value at notice.global, addressed by "*".
+        assertEquals(
+            listOf(DoorbellCore.GLOBAL_DOOR),
+            NoticeModel.writeTargets(NoticeTarget.GLOBAL, "d_front", doors),
+        )
         assertEquals(
             listOf("d_front"),
             NoticeModel.writeTargets(NoticeTarget.DOOR, "d_front", doors),
         )
         assertTrue(NoticeModel.writeTargets(NoticeTarget.DOOR, "", doors).isEmpty())
+        // "*" is never treated as a door of its own.
+        assertTrue(
+            NoticeModel.writeTargets(NoticeTarget.DOOR, DoorbellCore.GLOBAL_DOOR, doors).isEmpty(),
+        )
     }
 
     @Test
@@ -549,51 +600,87 @@ class BatchTwoModelTest {
     // ---------- Pairing PIN minting ----------
 
     @Test
-    fun thePinCardUsesTheDedicatedMintingCallWhenCoreOffersIt() {
-        assertEquals(MintPath.JOIN_TOKEN, JoinTokenMinting.pathFor(supported = true))
-        assertFalse(JoinTokenMinting.closesWindow(MintPath.JOIN_TOKEN, false))
+    fun thePinCardNeverOpensTheBulkAddWindow() {
+        // There is no fallback path that opens pairing mode: minting is its own core export, so
+        // showing a PIN can never start auto-inviting every discovered device.
+        assertTrue(JoinTokenMinting.withinCoreRange(0))
+        assertTrue(JoinTokenMinting.withinCoreRange(JoinTokenMinting.MIN_SECONDS))
+        assertTrue(JoinTokenMinting.withinCoreRange(JoinTokenMinting.MAX_SECONDS))
+        assertFalse(JoinTokenMinting.withinCoreRange(10))
+        assertFalse(JoinTokenMinting.withinCoreRange(3600))
     }
 
     @Test
-    fun anOlderCoreClosesTheBulkWindowItHadToOpenToMintAPin() {
-        assertEquals(
-            MintPath.START_PAIRING_THEN_CLOSE, JoinTokenMinting.pathFor(supported = false),
+    fun aMintResultIsOnlyASuccessWhenCoreActuallyReturnedAPin() {
+        val ok = JSONObject(
+            """{"ok":true,"host":"10.0.1.10:47172","pin":"123456","expires_s":600}""",
         )
-        assertTrue(
-            JoinTokenMinting.closesWindow(MintPath.START_PAIRING_THEN_CLOSE, false),
-        )
-        // The operator's own 「まとめて追加」 window is never closed behind their back.
-        assertFalse(
-            JoinTokenMinting.closesWindow(MintPath.START_PAIRING_THEN_CLOSE, true),
-        )
+        assertTrue(JoinTokenMinting.succeeded(ok))
+        assertEquals("", JoinTokenMinting.errorOf(ok))
+
+        val failed = JSONObject("""{"ok":false,"err":"host_unpaired"}""")
+        assertFalse(JoinTokenMinting.succeeded(failed))
+        assertEquals("host_unpaired", JoinTokenMinting.errorOf(failed))
+
+        // An "ok" without a PIN is not something the card may present as a code.
+        assertFalse(JoinTokenMinting.succeeded(JSONObject("""{"ok":true}""")))
+        assertFalse(JoinTokenMinting.succeeded(null))
+        assertEquals("", JoinTokenMinting.errorOf(null))
     }
 
-    // ---------- unlock button visibility ----------
+    // ---------- unlock button, as core reports it ----------
 
     @Test
-    fun theUnlockButtonShowsByDefaultOnlyWhenAnActionIsConfigured() {
-        val configured = JSONObject(
-            """{"doors":{"d_front":{"unlock":{"dtmf":"#9"}}}}""",
+    fun theUnlockControlFollowsCoresReportedVisibility() {
+        val status = JSONObject(
+            """
+            {"doors":{"d_front":{"unlock":{"configured":true,"command":"open_front",
+                                           "show_button":true,"source":"default"}},
+                      "d_back":{"unlock":{"configured":false,"command":"",
+                                          "show_button":false,"source":"default"}}}}
+            """.trimIndent(),
         )
-        val bare = JSONObject("""{"doors":{"d_front":{}}}""")
-        assertTrue(SettingsActivity.unlockButtonVisible(configured, "d_front"))
-        assertTrue(SettingsActivity.unlockConfigured(configured, "d_front"))
-        assertFalse(SettingsActivity.unlockButtonVisible(bare, "d_front"))
-        assertFalse(SettingsActivity.unlockConfigured(bare, "d_front"))
+        val front = DoorUnlocks.read(status, "d_front")
+        assertTrue(front.configured)
+        assertTrue(front.showButton)
+        assertEquals("default", front.source)
+        val back = DoorUnlocks.read(status, "d_back")
+        assertFalse(back.configured)
+        assertFalse(back.showButton)
     }
 
     @Test
-    fun theAdministratorCanForceTheUnlockButtonEitherWay() {
+    fun anAdministratorCanForceTheUnlockControlEitherWay() {
         val forcedOn = JSONObject(
-            """{"doors":{"d_front":{"unlock":{"show_button":true}}}}""",
+            """{"doors":{"d_front":{"unlock":{"configured":false,"show_button":true,
+                                              "source":"admin"}}}}""",
         )
         val forcedOff = JSONObject(
-            """{"doors":{"d_front":{"unlock":{"dtmf":"#9","show_button":false}}}}""",
+            """{"doors":{"d_front":{"unlock":{"configured":true,"show_button":false,
+                                              "source":"admin"}}}}""",
         )
-        // Forced on with nothing configured: the button appears and explains itself when pressed.
-        assertTrue(SettingsActivity.unlockButtonVisible(forcedOn, "d_front"))
-        assertFalse(SettingsActivity.unlockConfigured(forcedOn, "d_front"))
-        assertFalse(SettingsActivity.unlockButtonVisible(forcedOff, "d_front"))
+        // Shown with nothing configured: the button appears and explains itself when pressed.
+        assertTrue(DoorUnlocks.read(forcedOn, "d_front").showButton)
+        assertFalse(DoorUnlocks.read(forcedOn, "d_front").configured)
+        assertEquals("admin", DoorUnlocks.read(forcedOn, "d_front").source)
+        assertFalse(DoorUnlocks.read(forcedOff, "d_front").showButton)
+    }
+
+    @Test
+    fun withoutACoreAnswerTheUnlockControlStaysHidden() {
+        assertEquals(DoorUnlock.UNKNOWN, DoorUnlocks.read(null, "d_front"))
+        assertEquals(DoorUnlock.UNKNOWN, DoorUnlocks.read(JSONObject(), "d_front"))
+        assertEquals(DoorUnlock.UNKNOWN, DoorUnlocks.read(JSONObject(), ""))
+        assertFalse(DoorUnlock.UNKNOWN.showButton)
+    }
+
+    @Test
+    fun coresOpenDoorResultsAreDistinguished() {
+        assertTrue(DoorUnlocks.queued(0))
+        assertFalse(DoorUnlocks.queued(-3))
+        assertTrue(DoorUnlocks.unconfigured(-3))
+        assertFalse(DoorUnlocks.unconfigured(-2))
+        assertFalse(DoorUnlocks.unconfigured(0))
     }
 
     // ---------- administration link ----------

@@ -43,9 +43,29 @@ internal object NoticeModel {
     }
 
     /**
-     * The announcement a given door should render right now: its own value when one is active,
-     * otherwise the cluster-wide value. Expired values are treated as absent on every shell so a
-     * pruning tick that has not run yet never leaves stale text on a door station.
+     * The announcement core already resolved for one door.
+     *
+     * status.doors.<id>.notice carries the value that door actually shows plus a "scope" of
+     * "door" or "global", so the shell renders it rather than merging the two sources itself.
+     * Returns null when core published nothing, and the caller then falls back to [effective].
+     */
+    fun fromStatus(status: JSONObject?, door: String, nowMs: Long): Notice? {
+        if (door.isEmpty()) return null
+        val entry = status?.optJSONObject("doors")?.optJSONObject(door) ?: return null
+        if (!entry.has("notice") || entry.isNull("notice")) return null
+        val notice = parse(
+            entry.optJSONObject("notice"),
+            doorSpecific = entry.optJSONObject("notice")?.optString("scope") != "global",
+        ) ?: return null
+        return notice.takeIf { it.activeAt(nowMs) }
+    }
+
+    /**
+     * The announcement a given door should render right now, derived from configuration: its own
+     * value when one is active, otherwise the cluster-wide value. This is the fallback for a core
+     * that does not publish the resolved value; prefer [fromStatus]. Expired values are treated as
+     * absent on every shell so a pruning tick that has not run yet never leaves stale text on a
+     * door station.
      */
     fun effective(config: JSONObject?, door: String, nowMs: Long): Notice? {
         val doorValue = if (door.isEmpty()) null else parse(
@@ -57,9 +77,20 @@ internal object NoticeModel {
         return global?.takeIf { it.activeAt(nowMs) }
     }
 
+    /**
+     * The value a screen paints: core's resolved answer when it has one, otherwise the local
+     * derivation. Every screen goes through this so the two paths never diverge.
+     */
+    fun resolve(status: JSONObject?, config: JSONObject?, door: String, nowMs: Long): Notice? =
+        fromStatus(status, door, nowMs) ?: effective(config, door, nowMs)
+
     /** Doors that currently show an announcement, used for the dashboard tile chips. */
-    fun activeDoors(config: JSONObject?, doors: List<String>, nowMs: Long): Set<String> =
-        doors.filter { effective(config, it, nowMs) != null }.toSet()
+    fun activeDoors(
+        status: JSONObject?,
+        config: JSONObject?,
+        doors: List<String>,
+        nowMs: Long,
+    ): Set<String> = doors.filter { resolve(status, config, it, nowMs) != null }.toSet()
 
     /**
      * The presets rendered by the dialog. Defaults are seeded by core; an empty or malformed list
@@ -101,16 +132,20 @@ internal object NoticeModel {
         }
 
     /**
-     * Which doors one publish action writes.
+     * Which door identifiers one publish action addresses.
      *
-     * Core exposes db_core_set_door_notice per door but no global entry point, so "全体" is
-     * carried out as a write to every configured door, which is exactly the replicated result
-     * §5.1 describes (doors.*.notice for every door). Reading still prefers a door-specific value
-     * over notice.global when a newer core publishes one.
+     * 「全体」 is a single write to the cluster-wide announcement, which core stores at
+     * notice.global; a door-specific announcement always overrides it, so the two never have to be
+     * merged by hand. [allDoors] is unused by the global path and kept only so a caller can pass
+     * the door list it already has.
      */
-    fun writeTargets(target: NoticeTarget, door: String, allDoors: List<String>): List<String> =
-        if (target == NoticeTarget.GLOBAL) allDoors.filter { it.isNotEmpty() }
-        else listOf(door).filter { it.isNotEmpty() }
+    fun writeTargets(
+        target: NoticeTarget,
+        door: String,
+        @Suppress("UNUSED_PARAMETER") allDoors: List<String> = emptyList(),
+    ): List<String> =
+        if (target == NoticeTarget.GLOBAL) listOf(DoorbellCore.GLOBAL_DOOR)
+        else listOf(door).filter { it.isNotEmpty() && it != DoorbellCore.GLOBAL_DOOR }
 }
 
 internal enum class ExpiryChoice { ONE_HOUR, TODAY, UNTIL_CLEARED, CUSTOM }

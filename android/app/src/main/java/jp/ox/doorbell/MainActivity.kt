@@ -90,6 +90,12 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
     /** Resolved appearance for this screen; recomputed on every config or time change. */
     private var palette: Palette = Palette.DARK
 
+    /** Appearance and automatic theme as core published them; null on an older core. */
+    private var coreDisplay: CoreDisplay = CoreDisplay(null, null)
+
+    /** The latest status snapshot, which carries the resolved notice, unlock, and display. */
+    private var statusSnapshot: JSONObject? = null
+
     private var tts: TextToSpeech? = null
     private var ttsReady = false
     private val sensorManager by lazy { getSystemService(SENSOR_SERVICE) as SensorManager }
@@ -263,7 +269,7 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
             return
         }
         // A visitor sees the door, the core and app versions, and the battery — nothing else.
-        val status = app.core.status()
+        val status = statusSnapshot ?: app.core.status()
         val power = status?.optJSONObject("self")?.optJSONObject("power")
         nodeInfo.text = ShellUi.versionLine(
             doorLabel(app.boot.door).ifEmpty { app.boot.name },
@@ -515,7 +521,9 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
         val metrics = resources.displayMetrics
         val widthDp = (metrics.widthPixels / metrics.density).toInt()
         val heightDp = (metrics.heightPixels / metrics.density).toInt()
-        val notice = NoticeModel.effective(cfg, app.boot.door, clusterClock.now().wallMs)
+        val notice = NoticeModel.resolve(
+            statusSnapshot, cfg, app.boot.door, clusterClock.now().wallMs,
+        )
         noticeCard.text = notice?.text.orEmpty()
         noticeCard.visibility = if (notice != null) View.VISIBLE else View.GONE
         noticeCard.background = ShellUi.rounded(this, palette.noticeBg, 12, palette.noticeLine)
@@ -532,7 +540,12 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
 
     /** Light and dark tokens for the door station's own screen (§5.1). */
     private fun applyAppearance() {
-        palette = Appearance.resolve(
+        // Core resolves the schedule in the cluster time zone; the shell only adds the platform's
+        // own light/dark setting for auto_system, and computes everything locally on an older core.
+        val appearance = coreDisplay.appearance
+        palette = if (appearance != null)
+            Appearance.palette(CoreDisplays.isDark(appearance, systemDarkMode(this)))
+        else Appearance.resolve(
             cfg, nodeId, systemDarkMode(this), clusterClock.now().minuteOfDay(),
         )
         if (dashboard != null) return
@@ -549,45 +562,36 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
 
     /**
      * Automatic ink for text drawn straight onto the theme background (§5): core publishes
-     * display.theme.auto_ink for every region and this recomputes it locally when it is absent.
+     * display.theme.auto_ink per region, with an administrator override in ink_override, and the
+     * shell recomputes the same rule locally only when core published neither.
      */
-    private fun inkOverBackground(): Int {
-        val published = (app.core.dig(cfg, "display.theme.auto_ink.clock") as? String)
-        if (published == "dark") return Palette.DARK_INK
-        if (published == "light") return Palette.LIGHT_INK
-        val override = UiContrast.parseRgb(
-            app.core.dig(cfg, "devices.$nodeId.local.theme.ink_override.clock")?.toString()
-                ?: app.core.dig(cfg, "display.theme.ink_override.clock")?.toString(),
-        )
-        if (override != null) return override
-        return palette.inkOver(effectiveBackgroundRgb())
-    }
+    private fun inkOverBackground(region: String = "clock"): Int =
+        CoreDisplays.inkFor(coreDisplay.theme, region, effectiveBackgroundRgb())
 
-    /** The colour actually behind the visitor screen: theme colour, else the palette ground. */
+    /** The colour actually behind the visitor screen, averaged by core when it is an image. */
     private fun effectiveBackgroundRgb(): Int =
-        UiContrast.parseRgb(themeValue("bg_color")) ?: palette.ground
+        coreDisplay.theme?.backgroundRgb
+            ?: UiContrast.parseRgb(themeValue("bg_color"))
+            ?: palette.ground
 
     /**
-     * The call button's background is computed from the effective background (§5.2): core's
-     * display.theme.auto_accent when present, an administrator override when set, otherwise the
-     * same complement-and-lightness search recomputed locally.
+     * The call button's background comes from core, which has already folded in the administrator
+     * override; its text colour always comes from call_button_ink, because on a mid-luminance
+     * background core returns the best compromise rather than an unreadable button (§5.2).
      */
     private fun applyCallButtonAccent() {
-        val override = UiContrast.parseRgb(
-            app.core.dig(cfg, "devices.$nodeId.local.theme.call_button_bg")?.toString()
-                ?: app.core.dig(cfg, "display.theme.call_button_bg")?.toString(),
+        val (background, ink) = CoreDisplays.callButton(
+            coreDisplay.theme, effectiveBackgroundRgb(),
         )
-        val published = UiContrast.parseRgb(
-            app.core.dig(cfg, "display.theme.auto_accent.call_button")?.toString(),
-        )
-        val background = override ?: published ?: UiContrast.autoAccent(effectiveBackgroundRgb())
         callButton.background = ShellUi.rounded(this, background, 14)
-        callButton.setTextColor(ShellUi.opaque(UiContrast.callButtonInk(background)))
+        callButton.setTextColor(ShellUi.opaque(ink))
     }
 
     private fun refreshNodeInfo() {
         refreshConfigCache()
         val st = app.core.status()
+        statusSnapshot = st
+        coreDisplay = CoreDisplays.parse(st?.optJSONObject("display"))
         val node = st?.optJSONObject("node")
         if (node != null) nodeId = node.optString("id")
         refreshMembership()
@@ -1174,7 +1178,13 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
                     themeBg.drawable == null)
                     loadThemeImage(h)
             }
-            "display" -> applyNightTint(ev.optBoolean("night"), ev.optBoolean("red_tint"))
+            "display" -> {
+                coreDisplay = CoreDisplays.parse(ev)
+                applyNightTint(ev.optBoolean("night"), ev.optBoolean("red_tint"))
+                applyAppearance()
+                applyVisitorLayout()
+                dashboard?.refresh()
+            }
             // Cluster time, battery, and announcements each redraw only what they affect.
             "time_changed" -> {
                 updateClock()
@@ -1185,7 +1195,10 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
                 refreshMembership()
                 dashboard?.refresh()
             }
+            // A door of "*" means the cluster-wide announcement moved, which affects every
+            // door that has none of its own.
             "notice_changed" -> {
+                statusSnapshot = app.core.status()
                 applyVisitorLayout()
                 dashboard?.refresh()
             }

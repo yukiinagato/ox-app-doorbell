@@ -299,9 +299,7 @@ class PairingActivity : Activity(), DoorbellCore.Listener {
     private fun renewCode() {
         createdRenew.isEnabled = false
         Thread {
-            val result = JoinTokenMinting.mint(
-                app.core, PairingModel.PAIRING_WINDOW_S, bulkAddOwnedByUser = false,
-            )
+            val result = JoinTokenMinting.mint(app.core, PairingModel.PAIRING_WINDOW_S)
             ui.post {
                 createdRenew.isEnabled = true
                 if (result != null && !result.optBoolean("ok"))
@@ -410,9 +408,8 @@ class PairingActivity : Activity(), DoorbellCore.Listener {
             val started = app.core.foundCluster()
             // After 「この端末で新規作成」 the founder shows only the PIN card and its own QR;
             // nothing is auto-added, so the bulk-add window is never opened here.
-            val token = if (started) JoinTokenMinting.mint(
-                app.core, PairingModel.PAIRING_WINDOW_S, bulkAddOwnedByUser = false,
-            ) else null
+            val token = if (started)
+                JoinTokenMinting.mint(app.core, PairingModel.PAIRING_WINDOW_S) else null
             ui.post {
                 createInFlight = false
                 if (!started) {
