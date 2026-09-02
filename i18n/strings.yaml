@@ -629,6 +629,7 @@ pair.add_all_stop: { ja: "停止", en: "Stop", zh: "停止" }
 pair.qr_caption: { ja: "別の端末でこの QR を読み取ると追加できます", en: "Scan this QR from another device to add this one", zh: "用另一台设备扫描此二维码即可添加" }
 pair.scan_qr: { ja: "QR を読み取る", en: "Scan QR", zh: "扫描二维码" }
 pair.scan_hint: { ja: "新しい端末に表示された追加用 QR に合わせてください", en: "Point at the Add QR shown on the new device", zh: "请对准新设备上显示的添加二维码" }
+pair.scan_denied: { ja: "カメラを使用できません。設定アプリでこのアプリにカメラの使用を許可してください", en: "The camera is not available. Allow camera access for this app in Settings", zh: "无法使用相机。请在系统设置中允许本应用使用相机" }
 pair.membership: { ja: "クラスタ · {n} 台", en: "Cluster · {n} devices", zh: "集群 · {n} 台" }
 pair.membership_connected: { ja: "{n} 台接続中", en: "{n} connected", zh: "{n} 台已连接" }
 pair.created_badge: { ja: "クラスタを作成した端末", en: "Created this Cluster", zh: "创建了此集群" }

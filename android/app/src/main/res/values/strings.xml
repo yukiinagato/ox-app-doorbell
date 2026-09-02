@@ -498,6 +498,7 @@ Delete it?</string>
     <string name="pair_role_door_station">Door station</string>
     <string name="pair_role_indoor_panel">Indoor panel</string>
     <string name="pair_scan_camera_denied">Camera access is not allowed. Grant camera permission in the device settings.</string>
+    <string name="pair_scan_denied">The camera is not available. Allow camera access for this app in Settings</string>
     <string name="pair_scan_hint">Point at the Add QR shown on the new device</string>
     <string name="pair_scan_no_camera">This device has no camera. Scan from another device, or use a Pairing PIN.</string>
     <string name="pair_scan_qr">Scan QR</string>

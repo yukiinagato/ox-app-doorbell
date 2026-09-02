@@ -500,6 +500,7 @@ Delete it?</value></data>
   <data name="pair_role_door_station" xml:space="preserve"><value>Door station</value></data>
   <data name="pair_role_indoor_panel" xml:space="preserve"><value>Indoor panel</value></data>
   <data name="pair_scan_camera_denied" xml:space="preserve"><value>Camera access is not allowed. Grant camera permission in the device settings.</value></data>
+  <data name="pair_scan_denied" xml:space="preserve"><value>The camera is not available. Allow camera access for this app in Settings</value></data>
   <data name="pair_scan_hint" xml:space="preserve"><value>Point at the Add QR shown on the new device</value></data>
   <data name="pair_scan_no_camera" xml:space="preserve"><value>This device has no camera. Scan from another device, or use a Pairing PIN.</value></data>
   <data name="pair_scan_qr" xml:space="preserve"><value>Scan QR</value></data>

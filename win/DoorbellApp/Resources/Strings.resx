@@ -500,6 +500,7 @@
   <data name="pair_role_door_station" xml:space="preserve"><value>門口機</value></data>
   <data name="pair_role_indoor_panel" xml:space="preserve"><value>室内機</value></data>
   <data name="pair_scan_camera_denied" xml:space="preserve"><value>カメラの使用が許可されていません。端末の設定でカメラを許可してください。</value></data>
+  <data name="pair_scan_denied" xml:space="preserve"><value>カメラを使用できません。設定アプリでこのアプリにカメラの使用を許可してください</value></data>
   <data name="pair_scan_hint" xml:space="preserve"><value>新しい端末に表示された追加用 QR に合わせてください</value></data>
   <data name="pair_scan_no_camera" xml:space="preserve"><value>この端末にはカメラがありません。別の端末で読み取るか、ペアリング PIN を使ってください。</value></data>
   <data name="pair_scan_qr" xml:space="preserve"><value>QR を読み取る</value></data>

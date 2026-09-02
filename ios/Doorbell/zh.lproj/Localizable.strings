@@ -493,6 +493,7 @@
 "pair.role_door_station" = "门口机";
 "pair.role_indoor_panel" = "室内机";
 "pair.scan_camera_denied" = "未获得摄像头权限。请在设备设置中允许使用摄像头。";
+"pair.scan_denied" = "无法使用相机。请在系统设置中允许本应用使用相机";
 "pair.scan_hint" = "请对准新设备上显示的添加二维码";
 "pair.scan_no_camera" = "此设备没有摄像头。请用其他设备扫描，或改用配对 PIN。";
 "pair.scan_qr" = "扫描二维码";

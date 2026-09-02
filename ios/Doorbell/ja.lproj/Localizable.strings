@@ -493,6 +493,7 @@
 "pair.role_door_station" = "門口機";
 "pair.role_indoor_panel" = "室内機";
 "pair.scan_camera_denied" = "カメラの使用が許可されていません。端末の設定でカメラを許可してください。";
+"pair.scan_denied" = "カメラを使用できません。設定アプリでこのアプリにカメラの使用を許可してください";
 "pair.scan_hint" = "新しい端末に表示された追加用 QR に合わせてください";
 "pair.scan_no_camera" = "この端末にはカメラがありません。別の端末で読み取るか、ペアリング PIN を使ってください。";
 "pair.scan_qr" = "QR を読み取る";

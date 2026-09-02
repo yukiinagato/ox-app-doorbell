@@ -10,6 +10,7 @@ import UIKit
 enum IOSAvailability {
     private static let timerDispatcher = LegacyTimerDispatcher()
 
+#if os(iOS)
     /// Returns the clockwise transform receivers need for an unrotated camera sample buffer.
     /// `UIDeviceOrientation` names the physical edge facing left/right, so its landscape values
     /// are the inverse of the transform that makes the captured pixels upright remotely.
@@ -27,6 +28,7 @@ enum IOSAvailability {
             return nil
         }
     }
+#endif
 
     static func scheduledTimer(withTimeInterval interval: TimeInterval,
                                repeats: Bool,
@@ -37,6 +39,16 @@ enum IOSAvailability {
                                     selector: #selector(LegacyTimerDispatcher.invoke(_:)),
                                     userInfo: invocation,
                                     repeats: repeats)
+    }
+
+    /// Spinner whose style name differs by platform minimum: the modern cases exist only from
+    /// iOS/tvOS 13, and the iOS build still has to run on iOS 9.
+    static func activityIndicator(large: Bool) -> UIActivityIndicatorView {
+#if os(tvOS)
+        return UIActivityIndicatorView(style: large ? .large : .medium)
+#else
+        return UIActivityIndicatorView(style: large ? .whiteLarge : .white)
+#endif
     }
 
     static func safeAreaLayoutGuide(for view: UIView) -> UILayoutGuide {
@@ -100,6 +112,18 @@ enum IOSAvailability {
     }
 
 #if os(iOS)
+    /// Camera used to read an Add QR. The rear lens is preferred: the user points the device at
+    /// the screen of the device being added.
+    static func qrScanCaptureDevice() -> AVCaptureDevice? {
+#if IOS9_COMPAT
+        let devices = AVCaptureDevice.devices(for: .video)
+        return devices.first(where: { $0.position == .back }) ?? devices.first
+#else
+        return AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back)
+            ?? AVCaptureDevice.default(for: .video)
+#endif
+    }
+
     static func videoCaptureDevice() -> AVCaptureDevice? {
 #if IOS9_COMPAT
         let devices = AVCaptureDevice.devices(for: .video)

@@ -12,11 +12,17 @@ final class TVAppDelegate: UIResponder, UIApplicationDelegate {
     private let launchAudio = SirenPlayer()
     private var soundConfig: [String: Any]?
     private var runtime: RuntimeSupervisor?
+    private let pairingTexts = Texts()
+    private var pairingGate: PairingViewController?
+    private var pairingDeferred = false
+    private var pairingGateTimer: Timer?
+    private var openPairingObserver: NSObjectProtocol?
 
     func application(_ application: UIApplication,
                      didFinishLaunchingWithOptions launchOptions:
                         [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         boot = BootConfig.load()
+        if BootConfig.migrateLegacyPskIntoSecureStore() { boot = BootConfig.load() }
         let session = AVAudioSession.sharedInstance()
         try? session.setCategory(.playback, mode: .default)
         try? session.setActive(true)
@@ -40,7 +46,59 @@ final class TVAppDelegate: UIResponder, UIApplicationDelegate {
 
         application.isIdleTimerDisabled = true
         launchAudio.playConfigured(soundValue("launch_sound", "title_display"))
+
+        pairingTexts.setLang(boot.uiLang)
+        pairingTexts.setConfig(soundConfig)
+        if openPairingObserver == nil {
+            openPairingObserver = NotificationCenter.default.addObserver(
+                forName: .doorbellOpenPairing, object: nil, queue: .main
+            ) { [weak self] _ in
+                self?.pairingDeferred = false
+                self?.presentPairingGate()
+            }
+        }
+        evaluatePairingGate()
+        pairingGateTimer = IOSAvailability.scheduledTimer(withTimeInterval: 3, repeats: true) {
+            [weak self] _ in self?.evaluatePairingGate()
+        }
         return true
+    }
+
+
+    /// Apple TV gets the same unpaired gate as the handheld clients; it is display-only because
+    /// the device has no camera.
+    private func evaluatePairingGate() {
+        guard core.isRunning else { return }
+        let snapshot = PairingSnapshot.load(core)
+        guard snapshot.hasSnapshot else { return }
+        NotificationCenter.default.post(name: .doorbellPairingChanged, object: nil)
+        guard snapshot.state.blocksMainUi else {
+            // A member device starts over with a clean slate: a later revocation must gate again.
+            pairingDeferred = false
+            return
+        }
+        guard !pairingDeferred else { return }
+        presentPairingGate()
+    }
+
+    private func presentPairingGate() {
+        guard pairingGate == nil, let root = window?.rootViewController,
+              root.presentedViewController == nil else { return }
+        let gate = PairingViewController(core: core, boot: boot, texts: pairingTexts)
+        gate.onDefer = { [weak self] in self?.closePairingGate(deferred: true) }
+        gate.onFinished = { [weak self] in self?.closePairingGate(deferred: false) }
+        pairingGate = gate
+        root.present(gate, animated: false)
+    }
+
+    private func closePairingGate(deferred: Bool) {
+        pairingDeferred = deferred
+        guard let gate = pairingGate else { return }
+        pairingGate = nil
+        gate.dismiss(animated: true) { [weak self] in
+            NotificationCenter.default.post(name: .doorbellPairingChanged, object: nil)
+            self?.evaluatePairingGate()
+        }
     }
 
     func applicationWillTerminate(_ application: UIApplication) {
@@ -68,7 +126,11 @@ final class TVAppDelegate: UIResponder, UIApplicationDelegate {
                 boot = BootConfig.load()
             } else { presentPairingPersistenceError() }
         }
-        if t == "pairing_persistence_error" { presentPairingPersistenceError() }
+        if t == "pairing_persistence_error" {
+            presentPairingGate()
+            if pairingGate == nil { presentPairingPersistenceError() }
+        }
+        if t == "pairing_state" || t == "paired" { evaluatePairingGate() }
         if t == "chime" {
             presentIncoming(door: ConfigUtil.evStr(ev, "door"),
                             purpose: ConfigUtil.evStr(ev, "purpose"),
@@ -85,8 +147,8 @@ final class TVAppDelegate: UIResponder, UIApplicationDelegate {
         guard let root = window?.rootViewController,
               root.presentedViewController == nil else { return }
         let alert = UIAlertController(
-            title: NSLocalizedString("admin.pair_mode", comment: ""),
-            message: NSLocalizedString("admin.pair_secure_failed", comment: ""),
+            title: pairingTexts.t("pair.persist_error_title"),
+            message: pairingTexts.t("pair.persist_error_body"),
             preferredStyle: .alert)
         alert.addAction(UIAlertAction(title: "OK", style: .default))
         root.present(alert, animated: true)

@@ -61,6 +61,7 @@ final class MainViewController: UIViewController {
 
     private var secretTaps = 0
     private var secretFirst = Date.distantPast
+    private var pairingObserver: NSObjectProtocol?
 
     private var clockTimer: Timer?
     private var callTimeoutTimer: Timer?
@@ -80,6 +81,8 @@ final class MainViewController: UIViewController {
     private let monitorButton = UIButton(type: .system)
     private let touchHint = UILabel()
     private let nodeInfo = UILabel()
+    private let membershipLabel = UILabel()
+    private let pairingBanner = UIButton(type: .system)
     private let appVersionLabel = UILabel()
     private let purposeSection = UIStackView()
     private let purposeHint = UILabel()
@@ -127,6 +130,12 @@ final class MainViewController: UIViewController {
 
     required init?(coder: NSCoder) { fatalError("not supported") }
 
+    deinit {
+        if let observer = pairingObserver {
+            NotificationCenter.default.removeObserver(observer)
+        }
+    }
+
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -139,6 +148,10 @@ final class MainViewController: UIViewController {
         if !core.isRunning { offlineView.isHidden = false }
 
         core.addHandler("main") { [weak self] ev in self?.onUiEvent(ev) }
+        pairingObserver = NotificationCenter.default.addObserver(
+            forName: .doorbellPairingChanged, object: nil, queue: .main
+        ) { [weak self] _ in self?.refreshPairingStatus() }
+        refreshPairingStatus()
 
         clockTimer = IOSAvailability.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
             self?.onClockTick()
@@ -192,6 +205,9 @@ final class MainViewController: UIViewController {
         buildInCallView()
         buildReplyBanner()
         buildOfflineView()
+        // Added before the screensaver, night tint and emergency overlay so those full-screen
+        // states cover the banner instead of it floating on top of them.
+        buildPairingBanner()
         buildScreensaver()
 
         nightTint.backgroundColor = UIColor(red: 1.0, green: 0.13, blue: 0.0, alpha: 0.20)
@@ -211,6 +227,68 @@ final class MainViewController: UIViewController {
             secret.widthAnchor.constraint(equalToConstant: 120),
             secret.heightAnchor.constraint(equalToConstant: 120),
         ])
+    }
+
+    /// Persistent, tappable reminder shown until Core reports state `ready`.
+    private func buildPairingBanner() {
+        pairingBanner.setTitle(texts.t("pair.not_set_up_banner"), for: .normal)
+        pairingBanner.titleLabel?.font = .systemFont(ofSize: 18, weight: .semibold)
+        pairingBanner.titleLabel?.numberOfLines = 0
+        pairingBanner.titleLabel?.textAlignment = .center
+        pairingBanner.setTitleColor(.black, for: .normal)
+        pairingBanner.backgroundColor = MainViewController.accentColor
+        pairingBanner.layer.cornerRadius = 12
+        pairingBanner.contentEdgeInsets = UIEdgeInsets(top: 12, left: 22, bottom: 12, right: 22)
+        pairingBanner.accessibilityIdentifier = "pairing_banner"
+        pairingBanner.isHidden = true
+        pairingBanner.translatesAutoresizingMaskIntoConstraints = false
+        pairingBanner.addTarget(self, action: #selector(onPairingBannerTap),
+                                for: .touchUpInside)
+        view.addSubview(pairingBanner)
+        let g = IOSAvailability.safeAreaLayoutGuide(for: view)
+        NSLayoutConstraint.activate([
+            pairingBanner.topAnchor.constraint(equalTo: g.topAnchor, constant: 12),
+            pairingBanner.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            pairingBanner.widthAnchor.constraint(lessThanOrEqualTo: g.widthAnchor, constant: -40),
+        ])
+    }
+
+    @objc private func onPairingBannerTap() {
+        NotificationCenter.default.post(name: .doorbellOpenPairing, object: nil)
+    }
+
+    /// Membership status doubles as the entry point to the Add-device panel, behind the admin
+    /// password so a kiosk visitor cannot open it.
+    @objc private func onMembershipTap() {
+        guard presentedViewController == nil else { return }
+        let dlg = AdminPinViewController(texts: texts)
+        dlg.onUnlocked = { [weak self] in self?.showAddDevicePanel() }
+        present(dlg, animated: true)
+    }
+
+    private func showAddDevicePanel() {
+        guard presentedViewController == nil else { return }
+        present(AddDeviceViewController(core: core, boot: boot, texts: texts), animated: true)
+    }
+
+    /// Renders the authoritative pairing snapshot into the membership line and the banner.
+    private func refreshPairingStatus() {
+        let snapshot = PairingSnapshot.load(core)
+        guard snapshot.hasSnapshot else {
+            membershipLabel.isHidden = true
+            pairingBanner.isHidden = true
+            return
+        }
+        membershipLabel.isHidden = false
+        var text = texts.t("pair.membership", "\(max(snapshot.memberCount, snapshot.paired ? 1 : 0))")
+        if snapshot.connectedCount > 0 {
+            text += " · " + texts.t("pair.membership_connected", "\(snapshot.connectedCount)")
+        }
+        if snapshot.isFounder { text += " · " + texts.t("pair.created_badge") }
+        if snapshot.state != .ready { text = texts.t("pair.not_set_up_banner") }
+        membershipLabel.text = text
+        pairingBanner.setTitle(texts.t("pair.not_set_up_banner"), for: .normal)
+        pairingBanner.isHidden = snapshot.state == .ready
     }
 
     private func addFull(_ v: UIView, into parent: UIView? = nil) {
@@ -294,6 +372,17 @@ final class MainViewController: UIViewController {
         nodeInfo.translatesAutoresizingMaskIntoConstraints = false
         idleView.addSubview(nodeInfo)
 
+        // The membership status is the visible, documented way into the Add-device panel; the
+        // seven-tap corner stays only as a diagnostics shortcut.
+        membershipLabel.font = .systemFont(ofSize: 15, weight: .semibold)
+        membershipLabel.textColor = UIColor(white: 1, alpha: 0.62)
+        membershipLabel.isUserInteractionEnabled = true
+        membershipLabel.accessibilityIdentifier = "membership_status"
+        membershipLabel.translatesAutoresizingMaskIntoConstraints = false
+        membershipLabel.addGestureRecognizer(
+            UITapGestureRecognizer(target: self, action: #selector(onMembershipTap)))
+        idleView.addSubview(membershipLabel)
+
         let appVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "-"
         let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "-"
         appVersionLabel.text = "APP v\(appVersion) (\(build))\nCore v…"
@@ -327,6 +416,10 @@ final class MainViewController: UIViewController {
 
         let g = IOSAvailability.safeAreaLayoutGuide(for: view)
         NSLayoutConstraint.activate([
+            membershipLabel.leadingAnchor.constraint(equalTo: g.leadingAnchor, constant: 16),
+            membershipLabel.bottomAnchor.constraint(equalTo: nodeInfo.topAnchor, constant: -4),
+            membershipLabel.trailingAnchor.constraint(lessThanOrEqualTo: g.trailingAnchor,
+                                                      constant: -16),
             nodeInfo.leadingAnchor.constraint(equalTo: g.leadingAnchor, constant: 16),
             nodeInfo.bottomAnchor.constraint(equalTo: appVersionLabel.topAnchor, constant: -4),
             appVersionLabel.leadingAnchor.constraint(equalTo: g.leadingAnchor, constant: 16),
@@ -532,6 +625,7 @@ final class MainViewController: UIViewController {
         emergencyTitle.text = texts.t("emergency.title")
         emergencyNote.text = texts.t("emergency.notified")
         emergencyCancel.setTitle(texts.t("emergency.cancel"), for: .normal)
+        pairingBanner.setTitle(texts.t("pair.not_set_up_banner"), for: .normal)
     }
 
     private func doorLabel(_ door: String) -> String {
@@ -592,6 +686,7 @@ final class MainViewController: UIViewController {
             }
         }
         refreshSosConfig()
+        refreshPairingStatus()
         applyTheme()
         buildPurposeButtons()
         buildLangBar()
@@ -1185,6 +1280,8 @@ final class MainViewController: UIViewController {
             presentEmergency(ev)
         case "peers_changed", "config_changed":
             refreshNodeInfo()
+        case "pairing_state", "paired", "device_joined", "pairing_revoked", "pending_changed":
+            refreshPairingStatus()
         default:
             break
         }
@@ -1402,7 +1499,7 @@ final class MainViewController: UIViewController {
         """
         let a = UIAlertController(title: texts.t("admin.title"), message: msg,
                                   preferredStyle: .alert)
-        a.addAction(UIAlertAction(title: texts.t("admin.pair_mode"), style: .default) {
+        a.addAction(UIAlertAction(title: texts.t("pair.panel_title"), style: .default) {
             [weak self] _ in self?.showPairingAdmin()
         })
         if boot.role != "door_station" {
@@ -1418,115 +1515,7 @@ final class MainViewController: UIViewController {
     }
 
     private func showPairingAdmin() {
-        guard let pairing = core.pairing() else { return }
-        let paired = ConfigUtil.evBool(pairing, "paired")
-        let persistedObject = BootConfig.load().rawJson.data(using: .utf8).flatMap {
-            (try? JSONSerialization.jsonObject(with: $0)) as? [String: Any]
-        }
-        let persistedBoot = (persistedObject?["psk_ref"] as? String) == "secret:mesh.psk"
-        let persistenceReady = ConfigUtil.evBool(pairing, "persistence_ready") && persistedBoot
-        let message = paired && !persistenceReady
-            ? texts.t("admin.pair_secure_failed")
-            : (paired ? texts.t("admin.pair_hint") : texts.t("admin.pair_self_unpaired"))
-        let alert = UIAlertController(title: texts.t("admin.pair_mode"),
-                                      message: message,
-                                      preferredStyle: .alert)
-        if !paired {
-            alert.addAction(UIAlertAction(title: texts.t("admin.pair_found"), style: .default) {
-                [weak self] _ in _ = self?.core.createCluster()
-            })
-            alert.addAction(UIAlertAction(title: texts.t("admin.join"), style: .default) {
-                [weak self] _ in self?.showJoinCluster()
-            })
-        } else if persistenceReady {
-            alert.addAction(UIAlertAction(title: texts.t("admin.pair_mode"), style: .default) {
-                [weak self] _ in self?.core.pairingMode(seconds: 600)
-            })
-            if boot.role == "indoor_panel" {
-                alert.addAction(UIAlertAction(title: texts.t("admin.fleet"), style: .default) {
-                    [weak self] _ in self?.showFleetAdmin()
-                })
-            }
-            if let pending = pairing["pending"] as? [String: Any],
-               let devices = pending["devices"] as? [[String: Any]] {
-                for device in devices.prefix(4) {
-                    let id = ConfigUtil.evStr(device, "id")
-                    guard !id.isEmpty else { continue }
-                    let name = ConfigUtil.evStr(device, "name")
-                    alert.addAction(UIAlertAction(title: name.isEmpty ? id : name, style: .default) {
-                        [weak self] _ in self?.core.inviteDevice(id)
-                    })
-                }
-            }
-        }
-        alert.addAction(UIAlertAction(title: texts.t("admin.cancel"), style: .cancel))
-        alert.addAction(UIAlertAction(title: texts.t("admin.clear_pairing"), style: .destructive) {
-            _ in NotificationCenter.default.post(name: .doorbellResetLocalPairing, object: nil)
-        })
-        present(alert, animated: true)
-    }
-
-    private func showFleetAdmin() {
-        let peers = (core.status()?["peers"] as? [[String: Any]] ?? []).filter {
-            ConfigUtil.evStr($0, "id") != nodeId
-        }
-        let alert = UIAlertController(title: texts.t("admin.fleet"),
-                                      message: peers.isEmpty ? texts.t("admin.pair_none") : nil,
-                                      preferredStyle: .actionSheet)
-        for peer in peers.prefix(8) {
-            let id = ConfigUtil.evStr(peer, "id")
-            guard !id.isEmpty else { continue }
-            let name = ConfigUtil.evStr(peer, "name")
-            let label = "\(texts.t("admin.remove_device")): \(name.isEmpty ? id : name)"
-            alert.addAction(UIAlertAction(title: label,
-                                          style: .destructive) { [weak self] _ in
-                self?.core.removeDevice(id)
-            })
-        }
-        alert.addAction(UIAlertAction(title: texts.t("admin.cancel"), style: .cancel))
-        present(alert, animated: true)
-    }
-
-    private func showJoinCluster() {
-        let alert = UIAlertController(title: texts.t("admin.join"), message: nil,
-                                      preferredStyle: .alert)
-        alert.addTextField { field in
-            field.placeholder = "10.0.0.10:47172"
-            field.autocapitalizationType = .none
-            field.keyboardType = .numbersAndPunctuation
-        }
-        alert.addTextField { field in
-            field.placeholder = "PIN"
-            field.keyboardType = .numberPad
-            field.isSecureTextEntry = true
-        }
-        alert.addAction(UIAlertAction(title: texts.t("admin.login"), style: .default) {
-            [weak self, weak alert] _ in
-            let host = alert?.textFields?.first?.text ?? ""
-            let pin = alert?.textFields?.dropFirst().first?.text ?? ""
-            self?.core.joinCluster(host: host, pin: pin)
-        })
-        alert.addAction(UIAlertAction(title: texts.t("setup.scan_qr"), style: .default) {
-            [weak self] _ in self?.showPairingScanner()
-        })
-        alert.addAction(UIAlertAction(title: texts.t("admin.cancel"), style: .cancel))
-        present(alert, animated: true)
-    }
-
-    private func showPairingScanner() {
-        let scanner = PairingQrScannerViewController { [weak self] value in
-            guard let self = self else { return }
-            let prefix = "doorbell-join:"
-            guard value.hasPrefix(prefix) else { return }
-            let parts = value.dropFirst(prefix.count).split(separator: "|", maxSplits: 1)
-            guard parts.count == 2 else { return }
-            let host = String(parts[0])
-            let pin = String(parts[1])
-            guard host.contains(":"), pin.count == 6,
-                  pin.allSatisfy({ $0.isNumber }) else { return }
-            self.core.joinCluster(host: host, pin: pin)
-        }
-        present(scanner, animated: true)
+        showAddDevicePanel()
     }
 
 
@@ -1599,52 +1588,5 @@ final class MainViewController: UIViewController {
     func debugRefreshH264() {
         IOSAvailability.logDebug("h264 debug refresh requested")
         encoderPoll()
-    }
-}
-
-private final class PairingQrScannerViewController: UIViewController, AVCaptureMetadataOutputObjectsDelegate {
-    private let onValue: (String) -> Void
-    private let session = AVCaptureSession()
-    private var preview: AVCaptureVideoPreviewLayer?
-    private var delivered = false
-
-    init(onValue: @escaping (String) -> Void) {
-        self.onValue = onValue
-        super.init(nibName: nil, bundle: nil)
-    }
-
-    required init?(coder: NSCoder) { fatalError("init(coder:)") }
-
-    override func viewDidLoad() {
-        super.viewDidLoad()
-        view.backgroundColor = .black
-        guard let camera = AVCaptureDevice.default(for: .video),
-              let input = try? AVCaptureDeviceInput(device: camera), session.canAddInput(input)
-        else { dismiss(animated: true); return }
-        session.addInput(input)
-        let output = AVCaptureMetadataOutput()
-        guard session.canAddOutput(output) else { dismiss(animated: true); return }
-        session.addOutput(output)
-        output.setMetadataObjectsDelegate(self, queue: .main)
-        output.metadataObjectTypes = [.qr]
-        let layer = AVCaptureVideoPreviewLayer(session: session)
-        layer.videoGravity = .resizeAspectFill
-        view.layer.addSublayer(layer)
-        preview = layer
-        session.startRunning()
-    }
-
-    override func viewDidLayoutSubviews() {
-        super.viewDidLayoutSubviews()
-        preview?.frame = view.bounds
-    }
-
-    func metadataOutput(_ output: AVCaptureMetadataOutput,
-                        didOutput metadataObjects: [AVMetadataObject], from connection: AVCaptureConnection) {
-        guard !delivered, let code = metadataObjects.first as? AVMetadataMachineReadableCodeObject,
-              let value = code.stringValue else { return }
-        delivered = true
-        session.stopRunning()
-        dismiss(animated: true) { [onValue] in onValue(value) }
     }
 }

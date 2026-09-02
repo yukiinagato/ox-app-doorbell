@@ -22,6 +22,11 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
     private var chimeGate = CallChimeRevisionGate()
     private var appStarted = false
     private var resetObserver: NSObjectProtocol?
+    private var openPairingObserver: NSObjectProtocol?
+    private let pairingTexts = Texts()
+    private var pairingGate: PairingViewController?
+    private var pairingDeferred = false
+    private var pairingGateTimer: Timer?
 
     func application(_ application: UIApplication,
                      didFinishLaunchingWithOptions launchOptions:
@@ -31,6 +36,14 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
             resetObserver = NotificationCenter.default.addObserver(
                 forName: .doorbellResetLocalPairing, object: nil, queue: .main
             ) { [weak self] _ in self?.resetLocalPairing() }
+        }
+        if openPairingObserver == nil {
+            openPairingObserver = NotificationCenter.default.addObserver(
+                forName: .doorbellOpenPairing, object: nil, queue: .main
+            ) { [weak self] _ in
+                self?.pairingDeferred = false
+                self?.presentPairingGate()
+            }
         }
         emergencyNotifications.configure(application: application, delegate: self)
 
@@ -81,6 +94,10 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         let session = AVAudioSession.sharedInstance()
         let audioSessionReady = IOSAvailability.configureCallAudioSession(session)
 
+        // A key left in boot.json by an older build moves into the Keychain before Core reads
+        // the profile, so provenance is reported as secure_store from the first launch.
+        if BootConfig.migrateLegacyPskIntoSecureStore() { boot = BootConfig.load() }
+
         // Keep the UI available in offline mode if Core cannot start.
         _ = core.start(dataDir: BootConfig.dataDir(), bootJson: boot.rawJson)
         runtime = RuntimeSupervisor(core: core, boot: boot,
@@ -107,6 +124,53 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         win.makeKeyAndVisible()
 
         launchAudio.playConfigured(soundValue("launch_sound", "title_display"))
+
+        pairingTexts.setLang(boot.uiLang)
+        pairingTexts.setConfig(soundConfig)
+        evaluatePairingGate()
+        // Core may publish its first pairing snapshot slightly after start, and a later
+        // revocation moves the device back to unpaired, so the check keeps running.
+        pairingGateTimer?.invalidate()
+        pairingGateTimer = IOSAvailability.scheduledTimer(withTimeInterval: 3, repeats: true) {
+            [weak self] _ in self?.evaluatePairingGate()
+        }
+    }
+
+
+    /// The unpaired gate: an unpaired, joining or persist_error device shows the onboarding
+    /// screen instead of the main UI. State always comes from Core.
+    private func evaluatePairingGate() {
+        guard core.isRunning else { return }
+        let snapshot = PairingSnapshot.load(core)
+        guard snapshot.hasSnapshot else { return }
+        NotificationCenter.default.post(name: .doorbellPairingChanged, object: nil)
+        guard snapshot.state.blocksMainUi else {
+            // A member device starts over with a clean slate: a later revocation must gate again.
+            pairingDeferred = false
+            return
+        }
+        guard !pairingDeferred else { return }
+        presentPairingGate()
+    }
+
+    private func presentPairingGate() {
+        guard pairingGate == nil, let root = window?.rootViewController,
+              root.presentedViewController == nil else { return }
+        let gate = PairingViewController(core: core, boot: boot, texts: pairingTexts)
+        gate.onDefer = { [weak self] in self?.closePairingGate(deferred: true) }
+        gate.onFinished = { [weak self] in self?.closePairingGate(deferred: false) }
+        pairingGate = gate
+        root.present(gate, animated: false)
+    }
+
+    private func closePairingGate(deferred: Bool) {
+        pairingDeferred = deferred
+        guard let gate = pairingGate else { return }
+        pairingGate = nil
+        gate.dismiss(animated: true) { [weak self] in
+            NotificationCenter.default.post(name: .doorbellPairingChanged, object: nil)
+            self?.evaluatePairingGate()
+        }
     }
 
     func applicationWillTerminate(_ application: UIApplication) {
@@ -155,10 +219,16 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
             persistPairing(ev)
         }
         if eventKind == "pairing_persistence_error" {
-            presentPairingPersistenceError()
+            // The onboarding screen owns this state; the alert is only a fallback for a device
+            // that cannot show the gate right now.
+            presentPairingGate()
+            if pairingGate == nil { presentPairingPersistenceError() }
+        }
+        if eventKind == "pairing_state" || eventKind == "paired" {
+            evaluatePairingGate()
         }
         if eventKind == "pairing_revoked" {
-            resetLocalPairing()
+            announceRevocationThenReset()
             return
         }
         if eventKind == "call_recovery_required" {
@@ -198,7 +268,34 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         root.present(alert, animated: true)
     }
 
+    /// A removed device tells the user why it is resetting before it wipes itself.
+    private func announceRevocationThenReset() {
+        pairingGate?.dismiss(animated: false)
+        pairingGate = nil
+        guard let root = window?.rootViewController, root.presentedViewController == nil else {
+            resetLocalPairing()
+            return
+        }
+        let alert = UIAlertController(title: pairingTexts.t("pair.revoked"), message: nil,
+                                      preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: "OK", style: .default) { [weak self] _ in
+            self?.resetLocalPairing()
+        })
+        root.present(alert, animated: true)
+        // Never leave a revoked device stuck on a dialog nobody dismisses.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 15) { [weak self, weak alert] in
+            guard let self = self, let alert = alert,
+                  alert.presentingViewController != nil else { return }
+            alert.dismiss(animated: false) { self.resetLocalPairing() }
+        }
+    }
+
     private func resetLocalPairing() {
+        pairingGate?.dismiss(animated: false)
+        pairingGate = nil
+        pairingDeferred = false
+        pairingGateTimer?.invalidate()
+        pairingGateTimer = nil
         runtime?.stop(clean: false)
         runtime = nil
         core.stop()
@@ -276,18 +373,28 @@ private final class BootstrapSetupViewController: UIViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        view.backgroundColor = .white
+        // Same dark/amber theme as the pairing screens that follow it, so first-run setup does
+        // not flash a foreign white/blue page.
+        view.backgroundColor = PairingTheme.background
 
         let title = UILabel()
         title.text = NSLocalizedString("setup.title", comment: "")
         title.font = UIFont.boldSystemFont(ofSize: 30)
         title.textAlignment = .center
+        title.textColor = PairingTheme.foreground
 
         let message = UILabel()
         message.text = NSLocalizedString("setup.message", comment: "")
         message.font = UIFont.systemFont(ofSize: 17)
         message.textAlignment = .center
         message.numberOfLines = 0
+        message.textColor = PairingTheme.dim
+
+        for field in [nameField, doorField] {
+            field.backgroundColor = UIColor(white: 1, alpha: 0.12)
+            field.textColor = PairingTheme.foreground
+        }
+        roleControl.tintColor = PairingTheme.accent
 
         nameField.borderStyle = .roundedRect
         nameField.placeholder = NSLocalizedString("setup.name", comment: "")
@@ -306,6 +413,7 @@ private final class BootstrapSetupViewController: UIViewController {
 
         let doorLabel = UILabel()
         doorLabel.text = NSLocalizedString("setup.door", comment: "")
+        doorLabel.textColor = PairingTheme.dim
         doorLabel.setContentHuggingPriority(.required, for: .horizontal)
         doorRow.axis = .horizontal
         doorRow.spacing = 12
@@ -314,7 +422,7 @@ private final class BootstrapSetupViewController: UIViewController {
         doorRow.addArrangedSubview(doorField)
 
         errorLabel.text = NSLocalizedString("setup.invalid_door", comment: "")
-        errorLabel.textColor = .red
+        errorLabel.textColor = PairingTheme.danger
         errorLabel.textAlignment = .center
         errorLabel.numberOfLines = 0
         errorLabel.isHidden = true
@@ -322,8 +430,8 @@ private final class BootstrapSetupViewController: UIViewController {
         let save = UIButton(type: .system)
         save.setTitle(NSLocalizedString("setup.finish", comment: ""), for: .normal)
         save.titleLabel?.font = UIFont.boldSystemFont(ofSize: 20)
-        save.backgroundColor = UIColor(red: 0.08, green: 0.35, blue: 0.75, alpha: 1)
-        save.setTitleColor(.white, for: .normal)
+        save.backgroundColor = PairingTheme.accent
+        save.setTitleColor(.black, for: .normal)
         save.layer.cornerRadius = 8
         save.heightAnchor.constraint(greaterThanOrEqualToConstant: 52).isActive = true
         save.addTarget(self, action: #selector(saveTapped), for: .touchUpInside)

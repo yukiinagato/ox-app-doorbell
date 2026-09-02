@@ -498,6 +498,7 @@
     <string name="pair_role_door_station">门口机</string>
     <string name="pair_role_indoor_panel">室内机</string>
     <string name="pair_scan_camera_denied">未获得摄像头权限。请在设备设置中允许使用摄像头。</string>
+    <string name="pair_scan_denied">无法使用相机。请在系统设置中允许本应用使用相机</string>
     <string name="pair_scan_hint">请对准新设备上显示的添加二维码</string>
     <string name="pair_scan_no_camera">此设备没有摄像头。请用其他设备扫描，或改用配对 PIN。</string>
     <string name="pair_scan_qr">扫描二维码</string>

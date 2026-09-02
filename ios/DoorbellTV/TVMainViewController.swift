@@ -19,6 +19,7 @@ final class TVMainViewController: UIViewController {
     private let dateLabel = UILabel()
     private let statusLabel = UILabel()
     private let monitorButton = UIButton(type: .system)
+    private let membershipButton = UIButton(type: .system)
     private let nodeInfo = UILabel()
     private let replyBanner = UIView()
     private let replyCaption = UILabel()
@@ -30,6 +31,8 @@ final class TVMainViewController: UIViewController {
 
     private var clockTimer: Timer?
     private var replyTimer: Timer?
+    private var pairingObserver: NSObjectProtocol?
+    private var pairingReady = false
 
     init(core: CoreBridge, boot: BootConfig,
          deviceAlertReporter: @escaping ([String: Any]) -> Void) {
@@ -41,6 +44,12 @@ final class TVMainViewController: UIViewController {
 
     required init?(coder: NSCoder) { fatalError("not supported") }
 
+    deinit {
+        if let observer = pairingObserver {
+            NotificationCenter.default.removeObserver(observer)
+        }
+    }
+
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = UIColor(red: 0.063, green: 0.078, blue: 0.094, alpha: 1)
@@ -48,6 +57,10 @@ final class TVMainViewController: UIViewController {
         buildUi()
         refreshNodeInfo()
         core.addHandler("tv_main") { [weak self] ev in self?.onUiEvent(ev) }
+        pairingObserver = NotificationCenter.default.addObserver(
+            forName: .doorbellPairingChanged, object: nil, queue: .main
+        ) { [weak self] _ in self?.refreshPairingStatus() }
+        refreshPairingStatus()
         clockTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
             self?.updateClock()
         }
@@ -69,8 +82,14 @@ final class TVMainViewController: UIViewController {
         statusLabel.textColor = UIColor(white: 0.62, alpha: 1)
         monitorButton.titleLabel?.font = .systemFont(ofSize: 30, weight: .semibold)
         monitorButton.addTarget(self, action: #selector(openMonitor), for: .primaryActionTriggered)
+        // Membership status is focusable so the remote reaches the Add-device panel without any
+        // hidden gesture; while the device is not a member it reopens the onboarding screen.
+        membershipButton.titleLabel?.font = .systemFont(ofSize: 28, weight: .semibold)
+        membershipButton.accessibilityIdentifier = "membership_status"
+        membershipButton.addTarget(self, action: #selector(openPairing),
+                                   for: .primaryActionTriggered)
         let stack = UIStackView(arrangedSubviews: [clockLabel, dateLabel, statusLabel,
-                                                   monitorButton])
+                                                   monitorButton, membershipButton])
         stack.axis = .vertical
         stack.spacing = 16
         stack.alignment = .center
@@ -143,6 +162,7 @@ final class TVMainViewController: UIViewController {
 
     private func applyStrings() {
         statusLabel.text = texts.t("panel.monitor_title")
+        refreshPairingStatus()
         monitorButton.setTitle(texts.t("monitor.open"), for: .normal)
         replyCaption.text = texts.t("reply.banner")
         emergencyTitle.text = texts.t("emergency.title")
@@ -202,9 +222,47 @@ final class TVMainViewController: UIViewController {
             presentEmergency(ev)
         case "peers_changed", "config_changed":
             refreshNodeInfo()
+        case "pairing_state", "paired", "device_joined", "pending_changed":
+            refreshPairingStatus()
         default:
             break
         }
+    }
+
+    /// Renders the authoritative snapshot: membership when ready, the not-set-up prompt when not.
+    private func refreshPairingStatus() {
+        let snapshot = PairingSnapshot.load(core)
+        guard snapshot.hasSnapshot else {
+            membershipButton.isHidden = true
+            return
+        }
+        membershipButton.isHidden = false
+        pairingReady = snapshot.state == .ready
+        guard pairingReady else {
+            membershipButton.setTitle(texts.t("pair.not_set_up_banner"), for: .normal)
+            return
+        }
+        var title = texts.t("pair.membership",
+                            "\(max(snapshot.memberCount, snapshot.paired ? 1 : 0))")
+        if snapshot.connectedCount > 0 {
+            title += " · " + texts.t("pair.membership_connected", "\(snapshot.connectedCount)")
+        }
+        membershipButton.setTitle(title, for: .normal)
+    }
+
+    @objc private func openPairing() {
+        guard presentedViewController == nil else { return }
+        guard pairingReady else {
+            NotificationCenter.default.post(name: .doorbellOpenPairing, object: nil)
+            return
+        }
+        let dlg = AdminPinViewController(texts: texts)
+        dlg.onUnlocked = { [weak self] in
+            guard let self = self, self.presentedViewController == nil else { return }
+            self.present(AddDeviceViewController(core: self.core, boot: self.boot,
+                                                 texts: self.texts), animated: true)
+        }
+        present(dlg, animated: true)
     }
 
     @objc private func openMonitor() {
