@@ -350,6 +350,13 @@ Delete it?</value></data>
   <data name="calling_cancel_failed" xml:space="preserve"><value>Could not cancel the call</value></data>
   <data name="calling_no_answer" xml:space="preserve"><value>No answer</value></data>
   <data name="calling_title" xml:space="preserve"><value>Calling…</value></data>
+  <data name="dash_admin" xml:space="preserve"><value>Admin</value></data>
+  <data name="dash_doors" xml:space="preserve"><value>Doors</value></data>
+  <data name="dash_no_doors" xml:space="preserve"><value>No door station yet</value></data>
+  <data name="dash_notice_global" xml:space="preserve"><value>Announcement (all doors)</value></data>
+  <data name="dash_recent_calls" xml:space="preserve"><value>Recent calls</value></data>
+  <data name="dash_see_all" xml:space="preserve"><value>See all</value></data>
+  <data name="dash_tile_offline" xml:space="preserve"><value>Offline</value></data>
   <data name="date_full" xml:space="preserve"><value>{0}-{1}-{2} ({3})</value></data>
   <data name="day_fri" xml:space="preserve"><value>Fri</value></data>
   <data name="day_mon" xml:space="preserve"><value>Mon</value></data>
@@ -359,6 +366,8 @@ Delete it?</value></data>
   <data name="day_tue" xml:space="preserve"><value>Tue</value></data>
   <data name="day_wed" xml:space="preserve"><value>Wed</value></data>
   <data name="degraded_notified" xml:space="preserve"><value>Notified — please wait</value></data>
+  <data name="door_hint_call" xml:space="preserve"><value>Press the button to call the household</value></data>
+  <data name="door_lang_switch" xml:space="preserve"><value>Language</value></data>
   <data name="emergency_active_detail" xml:space="preserve"><value>Emergency mode is active</value></data>
   <data name="emergency_button" xml:space="preserve"><value>SOS</value></data>
   <data name="emergency_cancel" xml:space="preserve"><value>Cancel alarm</value></data>
@@ -375,12 +384,16 @@ Delete it?</value></data>
   <data name="history_answered_by" xml:space="preserve"><value>Answered by {0}</value></data>
   <data name="history_duration" xml:space="preserve"><value>{0}</value></data>
   <data name="history_empty" xml:space="preserve"><value>No calls yet</value></data>
+  <data name="history_filter_all" xml:space="preserve"><value>All</value></data>
+  <data name="history_filter_missed" xml:space="preserve"><value>Missed</value></data>
+  <data name="history_load_more" xml:space="preserve"><value>Load more</value></data>
   <data name="history_mark_seen" xml:space="preserve"><value>Mark all as seen</value></data>
   <data name="history_missed_badge" xml:space="preserve"><value>{0} missed</value></data>
   <data name="history_outcome_answered" xml:space="preserve"><value>Answered</value></data>
   <data name="history_outcome_cancelled" xml:space="preserve"><value>Cancelled</value></data>
   <data name="history_outcome_missed" xml:space="preserve"><value>Missed</value></data>
   <data name="history_outcome_replied" xml:space="preserve"><value>Replied</value></data>
+  <data name="history_seen_done" xml:space="preserve"><value>Marked as seen</value></data>
   <data name="history_title" xml:space="preserve"><value>Call history</value></data>
   <data name="history_today" xml:space="preserve"><value>Today</value></data>
   <data name="history_unread_banner" xml:space="preserve"><value>{0} missed calls</value></data>
@@ -396,11 +409,13 @@ Delete it?</value></data>
   <data name="info_address_cycle" xml:space="preserve"><value>Change address ({0}/{1}) ▸</value></data>
   <data name="info_addresses" xml:space="preserve"><value>All local addresses</value></data>
   <data name="info_addresses_loading" xml:space="preserve"><value>Loading… The network may be disconnected</value></data>
+  <data name="info_app_version" xml:space="preserve"><value>App</value></data>
   <data name="info_battery" xml:space="preserve"><value>Battery</value></data>
   <data name="info_camera" xml:space="preserve"><value>Camera</value></data>
   <data name="info_camera_absent_ipad1" xml:space="preserve"><value>Absent (iPad 1 has no camera)</value></data>
   <data name="info_capabilities" xml:space="preserve"><value>Capabilities</value></data>
   <data name="info_components" xml:space="preserve"><value>Components</value></data>
+  <data name="info_core_version" xml:space="preserve"><value>Core</value></data>
   <data name="info_device" xml:space="preserve"><value>Device</value></data>
   <data name="info_external_present" xml:space="preserve"><value>Present (external)</value></data>
   <data name="info_last_press" xml:space="preserve"><value>Latest button press</value></data>
@@ -419,6 +434,12 @@ Delete it?</value></data>
   <data name="info_refresh" xml:space="preserve"><value>Refresh</value></data>
   <data name="info_role" xml:space="preserve"><value>Role</value></data>
   <data name="info_runtime" xml:space="preserve"><value>Runtime</value></data>
+  <data name="info_safe_mode" xml:space="preserve"><value>Safe mode</value></data>
+  <data name="info_safe_mode_crash" xml:space="preserve"><value>A recent unclean exit is still counted</value></data>
+  <data name="info_safe_mode_heartbeat" xml:space="preserve"><value>The health heartbeat stalled</value></data>
+  <data name="info_safe_mode_helper" xml:space="preserve"><value>Held by the restart helper</value></data>
+  <data name="info_safe_mode_off" xml:space="preserve"><value>Normal</value></data>
+  <data name="info_safe_mode_wait" xml:space="preserve"><value>Clears automatically in {0} min</value></data>
   <data name="info_scan_admin" xml:space="preserve"><value>Scan to open the Admin page:</value></data>
   <data name="info_sip_direct" xml:space="preserve"><value>UDP (direct call)</value></data>
   <data name="info_system" xml:space="preserve"><value>System</value></data>
@@ -444,8 +465,10 @@ Delete it?</value></data>
   <data name="monitor_open" xml:space="preserve"><value>View door stations</value></data>
   <data name="monitor_title" xml:space="preserve"><value>{0} live</value></data>
   <data name="notice_active" xml:space="preserve"><value>Showing</value></data>
+  <data name="notice_chip" xml:space="preserve"><value>Announcement</value></data>
   <data name="notice_clear" xml:space="preserve"><value>Clear</value></data>
   <data name="notice_cleared" xml:space="preserve"><value>The announcement was cleared</value></data>
+  <data name="notice_edit" xml:space="preserve"><value>Edit</value></data>
   <data name="notice_empty" xml:space="preserve"><value>Enter a message</value></data>
   <data name="notice_expires_at" xml:space="preserve"><value>Until</value></data>
   <data name="notice_expiry" xml:space="preserve"><value>Show until</value></data>
@@ -460,12 +483,17 @@ Delete it?</value></data>
   <data name="notice_preset_absent" xml:space="preserve"><value>We are away right now</value></data>
   <data name="notice_preset_construction" xml:space="preserve"><value>Building work in progress — please call out</value></data>
   <data name="notice_preset_delivery" xml:space="preserve"><value>Deliveries to the side door, please</value></data>
+  <data name="notice_presets" xml:space="preserve"><value>Saved messages</value></data>
   <data name="notice_preview" xml:space="preserve"><value>How it looks at the door</value></data>
   <data name="notice_publish" xml:space="preserve"><value>Show</value></data>
   <data name="notice_saved" xml:space="preserve"><value>The announcement is now showing</value></data>
+  <data name="notice_target" xml:space="preserve"><value>Show on</value></data>
+  <data name="notice_target_door" xml:space="preserve"><value>This door ({0})</value></data>
+  <data name="notice_target_global" xml:space="preserve"><value>All doors</value></data>
   <data name="notice_text" xml:space="preserve"><value>Message</value></data>
   <data name="notice_title" xml:space="preserve"><value>Announcement</value></data>
   <data name="notice_too_long" xml:space="preserve"><value>The message is limited to 200 characters (currently {0})</value></data>
+  <data name="notice_write" xml:space="preserve"><value>Announce at this door</value></data>
   <data name="notify_test" xml:space="preserve"><value>Doorbell test notification</value></data>
   <data name="offline_body" xml:space="preserve"><value>Calling unavailable. Please knock.</value></data>
   <data name="offline_reconnect" xml:space="preserve"><value>Reconnecting in {0}s</value></data>
@@ -527,6 +555,7 @@ Delete it?</value></data>
   <data name="pair_later" xml:space="preserve"><value>Set up later</value></data>
   <data name="pair_membership" xml:space="preserve"><value>Cluster · {0} devices</value></data>
   <data name="pair_membership_connected" xml:space="preserve"><value>{0} connected</value></data>
+  <data name="pair_mint_unsupported" xml:space="preserve"><value>This device's core can't issue a Pairing PIN yet. Update it</value></data>
   <data name="pair_nearby_none" xml:space="preserve"><value>No devices waiting</value></data>
   <data name="pair_nearby_title" xml:space="preserve"><value>Nearby devices</value></data>
   <data name="pair_nearby_waiting_since" xml:space="preserve"><value>waiting {0}s</value></data>
@@ -667,13 +696,64 @@ Delete it?</value></data>
   <data name="ring_ignore" xml:space="preserve"><value>Ignore</value></data>
   <data name="ring_incoming" xml:space="preserve"><value>Visitor at {0}</value></data>
   <data name="ring_lang_badge" xml:space="preserve"><value>Visitor language: {0}</value></data>
+  <data name="ring_mic_off" xml:space="preserve"><value>Mic off</value></data>
+  <data name="ring_mic_on" xml:space="preserve"><value>Mic on</value></data>
   <data name="ring_monitor" xml:space="preserve"><value>Monitor</value></data>
+  <data name="ring_monitor_off" xml:space="preserve"><value>Monitor off</value></data>
+  <data name="ring_monitor_on" xml:space="preserve"><value>Monitor on</value></data>
   <data name="ring_monitoring" xml:space="preserve"><value>Live door audio on</value></data>
   <data name="ring_no_video" xml:space="preserve"><value>No video from door station</value></data>
   <data name="ring_open_door" xml:space="preserve"><value>Open door</value></data>
   <data name="ring_purpose_badge" xml:space="preserve"><value>Purpose: {0}</value></data>
   <data name="ring_unlock" xml:space="preserve"><value>Unlock</value></data>
   <data name="ring_unlock_sent" xml:space="preserve"><value>Unlock signal sent</value></data>
+  <data name="ring_unlock_unconfigured" xml:space="preserve"><value>No unlock action is configured</value></data>
+  <data name="settings_appearance" xml:space="preserve"><value>Appearance</value></data>
+  <data name="settings_appearance_dark" xml:space="preserve"><value>Dark</value></data>
+  <data name="settings_appearance_light" xml:space="preserve"><value>Light</value></data>
+  <data name="settings_appearance_schedule" xml:space="preserve"><value>Switch by time of day</value></data>
+  <data name="settings_close" xml:space="preserve"><value>Close</value></data>
+  <data name="settings_configured" xml:space="preserve"><value>Configured</value></data>
+  <data name="settings_device_door" xml:space="preserve"><value>Door</value></data>
+  <data name="settings_device_name" xml:space="preserve"><value>Device name</value></data>
+  <data name="settings_device_role" xml:space="preserve"><value>Role</value></data>
+  <data name="settings_exit_kiosk" xml:space="preserve"><value>Exit kiosk</value></data>
+  <data name="settings_helper_mode" xml:space="preserve"><value>Auto-restart helper</value></data>
+  <data name="settings_inherit" xml:space="preserve"><value>Use the cluster default</value></data>
+  <data name="settings_not_configured" xml:space="preserve"><value>Not set</value></data>
+  <data name="settings_number_prompt" xml:space="preserve"><value>Enter a number</value></data>
+  <data name="settings_off" xml:space="preserve"><value>Off</value></data>
+  <data name="settings_on" xml:space="preserve"><value>On</value></data>
+  <data name="settings_quiet_hours" xml:space="preserve"><value>Quiet hours</value></data>
+  <data name="settings_role_door" xml:space="preserve"><value>Door station</value></data>
+  <data name="settings_role_indoor" xml:space="preserve"><value>Indoor panel</value></data>
+  <data name="settings_role_restart" xml:space="preserve"><value>Changing the role restarts the app</value></data>
+  <data name="settings_rules_count" xml:space="preserve"><value>{0}</value></data>
+  <data name="settings_save_failed" xml:space="preserve"><value>Couldn't save</value></data>
+  <data name="settings_saved" xml:space="preserve"><value>Saved</value></data>
+  <data name="settings_section_cluster" xml:space="preserve"><value>Cluster</value></data>
+  <data name="settings_section_device" xml:space="preserve"><value>This device</value></data>
+  <data name="settings_section_doors" xml:space="preserve"><value>Doors</value></data>
+  <data name="settings_section_history" xml:space="preserve"><value>Call history</value></data>
+  <data name="settings_section_info" xml:space="preserve"><value>Device information</value></data>
+  <data name="settings_section_purposes" xml:space="preserve"><value>Visit purposes</value></data>
+  <data name="settings_section_rules" xml:space="preserve"><value>Notifications and rules</value></data>
+  <data name="settings_section_time" xml:space="preserve"><value>Time</value></data>
+  <data name="settings_section_volume" xml:space="preserve"><value>Volume</value></data>
+  <data name="settings_section_web" xml:space="preserve"><value>Open the web admin</value></data>
+  <data name="settings_theme_bg" xml:space="preserve"><value>Background colour</value></data>
+  <data name="settings_theme_image" xml:space="preserve"><value>Background image</value></data>
+  <data name="settings_title" xml:space="preserve"><value>Settings</value></data>
+  <data name="settings_ui_lang" xml:space="preserve"><value>Display language</value></data>
+  <data name="settings_unlock_button" xml:space="preserve"><value>Show the unlock button</value></data>
+  <data name="settings_video_playback" xml:space="preserve"><value>Video playback</value></data>
+  <data name="settings_video_rotation" xml:space="preserve"><value>Video rotation</value></data>
+  <data name="settings_web_only" xml:space="preserve"><value>Set this in the web admin</value></data>
+  <data name="settings_web_only_labels" xml:space="preserve"><value>Wording overrides</value></data>
+  <data name="settings_web_only_rule_actions" xml:space="preserve"><value>Rule actions</value></data>
+  <data name="settings_web_only_secrets" xml:space="preserve"><value>Passwords and tokens</value></data>
+  <data name="settings_web_only_upload" xml:space="preserve"><value>Adding images</value></data>
+  <data name="settings_zone_search" xml:space="preserve"><value>Search time zones</value></data>
   <data name="setup_confirm_new_cluster" xml:space="preserve"><value>Tap again to create a cluster (cancel to join an existing cluster)</value></data>
   <data name="setup_door" xml:space="preserve"><value>Door ID</value></data>
   <data name="setup_door_hint" xml:space="preserve"><value>Letters, numbers, - and _ only</value></data>
@@ -758,4 +838,6 @@ This device joins automatically. Only if it does not, enter the indoor panel add
   <data name="volume_preview" xml:space="preserve"><value>Preview</value></data>
   <data name="volume_sos" xml:space="preserve"><value>SOS</value></data>
   <data name="volume_title" xml:space="preserve"><value>Volume</value></data>
+  <data name="web_admin_open" xml:space="preserve"><value>Open the web admin</value></data>
+  <data name="web_admin_scan" xml:space="preserve"><value>Scan this with a phone</value></data>
 </root>

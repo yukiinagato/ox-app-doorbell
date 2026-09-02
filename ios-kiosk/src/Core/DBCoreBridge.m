@@ -9,6 +9,7 @@
 #import <arpa/inet.h>
 #import <sys/socket.h>
 #import <sys/sysctl.h>
+#import <dlfcn.h>
 #import "doorbell/doorbell.h"
 
 
@@ -16,6 +17,7 @@
 - (void)dispatchEvent:(NSDictionary *)ev;
 - (void)speakOnMain:(NSString *)text;
 - (NSString *)cachedDeviceInfoJson;
+- (NSString *)cachedPowerStateJson;
 @end
 
 
@@ -127,6 +129,25 @@ static int DBDeviceInfo(void *user, char **out_json) {
       }
     }
     return rc;
+  }
+}
+
+// Battery and mains state for ABI v2's power_state. UIDevice is documented as
+// main-thread-affine, so the reading is cached on the main run loop exactly
+// like device_info and this callback only copies the cached document.
+static int DBPowerState(void *user, char **out_json) {
+  if (out_json == NULL || user == NULL) return -1;
+  @autoreleasepool {
+    DBCoreBridge *me = (__bridge DBCoreBridge *)user;
+    NSString *cached = [me cachedPowerStateJson];
+    if ([cached length] == 0) return -1;
+    const char *s = [cached UTF8String];
+    size_t n = strlen(s);
+    char *buf = (char *)malloc(n + 1);
+    if (buf == NULL) return -1;
+    memcpy(buf, s, n + 1);
+    *out_json = buf;
+    return 0;
   }
 }
 
@@ -288,6 +309,8 @@ static void DBUiEventCb(void *user, const char *event_json) {
   db_core *_core;
   NSMutableDictionary *_handlers;
   NSString *_deviceInfoCache;
+  NSString *_powerStateCache;
+  NSDictionary *_powerState;
   NSLock *_diLock;
   NSTimer *_diTimer;
   dispatch_queue_t _coreQueue;
@@ -307,6 +330,7 @@ static void DBUiEventCb(void *user, const char *event_json) {
     _handlers = [[NSMutableDictionary alloc] init];
     _diLock = [[NSLock alloc] init];
     _deviceInfoCache = @"";
+    _powerStateCache = @"";
     _coreQueue = dispatch_queue_create("doorbell.core", DISPATCH_QUEUE_SERIAL);
     _cfgLock = [[NSLock alloc] init];
     _runtimeStatus = [[NSMutableDictionary alloc] init];
@@ -328,6 +352,7 @@ static void DBUiEventCb(void *user, const char *event_json) {
   // startWithDataDir is invoked on the main thread, so prime the UIKit-backed
   // device-info cache before Core can issue its first worker-thread callback.
   [self refreshDeviceInfo];
+  [self refreshPowerState];
   db_platform_v2 plat;
   memset(&plat, 0, sizeof(plat));
   plat.struct_size = sizeof(plat);
@@ -339,6 +364,7 @@ static void DBUiEventCb(void *user, const char *event_json) {
   plat.secure_put = DBSecurePut;
   plat.device_info = DBDeviceInfo;
   plat.release_buffer = DBReleaseBuffer;
+  plat.power_state = DBPowerState;
   plat.user = (__bridge void *)self;
 
   _core = db_core_create_v2(&plat, [dataDir UTF8String], [bootJson UTF8String]);
@@ -352,7 +378,7 @@ static void DBUiEventCb(void *user, const char *event_json) {
   // Refresh the callback cache periodically on the main run loop.
   _diTimer = [NSTimer scheduledTimerWithTimeInterval:10.0
                                               target:self
-                                            selector:@selector(refreshDeviceInfo)
+                                            selector:@selector(refreshRuntimeReadings)
                                             userInfo:nil
                                              repeats:YES];
   return YES;
@@ -878,6 +904,167 @@ static void DBUiEventCb(void *user, const char *event_json) {
   [_diLock lock];
   _deviceInfoCache = s;
   [_diLock unlock];
+}
+
+- (void)refreshRuntimeReadings {
+  [self refreshDeviceInfo];
+  [self refreshPowerState];
+}
+
+// ---- power state (ABI v2 power_state) ----
+
+- (void)refreshPowerState {
+  UIDevice *device = [UIDevice currentDevice];
+  device.batteryMonitoringEnabled = YES;
+  float level = device.batteryLevel;
+  UIDeviceBatteryState state = device.batteryState;
+  // A negative level means the device does not report a battery at all.
+  NSInteger percent = level < 0 ? -1 : (NSInteger)lroundf(level * 100.0f);
+  if (percent > 100) percent = 100;
+  BOOL charging = (state == UIDeviceBatteryStateCharging);
+  BOOL mains = charging || (state == UIDeviceBatteryStateFull);
+  if (state == UIDeviceBatteryStateUnknown && percent < 0) {
+    // No battery hardware reading at all: report mains, which is what a
+    // permanently docked panel actually is.
+    mains = YES;
+  }
+  NSDictionary *root = [NSDictionary dictionaryWithObjectsAndKeys:
+      [NSNumber numberWithInteger:percent], @"battery_pct",
+      [NSNumber numberWithBool:charging], @"charging",
+      [NSNumber numberWithBool:mains], @"mains", nil];
+  NSData *json = [NSJSONSerialization dataWithJSONObject:root options:0 error:NULL];
+  NSString *encoded =
+      json ? [[NSString alloc] initWithData:json encoding:NSUTF8StringEncoding] : @"";
+  [_diLock lock];
+  _powerStateCache = encoded;
+  _powerState = root;
+  [_diLock unlock];
+}
+
+- (NSString *)cachedPowerStateJson {
+  [_diLock lock];
+  NSString *s = _powerStateCache;
+  [_diLock unlock];
+  return s;
+}
+
+- (NSDictionary *)powerStateNow {
+  [_diLock lock];
+  NSDictionary *state = _powerState;
+  [_diLock unlock];
+  return state;
+}
+
+// ---- time, audio, announcements, history ----
+
+- (NSDictionary *)localTimeJson:(long long)wallMs {
+  __block NSDictionary *out = nil;
+  dispatch_sync(_coreQueue, ^{
+    if (self->_core)
+      out = [self takeJson:db_core_local_time_json(self->_core, (int64_t)wallMs)];
+  });
+  return out;
+}
+
+- (BOOL)timeSyncNow {
+  __block BOOL started = NO;
+  dispatch_sync(_coreQueue, ^{
+    if (self->_core) started = db_core_time_sync_now(self->_core) != 0;
+  });
+  return started;
+}
+
+- (NSDictionary *)audioJsonForDevice:(NSString *)deviceId {
+  NSString *identifier = [deviceId copy] ?: @"";
+  __block NSDictionary *out = nil;
+  dispatch_sync(_coreQueue, ^{
+    if (self->_core)
+      out = [self takeJson:db_core_audio_json(self->_core, [identifier UTF8String])];
+  });
+  return out;
+}
+
+- (BOOL)setNotice:(NSString *)text forDoor:(NSString *)door expiresMs:(long long)expiresMs {
+  if ([door length] == 0 || [text length] == 0) return NO;
+  NSString *d = [door copy];
+  NSString *t = [text copy];
+  __block BOOL ok = NO;
+  dispatch_sync(_coreQueue, ^{
+    if (self->_core)
+      ok = db_core_set_door_notice(self->_core, [d UTF8String], [t UTF8String],
+                                   (int64_t)expiresMs) == 0;
+  });
+  return ok;
+}
+
+- (BOOL)clearNoticeForDoor:(NSString *)door {
+  if ([door length] == 0) return NO;
+  NSString *d = [door copy];
+  __block BOOL ok = NO;
+  dispatch_sync(_coreQueue, ^{
+    if (self->_core) ok = db_core_clear_door_notice(self->_core, [d UTF8String]) == 0;
+  });
+  return ok;
+}
+
+- (NSDictionary *)callLogSince:(long long)sinceMs limit:(NSInteger)limit {
+  int bounded = (int)MAX(1, MIN(500, limit));
+  __block NSDictionary *out = nil;
+  dispatch_sync(_coreQueue, ^{
+    if (self->_core)
+      out = [self takeJson:db_core_call_log_json(self->_core, (int64_t)sinceMs, bounded)];
+  });
+  return out;
+}
+
+- (BOOL)markCallLogSeenUpTo:(NSString *)hlc {
+  NSString *watermark = [hlc copy] ?: @"";
+  __block BOOL ok = NO;
+  dispatch_sync(_coreQueue, ^{
+    if (self->_core)
+      ok = db_core_call_log_mark_seen(self->_core,
+                                      [watermark length] > 0 ? [watermark UTF8String] : NULL) == 0;
+  });
+  return ok;
+}
+
+- (NSString *)coreVersion {
+  const char *version = db_core_version();
+  return version ? [NSString stringWithUTF8String:version] : @"";
+}
+
+// ---- Pairing PIN minting (spec §5.4) ----
+//
+// Minting the join PIN must not open the 「まとめて追加」 window, so it uses a
+// separate export. It is resolved at run time: an older Core simply has no
+// symbol, and the shell then keeps the PIN card empty instead of silently
+// opening the bulk-add window, which would be the dangerous fallback.
+typedef char *(*DBMintJoinTokenFn)(db_core *, int);
+
+static DBMintJoinTokenFn DBMintJoinToken(void) {
+  static DBMintJoinTokenFn fn = NULL;
+  static dispatch_once_t once;
+  dispatch_once(&once, ^{
+    fn = (DBMintJoinTokenFn)dlsym(RTLD_DEFAULT, "db_core_mint_join_token_json");
+    if (fn == NULL)
+      NSLog(@"[doorbell][pairing] core has no db_core_mint_join_token_json; "
+             "the PIN card stays empty");
+  });
+  return fn;
+}
+
++ (BOOL)supportsJoinTokenMinting {
+  return DBMintJoinToken() != NULL;
+}
+
+- (NSDictionary *)mintJoinTokenWithSeconds:(int)seconds {
+  DBMintJoinTokenFn mint = DBMintJoinToken();
+  if (mint == NULL) return nil;
+  __block NSDictionary *out = nil;
+  dispatch_sync(_coreQueue, ^{
+    if (self->_core) out = [self takeJson:mint(self->_core, seconds)];
+  });
+  return out;
 }
 
 @end

@@ -8,11 +8,14 @@
 #import "../Core/DBMediaSource.h"
 #import "../Core/DBSemanticStyle.h"
 #import "../Core/DBTexts.h"
+#import "../Core/DBNoticeModel.h"
+#import "../Core/DBUiTheme.h"
 #import "../Media/DBSiren.h"
 #import "../Net/DBMjpegClient.h"
 #import "../Net/DBRTSPH264Source.h"
 #import "../Net/DBSnapshotPoller.h"
 #import "DBRouter.h"
+#import "DBWidgets.h"
 #import <math.h>
 
 static CGFloat DBDoorStyleNumber(NSDictionary *style, NSString *key, CGFloat fallback,
@@ -64,7 +67,7 @@ typedef enum {
   DBDoorPurposeAlertActiveCall
 } DBDoorPurposeAlertMode;
 
-@interface DBDoorScreen () <UIAlertViewDelegate>
+@interface DBDoorScreen () <UIAlertViewDelegate, DBSosSliderDelegate>
 - (BOOL)beginCallWithPurpose:(NSString *)purpose;
 - (void)presentPurposeAlertForActiveCall:(BOOL)activeCall;
 - (void)configureRTSPSource;
@@ -142,9 +145,23 @@ typedef enum {
   UILabel *_emergencyTitle;
   UILabel *_emergencyNote;
   UIButton *_emergencyCancel;
-  UIButton *_infoButton;
+  UIButton *_infoButton;      // Invisible 7-tap corner; a visitor sees no admin entry.
+  NSInteger _adminTaps;
+  NSDate *_adminFirstTap;
   UIButton *_pairBanner;      // pair.not_set_up_banner while the node is not ready.
   NSString *_pairingState;
+
+  // Batch-2 visitor screen (spec §4.2, §5.1).
+  UILabel *_clockLabel;
+  UILabel *_dateLabel;
+  UILabel *_noticeLabel;
+  UIButton *_noticeExpand;
+  BOOL _noticeExpanded;
+  UILabel *_versionLabel;
+  DBSosSlider *_sos;
+  DBUiPalette *_palette;
+  NSTimer *_clockTimer;
+  NSInteger _tzOffsetMinutes;
 }
 
 - (id)initWithRouter:(DBRouter *)router {
@@ -157,12 +174,20 @@ typedef enum {
     _visitorLang = [_boot.uiLang length] ? _boot.uiLang : @"ja";
     _purposeButtons = [[NSMutableArray alloc] init];
     _languageButtons = [[NSMutableArray alloc] init];
+    _adminFirstTap = [NSDate distantPast];
     _feedbackAudio = [[DBSiren alloc] init];
     _replyAudio = [[DBSiren alloc] init];
     _alarmAudio = [[DBSiren alloc] init];
     [self buildUI];
   }
   return self;
+}
+
+- (void)dealloc {
+  // Never leave a repeating run-loop timer behind a released screen.
+  [_clockTimer invalidate];
+  [_callTimer invalidate];
+  [_replyTimer invalidate];
 }
 
 - (NSString *)screenName {
@@ -254,11 +279,53 @@ typedef enum {
         forControlEvents:UIControlEventTouchUpInside];
   [self addSubview:_pairBanner];
 
-  _infoButton = [self buttonWithTitle:@"i" primary:NO];
-  _infoButton.titleLabel.font = [UIFont boldSystemFontOfSize:24];
-  _infoButton.accessibilityIdentifier = @"door_admin_info";
-  [_infoButton addTarget:self action:@selector(onInfo) forControlEvents:UIControlEventTouchUpInside];
+  // A door station shows no admin entry at all (spec §0.2): the corner is
+  // invisible and needs seven taps plus the admin password.
+  _infoButton = [UIButton buttonWithType:UIButtonTypeCustom];
+  _infoButton.backgroundColor = [UIColor clearColor];
+  _infoButton.accessibilityIdentifier = @"door_admin_corner";
+  [_infoButton addTarget:self action:@selector(onAdminCorner)
+        forControlEvents:UIControlEventTouchUpInside];
   [self addSubview:_infoButton];
+
+  // Large HH:MM:SS plus the date, on every size (spec §5.1).
+  _clockLabel = [[UILabel alloc] init];
+  _clockLabel.backgroundColor = [UIColor clearColor];
+  _clockLabel.textAlignment = NSTextAlignmentCenter;
+  _clockLabel.font = [UIFont systemFontOfSize:72];
+  [self addSubview:_clockLabel];
+
+  _dateLabel = [[UILabel alloc] init];
+  _dateLabel.backgroundColor = [UIColor clearColor];
+  _dateLabel.textAlignment = NSTextAlignmentCenter;
+  _dateLabel.font = [UIFont systemFontOfSize:22];
+  [self addSubview:_dateLabel];
+
+  // The visitor sees the announcement text only: no source line and no expiry.
+  _noticeLabel = [[UILabel alloc] init];
+  _noticeLabel.backgroundColor = [UIColor clearColor];
+  _noticeLabel.font = [UIFont systemFontOfSize:22];
+  _noticeLabel.numberOfLines = 2;
+  _noticeLabel.hidden = YES;
+  [self addSubview:_noticeLabel];
+
+  _noticeExpand = [UIButton buttonWithType:UIButtonTypeCustom];
+  _noticeExpand.backgroundColor = [UIColor clearColor];
+  _noticeExpand.hidden = YES;
+  [_noticeExpand addTarget:self action:@selector(onToggleNotice)
+          forControlEvents:UIControlEventTouchUpInside];
+  [self addSubview:_noticeExpand];
+
+  _versionLabel = [[UILabel alloc] init];
+  _versionLabel.backgroundColor = [UIColor clearColor];
+  _versionLabel.font = [UIFont systemFontOfSize:13];
+  _versionLabel.textAlignment = NSTextAlignmentCenter;
+  [self addSubview:_versionLabel];
+
+  _sos = [[DBSosSlider alloc] initWithFrame:CGRectZero];
+  _sos.delegate = self;
+  _sos.hidden = YES;
+  [self addSubview:_sos];
 
   _replyBanner = [[UIView alloc] init];
   _replyBanner.backgroundColor = [UIColor colorWithRed:0.10 green:0.34 blue:0.17 alpha:0.98];
@@ -317,8 +384,117 @@ typedef enum {
 }
 
 - (void)onScreenWillAppear {
+  if (!_clockTimer) {
+    _clockTimer = [NSTimer scheduledTimerWithTimeInterval:1.0 target:self
+                                                 selector:@selector(updateClock)
+                                                 userInfo:nil repeats:YES];
+  }
+  [self updateClock];
   [self refreshFromCore];
   [self applyStrings];
+}
+
+// Rendered from Core's local-time document: no operating-system time-zone
+// database is needed and the clock follows the cluster zone and NTP offset.
+- (void)updateClock {
+  NSDictionary *local = [_core localTimeJson:0];
+  if (![local isKindOfClass:[NSDictionary class]]) return;
+  NSInteger hh = [DBConfigUtil intVal:local path:@"hh" def:-1];
+  if (hh < 0) return;
+  _clockLabel.text = [NSString stringWithFormat:@"%02ld:%02ld:%02ld", (long)hh,
+                      (long)[DBConfigUtil intVal:local path:@"mm" def:0],
+                      (long)[DBConfigUtil intVal:local path:@"ss" def:0]];
+  _tzOffsetMinutes = [DBConfigUtil intVal:local path:@"offset_min" def:_tzOffsetMinutes];
+  NSArray *parts = [[DBConfigUtil str:local path:@"date"] componentsSeparatedByString:@"-"];
+  if ([parts count] != 3) return;
+  NSArray *weekdayKeys = [NSArray arrayWithObjects:@"day.sun", @"day.mon", @"day.tue",
+      @"day.wed", @"day.thu", @"day.fri", @"day.sat", nil];
+  NSInteger weekday = [DBConfigUtil intVal:local path:@"weekday_num" def:0];
+  if (weekday < 0 || weekday > 6) weekday = 0;
+  _dateLabel.text = [_texts t:@"date.full",
+      [NSNumber numberWithInteger:[[parts objectAtIndex:0] integerValue]],
+      [NSNumber numberWithInteger:[[parts objectAtIndex:1] integerValue]],
+      [NSNumber numberWithInteger:[[parts objectAtIndex:2] integerValue]],
+      [_texts ts:[weekdayKeys objectAtIndex:(NSUInteger)weekday]], nil];
+}
+
+- (NSInteger)minuteOfDay {
+  NSArray *parts = [_clockLabel.text componentsSeparatedByString:@":"];
+  if ([parts count] < 2) return 12 * 60;
+  return [[parts objectAtIndex:0] integerValue] * 60 + [[parts objectAtIndex:1] integerValue];
+}
+
+- (void)onToggleNotice {
+  _noticeExpanded = !_noticeExpanded;
+  _noticeLabel.numberOfLines = _noticeExpanded ? 0 : 2;
+  [self setNeedsLayout];
+}
+
+// The call button colour is computed from the effective background: hue rotated
+// by 180 degrees and lightness moved until it separates, with the local
+// fallback used whenever core published no auto_accent (spec §5.2).
+- (void)applyVisitorTheme {
+  NSString *background = [DBConfigUtil str:_cfg path:[NSString stringWithFormat:
+      @"devices.%@.local.theme.bg_color", _deviceID]];
+  if ([background length] == 0)
+    background = [DBConfigUtil str:_cfg path:@"display.theme.bg_color"];
+  _palette = [DBUiPalette paletteForConfig:_cfg deviceId:_deviceID backgroundHex:background
+                               minuteOfDay:[self minuteOfDay]];
+  UIColor *surface = _palette.surface;
+  if (_cameraPreviewView.hidden) self.backgroundColor = surface;
+  _clockLabel.textColor = [_palette inkForRegion:DBUiRegionClock];
+  _dateLabel.textColor = [_palette inkForRegion:DBUiRegionDate];
+  _touchHint.textColor = [_palette inkForRegion:DBUiRegionHint];
+  _noticeLabel.textColor = [_palette inkForRegion:DBUiRegionStatusLine];
+  _versionLabel.textColor = [_palette inkForRegion:DBUiRegionStatusLine];
+  _titleLabel.textColor = [_palette inkForRegion:DBUiRegionTileLabel];
+  [_sos applyPalette:_palette];
+  [_sos applyConfig:_cfg texts:_texts];
+
+  // An explicit semantic override still wins; otherwise the computed accent is
+  // what the visitor sees.
+  NSDictionary *callStyle = [self styleForSemanticID:@"call.primary"];
+  if ([callStyle objectForKey:@"background"] == nil) {
+    _callButton.backgroundColor = _palette.accent;
+    [_callButton setTitleColor:_palette.accentInk forState:UIControlStateNormal];
+  }
+
+  BOOL showSos = NO;
+  id roles = [DBConfigUtil dig:_cfg path:@"emergency.button_on_roles"];
+  if ([roles isKindOfClass:[NSArray class]]) {
+    for (id role in (NSArray *)roles)
+      if ([role isKindOfClass:[NSString class]] &&
+          [(NSString *)role isEqualToString:@"door_station"])
+        showSos = YES;
+  }
+  _sos.hidden = !showSos;
+
+  long long nowMs = (long long)([[NSDate date] timeIntervalSince1970] * 1000.0);
+  NSDictionary *notice = [DBNoticeModel effectiveNoticeForDoor:_boot.door config:_cfg
+                                                          nowMs:nowMs];
+  NSString *text = notice ? [DBNoticeModel noticeText:notice] : @"";
+  _noticeLabel.text = text;
+  _noticeLabel.hidden = ([text length] == 0);
+  _noticeExpand.hidden = _noticeLabel.hidden;
+
+  NSDictionary *power = [_core powerStateNow];
+  NSString *appVersion = [[NSBundle mainBundle]
+      objectForInfoDictionaryKey:@"CFBundleShortVersionString"] ?: @"";
+  _versionLabel.text = [DBUiTheme versionLineForName:[self doorLabel]
+                                         coreVersion:[_core coreVersion]
+                                          appVersion:appVersion
+                                          batteryPct:[DBConfigUtil intVal:power
+                                                                      path:@"battery_pct" def:-1]
+                                            charging:[DBConfigUtil boolVal:power
+                                                                      path:@"charging" def:NO]];
+}
+
+- (void)sosSliderDidArm:(DBSosSlider *)slider { (void)slider; }
+- (void)sosSliderDidCancel:(DBSosSlider *)slider { (void)slider; }
+
+- (void)sosSliderDidFire:(DBSosSlider *)slider {
+  (void)slider;
+  (void)[_core emergency:YES];
 }
 
 - (void)onScreenWillDisappear {
@@ -659,10 +835,11 @@ typedef enum {
 - (void)applyStrings {
   NSString *doorLabel = [self doorLabel];
   _titleLabel.text = doorLabel;
-  _touchHint.text = [_texts ts:@"idle.touch_to_call"];
+  _touchHint.text = [_texts ts:@"door.hint_call"];
   [_callButton setTitle:[_texts t:@"idle.call_button", doorLabel, nil]
                forState:UIControlStateNormal];
-  _purposeHint.text = [_texts ts:@"idle.choose_purpose"];
+  // Round 5 dropped the purpose explainer; a control shows only what it does.
+  _purposeHint.text = @"";
   _callingLabel.text = _flowState == DBDoorFlowInCall
       ? [_texts ts:@"incall.title"]
       : (_callingTitleOverride ?: [_texts ts:@"calling.title"]);
@@ -694,6 +871,7 @@ typedef enum {
     _mediaBadge.text = [NSString stringWithFormat:@" %@ ", [_texts ts:@"ring.no_video"]];
     _mediaBadge.textColor = [UIColor colorWithWhite:1 alpha:0.65];
   }
+  [self applyVisitorTheme];
 }
 
 - (NSDictionary *)styleForSemanticID:(NSString *)semanticID {
@@ -1039,11 +1217,19 @@ typedef enum {
   [self showIdleWithHint:[_texts ts:@"calling.no_answer"]];
 }
 
-- (void)onInfo {
+- (void)onAdminCorner {
+  NSDate *now = [NSDate date];
+  if ([now timeIntervalSinceDate:_adminFirstTap] > 5) {
+    _adminFirstTap = now;
+    _adminTaps = 0;
+  }
+  _adminTaps++;
+  if (_adminTaps < 7) return;
+  _adminTaps = 0;
   __weak DBDoorScreen *weakSelf = self;
   [_router requestPinThen:^{
     DBDoorScreen *screen = weakSelf;
-    if (screen) [screen->_router showInfo];
+    if (screen) [screen->_router showSettings];
   }];
 }
 
@@ -1253,47 +1439,113 @@ typedef enum {
   [super layoutSubviews];
   CGSize size = self.bounds.size;
   BOOL compact = DBCompatibilityLayoutForWidth(size.width) == DBCompatibilityLayoutCompact;
+  BOOL portrait = size.height > size.width;
   CGFloat margin = compact ? 12 : 28;
   CGFloat top = compact ? 12 : 22;
-  CGFloat badgeW = compact ? 100 : 145;
-  _titleLabel.frame = CGRectMake(margin + badgeW, top, size.width - 2 * (margin + badgeW),
-                                 compact ? 44 : 60);
-  _mediaBadge.frame = CGRectMake(margin, top + 6, badgeW, compact ? 32 : 38);
-  _infoButton.frame = CGRectMake(size.width - margin - 46, top + 2, 46, 46);
-  _touchHint.frame = CGRectMake(margin, CGRectGetMaxY(_titleLabel.frame), size.width - 2 * margin,
-                                compact ? 28 : 34);
-  CGFloat bannerH = 0;
+
+  // No visible admin entry: the corner is transparent and needs seven taps.
+  _infoButton.frame = CGRectMake(size.width - 110, 0, 110, 110);
+  _mediaBadge.frame = CGRectMake(margin, top, compact ? 100 : 145, compact ? 26 : 30);
+
+  CGFloat clockSize = compact ? 46 : (portrait ? 84 : 72);
+  _clockLabel.font = [UIFont systemFontOfSize:clockSize];
+  _dateLabel.font = [UIFont systemFontOfSize:compact ? 16 : 22];
+  CGFloat y = top + (compact ? 26 : 34);
+  _clockLabel.frame = CGRectMake(margin, y, size.width - 2 * margin, clockSize + 10);
+  y += clockSize + 12;
+  _dateLabel.frame = CGRectMake(margin, y, size.width - 2 * margin, compact ? 22 : 28);
+  y += compact ? 26 : 34;
+
+  CGFloat footerHeight = compact ? 44 : 54;
+  CGFloat sosHeight = _sos.hidden ? 0 : (compact ? 52 : 60);
+  CGFloat bottom = size.height - margin - footerHeight - (sosHeight > 0 ? sosHeight + 10 : 0);
+
+  _versionLabel.frame = CGRectMake(margin, size.height - margin - 18,
+                                   size.width - 2 * margin, 18);
+  if (sosHeight > 0) {
+    CGFloat sosWidth = MIN(360, size.width - 2 * margin);
+    _sos.frame = CGRectMake((size.width - sosWidth) / 2,
+                            size.height - margin - footerHeight - sosHeight + 8,
+                            sosWidth, sosHeight);
+  } else {
+    _sos.frame = CGRectZero;
+  }
+
+  CGFloat bannerHeight = 0;
   if (_pairBanner.hidden) {
     _pairBanner.frame = CGRectZero;
   } else {
-    bannerH = (compact ? 40 : 48) + 8;
-    CGFloat bannerW = MIN(size.width - 2 * margin, 560);
-    _pairBanner.frame = CGRectMake((size.width - bannerW) / 2,
-                                   CGRectGetMaxY(_touchHint.frame) + 4, bannerW,
-                                   bannerH - 8);
+    CGFloat bannerWidth = MIN(size.width - 2 * margin, 560);
+    bannerHeight = (compact ? 40 : 48) + 8;
+    _pairBanner.frame = CGRectMake((size.width - bannerWidth) / 2, y, bannerWidth,
+                                   bannerHeight - 8);
+    y += bannerHeight;
   }
 
-  CGFloat callW = compact ? MIN(230, size.width - 2 * margin) : MIN(390, size.width * 0.46);
-  CGFloat callH = compact ? 82 : 118;
-  CGFloat callY = CGRectGetMaxY(_touchHint.frame) + bannerH + (compact ? 4 : 12);
+  BOOL hasNotice = !_noticeLabel.hidden;
+  CGFloat langHeight = _languageBar.hidden ? 0 : (compact ? 44 : 54);
   NSDictionary *callStyle = [self styleForSemanticID:@"call.primary"];
   CGFloat callScale = DBDoorStyleNumber(callStyle, @"scale", 1, 0.75, 2);
   _callButton.titleLabel.font = [UIFont boldSystemFontOfSize:
-      24 * DBDoorStyleNumber(callStyle, @"font_scale", 1, 0.75, 2)];
-  CGRect callBase = CGRectMake((size.width - callW) / 2, callY, callW, callH);
-  _callButton.frame = DBScaledDoorFrame(callBase, callScale, size, margin);
-  _callButton.frame = CGRectMake(_callButton.frame.origin.x, callY,
-                                 _callButton.frame.size.width, _callButton.frame.size.height);
-  _purposeHint.frame = CGRectMake(margin, CGRectGetMaxY(_callButton.frame) + 8,
-                                  size.width - 2 * margin, compact ? 26 : 34);
+      (compact ? 22 : 26) * DBDoorStyleNumber(callStyle, @"font_scale", 1, 0.75, 2)];
+  CGFloat callHeight = MAX(96, (compact ? 88 : 118) * callScale);
+  CGFloat hintHeight = compact ? 26 : 32;
 
-  CGFloat langH = _languageBar.hidden ? 0 : (compact ? 44 : 54);
-  _languageBar.frame = CGRectMake(margin, size.height - margin - langH,
-                                  size.width - 2 * margin, langH);
-  CGFloat purposeY = CGRectGetMaxY(_purposeHint.frame) + 4;
-  CGFloat purposeBottom = _languageBar.hidden ? size.height - margin : CGRectGetMinY(_languageBar.frame) - 8;
-  _purposeScroll.frame = CGRectMake(margin, purposeY, size.width - 2 * margin,
-                                    MAX(0, purposeBottom - purposeY));
+  if (portrait || !hasNotice) {
+    // Portrait (and any layout without a notice): clock -> notice -> language
+    // row in the middle -> call button -> one-line hint -> footer.
+    CGFloat contentWidth = size.width - 2 * margin;
+    if (hasNotice) {
+      CGFloat noticeHeight = _noticeExpanded ? MIN(160, bottom - y - 200) : (compact ? 52 : 62);
+      noticeHeight = MAX(40, noticeHeight);
+      _noticeLabel.frame = CGRectMake(margin, y, contentWidth, noticeHeight);
+      _noticeExpand.frame = _noticeLabel.frame;
+      y += noticeHeight + 10;
+    } else {
+      _noticeLabel.frame = CGRectZero;
+      _noticeExpand.frame = CGRectZero;
+    }
+    if (langHeight > 0) {
+      _languageBar.frame = CGRectMake(margin, y, contentWidth, langHeight);
+      y += langHeight + 12;
+    } else {
+      _languageBar.frame = CGRectZero;
+    }
+    CGFloat callWidth = MIN(compact ? contentWidth : 480, contentWidth);
+    CGFloat callY = MIN(y, bottom - callHeight - hintHeight - 12);
+    _callButton.frame = CGRectMake((size.width - callWidth) / 2, callY, callWidth, callHeight);
+    _touchHint.frame = CGRectMake(margin, CGRectGetMaxY(_callButton.frame) + 8,
+                                  contentWidth, hintHeight);
+    _titleLabel.frame = CGRectZero;
+    _purposeHint.frame = CGRectZero;
+    _purposeScroll.frame = CGRectMake(margin, CGRectGetMaxY(_touchHint.frame) + 8,
+                                      contentWidth,
+                                      MAX(0, bottom - CGRectGetMaxY(_touchHint.frame) - 8));
+  } else {
+    // Landscape with a notice: the notice takes the left column and the
+    // language row sits directly above the call button on the right.
+    CGFloat columnGap = 20;
+    CGFloat leftWidth = (size.width - 2 * margin - columnGap) * 0.45;
+    CGFloat rightX = margin + leftWidth + columnGap;
+    CGFloat rightWidth = size.width - rightX - margin;
+    _noticeLabel.numberOfLines = 0;
+    _noticeLabel.frame = CGRectMake(margin, y, leftWidth, MAX(60, bottom - y));
+    _noticeExpand.frame = _noticeLabel.frame;
+
+    CGFloat callY = bottom - callHeight - hintHeight - 12;
+    if (langHeight > 0) {
+      _languageBar.frame = CGRectMake(rightX, callY - langHeight - 12, rightWidth, langHeight);
+    } else {
+      _languageBar.frame = CGRectZero;
+    }
+    _callButton.frame = CGRectMake(rightX, callY, rightWidth, callHeight);
+    _touchHint.frame = CGRectMake(rightX, CGRectGetMaxY(_callButton.frame) + 8, rightWidth,
+                                  hintHeight);
+    _titleLabel.frame = CGRectZero;
+    _purposeHint.frame = CGRectZero;
+    _purposeScroll.frame = CGRectMake(rightX, y, rightWidth,
+                                      MAX(0, CGRectGetMinY(_languageBar.frame) - y - 8));
+  }
 
   NSInteger columns = compact ? 2 : 3;
   CGFloat gap = compact ? 7 : 12;
@@ -1319,7 +1571,7 @@ typedef enum {
         [_languageButtons count] : 0;
   for (NSInteger i = 0; i < (NSInteger)[_languageButtons count]; i++) {
     UIButton *button = [_languageButtons objectAtIndex:(NSUInteger)i];
-    button.frame = CGRectMake(i * (languageW + languageGap), 0, languageW, langH);
+    button.frame = CGRectMake(i * (languageW + languageGap), 0, languageW, langHeight);
   }
 
   _replyBanner.frame = CGRectMake(margin, top + (compact ? 52 : 70), size.width - 2 * margin,

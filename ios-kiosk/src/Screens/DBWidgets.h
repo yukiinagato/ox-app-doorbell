@@ -1,0 +1,92 @@
+#import <UIKit/UIKit.h>
+
+#import "../Core/DBSosSlideModel.h"
+
+@class DBTexts;
+
+// Shared kiosk widgets for the batch-2 UI: the resolved appearance palette,
+// padded coloured labels, two-part labels, the SOS slide control, the admin QR
+// block, and the announcement chip. Every control is drawn with manual frames
+// and UIButtonTypeCustom because iOS 5 has no Auto Layout and renders
+// UIButtonTypeSystem invisibly.
+
+UIColor *DBColorFromHex(NSString *hex, UIColor *fallback);
+// Letterboxed video placement: the door camera's aspect is preserved inside the
+// available area, so a portrait stream is shown portrait.
+CGRect DBAspectFitRect(CGRect available, CGSize contentSize);
+NSString *DBHexFromColor(UIColor *color);
+
+// One appearance's colour tokens plus the per-region automatic ink rule.
+@interface DBUiPalette : NSObject
+
+@property(nonatomic, readonly, copy) NSString *mode;  // "light" | "dark"
+@property(nonatomic, readonly, copy) NSString *surfaceHex;
+@property(nonatomic, readonly) UIColor *surface;
+@property(nonatomic, readonly) UIColor *elevated;   // tiles, rows, chips
+@property(nonatomic, readonly) UIColor *separator;
+@property(nonatomic, readonly) UIColor *ink;
+@property(nonatomic, readonly) UIColor *mutedInk;
+@property(nonatomic, readonly) UIColor *accent;     // computed call/primary colour
+@property(nonatomic, readonly) UIColor *accentInk;
+@property(nonatomic, readonly) UIColor *danger;
+@property(nonatomic, readonly) UIColor *dangerInk;
+@property(nonatomic, readonly) UIColor *notice;
+@property(nonatomic, readonly) UIColor *noticeInk;
+
+// backgroundHex is the effective background behind the text: the theme colour,
+// or the sampled average of the theme image when one is loaded.
++ (DBUiPalette *)paletteForConfig:(NSDictionary *)config
+                         deviceId:(NSString *)deviceId
+                    backgroundHex:(NSString *)backgroundHex
+                      minuteOfDay:(NSInteger)minuteOfDay;
+
+- (UIColor *)inkForRegion:(NSString *)region;
+- (BOOL)needsShadowForRegion:(NSString *)region;
+// Average colour of a theme image, downsampled to 16x16 off the main thread.
++ (NSString *)averageHexForImage:(UIImage *)image;
+
+@end
+
+// Coloured background text always gets 6/12 padding and a radius (spec §0.7).
+@interface DBPillLabel : UILabel
+@property(nonatomic, assign) UIEdgeInsets contentInsets;
+@end
+
+// Deliberate two-part labels: the authored "\n" splits the title and the second
+// line renders smaller and muted (spec §5.1). Never auto-wrapped mid phrase.
+@interface DBTwoPartButton : UIButton
+- (void)setTwoPartTitle:(NSString *)title;
+- (void)setPrimaryColor:(UIColor *)primary secondaryColor:(UIColor *)secondary;
+@end
+
+@class DBSosSlider;
+
+@protocol DBSosSliderDelegate <NSObject>
+- (void)sosSliderDidArm:(DBSosSlider *)slider;
+- (void)sosSliderDidCancel:(DBSosSlider *)slider;
+- (void)sosSliderDidFire:(DBSosSlider *)slider;
+@end
+
+// Slide-to-trigger SOS. Releasing past 90 % starts the cancellable countdown;
+// Core is told only when the countdown reaches zero.
+@interface DBSosSlider : UIView
+@property(nonatomic, weak) id<DBSosSliderDelegate> delegate;
+@property(nonatomic, readonly) DBSosPhase phase;
+- (void)applyConfig:(NSDictionary *)config texts:(DBTexts *)texts;
+- (void)applyPalette:(DBUiPalette *)palette;
+- (void)reset;
+@end
+
+// Admin-page QR plus its URL. Visible on every indoor surface; opening the
+// admin still requires the password.
+@interface DBAdminQrView : UIView
+- (void)setUrl:(NSString *)url caption:(NSString *)caption;
+- (void)applyPalette:(DBUiPalette *)palette;
+@property(nonatomic, readonly, copy) NSString *url;
+@end
+
+// Compact 「お知らせ」 chip with an active dot (spec §5.2).
+@interface DBNoticeChip : UIButton
+- (void)setChipTitle:(NSString *)title active:(BOOL)active;
+- (void)applyPalette:(DBUiPalette *)palette;
+@end

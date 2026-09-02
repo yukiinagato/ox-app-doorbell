@@ -50,6 +50,15 @@
 + (BOOL)isValidDoor:(NSString *)door;
 + (BOOL)persistSetupName:(NSString *)name role:(NSString *)role door:(NSString *)door;
 
+// Device-local settings the native settings screen may write without any
+// cluster credential. The allow-list is deliberate: everything else in
+// boot.json is either cluster identity or set once during provisioning.
++ (BOOL)isLocalWritableKey:(NSString *)key;
++ (BOOL)isValidLocalValue:(NSString *)value forKey:(NSString *)key;
+// Pure transformation used by the writer below and by the host tests.
++ (NSString *)localJsonFromJson:(NSString *)json key:(NSString *)key value:(NSString *)value;
++ (NSString *)persistLocalValue:(NSString *)value forKey:(NSString *)key;
+
 // Pure transformation used by tests and the atomic file writer below.
 + (NSString *)pairingJsonFromJson:(NSString *)json
                         secretRef:(NSString *)secretRef
@@ -65,5 +74,13 @@
 
 // Atomically rewrites boot.json without psk_ref/psk_hex. Returns the new JSON.
 + (NSString *)clearPairingSecretRef;
+
+// Revoke is a factory reset of this device's cluster identity and its local
+// setup (spec §5.4): the pairing secret, the mesh seeds, and the operator's
+// name/role/door choice all go, and setup_complete returns to false so the
+// device comes back up in first-run setup. Pure transformation plus the atomic
+// writer that uses it.
++ (NSString *)factoryResetJsonFromJson:(NSString *)json;
++ (NSString *)clearPairingAndSetup;
 
 @end

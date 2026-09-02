@@ -710,7 +710,11 @@ static UIColor *DBAddError(void) {
   DBCoreBridge *core = _core;
   __weak DBAddDeviceScreen *weakSelf = self;
   dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-    NSDictionary *token = [core startPairingWithSeconds:600];
+    // Minting the Pairing PIN must never open the 「まとめて追加」 window
+    // (spec §5.4): that window is opened only by its own button, with its
+    // warning. An older Core without the mint export leaves the card empty
+    // instead of silently opening the window.
+    NSDictionary *token = [core mintJoinTokenWithSeconds:600];
     dispatch_async(dispatch_get_main_queue(), ^{
       DBAddDeviceScreen *screen = weakSelf;
       if (!screen) return;
@@ -720,6 +724,8 @@ static UIColor *DBAddError(void) {
         [screen adoptToken:token];
         if (screen->_tokenExpiresS <= 0) screen->_tokenExpiresS = 600;
         if (screen->_tokenAttemptsLeft <= 0) screen->_tokenAttemptsLeft = 3;
+      } else if (![DBCoreBridge supportsJoinTokenMinting]) {
+        screen->_errorLabel.text = [screen->_texts ts:@"pair.mint_unsupported"];
       } else {
         NSString *code = [DBConfigUtil evStr:token key:@"err"];
         screen->_errorLabel.text =
@@ -742,7 +748,8 @@ static UIColor *DBAddError(void) {
   _pairingModeLeftS = 600;
   _pairingModeAdded = 0;
   _pairingModeReadAt = CFAbsoluteTimeGetCurrent();
-  [_core setPairingMode:600];
+  // 「まとめて追加」 is the only caller that opens the pairing window.
+  (void)[_core startPairingWithSeconds:600];
   [self applyContent];
 }
 
@@ -766,14 +773,13 @@ static UIColor *DBAddError(void) {
   _confirmingUnpair = NO;
   _unpairConfirm.text = @"";
   [_unpairButton setTitle:[_texts ts:@"pair.clear_title"] forState:UIControlStateNormal];
-  [_core unpair];
-  NSString *json = [DBBootConfig clearPairingSecretRef];
-  if ([json length] > 0) [_router boot].rawJson = json;
-  [_router boot].legacyPskHex = @"";
+  // 「クラスタから外す」 confirmed on the device itself is a factory reset of
+  // its cluster identity and its setup, exactly like a remote revocation
+  // (spec §5.4). The router owns the wipe and the return to first-run setup.
   _state = @"unpaired";
   [self applyContent];
   [_router closeAddDeviceAnimated:NO];
-  [_router showPairing];
+  [_router factoryResetForRevocation:@"admin_unpair"];
 }
 
 - (void)onOpenOnboarding {

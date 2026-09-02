@@ -106,13 +106,23 @@ class RecoverySafeModeContracts(unittest.TestCase):
         recovery_start = app.rindex("- (void)armLocalSafeModeRecovery")
         recovery = app[recovery_start:
                        app.index("- (void)showBootstrapSetup", recovery_start)]
-        self.assertIn("300 * NSEC_PER_SEC", recovery)
+        # The latch now clears only after ten minutes of measured health: the
+        # heartbeat must keep advancing and no unclean launch may be charged
+        # during the window (qualification follow-up, 2026-09-02).
+        self.assertIn("DBSafeModeRecovery shouldClearSafeModeEnteredAt:", recovery)
+        self.assertIn("_lastHeartbeatAt", recovery)
+        self.assertIn("crashesSinceEntry:[self crashesChargedSinceSafeModeEntry]", recovery)
         self.assertIn("DBMarkHealthyRuntime()", recovery)
         self.assertIn("_helperSafeModeActive", recovery)
-        self.assertIn('setSafeMode:NO reason:@"healthy_runtime_5m"', recovery)
+        self.assertIn('setSafeMode:NO reason:@"healthy_runtime_10m"', recovery)
         self.assertIn("DBShellCapabilities(", recovery)
         self.assertIn("DBRecoveryLaunchesKey", app)
         self.assertIn('setObject:@"healthy_runtime"', app)
+        # A repeating evaluation, not a one-shot timer that a wedged run loop
+        # would still let fire.
+        self.assertIn("scheduledTimerWithTimeInterval:30.0", recovery)
+        self.assertNotIn("300 * NSEC_PER_SEC", recovery)
+
 
         self.assertIn("if (!enabled)", router)
         self.assertIn("[_incoming exitSafeMode]", router)
@@ -124,6 +134,24 @@ class RecoverySafeModeContracts(unittest.TestCase):
         self.assertIn("[self startVideo:_incomingStreamUrl]", incoming)
         self.assertIn("_safeMode = NO", home)
         self.assertIn("[self applyDisplay]", home)
+
+    def test_ios5_local_safe_mode_state_is_visible_to_the_operator(self):
+        app = read("ios-kiosk/src/Support/DBAppDelegate.m")
+        settings = read("ios-kiosk/src/Screens/DBSettingsScreen.m")
+        policy = read("ios-kiosk/src/Support/DBSafeModeRecovery.m")
+
+        # The window and the reason it is still running are published...
+        self.assertIn('@"recovery_state" : recoveryState', app)
+        self.assertIn('@"recovery_remaining_s" : @(recoveryRemaining)', app)
+        self.assertIn('@"safe_mode_state" : recoveryState', app)
+        # ...and rendered in the settings screen's 本機情報 section.
+        self.assertIn('[_texts ts:@"info.safe_mode"]', settings)
+        self.assertIn('info.safe_mode_wait', settings)
+        self.assertIn('info.safe_mode_heartbeat', settings)
+        self.assertIn('info.safe_mode_helper', settings)
+        # The policy itself stays a pure, host-tested decision.
+        self.assertIn("kHealthyWindow = 600.0", policy)
+        self.assertIn("if (helperSafeModeActive) return NO;", policy)
 
     def test_ios5_deploy_restart_is_not_counted_as_a_crash(self):
         app = read("ios-kiosk/src/Support/DBAppDelegate.m")

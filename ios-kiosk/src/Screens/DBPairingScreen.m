@@ -665,10 +665,13 @@ static UIColor *DBPairOk(void) {
 
   DBCoreBridge *core = [_router core];
   __weak DBPairingScreen *weakSelf = self;
-  // foundCluster and start_pairing both block on the Core queue; never on main.
+  // foundCluster and the PIN mint both block on the Core queue; never on main.
+  // Founding shows the PIN card and this device's own QR and nothing else: it
+  // must not open the 「まとめて追加」 window, which would silently adopt every
+  // device that asks (spec §5.4).
   dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
     BOOL created = [core foundCluster];
-    NSDictionary *token = created ? [core startPairingWithSeconds:600] : nil;
+    NSDictionary *token = created ? [core mintJoinTokenWithSeconds:600] : nil;
     dispatch_async(dispatch_get_main_queue(), ^{
       DBPairingScreen *screen = weakSelf;
       if (!screen) return;
