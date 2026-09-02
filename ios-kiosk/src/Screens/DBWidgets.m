@@ -11,17 +11,6 @@ UIColor *DBColorFromHex(NSString *hex, UIColor *fallback) {
 }
 
 // Where an aspect-filled picture lands in a view of the given size.
-static CGRect DBAspectFitRectForFill(CGSize contentSize, CGSize viewSize) {
-  NSArray *rect = [DBUiTheme aspectFillDrawRectForImageWidth:contentSize.width
-                                                imageHeight:contentSize.height
-                                                  viewWidth:viewSize.width
-                                                 viewHeight:viewSize.height];
-  return CGRectMake((CGFloat)[[rect objectAtIndex:0] doubleValue],
-                    (CGFloat)[[rect objectAtIndex:1] doubleValue],
-                    (CGFloat)[[rect objectAtIndex:2] doubleValue],
-                    (CGFloat)[[rect objectAtIndex:3] doubleValue]);
-}
-
 CGRect DBAspectFitRect(CGRect available, CGSize contentSize) {
   NSArray *rect = [DBUiTheme aspectFitRectForContentWidth:contentSize.width
                                             contentHeight:contentSize.height
@@ -56,23 +45,29 @@ NSString *DBHexFromColor(UIColor *color) {
 
 @implementation DBThemeBackdrop
 
-// Spec 5.1 wants the picture legible behind cards and text, not a wash. Just
-// over 60 % black keeps the photograph readable as a photograph while the ink
-// rule still finds contrast for every region over it.
-+ (CGFloat)darkeningAlpha { return 0.62; }
+// The picture work itself lives in DBBackdropCompositor, which is CoreGraphics
+// only so a host test can measure the mean luminance it produces instead of
+// anyone judging the darkening from a photograph of a panel.
++ (CGFloat)darkeningAlpha { return [DBBackdropCompositor darkeningAlpha]; }
 
-+ (CGFloat)maximumLongSide { return 512; }
++ (CGFloat)maximumLongSide { return [DBBackdropCompositor maximumLongSide]; }
 
-// The prepared bitmap keeps the panel's aspect ratio but never exceeds 512 pt
-// on its long side: the view scales it back up with aspect fill, which maps
-// one to one because the ratio matches, and an SGX535 holds a quarter of the
-// texture it used to.
 + (CGSize)preparedSizeForViewSize:(CGSize)size {
-  CGFloat longSide = MAX(size.width, size.height);
-  if (longSide <= 0 || longSide <= [self maximumLongSide]) return size;
-  CGFloat scale = [self maximumLongSide] / longSide;
-  return CGSizeMake(MAX(1, floorf((float)(size.width * scale))),
-                    MAX(1, floorf((float)(size.height * scale))));
+  return [DBBackdropCompositor preparedSizeForViewSize:size];
+}
+
+// A JPEG carrying an EXIF rotation draws upright through UIImage and sideways
+// through its raw CGImage, so the orientation is resolved here, in UIKit,
+// before the pixels go to CoreGraphics.
++ (CGImageRef)newUprightImageFrom:(UIImage *)image CF_RETURNS_RETAINED {
+  if (image == nil || image.CGImage == NULL) return NULL;
+  if (image.imageOrientation == UIImageOrientationUp)
+    return CGImageRetain(image.CGImage);
+  UIGraphicsBeginImageContextWithOptions(image.size, YES, 1.0);
+  [image drawInRect:CGRectMake(0, 0, image.size.width, image.size.height)];
+  UIImage *upright = UIGraphicsGetImageFromCurrentImageContext();
+  UIGraphicsEndImageContext();
+  return upright.CGImage ? CGImageRetain(upright.CGImage) : NULL;
 }
 
 + (NSMutableDictionary *)cache {
@@ -99,17 +94,14 @@ NSString *DBHexFromColor(UIColor *color) {
   UIImage *source = data ? [UIImage imageWithData:data] : nil;
   if (source == nil || source.size.width <= 0 || source.size.height <= 0) return nil;
 
-  // One draw, scale 1: the iPad 1 is not a Retina device and a 2x context would
-  // quadruple the texture for nothing.
-  CGSize preparedSize = [self preparedSizeForViewSize:size];
-  UIGraphicsBeginImageContextWithOptions(preparedSize, YES, 1.0);
-  CGRect fill = DBAspectFitRectForFill(source.size, preparedSize);
-  [source drawInRect:fill];
-  [[UIColor colorWithWhite:0 alpha:[self darkeningAlpha]] set];
-  UIRectFillUsingBlendMode(CGRectMake(0, 0, preparedSize.width, preparedSize.height),
-                           kCGBlendModeNormal);
-  UIImage *prepared = UIGraphicsGetImageFromCurrentImageContext();
-  UIGraphicsEndImageContext();
+  // One draw at scale 1: the iPad 1 is not a Retina device and a 2x bitmap
+  // would quadruple the texture for nothing.
+  CGImageRef upright = [self newUprightImageFrom:source];
+  CGImageRef composited = [DBBackdropCompositor newBackdropFromImage:upright viewSize:size];
+  CGImageRelease(upright);
+  if (composited == NULL) return nil;
+  UIImage *prepared = [UIImage imageWithCGImage:composited];
+  CGImageRelease(composited);
   if (prepared == nil) return nil;
   @synchronized([self cache]) {
     NSMutableDictionary *cache = [self cache];

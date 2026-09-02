@@ -154,6 +154,8 @@ static const NSInteger kRecentCallLimit = 20;
 
   // UI
   UIImageView *_themeBg;
+  UIView *_historyScrim;   // Readability plate under the call list.
+  UIView *_footerScrim;    // ...and under the QR block and version line.
   UILabel *_clockLabel;
   UILabel *_dateLabel;
   NSArray *_fleetCounters;   // Three DBFleetCounter, left to right.
@@ -232,6 +234,13 @@ static const NSInteger kRecentCallLimit = 20;
   _themeBg.clipsToBounds = YES;
   _themeBg.hidden = YES;
   [self addSubview:_themeBg];
+  // Two plates directly over the picture and under everything else. A busy
+  // wallpaper defeats per-region ink for a whole block of small text: the ink
+  // rule can pick a colour that wins on average and still lose over one bright
+  // patch. The door tiles already solve this by being cards, so the call list
+  // and the footer become cards too, at the same radius and tone.
+  _historyScrim = [self newScrimView];
+  _footerScrim = [self newScrimView];
 
   _clockLabel = [[UILabel alloc] init];
   _clockLabel.backgroundColor = [UIColor clearColor];
@@ -607,6 +616,32 @@ static const NSInteger kRecentCallLimit = 20;
   _offlineView.backgroundColor = _palette.surface;
   _offlineTitle.textColor = _palette.ink;
   _offlineBody.textColor = _palette.mutedInk;
+  [self applyScrimTone];
+}
+
+// A scrim plate: the surface colour at 70 %, so the picture still reads through
+// it while small text over it gets a stable ground. Card radius matches a door
+// tile, and it never takes touches away from the controls above it.
+- (UIView *)newScrimView {
+  UIView *scrim = [[UIView alloc] initWithFrame:CGRectZero];
+  scrim.layer.cornerRadius = 12;
+  scrim.userInteractionEnabled = NO;
+  scrim.hidden = YES;
+  [self insertSubview:scrim aboveSubview:_themeBg];
+  return scrim;
+}
+
+static const CGFloat kScrimAlpha = 0.70;
+
+// The plates exist only over a picture; on a flat ground they would be a
+// visible rectangle of very slightly different colour for no benefit.
+- (void)applyScrimTone {
+  BOOL overPicture = !_themeBg.hidden && _themeBg.image != nil;
+  UIColor *tone = [_palette.surface colorWithAlphaComponent:kScrimAlpha];
+  _historyScrim.backgroundColor = tone;
+  _footerScrim.backgroundColor = tone;
+  _historyScrim.hidden = !overPicture;
+  _footerScrim.hidden = !overPicture;
 }
 
 // Why the dashboard is on a flat ground rather than the theme picture. The two
@@ -630,6 +665,7 @@ static const NSInteger kRecentCallLimit = 20;
     _themeBg.hidden = YES;
     [self refreshBackgroundSampler];
     self.backgroundColor = _palette.surface;
+    [self applyScrimTone];
     return;
   }
   NSString *color = [self themeValue:@"bg_color"];
@@ -644,9 +680,11 @@ static const NSInteger kRecentCallLimit = 20;
     _themeBg.hidden = YES;
     [self refreshBackgroundSampler];
     self.backgroundColor = parsed ?: _palette.surface;
+    [self applyScrimTone];
     return;
   }
   self.backgroundColor = parsed ?: _palette.surface;
+  [self applyScrimTone];
   if ([_themeHash isEqualToString:hash] && _themeBg.image != nil) return;
   _themeHash = hash;
   [self loadThemeImage:hash];
@@ -1332,6 +1370,11 @@ static const NSInteger kRecentCallLimit = 20;
   _recentCaption.frame = CGRectMake(listX, listY - 26, listWidth - seeAllWidth - 10, 24);
   _seeAllButton.frame = CGRectMake(listX + listWidth - seeAllWidth, listY - 30,
                                    seeAllWidth, 34);
+  // The plate covers the rows, not the heading: headings keep the region-ink
+  // rule over the picture, which is what the spec asks of them.
+  CGFloat scrimPad = 10;
+  _historyScrim.frame = CGRectMake(listX - scrimPad, listY - scrimPad,
+                                   listWidth + scrimPad * 2, listHeight + scrimPad * 2);
   _recentList.frame = CGRectMake(listX, listY, listWidth, listHeight);
   CGFloat rowY = 0;
   for (UILabel *label in _recentLabels) {
@@ -1345,6 +1388,11 @@ static const NSInteger kRecentCallLimit = 20;
   _qr.frame = DBRectFromArray([footer objectForKey:@"qr"]);
   _versionLabel.frame = DBRectFromArray([footer objectForKey:@"version"]);
   _sos.frame = DBRectFromArray([footer objectForKey:@"sos"]);
+  // One plate under the QR block, its caption and the version line. The SOS
+  // slider keeps its own plate and is deliberately left outside this one.
+  CGRect footerBlock = CGRectUnion(_qr.frame, _versionLabel.frame);
+  _footerScrim.frame = CGRectIsEmpty(footerBlock)
+      ? CGRectZero : CGRectInset(footerBlock, -scrimPad, -scrimPad);
 
   CGFloat replyWidth = MIN(size.width - 40, 560);
   _replyBanner.frame = CGRectMake((size.width - replyWidth) / 2, 20, replyWidth, 96);

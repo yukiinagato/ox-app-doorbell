@@ -1,6 +1,7 @@
 #import <UIKit/UIKit.h>
 
 #import "../Core/DBAdminAddress.h"
+#import "../Core/DBBackdropCompositor.h"
 #import "../Core/DBSosSlideModel.h"
 
 @class DBTexts;

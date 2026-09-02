@@ -250,9 +250,20 @@ class ReadabilityContracts(unittest.TestCase):
         # The prepared bitmap is bounded and the darkening is deep enough to
         # read text over a bright wallpaper. Spec 5.1 wants the picture, so a
         # flat ground has to say which fault put it there.
-        self.assertIn("+ (CGFloat)maximumLongSide { return 512; }", widgets)
-        self.assertIn("+ (CGFloat)darkeningAlpha { return 0.62; }", widgets)
-        self.assertIn("preparedSizeForViewSize:size", widgets)
+        # The pixel work lives in a CoreGraphics-only unit so the darkening is
+        # measured by a host test rather than judged from a device photograph.
+        compositor = read("ios-kiosk/src/Core/DBBackdropCompositor.m")
+        self.assertIn("+ (CGFloat)maximumLongSide { return 512; }", compositor)
+        self.assertIn("+ (CGFloat)darkeningAlpha { return 0.62; }", compositor)
+        self.assertIn("kCGBlendModeNormal", compositor)
+        self.assertIn("aspectFillDrawRectForImageWidth", compositor)
+        self.assertIn("DBBackdropCompositor newBackdropFromImage:upright", widgets)
+        # Small text over a busy picture gets a plate; headings keep region ink.
+        self.assertIn("static const CGFloat kScrimAlpha = 0.70;", home)
+        self.assertIn("- (void)applyScrimTone", home)
+        self.assertIn("_historyScrim.frame", home)
+        self.assertIn("_footerScrim.frame", home)
+        self.assertIn("colorWithAlphaComponent:kScrimAlpha", home)
         for reason in ('@"safe_mode"', '@"no_theme_image_configured"',
                        '@"theme_asset_fetch_failed"', '@"theme_asset_decode_failed"'):
             self.assertIn(reason, home)
