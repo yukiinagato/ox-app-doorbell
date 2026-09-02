@@ -626,3 +626,93 @@ TEST_CASE("video: the publish-side counters describe what this node produced") {
   CHECK(json::getInt(counters.get(), "frame_interval_ms") > 0);
   CHECK(json::getInt(counters.get(), "fps_x10") > 0);
 }
+
+TEST_CASE("purposes: a disabled purpose is kept but never offered to a visitor") {
+  SettingsNode fleet("door_station", "d_front");
+  fleet.node->setConfigKey("doors.d_front", "{\"label\":{\"ja\":\"正面玄関\"}}");
+
+  // The flag is a boolean and nothing else.
+  fleet.node->setConfigKey("visit_purposes.p_sales.enabled", "\"no\"");
+  CHECK(fleet.at("visit_purposes.p_sales.enabled") == nullptr);
+  fleet.node->setConfigKey("visit_purposes.p_sales.enabled", "false");
+  const cJSON* flag = fleet.at("visit_purposes.p_sales.enabled");
+  REQUIRE(cJSON_IsBool(flag));
+  CHECK_FALSE(cJSON_IsTrue(flag));
+  // Switching a purpose off keeps its wording, icon and order for when it comes back.
+  CHECK(fleet.at("visit_purposes.p_sales.label") != nullptr);
+  CHECK(fleet.at("visit_purposes.p_sales.icon") != nullptr);
+
+  // A door station still showing the disabled button is stale. The call goes through -- the
+  // visitor should never be punished for that -- but it carries no purpose.
+  const std::string stale_call = fleet.node->pressV2("d_front", "p_sales");
+  REQUIRE_FALSE(stale_call.empty());
+  bool carried_purpose = false;
+  for (const auto& event : fleet.ui) {
+    auto parsed = json::parse(event);
+    if (parsed && json::getString(parsed.get(), "purpose") == "p_sales") carried_purpose = true;
+  }
+  CHECK_FALSE(carried_purpose);
+  REQUIRE(fleet.node->cancelCallV2("d_front", stale_call, "visitor"));
+
+  // A visitor cannot attach a disabled purpose to a call, while an enabled one still works.
+  const std::string call = fleet.node->pressV2("d_front", "p_delivery");
+  CHECK_FALSE(call.empty());
+  CHECK_FALSE(fleet.node->selectPurposeV2("d_front", call, "p_sales"));
+  CHECK(fleet.node->selectPurposeV2("d_front", call, "p_mail"));
+
+  // Re-enabling restores it without the administrator retyping anything.
+  fleet.node->setConfigKey("visit_purposes.p_sales.enabled", "true");
+  CHECK(fleet.node->selectPurposeV2("d_front", call, "p_sales"));
+}
+
+TEST_CASE("theme: a hard-to-read colour is saved and reported, never refused") {
+  SettingsNode fleet;
+  auto write = [&fleet](const std::string& ops) {
+    auto parsed = json::parse(fleet.node->configBatchJson(ops));
+    REQUIRE(parsed);
+    return parsed;
+  };
+
+  // A whole-theme write is inspected in place: the Theme tab sends one object, not leaves.
+  auto low = write(
+      "[{\"op\":\"set\",\"key\":\"display.theme\","
+      "\"value\":{\"bg_color\":\"#9BD748\",\"call_button_bg\":\"#9BD749\","
+      "\"ink_override\":{\"clock\":\"#9CD84A\"}}}]");
+  CHECK(json::getBool(low.get(), "ok"));
+  const cJSON* warnings = json::get(low.get(), "warnings");
+  REQUIRE(cJSON_IsArray(warnings));
+  CHECK(cJSON_GetArraySize(warnings) == 2);
+  std::set<std::string> properties;
+  const cJSON* warning = nullptr;
+  cJSON_ArrayForEach(warning, warnings) {
+    properties.insert(json::getString(warning, "property"));
+    CHECK(json::getString(warning, "message_key") == "theme.low_contrast");
+    CHECK(json::getNum(warning, "contrast") >= 1.0);
+    CHECK(json::getNum(warning, "contrast") < 4.5);
+  }
+  CHECK(properties.count("call_button_bg") == 1);
+  CHECK(properties.count("clock") == 1);
+  // The value is saved regardless: the warning is advice, not a rejection.
+  CHECK(fleet.stringAt("display.theme.call_button_bg") == "#9BD749");
+
+  // A readable pair produces no warning at all.
+  auto readable = write(
+      "[{\"op\":\"set\",\"key\":\"display.theme\","
+      "\"value\":{\"bg_color\":\"#101418\",\"call_button_bg\":\"#7F5E3D\"}}]");
+  CHECK(json::getBool(readable.get(), "ok"));
+  CHECK(json::get(readable.get(), "warnings") == nullptr);
+
+  // Format is still refused outright, and nothing is written.
+  auto malformed = write(
+      "[{\"op\":\"set\",\"key\":\"display.theme.call_button_bg\",\"value\":\"orange\"}]");
+  CHECK_FALSE(json::getBool(malformed.get(), "ok"));
+  CHECK(fleet.stringAt("display.theme.call_button_bg") == "#7F5E3D");
+
+  // A leaf write is measured against the effective background, not against nothing.
+  auto leaf = write(
+      "[{\"op\":\"set\",\"key\":\"display.theme.ink_override.clock\",\"value\":\"#111820\"}]");
+  CHECK(json::getBool(leaf.get(), "ok"));
+  REQUIRE(cJSON_IsArray(json::get(leaf.get(), "warnings")));
+  CHECK(json::getString(cJSON_GetArrayItem(json::get(leaf.get(), "warnings"), 0), "property") ==
+        "clock");
+}

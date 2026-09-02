@@ -241,7 +241,9 @@ the plaintext subscription. Startup reseals a legacy raw record or removes it fa
     // On the door station, one tap on a purpose button = a ring with that purpose attached
     // (a courier is done in a single action). The big "Call" button is a generic ring with no
     // purpose. Labels follow the visitor's language.
-    "p_visit":    { "label": { "ja": "訪問",       "en": "Visit",    "zh": "访客" }, "icon": "🏠", "order": 1 },
+    // "enabled": false hides a purpose from visitors without deleting it; its wording, icon
+    // and order survive being switched off and back on. Default true.
+    "p_visit":    { "label": { "ja": "訪問",       "en": "Visit",    "zh": "访客" }, "icon": "🏠", "order": 1, "enabled": true },
     "p_delivery": { "label": { "ja": "宅配便",     "en": "Delivery", "zh": "快递" }, "icon": "📦", "order": 2 },
     "p_mail":     { "label": { "ja": "郵便",       "en": "Mail",     "zh": "邮件" }, "icon": "✉️", "order": 3 },
     "p_sales":    { "label": { "ja": "営業・集金", "en": "Sales",    "zh": "推销/收费" }, "icon": "💼", "order": 4 },
@@ -403,6 +405,47 @@ helper is a visible degraded/error condition, not a successful supervision claim
 config apply, the platform client sends the fixed local `MODE <value>` command and verifies helper
 status; the helper atomically persists that mode for helper/OS restart. No generic command or argv
 is derived from configuration.
+
+## One administrator password, announcements, unlock, and appearance
+
+`admin.password_hash` is the single administrator credential for the whole cluster: the same
+secret opens the web admin and every device's settings screen. It replicates as
+`{"salt":"<hex>","hash":"<hex>","algo":"blake2b-256","updated_ms":…}` and never as plaintext, so
+an offline device verifies against the copy it already holds. The first password offered on any
+surface becomes the cluster's (the web login's existing trust-on-first-use path). Five failed
+attempts on any surface pause every surface for ten minutes; the counter is shared between
+`POST /api/login` and `db_core_admin_password_verify`.
+
+Before this key existed each node kept its own digest in local storage, and a kiosk kept a
+separate exit code. That local digest stays authoritative until the first successful
+verification, which republishes it as the cluster password. A shell that still holds its own
+`exit_pin.txt` digest must stop consulting it as soon as `db_core_admin_password_verify` returns
+success or "unset", and delete it: one password change must not leave a second way in.
+
+**An unset password never blocks clearing a running SOS alarm.** Read
+`status.emergency.cancel_requires_password`, which core computes as `emergency.cancel_requires_pin`
+AND a password actually being set. Gating the clear control on `emergency.cancel_requires_pin`
+alone would lock a household out of silencing its own alarm.
+
+`notice.global` is the cluster-wide announcement and `doors.<id>.notice` overrides it for one
+door; `status.doors.<id>.notice` reports the resolved value with a `scope` of `door` or `global`.
+`notice.presets` is an administrator-editable list of at most eight `{id, text}` entries that the
+announcement dialogs render; three are seeded once and may be edited or deleted freely.
+
+`doors.<id>.unlock.show_button` decides whether the unlock control appears. It defaults to
+"show it when it does something": true exactly when an unlock action is configured, which means
+`doors.<id>.unlock.command` or the first `ha_command` in `sip.dtmf_actions`. An administrator may
+force either answer. `status.doors.<id>.unlock` reports `configured`, `command`, `show_button` and
+whether the answer came from the default or an administrator, so a shell decides before the
+control is ever pressed. `POST /api/doors/<id>/open` and `db_core_open_door` publish the same
+`ha_command` the SIP feature code does, and report `unlock_not_configured` rather than a silent
+no-op.
+
+`display.appearance` is `auto_system`, `auto_schedule`, `light`, or `dark`, with
+`display.appearance_schedule = {dark_from, light_from}` evaluated in `time.zone`. Both exist at
+cluster scope and under `devices.<id>.local.display`. The published contract adds
+`follow_system`, which tells a shell to prefer the operating system's own setting; platforms
+without one (iOS 5, Android before 10) use the schedule result instead.
 
 ## Time, power, and announcements
 

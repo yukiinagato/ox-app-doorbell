@@ -173,6 +173,18 @@ class Node {
   void sipCall(const std::string& target, const std::string& mode = "");
   void sipHangup();
   bool sipSendDtmf(const std::string& digits);
+  // Microphone mute for the talk control. Remembered across calls and reported as
+  // status.call.mic_muted, including on builds without a SIP backend.
+  void setSipMicMuted(bool muted);
+  bool sipMicMuted();
+
+  // One administrator password for the whole cluster, stored as a salted digest in replicated
+  // configuration. verify returns 1 accepted, 0 wrong, -2 locked out, -3 not set yet; the
+  // lockout counter is shared with the web login. set returns 0 changed, -1 bad arguments,
+  // -2 current password wrong, -3 locked out, -4 not persisted; current is ignored, and may be
+  // empty, when no password has been set.
+  int verifyAdminPassword(const std::string& password);
+  int setAdminPassword(const std::string& current, const std::string& next);
 
 
 
@@ -216,10 +228,22 @@ class Node {
   // unlock action is configured anywhere, so the caller can explain rather than no-op silently.
   bool openDoor(const std::string& door);
 
+  // Configuration writes with the same validation and result shape the HTTP endpoints use, so a
+  // native shell does not have to talk to its own loopback HTTP server. The returned JSON is
+  // {"ok":true,...} or {"ok":false,"err":"..."} and carries the advisory "warnings" array.
+  std::string setConfigJson(const std::string& key, const std::string& value_json);
+  // The advisory warnings from the most recent single-key write, as a JSON array.
+  std::string lastWriteWarningsJson();
+  std::string configBatchJson(const std::string& ops_json);
+  std::string deleteConfigKeyJson(const std::string& key);
+
   // Call history for the local device. since_ms is an inclusive lower bound on the row timestamp
   // and zero means "from the beginning"; limit is clamped to a bounded page. The result is
   // {"rows":[...],"unread_missed":N,"seen_hlc":"...","server_ts":...}.
   std::string callLogJson(int64_t since_ms, int limit);
+  // Paging variant: before_ms is an exclusive upper bound on a row's timestamp, so a shell can
+  // fetch older pages by passing the oldest timestamp it already has. Zero means no upper bound.
+  std::string callLogJson(int64_t since_ms, int64_t before_ms, int limit);
   // Move the device-local seen watermark. An empty HLC marks every known call as seen. The
   // watermark never moves backwards and a call_log_changed event follows a successful write.
   bool markCallLogSeen(const std::string& up_to_hlc);

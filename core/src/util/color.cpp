@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstdio>
 
+#define STBI_NO_THREAD_LOCALS
 #define STBI_NO_STDIO
 // armv7/iOS 5 has no thread-local storage; stb only uses it for a failure-reason string.
 #define STBI_NO_THREAD_LOCALS

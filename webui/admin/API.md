@@ -307,3 +307,97 @@ A device that implements the optional platform power callback publishes
 than a zero-percent indicator. A device that does not implement the callback has no `power` key,
 which is not the same as a battery at zero. Peer values arrive through the bounded runtime
 projection, so they carry these three fields and nothing else.
+
+## Announcements, unlock, appearance, and the automatic theme
+
+`POST /api/notice` and `DELETE /api/notice` write the cluster-wide announcement at
+`notice.global`, taking the same `{"text":…,"expires_ms":…}` or `{"text":…,"ttl_s":…}` body as
+the per-door route and accepting an Admin session or a panel credential. A door-specific
+announcement always overrides it, so publishing a house-wide message never clears what a door
+already carries. `status.doors.<id>.notice` reports the resolved value with `"scope":"door"` or
+`"scope":"global"`; render that, do not merge the two yourself. `status.notice.global_active`
+says whether a cluster-wide message exists.
+
+`notice.presets` is an administrator-editable array of at most eight `{id, text}` entries that the
+announcement dialogs render. Ids are 1..32 characters of letters, digits, `_` or `-`; text is
+1..200 code points. Three are seeded once and may be edited or deleted freely.
+
+`POST /api/doors/<id>/open` triggers the configured unlock action for one door, accepting an Admin
+session or a panel credential. It returns `409 {"ok":false,"err":"unlock_not_configured"}` when no
+unlock action exists anywhere, and `404` for an unknown door — never a success that did nothing.
+The action is the existing feature-code path: the same `ha_command` a SIP DTMF code publishes,
+which the MQTT bridge forwards as `<base_topic>/cmd/<command>`.
+
+`status.doors.<id>.unlock` is `{"configured":bool,"command":"…","show_button":bool,
+"source":"default"|"admin"}`. `show_button` defaults to `configured`; `doors.<id>.unlock.show_button`
+forces either answer. Decide from this before rendering the control, and when it is shown but
+unconfigured, say so on the tap.
+
+`status.display.appearance` is `{"configured":…,"effective":"light"|"dark","follow_system":bool,
+"schedule":{"dark_from":…,"light_from":…}}`, resolved by core in `time.zone`.
+
+`status.display.theme` carries the automatic contrast decision: `auto_background`, `auto_ink` per
+semantic region, `auto_accent` (`call_button` plus `call_button_ink`), the `ink_override` map, and
+the effective `call_button_bg` / `call_button_ink`. `display.theme.auto_ink` and
+`display.theme.auto_accent` are computed and rejected on write; override with
+`display.theme.ink_override.<region>` and `display.theme.call_button_bg`, or their
+`devices.<id>.local.theme` equivalents. Always take the button text colour from
+`call_button_ink`: on a mid-luminance background no colour can both separate from it and carry
+white text, and core returns the best compromise rather than an unreadable button.
+
+`status.video.publish` carries the counters core measures on the sending side: `frames`,
+`keyframes`, `fragments`, `dropped_forward`, `frame_interval_ms`, `fps_x10`. Latency, jitter and
+displayed frames belong to each receiver's own player and arrive through its runtime status.
+
+## Colour contrast is advisory
+
+Every configuration write endpoint validates colour **format** (`#RRGGBB`) and rejects anything
+else. Contrast is measured but never enforced: a write that falls short of WCAG 2.1 AA (4.5:1 for
+text, 3:1 for large text and UI components) still succeeds and returns
+
+```json
+{"ok":true,"warnings":[{"key":"devices.<id>.local.ui.elements.cancel.call",
+                        "property":"foreground","contrast":3.1,
+                        "message_key":"theme.low_contrast"}]}
+```
+
+`warnings` is absent when there is nothing to report. Show the measured ratio inline next to the
+field; do not treat it as a failure or roll the value back. The check runs against the *resolved*
+element — manifest defaults, the stored override, and this write merged — so a warning may name a
+property the current request did not touch.
+
+## One administrator password
+
+`POST /api/login` verifies against `admin.password_hash`, the cluster-wide credential, falling back
+to this node's legacy local digest until the first successful login republishes it. The first
+password offered on any surface becomes the cluster's. Five failures pause every surface for ten
+minutes and the endpoint answers `429 {"ok":false,"err":"locked"}`; the counter is shared with
+`db_core_admin_password_verify`, so a native settings screen and the web page cannot be attacked
+independently. Changing the password invalidates every existing Admin session.
+
+`status.emergency.cancel_requires_password` is what gates the SOS clear control: core computes it
+as `emergency.cancel_requires_pin` AND a password actually being set, so a cluster that never
+chose one can always silence its own alarm. `status.emergency.admin_password_set` reports the
+second half on its own.
+
+## Pairing: minting a PIN is not bulk add
+
+`POST /api/join-token` mints or refreshes the join PIN and nothing else; the bulk-add window stays
+shut, so a device already announcing itself is not auto-invited merely because a PIN is on screen.
+It accepts an optional `{"seconds":N}` (clamped to 30..600) and returns
+`{"ok":true,"host":…,"pin":…,"expires_s":…}`, the same shape `POST /api/pairing/start` returns.
+`POST /api/pairing/start` is the explicit bulk-add button: it opens the auto-invite window *and*
+mints a PIN, and belongs only to that control and its warning.
+
+`pairing_revoked` means a full local reset, not just "forget the PSK". On receiving it, and when an
+administrator confirms removal on the device itself, the shell deletes the secure PSK, the pairing
+fields of `boot.json`, **and** name/role/door/`setup_complete`, then restarts into first-run setup.
+A device that kept its old role and door would rejoin the next cluster half-configured.
+
+## Visit purposes can be switched off
+
+`visit_purposes.<id>.enabled` (bool, default true) hides a purpose from visitors without deleting
+it: wording, icon and order survive being switched off and back on. Disabled purposes are omitted
+from the panel contract's `purposes` list and cannot be attached to a call. A door station still
+showing a stale button rings anyway, without the purpose — the visitor is never punished for a
+configuration change they cannot see. The 用件 tab offers a toggle alongside delete.
