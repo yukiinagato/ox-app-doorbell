@@ -179,7 +179,7 @@ fi
   exit 1
 }
 "${SSH[@]}" \
-  "test \"\$(id -u mobile)\" = 501 && test \"\$(id -g mobile)\" = 501 && "\
+  "test \"\$(sed -n 's/^mobile:[^:]*:\\([0-9]*\\):\\([0-9]*\\):.*/\\1:\\2/p' /etc/passwd)\" = 501:501 && "\
   "test -x /usr/bin/uiopen && test ! -L /usr/bin/uiopen && "\
   "test -x '$HELPER_BIN' && "\
   "test ! -L '$HELPER_BIN' && test -f '$STAGED_PLIST'"
