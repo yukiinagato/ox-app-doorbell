@@ -118,10 +118,7 @@ class HistoryActivity : Activity(), DoorbellCore.Listener {
 
         moreButton = ShellUi.button(
             this, texts.t("history.load_more", R.string.history_load_more), palette,
-        ) {
-            pages += 1
-            reload(markSeen = false)
-        }
+        ) { loadMore() }
         root.addView(moreButton, ShellUi.matchWrap().apply {
             topMargin = ShellUi.dp(this@HistoryActivity, 8)
         })
@@ -166,18 +163,52 @@ class HistoryActivity : Activity(), DoorbellCore.Listener {
             render()
             return
         }
-        val limit = CallHistoryModel.requestLimit(pages)
+        // With before_ms paging the first page is just the newest fifty rows; without it the v1
+        // call has no upper bound, so the whole prefix is fetched and sliced.
+        val paged = app.core.exports.callLogV2
+        val limit = if (paged) CallHistoryModel.PAGE_SIZE
+            else CallHistoryModel.requestLimit(pages)
         Thread({
-            val document = app.core.callLog(0L, limit)
+            val document = app.core.callLog(0L, 0L, limit)
             val parsed = CallHistoryModel.parse(document)
             if (markSeen) app.core.callLogMarkSeen(CallHistoryModel.newestHlc(parsed))
             ui.post {
                 if (isFinishing) return@post
-                hasMore = CallHistoryModel.hasMore(parsed.size, pages)
-                rows = CallHistoryModel.page(parsed, pages)
+                if (paged) {
+                    hasMore = CallHistoryModel.hasMoreAfterPage(parsed.size, limit)
+                    rows = parsed
+                } else {
+                    hasMore = CallHistoryModel.hasMore(parsed.size, pages)
+                    rows = CallHistoryModel.page(parsed, pages)
+                }
                 render()
             }
         }, "doorbell-history").apply { isDaemon = true }.start()
+    }
+
+    /** 「さらに読み込む」: one more page, continuing from the oldest row already shown. */
+    private fun loadMore() {
+        if (!app.coreOk || !hasMore) return
+        if (!app.core.exports.callLogV2) {
+            pages += 1
+            reload(markSeen = false)
+            return
+        }
+        val before = CallHistoryModel.beforeMs(rows)
+        if (before <= 0L) return
+        moreButton.isEnabled = false
+        val limit = CallHistoryModel.PAGE_SIZE
+        Thread({
+            val document = app.core.callLog(0L, before, limit)
+            val page = CallHistoryModel.parse(document)
+            ui.post {
+                if (isFinishing) return@post
+                moreButton.isEnabled = true
+                hasMore = CallHistoryModel.hasMoreAfterPage(page.size, limit)
+                rows = CallHistoryModel.append(rows, page)
+                render()
+            }
+        }, "doorbell-history-page").apply { isDaemon = true }.start()
     }
 
     private fun render() {

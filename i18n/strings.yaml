@@ -855,3 +855,10 @@ sos.slide_sub: { ja: "{n} 秒後に発報", en: "Alarm after {n}s", zh: "{n} 秒
 sos.countdown_cancel: { ja: "取り消す", en: "Cancel", zh: "取消" }
 power.percent: { ja: "{n}%", en: "{n}%", zh: "{n}%" }
 version.line: { ja: "core {core} · app {app}", en: "core {core} · app {app}", zh: "core {core} · app {app}" }
+settings.set_password: { ja: "管理パスワードを設定", en: "Set the admin password", zh: "设置管理密码" }
+settings.set_password_hint: { ja: "この端末と Web 管理で共通のパスワードです", en: "One password for this device and the web admin", zh: "此密码在本机与网页管理中通用" }
+settings.password_new: { ja: "新しいパスワード", en: "New password", zh: "新密码" }
+settings.password_confirm: { ja: "もう一度入力", en: "Enter it again", zh: "再次输入" }
+settings.password_mismatch: { ja: "2 つの入力が一致しません", en: "The two entries don't match", zh: "两次输入不一致" }
+settings.password_empty: { ja: "パスワードを入力してください", en: "Enter a password", zh: "请输入密码" }
+settings.password_set_failed: { ja: "パスワードを設定できませんでした", en: "Couldn't set the password", zh: "无法设置密码" }

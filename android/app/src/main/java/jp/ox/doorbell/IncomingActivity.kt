@@ -271,6 +271,10 @@ class IncomingActivity : Activity() {
         videoPlayer?.stop()
         videoPlayer = null
         if (sipCalling) app.core.sipHangup()
+        if (micMuted) {
+            app.core.sipSetMicMuted(false)
+            try { audioManager.isMicrophoneMute = false } catch (_: Exception) { }
+        }
         app.abandonPendingManualSipAnswer(callId)
         @Suppress("DEPRECATION")
         audioManager.isSpeakerphoneOn = oldSpeakerphone
@@ -699,6 +703,7 @@ class IncomingActivity : Activity() {
     }
 
     private fun updateControlLabels() {
+        if (isFinishing) return
         findViewById<Button>(R.id.monitor_button).apply {
             text = if (monitorOn) texts.t("ring.monitor_on", R.string.ring_monitor_on)
             else texts.t("ring.monitor_off", R.string.ring_monitor_off)
@@ -729,10 +734,27 @@ class IncomingActivity : Activity() {
         updateControlLabels()
     }
 
+    /**
+     * Mute the microphone on the SIP leg itself when core can do it, so only this call is muted
+     * rather than the whole device. Platform muting stays as the fallback for an older core.
+     */
     private fun toggleMic() {
         if (!inCall) return
         micMuted = !micMuted
-        try { audioManager.isMicrophoneMute = micMuted } catch (_: Exception) { }
+        if (!app.core.sipSetMicMuted(micMuted)) {
+            try { audioManager.isMicrophoneMute = micMuted } catch (_: Exception) { }
+        }
+        updateControlLabels()
+    }
+
+    /** Core reports the leg's own state in status.call.mic_muted; adopt it when it disagrees. */
+    private fun syncMicFromCore(status: JSONObject?) {
+        if (!app.core.exports.micMute) return
+        val call = status?.optJSONObject("call") ?: return
+        if (!call.has("mic_muted")) return
+        val reported = call.optBoolean("mic_muted", false)
+        if (reported == micMuted) return
+        micMuted = reported
         updateControlLabels()
     }
 
@@ -831,6 +853,7 @@ class IncomingActivity : Activity() {
 
     /** codec/strategy · latency · jitter · fps · dropped, tap to hide, remembered per device. */
     private fun updateDebugLine() {
+        if (inCall) syncMicFromCore(app.core.status())
         val line = findViewById<TextView>(R.id.debug_line)
         if (!debugVisible) {
             line.text = "·"

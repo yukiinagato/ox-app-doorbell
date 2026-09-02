@@ -719,11 +719,18 @@
   <data name="settings_helper_mode" xml:space="preserve"><value>恢复助手</value></data>
   <data name="settings_no_password" xml:space="preserve"><value>尚未设置管理密码，请先在网页管理中登录一次</value></data>
   <data name="settings_offline" xml:space="preserve"><value>暂时无法更改设置，此设备仍在启动中</value></data>
+  <data name="settings_password_confirm" xml:space="preserve"><value>再次输入</value></data>
+  <data name="settings_password_empty" xml:space="preserve"><value>请输入密码</value></data>
+  <data name="settings_password_mismatch" xml:space="preserve"><value>两次输入不一致</value></data>
+  <data name="settings_password_new" xml:space="preserve"><value>新密码</value></data>
+  <data name="settings_password_set_failed" xml:space="preserve"><value>无法设置密码</value></data>
   <data name="settings_purposes" xml:space="preserve"><value>来访目的</value></data>
   <data name="settings_quiet_hours" xml:space="preserve"><value>静音时段</value></data>
   <data name="settings_restart_required" xml:space="preserve"><value>更改角色后需要重新启动</value></data>
   <data name="settings_role" xml:space="preserve"><value>角色</value></data>
   <data name="settings_rules" xml:space="preserve"><value>通知与规则</value></data>
+  <data name="settings_set_password" xml:space="preserve"><value>设置管理密码</value></data>
+  <data name="settings_set_password_hint" xml:space="preserve"><value>此密码在本机与网页管理中通用</value></data>
   <data name="settings_this_device" xml:space="preserve"><value>本机</value></data>
   <data name="settings_title" xml:space="preserve"><value>设置</value></data>
   <data name="settings_ui_lang" xml:space="preserve"><value>显示语言</value></data>

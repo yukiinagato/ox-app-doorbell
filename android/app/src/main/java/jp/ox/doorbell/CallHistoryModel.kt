@@ -73,14 +73,13 @@ internal object CallHistoryModel {
         }
 
     /**
-     * The rows for a page. Core's limit is a whole-history cap, so a page is taken by asking for
-     * (pages * PAGE_SIZE) rows and returning the newest slice; [hasMore] says whether asking for
-     * one more page can still produce rows.
+     * The rows for a page when paging without an upper bound: core's v1 limit is a whole-history
+     * cap, so a page is the newest (pages * PAGE_SIZE) slice of what came back.
      */
     fun page(rows: List<CallRow>, pages: Int): List<CallRow> =
         rows.take((pages.coerceAtLeast(1)) * PAGE_SIZE)
 
-    /** The limit to request from core for a given page count, leaving room to detect more rows. */
+    /** The v1 limit for a given page count, leaving one row spare to detect that more exist. */
     fun requestLimit(pages: Int): Int =
         ((pages.coerceAtLeast(1)) * PAGE_SIZE + 1).coerceAtMost(500)
 
@@ -89,10 +88,27 @@ internal object CallHistoryModel {
         returned > (pages.coerceAtLeast(1)) * PAGE_SIZE
 
     /**
-     * Oldest timestamp already shown, so a caller that gains a real before_ms paging ABI can
-     * continue from here without changing the screen.
+     * The exclusive upper bound for the next backwards page: the oldest row already shown. Zero
+     * for an empty list, which core reads as "from now".
      */
     fun beforeMs(rows: List<CallRow>): Long = rows.lastOrNull()?.tsMs ?: 0L
+
+    /**
+     * Append a backwards page fetched with before_ms, dropping any row already held. Core's bound
+     * is exclusive, but two calls in the same millisecond can still overlap, so the merge is by
+     * row id rather than by trusting the bound.
+     */
+    fun append(existing: List<CallRow>, page: List<CallRow>): List<CallRow> {
+        if (page.isEmpty()) return existing
+        val seen = existing.mapTo(HashSet(existing.size)) { it.id }
+        val out = ArrayList<CallRow>(existing.size + page.size)
+        out.addAll(existing)
+        for (row in page) if (seen.add(row.id)) out.add(row)
+        return out
+    }
+
+    /** With before_ms, a short page is the end of the history. */
+    fun hasMoreAfterPage(returned: Int, limit: Int): Boolean = returned >= limit
 
     /** Group rows into day sections, preserving the newest-first order within and between days. */
     fun group(rows: List<CallRow>, dayKeyOf: (Long) -> String): List<DayGroup> {

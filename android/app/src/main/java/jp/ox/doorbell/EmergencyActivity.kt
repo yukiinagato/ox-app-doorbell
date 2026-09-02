@@ -32,20 +32,28 @@ class EmergencyActivity : Activity() {
             )
         }
         setContentView(R.layout.activity_emergency)
-        // Clearing an alarm asks for the same 管理パスワード the rest of the shell uses. The gate
-        // still accepts the locally stored digest when the administration API is unreachable, so
-        // an alarm is never impossible to clear.
+        // Clearing an alarm asks for the same cluster 管理パスワード the rest of the shell uses,
+        // but only once one exists: emergency.cancel_requires_pin cannot make an alarm impossible
+        // to clear on a cluster where nobody has set a password yet (§5.5).
         findViewById<Button>(R.id.emergency_clear_button).setOnClickListener { button ->
+            val config = if (app.coreOk) app.core.config() else null
             val texts = Texts(this).apply {
-                setConfig(if (app.coreOk) app.core.config() else null)
+                setConfig(config)
                 setLang(app.boot.uiLang)
             }
-            AdminGate.unlock(this, app.boot.httpPort, texts) {
-                if (app.coreOk) {
-                    button.isEnabled = false
-                    if (!app.commitEmergency(false)) button.isEnabled = true
-                }
+            fun clear() {
+                if (!app.coreOk) return
+                button.isEnabled = false
+                if (!app.commitEmergency(false)) button.isEnabled = true
             }
+            val requiresPin = (app.core.dig(config, "emergency.cancel_requires_pin") as? Boolean)
+                ?: false
+            val state = AdminPassword.stateOf(
+                if (app.coreOk) app.core.adminPasswordVerify("") else null,
+            )
+            if (AdminPassword.alarmClearNeedsPassword(requiresPin, state))
+                AdminGate.unlock(this, app.boot.httpPort, texts) { clear() }
+            else clear()
         }
         renderCurrent()
     }
