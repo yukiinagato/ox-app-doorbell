@@ -1747,3 +1747,89 @@ TEST_CASE("pairing: pairing mode is refused while the node is not in a cluster")
   CHECK_FALSE(json::getBool(json::get(d.get(), "pending"), "pairing_mode"));
   node.node->stop();
 }
+
+TEST_CASE("pairing: minting a PIN neither opens the bulk-add window nor invites anyone") {
+  NFleet f;
+  auto& host = f.add("A:1", "front", "door_station", "d_front", /*seed_cfg=*/true);
+  auto& joiner = f.add("J:1", "newpad", "indoor_panel", "", /*seed_cfg=*/false,
+                       /*zero_psk=*/true);
+  joiner.node->setSecureStore([](const std::string&) { return std::string(); },
+                              [](const std::string&, const std::string&) { return true; });
+  REQUIRE(host.node->start());
+  REQUIRE(joiner.node->start());
+
+  // Wait for the unpaired device to be discovered, so the host has something it *could*
+  // auto-invite if minting a PIN opened the window.
+  REQUIRE([&] {
+    for (int i = 0; i < 200; i++) {
+      f.run(50);
+      auto snapshot = json::parse(host.node->pairingJson());
+      const cJSON* pending = snapshot ? json::get(snapshot.get(), "pending") : nullptr;
+      const cJSON* devices = pending ? json::get(pending, "devices") : nullptr;
+      const cJSON* device = nullptr;
+      cJSON_ArrayForEach(device, devices) {
+        if (json::getString(device, "id") == joiner.node->nodeId()) return true;
+      }
+    }
+    return false;
+  }());
+
+  auto minted = json::parse(host.node->mintJoinTokenJson(0));
+  REQUIRE(minted);
+  CHECK(json::getBool(minted.get(), "ok"));
+  // Same shape as the bulk-add response, so one card can render either.
+  CHECK(json::getString(minted.get(), "pin").size() == 6);
+  CHECK_FALSE(json::getString(minted.get(), "host").empty());
+  CHECK(json::getInt(minted.get(), "expires_s") > 0);
+
+  auto after_mint = json::parse(host.node->pairingJson());
+  REQUIRE(after_mint);
+  const cJSON* pending = json::get(after_mint.get(), "pending");
+  // The window stayed shut: showing a PIN is not a decision to add whatever is nearby.
+  CHECK_FALSE(json::getBool(pending, "pairing_mode"));
+  CHECK(json::getInt(pending, "pairing_mode_left_s") == 0);
+  CHECK(json::getBool(json::get(after_mint.get(), "token"), "active"));
+
+  // Give the host ample time to auto-invite; it must not, and the device must stay pending.
+  f.run(2000);
+  CHECK(joiner.uiCount("paired") == 0);
+  auto still_pending = json::parse(host.node->pairingJson());
+  REQUIRE(still_pending);
+  const cJSON* devices = json::get(json::get(still_pending.get(), "pending"), "devices");
+  bool listed = false;
+  const cJSON* device = nullptr;
+  cJSON_ArrayForEach(device, devices) {
+    if (json::getString(device, "id") != joiner.node->nodeId()) continue;
+    listed = true;
+    CHECK(json::getString(device, "invite_state") == "none");
+  }
+  CHECK(listed);
+  CHECK_FALSE(json::getBool(json::get(still_pending.get(), "pending"), "pairing_mode"));
+
+  // Minting again refreshes the PIN rather than reusing it, and still leaves the window shut.
+  const std::string first_pin = json::getString(minted.get(), "pin");
+  auto refreshed = json::parse(host.node->mintJoinTokenJson(60));
+  REQUIRE(refreshed);
+  CHECK(json::getBool(refreshed.get(), "ok"));
+  CHECK(json::getString(refreshed.get(), "pin") != first_pin);
+  CHECK(json::getInt(refreshed.get(), "expires_s") <= 60);
+  auto after_refresh = json::parse(host.node->pairingJson());
+  CHECK_FALSE(json::getBool(json::get(after_refresh.get(), "pending"), "pairing_mode"));
+
+  // The explicit bulk-add button is what opens the window, and it returns the same shape.
+  auto bulk = json::parse(host.node->startPairingJson(600));
+  REQUIRE(bulk);
+  CHECK(json::getBool(bulk.get(), "ok"));
+  CHECK(json::getString(bulk.get(), "pin").size() == 6);
+  auto after_bulk = json::parse(host.node->pairingJson());
+  CHECK(json::getBool(json::get(after_bulk.get(), "pending"), "pairing_mode"));
+
+  // An unpaired node has no cluster to mint for.
+  auto refused = json::parse(joiner.node->mintJoinTokenJson(0));
+  REQUIRE(refused);
+  CHECK_FALSE(json::getBool(refused.get(), "ok"));
+  CHECK(json::getString(refused.get(), "err") == "host_unpaired");
+
+  host.node->stop();
+  joiner.node->stop();
+}

@@ -209,8 +209,12 @@ class Node {
   bool syncTimeNow();
   // Replicated per-door announcement. expires_ms is an absolute wall-clock deadline; 0 means
   // "until cleared". Returns false for an unknown door, invalid text, or a persistence failure.
+  // door may be "*" for the cluster-wide announcement a door-specific one overrides.
   bool setDoorNotice(const std::string& door, const std::string& text, int64_t expires_ms);
   bool clearDoorNotice(const std::string& door);
+  // Trigger the configured unlock action for one door. False when the door is unknown or no
+  // unlock action is configured anywhere, so the caller can explain rather than no-op silently.
+  bool openDoor(const std::string& door);
 
   // Call history for the local device. since_ms is an inclusive lower bound on the row timestamp
   // and zero means "from the beginning"; limit is clamped to a bounded page. The result is
@@ -225,7 +229,11 @@ class Node {
   bool foundCluster();
   void joinCluster(const std::string& host, const std::string& pin);
   void setPairingMode(int seconds);
+  // Open the bulk-add window and mint a PIN. Only the explicit "add several devices" button.
   std::string startPairingJson(int seconds);
+  // Mint or refresh the join PIN without opening the bulk-add window. seconds of zero keeps the
+  // default PIN lifetime.
+  std::string mintJoinTokenJson(int seconds);
   void removeDevice(const std::string& node_id);
   void inviteDevice(const std::string& id);
 
