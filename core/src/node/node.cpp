@@ -2003,6 +2003,48 @@ struct Node::Impl {
   std::string config_snap;
   std::string pairing_snap;
   bool snap_scheduled = false;
+
+  // Read-only exports a shell polls must never queue behind the run loop. Devices measured
+  // three-second stalls in db_core_local_time_json while the loop was mid-SNTP or building a
+  // status document, which is long enough for a one-second clock to visibly skip. The loop
+  // republishes these records whenever their inputs change; a reader swaps in a shared_ptr copy,
+  // which is a refcount bump on any thread and never waits for anything.
+  struct TimeSnapshot {
+    // Configured IANA zone, empty when the cluster has never set one.
+    std::string zone;
+    // integrations.tz_offset_min, used when no zone is configured or the zone is not in the
+    // bundled table.
+    int legacy_offset_min = 540;
+    // "ntp" while a fresh measurement is being applied, "system" otherwise.
+    std::string source = "system";
+    // Correction currently applied to the platform clock, and when it was last measured.
+    int64_t offset_ms = 0;
+    int64_t last_sync_wall_ms = 0;
+    // The HLC's monotonic floor, so a rendered clock keeps the same lower bound it had when the
+    // value was read on the loop. It only ever rises, so a slightly old copy is harmless.
+    int64_t hlc_floor_ms = 0;
+  };
+  std::shared_ptr<const TimeSnapshot> time_snap{std::make_shared<TimeSnapshot>()};
+
+  // Effective volumes are a pure function of configuration, so the loop publishes the inputs and
+  // the export resolves them on the caller's thread. One entry per configured device keeps a
+  // request for another node's volumes off the loop too.
+  struct AudioSnapshot {
+    struct Level {
+      bool present = false;
+      int64_t value = 0;
+    };
+    struct Levels {
+      Level call;
+      Level sos;
+      Level idle;
+    };
+    std::string self_id;
+    Levels cluster;
+    int64_t alarm_volume = 100;
+    std::map<std::string, Levels> devices;
+  };
+  std::shared_ptr<const AudioSnapshot> audio_snap{std::make_shared<AudioSnapshot>()};
   uint64_t snapshot_timer = 0;
   std::set<std::string> playback_invalid_logged;
 
@@ -2574,10 +2616,32 @@ struct Node::Impl {
 
   int tzOffsetMin() { return tzOffsetMinAt(hlc->correctedWallMs()); }
 
+  // Pure: the caller supplies the instant, so this runs on any thread from a published record.
+  static std::string renderLocalTime(const TimeSnapshot& snap, int64_t wall_ms, int64_t now_ms) {
+    const int64_t at = wall_ms > 0 ? wall_ms : std::max(now_ms, snap.hlc_floor_ms);
+    return tz::localTimeJson(snap.zone, at, snap.legacy_offset_min);
+  }
+
+  std::shared_ptr<const TimeSnapshot> buildTimeSnapshot() {
+    auto snap = std::make_shared<TimeSnapshot>();
+    snap->zone = configuredTimeZone();
+    snap->legacy_offset_min = legacyTzOffsetMin();
+    const bool active = ntpActive();
+    snap->source = active ? "ntp" : "system";
+    snap->offset_ms = active ? time_state.offset_ms : 0;
+    snap->last_sync_wall_ms = time_state.ever_synced ? time_state.last_sync_wall_ms : 0;
+    snap->hlc_floor_ms = hlc ? hlc->correctedWallMs() : clock->wallMs();
+    return snap;
+  }
+
+  // Called wherever the zone, the offset or the sync result can have changed. Cheap enough to
+  // run unconditionally: readers only ever see a fully built record.
+  void publishTimeSnapshot() {
+    std::atomic_store(&time_snap, std::shared_ptr<const TimeSnapshot>(buildTimeSnapshot()));
+  }
+
   std::string localTimeJsonOnLoop(int64_t wall_ms) {
-    const int64_t at = wall_ms > 0 ? wall_ms : hlc->correctedWallMs();
-    const std::string zone = configuredTimeZone();
-    return tz::localTimeJson(zone, at, legacyTzOffsetMin());
+    return renderLocalTime(*buildTimeSnapshot(), wall_ms, clock->wallMs());
   }
 
   // ---------- time service ----------
@@ -2623,6 +2687,8 @@ struct Node::Impl {
     const int64_t offset = active ? time_state.offset_ms : 0;
     if (clock->wallOffsetMs() != offset) clock->setWallOffsetMs(offset);
     const std::string source = active ? "ntp" : "system";
+    // A sync result must reach db_core_local_time_json now, not at the next periodic refresh.
+    publishTimeSnapshot();
     const int64_t moved = offset - reported_time_offset_ms;
     if (source == reported_time_source && (moved > -500 && moved < 500)) return;
     reported_time_source = source;
@@ -2996,27 +3062,58 @@ struct Node::Impl {
   // ---------- volumes ----------
   // Device override wins over the cluster default; emergency.alarm_volume remains the legacy
   // source for the SOS level so an existing installation keeps its configured alarm loudness.
-  std::string audioJsonOnLoop(const std::string& device_arg) {
-    const std::string id = device_arg.empty() ? node_id : device_arg;
-    const cJSON* device_volume = cfgAt("devices." + id + ".local.audio.volume");
-    const cJSON* cluster_volume = cfgAt("audio.volume");
-    const int64_t alarm_volume =
-        json::getInt(json::get(cfg.get(), "emergency"), "alarm_volume", 100);
+  static void readAudioLevels(const cJSON* container, AudioSnapshot::Levels* out) {
+    auto one = [&](const char* name, AudioSnapshot::Level* slot) {
+      const cJSON* value = json::get(container, name);
+      if (!cJSON_IsNumber(value)) return;
+      const int64_t whole = static_cast<int64_t>(value->valuedouble);
+      if (whole < 0 || whole > 100) return;
+      slot->present = true;
+      slot->value = whole;
+    };
+    one("call", &out->call);
+    one("sos", &out->sos);
+    one("idle", &out->idle);
+  }
+
+  std::shared_ptr<const AudioSnapshot> buildAudioSnapshot() {
+    auto snap = std::make_shared<AudioSnapshot>();
+    snap->self_id = node_id;
+    readAudioLevels(cfgAt("audio.volume"), &snap->cluster);
+    snap->alarm_volume = json::getInt(json::get(cfg.get(), "emergency"), "alarm_volume", 100);
+    const cJSON* devices = json::get(cfg.get(), "devices");
+    const cJSON* device = nullptr;
+    cJSON_ArrayForEach(device, devices) {
+      if (!device->string) continue;
+      AudioSnapshot::Levels levels;
+      readAudioLevels(json::get(json::get(json::get(device, "local"), "audio"), "volume"),
+                      &levels);
+      if (levels.call.present || levels.sos.present || levels.idle.present)
+        snap->devices[device->string] = levels;
+    }
+    return snap;
+  }
+
+  void publishAudioSnapshot() {
+    std::atomic_store(&audio_snap, std::shared_ptr<const AudioSnapshot>(buildAudioSnapshot()));
+  }
+
+  // Pure: device override, then cluster default, then the built-in fallback.
+  static std::string resolveAudioJson(const AudioSnapshot& snap, const std::string& device_arg) {
+    const std::string id = device_arg.empty() ? snap.self_id : device_arg;
+    const AudioSnapshot::Levels* device = nullptr;
+    auto found = snap.devices.find(id);
+    if (found != snap.devices.end()) device = &found->second;
+    const int64_t alarm =
+        (snap.alarm_volume < 0 || snap.alarm_volume > 100) ? 100 : snap.alarm_volume;
     struct Field {
       const char* name;
+      AudioSnapshot::Level AudioSnapshot::Levels::*member;
       int64_t fallback;
     };
-    const Field fields[] = {{"call", 80},
-                            {"sos", alarm_volume < 0 || alarm_volume > 100 ? 100 : alarm_volume},
-                            {"idle", 60}};
-    auto level = [](const cJSON* container, const char* name, int64_t* out) {
-      const cJSON* value = json::get(container, name);
-      if (!cJSON_IsNumber(value)) return false;
-      const int64_t whole = static_cast<int64_t>(value->valuedouble);
-      if (whole < 0 || whole > 100) return false;
-      *out = whole;
-      return true;
-    };
+    const Field fields[] = {{"call", &AudioSnapshot::Levels::call, 80},
+                            {"sos", &AudioSnapshot::Levels::sos, alarm},
+                            {"idle", &AudioSnapshot::Levels::idle, 60}};
     auto out = json::obj();
     json::set(out.get(), "device", id);
     cJSON* sources = json::addObj(out.get(), "sources");
@@ -3025,10 +3122,12 @@ struct Node::Impl {
     for (const auto& field : fields) {
       int64_t value = field.fallback;
       const char* source = "default";
-      if (level(device_volume, field.name, &value)) {
+      if (device && (device->*(field.member)).present) {
+        value = (device->*(field.member)).value;
         source = "device";
         any_device = true;
-      } else if (level(cluster_volume, field.name, &value)) {
+      } else if ((snap.cluster.*(field.member)).present) {
+        value = (snap.cluster.*(field.member)).value;
         source = "cluster";
         any_cluster = true;
       }
@@ -3085,6 +3184,10 @@ struct Node::Impl {
     std::string status = statusJsonOnLoop();
     std::string config_json = config->materializeJson();
     std::string pairing = pairingJsonOnLoop();
+    // Published separately: these two are read without taking snap_mu, so a caller polling the
+    // clock never queues behind a status string copy either.
+    publishTimeSnapshot();
+    publishAudioSnapshot();
     std::lock_guard<std::mutex> lk(snap_mu);
     status_snap = std::move(status);
     config_snap = std::move(config_json);
@@ -10349,16 +10452,16 @@ std::string Node::configJson() {
 }
 
 std::string Node::localTimeJson(int64_t wall_ms) {
-  std::string out;
-  if (!impl_->loop->callSync([&] { out = impl_->localTimeJsonOnLoop(wall_ms); }))
-    return tz::localTimeJson("", wall_ms, 540);
-  return out;
+  // Served from the published record: never enters the run loop, safe from any thread. Only the
+  // instant is read live, so a one-second clock still advances once a second while the loop is
+  // busy synchronizing time or building a status document.
+  auto snap = std::atomic_load(&impl_->time_snap);
+  return Impl::renderLocalTime(*snap, wall_ms, impl_->clock->wallMs());
 }
 
 std::string Node::audioJson(const std::string& device_id) {
-  std::string out = "{}";
-  impl_->loop->callSync([&] { out = impl_->audioJsonOnLoop(device_id); });
-  return out;
+  auto snap = std::atomic_load(&impl_->audio_snap);
+  return Impl::resolveAudioJson(*snap, device_id);
 }
 
 bool Node::syncTimeNow() {
@@ -10533,13 +10636,14 @@ std::string Node::startPairingJson(int seconds) {
 }
 
 std::string Node::parsePairUriJson(const std::string& uri) {
-  int64_t now_unix_s = 0;
-  // Corrected cluster time when the node is running, the platform clock otherwise: a shell may
-  // scan a code before core has started.
-  if (!impl_->loop->callSync([&] { now_unix_s = impl_->hlc->correctedWallMs() / 1000; }))
-    now_unix_s = std::chrono::duration_cast<std::chrono::seconds>(
-                     std::chrono::system_clock::now().time_since_epoch())
-                     .count();
+  // Corrected cluster time when the node has a clock, the platform clock otherwise: a shell may
+  // scan a code before core has started. The shared clock carries the time-service correction in
+  // an atomic, so this needs no trip through the run loop.
+  int64_t now_unix_s =
+      impl_->clock ? impl_->clock->wallMs() / 1000
+                   : std::chrono::duration_cast<std::chrono::seconds>(
+                         std::chrono::system_clock::now().time_since_epoch())
+                         .count();
   const pair_uri::Parsed parsed = pair_uri::parse(uri, now_unix_s);
   auto out = json::obj();
   json::setBool(out.get(), "ok", parsed.ok);

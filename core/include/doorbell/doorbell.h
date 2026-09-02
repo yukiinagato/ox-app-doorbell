@@ -152,7 +152,23 @@ DB_API void db_core_report_call_recovery(db_core* c, const char* call_id, int re
  * inactivity, and visitor_lang is delivered to every shell. */
 DB_API void db_core_set_visitor_lang(db_core* c, const char* door, const char* lang);
 
-/* Return a JSON snapshot of nodes, leaders, SIP state, and runtime state. Release with db_free. */
+/* Reading core from a UI thread
+ * -----------------------------
+ * db_core_status_json, db_core_config_json, db_core_local_time_json and db_core_audio_json are
+ * served from snapshots the run loop republishes when their inputs change. They are safe to call
+ * from any thread, never enter the loop, and never block behind whatever the loop is doing. The
+ * cost is that a value written through db_core_set_config_key appears on the next turn of the
+ * loop rather than synchronously inside the write call.
+ *
+ * Every other read-only export does marshal to the loop and can wait for it: db_core_pairing_json
+ * (its PIN countdown and pending list have to be live), db_core_call_log_json (a parameterized
+ * query against the database), db_core_capabilities_json and db_core_debug_json (built from live
+ * mesh and SIP state), db_core_text (depends on catalogs and language rules the loop owns),
+ * db_core_asset_path (consults the asset store), db_core_sip_mic_muted (PJSUA state), and
+ * db_core_verify_admin_password (its lockout counters must serialize). Call those off the UI
+ * thread, or accept that they can take as long as the loop's current task.
+ *
+ * Return a JSON snapshot of nodes, leaders, SIP state, and runtime state. Release with db_free. */
 DB_API char* db_core_status_json(db_core* c);
 
 /* Return diagnostic JSON for addresses, Wi-Fi, battery, press statistics, and reachability. */
@@ -243,7 +259,13 @@ DB_API int db_core_delete_config_key(db_core* c, const char* key);
  *    "weekday":"wed","weekday_num":3,"offset_min":540,"dst":false,"known":true,
  *    "wall_ms":…,"tz":"Asia/Tokyo"}
  * known is false when the configured zone is absent from the table, in which case
- * integrations.tz_offset_min was used. Release the result with db_free. */
+ * integrations.tz_offset_min was used.
+ *
+ * Safe to call from any thread, including a UI thread, and it never enters core's run loop: the
+ * zone and the offset come from a snapshot the loop republishes whenever configuration or the
+ * time service changes, and only the instant itself is read live. The call therefore costs
+ * microseconds even while core is synchronizing time or building a status document, and a clock
+ * driven from it keeps ticking through both. Release the result with db_free. */
 DB_API char* db_core_local_time_json(db_core* c, int64_t wall_ms);
 
 /* Start one immediate SNTP round, the same one POST /api/time/sync triggers. The exchange runs
@@ -259,7 +281,12 @@ DB_API int db_core_time_sync_now(db_core* c);
  * keeps its configured alarm loudness. Returns
  *   {"device":"<id>","call":80,"sos":100,"idle":60,"source":"device|cluster|default",
  *    "sources":{"call":"…","sos":"…","idle":"…"}}
- * where source is the strongest source among the three levels. Release with db_free. */
+ * where source is the strongest source among the three levels.
+ *
+ * Like db_core_local_time_json, this is served from a snapshot the run loop republishes on every
+ * configuration change: safe from any thread, never blocks on the loop. A value written through
+ * db_core_set_config_key is visible on the next turn of the loop, not synchronously within the
+ * write call. Release with db_free. */
 DB_API char* db_core_audio_json(db_core* c, const char* device_id);
 
 /* ---- Announcements ----
@@ -410,7 +437,9 @@ DB_API char* db_core_mint_join_token_json(db_core* c, int seconds);
  *   {"ok":true,"host":"10.0.1.10:47172","pin":"123456","exp":1772000000,"cluster":"Ox House"}
  * or {"ok":false,"err":"bad_scheme"|"missing_pin"|"missing_host"|"expired"}. The expiry is
  * checked against corrected cluster time when core is running and against the platform clock
- * otherwise, because a shell may scan a code before core has started. Release with db_free. */
+ * otherwise, because a shell may scan a code before core has started. The correction lives in an
+ * atomic on the shared clock, so this call is safe from any thread and does not enter the run
+ * loop either -- a camera callback can validate a code inline. Release with db_free. */
 DB_API char* db_core_parse_pair_uri_json(db_core* c, const char* uri);
 /* Request that an indoor-panel administrator remove one connected peer. The peer receives an
  * authenticated local-reset command and acknowledges it through its UI. */
