@@ -30,6 +30,9 @@ namespace DoorbellApp.Core
             // Appended in this ABI generation. NULL is legal and means core keeps an orphaned
             // secret when pairing is cleared, so struct_size must always be sizeof(this struct).
             public IntPtr secure_delete;
+            // Appended after secure_delete. NULL is legal and means core reports no power state.
+            // Fields are only ever appended, so power_state must stay last.
+            public IntPtr power_state;
         }
 
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
@@ -55,6 +58,11 @@ namespace DoorbellApp.Core
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         public delegate int DeviceInfoCb(IntPtr user, IntPtr jsonOut);
 
+        // {"battery_pct":<-1..100>,"charging":bool,"mains":bool}; core releases the buffer with
+        // release_buffer, so the same allocator as device_info must be used.
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        public delegate int PowerStateCb(IntPtr user, IntPtr jsonOut);
+
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         public delegate void ReleaseBufferCb(IntPtr user, IntPtr buffer);
 
@@ -62,6 +70,35 @@ namespace DoorbellApp.Core
 
         [DllImport("kernel32", SetLastError = true, CharSet = CharSet.Unicode)]
         private static extern IntPtr LoadLibrary(string path);
+
+        [DllImport("kernel32", SetLastError = true, CharSet = CharSet.Unicode)]
+        private static extern IntPtr GetModuleHandle(string name);
+
+        [DllImport("kernel32", SetLastError = true, CharSet = CharSet.Ansi,
+                   BestFitMapping = false)]
+        private static extern IntPtr GetProcAddress(IntPtr module, string name);
+
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        public delegate int SipSetMicMutedFn(IntPtr core, int muted);
+
+        /// <summary>
+        /// Binds an export that is optional in this Core generation. A missing export returns
+        /// null instead of throwing at the first call site, so the shell can hide the control.
+        /// </summary>
+        public static TDelegate OptionalExport<TDelegate>(string name) where TDelegate : class
+        {
+            if (string.IsNullOrEmpty(name)) return null;
+            try
+            {
+                IntPtr module = GetModuleHandle("doorbell.dll");
+                if (module == IntPtr.Zero) module = GetModuleHandle("doorbell");
+                if (module == IntPtr.Zero) return null;
+                IntPtr proc = GetProcAddress(module, name);
+                if (proc == IntPtr.Zero) return null;
+                return Marshal.GetDelegateForFunctionPointer(proc, typeof(TDelegate)) as TDelegate;
+            }
+            catch { return null; }
+        }
 
         public static void Preload()
         {
@@ -170,8 +207,13 @@ namespace DoorbellApp.Core
         public static extern void db_core_invite_device(IntPtr core,
             [MarshalAs(UnmanagedType.LPUTF8Str)] string nodeId);
 
+        // Opens the "add everything nearby" window. Reserved for that explicit button.
         [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
         public static extern IntPtr db_core_start_pairing_json(IntPtr core, int seconds);
+
+        // Mints or refreshes the Pairing PIN without opening the pairing-mode window.
+        [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
+        public static extern IntPtr db_core_mint_join_token_json(IntPtr core, int seconds);
 
         [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
         public static extern void db_core_invite_direct(IntPtr core,
@@ -220,6 +262,33 @@ namespace DoorbellApp.Core
         [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
         public static extern void db_core_on_camera_frame(IntPtr core, IntPtr data, int format,
             int width, int height, int stride, long tsMs);
+
+        // Render a wall-clock instant in the configured IANA zone. wall_ms of zero means "now".
+        [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
+        public static extern IntPtr db_core_local_time_json(IntPtr core, long wallMs);
+
+        [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
+        public static extern int db_core_time_sync_now(IntPtr core);
+
+        [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
+        public static extern IntPtr db_core_audio_json(IntPtr core,
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string deviceId);
+
+        [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
+        public static extern int db_core_set_door_notice(IntPtr core,
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string door,
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string text, long expiresMs);
+
+        [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
+        public static extern int db_core_clear_door_notice(IntPtr core,
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string door);
+
+        [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
+        public static extern IntPtr db_core_call_log_json(IntPtr core, long sinceMs, int limit);
+
+        [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
+        public static extern int db_core_call_log_mark_seen(IntPtr core,
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string upToHlc);
 
         [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
         public static extern void db_free(IntPtr p);

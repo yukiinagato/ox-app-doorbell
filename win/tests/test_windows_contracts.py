@@ -35,6 +35,8 @@ class WindowsContracts(unittest.TestCase):
         for path in [WIN / "DoorbellApp" / "MainWindow.xaml",
                      WIN / "DoorbellApp" / "App.xaml",
                      WIN / "DoorbellApp" / "AdminDialog.xaml",
+                     WIN / "DoorbellApp" / "NoticeDialog.xaml",
+                     WIN / "DoorbellApp" / "WebAdminWindow.xaml",
                      *sorted((WIN / "DoorbellApp" / "Pairing").glob("*.xaml")),
                      *sorted((WIN / "DoorbellApp" / "Resources").glob("*.resx"))]:
             with self.subTest(path=path.name):
@@ -48,7 +50,8 @@ class WindowsContracts(unittest.TestCase):
         # Fields are only appended; secure_delete is the newest and must stay last.
         self.assertEqual(fields, ["struct_size", "version", "user", "https_request",
                                  "secure_get", "secure_put", "log_line", "tts_speak",
-                                 "device_info", "release_buffer", "secure_delete"])
+                                 "device_info", "release_buffer", "secure_delete",
+                                 "power_state"])
         client = read("win/DoorbellApp/Core/CoreClient.cs")
         self.assertIn("Marshal.SizeOf(typeof(CoreInterop.DbPlatformV2))", client)
         self.assertIn("Marshal.FreeHGlobal(buffer)", client)
@@ -59,6 +62,11 @@ class WindowsContracts(unittest.TestCase):
                                  r"[\s\S]*?\? 0 : -1")
         self.assertIn("public bool Delete(string key)",
                       read("win/DoorbellApp/Core/DpapiSecretStore.cs"))
+        self.assertIn("power_state = Marshal.GetFunctionPointerForDelegate(_powerStateCb)",
+                      client)
+        probe = read("win/abi-probe/main.cpp")
+        self.assertIn("10 * sizeof(void*)", probe)
+        self.assertIn("offsetof(db_platform_v2, power_state)", probe)
 
     def test_native_zero_success_is_not_inverted(self):
         client = read("win/DoorbellApp/Core/CoreClient.cs")
@@ -305,7 +313,10 @@ class WindowsContracts(unittest.TestCase):
 
         window = read("win/DoorbellApp/MainWindow.xaml.cs")
         self.assertIn('_semanticApplier.Apply(IncomingTitle,', window)
-        self.assertIn('PublishUiStyleStatus', window)
+        # Publishing moved next to the contrast advisories it now carries.
+        self.assertIn('PublishUiStyleWithAdvisories();', window)
+        self.assertIn('App.Core.PublishUiStyleStatus(App.Boot.Role, App.SafeMode, report);',
+                      read("win/DoorbellApp/MainWindow.Shell.cs"))
         manifest = contracts[contracts.index("public static Dictionary<string, object> UiManifest"):
                              contracts.index("public static string Json")]
         self.assertIn('AddElement(elements, "ring.title", false)', manifest)
@@ -602,6 +613,28 @@ class WindowsContracts(unittest.TestCase):
         self.assertIn("App.Core.PushCameraFrame(bgra, 3, width, height, width * 4, now)", feed)
         self.assertIn("/stream.mjpeg", feed)
 
+    def test_every_windows_string_key_is_generated_from_the_catalog(self):
+        resources = read("win/DoorbellApp/Resources/Strings.resx")
+        available = set(re.findall(r'<data name="([^"]+)"', resources))
+        for path in sorted((WIN / "DoorbellApp").rglob("*.cs")):
+            text = path.read_text(encoding="utf-8")
+            for key in re.findall(r'(?:Texts|L10n)\.T\("([A-Za-z0-9_.]+)"', text):
+                # "pair.err." is completed at runtime from the core error code.
+                if key.endswith("."):
+                    continue
+                with self.subTest(path=path.name, key=key):
+                    self.assertIn(key.replace(".", "_"), available)
+        # No user-facing text is hardcoded in the new surfaces.
+        for name in ("MainWindow.Shell.cs", "MainWindow.Dashboard.cs", "MainWindow.Notice.cs",
+                     "MainWindow.History.cs", "MainWindow.CallScreen.cs",
+                     "NoticeDialog.xaml.cs", "WebAdminWindow.xaml.cs"):
+            text = (WIN / "DoorbellApp" / name).read_text(encoding="utf-8")
+            for literal in re.findall(r'(?:Text|Content) = "([^"]+)"', text):
+                if re.fullmatch(r"[0-9.:\-]*", literal):
+                    continue  # numeric defaults are not prose
+                with self.subTest(name=name, literal=literal):
+                    self.fail("hardcoded user-facing text: " + literal)
+
     def test_pairing_surfaces_use_only_generated_resource_keys(self):
         resources = read("win/DoorbellApp/Resources/Strings.resx")
         available = set(re.findall(r'<data name="([^"]+)"', resources))
@@ -615,6 +648,288 @@ class WindowsContracts(unittest.TestCase):
                     continue
                 with self.subTest(path=path.name, key=key):
                     self.assertIn(key.replace(".", "_"), available)
+
+
+    # ---- batch 2 (WP-N-win) ----------------------------------------------------------
+
+    def test_power_state_spi_reports_battery_charging_and_mains(self):
+        interop = read("win/DoorbellApp/Core/CoreInterop.cs")
+        client = read("win/DoorbellApp/Core/CoreClient.cs")
+        device = read("win/DoorbellApp/Core/DeviceInfoProvider.cs")
+        contracts = read("win/DoorbellApp/Core/RuntimeContracts.cs")
+
+        self.assertIn("public delegate int PowerStateCb(IntPtr user, IntPtr jsonOut);", interop)
+        # The same owned-buffer contract as device_info: core releases it with release_buffer.
+        self.assertRegex(client, r"_powerStateCb = [\s\S]{0,400}"
+                                 r"NativeUtf8\.Alloc\(DeviceInfoProvider\.PowerStateJson\(\)\)")
+        for key in ('{ "battery_pct", percent }', '{ "charging", charging }',
+                    '{ "mains", mains }'):
+            self.assertIn(key, device)
+        # A machine with no battery must report -1 rather than a fabricated level.
+        self.assertIn("int percent = -1;", device)
+        self.assertIn("status.BatteryFlag & 128", device)
+        self.assertIn('{ "power_state", true }', contracts)
+
+    def test_windows_has_no_native_settings_only_the_web_admin_entry(self):
+        shell = read("win/DoorbellApp/MainWindow.Shell.cs")
+        window = read("win/DoorbellApp/WebAdminWindow.xaml.cs")
+        link = read("win/DoorbellApp/Util/AdminLink.cs")
+        # The admin entry always asks for the admin password and then opens the web admin.
+        entry = shell[shell.index("private void OnAdminEntryClick"):
+                      shell.index("private void OpenWebAdmin")]
+        self.assertIn("new AdminDialog { Owner = this }", entry)
+        self.assertIn("OpenWebAdmin();", entry)
+        self.assertIn("new WebAdminWindow(App.Boot.HttpPort)", shell)
+        # QR, URL and an open button; the URL never points at loopback.
+        self.assertIn("QrCodeImage.Render(url, 200)", window)
+        self.assertIn('Texts.T("web_admin.open_browser")', window)
+        self.assertIn("UseShellExecute = true", window)
+        self.assertIn('"/admin/"', link)
+        self.assertIn('text.StartsWith("127.", StringComparison.Ordinal)', link)
+        # A door station shows no administration entry at all (spec 0.2).
+        self.assertIn("AdminEntryButton.Visibility = door ? Visibility.Collapsed", shell)
+        self.assertIn("AdminLinkCard.Visibility = door ? Visibility.Collapsed", shell)
+        # No native settings screen was added.
+        self.assertFalse((WIN / "DoorbellApp" / "SettingsWindow.xaml").exists())
+
+    def test_sos_slides_then_counts_down_before_core_is_told(self):
+        slider = read("win/DoorbellApp/Ui/SosSlider.cs")
+        window = read("win/DoorbellApp/MainWindow.xaml.cs")
+        self.assertIn("public class SosSlider : Slider", slider)
+        self.assertIn("public const double ArmThreshold = 90.0;", slider)
+        self.assertIn("bool armed = Value >= ArmThreshold;", slider)
+        # Core learns about the emergency only when the countdown reaches zero.
+        armed = window[window.index("private void OnSosArmed"):
+                       window.index("private void OnSosCountdownTick")]
+        self.assertNotIn("App.Core.Emergency(true)", armed)
+        self.assertIn("SosCountdownView.Visibility = Visibility.Visible", armed)
+        tick = window[window.index("private void OnSosCountdownTick"):
+                      window.index("private void OnSosCountdownCancel")]
+        self.assertIn("CommitEmergency();", tick)
+        cancel = window[window.index("private void OnSosCountdownCancel"):
+                        window.index("private void ShowEmergency")]
+        self.assertNotIn("App.Core.Emergency", cancel)
+        self.assertIn('CoreClient.Dig(cfg, "emergency.trigger.countdown_s")', window)
+        self.assertNotIn('CoreClient.Dig(cfg, "emergency.hold_to_trigger_s")', window)
+        # The two-part label breaks where the catalog says, and the second line is smaller.
+        self.assertIn("sos.slide_label", window)
+        xaml = read("win/DoorbellApp/MainWindow.xaml")
+        self.assertIn('x:Name="SosSlide"', xaml)
+        self.assertIn('x:Name="SosCountdownCancel"', xaml)
+
+    def test_every_clock_is_rendered_with_the_cluster_clock(self):
+        interop = read("win/DoorbellApp/Core/CoreInterop.cs")
+        client = read("win/DoorbellApp/Core/CoreClient.cs")
+        window = read("win/DoorbellApp/MainWindow.xaml.cs")
+        dashboard = read("win/DoorbellApp/MainWindow.Dashboard.cs")
+        self.assertIn("db_core_local_time_json", interop)
+        self.assertIn("db_core_time_sync_now", interop)
+        self.assertIn("public Dictionary<string, object> LocalTime(long wallMs)", client)
+        clock = window[window.index("private void UpdateClock"):
+                       window.index("private static string Weekday")]
+        self.assertIn("CoreLocalTime(out time, out date)", clock)
+        self.assertIn("DashClock.Text = time;", clock)
+        # Call-history timestamps use the same corrected clock.
+        self.assertIn("App.Core.LocalTime(wallMs)", dashboard)
+
+    def test_dashboard_shows_tiles_history_versions_and_battery(self):
+        xaml = read("win/DoorbellApp/MainWindow.xaml")
+        shell = read("win/DoorbellApp/MainWindow.Shell.cs")
+        dashboard = read("win/DoorbellApp/MainWindow.Dashboard.cs")
+        history = read("win/DoorbellApp/MainWindow.History.cs")
+        for name in ('DashboardHome', 'DoorTileGrid', 'RecentCallsList', 'MissedBadge',
+                     'AdminQrImage', 'AdminUrlText', 'NoticeGlobalButton', 'HistoryView'):
+            self.assertIn('x:Name="%s"' % name, xaml)
+        # Five-second stills come from the door station's own snapshot endpoint.
+        self.assertIn("TimeSpan.FromSeconds(5)", read("win/DoorbellApp/MainWindow.xaml.cs"))
+        self.assertIn('"/snapshot.jpg"', dashboard)
+        # Core version and app version are both shown, with the battery in the same line.
+        self.assertIn('Texts.T("version.line", label, _coreVersion, _appVersion)', shell)
+        self.assertIn('line += " · " + _batteryPct + "%"', shell)
+        self.assertIn("if (_batteryPct >= 0)", shell)
+        # History: 50 rows a page, day groups, filters and mark-seen on open.
+        self.assertIn("private const int HistoryPageRows = 50;", history)
+        self.assertIn("App.Core.CallLogMarkSeen(_latestCallHlc)", history)
+        opened = history[history.index("private void OpenHistory"):
+                         history.index("private void OnHistoryCloseClick")]
+        self.assertIn("MarkHistorySeen();", opened)
+        self.assertIn('_historyFilter == "missed"', history)
+
+    def test_incoming_screen_controls_notice_chip_and_debug_line(self):
+        xaml = read("win/DoorbellApp/MainWindow.xaml")
+        call = read("win/DoorbellApp/MainWindow.CallScreen.cs")
+        window = read("win/DoorbellApp/MainWindow.xaml.cs")
+        streamer = read("win/DoorbellApp/Core/MjpegStreamer.cs")
+        # One control row: monitor on/off, answer or end call, mic, unlock, quick replies.
+        for name in ('MonitorButton', 'AnswerButton', 'MicButton', 'OpenDoorButton',
+                     'QuickReplyToggle', 'EndCallButton', 'InCallMicButton',
+                     'NoticeChip', 'CallAdminQrImage', 'VideoStatsText', 'PurposeSlot'):
+            self.assertIn('x:Name="%s"' % name, xaml)
+        # The purpose slot keeps its height so a later purpose never moves the controls.
+        self.assertIn('x:Name="PurposeSlot" Height="36"', xaml)
+        # Portrait door cameras are letterboxed, never cropped or stretched.
+        self.assertNotIn('x:Name="IncomingLive" Stretch="UniformToFill"', xaml)
+        self.assertIn('x:Name="IncomingLive" Stretch="Uniform"', xaml)
+        self.assertIn('x:Name="PeerVideo" Stretch="Uniform"', xaml)
+        # The debug line reads the player's own counters and is remembered per device.
+        self.assertIn("public sealed class VideoStats", streamer)
+        self.assertIn("X-Doorbell-Capture-Time-Ms", streamer)
+        self.assertIn("X-Doorbell-Server-Time-Ms", streamer)
+        self.assertIn('Texts.T("video.stats", codec, latency, jitter, fps, dropped)', call)
+        self.assertIn("SaveVideoStatsPreference();", call)
+        # The microphone toggle only exists when core can honour it.
+        self.assertIn("if (!App.Core.SipMicMuteAvailable) return;", call)
+        self.assertIn("db_core_sip_set_mic_muted", read("win/DoorbellApp/Core/CoreClient.cs"))
+        # Unlock stays, gated by the admin setting, and explains itself when unconfigured.
+        self.assertIn('"doors." + (door ?? "") + ".unlock.show_button"', window)
+        self.assertIn('Texts.T("ring.open_unconfigured")', window)
+
+    def test_announcements_have_three_entry_points_and_editable_presets(self):
+        notice = read("win/DoorbellApp/MainWindow.Notice.cs")
+        dialog = read("win/DoorbellApp/NoticeDialog.xaml.cs")
+        # Door-specific wins over the global announcement.
+        effective = notice[notice.index("private Dictionary<string, object> EffectiveNotice"):
+                           notice.index("private static string NoticeText")]
+        self.assertLess(effective.index('".notice"'), effective.index('"notice.global"'))
+        # Entry points: dashboard button, door tile chip, chip on the monitor screen.
+        self.assertIn("private void OnGlobalNoticeClick", notice)
+        self.assertIn("private void OnTileNoticeChipClick", notice)
+        self.assertIn("private void OnNoticeChipClick", read(
+            "win/DoorbellApp/MainWindow.Notice.cs"))
+        self.assertIn('CoreClient.Dig(_cfg, "notice.presets")', notice)
+        # The visitor screen shows the text only, with no source or expiry line.
+        visitor = notice[notice.index("private void RefreshNoticeSurfaces"):
+                         notice.index("private void RefreshTileNoticeChip")]
+        self.assertNotIn("from_device", visitor)
+        self.assertNotIn("expires_ms", visitor)
+        # 200 characters, expiry presets and a target selector.
+        self.assertIn("private const int MaxCharacters = 200;", dialog)
+        for preset in ('"1h"', '"today"', '"until_cleared"', '"custom"'):
+            self.assertIn(preset, dialog)
+        self.assertIn('Texts.T("notice.target_global")', dialog)
+
+    def test_appearance_and_automatic_contrast_follow_the_shared_decision(self):
+        appearance = read("win/DoorbellApp/Util/Appearance.cs")
+        contrast = read("win/DoorbellApp/Util/ThemeContrast.cs")
+        shell = read("win/DoorbellApp/MainWindow.Shell.cs")
+        app_xaml = read("win/DoorbellApp/App.xaml")
+        # Windows releases without a system light/dark setting fall back to the schedule.
+        self.assertIn("AppsUseLightTheme", appearance)
+        self.assertIn("return ScheduleAppearance(config, localTime);", appearance)
+        self.assertIn('"display.appearance_schedule.dark_from"', appearance)
+        self.assertIn('"devices." + nodeId + ".local.display.appearance"', appearance)
+        # Core's published decision wins; the local computation is the fallback.
+        ink = contrast[contrast.index("public static Color Ink("):
+                       contrast.index("public static bool NeedsOutline")]
+        self.assertLess(ink.index("ink_override"), ink.index("auto_ink"))
+        self.assertIn("Luminance(background) >= 0.5 ? DarkInk : LightInk", ink)
+        button = contrast[contrast.index("public static Color CallButton("):
+                          contrast.index("public static Color LocalAccent")]
+        self.assertLess(button.index("call_button_bg"), button.index("auto_accent"))
+        self.assertIn("h = (h + 180.0) % 360.0;", contrast)
+        self.assertIn("onBackground >= 3.0 && onText >= 4.5", contrast)
+        # A colour that misses its target is still applied and only warned about.
+        self.assertIn("if (ratio >= minimum) return null;", contrast)
+        self.assertIn('report["contrast_advisories"] = advisories;', shell)
+        # Palette swaps only reach the UI when every consumer uses DynamicResource.
+        self.assertNotIn("{StaticResource Bg}", read("win/DoorbellApp/MainWindow.xaml"))
+        self.assertIn('<SolidColorBrush x:Key="Line"', app_xaml)
+
+    def test_coloured_labels_keep_their_padding(self):
+        # Any text drawn on a coloured background gets at least 6 vertical / 12 horizontal
+        # padding with a radius (spec 5, rule 7).
+        for name in ("MainWindow.xaml", "App.xaml", "AdminDialog.xaml", "NoticeDialog.xaml",
+                     "WebAdminWindow.xaml"):
+            text = read("win/DoorbellApp/" + name)
+            for padding in re.findall(r'Padding="(\d+),(\d+)"', text):
+                horizontal, vertical = int(padding[0]), int(padding[1])
+                with self.subTest(name=name, padding=padding):
+                    self.assertGreaterEqual(horizontal, 12)
+                    self.assertGreaterEqual(vertical, 6)
+        code = read("win/DoorbellApp/MainWindow.Dashboard.cs")
+        self.assertIn("new Thickness(12, 6, 12, 6)", code)
+
+    def test_responsive_layout_is_computed_from_the_window_size(self):
+        shell = read("win/DoorbellApp/MainWindow.Shell.cs")
+        window = read("win/DoorbellApp/MainWindow.xaml.cs")
+        self.assertIn("SizeChanged += (s, e) => ApplyResponsiveLayout();", window)
+        layout = shell[shell.index("private void ApplyResponsiveLayout"):
+                       shell.index("private static void PlaceVisitor")]
+        self.assertIn("bool portrait = height >= width || width < 900;", layout)
+        # Portrait stacks; landscape splits into two columns.
+        self.assertIn("VisitorRightColumn.Width = new GridLength(0);", layout)
+        self.assertIn("PlaceVisitor(LangBar, 2, 1, 1, 1);", layout)
+        self.assertIn("PlaceDashboard(RecentCallsPanel, 1, 0, 2);", layout)
+        self.assertIn("PlaceDashboard(RecentCallsPanel, 0, 1, 1);", layout)
+        # Tablets scale the call button and the hint.
+        self.assertIn("CallButton.MinHeight = large ? 170 : (tablet ? 120 : 96);", layout)
+
+    def test_effective_volumes_reach_the_players(self):
+        window = read("win/DoorbellApp/MainWindow.xaml.cs")
+        client = read("win/DoorbellApp/Core/CoreClient.cs")
+        self.assertIn("public Dictionary<string, object> AudioVolumes(string deviceId)", client)
+        self.assertIn("db_core_audio_json", read("win/DoorbellApp/Core/CoreInterop.cs"))
+        self.assertIn("_volumeCall = Clamp(DictInt(levels, \"call\", _volumeCall));", window)
+        self.assertIn("Volume = volumePercent < 0 ? 1.0 : Clamp(volumePercent) / 100.0", window)
+        self.assertIn('SoundValue("call_sound", "outdoor_call_alert"),\n'
+                      '                ConfigBool("ui.call_sound_loop", false), null, '
+                      '_volumeCall);', window)
+        self.assertIn('DictInt(ev.Data, "alarm_volume", _volumeSos)', window)
+
+    def test_pairing_pin_never_opens_the_bulk_add_window(self):
+        client = read("win/DoorbellApp/Core/CoreClient.cs")
+        interop = read("win/DoorbellApp/Core/CoreInterop.cs")
+        onboarding = read("win/DoorbellApp/Pairing/PairingOnboardingView.xaml.cs")
+        panel = read("win/DoorbellApp/Pairing/AddDeviceWindow.xaml.cs")
+        probe = read("win/abi-probe/main.cpp")
+        self.assertIn("db_core_mint_join_token_json", interop)
+        # The release gate lists it as pending until Core exports it; the shell binds it now and
+        # returns null rather than terminating on an older Core.
+        self.assertIn('kPendingExports[] = {"db_core_mint_join_token_json"', probe)
+        self.assertIn("EntryPointNotFoundException", client)
+        self.assertIn("public Dictionary<string, object> MintJoinToken(int seconds)", client)
+        # Founding a Cluster shows the PIN card without auto-adding anything.
+        request = onboarding[onboarding.index("private void RequestNewCode"):]
+        self.assertIn("App.Core.MintJoinToken(600)", request)
+        self.assertNotIn("StartPairing", request)
+        panel_request = panel[panel.index("private void RequestNewCode"):
+                              panel.index("private void OnAddAllClick")]
+        self.assertIn("App.Core.MintJoinToken(TokenSeconds)", panel_request)
+        self.assertNotIn("StartPairing", panel_request)
+        # Only the explicit bulk-add button opens the pairing-mode window.
+        add_all = panel[panel.index("private void OnAddAllClick"):
+                        panel.index("private void OnScanQrClick")]
+        self.assertIn("App.Core.StartPairing(PairingModeSeconds)", add_all)
+        self.assertIn('AddAllWarning.Text = Texts.T("pair.add_all_warning")', panel)
+
+    def test_revoke_resets_the_device_to_first_run_setup(self):
+        app = read("win/DoorbellApp/App.xaml.cs")
+        boot = read("win/DoorbellApp/BootConfig.cs")
+        client = read("win/DoorbellApp/Core/CoreClient.cs")
+        window = read("win/DoorbellApp/MainWindow.xaml.cs")
+        reset = app[app.index("internal static void FactoryResetAndRestart"):
+                    app.index("private static bool _factoryResetStarted;")]
+        self.assertIn('Core?.DeleteSecret("mesh.psk")', reset)
+        self.assertIn("BootConfig.ResetToFactory(Boot.FilePath)", reset)
+        self.assertIn("app.Shutdown(0)", reset)
+        self.assertIn('if (ev.T == "pairing_revoked")', app)
+        self.assertIn('FactoryResetAndRestart("pairing_revoked")', app)
+        # Leaving the Cluster from this device resets it the same way; a device that was never
+        # paired is left alone so a fresh install does not loop through setup.
+        self.assertIn('FactoryResetAndRestart("unpaired")', app)
+        self.assertIn("!string.IsNullOrEmpty(Boot.PskRef)", app)
+        factory = boot[boot.index("public static bool ResetToFactory"):
+                       boot.index("private static void AddUnique")]
+        for cleared in ('data["role"] = ""', 'data["setup_complete"] = false',
+                        'data["name"] = "doorbell"'):
+            self.assertIn(cleared, factory)
+        self.assertNotIn("psk_ref", factory)
+        self.assertNotIn("seed_peers", factory)
+        self.assertIn("public bool DeleteSecret(string key)", client)
+        # The window no longer clears only the boot reference on a revoke.
+        revoked = window[window.index('case "pairing_revoked":'):
+                         window.index('case "pairing_state":')]
+        self.assertNotIn("App.ClearPairingBootReference()", revoked)
 
 
 if __name__ == "__main__":

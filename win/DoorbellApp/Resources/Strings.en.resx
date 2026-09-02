@@ -351,13 +351,15 @@ Delete it?</value></data>
   <data name="calling_no_answer" xml:space="preserve"><value>No answer</value></data>
   <data name="calling_title" xml:space="preserve"><value>Calling…</value></data>
   <data name="dash_admin" xml:space="preserve"><value>Admin</value></data>
-  <data name="dash_doors" xml:space="preserve"><value>Doors</value></data>
-  <data name="dash_no_doors" xml:space="preserve"><value>No door station yet</value></data>
+  <data name="dash_doors" xml:space="preserve"><value>Door stations</value></data>
+  <data name="dash_last_answer" xml:space="preserve"><value>Last answered {0}</value></data>
+  <data name="dash_no_doors" xml:space="preserve"><value>No door stations</value></data>
   <data name="dash_notice_global" xml:space="preserve"><value>Announcement (all doors)</value></data>
   <data name="dash_recent_calls" xml:space="preserve"><value>Recent calls</value></data>
   <data name="dash_see_all" xml:space="preserve"><value>See all</value></data>
   <data name="dash_tile_offline" xml:space="preserve"><value>Offline</value></data>
   <data name="dash_tile_open" xml:space="preserve"><value>View</value></data>
+  <data name="dash_tile_watch" xml:space="preserve"><value>View</value></data>
   <data name="date_full" xml:space="preserve"><value>{0}-{1}-{2} ({3})</value></data>
   <data name="day_fri" xml:space="preserve"><value>Fri</value></data>
   <data name="day_mon" xml:space="preserve"><value>Mon</value></data>
@@ -367,7 +369,7 @@ Delete it?</value></data>
   <data name="day_tue" xml:space="preserve"><value>Tue</value></data>
   <data name="day_wed" xml:space="preserve"><value>Wed</value></data>
   <data name="degraded_notified" xml:space="preserve"><value>Notified — please wait</value></data>
-  <data name="door_hint_call" xml:space="preserve"><value>Press the button to call the household</value></data>
+  <data name="door_hint_call" xml:space="preserve"><value>Press the button to call the residents</value></data>
   <data name="door_lang_switch" xml:space="preserve"><value>Language</value></data>
   <data name="emergency_active_detail" xml:space="preserve"><value>Emergency mode is active</value></data>
   <data name="emergency_button" xml:space="preserve"><value>SOS</value></data>
@@ -387,7 +389,7 @@ Delete it?</value></data>
   <data name="history_empty" xml:space="preserve"><value>No calls yet</value></data>
   <data name="history_filter_all" xml:space="preserve"><value>All</value></data>
   <data name="history_filter_door" xml:space="preserve"><value>{0} only</value></data>
-  <data name="history_filter_missed" xml:space="preserve"><value>Missed</value></data>
+  <data name="history_filter_missed" xml:space="preserve"><value>Missed only</value></data>
   <data name="history_load_more" xml:space="preserve"><value>Load more</value></data>
   <data name="history_mark_seen" xml:space="preserve"><value>Mark all as seen</value></data>
   <data name="history_missed_badge" xml:space="preserve"><value>{0} missed</value></data>
@@ -395,6 +397,7 @@ Delete it?</value></data>
   <data name="history_outcome_cancelled" xml:space="preserve"><value>Cancelled</value></data>
   <data name="history_outcome_missed" xml:space="preserve"><value>Missed</value></data>
   <data name="history_outcome_replied" xml:space="preserve"><value>Replied</value></data>
+  <data name="history_page_limit" xml:space="preserve"><value>Older calls are in the web admin</value></data>
   <data name="history_seen_done" xml:space="preserve"><value>Marked as seen</value></data>
   <data name="history_title" xml:space="preserve"><value>Call history</value></data>
   <data name="history_today" xml:space="preserve"><value>Today</value></data>
@@ -405,6 +408,7 @@ Delete it?</value></data>
   <data name="idle_language" xml:space="preserve"><value>Language</value></data>
   <data name="idle_touch_to_call" xml:space="preserve"><value>Touch to call</value></data>
   <data name="incall_end" xml:space="preserve"><value>End</value></data>
+  <data name="incall_end_call" xml:space="preserve"><value>End call</value></data>
   <data name="incall_title" xml:space="preserve"><value>In call</value></data>
   <data name="info_absent" xml:space="preserve"><value>Absent</value></data>
   <data name="info_active_calls" xml:space="preserve"><value>Active calls</value></data>
@@ -471,6 +475,7 @@ Delete it?</value></data>
   <data name="notice_chip" xml:space="preserve"><value>Announcement</value></data>
   <data name="notice_clear" xml:space="preserve"><value>Clear</value></data>
   <data name="notice_cleared" xml:space="preserve"><value>The announcement was cleared</value></data>
+  <data name="notice_dialog_title" xml:space="preserve"><value>Show an announcement at the door</value></data>
   <data name="notice_door_button" xml:space="preserve"><value>Announcement for this door</value></data>
   <data name="notice_edit" xml:space="preserve"><value>Edit</value></data>
   <data name="notice_empty" xml:space="preserve"><value>Enter a message</value></data>
@@ -482,8 +487,10 @@ Delete it?</value></data>
   <data name="notice_expiry_today" xml:space="preserve"><value>End of today</value></data>
   <data name="notice_expiry_until_cleared" xml:space="preserve"><value>Until cleared</value></data>
   <data name="notice_failed" xml:space="preserve"><value>Couldn't save the announcement</value></data>
+  <data name="notice_for_this_door" xml:space="preserve"><value>Announcement for this door</value></data>
   <data name="notice_from" xml:space="preserve"><value>Posted by</value></data>
   <data name="notice_global_button" xml:space="preserve"><value>Announcement (all doors)</value></data>
+  <data name="notice_limit" xml:space="preserve"><value>Up to 200 characters</value></data>
   <data name="notice_none" xml:space="preserve"><value>No announcement</value></data>
   <data name="notice_preset_absent" xml:space="preserve"><value>We are away right now</value></data>
   <data name="notice_preset_construction" xml:space="preserve"><value>Building work in progress — please call out</value></data>
@@ -492,8 +499,8 @@ Delete it?</value></data>
   <data name="notice_preview" xml:space="preserve"><value>How it looks at the door</value></data>
   <data name="notice_publish" xml:space="preserve"><value>Show</value></data>
   <data name="notice_saved" xml:space="preserve"><value>The announcement is now showing</value></data>
-  <data name="notice_target" xml:space="preserve"><value>Show on</value></data>
-  <data name="notice_target_door" xml:space="preserve"><value>This door ({0})</value></data>
+  <data name="notice_target" xml:space="preserve"><value>Applies to</value></data>
+  <data name="notice_target_door" xml:space="preserve"><value>{0} only</value></data>
   <data name="notice_target_global" xml:space="preserve"><value>All doors</value></data>
   <data name="notice_text" xml:space="preserve"><value>Message</value></data>
   <data name="notice_title" xml:space="preserve"><value>Announcement</value></data>
@@ -711,7 +718,11 @@ Delete it?</value></data>
   <data name="ring_monitoring" xml:space="preserve"><value>Live door audio on</value></data>
   <data name="ring_no_video" xml:space="preserve"><value>No video from door station</value></data>
   <data name="ring_open_door" xml:space="preserve"><value>Open door</value></data>
+  <data name="ring_open_failed" xml:space="preserve"><value>Couldn't send the unlock signal</value></data>
+  <data name="ring_open_sent" xml:space="preserve"><value>Unlock signal sent</value></data>
+  <data name="ring_open_unconfigured" xml:space="preserve"><value>No unlock action is configured for this door</value></data>
   <data name="ring_purpose_badge" xml:space="preserve"><value>Purpose: {0}</value></data>
+  <data name="ring_quick_replies" xml:space="preserve"><value>Quick replies</value></data>
   <data name="ring_quick_reply" xml:space="preserve"><value>Quick reply</value></data>
   <data name="ring_unlock" xml:space="preserve"><value>Unlock</value></data>
   <data name="ring_unlock_sent" xml:space="preserve"><value>Unlock signal sent</value></data>
@@ -809,6 +820,7 @@ This device joins automatically. Only if it does not, enter the indoor panel add
   <data name="setup_scan_qr" xml:space="preserve"><value>Scan indoor-panel QR</value></data>
   <data name="setup_title" xml:space="preserve"><value>Set up this device</value></data>
   <data name="sip_unavailable" xml:space="preserve"><value>Calling is currently unavailable</value></data>
+  <data name="sos_abort" xml:space="preserve"><value>Cancel</value></data>
   <data name="sos_alarm_sound" xml:space="preserve"><value>Alarm sound</value></data>
   <data name="sos_alarm_volume" xml:space="preserve"><value>Alarm volume</value></data>
   <data name="sos_button_on_roles" xml:space="preserve"><value>Devices that show SOS</value></data>
@@ -820,7 +832,8 @@ This device joins automatically. Only if it does not, enter the indoor panel add
   <data name="sos_mode_hold" xml:space="preserve"><value>Press and hold (legacy)</value></data>
   <data name="sos_mode_slide" xml:space="preserve"><value>Slide to trigger</value></data>
   <data name="sos_slide_hint" xml:space="preserve"><value>Slide right to call for help</value></data>
-  <data name="sos_slide_label" xml:space="preserve"><value>Slide for SOS</value></data>
+  <data name="sos_slide_label" xml:space="preserve"><value>Slide for SOS
+Alarm in {0} s</value></data>
   <data name="sos_slide_sub" xml:space="preserve"><value>Alarm after {0}s</value></data>
   <data name="sos_title" xml:space="preserve"><value>SOS</value></data>
   <data name="sos_trigger_mode" xml:space="preserve"><value>How it is triggered</value></data>
@@ -859,7 +872,8 @@ This device joins automatically. Only if it does not, enter the indoor panel add
   <data name="time_title" xml:space="preserve"><value>Time</value></data>
   <data name="time_zone" xml:space="preserve"><value>Time zone</value></data>
   <data name="time_zone_hint" xml:space="preserve"><value>This sets the clock, call history, and rule schedules for the whole cluster</value></data>
-  <data name="version_line" xml:space="preserve"><value>core {0} · app {1}</value></data>
+  <data name="version_line" xml:space="preserve"><value>{0} · core v{1} · app v{2}</value></data>
+  <data name="video_stats" xml:space="preserve"><value>{0} · {1} ms · ±{2} ms · {3} fps · drop {4}</value></data>
   <data name="volume_call" xml:space="preserve"><value>Call</value></data>
   <data name="volume_cluster_default" xml:space="preserve"><value>Cluster default {0}</value></data>
   <data name="volume_device_title" xml:space="preserve"><value>Volume on this device</value></data>
@@ -869,8 +883,14 @@ This device joins automatically. Only if it does not, enter the indoor panel add
   <data name="volume_preview" xml:space="preserve"><value>Preview</value></data>
   <data name="volume_sos" xml:space="preserve"><value>SOS</value></data>
   <data name="volume_title" xml:space="preserve"><value>Volume</value></data>
+  <data name="web_admin_hint" xml:space="preserve"><value>Scan the QR with a phone, or type this address into a browser</value></data>
   <data name="web_admin_leader" xml:space="preserve"><value>Leader's admin page</value></data>
-  <data name="web_admin_open" xml:space="preserve"><value>Open the web admin</value></data>
+  <data name="web_admin_none" xml:space="preserve"><value>No admin address was found</value></data>
+  <data name="web_admin_open" xml:space="preserve"><value>Open web admin</value></data>
+  <data name="web_admin_open_browser" xml:space="preserve"><value>Open in this device's browser</value></data>
+  <data name="web_admin_open_failed" xml:space="preserve"><value>Couldn't open the browser</value></data>
+  <data name="web_admin_other_address" xml:space="preserve"><value>Another address</value></data>
   <data name="web_admin_scan" xml:space="preserve"><value>Scan this with a phone</value></data>
   <data name="web_admin_scan_hint" xml:space="preserve"><value>Scan this QR to open the admin page</value></data>
+  <data name="web_admin_title" xml:space="preserve"><value>Web admin page</value></data>
 </root>

@@ -3,15 +3,25 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              ShutdownMode="OnMainWindowClose">
     <Application.Resources>
+        <!-- Palette tokens. DoorbellApp.Util.Appearance replaces these brush instances when the
+             effective light/dark appearance changes, so every consumer must use DynamicResource. -->
         <SolidColorBrush x:Key="Bg" Color="#101418"/>
         <SolidColorBrush x:Key="Card" Color="#1A2027"/>
         <SolidColorBrush x:Key="Fg" Color="#E8EDF2"/>
         <SolidColorBrush x:Key="Dim" Color="#8A97A5"/>
         <SolidColorBrush x:Key="Accent" Color="#4DA3FF"/>
         <SolidColorBrush x:Key="Warn" Color="#FFB454"/>
+        <SolidColorBrush x:Key="Line" Color="#2A333D"/>
+        <SolidColorBrush x:Key="Danger" Color="#C0392B"/>
+        <SolidColorBrush x:Key="Ok" Color="#5DD39E"/>
+        <SolidColorBrush x:Key="Notice" Color="#B7791F"/>
+        <SolidColorBrush x:Key="OnAccent" Color="#04121F"/>
+        <SolidColorBrush x:Key="OnDanger" Color="#FFFFFF"/>
+        <SolidColorBrush x:Key="Track" Color="#802A21"/>
+
         <Style x:Key="BigButton" TargetType="Button">
-            <Setter Property="Background" Value="{StaticResource Accent}"/>
-            <Setter Property="Foreground" Value="#04121F"/>
+            <Setter Property="Background" Value="{DynamicResource Accent}"/>
+            <Setter Property="Foreground" Value="{DynamicResource OnAccent}"/>
             <Setter Property="FontSize" Value="44"/>
             <Setter Property="FontWeight" Value="Bold"/>
             <Setter Property="Padding" Value="60,40"/>
@@ -25,7 +35,7 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsPressed" Value="True">
-                                <Setter Property="Background" Value="#2F7FD6"/>
+                                <Setter Property="Opacity" Value="0.82"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -34,8 +44,8 @@
         </Style>
         <!-- Shared pairing surfaces (onboarding, add-device panel, QR scanner). -->
         <Style x:Key="PairPrimaryButton" TargetType="Button">
-            <Setter Property="Background" Value="{StaticResource Accent}"/>
-            <Setter Property="Foreground" Value="#04121F"/>
+            <Setter Property="Background" Value="{DynamicResource Accent}"/>
+            <Setter Property="Foreground" Value="{DynamicResource OnAccent}"/>
             <Setter Property="FontSize" Value="20"/>
             <Setter Property="FontWeight" Value="Bold"/>
             <Setter Property="Padding" Value="26,12"/>
@@ -51,7 +61,7 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsPressed" Value="True">
-                                <Setter Property="Background" Value="#2F7FD6"/>
+                                <Setter Property="Opacity" Value="0.82"/>
                             </Trigger>
                             <Trigger Property="IsEnabled" Value="False">
                                 <Setter Property="Opacity" Value="0.45"/>
@@ -62,8 +72,8 @@
             </Setter>
         </Style>
         <Style x:Key="PairSecondaryButton" TargetType="Button">
-            <Setter Property="Background" Value="{StaticResource Card}"/>
-            <Setter Property="Foreground" Value="{StaticResource Fg}"/>
+            <Setter Property="Background" Value="{DynamicResource Card}"/>
+            <Setter Property="Foreground" Value="{DynamicResource Fg}"/>
             <Setter Property="FontSize" Value="18"/>
             <Setter Property="Padding" Value="22,10"/>
             <Setter Property="MinHeight" Value="46"/>
@@ -72,19 +82,117 @@
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
                         <Border Background="{TemplateBinding Background}" CornerRadius="12"
-                                BorderBrush="#2A333D" BorderThickness="1"
+                                BorderBrush="{DynamicResource Line}" BorderThickness="1"
                                 Padding="{TemplateBinding Padding}">
                             <ContentPresenter HorizontalAlignment="Center"
                                               VerticalAlignment="Center"/>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsPressed" Value="True">
-                                <Setter Property="Background" Value="#243040"/>
+                                <Setter Property="Opacity" Value="0.82"/>
                             </Trigger>
                             <Trigger Property="IsEnabled" Value="False">
                                 <Setter Property="Opacity" Value="0.45"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- One control row on the incoming/monitor screen. Every coloured label keeps at least
+             6 units of vertical and 12 units of horizontal padding with a radius (spec 5, rule 7). -->
+        <Style x:Key="ActionButton" TargetType="Button">
+            <Setter Property="Background" Value="{DynamicResource Card}"/>
+            <Setter Property="Foreground" Value="{DynamicResource Fg}"/>
+            <Setter Property="FontSize" Value="22"/>
+            <Setter Property="Padding" Value="26,12"/>
+            <Setter Property="MinHeight" Value="56"/>
+            <Setter Property="Margin" Value="6,0,6,0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}" CornerRadius="12"
+                                BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter Property="Opacity" Value="0.82"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.45"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="ChipButton" TargetType="Button">
+            <Setter Property="Background" Value="{DynamicResource Card}"/>
+            <Setter Property="Foreground" Value="{DynamicResource Fg}"/>
+            <Setter Property="FontSize" Value="15"/>
+            <Setter Property="Padding" Value="14,6"/>
+            <Setter Property="MinHeight" Value="34"/>
+            <Setter Property="Margin" Value="5,0,0,0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}" CornerRadius="10"
+                                BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter Property="Opacity" Value="0.82"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.45"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Slide-to-trigger SOS. The visible label lives behind the slider inside the semantic
+             "sos.trigger" border, so admin style overrides keep addressing that border. -->
+        <Style x:Key="SosTrack" TargetType="Slider">
+            <Setter Property="Minimum" Value="0"/>
+            <Setter Property="Maximum" Value="100"/>
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="IsMoveToPointEnabled" Value="False"/>
+            <Setter Property="IsSnapToTickEnabled" Value="False"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Slider">
+                        <Grid Background="Transparent">
+                            <Track x:Name="PART_Track">
+                                <Track.Thumb>
+                                    <Thumb Width="52" Cursor="Hand">
+                                        <Thumb.Template>
+                                            <ControlTemplate TargetType="Thumb">
+                                                <Border Background="#FFFFFF" CornerRadius="12"
+                                                        Margin="3" Opacity="0.92">
+                                                    <TextBlock Text="»" FontSize="24"
+                                                               FontWeight="Bold"
+                                                               Foreground="#8C0D0A"
+                                                               HorizontalAlignment="Center"
+                                                               VerticalAlignment="Center"/>
+                                                </Border>
+                                            </ControlTemplate>
+                                        </Thumb.Template>
+                                    </Thumb>
+                                </Track.Thumb>
+                            </Track>
+                        </Grid>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>

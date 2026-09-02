@@ -349,13 +349,15 @@ Delete it?</string>
     <string name="calling_no_answer">No answer</string>
     <string name="calling_title">Calling…</string>
     <string name="dash_admin">Admin</string>
-    <string name="dash_doors">Doors</string>
-    <string name="dash_no_doors">No door station yet</string>
+    <string name="dash_doors">Door stations</string>
+    <string name="dash_last_answer">Last answered %1$s</string>
+    <string name="dash_no_doors">No door stations</string>
     <string name="dash_notice_global">Announcement (all doors)</string>
     <string name="dash_recent_calls">Recent calls</string>
     <string name="dash_see_all">See all</string>
     <string name="dash_tile_offline">Offline</string>
     <string name="dash_tile_open">View</string>
+    <string name="dash_tile_watch">View</string>
     <string name="date_full">%1$s-%2$s-%3$s (%4$s)</string>
     <string name="day_fri">Fri</string>
     <string name="day_mon">Mon</string>
@@ -365,7 +367,7 @@ Delete it?</string>
     <string name="day_tue">Tue</string>
     <string name="day_wed">Wed</string>
     <string name="degraded_notified">Notified — please wait</string>
-    <string name="door_hint_call">Press the button to call the household</string>
+    <string name="door_hint_call">Press the button to call the residents</string>
     <string name="door_lang_switch">Language</string>
     <string name="emergency_active_detail">Emergency mode is active</string>
     <string name="emergency_button">SOS</string>
@@ -385,7 +387,7 @@ Delete it?</string>
     <string name="history_empty">No calls yet</string>
     <string name="history_filter_all">All</string>
     <string name="history_filter_door">%1$s only</string>
-    <string name="history_filter_missed">Missed</string>
+    <string name="history_filter_missed">Missed only</string>
     <string name="history_load_more">Load more</string>
     <string name="history_mark_seen">Mark all as seen</string>
     <string name="history_missed_badge">%1$s missed</string>
@@ -393,6 +395,7 @@ Delete it?</string>
     <string name="history_outcome_cancelled">Cancelled</string>
     <string name="history_outcome_missed">Missed</string>
     <string name="history_outcome_replied">Replied</string>
+    <string name="history_page_limit">Older calls are in the web admin</string>
     <string name="history_seen_done">Marked as seen</string>
     <string name="history_title">Call history</string>
     <string name="history_today">Today</string>
@@ -403,6 +406,7 @@ Delete it?</string>
     <string name="idle_language">Language</string>
     <string name="idle_touch_to_call">Touch to call</string>
     <string name="incall_end">End</string>
+    <string name="incall_end_call">End call</string>
     <string name="incall_title">In call</string>
     <string name="info_absent">Absent</string>
     <string name="info_active_calls">Active calls</string>
@@ -469,6 +473,7 @@ Delete it?</string>
     <string name="notice_chip">Announcement</string>
     <string name="notice_clear">Clear</string>
     <string name="notice_cleared">The announcement was cleared</string>
+    <string name="notice_dialog_title">Show an announcement at the door</string>
     <string name="notice_door_button">Announcement for this door</string>
     <string name="notice_edit">Edit</string>
     <string name="notice_empty">Enter a message</string>
@@ -480,8 +485,10 @@ Delete it?</string>
     <string name="notice_expiry_today">End of today</string>
     <string name="notice_expiry_until_cleared">Until cleared</string>
     <string name="notice_failed">Couldn\'t save the announcement</string>
+    <string name="notice_for_this_door">Announcement for this door</string>
     <string name="notice_from">Posted by</string>
     <string name="notice_global_button">Announcement (all doors)</string>
+    <string name="notice_limit">Up to 200 characters</string>
     <string name="notice_none">No announcement</string>
     <string name="notice_preset_absent">We are away right now</string>
     <string name="notice_preset_construction">Building work in progress — please call out</string>
@@ -490,8 +497,8 @@ Delete it?</string>
     <string name="notice_preview">How it looks at the door</string>
     <string name="notice_publish">Show</string>
     <string name="notice_saved">The announcement is now showing</string>
-    <string name="notice_target">Show on</string>
-    <string name="notice_target_door">This door (%1$s)</string>
+    <string name="notice_target">Applies to</string>
+    <string name="notice_target_door">%1$s only</string>
     <string name="notice_target_global">All doors</string>
     <string name="notice_text">Message</string>
     <string name="notice_title">Announcement</string>
@@ -709,7 +716,11 @@ Delete it?</string>
     <string name="ring_monitoring">Live door audio on</string>
     <string name="ring_no_video">No video from door station</string>
     <string name="ring_open_door">Open door</string>
+    <string name="ring_open_failed">Couldn\'t send the unlock signal</string>
+    <string name="ring_open_sent">Unlock signal sent</string>
+    <string name="ring_open_unconfigured">No unlock action is configured for this door</string>
     <string name="ring_purpose_badge">Purpose: %1$s</string>
+    <string name="ring_quick_replies">Quick replies</string>
     <string name="ring_quick_reply">Quick reply</string>
     <string name="ring_unlock">Unlock</string>
     <string name="ring_unlock_sent">Unlock signal sent</string>
@@ -807,6 +818,7 @@ This device joins automatically. Only if it does not, enter the indoor panel add
     <string name="setup_scan_qr">Scan indoor-panel QR</string>
     <string name="setup_title">Set up this device</string>
     <string name="sip_unavailable">Calling is currently unavailable</string>
+    <string name="sos_abort">Cancel</string>
     <string name="sos_alarm_sound">Alarm sound</string>
     <string name="sos_alarm_volume">Alarm volume</string>
     <string name="sos_button_on_roles">Devices that show SOS</string>
@@ -818,7 +830,8 @@ This device joins automatically. Only if it does not, enter the indoor panel add
     <string name="sos_mode_hold">Press and hold (legacy)</string>
     <string name="sos_mode_slide">Slide to trigger</string>
     <string name="sos_slide_hint">Slide right to call for help</string>
-    <string name="sos_slide_label">Slide for SOS</string>
+    <string name="sos_slide_label">Slide for SOS
+Alarm in %1$s s</string>
     <string name="sos_slide_sub">Alarm after %1$ss</string>
     <string name="sos_title">SOS</string>
     <string name="sos_trigger_mode">How it is triggered</string>
@@ -857,7 +870,8 @@ This device joins automatically. Only if it does not, enter the indoor panel add
     <string name="time_title">Time</string>
     <string name="time_zone">Time zone</string>
     <string name="time_zone_hint">This sets the clock, call history, and rule schedules for the whole cluster</string>
-    <string name="version_line">core %1$s · app %2$s</string>
+    <string name="version_line">%1$s · core v%2$s · app v%3$s</string>
+    <string name="video_stats">%1$s · %2$s ms · ±%3$s ms · %4$s fps · drop %5$s</string>
     <string name="volume_call">Call</string>
     <string name="volume_cluster_default">Cluster default %1$s</string>
     <string name="volume_device_title">Volume on this device</string>
@@ -867,8 +881,14 @@ This device joins automatically. Only if it does not, enter the indoor panel add
     <string name="volume_preview">Preview</string>
     <string name="volume_sos">SOS</string>
     <string name="volume_title">Volume</string>
+    <string name="web_admin_hint">Scan the QR with a phone, or type this address into a browser</string>
     <string name="web_admin_leader">Leader\'s admin page</string>
-    <string name="web_admin_open">Open the web admin</string>
+    <string name="web_admin_none">No admin address was found</string>
+    <string name="web_admin_open">Open web admin</string>
+    <string name="web_admin_open_browser">Open in this device\'s browser</string>
+    <string name="web_admin_open_failed">Couldn\'t open the browser</string>
+    <string name="web_admin_other_address">Another address</string>
     <string name="web_admin_scan">Scan this with a phone</string>
     <string name="web_admin_scan_hint">Scan this QR to open the admin page</string>
+    <string name="web_admin_title">Web admin page</string>
 </resources>

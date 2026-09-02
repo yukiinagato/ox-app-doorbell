@@ -349,13 +349,15 @@
     <string name="calling_no_answer">応答がありません</string>
     <string name="calling_title">呼び出し中…</string>
     <string name="dash_admin">管理</string>
-    <string name="dash_doors">門口</string>
-    <string name="dash_no_doors">門口機がまだありません</string>
+    <string name="dash_doors">門口機</string>
+    <string name="dash_last_answer">最終応答 %1$s</string>
+    <string name="dash_no_doors">門口機がありません</string>
     <string name="dash_notice_global">お知らせ（全体）</string>
     <string name="dash_recent_calls">最近の呼出</string>
     <string name="dash_see_all">すべて見る</string>
     <string name="dash_tile_offline">オフライン</string>
     <string name="dash_tile_open">見る</string>
+    <string name="dash_tile_watch">見る</string>
     <string name="date_full">%1$s年%2$s月%3$s日 (%4$s)</string>
     <string name="day_fri">金</string>
     <string name="day_mon">月</string>
@@ -385,7 +387,7 @@
     <string name="history_empty">まだ呼出はありません</string>
     <string name="history_filter_all">すべて</string>
     <string name="history_filter_door">%1$s のみ</string>
-    <string name="history_filter_missed">不在着信</string>
+    <string name="history_filter_missed">不在着信のみ</string>
     <string name="history_load_more">さらに読み込む</string>
     <string name="history_mark_seen">すべて既読にする</string>
     <string name="history_missed_badge">不在着信 %1$s 件</string>
@@ -393,6 +395,7 @@
     <string name="history_outcome_cancelled">取消</string>
     <string name="history_outcome_missed">不在着信</string>
     <string name="history_outcome_replied">返信</string>
+    <string name="history_page_limit">これより前は Web 管理でご覧ください</string>
     <string name="history_seen_done">既読にしました</string>
     <string name="history_title">呼出履歴</string>
     <string name="history_today">今日</string>
@@ -403,6 +406,7 @@
     <string name="idle_language">言語</string>
     <string name="idle_touch_to_call">タッチして呼び出してください</string>
     <string name="incall_end">終了</string>
+    <string name="incall_end_call">通話終了</string>
     <string name="incall_title">通話中</string>
     <string name="info_absent">無</string>
     <string name="info_active_calls">進行中の呼出</string>
@@ -469,6 +473,7 @@
     <string name="notice_chip">お知らせ</string>
     <string name="notice_clear">取り消す</string>
     <string name="notice_cleared">お知らせを取り消しました</string>
+    <string name="notice_dialog_title">門口機にお知らせを表示</string>
     <string name="notice_door_button">この門口機にお知らせ</string>
     <string name="notice_edit">編集</string>
     <string name="notice_empty">本文を入力してください</string>
@@ -480,8 +485,10 @@
     <string name="notice_expiry_today">今日いっぱい</string>
     <string name="notice_expiry_until_cleared">取り消すまで</string>
     <string name="notice_failed">お知らせを保存できませんでした</string>
+    <string name="notice_for_this_door">この門口機にお知らせ</string>
     <string name="notice_from">作成</string>
     <string name="notice_global_button">お知らせ（全体）</string>
+    <string name="notice_limit">200 文字まで</string>
     <string name="notice_none">お知らせはありません</string>
     <string name="notice_preset_absent">ただいま留守にしています</string>
     <string name="notice_preset_construction">工事中です。ご用の方はお声がけください</string>
@@ -490,8 +497,8 @@
     <string name="notice_preview">門口での見え方</string>
     <string name="notice_publish">表示する</string>
     <string name="notice_saved">お知らせを表示しました</string>
-    <string name="notice_target">表示先</string>
-    <string name="notice_target_door">この門口機（%1$s）</string>
+    <string name="notice_target">対象</string>
+    <string name="notice_target_door">%1$sのみ</string>
     <string name="notice_target_global">全体</string>
     <string name="notice_text">本文</string>
     <string name="notice_title">お知らせ</string>
@@ -709,7 +716,11 @@
     <string name="ring_monitoring">門口の音声を再生中</string>
     <string name="ring_no_video">門口機の映像がありません</string>
     <string name="ring_open_door">ドアを開ける</string>
+    <string name="ring_open_failed">開錠信号を送信できませんでした</string>
+    <string name="ring_open_sent">開錠信号を送信しました</string>
+    <string name="ring_open_unconfigured">この門口機には開錠の動作が設定されていません</string>
     <string name="ring_purpose_badge">用件: %1$s</string>
+    <string name="ring_quick_replies">クイック返信</string>
     <string name="ring_quick_reply">クイック返信</string>
     <string name="ring_unlock">解錠</string>
     <string name="ring_unlock_sent">解錠信号を送信しました</string>
@@ -807,6 +818,7 @@ PIN: %2$s</string>
     <string name="setup_scan_qr">室内機の QR を読み取る</string>
     <string name="setup_title">端末を設定</string>
     <string name="sip_unavailable">通話機能は現在利用できません</string>
+    <string name="sos_abort">取り消す</string>
     <string name="sos_alarm_sound">警報音</string>
     <string name="sos_alarm_volume">警報音の音量</string>
     <string name="sos_button_on_roles">SOS を表示する端末</string>
@@ -818,7 +830,8 @@ PIN: %2$s</string>
     <string name="sos_mode_hold">長押しで発報 (旧方式)</string>
     <string name="sos_mode_slide">スライドして発報</string>
     <string name="sos_slide_hint">右にスライドして助けを呼ぶ</string>
-    <string name="sos_slide_label">スライドで SOS</string>
+    <string name="sos_slide_label">スライドで SOS
+%1$s 秒後に発報</string>
     <string name="sos_slide_sub">%1$s 秒後に発報</string>
     <string name="sos_title">SOS</string>
     <string name="sos_trigger_mode">発報のしかた</string>
@@ -857,7 +870,8 @@ PIN: %2$s</string>
     <string name="time_title">時刻</string>
     <string name="time_zone">タイムゾーン</string>
     <string name="time_zone_hint">この設定はクラスタ全体の時計・呼出履歴・ルールの時間帯に使われます</string>
-    <string name="version_line">core %1$s · app %2$s</string>
+    <string name="version_line">%1$s · core v%2$s · app v%3$s</string>
+    <string name="video_stats">%1$s · %2$s ms · ±%3$s ms · %4$s fps · drop %5$s</string>
     <string name="volume_call">呼出</string>
     <string name="volume_cluster_default">クラスタ既定 %1$s</string>
     <string name="volume_device_title">この端末の音量</string>
@@ -867,8 +881,14 @@ PIN: %2$s</string>
     <string name="volume_preview">試聴</string>
     <string name="volume_sos">SOS</string>
     <string name="volume_title">音量</string>
+    <string name="web_admin_hint">スマートフォンで QR を読み取るか、ブラウザーにこの URL を入力してください</string>
     <string name="web_admin_leader">リーダーの管理ページ</string>
+    <string name="web_admin_none">管理アドレスが見つかりません</string>
     <string name="web_admin_open">Web 管理を開く</string>
+    <string name="web_admin_open_browser">この端末のブラウザーで開く</string>
+    <string name="web_admin_open_failed">ブラウザーを開けませんでした</string>
+    <string name="web_admin_other_address">別のアドレス</string>
     <string name="web_admin_scan">スマートフォンで読み取ってください</string>
     <string name="web_admin_scan_hint">この QR を読み取ると管理ページが開きます</string>
+    <string name="web_admin_title">Web 管理ページ</string>
 </resources>

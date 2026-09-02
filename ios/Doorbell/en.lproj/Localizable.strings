@@ -344,13 +344,15 @@
 "calling.no_answer" = "No answer";
 "calling.title" = "Calling…";
 "dash.admin" = "Admin";
-"dash.doors" = "Doors";
-"dash.no_doors" = "No door station yet";
+"dash.doors" = "Door stations";
+"dash.last_answer" = "Last answered %@";
+"dash.no_doors" = "No door stations";
 "dash.notice_global" = "Announcement (all doors)";
 "dash.recent_calls" = "Recent calls";
 "dash.see_all" = "See all";
 "dash.tile_offline" = "Offline";
 "dash.tile_open" = "View";
+"dash.tile_watch" = "View";
 "date.full" = "%@-%@-%@ (%@)";
 "day.fri" = "Fri";
 "day.mon" = "Mon";
@@ -360,7 +362,7 @@
 "day.tue" = "Tue";
 "day.wed" = "Wed";
 "degraded.notified" = "Notified — please wait";
-"door.hint_call" = "Press the button to call the household";
+"door.hint_call" = "Press the button to call the residents";
 "door.lang_switch" = "Language";
 "emergency.active_detail" = "Emergency mode is active";
 "emergency.button" = "SOS";
@@ -380,7 +382,7 @@
 "history.empty" = "No calls yet";
 "history.filter_all" = "All";
 "history.filter_door" = "%@ only";
-"history.filter_missed" = "Missed";
+"history.filter_missed" = "Missed only";
 "history.load_more" = "Load more";
 "history.mark_seen" = "Mark all as seen";
 "history.missed_badge" = "%@ missed";
@@ -388,6 +390,7 @@
 "history.outcome_cancelled" = "Cancelled";
 "history.outcome_missed" = "Missed";
 "history.outcome_replied" = "Replied";
+"history.page_limit" = "Older calls are in the web admin";
 "history.seen_done" = "Marked as seen";
 "history.title" = "Call history";
 "history.today" = "Today";
@@ -398,6 +401,7 @@
 "idle.language" = "Language";
 "idle.touch_to_call" = "Touch to call";
 "incall.end" = "End";
+"incall.end_call" = "End call";
 "incall.title" = "In call";
 "info.absent" = "Absent";
 "info.active_calls" = "Active calls";
@@ -464,6 +468,7 @@
 "notice.chip" = "Announcement";
 "notice.clear" = "Clear";
 "notice.cleared" = "The announcement was cleared";
+"notice.dialog_title" = "Show an announcement at the door";
 "notice.door_button" = "Announcement for this door";
 "notice.edit" = "Edit";
 "notice.empty" = "Enter a message";
@@ -475,8 +480,10 @@
 "notice.expiry_today" = "End of today";
 "notice.expiry_until_cleared" = "Until cleared";
 "notice.failed" = "Couldn't save the announcement";
+"notice.for_this_door" = "Announcement for this door";
 "notice.from" = "Posted by";
 "notice.global_button" = "Announcement (all doors)";
+"notice.limit" = "Up to 200 characters";
 "notice.none" = "No announcement";
 "notice.preset_absent" = "We are away right now";
 "notice.preset_construction" = "Building work in progress — please call out";
@@ -485,8 +492,8 @@
 "notice.preview" = "How it looks at the door";
 "notice.publish" = "Show";
 "notice.saved" = "The announcement is now showing";
-"notice.target" = "Show on";
-"notice.target_door" = "This door (%@)";
+"notice.target" = "Applies to";
+"notice.target_door" = "%@ only";
 "notice.target_global" = "All doors";
 "notice.text" = "Message";
 "notice.title" = "Announcement";
@@ -704,7 +711,11 @@
 "ring.monitoring" = "Live door audio on";
 "ring.no_video" = "No video from door station";
 "ring.open_door" = "Open door";
+"ring.open_failed" = "Couldn't send the unlock signal";
+"ring.open_sent" = "Unlock signal sent";
+"ring.open_unconfigured" = "No unlock action is configured for this door";
 "ring.purpose_badge" = "Purpose: %@";
+"ring.quick_replies" = "Quick replies";
 "ring.quick_reply" = "Quick reply";
 "ring.unlock" = "Unlock";
 "ring.unlock_sent" = "Unlock signal sent";
@@ -798,6 +809,7 @@
 "setup.scan_qr" = "Scan indoor-panel QR";
 "setup.title" = "Set up this device";
 "sip.unavailable" = "Calling is currently unavailable";
+"sos.abort" = "Cancel";
 "sos.alarm_sound" = "Alarm sound";
 "sos.alarm_volume" = "Alarm volume";
 "sos.button_on_roles" = "Devices that show SOS";
@@ -809,7 +821,7 @@
 "sos.mode_hold" = "Press and hold (legacy)";
 "sos.mode_slide" = "Slide to trigger";
 "sos.slide_hint" = "Slide right to call for help";
-"sos.slide_label" = "Slide for SOS";
+"sos.slide_label" = "Slide for SOS\nAlarm in %@ s";
 "sos.slide_sub" = "Alarm after %@s";
 "sos.title" = "SOS";
 "sos.trigger_mode" = "How it is triggered";
@@ -848,7 +860,8 @@
 "time.title" = "Time";
 "time.zone" = "Time zone";
 "time.zone_hint" = "This sets the clock, call history, and rule schedules for the whole cluster";
-"version.line" = "core %@ · app %@";
+"version.line" = "%@ · core v%@ · app v%@";
+"video.stats" = "%@ · %@ ms · ±%@ ms · %@ fps · drop %@";
 "volume.call" = "Call";
 "volume.cluster_default" = "Cluster default %@";
 "volume.device_title" = "Volume on this device";
@@ -858,7 +871,13 @@
 "volume.preview" = "Preview";
 "volume.sos" = "SOS";
 "volume.title" = "Volume";
+"web_admin.hint" = "Scan the QR with a phone, or type this address into a browser";
 "web_admin.leader" = "Leader's admin page";
-"web_admin.open" = "Open the web admin";
+"web_admin.none" = "No admin address was found";
+"web_admin.open" = "Open web admin";
+"web_admin.open_browser" = "Open in this device's browser";
+"web_admin.open_failed" = "Couldn't open the browser";
+"web_admin.other_address" = "Another address";
 "web_admin.scan" = "Scan this with a phone";
 "web_admin.scan_hint" = "Scan this QR to open the admin page";
+"web_admin.title" = "Web admin page";

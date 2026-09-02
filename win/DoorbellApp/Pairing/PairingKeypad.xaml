@@ -8,8 +8,8 @@
                 <Setter Property="Margin" Value="4"/>
                 <Setter Property="MinHeight" Value="54"/>
                 <Setter Property="Background" Value="#0C1014"/>
-                <Setter Property="Foreground" Value="{StaticResource Fg}"/>
-                <Setter Property="BorderBrush" Value="#2A333D"/>
+                <Setter Property="Foreground" Value="{DynamicResource Fg}"/>
+                <Setter Property="BorderBrush" Value="{DynamicResource Line}"/>
                 <Setter Property="Cursor" Value="Hand"/>
                 <Setter Property="Template">
                     <Setter.Value>

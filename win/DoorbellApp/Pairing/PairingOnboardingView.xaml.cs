@@ -451,7 +451,9 @@ namespace DoorbellApp.Pairing
 
         private void RequestNewCode()
         {
-            Task.Factory.StartNew(() => App.Core.StartPairing(600))
+            // Founding a Cluster shows the PIN card and this device's QR; nothing is auto-added,
+            // so the PIN is minted without opening the pairing-mode window (spec 5.4).
+            Task.Factory.StartNew(() => App.Core.MintJoinToken(600))
                 .ContinueWith(task => Dispatcher.BeginInvoke(new Action(Refresh)));
         }
 
