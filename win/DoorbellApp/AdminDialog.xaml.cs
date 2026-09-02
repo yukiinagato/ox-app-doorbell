@@ -92,6 +92,21 @@ namespace DoorbellApp
             }
         }
 
+        /// <summary>
+        /// Once core has verified the cluster password, this device's own digest must stop being
+        /// a second way in: one password change would otherwise leave a stale door open.
+        /// </summary>
+        private static void DropLocalDigest()
+        {
+            try
+            {
+                var f = Path.Combine(App.DataDir, "exit_pin.txt");
+                if (File.Exists(f)) File.Delete(f);
+            }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
+        }
+
         /// <summary>The device digest that predates the replicated cluster password.</summary>
         private static string LocalDigest()
         {
@@ -123,6 +138,7 @@ namespace DoorbellApp
                 AdminPasswordVerdict.Unavailable : App.Core.AdminPasswordVerify(password);
             if (verdict == AdminPasswordVerdict.Accepted)
             {
+                DropLocalDigest();
                 Accept();
                 return;
             }
@@ -140,8 +156,13 @@ namespace DoorbellApp
             if (verdict == AdminPasswordVerdict.NotSet)
             {
                 // First password for the whole house: whatever was typed becomes it.
-                if (App.Core.AdminPasswordSet("", password)) Accept();
-                else Reject(L10n.T("admin.password_set_failed"));
+                if (!App.Core.AdminPasswordSet("", password))
+                {
+                    Reject(L10n.T("admin.password_set_failed"));
+                    return;
+                }
+                DropLocalDigest();
+                Accept();
                 return;
             }
             // Core could not evaluate. A cluster that already carries a password hash must not be
@@ -159,10 +180,12 @@ namespace DoorbellApp
                 return;
             }
             // First successful local entry publishes this device's secret as the cluster password.
-            if (App.Core != null && App.Core.AdminPasswordAvailable &&
-                !App.Core.AdminPasswordSet("", password))
-                System.Diagnostics.Debug.WriteLine(
+            if (App.Core != null && App.Core.AdminPasswordAvailable)
+            {
+                if (App.Core.AdminPasswordSet("", password)) DropLocalDigest();
+                else System.Diagnostics.Debug.WriteLine(
                     "cluster admin password was not published; local digest still applies");
+            }
             Accept();
         }
 

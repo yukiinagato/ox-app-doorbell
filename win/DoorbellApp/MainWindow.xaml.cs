@@ -1088,6 +1088,15 @@ namespace DoorbellApp
             }
             ApplySosLabel();
 
+            // status.emergency.cancel_requires_password is cancel_requires_pin AND a password
+            // actually being set; core is explicit that the clear control must never be gated on
+            // cancel_requires_pin alone.
+            bool? required = App.Core.EmergencyCancelRequiresPassword(_status);
+            if (required.HasValue)
+            {
+                _cancelRequiresPin = required.Value;
+                return;
+            }
             var pin = CoreClient.Dig(cfg, "emergency.cancel_requires_pin");
             _cancelRequiresPin = !(pin is bool) || (bool)pin;
         }
@@ -1372,8 +1381,8 @@ namespace DoorbellApp
 
         private void OnEmergencyCancelClick(object sender, RoutedEventArgs e)
         {
-            // Core answers -2 while no cluster password exists. Clearing a running alarm must
-            // never be gated behind a password nobody has chosen yet (spec 5.5).
+            // _cancelRequiresPin already carries core's own answer, which folds in "a password
+            // is actually set". The second test only covers a core that does not report it.
             if (_cancelRequiresPin && !AdminDialog.ClusterPasswordUnset())
             {
                 var dlg = new AdminDialog { Owner = this };
@@ -2297,7 +2306,7 @@ namespace DoorbellApp
             int result = App.Core.OpenDoor(CurrentCallDoor());
             if (result == -3)
             {
-                ShowCallMessage(Texts.T("ring.open_unconfigured"));
+                ShowCallMessage(Texts.T("unlock.not_configured"));
                 return;
             }
             ShowCallMessage(Texts.T(result == 0 ? "ring.open_sent" : "ring.open_failed"));

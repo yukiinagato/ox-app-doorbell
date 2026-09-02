@@ -50,6 +50,7 @@ namespace DoorbellApp.Core
         private CoreInterop.AdminPasswordVerifyFn _adminPasswordVerify;
         private CoreInterop.AdminPasswordSetFn _adminPasswordSet;
         private CoreInterop.SetConfigJsonFn _setConfigJson;
+        private CoreInterop.LastWriteWarningsFn _lastWriteWarnings;
         private CoreInterop.ConfigBatchJsonFn _configBatchJson;
         private CoreInterop.DeleteConfigKeyFn _deleteConfigKey;
         private CoreInterop.CallLogJsonV2Fn _callLogJsonV2;
@@ -342,6 +343,8 @@ namespace DoorbellApp.Core
                     "db_core_admin_password_set");
                 _setConfigJson = CoreInterop.OptionalExport<CoreInterop.SetConfigJsonFn>(
                     "db_core_set_config_json");
+                _lastWriteWarnings = CoreInterop.OptionalExport<CoreInterop.LastWriteWarningsFn>(
+                    "db_core_last_write_warnings_json");
                 _configBatchJson = CoreInterop.OptionalExport<CoreInterop.ConfigBatchJsonFn>(
                     "db_core_config_batch_json");
                 _deleteConfigKey = CoreInterop.OptionalExport<CoreInterop.DeleteConfigKeyFn>(
@@ -438,15 +441,41 @@ namespace DoorbellApp.Core
         }
 
         /// <summary>
+        /// Core's own answer for the SOS clear control: emergency.cancel_requires_pin AND a
+        /// password actually being set. The header is explicit that the control must never be
+        /// gated on cancel_requires_pin alone. Null means this core does not report it.
+        /// </summary>
+        public bool? EmergencyCancelRequiresPassword(Dictionary<string, object> status)
+        {
+            object value = Dig(status, "emergency.cancel_requires_password");
+            return value is bool ? (bool?)(bool)value : null;
+        }
+
+        /// <summary>
         /// Native configuration writes with the same validation and advisory warnings as the web
         /// (spec 5.5). Returns the result document, or null when this Core cannot answer.
         /// </summary>
-        public bool SetConfigJson(string json)
+        public bool SetConfigJson(string key, string valueJson)
         {
             ProbeOptionalExports();
-            if (_setConfigJson == null || string.IsNullOrEmpty(json)) return false;
+            if (_setConfigJson == null || string.IsNullOrEmpty(key)) return false;
             lock (_nativeLock)
-                return _core != IntPtr.Zero && _setConfigJson(_core, json) == 0;
+                return _core != IntPtr.Zero &&
+                    _setConfigJson(_core, key, valueJson ?? "null") == 0;
+        }
+
+        /// <summary>
+        /// Readability warnings from the write that just committed: the same array the batch form
+        /// embeds, and an empty array when there is nothing to report. A warning never means the
+        /// write failed, so it is shown as the measured ratio, not as an error.
+        /// </summary>
+        public string LastWriteWarnings()
+        {
+            ProbeOptionalExports();
+            if (_lastWriteWarnings == null) return null;
+            lock (_nativeLock)
+                return _core == IntPtr.Zero ? null :
+                    CoreInterop.TakeUtf8(_lastWriteWarnings(_core));
         }
 
         /// <summary>

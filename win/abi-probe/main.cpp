@@ -53,35 +53,21 @@ int main(int argc, char** argv) {
       return 5;
     }
   }
-  // Pending core exports (spec 5.4 and 5.5). The shell binds each one through GetProcAddress and
-  // hides or degrades the feature while it is absent, so this list only warns. Move the whole
-  // list into kShellExports as soon as batch2/core exports them, and the release gate covers it.
-  //   db_core_admin_password_*       the one cluster-wide 管理パスワード
-  //   db_core_set_config_json/...    native configuration writes with advisory warnings
-  //   db_core_call_log_json_v2       history paging with an exclusive before_ms bound
-  //   db_core_sip_set_mic_muted      the microphone toggle on the incoming screen
-  // The 全体 announcement is not in this list: core addresses it as the door "*" through
-  // db_core_set_door_notice, which the release gate already covers.
-  static const char* kPendingExports[] = {
-      "db_core_admin_password_verify", "db_core_admin_password_set",
-      "db_core_set_config_json",       "db_core_config_batch_json",
-      "db_core_delete_config_key",     "db_core_call_log_json_v2",
-      "db_core_sip_set_mic_muted"};
-  int pending_missing = 0;
-  for (const char* name : kPendingExports) {
-    if (!GetProcAddress(module, name)) {
-      ++pending_missing;
-      std::cerr << "note: pending core export is not present yet: " << name << "\n";
-    }
-  }
-  if (pending_missing == 0)
-    std::cerr << "note: every pending export is present; move kPendingExports into "
-                 "kShellExports\n";
-  // Batch-2 shell surfaces: the cluster clock, effective volumes, announcements and history.
+  // Batch-2 shell surfaces (spec 5.1 to 5.5): the cluster clock, effective volumes,
+  // announcements, call history and its before_ms paging, the one cluster-wide 管理パスワード,
+  // native configuration writes with their advisory warnings, the door unlock action, and the
+  // microphone toggle. The 全体 announcement needs no entry point of its own: core addresses it
+  // as the door "*" through db_core_set_door_notice.
   static const char* kShellExports[] = {
-      "db_core_local_time_json", "db_core_time_sync_now",     "db_core_audio_json",
-      "db_core_set_door_notice", "db_core_clear_door_notice", "db_core_call_log_json",
-      "db_core_call_log_mark_seen", "db_core_emergency_v2", "db_core_open_door"};
+      "db_core_local_time_json",         "db_core_time_sync_now",
+      "db_core_audio_json",              "db_core_set_door_notice",
+      "db_core_clear_door_notice",       "db_core_call_log_json",
+      "db_core_call_log_json_v2",        "db_core_call_log_mark_seen",
+      "db_core_emergency_v2",            "db_core_open_door",
+      "db_core_admin_password_verify",   "db_core_admin_password_set",
+      "db_core_set_config_json",         "db_core_last_write_warnings_json",
+      "db_core_config_batch_json",       "db_core_delete_config_key",
+      "db_core_sip_set_mic_muted"};
   for (const char* name : kShellExports) {
     if (!GetProcAddress(module, name)) {
       std::cerr << "required shell export is missing: " << name << "\n";

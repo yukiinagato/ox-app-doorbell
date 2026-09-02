@@ -102,13 +102,19 @@ namespace DoorbellApp.Core
             [MarshalAs(UnmanagedType.LPUTF8Str)] string current,
             [MarshalAs(UnmanagedType.LPUTF8Str)] string next);
 
-        // Native configuration writes with the same validation as the web. A single write and a
-        // key deletion answer with a status code (0 accepted, negative rejected); the batch
-        // answers with an owned document shaped like /api/config/batch, warnings included, which
-        // is released with db_free.
+        // Native configuration writes, mirroring POST /api/config, /api/config/batch and
+        // /api/config/delete exactly. One write and one deletion answer with a status code
+        // (0 committed, -1 invalid arguments, -2 rejected or not persisted); the readability
+        // warnings that write produced are read straight afterwards from
+        // db_core_last_write_warnings_json. The batch answers with an owned document shaped like
+        // /api/config/batch, warnings included, released with db_free.
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         public delegate int SetConfigJsonFn(IntPtr core,
-            [MarshalAs(UnmanagedType.LPUTF8Str)] string json);
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string key,
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string valueJson);
+
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        public delegate IntPtr LastWriteWarningsFn(IntPtr core);
 
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         public delegate IntPtr ConfigBatchJsonFn(IntPtr core,

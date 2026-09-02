@@ -784,6 +784,8 @@ power.charging: { ja: "充電中", en: "Charging", zh: "充电中" }
 power.mains: { ja: "電源に接続", en: "On mains power", zh: "已接电源" }
 power.no_battery: { ja: "電池なし", en: "No battery", zh: "无电池" }
 power.unknown: { ja: "未対応", en: "Not reported", zh: "未上报" }
+
+# Batch 2 WP-N-win: dashboard, visitor screen, web admin entry, SOS slider.
 web_admin.open: { ja: "Web 管理を開く", en: "Open web admin", zh: "打开网页管理" }
 web_admin.title: { ja: "Web 管理ページ", en: "Web admin page", zh: "网页管理" }
 web_admin.hint: { ja: "スマートフォンで QR を読み取るか、ブラウザーにこの URL を入力してください", en: "Scan the QR with a phone, or type this address into a browser", zh: "用手机扫描二维码，或在浏览器中输入此地址" }
@@ -808,15 +810,12 @@ sos.slide_label: { ja: "スライドで SOS\n{n} 秒後に発報", en: "Slide fo
 sos.abort: { ja: "取り消す", en: "Cancel", zh: "取消" }
 notice.chip: { ja: "お知らせ", en: "Announcement", zh: "公告" }
 notice.edit: { ja: "編集", en: "Edit", zh: "编辑" }
-notice.target: { ja: "対象", en: "Applies to", zh: "适用范围" }
-notice.target_global: { ja: "全体", en: "All doors", zh: "全部门口" }
 notice.target_door: { ja: "{door}のみ", en: "{door} only", zh: "仅 {door}" }
 notice.for_this_door: { ja: "この門口機にお知らせ", en: "Announcement for this door", zh: "为此门口机发布公告" }
 notice.dialog_title: { ja: "門口機にお知らせを表示", en: "Show an announcement at the door", zh: "在门口机显示公告" }
 notice.limit: { ja: "200 文字まで", en: "Up to 200 characters", zh: "最多 200 个字符" }
 ring.open_sent: { ja: "開錠信号を送信しました", en: "Unlock signal sent", zh: "已发送开锁信号" }
 ring.open_failed: { ja: "開錠信号を送信できませんでした", en: "Couldn't send the unlock signal", zh: "无法发送开锁信号" }
-ring.open_unconfigured: { ja: "この門口機には開錠の動作が設定されていません", en: "No unlock action is configured for this door", zh: "此门口机未配置开锁动作" }
 ring.monitor_on: { ja: "モニター ON", en: "Monitor on", zh: "监听开启" }
 ring.monitor_off: { ja: "モニター OFF", en: "Monitor off", zh: "监听关闭" }
 ring.mic_on: { ja: "マイク ON", en: "Mic on", zh: "麦克风开启" }
@@ -827,3 +826,45 @@ video.stats: { ja: "{codec} · {latency} ms · ±{jitter} ms · {fps} fps · dro
 version.line: { ja: "{name} · core v{core} · app v{app}", en: "{name} · core v{core} · app v{app}", zh: "{name} · core v{core} · app v{app}" }
 admin.password_set_prompt: { ja: "管理パスワードを設定してください", en: "Set the admin password", zh: "请设置管理密码" }
 admin.password_set_failed: { ja: "管理パスワードを設定できませんでした", en: "Couldn't set the admin password", zh: "无法设置管理密码" }
+
+# Batch 2 rounds 2/4/7: appearance, automatic theme, announcement targets, unlock, purposes.
+theme.low_contrast: { ja: "読みにくい可能性があります ({ratio}:1)", en: "This may be hard to read ({ratio}:1)", zh: "可能不易辨认（{ratio}:1）" }
+theme.appearance: { ja: "外観", en: "Appearance", zh: "外观" }
+theme.appearance_auto_system: { ja: "端末の設定に合わせる", en: "Follow the device", zh: "跟随设备" }
+theme.appearance_auto_schedule: { ja: "時間帯で切り替える", en: "Switch by time of day", zh: "按时段切换" }
+theme.appearance_light: { ja: "常にライト", en: "Always light", zh: "始终浅色" }
+theme.appearance_dark: { ja: "常にダーク", en: "Always dark", zh: "始终深色" }
+theme.dark_from: { ja: "ダークにする時刻", en: "Dark from", zh: "深色开始" }
+theme.light_from: { ja: "ライトにする時刻", en: "Light from", zh: "浅色开始" }
+theme.now: { ja: "現在", en: "Now", zh: "当前" }
+theme.mode_light: { ja: "ライト", en: "Light", zh: "浅色" }
+theme.mode_dark: { ja: "ダーク", en: "Dark", zh: "深色" }
+theme.auto: { ja: "自動", en: "Automatic", zh: "自动" }
+theme.custom: { ja: "指定色", en: "Custom colour", zh: "指定颜色" }
+theme.call_button: { ja: "呼出ボタンの色", en: "Call button colour", zh: "呼叫按钮颜色" }
+theme.ink: { ja: "文字色", en: "Text colour", zh: "文字颜色" }
+theme.ink_region: { ja: "表示箇所", en: "Where", zh: "位置" }
+theme.region_clock: { ja: "時計", en: "Clock", zh: "时钟" }
+theme.region_date: { ja: "日付", en: "Date", zh: "日期" }
+theme.region_status_line: { ja: "状態表示", en: "Status line", zh: "状态栏" }
+theme.region_hint: { ja: "案内文", en: "Hint", zh: "提示语" }
+theme.region_tile_label: { ja: "タイルの見出し", en: "Tile label", zh: "磁贴标题" }
+theme.region_footer: { ja: "フッター", en: "Footer", zh: "页脚" }
+theme.region_notice: { ja: "お知らせ", en: "Announcement", zh: "公告" }
+theme.background_source_image: { ja: "背景画像の平均色", en: "Averaged from the background image", zh: "取自背景图片的平均色" }
+theme.background_source_color: { ja: "背景色", en: "Background colour", zh: "背景颜色" }
+notice.target: { ja: "表示先", en: "Show on", zh: "显示位置" }
+notice.target_global: { ja: "全体", en: "Everywhere", zh: "全部" }
+notice.scope_global: { ja: "全体のお知らせ", en: "House-wide", zh: "全局公告" }
+notice.presets_title: { ja: "お知らせの定型文", en: "Announcement presets", zh: "公告模板" }
+notice.preset_add: { ja: "定型文を追加", en: "Add a preset", zh: "添加模板" }
+notice.presets_full: { ja: "定型文は 8 件までです", en: "At most eight presets", zh: "最多八条模板" }
+notice.preset_invalid: { ja: "定型文の本文を確認してください", en: "Check the preset text", zh: "请检查模板内容" }
+unlock.title: { ja: "開錠ボタン", en: "Unlock button", zh: "开锁按钮" }
+unlock.auto: { ja: "設定されているときだけ表示", en: "Show when configured", zh: "已配置时显示" }
+unlock.show: { ja: "常に表示", en: "Always show", zh: "始终显示" }
+unlock.hide: { ja: "表示しない", en: "Never show", zh: "不显示" }
+unlock.not_configured: { ja: "開錠の動作が設定されていません", en: "No unlock action is configured", zh: "尚未配置开锁动作" }
+unlock.command: { ja: "送信するコマンド", en: "Command sent", zh: "发送的命令" }
+purpose.enabled: { ja: "表示する", en: "Shown", zh: "显示" }
+purpose.disabled: { ja: "非表示", en: "Hidden", zh: "隐藏" }

@@ -223,7 +223,9 @@ materialized config/export に plaintext を出しません。起動時は legac
   "visit_purposes": {                           // 来訪者の用件ボタン (ユーザー編集可能; 既定 seed 下記)
     // 門口機では用件ボタン 1 タップ = その用件付きの呼出 (宅配員は 1 動作で完了)。
     // 大ボタン「呼出」は用件なしの汎用呼出。ラベルは来訪者言語に追従。
-    "p_visit":    { "label": { "ja": "訪問",       "en": "Visit",    "zh": "访客" }, "icon": "🏠", "order": 1 },
+    // "enabled": false は用件を削除せずに来訪者から隠す。文言・アイコン・並び順は残るので
+    // 再度有効にすればそのまま戻る。既定は true。
+    "p_visit":    { "label": { "ja": "訪問",       "en": "Visit",    "zh": "访客" }, "icon": "🏠", "order": 1, "enabled": true },
     "p_delivery": { "label": { "ja": "宅配便",     "en": "Delivery", "zh": "快递" }, "icon": "📦", "order": 2 },
     "p_mail":     { "label": { "ja": "郵便",       "en": "Mail",     "zh": "邮件" }, "icon": "✉️", "order": 3 },
     "p_sales":    { "label": { "ja": "営業・集金", "en": "Sales",    "zh": "推销/收费" }, "icon": "💼", "order": 4 },
@@ -376,6 +378,42 @@ effective mode を別に報告します。helper が届かない `on` は superv
 error です。atomic config apply 後、platform client は fixed local `MODE <value>` を送り helper status を
 確認します。helper は mode を原子的に保存し helper/OS restart 後も復元します。config から generic command/
 argv を生成しません。
+
+## 単一の管理パスワード・お知らせ・開錠・外観
+
+`admin.password_hash` はクラスタ全体で唯一の管理者資格情報で、Web 管理画面と各端末の設定画面は
+同じ秘密を使う。`{"salt":"<hex>","hash":"<hex>","algo":"blake2b-256","updated_ms":…}` として複製し、
+平文は決して保存しない。したがってオフラインの端末も手元の複製で照合できる。どの画面でも最初に
+入力されたパスワードがクラスタのものになる (Web ログインの既存の TOFU 経路)。どこかで 5 回失敗すると
+すべての画面が 10 分間停止する。カウンタは `POST /api/login` と `db_core_admin_password_verify` で共有する。
+
+このキーが無かった頃は各ノードがローカルにダイジェストを持ち、キオスクは別の終了コードを持っていた。
+そのローカルダイジェストは最初の照合成功まで有効で、成功した時点でクラスタのパスワードとして複製する。
+独自の `exit_pin.txt` ダイジェストを持つシェルは、`db_core_admin_password_verify` が成功または「未設定」を
+返した時点で参照をやめて削除すること。パスワードを変更しても別の入口が残るのを防ぐため。
+
+**パスワード未設定のときに SOS の解除を妨げてはならない。** `status.emergency.cancel_requires_password`
+を読むこと。core が `emergency.cancel_requires_pin` とパスワードが実際に設定されていることの
+両方から計算する。`emergency.cancel_requires_pin` だけで解除を止めると、自宅の警報を自分で
+止められなくなる。
+
+`notice.global` はクラスタ全体のお知らせで、`doors.<id>.notice` が門口ごとに上書きする。
+`status.doors.<id>.notice` は解決後の値を `scope` (`door` / `global`) 付きで返す。
+`notice.presets` は管理者が編集できる最大 8 件の `{id, text}` で、お知らせダイアログはこれを描画する。
+初回に 3 件を seed するが、以後は自由に編集・削除できる。
+
+`doors.<id>.unlock.show_button` は開錠コントロールを表示するかを決める。既定は
+「動作するときだけ表示する」で、`doors.<id>.unlock.command` か `sip.dtmf_actions` の最初の
+`ha_command` があるときだけ true。管理者はどちらにも固定できる。`status.doors.<id>.unlock` は
+`configured` / `command` / `show_button` と、その答えが既定と管理者のどちらに由来するかを返すので、
+押される前に判断できる。`POST /api/doors/<id>/open` と `db_core_open_door` は SIP の特番と同じ
+`ha_command` を送出し、未設定なら黙って何もせず `unlock_not_configured` を返す。
+
+`display.appearance` は `auto_system` / `auto_schedule` / `light` / `dark`。
+`display.appearance_schedule = {dark_from, light_from}` は `time.zone` で評価する。どちらも
+クラスタ既定と `devices.<id>.local.display` の両方に置ける。公開する契約には `follow_system` があり、
+true なら OS 自身の設定を優先する。OS に設定が無いプラットフォーム (iOS 5、Android 10 未満) は
+スケジュールの結果を使う。
 
 ## 時刻・電源・お知らせ
 
