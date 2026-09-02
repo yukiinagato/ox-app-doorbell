@@ -37,8 +37,11 @@ double contrastRatioLuminance(double y_a, double y_b);
 Hsl toHsl(const Rgb& color);
 Rgb fromHsl(const Hsl& hsl);
 
-// "dark" when the background is light enough to need dark ink (Y >= 0.5), otherwise "light".
-// The name is the ink to use, not the background.
+// The ink token that reads better on this background: whichever of dark or light has the higher
+// WCAG contrast ratio against it. The crossover is Y = 0.1791, not mid luminance -- a grey that
+// looks "middling" is already far better served by dark ink. The name is the ink to use, not the
+// background. When even the better ink falls below 4.5:1 the shell adds the 40% opposite-ink
+// shadow; that fallback is unchanged.
 const char* autoInk(const Rgb& background);
 
 // The computed call-button colour: the background hue rotated 180 degrees, with lightness moved

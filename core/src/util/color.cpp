@@ -123,7 +123,14 @@ Rgb fromHsl(const Hsl& hsl) {
 }
 
 const char* autoInk(const Rgb& background) {
-  return relativeLuminance(background) >= 0.5 ? "dark" : "light";
+  // Whichever ink token actually reads better against this background, measured with WCAG
+  // contrast against the two extremes the tokens sit near. Splitting at mid luminance (Y >= 0.5)
+  // instead put light ink on a light grey photograph: #BBBBB4 sits at Y 0.494, where white text
+  // scores 1.93:1 and dark text 9.58:1. The crossover of the two ratios is Y = 0.1791.
+  const double y = relativeLuminance(background);
+  const double dark_ink = contrastRatioLuminance(0.0, y);
+  const double light_ink = contrastRatioLuminance(1.0, y);
+  return dark_ink >= light_ink ? "dark" : "light";
 }
 
 Rgb autoAccent(const Rgb& background, const Rgb& text) {

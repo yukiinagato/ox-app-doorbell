@@ -314,8 +314,10 @@ DB_API int db_core_open_door(db_core* c, const char* door);
  *   "ink_override":    {"clock":"#RRGGBB", …}      only the regions an administrator overrode
  *   "call_button_bg":  "#RRGGBB"                   what to paint: the override, else auto
  *   "call_button_ink": "light|dark"                what to draw on it
- * auto_ink is the WCAG decision for text drawn straight onto the background: dark ink over a
- * background whose relative luminance is at least 0.5, light ink otherwise. When the background
+ * auto_ink is the WCAG decision for text drawn straight onto the background: whichever ink token
+ * has the higher contrast ratio against it. The two ratios cross at relative luminance 0.1791,
+ * not at mid luminance, so a grey that looks middling already wants dark ink. When even the
+ * better ink is below 4.5:1 the shell adds the 40% opposite-ink shadow. When the background
  * is an image, core averages it; a shell may refine per region locally because core has no
  * layout geometry. Always take the button text colour from call_button_ink: on a mid-luminance
  * background no colour can both separate from it and carry white text, and core then returns

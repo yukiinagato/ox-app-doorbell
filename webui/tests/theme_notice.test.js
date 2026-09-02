@@ -25,6 +25,23 @@ assert.strictEqual(L.autoInk("#9BD748"), "dark");
 assert.strictEqual(L.autoInk("#101418"), "light");
 assert.strictEqual(L.autoInk("#FFFFFF"), "dark");
 assert.strictEqual(L.autoInk("#000000"), "light");
+// The ink rule is "whichever token reads better", crossing at Y = 0.1791, not at mid luminance.
+// The same vectors core/tests/test_color.cpp pins, so the preview cannot drift from the fleet.
+assert.strictEqual(L.autoInk("#BBBBB4"), "dark", "the reported light-grey photograph");
+assert.strictEqual(L.autoInk("#404040"), "light", "a true mid-dark still wants light ink");
+assert.strictEqual(L.autoInk("#808080"), "dark", "mid grey is past the crossover");
+assert.strictEqual(L.autoInk("#767676"), "dark", "just above the crossover");
+assert.strictEqual(L.autoInk("#757575"), "light", "just below it");
+for (const sample of ["#9BD748", "#101418", "#BBBBB4", "#404040", "#808080", "#767676",
+                      "#757575", "#E8E2D5", "#2A2118", "#FFFFFF", "#000000"]) {
+  const dark = L.autoInk(sample) === "dark";
+  const chosen = L.contrast(dark ? "#000000" : "#FFFFFF", sample);
+  const other = L.contrast(dark ? "#FFFFFF" : "#000000", sample);
+  assert.ok(chosen >= other, "autoInk must pick the better ink for " + sample);
+}
+// core states the rule the same way, so a shell reading either source gets one answer.
+assert.ok(colorSource.includes("const double dark_ink = contrastRatioLuminance(0.0, y);"),
+  "db::color::autoInk must compare the two ink ratios, not split at mid luminance");
 assert.strictEqual(L.autoAccent("#101418", "#FFFFFF"), "#7F5E3D");
 for (const background of ["#9BD748", "#FFFFFF", "#101418", "#000000", "#E8E2D5"]) {
   const button = L.autoAccent(background, "#FFFFFF");
