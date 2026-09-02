@@ -83,7 +83,7 @@ internal class AdaptiveVideoPlayer(
     }
 
     fun onSafeModeChanged(active: Boolean) {
-        if (active) fallback("safe mode disables H.264 decoding")
+        if (active) failH264(h264Attempt, "safe mode disables H.264 decoding")
     }
 
     private fun startH264() {
@@ -97,26 +97,32 @@ internal class AdaptiveVideoPlayer(
         image.visibility = View.VISIBLE
         app.runtime.reportDecoderStatus("connecting")
         h264 = H264LivePlayer(h264Url, texture, object : H264LivePlayer.Listener {
-            override fun onConfigured(codec: String, width: Int, height: Int) = ui.post {
-                if (stopped || attempt != h264Attempt) return@post
-                videoWidth = width
-                videoHeight = height
-                activeCodec = codec
-                applyTextureTransform()
-                app.runtime.reportDecoderStatus("probing", codec)
+            override fun onConfigured(codec: String, width: Int, height: Int) {
+                ui.post {
+                    if (stopped || attempt != h264Attempt) return@post
+                    videoWidth = width
+                    videoHeight = height
+                    activeCodec = codec
+                    applyTextureTransform()
+                    app.runtime.reportDecoderStatus("probing", codec)
+                }
             }
 
-            override fun onFirstFrame() = ui.post {
-                if (stopped || attempt != h264Attempt) return@post
-                ui.removeCallbacks(firstFrameDeadline)
-                h264Visible = true
-                texture.alpha = 1f
-                image.visibility = View.GONE
-                noVideo.visibility = View.GONE
-                app.runtime.reportDecoderStatus("active", activeCodec)
+            override fun onFirstFrame() {
+                ui.post {
+                    if (stopped || attempt != h264Attempt) return@post
+                    ui.removeCallbacks(firstFrameDeadline)
+                    h264Visible = true
+                    texture.alpha = 1f
+                    image.visibility = View.GONE
+                    noVideo.visibility = View.GONE
+                    app.runtime.reportDecoderStatus("active", activeCodec)
+                }
             }
 
-            override fun onFailure(reason: String) = ui.post { failH264(attempt, reason) }
+            override fun onFailure(reason: String) {
+                ui.post { failH264(attempt, reason) }
+            }
         }).also { it.start() }
         ui.postDelayed(firstFrameDeadline, H264_FIRST_FRAME_MS)
         fetchRotation(h264Url, generation)
