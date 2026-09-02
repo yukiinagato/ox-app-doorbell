@@ -510,6 +510,7 @@
     <string name="notice_saved">お知らせを表示しました</string>
     <string name="notice_scope_global">全体のお知らせ</string>
     <string name="notice_target_door">%1$s のみ</string>
+    <string name="notice_target_global">全体</string>
     <string name="notice_text">本文</string>
     <string name="notice_title">お知らせ</string>
     <string name="notice_too_long">本文は 200 文字までです (現在 %1$s 文字)</string>

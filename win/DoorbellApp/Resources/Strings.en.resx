@@ -512,6 +512,7 @@ Delete it?</value></data>
   <data name="notice_saved" xml:space="preserve"><value>The announcement is now showing</value></data>
   <data name="notice_scope_global" xml:space="preserve"><value>House-wide</value></data>
   <data name="notice_target_door" xml:space="preserve"><value>{0} only</value></data>
+  <data name="notice_target_global" xml:space="preserve"><value>Everywhere</value></data>
   <data name="notice_text" xml:space="preserve"><value>Message</value></data>
   <data name="notice_title" xml:space="preserve"><value>Announcement</value></data>
   <data name="notice_too_long" xml:space="preserve"><value>The message is limited to 200 characters (currently {0})</value></data>

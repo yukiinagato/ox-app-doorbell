@@ -505,6 +505,7 @@
 "notice.saved" = "公告已显示";
 "notice.scope_global" = "全局公告";
 "notice.target_door" = "仅 %@";
+"notice.target_global" = "全部门口";
 "notice.text" = "内容";
 "notice.title" = "公告";
 "notice.too_long" = "内容最多 200 个字符（当前 %@ 个）";

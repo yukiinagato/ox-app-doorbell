@@ -512,6 +512,7 @@
   <data name="notice_saved" xml:space="preserve"><value>公告已显示</value></data>
   <data name="notice_scope_global" xml:space="preserve"><value>全局公告</value></data>
   <data name="notice_target_door" xml:space="preserve"><value>仅 {0}</value></data>
+  <data name="notice_target_global" xml:space="preserve"><value>全部门口</value></data>
   <data name="notice_text" xml:space="preserve"><value>内容</value></data>
   <data name="notice_title" xml:space="preserve"><value>公告</value></data>
   <data name="notice_too_long" xml:space="preserve"><value>内容最多 200 个字符（当前 {0} 个）</value></data>

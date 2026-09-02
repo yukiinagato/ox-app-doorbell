@@ -505,6 +505,7 @@
 "notice.saved" = "The announcement is now showing";
 "notice.scope_global" = "House-wide";
 "notice.target_door" = "%@ only";
+"notice.target_global" = "Everywhere";
 "notice.text" = "Message";
 "notice.title" = "Announcement";
 "notice.too_long" = "The message is limited to 200 characters (currently %@)";

@@ -510,6 +510,7 @@ Delete it?</string>
     <string name="notice_saved">The announcement is now showing</string>
     <string name="notice_scope_global">House-wide</string>
     <string name="notice_target_door">%1$s only</string>
+    <string name="notice_target_global">Everywhere</string>
     <string name="notice_text">Message</string>
     <string name="notice_title">Announcement</string>
     <string name="notice_too_long">The message is limited to 200 characters (currently %1$s)</string>
