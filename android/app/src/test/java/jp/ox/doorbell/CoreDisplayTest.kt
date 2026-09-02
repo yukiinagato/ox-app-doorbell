@@ -55,9 +55,9 @@ class CoreDisplayTest {
         val theme = CoreDisplays.parse(published).theme!!
         assertEquals(0x9BD748, theme.backgroundRgb)
         assertEquals("color", theme.backgroundSource)
-        assertEquals(Palette.DARK_INK, CoreDisplays.inkFor(theme, "clock", 0x000000))
+        assertEquals(Palette.DARK_INK, CoreDisplays.inkFor(theme, "clock", 0x000000).inkRgb)
         // ink_override is an explicit colour and beats the automatic decision.
-        assertEquals(0x123456, CoreDisplays.inkFor(theme, "footer", 0x000000))
+        assertEquals(0x123456, CoreDisplays.inkFor(theme, "footer", 0x000000).inkRgb)
     }
 
     @Test
@@ -93,8 +93,8 @@ class CoreDisplayTest {
         assertNull(CoreDisplays.parse(JSONObject("""{"brightness":80}""")).appearance)
         assertNull(CoreDisplays.parse(JSONObject("""{"brightness":80}""")).theme)
         // Local fallback: a light ground takes dark ink and the button is the computed accent.
-        assertEquals(Palette.DARK_INK, CoreDisplays.inkFor(null, "clock", 0xEEF1F4))
-        assertEquals(Palette.LIGHT_INK, CoreDisplays.inkFor(null, "clock", 0x0F1418))
+        assertEquals(Palette.DARK_INK, CoreDisplays.inkFor(null, "clock", 0xEEF1F4).inkRgb)
+        assertEquals(Palette.LIGHT_INK, CoreDisplays.inkFor(null, "clock", 0x0F1418).inkRgb)
         val (background, ink) = CoreDisplays.callButton(null, 0x9BD748)
         assertEquals(UiContrast.autoAccent(0x9BD748), background)
         assertEquals(UiContrast.callButtonInk(background), ink)
@@ -107,9 +107,38 @@ class CoreDisplayTest {
         )
         val theme = CoreDisplays.parse(display).theme!!
         assertEquals(0x101418, theme.backgroundRgb)
-        assertEquals(Palette.LIGHT_INK, CoreDisplays.inkFor(theme, "clock", 0xFFFFFF))
+        assertEquals(Palette.LIGHT_INK, CoreDisplays.inkFor(theme, "clock", 0xFFFFFF).inkRgb)
         // A region core said nothing about is decided locally against the same background.
-        assertEquals(Palette.LIGHT_INK, CoreDisplays.inkFor(theme, "hint", 0xFFFFFF))
+        assertEquals(Palette.LIGHT_INK, CoreDisplays.inkFor(theme, "hint", 0xFFFFFF).inkRgb)
+    }
+
+    @Test
+    fun anImageBackedThemeLetsTheShellRefineCoresWholeImageAverage() {
+        val display = JSONObject(
+            """
+            {"theme":{"bg_color":"#101418","bg_image":"abc",
+                      "auto_background":{"color":"#7A7A7A","source":"image"},
+                      "auto_ink":{"clock":"light","footer":"light"}}}
+            """.trimIndent(),
+        )
+        val theme = CoreDisplays.parse(display).theme!!
+        // Without a measurement core's answer stands.
+        assertEquals(Palette.LIGHT_INK, CoreDisplays.inkFor(theme, "footer", 0).inkRgb)
+        // With one, the region wins: this footer sits on the light part of the picture.
+        assertEquals(
+            Palette.DARK_INK,
+            CoreDisplays.inkFor(theme, "footer", 0, sampledBackgroundRgb = 0xE9EDF0).inkRgb,
+        )
+    }
+
+    @Test
+    fun aColourBackedThemeIsNotSecondGuessedByASample() {
+        val theme = CoreDisplays.parse(published).theme!!
+        assertEquals("color", theme.backgroundSource)
+        assertEquals(
+            Palette.DARK_INK,
+            CoreDisplays.inkFor(theme, "clock", 0, sampledBackgroundRgb = 0x000000).inkRgb,
+        )
     }
 
     @Test

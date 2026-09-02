@@ -115,14 +115,23 @@ internal object CoreDisplays {
     /**
      * The ink for one region: an administrator override wins, then core's automatic decision,
      * then the same rule recomputed locally against [fallbackBackgroundRgb].
+     *
+     * [sampledBackgroundRgb] is what the shell measured under this particular region. Over a
+     * background image core can only average the whole picture, so the local sample refines it;
+     * over a flat colour core's answer has no geometry to be wrong about and stands.
      */
-    fun inkFor(theme: CoreTheme?, region: String, fallbackBackgroundRgb: Int): Int {
-        theme?.inkOverride?.get(region)?.let { return it }
-        val background = theme?.backgroundRgb ?: fallbackBackgroundRgb
-        val light = theme?.ink?.get(region)
-            ?: (UiContrast.inkFor(background) == Ink.LIGHT)
-        return if (light) Palette.LIGHT_INK else Palette.DARK_INK
-    }
+    fun inkFor(
+        theme: CoreTheme?,
+        region: String,
+        fallbackBackgroundRgb: Int,
+        sampledBackgroundRgb: Int? = null,
+    ): RegionInkResult = RegionInkPolicy.resolve(
+        override = theme?.inkOverride?.get(region),
+        coreInkLight = theme?.ink?.get(region),
+        coreAuthoritative = theme != null && theme.backgroundSource != "image",
+        sampledBackgroundRgb = sampledBackgroundRgb,
+        fallbackBackgroundRgb = theme?.backgroundRgb ?: fallbackBackgroundRgb,
+    )
 
     /**
      * The call button's background and its text colour. Core's answer already carries the

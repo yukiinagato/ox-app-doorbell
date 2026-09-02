@@ -536,6 +536,38 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
             idleHeader, noticeCard, langBar, callSection,
             notice != null, widthDp, heightDp,
         )
+        applyFooterLayout(widthDp, heightDp)
+        scheduleRegionInk()
+    }
+
+    /**
+     * The version line and the SOS slider must never overlap or clip each other. A narrow window
+     * stacks them, so the full `door · core vX · app vY · battery` line is always readable; a wide
+     * one puts the slider to its right. The version line is never ellipsized.
+     */
+    private fun applyFooterLayout(widthDp: Int, heightDp: Int) {
+        val stacked = VisitorLayout.footerStacked(widthDp, heightDp)
+        visitorFooter.orientation =
+            if (stacked) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL
+        val infoParams = nodeInfo.layoutParams as LinearLayout.LayoutParams
+        val sosParams = sosSlot.layoutParams as LinearLayout.LayoutParams
+        if (stacked) {
+            infoParams.width = android.view.ViewGroup.LayoutParams.MATCH_PARENT
+            infoParams.weight = 0f
+            sosParams.width = android.view.ViewGroup.LayoutParams.MATCH_PARENT
+            sosParams.topMargin = dp(6)
+        } else {
+            infoParams.width = 0
+            infoParams.weight = 1f
+            sosParams.width = android.view.ViewGroup.LayoutParams.WRAP_CONTENT
+            sosParams.topMargin = 0
+        }
+        nodeInfo.layoutParams = infoParams
+        sosSlot.layoutParams = sosParams
+        // Two lines rather than a cut-off one: the versions and the battery all have to be read.
+        nodeInfo.setSingleLine(false)
+        nodeInfo.maxLines = 2
+        nodeInfo.ellipsize = null
     }
 
     /** Light and dark tokens for the door station's own screen (§5.1). */
@@ -552,21 +584,44 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
         // A configured background colour or image wins; the palette ground is the fallback.
         if (themeValue("bg_color") == null && themeValue("bg_image").isNullOrEmpty())
             rootView.setBackgroundColor(ShellUi.opaque(palette.ground))
-        clockText.setTextColor(ShellUi.opaque(inkOverBackground()))
-        dateText.setTextColor(ShellUi.opaque(ShellUi.mute(inkOverBackground(), palette.dark)))
-        touchHint.setTextColor(ShellUi.opaque(ShellUi.mute(inkOverBackground(), palette.dark)))
-        nodeInfo.setTextColor(ShellUi.opaque(ShellUi.mute(inkOverBackground(), palette.dark)))
+        applyRegionInk()
         sosSlider.applyPalette(palette)
         applyCallButtonAccent()
     }
 
     /**
-     * Automatic ink for text drawn straight onto the theme background (§5): core publishes
-     * display.theme.auto_ink per region, with an administrator override in ink_override, and the
-     * shell recomputes the same rule locally only when core published neither.
+     * Automatic ink per text region (§5). Core averages the whole background image because it has
+     * no layout geometry, so each region is sampled locally and the result refines core's answer;
+     * an administrator override still wins, and a flat background colour leaves core's value
+     * standing. A region that misses 4.5:1 gets the 40 % opposite-ink shadow behind it.
      */
-    private fun inkOverBackground(region: String = "clock"): Int =
-        CoreDisplays.inkFor(coreDisplay.theme, region, effectiveBackgroundRgb())
+    private fun applyRegionInk() {
+        paintRegion(clockText, "clock", muted = false)
+        paintRegion(dateText, "date", muted = true)
+        paintRegion(touchHint, "hint", muted = true)
+        paintRegion(nodeInfo, "footer", muted = true)
+    }
+
+    private fun paintRegion(view: TextView, region: String, muted: Boolean) {
+        val ground = effectiveBackgroundRgb()
+        val sampled = RegionInk.sample(themeBg, view, ground)
+        val result = CoreDisplays.inkFor(coreDisplay.theme, region, ground, sampled)
+        val ink = if (muted) ShellUi.mute(result.inkRgb, palette.dark) else result.inkRgb
+        view.setTextColor(ShellUi.opaque(ink))
+        if (result.needsShadow) {
+            val shadow = ShellUi.opaque(result.shadowRgb) and 0x00ffffff or
+                (RegionInkPolicy.SHADOW_ALPHA shl 24)
+            view.setShadowLayer(1f * resources.displayMetrics.density, 0f, 0f, shadow)
+        } else {
+            view.setShadowLayer(0f, 0f, 0f, 0)
+        }
+    }
+
+    /** The theme background moves under the text when the layout changes, so resample then. */
+    private fun scheduleRegionInk() {
+        if (dashboard != null) return
+        rootView.post { if (!isFinishing) applyRegionInk() }
+    }
 
     /** The colour actually behind the visitor screen, averaged by core when it is an image. */
     private fun effectiveBackgroundRgb(): Int =
@@ -762,6 +817,7 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
                 if (themeHash != hash || app.safeMode) return@post
                 themeBg.setImageBitmap(b)
                 themeBg.visibility = View.VISIBLE
+                scheduleRegionInk()
             }
         }, "theme-bg").apply { isDaemon = true }.start()
     }
@@ -1505,6 +1561,7 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
     companion object {
         private const val TAG = "doorbell-ui"
         private val YOBI = arrayOf("日", "月", "火", "水", "木", "金", "土")
+
         private const val PURPOSE_TIMEOUT_MS = 15_000L
         private const val CANCEL_RECONCILE_MS = 500L
     }
