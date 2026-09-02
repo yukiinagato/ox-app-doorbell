@@ -263,8 +263,23 @@ materialized config/export に plaintext を出しません。起動時は legac
           "presentation": { "visual": true, "sticky": false, "ttl_s": 10 } },
         { "type": "telegram", "households": "all", "never_suppress": true }
       ]
+    },
+    // 初回のみ自動投入。不在着信 = reason が "timeout" または "recovery_*" の call_cancelled。
+    // 室内ロールのみ: 室外機は来訪者に警報を出してはならない。
+    "r_missed_call_default": {
+      "enabled": true, "when": { "type": "call_missed" },
+      "actions": [
+        { "type": "device_alert",
+          "targets": { "roles": ["indoor_panel"], "web_profiles": "all" },
+          "channels": ["in_app", "system_notification", "web_push"],
+          "presentation": { "visual": true, "sticky": false, "ttl_s": 30 } }
+      ]
     }
   },
+
+  // ローカルのイベント保持。各 origin の最新 5,000 件は常に残り、それより古いものは
+  // クラスタ全端末が保持していることを複製が証明できた場合にのみ削除される。
+  "events": { "retention_days": 90 },           // 1..3650、既定 90
 
   "quiet_hours": {
     "default": { "windows": [ { "from": "23:00", "to": "07:00" } ],
@@ -389,6 +404,31 @@ surface を推測できません。
   正確な call_id と revision が必須で、旧形式の返信は通話中には表示専用となり通話を終了しません。
 - press の notify (LWW マージ): `{ "hlc": "…", "claimed_by": "…", "notified_at": "…",
   "telegram_msg_ids": {"<chat_id>": msg_id}, "replied": {"reply_id": "qr_away", "by": "telegram"} }`
+- **呼出履歴。** `call_projection` が 1 通話 = 1 行を実体化する。結果 (outcome) は保存せず導出する:
+  `ended`+`reply` → `replied`、それ以外の `ended` → `answered`、`cancelled`+`timeout` または
+  `recovery_*` → `missed`、それ以外の `cancelled` → `cancelled`。競合敗者
+  (`concurrent_press_loser` / `concurrent_answer_loser`)、フェンス済み (`terminal_fence`)、および
+  `ringing`/`in_call` の通話は履歴に出ない。`answered_by` は投影された `dialog_owner`、
+  `duration_ms` は `ended_wall_ms − answered_wall_ms`。
+- 取得は `GET /api/call-log?since_ms&before_ms&limit&door&outcome` (パネル資格情報または管理
+  セッション) か C ABI の `db_core_call_log_json`。`since_ms` は行のタイムスタンプの下限
+  (含む)、`before_ms` は古い方向へのページングのための上限 (含まない)。新しい順で、`limit` は
+  500 で頭打ち。
+- **既読ウォーターマークは端末ローカルで複製されない**: `POST /api/call-log/seen
+  {"up_to_hlc":"…"}` (空ならすべて既読) または `db_core_call_log_mark_seen`。前にしか進まない。
+  `unread_missed` はこれより新しい不在着信の件数で、待受画面のバッジそのもの。
+  `{"t":"call_log_changed","unread_missed":N}` は通話ライフサイクルイベントごと、および
+  ウォーターマーク更新のたびに配信される。
+- `call_missed` は**仮想のルールトリガー**で、どのノードも発行しない。reason が `timeout` または
+  `recovery_*` の `call_cancelled` は `call_cancelled` と `call_missed` の両方に一致するため、
+  既存ルールはそのまま動く。既定投入の `r_missed_call_default` がこれを室内ロールと Web Push 向け
+  `device_alert` に変換し、管理画面のルールタブで無効化できる。
+- `GET /api/events` は `since_ms` / `type` / `door` を受け付け、各行は従来のフィールドに加えて
+  `origin` / `seq` / `hlc` を持つ。
+- **保持期間。** `events.retention_days` (1..3650、既定 90) はローカル保持スイープの下限日数で、
+  加えて各 origin の最新 5,000 件は常に残る。削除にはさらに「適用済み・配信済み・永続化された
+  複製カバレッジベクタで覆われている」ことが必要で、そのベクタはまだ生成されないため、実運用では
+  剪定はログのみの no-op である。
 
 ## MQTT (Phase 2 — 実装済み)
 

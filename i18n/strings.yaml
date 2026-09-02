@@ -54,6 +54,7 @@ monitor.admin_qr_select: { ja: "管理ページの IP アドレスを選択", en
 monitor.admin_qr_none: { ja: "管理アドレスなし", en: "No admin address", zh: "没有管理地址" }
 
 admin.title: { ja: "管理", en: "Admin", zh: "管理" }
+admin.call_log: { ja: "呼出履歴", en: "Call log", zh: "呼叫记录" }
 admin.page_title: { ja: "ドアホン管理", en: "Doorbell Admin", zh: "门铃管理" }
 admin.language: { ja: "言語", en: "Language", zh: "语言" }
 admin.ui_style: { ja: "UI スタイル", en: "UI style", zh: "UI 样式" }
@@ -435,6 +436,21 @@ panel.event_sip_call: { ja: "SIP 発呼", en: "SIP call", zh: "SIP 呼叫" }
 panel.event_telegram: { ja: "Telegram 通知", en: "Telegram notification", zh: "Telegram 通知" }
 panel.event_visitor_lang: { ja: "言語変更", en: "Language changed", zh: "语言已更改" }
 panel.event_quick_reply: { ja: "クイック返信", en: "Quick reply", zh: "快捷回复" }
+
+# 呼出履歴 (call history) — 屋内シェル・Web パネル・管理画面で共通。
+history.title: { ja: "呼出履歴", en: "Call history", zh: "呼叫记录" }
+history.empty: { ja: "まだ呼出はありません", en: "No calls yet", zh: "暂无呼叫" }
+history.outcome_answered: { ja: "応答", en: "Answered", zh: "已接听" }
+history.outcome_replied: { ja: "返信", en: "Replied", zh: "已回复" }
+history.outcome_missed: { ja: "不在着信", en: "Missed", zh: "未接" }
+history.outcome_cancelled: { ja: "取消", en: "Cancelled", zh: "已取消" }
+history.answered_by: { ja: "{device} が応答", en: "Answered by {device}", zh: "{device} 接听" }
+history.duration: { ja: "通話 {mm_ss}", en: "{mm_ss}", zh: "通话 {mm_ss}" }
+history.missed_badge: { ja: "不在着信 {n} 件", en: "{n} missed", zh: "{n} 个未接" }
+history.unread_banner: { ja: "不在着信が {n} 件あります", en: "{n} missed calls", zh: "有 {n} 个未接来电" }
+history.mark_seen: { ja: "すべて既読にする", en: "Mark all as seen", zh: "全部标为已读" }
+history.today: { ja: "今日", en: "Today", zh: "今天" }
+history.yesterday: { ja: "昨日", en: "Yesterday", zh: "昨天" }
 reply.failed: { ja: "クイック返信の送信に失敗しました", en: "Failed to send the quick reply", zh: "发送快捷回复失败" }
 emergency.active_detail: { ja: "緊急モードが発報されています", en: "Emergency mode is active", zh: "紧急模式已触发" }
 emergency.clear_instruction: { ja: "解除は管理画面または端末の PIN 操作で行ってください。", en: "Clear the alarm from Admin or with the device PIN.", zh: "请从管理页面或使用设备 PIN 解除警报。" }

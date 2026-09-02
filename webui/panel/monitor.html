@@ -30,6 +30,15 @@
                                    min-height: 120px; }
   #evCard { background: #1a2027; border: 1px solid #2a333d; border-radius: 10px;
             margin: 8px 18px 24px; padding: 12px; }
+  #evHead { display: flex; align-items: center; justify-content: space-between;
+            padding: 0 8px 8px; }
+  #evHead h2 { font-size: 20px; color: #8a97a5; font-weight: normal; }
+  #markSeen { background: #274261; border: 1px solid #4da3ff; border-radius: 9px;
+              color: #fff; font-size: 16px; padding: 6px 14px; display: none; }
+  #missedBadge { display: none; background: #ff6b6b; color: #2a0505; border-radius: 999px;
+                 font-size: 17px; font-weight: bold; margin-left: 10px; padding: 3px 12px; }
+  .outMissed { color: #ff8e8e; font-weight: bold; }
+  .evEmpty { color: #8a97a5; padding: 10px 8px; }
   table { width: 100%; border-collapse: collapse; font-size: 20px; }
   th, td { text-align: left; padding: 8px; border-bottom: 1px solid #242d36; }
   th { color: #8a97a5; font-weight: normal; font-size: 16px; }
@@ -50,12 +59,19 @@
 <div id="offlineBand" data-semantic-id="status.offline"></div>
 <div id="pushBar"><button id="pushBtn" type="button"></button>
   <span id="pushStatus"></span></div>
-<h1 id="title" data-semantic-id="ring.title"></h1>
+<h1 id="title" data-semantic-id="ring.title"><span id="titleText"></span><span
+  id="missedBadge"></span></h1>
 <div id="snapGrid"></div>
-<div id="evCard"><table>
-  <thead><tr><th id="eventTime"></th><th id="eventType"></th><th id="eventDoor"></th></tr></thead>
-  <tbody id="evBody"></tbody>
-</table></div>
+<div id="evCard">
+  <div id="evHead"><h2 id="historyTitle"></h2>
+    <button id="markSeen" type="button"></button></div>
+  <table>
+    <thead><tr><th id="eventTime"></th><th id="eventOutcome"></th><th id="eventDoor"></th>
+      <th id="eventDetail"></th></tr></thead>
+    <tbody id="evBody"></tbody>
+  </table>
+  <div class="evEmpty" id="evEmpty"></div>
+</div>
 <div id="callView">
   <div class="msg" id="callMsg" data-semantic-id="ring.title"></div>
   <img id="callImg" alt="">
@@ -197,14 +213,17 @@
   }
   function applyI18n() {
     document.title = t("panel.monitor_title");
-    $("title").innerHTML = esc(t("panel.monitor_title"));
+    $("titleText").innerHTML = esc(t("panel.monitor_title"));
     $("soundBand").innerHTML = esc(t("panel.tap_sound"));
     $("offlineBand").innerHTML = esc(t("panel.offline"));
     $("answerBtn").innerHTML = esc(t("ring.answer"));
     $("monitorClose").innerHTML = esc(t("monitor.close"));
+    $("historyTitle").innerHTML = esc(t("history.title"));
+    $("markSeen").innerHTML = esc(t("history.mark_seen"));
     $("eventTime").innerHTML = esc(t("panel.event_time"));
-    $("eventType").innerHTML = esc(t("panel.event_type"));
+    $("eventOutcome").innerHTML = esc(t("panel.event_type"));
     $("eventDoor").innerHTML = esc(t("panel.event_door"));
+    renderCallLog();
     $("pushBtn").innerHTML = esc(pushSubscribed ? t("panel.push_disable") :
       t("panel.push_enable"));
     if (pushPaintState) paintPush(pushPaintState);
@@ -337,41 +356,99 @@
     }
   }, SNAP_MS);
 
-  function renderEvents(events) {
-    var eventKeys = {
-      press: "panel.event_press",
-      motion: "panel.event_motion",
-      call_answered: "panel.event_call_answered",
-      call_cancelled: "panel.event_call_cancelled",
-      call_ended: "panel.event_call_ended",
-      delivery_result: "panel.event_delivery_result",
-      dtmf_action: "panel.event_dtmf_action",
-      purpose_selected: "panel.event_purpose_selected",
-      reply: "panel.event_reply",
-      auto_reply: "panel.event_auto_reply",
-      chime: "panel.event_chime",
-      device_alert: "panel.event_device_alert",
-      emergency: "panel.event_emergency",
-      emergency_cancel: "panel.event_emergency_cancel",
-      ha_command: "panel.event_ha_command",
-      ha_event: "panel.event_ha_event",
-      hangup: "panel.event_hangup",
-      sip_call: "panel.event_sip_call",
-      telegram: "panel.event_telegram",
-      visitor_lang: "panel.event_visitor_lang",
-      quick_reply: "panel.event_quick_reply"
-    };
-    var rows = "";
-    for (var i = 0; i < events.length && i < 10; i++) {
-      var e = events[i];
-      var type = eventKeys[e.type] ? t(eventKeys[e.type]) : e.type;
-      rows += "<tr><td class='dim'>" + fmtTime(e.wall_ms) + "</td><td>" + esc(type) +
-              "</td><td>" + esc(e.door || e.device || "") + "</td></tr>";
-    }
-    $("evBody").innerHTML = rows;
+  // The call log replaces the raw event ticker: outcome, time, door and who answered, newest
+  // first, with the unread missed-call badge on the page title.
+  var callLog = { rows: [], unread_missed: 0, seen_hlc: "" };
+  var callLogPending = false;
+  var callLogTick = 0;
+  var markedSeenOnOpen = false;
+  var lastEventKey = "";
+  var doorLabels = {};
+
+  function outcomeLabel(outcome) {
+    if (outcome === "answered") return t("history.outcome_answered");
+    if (outcome === "replied") return t("history.outcome_replied");
+    if (outcome === "missed") return t("history.outcome_missed");
+    if (outcome === "cancelled") return t("history.outcome_cancelled");
+    return outcome || "";
   }
-
-
+  function durationLabel(ms) {
+    var total = Math.floor(Number(ms || 0) / 1000);
+    if (total <= 0) return "";
+    var mm = Math.floor(total / 60), ss = total % 60;
+    return t("history.duration", { mm_ss: mm + ":" + (ss < 10 ? "0" + ss : ss) });
+  }
+  function renderCallLog() {
+    var rows = callLog.rows || [];
+    var html = "";
+    for (var i = 0; i < rows.length && i < 10; i++) {
+      var r = rows[i] || {};
+      var cls = r.outcome === "missed" ? " class='outMissed'" : "";
+      var detail = "";
+      if (r.answered_by) detail = t("history.answered_by", { device: r.answered_by });
+      var dur = durationLabel(r.duration_ms);
+      if (dur) detail = detail ? detail + " · " + dur : dur;
+      html += "<tr><td class='dim'>" + fmtTime(r.ts) + "</td><td" + cls + ">" +
+              esc(outcomeLabel(r.outcome)) + "</td><td>" +
+              esc(doorLabels[r.door] || r.door || "") + "</td><td class='dim'>" +
+              esc(detail) + "</td></tr>";
+    }
+    $("evBody").innerHTML = html;
+    $("evEmpty").innerHTML = rows.length ? "" : esc(t("history.empty"));
+    $("evEmpty").style.display = rows.length ? "none" : "block";
+    var unread = Number(callLog.unread_missed || 0);
+    var badge = $("missedBadge");
+    badge.innerHTML = unread > 0 ? esc(t("history.missed_badge", { n: unread })) : "";
+    badge.style.display = unread > 0 ? "inline-block" : "none";
+    $("markSeen").style.display = unread > 0 ? "inline-block" : "none";
+  }
+  function mockCallLog() {
+    return { rows: [
+      { id: "mock:1", call_id: "mock1", ts: 1756300000000, door: "d_front",
+        outcome: "missed", answered_by: "", duration_ms: 0, hlc: "1", seen: false },
+      { id: "mock:2", call_id: "mock2", ts: 1756290000000, door: "d_back",
+        outcome: "answered", answered_by: "Living room", duration_ms: 42000, hlc: "0",
+        seen: true }
+    ], unread_missed: 1, seen_hlc: "", server_ts: 0 };
+  }
+  function fetchCallLog(force) {
+    if (callLogPending) return;
+    if (!force && (callLogTick++ % 3) !== 0) return;
+    if (MOCK) { callLog = mockCallLog(); renderCallLog(); return; }
+    callLogPending = true;
+    xhr("GET", "/api/call-log?limit=10", null, function (st, j) {
+      callLogPending = false;
+      if (st !== 200 || !j) return;
+      callLog = j;
+      renderCallLog();
+      // Opening the monitor is the "opened the history" gesture: clear the badge once, then let
+      // later missed calls raise it again.
+      if (!markedSeenOnOpen) {
+        markedSeenOnOpen = true;
+        if (Number(j.unread_missed || 0) > 0) markSeen();
+      }
+    });
+  }
+  function markSeen() {
+    if (MOCK) { callLog.unread_missed = 0; renderCallLog(); return; }
+    xhr("POST", "/api/call-log/seen", "up_to_hlc=", function (st, j) {
+      if (st !== 200 || !j) return;
+      callLog.unread_missed = Number(j.unread_missed || 0);
+      callLog.seen_hlc = j.seen_hlc || "";
+      renderCallLog();
+      fetchCallLog(true);
+    });
+  }
+  // A call-lifecycle change in the polled state is the browser's equivalent of the shells'
+  // call_log_changed event, so the list refreshes without waiting for the slow cadence.
+  function noteEventStream(events) {
+    var newest = (events && events[0]) || {};
+    var key = String(newest.origin || "") + ":" + String(newest.seq || "") + ":" +
+              String(newest.wall_ms || "");
+    if (key === lastEventKey) return false;
+    lastEventKey = key;
+    return true;
+  }
 
   var callingDoorId = null;
   var callingDoorKey = "";
@@ -510,9 +587,12 @@
       return;
     }
     emergencyOverlay.update(state);
-    renderSnapGrid(state.doors || []);
-    renderEvents(state.events || []);
-    renderCall(state.doors || [], state.events || [], state.quick_replies || []);
+    var doors = state.doors || [];
+    doorLabels = {};
+    for (var di = 0; di < doors.length; di++) doorLabels[doors[di].id] = doors[di].label;
+    renderSnapGrid(doors);
+    fetchCallLog(noteEventStream(state.events || []));
+    renderCall(doors, state.events || [], state.quick_replies || []);
     DoorbellPanelRuntime.applySemanticUi(state, { page: "monitor" });
   }
   function poll() {
@@ -560,6 +640,7 @@
   }
   loadLanguage(QUERY_LANG || "ja", function () {
     applyI18n();
+    $("markSeen").onclick = function () { markSeen(); };
     installEmergency();
     setupPushButton();
     if (MOCK) { poll(); return; }

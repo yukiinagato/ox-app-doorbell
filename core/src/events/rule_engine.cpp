@@ -97,16 +97,33 @@ std::string canonicalType(const std::string& t) {
   if (t == "device_online") return "online";
   if (t == "emergency_on") return "emergency";
   if (t == "emergency_off") return "emergency_cancel";
+  // "call_missed" is a virtual trigger: nobody emits it. A call_cancelled event whose reason is a
+  // ring timeout or a failed restart recovery also matches it, so a rule can notify on a missed
+  // call without changing the replicated event vocabulary.
+  if (t == "missed_call") return "call_missed";
   return t;
+}
+
+
+// A missed call is a cancellation that ended a call nobody answered.
+bool isMissedCall(const EventRecord& ev, const std::string& reason) {
+  if (ev.type != "call_cancelled") return false;
+  return reason == "timeout" || reason.rfind("recovery_", 0) == 0;
 }
 
 
 
 
 
-bool whenMatch(const cJSON* when, const EventRecord& ev, const std::string& purpose) {
+bool whenMatch(const cJSON* when, const EventRecord& ev, const std::string& purpose,
+               const std::string& reason) {
   if (!cJSON_IsObject(when)) return false;
-  if (canonicalType(json::getString(when, "type")) != canonicalType(ev.type)) return false;
+  const std::string wanted = canonicalType(json::getString(when, "type"));
+  // The event keeps its own canonical type so existing call_cancelled rules stay unchanged; a
+  // missed cancellation additionally answers to call_missed.
+  if (wanted != canonicalType(ev.type) &&
+      !(wanted == "call_missed" && isMissedCall(ev, reason)))
+    return false;
   const cJSON* doors = json::get(when, "doors");
   if (cJSON_IsArray(doors) && !listContains(doors, ev.door)) return false;
   const cJSON* devices = json::get(when, "devices");
@@ -169,9 +186,13 @@ std::vector<Action> RuleEngine::evaluate(const EventRecord& ev, int64_t correcte
 
 
   std::string purpose;
+  std::string reason;
   if (!ev.payload_json.empty()) {
     json::Doc payload = json::parse(ev.payload_json);
-    if (payload) purpose = json::getString(payload.get(), "purpose");
+    if (payload) {
+      purpose = json::getString(payload.get(), "purpose");
+      reason = json::getString(payload.get(), "reason");
+    }
   }
 
 
@@ -188,7 +209,7 @@ std::vector<Action> RuleEngine::evaluate(const EventRecord& ev, int64_t correcte
     const cJSON* rule = entry.second;
     if (!cJSON_IsObject(rule)) continue;
     if (!json::getBool(rule, "enabled", true)) continue;
-    if (!whenMatch(json::get(rule, "when"), ev, purpose)) continue;
+    if (!whenMatch(json::get(rule, "when"), ev, purpose, reason)) continue;
     if (!scheduleMatch(json::get(rule, "schedule"), day, minute)) continue;
 
     const cJSON* action = nullptr;

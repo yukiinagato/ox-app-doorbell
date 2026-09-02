@@ -66,6 +66,7 @@
     <string name="admin_call_flow_mixed_warning">并非所有已报告节点都支持 ring_then_purpose；旧版或未测量客户端仍使用 purpose_first。</string>
     <string name="admin_call_flow_purpose_first">purpose_first 在呼叫前询问来意；ring_then_purpose 先响铃，并允许之后更新来意。</string>
     <string name="admin_call_flow_supported">当前所有已报告节点均声明支持 call_flow_v2。</string>
+    <string name="admin_call_log">呼叫记录</string>
     <string name="admin_call_sound_loop">循环呼叫音</string>
     <string name="admin_cam_codec">视频编码</string>
     <string name="admin_cam_fps">帧率 (fps)</string>
@@ -369,6 +370,19 @@
     <string name="event_offline">⚠ %1$s 离线 (最后在线 %2$s)</string>
     <string name="event_online">%1$s 恢复在线</string>
     <string name="event_press">%1$s 有访客 (%2$s)</string>
+    <string name="history_answered_by">%1$s 接听</string>
+    <string name="history_duration">通话 %1$s</string>
+    <string name="history_empty">暂无呼叫</string>
+    <string name="history_mark_seen">全部标为已读</string>
+    <string name="history_missed_badge">%1$s 个未接</string>
+    <string name="history_outcome_answered">已接听</string>
+    <string name="history_outcome_cancelled">已取消</string>
+    <string name="history_outcome_missed">未接</string>
+    <string name="history_outcome_replied">已回复</string>
+    <string name="history_title">呼叫记录</string>
+    <string name="history_today">今天</string>
+    <string name="history_unread_banner">有 %1$s 个未接来电</string>
+    <string name="history_yesterday">昨天</string>
     <string name="idle_call_button">呼叫 %1$s</string>
     <string name="idle_choose_purpose">请选择来访目的</string>
     <string name="idle_language">语言</string>

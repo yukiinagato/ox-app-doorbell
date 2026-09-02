@@ -68,6 +68,7 @@
   <data name="admin_call_flow_mixed_warning" xml:space="preserve"><value>并非所有已报告节点都支持 ring_then_purpose；旧版或未测量客户端仍使用 purpose_first。</value></data>
   <data name="admin_call_flow_purpose_first" xml:space="preserve"><value>purpose_first 在呼叫前询问来意；ring_then_purpose 先响铃，并允许之后更新来意。</value></data>
   <data name="admin_call_flow_supported" xml:space="preserve"><value>当前所有已报告节点均声明支持 call_flow_v2。</value></data>
+  <data name="admin_call_log" xml:space="preserve"><value>呼叫记录</value></data>
   <data name="admin_call_sound_loop" xml:space="preserve"><value>循环呼叫音</value></data>
   <data name="admin_cam_codec" xml:space="preserve"><value>视频编码</value></data>
   <data name="admin_cam_fps" xml:space="preserve"><value>帧率 (fps)</value></data>
@@ -371,6 +372,19 @@
   <data name="event_offline" xml:space="preserve"><value>⚠ {0} 离线 (最后在线 {1})</value></data>
   <data name="event_online" xml:space="preserve"><value>{0} 恢复在线</value></data>
   <data name="event_press" xml:space="preserve"><value>{0} 有访客 ({1})</value></data>
+  <data name="history_answered_by" xml:space="preserve"><value>{0} 接听</value></data>
+  <data name="history_duration" xml:space="preserve"><value>通话 {0}</value></data>
+  <data name="history_empty" xml:space="preserve"><value>暂无呼叫</value></data>
+  <data name="history_mark_seen" xml:space="preserve"><value>全部标为已读</value></data>
+  <data name="history_missed_badge" xml:space="preserve"><value>{0} 个未接</value></data>
+  <data name="history_outcome_answered" xml:space="preserve"><value>已接听</value></data>
+  <data name="history_outcome_cancelled" xml:space="preserve"><value>已取消</value></data>
+  <data name="history_outcome_missed" xml:space="preserve"><value>未接</value></data>
+  <data name="history_outcome_replied" xml:space="preserve"><value>已回复</value></data>
+  <data name="history_title" xml:space="preserve"><value>呼叫记录</value></data>
+  <data name="history_today" xml:space="preserve"><value>今天</value></data>
+  <data name="history_unread_banner" xml:space="preserve"><value>有 {0} 个未接来电</value></data>
+  <data name="history_yesterday" xml:space="preserve"><value>昨天</value></data>
   <data name="idle_call_button" xml:space="preserve"><value>呼叫 {0}</value></data>
   <data name="idle_choose_purpose" xml:space="preserve"><value>请选择来访目的</value></data>
   <data name="idle_language" xml:space="preserve"><value>语言</value></data>
