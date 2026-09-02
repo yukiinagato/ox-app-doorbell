@@ -1041,6 +1041,25 @@ static void db_activate_app(db_state *state, uint64_t now) {
   if (state->launch_inhibited || state->stopping) return;
   if (state->next_activate_ms != 0 && now < state->next_activate_ms) return;
   if (state->nudge_pid > 0 && db_pid_alive(state->nudge_pid)) return;
+  /* In safe mode a nudge is what fronts an app that iOS itself keeps relaunching
+     (voip background mode), so it must obey the backoff ladder and the absolute
+     cap exactly like a launch; otherwise a crash loop is re-fronted every interval
+     forever and `launch_inhibited` can never be reached on such a device. */
+  if (state->safe_mode) {
+    if (state->next_restart_ms != 0 && now < state->next_restart_ms) return;
+    if (state->safe_mode_launches >= state->config.safe_mode_launch_cap) {
+      if (!state->launch_inhibited) {
+        state->launch_inhibited = true;
+        state->status_dirty = true;
+        db_log("doorbell-keepalive: safe-mode launch cap %u reached by activation "
+               "nudges; launching and nudging stopped until the safe-mode marker "
+               "is cleared\n",
+               state->config.safe_mode_launch_cap);
+      }
+      db_set_reason(state, "launch_inhibited");
+      return;
+    }
+  }
   if (state->config.profile == DB_PROFILE_IOS5) {
     executable = ios_argv[0];
     arguments = ios_argv;
@@ -1077,6 +1096,7 @@ static void db_activate_app(db_state *state, uint64_t now) {
   }
   state->nudge_pid = child;
   state->activation_nudges++;
+  if (state->safe_mode) state->safe_mode_launches++;
   state->status_dirty = true;
   db_log("doorbell-keepalive: activation nudge %u for a present app without heartbeat\n",
          state->activation_nudges);

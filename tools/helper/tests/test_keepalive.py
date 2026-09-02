@@ -528,6 +528,49 @@ class UnprovisionedAppTests(unittest.TestCase):
                     app.terminate()
                     app.wait(timeout=2)
 
+    def test_nudges_in_safe_mode_count_toward_the_launch_cap(self):
+        """Device finding: iOS relaunches the app itself, so only nudges run; they
+        must obey the ladder and the cap or a crash loop is re-fronted forever."""
+        with tempfile.TemporaryDirectory(prefix="dbh-nudgecap-", dir="/tmp") as temporary:
+            root = Path(temporary)
+            launch_log = root / "launch.log"
+            processes = root / "processes"
+            processes.write_text("SpringBoard\n", encoding="utf-8")
+            app = subprocess.Popen(["/bin/sleep", "30"])
+            try:
+                with HelperProcess(
+                    root, "on",
+                    extra=["--test-process-file", str(processes),
+                           "--boot-grace-ms", "0", "--activate-interval-ms", "1000",
+                           "--safe-mode-launch-cap", "4"],
+                    DB_KEEPALIVE_TEST_LOG=str(launch_log),
+                ) as helper:
+                    # Startup timeouts drive the ladder into safe mode first.
+                    wait_until(lambda: read_status(helper.status)["safe_mode"] is True)
+                    # Now the app is "present" (iOS relaunched it) but silent: only
+                    # nudges can run, and they must stop at the cap.
+                    processes.write_text(
+                        f"SpringBoard\nDoorbell {app.pid}\n", encoding="utf-8"
+                    )
+                    wait_until(
+                        lambda: read_status(helper.status)["launch_inhibited"] is True,
+                        timeout=20.0,
+                    )
+                    status = read_status(helper.status)
+                    self.assertEqual(status["state"], "launch_inhibited")
+                    log = launch_log.read_text(encoding="utf-8")
+                    self.assertGreaterEqual(log.count("activate=1"), 1)
+                    time.sleep(0.5)
+                    self.assertEqual(
+                        launch_log.read_text(encoding="utf-8").count("activate=1"),
+                        log.count("activate=1"),
+                    )
+                    self.assertLessEqual(status["activation_nudges"], 4)
+            finally:
+                if app.poll() is None:
+                    app.terminate()
+                    app.wait(timeout=2)
+
     def test_a_dead_listed_pid_is_not_treated_as_a_running_app(self):
         with tempfile.TemporaryDirectory(prefix="dbh-stalepid-", dir="/tmp") as temporary:
             root = Path(temporary)

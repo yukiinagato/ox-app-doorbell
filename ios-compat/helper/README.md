@@ -175,7 +175,10 @@ process activates it. While a present app stays silent (`launch_pending_no_heart
 every `--activate-interval-ms` (default 15000; `0` disables). A nudge is not a launch: it charges
 no failure, arms no backoff, counts against no cap, runs with `DOORBELL_ACTIVATE=1`, and stops on
 the first heartbeat. After a boot the first nudge after the operator unlocks the device brings the
-app to the front. Status reports the running total as `activation_nudges`.
+app to the front. Status reports the running total as `activation_nudges`. In safe mode a nudge
+obeys the backoff ladder and counts toward the absolute launch cap exactly like a launch: on a
+device where iOS itself relaunches the app, nudges are the only thing that would re-front a crash
+loop, so `launch_inhibited` stops them too until the marker is cleared.
 
 ### Expected exits
 
