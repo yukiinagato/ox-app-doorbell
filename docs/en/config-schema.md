@@ -517,6 +517,15 @@ correct for a real station that is merely down.
 `configured` separates "this door has an entry" from "a live station is serving a door nobody has
 set up yet".
 
+`served_by` and `peers[].status` are read from one liveness map that the status response builds
+once, so the two can never contradict each other: a node named in `served_by` is always `alive`
+in `peers[]`, and a node that is anything else is never named. A configured device the mesh has
+not seen appears as `offline` and never serves a door.
+
+A station that goes away and comes back keeps its node id: it refreshes the entry it already had
+rather than adding a second one. This holds even when the station restarts with its heartbeat
+counters reset, which would otherwise look like a replay of an advertisement already seen.
+
 ### Returning from the incoming-call screen
 
 `call.indoor.return_s` (5..600 seconds, default 60), with the per-device override
