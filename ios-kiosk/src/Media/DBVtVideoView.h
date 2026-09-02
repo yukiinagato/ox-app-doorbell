@@ -5,11 +5,19 @@
 @interface DBVtVideoView : GLKView
 
 @property(nonatomic, copy) void (^onDisplayedFrame)(int64_t captureMs);
-// Drop decoded frames that are already too old before they enter the GL queue.
 @property(nonatomic) int64_t serverToClientOffsetMs;
-@property(nonatomic) int64_t maxQueueAgeMs;
 @property(nonatomic, readonly) NSUInteger decodedFrames;
 @property(nonatomic, readonly) NSUInteger droppedFrames;
+
+// Adaptive live edge. It seeds high and tightens only after the device's own
+// baseline latency has been measured; see DBLiveEdgeGate.h for why a fixed
+// sub-100 ms budget is unreachable on the original iPad. Pass clockTrusted=NO
+// when the server clock is unknown: the gate then never drops on age.
+- (void)configureLiveEdgeStartMs:(int64_t)startMs
+                         floorMs:(int64_t)floorMs
+                       ceilingMs:(int64_t)ceilingMs
+                    clockTrusted:(BOOL)clockTrusted;
+- (int64_t)liveEdgeMs;
 
 - (void)setCompatibilityOutputView:(UIImageView *)view;
 - (BOOL)startWithSps:(NSData *)sps pps:(NSData *)pps;

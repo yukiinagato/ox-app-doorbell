@@ -68,6 +68,12 @@ swiftc \
   "$REPO_ROOT/ios-compat/tests/recovery_policy_test.m" \
   -framework Foundation -o "$OUT/recovery_policy_test"
 
+"$CC" -fobjc-arc -Wall -Wextra -Werror -O2 -isysroot "$MACOS_SDK" \
+  -I"$REPO_ROOT/ios-kiosk/src/Media" \
+  "$REPO_ROOT/ios-kiosk/src/Media/DBLiveEdgeGate.m" \
+  "$REPO_ROOT/ios-compat/tests/live_edge_gate_test.m" \
+  -framework Foundation -o "$OUT/live_edge_gate_test"
+
 "$OUT/minisip_uas_loopback"
 "$OUT/media_source_test"
 "$OUT/call_event_tracker_test"
@@ -76,6 +82,7 @@ swiftc \
 "$OUT/rtsp_h264_test"
 "$OUT/compatibility_profile_test"
 "$OUT/recovery_policy_test"
+"$OUT/live_edge_gate_test"
 python3 "$REPO_ROOT/ios-compat/tests/ios9_armv7_profile_test.py"
 python3 "$REPO_ROOT/ios-compat/tests/semantic_ui_contract_test.py"
 python3 "$REPO_ROOT/ios-compat/tests/sos_presentation_contract_test.py"

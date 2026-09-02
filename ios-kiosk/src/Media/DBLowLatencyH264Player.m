@@ -1,5 +1,6 @@
 #import "DBLowLatencyH264Player.h"
 
+#import "DBLiveEdgeGate.h"
 #import "DBVtVideoView.h"
 #import "../Net/DBFmp4Demux.h"
 #import <math.h>
@@ -7,6 +8,7 @@
 void DBH264Dbg(NSString *fmt, ...);
 
 @interface DBLowLatencyH264Player () <DBFmp4DemuxDelegate>
+- (void)scheduleDisplayWatchdog:(NSUInteger)generation;
 @end
 
 @implementation DBLowLatencyH264Player {
@@ -28,8 +30,14 @@ void DBH264Dbg(NSString *fmt, ...);
   double _jitterMs;
   double _framesPerSecond;
   CFAbsoluteTime _lastStatsFrameAt;
+  CFAbsoluteTime _lastDisplayedAt;
+  CFAbsoluteTime _firstDisplayedAt;
   NSUInteger _displayedFrames;
 }
+
+@synthesize liveEdgeStartMs = _liveEdgeStartMs;
+@synthesize liveEdgeFloorMs = _liveEdgeFloorMs;
+@synthesize liveEdgeCeilingMs = _liveEdgeCeilingMs;
 
 - (id)initWithURL:(NSString *)url container:(UIView *)container
            onState:(void (^)(DBLowLatencyPlayerState))onState {
@@ -38,6 +46,9 @@ void DBH264Dbg(NSString *fmt, ...);
     _url = [url copy];
     _container = container;
     _onState = [onState copy];
+    _liveEdgeStartMs = DB_LIVE_EDGE_DEFAULT_START_MS;
+    _liveEdgeFloorMs = DB_LIVE_EDGE_DEFAULT_FLOOR_MS;
+    _liveEdgeCeilingMs = DB_LIVE_EDGE_DEFAULT_CEILING_MS;
   }
   return self;
 }
@@ -49,7 +60,9 @@ void DBH264Dbg(NSString *fmt, ...);
                           (NSInteger)(_jitterMs + 0.5), (CGFloat)_framesPerSecond);
 }
 
-- (CFAbsoluteTime)lastFrameAt { return _lastStatsFrameAt; }
+// Every displayed frame counts here, not only the ones with a usable capture
+// timestamp, so the screen's stall watchdog sees the real display rate.
+- (CFAbsoluteTime)lastFrameAt { return _lastDisplayedAt; }
 - (NSUInteger)decodedFrames { return [_videoView decodedFrames]; }
 - (NSUInteger)displayedFrames { return _displayedFrames; }
 - (NSUInteger)droppedFrames { return [_videoView droppedFrames]; }
@@ -62,7 +75,9 @@ void DBH264Dbg(NSString *fmt, ...);
   }
   if (_state == state) return;
   _state = state;
-  if (_onState && (state == DBLowLatencyPlayerPlaying || state == DBLowLatencyPlayerFailed))
+  if (_onState && (state == DBLowLatencyPlayerPlaying ||
+                   state == DBLowLatencyPlayerFailed ||
+                   state == DBLowLatencyPlayerStalled))
     _onState(state);
 }
 
@@ -82,6 +97,8 @@ void DBH264Dbg(NSString *fmt, ...);
   _jitterMs = 0;
   _framesPerSecond = 0;
   _lastStatsFrameAt = 0;
+  _lastDisplayedAt = 0;
+  _firstDisplayedAt = 0;
   _displayedFrames = 0;
   _waitingForKeyframe = YES;
   NSUInteger generation = _generation;
@@ -112,6 +129,12 @@ void DBH264Dbg(NSString *fmt, ...);
     DBLowLatencyH264Player *player = weakSelf;
     if (!player || player->_generation != generation) return;
     player->_displayedFrames++;
+    CFAbsoluteTime displayedAt = CFAbsoluteTimeGetCurrent();
+    player->_lastDisplayedAt = displayedAt;
+    if (player->_firstDisplayedAt == 0) {
+      player->_firstDisplayedAt = displayedAt;
+      DBH264Dbg(@"[vt] first frame displayed");
+    }
     if (captureMs > 0 && captureMs != player->_lastCaptureMs) {
       player->_lastCaptureMs = captureMs;
       int64_t nowMs = (int64_t)([[NSDate date] timeIntervalSince1970] * 1000.0);
@@ -140,12 +163,20 @@ void DBH264Dbg(NSString *fmt, ...);
                   (long long)player->_latencyMax);
       }
     }
-    if (player->_state == DBLowLatencyPlayerLoading) {
+    // The compatibility overlay is opaque: bringing it to front hides the
+    // MJPEG availability layer underneath. Do that only once H.264 has proved
+    // it can sustain a real frame rate, so a decoder that manages one frame
+    // and then stalls can never leave a frozen still where MJPEG was live.
+    if (player->_state == DBLowLatencyPlayerLoading &&
+        DBLiveEdgeSustained((uint32_t)player->_displayedFrames,
+                            (double)(displayedAt - player->_firstDisplayedAt))) {
       player->_videoView.hidden = NO;
       player->_compatOverlay.hidden = NO;
       [player->_container bringSubviewToFront:player->_compatOverlay];
-      DBH264Dbg(@"[vt] first frame displayed");
+      DBH264Dbg(@"[vt] sustained %lu displayed frames; H.264 takes over from MJPEG",
+                (unsigned long)player->_displayedFrames);
       [player setState:DBLowLatencyPlayerPlaying];
+      [player scheduleDisplayWatchdog:generation];
     }
   };
   _state = DBLowLatencyPlayerLoading;
@@ -163,11 +194,38 @@ void DBH264Dbg(NSString *fmt, ...);
   });
 }
 
+// A decoder that stops delivering frames while the opaque compositor covers
+// MJPEG is worse than no H.264 at all. Watch the display rate and hand the
+// screen back to the availability layer when it collapses.
+- (void)scheduleDisplayWatchdog:(NSUInteger)generation {
+  __weak DBLowLatencyH264Player *weakSelf = self;
+  dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(NSEC_PER_SEC / 2)),
+                 dispatch_get_main_queue(), ^{
+    DBLowLatencyH264Player *player = weakSelf;
+    if (!player || player->_generation != generation) return;
+    if (player->_state != DBLowLatencyPlayerPlaying) return;
+    double idle = (double)(CFAbsoluteTimeGetCurrent() - player->_lastDisplayedAt);
+    if (DBLiveEdgeCollapsed((uint32_t)player->_displayedFrames, idle)) {
+      DBH264Dbg(@"[vt] display collapsed after %lu frames (%.2fs idle); back to MJPEG",
+                (unsigned long)player->_displayedFrames, idle);
+      player->_compatOverlay.hidden = YES;
+      [player setState:DBLowLatencyPlayerStalled];
+      return;
+    }
+    [player scheduleDisplayWatchdog:generation];
+  });
+}
+
 - (void)fmp4DemuxReady:(DBFmp4Demux *)demux sps:(NSData *)sps pps:(NSData *)pps {
   _videoView.serverToClientOffsetMs = [demux serverToClientOffsetMs];
-  // Hard live edge: leave ~30ms for the 640x360 BGRA upload and never display
-  // a frame which can no longer meet the 100ms glass-to-glass budget.
-  _videoView.maxQueueAgeMs = 70;
+  // Adaptive live edge. It starts at the last known-good conservative value
+  // and tightens only after this device's own baseline latency is measured;
+  // DBLiveEdgeGate.h documents why the original iPad's SGX535 upload path
+  // cannot meet a fixed sub-100ms glass-to-glass budget.
+  [_videoView configureLiveEdgeStartMs:_liveEdgeStartMs
+                               floorMs:_liveEdgeFloorMs
+                             ceilingMs:_liveEdgeCeilingMs
+                          clockTrusted:[demux clockOffsetTrusted]];
   if (![_videoView startWithSps:sps pps:pps]) {
     DBH264Dbg(@"[vt] decoder start failed");
     [self setState:DBLowLatencyPlayerFailed];
