@@ -603,9 +603,12 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
     }
 
     private fun paintRegion(view: TextView, region: String, muted: Boolean) {
-        val ground = effectiveBackgroundRgb()
-        val sampled = RegionInk.sample(themeBg, view, ground)
-        val result = CoreDisplays.inkFor(coreDisplay.theme, region, ground, sampled)
+        // The flat colour a visitor would see with no picture on screen; never core's average of
+        // the picture, which is only meaningful while the picture is actually painted.
+        val ground = flatBackgroundRgb()
+        val drawn = themeBg.visibility == View.VISIBLE && themeBg.drawable != null
+        val sampled = if (drawn) RegionInk.sample(themeBg, view, ground) else null
+        val result = CoreDisplays.inkFor(coreDisplay.theme, region, ground, sampled, drawn)
         val ink = if (muted) ShellUi.mute(result.inkRgb, palette.dark) else result.inkRgb
         view.setTextColor(ShellUi.opaque(ink))
         if (result.needsShadow) {
@@ -622,6 +625,10 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
         if (dashboard != null) return
         rootView.post { if (!isFinishing) applyRegionInk() }
     }
+
+    /** The flat colour behind the visitor screen, with no background image taken into account. */
+    private fun flatBackgroundRgb(): Int =
+        UiContrast.parseRgb(themeValue("bg_color")) ?: palette.ground
 
     /** The colour actually behind the visitor screen, averaged by core when it is an image. */
     private fun effectiveBackgroundRgb(): Int =

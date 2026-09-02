@@ -270,7 +270,12 @@ internal class DashboardView(
      * region actually sits on. A region that misses 4.5:1 gets the 40 % opposite-ink shadow.
      */
     private fun paintRegion(view: TextView, region: String, backgroundRgb: Int, muted: Boolean) {
-        val result = CoreDisplays.inkFor(coreDisplay.theme, region, backgroundRgb, backgroundRgb)
+        // The dashboard paints its own opaque surfaces, so this region's background colour is
+        // known exactly and is not the theme background core measured. Only the administrator's
+        // override outranks the local decision here.
+        val result = CoreDisplays.inkFor(
+            coreDisplay.theme, region, backgroundRgb, backgroundRgb, knownSurface = true,
+        )
         val ink = if (muted) ShellUi.mute(result.inkRgb, palette.dark) else result.inkRgb
         view.setTextColor(ShellUi.opaque(ink))
         if (result.needsShadow) {
