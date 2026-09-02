@@ -18,7 +18,14 @@ HELPER: Path
 TEST_APP: Path
 
 
-def wait_until(predicate, timeout: float = 20.0):
+# Every wait in this file is a bounded poll: a slow CI runner may take far
+# longer than a laptop to reach a state, but it must never be given a fixed
+# sleep and then asked whether the transition "already" happened.
+POLL_INTERVAL = 0.05
+POLL_TIMEOUT = 10.0
+
+
+def wait_until(predicate, timeout: float = POLL_TIMEOUT):
     deadline = time.monotonic() + timeout
     last_error: Exception | None = None
     while time.monotonic() < deadline:
@@ -28,7 +35,7 @@ def wait_until(predicate, timeout: float = 20.0):
                 return value
         except (FileNotFoundError, json.JSONDecodeError) as error:
             last_error = error
-        time.sleep(0.02)
+        time.sleep(POLL_INTERVAL)
     if last_error:
         raise AssertionError(f"condition timed out: {last_error}")
     raise AssertionError("condition timed out")
@@ -113,6 +120,9 @@ class HelperProcess:
         if stream:
             arguments += ["--test-stream", "yes"]
         arguments += extra or []
+        # Taken before the fork so it is always <= the daemon's own start, which
+        # is what the unscaled boot grace is measured from.
+        self.spawned_at = time.monotonic()
         self.process = subprocess.Popen(
             arguments,
             env=process_environment,
@@ -146,6 +156,56 @@ class HelperProcess:
             client.settimeout(1)
             client.sendto(command.encode(), str(self.socket))
             return json.loads(client.recv(512))
+
+    def wait_status(self, key: str, expected, timeout: float = POLL_TIMEOUT) -> dict:
+        """Poll status.json until `key` reads `expected`, then return the status.
+
+        The daemon forks the launcher *before* it rewrites status.json, so the
+        test app's log line routinely lands first. Reading the status file once,
+        after waiting on some other artefact, therefore races; waiting on the
+        field itself is the only ordering the daemon actually promises.
+        """
+        def observed():
+            status = read_status(self.status)
+            return status if status.get(key) == expected else None
+
+        try:
+            return wait_until(observed, timeout=timeout)
+        except AssertionError:
+            raise AssertionError(
+                f"status[{key!r}] never became {expected!r} within {timeout}s; "
+                f"last seen {read_status(self.status).get(key)!r}"
+            ) from None
+
+    def wait_at_least(self, key: str, minimum: int,
+                      timeout: float = POLL_TIMEOUT) -> dict:
+        """Poll status.json until the counter `key` reaches `minimum`."""
+        def observed():
+            status = read_status(self.status)
+            value = status.get(key)
+            return status if isinstance(value, int) and value >= minimum else None
+
+        try:
+            return wait_until(observed, timeout=timeout)
+        except AssertionError:
+            raise AssertionError(
+                f"status[{key!r}] never reached {minimum} within {timeout}s; "
+                f"last seen {read_status(self.status).get(key)!r}"
+            ) from None
+
+    def settle(self, passes: int = 4) -> dict:
+        """Force supervision passes and return the daemon's own STATUS.
+
+        The daemon answers a datagram and then runs its supervisor in the same
+        loop iteration, so a completed round-trip proves the supervisor has run
+        again since the previous reply. That is a real barrier for the "and now
+        nothing further happens" assertions, where a fixed sleep is a guess that
+        gets shorter, in daemon ticks, the slower the runner is.
+        """
+        status: dict = {}
+        for _ in range(max(2, passes)):
+            status = self.command("STATUS")
+        return status
 
     def stream_command(self, command: str) -> dict:
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
@@ -184,18 +244,21 @@ class KeepaliveTests(unittest.TestCase):
             launch_log = root / "launch.log"
             with HelperProcess(root, "auto", DB_KEEPALIVE_TEST_LOG=str(launch_log)) as helper:
                 wait_until(lambda: launch_log.exists())
-                self.assertTrue(read_status(helper.status)["armed"])
+                helper.wait_status("armed", True)
                 helper.send(b'{"protocol":1,"event":"heartbeat","unknown":true}')
-                time.sleep(0.1)
+                # Datagrams are answered in arrival order, so a completed STATUS
+                # round-trip proves the malformed heartbeat was already consumed
+                # and rejected — no sleep needs to stand in for that.
+                self.assertNotEqual(helper.command("STATUS")["state"], "healthy")
                 self.assertNotEqual(read_status(helper.status)["state"], "healthy")
                 helper.send(heartbeat(1))
-                wait_until(lambda: read_status(helper.status)["state"] == "healthy")
+                helper.wait_status("state", "healthy")
                 response = helper.command("MAINTENANCE_BEGIN 6")
                 self.assertTrue(response["ok"])
-                wait_until(lambda: read_status(helper.status)["state"] == "maintenance")
+                helper.wait_status("state", "maintenance")
                 response = helper.command("MAINTENANCE_END")
                 self.assertTrue(response["ok"])
-                wait_until(lambda: read_status(helper.status)["state"] == "healthy")
+                helper.wait_status("state", "healthy")
                 status = helper.command("STATUS")
                 self.assertEqual(status["mode"], "auto")
                 self.assertEqual(status["peer_credentials"],
@@ -208,8 +271,7 @@ class KeepaliveTests(unittest.TestCase):
             root = Path(temporary)
             launch_log = root / "launch.log"
             with HelperProcess(root, "off", DB_KEEPALIVE_TEST_LOG=str(launch_log)) as helper:
-                time.sleep(0.2)
-                status = read_status(helper.status)
+                status = helper.settle()
                 self.assertEqual(status["state"], "off")
                 self.assertFalse(status["armed"])
                 self.assertFalse(launch_log.exists())
@@ -224,10 +286,12 @@ class KeepaliveTests(unittest.TestCase):
                     root, "auto", DB_KEEPALIVE_TEST_LOG=str(launch_log)
                 ) as helper:
                     helper.send(heartbeat(1, app.pid))
-                    wait_until(lambda: read_status(helper.status)["app_pid"] == app.pid)
+                    helper.wait_status("app_pid", app.pid)
                     self.assertTrue(helper.command("MODE off")["ok"])
-                    wait_until(lambda: read_status(helper.status)["state"] == "off")
-                    time.sleep(0.1)
+                    helper.wait_status("state", "off")
+                    # Termination, if it were coming, would be driven by the
+                    # supervisor; force several passes rather than guessing.
+                    helper.settle()
                     self.assertIsNone(app.poll())
             finally:
                 if app.poll() is None:
@@ -257,10 +321,10 @@ class KeepaliveTests(unittest.TestCase):
                 self.assertTrue(kicked["running"])
                 paused = helper.stream_command("PAUSE_LEASE 30")
                 self.assertTrue(paused["enabled"])
-                wait_until(lambda: read_status(helper.status)["state"] == "maintenance")
+                helper.wait_status("state", "maintenance")
                 disabled = helper.stream_command("DISABLE")
                 self.assertFalse(disabled["enabled"])
-                wait_until(lambda: read_status(helper.status)["state"] == "waiting_heartbeat")
+                helper.wait_status("state", "waiting_heartbeat")
                 invalid = helper.stream_command("RUN /bin/sh")
                 self.assertEqual(invalid["error"], "invalid_command")
 
@@ -271,10 +335,7 @@ class KeepaliveTests(unittest.TestCase):
             script.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
             script.chmod(0o755)
             with HelperProcess(root, "on", test_exec=script) as helper:
-                wait_until(
-                    lambda: read_status(helper.status)["last_reason"]
-                    == "fixed_launcher_rejected"
-                )
+                helper.wait_status("last_reason", "fixed_launcher_rejected")
 
     def test_mode_transition_and_restart_persistence(self):
         with tempfile.TemporaryDirectory(prefix="dbh-mode-", dir="/tmp") as temporary:
@@ -287,11 +348,11 @@ class KeepaliveTests(unittest.TestCase):
                 self.assertEqual(invalid["error"], "invalid_mode")
                 self.assertEqual(helper.mode_file.read_text(encoding="utf-8"), "off\n")
                 self.assertTrue(helper.command("MODE auto")["ok"])
-                wait_until(lambda: read_status(helper.status)["armed"])
+                helper.wait_status("armed", True)
                 helper.send(heartbeat(1))
-                wait_until(lambda: read_status(helper.status)["state"] == "healthy")
+                helper.wait_status("state", "healthy")
                 self.assertTrue(helper.command("MODE off")["ok"])
-                wait_until(lambda: read_status(helper.status)["state"] == "off")
+                helper.wait_status("state", "off")
                 self.assertTrue(helper.command("MODE auto")["ok"])
                 self.assertEqual(helper.mode_file.read_text(encoding="utf-8"), "auto\n")
                 launch_count = launch_log.read_text(encoding="utf-8").count("safe=")
@@ -302,9 +363,8 @@ class KeepaliveTests(unittest.TestCase):
                     lambda: launch_log.read_text(encoding="utf-8").count("safe=")
                     > launch_count
                 )
-                status = read_status(restarted.status)
+                status = restarted.wait_status("armed", True)
                 self.assertEqual(status["mode"], "auto")
-                self.assertTrue(status["armed"])
 
     def test_mode_file_symlink_is_rejected(self):
         with tempfile.TemporaryDirectory(prefix="dbh-mode-link-", dir="/tmp") as temporary:
@@ -362,9 +422,10 @@ class KeepaliveTests(unittest.TestCase):
                     lambda: launch_log.exists()
                     and "safe=1" in launch_log.read_text(encoding="utf-8")
                 )
-                status = read_status(helper.status)
-                self.assertTrue(status["safe_mode"])
-                self.assertGreaterEqual(status["restart_count_5m"], 3)
+                # The launcher is forked before status.json is rewritten, so the
+                # safe-mode log line can precede the safe-mode status by a tick.
+                helper.wait_status("safe_mode", True)
+                helper.wait_at_least("restart_count_5m", 3)
             finally:
                 stderr = helper.stop()
             self.assertIn("restart scheduled after 20 ms", stderr)
@@ -407,11 +468,10 @@ class ColdBootTests(unittest.TestCase):
                 extra=["--test-process-file", str(processes), "--boot-grace-ms", "0"],
                 DB_KEEPALIVE_TEST_LOG=str(launch_log),
             ) as helper:
-                wait_until(
-                    lambda: read_status(helper.status)["state"] == "waiting_springboard"
-                )
-                time.sleep(0.4)
-                status = read_status(helper.status)
+                helper.wait_status("state", "waiting_springboard")
+                # The springboard gate is a state, not a deadline, so supervision
+                # passes prove it holds; no amount of sleeping proves more.
+                status = helper.settle()
                 self.assertFalse(launch_log.exists())
                 self.assertFalse(status["ui_ready"])
                 self.assertFalse(status["safe_mode"])
@@ -419,7 +479,7 @@ class ColdBootTests(unittest.TestCase):
                 self.assertEqual(status["restart_count_5m"], 0)
                 processes.write_text("SpringBoard\n", encoding="utf-8")
                 wait_until(lambda: launch_log.exists())
-                wait_until(lambda: read_status(helper.status)["ui_ready"])
+                helper.wait_status("ui_ready", True)
 
     def test_bounded_boot_grace_defers_the_first_launch(self):
         with tempfile.TemporaryDirectory(prefix="dbh-grace-", dir="/tmp") as temporary:
@@ -432,25 +492,25 @@ class ColdBootTests(unittest.TestCase):
                 extra=["--test-process-file", str(processes), "--boot-grace-ms", "900"],
                 DB_KEEPALIVE_TEST_LOG=str(launch_log),
             ) as helper:
-                wait_until(lambda: read_status(helper.status)["state"] == "boot_grace")
+                status = helper.wait_status("state", "boot_grace")
                 self.assertFalse(launch_log.exists())
                 # Deferring inside the grace is not a failure.
-                self.assertEqual(read_status(helper.status)["restart_count_5m"], 0)
-                started = time.monotonic()
-                wait_until(lambda: launch_log.exists(), timeout=5.0)
-                self.assertGreater(time.monotonic() - started, 0.2)
+                self.assertEqual(status["restart_count_5m"], 0)
+                # The boot grace is deliberately *not* scaled by --time-scale, and
+                # it runs from the daemon's own start. Measuring from the moment
+                # the test happened to observe `boot_grace` made the margin shrink
+                # to nothing on a slow runner; measure from the spawn instead, so
+                # the assertion covers the whole 900 ms grace either way.
+                wait_until(lambda: launch_log.exists(), timeout=10.0)
+                self.assertGreaterEqual(time.monotonic() - helper.spawned_at, 0.9)
 
     def test_failing_launcher_is_reported_instead_of_a_silent_startup_timeout(self):
         false_binary = fixed_failing_launcher()
         with tempfile.TemporaryDirectory(prefix="dbh-launcher-", dir="/tmp") as temporary:
             root = Path(temporary)
             with HelperProcess(root, "on", test_exec=false_binary) as helper:
-                wait_until(
-                    lambda: read_status(helper.status)["last_reason"] == "launcher_failed"
-                )
-                self.assertGreaterEqual(
-                    read_status(helper.status)["restart_count_5m"], 1
-                )
+                helper.wait_status("last_reason", "launcher_failed")
+                helper.wait_at_least("restart_count_5m", 1)
 
 
 class UnprovisionedAppTests(unittest.TestCase):
@@ -469,19 +529,21 @@ class UnprovisionedAppTests(unittest.TestCase):
                 with HelperProcess(
                     root, "on",
                     extra=["--test-process-file", str(processes),
-                           "--boot-grace-ms", "0"],
+                           "--boot-grace-ms", "0",
+                           # 500 ms nominal is 5 ms once --time-scale is applied,
+                           # so a nudge lands on the very next supervision tick
+                           # instead of being waited out.
+                           "--activate-interval-ms", "500"],
                     DB_KEEPALIVE_TEST_LOG=str(launch_log),
                 ) as helper:
-                    wait_until(
-                        lambda: read_status(helper.status)["state"]
-                        == "launch_pending_no_heartbeat"
-                    )
-                    time.sleep(0.5)
-                    status = read_status(helper.status)
-                    # Activation nudges may run, but nothing may be *launched*.
-                    if launch_log.exists():
-                        lines = launch_log.read_text(encoding="utf-8").splitlines()
-                        self.assertTrue(lines and all("activate=1" in l for l in lines))
+                    helper.wait_status("state", "launch_pending_no_heartbeat")
+                    # Wait for a nudge to actually be recorded, then let the
+                    # supervisor run on: nothing may turn into a *launch*.
+                    helper.wait_at_least("activation_nudges", 1)
+                    wait_until(lambda: launch_log.exists())
+                    status = helper.settle()
+                    lines = launch_log.read_text(encoding="utf-8").splitlines()
+                    self.assertTrue(lines and all("activate=1" in l for l in lines))
                     self.assertTrue(status["app_process_present"])
                     self.assertEqual(status["restart_count_5m"], 0)
                     self.assertFalse(status["safe_mode"])
@@ -504,23 +566,26 @@ class UnprovisionedAppTests(unittest.TestCase):
                 with HelperProcess(
                     root, "on",
                     extra=["--test-process-file", str(processes),
-                           "--boot-grace-ms", "0", "--activate-interval-ms", "20000"],
+                           # 20000 ms nominal was 200 ms scaled, so two nudges cost
+                           # nearly half a second of wall clock; 500 ms nominal is
+                           # 5 ms scaled and the count accumulates every tick.
+                           "--boot-grace-ms", "0", "--activate-interval-ms", "500"],
                     DB_KEEPALIVE_TEST_LOG=str(launch_log),
                 ) as helper:
-                    wait_until(
-                        lambda: read_status(helper.status)["state"]
-                        == "launch_pending_no_heartbeat"
-                    )
+                    helper.wait_status("state", "launch_pending_no_heartbeat")
+                    # The daemon forks the nudge before it bumps the counter and
+                    # rewrites status.json, so the log and the status file each
+                    # lead the other at times. Wait for both rather than reading
+                    # one of them the instant the other looks right.
+                    status = helper.wait_at_least("activation_nudges", 2)
                     wait_until(
                         lambda: launch_log.exists()
                         and launch_log.read_text(encoding="utf-8").count("activate=1") >= 2
                     )
-                    status = read_status(helper.status)
                     lines = launch_log.read_text(encoding="utf-8").splitlines()
                     self.assertTrue(all("activate=1" in l for l in lines))
                     self.assertEqual(status["state"], "launch_pending_no_heartbeat")
                     self.assertEqual(status["restart_count_5m"], 0)
-                    self.assertGreaterEqual(status["activation_nudges"], 2)
                     self.assertFalse(status["safe_mode"])
                     self.assertEqual(status["app_pid"], 0)
             finally:
@@ -546,26 +611,27 @@ class UnprovisionedAppTests(unittest.TestCase):
                     DB_KEEPALIVE_TEST_LOG=str(launch_log),
                 ) as helper:
                     # Startup timeouts drive the ladder into safe mode first.
-                    wait_until(lambda: read_status(helper.status)["safe_mode"] is True)
+                    helper.wait_status("safe_mode", True)
                     # Now the app is "present" (iOS relaunched it) but silent: only
                     # nudges can run, and they must stop at the cap.
                     processes.write_text(
                         f"SpringBoard\nDoorbell {app.pid}\n", encoding="utf-8"
                     )
-                    wait_until(
-                        lambda: read_status(helper.status)["launch_inhibited"] is True,
-                        timeout=30.0,
-                    )
-                    status = read_status(helper.status)
+                    status = helper.wait_status("launch_inhibited", True, timeout=30.0)
                     self.assertEqual(status["state"], "launch_inhibited")
-                    log = launch_log.read_text(encoding="utf-8")
-                    self.assertGreaterEqual(log.count("activate=1"), 1)
-                    time.sleep(0.5)
-                    self.assertEqual(
-                        launch_log.read_text(encoding="utf-8").count("activate=1"),
-                        log.count("activate=1"),
+                    wait_until(
+                        lambda: launch_log.exists()
+                        and launch_log.read_text(encoding="utf-8").count("activate=1") >= 1
                     )
+                    # `activation_nudges` is the daemon's own counter, so comparing
+                    # it across supervision passes has no race with a nudge child
+                    # that has forked but not yet appended its log line.
                     self.assertLessEqual(status["activation_nudges"], 4)
+                    settled = helper.settle()
+                    self.assertEqual(
+                        settled["activation_nudges"], status["activation_nudges"]
+                    )
+                    self.assertTrue(settled["launch_inhibited"])
             finally:
                 if app.poll() is None:
                     app.terminate()
@@ -588,7 +654,7 @@ class UnprovisionedAppTests(unittest.TestCase):
                 DB_KEEPALIVE_TEST_LOG=str(launch_log),
             ) as helper:
                 wait_until(lambda: launch_log.exists())
-                self.assertFalse(read_status(helper.status)["app_process_present"])
+                helper.wait_status("app_process_present", False)
 
 
 class RailTests(unittest.TestCase):
@@ -604,19 +670,20 @@ class RailTests(unittest.TestCase):
                 root, "auto", extra=["--disable-file", str(disable)],
                 DB_KEEPALIVE_TEST_LOG=str(launch_log),
             ) as helper:
-                wait_until(
-                    lambda: read_status(helper.status)["state"] == "disabled_by_file"
-                )
-                time.sleep(0.3)
-                status = read_status(helper.status)
+                helper.wait_status("state", "disabled_by_file")
+                status = helper.settle()
                 self.assertFalse(launch_log.exists())
                 self.assertEqual(status["mode"], "off")
                 self.assertEqual(status["configured_mode"], "auto")
                 self.assertTrue(status["disabled_by_file"])
                 self.assertFalse(status["armed"])
                 disable.unlink()
+                # The release and the relaunch happen in one supervision pass, and
+                # the launcher is forked before status.json is rewritten — so the
+                # log file can appear while the status still reads disabled. Wait
+                # on the field that is actually under test.
+                helper.wait_status("disabled_by_file", False)
                 wait_until(lambda: launch_log.exists())
-                self.assertFalse(read_status(helper.status)["disabled_by_file"])
 
     def test_a_symlinked_kill_switch_is_ignored(self):
         with tempfile.TemporaryDirectory(prefix="dbh-killlink-", dir="/tmp") as temporary:
@@ -631,7 +698,7 @@ class RailTests(unittest.TestCase):
                 DB_KEEPALIVE_TEST_LOG=str(launch_log),
             ) as helper:
                 wait_until(lambda: launch_log.exists())
-                self.assertFalse(read_status(helper.status)["disabled_by_file"])
+                helper.wait_status("disabled_by_file", False)
 
     def test_safe_mode_launch_cap_stops_relaunching_but_keeps_serving_status(self):
         with tempfile.TemporaryDirectory(prefix="dbh-cap-", dir="/tmp") as temporary:
@@ -642,13 +709,12 @@ class RailTests(unittest.TestCase):
                 DB_KEEPALIVE_TEST_LOG=str(launch_log),
             )
             try:
-                wait_until(
-                    lambda: read_status(helper.status)["state"] == "launch_inhibited",
-                    timeout=15.0,
-                )
+                # Reaching `launch_inhibited` already implies app_pid == 0, i.e.
+                # every launched child has been reaped and has therefore finished
+                # writing its line — the snapshot below cannot race one.
+                helper.wait_status("state", "launch_inhibited", timeout=15.0)
                 launches = launch_log.read_text(encoding="utf-8").count("safe=")
-                time.sleep(0.6)
-                status = read_status(helper.status)
+                status = helper.settle()
                 self.assertTrue(status["launch_inhibited"])
                 self.assertTrue(status["safe_mode"])
                 self.assertEqual(
@@ -668,15 +734,11 @@ class RailTests(unittest.TestCase):
                 root, "on", extra=["--safe-mode-launch-cap", "2"],
                 DB_KEEPALIVE_TEST_LOG=str(launch_log),
             ) as helper:
-                wait_until(
-                    lambda: read_status(helper.status)["state"] == "launch_inhibited",
-                    timeout=15.0,
-                )
+                helper.wait_status("state", "launch_inhibited", timeout=15.0)
                 self.assertTrue(helper.command("MODE off")["ok"])
-                wait_until(lambda: read_status(helper.status)["state"] == "off")
+                helper.wait_status("state", "off")
                 helper.marker.unlink()
-                wait_until(lambda: not read_status(helper.status)["safe_mode"])
-                status = read_status(helper.status)
+                status = helper.wait_status("safe_mode", False)
                 self.assertFalse(status["launch_inhibited"])
                 self.assertEqual(status["last_reason"], "safe_mode_cleared")
                 self.assertEqual(status["restart_count_5m"], 0)
@@ -691,19 +753,13 @@ class RailTests(unittest.TestCase):
                     root, "auto", DB_KEEPALIVE_TEST_LOG=str(launch_log)
                 ) as helper:
                     helper.send(heartbeat(1, app.pid))
-                    wait_until(lambda: read_status(helper.status)["state"] == "healthy")
+                    helper.wait_status("state", "healthy")
                     helper.send(heartbeat(2, app.pid, event="stopping"))
-                    wait_until(
-                        lambda: read_status(helper.status)["last_reason"] == "stopping"
-                    )
+                    helper.wait_status("last_reason", "stopping")
                     app.terminate()
                     app.wait(timeout=2)
-                    wait_until(
-                        lambda: read_status(helper.status)["last_reason"] == "clean_exit"
-                    )
-                    self.assertEqual(
-                        read_status(helper.status)["restart_count_5m"], 0
-                    )
+                    status = helper.wait_status("last_reason", "clean_exit")
+                    self.assertEqual(status["restart_count_5m"], 0)
             finally:
                 if app.poll() is None:
                     app.terminate()
@@ -719,21 +775,15 @@ class RailTests(unittest.TestCase):
                     root, "auto", DB_KEEPALIVE_TEST_LOG=str(launch_log)
                 ) as helper:
                     helper.send(heartbeat(1, app.pid))
-                    wait_until(lambda: read_status(helper.status)["state"] == "healthy")
+                    helper.wait_status("state", "healthy")
                     self.assertTrue(helper.command("MAINTENANCE_BEGIN 6")["ok"])
-                    wait_until(
-                        lambda: read_status(helper.status)["state"] == "maintenance"
-                    )
+                    helper.wait_status("state", "maintenance")
                     app.terminate()
                     app.wait(timeout=2)
-                    wait_until(
-                        lambda: read_status(helper.status)["last_reason"]
-                        == "maintenance_exit",
-                        timeout=30.0,
+                    status = helper.wait_status(
+                        "last_reason", "maintenance_exit", timeout=30.0
                     )
-                    self.assertEqual(
-                        read_status(helper.status)["restart_count_5m"], 0
-                    )
+                    self.assertEqual(status["restart_count_5m"], 0)
             finally:
                 if app.poll() is None:
                     app.terminate()
@@ -752,21 +802,19 @@ class RailTests(unittest.TestCase):
                     root, "auto", DB_KEEPALIVE_TEST_LOG=str(launch_log)
                 ) as helper:
                     helper.send(heartbeat(1, app.pid))
-                    wait_until(lambda: read_status(helper.status)["state"] == "healthy")
+                    helper.wait_status("state", "healthy")
                     self.assertTrue(helper.command("MAINTENANCE_BEGIN 8")["ok"])
-                    wait_until(
-                        lambda: read_status(helper.status)["state"] == "maintenance"
-                    )
+                    helper.wait_status("state", "maintenance")
                     helper.send(heartbeat(2, app.pid))
-                    time.sleep(0.3)
+                    # The heartbeat is a datagram on the same socket, so it is
+                    # consumed before this round-trip is answered: the kill below
+                    # is guaranteed to come after the daemon has seen it.
+                    helper.settle()
                     app.terminate()
                     app.wait(timeout=2)
-                    wait_until(
-                        lambda: read_status(helper.status)["last_reason"]
-                        == "maintenance_exit",
-                        timeout=30.0,
+                    status = helper.wait_status(
+                        "last_reason", "maintenance_exit", timeout=30.0
                     )
-                    status = read_status(helper.status)
                     self.assertEqual(status["restart_count_5m"], 0)
                     self.assertFalse(status["safe_mode"])
             finally:
@@ -811,9 +859,7 @@ class LogAndControlTests(unittest.TestCase):
                 begin = helper.control("begin", "--seconds", "30")
                 self.assertEqual(begin.returncode, 0)
                 self.assertTrue(json.loads(begin.stdout)["ok"])
-                wait_until(
-                    lambda: read_status(helper.status)["state"] == "maintenance"
-                )
+                helper.wait_status("state", "maintenance")
 
                 end = helper.control("end")
                 self.assertEqual(end.returncode, 0)
