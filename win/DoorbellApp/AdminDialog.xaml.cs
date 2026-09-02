@@ -12,11 +12,12 @@ namespace DoorbellApp
 {
     /// <summary>
     /// The single cluster 管理パスワード (spec 5.5). Core verifies it constant-time and
-    /// rate-limited, sharing the lockout with the web login. A Core that cannot answer — because
-    /// it predates the export or because the cluster has no password yet — falls back to this
-    /// device's local digest, and a successful local entry publishes that digest as the shared
-    /// secret so the migration happens on first use. Five local failures lock the keypad for ten
-    /// minutes even when core is answering.
+    /// rate-limited, sharing the lockout with the web login: &gt;0 accepted, 0 rejected, -1 locked
+    /// out, -2 no cluster password set yet. On -2 this dialog asks the operator to choose one and
+    /// publishes it with db_core_admin_password_set(c, "", new). A Core that predates the export
+    /// falls back to this device's local digest, and a successful local entry publishes that
+    /// digest as the shared secret so the migration happens on first use. Five local failures
+    /// lock the keypad for ten minutes even when core is answering.
     /// </summary>
     public partial class AdminDialog : Window
     {
@@ -27,10 +28,23 @@ namespace DoorbellApp
         public AdminDialog()
         {
             InitializeComponent();
-            Prompt.Text = L10n.T("admin.pin_prompt");
+            _settingPassword = ClusterPasswordUnset();
+            Prompt.Text = L10n.T(_settingPassword ? "admin.password_set_prompt"
+                                                  : "admin.pin_prompt");
             CancelBtn.Content = L10n.T("calling.cancel");
             KeyDown += OnPhysicalKey;
             Loaded += (sender, args) => PasswordEntry.Focus();
+        }
+
+        private readonly bool _settingPassword;
+
+        /// <summary>
+        /// True when core can verify but the cluster has no password yet, which is the state core
+        /// reports as -2. Nothing that must stay reachable may be gated while it holds.
+        /// </summary>
+        internal static bool ClusterPasswordUnset()
+        {
+            return App.Core != null && App.Core.AdminPasswordUnset;
         }
 
         private void OnPad(object sender, RoutedEventArgs e)
@@ -115,6 +129,19 @@ namespace DoorbellApp
             if (verdict == AdminPasswordVerdict.Rejected)
             {
                 CountFailure();
+                return;
+            }
+            if (verdict == AdminPasswordVerdict.LockedOut)
+            {
+                // Core owns this lockout and shares it with the web login; no local fallback.
+                Reject(L10n.T("admin.locked"));
+                return;
+            }
+            if (verdict == AdminPasswordVerdict.NotSet)
+            {
+                // First password for the whole house: whatever was typed becomes it.
+                if (App.Core.AdminPasswordSet("", password)) Accept();
+                else Reject(L10n.T("admin.password_set_failed"));
                 return;
             }
             // Core could not evaluate. A cluster that already carries a password hash must not be

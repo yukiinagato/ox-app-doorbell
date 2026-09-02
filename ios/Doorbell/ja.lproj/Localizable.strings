@@ -189,6 +189,8 @@
 "admin.panel_token" = "パネル token";
 "admin.pass" = "パスワード";
 "admin.password" = "管理パスワード";
+"admin.password_set_failed" = "管理パスワードを設定できませんでした";
+"admin.password_set_prompt" = "管理パスワードを設定してください";
 "admin.pin_prompt" = "管理パスワードを入力してください";
 "admin.pin_wrong" = "管理パスワードが違います";
 "admin.playback_fallback_hint" = "Web は HLS を即時スキップします。後段の MJPEG は時刻 0 から予熱します。MJPEG までの最大追加待機:";

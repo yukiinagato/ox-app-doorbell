@@ -825,3 +825,5 @@ ring.quick_replies: { ja: "クイック返信", en: "Quick replies", zh: "快捷
 incall.end_call: { ja: "通話終了", en: "End call", zh: "结束通话" }
 video.stats: { ja: "{codec} · {latency} ms · ±{jitter} ms · {fps} fps · drop {dropped}", en: "{codec} · {latency} ms · ±{jitter} ms · {fps} fps · drop {dropped}", zh: "{codec} · {latency} ms · ±{jitter} ms · {fps} fps · drop {dropped}" }
 version.line: { ja: "{name} · core v{core} · app v{app}", en: "{name} · core v{core} · app v{app}", zh: "{name} · core v{core} · app v{app}" }
+admin.password_set_prompt: { ja: "管理パスワードを設定してください", en: "Set the admin password", zh: "请设置管理密码" }
+admin.password_set_failed: { ja: "管理パスワードを設定できませんでした", en: "Couldn't set the admin password", zh: "无法设置管理密码" }

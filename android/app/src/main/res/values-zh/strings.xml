@@ -194,6 +194,8 @@
     <string name="admin_panel_token">面板 token</string>
     <string name="admin_pass">密码</string>
     <string name="admin_password">管理密码</string>
+    <string name="admin_password_set_failed">无法设置管理密码</string>
+    <string name="admin_password_set_prompt">请设置管理密码</string>
     <string name="admin_pin_prompt">请输入管理密码</string>
     <string name="admin_pin_wrong">管理密码错误</string>
     <string name="admin_playback_fallback_hint">Web 会立即跳过 HLS；后置 MJPEG 从零时刻开始预热。到 MJPEG 前的最大额外等待：</string>

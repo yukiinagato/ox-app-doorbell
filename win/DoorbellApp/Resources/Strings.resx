@@ -196,6 +196,8 @@
   <data name="admin_panel_token" xml:space="preserve"><value>パネル token</value></data>
   <data name="admin_pass" xml:space="preserve"><value>パスワード</value></data>
   <data name="admin_password" xml:space="preserve"><value>管理パスワード</value></data>
+  <data name="admin_password_set_failed" xml:space="preserve"><value>管理パスワードを設定できませんでした</value></data>
+  <data name="admin_password_set_prompt" xml:space="preserve"><value>管理パスワードを設定してください</value></data>
   <data name="admin_pin_prompt" xml:space="preserve"><value>管理パスワードを入力してください</value></data>
   <data name="admin_pin_wrong" xml:space="preserve"><value>管理パスワードが違います</value></data>
   <data name="admin_playback_fallback_hint" xml:space="preserve"><value>Web は HLS を即時スキップします。後段の MJPEG は時刻 0 から予熱します。MJPEG までの最大追加待機:</value></data>
