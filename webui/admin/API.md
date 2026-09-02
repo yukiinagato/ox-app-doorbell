@@ -508,6 +508,12 @@ any extra field, or a renamed label, means an administrator has adopted the door
 Use it to tell "the station is offline" (`configured: true`, `served_by: null` — show the tile
 greyed) apart from "no station at all".
 
+`served_by` and `peers[].status` come from one liveness map built once per status response, so a
+node named in `served_by` is always `alive` in `peers[]` and a node in any other state is never
+named. A configured device the mesh has not seen is reported `offline` and serves no door. A
+station that leaves and returns keeps its node id and refreshes its existing entry — including
+after a restart that reset its heartbeat counters — instead of appearing twice.
+
 ## Returning from the incoming-call screen
 
 `call.indoor.return_s` (5..600 seconds, default 60) and its per-device override

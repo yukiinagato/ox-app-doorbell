@@ -7,6 +7,7 @@
 #include <unistd.h>
 
 #include <cstdio>
+#include <functional>
 #include <memory>
 #include <random>
 #include <string>
@@ -2190,4 +2191,98 @@ TEST_CASE("calls: a monitor dialog leaves a ringing call ringing") {
 
   station.node->stop();
   panel.node->stop();
+}
+
+TEST_CASE("doors: served_by and the peer list never disagree about a station") {
+  // Device finding: /api/status listed a door station as "offline" in peers[] while
+  // doors["door-mini3"].served_by named that same station, and the node was answering HTTP the
+  // whole time. served_by is documented as the *alive* station, so the two views contradicted
+  // each other. They now read one liveness map, built once per status document.
+  NFleet f;
+  auto& panel = f.add("I:1", "living", "indoor_panel", "", /*seed_cfg=*/true);
+  auto& station = f.add("A:1", "mini3", "door_station", "door-mini3", /*seed_cfg=*/false);
+  REQUIRE(panel.node->start());
+  REQUIRE(station.node->start());
+
+  struct View {
+    std::string served_by;
+    std::string peer_status;
+    bool has_door = false;
+  };
+  auto view = [&](Node& node, const std::string& door, const std::string& peer_id) {
+    auto status = json::parse(node.statusJson());
+    REQUIRE(status);
+    View out;
+    const cJSON* entry = json::get(json::get(status.get(), "doors"), door.c_str());
+    out.has_door = cJSON_IsObject(entry);
+    if (out.has_door) {
+      const cJSON* served = json::get(entry, "served_by");
+      out.served_by = cJSON_IsString(served) ? served->valuestring : "";
+    }
+    const cJSON* peer = nullptr;
+    cJSON_ArrayForEach(peer, json::get(status.get(), "peers")) {
+      if (json::getString(peer, "id") == peer_id) out.peer_status = json::getString(peer, "status");
+    }
+    return out;
+  };
+  const std::string station_id = station.node->nodeId();
+  auto settle = [&](const std::function<bool(const View&)>& done) {
+    for (int i = 0; i < 600; i++) {
+      f.run(50);
+      if (done(view(*panel.node, "door-mini3", station_id))) return true;
+    }
+    return false;
+  };
+  // Whatever the state, the two halves of the status document must tell the same story.
+  auto consistent = [](const View& seen) {
+    if (!seen.served_by.empty() && seen.peer_status != "alive") return false;
+    if (seen.peer_status != "alive" && !seen.served_by.empty()) return false;
+    return true;
+  };
+
+  REQUIRE(settle([&](const View& seen) { return seen.served_by == station_id; }));
+  {
+    const View seen = view(*panel.node, "door-mini3", station_id);
+    CHECK(seen.served_by == station_id);
+    CHECK(seen.peer_status == "alive");
+    CHECK(consistent(seen));
+  }
+
+  // Flip the station offline: served_by must go null as soon as the peer stops being alive.
+  f.net.partition({{"I:1"}, {"A:1"}});
+  REQUIRE(settle([&](const View& seen) { return seen.served_by.empty(); }));
+  {
+    const View seen = view(*panel.node, "door-mini3", station_id);
+    CHECK(seen.served_by.empty());
+    CHECK(seen.peer_status != "alive");
+    // The door itself stays: it is configured, it simply has nobody serving it right now.
+    CHECK(seen.has_door);
+    CHECK(consistent(seen));
+  }
+
+  // ...and back. The same node id returns rather than arriving as a second entry.
+  f.net.heal();
+  REQUIRE(settle([&](const View& seen) { return seen.served_by == station_id; }));
+  {
+    const View seen = view(*panel.node, "door-mini3", station_id);
+    CHECK(seen.peer_status == "alive");
+    CHECK(consistent(seen));
+    auto status = json::parse(panel.node->statusJson());
+    REQUIRE(status);
+    size_t entries = 0;
+    const cJSON* peer = nullptr;
+    cJSON_ArrayForEach(peer, json::get(status.get(), "peers")) {
+      if (json::getString(peer, "id") == station_id) entries++;
+    }
+    CHECK(entries == 1);
+  }
+
+  // The agreement holds while the cluster keeps running, not only at the moments checked above.
+  for (int i = 0; i < 40; i++) {
+    f.run(100);
+    CHECK(consistent(view(*panel.node, "door-mini3", station_id)));
+  }
+
+  panel.node->stop();
+  station.node->stop();
 }

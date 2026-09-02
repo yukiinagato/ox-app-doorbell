@@ -2077,6 +2077,9 @@ struct Node::Impl {
   // One lockout counter for every surface that checks the administrator password: the web login,
   // the C ABI a native settings screen uses, and anything else added later. Five failures buy a
   // ten-minute pause, so a four-digit code cannot be walked through from the LAN.
+  // Scratch used while building one status document: node id -> alive | suspect | dead | offline.
+  // served_by and the peers array both read it, so the two can never contradict each other.
+  std::map<std::string, std::string> status_peer_status;
   // Remembered when there is no SIP backend to hold it, so the toggle keeps its position.
   bool mic_muted_without_sip = false;
   int admin_auth_failures = 0;
@@ -7716,19 +7719,53 @@ struct Node::Impl {
       cJSON* doors = json::addObj(o.get(), "doors");
       // The node id of the alive door station serving this door, or empty. Shells need the
       // difference between "the station is offline" and "no station serves this door at all".
+      //
+      // served_by and the peers array read the same map, built once here. They used to derive
+      // liveness separately -- served_by from mesh->peers() only, the peers array from that plus
+      // a configured-devices fallback -- so a device that had left and returned under a new node
+      // id could be named as serving a door by one view while the other listed it as offline.
+      // One map cannot disagree with itself.
+      auto& liveness = status_peer_status;
+      liveness.clear();
+      if (mesh) {
+        for (const auto& peer : mesh->peers()) liveness[peer.id] = peer.status;
+      }
+      liveness[node_id] = "alive";
+      {
+        // A configured device the mesh has never seen is offline, and stays out of served_by.
+        const cJSON* known = json::get(cfg.get(), "devices");
+        const cJSON* device = nullptr;
+        cJSON_ArrayForEach(device, known) {
+          if (device->string && !liveness.count(device->string))
+            liveness[device->string] = "offline";
+        }
+      }
+      auto peer_alive = [&](const std::string& id) {
+        auto it = liveness.find(id);
+        return it != liveness.end() && it->second == "alive";
+      };
       auto serving_station = [&](const std::string& door_id) {
         if (door_id.empty()) return std::string();
-        if (opts.role == "door_station" && opts.door == door_id) return node_id;
-        if (!mesh) return std::string();
-        for (const auto& peer : mesh->peers()) {
-          if (peer.status != "alive" || peer.id == node_id) continue;
-          const cJSON* device = cfgAt("devices." + peer.id);
+        if (opts.role == "door_station" && opts.door == door_id && peer_alive(node_id))
+          return node_id;
+        for (const auto& entry : liveness) {
+          if (entry.first == node_id || entry.second != "alive") continue;
+          const cJSON* device = cfgAt("devices." + entry.first);
           std::string role = json::getString(device, "role");
-          if (role.empty()) role = peer.role;
-          if (role != "door_station") continue;
           std::string peer_door = json::getString(device, "door");
-          if (peer_door.empty()) peer_door = peer.door;
-          if (peer_door == door_id) return peer.id;
+          if (role.empty() || peer_door.empty()) {
+            // Fall back to what the peer advertises while its devices.<id> entry catches up.
+            if (mesh) {
+              for (const auto& peer : mesh->peers()) {
+                if (peer.id != entry.first) continue;
+                if (role.empty()) role = peer.role;
+                if (peer_door.empty()) peer_door = peer.door;
+                break;
+              }
+            }
+          }
+          if (role != "door_station" || peer_door != door_id) continue;
+          return entry.first;
         }
         return std::string();
       };
@@ -7768,7 +7805,7 @@ struct Node::Impl {
       if (opts.role == "door_station") add_station(node_id, opts.door, opts.name);
       if (mesh) {
         for (const auto& peer : mesh->peers()) {
-          if (peer.status != "alive") continue;
+          if (!peer_alive(peer.id)) continue;
           const cJSON* device = cfgAt("devices." + peer.id);
           std::string role = json::getString(device, "role");
           if (role.empty()) role = peer.role;
@@ -7794,7 +7831,9 @@ struct Node::Impl {
         visible_peers.insert(p.id);
         cJSON* e = json::pushObj(arr);
         json::set(e, "id", p.id);
-        json::set(e, "status", p.status);
+        // The same map served_by consulted, so the two views cannot disagree about a node.
+        json::set(e, "status", status_peer_status.count(p.id) ? status_peer_status[p.id]
+                                                              : p.status);
         json::set(e, "role", p.role);
         json::set(e, "sw", p.sw_version);
         json::setBool(e, "self", p.id == node_id);
@@ -7862,7 +7901,8 @@ struct Node::Impl {
       if (id == node_id || visible_peers.count(id)) continue;
       cJSON* e = json::pushObj(arr);
       json::set(e, "id", id);
-      json::set(e, "status", "offline");
+      json::set(e, "status", status_peer_status.count(id) ? status_peer_status[id]
+                                                          : std::string("offline"));
       json::set(e, "role", json::getString(configured_device, "role"));
       json::set(e, "name", json::getString(configured_device, "name", id.substr(0, 8)));
       json::setBool(e, "self", false);
