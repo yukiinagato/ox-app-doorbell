@@ -162,6 +162,34 @@ assert.deepStrictEqual(
   L.doorUnlockEntries("d_front", "auto", { show_button: true, command: "gate" }),
   { entries: [{ key: "doors.d_front.unlock", value: { command: "gate" } }], dels: [] });
 
+// ---- a live door with no configuration entry is still listed and still addressable ------------
+// The regression: a cluster founded by a door station had no doors.* entries at all, so the tab
+// listed nothing and every door-keyed surface had nothing to target.
+const doorStatus = { doors: {
+  d_front: { label: "Front door", configured: true },
+  d_annex: { label: "annex-panel", configured: false }
+} };
+const rows = L.doorRows({ doors: { d_front: { label: { ja: "正面玄関" } } } }, doorStatus);
+assert.deepStrictEqual(rows, [
+  { id: "d_front", configured: true, label: "正面玄関" },
+  { id: "d_annex", configured: false, label: "annex-panel" }
+]);
+// A configured door with no label of its own falls back to what core reports, then to its id.
+assert.strictEqual(L.doorRows({ doors: { d_x: {} } }, { doors: { d_x: { label: "front-panel",
+  configured: true } } })[0].label, "front-panel");
+assert.strictEqual(L.doorRows({ doors: { d_x: {} } }, {})[0].label, "d_x");
+// A door reported as configured is never listed twice, whichever side it came from.
+assert.strictEqual(L.doorRows({ doors: { d_front: {} } }, doorStatus).length, 2);
+assert.deepStrictEqual(L.doorRows({}, {}), []);
+// An unconfigured door still resolves an announcement and an unlock model rather than throwing.
+assert.strictEqual(L.effectiveNoticeModel("d_annex", { doors: {} }, Date.now()).active, false);
+assert.strictEqual(L.doorUnlockModel("d_annex", { doors: {} }, doorStatus).mode, "auto");
+const adminDoorsSource = fs.readFileSync(path.join(__dirname, "../admin/app.js"), "utf8");
+assert.ok(adminDoorsSource.includes("admin.door_unconfigured"),
+  "the doors tab must mark a door that has no configuration entry");
+assert.ok(/L\.doorRows\(S\.cfg, S\.status\)/.test(adminDoorsSource),
+  "the doors tab must render live doors, not only configured ones");
+
 // ---- advisory warnings ---------------------------------------------------------------------------
 assert.deepStrictEqual(L.writeWarnings({ ok: true }), []);
 assert.deepStrictEqual(L.writeWarnings({ ok: true, warnings: [
@@ -192,7 +220,7 @@ const referenced = [
   "notice.target", "notice.target_global", "notice.scope_global", "notice.presets_title",
   "notice.preset_add", "notice.presets_full", "notice.preset_invalid",
   "unlock.title", "unlock.auto", "unlock.show", "unlock.hide", "unlock.not_configured",
-  "unlock.command", "purpose.enabled", "purpose.disabled"
+  "unlock.command", "purpose.enabled", "purpose.disabled", "admin.door_unconfigured"
 ].concat(L.INK_REGIONS.map((region) => "theme.region_" + region));
 for (const language of ["ja", "en", "zh"]) {
   const catalog = JSON.parse(fs.readFileSync(

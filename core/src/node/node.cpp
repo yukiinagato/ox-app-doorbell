@@ -2829,8 +2829,25 @@ struct Node::Impl {
     return entry != nullptr && json::getBool(entry, "enabled", true);
   }
 
-  bool doorExists(const std::string& door) const {
-    return cJSON_IsObject(json::get(json::get(cfg.get(), "doors"), door.c_str()));
+  // A door is addressable when it is configured OR when a live door station is serving it. The
+  // second case is the degraded one an older configuration leaves behind: the tile is on screen,
+  // so posting an announcement to it must work rather than reporting "unknown door".
+  bool doorExists(const std::string& door) {
+    if (door.empty()) return false;
+    if (cJSON_IsObject(json::get(json::get(cfg.get(), "doors"), door.c_str()))) return true;
+    if (opts.role == "door_station" && opts.door == door) return true;
+    if (!mesh) return false;
+    for (const auto& peer : mesh->peers()) {
+      if (peer.status != "alive") continue;
+      const cJSON* device = cfgAt("devices." + peer.id);
+      std::string role = json::getString(device, "role");
+      if (role.empty()) role = peer.role;
+      if (role != "door_station") continue;
+      std::string peer_door = json::getString(device, "door");
+      if (peer_door.empty()) peer_door = peer.door;
+      if (peer_door == door) return true;
+    }
+    return false;
   }
 
   bool setDoorNoticeOnLoop(const std::string& door, const std::string& text, int64_t expires_ms) {
@@ -5807,6 +5824,31 @@ struct Node::Impl {
       config->mutate(identity);
       if (!config->lastMutationCommitted()) return false;
     }
+    return ensureOwnDoorEntry();
+  }
+
+  // A cluster founded by a door station used to end up with devices.<id>.door pointing at a door
+  // that had no doors.<id> entry at all. Everything keyed by door -- announcements, unlock
+  // visibility, tiles -- then had nothing to target, and only the cluster-wide notice worked.
+  //
+  // The entry is created only when it is absent, so an administrator's labels are never
+  // overwritten; renaming or reassigning the door afterwards is the Admin doors tab's job.
+  bool ensureOwnDoorEntry() {
+    if (opts.role != "door_station" || opts.door.empty()) return true;
+    // Only a paired node writes cluster configuration: an unpaired device would seed a door into
+    // a cluster it is about to join and then win the merge with a name nobody chose.
+    if (!mesh || !mesh->isPaired()) return true;
+    const std::string key = "doors." + opts.door;
+    if (cfgAt(key)) return true;
+    auto entry = json::obj();
+    cJSON* label = json::addObj(entry.get(), "label");
+    // The device name is the only thing the operator has actually chosen at first run; the door
+    // id is a generated fallback and reads like one.
+    const std::string name = opts.name.empty() ? opts.door : opts.name;
+    for (const char* lang : {"ja", "en", "zh"}) json::set(label, lang, name);
+    config->mutate({{key, json::dump(entry.get()), false}});
+    if (!config->lastMutationCommitted()) return false;
+    DB_LOGI(kTag, "created the missing door entry " + key + " for this door station");
     return true;
   }
 
@@ -7194,6 +7236,10 @@ struct Node::Impl {
       emitPairingState();
       return;
     }
+    // Founding or joining is the other moment this node becomes able to write cluster
+    // configuration, so the door entry is ensured here as well as at startup.
+    if (!ensureOwnDoorEntry())
+      DB_LOGW(kTag, "could not create the door entry for this door station");
     emitPairedEvent();
     emitPairingState();
   }
@@ -7439,17 +7485,48 @@ struct Node::Impl {
 
     {
       cJSON* doors = json::addObj(o.get(), "doors");
-      const cJSON* configured_doors = json::get(cfg.get(), "doors");
-      const cJSON* door = nullptr;
-      cJSON_ArrayForEach(door, configured_doors) {
-        if (!door->string) continue;
-        const std::string id = door->string;
+      auto add_door = [&](const std::string& id, const cJSON* configured,
+                          const std::string& fallback_label) {
+        if (id.empty() || json::get(doors, id.c_str())) return;
         cJSON* entry = json::addObj(doors, id.c_str());
-        json::set(entry, "label", labelIn(json::get(door, "label"), "ja"));
+        const std::string label = labelIn(json::get(configured, "label"), "ja");
+        json::set(entry, "label", label.empty() ? fallback_label : label);
+        // configured:false means the door is live on the mesh but has no doors.<id> entry yet.
+        // Shells still render the tile and can still address it; the Admin doors tab is where
+        // it gets a name.
+        json::setBool(entry, "configured", configured != nullptr);
         auto notice = effectiveDoorNoticeDoc(id);
         if (notice) json::setItem(entry, "notice", std::move(notice));
         else json::setItem(entry, "notice", json::Doc(cJSON_CreateNull()));
         json::setItem(entry, "unlock", doorUnlockDoc(id));
+      };
+      const cJSON* configured_doors = json::get(cfg.get(), "doors");
+      const cJSON* door = nullptr;
+      cJSON_ArrayForEach(door, configured_doors) {
+        if (door->string) add_door(door->string, door, door->string);
+      }
+      // A door referenced by a live door station but missing from configuration would otherwise
+      // be invisible here, and every door-keyed surface would have nothing to target. Degrade
+      // to an unconfigured entry instead of dropping the door.
+      auto add_station = [&](const std::string& id, const std::string& door_id,
+                             const std::string& advertised_name) {
+        if (door_id.empty()) return;
+        const cJSON* device = cfgAt("devices." + id);
+        std::string name = json::getString(device, "name", advertised_name);
+        add_door(door_id, cfgAt("doors." + door_id), name.empty() ? door_id : name);
+      };
+      if (opts.role == "door_station") add_station(node_id, opts.door, opts.name);
+      if (mesh) {
+        for (const auto& peer : mesh->peers()) {
+          if (peer.status != "alive") continue;
+          const cJSON* device = cfgAt("devices." + peer.id);
+          std::string role = json::getString(device, "role");
+          if (role.empty()) role = peer.role;
+          if (role != "door_station") continue;
+          std::string door_id = json::getString(device, "door");
+          if (door_id.empty()) door_id = peer.door;
+          add_station(peer.id, door_id, peer.id.substr(0, 8));
+        }
       }
       cJSON* notice_config = json::addObj(o.get(), "notice");
       const cJSON* global = json::get(json::get(cfg.get(), "notice"), "global");

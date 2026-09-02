@@ -108,6 +108,7 @@
   <data name="admin_door_call_sound" xml:space="preserve"><value>门口机呼叫音</value></data>
   <data name="admin_door_list" xml:space="preserve"><value>门口</value></data>
   <data name="admin_door_or_device" xml:space="preserve"><value>门口 / 设备</value></data>
+  <data name="admin_door_unconfigured" xml:space="preserve"><value>未配置</value></data>
   <data name="admin_doors" xml:space="preserve"><value>门口/建筑</value></data>
   <data name="admin_drop_here" xml:space="preserve"><value>将文件拖放到此处或点击选择</value></data>
   <data name="admin_duty" xml:space="preserve"><value>职责</value></data>

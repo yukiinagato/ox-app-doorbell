@@ -941,6 +941,7 @@ unlock.show: { ja: "常に表示", en: "Always show", zh: "始终显示" }
 unlock.hide: { ja: "表示しない", en: "Never show", zh: "不显示" }
 unlock.not_configured: { ja: "開錠の動作が設定されていません", en: "No unlock action is configured", zh: "尚未配置开锁动作" }
 unlock.command: { ja: "送信するコマンド", en: "Command sent", zh: "发送的命令" }
+admin.door_unconfigured: { ja: "未設定", en: "Not set up", zh: "未配置" }
 purpose.enabled: { ja: "表示する", en: "Shown", zh: "显示" }
 purpose.disabled: { ja: "非表示", en: "Hidden", zh: "隐藏" }
 

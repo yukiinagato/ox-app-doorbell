@@ -401,3 +401,19 @@ it: wording, icon and order survive being switched off and back on. Disabled pur
 from the panel contract's `purposes` list and cannot be attached to a call. A door station still
 showing a stale button rings anyway, without the purpose — the visitor is never punished for a
 configuration change they cannot see. The 用件 tab offers a toggle alongside delete.
+
+## Doors always exist for a live door station
+
+A door station whose `boot.json` names a door creates `doors.<door>` itself when the entry is
+absent — on founding or joining a cluster and on every later start while paired — labelling it
+with the device name in all three languages. Before this, a cluster founded by a door station had
+no `doors.*` entries at all: `status.doors` was `{}`, `POST /api/doors/<id>/notice` answered
+`rejected`, and only the cluster-wide `POST /api/notice` worked. The entry is only ever created,
+never rewritten, so renaming a door, giving it a building, or reassigning the station in the 門口
+tab survives every restart.
+
+`status.doors` also lists any door served by an **alive door-station peer** that has no
+configuration entry yet, with `"configured": false` and the device's name as the label. Render
+those tiles normally — they are addressable, and the first announcement or unlock write creates the
+entry, after which the door reports `configured`. Offer the 門口 tab as the place to name it. A
+door nobody serves and nothing configures stays unknown and is refused with `400 rejected`.

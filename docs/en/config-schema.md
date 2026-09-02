@@ -447,6 +447,21 @@ cluster scope and under `devices.<id>.local.display`. The published contract add
 `follow_system`, which tells a shell to prefer the operating system's own setting; platforms
 without one (iOS 5, Android before 10) use the schedule result instead.
 
+A door station whose `boot.json` names a door creates `doors.<door>` itself when the entry is
+absent — on founding or joining a cluster and on every later start while paired — labelling it
+with the device name in all three languages. Without it a freshly founded cluster had
+`devices.<id>.door` pointing at a door that did not exist, `status.doors` was empty, and every
+door-keyed surface (announcements, unlock visibility, tiles) had nothing to address. The entry is
+only ever created, never rewritten: rename it, give it a building, or reassign the station in the
+Admin 門口 tab and those edits survive every restart. An indoor panel owns no door and seeds
+nothing.
+
+`status.doors` additionally lists any door served by an **alive door-station peer** that has no
+configuration entry yet, marked `"configured": false` and labelled with that device's name. An
+installation configured before this behaviour existed therefore still renders its tiles and still
+accepts an announcement for them; the first write creates the entry and it reports `configured`
+from then on. A door nobody serves and nothing configures remains unknown and is refused.
+
 ## Time, power, and announcements
 
 The bundled time-zone table lives in `core/src/util/tz.{h,cpp}` and covers the zones the settings

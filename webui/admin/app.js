@@ -1558,6 +1558,37 @@ var AdminLogic = (function () {
     return wrapped;
   }
 
+  /* Every door the administrator can act on: the configured ones, then any door a live door
+   * station is serving that has no entry yet. Core reports the second kind with
+   * configured:false so an installation predating door seeding still shows its tiles. */
+  function doorRows(cfg, status) {
+    var configured = isObj(cfg) && isObj(cfg.doors) ? cfg.doors : {};
+    var reported = isObj(status) && isObj(status.doors) ? status.doors : {};
+    var rows = [], seen = {}, id;
+    for (id in configured) {
+      if (!own(configured, id)) continue;
+      seen[id] = true;
+      rows.push({ id: id, configured: true,
+                  label: labelOfDoor(configured[id], id, reported[id]) });
+    }
+    for (id in reported) {
+      if (!own(reported, id) || seen[id]) continue;
+      if (reported[id] && reported[id].configured === true) continue;
+      rows.push({ id: id, configured: false,
+                  label: typeof reported[id].label === "string" && reported[id].label
+                    ? reported[id].label : id });
+    }
+    return rows;
+  }
+
+  function labelOfDoor(entry, id, reported) {
+    var label = labelOf(entry, "ja", "");
+    if (label) return label;
+    if (isObj(reported) && typeof reported.label === "string" && reported.label)
+      return reported.label;
+    return id;
+  }
+
   /* doors.<id>.unlock.show_button is a three-way choice: leave it to core (show the control when
    * an unlock action exists), always show it, or always hide it. */
   function doorUnlockEntries(door, mode, existing) {
@@ -2366,6 +2397,7 @@ var AdminLogic = (function () {
     NOTICE_PRESET_MAX: NOTICE_PRESET_MAX, noticePresetEntries: noticePresetEntries,
     noticePresetList: noticePresetList, effectiveNoticeModel: effectiveNoticeModel,
     doorUnlockEntries: doorUnlockEntries, doorUnlockModel: doorUnlockModel,
+    doorRows: doorRows,
     writeWarnings: writeWarnings,
     webSosEntries: webSosEntries, runtimeHealthRows: runtimeHealthRows,
     flattenConfig: flattenConfig, applyKey: applyKey, deleteKey: deleteKey,
@@ -2684,12 +2716,17 @@ if (typeof document !== "undefined") (function () {
                         ink_override: {},
                         call_button_bg: "#7F5E3D", call_button_ink: "light" } },
     doors: {
-      d_front: { label: "Front door", notice: null,
+      d_front: { label: "Front door", configured: true, notice: null,
                  unlock: { configured: true, command: "unlock", show_button: true,
                            source: "default" } },
-      d_back: { label: "Back door", notice: null,
+      d_back: { label: "Back door", configured: true, notice: null,
                 unlock: { configured: false, command: "", show_button: false,
-                          source: "default" } } },
+                          source: "default" } },
+      // A door a live station serves that configuration has never heard of: the tile still
+      // renders and is still addressable, and naming it is the doors tab's job.
+      d_annex: { label: "annex-panel", configured: false, notice: null,
+                 unlock: { configured: false, command: "", show_button: false,
+                           source: "default" } } },
     notice: { global_active: false },
     call: { state: "idle", mic_muted: false },
     ui_manifest: L.defaultUiManifest("door_station"),
@@ -2739,6 +2776,8 @@ if (typeof document !== "undefined") (function () {
                            command: configured ? "unlock" : "",
                            show_button: forced === null ? configured : forced,
                            source: forced === null ? "default" : "admin" };
+      // Core reports a door as configured once an entry exists, however it came to exist.
+      doors[id].configured = !!((MOCK_CFG.doors || {})[id]);
       var notice = ((MOCK_CFG.doors || {})[id] || {}).notice ||
                    ((MOCK_CFG.notice || {}).global || null);
       doors[id].notice = notice || null;
@@ -2818,6 +2857,12 @@ if (typeof document !== "undefined") (function () {
     }
     if (/^\/api\/doors\/[^\/]+\/notice$/.test(p)) {
       var noticeDoor = decodeURIComponent(p.split("/")[3]);
+      // A door served by a live station is addressable even before it has a config entry; the
+      // first write creates one, exactly as core does.
+      if (!(MOCK_CFG.doors || {})[noticeDoor] && (MOCK_STATUS.doors || {})[noticeDoor]) {
+        MOCK_CFG.doors = MOCK_CFG.doors || {};
+        MOCK_CFG.doors[noticeDoor] = { label: { ja: MOCK_STATUS.doors[noticeDoor].label } };
+      }
       var doorEntry = (MOCK_CFG.doors || {})[noticeDoor];
       if (!doorEntry) return setTimeout(function () { cb(400, { ok: false, err: "rejected" }); }, 0);
       if (method === "DELETE") { delete doorEntry.notice; return ok({ ok: true }); }
@@ -3760,11 +3805,16 @@ if (typeof document !== "undefined") (function () {
          "<th>ID</th><th>" + esc(t("admin.label_ja")) + "</th><th>" +
          esc(t("admin.building_assign")) + "</th><th>" + esc(t("notice.title")) +
          "</th><th>" + esc(t("unlock.title")) + "</th><th></th></tr></thead><tbody>";
-    for (var d in ds) {
+    L.doorRows(S.cfg, S.status).forEach(function (row) {
+      var d = row.id;
       var noticeModel = L.effectiveNoticeModel(d, S.cfg, new Date().getTime());
       var unlockModel = L.doorUnlockModel(d, S.cfg, S.status);
-      h += "<tr><td class='dim'>" + esc(d) + "</td><td>" + esc(doorLabel(d)) + "</td><td>" +
-           esc(ds[d].building ? L.labelOf(bs[ds[d].building], LANG, ds[d].building) : "—") +
+      h += "<tr" + (row.configured ? "" : " class='offline'") + "><td class='dim'>" + esc(d) +
+           "</td><td>" + esc(row.label) +
+           (row.configured ? "" : " <span class='tag warn'>" +
+             esc(t("admin.door_unconfigured")) + "</span>") + "</td><td>" +
+           esc((ds[d] && ds[d].building) ?
+             L.labelOf(bs[ds[d].building], LANG, ds[d].building) : "—") +
            "</td><td>" + (noticeModel.active ?
              "<span class='tag ok'>" +
              esc(noticeModel.scope === "global" ? t("notice.scope_global") : t("notice.active")) +
@@ -3787,9 +3837,9 @@ if (typeof document !== "undefined") (function () {
            (noticeModel.active && noticeModel.scope === "door" ?
              " <button class='btn2 danger' data-act='noticeClear' data-id='" +
              esc(d) + "'>" + esc(t("notice.clear")) + "</button>" : "") +
-           " <button class='btn2 danger' data-act='delD' data-id='" + esc(d) + "'>" +
-           esc(t("admin.delete")) + "</button></td></tr>";
-    }
+           (row.configured ? " <button class='btn2 danger' data-act='delD' data-id='" + esc(d) +
+             "'>" + esc(t("admin.delete")) + "</button>" : "") + "</td></tr>";
+    });
     h += "</tbody></table></div>";
 
     // Announcement presets: the same list the indoor dialog and the editor below render.

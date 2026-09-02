@@ -101,6 +101,7 @@
 "admin.door_call_sound" = "Door-station call sound";
 "admin.door_list" = "Doors";
 "admin.door_or_device" = "Door / device";
+"admin.door_unconfigured" = "Not set up";
 "admin.doors" = "Doors & Buildings";
 "admin.drop_here" = "Drop a file here or click to choose";
 "admin.duty" = "Duty";

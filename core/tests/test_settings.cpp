@@ -1,3 +1,6 @@
+#include <unistd.h>
+
+#include <cstdio>
 #include <memory>
 #include <string>
 #include <vector>
@@ -32,6 +35,8 @@ struct SettingsNode {
     options.enable_beacon = false;
     options.http_port = 0;
     options.seed_default_config = seed_defaults;
+    // A non-zero PSK is what "paired" means, which is the state these settings are written in.
+    options.psk.fill(0x5a);
     NodeDeps deps;
     deps.clock = &clock;
     deps.loop = &loop;
@@ -109,6 +114,20 @@ struct SettingsNode {
 int64_t utcMsForAppearance(int year, int month, int day, int hour, int minute) {
   return tz::daysFromCivil(year, month, day) * 86'400'000LL + hour * 3'600'000LL +
          minute * 60'000LL;
+}
+
+std::string settingsTempDir() {
+  char path[] = "/tmp/doorbell_settings_doors_XXXXXX";
+  char* created = mkdtemp(path);
+  REQUIRE(created != nullptr);
+  return created;
+}
+
+void removeSettingsTempDir(const std::string& dir) {
+  for (const char* name : {"doorbell.db", "doorbell.db-wal", "doorbell.db-shm"})
+    std::remove((dir + "/" + name).c_str());
+  ::rmdir((dir + "/assets").c_str());
+  ::rmdir(dir.c_str());
 }
 
 }  // namespace
@@ -715,4 +734,108 @@ TEST_CASE("theme: a hard-to-read colour is saved and reported, never refused") {
   REQUIRE(cJSON_IsArray(json::get(leaf.get(), "warnings")));
   CHECK(json::getString(cJSON_GetArrayItem(json::get(leaf.get(), "warnings"), 0), "property") ==
         "clock");
+}
+
+TEST_CASE("doors: a door station founding a cluster gets a door entry to target") {
+  // The regression: devices.<id>.door pointed at a door that had no doors.<id> entry, so
+  // status.doors was empty and every door-keyed surface had nothing to address.
+  SettingsNode fleet("door_station", "d_front");
+  CHECK(fleet.at("doors.d_front") != nullptr);
+  CHECK(fleet.stringAt("doors.d_front.label.ja") == "settings");
+  CHECK(fleet.stringAt("doors.d_front.label.en") == "settings");
+  CHECK(fleet.stringAt("doors.d_front.label.zh") == "settings");
+  CHECK(fleet.stringAt("devices." + fleet.node->nodeId() + ".door") == "d_front");
+
+  auto status = fleet.status();
+  const cJSON* entry = json::get(json::get(status.get(), "doors"), "d_front");
+  REQUIRE(cJSON_IsObject(entry));
+  CHECK(json::getBool(entry, "configured"));
+  CHECK(json::getString(entry, "label") == "settings");
+
+  // Everything keyed by door now has a target.
+  REQUIRE(fleet.node->setDoorNotice("d_front", "Side gate today", 0));
+  CHECK(fleet.stringAt("doors.d_front.notice.text") == "Side gate today");
+
+  // An indoor panel owns no door and seeds nothing.
+  SettingsNode indoor("indoor_panel", "");
+  CHECK(indoor.at("doors") == nullptr);
+  auto indoor_status = indoor.status();
+  const cJSON* indoor_doors = json::get(indoor_status.get(), "doors");
+  REQUIRE(cJSON_IsObject(indoor_doors));
+  CHECK(cJSON_GetArraySize(indoor_doors) == 0);
+}
+
+TEST_CASE("doors: seeding a door entry never overwrites what an administrator wrote") {
+  const std::string dir = settingsTempDir();
+  NodeOptions options;
+  options.data_dir = dir;
+  options.name = "front-panel";
+  options.role = "door_station";
+  options.door = "d_front";
+  options.listen_addr = "127.0.0.1:0";
+  options.enable_beacon = false;
+  options.http_port = 0;
+  options.psk.fill(0x5a);
+
+  {
+    Node node(options);
+    REQUIRE(node.start());
+    auto config = json::parse(node.configJson());
+    REQUIRE(config);
+    const cJSON* door = json::get(json::get(config.get(), "doors"), "d_front");
+    REQUIRE(cJSON_IsObject(door));
+    CHECK(json::getString(json::get(door, "label"), "ja") == "front-panel");
+    // The administrator renames it and files it under a building, as the doors tab does.
+    node.setConfigKey("doors.d_front.label.ja", "\"正面玄関\"");
+    node.setConfigKey("doors.d_front.label.en", "\"Front entrance\"");
+    node.setConfigKey("doors.d_front.building", "\"b_main\"");
+    node.stop();
+  }
+  {
+    // Every later start re-checks the entry, and must leave those edits alone.
+    Node node(options);
+    REQUIRE(node.start());
+    auto config = json::parse(node.configJson());
+    REQUIRE(config);
+    const cJSON* door = json::get(json::get(config.get(), "doors"), "d_front");
+    REQUIRE(cJSON_IsObject(door));
+    CHECK(json::getString(json::get(door, "label"), "ja") == "正面玄関");
+    CHECK(json::getString(json::get(door, "label"), "en") == "Front entrance");
+    CHECK(json::getString(door, "building") == "b_main");
+    node.stop();
+  }
+  removeSettingsTempDir(dir);
+}
+
+TEST_CASE("doors: a live door with no configuration entry still appears and is addressable") {
+  // The upgrade case: a cluster configured before this fix has devices.<id>.door but no
+  // doors.<id>. The tile must still render and still accept an announcement.
+  SettingsNode fleet("door_station", "d_front");
+  REQUIRE(fleet.at("doors.d_front") != nullptr);
+  // Simulate the old configuration by removing the entry the fix created.
+  auto removed = json::parse(fleet.node->deleteConfigKeyJson("doors.d_front"));
+  REQUIRE(removed);
+  REQUIRE(json::getBool(removed.get(), "ok"));
+  CHECK(fleet.at("doors.d_front") == nullptr);
+
+  auto status = fleet.status();
+  const cJSON* entry = json::get(json::get(status.get(), "doors"), "d_front");
+  REQUIRE(cJSON_IsObject(entry));
+  CHECK_FALSE(json::getBool(entry, "configured"));
+  // The label falls back to the device name so the tile is not blank.
+  CHECK(json::getString(entry, "label") == "settings");
+  CHECK(cJSON_IsObject(json::get(entry, "unlock")));
+  CHECK(cJSON_IsNull(json::get(entry, "notice")));
+
+  // An announcement posted to the tile the shell is showing must not be refused.
+  REQUIRE(fleet.node->setDoorNotice("d_front", "Still reachable", 0));
+  CHECK(fleet.stringAt("doors.d_front.notice.text") == "Still reachable");
+  auto after = fleet.status();
+  const cJSON* live = json::get(json::get(after.get(), "doors"), "d_front");
+  CHECK(json::getString(json::get(live, "notice"), "text") == "Still reachable");
+  // Writing the notice creates doors.d_front, so the door reports configured from now on.
+  CHECK(json::getBool(live, "configured"));
+
+  // A door nobody serves is still unknown.
+  CHECK_FALSE(fleet.node->setDoorNotice("d_nowhere", "hello", 0));
 }

@@ -1833,3 +1833,67 @@ TEST_CASE("pairing: minting a PIN neither opens the bulk-add window nor invites 
   host.node->stop();
   joiner.node->stop();
 }
+
+TEST_CASE("doors: an indoor panel lists a live door station's door even without a config entry") {
+  NFleet f;
+  auto& indoor = f.add("I:1", "living", "indoor_panel", "", /*seed_cfg=*/true);
+  auto& station = f.add("A:1", "front-panel", "door_station", "d_front", /*seed_cfg=*/false);
+  REQUIRE(indoor.node->start());
+  REQUIRE(station.node->start());
+
+  auto doorsOf = [](Node& node) {
+    auto status = json::parse(node.statusJson());
+    REQUIRE(status);
+    return json::Doc(cJSON_Duplicate(json::get(status.get(), "doors"), 1));
+  };
+
+  // The door station seeds its own entry, which replicates to the panel.
+  REQUIRE([&] {
+    for (int i = 0; i < 200; i++) {
+      f.run(50);
+      auto doors = doorsOf(*indoor.node);
+      if (doors && cJSON_IsObject(json::get(doors.get(), "d_front"))) return true;
+    }
+    return false;
+  }());
+  auto seeded = doorsOf(*indoor.node);
+  const cJSON* entry = json::get(seeded.get(), "d_front");
+  REQUIRE(cJSON_IsObject(entry));
+  CHECK(json::getBool(entry, "configured"));
+  CHECK(json::getString(entry, "label") == "front-panel");
+
+  // Now model the upgrade case: the door entry is gone but the station is still alive. The
+  // panel must keep the tile so announcements and unlock visibility have something to target.
+  auto removed = json::parse(indoor.node->deleteConfigKeyJson("doors.d_front"));
+  REQUIRE(removed);
+  REQUIRE(json::getBool(removed.get(), "ok"));
+  f.run(500);
+  auto degraded = doorsOf(*indoor.node);
+  const cJSON* live = json::get(degraded.get(), "d_front");
+  REQUIRE(cJSON_IsObject(live));
+  CHECK_FALSE(json::getBool(live, "configured"));
+  // The label falls back to the peer's device name rather than showing a blank tile.
+  CHECK(json::getString(live, "label") == "front-panel");
+  CHECK(cJSON_IsObject(json::get(live, "unlock")));
+
+  // The panel can still post an announcement to the door it is showing.
+  REQUIRE(indoor.node->setDoorNotice("d_front", "Side gate today", 0));
+  REQUIRE([&] {
+    for (int i = 0; i < 200; i++) {
+      f.run(50);
+      auto doors = doorsOf(*station.node);
+      const cJSON* notice = doors ? json::get(json::get(doors.get(), "d_front"), "notice")
+                                  : nullptr;
+      if (cJSON_IsObject(notice) &&
+          json::getString(notice, "text") == "Side gate today")
+        return true;
+    }
+    return false;
+  }());
+
+  // A door nobody serves is still refused.
+  CHECK_FALSE(indoor.node->setDoorNotice("d_nowhere", "hello", 0));
+
+  indoor.node->stop();
+  station.node->stop();
+}
