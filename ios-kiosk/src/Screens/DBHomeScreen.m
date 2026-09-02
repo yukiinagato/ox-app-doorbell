@@ -5,6 +5,7 @@
 #import "../Core/DBConfigUtil.h"
 #import "../Core/DBCoreBridge.h"
 #import "../Core/DBDoorTileModel.h"
+#import "../Core/DBFleetCounts.h"
 #import "../Core/DBNoticeModel.h"
 #import "../Core/DBPairingModel.h"
 #import "../Core/DBRefreshCoalescer.h"
@@ -147,7 +148,7 @@ static const NSInteger kRecentCallLimit = 20;
   UIImageView *_themeBg;
   UILabel *_clockLabel;
   UILabel *_dateLabel;
-  DBPillLabel *_membershipPill;
+  NSArray *_fleetCounters;   // Three DBFleetCounter, left to right.
   UIButton *_membershipButton;
   DBPillLabel *_missedBadge;
   UIButton *_missedButton;
@@ -234,10 +235,19 @@ static const NSInteger kRecentCallLimit = 20;
   _dateLabel.font = [UIFont systemFontOfSize:28];
   [self addSubview:_dateLabel];
 
-  _membershipPill = [[DBPillLabel alloc] initWithFrame:CGRectZero];
-  _membershipPill.font = [UIFont systemFontOfSize:19];
-  _membershipPill.numberOfLines = 2;
-  [self addSubview:_membershipPill];
+  // Three compact counters instead of one sentence: at a glance the owner wants
+  // how many devices there are and how many of each kind are answering.
+  NSMutableArray *counters = [NSMutableArray array];
+  DBFleetGlyph glyphs[3] = { DBFleetGlyphCluster, DBFleetGlyphDoorStation,
+                             DBFleetGlyphIndoorPanel };
+  for (NSUInteger i = 0; i < 3; i++) {
+    DBFleetCounter *counter = [[DBFleetCounter alloc] initWithFrame:CGRectZero];
+    counter.glyph = glyphs[i];
+    counter.userInteractionEnabled = NO;
+    [self addSubview:counter];
+    [counters addObject:counter];
+  }
+  _fleetCounters = counters;
   _membershipButton = [UIButton buttonWithType:UIButtonTypeCustom];
   [_membershipButton addTarget:self action:@selector(onMembership)
               forControlEvents:UIControlEventTouchUpInside];
@@ -503,6 +513,7 @@ static const NSInteger kRecentCallLimit = 20;
     _status = status;
     _nodeId = [DBConfigUtil str:status path:@"node.id"] ?: @"";
     _doorTileInfos = [DBDoorTileModel tilesFromStatus:status config:_cfg boot:_boot];
+    [self updateFleetCounters];
     NSDictionary *display = [status objectForKey:@"display"];
     if ([display isKindOfClass:[NSDictionary class]]) {
       _display = display;
@@ -534,20 +545,7 @@ static const NSInteger kRecentCallLimit = 20;
 - (void)applyPairingSnapshot:(NSDictionary *)pairing {
   NSString *state = [DBPairingModel stateFromPairingInfo:pairing];
   if (![state isEqualToString:DBPairingStateUnknown]) _pairingState = state;
-  NSInteger members = [DBConfigUtil intVal:pairing path:@"home.member_count" def:0];
-  NSInteger connected = [DBConfigUtil intVal:pairing path:@"home.connected_count" def:0];
-  BOOL founder = [DBConfigUtil boolVal:pairing path:@"is_founder" def:NO];
   BOOL ready = [_pairingState isEqualToString:@"ready"];
-  if (ready && members > 0) {
-    NSMutableArray *parts = [NSMutableArray array];
-    [parts addObject:[_texts t:@"pair.membership",
-                          [NSString stringWithFormat:@"%ld", (long)members], nil]];
-    [parts addObject:[_texts t:@"pair.membership_connected",
-                          [NSString stringWithFormat:@"%ld", (long)connected], nil]];
-    if (founder) [parts addObject:[_texts ts:@"pair.created_badge"]];
-    // One separator everywhere, as the other shells use.
-    _membershipPill.text = [parts componentsJoinedByString:@" · "];
-  }
   BOOL showBanner = !ready && ![_pairingState isEqualToString:DBPairingStateUnknown];
   [_pairBanner setTitle:[_texts ts:@"pair.not_set_up_banner"] forState:UIControlStateNormal];
   _pairBanner.hidden = !showBanner;
@@ -584,8 +582,10 @@ static const NSInteger kRecentCallLimit = 20;
   [_palette setBackgroundSampler:_sampler];
   [self applyRegionInk];
 
-  _membershipPill.backgroundColor = _palette.elevated;
-  _membershipPill.textColor = _palette.ink;
+  for (DBFleetCounter *counter in _fleetCounters) {
+    counter.fill = _palette.elevated;
+    counter.ink = _palette.ink;
+  }
   _missedBadge.backgroundColor = _palette.danger;
   _missedBadge.textColor = _palette.dangerInk;
   _adminButton.backgroundColor = _palette.elevated;
@@ -731,6 +731,31 @@ static const NSInteger kRecentCallLimit = 20;
 // decode, which is the hitch the owner sees on the dashboard. Tiles are now
 // created once per door and updated in place; only a membership change touches
 // the view tree.
+- (void)updateFleetCounters {
+  if ([_fleetCounters count] != 3) return;
+  DBFleetCounts *counts = [DBFleetCounts countsFromStatus:_status config:_cfg];
+  NSString *devices = [NSString stringWithFormat:@"%ld", (long)counts.devices];
+  NSString *doors = [NSString stringWithFormat:@"%ld/%ld", (long)counts.doorStationsOnline,
+                     (long)counts.doorStations];
+  NSString *panels = [NSString stringWithFormat:@"%ld/%ld", (long)counts.panelsOnline,
+                      (long)counts.panels];
+  DBFleetCounter *first = [_fleetCounters objectAtIndex:0];
+  DBFleetCounter *second = [_fleetCounters objectAtIndex:1];
+  DBFleetCounter *third = [_fleetCounters objectAtIndex:2];
+  first.value = devices;
+  second.value = doors;
+  third.value = panels;
+  // The glyphs carry the meaning on screen; a screen reader gets the sentence.
+  first.accessibilityLabel = [_texts t:@"dash.count_devices", devices, nil];
+  second.accessibilityLabel = [_texts t:@"dash.count_door_stations",
+      [NSString stringWithFormat:@"%ld", (long)counts.doorStationsOnline],
+      [NSString stringWithFormat:@"%ld", (long)counts.doorStations], nil];
+  third.accessibilityLabel = [_texts t:@"dash.count_panels",
+      [NSString stringWithFormat:@"%ld", (long)counts.panelsOnline],
+      [NSString stringWithFormat:@"%ld", (long)counts.panels], nil];
+  [self setNeedsLayout];
+}
+
 - (void)rebuildDoorTiles {
   NSMutableArray *live = [NSMutableArray array];
   NSMutableArray *keys = [NSMutableArray array];
@@ -842,10 +867,16 @@ static const NSInteger kRecentCallLimit = 20;
                                               cachePolicy:NSURLRequestReloadIgnoringLocalCacheData
                                           timeoutInterval:3.0];
       NSURLResponse *response = nil;
+      NSError *error = nil;
       NSData *data = [NSURLConnection sendSynchronousRequest:request returningResponse:&response
-                                                       error:NULL];
+                                                       error:&error];
       UIImage *image = data ? [UIImage imageWithData:data] : nil;
       UIImage *thumbnail = [DBHomeScreen thumbnailForImage:image maxSide:320];
+      // A door that is online but never shows a picture is otherwise silent.
+      if (thumbnail == nil) {
+        NSLog(@"[doorbell] still fetch failed for %@: %lu bytes, image=%d, %@", url,
+              (unsigned long)[data length], image != nil, error ?: (id)@"no error");
+      }
       dispatch_async(dispatch_get_main_queue(), ^{
         DBHomeScreen *screen = weakSelf;
         DBDoorTile *strongTile = weakTile;
@@ -1199,15 +1230,21 @@ static const NSInteger kRecentCallLimit = 20;
     rightX -= missedWidth + 10;
   }
 
-  // Two lines rather than an ellipsis: the membership line is the only place
-  // that says how many devices are connected.
-  CGFloat membershipWidth = MIN(size.width * 0.52, size.width - pad * 2);
-  CGSize membershipFit = [_membershipPill sizeThatFits:CGSizeMake(membershipWidth, 80)];
-  CGFloat membershipHeight = MAX(34, MIN(70, membershipFit.height));
-  _membershipPill.frame = CGRectMake(size.width - pad - membershipWidth,
-                                     CGRectGetMaxY(_adminButton.frame) + 8,
-                                     membershipWidth, membershipHeight);
-  _membershipButton.frame = _membershipPill.frame;
+  // One row of counters, right aligned under the admin button. Each sizes to
+  // its own glyph and number, so a three-digit fleet does not clip.
+  CGFloat counterHeight = 34;
+  CGFloat counterTop = CGRectGetMaxY(_adminButton.frame) + 8;
+  CGFloat counterGap = 8;
+  CGFloat counterRight = size.width - pad;
+  for (NSInteger i = (NSInteger)[_fleetCounters count] - 1; i >= 0; i--) {
+    DBFleetCounter *counter = [_fleetCounters objectAtIndex:(NSUInteger)i];
+    CGFloat width = [counter widthThatFits];
+    counter.frame = CGRectMake(counterRight - width, counterTop, width, counterHeight);
+    counterRight -= width + counterGap;
+  }
+  CGFloat countersLeft = counterRight + counterGap;
+  _membershipButton.frame = CGRectMake(countersLeft, counterTop,
+                                       MAX(0, size.width - pad - countersLeft), counterHeight);
 
   CGFloat bannerHeight = 0;
   if (_pairBanner.hidden) {

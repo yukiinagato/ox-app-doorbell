@@ -259,6 +259,9 @@ static NSDictionary *DBShellCapabilities(DBBootConfig *boot, BOOL secureStoreAva
     @"microphone" : @YES,
     @"microphone_enabled" : @(boot.micEnabled),
     @"speaker" : @YES,
+    // Both keys: "camera" is what the cluster reads now, "camera_capture" is
+    // what older shells look for. The iPad 1 has no camera either way.
+    @"camera" : @NO,
     @"camera_capture" : @NO,
     @"mjpeg_http_preview" : @YES,
     @"mjpeg_https_preview" : @YES,
@@ -704,8 +707,9 @@ static BOOL DBNativeKioskHealthy(void) {
     return;
   [_safeModeRecoveryTimer invalidate];
   _safeModeRecoveryTimer = nil;
-  [_screenshotTimer invalidate];
-  _screenshotTimer = nil;
+  // The screenshot hook is a boot.json debug opt-in, not part of recovery. It
+  // used to be torn down here, so remote verification stopped working at the
+  // exact moment the panel became healthy.
   DBMarkHealthyRuntime();
   _localSafeMode = NO;
   _safeModeEnteredAt = 0;

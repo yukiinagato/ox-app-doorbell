@@ -68,6 +68,41 @@
   return nil;
 }
 
++ (BOOL)peerHasCamera:(NSDictionary *)peer {
+  NSDictionary *caps = [self dictionary:peer key:@"caps"];
+  // "camera" is the cluster-wide key; "camera_capture" is what the iOS 5 shell
+  // published before it existed. Either one saying no is a no.
+  for (NSString *key in @[ @"camera", @"camera_capture" ]) {
+    id value = [caps objectForKey:key];
+    if ([value isKindOfClass:[NSNumber class]] && ![(NSNumber *)value boolValue]) return NO;
+  }
+  return YES;
+}
+
+// The station bound to a door, alive or not, so a tile can be suppressed for a
+// camera-less device even while that device is down.
++ (NSDictionary *)stationForDoor:(NSDictionary *)status config:(NSDictionary *)config
+                            door:(NSString *)doorId servedBy:(NSString *)servedBy {
+  id peers = [status objectForKey:@"peers"];
+  if (![peers isKindOfClass:[NSArray class]]) return nil;
+  NSDictionary *fallback = nil;
+  NSDictionary *devices = [self dictionary:config key:@"devices"];
+  for (id candidate in (NSArray *)peers) {
+    if (![candidate isKindOfClass:[NSDictionary class]]) continue;
+    NSString *identifier = [self peerID:candidate];
+    if ([servedBy length] > 0 && [identifier isEqualToString:servedBy]) return candidate;
+    NSDictionary *device = [self dictionary:devices key:identifier];
+    NSString *role = [self string:device key:@"role"];
+    if ([role length] == 0) role = [self string:candidate key:@"role"];
+    if (![role isEqualToString:@"door_station"]) continue;
+    NSString *door = [self string:device key:@"door"];
+    if ([door length] == 0) door = [self string:candidate key:@"door"];
+    if (![door isEqualToString:doorId]) continue;
+    if (fallback == nil) fallback = candidate;
+  }
+  return fallback;
+}
+
 + (NSInteger)orderOf:(NSString *)doorId doors:(NSDictionary *)doors {
   NSDictionary *entry = [self dictionary:doors key:doorId];
   id order = [entry objectForKey:@"order"];
@@ -125,6 +160,11 @@
     // omits the flag still render a named door.
     tile.configured = [self flag:entry key:@"configured" def:YES];
     tile.servedBy = [self string:entry key:@"served_by"];
+    // A station with no camera has nothing to watch. The door is still reachable
+    // from the door list and still carries notices; only the still tile goes.
+    NSDictionary *station = [self stationForDoor:status config:config door:doorId
+                                        servedBy:tile.servedBy];
+    if (station != nil && ![self peerHasCamera:station]) continue;
     NSDictionary *peer = [self alivePeer:status nodeId:tile.servedBy];
     tile.online = (peer != nil);
     if (!tile.online) {

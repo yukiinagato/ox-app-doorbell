@@ -354,6 +354,9 @@
 "calling.no_answer" = "No answer";
 "calling.title" = "Calling…";
 "dash.admin" = "Admin";
+"dash.count_devices" = "%@ devices";
+"dash.count_door_stations" = "Door stations %@ of %@ online";
+"dash.count_panels" = "Indoor panels %@ of %@ online";
 "dash.doors" = "Door stations";
 "dash.last_answer" = "Last answered %@";
 "dash.no_doors" = "No door station has been added yet";

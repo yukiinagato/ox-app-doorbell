@@ -1004,6 +1004,11 @@ dash.tile_offline: { ja: "オフライン", en: "Offline", zh: "离线" }
 dash.tile_no_station: { ja: "門口機なし", en: "No door station", zh: "无门口机" }
 dash.tile_open: { ja: "見る", en: "View", zh: "查看" }
 dash.no_doors: { ja: "門口機がまだ登録されていません", en: "No door station has been added yet", zh: "尚未添加门口机" }
+# The three header counters. Each is an icon and a number on screen; these are
+# what a screen reader says instead.
+dash.count_devices: { ja: "機器 {n} 台", en: "{n} devices", zh: "设备 {n} 台" }
+dash.count_door_stations: { ja: "門口機 {n} / {total} 台オンライン", en: "Door stations {n} of {total} online", zh: "门口机 {n} / {total} 台在线" }
+dash.count_panels: { ja: "室内機 {n} / {total} 台オンライン", en: "Indoor panels {n} of {total} online", zh: "室内机 {n} / {total} 台在线" }
 history.load_more: { ja: "さらに読み込む", en: "Load more", zh: "加载更多" }
 history.filter_all: { ja: "すべて", en: "All", zh: "全部" }
 history.filter_missed: { ja: "不在着信のみ", en: "Missed only", zh: "仅未接" }

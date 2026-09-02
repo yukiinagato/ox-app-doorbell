@@ -191,6 +191,47 @@ int main(void) {
             [[[tiles objectAtIndex:1] doorId] isEqualToString:@"door-back"],
             @"doors.<id>.order wins over the door id");
 
+    // --- caps.camera: a station with nothing to show gets no tile. ---
+    require([DBDoorTileModel peerHasCamera:aliveStation(@"alive")],
+            @"a peer with no caps at all is assumed to have a camera");
+    NSMutableDictionary *withCamera = [aliveStation(@"alive") mutableCopy];
+    [withCamera setObject:@{@"camera" : @YES} forKey:@"caps"];
+    NSMutableDictionary *noCamera = [aliveStation(@"alive") mutableCopy];
+    [noCamera setObject:@{@"camera" : @NO} forKey:@"caps"];
+    NSMutableDictionary *legacyNoCamera = [aliveStation(@"alive") mutableCopy];
+    // The iOS 5 shell published camera_capture before the cluster-wide key existed.
+    [legacyNoCamera setObject:@{@"camera_capture" : @NO} forKey:@"caps"];
+    require([DBDoorTileModel peerHasCamera:withCamera], @"caps.camera true has a camera");
+    require(![DBDoorTileModel peerHasCamera:noCamera], @"caps.camera false has none");
+    require(![DBDoorTileModel peerHasCamera:legacyNoCamera],
+            @"caps.camera_capture false has none");
+
+    NSDictionary *doorsEntry = @{
+      @"door-mini3" : @{@"served_by" : @"c0ffee1122334455", @"configured" : @YES},
+    };
+    NSDictionary *cameraTrue = @{ @"peers" : @[ panelSelf(), withCamera ], @"doors" : doorsEntry };
+    require([[DBDoorTileModel tilesFromStatus:cameraTrue config:config() boot:boot] count] == 1,
+            @"a station that reports a camera keeps its tile");
+    NSDictionary *cameraFalse = @{ @"peers" : @[ panelSelf(), noCamera ], @"doors" : doorsEntry };
+    require([[DBDoorTileModel tilesFromStatus:cameraFalse config:config() boot:boot] count] == 0,
+            @"a station that reports no camera renders no tile");
+    NSDictionary *cameraAbsent = @{
+      @"peers" : @[ panelSelf(), aliveStation(@"alive") ], @"doors" : doorsEntry,
+    };
+    require([[DBDoorTileModel tilesFromStatus:cameraAbsent config:config() boot:boot] count] == 1,
+            @"a station that reports no camera capability at all keeps its tile");
+
+    // The suppression follows the device, not its current state: an iPad 1 door
+    // station that is merely down still has nothing worth a tile.
+    NSMutableDictionary *downNoCamera = [noCamera mutableCopy];
+    [downNoCamera setObject:@"dead" forKey:@"status"];
+    NSDictionary *downStatus = @{
+      @"peers" : @[ panelSelf(), downNoCamera ],
+      @"doors" : @{@"door-mini3" : @{@"served_by" : [NSNull null], @"configured" : @YES}},
+    };
+    require([[DBDoorTileModel tilesFromStatus:downStatus config:config() boot:boot] count] == 0,
+            @"a camera-less station gets no tile even while it is offline");
+
     puts("PASS: DBDoorTileModel online/offline/no-station states");
   }
   return 0;

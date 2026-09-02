@@ -359,6 +359,9 @@ Delete it?</string>
     <string name="calling_no_answer">No answer</string>
     <string name="calling_title">Calling…</string>
     <string name="dash_admin">Admin</string>
+    <string name="dash_count_devices">%1$s devices</string>
+    <string name="dash_count_door_stations">Door stations %1$s of %2$s online</string>
+    <string name="dash_count_panels">Indoor panels %1$s of %2$s online</string>
     <string name="dash_doors">Door stations</string>
     <string name="dash_last_answer">Last answered %1$s</string>
     <string name="dash_no_doors">No door station has been added yet</string>

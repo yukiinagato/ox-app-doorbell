@@ -31,4 +31,11 @@
 // The peer entry for a node id, only when the mesh reports it alive.
 + (NSDictionary *)alivePeer:(NSDictionary *)status nodeId:(NSString *)nodeId;
 
+// Whether a peer can produce a picture. A station that reports caps.camera
+// false has nothing for a tile to show -- an iPad 1 playing door station is
+// exactly such a device -- so the dashboard omits its tile entirely. A peer
+// that reports no camera capability at all is assumed to have one: an older
+// shell that never published the key must not lose its tile.
++ (BOOL)peerHasCamera:(NSDictionary *)peer;
+
 @end
