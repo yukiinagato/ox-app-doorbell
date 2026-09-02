@@ -67,6 +67,47 @@ struct DoorbellPalette {
     }
 }
 
+/// Where one region's ink came from. Every batch-2 shell names the same four sources, so a panel
+/// that came back with white text over a light picture is diagnosed the same way everywhere.
+enum InkSource: String {
+    /// An administrator pinned this colour for the region.
+    case admin
+    /// Core's per-region `auto_ink`, which is exact over a flat theme colour.
+    case core
+    /// Measured here, on the part of the theme picture this region actually covers.
+    case localRegion = "local_region"
+    /// The same contrast rule, against whatever ground the caller could name.
+    case local
+}
+
+/// The ground one text region sits on, and how much this shell knows about it. The three cases
+/// are §5's precedence: only a picture the shell drew and sampled under the region displaces
+/// Core's published per-region ink.
+enum InkGround {
+    /// No theme decoration at all: the palette owns the screen.
+    case palette(UIColor)
+    /// A flat theme colour. Core measured exactly this, so its per-region ink is authoritative.
+    case themeColor(UIColor)
+    /// The theme picture this shell drew, measured under the region.
+    case sampled(UIColor)
+
+    var color: UIColor {
+        switch self {
+        case .palette(let color), .themeColor(let color), .sampled(let color): return color
+        }
+    }
+}
+
+/// The ink one text region is drawn in, the ground it was measured against, and the outline it
+/// still needs when even the better ink misses the 4.5:1 body-text target.
+struct InkDecision {
+    let ink: UIColor
+    let background: UIColor
+    let source: InkSource
+    /// The 40 % opposite-ink shadow, or nil when the pair already reaches AA on its own.
+    let shadow: UIColor?
+}
+
 /// Everything one screen needs to paint itself: the palette that owns every surface the shell
 /// draws, and the background the shell has painted under it.
 ///
@@ -79,13 +120,20 @@ struct DoorbellSkin {
 
     let palette: DoorbellPalette
     let display: [String: Any]?
-    /// The colour a bare text region actually sits on: the theme colour, or the average of the
-    /// theme picture. Core measures it once for the cluster; the shell measures locally when the
-    /// contract is absent.
+    /// The colour a bare text region sits on when nothing narrower is known: the theme colour, or
+    /// the average of the whole theme picture.
     let background: UIColor
     /// True while a configured theme colour or picture is painted under this screen. Core's
     /// automatic ink describes that background, so it is only meaningful when it is showing.
     let decorated: Bool
+    /// Configuration and this device's identity, so an `ink_override` a Core that predates the
+    /// display contract never republishes is still honoured.
+    var config: [String: Any]?
+    var nodeId: String = ""
+    /// The view drawing the theme picture, while one is drawn. Core computes `auto_ink` from the
+    /// whole picture because it has no layout geometry; this shell has it, which is why §5 leaves
+    /// the per-region refinement here.
+    weak var sampler: ThemeBackgroundView?
 
     /// A screen with no theme decoration: every region falls back to the palette.
     static func plain(_ palette: DoorbellPalette) -> DoorbellSkin {
@@ -98,27 +146,55 @@ struct DoorbellSkin {
     /// Ink for one of the semantic regions Core publishes (`clock`, `date`, `status_line`,
     /// `hint`, `tile_label`, `footer`, `notice`).
     func ink(_ region: String) -> UIColor {
-        if let override = DoorbellTheme.inkOverride(display: display, region: region) {
-            return override
+        return decision(region, in: nil).ink
+    }
+
+    /// The full decision for one region. `rect`, in the background view's own coordinates, is the
+    /// area the text covers; nil measures the whole ground.
+    func decision(_ region: String, in rect: CGRect?) -> InkDecision {
+        return DoorbellTheme.decideInk(display: display, config: config, nodeId: nodeId,
+                                       region: region, ground: ground(in: rect), palette: palette)
+    }
+
+    /// A picture on screen is the ground, whatever Core managed to measure of it: Core holds one
+    /// average for the whole picture, and on a picture it declined to sample it holds nothing
+    /// that describes the screen at all.
+    private func ground(in rect: CGRect?) -> InkGround {
+        guard let sampler = sampler, sampler.drawsImage else {
+            return decorated ? .themeColor(background) : .palette(background)
         }
-        guard decorated else { return palette.ink }
-        return DoorbellTheme.ink(display: display, region: region, background: background,
-                                 palette: palette)
+        return .sampled(sampler.sampledBackground(in: rect) ?? background)
     }
 
     /// The quiet variant of a region's ink. Over a decoration it is the same ink moved towards
     /// the background rather than made translucent, so it keeps a known contrast ratio.
     func muted(_ region: String) -> UIColor {
-        guard decorated else {
-            return DoorbellTheme.inkOverride(display: display, region: region)
-                .map { DoorbellTheme.solid($0.withAlphaComponent(0.74), over: background) }
-                ?? palette.inkMuted
-        }
-        return DoorbellTheme.solid(ink(region).withAlphaComponent(0.74), over: background)
+        return muted(region, in: nil)
     }
 
+    func muted(_ region: String, in rect: CGRect?) -> UIColor {
+        let decision = self.decision(region, in: rect)
+        if case .palette = ground(in: rect), decision.source != .admin {
+            return palette.inkMuted
+        }
+        return DoorbellTheme.solid(decision.ink.withAlphaComponent(0.74),
+                                   over: decision.background)
+    }
+
+    /// Paints one label and, over a theme picture, keeps painting it: a region's ink depends on
+    /// the part of the picture the label ends up covering, which is not known until layout has
+    /// settled and changes again when the picture or the viewport does.
     func apply(_ region: String, to label: UILabel, quiet: Bool = false) {
-        DoorbellTheme.applyInk(quiet ? muted(region) : ink(region), over: background, to: label)
+        sampler?.inkLater(label, region: region, quiet: quiet, skin: self)
+        paint(region, to: label, quiet: quiet)
+    }
+
+    /// Paints one label from the geometry it has right now.
+    func paint(_ region: String, to label: UILabel, quiet: Bool) {
+        let rect = sampler?.regionRect(of: label)
+        let decision = self.decision(region, in: rect)
+        DoorbellTheme.applyInk(quiet ? muted(region, in: rect) : decision.ink,
+                               over: decision.background, to: label)
     }
 
     // MARK: - Text on a card this shell painted
@@ -126,11 +202,13 @@ struct DoorbellSkin {
     /// A card is a palette surface, so the palette's own ink is the readable one there. An
     /// administrator's per-region override still wins, because it is a deliberate choice.
     func cardInk(_ region: String) -> UIColor {
-        return DoorbellTheme.inkOverride(display: display, region: region) ?? palette.ink
+        return DoorbellTheme.inkOverride(display: display, config: config, nodeId: nodeId,
+                                         region: region) ?? palette.ink
     }
 
     func cardMuted(_ region: String) -> UIColor {
-        guard let override = DoorbellTheme.inkOverride(display: display, region: region) else {
+        guard let override = DoorbellTheme.inkOverride(display: display, config: config,
+                                                       nodeId: nodeId, region: region) else {
             return palette.inkMuted
         }
         return DoorbellTheme.solid(override.withAlphaComponent(0.74), over: surface)
@@ -154,6 +232,27 @@ final class ThemeBackgroundView: UIImageView {
     private var loadedHash: String?
     private var paintedColor: String?
 
+    /// One label registered for automatic re-inking, held weakly: a screen that goes away must
+    /// not be kept alive by the background it used to wear.
+    private struct InkedRegion {
+        weak var label: UILabel?
+        let region: String
+        let quiet: Bool
+    }
+
+    private var inked: [InkedRegion] = []
+    private var inkSkin: DoorbellSkin?
+    private var inkPassScheduled = false
+    private var inkedViewport: CGSize = .zero
+
+    /// The drawn picture reduced to view space, and the factor from view points to its pixels.
+    private var proxyImage: CGImage?
+    private var proxyKey: String?
+    private var proxyScale: CGFloat = 1
+    /// Longest side of that proxy. Large enough that a footer band still covers several rows of
+    /// it, small enough that building it never touches the full-size photograph twice.
+    private static let proxySide: CGFloat = 128
+
     init() {
         super.init(frame: .zero)
         contentMode = .scaleAspectFill
@@ -162,6 +261,10 @@ final class ThemeBackgroundView: UIImageView {
     }
 
     required init?(coder: NSCoder) { fatalError("not supported") }
+
+    /// True while the theme picture is on screen. Core's whole-picture ink is advisory then, and
+    /// the local per-region measurement decides.
+    var drawsImage: Bool { return !isHidden && image != nil }
 
     /// Core resolves `display.theme` with this device's own override and republishes the result,
     /// so the contract is the first place to look; configuration is the fallback for a Core that
@@ -195,41 +298,146 @@ final class ThemeBackgroundView: UIImageView {
                                              nodeId: nodeId) ?? ""
         if hash.isEmpty {
             loadedHash = nil
-            image = nil
-            isHidden = true
+            setBackgroundImage(nil)
         } else if hash != loadedHash || image == nil {
             loadedHash = hash
             DoorbellTheme.loadBackgroundImage(
                 hash: hash, path: ConfigUtil.str(display, "theme.bg_image_path"),
                 httpPort: httpPort) { [weak self] picture in
                     guard let self = self, self.loadedHash == hash else { return }
-                    self.image = picture
-                    self.isHidden = false
+                    self.setBackgroundImage(picture)
                     self.onImageLoaded?()
                 }
         }
-        return skin(display: display, palette: palette, host: host, decorated: color != nil)
+        return skin(display: display, config: config, nodeId: nodeId, palette: palette, host: host,
+                    decorated: color != nil)
+    }
+
+    /// The picture has arrived, or gone. Everything measured from it — the sampling proxy and
+    /// every region's ink — is stale from here, and a picture that arrives after the screen was
+    /// laid out is exactly the case that leaves light ink over a light photograph if nothing
+    /// re-decides. The loader, the theme change and the memory warning all come through here.
+    func setBackgroundImage(_ picture: UIImage?) {
+        image = picture
+        isHidden = picture == nil
+        proxyImage = nil
+        proxyKey = nil
+        scheduleInkPass()
     }
 
     /// Drops the picture under memory pressure. The colour stays: a screen still has to have one.
     func releaseImage() {
         loadedHash = nil
-        image = nil
-        isHidden = true
+        setBackgroundImage(nil)
     }
 
-    private func skin(display: [String: Any]?, palette: DoorbellPalette, host: UIView,
-                      decorated: Bool) -> DoorbellSkin {
+    /// The ground the whole screen sits on. A picture that is actually drawn is measured here,
+    /// whatever Core managed to make of it; Core's colour stands for a flat theme, and for a
+    /// picture Core says it sampled.
+    private func skin(display: [String: Any]?, config: [String: Any]?, nodeId: String,
+                      palette: DoorbellPalette, host: UIView, decorated: Bool) -> DoorbellSkin {
         var background = host.backgroundColor ?? palette.background
-        // Core measures the served theme, image included, so every shell agrees on one answer.
-        if let published = DoorbellTheme.publishedBackground(display: display) {
+        if drawsImage, let sampled = sampledBackground(in: nil) {
+            background = sampled
+        } else if let published = DoorbellTheme.publishedBackground(display: display),
+                  DoorbellTheme.publishedBackgroundIsGround(display: display) {
             background = published
-        } else if !isHidden, let picture = image,
-                  let average = DoorbellTheme.averageColor(of: picture) {
-            background = average
         }
         return DoorbellSkin(palette: palette, display: display, background: background,
-                            decorated: decorated || !isHidden)
+                            decorated: decorated || drawsImage, config: config, nodeId: nodeId,
+                            sampler: self)
+    }
+
+    // MARK: - Sampling the picture this view draws
+
+    /// One view's rectangle in this view's own coordinates, or nil when there is no picture to
+    /// measure it against or the view has no geometry yet.
+    func regionRect(of view: UIView) -> CGRect? {
+        guard drawsImage, superview != nil, view.superview != nil else { return nil }
+        let rect = convert(view.bounds, from: view)
+        return (rect.width > 0 && rect.height > 0) ? rect : nil
+    }
+
+    /// The colour behind one rectangle of this view, measured on the picture actually drawn.
+    /// `rect` is in this view's coordinates; nil measures the whole picture. The area is reduced
+    /// to at most 16x16 samples before averaging, as the cross-platform rule requires.
+    func sampledBackground(in rect: CGRect?) -> UIColor? {
+        guard drawsImage, let proxy = proxy() else { return nil }
+        let area = rect.map {
+            CGRect(x: $0.minX * proxy.scale, y: $0.minY * proxy.scale,
+                   width: $0.width * proxy.scale, height: $0.height * proxy.scale)
+        }
+        return DoorbellTheme.averageColor(of: proxy.image, in: area)
+    }
+
+    /// The drawn picture reduced to a small copy in view space: aspect-filled into the same
+    /// viewport this view uses, so a rectangle on screen maps onto it by one scale factor and
+    /// nothing else — no image orientation to undo, no crop to recompute. Building it once is
+    /// what keeps every region sample off a full-size photograph.
+    private func proxy() -> (image: CGImage, scale: CGFloat)? {
+        guard let picture = image, bounds.width >= 1, bounds.height >= 1 else { return nil }
+        let key = "\(UInt(bitPattern: ObjectIdentifier(picture).hashValue))"
+            + "|\(Int(bounds.width))x\(Int(bounds.height))"
+        if key == proxyKey, let cached = proxyImage { return (cached, proxyScale) }
+        let scale = min(1, ThemeBackgroundView.proxySide / max(bounds.width, bounds.height))
+        let size = CGSize(width: max(1, (bounds.width * scale).rounded()),
+                          height: max(1, (bounds.height * scale).rounded()))
+        UIGraphicsBeginImageContextWithOptions(size, true, 1)
+        defer { UIGraphicsEndImageContext() }
+        picture.draw(in: DoorbellTheme.aspectFillRect(imageSize: picture.size, viewport: size))
+        guard let rendered = UIGraphicsGetImageFromCurrentImageContext()?.cgImage else {
+            return nil
+        }
+        proxyImage = rendered
+        proxyKey = key
+        proxyScale = scale
+        return (rendered, scale)
+    }
+
+    // MARK: - Keeping the ink true to the layout
+
+    /// Registers a label so its ink follows the picture under it. Screens hand their labels over
+    /// while they are still being laid out, and a region's ink cannot be decided before the label
+    /// has a frame.
+    func inkLater(_ label: UILabel, region: String, quiet: Bool, skin: DoorbellSkin) {
+        inkSkin = skin
+        let entry = InkedRegion(label: label, region: region, quiet: quiet)
+        if let index = inked.firstIndex(where: { $0.label === label }) {
+            inked[index] = entry
+        } else {
+            inked.append(entry)
+        }
+        scheduleInkPass()
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        guard bounds.size != inkedViewport else { return }
+        inkedViewport = bounds.size
+        proxyImage = nil
+        proxyKey = nil
+        scheduleInkPass()
+    }
+
+    /// Repaints on the next turn of the run loop, once the layout pass that prompted this has
+    /// finished. Coalesced, so a screen that re-skins several labels still samples once each.
+    private func scheduleInkPass() {
+        guard !inkPassScheduled else { return }
+        inkPassScheduled = true
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            self.inkPassScheduled = false
+            self.repaintInk()
+        }
+    }
+
+    private func repaintInk() {
+        guard let skin = inkSkin else { return }
+        inked = inked.filter { $0.label != nil }
+        for entry in inked {
+            guard let label = entry.label else { continue }
+            skin.paint(entry.region, to: label, quiet: entry.quiet)
+        }
     }
 }
 
@@ -346,53 +554,149 @@ enum DoorbellTheme {
     }
 
     /// Average colour of an image region, used when the theme background is a picture. The area is
-    /// reduced to at most 16x16 before averaging, as the cross-platform rule requires.
+    /// reduced to at most 16x16 samples before averaging, as the cross-platform rule requires.
     static func averageColor(of image: UIImage, in rect: CGRect? = nil) -> UIColor? {
         guard let cg = image.cgImage else { return nil }
-        let full = CGRect(x: 0, y: 0, width: cg.width, height: cg.height)
+        return averageColor(of: cg, in: rect)
+    }
+
+    static func averageColor(of image: CGImage, in rect: CGRect? = nil) -> UIColor? {
+        let full = CGRect(x: 0, y: 0, width: image.width, height: image.height)
         let area = (rect.map { full.intersection($0) } ?? full).integral
         guard area.width >= 1, area.height >= 1,
-              let cropped = cg.cropping(to: area) else { return nil }
-        let side = 16
-        var pixels = [UInt8](repeating: 0, count: side * side * 4)
-        guard let context = CGContext(data: &pixels, width: side, height: side,
-                                      bitsPerComponent: 8, bytesPerRow: side * 4,
+              let cropped = image.cropping(to: area) else { return nil }
+        // A band the width of a footer is averaged across its own shape rather than squared off.
+        let width = min(16, Int(area.width)), height = min(16, Int(area.height))
+        var pixels = [UInt8](repeating: 0, count: width * height * 4)
+        guard let context = CGContext(data: &pixels, width: width, height: height,
+                                      bitsPerComponent: 8, bytesPerRow: width * 4,
                                       space: CGColorSpaceCreateDeviceRGB(),
                                       bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
         else { return nil }
-        context.draw(cropped, in: CGRect(x: 0, y: 0, width: side, height: side))
+        context.draw(cropped, in: CGRect(x: 0, y: 0, width: width, height: height))
         var r = 0, g = 0, b = 0
         for index in stride(from: 0, to: pixels.count, by: 4) {
             r += Int(pixels[index]); g += Int(pixels[index + 1]); b += Int(pixels[index + 2])
         }
-        let count = CGFloat(side * side)
+        let count = CGFloat(width * height)
         return UIColor(red: CGFloat(r) / 255 / count, green: CGFloat(g) / 255 / count,
                        blue: CGFloat(b) / 255 / count, alpha: 1)
     }
 
-    /// Ink for one semantic text region. Core publishes the administrator's overrides and the
-    /// automatic decision in the display contract; without them the same luminance rule runs
-    /// locally, so an older Core still produces legible text.
+    /// The rectangle an aspect-fill picture occupies inside a viewport: scaled up until it covers,
+    /// then centred, so the overflow is cropped equally on both sides. This is what
+    /// `UIView.ContentMode.scaleAspectFill` does, written out so a region can be mapped onto the
+    /// pixels the viewer is actually looking at.
+    static func aspectFillRect(imageSize: CGSize, viewport: CGSize) -> CGRect {
+        guard imageSize.width > 0, imageSize.height > 0 else {
+            return CGRect(origin: .zero, size: viewport)
+        }
+        let scale = max(viewport.width / imageSize.width, viewport.height / imageSize.height)
+        let size = CGSize(width: imageSize.width * scale, height: imageSize.height * scale)
+        return CGRect(x: (viewport.width - size.width) / 2,
+                      y: (viewport.height - size.height) / 2,
+                      width: size.width, height: size.height)
+    }
+
     /// The colour an administrator pinned for one region, if any. Core republishes the overrides
-    /// it validated, so the shell reads them from the display contract rather than configuration.
-    static func inkOverride(display: [String: Any]?, region: String) -> UIColor? {
-        return color(hex: ConfigUtil.str(display, "theme.ink_override.\(region)"))
+    /// it validated, so the display contract is the first place to look; configuration is the
+    /// fallback for a Core that predates it, and this device's own value beats the cluster's.
+    static func inkOverride(display: [String: Any]?, config: [String: Any]? = nil,
+                            nodeId: String = "", region: String) -> UIColor? {
+        if let pinned = color(hex: ConfigUtil.str(display, "theme.ink_override.\(region)")) {
+            return pinned
+        }
+        if !nodeId.isEmpty, let pinned = color(hex: ConfigUtil.str(
+            config, "devices.\(nodeId).local.theme.ink_override.\(region)")) {
+            return pinned
+        }
+        return color(hex: ConfigUtil.str(config, "display.theme.ink_override.\(region)"))
     }
 
-    static func ink(display: [String: Any]?, region: String, background: UIColor,
-                    palette: DoorbellPalette) -> UIColor {
-        if let override = inkOverride(display: display, region: region) {
-            return override
+    /// The ink for one text region, and where it came from.
+    ///
+    /// An administrator's override always wins. Below it the ground decides. Over a theme picture
+    /// this shell drew, only the local sample under the region is trustworthy: Core measures the
+    /// whole picture — or, on one it declined to sample, nothing that is on screen at all — and
+    /// cannot know which corner a footer sits in. Over a flat theme colour Core's per-region value
+    /// is exact and keeps every shell on one answer. With no decoration the palette owns the text.
+    static func decideInk(display: [String: Any]?, config: [String: Any]?, nodeId: String,
+                          region: String, ground: InkGround,
+                          palette: DoorbellPalette) -> InkDecision {
+        let background = ground.color
+        if let override = inkOverride(display: display, config: config, nodeId: nodeId,
+                                      region: region) {
+            return decision(ink: override, background: background, source: .admin)
         }
-        if let published = ConfigUtil.str(display, "theme.auto_ink.\(region)") {
-            if published == "dark" { return DoorbellPalette.light.ink }
-            if published == "light" { return DoorbellPalette.dark.ink }
+        switch ground {
+        case .palette:
+            return decision(ink: palette.ink, background: background, source: .local)
+        case .sampled:
+            return decision(ink: automaticInk(on: background), background: background,
+                            source: .localRegion)
+        case .themeColor:
+            switch ConfigUtil.str(display, "theme.auto_ink.\(region)") {
+            case "dark"?:
+                return decision(ink: DoorbellPalette.light.ink, background: background,
+                                source: .core)
+            case "light"?:
+                return decision(ink: DoorbellPalette.dark.ink, background: background,
+                                source: .core)
+            default:
+                return decision(ink: automaticInk(on: background), background: background,
+                                source: .local)
+            }
         }
-        return luminance(background) >= 0.5 ? DoorbellPalette.light.ink : DoorbellPalette.dark.ink
     }
 
-    /// The background a text region actually sits on, as Core measured it (an image is averaged
-    /// there); nil when the contract is absent and the shell must measure locally.
+    /// The better of the two inks against a measured ground: whichever reaches the higher WCAG
+    /// contrast ratio, not whichever side of a luminance threshold the ground falls on. The
+    /// threshold is wrong in the middle of the range — a wallpaper averaging #BBBBB4 sits at
+    /// Y = 0.494 and would take the light ink at under 2:1, where the dark ink reads at over 9:1.
+    /// The two agree everywhere except that middle, and cross over near Y = 0.179.
+    static func automaticInk(on background: UIColor) -> UIColor {
+        let dark = DoorbellPalette.light.ink, light = DoorbellPalette.dark.ink
+        return contrast(dark, background) >= contrast(light, background) ? dark : light
+    }
+
+    /// The outline is added only when the chosen ink still misses the 4.5:1 body-text target
+    /// against its own ground; it is the opposite ink at 40 %.
+    private static func decision(ink: UIColor, background: UIColor,
+                                 source: InkSource) -> InkDecision {
+        guard contrast(ink, background) < 4.5 else {
+            return InkDecision(ink: ink, background: background, source: source, shadow: nil)
+        }
+        let opposite = luminance(ink) >= 0.5 ? UIColor.black : UIColor.white
+        return InkDecision(ink: ink, background: background, source: source,
+                           shadow: opposite.withAlphaComponent(0.4))
+    }
+
+    /// How Core arrived at `auto_background.color`: `image` when it sampled the picture, `color`
+    /// for a flat theme, and `image_unsampled` — which carries a `reason` — when the picture was
+    /// beyond what it will decode. A value this build has never seen is a newer Core.
+    enum BackgroundSource: String {
+        case image
+        case color
+        case imageUnsampled = "image_unsampled"
+    }
+
+    static func backgroundSource(display: [String: Any]?) -> BackgroundSource? {
+        guard let raw = ConfigUtil.str(display, "theme.auto_background.source") else { return nil }
+        return BackgroundSource(rawValue: raw)
+    }
+
+    /// Whether Core's published colour describes what this screen is showing. It does for a flat
+    /// theme and for a picture Core measured; it does not once Core reports it refused to sample
+    /// the picture, and a source value this build has never seen is read the same cautious way.
+    /// A contract with no `source` at all is an older Core, whose colour was always a measurement.
+    static func publishedBackgroundIsGround(display: [String: Any]?) -> Bool {
+        guard ConfigUtil.str(display, "theme.auto_background.source") != nil else { return true }
+        guard let source = backgroundSource(display: display) else { return false }
+        return source != .imageUnsampled
+    }
+
+    /// The background a text region sits on, as Core measured it (a picture is averaged there);
+    /// nil when the contract is absent and the shell must measure locally.
     static func publishedBackground(display: [String: Any]?) -> UIColor? {
         return color(hex: ConfigUtil.str(display, "theme.auto_background.color"))
     }
@@ -400,15 +704,10 @@ enum DoorbellTheme {
     /// A one-pixel outline is added only when the chosen ink still misses AA against the region
     /// background; it uses the opposite ink at 40 %.
     static func applyInk(_ ink: UIColor, over background: UIColor, to label: UILabel) {
-        label.textColor = ink
-        guard contrast(ink, background) < 4.5 else {
-            label.shadowColor = nil
-            label.shadowOffset = .zero
-            return
-        }
-        let opposite = luminance(ink) >= 0.5 ? UIColor.black : UIColor.white
-        label.shadowColor = opposite.withAlphaComponent(0.4)
-        label.shadowOffset = CGSize(width: 0, height: 1)
+        let decided = decision(ink: ink, background: background, source: .local)
+        label.textColor = decided.ink
+        label.shadowColor = decided.shadow
+        label.shadowOffset = decided.shadow == nil ? .zero : CGSize(width: 0, height: 1)
     }
 
     /// Call-button colour for a door station: the complement of the effective background, moved in
