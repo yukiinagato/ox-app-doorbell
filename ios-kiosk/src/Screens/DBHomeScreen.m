@@ -869,9 +869,9 @@ static const NSInteger kRecentCallLimit = 20;
     if (url == nil) continue;
     __weak DBDoorTile *weakTile = tile;
     __weak DBHomeScreen *weakSelf = self;
-    // One still per door every five seconds, fetched and downscaled entirely
-    // off the main thread: a full-size JPEG decode on the main run loop of an
-    // iPad 1 is visible as a dropped clock second.
+    // One still per door every five seconds (fifteen in safe mode), fetched and
+    // downscaled entirely off the main thread: a full-size JPEG decode on the
+    // main run loop of an iPad 1 is visible as a dropped clock second.
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_LOW, 0), ^{
       NSURLRequest *request = [NSURLRequest requestWithURL:url
                                               cachePolicy:NSURLRequestReloadIgnoringLocalCacheData
