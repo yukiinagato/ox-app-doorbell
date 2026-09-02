@@ -58,6 +58,25 @@ static NSArray *DBSortedPurposeIds(NSDictionary *map) {
   return out;
 }
 
++ (NSString *)displayIconForConfiguredIcon:(NSString *)icon {
+  if (![icon isKindOfClass:[NSString class]] || [icon length] == 0) return @"";
+  NSMutableString *safe = [NSMutableString string];
+  NSUInteger length = [icon length];
+  for (NSUInteger i = 0; i < length; i++) {
+    unichar c = [icon characterAtIndex:i];
+    // A surrogate pair is a codepoint above the BMP: every modern emoji.
+    if (c >= 0xD800 && c <= 0xDFFF) continue;
+    if (c == 0xFE0E || c == 0xFE0F) continue;  // Variation selectors.
+    if (c == 0x200D) continue;                 // Zero-width joiner.
+    if (c >= 0x1F00 && c <= 0x1FFF) continue;  // Not emoji, but not in the font.
+    if (c < 0x20) continue;
+    [safe appendFormat:@"%C", c];
+  }
+  NSString *trimmed = [safe stringByTrimmingCharactersInSet:
+      [NSCharacterSet whitespaceAndNewlineCharacterSet]];
+  return trimmed ?: @"";
+}
+
 + (NSString *)enabledKeyForPurpose:(NSString *)purposeId {
   if ([purposeId length] == 0) return @"";
   return [NSString stringWithFormat:@"visit_purposes.%@.enabled", purposeId];

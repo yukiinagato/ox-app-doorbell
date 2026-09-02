@@ -350,7 +350,10 @@ class RecoverySafeModeContracts(unittest.TestCase):
         self.assertIn(".answerSuperseded", modern_refresh)
         self.assertIn("demoteSupersededAnswer()", modern_refresh)
         self.assertIn("consumeSupersededIdle()", modern_idle)
-        self.assertIn("restartAutoClose()", modern_idle)
+        # Batch 3 replaced the fixed auto-close with the page's own return
+        # countdown; the rule this pins is unchanged -- a superseded idle keeps
+        # the page and restarts whatever governs its lifetime.
+        self.assertIn("restartReturnCountdown()", modern_idle)
         self.assertIn("return", modern_idle)
         self.assertNotIn("beginAnswer", modern_monitor)
 

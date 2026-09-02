@@ -652,6 +652,33 @@ static BOOL DBCoreSipBackendCompiled(void) {
   if (_current == _info) [self showHomeAnimated:animated];
 }
 
+- (void)showDebugStartScreen:(NSString *)name {
+  NSString *screen = [[name stringByTrimmingCharactersInSet:
+      [NSCharacterSet whitespaceAndNewlineCharacterSet]] lowercaseString];
+  if ([screen length] == 0 || [screen isEqualToString:@"dashboard"]) return;
+  NSLog(@"[doorbell][debug] opening start screen '%@'", screen);
+  if ([screen isEqualToString:@"settings"]) {
+    [self showSettings];
+  } else if ([screen isEqualToString:@"history"]) {
+    [self showHistory];
+  } else if ([screen isEqualToString:@"pairing"]) {
+    [self showPairing];
+  } else if ([screen isEqualToString:@"info"]) {
+    [self showInfo];
+  } else if ([screen isEqualToString:@"visitor"]) {
+    [self transitionTo:self.door animated:NO];
+  } else if ([screen isEqualToString:@"incoming"]) {
+    // A synthetic ring against this node's own door, so the page draws exactly
+    // as it does for a real call.
+    NSString *door = [_boot.door length] > 0 ? _boot.door : @"d_front";
+    [self showIncoming:door purpose:@"" lang:_boot.uiLang callID:@"debug-preview"
+         stageRevision:0
+           expiresAtMs:(long long)([[NSDate date] timeIntervalSince1970] * 1000.0) + 600000];
+  } else {
+    NSLog(@"[doorbell][debug] unknown start screen '%@'", screen);
+  }
+}
+
 - (void)showSettings {
   [[self settings] reload];
   [self transitionTo:_settings animated:YES];

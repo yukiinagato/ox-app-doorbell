@@ -619,6 +619,15 @@ static BOOL DBNativeKioskHealthy(void) {
   _runtimeHeartbeatTimer = [NSTimer scheduledTimerWithTimeInterval:10.0
       target:self selector:@selector(publishRuntimeHealth:) userInfo:nil repeats:YES];
   [self startScreenshotHookIfEnabled];
+  if (_boot.debugScreenshots && [_boot.debugStartScreen length] > 0) {
+    // After the first layout, so the screen it opens is fully drawn.
+    DBRouter *startRouter = _router;
+    NSString *startScreen = [_boot.debugStartScreen copy];
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.0 * NSEC_PER_SEC)),
+                   dispatch_get_main_queue(), ^{
+      [startRouter showDebugStartScreen:startScreen];
+    });
+  }
   [self publishRuntimeHealth:nil];
   dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(300 * NSEC_PER_SEC)),
                  dispatch_get_main_queue(), ^{

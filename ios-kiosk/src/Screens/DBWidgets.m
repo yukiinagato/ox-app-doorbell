@@ -10,6 +10,18 @@ UIColor *DBColorFromHex(NSString *hex, UIColor *fallback) {
   return [UIColor colorWithRed:(CGFloat)rgb.r green:(CGFloat)rgb.g blue:(CGFloat)rgb.b alpha:1];
 }
 
+// Where an aspect-filled picture lands in a view of the given size.
+static CGRect DBAspectFitRectForFill(CGSize contentSize, CGSize viewSize) {
+  NSArray *rect = [DBUiTheme aspectFillDrawRectForImageWidth:contentSize.width
+                                                imageHeight:contentSize.height
+                                                  viewWidth:viewSize.width
+                                                 viewHeight:viewSize.height];
+  return CGRectMake((CGFloat)[[rect objectAtIndex:0] doubleValue],
+                    (CGFloat)[[rect objectAtIndex:1] doubleValue],
+                    (CGFloat)[[rect objectAtIndex:2] doubleValue],
+                    (CGFloat)[[rect objectAtIndex:3] doubleValue]);
+}
+
 CGRect DBAspectFitRect(CGRect available, CGSize contentSize) {
   NSArray *rect = [DBUiTheme aspectFitRectForContentWidth:contentSize.width
                                             contentHeight:contentSize.height
@@ -39,6 +51,58 @@ NSString *DBHexFromColor(UIColor *color) {
   }
   return [DBUiTheme hexFromRgb:rgb];
 }
+
+#pragma mark - theme backdrop
+
+@implementation DBThemeBackdrop
+
++ (CGFloat)darkeningAlpha { return 0.45; }
+
++ (NSMutableDictionary *)cache {
+  static NSMutableDictionary *cache = nil;
+  static dispatch_once_t once;
+  dispatch_once(&once, ^{ cache = [[NSMutableDictionary alloc] init]; });
+  return cache;
+}
+
++ (NSString *)cacheKeyForKey:(NSString *)key size:(CGSize)size {
+  return [NSString stringWithFormat:@"%@@%.0fx%.0f", key ?: @"", size.width, size.height];
+}
+
++ (UIImage *)cachedBackdropForKey:(NSString *)key size:(CGSize)size {
+  @synchronized([self cache]) {
+    return [[self cache] objectForKey:[self cacheKeyForKey:key size:size]];
+  }
+}
+
++ (UIImage *)backdropForData:(NSData *)data key:(NSString *)key size:(CGSize)size {
+  if (size.width <= 0 || size.height <= 0) return nil;
+  UIImage *cached = [self cachedBackdropForKey:key size:size];
+  if (cached != nil) return cached;
+  UIImage *source = data ? [UIImage imageWithData:data] : nil;
+  if (source == nil || source.size.width <= 0 || source.size.height <= 0) return nil;
+
+  // One draw at panel size, scale 1: the iPad 1 is not a Retina device and a
+  // 2x context would quadruple the texture for nothing.
+  UIGraphicsBeginImageContextWithOptions(size, YES, 1.0);
+  CGRect fill = DBAspectFitRectForFill(source.size, size);
+  [source drawInRect:fill];
+  [[UIColor colorWithWhite:0 alpha:[self darkeningAlpha]] set];
+  UIRectFillUsingBlendMode(CGRectMake(0, 0, size.width, size.height), kCGBlendModeNormal);
+  UIImage *prepared = UIGraphicsGetImageFromCurrentImageContext();
+  UIGraphicsEndImageContext();
+  if (prepared == nil) return nil;
+  @synchronized([self cache]) {
+    NSMutableDictionary *cache = [self cache];
+    // A panel has one picture and at most two orientations; anything more is a
+    // leak, not a cache.
+    if ([cache count] > 4) [cache removeAllObjects];
+    [cache setObject:prepared forKey:[self cacheKeyForKey:key size:size]];
+  }
+  return prepared;
+}
+
+@end
 
 #pragma mark - background sampler
 
@@ -180,6 +244,8 @@ static const NSInteger kProxyEdge = 64;
   NSString *_mode;
   NSString *_surfaceHex;
   DBBackgroundSampler *_sampler;
+  BOOL _usesThemeBackground;
+  NSString *_requestedBackgroundHex;  // What the caller said its ground is.
 }
 
 @synthesize mode = _mode;
@@ -191,6 +257,7 @@ static const NSInteger kProxyEdge = 64;
                     backgroundHex:(NSString *)backgroundHex
                       minuteOfDay:(NSInteger)minuteOfDay {
   DBUiPalette *palette = [[DBUiPalette alloc] init];
+  palette->_usesThemeBackground = YES;
   palette->_config = config;
   palette->_display = display;
   palette->_deviceId = [deviceId copy] ?: @"";
@@ -201,17 +268,30 @@ static const NSInteger kProxyEdge = 64;
   // a caller's own sample is only used when core published none.
   NSString *effective = [DBUiTheme autoBackgroundHexInDisplay:display];
   DBRgb probe;
+  palette->_requestedBackgroundHex = [DBUiTheme parseHex:backgroundHex into:&probe]
+      ? [backgroundHex copy] : nil;
   if ([effective length] > 0)
     palette->_surfaceHex = [effective copy];
   else
-    palette->_surfaceHex = [DBUiTheme parseHex:backgroundHex into:&probe]
-        ? [backgroundHex copy]
-        : [[DBUiTheme surfaceHexForMode:palette->_mode] copy];
+    palette->_surfaceHex = palette->_requestedBackgroundHex
+        ?: [[DBUiTheme surfaceHexForMode:palette->_mode] copy];
   return palette;
 }
 
+// Whether the panel's own chrome sits on a light ground. This follows the
+// measured surface, not the configured appearance: with a light theme picture
+// behind them, chips drawn as "white at 8 %" and muted grey text disappear,
+// which is exactly what the first backdrop build showed on the device. The
+// appearance schedule still decides the tokens when there is no picture,
+// because then the surface is that mode's own colour.
 - (BOOL)isLight {
-  return [_mode isEqualToString:@"light"];
+  return [[DBUiTheme inkModeForBackgroundHex:_surfaceHex fallbackMode:_mode]
+      isEqualToString:@"dark"];
+}
+
+// The mode the chrome should use, as a token name.
+- (NSString *)chromeMode {
+  return [self isLight] ? @"light" : @"dark";
 }
 
 - (UIColor *)surface {
@@ -219,8 +299,8 @@ static const NSInteger kProxyEdge = 64;
 }
 
 - (UIColor *)elevated {
-  return [self isLight] ? [UIColor colorWithWhite:0 alpha:0.06]
-                        : [UIColor colorWithWhite:1 alpha:0.08];
+  return [self isLight] ? [UIColor colorWithWhite:1 alpha:0.72]
+                        : [UIColor colorWithWhite:0 alpha:0.42];
 }
 
 - (UIColor *)separator {
@@ -229,11 +309,11 @@ static const NSInteger kProxyEdge = 64;
 }
 
 - (UIColor *)ink {
-  return DBColorFromHex([DBUiTheme inkHexForMode:_mode], [UIColor whiteColor]);
+  return DBColorFromHex([DBUiTheme inkHexForMode:[self chromeMode]], [UIColor whiteColor]);
 }
 
 - (UIColor *)mutedInk {
-  return DBColorFromHex([DBUiTheme mutedInkHexForMode:_mode],
+  return DBColorFromHex([DBUiTheme mutedInkHexForMode:[self chromeMode]],
                         [UIColor colorWithWhite:0.6 alpha:1]);
 }
 
@@ -263,6 +343,13 @@ static const NSInteger kProxyEdge = 64;
                         : [UIColor colorWithRed:0.62 green:0.47 blue:0.10 alpha:1];
 }
 
+// A chip needs a real plate over a picture: an 8 % wash vanishes on a light
+// wallpaper and reads as nothing at all.
+- (UIColor *)chipPlate {
+  return [self isLight] ? [UIColor colorWithWhite:1 alpha:0.82]
+                        : [UIColor colorWithWhite:0 alpha:0.55];
+}
+
 - (UIColor *)noticeInk {
   return [self isLight] ? [UIColor colorWithRed:0.20 green:0.14 blue:0.02 alpha:1]
                         : [UIColor whiteColor];
@@ -270,6 +357,19 @@ static const NSInteger kProxyEdge = 64;
 
 - (void)setBackgroundSampler:(DBBackgroundSampler *)sampler {
   _sampler = sampler;
+}
+
+- (void)setUsesThemeBackground:(BOOL)usesThemeBackground {
+  _usesThemeBackground = usesThemeBackground;
+  // Core's measured theme background describes the wallpaper, not this
+  // screen's own chrome. A screen that paints its own ground says so, and its
+  // colour is then what everything is measured against -- otherwise the
+  // incoming page inherited a light wallpaper's dark ink onto black video
+  // chrome, which is exactly how the call title came out unreadable.
+  if (!usesThemeBackground) {
+    _surfaceHex = _requestedBackgroundHex
+        ?: [[DBUiTheme surfaceHexForMode:_mode] copy];
+  }
 }
 
 // A sampler built for a different view size maps region frames onto the wrong
@@ -282,6 +382,17 @@ static const NSInteger kProxyEdge = 64;
 }
 
 - (NSString *)inkHexForRegion:(NSString *)region {
+  if (!_usesThemeBackground) {
+    // This screen's ground is its own chrome, so only an administrator's
+    // override outranks the measurement of that colour.
+    NSString *override = [DBUiTheme adminInkOverrideHexForRegion:region config:_config
+                                                        deviceId:_deviceId display:_display];
+    if ([override length] > 0) return override;
+    DBRgb rgb;
+    if ([DBUiTheme parseHex:_surfaceHex into:&rgb])
+      return [DBUiTheme inkHexForSampledLuminance:[DBUiTheme relativeLuminance:rgb]];
+    return [DBUiTheme inkHexForMode:_mode];
+  }
   return [DBUiTheme inkHexForRegion:region config:_config deviceId:_deviceId
                             display:_display backgroundHex:_surfaceHex appearanceMode:_mode];
 }
@@ -508,6 +619,7 @@ static const NSInteger kProxyEdge = 64;
   UIView *_track;
   UIView *_fill;
   UIView *_thumb;
+  UILabel *_thumbChevron;
   UILabel *_hint;
   UILabel *_hintSecondary;
   UILabel *_countdown;
@@ -517,6 +629,7 @@ static const NSInteger kProxyEdge = 64;
   UIColor *_danger;
   UIColor *_dangerInk;
   UIColor *_trackColor;
+  UIColor *_trackInk;
 }
 
 - (id)initWithFrame:(CGRect)frame {
@@ -527,6 +640,7 @@ static const NSInteger kProxyEdge = 64;
     _danger = [UIColor colorWithRed:0.78 green:0.08 blue:0.06 alpha:1];
     _dangerInk = [UIColor whiteColor];
     _trackColor = [UIColor colorWithWhite:1 alpha:0.14];
+    _trackInk = [UIColor whiteColor];
 
     _track = [[UIView alloc] init];
     _track.layer.cornerRadius = 14;
@@ -539,21 +653,18 @@ static const NSInteger kProxyEdge = 64;
     _hint = [[UILabel alloc] init];
     _hint.backgroundColor = [UIColor clearColor];
     _hint.textAlignment = NSTextAlignmentCenter;
-    _hint.font = [UIFont boldSystemFontOfSize:20];
-    // Two lines rather than an ellipsis: this control must always read as what
-    // it does before someone slides it.
-    _hint.numberOfLines = 2;
+    _hint.font = [UIFont boldSystemFontOfSize:22];
+    _hint.numberOfLines = 1;
     [_track addSubview:_hint];
 
+    // The sub-line is the deliberate second part of the label, smaller and
+    // muted, exactly as on Android and the Swift shell.
     _hintSecondary = [[UILabel alloc] init];
     _hintSecondary.backgroundColor = [UIColor clearColor];
     _hintSecondary.textAlignment = NSTextAlignmentCenter;
     _hintSecondary.font = [UIFont systemFontOfSize:16];
+    _hintSecondary.numberOfLines = 1;
     [_track addSubview:_hintSecondary];
-
-    _thumb = [[UIView alloc] init];
-    _thumb.layer.cornerRadius = 12;
-    [self addSubview:_thumb];
 
     _countdown = [[UILabel alloc] init];
     _countdown.backgroundColor = [UIColor clearColor];
@@ -591,7 +702,8 @@ static const NSInteger kProxyEdge = 64;
 - (void)applyPalette:(DBUiPalette *)palette {
   _danger = palette.danger;
   _dangerInk = palette.dangerInk;
-  _trackColor = palette.elevated;
+  _trackColor = palette.chipPlate;
+  _trackInk = palette.ink;
   [self applyState];
 }
 
@@ -607,15 +719,18 @@ static const NSInteger kProxyEdge = 64;
   _track.backgroundColor = _trackColor;
   _fill.backgroundColor = [_danger colorWithAlphaComponent:0.55];
   _thumb.backgroundColor = _danger;
-  _hint.textColor = _dangerInk;
-  _hintSecondary.textColor = [_dangerInk colorWithAlphaComponent:0.75];
+  // The label is drawn on the track; the chevron is drawn on the red knob.
+  _hint.textColor = _trackInk;
+  _thumbChevron.textColor = _dangerInk;
+  _hintSecondary.textColor = [_trackInk colorWithAlphaComponent:0.75];
   _countdown.textColor = _dangerInk;
   _cancelHint.textColor = [_dangerInk colorWithAlphaComponent:0.85];
 
-  NSArray *parts = [DBUiTheme labelPartsFor:[_texts ts:@"sos.slide_hint"]];
-  _hint.text = [parts objectAtIndex:0];
-  _hintSecondary.text = [parts objectAtIndex:1];
-  _hintSecondary.hidden = ([[parts objectAtIndex:1] length] == 0) || counting;
+  // The same two-part label every shell shows: the action, then what happens.
+  _hint.text = [_texts ts:@"sos.slide_label"];
+  _hintSecondary.text = [_texts t:@"sos.slide_sub",
+      [NSString stringWithFormat:@"%ld", (long)_model.countdownSeconds], nil];
+  _hintSecondary.hidden = counting;
   _hint.hidden = counting;
   _thumb.hidden = counting;
   _countdown.hidden = !counting;
@@ -624,7 +739,7 @@ static const NSInteger kProxyEdge = 64;
     _track.backgroundColor = _danger;
     _countdown.text = [_texts t:@"sos.countdown",
         [NSString stringWithFormat:@"%ld", (long)_model.remainingSeconds], nil];
-    _cancelHint.text = [_texts ts:@"emergency.cancel"];
+    _cancelHint.text = [_texts ts:@"sos.countdown_cancel"];
   }
   [self setNeedsLayout];
 }
@@ -633,17 +748,28 @@ static const NSInteger kProxyEdge = 64;
   [super layoutSubviews];
   CGSize size = self.bounds.size;
   _track.frame = self.bounds;
-  CGFloat travel = MAX(0, size.width - _thumbSide - 8);
-  CGFloat x = 4 + travel * (CGFloat)_model.fraction;
-  _thumb.frame = CGRectMake(x, 4, _thumbSide, MAX(0, size.height - 8));
-  _fill.frame = CGRectMake(0, 0, x + _thumbSide / 2, size.height);
-  CGFloat textX = _thumbSide + 12;
+  CGFloat radius = MIN(16, size.height / 2);
+  _track.layer.cornerRadius = radius;
+  CGFloat inset = 5;
+  CGFloat knob = MAX(40, size.height - inset * 2);
+  _thumbSide = knob;
+  CGFloat travel = MAX(0, size.width - knob - inset * 2);
+  CGFloat x = inset + travel * (CGFloat)_model.fraction;
+  _thumb.frame = CGRectMake(x, inset, knob, knob);
+  _thumb.layer.cornerRadius = knob / 2;
+  _thumbChevron.frame = _thumb.bounds;
+  _fill.frame = CGRectMake(0, 0, x + knob / 2, size.height);
+
+  CGFloat textX = inset + knob + 10;
   CGFloat textW = MAX(0, size.width - textX - 12);
-  if (_hintSecondary.hidden) {
+  if (_hintSecondary.hidden || [_hintSecondary.text length] == 0) {
     _hint.frame = CGRectMake(textX, 0, textW, size.height);
   } else {
-    _hint.frame = CGRectMake(textX, 6, textW, size.height / 2);
-    _hintSecondary.frame = CGRectMake(textX, size.height / 2, textW, size.height / 2 - 6);
+    CGFloat primary = ceilf((float)_hint.font.lineHeight) + 2;
+    CGFloat secondary = ceilf((float)_hintSecondary.font.lineHeight) + 2;
+    CGFloat top = MAX(2, (size.height - primary - secondary) / 2);
+    _hint.frame = CGRectMake(textX, top, textW, primary);
+    _hintSecondary.frame = CGRectMake(textX, top + primary, textW, secondary);
   }
   _countdown.frame = CGRectMake(8, 4, MAX(0, size.width - 16), size.height / 2);
   _cancelHint.frame = CGRectMake(8, size.height / 2, MAX(0, size.width - 16),
@@ -802,9 +928,9 @@ static const NSInteger kProxyEdge = 64;
   _image.frame = CGRectMake(0, (size.height - side) / 2, side, side);
   CGFloat textX = side + 10;
   CGFloat textW = MAX(0, size.width - textX);
-  _caption.frame = CGRectMake(textX, (size.height - side) / 2, textW, 30);
-  _urlLabel.frame = CGRectMake(textX, (size.height - side) / 2 + 30, textW,
-                               MAX(0, side - 30));
+  _caption.frame = CGRectMake(textX, (size.height - side) / 2, textW, 26);
+  // The address gets the whole remaining width on one line.
+  _urlLabel.frame = CGRectMake(textX, (size.height - side) / 2 + 28, textW, 24);
 }
 
 @end

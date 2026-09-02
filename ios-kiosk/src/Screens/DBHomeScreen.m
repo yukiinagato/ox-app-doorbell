@@ -112,6 +112,7 @@ static const NSInteger kRecentCallLimit = 20;
   UIImage *_themeImage;
   DBBackgroundSampler *_sampler;   // Per-region sampling of the theme image.
   CGSize _samplerSize;
+  CGSize _themeImageSize;
   BOOL _samplerBuilding;
   NSArray *_doorPeers;
   NSArray *_recentRows;
@@ -214,6 +215,7 @@ static const NSInteger kRecentCallLimit = 20;
 - (void)buildUi {
   _themeBg = [[UIImageView alloc] init];
   _themeBg.contentMode = UIViewContentModeScaleAspectFill;
+  _themeBg.opaque = YES;
   _themeBg.clipsToBounds = YES;
   _themeBg.hidden = YES;
   [self addSubview:_themeBg];
@@ -539,7 +541,8 @@ static const NSInteger kRecentCallLimit = 20;
     [parts addObject:[_texts t:@"pair.membership_connected",
                           [NSString stringWithFormat:@"%ld", (long)connected], nil]];
     if (founder) [parts addObject:[_texts ts:@"pair.created_badge"]];
-    _membershipPill.text = [parts componentsJoinedByString:@"  ·  "];
+    // One separator everywhere, as the other shells use.
+    _membershipPill.text = [parts componentsJoinedByString:@" · "];
   }
   BOOL showBanner = !ready && ![_pairingState isEqualToString:DBPairingStateUnknown];
   [_pairBanner setTitle:[_texts ts:@"pair.not_set_up_banner"] forState:UIControlStateNormal];
@@ -630,20 +633,25 @@ static const NSInteger kRecentCallLimit = 20;
   NSURL *url = [NSURL URLWithString:urlString];
   if (url == nil) return;
   NSString *want = [hash copy];
+  CGSize size = self.bounds.size;
   __weak DBHomeScreen *weakSelf = self;
   dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_LOW, 0), ^{
-    NSData *data = [NSData dataWithContentsOfURL:url];
-    UIImage *image = data ? [UIImage imageWithData:data] : nil;
-    // The average is computed here, off the main thread, because the ink rule
-    // needs it before the first paint that uses the image.
-    NSString *average = [DBUiPalette averageHexForImage:image];
+    // One decode, at panel size, darkened once and cached per picture and
+    // size; the sampler then measures the very pixels that are on screen.
+    UIImage *backdrop = [DBThemeBackdrop cachedBackdropForKey:want size:size];
+    if (backdrop == nil) {
+      NSData *data = [NSData dataWithContentsOfURL:url];
+      backdrop = [DBThemeBackdrop backdropForData:data key:want size:size];
+    }
+    NSString *average = [DBUiPalette averageHexForImage:backdrop];
     dispatch_async(dispatch_get_main_queue(), ^{
       DBHomeScreen *screen = weakSelf;
       if (!screen || ![screen->_themeHash isEqualToString:want]) return;
-      screen->_themeBg.image = image;
-      screen->_themeBg.hidden = (image == nil);
+      screen->_themeBg.image = backdrop;
+      screen->_themeBg.hidden = (backdrop == nil);
       screen->_themeAverageHex = average;
-      screen->_themeImage = image;
+      screen->_themeImage = backdrop;
+      screen->_themeImageSize = size;
       screen->_samplerSize = CGSizeZero;
       [screen refreshBackgroundSampler];
       [screen applyPalette];
@@ -1281,6 +1289,11 @@ static const NSInteger kRecentCallLimit = 20;
   _emergencyNote.frame = CGRectMake(20, size.height / 2 - 20, size.width - 40, 40);
   _emergencyCancel.frame = CGRectMake(size.width / 2 - 110, size.height / 2 + 50, 220, 64);
 
+  // A rotation needs the picture rebuilt at the new panel size.
+  if ([_themeHash length] > 0 && !CGSizeEqualToSize(_themeImageSize, size)) {
+    _themeImageSize = size;
+    [self loadThemeImage:_themeHash];
+  }
   [self refreshBackgroundSampler];
   [self applyRegionInk];
 }

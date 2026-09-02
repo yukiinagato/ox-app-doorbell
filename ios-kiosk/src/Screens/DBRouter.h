@@ -38,6 +38,10 @@
 // Native settings (spec §3) and the full-screen call history (spec §5.1).
 // Callers gate both behind the admin password on a door station; the indoor
 // 管理 entry does the same.
+// Debug aid: open one screen by name, bypassing the admin password. The caller
+// must have checked that boot.json turned the screenshot hook on.
+- (void)showDebugStartScreen:(NSString *)name;
+
 - (void)showSettings;
 - (void)closeSettingsAnimated:(BOOL)animated;
 - (void)showHistory;

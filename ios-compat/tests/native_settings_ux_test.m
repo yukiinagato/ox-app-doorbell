@@ -827,6 +827,19 @@ static void TestDisabledVisitPurposesLeaveEveryChooser(void) {
   Require([[DBPurposeModel enabledKeyForPurpose:@""] length] == 0,
           @"an empty identifier never produces a writable key");
 
+  // iOS 5 draws an empty box for a modern emoji; the label alone is better.
+  Require([[DBPurposeModel displayIconForConfiguredIcon:@"\U0001F381"] length] == 0,
+          @"a gift emoji is dropped rather than drawn as a box");
+  Require([[DBPurposeModel displayIconForConfiguredIcon:@"\U0001F3E0"] length] == 0,
+          @"and a house emoji");
+  Require([[DBPurposeModel displayIconForConfiguredIcon:@"\u2709\uFE0F"]
+              isEqualToString:@"\u2709"],
+          @"a composed envelope keeps the glyph this device has and loses the selector");
+  Require([[DBPurposeModel displayIconForConfiguredIcon:@"\u2753"]
+              isEqualToString:@"\u2753"], @"a dingbat that iOS 5 has survives");
+  Require([[DBPurposeModel displayIconForConfiguredIcon:nil] length] == 0, @"nil is safe");
+  Require([[DBPurposeModel displayIconForConfiguredIcon:@""] length] == 0, @"empty is safe");
+
   Require([[DBPurposeModel allPurposeIdsInConfig:[NSDictionary dictionary]] count] == 0,
           @"an installation with no purposes renders none");
   Require([[DBPurposeModel enabledPurposeIdsInConfig:nil] count] == 0, @"and nil is safe");

@@ -241,8 +241,12 @@ class ReadabilityContracts(unittest.TestCase):
         # ...the decision re-runs once the image has finished loading...
         load = home[home.index("- (void)loadThemeImage:"):
                     home.index("- (void)refreshBackgroundSampler")]
-        self.assertIn("screen->_themeImage = image", load)
+        self.assertIn("screen->_themeImage = backdrop", load)
         self.assertIn("[screen refreshBackgroundSampler]", load)
+        # One prepared, darkened copy per picture and panel size, decoded off
+        # the main thread; the sampler then measures what is actually drawn.
+        self.assertIn("DBThemeBackdrop cachedBackdropForKey:want size:size", load)
+        self.assertIn("DBThemeBackdrop backdropForData:data key:want size:size", load)
         # ...and a sampler built for another view size is ignored, so a
         # rotation falls back rather than reading the wrong pixels.
         self.assertIn("- (DBBackgroundSampler *)samplerForViewSize:", widgets)
