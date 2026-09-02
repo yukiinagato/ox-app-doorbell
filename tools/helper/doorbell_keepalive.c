@@ -1201,7 +1201,9 @@ static void db_note_stream_heartbeat(db_state *state, pid_t pid, uint64_t sequen
   state->waiting_start = false;
   state->next_restart_ms = 0;
   state->expected_exit = false;
-  state->maintenance_exit_grace = false;
+  /* A heartbeat inside an active lease must not revoke the grace: the operator may
+     still kill the app before the lease ends, and that exit is maintenance, not a crash. */
+  if (state->maintenance_deadline_ms <= now) state->maintenance_exit_grace = false;
   state->presence_present = true;
   state->presence_valid = false;
   if (state->terminating_pid == pid) state->terminating_pid = 0;
@@ -1362,7 +1364,7 @@ static void db_accept_heartbeat(db_state *state, const db_message *message,
   /* `stopping` is the app announcing an orderly exit; the following process
      disappearance is expected and must not be charged as a crash. */
   state->expected_exit = message->event == DB_EVENT_STOPPING;
-  state->maintenance_exit_grace = false;
+  if (state->maintenance_deadline_ms <= now) state->maintenance_exit_grace = false;
   state->presence_present = true;
   state->presence_valid = false;
   if (state->terminating_pid == message->pid) state->terminating_pid = 0;

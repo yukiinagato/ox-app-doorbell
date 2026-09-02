@@ -123,7 +123,7 @@ case "$ACTION" in
     ;;
   disable-file)
     "${SSH[@]}" \
-      "/usr/bin/touch '$DISABLE_FILE' && /usr/sbin/chown root:wheel '$DISABLE_FILE' && "\
+      "( : > '$DISABLE_FILE' ) && /usr/sbin/chown root:wheel '$DISABLE_FILE' && "\
       "/bin/chmod 0644 '$DISABLE_FILE'"
     echo "kill switch engaged: the helper reports mode off and stops launching"
     status

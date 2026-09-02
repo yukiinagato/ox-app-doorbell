@@ -697,6 +697,40 @@ class RailTests(unittest.TestCase):
                     app.wait(timeout=2)
 
 
+    def test_a_heartbeat_inside_the_lease_keeps_the_maintenance_grace(self):
+        """Device finding: a heartbeat between begin and the kill must not turn the
+        later exit into a charged process_exited once the lease expires."""
+        with tempfile.TemporaryDirectory(prefix="dbh-lease2-", dir="/tmp") as temporary:
+            root = Path(temporary)
+            launch_log = root / "launch.log"
+            app = subprocess.Popen(["/bin/sleep", "10"])
+            try:
+                with HelperProcess(
+                    root, "auto", DB_KEEPALIVE_TEST_LOG=str(launch_log)
+                ) as helper:
+                    helper.send(heartbeat(1, app.pid))
+                    wait_until(lambda: read_status(helper.status)["state"] == "healthy")
+                    self.assertTrue(helper.command("MAINTENANCE_BEGIN 2")["ok"])
+                    wait_until(
+                        lambda: read_status(helper.status)["state"] == "maintenance"
+                    )
+                    helper.send(heartbeat(2, app.pid))
+                    time.sleep(0.3)
+                    app.terminate()
+                    app.wait(timeout=2)
+                    wait_until(
+                        lambda: read_status(helper.status)["last_reason"]
+                        == "maintenance_exit",
+                        timeout=10.0,
+                    )
+                    status = read_status(helper.status)
+                    self.assertEqual(status["restart_count_5m"], 0)
+                    self.assertFalse(status["safe_mode"])
+            finally:
+                if app.poll() is None:
+                    app.terminate()
+                    app.wait(timeout=2)
+
 class LogAndControlTests(unittest.TestCase):
     """C5/C8: bounded diagnostics and the fixed maintenance control client."""
 
