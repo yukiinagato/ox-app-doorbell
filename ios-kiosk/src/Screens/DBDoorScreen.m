@@ -239,7 +239,7 @@ typedef enum {
   [self addSubview:_titleLabel];
 
   _touchHint = [[UILabel alloc] init];
-  _touchHint.font = [UIFont systemFontOfSize:21];
+  _touchHint.font = [UIFont systemFontOfSize:26];
   _touchHint.textColor = [UIColor colorWithWhite:1 alpha:0.65];
   _touchHint.textAlignment = NSTextAlignmentCenter;
   [self addSubview:_touchHint];
@@ -307,7 +307,7 @@ typedef enum {
   // The visitor sees the announcement text only: no source line and no expiry.
   _noticeLabel = [[UILabel alloc] init];
   _noticeLabel.backgroundColor = [UIColor clearColor];
-  _noticeLabel.font = [UIFont systemFontOfSize:22];
+  _noticeLabel.font = [UIFont systemFontOfSize:26];
   _noticeLabel.numberOfLines = 2;
   _noticeLabel.hidden = YES;
   [self addSubview:_noticeLabel];
@@ -321,7 +321,7 @@ typedef enum {
 
   _versionLabel = [[UILabel alloc] init];
   _versionLabel.backgroundColor = [UIColor clearColor];
-  _versionLabel.font = [UIFont systemFontOfSize:13];
+  _versionLabel.font = [UIFont systemFontOfSize:16];
   _versionLabel.textAlignment = NSTextAlignmentCenter;
   [self addSubview:_versionLabel];
 
@@ -400,7 +400,7 @@ typedef enum {
 // Rendered from Core's local-time document: no operating-system time-zone
 // database is needed and the clock follows the cluster zone and NTP offset.
 - (void)updateClock {
-  NSDictionary *local = [_core localTimeJson:0];
+  NSDictionary *local = [_core cachedLocalTime];
   if (![local isKindOfClass:[NSDictionary class]]) return;
   NSInteger hh = [DBConfigUtil intVal:local path:@"hh" def:-1];
   if (hh < 0) return;
@@ -852,8 +852,9 @@ typedef enum {
   NSString *doorLabel = [self doorLabel];
   _titleLabel.text = doorLabel;
   _touchHint.text = [_texts ts:@"door.hint_call"];
-  [_callButton setTitle:[_texts t:@"idle.call_button", doorLabel, nil]
-               forState:UIControlStateNormal];
+  // A visitor is not told which device they are standing at: the button says
+  // only what it does (owner decision, batch 3).
+  [_callButton setTitle:[_texts ts:@"idle.call"] forState:UIControlStateNormal];
   // Round 5 dropped the purpose explainer; a control shows only what it does.
   _purposeHint.text = @"";
   _callingLabel.text = _flowState == DBDoorFlowInCall
@@ -1354,6 +1355,10 @@ typedef enum {
   } else if (state == DBMiniSipInCall) {
     [self showInCall];
   } else if (state == DBMiniSipEnded) {
+    // Returning to a screen that is already idle costs a full re-theme and
+    // relayout for nothing, and the listener can end dialogs faster than the
+    // iPad 1 can lay out.
+    if (_flowState == DBDoorFlowIdle) return;
     [self showIdleWithHint:nil];
   }
 }

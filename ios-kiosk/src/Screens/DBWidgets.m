@@ -747,13 +747,13 @@ static const NSInteger kProxyEdge = 64;
 
     _caption = [[UILabel alloc] init];
     _caption.backgroundColor = [UIColor clearColor];
-    _caption.font = [UIFont systemFontOfSize:12];
+    _caption.font = [UIFont systemFontOfSize:15];
     _caption.numberOfLines = 2;
     [self addSubview:_caption];
 
     _urlLabel = [[UILabel alloc] init];
     _urlLabel.backgroundColor = [UIColor clearColor];
-    _urlLabel.font = [UIFont systemFontOfSize:12];
+    _urlLabel.font = [UIFont systemFontOfSize:15];
     _urlLabel.numberOfLines = 2;
     _urlLabel.lineBreakMode = NSLineBreakByCharWrapping;
     [self addSubview:_urlLabel];

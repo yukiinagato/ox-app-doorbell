@@ -95,6 +95,7 @@ static BOOL DBCoreSipBackendCompiled(void) {
   NSDictionary *_soundConfig;
   NSString *_effectiveSipBackend;
   NSString *_sipFallbackReason;
+  NSString *_lastPublishedSipSignature;
   DBCallEventTracker *_callEvents;
   NSString *_selfDeviceID;
   NSString *_reportedRecoveryCallID;
@@ -468,6 +469,12 @@ static BOOL DBCoreSipBackendCompiled(void) {
     [runtime setObject:mode forKey:@"dialog_mode"];
   if ([_sipFallbackReason length] > 0)
     [runtime setObject:_sipFallbackReason forKey:@"fallback_reason"];
+  // Publishing an unchanged section still costs a JSON encode and a job on
+  // core's serial queue. Under listener churn that was several a second, which
+  // is what starved core's HTTP handlers on the iPad 1.
+  NSString *signature = [NSString stringWithFormat:@"%@|%@", state ?: @"", mode ?: @""];
+  if ([_lastPublishedSipSignature isEqualToString:signature]) return;
+  _lastPublishedSipSignature = [signature copy];
   [_core setRuntimeStatusSection:@"sip" value:runtime];
 }
 
@@ -515,7 +522,11 @@ static BOOL DBCoreSipBackendCompiled(void) {
 }
 
 - (void)transitionTo:(DBScreen *)next animated:(BOOL)animated {
-  if (_safeMode) animated = NO;
+  // Screen changes are instant on the iPad 1: a cross-fade of two full-screen
+  // views costs a compositing pass this GPU cannot spare, and the owner reads
+  // it as lag rather than polish. The SOS slide keeps its own feedback.
+  (void)animated;
+  animated = NO;
   if (_current == next) {
     // A superseded animation completion must never be able to leave the
     // logical current screen detached from the container.
@@ -1226,6 +1237,8 @@ static BOOL DBCoreSipBackendCompiled(void) {
     if (_current == _incoming) [_incoming refreshFromCore];
     if (_current == _settings) [_settings reload];
   } else if ([t isEqualToString:@"time_changed"]) {
+    // The cached clock base is now wrong; the next tick refetches it.
+    [_core invalidateCachedLocalTime];
     // The zone or the applied NTP correction moved; every clock is redrawn and
     // already recorded timestamps are left alone.
     if (_home) [_home refreshFromCore];

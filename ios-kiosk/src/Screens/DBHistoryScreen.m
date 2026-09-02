@@ -96,7 +96,7 @@ static const NSInteger kPageSize = 50;
   _table = [[UITableView alloc] initWithFrame:CGRectZero style:UITableViewStylePlain];
   _table.dataSource = self;
   _table.delegate = self;
-  _table.rowHeight = 64;
+  _table.rowHeight = 72;
   _table.separatorStyle = UITableViewCellSeparatorStyleSingleLine;
   [self addSubview:_table];
 
@@ -188,7 +188,7 @@ static const NSInteger kPageSize = 50;
 }
 
 - (NSInteger)minuteOfDay {
-  NSDictionary *local = [_core localTimeJson:0];
+  NSDictionary *local = [_core cachedLocalTime];
   NSInteger hh = [DBConfigUtil intVal:local path:@"hh" def:-1];
   if (hh < 0) return 12 * 60;
   return hh * 60 + [DBConfigUtil intVal:local path:@"mm" def:0];
@@ -332,7 +332,7 @@ static const NSInteger kPageSize = 50;
   long long ts = [DBConfigUtil longLongVal:row path:@"ts" def:0];
   cell.textLabel.text = [NSString stringWithFormat:@"%@   %@",
       [DBCallHistoryModel clockForTs:ts offsetMinutes:_tzOffsetMinutes], doorLabel];
-  cell.textLabel.font = [UIFont boldSystemFontOfSize:20];
+  cell.textLabel.font = [UIFont boldSystemFontOfSize:23];
 
   NSMutableArray *detail = [NSMutableArray array];
   [detail addObject:[self outcomeTextForRow:row]];
@@ -343,7 +343,7 @@ static const NSInteger kPageSize = 50;
       [DBConfigUtil longLongVal:row path:@"duration_ms" def:0]];
   if ([duration length] > 0) [detail addObject:[_texts t:@"history.duration", duration, nil]];
   cell.detailTextLabel.text = [detail componentsJoinedByString:@"  ·  "];
-  cell.detailTextLabel.font = [UIFont systemFontOfSize:16];
+  cell.detailTextLabel.font = [UIFont systemFontOfSize:19];
 
   cell.backgroundColor = _palette.surface;
   cell.textLabel.backgroundColor = [UIColor clearColor];

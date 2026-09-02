@@ -10,6 +10,7 @@
 #import <sys/socket.h>
 #import <sys/sysctl.h>
 #import <dlfcn.h>
+#import "DBCallHistoryModel.h"
 #import "DBNoticeModel.h"
 #import "doorbell/doorbell.h"
 
@@ -321,6 +322,9 @@ static void DBUiEventCb(void *user, const char *event_json) {
   NSMutableDictionary *_runtimeStatus;
   NSMutableDictionary *_runtimeCapabilities;
   NSLock *_encodedFrameLock;
+  NSDictionary *_localTimeBase;      // Last document core produced.
+  CFAbsoluteTime _localTimeBaseAt;   // When it was produced, monotonic-ish.
+  BOOL _localTimeRefreshing;
   NSUInteger _pendingEncodedFrames;
   NSUInteger _pendingEncodedBytes;
 }
@@ -965,6 +969,66 @@ static void DBUiEventCb(void *user, const char *event_json) {
       out = [self takeJson:db_core_local_time_json(self->_core, (int64_t)wallMs)];
   });
   return out;
+}
+
+static const CFAbsoluteTime kLocalTimeBaseMaxAgeS = 30.0;
+
+- (NSDictionary *)cachedLocalTime {
+  NSDictionary *base = nil;
+  CFAbsoluteTime baseAt = 0;
+  [_cfgLock lock];
+  base = _localTimeBase;
+  baseAt = _localTimeBaseAt;
+  BOOL refreshing = _localTimeRefreshing;
+  CFAbsoluteTime now = CFAbsoluteTimeGetCurrent();
+  BOOL stale = (base == nil) || (now - baseAt) > kLocalTimeBaseMaxAgeS ||
+               (now < baseAt);  // A clock step backwards also invalidates it.
+  if (stale && !refreshing) _localTimeRefreshing = YES;
+  [_cfgLock unlock];
+
+  if (stale && !refreshing) {
+    __weak DBCoreBridge *weakSelf = self;
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_LOW, 0), ^{
+      DBCoreBridge *bridge = weakSelf;
+      if (!bridge) return;
+      NSDictionary *fresh = [bridge localTimeJson:0];
+      [bridge->_cfgLock lock];
+      if (fresh != nil) {
+        bridge->_localTimeBase = fresh;
+        bridge->_localTimeBaseAt = CFAbsoluteTimeGetCurrent();
+      }
+      bridge->_localTimeRefreshing = NO;
+      [bridge->_cfgLock unlock];
+    });
+  }
+  if (base == nil) return nil;
+
+  // Derive the tick locally from the base. A zone or DST change lands with the
+  // next refresh, and time_changed invalidates the base immediately.
+  long long baseWallMs = 0;
+  id wall = [base objectForKey:@"wall_ms"];
+  if ([wall isKindOfClass:[NSNumber class]]) baseWallMs = [(NSNumber *)wall longLongValue];
+  if (baseWallMs <= 0) return base;
+  NSInteger offset = 0;
+  id offsetValue = [base objectForKey:@"offset_min"];
+  if ([offsetValue isKindOfClass:[NSNumber class]])
+    offset = [(NSNumber *)offsetValue integerValue];
+  long long elapsedMs = (long long)((now - baseAt) * 1000.0);
+  if (elapsedMs < 0) elapsedMs = 0;
+  NSMutableDictionary *derived = [[DBCallHistoryModel
+      localPartsForTs:(baseWallMs + elapsedMs) offsetMinutes:offset] mutableCopy];
+  id zone = [base objectForKey:@"tz"];
+  if (zone != nil) [derived setObject:zone forKey:@"tz"];
+  id known = [base objectForKey:@"known"];
+  if (known != nil) [derived setObject:known forKey:@"known"];
+  return derived;
+}
+
+- (void)invalidateCachedLocalTime {
+  [_cfgLock lock];
+  _localTimeBase = nil;
+  _localTimeBaseAt = 0;
+  [_cfgLock unlock];
 }
 
 - (BOOL)timeSyncNow {

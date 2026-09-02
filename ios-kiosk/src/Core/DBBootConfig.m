@@ -313,6 +313,8 @@ static BOOL DBValidPskHex(NSString *value) {
     id dumps = [debug isKindOfClass:[NSDictionary class]]
         ? [(NSDictionary *)debug objectForKey:@"ui_dumps"] : nil;
     if ([dumps isKindOfClass:[NSNumber class]]) c.diagnosticDumps = [dumps boolValue];
+    id shots = [d objectForKey:@"debug_screenshots"];
+    if ([shots isKindOfClass:[NSNumber class]]) c.debugScreenshots = [shots boolValue];
 
     // The original iPad has a built-in microphone. Preserve the historical
     // indoor default, but make a door profile usable when `mic` is omitted.

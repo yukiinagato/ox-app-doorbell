@@ -37,6 +37,10 @@
 // Local support actions, including screenshots and the controlled memory-warning
 // qualification trigger, are disabled by default. Enable only for a bounded run.
 @property(nonatomic, assign) BOOL diagnosticDumps;
+
+// Remote screenshot hook for verification on a device with no screencap.
+// Absent by default, so an ordinary install polls nothing at all.
+@property(nonatomic, assign) BOOL debugScreenshots;
 @property(nonatomic, assign) BOOL setupRequired;
 @property(nonatomic, copy) NSString *suggestedDoor;
 

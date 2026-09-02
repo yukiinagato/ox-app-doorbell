@@ -29,6 +29,8 @@ static const NSInteger kRecentCallLimit = 20;
 
 // One door tile: a five-second still, the door label, and the announcement chip.
 @interface DBDoorTile : UIButton
+// Stable identity across status polls, so a tile is created once per door.
+@property(nonatomic, copy) NSString *peerKey;
 @property(nonatomic, copy) NSString *doorId;
 @property(nonatomic, strong) NSDictionary *peer;
 @property(nonatomic, readonly) UIImageView *still;
@@ -38,14 +40,15 @@ static const NSInteger kRecentCallLimit = 20;
 @end
 
 @implementation DBDoorTile {
+  NSString *_peerKey;
   UIImageView *_still;
   DBPillLabel *_caption;
   DBNoticeChip *_noticeChip;
   UILabel *_offlineLabel;
 }
 
-@synthesize doorId = _doorId, peer = _peer, still = _still, caption = _caption,
-            noticeChip = _noticeChip, offlineLabel = _offlineLabel;
+@synthesize peerKey = _peerKey, doorId = _doorId, peer = _peer, still = _still,
+            caption = _caption, noticeChip = _noticeChip, offlineLabel = _offlineLabel;
 
 - (id)initWithFrame:(CGRect)frame {
   self = [super initWithFrame:frame];
@@ -61,11 +64,11 @@ static const NSInteger kRecentCallLimit = 20;
     _offlineLabel = [[UILabel alloc] init];
     _offlineLabel.backgroundColor = [UIColor clearColor];
     _offlineLabel.textAlignment = NSTextAlignmentCenter;
-    _offlineLabel.font = [UIFont systemFontOfSize:16];
+    _offlineLabel.font = [UIFont systemFontOfSize:19];
     _offlineLabel.userInteractionEnabled = NO;
     [self addSubview:_offlineLabel];
     _caption = [[DBPillLabel alloc] initWithFrame:CGRectZero];
-    _caption.font = [UIFont boldSystemFontOfSize:18];
+    _caption.font = [UIFont boldSystemFontOfSize:22];
     _caption.userInteractionEnabled = NO;
     [self addSubview:_caption];
     _noticeChip = [[DBNoticeChip alloc] initWithFrame:CGRectZero];
@@ -201,6 +204,7 @@ static const NSInteger kRecentCallLimit = 20;
 - (UIButton *)flatButton:(CGFloat)size {
   UIButton *button = [UIButton buttonWithType:UIButtonTypeCustom];
   button.titleLabel.font = [UIFont boldSystemFontOfSize:size];
+  button.titleLabel.adjustsFontSizeToFitWidth = NO;
   button.layer.cornerRadius = 10;
   button.clipsToBounds = YES;
   button.contentEdgeInsets = UIEdgeInsetsMake(6, 14, 6, 14);
@@ -216,16 +220,16 @@ static const NSInteger kRecentCallLimit = 20;
 
   _clockLabel = [[UILabel alloc] init];
   _clockLabel.backgroundColor = [UIColor clearColor];
-  _clockLabel.font = [UIFont systemFontOfSize:76];
+  _clockLabel.font = [UIFont systemFontOfSize:96];
   [self addSubview:_clockLabel];
 
   _dateLabel = [[UILabel alloc] init];
   _dateLabel.backgroundColor = [UIColor clearColor];
-  _dateLabel.font = [UIFont systemFontOfSize:22];
+  _dateLabel.font = [UIFont systemFontOfSize:28];
   [self addSubview:_dateLabel];
 
   _membershipPill = [[DBPillLabel alloc] initWithFrame:CGRectZero];
-  _membershipPill.font = [UIFont systemFontOfSize:16];
+  _membershipPill.font = [UIFont systemFontOfSize:19];
   [self addSubview:_membershipPill];
   _membershipButton = [UIButton buttonWithType:UIButtonTypeCustom];
   [_membershipButton addTarget:self action:@selector(onMembership)
@@ -233,7 +237,7 @@ static const NSInteger kRecentCallLimit = 20;
   [self addSubview:_membershipButton];
 
   _missedBadge = [[DBPillLabel alloc] initWithFrame:CGRectZero];
-  _missedBadge.font = [UIFont boldSystemFontOfSize:17];
+  _missedBadge.font = [UIFont boldSystemFontOfSize:21];
   _missedBadge.hidden = YES;
   [self addSubview:_missedBadge];
   _missedButton = [UIButton buttonWithType:UIButtonTypeCustom];
@@ -242,7 +246,7 @@ static const NSInteger kRecentCallLimit = 20;
           forControlEvents:UIControlEventTouchUpInside];
   [self addSubview:_missedButton];
 
-  _adminButton = [self flatButton:18];
+  _adminButton = [self flatButton:22];
   [_adminButton addTarget:self action:@selector(onAdmin)
          forControlEvents:UIControlEventTouchUpInside];
   [self addSubview:_adminButton];
@@ -262,15 +266,15 @@ static const NSInteger kRecentCallLimit = 20;
 
   _doorsCaption = [[UILabel alloc] init];
   _doorsCaption.backgroundColor = [UIColor clearColor];
-  _doorsCaption.font = [UIFont systemFontOfSize:16];
+  _doorsCaption.font = [UIFont systemFontOfSize:20];
   [self addSubview:_doorsCaption];
 
   _recentCaption = [[UILabel alloc] init];
   _recentCaption.backgroundColor = [UIColor clearColor];
-  _recentCaption.font = [UIFont systemFontOfSize:16];
+  _recentCaption.font = [UIFont systemFontOfSize:20];
   [self addSubview:_recentCaption];
 
-  _seeAllButton = [self flatButton:16];
+  _seeAllButton = [self flatButton:19];
   [_seeAllButton addTarget:self action:@selector(onHistory)
           forControlEvents:UIControlEventTouchUpInside];
   [self addSubview:_seeAllButton];
@@ -281,7 +285,7 @@ static const NSInteger kRecentCallLimit = 20;
 
   _recentEmpty = [[UILabel alloc] init];
   _recentEmpty.backgroundColor = [UIColor clearColor];
-  _recentEmpty.font = [UIFont systemFontOfSize:17];
+  _recentEmpty.font = [UIFont systemFontOfSize:20];
   [self addSubview:_recentEmpty];
 
   _qr = [[DBAdminQrView alloc] initWithFrame:CGRectZero];
@@ -289,7 +293,7 @@ static const NSInteger kRecentCallLimit = 20;
 
   _versionLabel = [[UILabel alloc] init];
   _versionLabel.backgroundColor = [UIColor clearColor];
-  _versionLabel.font = [UIFont systemFontOfSize:13];
+  _versionLabel.font = [UIFont systemFontOfSize:16];
   [self addSubview:_versionLabel];
 
   _sos = [[DBSosSlider alloc] initWithFrame:CGRectZero];
@@ -431,7 +435,7 @@ static const NSInteger kRecentCallLimit = 20;
 // no operating-system time-zone database and follows the cluster zone and the
 // NTP correction exactly like every other shell.
 - (void)updateClock {
-  NSDictionary *local = [_core localTimeJson:0];
+  NSDictionary *local = [_core cachedLocalTime];
   if (![local isKindOfClass:[NSDictionary class]]) return;
   NSInteger hh = [DBConfigUtil intVal:local path:@"hh" def:-1];
   if (hh < 0) return;
@@ -708,13 +712,47 @@ static const NSInteger kRecentCallLimit = 20;
                                     (long)_boot.httpPort];
 }
 
+// Status arrives every five seconds and on every event. Tearing the tiles down
+// and rebuilding them each time threw away the still image and forced a fresh
+// decode, which is the hitch the owner sees on the dashboard. Tiles are now
+// created once per door and updated in place; only a membership change touches
+// the view tree.
 - (void)rebuildDoorTiles {
-  for (DBDoorTile *tile in _doorTiles) [tile removeFromSuperview];
-  [_doorTiles removeAllObjects];
+  NSMutableArray *live = [NSMutableArray array];
+  NSMutableArray *keys = [NSMutableArray array];
+  for (NSDictionary *peer in _doorPeers) {
+    NSString *key = [DBConfigUtil evStr:peer key:@"id"];
+    if ([key length] == 0) key = [DBConfigUtil evStr:peer key:@"door"];
+    [keys addObject:key ?: @""];
+  }
+  // Drop tiles whose door left the cluster.
+  for (NSInteger i = (NSInteger)[_doorTiles count] - 1; i >= 0; i--) {
+    DBDoorTile *tile = [_doorTiles objectAtIndex:(NSUInteger)i];
+    if (![keys containsObject:tile.peerKey ?: @""]) {
+      [tile removeFromSuperview];
+      [_doorTiles removeObjectAtIndex:(NSUInteger)i];
+    }
+  }
   long long nowMs = (long long)([[NSDate date] timeIntervalSince1970] * 1000.0);
   NSInteger index = 0;
   for (NSDictionary *peer in _doorPeers) {
-    DBDoorTile *tile = [[DBDoorTile alloc] initWithFrame:CGRectZero];
+    NSString *key = [keys objectAtIndex:(NSUInteger)index];
+    DBDoorTile *tile = nil;
+    for (DBDoorTile *candidate in _doorTiles) {
+      if ([(candidate.peerKey ?: @"") isEqualToString:key]) {
+        tile = candidate;
+        break;
+      }
+    }
+    if (tile == nil) {
+      tile = [[DBDoorTile alloc] initWithFrame:CGRectZero];
+      tile.peerKey = key;
+      [tile addTarget:self action:@selector(onDoorTile:)
+     forControlEvents:UIControlEventTouchUpInside];
+      [self addSubview:tile];
+      [_doorTiles addObject:tile];
+    }
+    [live addObject:tile];
     tile.peer = peer;
     tile.doorId = [DBConfigUtil evStr:peer key:@"door"];
     tile.tag = index++;
@@ -727,17 +765,16 @@ static const NSInteger kRecentCallLimit = 20;
     tile.caption.textColor = [UIColor whiteColor];
     tile.offlineLabel.textColor = _palette.mutedInk;
     tile.offlineLabel.text = [_texts ts:@"dash.tile_offline"];
-    tile.offlineLabel.hidden = YES;
+    tile.offlineLabel.hidden = (tile.still.image != nil);
     NSDictionary *notice = [DBNoticeModel effectiveNoticeForDoor:tile.doorId config:_cfg
                                                             nowMs:nowMs];
     [tile.noticeChip applyPalette:_palette];
     [tile.noticeChip setChipTitle:[_texts ts:@"notice.chip"] active:YES];
     tile.noticeChip.hidden = (notice == nil);
-    [tile addTarget:self action:@selector(onDoorTile:)
-   forControlEvents:UIControlEventTouchUpInside];
-    [self addSubview:tile];
-    [_doorTiles addObject:tile];
   }
+  // Keep the array in configuration order without recreating anything.
+  [_doorTiles removeAllObjects];
+  [_doorTiles addObjectsFromArray:live];
   _doorsCaption.text = [_doorTiles count] > 0 ? [_texts ts:@"dash.doors"]
                                               : [_texts ts:@"dash.no_doors"];
   [self setNeedsLayout];
@@ -749,7 +786,7 @@ static const NSInteger kRecentCallLimit = 20;
   for (NSDictionary *row in _recentRows) {
     UILabel *label = [[UILabel alloc] init];
     label.backgroundColor = [UIColor clearColor];
-    label.font = [UIFont systemFontOfSize:17];
+    label.font = [UIFont systemFontOfSize:20];
     label.textColor = [DBCallHistoryModel rowIsMissed:row] ? _palette.danger : _palette.ink;
     NSString *door = [DBConfigUtil evStr:row key:@"door"];
     NSDictionary *doorEntry = [DBConfigUtil dig:_cfg
@@ -1206,8 +1243,8 @@ static const NSInteger kRecentCallLimit = 20;
   _recentList.frame = CGRectMake(listX, listY, listWidth, listHeight);
   CGFloat rowY = 0;
   for (UILabel *label in _recentLabels) {
-    label.frame = CGRectMake(0, rowY, listWidth, 30);
-    rowY += 32;
+    label.frame = CGRectMake(0, rowY, listWidth, 34);
+    rowY += 36;
   }
   _recentList.contentSize = CGSizeMake(listWidth, rowY);
   _recentEmpty.frame = CGRectMake(listX, listY + 8, listWidth, 26);
