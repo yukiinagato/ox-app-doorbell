@@ -1580,7 +1580,10 @@ final class MainViewController: UIViewController {
         let settings = SettingsViewController(core: core, boot: boot, texts: texts)
         settings.onOpenAddDevice = { [weak self] in self?.showAddDevicePanel() }
         settings.onOpenDeviceInfo = { [weak self] in self?.showAdminInfo() }
-        settings.onExitKiosk = { UIApplication.shared.isIdleTimerDisabled = false }
+        // A deliberate exit from kiosk mode is the one thing allowed to let the screen sleep,
+        // and it is remembered, so re-asserting the override on the next activation does not
+        // silently undo the administrator's choice.
+        settings.onExitKiosk = { ScreenAwake.want(false) }
         present(settings, animated: true)
     }
 
@@ -1622,7 +1625,10 @@ final class MainViewController: UIViewController {
             onMonitor: monitorAction)
         present(page, animated: true)
 #else
-        UIApplication.shared.isIdleTimerDisabled = false
+        // This used to clear the idle timer here and put it back only from the OK button below.
+        // Leaving through either of the other two actions left the panel able to auto-lock — and
+        // an auto-locked panel is suspended, drops its listeners and is evicted without a trace.
+        // The dialog has no need to let the screen sleep, so it no longer asks.
         let st = core.status()
         let node = st?["node"] as? [String: Any]
         let peers = (st?["peers"] as? [Any])?.count ?? 0
@@ -1642,9 +1648,7 @@ final class MainViewController: UIViewController {
                 [weak self] _ in self?.onMonitorOpen()
             })
         }
-        a.addAction(UIAlertAction(title: "OK", style: .default) { _ in
-            UIApplication.shared.isIdleTimerDisabled = true
-        })
+        a.addAction(UIAlertAction(title: "OK", style: .default) { _ in ScreenAwake.apply() })
         present(a, animated: true)
 #endif
     }
