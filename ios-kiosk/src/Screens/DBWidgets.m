@@ -40,6 +40,111 @@ NSString *DBHexFromColor(UIColor *color) {
   return [DBUiTheme hexFromRgb:rgb];
 }
 
+#pragma mark - background sampler
+
+// 64 square is enough resolution for a caption-sized region to land on several
+// pixels while staying a 16 KB buffer, which an SGX535 can build once per theme
+// image without anyone noticing.
+static const NSInteger kProxyEdge = 64;
+
+@implementation DBBackgroundSampler {
+  NSData *_pixels;   // RGBA, kProxyEdge x kProxyEdge, view-space.
+  CGSize _viewSize;
+}
+
+@synthesize viewSize = _viewSize;
+
++ (DBBackgroundSampler *)samplerWithImage:(UIImage *)image viewSize:(CGSize)viewSize {
+  if (image == nil || image.CGImage == NULL) return nil;
+  if (viewSize.width <= 0 || viewSize.height <= 0) return nil;
+  size_t edge = (size_t)kProxyEdge;
+  size_t bytesPerRow = edge * 4;
+  void *buffer = calloc(edge * bytesPerRow, 1);
+  if (buffer == NULL) return nil;
+  CGColorSpaceRef space = CGColorSpaceCreateDeviceRGB();
+  CGContextRef ctx = CGBitmapContextCreate(buffer, edge, edge, 8, bytesPerRow, space,
+                                           (CGBitmapInfo)kCGImageAlphaPremultipliedLast);
+  CGColorSpaceRelease(space);
+  if (ctx == NULL) {
+    free(buffer);
+    return nil;
+  }
+  // The proxy is the view, not the image: the image is placed into it with the
+  // same aspect-fill mapping the theme image view uses, so proxy coordinates
+  // and view coordinates are the same space up to a constant scale.
+  NSArray *draw = [DBUiTheme aspectFillDrawRectForImageWidth:image.size.width
+                                                 imageHeight:image.size.height
+                                                   viewWidth:viewSize.width
+                                                  viewHeight:viewSize.height];
+  double scaleX = (double)edge / viewSize.width;
+  double scaleY = (double)edge / viewSize.height;
+  CGRect target = CGRectMake((CGFloat)([[draw objectAtIndex:0] doubleValue] * scaleX),
+                             (CGFloat)([[draw objectAtIndex:1] doubleValue] * scaleY),
+                             (CGFloat)([[draw objectAtIndex:2] doubleValue] * scaleX),
+                             (CGFloat)([[draw objectAtIndex:3] doubleValue] * scaleY));
+  // CoreGraphics draws bottom-up; flip so proxy rows match view rows.
+  CGContextTranslateCTM(ctx, 0, (CGFloat)edge);
+  CGContextScaleCTM(ctx, 1, -1);
+  CGContextDrawImage(ctx, target, image.CGImage);
+  CGContextRelease(ctx);
+
+  DBBackgroundSampler *sampler = [[DBBackgroundSampler alloc] init];
+  sampler->_pixels = [NSData dataWithBytesNoCopy:buffer length:edge * bytesPerRow
+                                    freeWhenDone:YES];
+  sampler->_viewSize = viewSize;
+  return sampler;
+}
+
+- (NSString *)averageHexInViewRect:(CGRect)rect {
+  if (_pixels == nil) return nil;
+  NSArray *box = [DBUiTheme samplePixelRectForViewX:rect.origin.x
+                                                  y:rect.origin.y
+                                              width:rect.size.width
+                                             height:rect.size.height
+                                          viewWidth:_viewSize.width
+                                         viewHeight:_viewSize.height
+                                         proxyWidth:kProxyEdge
+                                        proxyHeight:kProxyEdge];
+  NSInteger x = [[box objectAtIndex:0] integerValue];
+  NSInteger y = [[box objectAtIndex:1] integerValue];
+  NSInteger width = [[box objectAtIndex:2] integerValue];
+  NSInteger height = [[box objectAtIndex:3] integerValue];
+  if (width <= 0 || height <= 0) return nil;
+
+  // The covered area is reduced to at most 16x16 samples, as the contrast rule
+  // specifies, by striding rather than by allocating another bitmap.
+  NSInteger maxEdge = [DBUiTheme maximumSampleEdge];
+  NSInteger strideX = (width + maxEdge - 1) / maxEdge;
+  NSInteger strideY = (height + maxEdge - 1) / maxEdge;
+  if (strideX < 1) strideX = 1;
+  if (strideY < 1) strideY = 1;
+
+  const unsigned char *pixels = (const unsigned char *)[_pixels bytes];
+  double red = 0, green = 0, blue = 0;
+  NSInteger samples = 0;
+  for (NSInteger row = y; row < y + height; row += strideY) {
+    for (NSInteger column = x; column < x + width; column += strideX) {
+      const unsigned char *pixel = pixels + (row * kProxyEdge + column) * 4;
+      red += pixel[0];
+      green += pixel[1];
+      blue += pixel[2];
+      samples++;
+    }
+  }
+  if (samples == 0) return nil;
+  DBRgb average;
+  average.r = red / (samples * 255.0);
+  average.g = green / (samples * 255.0);
+  average.b = blue / (samples * 255.0);
+  return [DBUiTheme hexFromRgb:average];
+}
+
+- (NSString *)averageHex {
+  return [self averageHexInViewRect:CGRectMake(0, 0, _viewSize.width, _viewSize.height)];
+}
+
+@end
+
 #pragma mark - palette
 
 @implementation DBUiPalette {
@@ -48,6 +153,7 @@ NSString *DBHexFromColor(UIColor *color) {
   NSString *_deviceId;
   NSString *_mode;
   NSString *_surfaceHex;
+  DBBackgroundSampler *_sampler;
 }
 
 @synthesize mode = _mode;
@@ -136,6 +242,10 @@ NSString *DBHexFromColor(UIColor *color) {
                         : [UIColor whiteColor];
 }
 
+- (void)setBackgroundSampler:(DBBackgroundSampler *)sampler {
+  _sampler = sampler;
+}
+
 - (NSString *)inkHexForRegion:(NSString *)region {
   return [DBUiTheme inkHexForRegion:region config:_config deviceId:_deviceId
                             display:_display backgroundHex:_surfaceHex appearanceMode:_mode];
@@ -148,6 +258,61 @@ NSString *DBHexFromColor(UIColor *color) {
 - (BOOL)needsShadowForRegion:(NSString *)region {
   return [DBUiTheme needsInkShadowForInk:[self inkHexForRegion:region]
                               background:_surfaceHex];
+}
+
+// The pixels actually behind one region, or the flat background when there is
+// no theme image to sample.
+- (NSString *)backgroundHexForRegion:(NSString *)region frame:(CGRect)frame {
+  (void)region;
+  if (_sampler == nil) return _surfaceHex;
+  NSString *sampled = [_sampler averageHexInViewRect:frame];
+  return [sampled length] > 0 ? sampled : _surfaceHex;
+}
+
+- (NSString *)inkHexForRegion:(NSString *)region frame:(CGRect)frame {
+  // 1. An administrator's override, device before cluster, always wins.
+  NSString *override = [DBUiTheme adminInkOverrideHexForRegion:region config:_config
+                                                      deviceId:_deviceId display:_display];
+  if ([override length] > 0) return override;
+  // 2. Over a theme image, refine locally: core averaged the whole picture and
+  //    says so, which is how a caption over a light corner came back white.
+  if (_sampler != nil) {
+    NSString *background = [_sampler averageHexInViewRect:frame];
+    DBRgb rgb;
+    if ([background length] > 0 && [DBUiTheme parseHex:background into:&rgb])
+      return [DBUiTheme inkHexForSampledLuminance:[DBUiTheme relativeLuminance:rgb]];
+  }
+  // 3. Otherwise core's published decision, which is exact for a flat colour.
+  return [self inkHexForRegion:region];
+}
+
+- (UIColor *)inkForRegion:(NSString *)region frame:(CGRect)frame {
+  return DBColorFromHex([self inkHexForRegion:region frame:frame], [self ink]);
+}
+
+- (BOOL)needsShadowForRegion:(NSString *)region frame:(CGRect)frame {
+  return [DBUiTheme needsInkShadowForInk:[self inkHexForRegion:region frame:frame]
+                              background:[self backgroundHexForRegion:region frame:frame]];
+}
+
+// One call per label: the ink measured behind its own frame, plus the 40 %
+// opposite-ink shadow only when the pair is still under the AA threshold.
+- (void)applyInkToLabel:(UILabel *)label region:(NSString *)region {
+  if (label == nil) return;
+  CGRect frame = label.frame;
+  label.textColor = [self inkForRegion:region frame:frame];
+  if (![self needsShadowForRegion:region frame:frame]) {
+    label.shadowColor = nil;
+    label.shadowOffset = CGSizeZero;
+    return;
+  }
+  NSString *ink = [self inkHexForRegion:region frame:frame];
+  DBRgb rgb;
+  BOOL inkIsDark = [DBUiTheme parseHex:ink into:&rgb] &&
+      [DBUiTheme relativeLuminance:rgb] < 0.5;
+  label.shadowColor = [(inkIsDark ? [UIColor whiteColor] : [UIColor blackColor])
+      colorWithAlphaComponent:(CGFloat)[DBUiTheme inkShadowAlpha]];
+  label.shadowOffset = CGSizeMake(0, 1);
 }
 
 + (NSString *)averageHexForImage:(UIImage *)image {

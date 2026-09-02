@@ -312,6 +312,162 @@ static void TestVideoAspectIsPreserved(void) {
   RequireClose([[empty objectAtIndex:2] doubleValue], 0.0, 0.001, @"an empty slot stays empty");
 }
 
+// A real-device finding on the Moto, which applies here: core computes
+// display.theme.auto_ink from the whole background image because it has no
+// layout geometry, so text over a light part of a mostly dark picture came back
+// white and unreadable. The shell refines each region from the pixels behind it.
+static void TestPerRegionBackgroundSampling(void) {
+  // Aspect fill: the image covers the view and overflows on one axis.
+  NSArray *wide = [DBUiTheme aspectFillDrawRectForImageWidth:1600 imageHeight:800
+                                                  viewWidth:1024 viewHeight:768];
+  RequireClose([[wide objectAtIndex:3] doubleValue], 768.0, 0.001, @"height fills the view");
+  RequireClose([[wide objectAtIndex:2] doubleValue], 1536.0, 0.001, @"width overflows");
+  RequireClose([[wide objectAtIndex:0] doubleValue], -256.0, 0.001,
+               @"and the overflow is centred, so the sample keeps the visible half");
+  RequireClose([[wide objectAtIndex:1] doubleValue], 0.0, 0.001, @"with no vertical offset");
+  NSArray *tall = [DBUiTheme aspectFillDrawRectForImageWidth:600 imageHeight:1200
+                                                  viewWidth:1024 viewHeight:768];
+  RequireClose([[tall objectAtIndex:2] doubleValue], 1024.0, 0.001, @"width fills the view");
+  RequireClose([[tall objectAtIndex:3] doubleValue], 2048.0, 0.001, @"height overflows");
+  NSArray *noImage = [DBUiTheme aspectFillDrawRectForImageWidth:0 imageHeight:0
+                                                     viewWidth:1024 viewHeight:768];
+  RequireClose([[noImage objectAtIndex:2] doubleValue], 1024.0, 0.001,
+               @"a flat colour covers the whole view");
+
+  // A region's frame maps onto the proxy, rounded outwards so an edge pixel is
+  // never dropped, and clamped to the proxy.
+  NSArray *clock = [DBUiTheme samplePixelRectForViewX:0 y:0 width:512 height:384
+                                            viewWidth:1024 viewHeight:768
+                                           proxyWidth:64 proxyHeight:64];
+  Require([[clock objectAtIndex:0] integerValue] == 0, @"top left starts at the origin");
+  Require([[clock objectAtIndex:2] integerValue] == 32, @"half the width is half the proxy");
+  Require([[clock objectAtIndex:3] integerValue] == 32, @"and half the height");
+
+  NSArray *footer = [DBUiTheme samplePixelRectForViewX:20 y:750 width:600 height:18
+                                             viewWidth:1024 viewHeight:768
+                                            proxyWidth:64 proxyHeight:64];
+  Require([[footer objectAtIndex:1] integerValue] == 62, @"a footer samples the bottom rows");
+  Require([[footer objectAtIndex:1] integerValue] + [[footer objectAtIndex:3] integerValue]
+              <= 64, @"and never reads past the proxy");
+
+  // Off-screen and degenerate frames still produce one readable sample rather
+  // than an empty average, so a region can never end up with no ink decision.
+  NSArray *offscreen = [DBUiTheme samplePixelRectForViewX:-400 y:-400 width:10 height:10
+                                                viewWidth:1024 viewHeight:768
+                                               proxyWidth:64 proxyHeight:64];
+  Require([[offscreen objectAtIndex:2] integerValue] >= 1, @"never an empty sample");
+  Require([[offscreen objectAtIndex:3] integerValue] >= 1, @"in either axis");
+  NSArray *empty = [DBUiTheme samplePixelRectForViewX:100 y:100 width:0 height:0
+                                            viewWidth:1024 viewHeight:768
+                                           proxyWidth:64 proxyHeight:64];
+  Require([[empty objectAtIndex:2] integerValue] == 1, @"a zero width still samples a pixel");
+  NSArray *degenerate = [DBUiTheme samplePixelRectForViewX:0 y:0 width:10 height:10
+                                                 viewWidth:0 viewHeight:0
+                                                proxyWidth:64 proxyHeight:64];
+  Require([[degenerate objectAtIndex:2] integerValue] == 0, @"an empty view samples nothing");
+
+  // The threshold and the shadow rule, on the same vectors the spec gives.
+  Require([[DBUiTheme inkHexForSampledLuminance:0.9] isEqualToString:[DBUiTheme darkInkHex]],
+          @"a light region takes the dark ink");
+  Require([[DBUiTheme inkHexForSampledLuminance:0.5] isEqualToString:[DBUiTheme darkInkHex]],
+          @"the boundary belongs to the dark ink");
+  Require([[DBUiTheme inkHexForSampledLuminance:0.2] isEqualToString:[DBUiTheme lightInkHex]],
+          @"a dark region takes the light ink");
+  // The reported defect in one line: a light patch under the clock must not
+  // keep the light ink core derived from the whole picture.
+  DBRgb lightPatch;
+  Require([DBUiTheme parseHex:@"#EFEFEF" into:&lightPatch], @"the sampled patch parses");
+  NSString *refined =
+      [DBUiTheme inkHexForSampledLuminance:[DBUiTheme relativeLuminance:lightPatch]];
+  Require([refined isEqualToString:[DBUiTheme darkInkHex]],
+          @"text over a light part of the image is dark, not white");
+  Require([DBUiTheme contrastBetweenHex:refined andHex:@"#EFEFEF"] >= 4.5,
+          @"and the result is legible");
+  Require(![DBUiTheme needsInkShadowForInk:refined background:@"#EFEFEF"],
+          @"a legible pair takes no shadow");
+  Require([DBUiTheme needsInkShadowForInk:[DBUiTheme lightInkHex] background:@"#8A8A8A"],
+          @"a marginal pair takes the opposite-ink shadow");
+  RequireClose([DBUiTheme inkShadowAlpha], 0.4, 0.001, @"at 40 %");
+  Require([DBUiTheme maximumSampleEdge] == 16, @"the covered area is reduced to 16x16");
+
+  // An administrator's colour outranks both core's decision and the sampling.
+  NSDictionary *deviceOverride = @{
+    @"devices" : @{ @"n1" : @{ @"local" : @{ @"theme" : @{
+        @"ink_override" : @{ @"clock" : @"#00FF00" } } } } },
+    @"display" : @{ @"theme" : @{ @"ink_override" : @{ @"clock" : @"#FF0000" } } } };
+  Require([[DBUiTheme adminInkOverrideHexForRegion:DBUiRegionClock config:deviceOverride
+                                          deviceId:@"n1" display:nil]
+              isEqualToString:@"#00FF00"], @"the device override wins");
+  Require([[DBUiTheme adminInkOverrideHexForRegion:DBUiRegionClock config:deviceOverride
+                                          deviceId:@"other" display:nil]
+              isEqualToString:@"#FF0000"], @"otherwise the cluster override");
+  Require([DBUiTheme adminInkOverrideHexForRegion:DBUiRegionClock
+                                           config:[NSDictionary dictionary]
+                                         deviceId:@"n1" display:nil] == nil,
+          @"and nil when an administrator set none, so sampling decides");
+}
+
+// The version/battery line ran underneath the SOS slider in portrait on a real
+// device. The footer split is computed in one place and may never overlap.
+static void TestFooterAndSosNeverOverlap(void) {
+  double sizes[4][2] = { {1024, 768}, {768, 1024}, {480, 320}, {320, 480} };
+  for (NSUInteger i = 0; i < 4; i++) {
+    double width = sizes[i][0], height = sizes[i][1];
+    BOOL portrait = height > width;
+    for (int withSos = 0; withSos < 2; withSos++) {
+      NSDictionary *layout = [DBUiTheme footerLayoutForViewWidth:width viewHeight:height
+                                                        portrait:portrait
+                                                      sosVisible:(withSos != 0)];
+      NSArray *sos = [layout objectForKey:@"sos"];
+      NSArray *qr = [layout objectForKey:@"qr"];
+      NSArray *version = [layout objectForKey:@"version"];
+      NSString *where = [NSString stringWithFormat:@"%.0fx%.0f sos=%d", width, height,
+                                                   withSos];
+
+      double sosX = [[sos objectAtIndex:0] doubleValue];
+      double sosY = [[sos objectAtIndex:1] doubleValue];
+      double sosW = [[sos objectAtIndex:2] doubleValue];
+      double sosH = [[sos objectAtIndex:3] doubleValue];
+      if (withSos) {
+        Require(sosW > 0 && sosH > 0,
+                [@"the slider is laid out: " stringByAppendingString:where]);
+      } else {
+        Require(sosW == 0 && sosH == 0,
+                [@"a hidden slider takes no space: " stringByAppendingString:where]);
+      }
+
+      NSArray *others = [NSArray arrayWithObjects:version, qr, nil];
+      for (NSArray *other in others) {
+        double x = [[other objectAtIndex:0] doubleValue];
+        double y = [[other objectAtIndex:1] doubleValue];
+        double w = [[other objectAtIndex:2] doubleValue];
+        double h = [[other objectAtIndex:3] doubleValue];
+        Require(w >= 0 && h >= 0, [@"no negative box: " stringByAppendingString:where]);
+        if (!withSos || w == 0 || h == 0) continue;
+        BOOL separated = (x + w <= sosX) || (sosX + sosW <= x) ||
+                         (y + h <= sosY) || (sosY + sosH <= y);
+        Require(separated,
+                [@"the footer never overlaps the SOS slider: "
+                    stringByAppendingString:where]);
+      }
+
+      // The QR block and the version line are neighbours, not a pile.
+      double qrRight = [[qr objectAtIndex:0] doubleValue] +
+                       [[qr objectAtIndex:2] doubleValue];
+      Require([[version objectAtIndex:0] doubleValue] >= qrRight,
+              [@"the version line starts after the QR: " stringByAppendingString:where]);
+      // Everything stays inside the view.
+      Require([[version objectAtIndex:0] doubleValue] +
+                  [[version objectAtIndex:2] doubleValue] <= width + 0.001,
+              [@"the version line stays on screen: " stringByAppendingString:where]);
+      Require(sosY + sosH <= height + 0.001,
+              [@"the slider stays on screen: " stringByAppendingString:where]);
+      Require([[layout objectForKey:@"height"] doubleValue] > 0,
+              [@"the band reserves room: " stringByAppendingString:where]);
+    }
+  }
+}
+
 #pragma mark - SOS
 
 static void TestSosSlideCountdownStateMachine(void) {
@@ -685,6 +841,8 @@ int main(void) {
     TestDeliberateLineBreaksAndVersionLine();
     TestCoreResolvedDisplayContractWins();
     TestVideoAspectIsPreserved();
+    TestPerRegionBackgroundSampling();
+    TestFooterAndSosNeverOverlap();
     TestSosSlideCountdownStateMachine();
     TestHistoryPagingFilteringAndGrouping();
     TestHistoryWallClockRendering();

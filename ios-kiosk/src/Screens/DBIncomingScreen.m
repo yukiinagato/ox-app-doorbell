@@ -716,7 +716,20 @@ static BOOL DBSameString(NSString *a, NSString *b) {
   _palette = [DBUiPalette paletteForConfig:_cfg deviceId:_nodeId display:_display
                              backgroundHex:nil minuteOfDay:[self minuteOfDay]];
   [_noticeChip applyPalette:_palette];
-  _adminUrlLabel.textColor = [_palette.ink colorWithAlphaComponent:0.85];
+  [self applyRegionInk];
+}
+
+// The same per-region ink rule the dashboard and the visitor screen use: each
+// label is measured against what is actually behind it, and an administrator's
+// override still wins. The stats line keeps its own opaque plate.
+- (void)applyRegionInk {
+  if (_palette == nil) return;
+  [_palette applyInkToLabel:_titleLabel region:DBUiRegionTileLabel];
+  if (!_cancelled) [_palette applyInkToLabel:_statusLabel region:DBUiRegionStatusLine];
+  [_palette applyInkToLabel:_hintLabel region:DBUiRegionHint];
+  _adminUrlLabel.textColor = [[_palette inkForRegion:DBUiRegionStatusLine
+                                               frame:_adminUrlLabel.frame]
+      colorWithAlphaComponent:0.85];
 }
 
 - (NSInteger)minuteOfDay {
@@ -2054,6 +2067,8 @@ static BOOL DBSameString(NSString *a, NSString *b) {
 
   [self layoutControlRow:CGRectMake(margin, controlY, size.width - 2 * margin,
                                     controlHeight)];
+
+  [self applyRegionInk];
 }
 
 @end

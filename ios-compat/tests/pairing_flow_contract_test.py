@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-"""Source contracts for the round-6 and round-7 decisions (spec §5.4, §5.5)
-and for the cross-platform visit-purpose flag.
+"""Source contracts for the kiosk's cross-cutting owner decisions: the round-6
+and round-7 pairing/password/write rules (spec §5.4, §5.5), the cross-platform
+visit-purpose flag, and the readability findings from the device run.
 
 Two rules the UI must not blur:
   1. Minting the Pairing PIN is separate from 「まとめて追加」. The PIN card and
@@ -187,6 +188,63 @@ class VisitPurposeContracts(unittest.TestCase):
         # A purpose the visitor already pressed is still reported back.
         self.assertIn("Deliberately not filtered by visit_purposes", incoming)
         self.assertNotIn("enabledPurposeIdsInConfig", incoming)
+
+
+class ReadabilityContracts(unittest.TestCase):
+    """Findings from the real-device run: text over a light part of a theme
+    image came out white, and the footer collided with the SOS slider in
+    portrait. The maths for both lives in DBUiTheme and is host-tested; this
+    pins that every screen actually goes through it."""
+
+    def test_every_screen_inks_text_per_region(self):
+        widgets = read("ios-kiosk/src/Screens/DBWidgets.m")
+        home = read("ios-kiosk/src/Screens/DBHomeScreen.m")
+        door = read("ios-kiosk/src/Screens/DBDoorScreen.m")
+        incoming = read("ios-kiosk/src/Screens/DBIncomingScreen.m")
+
+        # An administrator's colour outranks everything; over an image the
+        # shell refines locally, because core averaged the whole picture.
+        refine = widgets[widgets.index("- (NSString *)inkHexForRegion:(NSString *)region frame:"):
+                         widgets.index("- (UIColor *)inkForRegion:(NSString *)region frame:")]
+        self.assertIn("adminInkOverrideHexForRegion", refine)
+        self.assertIn("averageHexInViewRect:frame", refine)
+        self.assertIn("inkHexForSampledLuminance", refine)
+
+        # The sampler is built off the main thread and only when it must be.
+        self.assertIn("DBBackgroundSampler samplerWithImage:image viewSize:size", home)
+        self.assertIn("dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_LOW", home)
+        self.assertIn("CGSizeEqualToSize(_samplerSize, size)", home)
+
+        # Each screen inks its regions after layout, when the frames are final.
+        for source, name in ((home, "dashboard"), (door, "door screen"),
+                             (incoming, "incoming screen")):
+            self.assertIn("- (void)applyRegionInk", source, name)
+            self.assertIn("applyInkToLabel:", source, name)
+            layout = source[source.rindex("- (void)layoutSubviews"):]
+            self.assertIn("[self applyRegionInk]", layout, name)
+
+        for region in ("DBUiRegionClock", "DBUiRegionDate", "DBUiRegionStatusLine"):
+            self.assertIn(region, home)
+            self.assertIn(region, door)
+        self.assertIn("DBUiRegionHint", door)
+        self.assertIn("DBUiRegionTileLabel", home)
+
+    def test_the_footer_and_the_sos_slider_share_one_computed_band(self):
+        theme = read("ios-kiosk/src/Core/DBUiTheme.m")
+        home = read("ios-kiosk/src/Screens/DBHomeScreen.m")
+        door = read("ios-kiosk/src/Screens/DBDoorScreen.m")
+
+        self.assertIn("+ (NSDictionary *)footerLayoutForViewWidth:", theme)
+        # The dashboard takes all three frames from that one split, so nothing
+        # can drift back into an overlap.
+        self.assertIn("footerLayoutForViewWidth:size.width", home)
+        for element in ("qr", "version", "sos"):
+            self.assertIn('DBRectFromArray([footer objectForKey:@"%s"])' % element, home)
+        # The band reserves its own height instead of a hardcoded constant.
+        self.assertIn('[[footer objectForKey:@"height"] doubleValue]', home)
+
+        # The door station stacks them with an explicit gap.
+        self.assertIn("sosTop = versionTop - footerGap - sosHeight", door)
 
 
 if __name__ == "__main__":
