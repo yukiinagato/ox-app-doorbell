@@ -503,6 +503,7 @@
   <data name="pair_scan_denied" xml:space="preserve"><value>无法使用相机。请在系统设置中允许本应用使用相机</value></data>
   <data name="pair_scan_hint" xml:space="preserve"><value>请对准新设备上显示的添加二维码</value></data>
   <data name="pair_scan_no_camera" xml:space="preserve"><value>此设备没有摄像头。请用其他设备扫描，或改用配对 PIN。</value></data>
+  <data name="pair_scan_opening" xml:space="preserve"><value>正在启动摄像头…</value></data>
   <data name="pair_scan_qr" xml:space="preserve"><value>扫描二维码</value></data>
   <data name="pair_searching" xml:space="preserve"><value>正在查找附近设备…</value></data>
   <data name="pair_searching_hint" xml:space="preserve"><value>请在已加入集群的设备或管理页面上点击“添加”</value></data>

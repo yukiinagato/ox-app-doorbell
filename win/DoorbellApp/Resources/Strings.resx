@@ -503,6 +503,7 @@
   <data name="pair_scan_denied" xml:space="preserve"><value>カメラを使用できません。設定アプリでこのアプリにカメラの使用を許可してください</value></data>
   <data name="pair_scan_hint" xml:space="preserve"><value>新しい端末に表示された追加用 QR に合わせてください</value></data>
   <data name="pair_scan_no_camera" xml:space="preserve"><value>この端末にはカメラがありません。別の端末で読み取るか、ペアリング PIN を使ってください。</value></data>
+  <data name="pair_scan_opening" xml:space="preserve"><value>カメラを起動しています…</value></data>
   <data name="pair_scan_qr" xml:space="preserve"><value>QR を読み取る</value></data>
   <data name="pair_searching" xml:space="preserve"><value>近くの端末を探しています…</value></data>
   <data name="pair_searching_hint" xml:space="preserve"><value>クラスタに参加済みの端末か管理画面で「追加」を押してください</value></data>

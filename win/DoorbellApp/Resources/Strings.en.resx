@@ -503,6 +503,7 @@ Delete it?</value></data>
   <data name="pair_scan_denied" xml:space="preserve"><value>The camera is not available. Allow camera access for this app in Settings</value></data>
   <data name="pair_scan_hint" xml:space="preserve"><value>Point at the Add QR shown on the new device</value></data>
   <data name="pair_scan_no_camera" xml:space="preserve"><value>This device has no camera. Scan from another device, or use a Pairing PIN.</value></data>
+  <data name="pair_scan_opening" xml:space="preserve"><value>Starting the camera…</value></data>
   <data name="pair_scan_qr" xml:space="preserve"><value>Scan QR</value></data>
   <data name="pair_searching" xml:space="preserve"><value>Looking for nearby devices…</value></data>
   <data name="pair_searching_hint" xml:space="preserve"><value>Press &quot;Add&quot; on a device already in the Cluster, or on the admin page</value></data>

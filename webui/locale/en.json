@@ -496,6 +496,7 @@
  "pair.scan_denied": "The camera is not available. Allow camera access for this app in Settings",
  "pair.scan_hint": "Point at the Add QR shown on the new device",
  "pair.scan_no_camera": "This device has no camera. Scan from another device, or use a Pairing PIN.",
+ "pair.scan_opening": "Starting the camera…",
  "pair.scan_qr": "Scan QR",
  "pair.searching": "Looking for nearby devices…",
  "pair.searching_hint": "Press \"Add\" on a device already in the Cluster, or on the admin page",

@@ -13,6 +13,7 @@ namespace DoorbellApp
         public string Role = "door_station";
         public string Door = "";
         public string UiLang = "ja";
+        public string PskRef = "";
         public bool Kiosk = true;
         public int HttpPort = 47180;
         public string FilePath;
@@ -44,6 +45,7 @@ namespace DoorbellApp
                     if (d.TryGetValue("role", out var ro) && ro != null) c.Role = ro.ToString();
                     if (d.TryGetValue("door", out var dr) && dr != null) c.Door = dr.ToString();
                     if (d.TryGetValue("ui_lang", out var l) && l != null) c.UiLang = l.ToString();
+                    if (d.TryGetValue("psk_ref", out var pr) && pr != null) c.PskRef = pr.ToString();
                     if (d.TryGetValue("kiosk", out var k) && k is bool kb) c.Kiosk = kb;
                     if (d.TryGetValue("setup_complete", out var setup) && setup is bool sb)
                         setupComplete = sb;
@@ -149,6 +151,23 @@ namespace DoorbellApp
                 return WritePairingGenerations(path, output) ? output : null;
             }
             catch { return null; }
+        }
+
+        /// <summary>Drops the pairing reference and seeds after unpair/revoke.</summary>
+        public static bool ClearPairingReference(string path)
+        {
+            string current = ReadValidJson(path) ?? ReadValidJson(path + ".bak") ?? DefaultJson;
+            try
+            {
+                var json = new JavaScriptSerializer();
+                var data = json.Deserialize<Dictionary<string, object>>(current) ??
+                           new Dictionary<string, object>();
+                data.Remove("psk_hex");
+                data.Remove("psk_ref");
+                data.Remove("seed_peers");
+                return WritePairingGenerations(path, json.Serialize(data));
+            }
+            catch { return false; }
         }
 
         private static void AddUnique(List<string> values, string value)

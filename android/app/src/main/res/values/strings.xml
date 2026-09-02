@@ -501,6 +501,7 @@ Delete it?</string>
     <string name="pair_scan_denied">The camera is not available. Allow camera access for this app in Settings</string>
     <string name="pair_scan_hint">Point at the Add QR shown on the new device</string>
     <string name="pair_scan_no_camera">This device has no camera. Scan from another device, or use a Pairing PIN.</string>
+    <string name="pair_scan_opening">Starting the camera…</string>
     <string name="pair_scan_qr">Scan QR</string>
     <string name="pair_searching">Looking for nearby devices…</string>
     <string name="pair_searching_hint">Press &quot;Add&quot; on a device already in the Cluster, or on the admin page</string>

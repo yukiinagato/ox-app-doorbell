@@ -501,6 +501,7 @@
     <string name="pair_scan_denied">无法使用相机。请在系统设置中允许本应用使用相机</string>
     <string name="pair_scan_hint">请对准新设备上显示的添加二维码</string>
     <string name="pair_scan_no_camera">此设备没有摄像头。请用其他设备扫描，或改用配对 PIN。</string>
+    <string name="pair_scan_opening">正在启动摄像头…</string>
     <string name="pair_scan_qr">扫描二维码</string>
     <string name="pair_searching">正在查找附近设备…</string>
     <string name="pair_searching_hint">请在已加入集群的设备或管理页面上点击“添加”</string>

@@ -15,6 +15,7 @@ using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using DoorbellApp.Core;
 using DoorbellApp.Kiosk;
+using DoorbellApp.Pairing;
 using DoorbellApp.Util;
 
 namespace DoorbellApp
@@ -33,7 +34,12 @@ namespace DoorbellApp
         private readonly DispatcherTimer _peerPoll = new DispatcherTimer();
         private readonly DispatcherTimer _h264Fallback = new DispatcherTimer();
         private readonly DispatcherTimer _peerH264Retry = new DispatcherTimer();
+        private readonly DispatcherTimer _pairingPoll = new DispatcherTimer();
         private readonly Random _rng = new Random();
+
+        private PairingSnapshot _pairing = new PairingSnapshot();
+        // "Set up later" hides onboarding until the operator taps the banner again.
+        private bool _pairingSkipped;
 
         private MjpegStreamer _incomingStreamer;
         private MjpegStreamer _inCallStreamer;
@@ -188,6 +194,10 @@ namespace DoorbellApp
 
             App.Core.UiEventReceived += ev => Dispatcher.BeginInvoke(new Action(() => OnUiEvent(ev)));
 
+            PairingOverlay.DismissRequested += OnPairingDismissed;
+            _pairingPoll.Interval = TimeSpan.FromSeconds(2);
+            _pairingPoll.Tick += (s, e) => RefreshPairingState();
+
             Loaded += (s, e) =>
             {
                 if (App.Boot.Kiosk)
@@ -198,6 +208,8 @@ namespace DoorbellApp
                 }
                 KioskHooks.KeepDisplayOn();
                 RefreshNodeInfo();
+                RefreshPairingState();
+                _pairingPoll.Start();
                 RecoverActiveCall();
                 _launchAudio = PlayConfigured(_launchAudio,
                     SoundValue("launch_sound", "title_display"), false);
@@ -247,6 +259,8 @@ namespace DoorbellApp
             MonitorPickerTitle.Text = Texts.T("monitor.choose");
             MonitorPickerClose.Content = Texts.T("monitor.close");
             CallingPurposeHint.Text = Texts.T("idle.choose_purpose");
+            PairBannerText.Text = Texts.T("pair.not_set_up_banner");
+            PairingOverlay.ApplyStrings();
         }
 
         private string DoorLabel(string door)
@@ -261,6 +275,7 @@ namespace DoorbellApp
         {
             UpdateClock();
             if (!_screensaverOn && !_emergencyActive && _screensaverAfterS > 0 &&
+                !PairingOverlay.IsActive &&
                 IdleView.Visibility == Visibility.Visible &&
                 CallingView.Visibility != Visibility.Visible &&
                 OfflineView.Visibility != Visibility.Visible &&
@@ -1349,6 +1364,7 @@ namespace DoorbellApp
 
         private void OnUiEvent(UiEvent ev)
         {
+            HandlePairingEvent(ev);
             switch (ev.T)
             {
                 case "state":
@@ -2319,6 +2335,95 @@ namespace DoorbellApp
                 _activeCallExpiresAtMs = 0;
             }
             return ok;
+        }
+
+        // Pairing is core-authoritative: this window renders pairing.state and never infers it.
+        private void HandlePairingEvent(UiEvent ev)
+        {
+            switch (ev.T)
+            {
+                case "pairing_revoked":
+                    // Core already dropped the key; the shell drops the boot reference too.
+                    App.ClearPairingBootReference();
+                    _pairingSkipped = false;
+                    ShowPairingOverlay();
+                    PairingOverlay.HandleCoreEvent(ev);
+                    RefreshPairingState();
+                    return;
+                case "pairing_state":
+                case "paired":
+                case "join_result":
+                case "invite_rejected":
+                case "pairing_persistence_error":
+                case "join_token_changed":
+                case "pending_changed":
+                    PairingOverlay.HandleCoreEvent(ev);
+                    RefreshPairingState();
+                    return;
+            }
+        }
+
+        private void RefreshPairingState()
+        {
+            var snapshot = PairingSnapshot.From(App.Core.PairingInfo());
+            // {} means core has not published a snapshot yet: unknown, so do not show onboarding.
+            if (!snapshot.Known) return;
+            _pairing = snapshot;
+            bool ready = _pairing.IsReady;
+            if (ready) _pairingSkipped = false;
+            if (!ready && !_pairingSkipped && !PairingOverlay.IsActive) ShowPairingOverlay();
+
+            PairBanner.Visibility = !ready && !PairingOverlay.IsActive ?
+                Visibility.Visible : Visibility.Collapsed;
+            MembershipStatus.Visibility = ready && !PairingOverlay.IsActive ?
+                Visibility.Visible : Visibility.Collapsed;
+            MembershipText.Text = Texts.T("pair.membership", _pairing.MemberCount.ToString());
+            MembershipBadge.Text = _pairing.IsFounder ? Texts.T("pair.created_badge") :
+                Texts.T("pair.membership_connected", _pairing.ConnectedCount.ToString());
+        }
+
+        private void ShowPairingOverlay()
+        {
+            PairBanner.Visibility = Visibility.Collapsed;
+            MembershipStatus.Visibility = Visibility.Collapsed;
+            PairingOverlay.Activate();
+        }
+
+        private void OnPairingDismissed()
+        {
+            _pairingSkipped = true;
+            PairingOverlay.Deactivate();
+            RefreshPairingState();
+        }
+
+        private void OnPairBannerClick(object sender, MouseButtonEventArgs e)
+        {
+            _pairingSkipped = false;
+            ShowPairingOverlay();
+        }
+
+        private void OnMembershipClick(object sender, MouseButtonEventArgs e)
+        {
+            OpenAddDevicePanel();
+        }
+
+        /// <summary>Opens the Add-device panel, behind the admin password on a kiosk.</summary>
+        private void OpenAddDevicePanel()
+        {
+            if (App.Boot.Kiosk && !_adminUnlocked)
+            {
+                var prompt = new AdminDialog { Owner = this };
+                if (prompt.ShowDialog() != true) return;
+            }
+            var panel = new AddDeviceWindow { Owner = this, Topmost = Topmost };
+            panel.ShowDialog();
+            if (panel.OnboardingRequested)
+            {
+                _pairingSkipped = false;
+                ShowPairingOverlay();
+                return;
+            }
+            RefreshPairingState();
         }
 
         private void OnSecretCorner(object sender, MouseButtonEventArgs e)

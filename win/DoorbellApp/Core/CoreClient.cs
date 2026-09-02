@@ -28,6 +28,7 @@ namespace DoorbellApp.Core
         private CoreInterop.HttpsRequestCb _httpsCb;
         private CoreInterop.SecureGetCb _secureGetCb;
         private CoreInterop.SecurePutCb _securePutCb;
+        private CoreInterop.SecureDeleteCb _secureDeleteCb;
         private CoreInterop.DeviceInfoCb _deviceInfoCb;
         private CoreInterop.ReleaseBufferCb _releaseBufferCb;
         private DpapiSecretStore _secretStore;
@@ -102,6 +103,11 @@ namespace DoorbellApp.Core
                 try { return _secretStore.Put(CoreInterop.ReadUtf8(key), CoreInterop.ReadUtf8(value)) ? 0 : -1; }
                 catch { return -1; }
             };
+            _secureDeleteCb = (user, key) =>
+            {
+                try { return _secretStore.Delete(CoreInterop.ReadUtf8(key)) ? 0 : -1; }
+                catch { return -1; }
+            };
             _deviceInfoCb = (user, jsonOut) =>
             {
                 try
@@ -125,6 +131,7 @@ namespace DoorbellApp.Core
                 tts_speak = Marshal.GetFunctionPointerForDelegate(_ttsCb),
                 device_info = Marshal.GetFunctionPointerForDelegate(_deviceInfoCb),
                 release_buffer = Marshal.GetFunctionPointerForDelegate(_releaseBufferCb),
+                secure_delete = Marshal.GetFunctionPointerForDelegate(_secureDeleteCb),
             };
             _core = CoreInterop.db_core_create_v2(ref plat, dataDir, bootJson);
             if (_core == IntPtr.Zero) return false;
@@ -331,6 +338,104 @@ namespace DoorbellApp.Core
         {
             if (string.IsNullOrEmpty(nodeId)) return;
             lock (_nativeLock) if (_core != IntPtr.Zero) CoreInterop.db_core_invite_device(_core, nodeId);
+        }
+
+        /// <summary>Starts pairing mode and mints one Pairing PIN: {ok,host,pin,expires_s}.</summary>
+        public Dictionary<string, object> StartPairing(int seconds)
+        {
+            string s;
+            lock (_nativeLock)
+            {
+                if (_core == IntPtr.Zero) return null;
+                s = CoreInterop.TakeUtf8(CoreInterop.db_core_start_pairing_json(_core, seconds));
+            }
+            if (s == null) return null;
+            try { return _json.Deserialize<Dictionary<string, object>>(s); }
+            catch { return null; }
+        }
+
+        public void InviteDirect(string addr, string nodeId, string publicKeyHex)
+        {
+            if (string.IsNullOrEmpty(addr) || string.IsNullOrEmpty(publicKeyHex)) return;
+            lock (_nativeLock)
+                if (_core != IntPtr.Zero)
+                    CoreInterop.db_core_invite_direct(_core, addr, nodeId ?? "", publicKeyHex);
+        }
+
+        public void DenyDevice(string nodeId)
+        {
+            if (string.IsNullOrEmpty(nodeId)) return;
+            lock (_nativeLock)
+                if (_core != IntPtr.Zero) CoreInterop.db_core_deny_device(_core, nodeId);
+        }
+
+        /// <summary>Re-runs the secure-store write after state "persist_error".</summary>
+        public bool RetryPairingPersistence()
+        {
+            lock (_nativeLock)
+                return _core != IntPtr.Zero &&
+                    CoreInterop.db_core_retry_pairing_persistence(_core) != 0;
+        }
+
+        /// <summary>Leaves the cluster. Core emits pairing_state with state "unpaired".</summary>
+        public void Unpair()
+        {
+            lock (_nativeLock) if (_core != IntPtr.Zero) CoreInterop.db_core_unpair(_core);
+        }
+
+        /// <summary>Returns size*size row-major modules, one byte per module, or null.</summary>
+        public static byte[] QrEncode(string text, out int size)
+        {
+            size = 0;
+            if (string.IsNullOrEmpty(text)) return null;
+            int encoded;
+            IntPtr p = CoreInterop.db_core_qr_encode(text, out encoded);
+            if (p == IntPtr.Zero) return null;
+            try
+            {
+                if (encoded <= 0 || encoded > 4096) return null;
+                var modules = new byte[encoded * encoded];
+                Marshal.Copy(p, modules, 0, modules.Length);
+                size = encoded;
+                return modules;
+            }
+            finally { CoreInterop.db_free(p); }
+        }
+
+        /// <summary>Synchronously decodes one 8-bit grayscale image. Returns null when empty.</summary>
+        public static string QrDecodeGray(byte[] gray, int width, int height)
+        {
+            if (gray == null || width <= 0 || height <= 0 ||
+                gray.Length < width * height) return null;
+            IntPtr text;
+            if (CoreInterop.db_core_qr_decode(gray, width, height, out text) != 0) return null;
+            return CoreInterop.TakeUtf8(text);
+        }
+
+        public void QrScanStart()
+        {
+            lock (_nativeLock) if (_core != IntPtr.Zero) CoreInterop.db_core_qr_scan_start(_core);
+        }
+
+        public void QrScanStop()
+        {
+            lock (_nativeLock) if (_core != IntPtr.Zero) CoreInterop.db_core_qr_scan_stop(_core);
+        }
+
+        /// <summary>Pushes one raw frame. format: 0=NV21, 1=NV12, 2=YUY2, 3=BGRA.</summary>
+        public void PushCameraFrame(byte[] data, int format, int width, int height, int stride,
+                                    long timestampMs)
+        {
+            if (data == null || data.Length == 0 || width <= 0 || height <= 0) return;
+            var pinned = GCHandle.Alloc(data, GCHandleType.Pinned);
+            try
+            {
+                lock (_nativeLock)
+                    if (_core != IntPtr.Zero)
+                        CoreInterop.db_core_on_camera_frame(_core, pinned.AddrOfPinnedObject(),
+                            format, width, height, stride, timestampMs);
+            }
+            finally { pinned.Free(); }
         }
 
         public void PublishRuntimeContracts(string role, bool safeMode)

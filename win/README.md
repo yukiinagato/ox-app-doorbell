@@ -68,6 +68,33 @@ reference. The shell then atomically rewrites `boot.json` to contain only:
 The plaintext `psk_hex` boot field is removed. `boot.json.bak` is the previous
 valid generation and is used if the primary file is invalid.
 
+## Pairing UX (onboarding, Add-device panel, QR)
+
+`db_core_pairing_json` is the only source of pairing state; the shell renders
+`state` and never derives it from `paired`/`persistence_ready`. An empty snapshot
+means "not published yet" and never shows onboarding.
+
+- `Pairing/PairingOnboardingView` replaces the main UI whenever `state` is not
+  `ready`: searching status, this device's Add QR from `db_core_qr_encode`, the
+  Pairing-PIN entry with a drawn numeric keypad, the two-step "create a new
+  Cluster" confirm, the `persist_error` retry, and "set up later". Skipping shows
+  a persistent banner on the main UI that reopens onboarding.
+- `Pairing/AddDeviceWindow` is the state-`ready` panel, opened from the
+  membership status and gated by the admin password in kiosk mode: nearby
+  devices with add/ignore, the Pairing-PIN card re-rendered from `pairing.token`,
+  bulk add with its warning/stop/count, this device's own QR, and unpair.
+  A row only reports success on `device_joined`, never on `invite_result`.
+- `Pairing/QrScanWindow` starts `db_core_qr_scan_start` and feeds frames back
+  through `db_core_on_camera_frame`. Core owns the Media Foundation capture
+  (`core/src/media/camera_win.cpp`) and republishes it as `/stream.mjpeg`, so the
+  scanner consumes that local stream instead of opening the device twice. Core
+  only starts that capture for `role: door_station`; an indoor panel therefore
+  shows the "no camera" message and the operator uses a Pairing PIN or scans from
+  another device.
+- `db_platform_v2.secure_delete` is wired to the DPAPI store so leaving a Cluster
+  removes `mesh.psk` instead of orphaning it, and `boot.json` loses `psk_ref` and
+  `seed_peers` on unpair or revoke.
+
 ## Watchdog service
 
 Install from an elevated prompt after placing the artifact in its permanent
