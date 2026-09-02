@@ -771,36 +771,23 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
         nightTint.visibility = if (night && redTint) View.VISIBLE else View.GONE
     }
 
-    /** Sort configured entries by order and then identifier. */
-    private fun sortedByOrder(o: JSONObject): List<String> {
-        val ids = o.keys().asSequence().toMutableList()
-        ids.sortWith(compareBy({ o.optJSONObject(it)?.optInt("order", 999) ?: 999 }, { it }))
-        return ids
-    }
-
-    /** Resolve a label by requested language, Japanese, then fallback. */
-    private fun labelOf(e: JSONObject?, lang: String, fallback: String): String {
-        val l = e?.optJSONObject("label") ?: return fallback
-        val s = l.optString(lang)
-        if (s.isNotEmpty()) return s
-        val ja = l.optString("ja")
-        return if (ja.isNotEmpty()) ja else fallback
-    }
-
-    /** Build visit-purpose controls for the door-station idle screen. */
+    /**
+     * Build visit-purpose controls for the door-station idle screen. A purpose an administrator
+     * disabled is never offered; when every purpose is off the chooser behaves exactly as it does
+     * with none configured, so the visitor goes straight on with the call.
+     */
     private fun buildPurposeButtons() {
         purposeGrid.removeAllViews()
-        val purposes = app.core.dig(cfg, "visit_purposes") as? JSONObject
         if (app.boot.role != "door_station") {
             purposeSection.visibility = View.GONE
             return
         }
-        if (purposes == null || purposes.length() == 0) {
+        val ids = VisitPurposes.enabled(cfg)
+        if (ids.isEmpty()) {
             purposeGrid.columnCount = 1
             purposeSection.visibility = if (choosingPurpose) View.VISIBLE else View.GONE
             return
         }
-        val ids = sortedByOrder(purposes)
         val widthDp = resources.displayMetrics.widthPixels / resources.displayMetrics.density
         val columns = when {
             ids.size <= 1 -> 1
@@ -816,11 +803,9 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
         }
         val textSize = if (rows >= 2 || columns == 2) 14f else 16f
         for ((index, id) in ids.withIndex()) {
-            val e = purposes.optJSONObject(id)
-            val label = labelOf(e, texts.lang, id)
-            val icon = e?.optString("icon").orEmpty()
+            val label = VisitPurposes.label(cfg, id, texts.lang)
             val b = Button(this)
-            b.text = if (icon.isEmpty()) label else "$icon  $label"
+            b.text = VisitPurposes.decoratedLabel(cfg, id, texts.lang)
             b.textSize = textSize
             b.isAllCaps = false
             b.setSingleLine(false)

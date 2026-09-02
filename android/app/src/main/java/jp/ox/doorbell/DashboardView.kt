@@ -581,13 +581,9 @@ internal class DashboardView(
         return value?.toString() ?: door
     }
 
-    private fun purposeLabel(purpose: String): String {
-        val labels = (app.core.dig(config, "visit_purposes.$purpose") as? JSONObject)
-            ?.optJSONObject("label") ?: return purpose
-        val value = labels.optString(texts.lang)
-        if (value.isNotEmpty()) return value
-        return labels.optString("ja").ifEmpty { purpose }
-    }
+    /** A recorded call keeps the purpose the visitor chose, even once it has been disabled. */
+    private fun purposeLabel(purpose: String): String =
+        VisitPurposes.label(config, purpose, texts.lang)
 
     private fun appVersion(): String = try {
         activity.packageManager.getPackageInfo(activity.packageName, 0).versionName.orEmpty()

@@ -307,14 +307,9 @@ class HistoryActivity : Activity(), DoorbellCore.Listener {
         return value?.toString() ?: door
     }
 
-    private fun purposeLabel(purpose: String): String {
-        val entry = app.core.dig(config, "visit_purposes.$purpose") as? JSONObject
-            ?: return purpose
-        val labels = entry.optJSONObject("label") ?: return purpose
-        val value = labels.optString(texts.lang)
-        if (value.isNotEmpty()) return value
-        return labels.optString("ja").ifEmpty { purpose }
-    }
+    /** A recorded call keeps the purpose the visitor chose, even once it has been disabled. */
+    private fun purposeLabel(purpose: String): String =
+        VisitPurposes.label(config, purpose, texts.lang)
 
     companion object {
         private const val EXTRA_DOOR = "door"
