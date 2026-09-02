@@ -49,6 +49,12 @@ CFLAGS=(-std=c99 -Wall -Wextra -Werror -O2 -I"$MINISIP")
 
 "$CC" -fobjc-arc -Wall -Wextra -Werror -O2 -isysroot "$MACOS_SDK" \
   -I"$REPO_ROOT/ios-kiosk/src/Core" \
+  "$REPO_ROOT/ios-kiosk/src/Core/DBAdminAddress.m" \
+  "$REPO_ROOT/ios-compat/tests/admin_address_test.m" \
+  -framework Foundation -o "$OUT/admin_address_test"
+
+"$CC" -fobjc-arc -Wall -Wextra -Werror -O2 -isysroot "$MACOS_SDK" \
+  -I"$REPO_ROOT/ios-kiosk/src/Core" \
   "$REPO_ROOT/ios-kiosk/src/Core/DBCallEventTracker.m" \
   "$REPO_ROOT/ios-compat/tests/call_event_tracker_test.m" \
   -framework Foundation -o "$OUT/call_event_tracker_test"
@@ -127,6 +133,7 @@ swiftc \
 "$OUT/media_source_test"
 "$OUT/door_tile_model_test"
 "$OUT/fleet_counts_test"
+"$OUT/admin_address_test"
 "$OUT/call_event_tracker_test"
 [[ $MODERN_CALL_TEST -eq 1 ]] && "$OUT/modern_call_revision_test"
 "$OUT/http_media_test"

@@ -1,5 +1,6 @@
 #import <UIKit/UIKit.h>
 
+#import "../Core/DBAdminAddress.h"
 #import "../Core/DBSosSlideModel.h"
 
 @class DBTexts;
@@ -32,6 +33,10 @@ NSString *DBHexFromColor(UIColor *color);
 + (UIImage *)cachedBackdropForKey:(NSString *)key size:(CGSize)size;
 // How far the picture is darkened, so callers can describe it.
 + (CGFloat)darkeningAlpha;
+// The bitmap is prepared at the panel's aspect ratio but no more than this on
+// its long side, then scaled back up by the view.
++ (CGFloat)maximumLongSide;
++ (CGSize)preparedSizeForViewSize:(CGSize)size;
 
 @end
 
