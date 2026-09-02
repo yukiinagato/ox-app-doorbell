@@ -114,6 +114,25 @@ enum ConfigUtil {
         return nil
     }
 
+    /// Whether a door station has a camera to watch. A peer that says nothing about it is
+    /// assumed to have one: every door station shipped so far does, and hiding a tile because a
+    /// field is missing would take a working camera off the dashboard.
+    static func doorHasCamera(_ peer: [String: Any]?) -> Bool {
+        guard let peer = peer else { return true }
+        return bool(peer, "caps.camera", true)
+    }
+
+    /// The doors an indoor panel draws a tile for: every configured door except one whose peer is
+    /// present and says it has no camera. There is nothing to watch on those, and the door is
+    /// still reachable from the monitor page and still carries its notices.
+    static func doorsWithCamera(config: [String: Any]?, status: [String: Any]?) -> [String] {
+        let doors = (dig(config, "doors") as? [String: Any]).map { sortedByOrder($0) } ?? []
+        return doors.filter { door in
+            guard let peer = findDoorPeer(status, door: door) else { return true }
+            return doorHasCamera(peer)
+        }
+    }
+
     static func peerHost(_ peer: [String: Any]?) -> String? {
         guard let addrs = peer?["addrs"] as? [Any] else { return nil }
         for a in addrs {

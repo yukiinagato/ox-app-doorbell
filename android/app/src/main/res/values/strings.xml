@@ -358,6 +358,9 @@ Delete it?</string>
     <string name="calling_cancel_failed">Could not cancel the call</string>
     <string name="calling_no_answer">No answer</string>
     <string name="calling_title">Calling…</string>
+    <string name="cluster_devices_a11y">%1$s devices in the cluster</string>
+    <string name="cluster_door_stations_a11y">%1$s of %2$s door stations online</string>
+    <string name="cluster_indoor_panels_a11y">%1$s of %2$s indoor panels online</string>
     <string name="dash_admin">Admin</string>
     <string name="dash_doors">Door stations</string>
     <string name="dash_last_answer">Last answered %1$s</string>

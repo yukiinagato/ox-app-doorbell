@@ -112,8 +112,14 @@ assert "core.callLogPage(sinceMs: 0, beforeMs: beforeMs, limit: limit)" in histo
 # --- every clock goes through Core -----------------------------------------
 assert "func localTime(wallMs: Int64 = 0)" in bridge
 assert "core.localTime(wallMs: wallMs)" in clock
+# The iOS shell draws from a base Core gave it, re-taken off the main thread: db_core_local_time_json
+# is synchronous into Core and does not answer while Core is mid-SNTP, which made the panel's
+# seconds advance in threes. The reading still originates in Core, never in the OS calendar.
+assert "clockSource.reading()" in main, "MainViewController draws from the disciplined clock"
+assert "clockSource.refresh(core)" in main, "and re-takes its base from Core"
+assert "DoorbellClock.read(core)" in clock, "which is still Core's reading, not the OS calendar's"
+assert "clockSource.reading()" in tv, "TVMainViewController draws from the same source"
 for shell, name in ((main, "MainViewController"), (tv, "TVMainViewController")):
-    assert "DoorbellClock.read(core)" in shell, name
     assert "Calendar(identifier: .gregorian)" not in shell.split("private func updateClock")[1][:600], \
         f"{name} must not render its clock from the OS calendar"
 

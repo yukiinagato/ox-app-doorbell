@@ -57,6 +57,10 @@ final class MainViewController: UIViewController {
     private var secretTaps = 0
     private var secretFirst = Date.distantPast
     private var pairingObserver: NSObjectProtocol?
+    /// The clock is drawn from this, never from a Core call on the tick itself.
+    private let clockSource = DoorbellClockSource()
+    private var clockRefreshTimer: Timer?
+    private var lastClockTickUptime: TimeInterval = 0
     private var wakeObserver: NSObjectProtocol?
     private var inviteObserver: NSObjectProtocol?
 
@@ -172,6 +176,10 @@ final class MainViewController: UIViewController {
         clockTimer = IOSAvailability.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
             self?.onClockTick()
         }
+        refreshClockBase()
+        clockRefreshTimer = IOSAvailability.scheduledTimer(
+            withTimeInterval: DoorbellClockSource.refreshIntervalS, repeats: true
+        ) { [weak self] _ in self?.refreshClockBase() }
         updateClock()
         encoderPollTimer = IOSAvailability.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
             self?.encoderPoll()
@@ -632,6 +640,13 @@ final class MainViewController: UIViewController {
 
 
     private func onClockTick() {
+        // The interval between visible ticks is the whole complaint: the timer fires at 1 Hz, and
+        // what mattered was whether anything blocked the run loop between two of them.
+        let now = ProcessInfo.processInfo.systemUptime
+        if lastClockTickUptime > 0 {
+            IOSAvailability.PerfProbe.record("clock.tick", now - lastClockTickUptime)
+        }
+        lastClockTickUptime = now
         updateClock()
         if !screensaverOn && !emergencyActive && screensaverAfterS > 0 &&
             !idleView.isHidden && callingView.isHidden && offlineView.isHidden &&
@@ -641,14 +656,23 @@ final class MainViewController: UIViewController {
         }
     }
 
+    /// Re-takes the clock's base from Core, off the main thread.
+    private func refreshClockBase() {
+        clockSource.refresh(core) { [weak self] cost in
+            IOSAvailability.PerfProbe.record("clock.refresh", cost)
+            self?.updateClock()
+        }
+    }
+
     /// Every clock is rendered from Core's zone-corrected reading, so a device whose own clock is
     /// wrong — or that sits in another zone — still shows the household's time.
     private func updateClock() {
-        guard let reading = DoorbellClock.read(core) else { return }
+        guard let reading = clockSource.reading() else { return }
         clockLabel.text = reading.hhmmss
         dateLabel.text = DoorbellClock.longDate(reading, lang: texts.lang)
         visitorScreen?.updateClock(reading, lang: texts.lang)
-        dashboard?.updateClock()
+        // The dashboard is handed the same reading rather than asking Core for its own.
+        dashboard?.updateClock(reading)
         if screensaverOn {
             saverClock.text = clockLabel.text
             saverDate.text = dateLabel.text
@@ -704,7 +728,6 @@ final class MainViewController: UIViewController {
         applyIdleControlSkin(skin)
         if let dashboard = dashboard {
             dashboard.reload(config: cfg, skin: skin)
-            dashboard.updateMembership(membershipLabel.text ?? "", hidden: membershipLabel.isHidden)
         }
         if let visitor = visitorScreen {
             let notice = DoorbellNotice.effective(status: core.status(), config: cfg,
@@ -1309,8 +1332,10 @@ final class MainViewController: UIViewController {
         case "peers_changed", "config_changed":
             refreshNodeInfo()
         case "time_changed":
-            // The source or the applied correction moved: redraw every clock at once instead of
-            // waiting for the next tick, and re-evaluate a scheduled light/dark switch.
+            // The source or the applied correction moved, so the base this clock is counting from
+            // is stale: re-take it, then redraw every clock at once instead of waiting for the
+            // next tick, and re-evaluate a scheduled light/dark switch.
+            refreshClockBase()
             refreshHomeSurfaces()
         case "power_changed":
             core.refreshPowerStateCache()

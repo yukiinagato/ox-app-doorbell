@@ -31,6 +31,10 @@ final class VisitorScreenView: UIView {
     /// Whether this device's role offers the SOS slider. Remembered because `applyLayout` takes
     /// the whole stack apart and puts it back.
     private var sosVisible = true
+    private var callWidth: NSLayoutConstraint?
+    /// The call button may not hug its label: the verb is two characters in Japanese, and a
+    /// button barely wider than a finger is not what a visitor should have to hunt for.
+    private static let callButtonMinimumColumnShare: CGFloat = 0.6
     private var skin = DoorbellSkin.plain(.dark)
 
     init(texts: Texts, callButton: UIButton, langBar: UIView, purposeSection: UIView,
@@ -155,7 +159,7 @@ final class VisitorScreenView: UIView {
         if landscape {
             // With a notice on screen, the language row belongs directly above the call button.
             actionColumn.addArrangedSubview(langBar)
-            actionColumn.addArrangedSubview(centred(callButton))
+            actionColumn.addArrangedSubview(callButtonRow())
             actionColumn.addArrangedSubview(hintLabel)
             actionColumn.addArrangedSubview(purposeSection)
             let columns = UIStackView(arrangedSubviews: [
@@ -173,13 +177,26 @@ final class VisitorScreenView: UIView {
         root.addArrangedSubview(clockColumn)
         root.addArrangedSubview(noticeColumn)
         root.addArrangedSubview(langBar)
-        actionColumn.addArrangedSubview(centred(callButton))
+        actionColumn.addArrangedSubview(callButtonRow())
         actionColumn.addArrangedSubview(hintLabel)
         actionColumn.addArrangedSubview(purposeSection)
         root.addArrangedSubview(actionColumn)
         root.addArrangedSubview(UIView())
         root.addArrangedSubview(footerLabel)
         if sosVisible { root.addArrangedSubview(sosControl) }
+    }
+
+    /// The call button, centred in a full-width row and never narrower than its share of it.
+    private func callButtonRow() -> UIView {
+        let row = centred(callButton)
+        callWidth?.isActive = false
+        let width = callButton.widthAnchor.constraint(
+            greaterThanOrEqualTo: row.widthAnchor,
+            multiplier: VisitorScreenView.callButtonMinimumColumnShare)
+        width.priority = UILayoutPriority(999)
+        width.isActive = true
+        callWidth = width
+        return row
     }
 
     /// Wraps a control that must keep its own size inside a full-width row.

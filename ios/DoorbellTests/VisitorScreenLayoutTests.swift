@@ -16,6 +16,7 @@ final class VisitorScreenLayoutTests: XCTestCase {
         let sos: SosSlideControl
         let purposeHint: UILabel
         let purposeButtons: [UIButton]
+        let callButton: UIButton
     }
 
     /// Builds the screen with the controls `MainViewController` would hand it, laid out at `size`
@@ -70,7 +71,10 @@ final class VisitorScreenLayoutTests: XCTestCase {
         purposeSection.alignment = .center
 
         let sos = SosSlideControl(texts: texts)
-        let view = VisitorScreenView(texts: texts, callButton: UIButton(type: .system),
+        let callButton = UIButton(type: .system)
+        callButton.setTitle(texts.t("idle.call_button_verb"), for: .normal)
+        callButton.titleLabel?.font = .systemFont(ofSize: 40, weight: .bold)
+        let view = VisitorScreenView(texts: texts, callButton: callButton,
                                      langBar: langBar, purposeSection: purposeSection,
                                      sosControl: sos)
         let host = UIView(frame: CGRect(origin: .zero, size: size))
@@ -84,7 +88,7 @@ final class VisitorScreenLayoutTests: XCTestCase {
         view.applyLayout(for: size)
         host.layoutIfNeeded()
         return Screen(view: view, langBar: langBar, sos: sos, purposeHint: purposeHint,
-                      purposeButtons: buttons)
+                      purposeButtons: buttons, callButton: callButton)
     }
 
     // MARK: - The SOS bar is a bar
@@ -163,6 +167,23 @@ final class VisitorScreenLayoutTests: XCTestCase {
             for width in widths {
                 XCTAssertEqual(width, first, accuracy: 1, "\(name): equal columns")
             }
+        }
+    }
+
+    // MARK: - The call button
+
+    /// The call verb is two characters in Japanese, and a button that hugs it is barely wider than
+    /// a finger. It is the one control a visitor has to find, so it takes a share of its column.
+    func testTheCallButtonIsAtLeastSixtyPercentOfItsColumn() {
+        for (name, size) in [("portrait", portrait), ("landscape", landscape)] {
+            let screen = makeScreen(size)
+            let button = screen.callButton
+            guard let column = button.superview else { return XCTFail("\(name): no column") }
+            XCTAssertGreaterThanOrEqual(button.bounds.width, column.bounds.width * 0.6 - 1,
+                                        "\(name): the call button takes its share of the column")
+            XCTAssertLessThanOrEqual(button.bounds.width, column.bounds.width + 1,
+                                     "\(name): and never overflows it")
+            XCTAssertGreaterThan(button.bounds.height, 0, "\(name): it keeps a height")
         }
     }
 
