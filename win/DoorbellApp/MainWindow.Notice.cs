@@ -15,11 +15,19 @@ namespace DoorbellApp
     /// </summary>
     public partial class MainWindow
     {
-        /// <summary>Effective notice for one door: door-specific first, then notice.global.</summary>
+        /// <summary>
+        /// The announcement a door actually shows. Core resolves door-specific over
+        /// notice.global and publishes the answer with its scope as status.doors.&lt;id&gt;.notice,
+        /// so the two are never merged here.
+        /// </summary>
         private Dictionary<string, object> EffectiveNotice(string door)
         {
             if (!string.IsNullOrEmpty(door))
             {
+                var resolved = CoreClient.Dig(_status, "doors." + door + ".notice")
+                    as Dictionary<string, object>;
+                if (resolved != null) return NoticeText(resolved).Length == 0 ? null : resolved;
+                // Older core: resolve it from configuration with the same precedence.
                 var specific = CoreClient.Dig(_cfg, "doors." + door + ".notice")
                     as Dictionary<string, object>;
                 if (NoticeText(specific).Length != 0) return specific;
@@ -33,9 +41,12 @@ namespace DoorbellApp
             return notice == null ? "" : DictStr(notice, "text");
         }
 
+        /// <summary>True when this door carries its own announcement rather than the global one.</summary>
         private bool DoorHasOwnNotice(string door)
         {
             if (string.IsNullOrEmpty(door)) return false;
+            var scope = CoreClient.Dig(_status, "doors." + door + ".notice.scope");
+            if (scope != null) return scope.ToString() == "door";
             return NoticeText(CoreClient.Dig(_cfg, "doors." + door + ".notice")
                 as Dictionary<string, object>).Length != 0;
         }
@@ -138,18 +149,13 @@ namespace DoorbellApp
         {
             bool ok = DoorHasOwnNotice(door)
                 ? App.Core.ClearDoorNotice(door)
-                : ClearGlobalNotice();
+                : App.Core.ClearGlobalNotice();
             ShowCallMessage(Texts.T(ok ? "notice.cleared" : "notice.failed"));
             RefreshConfigCache();
             RefreshNoticeSurfaces();
         }
 
-        private bool ClearGlobalNotice()
-        {
-            bool ok = false;
-            foreach (string door in AllDoorIds()) ok |= App.Core.ClearDoorNotice(door);
-            return ok;
-        }
+
 
         private List<string> AllDoorIds()
         {
@@ -180,15 +186,13 @@ namespace DoorbellApp
             if (dialog.ClearRequested)
             {
                 ok = string.IsNullOrEmpty(dialog.TargetDoor)
-                    ? ClearGlobalNotice() : App.Core.ClearDoorNotice(dialog.TargetDoor);
+                    ? App.Core.ClearGlobalNotice()
+                    : App.Core.ClearDoorNotice(dialog.TargetDoor);
             }
             else if (string.IsNullOrEmpty(dialog.TargetDoor))
             {
-                // "Everywhere" writes the same announcement to every door; a door-specific value
-                // still wins wherever an operator sets one later.
-                ok = false;
-                foreach (string id in AllDoorIds())
-                    ok |= App.Core.SetDoorNotice(id, dialog.NoticeBody, dialog.ExpiresMs);
+                // 全体 is one cluster-wide value; a door-specific one still wins over it.
+                ok = App.Core.SetGlobalNotice(dialog.NoticeBody, dialog.ExpiresMs);
             }
             else
             {

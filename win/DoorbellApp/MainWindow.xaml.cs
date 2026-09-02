@@ -88,6 +88,10 @@ namespace DoorbellApp
         private static readonly Brush SaverClockBrush = Frozen(new SolidColorBrush(Color.FromRgb(0x39, 0x42, 0x4C)));
 
         private Dictionary<string, object> _cfg;
+        // The display contract core publishes: appearance, theme and the automatic contrast
+        // decision. Both status.display and the {"t":"display"} event carry the same document.
+        private Dictionary<string, object> _display;
+        private Dictionary<string, object> _status;
         private string _nodeId = "";
         private string _visitorLang = "ja";
         private string _themeColor;
@@ -409,6 +413,7 @@ namespace DoorbellApp
                         object id;
                         if (node.TryGetValue("id", out id) && id != null) _nodeId = id.ToString();
                         ReadPowerFromStatus(st);
+                        ReadCallStateFromStatus(st);
                         ApplyVersionLine(DictStr(node, "name"), DictStr(node, "version"));
                     }
                 }
@@ -954,9 +959,11 @@ namespace DoorbellApp
 
         private void ApplyDisplayFromStatus(Dictionary<string, object> st)
         {
+            _status = st;
             var disp = CoreClient.Dig(st, "display") as Dictionary<string, object>;
             if (disp != null)
             {
+                _display = disp;
                 _brightness = DictInt(disp, "brightness", _brightness);
                 _night = DictBool(disp, "night");
                 _redTint = DictBool(disp, "red_tint");
@@ -1675,11 +1682,13 @@ namespace DoorbellApp
                     ShowIdle();
                     break;
                 case "display":
+                    if (ev.Data != null) _display = ev.Data;
                     _brightness = DictInt(ev.Data, "brightness", _brightness);
                     _night = IsTrue(ev.Str("night"));
                     _redTint = IsTrue(ev.Str("red_tint"));
                     _screensaverAfterS = DictInt(ev.Data, "screensaver_after_s", _screensaverAfterS);
                     _pixelShiftS = DictInt(ev.Data, "pixel_shift_s", _pixelShiftS);
+                    ApplyAppearance();
                     ApplyDisplay();
                     break;
                 case "emergency":
@@ -2280,15 +2289,16 @@ namespace DoorbellApp
 
         private void OnOpenDoorClick(object sender, RoutedEventArgs e)
         {
-            // A door whose unlock action is not configured explains itself instead of no-opping.
-            if (!UnlockConfigured(CurrentCallDoor()))
+            // db_core_open_door publishes the same ha_command the SIP feature code does, so the
+            // control works from the monitor page too, and -3 means nothing is configured: the
+            // shell says so rather than reporting a success that did nothing.
+            int result = App.Core.OpenDoor(CurrentCallDoor());
+            if (result == -3)
             {
                 ShowCallMessage(Texts.T("ring.open_unconfigured"));
                 return;
             }
-            bool ok = App.Core.SipAvailable && _sipMode != "" &&
-                      App.Core.SipSendDtmf("*1");
-            ShowCallMessage(Texts.T(ok ? "ring.open_sent" : "ring.open_failed"));
+            ShowCallMessage(Texts.T(result == 0 ? "ring.open_sent" : "ring.open_failed"));
         }
 
         private string CurrentCallDoor()
@@ -2305,21 +2315,26 @@ namespace DoorbellApp
         }
 
         /// <summary>
-        /// doors.&lt;id&gt;.unlock.show_button decides whether the control is offered at all;
-        /// an unset key defaults to whether an unlock action exists.
+        /// status.doors.&lt;id&gt;.unlock.show_button decides whether the control is offered at
+        /// all. Core defaults it to "show it when it does something" and an administrator may
+        /// force either answer, so the shell never re-derives it.
         /// </summary>
         private bool UnlockShown(string door)
         {
             if (App.Boot.Role != "indoor_panel") return false;
-            var value = CoreClient.Dig(_cfg, "doors." + (door ?? "") + ".unlock.show_button");
+            var value = CoreClient.Dig(_status,
+                "doors." + (door ?? "") + ".unlock.show_button");
+            if (value is bool) return (bool)value;
+            // Older core: fall back to the configured visibility, then to "is it configured".
+            value = CoreClient.Dig(_cfg, "doors." + (door ?? "") + ".unlock.show_button");
             if (value is bool) return (bool)value;
             return UnlockConfigured(door);
         }
 
         private bool UnlockConfigured(string door)
         {
-            if (CoreClient.Dig(_cfg, "doors." + (door ?? "") + ".unlock.action") != null)
-                return true;
+            var value = CoreClient.Dig(_status, "doors." + (door ?? "") + ".unlock.configured");
+            if (value is bool) return (bool)value;
             var actions = CoreClient.Dig(_cfg, "sip.dtmf_actions") as Dictionary<string, object>;
             return actions != null && actions.Count != 0;
         }
