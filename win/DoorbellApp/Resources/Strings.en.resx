@@ -458,11 +458,18 @@ Delete it?</value></data>
   <data name="notice_from" xml:space="preserve"><value>Posted by</value></data>
   <data name="notice_none" xml:space="preserve"><value>No announcement</value></data>
   <data name="notice_preset_absent" xml:space="preserve"><value>We are away right now</value></data>
+  <data name="notice_preset_add" xml:space="preserve"><value>Add a preset</value></data>
   <data name="notice_preset_construction" xml:space="preserve"><value>Building work in progress — please call out</value></data>
   <data name="notice_preset_delivery" xml:space="preserve"><value>Deliveries to the side door, please</value></data>
+  <data name="notice_preset_invalid" xml:space="preserve"><value>Check the preset text</value></data>
+  <data name="notice_presets_full" xml:space="preserve"><value>At most eight presets</value></data>
+  <data name="notice_presets_title" xml:space="preserve"><value>Announcement presets</value></data>
   <data name="notice_preview" xml:space="preserve"><value>How it looks at the door</value></data>
   <data name="notice_publish" xml:space="preserve"><value>Show</value></data>
   <data name="notice_saved" xml:space="preserve"><value>The announcement is now showing</value></data>
+  <data name="notice_scope_global" xml:space="preserve"><value>House-wide</value></data>
+  <data name="notice_target" xml:space="preserve"><value>Show on</value></data>
+  <data name="notice_target_global" xml:space="preserve"><value>Everywhere</value></data>
   <data name="notice_text" xml:space="preserve"><value>Message</value></data>
   <data name="notice_title" xml:space="preserve"><value>Announcement</value></data>
   <data name="notice_too_long" xml:space="preserve"><value>The message is limited to 200 characters (currently {0})</value></data>
@@ -654,6 +661,8 @@ Delete it?</value></data>
   <data name="power_title" xml:space="preserve"><value>Battery</value></data>
   <data name="power_unknown" xml:space="preserve"><value>Not reported</value></data>
   <data name="purpose_cancel_call" xml:space="preserve"><value>Cancel call</value></data>
+  <data name="purpose_disabled" xml:space="preserve"><value>Hidden</value></data>
+  <data name="purpose_enabled" xml:space="preserve"><value>Shown</value></data>
   <data name="purpose_select_failed" xml:space="preserve"><value>Could not send the visit purpose</value></data>
   <data name="purpose_sent" xml:space="preserve"><value>Called as {0}</value></data>
   <data name="purpose_skip" xml:space="preserve"><value>Skip purpose</value></data>
@@ -720,6 +729,31 @@ This device joins automatically. Only if it does not, enter the indoor panel add
   <data name="sound_outdoor_call_alert" xml:space="preserve"><value>Alert 1 (door-station call)</value></data>
   <data name="sound_school_chime" xml:space="preserve"><value>School chime</value></data>
   <data name="sound_title_display" xml:space="preserve"><value>Title display (startup)</value></data>
+  <data name="theme_appearance" xml:space="preserve"><value>Appearance</value></data>
+  <data name="theme_appearance_auto_schedule" xml:space="preserve"><value>Switch by time of day</value></data>
+  <data name="theme_appearance_auto_system" xml:space="preserve"><value>Follow the device</value></data>
+  <data name="theme_appearance_dark" xml:space="preserve"><value>Always dark</value></data>
+  <data name="theme_appearance_light" xml:space="preserve"><value>Always light</value></data>
+  <data name="theme_auto" xml:space="preserve"><value>Automatic</value></data>
+  <data name="theme_background_source_color" xml:space="preserve"><value>Background colour</value></data>
+  <data name="theme_background_source_image" xml:space="preserve"><value>Averaged from the background image</value></data>
+  <data name="theme_call_button" xml:space="preserve"><value>Call button colour</value></data>
+  <data name="theme_custom" xml:space="preserve"><value>Custom colour</value></data>
+  <data name="theme_dark_from" xml:space="preserve"><value>Dark from</value></data>
+  <data name="theme_ink" xml:space="preserve"><value>Text colour</value></data>
+  <data name="theme_ink_region" xml:space="preserve"><value>Where</value></data>
+  <data name="theme_light_from" xml:space="preserve"><value>Light from</value></data>
+  <data name="theme_low_contrast" xml:space="preserve"><value>This may be hard to read ({0}:1)</value></data>
+  <data name="theme_mode_dark" xml:space="preserve"><value>Dark</value></data>
+  <data name="theme_mode_light" xml:space="preserve"><value>Light</value></data>
+  <data name="theme_now" xml:space="preserve"><value>Now</value></data>
+  <data name="theme_region_clock" xml:space="preserve"><value>Clock</value></data>
+  <data name="theme_region_date" xml:space="preserve"><value>Date</value></data>
+  <data name="theme_region_footer" xml:space="preserve"><value>Footer</value></data>
+  <data name="theme_region_hint" xml:space="preserve"><value>Hint</value></data>
+  <data name="theme_region_notice" xml:space="preserve"><value>Announcement</value></data>
+  <data name="theme_region_status_line" xml:space="preserve"><value>Status line</value></data>
+  <data name="theme_region_tile_label" xml:space="preserve"><value>Tile label</value></data>
   <data name="time_err_bad_reply" xml:space="preserve"><value>The server's answer wasn't valid</value></data>
   <data name="time_err_bad_server" xml:space="preserve"><value>A server entry isn't written correctly</value></data>
   <data name="time_err_implausible" xml:space="preserve"><value>The measured time wasn't plausible and was discarded</value></data>
@@ -749,6 +783,12 @@ This device joins automatically. Only if it does not, enter the indoor panel add
   <data name="time_title" xml:space="preserve"><value>Time</value></data>
   <data name="time_zone" xml:space="preserve"><value>Time zone</value></data>
   <data name="time_zone_hint" xml:space="preserve"><value>This sets the clock, call history, and rule schedules for the whole cluster</value></data>
+  <data name="unlock_auto" xml:space="preserve"><value>Show when configured</value></data>
+  <data name="unlock_command" xml:space="preserve"><value>Command sent</value></data>
+  <data name="unlock_hide" xml:space="preserve"><value>Never show</value></data>
+  <data name="unlock_not_configured" xml:space="preserve"><value>No unlock action is configured</value></data>
+  <data name="unlock_show" xml:space="preserve"><value>Always show</value></data>
+  <data name="unlock_title" xml:space="preserve"><value>Unlock button</value></data>
   <data name="volume_call" xml:space="preserve"><value>Call</value></data>
   <data name="volume_cluster_default" xml:space="preserve"><value>Cluster default {0}</value></data>
   <data name="volume_device_title" xml:space="preserve"><value>Volume on this device</value></data>

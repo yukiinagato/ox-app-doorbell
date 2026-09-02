@@ -5025,7 +5025,11 @@ struct Node::Impl {
   void themeContrastWarnings(const std::string& key, const cJSON* value,
                              std::vector<ConfigWarning>* warnings) {
     if (!warnings) return;
-    if (key.find("theme.call_button_bg") == std::string::npos &&
+    const bool is_theme_container =
+        key == "display.theme" ||
+        (key.rfind("devices.", 0) == 0 && key.size() >= 6 &&
+         key.compare(key.size() - 6, 6, ".theme") == 0);
+    if (!is_theme_container && key.find("theme.call_button_bg") == std::string::npos &&
         key.find("theme.ink_override") == std::string::npos)
       return;
     color::Rgb background;
@@ -5037,6 +5041,23 @@ struct Node::Impl {
       const double ratio = color::contrastRatio(candidate, background);
       if (ratio < floor_ratio) addContrastWarning(warnings, warning_key, property, ratio);
     };
+    if (is_theme_container) {
+      // The Theme tab writes the whole object in one operation, so the colours are inspected
+      // where they actually sit rather than only when written as individual leaves. A
+      // background supplied by this same write is what the colours are measured against.
+      const cJSON* written_background = json::get(value, "bg_color");
+      if (cJSON_IsString(written_background))
+        color::parseHex(written_background->valuestring, &background);
+      measure(json::get(value, "call_button_bg"), key + ".call_button_bg", "call_button_bg",
+              3.0);
+      const cJSON* ink = json::get(value, "ink_override");
+      const cJSON* region = nullptr;
+      cJSON_ArrayForEach(region, ink) {
+        if (region->string)
+          measure(region, key + ".ink_override." + region->string, region->string, 4.5);
+      }
+      return;
+    }
     if (key.find("theme.call_button_bg") != std::string::npos) {
       // A call button is a large UI component: WCAG 2.1 AA asks 3:1 against its surroundings.
       measure(value, key, "call_button_bg", 3.0);

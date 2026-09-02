@@ -364,12 +364,16 @@ var AdminLogic = (function () {
           errors.push(id + ".defaults has undeclared property " + dk);
       }
     }
+    // Contrast among a manifest's own defaults is reported the same way an operator's colour is:
+    // a shell that ships a hard-to-read default should be told, not refused outright.
+    var warnings = [];
     if (!errors.length) for (var elementId in els) {
       if (!own(els, elementId)) continue;
       var checked = validateUiElementValue(manifest, elementId, els[elementId].defaults);
       if (!checked.ok) errors = errors.concat(checked.errors);
+      if (checked.warnings) warnings = warnings.concat(checked.warnings);
     }
-    return { ok: errors.length === 0, errors: errors };
+    return { ok: errors.length === 0, errors: errors, warnings: warnings };
   }
 
   function colorOk(v) { return /^#[0-9a-f]{6}$/i.test(String(v || "")); }
@@ -413,16 +417,21 @@ var AdminLogic = (function () {
       if (own(defaultValues, defaultKey)) effective[defaultKey] = defaultValues[defaultKey];
     for (var overrideKey in value)
       if (own(value, overrideKey)) effective[overrideKey] = value[overrideKey];
-    if (effective.foreground && effective.background &&
-        contrast(effective.foreground, effective.background) < 4.5)
-      errors.push(id + ": foreground/background contrast must be at least 4.5:1");
-    if (effective.accent && effective.background &&
-        contrast(effective.accent, effective.background) < 3)
-      errors.push(id + ": accent/background contrast must be at least 3:1");
-    if (effective.border && effective.background &&
-        contrast(effective.border, effective.background) < 3)
-      errors.push(id + ": border/background contrast must be at least 3:1");
-    return { ok: errors.length === 0, errors: errors };
+    // Contrast is measured, never enforced. A custom colour is the operator's choice: the server
+    // saves it and reports the ratio, and so does this form.
+    var warnings = [];
+    function measure(property, floor) {
+      if (!effective[property] || !effective.background) return;
+      var ratio = contrast(effective[property], effective.background);
+      if (ratio >= floor) return;
+      warnings.push({ key: id, property: property,
+                      contrast: Math.round(ratio * 10) / 10,
+                      message_key: "theme.low_contrast" });
+    }
+    measure("foreground", 4.5);
+    measure("accent", 3);
+    measure("border", 3);
+    return { ok: errors.length === 0, errors: errors, warnings: warnings };
   }
 
   function validateUiElementOverride(manifest, id, value) {
@@ -2331,7 +2340,7 @@ var AdminLogic = (function () {
     validateUiManifest: validateUiManifest, validateUiElementOverride: validateUiElementOverride,
     uiElementValue: uiElementValue, uiElementChanges: uiElementChanges,
     uiPreviewModel: uiPreviewModel,
-    colorOk: colorOk, contrast: contrast, configBatchOps: configBatchOps,
+    colorOk: colorOk, contrast: contrast, isPlainObject: isObj, configBatchOps: configBatchOps,
     mqttEntries: mqttEntries, telegramEntries: telegramEntries, sipEntries: sipEntries,
     webPushEntries: webPushEntries,
     mqttPlan: mqttPlan, telegramPlan: telegramPlan, webPushPlan: webPushPlan,
@@ -2583,6 +2592,7 @@ if (typeof document !== "undefined") (function () {
       qr_wait: { label: { en: "Please wait" }, speak: true, order: 3 } },
     visit_purposes: {
       p_visit: { label: { en: "Visit" }, icon: "🏠", order: 1 },
+      p_disabled: { label: { en: "Sales" }, icon: "💼", order: 9, enabled: false },
       p_delivery: { label: { en: "Delivery" }, icon: "📦", order: 2 },
       p_mail: { label: { en: "Mail" }, icon: "✉️", order: 3 },
       p_sales: { label: { en: "Sales" }, icon: "💼", order: 4 },
@@ -2594,6 +2604,8 @@ if (typeof document !== "undefined") (function () {
           update_sound: "indoor_update", ringtone: "school_chime" },
     i18n_overrides: { en: { "idle.touch_to_call": "Touch to call" } },
     display: { theme: { bg_color: "#12202c", bg_image: MOCK_IMG }, brightness: 70,
+               appearance: "auto_schedule",
+               appearance_schedule: { dark_from: "19:00", light_from: "06:30" },
                screensaver_after_s: 120, pixel_shift_s: 300 },
     assets: (function () {
       var a = {};
@@ -2636,6 +2648,9 @@ if (typeof document !== "undefined") (function () {
     time: { zone: "Asia/Tokyo",
             ntp: { enabled: true, servers: ["ntp.nict.jp", "time.google.com"],
                    interval_s: 900 } },
+    notice: { presets: [{ id: "np_absent", text: "不在です。荷物は玄関前へお願いします" },
+                        { id: "np_back_door", text: "裏口へお回りください" },
+                        { id: "np_construction", text: "工事中です。足元にご注意ください" }] },
     audio: { volume: { call: 80, sos: 100, idle: 60 } },
     emergency: { web_active_page_alerts: true, button_on_roles: ["indoor_panel"],
                  cancel_requires_pin: true, alarm_sound: "siren1", alarm_volume: 100,
@@ -2656,6 +2671,27 @@ if (typeof document !== "undefined") (function () {
             local: { iso: "2026-09-02T21:30:00+09:00", date: "2026-09-02", hh: 21, mm: 30,
                      ss: 0, weekday: "wed", weekday_num: 3, offset_min: 540, dst: false,
                      known: true, wall_ms: Date.now(), tz: "Asia/Tokyo" } },
+    display: { brightness: 70,
+               appearance: { configured: "auto_schedule", effective: "dark",
+                             follow_system: false,
+                             schedule: { dark_from: "19:00", light_from: "06:30" } },
+               theme: { bg_color: "#12202c",
+                        auto_background: { color: "#12202c", source: "color" },
+                        auto_ink: { clock: "light", date: "light", status_line: "light",
+                                    hint: "light", tile_label: "light", footer: "light",
+                                    notice: "light" },
+                        auto_accent: { call_button: "#7F5E3D", call_button_ink: "light" },
+                        ink_override: {},
+                        call_button_bg: "#7F5E3D", call_button_ink: "light" } },
+    doors: {
+      d_front: { label: "Front door", notice: null,
+                 unlock: { configured: true, command: "unlock", show_button: true,
+                           source: "default" } },
+      d_back: { label: "Back door", notice: null,
+                unlock: { configured: false, command: "", show_button: false,
+                          source: "default" } } },
+    notice: { global_active: false },
+    call: { state: "idle", mic_muted: false },
     ui_manifest: L.defaultUiManifest("door_station"),
     features: { call_flow_v2: true, emergency_rules_v1: true, device_alert_v1: true },
     emergency: { active: false, device: "", wall_ms: 0 },
@@ -2688,6 +2724,25 @@ if (typeof document !== "undefined") (function () {
       h += ("00000000" + (x >>> 0).toString(16)).slice(-8);
     }
     return h;
+  }
+
+  /* Core recomputes the effective unlock visibility from configuration; the mock does the same
+     so the standalone panel shows what a real node would. */
+  function mockRefreshDoorStatus() {
+    var doors = MOCK_STATUS.doors || {};
+    for (var id in doors) {
+      var configured = doors[id].unlock ? doors[id].unlock.configured === true : false;
+      var override = ((MOCK_CFG.doors || {})[id] || {}).unlock;
+      var forced = override && typeof override.show_button === "boolean"
+        ? override.show_button : null;
+      doors[id].unlock = { configured: configured,
+                           command: configured ? "unlock" : "",
+                           show_button: forced === null ? configured : forced,
+                           source: forced === null ? "default" : "admin" };
+      var notice = ((MOCK_CFG.doors || {})[id] || {}).notice ||
+                   ((MOCK_CFG.notice || {}).global || null);
+      doors[id].notice = notice || null;
+    }
   }
 
   function mockApi(method, path, body, cb) {
@@ -2732,6 +2787,35 @@ if (typeof document !== "undefined") (function () {
       MOCK_STATUS.time.ok = true;
       return ok({ ok: true, started: true });
     }
+    if (p === "/api/notice") {
+      MOCK_CFG.notice = MOCK_CFG.notice || {};
+      if (method === "DELETE") {
+        delete MOCK_CFG.notice.global;
+        MOCK_STATUS.notice = { global_active: false };
+        return ok({ ok: true });
+      }
+      var globalText = String((body && body.text) || "");
+      if (!globalText || L.countCharacters(globalText) > L.NOTICE_MAX_CHARS)
+        return setTimeout(function () { cb(400, { ok: false, err: "rejected" }); }, 0);
+      var globalExpires = (body && body.expires_ms) || 0;
+      if (!globalExpires && body && body.ttl_s)
+        globalExpires = new Date().getTime() + body.ttl_s * 1000;
+      MOCK_CFG.notice.global = { text: globalText, from_device: MOCK_ID1,
+                                 created_ms: new Date().getTime(),
+                                 expires_ms: globalExpires };
+      MOCK_STATUS.notice = { global_active: true };
+      return ok({ ok: true });
+    }
+    if (/^\/api\/doors\/[^\/]+\/open$/.test(p)) {
+      var openDoor = decodeURIComponent(p.split("/")[3]);
+      var openEntry = (MOCK_STATUS.doors || {})[openDoor];
+      if (!openEntry) return setTimeout(function () { cb(404, { ok: false, err: "unknown_door" }); }, 0);
+      if (!openEntry.unlock || !openEntry.unlock.configured)
+        return setTimeout(function () {
+          cb(409, { ok: false, err: "unlock_not_configured" });
+        }, 0);
+      return ok({ ok: true });
+    }
     if (/^\/api\/doors\/[^\/]+\/notice$/.test(p)) {
       var noticeDoor = decodeURIComponent(p.split("/")[3]);
       var doorEntry = (MOCK_CFG.doors || {})[noticeDoor];
@@ -2763,7 +2847,41 @@ if (typeof document !== "undefined") (function () {
         else L.deleteKey(nextCfg, ops[oi].key);
       }
       MOCK_CFG = nextCfg;
-      return ok({ ok: true, n: ops.length, revision: "mock-" + Date.now() });
+      mockRefreshDoorStatus();
+      // Mirror the server's advisory contrast reporting so the inline warning path is exercised
+      // without a real node.
+      var mockWarnings = [];
+      function mockMeasure(colour, against, key, property, floor) {
+        if (typeof colour !== "string" || !L.colorOk(colour) || !L.colorOk(against)) return;
+        var ratio = L.contrast(colour, against);
+        if (ratio >= floor) return;
+        mockWarnings.push({ key: key, property: property,
+                            contrast: Math.round(ratio * 10) / 10,
+                            message_key: "theme.low_contrast" });
+      }
+      for (oi = 0; oi < ops.length; oi++) {
+        if (ops[oi].op !== "set") continue;
+        var key = String(ops[oi].key || "");
+        var against = ((MOCK_CFG.display || {}).theme || {}).bg_color || "#101418";
+        // The Theme tab writes the whole theme object, so the colours are inspected in place.
+        if (/(^display|\.local)\.theme$/.test(key) && L.isPlainObject(ops[oi].value)) {
+          var themeValue = ops[oi].value;
+          if (L.colorOk(themeValue.bg_color)) against = themeValue.bg_color;
+          mockMeasure(themeValue.call_button_bg, against, key + ".call_button_bg",
+                      "call_button_bg", 3);
+          for (var region in (themeValue.ink_override || {}))
+            mockMeasure(themeValue.ink_override[region], against,
+                        key + ".ink_override." + region, region, 4.5);
+          continue;
+        }
+        if (key.indexOf("call_button_bg") >= 0)
+          mockMeasure(ops[oi].value, against, key, "call_button_bg", 3);
+        else if (key.indexOf("ink_override.") >= 0)
+          mockMeasure(ops[oi].value, against, key, key.split(".").pop(), 4.5);
+      }
+      var batchResult = { ok: true, n: ops.length, revision: "mock-" + Date.now() };
+      if (mockWarnings.length) batchResult.warnings = mockWarnings;
+      return ok(batchResult);
     }
     if (p === "/api/config") { L.applyKey(MOCK_CFG, body.key, body.value); return ok({ ok: true }); }
     if (p === "/api/config/delete") { L.deleteKey(MOCK_CFG, body.key); return ok({ ok: true }); }
@@ -2777,6 +2895,7 @@ if (typeof document !== "undefined") (function () {
       if (MOCK_PAIR.state !== "ready")
         return setTimeout(function () { cb(409, { ok: false, err: "host_unpaired" }); }, 0);
       mockPairMintToken();
+      // Only the explicit bulk-add button opens the auto-invite window; minting a PIN does not.
       if (p === "/api/pairing/start") {
         MOCK_PAIR.modeUntil = new Date().getTime() + 600000;
         MOCK_PAIR.autoAdded = 0;
@@ -2942,15 +3061,27 @@ if (typeof document !== "undefined") (function () {
   }
 
 
-  function saveAndRefresh(entries, dels) {
+  // A readability warning is not a failure: the value is saved and the measured ratio is what
+  // the operator needs to see. Rendered next to the save result rather than swallowing it.
+  function warningText(warnings) {
+    var parts = [];
+    for (var i = 0; i < warnings.length && i < 3; i++)
+      parts.push(fmt(t(warnings[i].message_key), { ratio: warnings[i].contrast }));
+    return parts.join(" / ");
+  }
+
+  function saveAndRefresh(entries, dels, done) {
     postEntries(entries, dels, function (ok, result) {
       var text = t("admin.save_failed");
-      if (ok) text = t("admin.saved");
-      else if (result && result.unavailable)
+      if (ok) {
+        text = t("admin.saved");
+        var warnings = L.writeWarnings(result);
+        if (warnings.length) text += " — " + warningText(warnings);
+      } else if (result && result.unavailable)
         text = t("admin.atomic_batch_unavailable");
       else if (result && result.err) text += ": " + result.err;
       msg(text);
-      refreshConfig(function () { renderTab(); });
+      refreshConfig(function () { renderTab(); if (done) done(ok); });
     });
   }
 
@@ -3443,17 +3574,93 @@ if (typeof document !== "undefined") (function () {
   }
 
 
+
+  /* ---- announcement presets, the unlock toggle, and the announcement target ---- */
+
+  function collectNoticePresets(root) {
+    var rows = $all("[data-preset-row]", root), out = [];
+    for (var i = 0; i < rows.length; i++) {
+      var input = rows[i].querySelector("[data-preset-text]");
+      if (!input) continue;
+      var text = input.value.replace(/^\s+|\s+$/g, "");
+      if (!text) continue;
+      out.push({ id: input.getAttribute("data-preset-id"), text: text });
+    }
+    return out;
+  }
+
+  function saveNoticePresets(root) {
+    var entries;
+    try { entries = L.noticePresetEntries(collectNoticePresets(root)); }
+    catch (e) {
+      msg(t(e.message === "notice.presets_max" ? "notice.presets_full" :
+            "notice.preset_invalid"));
+      return;
+    }
+    saveAndRefresh(entries, null);
+  }
+
+  function addNoticePreset() {
+    var presets = L.noticePresetList(S.cfg);
+    if (presets.length >= L.NOTICE_PRESET_MAX) { msg(t("notice.presets_full")); return; }
+    openForm(t("notice.preset_add"),
+             [{ id: "text", label: t("notice.text"), type: "textarea" }], function (v) {
+      var text = String(v.text || "").replace(/^\s+|\s+$/g, "");
+      if (!text) return t("notice.empty");
+      if (L.countCharacters(text) > L.NOTICE_MAX_CHARS)
+        return fmt(t("notice.too_long"), { n: L.countCharacters(text) });
+      presets.push({ id: L.newId("np", presetIdMap(presets)), text: text });
+      var entries;
+      try { entries = L.noticePresetEntries(presets); }
+      catch (e) { return t("notice.preset_invalid"); }
+      saveAndRefresh(entries, null);
+      return "";
+    });
+  }
+
+  function presetIdMap(presets) {
+    var map = {};
+    for (var i = 0; i < presets.length; i++) map[presets[i].id] = true;
+    return map;
+  }
+
+  function deleteNoticePreset(id) {
+    var presets = L.noticePresetList(S.cfg).filter(function (p) { return p.id !== id; });
+    saveAndRefresh(L.noticePresetEntries(presets), null);
+  }
+
+  function editDoorUnlock(door) {
+    var model = L.doorUnlockModel(door, S.cfg, S.status);
+    var current = ((cfgObj("doors")[door] || {}).unlock) || {};
+    var fields = [
+      { id: "mode", label: t("unlock.title"), type: "select", value: model.mode,
+        options: [{ v: "auto", label: t("unlock.auto") },
+                  { v: "show", label: t("unlock.show") },
+                  { v: "hide", label: t("unlock.hide") }] },
+      { id: "state", label: t("unlock.command"), type: "static",
+        value: model.configured ? model.command : t("unlock.not_configured") }];
+    openForm(doorLabel(door), fields, function (v) {
+      var plan = L.doorUnlockEntries(door, v.mode, current);
+      saveAndRefresh(plan.entries, plan.dels);
+    });
+  }
+
   /* Announcements are not written through the config batch: core stamps the author and the
      creation time itself, so the editor posts to /api/doors/<id>/notice. */
   function editDoorNotice(door) {
     var model = L.noticeModel(door, cfgObj("doors"), new Date().getTime());
+    // The presets come from configuration, so the web editor and the indoor dialog offer the
+    // same list and an administrator can change it in one place.
+    var presetList = L.noticePresetList(S.cfg);
     var presets = "";
-    for (var pi = 0; pi < L.NOTICE_PRESET_KEYS.length; pi++)
+    for (var pi = 0; pi < presetList.length; pi++)
       presets += "<button class='btn2 small' data-notice-preset='" +
-        esc(t(L.NOTICE_PRESET_KEYS[pi])) + "'>" + esc(t(L.NOTICE_PRESET_KEYS[pi])) + "</button> ";
+        esc(presetList[pi].text) + "'>" + esc(presetList[pi].text) + "</button> ";
     var expirySelected = model.active && !model.expiresMs ? "until_cleared" : "1h";
-    var body = "<div class='dim fhint' style='margin-bottom:10px'>" + esc(doorLabel(door)) +
-      "</div><div class='frow'><label class='flab'>" + esc(t("notice.text")) + "</label>" +
+    var body = "<div class='frow'><label class='flab'>" + esc(t("notice.target")) + "</label>" +
+      "<select id='noticeTarget'><option value='" + esc(door) + "'>" + esc(doorLabel(door)) +
+      "</option><option value='*'>" + esc(t("notice.target_global")) + "</option></select></div>" +
+      "<div class='frow'><label class='flab'>" + esc(t("notice.text")) + "</label>" +
       "<textarea id='noticeText' maxlength='400' style='min-height:80px'>" +
       esc(model.text) + "</textarea>" +
       "<div class='dim fhint'><span id='noticeCount'>0</span> / " + L.NOTICE_MAX_CHARS +
@@ -3483,7 +3690,10 @@ if (typeof document !== "undefined") (function () {
                                  new Date().getTime(), offsetMin);
       if (plan.error) return plan.n === undefined ? t(plan.error) :
         fmt(t(plan.error), { n: plan.n });
-      api("POST", "/api/doors/" + encodeURIComponent(door) + "/notice", plan.body,
+      var target = m.querySelector("#noticeTarget").value;
+      var path = target === "*" ? "/api/notice"
+                                : "/api/doors/" + encodeURIComponent(target) + "/notice";
+      api("POST", path, plan.body,
           function (st, result) {
             if (st === 200 && result && result.ok) {
               msg(t("notice.saved"));
@@ -3517,7 +3727,9 @@ if (typeof document !== "undefined") (function () {
   }
 
   function clearDoorNotice(door) {
-    api("DELETE", "/api/doors/" + encodeURIComponent(door) + "/notice", null,
+    api("DELETE",
+        door === "*" ? "/api/notice" : "/api/doors/" + encodeURIComponent(door) + "/notice",
+        null,
         function (st, result) {
           if (st === 200 && result && result.ok) {
             msg(t("notice.cleared"));
@@ -3547,30 +3759,61 @@ if (typeof document !== "undefined") (function () {
          esc(t("admin.add_door")) + "</button></div><table><thead><tr>" +
          "<th>ID</th><th>" + esc(t("admin.label_ja")) + "</th><th>" +
          esc(t("admin.building_assign")) + "</th><th>" + esc(t("notice.title")) +
-         "</th><th></th></tr></thead><tbody>";
+         "</th><th>" + esc(t("unlock.title")) + "</th><th></th></tr></thead><tbody>";
     for (var d in ds) {
-      var noticeModel = L.noticeModel(d, ds, new Date().getTime());
+      var noticeModel = L.effectiveNoticeModel(d, S.cfg, new Date().getTime());
+      var unlockModel = L.doorUnlockModel(d, S.cfg, S.status);
       h += "<tr><td class='dim'>" + esc(d) + "</td><td>" + esc(doorLabel(d)) + "</td><td>" +
            esc(ds[d].building ? L.labelOf(bs[ds[d].building], LANG, ds[d].building) : "—") +
            "</td><td>" + (noticeModel.active ?
-             "<span class='tag ok'>" + esc(t("notice.active")) + "</span> " +
-             esc(noticeModel.text) +
+             "<span class='tag ok'>" +
+             esc(noticeModel.scope === "global" ? t("notice.scope_global") : t("notice.active")) +
+             "</span> " + esc(noticeModel.text) +
              (noticeModel.expiresMs ? "<div class='dim fhint'>" +
                esc(t("notice.expires_at")) + ": " + esc(fmtTime(noticeModel.expiresMs)) +
                "</div>" : "") :
              "<span class='dim'>" + esc(t("notice.none")) + "</span>") +
+           "</td><td>" +
+           (unlockModel.showButton ? "<span class='tag ok'>" + esc(t("unlock.show")) + "</span>"
+                                   : "<span class='dim'>" + esc(t("unlock.hide")) + "</span>") +
+           (unlockModel.configured ? "" : "<div class='dim fhint'>" +
+             esc(t("unlock.not_configured")) + "</div>") +
            "</td><td class='ops'><button class='btn2' data-act='editD' data-id='" + esc(d) +
            "'>" + esc(t("admin.edit")) +
            "</button> <button class='btn2' data-act='notice' data-id='" + esc(d) + "'>" +
            esc(t("notice.title")) + "</button>" +
-           (noticeModel.active ? " <button class='btn2 danger' data-act='noticeClear' data-id='" +
+           " <button class='btn2' data-act='unlock' data-id='" + esc(d) + "'>" +
+           esc(t("unlock.title")) + "</button>" +
+           (noticeModel.active && noticeModel.scope === "door" ?
+             " <button class='btn2 danger' data-act='noticeClear' data-id='" +
              esc(d) + "'>" + esc(t("notice.clear")) + "</button>" : "") +
            " <button class='btn2 danger' data-act='delD' data-id='" + esc(d) + "'>" +
            esc(t("admin.delete")) + "</button></td></tr>";
     }
     h += "</tbody></table></div>";
+
+    // Announcement presets: the same list the indoor dialog and the editor below render.
+    var presets = L.noticePresetList(S.cfg);
+    h += "<div class='card'><div class='chead'><h2>" + esc(t("notice.presets_title")) +
+         "</h2><button class='btn small' data-act='addPreset'>+ " +
+         esc(t("notice.preset_add")) + "</button></div><div id='noticePresetRows'>";
+    for (var pi = 0; pi < presets.length; pi++)
+      h += "<div class='frow' data-preset-row><input type='text' data-preset-text value='" +
+           esc(presets[pi].text) + "' maxlength='400' style='flex:1'" +
+           " data-preset-id='" + esc(presets[pi].id) + "'>" +
+           " <button class='btn2 danger' data-act='delPreset' data-id='" + esc(presets[pi].id) +
+           "'>" + esc(t("admin.delete")) + "</button></div>";
+    if (!presets.length)
+      h += "<div class='dim fhint'>" + esc(t("notice.none")) + "</div>";
+    h += "</div><button class='btn small' data-act='savePresets' style='margin-top:8px'>" +
+         esc(t("admin.save")) + "</button></div>";
+
     el.innerHTML = h;
     bindActs(el, {
+      addPreset: function () { addNoticePreset(); },
+      delPreset: function (id) { deleteNoticePreset(id); },
+      savePresets: function () { saveNoticePresets(el); },
+      unlock: function (id) { editDoorUnlock(id); },
       addB: function () { editBuilding(null); },
       editB: function (id) { editBuilding(id); },
       delB: function (id) {
@@ -6072,13 +6315,19 @@ if (typeof document !== "undefined") (function () {
             "<div class='dim fhint' style='margin-bottom:8px'>" +
             esc(t("admin.purpose_hint")) + "</div>" +
             "<table><thead><tr><th>#</th><th></th><th>ja</th><th>en</th><th>zh</th>" +
-            "<th>ID</th><th></th></tr></thead><tbody>";
+            "<th>ID</th><th>" + esc(t("purpose.enabled")) +
+            "</th><th></th></tr></thead><tbody>";
     ids.forEach(function (id, i) {
       var p = ps[id], lb = p.label || {};
-      h += "<tr><td class='dim'>" + (i + 1) + "</td><td style='font-size:20px'>" +
+      var enabled = p.enabled !== false;
+      h += "<tr" + (enabled ? "" : " class='offline'") + "><td class='dim'>" + (i + 1) +
+           "</td><td style='font-size:20px'>" +
            esc(p.icon || "") + "</td><td>" + esc(lb.ja || "") + "</td><td>" +
            esc(lb.en || "") + "</td><td>" + esc(lb.zh || "") + "</td><td class='dim'>" +
-           esc(id) + "</td><td class='ops'>" +
+           esc(id) + "</td><td><label class='mc'><input type='checkbox' data-purpose-enabled='" +
+           esc(id) + "'" + (enabled ? " checked" : "") + "> " +
+           esc(enabled ? t("purpose.enabled") : t("purpose.disabled")) + "</label></td>" +
+           "<td class='ops'>" +
            "<button class='btn2' data-act='up' data-id='" + esc(id) + "'>↑</button>" +
            "<button class='btn2' data-act='down' data-id='" + esc(id) + "'>↓</button> " +
            "<button class='btn2' data-act='edit' data-id='" + esc(id) + "'>" +
@@ -6124,6 +6373,13 @@ if (typeof document !== "undefined") (function () {
       },
       up: function (id) { move(id, -1); },
       down: function (id) { move(id, 1); }
+    });
+    // Switching a purpose off keeps its wording, icon and order; deleting it does not.
+    $all("[data-purpose-enabled]", el).forEach(function (box) {
+      box.onchange = function () {
+        saveAndRefresh([{ key: "visit_purposes." + box.getAttribute("data-purpose-enabled") +
+                               ".enabled", value: box.checked }], null);
+      };
     });
     $("#uiSave").onclick = function () {
       var ls = [];
@@ -6247,6 +6503,17 @@ if (typeof document !== "undefined") (function () {
     return "";
   }
 
+  function inkRegionLabel(region) {
+    if (region === "clock") return t("theme.region_clock");
+    if (region === "date") return t("theme.region_date");
+    if (region === "status_line") return t("theme.region_status_line");
+    if (region === "hint") return t("theme.region_hint");
+    if (region === "tile_label") return t("theme.region_tile_label");
+    if (region === "footer") return t("theme.region_footer");
+    if (region === "notice") return t("theme.region_notice");
+    return region;
+  }
+
   function themeCur(scope) {
     return scope ? (((cfgObj("devices")[scope] || {}).local || {}).theme || {})
                  : ((cfgObj("display") || {}).theme || {});
@@ -6316,6 +6583,62 @@ if (typeof document !== "undefined") (function () {
                  { unit: doorLabel((cfgObj("devices")[scope] || {}).door ||
                                    firstDoorId() || "") })) + "</div>" +
          "<div class='pprow' id='thPurps'></div></div></div></div>";
+    var appearance = L.appearanceModel(S.status, S.cfg, scope);
+    h += "<div class='frow'><label class='flab'>" + esc(t("theme.appearance")) + "</label>" +
+         "<select id='thAppearance'>";
+    [["auto_system", "theme.appearance_auto_system"],
+     ["auto_schedule", "theme.appearance_auto_schedule"],
+     ["light", "theme.appearance_light"],
+     ["dark", "theme.appearance_dark"]].forEach(function (option) {
+      h += "<option value='" + esc(option[0]) + "'" +
+        (appearance.configured === option[0] ? " selected" : "") + ">" +
+        esc(t(option[1])) + "</option>";
+    });
+    // The chip states what it is right now, not which mode was chosen.
+    h += "</select> <span class='tag'>" + esc(t("theme.now")) + ": " +
+         esc(t(appearance.effective === "dark" ? "theme.mode_dark" : "theme.mode_light")) +
+         "</span>";
+    if (!scope)
+      h += "<div class='frow' id='thScheduleRow'><label class='flab'>" +
+           esc(t("theme.dark_from")) + "</label>" +
+           "<input type='time' id='thDarkFrom' value='" + esc(appearance.darkFrom) + "'>" +
+           "<label class='flab'>" + esc(t("theme.light_from")) + "</label>" +
+           "<input type='time' id='thLightFrom' value='" + esc(appearance.lightFrom) + "'></div>";
+    h += "</div>";
+
+    // Automatic contrast: core publishes one answer for the whole cluster, and the operator may
+    // override the call button or any single text region.
+    var autoModel = L.themeAutoModel(S.status, eff.bg_color);
+    var buttonOverride = own.call_button_bg || (themeCur("").call_button_bg || "");
+    var inkOverrides = isObj(own.ink_override) ? own.ink_override :
+      (isObj(themeCur("").ink_override) ? themeCur("").ink_override : {});
+    h += "<div class='frow'><label class='flab'>" + esc(t("theme.call_button")) + "</label>" +
+         "<label class='mc'><input type='radio' name='thBtnMode' value='auto'" +
+         (L.colorOk(buttonOverride) ? "" : " checked") + "> " + esc(t("theme.auto")) + "</label>" +
+         "<label class='mc'><input type='radio' name='thBtnMode' value='custom'" +
+         (L.colorOk(buttonOverride) ? " checked" : "") + "> " + esc(t("theme.custom")) +
+         "</label> <input type='color' id='thBtnColor' value='" +
+         esc(L.colorOk(buttonOverride) ? buttonOverride : autoModel.callButton) + "'>" +
+         "<span class='mono' id='thBtnTxt' style='margin-left:8px'></span>" +
+         "<div class='dim fhint'>" +
+         esc(t(autoModel.source === "image" ? "theme.background_source_image"
+                                            : "theme.background_source_color")) + "</div></div>";
+
+    h += "<div class='frow'><label class='flab'>" + esc(t("theme.ink")) + "</label>" +
+         "<div class='scrollx'><table><thead><tr><th>" + esc(t("theme.ink_region")) +
+         "</th><th>" + esc(t("theme.auto")) + "</th><th>" + esc(t("theme.custom")) +
+         "</th></tr></thead><tbody>";
+    for (var ri = 0; ri < L.INK_REGIONS.length; ri++) {
+      var region = L.INK_REGIONS[ri];
+      var override = inkOverrides[region];
+      h += "<tr data-ink-row data-region='" + esc(region) + "'><td>" +
+           esc(inkRegionLabel(region)) + "</td><td><input type='checkbox' data-ink-auto" +
+           (L.colorOk(override) ? "" : " checked") + "></td><td><input type='color' " +
+           "data-ink-color value='" + esc(L.colorOk(override) ? override :
+             (autoModel.ink === "dark" ? "#101418" : "#F5F7FA")) + "'></td></tr>";
+    }
+    h += "</tbody></table></div></div>";
+
     h += "<button class='btn small' id='thSave'>" + esc(t("admin.save")) + "</button>";
     if (scope)
       h += " <button class='btn2 danger' id='thReset'>" +
@@ -6343,10 +6666,37 @@ if (typeof document !== "undefined") (function () {
       p.style.backgroundColor = c;
 
       p.style.backgroundImage = img ? "url('/asset/" + img + "')" : "none";
+
+      // Live preview of the automatic decision for the colour currently in the form; core
+      // republishes the same answer once the write lands.
+      var model = L.themeAutoModel(S.status, c);
+      var custom = el.querySelector("input[name='thBtnMode'][value='custom']").checked;
+      var button = custom ? $("#thBtnColor").value : model.callButton;
+      if (!custom) $("#thBtnColor").value = button;
+      $("#thBtnTxt").textContent = button;
+      var callEl = p.querySelector(".pcall");
+      if (callEl) {
+        callEl.style.backgroundColor = button;
+        callEl.style.color = L.autoInk(button) === "dark" ? "#101418" : "#FFFFFF";
+      }
+      $all("[data-ink-row]", el).forEach(function (row) {
+        var auto = row.querySelector("[data-ink-auto]").checked;
+        var picker = row.querySelector("[data-ink-color]");
+        picker.disabled = auto;
+        if (auto) picker.value = model.ink === "dark" ? "#101418" : "#F5F7FA";
+      });
+      var inkEl = p.querySelector(".pclock");
+      if (inkEl) inkEl.style.color = model.ink === "dark" ? "#101418" : "#F5F7FA";
     }
     $("#thColor").oninput = paint;
     $("#thColor").onchange = paint;
     $("#thImage").onchange = paint;
+    $all("input[name='thBtnMode']", el).forEach(function (radio) { radio.onchange = paint; });
+    $("#thBtnColor").oninput = function () {
+      el.querySelector("input[name='thBtnMode'][value='custom']").checked = true;
+      paint();
+    };
+    $all("[data-ink-row] [data-ink-auto]", el).forEach(function (box) { box.onchange = paint; });
     $all("[data-sw]", el).forEach(function (b) {
       b.onclick = function () { $("#thColor").value = b.getAttribute("data-sw"); paint(); };
     });
@@ -6358,7 +6708,23 @@ if (typeof document !== "undefined") (function () {
                 color_on: !scope || $("#thColorOn").checked,
                 image_on: !scope || $("#thImageOn").checked };
       var e = L.themeEntries(scope, f, own);
-      saveAndRefresh(e.entries, e.dels);
+      // The colour overrides live in the same theme object, so they are folded into one write.
+      var custom = el.querySelector("input[name='thBtnMode'][value='custom']").checked;
+      var ink = {};
+      $all("[data-ink-row]", el).forEach(function (row) {
+        if (row.querySelector("[data-ink-auto]").checked) return;
+        ink[row.getAttribute("data-region")] = row.querySelector("[data-ink-color]").value;
+      });
+      var base = (e.entries.length && e.entries[0].value) || {};
+      var colors = L.themeColorEntries(scope, { call_button_auto: !custom,
+                                                call_button_bg: $("#thBtnColor").value,
+                                                ink_override: ink }, base);
+      var entries = (colors.entries.length ? colors.entries : e.entries).concat(
+        L.appearanceEntries(scope, { mode: $("#thAppearance").value,
+                                     dark_from: $("#thDarkFrom") ? $("#thDarkFrom").value : "",
+                                     light_from: $("#thLightFrom") ? $("#thLightFrom").value
+                                                                   : "" }));
+      saveAndRefresh(entries, colors.entries.length ? [] : e.dels);
     };
     if (scope) {
       $("#thReset").onclick = function () {
