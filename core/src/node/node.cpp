@@ -7282,8 +7282,39 @@ struct Node::Impl {
 
 
   // C9: leave the cluster and forget the secret. Used by "clear pairing" and by revocation.
+  // Everything about the cluster this device is leaving. Kept deliberately: the event log, and
+  // with it the call history, which is this device's own record of who rang its own doorbell
+  // (attribution may name a device that no longer exists); the local administrator digest, so a
+  // device does not sit unauthenticated between unpair and first-run setup; and node_id, which
+  // is this device's identity rather than the cluster's.
+  void forgetClusterStateOnLoop() {
+    // Hard-delete the rows instead of tombstoning them. A tombstone replicates, so re-pairing to
+    // the same cluster would push deletions for every device this replica had forgotten.
+    if (!store.configDeleteAll())
+      DB_LOGW(kTag, "leaving a cluster: replicated configuration could not be cleared");
+    config->resetReplica();
+    // Cached peer contracts are the gossip cache: they are what made an offline device from a
+    // previous cluster still resolve to a name, role, and manifest.
+    const size_t contracts = store.metaDeletePrefix("peer_ui_contract.");
+    // The one-shot seed markers belong to the old cluster too; the next cluster seeds its own
+    // defaults, and an administrator's later deletion of a seeded rule is remembered again then.
+    for (const char* marker :
+         {"seed_sos_rules_v1", "seed_missed_call_rule_v1", "seed_notice_presets_v1"})
+      store.metaDeletePrefix(marker);
+    rebuildCfg();
+    DB_LOGI(kTag, "left the cluster: configuration replica and " + std::to_string(contracts) +
+                      " cached peer contract(s) dropped");
+    // Re-seed straight away so the device is immediately usable as an unpaired first-run node
+    // with its own identity, rather than only after the next restart.
+    if (!seedConfig())
+      DB_LOGW(kTag, "first-run configuration could not be re-seeded after leaving the cluster");
+    applyEffectiveCaps();
+    scheduleSnapshotRefresh();
+  }
+
   void unpairOnLoop() {
     if (mesh) mesh->unpair();
+    forgetClusterStateOnLoop();
     Node::SecureDeleteFn del;
     {
       std::lock_guard<std::mutex> lk(cb_mu);

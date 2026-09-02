@@ -493,6 +493,32 @@ void Store::configDelete(const std::string& key) {
   st.step();
 }
 
+bool Store::configDeleteAll() {
+  std::lock_guard<std::mutex> lk(mu_);
+  Stmt st(db_, "DELETE FROM config");
+  return st.ok() && st.step() == SQLITE_DONE;
+}
+
+size_t Store::metaDeletePrefix(const std::string& prefix) {
+  std::lock_guard<std::mutex> lk(mu_);
+  if (prefix.empty()) return 0;
+  // GLOB rather than LIKE: the pattern is a literal key prefix and LIKE would treat an
+  // underscore in it as a wildcard, which every one of these prefixes contains.
+  const std::string pattern = prefix + "*";
+  size_t removed = 0;
+  {
+    Stmt count(db_, "SELECT COUNT(*) FROM meta WHERE key GLOB ?1");
+    if (count.ok()) {
+      count.bind(1, pattern);
+      if (count.step() == SQLITE_ROW) removed = static_cast<size_t>(count.colInt(0));
+    }
+  }
+  Stmt st(db_, "DELETE FROM meta WHERE key GLOB ?1");
+  if (!st.ok()) return 0;
+  st.bind(1, pattern);
+  return st.step() == SQLITE_DONE ? removed : 0;
+}
+
 std::vector<LwwEntry> Store::configLoadAll() {
   std::lock_guard<std::mutex> lk(mu_);
   std::vector<LwwEntry> out;

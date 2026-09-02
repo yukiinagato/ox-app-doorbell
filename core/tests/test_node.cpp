@@ -1897,3 +1897,127 @@ TEST_CASE("doors: an indoor panel lists a live door station's door even without 
   indoor.node->stop();
   station.node->stop();
 }
+
+TEST_CASE("pairing: unpair then found leaves no peer from the previous cluster") {
+  // The regression: after unpairing all three devices and founding a fresh cluster on one of
+  // them, /api/status still listed the old cluster's members as offline peers. They came from
+  // devices.<id> entries that survived unpair in the replicated configuration, so the founder's
+  // brand-new cluster appeared to have members it had never met.
+  NFleet f;
+  auto& founder = f.add("A:1", "front-panel", "door_station", "d_front", /*seed_cfg=*/true);
+  auto& joiner = f.add("J:1", "living", "indoor_panel", "", /*seed_cfg=*/false);
+  REQUIRE(founder.node->start());
+  REQUIRE(joiner.node->start());
+  const std::string joiner_id = joiner.node->nodeId();
+
+  // Let the two become a cluster, so the founder learns the other device for real.
+  REQUIRE([&] {
+    for (int i = 0; i < 300; i++) {
+      f.run(50);
+      auto config = json::parse(founder.node->configJson());
+      if (config && json::get(json::get(config.get(), "devices"), joiner_id.c_str()))
+        return true;
+    }
+    return false;
+  }());
+  founder.node->setConfigKey("devices." + joiner_id + ".name", "\"doorbell-android\"");
+  f.run(200);
+
+  auto peerIds = [](Node& node) {
+    auto status = json::parse(node.statusJson());
+    REQUIRE(status);
+    std::set<std::string> ids;
+    const cJSON* peers = json::get(status.get(), "peers");
+    const cJSON* peer = nullptr;
+    cJSON_ArrayForEach(peer, peers) ids.insert(json::getString(peer, "id"));
+    return ids;
+  };
+  CHECK(peerIds(*founder.node).count(joiner_id) == 1);
+
+  // Both devices leave, as an operator resetting the house would do.
+  joiner.node->unpair();
+  founder.node->unpair();
+  f.run(200);
+
+  // The founder's own identity survives; the other device is gone from configuration entirely,
+  // not merely marked offline.
+  auto after = json::parse(founder.node->configJson());
+  REQUIRE(after);
+  const cJSON* devices = json::get(after.get(), "devices");
+  CHECK(json::get(devices, joiner_id.c_str()) == nullptr);
+  CHECK(cJSON_IsObject(json::get(devices, founder.node->nodeId().c_str())));
+  // The first-run defaults are re-seeded immediately, so the device is usable while unpaired.
+  CHECK(json::getInt(after.get(), "schema_version") == 1);
+
+  // Founding a fresh cluster starts with this device and nothing else.
+  REQUIRE(founder.node->foundCluster());
+  f.run(300);
+  const std::set<std::string> fresh = peerIds(*founder.node);
+  CHECK(fresh.count(joiner_id) == 0);
+  for (const std::string& id : fresh) CHECK(id == founder.node->nodeId());
+
+  // The history this device recorded is its own and is deliberately kept, even though its
+  // attribution may still name a device that has left.
+  auto history = json::parse(founder.node->callLogJson(0, 50));
+  REQUIRE(history);
+  CHECK(cJSON_IsArray(json::get(history.get(), "rows")));
+
+  founder.node->stop();
+  joiner.node->stop();
+}
+
+TEST_CASE("pairing: a replicated devices entry from the old cluster does not resurrect") {
+  // Purging must not be done with tombstones. A tombstone replicates, so re-pairing to the same
+  // cluster would push a deletion for every device the leaving node had forgotten -- and the
+  // forgotten entries must come back from the cluster instead.
+  NFleet f;
+  auto& keeper = f.add("K:1", "living", "indoor_panel", "", /*seed_cfg=*/true);
+  auto& leaver = f.add("L:1", "front-panel", "door_station", "d_front", /*seed_cfg=*/false);
+  REQUIRE(keeper.node->start());
+  REQUIRE(leaver.node->start());
+  const std::string keeper_id = keeper.node->nodeId();
+  const std::string leaver_id = leaver.node->nodeId();
+
+  REQUIRE([&] {
+    for (int i = 0; i < 300; i++) {
+      f.run(50);
+      auto config = json::parse(leaver.node->configJson());
+      if (config && json::get(json::get(config.get(), "devices"), keeper_id.c_str()))
+        return true;
+    }
+    return false;
+  }());
+  // A third device that only ever existed in configuration, like an old cluster member.
+  const std::string ghost_id(32, 'c');
+  keeper.node->setConfigKey("devices." + ghost_id + ".name", "\"doorbell-iPadmini3\"");
+  keeper.node->setConfigKey("devices." + ghost_id + ".role", "\"door_station\"");
+  REQUIRE([&] {
+    for (int i = 0; i < 300; i++) {
+      f.run(50);
+      auto config = json::parse(leaver.node->configJson());
+      if (config && json::get(json::get(config.get(), "devices"), ghost_id.c_str()))
+        return true;
+    }
+    return false;
+  }());
+
+  leaver.node->unpair();
+  f.run(200);
+  // Locally forgotten, including the ghost it had only ever replicated.
+  auto local = json::parse(leaver.node->configJson());
+  REQUIRE(local);
+  CHECK(json::get(json::get(local.get(), "devices"), ghost_id.c_str()) == nullptr);
+  CHECK(json::get(json::get(local.get(), "devices"), keeper_id.c_str()) == nullptr);
+
+  // The cluster it left is untouched: no deletion was replicated to it.
+  f.run(600);
+  auto remote = json::parse(keeper.node->configJson());
+  REQUIRE(remote);
+  const cJSON* remote_devices = json::get(remote.get(), "devices");
+  CHECK(cJSON_IsObject(json::get(remote_devices, ghost_id.c_str())));
+  CHECK(cJSON_IsObject(json::get(remote_devices, keeper_id.c_str())));
+  CHECK(cJSON_IsObject(json::get(remote_devices, leaver_id.c_str())));
+
+  keeper.node->stop();
+  leaver.node->stop();
+}

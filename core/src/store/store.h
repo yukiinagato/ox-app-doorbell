@@ -39,6 +39,12 @@ class Store {
   bool configPut(const LwwEntry& e);
   bool configPutBatch(const std::vector<LwwEntry>& entries);
   void configDelete(const std::string& key);
+  // Hard local wipe of the replicated configuration, for unpair and revoke. Rows are removed,
+  // not tombstoned, so nothing about the old cluster can replicate into the next one.
+  bool configDeleteAll();
+  // Remove every meta key with this prefix and report how many went. Used to drop the cached
+  // peer contracts of a cluster this device has left.
+  size_t metaDeletePrefix(const std::string& prefix);
   std::vector<LwwEntry> configLoadAll();
 
   // --- events ---
