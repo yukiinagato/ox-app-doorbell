@@ -67,11 +67,16 @@ namespace DoorbellApp.Util
         /// the cluster time zone; null falls back to this machine's local time.
         /// </summary>
         public static bool Apply(Dictionary<string, object> config, string nodeId,
-                                 Dictionary<string, object> localTime)
+                                 Dictionary<string, object> localTime,
+                                 Dictionary<string, object> display)
         {
-            string configured = Resolve(config, nodeId);
-            ConfiguredMode = configured;
-            string effective = Effective(configured, config, localTime);
+            string effective = FromDisplayContract(display);
+            if (effective == null)
+            {
+                // Older core: resolve display.appearance locally from configuration.
+                ConfiguredMode = Resolve(config, nodeId);
+                effective = Effective(ConfiguredMode, config, localTime);
+            }
             if (effective == Current && Application.Current != null &&
                 Application.Current.Resources.Contains("Line")) return false;
             Current = effective;
@@ -87,6 +92,35 @@ namespace DoorbellApp.Util
                 resources[key] = brush;
             }
             return true;
+        }
+
+        /// <summary>
+        /// Core resolves the schedule in the cluster time zone and publishes
+        /// display.appearance = {configured, effective, follow_system, schedule}. follow_system
+        /// tells the shell to prefer the operating system's own setting where one exists, which
+        /// is why Windows 7 and 8 still land on core's scheduled answer.
+        /// </summary>
+        private static string FromDisplayContract(Dictionary<string, object> display)
+        {
+            var appearance = CoreClient.Dig(display, "appearance") as Dictionary<string, object>;
+            if (appearance == null) return null;
+            object configured;
+            if (appearance.TryGetValue("configured", out configured) && configured != null)
+                ConfiguredMode = configured.ToString();
+            object followSystem;
+            bool follow = appearance.TryGetValue("follow_system", out followSystem) &&
+                          followSystem is bool && (bool)followSystem;
+            if (follow)
+            {
+                int system = SystemAppsUseLightTheme();
+                if (system == 1) return Light;
+                if (system == 0) return Dark;
+            }
+            object effective;
+            if (!appearance.TryGetValue("effective", out effective) || effective == null)
+                return null;
+            string value = effective.ToString();
+            return value == Light || value == Dark ? value : null;
         }
 
         private static string Resolve(Dictionary<string, object> config, string nodeId)

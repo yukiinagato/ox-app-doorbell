@@ -107,23 +107,32 @@ namespace DoorbellApp.Util
         /// Ink for one semantic region. Precedence: per-device override, cluster override, the
         /// core-published automatic decision, then the local luminance rule.
         /// </summary>
-        public static Color Ink(Dictionary<string, object> config, string nodeId, string regionId,
+        public static Color Ink(Dictionary<string, object> display, string regionId,
                                 Color background)
         {
             Color parsed;
-            object value = null;
-            if (!string.IsNullOrEmpty(nodeId))
-                value = CoreClient.Dig(config,
-                    "devices." + nodeId + ".local.theme.ink_override." + regionId);
-            if (value == null)
-                value = CoreClient.Dig(config, "display.theme.ink_override." + regionId);
+            // Core already folded the per-device and cluster overrides into theme.ink_override.
+            object value = CoreClient.Dig(display, "theme.ink_override." + regionId);
             if (value != null && TryParse(value.ToString(), out parsed)) return parsed;
 
-            object auto = CoreClient.Dig(config, "display.theme.auto_ink." + regionId);
+            object auto = CoreClient.Dig(display, "theme.auto_ink." + regionId);
             string token = auto == null ? "" : auto.ToString();
             if (token == "light") return LightInk;
             if (token == "dark") return DarkInk;
+            // Older core, or a region it does not know: the same WCAG rule, computed locally.
             return Luminance(background) >= 0.5 ? DarkInk : LightInk;
+        }
+
+        /// <summary>
+        /// The background core actually measured, image averaging included. Falls back to the
+        /// caller's own sample when the contract has no auto_background.
+        /// </summary>
+        public static bool TryContractBackground(Dictionary<string, object> display,
+                                                 out Color background)
+        {
+            background = Colors.Black;
+            object value = CoreClient.Dig(display, "theme.auto_background.color");
+            return value != null && TryParse(value.ToString(), out background);
         }
 
         /// <summary>
@@ -139,19 +148,30 @@ namespace DoorbellApp.Util
         /// Door-station call-button colour. Precedence: per-device override, cluster override, the
         /// core-published automatic accent, then the local complement computation.
         /// </summary>
-        public static Color CallButton(Dictionary<string, object> config, string nodeId,
-                                       Color background)
+        public static Color CallButton(Dictionary<string, object> display, Color background)
         {
             Color parsed;
-            object value = null;
-            if (!string.IsNullOrEmpty(nodeId))
-                value = CoreClient.Dig(config, "devices." + nodeId + ".local.theme.call_button_bg");
-            if (value == null) value = CoreClient.Dig(config, "display.theme.call_button_bg");
+            // theme.call_button_bg is what core says to paint: the override when there is one,
+            // otherwise the computed accent.
+            object value = CoreClient.Dig(display, "theme.call_button_bg");
             if (value != null && TryParse(value.ToString(), out parsed)) return parsed;
-
-            object auto = CoreClient.Dig(config, "display.theme.auto_accent.call_button");
+            object auto = CoreClient.Dig(display, "theme.auto_accent.call_button");
             if (auto != null && TryParse(auto.ToString(), out parsed)) return parsed;
             return LocalAccent(background);
+        }
+
+        /// <summary>
+        /// Always take the button text colour from call_button_ink: on a mid-luminance background
+        /// core returns the best compromise rather than an unreadable button.
+        /// </summary>
+        public static Color CallButtonInk(Dictionary<string, object> display, Color fill)
+        {
+            object value = CoreClient.Dig(display, "theme.call_button_ink");
+            if (value == null) value = CoreClient.Dig(display, "theme.auto_accent.call_button_ink");
+            string token = value == null ? "" : value.ToString();
+            if (token == "light") return Colors.White;
+            if (token == "dark") return Colors.Black;
+            return TextOn(fill);
         }
 
         /// <summary>

@@ -17,6 +17,15 @@ namespace DoorbellApp.Core
             Data != null && Data.TryGetValue(key, out var v) && v != null ? v.ToString() : "";
     }
 
+    /// <summary>Outcome of one cluster-password check.</summary>
+    public enum AdminPasswordVerdict
+    {
+        /// <summary>Core cannot answer: no export, or no replicated hash yet.</summary>
+        Unavailable,
+        Accepted,
+        Rejected,
+    }
+
     public sealed class CoreClient : IDisposable
     {
         private IntPtr _core;
@@ -33,7 +42,14 @@ namespace DoorbellApp.Core
         private CoreInterop.PowerStateCb _powerStateCb;
         private CoreInterop.ReleaseBufferCb _releaseBufferCb;
         private CoreInterop.SipSetMicMutedFn _sipSetMicMuted;
-        private bool _micMuteProbed;
+        private CoreInterop.MintJoinTokenFn _mintJoinToken;
+        private CoreInterop.AdminPasswordVerifyFn _adminPasswordVerify;
+        private CoreInterop.AdminPasswordSetFn _adminPasswordSet;
+        private CoreInterop.SetConfigJsonFn _setConfigJson;
+        private CoreInterop.ConfigBatchJsonFn _configBatchJson;
+        private CoreInterop.DeleteConfigKeyFn _deleteConfigKey;
+        private CoreInterop.CallLogJsonV2Fn _callLogJsonV2;
+        private bool _optionalProbed;
         private DpapiSecretStore _secretStore;
         private SpeechSynthesizer _tts;
         private readonly JavaScriptSerializer _json = new JavaScriptSerializer();
@@ -301,6 +317,37 @@ namespace DoorbellApp.Core
         }
 
         /// <summary>
+        /// Binds every entry point that lands with the batch-2 core delta (spec 5.5). Each one is
+        /// optional: an older Core simply reports the feature as unavailable and the shell hides
+        /// or degrades it rather than terminating at the first call.
+        /// </summary>
+        private void ProbeOptionalExports()
+        {
+            lock (_nativeLock)
+            {
+                if (_optionalProbed) return;
+                _optionalProbed = true;
+                _sipSetMicMuted = CoreInterop.OptionalExport<CoreInterop.SipSetMicMutedFn>(
+                    "db_core_sip_set_mic_muted");
+                _mintJoinToken = CoreInterop.OptionalExport<CoreInterop.MintJoinTokenFn>(
+                    "db_core_mint_join_token_json");
+                _adminPasswordVerify =
+                    CoreInterop.OptionalExport<CoreInterop.AdminPasswordVerifyFn>(
+                        "db_core_admin_password_verify");
+                _adminPasswordSet = CoreInterop.OptionalExport<CoreInterop.AdminPasswordSetFn>(
+                    "db_core_admin_password_set");
+                _setConfigJson = CoreInterop.OptionalExport<CoreInterop.SetConfigJsonFn>(
+                    "db_core_set_config_json");
+                _configBatchJson = CoreInterop.OptionalExport<CoreInterop.ConfigBatchJsonFn>(
+                    "db_core_config_batch_json");
+                _deleteConfigKey = CoreInterop.OptionalExport<CoreInterop.DeleteConfigKeyFn>(
+                    "db_core_delete_config_key");
+                _callLogJsonV2 = CoreInterop.OptionalExport<CoreInterop.CallLogJsonV2Fn>(
+                    "db_core_call_log_json_v2");
+            }
+        }
+
+        /// <summary>
         /// True when this Core build exports a microphone mute entry point. The control row hides
         /// the microphone toggle instead of offering a button that cannot do anything.
         /// </summary>
@@ -308,12 +355,7 @@ namespace DoorbellApp.Core
         {
             get
             {
-                if (!_micMuteProbed)
-                {
-                    _micMuteProbed = true;
-                    _sipSetMicMuted = CoreInterop.OptionalExport<CoreInterop.SipSetMicMutedFn>(
-                        "db_core_sip_set_mic_muted");
-                }
+                ProbeOptionalExports();
                 return _sipSetMicMuted != null;
             }
         }
@@ -323,6 +365,153 @@ namespace DoorbellApp.Core
             if (!SipMicMuteAvailable) return false;
             lock (_nativeLock)
                 return _core != IntPtr.Zero && _sipSetMicMuted(_core, muted ? 1 : 0) == 0;
+        }
+
+        /// <summary>
+        /// One 管理パスワード for the whole cluster (spec 5.5). Verification is constant-time and
+        /// rate-limited inside core, shared with the web login.
+        /// </summary>
+        public AdminPasswordVerdict AdminPasswordVerify(string password)
+        {
+            ProbeOptionalExports();
+            if (_adminPasswordVerify == null || string.IsNullOrEmpty(password))
+                return AdminPasswordVerdict.Unavailable;
+            int result;
+            lock (_nativeLock)
+            {
+                if (_core == IntPtr.Zero) return AdminPasswordVerdict.Unavailable;
+                result = _adminPasswordVerify(_core, password);
+            }
+            // Fail closed: only an explicit positive answer opens anything.
+            if (result > 0) return AdminPasswordVerdict.Accepted;
+            return result == 0 ? AdminPasswordVerdict.Rejected :
+                                 AdminPasswordVerdict.Unavailable;
+        }
+
+        /// <summary>
+        /// Publishes the cluster password. current is empty when none has been set yet, which is
+        /// how a device's migrated local digest becomes the shared secret.
+        /// </summary>
+        public bool AdminPasswordSet(string current, string next)
+        {
+            ProbeOptionalExports();
+            if (_adminPasswordSet == null || string.IsNullOrEmpty(next)) return false;
+            lock (_nativeLock)
+                return _core != IntPtr.Zero &&
+                    _adminPasswordSet(_core, current ?? "", next) == 0;
+        }
+
+        /// <summary>True once core can answer for the shared password.</summary>
+        public bool AdminPasswordAvailable
+        {
+            get
+            {
+                ProbeOptionalExports();
+                return _adminPasswordVerify != null;
+            }
+        }
+
+        /// <summary>True when the cluster already carries a replicated password hash.</summary>
+        public bool AdminPasswordConfigured
+        {
+            get
+            {
+                object value = Dig(Config(), "admin.password_hash");
+                return value != null && !string.IsNullOrEmpty(value.ToString());
+            }
+        }
+
+        /// <summary>
+        /// Native configuration writes with the same validation and advisory warnings as the web
+        /// (spec 5.5). Returns the result document, or null when this Core cannot answer.
+        /// </summary>
+        public string SetConfigJson(string json)
+        {
+            ProbeOptionalExports();
+            if (_setConfigJson == null || string.IsNullOrEmpty(json)) return null;
+            lock (_nativeLock)
+                return _core == IntPtr.Zero ? null : ConfigResult(_setConfigJson(_core, json));
+        }
+
+        public string ConfigBatchJson(string json)
+        {
+            ProbeOptionalExports();
+            if (_configBatchJson == null || string.IsNullOrEmpty(json)) return null;
+            lock (_nativeLock)
+                return _core == IntPtr.Zero ? null : ConfigResult(_configBatchJson(_core, json));
+        }
+
+        public bool DeleteConfigKey(string key)
+        {
+            ProbeOptionalExports();
+            if (_deleteConfigKey == null || string.IsNullOrEmpty(key)) return false;
+            lock (_nativeLock)
+                return _core != IntPtr.Zero && _deleteConfigKey(_core, key) == 0;
+        }
+
+        /// <summary>
+        /// The config write ABI is declared as returning an owned result document. A Core that
+        /// returns a plain status code instead would hand back a small integer, so anything that
+        /// cannot be a heap address is reported as a status rather than dereferenced.
+        /// </summary>
+        private static string ConfigResult(IntPtr returned)
+        {
+            if (returned == IntPtr.Zero) return "";
+            long value = returned.ToInt64();
+            if (value > 0 && value < 0x10000) return "";
+            return CoreInterop.TakeUtf8(returned) ?? "";
+        }
+
+        /// <summary>
+        /// The cluster-wide announcement is the door target "*" (core commit 0fb8d27). A
+        /// door-specific announcement always overrides it, so the two are never merged here.
+        /// </summary>
+        public const string GlobalNoticeDoor = "*";
+
+        public bool SetGlobalNotice(string text, long expiresMs)
+        {
+            return SetDoorNotice(GlobalNoticeDoor, text, expiresMs);
+        }
+
+        public bool ClearGlobalNotice()
+        {
+            return ClearDoorNotice(GlobalNoticeDoor);
+        }
+
+        /// <summary>
+        /// Triggers the configured unlock action. Returns core's code: 0 queued, -2 unknown door,
+        /// and -3 when nothing is configured, which the shell must say out loud.
+        /// </summary>
+        public int OpenDoor(string door)
+        {
+            if (string.IsNullOrEmpty(door)) return -1;
+            lock (_nativeLock)
+                return _core == IntPtr.Zero ? -1 : CoreInterop.db_core_open_door(_core, door);
+        }
+
+        /// <summary>True when history can page older with an exclusive upper bound.</summary>
+        public bool CallLogPagingAvailable
+        {
+            get
+            {
+                ProbeOptionalExports();
+                return _callLogJsonV2 != null;
+            }
+        }
+
+        /// <summary>One page of call history older than beforeMs; zero means "the newest".</summary>
+        public Dictionary<string, object> CallLogPage(long sinceMs, long beforeMs, int limit)
+        {
+            if (!CallLogPagingAvailable) return null;
+            string s;
+            lock (_nativeLock)
+            {
+                if (_core == IntPtr.Zero) return null;
+                s = CoreInterop.TakeUtf8(_callLogJsonV2(_core, sinceMs, beforeMs, limit));
+            }
+            if (s == null) return null;
+            try { return _json.Deserialize<Dictionary<string, object>>(s); }
+            catch { return null; }
         }
 
         /// <summary>Local wall clock rendered by core in the cluster time zone.</summary>
@@ -457,20 +646,17 @@ namespace DoorbellApp.Core
         /// </summary>
         public Dictionary<string, object> MintJoinToken(int seconds)
         {
+            ProbeOptionalExports();
+            if (_mintJoinToken == null)
+            {
+                Debug.WriteLine("core has no db_core_mint_join_token_json; no PIN minted");
+                return null;
+            }
             string s;
             lock (_nativeLock)
             {
                 if (_core == IntPtr.Zero) return null;
-                try
-                {
-                    s = CoreInterop.TakeUtf8(
-                        CoreInterop.db_core_mint_join_token_json(_core, seconds));
-                }
-                catch (EntryPointNotFoundException)
-                {
-                    Debug.WriteLine("core has no db_core_mint_join_token_json; no PIN minted");
-                    return null;
-                }
+                s = CoreInterop.TakeUtf8(_mintJoinToken(_core, seconds));
             }
             if (s == null) return null;
             try { return _json.Deserialize<Dictionary<string, object>>(s); }

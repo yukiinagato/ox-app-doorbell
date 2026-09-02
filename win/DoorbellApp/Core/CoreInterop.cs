@@ -78,8 +78,49 @@ namespace DoorbellApp.Core
                    BestFitMapping = false)]
         private static extern IntPtr GetProcAddress(IntPtr module, string name);
 
+        // ---- Optional exports (spec 5.5) -------------------------------------------------
+        // Every entry point below lands with the batch-2 core delta. Each is bound through
+        // OptionalExport, so a shell running against an older Core hides or degrades the feature
+        // instead of terminating at the first call.
+
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         public delegate int SipSetMicMutedFn(IntPtr core, int muted);
+
+        // Mints or refreshes the Pairing PIN without opening the pairing-mode window.
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        public delegate IntPtr MintJoinTokenFn(IntPtr core, int seconds);
+
+        // One cluster-wide 管理パスワード. Positive means accepted, zero means rejected, and a
+        // negative value means core could not evaluate it (no replicated hash yet).
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        public delegate int AdminPasswordVerifyFn(IntPtr core,
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string password);
+
+        // current may be empty when no password has been set yet. Zero on success.
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        public delegate int AdminPasswordSetFn(IntPtr core,
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string current,
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string next);
+
+        // Native configuration writes with the same validation and advisory warnings as the web.
+        // The result document is released with db_free; see CoreClient.ConfigResult for the
+        // small-value guard that keeps an int-returning Core from being dereferenced.
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        public delegate IntPtr SetConfigJsonFn(IntPtr core,
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string json);
+
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        public delegate IntPtr ConfigBatchJsonFn(IntPtr core,
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string json);
+
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        public delegate int DeleteConfigKeyFn(IntPtr core,
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string key);
+
+        // Call history with an exclusive upper bound, so the history page really pages.
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        public delegate IntPtr CallLogJsonV2Fn(IntPtr core, long sinceMs, long beforeMs,
+                                               int limit);
 
         /// <summary>
         /// Binds an export that is optional in this Core generation. A missing export returns
@@ -211,10 +252,6 @@ namespace DoorbellApp.Core
         [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
         public static extern IntPtr db_core_start_pairing_json(IntPtr core, int seconds);
 
-        // Mints or refreshes the Pairing PIN without opening the pairing-mode window.
-        [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
-        public static extern IntPtr db_core_mint_join_token_json(IntPtr core, int seconds);
-
         [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
         public static extern void db_core_invite_direct(IntPtr core,
             [MarshalAs(UnmanagedType.LPUTF8Str)] string addr,
@@ -281,6 +318,11 @@ namespace DoorbellApp.Core
 
         [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
         public static extern int db_core_clear_door_notice(IntPtr core,
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string door);
+
+        // 0 queued, -1 null core or empty door, -2 unknown door, -3 no unlock action configured.
+        [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
+        public static extern int db_core_open_door(IntPtr core,
             [MarshalAs(UnmanagedType.LPUTF8Str)] string door);
 
         [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]

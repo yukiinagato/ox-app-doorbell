@@ -44,28 +44,44 @@ int main(int argc, char** argv) {
       "db_core_pairing_json",   "db_core_start_pairing_json", "db_core_invite_device",
       "db_core_invite_direct",  "db_core_deny_device",        "db_core_unpair",
       "db_core_retry_pairing_persistence", "db_core_qr_encode", "db_core_qr_decode",
-      "db_core_qr_scan_start",  "db_core_qr_scan_stop",       "db_core_on_camera_frame"};
+      "db_core_qr_scan_start",  "db_core_qr_scan_stop",       "db_core_on_camera_frame",
+      // Landed with the batch-2 core delta: a PIN never opens the bulk-add window (spec 5.4).
+      "db_core_mint_join_token_json"};
   for (const char* name : kPairingExports) {
     if (!GetProcAddress(module, name)) {
       std::cerr << "required pairing export is missing: " << name << "\n";
       return 5;
     }
   }
-  // Pending core exports: the shell already binds these and degrades when they are absent.
-  // Move each one into kShellExports as soon as Core exports it, so the release gate covers it.
-  // db_core_mint_join_token_json mints a Pairing PIN without opening the pairing-mode window
-  // (spec 5.4); db_core_sip_set_mic_muted backs the microphone toggle on the incoming screen.
-  static const char* kPendingExports[] = {"db_core_mint_join_token_json",
-                                          "db_core_sip_set_mic_muted"};
+  // Pending core exports (spec 5.4 and 5.5). The shell binds each one through GetProcAddress and
+  // hides or degrades the feature while it is absent, so this list only warns. Move the whole
+  // list into kShellExports as soon as batch2/core exports them, and the release gate covers it.
+  //   db_core_admin_password_*       the one cluster-wide 管理パスワード
+  //   db_core_set_config_json/...    native configuration writes with advisory warnings
+  //   db_core_call_log_json_v2       history paging with an exclusive before_ms bound
+  //   db_core_sip_set_mic_muted      the microphone toggle on the incoming screen
+  // The 全体 announcement is not in this list: core addresses it as the door "*" through
+  // db_core_set_door_notice, which the release gate already covers.
+  static const char* kPendingExports[] = {
+      "db_core_admin_password_verify", "db_core_admin_password_set",
+      "db_core_set_config_json",       "db_core_config_batch_json",
+      "db_core_delete_config_key",     "db_core_call_log_json_v2",
+      "db_core_sip_set_mic_muted"};
+  int pending_missing = 0;
   for (const char* name : kPendingExports) {
-    if (!GetProcAddress(module, name))
+    if (!GetProcAddress(module, name)) {
+      ++pending_missing;
       std::cerr << "note: pending core export is not present yet: " << name << "\n";
+    }
   }
+  if (pending_missing == 0)
+    std::cerr << "note: every pending export is present; move kPendingExports into "
+                 "kShellExports\n";
   // Batch-2 shell surfaces: the cluster clock, effective volumes, announcements and history.
   static const char* kShellExports[] = {
       "db_core_local_time_json", "db_core_time_sync_now",     "db_core_audio_json",
       "db_core_set_door_notice", "db_core_clear_door_notice", "db_core_call_log_json",
-      "db_core_call_log_mark_seen", "db_core_emergency_v2"};
+      "db_core_call_log_mark_seen", "db_core_emergency_v2", "db_core_open_door"};
   for (const char* name : kShellExports) {
     if (!GetProcAddress(module, name)) {
       std::cerr << "required shell export is missing: " << name << "\n";

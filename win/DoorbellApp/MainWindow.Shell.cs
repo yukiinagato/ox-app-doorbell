@@ -22,7 +22,7 @@ namespace DoorbellApp
     {
         private const string RegionClock = "clock";
         private const string RegionDate = "date";
-        private const string RegionStatusLine = "status_line";
+        private const string RegionFooter = "footer";
         private const string RegionHint = "hint";
 
         /// <summary>Door stations get the visitor screen; indoor panels get the dashboard.</summary>
@@ -138,7 +138,7 @@ namespace DoorbellApp
         /// <summary>Applies display.appearance and then the per-region automatic ink.</summary>
         private void ApplyAppearance()
         {
-            Appearance.Apply(_cfg, _nodeId, App.Core.LocalTime(0));
+            Appearance.Apply(_cfg, _nodeId, App.Core.LocalTime(0), _display);
             ApplyAutoInk();
         }
 
@@ -151,8 +151,8 @@ namespace DoorbellApp
         {
             if (_night) return;  // Night mode owns the clock colours.
             Color background = EffectiveBackground();
-            Color ink = ThemeContrast.Ink(_cfg, _nodeId, RegionClock, background);
-            Color dim = ThemeContrast.Ink(_cfg, _nodeId, RegionDate, background);
+            Color ink = ThemeContrast.Ink(_display, RegionClock, background);
+            Color dim = ThemeContrast.Ink(_display, RegionDate, background);
             var inkBrush = ThemeContrast.Brush(ink);
             var dimBrush = ThemeContrast.Brush(MixTowards(dim, background, 0.35));
             ClockText.Foreground = inkBrush;
@@ -160,25 +160,29 @@ namespace DoorbellApp
             DateText.Foreground = dimBrush;
             DashDate.Foreground = dimBrush;
             TouchHint.Foreground = ThemeContrast.Brush(
-                MixTowards(ThemeContrast.Ink(_cfg, _nodeId, RegionHint, background),
+                MixTowards(ThemeContrast.Ink(_display, RegionHint, background),
                            background, 0.25));
             var statusBrush = ThemeContrast.Brush(
-                MixTowards(ThemeContrast.Ink(_cfg, _nodeId, RegionStatusLine, background),
+                MixTowards(ThemeContrast.Ink(_display, RegionFooter, background),
                            background, 0.35));
             NodeInfo.Foreground = statusBrush;
             VisitorVersionLine.Foreground = statusBrush;
 
             if (App.Boot.Role == "door_station")
             {
-                Color fill = ThemeContrast.CallButton(_cfg, _nodeId, background);
+                Color fill = ThemeContrast.CallButton(_display, background);
                 CallButton.Background = ThemeContrast.Brush(fill);
-                CallButton.Foreground = ThemeContrast.Brush(ThemeContrast.TextOn(fill));
+                CallButton.Foreground =
+                    ThemeContrast.Brush(ThemeContrast.CallButtonInk(_display, fill));
             }
         }
 
         /// <summary>The colour actually behind the idle screen, sampled from a theme image.</summary>
         private Color EffectiveBackground()
         {
+            Color contract;
+            // Core measured this once for the whole cluster, image averaging included.
+            if (ThemeContrast.TryContractBackground(_display, out contract)) return contract;
             Color average;
             var bitmap = ThemeBgImage.Source as BitmapSource;
             if (ThemeBgImage.Visibility == Visibility.Visible && bitmap != null &&
@@ -211,7 +215,7 @@ namespace DoorbellApp
                 Color background = EffectiveBackground();
                 var advisories = new List<Dictionary<string, object>>();
                 AddAdvisory(advisories, "clock", ClockText.Foreground, background, 3.0);
-                AddAdvisory(advisories, "status_line", NodeInfo.Foreground, background, 4.5);
+                AddAdvisory(advisories, "footer", NodeInfo.Foreground, background, 4.5);
                 if (App.Boot.Role == "door_station")
                 {
                     var fill = CallButton.Background as SolidColorBrush;
@@ -238,6 +242,21 @@ namespace DoorbellApp
             if (brush == null || brush.Color.A != 255) return;
             var advisory = ThemeContrast.Advise(element, brush.Color, background, minimum);
             if (advisory != null) into.Add(advisory.ToDictionary());
+        }
+
+        /// <summary>
+        /// status.call.mic_muted is authoritative for the microphone toggle, so a mute set from
+        /// another surface is reflected here too (spec 5.5).
+        /// </summary>
+        private void ReadCallStateFromStatus(Dictionary<string, object> status)
+        {
+            if (!App.Core.SipMicMuteAvailable) return;
+            var call = CoreClient.Dig(status, "call") as Dictionary<string, object>;
+            if (call == null || !call.ContainsKey("mic_muted")) return;
+            bool muted = DictBool(call, "mic_muted");
+            if (muted == _micMuted) return;
+            _micMuted = muted;
+            ApplyMicLabel();
         }
 
         private void ReadPowerFromStatus(Dictionary<string, object> status)

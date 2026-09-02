@@ -15,6 +15,16 @@ def read(relative: str) -> str:
     return (ROOT / relative).read_text(encoding="utf-8")
 
 
+def required_probe_exports(probe: str) -> set:
+    """Every export the ABI probe fails on, across all of its required lists."""
+    required = set()
+    for name in ("kPairingExports", "kShellExports"):
+        match = re.search(name + r"\[\] = \{(.*?)\};", probe, re.S)
+        if match:
+            required |= set(re.findall(r'"([a-z_0-9]+)"', match.group(1)))
+    return required
+
+
 class WindowsContracts(unittest.TestCase):
     def test_operational_capabilities_do_not_infer_wan_from_a_default_gateway(self):
         contracts = read("win/DoorbellApp/Core/RuntimeContracts.cs")
@@ -228,7 +238,9 @@ class WindowsContracts(unittest.TestCase):
             'case "call_recovery_required":')]
         self.assertIn("ShowIncoming(ev)", chime_block)
         self.assertIn("_incomingCallId", window)
-        self.assertIn('SipSendDtmf("*1")', window)
+        # Unlock goes through core's own action, which works from the monitor page too.
+        self.assertIn("App.Core.OpenDoor(CurrentCallDoor())", window)
+        self.assertIn("db_core_open_door", read("win/DoorbellApp/Core/CoreInterop.cs"))
 
     def test_originated_call_timeout_uses_core_expiry(self):
         window = read("win/DoorbellApp/MainWindow.xaml.cs")
@@ -882,11 +894,15 @@ class WindowsContracts(unittest.TestCase):
         onboarding = read("win/DoorbellApp/Pairing/PairingOnboardingView.xaml.cs")
         panel = read("win/DoorbellApp/Pairing/AddDeviceWindow.xaml.cs")
         probe = read("win/abi-probe/main.cpp")
-        self.assertIn("db_core_mint_join_token_json", interop)
-        # The release gate lists it as pending until Core exports it; the shell binds it now and
-        # returns null rather than terminating on an older Core.
-        self.assertIn('kPendingExports[] = {"db_core_mint_join_token_json"', probe)
-        self.assertIn("EntryPointNotFoundException", client)
+        self.assertIn("public delegate IntPtr MintJoinTokenFn(IntPtr core, int seconds);",
+                      interop)
+        # Bound through the shared GetProcAddress probe, never as a hard DllImport, so an older
+        # Core reports "no PIN minted" instead of terminating the shell. Core now exports it, so
+        # the release gate requires it.
+        self.assertNotIn("extern IntPtr db_core_mint_join_token_json", interop)
+        self.assertIn("db_core_mint_join_token_json", required_probe_exports(probe))
+        self.assertIn('CoreInterop.OptionalExport<CoreInterop.MintJoinTokenFn>(\n'
+                      '                    "db_core_mint_join_token_json")', client)
         self.assertIn("public Dictionary<string, object> MintJoinToken(int seconds)", client)
         # Founding a Cluster shows the PIN card without auto-adding anything.
         request = onboarding[onboarding.index("private void RequestNewCode"):]
@@ -930,6 +946,97 @@ class WindowsContracts(unittest.TestCase):
         revoked = window[window.index('case "pairing_revoked":'):
                          window.index('case "pairing_state":')]
         self.assertNotIn("App.ClearPairingBootReference()", revoked)
+
+
+    # ---- spec 5.5: one admin password, native write ABI, mic mute ---------------------
+
+    def test_every_optional_core_export_is_probed_not_hard_linked(self):
+        interop = read("win/DoorbellApp/Core/CoreInterop.cs")
+        client = read("win/DoorbellApp/Core/CoreClient.cs")
+        probe = read("win/abi-probe/main.cpp")
+        pending = re.search(r"kPendingExports\[\] = \{(.*?)\};", probe, re.S)
+        self.assertIsNotNone(pending)
+        expected = {
+            "db_core_admin_password_verify", "db_core_admin_password_set",
+            "db_core_set_config_json", "db_core_config_batch_json",
+            "db_core_delete_config_key", "db_core_call_log_json_v2",
+            "db_core_sip_set_mic_muted",
+        }
+        self.assertEqual(set(re.findall(r'"([a-z_0-9]+)"', pending.group(1))), expected)
+        # Every one of them is bound through the probe, and none is a hard DllImport that would
+        # terminate the shell on an older Core.
+        for symbol in sorted(expected):
+            with self.subTest(symbol=symbol):
+                self.assertIn('"%s"' % symbol, client)
+                self.assertNotIn("extern IntPtr " + symbol, interop)
+                self.assertNotIn("extern int " + symbol, interop)
+        self.assertIn("private void ProbeOptionalExports()", client)
+        # A pending symbol must never sit in a required release-gate list at the same time.
+        self.assertFalse(expected & required_probe_exports(probe))
+
+    def test_admin_password_is_one_cluster_secret(self):
+        dialog = read("win/DoorbellApp/AdminDialog.xaml.cs")
+        xaml = read("win/DoorbellApp/AdminDialog.xaml")
+        client = read("win/DoorbellApp/Core/CoreClient.cs")
+        # The cluster password is text, so the keypad types into a real password box.
+        self.assertIn('<PasswordBox x:Name="PasswordEntry"', xaml)
+        self.assertIn("PasswordEntry.Password", dialog)
+        # Core decides; only an explicit positive answer opens anything.
+        verify = client[client.index("public AdminPasswordVerdict AdminPasswordVerify"):
+                        client.index("public bool AdminPasswordSet")]
+        self.assertIn("if (result > 0) return AdminPasswordVerdict.Accepted;", verify)
+        self.assertIn("result == 0 ? AdminPasswordVerdict.Rejected", verify)
+        submit = dialog[dialog.index("private void Submit()"):
+                        dialog.index("private void Accept()")]
+        self.assertIn("App.Core.AdminPasswordVerify(password)", submit)
+        self.assertIn("if (verdict == AdminPasswordVerdict.Accepted)", submit)
+        # A cluster that already has a password is never opened with a stale device digest.
+        self.assertIn("App.Core.AdminPasswordConfigured", submit)
+        self.assertLess(submit.index("AdminPasswordConfigured"), submit.index("LocalDigest()"))
+        # First successful local entry publishes the device digest as the shared secret.
+        self.assertIn('App.Core.AdminPasswordSet("", password)', submit)
+        # The local five-failure, ten-minute lockout stays as a second line of defence.
+        self.assertIn("_lockedUntil = DateTime.Now.AddMinutes(10);", dialog)
+        self.assertIn("if (++_fails >= 5)", dialog)
+
+    def test_global_notice_and_history_paging_use_the_new_abi(self):
+        notice = read("win/DoorbellApp/MainWindow.Notice.cs")
+        history = read("win/DoorbellApp/MainWindow.History.cs")
+        client = read("win/DoorbellApp/Core/CoreClient.cs")
+        # 全体 is the door target "*", and a door-specific announcement still wins over it.
+        self.assertIn('public const string GlobalNoticeDoor = "*";', client)
+        self.assertIn("return SetDoorNotice(GlobalNoticeDoor, text, expiresMs);", client)
+        self.assertIn("return ClearDoorNotice(GlobalNoticeDoor);", client)
+        self.assertIn("App.Core.SetGlobalNotice(dialog.NoticeBody, dialog.ExpiresMs)", notice)
+        self.assertIn("App.Core.ClearGlobalNotice()", notice)
+        # 50 rows a page with an exclusive before_ms upper bound.
+        page = history[history.index("private void LoadHistoryPage"):
+                       history.index("private void OnHistoryCloseClick")]
+        self.assertIn("App.Core.CallLogPage(0, _historyBeforeMs, HistoryPageRows)", page)
+        self.assertIn("_historyBeforeMs = oldest;", page)
+        self.assertIn("public Dictionary<string, object> CallLogPage(long sinceMs, "
+                      "long beforeMs, int limit)", client)
+        # The growing-limit fallback stays for a core without before_ms.
+        self.assertIn("App.Core.CallLog(0, _historyLimit)", page)
+
+    def test_native_config_writes_are_prepared(self):
+        client = read("win/DoorbellApp/Core/CoreClient.cs")
+        for member in ("public string SetConfigJson(string json)",
+                       "public string ConfigBatchJson(string json)",
+                       "public bool DeleteConfigKey(string key)"):
+            self.assertIn(member, client)
+        # The result shape is unconfirmed, so a status-code return is never dereferenced.
+        guard = client[client.index("private static string ConfigResult"):
+                       client.index("public const string GlobalNoticeDoor")]
+        self.assertIn("value < 0x10000", guard)
+        self.assertIn("CoreInterop.TakeUtf8(returned)", guard)
+
+    def test_mic_mute_follows_the_replicated_call_state(self):
+        shell = read("win/DoorbellApp/MainWindow.Shell.cs")
+        call = read("win/DoorbellApp/MainWindow.CallScreen.cs")
+        self.assertIn('CoreClient.Dig(status, "call")', shell)
+        self.assertIn('call.ContainsKey("mic_muted")', shell)
+        self.assertIn("App.Core.SipSetMicMuted(wanted)", call)
 
 
 if __name__ == "__main__":
