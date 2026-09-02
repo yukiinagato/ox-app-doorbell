@@ -369,16 +369,18 @@ class SettingsActivity : Activity(), DoorbellCore.Listener {
 
     private fun sectionPurposes() {
         val card = section(texts.t("settings.purposes", R.string.settings_purposes))
-        val purposes = app.core.dig(config, "visit_purposes") as? JSONObject
-        if (purposes == null || purposes.length() == 0) {
+        // Every purpose is listed, disabled ones included: this is where the flag is turned
+        // back on, so hiding them here would make that impossible.
+        val ids = VisitPurposes.all(config)
+        if (ids.isEmpty()) {
             card.row(ShellUi.text(this, texts.t("info.no_data", R.string.info_no_data), 14f,
                                   palette.muted))
         } else {
-            for (id in sortedByOrder(purposes)) {
-                val entry = purposes.optJSONObject(id)
-                val enabled = entry?.optBoolean("enabled", true) ?: true
-                card.row(toggleRow(purposeLabel(id), "visit_purposes.$id.enabled", enabled))
-            }
+            for (id in ids) card.row(toggleRow(
+                purposeLabel(id),
+                VisitPurposes.enabledKey(id),
+                VisitPurposes.isEnabled(config, id),
+            ))
         }
         card.row(webOnlyRow(
             texts.t("admin.quick_replies", R.string.admin_quick_replies),
@@ -906,13 +908,8 @@ class SettingsActivity : Activity(), DoorbellCore.Listener {
         return value?.toString() ?: door
     }
 
-    private fun purposeLabel(purpose: String): String {
-        val labels = (app.core.dig(config, "visit_purposes.$purpose") as? JSONObject)
-            ?.optJSONObject("label") ?: return purpose
-        val value = labels.optString(texts.lang)
-        if (value.isNotEmpty()) return value
-        return labels.optString("ja").ifEmpty { purpose }
-    }
+    private fun purposeLabel(purpose: String): String =
+        VisitPurposes.label(config, purpose, texts.lang)
 
     private fun roleLabel(role: String): String = when (role) {
         "door_station" -> texts.t("pair.role_door_station", R.string.pair_role_door_station)

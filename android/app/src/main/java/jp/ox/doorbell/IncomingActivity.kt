@@ -450,15 +450,14 @@ class IncomingActivity : Activity() {
         val purposeBadge = findViewById<TextView>(R.id.purpose_badge)
         val langBadge = findViewById<TextView>(R.id.lang_badge)
 
-        val e = if (purpose.isEmpty()) null
-                else app.core.dig(cfg, "visit_purposes.$purpose") as? JSONObject
         // The slot keeps its height so the layout never jumps when the purpose arrives later.
+        // The label resolves even for a purpose that has since been disabled: this is what the
+        // visitor actually chose for the call now on screen.
         if (purpose.isEmpty()) {
             purposeBadge.visibility = View.INVISIBLE
         } else {
-            val label = labelOf(e, app.boot.uiLang, purpose)
-            val icon = e?.optString("icon").orEmpty()
-            purposeBadge.text = if (icon.isEmpty()) label else "$icon $label"
+            val label = VisitPurposes.label(cfg, purpose, app.boot.uiLang)
+            purposeBadge.text = VisitPurposes.decoratedLabel(cfg, purpose, app.boot.uiLang)
             purposeBadge.contentDescription =
                 texts.t("ring.purpose_badge", R.string.ring_purpose_badge, label)
             purposeBadge.visibility = View.VISIBLE
