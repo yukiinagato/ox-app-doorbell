@@ -210,10 +210,27 @@ class ReadabilityContracts(unittest.TestCase):
         self.assertIn("averageHexInViewRect:frame", refine)
         self.assertIn("inkHexForSampledLuminance", refine)
 
-        # The sampler is built off the main thread and only when it must be.
+        # The ink is whichever of the two reads better, not a lightness
+        # threshold: a midtone wallpaper took white ink under the old rule.
+        theme = read("ios-kiosk/src/Core/DBUiTheme.m")
+        rule = theme[theme.index("+ (NSString *)inkModeForLuminance:"):
+                     theme.index("+ (double)inkCrossoverLuminance")]
+        self.assertIn("withDarkInk >= withLightInk", rule)
+        self.assertNotIn("luminance >= 0.5", rule)
+
+        # The sampler is built off the main thread and only when it must be...
         self.assertIn("DBBackgroundSampler samplerWithImage:image viewSize:size", home)
         self.assertIn("dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_LOW", home)
         self.assertIn("CGSizeEqualToSize(_samplerSize, size)", home)
+        # ...the decision re-runs once the image has finished loading...
+        load = home[home.index("- (void)loadThemeImage:"):
+                    home.index("- (void)refreshBackgroundSampler")]
+        self.assertIn("screen->_themeImage = image", load)
+        self.assertIn("[screen refreshBackgroundSampler]", load)
+        # ...and a sampler built for another view size is ignored, so a
+        # rotation falls back rather than reading the wrong pixels.
+        self.assertIn("- (DBBackgroundSampler *)samplerForViewSize:", widgets)
+        self.assertIn("CGSizeEqualToSize(_sampler.viewSize, viewSize)", widgets)
 
         # Each screen inks its regions after layout, when the frames are final.
         for source, name in ((home, "dashboard"), (door, "door screen"),

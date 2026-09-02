@@ -63,10 +63,10 @@ static void TestCustomColoursWarnButAreNeverRejected(void) {
 }
 
 static void TestAutomaticInkPerRegionWithLocalFallback(void) {
-  // A light background asks for the dark ink token and a dark one for light ink.
+  // Whichever ink reads better wins; the crossover is near Y = 0.18, not 0.5.
   Require([[DBUiTheme inkModeForLuminance:0.9] isEqualToString:@"dark"], @"light bg -> dark ink");
-  Require([[DBUiTheme inkModeForLuminance:0.5] isEqualToString:@"dark"], @"the boundary is dark ink");
-  Require([[DBUiTheme inkModeForLuminance:0.2] isEqualToString:@"light"], @"dark bg -> light ink");
+  Require([[DBUiTheme inkModeForLuminance:0.5] isEqualToString:@"dark"], @"a midtone -> dark ink");
+  Require([[DBUiTheme inkModeForLuminance:0.05] isEqualToString:@"light"], @"dark bg -> light ink");
 
   NSDictionary *empty = [NSDictionary dictionary];
   NSString *onLight = [DBUiTheme inkHexForRegion:DBUiRegionClock config:empty deviceId:@"n1"
@@ -366,27 +366,74 @@ static void TestPerRegionBackgroundSampling(void) {
                                                 proxyWidth:64 proxyHeight:64];
   Require([[degenerate objectAtIndex:2] integerValue] == 0, @"an empty view samples nothing");
 
-  // The threshold and the shadow rule, on the same vectors the spec gives.
+  // The ink is whichever of the two reads better against the sample, not a
+  // lightness threshold, so the crossover sits near Y = 0.18.
   Require([[DBUiTheme inkHexForSampledLuminance:0.9] isEqualToString:[DBUiTheme darkInkHex]],
           @"a light region takes the dark ink");
   Require([[DBUiTheme inkHexForSampledLuminance:0.5] isEqualToString:[DBUiTheme darkInkHex]],
-          @"the boundary belongs to the dark ink");
-  Require([[DBUiTheme inkHexForSampledLuminance:0.2] isEqualToString:[DBUiTheme lightInkHex]],
+          @"a midtone takes the dark ink, which a 0.5 threshold got wrong");
+  Require([[DBUiTheme inkHexForSampledLuminance:0.05] isEqualToString:[DBUiTheme lightInkHex]],
           @"a dark region takes the light ink");
-  // The reported defect in one line: a light patch under the clock must not
-  // keep the light ink core derived from the whole picture.
-  DBRgb lightPatch;
-  Require([DBUiTheme parseHex:@"#EFEFEF" into:&lightPatch], @"the sampled patch parses");
-  NSString *refined =
-      [DBUiTheme inkHexForSampledLuminance:[DBUiTheme relativeLuminance:lightPatch]];
-  Require([refined isEqualToString:[DBUiTheme darkInkHex]],
-          @"text over a light part of the image is dark, not white");
-  Require([DBUiTheme contrastBetweenHex:refined andHex:@"#EFEFEF"] >= 4.5,
-          @"and the result is legible");
-  Require(![DBUiTheme needsInkShadowForInk:refined background:@"#EFEFEF"],
+  double crossover = [DBUiTheme inkCrossoverLuminance];
+  RequireClose(crossover, 0.18, 0.01,
+               @"the crossover is where the two contrasts meet, near 0.179");
+  Require([[DBUiTheme inkHexForSampledLuminance:crossover + 0.02]
+              isEqualToString:[DBUiTheme darkInkHex]], @"just above it, dark ink");
+  Require([[DBUiTheme inkHexForSampledLuminance:crossover - 0.02]
+              isEqualToString:[DBUiTheme lightInkHex]], @"just below it, light ink");
+  // Whatever the sample, the chosen ink is never the worse of the two: this
+  // walks every grey and checks the choice against both real contrast ratios.
+  for (int channel = 0; channel <= 255; channel++) {
+    DBRgb grey;
+    grey.r = grey.g = grey.b = channel / 255.0;
+    NSString *hex = [DBUiTheme hexFromRgb:grey];
+    NSString *chosen =
+        [DBUiTheme inkHexForSampledLuminance:[DBUiTheme relativeLuminance:grey]];
+    NSString *other = [chosen isEqualToString:[DBUiTheme darkInkHex]]
+        ? [DBUiTheme lightInkHex] : [DBUiTheme darkInkHex];
+    Require([DBUiTheme contrastBetweenHex:chosen andHex:hex] >=
+                [DBUiTheme contrastBetweenHex:other andHex:hex] - 0.0001,
+            [NSString stringWithFormat:@"the chosen ink wins on %@", hex]);
+  }
+
+  // The reported wallpaper: #BBBBB4 averages Y = 0.494, just under a 0.5
+  // threshold, where white ink is about 1.9:1 and the dark ink about 9.6:1.
+  DBRgb wallpaper;
+  Require([DBUiTheme parseHex:@"#BBBBB4" into:&wallpaper], @"the wallpaper average parses");
+  double wallpaperY = [DBUiTheme relativeLuminance:wallpaper];
+  RequireClose(wallpaperY, 0.494, 0.005, @"and measures as reported");
+  NSString *wallpaperInk = [DBUiTheme inkHexForSampledLuminance:wallpaperY];
+  Require([wallpaperInk isEqualToString:[DBUiTheme darkInkHex]],
+          @"a midtone wallpaper takes the dark ink, not white");
+  Require([DBUiTheme contrastBetweenHex:wallpaperInk andHex:@"#BBBBB4"] >= 9.0,
+          @"which is the legible choice");
+  Require([DBUiTheme contrastBetweenHex:[DBUiTheme lightInkHex] andHex:@"#BBBBB4"] < 2.0,
+          @"where the light ink would have been unreadable");
+
+  // A genuinely dark region still takes the light ink.
+  DBRgb darkPatch;
+  Require([DBUiTheme parseHex:@"#404040" into:&darkPatch], @"the dark patch parses");
+  NSString *darkPatchInk =
+      [DBUiTheme inkHexForSampledLuminance:[DBUiTheme relativeLuminance:darkPatch]];
+  Require([darkPatchInk isEqualToString:[DBUiTheme lightInkHex]],
+          @"#404040 takes the light ink");
+  Require([DBUiTheme contrastBetweenHex:darkPatchInk andHex:@"#404040"] >= 4.5,
+          @"and reads well");
+
+  Require(![DBUiTheme needsInkShadowForInk:wallpaperInk background:@"#BBBBB4"],
           @"a legible pair takes no shadow");
-  Require([DBUiTheme needsInkShadowForInk:[DBUiTheme lightInkHex] background:@"#8A8A8A"],
-          @"a marginal pair takes the opposite-ink shadow");
+  // The only case that does is a background sitting at the crossover, where
+  // even the better ink is short of AA: #767676 measures Y = 0.18 and gives
+  // about 4.1:1 either way.
+  DBRgb worst;
+  Require([DBUiTheme parseHex:@"#767676" into:&worst], @"the crossover grey parses");
+  double worstY = [DBUiTheme relativeLuminance:worst];
+  RequireClose(worstY, crossover, 0.01, @"which is the crossover luminance");
+  NSString *worstInk = [DBUiTheme inkHexForSampledLuminance:worstY];
+  Require([DBUiTheme contrastBetweenHex:worstInk andHex:@"#767676"] < 4.5,
+          @"neither ink reaches AA there");
+  Require([DBUiTheme needsInkShadowForInk:worstInk background:@"#767676"],
+          @"so that region takes the opposite-ink shadow");
   RequireClose([DBUiTheme inkShadowAlpha], 0.4, 0.001, @"at 40 %");
   Require([DBUiTheme maximumSampleEdge] == 16, @"the covered area is reduced to 16x16");
 

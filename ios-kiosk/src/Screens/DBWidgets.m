@@ -246,6 +246,15 @@ static const NSInteger kProxyEdge = 64;
   _sampler = sampler;
 }
 
+// A sampler built for a different view size maps region frames onto the wrong
+// pixels, which is exactly what a rotation produces for one layout pass. It is
+// ignored until the rebuild for the new size arrives.
+- (DBBackgroundSampler *)samplerForViewSize:(CGSize)viewSize {
+  if (_sampler == nil) return nil;
+  if (viewSize.width <= 0 || viewSize.height <= 0) return _sampler;
+  return CGSizeEqualToSize(_sampler.viewSize, viewSize) ? _sampler : nil;
+}
+
 - (NSString *)inkHexForRegion:(NSString *)region {
   return [DBUiTheme inkHexForRegion:region config:_config deviceId:_deviceId
                             display:_display backgroundHex:_surfaceHex appearanceMode:_mode];
@@ -262,22 +271,26 @@ static const NSInteger kProxyEdge = 64;
 
 // The pixels actually behind one region, or the flat background when there is
 // no theme image to sample.
-- (NSString *)backgroundHexForRegion:(NSString *)region frame:(CGRect)frame {
+- (NSString *)backgroundHexForRegion:(NSString *)region frame:(CGRect)frame
+                            viewSize:(CGSize)viewSize {
   (void)region;
-  if (_sampler == nil) return _surfaceHex;
-  NSString *sampled = [_sampler averageHexInViewRect:frame];
+  DBBackgroundSampler *sampler = [self samplerForViewSize:viewSize];
+  if (sampler == nil) return _surfaceHex;
+  NSString *sampled = [sampler averageHexInViewRect:frame];
   return [sampled length] > 0 ? sampled : _surfaceHex;
 }
 
-- (NSString *)inkHexForRegion:(NSString *)region frame:(CGRect)frame {
+- (NSString *)inkHexForRegion:(NSString *)region frame:(CGRect)frame
+                     viewSize:(CGSize)viewSize {
   // 1. An administrator's override, device before cluster, always wins.
   NSString *override = [DBUiTheme adminInkOverrideHexForRegion:region config:_config
                                                       deviceId:_deviceId display:_display];
   if ([override length] > 0) return override;
   // 2. Over a theme image, refine locally: core averaged the whole picture and
   //    says so, which is how a caption over a light corner came back white.
-  if (_sampler != nil) {
-    NSString *background = [_sampler averageHexInViewRect:frame];
+  DBBackgroundSampler *sampler = [self samplerForViewSize:viewSize];
+  if (sampler != nil) {
+    NSString *background = [sampler averageHexInViewRect:frame];
     DBRgb rgb;
     if ([background length] > 0 && [DBUiTheme parseHex:background into:&rgb])
       return [DBUiTheme inkHexForSampledLuminance:[DBUiTheme relativeLuminance:rgb]];
@@ -286,13 +299,18 @@ static const NSInteger kProxyEdge = 64;
   return [self inkHexForRegion:region];
 }
 
+- (NSString *)inkHexForRegion:(NSString *)region frame:(CGRect)frame {
+  return [self inkHexForRegion:region frame:frame viewSize:CGSizeZero];
+}
+
 - (UIColor *)inkForRegion:(NSString *)region frame:(CGRect)frame {
   return DBColorFromHex([self inkHexForRegion:region frame:frame], [self ink]);
 }
 
 - (BOOL)needsShadowForRegion:(NSString *)region frame:(CGRect)frame {
   return [DBUiTheme needsInkShadowForInk:[self inkHexForRegion:region frame:frame]
-                              background:[self backgroundHexForRegion:region frame:frame]];
+                              background:[self backgroundHexForRegion:region frame:frame
+                                                             viewSize:CGSizeZero]];
 }
 
 // One call per label: the ink measured behind its own frame, plus the 40 %
@@ -300,13 +318,18 @@ static const NSInteger kProxyEdge = 64;
 - (void)applyInkToLabel:(UILabel *)label region:(NSString *)region {
   if (label == nil) return;
   CGRect frame = label.frame;
-  label.textColor = [self inkForRegion:region frame:frame];
-  if (![self needsShadowForRegion:region frame:frame]) {
+  // The sampler is keyed to the view size it was built for, so a rotation that
+  // has not been resampled yet falls back instead of reading the wrong pixels.
+  CGSize viewSize = label.superview ? label.superview.bounds.size : CGSizeZero;
+  NSString *ink = [self inkHexForRegion:region frame:frame viewSize:viewSize];
+  label.textColor = DBColorFromHex(ink, [self ink]);
+  NSString *background = [self backgroundHexForRegion:region frame:frame viewSize:viewSize];
+  // Only when even the better of the two inks stays below AA.
+  if (![DBUiTheme needsInkShadowForInk:ink background:background]) {
     label.shadowColor = nil;
     label.shadowOffset = CGSizeZero;
     return;
   }
-  NSString *ink = [self inkHexForRegion:region frame:frame];
   DBRgb rgb;
   BOOL inkIsDark = [DBUiTheme parseHex:ink into:&rgb] &&
       [DBUiTheme relativeLuminance:rgb] < 0.5;

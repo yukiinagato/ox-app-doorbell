@@ -291,8 +291,35 @@ static DBRgb DBHslToRgb(double h, double s, double l) {
 
 #pragma mark - automatic ink
 
+// WCAG contrast against a background of the given luminance, for one ink.
+static double DBContrastAgainstLuminance(double inkLuminance, double backgroundLuminance) {
+  double hi = MAX(inkLuminance, backgroundLuminance);
+  double lo = MIN(inkLuminance, backgroundLuminance);
+  return (hi + 0.05) / (lo + 0.05);
+}
+
++ (double)luminanceOfHex:(NSString *)hex {
+  DBRgb rgb;
+  if (![self parseHex:hex into:&rgb]) return 0;
+  return [self relativeLuminance:rgb];
+}
+
 + (NSString *)inkModeForLuminance:(double)luminance {
-  return luminance >= 0.5 ? @"dark" : @"light";
+  // Whichever ink reads better wins. A lightness threshold gets midtones
+  // wrong: #BBBBB4 is just below Y = 0.5 yet white on it is 1.9:1 while the
+  // dark ink is 9.6:1.
+  if (luminance < 0) luminance = 0;
+  if (luminance > 1) luminance = 1;
+  double withDarkInk = DBContrastAgainstLuminance([self luminanceOfHex:kLightInk], luminance);
+  double withLightInk = DBContrastAgainstLuminance([self luminanceOfHex:kDarkInk], luminance);
+  return withDarkInk >= withLightInk ? @"dark" : @"light";
+}
+
++ (double)inkCrossoverLuminance {
+  // The two contrasts are equal when (Y + 0.05)^2 = (Yink_dark + 0.05)(Yink_light + 0.05).
+  double darkInk = [self luminanceOfHex:kLightInk];
+  double lightInk = [self luminanceOfHex:kDarkInk];
+  return sqrt((darkInk + 0.05) * (lightInk + 0.05)) - 0.05;
 }
 
 + (NSString *)inkModeForBackgroundHex:(NSString *)hex fallbackMode:(NSString *)fallbackMode {
@@ -328,6 +355,8 @@ static DBRgb DBHslToRgb(double h, double s, double l) {
   return [mode isEqualToString:@"dark"] ? kLightInk : kDarkInk;
 }
 
+// The ink handed in is already the better of the two, so this only fires when
+// neither ink reaches AA against that background.
 + (BOOL)needsInkShadowForInk:(NSString *)inkHex background:(NSString *)backgroundHex {
   double ratio = [self contrastBetweenHex:inkHex andHex:backgroundHex];
   if (ratio <= 0) return NO;
