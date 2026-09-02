@@ -1,8 +1,11 @@
 import CommonCrypto
 import UIKit
 
-// Five failed PIN attempts lock the process-local keypad for ten minutes. The configured PIN is
-// compared as a SHA-256 digest; deployments must replace the commissioning default.
+// The 管理パスワード is one cluster-wide secret. Core verifies it against the replicated salted
+// hash — constant-time, rate-limited, and shared with the web admin's login — so an offline device
+// still accepts the same password. A build whose Core does not publish that entry point yet falls
+// back to the legacy per-node digest in `exit_pin.txt`; the first successful Core verification
+// deletes that file, which is the migration the owner asked for.
 final class AdminPinViewController: UIViewController {
 
     private static let maxLen = 6
@@ -10,12 +13,14 @@ final class AdminPinViewController: UIViewController {
     private static var lockedUntil = Date.distantPast
 
     var onUnlocked: (() -> Void)?
+    private let core: CoreBridge?
     private let texts: Texts
     private var pin = ""
     private let display = UILabel()
     private let errorLabel = UILabel()
 
-    init(texts: Texts) {
+    init(texts: Texts, core: CoreBridge? = nil) {
+        self.core = core
         self.texts = texts
         super.init(nibName: nil, bundle: nil)
         modalPresentationStyle = .overFullScreen
@@ -125,8 +130,24 @@ final class AdminPinViewController: UIViewController {
             display.text = ""
             return
         }
+        if let accepted = core?.verifyAdminPassword(pin) {
+            if accepted {
+                AdminPinViewController.fails = 0
+                AdminPinViewController.retireLegacyDigest()
+                let cb = onUnlocked
+                dismiss(animated: true) { cb?() }
+                return
+            }
+            // Core owns the lockout in this path; the local counter only shapes the message.
+            AdminPinViewController.fails += 1
+            errorLabel.text = AdminPinViewController.fails >= 5 ? texts.t("admin.locked")
+                : texts.t("admin.pin_wrong")
+            pin = ""
+            display.text = ""
+            return
+        }
         var expected = AdminPinViewController.sha256Hex("000000")
-        let pinFile = (BootConfig.dataDir() as NSString).appendingPathComponent("exit_pin.txt")
+        let pinFile = AdminPinViewController.legacyDigestPath()
         if let s = try? String(contentsOfFile: pinFile, encoding: .utf8),
            !s.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             expected = s.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -147,6 +168,23 @@ final class AdminPinViewController: UIViewController {
         }
         pin = ""
         display.text = ""
+    }
+
+    private static func legacyDigestPath() -> String {
+        return (BootConfig.dataDir() as NSString).appendingPathComponent("exit_pin.txt")
+    }
+
+    /// Once Core has accepted the cluster password on this device, the old per-node digest is a
+    /// second secret that could still open the screen. It is removed rather than left behind.
+    private static func retireLegacyDigest() {
+        let path = legacyDigestPath()
+        guard FileManager.default.fileExists(atPath: path) else { return }
+        do {
+            try FileManager.default.removeItem(atPath: path)
+            IOSAvailability.logDebug("retired the legacy exit_pin digest after a Core verification")
+        } catch {
+            IOSAvailability.logDebug("could not retire the legacy exit_pin digest")
+        }
     }
 
     private static func sha256Hex(_ s: String) -> String {

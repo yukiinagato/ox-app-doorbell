@@ -40,8 +40,24 @@ final class IncomingViewController: UIViewController {
     private let replyStack = UIStackView()
     private let answerButton = UIButton(type: .system)
     private let monitorButton = UIButton(type: .system)
+    private let micButton = UIButton(type: .system)
     private let unlockButton = UIButton(type: .system)
     private let ignoreButton = UIButton(type: .system)
+    private let quickReplyButton = UIButton(type: .system)
+    private lazy var noticeChip = NoticeChipView(texts: texts)
+    private lazy var adminQr = AdminQrView(core: core, boot: boot, texts: texts, compact: true)
+    private let purposeSlot = UIView()
+    private let debugLine = UILabel()
+    private var debugTimer: Timer?
+    private var micMuted = false
+    private var debugCollapsed = false
+    private var monitorOn = false
+    private var replyExpanded = false
+    private var videoAspect: NSLayoutConstraint?
+    private var palette = DoorbellPalette.dark
+    private var displayDoc: [String: Any]?
+
+    private static let debugHiddenKey = "incoming.debug_line_hidden"
 
     private static let autoCloseS: TimeInterval = 30
     private static let cancelledCloseS: TimeInterval = 15
@@ -89,6 +105,9 @@ final class IncomingViewController: UIViewController {
         core.addHandler(IncomingViewController.handlerKey) { [weak self] ev in
             self?.onUiEvent(ev)
         }
+        debugTimer = IOSAvailability.scheduledTimer(withTimeInterval: 1, repeats: true) {
+            [weak self] _ in self?.refreshDebugLine()
+        }
         restartAutoClose()
     }
 
@@ -101,6 +120,8 @@ final class IncomingViewController: UIViewController {
     override func viewDidDisappear(_ animated: Bool) {
         super.viewDidDisappear(animated)
         core.removeHandler(IncomingViewController.handlerKey)
+        debugTimer?.invalidate()
+        debugTimer = nil
         autoCloseTimer?.invalidate()
         answerDelayTimer?.invalidate()
         videoPlayer?.stop()
@@ -220,13 +241,31 @@ final class IncomingViewController: UIViewController {
         titleLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         purposeBadge.setContentCompressionResistancePriority(.required, for: .horizontal)
         langBadge.setContentCompressionResistancePriority(.required, for: .horizontal)
-        let badgeRow = UIStackView(arrangedSubviews: [titleLabel, purposeBadge, langBadge,
-                                                      UIView()])
+
+        // The announcement is a compact chip, not a bar: a dot marks an active announcement and a
+        // tap opens the same dialog the dashboard uses, with this door already selected.
+        noticeChip.onTap = { [weak self] in self?.openNoticeDialog() }
+
+        let badgeRow = UIStackView(arrangedSubviews: [titleLabel, langBadge, UIView(),
+                                                      noticeChip])
         badgeRow.axis = .horizontal
         badgeRow.spacing = 12
         badgeRow.alignment = .center
         badgeRow.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(badgeRow)
+
+        // The purpose the visitor chose keeps its own slot under the door name. The slot holds its
+        // height even when it is empty, so a purpose arriving after the ring never shifts the
+        // layout under the user's finger.
+        purposeBadge.translatesAutoresizingMaskIntoConstraints = false
+        purposeSlot.translatesAutoresizingMaskIntoConstraints = false
+        purposeSlot.addSubview(purposeBadge)
+        NSLayoutConstraint.activate([
+            purposeSlot.heightAnchor.constraint(equalToConstant: 40),
+            purposeBadge.leadingAnchor.constraint(equalTo: purposeSlot.leadingAnchor),
+            purposeBadge.centerYAnchor.constraint(equalTo: purposeSlot.centerYAnchor),
+            purposeBadge.trailingAnchor.constraint(lessThanOrEqualTo: purposeSlot.trailingAnchor),
+        ])
 
         statusLabel.font = .systemFont(ofSize: 20)
         statusLabel.textColor = UIColor(white: 1, alpha: 0.7)
@@ -240,31 +279,62 @@ final class IncomingViewController: UIViewController {
 
         styleActionButton(answerButton, prominent: true)
         styleActionButton(monitorButton, prominent: false)
+        styleActionButton(micButton, prominent: false)
         styleActionButton(unlockButton, prominent: false)
         styleActionButton(ignoreButton, prominent: false)
+        styleActionButton(quickReplyButton, prominent: false)
         answerButton.addTarget(self, action: #selector(onAnswer), for: .primaryActionTriggered)
         monitorButton.addTarget(self, action: #selector(onMonitor), for: .primaryActionTriggered)
+        micButton.addTarget(self, action: #selector(onMic), for: .primaryActionTriggered)
         unlockButton.addTarget(self, action: #selector(onUnlock), for: .primaryActionTriggered)
         ignoreButton.addTarget(self, action: #selector(onIgnore), for: .primaryActionTriggered)
-        unlockButton.isHidden = true
+        quickReplyButton.addTarget(self, action: #selector(onToggleReplies),
+                                   for: .primaryActionTriggered)
+        micButton.accessibilityIdentifier = "incoming_mic"
+        monitorButton.accessibilityIdentifier = "incoming_monitor"
+        unlockButton.accessibilityIdentifier = "incoming_unlock"
+        quickReplyButton.accessibilityIdentifier = "incoming_quick_reply"
         if core.sipBackend != "pjsip" {
             answerButton.isHidden = true
             monitorButton.isHidden = true
+            micButton.isHidden = true
         }
         #if os(tvOS)
         answerButton.isHidden = true
+        micButton.isHidden = true
         unlockButton.isHidden = true
         #endif
-        let actionRow = UIStackView(arrangedSubviews: [answerButton, monitorButton,
-                                                        unlockButton, ignoreButton])
+        // A single control row, as the owner asked: monitor · answer/end · mic · unlock · replies.
+        let actionRow = UIStackView(arrangedSubviews: [monitorButton, answerButton, micButton,
+                                                        unlockButton, quickReplyButton,
+                                                        ignoreButton])
         actionRow.axis = .horizontal
-        actionRow.spacing = 14
+        actionRow.spacing = 10
         actionRow.distribution = .fillEqually
 
-        let rightCol = UIStackView(arrangedSubviews: [statusLabel, replyStack, hintLabel,
-                                                      UIView(), actionRow])
+        replyStack.isHidden = true
+
+        // Muted single line with the player's live counters. It never covers the video, and the
+        // choice to hide it is remembered on this device.
+        debugLine.font = .monospacedDigitSystemFont(ofSize: 11, weight: .regular)
+        debugLine.textColor = UIColor(white: 1, alpha: 0.38)
+        debugLine.numberOfLines = 1
+        debugLine.adjustsFontSizeToFitWidth = true
+        debugLine.minimumScaleFactor = 0.7
+        debugLine.accessibilityIdentifier = "incoming_debug_line"
+        debugLine.isUserInteractionEnabled = true
+        debugLine.addGestureRecognizer(
+            UITapGestureRecognizer(target: self, action: #selector(onToggleDebugLine)))
+        // Collapsed rather than removed: the strip stays in the corner so the counters can be
+        // brought back with the same tap that hid them.
+        debugCollapsed = UserDefaults.standard.bool(forKey: IncomingViewController.debugHiddenKey)
+        debugLine.heightAnchor.constraint(greaterThanOrEqualToConstant: 16).isActive = true
+
+        let rightCol = UIStackView(arrangedSubviews: [purposeSlot, statusLabel, replyStack,
+                                                      hintLabel, UIView(), actionRow, debugLine,
+                                                      adminQr])
         rightCol.axis = .vertical
-        rightCol.spacing = 16
+        rightCol.spacing = 12
         rightCol.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(rightCol)
 
@@ -279,6 +349,7 @@ final class IncomingViewController: UIViewController {
 
             liveView.topAnchor.constraint(equalTo: badgeRow.bottomAnchor, constant: 14),
             liveView.leadingAnchor.constraint(equalTo: g.leadingAnchor, constant: 24),
+            liveView.heightAnchor.constraint(greaterThanOrEqualToConstant: 120),
             h264View.topAnchor.constraint(equalTo: liveView.topAnchor),
             h264View.bottomAnchor.constraint(equalTo: liveView.bottomAnchor),
             h264View.leadingAnchor.constraint(equalTo: liveView.leadingAnchor),
@@ -339,17 +410,76 @@ final class IncomingViewController: UIViewController {
         statusLabel.text = texts.t("reply.choose")
         answerButton.setTitle(inCall ? texts.t("incall.end") : texts.t("ring.answer"),
                               for: .normal)
-        monitorButton.setTitle(texts.t("ring.monitor"), for: .normal)
         unlockButton.setTitle(texts.t("ring.unlock"), for: .normal)
         ignoreButton.setTitle(texts.t("ring.ignore"), for: .normal)
+        quickReplyButton.setTitle(texts.t("ring.quick_reply"), for: .normal)
+        updateToggleTitles()
+        updateUnlockVisibility()
+        updateNoticeChip()
         updateBadges()
         buildReplyButtons()
+    }
+
+    /// Both toggles show their state, so nobody has to guess whether the door can hear the room.
+    private func updateToggleTitles() {
+        monitorButton.setTitle(monitorOn ? texts.t("ring.monitor_on")
+            : texts.t("ring.monitor_off"), for: .normal)
+        micButton.setTitle(micMuted ? texts.t("ring.mic_off") : texts.t("ring.mic_on"),
+                           for: .normal)
+        micButton.isEnabled = inCall
+    }
+
+    /// The unlock control stays, and an administrator decides whether it is offered. When it is
+    /// shown without a configured action, pressing it says so instead of doing nothing.
+    private func updateUnlockVisibility() {
+        #if os(tvOS)
+        unlockButton.isHidden = true
+        #else
+        unlockButton.isHidden = !DoorUnlock.showsButton(status: core.status(), config: cfg,
+                                                        door: door)
+        #endif
+    }
+
+    private func updateNoticeChip() {
+        let notice = DoorbellNotice.effective(status: core.status(), config: cfg, door: door,
+                                              nowMs: DoorbellClock.nowMs(core))
+        displayDoc = core.status()?["display"] as? [String: Any]
+        palette = DoorbellPalette.of(DoorbellTheme.appearance(
+            display: displayDoc, config: cfg, nodeId: nodeId, localTime: core.localTime()))
+        applyPalette()
+        noticeChip.update(active: notice != nil, palette: palette)
+        adminQr.palette = palette
+        adminQr.reload()
+    }
+
+    /// The incoming screen follows the same light/dark appearance as the home screens; only the
+    /// video area stays black, because a picture is what belongs there.
+    private func applyPalette() {
+        view.backgroundColor = palette.background
+        titleLabel.textColor = palette.ink
+        statusLabel.textColor = palette.inkMuted
+        noVideoLabel.textColor = palette.inkMuted
+        debugLine.textColor = palette.inkMuted.withAlphaComponent(0.6)
+        for button in [monitorButton, micButton, unlockButton, quickReplyButton, ignoreButton] {
+            button.setTitleColor(palette.ink, for: .normal)
+            button.backgroundColor = palette.surface
+        }
+        answerButton.setTitleColor(DoorbellTheme.readableInk(on: answerButton.backgroundColor
+            ?? palette.accent), for: .normal)
+    }
+
+    private func openNoticeDialog() {
+        guard presentedViewController == nil else { return }
+        present(NoticeDialogViewController(core: core, texts: texts, httpPort: boot.httpPort,
+                                           lang: boot.uiLang, door: door), animated: true)
     }
 
     private func updateBadges() {
         let entry = purpose.isEmpty ? nil
             : ConfigUtil.dig(cfg, "visit_purposes.\(purpose)") as? [String: Any]
         if purpose.isEmpty {
+            // The slot keeps its height, so a purpose that arrives after the ring does not move
+            // the controls under the user's finger.
             purposeBadge.isHidden = true
         } else {
             let label = ConfigUtil.labelOf(entry, boot.uiLang, purpose)
@@ -370,6 +500,7 @@ final class IncomingViewController: UIViewController {
 
     private func buildReplyButtons() {
         for v in replyStack.arrangedSubviews { v.removeFromSuperview() }
+        defer { replyStack.isHidden = !replyExpanded || replyStack.arrangedSubviews.isEmpty }
         guard !inCall else { return }
         guard let replies = ConfigUtil.dig(cfg, "quick_replies") as? [String: Any],
               !replies.isEmpty else { return }
@@ -396,7 +527,8 @@ final class IncomingViewController: UIViewController {
 
     private func applySemanticStyles() {
         styleApplier.apply(config: cfg, nodeId: nodeId, semanticId: "ring.title", to: titleLabel)
-        for button in [answerButton, monitorButton, unlockButton, ignoreButton] {
+        for button in [answerButton, monitorButton, micButton, unlockButton, quickReplyButton,
+                       ignoreButton] {
             styleApplier.apply(config: cfg, nodeId: nodeId, semanticId: "ring.action", to: button)
         }
         if inCall {
@@ -411,10 +543,24 @@ final class IncomingViewController: UIViewController {
 
     private func startVideo(url: String) {
         videoPlayer?.stop()
-        videoPlayer = AdaptiveH264MjpegPlayer(h264Host: h264View, mjpegView: liveView,
-                                              noVideoLabel: noVideoLabel)
-        videoPlayer?.start(h264URLString: incomingStreamMp4Url, mjpegURL: url,
-                           h264Enabled: !safeMode)
+        let player = AdaptiveH264MjpegPlayer(h264Host: h264View, mjpegView: liveView,
+                                             noVideoLabel: noVideoLabel)
+        player.onVideoSize = { [weak self] size in self?.applyVideoAspect(size) }
+        videoPlayer = player
+        player.start(h264URLString: incomingStreamMp4Url, mjpegURL: url, h264Enabled: !safeMode)
+    }
+
+    /// The video box takes the door camera's own aspect, so a portrait stream is shown portrait
+    /// and is never cropped or stretched to fit a landscape frame.
+    private func applyVideoAspect(_ size: CGSize) {
+        guard size.width > 0, size.height > 0 else { return }
+        if let existing = videoAspect { existing.isActive = false }
+        let constraint = liveView.heightAnchor.constraint(equalTo: liveView.widthAnchor,
+                                                          multiplier: size.height / size.width)
+        constraint.priority = UILayoutPriority(999)
+        constraint.isActive = true
+        videoAspect = constraint
+        view.setNeedsLayout()
     }
 
 
@@ -438,8 +584,9 @@ final class IncomingViewController: UIViewController {
         lifecycleEnded = true
         inCall = false
         sipMode = ""
+        monitorOn = false
         answerButton.isEnabled = false
-        unlockButton.isHidden = true
+        updateUnlockVisibility()
         hintLabel.isHidden = true
         core.sipHangup()
     }
@@ -458,6 +605,7 @@ final class IncomingViewController: UIViewController {
         answerButton.isEnabled = false
         autoCloseTimer?.invalidate()
         if sipMode == "monitor" {
+            monitorOn = false
             core.sipHangup()
             answerDelayTimer?.invalidate()
             answerDelayTimer = IOSAvailability.scheduledTimer(withTimeInterval: 0.4,
@@ -476,24 +624,75 @@ final class IncomingViewController: UIViewController {
         core.sipCall(target: "sip:\(host):\(directPort)", mode: "answer")
     }
 
+    /// Monitoring is a stateful toggle: pressing it again stops playing the door's audio.
     @objc private func onMonitor() {
-        guard let host = peerHost, sipMode.isEmpty else { return }
+        guard let host = peerHost else { return }
+        if monitorOn && sipMode == "monitor" {
+            core.sipHangup()
+            sipMode = ""
+            monitorOn = false
+            hintLabel.isHidden = true
+            updateToggleTitles()
+            return
+        }
+        guard sipMode.isEmpty else { return }
         sipMode = "monitor"
+        monitorOn = true
         core.sipCall(target: "sip:\(host):\(directPort)", mode: "monitor")
         hintLabel.text = texts.t("ring.monitoring")
         hintLabel.isHidden = false
-        #if os(iOS)
-        unlockButton.isHidden = false
-        #endif
+        updateToggleTitles()
     }
 
     @objc private func onIgnore() { close() }
 
-    @objc private func onUnlock() {
-        if core.sipSendDtmf("*1") {
-            hintLabel.text = texts.t("ring.unlock_sent")
+    /// Microphone mute during an established dialog. Core does not publish the entry point yet;
+    /// until it does, the control says so rather than pretending to have muted anything.
+    @objc private func onMic() {
+        guard inCall else { return }
+        guard core.supportsMicMute else {
+            hintLabel.text = texts.t("ring.mic_unavailable")
             hintLabel.isHidden = false
+            return
         }
+        let target = !micMuted
+        guard core.setMicMuted(target) else {
+            hintLabel.text = texts.t("ring.mic_unavailable")
+            hintLabel.isHidden = false
+            return
+        }
+        micMuted = target
+        updateToggleTitles()
+    }
+
+    @objc private func onToggleReplies() {
+        replyExpanded.toggle()
+        replyStack.isHidden = !replyExpanded || replyStack.arrangedSubviews.isEmpty
+    }
+
+    /// The debug line is opt-in and the choice is remembered on this device.
+    @objc private func onToggleDebugLine() {
+        debugCollapsed.toggle()
+        UserDefaults.standard.set(debugCollapsed, forKey: IncomingViewController.debugHiddenKey)
+        refreshDebugLine()
+    }
+
+    private func refreshDebugLine() {
+        guard !debugCollapsed, let stats = videoPlayer?.statsSnapshot() else {
+            debugLine.text = ""
+            return
+        }
+        debugLine.text = "\(stats.codec) · \(stats.latencyMs) ms · ±\(stats.jitterMs) ms"
+            + " · \(stats.fps) fps · drop \(stats.dropped)"
+    }
+
+    /// The existing open-door action. Core answers -3 when nothing is configured anywhere, which
+    /// is the case the owner asked to be explained rather than silently ignored.
+    @objc private func onUnlock() {
+        let result = core.openDoor(door)
+        hintLabel.text = result == 0 ? texts.t("ring.unlock_sent")
+            : texts.t("door.unlock_not_configured")
+        hintLabel.isHidden = false
     }
 
     @objc private func onReply(_ sender: UIButton) {
@@ -519,9 +718,11 @@ final class IncomingViewController: UIViewController {
                 if revisionLifecycle.consumeSupersededIdle() {
                     inCall = false
                     sipMode = ""
+                    monitorOn = false
                     answerButton.isEnabled = peerHost != nil
                     answerButton.setTitle(texts.t("ring.answer"), for: .normal)
-                    unlockButton.isHidden = true
+                    updateToggleTitles()
+                    updateUnlockVisibility()
                     statusLabel.text = texts.t("reply.choose")
                     restartAutoClose()
                     return
@@ -582,6 +783,10 @@ final class IncomingViewController: UIViewController {
                 updateBadges()
                 buildReplyButtons()
             }
+        case "notice_changed", "config_changed", "display":
+            cfg = core.config()
+            updateNoticeChip()
+            updateUnlockVisibility()
         case "emergency":
             // Yield only to a rule-selected visual in-app alert. A system-notification-only SOS
             // must not disrupt an active incoming-call screen.
@@ -596,6 +801,9 @@ final class IncomingViewController: UIViewController {
     private func onSipInCall(_ ev: [String: Any]) {
         guard sipMode == "answer" else { return }
         inCall = true
+        monitorOn = false
+        micMuted = false
+        updateToggleTitles()
         buildReplyButtons()
         if !lifecycleAnswered {
             lifecycleAnswered = core.reportCallAnswered(door: door, callId: callId,
@@ -604,7 +812,7 @@ final class IncomingViewController: UIViewController {
         autoCloseTimer?.invalidate()
         answerButton.isEnabled = true
         answerButton.setTitle(texts.t("incall.end"), for: .normal)
-        unlockButton.isHidden = false
+        updateUnlockVisibility()
         statusLabel.text = texts.t("incall.title")
         hintLabel.isHidden = true
         let stream = ConfigUtil.evStr(ev, "peer_stream")

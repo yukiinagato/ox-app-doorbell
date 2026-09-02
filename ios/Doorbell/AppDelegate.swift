@@ -2,10 +2,6 @@ import AVFoundation
 import UIKit
 import UserNotifications
 
-extension Notification.Name {
-    static let doorbellResetLocalPairing = Notification.Name("doorbell.resetLocalPairing")
-}
-
 // Multicast discovery on recent iOS requires an entitlement, so managed deployments provide at
 // least one seed_peers entry in boot.json and let Core gossip discover the remaining LAN nodes.
 @UIApplicationMain
@@ -116,6 +112,7 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
 
         win.onControlTap = { [weak self] control in
             guard control.accessibilityIdentifier != "call_primary" else { return }
+            self?.applyEffectVolumes()
             self?.effects.playConfigured(self?.soundValue("button_sound", "button_click") ?? "")
         }
         let main = MainViewController(core: core, boot: boot, runtime: runtime)
@@ -123,6 +120,7 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         win.rootViewController = main
         win.makeKeyAndVisible()
 
+        applyEffectVolumes()
         launchAudio.playConfigured(soundValue("launch_sound", "title_display"))
 
         pairingTexts.setLang(boot.uiLang)
@@ -205,13 +203,16 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         if eventKind == "event", boot.role != "door_station",
            type == "call_cancelled" || type == "call_answered" ||
            type == "call_ended" || type == "purpose_selected" {
+            applyEffectVolumes()
             effects.playConfigured(soundValue("update_sound", "indoor_update"))
         }
         if eventKind == "config_changed" {
             soundConfig = core.config()
         }
         if eventKind == "emergency" {
-            emergencyNotifications.handle(ev) { [weak self] report in
+            let sosVolume = ConfigUtil.int(core.audioVolumes(), "sos",
+                                           ConfigUtil.int(ev, "alarm_volume", 100))
+            emergencyNotifications.handle(ev, sosVolume: sosVolume) { [weak self] report in
                 self?.runtime?.recordDeviceAlert(report)
             }
         }
@@ -319,6 +320,14 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         }
         win.rootViewController = setup
         win.makeKeyAndVisible()
+    }
+
+    /// UI and startup sounds follow the "everyday" level; the ring follows the call level. Core
+    /// resolves the device override and the cluster default, so the shell only applies the number.
+    private func applyEffectVolumes() {
+        guard let volumes = core.audioVolumes() else { return }
+        effects.volume = ConfigUtil.int(volumes, "idle", 60)
+        launchAudio.volume = ConfigUtil.int(volumes, "idle", 60)
     }
 
     private func soundValue(_ key: String, _ fallback: String) -> String {
@@ -484,7 +493,10 @@ private final class EmergencySystemNotifier {
         }
     }
 
-    func handle(_ event: [String: Any], report: @escaping ([String: Any]) -> Void) {
+    /// `sosVolume` is the device's effective SOS level, resolved by Core; the notifier only
+    /// decides whether a sound accompanies the alert.
+    func handle(_ event: [String: Any], sosVolume: Int,
+                report: @escaping ([String: Any]) -> Void) {
         generation += 1
         let currentGeneration = generation
         expiryWork?.cancel()
@@ -495,7 +507,7 @@ private final class EmergencySystemNotifier {
         let visual = event["visual"] == nil ? true : ConfigUtil.evBool(event, "visual")
         let sticky = event["sticky"] == nil ? active : ConfigUtil.evBool(event, "sticky")
         let ttl = max(0, ConfigUtil.double(event, "ttl_s", active ? 0 : 10))
-        let volume = min(100, max(0, ConfigUtil.int(event, "alarm_volume", 100)))
+        let volume = min(100, max(0, sosVolume))
         let requestedSound = !ConfigUtil.evStr(event, "alarm_sound").isEmpty ||
             !ConfigUtil.evStr(event, "audio_path").isEmpty
         let soundEnabled = volume > 0 && requestedSound

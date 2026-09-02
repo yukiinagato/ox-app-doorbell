@@ -372,7 +372,10 @@
   <data name="day_wed" xml:space="preserve"><value>水</value></data>
   <data name="degraded_notified" xml:space="preserve"><value>呼び出し済み・応答をお待ちください</value></data>
   <data name="door_hint_call" xml:space="preserve"><value>ボタンを押すと住人を呼び出します</value></data>
-  <data name="door_lang_switch" xml:space="preserve"><value>言語</value></data>
+  <data name="door_lang_switch" xml:space="preserve"><value>表示言語</value></data>
+  <data name="door_notice_for_this" xml:space="preserve"><value>この門口機にお知らせ</value></data>
+  <data name="door_unlock_not_configured" xml:space="preserve"><value>開錠の動作が設定されていません</value></data>
+  <data name="door_view" xml:space="preserve"><value>見る</value></data>
   <data name="emergency_active_detail" xml:space="preserve"><value>緊急モードが発報されています</value></data>
   <data name="emergency_button" xml:space="preserve"><value>緊急</value></data>
   <data name="emergency_cancel" xml:space="preserve"><value>解除</value></data>
@@ -390,8 +393,8 @@
   <data name="history_duration" xml:space="preserve"><value>通話 {0}</value></data>
   <data name="history_empty" xml:space="preserve"><value>まだ呼出はありません</value></data>
   <data name="history_filter_all" xml:space="preserve"><value>すべて</value></data>
-  <data name="history_filter_door" xml:space="preserve"><value>{0} のみ</value></data>
-  <data name="history_filter_missed" xml:space="preserve"><value>不在着信のみ</value></data>
+  <data name="history_filter_door" xml:space="preserve"><value>{0}</value></data>
+  <data name="history_filter_missed" xml:space="preserve"><value>不在着信</value></data>
   <data name="history_load_more" xml:space="preserve"><value>さらに読み込む</value></data>
   <data name="history_mark_seen" xml:space="preserve"><value>すべて既読にする</value></data>
   <data name="history_missed_badge" xml:space="preserve"><value>不在着信 {0} 件</value></data>
@@ -400,6 +403,7 @@
   <data name="history_outcome_missed" xml:space="preserve"><value>不在着信</value></data>
   <data name="history_outcome_replied" xml:space="preserve"><value>返信</value></data>
   <data name="history_page_limit" xml:space="preserve"><value>これより前は Web 管理でご覧ください</value></data>
+  <data name="history_see_all" xml:space="preserve"><value>すべて見る</value></data>
   <data name="history_seen_done" xml:space="preserve"><value>既読にしました</value></data>
   <data name="history_title" xml:space="preserve"><value>呼出履歴</value></data>
   <data name="history_today" xml:space="preserve"><value>今日</value></data>
@@ -501,8 +505,8 @@
   <data name="notice_preview" xml:space="preserve"><value>門口での見え方</value></data>
   <data name="notice_publish" xml:space="preserve"><value>表示する</value></data>
   <data name="notice_saved" xml:space="preserve"><value>お知らせを表示しました</value></data>
-  <data name="notice_target" xml:space="preserve"><value>対象</value></data>
-  <data name="notice_target_door" xml:space="preserve"><value>{0}のみ</value></data>
+  <data name="notice_target" xml:space="preserve"><value>表示する場所</value></data>
+  <data name="notice_target_door" xml:space="preserve"><value>{0} のみ</value></data>
   <data name="notice_target_global" xml:space="preserve"><value>全体</value></data>
   <data name="notice_text" xml:space="preserve"><value>本文</value></data>
   <data name="notice_title" xml:space="preserve"><value>お知らせ</value></data>
@@ -524,6 +528,7 @@
   <data name="pair_address_example" xml:space="preserve"><value>例: 10.0.1.5:47172</value></data>
   <data name="pair_address_label" xml:space="preserve"><value>接続先</value></data>
   <data name="pair_clear_confirm" xml:space="preserve"><value>クラスタから離脱し、この端末の設定をすべて消去します。元に戻せません。</value></data>
+  <data name="pair_clear_resets_device" xml:space="preserve"><value>この端末を初期状態に戻して外します</value></data>
   <data name="pair_clear_title" xml:space="preserve"><value>この端末のペアリングを消去</value></data>
   <data name="pair_code_attempts_left" xml:space="preserve"><value>残り {0} 回</value></data>
   <data name="pair_code_expired" xml:space="preserve"><value>期限切れ — 新しいコードを発行</value></data>
@@ -580,6 +585,7 @@
   <data name="pair_panel_title" xml:space="preserve"><value>端末を追加</value></data>
   <data name="pair_persist_error_body" xml:space="preserve"><value>端末の安全な保存領域に書き込めませんでした。空き容量と権限を確認して再試行してください。</value></data>
   <data name="pair_persist_error_title" xml:space="preserve"><value>設定を保存できませんでした</value></data>
+  <data name="pair_pin_unavailable" xml:space="preserve"><value>この版のコアでは PIN を発行できません</value></data>
   <data name="pair_qr_caption" xml:space="preserve"><value>別の端末でこの QR を読み取ると追加できます</value></data>
   <data name="pair_qr_pending" xml:space="preserve"><value>追加用 QR を準備しています…</value></data>
   <data name="pair_retry" xml:space="preserve"><value>再試行</value></data>
@@ -714,6 +720,7 @@
   <data name="ring_lang_badge" xml:space="preserve"><value>訪客言語: {0}</value></data>
   <data name="ring_mic_off" xml:space="preserve"><value>マイク OFF</value></data>
   <data name="ring_mic_on" xml:space="preserve"><value>マイク ON</value></data>
+  <data name="ring_mic_unavailable" xml:space="preserve"><value>この版ではマイクの切り替えができません</value></data>
   <data name="ring_monitor" xml:space="preserve"><value>モニタ</value></data>
   <data name="ring_monitor_off" xml:space="preserve"><value>モニター OFF</value></data>
   <data name="ring_monitor_on" xml:space="preserve"><value>モニター ON</value></data>
@@ -730,21 +737,27 @@
   <data name="ring_unlock_sent" xml:space="preserve"><value>解錠信号を送信しました</value></data>
   <data name="ring_unlock_unconfigured" xml:space="preserve"><value>解錠の動作が設定されていません</value></data>
   <data name="settings_about" xml:space="preserve"><value>本機情報</value></data>
-  <data name="settings_appearance" xml:space="preserve"><value>外観（ライト／ダーク）</value></data>
-  <data name="settings_appearance_dark" xml:space="preserve"><value>暗い</value></data>
-  <data name="settings_appearance_light" xml:space="preserve"><value>明るい</value></data>
+  <data name="settings_appearance" xml:space="preserve"><value>外観</value></data>
+  <data name="settings_appearance_auto_schedule" xml:space="preserve"><value>時刻で切り替える</value></data>
+  <data name="settings_appearance_auto_system" xml:space="preserve"><value>端末の設定に合わせる</value></data>
+  <data name="settings_appearance_dark" xml:space="preserve"><value>ダーク</value></data>
+  <data name="settings_appearance_dark_from" xml:space="preserve"><value>ダークにする時刻</value></data>
+  <data name="settings_appearance_light" xml:space="preserve"><value>ライト</value></data>
+  <data name="settings_appearance_light_from" xml:space="preserve"><value>ライトにする時刻</value></data>
   <data name="settings_appearance_range" xml:space="preserve"><value>ダーク {0} → ライト {1}</value></data>
   <data name="settings_appearance_schedule" xml:space="preserve"><value>時間帯で切り替え</value></data>
   <data name="settings_appearance_system" xml:space="preserve"><value>システムに合わせる</value></data>
   <data name="settings_background_color" xml:space="preserve"><value>背景色</value></data>
   <data name="settings_background_image" xml:space="preserve"><value>背景画像</value></data>
   <data name="settings_background_none" xml:space="preserve"><value>画像を使わない</value></data>
+  <data name="settings_change_password" xml:space="preserve"><value>管理パスワードを変更</value></data>
   <data name="settings_close" xml:space="preserve"><value>閉じる</value></data>
   <data name="settings_cluster" xml:space="preserve"><value>クラスタ</value></data>
+  <data name="settings_cluster_members" xml:space="preserve"><value>参加している機器</value></data>
   <data name="settings_configured" xml:space="preserve"><value>設定済み</value></data>
   <data name="settings_contrast_warning" xml:space="preserve"><value>読みにくい可能性があります ({0}:1)</value></data>
-  <data name="settings_device_door" xml:space="preserve"><value>担当する門口</value></data>
-  <data name="settings_device_name" xml:space="preserve"><value>端末名</value></data>
+  <data name="settings_device_door" xml:space="preserve"><value>担当ドア</value></data>
+  <data name="settings_device_name" xml:space="preserve"><value>名前</value></data>
   <data name="settings_device_role" xml:space="preserve"><value>役割</value></data>
   <data name="settings_door" xml:space="preserve"><value>担当する門口</value></data>
   <data name="settings_doors" xml:space="preserve"><value>門口</value></data>
@@ -757,6 +770,12 @@
   <data name="settings_off" xml:space="preserve"><value>オフ</value></data>
   <data name="settings_offline" xml:space="preserve"><value>設定を変更できません。この端末はまだ準備中です</value></data>
   <data name="settings_on" xml:space="preserve"><value>オン</value></data>
+  <data name="settings_password_changed" xml:space="preserve"><value>管理パスワードを変更しました</value></data>
+  <data name="settings_password_current" xml:space="preserve"><value>今のパスワード</value></data>
+  <data name="settings_password_failed" xml:space="preserve"><value>管理パスワードを変更できませんでした</value></data>
+  <data name="settings_password_new" xml:space="preserve"><value>新しいパスワード</value></data>
+  <data name="settings_password_shared" xml:space="preserve"><value>この端末と Web 管理で同じパスワードを使います</value></data>
+  <data name="settings_purpose_shown" xml:space="preserve"><value>訪客に表示する</value></data>
   <data name="settings_purposes" xml:space="preserve"><value>用件</value></data>
   <data name="settings_quiet_hours" xml:space="preserve"><value>静かな時間帯</value></data>
   <data name="settings_restart_required" xml:space="preserve"><value>役割を変えると再起動が必要です</value></data>
@@ -764,6 +783,8 @@
   <data name="settings_role_door" xml:space="preserve"><value>門口機</value></data>
   <data name="settings_role_indoor" xml:space="preserve"><value>室内機</value></data>
   <data name="settings_role_restart" xml:space="preserve"><value>役割を変えると再起動します</value></data>
+  <data name="settings_role_restart_notice" xml:space="preserve"><value>役割を変えると、アプリを開き直したときに切り替わります</value></data>
+  <data name="settings_rule_enabled" xml:space="preserve"><value>有効</value></data>
   <data name="settings_rules" xml:space="preserve"><value>通知とルール</value></data>
   <data name="settings_rules_count" xml:space="preserve"><value>{0} 件</value></data>
   <data name="settings_save_failed" xml:space="preserve"><value>保存できませんでした</value></data>
@@ -778,21 +799,30 @@
   <data name="settings_section_time" xml:space="preserve"><value>時刻</value></data>
   <data name="settings_section_volume" xml:space="preserve"><value>音量</value></data>
   <data name="settings_section_web" xml:space="preserve"><value>Web 管理を開く</value></data>
+  <data name="settings_telegram" xml:space="preserve"><value>Telegram</value></data>
   <data name="settings_theme_bg" xml:space="preserve"><value>背景色</value></data>
+  <data name="settings_theme_bg_color" xml:space="preserve"><value>背景色</value></data>
+  <data name="settings_theme_bg_image" xml:space="preserve"><value>背景画像</value></data>
   <data name="settings_theme_image" xml:space="preserve"><value>背景画像</value></data>
+  <data name="settings_theme_image_none" xml:space="preserve"><value>画像を使わない</value></data>
   <data name="settings_this_device" xml:space="preserve"><value>この端末</value></data>
   <data name="settings_title" xml:space="preserve"><value>設定</value></data>
   <data name="settings_ui_lang" xml:space="preserve"><value>表示言語</value></data>
   <data name="settings_unlock_button" xml:space="preserve"><value>開錠ボタンを表示</value></data>
+  <data name="settings_unlock_show_button" xml:space="preserve"><value>開錠ボタンを表示する</value></data>
   <data name="settings_value_unset" xml:space="preserve"><value>未設定</value></data>
-  <data name="settings_video_playback" xml:space="preserve"><value>映像の受信方式</value></data>
+  <data name="settings_video_playback" xml:space="preserve"><value>映像の受け取りかた</value></data>
   <data name="settings_video_rotation" xml:space="preserve"><value>映像の向き</value></data>
+  <data name="settings_volume_inherit" xml:space="preserve"><value>クラスタの既定に合わせる</value></data>
   <data name="settings_web_only" xml:space="preserve"><value>Web 管理で設定します</value></data>
   <data name="settings_web_only_labels" xml:space="preserve"><value>文言の書き換え</value></data>
-  <data name="settings_web_only_rule_actions" xml:space="preserve"><value>ルールの動作</value></data>
-  <data name="settings_web_only_secrets" xml:space="preserve"><value>パスワードとトークン</value></data>
+  <data name="settings_web_only_raw_config" xml:space="preserve"><value>設定の書き出しと読み込みは Web 管理から行います</value></data>
+  <data name="settings_web_only_rule_actions" xml:space="preserve"><value>ルールの動作は Web 管理から編集します</value></data>
+  <data name="settings_web_only_secrets" xml:space="preserve"><value>接続の認証情報は各端末の Web 管理で入力します</value></data>
   <data name="settings_web_only_text" xml:space="preserve"><value>文言の書き換えは Web 管理で行います</value></data>
-  <data name="settings_web_only_upload" xml:space="preserve"><value>画像の追加</value></data>
+  <data name="settings_web_only_upload" xml:space="preserve"><value>画像の追加は Web 管理から行います</value></data>
+  <data name="settings_web_only_wording" xml:space="preserve"><value>文言の書き換えは Web 管理から行います</value></data>
+  <data name="settings_web_push" xml:space="preserve"><value>Web Push</value></data>
   <data name="settings_zone_search" xml:space="preserve"><value>タイムゾーンを検索</value></data>
   <data name="setup_confirm_new_cluster" xml:space="preserve"><value>もう一度タップして新規作成（既存クラスタへ参加する場合はキャンセル）</value></data>
   <data name="setup_door" xml:space="preserve"><value>ドア ID</value></data>
@@ -826,6 +856,7 @@ PIN: {1}</value></data>
   <data name="sos_alarm_sound" xml:space="preserve"><value>警報音</value></data>
   <data name="sos_alarm_volume" xml:space="preserve"><value>警報音の音量</value></data>
   <data name="sos_button_on_roles" xml:space="preserve"><value>SOS を表示する端末</value></data>
+  <data name="sos_cancel_countdown" xml:space="preserve"><value>取り消す</value></data>
   <data name="sos_cancel_requires_pin" xml:space="preserve"><value>解除に管理パスワードを求める</value></data>
   <data name="sos_countdown" xml:space="preserve"><value>{0} 秒後に発報します</value></data>
   <data name="sos_countdown_cancel" xml:space="preserve"><value>取り消す</value></data>
@@ -837,6 +868,8 @@ PIN: {1}</value></data>
   <data name="sos_slide_label" xml:space="preserve"><value>スライドで SOS
 {0} 秒後に発報</value></data>
   <data name="sos_slide_sub" xml:space="preserve"><value>{0} 秒後に発報</value></data>
+  <data name="sos_slide_two_line" xml:space="preserve"><value>スライドで SOS
+{0} 秒後に発報</value></data>
   <data name="sos_title" xml:space="preserve"><value>SOS</value></data>
   <data name="sos_trigger_mode" xml:space="preserve"><value>発報のしかた</value></data>
   <data name="sound_button_click" xml:space="preserve"><value>カーソル移動 4（ボタン）</value></data>
@@ -845,6 +878,7 @@ PIN: {1}</value></data>
   <data name="sound_outdoor_call_alert" xml:space="preserve"><value>警告音 1（室外機呼出）</value></data>
   <data name="sound_school_chime" xml:space="preserve"><value>学校のチャイム</value></data>
   <data name="sound_title_display" xml:space="preserve"><value>タイトル表示（起動）</value></data>
+  <data name="theme_contrast_warning" xml:space="preserve"><value>読みにくい可能性があります（{0}:1）</value></data>
   <data name="time_err_bad_reply" xml:space="preserve"><value>サーバーの応答が正しくありません</value></data>
   <data name="time_err_bad_server" xml:space="preserve"><value>サーバーの書き方が正しくありません</value></data>
   <data name="time_err_implausible" xml:space="preserve"><value>測定した時刻が信用できないため使いませんでした</value></data>
@@ -886,13 +920,14 @@ PIN: {1}</value></data>
   <data name="volume_sos" xml:space="preserve"><value>SOS</value></data>
   <data name="volume_title" xml:space="preserve"><value>音量</value></data>
   <data name="web_admin_hint" xml:space="preserve"><value>スマートフォンで QR を読み取るか、ブラウザーにこの URL を入力してください</value></data>
-  <data name="web_admin_leader" xml:space="preserve"><value>リーダーの管理ページ</value></data>
+  <data name="web_admin_leader" xml:space="preserve"><value>リーダー機の管理ページ</value></data>
+  <data name="web_admin_no_address" xml:space="preserve"><value>管理ページのアドレスがありません</value></data>
   <data name="web_admin_none" xml:space="preserve"><value>管理アドレスが見つかりません</value></data>
   <data name="web_admin_open" xml:space="preserve"><value>Web 管理を開く</value></data>
   <data name="web_admin_open_browser" xml:space="preserve"><value>この端末のブラウザーで開く</value></data>
   <data name="web_admin_open_failed" xml:space="preserve"><value>ブラウザーを開けませんでした</value></data>
   <data name="web_admin_other_address" xml:space="preserve"><value>別のアドレス</value></data>
   <data name="web_admin_scan" xml:space="preserve"><value>スマートフォンで読み取ってください</value></data>
-  <data name="web_admin_scan_hint" xml:space="preserve"><value>この QR を読み取ると管理ページが開きます</value></data>
+  <data name="web_admin_scan_hint" xml:space="preserve"><value>スマホでこの QR を読み取ってください</value></data>
   <data name="web_admin_title" xml:space="preserve"><value>Web 管理ページ</value></data>
 </root>

@@ -28,10 +28,7 @@ final class MainViewController: UIViewController {
     private var screensaverOn = false
 
     private var emergencyActive = false
-    private var sosHoldS = 3.0
     private var cancelRequiresPin = true
-    private var sosDownAt = Date.distantPast
-    private var sosHolding = false
 
     private var inCall = false
     private var peerPollBusy = false
@@ -68,7 +65,6 @@ final class MainViewController: UIViewController {
     private var replyTimer: Timer?
     private var pixelShiftTimer: Timer?
     private var saverDriftTimer: Timer?
-    private var sosTimer: Timer?
     private var emergencyPresentationTimer: Timer?
     private var peerPollTimer: Timer?
     private var encoderPollTimer: Timer?
@@ -88,8 +84,11 @@ final class MainViewController: UIViewController {
     private let purposeHint = UILabel()
     private let purposeGrid = UIStackView()
     private let langBar = UIStackView()
-    private let sosButton = UIButton(type: .custom)
-    private let sosProgress = UIProgressView(progressViewStyle: .bar)
+    private lazy var sosSlider = SosSlideControl(texts: texts)
+    private var dashboard: DashboardView?
+    private var visitorScreen: VisitorScreenView?
+    private var palette = DoorbellPalette.dark
+    private var displayDoc: [String: Any]?
     private let callingView = UIView()
     private let pulse = UIView()
     private let callingText = UILabel()
@@ -261,7 +260,7 @@ final class MainViewController: UIViewController {
     /// password so a kiosk visitor cannot open it.
     @objc private func onMembershipTap() {
         guard presentedViewController == nil else { return }
-        let dlg = AdminPinViewController(texts: texts)
+        let dlg = AdminPinViewController(texts: texts, core: core)
         dlg.onUnlocked = { [weak self] in self?.showAddDevicePanel() }
         present(dlg, animated: true)
     }
@@ -306,6 +305,8 @@ final class MainViewController: UIViewController {
     private func buildIdleView() {
         addFull(idleView)
 
+        // The clock and date labels stay the single source the screensaver mirrors, even on the
+        // indoor dashboard where the visible clock belongs to the dashboard itself.
         clockLabel.font = UIFont.monospacedDigitSystemFont(ofSize: 84, weight: .light)
         clockLabel.textColor = MainViewController.fgColor
         clockLabel.textAlignment = .center
@@ -315,13 +316,14 @@ final class MainViewController: UIViewController {
         dateLabel.textAlignment = .center
 
         callButton.titleLabel?.font = .systemFont(ofSize: 34, weight: .bold)
+        callButton.titleLabel?.numberOfLines = 0
+        callButton.titleLabel?.textAlignment = .center
         callButton.setTitleColor(.black, for: .normal)
         callButton.backgroundColor = MainViewController.accentColor
         callButton.layer.cornerRadius = 18
         callButton.accessibilityIdentifier = "call_primary"
         callButton.contentEdgeInsets = UIEdgeInsets(top: 26, left: 60, bottom: 26, right: 60)
         callButton.addTarget(self, action: #selector(onCallClick), for: .touchUpInside)
-        callButton.isHidden = boot.role != "door_station"
 
         monitorButton.titleLabel?.font = .systemFont(ofSize: 24, weight: .semibold)
         monitorButton.setTitleColor(MainViewController.fgColor, for: .normal)
@@ -329,12 +331,10 @@ final class MainViewController: UIViewController {
         monitorButton.layer.cornerRadius = 14
         monitorButton.contentEdgeInsets = UIEdgeInsets(top: 16, left: 36, bottom: 16, right: 36)
         monitorButton.addTarget(self, action: #selector(onMonitorOpen), for: .touchUpInside)
-        monitorButton.isHidden = boot.role == "door_station"
 
         touchHint.font = .systemFont(ofSize: 20)
         touchHint.textColor = MainViewController.dimColor
         touchHint.textAlignment = .center
-        touchHint.isHidden = boot.role != "door_station"
 
         purposeHint.font = .systemFont(ofSize: 20)
         purposeHint.textColor = MainViewController.dimColor
@@ -352,84 +352,56 @@ final class MainViewController: UIViewController {
         langBar.spacing = 12
         langBar.alignment = .center
 
-        let stack = UIStackView(arrangedSubviews: [clockLabel, dateLabel, callButton, touchHint,
-                                                   monitorButton,
-                                                   purposeSection, langBar])
-        stack.axis = .vertical
-        stack.spacing = 20
-        stack.alignment = .center
-        IOSAvailability.setCustomSpacing(6, after: clockLabel, in: stack)
-        IOSAvailability.setCustomSpacing(34, after: dateLabel, in: stack)
-        stack.translatesAutoresizingMaskIntoConstraints = false
-        idleView.addSubview(stack)
-        NSLayoutConstraint.activate([
-            stack.centerXAnchor.constraint(equalTo: idleView.centerXAnchor),
-            stack.centerYAnchor.constraint(equalTo: idleView.centerYAnchor),
-        ])
+        sosSlider.accessibilityIdentifier = "sos_slider"
+        sosSlider.onTriggered = { [weak self] in self?.triggerEmergency() }
 
         nodeInfo.font = .systemFont(ofSize: 14)
         nodeInfo.textColor = UIColor(white: 1, alpha: 0.35)
-        nodeInfo.translatesAutoresizingMaskIntoConstraints = false
-        idleView.addSubview(nodeInfo)
-
-        // The membership status is the visible, documented way into the Add-device panel; the
-        // seven-tap corner stays only as a diagnostics shortcut.
         membershipLabel.font = .systemFont(ofSize: 15, weight: .semibold)
         membershipLabel.textColor = UIColor(white: 1, alpha: 0.62)
-        membershipLabel.isUserInteractionEnabled = true
         membershipLabel.accessibilityIdentifier = "membership_status"
-        membershipLabel.translatesAutoresizingMaskIntoConstraints = false
-        membershipLabel.addGestureRecognizer(
-            UITapGestureRecognizer(target: self, action: #selector(onMembershipTap)))
-        idleView.addSubview(membershipLabel)
-
-        let appVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "-"
-        let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "-"
-        appVersionLabel.text = "APP v\(appVersion) (\(build))\nCore v…"
         appVersionLabel.font = .monospacedDigitSystemFont(ofSize: 13, weight: .medium)
-        appVersionLabel.textColor = UIColor(white: 1, alpha: 0.78)
-        appVersionLabel.backgroundColor = UIColor(white: 0, alpha: 0.28)
-        appVersionLabel.layer.cornerRadius = 4
-        appVersionLabel.clipsToBounds = true
-        appVersionLabel.textAlignment = .left
         appVersionLabel.numberOfLines = 2
-        appVersionLabel.accessibilityIdentifier = "app_version"
-        appVersionLabel.translatesAutoresizingMaskIntoConstraints = false
-        idleView.addSubview(appVersionLabel)
 
-        sosButton.setTitle("SOS", for: .normal)
-        sosButton.titleLabel?.font = .systemFont(ofSize: 24, weight: .heavy)
-        sosButton.setTitleColor(.white, for: .normal)
-        sosButton.backgroundColor = UIColor(red: 0.78, green: 0.16, blue: 0.12, alpha: 1)
-        sosButton.layer.cornerRadius = 14
-        sosButton.contentEdgeInsets = UIEdgeInsets(top: 18, left: 30, bottom: 18, right: 30)
-        sosButton.translatesAutoresizingMaskIntoConstraints = false
-        let hold = UILongPressGestureRecognizer(target: self, action: #selector(onSosHold(_:)))
-        hold.minimumPressDuration = 0.05
-        sosButton.addGestureRecognizer(hold)
-        idleView.addSubview(sosButton)
-
-        sosProgress.progressTintColor = .white
-        sosProgress.trackTintColor = UIColor(white: 1, alpha: 0.25)
-        sosProgress.translatesAutoresizingMaskIntoConstraints = false
-        idleView.addSubview(sosProgress)
-
+        let content: UIView
+        if boot.role == "door_station" {
+            let screen = VisitorScreenView(texts: texts, callButton: callButton, langBar: langBar,
+                                           purposeSection: purposeSection, sosControl: sosSlider)
+            visitorScreen = screen
+            content = screen
+        } else {
+            let board = DashboardView(core: core, boot: boot, texts: texts,
+                                      sosControl: sosSlider)
+            board.onOpenAdmin = { [weak self] in self?.onAdminEntry() }
+            board.onOpenHistory = { [weak self] in self?.openCallHistory() }
+            board.onOpenDoor = { [weak self] _ in self?.onMonitorOpen() }
+            board.onOpenNotice = { [weak self] door in self?.openNoticeDialog(door: door) }
+            dashboard = board
+            content = board
+        }
+        content.translatesAutoresizingMaskIntoConstraints = false
+        idleView.addSubview(content)
         let g = IOSAvailability.safeAreaLayoutGuide(for: view)
         NSLayoutConstraint.activate([
-            membershipLabel.leadingAnchor.constraint(equalTo: g.leadingAnchor, constant: 16),
-            membershipLabel.bottomAnchor.constraint(equalTo: nodeInfo.topAnchor, constant: -4),
-            membershipLabel.trailingAnchor.constraint(lessThanOrEqualTo: g.trailingAnchor,
-                                                      constant: -16),
-            nodeInfo.leadingAnchor.constraint(equalTo: g.leadingAnchor, constant: 16),
-            nodeInfo.bottomAnchor.constraint(equalTo: appVersionLabel.topAnchor, constant: -4),
-            appVersionLabel.leadingAnchor.constraint(equalTo: g.leadingAnchor, constant: 16),
-            appVersionLabel.bottomAnchor.constraint(equalTo: g.bottomAnchor, constant: -8),
-            sosButton.trailingAnchor.constraint(equalTo: g.trailingAnchor, constant: -20),
-            sosButton.bottomAnchor.constraint(equalTo: g.bottomAnchor, constant: -20),
-            sosProgress.leadingAnchor.constraint(equalTo: sosButton.leadingAnchor),
-            sosProgress.trailingAnchor.constraint(equalTo: sosButton.trailingAnchor),
-            sosProgress.bottomAnchor.constraint(equalTo: sosButton.topAnchor, constant: -6),
+            content.topAnchor.constraint(equalTo: g.topAnchor, constant: 14),
+            content.bottomAnchor.constraint(equalTo: g.bottomAnchor, constant: -12),
+            content.leadingAnchor.constraint(equalTo: g.leadingAnchor, constant: 20),
+            content.trailingAnchor.constraint(equalTo: g.trailingAnchor, constant: -20),
         ])
+        applyIdleLayout(for: view.bounds.size)
+    }
+
+    /// Both home screens are laid out from the size they are about to have, so a rotation or a
+    /// split-screen resize re-flows instead of keeping a layout that only suits one orientation.
+    private func applyIdleLayout(for size: CGSize) {
+        dashboard?.applyLayout(for: size)
+        visitorScreen?.applyLayout(for: size)
+    }
+
+    override func viewWillTransition(to size: CGSize,
+                                     with coordinator: UIViewControllerTransitionCoordinator) {
+        super.viewWillTransition(to: size, with: coordinator)
+        applyIdleLayout(for: size)
     }
 
     private func buildCallingView() {
@@ -618,8 +590,8 @@ final class MainViewController: UIViewController {
         replyCaption.text = texts.t("reply.banner")
         offlineTitle.text = texts.t("offline.title")
         offlineBody.text = texts.t("offline.body")
-        sosButton.setTitle(texts.t("emergency.button"), for: .normal)
-        sosButton.accessibilityHint = texts.t("emergency.hold_hint", "\(sosHoldS)")
+        sosSlider.refreshStrings()
+        visitorScreen?.updateHint(texts.t("door.hint_call"))
         inCallTitle.text = texts.t("incall.title")
         endCallButton.setTitle(texts.t("incall.end"), for: .normal)
         emergencyTitle.text = texts.t("emergency.title")
@@ -645,15 +617,14 @@ final class MainViewController: UIViewController {
         }
     }
 
+    /// Every clock is rendered from Core's zone-corrected reading, so a device whose own clock is
+    /// wrong — or that sits in another zone — still shows the household's time.
     private func updateClock() {
-        let now = Date()
-        let cal = Calendar(identifier: .gregorian)
-        let c = cal.dateComponents([.year, .month, .day, .hour, .minute, .second, .weekday], from: now)
-        clockLabel.text = String(format: "%02d:%02d:%02d", c.hour ?? 0, c.minute ?? 0,
-                                 c.second ?? 0)
-        let yobi = ["日", "月", "火", "水", "木", "金", "土"]
-        dateLabel.text = String(format: "%d年%d月%d日 (%@)", c.year ?? 0, c.month ?? 0,
-                                c.day ?? 0, yobi[((c.weekday ?? 1) - 1) % 7])
+        guard let reading = DoorbellClock.read(core) else { return }
+        clockLabel.text = reading.hhmmss
+        dateLabel.text = DoorbellClock.longDate(reading, lang: texts.lang)
+        visitorScreen?.updateClock(reading, lang: texts.lang)
+        dashboard?.updateClock()
         if screensaverOn {
             saverClock.text = clockLabel.text
             saverDate.text = dateLabel.text
@@ -687,17 +658,66 @@ final class MainViewController: UIViewController {
         }
         refreshSosConfig()
         refreshPairingStatus()
-        applyTheme()
         buildPurposeButtons()
         buildLangBar()
         applyStrings()
+        refreshHomeSurfaces()
         applySemanticStyles()
+    }
+
+    /// Recomputes the appearance and hands the current snapshot to whichever home screen this
+    /// device shows. Both are pure renderers: they never read Core state on their own.
+    private func refreshHomeSurfaces() {
+        palette = DoorbellPalette.of(DoorbellTheme.appearance(
+            display: displayDoc, config: cfg, nodeId: nodeId, localTime: core.localTime()))
+        applyTheme()
+        applyVolumes()
+        updateClock()
+        if let dashboard = dashboard {
+            dashboard.reload(config: cfg, palette: palette)
+            dashboard.updateMembership(membershipLabel.text ?? "", hidden: membershipLabel.isHidden)
+        }
+        if let visitor = visitorScreen {
+            let notice = DoorbellNotice.effective(status: core.status(), config: cfg,
+                                                  door: boot.door,
+                                                  nowMs: DoorbellClock.nowMs(core))
+            visitor.updateNotice(notice)
+            visitor.updateHint(texts.t("door.hint_call"))
+            let power = (core.status()?["self"] as? [String: Any])?["power"] as? [String: Any]
+            let label = doorLabel(boot.door)
+            visitor.updateFooter(DoorbellTheme.versionLine(
+                name: label.isEmpty ? boot.name : label,
+                coreVersion: DoorbellTheme.coreVersion(), texts: texts, power: power))
+            visitor.applyTheme(palette: palette, display: displayDoc,
+                               effectiveBackground: effectiveThemeBackground())
+        }
+    }
+
+    /// The background a text region actually sits on: the theme image's average colour when one is
+    /// displayed, the theme colour otherwise. It is what the automatic ink rule measures.
+    private func effectiveThemeBackground() -> UIColor {
+        // Core measures the served theme, image included, so every shell agrees on one answer.
+        if let published = DoorbellTheme.publishedBackground(display: displayDoc) {
+            return published
+        }
+        if !themeBg.isHidden, let image = themeBg.image,
+           let average = DoorbellTheme.averageColor(of: image) {
+            return average
+        }
+        return view.backgroundColor ?? palette.background
+    }
+
+    /// Applies the three effective volumes to the players that own each kind of sound.
+    private func applyVolumes() {
+        guard let volumes = core.audioVolumes() else { return }
+        audio.volume = ConfigUtil.int(volumes, "call", 80)
+        callFeedbackAudio.volume = ConfigUtil.int(volumes, "idle", 60)
     }
 
     private func applySemanticStyles() {
         let bindings: [(String, UIView)] = [
             ("call.primary", callButton), ("cancel.call", cancelButton),
-            ("call.end", endCallButton), ("sos.trigger", sosButton),
+            ("call.end", endCallButton), ("sos.trigger", sosSlider),
             ("sos.cancel", emergencyCancel), ("status.offline", offlineTitle),
         ]
         for (id, view) in bindings {
@@ -805,17 +825,22 @@ final class MainViewController: UIViewController {
         return ConfigUtil.str(cfg, "display.theme.\(leaf)")
     }
 
+    /// `display.theme` is the door station's decorative background. An indoor panel follows the
+    /// light/dark appearance instead, so its text tokens and its background always belong to the
+    /// same mode.
     private func applyTheme() {
-        let color = themeValue("bg_color")
-        if color != themeColor {
-            themeColor = color
+        let decorated = boot.role == "door_station"
+        let color = decorated ? themeValue("bg_color") : nil
+        let key = (color ?? "") + "/" + palette.appearance.rawValue
+        if key != themeColor {
+            themeColor = key
             if let c = color, let rgb = ConfigUtil.parseHexColor(c) {
                 view.backgroundColor = UIColor(red: rgb.r, green: rgb.g, blue: rgb.b, alpha: 1)
             } else {
-                view.backgroundColor = MainViewController.bgColor
+                view.backgroundColor = palette.background
             }
         }
-        guard let hash = themeValue("bg_image"), !hash.isEmpty else {
+        guard decorated, let hash = themeValue("bg_image"), !hash.isEmpty else {
             themeHash = nil
             themeBg.image = nil
             themeBg.isHidden = true
@@ -949,6 +974,9 @@ final class MainViewController: UIViewController {
 
 
     private func applyDisplayValues(_ d: [String: Any]) {
+        // Core's display contract carries the resolved appearance and the automatic theme; both
+        // home screens paint from it rather than each deriving its own answer.
+        displayDoc = d
         brightness = ConfigUtil.int(d, "brightness", brightness)
         night = ConfigUtil.evBool(d, "night")
         redTint = ConfigUtil.evBool(d, "red_tint")
@@ -959,8 +987,8 @@ final class MainViewController: UIViewController {
 
     private func applyDisplay() {
         nightTint.isHidden = !(night && redTint)
-        clockLabel.textColor = night ? MainViewController.nightClock : MainViewController.fgColor
-        dateLabel.textColor = night ? MainViewController.nightClock : MainViewController.dimColor
+        clockLabel.textColor = night ? MainViewController.nightClock : palette.ink
+        dateLabel.textColor = night ? MainViewController.nightClock : palette.inkMuted
         saverClock.textColor = night ? MainViewController.nightClock
                                      : MainViewController.saverClockColor
 
@@ -1021,49 +1049,19 @@ final class MainViewController: UIViewController {
         if let roles = ConfigUtil.dig(cfg, "emergency.button_on_roles") as? [Any] {
             show = roles.contains { ($0 as? String) == boot.role }
         }
-        sosButton.isHidden = !show
-        sosProgress.isHidden = !show
-        sosHoldS = ConfigUtil.double(cfg, "emergency.hold_to_trigger_s", 3)
-        if sosHoldS <= 0 { sosHoldS = 3 }
+        sosSlider.isHidden = !show
+        visitorScreen?.setSosVisible(show)
+        // The countdown is a shell state; Core hears about the emergency only when it reaches
+        // zero. `emergency.hold_to_trigger_s` stays in old configurations but no longer drives it.
+        sosSlider.countdownSeconds = max(0, min(10,
+            ConfigUtil.int(cfg, "emergency.trigger.countdown_s", 3)))
+        sosSlider.refreshStrings()
         cancelRequiresPin = ConfigUtil.bool(cfg, "emergency.cancel_requires_pin", true)
     }
 
-    @objc private func onSosHold(_ g: UILongPressGestureRecognizer) {
-        switch g.state {
-        case .began:
-            sosDownAt = Date()
-            sosHolding = true
-            sosProgress.progress = 0
-            sosTimer?.invalidate()
-            sosTimer = IOSAvailability.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] _ in
-                self?.onSosTick()
-            }
-        case .ended, .cancelled, .failed:
-            resetSosHold()
-        default:
-            break
-        }
-    }
-
-    private func onSosTick() {
-        guard sosHolding else {
-            sosTimer?.invalidate()
-            sosTimer = nil
-            return
-        }
-        let held = Date().timeIntervalSince(sosDownAt)
-        sosProgress.progress = Float(min(1, held / sosHoldS))
-        if held >= sosHoldS {
-            resetSosHold()
-            core.emergency(true)
-        }
-    }
-
-    private func resetSosHold() {
-        sosHolding = false
-        sosTimer?.invalidate()
-        sosTimer = nil
-        sosProgress.progress = 0
+    /// Called only once the slide countdown has elapsed.
+    private func triggerEmergency() {
+        core.emergency(true)
     }
 
     private func presentEmergency(_ ev: [String: Any]) {
@@ -1082,7 +1080,10 @@ final class MainViewController: UIViewController {
         showEmergency(visual: visual)
         let sound = ConfigUtil.evStr(ev, "alarm_sound")
         let path = ConfigUtil.evStr(ev, "audio_path")
-        let volume = ConfigUtil.int(ev, "alarm_volume", 100)
+        // The SOS level is one of the three per-device volumes; Core resolves the device
+        // override, the cluster default and the legacy emergency.alarm_volume in that order.
+        let volume = ConfigUtil.int(core.audioVolumes(), "sos",
+                                    ConfigUtil.int(ev, "alarm_volume", 100))
         if volume > 0 && (!sound.isEmpty || !path.isEmpty) {
             audio.startSiren(customPath: path, volume: volume)
         } else {
@@ -1132,7 +1133,7 @@ final class MainViewController: UIViewController {
 
     @objc private func onEmergencyCancel() {
         if cancelRequiresPin {
-            let dlg = AdminPinViewController(texts: texts)
+            let dlg = AdminPinViewController(texts: texts, core: core)
             dlg.onUnlocked = { [weak self] in
                 guard let self = self, self.core.emergency(false) else { return }
                 self.hideEmergency()
@@ -1154,7 +1155,10 @@ final class MainViewController: UIViewController {
         idleView.isHidden = false
         activeCallId = ""
         activeCallExpiresAtMs = 0
-        if let h = hint { touchHint.text = h }
+        if let h = hint {
+            touchHint.text = h
+            visitorScreen?.updateHint(h)
+        }
     }
 
     private func coreExpiryForActiveCall() -> Int64 {
@@ -1276,10 +1280,23 @@ final class MainViewController: UIViewController {
             }
         case "display":
             applyDisplayValues(ev)
+            refreshHomeSurfaces()
         case "emergency":
             presentEmergency(ev)
         case "peers_changed", "config_changed":
             refreshNodeInfo()
+        case "time_changed":
+            // The source or the applied correction moved: redraw every clock at once instead of
+            // waiting for the next tick, and re-evaluate a scheduled light/dark switch.
+            refreshHomeSurfaces()
+        case "power_changed":
+            core.refreshPowerStateCache()
+            refreshHomeSurfaces()
+        case "notice_changed":
+            refreshConfigCache()
+            refreshHomeSurfaces()
+        case "call_log_changed":
+            dashboard?.refreshHistory()
         case "pairing_state", "paired", "device_joined", "pairing_revoked", "pending_changed":
             refreshPairingStatus()
         default:
@@ -1462,6 +1479,37 @@ final class MainViewController: UIViewController {
         present(MonitorViewController(core: core, boot: boot), animated: true)
     }
 
+    /// The visible 管理 entry on an indoor panel. It always asks for the admin password; a door
+    /// station has no visible entry at all and reaches the same screen through the hidden corner.
+    private func onAdminEntry() {
+        guard presentedViewController == nil else { return }
+        let dialog = AdminPinViewController(texts: texts, core: core)
+        dialog.onUnlocked = { [weak self] in self?.showSettings() }
+        present(dialog, animated: true)
+    }
+
+    private func showSettings() {
+        guard presentedViewController == nil else { return }
+        let settings = SettingsViewController(core: core, boot: boot, texts: texts)
+        settings.onOpenAddDevice = { [weak self] in self?.showAddDevicePanel() }
+        settings.onOpenDeviceInfo = { [weak self] in self?.showAdminInfo() }
+        settings.onExitKiosk = { UIApplication.shared.isIdleTimerDisabled = false }
+        present(settings, animated: true)
+    }
+
+    private func openCallHistory() {
+        guard presentedViewController == nil else { return }
+        present(CallHistoryViewController(core: core, texts: texts, lang: texts.lang),
+                animated: true)
+    }
+
+    /// `door` empty opens the dialog with the home-wide target preselected.
+    private func openNoticeDialog(door: String) {
+        guard presentedViewController == nil else { return }
+        present(NoticeDialogViewController(core: core, texts: texts, httpPort: boot.httpPort,
+                                           lang: texts.lang, door: door), animated: true)
+    }
+
     @objc private func onSecretCorner() {
         let now = Date()
         if now.timeIntervalSince(secretFirst) > 5 {
@@ -1471,8 +1519,8 @@ final class MainViewController: UIViewController {
         secretTaps += 1
         guard secretTaps >= 7 else { return }
         secretTaps = 0
-        let dlg = AdminPinViewController(texts: texts)
-        dlg.onUnlocked = { [weak self] in self?.showAdminInfo() }
+        let dlg = AdminPinViewController(texts: texts, core: core)
+        dlg.onUnlocked = { [weak self] in self?.showSettings() }
         present(dlg, animated: true)
     }
 

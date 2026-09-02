@@ -12,6 +12,9 @@ extension Notification.Name {
     static let doorbellPairingChanged = Notification.Name("doorbell.pairingChanged")
     /// Posted by a main screen's banner: reopen the onboarding screen the user deferred.
     static let doorbellOpenPairing = Notification.Name("doorbell.openPairing")
+    /// Posted when this device must return to its first-run state: the cluster key, the pairing
+    /// fields and its own name, role and door are all discarded.
+    static let doorbellResetLocalPairing = Notification.Name("doorbell.resetLocalPairing")
 }
 
 /// Authoritative pairing state. `unknown` means Core has not published a snapshot yet, which is

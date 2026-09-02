@@ -97,6 +97,39 @@
 		F90000000000000000000064 /* AddDeviceViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000027 /* AddDeviceViewController.swift */; };
 		FB0000000000000000000066 /* PairingScannerViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000028 /* PairingScannerViewController.swift */; };
 		F90000000000000000000066 /* PairingScannerViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000028 /* PairingScannerViewController.swift */; };
+		FB0000000000000000000070 /* DoorbellTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000030 /* DoorbellTheme.swift */; };
+		FB0000000000000000000090 /* DoorbellTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000030 /* DoorbellTheme.swift */; };
+		F90000000000000000000070 /* DoorbellTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000030 /* DoorbellTheme.swift */; };
+		FB0000000000000000000071 /* DoorbellClock.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000031 /* DoorbellClock.swift */; };
+		FB0000000000000000000091 /* DoorbellClock.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000031 /* DoorbellClock.swift */; };
+		F90000000000000000000071 /* DoorbellClock.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000031 /* DoorbellClock.swift */; };
+		FB0000000000000000000072 /* ConfigWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000032 /* ConfigWriter.swift */; };
+		FB0000000000000000000092 /* ConfigWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000032 /* ConfigWriter.swift */; };
+		F90000000000000000000072 /* ConfigWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000032 /* ConfigWriter.swift */; };
+		FB0000000000000000000073 /* SosSlideControl.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000033 /* SosSlideControl.swift */; };
+		FB0000000000000000000093 /* SosSlideControl.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000033 /* SosSlideControl.swift */; };
+		F90000000000000000000073 /* SosSlideControl.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000033 /* SosSlideControl.swift */; };
+		FB0000000000000000000074 /* NoticeSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000034 /* NoticeSupport.swift */; };
+		FB0000000000000000000094 /* NoticeSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000034 /* NoticeSupport.swift */; };
+		F90000000000000000000074 /* NoticeSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000034 /* NoticeSupport.swift */; };
+		FB0000000000000000000075 /* CallHistory.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000035 /* CallHistory.swift */; };
+		FB0000000000000000000095 /* CallHistory.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000035 /* CallHistory.swift */; };
+		F90000000000000000000075 /* CallHistory.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000035 /* CallHistory.swift */; };
+		FB0000000000000000000076 /* SettingsForm.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000036 /* SettingsForm.swift */; };
+		FB0000000000000000000096 /* SettingsForm.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000036 /* SettingsForm.swift */; };
+		F90000000000000000000076 /* SettingsForm.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000036 /* SettingsForm.swift */; };
+		FB0000000000000000000077 /* SettingsViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000037 /* SettingsViewController.swift */; };
+		FB0000000000000000000097 /* SettingsViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000037 /* SettingsViewController.swift */; };
+		F90000000000000000000077 /* SettingsViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000037 /* SettingsViewController.swift */; };
+		FB0000000000000000000078 /* AdminQrView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000038 /* AdminQrView.swift */; };
+		FB0000000000000000000098 /* AdminQrView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000038 /* AdminQrView.swift */; };
+		F90000000000000000000078 /* AdminQrView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000038 /* AdminQrView.swift */; };
+		FB0000000000000000000079 /* DashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000039 /* DashboardView.swift */; };
+		FB0000000000000000000099 /* DashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000039 /* DashboardView.swift */; };
+		F90000000000000000000079 /* DashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000039 /* DashboardView.swift */; };
+		FB000000000000000000007A /* VisitorScreenView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA000000000000000000003A /* VisitorScreenView.swift */; };
+		FB000000000000000000009A /* VisitorScreenView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA000000000000000000003A /* VisitorScreenView.swift */; };
+		F9000000000000000000007A /* VisitorScreenView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA000000000000000000003A /* VisitorScreenView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -140,6 +173,17 @@
 		FA0000000000000000000026 /* PairingViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PairingViewController.swift; sourceTree = "<group>"; };
 		FA0000000000000000000027 /* AddDeviceViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddDeviceViewController.swift; sourceTree = "<group>"; };
 		FA0000000000000000000028 /* PairingScannerViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PairingScannerViewController.swift; sourceTree = "<group>"; };
+		FA0000000000000000000030 /* DoorbellTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DoorbellTheme.swift; sourceTree = "<group>"; };
+		FA0000000000000000000031 /* DoorbellClock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DoorbellClock.swift; sourceTree = "<group>"; };
+		FA0000000000000000000032 /* ConfigWriter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigWriter.swift; sourceTree = "<group>"; };
+		FA0000000000000000000033 /* SosSlideControl.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SosSlideControl.swift; sourceTree = "<group>"; };
+		FA0000000000000000000034 /* NoticeSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoticeSupport.swift; sourceTree = "<group>"; };
+		FA0000000000000000000035 /* CallHistory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CallHistory.swift; sourceTree = "<group>"; };
+		FA0000000000000000000036 /* SettingsForm.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsForm.swift; sourceTree = "<group>"; };
+		FA0000000000000000000037 /* SettingsViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsViewController.swift; sourceTree = "<group>"; };
+		FA0000000000000000000038 /* AdminQrView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdminQrView.swift; sourceTree = "<group>"; };
+		FA0000000000000000000039 /* DashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardView.swift; sourceTree = "<group>"; };
+		FA000000000000000000003A /* VisitorScreenView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VisitorScreenView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -183,6 +227,17 @@
 				FA0000000000000000000001 /* BridgingHeader.h */,
 				FA000000000000000000000A /* AppDelegate.swift */,
 				FA000000000000000000000B /* MainViewController.swift */,
+				FA0000000000000000000030 /* DoorbellTheme.swift */,
+				FA0000000000000000000031 /* DoorbellClock.swift */,
+				FA0000000000000000000032 /* ConfigWriter.swift */,
+				FA0000000000000000000033 /* SosSlideControl.swift */,
+				FA0000000000000000000034 /* NoticeSupport.swift */,
+				FA0000000000000000000035 /* CallHistory.swift */,
+				FA0000000000000000000036 /* SettingsForm.swift */,
+				FA0000000000000000000037 /* SettingsViewController.swift */,
+				FA0000000000000000000038 /* AdminQrView.swift */,
+				FA0000000000000000000039 /* DashboardView.swift */,
+				FA000000000000000000003A /* VisitorScreenView.swift */,
 				FA0000000000000000000009 /* IncomingViewController.swift */,
 				FA0000000000000000000022 /* CallRevisionLifecycle.swift */,
 				FA0000000000000000000023 /* DebugInfoViewController.swift */,
@@ -472,6 +527,17 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				FB0000000000000000000070 /* DoorbellTheme.swift in Sources */,
+				FB0000000000000000000071 /* DoorbellClock.swift in Sources */,
+				FB0000000000000000000072 /* ConfigWriter.swift in Sources */,
+				FB0000000000000000000073 /* SosSlideControl.swift in Sources */,
+				FB0000000000000000000074 /* NoticeSupport.swift in Sources */,
+				FB0000000000000000000075 /* CallHistory.swift in Sources */,
+				FB0000000000000000000076 /* SettingsForm.swift in Sources */,
+				FB0000000000000000000077 /* SettingsViewController.swift in Sources */,
+				FB0000000000000000000078 /* AdminQrView.swift in Sources */,
+				FB0000000000000000000079 /* DashboardView.swift in Sources */,
+				FB000000000000000000007A /* VisitorScreenView.swift in Sources */,
 				FB0000000000000000000060 /* PairingSupport.swift in Sources */,
 				FB0000000000000000000062 /* PairingViewController.swift in Sources */,
 				FB0000000000000000000064 /* AddDeviceViewController.swift in Sources */,
@@ -502,6 +568,17 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				FB0000000000000000000090 /* DoorbellTheme.swift in Sources */,
+				FB0000000000000000000091 /* DoorbellClock.swift in Sources */,
+				FB0000000000000000000092 /* ConfigWriter.swift in Sources */,
+				FB0000000000000000000093 /* SosSlideControl.swift in Sources */,
+				FB0000000000000000000094 /* NoticeSupport.swift in Sources */,
+				FB0000000000000000000095 /* CallHistory.swift in Sources */,
+				FB0000000000000000000096 /* SettingsForm.swift in Sources */,
+				FB0000000000000000000097 /* SettingsViewController.swift in Sources */,
+				FB0000000000000000000098 /* AdminQrView.swift in Sources */,
+				FB0000000000000000000099 /* DashboardView.swift in Sources */,
+				FB000000000000000000009A /* VisitorScreenView.swift in Sources */,
 				FB0000000000000000000061 /* PairingSupport.swift in Sources */,
 				FB0000000000000000000063 /* PairingViewController.swift in Sources */,
 				FB0000000000000000000065 /* AddDeviceViewController.swift in Sources */,
@@ -528,6 +605,17 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				F90000000000000000000070 /* DoorbellTheme.swift in Sources */,
+				F90000000000000000000071 /* DoorbellClock.swift in Sources */,
+				F90000000000000000000072 /* ConfigWriter.swift in Sources */,
+				F90000000000000000000073 /* SosSlideControl.swift in Sources */,
+				F90000000000000000000074 /* NoticeSupport.swift in Sources */,
+				F90000000000000000000075 /* CallHistory.swift in Sources */,
+				F90000000000000000000076 /* SettingsForm.swift in Sources */,
+				F90000000000000000000077 /* SettingsViewController.swift in Sources */,
+				F90000000000000000000078 /* AdminQrView.swift in Sources */,
+				F90000000000000000000079 /* DashboardView.swift in Sources */,
+				F9000000000000000000007A /* VisitorScreenView.swift in Sources */,
 				F90000000000000000000060 /* PairingSupport.swift in Sources */,
 				F90000000000000000000062 /* PairingViewController.swift in Sources */,
 				F90000000000000000000064 /* AddDeviceViewController.swift in Sources */,
