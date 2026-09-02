@@ -47,6 +47,7 @@ internal class DashboardView(
     private val missedBadge = ShellUi.pill(activity, "", palette.dangerSoft, palette.dangerInk)
     private lateinit var adminButton: Button
     private lateinit var noticeButton: Button
+    private lateinit var actionRow: LinearLayout
     private lateinit var recentCallsHeading: TextView
     private lateinit var seeAllButton: Button
     private val tileColumn = LinearLayout(activity).apply {
@@ -207,11 +208,12 @@ internal class DashboardView(
         root.addView(footer, ShellUi.matchWrap())
         root.addView(versionText, ShellUi.matchWrap())
 
-        val actions = LinearLayout(activity).apply {
+        actionRow = LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             isBaselineAligned = false
         }
+        val actions = actionRow
         noticeButton = ShellUi.button(
             activity, texts.t("notice.global_button", R.string.notice_global_button), palette,
         ) { openNoticeDialog("") }
@@ -237,9 +239,12 @@ internal class DashboardView(
 
     private fun applyPalette() {
         root.setBackgroundColor(ShellUi.opaque(palette.ground))
-        clockText.setTextColor(ShellUi.opaque(palette.ink))
-        dateText.setTextColor(ShellUi.opaque(palette.muted))
-        versionText.setTextColor(ShellUi.opaque(palette.muted))
+        // The dashboard paints its own opaque ground, so each region's background is a known
+        // colour rather than an image; the same §5 rule still decides the ink, which keeps the
+        // footer and the tile labels readable when an administrator recolours the surfaces.
+        paintRegion(clockText, "clock", palette.ground, muted = false)
+        paintRegion(dateText, "date", palette.ground, muted = true)
+        paintRegion(versionText, "footer", palette.ground, muted = true)
         membershipPill.background = ShellUi.rounded(activity, palette.surfaceAlt, 999, palette.line)
         membershipPill.setTextColor(ShellUi.opaque(palette.muted))
         missedBadge.background = ShellUi.rounded(activity, palette.dangerSoft, 999)
@@ -248,7 +253,7 @@ internal class DashboardView(
         adminButton.setTextColor(ShellUi.opaque(palette.ink))
         noticeButton.background = ShellUi.rounded(activity, palette.surfaceAlt, 10)
         noticeButton.setTextColor(ShellUi.opaque(palette.ink))
-        recentCallsHeading.setTextColor(ShellUi.opaque(palette.muted))
+        paintRegion(recentCallsHeading, "status_line", palette.ground, muted = true)
         seeAllButton.background = ShellUi.rounded(activity, palette.surfaceAlt, 10)
         seeAllButton.setTextColor(ShellUi.opaque(palette.ink))
         sosSlider.applyPalette(palette)
@@ -257,6 +262,24 @@ internal class DashboardView(
         noticeButton.text = texts.t("notice.global_button", R.string.notice_global_button)
         recentCallsHeading.text = texts.t("dash.recent_calls", R.string.dash_recent_calls)
         seeAllButton.text = texts.t("dash.see_all", R.string.dash_see_all)
+    }
+
+    /**
+     * One text region's ink, by the same §5 rule the visitor screen uses: an administrator
+     * override wins, then core's per-region decision, then the local measurement of whatever the
+     * region actually sits on. A region that misses 4.5:1 gets the 40 % opposite-ink shadow.
+     */
+    private fun paintRegion(view: TextView, region: String, backgroundRgb: Int, muted: Boolean) {
+        val result = CoreDisplays.inkFor(coreDisplay.theme, region, backgroundRgb, backgroundRgb)
+        val ink = if (muted) ShellUi.mute(result.inkRgb, palette.dark) else result.inkRgb
+        view.setTextColor(ShellUi.opaque(ink))
+        if (result.needsShadow) {
+            val shadow = ShellUi.opaque(result.shadowRgb) and 0x00ffffff or
+                (RegionInkPolicy.SHADOW_ALPHA shl 24)
+            view.setShadowLayer(activity.resources.displayMetrics.density, 0f, 0f, shadow)
+        } else {
+            view.setShadowLayer(0f, 0f, 0f, 0)
+        }
     }
 
     private fun updateClock(now: ClusterTime) {
@@ -404,8 +427,11 @@ internal class DashboardView(
             isBaselineAligned = false
             setPadding(0, ShellUi.dp(activity, 6), 0, 0)
         }
+        val tileLabel = ShellUi.text(activity, doorLabel(door), 16f, palette.ink, bold = true)
+        // A tile label sits on the card surface, which is a different background from the ground.
+        paintRegion(tileLabel, "tile_label", palette.surface, muted = false)
         caption.addView(
-            ShellUi.text(activity, doorLabel(door), 16f, palette.ink, bold = true),
+            tileLabel,
             LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f),
         )
         caption.addView(ShellUi.text(
@@ -416,6 +442,7 @@ internal class DashboardView(
             ShellUi.text(activity, notice.text, 13f, palette.muted).apply {
                 maxLines = 2
                 ellipsize = android.text.TextUtils.TruncateAt.END
+                paintRegion(this, "notice", palette.surface, muted = true)
             },
             ShellUi.matchWrap(),
         )
@@ -548,6 +575,35 @@ internal class DashboardView(
         }
         tileColumn.layoutParams = tileParams
         callColumn.layoutParams = callParams
+        applyActionLayout(widthDp)
+    }
+
+    /**
+     * On a narrow panel the announcement button and the SOS slider stack instead of halving each
+     * other's width, so neither the two-part slider label nor the button text is clipped.
+     */
+    private fun applyActionLayout(widthDp: Int) {
+        val stacked = VisitorLayout.actionsStacked(widthDp)
+        actionRow.orientation = if (stacked) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL
+        val noticeParams = noticeButton.layoutParams as LinearLayout.LayoutParams
+        val sosParams = sosSlider.layoutParams as LinearLayout.LayoutParams
+        if (stacked) {
+            noticeParams.width = ViewGroup.LayoutParams.MATCH_PARENT
+            noticeParams.weight = 0f
+            sosParams.width = ViewGroup.LayoutParams.MATCH_PARENT
+            sosParams.weight = 0f
+            sosParams.leftMargin = 0
+            sosParams.topMargin = ShellUi.dp(activity, 8)
+        } else {
+            noticeParams.width = 0
+            noticeParams.weight = 1f
+            sosParams.width = 0
+            sosParams.weight = 1f
+            sosParams.leftMargin = ShellUi.dp(activity, 8)
+            sosParams.topMargin = 0
+        }
+        noticeButton.layoutParams = noticeParams
+        sosSlider.layoutParams = sosParams
     }
 
     // ---------- helpers ----------

@@ -218,27 +218,28 @@
             </LinearLayout>
         </LinearLayout>
 
-        <!-- Footer: door label, core and app versions, battery, and the optional SOS slider. -->
+        <!-- Footer: door label, core and app versions, battery, and the optional SOS slider.
+             Stacked by default so a portrait phone never clips the version line behind the
+             slider; VisitorLayout puts them side by side only on a wide landscape window. -->
         <LinearLayout
             android:id="@+id/visitor_footer"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:baselineAligned="false"
-            android:gravity="center_vertical"
-            android:orientation="horizontal"
+            android:orientation="vertical"
             android:paddingTop="6dp">
             <TextView
                 android:id="@+id/node_info"
-                android:layout_width="0dp"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:maxLines="1"
+                android:maxLines="2"
                 android:textColor="@color/dim"
                 android:textSize="12sp"/>
             <FrameLayout
                 android:id="@+id/sos_slot"
-                android:layout_width="wrap_content"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
                 android:minWidth="200dp"/>
         </LinearLayout>
     </LinearLayout>

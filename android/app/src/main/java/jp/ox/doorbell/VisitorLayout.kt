@@ -24,6 +24,19 @@ internal object VisitorLayout {
 
     fun callButtonHeightDp(widthDp: Int): Int = if (widthDp >= TABLET_MIN_DP) 96 else 72
 
+    /**
+     * Whether the footer stacks the version line above the SOS slider.
+     *
+     * They must never overlap or clip each other: the observed failure was the version line cut
+     * off by the slider on a portrait phone. Anything portrait, and anything narrower than a
+     * tablet, stacks; only a genuinely wide landscape window puts them side by side.
+     */
+    fun footerStacked(widthDp: Int, heightDp: Int): Boolean =
+        widthDp < FOOTER_SPLIT_MIN_DP || widthDp <= heightDp
+
+    /** Whether the dashboard's announcement button and SOS slider stack rather than share a row. */
+    fun actionsStacked(widthDp: Int): Boolean = widthDp < FOOTER_SPLIT_MIN_DP
+
     fun hintTextSizeSp(widthDp: Int): Float = if (widthDp >= TABLET_MIN_DP) 20f else 15f
 
     fun clockTextSizeSp(widthDp: Int, heightDp: Int): Float = when {
@@ -113,4 +126,7 @@ internal object VisitorLayout {
     ).apply { gravity = android.view.Gravity.CENTER_HORIZONTAL }
 
     private const val SPLIT_MIN_DP = 600
+
+    /** Below this a row of two controls cannot hold both without clipping one of them. */
+    const val FOOTER_SPLIT_MIN_DP = 600
 }
