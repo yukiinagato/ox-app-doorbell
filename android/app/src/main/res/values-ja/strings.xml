@@ -363,7 +363,10 @@
     <string name="cluster_indoor_panels_a11y">室内機 %1$s/%2$s 台オンライン</string>
     <string name="dash_admin">管理</string>
     <string name="dash_count_cluster">クラスタの機器 %1$s 台</string>
+    <string name="dash_count_devices">クラスタの端末 %1$s 台</string>
+    <string name="dash_count_door_stations">門口機 %1$s/%2$s 台オンライン</string>
     <string name="dash_count_doors">門口機 %1$s/%2$s 台が接続中</string>
+    <string name="dash_count_indoor_panels">室内機 %1$s/%2$s 台オンライン</string>
     <string name="dash_count_panels">室内機 %1$s/%2$s 台が接続中</string>
     <string name="dash_doors">門口機</string>
     <string name="dash_last_answer">最終応答 %1$s</string>

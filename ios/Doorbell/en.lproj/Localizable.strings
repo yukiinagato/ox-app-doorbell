@@ -358,7 +358,10 @@
 "cluster.indoor_panels_a11y" = "%@ of %@ indoor panels online";
 "dash.admin" = "Admin";
 "dash.count_cluster" = "%@ devices in the cluster";
+"dash.count_devices" = "%@ devices in the cluster";
+"dash.count_door_stations" = "%@ of %@ door stations online";
 "dash.count_doors" = "%@ of %@ door stations online";
+"dash.count_indoor_panels" = "%@ of %@ indoor panels online";
 "dash.count_panels" = "%@ of %@ indoor panels online";
 "dash.doors" = "Door stations";
 "dash.last_answer" = "Last answered %@";

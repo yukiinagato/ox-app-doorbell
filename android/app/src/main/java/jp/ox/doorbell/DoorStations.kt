@@ -140,8 +140,29 @@ internal object DoorStations {
         return parts.toString()
     }
 
+    /**
+     * Whether this station has a camera at all.
+     *
+     * A station with `caps.camera` false has nothing to watch, so the dashboard does not give it
+     * a tile: a tile is a picture and a the door action, and both are empty for a doorbell with no
+     * lens. The door stays addressable everywhere else -- the door monitor list, announcements,
+     * unlock -- because it is still a door. Absent caps, or absent camera within them, means an
+     * older peer that never published the capability, and those keep their tile.
+     */
+    fun hasCamera(peer: JSONObject?): Boolean {
+        val caps = peer?.optJSONObject("caps") ?: return true
+        if (!caps.has("camera") || caps.isNull("camera")) return true
+        return caps.optBoolean("camera", true)
+    }
+
+    /** Whether the dashboard should give this door a tile. A door with no station yet keeps one. */
+    fun tileVisible(status: JSONObject?, config: JSONObject?, door: String): Boolean {
+        val peer = peerFor(status, config, door) ?: return true
+        return hasCamera(peer)
+    }
+
     /** A configured role overrides what the peer advertises, exactly as core resolves it. */
-    private fun roleOf(config: JSONObject?, peer: JSONObject): String {
+    internal fun roleOf(config: JSONObject?, peer: JSONObject): String {
         val configured = deviceOf(config, peer)?.optString("role").orEmpty()
         return if (configured.isNotEmpty()) configured else peer.optString("role").orEmpty()
     }

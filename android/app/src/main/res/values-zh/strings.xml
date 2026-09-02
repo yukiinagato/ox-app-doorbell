@@ -363,7 +363,10 @@
     <string name="cluster_indoor_panels_a11y">室内机 %1$s/%2$s 台在线</string>
     <string name="dash_admin">管理</string>
     <string name="dash_count_cluster">集群设备 %1$s 台</string>
+    <string name="dash_count_devices">集群内 %1$s 台设备</string>
+    <string name="dash_count_door_stations">门口机 %1$s/%2$s 台在线</string>
     <string name="dash_count_doors">门口机 %1$s/%2$s 在线</string>
+    <string name="dash_count_indoor_panels">室内机 %1$s/%2$s 台在线</string>
     <string name="dash_count_panels">室内机 %1$s/%2$s 在线</string>
     <string name="dash_doors">门口机</string>
     <string name="dash_last_answer">最后接听 %1$s</string>

@@ -358,7 +358,10 @@
 "cluster.indoor_panels_a11y" = "室内机 %@/%@ 台在线";
 "dash.admin" = "管理";
 "dash.count_cluster" = "集群设备 %@ 台";
+"dash.count_devices" = "集群内 %@ 台设备";
+"dash.count_door_stations" = "门口机 %@/%@ 台在线";
 "dash.count_doors" = "门口机 %@/%@ 在线";
+"dash.count_indoor_panels" = "室内机 %@/%@ 台在线";
 "dash.count_panels" = "室内机 %@/%@ 在线";
 "dash.doors" = "门口机";
 "dash.last_answer" = "最后接听 %@";

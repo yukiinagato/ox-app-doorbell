@@ -1007,6 +1007,9 @@ dash.see_all: { ja: "すべて見る", en: "See all", zh: "查看全部" }
 dash.recent_calls: { ja: "呼出履歴", en: "Recent calls", zh: "呼叫记录" }
 dash.tile_offline: { ja: "オフライン", en: "Offline", zh: "离线" }
 dash.tile_no_station: { ja: "門口機なし", en: "No door station", zh: "无门口机" }
+dash.count_devices: { ja: "クラスタの端末 {n} 台", en: "{n} devices in the cluster", zh: "集群内 {n} 台设备" }
+dash.count_door_stations: { ja: "門口機 {online}/{total} 台オンライン", en: "{online} of {total} door stations online", zh: "门口机 {online}/{total} 台在线" }
+dash.count_indoor_panels: { ja: "室内機 {online}/{total} 台オンライン", en: "{online} of {total} indoor panels online", zh: "室内机 {online}/{total} 台在线" }
 dash.tile_open: { ja: "見る", en: "View", zh: "查看" }
 dash.no_doors: { ja: "門口機がまだ登録されていません", en: "No door station has been added yet", zh: "尚未添加门口机" }
 history.load_more: { ja: "さらに読み込む", en: "Load more", zh: "加载更多" }

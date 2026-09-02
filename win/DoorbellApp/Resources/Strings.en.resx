@@ -365,7 +365,10 @@ Delete it?</value></data>
   <data name="cluster_indoor_panels_a11y" xml:space="preserve"><value>{0} of {1} indoor panels online</value></data>
   <data name="dash_admin" xml:space="preserve"><value>Admin</value></data>
   <data name="dash_count_cluster" xml:space="preserve"><value>{0} devices in the cluster</value></data>
+  <data name="dash_count_devices" xml:space="preserve"><value>{0} devices in the cluster</value></data>
+  <data name="dash_count_door_stations" xml:space="preserve"><value>{0} of {1} door stations online</value></data>
   <data name="dash_count_doors" xml:space="preserve"><value>{0} of {1} door stations online</value></data>
+  <data name="dash_count_indoor_panels" xml:space="preserve"><value>{0} of {1} indoor panels online</value></data>
   <data name="dash_count_panels" xml:space="preserve"><value>{0} of {1} indoor panels online</value></data>
   <data name="dash_doors" xml:space="preserve"><value>Door stations</value></data>
   <data name="dash_last_answer" xml:space="preserve"><value>Last answered {0}</value></data>

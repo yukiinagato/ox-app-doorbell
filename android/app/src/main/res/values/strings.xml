@@ -363,7 +363,10 @@ Delete it?</string>
     <string name="cluster_indoor_panels_a11y">%1$s of %2$s indoor panels online</string>
     <string name="dash_admin">Admin</string>
     <string name="dash_count_cluster">%1$s devices in the cluster</string>
+    <string name="dash_count_devices">%1$s devices in the cluster</string>
+    <string name="dash_count_door_stations">%1$s of %2$s door stations online</string>
     <string name="dash_count_doors">%1$s of %2$s door stations online</string>
+    <string name="dash_count_indoor_panels">%1$s of %2$s indoor panels online</string>
     <string name="dash_count_panels">%1$s of %2$s indoor panels online</string>
     <string name="dash_doors">Door stations</string>
     <string name="dash_last_answer">Last answered %1$s</string>
