@@ -63,6 +63,12 @@ struct VideoTrack::State {
   Bytes frag;
   uint64_t base_dt = 0;
 
+  // Counters for the debug line. They are cumulative for the life of the track and are not
+  // cleared by resetLocked(), so a mid-stream SPS change does not look like a restart.
+  uint64_t frames = 0;
+  uint64_t keyframes = 0;
+  uint64_t dropped_forward = 0;
+
 
   void resetLocked() {
     generation++;
@@ -127,6 +133,8 @@ void VideoTrack::push(const uint8_t* annexb, size_t len, bool key, int64_t ts_ms
   if (sample.data.empty()) return;
   sample.key = sample.key || key;
   sample.ts_ms = ts_ms;
+  s.frames++;
+  if (sample.key) s.keyframes++;
 
   // Ultra-low-latency live mode: publish the current access unit immediately.
   // Its duration is inferred from the previous capture interval. Waiting for
@@ -205,10 +213,25 @@ Bytes VideoTrack::Reader::pull(int timeout_ms, bool* ended) {
     return s.init;
   }
   if (s.frag_seq > last_frag_) {
+    // Only the newest fragment is retained, so a subscriber that fell behind skips the ones in
+    // between. That is the design, and counting the skips is what makes it visible.
+    if (s.frag_seq > last_frag_ + 1) s.dropped_forward += s.frag_seq - last_frag_ - 1;
     last_frag_ = s.frag_seq;
     return s.frag;
   }
   return {};
+}
+
+VideoTrack::Stats VideoTrack::stats() const {
+  std::lock_guard<std::mutex> lk(st_->mu);
+  Stats out;
+  out.frames = st_->frames;
+  out.keyframes = st_->keyframes;
+  out.fragments = st_->frag_seq;
+  out.dropped_forward = st_->dropped_forward;
+  out.frame_interval_ms = st_->frame_dur_ms;
+  out.last_frame_ts_ms = st_->last_ts_ms;
+  return out;
 }
 
 }  // namespace db

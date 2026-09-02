@@ -421,6 +421,18 @@ DB_API int db_core_clear_door_notice(db_core* c, const char* door) {
   return c->node->clearDoorNotice(door) ? 0 : -2;
 }
 
+DB_API int db_core_open_door(db_core* c, const char* door) {
+  if (!c || !c->node || !door || !*door) return -1;
+  // The node reports one failure; separate "unknown door" from "nothing configured" here so the
+  // shell can tell the visitor-facing message from the administrator-facing one.
+  auto status = json::parse(c->node->statusJson());
+  const cJSON* entry =
+      status ? json::get(json::get(status.get(), "doors"), door) : nullptr;
+  if (!cJSON_IsObject(entry)) return -2;
+  if (!json::getBool(json::get(entry, "unlock"), "configured", false)) return -3;
+  return c->node->openDoor(door) ? 0 : -3;
+}
+
 DB_API void db_core_set_capabilities_json(db_core* c, const char* capabilities_json) {
   if (c && c->node && capabilities_json)
     c->node->setRuntimeCapabilities(capabilities_json);
@@ -451,6 +463,11 @@ DB_API void db_core_join_cluster(db_core* c, const char* host, const char* pin) 
 
 DB_API void db_core_pairing_mode(db_core* c, int seconds) {
   if (c && c->node) c->node->setPairingMode(seconds);
+}
+
+DB_API char* db_core_mint_join_token_json(db_core* c, int seconds) {
+  if (!c || !c->node) return nullptr;
+  return dupString(c->node->mintJoinTokenJson(seconds));
 }
 
 DB_API char* db_core_start_pairing_json(db_core* c, int seconds) {

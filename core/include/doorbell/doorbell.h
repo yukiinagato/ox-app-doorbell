@@ -100,7 +100,8 @@ typedef struct db_platform_v2 {
  * {"t":"power_changed","battery_pct":82,"charging":false,"mains":true} when the battery moves
  *   by five points or more, or charging/mains flips.
  * {"t":"notice_changed","door":"d_front","active":true} when a door announcement is published,
- *   replaced, expired, or cleared anywhere in the cluster. */
+ *   replaced, expired, or cleared anywhere in the cluster. A door of "*" means the cluster-wide
+ *   announcement changed, which affects every door that has no announcement of its own. */
 typedef void (*db_ui_event_cb)(void* user, const char* event_json);
 
 /* Create core with a writable data directory and bootstrap configuration in boot_json. */
@@ -220,15 +221,63 @@ DB_API int db_core_time_sync_now(db_core* c);
 DB_API char* db_core_audio_json(db_core* c, const char* device_id);
 
 /* ---- Announcements ----
- * Publish a replicated announcement for one door. text is 1..200 characters; expires_ms is an
- * absolute wall-clock deadline in milliseconds and zero means "until cleared". Core records the
- * publishing device and the creation time, replicates the value as doors.<id>.notice, prunes it
- * once the deadline passes, and emits notice_changed. Returns 0 on success and a negative value
- * for a null core, an unknown door, text outside the length limit, or a persistence failure. */
+ * Publish a replicated announcement for one door. text is 1..200 characters (counted in Unicode
+ * code points); expires_ms is an absolute wall-clock deadline in milliseconds and zero means
+ * "until cleared". Core records the publishing device and the creation time, replicates the
+ * value as doors.<id>.notice, prunes it once the deadline passes, and emits notice_changed.
+ *
+ * Pass "*" as door for the cluster-wide announcement, stored at notice.global. A door-specific
+ * announcement always overrides it, so a station can carry its own message while the rest of
+ * the house shows the general one. status.doors.<id>.notice reports the resolved value with a
+ * "scope" of "door" or "global"; do not merge the two in the shell.
+ *
+ * Returns 0 on success and a negative value for a null core, an unknown door, text outside the
+ * length limit, or a persistence failure. */
 DB_API int db_core_set_door_notice(db_core* c, const char* door, const char* text,
                                    int64_t expires_ms);
-/* Remove the announcement for one door. Clearing an absent announcement succeeds. */
+/* Remove the announcement for one door, or the cluster-wide one with "*". Clearing an absent
+ * announcement succeeds. */
 DB_API int db_core_clear_door_notice(db_core* c, const char* door);
+
+/* ---- Door unlock ----
+ * Trigger the configured unlock action for one door. This is the existing feature-code path: it
+ * publishes the same ha_command that a SIP DTMF feature code does, which the MQTT bridge
+ * forwards as <base_topic>/cmd/<command>. The command comes from doors.<id>.unlock.command when
+ * set, otherwise from the first ha_command in sip.dtmf_actions.
+ *
+ * Returns 0 when the action was queued, -1 for a null core or empty door, -2 for an unknown
+ * door, and -3 when no unlock action is configured anywhere. A shell that shows the control
+ * must say so on -3 rather than reporting a silent success: status.doors.<id>.unlock reports
+ * {"configured":bool,"command":"…","show_button":bool,"source":"default"|"admin"} so the button
+ * can be hidden before it is ever pressed. show_button defaults to configured and an
+ * administrator may force either answer through doors.<id>.unlock.show_button. */
+DB_API int db_core_open_door(db_core* c, const char* door);
+
+/* ---- Appearance and the automatic theme ----
+ * The display contract delivered as {"t":"display",...} and reported as status.display carries
+ *   "appearance": {"configured":"auto_system|auto_schedule|light|dark",
+ *                  "effective":"light|dark","follow_system":bool,
+ *                  "schedule":{"dark_from":"19:00","light_from":"06:30"}}
+ * effective is resolved by core from the schedule in the configured time zone. When
+ * follow_system is true the shell uses the operating system's own light/dark setting and falls
+ * back to effective when the platform has none, which is the case on iOS 5 and Android before
+ * 10.
+ *
+ * Its "theme" object additionally carries the automatic contrast decision, computed once by the
+ * node that serves the theme so every shell agrees instead of each deriving its own:
+ *   "auto_background": {"color":"#RRGGBB","source":"image|color"}
+ *   "auto_ink":        {"clock":"light|dark", …}   one entry per semantic text region
+ *   "auto_accent":     {"call_button":"#RRGGBB","call_button_ink":"light|dark"}
+ *   "ink_override":    {"clock":"#RRGGBB", …}      only the regions an administrator overrode
+ *   "call_button_bg":  "#RRGGBB"                   what to paint: the override, else auto
+ *   "call_button_ink": "light|dark"                what to draw on it
+ * auto_ink is the WCAG decision for text drawn straight onto the background: dark ink over a
+ * background whose relative luminance is at least 0.5, light ink otherwise. When the background
+ * is an image, core averages it; a shell may refine per region locally because core has no
+ * layout geometry. Always take the button text colour from call_button_ink: on a mid-luminance
+ * background no colour can both separate from it and carry white text, and core then returns
+ * the best compromise rather than an unreadable button. Both are computed, never stored; writing
+ * display.theme.auto_ink or auto_accent is rejected. */
 
 /* Runtime contracts reported by a platform shell. JSON must be an object and is copied by core. */
 DB_API void db_core_set_capabilities_json(db_core* c, const char* capabilities_json);
@@ -258,7 +307,13 @@ DB_API char* db_core_capabilities_json(db_core* c);
  *   {"t":"join_token_changed","active":bool,"expires_s":int,"attempts_left":int}
  *   {"t":"invite_rejected","reason":...} on the invited device
  *   {"t":"qr_scan_state","active":bool} {"t":"qr_scanned","text":...,"invited":bool}
- *   plus the existing paired, pairing_persistence_error, join_result, and pairing_revoked. */
+ *   plus the existing paired, pairing_persistence_error, join_result, and pairing_revoked.
+ *
+ * pairing_revoked means a full local reset, not just "forget the PSK". On receiving it (and when
+ * an administrator confirms removal on the device itself) the shell deletes the secure PSK, the
+ * pairing fields of boot.json, AND name/role/door/setup_complete, then restarts into first-run
+ * setup. A device that keeps its old role and door after being removed would rejoin as a
+ * half-configured member of the next cluster. */
 DB_API char* db_core_pairing_json(db_core* c);
 /* Join an existing cluster with a PIN and seed. Completion is reported as t:"join_result" first,
  * then on success t:"paired" and t:"pairing_state". The paired event contains psk_ref,
@@ -271,9 +326,21 @@ DB_API void db_core_join_cluster(db_core* c, const char* host, const char* pin);
 DB_API int db_core_found_cluster(db_core* c);
 /* Enable pairing mode for the requested duration and automatically invite discovered devices. */
 DB_API void db_core_pairing_mode(db_core* c, int seconds);
-/* Start automatic pairing and mint a one-time PIN for manual joining. The returned JSON contains
- * ok, host, pin, and expires_s; the PIN is never persisted. Release the result with db_free. */
+/* Open the bulk-add window for the requested duration AND mint a PIN. While the
+ * window is open, core automatically invites every device it discovers, so this belongs only to
+ * the explicit bulk-add button and its warning -- never to simply showing a PIN. The returned
+ * JSON contains ok, host, pin, and expires_s; the PIN is never persisted. Release with db_free.
+ */
 DB_API char* db_core_start_pairing_json(db_core* c, int seconds);
+
+/* Mint or refresh the join PIN WITHOUT opening the bulk-add window. This is what the founder's
+ * PIN card and POST /api/join-token use: a device that is already announcing itself is not
+ * auto-invited just because a PIN is on screen, and each device is still approved one at a time.
+ * seconds requests a PIN lifetime and is clamped to 30..600 seconds; zero keeps core's default.
+ * The result has the same shape as db_core_start_pairing_json:
+ *   {"ok":true,"host":"10.0.1.10:47172","pin":"123456","expires_s":600}
+ * or {"ok":false,"err":"host_unpaired"|"pairing_unavailable"}. Release with db_free. */
+DB_API char* db_core_mint_join_token_json(db_core* c, int seconds);
 /* Request that an indoor-panel administrator remove one connected peer. The peer receives an
  * authenticated local-reset command and acknowledges it through its UI. */
 DB_API void db_core_remove_device(db_core* c, const char* node_id);

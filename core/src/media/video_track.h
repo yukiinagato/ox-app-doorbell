@@ -47,6 +47,19 @@ class VideoTrack {
   int subscriberCount() const;
   std::string codecString() const;
 
+  // Publish-side counters for the debug line. These describe what this node produced and handed
+  // out, not what a receiver managed to display: latency, jitter and displayed frames belong to
+  // each shell's own player and are reported through its runtime status instead.
+  struct Stats {
+    uint64_t frames = 0;          // access units accepted
+    uint64_t keyframes = 0;
+    uint64_t fragments = 0;       // fMP4 fragments published
+    uint64_t dropped_forward = 0; // fragments a slow subscriber skipped past
+    uint32_t frame_interval_ms = 0;
+    int64_t last_frame_ts_ms = 0;
+  };
+  Stats stats() const;
+
 
 
 

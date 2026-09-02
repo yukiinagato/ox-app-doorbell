@@ -560,20 +560,54 @@ TEST_CASE("admin API: session gate + config delete/import + join-token + panel-t
                  sess)
             .find("\"ok\":true") != std::string::npos);
   const std::string before_single_color = node.configJson();
+  // A colour whose contrast falls short is the operator's choice: the write succeeds and the
+  // measured ratio comes back as a warning so the admin can show it inline.
+  auto low_contrast = bodyJson(adminReq(http_port, "POST", "/api/config/batch",
+                                        style_batch("cancel.call",
+                                                    R"({"foreground":"#000000"})"), sess));
+  REQUIRE(low_contrast);
+  CHECK(json::getBool(low_contrast.get(), "ok"));
+  const cJSON* warnings = json::get(low_contrast.get(), "warnings");
+  REQUIRE(cJSON_IsArray(warnings));
+  REQUIRE(cJSON_GetArraySize(warnings) >= 1);
+  const cJSON* first = cJSON_GetArrayItem(warnings, 0);
+  CHECK(json::getString(first, "property") == "foreground");
+  CHECK(json::getString(first, "message_key") == "theme.low_contrast");
+  CHECK(json::getNum(first, "contrast") >= 1.0);
+  CHECK(json::getNum(first, "contrast") < 4.5);
+  CHECK(node.configJson() != before_single_color);
+  CHECK(node.configJson().find("\"foreground\":\"#000000\"") != std::string::npos);
+
+  // Format is still enforced: a colour that is not #RRGGBB is refused outright.
+  const std::string before_bad_color = node.configJson();
   CHECK(adminReq(http_port, "POST", "/api/config/batch",
-                 style_batch("cancel.call", R"({"foreground":"#000000"})"), sess)
+                 style_batch("cancel.call", R"({"foreground":"black"})"), sess)
             .find("400") != std::string::npos);
-  CHECK(node.configJson() == before_single_color);
+  CHECK(node.configJson() == before_bad_color);
+
+  // Non-colour constraints are unchanged; only the contrast checks became advisory.
   CHECK(adminReq(http_port, "POST", "/api/config/batch",
                  style_batch("call.primary", R"({"scale":0.75})"), sess)
             .find("400") != std::string::npos);
   CHECK(adminReq(http_port, "POST", "/api/config/batch",
                  style_batch("call.primary", R"({"scale":1.75})"), sess)
             .find("400") != std::string::npos);
-  CHECK(adminReq(http_port, "POST", "/api/config/batch",
-                 style_batch("cancel.call", R"({"border":"#111111"})"), sess)
-            .find("400") != std::string::npos);
-  CHECK(node.configJson() == before_single_color);
+  auto low_border = bodyJson(adminReq(http_port, "POST", "/api/config/batch",
+                                      style_batch("cancel.call", R"({"border":"#111111"})"),
+                                      sess));
+  REQUIRE(low_border);
+  CHECK(json::getBool(low_border.get(), "ok"));
+  CHECK(cJSON_IsArray(json::get(low_border.get(), "warnings")));
+  // A comfortable set produces no warning at all. Every colour of the element is written here
+  // because the check runs against the resolved element, not against this write alone.
+  auto readable = bodyJson(adminReq(http_port, "POST", "/api/config/batch",
+                                    style_batch("cancel.call",
+                                                R"({"foreground":"#FFFFFF","background":"#000000","border":"#FFFFFF"})"),
+                                    sess));
+  REQUIRE(readable);
+  CHECK(json::getBool(readable.get(), "ok"));
+  CHECK(json::get(readable.get(), "warnings") == nullptr);
+  const std::string before_single_color_2 = node.configJson();
   CHECK(adminReq(http_port, "POST", "/api/config/batch",
                  style_batch("call.primary", R"({"radius":8})"), sess)
             .find("400") != std::string::npos);
@@ -582,7 +616,7 @@ TEST_CASE("admin API: session gate + config delete/import + join-token + panel-t
                  "\"devices.unknown.local.ui.elements.call.primary\","
                  "\"value\":{\"scale\":1.0}}]}", sess)
             .find("400") != std::string::npos);
-  CHECK(node.configJson() == before_single_color);
+  CHECK(node.configJson() == before_single_color_2);
 
   CHECK(adminReq(http_port, "POST", "/api/config/batch",
                  "{\"ops\":[{\"op\":\"set\",\"key\":"
@@ -1512,5 +1546,104 @@ TEST_CASE("admin API: announcements and the manual time sync enforce their own c
   CHECK(json::getBool(time, "enabled") == false);
   CHECK(json::getInt(time, "offset_min") == 540);
   CHECK(cJSON_IsObject(json::get(time, "local")));
+  node.stop();
+}
+
+TEST_CASE("admin API: the cluster-wide notice, the unlock trigger, and PIN minting") {
+  std::mt19937 rng(static_cast<uint32_t>(::getpid()) ^ 0x51a2u);
+  const int mesh_port = adminFreePort(rng);
+  const int http_port = adminFreePort(rng);
+  REQUIRE(mesh_port > 0);
+  REQUIRE(http_port > 0);
+
+  NodeOptions options;
+  options.data_dir = ":memory:";
+  options.name = "round4-api";
+  options.role = "door_station";
+  options.door = "d_front";
+  options.listen_addr = "127.0.0.1:" + std::to_string(mesh_port);
+  options.psk.fill(0x64);
+  options.enable_beacon = false;
+  options.http_port = http_port;
+  options.mesh_timing_template = adminTiming();
+  options.use_mesh_timing_template = true;
+  Node node(options);
+  std::map<std::string, std::string> secure_values;
+  node.setSecureStore(
+      [&](const std::string& key) {
+        auto it = secure_values.find(key);
+        return it == secure_values.end() ? std::string() : it->second;
+      },
+      [&](const std::string& key, const std::string& value) {
+        secure_values[key] = value;
+        return true;
+      });
+  REQUIRE(node.start());
+  const std::string session = adminLogin(http_port);
+  node.setConfigKey("doors.d_front", "{\"label\":{\"ja\":\"正面玄関\"}}");
+
+  // The cluster-wide announcement is its own resource, not a bulk per-door write.
+  CHECK(adminReq(http_port, "POST", "/api/notice", "{\"text\":\"House message\"}")
+            .find("HTTP/1.1 403") == 0);
+  CHECK(adminReq(http_port, "POST", "/api/notice", "{\"text\":\"House message\"}", session)
+            .find("HTTP/1.1 200") == 0);
+  CHECK(node.configJson().find("House message") != std::string::npos);
+  auto status = bodyJson(adminReq(http_port, "GET", "/api/status", "", session));
+  REQUIRE(status);
+  const cJSON* front = json::get(json::get(status.get(), "doors"), "d_front");
+  REQUIRE(cJSON_IsObject(front));
+  CHECK(json::getString(json::get(front, "notice"), "text") == "House message");
+  CHECK(json::getString(json::get(front, "notice"), "scope") == "global");
+  CHECK(json::getBool(json::get(status.get(), "notice"), "global_active"));
+  CHECK(adminReq(http_port, "POST", "/api/notice",
+                 "{\"text\":\"" + std::string(201, 'x') + "\"}", session)
+            .find("HTTP/1.1 400") == 0);
+  CHECK(adminReq(http_port, "DELETE", "/api/notice", "", session).find("HTTP/1.1 200") == 0);
+  CHECK(node.configJson().find("House message") == std::string::npos);
+
+  // The unlock trigger refuses clearly when nothing is configured, rather than reporting a
+  // success that did nothing.
+  auto unconfigured = bodyJson(adminReq(http_port, "POST", "/api/doors/d_front/open", "{}",
+                                        session));
+  REQUIRE(unconfigured);
+  CHECK_FALSE(json::getBool(unconfigured.get(), "ok"));
+  CHECK(json::getString(unconfigured.get(), "err") == "unlock_not_configured");
+  CHECK(adminReq(http_port, "POST", "/api/doors/d_missing/open", "{}", session)
+            .find("HTTP/1.1 404") == 0);
+  CHECK(adminReq(http_port, "POST", "/api/doors/d_front/open", "{}").find("HTTP/1.1 403") == 0);
+
+  node.setConfigKey(
+      "sip.dtmf_actions",
+      "{\"*1\":{\"type\":\"ha_command\",\"command\":\"unlock\",\"door\":\"self\"}}");
+  CHECK(adminReq(http_port, "POST", "/api/doors/d_front/open", "{}", session)
+            .find("HTTP/1.1 200") == 0);
+  auto with_unlock = bodyJson(adminReq(http_port, "GET", "/api/status", "", session));
+  REQUIRE(with_unlock);
+  const cJSON* unlock =
+      json::get(json::get(json::get(with_unlock.get(), "doors"), "d_front"), "unlock");
+  CHECK(json::getBool(unlock, "configured"));
+  CHECK(json::getBool(unlock, "show_button"));
+  CHECK(json::getString(unlock, "command") == "unlock");
+
+  // Minting a PIN must not open the bulk-add window; only /api/pairing/start does that.
+  auto minted = bodyJson(adminReq(http_port, "POST", "/api/join-token", "{}", session));
+  REQUIRE(minted);
+  CHECK(json::getBool(minted.get(), "ok"));
+  CHECK(json::getString(minted.get(), "pin").size() == 6);
+  CHECK_FALSE(json::getString(minted.get(), "host").empty());
+  CHECK(json::getInt(minted.get(), "expires_s") > 0);
+  auto pairing = bodyJson(adminReq(http_port, "GET", "/api/pairing", "", session));
+  REQUIRE(pairing);
+  CHECK_FALSE(json::getBool(json::get(pairing.get(), "pending"), "pairing_mode"));
+  CHECK(json::getBool(json::get(pairing.get(), "token"), "active"));
+
+  auto started = bodyJson(adminReq(http_port, "POST", "/api/pairing/start",
+                                   "{\"seconds\":600}", session));
+  REQUIRE(started);
+  CHECK(json::getBool(started.get(), "ok"));
+  auto opened = bodyJson(adminReq(http_port, "GET", "/api/pairing", "", session));
+  REQUIRE(opened);
+  CHECK(json::getBool(json::get(opened.get(), "pending"), "pairing_mode"));
+
   node.stop();
 }

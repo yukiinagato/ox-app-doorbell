@@ -2768,10 +2768,12 @@ void Mesh::fetchBlob(const std::string& hash, std::function<void(Bytes)> cb) {
   impl_->fetchBlob(hash, std::move(cb));
 }
 
-Mesh::JoinToken Mesh::createJoinToken() {
+Mesh::JoinToken Mesh::createJoinToken(int64_t ttl_ms) {
   if (!impl_->isPaired()) return JoinToken{};
+  int64_t lifetime = ttl_ms > 0 ? ttl_ms : kJoinTokenTtlMs;
+  lifetime = std::max<int64_t>(30'000, std::min<int64_t>(lifetime, kJoinTokenTtlMs));
   impl_->token.pin = genPin6();
-  impl_->token.expires_mono = impl_->now() + kJoinTokenTtlMs;
+  impl_->token.expires_mono = impl_->now() + lifetime;
   impl_->token.fails = 0;
   impl_->token.active = true;
   impl_->token.expired_unreported = false;
