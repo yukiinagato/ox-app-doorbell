@@ -46,6 +46,11 @@ class IncomingActivity : Activity() {
 
     /** モニター ON/OFF: whether the door's audio is being played on this panel. */
     private var monitorOn = true
+    private val monitorBackoff = MonitorBackoff()
+    private val monitorRetry = Runnable { startAudio() }
+    /** RTP counters when the current monitor leg opened, so its own media can be measured. */
+    private var monitorTxAtStart = 0L
+    private var monitorRxAtStart = 0L
 
     /** マイク: only meaningful once the answer leg is up. */
     private var micMuted = false
@@ -194,6 +199,7 @@ class IncomingActivity : Activity() {
 
     private fun startReturnCountdown() {
         ui.removeCallbacks(returnTick)
+        ui.removeCallbacks(monitorRetry)
         if (returnCountdown.snapshot().ticking) ui.postDelayed(returnTick, 1000L)
     }
 
@@ -473,9 +479,13 @@ class IncomingActivity : Activity() {
                         }
                         return@runOnUiThread
                     }
+                    val wasMonitorLeg = sipCalling && !answerRequested && !inCall
                     sipCalling = false
                     if (answerRequested || inCall) finish()
-                    else findViewById<TextView>(R.id.audio_hint).visibility = View.GONE
+                    else {
+                        findViewById<TextView>(R.id.audio_hint).visibility = View.GONE
+                        if (wasMonitorLeg) onMonitorLegEnded()
+                    }
                 }
             }
         }
@@ -563,12 +573,66 @@ class IncomingActivity : Activity() {
 
     // Direct monitor audio.
 
+    /**
+     * Open the receive-only door-audio leg.
+     *
+     * Idempotent, and rate-limited by [monitorBackoff]. Every entry point to this screen used to
+     * call this unconditionally, so re-entering for a new ring opened another dialog on top of
+     * the last one -- which is how an indoor panel came to open monitor dialogs against a mute
+     * door roughly twice a second until the door station fell over.
+     */
     private fun startAudio() {
-        if (!monitorOn) return
+        ui.removeCallbacks(monitorRetry)
+        if (!monitorOn || sipCalling) return
         val host = peerHost ?: return
+        if (!doorHasAudio()) {
+            monitorBackoff.onNoAudioCapability()
+            findViewById<TextView>(R.id.audio_hint).visibility = View.GONE
+            return
+        }
+        val nowMs = System.currentTimeMillis()
+        if (!monitorBackoff.mayStart(nowMs)) {
+            val wait = monitorBackoff.retryDelayMs(nowMs)
+            if (wait > 0L) ui.postDelayed(monitorRetry, wait)
+            return
+        }
+        val sip = app.core.status()?.optJSONObject("sip")
+        monitorTxAtStart = sip?.optLong("rtp_tx", 0L) ?: 0L
+        monitorRxAtStart = sip?.optLong("rtp_rx", 0L) ?: 0L
         app.core.sipCall("sip:$host:$directPort", "monitor")
         sipCalling = true
         findViewById<TextView>(R.id.audio_hint).visibility = View.VISIBLE
+    }
+
+    /**
+     * Whether the door can be listened to at all. Absent capability information is treated as
+     * "maybe", so the backoff — not this — is what protects an older door station.
+     */
+    private fun doorHasAudio(): Boolean {
+        val caps = findDoorPeer(app.core.status())?.optJSONObject("caps") ?: return true
+        if (!caps.has("audio")) return true
+        val audio = caps.opt("audio")
+        return when (audio) {
+            is Boolean -> audio
+            is JSONObject -> audio.optBoolean("in", true) || audio.optBoolean("out", true)
+            else -> true
+        }
+    }
+
+    /** A monitor leg has ended: decide whether it is worth opening another one. */
+    private fun onMonitorLegEnded() {
+        val sip = app.core.status()?.optJSONObject("sip")
+        val tx = (sip?.optLong("rtp_tx", 0L) ?: 0L) - monitorTxAtStart
+        val rx = (sip?.optLong("rtp_rx", 0L) ?: 0L) - monitorRxAtStart
+        if (MonitorBackoff.carriedMedia(tx, rx)) {
+            monitorBackoff.onMediaFlowed()
+            return
+        }
+        // Nothing on the wire: back off rather than reopening straight away.
+        val wait = monitorBackoff.onDeadDialog(System.currentTimeMillis())
+        ui.removeCallbacks(monitorRetry)
+        if (monitorOn && !inCall && !answerRequested && wait > 0L)
+            ui.postDelayed(monitorRetry, wait)
     }
 
     // Bidirectional answer takeover.
@@ -765,6 +829,8 @@ class IncomingActivity : Activity() {
     /** Stops or restarts the door audio leg without touching the call lifecycle. */
     private fun toggleMonitor() {
         monitorOn = !monitorOn
+        if (monitorOn) monitorBackoff.onToggledOn() else monitorBackoff.onToggledOff()
+        if (!monitorOn) ui.removeCallbacks(monitorRetry)
         if (inCall || answerRequested) {
             // While talking, the toggle only mutes local playback of the far end.
             setPlaybackMuted(!monitorOn)
