@@ -743,8 +743,8 @@ TEST_CASE("mesh: malformed live events are neither persisted nor forwarded") {
   auto sender = connectRawPeer(fleet, kIdC, "raw-C", "B");
   auto observer = connectRawPeer(fleet, kIdD, "raw-D", "B");
   REQUIRE(fleet.runUntil([&] { return sender->established && observer->established; }, 1000));
-  REQUIRE(sender->channel);
-  REQUIRE(observer->channel);
+  REQUIRE(sender->channel != nullptr);
+  REQUIRE(observer->channel != nullptr);
 
   auto rejected = [&](const std::string& name,
                       const std::function<void(cJSON*)>& make_invalid) {
