@@ -631,7 +631,7 @@ TEST_CASE("mesh: malformed config wire snapshots are rejected atomically") {
       fleet.add(kIdB, "B", capsJson(9), {{}, /*beacon=*/false});
   auto peer = connectRawPeer(fleet, kIdC, "raw-C", "B");
   REQUIRE(fleet.runUntil([&] { return peer->established; }, 1000));
-  REQUIRE(peer->channel);
+  REQUIRE(peer->channel != nullptr);
 
   int case_number = 0;
   auto rejected = [&](const std::string& name,
@@ -841,7 +841,7 @@ TEST_CASE("mesh: sync event arrays decode completely before any state is applied
       fleet.add(kIdB, "B", capsJson(9), {{}, /*beacon=*/false});
   auto peer = connectRawPeer(fleet, kIdC, "raw-C", "B");
   REQUIRE(fleet.runUntil([&] { return peer->established; }, 1000));
-  REQUIRE(peer->channel);
+  REQUIRE(peer->channel != nullptr);
 
   auto malformed = wireConfigSnapshot("wire.event.reject");
   cJSON* malformed_events = json::get(malformed.get(), "ev");
@@ -895,7 +895,7 @@ TEST_CASE("mesh: heartbeat and claim counters reject unsafe wire numbers") {
       fleet.add(kIdB, "B", capsJson(9), {{}, /*beacon=*/false});
   auto peer = connectRawPeer(fleet, kIdC, "raw-C", "B");
   REQUIRE(fleet.runUntil([&] { return peer->established; }, 1000));
-  REQUIRE(peer->channel);
+  REQUIRE(peer->channel != nullptr);
   REQUIRE(receiver.peer(kIdC).id == kIdC);
 
   auto ping = [](double epoch, double heartbeat) {
