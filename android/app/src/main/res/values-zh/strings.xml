@@ -705,7 +705,7 @@
     <string name="power_charging">充电中</string>
     <string name="power_mains">已接电源</string>
     <string name="power_no_battery">无电池</string>
-    <string name="power_percent">%1$s%</string>
+    <string name="power_percent">%1$s%%</string>
     <string name="power_title">电量</string>
     <string name="power_unknown">未上报</string>
     <string name="purpose_cancel_call">取消呼叫</string>

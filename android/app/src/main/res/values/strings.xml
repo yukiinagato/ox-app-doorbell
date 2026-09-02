@@ -705,7 +705,7 @@ Delete it?</string>
     <string name="power_charging">Charging</string>
     <string name="power_mains">On mains power</string>
     <string name="power_no_battery">No battery</string>
-    <string name="power_percent">%1$s%</string>
+    <string name="power_percent">%1$s%%</string>
     <string name="power_title">Battery</string>
     <string name="power_unknown">Not reported</string>
     <string name="purpose_cancel_call">Cancel call</string>

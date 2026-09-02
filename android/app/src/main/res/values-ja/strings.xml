@@ -705,7 +705,7 @@
     <string name="power_charging">充電中</string>
     <string name="power_mains">電源に接続</string>
     <string name="power_no_battery">電池なし</string>
-    <string name="power_percent">%1$s%</string>
+    <string name="power_percent">%1$s%%</string>
     <string name="power_title">電池</string>
     <string name="power_unknown">未対応</string>
     <string name="purpose_cancel_call">呼び出しを取り消す</string>
