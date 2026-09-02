@@ -214,8 +214,31 @@ final class ThemeInkTests: XCTestCase {
         }
         var white: CGFloat = 0, alpha: CGFloat = 0
         XCTAssertTrue(shadow.getWhite(&white, alpha: &alpha))
-        XCTAssertEqual(Double(alpha), 0.4, accuracy: 0.001)
+        XCTAssertEqual(Double(alpha), 1, accuracy: 0.001,
+                       "the halo colour is opaque; its strength is the layer's opacity")
         XCTAssertEqual(Double(white), 1, accuracy: 0.001, "a dark ink is outlined in white")
+    }
+
+    /// The halo has to be a halo: a flat one-point label shadow is two device pixels on a 2x
+    /// panel and vanished into a photograph on the device.
+    func testTheHaloIsBlurredAndNearlyOpaque() {
+        XCTAssertGreaterThanOrEqual(Double(DoorbellTheme.outlineBlurRadius), 2)
+        XCTAssertGreaterThanOrEqual(Double(DoorbellTheme.outlineOpacity), 0.8)
+
+        let label = UILabel()
+        let midGround = UIColor(white: 0.5, alpha: 1)
+        DoorbellTheme.applyInk(DoorbellPalette.light.ink,
+                               over: .sampled(.uniform(midGround)), to: label)
+        XCTAssertEqual(label.layer.shadowOpacity, DoorbellTheme.outlineOpacity)
+        XCTAssertEqual(label.layer.shadowRadius, DoorbellTheme.outlineBlurRadius)
+        XCTAssertEqual(label.layer.shadowOffset, .zero)
+        XCTAssertNil(label.shadowColor, "the flat label shadow is not used any more")
+
+        // An ink that reads on its own carries no halo at all.
+        DoorbellTheme.applyInk(DoorbellPalette.dark.ink,
+                               over: .sampled(.uniform(UIColor(white: 0.02, alpha: 1))),
+                               to: label)
+        XCTAssertEqual(label.layer.shadowOpacity, 0)
     }
 
     // MARK: - Sampling the picture the shell actually draws
@@ -317,7 +340,8 @@ final class ThemeInkTests: XCTestCase {
         }
         var white: CGFloat = 0, alpha: CGFloat = 0
         XCTAssertTrue(shadow.getWhite(&white, alpha: &alpha))
-        XCTAssertEqual(Double(alpha), 0.4, accuracy: 0.001)
+        XCTAssertEqual(Double(alpha), 1, accuracy: 0.001,
+                       "the halo colour is opaque; its strength is the layer's opacity")
         XCTAssertEqual(Double(white), 1, accuracy: 0.001, "a dark ink is outlined in white")
     }
 

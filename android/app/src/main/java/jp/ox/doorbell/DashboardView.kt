@@ -444,7 +444,6 @@ internal class DashboardView(
                 )
             }
         }
-        applyStillHeight(if (bodySplit.orientation == LinearLayout.HORIZONTAL) 88 else 120)
         val nowMs = clock.now().wallMs
         for ((door, tile) in tiles) updateTile(door, tile, NoticeModel.resolve(
             status, config, door, nowMs,
@@ -455,6 +454,7 @@ internal class DashboardView(
             tilesScrolled = true
             tileScroll.post { tileScroll.scrollTo(0, 0) }
         }
+        fitTilesToViewport()
     }
 
     /** The parts that never change for a door. Called once. */
@@ -674,18 +674,50 @@ internal class DashboardView(
         tileScroll.layoutParams = tileParams
         callColumn.layoutParams = callParams
         applyActionLayout(widthDp)
-        // Side by side the tile column is short, so the still gives up height first and the
-        // label and chips stay on screen instead of falling below the fold.
-        applyStillHeight(if (side) 88 else 120)
+        fitTilesToViewport()
     }
 
-    private fun applyStillHeight(heightDp: Int) {
-        val height = ShellUi.dp(activity, heightDp)
+    private fun applyStillHeight(heightPx: Int) {
         for (tile in tiles.values) {
             val params = tile.still.layoutParams ?: continue
-            if (params.height == height) continue
-            params.height = height
+            if (params.height == heightPx) continue
+            params.height = heightPx
             tile.still.layoutParams = params
+        }
+    }
+
+    /**
+     * Size the preview so a whole tile fits in the space above the QR footer.
+     *
+     * The tile column is already constrained to end above the footer, but a tile taller than that
+     * area left its bottom row -- the door name and 見る -- cut off at the scroll boundary, which
+     * reads as the label disappearing under the footer. The still is the only part that may give
+     * up height, so it is measured against the real viewport instead of guessed per orientation.
+     * More doors than fit still scroll, but every row is whole.
+     */
+    private fun fitTilesToViewport() {
+        val tile = tiles.values.firstOrNull() ?: return
+        tileScroll.post {
+            val viewport = tileScroll.height
+            if (viewport <= 0 || tile.still.layoutParams == null) return@post
+            val card = tile.root
+            var others = card.paddingTop + card.paddingBottom
+            for (index in 0 until card.childCount) {
+                val child = card.getChildAt(index)
+                if (child === tile.still || child.visibility == View.GONE) continue
+                others += child.height +
+                    ((child.layoutParams as? LinearLayout.LayoutParams)?.topMargin ?: 0)
+            }
+            // The section heading shares the column, and each tile carries a top margin.
+            val heading = if (tileColumn.childCount > 0) tileColumn.getChildAt(0).height else 0
+            applyStillHeight(VisitorLayout.tileStillHeightPx(
+                viewportPx = viewport,
+                headingPx = heading,
+                otherRowsPx = others,
+                gapPx = ShellUi.dp(activity, 16),
+                minPx = ShellUi.dp(activity, 56),
+                maxPx = ShellUi.dp(activity, 160),
+            ))
         }
     }
 

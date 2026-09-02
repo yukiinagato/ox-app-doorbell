@@ -18,6 +18,7 @@
 #include "events/events.h"
 #include "mesh/mesh.h"
 #include "node/node.h"
+#include "sipctl/sipctl.h"
 #include "store/store.h"
 #include "util/clock.h"
 #include "util/json.h"
@@ -1896,4 +1897,297 @@ TEST_CASE("doors: an indoor panel lists a live door station's door even without 
 
   indoor.node->stop();
   station.node->stop();
+}
+
+TEST_CASE("pairing: unpair then found leaves no peer from the previous cluster") {
+  // The regression: after unpairing all three devices and founding a fresh cluster on one of
+  // them, /api/status still listed the old cluster's members as offline peers. They came from
+  // devices.<id> entries that survived unpair in the replicated configuration, so the founder's
+  // brand-new cluster appeared to have members it had never met.
+  NFleet f;
+  auto& founder = f.add("A:1", "front-panel", "door_station", "d_front", /*seed_cfg=*/true);
+  auto& joiner = f.add("J:1", "living", "indoor_panel", "", /*seed_cfg=*/false);
+  REQUIRE(founder.node->start());
+  REQUIRE(joiner.node->start());
+  const std::string joiner_id = joiner.node->nodeId();
+
+  // Let the two become a cluster, so the founder learns the other device for real.
+  REQUIRE([&] {
+    for (int i = 0; i < 300; i++) {
+      f.run(50);
+      auto config = json::parse(founder.node->configJson());
+      if (config && json::get(json::get(config.get(), "devices"), joiner_id.c_str()))
+        return true;
+    }
+    return false;
+  }());
+  founder.node->setConfigKey("devices." + joiner_id + ".name", "\"doorbell-android\"");
+  f.run(200);
+
+  auto peerIds = [](Node& node) {
+    auto status = json::parse(node.statusJson());
+    REQUIRE(status);
+    std::set<std::string> ids;
+    const cJSON* peers = json::get(status.get(), "peers");
+    const cJSON* peer = nullptr;
+    cJSON_ArrayForEach(peer, peers) ids.insert(json::getString(peer, "id"));
+    return ids;
+  };
+  CHECK(peerIds(*founder.node).count(joiner_id) == 1);
+
+  // Both devices leave, as an operator resetting the house would do.
+  joiner.node->unpair();
+  founder.node->unpair();
+  f.run(200);
+
+  // The founder's own identity survives; the other device is gone from configuration entirely,
+  // not merely marked offline.
+  auto after = json::parse(founder.node->configJson());
+  REQUIRE(after);
+  const cJSON* devices = json::get(after.get(), "devices");
+  CHECK(json::get(devices, joiner_id.c_str()) == nullptr);
+  CHECK(cJSON_IsObject(json::get(devices, founder.node->nodeId().c_str())));
+  // The first-run defaults are re-seeded immediately, so the device is usable while unpaired.
+  CHECK(json::getInt(after.get(), "schema_version") == 1);
+
+  // Founding a fresh cluster starts with this device and nothing else.
+  REQUIRE(founder.node->foundCluster());
+  f.run(300);
+  const std::set<std::string> fresh = peerIds(*founder.node);
+  CHECK(fresh.count(joiner_id) == 0);
+  for (const std::string& id : fresh) CHECK(id == founder.node->nodeId());
+
+  // The history this device recorded is its own and is deliberately kept, even though its
+  // attribution may still name a device that has left.
+  auto history = json::parse(founder.node->callLogJson(0, 50));
+  REQUIRE(history);
+  CHECK(cJSON_IsArray(json::get(history.get(), "rows")));
+
+  founder.node->stop();
+  joiner.node->stop();
+}
+
+TEST_CASE("pairing: a replicated devices entry from the old cluster does not resurrect") {
+  // Purging must not be done with tombstones. A tombstone replicates, so re-pairing to the same
+  // cluster would push a deletion for every device the leaving node had forgotten -- and the
+  // forgotten entries must come back from the cluster instead.
+  NFleet f;
+  auto& keeper = f.add("K:1", "living", "indoor_panel", "", /*seed_cfg=*/true);
+  auto& leaver = f.add("L:1", "front-panel", "door_station", "d_front", /*seed_cfg=*/false);
+  REQUIRE(keeper.node->start());
+  REQUIRE(leaver.node->start());
+  const std::string keeper_id = keeper.node->nodeId();
+  const std::string leaver_id = leaver.node->nodeId();
+
+  REQUIRE([&] {
+    for (int i = 0; i < 300; i++) {
+      f.run(50);
+      auto config = json::parse(leaver.node->configJson());
+      if (config && json::get(json::get(config.get(), "devices"), keeper_id.c_str()))
+        return true;
+    }
+    return false;
+  }());
+  // A third device that only ever existed in configuration, like an old cluster member.
+  const std::string ghost_id(32, 'c');
+  keeper.node->setConfigKey("devices." + ghost_id + ".name", "\"doorbell-iPadmini3\"");
+  keeper.node->setConfigKey("devices." + ghost_id + ".role", "\"door_station\"");
+  REQUIRE([&] {
+    for (int i = 0; i < 300; i++) {
+      f.run(50);
+      auto config = json::parse(leaver.node->configJson());
+      if (config && json::get(json::get(config.get(), "devices"), ghost_id.c_str()))
+        return true;
+    }
+    return false;
+  }());
+
+  leaver.node->unpair();
+  f.run(200);
+  // Locally forgotten, including the ghost it had only ever replicated.
+  auto local = json::parse(leaver.node->configJson());
+  REQUIRE(local);
+  CHECK(json::get(json::get(local.get(), "devices"), ghost_id.c_str()) == nullptr);
+  CHECK(json::get(json::get(local.get(), "devices"), keeper_id.c_str()) == nullptr);
+
+  // The cluster it left is untouched: no deletion was replicated to it.
+  f.run(600);
+  auto remote = json::parse(keeper.node->configJson());
+  REQUIRE(remote);
+  const cJSON* remote_devices = json::get(remote.get(), "devices");
+  CHECK(cJSON_IsObject(json::get(remote_devices, ghost_id.c_str())));
+  CHECK(cJSON_IsObject(json::get(remote_devices, keeper_id.c_str())));
+  CHECK(cJSON_IsObject(json::get(remote_devices, leaver_id.c_str())));
+
+  keeper.node->stop();
+  leaver.node->stop();
+}
+
+TEST_CASE("calls: joining a cluster imports the history silently") {
+  // Owner observation: a newly paired indoor panel rang many times right after joining. Every
+  // historical press replicated by anti-entropy was dispatched while its projection was briefly
+  // "ringing", so the panel re-enacted calls the house had taken days earlier.
+  NFleet f;
+  auto& station = f.add("A:1", "front-panel", "door_station", "d_front", /*seed_cfg=*/true);
+  REQUIRE(station.node->start());
+  f.run(200);
+
+  for (int i = 0; i < 20; i++) {
+    const std::string call = station.node->pressV2("d_front", "");
+    REQUIRE_FALSE(call.empty());
+    REQUIRE(station.node->cancelCallV2("d_front", call, "visitor"));
+    f.run(2000);
+  }
+  // Every one of those calls is now well past its ring window.
+  f.run(180'000, 1000);
+
+  auto& panel = f.add("P:1", "living", "indoor_panel", "", /*seed_cfg=*/false);
+  REQUIRE(panel.node->start());
+  REQUIRE([&] {
+    for (int i = 0; i < 400; i++) {
+      f.run(50);
+      auto history = json::parse(panel.node->callLogJson(0, 100));
+      if (history && cJSON_GetArraySize(json::get(history.get(), "rows")) == 20) return true;
+    }
+    return false;
+  }());
+
+  // The history is there in full, and not one of those calls rang.
+  auto history = json::parse(panel.node->callLogJson(0, 100));
+  REQUIRE(history);
+  CHECK(cJSON_GetArraySize(json::get(history.get(), "rows")) == 20);
+  CHECK(panel.uiCount("chime") == 0);
+  CHECK(panel.uiCount("event", "press") == 0);
+  CHECK(panel.tts.empty());
+
+  // A call that is genuinely ringing when the panel joins rings exactly once.
+  panel.ui.clear();
+  const std::string live = station.node->pressV2("d_front", "p_delivery");
+  REQUIRE_FALSE(live.empty());
+  REQUIRE([&] {
+    for (int i = 0; i < 300; i++) {
+      f.run(50);
+      if (panel.uiCount("chime") >= 1) return true;
+    }
+    return false;
+  }());
+  f.run(2000);
+  CHECK(panel.uiCount("chime") == 1);
+  CHECK(panel.uiCount("event", "press") == 1);
+
+  station.node->stop();
+  panel.node->stop();
+}
+
+TEST_CASE("calls: an indoor panel rings and never answers by itself") {
+  // Real-device finding: the call log recorded outcome "answered", answered_by an indoor panel
+  // nobody had touched. SipSettings::auto_answer defaulted to true for every role, so an
+  // unconfigured panel picked up the incoming SIP call and its shell reported it as answered.
+  NFleet f;
+  auto& station = f.add("A:1", "front-panel", "door_station", "d_front", /*seed_cfg=*/true);
+  auto& panel = f.add("P:1", "living", "indoor_panel", "", /*seed_cfg=*/false);
+  REQUIRE(station.node->start());
+  REQUIRE(panel.node->start());
+  f.run(300);
+
+  auto answerMode = [](Node& node) {
+    auto status = json::parse(node.statusJson());
+    REQUIRE(status);
+    return json::getString(json::get(status.get(), "sip"), "answer_mode");
+  };
+  // The documented defaults, now actually applied: the door answers, the panel waits.
+  CHECK(answerMode(*station.node) == "auto");
+  CHECK(answerMode(*panel.node) == "ring");
+
+  // A household that wants an intercom can still opt in, per device.
+  panel.node->setConfigKey(
+      "sip.accounts." + panel.node->nodeId() + ".answer_mode", "\"auto\"");
+  f.run(300);
+  CHECK(answerMode(*panel.node) == "auto");
+  panel.node->setConfigKey(
+      "sip.accounts." + panel.node->nodeId() + ".answer_mode", "\"ring\"");
+  f.run(300);
+  CHECK(answerMode(*panel.node) == "ring");
+
+  // A ringing call that nobody answers is never attributed to anyone, and opening a listen-in
+  // (monitor) session while it rings is not an answer either. A monitor dialog is one-way audio
+  // that a panel opens by itself; core reports a call answered only for the primary dialog it
+  // owns, so a storm of monitor sessions cannot promote a ringing call to answered.
+  const std::string call = station.node->pressV2("d_front", "");
+  REQUIRE_FALSE(call.empty());
+  for (int i = 0; i < 20; i++) {
+    panel.node->sipCall("sip:127.0.0.1:47190", "monitor");
+    f.run(50);
+  }
+  f.run(1000);
+  auto history = json::parse(panel.node->callLogJson(0, 10));
+  REQUIRE(history);
+  const cJSON* rows = json::get(history.get(), "rows");
+  const cJSON* row = nullptr;
+  cJSON_ArrayForEach(row, rows) {
+    CHECK(json::getString(row, "outcome") != "answered");
+    CHECK(json::getString(row, "answered_by").empty());
+  }
+
+  station.node->stop();
+  panel.node->stop();
+}
+
+TEST_CASE("calls: a monitor dialog leaves a ringing call ringing") {
+  // The mode of the dialog in the primary slot is what decides whether it may answer. A panel
+  // opening listen-in must leave the call ringing and the history untouched.
+  NFleet f;
+  auto& station = f.add("A:1", "front-panel", "door_station", "d_front", /*seed_cfg=*/true);
+  auto& panel = f.add("P:1", "living", "indoor_panel", "", /*seed_cfg=*/false);
+  REQUIRE(station.node->start());
+  REQUIRE(panel.node->start());
+  f.run(300);
+
+  auto dialogMode = [](Node& node) {
+    auto status = json::parse(node.statusJson());
+    REQUIRE(status);
+    return json::getString(json::get(status.get(), "call"), "dialog_mode");
+  };
+  CHECK(dialogMode(*panel.node).empty());
+
+  const std::string call = station.node->pressV2("d_front", "");
+  REQUIRE_FALSE(call.empty());
+  f.run(300);
+
+  // The panel opens listen-in. The dialog mode follows it, and that mode is what the answer
+  // guard reads.
+  panel.node->sipCall("sip:127.0.0.1:47190", "monitor");
+  f.run(3000);  // let the published status snapshot catch up
+  CHECK(dialogMode(*panel.node) == "monitor");
+  CHECK_FALSE(SipCtl::dialogCanAnswer(dialogMode(*panel.node)));
+
+  // The call is still ringing on the door station and nothing has been attributed to anyone.
+  auto status = json::parse(station.node->statusJson());
+  REQUIRE(status);
+  const cJSON* calls = json::get(status.get(), "active_calls");
+  bool still_ringing = false;
+  const cJSON* entry = nullptr;
+  cJSON_ArrayForEach(entry, calls) {
+    if (json::getString(entry, "call_id") != call) continue;
+    still_ringing = json::getString(entry, "state") == "ringing";
+  }
+  CHECK(still_ringing);
+  for (Node* node : {station.node.get(), panel.node.get()}) {
+    auto history = json::parse(node->callLogJson(0, 10));
+    REQUIRE(history);
+    const cJSON* row = nullptr;
+    cJSON_ArrayForEach(row, json::get(history.get(), "rows")) {
+      CHECK(json::getString(row, "outcome") != "answered");
+      CHECK(json::getString(row, "answered_by").empty());
+    }
+  }
+
+  // A talk dialog is a different matter and is allowed to answer.
+  panel.node->sipCall("sip:127.0.0.1:47190", "answer");
+  f.run(3000);
+  CHECK(dialogMode(*panel.node) == "answer");
+  CHECK(SipCtl::dialogCanAnswer(dialogMode(*panel.node)));
+
+  station.node->stop();
+  panel.node->stop();
 }

@@ -11,6 +11,19 @@ final class MonitorViewController: UIViewController {
     private var config: [String: Any]?
     private var videoPlayer: AdaptiveH264MjpegPlayer?
     private var monitoringAudio = false
+    /// The door the page is showing, so a peer list arriving again does not restart anything.
+    private var selectedPeerId = ""
+    /// The user wants to listen to `selectedPeerId`. Cleared when the page goes away or the door
+    /// turns out to have nothing to listen to; an automatic retry is only allowed while it is set.
+    private var monitorWanted = false
+    private var monitorRetry = MonitorRetryPolicy()
+    private var monitorRetryTimer: Timer?
+    /// When the current dialog was asked for, to tell a listen that carried audio from one that
+    /// came up and died with nothing in it.
+    private var monitorStartedAt: TimeInterval = 0
+    private var monitorReachedInCall = false
+    /// A dialog that ends within this of being answered carried nothing worth keeping.
+    private static let silentDialogS: TimeInterval = 2
     private var safeMode = UserDefaults.standard.bool(forKey: "runtime.safe_mode")
 
     private let themeBg = ThemeBackgroundView()
@@ -52,6 +65,13 @@ final class MonitorViewController: UIViewController {
                 self?.rebuildDevices()
             } else if type == "display" {
                 self?.applySkin()
+            } else if type == "state" {
+                let state = ConfigUtil.evStr(event, "state")
+                if state == "in_call" {
+                    self?.monitorReachedInCall = true
+                } else if state == "idle" {
+                    self?.monitorDialogEnded()
+                }
             } else if type == "emergency" && ConfigUtil.evBool(event, "active") {
                 self?.close()
             }
@@ -70,6 +90,8 @@ final class MonitorViewController: UIViewController {
         core.removeHandler("active-monitor")
         videoPlayer?.stop()
         videoPlayer = nil
+        monitorWanted = false
+        cancelMonitorRetry()
         if monitoringAudio { core.sipHangup() }
         monitoringAudio = false
     }
@@ -204,7 +226,10 @@ final class MonitorViewController: UIViewController {
             button.addTarget(self, action: #selector(selectDevice(_:)), for: .primaryActionTriggered)
             deviceStack.addArrangedSubview(button)
         }
-        if video.image == nil, let first = peers.first { start(peer: first) }
+        // Restarting here on every peers_changed is what produced the retry storm: no video
+        // frame meant "start again", and starting again is what kept the door too busy to send
+        // one. The first open picks a door; after that only the user does.
+        if selectedPeerId.isEmpty, let first = peers.first { start(peer: first) }
     }
 
     @objc private func selectDevice(_ sender: UIButton) {
@@ -214,7 +239,13 @@ final class MonitorViewController: UIViewController {
         start(peer: peer)
     }
 
+    /// A deliberate request: the page opening, or the user choosing a door. It clears whatever
+    /// the last door taught the policy, because this is a different question being asked.
     private func start(peer: [String: Any]) {
+        cancelMonitorRetry()
+        monitorRetry.reset()
+        monitorWanted = true
+        selectedPeerId = ConfigUtil.evStr(peer, "id")
         videoPlayer?.stop()
         videoPlayer = nil
         video.image = nil
@@ -227,11 +258,55 @@ final class MonitorViewController: UIViewController {
         videoPlayer?.start(h264URLString: h264, mjpegURL: mjpeg, h264Enabled: !safeMode)
         if monitoringAudio { core.sipHangup() }
         monitoringAudio = false
-        if core.sipBackend == "pjsip", let host = ConfigUtil.peerHost(peer) {
-            let port = ConfigUtil.int(core.config(), "sip.direct_port", 47190)
-            core.sipCall(target: "sip:\(host):\(port)", mode: "monitor")
-            monitoringAudio = true
+        openMonitorDialog(peer: peer)
+    }
+
+    /// Opens one listen dialog, if the policy still allows one. A door that has said it has no
+    /// microphone is not asked again until somebody selects it by hand.
+    private func openMonitorDialog(peer: [String: Any]) {
+        guard core.sipBackend == "pjsip", monitorRetry.mayAttempt(wanted: monitorWanted),
+              let host = ConfigUtil.peerHost(peer) else { return }
+        if ConfigUtil.dig(peer, "capabilities.audio") != nil,
+           !ConfigUtil.bool(peer, "capabilities.audio", true) {
+            _ = monitorRetry.nextDelay(after: .doorHasNoAudio)
+            return
         }
+        let port = ConfigUtil.int(core.config(), "sip.direct_port", 47190)
+        monitorStartedAt = Date().timeIntervalSince1970
+        monitorReachedInCall = false
+        core.sipCall(target: "sip:\(host):\(port)", mode: "monitor")
+        monitoringAudio = true
+    }
+
+    /// One dialog is over. A listen that carried nothing gets a longer wait than the last one; a
+    /// listen that carried audio resets the wait entirely.
+    private func monitorDialogEnded() {
+        guard monitoringAudio else { return }
+        monitoringAudio = false
+        let lasted = Date().timeIntervalSince1970 - monitorStartedAt
+        let outcome: MonitorRetryPolicy.Outcome
+        if !monitorReachedInCall {
+            outcome = .refused
+        } else if lasted < MonitorViewController.silentDialogS {
+            outcome = .endedWithoutMedia
+        } else {
+            outcome = .carriedAudio
+        }
+        guard let delay = monitorRetry.nextDelay(after: outcome), monitorWanted else { return }
+        cancelMonitorRetry()
+        monitorRetryTimer = IOSAvailability.scheduledTimer(withTimeInterval: delay,
+                                                           repeats: false) { [weak self] _ in
+            guard let self = self, self.monitorWanted else { return }
+            guard let peer = self.confirmedDoorPeers().first(where: {
+                ConfigUtil.evStr($0, "id") == self.selectedPeerId
+            }) else { return }
+            self.openMonitorDialog(peer: peer)
+        }
+    }
+
+    private func cancelMonitorRetry() {
+        monitorRetryTimer?.invalidate()
+        monitorRetryTimer = nil
     }
 
     @objc private func close() { dismiss(animated: true) }

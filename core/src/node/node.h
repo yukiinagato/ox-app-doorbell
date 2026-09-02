@@ -258,6 +258,9 @@ class Node {
   // Mint or refresh the join PIN without opening the bulk-add window. seconds of zero keeps the
   // default PIN lifetime.
   std::string mintJoinTokenJson(int seconds);
+  // Validate a scanned doorbell://pair URI. Uses corrected cluster time for the expiry check
+  // when this node is running, so every shell reaches the same verdict.
+  std::string parsePairUriJson(const std::string& uri);
   void removeDevice(const std::string& node_id);
   void inviteDevice(const std::string& id);
 

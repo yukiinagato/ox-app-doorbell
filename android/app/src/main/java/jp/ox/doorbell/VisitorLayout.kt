@@ -44,6 +44,30 @@ internal object VisitorLayout {
     val SPACING_SCALE = intArrayOf(32, 24, 16, 12, 8, 4)
 
     /**
+     * How tall a door tile's preview may be so the whole tile fits above the QR footer.
+     *
+     * The tile column ends above the footer, but a tile taller than that area had its bottom row
+     * -- the door name and the 見る action -- cut off at the scroll boundary, which reads as the
+     * label vanishing under the footer. The preview is the only part that may give up height, so
+     * it is derived from the measured viewport rather than guessed per orientation.
+     *
+     * All values are pixels. [otherRowsPx] is everything in the card except the preview.
+     */
+    fun tileStillHeightPx(
+        viewportPx: Int,
+        headingPx: Int,
+        otherRowsPx: Int,
+        gapPx: Int,
+        minPx: Int,
+        maxPx: Int,
+    ): Int {
+        if (viewportPx <= 0) return maxPx
+        val available = viewportPx - headingPx - otherRowsPx - gapPx
+        // Clamped: below the floor the preview is useless, above the ceiling it wastes the column.
+        return available.coerceIn(minPx, maxPx)
+    }
+
+    /**
      * Whether the footer stacks the version line above the SOS slider.
      *
      * They must never overlap or clip each other: the observed failure was the version line cut

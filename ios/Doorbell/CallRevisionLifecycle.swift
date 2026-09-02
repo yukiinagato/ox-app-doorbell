@@ -101,13 +101,28 @@ struct IncomingReturnCountdown: Equatable {
     /// `call.indoor.return_s` as Core publishes it in the runtime status. A Core that predates the
     /// field, or a value that is not a number, falls back to the documented default rather than to
     /// no countdown at all.
+    ///
+    /// The dotted lookup is spelled out here rather than borrowed from `ConfigUtil`: this file is
+    /// pure Foundation and is compiled into all three application targets, and a helper that is
+    /// not is exactly the kind of dependency that breaks one target and not the others.
     static func seconds(status: [String: Any]?) -> Int {
         for path in ["call.indoor.return_s", "call.return_s"] {
-            if ConfigUtil.dig(status, path) != nil {
-                return ConfigUtil.int(status, path, defaultSeconds)
-            }
+            guard let value = lookup(path, in: status) else { continue }
+            if let number = value as? NSNumber { return number.intValue }
+            if let text = value as? String, let parsed = Int(text) { return parsed }
+            return defaultSeconds
         }
         return defaultSeconds
+    }
+
+    private static func lookup(_ dotted: String, in root: [String: Any]?) -> Any? {
+        var current: Any? = root
+        for part in dotted.split(separator: ".") {
+            guard let level = current as? [String: Any], let next = level[String(part)],
+                  !(next is NSNull) else { return nil }
+            current = next
+        }
+        return current
     }
 
     var display: Display {
@@ -150,5 +165,79 @@ struct IncomingReturnCountdown: Equatable {
     mutating func stop() {
         isStopped = true
         isPaused = false
+    }
+}
+
+/// How soon the shell may open another SIP monitor (listen) dialog to a door station after one
+/// ended without carrying anything.
+///
+/// From a device run: an indoor panel reopened a monitor dialog to an iPad 1 door station about
+/// 1.5 times a second for 39 seconds, every one of them ending immediately with no RTP in either
+/// direction. There was no backoff, so the retries themselves saturated the door station and took
+/// its HTTP server down with them — which removed the video frame whose absence was triggering the
+/// retry. A failed listen has to get quieter, not louder.
+struct MonitorRetryPolicy: Equatable {
+
+    /// The first wait, and the ceiling the doubling stops at.
+    static let firstDelayS: TimeInterval = 1
+    static let maxDelayS: TimeInterval = 30
+
+    /// What became of one monitor attempt.
+    enum Outcome: Equatable {
+        /// Media actually flowed: the door can be listened to and the wait resets.
+        case carriedAudio
+        /// The dialog came up and ended with nothing sent or received.
+        case endedWithoutMedia
+        /// The door never accepted the invitation.
+        case refused
+        /// The door says it has no microphone. Retrying cannot fix that.
+        case doorHasNoAudio
+    }
+
+    private(set) var failures = 0
+    /// Set once the door has said it has nothing to listen to. Only a deliberate request clears it.
+    private(set) var hasGivenUp = false
+
+    /// The wait before the next automatic attempt, or nil when there must not be one.
+    mutating func nextDelay(after outcome: Outcome) -> TimeInterval? {
+        switch outcome {
+        case .carriedAudio:
+            failures = 0
+            return nil
+        case .doorHasNoAudio:
+            hasGivenUp = true
+            failures = 0
+            return nil
+        case .endedWithoutMedia, .refused:
+            guard !hasGivenUp else { return nil }
+            failures += 1
+            return MonitorRetryPolicy.delay(forFailure: failures)
+        }
+    }
+
+    /// 1, 2, 4, 8, 16, then 30 for as long as it keeps failing.
+    static func delay(forFailure attempt: Int) -> TimeInterval {
+        guard attempt > 0 else { return firstDelayS }
+        // Doubling is computed by halving the ceiling instead of shifting, so a long-lived panel
+        // cannot overflow the exponent.
+        var delay = firstDelayS
+        for _ in 1..<attempt {
+            delay *= 2
+            if delay >= maxDelayS { return maxDelayS }
+        }
+        return min(delay, maxDelayS)
+    }
+
+    /// Whether a monitor dialog may be opened at all. `wanted` is the user's toggle: an automatic
+    /// retry behind a toggle the user has switched off is exactly the storm this prevents.
+    func mayAttempt(wanted: Bool) -> Bool {
+        return wanted && !hasGivenUp
+    }
+
+    /// A deliberate request — the user selecting a door, or turning the toggle back on — starts
+    /// over, including after the door said it had no audio.
+    mutating func reset() {
+        failures = 0
+        hasGivenUp = false
     }
 }

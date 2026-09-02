@@ -430,3 +430,91 @@ configuration entry yet, with `"configured": false` and the device's name as the
 those tiles normally — they are addressable, and the first announcement or unlock write creates the
 entry, after which the door reports `configured`. Offer the 門口 tab as the place to name it. A
 door nobody serves and nothing configures stays unknown and is refused with `400 rejected`.
+
+## History replicates silently, and only people answer
+
+A node joining a cluster receives the whole event history through anti-entropy. Those records land
+in the call log with their original outcomes and raise no presentation at all: no chime, no
+incoming screen, no missed-call `device_alert`, no Telegram or MQTT. A call event presents only
+while its call is live now — still `ringing` on the door station and inside the ring window the
+press declared (`expires_at_ms`, against corrected cluster time). Announcements and SOS are
+replicated *state*, so a joining node applies the current value once and never replays the
+transitions behind it.
+
+`status.sip.answer_mode` reports whether this node picks up by itself. The default follows the
+role — `auto` on a door station, `ring` on an indoor panel — so `outcome: "answered"` and
+`answered_by` in the call log mean a person answered. Setting
+`sip.accounts.<node_id>.answer_mode` to `auto` on an indoor panel is a deliberate intercom
+choice, and the history then attributes calls to that device.
+
+## Live streams and the HTTP worker pool
+
+`/stream.mjpeg`, `/stream.mp4` and `/stream-proxy.mp4` hold one HTTP worker thread each for as
+long as the stream runs. The pool is sized for that (16 workers), so ordinary API traffic is not
+starved by the live views a house has open. A door station whose camera produces no frames now
+probes its stream sockets every two seconds and releases the connection after thirty idle
+seconds — without that, a stream with no frames never touched the socket, never noticed a client
+that had gone away, and pinned its worker permanently. Four such connections used to make the
+port refuse everything while the process and the mesh carried on normally.
+
+Handler exceptions are contained at both boundaries: one that escapes a route handler answers
+`500` instead of unwinding the runloop that owns calls, the mesh and every timer, and one that
+reaches the civetweb C frame answers `500` instead of terminating the process. A handler that
+exceeds its five-second budget is logged with its URI, because a stalled runloop shows up there
+first, one worker at a time.
+
+## The pairing QR payload
+
+`POST /api/join-token` and `POST /api/pairing/start` both return a `uri` alongside `host`, `pin`
+and `expires_s`, and `GET /api/pairing`'s `token` object carries the same field while a PIN is
+live:
+
+```
+doorbell://pair?host=<ip:port>&pin=<6 digits>&exp=<unix seconds>&cluster=<name>
+```
+
+Render the QR from that string and never assemble it in the client — core owns the format so a
+device with the app installed opens a scanned code straight into the join flow. `host` and `pin`
+are required, `exp` is an absolute Unix second, and values are percent-encoded (a `+` is a literal
+plus, not a space), so a cluster name with spaces or Japanese survives. Unknown query keys are
+ignored by parsers, so the format can gain one without breaking shipped clients.
+
+Keep the host and PIN printed beside the code: someone scanning with a plain camera app reads and
+types them instead. `db_core_parse_pair_uri_json` validates a scanned code the same way on every
+platform, returning `bad_scheme`, `missing_pin`, `missing_host` or `expired` on failure.
+
+## Listen-in is not answering
+
+`status.call.dialog_mode` is the `X-Doorbell-Mode` of the dialog in this node's primary slot: `""`
+for an ordinary two-way call, `"answer"` for an explicit takeover, `"monitor"` for one-way
+listen-in. An outbound monitor dialog occupies the same slot as a real call, so core checks the
+mode before treating an established dialog as an answer — a panel opening listen-in leaves the
+call ringing and writes nothing into the history.
+
+A door station also refuses monitor dialogs from a peer that keeps opening them without ever
+carrying media: after eight such dialogs within ten seconds it answers `486` with a
+`Retry-After: 10`. One panel churning listen-in sessions is otherwise enough to saturate a small
+door station, which is what took an iPad 1's HTTP listener down.
+
+## Auto-seeded doors are reclaimed, not orphaned
+
+A door station seeds `doors.<door>` for the door it serves and stamps it with `seeded_by` and
+`seeded_label`. If that device later starts with a different role or a different `boot.door`, it
+deletes the entry it seeded — a station switched to an indoor panel would otherwise leave a ghost
+tile for a door nobody serves. It only ever deletes an entry that is still exactly what it wrote:
+any extra field, or a renamed label, means an administrator has adopted the door, and it stays.
+
+`status.doors.<id>.served_by` gives the node id of the alive station serving that door, or `null`.
+Use it to tell "the station is offline" (`configured: true`, `served_by: null` — show the tile
+greyed) apart from "no station at all".
+
+## Returning from the incoming-call screen
+
+`call.indoor.return_s` (5..600 seconds, default 60) and its per-device override
+`devices.<id>.local.call.return_s` set how long an indoor panel stays on the incoming-call page.
+The title carries the countdown and the panel returns home at zero; `status.call.return_s` is the
+effective value for that node. Removing an override means deleting the leaf key, not writing the
+cluster value into the device.
+
+A visitor cancelling the call does not close the page: the live view stays until the countdown
+ends or someone leaves manually. Tapping the countdown number cancels the countdown for that call.

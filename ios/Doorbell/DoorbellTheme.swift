@@ -238,10 +238,39 @@ struct DoorbellSkin {
     /// colour actually painted, quiet variant included, and against the whole ground rather than
     /// its average.
     func paint(_ region: String, to label: UILabel, quiet: Bool) {
-        let ground = self.ground(in: sampler?.regionRect(of: label))
+        let rect = sampler?.regionRect(of: label)
+        let ground = self.ground(in: rect)
         let decision = self.decision(region, on: ground)
         DoorbellTheme.applyInk(quiet ? muted(decision, on: ground) : decision.ink, over: ground,
                                to: label)
+        logSample(region, rect: rect, ground: ground, decision: decision)
+    }
+
+    /// What the region was actually measured on. Off unless `boot.json` asks for timings — this
+    /// is the line that says whether a halo is missing because the sample was wrong or because
+    /// the ink genuinely cleared 4.5:1.
+    private func logSample(_ region: String, rect: CGRect?, ground: InkGround,
+                           decision: InkDecision) {
+        guard IOSAvailability.PerfProbe.enabled else { return }
+        var detail = "ink." + region
+        if let rect = rect {
+            detail += String(format: " rect=%.0f,%.0f %.0fx%.0f", rect.minX, rect.minY,
+                             rect.width, rect.height)
+        } else {
+            detail += " rect=none"
+        }
+        if case .sampled(let sample) = ground {
+            detail += String(format: " y[min=%.3f max=%.3f avg=%.3f] worst=%.2f",
+                             Double(sample.minLuminance), Double(sample.maxLuminance),
+                             Double(DoorbellTheme.luminance(sample.average)),
+                             Double(ground.worstContrast(decision.ink)))
+        } else {
+            detail += " flat"
+        }
+        detail += " ink=" + DoorbellTheme.hex(decision.ink)
+            + " src=" + decision.source.rawValue
+            + " halo=" + (decision.shadow == nil ? "no" : "yes")
+        IOSAvailability.logDebug(detail)
     }
 
     // MARK: - Text on a card this shell painted
@@ -480,6 +509,9 @@ final class ThemeBackgroundView: UIImageView {
 
     private func repaintInk() {
         guard let skin = inkSkin else { return }
+        // A label's frame is only true after the pending layout pass has run. Sampling before it
+        // measures whatever rectangle the label happened to hold — often a pre-layout zero.
+        (window ?? superview)?.layoutIfNeeded()
         inked = inked.filter { $0.label != nil }
         for entry in inked {
             guard let label = entry.label else { continue }
@@ -729,8 +761,7 @@ enum DoorbellTheme {
             return InkDecision(ink: ink, background: background, source: source, shadow: nil)
         }
         let opposite = luminance(ink) >= 0.5 ? UIColor.black : UIColor.white
-        return InkDecision(ink: ink, background: background, source: source,
-                           shadow: opposite.withAlphaComponent(0.4))
+        return InkDecision(ink: ink, background: background, source: source, shadow: opposite)
     }
 
     /// How Core arrived at `auto_background.color`: `image` when it sampled the picture, `color`
@@ -763,13 +794,33 @@ enum DoorbellTheme {
         return color(hex: ConfigUtil.str(display, "theme.auto_background.color"))
     }
 
-    /// A one-pixel outline is added when the chosen ink misses AA anywhere on the ground under
-    /// the region; it uses the opposite ink at 40 %.
+    /// Blur of the halo drawn behind text that misses AA somewhere in its own region, and how
+    /// solid it is. A flat 40 % at a one-point offset — which is what `UILabel.shadowColor` can
+    /// express — is two device pixels of unblurred colour on a 2x panel, and the device showed it
+    /// simply is not visible behind a busy photograph. A blurred halo at close to full opacity is.
+    static let outlineBlurRadius: CGFloat = 3
+    static let outlineOpacity: Float = 0.9
+
+    /// A halo is drawn when the chosen ink misses AA anywhere on the ground under the region.
+    ///
+    /// It goes on the layer rather than through `UILabel.shadowColor`, for two reasons: the label
+    /// shadow has no blur at all, and the layer shadow is computed from the glyph alpha, so it
+    /// survives every later `text` assignment. An attributed `NSShadow` would be cheaper to draw
+    /// but the clock rewrites its text once a second and would lose it.
     static func applyInk(_ ink: UIColor, over ground: InkGround, to label: UILabel) {
         let decided = decision(ink: ink, ground: ground, source: .local)
         label.textColor = decided.ink
-        label.shadowColor = decided.shadow
-        label.shadowOffset = decided.shadow == nil ? .zero : CGSize(width: 0, height: 1)
+        label.shadowColor = nil
+        label.shadowOffset = .zero
+        guard let outline = decided.shadow else {
+            label.layer.shadowOpacity = 0
+            return
+        }
+        label.layer.masksToBounds = false
+        label.layer.shadowColor = outline.cgColor
+        label.layer.shadowOffset = .zero
+        label.layer.shadowRadius = outlineBlurRadius
+        label.layer.shadowOpacity = outlineOpacity
     }
 
     /// Call-button colour for a door station: the complement of the effective background, moved in

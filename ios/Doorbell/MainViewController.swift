@@ -79,6 +79,9 @@ final class MainViewController: UIViewController {
     private let pairingBanner = UIButton(type: .system)
     private let appVersionLabel = UILabel()
     private let purposeSection = UIStackView()
+    /// The purpose grid's caption. §5.3 allows the door station one hint sentence and the
+    /// visitor screen spends it on `door.hint_call`, so this stays hidden there; the plain idle
+    /// view, which has no hint of its own, still shows it.
     private let purposeHint = UILabel()
     private let purposeGrid = UIStackView()
     private let langBar = UIStackView()
@@ -346,7 +349,8 @@ final class MainViewController: UIViewController {
 
         langBar.axis = .horizontal
         langBar.spacing = 12
-        langBar.alignment = .center
+        langBar.alignment = .fill
+        langBar.distribution = .fillEqually
 
         sosSlider.accessibilityIdentifier = "sos_slider"
         sosSlider.onTriggered = { [weak self] in self?.triggerEmergency() }
@@ -361,6 +365,7 @@ final class MainViewController: UIViewController {
 
         let content: UIView
         if boot.role == "door_station" {
+            purposeHint.isHidden = true
             let screen = VisitorScreenView(texts: texts, callButton: callButton, langBar: langBar,
                                            purposeSection: purposeSection, sosControl: sosSlider)
             visitorScreen = screen
@@ -581,7 +586,6 @@ final class MainViewController: UIViewController {
         callButton.setTitle(texts.t("idle.call_button_verb"), for: .normal)
         touchHint.text = texts.t("idle.touch_to_call")
         monitorButton.setTitle(texts.t("monitor.open"), for: .normal)
-        purposeHint.text = texts.t("idle.choose_purpose")
         callingText.text = callTitleOverride ?? texts.t("calling.title")
         cancelButton.setTitle(texts.t("calling.cancel"), for: .normal)
         replyCaption.text = texts.t("reply.banner")

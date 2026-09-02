@@ -348,6 +348,12 @@
     <string name="admin_with_snapshot">附照片</string>
     <string name="admin_write">写入</string>
     <string name="app_name">门铃</string>
+    <string name="call_return_device_hint">勾选“使用集群默认值”即可恢复默认</string>
+    <string name="call_return_hint">来电界面标题会显示倒计时，归零后返回主页。访客取消时实时画面仍会保留至倒计时结束；点按数字可取消倒计时</string>
+    <string name="call_return_inherit">使用集群默认值</string>
+    <string name="call_return_invalid">返回倒计时必须在 5 到 600 秒之间</string>
+    <string name="call_return_s">返回前的秒数</string>
+    <string name="call_return_title">从来电界面返回</string>
     <string name="calling_cancel">取消</string>
     <string name="calling_cancel_failed">无法取消呼叫</string>
     <string name="calling_no_answer">无人应答</string>

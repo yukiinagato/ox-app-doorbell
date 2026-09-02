@@ -20,6 +20,12 @@ namespace db {
 namespace {
 
 constexpr int64_t kHandlerTimeoutMs = 5000;
+// A live stream holds its worker thread for as long as it runs, so an idle one has to be able to
+// notice a client that has gone away. Without a frame to write, nothing ever touches the socket
+// and the worker is pinned for good -- which is exactly what a door station with no working
+// camera produces.
+constexpr int64_t kStreamIdleProbeMs = 2000;
+constexpr int64_t kStreamIdleGiveUpMs = 30000;
 constexpr size_t kMaxBodyBytes = 8 * 1024 * 1024;
 
 
@@ -258,6 +264,8 @@ int handleStream(struct mg_connection* conn, Httpd::Impl* impl) {
       "Connection: close\r\n\r\n", static_cast<long long>(server_wall_ms));
   if (mg_write(conn, head, std::strlen(head)) <= 0) return 200;
   const auto interval = std::chrono::milliseconds(1000 / (fps > 0 ? fps : 8));
+  auto last_frame = std::chrono::steady_clock::now();
+  auto last_probe = last_frame;
   for (;;) {
     if (impl->stopping.load()) break;
     {
@@ -267,7 +275,26 @@ int handleStream(struct mg_connection* conn, Httpd::Impl* impl) {
     if (!prov) break;
     int64_t capture_ms = 0;
     Bytes frame = prov(&capture_ms);
+    const auto now = std::chrono::steady_clock::now();
+    if (frame.empty()) {
+      const auto idle = std::chrono::duration_cast<std::chrono::milliseconds>(
+          now - last_frame).count();
+      if (idle >= kStreamIdleGiveUpMs) {
+        DB_LOGW("httpd", "/stream.mjpeg produced no frame for " + std::to_string(idle) +
+                             "ms; releasing the connection");
+        break;
+      }
+      // Touch the socket so a client that has gone away is detected even with no frames to send.
+      // A bare CRLF between parts is ignored by every multipart reader.
+      if (std::chrono::duration_cast<std::chrono::milliseconds>(now - last_probe).count() >=
+          kStreamIdleProbeMs) {
+        last_probe = now;
+        if (mg_write(conn, "\r\n", 2) <= 0) break;
+      }
+    }
     if (!frame.empty()) {
+      last_frame = now;
+      last_probe = now;
       int rotation = 0;
       {
         std::lock_guard<std::mutex> lk(impl->mu);
@@ -402,8 +429,21 @@ HttpResp runOnLoop(Httpd::Impl* impl, const Httpd::Handler& h, const HttpReq& re
     HttpResp resp;
   };
   auto p = std::make_shared<Pending>();
+  const std::string uri = req.uri;
   impl->loop.post([p, h, req] {
-    HttpResp r = h(req);
+    // The runloop is the single state thread for the whole node. An exception escaping a handler
+    // here would unwind it, so a bad request is answered with a 500 instead of stopping calls,
+    // the mesh, and every timer in the process.
+    HttpResp r;
+    try {
+      r = h(req);
+    } catch (const std::exception& e) {
+      DB_LOGE("httpd", std::string("handler threw on the runloop: ") + e.what());
+      r = HttpResp::text("internal error", 500);
+    } catch (...) {
+      DB_LOGE("httpd", "handler threw an unknown exception on the runloop");
+      r = HttpResp::text("internal error", 500);
+    }
     std::lock_guard<std::mutex> lk(p->m);
     p->resp = std::move(r);
     p->done = true;
@@ -411,13 +451,33 @@ HttpResp runOnLoop(Httpd::Impl* impl, const Httpd::Handler& h, const HttpReq& re
   });
   std::unique_lock<std::mutex> lk(p->m);
   if (!p->cv.wait_for(lk, std::chrono::milliseconds(kHandlerTimeoutMs), [&] { return p->done; })) {
+    // Worth a log: a stalled runloop shows up here first, one worker thread at a time.
+    DB_LOGW("httpd", "handler timed out after " + std::to_string(kHandlerTimeoutMs) + "ms: " +
+                         uri);
     return HttpResp::text("handler timeout", 503);
   }
   return std::move(p->resp);
 }
 
 
+int requestHandlerImpl(struct mg_connection* conn, void* cbdata);
+
+// civetweb calls this from a C frame, so an escaping C++ exception would terminate the process
+// rather than fail one request. Every request is answered, and the worker thread always returns
+// to the pool.
 int requestHandler(struct mg_connection* conn, void* cbdata) {
+  try {
+    return requestHandlerImpl(conn, cbdata);
+  } catch (const std::exception& e) {
+    DB_LOGE("httpd", std::string("request handler threw: ") + e.what());
+  } catch (...) {
+    DB_LOGE("httpd", "request handler threw an unknown exception");
+  }
+  writeResp(conn, HttpResp::text("internal error", 500));
+  return 500;
+}
+
+int requestHandlerImpl(struct mg_connection* conn, void* cbdata) {
   auto* impl = static_cast<Httpd::Impl*>(cbdata);
   HttpReq req = buildReq(conn);
 
@@ -524,8 +584,12 @@ bool Httpd::start(int port) {
   struct mg_callbacks cb;
   std::memset(&cb, 0, sizeof(cb));
   auto tryStart = [&](const std::string& ports) -> struct mg_context* {
+    // Every live stream holds one worker for as long as it runs, so the pool has to be larger
+    // than the number of viewers a house can open at once. With four workers, four live views
+    // pinned the pool and the port stopped accepting anything -- the process kept running and
+    // the mesh kept heartbeating on its own thread, so it looked like the listener had died.
     const char* opts[] = {"listening_ports", ports.c_str(),
-                          "num_threads",     "4",
+                          "num_threads",     "16",
                           "tcp_nodelay",     "1",
                           nullptr};
     return mg_start(&cb, nullptr, opts);

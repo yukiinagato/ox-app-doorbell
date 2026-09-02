@@ -351,6 +351,17 @@ std::vector<std::pair<std::string, std::string>> LwwMap::byPrefix(const std::str
   return out;
 }
 
+void LwwMap::resetReplica() {
+  map_.clear();
+  vv_.clear();
+  out_of_order_sequences_.clear();
+  durable_remote_frontier_.clear();
+  // Keep our own contiguous prefix: the identity survives unpair, so a later write must not
+  // reuse a sequence number the previous cluster still associates with different content.
+  if (self_seq_ > 0) vv_[self_id_] = self_seq_;
+  last_mutation_committed_ = true;
+}
+
 VersionVector LwwMap::versionVector() const { return vv_; }
 
 std::vector<LwwEntry> LwwMap::deltaSince(const VersionVector& remote_vv) const {

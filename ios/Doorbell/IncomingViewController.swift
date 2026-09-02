@@ -842,6 +842,11 @@ final class IncomingViewController: UIViewController {
                 if was { reportEndedIfNeeded() }
                 inCall = false
                 sipMode = ""
+                // A monitor dialog that ended leaves nothing playing, so the toggle must not go
+                // on claiming the room is being listened to. Nothing reopens it: the only way
+                // back into monitor here is the button.
+                monitorOn = false
+                updateToggleTitles()
                 if was { resumeReturnCountdown() }
             }
         case "reply":
