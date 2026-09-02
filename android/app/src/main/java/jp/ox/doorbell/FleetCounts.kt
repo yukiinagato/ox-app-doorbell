@@ -45,13 +45,15 @@ internal object FleetCounting {
         if (peers != null) for (index in 0 until peers.length()) {
             val peer = peers.optJSONObject(index) ?: continue
             val id = peer.optString("id").orEmpty()
-            if (peer.optBoolean("self", false) || (selfId.isNotEmpty() && id == selfId))
-                sawSelf = true
-            devices++
             // This node is running, whatever a stale peer entry for it happens to say.
-            val online = peer.optBoolean("self", false) ||
-                (selfId.isNotEmpty() && id == selfId) ||
-                DoorStations.isAlive(peer)
+            val self = peer.optBoolean("self", false) || (selfId.isNotEmpty() && id == selfId)
+            if (self) sawSelf = true
+            devices++
+            // Every other device is online exactly when core says so, which is the same single
+            // liveness source core resolves served_by from. DoorStations.isAlive stays looser --
+            // an unrecognised state is worth one still request there -- but a counter that says
+            // "2/2 answering" must not reach that number on a state nobody recognises.
+            val online = self || peer.optString("status") == ALIVE
             when (DoorStations.roleOf(config, peer)) {
                 DoorStations.ROLE -> { doors++; if (online) doorsOnline++ }
                 PANEL -> { panels++; if (online) panelsOnline++ }
@@ -69,4 +71,6 @@ internal object FleetCounting {
     }
 
     const val PANEL = "indoor_panel"
+
+    private const val ALIVE = "alive"
 }

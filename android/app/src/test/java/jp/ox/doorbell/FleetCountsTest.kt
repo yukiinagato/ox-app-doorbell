@@ -119,4 +119,40 @@ class FleetCountsTest {
         assertEquals(RoleCount(0, 0), result.doorStations)
         assertEquals(RoleCount(1, 1), result.panels)
     }
+
+    /** Device-verified payload: peers keyed by name, one dead door, a remote alive panel. */
+    @Test
+    fun theDeviceReportedClusterCountsBothPanelsOnline() {
+        val result = FleetCounting.of(
+            JSONObject(
+                """{"peers":[
+                    {"name":"ipad1-monitor","role":"indoor_panel","status":"alive","self":false},
+                    {"name":"doorbell-ios","role":"door_station","status":"dead"},
+                    {"name":"doorbell-android","role":"indoor_panel","status":"alive","self":true}
+                ]}""",
+            ),
+            null,
+            "indoor_panel",
+            "doorbell-android",
+        )
+        assertEquals(3, result.devices)
+        assertEquals(RoleCount(0, 1), result.doorStations)
+        assertEquals(RoleCount(2, 2), result.panels)
+    }
+
+    /**
+     * Only core's own "alive" counts as answering. A state this shell does not recognise is not
+     * evidence that a device is up, and the header must not claim it is.
+     */
+    @Test
+    fun aPeerInAnUnrecognisedStateIsNotCountedAsAnswering() {
+        val result = counts(status(
+            peer(selfId, "indoor_panel", self = true),
+            peer("n-panel2", "indoor_panel", state = "joining"),
+            """{"id":"n-door","role":"door_station"}""",
+        ))
+        assertEquals(3, result.devices)
+        assertEquals(RoleCount(0, 1), result.doorStations)
+        assertEquals(RoleCount(1, 2), result.panels)
+    }
 }
