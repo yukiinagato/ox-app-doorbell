@@ -163,7 +163,7 @@ esac
 }
 LOCAL_SHA="$(shasum -a 256 "$PACKAGE" | awk '{print $1}')"
 "${SSH[@]}" "cat > '$REMOTE_PACKAGE'" < "$PACKAGE"
-REMOTE_SHA="$("${SSH[@]}" "openssl sha256 '$REMOTE_PACKAGE'" | awk '{print $NF}')"
+REMOTE_SHA="$("${SSH[@]}" "openssl dgst -sha256 '$REMOTE_PACKAGE'" | awk '{print $NF}')"
 [[ "$REMOTE_SHA" == "$LOCAL_SHA" ]] || {
   echo "error: uploaded helper package digest mismatch" >&2
   exit 1
