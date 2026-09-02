@@ -360,6 +360,7 @@
 "dash.notice_global" = "Announcement (all doors)";
 "dash.recent_calls" = "Recent calls";
 "dash.see_all" = "See all";
+"dash.tile_no_station" = "No door station";
 "dash.tile_offline" = "Offline";
 "dash.tile_open" = "View";
 "dash.tile_watch" = "View";

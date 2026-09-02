@@ -365,6 +365,7 @@
     <string name="dash_notice_global">公告（全部门口）</string>
     <string name="dash_recent_calls">呼叫记录</string>
     <string name="dash_see_all">查看全部</string>
+    <string name="dash_tile_no_station">无门口机</string>
     <string name="dash_tile_offline">离线</string>
     <string name="dash_tile_open">查看</string>
     <string name="dash_tile_watch">查看</string>
