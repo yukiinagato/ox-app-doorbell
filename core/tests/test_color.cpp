@@ -4,6 +4,7 @@
 #include <string>
 
 #include "doctest.h"
+#include "test_env.h"
 #include "util/color.h"
 #include "util/common.h"
 
@@ -264,7 +265,8 @@ Bytes makeGreyPng(int width, int height, uint8_t value) {
 }
 
 std::string writeTempFixture(const std::string& name, const Bytes& bytes) {
-  const std::string path = "/tmp/" + name;
+  // A per-process path: two copies of the suite used to write and delete the same file.
+  const std::string path = db::testing::uniqueTempPath("doorbell_fixture_" + name, "");
   REQUIRE(writeFileBytes(path, bytes));
   return path;
 }
@@ -290,7 +292,7 @@ TEST_CASE("color: image averaging samples a decodable file and reports why it co
       0xDA, 0x63, 0x98, 0x7D, 0xDD, 0x03, 0x88, 0x18, 0x20, 0x14, 0x00, 0x31, 0xB2, 0x06,
       0xE9, 0x0E, 0x76, 0xB2, 0x64, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4E, 0x44, 0xAE,
       0x42, 0x60, 0x82};
-  const std::string path = "/tmp/doorbell_theme_average_test.png";
+  const std::string path = db::testing::uniqueTempPath("doorbell_theme_average", ".png");
   Bytes bytes(png, png + sizeof(png));
   REQUIRE(writeFileBytes(path, bytes));
   REQUIRE(averageImageColor(path, &average) == SampleStatus::kOk);
@@ -298,7 +300,7 @@ TEST_CASE("color: image averaging samples a decodable file and reports why it co
   std::remove(path.c_str());
 
   // A file that is not an image at all is a decode failure, distinct from a missing file.
-  const std::string junk_path = "/tmp/doorbell_theme_average_junk.png";
+  const std::string junk_path = db::testing::uniqueTempPath("doorbell_theme_junk", ".png");
   Bytes junk(64, 0x41);
   REQUIRE(writeFileBytes(junk_path, junk));
   CHECK(averageImageColor(junk_path, &average) == SampleStatus::kDecodeFailed);
