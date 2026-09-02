@@ -965,7 +965,7 @@ class WindowsContracts(unittest.TestCase):
         shell = read("win/DoorbellApp/MainWindow.Shell.cs")
         # Core has no layout geometry, so its auto_ink is one whole-image average. The shell has
         # the geometry and samples only the pixels under each element.
-        self.assertIn("public static bool TryAverageRegion(BitmapSource source, Int32Rect crop,",
+        self.assertIn("public static bool TrySampleRegion(BitmapSource source, Int32Rect crop,",
                       contrast)
         self.assertIn("public static Int32Rect MapUniformToFill(", contrast)
         # The mapping matches Stretch=UniformToFill: scale to cover, centre the overflow.
@@ -974,26 +974,29 @@ class WindowsContracts(unittest.TestCase):
         self.assertIn("Math.Max(viewport.Width / imageWidth, viewport.Height / imageHeight)",
                       mapping)
         self.assertIn("(viewport.Width - imageWidth * scale) / 2.0", mapping)
-        # Downscale to at most 16x16 before averaging, per the spec's sampling rule.
-        average = contrast[contrast.index("public static bool TryAverage(BitmapSource source"):
-                           contrast.index("public static bool TryAverageRegion")]
-        self.assertIn("16.0 / Math.Max(1, source.PixelWidth)", average)
+        # Downscale to at most 16x16 before sampling, per the spec's rule.
+        sampler = contrast[contrast.index("public static bool TrySample(BitmapSource source"):
+                           contrast.index("public static bool TryAverage(BitmapSource source")]
+        self.assertIn("16.0 / Math.Max(1, source.PixelWidth)", sampler)
         self.assertIn("0.2126 * Channel(color.R)", contrast)
         # A per-region sample, and any opaque surface core never saw, decide locally.
         decide = contrast[contrast.index("public static InkDecision Decide("):
                           contrast.index("public static bool TryContractBackground")]
         self.assertIn("object auto = decideLocally ? null", decide)
-        self.assertIn("decision.NeedsShadow = Ratio(decision.Ink, background) < 4.5;", decide)
-        # The outline is the opposite of whatever ink was chosen, admin colours included.
+        # The outline is the opposite of whatever ink was chosen, admin colours included, and is
+        # judged against the region's extremes rather than its average.
         self.assertIn("decision.Shadow = BetterInk(decision.Ink);", decide)
-        under = shell[shell.index("private Color BackgroundUnder("):
+        self.assertIn("sample.DarkestLuminance", decide)
+        self.assertIn("sample.LightestLuminance", decide)
+        under = shell[shell.index("private BackgroundSample BackgroundUnder("):
                       shell.index("private static Color? SurfaceColour(")]
         self.assertIn("decideLocally = true;", under)
         self.assertIn("ThemeContrast.MapUniformToFill(bitmap,", under)
+        self.assertIn("ThemeContrast.TrySampleRegion(bitmap, crop, out region)", under)
         self.assertIn("element.TransformToAncestor(this).Transform(new Point(0, 0))", under)
         # The outline is 40 % of the opposite ink and only appears when contrast falls short.
         outline = shell[shell.index("private static DropShadowEffect OutlineFor("):
-                        shell.index("private Color BackgroundUnder(")]
+                        shell.index("private BackgroundSample BackgroundUnder(")]
         self.assertIn("Opacity = 0.4", outline)
         self.assertIn("decision.NeedsShadow ? OutlineFor(decision.Shadow) : null", shell)
         # Every region the spec lists, across the dashboard, visitor screen and call screens.
@@ -1068,6 +1071,74 @@ class WindowsContracts(unittest.TestCase):
         self.assertIn("Ratio(DarkInk, background) >= Ratio(LightInk, background)", rule)
         # Every local decision goes through it, including the call-button direction.
         self.assertIn("bool preferDark = BetterInk(background) == DarkInk;", contrast)
+
+    def test_the_outline_answers_to_the_worst_patch_not_the_average(self):
+        """A region that spans light and dark fails over one of them even when its average reads.
+
+        Ink choice still follows the average; the 40 % opposite-ink outline is judged against the
+        darkest and the lightest patch of the 16x16 sample. Contrast falls off monotonically away
+        from the ink's own luminance, so the worst patch is always one of those two extremes.
+        """
+        contrast = read("win/DoorbellApp/Util/ThemeContrast.cs")
+        found = re.findall(
+            r"public static readonly Color (LightInk|DarkInk) = "
+            r"Color\.FromRgb\(0x([0-9A-Fa-f]{2}), 0x([0-9A-Fa-f]{2}), 0x([0-9A-Fa-f]{2})\);",
+            contrast)
+        inks = {name: (int(r, 16), int(g, 16), int(b, 16)) for name, r, g, b in found}
+
+        def channel(value):
+            value /= 255.0
+            return value / 12.92 if value <= 0.04045 else ((value + 0.055) / 1.055) ** 2.4
+
+        def luminance(rgb):
+            return (0.2126 * channel(rgb[0]) + 0.7152 * channel(rgb[1]) +
+                    0.0722 * channel(rgb[2]))
+
+        def ratio(first, second):
+            return (max(first, second) + 0.05) / (min(first, second) + 0.05)
+
+        def decide(average, darkest, lightest):
+            """The rule as implemented: ink from the average, outline from the extremes."""
+            ink = ("DarkInk" if ratio(luminance(inks["DarkInk"]), luminance(average)) >=
+                   ratio(luminance(inks["LightInk"]), luminance(average)) else "LightInk")
+            y = luminance(inks[ink])
+            outline = ratio(y, darkest) < 4.5 or ratio(y, lightest) < 4.5
+            return ink, outline
+
+        # A uniform wallpaper: dark ink, and nothing to outline against.
+        flat = luminance((0xBB, 0xBB, 0xB4))
+        self.assertEqual(decide((0xBB, 0xBB, 0xB4), flat, flat), ("DarkInk", False))
+
+        # The same average built out of a light half and a dark half. The average still asks for
+        # dark ink, but dark ink is unreadable over the dark half, so the outline appears.
+        dark_patch = luminance((0x20, 0x20, 0x20))
+        light_patch = luminance((0xF4, 0xF4, 0xEC))
+        ink, outline = decide((0xBB, 0xBB, 0xB4), dark_patch, light_patch)
+        self.assertEqual(ink, "DarkInk")
+        self.assertTrue(outline, "text spanning a dark patch needs the outline")
+        # The average alone would not have asked for it, which is the bug this rule fixes.
+        self.assertGreaterEqual(ratio(luminance(inks["DarkInk"]), flat), 4.5)
+
+        # And the implementation is that comparison, against both extremes.
+        decision = contrast[contrast.index("public static InkDecision Decide(Dictionary<string, "
+                                           "object> display, string regionId,\n"
+                                           "                                         "
+                                           "BackgroundSample sample"):
+                            contrast.index("public static bool CoreSampledBackground")]
+        self.assertIn("decision.Ink = BetterInk(background);", decision)
+        self.assertIn("RatioOf(ink, sample.DarkestLuminance) < 4.5 ||", decision)
+        self.assertIn("RatioOf(ink, sample.LightestLuminance) < 4.5", decision)
+        self.assertNotIn("Ratio(decision.Ink, background) < 4.5", contrast)
+        # The sampler records both extremes alongside the average.
+        sampler = contrast[contrast.index("public static bool TrySample(BitmapSource source"):
+                           contrast.index("public static bool TryAverage(BitmapSource source")]
+        self.assertIn("if (patch < darkest) darkest = patch;", sampler)
+        self.assertIn("if (patch > lightest) lightest = patch;", sampler)
+        # A flat surface is the degenerate sample, so a card behaves exactly as before.
+        uniform = contrast[contrast.index("public static BackgroundSample Uniform("):
+                           contrast.index("/// <summary>\n    /// The ink one text region")]
+        self.assertIn("DarkestLuminance = luminance,", uniform)
+        self.assertIn("LightestLuminance = luminance,", uniform)
 
     def test_core_theme_values_are_dropped_when_core_never_read_the_image(self):
         contrast = read("win/DoorbellApp/Util/ThemeContrast.cs")

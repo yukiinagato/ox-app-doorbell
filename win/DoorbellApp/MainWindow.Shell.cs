@@ -254,14 +254,14 @@ namespace DoorbellApp
         {
             if (element == null) return;
             bool decideLocally;
-            Color background = BackgroundUnder(element, out decideLocally);
+            BackgroundSample sample = BackgroundUnder(element, out decideLocally);
             // Core's published ink also has to be ignored when core says it never read the
             // configured background image: it then describes the flat theme colour, not the photo.
             decideLocally |= !ThemeContrast.CoreSampledBackground(_display);
             InkDecision decision =
-                ThemeContrast.Decide(_display, regionId, background, decideLocally);
+                ThemeContrast.Decide(_display, regionId, sample, decideLocally);
             element.Foreground = ThemeContrast.Brush(
-                muted > 0 ? MixTowards(decision.Ink, background, muted) : decision.Ink);
+                muted > 0 ? MixTowards(decision.Ink, sample.Average, muted) : decision.Ink);
             element.Effect = decision.NeedsShadow ? OutlineFor(decision.Shadow) : null;
         }
 
@@ -278,13 +278,15 @@ namespace DoorbellApp
         }
 
         /// <summary>
-        /// The colour behind one element. An opaque ancestor surface — a card, a call screen —
-        /// answers directly; otherwise the theme background image is sampled under exactly this
-        /// element's bounds, which is the refinement core cannot make without layout geometry.
+        /// What is behind one element. An opaque ancestor surface — a card, a call screen —
+        /// answers directly and uniformly; otherwise the theme background image is sampled under
+        /// exactly this element's bounds, which is the refinement core cannot make without layout
+        /// geometry, and the sample keeps its darkest and lightest patch so the outline can be
+        /// judged against the whole region rather than its average.
         /// decideLocally is true in both of those cases, because core's published token describes
         /// only the theme background as a whole; it is false when that whole is what applies.
         /// </summary>
-        private Color BackgroundUnder(FrameworkElement element, out bool decideLocally)
+        private BackgroundSample BackgroundUnder(FrameworkElement element, out bool decideLocally)
         {
             decideLocally = false;
             for (DependencyObject node = element; node != null && node != this;
@@ -295,7 +297,7 @@ namespace DoorbellApp
                 {
                     // Core never saw this surface, so its whole-image token cannot describe it.
                     decideLocally = true;
-                    return opaque.Value;
+                    return BackgroundSample.Uniform(opaque.Value);
                 }
             }
 
@@ -311,8 +313,8 @@ namespace DoorbellApp
                             new Size(element.ActualWidth, element.ActualHeight));
                         Int32Rect crop = ThemeContrast.MapUniformToFill(bitmap,
                             new Size(ActualWidth, ActualHeight), bounds);
-                        Color region;
-                        if (ThemeContrast.TryAverageRegion(bitmap, crop, out region))
+                        BackgroundSample region;
+                        if (ThemeContrast.TrySampleRegion(bitmap, crop, out region))
                         {
                             decideLocally = true;
                             return region;
@@ -324,7 +326,7 @@ namespace DoorbellApp
                     // Not connected to this window's visual tree yet; the shared value applies.
                 }
             }
-            return EffectiveBackground();
+            return BackgroundSample.Uniform(EffectiveBackground());
         }
 
         private static Color? SurfaceColour(DependencyObject node)
