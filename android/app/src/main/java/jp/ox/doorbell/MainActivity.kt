@@ -18,7 +18,10 @@ import android.hardware.SensorManager
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
+import android.os.HandlerThread
 import android.os.Looper
+import android.os.Process
+import android.os.SystemClock
 import android.speech.tts.TextToSpeech
 import android.util.Log
 import android.view.View
@@ -99,6 +102,16 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
     /** The latest status snapshot, which carries the resolved notice, unlock, and display. */
     private var statusSnapshot: JSONObject? = null
 
+    /** Home-screen refresh coalescing; see [HomeRefreshPolicy]. */
+    private var homeRefreshRunMs = 0L
+    private var homeRefreshQueued = false
+    private var homeRefreshWantsConfig = false
+    private val homeRefreshTick = Runnable { runHomeRefresh() }
+
+    /** Where the coalesced refresh reads core, so the main thread never waits on the run loop. */
+    private var homeThread: HandlerThread? = null
+    private var homeHandler: Handler? = null
+
     private var tts: TextToSpeech? = null
     private var ttsReady = false
     private val sensorManager by lazy { getSystemService(SENSOR_SERVICE) as SensorManager }
@@ -168,6 +181,11 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
         setContentView(R.layout.activity_main)
         bindViews()
         installRoleHome()
+
+        val worker = HandlerThread("doorbell-home", Process.THREAD_PRIORITY_BACKGROUND)
+        worker.start()
+        homeThread = worker
+        homeHandler = Handler(worker.looper)
 
         refreshConfigCache()
         texts.setLang(visitorLang)
@@ -244,16 +262,27 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
      */
     private fun maybeShowPairing(): Boolean {
         if (!app.coreOk) return false
-        if (app.core.pairingInfo() == null) return false
-        if (app.pairingReady()) return false
+        val pairing = app.core.pairingInfo() ?: return false
+        if (app.pairingReadyFrom(pairing)) return false
         if (app.pairingDeferred) return false
         PairingActivity.launch(this)
         return true
     }
 
-    /** Membership status replaces the raw node identifier, and opens the Add-device panel. */
+    /**
+     * Membership status replaces the raw node identifier, and opens the Add-device panel.
+     *
+     * Reads core here, so it belongs to the one-shot paths: resume, and core reporting ready. The
+     * event stream goes through [scheduleHomeRefresh], which reads pairing off the main thread and
+     * renders through [renderMembership].
+     */
     private fun refreshMembership() {
-        val ready = app.pairingReady()
+        val pairing = if (app.coreOk) app.core.pairingInfo() else null
+        renderMembership(pairing, app.pairingReadyFrom(pairing))
+    }
+
+    /** Render the membership pill and the pairing banner from an already-read pairing document. */
+    private fun renderMembership(pairing: JSONObject?, ready: Boolean) {
         pairingBanner.visibility = if (ready) View.GONE else View.VISIBLE
         if (!ready) {
             pairingBanner.text = texts.t(
@@ -263,7 +292,6 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
             return
         }
         if (dashboard != null) {
-            val pairing = app.core.pairingInfo()
             nodeInfo.text = listOf(
                 texts.t("pair.membership", R.string.pair_membership,
                         PairingModel.memberCount(pairing).toString()),
@@ -273,7 +301,7 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
             return
         }
         // A visitor sees the door, the core and app versions, and the battery — nothing else.
-        val status = statusSnapshot ?: app.core.status()
+        val status = statusSnapshot
         val power = status?.optJSONObject("self")?.optJSONObject("power")
         nodeInfo.text = ShellUi.versionLine(
             doorLabel(app.boot.door).ifEmpty { app.boot.name },
@@ -336,6 +364,8 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
         sensorManager.unregisterListener(this)
         ui.removeCallbacks(clockTick)
         ui.removeCallbacks(purposeTimeout)
+        ui.removeCallbacks(homeRefreshTick)
+        homeRefreshQueued = false
         dashboard?.onPause()
         stopRegionInkWatch()
         if (::sosSlider.isInitialized) sosSlider.cancelCountdown()
@@ -391,6 +421,10 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
     }
 
     override fun onDestroy() {
+        ui.removeCallbacks(homeRefreshTick)
+        homeThread?.quit()
+        homeThread = null
+        homeHandler = null
         app.unbindForeground(this)
         tts?.shutdown()
         try { audio?.release() } catch (_: Exception) { }
@@ -734,6 +768,70 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
         callButton.setTextColor(ShellUi.opaque(ink))
     }
 
+    /**
+     * Ask for a home-screen refresh. Several events a second fold into one refresh; see
+     * [HomeRefreshPolicy]. [withConfig] also re-reads configuration and rebuilds what depends on
+     * it, which peer liveness never changes.
+     */
+    private fun scheduleHomeRefresh(withConfig: Boolean = false) {
+        if (withConfig) homeRefreshWantsConfig = true
+        if (homeRefreshQueued) return
+        homeRefreshQueued = true
+        ui.postDelayed(
+            homeRefreshTick,
+            HomeRefreshPolicy.delayMs(homeRefreshRunMs, SystemClock.elapsedRealtime()),
+        )
+    }
+
+    /** Read core for one coalesced refresh, off the main thread, and render what comes back. */
+    private fun runHomeRefresh() {
+        homeRefreshQueued = false
+        val worker = homeHandler
+        // Leave the pending flags alone when there is nothing to read: the configuration rebuild
+        // this refresh was carrying must still happen once core is back.
+        if (!app.coreOk || worker == null) return
+        homeRefreshRunMs = SystemClock.elapsedRealtime()
+        val withConfig = homeRefreshWantsConfig
+        homeRefreshWantsConfig = false
+        worker.post {
+            // One status document per refresh, shared by every surface that renders from it.
+            val status = app.core.status()
+            val config = if (withConfig) app.core.config() else null
+            val pairing = app.core.pairingInfo()
+            val ready = app.pairingReadyFrom(pairing)
+            ui.post { applyHomeRefresh(status, config, pairing, ready, withConfig) }
+        }
+    }
+
+    private fun applyHomeRefresh(
+        status: JSONObject?,
+        config: JSONObject?,
+        pairing: JSONObject?,
+        pairingReady: Boolean,
+        withConfig: Boolean,
+    ) {
+        if (isFinishing) return
+        statusSnapshot = status
+        coreDisplay = CoreDisplays.parse(status?.optJSONObject("display"))
+        status?.optJSONObject("node")?.optString("id")?.let { if (it.isNotEmpty()) nodeId = it }
+        if (withConfig) {
+            applyConfigCache(config)
+            applyTheme()
+            buildPurposeButtons()
+            buildLangBar()
+            applyStrings()
+            applySemanticUi()
+            configureSos()
+        }
+        renderMembership(pairing, pairingReady)
+        status?.optJSONObject("display")?.let {
+            applyNightTint(it.optBoolean("night"), it.optBoolean("red_tint"))
+        }
+        applyAppearance()
+        applyVisitorLayout()
+        dashboard?.refresh(status, cfg)
+    }
+
     private fun refreshNodeInfo() {
         refreshConfigCache()
         val st = app.core.status()
@@ -758,7 +856,8 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
         applySemanticUi()
         configureSos()
         applyVisitorLayout()
-        dashboard?.refresh()
+        homeRefreshRunMs = SystemClock.elapsedRealtime()
+        dashboard?.refresh(st, cfg)
     }
 
     /**
@@ -825,8 +924,10 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
 
     // Theme, purpose, and visitor-language configuration.
 
-    private fun refreshConfigCache() {
-        cfg = app.core.config()
+    private fun refreshConfigCache() = applyConfigCache(app.core.config())
+
+    private fun applyConfigCache(config: JSONObject?) {
+        cfg = config
         texts.setConfig(cfg)
         callFlowMode = CallFlowMode.parse(app.core.dig(cfg, "ui.call_flow")?.toString().orEmpty())
         val ttlSeconds = (app.core.dig(cfg, "ui.call_ttl_s") as? Number)?.toLong() ?: 60L
@@ -1270,7 +1371,12 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
                     releasePlayer(launchAudio); launchAudio = null
                 }
             }
-            "pairing_state", "pairing_revoked", "peers_changed" -> refreshMembership()
+            // peers_changed lands in the coalesced refresh below, which renders membership too.
+            // It used to be caught here as well, and because a `when` takes only its first
+            // matching branch that swallowed the event: the header counters were then never
+            // recomputed after startup, and stood at whatever the cluster looked like when the
+            // last unrelated event arrived.
+            "pairing_state", "pairing_revoked" -> refreshMembership()
             "safe_mode" -> {
                 if (ev.optBoolean("active")) {
                     pulse.clearAnimation()
@@ -1342,7 +1448,7 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
                 applyNightTint(ev.optBoolean("night"), ev.optBoolean("red_tint"))
                 applyAppearance()
                 applyVisitorLayout()
-                dashboard?.refresh()
+                scheduleHomeRefresh()
             }
             // Cluster time, battery, and announcements each redraw only what they affect.
             "time_changed" -> {
@@ -1352,21 +1458,15 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
                 dashboard?.onTimeChanged()
                 updateClock()
                 applyAppearance()
-                dashboard?.refresh()
+                scheduleHomeRefresh()
             }
-            "power_changed" -> {
-                refreshMembership()
-                dashboard?.refresh()
-            }
+            "power_changed" -> scheduleHomeRefresh()
             // A door of "*" means the cluster-wide announcement moved, which affects every
             // door that has none of its own.
-            "notice_changed" -> {
-                statusSnapshot = app.core.status()
-                applyVisitorLayout()
-                dashboard?.refresh()
-            }
-            "call_log_changed" -> dashboard?.refresh()
-            "peers_changed", "config_changed" -> refreshNodeInfo()
+            "notice_changed" -> scheduleHomeRefresh()
+            "call_log_changed" -> scheduleHomeRefresh()
+            "peers_changed" -> scheduleHomeRefresh()
+            "config_changed" -> scheduleHomeRefresh(withConfig = true)
             "event" -> {
                 handleCallLifecycleEvent(ev)
             }
