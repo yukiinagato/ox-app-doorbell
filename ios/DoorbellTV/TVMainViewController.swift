@@ -72,7 +72,11 @@ final class TVMainViewController: UIViewController {
         ) { [weak self] _ in self?.refreshPairingStatus() }
         refreshPairingStatus()
         clockTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
-            self?.updateClock()
+            guard let self = self else { return }
+            // A base refused because Core had not started yet is retried on the tick, not at the
+            // next half minute.
+            if self.clockSource.waitingForCore { self.refreshClockBase() }
+            self.updateClock()
         }
         refreshClockBase()
         clockRefreshTimer = Timer.scheduledTimer(

@@ -145,4 +145,90 @@ final class ClusterAndClockTests: XCTestCase {
         XCTAssertFalse(source.hasReading)
         XCTAssertNil(source.reading())
     }
+
+    // MARK: - Nothing reads Core before Core has started
+
+    /// A Core that counts what is asked of it and can be switched from "starting" to "started".
+    ///
+    /// The distinction is the whole point: `db_core_create_v2` returns a handle while Core's run
+    /// loop is still manual, and in that state a loop-backed export runs its body on the calling
+    /// thread instead of Core's. The clock refreshes off a utility queue, so it is exactly the
+    /// caller that must not do that while `db_core_start` is assembling the node.
+    private final class CoreSpy: DoorbellClockCore {
+        var isRunning = false
+        private(set) var reads = 0
+
+        func localTime(wallMs: Int64) -> [String: Any]? {
+            reads += 1
+            return ["hh": 21, "mm": 30, "ss": 0, "date": "2026-09-03", "weekday": "thu",
+                    "tz": "Asia/Tokyo", "known": true, "wall_ms": 1_772_000_000_000]
+        }
+    }
+
+    func testTheClockAsksAnUnstartedCoreForNothing() {
+        let core = CoreSpy()
+        let source = DoorbellClockSource()
+
+        source.refresh(core)
+        XCTAssertEqual(core.reads, 0, "no Core call may be made while start is in flight")
+        XCTAssertTrue(source.waitingForCore, "and the refusal is remembered, so it can be retried")
+        XCTAssertNil(source.reading(), "with no base there is no time to draw")
+        XCTAssertNil(DoorbellClock.read(core), "nor through the plain reader")
+        XCTAssertEqual(core.reads, 0)
+
+        // Repeated attempts — the 1 Hz retry — still ask Core nothing.
+        for _ in 0..<10 { source.refresh(core) }
+        XCTAssertEqual(core.reads, 0)
+    }
+
+    func testTheClockTakesExactlyOneReadingOnceCoreHasStarted() {
+        let core = CoreSpy()
+        let source = DoorbellClockSource()
+        source.refresh(core)
+        XCTAssertEqual(core.reads, 0)
+
+        core.isRunning = true
+        let refreshed = expectation(description: "the base is taken once Core is up")
+        source.refresh(core) { _ in refreshed.fulfill() }
+        wait(for: [refreshed], timeout: 5)
+
+        XCTAssertEqual(core.reads, 1, "one reading, not one per tick")
+        XCTAssertFalse(source.waitingForCore)
+        XCTAssertEqual(source.reading()?.hhmm, "21:30")
+
+        // Drawing a second is arithmetic on that base: still one Core call.
+        for _ in 0..<30 { _ = source.reading() }
+        XCTAssertEqual(core.reads, 1)
+    }
+
+    /// The two home screens are built before anything has confirmed Core is up. Neither may read
+    /// through it until it is: `CoreBridge` hands out its handle only after `db_core_start`
+    /// returned, so every read here answers nil instead of entering a half-built node.
+    func testTheHomeScreensReadNothingFromACoreThatHasNotStarted() {
+        let core = CoreBridge()
+        XCTAssertFalse(core.isRunning, "an unstarted bridge never reports itself running")
+        XCTAssertNil(core.status())
+        XCTAssertNil(core.config())
+        XCTAssertNil(core.localTime())
+        XCTAssertNil(core.callLog())
+        XCTAssertNil(DoorbellClock.read(core))
+
+        let texts = Texts()
+        let boot = BootConfig()
+        let dashboard = DashboardView(core: core, boot: boot, texts: texts,
+                                      sosControl: SosSlideControl(texts: texts))
+        dashboard.reload(config: nil, skin: .plain(.dark))
+        dashboard.updateClock(DoorbellClock.Reading(
+            hour: 21, minute: 30, second: 0, date: "2026-09-03", weekday: "thu",
+            tz: "Asia/Tokyo", known: true, wallMs: 0, raw: [:]))
+
+        let visitor = VisitorScreenView(texts: texts, callButton: UIButton(type: .system),
+                                        langBar: UIStackView(),
+                                        purposeSection: UIStackView(),
+                                        sosControl: SosSlideControl(texts: texts))
+        visitor.applyLayout(for: CGSize(width: 768, height: 1024))
+        visitor.apply(skin: .plain(.dark))
+
+        XCTAssertFalse(core.isRunning, "and building them started nothing")
+    }
 }

@@ -61,6 +61,17 @@ final class MainViewController: UIViewController {
     private let clockSource = DoorbellClockSource()
     private var clockRefreshTimer: Timer?
     private var lastClockTickUptime: TimeInterval = 0
+    /// Core announces `peers_changed` on every *fresh* peer heartbeat, not only when the
+    /// membership actually moves, so a cluster of a handful of devices produces several a second.
+    /// Rebuilding the home page on each one meant a SQLite call-log query, an admin-QR address
+    /// lookup and a full ink pass per event — each of them a synchronous hop onto Core's run
+    /// loop. On the door station that is what took the app over the OS CPU limit, and it left
+    /// Core's own loop with no time for its mesh heartbeats, so the other nodes called it dead.
+    /// The events are coalesced onto one rebuild.
+    private static let homeRefreshCoalesceS: TimeInterval = 1
+    private var homeRefreshPending = false
+    private var nodeInfoRefreshPending = false
+    private var lastHomeRefreshUptime: TimeInterval = 0
     private var wakeObserver: NSObjectProtocol?
     private var inviteObserver: NSObjectProtocol?
 
@@ -647,6 +658,10 @@ final class MainViewController: UIViewController {
             IOSAvailability.PerfProbe.record("clock.tick", now - lastClockTickUptime)
         }
         lastClockTickUptime = now
+        // A base that was refused because Core had not started yet is retried here rather than at
+        // the next half minute, so a late start still puts a time on screen within a second of
+        // Core being ready. The retry costs one boolean while Core is down.
+        if clockSource.waitingForCore { refreshClockBase() }
         updateClock()
         if !screensaverOn && !emergencyActive && screensaverAfterS > 0 &&
             !idleView.isHidden && callingView.isHidden && offlineView.isHidden &&
@@ -713,6 +728,25 @@ final class MainViewController: UIViewController {
         applySemanticStyles()
     }
 
+    /// Coalesces the home rebuild onto at most one pass per second, however many events Core
+    /// announces in between. `withNodeInfo` asks for the wider pass that also re-reads the
+    /// configuration, this node's status and the pairing state.
+    private func scheduleHomeRefresh(withNodeInfo: Bool = false) {
+        if withNodeInfo { nodeInfoRefreshPending = true }
+        guard !homeRefreshPending else { return }
+        homeRefreshPending = true
+        let now = ProcessInfo.processInfo.systemUptime
+        let due = max(0, lastHomeRefreshUptime + MainViewController.homeRefreshCoalesceS - now)
+        DispatchQueue.main.asyncAfter(deadline: .now() + due) { [weak self] in
+            guard let self = self else { return }
+            self.homeRefreshPending = false
+            self.lastHomeRefreshUptime = ProcessInfo.processInfo.systemUptime
+            let wide = self.nodeInfoRefreshPending
+            self.nodeInfoRefreshPending = false
+            if wide { self.refreshNodeInfo() } else { self.refreshHomeSurfaces() }
+        }
+    }
+
     /// Recomputes the appearance and hands the current snapshot to whichever home screen this
     /// device shows. Both are pure renderers: they never read Core state on their own.
     private func refreshHomeSurfaces() {
@@ -720,8 +754,16 @@ final class MainViewController: UIViewController {
     }
 
     private func refreshHomeSurfacesBody() {
+        // One status document for the whole pass. This used to ask Core three separate times, and
+        // every one of those is a synchronous hop onto Core's run loop.
+        let status = core.status()
+        // The clock's own base, not a fresh Core call: the appearance schedule and a notice's
+        // expiry are both minute-scale decisions, and the base is never more than half a minute
+        // old — `time_changed` re-takes it the moment Core's idea of the time moves.
+        let reading = clockSource.reading()
         palette = DoorbellPalette.of(DoorbellTheme.appearance(
-            display: displayDoc, config: cfg, nodeId: nodeId, localTime: core.localTime()))
+            display: displayDoc, config: cfg, nodeId: nodeId,
+            localTime: reading?.raw ?? core.localTime()))
         let skin = applyTheme()
         applyVolumes()
         updateClock()
@@ -730,12 +772,12 @@ final class MainViewController: UIViewController {
             dashboard.reload(config: cfg, skin: skin)
         }
         if let visitor = visitorScreen {
-            let notice = DoorbellNotice.effective(status: core.status(), config: cfg,
+            let notice = DoorbellNotice.effective(status: status, config: cfg,
                                                   door: boot.door,
-                                                  nowMs: DoorbellClock.nowMs(core))
+                                                  nowMs: reading?.wallMs ?? DoorbellClock.nowMs(core))
             visitor.updateNotice(notice)
             visitor.updateHint(texts.t("door.hint_call"))
-            let power = (core.status()?["self"] as? [String: Any])?["power"] as? [String: Any]
+            let power = (status?["self"] as? [String: Any])?["power"] as? [String: Any]
             let label = doorLabel(boot.door)
             visitor.updateFooter(DoorbellTheme.versionLine(
                 name: label.isEmpty ? boot.name : label,
@@ -1323,26 +1365,26 @@ final class MainViewController: UIViewController {
         case "asset_ready":
             // The theme picture may be the asset that just finished arriving; re-applying is a
             // no-op unless it is, because the background view remembers what it already holds.
-            if themeBg.image == nil { refreshHomeSurfaces() }
+            if themeBg.image == nil { scheduleHomeRefresh() }
         case "display":
             applyDisplayValues(ev)
-            refreshHomeSurfaces()
+            scheduleHomeRefresh()
         case "emergency":
             presentEmergency(ev)
         case "peers_changed", "config_changed":
-            refreshNodeInfo()
+            scheduleHomeRefresh(withNodeInfo: true)
         case "time_changed":
             // The source or the applied correction moved, so the base this clock is counting from
             // is stale: re-take it, then redraw every clock at once instead of waiting for the
             // next tick, and re-evaluate a scheduled light/dark switch.
             refreshClockBase()
-            refreshHomeSurfaces()
+            scheduleHomeRefresh()
         case "power_changed":
             core.refreshPowerStateCache()
-            refreshHomeSurfaces()
+            scheduleHomeRefresh()
         case "notice_changed":
             refreshConfigCache()
-            refreshHomeSurfaces()
+            scheduleHomeRefresh()
         case "call_log_changed":
             dashboard?.refreshHistory()
         case "pairing_state", "paired", "device_joined", "pairing_revoked", "pending_changed":
