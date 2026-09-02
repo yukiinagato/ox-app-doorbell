@@ -27,6 +27,12 @@ static CGRect DBRectFromArray(NSArray *rect) {
 }
 
 static const NSTimeInterval kSnapshotIntervalS = 5.0;
+// Safe mode keeps the door picture, smaller and less often. It is already the
+// bounded low-resolution snapshot the safe-mode contract asks for, and a panel
+// latched in safe mode for hours must not sit in front of a black door tile.
+static const CGFloat kSnapshotMaxSide = 320;
+static const CGFloat kSafeModeSnapshotMaxSide = 160;
+static const NSInteger kSafeModeSnapshotEveryNTicks = 3;
 static const NSInteger kRecentCallLimit = 20;
 
 // One door tile: a five-second still, the door label, and the announcement chip.
@@ -137,6 +143,7 @@ static const NSInteger kRecentCallLimit = 20;
   NSTimer *_snapshotTimer;
   NSTimer *_peersTimer;
   NSInteger _snapshotGeneration;
+  NSInteger _snapshotTick;
 
   NSInteger _secretTaps;
   NSDate *_secretFirst;
@@ -849,7 +856,10 @@ static const NSInteger kRecentCallLimit = 20;
 #pragma mark - door stills
 
 - (void)refreshSnapshots {
-  if (_safeMode || self.superview == nil) return;
+  if (self.superview == nil) return;
+  _snapshotTick++;
+  if (_safeMode && (_snapshotTick % kSafeModeSnapshotEveryNTicks) != 0) return;
+  CGFloat maxSide = _safeMode ? kSafeModeSnapshotMaxSide : kSnapshotMaxSide;
   NSInteger generation = ++_snapshotGeneration;
   for (DBDoorTile *tile in _doorTiles) {
     // The still comes off the serving peer's own media origin, resolved once in
@@ -871,7 +881,7 @@ static const NSInteger kRecentCallLimit = 20;
       NSData *data = [NSURLConnection sendSynchronousRequest:request returningResponse:&response
                                                        error:&error];
       UIImage *image = data ? [UIImage imageWithData:data] : nil;
-      UIImage *thumbnail = [DBHomeScreen thumbnailForImage:image maxSide:320];
+      UIImage *thumbnail = [DBHomeScreen thumbnailForImage:image maxSide:maxSide];
       // A door that is online but never shows a picture is otherwise silent.
       if (thumbnail == nil) {
         NSLog(@"[doorbell] still fetch failed for %@: %lu bytes, image=%d, %@", url,
