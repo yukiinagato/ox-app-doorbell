@@ -338,7 +338,16 @@ unconfigured, say so on the tap.
 
 `status.display.theme` carries the automatic contrast decision: `auto_background`, `auto_ink` per
 semantic region, `auto_accent` (`call_button` plus `call_button_ink`), the `ink_override` map, and
-the effective `call_button_bg` / `call_button_ink`. `display.theme.auto_ink` and
+the effective `call_button_bg` / `call_button_ink`.
+
+`auto_background.source` is `color` when no background image is configured, `image` when one was
+sampled, and `image_unsampled` when an image **is** configured but core could not sample it — with
+a `reason` of `too_large` (past core's 16 MP decoded-pixel budget), `decode_failed`, or `missing`
+(not cached on this node yet). On `image_unsampled` the published `color`, `auto_ink` and
+`auto_accent` were derived from the flat theme colour, not from the picture on screen: do not
+trust them. Sample the image locally, or keep the previous ink until the asset arrives. Reporting
+`color` for a configured-but-unsampled image is what made shells paint light text over a light
+background photograph. `display.theme.auto_ink` and
 `display.theme.auto_accent` are computed and rejected on write; override with
 `display.theme.ink_override.<region>` and `display.theme.call_button_bg`, or their
 `devices.<id>.local.theme` equivalents. Always take the button text colour from

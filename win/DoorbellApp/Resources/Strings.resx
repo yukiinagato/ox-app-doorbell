@@ -909,6 +909,7 @@ PIN: {1}</value></data>
   <data name="theme_auto" xml:space="preserve"><value>自動</value></data>
   <data name="theme_background_source_color" xml:space="preserve"><value>背景色</value></data>
   <data name="theme_background_source_image" xml:space="preserve"><value>背景画像の平均色</value></data>
+  <data name="theme_background_unsampled" xml:space="preserve"><value>背景画像を読み取れませんでした ({0})。文字色は端末側で判定します</value></data>
   <data name="theme_call_button" xml:space="preserve"><value>呼出ボタンの色</value></data>
   <data name="theme_contrast_warning" xml:space="preserve"><value>読みにくい可能性があります（{0}:1）</value></data>
   <data name="theme_custom" xml:space="preserve"><value>指定色</value></data>
@@ -927,6 +928,9 @@ PIN: {1}</value></data>
   <data name="theme_region_notice" xml:space="preserve"><value>お知らせ</value></data>
   <data name="theme_region_status_line" xml:space="preserve"><value>状態表示</value></data>
   <data name="theme_region_tile_label" xml:space="preserve"><value>タイルの見出し</value></data>
+  <data name="theme_unsampled_decode_failed" xml:space="preserve"><value>対応していない形式です</value></data>
+  <data name="theme_unsampled_missing" xml:space="preserve"><value>この端末にまだ届いていません</value></data>
+  <data name="theme_unsampled_too_large" xml:space="preserve"><value>画像が大きすぎます</value></data>
   <data name="time_err_bad_reply" xml:space="preserve"><value>サーバーの応答が正しくありません</value></data>
   <data name="time_err_bad_server" xml:space="preserve"><value>サーバーの書き方が正しくありません</value></data>
   <data name="time_err_implausible" xml:space="preserve"><value>測定した時刻が信用できないため使いませんでした</value></data>

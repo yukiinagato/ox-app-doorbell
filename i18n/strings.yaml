@@ -930,6 +930,10 @@ theme.region_footer: { ja: "フッター", en: "Footer", zh: "页脚" }
 theme.region_notice: { ja: "お知らせ", en: "Announcement", zh: "公告" }
 theme.background_source_image: { ja: "背景画像の平均色", en: "Averaged from the background image", zh: "取自背景图片的平均色" }
 theme.background_source_color: { ja: "背景色", en: "Background colour", zh: "背景颜色" }
+theme.background_unsampled: { ja: "背景画像を読み取れませんでした ({reason})。文字色は端末側で判定します", en: "The background image could not be read ({reason}); each device decides its text colour", zh: "无法读取背景图片（{reason}），文字颜色由各设备自行判断" }
+theme.unsampled_too_large: { ja: "画像が大きすぎます", en: "image too large", zh: "图片过大" }
+theme.unsampled_decode_failed: { ja: "対応していない形式です", en: "unsupported format", zh: "不支持的格式" }
+theme.unsampled_missing: { ja: "この端末にまだ届いていません", en: "not on this device yet", zh: "尚未同步到本设备" }
 notice.scope_global: { ja: "全体のお知らせ", en: "House-wide", zh: "全局公告" }
 notice.presets_title: { ja: "お知らせの定型文", en: "Announcement presets", zh: "公告模板" }
 notice.preset_add: { ja: "定型文を追加", en: "Add a preset", zh: "添加模板" }

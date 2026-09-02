@@ -3559,7 +3559,12 @@ struct Node::Impl {
   // one is cached and decodable, otherwise the theme colour.
   struct ThemeAuto {
     std::string background = "#101418";
+    // "image" when the background image was sampled, "color" only when no image is configured,
+    // and "image_unsampled" when one is configured but core could not sample it. The last case
+    // must never be reported as "color": a shell would then paint ink chosen for the flat theme
+    // colour over a photograph that may be nothing like it.
     std::string source = "color";
+    std::string reason;  // set only for image_unsampled
     std::string ink = "light";
     std::string call_button = "#7F5E3D";
     std::string call_button_ink = "light";
@@ -3596,15 +3601,22 @@ struct Node::Impl {
     ThemeAuto next;
     color::Rgb background;
     bool have_background = false;
-    if (!bg_image.empty() && assetCached(bg_image) &&
-        color::averageImageColor(assetFilePath(bg_image), &background)) {
-      next.source = "image";
-      have_background = true;
+    if (!bg_image.empty()) {
+      // An image is configured, so the answer is about that image whether or not it sampled.
+      const color::SampleStatus status =
+          assetCached(bg_image) ? color::averageImageColor(assetFilePath(bg_image), &background)
+                                : color::SampleStatus::kMissing;
+      if (status == color::SampleStatus::kOk) {
+        next.source = "image";
+        have_background = true;
+      } else {
+        next.source = "image_unsampled";
+        next.reason = color::sampleStatusName(status);
+        DB_LOGW(kTag, "background image " + bg_image.substr(0, 8) + " not sampled (" +
+                          next.reason + "); shells must sample it locally");
+      }
     }
-    if (!have_background && color::parseHex(bg_color, &background)) {
-      next.source = "color";
-      have_background = true;
-    }
+    if (!have_background && color::parseHex(bg_color, &background)) have_background = true;
     if (!have_background) color::parseHex("#101418", &background);
     next.background = color::formatHex(background);
     next.ink = color::autoInk(background);
@@ -3722,6 +3734,9 @@ struct Node::Impl {
     cJSON* background = json::addObj(theme, "auto_background");
     json::set(background, "color", automatic.background);
     json::set(background, "source", automatic.source);
+    // Present only when an image is configured but was not sampled, so a shell can fall back to
+    // sampling it itself instead of trusting ink derived from the flat colour.
+    if (!automatic.reason.empty()) json::set(background, "reason", automatic.reason);
 
     const cJSON* theme_base = json::get(json::get(cfg.get(), "display"), "theme");
     const cJSON* theme_ovr = cfgAt("devices." + node_id + ".local.theme");

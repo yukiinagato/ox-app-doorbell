@@ -907,6 +907,7 @@ Sends in %1$ss</string>
     <string name="theme_auto">Automatic</string>
     <string name="theme_background_source_color">Background colour</string>
     <string name="theme_background_source_image">Averaged from the background image</string>
+    <string name="theme_background_unsampled">The background image could not be read (%1$s); each device decides its text colour</string>
     <string name="theme_call_button">Call button colour</string>
     <string name="theme_contrast_warning">This may be hard to read (%1$s:1)</string>
     <string name="theme_custom">Custom colour</string>
@@ -925,6 +926,9 @@ Sends in %1$ss</string>
     <string name="theme_region_notice">Announcement</string>
     <string name="theme_region_status_line">Status line</string>
     <string name="theme_region_tile_label">Tile label</string>
+    <string name="theme_unsampled_decode_failed">unsupported format</string>
+    <string name="theme_unsampled_missing">not on this device yet</string>
+    <string name="theme_unsampled_too_large">image too large</string>
     <string name="time_err_bad_reply">The server\'s answer wasn\'t valid</string>
     <string name="time_err_bad_server">A server entry isn\'t written correctly</string>
     <string name="time_err_implausible">The measured time wasn\'t plausible and was discarded</string>

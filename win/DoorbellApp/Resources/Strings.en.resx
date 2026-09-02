@@ -909,6 +909,7 @@ Sends in {0}s</value></data>
   <data name="theme_auto" xml:space="preserve"><value>Automatic</value></data>
   <data name="theme_background_source_color" xml:space="preserve"><value>Background colour</value></data>
   <data name="theme_background_source_image" xml:space="preserve"><value>Averaged from the background image</value></data>
+  <data name="theme_background_unsampled" xml:space="preserve"><value>The background image could not be read ({0}); each device decides its text colour</value></data>
   <data name="theme_call_button" xml:space="preserve"><value>Call button colour</value></data>
   <data name="theme_contrast_warning" xml:space="preserve"><value>This may be hard to read ({0}:1)</value></data>
   <data name="theme_custom" xml:space="preserve"><value>Custom colour</value></data>
@@ -927,6 +928,9 @@ Sends in {0}s</value></data>
   <data name="theme_region_notice" xml:space="preserve"><value>Announcement</value></data>
   <data name="theme_region_status_line" xml:space="preserve"><value>Status line</value></data>
   <data name="theme_region_tile_label" xml:space="preserve"><value>Tile label</value></data>
+  <data name="theme_unsampled_decode_failed" xml:space="preserve"><value>unsupported format</value></data>
+  <data name="theme_unsampled_missing" xml:space="preserve"><value>not on this device yet</value></data>
+  <data name="theme_unsampled_too_large" xml:space="preserve"><value>image too large</value></data>
   <data name="time_err_bad_reply" xml:space="preserve"><value>The server's answer wasn't valid</value></data>
   <data name="time_err_bad_server" xml:space="preserve"><value>A server entry isn't written correctly</value></data>
   <data name="time_err_implausible" xml:space="preserve"><value>The measured time wasn't plausible and was discarded</value></data>
