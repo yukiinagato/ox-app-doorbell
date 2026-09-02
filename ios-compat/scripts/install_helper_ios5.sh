@@ -23,7 +23,7 @@ usage: install_helper_ios5.sh [action] [ipad-ip]
 
 Enabling requires DB_CONFIRM_ROOT_HELPER=YES. The package never enables the service by itself.
 Set SSHPASS to the device's commissioned root SSH password. Override the USB-forwarded port
-with DB_IOS_SSH_LOCAL_PORT (default 2223).
+with DB_IOS_SSH_LOCAL_PORT (default 2223); pin the USB device with DB_IOS_UDID (idevice_id -l).
 EOF
 }
 
@@ -56,8 +56,12 @@ if [[ -n "$DEVICE_HOST" ]]; then
   DEVICE_PORT=22
 else
   command -v iproxy >/dev/null || { echo "error: iproxy is required" >&2; exit 1; }
-  if ! pgrep -f "iproxy $LOCAL_PORT" >/dev/null 2>&1; then
-    iproxy "$LOCAL_PORT" 22 >/dev/null 2>&1 &
+  # Pin the forward to one device with DB_IOS_UDID when several are attached: an
+  # unpinned iproxy may attach to a different iPad and every SSH attempt then fails.
+  if ! pgrep -f "iproxy.* $LOCAL_PORT 22" >/dev/null 2>&1; then
+    if [[ -n "${DB_IOS_UDID:-}" ]]; then iproxy -u "$DB_IOS_UDID" "$LOCAL_PORT" 22 >/dev/null 2>&1 &
+    else iproxy "$LOCAL_PORT" 22 >/dev/null 2>&1 &
+    fi
     PROXY_PID=$!
     trap 'kill "$PROXY_PID" 2>/dev/null || true' EXIT
     sleep 3

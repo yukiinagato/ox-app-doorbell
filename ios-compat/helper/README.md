@@ -158,6 +158,13 @@ setup was relaunched on every startup timeout forever. Both sides are fixed: the
 When no heartbeat has arrived but a `Doorbell` process owned by the app UID exists, the state is
 `launch_pending_no_heartbeat` — the helper neither relaunches nor charges a failure.
 
+### Who starts the app after a reboot
+
+The app declares the `voip` background mode, so iOS 5 itself relaunches it after a reboot — in
+the background, never activated. On iPad 1 the helper therefore usually finds the process already
+present at boot and never runs its own launcher; the activation nudge below is what brings that
+process to the front. The helper's launcher is the fallback for a process that is genuinely absent.
+
 ### Activation nudge (iOS 5 `uiopen` starts the app in the background)
 
 Observed on iPad 1 / iOS 5.1.1: a process started by the helper's `uiopen` comes up with Core

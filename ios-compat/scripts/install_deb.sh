@@ -13,7 +13,9 @@ if [[ $# -ge 1 ]]; then
   DEVICE_PORT=22
 else
   command -v iproxy >/dev/null || { echo "error: iproxy is required" >&2; exit 1; }
-  iproxy 2223 22 >/dev/null 2>&1 &
+  if [[ -n "${DB_IOS_UDID:-}" ]]; then iproxy -u "$DB_IOS_UDID" 2223 22 >/dev/null 2>&1 &
+  else iproxy 2223 22 >/dev/null 2>&1 &
+  fi
   PROXY_PID=$!
   trap 'kill "$PROXY_PID" 2>/dev/null || true' EXIT
   sleep 3
