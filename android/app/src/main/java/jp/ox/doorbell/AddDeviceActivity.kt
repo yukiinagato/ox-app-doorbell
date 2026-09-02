@@ -374,8 +374,9 @@ class AddDeviceActivity : Activity(), DoorbellCore.Listener {
     }
 
     /**
-     * Core mints the PIN and opens the bulk-add window in one call, so the window is closed again
-     * immediately: the Pairing PIN path must not silently start adding every nearby device.
+     * The PIN card mints a code and nothing else. Core's PIN-only entry point leaves pairing mode
+     * closed; on an older core the combined call is used and the window is closed again at once,
+     * unless the operator already opened 「まとめて追加」 themselves.
      */
     private fun mintCode() {
         if (mintInFlight) return
@@ -384,8 +385,9 @@ class AddDeviceActivity : Activity(), DoorbellCore.Listener {
         codeCardOpen = true
         codeCard.visibility = View.VISIBLE
         Thread {
-            val result = app.core.startPairing(PairingModel.PAIRING_WINDOW_S)
-            if (!bulkOwnedByUser()) app.core.setPairingMode(0)
+            val result = JoinTokenMinting.mint(
+                app.core, PairingModel.PAIRING_WINDOW_S, bulkOwnedByUser(),
+            )
             ui.post {
                 mintInFlight = false
                 if (result == null || !result.optBoolean("ok")) {

@@ -38,6 +38,25 @@ class IncomingActivity : Activity() {
     private var answerDelayPending = false // Do not close on Idle while replacing monitor mode.
     private var peerHost: String? = null
     private var directPort = DIRECT_PORT
+    private lateinit var clusterClock: ClusterClock
+    private lateinit var sosSlider: SosSlideView
+    private var palette: Palette = Palette.DARK
+    private var cachedConfig: JSONObject? = null
+
+    /** モニター ON/OFF: whether the door's audio is being played on this panel. */
+    private var monitorOn = true
+
+    /** マイク: only meaningful once the answer leg is up. */
+    private var micMuted = false
+
+    /** The debug line is remembered per device, so it stays hidden once it is dismissed. */
+    private var debugVisible = true
+    private val debugTick = object : Runnable {
+        override fun run() {
+            updateDebugLine()
+            ui.postDelayed(this, DEBUG_INTERVAL_MS)
+        }
+    }
     private lateinit var audioManager: AudioManager
     private var oldAudioMode = AudioManager.MODE_NORMAL
     private var oldSpeakerphone = false
@@ -81,14 +100,21 @@ class IncomingActivity : Activity() {
 
         val cfg = app.core.config()
         val st = app.core.status()
+        cachedConfig = cfg
         texts = Texts(this)
         texts.setConfig(cfg)
         texts.setLang(app.boot.uiLang)
+        clusterClock = ClusterClock(app.core)
+        debugVisible = getSharedPreferences(PREFS, MODE_PRIVATE)
+            .getBoolean(PREF_DEBUG_VISIBLE, true)
+        palette = Appearance.resolve(
+            cfg,
+            st?.optJSONObject("node")?.optString("id").orEmpty(),
+            systemDarkMode(this),
+            clusterClock.now().minuteOfDay(),
+        )
 
-        // Resolve the resident-facing door label.
-        val label = app.core.dig(cfg, "doors.$door.label.${app.boot.uiLang}")
-            ?: app.core.dig(cfg, "doors.$door.label.ja") ?: door
-        findViewById<TextView>(R.id.door_label).text = label.toString()
+        findViewById<TextView>(R.id.door_label).text = doorLabel()
         findViewById<TextView>(R.id.status_text).text =
             texts.t("reply.choose", R.string.reply_choose)
         findViewById<TextView>(R.id.audio_hint).text =
@@ -101,13 +127,19 @@ class IncomingActivity : Activity() {
         close.text = texts.t("ring.ignore", R.string.ring_ignore)
         close.setOnClickListener { finish() }
 
-        val sos = findViewById<Button>(R.id.sos_button)
-        sos.contentDescription = getString(
-            R.string.emergency_hold_hint,
-            SosHoldTrigger.HOLD_SECONDS.toString(),
+        sosSlider = SosSlideView(this, ui)
+        sosSlider.enabledProvider = { app.coreOk }
+        sosSlider.onTrigger = { app.commitEmergency(true) }
+        findViewById<android.widget.FrameLayout>(R.id.sos_slot).addView(
+            sosSlider,
+            android.widget.FrameLayout.LayoutParams(
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT, dp(56),
+            ),
         )
-        SosHoldTrigger.bind(sos, ui, { app.coreOk }) { app.commitEmergency(true) }
-
+        applyAppearance()
+        buildControlRow(cfg)
+        buildNoticeChip()
+        buildAdminQr(st)
         buildReplyButtons(cfg)
 
         // Resolve the confirmed door peer for video and direct SIP.
@@ -123,6 +155,7 @@ class IncomingActivity : Activity() {
         answer.isEnabled = peerHost != null
         answer.setOnClickListener { onAnswerClick(answer) }
         applySemanticUi(cfg, st)
+        ui.post(debugTick)
 
         // Bound unanswered video and monitor-audio resource use.
         scheduleAutoClose()
@@ -196,13 +229,17 @@ class IncomingActivity : Activity() {
         val cfg = app.core.config()
         val st = app.core.status()
         texts.setConfig(cfg)
-        val entry = app.core.dig(cfg, "doors.$door.label.${app.boot.uiLang}")
-            ?: app.core.dig(cfg, "doors.$door.label.ja") ?: door
-        findViewById<TextView>(R.id.door_label).text = entry.toString()
+        cachedConfig = cfg
+        findViewById<TextView>(R.id.door_label).text = doorLabel()
         findViewById<TextView>(R.id.status_text).text =
             texts.t("reply.choose", R.string.reply_choose)
         findViewById<TextView>(R.id.audio_hint).visibility = View.GONE
+        monitorOn = true
+        micMuted = false
         updateBadges(cfg)
+        buildControlRow(cfg)
+        buildNoticeChip()
+        buildAdminQr(st)
         buildReplyButtons(cfg)
 
         val peer = findDoorPeer(st)
@@ -220,6 +257,8 @@ class IncomingActivity : Activity() {
 
     override fun onDestroy() {
         if (app.incomingActivity === this) app.incomingActivity = null
+        ui.removeCallbacks(debugTick)
+        if (::sosSlider.isInitialized) sosSlider.cancelCountdown()
         ui.removeCallbacksAndMessages(null)
         answerRequested = false
         answerDelayPending = false
@@ -283,6 +322,7 @@ class IncomingActivity : Activity() {
         findViewById<TextView>(R.id.status_text).text =
             texts.t("reply.choose", R.string.reply_choose)
         findViewById<TextView>(R.id.audio_hint).visibility = View.GONE
+        updateControlLabels()
         applySemanticUi(app.core.config(), app.core.status())
         scheduleAutoClose()
     }
@@ -354,6 +394,7 @@ class IncomingActivity : Activity() {
                     findViewById<TextView>(R.id.status_text).text =
                         texts.t("incall.title", R.string.incall_title)
                     findViewById<TextView>(R.id.audio_hint).visibility = View.GONE
+                    updateControlLabels()
                     buildReplyButtons(app.core.config())
                 }
                 "idle" -> {
@@ -401,8 +442,9 @@ class IncomingActivity : Activity() {
 
         val e = if (purpose.isEmpty()) null
                 else app.core.dig(cfg, "visit_purposes.$purpose") as? JSONObject
+        // The slot keeps its height so the layout never jumps when the purpose arrives later.
         if (purpose.isEmpty()) {
-            purposeBadge.visibility = View.GONE
+            purposeBadge.visibility = View.INVISIBLE
         } else {
             val label = labelOf(e, app.boot.uiLang, purpose)
             val icon = e?.optString("icon").orEmpty()
@@ -459,11 +501,15 @@ class IncomingActivity : Activity() {
         videoPlayer = AdaptiveVideoPlayer(app, ui, texture, live, noVideo).also {
             it.start(h264Url, mjpegUrl)
         }
+        // fitCenter letterboxes inside the video box, so a portrait door camera stays portrait
+        // and is never cropped or stretched to the panel's own shape.
+        live.scaleType = ImageView.ScaleType.FIT_CENTER
     }
 
     // Direct monitor audio.
 
     private fun startAudio() {
+        if (!monitorOn) return
         val host = peerHost ?: return
         app.core.sipCall("sip:$host:$directPort", "monitor")
         sipCalling = true
@@ -525,48 +571,50 @@ class IncomingActivity : Activity() {
 
     // Quick replies.
 
+    /**
+     * Quick replies live in their own expandable strip below the single control row, so the row
+     * itself stays one line of five actions on every screen size.
+     */
     private fun buildReplyButtons(cfg: JSONObject?) {
         val list = findViewById<LinearLayout>(R.id.reply_list)
-        val close = findViewById<Button>(R.id.close_button)
-        val answer = findViewById<Button>(R.id.answer_button)
-        // Rebuild dynamic replies while preserving the answer and close controls.
-        var i = list.childCount - 1
-        while (i >= 0) {
-            val v = list.getChildAt(i)
-            if (v !== close && v !== answer) list.removeViewAt(i)
-            i--
+        list.removeAllViews()
+        val replyButton = findViewById<Button>(R.id.reply_button)
+        val replies = (app.core.dig(cfg, "quick_replies") as? JSONObject)
+        val available = replies != null && replies.length() > 0 && !inCall && !answerRequested
+        replyButton.visibility = if (available) View.VISIBLE else View.GONE
+        if (!available) {
+            list.visibility = View.GONE
+            return
         }
-        if (inCall || answerRequested) return
-        val replies = (app.core.dig(cfg, "quick_replies") as? JSONObject) ?: return
         // Replies use the visitor language with a Japanese fallback.
         val lang = if (visitorLang.isEmpty()) "ja" else visitorLang
-        val ids = replies.keys().asSequence().toMutableList()
+        val ids = replies!!.keys().asSequence().toMutableList()
         ids.sortWith(compareBy({ replies.optJSONObject(it)?.optInt("order", 999) ?: 999 }, { it }))
-        var first: Button? = null
-        val replyTextSize = if (ids.size >= 5) 16f else 19f
-        for ((idx, id) in ids.withIndex()) {
+        for (id in ids) {
             val q = replies.optJSONObject(id) ?: continue
+            val label = labelOf(q, lang, id)
             val b = Button(this)
-            b.text = labelOf(q, lang, id)
-            b.textSize = replyTextSize
+            b.text = label
+            b.textSize = 17f
             b.maxLines = 2
+            b.isAllCaps = false
             @Suppress("DEPRECATION")
             b.setTextColor(resources.getColor(R.color.fg))
             @Suppress("DEPRECATION")
             b.background = resources.getDrawable(R.drawable.bg_tv_button)
             b.isFocusable = true
-            b.isAllCaps = false
+            b.minHeight = dp(52)
             val lp = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f)
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            )
             lp.topMargin = dp(4)
-            lp.bottomMargin = dp(4)
             b.layoutParams = lp
-            b.setOnClickListener { sendReply(id, b.text.toString()) }
-            list.addView(b, list.childCount - 1)
-            if (first == null) first = b
+            b.setOnClickListener { sendReply(id, label) }
+            list.addView(b)
         }
-        // Initial focus enables immediate D-pad use.
-        (first ?: close).requestFocus()
+        if (list.visibility == View.VISIBLE && list.childCount > 0)
+            list.getChildAt(0).requestFocus()
     }
 
     private fun applySemanticUi(cfg: JSONObject?, status: JSONObject?) {
@@ -582,13 +630,9 @@ class IncomingActivity : Activity() {
         )
         val close = findViewById<Button>(R.id.close_button)
         SemanticUi.apply(close, "monitor.close", styleConfig, nodeId)
-        SemanticUi.apply(findViewById(R.id.sos_button), "sos.trigger", styleConfig, nodeId)
         val list = findViewById<LinearLayout>(R.id.reply_list)
-        for (index in 0 until list.childCount) {
-            val child = list.getChildAt(index)
-            if (child.id != R.id.answer_button && child.id != R.id.close_button)
-                SemanticUi.apply(child, "reply.button", styleConfig, nodeId)
-        }
+        for (index in 0 until list.childCount)
+            SemanticUi.apply(list.getChildAt(index), "reply.button", styleConfig, nodeId)
     }
 
     private fun sendReply(replyId: String, label: String) {
@@ -606,9 +650,217 @@ class IncomingActivity : Activity() {
         }
     }
 
+
+    // ---------- batch 2: one control row, notice chip, debug line, admin QR ----------
+
+    private fun applyAppearance() {
+        findViewById<View>(R.id.incoming_root).setBackgroundColor(ShellUi.opaque(palette.ground))
+        findViewById<TextView>(R.id.door_label).setTextColor(ShellUi.opaque(palette.ink))
+        findViewById<TextView>(R.id.status_text).setTextColor(ShellUi.opaque(palette.accent))
+        findViewById<TextView>(R.id.audio_hint).setTextColor(ShellUi.opaque(palette.muted))
+        findViewById<TextView>(R.id.no_video_text).setTextColor(ShellUi.opaque(palette.muted))
+        val debug = findViewById<TextView>(R.id.debug_line)
+        debug.setTextColor(ShellUi.opaque(palette.muted))
+        debug.background = ShellUi.rounded(this, palette.surfaceAlt, 8)
+        sosSlider.applyPalette(palette)
+    }
+
+    /**
+     * モニター ON/OFF · 応答/通話終了 · マイク · 開錠 · クイック返信 — one row, each control showing
+     * its own state rather than an explanatory label next to it.
+     */
+    private fun buildControlRow(cfg: JSONObject?) {
+        val monitor = findViewById<Button>(R.id.monitor_button)
+        monitor.setOnClickListener { toggleMonitor() }
+        val mic = findViewById<Button>(R.id.mic_button)
+        mic.setOnClickListener { toggleMic() }
+        val reply = findViewById<Button>(R.id.reply_button)
+        reply.setOnClickListener {
+            val list = findViewById<LinearLayout>(R.id.reply_list)
+            list.visibility = if (list.visibility == View.VISIBLE) View.GONE else View.VISIBLE
+            if (list.visibility == View.VISIBLE && list.childCount > 0)
+                list.getChildAt(0).requestFocus()
+        }
+        reply.text = texts.t("ring.quick_reply", R.string.ring_quick_reply)
+        val unlock = findViewById<Button>(R.id.unlock_button)
+        unlock.text = texts.t("ring.unlock", R.string.ring_unlock)
+        unlock.visibility = if (SettingsActivity.unlockButtonVisible(cfg, door)) View.VISIBLE
+            else View.GONE
+        unlock.setOnClickListener { onUnlockClick(cfg) }
+        updateControlLabels()
+    }
+
+    private fun updateControlLabels() {
+        findViewById<Button>(R.id.monitor_button).apply {
+            text = if (monitorOn) texts.t("ring.monitor_on", R.string.ring_monitor_on)
+            else texts.t("ring.monitor_off", R.string.ring_monitor_off)
+            isSelected = monitorOn
+        }
+        findViewById<Button>(R.id.mic_button).apply {
+            text = if (micMuted) texts.t("ring.mic_off", R.string.ring_mic_off)
+            else texts.t("ring.mic_on", R.string.ring_mic_on)
+            isSelected = !micMuted
+            isEnabled = inCall
+        }
+        findViewById<TextView>(R.id.audio_hint).visibility =
+            if (sipCalling && monitorOn && !inCall) View.VISIBLE else View.GONE
+    }
+
+    /** Stops or restarts the door audio leg without touching the call lifecycle. */
+    private fun toggleMonitor() {
+        monitorOn = !monitorOn
+        if (inCall || answerRequested) {
+            // While talking, the toggle only mutes local playback of the far end.
+            setPlaybackMuted(!monitorOn)
+        } else if (monitorOn) {
+            startAudio()
+        } else if (sipCalling) {
+            app.core.sipHangup()
+            sipCalling = false
+        }
+        updateControlLabels()
+    }
+
+    private fun toggleMic() {
+        if (!inCall) return
+        micMuted = !micMuted
+        try { audioManager.isMicrophoneMute = micMuted } catch (_: Exception) { }
+        updateControlLabels()
+    }
+
+    private fun setPlaybackMuted(muted: Boolean) {
+        try {
+            @Suppress("DEPRECATION")
+            audioManager.setStreamMute(AudioManager.STREAM_VOICE_CALL, muted)
+        } catch (_: Exception) { }
+    }
+
+    /**
+     * 開錠 stays on this screen. When the administrator shows the button but no unlock action is
+     * configured, pressing it says so rather than silently doing nothing.
+     */
+    private fun onUnlockClick(cfg: JSONObject?) {
+        if (!SettingsActivity.unlockConfigured(cfg, door)) {
+            toast(texts.t("ring.unlock_unconfigured", R.string.ring_unlock_unconfigured))
+            return
+        }
+        val digits = (app.core.dig(cfg, "doors.$door.unlock.dtmf") as? String).orEmpty()
+        val sent = if (digits.isNotEmpty()) app.core.sipSendDtmf(digits) else false
+        toast(
+            if (sent) texts.t("ring.unlock_sent", R.string.ring_unlock_sent)
+            else texts.t("ring.unlock_unconfigured", R.string.ring_unlock_unconfigured),
+        )
+    }
+
+    /** A compact chip with a dot while an announcement is showing; tap opens the popover. */
+    private fun buildNoticeChip() {
+        val chip = findViewById<TextView>(R.id.notice_chip)
+        val notice = NoticeModel.effective(cachedConfig, door, clusterClock.now().wallMs)
+        val active = notice != null
+        chip.text = (if (active) "● " else "") +
+            texts.t("notice.title", R.string.notice_title)
+        chip.background = ShellUi.rounded(
+            this, if (active) palette.noticeBg else palette.surfaceAlt, 999,
+            if (active) palette.noticeLine else palette.line,
+        )
+        chip.setTextColor(ShellUi.opaque(if (active) palette.noticeInk else palette.muted))
+        chip.setOnClickListener { showNoticePopover(notice) }
+    }
+
+    private fun showNoticePopover(notice: Notice?) {
+        val builder = android.app.AlertDialog.Builder(this)
+            .setTitle(texts.t("notice.title", R.string.notice_title))
+            .setMessage(notice?.text ?: texts.t("notice.none", R.string.notice_none))
+            .setPositiveButton(
+                if (notice == null) texts.t("notice.door_button", R.string.notice_door_button)
+                else texts.t("notice.edit", R.string.notice_edit),
+            ) { _, _ -> openNoticeDialog() }
+            .setNegativeButton(texts.t("admin.menu_close", R.string.admin_menu_close), null)
+        if (notice != null) builder.setNeutralButton(
+            texts.t("notice.clear", R.string.notice_clear),
+        ) { _, _ ->
+            Thread({
+                app.core.clearDoorNotice(door)
+                ui.post { if (!isFinishing) refreshNotice() }
+            }, "doorbell-notice-clear").apply { isDaemon = true }.start()
+        }
+        builder.show()
+    }
+
+    private fun openNoticeDialog() {
+        NoticeDialog.show(this, app, texts, palette, door, doorIds(), { doorLabel(it) }) {
+            refreshNotice()
+        }
+    }
+
+    private fun refreshNotice() {
+        cachedConfig = app.core.config()
+        texts.setConfig(cachedConfig)
+        buildNoticeChip()
+    }
+
+    /** The door station's admin page stays reachable from a corner of this screen. */
+    private fun buildAdminQr(status: JSONObject?) {
+        val slot = findViewById<LinearLayout>(R.id.admin_qr_slot)
+        slot.removeAllViews()
+        slot.addView(
+            AdminLinks.view(
+                this, palette, app.core, AdminLinks.resolve(status, app.boot.httpPort),
+                texts.t("web_admin.scan_hint", R.string.web_admin_scan_hint), 44,
+            ),
+        )
+    }
+
+    /** codec/strategy · latency · jitter · fps · dropped, tap to hide, remembered per device. */
+    private fun updateDebugLine() {
+        val line = findViewById<TextView>(R.id.debug_line)
+        if (!debugVisible) {
+            line.text = "·"
+            line.contentDescription = texts.t("info.title", R.string.info_title)
+            line.setOnClickListener { setDebugVisible(true) }
+            return
+        }
+        val stats = videoPlayer?.stats()
+        line.text = texts.t(
+            "ring.debug_stats", R.string.ring_debug_stats,
+            stats?.codec.orEmpty().ifEmpty { "-" },
+            (stats?.latencyMs ?: 0).toString(),
+            (stats?.jitterMs ?: 0).toString(),
+            (stats?.fps ?: 0).toString(),
+            (stats?.dropped ?: 0).toString(),
+        )
+        line.setOnClickListener { setDebugVisible(false) }
+    }
+
+    private fun setDebugVisible(value: Boolean) {
+        debugVisible = value
+        getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+            .putBoolean(PREF_DEBUG_VISIBLE, value).apply()
+        updateDebugLine()
+    }
+
+    private fun doorIds(): List<String> {
+        val doors = app.core.dig(cachedConfig, "doors") as? JSONObject ?: return emptyList()
+        return doors.keys().asSequence().sorted().toList()
+    }
+
+    private fun doorLabel(value: String = door): String {
+        if (value.isEmpty()) return ""
+        val label = app.core.dig(cachedConfig, "doors.$value.label.${texts.lang}")
+            ?: app.core.dig(cachedConfig, "doors.$value.label.ja")
+        return label?.toString() ?: value
+    }
+
+    private fun toast(message: String) {
+        android.widget.Toast.makeText(this, message, android.widget.Toast.LENGTH_SHORT).show()
+    }
+
     private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
 
     companion object {
+        private const val PREFS = "doorbell-incoming"
+        private const val PREF_DEBUG_VISIBLE = "debug_line_visible"
+        private const val DEBUG_INTERVAL_MS = 1_000L
         private const val EXTRA_DOOR = "door"
         private const val EXTRA_PURPOSE = "purpose"
         private const val EXTRA_LANG = "visitor_lang"

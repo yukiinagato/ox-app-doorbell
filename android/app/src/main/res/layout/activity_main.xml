@@ -1,5 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Door-station idle, ringing, reply, and offline views. Camera capture is service-owned. -->
+<!-- Door-station visitor screen (idle, purpose, ringing, reply, offline) and the host container
+     for the indoor dashboard. Camera capture is service-owned.
+
+     The visitor screen is responsive: the two columns below are filled at runtime by
+     VisitorLayout, which stacks them in portrait and splits them in landscape. -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/root_view"
     android:layout_width="match_parent"
@@ -15,23 +19,53 @@
         android:scaleType="centerCrop"
         android:visibility="gone"/>
 
-    <!-- Idle view uses weights so all safety controls remain visible without scrolling. -->
+    <!-- Indoor dashboard host; filled by DashboardView on an indoor panel. -->
+    <FrameLayout
+        android:id="@+id/dashboard_host"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:visibility="gone"/>
+
     <LinearLayout
         android:id="@+id/idle_view"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:orientation="vertical"
         android:paddingLeft="12dp"
-        android:paddingTop="4dp"
+        android:paddingTop="6dp"
         android:paddingRight="12dp"
-        android:paddingBottom="4dp">
+        android:paddingBottom="6dp">
 
-        <!-- Clock. -->
+        <!-- Two responsive columns. VisitorLayout owns their orientation and their children. -->
+        <LinearLayout
+            android:id="@+id/visitor_split"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:baselineAligned="false"
+            android:orientation="vertical">
+            <LinearLayout
+                android:id="@+id/visitor_col_a"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:gravity="center"
+                android:orientation="vertical"/>
+            <LinearLayout
+                android:id="@+id/visitor_col_b"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:gravity="center"
+                android:orientation="vertical"
+                android:visibility="gone"/>
+        </LinearLayout>
+
+        <!-- Clock: large HH:MM:SS with the date on every size. -->
         <LinearLayout
             android:id="@+id/idle_header"
             android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="1.35"
+            android:layout_height="wrap_content"
             android:gravity="center"
             android:orientation="vertical">
             <TextView
@@ -41,35 +75,61 @@
                 android:fontFamily="sans-serif-light"
                 android:maxLines="1"
                 android:textColor="@color/fg"
-                android:textSize="42sp"/>
+                android:textSize="52sp"/>
             <TextView
                 android:id="@+id/date_text"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="0dp"
                 android:maxLines="1"
                 android:textColor="@color/dim"
                 android:textSize="15sp"/>
         </LinearLayout>
 
-        <!-- Primary call action. -->
+        <!-- Announcement: the text only, no source and no expiry (§5.1). -->
+        <TextView
+            android:id="@+id/notice_card"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginLeft="8dp"
+            android:layout_marginTop="8dp"
+            android:layout_marginRight="8dp"
+            android:ellipsize="end"
+            android:maxLines="2"
+            android:paddingLeft="12dp"
+            android:paddingTop="6dp"
+            android:paddingRight="12dp"
+            android:paddingBottom="6dp"
+            android:textColor="@color/fg"
+            android:textSize="15sp"
+            android:visibility="gone"/>
+
+        <!-- Visitor-language controls. -->
+        <LinearLayout
+            android:id="@+id/lang_bar"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center_horizontal"
+            android:baselineAligned="false"
+            android:orientation="horizontal"
+            android:visibility="gone"/>
+
+        <!-- Primary call action and the single-sentence hint. -->
         <LinearLayout
             android:id="@+id/call_section"
             android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="2.15"
+            android:layout_height="wrap_content"
             android:gravity="center"
             android:orientation="vertical">
             <Button
                 android:id="@+id/call_button"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginLeft="36dp"
-                android:layout_marginRight="36dp"
-                android:maxWidth="560dp"
-                android:minHeight="64dp"
+                android:layout_marginLeft="24dp"
+                android:layout_marginRight="24dp"
                 android:background="@drawable/bg_big_button"
                 android:maxLines="2"
+                android:maxWidth="560dp"
+                android:minHeight="72dp"
                 android:textColor="@color/fg"
                 android:textSize="28sp"
                 android:textStyle="bold"/>
@@ -77,9 +137,10 @@
                 android:id="@+id/touch_hint"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
-                android:maxLines="1"
-                android:text="@string/idle_touch_to_call"
+                android:layout_marginTop="6dp"
+                android:gravity="center"
+                android:maxLines="2"
+                android:text="@string/door_hint_call"
                 android:textColor="@color/dim"
                 android:textSize="15sp"/>
         </LinearLayout>
@@ -88,8 +149,7 @@
         <LinearLayout
             android:id="@+id/purpose_section"
             android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="2.25"
+            android:layout_height="wrap_content"
             android:gravity="center"
             android:orientation="vertical"
             android:visibility="gone">
@@ -158,29 +218,29 @@
             </LinearLayout>
         </LinearLayout>
 
-        <!-- Visitor-language controls and node information. -->
-        <FrameLayout
+        <!-- Footer: door label, core and app versions, battery, and the optional SOS slider. -->
+        <LinearLayout
+            android:id="@+id/visitor_footer"
             android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="0.9"
-            android:padding="4dp">
-            <LinearLayout
-                android:id="@+id/lang_bar"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_gravity="center"
-                android:baselineAligned="false"
-                android:orientation="horizontal"
-                android:visibility="gone"/>
+            android:layout_height="wrap_content"
+            android:baselineAligned="false"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingTop="6dp">
             <TextView
                 android:id="@+id/node_info"
-                android:layout_width="wrap_content"
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_gravity="bottom|start"
+                android:layout_weight="1"
                 android:maxLines="1"
                 android:textColor="@color/dim"
                 android:textSize="12sp"/>
-        </FrameLayout>
+            <FrameLayout
+                android:id="@+id/sos_slot"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:minWidth="200dp"/>
+        </LinearLayout>
     </LinearLayout>
 
     <!-- Ringing. -->
@@ -214,8 +274,8 @@
             android:layout_height="wrap_content"
             android:background="@drawable/bg_card_button"
             android:paddingLeft="40dp"
-            android:paddingRight="40dp"
             android:paddingTop="14dp"
+            android:paddingRight="40dp"
             android:paddingBottom="14dp"
             android:text="@string/calling_cancel"
             android:textColor="@color/fg"
@@ -279,7 +339,7 @@
             android:textSize="24sp"/>
     </LinearLayout>
 
-    <!-- Hidden maintenance tap target. -->
+    <!-- Hidden maintenance tap target; the door station's only way into settings. -->
     <View
         android:id="@+id/secret_corner"
         android:layout_width="200dp"
@@ -311,8 +371,8 @@
         android:background="#243244"
         android:clickable="true"
         android:focusable="true"
-        android:minHeight="48dp"
         android:gravity="center_vertical"
+        android:minHeight="48dp"
         android:paddingLeft="14dp"
         android:paddingTop="10dp"
         android:paddingRight="14dp"
@@ -321,19 +381,4 @@
         android:textColor="#FFFFFF"
         android:textSize="15sp"
         android:visibility="gone"/>
-
-    <Button
-        android:id="@+id/sos_button"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="bottom|end"
-        android:layout_margin="16dp"
-        android:background="#B00020"
-        android:focusable="true"
-        android:minWidth="88dp"
-        android:minHeight="56dp"
-        android:text="@string/emergency_button"
-        android:textColor="#FFFFFF"
-        android:textSize="20sp"
-        android:textStyle="bold"/>
 </FrameLayout>

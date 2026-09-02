@@ -31,12 +31,26 @@ internal class AdaptiveVideoPlayer(
     private var activeCodec = ""
     private var generation = 0
     private var h264Attempt = 0
+    private val stats = VideoStatsCounter()
     private val firstFrameDeadline = Runnable { failH264(h264Attempt, "H.264 first-frame timeout") }
     private val h264Retry = Runnable { startH264() }
+
+    /** The live-view counters behind the incoming screen's debug line. */
+    fun stats(): VideoStats = stats.snapshot(System.currentTimeMillis())
+
+    /** True when the door camera is portrait, so the screen can keep the stream's own aspect. */
+    fun frameAspect(): Float {
+        val width = if (rotation == 90 || rotation == 270) videoHeight else videoWidth
+        val height = if (rotation == 90 || rotation == 270) videoWidth else videoHeight
+        if (width <= 0 || height <= 0) return 0f
+        return width.toFloat() / height.toFloat()
+    }
 
     fun start(h264Url: String, mjpegUrl: String) {
         stop()
         stopped = false
+        stats.reset()
+        stats.setCodec("")
         h264Visible = false
         activeCodec = ""
         generation++
@@ -103,6 +117,7 @@ internal class AdaptiveVideoPlayer(
                     videoWidth = width
                     videoHeight = height
                     activeCodec = codec
+                    stats.setCodec(codec)
                     applyTextureTransform()
                     app.runtime.reportDecoderStatus("probing", codec)
                 }
@@ -120,8 +135,17 @@ internal class AdaptiveVideoPlayer(
                 }
             }
 
+            override fun onFrameRendered(presentationTimeUs: Long) {
+                // Called on the decoder thread; the counter is only read from the UI thread's
+                // one-second debug tick, and a stale sample there is harmless.
+                if (attempt == h264Attempt) stats.onFrame(System.currentTimeMillis())
+            }
+
             override fun onFailure(reason: String) {
-                ui.post { failH264(attempt, reason) }
+                ui.post {
+                    stats.onDropped()
+                    failH264(attempt, reason)
+                }
             }
         }).also { it.start() }
         ui.postDelayed(firstFrameDeadline, H264_FIRST_FRAME_MS)
@@ -152,6 +176,12 @@ internal class AdaptiveVideoPlayer(
                     return@post
                 }
                 currentBitmap = bitmap
+                if (!h264Visible) {
+                    stats.setCodec("mjpeg")
+                    stats.onFrame(System.currentTimeMillis())
+                }
+                videoWidth = bitmap.width
+                videoHeight = bitmap.height
                 image.setImageBitmap(bitmap)
                 if (!h264Visible) noVideo.visibility = View.GONE
                 applyImageRotation(bitmap, frameRotation)

@@ -137,6 +137,41 @@ class BootConfig private constructor(
         }
 
         /**
+         * Revocation is a factory reset of this device's cluster identity and its setup
+         * (spec §5.4): the pairing reference and seeds go, and so do the locally chosen name,
+         * role, door, and the setup_complete marker, so the shell reopens first-run setup instead
+         * of silently keeping a role it is no longer entitled to.
+         *
+         * Returns the rewritten boot JSON, or null when the write failed.
+         */
+        fun factoryReset(file: File): String? {
+            val parent = file.parentFile ?: return null
+            return try {
+                val fresh = JSONObject(DEFAULT_JSON).apply {
+                    put("door", suggestedDoorId())
+                }
+                // Keep the locally provisioned ports so a re-setup reaches the same endpoints.
+                readValidJson(file)?.let { current ->
+                    val previous = JSONObject(current)
+                    for (key in listOf("listen_port", "http_port"))
+                        if (previous.has(key)) fresh.put(key, previous.opt(key))
+                }
+                val text = fresh.toString()
+                writeAndRename(File(parent, file.name + ".bak"), text)
+                writeAndRename(file, text)
+                text
+            } catch (_: Exception) { null }
+        }
+
+        /** True once [factoryReset] has removed the identity and the pairing material. */
+        fun isFactoryReset(rawJson: String): Boolean = try {
+            val document = JSONObject(rawJson)
+            !document.optBoolean("setup_complete", false) &&
+                !document.has("psk_ref") && !document.has("psk_hex") &&
+                !document.has("seed_peers")
+        } catch (_: Exception) { false }
+
+        /**
          * Drop the cluster secret reference and seeds after core reported state "unpaired".
          * Returns the rewritten boot JSON, or null when nothing had to change or the write failed.
          */

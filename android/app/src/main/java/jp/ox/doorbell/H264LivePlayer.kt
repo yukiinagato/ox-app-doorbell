@@ -19,6 +19,13 @@ internal class H264LivePlayer(
         fun onConfigured(codec: String, width: Int, height: Int)
         fun onFirstFrame()
         fun onFailure(reason: String)
+
+        /**
+         * One decoded frame reached the surface. presentationTimeUs is the sample's own stamp, so
+         * the caller can report the live-view latency without re-deriving it from the stream.
+         * Called on the decoder thread.
+         */
+        fun onFrameRendered(presentationTimeUs: Long) {}
     }
 
     @Volatile private var running = false
@@ -174,7 +181,9 @@ internal class H264LivePlayer(
                     when {
                         index >= 0 -> {
                             val render = info.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG == 0
+                            val presentationTimeUs = info.presentationTimeUs
                             active.releaseOutputBuffer(index, render)
+                            if (render) listener.onFrameRendered(presentationTimeUs)
                             if (render && !firstFrame) {
                                 firstFrame = true
                                 listener.onFirstFrame()

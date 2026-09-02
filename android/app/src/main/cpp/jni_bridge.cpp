@@ -2,6 +2,7 @@
 // its own threads; this layer attaches them to the JVM and Kotlin marshals UI work to main.
 // A pthread TLS destructor detaches threads at exit to avoid per-callback attach churn.
 #include <android/log.h>
+#include <dlfcn.h>
 #include <jni.h>
 #include <pthread.h>
 
@@ -62,6 +63,7 @@ struct Bridge {
   jmethodID mid_secure_put = nullptr;
   jmethodID mid_secure_delete = nullptr;
   jmethodID mid_device_info = nullptr;
+  jmethodID mid_power_state = nullptr;
   jclass cls_string = nullptr;        // java/lang/String (GlobalRef)
   jmethodID mid_string_ctor = nullptr;  // String(byte[], String charset)
   jmethodID mid_string_get_bytes = nullptr;
@@ -259,6 +261,21 @@ int platDeviceInfo(void* user, char** out_json) {
   return copied ? 0 : -1;
 }
 
+// Battery and mains state, polled by core about once a minute. An absent Kotlin method or a
+// null document leaves core's previous reading in place, which is the documented behaviour.
+int platPowerState(void* user, char** out_json) {
+  auto* b = static_cast<Bridge*>(user);
+  if (!b || !out_json) return -1;
+  *out_json = nullptr;
+  JNIEnv* env = envForThisThread();
+  if (!env || !b->obj || !b->mid_power_state) return -1;
+  auto* value = static_cast<jstring>(env->CallObjectMethod(b->obj, b->mid_power_state));
+  if (clearJavaException(env, "power_state") || !value) return -1;
+  const bool copied = copyJavaString(env, b, value, out_json);
+  env->DeleteLocalRef(value);
+  return copied ? 0 : -1;
+}
+
 void platReleaseBuffer(void*, void* buffer) { std::free(buffer); }
 
 void uiEventCb(void* user, const char* event_json) {
@@ -303,6 +320,8 @@ Java_jp_ox_doorbell_DoorbellCore_nativeCreate(JNIEnv* env, jobject thiz, jstring
       cls, "onSecureDeleteFromNative", "(Ljava/lang/String;)Z");
   b->mid_device_info = env->GetMethodID(
       cls, "onDeviceInfoFromNative", "()Ljava/lang/String;");
+  b->mid_power_state = env->GetMethodID(
+      cls, "onPowerStateFromNative", "()Ljava/lang/String;");
   jclass str = env->FindClass("java/lang/String");
   b->cls_string = static_cast<jclass>(env->NewGlobalRef(str));
   b->mid_string_ctor = env->GetMethodID(str, "<init>", "([BLjava/lang/String;)V");
@@ -314,7 +333,7 @@ Java_jp_ox_doorbell_DoorbellCore_nativeCreate(JNIEnv* env, jobject thiz, jstring
   env->DeleteLocalRef(cls);
   if (!b->obj || !b->cls_string || !b->utf8 || !b->mid_ui_event || !b->mid_tts ||
       !b->mid_https || !b->mid_secure_get || !b->mid_secure_put || !b->mid_secure_delete ||
-      !b->mid_device_info ||
+      !b->mid_device_info || !b->mid_power_state ||
       !b->mid_string_ctor || !b->mid_string_get_bytes) {
     clearJavaException(env, "nativeCreate method lookup");
     if (b->obj) env->DeleteGlobalRef(b->obj);
@@ -335,6 +354,7 @@ Java_jp_ox_doorbell_DoorbellCore_nativeCreate(JNIEnv* env, jobject thiz, jstring
   b->plat.device_info = platDeviceInfo;
   b->plat.release_buffer = platReleaseBuffer;
   b->plat.secure_delete = platSecureDelete;
+  b->plat.power_state = platPowerState;
 
   const std::string dir = toUtf8(env, data_dir);
   const std::string boot = toUtf8(env, boot_json);
@@ -755,4 +775,100 @@ Java_jp_ox_doorbell_DoorbellCore_nativeQrEncode(JNIEnv* env, jobject, jstring te
   jintArray arr = env->NewIntArray(static_cast<jsize>(buf.size()));
   if (arr) env->SetIntArrayRegion(arr, 0, static_cast<jsize>(buf.size()), buf.data());
   return arr;
+}
+
+// ---- Batch 2: cluster time, effective volumes, announcements, and call history ----
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_jp_ox_doorbell_DoorbellCore_nativeLocalTimeJson(JNIEnv* env, jobject, jlong h,
+                                                     jlong wall_ms) {
+  Bridge* b = fromHandle(h);
+  if (!b || !b->core) return nullptr;
+  char* s = db_core_local_time_json(b->core, static_cast<int64_t>(wall_ms));
+  jstring out = toJString(env, b, s);
+  db_free(s);
+  return out;
+}
+
+extern "C" JNIEXPORT jint JNICALL
+Java_jp_ox_doorbell_DoorbellCore_nativeTimeSyncNow(JNIEnv*, jobject, jlong h) {
+  Bridge* b = fromHandle(h);
+  if (!b || !b->core) return 0;
+  return db_core_time_sync_now(b->core);
+}
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_jp_ox_doorbell_DoorbellCore_nativeAudioJson(JNIEnv* env, jobject, jlong h,
+                                                 jstring device_id) {
+  Bridge* b = fromHandle(h);
+  if (!b || !b->core) return nullptr;
+  const std::string id = toUtf8(env, device_id);
+  char* s = db_core_audio_json(b->core, id.empty() ? nullptr : id.c_str());
+  jstring out = toJString(env, b, s);
+  db_free(s);
+  return out;
+}
+
+extern "C" JNIEXPORT jint JNICALL
+Java_jp_ox_doorbell_DoorbellCore_nativeSetDoorNotice(JNIEnv* env, jobject, jlong h, jstring door,
+                                                     jstring text, jlong expires_ms) {
+  Bridge* b = fromHandle(h);
+  if (!b || !b->core) return -1;
+  return db_core_set_door_notice(b->core, toUtf8(env, door).c_str(), toUtf8(env, text).c_str(),
+                                 static_cast<int64_t>(expires_ms));
+}
+
+extern "C" JNIEXPORT jint JNICALL
+Java_jp_ox_doorbell_DoorbellCore_nativeClearDoorNotice(JNIEnv* env, jobject, jlong h,
+                                                       jstring door) {
+  Bridge* b = fromHandle(h);
+  if (!b || !b->core) return -1;
+  return db_core_clear_door_notice(b->core, toUtf8(env, door).c_str());
+}
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_jp_ox_doorbell_DoorbellCore_nativeCallLogJson(JNIEnv* env, jobject, jlong h, jlong since_ms,
+                                                   jint limit) {
+  Bridge* b = fromHandle(h);
+  if (!b || !b->core) return nullptr;
+  char* s = db_core_call_log_json(b->core, static_cast<int64_t>(since_ms),
+                                  static_cast<int>(limit));
+  jstring out = toJString(env, b, s);
+  db_free(s);
+  return out;
+}
+
+extern "C" JNIEXPORT jint JNICALL
+Java_jp_ox_doorbell_DoorbellCore_nativeCallLogMarkSeen(JNIEnv* env, jobject, jlong h,
+                                                       jstring up_to_hlc) {
+  Bridge* b = fromHandle(h);
+  if (!b || !b->core) return -1;
+  const std::string hlc = toUtf8(env, up_to_hlc);
+  return db_core_call_log_mark_seen(b->core, hlc.empty() ? nullptr : hlc.c_str());
+}
+
+// ---- Round 6: Pairing PIN minting without opening the bulk-add window ----
+//
+// db_core_mint_join_token_json mints or refreshes the Pairing PIN and, unlike
+// db_core_start_pairing_json, leaves pairing mode closed. It is resolved at run time so this shell
+// still links and runs against a core built before the export existed; the Kotlin side falls back
+// to the old call and closes the window again when the symbol is missing.
+extern "C" JNIEXPORT jstring JNICALL
+Java_jp_ox_doorbell_DoorbellCore_nativeMintJoinTokenJson(JNIEnv* env, jobject, jlong h,
+                                                         jint seconds) {
+  Bridge* b = fromHandle(h);
+  if (!b || !b->core) return nullptr;
+  using MintFn = char* (*)(db_core*, int);
+  static MintFn mint = reinterpret_cast<MintFn>(
+      dlsym(RTLD_DEFAULT, "db_core_mint_join_token_json"));
+  if (!mint) return nullptr;
+  char* s = mint(b->core, static_cast<int>(seconds));
+  jstring out = toJString(env, b, s);
+  db_free(s);
+  return out;
+}
+
+extern "C" JNIEXPORT jboolean JNICALL
+Java_jp_ox_doorbell_DoorbellCore_nativeMintJoinTokenSupported(JNIEnv*, jobject) {
+  return dlsym(RTLD_DEFAULT, "db_core_mint_join_token_json") != nullptr ? JNI_TRUE : JNI_FALSE;
 }

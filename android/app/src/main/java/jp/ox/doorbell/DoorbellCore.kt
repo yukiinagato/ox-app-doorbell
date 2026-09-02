@@ -106,6 +106,36 @@ class DoorbellCore(context: Context) {
 
     fun status(): JSONObject? = parse(if (handle != 0L) nativeStatusJson(handle) else null)
 
+    /**
+     * Render a wall-clock instant in the cluster time zone with core's NTP correction applied.
+     * Pass zero for "now". Every clock in the shell goes through this rather than the OS clock.
+     */
+    fun localTime(wallMs: Long = 0L): JSONObject? =
+        parse(if (handle != 0L) nativeLocalTimeJson(handle, wallMs) else null)
+
+    /** Start one immediate SNTP round; false when NTP is off or core is not started. */
+    fun timeSyncNow(): Boolean = handle != 0L && nativeTimeSyncNow(handle) == 1
+
+    /** Effective call/sos/idle volumes for one device; empty id means this node. */
+    fun audio(deviceId: String = ""): JSONObject? =
+        parse(if (handle != 0L) nativeAudioJson(handle, deviceId) else null)
+
+    /** Publish a replicated announcement for one door. expiresMs of zero means until cleared. */
+    fun setDoorNotice(door: String, text: String, expiresMs: Long): Boolean =
+        handle != 0L && door.isNotEmpty() &&
+            nativeSetDoorNotice(handle, door, text, expiresMs) == 0
+
+    fun clearDoorNotice(door: String): Boolean =
+        handle != 0L && door.isNotEmpty() && nativeClearDoorNotice(handle, door) == 0
+
+    /** Call history newest first. sinceMs is an inclusive lower bound; zero is the whole log. */
+    fun callLog(sinceMs: Long = 0L, limit: Int = 50): JSONObject? =
+        parse(if (handle != 0L) nativeCallLogJson(handle, sinceMs, limit) else null)
+
+    /** Move the device-local seen watermark; an empty hlc marks everything as seen. */
+    fun callLogMarkSeen(upToHlc: String = ""): Boolean =
+        handle != 0L && nativeCallLogMarkSeen(handle, upToHlc) == 0
+
     /** Diagnostic snapshot for the maintenance information screen. */
     fun debugInfo(): JSONObject? = parse(if (handle != 0L) nativeDebugJson(handle) else null)
 
@@ -198,6 +228,18 @@ class DoorbellCore(context: Context) {
     fun startPairing(seconds: Int): JSONObject? =
         parse(if (handle != 0L) nativeStartPairingJson(handle, seconds) else null)
 
+    /**
+     * Mint or refresh the Pairing PIN **without** opening the bulk-add window. This is what the
+     * PIN card uses; [startPairing] is reserved for the explicit 「まとめて追加」 button and its
+     * warning. Returns null when the running core predates the export, and callers then fall back
+     * to [startPairing] followed by closing the window again.
+     */
+    fun mintJoinToken(seconds: Int): JSONObject? =
+        parse(if (handle != 0L) nativeMintJoinTokenJson(handle, seconds) else null)
+
+    /** Whether the running core exports the PIN-only minting entry point. */
+    fun mintJoinTokenSupported(): Boolean = nativeMintJoinTokenSupported()
+
     /** Approve and invite one pending node. */
     fun inviteDevice(nodeId: String) {
         if (handle != 0L) nativeInviteDevice(handle, nodeId)
@@ -284,10 +326,17 @@ class DoorbellCore(context: Context) {
     @Suppress("unused")
     private fun onDeviceInfoFromNative(): String = deviceInfo.snapshot()
 
+    /** db_platform_v2.power_state: battery percentage, charging, and mains presence. */
+    @Suppress("unused")
+    private fun onPowerStateFromNative(): String = deviceInfo.powerState()
+
     fun isOnMainsPower(): Boolean = deviceInfo.isOnMainsPower()
 
     internal fun putPlatformSecret(key: String, value: String): Boolean =
         secureStore.put(key, value)
+
+    /** Remove one platform secret; used by the factory reset that follows a revocation. */
+    internal fun deletePlatformSecret(key: String): Boolean = secureStore.delete(key)
 
     internal fun platformDeviceInfo(): JSONObject = parse(deviceInfo.snapshot()) ?: JSONObject()
 
@@ -333,6 +382,18 @@ class DoorbellCore(context: Context) {
     private external fun nativeEmergencyV2(handle: Long, active: Boolean): Boolean
     private external fun nativeSetVisitorLang(handle: Long, door: String, lang: String)
     private external fun nativeStatusJson(handle: Long): String?
+    private external fun nativeLocalTimeJson(handle: Long, wallMs: Long): String?
+    private external fun nativeTimeSyncNow(handle: Long): Int
+    private external fun nativeAudioJson(handle: Long, deviceId: String): String?
+    private external fun nativeSetDoorNotice(
+        handle: Long,
+        door: String,
+        text: String,
+        expiresMs: Long,
+    ): Int
+    private external fun nativeClearDoorNotice(handle: Long, door: String): Int
+    private external fun nativeCallLogJson(handle: Long, sinceMs: Long, limit: Int): String?
+    private external fun nativeCallLogMarkSeen(handle: Long, upToHlc: String): Int
     private external fun nativeConfigJson(handle: Long): String?
     private external fun nativeSetCapabilitiesJson(handle: Long, json: String)
     private external fun nativeSetRuntimeStatusJson(handle: Long, json: String)
@@ -356,6 +417,8 @@ class DoorbellCore(context: Context) {
     private external fun nativeJoinCluster(handle: Long, host: String, pin: String)
     private external fun nativePairingMode(handle: Long, seconds: Int)
     private external fun nativeStartPairingJson(handle: Long, seconds: Int): String?
+    private external fun nativeMintJoinTokenJson(handle: Long, seconds: Int): String?
+    private external fun nativeMintJoinTokenSupported(): Boolean
     private external fun nativeInviteDevice(handle: Long, nodeId: String)
     private external fun nativeInviteDirect(handle: Long, addr: String, nodeId: String, pk: String)
     private external fun nativeDenyDevice(handle: Long, nodeId: String)

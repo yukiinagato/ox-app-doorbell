@@ -63,7 +63,7 @@ class PairingActivity : Activity(), DoorbellCore.Listener {
     private lateinit var createdRenew: Button
 
     private lateinit var persistCard: LinearLayout
-    private lateinit var sosButton: Button
+    private lateinit var sosSlider: SosSlideView
 
     private var lastQr = ""
     private var pin = ""
@@ -197,12 +197,7 @@ class PairingActivity : Activity(), DoorbellCore.Listener {
         }
         renderState(state)
         renderCodeCard(p)
-        SemanticUi.apply(
-            sosButton,
-            "sos.trigger",
-            if (app.safeMode) null else app.core.config(),
-            app.core.status()?.optJSONObject("node")?.optString("id").orEmpty(),
-        )
+        configureSos()
         if (state == PairingModel.READY) finishWhenReady()
     }
 
@@ -304,7 +299,9 @@ class PairingActivity : Activity(), DoorbellCore.Listener {
     private fun renewCode() {
         createdRenew.isEnabled = false
         Thread {
-            val result = app.core.startPairing(PairingModel.PAIRING_WINDOW_S)
+            val result = JoinTokenMinting.mint(
+                app.core, PairingModel.PAIRING_WINDOW_S, bulkAddOwnedByUser = false,
+            )
             ui.post {
                 createdRenew.isEnabled = true
                 if (result != null && !result.optBoolean("ok"))
@@ -411,7 +408,11 @@ class PairingActivity : Activity(), DoorbellCore.Listener {
         statusView.text = texts.t("pair.joining", R.string.pair_joining)
         Thread {
             val started = app.core.foundCluster()
-            val token = if (started) app.core.startPairing(PairingModel.PAIRING_WINDOW_S) else null
+            // After 「この端末で新規作成」 the founder shows only the PIN card and its own QR;
+            // nothing is auto-added, so the bulk-add window is never opened here.
+            val token = if (started) JoinTokenMinting.mint(
+                app.core, PairingModel.PAIRING_WINDOW_S, bulkAddOwnedByUser = false,
+            ) else null
             ui.post {
                 createInFlight = false
                 if (!started) {
@@ -545,27 +546,40 @@ class PairingActivity : Activity(), DoorbellCore.Listener {
                 ViewGroup.LayoutParams.MATCH_PARENT,
             ),
         )
-        sosButton = Button(this).apply {
-            text = getString(R.string.emergency_button)
-            contentDescription = getString(
-                R.string.emergency_hold_hint,
-                SosHoldTrigger.HOLD_SECONDS.toString(),
-            )
-            setBackgroundColor(Color.parseColor("#B00020"))
-            setTextColor(Color.WHITE)
-            textSize = 20f
-            minWidth = dp(88)
-            minHeight = dp(56)
-            isAllCaps = false
-            SosHoldTrigger.bind(this, ui, { app.coreOk }) { app.commitEmergency(true) }
+        // The SOS control is a slide everywhere, including during onboarding.
+        sosSlider = SosSlideView(this, ui).apply {
+            enabledProvider = { app.coreOk }
+            onTrigger = { app.commitEmergency(true) }
         }
         frame.addView(
-            sosButton,
-            FrameLayout.LayoutParams(dp(104), dp(64), Gravity.BOTTOM or Gravity.END).apply {
+            sosSlider,
+            FrameLayout.LayoutParams(dp(240), dp(56), Gravity.BOTTOM or Gravity.END).apply {
                 setMargins(dp(16), dp(16), dp(16), dp(16))
             },
         )
+        configureSos()
         return frame
+    }
+
+    /** The countdown length is configured, never hardcoded. */
+    private fun configureSos() {
+        if (!::sosSlider.isInitialized) return
+        val config = if (app.coreOk) app.core.config() else null
+        val countdown = SosSlideState.countdownFromConfig(config)
+        sosSlider.applyPalette(
+            Appearance.resolve(
+                config,
+                app.core.status()?.optJSONObject("node")?.optString("id").orEmpty(),
+                systemDarkMode(this),
+                ClusterClock(app.core).now().minuteOfDay(),
+            ),
+        )
+        sosSlider.configure(
+            texts.t("sos.slide_label", R.string.sos_slide_label),
+            texts.t("sos.slide_sub", R.string.sos_slide_sub, countdown.toString()),
+            texts.t("sos.countdown_cancel", R.string.sos_countdown_cancel),
+            countdown,
+        ) { seconds -> texts.t("sos.countdown", R.string.sos_countdown, seconds.toString()) }
     }
 
     private fun toggleJoinCard() {

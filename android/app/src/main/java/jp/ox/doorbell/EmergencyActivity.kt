@@ -32,11 +32,18 @@ class EmergencyActivity : Activity() {
             )
         }
         setContentView(R.layout.activity_emergency)
-        findViewById<Button>(R.id.emergency_clear_button).setOnClickListener {
-            AdminPinDialog.show(this, filesDir) {
+        // Clearing an alarm asks for the same 管理パスワード the rest of the shell uses. The gate
+        // still accepts the locally stored digest when the administration API is unreachable, so
+        // an alarm is never impossible to clear.
+        findViewById<Button>(R.id.emergency_clear_button).setOnClickListener { button ->
+            val texts = Texts(this).apply {
+                setConfig(if (app.coreOk) app.core.config() else null)
+                setLang(app.boot.uiLang)
+            }
+            AdminGate.unlock(this, app.boot.httpPort, texts) {
                 if (app.coreOk) {
-                    it.isEnabled = false
-                    if (!app.commitEmergency(false)) it.isEnabled = true
+                    button.isEnabled = false
+                    if (!app.commitEmergency(false)) button.isEnabled = true
                 }
             }
         }

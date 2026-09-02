@@ -171,7 +171,8 @@ class App : Application(), DoorbellCore.Listener {
         if (eventType == "pairing_persistence_error") pairingPersistence.recordFailure()
         if (eventType == "pairing_state" &&
             ev.optString("state") == PairingModel.UNPAIRED) onClusterLeft()
-        if (eventType == "pairing_revoked") pairingPersistence.recordFailure()
+        // A revocation is a factory reset of this device's cluster identity and its setup.
+        if (eventType == "pairing_revoked") factoryResetClusterIdentity("revoked")
         val forwarded = if (eventType == "paired") {
             val persisted = onPaired(ev)
             JSONObject(ev.toString()).apply {
@@ -498,6 +499,39 @@ class App : Application(), DoorbellCore.Listener {
             Log.i(TAG, "cluster left: cleared the secure PSK reference and seeds")
         }
         pairingPersistence.initialize(BootConfig.hasSecureMeshReference(boot.rawJson))
+    }
+
+    /**
+     * Wipe everything this device holds about the cluster and about its own role, then reopen
+     * first-run setup (spec §5.4). Used when the administrator revokes this device and when the
+     * operator confirms 「クラスタから外す」 on the device itself. Safe to call more than once.
+     */
+    internal fun factoryResetClusterIdentity(reason: String) {
+        pairingPersistence.recordFailure()
+        try { core.unpair() } catch (_: Exception) { }
+        // The pre-shared key must not survive; an orphaned entry would be readable material.
+        try { core.deletePlatformSecret("mesh.psk") } catch (_: Exception) { }
+        val bootFile = File(filesDir, "boot.json")
+        if (BootConfig.factoryReset(bootFile) == null) {
+            Log.e(TAG, "factory reset ($reason): boot.json could not be rewritten")
+            return
+        }
+        boot = BootConfig.load(bootFile)
+        bootSetupRequired = boot.setupRequired
+        pairingPersistence.initialize(BootConfig.hasSecureMeshReference(boot.rawJson))
+        resumePairingSetup()
+        Log.i(TAG, "factory reset ($reason): cleared the cluster key, seeds, and local identity")
+        mainHandler.post {
+            try {
+                startActivity(
+                    Intent(this, BootSetupActivity::class.java)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or
+                            Intent.FLAG_ACTIVITY_CLEAR_TASK),
+                )
+            } catch (_: Exception) {
+                // A background start may be denied; the next resume reopens setup anyway.
+            }
+        }
     }
 
     /** True once core reports "ready" and the shell has its own durable secure reference. */

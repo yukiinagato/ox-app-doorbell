@@ -74,7 +74,21 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
     private lateinit var offlineView: View
     private lateinit var offlineTitle: TextView
     private lateinit var offlineBody: TextView
-    private lateinit var sosButton: Button
+    private lateinit var dashboardHost: android.widget.FrameLayout
+    private lateinit var visitorSplit: LinearLayout
+    private lateinit var visitorColumnA: LinearLayout
+    private lateinit var visitorColumnB: LinearLayout
+    private lateinit var noticeCard: TextView
+    private lateinit var visitorFooter: LinearLayout
+    private lateinit var sosSlot: android.widget.FrameLayout
+    private lateinit var sosSlider: SosSlideView
+    private lateinit var clusterClock: ClusterClock
+
+    /** Present only on an indoor panel; the door station never builds a dashboard. */
+    private var dashboard: DashboardView? = null
+
+    /** Resolved appearance for this screen; recomputed on every config or time change. */
+    private var palette: Palette = Palette.DARK
 
     private var tts: TextToSpeech? = null
     private var ttsReady = false
@@ -139,10 +153,12 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
             startActivity(android.content.Intent(this, BootSetupActivity::class.java))
         }
         texts = Texts(this)
+        clusterClock = ClusterClock(app.core)
         visitorLang = app.boot.uiLang
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         setContentView(R.layout.activity_main)
         bindViews()
+        installRoleHome()
 
         refreshConfigCache()
         texts.setLang(visitorLang)
@@ -152,17 +168,11 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
         purposeSkipButton.setOnClickListener { continueWithoutPurpose(true) }
         purposeCancelButton.setOnClickListener { cancelActiveCall("visitor") }
         cancelButton.setOnClickListener { endOrCancelCall() }
-        sosButton.contentDescription = getString(
-            R.string.emergency_hold_hint,
-            SosHoldTrigger.HOLD_SECONDS.toString(),
-        )
-        SosHoldTrigger.bind(sosButton, ui, { app.coreOk }) { app.commitEmergency(true) }
+        sosSlider.enabledProvider = { app.coreOk }
+        sosSlider.onTrigger = { app.commitEmergency(true) }
         // Hidden maintenance entry: seven taps in the top-right corner within five seconds.
+        // This is the door station's only route to settings; nothing about it is visible.
         findViewById<View>(R.id.secret_corner).setOnClickListener { playButtonSound(); onSecretCorner() }
-        // The membership status is the visible, documented way into the Add-device panel.
-        nodeInfo.setOnClickListener {
-            AdminPinDialog.show(this, filesDir) { openAddDevice() }
-        }
         pairingBanner.setOnClickListener {
             app.resumePairingSetup()
             PairingActivity.launch(this)
@@ -207,6 +217,8 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
         if (choosingPurpose) ui.postDelayed(purposeTimeout, PURPOSE_TIMEOUT_MS)
         enterKioskIfConfigured()
         maybeStartCamera()
+        dashboard?.onResume()
+        applyVisitorLayout()
         if (app.boot.role == "door_station") {
             publishDisplayRotationFallback()
             sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)?.let {
@@ -240,20 +252,39 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
             nodeInfo.text = texts.t("pair.not_set_up_banner", R.string.pair_not_set_up_banner)
             return
         }
-        val pairing = app.core.pairingInfo()
-        val parts = ArrayList<String>(3)
-        parts.add(texts.t("pair.membership", R.string.pair_membership,
-                          PairingModel.memberCount(pairing).toString()))
-        parts.add(texts.t("pair.membership_connected", R.string.pair_membership_connected,
-                          PairingModel.connectedCount(pairing).toString()))
-        if (PairingModel.isFounder(pairing))
-            parts.add(texts.t("pair.created_badge", R.string.pair_created_badge))
-        nodeInfo.text = parts.joinToString(" · ")
+        if (dashboard != null) {
+            val pairing = app.core.pairingInfo()
+            nodeInfo.text = listOf(
+                texts.t("pair.membership", R.string.pair_membership,
+                        PairingModel.memberCount(pairing).toString()),
+                texts.t("pair.membership_connected", R.string.pair_membership_connected,
+                        PairingModel.connectedCount(pairing).toString()),
+            ).joinToString(" · ")
+            return
+        }
+        // A visitor sees the door, the core and app versions, and the battery — nothing else.
+        val status = app.core.status()
+        val power = status?.optJSONObject("self")?.optJSONObject("power")
+        nodeInfo.text = ShellUi.versionLine(
+            doorLabel(app.boot.door).ifEmpty { app.boot.name },
+            status?.optJSONObject("node")?.optString("version").orEmpty()
+                .ifEmpty { app.core.version() },
+            appVersionName(),
+            power?.optInt("battery_pct", -1) ?: -1,
+            power?.optBoolean("charging", false) ?: false,
+        ) { texts.t("power.percent", R.string.power_percent, it.toString()) }
+    }
+
+    private fun appVersionName(): String = try {
+        packageManager.getPackageInfo(packageName, 0).versionName.orEmpty()
+    } catch (_: Exception) {
+        ""
     }
 
     /** Everything behind the admin password: information, adding devices, setup, kiosk exit. */
     private fun showMaintenanceMenu() {
         val labels = arrayOf<CharSequence>(
+            texts.t("settings.title", R.string.settings_title),
             texts.t("admin.menu_info", R.string.admin_menu_info),
             texts.t("admin.menu_add_device", R.string.admin_menu_add_device),
             texts.t("admin.menu_boot_setup", R.string.admin_menu_boot_setup),
@@ -263,10 +294,11 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
             .setTitle(texts.t("admin.menu_title", R.string.admin_menu_title))
             .setItems(labels) { _, which ->
                 when (which) {
-                    0 -> DeviceInfoActivity.launch(this)
-                    1 -> openAddDevice()
-                    2 -> startActivity(BootSetupActivity.reentryIntent(this))
-                    3 -> exitKiosk()
+                    0 -> SettingsActivity.open(this, app, texts)
+                    1 -> DeviceInfoActivity.launch(this)
+                    2 -> openAddDevice()
+                    3 -> startActivity(BootSetupActivity.reentryIntent(this))
+                    4 -> exitKiosk()
                 }
             }
             .setNegativeButton(texts.t("admin.menu_close", R.string.admin_menu_close), null)
@@ -294,6 +326,8 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
         sensorManager.unregisterListener(this)
         ui.removeCallbacks(clockTick)
         ui.removeCallbacks(purposeTimeout)
+        dashboard?.onPause()
+        if (::sosSlider.isInitialized) sosSlider.cancelCountdown()
         app.unbindForeground(this)
         super.onPause()
     }
@@ -331,6 +365,13 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
         if (rotation == lastVideoRotation) return
         lastVideoRotation = rotation
         app.core.setVideoSensorRotation(rotation)
+    }
+
+    override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
+        super.onConfigurationChanged(newConfig)
+        applyVisitorLayout()
+        buildPurposeButtons()
+        dashboard?.onConfigurationChanged()
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
@@ -394,7 +435,21 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
         offlineView = findViewById(R.id.offline_view)
         offlineTitle = findViewById(R.id.offline_title)
         offlineBody = findViewById(R.id.offline_body)
-        sosButton = findViewById(R.id.sos_button)
+        dashboardHost = findViewById(R.id.dashboard_host)
+        visitorSplit = findViewById(R.id.visitor_split)
+        visitorColumnA = findViewById(R.id.visitor_col_a)
+        visitorColumnB = findViewById(R.id.visitor_col_b)
+        noticeCard = findViewById(R.id.notice_card)
+        visitorFooter = findViewById(R.id.visitor_footer)
+        sosSlot = findViewById(R.id.sos_slot)
+        sosSlider = SosSlideView(this, ui)
+        sosSlot.addView(
+            sosSlider,
+            android.widget.FrameLayout.LayoutParams(
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                dp(56),
+            ),
+        )
     }
 
     // Full-screen kiosk behavior.
@@ -416,14 +471,118 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
 
     // Clock.
 
+    /**
+     * Every clock comes from core's cluster time, so the configured time zone and core's own NTP
+     * correction apply without ever touching the operating-system clock.
+     */
     private fun updateClock() {
-        val now = Calendar.getInstance()
-        clockText.text = String.format(Locale.US, "%02d:%02d:%02d",
-            now.get(Calendar.HOUR_OF_DAY), now.get(Calendar.MINUTE), now.get(Calendar.SECOND))
-        val yobi = arrayOf("日", "月", "火", "水", "木", "金", "土")
-        dateText.text = String.format(Locale.US, "%d年%d月%d日 (%s)",
-            now.get(Calendar.YEAR), now.get(Calendar.MONTH) + 1, now.get(Calendar.DAY_OF_MONTH),
-            yobi[now.get(Calendar.DAY_OF_WEEK) - 1])
+        dashboard?.let {
+            it.tickClock()
+            return
+        }
+        val now = clusterClock.now()
+        clockText.text = now.clockText()
+        val parts = now.date.split("-")
+        dateText.text = if (parts.size != 3) now.date else String.format(
+            Locale.US, "%s年%s月%s日 (%s)",
+            parts[0], parts[1].trimStart('0'), parts[2].trimStart('0'),
+            YOBI.getOrElse(now.weekdayNum) { "" },
+        )
+    }
+
+    /** An indoor panel replaces the visitor screen with the dashboard; a door station keeps it. */
+    private fun installRoleHome() {
+        if (app.boot.role != "indoor_panel") return
+        val view = DashboardView(this, app, texts, ui)
+        dashboard = view
+        dashboardHost.addView(
+            view.root,
+            android.widget.FrameLayout.LayoutParams(
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+            ),
+        )
+        dashboardHost.visibility = View.VISIBLE
+        idleView.visibility = View.GONE
+    }
+
+    /**
+     * Lay the visitor screen out for the current window and paint the parts that follow the
+     * appearance and the effective announcement.
+     */
+    private fun applyVisitorLayout() {
+        if (dashboard != null) return
+        val metrics = resources.displayMetrics
+        val widthDp = (metrics.widthPixels / metrics.density).toInt()
+        val heightDp = (metrics.heightPixels / metrics.density).toInt()
+        val notice = NoticeModel.effective(cfg, app.boot.door, clusterClock.now().wallMs)
+        noticeCard.text = notice?.text.orEmpty()
+        noticeCard.visibility = if (notice != null) View.VISIBLE else View.GONE
+        noticeCard.background = ShellUi.rounded(this, palette.noticeBg, 12, palette.noticeLine)
+        noticeCard.setTextColor(ShellUi.opaque(palette.noticeInk))
+        clockText.textSize = VisitorLayout.clockTextSizeSp(widthDp, heightDp)
+        touchHint.textSize = VisitorLayout.hintTextSizeSp(widthDp)
+        callButton.minHeight = dp(VisitorLayout.callButtonHeightDp(widthDp))
+        VisitorLayout.apply(
+            visitorSplit, visitorColumnA, visitorColumnB,
+            idleHeader, noticeCard, langBar, callSection,
+            notice != null, widthDp, heightDp,
+        )
+    }
+
+    /** Light and dark tokens for the door station's own screen (§5.1). */
+    private fun applyAppearance() {
+        palette = Appearance.resolve(
+            cfg, nodeId, systemDarkMode(this), clusterClock.now().minuteOfDay(),
+        )
+        if (dashboard != null) return
+        // A configured background colour or image wins; the palette ground is the fallback.
+        if (themeValue("bg_color") == null && themeValue("bg_image").isNullOrEmpty())
+            rootView.setBackgroundColor(ShellUi.opaque(palette.ground))
+        clockText.setTextColor(ShellUi.opaque(inkOverBackground()))
+        dateText.setTextColor(ShellUi.opaque(ShellUi.mute(inkOverBackground(), palette.dark)))
+        touchHint.setTextColor(ShellUi.opaque(ShellUi.mute(inkOverBackground(), palette.dark)))
+        nodeInfo.setTextColor(ShellUi.opaque(ShellUi.mute(inkOverBackground(), palette.dark)))
+        sosSlider.applyPalette(palette)
+        applyCallButtonAccent()
+    }
+
+    /**
+     * Automatic ink for text drawn straight onto the theme background (§5): core publishes
+     * display.theme.auto_ink for every region and this recomputes it locally when it is absent.
+     */
+    private fun inkOverBackground(): Int {
+        val published = (app.core.dig(cfg, "display.theme.auto_ink.clock") as? String)
+        if (published == "dark") return Palette.DARK_INK
+        if (published == "light") return Palette.LIGHT_INK
+        val override = UiContrast.parseRgb(
+            app.core.dig(cfg, "devices.$nodeId.local.theme.ink_override.clock")?.toString()
+                ?: app.core.dig(cfg, "display.theme.ink_override.clock")?.toString(),
+        )
+        if (override != null) return override
+        return palette.inkOver(effectiveBackgroundRgb())
+    }
+
+    /** The colour actually behind the visitor screen: theme colour, else the palette ground. */
+    private fun effectiveBackgroundRgb(): Int =
+        UiContrast.parseRgb(themeValue("bg_color")) ?: palette.ground
+
+    /**
+     * The call button's background is computed from the effective background (§5.2): core's
+     * display.theme.auto_accent when present, an administrator override when set, otherwise the
+     * same complement-and-lightness search recomputed locally.
+     */
+    private fun applyCallButtonAccent() {
+        val override = UiContrast.parseRgb(
+            app.core.dig(cfg, "devices.$nodeId.local.theme.call_button_bg")?.toString()
+                ?: app.core.dig(cfg, "display.theme.call_button_bg")?.toString(),
+        )
+        val published = UiContrast.parseRgb(
+            app.core.dig(cfg, "display.theme.auto_accent.call_button")?.toString(),
+        )
+        val background = override ?: published ?: UiContrast.autoAccent(effectiveBackgroundRgb())
+        callButton.background = ShellUi.rounded(this, background, 14)
+        callButton.setTextColor(ShellUi.opaque(UiContrast.callButtonInk(background)))
     }
 
     private fun refreshNodeInfo() {
@@ -441,10 +600,38 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
         st?.optJSONObject("display")?.let { applyNightTint(it.optBoolean("night"),
                                                           it.optBoolean("red_tint")) }
         applyTheme()
+        applyAppearance()
         buildPurposeButtons()
         buildLangBar()
         applyStrings()
         applySemanticUi()
+        configureSos()
+        applyVisitorLayout()
+        dashboard?.refresh()
+    }
+
+    /**
+     * The SOS control is a slide, and the countdown length is the configured
+     * emergency.trigger.countdown_s rather than a hardcoded hold.
+     */
+    private fun configureSos() {
+        val countdown = SosSlideState.countdownFromConfig(cfg)
+        sosSlider.configure(
+            texts.t("sos.slide_label", R.string.sos_slide_label),
+            texts.t("sos.slide_sub", R.string.sos_slide_sub, countdown.toString()),
+            texts.t("sos.countdown_cancel", R.string.sos_countdown_cancel),
+            countdown,
+        ) { seconds -> texts.t("sos.countdown", R.string.sos_countdown, seconds.toString()) }
+        sosSlot.visibility = if (sosVisibleForRole()) View.VISIBLE else View.GONE
+    }
+
+    /** emergency.button_on_roles decides whether this device offers the slider at all. */
+    private fun sosVisibleForRole(): Boolean {
+        val roles = app.core.dig(cfg, "emergency.button_on_roles") as? JSONArray ?: return true
+        if (roles.length() == 0) return true
+        for (index in 0 until roles.length())
+            if (roles.optString(index) == app.boot.role) return true
+        return false
     }
 
     private fun applySemanticUi() {
@@ -457,7 +644,6 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
             SemanticUi.apply(purposeGrid.getChildAt(index), "purpose.button", styleConfig, nodeId)
         SemanticUi.apply(offlineTitle, "status.offline", styleConfig, nodeId)
         SemanticUi.apply(offlineBody, "status.offline", styleConfig, nodeId)
-        SemanticUi.apply(sosButton, "sos.trigger", styleConfig, nodeId)
     }
 
     // Localized text: configuration overrides precede generated resources.
@@ -466,7 +652,7 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
     private fun applyStrings() {
         callButton.text =
             texts.t("idle.call_button", R.string.idle_call_button, doorLabel(app.boot.door)).trim()
-        touchHint.text = texts.t("idle.touch_to_call", R.string.idle_touch_to_call)
+        touchHint.text = texts.t("door.hint_call", R.string.door_hint_call)
         purposeHint.text = texts.t("idle.choose_purpose", R.string.idle_choose_purpose)
         purposeAutoHint.text = texts.t("calling.title", R.string.calling_title)
         purposeSkipButton.text = texts.t("purpose.skip", R.string.purpose_skip)
@@ -702,7 +888,8 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
             lp.rightMargin = dp(4)
             langBar.addView(b, lp)
         }
-        langBar.visibility = if (choosingPurpose) View.VISIBLE else View.GONE
+        // The visitor keeps the language row on the idle screen, not only while choosing.
+        langBar.visibility = View.VISIBLE
         updateLangBarSelection()
     }
 
@@ -747,9 +934,9 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
         idleHeader.visibility = View.VISIBLE
         callSection.visibility = View.VISIBLE
         purposeSection.visibility = View.GONE
-        langBar.visibility = View.GONE
+        langBar.visibility = if (langBar.childCount > 0) View.VISIBLE else View.GONE
         purposeCancelButton.visibility = View.GONE
-        touchHint.text = hint ?: texts.t("idle.touch_to_call", R.string.idle_touch_to_call)
+        touchHint.text = hint ?: texts.t("door.hint_call", R.string.door_hint_call)
         updateCallActionLabel()
     }
 
@@ -988,6 +1175,21 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
                     loadThemeImage(h)
             }
             "display" -> applyNightTint(ev.optBoolean("night"), ev.optBoolean("red_tint"))
+            // Cluster time, battery, and announcements each redraw only what they affect.
+            "time_changed" -> {
+                updateClock()
+                applyAppearance()
+                dashboard?.refresh()
+            }
+            "power_changed" -> {
+                refreshMembership()
+                dashboard?.refresh()
+            }
+            "notice_changed" -> {
+                applyVisitorLayout()
+                dashboard?.refresh()
+            }
+            "call_log_changed" -> dashboard?.refresh()
             "peers_changed", "config_changed" -> refreshNodeInfo()
             "event" -> {
                 handleCallLifecycleEvent(ev)
@@ -1270,7 +1472,7 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
         if (now - secretFirstMs > 5000) { secretFirstMs = now; secretTaps = 0 }
         if (++secretTaps < 7) return
         secretTaps = 0
-        AdminPinDialog.show(this, filesDir) { showMaintenanceMenu() }
+        AdminGate.unlock(this, app.boot.httpPort, texts) { showMaintenanceMenu() }
     }
 
     private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
@@ -1304,6 +1506,7 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
 
     companion object {
         private const val TAG = "doorbell-ui"
+        private val YOBI = arrayOf("日", "月", "火", "水", "木", "金", "土")
         private const val PURPOSE_TIMEOUT_MS = 15_000L
         private const val CANCEL_RECONCILE_MS = 500L
     }

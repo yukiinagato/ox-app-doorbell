@@ -16,7 +16,7 @@ import org.json.JSONObject
 internal class AndroidDeviceInfo(context: Context) {
     private val app = context.applicationContext
     @Volatile private var cached = "{}"
-    private var batteryPercent = -1
+    @Volatile private var batteryPercent = -1
     @Volatile private var charging = false
     @Volatile private var mainsPower = false
 
@@ -37,6 +37,16 @@ internal class AndroidDeviceInfo(context: Context) {
     fun snapshot(): String = cached
 
     fun isOnMainsPower(): Boolean = mainsPower
+
+    /**
+     * db_platform_v2.power_state. battery_pct is -1 on a device that reports no battery, which is
+     * how a mains-only panel stays out of the version line instead of showing a fake level.
+     */
+    fun powerState(): String = JSONObject()
+        .put("battery_pct", batteryPercent.coerceAtLeast(-1).coerceAtMost(100))
+        .put("charging", charging)
+        .put("mains", mainsPower)
+        .toString()
 
     @Suppress("DEPRECATION")
     private fun refresh(intent: Intent?) {
