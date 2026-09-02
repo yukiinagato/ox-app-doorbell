@@ -451,10 +451,12 @@
   <data name="pair_created_badge" xml:space="preserve"><value>创建了此集群</value></data>
   <data name="pair_created_next" xml:space="preserve"><value>要添加下一个设备吗？</value></data>
   <data name="pair_deny" xml:space="preserve"><value>忽略</value></data>
+  <data name="pair_deny_confirm" xml:space="preserve"><value>要忽略此设备吗？它将在一段时间内不再出现在列表中。</value></data>
   <data name="pair_err_already_paired" xml:space="preserve"><value>此设备已加入集群</value></data>
   <data name="pair_err_bad_challenge" xml:space="preserve"><value>对方设备的版本不兼容</value></data>
   <data name="pair_err_bad_payload" xml:space="preserve"><value>对方设备的版本不兼容</value></data>
   <data name="pair_err_bad_pin" xml:space="preserve"><value>配对 PIN 不正确</value></data>
+  <data name="pair_err_bad_qr" xml:space="preserve"><value>这不是设备二维码。请原样粘贴新设备上显示的文本</value></data>
   <data name="pair_err_closed" xml:space="preserve"><value>与对方设备的连接已断开</value></data>
   <data name="pair_err_connect_failed" xml:space="preserve"><value>无法连接到该地址。请检查连接地址，并确认两台设备处于同一网络</value></data>
   <data name="pair_err_decrypt_failed" xml:space="preserve"><value>安全校验失败。请检查网络中是否存在可疑设备</value></data>
@@ -464,11 +466,14 @@
   <data name="pair_err_join_in_progress" xml:space="preserve"><value>正在加入中</value></data>
   <data name="pair_err_local_persist_failed" xml:space="preserve"><value>无法在此设备上保存设置</value></data>
   <data name="pair_err_no_ack" xml:space="preserve"><value>该设备没有响应。请确认设备已开机并处于同一网络</value></data>
+  <data name="pair_err_no_mesh" xml:space="preserve"><value>设备仍在启动中，请稍后重试</value></data>
   <data name="pair_err_no_token" xml:space="preserve"><value>对方设备当前没有开启“使用配对 PIN 添加”</value></data>
+  <data name="pair_err_pairing_unavailable" xml:space="preserve"><value>无法生成配对码，请重试</value></data>
   <data name="pair_err_persist_failed" xml:space="preserve"><value>无法在此设备上保存设置</value></data>
   <data name="pair_err_timeout" xml:space="preserve"><value>没有收到响应。请重试</value></data>
   <data name="pair_err_unknown" xml:space="preserve"><value>操作未能完成，请重试</value></data>
   <data name="pair_err_detail" xml:space="preserve"><value>详情: {0}</value></data>
+  <data name="pair_join_submit" xml:space="preserve"><value>加入</value></data>
   <data name="pair_join_with_code" xml:space="preserve"><value>使用配对 PIN 加入</value></data>
   <data name="pair_joined" xml:space="preserve"><value>已加入集群</value></data>
   <data name="pair_joining" xml:space="preserve"><value>正在加入集群…</value></data>
@@ -478,16 +483,25 @@
   <data name="pair_nearby_none" xml:space="preserve"><value>暂无等待中的设备</value></data>
   <data name="pair_nearby_title" xml:space="preserve"><value>附近设备</value></data>
   <data name="pair_nearby_waiting_since" xml:space="preserve"><value>已等待 {0} 秒</value></data>
+  <data name="pair_new_code" xml:space="preserve"><value>生成新码</value></data>
   <data name="pair_not_set_up_banner" xml:space="preserve"><value>未设置 — 点击添加</value></data>
+  <data name="pair_open_panel" xml:space="preserve"><value>打开“添加设备”</value></data>
   <data name="pair_persist_error_body" xml:space="preserve"><value>无法写入此设备的安全存储区。请检查可用空间和权限后重试。</value></data>
   <data name="pair_persist_error_title" xml:space="preserve"><value>无法保存设置</value></data>
   <data name="pair_qr_caption" xml:space="preserve"><value>用另一台设备扫描此二维码即可添加</value></data>
+  <data name="pair_qr_pending" xml:space="preserve"><value>正在准备添加二维码…</value></data>
   <data name="pair_retry" xml:space="preserve"><value>重试</value></data>
   <data name="pair_revoked" xml:space="preserve"><value>此设备已从集群中移除</value></data>
+  <data name="pair_scan_cancel" xml:space="preserve"><value>取消</value></data>
+  <data name="pair_scan_denied" xml:space="preserve"><value>无法打开摄像头。请检查浏览器的摄像头权限</value></data>
   <data name="pair_scan_hint" xml:space="preserve"><value>请对准新设备上显示的添加二维码</value></data>
+  <data name="pair_scan_paste" xml:space="preserve"><value>粘贴二维码文本</value></data>
   <data name="pair_scan_qr" xml:space="preserve"><value>扫描二维码</value></data>
+  <data name="pair_scan_unavailable_http" xml:space="preserve"><value>摄像头仅在 https 或 localhost 下可用。请改为粘贴新设备上显示的二维码文本</value></data>
+  <data name="pair_scanning" xml:space="preserve"><value>扫描中…</value></data>
   <data name="pair_searching" xml:space="preserve"><value>正在查找附近设备…</value></data>
   <data name="pair_searching_hint" xml:space="preserve"><value>请在已加入集群的设备或管理页面上点击“添加”</value></data>
+  <data name="pair_tab" xml:space="preserve"><value>添加设备</value></data>
   <data name="pair_title_unpaired" xml:space="preserve"><value>将此门铃添加到集群</value></data>
   <data name="panel_answering" xml:space="preserve"><value>正在接听…</value></data>
   <data name="panel_auth_failed" xml:space="preserve"><value>面板认证失败</value></data>

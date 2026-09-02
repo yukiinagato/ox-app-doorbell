@@ -651,3 +651,19 @@ pair.err.host_zero_psk: { ja: "相手の端末の設定が不正です", en: "Th
 pair.err.no_ack: { ja: "端末が応答しませんでした。電源が入っているか、同じネットワークにつながっているかを確認してください", en: "The device didn't respond. Check that it is powered on and on the same network", zh: "该设备没有响应。请确认设备已开机并处于同一网络" }
 pair.err.unknown: { ja: "追加できませんでした。もう一度お試しください", en: "Couldn't complete that. Please try again", zh: "操作未能完成，请重试" }
 
+
+# Web admin (WP-W): the pairing tab, its QR scanner, and the actions that only the admin page has.
+pair.tab: { ja: "端末を追加", en: "Add device", zh: "添加设备" }
+pair.open_panel: { ja: "「端末を追加」を開く", en: "Open \"Add device\"", zh: "打开“添加设备”" }
+pair.qr_pending: { ja: "追加用 QR を準備しています…", en: "Preparing the Add QR…", zh: "正在准备添加二维码…" }
+pair.new_code: { ja: "新しいコードを発行", en: "Get a new code", zh: "生成新码" }
+pair.join_submit: { ja: "参加", en: "Join", zh: "加入" }
+pair.deny_confirm: { ja: "この端末を無視しますか? しばらく一覧に表示されなくなります。", en: "Ignore this device? It will stay out of the list for a while.", zh: "要忽略此设备吗？它将在一段时间内不再出现在列表中。" }
+pair.scan_cancel: { ja: "キャンセル", en: "Cancel", zh: "取消" }
+pair.scanning: { ja: "読み取り中…", en: "Scanning…", zh: "扫描中…" }
+pair.scan_denied: { ja: "カメラを開けませんでした。ブラウザのカメラ権限を確認してください", en: "Couldn't open the camera. Check the browser's camera permission", zh: "无法打开摄像头。请检查浏览器的摄像头权限" }
+pair.scan_unavailable_http: { ja: "カメラは https か localhost でのみ使えます。新しい端末に表示された QR の文字列を貼り付けてください", en: "The camera works only over https or localhost. Paste the QR text shown on the new device instead", zh: "摄像头仅在 https 或 localhost 下可用。请改为粘贴新设备上显示的二维码文本" }
+pair.scan_paste: { ja: "QR の文字列を貼り付ける", en: "Paste the QR text", zh: "粘贴二维码文本" }
+pair.err.bad_qr: { ja: "QR の内容が読み取れませんでした。新しい端末に表示された文字列をそのまま貼り付けてください", en: "That isn't a device QR. Paste the text shown on the new device exactly as it appears", zh: "这不是设备二维码。请原样粘贴新设备上显示的文本" }
+pair.err.no_mesh: { ja: "端末がまだ起動中です。少し待ってからお試しください", en: "The device is still starting up. Try again in a moment", zh: "设备仍在启动中，请稍后重试" }
+pair.err.pairing_unavailable: { ja: "コードを発行できませんでした。もう一度お試しください", en: "Couldn't create a code. Please try again", zh: "无法生成配对码，请重试" }
