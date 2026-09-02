@@ -77,6 +77,18 @@ namespace DoorbellApp.Util
                    0.0722 * Channel(color.B);
         }
 
+        /// <summary>
+        /// The ink token that actually reads better on a background: whichever of the two has the
+        /// higher WCAG contrast ratio against it. A luminance threshold at 0.5 gets this wrong in
+        /// the middle of the range — a wallpaper averaging #BBBBB4 sits at Y = 0.494 and would
+        /// take light ink at 1.7:1 where dark ink gives 9.0:1. The true crossover for these
+        /// tokens is near Y = 0.179, and comparing the ratios finds it exactly.
+        /// </summary>
+        public static Color BetterInk(Color background)
+        {
+            return Ratio(DarkInk, background) >= Ratio(LightInk, background) ? DarkInk : LightInk;
+        }
+
         public static double Ratio(Color first, Color second)
         {
             double a = Luminance(first), b = Luminance(second);
@@ -190,23 +202,38 @@ namespace DoorbellApp.Util
                 else if (token == "dark") { decision.Ink = DarkInk; decision.Source = "core"; }
                 else
                 {
-                    decision.Ink = Luminance(background) >= 0.5 ? DarkInk : LightInk;
+                    decision.Ink = BetterInk(background);
                     decision.Source = decideLocally ? "local_region" : "local";
                 }
             }
-            decision.Shadow = Luminance(decision.Ink) >= 0.5 ? DarkInk : LightInk;
+            // The outline is the opposite of whatever ink was chosen, including an admin colour.
+            decision.Shadow = BetterInk(decision.Ink);
             decision.NeedsShadow = Ratio(decision.Ink, background) < 4.5;
             return decision;
         }
 
         /// <summary>
+        /// False when core reports auto_background.source "image_unsampled": a background image is
+        /// configured but core could not read it, so its colour, auto_ink and auto_accent all came
+        /// from the flat theme colour and describe nothing that is on screen. Shells must then
+        /// sample locally instead of trusting the published values.
+        /// </summary>
+        public static bool CoreSampledBackground(Dictionary<string, object> display)
+        {
+            object source = CoreClient.Dig(display, "theme.auto_background.source");
+            return source == null || source.ToString() != "image_unsampled";
+        }
+
+        /// <summary>
         /// The background core actually measured, image averaging included. Falls back to the
-        /// caller's own sample when the contract has no auto_background.
+        /// caller's own sample when the contract has no auto_background, or when core says it
+        /// never read the configured image.
         /// </summary>
         public static bool TryContractBackground(Dictionary<string, object> display,
                                                  out Color background)
         {
             background = Colors.Black;
+            if (!CoreSampledBackground(display)) return false;
             object value = CoreClient.Dig(display, "theme.auto_background.color");
             return value != null && TryParse(value.ToString(), out background);
         }
@@ -215,9 +242,24 @@ namespace DoorbellApp.Util
         /// Door-station call-button colour. Precedence: per-device override, cluster override, the
         /// core-published automatic accent, then the local complement computation.
         /// </summary>
-        public static Color CallButton(Dictionary<string, object> display, Color background)
+        public static Color CallButton(Dictionary<string, object> display,
+                                       Dictionary<string, object> config, string nodeId,
+                                       Color background)
         {
             Color parsed;
+            // An administrator's colour always applies. Core folds it into theme.call_button_bg,
+            // but that field also carries the computed accent, so when core never read the
+            // background image the override is taken from configuration instead.
+            if (!CoreSampledBackground(display))
+            {
+                object over = null;
+                if (!string.IsNullOrEmpty(nodeId))
+                    over = CoreClient.Dig(config,
+                        "devices." + nodeId + ".local.theme.call_button_bg");
+                if (over == null) over = CoreClient.Dig(config, "display.theme.call_button_bg");
+                if (over != null && TryParse(over.ToString(), out parsed)) return parsed;
+                return LocalAccent(background);
+            }
             // theme.call_button_bg is what core says to paint: the override when there is one,
             // otherwise the computed accent.
             object value = CoreClient.Dig(display, "theme.call_button_bg");
@@ -233,11 +275,15 @@ namespace DoorbellApp.Util
         /// </summary>
         public static Color CallButtonInk(Dictionary<string, object> display, Color fill)
         {
-            object value = CoreClient.Dig(display, "theme.call_button_ink");
-            if (value == null) value = CoreClient.Dig(display, "theme.auto_accent.call_button_ink");
-            string token = value == null ? "" : value.ToString();
-            if (token == "light") return Colors.White;
-            if (token == "dark") return Colors.Black;
+            if (CoreSampledBackground(display))
+            {
+                object value = CoreClient.Dig(display, "theme.call_button_ink");
+                if (value == null)
+                    value = CoreClient.Dig(display, "theme.auto_accent.call_button_ink");
+                string token = value == null ? "" : value.ToString();
+                if (token == "light") return Colors.White;
+                if (token == "dark") return Colors.Black;
+            }
             return TextOn(fill);
         }
 
@@ -252,7 +298,7 @@ namespace DoorbellApp.Util
             ToHsl(background, out h, out s, out l);
             h = (h + 180.0) % 360.0;
             if (s < 0.25) s = 0.55;
-            bool preferDark = Luminance(background) >= 0.5;
+            bool preferDark = BetterInk(background) == DarkInk;
             Color best = FromHsl(h, s, preferDark ? 0.2 : 0.8);
             double bestScore = -1;
             for (int step = 0; step <= 20; step++)

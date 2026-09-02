@@ -238,7 +238,7 @@ namespace DoorbellApp
 
             if (App.Boot.Role == "door_station")
             {
-                Color fill = ThemeContrast.CallButton(_display, background);
+                Color fill = ThemeContrast.CallButton(_display, _cfg, _nodeId, background);
                 CallButton.Background = ThemeContrast.Brush(fill);
                 CallButton.Foreground =
                     ThemeContrast.Brush(ThemeContrast.CallButtonInk(_display, fill));
@@ -255,6 +255,9 @@ namespace DoorbellApp
             if (element == null) return;
             bool decideLocally;
             Color background = BackgroundUnder(element, out decideLocally);
+            // Core's published ink also has to be ignored when core says it never read the
+            // configured background image: it then describes the flat theme colour, not the photo.
+            decideLocally |= !ThemeContrast.CoreSampledBackground(_display);
             InkDecision decision =
                 ThemeContrast.Decide(_display, regionId, background, decideLocally);
             element.Foreground = ThemeContrast.Brush(

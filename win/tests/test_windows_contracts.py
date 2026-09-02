@@ -2,6 +2,7 @@
 """Host-runnable contract checks for the Windows client (no Windows SDK needed)."""
 
 from pathlib import Path
+import math
 import re
 import unittest
 import xml.etree.ElementTree as ET
@@ -831,11 +832,12 @@ class WindowsContracts(unittest.TestCase):
         self.assertIn('"display.appearance_schedule.dark_from"', appearance)
         self.assertIn('"devices." + nodeId + ".local.display.appearance"', appearance)
         # An admin override wins over everything, then core's published decision, then the
-        # local rule; the local rule is the same WCAG threshold.
+        # local rule, which picks whichever ink actually reads better.
         decide = contrast[contrast.index("public static InkDecision Decide("):
-                          contrast.index("public static bool TryContractBackground")]
+                          contrast.index("public static bool CoreSampledBackground")]
         self.assertLess(decide.index("ink_override"), decide.index("auto_ink"))
-        self.assertIn("Luminance(background) >= 0.5 ? DarkInk : LightInk", decide)
+        self.assertIn("decision.Ink = BetterInk(background);", decide)
+        self.assertNotIn("Luminance(background) >= 0.5", contrast)
         button = contrast[contrast.index("public static Color CallButton("):
                           contrast.index("public static Color LocalAccent")]
         self.assertLess(button.index("call_button_bg"), button.index("auto_accent"))
@@ -872,6 +874,8 @@ class WindowsContracts(unittest.TestCase):
                           contrast.index("public static bool TryContractBackground")]
         self.assertIn("object auto = decideLocally ? null", decide)
         self.assertIn("decision.NeedsShadow = Ratio(decision.Ink, background) < 4.5;", decide)
+        # The outline is the opposite of whatever ink was chosen, admin colours included.
+        self.assertIn("decision.Shadow = BetterInk(decision.Ink);", decide)
         under = shell[shell.index("private Color BackgroundUnder("):
                       shell.index("private static Color? SurfaceColour(")]
         self.assertIn("decideLocally = true;", under)
@@ -902,6 +906,73 @@ class WindowsContracts(unittest.TestCase):
         for region in ("clock", "date", "status_line", "hint", "tile_label", "footer", "notice"):
             with self.subTest(region=region):
                 self.assertIn('= "%s";' % region, shell)
+
+    def test_automatic_ink_picks_the_higher_contrast_of_the_two(self):
+        """The decision is a WCAG contrast comparison, not a luminance threshold at 0.5.
+
+        A real wallpaper averaging #BBBBB4 sits at Y = 0.494, just under the old threshold, and
+        took light ink at 1.7:1 where dark ink gives 9.0:1. Comparing the ratios finds the true
+        crossover, near Y = 0.179, exactly.
+        """
+        contrast = read("win/DoorbellApp/Util/ThemeContrast.cs")
+        found = re.findall(
+            r"public static readonly Color (LightInk|DarkInk) = "
+            r"Color\.FromRgb\(0x([0-9A-Fa-f]{2}), 0x([0-9A-Fa-f]{2}), 0x([0-9A-Fa-f]{2})\);",
+            contrast)
+        self.assertEqual(len(found), 2, "both ink tokens must be declared as literal colours")
+        inks = {name: (int(r, 16), int(g, 16), int(b, 16)) for name, r, g, b in found}
+
+        def channel(value):
+            value /= 255.0
+            return value / 12.92 if value <= 0.04045 else ((value + 0.055) / 1.055) ** 2.4
+
+        def luminance(rgb):
+            return (0.2126 * channel(rgb[0]) + 0.7152 * channel(rgb[1]) +
+                    0.0722 * channel(rgb[2]))
+
+        def ratio(first, second):
+            a, b = luminance(first), luminance(second)
+            return (max(a, b) + 0.05) / (min(a, b) + 0.05)
+
+        def better(background):
+            return ("DarkInk" if ratio(inks["DarkInk"], background) >=
+                    ratio(inks["LightInk"], background) else "LightInk")
+
+        # The wallpaper from the device report, and a dark grey that must stay light.
+        self.assertEqual(better((0xBB, 0xBB, 0xB4)), "DarkInk")
+        self.assertEqual(better((0x40, 0x40, 0x40)), "LightInk")
+        # The chosen ink is always the readable one, and the old rule was not.
+        self.assertGreater(ratio(inks["DarkInk"], (0xBB, 0xBB, 0xB4)), 4.5)
+        self.assertLess(ratio(inks["LightInk"], (0xBB, 0xBB, 0xB4)), 4.5)
+        self.assertLess(luminance((0xBB, 0xBB, 0xB4)), 0.5)  # why the old threshold failed
+        # The crossover sits low in the range, near Y = 0.19 for these two tokens, not at 0.5.
+        self.assertEqual(better((0x7A, 0x7A, 0x7A)), "DarkInk")   # Y 0.195, just above it
+        self.assertEqual(better((0x76, 0x76, 0x76)), "LightInk")  # Y 0.181, just below it
+        crossover = math.sqrt((luminance(inks["LightInk"]) + 0.05) *
+                              (luminance(inks["DarkInk"]) + 0.05)) - 0.05
+        self.assertLess(crossover, 0.25)
+        self.assertGreater(crossover, 0.10)
+        # And the implementation is that comparison.
+        rule = contrast[contrast.index("public static Color BetterInk("):
+                        contrast.index("public static double Ratio(")]
+        self.assertIn("Ratio(DarkInk, background) >= Ratio(LightInk, background)", rule)
+        # Every local decision goes through it, including the call-button direction.
+        self.assertIn("bool preferDark = BetterInk(background) == DarkInk;", contrast)
+
+    def test_core_theme_values_are_dropped_when_core_never_read_the_image(self):
+        contrast = read("win/DoorbellApp/Util/ThemeContrast.cs")
+        shell = read("win/DoorbellApp/MainWindow.Shell.cs")
+        # auto_background.source "image_unsampled" means a background image is configured but
+        # core could not read it, so its colour, ink and accent describe the flat theme colour.
+        self.assertIn('source.ToString() != "image_unsampled"', contrast)
+        self.assertIn("if (!CoreSampledBackground(display)) return false;", contrast)
+        self.assertIn("decideLocally |= !ThemeContrast.CoreSampledBackground(_display);", shell)
+        # The administrator's own call-button colour still applies; core's accent does not.
+        button = contrast[contrast.index("public static Color CallButton("):
+                          contrast.index("public static Color CallButtonInk(")]
+        self.assertIn("if (!CoreSampledBackground(display))", button)
+        self.assertIn('"devices." + nodeId + ".local.theme.call_button_bg"', button)
+        self.assertIn("return LocalAccent(background);", button)
 
     def test_the_footer_and_the_sos_slider_never_overlap(self):
         shell = read("win/DoorbellApp/MainWindow.Shell.cs")
