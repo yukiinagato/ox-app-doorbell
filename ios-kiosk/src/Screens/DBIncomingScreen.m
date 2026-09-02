@@ -830,6 +830,9 @@ static BOOL DBSameString(NSString *a, NSString *b) {
   if ([_purpose length] == 0) {
     _purposeBadge.hidden = YES;
   } else {
+    // Deliberately not filtered by visit_purposes.<id>.enabled: this slot
+    // reports what the visitor actually pressed, and a purpose disabled after
+    // the call would otherwise vanish from a call that already happened.
     NSDictionary *entry =
         [DBConfigUtil dig:_cfg path:[NSString stringWithFormat:@"visit_purposes.%@", _purpose]];
     NSString *label = [DBConfigUtil labelOf:entry lang:_boot.uiLang fallback:_purpose];

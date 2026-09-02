@@ -3,6 +3,7 @@
 #import "DBBootConfig.h"
 #import "DBCallHistoryModel.h"
 #import "DBNoticeModel.h"
+#import "DBPurposeModel.h"
 #import "DBSafeModeRecovery.h"
 #import "DBSosSlideModel.h"
 #import "DBUiTheme.h"
@@ -527,6 +528,53 @@ static void TestNoticePrecedenceExpiryAndPresets(void) {
   Require([[DBNoticeModel clampNoticeText:nil] length] == 0, @"nil is not publishable");
 }
 
+#pragma mark - visit purposes
+
+// `visit_purposes.<id>.enabled` is a cross-platform key introduced by the iOS
+// package: a bool that defaults to true, so an installation that predates it
+// keeps every purpose. A disabled purpose leaves every chooser.
+static void TestDisabledVisitPurposesLeaveEveryChooser(void) {
+  NSDictionary *config = @{ @"visit_purposes" : @{
+      @"p_delivery" : @{ @"order" : @2, @"enabled" : @YES },
+      @"p_post" : @{ @"order" : @1, @"enabled" : @NO },
+      @"p_guest" : @{ @"order" : @3 },
+      @"p_repair" : @{ @"order" : @3, @"enabled" : @"yes" },
+      @"p_broken" : @"not an entry" } };
+
+  NSArray *all = [DBPurposeModel allPurposeIdsInConfig:config];
+  Require([all count] == 4, @"a malformed entry is dropped, a disabled one is not");
+  Require([[all objectAtIndex:0] isEqualToString:@"p_post"], @"order comes first");
+  Require([[all objectAtIndex:1] isEqualToString:@"p_delivery"], @"then the next order");
+  // Equal order falls back to the identifier, so the list is stable.
+  Require([[all objectAtIndex:2] isEqualToString:@"p_guest"], @"ties break by identifier");
+  Require([[all objectAtIndex:3] isEqualToString:@"p_repair"], @"and stay stable");
+
+  NSArray *enabled = [DBPurposeModel enabledPurposeIdsInConfig:config];
+  Require([enabled count] == 3, @"the disabled purpose is not offered");
+  Require([enabled indexOfObject:@"p_post"] == NSNotFound, @"specifically that one");
+  Require([[enabled objectAtIndex:0] isEqualToString:@"p_delivery"],
+          @"the remaining purposes keep their configured order");
+
+  // Only an explicit false disables.
+  Require([DBPurposeModel isPurposeEnabled:nil], @"an absent entry is enabled");
+  Require([DBPurposeModel isPurposeEnabled:[NSDictionary dictionary]],
+          @"an entry without the key is enabled, so old installations are unchanged");
+  Require([DBPurposeModel isPurposeEnabled:@{ @"enabled" : @"no" }],
+          @"a non-boolean value never disables a purpose by accident");
+  Require(![DBPurposeModel isPurposeEnabled:@{ @"enabled" : @NO }], @"false disables");
+  Require([DBPurposeModel isPurposeEnabled:@{ @"enabled" : @YES }], @"true enables");
+
+  // The key the settings toggle writes through the config-write path.
+  Require([[DBPurposeModel enabledKeyForPurpose:@"p_post"]
+              isEqualToString:@"visit_purposes.p_post.enabled"], @"the written key");
+  Require([[DBPurposeModel enabledKeyForPurpose:@""] length] == 0,
+          @"an empty identifier never produces a writable key");
+
+  Require([[DBPurposeModel allPurposeIdsInConfig:[NSDictionary dictionary]] count] == 0,
+          @"an installation with no purposes renders none");
+  Require([[DBPurposeModel enabledPurposeIdsInConfig:nil] count] == 0, @"and nil is safe");
+}
+
 #pragma mark - safe mode
 
 static void TestLocalSafeModeAutoClearTiming(void) {
@@ -641,6 +689,7 @@ int main(void) {
     TestHistoryPagingFilteringAndGrouping();
     TestHistoryWallClockRendering();
     TestNoticePrecedenceExpiryAndPresets();
+    TestDisabledVisitPurposesLeaveEveryChooser();
     TestLocalSafeModeAutoClearTiming();
     TestRevokeClearsClusterIdentityAndSetup();
     NSLog(@"native_settings_ux_test ok");

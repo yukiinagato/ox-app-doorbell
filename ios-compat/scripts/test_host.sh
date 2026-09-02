@@ -80,6 +80,7 @@ swiftc \
   "$REPO_ROOT/ios-kiosk/src/Core/DBSosSlideModel.m" \
   "$REPO_ROOT/ios-kiosk/src/Core/DBCallHistoryModel.m" \
   "$REPO_ROOT/ios-kiosk/src/Core/DBNoticeModel.m" \
+  "$REPO_ROOT/ios-kiosk/src/Core/DBPurposeModel.m" \
   "$REPO_ROOT/ios-kiosk/src/Core/DBBootConfig.m" \
   "$REPO_ROOT/ios-kiosk/src/Support/DBSafeModeRecovery.m" \
   "$REPO_ROOT/ios-compat/tests/native_settings_ux_test.m" \
