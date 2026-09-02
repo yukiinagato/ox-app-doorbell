@@ -161,7 +161,10 @@ class Mesh {
     std::string pin;
     int64_t expires_mono = 0;
   };
-  JoinToken createJoinToken();
+  // Mint or refresh the join PIN. ttl_ms of zero keeps the default lifetime; anything else is
+  // clamped to 30 seconds..10 minutes so a caller cannot leave a PIN valid indefinitely.
+  // Minting never opens pairing mode: the two are separate decisions.
+  JoinToken createJoinToken(int64_t ttl_ms = 0);
 
 
   // Valid only while unpaired; applies PSK, seeds, and config before completion.

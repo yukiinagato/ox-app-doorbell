@@ -7,6 +7,7 @@
 #include "util/clock.h"
 #include "util/json.h"
 #include "util/runloop.h"
+#include "util/tz.h"
 
 using namespace db;
 
@@ -103,6 +104,12 @@ struct SettingsNode {
 
   json::Doc cached_config;
 };
+
+// Wall milliseconds of a UTC civil instant, for the appearance-schedule cases.
+int64_t utcMsForAppearance(int year, int month, int day, int hour, int minute) {
+  return tz::daysFromCivil(year, month, day) * 86'400'000LL + hour * 3'600'000LL +
+         minute * 60'000LL;
+}
 
 }  // namespace
 
@@ -358,4 +365,264 @@ TEST_CASE("power: a reported battery reaches status, capabilities, and the chang
   reading = "";
   fleet.run(60'000);
   CHECK(json::getInt(self_power().get(), "battery_pct") == -1);
+}
+
+TEST_CASE("announcements: a cluster-wide notice is overridden by a door-specific one") {
+  SettingsNode fleet("door_station", "d_front");
+  fleet.node->setConfigKey("doors.d_front", "{\"label\":{\"ja\":\"正面玄関\"}}");
+  fleet.node->setConfigKey("doors.d_back", "{\"label\":{\"ja\":\"勝手口\"}}");
+  fleet.ui.clear();
+
+  // status reports an explicit JSON null when a door has no announcement, so "absent" is
+  // distinguishable from "this door is not configured".
+  auto doorNotice = [&fleet](const std::string& door) {
+    auto status = fleet.status();
+    const cJSON* entry = json::get(json::get(status.get(), "doors"), door.c_str());
+    const cJSON* notice = json::get(entry, "notice");
+    if (!notice || cJSON_IsNull(notice)) return json::Doc{};
+    return json::Doc(cJSON_Duplicate(notice, 1));
+  };
+
+  REQUIRE(fleet.node->setDoorNotice("*", "House-wide message", 0));
+  CHECK(fleet.stringAt("notice.global.text") == "House-wide message");
+  // Every door shows it, tagged with the scope it came from.
+  for (const char* door : {"d_front", "d_back"}) {
+    auto notice = doorNotice(door);
+    REQUIRE(notice);
+    CHECK(json::getString(notice.get(), "text") == "House-wide message");
+    CHECK(json::getString(notice.get(), "scope") == "global");
+  }
+  // The wildcard target is reported so a shell can refresh every door at once.
+  bool wildcard = false;
+  for (const auto& event : fleet.ui) {
+    auto parsed = json::parse(event);
+    if (parsed && json::getString(parsed.get(), "t") == "notice_changed" &&
+        json::getString(parsed.get(), "door") == "*")
+      wildcard = true;
+  }
+  CHECK(wildcard);
+
+  // A door-specific announcement wins for that door only.
+  REQUIRE(fleet.node->setDoorNotice("d_front", "Side gate today", 0));
+  auto front = doorNotice("d_front");
+  REQUIRE(front);
+  CHECK(json::getString(front.get(), "text") == "Side gate today");
+  CHECK(json::getString(front.get(), "scope") == "door");
+  auto back = doorNotice("d_back");
+  REQUIRE(back);
+  CHECK(json::getString(back.get(), "text") == "House-wide message");
+
+  // Clearing the door-specific one falls back to the cluster-wide message rather than to none.
+  REQUIRE(fleet.node->clearDoorNotice("d_front"));
+  auto restored = doorNotice("d_front");
+  REQUIRE(restored);
+  CHECK(json::getString(restored.get(), "text") == "House-wide message");
+  CHECK(json::getString(restored.get(), "scope") == "global");
+
+  // The cluster-wide announcement expires on the same housekeeping tick.
+  REQUIRE(fleet.node->setDoorNotice("*", "Until six", fleet.clock.wallMs() + 90'000));
+  fleet.run(180'000);
+  CHECK(fleet.at("notice.global") == nullptr);
+  CHECK(doorNotice("d_front") == nullptr);
+}
+
+TEST_CASE("config: the announcement presets are seeded once and stay editable") {
+  SettingsNode fleet;
+  const cJSON* presets = fleet.at("notice.presets");
+  REQUIRE(cJSON_IsArray(presets));
+  CHECK(cJSON_GetArraySize(presets) == 3);
+  CHECK(json::getString(cJSON_GetArrayItem(presets, 0), "id") == "np_absent");
+  CHECK_FALSE(json::getString(cJSON_GetArrayItem(presets, 0), "text").empty());
+
+  fleet.node->setConfigKey("notice.presets",
+                           "[{\"id\":\"np_one\",\"text\":\"Only one\"}]");
+  CHECK(cJSON_GetArraySize(fleet.at("notice.presets")) == 1);
+  // At most eight, each with a usable id and a bounded message.
+  fleet.node->setConfigKey(
+      "notice.presets",
+      "[{\"id\":\"a\",\"text\":\"1\"},{\"id\":\"b\",\"text\":\"2\"},"
+      "{\"id\":\"c\",\"text\":\"3\"},{\"id\":\"d\",\"text\":\"4\"},"
+      "{\"id\":\"e\",\"text\":\"5\"},{\"id\":\"f\",\"text\":\"6\"},"
+      "{\"id\":\"g\",\"text\":\"7\"},{\"id\":\"h\",\"text\":\"8\"},"
+      "{\"id\":\"i\",\"text\":\"9\"}]");
+  fleet.node->setConfigKey("notice.presets", "[{\"id\":\"a\",\"text\":\"\"}]");
+  fleet.node->setConfigKey("notice.presets", "[{\"id\":\"bad id\",\"text\":\"x\"}]");
+  fleet.node->setConfigKey("notice.presets",
+                           "[{\"id\":\"a\",\"text\":\"1\"},{\"id\":\"a\",\"text\":\"2\"}]");
+  fleet.node->setConfigKey("notice.presets", "[{\"id\":\"a\"}]");
+  fleet.node->setConfigKey("notice.presets", "{\"a\":\"1\"}");
+  CHECK(cJSON_GetArraySize(fleet.at("notice.presets")) == 1);
+  CHECK(json::getString(cJSON_GetArrayItem(fleet.at("notice.presets"), 0), "id") == "np_one");
+}
+
+TEST_CASE("doors: the unlock control appears only when an unlock action exists") {
+  SettingsNode fleet("door_station", "d_front");
+  fleet.node->setConfigKey("doors.d_front", "{\"label\":{\"ja\":\"正面玄関\"}}");
+
+  auto unlock = [&fleet]() {
+    auto status = fleet.status();
+    const cJSON* entry = json::get(json::get(status.get(), "doors"), "d_front");
+    return json::Doc(cJSON_Duplicate(json::get(entry, "unlock"), 1));
+  };
+
+  // Nothing configured: no command, and the control is hidden by default.
+  auto initial = unlock();
+  REQUIRE(initial);
+  CHECK_FALSE(json::getBool(initial.get(), "configured"));
+  CHECK_FALSE(json::getBool(initial.get(), "show_button"));
+  CHECK(json::getString(initial.get(), "source") == "default");
+  CHECK(fleet.node->openDoor("d_front") == false);
+
+  // The existing feature-code action is what makes the door openable.
+  fleet.node->setConfigKey(
+      "sip.dtmf_actions",
+      "{\"*1\":{\"type\":\"ha_command\",\"command\":\"unlock\",\"door\":\"self\"}}");
+  auto configured = unlock();
+  REQUIRE(configured);
+  CHECK(json::getBool(configured.get(), "configured"));
+  CHECK(json::getBool(configured.get(), "show_button"));
+  CHECK(json::getString(configured.get(), "command") == "unlock");
+  CHECK(json::getString(configured.get(), "source") == "default");
+  CHECK(fleet.node->openDoor("d_front"));
+  CHECK(fleet.node->openDoor("d_missing") == false);
+
+  // An administrator may hide it even though it works, or show it even though it does not.
+  fleet.node->setConfigKey("doors.d_front.unlock.show_button", "false");
+  CHECK_FALSE(json::getBool(unlock().get(), "show_button"));
+  CHECK(json::getString(unlock().get(), "source") == "admin");
+  CHECK(fleet.node->openDoor("d_front"));
+
+  // A door may name its own command, which wins over the feature-code default.
+  fleet.node->setConfigKey("doors.d_front.unlock.command", "\"gate\"");
+  CHECK(json::getString(unlock().get(), "command") == "gate");
+  fleet.node->setConfigKey("doors.d_front.unlock.command", "\"bad command\"");
+  CHECK(json::getString(unlock().get(), "command") == "gate");
+  fleet.node->setConfigKey("doors.d_front.unlock.show_button", "\"yes\"");
+  CHECK(json::getString(unlock().get(), "source") == "admin");
+}
+
+TEST_CASE("display: appearance resolves in the configured zone and per device") {
+  SettingsNode fleet;
+  auto appearance = [&fleet]() {
+    auto status = fleet.status();
+    return json::Doc(
+        cJSON_Duplicate(json::get(json::get(status.get(), "display"), "appearance"), 1));
+  };
+
+  auto initial = appearance();
+  REQUIRE(initial);
+  CHECK(json::getString(initial.get(), "configured") == "auto_system");
+  CHECK(json::getBool(initial.get(), "follow_system"));
+
+  // An explicit choice is reported as-is and stops the shell consulting the system.
+  fleet.node->setConfigKey("display.appearance", "\"dark\"");
+  CHECK(json::getString(appearance().get(), "effective") == "dark");
+  CHECK_FALSE(json::getBool(appearance().get(), "follow_system"));
+  fleet.node->setConfigKey("display.appearance", "\"light\"");
+  CHECK(json::getString(appearance().get(), "effective") == "light");
+  fleet.node->setConfigKey("display.appearance", "\"sepia\"");
+  CHECK(json::getString(appearance().get(), "configured") == "light");
+
+  // auto_schedule is evaluated against the cluster time zone, not UTC.
+  fleet.node->setConfigKey("time.zone", "\"Asia/Tokyo\"");
+  fleet.node->setConfigKey("display.appearance", "\"auto_schedule\"");
+  fleet.node->setConfigKey("display.appearance_schedule",
+                           "{\"dark_from\":\"19:00\",\"light_from\":\"06:30\"}");
+  // The clock only ever moves forward here: the hybrid logical clock refuses to go backwards,
+  // so each step in this test is later than the last. The monotonic clock is moved too, because
+  // the published snapshot is rebuilt on a timer rather than on every wall-clock read.
+  auto jumpTo = [&fleet](int64_t wall_ms) {
+    fleet.clock.setWall(wall_ms);
+    fleet.clock.setMono(fleet.clock.monoMs() + 2500);
+    fleet.loop.pumpDue();
+  };
+  // 2026-09-02T02:00Z is 11:00 in Tokyo, outside the dark window.
+  jumpTo(utcMsForAppearance(2026, 9, 2, 2, 0));
+  CHECK(json::getString(appearance().get(), "effective") == "light");
+  // 2026-09-02T12:00Z is 21:00 in Tokyo, inside it.
+  jumpTo(utcMsForAppearance(2026, 9, 2, 12, 0));
+  CHECK(json::getString(appearance().get(), "effective") == "dark");
+  // The same instant is 08:00 in New York, so the zone decides the answer, not UTC.
+  fleet.node->setConfigKey("time.zone", "\"America/New_York\"");
+  fleet.loop.pumpDue();
+  CHECK(json::getString(appearance().get(), "effective") == "light");
+
+  // A per-device override wins over the cluster default.
+  fleet.node->setConfigKey(
+      "devices." + fleet.node->nodeId() + ".local.display.appearance", "\"light\"");
+  CHECK(json::getString(appearance().get(), "effective") == "light");
+  CHECK(json::getString(appearance().get(), "configured") == "light");
+
+  fleet.node->setConfigKey("display.appearance_schedule", "{\"dark_from\":\"25:00\"}");
+  CHECK(json::getString(json::get(appearance().get(), "schedule"), "dark_from") == "19:00");
+}
+
+TEST_CASE("display: the automatic theme is published and overridable") {
+  SettingsNode fleet;
+  auto theme = [&fleet]() {
+    auto status = fleet.status();
+    return json::Doc(
+        cJSON_Duplicate(json::get(json::get(status.get(), "display"), "theme"), 1));
+  };
+
+  fleet.node->setConfigKey("display.theme.bg_color", "\"#9BD748\"");
+  auto light = theme();
+  REQUIRE(light);
+  CHECK(json::getString(json::get(light.get(), "auto_background"), "color") == "#9BD748");
+  CHECK(json::getString(json::get(light.get(), "auto_background"), "source") == "color");
+  // A light background asks for dark ink in every region.
+  CHECK(json::getString(json::get(light.get(), "auto_ink"), "clock") == "dark");
+  CHECK(json::getString(json::get(light.get(), "auto_ink"), "footer") == "dark");
+  CHECK(json::getString(json::get(light.get(), "auto_accent"), "call_button") == "#8144D6");
+  CHECK(json::getString(light.get(), "call_button_bg") == "#8144D6");
+  CHECK(json::getString(light.get(), "call_button_ink") == "light");
+
+  // A dark background flips the ink and produces a different button.
+  fleet.node->setConfigKey("display.theme.bg_color", "\"#101418\"");
+  auto dark = theme();
+  CHECK(json::getString(json::get(dark.get(), "auto_ink"), "clock") == "light");
+  CHECK(json::getString(dark.get(), "call_button_bg") !=
+        json::getString(light.get(), "call_button_bg"));
+
+  // An administrator override replaces the computed button; the computed value stays visible.
+  fleet.node->setConfigKey("display.theme.call_button_bg", "\"#1155AA\"");
+  auto overridden = theme();
+  CHECK(json::getString(overridden.get(), "call_button_bg") == "#1155AA");
+  CHECK(json::getString(json::get(overridden.get(), "auto_accent"), "call_button") ==
+        json::getString(dark.get(), "call_button_bg"));
+  CHECK(json::getString(overridden.get(), "call_button_ink") == "light");
+
+  // Per-region ink overrides are passed through for the regions the manifest knows.
+  fleet.node->setConfigKey("display.theme.ink_override.clock", "\"#FF8800\"");
+  CHECK(json::getString(json::get(theme().get(), "ink_override"), "clock") == "#FF8800");
+  fleet.node->setConfigKey("display.theme.ink_override.nonsense", "\"#FF8800\"");
+  CHECK(json::get(json::get(theme().get(), "ink_override"), "nonsense") == nullptr);
+  fleet.node->setConfigKey("display.theme.ink_override.date", "\"orange\"");
+  CHECK(json::get(json::get(theme().get(), "ink_override"), "date") == nullptr);
+
+  // The computed fields are core's to publish, not an administrator's to set.
+  fleet.node->setConfigKey("display.theme.auto_accent",
+                           "{\"call_button\":\"#000000\"}");
+  CHECK(json::getString(json::get(theme().get(), "auto_accent"), "call_button") !=
+        "#000000");
+  fleet.node->setConfigKey("display.theme.auto_ink", "{\"clock\":\"dark\"}");
+  CHECK(json::getString(json::get(theme().get(), "auto_ink"), "clock") == "light");
+}
+
+TEST_CASE("video: the publish-side counters describe what this node produced") {
+  SettingsNode fleet("door_station", "d_front");
+  auto publish = [&fleet]() {
+    auto status = fleet.status();
+    return json::Doc(
+        cJSON_Duplicate(json::get(json::get(status.get(), "video"), "publish"), 1));
+  };
+  auto counters = publish();
+  REQUIRE(counters);
+  CHECK(json::getInt(counters.get(), "frames") == 0);
+  CHECK(json::getInt(counters.get(), "keyframes") == 0);
+  CHECK(json::getInt(counters.get(), "fragments") == 0);
+  CHECK(json::getInt(counters.get(), "dropped_forward") == 0);
+  // fps is derived from the measured capture interval rather than the configured one.
+  CHECK(json::getInt(counters.get(), "frame_interval_ms") > 0);
+  CHECK(json::getInt(counters.get(), "fps_x10") > 0);
 }
