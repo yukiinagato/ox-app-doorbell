@@ -371,6 +371,7 @@
     <string name="day_tue">火</string>
     <string name="day_wed">水</string>
     <string name="degraded_notified">呼び出し済み・応答をお待ちください</string>
+    <string name="door_call_action">呼出</string>
     <string name="door_hint_call">ボタンを押すと住人を呼び出します</string>
     <string name="door_lang_switch">言語</string>
     <string name="door_notice_for_this">この門口機にお知らせ</string>
@@ -573,10 +574,13 @@
     <string name="pair_err_detail">詳細: %1$s</string>
     <string name="pair_join_required">接続先とペアリング PIN を入力してください</string>
     <string name="pair_join_submit">参加</string>
+    <string name="pair_join_this_cluster">この集まりに参加</string>
     <string name="pair_join_with_code">ペアリング PIN で参加</string>
     <string name="pair_joined">クラスタに参加しました</string>
     <string name="pair_joining">クラスタに参加しています…</string>
     <string name="pair_later">あとで設定</string>
+    <string name="pair_link_from">%1$s への招待</string>
+    <string name="pair_link_leave_current">この端末は既に別の集まりに参加しています。参加すると現在の設定はすべて消去されます。</string>
     <string name="pair_membership">クラスタ · %1$s 台</string>
     <string name="pair_membership_connected">%1$s 台接続中</string>
     <string name="pair_mint_unsupported">この端末のコアはペアリング PIN の発行に対応していません。更新してください</string>
@@ -597,6 +601,7 @@
     <string name="pair_revoked">この端末はクラスタから削除されました</string>
     <string name="pair_role_door_station">門口機</string>
     <string name="pair_role_indoor_panel">室内機</string>
+    <string name="pair_scan_button">QR を読み取る</string>
     <string name="pair_scan_camera_denied">カメラの使用が許可されていません。端末の設定でカメラを許可してください。</string>
     <string name="pair_scan_cancel">キャンセル</string>
     <string name="pair_scan_denied">カメラを開けませんでした。ブラウザのカメラ権限を確認してください</string>

@@ -57,6 +57,8 @@ internal class DashboardView(
         orientation = LinearLayout.VERTICAL
     }
     private val bodySplit = LinearLayout(activity).apply { isBaselineAligned = false }
+    private lateinit var tileScroll: ScrollView
+    private var tilesScrolled = false
     private val callList = LinearLayout(activity).apply {
         orientation = LinearLayout.VERTICAL
     }
@@ -69,6 +71,25 @@ internal class DashboardView(
     private val sosSlider = SosSlideView(activity, ui)
 
     private val stills = HashMap<String, ImageView>()
+
+    /** One tile view per door, built once and then only updated. */
+    private val tiles = LinkedHashMap<String, DoorTile>()
+
+    /** What the footer currently shows, so an unchanged poll does no work. */
+    private var footerUrl = ""
+    private var versionLine = ""
+
+    /** A door tile's mutable parts, so a status poll updates rather than rebuilds. */
+    private class DoorTile(
+        val root: LinearLayout,
+        val still: ImageView,
+        val chips: LinearLayout,
+        val label: TextView,
+        val noticeText: TextView,
+    ) {
+        var lastNotice: String = "\u0000"
+        var lastOnline: Boolean? = null
+    }
     private var lastRows: List<CallRow> = emptyList()
     private var unreadMissed = 0
 
@@ -164,7 +185,16 @@ internal class DashboardView(
         header.addView(headerActions)
         root.addView(header, ShellUi.matchWrap())
 
-        bodySplit.addView(tileColumn, LinearLayout.LayoutParams(
+        tileScroll = ScrollView(activity).apply {
+            // Deliberately not fillViewport: that re-measures the column to exactly the viewport
+            // height, and a column taller than the viewport then crushes the tile captions to a
+            // few pixels instead of scrolling.
+            isFillViewport = false
+            addView(tileColumn, LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+            ))
+        }
+        bodySplit.addView(tileScroll, LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
         ))
         bodySplit.addView(callColumn, LinearLayout.LayoutParams(
@@ -287,9 +317,21 @@ internal class DashboardView(
         }
     }
 
+    private var lastClock = ""
+    private var lastDate = ""
+
+    /** Called once a second: only touches a TextView when the rendered value actually changed. */
     private fun updateClock(now: ClusterTime) {
-        clockText.text = now.clockText()
-        dateText.text = dateLine(now)
+        val clockValue = now.clockText()
+        if (clockValue != lastClock) {
+            lastClock = clockValue
+            clockText.text = clockValue
+        }
+        val dateValue = dateLine(now)
+        if (dateValue != lastDate) {
+            lastDate = dateValue
+            dateText.text = dateValue
+        }
     }
 
     private fun dateLine(now: ClusterTime): String {
@@ -317,16 +359,22 @@ internal class DashboardView(
     }
 
     private fun updateFooter() {
-        footer.removeAllViews()
-        footer.addView(
-            AdminLinks.view(
-                activity, palette, app.core, AdminLinks.resolve(status, app.boot.httpPort),
-                texts.t("web_admin.scan_hint", R.string.web_admin_scan_hint), 56,
-            ),
-            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f),
-        )
+        // The QR only changes when this node's own address does, so the footer is rebuilt on that
+        // rather than on every status poll.
+        val link = AdminLinks.resolve(status, app.boot.httpPort)
+        if (link.url != footerUrl || footer.childCount == 0) {
+            footerUrl = link.url
+            footer.removeAllViews()
+            footer.addView(
+                AdminLinks.view(
+                    activity, palette, app.core, link,
+                    texts.t("web_admin.scan_hint", R.string.web_admin_scan_hint), 56,
+                ),
+                LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f),
+            )
+        }
         val power = status?.optJSONObject("self")?.optJSONObject("power")
-        versionText.text = ShellUi.versionLine(
+        val line = ShellUi.versionLine(
             app.boot.name,
             status?.optJSONObject("node")?.optString("version").orEmpty()
                 .ifEmpty { app.core.version() },
@@ -334,6 +382,10 @@ internal class DashboardView(
             power?.optInt("battery_pct", -1) ?: -1,
             power?.optBoolean("charging", false) ?: false,
         ) { texts.t("power.percent", R.string.power_percent, it.toString()) }
+        if (line != versionLine) {
+            versionLine = line
+            versionText.text = line
+        }
     }
 
     private fun configureSos() {
@@ -358,72 +410,79 @@ internal class DashboardView(
 
     // ---------- door tiles ----------
 
+    /**
+     * Tiles are created once per door and then updated in place. Rebuilding them on every status
+     * poll -- which is what this used to do -- inflated a card, an image view and two labels per
+     * door several times a second, and that was the hitch on the home page.
+     */
     private fun buildTiles() {
-        tileColumn.removeAllViews()
-        stills.clear()
-        tileColumn.addView(
-            ShellUi.sectionHeading(activity, palette,
-                                   texts.t("settings.doors", R.string.settings_doors)),
-            ShellUi.matchWrap(),
-        )
         val doors = doorIds()
-        if (doors.isEmpty()) {
+        if (tiles.keys.toList() != doors) {
+            tileColumn.removeAllViews()
+            tiles.clear()
+            stills.clear()
             tileColumn.addView(
-                ShellUi.text(activity, texts.t("dash.no_doors", R.string.dash_no_doors), 14f,
-                             palette.muted),
+                ShellUi.sectionHeading(activity, palette,
+                                       texts.t("settings.doors", R.string.settings_doors)),
                 ShellUi.matchWrap(),
             )
-            return
+            if (doors.isEmpty()) {
+                tileColumn.addView(
+                    ShellUi.text(activity, texts.t("dash.no_doors", R.string.dash_no_doors), 14f,
+                                 palette.muted),
+                    ShellUi.matchWrap(),
+                )
+                return
+            }
+            for (door in doors) {
+                val tile = createTile(door)
+                tiles[door] = tile
+                stills[door] = tile.still
+                tileColumn.addView(
+                    tile.root,
+                    ShellUi.matchWrap().apply { topMargin = ShellUi.dp(activity, 8) },
+                )
+            }
         }
+        applyStillHeight(if (bodySplit.orientation == LinearLayout.HORIZONTAL) 88 else 120)
         val nowMs = clock.now().wallMs
-        for (door in doors) tileColumn.addView(
-            tileView(door, NoticeModel.resolve(status, config, door, nowMs)),
-            ShellUi.matchWrap().apply { topMargin = ShellUi.dp(activity, 8) },
-        )
+        for ((door, tile) in tiles) updateTile(door, tile, NoticeModel.resolve(
+            status, config, door, nowMs,
+        ))
+        // A focusable tile pulls the scroll view to itself on first layout, which hid the 門口
+        // heading and clipped the first tile. Start at the top; the operator scrolls from there.
+        if (!tilesScrolled) {
+            tilesScrolled = true
+            tileScroll.post { tileScroll.scrollTo(0, 0) }
+        }
     }
 
-    private fun tileView(door: String, notice: Notice?): View {
-        val peer = doorPeer(door)
-        val online = peer != null && peer.optString("status") != "dead"
+    /** The parts that never change for a door. Called once. */
+    /** The parts that never change for a door. Called once. */
+    private fun createTile(door: String): DoorTile {
         val card = ShellUi.card(activity, palette)
         card.isFocusable = true
         card.isClickable = true
-        card.setOnClickListener {
-            IncomingActivity.launch(activity, door)
-        }
+        card.setOnClickListener { IncomingActivity.launch(activity, door) }
 
         val still = ImageView(activity).apply {
             scaleType = ImageView.ScaleType.CENTER_CROP
             background = ShellUi.rounded(activity, palette.surfaceAlt, 8)
             contentDescription = doorLabel(door)
         }
-        stills[door] = still
-        card.addView(still, LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, ShellUi.dp(activity, 120),
-        ))
+        // The still is the only part that may shrink; the label and chips keep their height.
+        card.addView(
+            still,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ShellUi.dp(activity, 120),
+            ),
+        )
+        still.minimumHeight = ShellUi.dp(activity, 64)
 
         val chips = LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
             setPadding(0, ShellUi.dp(activity, 6), 0, 0)
         }
-        if (notice != null) {
-            // The status chip is compact, with a dot when an announcement is showing (§5.2).
-            val chip = ShellUi.pill(
-                activity, "● " + texts.t("notice.active", R.string.notice_active),
-                palette.noticeBg, palette.noticeInk,
-            )
-            chip.isFocusable = true
-            chip.isClickable = true
-            chip.setOnClickListener { openNoticeDialog(door) }
-            chips.addView(chip)
-        }
-        if (!online) chips.addView(
-            ShellUi.pill(activity, texts.t("dash.tile_offline", R.string.dash_tile_offline),
-                         palette.surfaceAlt, palette.muted),
-            LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
-            ).apply { leftMargin = ShellUi.dp(activity, 6) },
-        )
         card.addView(chips, ShellUi.matchWrap())
 
         val caption = LinearLayout(activity).apply {
@@ -432,26 +491,60 @@ internal class DashboardView(
             isBaselineAligned = false
             setPadding(0, ShellUi.dp(activity, 6), 0, 0)
         }
-        val tileLabel = ShellUi.text(activity, doorLabel(door), 16f, palette.ink, bold = true)
-        // A tile label sits on the card surface, which is a different background from the ground.
-        paintRegion(tileLabel, "tile_label", palette.surface, muted = false)
+        val label = ShellUi.text(activity, doorLabel(door), 16f, palette.ink, bold = true)
+        // A tile label sits on the card surface, a different background from the ground.
+        paintRegion(label, "tile_label", palette.surface, muted = false)
         caption.addView(
-            tileLabel,
+            label,
             LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f),
         )
         caption.addView(ShellUi.text(
             activity, texts.t("dash.tile_open", R.string.dash_tile_open), 13f, palette.accent,
         ))
         card.addView(caption, ShellUi.matchWrap())
-        if (notice != null) card.addView(
-            ShellUi.text(activity, notice.text, 13f, palette.muted).apply {
-                maxLines = 2
-                ellipsize = android.text.TextUtils.TruncateAt.END
-                paintRegion(this, "notice", palette.surface, muted = true)
-            },
-            ShellUi.matchWrap(),
+
+        val noticeText = ShellUi.text(activity, "", 13f, palette.muted).apply {
+            maxLines = 2
+            ellipsize = android.text.TextUtils.TruncateAt.END
+            visibility = View.GONE
+            paintRegion(this, "notice", palette.surface, muted = true)
+        }
+        card.addView(noticeText, ShellUi.matchWrap())
+        return DoorTile(card, still, chips, label, noticeText)
+    }
+
+    /** Everything a status poll can change, applied only when it actually changed. */
+    private fun updateTile(door: String, tile: DoorTile, notice: Notice?) {
+        val peer = doorPeer(door)
+        val online = peer != null && peer.optString("status") != "dead"
+        val noticeKey = notice?.text ?: ""
+        if (tile.lastNotice == noticeKey && tile.lastOnline == online) return
+        tile.lastNotice = noticeKey
+        tile.lastOnline = online
+
+        tile.label.text = doorLabel(door)
+        tile.chips.removeAllViews()
+        if (notice != null) {
+            // A compact chip with a dot while an announcement is showing (§5.2).
+            val chip = ShellUi.pill(
+                activity, "● " + texts.t("notice.active", R.string.notice_active),
+                palette.noticeBg, palette.noticeInk,
+            )
+            chip.isFocusable = true
+            chip.isClickable = true
+            chip.setOnClickListener { openNoticeDialog(door) }
+            tile.chips.addView(chip)
+        }
+        if (!online) tile.chips.addView(
+            ShellUi.pill(activity, texts.t("dash.tile_offline", R.string.dash_tile_offline),
+                         palette.surfaceAlt, palette.muted),
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+            ).apply { leftMargin = if (tile.chips.childCount == 0) 0 else ShellUi.dp(activity, 6) },
         )
-        return card
+        tile.chips.visibility = if (tile.chips.childCount == 0) View.GONE else View.VISIBLE
+        tile.noticeText.text = noticeKey
+        tile.noticeText.visibility = if (notice != null) View.VISIBLE else View.GONE
     }
 
     /** Live stills refresh every five seconds; a failure simply leaves the previous frame. */
@@ -559,7 +652,7 @@ internal class DashboardView(
         val heightDp = (metrics.heightPixels / metrics.density).toInt()
         val side = widthDp > heightDp && widthDp >= 600
         bodySplit.orientation = if (side) LinearLayout.HORIZONTAL else LinearLayout.VERTICAL
-        val tileParams = tileColumn.layoutParams as LinearLayout.LayoutParams
+        val tileParams = tileScroll.layoutParams as LinearLayout.LayoutParams
         val callParams = callColumn.layoutParams as LinearLayout.LayoutParams
         if (side) {
             tileParams.width = 0
@@ -578,9 +671,22 @@ internal class DashboardView(
             callParams.weight = 1f
             callParams.leftMargin = 0
         }
-        tileColumn.layoutParams = tileParams
+        tileScroll.layoutParams = tileParams
         callColumn.layoutParams = callParams
         applyActionLayout(widthDp)
+        // Side by side the tile column is short, so the still gives up height first and the
+        // label and chips stay on screen instead of falling below the fold.
+        applyStillHeight(if (side) 88 else 120)
+    }
+
+    private fun applyStillHeight(heightDp: Int) {
+        val height = ShellUi.dp(activity, heightDp)
+        for (tile in tiles.values) {
+            val params = tile.still.layoutParams ?: continue
+            if (params.height == height) continue
+            params.height = height
+            tile.still.layoutParams = params
+        }
     }
 
     /**

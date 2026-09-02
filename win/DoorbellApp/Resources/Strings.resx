@@ -373,6 +373,7 @@
   <data name="day_tue" xml:space="preserve"><value>火</value></data>
   <data name="day_wed" xml:space="preserve"><value>水</value></data>
   <data name="degraded_notified" xml:space="preserve"><value>呼び出し済み・応答をお待ちください</value></data>
+  <data name="door_call_action" xml:space="preserve"><value>呼出</value></data>
   <data name="door_hint_call" xml:space="preserve"><value>ボタンを押すと住人を呼び出します</value></data>
   <data name="door_lang_switch" xml:space="preserve"><value>言語</value></data>
   <data name="door_notice_for_this" xml:space="preserve"><value>この門口機にお知らせ</value></data>
@@ -575,10 +576,13 @@
   <data name="pair_err_detail" xml:space="preserve"><value>詳細: {0}</value></data>
   <data name="pair_join_required" xml:space="preserve"><value>接続先とペアリング PIN を入力してください</value></data>
   <data name="pair_join_submit" xml:space="preserve"><value>参加</value></data>
+  <data name="pair_join_this_cluster" xml:space="preserve"><value>この集まりに参加</value></data>
   <data name="pair_join_with_code" xml:space="preserve"><value>ペアリング PIN で参加</value></data>
   <data name="pair_joined" xml:space="preserve"><value>クラスタに参加しました</value></data>
   <data name="pair_joining" xml:space="preserve"><value>クラスタに参加しています…</value></data>
   <data name="pair_later" xml:space="preserve"><value>あとで設定</value></data>
+  <data name="pair_link_from" xml:space="preserve"><value>{0} への招待</value></data>
+  <data name="pair_link_leave_current" xml:space="preserve"><value>この端末は既に別の集まりに参加しています。参加すると現在の設定はすべて消去されます。</value></data>
   <data name="pair_membership" xml:space="preserve"><value>クラスタ · {0} 台</value></data>
   <data name="pair_membership_connected" xml:space="preserve"><value>{0} 台接続中</value></data>
   <data name="pair_mint_unsupported" xml:space="preserve"><value>この端末のコアはペアリング PIN の発行に対応していません。更新してください</value></data>
@@ -599,6 +603,7 @@
   <data name="pair_revoked" xml:space="preserve"><value>この端末はクラスタから削除されました</value></data>
   <data name="pair_role_door_station" xml:space="preserve"><value>門口機</value></data>
   <data name="pair_role_indoor_panel" xml:space="preserve"><value>室内機</value></data>
+  <data name="pair_scan_button" xml:space="preserve"><value>QR を読み取る</value></data>
   <data name="pair_scan_camera_denied" xml:space="preserve"><value>カメラの使用が許可されていません。端末の設定でカメラを許可してください。</value></data>
   <data name="pair_scan_cancel" xml:space="preserve"><value>キャンセル</value></data>
   <data name="pair_scan_denied" xml:space="preserve"><value>カメラを開けませんでした。ブラウザのカメラ権限を確認してください</value></data>

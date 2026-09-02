@@ -371,6 +371,7 @@ Delete it?</string>
     <string name="day_tue">Tue</string>
     <string name="day_wed">Wed</string>
     <string name="degraded_notified">Notified — please wait</string>
+    <string name="door_call_action">Call</string>
     <string name="door_hint_call">Press the button to call the residents</string>
     <string name="door_lang_switch">Language</string>
     <string name="door_notice_for_this">Announce at this door</string>
@@ -573,10 +574,13 @@ Delete it?</string>
     <string name="pair_err_detail">Details: %1$s</string>
     <string name="pair_join_required">Enter the address and the Pairing PIN</string>
     <string name="pair_join_submit">Join</string>
+    <string name="pair_join_this_cluster">Join this cluster</string>
     <string name="pair_join_with_code">Join with a Pairing PIN</string>
     <string name="pair_joined">Joined the Cluster</string>
     <string name="pair_joining">Joining the Cluster…</string>
     <string name="pair_later">Set up later</string>
+    <string name="pair_link_from">Invitation to %1$s</string>
+    <string name="pair_link_leave_current">This device is already in another cluster. Joining erases all of its current settings.</string>
     <string name="pair_membership">Cluster · %1$s devices</string>
     <string name="pair_membership_connected">%1$s connected</string>
     <string name="pair_mint_unsupported">This device\'s core can\'t issue a Pairing PIN yet. Update it</string>
@@ -597,6 +601,7 @@ Delete it?</string>
     <string name="pair_revoked">This device was removed from the Cluster</string>
     <string name="pair_role_door_station">Door station</string>
     <string name="pair_role_indoor_panel">Indoor panel</string>
+    <string name="pair_scan_button">Scan QR</string>
     <string name="pair_scan_camera_denied">Camera access is not allowed. Grant camera permission in the device settings.</string>
     <string name="pair_scan_cancel">Cancel</string>
     <string name="pair_scan_denied">Couldn\'t open the camera. Check the browser\'s camera permission</string>

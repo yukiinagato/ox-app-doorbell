@@ -366,6 +366,7 @@
 "day.tue" = "二";
 "day.wed" = "三";
 "degraded.notified" = "已通知，请稍候";
+"door.call_action" = "呼叫";
 "door.hint_call" = "按下按钮即可呼叫住户";
 "door.lang_switch" = "语言";
 "door.notice_for_this" = "在此门口机发布公告";
@@ -568,10 +569,13 @@
 "pair.err_detail" = "详情: %@";
 "pair.join_required" = "请输入连接地址和配对 PIN";
 "pair.join_submit" = "加入";
+"pair.join_this_cluster" = "加入此集群";
 "pair.join_with_code" = "使用配对 PIN 加入";
 "pair.joined" = "已加入集群";
 "pair.joining" = "正在加入集群…";
 "pair.later" = "稍后设置";
+"pair.link_from" = "加入 %@ 的邀请";
+"pair.link_leave_current" = "此设备已加入其他集群。加入将清除其当前的全部设置。";
 "pair.membership" = "集群 · %@ 台";
 "pair.membership_connected" = "%@ 台已连接";
 "pair.mint_unsupported" = "此设备的内核尚不支持生成配对 PIN，请更新";
@@ -592,6 +596,7 @@
 "pair.revoked" = "此设备已从集群中移除";
 "pair.role_door_station" = "门口机";
 "pair.role_indoor_panel" = "室内机";
+"pair.scan_button" = "扫描二维码";
 "pair.scan_camera_denied" = "未获得摄像头权限。请在设备设置中允许使用摄像头。";
 "pair.scan_cancel" = "取消";
 "pair.scan_denied" = "无法打开摄像头。请检查浏览器的摄像头权限";

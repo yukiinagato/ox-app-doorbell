@@ -62,6 +62,18 @@ class IncomingActivity : Activity() {
     private var oldAudioMode = AudioManager.MODE_NORMAL
     private var oldSpeakerphone = false
     private val autoClose = Runnable { finish() }
+    private val returnCountdown = ReturnCountdown()
+    private val returnTick = object : Runnable {
+        override fun run() {
+            val snapshot = returnCountdown.tick()
+            renderDoorTitle()
+            if (snapshot.shouldReturnHome) {
+                finish()
+                return
+            }
+            if (snapshot.ticking) ui.postDelayed(this, 1000L)
+        }
+    }
     private val answerReplaceTimeout = Runnable {
         if (answerDelayPending) {
             answerDelayPending = false
@@ -162,8 +174,27 @@ class IncomingActivity : Activity() {
         applySemanticUi(cfg, st)
         ui.post(debugTick)
 
-        // Bound unanswered video and monitor-audio resource use.
-        scheduleAutoClose()
+        // The page returns to the home screen on its own after the configured delay; the resident
+        // can stop that by tapping the number.
+        returnCountdown.configure(ReturnCountdown.secondsFrom(st, cfg))
+        findViewById<TextView>(R.id.door_label).setOnClickListener {
+            returnCountdown.cancelByUser()
+            renderDoorTitle()
+        }
+        renderDoorTitle()
+        startReturnCountdown()
+    }
+
+    /** Door name plus the return countdown, which is the only thing that closes this page. */
+    private fun renderDoorTitle() {
+        val suffix = returnCountdown.snapshot().suffix
+        findViewById<TextView>(R.id.door_label).text =
+            if (suffix.isEmpty()) doorLabel() else "${doorLabel()} $suffix"
+    }
+
+    private fun startReturnCountdown() {
+        ui.removeCallbacks(returnTick)
+        if (returnCountdown.snapshot().ticking) ui.postDelayed(returnTick, 1000L)
     }
 
     override fun onNewIntent(intent: Intent?) {
@@ -264,6 +295,7 @@ class IncomingActivity : Activity() {
     override fun onDestroy() {
         if (app.incomingActivity === this) app.incomingActivity = null
         ui.removeCallbacks(debugTick)
+        ui.removeCallbacks(returnTick)
         if (::sosSlider.isInitialized) sosSlider.cancelCountdown()
         ui.removeCallbacksAndMessages(null)
         answerRequested = false
@@ -289,8 +321,10 @@ class IncomingActivity : Activity() {
             if (isFinishing || inCall || answerRequested) return@runOnUiThread
             findViewById<TextView>(R.id.status_text).text =
                 texts.t("ring.cancelled", R.string.ring_cancelled)
-            ui.removeCallbacks(autoClose)
-            ui.postDelayed(autoClose, CANCELLED_CLOSE_MS)
+            // Deliberately no close timer: the live view stays until the countdown ends or the
+            // resident leaves, so a visitor hanging up does not snatch the picture away.
+            returnCountdown.onVisitorCancelled()
+            startReturnCountdown()
         }
     }
 
@@ -319,6 +353,13 @@ class IncomingActivity : Activity() {
         }
     }
 
+    /** The call ended without leaving the page: start the countdown again from the top. */
+    private fun restartReturnAfterCall() {
+        returnCountdown.resumeAfterCall()
+        renderDoorTitle()
+        startReturnCountdown()
+    }
+
     private fun demoteSupersededAnswer() {
         ui.removeCallbacks(answerReplaceTimeout)
         answerDelayPending = false
@@ -334,7 +375,7 @@ class IncomingActivity : Activity() {
         findViewById<TextView>(R.id.audio_hint).visibility = View.GONE
         updateControlLabels()
         applySemanticUi(app.core.config(), app.core.status())
-        scheduleAutoClose()
+        restartReturnAfterCall()
     }
 
     fun onCallAnswered(answeredDoor: String, answeredCallId: String, answeredStage: Int) {
@@ -371,11 +412,13 @@ class IncomingActivity : Activity() {
             eventStage >= stageRevision &&
             (eventDoor.isEmpty() || door.isEmpty() || eventDoor == door)
 
+    /**
+     * The page is closed by the return countdown alone. A visitor hanging up, or a call expiring,
+     * deliberately leaves the live view on screen so the resident can still see who was there.
+     */
     private fun scheduleAutoClose() {
         ui.removeCallbacks(autoClose)
-        val byExpiry = if (expiresAtMs > 0L) expiresAtMs - System.currentTimeMillis()
-            else AUTO_CLOSE_MS
-        ui.postDelayed(autoClose, byExpiry.coerceIn(0L, AUTO_CLOSE_MS))
+        startReturnCountdown()
     }
 
     fun onMemoryPressure() {
@@ -396,6 +439,9 @@ class IncomingActivity : Activity() {
             when (state) {
                 "in_call" -> if (answerRequested && !answerDelayPending) {
                     inCall = true
+                    ui.removeCallbacks(returnTick)
+                    returnCountdown.pauseForCall()
+                    renderDoorTitle()
                     findViewById<Button>(R.id.answer_button).apply {
                         text = texts.t("incall.end", R.string.incall_end)
                         isEnabled = true
@@ -653,10 +699,8 @@ class IncomingActivity : Activity() {
         else
             texts.t("reply.failed", R.string.reply_failed)
         sent.visibility = View.VISIBLE
-        if (accepted) {
-            ui.removeCallbacks(autoClose)
-            if (!inCall) ui.postDelayed(autoClose, 3000)
-        }
+        // A sent reply leaves the page up too; the countdown decides when it goes.
+        if (accepted) startReturnCountdown()
     }
 
 

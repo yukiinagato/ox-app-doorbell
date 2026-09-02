@@ -2,6 +2,7 @@
 // its own threads; this layer attaches them to the JVM and Kotlin marshals UI work to main.
 // A pthread TLS destructor detaches threads at exit to avoid per-callback attach churn.
 #include <android/log.h>
+#include <dlfcn.h>
 #include <jni.h>
 #include <pthread.h>
 
@@ -962,4 +963,20 @@ Java_jp_ox_doorbell_DoorbellCore_nativeSipSetMicMuted(JNIEnv*, jobject, jlong h,
   Bridge* b = fromHandle(h);
   if (!b || !b->core) return -1;
   return db_core_sip_set_mic_muted(b->core, muted == JNI_TRUE ? 1 : 0);
+}
+
+// doorbell:// pairing-link parser. Core is adding db_core_parse_pair_uri_json; until it lands this
+// resolves to nothing and the Kotlin side uses its own parse of the same grammar, so the feature
+// works today and adopts core's answer the moment it exists.
+extern "C" JNIEXPORT jstring JNICALL
+Java_jp_ox_doorbell_DoorbellCore_nativeParsePairUriJson(JNIEnv* env, jobject, jstring uri) {
+  using ParseFn = char* (*)(const char*);
+  static ParseFn fn = reinterpret_cast<ParseFn>(
+      dlsym(RTLD_DEFAULT, "db_core_parse_pair_uri_json"));
+  if (!fn) return nullptr;
+  char* s = fn(toUtf8(env, uri).c_str());
+  if (!s) return nullptr;
+  jstring out = env->NewStringUTF(s);
+  db_free(s);
+  return out;
 }

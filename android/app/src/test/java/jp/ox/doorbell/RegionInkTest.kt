@@ -319,6 +319,34 @@ class RegionInkTest {
     }
 
     @Test
+    fun breathingRoomIsAddedOnlyOutOfRealSlack() {
+        // A tall screen with compact content gets a generous gap...
+        assertEquals(32, VisitorLayout.groupGapDp(800, 400, 4))
+        // ...a snug one gets a small one...
+        assertEquals(8, VisitorLayout.groupGapDp(640, 600, 4))
+        // ...and a short screen keeps the tight layout rather than pushing the call button off.
+        assertEquals(0, VisitorLayout.groupGapDp(600, 600, 4))
+        assertEquals(0, VisitorLayout.groupGapDp(500, 600, 4))
+    }
+
+    @Test
+    fun theGapAlwaysComesFromTheDocumentedScale() {
+        for (available in 300..1200 step 7) {
+            val gap = VisitorLayout.groupGapDp(available, 400, 4)
+            assertTrue("gap $gap is off the scale",
+                       gap == 0 || VisitorLayout.SPACING_SCALE.contains(gap))
+        }
+    }
+
+    @Test
+    fun oneGroupNeedsNoGapAndSlackIsNeverFullySpent() {
+        assertEquals(0, VisitorLayout.groupGapDp(800, 100, 1))
+        // At most two thirds of the slack is spent, so the layout never sits flush to the edges.
+        val gap = VisitorLayout.groupGapDp(800, 400, 4)
+        assertTrue(gap * 3 <= (800 - 400))
+    }
+
+    @Test
     fun theDashboardActionsFollowTheSameWidthRule() {
         assertTrue(VisitorLayout.actionsStacked(360))
         assertTrue(VisitorLayout.actionsStacked(599))
