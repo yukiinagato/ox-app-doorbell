@@ -120,6 +120,8 @@ namespace DoorbellApp
             new Dictionary<string, Border>(StringComparer.Ordinal);
         private readonly Dictionary<string, string> _tileSnapshotUrls =
             new Dictionary<string, string>(StringComparer.Ordinal);
+        // Tile captions are drawn over the tile surface and follow the same per-region ink rule.
+        private readonly List<TextBlock> _tileLabels = new List<TextBlock>();
         private readonly HashSet<string> _tileFetching =
             new HashSet<string>(StringComparer.Ordinal);
         private int _unreadMissed;

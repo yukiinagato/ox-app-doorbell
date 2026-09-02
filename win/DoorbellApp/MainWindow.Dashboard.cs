@@ -51,6 +51,7 @@ namespace DoorbellApp
                 _tileDoors.AddRange(doors);
                 _tileImages.Clear();
                 _tileNoticeChips.Clear();
+                _tileLabels.Clear();
                 DoorTileGrid.Children.Clear();
                 foreach (string door in doors) DoorTileGrid.Children.Add(BuildDoorTile(door));
                 if (doors.Count == 0)
@@ -87,6 +88,8 @@ namespace DoorbellApp
                 RefreshTileNoticeChip(door);
             }
 
+            // Tile captions were just created; their bounds exist only after the next layout.
+            QueueInkPass();
             if (doors.Count != 0 && DashboardHome.Visibility == Visibility.Visible)
             {
                 if (!_tileRefresh.IsEnabled) _tileRefresh.Start();
@@ -132,13 +135,15 @@ namespace DoorbellApp
 
             var caption = new Grid { Margin = new Thickness(10, 8, 10, 8) };
             var labels = new StackPanel { HorizontalAlignment = HorizontalAlignment.Left };
-            labels.Children.Add(new TextBlock
+            var title = new TextBlock
             {
                 Text = DoorLabel(door),
                 FontSize = 17,
                 FontWeight = FontWeights.Bold,
                 Foreground = (Brush)FindResource("Fg"),
-            });
+            };
+            _tileLabels.Add(title);
+            labels.Children.Add(title);
             var watch = new TextBlock
             {
                 Text = Texts.T("dash.tile_watch") + " ›",

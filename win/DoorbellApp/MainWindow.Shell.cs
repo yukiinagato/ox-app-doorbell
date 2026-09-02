@@ -6,7 +6,9 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Effects;
 using System.Windows.Media.Imaging;
+using System.Windows.Threading;
 using DoorbellApp.Core;
 using DoorbellApp.Pairing;
 using DoorbellApp.Util;
@@ -24,6 +26,9 @@ namespace DoorbellApp
         private const string RegionDate = "date";
         private const string RegionFooter = "footer";
         private const string RegionHint = "hint";
+        private const string RegionStatusLine = "status_line";
+        private const string RegionTileLabel = "tile_label";
+        private const string RegionNotice = "notice";
 
         /// <summary>Door stations get the visitor screen; indoor panels get the dashboard.</summary>
         private void ApplyRoleHome()
@@ -106,14 +111,72 @@ namespace DoorbellApp
             }
             DoorTileGrid.Columns = portrait ? 2 : (large ? 2 : 1);
 
-            bool stretchSos = portrait && App.Boot.Role == "door_station";
-            SosButton.HorizontalAlignment = stretchSos ?
-                HorizontalAlignment.Stretch : HorizontalAlignment.Right;
-            SosButton.Width = stretchSos ? double.NaN : 238;
-            SosButton.Margin = stretchSos ? new Thickness(26, 0, 26, 16)
-                                          : new Thickness(0, 0, 20, 16);
+            LayOutSosAndFooters(width, portrait);
+            // Sampling the background under an element needs its arranged bounds, so the ink pass
+            // waits for the layout this call just requested.
+            QueueInkPass();
+        }
+
+        private bool _inkPassQueued;
+
+        /// <summary>Runs one coalesced ink pass once the pending layout has been arranged.</summary>
+        private void QueueInkPass()
+        {
+            if (_inkPassQueued) return;
+            _inkPassQueued = true;
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                _inkPassQueued = false;
+                ApplyAutoInk();
+            }), DispatcherPriority.Loaded);
+        }
+
+        // The SOS slider floats over whichever home screen is showing, so the footers have to
+        // reserve room for it explicitly. A real device found the version and battery line
+        // running underneath it in the narrow layout; these are the numbers that stop it.
+        private const double SosBarWidth = 238;
+        private const double SosBarHeight = 62;
+        private const double SosBarMargin = 20;
+        private const double SosBarBottom = 16;
+        private const double SosClearance = 12;
+        private const double FooterMinimumWidth = 320;
+
+        /// <summary>Width the footers must leave free when the slider sits beside them.</summary>
+        internal static double SosReservedWidth
+        {
+            get { return SosBarWidth + SosBarMargin + SosClearance; }
+        }
+
+        /// <summary>Height the footers must leave free when the slider sits below them.</summary>
+        internal static double SosReservedHeight
+        {
+            get { return SosBarHeight + SosBarBottom + SosClearance; }
+        }
+
+        /// <summary>
+        /// Places the slider and reserves exactly the space it occupies, so the footer and the
+        /// slider cannot overlap at any window size. Beside the footer there is room only when
+        /// the footer still gets its minimum width; otherwise the slider becomes a full-width
+        /// band and the footer reserves height above it instead.
+        /// </summary>
+        private void LayOutSosAndFooters(double width, bool portrait)
+        {
             bool sosVisible = SosButton.Visibility == Visibility.Visible;
-            VisitorFooter.Margin = new Thickness(0, 12, 0, stretchSos && sosVisible ? 76 : 0);
+            bool sosBelow = sosVisible &&
+                (portrait || width < SosReservedWidth + FooterMinimumWidth);
+
+            SosButton.HorizontalAlignment = sosBelow ?
+                HorizontalAlignment.Stretch : HorizontalAlignment.Right;
+            SosButton.Width = sosBelow ? double.NaN : SosBarWidth;
+            SosButton.Margin = sosBelow
+                ? new Thickness(SosBarMargin, 0, SosBarMargin, SosBarBottom)
+                : new Thickness(0, 0, SosBarMargin, SosBarBottom);
+
+            double reserveWidth = sosVisible && !sosBelow ? SosReservedWidth : 0;
+            double reserveHeight = sosBelow ? SosReservedHeight : 0;
+            DashboardSosColumn.Width = new GridLength(reserveWidth);
+            DashboardFooter.Margin = new Thickness(0, 0, 0, reserveHeight);
+            VisitorFooter.Margin = new Thickness(0, 12, reserveWidth, reserveHeight);
         }
 
         private static void PlaceVisitor(FrameworkElement element, int row, int column,
@@ -140,6 +203,7 @@ namespace DoorbellApp
         {
             Appearance.Apply(_cfg, _nodeId, App.Core.LocalTime(0), _display);
             ApplyAutoInk();
+            QueueInkPass();
         }
 
         /// <summary>
@@ -151,22 +215,26 @@ namespace DoorbellApp
         {
             if (_night) return;  // Night mode owns the clock colours.
             Color background = EffectiveBackground();
-            Color ink = ThemeContrast.Ink(_display, RegionClock, background);
-            Color dim = ThemeContrast.Ink(_display, RegionDate, background);
-            var inkBrush = ThemeContrast.Brush(ink);
-            var dimBrush = ThemeContrast.Brush(MixTowards(dim, background, 0.35));
-            ClockText.Foreground = inkBrush;
-            DashClock.Foreground = inkBrush;
-            DateText.Foreground = dimBrush;
-            DashDate.Foreground = dimBrush;
-            TouchHint.Foreground = ThemeContrast.Brush(
-                MixTowards(ThemeContrast.Ink(_display, RegionHint, background),
-                           background, 0.25));
-            var statusBrush = ThemeContrast.Brush(
-                MixTowards(ThemeContrast.Ink(_display, RegionFooter, background),
-                           background, 0.35));
-            NodeInfo.Foreground = statusBrush;
-            VisitorVersionLine.Foreground = statusBrush;
+
+            // Every text region that is drawn straight onto a background, on all three screens.
+            // Each is decided from the pixels under that element, not from the whole image.
+            InkText(ClockText, RegionClock, 0);
+            InkText(DashClock, RegionClock, 0);
+            InkText(DateText, RegionDate, 0.35);
+            InkText(DashDate, RegionDate, 0.35);
+            InkText(TouchHint, RegionHint, 0.25);
+            InkText(NodeInfo, RegionFooter, 0.35);
+            InkText(VisitorVersionLine, RegionFooter, 0.35);
+            InkText(VisitorNoticeText, RegionNotice, 0);
+            InkText(MembershipText, RegionStatusLine, 0);
+            InkText(RecentCallsTitle, RegionTileLabel, 0);
+            // The call screens draw over their own opaque surface, so the same rule resolves
+            // there against that surface rather than against the theme background.
+            InkText(IncomingTitle, RegionStatusLine, 0);
+            InkText(InCallTitle, RegionStatusLine, 0);
+            InkText(IncomingHint, RegionHint, 0.25);
+            InkText(IncomingNoVideo, RegionHint, 0.25);
+            foreach (TextBlock label in _tileLabels) InkText(label, RegionTileLabel, 0);
 
             if (App.Boot.Role == "door_station")
             {
@@ -175,6 +243,105 @@ namespace DoorbellApp
                 CallButton.Foreground =
                     ThemeContrast.Brush(ThemeContrast.CallButtonInk(_display, fill));
             }
+        }
+
+        /// <summary>
+        /// Resolves one text element's ink against whatever is actually behind it, and adds the
+        /// 40 % opposite-ink outline only when the chosen ink still misses 4.5:1. muted mixes the
+        /// ink towards the background for secondary lines, after the decision is made.
+        /// </summary>
+        private void InkText(TextBlock element, string regionId, double muted)
+        {
+            if (element == null) return;
+            bool decideLocally;
+            Color background = BackgroundUnder(element, out decideLocally);
+            InkDecision decision =
+                ThemeContrast.Decide(_display, regionId, background, decideLocally);
+            element.Foreground = ThemeContrast.Brush(
+                muted > 0 ? MixTowards(decision.Ink, background, muted) : decision.Ink);
+            element.Effect = decision.NeedsShadow ? OutlineFor(decision.Shadow) : null;
+        }
+
+        private static DropShadowEffect OutlineFor(Color shadow)
+        {
+            return new DropShadowEffect
+            {
+                Color = shadow,
+                Opacity = 0.4,
+                ShadowDepth = 1,
+                BlurRadius = 2,
+                Direction = 315,
+            };
+        }
+
+        /// <summary>
+        /// The colour behind one element. An opaque ancestor surface — a card, a call screen —
+        /// answers directly; otherwise the theme background image is sampled under exactly this
+        /// element's bounds, which is the refinement core cannot make without layout geometry.
+        /// decideLocally is true in both of those cases, because core's published token describes
+        /// only the theme background as a whole; it is false when that whole is what applies.
+        /// </summary>
+        private Color BackgroundUnder(FrameworkElement element, out bool decideLocally)
+        {
+            decideLocally = false;
+            for (DependencyObject node = element; node != null && node != this;
+                 node = VisualTreeHelper.GetParent(node))
+            {
+                var opaque = SurfaceColour(node);
+                if (opaque.HasValue)
+                {
+                    // Core never saw this surface, so its whole-image token cannot describe it.
+                    decideLocally = true;
+                    return opaque.Value;
+                }
+            }
+
+            var bitmap = ThemeBgImage.Source as BitmapSource;
+            if (ThemeBgImage.Visibility == Visibility.Visible && bitmap != null)
+            {
+                try
+                {
+                    if (element.ActualWidth > 0 && element.ActualHeight > 0 && IsAncestorOf(element))
+                    {
+                        Point origin = element.TransformToAncestor(this).Transform(new Point(0, 0));
+                        var bounds = new Rect(origin,
+                            new Size(element.ActualWidth, element.ActualHeight));
+                        Int32Rect crop = ThemeContrast.MapUniformToFill(bitmap,
+                            new Size(ActualWidth, ActualHeight), bounds);
+                        Color region;
+                        if (ThemeContrast.TryAverageRegion(bitmap, crop, out region))
+                        {
+                            decideLocally = true;
+                            return region;
+                        }
+                    }
+                }
+                catch (InvalidOperationException)
+                {
+                    // Not connected to this window's visual tree yet; the shared value applies.
+                }
+            }
+            return EffectiveBackground();
+        }
+
+        private static Color? SurfaceColour(DependencyObject node)
+        {
+            Brush brush = null;
+            var control = node as Control;
+            if (control != null) brush = control.Background;
+            var panel = node as Panel;
+            if (brush == null && panel != null) brush = panel.Background;
+            var border = node as Border;
+            if (brush == null && border != null) brush = border.Background;
+            var solid = brush as SolidColorBrush;
+            return solid != null && solid.Color.A == 255 ? (Color?)solid.Color : null;
+        }
+
+        private bool IsAncestorOf(DependencyObject node)
+        {
+            for (; node != null; node = VisualTreeHelper.GetParent(node))
+                if (node == this) return true;
+            return false;
         }
 
         /// <summary>The colour actually behind the idle screen, sampled from a theme image.</summary>
