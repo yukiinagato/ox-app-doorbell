@@ -2286,3 +2286,73 @@ TEST_CASE("doors: served_by and the peer list never disagree about a station") {
   panel.node->stop();
   station.node->stop();
 }
+
+TEST_CASE("peers: a quiet cluster stops emitting peers_changed") {
+  // Device finding: core emitted peers_changed on every fresh advertisement, so with three
+  // devices heartbeating the shells received it several times a second, rebuilt their home
+  // screens each time, and saturated core's own run loop until the mesh timers starved and
+  // httpd stalled. A busy loop then delivers heartbeats late, which flaps peers between alive
+  // and suspect, which emits more events -- the spiral this test pins shut at both ends.
+  NFleet f;
+  auto& a = f.add("A:1", "front", "door_station", "d_front", /*seed_cfg=*/true);
+  auto& b = f.add("B:1", "kitchen", "indoor_panel", "", /*seed_cfg=*/false);
+  REQUIRE(a.node->start());
+  REQUIRE(b.node->start());
+  // A shell publishes runtime telemetry, and a real one refreshes it constantly. The values it
+  // carries -- uptime, frame counters, battery -- must never be mistaken for something to redraw.
+  a.node->setRuntimeStatus(R"({"uptime_s":1,"fps":15})");
+  b.node->setRuntimeStatus(R"({"uptime_s":1,"fps":15})");
+  f.run(2000);
+
+  const size_t settled_a = a.uiCount("peers_changed");
+  const size_t settled_b = b.uiCount("peers_changed");
+  // Discovering one peer is a couple of events, not a stream.
+  CHECK(settled_a <= 3);
+  CHECK(settled_b <= 3);
+
+  // Fifty heartbeats with nothing a shell renders changing, while the telemetry moves the whole
+  // time. The mesh keeps talking; the UI hears nothing.
+  for (int beat = 0; beat < 50; beat++) {
+    const std::string runtime =
+        "{\"uptime_s\":" + std::to_string(2 + beat) + ",\"fps\":15}";
+    a.node->setRuntimeStatus(runtime);
+    b.node->setRuntimeStatus(runtime);
+    f.run(30, 10);
+  }
+  CHECK(a.uiCount("peers_changed") == settled_a);
+  CHECK(b.uiCount("peers_changed") == settled_b);
+
+  // Now the spiral's own input: heartbeats arriving late enough that the peer drops out and
+  // recovers, over and over. Ten cycles of roughly a third of a second each.
+  for (int cycle = 0; cycle < 10; cycle++) {
+    f.net.partition({{"A:1"}, {"B:1"}});
+    f.run(170, 10);
+    f.net.heal();
+    f.run(170, 10);
+  }
+  // The peer really did flap: offline is emitted per death and is not affected by this change.
+  CHECK(a.uiCount("event", "offline") >= 5);
+  // Roughly 3.4 seconds elapsed, so the coalescing window allows at most seven events however
+  // often the state actually moved. Measured: 50 events before this change, 7 after.
+  CHECK(a.uiCount("peers_changed") - settled_a <= 8);
+
+  // One field a shell renders changes on an already-known peer: exactly one event.
+  f.run(1500);
+  const size_t before_change = a.uiCount("peers_changed");
+  b.node->setUiManifest(
+      R"({"schema_version":1,"units":"logical","viewport":{"minimum_touch":44,"scale_min":0.75,"scale_max":2.0},"elements":{"sos.trigger":{"properties":["scale"],"defaults":{"scale":1.0},"safety_critical":true}}})");
+  f.run(2000);
+  CHECK(a.uiCount("peers_changed") == before_change + 1);
+
+  // A new member is at most the peer appearing and its details filling in, never more.
+  const size_t before_join = a.uiCount("peers_changed");
+  auto& c = f.add("C:1", "annex", "door_station", "d_annex", /*seed_cfg=*/false);
+  REQUIRE(c.node->start());
+  f.run(2000);
+  CHECK(a.uiCount("peers_changed") > before_join);
+  CHECK(a.uiCount("peers_changed") - before_join <= 2);
+
+  a.node->stop();
+  b.node->stop();
+  c.node->stop();
+}

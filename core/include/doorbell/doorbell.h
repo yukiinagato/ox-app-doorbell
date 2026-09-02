@@ -79,6 +79,19 @@ typedef struct db_platform_v2 {
 /* JSON events delivered from core to the platform UI. Examples:
  * {"t":"state","state":"idle|calling|in_call|degraded|offline"}
  * {"t":"chime","sound":"ding1"} {"t":"config_changed"} {"t":"peers_changed"}
+ *
+ * Change events report change, not traffic. peers_changed is emitted only when the peer set or
+ * a rendered field of some peer -- status, role, door, name, addresses, capabilities, UI
+ * manifest, software version -- differs from the last one reported, and never more often than
+ * once every 500 ms however fast things move. Volatile peer telemetry (battery, uptime, frame
+ * counters) is deliberately not a change: battery has power_changed of its own. A peer that
+ * flaps offline and back inside the window produces no event at all, because nothing a shell
+ * would draw ended up different. config_changed is suppressed for a replicated write whose
+ * values this node already had -- anti-entropy re-sends the frontier on every reconnect -- but
+ * is always delivered for a write this device made, so a shell may still use it as the signal
+ * that its own save landed. notice_changed is emitted only when the announcement for that door
+ * differs from the one last reported. A shell must still coalesce: these are refresh hints, and
+ * rebuilding a screen per event is what saturated core's run loop on a three-device cluster.
  * {"t":"reply","text":"<localized text>","ttl_s":30,"lang":"ja"}
  *   A cached custom reply includes a local audio_path. The shell plays it without TTS;
  *   otherwise core calls tts_speak.

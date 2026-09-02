@@ -2122,6 +2122,26 @@ struct Node::Impl {
   // Scratch used while building one status document: node id -> alive | suspect | dead | offline.
   // served_by and the peers array both read it, so the two can never contradict each other.
   std::map<std::string, std::string> status_peer_status;
+
+  // peers_changed must report change, not traffic. Devices measured it arriving several times a
+  // second on a three-node cluster: every shell rebuilt its home screen on each one, and the
+  // rebuilds saturated core's own run loop until the mesh timers starved and httpd stalled --
+  // which made heartbeats late, which flapped peers between alive and suspect, which emitted
+  // more events. The digest below covers exactly the fields a shell renders, so heartbeats,
+  // sequence numbers and volatile runtime telemetry (battery, uptime, frame counters) never
+  // qualify; battery has power_changed of its own. Emission is additionally coalesced, so a
+  // peer flapping alive/suspect/alive inside the window -- the very thing a busy loop causes --
+  // produces no event at all.
+  static constexpr int64_t kPeersEventMinGapMs = 500;
+  std::string emitted_peers_digest;
+  bool peers_ever_emitted = false;
+  int64_t peers_emitted_mono = 0;
+  uint64_t peers_emit_timer = 0;
+  // Peer id -> digest of the contract last written to the cache, so a quiet cluster costs no
+  // database traffic at all rather than one read (previously one write) per peer per event.
+  std::map<std::string, std::string> cached_contract_digests;
+  // Door (or "*") -> the announcement last reported, so re-writing an identical notice is silent.
+  std::map<std::string, std::string> emitted_notice_digests;
   // Remembered when there is no SIP backend to hold it, so the toggle keeps its position.
   bool mic_muted_without_sip = false;
   int admin_auth_failures = 0;
@@ -5028,6 +5048,56 @@ struct Node::Impl {
     return cJSON_IsObject(manifest) ? json::dump(manifest) : "";
   }
 
+  // Exactly the fields a shell renders in a peer list. Addresses are sorted so the order a peer
+  // happens to advertise them in is not mistaken for a change.
+  std::string peersDigest() {
+    if (!mesh) return std::string();
+    std::string composed;
+    auto field = [&composed](const std::string& value) {
+      composed += std::to_string(value.size());
+      composed += ':';
+      composed += value;
+    };
+    for (const auto& peer : mesh->peers()) {
+      field(peer.id);
+      field(peer.status);
+      field(peer.connected ? "1" : "0");
+      field(peer.role);
+      field(peer.door);
+      field(peer.sw_version);
+      field(peer.caps_json);
+      field(peer.ui_manifest_json);
+      field(json::getString(cfgAt("devices." + peer.id), "name"));
+      std::vector<std::string> addrs = peer.addrs;
+      std::sort(addrs.begin(), addrs.end());
+      for (const auto& addr : addrs) field(addr);
+      composed += ';';
+    }
+    return sha256Hex(reinterpret_cast<const uint8_t*>(composed.data()), composed.size());
+  }
+
+  void notifyPeersChanged() {
+    const std::string digest = peersDigest();
+    // Nothing a shell would draw differently. This also absorbs a flap that has already
+    // reverted by the time the coalescing timer fires.
+    if (peers_ever_emitted && digest == emitted_peers_digest) return;
+    const int64_t at = clock->monoMs();
+    if (peers_ever_emitted && at - peers_emitted_mono < kPeersEventMinGapMs) {
+      if (!peers_emit_timer) {
+        const int64_t wait = kPeersEventMinGapMs - (at - peers_emitted_mono);
+        peers_emit_timer = loop->postDelayed(wait, [this] {
+          peers_emit_timer = 0;
+          notifyPeersChanged();
+        });
+      }
+      return;
+    }
+    emitted_peers_digest = digest;
+    peers_ever_emitted = true;
+    peers_emitted_mono = at;
+    uiNotify("{\"t\":\"peers_changed\"}");
+  }
+
   void cachePeerContracts() {
     if (!mesh) return;
     for (const auto& peer : mesh->peers()) {
@@ -5048,7 +5118,6 @@ struct Node::Impl {
       json::set(contract.get(), "role", peer.role);
       if (!peer.door.empty()) json::set(contract.get(), "door", peer.door);
       json::set(contract.get(), "sw", peer.sw_version);
-      json::set(contract.get(), "updated_wall_ms", hlc->correctedWallMs());
       json::setItem(contract.get(), "caps",
                     caps && cJSON_IsObject(caps.get()) ? std::move(caps) : json::obj());
       json::setItem(contract.get(), "ui_manifest", std::move(manifest));
@@ -5057,9 +5126,28 @@ struct Node::Impl {
           ? json::parse(projected_runtime) : json::obj();
       json::setItem(contract.get(), "runtime",
                     runtime ? std::move(runtime) : json::obj());
-      const std::string next = json::dump(contract.get());
+      // updated_wall_ms is added last and excluded from the comparison: stamping it into every
+      // rebuild made the row differ from itself, so a quiet cluster wrote to the database once
+      // per peer per peers_changed. It now means "when this contract last changed".
+      const std::string body = json::dump(contract.get());
+      const std::string digest = sha256Hex(reinterpret_cast<const uint8_t*>(body.data()),
+                                           body.size());
+      auto remembered = cached_contract_digests.find(peer.id);
+      if (remembered != cached_contract_digests.end() && remembered->second == digest) continue;
+      std::string stored_body;
       auto previous = store.metaGet(peerContractCacheKey(peer.id));
-      if (!previous || *previous != next) store.metaSet(peerContractCacheKey(peer.id), next);
+      if (previous) {
+        auto parsed = json::parse(*previous);
+        if (parsed) {
+          cJSON_DeleteItemFromObject(parsed.get(), "updated_wall_ms");
+          stored_body = json::dump(parsed.get());
+        }
+      }
+      if (stored_body != body) {
+        json::set(contract.get(), "updated_wall_ms", hlc->correctedWallMs());
+        store.metaSet(peerContractCacheKey(peer.id), json::dump(contract.get()));
+      }
+      cached_contract_digests[peer.id] = digest;
     }
   }
 
@@ -5402,7 +5490,29 @@ struct Node::Impl {
       config_persistence_failed = false;
       if (started) scheduleSnapshotRefresh();
     }
+    // A replicated write can carry values this node already has: anti-entropy re-sends the
+    // whole frontier when a peer reconnects, and each entry is a legitimate CRDT update even
+    // when the value is byte-identical. Persist and replicate it as always, but do not wake
+    // every shell for a change nobody can see.
+    std::map<std::string, std::string> values_before;
+    if (!is_local) {
+      for (const auto& e : effective_entries) {
+        const cJSON* value = cfgAt(e.key);
+        values_before[e.key] = value ? json::dump(value) : std::string();
+      }
+    }
     rebuildCfg();
+    bool values_changed = is_local;
+    if (!is_local) {
+      for (const auto& e : effective_entries) {
+        const cJSON* value = cfgAt(e.key);
+        const std::string after = value ? json::dump(value) : std::string();
+        if (after != values_before[e.key]) {
+          values_changed = true;
+          break;
+        }
+      }
+    }
     if (is_local && mesh) mesh->pushConfigDelta(entries);
     if (!is_local && mesh && !tombstones_to_push.empty())
       mesh->pushConfigDelta(tombstones_to_push);
@@ -5454,24 +5564,33 @@ struct Node::Impl {
       applyTimeOffset();
     }
     for (const auto& door : notice_doors) {
-      auto notice_event = json::obj();
-      json::set(notice_event.get(), "t", "notice_changed");
-      json::set(notice_event.get(), "door", door);
       const cJSON* current =
           isGlobalNoticeTarget(door)
               ? json::get(json::get(cfg.get(), "notice"), "global")
               : json::get(json::get(json::get(cfg.get(), "doors"), door.c_str()), "notice");
+      // Anti-entropy replays a notice write whenever a peer syncs, and an administrator saving
+      // the same text again is a write too. Neither is news: report the announcement only when
+      // it actually differs from the one this node last reported for that door.
+      const std::string signature = current ? json::dump(current) : std::string();
+      auto reported = emitted_notice_digests.find(door);
+      if (reported != emitted_notice_digests.end() && reported->second == signature) continue;
+      emitted_notice_digests[door] = signature;
+      auto notice_event = json::obj();
+      json::set(notice_event.get(), "t", "notice_changed");
+      json::set(notice_event.get(), "door", door);
       json::setBool(notice_event.get(), "active", cJSON_IsObject(current));
       uiNotify(json::dump(notice_event.get()));
     }
     scheduleBridgeReapply();
     if (started) evalDisplay();
     schedulePrefetch();
-    auto event = json::obj();
-    json::set(event.get(), "t", "config_changed");
-    json::set(event.get(), "count", static_cast<int64_t>(effective_entries.size()));
-    json::setBool(event.get(), "atomic", batch);
-    uiNotify(json::dump(event.get()));
+    if (values_changed) {
+      auto event = json::obj();
+      json::set(event.get(), "t", "config_changed");
+      json::set(event.get(), "count", static_cast<int64_t>(effective_entries.size()));
+      json::setBool(event.get(), "atomic", batch);
+      uiNotify(json::dump(event.get()));
+    }
     return true;
   }
 
@@ -5594,7 +5713,7 @@ struct Node::Impl {
       schedulePrefetch();
       rearmCallTimeouts();
       rearmCallRecoveryTakeovers();
-      uiNotify("{\"t\":\"peers_changed\"}");
+      notifyPeersChanged();
     };
     cbs.on_leader_changed = [this](const std::string& duty, const std::string& leader) {
 
@@ -7577,6 +7696,12 @@ struct Node::Impl {
     // Cached peer contracts are the gossip cache: they are what made an offline device from a
     // previous cluster still resolve to a name, role, and manifest.
     const size_t contracts = store.metaDeletePrefix("peer_ui_contract.");
+    // The in-memory guards belong to the old cluster as well: a node id reused by the next
+    // cluster must not inherit "already cached" or "already announced" from this one.
+    cached_contract_digests.clear();
+    emitted_notice_digests.clear();
+    emitted_peers_digest.clear();
+    peers_ever_emitted = false;
     // The one-shot seed markers belong to the old cluster too; the next cluster seeds its own
     // defaults, and an administrator's later deletion of a seeded rule is remembered again then.
     for (const char* marker :
@@ -10107,6 +10232,10 @@ void Node::stop() {
       impl_->loop->cancel(impl_->time_sync_timer);
       impl_->time_sync_timer = 0;
       impl_->time_sync_timer_interval_s = 0;
+    }
+    if (impl_->peers_emit_timer) {
+      impl_->loop->cancel(impl_->peers_emit_timer);
+      impl_->peers_emit_timer = 0;
     }
     if (impl_->snapshot_timer) {
       impl_->loop->cancel(impl_->snapshot_timer);
