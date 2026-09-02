@@ -13,6 +13,7 @@
 #include <thread>
 
 #include "civetweb.h"
+#include "mesh/socket_compat.h"
 #include "util/log.h"
 
 namespace db {
@@ -577,12 +578,20 @@ Httpd::Httpd(Runloop& loop) : impl_(new Impl(loop)) {}
 
 Httpd::~Httpd() { stop(); }
 
+// civetweb explains a failed bind in a log line and nothing else -- mg_start just returns null.
+// Without this the only record of "address already in use" was a test asserting false.
+static int httpdLogMessage(const struct mg_connection* /*conn*/, const char* message) {
+  DB_LOGW("httpd", std::string("civetweb: ") + (message ? message : ""));
+  return 1;
+}
+
 bool Httpd::start(int port) {
   if (impl_->ctx) return false;
   impl_->stopping = false;
   std::string p = std::to_string(port);
   struct mg_callbacks cb;
   std::memset(&cb, 0, sizeof(cb));
+  cb.log_message = &httpdLogMessage;
   auto tryStart = [&](const std::string& ports) -> struct mg_context* {
     // Every live stream holds one worker for as long as it runs, so the pool has to be larger
     // than the number of viewers a house can open at once. With four workers, four live views
@@ -602,7 +611,20 @@ bool Httpd::start(int port) {
   std::string mode = dual;
   if (!ctx) { ctx = tryStart(p); mode = p; }
   if (!ctx) {
-    DB_LOGE("httpd", "mg_start failed port=" + p);
+    // Say who holds the port, not just that we failed to take it.
+    std::string reason = "unknown";
+    const net::socket_t probe = ::socket(AF_INET, SOCK_STREAM, 0);
+    if (net::valid(probe)) {
+      sockaddr_in address{};
+      address.sin_family = AF_INET;
+      address.sin_addr.s_addr = htonl(INADDR_ANY);
+      address.sin_port = htons(static_cast<uint16_t>(port));
+      reason = ::bind(probe, reinterpret_cast<sockaddr*>(&address), sizeof(address)) == 0
+                   ? "the port is bindable now, so civetweb refused it for another reason"
+                   : "bind: " + std::to_string(net::lastError());
+      net::closeSocket(probe);
+    }
+    DB_LOGE("httpd", "mg_start failed port=" + p + ": " + reason);
     return false;
   }
   impl_->ctx = ctx;

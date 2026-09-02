@@ -20,6 +20,7 @@
 #include <sqlite3.h>
 
 #include "doctest.h"
+#include "test_env.h"
 #include "events/events.h"
 #include "node/node.h"
 #include "store/store.h"
@@ -127,21 +128,9 @@ void seedOutcomeFixture(Store& store) {
   REQUIRE(store.eventPut(logEvent(14, 9500, "press", "d_live", pressPayload("c_live"))));
 }
 
-int callLogFreePort(std::mt19937& rng) {
-  std::uniform_int_distribution<int> dist(40000, 60000);
-  for (int i = 0; i < 50; i++) {
-    const int port = dist(rng);
-    const int fd = ::socket(AF_INET, SOCK_STREAM, 0);
-    if (fd < 0) continue;
-    sockaddr_in sa{};
-    sa.sin_family = AF_INET;
-    sa.sin_port = htons(static_cast<uint16_t>(port));
-    sa.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-    const int ok = ::bind(fd, reinterpret_cast<sockaddr*>(&sa), sizeof(sa));
-    ::close(fd);
-    if (ok == 0) return port;
-  }
-  return -1;
+int callLogFreePort(std::mt19937& /*rng*/) {
+  // Ports come from one process-wide allocator; see core/tests/test_ports.h.
+  return db::testing::freeListenPort();
 }
 
 std::string callLogReq(int port, const std::string& method, const std::string& path,
@@ -254,6 +243,9 @@ struct CallLogNode {
           else secure_values[key] = value;
           return true;
         });
+    // Name the ports in the failure context: a start() that fails here is almost always a
+    // listener that could not bind, and the number is what makes that diagnosable from CI logs.
+    INFO("mesh_port=" << mesh_port << " http_port=" << http_port << " dir=" << dir);
     REQUIRE(node->start());
   }
 

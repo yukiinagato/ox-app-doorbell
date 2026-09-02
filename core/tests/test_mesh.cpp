@@ -14,6 +14,7 @@
 
 #include "crdt/lww_map.h"
 #include "doctest.h"
+#include "test_env.h"
 #include "events/events.h"
 #include "mesh/mesh.h"
 #include "mesh/secure_channel.h"
@@ -369,23 +370,8 @@ size_t receivedMessageCount(const RawMeshPeer& peer, const std::string& type) {
 
 
 int pickPort() {
-  static std::mt19937 rng(static_cast<uint32_t>(::getpid()) * 2654435761u + 777u);
-  std::uniform_int_distribution<int> dist(40000, 60000);
-  for (int i = 0; i < 100; i++) {
-    int p = dist(rng);
-    int fd = ::socket(AF_INET, SOCK_STREAM, 0);
-    if (fd < 0) continue;
-    int yes = 1;
-    ::setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes));
-    sockaddr_in a{};
-    a.sin_family = AF_INET;
-    a.sin_port = htons(static_cast<uint16_t>(p));
-    a.sin_addr.s_addr = htonl(INADDR_ANY);
-    int ok = ::bind(fd, reinterpret_cast<sockaddr*>(&a), sizeof(a));
-    ::close(fd);
-    if (ok == 0) return p;
-  }
-  return 0;
+  // Ports come from one process-wide allocator; see core/tests/test_ports.h.
+  return db::testing::freeListenPort();
 }
 
 }  // namespace
