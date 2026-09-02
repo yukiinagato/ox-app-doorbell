@@ -32,11 +32,32 @@ internal object UiContrast {
     fun ratioText(ratio: Double): String = String.format(java.util.Locale.US, "%.1f", ratio)
 
     /**
-     * Dark ink over a light region and light ink over a dark region, exactly as §5 specifies:
-     * relative luminance at or above 0.5 selects the dark ink token.
+     * The ink that actually reads best: whichever token has the higher WCAG contrast ratio
+     * against this background.
+     *
+     * A midpoint on luminance is the wrong test, because contrast is not linear in luminance --
+     * the crossover between the two ink tokens sits near Y = 0.179, not 0.5. The observed failure
+     * was a wallpaper averaging #BBBBB4 (Y = 0.494), which a "Y >= 0.5 selects dark" rule called
+     * light-on-light at 1.9:1 when the dark ink would have given 9.6:1.
      */
     fun inkFor(backgroundRgb: Int): Ink =
-        if (luminance(backgroundRgb) >= 0.5) Ink.DARK else Ink.LIGHT
+        inkFor(backgroundRgb, Palette.LIGHT_INK, Palette.DARK_INK)
+
+    /** The same choice against an explicit pair of ink tokens. */
+    fun inkFor(backgroundRgb: Int, lightInkRgb: Int, darkInkRgb: Int): Ink =
+        if (contrast(darkInkRgb, backgroundRgb) >= contrast(lightInkRgb, backgroundRgb)) Ink.DARK
+        else Ink.LIGHT
+
+    /**
+     * The luminance at which the two ink tokens read equally well. Below it the light ink wins,
+     * above it the dark one. Roughly 0.179 for near-black and near-white tokens.
+     */
+    fun inkCrossoverLuminance(lightInkRgb: Int, darkInkRgb: Int): Double {
+        // contrast(light, Y) == contrast(dark, Y) solves to Y = sqrt((Ld+0.05)(Ll+0.05)) - 0.05.
+        val light = luminance(lightInkRgb)
+        val dark = luminance(darkInkRgb)
+        return Math.sqrt((dark + 0.05) * (light + 0.05)) - 0.05
+    }
 
     /**
      * Average an already-downscaled region as ARGB pixels. Fully transparent pixels are ignored

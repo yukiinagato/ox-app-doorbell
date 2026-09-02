@@ -151,6 +151,7 @@ internal object CoreDisplays {
         sampledBackgroundRgb: Int? = null,
         imageDrawnLocally: Boolean = false,
         knownSurface: Boolean = false,
+        sample: RegionSample? = null,
     ): RegionInkResult {
         val kind = if (knownSurface) BackgroundKind.KNOWN_SURFACE
             else backgroundKind(theme, imageDrawnLocally)
@@ -168,6 +169,7 @@ internal object CoreDisplays {
             background = kind,
             sampledBackgroundRgb = sampledBackgroundRgb,
             fallbackBackgroundRgb = fallback,
+            sample = sample,
         )
     }
 
