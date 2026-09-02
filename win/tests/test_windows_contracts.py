@@ -177,9 +177,16 @@ class WindowsContracts(unittest.TestCase):
         secure_put = android_core[android_core.index("private fun onSecurePutFromNative"):
                                   android_core.index("private fun onDeviceInfoFromNative")]
         self.assertIn("secureStore.put(key, value)", secure_put)
+        # The onboarding screen decides "ready" only through App.pairingReady(), which is the
+        # single caller of the persistence gate; the screen itself never inspects the plaintext.
         pairing_ui = read(
             "android/app/src/main/java/jp/keihan/doorbell/PairingActivity.kt")
-        self.assertIn("pairingPersistence.canMarkReady", pairing_ui)
+        self.assertIn("app.pairingReady()", pairing_ui)
+        self.assertNotIn("psk_hex", pairing_ui)
+        android_app = read("android/app/src/main/java/jp/keihan/doorbell/App.kt")
+        ready = android_app[android_app.index("fun pairingReady()"):]
+        ready = ready[:ready.index("\n    }\n")]
+        self.assertIn("pairingPersistence.canMarkReady", ready)
 
     def test_android_helper_policy_uses_only_the_fixed_local_protocol(self):
         client = read(
