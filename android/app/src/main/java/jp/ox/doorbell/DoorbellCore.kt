@@ -139,9 +139,21 @@ class DoorbellCore(context: Context) {
     fun openDoor(door: String): Int =
         if (handle != 0L && door.isNotEmpty()) nativeOpenDoor(handle, door) else -1
 
-    /** Call history newest first. sinceMs is an inclusive lower bound; zero is the whole log. */
-    fun callLog(sinceMs: Long = 0L, limit: Int = 50): JSONObject? =
-        parse(if (handle != 0L) nativeCallLogJson(handle, sinceMs, limit) else null)
+    /**
+     * Call history newest first. sinceMs is an inclusive lower bound and zero is the whole log;
+     * beforeMs is an exclusive upper bound used to page backwards, and zero means "from now".
+     * Falls back to the v1 entry point, which has no upper bound, on a core without v2.
+     */
+    fun callLog(sinceMs: Long = 0L, beforeMs: Long = 0L, limit: Int = 50): JSONObject? {
+        if (handle == 0L) return null
+        if (exports.callLogV2)
+            parse(nativeCallLogJsonV2(handle, sinceMs, beforeMs, limit))?.let { return it }
+        return parse(nativeCallLogJson(handle, sinceMs, limit))
+    }
+
+    /** Mute or unmute the microphone on the active SIP leg. False when core cannot do it. */
+    fun sipSetMicMuted(muted: Boolean): Boolean =
+        handle != 0L && exports.micMute && nativeSipSetMicMuted(handle, muted) == 0
 
     /** Move the device-local seen watermark; an empty hlc marks everything as seen. */
     fun callLogMarkSeen(upToHlc: String = ""): Boolean =
@@ -156,6 +168,52 @@ class DoorbellCore(context: Context) {
         parse(if (handle != 0L) nativeCapabilitiesJson(handle) else null)
 
     fun backend(): JSONObject = parse(nativeBackendJson()) ?: JSONObject()
+
+    /** Which of the optional core entry points this build actually links against (§5.5). */
+    internal val exports: CoreExports by lazy(LazyThreadSafetyMode.SYNCHRONIZED) {
+        CoreExports.parse(parse(nativeCoreExportsJson()))
+    }
+
+    /**
+     * Write one configuration key through core, using the same validation the web admin does.
+     * Returns null when this core has no configuration-write export and the caller must fall back
+     * to the loopback administration API.
+     */
+    fun setConfigJson(key: String, valueJson: String): Int? {
+        if (handle == 0L || !exports.configWrite) return null
+        val result = nativeSetConfigJson(handle, key, valueJson)
+        return if (result == UNSUPPORTED) null else result
+    }
+
+    /** Apply several keys at once. The document is the same one /api/config/batch accepts. */
+    fun configBatchJson(opsJson: String): JSONObject? {
+        if (handle == 0L || !exports.configWrite) return null
+        return parse(nativeConfigBatchJson(handle, opsJson))
+    }
+
+    fun deleteConfigKey(key: String): Int? {
+        if (handle == 0L || !exports.configWrite) return null
+        val result = nativeDeleteConfigKey(handle, key)
+        return if (result == UNSUPPORTED) null else result
+    }
+
+    /**
+     * Verify the cluster-wide administrator password. Positive means accepted, zero means wrong,
+     * -1 means entry is locked out, and -2 means no password has been set yet. Null when this core
+     * cannot answer at all.
+     */
+    fun adminPasswordVerify(password: String): Int? {
+        if (handle == 0L || !exports.adminPassword) return null
+        val result = nativeAdminPasswordVerify(handle, password)
+        return if (result == UNSUPPORTED) null else result
+    }
+
+    /** Set the cluster-wide administrator password; pass an empty current when none exists. */
+    fun adminPasswordSet(current: String, next: String): Int? {
+        if (handle == 0L || !exports.adminPassword) return null
+        val result = nativeAdminPasswordSet(handle, current, next)
+        return if (result == UNSUPPORTED) null else result
+    }
 
     fun setCapabilities(value: JSONObject) {
         if (handle != 0L) nativeSetCapabilitiesJson(handle, value.toString())
@@ -401,6 +459,23 @@ class DoorbellCore(context: Context) {
     private external fun nativeClearDoorNotice(handle: Long, door: String): Int
     private external fun nativeOpenDoor(handle: Long, door: String): Int
     private external fun nativeCallLogJson(handle: Long, sinceMs: Long, limit: Int): String?
+    private external fun nativeCallLogJsonV2(
+        handle: Long,
+        sinceMs: Long,
+        beforeMs: Long,
+        limit: Int,
+    ): String?
+    private external fun nativeCoreExportsJson(): String?
+    private external fun nativeSetConfigJson(handle: Long, key: String, valueJson: String): Int
+    private external fun nativeConfigBatchJson(handle: Long, opsJson: String): String?
+    private external fun nativeDeleteConfigKey(handle: Long, key: String): Int
+    private external fun nativeAdminPasswordVerify(handle: Long, password: String): Int
+    private external fun nativeAdminPasswordSet(
+        handle: Long,
+        current: String,
+        next: String,
+    ): Int
+    private external fun nativeSipSetMicMuted(handle: Long, muted: Boolean): Int
     private external fun nativeCallLogMarkSeen(handle: Long, upToHlc: String): Int
     private external fun nativeConfigJson(handle: Long): String?
     private external fun nativeSetCapabilitiesJson(handle: Long, json: String)
@@ -439,6 +514,9 @@ class DoorbellCore(context: Context) {
     companion object {
         /** The door identifier that addresses the cluster-wide announcement (notice.global). */
         const val GLOBAL_DOOR = "*"
+
+        /** Returned by a wrapper whose core export is absent; never a documented core result. */
+        const val UNSUPPORTED = -100
 
         init {
             System.loadLibrary("doorbell")

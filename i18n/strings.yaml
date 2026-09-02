@@ -812,10 +812,6 @@ dash.tile_offline: { ja: "オフライン", en: "Offline", zh: "离线" }
 dash.tile_open: { ja: "見る", en: "View", zh: "查看" }
 notice.door_button: { ja: "この門口機にお知らせ", en: "Announcement for this door", zh: "为此门口发布公告" }
 notice.char_count: { ja: "{n}/200", en: "{n}/200", zh: "{n}/200" }
-ring.debug_stats: { ja: "{codec} · {latency} ms · ±{jitter} ms · {fps} fps · drop {dropped}", en: "{codec} · {latency} ms · ±{jitter} ms · {fps} fps · drop {dropped}", zh: "{codec} · {latency} ms · ±{jitter} ms · {fps} fps · drop {dropped}" }
-sos.slide_sub: { ja: "{n} 秒後に発報", en: "Alarm after {n}s", zh: "{n} 秒后发出" }
-sos.countdown_cancel: { ja: "取り消す", en: "Cancel", zh: "取消" }
-power.percent: { ja: "{n}%", en: "{n}%", zh: "{n}%" }
 # Native settings, indoor dashboard, visitor screen (batch 2, WP-N-kiosk).
 settings.section_device: { ja: "この端末", en: "This device", zh: "本设备" }
 settings.section_volume: { ja: "音量", en: "Volume", zh: "音量" }
@@ -856,7 +852,6 @@ notice.chip: { ja: "お知らせ", en: "Announcement", zh: "公告" }
 notice.write: { ja: "この門口機にお知らせ", en: "Announce at this door", zh: "在此门口发布公告" }
 notice.target_global: { ja: "全体", en: "All doors", zh: "全部门口" }
 web_admin.scan: { ja: "スマートフォンで読み取ってください", en: "Scan this with a phone", zh: "请用手机扫描" }
-ring.unlock_unconfigured: { ja: "解錠の動作が設定されていません", en: "No unlock action is configured", zh: "尚未配置开锁动作" }
 info.safe_mode: { ja: "セーフモード", en: "Safe mode", zh: "安全模式" }
 info.safe_mode_off: { ja: "通常動作", en: "Normal", zh: "正常" }
 info.safe_mode_wait: { ja: "あと {n} 分で自動解除", en: "Clears automatically in {n} min", zh: "{n} 分钟后自动解除" }
@@ -877,7 +872,6 @@ dash.no_doors: { ja: "門口機がありません", en: "No door stations", zh: 
 dash.tile_watch: { ja: "見る", en: "View", zh: "查看" }
 dash.last_answer: { ja: "最終応答 {when}", en: "Last answered {when}", zh: "最后接听 {when}" }
 history.page_limit: { ja: "これより前は Web 管理でご覧ください", en: "Older calls are in the web admin", zh: "更早的记录请在网页管理中查看" }
-sos.slide_label: { ja: "スライドで SOS\n{n} 秒後に発報", en: "Slide for SOS\nAlarm in {n} s", zh: "滑动求助\n{n} 秒后发出" }
 sos.abort: { ja: "取り消す", en: "Cancel", zh: "取消" }
 notice.for_this_door: { ja: "この門口機にお知らせ", en: "Announcement for this door", zh: "为此门口机发布公告" }
 notice.dialog_title: { ja: "門口機にお知らせを表示", en: "Show an announcement at the door", zh: "在门口机显示公告" }
@@ -888,7 +882,6 @@ ring.open_unconfigured: { ja: "この門口機には開錠の動作が設定さ�
 ring.quick_replies: { ja: "クイック返信", en: "Quick replies", zh: "快捷回复" }
 incall.end_call: { ja: "通話終了", en: "End call", zh: "结束通话" }
 video.stats: { ja: "{codec} · {latency} ms · ±{jitter} ms · {fps} fps · drop {dropped}", en: "{codec} · {latency} ms · ±{jitter} ms · {fps} fps · drop {dropped}", zh: "{codec} · {latency} ms · ±{jitter} ms · {fps} fps · drop {dropped}" }
-version.line: { ja: "{name} · core v{core} · app v{app}", en: "{name} · core v{core} · app v{app}", zh: "{name} · core v{core} · app v{app}" }
 admin.password_set_prompt: { ja: "管理パスワードを設定してください", en: "Set the admin password", zh: "请设置管理密码" }
 admin.password_set_failed: { ja: "管理パスワードを設定できませんでした", en: "Couldn't set the admin password", zh: "无法设置管理密码" }
 settings.device_name: { ja: "名前", en: "Name", zh: "名称" }
@@ -957,3 +950,16 @@ settings.password_new: { ja: "新しいパスワード", en: "New password", zh:
 settings.password_changed: { ja: "管理パスワードを変更しました", en: "The admin password was changed", zh: "管理密码已更改" }
 settings.password_failed: { ja: "管理パスワードを変更できませんでした", en: "Couldn't change the admin password", zh: "无法更改管理密码" }
 settings.password_shared: { ja: "この端末と Web 管理で同じパスワードを使います", en: "The same password is used here and in the web admin", zh: "此设备与网页管理使用同一密码" }
+ring.unlock_unconfigured: { ja: "この門口機には開錠の操作が設定されていません", en: "No unlock action is configured for this door", zh: "此门口尚未配置开锁操作" }
+ring.debug_stats: { ja: "{codec} · {latency} ms · ±{jitter} ms · {fps} fps · drop {dropped}", en: "{codec} · {latency} ms · ±{jitter} ms · {fps} fps · drop {dropped}", zh: "{codec} · {latency} ms · ±{jitter} ms · {fps} fps · drop {dropped}" }
+sos.slide_label: { ja: "スライドで SOS", en: "Slide for SOS", zh: "滑动求助" }
+sos.slide_sub: { ja: "{n} 秒後に発報", en: "Alarm after {n}s", zh: "{n} 秒后发出" }
+sos.countdown_cancel: { ja: "取り消す", en: "Cancel", zh: "取消" }
+power.percent: { ja: "{n}%", en: "{n}%", zh: "{n}%" }
+version.line: { ja: "core {core} · app {app}", en: "core {core} · app {app}", zh: "core {core} · app {app}" }
+settings.set_password: { ja: "管理パスワードを設定", en: "Set the admin password", zh: "设置管理密码" }
+settings.set_password_hint: { ja: "この端末と Web 管理で共通のパスワードです", en: "One password for this device and the web admin", zh: "此密码在本机与网页管理中通用" }
+settings.password_confirm: { ja: "もう一度入力", en: "Enter it again", zh: "再次输入" }
+settings.password_mismatch: { ja: "2 つの入力が一致しません", en: "The two entries don't match", zh: "两次输入不一致" }
+settings.password_empty: { ja: "パスワードを入力してください", en: "Enter a password", zh: "请输入密码" }
+settings.password_set_failed: { ja: "パスワードを設定できませんでした", en: "Couldn't set the password", zh: "无法设置密码" }

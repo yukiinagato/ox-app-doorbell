@@ -733,7 +733,7 @@
     <string name="ring_quick_reply">快捷回复</string>
     <string name="ring_unlock">开锁</string>
     <string name="ring_unlock_sent">已发送开锁信号</string>
-    <string name="ring_unlock_unconfigured">尚未配置开锁动作</string>
+    <string name="ring_unlock_unconfigured">此门口尚未配置开锁操作</string>
     <string name="settings_about">本机信息</string>
     <string name="settings_appearance">外观</string>
     <string name="settings_appearance_auto_schedule">按时间切换</string>
@@ -769,9 +769,13 @@
     <string name="settings_offline">暂时无法更改设置，此设备仍在启动中</string>
     <string name="settings_on">开</string>
     <string name="settings_password_changed">管理密码已更改</string>
+    <string name="settings_password_confirm">再次输入</string>
     <string name="settings_password_current">当前密码</string>
+    <string name="settings_password_empty">请输入密码</string>
     <string name="settings_password_failed">无法更改管理密码</string>
+    <string name="settings_password_mismatch">两次输入不一致</string>
     <string name="settings_password_new">新密码</string>
+    <string name="settings_password_set_failed">无法设置密码</string>
     <string name="settings_password_shared">此设备与网页管理使用同一密码</string>
     <string name="settings_purpose_shown">向访客显示</string>
     <string name="settings_purposes">来访目的</string>
@@ -797,6 +801,8 @@
     <string name="settings_section_time">时间</string>
     <string name="settings_section_volume">音量</string>
     <string name="settings_section_web">打开网页管理</string>
+    <string name="settings_set_password">设置管理密码</string>
+    <string name="settings_set_password_hint">此密码在本机与网页管理中通用</string>
     <string name="settings_telegram">Telegram</string>
     <string name="settings_theme_bg">背景颜色</string>
     <string name="settings_theme_bg_color">背景色</string>
@@ -863,8 +869,7 @@ PIN：%2$s</string>
     <string name="sos_mode_hold">长按触发（旧方式）</string>
     <string name="sos_mode_slide">滑动触发</string>
     <string name="sos_slide_hint">向右滑动求助</string>
-    <string name="sos_slide_label">滑动求助
-%1$s 秒后发出</string>
+    <string name="sos_slide_label">滑动求助</string>
     <string name="sos_slide_sub">%1$s 秒后发出</string>
     <string name="sos_slide_two_line">滑动求助
 %1$s 秒后发出</string>
@@ -906,7 +911,7 @@ PIN：%2$s</string>
     <string name="time_title">时间</string>
     <string name="time_zone">时区</string>
     <string name="time_zone_hint">此设置用于整个集群的时钟、呼叫记录与规则时段</string>
-    <string name="version_line">%1$s · core v%2$s · app v%3$s</string>
+    <string name="version_line">core %1$s · app %2$s</string>
     <string name="video_stats">%1$s · %2$s ms · ±%3$s ms · %4$s fps · drop %5$s</string>
     <string name="volume_call">呼叫</string>
     <string name="volume_cluster_default">集群默认 %1$s</string>

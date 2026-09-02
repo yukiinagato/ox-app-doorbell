@@ -39,9 +39,10 @@ class SettingsActivity : Activity(), DoorbellCore.Listener {
     private var config: JSONObject? = null
     private var status: JSONObject? = null
     private var nodeId = ""
-    private var session: AdminSession? = null
+    /** Where writes go: core when it exports them, otherwise the loopback session. */
+    private var writer: ConfigWriter? = null
 
-    /** Set when the operator unlocked locally because the administration API was unreachable. */
+    /** Set when neither core nor a loopback session can write, so the screen is read-only. */
     private var readOnly = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -49,8 +50,8 @@ class SettingsActivity : Activity(), DoorbellCore.Listener {
         app = application as App
         texts = Texts(this)
         clock = ClusterClock(app.core)
-        session = pendingSession
-        readOnly = pendingSession == null
+        writer = ConfigWriters.choose(app.core, pendingSession)
+        readOnly = writer == null
         pendingSession = null
         refreshSnapshots()
         texts.setConfig(config)
@@ -73,7 +74,7 @@ class SettingsActivity : Activity(), DoorbellCore.Listener {
     }
 
     override fun onDestroy() {
-        session = null
+        writer = null
         super.onDestroy()
     }
 
@@ -784,7 +785,7 @@ class SettingsActivity : Activity(), DoorbellCore.Listener {
     // ---------- writes ----------
 
     private fun write(key: String, valueJson: String, done: (Boolean) -> Unit) {
-        val active = session
+        val active = writer
         if (active == null) {
             toast(texts.t("settings.offline", R.string.settings_offline))
             done(false)
@@ -795,7 +796,13 @@ class SettingsActivity : Activity(), DoorbellCore.Listener {
             ui.post {
                 if (isFinishing) return@post
                 if (result.ok) {
-                    toast(texts.t("admin.saved", R.string.admin_saved))
+                    // A colour below the WCAG ratio is still saved; core returns the advisory
+                    // notice alongside the success and it is shown rather than swallowed.
+                    toast(
+                        result.warning.ifEmpty {
+                            texts.t("admin.saved", R.string.admin_saved)
+                        },
+                    )
                     refreshSnapshots()
                     texts.setConfig(config)
                     render()
@@ -812,7 +819,7 @@ class SettingsActivity : Activity(), DoorbellCore.Listener {
     }
 
     private fun deleteKey(key: String) {
-        val active = session ?: run {
+        val active = writer ?: run {
             toast(texts.t("settings.offline", R.string.settings_offline))
             return
         }

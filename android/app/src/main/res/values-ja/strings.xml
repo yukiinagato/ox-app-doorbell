@@ -733,7 +733,7 @@
     <string name="ring_quick_reply">クイック返信</string>
     <string name="ring_unlock">解錠</string>
     <string name="ring_unlock_sent">解錠信号を送信しました</string>
-    <string name="ring_unlock_unconfigured">解錠の動作が設定されていません</string>
+    <string name="ring_unlock_unconfigured">この門口機には開錠の操作が設定されていません</string>
     <string name="settings_about">本機情報</string>
     <string name="settings_appearance">外観</string>
     <string name="settings_appearance_auto_schedule">時刻で切り替える</string>
@@ -769,9 +769,13 @@
     <string name="settings_offline">設定を変更できません。この端末はまだ準備中です</string>
     <string name="settings_on">オン</string>
     <string name="settings_password_changed">管理パスワードを変更しました</string>
+    <string name="settings_password_confirm">もう一度入力</string>
     <string name="settings_password_current">今のパスワード</string>
+    <string name="settings_password_empty">パスワードを入力してください</string>
     <string name="settings_password_failed">管理パスワードを変更できませんでした</string>
+    <string name="settings_password_mismatch">2 つの入力が一致しません</string>
     <string name="settings_password_new">新しいパスワード</string>
+    <string name="settings_password_set_failed">パスワードを設定できませんでした</string>
     <string name="settings_password_shared">この端末と Web 管理で同じパスワードを使います</string>
     <string name="settings_purpose_shown">訪客に表示する</string>
     <string name="settings_purposes">用件</string>
@@ -797,6 +801,8 @@
     <string name="settings_section_time">時刻</string>
     <string name="settings_section_volume">音量</string>
     <string name="settings_section_web">Web 管理を開く</string>
+    <string name="settings_set_password">管理パスワードを設定</string>
+    <string name="settings_set_password_hint">この端末と Web 管理で共通のパスワードです</string>
     <string name="settings_telegram">Telegram</string>
     <string name="settings_theme_bg">背景色</string>
     <string name="settings_theme_bg_color">背景色</string>
@@ -863,8 +869,7 @@ PIN: %2$s</string>
     <string name="sos_mode_hold">長押しで発報 (旧方式)</string>
     <string name="sos_mode_slide">スライドして発報</string>
     <string name="sos_slide_hint">右にスライドして助けを呼ぶ</string>
-    <string name="sos_slide_label">スライドで SOS
-%1$s 秒後に発報</string>
+    <string name="sos_slide_label">スライドで SOS</string>
     <string name="sos_slide_sub">%1$s 秒後に発報</string>
     <string name="sos_slide_two_line">スライドで SOS
 %1$s 秒後に発報</string>
@@ -906,7 +911,7 @@ PIN: %2$s</string>
     <string name="time_title">時刻</string>
     <string name="time_zone">タイムゾーン</string>
     <string name="time_zone_hint">この設定はクラスタ全体の時計・呼出履歴・ルールの時間帯に使われます</string>
-    <string name="version_line">%1$s · core v%2$s · app v%3$s</string>
+    <string name="version_line">core %1$s · app %2$s</string>
     <string name="video_stats">%1$s · %2$s ms · ±%3$s ms · %4$s fps · drop %5$s</string>
     <string name="volume_call">呼出</string>
     <string name="volume_cluster_default">クラスタ既定 %1$s</string>

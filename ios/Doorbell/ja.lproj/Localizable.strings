@@ -728,7 +728,7 @@
 "ring.quick_reply" = "クイック返信";
 "ring.unlock" = "解錠";
 "ring.unlock_sent" = "解錠信号を送信しました";
-"ring.unlock_unconfigured" = "解錠の動作が設定されていません";
+"ring.unlock_unconfigured" = "この門口機には開錠の操作が設定されていません";
 "settings.about" = "本機情報";
 "settings.appearance" = "外観";
 "settings.appearance_auto_schedule" = "時刻で切り替える";
@@ -764,9 +764,13 @@
 "settings.offline" = "設定を変更できません。この端末はまだ準備中です";
 "settings.on" = "オン";
 "settings.password_changed" = "管理パスワードを変更しました";
+"settings.password_confirm" = "もう一度入力";
 "settings.password_current" = "今のパスワード";
+"settings.password_empty" = "パスワードを入力してください";
 "settings.password_failed" = "管理パスワードを変更できませんでした";
+"settings.password_mismatch" = "2 つの入力が一致しません";
 "settings.password_new" = "新しいパスワード";
+"settings.password_set_failed" = "パスワードを設定できませんでした";
 "settings.password_shared" = "この端末と Web 管理で同じパスワードを使います";
 "settings.purpose_shown" = "訪客に表示する";
 "settings.purposes" = "用件";
@@ -792,6 +796,8 @@
 "settings.section_time" = "時刻";
 "settings.section_volume" = "音量";
 "settings.section_web" = "Web 管理を開く";
+"settings.set_password" = "管理パスワードを設定";
+"settings.set_password_hint" = "この端末と Web 管理で共通のパスワードです";
 "settings.telegram" = "Telegram";
 "settings.theme_bg" = "背景色";
 "settings.theme_bg_color" = "背景色";
@@ -854,7 +860,7 @@
 "sos.mode_hold" = "長押しで発報 (旧方式)";
 "sos.mode_slide" = "スライドして発報";
 "sos.slide_hint" = "右にスライドして助けを呼ぶ";
-"sos.slide_label" = "スライドで SOS\n%@ 秒後に発報";
+"sos.slide_label" = "スライドで SOS";
 "sos.slide_sub" = "%@ 秒後に発報";
 "sos.slide_two_line" = "スライドで SOS\n%@ 秒後に発報";
 "sos.title" = "SOS";
@@ -895,7 +901,7 @@
 "time.title" = "時刻";
 "time.zone" = "タイムゾーン";
 "time.zone_hint" = "この設定はクラスタ全体の時計・呼出履歴・ルールの時間帯に使われます";
-"version.line" = "%@ · core v%@ · app v%@";
+"version.line" = "core %@ · app %@";
 "video.stats" = "%@ · %@ ms · ±%@ ms · %@ fps · drop %@";
 "volume.call" = "呼出";
 "volume.cluster_default" = "クラスタ既定 %@";

@@ -11,7 +11,6 @@ import java.io.ByteArrayOutputStream
 import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.URL
-import org.json.JSONArray
 import org.json.JSONObject
 
 internal data class ConfigWriteResult(
@@ -19,8 +18,14 @@ internal data class ConfigWriteResult(
     /** Server-supplied reason, already a documented key or an empty string. */
     val error: String = "",
     val status: Int = 0,
+    /**
+     * An advisory message that accompanies a successful write, such as the WCAG contrast notice a
+     * colour below the ratio earns. The value is still saved; this is shown next to the field.
+     */
+    val warning: String = "",
 ) {
     val unauthorized: Boolean get() = status == 401 || status == 403
+    val unsupported: Boolean get() = error == ConfigWriters.ERR_UNSUPPORTED
 }
 
 /**
@@ -30,46 +35,22 @@ internal data class ConfigWriteResult(
 internal class AdminSession private constructor(
     private val port: Int,
     private val cookie: String,
-) {
+) : ConfigWriter {
 
     /** Write one configuration key. [valueJson] is a JSON document, not a bare display string. */
-    fun setKey(key: String, valueJson: String): ConfigWriteResult {
+    override fun setKey(key: String, valueJson: String): ConfigWriteResult {
         val body = JSONObject().put("key", key).put("value", valueJson)
         return post("/api/config", body.toString())
     }
 
-    fun setString(key: String, value: String): ConfigWriteResult =
-        setKey(key, JSONObject.quote(value))
-
-    fun setInt(key: String, value: Int): ConfigWriteResult = setKey(key, value.toString())
-
-    fun setBool(key: String, value: Boolean): ConfigWriteResult =
-        setKey(key, if (value) "true" else "false")
-
     /** Apply several keys atomically, exactly as the web admin's save buttons do. */
-    fun setBatch(values: List<Pair<String, String>>): ConfigWriteResult {
+    override fun setBatch(values: List<Pair<String, String>>): ConfigWriteResult {
         if (values.isEmpty()) return ConfigWriteResult(true)
-        val ops = JSONArray()
-        for ((key, valueJson) in values) {
-            val op = JSONObject().put("op", "set").put("key", key)
-            op.put("value", parseValue(valueJson))
-            ops.put(op)
-        }
-        return post("/api/config/batch", JSONObject().put("ops", ops).toString())
+        return post("/api/config/batch", ConfigOps.build(values))
     }
 
-    fun deleteKey(key: String): ConfigWriteResult =
+    override fun deleteKey(key: String): ConfigWriteResult =
         post("/api/config/delete", JSONObject().put("key", key).toString())
-
-    private fun parseValue(valueJson: String): Any = try {
-        when {
-            valueJson.startsWith("{") -> JSONObject(valueJson)
-            valueJson.startsWith("[") -> JSONArray(valueJson)
-            else -> JSONObject("{\"v\":$valueJson}").get("v")
-        }
-    } catch (_: Exception) {
-        valueJson
-    }
 
     private fun post(path: String, body: String): ConfigWriteResult {
         var connection: HttpURLConnection? = null
@@ -86,7 +67,8 @@ internal class AdminSession private constructor(
             )
             val document = try { JSONObject(payload) } catch (_: Exception) { null }
             val ok = status in 200..299 && document?.optBoolean("ok", false) != false
-            ConfigWriteResult(ok, document?.optString("err").orEmpty(), status)
+            ConfigWriteResult(ok, document?.optString("err").orEmpty(), status,
+                              document?.optString("warning").orEmpty())
         } catch (e: Exception) {
             ConfigWriteResult(false, e.javaClass.simpleName, 0)
         } finally {

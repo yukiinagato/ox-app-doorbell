@@ -735,7 +735,7 @@
   <data name="ring_quick_reply" xml:space="preserve"><value>快捷回复</value></data>
   <data name="ring_unlock" xml:space="preserve"><value>开锁</value></data>
   <data name="ring_unlock_sent" xml:space="preserve"><value>已发送开锁信号</value></data>
-  <data name="ring_unlock_unconfigured" xml:space="preserve"><value>尚未配置开锁动作</value></data>
+  <data name="ring_unlock_unconfigured" xml:space="preserve"><value>此门口尚未配置开锁操作</value></data>
   <data name="settings_about" xml:space="preserve"><value>本机信息</value></data>
   <data name="settings_appearance" xml:space="preserve"><value>外观</value></data>
   <data name="settings_appearance_auto_schedule" xml:space="preserve"><value>按时间切换</value></data>
@@ -771,9 +771,13 @@
   <data name="settings_offline" xml:space="preserve"><value>暂时无法更改设置，此设备仍在启动中</value></data>
   <data name="settings_on" xml:space="preserve"><value>开</value></data>
   <data name="settings_password_changed" xml:space="preserve"><value>管理密码已更改</value></data>
+  <data name="settings_password_confirm" xml:space="preserve"><value>再次输入</value></data>
   <data name="settings_password_current" xml:space="preserve"><value>当前密码</value></data>
+  <data name="settings_password_empty" xml:space="preserve"><value>请输入密码</value></data>
   <data name="settings_password_failed" xml:space="preserve"><value>无法更改管理密码</value></data>
+  <data name="settings_password_mismatch" xml:space="preserve"><value>两次输入不一致</value></data>
   <data name="settings_password_new" xml:space="preserve"><value>新密码</value></data>
+  <data name="settings_password_set_failed" xml:space="preserve"><value>无法设置密码</value></data>
   <data name="settings_password_shared" xml:space="preserve"><value>此设备与网页管理使用同一密码</value></data>
   <data name="settings_purpose_shown" xml:space="preserve"><value>向访客显示</value></data>
   <data name="settings_purposes" xml:space="preserve"><value>来访目的</value></data>
@@ -799,6 +803,8 @@
   <data name="settings_section_time" xml:space="preserve"><value>时间</value></data>
   <data name="settings_section_volume" xml:space="preserve"><value>音量</value></data>
   <data name="settings_section_web" xml:space="preserve"><value>打开网页管理</value></data>
+  <data name="settings_set_password" xml:space="preserve"><value>设置管理密码</value></data>
+  <data name="settings_set_password_hint" xml:space="preserve"><value>此密码在本机与网页管理中通用</value></data>
   <data name="settings_telegram" xml:space="preserve"><value>Telegram</value></data>
   <data name="settings_theme_bg" xml:space="preserve"><value>背景颜色</value></data>
   <data name="settings_theme_bg_color" xml:space="preserve"><value>背景色</value></data>
@@ -865,8 +871,7 @@ PIN：{1}</value></data>
   <data name="sos_mode_hold" xml:space="preserve"><value>长按触发（旧方式）</value></data>
   <data name="sos_mode_slide" xml:space="preserve"><value>滑动触发</value></data>
   <data name="sos_slide_hint" xml:space="preserve"><value>向右滑动求助</value></data>
-  <data name="sos_slide_label" xml:space="preserve"><value>滑动求助
-{0} 秒后发出</value></data>
+  <data name="sos_slide_label" xml:space="preserve"><value>滑动求助</value></data>
   <data name="sos_slide_sub" xml:space="preserve"><value>{0} 秒后发出</value></data>
   <data name="sos_slide_two_line" xml:space="preserve"><value>滑动求助
 {0} 秒后发出</value></data>
@@ -908,7 +913,7 @@ PIN：{1}</value></data>
   <data name="time_title" xml:space="preserve"><value>时间</value></data>
   <data name="time_zone" xml:space="preserve"><value>时区</value></data>
   <data name="time_zone_hint" xml:space="preserve"><value>此设置用于整个集群的时钟、呼叫记录与规则时段</value></data>
-  <data name="version_line" xml:space="preserve"><value>{0} · core v{1} · app v{2}</value></data>
+  <data name="version_line" xml:space="preserve"><value>core {0} · app {1}</value></data>
   <data name="video_stats" xml:space="preserve"><value>{0} · {1} ms · ±{2} ms · {3} fps · drop {4}</value></data>
   <data name="volume_call" xml:space="preserve"><value>呼叫</value></data>
   <data name="volume_cluster_default" xml:space="preserve"><value>集群默认 {0}</value></data>

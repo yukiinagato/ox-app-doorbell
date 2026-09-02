@@ -733,7 +733,7 @@ Delete it?</string>
     <string name="ring_quick_reply">Quick reply</string>
     <string name="ring_unlock">Unlock</string>
     <string name="ring_unlock_sent">Unlock signal sent</string>
-    <string name="ring_unlock_unconfigured">No unlock action is configured</string>
+    <string name="ring_unlock_unconfigured">No unlock action is configured for this door</string>
     <string name="settings_about">About this device</string>
     <string name="settings_appearance">Appearance</string>
     <string name="settings_appearance_auto_schedule">Switch by time of day</string>
@@ -769,9 +769,13 @@ Delete it?</string>
     <string name="settings_offline">Settings can\'t be changed; this device is still starting up</string>
     <string name="settings_on">On</string>
     <string name="settings_password_changed">The admin password was changed</string>
+    <string name="settings_password_confirm">Enter it again</string>
     <string name="settings_password_current">Current password</string>
+    <string name="settings_password_empty">Enter a password</string>
     <string name="settings_password_failed">Couldn\'t change the admin password</string>
+    <string name="settings_password_mismatch">The two entries don\'t match</string>
     <string name="settings_password_new">New password</string>
+    <string name="settings_password_set_failed">Couldn\'t set the password</string>
     <string name="settings_password_shared">The same password is used here and in the web admin</string>
     <string name="settings_purpose_shown">Offer it to visitors</string>
     <string name="settings_purposes">Visit purposes</string>
@@ -797,6 +801,8 @@ Delete it?</string>
     <string name="settings_section_time">Time</string>
     <string name="settings_section_volume">Volume</string>
     <string name="settings_section_web">Open the web admin</string>
+    <string name="settings_set_password">Set the admin password</string>
+    <string name="settings_set_password_hint">One password for this device and the web admin</string>
     <string name="settings_telegram">Telegram</string>
     <string name="settings_theme_bg">Background colour</string>
     <string name="settings_theme_bg_color">Background colour</string>
@@ -863,8 +869,7 @@ This device joins automatically. Only if it does not, enter the indoor panel add
     <string name="sos_mode_hold">Press and hold (legacy)</string>
     <string name="sos_mode_slide">Slide to trigger</string>
     <string name="sos_slide_hint">Slide right to call for help</string>
-    <string name="sos_slide_label">Slide for SOS
-Alarm in %1$s s</string>
+    <string name="sos_slide_label">Slide for SOS</string>
     <string name="sos_slide_sub">Alarm after %1$ss</string>
     <string name="sos_slide_two_line">Slide for SOS
 Sends in %1$ss</string>
@@ -906,7 +911,7 @@ Sends in %1$ss</string>
     <string name="time_title">Time</string>
     <string name="time_zone">Time zone</string>
     <string name="time_zone_hint">This sets the clock, call history, and rule schedules for the whole cluster</string>
-    <string name="version_line">%1$s · core v%2$s · app v%3$s</string>
+    <string name="version_line">core %1$s · app %2$s</string>
     <string name="video_stats">%1$s · %2$s ms · ±%3$s ms · %4$s fps · drop %5$s</string>
     <string name="volume_call">Call</string>
     <string name="volume_cluster_default">Cluster default %1$s</string>

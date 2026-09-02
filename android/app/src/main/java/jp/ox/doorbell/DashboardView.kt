@@ -460,7 +460,7 @@ internal class DashboardView(
     private fun loadCalls() {
         if (!app.coreOk) return
         Thread({
-            val document = app.core.callLog(0L, CallHistoryModel.DASHBOARD_ROWS)
+            val document = app.core.callLog(0L, 0L, CallHistoryModel.DASHBOARD_ROWS)
             val rows = CallHistoryModel.parse(document)
             val missed = CallHistoryModel.unreadMissed(document)
             ui.post {

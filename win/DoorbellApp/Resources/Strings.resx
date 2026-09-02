@@ -735,7 +735,7 @@
   <data name="ring_quick_reply" xml:space="preserve"><value>クイック返信</value></data>
   <data name="ring_unlock" xml:space="preserve"><value>解錠</value></data>
   <data name="ring_unlock_sent" xml:space="preserve"><value>解錠信号を送信しました</value></data>
-  <data name="ring_unlock_unconfigured" xml:space="preserve"><value>解錠の動作が設定されていません</value></data>
+  <data name="ring_unlock_unconfigured" xml:space="preserve"><value>この門口機には開錠の操作が設定されていません</value></data>
   <data name="settings_about" xml:space="preserve"><value>本機情報</value></data>
   <data name="settings_appearance" xml:space="preserve"><value>外観</value></data>
   <data name="settings_appearance_auto_schedule" xml:space="preserve"><value>時刻で切り替える</value></data>
@@ -771,9 +771,13 @@
   <data name="settings_offline" xml:space="preserve"><value>設定を変更できません。この端末はまだ準備中です</value></data>
   <data name="settings_on" xml:space="preserve"><value>オン</value></data>
   <data name="settings_password_changed" xml:space="preserve"><value>管理パスワードを変更しました</value></data>
+  <data name="settings_password_confirm" xml:space="preserve"><value>もう一度入力</value></data>
   <data name="settings_password_current" xml:space="preserve"><value>今のパスワード</value></data>
+  <data name="settings_password_empty" xml:space="preserve"><value>パスワードを入力してください</value></data>
   <data name="settings_password_failed" xml:space="preserve"><value>管理パスワードを変更できませんでした</value></data>
+  <data name="settings_password_mismatch" xml:space="preserve"><value>2 つの入力が一致しません</value></data>
   <data name="settings_password_new" xml:space="preserve"><value>新しいパスワード</value></data>
+  <data name="settings_password_set_failed" xml:space="preserve"><value>パスワードを設定できませんでした</value></data>
   <data name="settings_password_shared" xml:space="preserve"><value>この端末と Web 管理で同じパスワードを使います</value></data>
   <data name="settings_purpose_shown" xml:space="preserve"><value>訪客に表示する</value></data>
   <data name="settings_purposes" xml:space="preserve"><value>用件</value></data>
@@ -799,6 +803,8 @@
   <data name="settings_section_time" xml:space="preserve"><value>時刻</value></data>
   <data name="settings_section_volume" xml:space="preserve"><value>音量</value></data>
   <data name="settings_section_web" xml:space="preserve"><value>Web 管理を開く</value></data>
+  <data name="settings_set_password" xml:space="preserve"><value>管理パスワードを設定</value></data>
+  <data name="settings_set_password_hint" xml:space="preserve"><value>この端末と Web 管理で共通のパスワードです</value></data>
   <data name="settings_telegram" xml:space="preserve"><value>Telegram</value></data>
   <data name="settings_theme_bg" xml:space="preserve"><value>背景色</value></data>
   <data name="settings_theme_bg_color" xml:space="preserve"><value>背景色</value></data>
@@ -865,8 +871,7 @@ PIN: {1}</value></data>
   <data name="sos_mode_hold" xml:space="preserve"><value>長押しで発報 (旧方式)</value></data>
   <data name="sos_mode_slide" xml:space="preserve"><value>スライドして発報</value></data>
   <data name="sos_slide_hint" xml:space="preserve"><value>右にスライドして助けを呼ぶ</value></data>
-  <data name="sos_slide_label" xml:space="preserve"><value>スライドで SOS
-{0} 秒後に発報</value></data>
+  <data name="sos_slide_label" xml:space="preserve"><value>スライドで SOS</value></data>
   <data name="sos_slide_sub" xml:space="preserve"><value>{0} 秒後に発報</value></data>
   <data name="sos_slide_two_line" xml:space="preserve"><value>スライドで SOS
 {0} 秒後に発報</value></data>
@@ -908,7 +913,7 @@ PIN: {1}</value></data>
   <data name="time_title" xml:space="preserve"><value>時刻</value></data>
   <data name="time_zone" xml:space="preserve"><value>タイムゾーン</value></data>
   <data name="time_zone_hint" xml:space="preserve"><value>この設定はクラスタ全体の時計・呼出履歴・ルールの時間帯に使われます</value></data>
-  <data name="version_line" xml:space="preserve"><value>{0} · core v{1} · app v{2}</value></data>
+  <data name="version_line" xml:space="preserve"><value>core {0} · app {1}</value></data>
   <data name="video_stats" xml:space="preserve"><value>{0} · {1} ms · ±{2} ms · {3} fps · drop {4}</value></data>
   <data name="volume_call" xml:space="preserve"><value>呼出</value></data>
   <data name="volume_cluster_default" xml:space="preserve"><value>クラスタ既定 {0}</value></data>
