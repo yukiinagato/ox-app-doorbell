@@ -123,7 +123,12 @@ final class NoticeChipView: UIControl {
     func update(active: Bool, palette: DoorbellPalette) {
         dot.isHidden = !active
         dot.backgroundColor = palette.notice
-        backgroundColor = active ? palette.notice.withAlphaComponent(0.24) : palette.surface
+        // Opaque on both states: the chip may be lying on the household's theme picture, and a
+        // translucent fill would let that picture decide whether its label is readable.
+        backgroundColor = active
+            ? DoorbellTheme.solid(palette.notice.withAlphaComponent(0.24),
+                                  over: palette.background)
+            : palette.surfaceSolid
         label.textColor = palette.ink
     }
 
@@ -172,9 +177,6 @@ final class NoticeDialogViewController: UIViewController {
     private let clearButton = UIButton(type: .system)
 
     private var palette = DoorbellPalette.dark
-
-    /// Core addresses the house-wide announcement as the door "*".
-    private static let globalTarget = "*"
 
     /// `door` empty selects the home-wide target.
     init(core: CoreBridge, texts: Texts, httpPort: Int, lang: String, door: String) {
@@ -437,12 +439,7 @@ final class NoticeDialogViewController: UIViewController {
     /// The house-wide announcement goes through the same Core entry point as a door's, addressed
     /// as "*". Only a Core that predates that target falls back to writing the key directly.
     private func publishGlobal(text: String, expiresMs: Int64) {
-        if let published = core.setGlobalNotice(text: text, expiresMs: expiresMs) {
-            finish(published ? texts.t("notice.saved") : texts.t("notice.failed"))
-            return
-        }
-        if core.setDoorNotice(door: NoticeDialogViewController.globalTarget, text: text,
-                              expiresMs: expiresMs) {
+        if core.setGlobalNotice(text: text, expiresMs: expiresMs) {
             finish(texts.t("notice.saved"))
             return
         }
@@ -466,11 +463,7 @@ final class NoticeDialogViewController: UIViewController {
 
     @objc private func clear() {
         if selectedDoor.isEmpty {
-            if let cleared = core.clearGlobalNotice() {
-                finish(cleared ? texts.t("notice.cleared") : texts.t("notice.failed"))
-                return
-            }
-            if core.clearDoorNotice(door: NoticeDialogViewController.globalTarget) {
+            if core.clearGlobalNotice() {
                 finish(texts.t("notice.cleared"))
                 return
             }

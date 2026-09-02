@@ -94,7 +94,7 @@ final class SettingsViewController: SettingsFormViewController {
     }
 
     private func purposeSummary() -> String {
-        let purposes = (ConfigUtil.dig(config, "visit_purposes") as? [String: Any])?.count ?? 0
+        let purposes = ConfigUtil.enabledPurposeIds(config).count
         return purposes > 0 ? "\(purposes)" : ""
     }
 
@@ -195,6 +195,16 @@ class SettingsChildViewController: SettingsFormViewController {
         palette = DoorbellPalette.of(DoorbellTheme.appearance(
             config: config, nodeId: nodeId, localTime: core.localTime()))
         super.viewDidLoad()
+    }
+
+    /// A value changed on a screen presented from this one is what the household just did; the
+    /// summaries here have to show it when they come back rather than the state they were built
+    /// with.
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        guard isViewLoaded, presentedViewController == nil else { return }
+        reloadConfig()
+        rebuild()
     }
 
     func reloadConfig() {
@@ -376,13 +386,18 @@ final class DeviceSettingsViewController: SettingsChildViewController {
             setStatus(texts.t("settings.password_failed"))
             return
         }
-        let changed = core.setAdminPassword(current: currentPassword, new: newPassword)
-        setStatus(changed ? texts.t("settings.password_changed")
-            : texts.t("settings.password_failed"))
-        if changed {
+        switch core.setAdminPassword(current: currentPassword, new: newPassword) {
+        case .ok:
+            setStatus(texts.t("settings.password_changed"))
             currentPassword = ""
             newPassword = ""
             rebuild()
+        case .wrongCurrent:
+            setStatus(texts.t("admin.pin_wrong"))
+        case .lockedOut:
+            setStatus(texts.t("admin.locked"))
+        case .failed:
+            setStatus(texts.t("settings.password_failed"))
         }
     }
 
@@ -725,18 +740,23 @@ final class PurposeSettingsViewController: SettingsChildViewController {
 
     required init?(coder: NSCoder) { fatalError("not supported") }
 
+    /// This is the one surface that lists every purpose, switched on or not: a purpose that is
+    /// switched off is exactly the one a household comes here to switch back on. The door
+    /// station's buttons and the ring-then-purpose chooser offer only the enabled ones, and the
+    /// toggle writes that single key — nothing else about the purpose is touched here.
     override func fields() -> [SettingsField] {
-        guard let purposes = ConfigUtil.dig(config, "visit_purposes") as? [String: Any] else {
+        guard let purposes = ConfigUtil.dig(config, "visit_purposes") as? [String: Any],
+              !purposes.isEmpty else {
             return []
         }
-        let ordered = ConfigUtil.sortedByOrder(purposes)
+        let ordered = ConfigUtil.allPurposeIds(config)
         var result: [SettingsField] = []
         for (index, id) in ordered.enumerated() {
             let entry = purposes[id] as? [String: Any]
             let label = ConfigUtil.labelOf(entry, boot.uiLang, id)
             let icon = ConfigUtil.str(entry, "icon") ?? ""
             result.append(.toggle(title: icon.isEmpty ? label : "\(icon) \(label)", detail: "",
-                                  value: ConfigUtil.bool(entry, "enabled", true),
+                                  value: ConfigUtil.purposeIsEnabled(entry),
                                   identifier: "purpose_enabled_\(id)") { [weak self] value in
                                       self?.write([.set("visit_purposes.\(id).enabled", value)])
                                   })
@@ -850,7 +870,9 @@ final class WebAdminViewController: SettingsChildViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         let card = AdminQrView(core: core, boot: boot, texts: texts, compact: false)
-        card.palette = palette
+        // Settings is a sheet layered over the home screen, so it stays in the palette: the
+        // theme background is not what is behind this card.
+        card.skin = DoorbellSkin.plain(palette)
         card.reload()
         card.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(card)

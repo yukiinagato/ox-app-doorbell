@@ -13,12 +13,15 @@ final class MonitorViewController: UIViewController {
     private var monitoringAudio = false
     private var safeMode = UserDefaults.standard.bool(forKey: "runtime.safe_mode")
 
+    private let themeBg = ThemeBackgroundView()
+    private let videoBackdrop = UIView()
     private let video = UIImageView()
     private let h264View = UIView()
     private let titleLabel = UILabel()
     private let emptyLabel = UILabel()
     private let deviceStack = UIStackView()
     private let closeButton = UIButton(type: .system)
+    private var skin = DoorbellSkin.plain(.dark)
 
     init(core: CoreBridge, boot: BootConfig) {
         self.core = core
@@ -39,11 +42,16 @@ final class MonitorViewController: UIViewController {
             nodeId = ConfigUtil.evStr(node, "id")
         }
         buildUi()
+        applySkin()
         rebuildDevices()
         core.addHandler("active-monitor") { [weak self] event in
             let type = ConfigUtil.evStr(event, "t")
             if type == "peers_changed" || type == "config_changed" {
+                self?.config = self?.core.config()
+                self?.applySkin()
                 self?.rebuildDevices()
+            } else if type == "display" {
+                self?.applySkin()
             } else if type == "emergency" && ConfigUtil.evBool(event, "active") {
                 self?.close()
             }
@@ -71,11 +79,20 @@ final class MonitorViewController: UIViewController {
         videoPlayer?.stop()
         videoPlayer = nil
         video.image = nil
+        themeBg.releaseImage()
         emptyLabel.isHidden = false
         // Monitoring audio and the Close control remain available until the user exits.
     }
 
     private func buildUi() {
+        themeBg.onImageLoaded = { [weak self] in self?.applySkin() }
+        themeBg.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(themeBg)
+
+        videoBackdrop.backgroundColor = .black
+        videoBackdrop.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(videoBackdrop)
+
         video.contentMode = .scaleAspectFit
         video.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(video)
@@ -84,12 +101,10 @@ final class MonitorViewController: UIViewController {
         view.addSubview(h264View)
 
         titleLabel.text = texts.t("monitor.choose")
-        titleLabel.textColor = .white
         titleLabel.font = .systemFont(ofSize: 28, weight: .semibold)
         titleLabel.numberOfLines = 2
 
         emptyLabel.text = texts.t("ring.no_video")
-        emptyLabel.textColor = UIColor(white: 1, alpha: 0.65)
         emptyLabel.textAlignment = .center
 
         deviceStack.axis = .vertical
@@ -101,7 +116,9 @@ final class MonitorViewController: UIViewController {
         closeButton.setTitleColor(.white, for: .normal)
         closeButton.backgroundColor = UIColor(red: 0.72, green: 0.15, blue: 0.12, alpha: 1)
         closeButton.layer.cornerRadius = 12
+        #if !os(tvOS)
         closeButton.contentEdgeInsets = UIEdgeInsets(top: 14, left: 30, bottom: 14, right: 30)
+        #endif
         closeButton.addTarget(self, action: #selector(close), for: .primaryActionTriggered)
 
         let sidebar = UIStackView(arrangedSubviews: [titleLabel, deviceStack, emptyLabel,
@@ -113,6 +130,14 @@ final class MonitorViewController: UIViewController {
 
         let guide = IOSAvailability.safeAreaLayoutGuide(for: view)
         NSLayoutConstraint.activate([
+            themeBg.topAnchor.constraint(equalTo: view.topAnchor),
+            themeBg.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            themeBg.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            themeBg.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            videoBackdrop.topAnchor.constraint(equalTo: view.topAnchor),
+            videoBackdrop.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            videoBackdrop.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            videoBackdrop.trailingAnchor.constraint(equalTo: video.trailingAnchor),
             video.topAnchor.constraint(equalTo: guide.topAnchor),
             video.bottomAnchor.constraint(equalTo: guide.bottomAnchor),
             video.leadingAnchor.constraint(equalTo: guide.leadingAnchor),
@@ -127,6 +152,28 @@ final class MonitorViewController: UIViewController {
             sidebar.trailingAnchor.constraint(equalTo: guide.trailingAnchor, constant: -24),
             closeButton.heightAnchor.constraint(greaterThanOrEqualToConstant: 44),
         ])
+    }
+
+    /// The monitor page wears the same theme background as the home screens; only the picture
+    /// keeps its black frame, and the sidebar's heading takes the automatic ink for the
+    /// background behind it.
+    /// The monitor page wears the same theme background as the home screens; only the picture
+    /// keeps its black frame, and the sidebar takes the automatic ink for what is behind it.
+    private func applySkin() {
+        let display = core.status()?["display"] as? [String: Any]
+        let palette = DoorbellPalette.of(DoorbellTheme.appearance(
+            display: display, config: config, nodeId: nodeId, localTime: core.localTime()))
+        skin = themeBg.apply(display: display, config: config, nodeId: nodeId, palette: palette,
+                             httpPort: boot.httpPort, host: view)
+        skin.apply("status_line", to: titleLabel)
+        // The empty-video notice lives in the sidebar, not over the picture, so it follows the
+        // sidebar's background rather than the video's black frame.
+        skin.apply("hint", to: emptyLabel, quiet: true)
+        for view in deviceStack.arrangedSubviews {
+            guard let button = view as? UIButton else { continue }
+            button.setTitleColor(skin.cardInk("tile_label"), for: .normal)
+            button.backgroundColor = skin.surfaceStrong
+        }
     }
 
     private func confirmedDoorPeers() -> [[String: Any]] {
@@ -146,11 +193,13 @@ final class MonitorViewController: UIViewController {
             let button = UIButton(type: .system)
             let name = ConfigUtil.evStr(peer, "name")
             button.setTitle(name.isEmpty ? ConfigUtil.evStr(peer, "id") : name, for: .normal)
-            button.setTitleColor(.white, for: .normal)
+            button.setTitleColor(skin.cardInk("tile_label"), for: .normal)
             button.titleLabel?.font = .systemFont(ofSize: 20, weight: .medium)
-            button.backgroundColor = UIColor(white: 1, alpha: 0.14)
+            button.backgroundColor = skin.surfaceStrong
             button.layer.cornerRadius = 10
+            #if !os(tvOS)
             button.contentEdgeInsets = UIEdgeInsets(top: 13, left: 14, bottom: 13, right: 14)
+            #endif
             button.accessibilityIdentifier = ConfigUtil.evStr(peer, "id")
             button.addTarget(self, action: #selector(selectDevice(_:)), for: .primaryActionTriggered)
             deviceStack.addArrangedSubview(button)

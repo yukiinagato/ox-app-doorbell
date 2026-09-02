@@ -118,7 +118,7 @@ final class RecentCallsView: UIView {
     private let scroll = UIScrollView()
     private let stack = UIStackView()
     private let emptyLabel = UILabel()
-    private var palette = DoorbellPalette.dark
+    private var skin = DoorbellSkin.plain(.dark)
 
     init(core: CoreBridge, texts: Texts, lang: String) {
         self.core = core
@@ -126,6 +126,11 @@ final class RecentCallsView: UIView {
         self.lang = lang
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
+        // The list is a card in its own right. On a panel wearing a theme picture that is what
+        // keeps its rows readable: the palette ink they carry belongs to this fill, not to
+        // whatever the household put behind the screen.
+        layer.cornerRadius = 12
+        clipsToBounds = true
 
         stack.axis = .vertical
         stack.spacing = 2
@@ -141,32 +146,34 @@ final class RecentCallsView: UIView {
         addSubview(emptyLabel)
 
         NSLayoutConstraint.activate([
-            scroll.topAnchor.constraint(equalTo: topAnchor),
-            scroll.bottomAnchor.constraint(equalTo: bottomAnchor),
-            scroll.leadingAnchor.constraint(equalTo: leadingAnchor),
-            scroll.trailingAnchor.constraint(equalTo: trailingAnchor),
+            scroll.topAnchor.constraint(equalTo: topAnchor, constant: 10),
+            scroll.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -10),
+            scroll.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
+            scroll.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
             stack.topAnchor.constraint(equalTo: scroll.topAnchor),
             stack.bottomAnchor.constraint(equalTo: scroll.bottomAnchor),
             stack.leadingAnchor.constraint(equalTo: scroll.leadingAnchor),
             stack.trailingAnchor.constraint(equalTo: scroll.trailingAnchor),
             stack.widthAnchor.constraint(equalTo: scroll.widthAnchor),
-            emptyLabel.topAnchor.constraint(equalTo: topAnchor, constant: 8),
-            emptyLabel.leadingAnchor.constraint(equalTo: leadingAnchor),
-            emptyLabel.trailingAnchor.constraint(equalTo: trailingAnchor),
+            emptyLabel.topAnchor.constraint(equalTo: topAnchor, constant: 12),
+            emptyLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
+            emptyLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
         ])
     }
 
     required init?(coder: NSCoder) { fatalError("not supported") }
 
-    func reload(config: [String: Any]?, palette: DoorbellPalette, limit: Int = 20) {
-        self.palette = palette
+    func reload(config: [String: Any]?, skin: DoorbellSkin, limit: Int = 20) {
+        self.skin = skin
+        backgroundColor = skin.surface
         for view in stack.arrangedSubviews { view.removeFromSuperview() }
         let rows = CallHistory.page(core, beforeMs: 0, limit: limit)
         emptyLabel.isHidden = !rows.isEmpty
-        emptyLabel.textColor = palette.inkMuted
+        emptyLabel.textColor = skin.cardMuted("status_line")
         for row in rows {
             stack.addArrangedSubview(CallHistoryRowView(core: core, texts: texts, config: config,
-                                                        row: row, lang: lang, palette: palette))
+                                                        row: row, lang: lang,
+                                                        palette: skin.palette))
         }
     }
 }

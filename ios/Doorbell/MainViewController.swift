@@ -13,8 +13,6 @@ final class MainViewController: UIViewController {
     private var cfg: [String: Any]?
     private var nodeId = ""
     private var visitorLang = "ja"
-    private var themeColor: String?
-    private var themeHash: String?
     private let audio = SirenPlayer()
     private let callFeedbackAudio = SirenPlayer()
     private var callTitleOverride: String?
@@ -69,7 +67,7 @@ final class MainViewController: UIViewController {
     private var peerPollTimer: Timer?
     private var encoderPollTimer: Timer?
 
-    private let themeBg = UIImageView()
+    private let themeBg = ThemeBackgroundView()
     private let idleView = UIView()
     private let clockLabel = UILabel()
     private let dateLabel = UILabel()
@@ -88,6 +86,7 @@ final class MainViewController: UIViewController {
     private var dashboard: DashboardView?
     private var visitorScreen: VisitorScreenView?
     private var palette = DoorbellPalette.dark
+    private var idleSkin = DoorbellSkin.plain(.dark)
     private var displayDoc: [String: Any]?
     private let callingView = UIView()
     private let pulse = UIView()
@@ -178,8 +177,7 @@ final class MainViewController: UIViewController {
         camera.encoder = nil
         videoEncoder.stop()
         camera.stop()
-        themeBg.image = nil
-        themeBg.isHidden = true
+        themeBg.releaseImage()
         // The SIP dialog and its End Call control must survive video memory pressure. Drop only
         // decoder/image state; the user can continue a pure-audio established call or hang it up.
         peerPollTimer?.invalidate()
@@ -194,9 +192,7 @@ final class MainViewController: UIViewController {
 
 
     private func buildUi() {
-        themeBg.contentMode = .scaleAspectFill
-        themeBg.clipsToBounds = true
-        themeBg.isHidden = true
+        themeBg.onImageLoaded = { [weak self] in self?.refreshHomeSurfaces() }
         addFull(themeBg)
 
         buildIdleView()
@@ -670,11 +666,12 @@ final class MainViewController: UIViewController {
     private func refreshHomeSurfaces() {
         palette = DoorbellPalette.of(DoorbellTheme.appearance(
             display: displayDoc, config: cfg, nodeId: nodeId, localTime: core.localTime()))
-        applyTheme()
+        let skin = applyTheme()
         applyVolumes()
         updateClock()
+        applyIdleControlSkin(skin)
         if let dashboard = dashboard {
-            dashboard.reload(config: cfg, palette: palette)
+            dashboard.reload(config: cfg, skin: skin)
             dashboard.updateMembership(membershipLabel.text ?? "", hidden: membershipLabel.isHidden)
         }
         if let visitor = visitorScreen {
@@ -688,23 +685,23 @@ final class MainViewController: UIViewController {
             visitor.updateFooter(DoorbellTheme.versionLine(
                 name: label.isEmpty ? boot.name : label,
                 coreVersion: DoorbellTheme.coreVersion(), texts: texts, power: power))
-            visitor.applyTheme(palette: palette, display: displayDoc,
-                               effectiveBackground: effectiveThemeBackground())
+            visitor.apply(skin: skin)
         }
     }
 
-    /// The background a text region actually sits on: the theme image's average colour when one is
-    /// displayed, the theme colour otherwise. It is what the automatic ink rule measures.
-    private func effectiveThemeBackground() -> UIColor {
-        // Core measures the served theme, image included, so every shell agrees on one answer.
-        if let published = DoorbellTheme.publishedBackground(display: displayDoc) {
-            return published
+    /// The controls the visitor screen borrows from this controller. They are built once and only
+    /// recoloured here, so a theme or appearance change never rebuilds them under a finger.
+    private func applyIdleControlSkin(_ skin: DoorbellSkin) {
+        purposeHint.textColor = skin.muted("hint")
+        for row in purposeGrid.arrangedSubviews {
+            for view in (row as? UIStackView)?.arrangedSubviews ?? [] {
+                guard let button = view as? UIButton else { continue }
+                button.backgroundColor = skin.surface
+                button.setTitleColor(skin.cardInk("tile_label"), for: .normal)
+            }
         }
-        if !themeBg.isHidden, let image = themeBg.image,
-           let average = DoorbellTheme.averageColor(of: image) {
-            return average
-        }
-        return view.backgroundColor ?? palette.background
+        idleSkin = skin
+        updateLangBarSelection()
     }
 
     /// Applies the three effective volumes to the players that own each kind of sound.
@@ -817,64 +814,26 @@ final class MainViewController: UIViewController {
     }
 
 
-    private func themeValue(_ leaf: String) -> String? {
-        if !nodeId.isEmpty,
-           let v = ConfigUtil.str(cfg, "devices.\(nodeId).local.theme.\(leaf)") {
-            return v
-        }
-        return ConfigUtil.str(cfg, "display.theme.\(leaf)")
+    /// `display.theme` is the household's own background, and every panel wears it — the indoor
+    /// dashboard as much as the door station, which is what the iPad 1 indoor panel already does.
+    /// Light/dark then owns the cards layered on top rather than the screen itself, and §5's
+    /// automatic contrast keeps the bare text legible on whatever picture is behind it.
+    private func applyTheme() -> DoorbellSkin {
+        return themeBg.apply(display: displayDoc, config: cfg, nodeId: nodeId, palette: palette,
+                             httpPort: boot.httpPort, host: view)
     }
 
-    /// `display.theme` is the door station's decorative background. An indoor panel follows the
-    /// light/dark appearance instead, so its text tokens and its background always belong to the
-    /// same mode.
-    private func applyTheme() {
-        let decorated = boot.role == "door_station"
-        let color = decorated ? themeValue("bg_color") : nil
-        let key = (color ?? "") + "/" + palette.appearance.rawValue
-        if key != themeColor {
-            themeColor = key
-            if let c = color, let rgb = ConfigUtil.parseHexColor(c) {
-                view.backgroundColor = UIColor(red: rgb.r, green: rgb.g, blue: rgb.b, alpha: 1)
-            } else {
-                view.backgroundColor = palette.background
-            }
-        }
-        guard decorated, let hash = themeValue("bg_image"), !hash.isEmpty else {
-            themeHash = nil
-            themeBg.image = nil
-            themeBg.isHidden = true
-            return
-        }
-        if hash == themeHash && themeBg.image != nil { return }
-        themeHash = hash
-        loadThemeImage(hash)
-    }
-
-    private func loadThemeImage(_ hash: String) {
-        let urlStr = "http://127.0.0.1:\(boot.httpPort)/asset/\(hash)"
-        guard let url = URL(string: urlStr) else { return }
-        URLSession.shared.dataTask(with: url) { [weak self] data, resp, _ in
-            guard let self = self, let data = data,
-                  (resp as? HTTPURLResponse)?.statusCode == 200,
-                  let img = UIImage(data: data) else { return }
-            DispatchQueue.main.async {
-                guard self.themeHash == hash else { return }
-                self.themeBg.image = img
-                self.themeBg.isHidden = false
-            }
-        }.resume()
-    }
-
+    /// Only the purposes an administrator left switched on are offered here; the settings 用件
+    /// list is the one surface that shows the others, because that is where they are switched
+    /// back on.
     private func buildPurposeButtons() {
         for v in purposeGrid.arrangedSubviews { v.removeFromSuperview() }
-        guard boot.role == "door_station",
-              let purposes = ConfigUtil.dig(cfg, "visit_purposes") as? [String: Any],
-              !purposes.isEmpty else {
+        let purposes = (ConfigUtil.dig(cfg, "visit_purposes") as? [String: Any]) ?? [:]
+        let ids = ConfigUtil.enabledPurposeIds(cfg)
+        guard boot.role == "door_station", !ids.isEmpty else {
             purposeSection.isHidden = true
             return
         }
-        let ids = ConfigUtil.sortedByOrder(purposes)
         var row: UIStackView?
         for (i, id) in ids.enumerated() {
             if i % 3 == 0 {
@@ -891,8 +850,8 @@ final class MainViewController: UIViewController {
             b.titleLabel?.font = .systemFont(ofSize: 20)
             b.titleLabel?.numberOfLines = 3
             b.titleLabel?.textAlignment = .center
-            b.setTitleColor(MainViewController.fgColor, for: .normal)
-            b.backgroundColor = MainViewController.cardColor
+            b.setTitleColor(idleSkin.cardInk("tile_label"), for: .normal)
+            b.backgroundColor = idleSkin.surface
             b.layer.cornerRadius = 12
             b.widthAnchor.constraint(equalToConstant: 176).isActive = true
             b.heightAnchor.constraint(equalToConstant: 92).isActive = true
@@ -934,25 +893,34 @@ final class MainViewController: UIViewController {
         }
         for lang in list {
             let b = UIButton(type: .system)
-            b.setTitle(Texts.langDisplayName(lang), for: .normal)
-            b.titleLabel?.font = .systemFont(ofSize: 20)
             b.layer.cornerRadius = 10
+            #if !os(tvOS)
             b.contentEdgeInsets = UIEdgeInsets(top: 8, left: 22, bottom: 8, right: 22)
+            #endif
             b.accessibilityIdentifier = "lang_\(lang)"
-            b.addTarget(self, action: #selector(onLangClick(_:)), for: .touchUpInside)
+            b.addTarget(self, action: #selector(onLangClick(_:)), for: .primaryActionTriggered)
             langBar.addArrangedSubview(b)
         }
         langBar.isHidden = false
         updateLangBarSelection()
     }
 
+    /// A language chip says one thing — the language's own name — so it has no authored second
+    /// line; adding a tag under it would be exactly the decorative label §5.2 rules out. It still
+    /// goes through the two-part renderer, so a name that needs a break (「Tiếng Việt」) breaks
+    /// where the catalog puts it instead of being squeezed to fit.
     private func updateLangBarSelection() {
         for v in langBar.arrangedSubviews {
             guard let b = v as? UIButton,
                   let lang = b.accessibilityIdentifier?.dropFirst("lang_".count) else { continue }
-            let on = String(lang) == visitorLang
-            b.backgroundColor = on ? MainViewController.accentColor : MainViewController.cardColor
-            b.setTitleColor(on ? .black : MainViewController.dimColor, for: .normal)
+            let code = String(lang)
+            let on = code == visitorLang
+            let fill = on ? idleSkin.palette.accent : idleSkin.surface
+            b.backgroundColor = fill
+            let ink = on ? idleSkin.palette.onAccent : idleSkin.cardMuted("hint")
+            DoorbellTheme.twoPartTitle(Texts.langDisplayName(code), on: b, primarySize: 20,
+                                       color: ink, focusColor: idleSkin.palette.onAccent,
+                                       bold: on)
         }
     }
 
@@ -1056,7 +1024,10 @@ final class MainViewController: UIViewController {
         sosSlider.countdownSeconds = max(0, min(10,
             ConfigUtil.int(cfg, "emergency.trigger.countdown_s", 3)))
         sosSlider.refreshStrings()
-        cancelRequiresPin = ConfigUtil.bool(cfg, "emergency.cancel_requires_pin", true)
+        // Core folds the setting together with "a password actually exists"; the setting
+        // alone would stand between a household and a running alarm on a cluster that
+        // has never set one.
+        cancelRequiresPin = core.sosCancelRequiresPassword
     }
 
     /// Called only once the slide countdown has elapsed.
@@ -1275,9 +1246,9 @@ final class MainViewController: UIViewController {
                 setVisitorLang(ConfigUtil.evStr(ev, "lang"))
             }
         case "asset_ready":
-            if let h = themeHash, ConfigUtil.evStr(ev, "hash") == h, themeBg.image == nil {
-                loadThemeImage(h)
-            }
+            // The theme picture may be the asset that just finished arriving; re-applying is a
+            // no-op unless it is, because the background view remembers what it already holds.
+            if themeBg.image == nil { refreshHomeSurfaces() }
         case "display":
             applyDisplayValues(ev)
             refreshHomeSurfaces()
@@ -1426,15 +1397,12 @@ final class MainViewController: UIViewController {
     }
 
     private func availablePurposeIds() -> [String] {
-        guard let purposes = ConfigUtil.dig(cfg, "visit_purposes") as? [String: Any] else {
-            return []
-        }
-        return ConfigUtil.sortedByOrder(purposes)
+        return ConfigUtil.enabledPurposeIds(cfg)
     }
 
     private func showPurposeChoice(afterRing: Bool) {
-        guard presentedViewController == nil,
-              let purposes = ConfigUtil.dig(cfg, "visit_purposes") as? [String: Any] else { return }
+        let purposes = (ConfigUtil.dig(cfg, "visit_purposes") as? [String: Any]) ?? [:]
+        guard presentedViewController == nil, !availablePurposeIds().isEmpty else { return }
         let alert = UIAlertController(title: texts.t("idle.choose_purpose"), message: nil,
                                       preferredStyle: .alert)
         for purposeId in availablePurposeIds() {

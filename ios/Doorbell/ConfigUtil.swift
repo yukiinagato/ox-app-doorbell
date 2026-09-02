@@ -50,6 +50,28 @@ enum ConfigUtil {
         }
     }
 
+    /// Every visit purpose an administrator configured, offered or not, in the configured order.
+    /// The settings list needs all of them: a purpose that is switched off is exactly the one a
+    /// household wants to find and switch back on.
+    static func allPurposeIds(_ config: [String: Any]?) -> [String] {
+        guard let purposes = dig(config, "visit_purposes") as? [String: Any] else { return [] }
+        return sortedByOrder(purposes)
+    }
+
+    /// The purposes a visitor is actually offered. `visit_purposes.<id>.enabled` is the single
+    /// switch behind that, and a purpose that has never been switched off carries no such key —
+    /// on a seeded cluster and on an older one alike — so an absent value means offered.
+    static func enabledPurposeIds(_ config: [String: Any]?) -> [String] {
+        guard let purposes = dig(config, "visit_purposes") as? [String: Any] else { return [] }
+        return sortedByOrder(purposes).filter {
+            purposeIsEnabled(purposes[$0] as? [String: Any])
+        }
+    }
+
+    static func purposeIsEnabled(_ entry: [String: Any]?) -> Bool {
+        return bool(entry, "enabled", true)
+    }
+
     static func labelOf(_ entry: [String: Any]?, _ lang: String, _ fallback: String) -> String {
         guard let label = entry?["label"] as? [String: Any] else { return fallback }
         if let s = label[lang] as? String, !s.isEmpty { return s }

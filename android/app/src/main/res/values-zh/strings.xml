@@ -195,7 +195,8 @@
     <string name="admin_pass">密码</string>
     <string name="admin_password">管理密码</string>
     <string name="admin_password_set_failed">无法设置管理密码</string>
-    <string name="admin_password_set_prompt">请设置管理密码</string>
+    <string name="admin_password_set_prompt">设置管理密码</string>
+    <string name="admin_password_too_short">请至少输入四位</string>
     <string name="admin_pin_prompt">请输入管理密码</string>
     <string name="admin_pin_wrong">管理密码错误</string>
     <string name="admin_playback_fallback_hint">Web 会立即跳过 HLS；后置 MJPEG 从零时刻开始预热。到 MJPEG 前的最大额外等待：</string>
@@ -508,9 +509,7 @@
     <string name="notice_publish">显示</string>
     <string name="notice_saved">公告已显示</string>
     <string name="notice_scope_global">全局公告</string>
-    <string name="notice_target">显示位置</string>
     <string name="notice_target_door">仅 %1$s</string>
-    <string name="notice_target_global">全部</string>
     <string name="notice_text">内容</string>
     <string name="notice_title">公告</string>
     <string name="notice_too_long">内容最多 200 个字符（当前 %1$s 个）</string>
@@ -725,10 +724,18 @@
     <string name="ring_lang_badge">访客语言: %1$s</string>
     <string name="ring_mic_off">麦克风 关</string>
     <string name="ring_mic_on">麦克风 开</string>
+    <string name="ring_mic_two_line_off">麦克风
+关</string>
+    <string name="ring_mic_two_line_on">麦克风
+开</string>
     <string name="ring_mic_unavailable">此版本无法切换麦克风</string>
     <string name="ring_monitor">监听</string>
     <string name="ring_monitor_off">监听 关</string>
     <string name="ring_monitor_on">监听 开</string>
+    <string name="ring_monitor_two_line_off">监听
+关</string>
+    <string name="ring_monitor_two_line_on">监听
+开</string>
     <string name="ring_monitoring">正在播放门口声音</string>
     <string name="ring_no_video">没有门口机画面</string>
     <string name="ring_open_door">开门</string>

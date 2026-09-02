@@ -190,7 +190,8 @@
 "admin.pass" = "パスワード";
 "admin.password" = "管理パスワード";
 "admin.password_set_failed" = "管理パスワードを設定できませんでした";
-"admin.password_set_prompt" = "管理パスワードを設定してください";
+"admin.password_set_prompt" = "管理パスワードを設定";
+"admin.password_too_short" = "4 文字以上にしてください";
 "admin.pin_prompt" = "管理パスワードを入力してください";
 "admin.pin_wrong" = "管理パスワードが違います";
 "admin.playback_fallback_hint" = "Web は HLS を即時スキップします。後段の MJPEG は時刻 0 から予熱します。MJPEG までの最大追加待機:";
@@ -503,9 +504,7 @@
 "notice.publish" = "表示する";
 "notice.saved" = "お知らせを表示しました";
 "notice.scope_global" = "全体のお知らせ";
-"notice.target" = "表示先";
 "notice.target_door" = "%@ のみ";
-"notice.target_global" = "全体";
 "notice.text" = "本文";
 "notice.title" = "お知らせ";
 "notice.too_long" = "本文は 200 文字までです (現在 %@ 文字)";
@@ -720,10 +719,14 @@
 "ring.lang_badge" = "訪客言語: %@";
 "ring.mic_off" = "マイク OFF";
 "ring.mic_on" = "マイク ON";
+"ring.mic_two_line_off" = "マイク\nOFF";
+"ring.mic_two_line_on" = "マイク\nON";
 "ring.mic_unavailable" = "この版ではマイクの切り替えができません";
 "ring.monitor" = "モニタ";
 "ring.monitor_off" = "モニター OFF";
 "ring.monitor_on" = "モニター ON";
+"ring.monitor_two_line_off" = "モニター\nOFF";
+"ring.monitor_two_line_on" = "モニター\nON";
 "ring.monitoring" = "門口の音声を再生中";
 "ring.no_video" = "門口機の映像がありません";
 "ring.open_door" = "ドアを開ける";

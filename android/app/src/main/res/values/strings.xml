@@ -196,6 +196,7 @@ Delete it?</string>
     <string name="admin_password">Admin password</string>
     <string name="admin_password_set_failed">Couldn\'t set the admin password</string>
     <string name="admin_password_set_prompt">Set the admin password</string>
+    <string name="admin_password_too_short">Use at least four characters</string>
     <string name="admin_pin_prompt">Enter the admin password</string>
     <string name="admin_pin_wrong">Wrong admin password</string>
     <string name="admin_playback_fallback_hint">Web skips HLS immediately. A later MJPEG strategy is prewarmed from time zero. Maximum extra wait before MJPEG:</string>
@@ -508,9 +509,7 @@ Delete it?</string>
     <string name="notice_publish">Show</string>
     <string name="notice_saved">The announcement is now showing</string>
     <string name="notice_scope_global">House-wide</string>
-    <string name="notice_target">Show on</string>
     <string name="notice_target_door">%1$s only</string>
-    <string name="notice_target_global">Everywhere</string>
     <string name="notice_text">Message</string>
     <string name="notice_title">Announcement</string>
     <string name="notice_too_long">The message is limited to 200 characters (currently %1$s)</string>
@@ -725,10 +724,18 @@ Delete it?</string>
     <string name="ring_lang_badge">Visitor language: %1$s</string>
     <string name="ring_mic_off">Mic off</string>
     <string name="ring_mic_on">Mic on</string>
+    <string name="ring_mic_two_line_off">Mic
+Off</string>
+    <string name="ring_mic_two_line_on">Mic
+On</string>
     <string name="ring_mic_unavailable">Muting the microphone isn\'t available in this build</string>
     <string name="ring_monitor">Monitor</string>
     <string name="ring_monitor_off">Monitor off</string>
     <string name="ring_monitor_on">Monitor on</string>
+    <string name="ring_monitor_two_line_off">Monitor
+Off</string>
+    <string name="ring_monitor_two_line_on">Monitor
+On</string>
     <string name="ring_monitoring">Live door audio on</string>
     <string name="ring_no_video">No video from door station</string>
     <string name="ring_open_door">Open door</string>

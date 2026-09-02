@@ -197,7 +197,8 @@
   <data name="admin_pass" xml:space="preserve"><value>パスワード</value></data>
   <data name="admin_password" xml:space="preserve"><value>管理パスワード</value></data>
   <data name="admin_password_set_failed" xml:space="preserve"><value>管理パスワードを設定できませんでした</value></data>
-  <data name="admin_password_set_prompt" xml:space="preserve"><value>管理パスワードを設定してください</value></data>
+  <data name="admin_password_set_prompt" xml:space="preserve"><value>管理パスワードを設定</value></data>
+  <data name="admin_password_too_short" xml:space="preserve"><value>4 文字以上にしてください</value></data>
   <data name="admin_pin_prompt" xml:space="preserve"><value>管理パスワードを入力してください</value></data>
   <data name="admin_pin_wrong" xml:space="preserve"><value>管理パスワードが違います</value></data>
   <data name="admin_playback_fallback_hint" xml:space="preserve"><value>Web は HLS を即時スキップします。後段の MJPEG は時刻 0 から予熱します。MJPEG までの最大追加待機:</value></data>
@@ -510,9 +511,7 @@
   <data name="notice_publish" xml:space="preserve"><value>表示する</value></data>
   <data name="notice_saved" xml:space="preserve"><value>お知らせを表示しました</value></data>
   <data name="notice_scope_global" xml:space="preserve"><value>全体のお知らせ</value></data>
-  <data name="notice_target" xml:space="preserve"><value>表示先</value></data>
   <data name="notice_target_door" xml:space="preserve"><value>{0} のみ</value></data>
-  <data name="notice_target_global" xml:space="preserve"><value>全体</value></data>
   <data name="notice_text" xml:space="preserve"><value>本文</value></data>
   <data name="notice_title" xml:space="preserve"><value>お知らせ</value></data>
   <data name="notice_too_long" xml:space="preserve"><value>本文は 200 文字までです (現在 {0} 文字)</value></data>
@@ -727,10 +726,18 @@
   <data name="ring_lang_badge" xml:space="preserve"><value>訪客言語: {0}</value></data>
   <data name="ring_mic_off" xml:space="preserve"><value>マイク OFF</value></data>
   <data name="ring_mic_on" xml:space="preserve"><value>マイク ON</value></data>
+  <data name="ring_mic_two_line_off" xml:space="preserve"><value>マイク
+OFF</value></data>
+  <data name="ring_mic_two_line_on" xml:space="preserve"><value>マイク
+ON</value></data>
   <data name="ring_mic_unavailable" xml:space="preserve"><value>この版ではマイクの切り替えができません</value></data>
   <data name="ring_monitor" xml:space="preserve"><value>モニタ</value></data>
   <data name="ring_monitor_off" xml:space="preserve"><value>モニター OFF</value></data>
   <data name="ring_monitor_on" xml:space="preserve"><value>モニター ON</value></data>
+  <data name="ring_monitor_two_line_off" xml:space="preserve"><value>モニター
+OFF</value></data>
+  <data name="ring_monitor_two_line_on" xml:space="preserve"><value>モニター
+ON</value></data>
   <data name="ring_monitoring" xml:space="preserve"><value>門口の音声を再生中</value></data>
   <data name="ring_no_video" xml:space="preserve"><value>門口機の映像がありません</value></data>
   <data name="ring_open_door" xml:space="preserve"><value>ドアを開ける</value></data>

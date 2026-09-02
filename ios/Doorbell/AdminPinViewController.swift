@@ -18,6 +18,10 @@ final class AdminPinViewController: UIViewController {
     private var pin = ""
     private let display = UILabel()
     private let errorLabel = UILabel()
+    private let promptLabel = UILabel()
+    /// A cluster with no password must never be locked out of its own device: the gate turns into
+    /// 「管理パスワードを設定」 and the first password entered here becomes the cluster's.
+    private var settingPassword = false
 
     init(texts: Texts, core: CoreBridge? = nil) {
         self.core = core
@@ -39,11 +43,12 @@ final class AdminPinViewController: UIViewController {
         card.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(card)
 
-        let title = UILabel()
-        title.text = texts.t("admin.pin_prompt")
-        title.font = .systemFont(ofSize: 24, weight: .semibold)
-        title.textColor = .white
-        title.textAlignment = .center
+        settingPassword = core.map { $0.supportsAdminPassword && !$0.adminPasswordIsSet } ?? false
+        promptLabel.text = texts.t(settingPassword ? "admin.password_set_prompt"
+                                                   : "admin.pin_prompt")
+        promptLabel.font = .systemFont(ofSize: 24, weight: .semibold)
+        promptLabel.textColor = .white
+        promptLabel.textAlignment = .center
 
         display.font = UIFont.monospacedDigitSystemFont(ofSize: 34, weight: .medium)
         display.textColor = .white
@@ -55,7 +60,7 @@ final class AdminPinViewController: UIViewController {
         errorLabel.textAlignment = .center
         errorLabel.text = " "
 
-        let stack = UIStackView(arrangedSubviews: [title, display, errorLabel])
+        let stack = UIStackView(arrangedSubviews: [promptLabel, display, errorLabel])
         stack.axis = .vertical
         stack.spacing = 10
         stack.translatesAutoresizingMaskIntoConstraints = false
@@ -126,25 +131,41 @@ final class AdminPinViewController: UIViewController {
     private func submit() {
         if Date() < AdminPinViewController.lockedUntil {
             errorLabel.text = texts.t("admin.locked")
-            pin = ""
-            display.text = ""
+            clearEntry()
             return
         }
-        if let accepted = core?.verifyAdminPassword(pin) {
-            if accepted {
-                AdminPinViewController.fails = 0
-                AdminPinViewController.retireLegacyDigest()
-                let cb = onUnlocked
-                dismiss(animated: true) { cb?() }
-                return
-            }
+        if settingPassword {
+            setFirstPassword()
+            return
+        }
+        switch core?.verifyAdminPassword(pin) ?? .unavailable {
+        case .accepted:
+            AdminPinViewController.fails = 0
+            AdminPinViewController.retireLegacyDigest()
+            unlock()
+            return
+        case .wrong:
             // Core owns the lockout in this path; the local counter only shapes the message.
             AdminPinViewController.fails += 1
             errorLabel.text = AdminPinViewController.fails >= 5 ? texts.t("admin.locked")
                 : texts.t("admin.pin_wrong")
-            pin = ""
-            display.text = ""
+            clearEntry()
             return
+        case .lockedOut:
+            // Core has stopped answering for everyone; the old local digest must not become a
+            // second way past that.
+            AdminPinViewController.retireLegacyDigest()
+            errorLabel.text = texts.t("admin.locked")
+            clearEntry()
+            return
+        case .unset:
+            settingPassword = true
+            promptLabel.text = texts.t("admin.password_set_prompt")
+            errorLabel.text = " "
+            clearEntry()
+            return
+        case .unavailable:
+            break
         }
         var expected = AdminPinViewController.sha256Hex("000000")
         let pinFile = AdminPinViewController.legacyDigestPath()
@@ -166,6 +187,36 @@ final class AdminPinViewController: UIViewController {
         } else {
             errorLabel.text = texts.t("admin.pin_wrong")
         }
+        clearEntry()
+    }
+
+    /// The set-once path: an empty current password is accepted only while the cluster has none,
+    /// so this is the same trust-on-first-use the first web login takes.
+    private func setFirstPassword() {
+        guard pin.count >= 4 else {
+            errorLabel.text = texts.t("admin.password_too_short")
+            return
+        }
+        switch core?.setAdminPassword(current: "", new: pin) ?? .failed {
+        case .ok:
+            AdminPinViewController.fails = 0
+            AdminPinViewController.retireLegacyDigest()
+            unlock()
+        case .lockedOut:
+            errorLabel.text = texts.t("admin.locked")
+            clearEntry()
+        default:
+            errorLabel.text = texts.t("settings.password_failed")
+            clearEntry()
+        }
+    }
+
+    private func unlock() {
+        let callback = onUnlocked
+        dismiss(animated: true) { callback?() }
+    }
+
+    private func clearEntry() {
         pin = ""
         display.text = ""
     }

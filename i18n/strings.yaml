@@ -858,7 +858,6 @@ ring.open_unconfigured: { ja: "この門口機には開錠の動作が設定さ�
 ring.quick_replies: { ja: "クイック返信", en: "Quick replies", zh: "快捷回复" }
 incall.end_call: { ja: "通話終了", en: "End call", zh: "结束通话" }
 video.stats: { ja: "{codec} · {latency} ms · ±{jitter} ms · {fps} fps · drop {dropped}", en: "{codec} · {latency} ms · ±{jitter} ms · {fps} fps · drop {dropped}", zh: "{codec} · {latency} ms · ±{jitter} ms · {fps} fps · drop {dropped}" }
-admin.password_set_prompt: { ja: "管理パスワードを設定してください", en: "Set the admin password", zh: "请设置管理密码" }
 admin.password_set_failed: { ja: "管理パスワードを設定できませんでした", en: "Couldn't set the admin password", zh: "无法设置管理密码" }
 settings.device_door: { ja: "担当ドア", en: "Assigned door", zh: "负责门口" }
 settings.role_restart_notice: { ja: "役割を変えると、アプリを開き直したときに切り替わります", en: "A new role takes effect the next time the app is opened", zh: "更改角色后，下次打开应用时生效" }
@@ -902,6 +901,10 @@ ring.unlock_unconfigured: { ja: "この門口機には開錠の操作が設定�
 version.line: { ja: "core {core} · app {app}", en: "core {core} · app {app}", zh: "core {core} · app {app}" }
 
 # Batch 2 rounds 2/4/7: appearance, automatic theme, announcement targets, unlock, purposes.
+ring.monitor_two_line_on: { ja: "モニター\nON", en: "Monitor\nOn", zh: "监听\n开" }
+ring.monitor_two_line_off: { ja: "モニター\nOFF", en: "Monitor\nOff", zh: "监听\n关" }
+ring.mic_two_line_on: { ja: "マイク\nON", en: "Mic\nOn", zh: "麦克风\n开" }
+ring.mic_two_line_off: { ja: "マイク\nOFF", en: "Mic\nOff", zh: "麦克风\n关" }
 theme.low_contrast: { ja: "読みにくい可能性があります ({ratio}:1)", en: "This may be hard to read ({ratio}:1)", zh: "可能不易辨认（{ratio}:1）" }
 theme.appearance: { ja: "外観", en: "Appearance", zh: "外观" }
 theme.appearance_auto_system: { ja: "端末の設定に合わせる", en: "Follow the device", zh: "跟随设备" }
@@ -927,8 +930,6 @@ theme.region_footer: { ja: "フッター", en: "Footer", zh: "页脚" }
 theme.region_notice: { ja: "お知らせ", en: "Announcement", zh: "公告" }
 theme.background_source_image: { ja: "背景画像の平均色", en: "Averaged from the background image", zh: "取自背景图片的平均色" }
 theme.background_source_color: { ja: "背景色", en: "Background colour", zh: "背景颜色" }
-notice.target: { ja: "表示先", en: "Show on", zh: "显示位置" }
-notice.target_global: { ja: "全体", en: "Everywhere", zh: "全部" }
 notice.scope_global: { ja: "全体のお知らせ", en: "House-wide", zh: "全局公告" }
 notice.presets_title: { ja: "お知らせの定型文", en: "Announcement presets", zh: "公告模板" }
 notice.preset_add: { ja: "定型文を追加", en: "Add a preset", zh: "添加模板" }
@@ -1008,3 +1009,5 @@ settings.password_mismatch: { ja: "2 つの入力が一致しません", en: "Th
 settings.password_empty: { ja: "パスワードを入力してください", en: "Enter a password", zh: "请输入密码" }
 settings.password_set_failed: { ja: "パスワードを設定できませんでした", en: "Couldn't set the password", zh: "无法设置密码" }
 settings.password_length: { ja: "パスワードは {min}〜{max} 文字にしてください", en: "The password must be {min}–{max} characters", zh: "密码需为 {min}–{max} 个字符" }
+admin.password_set_prompt: { ja: "管理パスワードを設定", en: "Set the admin password", zh: "设置管理密码" }
+admin.password_too_short: { ja: "4 文字以上にしてください", en: "Use at least four characters", zh: "请至少输入四位" }

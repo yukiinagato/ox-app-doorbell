@@ -21,8 +21,13 @@ final class ConfigWriter {
     }
 
     enum Result {
-        case ok
+        /// The write committed. `contrasts` carries the ratios Core measured, which are never a
+        /// refusal: §5.2 is explicit that a colour an administrator typed is saved and only
+        /// commented on.
+        case ok(contrasts: [Double])
         case failed(String)
+
+        static var ok: Result { return .ok(contrasts: []) }
 
         var isOk: Bool { if case .ok = self { return true }; return false }
     }
@@ -73,9 +78,15 @@ final class ConfigWriter {
                 }
                 return (operation.key, encoded)
             }
-            if let applied = core.applyConfigBatch(opsJson, operations: pairs) {
+            if let outcome = core.applyConfigBatch(opsJson, operations: pairs) {
+                let contrasts = ConfigWriter.contrasts(outcome.warnings)
                 DispatchQueue.main.async {
-                    completion(applied ? .ok : .failed("config_persistence_failed"))
+                    guard outcome.ok else {
+                        completion(.failed(outcome.error.isEmpty ? "config_persistence_failed"
+                            : outcome.error))
+                        return
+                    }
+                    completion(.ok(contrasts: contrasts))
                 }
                 return
             }
@@ -93,12 +104,25 @@ final class ConfigWriter {
                 payload = object
             }
             let ok = status == 200 && ConfigUtil.bool(payload, "ok", false)
+            let warnings = (payload["warnings"] as? [[String: Any]]) ?? []
             // 401 means this Core has neither the programmatic entry point nor an administrator
             // session for the shell; both read as "this node cannot apply the write".
             let error = ConfigUtil.str(payload, "err")
                 ?? (status == 404 || status == 401 ? "batch_unavailable" : "request_failed")
-            DispatchQueue.main.async { completion(ok ? .ok : .failed(error)) }
+            let contrasts = ConfigWriter.contrasts(warnings)
+            DispatchQueue.main.async {
+                completion(ok ? .ok(contrasts: contrasts) : .failed(error))
+            }
         }.resume()
+    }
+
+    /// The ratios out of Core's warning array. Both transports return the same shape, so one
+    /// place reads it; the wording is left to `message`, which has the catalog.
+    private static func contrasts(_ warnings: [[String: Any]]) -> [Double] {
+        return warnings.compactMap { warning in
+            let ratio = ConfigUtil.double(warning, "contrast", 0)
+            return ratio > 0 ? ratio : nil
+        }
     }
 
     /// JSON encoding of one value, as Core's single-key entry point expects it.
@@ -123,8 +147,14 @@ final class ConfigWriter {
     /// endpoint, because that failure means the node is too old for atomic writes.
     static func message(_ texts: Texts, _ result: Result) -> String {
         switch result {
-        case .ok:
-            return texts.t("settings.saved")
+        case .ok(let contrasts):
+            // The write went through: the warning is shown next to the confirmation, never
+            // instead of it.
+            guard !contrasts.isEmpty else { return texts.t("settings.saved") }
+            let advice = contrasts
+                .map { texts.t("theme.contrast_warning", String(format: "%.1f", $0)) }
+                .joined(separator: " · ")
+            return texts.t("settings.saved") + " · " + advice
         case .failed(let code):
             if code == "batch_unavailable" { return texts.t("admin.atomic_batch_unavailable") }
             return texts.t("settings.save_failed")
