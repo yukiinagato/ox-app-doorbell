@@ -511,6 +511,11 @@ DB_API void db_core_pairing_mode(db_core* c, int seconds) {
   if (c && c->node) c->node->setPairingMode(seconds);
 }
 
+DB_API char* db_core_parse_pair_uri_json(db_core* c, const char* uri) {
+  if (!c || !c->node || !uri) return nullptr;
+  return dupString(c->node->parsePairUriJson(uri));
+}
+
 DB_API char* db_core_mint_join_token_json(db_core* c, int seconds) {
   if (!c || !c->node) return nullptr;
   return dupString(c->node->mintJoinTokenJson(seconds));

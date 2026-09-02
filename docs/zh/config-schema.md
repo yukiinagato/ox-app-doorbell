@@ -476,6 +476,30 @@ anti-entropy 会把集群的全部事件历史一次性交给新加入的节点�
 因此保持默认设置的室内机不得自行接听。希望当作对讲机使用的家庭仍可按设备设置为 `auto`，
 此时记录也会归属到该设备。
 
+### 配对二维码的载荷
+
+用于加入集群的二维码是一个自定义 scheme 的 URI，因此已安装应用的设备扫描后会直接进入加入流程，
+而不是打开浏览器：
+
+```
+doorbell://pair?host=<ip:port>&pin=<6 位数字>&exp=<unix 秒>&cluster=<名称>
+```
+
+`host` 与 `pin` 为必填。`exp` 是绝对 Unix 秒，扫描方无需知道二维码何时生成即可拒绝过期的码。
+`cluster` 是供人阅读的集群名称。取值按 RFC 3986 的 unreserved 集合做百分号编码，
+因此含空格或日文的名称也能原样往返；`+` 是字面的加号，而非空格。
+仅定义这四个键，解析器会**忽略**其他键，因此格式日后可新增键而不破坏已发布的外壳。
+
+该字符串由 core 生成：请读取 `db_core_mint_join_token_json`、`db_core_start_pairing_json`、
+`POST /api/join-token`、`POST /api/pairing/start`，或 `db_core_pairing_json` /
+`GET /api/pairing` 的 `token` 对象中的 `uri` 字段。外壳不得自行拼接该字符串。
+同时务必在二维码旁继续显示 host 与 PIN——用普通相机应用扫描的人需要读取并手动输入它们。
+
+`db_core_parse_pair_uri_json` 用于校验扫描到的内容，使各平台得到一致结论：返回
+`{"ok":true,"host":…,"pin":…,"exp":…,"cluster":…}` 或 `{"ok":false,"err":…}`，
+其中 `err` 为 `bad_scheme`、`missing_pin`、`missing_host`、`expired` 之一。
+过期判定在 core 运行时使用校正后的集群时间，否则使用平台时钟，因为外壳可能在 core 启动前扫描。
+
 ## 时间、电源与公告
 
 内置时区表位于 `core/src/util/tz.{h,cpp}`，覆盖设置界面提供的亚洲、欧洲、美洲、大洋洲与非洲时区。

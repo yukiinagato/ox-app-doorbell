@@ -1714,3 +1714,81 @@ TEST_CASE("admin API: a door station with no working camera keeps serving HTTP a
             .find("HTTP/1.1 200") == 0);
   node.stop();
 }
+
+TEST_CASE("admin API: the pairing QR payload comes from core, on every surface that mints a PIN") {
+  std::mt19937 rng(static_cast<uint32_t>(::getpid()) ^ 0x9b21u);
+  const int mesh_port = adminFreePort(rng);
+  const int http_port = adminFreePort(rng);
+  REQUIRE(mesh_port > 0);
+  REQUIRE(http_port > 0);
+
+  NodeOptions options;
+  options.data_dir = ":memory:";
+  options.name = "qr-host";
+  options.role = "indoor_panel";
+  options.listen_addr = "127.0.0.1:" + std::to_string(mesh_port);
+  options.advertise_addr = "127.0.0.1:" + std::to_string(mesh_port);
+  options.psk.fill(0x77);
+  options.enable_beacon = false;
+  options.http_port = http_port;
+  options.mesh_timing_template = adminTiming();
+  options.use_mesh_timing_template = true;
+  Node node(options);
+  REQUIRE(node.start());
+  const std::string session = adminLogin(http_port);
+  // A name a shell must not have to encode itself.
+  node.setConfigKey("cluster.name", "\"京阪 ハウス\"");
+
+  auto checkUri = [&](const std::string& uri, const std::string& pin) {
+    CAPTURE(uri);
+    CHECK(uri.rfind("doorbell://pair?", 0) == 0);
+    CHECK(uri.find("\xe4\xba\xac") == std::string::npos);  // percent-encoded, never raw
+    auto parsed = bodyJson(adminReq(http_port, "GET", "/api/status", "", session));
+    (void)parsed;
+    auto round_trip = json::parse(node.parsePairUriJson(uri));
+    REQUIRE(round_trip);
+    CHECK(json::getBool(round_trip.get(), "ok"));
+    CHECK(json::getString(round_trip.get(), "pin") == pin);
+    CHECK(json::getString(round_trip.get(), "host") ==
+          "127.0.0.1:" + std::to_string(mesh_port));
+    CHECK(json::getString(round_trip.get(), "cluster") == "京阪 ハウス");
+    CHECK(json::getInt(round_trip.get(), "exp") > 0);
+  };
+
+  // Minting a PIN.
+  auto minted = bodyJson(adminReq(http_port, "POST", "/api/join-token", "{}", session));
+  REQUIRE(minted);
+  REQUIRE(json::getBool(minted.get(), "ok"));
+  checkUri(json::getString(minted.get(), "uri"), json::getString(minted.get(), "pin"));
+
+  // The bulk-add button.
+  auto started = bodyJson(adminReq(http_port, "POST", "/api/pairing/start",
+                                   "{\"seconds\":600}", session));
+  REQUIRE(started);
+  REQUIRE(json::getBool(started.get(), "ok"));
+  checkUri(json::getString(started.get(), "uri"), json::getString(started.get(), "pin"));
+
+  // The PIN card in the pairing snapshot, which is what the admin page renders.
+  auto pairing = bodyJson(adminReq(http_port, "GET", "/api/pairing", "", session));
+  REQUIRE(pairing);
+  const cJSON* token = json::get(pairing.get(), "token");
+  REQUIRE(cJSON_IsObject(token));
+  REQUIRE(json::getBool(token, "active"));
+  checkUri(json::getString(token, "uri"), json::getString(token, "pin"));
+  // The host and PIN stay printed beside the code for a plain camera app.
+  CHECK_FALSE(json::getString(token, "host").empty());
+  CHECK(json::getString(token, "pin").size() == 6);
+
+  // A scanned code is validated the same way everywhere, including the failures.
+  auto rejected = json::parse(node.parsePairUriJson("https://example.invalid/pair"));
+  REQUIRE(rejected);
+  CHECK_FALSE(json::getBool(rejected.get(), "ok"));
+  CHECK(json::getString(rejected.get(), "err") == "bad_scheme");
+  auto no_pin = json::parse(node.parsePairUriJson("doorbell://pair?host=10.0.1.10%3A47172"));
+  CHECK(json::getString(no_pin.get(), "err") == "missing_pin");
+  auto stale = json::parse(node.parsePairUriJson(
+      "doorbell://pair?host=10.0.1.10%3A47172&pin=123456&exp=1000000000"));
+  CHECK(json::getString(stale.get(), "err") == "expired");
+
+  node.stop();
+}

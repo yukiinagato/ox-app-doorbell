@@ -529,6 +529,33 @@ that a person picked up. An indoor panel left on the default must therefore not 
 A household that wants an intercom can still set `auto` per device, and the history then
 attributes the call to that device.
 
+### The pairing QR payload
+
+The QR a device scans to join is a custom-scheme URI, so a device that already has the app
+installed opens straight into the join flow instead of a browser:
+
+```
+doorbell://pair?host=<ip:port>&pin=<6 digits>&exp=<unix seconds>&cluster=<name>
+```
+
+`host` and `pin` are required. `exp` is an absolute Unix second, so a scanner rejects a stale code
+without having to know when it was produced. `cluster` is the human-readable cluster name. Values
+are percent-encoded with the RFC 3986 unreserved set, so a name with spaces or Japanese survives
+the round trip; `+` is a literal plus, never a space. Only these four keys are defined and a
+parser **ignores** any other, so the format can gain one without breaking shells already shipped.
+
+Core builds it: read the `uri` field of `db_core_mint_join_token_json`,
+`db_core_start_pairing_json`, `POST /api/join-token`, `POST /api/pairing/start`, or the `token`
+object of `db_core_pairing_json` / `GET /api/pairing`. Never assemble the string in a shell.
+Always keep the host and PIN printed beside the code as well — someone scanning with a plain
+camera app has to be able to read and type them.
+
+`db_core_parse_pair_uri_json` validates a scanned code so every platform reaches the same verdict:
+`{"ok":true,"host":…,"pin":…,"exp":…,"cluster":…}` or `{"ok":false,"err":…}` with `err` one of
+`bad_scheme`, `missing_pin`, `missing_host`, `expired`. The expiry is checked against corrected
+cluster time when core is running, and against the platform clock otherwise, because a shell may
+scan a code before core has started.
+
 ## Time, power, and announcements
 
 The bundled time-zone table lives in `core/src/util/tz.{h,cpp}` and covers the zones the settings

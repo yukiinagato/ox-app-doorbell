@@ -462,3 +462,23 @@ Handler exceptions are contained at both boundaries: one that escapes a route ha
 reaches the civetweb C frame answers `500` instead of terminating the process. A handler that
 exceeds its five-second budget is logged with its URI, because a stalled runloop shows up there
 first, one worker at a time.
+
+## The pairing QR payload
+
+`POST /api/join-token` and `POST /api/pairing/start` both return a `uri` alongside `host`, `pin`
+and `expires_s`, and `GET /api/pairing`'s `token` object carries the same field while a PIN is
+live:
+
+```
+doorbell://pair?host=<ip:port>&pin=<6 digits>&exp=<unix seconds>&cluster=<name>
+```
+
+Render the QR from that string and never assemble it in the client — core owns the format so a
+device with the app installed opens a scanned code straight into the join flow. `host` and `pin`
+are required, `exp` is an absolute Unix second, and values are percent-encoded (a `+` is a literal
+plus, not a space), so a cluster name with spaces or Japanese survives. Unknown query keys are
+ignored by parsers, so the format can gain one without breaking shipped clients.
+
+Keep the host and PIN printed beside the code: someone scanning with a plain camera app reads and
+types them instead. `db_core_parse_pair_uri_json` validates a scanned code the same way on every
+platform, returning `bad_scheme`, `missing_pin`, `missing_host` or `expired` on failure.

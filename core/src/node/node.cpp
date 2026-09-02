@@ -34,6 +34,7 @@
 #include "util/common.h"
 #include "util/ids.h"
 #include "util/json.h"
+#include "util/pair_uri.h"
 #include "util/log.h"
 #include "util/sntp.h"
 #include "util/tz.h"
@@ -7087,7 +7088,18 @@ struct Node::Impl {
     }
 
     json::Doc token = json::parse(mesh->tokenJson());
-    if (token) json::setItem(o.get(), "token", std::move(token));
+    if (token) {
+      // The PIN card renders its QR from this field, beside the printed host and PIN that a
+      // plain camera app can still read.
+      if (json::getBool(token.get(), "active")) {
+        const std::string pin = json::getString(token.get(), "pin");
+        const std::string host = json::getString(token.get(), "host");
+        if (!pin.empty() && !host.empty())
+          json::set(token.get(), "uri",
+                    pairUriFor(host, pin, json::getInt(token.get(), "expires_s", 0)));
+      }
+      json::setItem(o.get(), "token", std::move(token));
+    }
 
     json::Doc pend = json::parse(mesh->pendingJson());
     if (pend) json::setItem(o.get(), "pending", std::move(pend));
@@ -7113,13 +7125,26 @@ struct Node::Impl {
       json::setBool(result.get(), "ok", false);
       json::set(result.get(), "err", "pairing_unavailable");
     } else {
+      const int64_t expires_s =
+          std::max<int64_t>(0, (token.expires_mono - clock->monoMs()) / 1000);
       json::setBool(result.get(), "ok", true);
       json::set(result.get(), "host", host);
       json::set(result.get(), "pin", token.pin);
-      json::set(result.get(), "expires_s",
-                std::max<int64_t>(0, (token.expires_mono - clock->monoMs()) / 1000));
+      json::set(result.get(), "expires_s", expires_s);
+      // Shells render the QR from this and never assemble it themselves, so one definition of
+      // the format serves every platform.
+      json::set(result.get(), "uri", pairUriFor(host, token.pin, expires_s));
     }
     return json::dump(result.get());
+  }
+
+  // doorbell://pair?... for the current PIN. The expiry is absolute so a scanned code can be
+  // rejected without the scanner having to know when it was produced.
+  std::string pairUriFor(const std::string& host, const std::string& pin,
+                         int64_t expires_s) const {
+    const int64_t exp = expires_s > 0 ? hlc->correctedWallMs() / 1000 + expires_s : 0;
+    return pair_uri::build(host, pin,
+                           exp, json::getString(json::get(cfg.get(), "cluster"), "name"));
   }
 
   // The explicit "add several devices" window: open pairing mode, then mint a PIN so the same
@@ -10327,6 +10352,28 @@ std::string Node::startPairingJson(int seconds) {
   std::string out;
   impl_->loop->callSync([&] { out = impl_->startPairingJsonOnLoop(seconds); });
   return out;
+}
+
+std::string Node::parsePairUriJson(const std::string& uri) {
+  int64_t now_unix_s = 0;
+  // Corrected cluster time when the node is running, the platform clock otherwise: a shell may
+  // scan a code before core has started.
+  if (!impl_->loop->callSync([&] { now_unix_s = impl_->hlc->correctedWallMs() / 1000; }))
+    now_unix_s = std::chrono::duration_cast<std::chrono::seconds>(
+                     std::chrono::system_clock::now().time_since_epoch())
+                     .count();
+  const pair_uri::Parsed parsed = pair_uri::parse(uri, now_unix_s);
+  auto out = json::obj();
+  json::setBool(out.get(), "ok", parsed.ok);
+  if (!parsed.ok) {
+    json::set(out.get(), "err", parsed.err);
+    return json::dump(out.get());
+  }
+  json::set(out.get(), "host", parsed.host);
+  json::set(out.get(), "pin", parsed.pin);
+  json::set(out.get(), "exp", parsed.exp);
+  json::set(out.get(), "cluster", parsed.cluster);
+  return json::dump(out.get());
 }
 
 std::string Node::mintJoinTokenJson(int seconds) {

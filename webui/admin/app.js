@@ -2070,6 +2070,9 @@ var AdminLogic = (function () {
         active: tokenActive,
         pin: tokenActive ? String(token.pin || "") : "",
         host: String(token.host || self.addr || ""),
+        // Core defines the QR payload (doorbell://pair?...) so a scanning device opens straight
+        // into the join flow. The page renders whatever core published and never builds it.
+        uri: tokenActive ? String(token.uri || "") : "",
         expires_s: tokenActive ? Math.max(0, Math.round(num(token.expires_s, 0))) : 0,
         attemptsLeft: tokenActive ? Math.max(0, Math.round(num(token.attempts_left, 0))) : 0
       },
@@ -2592,12 +2595,21 @@ if (typeof document !== "undefined") (function () {
               connected_count: MOCK_STATUS.peers.length - 1 },
       token: { active: active, expires_s: active ? Math.round((MOCK_PAIR.tokenUntil - now) / 1000) : 0,
                attempts_left: active ? MOCK_PAIR.tokenAttempts : 0,
-               host: "10.10.38.9:47172", pin: active ? MOCK_PAIR.tokenPin : undefined },
+               host: "10.10.38.9:47172", pin: active ? MOCK_PAIR.tokenPin : undefined,
+               uri: active ? mockPairUri() : undefined },
       pending: { pairing_mode: MOCK_PAIR.modeUntil > now,
                  pairing_mode_left_s: Math.max(0, Math.round((MOCK_PAIR.modeUntil - now) / 1000)),
                  auto_added_count: MOCK_PAIR.autoAdded,
                  devices: paired ? devices : [] }
     };
+  }
+
+  // Core builds this for real; the mock mirrors the format so the card renders standalone.
+  function mockPairUri() {
+    return "doorbell://pair?host=" + encodeURIComponent("10.10.38.9:47172") +
+           "&pin=" + MOCK_PAIR.tokenPin +
+           "&exp=" + Math.round((MOCK_PAIR.tokenUntil || Date.now() + 90000) / 1000) +
+           "&cluster=" + encodeURIComponent("京阪ハウス");
   }
 
   function mockPairMintToken() {
@@ -2964,7 +2976,8 @@ if (typeof document !== "undefined") (function () {
         MOCK_PAIR.modeUntil = new Date().getTime() + 600000;
         MOCK_PAIR.autoAdded = 0;
       }
-      return ok({ ok: true, host: "10.10.38.9:47172", pin: MOCK_PAIR.tokenPin, expires_s: 90 });
+      return ok({ ok: true, host: "10.10.38.9:47172", pin: MOCK_PAIR.tokenPin, expires_s: 90,
+                  uri: mockPairUri() });
     }
     if (p === "/api/pairing/mode") {
       if (MOCK_PAIR.state !== "ready")
@@ -6031,6 +6044,11 @@ if (typeof document !== "undefined") (function () {
              "</button></div>";
     }
     var left = L.pairClock(m.token.expires_s);
+    // The code is for a device running the app; the printed host and PIN below it are for
+    // someone scanning with a plain camera app, who has to read and type them.
+    if (m.token.uri)
+      h += "<div style='text-align:center; margin-bottom:10px'>" +
+           "<canvas id='pairCodeQr'></canvas></div>";
     h += "<div class='frow'><label class='flab'>" + esc(t("pair.address_label")) + "</label>" +
          "<div class='pairaddr'><span class='mono' id='pairHost'>" + esc(m.token.host) +
          "</span><button class='btn2 small' data-pair='copyhost'>" + esc(t("pair.copy")) +
@@ -6140,6 +6158,7 @@ if (typeof document !== "undefined") (function () {
     el.innerHTML = m.onboarding ? pairOnboardingHtml(m) : pairPanelHtml(m);
     pairBind(el);
     if (m.qrText && $("#pairQr")) drawPairQr($("#pairQr"), m.qrText);
+    if (m.token.uri && $("#pairCodeQr")) drawPairQr($("#pairCodeQr"), m.token.uri);
     var again = focusId ? $("#" + focusId) : null;
     if (again) {
       again.focus();

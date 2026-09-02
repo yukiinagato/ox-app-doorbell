@@ -337,6 +337,7 @@ DB_API char* db_core_capabilities_json(db_core* c);
  *  "psk_source":"secure_store|boot_plaintext|none","psk_ref":"secret:mesh.psk"|null,"role":"...",
  *  "self":{id,addr,name,role,pk,model,platform,sw},
  *  "pair_qr":"doorbell-pair:<addr>|<id>|<pk>",
+ *  "token":{…,"uri":"doorbell://pair?host=…&pin=…&exp=…&cluster=…"} while a PIN is live,
  *  "home":{"member_count":int,"connected_count":int},
  *  "token":{"active":bool,"expires_s":int,"attempts_left":int,"host":"<addr>","pin":"<6>"},
  *  "pending":{"pairing_mode":bool,"pairing_mode_left_s":int,"auto_added_count":int,
@@ -386,6 +387,31 @@ DB_API char* db_core_start_pairing_json(db_core* c, int seconds);
  *   {"ok":true,"host":"10.0.1.10:47172","pin":"123456","expires_s":600}
  * or {"ok":false,"err":"host_unpaired"|"pairing_unavailable"}. Release with db_free. */
 DB_API char* db_core_mint_join_token_json(db_core* c, int seconds);
+
+/* ---- The pairing QR payload ----
+ * One definition of the format, so a device with the app installed opens a scanned code straight
+ * into the join flow and every shell renders the same thing:
+ *
+ *   doorbell://pair?host=<ip:port>&pin=<6 digits>&exp=<unix seconds>&cluster=<name>
+ *
+ * host and pin are required; exp is absolute, so a scanner can reject a stale code without
+ * knowing when it was produced; cluster is the human-readable cluster name. Values are
+ * percent-encoded with the RFC 3986 unreserved set, so a name with spaces or Japanese survives
+ * the round trip -- "+" is a literal plus, never a space. Only these four keys are defined and a
+ * parser ignores any other, so the format can gain one without breaking shipped shells.
+ *
+ * Render the QR from the "uri" field of db_core_mint_join_token_json,
+ * db_core_start_pairing_json, POST /api/join-token, POST /api/pairing/start, or
+ * db_core_pairing_json's token object. Never assemble the string in a shell. Keep the host and
+ * PIN printed beside the code as well: someone scanning with a plain camera app needs to be able
+ * to read and type them.
+ *
+ * db_core_parse_pair_uri_json validates a scanned code the same way everywhere. It returns
+ *   {"ok":true,"host":"10.0.1.10:47172","pin":"123456","exp":1772000000,"cluster":"Ox House"}
+ * or {"ok":false,"err":"bad_scheme"|"missing_pin"|"missing_host"|"expired"}. The expiry is
+ * checked against corrected cluster time when core is running and against the platform clock
+ * otherwise, because a shell may scan a code before core has started. Release with db_free. */
+DB_API char* db_core_parse_pair_uri_json(db_core* c, const char* uri);
 /* Request that an indoor-panel administrator remove one connected peer. The peer receives an
  * authenticated local-reset command and acknowledges it through its UI. */
 DB_API void db_core_remove_device(db_core* c, const char* node_id);

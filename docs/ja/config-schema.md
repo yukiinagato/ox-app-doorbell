@@ -490,6 +490,33 @@ anti-entropy は参加したノードにクラスタのイベント履歴をま�
 という記録である。したがって既定のままの室内機が自分で応答してはならない。インターコムとして
 使いたい世帯は端末ごとに `auto` を設定でき、その場合は履歴もその端末に帰属する。
 
+### ペアリング QR のペイロード
+
+参加のために読み取る QR はカスタムスキームの URI である。アプリが既に入っている端末なら、
+ブラウザではなく参加フローが直接開く。
+
+```
+doorbell://pair?host=<ip:port>&pin=<6 桁>&exp=<unix 秒>&cluster=<名前>
+```
+
+`host` と `pin` は必須。`exp` は絶対 Unix 秒なので、読み取り側は「いつ作られたか」を知らなくても
+期限切れを拒否できる。`cluster` は人が読むクラスタ名。値は RFC 3986 の unreserved 集合で
+percent-encode するため、空白や日本語を含む名前もそのまま往復する。`+` は空白ではなく
+文字どおりのプラス。定義されるキーはこの 4 つだけで、パーサは**それ以外を無視する**。
+これにより、既に出荷したシェルを壊さずにキーを追加できる。
+
+生成するのは core 側である。`db_core_mint_join_token_json`、`db_core_start_pairing_json`、
+`POST /api/join-token`、`POST /api/pairing/start`、または `db_core_pairing_json` /
+`GET /api/pairing` の `token` オブジェクトの `uri` を読むこと。シェルで文字列を組み立てては
+ならない。また、QR の横に host と PIN を必ず印字しておくこと。普通のカメラアプリで読む人は
+それを読んで入力する必要がある。
+
+`db_core_parse_pair_uri_json` は読み取った内容を検証し、どのプラットフォームでも同じ判定に
+なるようにする。`{"ok":true,"host":…,"pin":…,"exp":…,"cluster":…}` か
+`{"ok":false,"err":…}` を返し、`err` は `bad_scheme` / `missing_pin` / `missing_host` /
+`expired` のいずれか。期限判定には core 稼働中なら補正済みクラスタ時刻を、そうでなければ
+プラットフォームの時計を使う。core 起動前に読み取ることがあるためである。
+
 ## 時刻・電源・お知らせ
 
 同梱のタイムゾーン表は `core/src/util/tz.{h,cpp}` にあり、設定 UI が提示するアジア・ヨーロッパ・
