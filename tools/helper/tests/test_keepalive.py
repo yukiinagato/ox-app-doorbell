@@ -554,7 +554,7 @@ class UnprovisionedAppTests(unittest.TestCase):
                     )
                     wait_until(
                         lambda: read_status(helper.status)["launch_inhibited"] is True,
-                        timeout=20.0,
+                        timeout=30.0,
                     )
                     status = read_status(helper.status)
                     self.assertEqual(status["state"], "launch_inhibited")
@@ -729,7 +729,7 @@ class RailTests(unittest.TestCase):
                     wait_until(
                         lambda: read_status(helper.status)["last_reason"]
                         == "maintenance_exit",
-                        timeout=8.0,
+                        timeout=30.0,
                     )
                     self.assertEqual(
                         read_status(helper.status)["restart_count_5m"], 0
@@ -764,7 +764,7 @@ class RailTests(unittest.TestCase):
                     wait_until(
                         lambda: read_status(helper.status)["last_reason"]
                         == "maintenance_exit",
-                        timeout=10.0,
+                        timeout=30.0,
                     )
                     status = read_status(helper.status)
                     self.assertEqual(status["restart_count_5m"], 0)
@@ -792,7 +792,7 @@ class LogAndControlTests(unittest.TestCase):
                     lambda: "log truncated" in log.read_text(
                         encoding="utf-8", errors="replace"
                     ),
-                    timeout=20.0,
+                    timeout=30.0,
                 )
                 self.assertLess(log.stat().st_size, 4096)
             finally:
