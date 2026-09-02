@@ -2,7 +2,8 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:pairing="clr-namespace:DoorbellApp.Pairing"
-        Title="ドアホン" Background="{StaticResource Bg}"
+        xmlns:ui="clr-namespace:DoorbellApp.Ui"
+        Title="ドアホン" Background="{DynamicResource Bg}"
         WindowStyle="None" ResizeMode="NoResize" WindowState="Maximized"
         Topmost="False" Cursor="Arrow" FontFamily="Yu Gothic UI, Meiryo UI, Segoe UI">
     <Grid ClipToBounds="True">
@@ -13,107 +14,251 @@
             <Grid.RenderTransform>
                 <TranslateTransform x:Name="IdleShift"/>
             </Grid.RenderTransform>
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="*"/>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
-            </Grid.RowDefinitions>
-            <StackPanel Grid.Row="0" Margin="0,40,0,0" HorizontalAlignment="Center">
-                <TextBlock x:Name="ClockText" FontSize="72" FontWeight="Light"
-                           Foreground="{StaticResource Fg}" HorizontalAlignment="Center"/>
-                <TextBlock x:Name="DateText" FontSize="26" Foreground="{StaticResource Dim}"
-                           HorizontalAlignment="Center" Margin="0,4,0,0"/>
-            </StackPanel>
-            <StackPanel Grid.Row="1" VerticalAlignment="Center" HorizontalAlignment="Center">
-                <Button x:Name="CallButton" Style="{StaticResource BigButton}"
-                        MinWidth="420" MinHeight="180" Click="OnCallClick"/>
-                <Button x:Name="OpenMonitorButton" FontSize="22" Padding="28,12"
-                        Margin="0,18,0,0" Background="{StaticResource Card}"
-                        Foreground="{StaticResource Fg}" BorderBrush="{StaticResource Dim}"
-                        Visibility="Collapsed" Click="OnOpenMonitorClick"/>
-                <TextBlock x:Name="TouchHint" FontSize="24" Foreground="{StaticResource Dim}"
-                           HorizontalAlignment="Center" Margin="0,26,0,0"/>
-                <Border x:Name="SosButton" Visibility="Collapsed" Background="#C0392B"
-                        CornerRadius="16" Margin="0,44,0,0" Padding="56,18" Cursor="Hand"
-                        HorizontalAlignment="Center"
-                        MouseLeftButtonDown="OnSosDown" MouseLeftButtonUp="OnSosUp"
-                        MouseLeave="OnSosLeave">
-                    <StackPanel>
-                        <TextBlock x:Name="SosText" FontSize="32" FontWeight="Bold"
-                                   Foreground="#FFFFFF" HorizontalAlignment="Center"/>
-                        <TextBlock x:Name="SosHint" FontSize="14" Foreground="#FFD9D2"
-                                   HorizontalAlignment="Center" Margin="0,4,0,0"/>
-                        <ProgressBar x:Name="SosProgress" Height="6" Width="200" Margin="0,10,0,0"
-                                     Minimum="0" Maximum="100" Value="0" Foreground="#FFFFFF"
-                                     Background="#802A21" BorderThickness="0"/>
-                    </StackPanel>
-                </Border>
-            </StackPanel>
-            <StackPanel x:Name="PurposeSection" Grid.Row="2" Visibility="Collapsed"
-                        Margin="0,0,0,12">
-                <TextBlock x:Name="PurposeHint" FontSize="20" Foreground="{StaticResource Dim}"
-                           HorizontalAlignment="Center" Margin="0,0,0,10"/>
-                <ScrollViewer HorizontalScrollBarVisibility="Auto"
-                              VerticalScrollBarVisibility="Disabled" Margin="20,0">
-                    <UniformGrid x:Name="PurposeGrid" Columns="3" HorizontalAlignment="Center"/>
-                </ScrollViewer>
-            </StackPanel>
 
-            <Grid Grid.Row="3" Margin="20,0,20,14">
-                <StackPanel x:Name="LangBar" Orientation="Horizontal"
-                            HorizontalAlignment="Center" Visibility="Collapsed"/>
-                <TextBlock x:Name="NodeInfo" FontSize="14" Foreground="{StaticResource Dim}"
-                           HorizontalAlignment="Left" VerticalAlignment="Bottom"/>
-                <!-- Membership status is the visible entry point to the Add-device panel. -->
-                <Border x:Name="MembershipStatus" Visibility="Collapsed" Cursor="Hand"
-                        Background="{StaticResource Card}" CornerRadius="10" Padding="14,6"
-                        BorderBrush="#2A333D" BorderThickness="1" Margin="0,0,30,0"
-                        HorizontalAlignment="Right" VerticalAlignment="Bottom"
-                        MouseLeftButtonDown="OnMembershipClick">
-                    <StackPanel Orientation="Horizontal">
-                        <TextBlock x:Name="MembershipText" FontSize="14"
-                                   Foreground="{StaticResource Fg}"/>
-                        <TextBlock x:Name="MembershipBadge" FontSize="12" Margin="10,0,0,0"
-                                   VerticalAlignment="Center"
-                                   Foreground="{StaticResource Dim}"/>
-                    </StackPanel>
-                </Border>
-                <Ellipse x:Name="MeshDot" Width="12" Height="12" Fill="#5DD39E"
-                         HorizontalAlignment="Right" VerticalAlignment="Center"/>
-            </Grid>
-            <Border Width="200" Height="200" Background="Transparent"
+            <!-- Hidden 7-tap corner, drawn first so the dashboard chips above it still take
+                 their own taps; panels without a background never steal one. -->
+            <Border x:Name="SecretCorner" Width="200" Height="200" Background="Transparent"
                     HorizontalAlignment="Right" VerticalAlignment="Top"
                     MouseLeftButtonDown="OnSecretCorner"/>
+
+            <!-- B · door-station visitor screen. Row and column placement is recomputed from the
+                 window size, so the same elements serve portrait and landscape. -->
+            <Grid x:Name="VisitorHome" Margin="26,22,26,18" Visibility="Collapsed">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition x:Name="VisitorLeftColumn" Width="*"/>
+                    <ColumnDefinition x:Name="VisitorRightColumn" Width="1.2*"/>
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <StackPanel x:Name="VisitorClockBlock" Grid.Row="0" Grid.Column="0">
+                    <TextBlock x:Name="ClockText" FontSize="76" FontWeight="Light"
+                               Foreground="{DynamicResource Fg}"/>
+                    <TextBlock x:Name="DateText" FontSize="24"
+                               Foreground="{DynamicResource Dim}" Margin="0,2,0,0"/>
+                </StackPanel>
+
+                <Border x:Name="VisitorNoticeCard" Grid.Row="1" Grid.Column="0"
+                        Visibility="Collapsed" Margin="0,16,0,0" CornerRadius="12"
+                        Padding="16,12" Background="{DynamicResource Card}"
+                        BorderBrush="{DynamicResource Notice}" BorderThickness="1,1,1,4"
+                        VerticalAlignment="Top">
+                    <TextBlock x:Name="VisitorNoticeText" FontSize="22" TextWrapping="Wrap"
+                               Foreground="{DynamicResource Fg}"/>
+                </Border>
+
+                <StackPanel x:Name="LangBar" Grid.Row="2" Grid.Column="1"
+                            Orientation="Horizontal" HorizontalAlignment="Center"
+                            Margin="0,10,0,10" Visibility="Collapsed"/>
+
+                <StackPanel x:Name="VisitorCallBlock" Grid.Row="3" Grid.Column="1"
+                            VerticalAlignment="Center">
+                    <Button x:Name="CallButton" Style="{StaticResource BigButton}"
+                            MinWidth="360" MinHeight="150" Click="OnCallClick"/>
+                </StackPanel>
+
+                <TextBlock x:Name="TouchHint" Grid.Row="4" Grid.Column="1" FontSize="20"
+                           TextWrapping="Wrap" TextAlignment="Center"
+                           Foreground="{DynamicResource Dim}" Margin="0,14,0,0"/>
+
+                <StackPanel x:Name="PurposeSection" Grid.Row="5" Grid.Column="0"
+                            Grid.ColumnSpan="2" Visibility="Collapsed" Margin="0,14,0,6">
+                    <TextBlock x:Name="PurposeHint" FontSize="18"
+                               Foreground="{DynamicResource Dim}"
+                               HorizontalAlignment="Center" Margin="0,0,0,8"/>
+                    <ScrollViewer HorizontalScrollBarVisibility="Auto"
+                                  VerticalScrollBarVisibility="Disabled">
+                        <UniformGrid x:Name="PurposeGrid" Columns="3"
+                                     HorizontalAlignment="Center"/>
+                    </ScrollViewer>
+                </StackPanel>
+
+                <Grid x:Name="VisitorFooter" Grid.Row="6" Grid.Column="0" Grid.ColumnSpan="2"
+                      Margin="0,12,0,0">
+                    <TextBlock x:Name="VisitorVersionLine" FontSize="14"
+                               Foreground="{DynamicResource Dim}" HorizontalAlignment="Left"
+                               VerticalAlignment="Center"/>
+                </Grid>
+            </Grid>
+
+            <!-- A · indoor dashboard. -->
+            <Grid x:Name="DashboardHome" Margin="22,18,22,16" Visibility="Collapsed">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <Grid Grid.Row="0">
+                    <StackPanel HorizontalAlignment="Left">
+                        <TextBlock x:Name="DashClock" FontSize="52" FontWeight="Light"
+                                   Foreground="{DynamicResource Fg}"/>
+                        <TextBlock x:Name="DashDate" FontSize="16"
+                                   Foreground="{DynamicResource Dim}" Margin="0,2,0,0"/>
+                    </StackPanel>
+                    <WrapPanel x:Name="DashboardChips" Orientation="Horizontal"
+                               HorizontalAlignment="Right" VerticalAlignment="Bottom">
+                        <Border x:Name="MembershipStatus" Visibility="Collapsed" Cursor="Hand"
+                                Background="{DynamicResource Card}" CornerRadius="10"
+                                Padding="12,6" BorderBrush="{DynamicResource Line}"
+                                BorderThickness="1" Margin="5,0,0,0"
+                                MouseLeftButtonDown="OnMembershipClick">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock x:Name="MembershipText" FontSize="14"
+                                           Foreground="{DynamicResource Fg}"/>
+                                <TextBlock x:Name="MembershipBadge" FontSize="12" Margin="10,0,0,0"
+                                           VerticalAlignment="Center"
+                                           Foreground="{DynamicResource Dim}"/>
+                            </StackPanel>
+                        </Border>
+                        <Border x:Name="MissedBadge" Visibility="Collapsed" Cursor="Hand"
+                                Background="{DynamicResource Danger}" CornerRadius="10"
+                                Padding="12,6" Margin="5,0,0,0"
+                                MouseLeftButtonDown="OnMissedBadgeClick">
+                            <TextBlock x:Name="MissedBadgeText" FontSize="14" FontWeight="Bold"
+                                       Foreground="{DynamicResource OnDanger}"/>
+                        </Border>
+                        <Button x:Name="OpenMonitorButton" Style="{StaticResource ChipButton}"
+                                BorderBrush="{DynamicResource Line}" Visibility="Collapsed"
+                                Click="OnOpenMonitorClick"/>
+                        <Button x:Name="AdminEntryButton" Style="{StaticResource ChipButton}"
+                                BorderBrush="{DynamicResource Line}" Click="OnAdminEntryClick"/>
+                        <Ellipse x:Name="MeshDot" Width="12" Height="12"
+                                 Fill="{DynamicResource Ok}" Margin="10,0,0,0"
+                                 VerticalAlignment="Center"/>
+                    </WrapPanel>
+                </Grid>
+
+                <Grid x:Name="DashboardContent" Grid.Row="1" Margin="0,14,0,10">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition x:Name="DashboardLeftColumn" Width="1.4*"/>
+                        <ColumnDefinition x:Name="DashboardRightColumn" Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition x:Name="DashboardTopRow" Height="*"/>
+                        <RowDefinition x:Name="DashboardBottomRow" Height="0"/>
+                    </Grid.RowDefinitions>
+
+                    <ScrollViewer x:Name="DoorTilesPanel" Grid.Row="0" Grid.Column="0"
+                                  VerticalScrollBarVisibility="Auto"
+                                  HorizontalScrollBarVisibility="Disabled" Margin="0,0,8,0">
+                        <UniformGrid x:Name="DoorTileGrid" Columns="2"/>
+                    </ScrollViewer>
+
+                    <Border x:Name="RecentCallsPanel" Grid.Row="0" Grid.Column="1"
+                            BorderBrush="{DynamicResource Line}" BorderThickness="1"
+                            CornerRadius="12" Padding="12,10" Margin="8,0,0,0">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
+                            <Grid Grid.Row="0" Margin="0,0,0,6">
+                                <TextBlock x:Name="RecentCallsTitle" FontSize="16"
+                                           FontWeight="Bold" HorizontalAlignment="Left"
+                                           Foreground="{DynamicResource Fg}"/>
+                                <Button x:Name="SeeAllCallsButton"
+                                        Style="{StaticResource ChipButton}"
+                                        BorderBrush="{DynamicResource Line}"
+                                        HorizontalAlignment="Right" Click="OnOpenHistoryClick"/>
+                            </Grid>
+                            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto"
+                                          HorizontalScrollBarVisibility="Disabled">
+                                <StackPanel x:Name="RecentCallsList"/>
+                            </ScrollViewer>
+                        </Grid>
+                    </Border>
+                </Grid>
+
+                <Grid x:Name="DashboardFooter" Grid.Row="2">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="250"/>
+                    </Grid.ColumnDefinitions>
+                    <Border x:Name="AdminLinkCard" Grid.Column="0" Cursor="Hand"
+                            Background="{DynamicResource Card}" CornerRadius="10" Padding="12,6"
+                            BorderBrush="{DynamicResource Line}" BorderThickness="1"
+                            MouseLeftButtonDown="OnWebAdminClick">
+                        <StackPanel Orientation="Horizontal">
+                            <Image x:Name="AdminQrImage" Width="52" Height="52"
+                                   RenderOptions.BitmapScalingMode="NearestNeighbor"/>
+                            <StackPanel Margin="10,0,0,0" VerticalAlignment="Center">
+                                <TextBlock x:Name="AdminLinkTitle" FontSize="13"
+                                           Foreground="{DynamicResource Dim}"/>
+                                <TextBlock x:Name="AdminUrlText" FontSize="14"
+                                           Foreground="{DynamicResource Fg}"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+                    <TextBlock x:Name="NodeInfo" Grid.Column="1" FontSize="14"
+                               Margin="14,0,10,0" TextWrapping="Wrap"
+                               Foreground="{DynamicResource Dim}" VerticalAlignment="Center"/>
+                    <Button x:Name="NoticeGlobalButton" Grid.Column="2"
+                            Style="{StaticResource ChipButton}"
+                            BorderBrush="{DynamicResource Line}" VerticalAlignment="Center"
+                            Click="OnGlobalNoticeClick"/>
+                </Grid>
+            </Grid>
+
+            <!-- Slide-to-trigger SOS. The semantic id "sos.trigger" keeps addressing this border,
+                 so an administrator's style override still applies to the visible control. -->
+            <Border x:Name="SosButton" Visibility="Collapsed"
+                    Background="{DynamicResource Danger}" CornerRadius="16"
+                    HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                    Margin="0,0,20,16" Width="238" Height="62">
+                <Grid>
+                    <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center"
+                                IsHitTestVisible="False" Margin="60,6,12,6">
+                        <TextBlock x:Name="SosText" FontSize="17" FontWeight="Bold"
+                                   Foreground="{DynamicResource OnDanger}"
+                                   HorizontalAlignment="Center"/>
+                        <TextBlock x:Name="SosHint" FontSize="13" Opacity="0.85"
+                                   Foreground="{DynamicResource OnDanger}"
+                                   HorizontalAlignment="Center"/>
+                    </StackPanel>
+                    <ui:SosSlider x:Name="SosSlide" Style="{StaticResource SosTrack}"/>
+                </Grid>
+            </Border>
+
         </Grid>
 
-        <Grid x:Name="CallingView" Visibility="Collapsed" Background="{StaticResource Bg}">
+        <Grid x:Name="CallingView" Visibility="Collapsed" Background="{DynamicResource Bg}">
             <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
                 <TextBlock x:Name="CallingText" FontSize="56" FontWeight="Bold"
-                           Foreground="{StaticResource Fg}" HorizontalAlignment="Center"/>
+                           Foreground="{DynamicResource Fg}" HorizontalAlignment="Center"/>
                 <Ellipse x:Name="Pulse" Width="140" Height="140" Margin="0,50"
-                         Stroke="#4DA3FF" StrokeThickness="6" HorizontalAlignment="Center"/>
+                         Stroke="{DynamicResource Accent}" StrokeThickness="6"
+                         HorizontalAlignment="Center"/>
                 <StackPanel x:Name="CallingPurposeSection" Visibility="Collapsed" Margin="20,0,20,24">
                     <TextBlock x:Name="CallingPurposeHint" FontSize="20"
-                               Foreground="{StaticResource Dim}" HorizontalAlignment="Center"
+                               Foreground="{DynamicResource Dim}" HorizontalAlignment="Center"
                                Margin="0,0,0,8"/>
                     <UniformGrid x:Name="CallingPurposeGrid" Columns="3"
                                  HorizontalAlignment="Center"/>
                 </StackPanel>
                 <Button x:Name="CancelButton" FontSize="28" Padding="40,16"
-                        Background="{StaticResource Card}" Foreground="{StaticResource Fg}"
-                        BorderBrush="{StaticResource Dim}" Click="OnCancelClick"/>
+                        Background="{DynamicResource Card}" Foreground="{DynamicResource Fg}"
+                        BorderBrush="{DynamicResource Line}" Click="OnCancelClick"/>
             </StackPanel>
         </Grid>
 
         <Border x:Name="ReplyBanner" Visibility="Collapsed" VerticalAlignment="Center"
-                HorizontalAlignment="Center" Background="#243040" CornerRadius="20"
-                Padding="60,40" MaxWidth="900">
+                HorizontalAlignment="Center" Background="{DynamicResource Card}"
+                CornerRadius="20" Padding="60,40" MaxWidth="900">
             <StackPanel>
-                <TextBlock x:Name="ReplyCaption" FontSize="22" Foreground="{StaticResource Dim}"
+                <TextBlock x:Name="ReplyCaption" FontSize="22" Foreground="{DynamicResource Dim}"
                            HorizontalAlignment="Center"/>
                 <TextBlock x:Name="ReplyText" FontSize="46" FontWeight="Bold" TextWrapping="Wrap"
-                           Foreground="{StaticResource Fg}" HorizontalAlignment="Center"
+                           Foreground="{DynamicResource Fg}" HorizontalAlignment="Center"
                            Margin="0,14,0,0" TextAlignment="Center"/>
             </StackPanel>
         </Border>
@@ -127,86 +272,215 @@
             </StackPanel>
         </Border>
 
+        <!-- A2 · incoming / monitor screen. -->
         <Grid x:Name="IncomingView" Visibility="Collapsed" Background="#000000">
-            <MediaElement x:Name="IncomingH264" Stretch="Uniform" Visibility="Collapsed"
-                          LoadedBehavior="Manual" UnloadedBehavior="Manual" ScrubbingEnabled="False"/>
-            <Image x:Name="IncomingLive" Stretch="Uniform"/>
-            <TextBlock x:Name="IncomingNoVideo" FontSize="24" Foreground="{StaticResource Dim}"
-                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
-            <Border Background="#C0141B22" CornerRadius="14" Padding="28,16"
-                    HorizontalAlignment="Left" VerticalAlignment="Top" Margin="24">
-                <StackPanel>
-                    <TextBlock x:Name="IncomingTitle" FontSize="34" FontWeight="Bold"
-                               Foreground="{StaticResource Fg}" Background="#0A0D12"/>
-                    <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
-                        <Border x:Name="PurposeBadge" Visibility="Collapsed" Background="#2A3A4C"
-                                CornerRadius="8" Padding="12,4">
-                            <TextBlock x:Name="PurposeBadgeText" FontSize="20"
-                                       Foreground="{StaticResource Fg}"/>
-                        </Border>
-                        <Border x:Name="LangBadge" Visibility="Collapsed" Background="#2A3A4C"
-                                CornerRadius="8" Padding="12,4" Margin="10,0,0,0">
-                            <TextBlock x:Name="LangBadgeText" FontSize="20"
-                                       Foreground="{StaticResource Fg}"/>
-                        </Border>
-                    </StackPanel>
-                    <TextBlock x:Name="IncomingHint" FontSize="18" Foreground="{StaticResource Dim}"
-                               Margin="0,6,0,0" Visibility="Collapsed"/>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+            <Grid Grid.Row="0" Margin="20,16,20,8">
+                <StackPanel HorizontalAlignment="Left">
+                    <TextBlock x:Name="IncomingTitle" FontSize="32" FontWeight="Bold"
+                               Foreground="#F2F5F8"/>
+                    <!-- Fixed-height purpose slot: a purpose that arrives later never moves the
+                         layout (ring_then_purpose). -->
+                    <Grid x:Name="PurposeSlot" Height="36" Margin="0,6,0,0">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <Border x:Name="PurposeBadge" Visibility="Collapsed"
+                                    Background="#2A3A4C" CornerRadius="8" Padding="12,6">
+                                <TextBlock x:Name="PurposeBadgeText" FontSize="18"
+                                           Foreground="#F2F5F8"/>
+                            </Border>
+                            <Border x:Name="LangBadge" Visibility="Collapsed" Background="#2A3A4C"
+                                    CornerRadius="8" Padding="12,6" Margin="10,0,0,0">
+                                <TextBlock x:Name="LangBadgeText" FontSize="18"
+                                           Foreground="#F2F5F8"/>
+                            </Border>
+                        </StackPanel>
+                    </Grid>
+                    <TextBlock x:Name="IncomingHint" FontSize="17" Foreground="#B6C1CC"
+                               Margin="0,4,0,0" Visibility="Collapsed"/>
                 </StackPanel>
-            </Border>
-            <WrapPanel x:Name="QuickReplyPanel" Orientation="Horizontal"
-                       HorizontalAlignment="Center" VerticalAlignment="Bottom"
-                       Margin="40,0,40,130" MaxWidth="1200"/>
-            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center"
-                        VerticalAlignment="Bottom" Margin="0,0,0,44">
-                <Button x:Name="AnswerButton" FontSize="30" FontWeight="Bold" Padding="56,20"
-                        Background="#187A3C" Foreground="#FFFFFF" BorderThickness="0"
-                        Click="OnAnswerClick"/>
-                <Button x:Name="MonitorButton" FontSize="30" Padding="44,20" Margin="24,0,0,0"
-                        Background="{StaticResource Card}" Foreground="{StaticResource Fg}"
-                        BorderBrush="{StaticResource Dim}" Click="OnMonitorClick"/>
-                <Button x:Name="OpenDoorButton" FontSize="30" Padding="44,20" Margin="24,0,0,0"
-                        Background="#B7791F" Foreground="#FFFFFF" BorderThickness="0"
+            </Grid>
+            <Grid Grid.Row="1" ClipToBounds="True">
+                <MediaElement x:Name="IncomingH264" Stretch="Uniform" Visibility="Collapsed"
+                              LoadedBehavior="Manual" UnloadedBehavior="Manual"
+                              ScrubbingEnabled="False"/>
+                <Image x:Name="IncomingLive" Stretch="Uniform"/>
+                <TextBlock x:Name="IncomingNoVideo" FontSize="24" Foreground="#8A97A5"
+                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Grid>
+            <WrapPanel x:Name="QuickReplyPanel" Grid.Row="2" Orientation="Horizontal"
+                       HorizontalAlignment="Center" Margin="30,6,30,0" MaxWidth="1200"/>
+            <WrapPanel x:Name="IncomingControlRow" Grid.Row="3" Orientation="Horizontal"
+                       HorizontalAlignment="Center" Margin="20,10,20,18">
+                <Button x:Name="MonitorButton" Style="{StaticResource ActionButton}"
+                        BorderBrush="{DynamicResource Line}" Click="OnMonitorClick"/>
+                <Button x:Name="AnswerButton" Style="{StaticResource ActionButton}"
+                        FontWeight="Bold" Background="#187A3C" Foreground="#FFFFFF"
+                        BorderBrush="#187A3C" Click="OnAnswerClick"/>
+                <Button x:Name="MicButton" Style="{StaticResource ActionButton}"
+                        BorderBrush="{DynamicResource Line}" Visibility="Collapsed"
+                        Click="OnMicClick"/>
+                <Button x:Name="OpenDoorButton" Style="{StaticResource ActionButton}"
+                        Background="#B7791F" Foreground="#FFFFFF" BorderBrush="#B7791F"
                         Click="OnOpenDoorClick"/>
-                <Button x:Name="IgnoreButton" FontSize="30" Padding="44,20" Margin="24,0,0,0"
-                        Background="{StaticResource Card}" Foreground="{StaticResource Dim}"
-                        BorderBrush="{StaticResource Dim}" Click="OnIgnoreClick"/>
-            </StackPanel>
+                <Button x:Name="QuickReplyToggle" Style="{StaticResource ActionButton}"
+                        BorderBrush="{DynamicResource Line}" Click="OnQuickReplyToggleClick"/>
+                <Button x:Name="IgnoreButton" Style="{StaticResource ActionButton}"
+                        Foreground="#B6C1CC" BorderBrush="{DynamicResource Line}"
+                        Click="OnIgnoreClick"/>
+            </WrapPanel>
         </Grid>
 
         <Grid x:Name="InCallView" Visibility="Collapsed" Background="#000000">
-            <MediaElement x:Name="PeerH264" Stretch="Uniform" Visibility="Collapsed"
-                          LoadedBehavior="Manual" UnloadedBehavior="Manual" ScrubbingEnabled="False"/>
-            <Image x:Name="PeerVideo" Stretch="Uniform"/>
-            <Border Background="#C0141B22" CornerRadius="14" Padding="28,12"
-                    HorizontalAlignment="Left" VerticalAlignment="Top" Margin="24">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+            <StackPanel Grid.Row="0" Margin="20,16,20,8" HorizontalAlignment="Left">
                 <TextBlock x:Name="InCallTitle" FontSize="30" FontWeight="Bold"
-                           Foreground="{StaticResource Fg}"/>
+                           Foreground="#F2F5F8"/>
+                <Grid x:Name="InCallPurposeSlot" Height="34" Margin="0,6,0,0">
+                    <Border x:Name="InCallPurposeBadge" Visibility="Collapsed"
+                            Background="#2A3A4C" CornerRadius="8" Padding="12,6"
+                            HorizontalAlignment="Left" VerticalAlignment="Center">
+                        <TextBlock x:Name="InCallPurposeText" FontSize="18"
+                                   Foreground="#F2F5F8"/>
+                    </Border>
+                </Grid>
+            </StackPanel>
+            <Grid Grid.Row="1" ClipToBounds="True">
+                <MediaElement x:Name="PeerH264" Stretch="Uniform" Visibility="Collapsed"
+                              LoadedBehavior="Manual" UnloadedBehavior="Manual"
+                              ScrubbingEnabled="False"/>
+                <Image x:Name="PeerVideo" Stretch="Uniform"/>
+            </Grid>
+            <WrapPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Center"
+                       Margin="20,10,20,18">
+                <Button x:Name="EndCallButton" Style="{StaticResource ActionButton}"
+                        FontWeight="Bold" Background="{DynamicResource Danger}"
+                        Foreground="{DynamicResource OnDanger}"
+                        BorderBrush="{DynamicResource Danger}" Click="OnEndCallClick"/>
+                <Button x:Name="InCallMicButton" Style="{StaticResource ActionButton}"
+                        BorderBrush="{DynamicResource Line}" Visibility="Collapsed"
+                        Click="OnMicClick"/>
+                <Button x:Name="InCallOpenDoorButton" Style="{StaticResource ActionButton}"
+                        Background="#B7791F" Foreground="#FFFFFF" BorderBrush="#B7791F"
+                        Click="OnOpenDoorClick"/>
+            </WrapPanel>
+        </Grid>
+
+        <!-- Shared overlay for both call screens: the announcement chip, this node's admin QR and
+             the unobtrusive player statistics line. -->
+        <Grid x:Name="CallOverlay" Visibility="Collapsed">
+            <Border x:Name="NoticeChip" HorizontalAlignment="Right" VerticalAlignment="Top"
+                    Margin="0,18,20,0" Cursor="Hand" CornerRadius="10" Padding="12,6"
+                    Background="#C0141B22" BorderBrush="#3A4551" BorderThickness="1"
+                    MouseLeftButtonDown="OnNoticeChipClick">
+                <StackPanel Orientation="Horizontal">
+                    <Ellipse x:Name="NoticeChipDot" Width="9" Height="9" Margin="0,0,8,0"
+                             VerticalAlignment="Center" Fill="{DynamicResource Warn}"
+                             Visibility="Collapsed"/>
+                    <TextBlock x:Name="NoticeChipText" FontSize="15" Foreground="#F2F5F8"/>
+                </StackPanel>
             </Border>
-            <Button x:Name="EndCallButton" FontSize="30" FontWeight="Bold" Padding="64,20"
-                    Background="#C0392B" Foreground="#FFFFFF" BorderThickness="0"
-                    HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,44"
-                    Click="OnEndCallClick"/>
-            <Button x:Name="InCallOpenDoorButton" FontSize="24" Padding="36,14"
-                    Background="#B7791F" Foreground="#FFFFFF" BorderThickness="0"
-                    HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,34,50"
-                    Click="OnOpenDoorClick"/>
+            <Border x:Name="CallAdminQrCard" HorizontalAlignment="Left" VerticalAlignment="Bottom"
+                    Margin="20,0,0,112" CornerRadius="8" Padding="6" Background="#C0141B22"
+                    Cursor="Hand" MouseLeftButtonDown="OnWebAdminClick">
+                <Image x:Name="CallAdminQrImage" Width="46" Height="46"
+                       RenderOptions.BitmapScalingMode="NearestNeighbor"/>
+            </Border>
+            <Border x:Name="VideoStatsCard" HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                    Margin="0,0,20,112" CornerRadius="8" Padding="12,6" Background="#80101418"
+                    Cursor="Hand" MouseLeftButtonDown="OnVideoStatsClick">
+                <TextBlock x:Name="VideoStatsText" FontSize="11" Foreground="#8A97A5"
+                           FontFamily="Consolas, Courier New"/>
+            </Border>
+
+            <Border x:Name="NoticePopover" Visibility="Collapsed" HorizontalAlignment="Right"
+                    VerticalAlignment="Top" Margin="0,58,20,0" MaxWidth="440" CornerRadius="12"
+                    Padding="16,14" Background="{DynamicResource Card}"
+                    BorderBrush="{DynamicResource Line}" BorderThickness="1">
+                <StackPanel>
+                    <TextBlock x:Name="NoticePopoverTarget" FontSize="13"
+                               Foreground="{DynamicResource Dim}"/>
+                    <TextBlock x:Name="NoticePopoverText" FontSize="18" TextWrapping="Wrap"
+                               Margin="0,8,0,0" Foreground="{DynamicResource Fg}"/>
+                    <WrapPanel Orientation="Horizontal" Margin="0,12,0,0">
+                        <Button x:Name="NoticeEditButton" Style="{StaticResource ChipButton}"
+                                BorderBrush="{DynamicResource Line}"
+                                Click="OnNoticeEditClick"/>
+                        <Button x:Name="NoticeClearButton" Style="{StaticResource ChipButton}"
+                                BorderBrush="{DynamicResource Line}"
+                                Click="OnNoticeClearClick"/>
+                        <Button x:Name="NoticePopoverClose" Style="{StaticResource ChipButton}"
+                                BorderBrush="{DynamicResource Line}"
+                                Click="OnNoticePopoverCloseClick"/>
+                    </WrapPanel>
+                </StackPanel>
+            </Border>
         </Grid>
 
         <!-- Indoor proactive monitoring selects a door station without requiring a chime. -->
         <Grid x:Name="MonitorPickerView" Visibility="Collapsed" Background="#E6101418">
-            <Border Background="{StaticResource Card}" CornerRadius="20" Padding="38"
+            <Border Background="{DynamicResource Card}" CornerRadius="20" Padding="38"
                     HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="760">
                 <StackPanel>
                     <TextBlock x:Name="MonitorPickerTitle" FontSize="34" FontWeight="Bold"
-                               Foreground="{StaticResource Fg}" HorizontalAlignment="Center"/>
+                               Foreground="{DynamicResource Fg}" HorizontalAlignment="Center"/>
                     <StackPanel x:Name="MonitorDoorList" Margin="0,24,0,18"/>
                     <Button x:Name="MonitorPickerClose" FontSize="24" Padding="34,12"
-                            Background="{StaticResource Card}" Foreground="{StaticResource Fg}"
-                            BorderBrush="{StaticResource Dim}" HorizontalAlignment="Center"
+                            Background="{DynamicResource Card}" Foreground="{DynamicResource Fg}"
+                            BorderBrush="{DynamicResource Line}" HorizontalAlignment="Center"
                             Click="OnMonitorPickerClose"/>
                 </StackPanel>
             </Border>
+        </Grid>
+
+        <!-- Full-screen call history, 50 rows per page, grouped by day. -->
+        <Grid x:Name="HistoryView" Visibility="Collapsed" Background="{DynamicResource Bg}">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+            <Grid Grid.Row="0" Margin="26,20,26,6">
+                <TextBlock x:Name="HistoryTitle" FontSize="30" FontWeight="Bold"
+                           HorizontalAlignment="Left" Foreground="{DynamicResource Fg}"/>
+                <Button x:Name="HistoryCloseButton" Style="{StaticResource ChipButton}"
+                        BorderBrush="{DynamicResource Line}" HorizontalAlignment="Right"
+                        VerticalAlignment="Center" Click="OnHistoryCloseClick"/>
+            </Grid>
+            <WrapPanel x:Name="HistoryFilterRow" Grid.Row="1" Orientation="Horizontal"
+                       Margin="26,0,26,8">
+                <Button x:Name="HistoryFilterAll" Style="{StaticResource ChipButton}"
+                        BorderBrush="{DynamicResource Line}" Margin="0,0,0,0"
+                        Click="OnHistoryFilterClick" Tag="all"/>
+                <Button x:Name="HistoryFilterMissed" Style="{StaticResource ChipButton}"
+                        BorderBrush="{DynamicResource Line}" Click="OnHistoryFilterClick"
+                        Tag="missed"/>
+                <StackPanel x:Name="HistoryDoorFilters" Orientation="Horizontal"/>
+                <Button x:Name="HistoryMarkSeenButton" Style="{StaticResource ChipButton}"
+                        BorderBrush="{DynamicResource Line}" Margin="18,0,0,0"
+                        Click="OnHistoryMarkSeenClick"/>
+            </WrapPanel>
+            <ScrollViewer Grid.Row="2" Margin="26,0,26,0" VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Disabled">
+                <StackPanel x:Name="HistoryList"/>
+            </ScrollViewer>
+            <StackPanel Grid.Row="3" Margin="26,10,26,18" HorizontalAlignment="Center">
+                <Button x:Name="HistoryMoreButton" Style="{StaticResource ChipButton}"
+                        BorderBrush="{DynamicResource Line}" HorizontalAlignment="Center"
+                        Click="OnHistoryMoreClick"/>
+                <TextBlock x:Name="HistoryNote" FontSize="13" Margin="0,8,0,0"
+                           HorizontalAlignment="Center" Foreground="{DynamicResource Dim}"
+                           Visibility="Collapsed"/>
+            </StackPanel>
         </Grid>
 
         <Canvas x:Name="ScreensaverView" Visibility="Collapsed" Background="#000000">
@@ -217,6 +491,19 @@
                            Margin="0,6,0,0"/>
             </StackPanel>
         </Canvas>
+
+        <!-- Slide-to-trigger countdown; tapping cancel before zero tells core nothing. -->
+        <Grid x:Name="SosCountdownView" Visibility="Collapsed" Background="#E68C0D0A">
+            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                <TextBlock x:Name="SosCountdownText" FontSize="86" FontWeight="Bold"
+                           Foreground="#FFFFFF" HorizontalAlignment="Center"
+                           TextAlignment="Center"/>
+                <Button x:Name="SosCountdownCancel" FontSize="32" Padding="70,20"
+                        Margin="0,44,0,0" Background="#FFFFFF" Foreground="#8C0D0A"
+                        BorderThickness="0" HorizontalAlignment="Center"
+                        Click="OnSosCountdownCancel"/>
+            </StackPanel>
+        </Grid>
 
         <Grid x:Name="EmergencyView" Visibility="Collapsed" Background="#C62828">
             <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
@@ -235,8 +522,9 @@
                 IsHitTestVisible="False"/>
 
         <!-- Persistent "not set up" banner; tapping it reopens onboarding (spec 5.0). -->
-        <Border x:Name="PairBanner" Visibility="Collapsed" Background="#B7791F" Padding="0,12"
-                VerticalAlignment="Top" Cursor="Hand" MouseLeftButtonDown="OnPairBannerClick">
+        <Border x:Name="PairBanner" Visibility="Collapsed" Background="{DynamicResource Notice}"
+                Padding="16,12" VerticalAlignment="Top" Cursor="Hand"
+                MouseLeftButtonDown="OnPairBannerClick">
             <TextBlock x:Name="PairBannerText" FontSize="20" FontWeight="Bold"
                        Foreground="#FFFFFF" HorizontalAlignment="Center"/>
         </Border>

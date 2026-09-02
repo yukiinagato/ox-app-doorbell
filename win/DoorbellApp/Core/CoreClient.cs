@@ -30,7 +30,10 @@ namespace DoorbellApp.Core
         private CoreInterop.SecurePutCb _securePutCb;
         private CoreInterop.SecureDeleteCb _secureDeleteCb;
         private CoreInterop.DeviceInfoCb _deviceInfoCb;
+        private CoreInterop.PowerStateCb _powerStateCb;
         private CoreInterop.ReleaseBufferCb _releaseBufferCb;
+        private CoreInterop.SipSetMicMutedFn _sipSetMicMuted;
+        private bool _micMuteProbed;
         private DpapiSecretStore _secretStore;
         private SpeechSynthesizer _tts;
         private readonly JavaScriptSerializer _json = new JavaScriptSerializer();
@@ -119,6 +122,18 @@ namespace DoorbellApp.Core
                 }
                 catch { return -1; }
             };
+            _powerStateCb = (user, jsonOut) =>
+            {
+                try
+                {
+                    if (jsonOut == IntPtr.Zero) return -1;
+                    Marshal.WriteIntPtr(jsonOut, IntPtr.Zero);
+                    Marshal.WriteIntPtr(jsonOut,
+                        NativeUtf8.Alloc(DeviceInfoProvider.PowerStateJson()));
+                    return 0;
+                }
+                catch { return -1; }
+            };
             var plat = new CoreInterop.DbPlatformV2
             {
                 struct_size = checked((uint)Marshal.SizeOf(typeof(CoreInterop.DbPlatformV2))),
@@ -132,6 +147,7 @@ namespace DoorbellApp.Core
                 device_info = Marshal.GetFunctionPointerForDelegate(_deviceInfoCb),
                 release_buffer = Marshal.GetFunctionPointerForDelegate(_releaseBufferCb),
                 secure_delete = Marshal.GetFunctionPointerForDelegate(_secureDeleteCb),
+                power_state = Marshal.GetFunctionPointerForDelegate(_powerStateCb),
             };
             _core = CoreInterop.db_core_create_v2(ref plat, dataDir, bootJson);
             if (_core == IntPtr.Zero) return false;
@@ -284,6 +300,100 @@ namespace DoorbellApp.Core
                 return _core != IntPtr.Zero && CoreInterop.db_core_sip_send_dtmf(_core, digits) == 0;
         }
 
+        /// <summary>
+        /// True when this Core build exports a microphone mute entry point. The control row hides
+        /// the microphone toggle instead of offering a button that cannot do anything.
+        /// </summary>
+        public bool SipMicMuteAvailable
+        {
+            get
+            {
+                if (!_micMuteProbed)
+                {
+                    _micMuteProbed = true;
+                    _sipSetMicMuted = CoreInterop.OptionalExport<CoreInterop.SipSetMicMutedFn>(
+                        "db_core_sip_set_mic_muted");
+                }
+                return _sipSetMicMuted != null;
+            }
+        }
+
+        public bool SipSetMicMuted(bool muted)
+        {
+            if (!SipMicMuteAvailable) return false;
+            lock (_nativeLock)
+                return _core != IntPtr.Zero && _sipSetMicMuted(_core, muted ? 1 : 0) == 0;
+        }
+
+        /// <summary>Local wall clock rendered by core in the cluster time zone.</summary>
+        public Dictionary<string, object> LocalTime(long wallMs)
+        {
+            if (_core == IntPtr.Zero) return null;
+            string s;
+            lock (_nativeLock)
+                s = CoreInterop.TakeUtf8(CoreInterop.db_core_local_time_json(_core, wallMs));
+            if (s == null) return null;
+            try { return _json.Deserialize<Dictionary<string, object>>(s); }
+            catch { return null; }
+        }
+
+        public bool TimeSyncNow()
+        {
+            lock (_nativeLock)
+                return _core != IntPtr.Zero && CoreInterop.db_core_time_sync_now(_core) != 0;
+        }
+
+        /// <summary>Effective {call,sos,idle} volumes for this device, 0-100.</summary>
+        public Dictionary<string, object> AudioVolumes(string deviceId)
+        {
+            if (_core == IntPtr.Zero) return null;
+            string s;
+            lock (_nativeLock)
+                s = CoreInterop.TakeUtf8(CoreInterop.db_core_audio_json(_core, deviceId ?? ""));
+            if (s == null) return null;
+            try { return _json.Deserialize<Dictionary<string, object>>(s); }
+            catch { return null; }
+        }
+
+        public bool SetDoorNotice(string door, string text, long expiresMs)
+        {
+            if (string.IsNullOrEmpty(door) || string.IsNullOrEmpty(text)) return false;
+            lock (_nativeLock)
+                return _core != IntPtr.Zero && CoreInterop.db_core_set_door_notice(
+                    _core, door, text, expiresMs) == 0;
+        }
+
+        public bool ClearDoorNotice(string door)
+        {
+            if (string.IsNullOrEmpty(door)) return false;
+            lock (_nativeLock)
+                return _core != IntPtr.Zero &&
+                    CoreInterop.db_core_clear_door_notice(_core, door) == 0;
+        }
+
+        /// <summary>Call history, newest first. limit is clamped by core to 1..500.</summary>
+        public Dictionary<string, object> CallLog(long sinceMs, int limit)
+        {
+            if (_core == IntPtr.Zero) return null;
+            string s;
+            lock (_nativeLock)
+                s = CoreInterop.TakeUtf8(
+                    CoreInterop.db_core_call_log_json(_core, sinceMs, limit));
+            if (s == null) return null;
+            try { return _json.Deserialize<Dictionary<string, object>>(s); }
+            catch { return null; }
+        }
+
+        public bool CallLogMarkSeen(string upToHlc)
+        {
+            lock (_nativeLock)
+                return _core != IntPtr.Zero &&
+                    CoreInterop.db_core_call_log_mark_seen(_core, upToHlc ?? "") == 0;
+        }
+
+        public string CoreVersion =>
+            CoreInterop.ReadUtf8(CoreInterop.db_core_version()) ?? "";
+
         public string SipBackend => CoreInterop.ReadUtf8(CoreInterop.db_core_sip_backend()) ?? "unknown";
 
         public bool SipAvailable => string.Equals(SipBackend, "pjsip", StringComparison.Ordinal);
@@ -340,7 +450,45 @@ namespace DoorbellApp.Core
             lock (_nativeLock) if (_core != IntPtr.Zero) CoreInterop.db_core_invite_device(_core, nodeId);
         }
 
-        /// <summary>Starts pairing mode and mints one Pairing PIN: {ok,host,pin,expires_s}.</summary>
+        /// <summary>
+        /// Mints or refreshes the Pairing PIN without opening the pairing-mode window
+        /// (spec 5.4): {ok,host,pin,expires_s}. Every PIN card uses this, never StartPairing.
+        /// A Core that predates the export returns null instead of terminating the shell.
+        /// </summary>
+        public Dictionary<string, object> MintJoinToken(int seconds)
+        {
+            string s;
+            lock (_nativeLock)
+            {
+                if (_core == IntPtr.Zero) return null;
+                try
+                {
+                    s = CoreInterop.TakeUtf8(
+                        CoreInterop.db_core_mint_join_token_json(_core, seconds));
+                }
+                catch (EntryPointNotFoundException)
+                {
+                    Debug.WriteLine("core has no db_core_mint_join_token_json; no PIN minted");
+                    return null;
+                }
+            }
+            if (s == null) return null;
+            try { return _json.Deserialize<Dictionary<string, object>>(s); }
+            catch { return null; }
+        }
+
+        /// <summary>Removes one secure-store entry, for the revoke/unpair factory reset.</summary>
+        public bool DeleteSecret(string key)
+        {
+            if (_secretStore == null || string.IsNullOrEmpty(key)) return false;
+            try { return _secretStore.Delete(key); }
+            catch { return false; }
+        }
+
+        /// <summary>
+        /// Opens the "add everything nearby" pairing-mode window. Only the explicit
+        /// bulk-add button calls this; PIN cards use MintJoinToken.
+        /// </summary>
         public Dictionary<string, object> StartPairing(int seconds)
         {
             string s;
@@ -445,7 +593,8 @@ namespace DoorbellApp.Core
                 if (_core == IntPtr.Zero) return;
                 string backend = SipBackend;
                 CoreInterop.db_core_set_capabilities_json(_core,
-                    RuntimeContracts.Json(RuntimeContracts.Capabilities(backend, role, safeMode)));
+                    RuntimeContracts.Json(RuntimeContracts.Capabilities(backend, role, safeMode,
+                                                                        SipMicMuteAvailable)));
                 CoreInterop.db_core_set_runtime_status_json(_core,
                     RuntimeContracts.Json(RuntimeStatus(role, backend, safeMode)));
                 if (RuntimeContracts.SupportsUiManifest(role))

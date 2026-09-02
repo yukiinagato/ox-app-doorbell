@@ -13,13 +13,16 @@ static_assert(offsetof(db_platform_v2, version) == sizeof(std::uint32_t),
               "version offset changed");
 static_assert(offsetof(db_platform_v2, user) == 2 * sizeof(std::uint32_t),
               "pointer alignment/layout changed");
-// Nine callbacks since secure_delete was appended. Fields are only ever appended, and the shell
-// always reports sizeof(db_platform_v2) as struct_size.
-static_assert(sizeof(db_platform_v2) == 2 * sizeof(std::uint32_t) + 9 * sizeof(void*),
+// Ten callbacks since power_state was appended after secure_delete. Fields are only ever
+// appended, and the shell always reports sizeof(db_platform_v2) as struct_size.
+static_assert(sizeof(db_platform_v2) == 2 * sizeof(std::uint32_t) + 10 * sizeof(void*),
               "db_platform_v2 size changed");
 static_assert(offsetof(db_platform_v2, secure_delete) ==
                   2 * sizeof(std::uint32_t) + 8 * sizeof(void*),
-              "secure_delete must stay the last field");
+              "secure_delete offset changed");
+static_assert(offsetof(db_platform_v2, power_state) ==
+                  2 * sizeof(std::uint32_t) + 9 * sizeof(void*),
+              "power_state must stay the last field");
 
 int main(int argc, char** argv) {
   const bool allow_stub = argc == 2 && std::strcmp(argv[1], "--allow-stub") == 0;
@@ -46,6 +49,27 @@ int main(int argc, char** argv) {
     if (!GetProcAddress(module, name)) {
       std::cerr << "required pairing export is missing: " << name << "\n";
       return 5;
+    }
+  }
+  // Pending core exports: the shell already binds these and degrades when they are absent.
+  // Move each one into kShellExports as soon as Core exports it, so the release gate covers it.
+  // db_core_mint_join_token_json mints a Pairing PIN without opening the pairing-mode window
+  // (spec 5.4); db_core_sip_set_mic_muted backs the microphone toggle on the incoming screen.
+  static const char* kPendingExports[] = {"db_core_mint_join_token_json",
+                                          "db_core_sip_set_mic_muted"};
+  for (const char* name : kPendingExports) {
+    if (!GetProcAddress(module, name))
+      std::cerr << "note: pending core export is not present yet: " << name << "\n";
+  }
+  // Batch-2 shell surfaces: the cluster clock, effective volumes, announcements and history.
+  static const char* kShellExports[] = {
+      "db_core_local_time_json", "db_core_time_sync_now",     "db_core_audio_json",
+      "db_core_set_door_notice", "db_core_clear_door_notice", "db_core_call_log_json",
+      "db_core_call_log_mark_seen", "db_core_emergency_v2"};
+  for (const char* name : kShellExports) {
+    if (!GetProcAddress(module, name)) {
+      std::cerr << "required shell export is missing: " << name << "\n";
+      return 6;
     }
   }
   if (!allow_stub && std::strcmp(backend, "pjsip") != 0) {

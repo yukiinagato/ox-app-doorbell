@@ -170,6 +170,36 @@ namespace DoorbellApp
             catch { return false; }
         }
 
+        /// <summary>
+        /// Revoke and device-side "leave the Cluster" are a factory reset of this device's
+        /// identity (spec 5.4): the pairing reference, the discovery seeds, and the operator's own
+        /// name/role/door confirmation all go, so the next start lands in first-run setup.
+        /// </summary>
+        public static bool ResetToFactory(string path)
+        {
+            try
+            {
+                var json = new JavaScriptSerializer();
+                var current = json.Deserialize<Dictionary<string, object>>(
+                    ReadValidJson(path) ?? ReadValidJson(path + ".bak") ?? DefaultJson) ??
+                    new Dictionary<string, object>();
+                var data = new Dictionary<string, object>();
+                // Only transport-level bootstrap survives; nothing that identifies this device or
+                // its Cluster does.
+                foreach (string keep in new[] { "listen_port", "http_port", "ui_lang", "kiosk" })
+                {
+                    object value;
+                    if (current.TryGetValue(keep, out value) && value != null) data[keep] = value;
+                }
+                data["name"] = "doorbell";
+                data["role"] = "";
+                data["door"] = SuggestedDoorId();
+                data["setup_complete"] = false;
+                return WritePairingGenerations(path, json.Serialize(data));
+            }
+            catch { return false; }
+        }
+
         private static void AddUnique(List<string> values, string value)
         {
             if (string.IsNullOrWhiteSpace(value)) return;

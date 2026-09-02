@@ -27,7 +27,9 @@ namespace DoorbellApp
         private readonly DispatcherTimer _replyTimeout = new DispatcherTimer();
         private readonly DispatcherTimer _pixelShift = new DispatcherTimer();
         private readonly DispatcherTimer _saverDrift = new DispatcherTimer();
-        private readonly DispatcherTimer _sosTimer = new DispatcherTimer();
+        private readonly DispatcherTimer _sosCountdown = new DispatcherTimer();
+        private readonly DispatcherTimer _tileRefresh = new DispatcherTimer();
+        private readonly DispatcherTimer _statsRefresh = new DispatcherTimer();
         private readonly DispatcherTimer _emergencyPresentationTimeout = new DispatcherTimer();
         private readonly DispatcherTimer _incomingTimeout = new DispatcherTimer();
         private readonly DispatcherTimer _answerDelay = new DispatcherTimer();
@@ -101,13 +103,38 @@ namespace DoorbellApp
         private SemanticUiOverrides _semanticStyles;
         private readonly SemanticUiApplier _semanticApplier = new SemanticUiApplier();
 
+        private string _coreVersion = "";
+        private string _appVersion = "";
+        private int _batteryPct = -1;
+        private bool _batteryCharging;
+        private string _adminUrl = "";
+        private string _renderedAdminQr = "";
+        private readonly List<string> _tileDoors = new List<string>();
+        private readonly Dictionary<string, Image> _tileImages =
+            new Dictionary<string, Image>(StringComparer.Ordinal);
+        private readonly Dictionary<string, Border> _tileNoticeChips =
+            new Dictionary<string, Border>(StringComparer.Ordinal);
+        private readonly Dictionary<string, string> _tileSnapshotUrls =
+            new Dictionary<string, string>(StringComparer.Ordinal);
+        private readonly HashSet<string> _tileFetching =
+            new HashSet<string>(StringComparer.Ordinal);
+        private int _unreadMissed;
+        private string _latestCallHlc = "";
+        private bool _showVideoStats = true;
+        private bool _micMuted;
+        private bool _monitorAudioOn;
+        private bool _quickRepliesOpen;
+        private string _noticeChipDoor = "";
+        private int _volumeCall = 80;
+        private int _volumeSos = 100;
+        private int _volumeIdle = 60;
+
         private bool _emergencyActive;
         private bool _emergencyVisual;
         private Dictionary<string, object> _emergencyReport;
-        private double _sosHoldS = 3;
+        private int _sosCountdownS = 3;
+        private int _sosCountdownLeft;
         private bool _cancelRequiresPin = true;
-        private DateTime _sosDownAt = DateTime.MinValue;
-        private bool _sosHolding;
         private SoundPlayer _siren;
         private MemoryStream _sirenStream;
         private MediaPlayer _emergencyAudio;
@@ -119,6 +146,8 @@ namespace DoorbellApp
             _visitorLang = App.Boot.UiLang;
             RefreshConfigCache();
             ApplyStrings();
+            // Pick the home screen before the first frame so a role never flashes the other one.
+            ApplyRoleHome();
 
             _clock.Interval = TimeSpan.FromSeconds(1);
             _clock.Tick += (s, e) => OnClockTick();
@@ -140,8 +169,14 @@ namespace DoorbellApp
             };
             _saverDrift.Interval = TimeSpan.FromSeconds(30);
             _saverDrift.Tick += (s, e) => MoveSaverClock();
-            _sosTimer.Interval = TimeSpan.FromMilliseconds(50);
-            _sosTimer.Tick += (s, e) => OnSosTick();
+            _sosCountdown.Interval = TimeSpan.FromSeconds(1);
+            _sosCountdown.Tick += (s, e) => OnSosCountdownTick();
+            SosSlide.Armed += OnSosArmed;
+            _tileRefresh.Interval = TimeSpan.FromSeconds(5);
+            _tileRefresh.Tick += (s, e) => RefreshDoorTileStills();
+            _statsRefresh.Interval = TimeSpan.FromSeconds(1);
+            _statsRefresh.Tick += (s, e) => RefreshVideoStats();
+            SizeChanged += (s, e) => ApplyResponsiveLayout();
             _emergencyPresentationTimeout.Tick += (s, e) =>
             {
                 _emergencyPresentationTimeout.Stop();
@@ -189,7 +224,8 @@ namespace DoorbellApp
             AddHandler(Button.ClickEvent, new RoutedEventHandler((s, e) =>
             {
                 if (!ReferenceEquals(e.OriginalSource, CallButton))
-                    _effects = PlayConfigured(_effects, SoundValue("button_sound", "button_click"), false);
+                    _effects = PlayConfigured(_effects,
+                        SoundValue("button_sound", "button_click"), false, null, _volumeIdle);
             }));
 
             App.Core.UiEventReceived += ev => Dispatcher.BeginInvoke(new Action(() => OnUiEvent(ev)));
@@ -198,8 +234,10 @@ namespace DoorbellApp
             _pairingPoll.Interval = TimeSpan.FromSeconds(2);
             _pairingPoll.Tick += (s, e) => RefreshPairingState();
 
+            _showVideoStats = LoadVideoStatsPreference();
             Loaded += (s, e) =>
             {
+                ApplyResponsiveLayout();
                 if (App.Boot.Kiosk)
                 {
                     Topmost = true;
@@ -208,11 +246,12 @@ namespace DoorbellApp
                 }
                 KioskHooks.KeepDisplayOn();
                 RefreshNodeInfo();
+                RefreshCallHistory();
                 RefreshPairingState();
                 _pairingPoll.Start();
                 RecoverActiveCall();
                 _launchAudio = PlayConfigured(_launchAudio,
-                    SoundValue("launch_sound", "title_display"), false);
+                    SoundValue("launch_sound", "title_display"), false, null, _volumeIdle);
             };
             Closing += (s, e) =>
             {
@@ -240,8 +279,8 @@ namespace DoorbellApp
             ReplyCaption.Text = Texts.T("reply.banner");
             OfflineTitle.Text = Texts.T("offline.title");
             OfflineBody.Text = Texts.T("offline.body");
-            SosText.Text = Texts.T("emergency.button");
-            SosHint.Text = Texts.T("emergency.hold_hint", _sosHoldS);
+            ApplySosLabel();
+            SosCountdownCancel.Content = Texts.T("sos.abort");
             EmergencyTitle.Text = Texts.T("emergency.title");
             EmergencyNote.Text = Texts.T("emergency.notified");
             EmergencyCancelButton.Content = Texts.T("emergency.cancel");
@@ -249,17 +288,35 @@ namespace DoorbellApp
             MonitorButton.Content = Texts.T("ring.monitor");
             OpenDoorButton.Content = Texts.T("ring.open_door");
             InCallOpenDoorButton.Content = Texts.T("ring.open_door");
-            InCallOpenDoorButton.Visibility = App.Boot.Role == "indoor_panel" ?
-                Visibility.Visible : Visibility.Collapsed;
             IgnoreButton.Content = Texts.T("ring.ignore");
             IncomingNoVideo.Text = Texts.T("ring.no_video");
             InCallTitle.Text = Texts.T("incall.title");
-            EndCallButton.Content = Texts.T("incall.end");
+            EndCallButton.Content = Texts.T("incall.end_call");
+            QuickReplyToggle.Content = Texts.T("ring.quick_replies");
+            NoticeChipText.Text = Texts.T("notice.chip");
+            NoticeEditButton.Content = Texts.T("notice.edit");
+            NoticeClearButton.Content = Texts.T("notice.clear");
+            NoticePopoverClose.Content = Texts.T("monitor.close");
+            AdminEntryButton.Content = Texts.T("admin.title");
+            AdminLinkTitle.Text = Texts.T("web_admin.open");
+            NoticeGlobalButton.Content = Texts.T("dash.notice_global");
+            RecentCallsTitle.Text = Texts.T("history.title");
+            SeeAllCallsButton.Content = Texts.T("dash.see_all");
+            HistoryTitle.Text = Texts.T("history.title");
+            HistoryCloseButton.Content = Texts.T("monitor.close");
+            HistoryFilterAll.Content = Texts.T("history.filter_all");
+            HistoryFilterMissed.Content = Texts.T("history.filter_missed");
+            HistoryMarkSeenButton.Content = Texts.T("history.mark_seen");
+            HistoryMoreButton.Content = Texts.T("history.load_more");
+            HistoryNote.Text = Texts.T("history.page_limit");
+            ApplyMicLabel();
+            ApplyMonitorLabel();
             OpenMonitorButton.Content = Texts.T("monitor.open");
             MonitorPickerTitle.Text = Texts.T("monitor.choose");
             MonitorPickerClose.Content = Texts.T("monitor.close");
             CallingPurposeHint.Text = Texts.T("idle.choose_purpose");
             PairBannerText.Text = Texts.T("pair.not_set_up_banner");
+            if (App.Boot.Role == "door_station") TouchHint.Text = Texts.T("door.hint_call");
             PairingOverlay.ApplyStrings();
         }
 
@@ -285,17 +342,57 @@ namespace DoorbellApp
                 EnterScreensaver();
         }
 
+        // Every clock is rendered from db_core_local_time_json, so the cluster time zone and any
+        // NTP correction apply without touching this machine's own clock.
         private void UpdateClock()
         {
-            var now = DateTime.Now;
-            ClockText.Text = now.ToString("HH:mm:ss");
-            string[] yobi = { "日", "月", "火", "水", "木", "金", "土" };
-            DateText.Text = now.ToString("yyyy年M月d日") + " (" + yobi[(int)now.DayOfWeek] + ")";
+            string time, date;
+            if (!CoreLocalTime(out time, out date))
+            {
+                var now = DateTime.Now;
+                time = now.ToString("HH:mm:ss");
+                date = now.ToString("yyyy年M月d日") + " (" + Weekday((int)now.DayOfWeek) + ")";
+            }
+            ClockText.Text = time;
+            DateText.Text = date;
+            DashClock.Text = time;
+            DashDate.Text = date;
             if (_screensaverOn)
             {
-                SaverClock.Text = ClockText.Text;
-                SaverDate.Text = DateText.Text;
+                SaverClock.Text = time;
+                SaverDate.Text = date;
             }
+        }
+
+        private static string Weekday(int dayOfWeek)
+        {
+            string[] names = { "日", "月", "火", "水", "木", "金", "土" };
+            return dayOfWeek >= 0 && dayOfWeek < names.Length ? names[dayOfWeek] : "";
+        }
+
+        private bool CoreLocalTime(out string time, out string date)
+        {
+            time = "";
+            date = "";
+            var local = App.Core.LocalTime(0);
+            if (local == null) return false;
+            object known;
+            int hour = DictInt(local, "hh", -1);
+            int minute = DictInt(local, "mm", -1);
+            int second = DictInt(local, "ss", -1);
+            if (hour < 0 || minute < 0 || second < 0) return false;
+            time = hour.ToString("00") + ":" + minute.ToString("00") + ":" + second.ToString("00");
+            string iso = DictStr(local, "date");
+            DateTime parsed;
+            if (DateTime.TryParse(iso, System.Globalization.CultureInfo.InvariantCulture,
+                                  System.Globalization.DateTimeStyles.None, out parsed))
+                date = parsed.ToString("yyyy年M月d日") + " (" +
+                       Weekday((int)parsed.DayOfWeek) + ")";
+            else
+                date = iso;
+            if (local.TryGetValue("known", out known) && known is bool && !(bool)known)
+                System.Diagnostics.Debug.WriteLine("core reports an unknown time zone");
+            return true;
         }
 
         private void RefreshNodeInfo()
@@ -309,9 +406,10 @@ namespace DoorbellApp
                     var node = st["node"] as Dictionary<string, object>;
                     if (node != null)
                     {
-                        NodeInfo.Text = node["name"] + " · v" + node["version"];
                         object id;
                         if (node.TryGetValue("id", out id) && id != null) _nodeId = id.ToString();
+                        ReadPowerFromStatus(st);
+                        ApplyVersionLine(DictStr(node, "name"), DictStr(node, "version"));
                     }
                 }
                 catch { }
@@ -323,6 +421,7 @@ namespace DoorbellApp
                 SetVisitorLang(vl != null ? vl.ToString() : "ja");
             }
             RefreshSosConfig(_cfg);
+            RefreshAudioVolumes();
             var dp = CoreClient.Dig(_cfg, "sip.direct_port");
             if (dp != null)
             {
@@ -336,15 +435,22 @@ namespace DoorbellApp
             _callFlow = flow != null && flow.ToString() == "ring_then_purpose" ?
                 "ring_then_purpose" : "purpose_first";
             ApplyTheme();
+            ApplyAppearance();
             BuildPurposeButtons();
             BuildLangBar();
             ApplyStrings();
+            ApplyRoleHome();
+            RefreshAdminLink();
+            RefreshNoticeSurfaces();
+            RefreshDoorTiles();
             _semanticStyles = SemanticUiOverrides.Load(_cfg, _nodeId, App.DataDir);
             ApplySemanticStyles();
-            App.Core.PublishUiStyleStatus(App.Boot.Role, App.SafeMode,
-                                          _semanticStyles.RuntimeReport);
+            PublishUiStyleWithAdvisories();
             OpenMonitorButton.Visibility = App.Boot.Role == "indoor_panel" ?
                 Visibility.Visible : Visibility.Collapsed;
+            MicButton.Visibility = App.Core.SipMicMuteAvailable ?
+                Visibility.Visible : Visibility.Collapsed;
+            InCallMicButton.Visibility = MicButton.Visibility;
             bool sip = App.Core.SipAvailable;
             AnswerButton.IsEnabled = sip && !_suppressLosingSipIdle;
             MonitorButton.IsEnabled = sip;
@@ -640,6 +746,7 @@ namespace DoorbellApp
                 LangBar.Children.Add(b);
             }
             LangBar.Visibility = Visibility.Visible;
+            LangBar.ToolTip = Texts.T("door.lang_switch");
             UpdateLangBarSelection();
         }
 
@@ -701,6 +808,7 @@ namespace DoorbellApp
                 if (_audio == null)
                 {
                     _audio = new MediaPlayer();
+                    _audio.Volume = _volumeCall / 100.0;
                     _audio.MediaFailed += (s, e) =>
                     {
                         Debug.WriteLine("Custom audio playback failed; using fallback: " + e.ErrorException);
@@ -709,6 +817,7 @@ namespace DoorbellApp
                         if (fb != null) fb();
                     };
                 }
+                _audio.Volume = _volumeCall / 100.0;
                 _audio.Open(new Uri(path));
                 _audio.Play();
             }
@@ -745,8 +854,26 @@ namespace DoorbellApp
             }
         }
 
+        /// <summary>
+        /// Effective 呼出 / SOS / 通常 volumes for this device, resolved by core from the device
+        /// override and the cluster default (db_core_audio_json).
+        /// </summary>
+        private void RefreshAudioVolumes()
+        {
+            var levels = App.Core.AudioVolumes(_nodeId);
+            if (levels == null) return;
+            _volumeCall = Clamp(DictInt(levels, "call", _volumeCall));
+            _volumeSos = Clamp(DictInt(levels, "sos", _volumeSos));
+            _volumeIdle = Clamp(DictInt(levels, "idle", _volumeIdle));
+        }
+
+        private static int Clamp(int percent)
+        {
+            return percent < 0 ? 0 : (percent > 100 ? 100 : percent);
+        }
+
         private MediaPlayer PlayConfigured(MediaPlayer current, string value, bool loop,
-                                           Action fallback = null)
+                                           Action fallback = null, int volumePercent = -1)
         {
             StopPlayer(ref current);
             if (string.IsNullOrEmpty(value)) return null;
@@ -766,7 +893,8 @@ namespace DoorbellApp
             }
             try
             {
-                var player = new MediaPlayer();
+                var player = new MediaPlayer
+                { Volume = volumePercent < 0 ? 1.0 : Clamp(volumePercent) / 100.0 };
                 player.MediaEnded += (s, e) =>
                 {
                     if (loop) { player.Position = TimeSpan.Zero; player.Play(); }
@@ -843,6 +971,8 @@ namespace DoorbellApp
             NightTint.Visibility = (_night && _redTint) ? Visibility.Visible : Visibility.Collapsed;
             ClockText.Foreground = _night ? NightClockBrush : (Brush)FindResource("Fg");
             DateText.Foreground = _night ? NightClockBrush : (Brush)FindResource("Dim");
+            DashClock.Foreground = ClockText.Foreground;
+            DashDate.Foreground = DateText.Foreground;
             SaverClock.Foreground = _night ? NightClockBrush : SaverClockBrush;
 
             if (!App.SafeMode && _pixelShiftS > 0)
@@ -859,6 +989,7 @@ namespace DoorbellApp
 
             if (!_emergencyActive)
                 SetBrightnessAsync(_screensaverOn ? Math.Min(_brightness, 10) : _brightness);
+            ApplyAutoInk();
         }
 
         private void SetBrightnessAsync(int percent)
@@ -938,50 +1069,77 @@ namespace DoorbellApp
             }
             SosButton.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
 
-            var hold = CoreClient.Dig(cfg, "emergency.hold_to_trigger_s");
-            _sosHoldS = 3;
-            if (hold != null)
+            // Slide mode is the only trigger; "hold" stays accepted so an older configuration
+            // keeps validating, and the cancellable countdown is what it configures.
+            var countdown = CoreClient.Dig(cfg, "emergency.trigger.countdown_s");
+            _sosCountdownS = 3;
+            if (countdown != null)
             {
-                double d;
-                if (double.TryParse(hold.ToString(), out d) && d > 0) _sosHoldS = d;
+                int seconds;
+                if (int.TryParse(countdown.ToString(), out seconds) &&
+                    seconds >= 0 && seconds <= 10) _sosCountdownS = seconds;
             }
-            SosHint.Text = Texts.T("emergency.hold_hint", _sosHoldS);
+            ApplySosLabel();
 
             var pin = CoreClient.Dig(cfg, "emergency.cancel_requires_pin");
             _cancelRequiresPin = !(pin is bool) || (bool)pin;
         }
 
-        private void OnSosDown(object sender, MouseButtonEventArgs e)
+        // Deliberate two-part label: the second line is the smaller, muted explanation and the
+        // break is authored in the catalog rather than produced by wrapping.
+        private void ApplySosLabel()
         {
-            _sosDownAt = DateTime.Now;
-            _sosHolding = true;
-            SosProgress.Value = 0;
-            _sosTimer.Start();
-            SosButton.CaptureMouse();
+            string label = Texts.T("sos.slide_label", _sosCountdownS);
+            int split = label.IndexOf('\n');
+            SosText.Text = split >= 0 ? label.Substring(0, split) : label;
+            SosHint.Text = split >= 0 ? label.Substring(split + 1) : "";
+            SosHint.Visibility = SosHint.Text.Length == 0 ?
+                Visibility.Collapsed : Visibility.Visible;
         }
 
-        private void OnSosTick()
+        /// <summary>The thumb was released past 90 %: start the cancellable countdown.</summary>
+        private void OnSosArmed()
         {
-            if (!_sosHolding) { _sosTimer.Stop(); return; }
-            double held = (DateTime.Now - _sosDownAt).TotalSeconds;
-            SosProgress.Value = Math.Min(100, held / _sosHoldS * 100);
-            if (held >= _sosHoldS)
+            if (_emergencyActive) return;
+            if (_sosCountdownS <= 0)
             {
-                ResetSosHold();
-                if (!App.Core.Emergency(true))
-                    System.Diagnostics.Debug.WriteLine("SOS state was not durably committed");
+                CommitEmergency();
+                return;
             }
+            _sosCountdownLeft = _sosCountdownS;
+            SosCountdownText.Text = Texts.T("sos.countdown", _sosCountdownLeft);
+            SosCountdownView.Visibility = Visibility.Visible;
+            _sosCountdown.Stop();
+            _sosCountdown.Start();
         }
 
-        private void OnSosUp(object sender, MouseButtonEventArgs e) => ResetSosHold();
-        private void OnSosLeave(object sender, MouseEventArgs e) => ResetSosHold();
-
-        private void ResetSosHold()
+        private void OnSosCountdownTick()
         {
-            _sosHolding = false;
-            _sosTimer.Stop();
-            SosProgress.Value = 0;
-            if (SosButton.IsMouseCaptured) SosButton.ReleaseMouseCapture();
+            _sosCountdownLeft--;
+            if (_sosCountdownLeft > 0)
+            {
+                SosCountdownText.Text = Texts.T("sos.countdown", _sosCountdownLeft);
+                return;
+            }
+            StopSosCountdown();
+            CommitEmergency();
+        }
+
+        // Core only ever learns about the emergency when the countdown reaches zero.
+        private void CommitEmergency()
+        {
+            if (!App.Core.Emergency(true))
+                System.Diagnostics.Debug.WriteLine("SOS state was not durably committed");
+        }
+
+        private void OnSosCountdownCancel(object sender, RoutedEventArgs e) => StopSosCountdown();
+
+        private void StopSosCountdown()
+        {
+            _sosCountdown.Stop();
+            _sosCountdownLeft = 0;
+            SosCountdownView.Visibility = Visibility.Collapsed;
+            SosSlide.Reset();
         }
 
         private void ShowEmergency(UiEvent ev)
@@ -992,7 +1150,8 @@ namespace DoorbellApp
             bool visual = EventBool(ev, "visual", true);
             bool sticky = EventBool(ev, "sticky", active);
             double ttl = Math.Max(0, DictDouble(ev.Data, "ttl_s", active ? 0 : 10));
-            int volume = Math.Max(0, Math.Min(100, DictInt(ev.Data, "alarm_volume", 100)));
+            int volume = Math.Max(0, Math.Min(100,
+                DictInt(ev.Data, "alarm_volume", _volumeSos)));
             bool hasSound = !string.IsNullOrEmpty(ev.Str("alarm_sound")) ||
                             !string.IsNullOrEmpty(ev.Str("audio_path"));
             bool sound = hasSound && volume > 0;
@@ -1074,6 +1233,7 @@ namespace DoorbellApp
 
         private void HideEmergency()
         {
+            StopSosCountdown();
             _emergencyPresentationTimeout.Stop();
             _alertNotifier.Clear();
             _emergencyActive = false;
@@ -1414,7 +1574,8 @@ namespace DoorbellApp
                          eventType == "call_ended" ||
                          (eventType == "purpose_selected" && purposeApplied)))
                         _effects = PlayConfigured(_effects,
-                            SoundValue("update_sound", "indoor_update"), false);
+                            SoundValue("update_sound", "indoor_update"), false, null,
+                            _volumeIdle);
                     if (eventType == "call_answered")
                     {
                         StopPlayer(ref _callFeedback);
@@ -1469,7 +1630,7 @@ namespace DoorbellApp
                         PlayAudio(ev.Str("audio_path"), () => SystemSounds.Exclamation.Play());
                     else
                         _audio = PlayConfigured(_audio, ev.Str("sound"), false,
-                            () => SystemSounds.Exclamation.Play());
+                            () => SystemSounds.Exclamation.Play(), _volumeCall);
                     break;
                 case "call_recovery_required":
                     RecoverCall(ev);
@@ -1527,6 +1688,25 @@ namespace DoorbellApp
                 case "peers_changed":
                 case "config_changed":
                     RefreshNodeInfo();
+                    break;
+                case "time_changed":
+                    // The source flipped or the correction moved: redraw every clock now.
+                    UpdateClock();
+                    ApplyAppearance();
+                    break;
+                case "power_changed":
+                    _batteryPct = DictInt(ev.Data, "battery_pct", _batteryPct);
+                    _batteryCharging = EventBool(ev, "charging", _batteryCharging);
+                    RefreshNodeInfo();
+                    break;
+                case "notice_changed":
+                    RefreshConfigCache();
+                    RefreshNoticeSurfaces();
+                    RefreshDoorTiles();
+                    break;
+                case "call_log_changed":
+                    _unreadMissed = DictInt(ev.Data, "unread_missed", _unreadMissed);
+                    RefreshCallHistory();
                     break;
             }
         }
@@ -1723,7 +1903,7 @@ namespace DoorbellApp
                 _callFlow = callFlow;
             _callFeedback = PlayConfigured(_callFeedback,
                 SoundValue("call_sound", "outdoor_call_alert"),
-                ConfigBool("ui.call_sound_loop", false));
+                ConfigBool("ui.call_sound_loop", false), null, _volumeCall);
             ShowCalling(null, expiry);
             ReportRecoveryOnce(callId, true);
         }
@@ -1804,9 +1984,15 @@ namespace DoorbellApp
             _incomingLang = ev.Str("visitor_lang");
             IncomingTitle.Text = monitorOnly ? Texts.T("monitor.title", DoorLabel(_incomingDoor)) :
                                                Texts.T("ring.incoming", DoorLabel(_incomingDoor));
+            _quickRepliesOpen = false;
+            _monitorAudioOn = false;
+            _micMuted = false;
+            ApplyMicLabel();
+            ApplyMonitorLabel();
             UpdateIncomingBadges();
             BuildQuickReplies();
-            QuickReplyPanel.Visibility = monitorOnly ? Visibility.Collapsed : QuickReplyPanel.Visibility;
+            QuickReplyToggle.Visibility = monitorOnly ?
+                Visibility.Collapsed : Visibility.Visible;
             IncomingHint.Visibility = Visibility.Collapsed;
 
             // Resolve the door peer into a video URL and direct-call host.
@@ -1819,11 +2005,18 @@ namespace DoorbellApp
             AnswerButton.IsEnabled = sip;
             MonitorButton.IsEnabled = sip;
             OpenDoorButton.IsEnabled = false;
+            bool unlock = UnlockShown(_incomingDoor);
+            OpenDoorButton.Visibility = unlock ? Visibility.Visible : Visibility.Collapsed;
+            InCallOpenDoorButton.Visibility = OpenDoorButton.Visibility;
             IgnoreButton.Content = monitorOnly ? Texts.T("monitor.close") : Texts.T("ring.ignore");
 
             StartIncomingVideo();
 
             IncomingView.Visibility = Visibility.Visible;
+            ShowCallOverlay(_incomingDoor);
+            _statsRefresh.Stop();
+            _statsRefresh.Start();
+            RefreshVideoStats();
             _incomingTimeout.Stop();
             if (!monitorOnly) _incomingTimeout.Start();  // Proactive monitoring remains until closed.
         }
@@ -1971,7 +2164,14 @@ namespace DoorbellApp
                     _semanticApplier.Apply(b, _semanticStyles.Get("reply.button"), false);
                 QuickReplyPanel.Children.Add(b);
             }
-            QuickReplyPanel.Visibility = Visibility.Visible;
+            ApplyQuickReplyVisibility();
+        }
+
+        private void ApplyQuickReplyVisibility()
+        {
+            QuickReplyPanel.Visibility = _quickRepliesOpen && !_inCall &&
+                QuickReplyPanel.Children.Count != 0 ?
+                Visibility.Visible : Visibility.Collapsed;
         }
 
         private void OnQuickReplyClick(object sender, RoutedEventArgs e)
@@ -1992,6 +2192,7 @@ namespace DoorbellApp
             _answerDelay.Stop();
             StopIncomingVideo();
             IncomingView.Visibility = Visibility.Collapsed;
+            if (InCallView.Visibility != Visibility.Visible) HideCallOverlay();
             AnswerButton.IsEnabled = true;
             if (hangup && _sipMode != "" && !_inCall)
             {
@@ -2000,6 +2201,10 @@ namespace DoorbellApp
             }
             _incomingCallId = "";
             _monitorOnly = false;
+            _quickRepliesOpen = false;
+            _monitorAudioOn = false;
+            ApplyQuickReplyVisibility();
+            ApplyMonitorLabel();
             AnswerButton.Visibility = Visibility.Visible;
             IgnoreButton.Content = Texts.T("ring.ignore");
             OpenDoorButton.IsEnabled = false;
@@ -2051,8 +2256,20 @@ namespace DoorbellApp
                 IncomingHint.Visibility = Visibility.Visible;
                 return;
             }
+            if (_sipMode == "monitor")
+            {
+                // Visible ON/OFF state: turning it off stops door audio without ending the call.
+                App.Core.SipHangup();
+                _sipMode = "";
+                _monitorAudioOn = false;
+                OpenDoorButton.IsEnabled = false;
+                ApplyMonitorLabel();
+                return;
+            }
             if (string.IsNullOrEmpty(_incomingHost) || _sipMode != "") return;
             _sipMode = "monitor";
+            _monitorAudioOn = true;
+            ApplyMonitorLabel();
             App.Core.SipCall("sip:" + _incomingHost + ":" + _directPort, "monitor");
             IncomingHint.Text = Texts.T("ring.monitoring");
             IncomingHint.Visibility = Visibility.Visible;
@@ -2063,11 +2280,48 @@ namespace DoorbellApp
 
         private void OnOpenDoorClick(object sender, RoutedEventArgs e)
         {
+            // A door whose unlock action is not configured explains itself instead of no-opping.
+            if (!UnlockConfigured(CurrentCallDoor()))
+            {
+                ShowCallMessage(Texts.T("ring.open_unconfigured"));
+                return;
+            }
             bool ok = App.Core.SipAvailable && _sipMode != "" &&
                       App.Core.SipSendDtmf("*1");
-            string message = Texts.T(ok ? "ring.open_sent" : "ring.open_failed");
+            ShowCallMessage(Texts.T(ok ? "ring.open_sent" : "ring.open_failed"));
+        }
+
+        private string CurrentCallDoor()
+        {
+            if (InCallView.Visibility == Visibility.Visible &&
+                !string.IsNullOrEmpty(_lifecycleDoor)) return _lifecycleDoor;
+            return _incomingDoor;
+        }
+
+        private void ShowCallMessage(string message)
+        {
             if (InCallView.Visibility == Visibility.Visible) InCallTitle.Text = message;
             else { IncomingHint.Text = message; IncomingHint.Visibility = Visibility.Visible; }
+        }
+
+        /// <summary>
+        /// doors.&lt;id&gt;.unlock.show_button decides whether the control is offered at all;
+        /// an unset key defaults to whether an unlock action exists.
+        /// </summary>
+        private bool UnlockShown(string door)
+        {
+            if (App.Boot.Role != "indoor_panel") return false;
+            var value = CoreClient.Dig(_cfg, "doors." + (door ?? "") + ".unlock.show_button");
+            if (value is bool) return (bool)value;
+            return UnlockConfigured(door);
+        }
+
+        private bool UnlockConfigured(string door)
+        {
+            if (CoreClient.Dig(_cfg, "doors." + (door ?? "") + ".unlock.action") != null)
+                return true;
+            var actions = CoreClient.Dig(_cfg, "sip.dtmf_actions") as Dictionary<string, object>;
+            return actions != null && actions.Count != 0;
         }
 
         private void OnOpenMonitorClick(object sender, RoutedEventArgs e)
@@ -2214,6 +2468,11 @@ namespace DoorbellApp
             StartInCallMjpeg();
             StartInCallH264();
             InCallView.Visibility = Visibility.Visible;
+            UpdateInCallPurpose();
+            ShowCallOverlay(_lifecycleDoor.Length != 0 ? _lifecycleDoor : _incomingDoor);
+            _statsRefresh.Stop();
+            _statsRefresh.Start();
+            RefreshVideoStats();
         }
 
         private void StartInCallMjpeg()
@@ -2259,6 +2518,7 @@ namespace DoorbellApp
         {
             _peerPoll.Stop();
             _peerH264Retry.Stop();
+            if (IncomingView.Visibility != Visibility.Visible) _statsRefresh.Stop();
             if (_inCallStreamer != null) { _inCallStreamer.Stop(); _inCallStreamer = null; }
             try { PeerH264.Stop(); } catch { }
             PeerH264.Source = null;
@@ -2270,6 +2530,9 @@ namespace DoorbellApp
             _inCallMjpegUrl = "";
             _inCallH264Url = "";
             InCallView.Visibility = Visibility.Collapsed;
+            _micMuted = false;
+            ApplyMicLabel();
+            if (IncomingView.Visibility != Visibility.Visible) HideCallOverlay();
         }
 
         private void PollPeerFrame()
@@ -2300,7 +2563,7 @@ namespace DoorbellApp
         {
             _callFeedback = PlayConfigured(_callFeedback,
                 SoundValue("call_sound", "outdoor_call_alert"),
-                ConfigBool("ui.call_sound_loop", false));
+                ConfigBool("ui.call_sound_loop", false), null, _volumeCall);
             _activeCallId = App.Core.Press(App.Boot.Door) ?? "";
             if (string.IsNullOrEmpty(_activeCallId))
             {
@@ -2343,8 +2606,7 @@ namespace DoorbellApp
             switch (ev.T)
             {
                 case "pairing_revoked":
-                    // Core already dropped the key; the shell drops the boot reference too.
-                    App.ClearPairingBootReference();
+                    // App owns the factory reset for a revoke (spec 5.4); this view only renders.
                     _pairingSkipped = false;
                     ShowPairingOverlay();
                     PairingOverlay.HandleCoreEvent(ev);

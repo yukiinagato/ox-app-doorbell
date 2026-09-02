@@ -282,7 +282,8 @@ namespace DoorbellApp.Pairing
         private void RequestNewCode()
         {
             AddWithCodeButton.IsEnabled = false;
-            Task.Factory.StartNew(() => App.Core.StartPairing(TokenSeconds))
+            // A PIN never opens the pairing-mode window (spec 5.4).
+            Task.Factory.StartNew(() => App.Core.MintJoinToken(TokenSeconds))
                 .ContinueWith(task => Dispatcher.BeginInvoke(new Action(() =>
                 {
                     AddWithCodeButton.IsEnabled = true;
@@ -293,9 +294,13 @@ namespace DoorbellApp.Pairing
         private void OnAddAllClick(object sender, RoutedEventArgs e)
         {
             bool stopping = _snapshot.PairingMode;
-            int seconds = stopping ? 0 : PairingModeSeconds;
             AddAllButton.IsEnabled = false;
-            Task.Factory.StartNew(() => App.Core.SetPairingMode(seconds))
+            // Only this explicit button, with its warning, opens the pairing-mode window.
+            Task.Factory.StartNew(() =>
+                {
+                    if (stopping) App.Core.SetPairingMode(0);
+                    else App.Core.StartPairing(PairingModeSeconds);
+                })
                 .ContinueWith(task => Dispatcher.BeginInvoke(new Action(() =>
                 {
                     AddAllButton.IsEnabled = true;

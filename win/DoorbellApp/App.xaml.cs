@@ -88,6 +88,50 @@ namespace DoorbellApp
                 Boot = BootConfig.Load(Boot.FilePath);
         }
 
+        /// <summary>
+        /// Revoke, and "leave the Cluster" confirmed on this device, are a factory reset
+        /// (spec 5.4): the DPAPI mesh key, the boot.json pairing fields, and the operator's own
+        /// name/role/door/setup_complete confirmation are all removed, then the app restarts into
+        /// first-run setup. A watchdog-managed install is restarted by the watchdog; without one
+        /// the process relaunches itself so a kiosk never sits on a blank screen.
+        /// </summary>
+        internal static void FactoryResetAndRestart(string reason)
+        {
+            if (_factoryResetStarted) return;
+            _factoryResetStarted = true;
+            var app = Current as App;
+            try { Core?.DeleteSecret("mesh.psk"); } catch { }
+            try { if (Boot != null) BootConfig.ResetToFactory(Boot.FilePath); } catch { }
+            try
+            {
+                File.AppendAllText(Path.Combine(DataDir, "pairing-error.log"),
+                    DateTime.UtcNow.ToString("o") + " factory_reset " + (reason ?? "") +
+                    Environment.NewLine);
+            }
+            catch { }
+            if (app != null) app._runtimeProcess?.RecordExit("factory_reset");
+            bool watchdog = app != null && app._heartbeat != null && app._heartbeat.Available;
+            if (!watchdog)
+            {
+                try
+                {
+                    string exe = System.Reflection.Assembly.GetEntryAssembly() == null ? null :
+                        System.Reflection.Assembly.GetEntryAssembly().Location;
+                    if (!string.IsNullOrEmpty(exe)) System.Diagnostics.Process.Start(exe);
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine("relaunch after factory reset failed: " +
+                                                       ex.Message);
+                }
+            }
+            // Shutdown must run on the UI thread; core delivers this event on its own thread.
+            if (app != null)
+                app.Dispatcher.BeginInvoke(new Action(() => app.Shutdown(0)));
+        }
+
+        private static bool _factoryResetStarted;
+
         private void OnCoreLifecycleEvent(UiEvent ev)
         {
             if (ev == null) return;
@@ -96,10 +140,24 @@ namespace DoorbellApp
                 ReportPairingPersistenceFailure("Core secure-store callback failed");
                 return;
             }
+            if (ev.T == "pairing_revoked")
+            {
+                // Removed by an administrator: wipe the key, the pairing reference and this
+                // device's own setup, then come back in first-run setup.
+                FactoryResetAndRestart("pairing_revoked");
+                return;
+            }
             if (ev.T == "pairing_state")
             {
                 // Leaving the Cluster must not leave a boot reference to a secret that is gone.
-                if (ev.Str("state") == "unpaired") ClearPairingBootReference();
+                // A device that had been paired is reset the same way a revoke resets it; a device
+                // that was never paired simply starts out unpaired and is left alone.
+                if (ev.Str("state") == "unpaired")
+                {
+                    if (Boot != null && !string.IsNullOrEmpty(Boot.PskRef))
+                        FactoryResetAndRestart("unpaired");
+                    else ClearPairingBootReference();
+                }
                 return;
             }
             if (ev.T != "paired" || ev.Data == null) return;

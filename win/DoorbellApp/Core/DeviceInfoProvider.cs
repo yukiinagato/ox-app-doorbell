@@ -90,5 +90,36 @@ namespace DoorbellApp.Core
             SystemPowerStatus status;
             return GetSystemPowerStatus(out status) && status.ACLineStatus == 1;
         }
+
+        /// <summary>
+        /// db_platform_v2.power_state payload: {"battery_pct":-1..100,"charging":bool,
+        /// "mains":bool}. A desktop without a battery reports -1 and shells hide the indicator.
+        /// </summary>
+        public static Dictionary<string, object> PowerState()
+        {
+            int percent = -1;
+            bool charging = false;
+            bool mains = false;
+            SystemPowerStatus status;
+            if (GetSystemPowerStatus(out status))
+            {
+                mains = status.ACLineStatus == 1;
+                // BatteryFlag bit 7 (128) means "no system battery"; 255 means unknown.
+                bool hasBattery = status.BatteryFlag != 255 && (status.BatteryFlag & 128) == 0;
+                if (hasBattery && status.BatteryLifePercent <= 100)
+                    percent = status.BatteryLifePercent;
+                // Bit 3 (8) is the charging flag; only a real battery can be charging.
+                charging = hasBattery && (status.BatteryFlag & 8) != 0;
+            }
+            return new Dictionary<string, object>
+            {
+                { "battery_pct", percent },
+                { "charging", charging },
+                { "mains", mains },
+            };
+        }
+
+        public static string PowerStateJson() =>
+            new JavaScriptSerializer().Serialize(PowerState());
     }
 }
