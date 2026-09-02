@@ -118,7 +118,9 @@ typedef void (^DBUiEventHandler)(NSDictionary *ev);
 // constant-time and rate-limited inside Core and is shared with /api/login, so
 // an offline device checks the replicated hash it already holds.
 + (BOOL)supportsAdminPassword;
-- (BOOL)verifyAdminPassword:(NSString *)password;
+// Core's own result: >0 accepted, 0 wrong, -1 locked out, -2 no cluster
+// password yet, -3 invalid arguments. -100 when the export is absent.
+- (int)verifyAdminPassword:(NSString *)password;
 // current may be empty when no password has been set yet. Returns 0 on success.
 - (int)setAdminPasswordFrom:(NSString *)current to:(NSString *)replacement;
 
@@ -133,11 +135,16 @@ typedef void (^DBUiEventHandler)(NSDictionary *ev);
 - (int)setConfigKey:(NSString *)key numberValue:(NSInteger)value;
 - (int)setConfigKey:(NSString *)key boolValue:(BOOL)value;
 - (int)deleteConfigKey:(NSString *)key;
-// ops are {op:"set"|"delete", key, value} entries, applied as one transaction.
-- (int)writeConfigBatch:(NSArray *)ops;
+// ops are {op:"set"|"delete", key, value} entries, applied as one atomic
+// commit. Returns Core's result document, or nil when the export is absent.
+- (NSDictionary *)writeConfigBatch:(NSArray *)ops;
+// Readability warnings produced by the last single-key write. Each entry is
+// {key, property, contrast, message_key}; an empty array means nothing to
+// report. A warning never means the write failed.
+- (NSArray *)lastWriteWarnings;
 
-// The cluster-wide announcement (notice.global), which a door-specific one
-// always overrides.
+// The cluster-wide announcement. Core has no separate export for it: it is
+// door "*", stored at notice.global, which a door-specific notice overrides.
 - (BOOL)setGlobalNotice:(NSString *)text expiresMs:(long long)expiresMs;
 - (BOOL)clearGlobalNotice;
 

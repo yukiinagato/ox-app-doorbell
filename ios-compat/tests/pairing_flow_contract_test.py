@@ -105,8 +105,13 @@ class AdminPasswordAndWriteContracts(unittest.TestCase):
         self.assertIn("[DBCoreBridge supportsAdminPassword]", accept)
         self.assertIn("[_core verifyAdminPassword:entered]", accept)
         self.assertIn("retireLocalDigest", accept)
-        # The old per-node digest is accepted only while the cluster has no
-        # password at all, proven by Core accepting it as the first one.
+        # Core's documented codes drive the decision: accepted, wrong, locked
+        # out, or no cluster password yet.
+        self.assertIn("if (status > 0)", accept)
+        self.assertIn("if (status == 0 || status == -1)", accept)
+        self.assertIn("if (status != -2) return NO;", accept)
+        # The old per-node digest is consulted only while the cluster has no
+        # password (-2) and the first successful entry republishes it.
         self.assertIn('setAdminPasswordFrom:@"" to:entered', accept)
         self.assertIn("if (!localMatches) return NO;", accept)
         # ...and then the file is gone, so it is never a second credential.
@@ -124,10 +129,19 @@ class AdminPasswordAndWriteContracts(unittest.TestCase):
         incoming = read("ios-kiosk/src/Screens/DBIncomingScreen.m")
 
         for symbol in ("db_core_set_config_json", "db_core_config_batch_json",
-                       "db_core_delete_config_key", "db_core_set_global_notice",
-                       "db_core_clear_global_notice", "db_core_call_log_json_v2",
-                       "db_core_sip_set_mic_muted"):
+                       "db_core_delete_config_key", "db_core_last_write_warnings_json",
+                       "db_core_call_log_json_v2", "db_core_sip_set_mic_muted"):
             self.assertIn('DBCoreSymbol("%s")' % symbol, bridge)
+        # There is no global-notice export: the cluster-wide announcement is
+        # door "*", so the shell must not look one up.
+        self.assertNotIn("db_core_set_global_notice", bridge)
+        self.assertNotIn("db_core_clear_global_notice", bridge)
+        self.assertIn("setNotice:text forDoor:DBNoticeTargetGlobal", bridge)
+        # The batch form returns a result document, not a status code.
+        self.assertIn("typedef char *(*DBConfigBatchFn)", bridge)
+        # A readability warning is shown, never treated as a failed write.
+        self.assertIn("lastWriteWarnings", settings)
+        self.assertIn("theme.low_contrast", settings)
 
         # No loopback HTTP anywhere in the settings path.
         self.assertNotIn("api/config", settings)

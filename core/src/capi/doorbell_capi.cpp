@@ -395,6 +395,52 @@ DB_API char* db_core_config_json(db_core* c) {
   return dupString(c->node->configJson());
 }
 
+DB_API int db_core_sip_set_mic_muted(db_core* c, int muted) {
+  if (!c || !c->node) return -1;
+  c->node->setSipMicMuted(muted != 0);
+  return 0;
+}
+
+DB_API int db_core_admin_password_verify(db_core* c, const char* pw) {
+  // -1 is "locked out" in this contract, so a bad argument reports -3 instead.
+  if (!c || !c->node || !pw) return -3;
+  return c->node->verifyAdminPassword(pw);
+}
+
+DB_API int db_core_admin_password_set(db_core* c, const char* current_or_empty,
+                                      const char* new_pw) {
+  if (!c || !c->node || !new_pw) return -1;
+  return c->node->setAdminPassword(current_or_empty ? current_or_empty : "", new_pw);
+}
+
+DB_API int db_core_set_config_json(db_core* c, const char* key, const char* value_json) {
+  if (!c || !c->node || !key || !*key || !value_json) return -1;
+  auto result = json::parse(c->node->setConfigJson(key, value_json));
+  return (result && json::getBool(result.get(), "ok")) ? 0 : -2;
+}
+
+DB_API char* db_core_last_write_warnings_json(db_core* c) {
+  if (!c || !c->node) return nullptr;
+  return dupString(c->node->lastWriteWarningsJson());
+}
+
+DB_API char* db_core_config_batch_json(db_core* c, const char* ops_json) {
+  if (!c || !c->node || !ops_json) return nullptr;
+  return dupString(c->node->configBatchJson(ops_json));
+}
+
+DB_API int db_core_delete_config_key(db_core* c, const char* key) {
+  if (!c || !c->node || !key || !*key) return -1;
+  auto result = json::parse(c->node->deleteConfigKeyJson(key));
+  return (result && json::getBool(result.get(), "ok")) ? 0 : -2;
+}
+
+DB_API char* db_core_call_log_json_v2(db_core* c, int64_t since_ms, int64_t before_ms,
+                                      int limit) {
+  if (!c || !c->node) return nullptr;
+  return dupString(c->node->callLogJson(since_ms, before_ms, limit));
+}
+
 DB_API char* db_core_local_time_json(db_core* c, int64_t wall_ms) {
   if (!c || !c->node) return nullptr;
   return dupString(c->node->localTimeJson(wall_ms));

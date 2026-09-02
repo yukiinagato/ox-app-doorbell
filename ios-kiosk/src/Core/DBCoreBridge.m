@@ -1054,10 +1054,9 @@ static void DBUiEventCb(void *user, const char *event_json) {
 typedef int (*DBAdminVerifyFn)(db_core *, const char *);
 typedef int (*DBAdminSetFn)(db_core *, const char *, const char *);
 typedef int (*DBSetConfigFn)(db_core *, const char *, const char *);
-typedef int (*DBConfigBatchFn)(db_core *, const char *);
+typedef char *(*DBConfigBatchFn)(db_core *, const char *);
+typedef char *(*DBWriteWarningsFn)(db_core *);
 typedef int (*DBDeleteConfigFn)(db_core *, const char *);
-typedef int (*DBSetGlobalNoticeFn)(db_core *, const char *, int64_t);
-typedef int (*DBClearGlobalNoticeFn)(db_core *);
 typedef char *(*DBCallLogV2Fn)(db_core *, int64_t, int64_t, int);
 typedef int (*DBMicMuteFn)(db_core *, int);
 
@@ -1123,17 +1122,18 @@ static DBAdminSetFn DBAdminSet(void) {
   return DBAdminVerify() != NULL;
 }
 
-- (BOOL)verifyAdminPassword:(NSString *)password {
+- (int)verifyAdminPassword:(NSString *)password {
   DBAdminVerifyFn verify = DBAdminVerify();
-  if (verify == NULL || password == nil) return NO;
+  if (verify == NULL) return -100;
+  if (password == nil) return -3;
   NSString *value = [password copy];
-  __block BOOL ok = NO;
-  // Core owns the constant-time comparison and the shared lockout counter, so
-  // the shell must not add a second, weaker check of its own.
+  __block int status = -3;
+  // Core owns the constant-time comparison and the lockout counter it shares
+  // with /api/login, so the shell must not add a second, weaker check.
   dispatch_sync(_coreQueue, ^{
-    if (self->_core) ok = verify(self->_core, [value UTF8String]) > 0;
+    if (self->_core) status = verify(self->_core, [value UTF8String]);
   });
-  return ok;
+  return status;
 }
 
 - (int)setAdminPasswordFrom:(NSString *)current to:(NSString *)replacement {
@@ -1221,66 +1221,60 @@ static DBDeleteConfigFn DBDeleteConfig(void) {
   return status;
 }
 
-- (int)writeConfigBatch:(NSArray *)ops {
+static DBWriteWarningsFn DBWriteWarnings(void) {
+  static DBWriteWarningsFn fn = NULL;
+  static dispatch_once_t once;
+  dispatch_once(&once, ^{
+    fn = (DBWriteWarningsFn)DBCoreSymbol("db_core_last_write_warnings_json");
+  });
+  return fn;
+}
+
+// Core returns the same result document the HTTP endpoint does; nothing is
+// written unless every operation validates.
+- (NSDictionary *)writeConfigBatch:(NSArray *)ops {
   DBConfigBatchFn batch = DBConfigBatch();
-  if (batch == NULL) return -100;
-  if (![ops isKindOfClass:[NSArray class]] || [ops count] == 0) return -1;
+  if (batch == NULL) return nil;
+  if (![ops isKindOfClass:[NSArray class]] || [ops count] == 0) return nil;
   NSData *encoded = [NSJSONSerialization
       dataWithJSONObject:[NSDictionary dictionaryWithObject:ops forKey:@"ops"]
                  options:0 error:NULL];
-  if (encoded == nil) return -1;
+  if (encoded == nil) return nil;
   NSString *json = [[NSString alloc] initWithData:encoded encoding:NSUTF8StringEncoding];
-  __block int status = -1;
+  __block NSDictionary *out = nil;
   dispatch_sync(_coreQueue, ^{
-    if (self->_core) status = batch(self->_core, [json UTF8String]);
+    if (self->_core) out = [self takeJson:batch(self->_core, [json UTF8String])];
   });
-  return status;
+  return out;
+}
+
+// A readability warning means the value was saved and may be hard to read; it
+// is never a failure.
+- (NSArray *)lastWriteWarnings {
+  DBWriteWarningsFn warnings = DBWriteWarnings();
+  if (warnings == NULL) return [NSArray array];
+  __block NSArray *out = nil;
+  dispatch_sync(_coreQueue, ^{
+    if (!self->_core) return;
+    char *raw = warnings(self->_core);
+    if (raw == NULL) return;
+    NSData *data = [NSData dataWithBytes:raw length:strlen(raw)];
+    db_free(raw);
+    id parsed = [NSJSONSerialization JSONObjectWithData:data options:0 error:NULL];
+    if ([parsed isKindOfClass:[NSArray class]]) out = parsed;
+  });
+  return out ?: [NSArray array];
 }
 
 #pragma mark - global announcement, history paging, mic mute (spec §5.5)
 
-static DBSetGlobalNoticeFn DBSetGlobalNotice(void) {
-  static DBSetGlobalNoticeFn fn = NULL;
-  static dispatch_once_t once;
-  dispatch_once(&once, ^{
-    fn = (DBSetGlobalNoticeFn)DBCoreSymbol("db_core_set_global_notice");
-  });
-  return fn;
-}
-
-static DBClearGlobalNoticeFn DBClearGlobalNotice(void) {
-  static DBClearGlobalNoticeFn fn = NULL;
-  static dispatch_once_t once;
-  dispatch_once(&once, ^{
-    fn = (DBClearGlobalNoticeFn)DBCoreSymbol("db_core_clear_global_notice");
-  });
-  return fn;
-}
-
+// There is no separate global-notice export: the cluster-wide announcement is
+// door "*", stored at notice.global, and a door-specific one overrides it.
 - (BOOL)setGlobalNotice:(NSString *)text expiresMs:(long long)expiresMs {
-  if ([text length] == 0) return NO;
-  NSString *value = [text copy];
-  DBSetGlobalNoticeFn set = DBSetGlobalNotice();
-  if (set != NULL) {
-    __block BOOL ok = NO;
-    dispatch_sync(_coreQueue, ^{
-      if (self->_core) ok = set(self->_core, [value UTF8String], (int64_t)expiresMs) == 0;
-    });
-    return ok;
-  }
-  // Older Core: the door API addresses the cluster-wide announcement with "*".
-  return [self setNotice:value forDoor:DBNoticeTargetGlobal expiresMs:expiresMs];
+  return [self setNotice:text forDoor:DBNoticeTargetGlobal expiresMs:expiresMs];
 }
 
 - (BOOL)clearGlobalNotice {
-  DBClearGlobalNoticeFn clear = DBClearGlobalNotice();
-  if (clear != NULL) {
-    __block BOOL ok = NO;
-    dispatch_sync(_coreQueue, ^{
-      if (self->_core) ok = clear(self->_core) == 0;
-    });
-    return ok;
-  }
   return [self clearNoticeForDoor:DBNoticeTargetGlobal];
 }
 

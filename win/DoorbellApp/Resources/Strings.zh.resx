@@ -481,15 +481,20 @@
   <data name="notice_from" xml:space="preserve"><value>发布者</value></data>
   <data name="notice_none" xml:space="preserve"><value>没有公告</value></data>
   <data name="notice_preset_absent" xml:space="preserve"><value>现在不在家</value></data>
+  <data name="notice_preset_add" xml:space="preserve"><value>添加模板</value></data>
   <data name="notice_preset_construction" xml:space="preserve"><value>施工中，如有需要请呼叫</value></data>
   <data name="notice_preset_delivery" xml:space="preserve"><value>快递请送到侧门</value></data>
+  <data name="notice_preset_invalid" xml:space="preserve"><value>请检查模板内容</value></data>
   <data name="notice_presets" xml:space="preserve"><value>常用文案</value></data>
+  <data name="notice_presets_full" xml:space="preserve"><value>最多八条模板</value></data>
+  <data name="notice_presets_title" xml:space="preserve"><value>公告模板</value></data>
   <data name="notice_preview" xml:space="preserve"><value>门口的显示效果</value></data>
   <data name="notice_publish" xml:space="preserve"><value>显示</value></data>
   <data name="notice_saved" xml:space="preserve"><value>公告已显示</value></data>
+  <data name="notice_scope_global" xml:space="preserve"><value>全局公告</value></data>
   <data name="notice_target" xml:space="preserve"><value>显示位置</value></data>
   <data name="notice_target_door" xml:space="preserve"><value>此门口（{0}）</value></data>
-  <data name="notice_target_global" xml:space="preserve"><value>全部门口</value></data>
+  <data name="notice_target_global" xml:space="preserve"><value>全部</value></data>
   <data name="notice_text" xml:space="preserve"><value>内容</value></data>
   <data name="notice_title" xml:space="preserve"><value>公告</value></data>
   <data name="notice_too_long" xml:space="preserve"><value>内容最多 200 个字符（当前 {0} 个）</value></data>
@@ -683,6 +688,8 @@
   <data name="power_title" xml:space="preserve"><value>电量</value></data>
   <data name="power_unknown" xml:space="preserve"><value>未上报</value></data>
   <data name="purpose_cancel_call" xml:space="preserve"><value>取消呼叫</value></data>
+  <data name="purpose_disabled" xml:space="preserve"><value>隐藏</value></data>
+  <data name="purpose_enabled" xml:space="preserve"><value>显示</value></data>
   <data name="purpose_select_failed" xml:space="preserve"><value>无法发送来访目的</value></data>
   <data name="purpose_sent" xml:space="preserve"><value>已按 {0} 呼叫</value></data>
   <data name="purpose_skip" xml:space="preserve"><value>跳过来访目的</value></data>
@@ -707,11 +714,6 @@
   <data name="ring_purpose_badge" xml:space="preserve"><value>目的: {0}</value></data>
   <data name="ring_unlock" xml:space="preserve"><value>开锁</value></data>
   <data name="ring_unlock_sent" xml:space="preserve"><value>已发送开锁信号</value></data>
-  <data name="ring_unlock_unconfigured" xml:space="preserve"><value>尚未配置开锁动作</value></data>
-  <data name="settings_appearance" xml:space="preserve"><value>外观</value></data>
-  <data name="settings_appearance_dark" xml:space="preserve"><value>深色</value></data>
-  <data name="settings_appearance_light" xml:space="preserve"><value>浅色</value></data>
-  <data name="settings_appearance_schedule" xml:space="preserve"><value>按时段切换</value></data>
   <data name="settings_close" xml:space="preserve"><value>关闭</value></data>
   <data name="settings_configured" xml:space="preserve"><value>已设置</value></data>
   <data name="settings_device_door" xml:space="preserve"><value>负责的门口</value></data>
@@ -745,7 +747,6 @@
   <data name="settings_theme_image" xml:space="preserve"><value>背景图片</value></data>
   <data name="settings_title" xml:space="preserve"><value>设置</value></data>
   <data name="settings_ui_lang" xml:space="preserve"><value>显示语言</value></data>
-  <data name="settings_unlock_button" xml:space="preserve"><value>显示开锁按钮</value></data>
   <data name="settings_video_playback" xml:space="preserve"><value>视频接收方式</value></data>
   <data name="settings_video_rotation" xml:space="preserve"><value>画面方向</value></data>
   <data name="settings_web_only" xml:space="preserve"><value>请在网页管理中设置</value></data>
@@ -800,6 +801,31 @@ PIN：{1}</value></data>
   <data name="sound_outdoor_call_alert" xml:space="preserve"><value>警报音 1（门口机呼叫）</value></data>
   <data name="sound_school_chime" xml:space="preserve"><value>学校铃声</value></data>
   <data name="sound_title_display" xml:space="preserve"><value>标题显示（启动）</value></data>
+  <data name="theme_appearance" xml:space="preserve"><value>外观</value></data>
+  <data name="theme_appearance_auto_schedule" xml:space="preserve"><value>按时段切换</value></data>
+  <data name="theme_appearance_auto_system" xml:space="preserve"><value>跟随设备</value></data>
+  <data name="theme_appearance_dark" xml:space="preserve"><value>始终深色</value></data>
+  <data name="theme_appearance_light" xml:space="preserve"><value>始终浅色</value></data>
+  <data name="theme_auto" xml:space="preserve"><value>自动</value></data>
+  <data name="theme_background_source_color" xml:space="preserve"><value>背景颜色</value></data>
+  <data name="theme_background_source_image" xml:space="preserve"><value>取自背景图片的平均色</value></data>
+  <data name="theme_call_button" xml:space="preserve"><value>呼叫按钮颜色</value></data>
+  <data name="theme_custom" xml:space="preserve"><value>指定颜色</value></data>
+  <data name="theme_dark_from" xml:space="preserve"><value>深色开始</value></data>
+  <data name="theme_ink" xml:space="preserve"><value>文字颜色</value></data>
+  <data name="theme_ink_region" xml:space="preserve"><value>位置</value></data>
+  <data name="theme_light_from" xml:space="preserve"><value>浅色开始</value></data>
+  <data name="theme_low_contrast" xml:space="preserve"><value>可能不易辨认（{0}:1）</value></data>
+  <data name="theme_mode_dark" xml:space="preserve"><value>深色</value></data>
+  <data name="theme_mode_light" xml:space="preserve"><value>浅色</value></data>
+  <data name="theme_now" xml:space="preserve"><value>当前</value></data>
+  <data name="theme_region_clock" xml:space="preserve"><value>时钟</value></data>
+  <data name="theme_region_date" xml:space="preserve"><value>日期</value></data>
+  <data name="theme_region_footer" xml:space="preserve"><value>页脚</value></data>
+  <data name="theme_region_hint" xml:space="preserve"><value>提示语</value></data>
+  <data name="theme_region_notice" xml:space="preserve"><value>公告</value></data>
+  <data name="theme_region_status_line" xml:space="preserve"><value>状态栏</value></data>
+  <data name="theme_region_tile_label" xml:space="preserve"><value>磁贴标题</value></data>
   <data name="time_err_bad_reply" xml:space="preserve"><value>服务器的响应无效</value></data>
   <data name="time_err_bad_server" xml:space="preserve"><value>服务器条目格式不正确</value></data>
   <data name="time_err_implausible" xml:space="preserve"><value>测得的时间不可信，已丢弃</value></data>
@@ -829,6 +855,12 @@ PIN：{1}</value></data>
   <data name="time_title" xml:space="preserve"><value>时间</value></data>
   <data name="time_zone" xml:space="preserve"><value>时区</value></data>
   <data name="time_zone_hint" xml:space="preserve"><value>此设置用于整个集群的时钟、呼叫记录与规则时段</value></data>
+  <data name="unlock_auto" xml:space="preserve"><value>已配置时显示</value></data>
+  <data name="unlock_command" xml:space="preserve"><value>发送的命令</value></data>
+  <data name="unlock_hide" xml:space="preserve"><value>不显示</value></data>
+  <data name="unlock_not_configured" xml:space="preserve"><value>尚未配置开锁动作</value></data>
+  <data name="unlock_show" xml:space="preserve"><value>始终显示</value></data>
+  <data name="unlock_title" xml:space="preserve"><value>开锁按钮</value></data>
   <data name="volume_call" xml:space="preserve"><value>呼叫</value></data>
   <data name="volume_cluster_default" xml:space="preserve"><value>集群默认 {0}</value></data>
   <data name="volume_device_title" xml:space="preserve"><value>此设备的音量</value></data>

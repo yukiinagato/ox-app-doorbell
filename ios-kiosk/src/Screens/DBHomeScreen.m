@@ -490,7 +490,12 @@ static const NSInteger kRecentCallLimit = 20;
                                       beforeMs:0 limit:kRecentCallLimit];
     _unreadMissed = [DBCallHistoryModel unreadMissedFromLog:log];
   }
-  _cancelRequiresPin = [DBConfigUtil boolVal:_cfg path:@"emergency.cancel_requires_pin" def:YES];
+  // Core computes this as emergency.cancel_requires_pin AND a password
+  // actually being set: an unset password must never stand between a household
+  // and a running alarm, so the raw config flag is not the gate.
+  _cancelRequiresPin = [DBConfigUtil boolVal:_status
+      path:@"emergency.cancel_requires_password"
+       def:[DBConfigUtil boolVal:_cfg path:@"emergency.cancel_requires_pin" def:YES]];
   [self applyPalette];
   [self applyTheme];
   [self applyStrings];
