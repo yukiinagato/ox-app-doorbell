@@ -358,6 +358,9 @@
     <string name="calling_cancel_failed">无法取消呼叫</string>
     <string name="calling_no_answer">无人应答</string>
     <string name="calling_title">呼叫中…</string>
+    <string name="cluster_devices_a11y">集群设备 %1$s 台</string>
+    <string name="cluster_door_stations_a11y">门口机 %1$s/%2$s 台在线</string>
+    <string name="cluster_indoor_panels_a11y">室内机 %1$s/%2$s 台在线</string>
     <string name="dash_admin">管理</string>
     <string name="dash_count_cluster">集群设备 %1$s 台</string>
     <string name="dash_count_doors">门口机 %1$s/%2$s 在线</string>

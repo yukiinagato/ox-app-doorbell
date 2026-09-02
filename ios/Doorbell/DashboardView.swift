@@ -8,6 +8,8 @@ import UIKit
 /// The view owns no call state; `MainViewController` hosts it and routes every action.
 final class DashboardView: UIView {
 
+    private var lastCounts = ClusterCounts()
+
     var onOpenAdmin: (() -> Void)?
     var onOpenHistory: (() -> Void)?
     var onOpenDoor: ((String) -> Void)?
@@ -19,7 +21,8 @@ final class DashboardView: UIView {
 
     private let clockLabel = HaloLabel()
     private let dateLabel = HaloLabel()
-    private let membershipPill = PaddedLabel()
+    /// Three counts with a drawn mark each, in place of the old one-line membership pill.
+    private lazy var counters = ClusterCountersView(texts: texts)
     private let missedBadge = PaddedLabel()
     private let adminButton = UIButton(type: .system)
     private let noticeButton = UIButton(type: .system)
@@ -64,9 +67,10 @@ final class DashboardView: UIView {
         clockLabel.accessibilityIdentifier = "dashboard_clock"
         dateLabel.font = .systemFont(ofSize: 20)
 
-        DoorbellTheme.pill(membershipPill, background: skin.surface, ink: skin.cardInk("status_line"),
+        DoorbellTheme.pill(missedBadge, background: skin.palette.danger,
+                           ink: DoorbellTheme.readableInk(on: skin.palette.danger),
                            fontSize: 15)
-        membershipPill.accessibilityIdentifier = "membership_status"
+        counters.accessibilityIdentifier = "cluster_counters"
         DoorbellTheme.pill(missedBadge, background: skin.palette.danger, ink: .white, fontSize: 15)
         missedBadge.accessibilityIdentifier = "missed_badge"
         missedBadge.isHidden = true
@@ -87,7 +91,7 @@ final class DashboardView: UIView {
         clockColumn.axis = .vertical
         clockColumn.spacing = 2
 
-        let statusRow = UIStackView(arrangedSubviews: [membershipPill, missedBadge, UIView(),
+        let statusRow = UIStackView(arrangedSubviews: [counters, missedBadge, UIView(),
                                                         adminButton])
         statusRow.axis = .horizontal
         statusRow.spacing = 12
@@ -187,6 +191,7 @@ final class DashboardView: UIView {
         self.skin = skin
         let status = core.status()
         let nowMs = DoorbellClock.nowMs(core)
+        lastCounts = ClusterCounts.from(status: status, selfRole: boot.role)
         applySkin()
         rebuildTiles(status: status, nowMs: nowMs)
         recentCalls.reload(config: config, skin: skin)
@@ -208,8 +213,7 @@ final class DashboardView: UIView {
         skin.apply("date", to: dateLabel, quiet: true)
         skin.apply("status_line", to: historyHeader)
         skin.apply("footer", to: versionLabel, quiet: true)
-        DoorbellTheme.pill(membershipPill, background: skin.surface,
-                           ink: skin.cardInk("status_line"), fontSize: 15)
+        counters.update(lastCounts, ink: skin.cardInk("status_line"))
         DoorbellTheme.pill(missedBadge, background: skin.palette.danger,
                            ink: DoorbellTheme.readableInk(on: skin.palette.danger), fontSize: 15)
         for button in [adminButton, noticeButton, seeAllButton] {
@@ -218,15 +222,11 @@ final class DashboardView: UIView {
         }
     }
 
-    func updateClock() {
-        guard let reading = DoorbellClock.read(core) else { return }
+    /// The reading is handed in by the screen that owns the clock. Asking Core for a second one
+    /// meant two synchronous Core calls per tick on the main thread.
+    func updateClock(_ reading: DoorbellClock.Reading) {
         clockLabel.text = reading.hhmmss
         dateLabel.text = DoorbellClock.longDate(reading, lang: boot.uiLang)
-    }
-
-    func updateMembership(_ text: String, hidden: Bool) {
-        membershipPill.text = text
-        membershipPill.isHidden = hidden
     }
 
     func refreshMissedBadge() {
@@ -261,8 +261,9 @@ final class DashboardView: UIView {
     // MARK: - Door tiles
 
     private func rebuildTiles(status: [String: Any]?, nowMs: Int64) {
-        let doors = (ConfigUtil.dig(config, "doors") as? [String: Any])
-            .map { ConfigUtil.sortedByOrder($0) } ?? []
+        // A door station with no camera has nothing for a tile to show. It stays reachable from
+        // the monitor page's device list and still delivers its notices.
+        let doors = ConfigUtil.doorsWithCamera(config: config, status: status)
         let existing = Set(tiles.keys)
         if existing != Set(doors) {
             for view in tilesStack.arrangedSubviews { view.removeFromSuperview() }

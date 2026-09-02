@@ -353,6 +353,9 @@
 "calling.cancel_failed" = "Could not cancel the call";
 "calling.no_answer" = "No answer";
 "calling.title" = "Calling…";
+"cluster.devices_a11y" = "%@ devices in the cluster";
+"cluster.door_stations_a11y" = "%@ of %@ door stations online";
+"cluster.indoor_panels_a11y" = "%@ of %@ indoor panels online";
 "dash.admin" = "Admin";
 "dash.count_cluster" = "%@ devices in the cluster";
 "dash.count_doors" = "%@ of %@ door stations online";

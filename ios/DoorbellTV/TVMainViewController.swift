@@ -36,6 +36,10 @@ final class TVMainViewController: UIViewController {
     private var palette = DoorbellPalette.dark
 
     private var clockTimer: Timer?
+    /// The same disciplined clock the hand-held shells use: Core is asked off the main thread
+    /// every half minute, never on the tick.
+    private let clockSource = DoorbellClockSource()
+    private var clockRefreshTimer: Timer?
     private var replyTimer: Timer?
     private var pairingObserver: NSObjectProtocol?
     private var pairingReady = false
@@ -70,6 +74,10 @@ final class TVMainViewController: UIViewController {
         clockTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
             self?.updateClock()
         }
+        refreshClockBase()
+        clockRefreshTimer = Timer.scheduledTimer(
+            withTimeInterval: DoorbellClockSource.refreshIntervalS, repeats: true
+        ) { [weak self] _ in self?.refreshClockBase() }
         updateClock()
     }
 
@@ -202,10 +210,14 @@ final class TVMainViewController: UIViewController {
     /// The clock follows the cluster zone and Core's time correction, exactly as it does on the
     /// hand-held shells.
     private func updateClock() {
-        guard let reading = DoorbellClock.read(core) else { return }
+        guard let reading = clockSource.reading() else { return }
         clockLabel.text = reading.hhmmss
         dateLabel.text = DoorbellClock.longDate(reading, lang: texts.lang)
-        dashboard.updateClock()
+        dashboard.updateClock(reading)
+    }
+
+    private func refreshClockBase() {
+        clockSource.refresh(core) { [weak self] _ in self?.updateClock() }
     }
 
     /// The TV reaches settings from the dashboard's 管理 entry, still behind the admin password.
@@ -288,7 +300,11 @@ final class TVMainViewController: UIViewController {
             }
         case "emergency":
             presentEmergency(ev)
-        case "peers_changed", "config_changed", "notice_changed", "time_changed":
+        case "time_changed":
+            // The correction moved, so the base this clock counts from is stale.
+            refreshClockBase()
+            refreshNodeInfo()
+        case "peers_changed", "config_changed", "notice_changed":
             refreshNodeInfo()
         case "call_log_changed":
             dashboard.refreshHistory()

@@ -116,8 +116,109 @@ struct DoorbellClock {
         return now.wallMs - elapsed + dayMs
     }
 
+    /// Advances a reading by whole seconds without asking Core again. Everything Core returns is
+    /// already zone-corrected, so moving it forward is plain arithmetic on the same fields.
+    static func advance(_ reading: Reading, bySeconds seconds: Int) -> Reading {
+        guard seconds > 0 else { return reading }
+        let total = reading.hour * 3600 + reading.minute * 60 + reading.second + seconds
+        let days = total / 86400
+        let rest = total % 86400
+        var date = reading.date
+        var weekday = reading.weekday
+        if days > 0 {
+            date = addDays(days, to: reading.date)
+            if let index = weekdayKeys.firstIndex(of: reading.weekday) {
+                weekday = weekdayKeys[(index + days) % 7]
+            }
+        }
+        return Reading(hour: rest / 3600, minute: (rest % 3600) / 60, second: rest % 60,
+                       date: date, weekday: weekday, tz: reading.tz, known: reading.known,
+                       wallMs: reading.wallMs + Int64(seconds) * 1000, raw: reading.raw)
+    }
+
+    /// Civil-date arithmetic on Core's `YYYY-MM-DD`, so a clock that crosses midnight between two
+    /// refreshes shows tomorrow's date rather than yesterday's for up to half a minute.
+    static func addDays(_ days: Int, to date: String) -> String {
+        let parts = date.split(separator: "-")
+        guard parts.count == 3, var year = Int(parts[0]), var month = Int(parts[1]),
+              var day = Int(parts[2]), days > 0 else { return date }
+        for _ in 0..<days {
+            day += 1
+            if day > daysIn(month: month, year: year) {
+                day = 1
+                month += 1
+                if month > 12 {
+                    month = 1
+                    year += 1
+                }
+            }
+        }
+        return String(format: "%04d-%02d-%02d", year, month, day)
+    }
+
+    static func daysIn(month: Int, year: Int) -> Int {
+        switch month {
+        case 1, 3, 5, 7, 8, 10, 12: return 31
+        case 4, 6, 9, 11: return 30
+        default:
+            let leap = (year % 4 == 0 && year % 100 != 0) || year % 400 == 0
+            return leap ? 29 : 28
+        }
+    }
+
     static func nowMs(_ core: CoreBridge) -> Int64 {
         if let reading = read(core), reading.wallMs > 0 { return reading.wallMs }
         return Int64(Date().timeIntervalSince1970 * 1000)
+    }
+}
+
+/// A clock disciplined by Core rather than read from it every second.
+///
+/// `db_core_local_time_json` is a synchronous call into Core, and Core does not answer while it is
+/// mid-SNTP or building a status document. Calling it once a second on the main thread — twice, in
+/// fact, because the dashboard asked as well — is what made the panel's seconds advance in threes.
+/// The base is now taken off the main thread every half minute and whenever Core says the time
+/// changed, and each tick is arithmetic on that base against the monotonic clock.
+final class DoorbellClockSource {
+
+    /// How often the base is re-taken from Core.
+    static let refreshIntervalS: TimeInterval = 30
+
+    private var base: DoorbellClock.Reading?
+    private var baseUptime: TimeInterval = 0
+    private var refreshing = false
+
+    var hasReading: Bool { return base != nil }
+
+    /// The time to draw. No Core call, no lock: safe at 1 Hz on the main thread.
+    func reading() -> DoorbellClock.Reading? {
+        guard let base = base else { return nil }
+        let elapsed = ProcessInfo.processInfo.systemUptime - baseUptime
+        guard elapsed >= 1 else { return base }
+        return DoorbellClock.advance(base, bySeconds: Int(elapsed))
+    }
+
+    /// Re-takes the base from Core off the main thread. `completion` receives how long Core took,
+    /// which is the number worth watching: it is the stall this indirection exists to keep off
+    /// the run loop.
+    func refresh(_ core: CoreBridge, completion: ((TimeInterval) -> Void)? = nil) {
+        guard !refreshing else { return }
+        refreshing = true
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            let started = ProcessInfo.processInfo.systemUptime
+            let fresh = DoorbellClock.read(core)
+            let finished = ProcessInfo.processInfo.systemUptime
+            DispatchQueue.main.async {
+                guard let self = self else { return }
+                self.refreshing = false
+                if let fresh = fresh {
+                    self.base = fresh
+                    // The reading describes the moment Core answered, so the base is timed to the
+                    // middle of the call rather than to either end of it.
+                    self.baseUptime = (started + finished) / 2
+                }
+                completion?(finished - started)
+            }
+        }
     }
 }

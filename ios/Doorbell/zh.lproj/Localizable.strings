@@ -353,6 +353,9 @@
 "calling.cancel_failed" = "无法取消呼叫";
 "calling.no_answer" = "无人应答";
 "calling.title" = "呼叫中…";
+"cluster.devices_a11y" = "集群设备 %@ 台";
+"cluster.door_stations_a11y" = "门口机 %@/%@ 台在线";
+"cluster.indoor_panels_a11y" = "室内机 %@/%@ 台在线";
 "dash.admin" = "管理";
 "dash.count_cluster" = "集群设备 %@ 台";
 "dash.count_doors" = "门口机 %@/%@ 在线";
