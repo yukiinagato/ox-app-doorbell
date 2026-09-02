@@ -18,6 +18,7 @@
 #include "events/events.h"
 #include "mesh/mesh.h"
 #include "node/node.h"
+#include "sipctl/sipctl.h"
 #include "store/store.h"
 #include "util/clock.h"
 #include "util/json.h"
@@ -2108,9 +2109,16 @@ TEST_CASE("calls: an indoor panel rings and never answers by itself") {
   f.run(300);
   CHECK(answerMode(*panel.node) == "ring");
 
-  // A ringing call that nobody answers is never attributed to anyone.
+  // A ringing call that nobody answers is never attributed to anyone, and opening a listen-in
+  // (monitor) session while it rings is not an answer either. A monitor dialog is one-way audio
+  // that a panel opens by itself; core reports a call answered only for the primary dialog it
+  // owns, so a storm of monitor sessions cannot promote a ringing call to answered.
   const std::string call = station.node->pressV2("d_front", "");
   REQUIRE_FALSE(call.empty());
+  for (int i = 0; i < 20; i++) {
+    panel.node->sipCall("sip:127.0.0.1:47190", "monitor");
+    f.run(50);
+  }
   f.run(1000);
   auto history = json::parse(panel.node->callLogJson(0, 10));
   REQUIRE(history);
@@ -2120,6 +2128,65 @@ TEST_CASE("calls: an indoor panel rings and never answers by itself") {
     CHECK(json::getString(row, "outcome") != "answered");
     CHECK(json::getString(row, "answered_by").empty());
   }
+
+  station.node->stop();
+  panel.node->stop();
+}
+
+TEST_CASE("calls: a monitor dialog leaves a ringing call ringing") {
+  // The mode of the dialog in the primary slot is what decides whether it may answer. A panel
+  // opening listen-in must leave the call ringing and the history untouched.
+  NFleet f;
+  auto& station = f.add("A:1", "front-panel", "door_station", "d_front", /*seed_cfg=*/true);
+  auto& panel = f.add("P:1", "living", "indoor_panel", "", /*seed_cfg=*/false);
+  REQUIRE(station.node->start());
+  REQUIRE(panel.node->start());
+  f.run(300);
+
+  auto dialogMode = [](Node& node) {
+    auto status = json::parse(node.statusJson());
+    REQUIRE(status);
+    return json::getString(json::get(status.get(), "call"), "dialog_mode");
+  };
+  CHECK(dialogMode(*panel.node).empty());
+
+  const std::string call = station.node->pressV2("d_front", "");
+  REQUIRE_FALSE(call.empty());
+  f.run(300);
+
+  // The panel opens listen-in. The dialog mode follows it, and that mode is what the answer
+  // guard reads.
+  panel.node->sipCall("sip:127.0.0.1:47190", "monitor");
+  f.run(3000);  // let the published status snapshot catch up
+  CHECK(dialogMode(*panel.node) == "monitor");
+  CHECK_FALSE(SipCtl::dialogCanAnswer(dialogMode(*panel.node)));
+
+  // The call is still ringing on the door station and nothing has been attributed to anyone.
+  auto status = json::parse(station.node->statusJson());
+  REQUIRE(status);
+  const cJSON* calls = json::get(status.get(), "active_calls");
+  bool still_ringing = false;
+  const cJSON* entry = nullptr;
+  cJSON_ArrayForEach(entry, calls) {
+    if (json::getString(entry, "call_id") != call) continue;
+    still_ringing = json::getString(entry, "state") == "ringing";
+  }
+  CHECK(still_ringing);
+  for (Node* node : {station.node.get(), panel.node.get()}) {
+    auto history = json::parse(node->callLogJson(0, 10));
+    REQUIRE(history);
+    const cJSON* row = nullptr;
+    cJSON_ArrayForEach(row, json::get(history.get(), "rows")) {
+      CHECK(json::getString(row, "outcome") != "answered");
+      CHECK(json::getString(row, "answered_by").empty());
+    }
+  }
+
+  // A talk dialog is a different matter and is allowed to answer.
+  panel.node->sipCall("sip:127.0.0.1:47190", "answer");
+  f.run(3000);
+  CHECK(dialogMode(*panel.node) == "answer");
+  CHECK(SipCtl::dialogCanAnswer(dialogMode(*panel.node)));
 
   station.node->stop();
   panel.node->stop();

@@ -1523,8 +1523,45 @@ bool visitPurposeValid(const std::string& key, const cJSON* value, std::string* 
   return true;
 }
 
+// call.indoor.return_s and its per-device override: how long an indoor panel stays on the
+// incoming-call page before returning home.
+bool callReturnValid(const std::string& key, const cJSON* value, std::string* error) {
+  auto seconds_valid = [&error](const cJSON* seconds, const std::string& path) {
+    if (wholeNumberInRange(seconds, 5, 600)) return true;
+    *error = path + " must be a whole number of seconds between 5 and 600";
+    return false;
+  };
+  const std::string cluster_leaf = "call.indoor.return_s";
+  const std::string device_leaf = ".local.call.return_s";
+  auto ends_with = [&key](const std::string& suffix) {
+    return key.size() >= suffix.size() &&
+           key.compare(key.size() - suffix.size(), suffix.size(), suffix) == 0;
+  };
+  if (key == cluster_leaf || (key.rfind("devices.", 0) == 0 && ends_with(device_leaf)))
+    return seconds_valid(value, key);
+  // Container writes carry it inline.
+  if (key == "call" || key == "call.indoor") {
+    const cJSON* indoor = key == "call" ? json::get(value, "indoor") : value;
+    if (key == "call" && !objectHasOnly(value, {"indoor"}, "call", error)) return false;
+    if (!indoor) return true;
+    if (!objectHasOnly(indoor, {"return_s"}, "call.indoor", error)) return false;
+    const cJSON* seconds = json::get(indoor, "return_s");
+    return !seconds || seconds_valid(seconds, "call.indoor.return_s");
+  }
+  if (key.rfind("devices.", 0) == 0 && cJSON_IsObject(value)) {
+    const cJSON* local = key.find(".local") == std::string::npos
+        ? json::get(value, "local") : value;
+    const cJSON* call = json::get(local, "call");
+    if (ends_with(".local.call")) call = value;
+    const cJSON* seconds = json::get(call, "return_s");
+    if (seconds) return seconds_valid(seconds, key + ".return_s");
+  }
+  return true;
+}
+
 bool configWriteValid(const std::string& key, const cJSON* value, std::string* error,
                       std::vector<ConfigWarning>* warnings = nullptr) {
+  if (!callReturnValid(key, value, error)) return false;
   if (!secretContractValid(key, value, error)) return false;
   if (!visitPurposeValid(key, value, error)) return false;
   if (!eventRetentionValid(key, value, error)) return false;
@@ -4550,13 +4587,21 @@ struct Node::Impl {
         for (auto& entry : active_calls) {
           ActiveCall& call = entry.second;
           if (call.call_id != sip_call_id) continue;
-          if (call.state == "ringing") {
+          // Only a dialog someone is actually talking on may answer a call. An outbound
+          // listen-in dialog occupies the same primary slot as a real call, so without this a
+          // panel opening monitor sessions marked the ringing call answered by itself -- and a
+          // burst of them wrote that into the history for a call nobody had picked up.
+          const std::string dialog_mode = sipctl ? sipctl->callMode() : std::string();
+          if (call.state == "ringing" && SipCtl::dialogCanAnswer(dialog_mode)) {
             call.local_sip_established = true;
             if (call.timeout_timer) loop->cancel(call.timeout_timer);
             call.timeout_timer = 0;
             door_calling_until.erase(call.door);
             doReportCallAnswered(call.door, call.call_id, call.stage_revision, node_id,
                                  /*retry_on_persistence_failure=*/true);
+          } else if (call.state == "ringing") {
+            DB_LOGI(kTag, "listen-in dialog established while " + call.call_id +
+                              " rings; the call stays ringing");
           }
           break;
         }
@@ -5870,7 +5915,57 @@ struct Node::Impl {
       config->mutate(identity);
       if (!config->lastMutationCommitted()) return false;
     }
-    return ensureOwnDoorEntry();
+    return reclaimSeededDoorEntries() && ensureOwnDoorEntry();
+  }
+
+  // An entry is still exactly what this node seeded: nothing but the label it wrote, and that
+  // label unchanged. Anything else -- a building, a notice, an unlock setting, a rename -- is an
+  // administrator's work, and a door an administrator has adopted outlives the device that
+  // happened to create it.
+  bool seededDoorIsPristine(const cJSON* entry) const {
+    if (!cJSON_IsObject(entry)) return false;
+    const cJSON* field = nullptr;
+    cJSON_ArrayForEach(field, entry) {
+      const std::string name = field->string ? field->string : "";
+      if (name != "label" && name != "seeded_by" && name != "seeded_label") return false;
+    }
+    const std::string seeded_label = json::getString(entry, "seeded_label");
+    const cJSON* label = json::get(entry, "label");
+    if (!cJSON_IsObject(label)) return seeded_label.empty();
+    const cJSON* text = nullptr;
+    cJSON_ArrayForEach(text, label) {
+      if (!cJSON_IsString(text) || seeded_label != text->valuestring) return false;
+    }
+    return true;
+  }
+
+  // A door station that changes role, or moves to a different door, leaves behind the entry it
+  // created for the door it no longer serves. Left alone it becomes a ghost tile on every
+  // dashboard: a door with a name, permanently offline, that nobody serves.
+  bool reclaimSeededDoorEntries() {
+    if (!mesh || !mesh->isPaired()) return true;
+    const std::string still_serving =
+        opts.role == "door_station" ? opts.door : std::string();
+    std::vector<LwwMutation> stale;
+    const cJSON* doors = json::get(cfg.get(), "doors");
+    const cJSON* door = nullptr;
+    cJSON_ArrayForEach(door, doors) {
+      if (!door->string) continue;
+      const std::string id = door->string;
+      if (json::getString(door, "seeded_by") != node_id) continue;
+      if (id == still_serving) continue;
+      if (!seededDoorIsPristine(door)) {
+        DB_LOGI(kTag, "keeping door " + id + ": an administrator has edited it");
+        continue;
+      }
+      stale.push_back({"doors." + id, "", true});
+    }
+    if (stale.empty()) return true;
+    config->mutate(stale);
+    if (!config->lastMutationCommitted()) return false;
+    for (const auto& mutation : stale)
+      DB_LOGI(kTag, "removed " + mutation.key + ": this node no longer serves that door");
+    return true;
   }
 
   // A cluster founded by a door station used to end up with devices.<id>.door pointing at a door
@@ -5892,10 +5987,28 @@ struct Node::Impl {
     // id is a generated fallback and reads like one.
     const std::string name = opts.name.empty() ? opts.door : opts.name;
     for (const char* lang : {"ja", "en", "zh"}) json::set(label, lang, name);
+    // Provenance, so this node can take back exactly what it created and nothing else. Both
+    // fields are needed: seeded_by says who may reclaim it, and seeded_label says what was
+    // written, so a rename by an administrator is recognisable as an edit.
+    json::set(entry.get(), "seeded_by", node_id);
+    json::set(entry.get(), "seeded_label", name);
     config->mutate({{key, json::dump(entry.get()), false}});
     if (!config->lastMutationCommitted()) return false;
     DB_LOGI(kTag, "created the missing door entry " + key + " for this door station");
     return true;
+  }
+
+  // Seconds the incoming-call page counts down before an indoor panel returns to its home page.
+  // A per-device override wins, exactly like volume and appearance.
+  int callReturnSeconds() {
+    const cJSON* device = cfgAt("devices." + node_id + ".local.call");
+    const cJSON* seconds = json::get(device, "return_s");
+    if (!cJSON_IsNumber(seconds))
+      seconds = json::get(json::get(json::get(cfg.get(), "call"), "indoor"), "return_s");
+    int64_t value = cJSON_IsNumber(seconds) ? static_cast<int64_t>(seconds->valuedouble) : 60;
+    if (value < 5) value = 5;
+    if (value > 600) value = 600;
+    return static_cast<int>(value);
   }
 
   int64_t callTtlMs() const {
@@ -7315,8 +7428,8 @@ struct Node::Impl {
     }
     // Founding or joining is the other moment this node becomes able to write cluster
     // configuration, so the door entry is ensured here as well as at startup.
-    if (!ensureOwnDoorEntry())
-      DB_LOGW(kTag, "could not create the door entry for this door station");
+    if (!reclaimSeededDoorEntries() || !ensureOwnDoorEntry())
+      DB_LOGW(kTag, "could not reconcile the door entry for this device");
     emitPairedEvent();
     emitPairingState();
   }
@@ -7484,6 +7597,10 @@ struct Node::Impl {
       // reported even without a SIP backend, because the shell's toggle still has a position.
       cJSON* call = json::addObj(o.get(), "call");
       json::set(call, "state", sipCallName(sip_call));
+      json::set(call, "return_s", static_cast<int64_t>(callReturnSeconds()));
+      // "" two-way, "answer" an explicit takeover, "monitor" one-way listen-in. Only the first
+      // two may ever answer a call.
+      json::set(call, "dialog_mode", sipctl ? sipctl->callMode() : std::string());
       json::setBool(call, "mic_muted", sipctl ? sipctl->micMuted() : mic_muted_without_sip);
     }
     cJSON* leaders = json::addObj(o.get(), "leaders");
@@ -7597,10 +7714,31 @@ struct Node::Impl {
 
     {
       cJSON* doors = json::addObj(o.get(), "doors");
+      // The node id of the alive door station serving this door, or empty. Shells need the
+      // difference between "the station is offline" and "no station serves this door at all".
+      auto serving_station = [&](const std::string& door_id) {
+        if (door_id.empty()) return std::string();
+        if (opts.role == "door_station" && opts.door == door_id) return node_id;
+        if (!mesh) return std::string();
+        for (const auto& peer : mesh->peers()) {
+          if (peer.status != "alive" || peer.id == node_id) continue;
+          const cJSON* device = cfgAt("devices." + peer.id);
+          std::string role = json::getString(device, "role");
+          if (role.empty()) role = peer.role;
+          if (role != "door_station") continue;
+          std::string peer_door = json::getString(device, "door");
+          if (peer_door.empty()) peer_door = peer.door;
+          if (peer_door == door_id) return peer.id;
+        }
+        return std::string();
+      };
       auto add_door = [&](const std::string& id, const cJSON* configured,
                           const std::string& fallback_label) {
         if (id.empty() || json::get(doors, id.c_str())) return;
         cJSON* entry = json::addObj(doors, id.c_str());
+        const std::string station = serving_station(id);
+        if (station.empty()) json::setItem(entry, "served_by", json::Doc(cJSON_CreateNull()));
+        else json::set(entry, "served_by", station);
         const std::string label = labelIn(json::get(configured, "label"), "ja");
         json::set(entry, "label", label.empty() ? fallback_label : label);
         // configured:false means the door is live on the mesh but has no doors.<id> entry yet.

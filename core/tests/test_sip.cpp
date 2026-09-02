@@ -362,3 +362,13 @@ TEST_CASE("sip: Node press rule transitions a SIP call from calling to in_call")
 
   node.stop();
 }
+
+TEST_CASE("sip: a listen-in dialog can never answer a call") {
+  // Real-device finding: a ringing call was recorded as answered by an indoor panel nobody had
+  // touched. An outbound monitor dialog occupies the same primary slot as a real call, so the
+  // "call established while ringing" branch fired for a listen-in session and reported it as an
+  // answer. Only a dialog someone is actually talking on may answer.
+  CHECK_FALSE(SipCtl::dialogCanAnswer("monitor"));
+  CHECK(SipCtl::dialogCanAnswer(""));        // an ordinary two-way call
+  CHECK(SipCtl::dialogCanAnswer("answer"));  // an explicit takeover by a person
+}

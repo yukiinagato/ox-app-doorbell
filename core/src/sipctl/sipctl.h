@@ -80,6 +80,17 @@ class SipCtl {
   // Restrict direct INVITEs by source IP. Empty allows all sources.
   void setAllowedSources(const std::vector<std::string>& ips);
 
+  // The X-Doorbell-Mode of the dialog currently in the primary slot: "" for an ordinary
+  // two-way call, "answer" for an explicit takeover, "monitor" for one-way listen-in. An
+  // outbound monitor dialog occupies the same slot as a real call, so callers that act on a
+  // call becoming established must consult this before treating it as an answer.
+  std::string callMode() const;
+
+  // A dialog may report a call answered only when a person is actually on it. Listen-in is not
+  // answering: a panel opens a monitor dialog by itself, and a burst of them must never turn a
+  // ringing call into an answered one in the history.
+  static bool dialogCanAnswer(const std::string& mode) { return mode != "monitor"; }
+
   // Microphone mute for the talk control. The flag is remembered across calls and reapplied
   // when media becomes active, so muting before answering stays muted.
   void setMicMuted(bool muted);

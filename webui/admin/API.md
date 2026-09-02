@@ -482,3 +482,16 @@ ignored by parsers, so the format can gain one without breaking shipped clients.
 Keep the host and PIN printed beside the code: someone scanning with a plain camera app reads and
 types them instead. `db_core_parse_pair_uri_json` validates a scanned code the same way on every
 platform, returning `bad_scheme`, `missing_pin`, `missing_host` or `expired` on failure.
+
+## Listen-in is not answering
+
+`status.call.dialog_mode` is the `X-Doorbell-Mode` of the dialog in this node's primary slot: `""`
+for an ordinary two-way call, `"answer"` for an explicit takeover, `"monitor"` for one-way
+listen-in. An outbound monitor dialog occupies the same slot as a real call, so core checks the
+mode before treating an established dialog as an answer — a panel opening listen-in leaves the
+call ringing and writes nothing into the history.
+
+A door station also refuses monitor dialogs from a peer that keeps opening them without ever
+carrying media: after eight such dialogs within ten seconds it answers `486` with a
+`Retry-After: 10`. One panel churning listen-in sessions is otherwise enough to saturate a small
+door station, which is what took an iPad 1's HTTP listener down.

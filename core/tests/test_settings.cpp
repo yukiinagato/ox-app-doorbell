@@ -994,3 +994,136 @@ TEST_CASE("display: a configured background that cannot be sampled is never repo
   std::remove((dir + "/assets/" + photo_hash).c_str());
   removeSettingsTempDir(dir);
 }
+
+TEST_CASE("doors: a device that stops serving a door takes back the entry it seeded") {
+  // Device finding: the Moto was switched from door_station to indoor_panel and the door entry
+  // it had auto-seeded stayed in cluster configuration, so every dashboard showed a ghost tile
+  // for a door nobody serves.
+  const std::string dir = settingsTempDir();
+  NodeOptions options;
+  options.data_dir = dir;
+  options.name = "doorbell-android";
+  options.role = "door_station";
+  options.door = "door-b8a9a651";
+  options.listen_addr = "127.0.0.1:0";
+  options.enable_beacon = false;
+  options.http_port = 0;
+  options.psk.fill(0x5a);
+
+  {
+    Node node(options);
+    REQUIRE(node.start());
+    auto config = json::parse(node.configJson());
+    REQUIRE(config);
+    const cJSON* door = json::get(json::get(config.get(), "doors"), "door-b8a9a651");
+    REQUIRE(cJSON_IsObject(door));
+    // Provenance, so only the device that created it may take it back.
+    CHECK(json::getString(door, "seeded_by") == node.nodeId());
+    CHECK(json::getString(door, "seeded_label") == "doorbell-android");
+    node.stop();
+  }
+  {
+    // The same device comes back as an indoor panel.
+    NodeOptions changed = options;
+    changed.role = "indoor_panel";
+    changed.door = "";
+    Node node(changed);
+    REQUIRE(node.start());
+    auto config = json::parse(node.configJson());
+    REQUIRE(config);
+    CHECK(json::get(json::get(config.get(), "doors"), "door-b8a9a651") == nullptr);
+    // Nothing serves it, so nothing shows it either.
+    auto status = json::parse(node.statusJson());
+    REQUIRE(status);
+    CHECK(json::get(json::get(status.get(), "doors"), "door-b8a9a651") == nullptr);
+    node.stop();
+  }
+  removeSettingsTempDir(dir);
+}
+
+TEST_CASE("doors: an entry an administrator has adopted outlives the device that seeded it") {
+  const std::string dir = settingsTempDir();
+  NodeOptions options;
+  options.data_dir = dir;
+  options.name = "doorbell-android";
+  options.role = "door_station";
+  options.door = "door-b8a9a651";
+  options.listen_addr = "127.0.0.1:0";
+  options.enable_beacon = false;
+  options.http_port = 0;
+  options.psk.fill(0x5a);
+
+  {
+    Node node(options);
+    REQUIRE(node.start());
+    // An administrator renames it in the doors tab. That alone makes it theirs.
+    node.setConfigKey("doors.door-b8a9a651.label.ja", "\"正面玄関\"");
+    node.stop();
+  }
+  {
+    NodeOptions changed = options;
+    changed.role = "indoor_panel";
+    changed.door = "";
+    Node node(changed);
+    REQUIRE(node.start());
+    auto config = json::parse(node.configJson());
+    REQUIRE(config);
+    const cJSON* door = json::get(json::get(config.get(), "doors"), "door-b8a9a651");
+    REQUIRE(cJSON_IsObject(door));
+    CHECK(json::getString(json::get(door, "label"), "ja") == "正面玄関");
+    // It shows, and it shows as served by nobody -- which is the honest state for a station
+    // that is down, and is what an administrator needs to see to fix it.
+    auto status = json::parse(node.statusJson());
+    REQUIRE(status);
+    const cJSON* entry = json::get(json::get(status.get(), "doors"), "door-b8a9a651");
+    REQUIRE(cJSON_IsObject(entry));
+    CHECK(cJSON_IsNull(json::get(entry, "served_by")));
+    CHECK(json::getBool(entry, "configured"));
+    node.stop();
+  }
+  removeSettingsTempDir(dir);
+
+  // The same protection for any other field an administrator adds.
+  for (const char* edit : {"doors.door-b8a9a651.building",
+                           "doors.door-b8a9a651.unlock.command"}) {
+    const std::string dir2 = settingsTempDir();
+    NodeOptions first = options;
+    first.data_dir = dir2;
+    {
+      Node node(first);
+      REQUIRE(node.start());
+      node.setConfigKey(edit, "\"b_main\"");
+      node.stop();
+    }
+    NodeOptions changed = first;
+    changed.role = "indoor_panel";
+    changed.door = "";
+    Node node(changed);
+    REQUIRE(node.start());
+    auto config = json::parse(node.configJson());
+    REQUIRE(config);
+    CAPTURE(edit);
+    CHECK(cJSON_IsObject(json::get(json::get(config.get(), "doors"), "door-b8a9a651")));
+    node.stop();
+    removeSettingsTempDir(dir2);
+  }
+}
+
+TEST_CASE("doors: served_by names the alive station, and is null when nobody serves the door") {
+  SettingsNode fleet("door_station", "d_front");
+  auto entry = [&fleet](const char* door) {
+    auto status = fleet.status();
+    return json::Doc(cJSON_Duplicate(json::get(json::get(status.get(), "doors"), door), 1));
+  };
+  auto own = entry("d_front");
+  REQUIRE(own);
+  CHECK(json::getString(own.get(), "served_by") == fleet.node->nodeId());
+
+  // A door that exists in configuration but has no station is reported as served by nobody,
+  // which is what distinguishes "the station is offline" from "there is no station".
+  fleet.node->setConfigKey("doors.d_ghost", "{\"label\":{\"ja\":\"離れ\"}}");
+  auto ghost = entry("d_ghost");
+  REQUIRE(ghost);
+  CHECK(cJSON_IsNull(json::get(ghost.get(), "served_by")));
+  CHECK(json::getBool(ghost.get(), "configured"));
+}
