@@ -32,10 +32,24 @@ SSH_OPTIONS=(
   -oPubkeyAuthentication=no
 )
 
+HELPER_BIN="/usr/local/libexec/doorbell-keepalive"
+HELPER_SOCKET="/var/run/doorbell-keepalive.sock"
+
+# Respringing and replacing the bundle under a provisioned root helper looks like a
+# crash to it. Take a bounded lease first; both calls no-op when no helper exists.
+helper_maintenance() {
+  sshpass -e ssh "${SSH_OPTIONS[@]}" -p "$DEVICE_PORT" "root@$DEVICE_HOST" \
+    "if [ -S '$HELPER_SOCKET' ] && [ -x '$HELPER_BIN' ]; then \
+       '$HELPER_BIN' --control $1 --socket '$HELPER_SOCKET' >/dev/null 2>&1 || true; \
+     fi; true"
+}
+
 sshpass -e ssh "${SSH_OPTIONS[@]}" -p "$DEVICE_PORT" "root@$DEVICE_HOST" \
   'cat > /var/root/doorbell.deb' < "$DEB"
+helper_maintenance "begin --seconds 300"
 sshpass -e ssh "${SSH_OPTIONS[@]}" -oConnectTimeout=60 -p "$DEVICE_PORT" \
   "root@$DEVICE_HOST" \
   'dpkg -i /var/root/doorbell.deb && ls -ld /Applications/Doorbell.app && killall SpringBoard 2>/dev/null || true'
+helper_maintenance "end"
 
 echo "installation requested; verify the app heartbeat and UI on the device"

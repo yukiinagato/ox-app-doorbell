@@ -82,7 +82,30 @@ staged DEB を生成できます。package は binary と無効な launchd templ
 を使います。iOS 実機 qualification はまだ未完了です。明示的に opt-in する場合だけ `--enable` に
 `DB_CONFIRM_ROOT_HELPER=YES` を要求し、root-owned plist、正確な UID/GID/socket permission、maintenance
 lease、hang、2/5/10/30/60 秒 backoff、3 回/5 分の safe mode、rollback、soak を commissioning します。
-それまでは helper 無しの復旧を維持します。
+それまでは helper 無しの復旧を維持します。host test は CI の `keepalive-helper` job と
+`ios-compat/scripts/test_host.sh` から実行されます。installer は既定で `iproxy` の local port
+2223 を使い（`DB_IOS_SSH_LOCAL_PORT` で上書き）、iOS 5 sshd が要求する legacy KEX/cipher/MAC を
+維持します。
+
+commissioning 前に把握しておく rail:
+
+- `ios5` profile は boot grace の後、app UID 所有の `SpringBoard` process を確認してから launch
+  するため、cold boot で failure slot を 3 つ消費しません;
+- heartbeat 未着でも動作中の app は `launch_pending_no_heartbeat` として扱い再 launch しません。
+  app も bootstrap setup から `started` を送ります;
+- `/var/db/doorbell-keepalive.disable` は root 専用の kill switch で、永続 mode を書き換えずに
+  mode を `off` に強制します（`--disable-file` / `--enable-file`）;
+- safe mode 中の launch が 10 回を超えると launch を停止し（`launch_inhibited`）status/control
+  のみ応答します。`--clear-safe-mode` が root 所有 marker を削除して解除します;
+- `install_via_ssh.sh` と `install_deb.sh` は kill の前後で 300 秒の maintenance lease を取得
+  するため、helper 稼働中の app upgrade は crash として数えられません;
+- iOS 5 の SSH session からの `launchctl load` は `Socket is not connected` を返すことがあります。
+  installer は socket と status file を確認できない限り成功と報告せず、reboot 指示を出して 40 で
+  終了します。
+
+実機 checklist（cold boot ×3、未 provisioning boot、kill、hang、crash loop、launch cap、
+maintenance lease、permission 拒否、mode wiring、kill switch、helper 稼働中の upgrade、電源断、
+soak、rollback）は `ios-compat/helper/README.md` にあります。
 
 ## release record
 

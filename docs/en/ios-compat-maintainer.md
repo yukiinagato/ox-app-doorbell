@@ -102,15 +102,37 @@ video is released, and the bounded JPEG/audio fallback remains usable. Restore `
 `false` afterward. This qualifies the handler only; it is not an OOM-kill or long-soak result.
 
 The optional root helper is implemented at `tools/helper/doorbell_keepalive.c` and covered by
-non-root host tests. Build its reproducible armv7/iOS 5.1 staged DEB with
+non-root host tests, which now run in the `keepalive-helper` CI job and from
+`ios-compat/scripts/test_host.sh`. Build its reproducible armv7/iOS 5.1 staged DEB with
 `DB_ALLOW_DIRTY=1 DB_BUILD_ID=<reviewed-id> ios-compat/scripts/build_helper_ios5.sh`. The package
 stages the binary and inactive launchd template only; it does not enable a root service. Use
 `SSHPASS=<commissioned-password> ios-compat/scripts/install_helper_ios5.sh --stage` for inspection.
+The installer forwards through `iproxy` on local port 2223 by default
+(`DB_IOS_SSH_LOCAL_PORT` overrides it) and keeps the legacy KEX/cipher/MAC options iOS 5's sshd
+requires.
+
+Operational rails to know before commissioning:
+
+- the `ios5` profile waits for a boot grace and then for a `SpringBoard` process owned by the app
+  UID before any launch, so a cold boot no longer burns three failure slots;
+- a running app with no heartbeat is adopted as `launch_pending_no_heartbeat` instead of being
+  relaunched, and the app announces `started` from bootstrap setup as well;
+- `/var/db/doorbell-keepalive.disable` is a root-only kill switch that forces mode `off` without
+  rewriting the persisted mode (`--disable-file` / `--enable-file`);
+- after ten launches in latched safe mode the helper stops launching (`launch_inhibited`) and keeps
+  only its status/control surface; `--clear-safe-mode` removes the root-owned marker to reset it;
+- `install_via_ssh.sh` and `install_deb.sh` take a 300-second maintenance lease around the kill, so
+  an app upgrade under an active helper is not counted as a crash;
+- `launchctl load` over SSH on iOS 5 commonly answers `Socket is not connected`. The installer
+  never reports success without the socket and status file, and exits 40 with a reboot instruction
+  instead.
+
 There is still no iOS hardware qualification. If a device explicitly opts in, require
-`DB_CONFIRM_ROOT_HELPER=YES` for `--enable`, then commission the root-owned plist, exact UID/GID and
-socket permissions, maintenance lease, heartbeat hang, 2/5/10/30/60-second backoff,
-three-in-five-minute safe mode, rollback, and soak. Until those gates pass, recovery claims must
-continue to work without the helper.
+`DB_CONFIRM_ROOT_HELPER=YES` for `--enable`, then work the fourteen-item device checklist in
+`ios-compat/helper/README.md` — cold boot ×3, unprovisioned boot, kill, hang, crash loop, launch
+cap, maintenance lease, permission rejection, mode wiring, kill switch, upgrade under the helper,
+power loss, soak, and rollback. Until those gates pass, recovery claims must continue to work
+without the helper.
 
 ## Release record
 

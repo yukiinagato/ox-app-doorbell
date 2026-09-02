@@ -84,6 +84,17 @@ jobs:
           cmake --build build -j4
           ./build/doorbell_tests
 
+  keepalive-helper:
+    # The root keepalive helper is portable C99 and its host tests need no root,
+    # so the daemon contract is proven on every push, not only on the Apple lane.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Root keepalive helper daemon tests
+        run: bash tools/helper/test_keepalive_helper.sh
+      - name: Staged iOS 5 helper package and installer rails
+        run: python3 tools/tests/test_ios5_helper_package.py
+
   windows-contract:
     runs-on: windows-latest
     steps:

@@ -76,7 +76,29 @@ armv7/iOS 5.1 staged DEB。package 只安裝 binary 與未啟用的 launchd temp
 可用 `SSHPASS=<commissioned-password> ios-compat/scripts/install_helper_ios5.sh --stage` 檢查。iOS 實機
 qualification 仍未完成。只有裝置明確 opt-in 時，才以 `DB_CONFIRM_ROOT_HELPER=YES` 執行 `--enable`，並
 commission root-owned plist、正確 UID/GID/socket permission、maintenance lease、hang、2/5/10/30/60 秒
-backoff、5 分鐘 3 次的 safe mode、rollback 與 soak；在此之前仍須維持沒有 helper 的復原能力。
+backoff、5 分鐘 3 次的 safe mode、rollback 與 soak；在此之前仍須維持沒有 helper 的復原能力。host
+test 會在 CI 的 `keepalive-helper` job 與 `ios-compat/scripts/test_host.sh` 中執行。installer 預設
+透過 `iproxy` 的 local port 2223（可用 `DB_IOS_SSH_LOCAL_PORT` 覆寫），並保留 iOS 5 sshd 需要的
+legacy KEX/cipher/MAC 選項。
+
+commissioning 前必須了解的 rail：
+
+- `ios5` profile 會先等 boot grace，再確認 app UID 所有的 `SpringBoard` process 才 launch，因此
+  cold boot 不會消耗三個 failure slot；
+- 尚未送出 heartbeat 但正在執行的 app 會被視為 `launch_pending_no_heartbeat` 而不重新 launch；
+  app 也會從 bootstrap setup 送出 `started`；
+- `/var/db/doorbell-keepalive.disable` 是 root 專用 kill switch，強制 mode 為 `off` 但不改寫已持久
+  化的 mode（`--disable-file` / `--enable-file`）；
+- safe mode 中 launch 超過 10 次後停止 launch（`launch_inhibited`），僅回應 status/control；
+  `--clear-safe-mode` 刪除 root 所有的 marker 以重置；
+- `install_via_ssh.sh` 與 `install_deb.sh` 會在 kill 前後取得 300 秒 maintenance lease，因此
+  helper 運作中的 app upgrade 不會被計為 crash；
+- iOS 5 的 SSH session 執行 `launchctl load` 常會回報 `Socket is not connected`。installer 在確認
+  socket 與 status file 之前不會回報成功，而是輸出重開機指示並以 40 結束。
+
+實機 checklist（cold boot ×3、未 provisioning boot、kill、hang、crash loop、launch cap、
+maintenance lease、permission 拒絕、mode wiring、kill switch、helper 運作中的 upgrade、斷電、
+soak、rollback）詳見 `ios-compat/helper/README.md`。
 
 ## release record
 

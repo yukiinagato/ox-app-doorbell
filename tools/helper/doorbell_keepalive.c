@@ -5,6 +5,7 @@
 #include <grp.h>
 #include <poll.h>
 #include <signal.h>
+#include <stdarg.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -24,6 +25,10 @@
 #include <sys/sysctl.h>
 #endif
 
+#ifdef __linux__
+#include <dirent.h>
+#endif
+
 #ifndef O_NOFOLLOW
 #define O_NOFOLLOW 0
 #endif
@@ -37,6 +42,17 @@
 #define DB_TERMINATE_GRACE_MS 5000ULL
 #define DB_MAINTENANCE_MAX_SECONDS 3600ULL
 #define DB_CRASH_WINDOW_MS 300000ULL
+/* Cold boot: launchd starts this daemon long before SpringBoard exists. */
+#define DB_BOOT_GRACE_MS 20000ULL
+/* Bounded re-scan interval for the fixed process-presence probe. */
+#define DB_PRESENCE_SCAN_MS 1000ULL
+/* Absolute cap on launches performed while safe mode is latched. */
+#define DB_SAFE_MODE_LAUNCH_CAP 10U
+/* Default bound for the launchd-redirected stderr log. */
+#define DB_LOG_MAX_BYTES_DEFAULT 262144ULL
+/* Fixed process names; never derived from configuration or the network. */
+#define DB_UI_PROCESS_NAME "SpringBoard"
+#define DB_APP_PROCESS_NAME "Doorbell"
 
 typedef enum {
   DB_MODE_OFF,
@@ -71,6 +87,7 @@ typedef struct {
   const char *status_path;
   const char *marker_path;
   const char *mode_path;
+  const char *disable_path;
   db_mode mode;
   db_profile profile;
   uid_t app_uid;
@@ -79,9 +96,13 @@ typedef struct {
   uint64_t heartbeat_timeout_ms;
   uint64_t startup_timeout_ms;
   uint64_t terminate_grace_ms;
+  uint64_t boot_grace_ms;
+  uint64_t log_max_bytes;
+  unsigned int safe_mode_launch_cap;
   double time_scale;
 #ifdef DB_KEEPALIVE_TESTING
   const char *test_exec;
+  const char *test_process_file;
   bool test_stream;
 #endif
 } db_config;
@@ -94,6 +115,13 @@ typedef struct {
   bool safe_mode;
   bool waiting_start;
   bool stopping;
+  bool disabled_by_file;
+  bool launch_inhibited;
+  bool expected_exit;
+  bool maintenance_exit_grace;
+  bool ui_ready;
+  bool presence_valid;
+  bool presence_present;
   pid_t app_pid;
   pid_t terminating_pid;
   pid_t launcher_pid;
@@ -103,9 +131,12 @@ typedef struct {
   uint64_t next_restart_ms;
   uint64_t termination_deadline_ms;
   uint64_t maintenance_deadline_ms;
+  uint64_t boot_grace_deadline_ms;
+  uint64_t presence_checked_ms;
   uint64_t failures[DB_FAILURE_MAX];
   size_t failure_count;
   size_t backoff_index;
+  unsigned int safe_mode_launches;
   const char *last_reason;
   bool status_dirty;
 } db_state;
@@ -114,6 +145,8 @@ typedef struct {
   const char *cursor;
   const char *end;
 } db_parser;
+
+static bool db_presence_gate_enabled(const db_state *state);
 
 static volatile sig_atomic_t db_should_stop = 0;
 
@@ -135,6 +168,30 @@ static uint64_t db_now_ms(void) {
   if (clock_gettime(CLOCK_MONOTONIC, &value) != 0) return 0;
   return (uint64_t)value.tv_sec * 1000ULL + (uint64_t)value.tv_nsec / 1000000ULL;
 #endif
+}
+
+/* launchd redirects stdout/stderr into one file that nothing else rotates, so the
+   helper caps its own log. When stderr is not a regular file (host tests, a pipe)
+   the cap is a no-op and the caller's own bounds apply. */
+static uint64_t db_log_limit = DB_LOG_MAX_BYTES_DEFAULT;
+
+static void db_log_rotate(void) {
+  struct stat metadata;
+  if (db_log_limit == 0) return;
+  if (fstat(STDERR_FILENO, &metadata) != 0 || !S_ISREG(metadata.st_mode)) return;
+  if ((uint64_t)metadata.st_size < db_log_limit) return;
+  if (ftruncate(STDERR_FILENO, 0) != 0) return;
+  if (lseek(STDERR_FILENO, 0, SEEK_SET) == (off_t)-1) return;
+  fprintf(stderr, "doorbell-keepalive: log truncated at %llu bytes\n",
+          (unsigned long long)db_log_limit);
+}
+
+static void db_log(const char *format, ...) {
+  va_list arguments;
+  db_log_rotate();
+  va_start(arguments, format);
+  (void)vfprintf(stderr, format, arguments);
+  va_end(arguments);
 }
 
 static const char *db_mode_name(db_mode mode) {
@@ -385,6 +442,90 @@ static bool db_pid_alive(pid_t pid) {
   return errno == EPERM;
 }
 
+/* Fixed-name process presence probe.
+   iOS 5 exposes no launchd query reachable from C99 and `uiopen` silently fails
+   before SpringBoard exists, so the helper walks the kernel process table for two
+   compiled-in names owned by the configured application UID. Names are never taken
+   from configuration, the environment, or the network, and nothing is executed. */
+static void db_scan_process_table(const char *ui_name, const char *app_name,
+                                  uid_t expected_uid, bool *ui_present,
+                                  bool *app_present) {
+  *ui_present = false;
+  *app_present = false;
+#if defined(__APPLE__)
+  {
+    int mib[3];
+    struct kinfo_proc *entries;
+    size_t length = 0;
+    size_t count;
+    size_t index;
+    mib[0] = CTL_KERN;
+    mib[1] = KERN_PROC;
+    mib[2] = KERN_PROC_ALL;
+    if (sysctl(mib, 3, NULL, &length, NULL, 0) != 0 || length == 0) return;
+    /* The table can grow between sizing and reading; ask for headroom. */
+    length += length / 8 + sizeof(struct kinfo_proc);
+    entries = (struct kinfo_proc *)malloc(length);
+    if (entries == NULL) return;
+    if (sysctl(mib, 3, entries, &length, NULL, 0) != 0) {
+      free(entries);
+      return;
+    }
+    count = length / sizeof(struct kinfo_proc);
+    for (index = 0; index < count; ++index) {
+      const struct kinfo_proc *entry = &entries[index];
+      if (entry->kp_proc.p_pid <= 0) continue;
+      /* A zombie is not a running app; treating one as present would stall
+         every relaunch until its parent reaped it. */
+      if (entry->kp_proc.p_stat == SZOMB) continue;
+      if (entry->kp_eproc.e_ucred.cr_uid != expected_uid) continue;
+      if (!*ui_present &&
+          strncmp(entry->kp_proc.p_comm, ui_name, sizeof(entry->kp_proc.p_comm)) == 0)
+        *ui_present = true;
+      if (!*app_present &&
+          strncmp(entry->kp_proc.p_comm, app_name, sizeof(entry->kp_proc.p_comm)) == 0)
+        *app_present = true;
+      if (*ui_present && *app_present) break;
+    }
+    free(entries);
+  }
+#elif defined(__linux__)
+  {
+    DIR *directory = opendir("/proc");
+    struct dirent *entry;
+    if (directory == NULL) return;
+    while ((entry = readdir(directory)) != NULL) {
+      char path[64];
+      char name[64];
+      char *end = NULL;
+      long pid;
+      int descriptor;
+      ssize_t length;
+      errno = 0;
+      pid = strtol(entry->d_name, &end, 10);
+      if (errno != 0 || end == entry->d_name || *end != '\0' || pid <= 0) continue;
+      snprintf(path, sizeof(path), "/proc/%ld/comm", pid);
+      descriptor = open(path, O_RDONLY | O_CLOEXEC);
+      if (descriptor < 0) continue;
+      length = read(descriptor, name, sizeof(name) - 1);
+      close(descriptor);
+      if (length <= 0) continue;
+      name[length] = '\0';
+      if (name[length - 1] == '\n') name[length - 1] = '\0';
+      if (!db_pid_uid_matches((pid_t)pid, expected_uid)) continue;
+      if (strcmp(name, ui_name) == 0) *ui_present = true;
+      if (strcmp(name, app_name) == 0) *app_present = true;
+      if (*ui_present && *app_present) break;
+    }
+    closedir(directory);
+  }
+#else
+  (void)ui_name;
+  (void)app_name;
+  (void)expected_uid;
+#endif
+}
+
 static bool db_write_all(int descriptor, const char *data, size_t length) {
   size_t offset = 0;
   while (offset < length) {
@@ -527,11 +668,17 @@ static size_t db_recent_failure_count(db_state *state, uint64_t now) {
 
 static const char *db_supervision_state(const db_state *state, uint64_t now) {
   if (state->stopping) return "stopped";
+  if (state->disabled_by_file) return "disabled_by_file";
   if (state->config.mode == DB_MODE_OFF) return "off";
   if (!state->armed) return "waiting_heartbeat";
   if (state->maintenance_deadline_ms > now) return "maintenance";
   if (state->waiting_start) return "waiting_start";
   if (state->app_pid > 0) return "healthy";
+  if (state->launch_inhibited) return "launch_inhibited";
+  if (db_presence_gate_enabled(state) && state->presence_present)
+    return "launch_pending_no_heartbeat";
+  if (now < state->boot_grace_deadline_ms) return "boot_grace";
+  if (db_presence_gate_enabled(state) && !state->ui_ready) return "waiting_springboard";
   if (state->next_restart_ms > now) return "restart_backoff";
   return "launch_pending";
 }
@@ -553,15 +700,24 @@ static int db_render_status(db_state *state, uint64_t now, char *output,
       "\"armed\":%s,\"safe_mode\":%s,\"app_pid\":%ld,"
       "\"heartbeat_age_ms\":%llu,\"restart_count_5m\":%lu,"
       "\"next_restart_seconds\":%llu,\"maintenance_remaining_seconds\":%llu,"
-      "\"peer_credentials\":\"%s\",\"last_reason\":\"%s\"}\n",
-      db_mode_name(state->config.mode), db_supervision_state(state, now),
-      state->armed ? "true" : "false", state->safe_mode ? "true" : "false",
+      "\"peer_credentials\":\"%s\",\"last_reason\":\"%s\","
+      "\"configured_mode\":\"%s\",\"disabled_by_file\":%s,"
+      "\"launch_inhibited\":%s,\"ui_ready\":%s,\"app_process_present\":%s}\n",
+      state->disabled_by_file ? "off" : db_mode_name(state->config.mode),
+      db_supervision_state(state, now),
+      state->armed && !state->disabled_by_file ? "true" : "false",
+      state->safe_mode ? "true" : "false",
       (long)state->app_pid, (unsigned long long)heartbeat_age,
       (unsigned long)db_recent_failure_count(state, now),
       (unsigned long long)restart_remaining,
       (unsigned long long)maintenance_remaining,
       state->peer_credentials_enforced ? "enforced" : "socket_permissions",
-      state->last_reason == NULL ? "none" : state->last_reason);
+      state->last_reason == NULL ? "none" : state->last_reason,
+      db_mode_name(state->config.mode),
+      state->disabled_by_file ? "true" : "false",
+      state->launch_inhibited ? "true" : "false",
+      !db_presence_gate_enabled(state) || state->ui_ready ? "true" : "false",
+      state->presence_present ? "true" : "false");
 }
 
 static bool db_write_status(db_state *state, uint64_t now) {
@@ -580,9 +736,98 @@ static bool db_write_safe_mode_marker(db_state *state) {
   return db_atomic_write(state->config.marker_path, marker, 0644);
 }
 
-static uint64_t db_scaled_delay(const db_state *state, uint64_t seconds) {
-  double scaled = (double)seconds * 1000.0 * state->config.time_scale;
+static uint64_t db_scaled_ms(const db_state *state, uint64_t milliseconds) {
+  double scaled = (double)milliseconds * state->config.time_scale;
   return scaled < 1.0 ? 1 : (uint64_t)scaled;
+}
+
+static uint64_t db_scaled_delay(const db_state *state, uint64_t seconds) {
+  return db_scaled_ms(state, seconds * 1000ULL);
+}
+
+static void db_set_reason(db_state *state, const char *reason) {
+  if (state->last_reason == reason) return;
+  state->last_reason = reason;
+  state->status_dirty = true;
+}
+
+/* The presence gate exists only for the profile whose launcher is fire-and-forget
+   (`uiopen`). Android's `startservice` reports its own failure, so it is unchanged. */
+static bool db_presence_gate_enabled(const db_state *state) {
+  if (state->config.profile == DB_PROFILE_IOS5) return true;
+#ifdef DB_KEEPALIVE_TESTING
+  if (state->config.profile == DB_PROFILE_TEST &&
+      state->config.test_process_file != NULL) return true;
+#endif
+  return false;
+}
+
+#ifdef DB_KEEPALIVE_TESTING
+/* Testing-only seam: a fixed file of `NAME PID` lines stands in for the kernel
+   process table so the cold-boot and no-heartbeat paths are host-testable. The
+   production binary is compiled without it and has no equivalent option. */
+static void db_scan_test_process_file(const db_config *config, bool *ui_present,
+                                      bool *app_present) {
+  char buffer[4096];
+  char *line;
+  char *save;
+  ssize_t length;
+  int descriptor;
+  *ui_present = false;
+  *app_present = false;
+  descriptor = open(config->test_process_file, O_RDONLY | O_CLOEXEC | O_NOFOLLOW);
+  if (descriptor < 0) return;
+  length = read(descriptor, buffer, sizeof(buffer) - 1);
+  close(descriptor);
+  if (length <= 0) return;
+  buffer[length] = '\0';
+  for (line = strtok_r(buffer, "\n", &save); line != NULL;
+       line = strtok_r(NULL, "\n", &save)) {
+    char name[64];
+    long pid = 0;
+    if (sscanf(line, "%63s %ld", name, &pid) < 1) continue;
+    if (pid > 0 && (!db_pid_alive((pid_t)pid) ||
+                    !db_pid_uid_matches((pid_t)pid, config->app_uid))) continue;
+    if (strcmp(name, DB_UI_PROCESS_NAME) == 0) *ui_present = true;
+    if (strcmp(name, DB_APP_PROCESS_NAME) == 0) *app_present = true;
+  }
+}
+#endif
+
+static void db_refresh_presence(db_state *state, uint64_t now) {
+  bool ui_present = false;
+  bool app_present = false;
+  if (!db_presence_gate_enabled(state)) {
+    state->ui_ready = true;
+    state->presence_present = false;
+    state->presence_valid = true;
+    return;
+  }
+  if (state->presence_valid &&
+      now - state->presence_checked_ms < db_scaled_ms(state, DB_PRESENCE_SCAN_MS))
+    return;
+#ifdef DB_KEEPALIVE_TESTING
+  if (state->config.test_process_file != NULL)
+    db_scan_test_process_file(&state->config, &ui_present, &app_present);
+  else
+#endif
+    db_scan_process_table(DB_UI_PROCESS_NAME, DB_APP_PROCESS_NAME,
+                          state->config.app_uid, &ui_present, &app_present);
+  state->ui_ready = ui_present;
+  state->presence_present = app_present;
+  state->presence_valid = true;
+  state->presence_checked_ms = now;
+}
+
+/* A root-owned kill switch that survives every control path: while the file
+   exists the helper never launches and reports mode `off`, without rewriting the
+   persisted administrator mode. */
+static bool db_disable_file_present(const db_state *state) {
+  struct stat metadata;
+  if (state->config.disable_path == NULL) return false;
+  if (lstat(state->config.disable_path, &metadata) != 0) return false;
+  if (!S_ISREG(metadata.st_mode) || S_ISLNK(metadata.st_mode)) return false;
+  return metadata.st_uid == 0 || metadata.st_uid == geteuid();
 }
 
 static void db_record_failure(db_state *state, const char *reason, uint64_t now) {
@@ -599,8 +844,8 @@ static void db_record_failure(db_state *state, const char *reason, uint64_t now)
   if (state->failure_count >= 3 && !state->safe_mode) {
     state->safe_mode = true;
     if (!db_write_safe_mode_marker(state))
-      fprintf(stderr, "doorbell-keepalive: safe-mode marker write failed: %s\n",
-              strerror(errno));
+      db_log("doorbell-keepalive: safe-mode marker write failed: %s\n",
+             strerror(errno));
   }
   if (state->backoff_index >= sizeof(backoff_seconds) / sizeof(backoff_seconds[0]))
     state->backoff_index = sizeof(backoff_seconds) / sizeof(backoff_seconds[0]) - 1;
@@ -612,12 +857,26 @@ static void db_record_failure(db_state *state, const char *reason, uint64_t now)
   state->app_pid = 0;
   state->last_heartbeat_ms = 0;
   state->last_sequence = 0;
+  state->expected_exit = false;
   state->last_reason = reason;
   state->status_dirty = true;
-  fprintf(stderr,
-          "doorbell-keepalive: %s; restart scheduled after %llu ms%s\n",
-          reason, (unsigned long long)delay,
-          state->safe_mode ? " in safe mode" : "");
+  db_log("doorbell-keepalive: %s; restart scheduled after %llu ms%s\n",
+         reason, (unsigned long long)delay,
+         state->safe_mode ? " in safe mode" : "");
+}
+
+/* A clean stop that the operator or the app itself requested is not a crash: it
+   must not consume a safe-mode failure slot or lengthen the restart backoff. */
+static void db_note_expected_exit(db_state *state, const char *reason, uint64_t now) {
+  state->app_pid = 0;
+  state->waiting_start = false;
+  state->last_heartbeat_ms = 0;
+  state->last_sequence = 0;
+  state->expected_exit = false;
+  state->next_restart_ms = now + db_scaled_delay(state, 2);
+  state->last_reason = reason;
+  state->status_dirty = true;
+  db_log("doorbell-keepalive: %s; no failure charged\n", reason);
 }
 
 static void db_begin_termination(db_state *state, pid_t pid, uint64_t now) {
@@ -637,8 +896,8 @@ static void db_check_termination(db_state *state, uint64_t now) {
   if (now >= state->termination_deadline_ms &&
       db_pid_uid_matches(state->terminating_pid, state->config.app_uid)) {
     if (kill(state->terminating_pid, SIGKILL) == 0)
-      fprintf(stderr, "doorbell-keepalive: terminated unresponsive app pid %ld\n",
-              (long)state->terminating_pid);
+      db_log("doorbell-keepalive: terminated unresponsive app pid %ld\n",
+             (long)state->terminating_pid);
     state->termination_deadline_ms = now + 250;
   }
 }
@@ -705,6 +964,17 @@ static bool db_launch_app(db_state *state, uint64_t now) {
     db_record_failure(state, "fixed_launcher_rejected", now);
     return false;
   }
+  if (state->safe_mode &&
+      state->safe_mode_launches >= state->config.safe_mode_launch_cap) {
+    if (!state->launch_inhibited) {
+      state->launch_inhibited = true;
+      db_log("doorbell-keepalive: safe-mode launch cap %u reached; launching stopped "
+             "until the safe-mode marker is cleared\n",
+             state->config.safe_mode_launch_cap);
+    }
+    db_set_reason(state, "launch_inhibited");
+    return false;
+  }
   child = fork();
   if (child < 0) {
     db_record_failure(state, "fork_failed", now);
@@ -716,7 +986,12 @@ static bool db_launch_app(db_state *state, uint64_t now) {
     if (state->config.profile == DB_PROFILE_ANDROID)
       setenv("CLASSPATH", "/system/framework/am.jar", 1);
     if (drop_identity) {
-      if (setgroups(0, NULL) != 0 || setgid((gid_t)state->config.app_uid) != 0 ||
+      /* The launcher runs as the installed application identity. The primary group
+         is the configured socket GID so the child can reach the 0660 socket. */
+      gid_t child_gid = state->config.socket_gid_set
+                            ? state->config.socket_gid
+                            : (gid_t)state->config.app_uid;
+      if (setgroups(0, NULL) != 0 || setgid(child_gid) != 0 ||
           setuid(state->config.app_uid) != 0) _exit(126);
     }
     execv(executable, arguments);
@@ -726,20 +1001,33 @@ static bool db_launch_app(db_state *state, uint64_t now) {
   state->waiting_start = true;
   state->startup_deadline_ms = now + state->config.startup_timeout_ms;
   state->next_restart_ms = 0;
+  if (state->safe_mode) state->safe_mode_launches++;
   state->last_reason = state->safe_mode ? "safe_mode_launch" : "launch";
   state->status_dirty = true;
-  fprintf(stderr, "doorbell-keepalive: launched fixed %s profile\n",
-          state->config.profile == DB_PROFILE_IOS5
-              ? "ios5"
-              : state->config.profile == DB_PROFILE_ANDROID ? "android" : "test");
+  db_log("doorbell-keepalive: launched fixed %s profile\n",
+         state->config.profile == DB_PROFILE_IOS5
+             ? "ios5"
+             : state->config.profile == DB_PROFILE_ANDROID ? "android" : "test");
   return true;
 }
 
-static void db_reap_children(db_state *state) {
+/* The launcher is fire-and-forget on iOS 5, so its exit status is the only direct
+   evidence that `uiopen` reached SpringBoard. Discarding it turned every failed
+   launch into an indistinguishable 30-second startup timeout. */
+static void db_reap_children(db_state *state, uint64_t now) {
   int status;
   pid_t child;
   while ((child = waitpid(-1, &status, WNOHANG)) > 0) {
-    if (child == state->launcher_pid) state->launcher_pid = 0;
+    if (child != state->launcher_pid) continue;
+    state->launcher_pid = 0;
+    if (!state->waiting_start) continue;
+    if (WIFEXITED(status) && WEXITSTATUS(status) == 0) continue;
+    if (WIFEXITED(status))
+      db_log("doorbell-keepalive: launcher exited with status %d\n",
+             WEXITSTATUS(status));
+    else if (WIFSIGNALED(status))
+      db_log("doorbell-keepalive: launcher killed by signal %d\n", WTERMSIG(status));
+    db_record_failure(state, "launcher_failed", now);
   }
 }
 
@@ -836,6 +1124,10 @@ static void db_note_stream_heartbeat(db_state *state, pid_t pid, uint64_t sequen
   state->last_heartbeat_ms = now;
   state->waiting_start = false;
   state->next_restart_ms = 0;
+  state->expected_exit = false;
+  state->maintenance_exit_grace = false;
+  state->presence_present = true;
+  state->presence_valid = false;
   if (state->terminating_pid == pid) state->terminating_pid = 0;
   if (state->config.mode == DB_MODE_AUTO) state->armed = true;
   state->last_reason = "heartbeat";
@@ -900,6 +1192,7 @@ static void db_handle_stream_command(db_state *state, const char *command,
              value <= DB_MAINTENANCE_MAX_SECONDS) {
     state->maintenance_deadline_ms = now + value * 1000ULL;
     state->terminating_pid = 0;
+    state->maintenance_exit_grace = true;
     state->last_reason = "maintenance_started";
     state->status_dirty = true;
   } else {
@@ -990,6 +1283,12 @@ static void db_accept_heartbeat(db_state *state, const db_message *message,
   state->last_heartbeat_ms = now;
   state->waiting_start = false;
   state->next_restart_ms = 0;
+  /* `stopping` is the app announcing an orderly exit; the following process
+     disappearance is expected and must not be charged as a crash. */
+  state->expected_exit = message->event == DB_EVENT_STOPPING;
+  state->maintenance_exit_grace = false;
+  state->presence_present = true;
+  state->presence_valid = false;
   if (state->terminating_pid == message->pid) state->terminating_pid = 0;
   if (state->config.mode == DB_MODE_AUTO) state->armed = true;
   state->last_reason = message->event == DB_EVENT_MEMORY_PRESSURE
@@ -1078,6 +1377,8 @@ static void db_handle_datagram(db_state *state, uint64_t now) {
       state->safe_mode = false;
       state->failure_count = 0;
       state->backoff_index = 0;
+      state->safe_mode_launches = 0;
+      state->launch_inhibited = false;
       unlink(state->config.marker_path);
       state->last_reason = "safe_mode_cleared";
       state->status_dirty = true;
@@ -1107,6 +1408,9 @@ static void db_handle_datagram(db_state *state, uint64_t now) {
     if (db_parse_lease(data, (size_t)length, &lease_seconds)) {
       state->maintenance_deadline_ms = now + lease_seconds * 1000ULL;
       state->terminating_pid = 0;
+      /* An upgrade under the helper kills the app on purpose; the exit that
+         follows a lease must not be charged as a crash. */
+      state->maintenance_exit_grace = true;
       state->last_reason = "maintenance_started";
       state->status_dirty = true;
       db_send_response(state, &peer, header.msg_namelen, "{\"ok\":true}\n");
@@ -1121,17 +1425,49 @@ static void db_handle_datagram(db_state *state, uint64_t now) {
 }
 
 static void db_supervise(db_state *state, uint64_t now) {
-  db_reap_children(state);
+  bool disabled;
+  db_reap_children(state, now);
   db_check_termination(state, now);
+  disabled = db_disable_file_present(state);
+  if (disabled != state->disabled_by_file) {
+    state->disabled_by_file = disabled;
+    state->status_dirty = true;
+    db_set_reason(state, disabled ? "disable_file_present" : "disable_file_removed");
+    db_log("doorbell-keepalive: kill switch %s at %s\n",
+           disabled ? "engaged" : "released",
+           state->config.disable_path == NULL ? "(unset)" : state->config.disable_path);
+  }
   if (state->maintenance_deadline_ms != 0 && state->maintenance_deadline_ms <= now) {
     state->maintenance_deadline_ms = 0;
     state->last_reason = "maintenance_expired";
     state->status_dirty = true;
   }
+  /* Apple datagram sockets expose no per-message credentials, so SAFE_MODE_CLEAR is
+     unavailable there. Removing the marker is equivalent and already root-only: it
+     lives in a root-owned directory the app UID cannot write. */
+  if (state->safe_mode) {
+    struct stat marker;
+    if (lstat(state->config.marker_path, &marker) != 0 && errno == ENOENT) {
+      state->safe_mode = false;
+      state->failure_count = 0;
+      state->backoff_index = 0;
+      state->safe_mode_launches = 0;
+      state->launch_inhibited = false;
+      state->next_restart_ms = 0;
+      state->last_reason = "safe_mode_cleared";
+      state->status_dirty = true;
+      db_log("doorbell-keepalive: safe mode cleared by marker removal\n");
+    }
+  }
+  if (state->disabled_by_file) return;
   if (state->config.mode == DB_MODE_OFF || !state->armed ||
       state->maintenance_deadline_ms > now) return;
   if (state->app_pid > 0 && !db_pid_alive(state->app_pid)) {
-    db_record_failure(state, "process_exited", now);
+    if (state->expected_exit || state->maintenance_exit_grace)
+      db_note_expected_exit(state,
+                            state->expected_exit ? "clean_exit" : "maintenance_exit", now);
+    else
+      db_record_failure(state, "process_exited", now);
     return;
   }
   if (state->app_pid > 0 && state->last_heartbeat_ms > 0 &&
@@ -1141,12 +1477,37 @@ static void db_supervise(db_state *state, uint64_t now) {
     db_record_failure(state, "heartbeat_timeout", now);
     return;
   }
+  /* Only scan while no heartbeat owns a PID: a live heartbeat already proves
+     presence, and the process table is expensive to walk on an iPad 1. */
+  if (state->app_pid == 0) db_refresh_presence(state, now);
   if (state->waiting_start && now >= state->startup_deadline_ms) {
+    /* An unprovisioned or pre-heartbeat app is running but silent. Relaunching it
+       every startup timeout is the bootstrap-setup deadlock; adopt it instead. */
+    if (state->presence_present) {
+      state->waiting_start = false;
+      state->next_restart_ms = 0;
+      db_set_reason(state, "launch_pending_no_heartbeat");
+      return;
+    }
     db_record_failure(state, "startup_timeout", now);
     return;
   }
   if (state->app_pid == 0 && !state->waiting_start &&
       (state->next_restart_ms == 0 || now >= state->next_restart_ms)) {
+    if (state->presence_present) {
+      db_set_reason(state, "launch_pending_no_heartbeat");
+      return;
+    }
+    if (now < state->boot_grace_deadline_ms) {
+      db_set_reason(state, "boot_grace");
+      return;
+    }
+    if (db_presence_gate_enabled(state) && !state->ui_ready) {
+      /* No SpringBoard yet: `uiopen` would fail silently, so defer without
+         charging a failure and without arming the backoff ladder. */
+      db_set_reason(state, "waiting_springboard");
+      return;
+    }
     db_launch_app(state, now);
   }
 }
@@ -1155,8 +1516,11 @@ static void db_usage(const char *program) {
   fprintf(stderr,
           "usage: %s --socket PATH --status PATH --marker PATH --mode-file PATH "
           "--mode off|auto|on "
-          "--profile ios5|android --app-uid UID [--socket-gid GID]\n",
-          program);
+          "--profile ios5|android --app-uid UID [--socket-gid GID] "
+          "[--disable-file PATH] [--log-max-bytes BYTES]\n"
+          "       %s --control begin|end|status|safe-mode-clear --socket PATH "
+          "[--seconds 1..3600]\n",
+          program, program);
 }
 
 static bool db_parse_arguments(int argc, char **argv, db_config *config) {
@@ -1167,6 +1531,9 @@ static bool db_parse_arguments(int argc, char **argv, db_config *config) {
   config->heartbeat_timeout_ms = DB_HEARTBEAT_TIMEOUT_MS;
   config->startup_timeout_ms = DB_STARTUP_TIMEOUT_MS;
   config->terminate_grace_ms = DB_TERMINATE_GRACE_MS;
+  config->boot_grace_ms = DB_BOOT_GRACE_MS;
+  config->log_max_bytes = DB_LOG_MAX_BYTES_DEFAULT;
+  config->safe_mode_launch_cap = DB_SAFE_MODE_LAUNCH_CAP;
   config->time_scale = 1.0;
   for (index = 1; index < argc; ++index) {
     const char *option = argv[index];
@@ -1206,9 +1573,21 @@ static bool db_parse_arguments(int argc, char **argv, db_config *config) {
       if (!db_parse_u64(value, &number) || number > 2147483647ULL) return false;
       config->socket_gid = (gid_t)number;
       config->socket_gid_set = true;
+    } else if (strcmp(option, "--disable-file") == 0) {
+      config->disable_path = value;
+    } else if (strcmp(option, "--log-max-bytes") == 0) {
+      if (!db_parse_u64(value, &config->log_max_bytes)) return false;
+      if (config->log_max_bytes != 0 && config->log_max_bytes < 512) return false;
 #ifdef DB_KEEPALIVE_TESTING
     } else if (strcmp(option, "--test-exec") == 0) {
       config->test_exec = value;
+    } else if (strcmp(option, "--test-process-file") == 0) {
+      config->test_process_file = value;
+    } else if (strcmp(option, "--safe-mode-launch-cap") == 0) {
+      if (!db_parse_u64(value, &number) || number == 0 || number > 1000) return false;
+      config->safe_mode_launch_cap = (unsigned int)number;
+    } else if (strcmp(option, "--boot-grace-ms") == 0) {
+      if (!db_parse_u64(value, &config->boot_grace_ms)) return false;
     } else if (strcmp(option, "--test-stream") == 0) {
       if (strcmp(value, "yes") != 0) return false;
       config->test_stream = true;
@@ -1237,18 +1616,127 @@ static bool db_parse_arguments(int argc, char **argv, db_config *config) {
       !db_valid_path(config->status_path, DB_PATH_MAX) ||
       !db_valid_path(config->marker_path, DB_PATH_MAX) ||
       !db_valid_path(config->mode_path, DB_PATH_MAX)) return false;
+  if (config->disable_path != NULL &&
+      !db_valid_path(config->disable_path, DB_PATH_MAX)) return false;
 #ifdef DB_KEEPALIVE_TESTING
   if (config->profile == DB_PROFILE_TEST &&
       (config->test_exec == NULL || !db_valid_path(config->test_exec, DB_PATH_MAX)))
     return false;
+  if (config->test_process_file != NULL &&
+      !db_valid_path(config->test_process_file, DB_PATH_MAX)) return false;
 #endif
   return true;
+}
+
+/* One-shot control client.
+   A device maintenance script must be able to take a maintenance lease before it
+   kills the app, and iOS 5 ships no UNIX-datagram command-line tool. This mode
+   sends exactly one of four compiled payloads to the fixed socket and exits; no
+   caller-supplied string ever reaches the socket, nothing is executed, and the
+   daemon side of the process is never started. */
+static int db_control_main(int argc, char **argv) {
+  const char *socket_path = NULL;
+  const char *action = NULL;
+  uint64_t seconds = 300;
+  char payload[64];
+  char reply[DB_STATUS_MAX];
+  char local_path[64];
+  struct sockaddr_un helper_address;
+  struct sockaddr_un local_address;
+  struct pollfd item;
+  ssize_t length;
+  int descriptor;
+  int index;
+  int result = 3;
+  for (index = 1; index < argc; ++index) {
+    const char *option = argv[index];
+    if (index + 1 >= argc) { db_usage(argv[0]); return 2; }
+    if (strcmp(option, "--control") == 0) {
+      action = argv[++index];
+    } else if (strcmp(option, "--socket") == 0) {
+      socket_path = argv[++index];
+    } else if (strcmp(option, "--seconds") == 0) {
+      if (!db_parse_u64(argv[++index], &seconds) || seconds < 1 ||
+          seconds > DB_MAINTENANCE_MAX_SECONDS) { db_usage(argv[0]); return 2; }
+    } else {
+      db_usage(argv[0]);
+      return 2;
+    }
+  }
+  if (action == NULL || socket_path == NULL ||
+      !db_valid_path(socket_path, sizeof(helper_address.sun_path))) {
+    db_usage(argv[0]);
+    return 2;
+  }
+  if (strcmp(action, "begin") == 0)
+    snprintf(payload, sizeof(payload), "MAINTENANCE_BEGIN %llu",
+             (unsigned long long)seconds);
+  else if (strcmp(action, "end") == 0)
+    snprintf(payload, sizeof(payload), "MAINTENANCE_END");
+  else if (strcmp(action, "status") == 0)
+    snprintf(payload, sizeof(payload), "STATUS");
+  else if (strcmp(action, "safe-mode-clear") == 0)
+    snprintf(payload, sizeof(payload), "SAFE_MODE_CLEAR");
+  else {
+    db_usage(argv[0]);
+    return 2;
+  }
+  descriptor = socket(AF_UNIX, SOCK_DGRAM, 0);
+  if (descriptor < 0) {
+    fprintf(stderr, "doorbell-keepalive: control socket failed: %s\n", strerror(errno));
+    return 3;
+  }
+  snprintf(local_path, sizeof(local_path), "/var/tmp/dbka-ctl-%ld.sock", (long)getpid());
+  memset(&local_address, 0, sizeof(local_address));
+  local_address.sun_family = AF_UNIX;
+#ifdef __APPLE__
+  local_address.sun_len = sizeof(local_address);
+#endif
+  snprintf(local_address.sun_path, sizeof(local_address.sun_path), "%s", local_path);
+  unlink(local_path);
+  if (bind(descriptor, (struct sockaddr *)&local_address, sizeof(local_address)) != 0) {
+    fprintf(stderr, "doorbell-keepalive: control bind failed: %s\n", strerror(errno));
+    close(descriptor);
+    return 3;
+  }
+  chmod(local_path, 0600);
+  memset(&helper_address, 0, sizeof(helper_address));
+  helper_address.sun_family = AF_UNIX;
+#ifdef __APPLE__
+  helper_address.sun_len = sizeof(helper_address);
+#endif
+  snprintf(helper_address.sun_path, sizeof(helper_address.sun_path), "%s", socket_path);
+  if (sendto(descriptor, payload, strlen(payload), 0,
+             (struct sockaddr *)&helper_address, sizeof(helper_address)) < 0) {
+    fprintf(stderr, "doorbell-keepalive: control send failed: %s\n", strerror(errno));
+    close(descriptor);
+    unlink(local_path);
+    return 3;
+  }
+  item.fd = descriptor;
+  item.events = POLLIN;
+  item.revents = 0;
+  if (poll(&item, 1, 1000) > 0 && (item.revents & POLLIN) != 0) {
+    length = recv(descriptor, reply, sizeof(reply) - 1, 0);
+    if (length > 0) {
+      reply[length] = '\0';
+      printf("%s", reply);
+      if (reply[length - 1] != '\n') printf("\n");
+      result = 0;
+    }
+  }
+  if (result != 0)
+    fprintf(stderr, "doorbell-keepalive: no reply from %s\n", socket_path);
+  close(descriptor);
+  unlink(local_path);
+  return result;
 }
 
 int main(int argc, char **argv) {
   db_state state;
   struct sigaction action;
   struct stat marker;
+  if (argc >= 2 && strcmp(argv[1], "--control") == 0) return db_control_main(argc, argv);
   memset(&state, 0, sizeof(state));
   state.socket_fd = -1;
   state.last_reason = "startup";
@@ -1257,6 +1745,7 @@ int main(int argc, char **argv) {
     db_usage(argv[0]);
     return 2;
   }
+  db_log_limit = state.config.log_max_bytes;
   if (!db_load_or_initialize_mode(&state.config)) {
     fprintf(stderr, "doorbell-keepalive: mode file rejected: %s\n", strerror(errno));
     return 1;
@@ -1277,6 +1766,15 @@ int main(int argc, char **argv) {
     fprintf(stderr, "doorbell-keepalive: socket setup failed: %s\n", strerror(errno));
     return 1;
   }
+  /* launchd starts this daemon at RunAtLoad, which on a cold boot is minutes
+     before SpringBoard exists. Hold the first launch for a bounded grace and then
+     let the SpringBoard gate decide. */
+  if (db_presence_gate_enabled(&state))
+    state.boot_grace_deadline_ms = db_now_ms() + state.config.boot_grace_ms;
+  if (state.config.socket_gid_set &&
+      state.config.socket_gid != (gid_t)state.config.app_uid)
+    db_log("doorbell-keepalive: launcher primary group %ld differs from app uid %ld\n",
+           (long)state.config.socket_gid, (long)state.config.app_uid);
   memset(&action, 0, sizeof(action));
   action.sa_handler = db_on_signal;
   sigemptyset(&action.sa_mask);
@@ -1298,7 +1796,7 @@ int main(int argc, char **argv) {
     }
     db_supervise(&state, now);
     if (state.status_dirty && !db_write_status(&state, now))
-      fprintf(stderr, "doorbell-keepalive: status write failed: %s\n", strerror(errno));
+      db_log("doorbell-keepalive: status write failed: %s\n", strerror(errno));
   }
   state.stopping = true;
   state.status_dirty = true;

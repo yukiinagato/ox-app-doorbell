@@ -16,6 +16,10 @@
     <string>/var/db/doorbell-keepalive-safe-mode.json</string>
     <string>--mode-file</string>
     <string>/var/db/doorbell-keepalive-mode</string>
+    <string>--disable-file</string>
+    <string>/var/db/doorbell-keepalive.disable</string>
+    <string>--log-max-bytes</string>
+    <string>262144</string>
     <string>--mode</string>
     <string>auto</string>
     <string>--profile</string>

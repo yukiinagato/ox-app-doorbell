@@ -45,3 +45,23 @@ mode は Core/MiniSIP audio/ringer/SOS/control を保持し、H.264 ingest/decod
 済みです。iOS 5 lane には launchd を無効のままにする再現可能な staged DEB がありますが、両 platform
 とも別 provisioning で実機 qualification は未完了です。root service、UID/socket、maintenance lease、
 safe mode、rollback、soak が合格するまで依存しません。
+
+iOS 5 helper は launch 前に SpringBoard を待ちます。launchd は cold boot 時に window server より
+数分早く helper を起動し、その間 `uiopen` は無言で失敗するため、bounded boot grace と process
+table gate で最初の launch を遅らせます。この待機は failure に数えず backoff も進めません。
+launcher が非 0 終了した場合は startup timeout ではなく `launcher_failed` として区別します。
+
+heartbeat 未開始のまま動作中の app（bootstrap setup 中など）は process presence で検出し
+`launch_pending_no_heartbeat` として報告します。再 launch せず failure にも数えません。app 側も
+bootstrap setup branch から `started` を送るようになりました。
+
+意図した終了は crash ではありません。`stopping` heartbeat 後の終了と maintenance lease 中の終了は
+failure slot を消費せずに再 launch します。app の upgrade は maintenance lease を自動取得するため、
+インストールが helper から crash loop に見えることはありません。
+
+絶対的な rail が 2 つあります。root 所有の kill switch file
+(`/var/db/doorbell-keepalive.disable`) は次の supervision tick で mode を `off` に強制しますが、
+永続 mode は書き換えません。safe mode 中の launch が 10 回を超えると helper は launch を完全に停止
+(`launch_inhibited`) し、status と control の応答だけを続けます。root 所有の safe-mode marker を
+削除すると両方が解除されます。iOS 5 の datagram socket は peer credential を持たないため、これが
+サポートされる解除手段です。

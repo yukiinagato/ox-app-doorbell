@@ -80,6 +80,56 @@ class Ios5HelperPackageTests(unittest.TestCase):
         self.assertNotIn("SSHPASS:-alpine", installer)
         self.assertNotIn("rm -rf", installer)
 
+    def test_installer_uses_this_project_ssh_port_and_legacy_crypto(self) -> None:
+        installer = (ROOT / "ios-compat" / "scripts" / "install_helper_ios5.sh").read_text()
+        self.assertIn("DB_IOS_SSH_LOCAL_PORT:-2223", installer)
+        for option in (
+            "-oKexAlgorithms=+diffie-hellman-group1-sha1",
+            "-oHostKeyAlgorithms=+ssh-rsa",
+            "-oCiphers=+aes128-cbc,3des-cbc",
+            "-oMACs=+hmac-sha1",
+        ):
+            self.assertIn(option, installer)
+
+    def test_installer_exposes_the_kill_switch_and_safe_mode_actions(self) -> None:
+        installer = (ROOT / "ios-compat" / "scripts" / "install_helper_ios5.sh").read_text()
+        for action in ("--clear-safe-mode", "--disable-file", "--enable-file"):
+            self.assertIn(action, installer)
+        self.assertIn("/var/db/doorbell-keepalive.disable", installer)
+        # --status must read the status file rather than depend on launchctl.
+        self.assertIn("/var/run/doorbell-keepalive-status.json", installer)
+        self.assertIn("launchctl (advisory)", installer)
+        # A load that never took effect must never be reported as success.
+        self.assertIn("Socket is not connected", installer)
+        self.assertIn("exit 40", installer)
+
+    def test_launchd_template_declares_the_kill_switch_and_log_bound(self) -> None:
+        template = (
+            ROOT / "ios-compat" / "helper" / "jp.keihan.doorbell.keepalive.plist.example"
+        ).read_text()
+        self.assertIn("--disable-file", template)
+        self.assertIn("/var/db/doorbell-keepalive.disable", template)
+        self.assertIn("--log-max-bytes", template)
+
+    def test_app_installers_take_a_maintenance_lease_before_killing_the_app(self) -> None:
+        for relative in (
+            ("ios-kiosk", "scripts", "install_via_ssh.sh"),
+            ("ios-compat", "scripts", "install_deb.sh"),
+        ):
+            script = ROOT.joinpath(*relative).read_text()
+            self.assertIn("--control $1 --socket", script)
+            self.assertIn('"begin --seconds 300"', script)
+            self.assertIn('"end"', script)
+            # Absent helper must be a no-op, never an installer failure.
+            self.assertIn("-S '$HELPER_SOCKET'", script)
+            self.assertIn('HELPER_SOCKET="/var/run/doorbell-keepalive.sock"', script)
+
+    def test_helper_drops_to_the_configured_socket_group(self) -> None:
+        source = (ROOT / "tools" / "helper" / "doorbell_keepalive.c").read_text()
+        self.assertIn("gid_t child_gid = state->config.socket_gid_set", source)
+        self.assertIn("setgid(child_gid)", source)
+        self.assertNotIn("setgid((gid_t)state->config.app_uid)", source)
+
 
 if __name__ == "__main__":
     unittest.main()

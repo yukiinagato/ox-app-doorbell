@@ -29,6 +29,12 @@ static NSDictionary *DBRecoverySanitizeHelperStatus(NSDictionary *input) {
     @"next_restart_seconds" : [NSNumber class],
     @"maintenance_remaining_seconds" : [NSNumber class],
     @"peer_credentials" : [NSString class], @"last_reason" : [NSString class],
+    // Rails added with the cold-boot work: the administrator's persisted mode
+    // (which the root kill switch overrides without rewriting), the kill switch
+    // and absolute launch-cap flags, and the two process-presence measurements.
+    @"configured_mode" : [NSString class], @"disabled_by_file" : [NSNumber class],
+    @"launch_inhibited" : [NSNumber class], @"ui_ready" : [NSNumber class],
+    @"app_process_present" : [NSNumber class],
   };
   for (NSString *key in types) {
     id value = [input objectForKey:key];
@@ -37,9 +43,11 @@ static NSDictionary *DBRecoverySanitizeHelperStatus(NSDictionary *input) {
     if ([value isKindOfClass:[NSString class]] && [(NSString *)value length] > 120) continue;
     [output setObject:value forKey:key];
   }
-  NSString *mode = [output objectForKey:@"mode"];
-  if (mode && ![DBRecoveryClient isValidHelperMode:mode])
-    [output removeObjectForKey:@"mode"];
+  for (NSString *key in @[ @"mode", @"configured_mode" ]) {
+    NSString *mode = [output objectForKey:key];
+    if (mode && ![DBRecoveryClient isValidHelperMode:mode])
+      [output removeObjectForKey:key];
+  }
   return output;
 }
 

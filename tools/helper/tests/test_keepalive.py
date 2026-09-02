@@ -38,11 +38,23 @@ def read_status(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def heartbeat(sequence: int, pid: int | None = None) -> bytes:
+def fixed_failing_launcher() -> Path:
+    """A real root-owned executable that always exits nonzero.
+
+    The helper rejects scripts, so the launcher-failure path needs a compiled
+    binary rather than a shell stub.
+    """
+    for candidate in (Path("/usr/bin/false"), Path("/bin/false")):
+        if candidate.is_file() and os.access(candidate, os.X_OK):
+            return candidate
+    raise unittest.SkipTest("no fixed false(1) binary available")
+
+
+def heartbeat(sequence: int, pid: int | None = None, event: str = "heartbeat") -> bytes:
     return json.dumps(
         {
             "protocol": 1,
-            "event": "heartbeat",
+            "event": event,
             "pid": pid or os.getpid(),
             "bundle_id": "jp.keihan.doorbell",
             "app_version": "test",
@@ -59,13 +71,16 @@ def heartbeat(sequence: int, pid: int | None = None) -> bytes:
 
 class HelperProcess:
     def __init__(self, root: Path, mode: str, stream: bool = False,
-                 test_exec: Path | None = None, **environment: str):
+                 test_exec: Path | None = None, extra: list[str] | None = None,
+                 stderr_path: Path | None = None, **environment: str):
         self.root = root
         self.socket = root / "keepalive.sock"
         self.status = root / "status.json"
         self.marker = root / "safe-mode.json"
         self.mode_file = root / "mode"
         self.control_sequence = 0
+        self.stderr_path = stderr_path
+        self._stderr_file = stderr_path.open("wb") if stderr_path else None
         process_environment = os.environ.copy()
         process_environment.update(environment)
         arguments = [
@@ -97,17 +112,26 @@ class HelperProcess:
             ]
         if stream:
             arguments += ["--test-stream", "yes"]
+        arguments += extra or []
         self.process = subprocess.Popen(
             arguments,
             env=process_environment,
             stdout=subprocess.DEVNULL,
-            stderr=subprocess.PIPE,
-            text=True,
+            stderr=self._stderr_file or subprocess.PIPE,
+            text=self._stderr_file is None,
         )
         wait_until(
             lambda: self.socket.exists()
             and self.status.exists()
             and read_status(self.status).get("state") != "stopped"
+        )
+
+    def control(self, *arguments: str) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            [str(HELPER), "--control", *arguments, "--socket", str(self.socket)],
+            capture_output=True,
+            text=True,
+            check=False,
         )
 
     def send(self, payload: bytes) -> None:
@@ -140,6 +164,10 @@ class HelperProcess:
         if self.process.poll() is None:
             self.process.send_signal(signal.SIGTERM)
         _, stderr = self.process.communicate(timeout=3)
+        if self._stderr_file is not None:
+            self._stderr_file.close()
+            self._stderr_file = None
+            return self.stderr_path.read_text(encoding="utf-8", errors="replace")
         return stderr
 
     def __enter__(self):
@@ -363,6 +391,328 @@ class KeepaliveTests(unittest.TestCase):
         )
         self.assertEqual(unknown.returncode, 2)
         self.assertEqual(arbitrary.returncode, 2)
+
+
+class ColdBootTests(unittest.TestCase):
+    """C1: nothing may be launched before the window server exists."""
+
+    def test_launch_waits_for_springboard_and_never_charges_a_failure(self):
+        with tempfile.TemporaryDirectory(prefix="dbh-sb-", dir="/tmp") as temporary:
+            root = Path(temporary)
+            launch_log = root / "launch.log"
+            processes = root / "processes"
+            processes.write_text("", encoding="utf-8")
+            with HelperProcess(
+                root, "on",
+                extra=["--test-process-file", str(processes), "--boot-grace-ms", "0"],
+                DB_KEEPALIVE_TEST_LOG=str(launch_log),
+            ) as helper:
+                wait_until(
+                    lambda: read_status(helper.status)["state"] == "waiting_springboard"
+                )
+                time.sleep(0.4)
+                status = read_status(helper.status)
+                self.assertFalse(launch_log.exists())
+                self.assertFalse(status["ui_ready"])
+                self.assertFalse(status["safe_mode"])
+                # A missing window server is not a crash: no backoff, no safe mode.
+                self.assertEqual(status["restart_count_5m"], 0)
+                processes.write_text("SpringBoard\n", encoding="utf-8")
+                wait_until(lambda: launch_log.exists())
+                wait_until(lambda: read_status(helper.status)["ui_ready"])
+
+    def test_bounded_boot_grace_defers_the_first_launch(self):
+        with tempfile.TemporaryDirectory(prefix="dbh-grace-", dir="/tmp") as temporary:
+            root = Path(temporary)
+            launch_log = root / "launch.log"
+            processes = root / "processes"
+            processes.write_text("SpringBoard\n", encoding="utf-8")
+            with HelperProcess(
+                root, "on",
+                extra=["--test-process-file", str(processes), "--boot-grace-ms", "900"],
+                DB_KEEPALIVE_TEST_LOG=str(launch_log),
+            ) as helper:
+                wait_until(lambda: read_status(helper.status)["state"] == "boot_grace")
+                self.assertFalse(launch_log.exists())
+                # Deferring inside the grace is not a failure.
+                self.assertEqual(read_status(helper.status)["restart_count_5m"], 0)
+                started = time.monotonic()
+                wait_until(lambda: launch_log.exists(), timeout=5.0)
+                self.assertGreater(time.monotonic() - started, 0.2)
+
+    def test_failing_launcher_is_reported_instead_of_a_silent_startup_timeout(self):
+        false_binary = fixed_failing_launcher()
+        with tempfile.TemporaryDirectory(prefix="dbh-launcher-", dir="/tmp") as temporary:
+            root = Path(temporary)
+            with HelperProcess(root, "on", test_exec=false_binary) as helper:
+                wait_until(
+                    lambda: read_status(helper.status)["last_reason"] == "launcher_failed"
+                )
+                self.assertGreaterEqual(
+                    read_status(helper.status)["restart_count_5m"], 1
+                )
+
+
+class UnprovisionedAppTests(unittest.TestCase):
+    """C3: an app that has not started its heartbeat is still running."""
+
+    def test_present_app_without_heartbeat_is_not_relaunched(self):
+        with tempfile.TemporaryDirectory(prefix="dbh-silent-", dir="/tmp") as temporary:
+            root = Path(temporary)
+            launch_log = root / "launch.log"
+            processes = root / "processes"
+            app = subprocess.Popen(["/bin/sleep", "5"])
+            try:
+                processes.write_text(
+                    f"SpringBoard\nDoorbell {app.pid}\n", encoding="utf-8"
+                )
+                with HelperProcess(
+                    root, "on",
+                    extra=["--test-process-file", str(processes),
+                           "--boot-grace-ms", "0"],
+                    DB_KEEPALIVE_TEST_LOG=str(launch_log),
+                ) as helper:
+                    wait_until(
+                        lambda: read_status(helper.status)["state"]
+                        == "launch_pending_no_heartbeat"
+                    )
+                    time.sleep(0.5)
+                    status = read_status(helper.status)
+                    self.assertFalse(launch_log.exists())
+                    self.assertTrue(status["app_process_present"])
+                    self.assertEqual(status["restart_count_5m"], 0)
+                    self.assertFalse(status["safe_mode"])
+            finally:
+                if app.poll() is None:
+                    app.terminate()
+                    app.wait(timeout=2)
+
+    def test_a_dead_listed_pid_is_not_treated_as_a_running_app(self):
+        with tempfile.TemporaryDirectory(prefix="dbh-stalepid-", dir="/tmp") as temporary:
+            root = Path(temporary)
+            launch_log = root / "launch.log"
+            processes = root / "processes"
+            app = subprocess.Popen(["/bin/sleep", "5"])
+            app.terminate()
+            app.wait(timeout=2)
+            processes.write_text(
+                f"SpringBoard\nDoorbell {app.pid}\n", encoding="utf-8"
+            )
+            with HelperProcess(
+                root, "on",
+                extra=["--test-process-file", str(processes), "--boot-grace-ms", "0"],
+                DB_KEEPALIVE_TEST_LOG=str(launch_log),
+            ) as helper:
+                wait_until(lambda: launch_log.exists())
+                self.assertFalse(read_status(helper.status)["app_process_present"])
+
+
+class RailTests(unittest.TestCase):
+    """C4: kill switch, absolute safe-mode cap, and expected-exit accounting."""
+
+    def test_root_owned_kill_switch_forces_off_and_release_resumes(self):
+        with tempfile.TemporaryDirectory(prefix="dbh-kill-", dir="/tmp") as temporary:
+            root = Path(temporary)
+            launch_log = root / "launch.log"
+            disable = root / "disable"
+            disable.write_text("", encoding="utf-8")
+            with HelperProcess(
+                root, "auto", extra=["--disable-file", str(disable)],
+                DB_KEEPALIVE_TEST_LOG=str(launch_log),
+            ) as helper:
+                wait_until(
+                    lambda: read_status(helper.status)["state"] == "disabled_by_file"
+                )
+                time.sleep(0.3)
+                status = read_status(helper.status)
+                self.assertFalse(launch_log.exists())
+                self.assertEqual(status["mode"], "off")
+                self.assertEqual(status["configured_mode"], "auto")
+                self.assertTrue(status["disabled_by_file"])
+                self.assertFalse(status["armed"])
+                disable.unlink()
+                wait_until(lambda: launch_log.exists())
+                self.assertFalse(read_status(helper.status)["disabled_by_file"])
+
+    def test_a_symlinked_kill_switch_is_ignored(self):
+        with tempfile.TemporaryDirectory(prefix="dbh-killlink-", dir="/tmp") as temporary:
+            root = Path(temporary)
+            launch_log = root / "launch.log"
+            target = root / "target"
+            target.write_text("", encoding="utf-8")
+            disable = root / "disable"
+            disable.symlink_to(target)
+            with HelperProcess(
+                root, "auto", extra=["--disable-file", str(disable)],
+                DB_KEEPALIVE_TEST_LOG=str(launch_log),
+            ) as helper:
+                wait_until(lambda: launch_log.exists())
+                self.assertFalse(read_status(helper.status)["disabled_by_file"])
+
+    def test_safe_mode_launch_cap_stops_relaunching_but_keeps_serving_status(self):
+        with tempfile.TemporaryDirectory(prefix="dbh-cap-", dir="/tmp") as temporary:
+            root = Path(temporary)
+            launch_log = root / "launch.log"
+            helper = HelperProcess(
+                root, "on", extra=["--safe-mode-launch-cap", "2"],
+                DB_KEEPALIVE_TEST_LOG=str(launch_log),
+            )
+            try:
+                wait_until(
+                    lambda: read_status(helper.status)["state"] == "launch_inhibited",
+                    timeout=15.0,
+                )
+                launches = launch_log.read_text(encoding="utf-8").count("safe=")
+                time.sleep(0.6)
+                status = read_status(helper.status)
+                self.assertTrue(status["launch_inhibited"])
+                self.assertTrue(status["safe_mode"])
+                self.assertEqual(
+                    launch_log.read_text(encoding="utf-8").count("safe="), launches
+                )
+                # The control surface stays available while launching is inhibited.
+                self.assertEqual(helper.command("STATUS")["state"], "launch_inhibited")
+            finally:
+                stderr = helper.stop()
+            self.assertIn("safe-mode launch cap 2 reached", stderr)
+
+    def test_marker_removal_clears_safe_mode_and_the_launch_cap(self):
+        with tempfile.TemporaryDirectory(prefix="dbh-clear-", dir="/tmp") as temporary:
+            root = Path(temporary)
+            launch_log = root / "launch.log"
+            with HelperProcess(
+                root, "on", extra=["--safe-mode-launch-cap", "2"],
+                DB_KEEPALIVE_TEST_LOG=str(launch_log),
+            ) as helper:
+                wait_until(
+                    lambda: read_status(helper.status)["state"] == "launch_inhibited",
+                    timeout=15.0,
+                )
+                self.assertTrue(helper.command("MODE off")["ok"])
+                wait_until(lambda: read_status(helper.status)["state"] == "off")
+                helper.marker.unlink()
+                wait_until(lambda: not read_status(helper.status)["safe_mode"])
+                status = read_status(helper.status)
+                self.assertFalse(status["launch_inhibited"])
+                self.assertEqual(status["last_reason"], "safe_mode_cleared")
+                self.assertEqual(status["restart_count_5m"], 0)
+
+    def test_announced_stop_is_not_charged_as_a_crash(self):
+        with tempfile.TemporaryDirectory(prefix="dbh-clean-", dir="/tmp") as temporary:
+            root = Path(temporary)
+            launch_log = root / "launch.log"
+            app = subprocess.Popen(["/bin/sleep", "10"])
+            try:
+                with HelperProcess(
+                    root, "auto", DB_KEEPALIVE_TEST_LOG=str(launch_log)
+                ) as helper:
+                    helper.send(heartbeat(1, app.pid))
+                    wait_until(lambda: read_status(helper.status)["state"] == "healthy")
+                    helper.send(heartbeat(2, app.pid, event="stopping"))
+                    wait_until(
+                        lambda: read_status(helper.status)["last_reason"] == "stopping"
+                    )
+                    app.terminate()
+                    app.wait(timeout=2)
+                    wait_until(
+                        lambda: read_status(helper.status)["last_reason"] == "clean_exit"
+                    )
+                    self.assertEqual(
+                        read_status(helper.status)["restart_count_5m"], 0
+                    )
+            finally:
+                if app.poll() is None:
+                    app.terminate()
+                    app.wait(timeout=2)
+
+    def test_a_kill_under_a_maintenance_lease_is_not_charged_as_a_crash(self):
+        with tempfile.TemporaryDirectory(prefix="dbh-lease-", dir="/tmp") as temporary:
+            root = Path(temporary)
+            launch_log = root / "launch.log"
+            app = subprocess.Popen(["/bin/sleep", "10"])
+            try:
+                with HelperProcess(
+                    root, "auto", DB_KEEPALIVE_TEST_LOG=str(launch_log)
+                ) as helper:
+                    helper.send(heartbeat(1, app.pid))
+                    wait_until(lambda: read_status(helper.status)["state"] == "healthy")
+                    self.assertTrue(helper.command("MAINTENANCE_BEGIN 1")["ok"])
+                    wait_until(
+                        lambda: read_status(helper.status)["state"] == "maintenance"
+                    )
+                    app.terminate()
+                    app.wait(timeout=2)
+                    wait_until(
+                        lambda: read_status(helper.status)["last_reason"]
+                        == "maintenance_exit",
+                        timeout=8.0,
+                    )
+                    self.assertEqual(
+                        read_status(helper.status)["restart_count_5m"], 0
+                    )
+            finally:
+                if app.poll() is None:
+                    app.terminate()
+                    app.wait(timeout=2)
+
+
+class LogAndControlTests(unittest.TestCase):
+    """C5/C8: bounded diagnostics and the fixed maintenance control client."""
+
+    def test_stderr_log_is_bounded_by_the_configured_cap(self):
+        with tempfile.TemporaryDirectory(prefix="dbh-log-", dir="/tmp") as temporary:
+            root = Path(temporary)
+            log = root / "helper.log"
+            helper = HelperProcess(
+                root, "on",
+                extra=["--log-max-bytes", "512", "--safe-mode-launch-cap", "1000"],
+                stderr_path=log,
+                DB_KEEPALIVE_TEST_LOG=str(root / "launch.log"),
+            )
+            try:
+                wait_until(
+                    lambda: "log truncated" in log.read_text(
+                        encoding="utf-8", errors="replace"
+                    ),
+                    timeout=20.0,
+                )
+                self.assertLess(log.stat().st_size, 4096)
+            finally:
+                helper.stop()
+
+    def test_control_client_only_speaks_the_fixed_maintenance_vocabulary(self):
+        with tempfile.TemporaryDirectory(prefix="dbh-ctl-", dir="/tmp") as temporary:
+            root = Path(temporary)
+            with HelperProcess(
+                root, "auto", DB_KEEPALIVE_TEST_LOG=str(root / "launch.log")
+            ) as helper:
+                status = helper.control("status")
+                self.assertEqual(status.returncode, 0)
+                self.assertEqual(json.loads(status.stdout)["configured_mode"], "auto")
+
+                begin = helper.control("begin", "--seconds", "30")
+                self.assertEqual(begin.returncode, 0)
+                self.assertTrue(json.loads(begin.stdout)["ok"])
+                wait_until(
+                    lambda: read_status(helper.status)["state"] == "maintenance"
+                )
+
+                end = helper.control("end")
+                self.assertEqual(end.returncode, 0)
+                self.assertTrue(json.loads(end.stdout)["ok"])
+                wait_until(
+                    lambda: read_status(helper.status)["state"] != "maintenance"
+                )
+
+                self.assertEqual(helper.control("reboot").returncode, 2)
+                self.assertEqual(
+                    helper.control("begin", "--seconds", "99999").returncode, 2
+                )
+                missing = subprocess.run(
+                    [str(HELPER), "--control", "end", "--socket", str(root / "absent")],
+                    capture_output=True, text=True, check=False,
+                )
+                self.assertNotEqual(missing.returncode, 0)
 
 
 def main() -> int:
