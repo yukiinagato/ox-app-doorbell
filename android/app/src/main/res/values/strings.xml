@@ -509,6 +509,7 @@ Delete it?</string>
     <string name="notice_publish">Show</string>
     <string name="notice_saved">The announcement is now showing</string>
     <string name="notice_scope_global">House-wide</string>
+    <string name="notice_target">Applies to</string>
     <string name="notice_target_door">%1$s only</string>
     <string name="notice_target_global">Everywhere</string>
     <string name="notice_text">Message</string>

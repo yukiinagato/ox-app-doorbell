@@ -504,6 +504,7 @@
 "notice.publish" = "Show";
 "notice.saved" = "The announcement is now showing";
 "notice.scope_global" = "House-wide";
+"notice.target" = "Applies to";
 "notice.target_door" = "%@ only";
 "notice.target_global" = "Everywhere";
 "notice.text" = "Message";

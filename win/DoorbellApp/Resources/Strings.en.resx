@@ -511,6 +511,7 @@ Delete it?</value></data>
   <data name="notice_publish" xml:space="preserve"><value>Show</value></data>
   <data name="notice_saved" xml:space="preserve"><value>The announcement is now showing</value></data>
   <data name="notice_scope_global" xml:space="preserve"><value>House-wide</value></data>
+  <data name="notice_target" xml:space="preserve"><value>Applies to</value></data>
   <data name="notice_target_door" xml:space="preserve"><value>{0} only</value></data>
   <data name="notice_target_global" xml:space="preserve"><value>Everywhere</value></data>
   <data name="notice_text" xml:space="preserve"><value>Message</value></data>

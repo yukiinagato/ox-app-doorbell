@@ -511,6 +511,7 @@
   <data name="notice_publish" xml:space="preserve"><value>表示する</value></data>
   <data name="notice_saved" xml:space="preserve"><value>お知らせを表示しました</value></data>
   <data name="notice_scope_global" xml:space="preserve"><value>全体のお知らせ</value></data>
+  <data name="notice_target" xml:space="preserve"><value>表示先</value></data>
   <data name="notice_target_door" xml:space="preserve"><value>{0} のみ</value></data>
   <data name="notice_target_global" xml:space="preserve"><value>全体</value></data>
   <data name="notice_text" xml:space="preserve"><value>本文</value></data>

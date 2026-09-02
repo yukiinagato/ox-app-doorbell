@@ -509,6 +509,7 @@
     <string name="notice_publish">表示する</string>
     <string name="notice_saved">お知らせを表示しました</string>
     <string name="notice_scope_global">全体のお知らせ</string>
+    <string name="notice_target">表示先</string>
     <string name="notice_target_door">%1$s のみ</string>
     <string name="notice_target_global">全体</string>
     <string name="notice_text">本文</string>

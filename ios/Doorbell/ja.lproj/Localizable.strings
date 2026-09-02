@@ -504,6 +504,7 @@
 "notice.publish" = "表示する";
 "notice.saved" = "お知らせを表示しました";
 "notice.scope_global" = "全体のお知らせ";
+"notice.target" = "表示先";
 "notice.target_door" = "%@ のみ";
 "notice.target_global" = "全体";
 "notice.text" = "本文";

@@ -985,6 +985,7 @@ history.load_more: { ja: "さらに読み込む", en: "Load more", zh: "加载�
 history.filter_all: { ja: "すべて", en: "All", zh: "全部" }
 history.filter_missed: { ja: "不在着信のみ", en: "Missed only", zh: "仅未接" }
 history.filter_door: { ja: "{door} のみ", en: "{door} only", zh: "仅 {door}" }
+notice.target: { ja: "表示先", en: "Applies to", zh: "适用范围" }
 notice.target_global: { ja: "全体", en: "Everywhere", zh: "全部门口" }
 notice.target_door: { ja: "{door} のみ", en: "{door} only", zh: "仅 {door}" }
 notice.global_button: { ja: "お知らせ（全体）", en: "Announcement (all doors)", zh: "公告（全部门口）" }

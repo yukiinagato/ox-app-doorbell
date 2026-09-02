@@ -509,6 +509,7 @@
     <string name="notice_publish">显示</string>
     <string name="notice_saved">公告已显示</string>
     <string name="notice_scope_global">全局公告</string>
+    <string name="notice_target">适用范围</string>
     <string name="notice_target_door">仅 %1$s</string>
     <string name="notice_target_global">全部门口</string>
     <string name="notice_text">内容</string>
