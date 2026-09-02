@@ -744,13 +744,18 @@ final class MainViewController: UIViewController {
     }
 
     private func applySemanticStyles() {
-        let bindings: [(String, UIView)] = [
-            ("call.primary", callButton), ("cancel.call", cancelButton),
-            ("call.end", endCallButton), ("sos.trigger", sosSlider),
-            ("sos.cancel", emergencyCancel), ("status.offline", offlineTitle),
+        // This runs on every layout pass. The SOS slider is only a control on a screen whose role
+        // offers one; styling it anywhere else would put it back, because a safety control's style
+        // floor forces it visible.
+        let sosOffered = ConfigUtil.sosButtonVisible(config: cfg, role: boot.role)
+        let bindings: [(String, UIView, Bool)] = [
+            ("call.primary", callButton, true), ("cancel.call", cancelButton, true),
+            ("call.end", endCallButton, true), ("sos.trigger", sosSlider, sosOffered),
+            ("sos.cancel", emergencyCancel, true), ("status.offline", offlineTitle, true),
         ]
-        for (id, view) in bindings {
-            styleApplier.apply(config: cfg, nodeId: nodeId, semanticId: id, to: view)
+        for (id, view, offered) in bindings {
+            styleApplier.apply(config: cfg, nodeId: nodeId, semanticId: id, to: view,
+                               offered: offered)
         }
         for row in purposeGrid.arrangedSubviews {
             for button in (row as? UIStackView)?.arrangedSubviews ?? [] {

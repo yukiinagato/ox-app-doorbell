@@ -449,16 +449,17 @@ final class ThemeInkTests: XCTestCase {
         return UIGraphicsGetImageFromCurrentImageContext() ?? UIImage()
     }
 
-    /// Renders a view exactly the way the screenshot hook renders the key window, and returns the
-    /// grey level of every pixel. `drawHierarchy` is used rather than `layer.render(in:)` because
-    /// only the former draws layer shadows.
+    /// Renders a view and returns the grey level of every pixel. `layer.render(in:)` is enough
+    /// here because the halo is drawn by the label's own `drawText`, which this calls — unlike the
+    /// layer shadow it replaced, which needed a live window to appear at all.
     static func grey(of view: UIView) -> [CGFloat]? {
         let bounds = view.bounds
         guard bounds.width >= 1, bounds.height >= 1 else { return nil }
         UIGraphicsBeginImageContextWithOptions(bounds.size, true, 1)
         defer { UIGraphicsEndImageContext() }
-        guard view.drawHierarchy(in: bounds, afterScreenUpdates: true),
-              let image = UIGraphicsGetImageFromCurrentImageContext()?.cgImage else { return nil }
+        guard let canvas = UIGraphicsGetCurrentContext() else { return nil }
+        view.layer.render(in: canvas)
+        guard let image = UIGraphicsGetImageFromCurrentImageContext()?.cgImage else { return nil }
         let width = image.width, height = image.height
         var raw = [UInt8](repeating: 0, count: width * height * 4)
         guard let context = CGContext(data: &raw, width: width, height: height,
@@ -488,39 +489,44 @@ final class ThemeInkTests: XCTestCase {
                                       minLuminance: DoorbellTheme.luminance(.black),
                                       maxLuminance: DoorbellTheme.luminance(.white))
 
-        let withHalo = ThemeInkTests.litPixels { label in
-            DoorbellTheme.applyInk(DoorbellPalette.light.ink, over: .sampled(sample), to: label)
-            XCTAssertNotNil(label.halo, "the decision must ask for a halo")
+        // Every size a region on the theme background actually uses: the footer's 13 pt, the
+        // hint's 20 pt, the date's 24 pt and the clock's 76 pt. The stroke scales with the font,
+        // so each has to be checked — a width that reads on the clock was a sticker outline on
+        // the footer, and a width that suits the footer would vanish under the clock.
+        for pointSize in [13, 20, 24, 76] as [CGFloat] {
+            let withHalo = ThemeInkTests.litPixels(pointSize: pointSize) { label in
+                DoorbellTheme.applyInk(DoorbellPalette.light.ink, over: .sampled(sample),
+                                       to: label)
+                XCTAssertNotNil(label.halo, "the decision must ask for a halo")
+            }
+            // The same glyphs with the halo suppressed: the baseline is whatever anti-aliasing
+            // lights on its own, so the test calibrates itself rather than trusting a number.
+            let without = ThemeInkTests.litPixels(pointSize: pointSize) { label in
+                DoorbellTheme.applyInk(DoorbellPalette.light.ink, over: .sampled(sample),
+                                       to: label)
+                label.halo = nil
+            }
+            // 4x holds at every one of these sizes; the agreed floor is 2.5x.
+            XCTAssertGreaterThan(withHalo, Int(Double(without) * 4.0),
+                                 "\(pointSize) pt: the halo must dominate the anti-aliasing")
         }
-        // The same glyphs with the halo suppressed: the baseline is whatever anti-aliasing lights
-        // on its own, so the test calibrates itself instead of trusting a number I picked.
-        let without = ThemeInkTests.litPixels { label in
-            DoorbellTheme.applyInk(DoorbellPalette.light.ink, over: .sampled(sample), to: label)
-            label.halo = nil
-        }
-
-        XCTAssertLessThan(without, 60, "dark text on grey lights almost nothing by itself")
-        XCTAssertGreaterThan(withHalo, without * 4,
-                             "the halo has to dominate the anti-aliasing, not hide in it")
     }
 
     /// Draws one glyph through `configure` over a mid-grey ground and counts the pixels clearly
     /// lighter than that ground — which, with dark ink, can only be halo.
-    private static func litPixels(_ configure: (HaloLabel) -> Void) -> Int {
+    private static func litPixels(pointSize: CGFloat = 64,
+                                  _ configure: (HaloLabel) -> Void) -> Int {
         let label = HaloLabel()
-        label.text = "8"
-        label.font = .systemFont(ofSize: 64, weight: .bold)
+        label.text = "888"
+        label.font = .systemFont(ofSize: pointSize, weight: .bold)
         label.textAlignment = .center
-        label.frame = CGRect(x: 0, y: 0, width: 120, height: 100)
+        label.frame = CGRect(x: 0, y: 0, width: pointSize * 4, height: pointSize * 2)
         configure(label)
 
         let host = UIView(frame: label.bounds)
         host.backgroundColor = UIColor(white: 0.5, alpha: 1)
         host.addSubview(label)
-        let window = UIWindow(frame: host.bounds)
-        window.addSubview(host)
-        window.makeKeyAndVisible()
-        window.layoutIfNeeded()
+        host.layoutIfNeeded()
         return (ThemeInkTests.grey(of: host) ?? []).filter { $0 > 0.72 }.count
     }
 
