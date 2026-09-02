@@ -467,7 +467,7 @@ DB_API int db_core_sip_set_mic_muted(db_core* c, int muted);
  * Migration: before this existed, each node kept its own digest in local storage, and a kiosk
  * kept a separate exit code. That local digest stays authoritative until the first successful
  * verification, which republishes it as the cluster password. A shell that still holds its own
- * exit_pin digest must stop consulting it once db_core_admin_password_verify returns 1 or -3,
+ * exit_pin digest must stop consulting it once db_core_admin_password_verify returns a positive value (or once db_core_admin_password_set succeeds),
  * and delete it, so one password change cannot leave a device with a stale second way in. */
 DB_API int db_core_admin_password_verify(db_core* c, const char* pw);
 DB_API int db_core_admin_password_set(db_core* c, const char* current_or_empty,
