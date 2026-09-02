@@ -54,7 +54,7 @@ static NSArray *DBCommonTimeZones(void) {
 }
 
 @interface DBSettingsScreen () <UITableViewDataSource, UITableViewDelegate,
-                                UITableViewDataSource, UITextFieldDelegate>
+                                UITextFieldDelegate>
 @end
 
 @implementation DBSettingsScreen {
