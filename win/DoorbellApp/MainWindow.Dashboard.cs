@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
@@ -34,6 +35,9 @@ namespace DoorbellApp
                 {
                     var peer = raw as Dictionary<string, object>;
                     if (peer == null || DictStr(peer, "role") != "door_station") continue;
+                    // A door station with no camera has nothing to watch, so it gets no tile. It
+                    // stays reachable through the monitor list and still takes announcements.
+                    if (!PeerHasCamera(peer)) continue;
                     string door = DictStr(peer, "door");
                     if (string.IsNullOrEmpty(door) || doors.Contains(door)) continue;
                     doors.Add(door);
@@ -96,6 +100,73 @@ namespace DoorbellApp
                 RefreshDoorTileStills();
             }
             else _tileRefresh.Stop();
+        }
+
+        /// <summary>
+        /// caps.camera says whether a peer can show live video. Only an explicit false hides the
+        /// tile: a shell that does not advertise the capability at all still gets one.
+        /// </summary>
+        private static bool PeerHasCamera(Dictionary<string, object> peer)
+        {
+            object value = CoreClient.Dig(peer, "caps.camera");
+            return !(value is bool) || (bool)value;
+        }
+
+        /// <summary>
+        /// The cluster, door-station and indoor-panel counters. status.peers carries every device
+        /// including this one; a mesh that has not listed us yet is counted from the boot profile
+        /// so the total is never short by one.
+        /// </summary>
+        private void RefreshDeviceCounters()
+        {
+            var peers = _status != null && _status.ContainsKey("peers") ?
+                _status["peers"] as System.Collections.IEnumerable : null;
+            int total = 0, doorsOnline = 0, doorsTotal = 0, panelsOnline = 0, panelsTotal = 0;
+            bool sawSelf = false;
+            if (peers != null)
+                foreach (object raw in peers)
+                {
+                    var peer = raw as Dictionary<string, object>;
+                    if (peer == null || string.IsNullOrEmpty(DictStr(peer, "id"))) continue;
+                    bool self = DictBool(peer, "self");
+                    if (self) sawSelf = true;
+                    // This device is plainly reachable from itself, whatever gossip says.
+                    bool online = self || DictStr(peer, "status") != "dead";
+                    total++;
+                    CountRole(DictStr(peer, "role"), online, ref doorsOnline, ref doorsTotal,
+                              ref panelsOnline, ref panelsTotal);
+                }
+            if (!sawSelf)
+            {
+                total++;
+                CountRole(App.Boot.Role, true, ref doorsOnline, ref doorsTotal,
+                          ref panelsOnline, ref panelsTotal);
+            }
+
+            ClusterCountText.Text = total.ToString();
+            DoorCountText.Text = doorsOnline + "/" + doorsTotal;
+            PanelCountText.Text = panelsOnline + "/" + panelsTotal;
+            AutomationProperties.SetName(ClusterCounter, Texts.T("dash.count_cluster", total));
+            AutomationProperties.SetName(DoorCounter,
+                Texts.T("dash.count_doors", doorsOnline, doorsTotal));
+            AutomationProperties.SetName(PanelCounter,
+                Texts.T("dash.count_panels", panelsOnline, panelsTotal));
+        }
+
+        private static void CountRole(string role, bool online, ref int doorsOnline,
+                                      ref int doorsTotal, ref int panelsOnline,
+                                      ref int panelsTotal)
+        {
+            if (role == "door_station")
+            {
+                doorsTotal++;
+                if (online) doorsOnline++;
+            }
+            else if (role == "indoor_panel")
+            {
+                panelsTotal++;
+                if (online) panelsOnline++;
+            }
         }
 
         private Border BuildDoorTile(string door)
@@ -369,30 +440,18 @@ namespace DoorbellApp
             return LabelOf(entry, Texts.Lang, purpose);
         }
 
-        /// <summary>Renders a stored wall-clock instant with the cluster's own clock.</summary>
+        /// <summary>
+        /// Renders a stored wall-clock instant in the cluster time zone, from the same cached
+        /// base the clock uses. A history page must not make one call into core per row.
+        /// </summary>
         private string ClockOf(long wallMs)
         {
-            if (wallMs <= 0) return "";
-            var local = App.Core.LocalTime(wallMs);
-            if (local != null)
-            {
-                int hour = DictInt(local, "hh", -1);
-                int minute = DictInt(local, "mm", -1);
-                if (hour >= 0 && minute >= 0)
-                    return hour.ToString("00") + ":" + minute.ToString("00");
-            }
-            return new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc).AddMilliseconds(wallMs)
-                .ToLocalTime().ToString("HH:mm");
+            return wallMs <= 0 ? "" : InZone(wallMs).ToString("HH:mm");
         }
 
         private string DayOf(long wallMs)
         {
-            if (wallMs <= 0) return "";
-            var local = App.Core.LocalTime(wallMs);
-            string date = local == null ? "" : DictStr(local, "date");
-            if (!string.IsNullOrEmpty(date)) return date;
-            return new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc).AddMilliseconds(wallMs)
-                .ToLocalTime().ToString("yyyy-MM-dd");
+            return wallMs <= 0 ? "" : InZone(wallMs).ToString("yyyy-MM-dd");
         }
     }
 }

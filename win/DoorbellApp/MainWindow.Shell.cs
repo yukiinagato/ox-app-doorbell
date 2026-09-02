@@ -226,7 +226,9 @@ namespace DoorbellApp
             InkText(NodeInfo, RegionFooter, 0.35);
             InkText(VisitorVersionLine, RegionFooter, 0.35);
             InkText(VisitorNoticeText, RegionNotice, 0);
-            InkText(MembershipText, RegionStatusLine, 0);
+            InkText(ClusterCountText, RegionStatusLine, 0);
+            InkText(DoorCountText, RegionStatusLine, 0);
+            InkText(PanelCountText, RegionStatusLine, 0);
             InkText(RecentCallsTitle, RegionTileLabel, 0);
             // The call screens draw over their own opaque surface, so the same rule resolves
             // there against that surface rather than against the theme background.

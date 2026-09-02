@@ -730,7 +730,7 @@ class WindowsContracts(unittest.TestCase):
         self.assertIn('x:Name="SosSlide"', xaml)
         self.assertIn('x:Name="SosCountdownCancel"', xaml)
 
-    def test_every_clock_is_rendered_with_the_cluster_clock(self):
+    def test_the_clock_ticks_from_a_cached_base_not_a_call_per_second(self):
         interop = read("win/DoorbellApp/Core/CoreInterop.cs")
         client = read("win/DoorbellApp/Core/CoreClient.cs")
         window = read("win/DoorbellApp/MainWindow.xaml.cs")
@@ -738,12 +738,151 @@ class WindowsContracts(unittest.TestCase):
         self.assertIn("db_core_local_time_json", interop)
         self.assertIn("db_core_time_sync_now", interop)
         self.assertIn("public Dictionary<string, object> LocalTime(long wallMs)", client)
+
+        # One hertz, and the tick draws from the cached base rather than calling into core.
+        self.assertIn("_clock.Interval = TimeSpan.FromSeconds(1);", window)
+        self.assertIn("_clock.Tick += (s, e) => OnClockTick();", window)
         clock = window[window.index("private void UpdateClock"):
                        window.index("private static string Weekday")]
-        self.assertIn("CoreLocalTime(out time, out date)", clock)
+        self.assertIn("DateTime now = CorrectedNow();", clock)
         self.assertIn("DashClock.Text = time;", clock)
-        # Call-history timestamps use the same corrected clock.
-        self.assertIn("App.Core.LocalTime(wallMs)", dashboard)
+        self.assertNotIn("App.Core", clock)
+        self.assertNotIn("LocalTime", clock)
+        corrected = window[window.index("private DateTime CorrectedNow()"):
+                           window.index("private DateTime InZone(long wallMs)")]
+        self.assertIn("SystemUtcMs() + _clockOffsetMs", corrected)
+        self.assertNotIn("App.Core", corrected)
+
+        # The base is re-read on its own thirty-second timer, off the UI thread, and again
+        # whenever core reports the time source moved.
+        self.assertIn("_clockSync.Interval = TimeSpan.FromSeconds(30);", window)
+        self.assertIn("_clockSync.Tick += (s, e) => SyncClockBase();", window)
+        sync = window[window.index("private void SyncClockBase()"):
+                      window.index("private void ApplyClockBase(")]
+        self.assertIn("Task.Run(", sync)
+        self.assertIn("App.Core.LocalTime(0)", sync)
+        self.assertIn("Dispatcher.BeginInvoke(", sync)
+        self.assertIn("_clockSyncBusy", sync)
+        changed = window[window.index('case "time_changed":'):
+                         window.index('case "power_changed":')]
+        self.assertIn("SyncClockBase();", changed)
+
+        # The status poll is not what advances the clock.
+        node_info = window[window.index("private void RefreshNodeInfo"):
+                           window.index("private void RefreshConfigCache")]
+        self.assertNotIn("UpdateClock", node_info)
+
+        # A history page renders its timestamps from the same base, not one call per row.
+        self.assertNotIn("App.Core.LocalTime", dashboard)
+        self.assertIn("InZone(wallMs)", dashboard)
+
+    def test_a_door_station_without_a_camera_gets_no_tile(self):
+        dashboard = read("win/DoorbellApp/MainWindow.Dashboard.cs")
+        tiles = dashboard[dashboard.index("private void RefreshDoorTiles()"):
+                          dashboard.index("private static bool PeerHasCamera(")]
+        self.assertIn("if (!PeerHasCamera(peer)) continue;", tiles)
+        camera = dashboard[dashboard.index("private static bool PeerHasCamera("):
+                           dashboard.index("private void RefreshDeviceCounters()")]
+        self.assertIn('CoreClient.Dig(peer, "caps.camera")', camera)
+        # true shows, false hides, absent shows.
+        self.assertIn("return !(value is bool) || (bool)value;", camera)
+
+        def shows(caps):
+            """The rule as implemented: only an explicit false hides the tile."""
+            if "camera" not in caps:
+                return True
+            return bool(caps["camera"])
+
+        self.assertTrue(shows({"camera": True}))
+        self.assertFalse(shows({"camera": False}))
+        self.assertTrue(shows({}))
+        # The door itself stays reachable elsewhere: the monitor list is built from peers on its
+        # own, and announcements enumerate configured doors, not tiles.
+        window = read("win/DoorbellApp/MainWindow.xaml.cs")
+        monitor = window[window.index("private void OnOpenMonitorClick"):
+                         window.index("private void OnMonitorDoorClick")]
+        self.assertNotIn("PeerHasCamera", monitor)
+        notice = read("win/DoorbellApp/MainWindow.Notice.cs")
+        self.assertIn('CoreClient.Dig(_cfg, "doors") as Dictionary<string, object>', notice)
+
+    def test_the_dashboard_counts_devices_by_role(self):
+        dashboard = read("win/DoorbellApp/MainWindow.Dashboard.cs")
+        xaml = read("win/DoorbellApp/MainWindow.xaml")
+        # Three counters, each a vector icon and a number. No emoji anywhere near them.
+        for name in ("ClusterCounter", "ClusterCountText", "DoorCounter", "DoorCountText",
+                     "PanelCounter", "PanelCountText"):
+            self.assertIn('x:Name="%s"' % name, xaml)
+        pill = xaml[xaml.index('<Border x:Name="MembershipStatus"'):
+                    xaml.index('<Border x:Name="MissedBadge"')]
+        self.assertEqual(pill.count("<Path "), 3)
+        for glyph in pill:
+            self.assertLess(ord(glyph), 0x2190, "counter icons must be vector paths, not emoji")
+        # Screen readers get the meaning in the operator's language.
+        for key in ("dash.count_cluster", "dash.count_doors", "dash.count_panels"):
+            self.assertIn('Texts.T("%s"' % key, dashboard)
+        self.assertIn("AutomationProperties.SetName(ClusterCounter", dashboard)
+        self.assertIn("AutomationProperties.SetName(DoorCounter", dashboard)
+        self.assertIn("AutomationProperties.SetName(PanelCounter", dashboard)
+        catalog = read("i18n/strings.yaml")
+        for key in ("dash.count_cluster", "dash.count_doors", "dash.count_panels"):
+            # The whole line: a placeholder such as {n} also contains a brace.
+            entry = re.search(r"^%s: (.*)$" % re.escape(key), catalog, re.M)
+            self.assertIsNotNone(entry, key)
+            self.assertEqual(set(re.findall(r'(\w+): "', entry.group(1))), {"ja", "en", "zh"})
+
+        # The counting itself: peers carry self, and a mesh that has not listed us yet does not
+        # make the total short by one.
+        counters = dashboard[dashboard.index("private void RefreshDeviceCounters()"):
+                             dashboard.index("private static void CountRole(")]
+        self.assertIn('_status["peers"]', counters)
+        self.assertIn('bool self = DictBool(peer, "self");', counters)
+        self.assertIn('bool online = self || DictStr(peer, "status") != "dead";', counters)
+        self.assertIn("if (!sawSelf)", counters)
+        self.assertIn('DoorCountText.Text = doorsOnline + "/" + doorsTotal;', counters)
+        self.assertIn('PanelCountText.Text = panelsOnline + "/" + panelsTotal;', counters)
+
+        def count(peers, self_role):
+            """The rule as implemented."""
+            total = doors_on = doors_all = panels_on = panels_all = 0
+            saw_self = False
+
+            def add(role, online):
+                nonlocal doors_on, doors_all, panels_on, panels_all
+                if role == "door_station":
+                    doors_all += 1
+                    if online:
+                        doors_on += 1
+                elif role == "indoor_panel":
+                    panels_all += 1
+                    if online:
+                        panels_on += 1
+
+            for peer in peers:
+                if not peer.get("id"):
+                    continue
+                is_self = bool(peer.get("self"))
+                saw_self = saw_self or is_self
+                total += 1
+                add(peer.get("role", ""), is_self or peer.get("status") != "dead")
+            if not saw_self:
+                total += 1
+                add(self_role, True)
+            return total, (doors_on, doors_all), (panels_on, panels_all)
+
+        # A cluster of three: one door station that has gone dead, two panels, self listed.
+        peers = [
+            {"id": "a", "role": "door_station", "status": "dead"},
+            {"id": "b", "role": "indoor_panel", "status": "alive", "self": True},
+            {"id": "c", "role": "indoor_panel", "status": "alive"},
+        ]
+        self.assertEqual(count(peers, "indoor_panel"), (3, (0, 1), (2, 2)))
+        # The same cluster before the mesh has listed this device.
+        self.assertEqual(count(peers[:1] + peers[2:], "indoor_panel"), (3, (0, 1), (2, 2)))
+        # A dead entry that is nonetheless this device still counts as online.
+        self.assertEqual(
+            count([{"id": "b", "role": "indoor_panel", "status": "dead", "self": True}],
+                  "indoor_panel"),
+            (1, (0, 0), (1, 1)))
 
     def test_dashboard_shows_tiles_history_versions_and_battery(self):
         xaml = read("win/DoorbellApp/MainWindow.xaml")
@@ -1007,7 +1146,7 @@ class WindowsContracts(unittest.TestCase):
                                 ("TouchHint", "RegionHint"), ("NodeInfo", "RegionFooter"),
                                 ("VisitorVersionLine", "RegionFooter"),
                                 ("VisitorNoticeText", "RegionNotice"),
-                                ("MembershipText", "RegionStatusLine"),
+                                ("ClusterCountText", "RegionStatusLine"),
                                 ("IncomingTitle", "RegionStatusLine"),
                                 ("InCallTitle", "RegionStatusLine"),
                                 ("IncomingHint", "RegionHint")):

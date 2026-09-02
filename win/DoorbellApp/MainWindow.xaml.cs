@@ -33,6 +33,7 @@ namespace DoorbellApp
         private readonly DispatcherTimer _emergencyPresentationTimeout = new DispatcherTimer();
         private readonly DispatcherTimer _incomingTimeout = new DispatcherTimer();
         private readonly DispatcherTimer _returnTimer = new DispatcherTimer();
+        private readonly DispatcherTimer _clockSync = new DispatcherTimer();
         private readonly DispatcherTimer _answerDelay = new DispatcherTimer();
         private readonly DispatcherTimer _peerPoll = new DispatcherTimer();
         private readonly DispatcherTimer _h264Fallback = new DispatcherTimer();
@@ -137,6 +138,12 @@ namespace DoorbellApp
         private int _returnSecondsLeft;
         private bool _returnCancelled;
         private string _returnDoor = "";
+        // The clock renders from a cached base: core's corrected wall clock and zone offset,
+        // refreshed off the UI thread, never asked for on the tick that draws a second.
+        private long _clockOffsetMs;
+        private int _clockZoneOffsetMin;
+        private bool _clockBaseKnown;
+        private bool _clockSyncBusy;
         private int _volumeCall = 80;
         private int _volumeSos = 100;
         private int _volumeIdle = 60;
@@ -164,6 +171,12 @@ namespace DoorbellApp
             _clock.Interval = TimeSpan.FromSeconds(1);
             _clock.Tick += (s, e) => OnClockTick();
             _clock.Start();
+            // Core's offset moves slowly, so it is re-read on its own schedule and whenever core
+            // says the time source changed, never once per rendered second.
+            _clockSync.Interval = TimeSpan.FromSeconds(30);
+            _clockSync.Tick += (s, e) => SyncClockBase();
+            _clockSync.Start();
+            SyncClockBase();
             UpdateClock();
 
             _callTimeout.Tick += (s, e) =>
@@ -361,17 +374,12 @@ namespace DoorbellApp
                 EnterScreensaver();
         }
 
-        // Every clock is rendered from db_core_local_time_json, so the cluster time zone and any
-        // NTP correction apply without touching this machine's own clock.
+        // Ticks once a second from the cached base, so a second never waits on a call into core.
         private void UpdateClock()
         {
-            string time, date;
-            if (!CoreLocalTime(out time, out date))
-            {
-                var now = DateTime.Now;
-                time = now.ToString("HH:mm:ss");
-                date = now.ToString("yyyy年M月d日") + " (" + Weekday((int)now.DayOfWeek) + ")";
-            }
+            DateTime now = CorrectedNow();
+            string time = now.ToString("HH:mm:ss");
+            string date = now.ToString("yyyy年M月d日") + " (" + Weekday((int)now.DayOfWeek) + ")";
             ClockText.Text = time;
             DateText.Text = date;
             DashClock.Text = time;
@@ -389,29 +397,75 @@ namespace DoorbellApp
             return dayOfWeek >= 0 && dayOfWeek < names.Length ? names[dayOfWeek] : "";
         }
 
-        private bool CoreLocalTime(out string time, out string date)
+        private static readonly DateTime UnixEpoch =
+            new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+
+        private static long SystemUtcMs()
         {
-            time = "";
-            date = "";
-            var local = App.Core.LocalTime(0);
-            if (local == null) return false;
+            return (long)(DateTime.UtcNow - UnixEpoch).TotalMilliseconds;
+        }
+
+        /// <summary>
+        /// Now, in the cluster time zone, from the cached base alone. Until core has answered
+        /// once this is simply the machine's own local clock.
+        /// </summary>
+        private DateTime CorrectedNow()
+        {
+            if (!_clockBaseKnown) return DateTime.Now;
+            return InZone(SystemUtcMs() + _clockOffsetMs);
+        }
+
+        /// <summary>One recorded wall-clock instant, rendered in the cluster time zone.</summary>
+        private DateTime InZone(long wallMs)
+        {
+            if (!_clockBaseKnown) return UnixEpoch.AddMilliseconds(wallMs).ToLocalTime();
+            return UnixEpoch.AddMilliseconds(wallMs + _clockZoneOffsetMin * 60000L);
+        }
+
+        /// <summary>
+        /// Re-reads core's corrected wall clock and zone offset on a worker thread, then hands
+        /// the two numbers back to the UI thread. Everything the clock draws comes from those.
+        /// </summary>
+        private void SyncClockBase()
+        {
+            if (_clockSyncBusy) return;
+            _clockSyncBusy = true;
+            Task.Run(() =>
+            {
+                long before = SystemUtcMs();
+                Dictionary<string, object> local = null;
+                try { local = App.Core.LocalTime(0); }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine("clock base unavailable: " + ex.Message);
+                }
+                long after = SystemUtcMs();
+                Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    _clockSyncBusy = false;
+                    ApplyClockBase(local, before, after);
+                }));
+            });
+        }
+
+        private void ApplyClockBase(Dictionary<string, object> local, long before, long after)
+        {
+            if (local == null) return;
+            long wallMs = DictLong(local, "wall_ms", 0);
+            if (wallMs <= 0) return;
+            object offset;
+            if (!local.TryGetValue("offset_min", out offset) || offset == null) return;
+            int zoneMinutes;
+            if (!int.TryParse(offset.ToString(), out zoneMinutes) ||
+                zoneMinutes < -900 || zoneMinutes > 900) return;
+            // The reading is from the middle of the call, so the round trip does not skew it.
+            _clockOffsetMs = wallMs - (before + (after - before) / 2);
+            _clockZoneOffsetMin = zoneMinutes;
+            _clockBaseKnown = true;
             object known;
-            int hour = DictInt(local, "hh", -1);
-            int minute = DictInt(local, "mm", -1);
-            int second = DictInt(local, "ss", -1);
-            if (hour < 0 || minute < 0 || second < 0) return false;
-            time = hour.ToString("00") + ":" + minute.ToString("00") + ":" + second.ToString("00");
-            string iso = DictStr(local, "date");
-            DateTime parsed;
-            if (DateTime.TryParse(iso, System.Globalization.CultureInfo.InvariantCulture,
-                                  System.Globalization.DateTimeStyles.None, out parsed))
-                date = parsed.ToString("yyyy年M月d日") + " (" +
-                       Weekday((int)parsed.DayOfWeek) + ")";
-            else
-                date = iso;
             if (local.TryGetValue("known", out known) && known is bool && !(bool)known)
-                System.Diagnostics.Debug.WriteLine("core reports an unknown time zone");
-            return true;
+                Debug.WriteLine("core reports an unknown time zone");
+            UpdateClock();
         }
 
         private void RefreshNodeInfo()
@@ -461,6 +515,7 @@ namespace DoorbellApp
             ApplyStrings();
             ApplyRoleHome();
             RefreshAdminLink();
+            RefreshDeviceCounters();
             RefreshNoticeSurfaces();
             RefreshDoorTiles();
             _semanticStyles = SemanticUiOverrides.Load(_cfg, _nodeId, App.DataDir);
@@ -1734,7 +1789,8 @@ namespace DoorbellApp
                     RefreshNodeInfo();
                     break;
                 case "time_changed":
-                    // The source flipped or the correction moved: redraw every clock now.
+                    // The source flipped or the correction moved: re-read the base, then redraw.
+                    SyncClockBase();
                     UpdateClock();
                     ApplyAppearance();
                     break;
@@ -2815,9 +2871,7 @@ namespace DoorbellApp
                 Visibility.Visible : Visibility.Collapsed;
             MembershipStatus.Visibility = ready && !PairingOverlay.IsActive ?
                 Visibility.Visible : Visibility.Collapsed;
-            MembershipText.Text = Texts.T("pair.membership", _pairing.MemberCount.ToString());
-            MembershipBadge.Text = _pairing.IsFounder ? Texts.T("pair.created_badge") :
-                Texts.T("pair.membership_connected", _pairing.ConnectedCount.ToString());
+            RefreshDeviceCounters();
         }
 
         private void ShowPairingOverlay()

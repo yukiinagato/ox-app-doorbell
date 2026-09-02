@@ -359,6 +359,9 @@
     <string name="calling_no_answer">无人应答</string>
     <string name="calling_title">呼叫中…</string>
     <string name="dash_admin">管理</string>
+    <string name="dash_count_cluster">集群设备 %1$s 台</string>
+    <string name="dash_count_doors">门口机 %1$s/%2$s 在线</string>
+    <string name="dash_count_panels">室内机 %1$s/%2$s 在线</string>
     <string name="dash_doors">门口机</string>
     <string name="dash_last_answer">最后接听 %1$s</string>
     <string name="dash_no_doors">尚未添加门口机</string>
