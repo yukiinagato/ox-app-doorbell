@@ -504,6 +504,31 @@ The 1 px 40% opposite-ink shadow stays, as the fallback for when even the better
 4.5:1. Shells that sample locally (because `source` is `image_unsampled`, or because the hardware
 cannot afford core's decode) apply the same rule, so the fleet agrees on one answer.
 
+### Joining a cluster is silent
+
+Anti-entropy hands a joining node the cluster's entire event history at once. Those records are
+applied to the call log in full, with their original outcomes, and **none of them ring**. A call
+event presents -- chime, incoming screen, missed-call alert, Telegram, MQTT -- only while its call
+is live now: still `ringing` on the door station, and inside the ring window the press itself
+declared (`expires_at_ms`, evaluated against corrected cluster time). A terminal event presents
+only while it closes a call this device is actually showing, or while it is recent enough for a
+missed-call alert to still mean something.
+
+The same principle covers announcements and SOS by construction: both are replicated
+configuration and replicated state, so a joining node applies the *current* value once and never
+replays the transitions that produced it.
+
+### Who may answer
+
+`sip.accounts.<node_id>.answer_mode` is `auto` (answer immediately) or `ring` (ring and wait for a
+person). **The default follows the role**: `auto` on a `door_station`, `ring` on an
+`indoor_panel`. `status.sip.answer_mode` reports the effective value.
+
+This matters for the call history: `outcome: "answered"` and `answered_by` are meant to record
+that a person picked up. An indoor panel left on the default must therefore not answer by itself.
+A household that wants an intercom can still set `auto` per device, and the history then
+attributes the call to that device.
+
 ## Time, power, and announcements
 
 The bundled time-zone table lives in `core/src/util/tz.{h,cpp}` and covers the zones the settings

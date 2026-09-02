@@ -3911,6 +3911,31 @@ struct Node::Impl {
 
   // ---------- call history ----------
 
+  // Anti-entropy hands a joining node the cluster's whole history at once. Applying those
+  // records to the call log is the point; re-enacting them is not. A call event presents only
+  // while its call is live right now, so a panel that has just joined imports the log silently
+  // instead of ringing once for every call the house has ever taken.
+  bool callEventIsLive(const EventRecord& ev) {
+    if (!callLifecycleType(ev.type)) return true;
+    const int64_t now = hlc->correctedWallMs();
+    const std::string id = eventCallId(ev);
+    if (ev.type == "press" || ev.type == "purpose_selected") {
+      auto projection = store.callProjection(id);
+      // Still ringing on the door station, and inside the ring window the press itself declared.
+      if (!projection || projection->state != "ringing") return false;
+      auto payload = json::parse(ev.payload_json.empty() ? "{}" : ev.payload_json);
+      const int64_t expires =
+          payload ? json::getInt(payload.get(), "expires_at_ms", 0) : 0;
+      if (expires > 0) return now < expires;
+      return now - ev.wall_ms <= callTtlMs();
+    }
+    // A terminal event matters while it closes a call this device is actually showing, and
+    // otherwise only while it is recent enough for a missed-call alert to still mean anything.
+    auto active = active_calls.find(ev.door);
+    if (!id.empty() && active != active_calls.end() && active->second.call_id == id) return true;
+    return now - ev.wall_ms <= callTtlMs();
+  }
+
   static bool callLifecycleType(const std::string& type) {
     return type == "press" || type == "purpose_selected" || type == "call_answered" ||
            type == "call_ended" || type == "call_cancelled" || type == "reply";
@@ -4316,6 +4341,11 @@ struct Node::Impl {
 
 
 
+    // Default by role, which is what the schema has always documented: a door station answers
+    // immediately, an indoor panel rings and waits for a person. The setting used to default to
+    // answering on every role, so an unconfigured indoor panel picked up the call by itself and
+    // the history recorded it as answered by a device nobody had touched.
+    s.auto_answer = opts.role == "door_station";
     std::string am = json::getString(acct, "answer_mode");
     if (am == "ring") s.auto_answer = false;
     else if (am == "auto") s.auto_answer = true;
@@ -6533,6 +6563,13 @@ struct Node::Impl {
         ev.type == "call_answered" || ev.type == "call_ended" ||
         ev.type == "call_cancelled")
       applyCallEvent(ev);
+    // The projection above is the call log and is always applied. Everything below this line is
+    // presentation, and replicated history must not re-enact any of it.
+    const bool live = callEventIsLive(ev);
+    if (!live) {
+      if (callLifecycleType(ev.type)) notifyCallLogChanged();
+      return;
+    }
     if (ev.type == "press") {
       last_press_door = ev.door;
       last_press_by_door[ev.door] = {ev.origin, ev.seq};
@@ -7405,6 +7442,10 @@ struct Node::Impl {
     json::set(sip, "state", sipRegName(sip_reg));
     json::set(sip, "call", sipCallName(sip_call));
     json::set(sip, "credential_source", sip_credential_source);
+    // Whether this node picks up by itself. An indoor panel defaults to ringing so that
+    // "answered" in the call history always means a person answered.
+    json::setBool(sip, "auto_answer", sipSettings().auto_answer);
+    json::set(sip, "answer_mode", sipSettings().auto_answer ? "auto" : "ring");
     if (!sip_peer_node.empty()) json::set(sip, "peer_node", sip_peer_node);
     if (!sip_peer_stream.empty()) json::set(sip, "peer_stream", sip_peer_stream);
     if (sipctl) {

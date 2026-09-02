@@ -2021,3 +2021,106 @@ TEST_CASE("pairing: a replicated devices entry from the old cluster does not res
   keeper.node->stop();
   leaver.node->stop();
 }
+
+TEST_CASE("calls: joining a cluster imports the history silently") {
+  // Owner observation: a newly paired indoor panel rang many times right after joining. Every
+  // historical press replicated by anti-entropy was dispatched while its projection was briefly
+  // "ringing", so the panel re-enacted calls the house had taken days earlier.
+  NFleet f;
+  auto& station = f.add("A:1", "front-panel", "door_station", "d_front", /*seed_cfg=*/true);
+  REQUIRE(station.node->start());
+  f.run(200);
+
+  for (int i = 0; i < 20; i++) {
+    const std::string call = station.node->pressV2("d_front", "");
+    REQUIRE_FALSE(call.empty());
+    REQUIRE(station.node->cancelCallV2("d_front", call, "visitor"));
+    f.run(2000);
+  }
+  // Every one of those calls is now well past its ring window.
+  f.run(180'000, 1000);
+
+  auto& panel = f.add("P:1", "living", "indoor_panel", "", /*seed_cfg=*/false);
+  REQUIRE(panel.node->start());
+  REQUIRE([&] {
+    for (int i = 0; i < 400; i++) {
+      f.run(50);
+      auto history = json::parse(panel.node->callLogJson(0, 100));
+      if (history && cJSON_GetArraySize(json::get(history.get(), "rows")) == 20) return true;
+    }
+    return false;
+  }());
+
+  // The history is there in full, and not one of those calls rang.
+  auto history = json::parse(panel.node->callLogJson(0, 100));
+  REQUIRE(history);
+  CHECK(cJSON_GetArraySize(json::get(history.get(), "rows")) == 20);
+  CHECK(panel.uiCount("chime") == 0);
+  CHECK(panel.uiCount("event", "press") == 0);
+  CHECK(panel.tts.empty());
+
+  // A call that is genuinely ringing when the panel joins rings exactly once.
+  panel.ui.clear();
+  const std::string live = station.node->pressV2("d_front", "p_delivery");
+  REQUIRE_FALSE(live.empty());
+  REQUIRE([&] {
+    for (int i = 0; i < 300; i++) {
+      f.run(50);
+      if (panel.uiCount("chime") >= 1) return true;
+    }
+    return false;
+  }());
+  f.run(2000);
+  CHECK(panel.uiCount("chime") == 1);
+  CHECK(panel.uiCount("event", "press") == 1);
+
+  station.node->stop();
+  panel.node->stop();
+}
+
+TEST_CASE("calls: an indoor panel rings and never answers by itself") {
+  // Real-device finding: the call log recorded outcome "answered", answered_by an indoor panel
+  // nobody had touched. SipSettings::auto_answer defaulted to true for every role, so an
+  // unconfigured panel picked up the incoming SIP call and its shell reported it as answered.
+  NFleet f;
+  auto& station = f.add("A:1", "front-panel", "door_station", "d_front", /*seed_cfg=*/true);
+  auto& panel = f.add("P:1", "living", "indoor_panel", "", /*seed_cfg=*/false);
+  REQUIRE(station.node->start());
+  REQUIRE(panel.node->start());
+  f.run(300);
+
+  auto answerMode = [](Node& node) {
+    auto status = json::parse(node.statusJson());
+    REQUIRE(status);
+    return json::getString(json::get(status.get(), "sip"), "answer_mode");
+  };
+  // The documented defaults, now actually applied: the door answers, the panel waits.
+  CHECK(answerMode(*station.node) == "auto");
+  CHECK(answerMode(*panel.node) == "ring");
+
+  // A household that wants an intercom can still opt in, per device.
+  panel.node->setConfigKey(
+      "sip.accounts." + panel.node->nodeId() + ".answer_mode", "\"auto\"");
+  f.run(300);
+  CHECK(answerMode(*panel.node) == "auto");
+  panel.node->setConfigKey(
+      "sip.accounts." + panel.node->nodeId() + ".answer_mode", "\"ring\"");
+  f.run(300);
+  CHECK(answerMode(*panel.node) == "ring");
+
+  // A ringing call that nobody answers is never attributed to anyone.
+  const std::string call = station.node->pressV2("d_front", "");
+  REQUIRE_FALSE(call.empty());
+  f.run(1000);
+  auto history = json::parse(panel.node->callLogJson(0, 10));
+  REQUIRE(history);
+  const cJSON* rows = json::get(history.get(), "rows");
+  const cJSON* row = nullptr;
+  cJSON_ArrayForEach(row, rows) {
+    CHECK(json::getString(row, "outcome") != "answered");
+    CHECK(json::getString(row, "answered_by").empty());
+  }
+
+  station.node->stop();
+  panel.node->stop();
+}

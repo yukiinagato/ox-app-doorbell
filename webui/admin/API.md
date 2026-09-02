@@ -430,3 +430,19 @@ configuration entry yet, with `"configured": false` and the device's name as the
 those tiles normally — they are addressable, and the first announcement or unlock write creates the
 entry, after which the door reports `configured`. Offer the 門口 tab as the place to name it. A
 door nobody serves and nothing configures stays unknown and is refused with `400 rejected`.
+
+## History replicates silently, and only people answer
+
+A node joining a cluster receives the whole event history through anti-entropy. Those records land
+in the call log with their original outcomes and raise no presentation at all: no chime, no
+incoming screen, no missed-call `device_alert`, no Telegram or MQTT. A call event presents only
+while its call is live now — still `ringing` on the door station and inside the ring window the
+press declared (`expires_at_ms`, against corrected cluster time). Announcements and SOS are
+replicated *state*, so a joining node applies the current value once and never replays the
+transitions behind it.
+
+`status.sip.answer_mode` reports whether this node picks up by itself. The default follows the
+role — `auto` on a door station, `ring` on an indoor panel — so `outcome: "answered"` and
+`answered_by` in the call log mean a person answered. Setting
+`sip.accounts.<node_id>.answer_mode` to `auto` on an indoor panel is a deliberate intercom
+choice, and the history then attributes calls to that device.
