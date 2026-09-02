@@ -43,6 +43,25 @@ class DoorStationsTest {
      * served_by null with a station that exists is "the station is offline"; the same null with
      * no station anywhere is "no station". That difference is the whole point of the field.
      */
+    /**
+     * The two signals agree since core resolved both from one liveness source. If they ever drift
+     * apart again the tile says "offline", which is the safer reading to put in front of someone.
+     */
+    @Test
+    fun aServedByNamingAStationThePeerListCallsDeadIsOffline() {
+        val st = status(
+            "[${peer(state = "dead")}]",
+            """{"$door":{"served_by":"$stationId"}}""",
+        )
+        assertEquals(DoorService.STATION_OFFLINE, DoorStations.serviceOf(st, null, door))
+    }
+
+    @Test
+    fun anAlivePeerWithNoServedByIsOfflineToo() {
+        val st = status("[${peer()}]", """{"$door":{"served_by":null}}""")
+        assertEquals(DoorService.STATION_OFFLINE, DoorStations.serviceOf(st, null, door))
+    }
+
     @Test
     fun aNullServedByWithAKnownStationIsOffline() {
         val st = status(

@@ -34,18 +34,20 @@ internal object DoorStations {
     /**
      * The service state for one door.
      *
-     * Core publishes status.doors.<id>.served_by; when it does, that is the whole answer for
-     * "alive or not". An older core has no status.doors, and the peer list is then the only
-     * evidence, which is what the tile used before -- so nothing regresses on a core that
-     * predates the field.
+     * A door counts as served when core names a station in status.doors.<id>.served_by *and* that
+     * station is alive in the peer list. Core resolves both from one liveness source, so the two
+     * agree; requiring both means that if they ever drift apart again the tile falls back to
+     * "offline", which is the safer of the two readings for a resident to act on.
+     *
+     * An older core has no status.doors at all, and the peer list is then the only evidence,
+     * which is what the tile used before the field existed.
      */
     fun serviceOf(status: JSONObject?, config: JSONObject?, door: String): DoorService {
         if (door.isEmpty()) return DoorService.NO_STATION
-        val doors = status?.optJSONObject("doors")
-        val entry = doors?.optJSONObject(door)
-        val alive = if (entry != null) servedBy(entry).isNotEmpty()
-        else alivePeer(status, config, door) != null
-        if (alive) return DoorService.SERVED
+        val entry = status?.optJSONObject("doors")?.optJSONObject(door)
+        val live = alivePeer(status, config, door) != null
+        val served = if (entry != null) servedBy(entry).isNotEmpty() && live else live
+        if (served) return DoorService.SERVED
         return if (anyStation(status, config, door)) DoorService.STATION_OFFLINE
         else DoorService.NO_STATION
     }

@@ -88,6 +88,9 @@ internal class DashboardView(
     }
     private val bodySplit = LinearLayout(activity).apply { isBaselineAligned = false }
     private lateinit var tileScroll: ScrollView
+
+    /** The scrim card the call rows sit on. */
+    private lateinit var callListScroll: ScrollView
     private var tilesScrolled = false
     private val callList = LinearLayout(activity).apply {
         orientation = LinearLayout.VERTICAL
@@ -299,13 +302,21 @@ internal class DashboardView(
         ) { HistoryActivity.launch(activity) }
         callHeader.addView(seeAllButton)
         callColumn.addView(callHeader, ShellUi.matchWrap())
+        // The rows sit on a translucent card rather than straight on the theme picture, so each
+        // one has a known surface and keeps its palette colour -- the outcome grey, the missed
+        // red -- instead of being measured against whatever part of the wallpaper it lands on.
+        callListScroll = ScrollView(activity).apply {
+            isFillViewport = true
+            val padH = ShellUi.dp(activity, 10)
+            val padV = ShellUi.dp(activity, 6)
+            setPadding(padH, padV, padH, padV)
+            clipToPadding = false
+            addView(callList, LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+            ))
+        }
         callColumn.addView(
-            ScrollView(activity).apply {
-                isFillViewport = true
-                addView(callList, LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
-                ))
-            },
+            callListScroll,
             LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f),
         )
 
@@ -384,6 +395,7 @@ internal class DashboardView(
         noticeButton.setTextColor(ShellUi.opaque(palette.ink))
         seeAllButton.background = ShellUi.rounded(activity, palette.surfaceAlt, 10)
         seeAllButton.setTextColor(ShellUi.opaque(palette.ink))
+        callListScroll.background = ShellUi.scrim(activity, palette.surface)
         sosSlider.applyPalette(palette)
         // Labels are reapplied here too, so a language change reaches the controls built once.
         adminButton.text = texts.t("admin.title", R.string.admin_title)
@@ -818,15 +830,15 @@ internal class DashboardView(
         Thread({
             for (door in targets) {
                 try {
-                    // Any station bound to this door, not only one the mesh calls alive: core
-                    // omits the stream URL for a peer it has lost, so an unreachable station
-                    // costs nothing here, while a station that is serving pictures over HTTP
-                    // before the mesh has caught up still fills its tile.
-                    val peer = DoorStations.peerFor(snapshot, settings, door)
+                    // Only a station the mesh says is alive. This used to accept any peer bound
+                    // to the door, because served_by and peers[].status could disagree and a
+                    // serving station was being reported offline; core resolves both from one
+                    // liveness source now, so the workaround is gone.
+                    val peer = DoorStations.alivePeer(snapshot, settings, door)
                     if (peer == null) {
                         // Say which peers were considered and how each resolved: "no station" on
                         // its own cannot tell a door-id mismatch from a station that is down.
-                        logStill(door, "no station; " + DoorStations.why(snapshot, settings, door))
+                        logStill(door, "no alive station; " + DoorStations.why(snapshot, settings, door))
                         continue
                     }
                     val url = DoorStations.stillUrl(peer)
