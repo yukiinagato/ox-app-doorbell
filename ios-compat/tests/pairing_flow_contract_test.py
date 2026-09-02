@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Source contract for the round-6 and round-7 decisions (spec §5.4, §5.5).
+"""Source contracts for the round-6 and round-7 decisions (spec §5.4, §5.5)
+and for the cross-platform visit-purpose flag.
 
 Two rules the UI must not blur:
   1. Minting the Pairing PIN is separate from 「まとめて追加」. The PIN card and
@@ -141,6 +142,37 @@ class AdminPasswordAndWriteContracts(unittest.TestCase):
         self.assertIn("callLogSince:0 beforeMs:beforeMs", history)
         self.assertIn("[DBCoreBridge supportsMicMute]", incoming)
         self.assertIn("[_core setMicMuted:muted]", incoming)
+
+
+class VisitPurposeContracts(unittest.TestCase):
+    """`visit_purposes.<id>.enabled` (bool, default true), introduced by the iOS
+    package and honoured here. The arithmetic is covered by the host suite; this
+    pins which screens filter on it and which deliberately do not."""
+
+    def test_choosers_hide_disabled_purposes_but_records_keep_them(self):
+        door = read("ios-kiosk/src/Screens/DBDoorScreen.m")
+        settings = read("ios-kiosk/src/Screens/DBSettingsScreen.m")
+        incoming = read("ios-kiosk/src/Screens/DBIncomingScreen.m")
+
+        # The visitor's grid, and the follow-up chooser that reads the same
+        # list, offer only enabled purposes.
+        rebuild = door[door.index("- (void)rebuildPurposes"):
+                       door.index("- (void)rebuildLanguages")]
+        self.assertIn("enabledPurposeIdsInConfig", rebuild)
+        self.assertNotIn("sortedByOrder", rebuild)
+        self.assertIn("_purposeAlertIDs = [_purposeIds copy]", door)
+
+        # The editor lists every purpose, or a disabled one could never be
+        # switched back on from the device, and its toggle writes the key.
+        purpose_rows = settings[settings.index("- (NSArray *)purposeRows"):
+                                settings.index("- (NSArray *)ruleRows")]
+        self.assertIn("allPurposeIdsInConfig", purpose_rows)
+        self.assertIn("enabledKeyForPurpose:purpose", purpose_rows)
+        self.assertIn('@"toggle"', purpose_rows)
+
+        # A purpose the visitor already pressed is still reported back.
+        self.assertIn("Deliberately not filtered by visit_purposes", incoming)
+        self.assertNotIn("enabledPurposeIdsInConfig", incoming)
 
 
 if __name__ == "__main__":

@@ -4,6 +4,7 @@
 #import "../Core/DBConfigUtil.h"
 #import "../Core/DBCoreBridge.h"
 #import "../Core/DBNoticeModel.h"
+#import "../Core/DBPurposeModel.h"
 #import "../Core/DBTexts.h"
 #import "../Core/DBUiTheme.h"
 #import "../Support/DBSafeModeRecovery.h"
@@ -429,16 +430,16 @@ static NSArray *DBCommonTimeZones(void) {
 - (NSArray *)purposeRows {
   NSMutableArray *rows = [NSMutableArray array];
   NSDictionary *purposes = [DBConfigUtil dig:_cfg path:@"visit_purposes"];
-  if ([purposes isKindOfClass:[NSDictionary class]]) {
-    for (NSString *purpose in [DBConfigUtil sortedByOrder:purposes]) {
-      NSDictionary *entry = [purposes objectForKey:purpose];
-      BOOL enabled = [DBConfigUtil boolVal:entry path:@"enabled" def:YES];
-      [rows addObject:DBRow([DBConfigUtil labelOf:entry lang:_boot.uiLang fallback:purpose],
-                            [_texts ts:(enabled ? @"settings.on" : @"settings.off")],
-                            @"toggle",
-                            [NSString stringWithFormat:@"visit_purposes.%@.enabled|%d",
-                                                       purpose, enabled ? 1 : 0])];
-    }
+  // The editor lists disabled purposes too: hiding them here would leave no way
+  // to switch one back on from the device.
+  for (NSString *purpose in [DBPurposeModel allPurposeIdsInConfig:_cfg]) {
+    NSDictionary *entry = [purposes objectForKey:purpose];
+    BOOL enabled = [DBPurposeModel isPurposeEnabled:entry];
+    [rows addObject:DBRow([DBConfigUtil labelOf:entry lang:_boot.uiLang fallback:purpose],
+                          [_texts ts:(enabled ? @"settings.on" : @"settings.off")],
+                          @"toggle",
+                          [NSString stringWithFormat:@"%@|%d",
+                              [DBPurposeModel enabledKeyForPurpose:purpose], enabled ? 1 : 0])];
   }
   return rows;
 }

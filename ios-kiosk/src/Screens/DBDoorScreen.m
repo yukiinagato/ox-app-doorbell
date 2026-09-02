@@ -9,6 +9,7 @@
 #import "../Core/DBSemanticStyle.h"
 #import "../Core/DBTexts.h"
 #import "../Core/DBNoticeModel.h"
+#import "../Core/DBPurposeModel.h"
 #import "../Core/DBUiTheme.h"
 #import "../Media/DBSiren.h"
 #import "../Net/DBMjpegClient.h"
@@ -916,7 +917,9 @@ typedef enum {
   [_purposeButtons removeAllObjects];
   NSDictionary *purposes = [DBConfigUtil dig:_cfg path:@"visit_purposes"];
   if (![purposes isKindOfClass:[NSDictionary class]]) purposes = nil;
-  _purposeIds = purposes ? [DBConfigUtil sortedByOrder:purposes] : @[];
+  // A purpose an administrator switched off is not offered to the visitor, in
+  // the grid or in the follow-up chooser, which reads the same list.
+  _purposeIds = [DBPurposeModel enabledPurposeIdsInConfig:_cfg];
   for (NSInteger i = 0; i < (NSInteger)[_purposeIds count]; i++) {
     NSString *identifier = [_purposeIds objectAtIndex:(NSUInteger)i];
     NSDictionary *entry = [purposes objectForKey:identifier];
