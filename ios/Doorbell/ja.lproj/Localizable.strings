@@ -437,6 +437,7 @@
 "pair.code_expires_in" = "あと %@:%@";
 "pair.code_instructions" = "新しい端末で「ペアリング PIN で参加」を選び、上の接続先とペアリング PIN を入力してください";
 "pair.code_label" = "ペアリング PIN (6 桁)";
+"pair.confirm_tap_again" = "もう一度押すと実行します";
 "pair.copy" = "コピー";
 "pair.create_home" = "新しいクラスタを作る";
 "pair.create_home_confirm" = "この端末で新しいクラスタを作りますか? 他の端末がすでにある場合は、その端末から「追加」してください。";
@@ -444,6 +445,7 @@
 "pair.created_badge" = "クラスタを作成した端末";
 "pair.created_next" = "次の端末を追加しますか?";
 "pair.deny" = "無視";
+"pair.enter_address_and_code" = "接続先とペアリング PIN を入力してください";
 "pair.err.already_paired" = "この端末はすでにクラスタに参加しています";
 "pair.err.bad_challenge" = "相手の端末のバージョンが合いません";
 "pair.err.bad_payload" = "相手の端末のバージョンが合いません";
@@ -471,12 +473,18 @@
 "pair.nearby_none" = "待機中の端末はありません";
 "pair.nearby_title" = "近くの端末";
 "pair.nearby_waiting_since" = "%@ 秒前から待機";
+"pair.new_code" = "新しいコードを発行";
 "pair.not_set_up_banner" = "クラスタ未設定 — タップして追加";
+"pair.open_onboarding" = "ペアリング画面を開く";
+"pair.panel_title" = "端末を追加";
 "pair.persist_error_body" = "端末の安全な保存領域に書き込めませんでした。空き容量と権限を確認して再試行してください。";
 "pair.persist_error_title" = "設定を保存できませんでした";
 "pair.qr_caption" = "別の端末でこの QR を読み取ると追加できます";
+"pair.qr_pending" = "追加用 QR を準備しています…";
 "pair.retry" = "再試行";
 "pair.revoked" = "この端末はクラスタから削除されました";
+"pair.role_door_station" = "門口機";
+"pair.role_indoor_panel" = "室内機";
 "pair.scan_hint" = "新しい端末に表示された追加用 QR に合わせてください";
 "pair.scan_qr" = "QR を読み取る";
 "pair.searching" = "近くの端末を探しています…";

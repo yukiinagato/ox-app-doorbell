@@ -37,6 +37,14 @@
 - (void)showPairing;
 - (void)closePairingAnimated:(BOOL)animated;
 
+// "Add a device" panel (spec §5.1). Callers gate it behind the admin password.
+- (void)showAddDevice;
+- (void)closeAddDeviceAnimated:(BOOL)animated;
+
+// The user chose 「あとで設定」. Onboarding stops re-appearing on its own; the
+// Home screen shows the persistent pair.not_set_up_banner instead.
+- (void)pairingDeferredByUser;
+
 
 - (void)requestPinThen:(void (^)(void))action;
 - (void)dismissPinOverlay;

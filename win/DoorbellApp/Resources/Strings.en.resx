@@ -444,6 +444,7 @@ Delete it?</value></data>
   <data name="pair_code_expires_in" xml:space="preserve"><value>{0}:{1} left</value></data>
   <data name="pair_code_instructions" xml:space="preserve"><value>On the new device choose &quot;Join with a Pairing PIN&quot; and enter the address and code shown above</value></data>
   <data name="pair_code_label" xml:space="preserve"><value>Pairing PIN (6 digits)</value></data>
+  <data name="pair_confirm_tap_again" xml:space="preserve"><value>Press again to confirm</value></data>
   <data name="pair_copy" xml:space="preserve"><value>Copy</value></data>
   <data name="pair_create_home" xml:space="preserve"><value>Create a new Cluster</value></data>
   <data name="pair_create_home_confirm" xml:space="preserve"><value>Create a new Cluster on this device? If you already have another device, press &quot;Add&quot; on that device instead.</value></data>
@@ -451,6 +452,7 @@ Delete it?</value></data>
   <data name="pair_created_badge" xml:space="preserve"><value>Created this Cluster</value></data>
   <data name="pair_created_next" xml:space="preserve"><value>Add the next device?</value></data>
   <data name="pair_deny" xml:space="preserve"><value>Ignore</value></data>
+  <data name="pair_enter_address_and_code" xml:space="preserve"><value>Enter the address and the Pairing PIN</value></data>
   <data name="pair_err_already_paired" xml:space="preserve"><value>This device is already in a Cluster</value></data>
   <data name="pair_err_bad_challenge" xml:space="preserve"><value>The other device's version isn't compatible</value></data>
   <data name="pair_err_bad_payload" xml:space="preserve"><value>The other device's version isn't compatible</value></data>
@@ -478,12 +480,18 @@ Delete it?</value></data>
   <data name="pair_nearby_none" xml:space="preserve"><value>No devices waiting</value></data>
   <data name="pair_nearby_title" xml:space="preserve"><value>Nearby devices</value></data>
   <data name="pair_nearby_waiting_since" xml:space="preserve"><value>waiting {0}s</value></data>
+  <data name="pair_new_code" xml:space="preserve"><value>Get a new code</value></data>
   <data name="pair_not_set_up_banner" xml:space="preserve"><value>Not set up — tap to add</value></data>
+  <data name="pair_open_onboarding" xml:space="preserve"><value>Open the pairing screen</value></data>
+  <data name="pair_panel_title" xml:space="preserve"><value>Add a device</value></data>
   <data name="pair_persist_error_body" xml:space="preserve"><value>This device couldn't write to its secure storage. Check free space and permissions, then try again.</value></data>
   <data name="pair_persist_error_title" xml:space="preserve"><value>Couldn't save settings</value></data>
   <data name="pair_qr_caption" xml:space="preserve"><value>Scan this QR from another device to add this one</value></data>
+  <data name="pair_qr_pending" xml:space="preserve"><value>Preparing the Add QR…</value></data>
   <data name="pair_retry" xml:space="preserve"><value>Retry</value></data>
   <data name="pair_revoked" xml:space="preserve"><value>This device was removed from the Cluster</value></data>
+  <data name="pair_role_door_station" xml:space="preserve"><value>Door station</value></data>
+  <data name="pair_role_indoor_panel" xml:space="preserve"><value>Indoor panel</value></data>
   <data name="pair_scan_hint" xml:space="preserve"><value>Point at the Add QR shown on the new device</value></data>
   <data name="pair_scan_qr" xml:space="preserve"><value>Scan QR</value></data>
   <data name="pair_searching" xml:space="preserve"><value>Looking for nearby devices…</value></data>

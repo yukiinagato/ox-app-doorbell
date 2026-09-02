@@ -442,6 +442,7 @@
     <string name="pair_code_expires_in">剩余 %1$s:%2$s</string>
     <string name="pair_code_instructions">在新设备上选择“使用配对 PIN 加入”，然后输入上面的连接地址和配对 PIN</string>
     <string name="pair_code_label">配对 PIN（6 位）</string>
+    <string name="pair_confirm_tap_again">再次按下以确认</string>
     <string name="pair_copy">复制</string>
     <string name="pair_create_home">新建集群</string>
     <string name="pair_create_home_confirm">要在此设备上新建集群吗？如果已经有其他设备，请在那台设备上点击“添加”。</string>
@@ -449,6 +450,7 @@
     <string name="pair_created_badge">创建了此集群</string>
     <string name="pair_created_next">要添加下一个设备吗？</string>
     <string name="pair_deny">忽略</string>
+    <string name="pair_enter_address_and_code">请输入连接地址和配对 PIN</string>
     <string name="pair_err_already_paired">此设备已加入集群</string>
     <string name="pair_err_bad_challenge">对方设备的版本不兼容</string>
     <string name="pair_err_bad_payload">对方设备的版本不兼容</string>
@@ -476,12 +478,18 @@
     <string name="pair_nearby_none">暂无等待中的设备</string>
     <string name="pair_nearby_title">附近设备</string>
     <string name="pair_nearby_waiting_since">已等待 %1$s 秒</string>
+    <string name="pair_new_code">生成新码</string>
     <string name="pair_not_set_up_banner">未设置 — 点击添加</string>
+    <string name="pair_open_onboarding">打开配对界面</string>
+    <string name="pair_panel_title">添加设备</string>
     <string name="pair_persist_error_body">无法写入此设备的安全存储区。请检查可用空间和权限后重试。</string>
     <string name="pair_persist_error_title">无法保存设置</string>
     <string name="pair_qr_caption">用另一台设备扫描此二维码即可添加</string>
+    <string name="pair_qr_pending">正在生成添加二维码…</string>
     <string name="pair_retry">重试</string>
     <string name="pair_revoked">此设备已从集群中移除</string>
+    <string name="pair_role_door_station">门口机</string>
+    <string name="pair_role_indoor_panel">室内机</string>
     <string name="pair_scan_hint">请对准新设备上显示的添加二维码</string>
     <string name="pair_scan_qr">扫描二维码</string>
     <string name="pair_searching">正在查找附近设备…</string>

@@ -631,6 +631,14 @@ pair.retry: { ja: "再試行", en: "Retry", zh: "重试" }
 pair.revoked: { ja: "この端末はクラスタから削除されました", en: "This device was removed from the Cluster", zh: "此设备已从集群中移除" }
 pair.clear_title: { ja: "この端末のペアリングを消去", en: "Clear pairing on this device", zh: "清除此设备的配对" }
 pair.clear_confirm: { ja: "クラスタから離脱し、この端末の設定をすべて消去します。元に戻せません。", en: "This device will leave the Cluster and all of its settings will be erased. This cannot be undone.", zh: "此设备将退出集群并清除其全部设置。此操作无法撤销。" }
+pair.panel_title: { ja: "端末を追加", en: "Add a device", zh: "添加设备" }
+pair.new_code: { ja: "新しいコードを発行", en: "Get a new code", zh: "生成新码" }
+pair.qr_pending: { ja: "追加用 QR を準備しています…", en: "Preparing the Add QR…", zh: "正在生成添加二维码…" }
+pair.confirm_tap_again: { ja: "もう一度押すと実行します", en: "Press again to confirm", zh: "再次按下以确认" }
+pair.open_onboarding: { ja: "ペアリング画面を開く", en: "Open the pairing screen", zh: "打开配对界面" }
+pair.enter_address_and_code: { ja: "接続先とペアリング PIN を入力してください", en: "Enter the address and the Pairing PIN", zh: "请输入连接地址和配对 PIN" }
+pair.role_door_station: { ja: "門口機", en: "Door station", zh: "门口机" }
+pair.role_indoor_panel: { ja: "室内機", en: "Indoor panel", zh: "室内机" }
 # エラーコード → 表示文言 (全シェル共通)。生のコードは「詳細」行以外に出さない。
 pair.err_detail: { ja: "詳細: {code}", en: "Details: {code}", zh: "详情: {code}" }
 pair.err.bad_pin: { ja: "ペアリング PIN が違います", en: "Wrong Pairing PIN", zh: "配对 PIN 不正确" }

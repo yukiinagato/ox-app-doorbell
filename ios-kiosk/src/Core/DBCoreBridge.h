@@ -85,6 +85,12 @@ typedef void (^DBUiEventHandler)(NSDictionary *ev);
 - (NSDictionary *)startPairingWithSeconds:(int)seconds;
 - (void)removeDevice:(NSString *)nodeId;
 - (void)inviteDevice:(NSString *)nodeId;
+// Short-lived blocklist for one pending device (the "無視" action).
+- (void)denyDevice:(NSString *)nodeId;
+// Re-runs the failed secure_put. Core emits pairing_state either way.
+- (BOOL)retryPairingPersistence;
+// Leaves the Cluster: zeroes the PSK, deletes mesh.psk, emits pairing_state.
+- (void)unpair;
 
 
 - (void)chimeFallback;
