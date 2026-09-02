@@ -540,6 +540,9 @@ static const NSInteger kProxyEdge = 64;
     _hint.backgroundColor = [UIColor clearColor];
     _hint.textAlignment = NSTextAlignmentCenter;
     _hint.font = [UIFont boldSystemFontOfSize:20];
+    // Two lines rather than an ellipsis: this control must always read as what
+    // it does before someone slides it.
+    _hint.numberOfLines = 2;
     [_track addSubview:_hint];
 
     _hintSecondary = [[UILabel alloc] init];
@@ -747,13 +750,13 @@ static const NSInteger kProxyEdge = 64;
 
     _caption = [[UILabel alloc] init];
     _caption.backgroundColor = [UIColor clearColor];
-    _caption.font = [UIFont systemFontOfSize:12];
+    _caption.font = [UIFont systemFontOfSize:15];
     _caption.numberOfLines = 2;
     [self addSubview:_caption];
 
     _urlLabel = [[UILabel alloc] init];
     _urlLabel.backgroundColor = [UIColor clearColor];
-    _urlLabel.font = [UIFont systemFontOfSize:12];
+    _urlLabel.font = [UIFont systemFontOfSize:15];
     _urlLabel.numberOfLines = 2;
     _urlLabel.lineBreakMode = NSLineBreakByCharWrapping;
     [self addSubview:_urlLabel];

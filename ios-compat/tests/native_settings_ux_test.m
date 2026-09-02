@@ -2,6 +2,8 @@
 
 #import "DBBootConfig.h"
 #import "DBCallHistoryModel.h"
+#import "DBCallReturnCountdown.h"
+#import "DBSipChurnPolicy.h"
 #import "DBNoticeModel.h"
 #import "DBPurposeModel.h"
 #import "DBSafeModeRecovery.h"
@@ -217,6 +219,20 @@ static void TestDeliberateLineBreaksAndVersionLine(void) {
                               batteryPct:82 charging:NO]
               isEqualToString:@"居間 · core v1.2.3 · app v0.9.1 · 82%"],
           @"the footer carries core and app versions plus battery");
+  // A build id is forty hex characters on this project; the whole thing pushed
+  // the battery off the footer on the iPad 1.
+  Require([[DBUiTheme shortVersion:@"0.2.0+38f923938cf5f245c7462e011485eac44ef7c9e0"]
+              isEqualToString:@"0.2.0+38f9239"], @"the build hash is trimmed to seven");
+  Require([[DBUiTheme shortVersion:@"0.3.4"] isEqualToString:@"0.3.4"],
+          @"a plain version is untouched");
+  Require([[DBUiTheme shortVersion:@"0.3.4+abc"] isEqualToString:@"0.3.4+abc"],
+          @"and a short build id is kept whole");
+  Require([[DBUiTheme shortVersion:nil] length] == 0, @"nil is safe");
+  Require([[DBUiTheme versionLineForName:@"居間"
+                             coreVersion:@"0.2.0+38f923938cf5f245c7462e011485eac44ef7c9e0"
+                              appVersion:@"0.3.4" batteryPct:85 charging:YES]
+              rangeOfString:@"38f923938cf5f245"].location == NSNotFound,
+          @"so the footer never carries the full hash");
   Require([[DBUiTheme versionLineForName:@"居間" coreVersion:@"1.2.3" appVersion:@"0.9.1"
                               batteryPct:82 charging:YES] rangeOfString:@"⚡"].location
               != NSNotFound, @"charging is marked");
@@ -816,6 +832,113 @@ static void TestDisabledVisitPurposesLeaveEveryChooser(void) {
   Require([[DBPurposeModel enabledPurposeIdsInConfig:nil] count] == 0, @"and nil is safe");
 }
 
+#pragma mark - the indoor incoming page returns on its own
+
+static void TestIncomingReturnCountdown(void) {
+  Require([DBCallReturnCountdown defaultSeconds] == 60, @"the documented default");
+  Require([DBCallReturnCountdown secondsFromStatus:nil] == 60,
+          @"a core that does not report it yet falls back to sixty");
+  Require([DBCallReturnCountdown secondsFromStatus:@{ @"call" : @{ @"return_s" : @45 } }] == 45,
+          @"core's value is used when present");
+  Require([DBCallReturnCountdown secondsFromStatus:@{ @"call" : @{ @"return_s" : @0 } }] == 60,
+          @"a nonsense value never produces a page that closes instantly");
+  Require([DBCallReturnCountdown secondsFromStatus:@{ @"call" : @{ @"return_s" : @99999 } }]
+              == 60, @"nor one that never returns");
+
+  DBCallReturnCountdown *countdown = [[DBCallReturnCountdown alloc] init];
+  [countdown startWithSeconds:3];
+  Require(countdown.isVisible, @"the suffix is drawn while it runs");
+  Require(countdown.remaining == 3, @"starting at the full value");
+  Require(![countdown tick], @"two");
+  Require(countdown.remaining == 2, @"and it counts down");
+  Require(![countdown tick], @"one");
+  Require([countdown tick], @"reaching zero returns to the dashboard, once");
+  Require(![countdown tick], @"and never fires twice");
+  Require(!countdown.isVisible, @"the suffix goes when it is done");
+
+  // Tapping the number cancels it: the page stays until the resident leaves.
+  [countdown startWithSeconds:10];
+  Require([countdown cancelByUser], @"the tap cancels");
+  Require(!countdown.isVisible, @"the suffix disappears");
+  Require(countdown.isCancelledByUser, @"and it stays cancelled");
+  Require(![countdown tick], @"a cancelled countdown never returns on its own");
+  Require(![countdown cancelByUser], @"cancelling twice reports nothing");
+
+  // An answered call pauses it; the full value starts again afterwards.
+  [countdown startWithSeconds:30];
+  Require(![countdown tick], @"running");
+  Require(countdown.remaining == 29, @"29 left");
+  [countdown pauseForAnsweredCall];
+  Require(countdown.isPaused, @"answering pauses it");
+  Require(!countdown.isVisible, @"the suffix is hidden while talking");
+  Require(![countdown tick], @"and it does not run while talking");
+  Require(countdown.remaining == 29, @"nor lose time");
+  [countdown resumeAfterCall];
+  Require(countdown.isVisible, @"the suffix comes back when the call ends");
+  Require(countdown.remaining == 30, @"restarting from the full value, not the remainder");
+
+  // A cancel survives a call: the resident said they wanted to stay.
+  [countdown startWithSeconds:20];
+  Require([countdown cancelByUser], @"cancelled");
+  [countdown pauseForAnsweredCall];
+  [countdown resumeAfterCall];
+  Require(!countdown.isVisible, @"a call does not undo the resident's cancel");
+  Require(![countdown tick], @"and it still never returns on its own");
+
+  // A visitor cancelling the call is not modelled here at all: it must not
+  // touch the countdown, which is what keeps the live view on screen.
+  [countdown startWithSeconds:5];
+  Require(countdown.isVisible && countdown.remaining == 5,
+          @"the countdown is the only thing that closes the page");
+}
+
+#pragma mark - the door station's SIP listener under churn
+
+static void TestSipChurnBackoff(void) {
+  DBSipChurnPolicy *churn = [[DBSipChurnPolicy alloc] init];
+  // A dialog that carried audio never costs anything.
+  RequireClose([churn delayAfterDialogWithDuration:12.0 rtpPackets:400 at:100.0], 0.15, 0.001,
+               @"a real call is followed by an immediate re-listen");
+  Require(churn.churnCount == 0, @"and leaves no record");
+
+  // The device signature: empty monitor dialogs, about 1.5 a second.
+  double at = 200.0;
+  NSTimeInterval last = 0;
+  for (int i = 0; i < 6; i++) {
+    last = [churn delayAfterDialogWithDuration:0.05 rtpPackets:0 at:at];
+    at += 0.7;
+  }
+  Require(churn.churnCount == 6, @"every empty dialog is counted");
+  RequireClose(last, 3.0, 0.001, @"and they are spaced out to the cap");
+  Require([DBSipChurnPolicy delayForChurnCount:1] < [DBSipChurnPolicy delayForChurnCount:4],
+          @"the schedule escalates");
+  RequireClose([DBSipChurnPolicy delayForChurnCount:99], 3.0, 0.001, @"and is capped");
+
+  // One real dialog clears it: a door actually being monitored is never slowed.
+  RequireClose([churn delayAfterDialogWithDuration:0.05 rtpPackets:12 at:at], 0.15, 0.001,
+               @"a dialog with audio resets the spacing");
+  Require(churn.churnCount == 0, @"and the record");
+
+  // A long gap is not churn either.
+  DBSipChurnPolicy *sparse = [[DBSipChurnPolicy alloc] init];
+  [sparse delayAfterDialogWithDuration:0.05 rtpPackets:0 at:1000.0];
+  NSTimeInterval afterGap =
+      [sparse delayAfterDialogWithDuration:0.05 rtpPackets:0 at:1000.0 +
+          [DBSipChurnPolicy churnWindowSeconds] + 1.0];
+  RequireClose(afterGap, 0.15, 0.001, @"an occasional empty dialog is not a storm");
+
+  // The condition is logged once, not twice per dialog.
+  DBSipChurnPolicy *logging = [[DBSipChurnPolicy alloc] init];
+  double t = 0;
+  int requests = 0;
+  for (int i = 0; i < 10; i++) {
+    [logging delayAfterDialogWithDuration:0.05 rtpPackets:0 at:t];
+    if ([logging consumeChurnLogRequest]) requests++;
+    t += 0.5;
+  }
+  Require(requests == 1, @"the churn is reported once, not on every cycle");
+}
+
 #pragma mark - safe mode
 
 static void TestLocalSafeModeAutoClearTiming(void) {
@@ -933,6 +1056,8 @@ int main(void) {
     TestHistoryWallClockRendering();
     TestNoticePrecedenceExpiryAndPresets();
     TestDisabledVisitPurposesLeaveEveryChooser();
+    TestIncomingReturnCountdown();
+    TestSipChurnBackoff();
     TestLocalSafeModeAutoClearTiming();
     TestRevokeClearsClusterIdentityAndSetup();
     NSLog(@"native_settings_ux_test ok");

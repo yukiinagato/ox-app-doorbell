@@ -581,7 +581,7 @@ static NSArray *DBRectArray(double x, double y, double width, double height) {
   const double pad = 20;
   const double gap = 12;
   const double qrHeight = 76;
-  const double versionHeight = 18;
+  const double versionHeight = 40;  // Two lines rather than an ellipsis.
   const double sosHeight = 62;
   if (viewWidth <= 0 || viewHeight <= 0) {
     return [NSDictionary dictionaryWithObjectsAndKeys:
@@ -632,6 +632,16 @@ static NSArray *DBRectArray(double x, double y, double width, double height) {
       [NSNumber numberWithDouble:bandHeight], @"height", nil];
 }
 
++ (NSString *)shortVersion:(NSString *)version {
+  if (![version isKindOfClass:[NSString class]] || [version length] == 0) return @"";
+  NSRange plus = [version rangeOfString:@"+"];
+  if (plus.location == NSNotFound) return version;
+  NSString *base = [version substringToIndex:plus.location];
+  NSString *build = [version substringFromIndex:plus.location + 1];
+  if ([build length] <= 7) return version;
+  return [NSString stringWithFormat:@"%@+%@", base, [build substringToIndex:7]];
+}
+
 + (NSString *)versionLineForName:(NSString *)name
                      coreVersion:(NSString *)coreVersion
                       appVersion:(NSString *)appVersion
@@ -639,10 +649,10 @@ static NSArray *DBRectArray(double x, double y, double width, double height) {
                         charging:(BOOL)charging {
   NSMutableArray *parts = [NSMutableArray array];
   if ([name length] > 0) [parts addObject:name];
-  [parts addObject:[NSString stringWithFormat:@"core v%@",
-      [coreVersion length] > 0 ? coreVersion : @"?"]];
-  [parts addObject:[NSString stringWithFormat:@"app v%@",
-      [appVersion length] > 0 ? appVersion : @"?"]];
+  NSString *core = [self shortVersion:coreVersion];
+  NSString *app = [self shortVersion:appVersion];
+  [parts addObject:[NSString stringWithFormat:@"core v%@", [core length] > 0 ? core : @"?"]];
+  [parts addObject:[NSString stringWithFormat:@"app v%@", [app length] > 0 ? app : @"?"]];
   // A device without a battery reports -1 and shows nothing at all.
   if (batteryPct >= 0) {
     [parts addObject:charging

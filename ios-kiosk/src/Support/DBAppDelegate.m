@@ -439,6 +439,7 @@ static BOOL DBNativeKioskHealthy(void) {
   NSString *_recoveryConfigSource;
   NSTimer *_nativeKioskProbeTimer;
   NSTimer *_runtimeHeartbeatTimer;
+  NSTimer *_screenshotTimer;
   BOOL _localSafeMode;
   BOOL _helperSafeModeActive;
   NSUInteger _safeModeRecoveryGeneration;
@@ -617,6 +618,7 @@ static BOOL DBNativeKioskHealthy(void) {
   [_watchdog start];
   _runtimeHeartbeatTimer = [NSTimer scheduledTimerWithTimeInterval:10.0
       target:self selector:@selector(publishRuntimeHealth:) userInfo:nil repeats:YES];
+  [self startScreenshotHookIfEnabled];
   [self publishRuntimeHealth:nil];
   dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(300 * NSEC_PER_SEC)),
                  dispatch_get_main_queue(), ^{
@@ -690,6 +692,8 @@ static BOOL DBNativeKioskHealthy(void) {
     return;
   [_safeModeRecoveryTimer invalidate];
   _safeModeRecoveryTimer = nil;
+  [_screenshotTimer invalidate];
+  _screenshotTimer = nil;
   DBMarkHealthyRuntime();
   _localSafeMode = NO;
   _safeModeEnteredAt = 0;
@@ -729,6 +733,45 @@ static BOOL DBNativeKioskHealthy(void) {
   window.rootViewController = setup;
   [window makeKeyAndVisible];
   self.window = window;
+}
+
+// iOS 5 has no screencap, so remote verification needs the app to draw itself.
+// The poll exists only when boot.json opts in, so an ordinary install pays
+// nothing: no timer, no stat, no file.
+static NSString *const DBScreenshotRequestPath =
+    @"/var/mobile/Documents/screenshot.request";
+static NSString *const DBScreenshotOutputPath = @"/var/mobile/Documents/screenshot.png";
+
+- (void)startScreenshotHookIfEnabled {
+  if (!_boot.debugScreenshots || _screenshotTimer != nil) return;
+  NSLog(@"[doorbell][debug] screenshot hook armed at %@", DBScreenshotRequestPath);
+  _screenshotTimer = [NSTimer scheduledTimerWithTimeInterval:1.0 target:self
+                                                    selector:@selector(pollScreenshotRequest:)
+                                                    userInfo:nil repeats:YES];
+}
+
+- (void)pollScreenshotRequest:(NSTimer *)timer {
+  (void)timer;
+  NSFileManager *files = [NSFileManager defaultManager];
+  if (![files fileExistsAtPath:DBScreenshotRequestPath]) return;
+  // Remove the request first: a render that throws must not leave a request
+  // that fires again every second.
+  [files removeItemAtPath:DBScreenshotRequestPath error:NULL];
+  UIWindow *window = self.window ?: [[UIApplication sharedApplication] keyWindow];
+  if (window == nil) return;
+  CGSize size = window.bounds.size;
+  if (size.width <= 0 || size.height <= 0) return;
+  UIGraphicsBeginImageContextWithOptions(size, YES, 0.0);
+  CGContextRef ctx = UIGraphicsGetCurrentContext();
+  if (ctx != NULL) [window.layer renderInContext:ctx];
+  UIImage *shot = UIGraphicsGetImageFromCurrentImageContext();
+  UIGraphicsEndImageContext();
+  if (shot == nil) return;
+  NSData *png = UIImagePNGRepresentation(shot);
+  if (png == nil) return;
+  [png writeToFile:DBScreenshotOutputPath atomically:YES];
+  NSLog(@"[doorbell][debug] screenshot written (%lux%lu, %lu bytes)",
+        (unsigned long)size.width, (unsigned long)size.height, (unsigned long)[png length]);
 }
 
 - (void)restartIntoBootstrapSetup {
@@ -957,9 +1000,14 @@ static BOOL DBNativeKioskHealthy(void) {
          annotation:(id)annotation {
   (void)application; (void)source; (void)annotation;
   NSString *host = [url host] ?: @"";
-  if ([host length] == 0) host = [[url path] stringByTrimmingCharactersInSet:
-                                     [NSCharacterSet characterSetWithCharactersInString:@"/"]];
-  NSLog(@"[doorbell] openURL: %@ → host='%@'", url, host);
+  if ([host length] == 0) {
+    // A bare "doorbell://" has no path either, and messaging nil here used to
+    // put a literal (null) in the log.
+    host = [[url path] stringByTrimmingCharactersInSet:
+               [NSCharacterSet characterSetWithCharactersInString:@"/"]] ?: @"";
+  }
+  // ASCII only: ASL mangles a multi-byte arrow into one dash per character.
+  NSLog(@"[doorbell] openURL: %@ -> host='%@'", url, host);
   if ([host isEqualToString:@"pin"]) {
     [_router requestPinThen:nil];
     return YES;

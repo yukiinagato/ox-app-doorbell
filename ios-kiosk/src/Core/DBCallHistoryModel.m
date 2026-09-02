@@ -60,6 +60,28 @@ static void DBLocalParts(long long ms, NSInteger offsetMinutes, long long *year,
   return [NSString stringWithFormat:@"%02d:%02d", hour, minute];
 }
 
++ (NSDictionary *)localPartsForTs:(long long)ms offsetMinutes:(NSInteger)offsetMinutes {
+  long long year = 0;
+  int month = 0, day = 0, hour = 0, minute = 0;
+  DBLocalParts(ms, offsetMinutes, &year, &month, &day, &hour, &minute);
+  long long localSeconds = ms / 1000 + (long long)offsetMinutes * 60;
+  long long second = localSeconds % 60;
+  if (second < 0) second += 60;
+  // Days since 1970-01-01, which was a Thursday, so weekday 0 is Sunday.
+  long long days = localSeconds / 86400;
+  if (localSeconds % 86400 < 0) days -= 1;
+  long long weekday = (days + 4) % 7;
+  if (weekday < 0) weekday += 7;
+  return [NSDictionary dictionaryWithObjectsAndKeys:
+      [NSNumber numberWithInt:hour], @"hh",
+      [NSNumber numberWithInt:minute], @"mm",
+      [NSNumber numberWithLongLong:second], @"ss",
+      [NSString stringWithFormat:@"%04lld-%02d-%02d", year, month, day], @"date",
+      [NSNumber numberWithLongLong:weekday], @"weekday_num",
+      [NSNumber numberWithLongLong:ms], @"wall_ms",
+      [NSNumber numberWithInteger:offsetMinutes], @"offset_min", nil];
+}
+
 + (NSString *)durationTextForMs:(long long)durationMs {
   if (durationMs <= 0) return @"";
   long long seconds = durationMs / 1000;

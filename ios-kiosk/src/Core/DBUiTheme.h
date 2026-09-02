@@ -186,6 +186,10 @@ FOUNDATION_EXPORT NSString *const DBUiRegionTileLabel;
                                   portrait:(BOOL)portrait
                                 sosVisible:(BOOL)sosVisible;
 
+// A build version fit for a footer: "0.2.0+38f9239…" keeps the identity of the
+// build without the forty hex characters that pushed the battery off screen.
++ (NSString *)shortVersion:(NSString *)version;
+
 // Version + battery footer line, shared by every screen (§5.1, §0.6).
 + (NSString *)versionLineForName:(NSString *)name
                      coreVersion:(NSString *)coreVersion
