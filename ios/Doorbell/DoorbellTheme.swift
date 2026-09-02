@@ -98,7 +98,7 @@ final class HaloLabel: UILabel {
         context.saveGState()
         context.setShadow(offset: .zero, blur: DoorbellTheme.outlineBlurRadius,
                           color: halo.cgColor)
-        context.setLineWidth(DoorbellTheme.outlineStrokeWidth)
+        context.setLineWidth(DoorbellTheme.outlineStroke(forPointSize: font.pointSize))
         context.setLineJoin(.round)
         context.setStrokeColor(halo.cgColor)
         context.setTextDrawingMode(.stroke)
@@ -841,8 +841,19 @@ enum DoorbellTheme {
     /// simply is not visible behind a busy photograph. A blurred halo at close to full opacity is.
     static let outlineBlurRadius: CGFloat = 3
     static let outlineOpacity: Float = 0.9
-    /// Width of the stroked edge drawn around each glyph, in points.
-    static let outlineStrokeWidth: CGFloat = 4
+    /// Width of the stroked edge drawn around each glyph, in points, for a given text size. A
+    /// single width cannot serve a 13 pt footer and a 108 pt clock: 4 pt read as a sticker outline
+    /// around the small text on the panel. A fourteenth of the point size tracks the stroke
+    /// weight of the glyphs themselves — footer ≈ 1 pt, hint ≈ 1.5 pt, date ≈ 1.7 pt — and the cap
+    /// keeps the clock at the 4 pt that already reads well rather than growing to 8.
+    static let outlineStrokeDivisor: CGFloat = 14
+    static let outlineStrokeMin: CGFloat = 0.75
+    static let outlineStrokeMax: CGFloat = 4
+
+    static func outlineStroke(forPointSize pointSize: CGFloat) -> CGFloat {
+        guard pointSize > 0 else { return outlineStrokeMin }
+        return min(outlineStrokeMax, max(outlineStrokeMin, pointSize / outlineStrokeDivisor))
+    }
 
     /// A halo is drawn when the chosen ink misses AA anywhere on the ground under the region.
     /// Only a `HaloLabel` can carry one; every region that sits straight on the theme background
