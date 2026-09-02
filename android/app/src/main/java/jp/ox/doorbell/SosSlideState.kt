@@ -104,6 +104,28 @@ internal class SosSlideState(countdownSeconds: Int) {
         const val DEFAULT_COUNTDOWN_S = 3
         const val MAX_COUNTDOWN_S = 10
 
+        /** Core's documented default for emergency.button_on_roles: the indoor panel alone. */
+        const val DEFAULT_BUTTON_ROLE = "indoor_panel"
+
+        /**
+         * Whether this device offers the slide bar at all.
+         *
+         * emergency.button_on_roles is a cluster setting, and its absence does not mean
+         * "everywhere": core documents the default as ["indoor_panel"], so a door station shows
+         * no bar unless the cluster names door_station. This shell used to read an absent key --
+         * and an empty list -- as "show it", which put an SOS bar on the door station's visitor
+         * screen, where any passer-by could raise the household alarm. An empty list is a
+         * deliberate "nowhere", and a value that is not a list is treated as unset, which is what
+         * every other shell does.
+         */
+        fun visibleForRole(config: org.json.JSONObject?, role: String): Boolean {
+            val roles = config?.optJSONObject("emergency")?.optJSONArray("button_on_roles")
+                ?: return role == DEFAULT_BUTTON_ROLE
+            for (index in 0 until roles.length())
+                if (roles.optString(index) == role) return true
+            return false
+        }
+
         fun clampCountdown(seconds: Int): Int = seconds.coerceIn(0, MAX_COUNTDOWN_S)
 
         /** Read emergency.trigger.countdown_s, defaulting to the documented three seconds. */

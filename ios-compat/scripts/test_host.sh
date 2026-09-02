@@ -47,24 +47,22 @@ CFLAGS=(-std=c99 -Wall -Wextra -Werror -O2 -I"$MINISIP")
   "$REPO_ROOT/ios-compat/tests/call_event_tracker_test.m" \
   -framework Foundation -o "$OUT/call_event_tracker_test"
 
-# The Swift call-revision test builds for the host, so every file it pulls in
-# has to be host-compilable. ios/Doorbell/CallRevisionLifecycle.swift now uses
-# ConfigUtil, and ConfigUtil.swift imports UIKit, which does not exist on
-# macOS. Owned by the iOS package: either lift the shared helpers out of the
-# UIKit file or move this test into the XCTest target. Until then it is skipped
-# loudly rather than silently.
+# The Swift call-revision test builds for the host, so every file it pulls in has
+# to be host-compilable. ConfigUtil.swift is Foundation and CoreGraphics only for
+# exactly this reason; its UIColor half lives in ConfigUtilColors.swift, which the
+# host never compiles. A UIKit import creeping back in here is a real regression,
+# so this fails rather than skipping.
 MODERN_CALL_TEST=1
 if grep -q "^import UIKit" "$REPO_ROOT/ios/Doorbell/ConfigUtil.swift" 2>/dev/null; then
-  MODERN_CALL_TEST=0
-  echo "SKIP modern_call_revision_test: ios/Doorbell/ConfigUtil.swift imports UIKit" >&2
-  echo "     (batch2/ios owns this; the kiosk suite cannot build it for the host)" >&2
-else
-  swiftc \
-    "$REPO_ROOT/ios/Doorbell/ConfigUtil.swift" \
-    "$REPO_ROOT/ios/Doorbell/CallRevisionLifecycle.swift" \
-    "$REPO_ROOT/ios-compat/tests/modern_call_revision_test.swift" \
-    -o "$OUT/modern_call_revision_test"
+  echo "error: ios/Doorbell/ConfigUtil.swift imports UIKit again" >&2
+  echo "       Keep it host-compilable; UIKit helpers belong in ConfigUtilColors.swift." >&2
+  exit 1
 fi
+swiftc \
+  "$REPO_ROOT/ios/Doorbell/ConfigUtil.swift" \
+  "$REPO_ROOT/ios/Doorbell/CallRevisionLifecycle.swift" \
+  "$REPO_ROOT/ios-compat/tests/modern_call_revision_test.swift" \
+  -o "$OUT/modern_call_revision_test"
 
 "$CC" -fobjc-arc -Wall -Wextra -Werror -O2 -isysroot "$MACOS_SDK" \
   -I"$REPO_ROOT/ios-kiosk/src/Net" \

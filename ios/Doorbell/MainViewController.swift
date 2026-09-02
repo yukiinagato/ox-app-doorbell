@@ -57,6 +57,8 @@ final class MainViewController: UIViewController {
     private var secretTaps = 0
     private var secretFirst = Date.distantPast
     private var pairingObserver: NSObjectProtocol?
+    private var wakeObserver: NSObjectProtocol?
+    private var inviteObserver: NSObjectProtocol?
 
     private var clockTimer: Timer?
     private var callTimeoutTimer: Timer?
@@ -135,7 +137,8 @@ final class MainViewController: UIViewController {
     required init?(coder: NSCoder) { fatalError("not supported") }
 
     deinit {
-        if let observer = pairingObserver {
+        for observer in [pairingObserver, wakeObserver, inviteObserver] {
+            guard let observer = observer else { continue }
             NotificationCenter.default.removeObserver(observer)
         }
     }
@@ -155,6 +158,15 @@ final class MainViewController: UIViewController {
         pairingObserver = NotificationCenter.default.addObserver(
             forName: .doorbellPairingChanged, object: nil, queue: .main
         ) { [weak self] _ in self?.refreshPairingStatus() }
+        // Anything that would have made somebody look at the panel wakes it the way a finger
+        // does, idle timer and all: the screenshot hook's wake request, and an invitation
+        // arriving for a device that is waiting to be added.
+        wakeObserver = NotificationCenter.default.addObserver(
+            forName: .doorbellWakeScreen, object: nil, queue: .main
+        ) { [weak self] _ in self?.onActivity() }
+        inviteObserver = NotificationCenter.default.addObserver(
+            forName: .doorbellPairInvitation, object: nil, queue: .main
+        ) { [weak self] _ in self?.onActivity() }
         refreshPairingStatus()
 
         clockTimer = IOSAvailability.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
@@ -732,13 +744,18 @@ final class MainViewController: UIViewController {
     }
 
     private func applySemanticStyles() {
-        let bindings: [(String, UIView)] = [
-            ("call.primary", callButton), ("cancel.call", cancelButton),
-            ("call.end", endCallButton), ("sos.trigger", sosSlider),
-            ("sos.cancel", emergencyCancel), ("status.offline", offlineTitle),
+        // This runs on every layout pass. The SOS slider is only a control on a screen whose role
+        // offers one; styling it anywhere else would put it back, because a safety control's style
+        // floor forces it visible.
+        let sosOffered = ConfigUtil.sosButtonVisible(config: cfg, role: boot.role)
+        let bindings: [(String, UIView, Bool)] = [
+            ("call.primary", callButton, true), ("cancel.call", cancelButton, true),
+            ("call.end", endCallButton, true), ("sos.trigger", sosSlider, sosOffered),
+            ("sos.cancel", emergencyCancel, true), ("status.offline", offlineTitle, true),
         ]
-        for (id, view) in bindings {
-            styleApplier.apply(config: cfg, nodeId: nodeId, semanticId: id, to: view)
+        for (id, view, offered) in bindings {
+            styleApplier.apply(config: cfg, nodeId: nodeId, semanticId: id, to: view,
+                               offered: offered)
         }
         for row in purposeGrid.arrangedSubviews {
             for button in (row as? UIStackView)?.arrangedSubviews ?? [] {
@@ -1043,11 +1060,10 @@ final class MainViewController: UIViewController {
     }
 
     private func refreshSosConfig() {
-        var show = boot.role == "indoor_panel"
-        if let roles = ConfigUtil.dig(cfg, "emergency.button_on_roles") as? [Any] {
-            show = roles.contains { ($0 as? String) == boot.role }
-        }
+        let show = ConfigUtil.sosButtonVisible(config: cfg, role: boot.role)
         sosSlider.isHidden = !show
+        // The visitor screen remembers it, so a rotation cannot put the slider back on a screen
+        // whose role does not offer one.
         visitorScreen?.setSosVisible(show)
         // The countdown is a shell state; Core hears about the emergency only when it reaches
         // zero. `emergency.hold_to_trigger_s` stays in old configurations but no longer drives it.
@@ -1261,6 +1277,12 @@ final class MainViewController: UIViewController {
         case "event":
             let type = ConfigUtil.evStr(ev, "type")
             let eventCall = ConfigUtil.evStr(ev, "call_id")
+            if type == "press", boot.role == "door_station" {
+                // A visitor who pressed the button expects the screen to be there, and on a
+                // future physical button that press arrives here and nowhere else.
+                let door = ConfigUtil.evStr(ev, "door")
+                if door.isEmpty || door == boot.door { onActivity() }
+            }
             if type == "press", !activeCallId.isEmpty, eventCall == activeCallId,
                let expiry = ev["expires_at_ms"] as? NSNumber, expiry.int64Value > 0 {
                 activeCallExpiresAtMs = expiry.int64Value

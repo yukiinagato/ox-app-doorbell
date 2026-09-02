@@ -360,6 +360,7 @@
  "dash.notice_global": "公告（全部门口）",
  "dash.recent_calls": "呼叫记录",
  "dash.see_all": "查看全部",
+ "dash.tile_no_station": "无门口机",
  "dash.tile_offline": "离线",
  "dash.tile_open": "查看",
  "dash.tile_watch": "查看",

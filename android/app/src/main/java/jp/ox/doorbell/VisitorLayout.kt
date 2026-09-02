@@ -80,6 +80,19 @@ internal object VisitorLayout {
     /** Whether the dashboard's announcement button and SOS slider stack rather than share a row. */
     fun actionsStacked(widthDp: Int): Boolean = widthDp < FOOTER_SPLIT_MIN_DP
 
+    /**
+     * Whether the dashboard header puts the clock on its own row above the membership pill and
+     * the buttons, rather than sharing one row with them.
+     *
+     * The one-row header is a landscape arrangement: the clock takes the leftover width after the
+     * pill, the missed badge and 管理 have taken theirs. On a portrait phone those three want
+     * nearly the whole width, so "leftover" was about one character and the clock rendered one
+     * glyph per line down the left edge -- observed on the Moto. Portrait, and anything narrower
+     * than a tablet, therefore gets its own full-width clock row.
+     */
+    fun dashboardHeaderStacked(widthDp: Int, heightDp: Int): Boolean =
+        widthDp <= heightDp || widthDp < FOOTER_SPLIT_MIN_DP
+
     fun hintTextSizeSp(widthDp: Int): Float = if (widthDp >= TABLET_MIN_DP) 20f else 15f
 
     fun clockTextSizeSp(widthDp: Int, heightDp: Int): Float = when {

@@ -2,7 +2,6 @@
 // its own threads; this layer attaches them to the JVM and Kotlin marshals UI work to main.
 // A pthread TLS destructor detaches threads at exit to avoid per-callback attach churn.
 #include <android/log.h>
-#include <dlfcn.h>
 #include <jni.h>
 #include <pthread.h>
 
@@ -965,18 +964,21 @@ Java_jp_ox_doorbell_DoorbellCore_nativeSipSetMicMuted(JNIEnv*, jobject, jlong h,
   return db_core_sip_set_mic_muted(b->core, muted == JNI_TRUE ? 1 : 0);
 }
 
-// doorbell:// pairing-link parser. Core is adding db_core_parse_pair_uri_json; until it lands this
-// resolves to nothing and the Kotlin side uses its own parse of the same grammar, so the feature
-// works today and adopts core's answer the moment it exists.
+// doorbell:// pairing-link parser. Core is compiled into this same shared object, so the export is
+// called directly like every other one; the node handle is passed because core checks the expiry
+// against corrected cluster time when it is running. Core returns null when it is not, and the
+// Kotlin side then falls back to its own parse of the same grammar.
+//
+// The result is built with toJString rather than NewStringUTF: a cluster name may be Japanese, and
+// NewStringUTF wants modified UTF-8, not the real UTF-8 core emits.
 extern "C" JNIEXPORT jstring JNICALL
-Java_jp_ox_doorbell_DoorbellCore_nativeParsePairUriJson(JNIEnv* env, jobject, jstring uri) {
-  using ParseFn = char* (*)(const char*);
-  static ParseFn fn = reinterpret_cast<ParseFn>(
-      dlsym(RTLD_DEFAULT, "db_core_parse_pair_uri_json"));
-  if (!fn) return nullptr;
-  char* s = fn(toUtf8(env, uri).c_str());
+Java_jp_ox_doorbell_DoorbellCore_nativeParsePairUriJson(JNIEnv* env, jobject, jlong h,
+                                                        jstring uri) {
+  Bridge* b = fromHandle(h);
+  if (!b || !b->core) return nullptr;
+  char* s = db_core_parse_pair_uri_json(b->core, toUtf8(env, uri).c_str());
   if (!s) return nullptr;
-  jstring out = env->NewStringUTF(s);
+  jstring out = toJString(env, b, s);
   db_free(s);
   return out;
 }

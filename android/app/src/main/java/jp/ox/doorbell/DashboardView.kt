@@ -48,6 +48,9 @@ internal class DashboardView(
     private lateinit var adminButton: Button
     private lateinit var noticeButton: Button
     private lateinit var actionRow: LinearLayout
+    private lateinit var header: LinearLayout
+    private lateinit var clockBox: LinearLayout
+    private lateinit var headerActions: LinearLayout
     private lateinit var recentCallsHeading: TextView
     private lateinit var seeAllButton: Button
     private val tileColumn = LinearLayout(activity).apply {
@@ -88,7 +91,7 @@ internal class DashboardView(
         val noticeText: TextView,
     ) {
         var lastNotice: String = "\u0000"
-        var lastOnline: Boolean? = null
+        var lastService: DoorService? = null
     }
     private var lastRows: List<CallRow> = emptyList()
     private var unreadMissed = 0
@@ -156,12 +159,18 @@ internal class DashboardView(
         val pad = ShellUi.dp(activity, 14)
         root.setPadding(pad, pad, pad, pad)
 
-        val header = LinearLayout(activity).apply {
+        header = LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             isBaselineAligned = false
         }
-        val clockBox = LinearLayout(activity).apply {
+        // The clock and the date each keep to one line. Sharing a row with the header buttons left
+        // the clock about one character wide on a portrait phone, and it wrapped to one glyph per
+        // line down the edge; applyHeaderLayout gives portrait its own row, and this makes the
+        // failure unreachable even if a future arrangement gets the widths wrong again.
+        clockText.maxLines = 1
+        dateText.maxLines = 1
+        clockBox = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
             addView(clockText)
             addView(dateText)
@@ -169,10 +178,14 @@ internal class DashboardView(
         header.addView(clockBox, LinearLayout.LayoutParams(
             0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f,
         ))
-        val headerActions = LinearLayout(activity).apply {
+        headerActions = LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
+        // The pill is the one header control that may give up width, so a long cluster line
+        // shortens instead of pushing 不在着信 and 管理 off the screen.
+        membershipPill.maxLines = 1
+        membershipPill.ellipsize = android.text.TextUtils.TruncateAt.END
         headerActions.addView(membershipPill, chipParams())
         headerActions.addView(missedBadge, chipParams())
         missedBadge.isFocusable = true
@@ -399,14 +412,11 @@ internal class DashboardView(
         sosSlider.visibility = if (sosVisible()) View.VISIBLE else View.GONE
     }
 
-    /** emergency.button_on_roles decides whether this panel offers the slider at all. */
-    private fun sosVisible(): Boolean {
-        val roles = app.core.dig(config, "emergency.button_on_roles") as? org.json.JSONArray
-            ?: return true
-        for (index in 0 until roles.length())
-            if (roles.optString(index) == app.boot.role) return true
-        return roles.length() == 0
-    }
+    /**
+     * emergency.button_on_roles decides whether this panel offers the slider at all. An absent
+     * key is core's default of ["indoor_panel"]; an empty list is a deliberate "nowhere".
+     */
+    private fun sosVisible(): Boolean = SosSlideState.visibleForRole(config, app.boot.role)
 
     // ---------- door tiles ----------
 
@@ -515,12 +525,11 @@ internal class DashboardView(
 
     /** Everything a status poll can change, applied only when it actually changed. */
     private fun updateTile(door: String, tile: DoorTile, notice: Notice?) {
-        val peer = doorPeer(door)
-        val online = peer != null && peer.optString("status") != "dead"
+        val service = DoorStations.serviceOf(status, config, door)
         val noticeKey = notice?.text ?: ""
-        if (tile.lastNotice == noticeKey && tile.lastOnline == online) return
+        if (tile.lastNotice == noticeKey && tile.lastService == service) return
         tile.lastNotice = noticeKey
-        tile.lastOnline = online
+        tile.lastService = service
 
         tile.label.text = doorLabel(door)
         tile.chips.removeAllViews()
@@ -535,9 +544,17 @@ internal class DashboardView(
             chip.setOnClickListener { openNoticeDialog(door) }
             tile.chips.addView(chip)
         }
-        if (!online) tile.chips.addView(
-            ShellUi.pill(activity, texts.t("dash.tile_offline", R.string.dash_tile_offline),
-                         palette.surfaceAlt, palette.muted),
+        // "The station is down" and "no station serves this door" are different problems with
+        // different fixes, and core's served_by is what separates them.
+        val serviceLabel = when (service) {
+            DoorService.SERVED -> ""
+            DoorService.STATION_OFFLINE ->
+                texts.t("dash.tile_offline", R.string.dash_tile_offline)
+            DoorService.NO_STATION ->
+                texts.t("dash.tile_no_station", R.string.dash_tile_no_station)
+        }
+        if (serviceLabel.isNotEmpty()) tile.chips.addView(
+            ShellUi.pill(activity, serviceLabel, palette.surfaceAlt, palette.muted),
             LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
             ).apply { leftMargin = if (tile.chips.childCount == 0) 0 else ShellUi.dp(activity, 6) },
@@ -548,36 +565,95 @@ internal class DashboardView(
     }
 
     /** Live stills refresh every five seconds; a failure simply leaves the previous frame. */
+    /**
+     * Refresh every tile's picture.
+     *
+     * The peer is resolved per door on each pass rather than captured with the tile, so a station
+     * that joins after its tile was built starts showing a picture on the next tick instead of
+     * staying blank until the door set changes. Each door is attempted independently: one station
+     * that is down must not stop the loop before it reaches the others, which is why the body is
+     * wrapped rather than relying on fetchStill alone to swallow everything.
+     */
     private fun refreshStills() {
         if (stills.isEmpty()) return
         val targets = stills.keys.toList()
+        val snapshot = status
+        val settings = config
         Thread({
             for (door in targets) {
-                val peer = doorPeer(door) ?: continue
-                val snapshot = peer.optString("snapshot").ifEmpty {
-                    val stream = peer.optString("stream")
-                    if (stream.isEmpty()) "" else stream.substringBeforeLast('/') + "/snapshot.jpg"
+                try {
+                    // Any station bound to this door, not only one the mesh calls alive: core
+                    // omits the stream URL for a peer it has lost, so an unreachable station
+                    // costs nothing here, while a station that is serving pictures over HTTP
+                    // before the mesh has caught up still fills its tile.
+                    val peer = DoorStations.peerFor(snapshot, settings, door)
+                    if (peer == null) {
+                        // Say which peers were considered and how each resolved: "no station" on
+                        // its own cannot tell a door-id mismatch from a station that is down.
+                        logStill(door, "no station; " + DoorStations.why(snapshot, settings, door))
+                        continue
+                    }
+                    val url = DoorStations.stillUrl(peer)
+                    if (url.isEmpty()) {
+                        logStill(
+                            door,
+                            "station ${peer.optString("id")} (status " +
+                                "${peer.optString("status")}) advertises no snapshot or stream",
+                        )
+                        continue
+                    }
+                    val bitmap = fetchStill(door, url) ?: continue
+                    ui.post { stills[door]?.setImageBitmap(bitmap) }
+                } catch (error: Exception) {
+                    logStill(door, "failed: ${error.javaClass.simpleName}: ${error.message}")
                 }
-                if (snapshot.isEmpty()) continue
-                val bitmap = fetchStill(snapshot) ?: continue
-                ui.post { stills[door]?.setImageBitmap(bitmap) }
             }
         }, "doorbell-tiles").apply { isDaemon = true }.start()
     }
 
-    private fun fetchStill(url: String): Bitmap? {
+    /**
+     * One still. Every outcome is logged with the URL, the HTTP status, the byte count and
+     * whether the decode produced a bitmap.
+     *
+     * This used to swallow the exception silently, which is how a blocked request looked exactly
+     * like a station with no camera: an empty tile and nothing at all in logcat.
+     */
+    private fun fetchStill(door: String, url: String): Bitmap? {
         var connection: HttpURLConnection? = null
         return try {
             connection = URL(url).openConnection() as HttpURLConnection
             connection.connectTimeout = 2000
             connection.readTimeout = 3000
+            connection.useCaches = false
+            val code = connection.responseCode
+            if (code != HttpURLConnection.HTTP_OK) {
+                logStill(door, "$url -> HTTP $code")
+                return null
+            }
             val bytes = BoundedBitmapDecoder.readLimited(connection.inputStream, 2 * 1024 * 1024)
-            bytes?.let { BoundedBitmapDecoder.decode(it, 640, 480) }
-        } catch (_: Exception) {
+            if (bytes == null) {
+                logStill(door, "$url -> HTTP $code, body empty or over the 2 MB cap")
+                return null
+            }
+            val bitmap = BoundedBitmapDecoder.decode(bytes, 640, 480)
+            logStill(
+                door,
+                "$url -> HTTP $code, ${bytes.size} bytes, " +
+                    if (bitmap == null) "decode failed"
+                    else "decoded ${bitmap.width}x${bitmap.height}",
+            )
+            bitmap
+        } catch (error: Exception) {
+            // A cleartext-policy refusal arrives here as an IOException naming the peer address.
+            logStill(door, "$url -> ${error.javaClass.simpleName}: ${error.message}")
             null
         } finally {
             try { connection?.disconnect() } catch (_: Exception) { }
         }
+    }
+
+    private fun logStill(door: String, message: String) {
+        android.util.Log.i("doorbell-still", "[$door] $message")
     }
 
     // ---------- recent calls ----------
@@ -673,8 +749,43 @@ internal class DashboardView(
         }
         tileScroll.layoutParams = tileParams
         callColumn.layoutParams = callParams
+        applyHeaderLayout(widthDp, heightDp)
         applyActionLayout(widthDp)
         fitTilesToViewport()
+    }
+
+    /**
+     * Portrait gives the clock its own full-width row above the pill and the buttons; landscape
+     * keeps the single row, with the clock taking the width the buttons leave.
+     */
+    private fun applyHeaderLayout(widthDp: Int, heightDp: Int) {
+        val stacked = VisitorLayout.dashboardHeaderStacked(widthDp, heightDp)
+        header.orientation = if (stacked) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL
+        header.gravity = if (stacked) Gravity.START else Gravity.CENTER_VERTICAL
+        val clockParams = clockBox.layoutParams as LinearLayout.LayoutParams
+        val actionParams = headerActions.layoutParams as LinearLayout.LayoutParams
+        val pillParams = membershipPill.layoutParams as LinearLayout.LayoutParams
+        if (stacked) {
+            clockParams.width = ViewGroup.LayoutParams.MATCH_PARENT
+            clockParams.weight = 0f
+            actionParams.width = ViewGroup.LayoutParams.MATCH_PARENT
+            actionParams.topMargin = ShellUi.dp(activity, 8)
+            // The pill absorbs the row's slack and shortens when there is none.
+            pillParams.width = 0
+            pillParams.weight = 1f
+            pillParams.leftMargin = 0
+        } else {
+            clockParams.width = 0
+            clockParams.weight = 1f
+            actionParams.width = ViewGroup.LayoutParams.WRAP_CONTENT
+            actionParams.topMargin = 0
+            pillParams.width = ViewGroup.LayoutParams.WRAP_CONTENT
+            pillParams.weight = 0f
+            pillParams.leftMargin = ShellUi.dp(activity, 8)
+        }
+        clockBox.layoutParams = clockParams
+        headerActions.layoutParams = actionParams
+        membershipPill.layoutParams = pillParams
     }
 
     private fun applyStillHeight(heightPx: Int) {
@@ -760,17 +871,6 @@ internal class DashboardView(
     private fun doorIds(): List<String> {
         val doors = app.core.dig(config, "doors") as? JSONObject ?: return emptyList()
         return doors.keys().asSequence().sorted().toList()
-    }
-
-    private fun doorPeer(door: String): JSONObject? {
-        val peers = status?.optJSONArray("peers") ?: return null
-        for (index in 0 until peers.length()) {
-            val peer = peers.optJSONObject(index) ?: continue
-            if (peer.optString("role") != "door_station") continue
-            if (peer.optString("door") != door) continue
-            return peer
-        }
-        return null
     }
 
     private fun doorLabel(door: String): String {

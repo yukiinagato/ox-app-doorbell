@@ -775,14 +775,13 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
         sosSlot.visibility = if (sosVisibleForRole()) View.VISIBLE else View.GONE
     }
 
-    /** emergency.button_on_roles decides whether this device offers the slider at all. */
-    private fun sosVisibleForRole(): Boolean {
-        val roles = app.core.dig(cfg, "emergency.button_on_roles") as? JSONArray ?: return true
-        if (roles.length() == 0) return true
-        for (index in 0 until roles.length())
-            if (roles.optString(index) == app.boot.role) return true
-        return false
-    }
+    /**
+     * emergency.button_on_roles decides whether this device offers the slider at all. An absent
+     * key is core's default of ["indoor_panel"], so this visitor screen shows no bar unless the
+     * cluster deliberately names door_station.
+     */
+    private fun sosVisibleForRole(): Boolean =
+        SosSlideState.visibleForRole(cfg, app.boot.role)
 
     private fun applySemanticUi() {
         val styleConfig = if (app.safeMode) null else cfg

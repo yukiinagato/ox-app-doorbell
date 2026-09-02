@@ -360,6 +360,7 @@
 "dash.notice_global" = "お知らせ（全体）";
 "dash.recent_calls" = "呼出履歴";
 "dash.see_all" = "すべて見る";
+"dash.tile_no_station" = "門口機なし";
 "dash.tile_offline" = "オフライン";
 "dash.tile_open" = "見る";
 "dash.tile_watch" = "見る";

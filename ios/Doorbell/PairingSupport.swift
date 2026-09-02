@@ -12,6 +12,10 @@ extension Notification.Name {
     static let doorbellPairingChanged = Notification.Name("doorbell.pairingChanged")
     /// Posted by a main screen's banner: reopen the onboarding screen the user deferred.
     static let doorbellOpenPairing = Notification.Name("doorbell.openPairing")
+    /// Something that a finger would have woken the panel for. Posted by the screenshot
+    /// hook's `wake` request and by anything that ought to put the screen in front of
+    /// somebody who is standing at it.
+    static let doorbellWakeScreen = Notification.Name("doorbell.wakeScreen")
     /// A `doorbell://pair?…` invitation arrived — from a tapped link or the camera. The
     /// URI travels as the notification object.
     static let doorbellPairInvitation = Notification.Name("doorbell.pairInvitation")

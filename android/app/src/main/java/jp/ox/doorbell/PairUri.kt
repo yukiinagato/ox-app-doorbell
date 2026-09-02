@@ -112,13 +112,29 @@ internal object PairUri {
     }
 
     /**
-     * The QR payload for the PIN card: core's link when it publishes one, otherwise the existing
-     * pair_qr content so an older core keeps working.
+     * The QR payload for the PIN card: core's doorbell:// link when it publishes one, otherwise
+     * the existing pair_qr content so an older core keeps working.
+     *
+     * db_core_pairing_json carries the link on its *token* object, and only while a PIN is
+     * active; db_core_mint_join_token_json and db_core_start_pairing_json carry it at the top
+     * level of their own result. Both shapes are accepted so either document can be handed here.
+     * Reading only the top level -- which is what this did -- meant the pairing screen never
+     * showed core's link at all and always fell back to the legacy payload.
      */
     fun qrPayload(pairing: JSONObject?): String {
-        val uri = pairing?.optString("uri").orEmpty()
-        if (uri.isNotEmpty() && uri != "null") return uri
-        return pairing?.optString("pair_qr").orEmpty()
+        if (pairing == null) return ""
+        val token = uriOf(pairing.optJSONObject("token"))
+        if (token.isNotEmpty()) return token
+        val own = uriOf(pairing)
+        if (own.isNotEmpty()) return own
+        return pairing.optString("pair_qr").orEmpty()
+    }
+
+    /** A "uri" field that is really there: org.json renders an absent or null value as text. */
+    private fun uriOf(document: JSONObject?): String {
+        if (document == null || document.isNull("uri")) return ""
+        val uri = document.optString("uri").orEmpty()
+        return if (uri == "null") "" else uri
     }
 
     /** host:port, with a non-empty host and a port in range when one is given. */

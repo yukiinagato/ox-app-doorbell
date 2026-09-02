@@ -28,6 +28,9 @@ final class VisitorScreenView: UIView {
     private var noticeExpanded = false
     private var noticeText = ""
     private var isLandscape = false
+    /// Whether this device's role offers the SOS slider. Remembered because `applyLayout` takes
+    /// the whole stack apart and puts it back.
+    private var sosVisible = true
     private var skin = DoorbellSkin.plain(.dark)
 
     init(texts: Texts, callButton: UIButton, langBar: UIView, purposeSection: UIView,
@@ -118,8 +121,10 @@ final class VisitorScreenView: UIView {
         let wide = min(size.width, size.height) >= 768
         isLandscape = landscape
 
-        for view in root.arrangedSubviews { root.removeArrangedSubview(view) }
-        for view in root.arrangedSubviews { view.removeFromSuperview() }
+        for view in root.arrangedSubviews.reversed() {
+            root.removeArrangedSubview(view)
+            view.removeFromSuperview()
+        }
         for view in [noticeColumn, actionColumn] {
             for child in view.arrangedSubviews {
                 view.removeArrangedSubview(child)
@@ -161,7 +166,7 @@ final class VisitorScreenView: UIView {
             columns.alignment = .center
             root.addArrangedSubview(columns)
             root.addArrangedSubview(footerLabel)
-            root.addArrangedSubview(sosControl)
+            if sosVisible { root.addArrangedSubview(sosControl) }
             return
         }
 
@@ -174,7 +179,7 @@ final class VisitorScreenView: UIView {
         root.addArrangedSubview(actionColumn)
         root.addArrangedSubview(UIView())
         root.addArrangedSubview(footerLabel)
-        root.addArrangedSubview(sosControl)
+        if sosVisible { root.addArrangedSubview(sosControl) }
     }
 
     /// Wraps a control that must keep its own size inside a full-width row.
@@ -230,8 +235,14 @@ final class VisitorScreenView: UIView {
         footerLabel.text = text
     }
 
+    /// A screen whose role offers no SOS slider does not merely hide one: it never puts one in
+    /// the hierarchy. Hiding was not enough, because a safety control's semantic style forces it
+    /// visible again on every layout pass.
     func setSosVisible(_ visible: Bool) {
+        guard visible != sosVisible else { return }
+        sosVisible = visible
         sosControl.isHidden = !visible
+        if bounds.width > 0 && bounds.height > 0 { applyLayout(for: bounds.size) }
     }
 
     /// Applies the skin and the computed call-button colour. Every label here is drawn straight

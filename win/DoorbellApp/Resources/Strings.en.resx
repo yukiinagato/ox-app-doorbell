@@ -367,6 +367,7 @@ Delete it?</value></data>
   <data name="dash_notice_global" xml:space="preserve"><value>Announcement (all doors)</value></data>
   <data name="dash_recent_calls" xml:space="preserve"><value>Recent calls</value></data>
   <data name="dash_see_all" xml:space="preserve"><value>See all</value></data>
+  <data name="dash_tile_no_station" xml:space="preserve"><value>No door station</value></data>
   <data name="dash_tile_offline" xml:space="preserve"><value>Offline</value></data>
   <data name="dash_tile_open" xml:space="preserve"><value>View</value></data>
   <data name="dash_tile_watch" xml:space="preserve"><value>View</value></data>

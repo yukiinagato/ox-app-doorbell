@@ -142,6 +142,47 @@ class PairUriTest {
         assertEquals("", PairUri.qrPayload(null))
     }
 
+    /**
+     * db_core_pairing_json carries the link on its token object, not at the top level. Reading
+     * only the top level meant the pairing screen never showed core's link at all.
+     */
+    @Test
+    fun thePinCardTakesTheLinkFromCoresTokenObject() {
+        val pairing = JSONObject(
+            """{"pair_qr":"doorbell-pair:a|b|c",
+                "token":{"active":true,"pin":"123456","host":"a:1",
+                         "uri":"doorbell://pair?host=a%3A1&pin=123456&cluster=%E6%88%91"}}""",
+        )
+        assertEquals(
+            "doorbell://pair?host=a%3A1&pin=123456&cluster=%E6%88%91",
+            PairUri.qrPayload(pairing),
+        )
+    }
+
+    @Test
+    fun aTokenWithoutALinkFallsBackToTheLegacyPayload() {
+        // No PIN is active, so core publishes the token without a uri.
+        val pairing = JSONObject(
+            """{"pair_qr":"doorbell-pair:a|b|c","token":{"active":false}}""",
+        )
+        assertEquals("doorbell-pair:a|b|c", PairUri.qrPayload(pairing))
+        // An explicit JSON null must not become the string "null" on the QR.
+        val nulled = JSONObject(
+            """{"pair_qr":"doorbell-pair:a|b|c","uri":null,"token":{"uri":null}}""",
+        )
+        assertEquals("doorbell-pair:a|b|c", PairUri.qrPayload(nulled))
+    }
+
+    /** A mint or start-pairing result carries the link at its own top level. */
+    @Test
+    fun aMintResultCarriesTheLinkAtTheTopLevel() {
+        val minted = JSONObject(
+            """{"ok":true,"host":"a:1","pin":"123456",
+                "uri":"doorbell://pair?host=a%3A1&pin=123456"}""",
+        )
+        assertEquals("doorbell://pair?host=a%3A1&pin=123456", PairUri.qrPayload(minted))
+    }
+
     // ---------- what the screen does ----------
 
     @Test
