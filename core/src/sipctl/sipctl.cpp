@@ -92,6 +92,14 @@ struct SipCtl::Impl {
   std::mutex src_mu;
   std::set<std::string> allowed_sources;
 
+  // Conference port 0 is the sound device; muting its receive level silences the microphone
+  // without tearing down the leg, so the far end simply stops hearing us.
+  std::atomic<bool> mic_muted{false};
+
+  void applyMicMuteLocked() const {
+    pjsua_conf_adjust_rx_level(0, mic_muted.load() ? 0.0f : 1.0f);
+  }
+
   bool addMonitor(pjsua_call_id cid) {
     std::lock_guard<std::mutex> lk(mon_mu);
     if (static_cast<int>(monitors.size()) >= kMaxMonitorCalls) return false;
@@ -354,6 +362,8 @@ void SipCtl::Impl::s_on_call_media_state(pjsua_call_id call_id) {
   if (im->call_id.load() == call_id) {
     pjsua_conf_connect(slot, 0);
     pjsua_conf_connect(0, slot);
+    // Reapply, because a mute set before the call was answered must survive into it.
+    im->applyMicMuteLocked();
     DB_LOGI(kTag, "primary call #" + std::to_string(call_id) + ": bidirectional audio connected (conf slot " +
                       std::to_string(slot) + " <-> 0)");
   } else if (im->isMonitor(call_id)) {
@@ -697,6 +707,13 @@ bool SipCtl::sendDtmf(const std::string& digits) {
   }
   return true;
 }
+
+void SipCtl::setMicMuted(bool muted) {
+  impl_->mic_muted.store(muted);
+  if (impl_->running) impl_->applyMicMuteLocked();
+}
+
+bool SipCtl::micMuted() const { return impl_->mic_muted.load(); }
 
 SipRegState SipCtl::regState() const { return impl_->reg_state; }
 

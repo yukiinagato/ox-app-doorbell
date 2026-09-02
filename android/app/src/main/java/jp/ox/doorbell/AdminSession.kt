@@ -19,11 +19,14 @@ internal data class ConfigWriteResult(
     val error: String = "",
     val status: Int = 0,
     /**
-     * An advisory message that accompanies a successful write, such as the WCAG contrast notice a
-     * colour below the ratio earns. The value is still saved; this is shown next to the field.
+     * Advisory notices that accompany a successful write, such as the WCAG contrast warning a
+     * colour below the ratio earns. The value is still saved; these are shown next to the field.
      */
-    val warning: String = "",
+    val warnings: org.json.JSONArray? = null,
 ) {
+    /** The advisory to show, or null when the write raised none. */
+    val warning: WriteWarning? get() = WriteWarnings.first(warnings)
+
     val unauthorized: Boolean get() = status == 401 || status == 403
     val unsupported: Boolean get() = error == ConfigWriters.ERR_UNSUPPORTED
 }
@@ -68,7 +71,7 @@ internal class AdminSession private constructor(
             val document = try { JSONObject(payload) } catch (_: Exception) { null }
             val ok = status in 200..299 && document?.optBoolean("ok", false) != false
             ConfigWriteResult(ok, document?.optString("err").orEmpty(), status,
-                              document?.optString("warning").orEmpty())
+                              document?.optJSONArray("warnings"))
         } catch (e: Exception) {
             ConfigWriteResult(false, e.javaClass.simpleName, 0)
         } finally {

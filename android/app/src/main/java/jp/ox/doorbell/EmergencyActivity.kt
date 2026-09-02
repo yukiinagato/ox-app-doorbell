@@ -46,12 +46,9 @@ class EmergencyActivity : Activity() {
                 button.isEnabled = false
                 if (!app.commitEmergency(false)) button.isEnabled = true
             }
-            val requiresPin = (app.core.dig(config, "emergency.cancel_requires_pin") as? Boolean)
-                ?: false
-            val state = AdminPassword.stateOf(
-                if (app.coreOk) app.core.adminPasswordVerify("") else null,
-            )
-            if (AdminPassword.alarmClearNeedsPassword(requiresPin, state))
+            // Core publishes cancel_requires_pin AND a password actually being set as one
+            // answer, so the flag alone can never lock a household out of its own alarm.
+            if (AdminPassword.alarmClearNeedsPassword(if (app.coreOk) app.core.status() else null))
                 AdminGate.unlock(this, app.boot.httpPort, texts) { clear() }
             else clear()
         }

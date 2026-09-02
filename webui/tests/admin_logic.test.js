@@ -45,9 +45,14 @@ assert.strictEqual(L.validateUiManifest(missingDefaults).ok, false);
 const incompleteDefaults = L.defaultUiManifest("door_station");
 delete incompleteDefaults.elements["call.primary"].defaults.background;
 assert.strictEqual(L.validateUiManifest(incompleteDefaults).ok, false);
+// Contrast is advisory now: a manifest whose own defaults are hard to read is accepted and
+// reported, exactly like an operator's custom colour.
 const unsafeDefaults = L.defaultUiManifest("door_station");
 unsafeDefaults.elements["call.primary"].defaults.foreground = "#111111";
-assert.strictEqual(L.validateUiManifest(unsafeDefaults).ok, false);
+const unsafeChecked = L.validateUiManifest(unsafeDefaults);
+assert.strictEqual(unsafeChecked.ok, true);
+assert.ok(unsafeChecked.warnings.length >= 1);
+assert.strictEqual(unsafeChecked.warnings[0].message_key, "theme.low_contrast");
 
 const manifest = L.defaultUiManifest("door_station");
 assert.strictEqual(L.validateUiElementOverride(manifest, "call.primary", {
@@ -60,11 +65,26 @@ assert.strictEqual(L.validateUiElementOverride(manifest, "call.primary", { radiu
 assert.strictEqual(L.validateUiElementOverride(manifest, "cancel.call", { scale: 0.9 }).ok, false);
 assert.strictEqual(L.validateUiElementOverride(manifest, "cancel.call", { font_scale: 0.9 }).ok,
                    false);
-assert.strictEqual(L.validateUiElementOverride(manifest, "call.primary", {
+// A low-contrast override saves and reports the measured ratio; only the format is enforced.
+const lowContrast = L.validateUiElementOverride(manifest, "call.primary", {
   foreground: "#111111", background: "#101418"
-}).ok, false);
-assert.strictEqual(L.validateUiElementOverride(manifest, "call.primary", {
+});
+assert.strictEqual(lowContrast.ok, true);
+assert.strictEqual(lowContrast.errors.length, 0);
+assert.strictEqual(lowContrast.warnings.length, 1);
+assert.strictEqual(lowContrast.warnings[0].property, "foreground");
+assert.strictEqual(lowContrast.warnings[0].message_key, "theme.low_contrast");
+assert.ok(lowContrast.warnings[0].contrast < 4.5);
+// The check uses the resolved element, so a single-property override is measured against the
+// manifest default it will sit on.
+const resolvedAgainstDefault = L.validateUiElementOverride(manifest, "call.primary", {
   foreground: "#1a2027"
+});
+assert.strictEqual(resolvedAgainstDefault.ok, true);
+assert.ok(resolvedAgainstDefault.warnings.length >= 1);
+// Format is still refused outright.
+assert.strictEqual(L.validateUiElementOverride(manifest, "call.primary", {
+  foreground: "not-a-colour"
 }).ok, false);
 assert.deepStrictEqual(L.uiElementValue({ call: { primary: { scale: 1.2 } } }, "call.primary"),
                        { scale: 1.2 });

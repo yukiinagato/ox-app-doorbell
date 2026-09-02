@@ -181,8 +181,14 @@ class DoorbellCore(context: Context) {
      */
     fun setConfigJson(key: String, valueJson: String): Int? {
         if (handle == 0L || !exports.configWrite) return null
-        val result = nativeSetConfigJson(handle, key, valueJson)
-        return if (result == UNSUPPORTED) null else result
+        return nativeSetConfigJson(handle, key, valueJson)
+    }
+
+    /** Readability warnings produced by the most recent single-key write; never null-safe. */
+    fun lastWriteWarnings(): org.json.JSONArray? {
+        if (handle == 0L || !exports.configWrite) return null
+        val raw = nativeLastWriteWarningsJson(handle) ?: return null
+        return try { org.json.JSONArray(raw) } catch (_: Exception) { null }
     }
 
     /** Apply several keys at once. The document is the same one /api/config/batch accepts. */
@@ -193,8 +199,7 @@ class DoorbellCore(context: Context) {
 
     fun deleteConfigKey(key: String): Int? {
         if (handle == 0L || !exports.configWrite) return null
-        val result = nativeDeleteConfigKey(handle, key)
-        return if (result == UNSUPPORTED) null else result
+        return nativeDeleteConfigKey(handle, key)
     }
 
     /**
@@ -204,15 +209,13 @@ class DoorbellCore(context: Context) {
      */
     fun adminPasswordVerify(password: String): Int? {
         if (handle == 0L || !exports.adminPassword) return null
-        val result = nativeAdminPasswordVerify(handle, password)
-        return if (result == UNSUPPORTED) null else result
+        return nativeAdminPasswordVerify(handle, password)
     }
 
     /** Set the cluster-wide administrator password; pass an empty current when none exists. */
     fun adminPasswordSet(current: String, next: String): Int? {
         if (handle == 0L || !exports.adminPassword) return null
-        val result = nativeAdminPasswordSet(handle, current, next)
-        return if (result == UNSUPPORTED) null else result
+        return nativeAdminPasswordSet(handle, current, next)
     }
 
     fun setCapabilities(value: JSONObject) {
@@ -468,6 +471,7 @@ class DoorbellCore(context: Context) {
     private external fun nativeCoreExportsJson(): String?
     private external fun nativeSetConfigJson(handle: Long, key: String, valueJson: String): Int
     private external fun nativeConfigBatchJson(handle: Long, opsJson: String): String?
+    private external fun nativeLastWriteWarningsJson(handle: Long): String?
     private external fun nativeDeleteConfigKey(handle: Long, key: String): Int
     private external fun nativeAdminPasswordVerify(handle: Long, password: String): Int
     private external fun nativeAdminPasswordSet(
@@ -515,8 +519,6 @@ class DoorbellCore(context: Context) {
         /** The door identifier that addresses the cluster-wide announcement (notice.global). */
         const val GLOBAL_DOOR = "*"
 
-        /** Returned by a wrapper whose core export is absent; never a documented core result. */
-        const val UNSUPPORTED = -100
 
         init {
             System.loadLibrary("doorbell")
