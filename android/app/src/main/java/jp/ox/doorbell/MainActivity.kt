@@ -225,6 +225,7 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
         maybeStartCamera()
         dashboard?.onResume()
         applyVisitorLayout()
+        startRegionInkWatch()
         if (app.boot.role == "door_station") {
             publishDisplayRotationFallback()
             sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)?.let {
@@ -333,6 +334,7 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
         ui.removeCallbacks(clockTick)
         ui.removeCallbacks(purposeTimeout)
         dashboard?.onPause()
+        stopRegionInkWatch()
         if (::sosSlider.isInitialized) sosSlider.cancelCountdown()
         app.unbindForeground(this)
         super.onPause()
@@ -584,6 +586,7 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
         // A configured background colour or image wins; the palette ground is the fallback.
         if (themeValue("bg_color") == null && themeValue("bg_image").isNullOrEmpty())
             rootView.setBackgroundColor(ShellUi.opaque(palette.ground))
+        regionInkApplied.clear()
         applyRegionInk()
         sosSlider.applyPalette(palette)
         applyCallButtonAccent()
@@ -602,14 +605,22 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
         paintRegion(nodeInfo, "footer", muted = true)
     }
 
+    /** The last ink applied per region, so a layout pass that changes nothing does no work. */
+    private val regionInkApplied = HashMap<String, Int>()
+
     private fun paintRegion(view: TextView, region: String, muted: Boolean) {
         // The flat colour a visitor would see with no picture on screen; never core's average of
         // the picture, which is only meaningful while the picture is actually painted.
         val ground = flatBackgroundRgb()
         val drawn = themeBg.visibility == View.VISIBLE && themeBg.drawable != null
-        val sampled = if (drawn) RegionInk.sample(themeBg, view, ground) else null
-        val result = CoreDisplays.inkFor(coreDisplay.theme, region, ground, sampled, drawn)
+        val sample = if (drawn) RegionInk.sample(themeBg, view, ground) else null
+        val result = CoreDisplays.inkFor(
+            coreDisplay.theme, region, ground, sample?.averageRgb, drawn, sample = sample,
+        )
         val ink = if (muted) ShellUi.mute(result.inkRgb, palette.dark) else result.inkRgb
+        val signature = (if (result.needsShadow) 1 shl 25 else 0) or (ink and 0xffffff)
+        if (regionInkApplied[region] == signature) return
+        regionInkApplied[region] = signature
         view.setTextColor(ShellUi.opaque(ink))
         if (result.needsShadow) {
             val shadow = ShellUi.opaque(result.shadowRgb) and 0x00ffffff or
@@ -620,10 +631,30 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
         }
     }
 
-    /** The theme background moves under the text when the layout changes, so resample then. */
+    /**
+     * The regions move under the picture on every layout, and the picture itself arrives long
+     * after the first one. Both have to re-run the decision, or the screen keeps the ink it chose
+     * against a background nobody is looking at any more -- which is how a light illustration ended
+     * up carrying light text.
+     */
     private fun scheduleRegionInk() {
         if (dashboard != null) return
         rootView.post { if (!isFinishing) applyRegionInk() }
+    }
+
+    private val regionInkOnLayout = android.view.ViewTreeObserver.OnGlobalLayoutListener {
+        if (!isFinishing) applyRegionInk()
+    }
+
+    private fun startRegionInkWatch() {
+        if (dashboard != null) return
+        rootView.viewTreeObserver.addOnGlobalLayoutListener(regionInkOnLayout)
+    }
+
+    private fun stopRegionInkWatch() {
+        if (dashboard != null) return
+        @Suppress("DEPRECATION")
+        rootView.viewTreeObserver.removeGlobalOnLayoutListener(regionInkOnLayout)
     }
 
     /** The flat colour behind the visitor screen, with no background image taken into account. */
@@ -824,6 +855,9 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
                 if (themeHash != hash || app.safeMode) return@post
                 themeBg.setImageBitmap(b)
                 themeBg.visibility = View.VISIBLE
+                // The background under every region just changed, so nothing decided against the
+                // previous one may be kept.
+                regionInkApplied.clear()
                 scheduleRegionInk()
             }
         }, "theme-bg").apply { isDaemon = true }.start()

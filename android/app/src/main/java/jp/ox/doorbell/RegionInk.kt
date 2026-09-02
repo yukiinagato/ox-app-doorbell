@@ -26,6 +26,26 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.view.View
 
+/**
+ * What the shell measured under one text region: the average colour that picks the ink, and the
+ * darkest and lightest patches within it, which decide whether the ink needs a shadow. A region
+ * spanning a pale wall and a dark jacket averages to something the ink clears comfortably while
+ * still being unreadable over part of its own width.
+ */
+internal data class RegionSample(
+    val averageRgb: Int,
+    val minLuminance: Double,
+    val maxLuminance: Double,
+) {
+    /** The worst contrast [inkRgb] achieves anywhere in the region. */
+    fun worstContrast(inkRgb: Int): Double {
+        val ink = UiContrast.luminance(inkRgb)
+        val low = (maxOf(ink, minLuminance) + 0.05) / (minOf(ink, minLuminance) + 0.05)
+        val high = (maxOf(ink, maxLuminance) + 0.05) / (minOf(ink, maxLuminance) + 0.05)
+        return minOf(low, high)
+    }
+}
+
 /** What to paint one text region with. */
 internal data class RegionInkResult(
     val inkRgb: Int,
@@ -72,11 +92,18 @@ internal object RegionInkPolicy {
         background: BackgroundKind,
         sampledBackgroundRgb: Int?,
         fallbackBackgroundRgb: Int,
+        sample: RegionSample? = null,
     ): RegionInkResult {
         val measured = sampledBackgroundRgb ?: fallbackBackgroundRgb
-        if (override != null) return RegionInkResult(
-            override, UiContrast.needsTextShadow(override, measured),
-        )
+        // The shadow answers the region's worst patch when one was measured, not only its
+        // average: text crossing a dark jacket on a pale wall needs it even though the average
+        // clears 4.5:1.
+        fun shadowed(inkRgb: Int, againstRgb: Int): Boolean {
+            if (UiContrast.needsTextShadow(inkRgb, againstRgb)) return true
+            val worst = sample?.worstContrast(inkRgb) ?: return false
+            return worst < UiContrast.TEXT_AA
+        }
+        if (override != null) return RegionInkResult(override, shadowed(override, measured))
         val light = when (background) {
             // Nothing local to add: core measured the one colour there is.
             BackgroundKind.FLAT_COLOUR ->
@@ -96,7 +123,7 @@ internal object RegionInkPolicy {
         val ink = if (light) Palette.LIGHT_INK else Palette.DARK_INK
         val against = if (background == BackgroundKind.IMAGE_NOT_DRAWN) fallbackBackgroundRgb
             else measured
-        return RegionInkResult(ink, UiContrast.needsTextShadow(ink, against))
+        return RegionInkResult(ink, shadowed(ink, against))
     }
 }
 
@@ -110,7 +137,7 @@ internal object RegionInk {
      * through the same transform the region occupies. Returns null when there is nothing to
      * sample, and the caller then falls back to the flat background colour.
      */
-    fun sample(background: View?, region: View, groundRgb: Int): Int? {
+    fun sample(background: View?, region: View, groundRgb: Int): RegionSample? {
         if (background == null || background.visibility != View.VISIBLE) return null
         if (background.width <= 0 || background.height <= 0) return null
         if (region.width <= 0 || region.height <= 0) return null
@@ -140,7 +167,7 @@ internal object RegionInk {
             background.draw(canvas)
             val pixels = IntArray(SAMPLE * SAMPLE)
             bitmap.getPixels(pixels, 0, SAMPLE, 0, 0, SAMPLE, SAMPLE)
-            UiContrast.averageRgb(pixels)
+            summarise(pixels)
         } catch (_: Exception) {
             null
         } catch (_: OutOfMemoryError) {
@@ -148,5 +175,19 @@ internal object RegionInk {
         } finally {
             bitmap?.recycle()
         }
+    }
+
+    /** Average colour plus the darkest and lightest patch, over the downscaled cells. */
+    internal fun summarise(pixels: IntArray): RegionSample {
+        var min = Double.MAX_VALUE
+        var max = -1.0
+        for (pixel in pixels) {
+            if ((pixel ushr 24 and 0xff) == 0) continue
+            val luminance = UiContrast.luminance(pixel and 0xffffff)
+            if (luminance < min) min = luminance
+            if (luminance > max) max = luminance
+        }
+        if (max < 0.0) return RegionSample(0, 0.0, 0.0)
+        return RegionSample(UiContrast.averageRgb(pixels), min, max)
     }
 }

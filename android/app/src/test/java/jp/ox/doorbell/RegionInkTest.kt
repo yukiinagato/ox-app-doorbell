@@ -129,17 +129,66 @@ class RegionInkTest {
         assertTrue(at(lightPatch) != at(darkPatch))
     }
 
+    @Test
+    fun aPictureArrivingAfterTheFirstLayoutFlipsTheInk() {
+        // The exact sequence on the device: the screen binds before the asset is fetched, so the
+        // first decision is made against the flat #101418 ground and picks light ink. When the
+        // bitmap lands the region is measured for real -- a light wallpaper -- and the ink must
+        // flip. A decision taken once at bind time is how light text ended up on a light picture.
+        val theme = CoreDisplays.parse(
+            org.json.JSONObject(
+                """{"theme":{"bg_color":"#101418","bg_image":"asset",
+                             "auto_background":{"color":"#101418","source":"color"},
+                             "auto_ink":{"footer":"light"}}}""",
+            ),
+        ).theme!!
+
+        // 1. First layout: configured but not painted yet.
+        assertEquals(
+            BackgroundKind.IMAGE_NOT_DRAWN,
+            CoreDisplays.backgroundKind(theme, imageDrawnLocally = false),
+        )
+        val beforeImage = CoreDisplays.inkFor(theme, "footer", 0x101418, null, false)
+        assertEquals(Palette.LIGHT_INK, beforeImage.inkRgb)
+
+        // 2. The bitmap is painted and the region is sampled: the Moto wallpaper average.
+        assertEquals(
+            BackgroundKind.IMAGE_DRAWN,
+            CoreDisplays.backgroundKind(theme, imageDrawnLocally = true),
+        )
+        val afterImage = CoreDisplays.inkFor(theme, "footer", 0x101418, 0xBBBBB4, true)
+        assertEquals(Palette.DARK_INK, afterImage.inkRgb)
+        assertTrue(beforeImage.inkRgb != afterImage.inkRgb)
+    }
+
+    @Test
+    fun everyVisitorRegionFlipsTogetherWhenThePictureLands() {
+        // All four regions the visitor screen draws straight onto the background.
+        for (region in listOf("clock", "date", "hint", "footer")) {
+            val before = CoreDisplays.inkFor(null, region, 0x101418, null, false)
+            val after = CoreDisplays.inkFor(null, region, 0x101418, 0xBBBBB4, true)
+            assertEquals("$region before", Palette.LIGHT_INK, before.inkRgb)
+            assertEquals("$region after", Palette.DARK_INK, after.inkRgb)
+        }
+    }
+
     // ---------- the shadow ----------
 
     @Test
-    fun theShadowIsAddedOnlyWhenTheChosenInkMissesTheTextRatio() {
-        // Mid grey defeats both ink tokens, so whichever is chosen needs the shadow.
-        val midGrey = ink(background = BackgroundKind.FLAT_COLOUR, fallback = 0x8A8A8A)
-        assertTrue(midGrey.needsShadow)
+    fun theShadowIsAddedOnlyWhenEvenTheBetterInkMissesTheTextRatio() {
+        // Only a narrow band around the crossover defeats both tokens; #787878 is its worst
+        // point, where the best either can manage is about 4.1:1.
+        val crossoverGrey = ink(background = BackgroundKind.FLAT_COLOUR, fallback = 0x787878)
+        assertTrue(crossoverGrey.needsShadow)
         // A properly dark background does not.
         val dark = ink(background = BackgroundKind.FLAT_COLOUR, fallback = 0x101418)
         assertFalse(dark.needsShadow)
         assertEquals(Palette.LIGHT_INK, dark.inkRgb)
+        // Nor does a mid grey that the better ink clears comfortably: under the old midpoint rule
+        // this one was given light ink at 3.2:1, and now takes dark ink at 5.3:1 with no shadow.
+        val midGrey = ink(background = BackgroundKind.FLAT_COLOUR, fallback = 0x8A8A8A)
+        assertEquals(Palette.DARK_INK, midGrey.inkRgb)
+        assertFalse(midGrey.needsShadow)
     }
 
     @Test
@@ -166,6 +215,55 @@ class RegionInkTest {
         )
         assertEquals(0x9A9A9A, result.inkRgb)
         assertTrue(result.needsShadow)
+    }
+
+    @Test
+    fun aRegionCrossingLightAndDarkGetsTheShadowEvenThoughItsAverageIsFine() {
+        // The visitor hint crosses a pale wall and a dark jacket. The average clears 4.5:1 with
+        // dark ink, but over the jacket that same ink is unreadable, so the shadow is required.
+        val busy = RegionSample(averageRgb = 0xC8CCD0, minLuminance = 0.01, maxLuminance = 0.85)
+        val result = RegionInkPolicy.resolve(
+            override = null, coreInkLight = null, background = BackgroundKind.IMAGE_DRAWN,
+            sampledBackgroundRgb = busy.averageRgb, fallbackBackgroundRgb = 0x101418,
+            sample = busy,
+        )
+        assertEquals(Palette.DARK_INK, result.inkRgb)
+        assertTrue(UiContrast.contrast(result.inkRgb, busy.averageRgb) > 4.5)
+        assertTrue("a busy region needs the shadow", result.needsShadow)
+    }
+
+    @Test
+    fun anEvenRegionKeepsNoShadow() {
+        val flat = RegionSample(averageRgb = 0xE9EDF0, minLuminance = 0.80, maxLuminance = 0.86)
+        val result = RegionInkPolicy.resolve(
+            null, null, BackgroundKind.IMAGE_DRAWN, flat.averageRgb, 0x101418, flat,
+        )
+        assertEquals(Palette.DARK_INK, result.inkRgb)
+        assertFalse(result.needsShadow)
+    }
+
+    @Test
+    fun theWorstPatchIsMeasuredAgainstWhicheverSideTheInkSitsOn() {
+        val spread = RegionSample(0x808080, minLuminance = 0.0, maxLuminance = 1.0)
+        // Light ink is defeated by the light end, dark ink by the dark end; both are below AA.
+        assertTrue(spread.worstContrast(Palette.LIGHT_INK) < UiContrast.TEXT_AA)
+        assertTrue(spread.worstContrast(Palette.DARK_INK) < UiContrast.TEXT_AA)
+        // A region that is uniformly dark gives light ink its full ratio.
+        val dark = RegionSample(0x101418, minLuminance = 0.01, maxLuminance = 0.02)
+        assertTrue(dark.worstContrast(Palette.LIGHT_INK) > 10.0)
+    }
+
+    @Test
+    fun summarisingKeepsBothTheAverageAndTheExtremes() {
+        val pixels = IntArray(RegionInk.SAMPLE * RegionInk.SAMPLE) { index ->
+            if (index % 2 == 0) 0xFFFFFFFF.toInt() else 0xFF000000.toInt()
+        }
+        val sample = RegionInk.summarise(pixels)
+        assertEquals(0x7F7F7F, sample.averageRgb)
+        assertEquals(0.0, sample.minLuminance, 1e-9)
+        assertEquals(1.0, sample.maxLuminance, 1e-9)
+        // Whichever ink is chosen for the average, half the region defeats it.
+        assertTrue(sample.worstContrast(Palette.DARK_INK) < UiContrast.TEXT_AA)
     }
 
     // ---------- sampling maths ----------
