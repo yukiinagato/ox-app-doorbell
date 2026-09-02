@@ -445,12 +445,8 @@ typedef enum {
                              backgroundHex:background minuteOfDay:[self minuteOfDay]];
   UIColor *surface = _palette.surface;
   if (_cameraPreviewView.hidden) self.backgroundColor = surface;
-  _clockLabel.textColor = [_palette inkForRegion:DBUiRegionClock];
-  _dateLabel.textColor = [_palette inkForRegion:DBUiRegionDate];
-  _touchHint.textColor = [_palette inkForRegion:DBUiRegionHint];
-  _noticeLabel.textColor = [_palette inkForRegion:DBUiRegionStatusLine];
-  _versionLabel.textColor = [_palette inkForRegion:DBUiRegionStatusLine];
-  _titleLabel.textColor = [_palette inkForRegion:DBUiRegionTileLabel];
+  // The per-region colours land after layout, when each frame is known.
+  [self applyRegionInk];
   [_sos applyPalette:_palette];
   [_sos applyConfig:_cfg texts:_texts];
 
@@ -490,6 +486,20 @@ typedef enum {
                                                                       path:@"battery_pct" def:-1]
                                             charging:[DBConfigUtil boolVal:power
                                                                       path:@"charging" def:NO]];
+}
+
+// Each text region takes the ink measured behind its own frame. The visitor
+// screen paints a flat background today, so this resolves to core's per-region
+// decision plus any administrator override; it is the same code path the
+// dashboard uses over a theme image.
+- (void)applyRegionInk {
+  if (_palette == nil) return;
+  [_palette applyInkToLabel:_clockLabel region:DBUiRegionClock];
+  [_palette applyInkToLabel:_dateLabel region:DBUiRegionDate];
+  [_palette applyInkToLabel:_touchHint region:DBUiRegionHint];
+  [_palette applyInkToLabel:_noticeLabel region:DBUiRegionStatusLine];
+  [_palette applyInkToLabel:_versionLabel region:DBUiRegionStatusLine];
+  [_palette applyInkToLabel:_titleLabel region:DBUiRegionTileLabel];
 }
 
 - (void)sosSliderDidArm:(DBSosSlider *)slider { (void)slider; }
@@ -1471,20 +1481,23 @@ typedef enum {
   _dateLabel.frame = CGRectMake(margin, y, size.width - 2 * margin, compact ? 22 : 28);
   y += compact ? 26 : 34;
 
-  CGFloat footerHeight = compact ? 44 : 54;
+  // The version/battery line owns the last row; the slider sits strictly above
+  // it with a real gap, so the two can never collide in either orientation.
+  CGFloat versionHeight = 18;
+  CGFloat footerGap = 10;
   CGFloat sosHeight = _sos.hidden ? 0 : (compact ? 52 : 60);
-  CGFloat bottom = size.height - margin - footerHeight - (sosHeight > 0 ? sosHeight + 10 : 0);
-
-  _versionLabel.frame = CGRectMake(margin, size.height - margin - 18,
-                                   size.width - 2 * margin, 18);
+  CGFloat versionTop = size.height - margin - versionHeight;
+  _versionLabel.frame = CGRectMake(margin, versionTop, size.width - 2 * margin,
+                                   versionHeight);
+  CGFloat sosTop = versionTop;
   if (sosHeight > 0) {
     CGFloat sosWidth = MIN(360, size.width - 2 * margin);
-    _sos.frame = CGRectMake((size.width - sosWidth) / 2,
-                            size.height - margin - footerHeight - sosHeight + 8,
-                            sosWidth, sosHeight);
+    sosTop = versionTop - footerGap - sosHeight;
+    _sos.frame = CGRectMake((size.width - sosWidth) / 2, sosTop, sosWidth, sosHeight);
   } else {
     _sos.frame = CGRectZero;
   }
+  CGFloat bottom = sosTop - footerGap;
 
   CGFloat bannerHeight = 0;
   if (_pairBanner.hidden) {
@@ -1588,6 +1601,8 @@ typedef enum {
     UIButton *button = [_languageButtons objectAtIndex:(NSUInteger)i];
     button.frame = CGRectMake(i * (languageW + languageGap), 0, languageW, langHeight);
   }
+
+  [self applyRegionInk];
 
   _replyBanner.frame = CGRectMake(margin, top + (compact ? 52 : 70), size.width - 2 * margin,
                                   compact ? 88 : 110);

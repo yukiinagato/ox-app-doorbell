@@ -80,6 +80,41 @@ FOUNDATION_EXPORT NSString *const DBUiRegionTileLabel;
 // A 1 px shadow of the opposite ink is only added below the AA text threshold.
 + (BOOL)needsInkShadowForInk:(NSString *)inkHex background:(NSString *)backgroundHex;
 
+// ---- per-region sampling of a theme image ----
+// Core averages the whole image because it has no layout geometry, so a caption
+// over a light corner of a mostly dark picture comes back white and unreadable.
+// The shell refines each region by sampling only the pixels behind it.
+//
+// Where an aspect-fill image lands in the view, in view coordinates. The result
+// may overflow the view on one axis, which is what aspect fill means.
+// Returns @[x, y, width, height].
++ (NSArray *)aspectFillDrawRectForImageWidth:(double)imageWidth
+                                 imageHeight:(double)imageHeight
+                                   viewWidth:(double)viewWidth
+                                  viewHeight:(double)viewHeight;
+// One text region's frame mapped onto the low-resolution proxy, clamped to the
+// proxy and never empty, so a region partly off-screen still yields a sample.
+// Returns @[x, y, width, height] in whole proxy pixels.
++ (NSArray *)samplePixelRectForViewX:(double)x
+                                   y:(double)y
+                               width:(double)width
+                              height:(double)height
+                           viewWidth:(double)viewWidth
+                          viewHeight:(double)viewHeight
+                          proxyWidth:(NSInteger)proxyWidth
+                         proxyHeight:(NSInteger)proxyHeight;
+// The ink token for one sampled region: dark ink at or above 0.5, else light.
++ (NSString *)inkHexForSampledLuminance:(double)luminance;
+// An administrator's explicit colour for one region, device before cluster,
+// or nil. It outranks both core's decision and any local sampling.
++ (NSString *)adminInkOverrideHexForRegion:(NSString *)region
+                                    config:(NSDictionary *)config
+                                  deviceId:(NSString *)deviceId
+                                   display:(NSDictionary *)display;
+// Longest edge of the per-region sample proxy (16, per the spec's <= 16x16).
++ (NSInteger)maximumSampleEdge;
++ (double)inkShadowAlpha;
+
 // ---- computed call-button colour (§5.2) ----
 // Rotates the background hue by 180 degrees and moves lightness until the
 // button reads against the background and its own text reads against it.
@@ -120,6 +155,18 @@ FOUNDATION_EXPORT NSString *const DBUiRegionTileLabel;
                             contentHeight:(double)contentHeight
                            availableWidth:(double)availableWidth
                           availableHeight:(double)availableHeight;
+
+// ---- footer band ----
+// The admin QR, the version/battery line and the SOS slider share the bottom
+// of the indoor dashboard. On a real device the version line ran underneath
+// the slider in portrait, so the split is computed here, in one place, and
+// host-tested to never overlap in either orientation.
+// Returns {"sos": @[x,y,w,h], "qr": …, "version": …, "height": <band height>};
+// an entry is a zero rect when that element is not shown.
++ (NSDictionary *)footerLayoutForViewWidth:(double)viewWidth
+                                viewHeight:(double)viewHeight
+                                  portrait:(BOOL)portrait
+                                sosVisible:(BOOL)sosVisible;
 
 // Version + battery footer line, shared by every screen (§5.1, §0.6).
 + (NSString *)versionLineForName:(NSString *)name

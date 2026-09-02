@@ -16,6 +16,25 @@ UIColor *DBColorFromHex(NSString *hex, UIColor *fallback);
 CGRect DBAspectFitRect(CGRect available, CGSize contentSize);
 NSString *DBHexFromColor(UIColor *color);
 
+// A low-resolution copy of the theme background exactly as it is drawn on
+// screen, so each text region can be measured against the pixels actually
+// behind it. Core averages the whole image because it has no layout geometry;
+// this is the refinement its contract invites.
+@interface DBBackgroundSampler : NSObject
+
+// Renders the image with the same aspect-fill mapping the theme view uses.
+// Call it off the main thread: it decodes and scales. Returns nil when there
+// is no usable image.
++ (DBBackgroundSampler *)samplerWithImage:(UIImage *)image viewSize:(CGSize)viewSize;
+
+@property(nonatomic, readonly) CGSize viewSize;
+// Mean colour of one region, sampled at no more than 16x16 points; nil for an
+// empty rect. averageHex is the same measurement over the whole view.
+- (NSString *)averageHexInViewRect:(CGRect)rect;
+- (NSString *)averageHex;
+
+@end
+
 // One appearance's colour tokens plus the per-region automatic ink rule.
 @interface DBUiPalette : NSObject
 
@@ -44,8 +63,18 @@ NSString *DBHexFromColor(UIColor *color);
                     backgroundHex:(NSString *)backgroundHex
                       minuteOfDay:(NSInteger)minuteOfDay;
 
+// Region ink without layout knowledge: the whole-background answer.
 - (UIColor *)inkForRegion:(NSString *)region;
 - (BOOL)needsShadowForRegion:(NSString *)region;
+
+// Region ink refined by what is actually behind the text. An administrator's
+// override still wins, and core's per-region value is used when the background
+// is a flat colour, where core's answer is exact.
+- (void)setBackgroundSampler:(DBBackgroundSampler *)sampler;
+- (UIColor *)inkForRegion:(NSString *)region frame:(CGRect)frame;
+- (BOOL)needsShadowForRegion:(NSString *)region frame:(CGRect)frame;
+// Applies both to one label in a single call, which is what every screen wants.
+- (void)applyInkToLabel:(UILabel *)label region:(NSString *)region;
 // Average colour of a theme image, downsampled to 16x16 off the main thread.
 + (NSString *)averageHexForImage:(UIImage *)image;
 

@@ -16,6 +16,14 @@
 #import "DBWidgets.h"
 #import <AudioToolbox/AudioToolbox.h>
 
+static CGRect DBRectFromArray(NSArray *rect) {
+  if ([rect count] != 4) return CGRectZero;
+  return CGRectMake((CGFloat)[[rect objectAtIndex:0] doubleValue],
+                    (CGFloat)[[rect objectAtIndex:1] doubleValue],
+                    (CGFloat)[[rect objectAtIndex:2] doubleValue],
+                    (CGFloat)[[rect objectAtIndex:3] doubleValue]);
+}
+
 static const NSTimeInterval kSnapshotIntervalS = 5.0;
 static const NSInteger kRecentCallLimit = 20;
 
@@ -97,7 +105,11 @@ static const NSInteger kRecentCallLimit = 20;
   NSDictionary *_display;   // status.display: core-resolved appearance and theme.
   NSString *_nodeId;
   NSString *_themeHash;
-  NSString *_themeAverageHex;   // Sampled average behind the text regions.
+  NSString *_themeAverageHex;   // Whole-image average, the fallback background.
+  UIImage *_themeImage;
+  DBBackgroundSampler *_sampler;   // Per-region sampling of the theme image.
+  CGSize _samplerSize;
+  BOOL _samplerBuilding;
   NSArray *_doorPeers;
   NSArray *_recentRows;
   NSInteger _unreadMissed;
@@ -554,15 +566,10 @@ static const NSInteger kRecentCallLimit = 20;
                              backgroundHex:background minuteOfDay:[self minuteOfDay]];
   if (_themeBg.hidden) self.backgroundColor = _palette.surface;
 
-  _clockLabel.textColor = [_palette inkForRegion:DBUiRegionClock];
-  _dateLabel.textColor = [_palette inkForRegion:DBUiRegionDate];
-  _doorsCaption.textColor = [_palette inkForRegion:DBUiRegionStatusLine];
-  _recentCaption.textColor = [_palette inkForRegion:DBUiRegionStatusLine];
-  _recentEmpty.textColor = _palette.mutedInk;
-  _versionLabel.textColor = [_palette inkForRegion:DBUiRegionStatusLine];
-  [self applyShadow:_clockLabel region:DBUiRegionClock];
-  [self applyShadow:_dateLabel region:DBUiRegionDate];
-  [self applyShadow:_versionLabel region:DBUiRegionStatusLine];
+  // The per-region colours are applied after layout, when each label's frame is
+  // known; this only refreshes what does not depend on geometry.
+  [_palette setBackgroundSampler:_sampler];
+  [self applyRegionInk];
 
   _membershipPill.backgroundColor = _palette.elevated;
   _membershipPill.textColor = _palette.ink;
@@ -581,26 +588,14 @@ static const NSInteger kRecentCallLimit = 20;
   _offlineBody.textColor = _palette.mutedInk;
 }
 
-// A 1 px shadow of the opposite ink is added only below the AA threshold, so a
-// legible region stays perfectly flat (SGX535 has no budget for decoration).
-- (void)applyShadow:(UILabel *)label region:(NSString *)region {
-  if ([_palette needsShadowForRegion:region]) {
-    label.shadowColor = [[_palette.mode isEqualToString:@"light"] ? [UIColor whiteColor]
-                                                                 : [UIColor blackColor]
-        colorWithAlphaComponent:0.4];
-    label.shadowOffset = CGSizeMake(0, 1);
-  } else {
-    label.shadowColor = nil;
-    label.shadowOffset = CGSizeZero;
-  }
-}
-
 - (void)applyTheme {
   if (_safeMode) {
     _themeHash = nil;
     _themeAverageHex = nil;
+    _themeImage = nil;
     _themeBg.image = nil;
     _themeBg.hidden = YES;
+    [self refreshBackgroundSampler];
     self.backgroundColor = _palette.surface;
     return;
   }
@@ -610,8 +605,10 @@ static const NSInteger kRecentCallLimit = 20;
   if ([hash length] == 0) {
     _themeHash = nil;
     _themeAverageHex = nil;
+    _themeImage = nil;
     _themeBg.image = nil;
     _themeBg.hidden = YES;
+    [self refreshBackgroundSampler];
     self.backgroundColor = parsed ?: _palette.surface;
     return;
   }
@@ -640,6 +637,9 @@ static const NSInteger kRecentCallLimit = 20;
       screen->_themeBg.image = image;
       screen->_themeBg.hidden = (image == nil);
       screen->_themeAverageHex = average;
+      screen->_themeImage = image;
+      screen->_samplerSize = CGSizeZero;
+      [screen refreshBackgroundSampler];
       [screen applyPalette];
       [screen rebuildDoorTiles];
       [screen rebuildRecentCalls];
@@ -973,6 +973,59 @@ static const NSInteger kRecentCallLimit = 20;
   _replyBanner.hidden = YES;
 }
 
+// The proxy is rebuilt only when the image or the view size actually changes,
+// and always off the main thread: it decodes and scales the theme picture.
+- (void)refreshBackgroundSampler {
+  CGSize size = self.bounds.size;
+  if (_themeImage == nil || _safeMode || size.width <= 0 || size.height <= 0) {
+    _sampler = nil;
+    _samplerSize = CGSizeZero;
+    [_palette setBackgroundSampler:nil];
+    return;
+  }
+  if (_samplerBuilding) return;
+  if (CGSizeEqualToSize(_samplerSize, size) && _sampler != nil) return;
+  _samplerBuilding = YES;
+  UIImage *image = _themeImage;
+  __weak DBHomeScreen *weakSelf = self;
+  dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_LOW, 0), ^{
+    DBBackgroundSampler *sampler = [DBBackgroundSampler samplerWithImage:image viewSize:size];
+    dispatch_async(dispatch_get_main_queue(), ^{
+      DBHomeScreen *screen = weakSelf;
+      if (!screen) return;
+      screen->_samplerBuilding = NO;
+      if (screen->_themeImage != image) return;
+      screen->_sampler = sampler;
+      screen->_samplerSize = size;
+      [screen->_palette setBackgroundSampler:sampler];
+      [screen applyRegionInk];
+    });
+  });
+}
+
+// Every text region takes the ink measured behind its own frame, so a caption
+// over a light corner of a dark picture is dark, not white. Called after
+// layout, when the frames are final; changing a text colour does not itself
+// invalidate layout, so this cannot loop.
+- (void)applyRegionInk {
+  if (_palette == nil) return;
+  [_palette setBackgroundSampler:_sampler];
+  [_palette applyInkToLabel:_clockLabel region:DBUiRegionClock];
+  [_palette applyInkToLabel:_dateLabel region:DBUiRegionDate];
+  [_palette applyInkToLabel:_doorsCaption region:DBUiRegionStatusLine];
+  [_palette applyInkToLabel:_recentCaption region:DBUiRegionStatusLine];
+  [_palette applyInkToLabel:_recentEmpty region:DBUiRegionHint];
+  [_palette applyInkToLabel:_versionLabel region:DBUiRegionStatusLine];
+  for (DBDoorTile *tile in _doorTiles) {
+    // A tile caption sits on its own translucent pill over live video, so it
+    // is measured against the tile, not the wallpaper behind it.
+    [_palette applyInkToLabel:tile.caption region:DBUiRegionTileLabel];
+    tile.caption.backgroundColor = [UIColor colorWithWhite:0 alpha:0.55];
+    tile.caption.textColor = [UIColor whiteColor];
+    tile.caption.shadowColor = nil;
+  }
+}
+
 - (void)applyDisplayEvent:(NSDictionary *)display {
   // The event carries the same contract as status.display, including the
   // resolved appearance and the automatic theme decision.
@@ -1034,6 +1087,9 @@ static const NSInteger kRecentCallLimit = 20;
   _safeMode = YES;
   _themeHash = nil;
   _themeAverageHex = nil;
+  _themeImage = nil;
+  _sampler = nil;
+  _samplerSize = CGSizeZero;
   _themeBg.image = nil;
   _themeBg.hidden = YES;
   for (DBDoorTile *tile in _doorTiles) tile.still.image = nil;
@@ -1102,7 +1158,13 @@ static const NSInteger kRecentCallLimit = 20;
   }
 
   CGFloat contentTop = 132 + bannerHeight;
-  CGFloat footerHeight = 108;
+  // The QR, the version line and the SOS slider are placed by one shared,
+  // host-tested split so they can never overlap in either orientation.
+  NSDictionary *footer = [DBUiTheme footerLayoutForViewWidth:size.width
+                                                  viewHeight:size.height
+                                                    portrait:portrait
+                                                  sosVisible:!_sos.hidden];
+  CGFloat footerHeight = (CGFloat)[[footer objectForKey:@"height"] doubleValue];
   CGFloat contentHeight = MAX(120, size.height - contentTop - footerHeight);
 
   CGFloat tilesWidth, tilesHeight, listX, listY, listWidth, listHeight;
@@ -1151,12 +1213,9 @@ static const NSInteger kRecentCallLimit = 20;
   _recentEmpty.frame = CGRectMake(listX, listY + 8, listWidth, 26);
 
   // Footer: admin QR (always), version + battery, SOS slider.
-  CGFloat footerY = size.height - footerHeight + 8;
-  CGFloat qrWidth = MIN(320, size.width * 0.34);
-  _qr.frame = CGRectMake(pad, footerY, qrWidth, 76);
-  _versionLabel.frame = CGRectMake(pad, size.height - 22, size.width - 2 * pad - 320, 18);
-  CGFloat sosWidth = MIN(320, size.width * 0.32);
-  _sos.frame = CGRectMake(size.width - pad - sosWidth, footerY + 8, sosWidth, 62);
+  _qr.frame = DBRectFromArray([footer objectForKey:@"qr"]);
+  _versionLabel.frame = DBRectFromArray([footer objectForKey:@"version"]);
+  _sos.frame = DBRectFromArray([footer objectForKey:@"sos"]);
 
   CGFloat replyWidth = MIN(size.width - 40, 560);
   _replyBanner.frame = CGRectMake((size.width - replyWidth) / 2, 20, replyWidth, 96);
@@ -1168,6 +1227,9 @@ static const NSInteger kRecentCallLimit = 20;
   _emergencyTitle.frame = CGRectMake(0, size.height / 2 - 120, size.width, 80);
   _emergencyNote.frame = CGRectMake(20, size.height / 2 - 20, size.width - 40, 40);
   _emergencyCancel.frame = CGRectMake(size.width / 2 - 110, size.height / 2 + 50, 220, 64);
+
+  [self refreshBackgroundSampler];
+  [self applyRegionInk];
 }
 
 @end

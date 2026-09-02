@@ -334,6 +334,96 @@ static DBRgb DBHslToRgb(double h, double s, double l) {
   return ratio < 4.5;
 }
 
+#pragma mark - per-region sampling
+
++ (NSInteger)maximumSampleEdge { return 16; }
++ (double)inkShadowAlpha { return 0.4; }
+
++ (NSArray *)aspectFillDrawRectForImageWidth:(double)imageWidth
+                                 imageHeight:(double)imageHeight
+                                   viewWidth:(double)viewWidth
+                                  viewHeight:(double)viewHeight {
+  if (viewWidth <= 0 || viewHeight <= 0)
+    return [NSArray arrayWithObjects:@0, @0, @0, @0, nil];
+  if (imageWidth <= 0 || imageHeight <= 0) {
+    // No image: the whole view is the region, which is what a flat colour is.
+    return [NSArray arrayWithObjects:@0, @0,
+        [NSNumber numberWithDouble:viewWidth],
+        [NSNumber numberWithDouble:viewHeight], nil];
+  }
+  double scale = MAX(viewWidth / imageWidth, viewHeight / imageHeight);
+  double width = imageWidth * scale;
+  double height = imageHeight * scale;
+  return [NSArray arrayWithObjects:
+      [NSNumber numberWithDouble:(viewWidth - width) / 2.0],
+      [NSNumber numberWithDouble:(viewHeight - height) / 2.0],
+      [NSNumber numberWithDouble:width],
+      [NSNumber numberWithDouble:height], nil];
+}
+
++ (NSArray *)samplePixelRectForViewX:(double)x
+                                   y:(double)y
+                               width:(double)width
+                              height:(double)height
+                           viewWidth:(double)viewWidth
+                          viewHeight:(double)viewHeight
+                          proxyWidth:(NSInteger)proxyWidth
+                         proxyHeight:(NSInteger)proxyHeight {
+  if (viewWidth <= 0 || viewHeight <= 0 || proxyWidth <= 0 || proxyHeight <= 0)
+    return [NSArray arrayWithObjects:@0, @0, @0, @0, nil];
+  double scaleX = (double)proxyWidth / viewWidth;
+  double scaleY = (double)proxyHeight / viewHeight;
+  double left = floor(x * scaleX);
+  double top = floor(y * scaleY);
+  double right = ceil((x + width) * scaleX);
+  double bottom = ceil((y + height) * scaleY);
+  if (left < 0) left = 0;
+  if (top < 0) top = 0;
+  if (right > proxyWidth) right = proxyWidth;
+  if (bottom > proxyHeight) bottom = proxyHeight;
+  // A region entirely off the proxy, or one that rounds to nothing, still has
+  // to produce a readable ink, so it samples one pixel rather than none.
+  if (right <= left) {
+    left = MIN(MAX(0, left), proxyWidth - 1);
+    right = left + 1;
+  }
+  if (bottom <= top) {
+    top = MIN(MAX(0, top), proxyHeight - 1);
+    bottom = top + 1;
+  }
+  return [NSArray arrayWithObjects:
+      [NSNumber numberWithInteger:(NSInteger)left],
+      [NSNumber numberWithInteger:(NSInteger)top],
+      [NSNumber numberWithInteger:(NSInteger)(right - left)],
+      [NSNumber numberWithInteger:(NSInteger)(bottom - top)], nil];
+}
+
++ (NSString *)inkHexForSampledLuminance:(double)luminance {
+  return [[self inkModeForLuminance:luminance] isEqualToString:@"dark"] ? kLightInk : kDarkInk;
+}
+
++ (NSString *)adminInkOverrideHexForRegion:(NSString *)region
+                                    config:(NSDictionary *)config
+                                  deviceId:(NSString *)deviceId
+                                   display:(NSDictionary *)display {
+  if ([region length] == 0) region = DBUiRegionStatusLine;
+  DBRgb probe;
+  if ([deviceId length] > 0) {
+    NSString *device = DBThemeString(config, [NSString stringWithFormat:
+        @"devices.%@.local.theme.ink_override.%@", deviceId, region]);
+    if (device && [self parseHex:device into:&probe]) return device;
+  }
+  // Core republishes the cluster override under display.theme; the raw config
+  // key is the fallback for a core that does not.
+  NSString *published = DBThemeString(display, [NSString stringWithFormat:
+      @"theme.ink_override.%@", region]);
+  if (published && [self parseHex:published into:&probe]) return published;
+  NSString *cluster = DBThemeString(config, [NSString stringWithFormat:
+      @"display.theme.ink_override.%@", region]);
+  if (cluster && [self parseHex:cluster into:&probe]) return cluster;
+  return nil;
+}
+
 #pragma mark - computed accent
 
 + (NSString *)autoAccentForBackgroundHex:(NSString *)backgroundHex {
@@ -428,6 +518,71 @@ static DBRgb DBHslToRgb(double h, double s, double l) {
       [NSNumber numberWithDouble:(availableHeight - height) / 2.0],
       [NSNumber numberWithDouble:width],
       [NSNumber numberWithDouble:height], nil];
+}
+
+static NSArray *DBRectArray(double x, double y, double width, double height) {
+  return [NSArray arrayWithObjects:
+      [NSNumber numberWithDouble:x], [NSNumber numberWithDouble:y],
+      [NSNumber numberWithDouble:MAX(0, width)],
+      [NSNumber numberWithDouble:MAX(0, height)], nil];
+}
+
++ (NSDictionary *)footerLayoutForViewWidth:(double)viewWidth
+                                viewHeight:(double)viewHeight
+                                  portrait:(BOOL)portrait
+                                sosVisible:(BOOL)sosVisible {
+  const double pad = 20;
+  const double gap = 12;
+  const double qrHeight = 76;
+  const double versionHeight = 18;
+  const double sosHeight = 62;
+  if (viewWidth <= 0 || viewHeight <= 0) {
+    return [NSDictionary dictionaryWithObjectsAndKeys:
+        DBRectArray(0, 0, 0, 0), @"sos", DBRectArray(0, 0, 0, 0), @"qr",
+        DBRectArray(0, 0, 0, 0), @"version", [NSNumber numberWithDouble:0], @"height", nil];
+  }
+
+  double bottom = viewHeight - pad;
+  NSArray *sos, *qr, *version;
+  double bandHeight;
+  if (portrait) {
+    // Portrait puts the slider on its own row above the QR block: at this
+    // width there is no room to place them side by side without the version
+    // line running under the slider, which is exactly the reported defect.
+    double qrTop = bottom - qrHeight;
+    double qrWidth = MIN(300, viewWidth - 2 * pad);
+    qr = DBRectArray(pad, qrTop, qrWidth, qrHeight);
+    // The version line sits beside the QR, inside the same row.
+    double versionX = pad + qrWidth + gap;
+    version = DBRectArray(versionX, bottom - versionHeight,
+                          viewWidth - versionX - pad, versionHeight);
+    if (sosVisible) {
+      double sosTop = qrTop - gap - sosHeight;
+      sos = DBRectArray(pad, sosTop, viewWidth - 2 * pad, sosHeight);
+      bandHeight = viewHeight - sosTop + gap;
+    } else {
+      sos = DBRectArray(0, 0, 0, 0);
+      bandHeight = viewHeight - qrTop + gap;
+    }
+  } else {
+    // Landscape keeps them on one row, with the QR and the version line hard
+    // limited by where the slider starts.
+    double sosWidth = sosVisible ? MIN(320, viewWidth * 0.32) : 0;
+    double sosX = viewWidth - pad - sosWidth;
+    double rightLimit = sosVisible ? sosX - gap : viewWidth - pad;
+    double qrTop = bottom - qrHeight;
+    double qrWidth = MIN(300, MAX(0, rightLimit - pad));
+    qr = DBRectArray(pad, qrTop, qrWidth, qrHeight);
+    double versionX = pad + qrWidth + gap;
+    version = DBRectArray(versionX, bottom - versionHeight,
+                          MAX(0, rightLimit - versionX), versionHeight);
+    sos = sosVisible ? DBRectArray(sosX, bottom - sosHeight, sosWidth, sosHeight)
+                     : DBRectArray(0, 0, 0, 0);
+    bandHeight = viewHeight - qrTop + gap;
+  }
+  return [NSDictionary dictionaryWithObjectsAndKeys:
+      sos, @"sos", qr, @"qr", version, @"version",
+      [NSNumber numberWithDouble:bandHeight], @"height", nil];
 }
 
 + (NSString *)versionLineForName:(NSString *)name
