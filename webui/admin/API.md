@@ -201,3 +201,26 @@ dispatch, shell unavailable, Push accepted/failed, no recipients, or backend una
 not prove OS/browser presentation. Native clients separately publish per-channel presentation,
 permission, TTL-expiry, and limitation results under runtime `device_alert`; Admin must show the two
 evidence levels distinctly.
+
+## Call history and the missed-call rule
+
+`GET /api/call-log?since_ms&before_ms&limit&door&outcome` and `POST /api/call-log/seen` accept an
+authenticated Admin session as well as a panel session; the panel contract in
+`webui/panel/API.md` documents the row shape. `outcome` is derived, never stored, and concurrency
+losers, fenced calls, and live calls are excluded. The seen watermark behind `unread_missed` is
+device-local and is not replicated, so each node reports its own badge.
+
+`GET /api/events` additionally accepts `since_ms` (inclusive lower bound on `wall_ms`), `type`, and
+`door`, and every row carries `origin`, `seq`, and `hlc` for replication identity. The response
+carries `server_ts` for use as the next cursor.
+
+`call_missed` is a rule trigger with no event of its own: a `call_cancelled` event whose reason is
+`timeout` or `recovery_*` matches both `call_cancelled` and `call_missed`. The seeded
+`r_missed_call_default` rule is an ordinary `trigger_rules` entry — editable, disableable, and
+deletable in the rules tab — that raises a `device_alert` on `indoor_panel` roles and Web Push and
+deliberately excludes door stations. Deleting it is permanent; a local meta marker stops the
+migration from recreating it on restart.
+
+`events.retention_days` (1..3650, default 90) is the age floor of the local event-retention sweep,
+which always also keeps the newest 5,000 records per origin. Deletion additionally requires a
+durable replication coverage vector; until one exists, retention is a no-op.

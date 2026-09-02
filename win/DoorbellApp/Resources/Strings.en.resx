@@ -68,6 +68,7 @@ Delete it?</value></data>
   <data name="admin_call_flow_mixed_warning" xml:space="preserve"><value>ring_then_purpose is not supported by every reported peer. Older or unmeasured clients remain on purpose_first behavior.</value></data>
   <data name="admin_call_flow_purpose_first" xml:space="preserve"><value>purpose_first asks for a purpose before emitting a call; ring_then_purpose rings first and permits a later purpose revision.</value></data>
   <data name="admin_call_flow_supported" xml:space="preserve"><value>Every currently reported peer declares call_flow_v2.</value></data>
+  <data name="admin_call_log" xml:space="preserve"><value>Call log</value></data>
   <data name="admin_call_sound_loop" xml:space="preserve"><value>Loop the call sound</value></data>
   <data name="admin_cam_codec" xml:space="preserve"><value>Video codec</value></data>
   <data name="admin_cam_fps" xml:space="preserve"><value>Frame rate (fps)</value></data>
@@ -364,6 +365,19 @@ Delete it?</value></data>
   <data name="event_offline" xml:space="preserve"><value>⚠ {0} offline (last seen {1})</value></data>
   <data name="event_online" xml:space="preserve"><value>{0} back online</value></data>
   <data name="event_press" xml:space="preserve"><value>Visitor at {0} ({1})</value></data>
+  <data name="history_answered_by" xml:space="preserve"><value>Answered by {0}</value></data>
+  <data name="history_duration" xml:space="preserve"><value>{0}</value></data>
+  <data name="history_empty" xml:space="preserve"><value>No calls yet</value></data>
+  <data name="history_mark_seen" xml:space="preserve"><value>Mark all as seen</value></data>
+  <data name="history_missed_badge" xml:space="preserve"><value>{0} missed</value></data>
+  <data name="history_outcome_answered" xml:space="preserve"><value>Answered</value></data>
+  <data name="history_outcome_cancelled" xml:space="preserve"><value>Cancelled</value></data>
+  <data name="history_outcome_missed" xml:space="preserve"><value>Missed</value></data>
+  <data name="history_outcome_replied" xml:space="preserve"><value>Replied</value></data>
+  <data name="history_title" xml:space="preserve"><value>Call history</value></data>
+  <data name="history_today" xml:space="preserve"><value>Today</value></data>
+  <data name="history_unread_banner" xml:space="preserve"><value>{0} missed calls</value></data>
+  <data name="history_yesterday" xml:space="preserve"><value>Yesterday</value></data>
   <data name="idle_call_button" xml:space="preserve"><value>Call {0}</value></data>
   <data name="idle_choose_purpose" xml:space="preserve"><value>Please choose your purpose</value></data>
   <data name="idle_language" xml:space="preserve"><value>Language</value></data>

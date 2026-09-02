@@ -193,6 +193,14 @@ class Node {
   std::string debugJson();
   std::string configJson();
 
+  // Call history for the local device. since_ms is an inclusive lower bound on the row timestamp
+  // and zero means "from the beginning"; limit is clamped to a bounded page. The result is
+  // {"rows":[...],"unread_missed":N,"seen_hlc":"...","server_ts":...}.
+  std::string callLogJson(int64_t since_ms, int limit);
+  // Move the device-local seen watermark. An empty HLC marks every known call as seen. The
+  // watermark never moves backwards and a call_log_changed event follows a successful write.
+  bool markCallLogSeen(const std::string& up_to_hlc);
+
 
   std::string pairingJson();
   bool foundCluster();

@@ -115,6 +115,11 @@ int64_t floorDiv(int64_t a, int64_t b) {
 
 
 constexpr size_t kAssetMaxBytes = 3 * 1024 * 1024;
+// Event retention: the newest records of every origin always survive, whatever the age cutoff is.
+constexpr size_t kEventRetentionPerOrigin = 5000;
+// Call history defaults. A page is bounded so one HTTP call cannot serialize the whole database.
+constexpr size_t kCallLogDefaultLimit = 50;
+constexpr size_t kCallLogMaxLimit = 500;
 constexpr int64_t kAssetGcGraceMs = 10 * 60 * 1000;
 constexpr const char* kAssetTypes[] = {"image/jpeg", "image/png", "audio/mpeg", "audio/wav"};
 
@@ -986,8 +991,30 @@ bool webPushSealedRecordValid(const std::string& key, const cJSON* value,
   return true;
 }
 
+// events.retention_days is the age floor for the local event-retention sweep. One day keeps a
+// short-lived diagnostic window; ten years effectively disables age-based pruning.
+bool eventRetentionValid(const std::string& key, const cJSON* value, std::string* error) {
+  const cJSON* days = nullptr;
+  if (key == "events.retention_days") {
+    days = value;
+  } else if (key == "events") {
+    if (!objectHasOnly(value, {"retention_days"}, "events", error)) return false;
+    days = json::get(value, "retention_days");
+    if (!days) return true;
+  } else {
+    return true;
+  }
+  if (!cJSON_IsNumber(days) || days->valuedouble < 1 || days->valuedouble > 3650 ||
+      days->valuedouble != static_cast<double>(static_cast<int64_t>(days->valuedouble))) {
+    *error = "events.retention_days must be a whole number of days between 1 and 3650";
+    return false;
+  }
+  return true;
+}
+
 bool configWriteValid(const std::string& key, const cJSON* value, std::string* error) {
   if (!secretContractValid(key, value, error)) return false;
+  if (!eventRetentionValid(key, value, error)) return false;
   if (!panelTokenGenerationValid(key, value, error)) return false;
   if (key == "web_push.subscriptions") {
     *error = "the Web Push subscription container is read-only";
@@ -1412,6 +1439,7 @@ struct Node::Impl {
 
   std::string last_display_json;
   uint64_t display_timer = 0;
+  uint64_t event_retention_timer = 0;
 
 
   std::string assets_dir;
@@ -2641,6 +2669,78 @@ struct Node::Impl {
     return event.origin + ":" + std::to_string(event.seq);
   }
 
+  // ---------- call history ----------
+
+  static bool callLifecycleType(const std::string& type) {
+    return type == "press" || type == "purpose_selected" || type == "call_answered" ||
+           type == "call_ended" || type == "call_cancelled" || type == "reply";
+  }
+
+  // A missed call is the cancellation of a call nobody answered: the ring timeout, or a restart
+  // recovery that never completed. It mirrors RuleEngine's virtual "call_missed" trigger.
+  static bool missedCallEvent(const EventRecord& ev) {
+    if (ev.type != "call_cancelled") return false;
+    auto p = json::parse(ev.payload_json.empty() ? "{}" : ev.payload_json);
+    const std::string reason = p ? json::getString(p.get(), "reason") : "";
+    return reason == "timeout" || reason.rfind("recovery_", 0) == 0;
+  }
+
+  json::Doc callLogRowJson(const Store::CallLogRow& row) const {
+    auto o = json::obj();
+    json::set(o.get(), "id", row.id);
+    json::set(o.get(), "call_id", row.call_id);
+    json::set(o.get(), "ts", row.ts);
+    json::set(o.get(), "door", row.door);
+    json::set(o.get(), "purpose", row.purpose);
+    json::set(o.get(), "visitor_lang", row.visitor_lang);
+    json::set(o.get(), "outcome", row.outcome);
+    json::set(o.get(), "answered_by", row.answered_by);
+    json::set(o.get(), "duration_ms", row.duration_ms);
+    json::set(o.get(), "snapshot", row.snapshot);
+    json::set(o.get(), "hlc", row.updated_hlc);
+    json::setBool(o.get(), "seen", row.seen);
+    return o;
+  }
+
+  std::string callLogJson(const Store::CallLogQuery& query) {
+    auto o = json::obj();
+    cJSON* rows = json::addArr(o.get(), "rows");
+    for (const auto& row : store.callLog(query)) json::push(rows, callLogRowJson(row));
+    json::set(o.get(), "unread_missed", static_cast<int64_t>(store.unreadMissedCount()));
+    json::set(o.get(), "seen_hlc", store.callLogSeenHlc());
+    json::set(o.get(), "server_ts", hlc->correctedWallMs());
+    return json::dump(o.get());
+  }
+
+  // Delivered after every call-lifecycle event and after the watermark moves, so an open history
+  // screen and an idle badge stay live without polling.
+  void notifyCallLogChanged() {
+    auto o = json::obj();
+    json::set(o.get(), "t", "call_log_changed");
+    json::set(o.get(), "unread_missed", static_cast<int64_t>(store.unreadMissedCount()));
+    uiNotify(json::dump(o.get()));
+  }
+
+  bool markCallLogSeen(const std::string& up_to_hlc) {
+    if (!store.callLogMarkSeen(up_to_hlc)) return false;
+    notifyCallLogChanged();
+    return true;
+  }
+
+  int eventRetentionDays() const {
+    const int64_t days = json::getInt(json::get(cfg.get(), "events"), "retention_days", 90);
+    return static_cast<int>(std::max<int64_t>(1, std::min<int64_t>(days, 3650)));
+  }
+
+  // Retention runs against whatever replicated coverage the store has recorded. Without a
+  // coverage snapshot the store still refuses to delete anything, so this tick is a no-op.
+  void pruneEventsTick() {
+    const int64_t cutoff =
+        hlc->correctedWallMs() - static_cast<int64_t>(eventRetentionDays()) * 86'400'000LL;
+    if (cutoff <= 0) return;
+    store.pruneEvents(kEventRetentionPerOrigin, cutoff);
+  }
+
   bool isCurrentEmergencyWinner(const EventRecord& event) {
     auto winner = store.latestEventOfTypes("emergency", "emergency_cancel");
     return winner && winner->origin == event.origin && winner->seq == event.seq &&
@@ -2739,17 +2839,28 @@ struct Node::Impl {
     json::set(vapid, "subject", json::getString(push_cfg, "vapid_subject"));
     json::setItem(request.get(), "subscriptions", std::move(recipients));
     cJSON* payload = json::addObj(request.get(), "payload");
-    const bool active = ev.type == "emergency";
+    const bool missed = missedCallEvent(ev);
+    const bool active = !missed && ev.type == "emergency";
     std::string push_lang =
         json::getString(cfgAt("devices." + node_id + ".local"), "ui_lang", "ja");
     if (push_lang != "ja" && push_lang != "en" && push_lang != "zh") push_lang = "ja";
-    json::set(payload, "kind", active ? "emergency" : "emergency_cancel");
-    json::set(payload, "title", textOnLoop(active ? "emergency.title" : "emergency.notify_off",
-                                            push_lang, {}));
-    json::set(payload, "body",
-              textOnLoop(active ? "emergency.active_detail" : "emergency.notify_off",
-                         push_lang, {}));
-    json::set(payload, "tag", "doorbell-emergency");
+    if (missed) {
+      const std::string unread = std::to_string(store.unreadMissedCount());
+      json::set(payload, "kind", "call_missed");
+      json::set(payload, "title", textOnLoop("history.outcome_missed", push_lang, {}));
+      json::set(payload, "body",
+                textOnLoop("history.unread_banner", push_lang, {{"n", unread}}));
+      json::set(payload, "tag", "doorbell-call-missed");
+      json::set(payload, "unread_missed", static_cast<int64_t>(store.unreadMissedCount()));
+    } else {
+      json::set(payload, "kind", active ? "emergency" : "emergency_cancel");
+      json::set(payload, "title", textOnLoop(active ? "emergency.title" : "emergency.notify_off",
+                                              push_lang, {}));
+      json::set(payload, "body",
+                textOnLoop(active ? "emergency.active_detail" : "emergency.notify_off",
+                           push_lang, {}));
+      json::set(payload, "tag", "doorbell-emergency");
+    }
     json::set(payload, "url", "/panel/monitor");
     json::setBool(payload, "active", active);
     json::set(payload, "event_id", eventIdentity(ev));
@@ -2787,6 +2898,59 @@ struct Node::Impl {
                             status >= 200 && status < 300 ? "accepted" : "failed", status,
                             response_json ? json::get(response_json.get(), "results") : nullptr);
     });
+  }
+
+  // In-app / system-notification delivery for a missed call. The alert carries the badge count so
+  // a shell can render the idle-screen badge without querying the history first.
+  void missedCallNotifyUi(const EventRecord& ev, const cJSON* params) {
+    if (!deviceAlertTargetsSelf(params) || !alertUsesLocalChannel(params)) return;
+    auto payload = json::parse(ev.payload_json.empty() ? "{}" : ev.payload_json);
+    auto o = json::obj();
+    json::set(o.get(), "schema_version", static_cast<int64_t>(2));
+    json::set(o.get(), "t", "device_alert");
+    json::set(o.get(), "kind", "call_missed");
+    json::set(o.get(), "event_id", eventIdentity(ev));
+    json::set(o.get(), "origin", ev.origin);
+    json::set(o.get(), "seq", static_cast<int64_t>(ev.seq));
+    json::set(o.get(), "event_hlc", ev.hlc);
+    json::set(o.get(), "door", ev.door);
+    json::set(o.get(), "wall_ms", ev.wall_ms);
+    if (payload) {
+      const std::string call_id = json::getString(payload.get(), "call_id");
+      const std::string reason = json::getString(payload.get(), "reason");
+      if (!call_id.empty()) json::set(o.get(), "call_id", call_id);
+      if (!reason.empty()) json::set(o.get(), "reason", reason);
+    }
+    json::set(o.get(), "unread_missed", static_cast<int64_t>(store.unreadMissedCount()));
+    const cJSON* presentation = json::get(params, "presentation");
+    json::setBool(o.get(), "visual", json::getBool(presentation, "visual", true));
+    json::setBool(o.get(), "sticky", json::getBool(presentation, "sticky", false));
+    json::set(o.get(), "ttl_s", json::getInt(presentation, "ttl_s", 30));
+    const std::string sound = json::getString(presentation, "sound");
+    if (!sound.empty()) {
+      json::set(o.get(), "sound", sound);
+      const std::string hash = assetRefHash(sound);
+      if (!hash.empty() && assetCached(hash))
+        json::set(o.get(), "audio_path", assetFilePath(hash));
+    }
+    if (cJSON* channels = json::get(params, "channels"))
+      json::setItem(o.get(), "channels", json::Doc(cJSON_Duplicate(channels, 1)));
+    const bool dispatched = uiNotify(json::dump(o.get()));
+    auto delivery = json::obj();
+    json::set(delivery.get(), "schema_version", static_cast<int64_t>(1));
+    json::set(delivery.get(), "source_event_id", eventIdentity(ev));
+    json::set(delivery.get(), "source_event_origin", ev.origin);
+    json::set(delivery.get(), "source_event_seq", static_cast<int64_t>(ev.seq));
+    json::set(delivery.get(), "source_event_hlc", ev.hlc);
+    json::set(delivery.get(), "channel", "local_shell");
+    json::set(delivery.get(), "kind", "call_missed");
+    json::set(delivery.get(), "device_id", node_id);
+    json::set(delivery.get(), "role", opts.role);
+    json::set(delivery.get(), "result", dispatched ? "dispatched" : "shell_unavailable");
+    if (cJSON* channels = json::get(params, "channels"))
+      json::setItem(delivery.get(), "requested_channels",
+                    json::Doc(cJSON_Duplicate(channels, 1)));
+    events->append("delivery_result", ev.door, node_id, json::dump(delivery.get()));
   }
 
   void emergencyNotifyUi(const EventRecord& ev, const cJSON* params) {
@@ -4141,6 +4305,9 @@ struct Node::Impl {
 #endif
 
     display_timer = loop->postEvery(30'000, [this] { evalDisplay(); });
+    // Retention is a slow background sweep; six hours is frequent enough for a daily policy and
+    // cheap enough for the oldest hardware in the fleet.
+    event_retention_timer = loop->postEvery(6 * 3600'000, [this] { pruneEventsTick(); });
 
     started = true;
     startNetMonitor();
@@ -4154,6 +4321,7 @@ struct Node::Impl {
     evalDisplay(/*force=*/true);
     restoreEmergencyPresentation();
     prefetchAssets();
+    pruneEventsTick();
     DB_LOGI(kTag, "node " + node_id.substr(0, 8) + " (" + opts.name + ") started");
     return true;
   }
@@ -4251,6 +4419,29 @@ struct Node::Impl {
         if (!config->lastMutationCommitted()) return false;
       }
       if (!store.metaSet("seed_sos_rules_v1", "1")) return false;
+    }
+    // A missed call is worth a notification on the indoor surfaces only; a door station must not
+    // alert the visitor. The rule is an ordinary trigger_rules entry, so the Admin rules tab can
+    // disable or retarget it, and the meta marker keeps a deletion deleted across restarts.
+    if (!store.metaGet("seed_missed_call_rule_v1")) {
+      bool has_missed_rule = false;
+      cJSON* existing_rules = json::get(cfg.get(), "trigger_rules");
+      cJSON* rule = nullptr;
+      cJSON_ArrayForEach(rule, existing_rules) {
+        const std::string t = json::getString(json::get(rule, "when"), "type");
+        if (t == "call_missed" || t == "missed_call") has_missed_rule = true;
+      }
+      if (!has_missed_rule) {
+        const std::string missed =
+            "{\"enabled\":true,\"when\":{\"type\":\"call_missed\"},"
+            "\"actions\":[{\"type\":\"device_alert\",\"targets\":{\"roles\":"
+            "[\"indoor_panel\"],\"web_profiles\":\"all\"},"
+            "\"channels\":[\"in_app\",\"system_notification\",\"web_push\"],"
+            "\"presentation\":{\"visual\":true,\"sticky\":false,\"ttl_s\":30}}]}";
+        config->mutate({{"trigger_rules.r_missed_call_default", missed, false}});
+        if (!config->lastMutationCommitted()) return false;
+      }
+      if (!store.metaSet("seed_missed_call_rule_v1", "1")) return false;
     }
 
     // The boot identity is the operational source of truth used by the shell and mesh. Keep the
@@ -5008,6 +5199,9 @@ struct Node::Impl {
       }
       uiNotify(json::dump(o.get()));
     }
+    // The history projection is already committed at this point, so the badge count delivered
+    // here is the one a client would read back from /api/call-log.
+    if (callLifecycleType(ev.type)) notifyCallLogChanged();
     auto actions = rules.evaluate(ev, hlc->correctedWallMs(), tzOffsetMin());
     bool chime_notified = false;
     bool chime_action_seen = false;
@@ -5053,6 +5247,9 @@ struct Node::Impl {
       } else if (a.type == "device_alert") {
         if (ev.type == "emergency" || ev.type == "emergency_cancel") {
           if (selfFeature("device_alert_v1")) emergencyNotifyUi(ev, p.get());
+          deliverWebPush(ev, p.get());
+        } else if (missedCallEvent(ev)) {
+          if (selfFeature("device_alert_v1")) missedCallNotifyUi(ev, p.get());
           deliverWebPush(ev, p.get());
         }
       } else if (a.type == "sip_call") {
@@ -5973,7 +6170,10 @@ struct Node::Impl {
     },
                    {"/api/login", "/locale/", "/panel/", "/admin/", "/stream.mjpeg",
                     "/stream.mp4", "/stream-proxy.mp4", "/video-meta", "/snapshot.jpg",
-                    "/api/panel/", "/snapshot-proxy", "/call-frame", "/peer-frame.jpg"});
+                    "/api/panel/", "/snapshot-proxy", "/call-frame", "/peer-frame.jpg",
+                    // The call history is readable by a panel credential and by an admin
+                    // session; both handlers below re-check the caller explicitly.
+                    "/api/call-log"});
 
     // /stream.mp4 follows the same LAN-public policy as /stream.mjpeg.
 
@@ -6102,16 +6302,83 @@ struct Node::Impl {
         if (!l.empty()) limit = std::stoul(l);
       } catch (...) {
       }
+      limit = std::max<size_t>(1, std::min<size_t>(limit, 1000));
+      int64_t since_ms = 0;
+      try {
+        const std::string raw = req.param("since_ms");
+        if (!raw.empty()) since_ms = std::stoll(raw);
+      } catch (...) {
+      }
+      const std::string type_filter = req.param("type");
+      const std::string door_filter = req.param("door");
       auto o = json::obj();
       cJSON* arr = json::addArr(o.get(), "events");
-      for (const auto& ev : store.recentEvents(limit)) {
+      // recentEvents is newest first. Filtering after the fetch keeps one query shape while
+      // since_ms lets a caller poll for what it has not seen yet.
+      size_t emitted = 0;
+      for (const auto& ev : store.recentEvents(
+               since_ms > 0 || !type_filter.empty() || !door_filter.empty()
+                   ? std::max<size_t>(limit, 1000)
+                   : limit)) {
+        if (emitted >= limit) break;
+        if (since_ms > 0 && ev.wall_ms < since_ms) continue;
+        if (!type_filter.empty() && ev.type != type_filter) continue;
+        if (!door_filter.empty() && ev.door != door_filter) continue;
         cJSON* e = json::pushObj(arr);
         json::set(e, "type", ev.type);
         json::set(e, "door", ev.door);
         json::set(e, "device", ev.device);
         json::set(e, "wall_ms", ev.wall_ms);
+        json::set(e, "origin", ev.origin);
+        json::set(e, "seq", static_cast<int64_t>(ev.seq));
+        json::set(e, "hlc", ev.hlc);
         json::set(e, "payload", ev.payload_json);
+        emitted++;
       }
+      json::set(o.get(), "server_ts", hlc->correctedWallMs());
+      return HttpResp::json(json::dump(o.get()));
+    });
+
+    // Call history. The panel token and the admin session are both accepted so the Web panel and
+    // the Admin UI read one shared projection.
+    httpd->route("GET", "/api/call-log", [this](const HttpReq& req) {
+      if (!panelTokenOk(req) && !checkSession(req))
+        return HttpResp::json("{\"ok\":false,\"err\":\"bad token\"}", 403);
+      Store::CallLogQuery query;
+      query.limit = kCallLogDefaultLimit;
+      try {
+        const std::string raw = req.param("limit");
+        if (!raw.empty()) query.limit = std::stoul(raw);
+      } catch (...) {
+      }
+      query.limit = std::max<size_t>(1, std::min<size_t>(query.limit, kCallLogMaxLimit));
+      try {
+        const std::string raw = req.param("since_ms");
+        if (!raw.empty()) query.since_ms = std::stoll(raw);
+      } catch (...) {
+      }
+      try {
+        const std::string raw = req.param("before_ms");
+        if (!raw.empty()) query.before_ms = std::stoll(raw);
+      } catch (...) {
+      }
+      query.door = req.param("door");
+      query.outcome = req.param("outcome");
+      return HttpResp::json(callLogJson(query));
+    });
+
+    httpd->route("POST", "/api/call-log/seen", [this](const HttpReq& req) {
+      if (!panelTokenOk(req) && !checkSession(req))
+        return HttpResp::json("{\"ok\":false,\"err\":\"bad token\"}", 403);
+      auto body = json::parse(req.body.empty() ? "{}" : req.body);
+      const std::string up_to = body ? json::getString(body.get(), "up_to_hlc")
+                                     : req.param("up_to_hlc");
+      if (!markCallLogSeen(up_to))
+        return HttpResp::json("{\"ok\":false,\"err\":\"persist_failed\"}", 500);
+      auto o = json::obj();
+      json::setBool(o.get(), "ok", true);
+      json::set(o.get(), "unread_missed", static_cast<int64_t>(store.unreadMissedCount()));
+      json::set(o.get(), "seen_hlc", store.callLogSeenHlc());
       return HttpResp::json(json::dump(o.get()));
     });
 
@@ -7648,6 +7915,10 @@ void Node::stop() {
       impl_->loop->cancel(impl_->display_timer);
       impl_->display_timer = 0;
     }
+    if (impl_->event_retention_timer) {
+      impl_->loop->cancel(impl_->event_retention_timer);
+      impl_->event_retention_timer = 0;
+    }
     if (impl_->snapshot_timer) {
       impl_->loop->cancel(impl_->snapshot_timer);
       impl_->snapshot_timer = 0;
@@ -7939,6 +8210,31 @@ std::string Node::statusJson() {
   std::lock_guard<std::mutex> lk(impl_->snap_mu);
   if (impl_->status_snap.empty()) return "{}";
   return impl_->status_snap;
+}
+
+std::string Node::callLogJson(int64_t since_ms, int limit) {
+  Store::CallLogQuery query;
+  query.since_ms = since_ms > 0 ? since_ms : 0;
+  query.limit = limit > 0 ? static_cast<size_t>(limit) : kCallLogDefaultLimit;
+  query.limit = std::min<size_t>(query.limit, kCallLogMaxLimit);
+  std::string out;
+  // A core that was created but never started has no store to read; report an empty history
+  // rather than touching uninitialized composition state.
+  if (!impl_->loop->callSync([&] {
+        if (impl_->started) out = impl_->callLogJson(query);
+      }) ||
+      out.empty())
+    out = R"({"rows":[],"unread_missed":0,"seen_hlc":"","server_ts":0})";
+  return out;
+}
+
+bool Node::markCallLogSeen(const std::string& up_to_hlc) {
+  bool ok = false;
+  if (!impl_->loop->callSync([&] {
+        if (impl_->started) ok = impl_->markCallLogSeen(up_to_hlc);
+      }))
+    return false;
+  return ok;
 }
 
 std::string Node::debugJson() {

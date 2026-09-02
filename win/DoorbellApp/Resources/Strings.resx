@@ -68,6 +68,7 @@
   <data name="admin_call_flow_mixed_warning" xml:space="preserve"><value>ring_then_purpose は全 peer でサポートされていません。旧版または未計測の client は purpose_first のままです。</value></data>
   <data name="admin_call_flow_purpose_first" xml:space="preserve"><value>purpose_first は呼出前に用件を選択します。ring_then_purpose は先に呼び出し、後から用件を更新できます。</value></data>
   <data name="admin_call_flow_supported" xml:space="preserve"><value>現在報告中の全 peer が call_flow_v2 を宣言しています。</value></data>
+  <data name="admin_call_log" xml:space="preserve"><value>呼出履歴</value></data>
   <data name="admin_call_sound_loop" xml:space="preserve"><value>呼出音を繰り返す</value></data>
   <data name="admin_cam_codec" xml:space="preserve"><value>映像コーデック</value></data>
   <data name="admin_cam_fps" xml:space="preserve"><value>フレームレート (fps)</value></data>
@@ -364,6 +365,19 @@
   <data name="event_offline" xml:space="preserve"><value>⚠ {0} オフライン (最終応答 {1})</value></data>
   <data name="event_online" xml:space="preserve"><value>{0} オンライン復帰</value></data>
   <data name="event_press" xml:space="preserve"><value>{0} に来客です ({1})</value></data>
+  <data name="history_answered_by" xml:space="preserve"><value>{0} が応答</value></data>
+  <data name="history_duration" xml:space="preserve"><value>通話 {0}</value></data>
+  <data name="history_empty" xml:space="preserve"><value>まだ呼出はありません</value></data>
+  <data name="history_mark_seen" xml:space="preserve"><value>すべて既読にする</value></data>
+  <data name="history_missed_badge" xml:space="preserve"><value>不在着信 {0} 件</value></data>
+  <data name="history_outcome_answered" xml:space="preserve"><value>応答</value></data>
+  <data name="history_outcome_cancelled" xml:space="preserve"><value>取消</value></data>
+  <data name="history_outcome_missed" xml:space="preserve"><value>不在着信</value></data>
+  <data name="history_outcome_replied" xml:space="preserve"><value>返信</value></data>
+  <data name="history_title" xml:space="preserve"><value>呼出履歴</value></data>
+  <data name="history_today" xml:space="preserve"><value>今日</value></data>
+  <data name="history_unread_banner" xml:space="preserve"><value>不在着信が {0} 件あります</value></data>
+  <data name="history_yesterday" xml:space="preserve"><value>昨日</value></data>
   <data name="idle_call_button" xml:space="preserve"><value>{0} 呼出</value></data>
   <data name="idle_choose_purpose" xml:space="preserve"><value>ご用件をお選びください</value></data>
   <data name="idle_language" xml:space="preserve"><value>言語</value></data>

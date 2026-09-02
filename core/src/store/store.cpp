@@ -17,7 +17,7 @@ namespace db {
 namespace {
 
 constexpr const char* kTag = "store";
-constexpr int kSchemaVersion = 6;
+constexpr int kSchemaVersion = 7;
 
 bool isCorruptionCode(int code) {
   const int primary = code & 0xff;
@@ -220,7 +220,11 @@ bool Store::migrate() {
       "CREATE TABLE IF NOT EXISTS call_projection("
       "  call_id TEXT PRIMARY KEY, door TEXT NOT NULL, origin TEXT NOT NULL, purpose TEXT,"
       "  state TEXT NOT NULL, stage_revision INT NOT NULL, expires_wall_ms INT NOT NULL,"
-      "  updated_hlc TEXT NOT NULL, terminal_reason TEXT);"
+      "  updated_hlc TEXT NOT NULL, terminal_reason TEXT,"
+      "  press_wall_ms INT NOT NULL DEFAULT 0, press_seq INT NOT NULL DEFAULT 0,"
+      "  answered_wall_ms INT NOT NULL DEFAULT 0,"
+      "  ended_wall_ms INT NOT NULL DEFAULT 0, visitor_lang TEXT NOT NULL DEFAULT '',"
+      "  snapshot_hash TEXT NOT NULL DEFAULT '');"
       "CREATE INDEX IF NOT EXISTS idx_call_projection_active"
       "  ON call_projection(state, door);"
       "CREATE TABLE IF NOT EXISTS call_door_fence("
@@ -329,6 +333,48 @@ bool Store::migrate() {
             " WHERE state='ringing' AND EXISTS (SELECT 1 FROM call_door_fence f"
             " WHERE f.door=call_projection.door AND f.hlc>=call_projection.updated_hlc);"))
       return false;
+  }
+  if (previous_schema < 7) {
+    // Call history needs wall clocks, the visitor language, and the door snapshot reference that
+    // schema v6 never materialized. Add the columns, then rebuild the projection and its door
+    // fence by replaying every applied lifecycle event, exactly as the v4 backfill did.
+    const char* const kCallLogColumns[] = {"press_wall_ms", "press_seq", "answered_wall_ms",
+                                          "ended_wall_ms"};
+    for (const char* column : kCallLogColumns) {
+      if (has_column("call_projection", column)) continue;
+      const std::string sql = std::string("ALTER TABLE call_projection ADD COLUMN ") + column +
+                              " INT NOT NULL DEFAULT 0";
+      if (!exec(sql.c_str())) return false;
+    }
+    for (const char* column : {"visitor_lang", "snapshot_hash"}) {
+      if (has_column("call_projection", column)) continue;
+      const std::string sql = std::string("ALTER TABLE call_projection ADD COLUMN ") + column +
+                              " TEXT NOT NULL DEFAULT ''";
+      if (!exec(sql.c_str())) return false;
+    }
+    std::vector<EventRecord> lifecycle;
+    Stmt events(db_,
+                "SELECT e.origin,e.seq,e.type,e.door,e.device,e.hlc,e.wall_ms,"
+                " e.payload_json,e.notify_json FROM events e"
+                " JOIN event_origin_state s ON s.origin=e.origin"
+                " WHERE e.seq<=s.frontier ORDER BY e.hlc ASC");
+    if (!events.ok()) return false;
+    while (events.step() == SQLITE_ROW) lifecycle.push_back(rowToEvent(events));
+    if (!exec("BEGIN IMMEDIATE") || !exec("DELETE FROM call_projection") ||
+        !exec("DELETE FROM call_door_fence")) {
+      exec("ROLLBACK");
+      return false;
+    }
+    for (const auto& event : lifecycle) {
+      if (!applyCallProjectionLocked(event)) {
+        exec("ROLLBACK");
+        return false;
+      }
+    }
+    if (!exec("COMMIT")) {
+      exec("ROLLBACK");
+      return false;
+    }
   }
   if ((!schema || *schema != std::to_string(kSchemaVersion)) &&
       !metaSetLocked("schema_version", std::to_string(kSchemaVersion)))
@@ -750,10 +796,11 @@ bool Store::applyCallProjectionLocked(const EventRecord& e) {
     Stmt terminal(
         db_,
         "INSERT INTO call_projection(call_id,door,origin,purpose,state,stage_revision,"
-        " expires_wall_ms,updated_hlc,terminal_reason)"
-        " VALUES(?1,?2,?3,'','ended',?4,0,?5,'reply')"
+        " expires_wall_ms,updated_hlc,terminal_reason,ended_wall_ms)"
+        " VALUES(?1,?2,?3,'','ended',?4,0,?5,'reply',?6)"
         " ON CONFLICT(call_id) DO UPDATE SET state='ended',updated_hlc=excluded.updated_hlc,"
-        " terminal_reason='reply' WHERE call_projection.door=excluded.door"
+        " terminal_reason='reply',ended_wall_ms=excluded.ended_wall_ms"
+        " WHERE call_projection.door=excluded.door"
         " AND call_projection.origin=excluded.origin"
         " AND call_projection.state='ringing'"
         " AND call_projection.stage_revision=excluded.stage_revision"
@@ -764,6 +811,7 @@ bool Store::applyCallProjectionLocked(const EventRecord& e) {
     terminal.bind(3, call_origin);
     terminal.bind(4, revision);
     terminal.bind(5, e.hlc);
+    terminal.bind(6, e.wall_ms);
     if (terminal.step() != SQLITE_DONE) return false;
     Stmt winner(db_, "SELECT state,updated_hlc,terminal_reason FROM call_projection"
                      " WHERE call_id=?1 AND door=?2 AND origin=?3");
@@ -778,12 +826,16 @@ bool Store::applyCallProjectionLocked(const EventRecord& e) {
   if (call_id.empty()) return true;
 
   if (e.type == "press") {
+    const std::string press_lang =
+        payload ? json::getString(payload.get(), "visitor_lang") : "";
+    const std::string press_snapshot = payload ? json::getString(payload.get(), "snapshot") : "";
     const auto fence = callDoorFenceLocked(e.door);
     if (fence && e.hlc <= *fence) {
       Stmt stale(db_,
                  "INSERT INTO call_projection(call_id,door,origin,purpose,state,stage_revision,"
-                 " expires_wall_ms,updated_hlc,terminal_reason)"
-                 " VALUES(?1,?2,?3,?4,'ended',?5,?6,?7,'terminal_fence')"
+                 " expires_wall_ms,updated_hlc,terminal_reason,"
+                 " press_wall_ms,press_seq,visitor_lang,snapshot_hash)"
+                 " VALUES(?1,?2,?3,?4,'ended',?5,?6,?7,'terminal_fence',?8,?11,?9,?10)"
                  " ON CONFLICT(call_id) DO UPDATE SET state='ended',"
                  " terminal_reason='terminal_fence'"
                  " WHERE call_projection.door=excluded.door"
@@ -799,6 +851,10 @@ bool Store::applyCallProjectionLocked(const EventRecord& e) {
       stale.bind(6, payload ? json::getInt(payload.get(), "expires_at_ms", e.wall_ms + 60'000)
                             : e.wall_ms + 60'000);
       stale.bind(7, e.hlc);
+      stale.bind(8, e.wall_ms);
+      stale.bind(9, press_lang);
+      stale.bind(10, press_snapshot);
+      stale.bind(11, static_cast<int64_t>(e.seq));
       return stale.step() == SQLITE_DONE;
     }
     bool accept = true;
@@ -821,8 +877,9 @@ bool Store::applyCallProjectionLocked(const EventRecord& e) {
     if (!accept) {
       Stmt rejected(db_,
                     "INSERT INTO call_projection(call_id,door,origin,purpose,state,stage_revision,"
-                    " expires_wall_ms,updated_hlc,terminal_reason)"
-                    " VALUES(?1,?2,?3,?4,'ended',?5,?6,?7,'concurrent_press_loser')"
+                    " expires_wall_ms,updated_hlc,terminal_reason,"
+                    " press_wall_ms,press_seq,visitor_lang,snapshot_hash)"
+                    " VALUES(?1,?2,?3,?4,'ended',?5,?6,?7,'concurrent_press_loser',?8,?11,?9,?10)"
                     " ON CONFLICT(call_id) DO NOTHING");
       if (!rejected.ok()) return false;
       rejected.bind(1, call_id);
@@ -833,6 +890,10 @@ bool Store::applyCallProjectionLocked(const EventRecord& e) {
       rejected.bind(6, payload ? json::getInt(payload.get(), "expires_at_ms", e.wall_ms + 60'000)
                                : e.wall_ms + 60'000);
       rejected.bind(7, e.hlc);
+      rejected.bind(8, e.wall_ms);
+      rejected.bind(9, press_lang);
+      rejected.bind(10, press_snapshot);
+      rejected.bind(11, static_cast<int64_t>(e.seq));
       return rejected.step() == SQLITE_DONE;
     }
     {
@@ -847,12 +908,16 @@ bool Store::applyCallProjectionLocked(const EventRecord& e) {
     }
     Stmt upsert(db_,
                 "INSERT INTO call_projection(call_id,door,origin,purpose,state,stage_revision,"
-                " expires_wall_ms,updated_hlc,terminal_reason)"
-                " VALUES(?1,?2,?3,?4,'ringing',?5,?6,?7,'')"
+                " expires_wall_ms,updated_hlc,terminal_reason,"
+                " press_wall_ms,press_seq,visitor_lang,snapshot_hash)"
+                " VALUES(?1,?2,?3,?4,'ringing',?5,?6,?7,'',?8,?11,?9,?10)"
                 " ON CONFLICT(call_id) DO UPDATE SET door=excluded.door,origin=excluded.origin,"
                 " purpose=excluded.purpose,state='ringing',"
                 " stage_revision=excluded.stage_revision,expires_wall_ms=excluded.expires_wall_ms,"
-                " updated_hlc=excluded.updated_hlc,terminal_reason=''"
+                " updated_hlc=excluded.updated_hlc,terminal_reason='',"
+                " press_wall_ms=excluded.press_wall_ms,press_seq=excluded.press_seq,"
+                " visitor_lang=excluded.visitor_lang,"
+                " snapshot_hash=excluded.snapshot_hash"
                 " WHERE excluded.updated_hlc>=call_projection.updated_hlc");
     if (!upsert.ok()) return false;
     upsert.bind(1, call_id);
@@ -863,6 +928,10 @@ bool Store::applyCallProjectionLocked(const EventRecord& e) {
     upsert.bind(6, payload ? json::getInt(payload.get(), "expires_at_ms", e.wall_ms + 60'000)
                            : e.wall_ms + 60'000);
     upsert.bind(7, e.hlc);
+    upsert.bind(8, e.wall_ms);
+    upsert.bind(9, press_lang);
+    upsert.bind(10, press_snapshot);
+    upsert.bind(11, static_cast<int64_t>(e.seq));
     return upsert.step() == SQLITE_DONE;
   }
 
@@ -872,7 +941,8 @@ bool Store::applyCallProjectionLocked(const EventRecord& e) {
     Stmt update(db_,
                 "UPDATE call_projection SET purpose=?3,state='ringing',stage_revision=?4,"
                 " expires_wall_ms=CASE WHEN ?5>0 THEN ?5 ELSE expires_wall_ms END,"
-                " updated_hlc=?6,terminal_reason='',dialog_owner='',answered_hlc=''"
+                " updated_hlc=?6,terminal_reason='',dialog_owner='',answered_hlc='',"
+                " visitor_lang=CASE WHEN ?7<>'' THEN ?7 ELSE visitor_lang END"
                 " WHERE call_id=?1 AND door=?2 AND ?4=stage_revision+1 AND ("
                 " (state='ringing' AND answered_hlc='' AND ?6>updated_hlc) OR"
                 " (state='in_call' AND answered_hlc<>'' AND ?6<answered_hlc))");
@@ -883,6 +953,7 @@ bool Store::applyCallProjectionLocked(const EventRecord& e) {
     update.bind(4, revision);
     update.bind(5, payload ? json::getInt(payload.get(), "expires_at_ms", 0) : 0);
     update.bind(6, e.hlc);
+    update.bind(7, payload ? json::getString(payload.get(), "visitor_lang") : "");
     return update.step() == SQLITE_DONE;
   }
 
@@ -966,8 +1037,9 @@ bool Store::applyCallProjectionLocked(const EventRecord& e) {
     if (!incoming_wins) {
       Stmt loser(db_,
                  "INSERT INTO call_projection(call_id,door,origin,purpose,state,stage_revision,"
-                 " expires_wall_ms,updated_hlc,terminal_reason,dialog_owner,answered_hlc)"
-                 " VALUES(?1,?2,?3,?4,'ended',?5,?6,?7,'concurrent_answer_loser',?8,?7)"
+                 " expires_wall_ms,updated_hlc,terminal_reason,dialog_owner,answered_hlc,"
+                 " answered_wall_ms)"
+                 " VALUES(?1,?2,?3,?4,'ended',?5,?6,?7,'concurrent_answer_loser',?8,?7,?9)"
                  " ON CONFLICT(call_id) DO UPDATE SET state='ended',"
                  " terminal_reason=CASE WHEN call_projection.terminal_reason='concurrent_press_loser'"
                  " THEN call_projection.terminal_reason ELSE 'concurrent_answer_loser' END"
@@ -981,6 +1053,7 @@ bool Store::applyCallProjectionLocked(const EventRecord& e) {
       loser.bind(6, expires);
       loser.bind(7, e.hlc);
       loser.bind(8, owner);
+      loser.bind(9, e.wall_ms);
       return loser.step() == SQLITE_DONE;
     }
 
@@ -996,15 +1069,18 @@ bool Store::applyCallProjectionLocked(const EventRecord& e) {
 
     Stmt update(db_,
                 "INSERT INTO call_projection(call_id,door,origin,purpose,state,stage_revision,"
-                " expires_wall_ms,updated_hlc,terminal_reason,dialog_owner,answered_hlc)"
-                " VALUES(?1,?2,?3,?4,'in_call',?5,?6,?7,'',?8,?7)"
+                " expires_wall_ms,updated_hlc,terminal_reason,dialog_owner,answered_hlc,"
+                " answered_wall_ms)"
+                " VALUES(?1,?2,?3,?4,'in_call',?5,?6,?7,'',?8,?7,?10)"
                 " ON CONFLICT(call_id) DO UPDATE SET state='in_call',"
                 " purpose=CASE WHEN ?9=1 THEN '' WHEN excluded.purpose<>'' THEN excluded.purpose"
                 " ELSE call_projection.purpose END,stage_revision=excluded.stage_revision,"
                 " expires_wall_ms=CASE WHEN excluded.expires_wall_ms>0"
                 " THEN excluded.expires_wall_ms ELSE call_projection.expires_wall_ms END,"
                 " updated_hlc=excluded.updated_hlc,terminal_reason='',dialog_owner=excluded.dialog_owner,"
-                " answered_hlc=excluded.answered_hlc WHERE call_projection.door=excluded.door"
+                " answered_hlc=excluded.answered_hlc,"
+                " answered_wall_ms=excluded.answered_wall_ms"
+                " WHERE call_projection.door=excluded.door"
                 " AND (call_projection.state IN ('ringing','ended') OR"
                 " (call_projection.state='in_call' AND excluded.answered_hlc<call_projection.answered_hlc))");
     if (!update.ok()) return false;
@@ -1017,6 +1093,7 @@ bool Store::applyCallProjectionLocked(const EventRecord& e) {
     update.bind(7, e.hlc);
     update.bind(8, owner);
     update.bind(9, rolls_back_purpose ? 1 : 0);
+    update.bind(10, e.wall_ms);
     return update.step() == SQLITE_DONE;
   }
 
@@ -1027,10 +1104,12 @@ bool Store::applyCallProjectionLocked(const EventRecord& e) {
     const std::string owner = e.device.empty() ? e.origin : e.device;
     Stmt terminal(db_,
                   "INSERT INTO call_projection(call_id,door,origin,purpose,state,stage_revision,"
-                  " expires_wall_ms,updated_hlc,terminal_reason,dialog_owner,answered_hlc)"
-                  " VALUES(?1,?2,?3,'','ended',?4,0,?5,?6,?7,'')"
+                  " expires_wall_ms,updated_hlc,terminal_reason,dialog_owner,answered_hlc,"
+                  " ended_wall_ms)"
+                  " VALUES(?1,?2,?3,'','ended',?4,0,?5,?6,?7,'',?8)"
                   " ON CONFLICT(call_id) DO UPDATE SET state='ended',"
-                  " updated_hlc=excluded.updated_hlc,terminal_reason=excluded.terminal_reason"
+                  " updated_hlc=excluded.updated_hlc,terminal_reason=excluded.terminal_reason,"
+                  " ended_wall_ms=excluded.ended_wall_ms"
                   " WHERE excluded.updated_hlc>=call_projection.updated_hlc"
                   " AND call_projection.state IN ('in_call','ended')"
                   " AND call_projection.door=excluded.door"
@@ -1044,6 +1123,7 @@ bool Store::applyCallProjectionLocked(const EventRecord& e) {
     terminal.bind(5, e.hlc);
     terminal.bind(6, reason);
     terminal.bind(7, owner);
+    terminal.bind(8, e.wall_ms);
     if (terminal.step() != SQLITE_DONE) return false;
     Stmt winner(db_, "SELECT state,updated_hlc,terminal_reason,dialog_owner"
                      " FROM call_projection WHERE call_id=?1 AND door=?2");
@@ -1068,10 +1148,11 @@ bool Store::applyCallProjectionLocked(const EventRecord& e) {
   }
   Stmt terminal(db_,
                 "INSERT INTO call_projection(call_id,door,origin,purpose,state,stage_revision,"
-                " expires_wall_ms,updated_hlc,terminal_reason)"
-                " VALUES(?1,?2,?3,'',?4,0,0,?5,?6)"
+                " expires_wall_ms,updated_hlc,terminal_reason,ended_wall_ms)"
+                " VALUES(?1,?2,?3,'',?4,0,0,?5,?6,?7)"
                 " ON CONFLICT(call_id) DO UPDATE SET state=excluded.state,"
-                " updated_hlc=excluded.updated_hlc,terminal_reason=excluded.terminal_reason"
+                " updated_hlc=excluded.updated_hlc,terminal_reason=excluded.terminal_reason,"
+                " ended_wall_ms=excluded.ended_wall_ms"
                 " WHERE excluded.updated_hlc>=call_projection.updated_hlc");
   if (!terminal.ok()) return false;
   terminal.bind(1, call_id);
@@ -1080,6 +1161,7 @@ bool Store::applyCallProjectionLocked(const EventRecord& e) {
   terminal.bind(4, state);
   terminal.bind(5, e.hlc);
   terminal.bind(6, reason);
+  terminal.bind(7, e.wall_ms);
   if (terminal.step() != SQLITE_DONE) return false;
   Stmt winner(db_, "SELECT state,updated_hlc,terminal_reason FROM call_projection"
                    " WHERE call_id=?1 AND door=?2");
@@ -1276,7 +1358,8 @@ std::vector<Store::CallProjection> Store::activeCallProjections() {
   std::vector<CallProjection> out;
   Stmt st(db_,
           "SELECT call_id,door,origin,purpose,state,stage_revision,expires_wall_ms,updated_hlc,"
-          " terminal_reason,dialog_owner,answered_hlc"
+          " terminal_reason,dialog_owner,answered_hlc,press_wall_ms,answered_wall_ms,"
+          " ended_wall_ms,visitor_lang,snapshot_hash"
           " FROM call_projection WHERE state IN ('ringing','in_call')"
           " ORDER BY updated_hlc ASC");
   if (!st.ok()) return out;
@@ -1293,6 +1376,11 @@ std::vector<Store::CallProjection> Store::activeCallProjections() {
     p.terminal_reason = st.colText(8);
     p.dialog_owner = st.colText(9);
     p.answered_hlc = st.colText(10);
+    p.press_wall_ms = st.colInt(11);
+    p.answered_wall_ms = st.colInt(12);
+    p.ended_wall_ms = st.colInt(13);
+    p.visitor_lang = st.colText(14);
+    p.snapshot_hash = st.colText(15);
     out.push_back(std::move(p));
   }
   return out;
@@ -1302,7 +1390,8 @@ std::optional<Store::CallProjection> Store::callProjection(const std::string& ca
   std::lock_guard<std::mutex> lk(mu_);
   Stmt st(db_,
           "SELECT call_id,door,origin,purpose,state,stage_revision,expires_wall_ms,updated_hlc,"
-          " terminal_reason,dialog_owner,answered_hlc FROM call_projection WHERE call_id=?1");
+          " terminal_reason,dialog_owner,answered_hlc,press_wall_ms,answered_wall_ms,"
+          " ended_wall_ms,visitor_lang,snapshot_hash FROM call_projection WHERE call_id=?1");
   if (!st.ok()) return std::nullopt;
   st.bind(1, call_id);
   if (st.step() != SQLITE_ROW) return std::nullopt;
@@ -1318,14 +1407,207 @@ std::optional<Store::CallProjection> Store::callProjection(const std::string& ca
   p.terminal_reason = st.colText(8);
   p.dialog_owner = st.colText(9);
   p.answered_hlc = st.colText(10);
+  p.press_wall_ms = st.colInt(11);
+  p.answered_wall_ms = st.colInt(12);
+  p.ended_wall_ms = st.colInt(13);
+  p.visitor_lang = st.colText(14);
+  p.snapshot_hash = st.colText(15);
   return p;
 }
 
+namespace {
+
+constexpr const char* kCallLogSeenKey = "call_log_seen_hlc";
+constexpr const char* kEventCoverageKey = "event_coverage";
+
+// Outcome derivation shared by every call-history query. Losers, fenced calls, and calls that are
+// still live never appear, so the SQL filter and the projected outcome stay in one place.
+constexpr const char* kCallLogOutcomeSql =
+    "CASE WHEN state='ended' AND terminal_reason='reply' THEN 'replied'"
+    " WHEN state='ended' THEN 'answered'"
+    " WHEN state='cancelled' AND (terminal_reason='timeout'"
+    "   OR substr(terminal_reason,1,9)='recovery_') THEN 'missed'"
+    " WHEN state='cancelled' THEN 'cancelled' ELSE '' END";
+constexpr const char* kCallLogVisibleSql =
+    "((state='ended' AND terminal_reason NOT IN ('concurrent_press_loser',"
+    "  'concurrent_answer_loser','terminal_fence')) OR state='cancelled')";
+
+}  // namespace
+
+std::vector<Store::CallLogRow> Store::callLog(const CallLogQuery& query) {
+  std::lock_guard<std::mutex> lk(mu_);
+  std::vector<CallLogRow> out;
+  if (!db_ || query.limit == 0) return out;
+  const std::string seen_hlc = metaGetLocked(kCallLogSeenKey).value_or("");
+  const std::string ts_sql = "(CASE WHEN press_wall_ms>0 THEN press_wall_ms"
+                             " ELSE ended_wall_ms END)";
+  const std::string sql =
+      "SELECT call_id,origin,press_seq,door,purpose,visitor_lang," + std::string(kCallLogOutcomeSql) +
+      ",dialog_owner,answered_wall_ms,ended_wall_ms,snapshot_hash,updated_hlc," + ts_sql +
+      " FROM call_projection WHERE " + kCallLogVisibleSql +
+      " AND (?1=0 OR " + ts_sql + ">=?1)"
+      " AND (?2=0 OR " + ts_sql + "<?2)"
+      " AND (?3='' OR door=?3)"
+      " AND (?4='' OR " + kCallLogOutcomeSql + "=?4)"
+      " ORDER BY " + ts_sql + " DESC,updated_hlc DESC,call_id ASC LIMIT ?5";
+  Stmt st(db_, sql.c_str());
+  if (!st.ok()) return out;
+  st.bind(1, query.since_ms);
+  st.bind(2, query.before_ms);
+  st.bind(3, query.door);
+  st.bind(4, query.outcome);
+  st.bind(5, static_cast<int64_t>(
+                 std::min(query.limit,
+                          static_cast<size_t>(std::numeric_limits<int64_t>::max()))));
+  while (st.step() == SQLITE_ROW) {
+    CallLogRow row;
+    row.call_id = st.colText(0);
+    const std::string origin = st.colText(1);
+    const int64_t press_seq = st.colInt(2);
+    row.id = press_seq > 0 && !origin.empty()
+        ? origin + ":" + std::to_string(press_seq)
+        : row.call_id;
+    row.door = st.colText(3);
+    row.purpose = st.colText(4);
+    row.visitor_lang = st.colText(5);
+    row.outcome = st.colText(6);
+    const int64_t answered_wall_ms = st.colInt(8);
+    const int64_t ended_wall_ms = st.colInt(9);
+    // A device that never answered still records the terminal event; only a real answer produces
+    // an owner and a duration.
+    row.answered_by = row.outcome == "answered" ? st.colText(7) : "";
+    row.duration_ms = row.outcome == "answered" && answered_wall_ms > 0 &&
+            ended_wall_ms > answered_wall_ms
+        ? ended_wall_ms - answered_wall_ms
+        : 0;
+    row.snapshot = st.colText(10);
+    row.updated_hlc = st.colText(11);
+    row.ts = st.colInt(12);
+    row.seen = !seen_hlc.empty() && row.updated_hlc <= seen_hlc;
+    out.push_back(std::move(row));
+  }
+  return out;
+}
+
+size_t Store::unreadMissedCount() {
+  std::lock_guard<std::mutex> lk(mu_);
+  if (!db_) return 0;
+  const std::string seen_hlc = metaGetLocked(kCallLogSeenKey).value_or("");
+  const std::string sql = "SELECT COUNT(*) FROM call_projection WHERE " +
+                          std::string(kCallLogVisibleSql) + " AND " + kCallLogOutcomeSql +
+                          "='missed' AND updated_hlc>?1";
+  Stmt st(db_, sql.c_str());
+  if (!st.ok()) return 0;
+  st.bind(1, seen_hlc);
+  if (st.step() != SQLITE_ROW) return 0;
+  return static_cast<size_t>(st.colInt(0));
+}
+
+std::string Store::callLogSeenHlc() {
+  std::lock_guard<std::mutex> lk(mu_);
+  return metaGetLocked(kCallLogSeenKey).value_or("");
+}
+
+bool Store::callLogMarkSeen(const std::string& up_to_hlc) {
+  std::lock_guard<std::mutex> lk(mu_);
+  if (!db_) return false;
+  std::string target = up_to_hlc;
+  if (target.empty()) {
+    const std::string sql = "SELECT MAX(updated_hlc) FROM call_projection WHERE " +
+                            std::string(kCallLogVisibleSql);
+    Stmt newest(db_, sql.c_str());
+    if (!newest.ok()) return false;
+    if (newest.step() == SQLITE_ROW) target = newest.colText(0);
+  }
+  const std::string current = metaGetLocked(kCallLogSeenKey).value_or("");
+  // The watermark is device-local and monotonic; a stale client must not resurrect a badge.
+  if (target.empty() || target <= current) return true;
+  return metaSetLocked(kCallLogSeenKey, target);
+}
+
+bool Store::eventCoverageSet(const std::map<std::string, uint64_t>& coverage) {
+  std::lock_guard<std::mutex> lk(mu_);
+  if (!db_) return false;
+  auto o = json::obj();
+  for (const auto& item : coverage)
+    json::set(o.get(), item.first.c_str(),
+              static_cast<int64_t>(std::min(
+                  item.second, static_cast<uint64_t>(std::numeric_limits<int64_t>::max()))));
+  return metaSetLocked(kEventCoverageKey, json::dump(o.get()));
+}
+
+std::map<std::string, uint64_t> Store::eventCoverage() {
+  std::lock_guard<std::mutex> lk(mu_);
+  std::map<std::string, uint64_t> out;
+  auto raw = metaGetLocked(kEventCoverageKey);
+  if (!raw) return out;
+  auto doc = json::parse(*raw);
+  if (!doc) return out;
+  const cJSON* item = nullptr;
+  cJSON_ArrayForEach(item, doc.get()) {
+    if (!item->string || !cJSON_IsNumber(item)) continue;
+    const double value = item->valuedouble;
+    if (value <= 0) continue;
+    out[item->string] = static_cast<uint64_t>(value);
+  }
+  return out;
+}
+
 size_t Store::pruneEvents(size_t max_events, int64_t cutoff_wall_ms) {
-  (void)max_events;
-  (void)cutoff_wall_ms;
-  DB_LOGW(kTag, "event pruning refused because no replicated coverage snapshot exists");
-  return 0;
+  std::lock_guard<std::mutex> lk(mu_);
+  if (!db_) return 0;
+  std::map<std::string, uint64_t> coverage;
+  {
+    auto raw = metaGetLocked(kEventCoverageKey);
+    auto doc = raw ? json::parse(*raw) : json::Doc();
+    const cJSON* item = nullptr;
+    if (doc) {
+      cJSON_ArrayForEach(item, doc.get()) {
+        if (!item->string || !cJSON_IsNumber(item) || item->valuedouble <= 0) continue;
+        coverage[item->string] = static_cast<uint64_t>(item->valuedouble);
+      }
+    }
+  }
+  if (coverage.empty()) {
+    // The steady state today: no replication mechanism records event coverage yet, so retention
+    // stays a no-op instead of destroying history a peer may still need.
+    DB_LOGD(kTag, "event pruning refused because no replicated coverage snapshot exists");
+    return 0;
+  }
+  if (!exec("CREATE TEMP TABLE IF NOT EXISTS event_prune_coverage("
+            "origin TEXT PRIMARY KEY,covered INT NOT NULL)") ||
+      !exec("DELETE FROM event_prune_coverage"))
+    return 0;
+  for (const auto& item : coverage) {
+    Stmt insert(db_,
+                "INSERT OR REPLACE INTO event_prune_coverage(origin,covered) VALUES(?1,?2)");
+    if (!insert.ok()) return 0;
+    insert.bind(1, item.first);
+    insert.bind(2, static_cast<int64_t>(std::min(
+                       item.second,
+                       static_cast<uint64_t>(std::numeric_limits<int64_t>::max()))));
+    if (insert.step() != SQLITE_DONE) return 0;
+  }
+  // Retention keeps the newest max_events per origin and everything at or after cutoff_wall_ms.
+  // Deletion additionally requires that the record is applied, dispatched, and proven to exist on
+  // every cluster member, so anti-entropy can never be asked for an event this node destroyed.
+  Stmt del(db_,
+           "DELETE FROM events WHERE rowid IN ("
+           " SELECT e.rowid FROM events e"
+           " JOIN event_origin_state s ON s.origin=e.origin"
+           " JOIN event_prune_coverage c ON c.origin=e.origin"
+           " WHERE e.wall_ms<?1 AND e.seq<=MIN(s.frontier,s.dispatch_frontier)"
+           " AND e.seq<=c.covered"
+           " AND (SELECT COUNT(*) FROM events n WHERE n.origin=e.origin AND n.seq>e.seq)>=?2)");
+  if (!del.ok()) return 0;
+  del.bind(1, cutoff_wall_ms);
+  del.bind(2, static_cast<int64_t>(std::min(
+                  max_events, static_cast<size_t>(std::numeric_limits<int64_t>::max()))));
+  if (del.step() != SQLITE_DONE) return 0;
+  const size_t removed = static_cast<size_t>(std::max(0, sqlite3_changes(db_)));
+  if (removed)
+    DB_LOGI(kTag, "pruned " + std::to_string(removed) + " replicated events");
+  return removed;
 }
 
 // --- tg_queue ---

@@ -66,6 +66,7 @@
     <string name="admin_call_flow_mixed_warning">ring_then_purpose は全 peer でサポートされていません。旧版または未計測の client は purpose_first のままです。</string>
     <string name="admin_call_flow_purpose_first">purpose_first は呼出前に用件を選択します。ring_then_purpose は先に呼び出し、後から用件を更新できます。</string>
     <string name="admin_call_flow_supported">現在報告中の全 peer が call_flow_v2 を宣言しています。</string>
+    <string name="admin_call_log">呼出履歴</string>
     <string name="admin_call_sound_loop">呼出音を繰り返す</string>
     <string name="admin_cam_codec">映像コーデック</string>
     <string name="admin_cam_fps">フレームレート (fps)</string>
@@ -362,6 +363,19 @@
     <string name="event_offline">⚠ %1$s オフライン (最終応答 %2$s)</string>
     <string name="event_online">%1$s オンライン復帰</string>
     <string name="event_press">%1$s に来客です (%2$s)</string>
+    <string name="history_answered_by">%1$s が応答</string>
+    <string name="history_duration">通話 %1$s</string>
+    <string name="history_empty">まだ呼出はありません</string>
+    <string name="history_mark_seen">すべて既読にする</string>
+    <string name="history_missed_badge">不在着信 %1$s 件</string>
+    <string name="history_outcome_answered">応答</string>
+    <string name="history_outcome_cancelled">取消</string>
+    <string name="history_outcome_missed">不在着信</string>
+    <string name="history_outcome_replied">返信</string>
+    <string name="history_title">呼出履歴</string>
+    <string name="history_today">今日</string>
+    <string name="history_unread_banner">不在着信が %1$s 件あります</string>
+    <string name="history_yesterday">昨日</string>
     <string name="idle_call_button">%1$s 呼出</string>
     <string name="idle_choose_purpose">ご用件をお選びください</string>
     <string name="idle_language">言語</string>

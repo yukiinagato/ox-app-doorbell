@@ -77,8 +77,19 @@ class Store {
   std::optional<EventRecord> latestEventOfTypes(const std::string& t1, const std::string& t2);
 
   // Applied events cannot be deleted until replication carries an equivalent materialized-state
-  // snapshot and its complete per-origin coverage vector. Until then pruning fails closed.
+  // snapshot and its complete per-origin coverage vector. Until such a coverage vector is
+  // recorded with eventCoverageSet, pruning still fails closed.
+  //
+  // Retention policy: an event survives when it is inside the newest max_events of its origin,
+  // when its wall clock is at or after cutoff_wall_ms, when it is still above the origin's
+  // applied or dispatch frontier, or when the recorded coverage vector does not prove that every
+  // cluster member already holds it.
   size_t pruneEvents(size_t max_events, int64_t cutoff_wall_ms);
+
+  // Durable per-origin replication coverage. A sequence recorded here is held by every cluster
+  // member, so events at or below it may be pruned locally without losing cluster history.
+  bool eventCoverageSet(const std::map<std::string, uint64_t>& coverage);
+  std::map<std::string, uint64_t> eventCoverage();
 
   struct CallProjection {
     std::string call_id;
@@ -92,7 +103,43 @@ class Store {
     std::string terminal_reason;
     std::string dialog_owner;
     std::string answered_hlc;
+    int64_t press_wall_ms = 0;
+    int64_t answered_wall_ms = 0;
+    int64_t ended_wall_ms = 0;
+    std::string visitor_lang;
+    std::string snapshot_hash;
   };
+
+  // One finished call as shown in the call history. outcome is derived from state and
+  // terminal_reason; concurrency losers, fenced calls, and live calls are never returned.
+  struct CallLogRow {
+    std::string id;           // "<origin>:<seq>" of the originating press when known.
+    std::string call_id;
+    int64_t ts = 0;           // Press wall clock, falling back to the terminal wall clock.
+    std::string door;
+    std::string purpose;
+    std::string visitor_lang;
+    std::string outcome;      // answered | replied | missed | cancelled
+    std::string answered_by;
+    int64_t duration_ms = 0;
+    std::string snapshot;     // sha256 of the door snapshot asset, empty until phase 2.
+    std::string updated_hlc;
+    bool seen = true;
+  };
+  struct CallLogQuery {
+    int64_t since_ms = 0;     // Inclusive lower bound on ts; zero disables the bound.
+    int64_t before_ms = 0;    // Exclusive upper bound on ts for paging older; zero disables it.
+    size_t limit = 50;
+    std::string door;         // Empty matches every door.
+    std::string outcome;      // Empty matches every outcome.
+  };
+  // Newest first. seen is resolved against the device-local watermark.
+  std::vector<CallLogRow> callLog(const CallLogQuery& query);
+  // Missed calls whose projection is newer than the device-local seen watermark.
+  size_t unreadMissedCount();
+  std::string callLogSeenHlc();
+  // Empty up_to_hlc marks every currently known call as seen. The watermark never moves back.
+  bool callLogMarkSeen(const std::string& up_to_hlc);
   // Each contiguous frontier advancement and its lifecycle projection share one transaction.
   std::vector<CallProjection> activeCallProjections();
   std::optional<CallProjection> callProjection(const std::string& call_id);

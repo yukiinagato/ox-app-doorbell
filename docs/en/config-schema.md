@@ -281,8 +281,24 @@ the plaintext subscription. Startup reseals a legacy raw record or removes it fa
           "presentation": { "visual": true, "sticky": false, "ttl_s": 10 } },
         { "type": "telegram", "households": "all", "never_suppress": true }
       ]
+    },
+    // Seeded once. A missed call is a call_cancelled event whose reason is "timeout" or
+    // "recovery_*". Indoor roles only: a door station must never alert the visitor.
+    "r_missed_call_default": {
+      "enabled": true,
+      "when": { "type": "call_missed" },
+      "actions": [
+        { "type": "device_alert",
+          "targets": { "roles": ["indoor_panel"], "web_profiles": "all" },
+          "channels": ["in_app", "system_notification", "web_push"],
+          "presentation": { "visual": true, "sticky": false, "ttl_s": 30 } }
+      ]
     }
   },
+
+  // Local event retention. The newest 5,000 records of every origin always survive; older ones
+  // may be removed only once replication proves every cluster member holds them.
+  "events": { "retention_days": 90 },           // 1..3650, default 90
 
   "quiet_hours": {
     "default": { "windows": [ { "from": "23:00", "to": "07:00" } ],
@@ -498,6 +514,31 @@ one bulk-add window may auto-add.
   display-only while a call is active and never terminate a call.
 - press notify (LWW merge): `{ "hlc": "…", "claimed_by": "…", "notified_at": "…",
   "telegram_msg_ids": {"<chat_id>": msg_id}, "replied": {"reply_id": "qr_away", "by": "telegram"} }`
+- **Call history (呼出履歴).** `call_projection` materializes one row per call. The outcome is
+  derived, never stored: `ended`+`reply` → `replied`; any other `ended` → `answered`;
+  `cancelled`+`timeout` or `recovery_*` → `missed`; any other `cancelled` → `cancelled`.
+  Concurrency losers (`concurrent_press_loser`, `concurrent_answer_loser`), fenced calls
+  (`terminal_fence`), and calls that are still `ringing`/`in_call` never appear. `answered_by` is
+  the projected `dialog_owner` and `duration_ms` is `ended_wall_ms − answered_wall_ms`.
+- Read it with `GET /api/call-log?since_ms&before_ms&limit&door&outcome` (panel credential or
+  admin session) or with the `db_core_call_log_json` C ABI. `since_ms` is an inclusive lower bound
+  on a row's timestamp and `before_ms` an exclusive upper bound for paging older; rows are newest
+  first and `limit` is clamped to 500.
+- The **seen watermark** is device-local and never replicates: `POST /api/call-log/seen
+  {"up_to_hlc":"…"}` (empty marks everything seen) or `db_core_call_log_mark_seen`. It only ever
+  moves forward. `unread_missed` counts missed calls newer than it and is what the idle-screen
+  badge shows. `{"t":"call_log_changed","unread_missed":N}` follows every call-lifecycle event and
+  every watermark move.
+- `call_missed` is a **virtual rule trigger**: no node emits it. A `call_cancelled` event whose
+  reason is `timeout` or `recovery_*` matches both `call_cancelled` and `call_missed`, so existing
+  rules keep working. The seeded `r_missed_call_default` turns it into a `device_alert` on indoor
+  roles and Web Push, and can be disabled in the Admin rules tab.
+- `GET /api/events` accepts `since_ms`, `type`, and `door`, and every row carries `origin`, `seq`,
+  and `hlc` alongside the existing fields.
+- **Retention.** `events.retention_days` (1..3650, default 90) is the age floor of the local
+  retention sweep, which also always keeps the newest 5,000 records per origin. Deletion further
+  requires that the record is applied, dispatched, and covered by a durable replication coverage
+  vector; no such vector is produced yet, so pruning is still a logged no-op in practice.
 
 ## MQTT (Phase 2 — implemented)
 

@@ -260,8 +260,23 @@ mesh-PSK-derived key 和 XChaCha20-Poly1305 seal 成 schema-v2 CRDT record；mat
           "presentation": { "visual": true, "sticky": false, "ttl_s": 10 } },
         { "type": "telegram", "households": "all", "never_suppress": true }
       ]
+    },
+    // 仅首次自动写入。未接来电 = reason 为 "timeout" 或 "recovery_*" 的 call_cancelled。
+    // 仅限室内角色: 门口机不得向访客发出提醒。
+    "r_missed_call_default": {
+      "enabled": true, "when": { "type": "call_missed" },
+      "actions": [
+        { "type": "device_alert",
+          "targets": { "roles": ["indoor_panel"], "web_profiles": "all" },
+          "channels": ["in_app", "system_notification", "web_push"],
+          "presentation": { "visual": true, "sticky": false, "ttl_s": 30 } }
+      ]
     }
   },
+
+  // 本地事件保留策略。每个 origin 最新的 5,000 条始终保留; 更旧的记录只有在复制证明
+  // 集群中每个成员都已持有时才会被删除。
+  "events": { "retention_days": 90 },           // 1..3650, 默认 90
 
   "quiet_hours": {
     "default": { "windows": [ { "from": "23:00", "to": "07:00" } ],
@@ -377,6 +392,28 @@ remote/offline Web surface。
   精確 call_id 與 revision；舊格式回覆在通話進行中僅作顯示公告，不會結束通話。
 - press 的 notify（LWW 合并）: `{ "hlc": "…", "claimed_by": "…", "notified_at": "…",
   "telegram_msg_ids": {"<chat_id>": msg_id}, "replied": {"reply_id": "qr_away", "by": "telegram"} }`
+- **呼叫记录。** `call_projection` 为每次呼叫实体化一行。结果 (outcome) 不存储而是导出:
+  `ended`+`reply` → `replied`; 其他 `ended` → `answered`; `cancelled`+`timeout` 或
+  `recovery_*` → `missed`; 其他 `cancelled` → `cancelled`。并发失败方
+  (`concurrent_press_loser` / `concurrent_answer_loser`)、被围栏终止 (`terminal_fence`) 以及仍处于
+  `ringing`/`in_call` 的呼叫都不会出现。`answered_by` 即投影的 `dialog_owner`,
+  `duration_ms` = `ended_wall_ms − answered_wall_ms`。
+- 读取方式: `GET /api/call-log?since_ms&before_ms&limit&door&outcome` (面板凭据或管理会话), 或
+  C ABI 的 `db_core_call_log_json`。`since_ms` 是行时间戳的下界 (含), `before_ms` 是向更早翻页的
+  上界 (不含); 结果按时间倒序, `limit` 上限为 500。
+- **已读水位线是设备本地的, 不参与复制**: `POST /api/call-log/seen {"up_to_hlc":"…"}` (为空表示
+  全部标为已读) 或 `db_core_call_log_mark_seen`, 且只会前进。`unread_missed` 统计比水位线更新的
+  未接来电, 也就是待机界面上的红点数字。每个呼叫生命周期事件之后以及每次水位线更新之后都会下发
+  `{"t":"call_log_changed","unread_missed":N}`。
+- `call_missed` 是**虚拟规则触发器**, 没有任何节点会发出它。reason 为 `timeout` 或 `recovery_*`
+  的 `call_cancelled` 同时匹配 `call_cancelled` 与 `call_missed`, 因此既有规则不受影响。默认写入的
+  `r_missed_call_default` 将其转换为面向室内角色与 Web Push 的 `device_alert`, 可在管理页规则标签
+  中关闭。
+- `GET /api/events` 接受 `since_ms` / `type` / `door`, 每行在原有字段之外还带有 `origin` / `seq`
+  / `hlc`。
+- **保留策略。** `events.retention_days` (1..3650, 默认 90) 是本地保留清扫的年龄下限, 同时每个
+  origin 最新的 5,000 条始终保留。删除还要求记录已应用、已派发, 并被持久化的复制覆盖向量覆盖;
+  该向量目前尚未产生, 因此实际运行中剪枝仍是仅记录日志的空操作。
 
 ## MQTT（Phase 2 — 已实现）
 

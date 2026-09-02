@@ -76,6 +76,10 @@ typedef struct db_platform_v2 {
  * {"t":"chime",...,"audio_path":"..."} for a cached sound "asset:<sha256>"
  * {"t":"visitor_lang","door":"d_front","lang":"en"} for a replicated language change
  * {"t":"asset_ready","hash":"<sha256>"} when a shared asset is ready locally
+ * {"t":"call_log_changed","unread_missed":N} after every call-lifecycle event and after the seen
+ *   watermark moves. The shell refreshes the history list and the idle-screen missed badge.
+ * {"t":"device_alert","kind":"call_missed","door":"d_front","call_id":"…","unread_missed":N,
+ *   "visual":true,"sticky":false,"ttl_s":30,"channels":[…]} when a rule matches a missed call.
  * {"t":"display",...,"theme":{"bg_color":"#101418","bg_image":"<sha256>|null",
  *   "bg_image_path":"<local path>|null"}} for the idle-screen theme. The shell renders the
  *   local path directly; null means it is not cached and display is reissued after asset_ready.
@@ -136,6 +140,29 @@ DB_API char* db_core_status_json(db_core* c);
 
 /* Return diagnostic JSON for addresses, Wi-Fi, battery, press statistics, and reachability. */
 DB_API char* db_core_debug_json(db_core* c);
+
+/* Call history for this device. since_ms is an inclusive lower bound on a row's
+ * timestamp; pass 0 for the whole history. limit is clamped to 1..500 and defaults to 50 when it
+ * is not positive. Rows are newest first, and concurrency losers, fenced calls, and calls that are
+ * still ringing or connected never appear.
+ *
+ * {"rows":[{"id":"<origin>:<seq>","call_id":"…","ts":<wall ms>,"door":"d_front",
+ *           "purpose":"p_delivery","visitor_lang":"en",
+ *           "outcome":"answered|replied|missed|cancelled","answered_by":"<device or empty>",
+ *           "duration_ms":0,"snapshot":"<sha256 or empty>","hlc":"…","seen":true}],
+ *  "unread_missed":0,"seen_hlc":"…","server_ts":<wall ms>}
+ *
+ * unread_missed counts missed calls newer than the device-local seen watermark; it is what the
+ * idle-screen badge shows. Returns NULL on invalid arguments; release the result with db_free. */
+DB_API char* db_core_call_log_json(db_core* c, int64_t since_ms, int limit);
+
+/* Move the device-local seen watermark so the missed-call badge clears. up_to_hlc is a row "hlc"
+ * from db_core_call_log_json; NULL or an empty string marks every currently known call as seen.
+ * The watermark is never replicated and never moves backwards. Returns 0 on success and a
+ * negative value on invalid arguments, a core that has not been started, or a persistence
+ * failure. A successful call emits
+ * {"t":"call_log_changed","unread_missed":N} through the UI callback. */
+DB_API int db_core_call_log_mark_seen(db_core* c, const char* up_to_hlc);
 
 /* Return fully materialized configuration JSON. Release with db_free. */
 DB_API char* db_core_config_json(db_core* c);

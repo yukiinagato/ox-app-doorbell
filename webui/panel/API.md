@@ -203,6 +203,30 @@ the doorbell LAN accordingly.
 An in-call UI state may include `remote`, `peer_node`, and `peer_stream`. When peer resolution
 fails, a door station may poll `/peer-frame.jpg`; an indoor client reports video unavailable.
 
+## Call history
+
+`GET /api/call-log?since_ms&before_ms&limit&door&outcome` is accepted with either the panel session
+cookie or an authenticated Admin session. Rows are newest first, `limit` defaults to 50 and is
+clamped to 500, `since_ms` is an inclusive lower bound on `ts`, and `before_ms` is an exclusive
+upper bound used to page older.
+
+```json
+{ "rows": [ { "id": "<origin>:<seq>", "call_id": "0195…", "ts": 1756300000000,
+              "door": "d_front", "purpose": "p_delivery", "visitor_lang": "en",
+              "outcome": "answered", "answered_by": "living-room", "duration_ms": 42000,
+              "snapshot": "", "hlc": "…", "seen": true } ],
+  "unread_missed": 0, "seen_hlc": "…", "server_ts": 1756300100000 }
+```
+
+`outcome` is derived from the replicated projection: `answered`, `replied`, `missed` (a ring
+timeout or a failed restart recovery), or `cancelled`. Concurrency losers, fenced calls, and calls
+that are still ringing or connected are never returned.
+
+`POST /api/call-log/seen` with `{"up_to_hlc":"<row hlc>"}` (or an empty value for "everything")
+moves the **device-local** seen watermark forward and answers with the new `unread_missed`. The
+watermark never replicates and never moves backwards. `monitor.html` calls it once when the page
+opens so the missed badge clears.
+
 ## Web call information
 
 `GET /api/panel/call-info` returns `webrtc` connection data and a `doors` map containing

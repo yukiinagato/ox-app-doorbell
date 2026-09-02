@@ -247,6 +247,27 @@ Service Worker は通知を表示すると同時に開いている `/panel/` cli
 - monitor.html は **UA 判定をしない**。`<body data-live="1">` を手動で付けた場合のみ
   この URL を使い、`<img>` の src を据え置く (それ以外は snapshot 輪詢)。
 
+## GET /api/call-log / POST /api/call-log/seen  (呼出履歴)
+
+panel session cookie でも認証済み Admin session でも許可される。`GET /api/call-log?since_ms&
+before_ms&limit&door&outcome` は新しい順、`limit` 既定 50 / 上限 500、`since_ms` は `ts` の下限
+(含む)、`before_ms` は古い方向へページングするための上限 (含まない)。
+
+```json
+{ "rows": [ { "id": "<origin>:<seq>", "call_id": "0195…", "ts": 1756300000000,
+              "door": "d_front", "purpose": "p_delivery", "visitor_lang": "en",
+              "outcome": "answered", "answered_by": "living-room", "duration_ms": 42000,
+              "snapshot": "", "hlc": "…", "seen": true } ],
+  "unread_missed": 0, "seen_hlc": "…", "server_ts": 1756300100000 }
+```
+
+`outcome` は複製された projection から導出する: `answered` / `replied` / `missed` (呼出タイムアウト
+または復帰失敗) / `cancelled`。競合敗者・フェンス済み・進行中の通話は返らない。
+
+`POST /api/call-log/seen` に `{"up_to_hlc":"<行の hlc>"}` (空ならすべて) を送ると**端末ローカルの**
+既読ウォーターマークが前進し、新しい `unread_missed` を返す。複製されず、後退もしない。
+monitor.html はページを開いた時に一度だけ呼び、不在着信バッジを消す。
+
 ## GET /api/panel/call-info  (網頁通話 — call.html 用)
 
 網頁通話ページの設定/宛先解決 (現代ブラウザ専用 — legacy 面板は使わない)。応答:

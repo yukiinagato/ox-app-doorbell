@@ -54,6 +54,29 @@ TEST_CASE("capi: legacy and v2 constructors accept their declared layouts") {
   db_core_destroy(new_core);
 }
 
+TEST_CASE("capi: call-history entry points fail closed on a null core") {
+  // Both are additive exports; existing shells keep working and a null handle never traps.
+  CHECK(db_core_call_log_json(nullptr, 0, 10) == nullptr);
+  CHECK(db_core_call_log_mark_seen(nullptr, "") < 0);
+  CHECK(db_core_call_log_mark_seen(nullptr, nullptr) < 0);
+
+  db_platform_v2 platform{};
+  platform.struct_size = sizeof(platform);
+  platform.version = DB_PLATFORM_V2_VERSION;
+  db_core* core = db_core_create_v2(&platform, ":memory:", "{\"http_port\":0}");
+  REQUIRE(core != nullptr);
+  // A core that was created but never started reports an empty history and refuses to move the
+  // watermark instead of reaching into uninitialized state.
+  char* history = db_core_call_log_json(core, 0, 10);
+  REQUIRE(history != nullptr);
+  const std::string json = history;
+  db_free(history);
+  CHECK(json.find("\"rows\":[]") != std::string::npos);
+  CHECK(json.find("\"unread_missed\":0") != std::string::npos);
+  CHECK(db_core_call_log_mark_seen(core, nullptr) < 0);
+  db_core_destroy(core);
+}
+
 TEST_CASE("capi: SIP backend identity is explicit") {
   const std::string backend = db_core_sip_backend();
   CHECK((backend == "pjsip" || backend == "stub"));

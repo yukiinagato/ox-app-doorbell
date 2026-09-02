@@ -365,6 +365,16 @@ DB_API char* db_core_debug_json(db_core* c) {
   return dupString(c->node->debugJson());
 }
 
+DB_API char* db_core_call_log_json(db_core* c, int64_t since_ms, int limit) {
+  if (!c || !c->node) return nullptr;
+  return dupString(c->node->callLogJson(since_ms, limit));
+}
+
+DB_API int db_core_call_log_mark_seen(db_core* c, const char* up_to_hlc) {
+  if (!c || !c->node) return -1;
+  return c->node->markCallLogSeen(up_to_hlc ? up_to_hlc : "") ? 0 : -2;
+}
+
 DB_API char* db_core_config_json(db_core* c) {
   if (!c || !c->node) return nullptr;
   return dupString(c->node->configJson());
