@@ -344,6 +344,7 @@
     <string name="admin_write">写入</string>
     <string name="app_name">门铃</string>
     <string name="calling_cancel">取消</string>
+    <string name="calling_cancel_failed">无法取消呼叫</string>
     <string name="calling_no_answer">无人应答</string>
     <string name="calling_title">呼叫中…</string>
     <string name="date_full">%1$s年%2$s月%3$s日（%4$s）</string>
@@ -609,6 +610,7 @@
     <string name="panel_visitor_calling">访客呼叫中</string>
     <string name="panel_webrtc_required">通话需要配置 Asterisk WebRTC (integrations.webrtc.ws_url) — 请参阅 deploy/asterisk/webrtc.md</string>
     <string name="purpose_cancel_call">取消呼叫</string>
+    <string name="purpose_select_failed">无法发送来访目的</string>
     <string name="purpose_sent">已按 %1$s 呼叫</string>
     <string name="purpose_skip">跳过来访目的</string>
     <string name="reply_answered">已回复 (%1$s)</string>
@@ -624,6 +626,7 @@
     <string name="ring_monitor">监听</string>
     <string name="ring_monitoring">正在播放门口声音</string>
     <string name="ring_no_video">没有门口机画面</string>
+    <string name="ring_open_door">开门</string>
     <string name="ring_purpose_badge">目的: %1$s</string>
     <string name="ring_unlock">开锁</string>
     <string name="ring_unlock_sent">已发送开锁信号</string>
@@ -654,6 +657,7 @@ PIN：%2$s</string>
     <string name="setup_role">角色</string>
     <string name="setup_scan_qr">扫描室内机二维码</string>
     <string name="setup_title">设置此设备</string>
+    <string name="sip_unavailable">通话功能当前不可用</string>
     <string name="sound_button_click">光标移动 4（按钮）</string>
     <string name="sound_indoor_update">确认按钮 23（追加消息）</string>
     <string name="sound_none">不播放</string>

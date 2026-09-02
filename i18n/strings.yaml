@@ -24,6 +24,7 @@ idle.touch_to_call: { ja: "タッチして呼び出してください", en: "Tou
 calling.title: { ja: "呼び出し中…", en: "Calling…", zh: "呼叫中…" }
 calling.cancel: { ja: "取消し", en: "Cancel", zh: "取消" }
 calling.no_answer: { ja: "応答がありません", en: "No answer", zh: "无人应答" }
+calling.cancel_failed: { ja: "呼出を取り消せませんでした", en: "Could not cancel the call", zh: "无法取消呼叫" }
 
 incall.title: { ja: "通話中", en: "In call", zh: "通话中" }
 incall.end: { ja: "終了", en: "End", zh: "结束" }
@@ -444,8 +445,10 @@ idle.language: { ja: "言語", en: "Language", zh: "语言" }
 purpose.sent: { ja: "{purpose} で呼び出しました", en: "Called as {purpose}", zh: "已按 {purpose} 呼叫" }
 purpose.skip: { ja: "用件を選ばず続ける", en: "Skip purpose", zh: "跳过来访目的" }
 purpose.cancel_call: { ja: "呼び出しを取り消す", en: "Cancel call", zh: "取消呼叫" }
+purpose.select_failed: { ja: "用件を送信できませんでした", en: "Could not send the visit purpose", zh: "无法发送来访目的" }
 ring.purpose_badge: { ja: "用件: {purpose}", en: "Purpose: {purpose}", zh: "目的: {purpose}" }
 ring.lang_badge: { ja: "訪客言語: {lang}", en: "Visitor language: {lang}", zh: "访客语言: {lang}" }
+ring.open_door: { ja: "ドアを開ける", en: "Open door", zh: "开门" }
 admin.assets: { ja: "資産 (画像・音声)", en: "Assets", zh: "资源 (图片/音频)" }
 admin.assets_upload: { ja: "アップロード", en: "Upload", zh: "上传" }
 admin.assets_cached: { ja: "キャッシュ: {n}/{total} 台", en: "Cached on {n}/{total} nodes", zh: "已缓存 {n}/{total} 台" }
@@ -684,3 +687,5 @@ pair.scan_paste: { ja: "QR の文字列を貼り付ける", en: "Paste the QR te
 pair.err.bad_qr: { ja: "QR の内容が読み取れませんでした。新しい端末に表示された文字列をそのまま貼り付けてください", en: "That isn't a device QR. Paste the text shown on the new device exactly as it appears", zh: "这不是设备二维码。请原样粘贴新设备上显示的文本" }
 pair.err.no_mesh: { ja: "端末がまだ起動中です。少し待ってからお試しください", en: "The device is still starting up. Try again in a moment", zh: "设备仍在启动中，请稍后重试" }
 pair.err.pairing_unavailable: { ja: "コードを発行できませんでした。もう一度お試しください", en: "Couldn't create a code. Please try again", zh: "无法生成配对码，请重试" }
+
+sip.unavailable: { ja: "通話機能は現在利用できません", en: "Calling is currently unavailable", zh: "通话功能当前不可用" }

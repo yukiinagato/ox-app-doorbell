@@ -339,6 +339,7 @@
 "admin.write" = "書込";
 "app.name" = "ドアホン";
 "calling.cancel" = "取消し";
+"calling.cancel_failed" = "呼出を取り消せませんでした";
 "calling.no_answer" = "応答がありません";
 "calling.title" = "呼び出し中…";
 "date.full" = "%@年%@月%@日 (%@)";
@@ -604,6 +605,7 @@
 "panel.visitor_calling" = "来客呼出中";
 "panel.webrtc_required" = "通話には Asterisk の WebRTC 設定 (integrations.webrtc.ws_url) が必要です — deploy/asterisk/webrtc.md を参照してください";
 "purpose.cancel_call" = "呼び出しを取り消す";
+"purpose.select_failed" = "用件を送信できませんでした";
 "purpose.sent" = "%@ で呼び出しました";
 "purpose.skip" = "用件を選ばず続ける";
 "reply.answered" = "応答済み (%@)";
@@ -619,6 +621,7 @@
 "ring.monitor" = "モニタ";
 "ring.monitoring" = "門口の音声を再生中";
 "ring.no_video" = "門口機の映像がありません";
+"ring.open_door" = "ドアを開ける";
 "ring.purpose_badge" = "用件: %@";
 "ring.unlock" = "解錠";
 "ring.unlock_sent" = "解錠信号を送信しました";
@@ -645,6 +648,7 @@
 "setup.role" = "役割";
 "setup.scan_qr" = "室内機の QR を読み取る";
 "setup.title" = "端末を設定";
+"sip.unavailable" = "通話機能は現在利用できません";
 "sound.button_click" = "カーソル移動 4（ボタン）";
 "sound.indoor_update" = "決定ボタン 23（追加メッセージ）";
 "sound.none" = "再生しない";

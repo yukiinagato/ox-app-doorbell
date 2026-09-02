@@ -344,6 +344,7 @@
     <string name="admin_write">書込</string>
     <string name="app_name">ドアホン</string>
     <string name="calling_cancel">取消し</string>
+    <string name="calling_cancel_failed">呼出を取り消せませんでした</string>
     <string name="calling_no_answer">応答がありません</string>
     <string name="calling_title">呼び出し中…</string>
     <string name="date_full">%1$s年%2$s月%3$s日 (%4$s)</string>
@@ -609,6 +610,7 @@
     <string name="panel_visitor_calling">来客呼出中</string>
     <string name="panel_webrtc_required">通話には Asterisk の WebRTC 設定 (integrations.webrtc.ws_url) が必要です — deploy/asterisk/webrtc.md を参照してください</string>
     <string name="purpose_cancel_call">呼び出しを取り消す</string>
+    <string name="purpose_select_failed">用件を送信できませんでした</string>
     <string name="purpose_sent">%1$s で呼び出しました</string>
     <string name="purpose_skip">用件を選ばず続ける</string>
     <string name="reply_answered">応答済み (%1$s)</string>
@@ -624,6 +626,7 @@
     <string name="ring_monitor">モニタ</string>
     <string name="ring_monitoring">門口の音声を再生中</string>
     <string name="ring_no_video">門口機の映像がありません</string>
+    <string name="ring_open_door">ドアを開ける</string>
     <string name="ring_purpose_badge">用件: %1$s</string>
     <string name="ring_unlock">解錠</string>
     <string name="ring_unlock_sent">解錠信号を送信しました</string>
@@ -654,6 +657,7 @@ PIN: %2$s</string>
     <string name="setup_role">役割</string>
     <string name="setup_scan_qr">室内機の QR を読み取る</string>
     <string name="setup_title">端末を設定</string>
+    <string name="sip_unavailable">通話機能は現在利用できません</string>
     <string name="sound_button_click">カーソル移動 4（ボタン）</string>
     <string name="sound_indoor_update">決定ボタン 23（追加メッセージ）</string>
     <string name="sound_none">再生しない</string>

@@ -346,6 +346,7 @@ Delete it?</value></data>
   <data name="admin_write" xml:space="preserve"><value>Write</value></data>
   <data name="app_name" xml:space="preserve"><value>Doorbell</value></data>
   <data name="calling_cancel" xml:space="preserve"><value>Cancel</value></data>
+  <data name="calling_cancel_failed" xml:space="preserve"><value>Could not cancel the call</value></data>
   <data name="calling_no_answer" xml:space="preserve"><value>No answer</value></data>
   <data name="calling_title" xml:space="preserve"><value>Calling…</value></data>
   <data name="date_full" xml:space="preserve"><value>{0}-{1}-{2} ({3})</value></data>
@@ -611,6 +612,7 @@ Delete it?</value></data>
   <data name="panel_visitor_calling" xml:space="preserve"><value>Visitor calling</value></data>
   <data name="panel_webrtc_required" xml:space="preserve"><value>Calling requires Asterisk WebRTC configuration (integrations.webrtc.ws_url) — see deploy/asterisk/webrtc.md</value></data>
   <data name="purpose_cancel_call" xml:space="preserve"><value>Cancel call</value></data>
+  <data name="purpose_select_failed" xml:space="preserve"><value>Could not send the visit purpose</value></data>
   <data name="purpose_sent" xml:space="preserve"><value>Called as {0}</value></data>
   <data name="purpose_skip" xml:space="preserve"><value>Skip purpose</value></data>
   <data name="reply_answered" xml:space="preserve"><value>Replied ({0})</value></data>
@@ -626,6 +628,7 @@ Delete it?</value></data>
   <data name="ring_monitor" xml:space="preserve"><value>Monitor</value></data>
   <data name="ring_monitoring" xml:space="preserve"><value>Live door audio on</value></data>
   <data name="ring_no_video" xml:space="preserve"><value>No video from door station</value></data>
+  <data name="ring_open_door" xml:space="preserve"><value>Open door</value></data>
   <data name="ring_purpose_badge" xml:space="preserve"><value>Purpose: {0}</value></data>
   <data name="ring_unlock" xml:space="preserve"><value>Unlock</value></data>
   <data name="ring_unlock_sent" xml:space="preserve"><value>Unlock signal sent</value></data>
@@ -656,6 +659,7 @@ This device joins automatically. Only if it does not, enter the indoor panel add
   <data name="setup_role" xml:space="preserve"><value>Role</value></data>
   <data name="setup_scan_qr" xml:space="preserve"><value>Scan indoor-panel QR</value></data>
   <data name="setup_title" xml:space="preserve"><value>Set up this device</value></data>
+  <data name="sip_unavailable" xml:space="preserve"><value>Calling is currently unavailable</value></data>
   <data name="sound_button_click" xml:space="preserve"><value>Cursor move 4 (button)</value></data>
   <data name="sound_indoor_update" xml:space="preserve"><value>Confirm 23 (additional message)</value></data>
   <data name="sound_none" xml:space="preserve"><value>Do not play</value></data>

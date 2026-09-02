@@ -344,6 +344,7 @@ Delete it?</string>
     <string name="admin_write">Write</string>
     <string name="app_name">Doorbell</string>
     <string name="calling_cancel">Cancel</string>
+    <string name="calling_cancel_failed">Could not cancel the call</string>
     <string name="calling_no_answer">No answer</string>
     <string name="calling_title">Calling…</string>
     <string name="date_full">%1$s-%2$s-%3$s (%4$s)</string>
@@ -609,6 +610,7 @@ Delete it?</string>
     <string name="panel_visitor_calling">Visitor calling</string>
     <string name="panel_webrtc_required">Calling requires Asterisk WebRTC configuration (integrations.webrtc.ws_url) — see deploy/asterisk/webrtc.md</string>
     <string name="purpose_cancel_call">Cancel call</string>
+    <string name="purpose_select_failed">Could not send the visit purpose</string>
     <string name="purpose_sent">Called as %1$s</string>
     <string name="purpose_skip">Skip purpose</string>
     <string name="reply_answered">Replied (%1$s)</string>
@@ -624,6 +626,7 @@ Delete it?</string>
     <string name="ring_monitor">Monitor</string>
     <string name="ring_monitoring">Live door audio on</string>
     <string name="ring_no_video">No video from door station</string>
+    <string name="ring_open_door">Open door</string>
     <string name="ring_purpose_badge">Purpose: %1$s</string>
     <string name="ring_unlock">Unlock</string>
     <string name="ring_unlock_sent">Unlock signal sent</string>
@@ -654,6 +657,7 @@ This device joins automatically. Only if it does not, enter the indoor panel add
     <string name="setup_role">Role</string>
     <string name="setup_scan_qr">Scan indoor-panel QR</string>
     <string name="setup_title">Set up this device</string>
+    <string name="sip_unavailable">Calling is currently unavailable</string>
     <string name="sound_button_click">Cursor move 4 (button)</string>
     <string name="sound_indoor_update">Confirm 23 (additional message)</string>
     <string name="sound_none">Do not play</string>
