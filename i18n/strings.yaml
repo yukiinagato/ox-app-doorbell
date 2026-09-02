@@ -786,6 +786,7 @@ power.no_battery: { ja: "電池なし", en: "No battery", zh: "无电池" }
 power.unknown: { ja: "未対応", en: "Not reported", zh: "未上报" }
 
 # Batch 2 (WP-N-android): native settings, indoor dashboard, visitor screen, shared UI rules.
+# Native settings, indoor dashboard, visitor screen (batch 2, WP-N-kiosk).
 settings.title: { ja: "設定", en: "Settings", zh: "设置" }
 settings.this_device: { ja: "この端末", en: "This device", zh: "本机" }
 settings.doors: { ja: "門口", en: "Doors", zh: "门口" }

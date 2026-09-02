@@ -293,7 +293,7 @@ static NSArray *DBCommonTimeZones(void) {
                                                    display:[DBConfigUtil dig:_status
                                                                        path:@"display"]
                                                minuteOfDay:[self minuteOfDay]];
-  [rows addObject:DBRow([_texts ts:@"settings.appearance"],
+  [rows addObject:DBRow([_texts ts:@"theme.appearance"],
                         [self appearanceLabel:configured effective:effective],
                         @"cycle",
                         @"display.appearance|auto_schedule,light,dark")];
@@ -354,11 +354,11 @@ static NSArray *DBCommonTimeZones(void) {
 }
 
 - (NSString *)appearanceLabel:(NSString *)configured effective:(NSString *)effective {
-  if ([configured isEqualToString:@"light"]) return [_texts ts:@"settings.appearance_light"];
-  if ([configured isEqualToString:@"dark"]) return [_texts ts:@"settings.appearance_dark"];
-  return [NSString stringWithFormat:@"%@  ·  %@", [_texts ts:@"settings.appearance_schedule"],
-      [_texts ts:([effective isEqualToString:@"light"] ? @"settings.appearance_light"
-                                                       : @"settings.appearance_dark")]];
+  if ([configured isEqualToString:@"light"]) return [_texts ts:@"theme.mode_light"];
+  if ([configured isEqualToString:@"dark"]) return [_texts ts:@"theme.mode_dark"];
+  return [NSString stringWithFormat:@"%@  ·  %@", [_texts ts:@"theme.appearance_auto_schedule"],
+      [_texts ts:([effective isEqualToString:@"light"] ? @"theme.mode_light"
+                                                       : @"theme.mode_dark")]];
 }
 
 - (NSArray *)timeRows {
@@ -416,7 +416,7 @@ static NSArray *DBCommonTimeZones(void) {
       BOOL configuredUnlock = [DBConfigUtil boolVal:unlock path:@"configured" def:NO];
       BOOL showUnlock = [DBConfigUtil boolVal:unlock path:@"show_button"
                                           def:configuredUnlock];
-      [rows addObject:DBRow([_texts ts:@"settings.unlock_button"],
+      [rows addObject:DBRow([_texts ts:@"unlock.title"],
                             [_texts ts:(showUnlock ? @"settings.on" : @"settings.off")],
                             @"toggle",
                             [NSString stringWithFormat:@"doors.%@.unlock.show_button|%d",
@@ -436,7 +436,7 @@ static NSArray *DBCommonTimeZones(void) {
     NSDictionary *entry = [purposes objectForKey:purpose];
     BOOL enabled = [DBPurposeModel isPurposeEnabled:entry];
     [rows addObject:DBRow([DBConfigUtil labelOf:entry lang:_boot.uiLang fallback:purpose],
-                          [_texts ts:(enabled ? @"settings.on" : @"settings.off")],
+                          [_texts ts:(enabled ? @"purpose.enabled" : @"purpose.disabled")],
                           @"toggle",
                           [NSString stringWithFormat:@"%@|%d",
                               [DBPurposeModel enabledKeyForPurpose:purpose], enabled ? 1 : 0])];
@@ -598,14 +598,27 @@ static NSArray *DBCommonTimeZones(void) {
 // that predates the export answers -100 and the row says so rather than
 // pretending the value was saved.
 - (BOOL)reportWriteStatus:(int)status {
-  if (status == 0) {
-    [self showToast:[_texts ts:@"settings.saved"]];
-    [self reload];
-    return YES;
+  if (status != 0) {
+    [self showToast:[_texts ts:(status == -100 ? @"settings.web_only"
+                                               : @"settings.save_failed")]];
+    return NO;
   }
-  [self showToast:[_texts ts:(status == -100 ? @"settings.web_only"
-                                             : @"settings.save_failed")]];
-  return NO;
+  // A readability warning means the value was saved and may be hard to read;
+  // custom colours are never rejected (spec §5.2).
+  NSString *message = [_texts ts:@"settings.saved"];
+  for (id entry in [_core lastWriteWarnings]) {
+    if (![entry isKindOfClass:[NSDictionary class]]) continue;
+    id ratio = [(NSDictionary *)entry objectForKey:@"contrast"];
+    NSString *key = [DBConfigUtil evStr:entry key:@"message_key"];
+    if ([key length] == 0) key = @"theme.low_contrast";
+    message = [_texts t:key,
+        [NSString stringWithFormat:@"%.1f", [ratio respondsToSelector:@selector(doubleValue)]
+                                                ? [ratio doubleValue] : 0.0], nil];
+    break;
+  }
+  [self showToast:message];
+  [self reload];
+  return YES;
 }
 
 - (void)commitPendingNumber:(NSString *)value {
@@ -662,7 +675,11 @@ static NSArray *DBCommonTimeZones(void) {
 
 - (void)presentZonePickerForKey:(NSString *)key {
   _pickerKey = [key copy];
-  _pickerAll = DBCommonTimeZones();
+  // Core publishes the zones it can actually resolve; the built-in list is the
+  // fallback for a core that does not report them.
+  id zones = [DBConfigUtil dig:_status path:@"time.zones"];
+  _pickerAll = ([zones isKindOfClass:[NSArray class]] && [(NSArray *)zones count] > 0)
+      ? (NSArray *)zones : DBCommonTimeZones();
   _pickerFiltered = _pickerAll;
   _pickerSearch.text = @"";
   _pickerSearch.placeholder = [_texts ts:@"settings.zone_search"];

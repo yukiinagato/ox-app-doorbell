@@ -613,6 +613,10 @@ static BOOL DBSameString(NSString *a, NSString *b) {
       }
       NSString *selfId = [DBConfigUtil str:st path:@"node.id"];
       s->_nodeId = [selfId copy] ?: @"";
+      // Core remembers the mute flag across calls and reports it here, so the
+      // toggle shows the real position instead of a local guess.
+      if ([DBConfigUtil dig:st path:@"call.mic_muted"] != nil)
+        s->_micMuted = [DBConfigUtil boolVal:st path:@"call.mic_muted" def:s->_micMuted];
       NSDictionary *display = [st objectForKey:@"display"];
       if ([display isKindOfClass:[NSDictionary class]]) s->_display = display;
       // Core reports whether an unlock action exists and whether the button
@@ -1805,7 +1809,7 @@ static BOOL DBSameString(NSString *a, NSString *b) {
   // a silent no-op reads as a broken lock (spec §5.2).
   int status = [_core openDoor:_door];
   _hintLabel.text = (status == 0) ? [_texts ts:@"ring.unlock_sent"]
-                                  : [_texts ts:@"ring.unlock_unconfigured"];
+                                  : [_texts ts:@"unlock.not_configured"];
   _hintLabel.hidden = NO;
 }
 

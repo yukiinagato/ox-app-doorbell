@@ -229,14 +229,23 @@ static NSTimeInterval sLockedUntil = 0;
     // Core predates the shared password: keep the local digest as the gate.
     return localMatches;
   }
-  if ([_core verifyAdminPassword:entered]) {
+  // >0 accepted, 0 wrong, -1 locked out, -2 no cluster password yet.
+  int status = [_core verifyAdminPassword:entered];
+  if (status > 0) {
     [[self class] retireLocalDigest];
     return YES;
   }
+  if (status == 0 || status == -1) {
+    // The cluster has a password and Core answered for it, so the device digest
+    // stops being consulted and is deleted: one password change must not leave
+    // a stale second way in.
+    [[self class] retireLocalDigest];
+    return NO;
+  }
+  if (status != -2) return NO;
+  // No cluster password yet: the device's own digest is still authoritative,
+  // and the first successful entry republishes it as the cluster password.
   if (!localMatches) return NO;
-  // Core rejected it but the device's own digest matches: adopt it as the
-  // cluster password. Core accepts an empty "current" only while none is set,
-  // so a cluster that already has one refuses here and the stale digest dies.
   if ([_core setAdminPasswordFrom:@"" to:entered] != 0) return NO;
   [[self class] retireLocalDigest];
   NSLog(@"[doorbell][admin] migrated the local admin digest to the cluster password");

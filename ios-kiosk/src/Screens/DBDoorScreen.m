@@ -160,6 +160,7 @@ typedef enum {
   BOOL _noticeExpanded;
   UILabel *_versionLabel;
   NSDictionary *_display;   // status.display: core-resolved appearance and theme.
+  NSDictionary *_status;
   DBSosSlider *_sos;
   DBUiPalette *_palette;
   NSTimer *_clockTimer;
@@ -517,6 +518,7 @@ typedef enum {
       if (!screen || generation != screen->_snapshotGeneration) return;
       [screen applyPairingSnapshot:pairing];
       screen->_cfg = config;
+      screen->_status = status;
       NSDictionary *display = [status objectForKey:@"display"];
       if ([display isKindOfClass:[NSDictionary class]]) screen->_display = display;
       [screen->_texts setConfig:config];
@@ -1241,6 +1243,13 @@ typedef enum {
 
 - (void)onEmergencyCancel {
   __weak DBDoorScreen *weakSelf = self;
+  // Core reports whether clearing really needs the password: an unset cluster
+  // password must never stand between a household and a running alarm, so the
+  // prompt is skipped when there is nothing to prompt for.
+  if (![DBConfigUtil boolVal:_status path:@"emergency.cancel_requires_password" def:YES]) {
+    (void)[_core emergency:NO];
+    return;
+  }
   [_router requestPinThen:^{
     DBDoorScreen *screen = weakSelf;
     if (screen) (void)[screen->_core emergency:NO];
