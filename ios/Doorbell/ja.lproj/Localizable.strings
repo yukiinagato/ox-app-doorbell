@@ -727,6 +727,7 @@
 "theme.auto" = "自動";
 "theme.background_source_color" = "背景色";
 "theme.background_source_image" = "背景画像の平均色";
+"theme.background_unsampled" = "背景画像を読み取れませんでした (%@)。文字色は端末側で判定します";
 "theme.call_button" = "呼出ボタンの色";
 "theme.custom" = "指定色";
 "theme.dark_from" = "ダークにする時刻";
@@ -744,6 +745,9 @@
 "theme.region_notice" = "お知らせ";
 "theme.region_status_line" = "状態表示";
 "theme.region_tile_label" = "タイルの見出し";
+"theme.unsampled_decode_failed" = "対応していない形式です";
+"theme.unsampled_missing" = "この端末にまだ届いていません";
+"theme.unsampled_too_large" = "画像が大きすぎます";
 "time.err_bad_reply" = "サーバーの応答が正しくありません";
 "time.err_bad_server" = "サーバーの書き方が正しくありません";
 "time.err_implausible" = "測定した時刻が信用できないため使いませんでした";

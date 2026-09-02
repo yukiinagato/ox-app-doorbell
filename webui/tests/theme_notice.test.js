@@ -50,6 +50,31 @@ assert.strictEqual(previewing.callButton, "#8144D6");
 assert.strictEqual(previewing.ink, "dark");
 assert.strictEqual(previewing.callButtonInk, L.autoInk(previewing.callButton));
 assert.strictEqual(L.themeAutoModel({}, "").callButton, L.autoAccent("#101418", "#FFFFFF"));
+assert.strictEqual(published.unsampled, false);
+assert.strictEqual(published.reason, "");
+
+// A configured background core could not sample must never read as the flat theme colour: the
+// published ink came from #101418, not from the photograph actually on screen.
+const unsampled = L.themeAutoModel({ display: { theme: {
+  auto_background: { color: "#101418", source: "image_unsampled", reason: "too_large" },
+  auto_accent: { call_button: "#AA5522", call_button_ink: "light" }
+} } }, "");
+assert.strictEqual(unsampled.source, "image_unsampled");
+assert.strictEqual(unsampled.unsampled, true);
+assert.strictEqual(unsampled.reason, "too_large");
+// Core's accent is not preferred here, because it was derived from the flat colour.
+assert.notStrictEqual(unsampled.callButton, "#AA5522");
+assert.strictEqual(unsampled.callButton, L.autoAccent("#101418", "#FFFFFF"));
+for (const reason of ["decode_failed", "missing"]) {
+  const model = L.themeAutoModel({ display: { theme: {
+    auto_background: { color: "#101418", source: "image_unsampled", reason: reason } } } }, "");
+  assert.strictEqual(model.reason, reason);
+}
+// An unknown source is treated as the flat colour, which is what an older core reports.
+assert.strictEqual(L.themeAutoModel({ display: { theme: {
+  auto_background: { color: "#101418", source: "color" } } } }, "").unsampled, false);
+assert.strictEqual(L.themeAutoModel({ display: { theme: {
+  auto_background: { color: "#101418", source: "nonsense" } } } }, "").source, "color");
 
 // ---- theme colour overrides ------------------------------------------------------------------
 const auto = L.themeColorEntries("", { call_button_auto: true, ink_override: {} },
@@ -216,7 +241,8 @@ const referenced = [
   "theme.dark_from", "theme.light_from", "theme.now", "theme.mode_light", "theme.mode_dark",
   "theme.auto", "theme.custom",
   "theme.call_button", "theme.ink", "theme.ink_region", "theme.background_source_image",
-  "theme.background_source_color",
+  "theme.background_source_color", "theme.background_unsampled",
+  "theme.unsampled_too_large", "theme.unsampled_decode_failed", "theme.unsampled_missing",
   "notice.target", "notice.target_global", "notice.scope_global", "notice.presets_title",
   "notice.preset_add", "notice.presets_full", "notice.preset_invalid",
   "unlock.title", "unlock.auto", "unlock.show", "unlock.hide", "unlock.not_configured",
@@ -230,6 +256,8 @@ for (const language of ["ja", "en", "zh"]) {
       language + " is missing " + key);
   assert.ok(catalog["theme.low_contrast"].includes("{ratio}"),
     language + " theme.low_contrast needs {ratio}");
+  assert.ok(catalog["theme.background_unsampled"].includes("{reason}"),
+    language + " theme.background_unsampled needs {reason}");
 }
 
 console.log("theme and notice tests: ok");

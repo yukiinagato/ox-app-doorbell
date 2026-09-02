@@ -1441,12 +1441,21 @@ var AdminLogic = (function () {
     var background = colorOk(backgroundHex) ? backgroundHex :
       (isObj(theme.auto_background) && colorOk(theme.auto_background.color)
         ? theme.auto_background.color : "#101418");
-    var usePublished = !colorOk(backgroundHex) && colorOk(published.call_button);
+    var reported = isObj(theme.auto_background) ? theme.auto_background : {};
+    var source = reported.source === "image" || reported.source === "image_unsampled"
+      ? reported.source : "color";
+    // When core says it could not sample the configured image, its accent came from the flat
+    // theme colour rather than from the picture, so it is not worth preferring over a local
+    // computation. The tab says so either way.
+    var usePublished = !colorOk(backgroundHex) && colorOk(published.call_button) &&
+      source !== "image_unsampled";
     var button = usePublished ? published.call_button : autoAccent(background, "#FFFFFF");
     return {
       background: background,
-      source: isObj(theme.auto_background) && theme.auto_background.source === "image"
-        ? "image" : "color",
+      source: source,
+      unsampled: source === "image_unsampled",
+      reason: source === "image_unsampled" && typeof reported.reason === "string"
+        ? reported.reason : "",
       ink: autoInk(background),
       callButton: button,
       callButtonInk: autoInk(button),
@@ -2708,7 +2717,10 @@ if (typeof document !== "undefined") (function () {
                              follow_system: false,
                              schedule: { dark_from: "19:00", light_from: "06:30" } },
                theme: { bg_color: "#12202c",
-                        auto_background: { color: "#12202c", source: "color" },
+                        // The Moto's real state before the fix: an image is configured but was
+                        // never sampled, so the ink must not be taken from the flat colour.
+                        auto_background: { color: "#12202c", source: "image_unsampled",
+                                           reason: "too_large" },
                         auto_ink: { clock: "light", date: "light", status_line: "light",
                                     hint: "light", tile_label: "light", footer: "light",
                                     notice: "light" },
@@ -6553,6 +6565,12 @@ if (typeof document !== "undefined") (function () {
     return "";
   }
 
+  function unsampledReasonLabel(reason) {
+    if (reason === "too_large") return t("theme.unsampled_too_large");
+    if (reason === "missing") return t("theme.unsampled_missing");
+    return t("theme.unsampled_decode_failed");
+  }
+
   function inkRegionLabel(region) {
     if (region === "clock") return t("theme.region_clock");
     if (region === "date") return t("theme.region_date");
@@ -6670,9 +6688,13 @@ if (typeof document !== "undefined") (function () {
          "</label> <input type='color' id='thBtnColor' value='" +
          esc(L.colorOk(buttonOverride) ? buttonOverride : autoModel.callButton) + "'>" +
          "<span class='mono' id='thBtnTxt' style='margin-left:8px'></span>" +
-         "<div class='dim fhint'>" +
-         esc(t(autoModel.source === "image" ? "theme.background_source_image"
-                                            : "theme.background_source_color")) + "</div></div>";
+         "<div class='" + (autoModel.unsampled ? "warn" : "dim") + " fhint'>" +
+         esc(autoModel.unsampled
+               ? fmt(t("theme.background_unsampled"),
+                     { reason: unsampledReasonLabel(autoModel.reason) })
+               : t(autoModel.source === "image" ? "theme.background_source_image"
+                                                : "theme.background_source_color")) +
+         "</div></div>";
 
     h += "<div class='frow'><label class='flab'>" + esc(t("theme.ink")) + "</label>" +
          "<div class='scrollx'><table><thead><tr><th>" + esc(t("theme.ink_region")) +

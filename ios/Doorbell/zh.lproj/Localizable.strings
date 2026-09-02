@@ -727,6 +727,7 @@
 "theme.auto" = "自动";
 "theme.background_source_color" = "背景颜色";
 "theme.background_source_image" = "取自背景图片的平均色";
+"theme.background_unsampled" = "无法读取背景图片（%@），文字颜色由各设备自行判断";
 "theme.call_button" = "呼叫按钮颜色";
 "theme.custom" = "指定颜色";
 "theme.dark_from" = "深色开始";
@@ -744,6 +745,9 @@
 "theme.region_notice" = "公告";
 "theme.region_status_line" = "状态栏";
 "theme.region_tile_label" = "磁贴标题";
+"theme.unsampled_decode_failed" = "不支持的格式";
+"theme.unsampled_missing" = "尚未同步到本设备";
+"theme.unsampled_too_large" = "图片过大";
 "time.err_bad_reply" = "服务器的响应无效";
 "time.err_bad_server" = "服务器条目格式不正确";
 "time.err_implausible" = "测得的时间不可信，已丢弃";

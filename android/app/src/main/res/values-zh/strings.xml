@@ -736,6 +736,7 @@ PIN：%2$s</string>
     <string name="theme_auto">自动</string>
     <string name="theme_background_source_color">背景颜色</string>
     <string name="theme_background_source_image">取自背景图片的平均色</string>
+    <string name="theme_background_unsampled">无法读取背景图片（%1$s），文字颜色由各设备自行判断</string>
     <string name="theme_call_button">呼叫按钮颜色</string>
     <string name="theme_custom">指定颜色</string>
     <string name="theme_dark_from">深色开始</string>
@@ -753,6 +754,9 @@ PIN：%2$s</string>
     <string name="theme_region_notice">公告</string>
     <string name="theme_region_status_line">状态栏</string>
     <string name="theme_region_tile_label">磁贴标题</string>
+    <string name="theme_unsampled_decode_failed">不支持的格式</string>
+    <string name="theme_unsampled_missing">尚未同步到本设备</string>
+    <string name="theme_unsampled_too_large">图片过大</string>
     <string name="time_err_bad_reply">服务器的响应无效</string>
     <string name="time_err_bad_server">服务器条目格式不正确</string>
     <string name="time_err_implausible">测得的时间不可信，已丢弃</string>

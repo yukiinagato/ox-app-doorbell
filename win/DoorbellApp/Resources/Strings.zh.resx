@@ -738,6 +738,7 @@ PIN：{1}</value></data>
   <data name="theme_auto" xml:space="preserve"><value>自动</value></data>
   <data name="theme_background_source_color" xml:space="preserve"><value>背景颜色</value></data>
   <data name="theme_background_source_image" xml:space="preserve"><value>取自背景图片的平均色</value></data>
+  <data name="theme_background_unsampled" xml:space="preserve"><value>无法读取背景图片（{0}），文字颜色由各设备自行判断</value></data>
   <data name="theme_call_button" xml:space="preserve"><value>呼叫按钮颜色</value></data>
   <data name="theme_custom" xml:space="preserve"><value>指定颜色</value></data>
   <data name="theme_dark_from" xml:space="preserve"><value>深色开始</value></data>
@@ -755,6 +756,9 @@ PIN：{1}</value></data>
   <data name="theme_region_notice" xml:space="preserve"><value>公告</value></data>
   <data name="theme_region_status_line" xml:space="preserve"><value>状态栏</value></data>
   <data name="theme_region_tile_label" xml:space="preserve"><value>磁贴标题</value></data>
+  <data name="theme_unsampled_decode_failed" xml:space="preserve"><value>不支持的格式</value></data>
+  <data name="theme_unsampled_missing" xml:space="preserve"><value>尚未同步到本设备</value></data>
+  <data name="theme_unsampled_too_large" xml:space="preserve"><value>图片过大</value></data>
   <data name="time_err_bad_reply" xml:space="preserve"><value>服务器的响应无效</value></data>
   <data name="time_err_bad_server" xml:space="preserve"><value>服务器条目格式不正确</value></data>
   <data name="time_err_implausible" xml:space="preserve"><value>测得的时间不可信，已丢弃</value></data>

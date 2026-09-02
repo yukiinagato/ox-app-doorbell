@@ -462,6 +462,26 @@ installation configured before this behaviour existed therefore still renders it
 accepts an announcement for them; the first write creates the entry and it reports `configured`
 from then on. A door nobody serves and nothing configures remains unknown and is refused.
 
+`display.theme.auto_background` reports `{"color":"#RRGGBB","source":…}` and, when the source is
+`image_unsampled`, a `"reason"`. The three sources are distinct on purpose:
+
+| `source` | meaning |
+|---|---|
+| `color` | no background image is configured; `color` is the theme colour and is authoritative |
+| `image` | the background image was sampled; `color` is its average |
+| `image_unsampled` | an image **is** configured but core could not sample it; `color` is only the flat theme colour |
+
+`reason` is `too_large` (beyond core's decoded-pixel budget of 16 MP), `decode_failed` (not a JPEG
+or PNG this build decodes), or `missing` (the asset is not cached on this node yet). On
+`image_unsampled` a shell must **not** trust `auto_ink` or `auto_accent`: they were derived from
+the theme colour, not from the picture actually on screen. Sample the image locally and decide
+there, or leave the previous ink in place until the asset arrives.
+
+Core samples a grid of at most 16x16 points, but stb has no downscale-on-decode, so the decode is
+transient and costs about three bytes per pixel (roughly 48 MB at the cap) and is freed
+immediately. A shell on hardware that cannot afford that should sample locally regardless; the
+`source` field is what tells it core has not.
+
 ## Time, power, and announcements
 
 The bundled time-zone table lives in `core/src/util/tz.{h,cpp}` and covers the zones the settings

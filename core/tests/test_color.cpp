@@ -1,4 +1,5 @@
 #include <cmath>
+#include <algorithm>
 #include <cstdio>
 #include <string>
 
@@ -155,10 +156,103 @@ TEST_CASE("color: the computed call button is stable and reproducible") {
   CHECK(contrastRatio(ink == "light" ? kWhite : kBlack, impossible) >= 4.5);
 }
 
-TEST_CASE("color: image averaging samples a decodable file and refuses anything else") {
+namespace {
+
+uint32_t crc32Of(const uint8_t* data, size_t len, uint32_t seed = 0) {
+  static uint32_t table[256];
+  static bool ready = false;
+  if (!ready) {
+    for (uint32_t i = 0; i < 256; i++) {
+      uint32_t c = i;
+      for (int k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320u ^ (c >> 1)) : (c >> 1);
+      table[i] = c;
+    }
+    ready = true;
+  }
+  uint32_t crc = seed ^ 0xFFFFFFFFu;
+  for (size_t i = 0; i < len; i++) crc = table[(crc ^ data[i]) & 0xFF] ^ (crc >> 8);
+  return crc ^ 0xFFFFFFFFu;
+}
+
+void appendBigEndian(Bytes& out, uint32_t value) {
+  out.push_back(static_cast<uint8_t>(value >> 24));
+  out.push_back(static_cast<uint8_t>(value >> 16));
+  out.push_back(static_cast<uint8_t>(value >> 8));
+  out.push_back(static_cast<uint8_t>(value));
+}
+
+void appendChunk(Bytes& out, const char tag[4], const Bytes& payload) {
+  appendBigEndian(out, static_cast<uint32_t>(payload.size()));
+  Bytes body(tag, tag + 4);
+  body.insert(body.end(), payload.begin(), payload.end());
+  out.insert(out.end(), body.begin(), body.end());
+  appendBigEndian(out, crc32Of(body.data(), body.size()));
+}
+
+// A flat 8-bit greyscale PNG of the requested size, deflated with stored blocks so the test
+// needs no compressor. Greyscale keeps a multi-megapixel fixture around one byte per pixel;
+// stb expands it to RGB on load, which is what the sampler asks for.
+Bytes makeGreyPng(int width, int height, uint8_t value) {
+  Bytes raw;
+  raw.reserve(static_cast<size_t>(height) * (static_cast<size_t>(width) + 1));
+  for (int y = 0; y < height; y++) {
+    raw.push_back(0);  // filter type: none
+    raw.insert(raw.end(), static_cast<size_t>(width), value);
+  }
+  uint32_t a = 1, b = 0;
+  for (uint8_t byte : raw) {
+    a = (a + byte) % 65521;
+    b = (b + a) % 65521;
+  }
+  Bytes zlib{0x78, 0x01};
+  size_t offset = 0;
+  while (offset < raw.size()) {
+    const size_t block = std::min<size_t>(raw.size() - offset, 65535);
+    const bool last = offset + block >= raw.size();
+    zlib.push_back(last ? 1 : 0);
+    zlib.push_back(static_cast<uint8_t>(block & 0xFF));
+    zlib.push_back(static_cast<uint8_t>(block >> 8));
+    zlib.push_back(static_cast<uint8_t>((~block) & 0xFF));
+    zlib.push_back(static_cast<uint8_t>((~block) >> 8));
+    zlib.insert(zlib.end(), raw.begin() + static_cast<std::ptrdiff_t>(offset),
+                raw.begin() + static_cast<std::ptrdiff_t>(offset + block));
+    offset += block;
+  }
+  appendBigEndian(zlib, (b << 16) | a);
+
+  Bytes header;
+  appendBigEndian(header, static_cast<uint32_t>(width));
+  appendBigEndian(header, static_cast<uint32_t>(height));
+  header.push_back(8);  // bit depth
+  header.push_back(0);  // colour type: greyscale
+  header.push_back(0);
+  header.push_back(0);
+  header.push_back(0);
+
+  Bytes png{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A};
+  appendChunk(png, "IHDR", header);
+  appendChunk(png, "IDAT", zlib);
+  appendChunk(png, "IEND", {});
+  return png;
+}
+
+std::string writeTempFixture(const std::string& name, const Bytes& bytes) {
+  const std::string path = "/tmp/" + name;
+  REQUIRE(writeFileBytes(path, bytes));
+  return path;
+}
+
+}  // namespace
+
+TEST_CASE("color: image averaging samples a decodable file and reports why it could not") {
   Rgb average;
-  CHECK_FALSE(averageImageColor("", &average));
-  CHECK_FALSE(averageImageColor("/nonexistent/theme.jpg", &average));
+  // Absent input is "missing", not a decode failure: the caller distinguishes the two.
+  CHECK(averageImageColor("", &average) == SampleStatus::kMissing);
+  CHECK(averageImageColor("/nonexistent/theme.jpg", &average) == SampleStatus::kMissing);
+  CHECK(std::string(sampleStatusName(SampleStatus::kOk)) == "ok");
+  CHECK(std::string(sampleStatusName(SampleStatus::kMissing)) == "missing");
+  CHECK(std::string(sampleStatusName(SampleStatus::kTooLarge)) == "too_large");
+  CHECK(std::string(sampleStatusName(SampleStatus::kDecodeFailed)) == "decode_failed");
 
   // A 2x2 PNG of one flat colour must average to exactly that colour. The bytes below are a
   // minimal PNG encoding #9BD748 so the test needs no fixture file on disk.
@@ -172,14 +266,48 @@ TEST_CASE("color: image averaging samples a decodable file and refuses anything 
   const std::string path = "/tmp/doorbell_theme_average_test.png";
   Bytes bytes(png, png + sizeof(png));
   REQUIRE(writeFileBytes(path, bytes));
-  REQUIRE(averageImageColor(path, &average));
+  REQUIRE(averageImageColor(path, &average) == SampleStatus::kOk);
   CHECK(formatHex(average) == "#9BD748");
   std::remove(path.c_str());
 
-  // A file that is not an image at all is refused rather than averaged as noise.
+  // A file that is not an image at all is a decode failure, distinct from a missing file.
   const std::string junk_path = "/tmp/doorbell_theme_average_junk.png";
   Bytes junk(64, 0x41);
   REQUIRE(writeFileBytes(junk_path, junk));
-  CHECK_FALSE(averageImageColor(junk_path, &average));
+  CHECK(averageImageColor(junk_path, &average) == SampleStatus::kDecodeFailed);
   std::remove(junk_path.c_str());
+
+  // A truncated PNG carries a valid header but cannot be decoded.
+  Bytes truncated(png, png + 40);
+  const std::string truncated_path =
+      writeTempFixture("doorbell_theme_average_truncated.png", truncated);
+  CHECK(averageImageColor(truncated_path, &average) == SampleStatus::kDecodeFailed);
+  std::remove(truncated_path.c_str());
+}
+
+TEST_CASE("color: an ordinary phone photograph is sampled, not refused for its size") {
+  // The regression: a real 2200x2609 background (5.7 MP) sat above the old 4 MP budget, so it
+  // was never sampled and the caller reported the flat theme colour instead.
+  Rgb average;
+  const Bytes photo = makeGreyPng(2200, 2609, 0xC8);
+  const std::string path = writeTempFixture("doorbell_theme_large.png", photo);
+  REQUIRE(averageImageColor(path, &average) == SampleStatus::kOk);
+  CHECK(formatHex(average) == "#C8C8C8");
+  // A light photograph asks for dark ink; before the fix this resolved from #101418 instead.
+  CHECK(std::string(autoInk(average)) == "dark");
+  std::remove(path.c_str());
+
+  // The budget still exists: a declared size past it is refused before anything is decoded.
+  Bytes oversized = makeGreyPng(2, 2, 0x40);
+  // Rewrite the IHDR dimensions in place, so stbi_info reports 5000x5000 for a tiny file.
+  oversized[16] = 0x00; oversized[17] = 0x00; oversized[18] = 0x13; oversized[19] = 0x88;
+  oversized[20] = 0x00; oversized[21] = 0x00; oversized[22] = 0x13; oversized[23] = 0x88;
+  const uint32_t fixed = crc32Of(oversized.data() + 12, 17);
+  oversized[29] = static_cast<uint8_t>(fixed >> 24);
+  oversized[30] = static_cast<uint8_t>(fixed >> 16);
+  oversized[31] = static_cast<uint8_t>(fixed >> 8);
+  oversized[32] = static_cast<uint8_t>(fixed);
+  const std::string big_path = writeTempFixture("doorbell_theme_oversized.png", oversized);
+  CHECK(averageImageColor(big_path, &average) == SampleStatus::kTooLarge);
+  std::remove(big_path.c_str());
 }

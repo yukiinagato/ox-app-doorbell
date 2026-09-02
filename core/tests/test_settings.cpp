@@ -1,5 +1,7 @@
 #include <unistd.h>
 
+#include <algorithm>
+
 #include <cstdio>
 #include <memory>
 #include <string>
@@ -9,6 +11,7 @@
 #include "node/node.h"
 #include "util/clock.h"
 #include "util/json.h"
+#include "util/common.h"
 #include "util/runloop.h"
 #include "util/tz.h"
 
@@ -114,6 +117,75 @@ struct SettingsNode {
 int64_t utcMsForAppearance(int year, int month, int day, int hour, int minute) {
   return tz::daysFromCivil(year, month, day) * 86'400'000LL + hour * 3'600'000LL +
          minute * 60'000LL;
+}
+
+// A flat 8-bit greyscale PNG with stored-deflate blocks, so a multi-megapixel fixture needs no
+// compressor and stays about one byte per pixel on disk.
+Bytes makeTestGreyPng(int width, int height, const Bytes& raw) {
+  static const auto crc32Of = [](const uint8_t* data, size_t len) {
+    static uint32_t table[256];
+    static bool ready = false;
+    if (!ready) {
+      for (uint32_t i = 0; i < 256; i++) {
+        uint32_t c = i;
+        for (int k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320u ^ (c >> 1)) : (c >> 1);
+        table[i] = c;
+      }
+      ready = true;
+    }
+    uint32_t crc = 0xFFFFFFFFu;
+    for (size_t i = 0; i < len; i++) crc = table[(crc ^ data[i]) & 0xFF] ^ (crc >> 8);
+    return crc ^ 0xFFFFFFFFu;
+  };
+  auto append_be = [](Bytes& out, uint32_t value) {
+    out.push_back(static_cast<uint8_t>(value >> 24));
+    out.push_back(static_cast<uint8_t>(value >> 16));
+    out.push_back(static_cast<uint8_t>(value >> 8));
+    out.push_back(static_cast<uint8_t>(value));
+  };
+  auto append_chunk = [&](Bytes& out, const char tag[4], const Bytes& payload) {
+    append_be(out, static_cast<uint32_t>(payload.size()));
+    Bytes body(tag, tag + 4);
+    body.insert(body.end(), payload.begin(), payload.end());
+    out.insert(out.end(), body.begin(), body.end());
+    append_be(out, crc32Of(body.data(), body.size()));
+  };
+
+  uint32_t a = 1, b = 0;
+  for (uint8_t byte : raw) {
+    a = (a + byte) % 65521;
+    b = (b + a) % 65521;
+  }
+  Bytes zlib{0x78, 0x01};
+  size_t offset = 0;
+  while (offset < raw.size()) {
+    const size_t block = std::min<size_t>(raw.size() - offset, 65535);
+    const bool last = offset + block >= raw.size();
+    zlib.push_back(last ? 1 : 0);
+    zlib.push_back(static_cast<uint8_t>(block & 0xFF));
+    zlib.push_back(static_cast<uint8_t>(block >> 8));
+    zlib.push_back(static_cast<uint8_t>((~block) & 0xFF));
+    zlib.push_back(static_cast<uint8_t>((~block) >> 8));
+    zlib.insert(zlib.end(), raw.begin() + static_cast<std::ptrdiff_t>(offset),
+                raw.begin() + static_cast<std::ptrdiff_t>(offset + block));
+    offset += block;
+  }
+  append_be(zlib, (b << 16) | a);
+
+  Bytes header;
+  append_be(header, static_cast<uint32_t>(width));
+  append_be(header, static_cast<uint32_t>(height));
+  header.push_back(8);
+  header.push_back(0);
+  header.push_back(0);
+  header.push_back(0);
+  header.push_back(0);
+
+  Bytes png{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A};
+  append_chunk(png, "IHDR", header);
+  append_chunk(png, "IDAT", zlib);
+  append_chunk(png, "IEND", {});
+  return png;
 }
 
 std::string settingsTempDir() {
@@ -838,4 +910,87 @@ TEST_CASE("doors: a live door with no configuration entry still appears and is a
 
   // A door nobody serves is still unknown.
   CHECK_FALSE(fleet.node->setDoorNotice("d_nowhere", "hello", 0));
+}
+
+TEST_CASE("display: a configured background that cannot be sampled is never reported as color") {
+  // The regression: an oversized background made the sampler fail, and the theme then reported
+  // source "color" with the flat theme colour. Shells trusted that and painted ink chosen for
+  // #101418 over a photograph that looked nothing like it.
+  const std::string dir = settingsTempDir();
+  NodeOptions options;
+  options.data_dir = dir;
+  options.name = "theme-source";
+  options.role = "indoor_panel";
+  options.listen_addr = "127.0.0.1:0";
+  options.enable_beacon = false;
+  options.http_port = 0;
+  options.psk.fill(0x5a);
+
+  SimClock clock(1'700'000'000'000LL, 0);
+  Runloop loop(clock);
+  NodeDeps deps;
+  deps.clock = &clock;
+  deps.loop = &loop;
+  Node node(options, std::move(deps));
+  REQUIRE(node.start());
+  loop.pumpDue();
+
+  auto background = [&node, &loop]() {
+    loop.pumpDue();
+    auto status = json::parse(node.statusJson());
+    REQUIRE(status);
+    const cJSON* theme = json::get(json::get(status.get(), "display"), "theme");
+    return json::Doc(cJSON_Duplicate(json::get(theme, "auto_background"), 1));
+  };
+
+  // No image configured: the flat colour is the honest answer and carries no reason.
+  node.setConfigKey("display.theme.bg_color", "\"#9BD748\"");
+  auto flat = background();
+  REQUIRE(flat);
+  CHECK(json::getString(flat.get(), "source") == "color");
+  CHECK(json::getString(flat.get(), "color") == "#9BD748");
+  CHECK(json::get(flat.get(), "reason") == nullptr);
+
+  // An image that is configured but not cached here yet is not "color" either.
+  const std::string hash(64, 'a');
+  node.setConfigKey("display.theme.bg_image", "\"" + hash + "\"");
+  auto uncached = background();
+  CHECK(json::getString(uncached.get(), "source") == "image_unsampled");
+  CHECK(json::getString(uncached.get(), "reason") == "missing");
+
+  // A cached asset that is not a decodable image says so, rather than falling back silently.
+  Bytes junk(96, 0x41);
+  REQUIRE(writeFileBytes(dir + "/assets/" + hash, junk));
+  node.setConfigKey("display.theme.bg_color", "\"#9BD749\"");  // force a recompute
+  auto undecodable = background();
+  CHECK(json::getString(undecodable.get(), "source") == "image_unsampled");
+  CHECK(json::getString(undecodable.get(), "reason") == "decode_failed");
+  // The published colour still has to be something, but the source says not to trust it.
+  CHECK(json::getString(undecodable.get(), "color") == "#9BD749");
+
+  // A real photograph above the old 4 MP budget is sampled and reported as an image.
+  const std::string photo_hash(64, 'b');
+  Bytes photo;
+  {
+    // 2200x2609 flat grey, the shape of the background this was reported against.
+    const int width = 2200, height = 2609;
+    Bytes raw;
+    raw.reserve(static_cast<size_t>(height) * (width + 1));
+    for (int y = 0; y < height; y++) {
+      raw.push_back(0);
+      raw.insert(raw.end(), static_cast<size_t>(width), 0xC8);
+    }
+    photo = makeTestGreyPng(width, height, raw);
+  }
+  REQUIRE(writeFileBytes(dir + "/assets/" + photo_hash, photo));
+  node.setConfigKey("display.theme.bg_image", "\"" + photo_hash + "\"");
+  auto sampled = background();
+  CHECK(json::getString(sampled.get(), "source") == "image");
+  CHECK(json::getString(sampled.get(), "color") == "#C8C8C8");
+  CHECK(json::get(sampled.get(), "reason") == nullptr);
+
+  node.stop();
+  std::remove((dir + "/assets/" + hash).c_str());
+  std::remove((dir + "/assets/" + photo_hash).c_str());
+  removeSettingsTempDir(dir);
 }

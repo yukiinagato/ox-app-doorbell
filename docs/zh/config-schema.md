@@ -416,6 +416,24 @@ generic command/argv。
 仍能渲染磁贴并接受公告；第一次写入会创建该条目，之后即报告 `configured`。
 无人负责且没有配置的门口仍视为未知并被拒绝。
 
+`display.theme.auto_background` 返回 `{"color":"#RRGGBB","source":…}`；当 source 为
+`image_unsampled` 时还带有 `"reason"`。三种 source 是有意区分的：
+
+| `source` | 含义 |
+|---|---|
+| `color` | 未配置背景图片；`color` 就是主题色，可以信任 |
+| `image` | 已对背景图片采样；`color` 是其平均色 |
+| `image_unsampled` | 确实配置了图片，但 core 无法采样；`color` 只是扁平的主题色 |
+
+`reason` 为 `too_large`（超过 core 的 16 MP 解码预算）、`decode_failed`（本构建无法解码的格式）
+或 `missing`（该节点尚未缓存此资产）。在 `image_unsampled` 时，外壳**不得**信任 `auto_ink` 与
+`auto_accent`：它们来自主题色，而不是屏幕上真正显示的图片。请在本地采样后自行判断，
+或在资产到达前保留先前的文字颜色。
+
+core 最多采样 16x16 个点，但 stb 没有解码时缩放，因此解码是瞬时的，约每像素 3 字节
+（上限约 48 MB），随后立即释放。承受不起该开销的硬件上的外壳无论如何都应自行采样；
+`source` 字段就是用来告知 core 未曾采样的。
+
 ## 时间、电源与公告
 
 内置时区表位于 `core/src/util/tz.{h,cpp}`，覆盖设置界面提供的亚洲、欧洲、美洲、大洋洲与非洲时区。

@@ -55,12 +55,29 @@ Rgb autoAccent(const Rgb& background, const Rgb& text);
 // The ink to draw on a computed button: "light" or "dark", by the same rule as autoInk.
 const char* accentInk(const Rgb& button);
 
+// Why a background image could not be sampled. The caller must publish the distinction: a
+// configured image that failed to sample is not the same as no image at all, and reporting the
+// flat theme colour for it makes every shell paint the wrong ink over the real background.
+enum class SampleStatus {
+  kOk,
+  kMissing,        // the file is absent, unreadable, or empty
+  kTooLarge,       // beyond the decode budget below
+  kDecodeFailed,   // not a JPEG or PNG this build can decode
+};
+
+// Stable lowercase name for the published contract: "ok", "missing", "too_large",
+// "decode_failed".
+const char* sampleStatusName(SampleStatus status);
+
 // Average colour of an image file, sampled on a grid of at most 16x16 points rather than
-// touching every pixel. Returns false when the file cannot be decoded or is larger than the
-// pixel budget, in which case the caller falls back to the theme colour. Images come from the
-// asset ledger, which caps uploads at 3 MB, and the oldest hardware in the fleet cannot afford
-// a full-resolution decode of anything much larger.
-bool averageImageColor(const std::string& path, Rgb* out);
+// touching every pixel. Images come from the asset ledger, which caps uploads at 3 MB.
+//
+// The budget below is on decoded pixels, because stb has no downscale-on-decode: a 16 MP photo
+// costs about 48 MB of RGB while it is being sampled and is freed immediately afterwards. That
+// covers what an ordinary phone or tablet camera produces. A shell on hardware that cannot
+// afford the transient allocation should sample locally and ignore core's answer; the published
+// source field tells it when core has not sampled.
+SampleStatus averageImageColor(const std::string& path, Rgb* out);
 
 }  // namespace color
 }  // namespace db
