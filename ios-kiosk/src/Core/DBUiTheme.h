@@ -55,8 +55,15 @@ FOUNDATION_EXPORT NSString *const DBUiRegionTileLabel;
 + (NSString *)darkInkHex;
 
 // ---- automatic ink (§5) ----
-// "dark" means: use the dark ink token because the background is light.
+// "dark" means: use the dark ink token. The choice is whichever ink actually
+// reads better -- the one with the higher WCAG contrast ratio against the
+// measured luminance -- not a lightness threshold. A midtone wallpaper
+// averaging #BBBBB4 sits just under Y = 0.5 and would take white ink at 1.9:1
+// under a threshold rule, where the dark ink gives 9.6:1. The crossover falls
+// near Y = 0.18 for the ink tokens in use (Y = 0.179 for pure black on white).
 + (NSString *)inkModeForLuminance:(double)luminance;
+// The luminance at which the two inks read equally well, for tests and docs.
++ (double)inkCrossoverLuminance;
 + (NSString *)inkModeForBackgroundHex:(NSString *)hex fallbackMode:(NSString *)fallbackMode;
 // Resolution order: device ink_override -> cluster ink_override ->
 // core-published display.theme.auto_ink -> local computation from the effective
@@ -77,7 +84,8 @@ FOUNDATION_EXPORT NSString *const DBUiRegionTileLabel;
 // The effective background core measured (an averaged theme image, or the
 // theme colour). Returns nil when core published none.
 + (NSString *)autoBackgroundHexInDisplay:(NSDictionary *)display;
-// A 1 px shadow of the opposite ink is only added below the AA text threshold.
+// A 1 px shadow of the opposite ink is only added when even the better ink
+// stays below the AA text threshold.
 + (BOOL)needsInkShadowForInk:(NSString *)inkHex background:(NSString *)backgroundHex;
 
 // ---- per-region sampling of a theme image ----
