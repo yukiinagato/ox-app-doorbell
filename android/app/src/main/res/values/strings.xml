@@ -194,6 +194,8 @@ Delete it?</string>
     <string name="admin_panel_token">Panel token</string>
     <string name="admin_pass">Password</string>
     <string name="admin_password">Admin password</string>
+    <string name="admin_password_set_failed">Couldn\'t set the admin password</string>
+    <string name="admin_password_set_prompt">Set the admin password</string>
     <string name="admin_pin_prompt">Enter the admin password</string>
     <string name="admin_pin_wrong">Wrong admin password</string>
     <string name="admin_playback_fallback_hint">Web skips HLS immediately. A later MJPEG strategy is prewarmed from time zero. Maximum extra wait before MJPEG:</string>

@@ -981,11 +981,14 @@ class WindowsContracts(unittest.TestCase):
         # The cluster password is text, so the keypad types into a real password box.
         self.assertIn('<PasswordBox x:Name="PasswordEntry"', xaml)
         self.assertIn("PasswordEntry.Password", dialog)
-        # Core decides; only an explicit positive answer opens anything.
+        # Core decides, with the agreed codes: >0 accepted, 0 rejected, -1 locked out,
+        # -2 no cluster password set yet. Only an explicit positive answer opens anything.
         verify = client[client.index("public AdminPasswordVerdict AdminPasswordVerify"):
                         client.index("public bool AdminPasswordSet")]
         self.assertIn("if (result > 0) return AdminPasswordVerdict.Accepted;", verify)
-        self.assertIn("result == 0 ? AdminPasswordVerdict.Rejected", verify)
+        self.assertIn("if (result == 0) return AdminPasswordVerdict.Rejected;", verify)
+        self.assertIn("if (result == -1) return AdminPasswordVerdict.LockedOut;", verify)
+        self.assertIn("if (result == -2) return AdminPasswordVerdict.NotSet;", verify)
         submit = dialog[dialog.index("private void Submit()"):
                         dialog.index("private void Accept()")]
         self.assertIn("App.Core.AdminPasswordVerify(password)", submit)
@@ -993,11 +996,28 @@ class WindowsContracts(unittest.TestCase):
         # A cluster that already has a password is never opened with a stale device digest.
         self.assertIn("App.Core.AdminPasswordConfigured", submit)
         self.assertLess(submit.index("AdminPasswordConfigured"), submit.index("LocalDigest()"))
-        # First successful local entry publishes the device digest as the shared secret.
+        # -2 asks the operator to choose the household password and publishes it.
+        self.assertIn("if (verdict == AdminPasswordVerdict.NotSet)", submit)
         self.assertIn('App.Core.AdminPasswordSet("", password)', submit)
+        self.assertIn('"admin.password_set_prompt"', dialog)
+        self.assertIn('"admin.password_set_failed"', dialog)
+        # A core-owned lockout is never worked around with the local digest.
+        locked = submit[submit.index("AdminPasswordVerdict.LockedOut"):]
+        self.assertLess(locked.index('L10n.T("admin.locked")'), locked.index("LocalDigest()"))
         # The local five-failure, ten-minute lockout stays as a second line of defence.
         self.assertIn("_lockedUntil = DateTime.Now.AddMinutes(10);", dialog)
         self.assertIn("if (++_fails >= 5)", dialog)
+
+    def test_an_unset_password_never_traps_a_running_alarm(self):
+        window = read("win/DoorbellApp/MainWindow.xaml.cs")
+        dialog = read("win/DoorbellApp/AdminDialog.xaml.cs")
+        client = read("win/DoorbellApp/Core/CoreClient.cs")
+        cancel = window[window.index("private void OnEmergencyCancelClick"):
+                        window.index("private void StartSiren")]
+        self.assertIn("if (_cancelRequiresPin && !AdminDialog.ClusterPasswordUnset())", cancel)
+        self.assertIn("if (App.Core.Emergency(false)) HideEmergency()", cancel)
+        self.assertIn("internal static bool ClusterPasswordUnset()", dialog)
+        self.assertIn("return AdminPasswordAvailable && !AdminPasswordConfigured;", client)
 
     def test_global_notice_and_history_paging_use_the_new_abi(self):
         notice = read("win/DoorbellApp/MainWindow.Notice.cs")
@@ -1021,15 +1041,19 @@ class WindowsContracts(unittest.TestCase):
 
     def test_native_config_writes_are_prepared(self):
         client = read("win/DoorbellApp/Core/CoreClient.cs")
-        for member in ("public string SetConfigJson(string json)",
-                       "public string ConfigBatchJson(string json)",
-                       "public bool DeleteConfigKey(string key)"):
-            self.assertIn(member, client)
-        # The result shape is unconfirmed, so a status-code return is never dereferenced.
-        guard = client[client.index("private static string ConfigResult"):
-                       client.index("public const string GlobalNoticeDoor")]
-        self.assertIn("value < 0x10000", guard)
-        self.assertIn("CoreInterop.TakeUtf8(returned)", guard)
+        interop = read("win/DoorbellApp/Core/CoreInterop.cs")
+        # A single write and a key deletion answer with a status code; only the batch returns an
+        # owned document, shaped like /api/config/batch so its warnings can be rendered.
+        self.assertIn("public delegate int SetConfigJsonFn(IntPtr core,", interop)
+        self.assertIn("public delegate int DeleteConfigKeyFn(IntPtr core,", interop)
+        self.assertIn("public delegate IntPtr ConfigBatchJsonFn(IntPtr core,", interop)
+        self.assertIn("public bool SetConfigJson(string json)", client)
+        self.assertIn("public bool DeleteConfigKey(string key)", client)
+        self.assertIn("public string ConfigBatchJson(string json)", client)
+        self.assertIn("_setConfigJson(_core, json) == 0", client)
+        self.assertIn("_deleteConfigKey(_core, key) == 0", client)
+        self.assertIn("CoreInterop.TakeUtf8(_configBatchJson(_core, json))", client)
+        self.assertNotIn("ConfigResult", client)
 
     def test_mic_mute_follows_the_replicated_call_state(self):
         shell = read("win/DoorbellApp/MainWindow.Shell.cs")

@@ -90,8 +90,8 @@ namespace DoorbellApp.Core
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         public delegate IntPtr MintJoinTokenFn(IntPtr core, int seconds);
 
-        // One cluster-wide 管理パスワード. Positive means accepted, zero means rejected, and a
-        // negative value means core could not evaluate it (no replicated hash yet).
+        // One cluster-wide 管理パスワード: >0 accepted, 0 rejected, -1 locked out,
+        // -2 no cluster password has been set yet.
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         public delegate int AdminPasswordVerifyFn(IntPtr core,
             [MarshalAs(UnmanagedType.LPUTF8Str)] string password);
@@ -102,11 +102,12 @@ namespace DoorbellApp.Core
             [MarshalAs(UnmanagedType.LPUTF8Str)] string current,
             [MarshalAs(UnmanagedType.LPUTF8Str)] string next);
 
-        // Native configuration writes with the same validation and advisory warnings as the web.
-        // The result document is released with db_free; see CoreClient.ConfigResult for the
-        // small-value guard that keeps an int-returning Core from being dereferenced.
+        // Native configuration writes with the same validation as the web. A single write and a
+        // key deletion answer with a status code (0 accepted, negative rejected); the batch
+        // answers with an owned document shaped like /api/config/batch, warnings included, which
+        // is released with db_free.
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-        public delegate IntPtr SetConfigJsonFn(IntPtr core,
+        public delegate int SetConfigJsonFn(IntPtr core,
             [MarshalAs(UnmanagedType.LPUTF8Str)] string json);
 
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]

@@ -189,6 +189,8 @@
  "admin.panel_token": "面板 token",
  "admin.pass": "密码",
  "admin.password": "管理密码",
+ "admin.password_set_failed": "无法设置管理密码",
+ "admin.password_set_prompt": "请设置管理密码",
  "admin.pin_prompt": "请输入管理密码",
  "admin.pin_wrong": "管理密码错误",
  "admin.playback_fallback_hint": "Web 会立即跳过 HLS；后置 MJPEG 从零时刻开始预热。到 MJPEG 前的最大额外等待：",

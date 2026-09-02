@@ -189,6 +189,8 @@
 "admin.panel_token" = "Panel token";
 "admin.pass" = "Password";
 "admin.password" = "Admin password";
+"admin.password_set_failed" = "Couldn't set the admin password";
+"admin.password_set_prompt" = "Set the admin password";
 "admin.pin_prompt" = "Enter the admin password";
 "admin.pin_wrong" = "Wrong admin password";
 "admin.playback_fallback_hint" = "Web skips HLS immediately. A later MJPEG strategy is prewarmed from time zero. Maximum extra wait before MJPEG:";

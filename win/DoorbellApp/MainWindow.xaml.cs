@@ -1372,7 +1372,9 @@ namespace DoorbellApp
 
         private void OnEmergencyCancelClick(object sender, RoutedEventArgs e)
         {
-            if (_cancelRequiresPin)
+            // Core answers -2 while no cluster password exists. Clearing a running alarm must
+            // never be gated behind a password nobody has chosen yet (spec 5.5).
+            if (_cancelRequiresPin && !AdminDialog.ClusterPasswordUnset())
             {
                 var dlg = new AdminDialog { Owner = this };
                 if (dlg.ShowDialog() != true) return;

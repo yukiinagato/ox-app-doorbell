@@ -196,6 +196,8 @@
   <data name="admin_panel_token" xml:space="preserve"><value>面板 token</value></data>
   <data name="admin_pass" xml:space="preserve"><value>密码</value></data>
   <data name="admin_password" xml:space="preserve"><value>管理密码</value></data>
+  <data name="admin_password_set_failed" xml:space="preserve"><value>无法设置管理密码</value></data>
+  <data name="admin_password_set_prompt" xml:space="preserve"><value>请设置管理密码</value></data>
   <data name="admin_pin_prompt" xml:space="preserve"><value>请输入管理密码</value></data>
   <data name="admin_pin_wrong" xml:space="preserve"><value>管理密码错误</value></data>
   <data name="admin_playback_fallback_hint" xml:space="preserve"><value>Web 会立即跳过 HLS；后置 MJPEG 从零时刻开始预热。到 MJPEG 前的最大额外等待：</value></data>

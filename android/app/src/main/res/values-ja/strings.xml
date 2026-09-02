@@ -194,6 +194,8 @@
     <string name="admin_panel_token">パネル token</string>
     <string name="admin_pass">パスワード</string>
     <string name="admin_password">管理パスワード</string>
+    <string name="admin_password_set_failed">管理パスワードを設定できませんでした</string>
+    <string name="admin_password_set_prompt">管理パスワードを設定してください</string>
     <string name="admin_pin_prompt">管理パスワードを入力してください</string>
     <string name="admin_pin_wrong">管理パスワードが違います</string>
     <string name="admin_playback_fallback_hint">Web は HLS を即時スキップします。後段の MJPEG は時刻 0 から予熱します。MJPEG までの最大追加待機:</string>

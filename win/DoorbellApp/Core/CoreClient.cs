@@ -17,13 +17,17 @@ namespace DoorbellApp.Core
             Data != null && Data.TryGetValue(key, out var v) && v != null ? v.ToString() : "";
     }
 
-    /// <summary>Outcome of one cluster-password check.</summary>
+    /// <summary>Outcome of one cluster-password check (core: &gt;0, 0, -1, -2).</summary>
     public enum AdminPasswordVerdict
     {
-        /// <summary>Core cannot answer: no export, or no replicated hash yet.</summary>
+        /// <summary>Core cannot answer at all: no export, or core is not started.</summary>
         Unavailable,
         Accepted,
         Rejected,
+        /// <summary>Too many failures; core shares the lockout with the web login.</summary>
+        LockedOut,
+        /// <summary>No cluster password has been set yet, so the next entry sets it.</summary>
+        NotSet,
     }
 
     public sealed class CoreClient : IDisposable
@@ -384,8 +388,10 @@ namespace DoorbellApp.Core
             }
             // Fail closed: only an explicit positive answer opens anything.
             if (result > 0) return AdminPasswordVerdict.Accepted;
-            return result == 0 ? AdminPasswordVerdict.Rejected :
-                                 AdminPasswordVerdict.Unavailable;
+            if (result == 0) return AdminPasswordVerdict.Rejected;
+            if (result == -1) return AdminPasswordVerdict.LockedOut;
+            if (result == -2) return AdminPasswordVerdict.NotSet;
+            return AdminPasswordVerdict.Unavailable;
         }
 
         /// <summary>
@@ -422,23 +428,38 @@ namespace DoorbellApp.Core
         }
 
         /// <summary>
+        /// True when core would answer -2: it can verify, but no cluster password exists yet.
+        /// Nothing that must stay reachable — clearing a running SOS alarm above all — may be
+        /// gated behind a password in that state.
+        /// </summary>
+        public bool AdminPasswordUnset
+        {
+            get { return AdminPasswordAvailable && !AdminPasswordConfigured; }
+        }
+
+        /// <summary>
         /// Native configuration writes with the same validation and advisory warnings as the web
         /// (spec 5.5). Returns the result document, or null when this Core cannot answer.
         /// </summary>
-        public string SetConfigJson(string json)
+        public bool SetConfigJson(string json)
         {
             ProbeOptionalExports();
-            if (_setConfigJson == null || string.IsNullOrEmpty(json)) return null;
+            if (_setConfigJson == null || string.IsNullOrEmpty(json)) return false;
             lock (_nativeLock)
-                return _core == IntPtr.Zero ? null : ConfigResult(_setConfigJson(_core, json));
+                return _core != IntPtr.Zero && _setConfigJson(_core, json) == 0;
         }
 
+        /// <summary>
+        /// A batch write answers with the /api/config/batch document, so the caller can render the
+        /// advisory warnings core returns instead of guessing at them.
+        /// </summary>
         public string ConfigBatchJson(string json)
         {
             ProbeOptionalExports();
             if (_configBatchJson == null || string.IsNullOrEmpty(json)) return null;
             lock (_nativeLock)
-                return _core == IntPtr.Zero ? null : ConfigResult(_configBatchJson(_core, json));
+                return _core == IntPtr.Zero ? null :
+                    CoreInterop.TakeUtf8(_configBatchJson(_core, json));
         }
 
         public bool DeleteConfigKey(string key)
@@ -447,19 +468,6 @@ namespace DoorbellApp.Core
             if (_deleteConfigKey == null || string.IsNullOrEmpty(key)) return false;
             lock (_nativeLock)
                 return _core != IntPtr.Zero && _deleteConfigKey(_core, key) == 0;
-        }
-
-        /// <summary>
-        /// The config write ABI is declared as returning an owned result document. A Core that
-        /// returns a plain status code instead would hand back a small integer, so anything that
-        /// cannot be a heap address is reported as a status rather than dereferenced.
-        /// </summary>
-        private static string ConfigResult(IntPtr returned)
-        {
-            if (returned == IntPtr.Zero) return "";
-            long value = returned.ToInt64();
-            if (value > 0 && value < 0x10000) return "";
-            return CoreInterop.TakeUtf8(returned) ?? "";
         }
 
         /// <summary>
