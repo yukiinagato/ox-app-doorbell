@@ -15,89 +15,118 @@ class RegionInkTest {
     private val lightPatch = 0xE9EDF0
     private val darkPatch = 0x17202A
 
-    // ---------- precedence ----------
+    // ---------- the decision table ----------
+    //
+    // Rows: administrator override / a picture on screen (local sample) / a picture core averaged
+    // / a flat colour / a picture core declined to average. The last row is the observed failure:
+    // core reported source "color" for a 5.7 MP JPEG it would not decode, and a shell that
+    // believed it painted light text onto a light picture.
+
+    private fun ink(
+        override: Int? = null,
+        coreInkLight: Boolean? = null,
+        background: BackgroundKind,
+        sample: Int? = null,
+        fallback: Int = 0x808080,
+    ) = RegionInkPolicy.resolve(override, coreInkLight, background, sample, fallback)
 
     @Test
-    fun anAdministratorOverrideWinsOverEverything() {
-        val result = RegionInkPolicy.resolve(
-            override = 0xFF0000,
-            coreInkLight = true,
-            coreAuthoritative = true,
-            sampledBackgroundRgb = darkPatch,
-            fallbackBackgroundRgb = lightPatch,
-        )
-        assertEquals(0xFF0000, result.inkRgb)
+    fun overrideWinsOverEveryOtherRow() {
+        for (kind in BackgroundKind.values()) {
+            assertEquals(
+                "override lost to $kind",
+                0xFF0000,
+                ink(override = 0xFF0000, coreInkLight = true, background = kind,
+                    sample = darkPatch).inkRgb,
+            )
+        }
     }
 
     @Test
-    fun coresValueStandsOverAFlatBackgroundColour() {
-        // A flat colour has no geometry for core to be wrong about, so its answer is authoritative
-        // even though the shell also measured the region.
-        val result = RegionInkPolicy.resolve(
-            override = null,
-            coreInkLight = true,
-            coreAuthoritative = true,
-            sampledBackgroundRgb = lightPatch,
-            fallbackBackgroundRgb = lightPatch,
+    fun aPictureOnScreenIsDecidedByTheLocalSample() {
+        // Core said light for the whole picture; this region sits on its light part.
+        assertEquals(
+            Palette.DARK_INK,
+            ink(coreInkLight = true, background = BackgroundKind.IMAGE_DRAWN,
+                sample = lightPatch).inkRgb,
         )
-        assertEquals(Palette.LIGHT_INK, result.inkRgb)
+        assertEquals(
+            Palette.LIGHT_INK,
+            ink(coreInkLight = false, background = BackgroundKind.IMAGE_DRAWN,
+                sample = darkPatch).inkRgb,
+        )
     }
 
     @Test
-    fun theLocalSampleRefinesCoresWholeImageAverage() {
-        // The reported failure: core averaged the whole picture to "light ink", but this region
-        // sits on the light part of it, so the shell must choose dark ink instead.
-        val footer = RegionInkPolicy.resolve(
-            override = null,
-            coreInkLight = true,
-            coreAuthoritative = false,
-            sampledBackgroundRgb = lightPatch,
-            fallbackBackgroundRgb = 0x808080,
+    fun aPictureCoreAveragedIsStillDecidedLocallyWhereTheShellCanMeasure() {
+        // Core sampling the image does not make its one answer right for every region.
+        assertEquals(
+            Palette.DARK_INK,
+            ink(coreInkLight = true, background = BackgroundKind.IMAGE_DRAWN,
+                sample = lightPatch).inkRgb,
         )
-        assertEquals(Palette.DARK_INK, footer.inkRgb)
-
-        // A region on the dark part of the same image keeps light ink.
-        val clock = RegionInkPolicy.resolve(
-            override = null,
-            coreInkLight = true,
-            coreAuthoritative = false,
-            sampledBackgroundRgb = darkPatch,
-            fallbackBackgroundRgb = 0x808080,
+        // Only a region the shell could not measure falls back to core's average.
+        assertEquals(
+            Palette.LIGHT_INK,
+            ink(coreInkLight = true, background = BackgroundKind.IMAGE_DRAWN,
+                sample = null).inkRgb,
         )
-        assertEquals(Palette.LIGHT_INK, clock.inkRgb)
     }
 
     @Test
-    fun twoRegionsOnOneImageCanDisagree() {
-        fun ink(patch: Int) = RegionInkPolicy.resolve(
-            null, coreInkLight = true, coreAuthoritative = false,
-            sampledBackgroundRgb = patch, fallbackBackgroundRgb = 0x808080,
-        ).inkRgb
-        assertTrue(ink(lightPatch) != ink(darkPatch))
+    fun aFlatColourLeavesCoresAnswerStanding() {
+        assertEquals(
+            Palette.LIGHT_INK,
+            ink(coreInkLight = true, background = BackgroundKind.FLAT_COLOUR,
+                fallback = lightPatch).inkRgb,
+        )
+        // With nothing from core the same rule is applied locally.
+        assertEquals(
+            Palette.DARK_INK,
+            ink(background = BackgroundKind.FLAT_COLOUR, fallback = lightPatch).inkRgb,
+        )
     }
 
     @Test
-    fun coresValueIsUsedWhenTheShellCouldNotMeasureTheRegion() {
-        val result = RegionInkPolicy.resolve(
-            override = null,
-            coreInkLight = false,
-            coreAuthoritative = false,
-            sampledBackgroundRgb = null,
-            fallbackBackgroundRgb = lightPatch,
+    fun aPictureCoreDeclinedToSampleIsNeverTrusted() {
+        // The Moto failure: core answered "light" for a picture it never decoded. The shell
+        // measures the region itself and gets the opposite, correct, answer.
+        val result = ink(
+            coreInkLight = true, background = BackgroundKind.IMAGE_DRAWN, sample = lightPatch,
         )
         assertEquals(Palette.DARK_INK, result.inkRgb)
     }
 
     @Test
-    fun withNothingFromCoreTheRuleIsAppliedLocally() {
+    fun aPictureConfiguredButNotYetPaintedUsesWhatIsActuallyOnScreen() {
+        // Core's ink describes the picture; until it is drawn the flat colour is what shows.
         assertEquals(
             Palette.DARK_INK,
-            RegionInkPolicy.resolve(null, null, false, null, 0xFFFFFF).inkRgb,
+            ink(coreInkLight = true, background = BackgroundKind.IMAGE_NOT_DRAWN,
+                fallback = lightPatch).inkRgb,
+        )
+    }
+
+    @Test
+    fun aSurfaceTheShellPaintedIgnoresCoresThemeMeasurement() {
+        // The dashboard's cards are not the theme background core measured at all.
+        assertEquals(
+            Palette.DARK_INK,
+            ink(coreInkLight = true, background = BackgroundKind.KNOWN_SURFACE,
+                sample = lightPatch).inkRgb,
         )
         assertEquals(
             Palette.LIGHT_INK,
-            RegionInkPolicy.resolve(null, null, false, null, 0x000000).inkRgb,
+            ink(coreInkLight = false, background = BackgroundKind.KNOWN_SURFACE,
+                sample = darkPatch).inkRgb,
         )
+    }
+
+    @Test
+    fun twoRegionsOnOneImageCanDisagree() {
+        fun at(patch: Int) =
+            ink(coreInkLight = true, background = BackgroundKind.IMAGE_DRAWN, sample = patch).inkRgb
+        assertTrue(at(lightPatch) != at(darkPatch))
     }
 
     // ---------- the shadow ----------
@@ -105,21 +134,21 @@ class RegionInkTest {
     @Test
     fun theShadowIsAddedOnlyWhenTheChosenInkMissesTheTextRatio() {
         // Mid grey defeats both ink tokens, so whichever is chosen needs the shadow.
-        val midGrey = RegionInkPolicy.resolve(null, null, false, 0x8A8A8A, 0x8A8A8A)
+        val midGrey = ink(background = BackgroundKind.FLAT_COLOUR, fallback = 0x8A8A8A)
         assertTrue(midGrey.needsShadow)
         // A properly dark background does not.
-        val dark = RegionInkPolicy.resolve(null, null, false, 0x101418, 0x101418)
+        val dark = ink(background = BackgroundKind.FLAT_COLOUR, fallback = 0x101418)
         assertFalse(dark.needsShadow)
         assertEquals(Palette.LIGHT_INK, dark.inkRgb)
     }
 
     @Test
     fun theShadowIsTheOppositeInkAtFortyPercent() {
-        val overLight = RegionInkPolicy.resolve(null, null, false, 0xFFFFFF, 0xFFFFFF)
+        val overLight = ink(background = BackgroundKind.FLAT_COLOUR, fallback = 0xFFFFFF)
         assertEquals(Palette.DARK_INK, overLight.inkRgb)
         assertEquals(Palette.LIGHT_INK, overLight.shadowRgb)
 
-        val overDark = RegionInkPolicy.resolve(null, null, false, 0x000000, 0x000000)
+        val overDark = ink(background = BackgroundKind.FLAT_COLOUR, fallback = 0x000000)
         assertEquals(Palette.LIGHT_INK, overDark.inkRgb)
         assertEquals(Palette.DARK_INK, overDark.shadowRgb)
 
@@ -131,9 +160,9 @@ class RegionInkTest {
     @Test
     fun anOverrideThatIsHardToReadStillGetsTheShadowRatherThanBeingReplaced() {
         // A custom colour is never rejected; it is helped.
-        val result = RegionInkPolicy.resolve(
-            override = 0x9A9A9A, coreInkLight = null, coreAuthoritative = false,
-            sampledBackgroundRgb = 0x8A8A8A, fallbackBackgroundRgb = 0x8A8A8A,
+        val result = ink(
+            override = 0x9A9A9A, background = BackgroundKind.IMAGE_DRAWN,
+            sample = 0x8A8A8A, fallback = 0x8A8A8A,
         )
         assertEquals(0x9A9A9A, result.inkRgb)
         assertTrue(result.needsShadow)
@@ -164,11 +193,11 @@ class RegionInkTest {
         val mostlyDark = patch(20)
         assertEquals(
             Palette.DARK_INK,
-            RegionInkPolicy.resolve(null, null, false, mostlyLight, 0).inkRgb,
+            ink(background = BackgroundKind.IMAGE_DRAWN, sample = mostlyLight).inkRgb,
         )
         assertEquals(
             Palette.LIGHT_INK,
-            RegionInkPolicy.resolve(null, null, false, mostlyDark, 0).inkRgb,
+            ink(background = BackgroundKind.IMAGE_DRAWN, sample = mostlyDark).inkRgb,
         )
     }
 
