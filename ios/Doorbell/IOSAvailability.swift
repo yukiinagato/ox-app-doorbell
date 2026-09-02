@@ -203,3 +203,149 @@ private final class LegacyTimerDispatcher: NSObject {
         (timer.userInfo as? LegacyTimerInvocation)?.block(timer)
     }
 }
+
+/// The panel's screen must never sleep, and the override that keeps it awake has to be re-asserted
+/// rather than set once.
+///
+/// When the device auto-locks, iOS suspends the foreground app. A suspended node's listening
+/// sockets are closed, so 47180 and 47172 start *refusing* connections rather than stalling, the
+/// cluster stops hearing from it, and the process is evicted later — with no crash report, no
+/// jetsam event and nothing in syslog, because nothing went wrong from the OS's point of view.
+/// That is indistinguishable from a hang unless you know to look for it.
+///
+/// `isIdleTimerDisabled` was previously set exactly once, in `didFinishLaunchingWithOptions`,
+/// before the window was ever key. Several screens clear it and put it back only on one of the
+/// ways out of them — the iOS 9 admin alert restores it from its OK button, so dismissing that
+/// alert through either of its other two actions left the panel able to lock, permanently. This
+/// holds the shell's intent instead, so it can be re-applied whenever the app becomes active.
+enum ScreenAwake {
+
+    /// What the shell wants. Only an administrator deliberately leaving kiosk mode sets it false.
+    private(set) static var wanted = true
+
+    static func want(_ awake: Bool) {
+        wanted = awake
+        apply()
+    }
+
+    /// Puts the override back the way the shell wants it. Cheap and idempotent, so it is safe to
+    /// call on every activation and from anything that might have cleared it.
+    static func apply() {
+        UIApplication.shared.isIdleTimerDisabled = wanted
+    }
+}
+
+/// A small persistent record of the shell's own life, written to `<dataDir>/shell.log` so that a
+/// death that leaves nothing behind — no crash, no jetsam, no resource report — can still be
+/// explained afterwards from the device. It records the launch, Core starting and stopping, every
+/// lifecycle transition, and the most recent UI events.
+///
+/// Off unless `boot.json` carries `"debug_timings": true`, so a shipped panel writes nothing.
+/// Lifecycle lines are flushed immediately, because those are the ones that matter when the app
+/// is about to be suspended; UI events are buffered and flushed at most once a second, because
+/// Core announces `peers_changed` several times a second and this must not become its own load.
+enum ShellLog {
+
+    static var enabled = false
+
+    /// How many UI-event lines are kept. Older ones fall off the front.
+    private static let uiEventLimit = 50
+    /// The file is trimmed to its last lines once it passes this, so it cannot grow without end.
+    private static let maxBytes = 64 * 1024
+    private static let keepLines = 400
+    private static let minFlushIntervalS: TimeInterval = 1
+
+    private static let queue = DispatchQueue(label: "jp.ox.doorbell.shell-log")
+    private static var path = ""
+    private static var pending: [String] = []
+    private static var uiEvents: [String] = []
+    private static var lastFlush: TimeInterval = 0
+
+    static func start(dataDir: String, note: String) {
+        guard enabled, !dataDir.isEmpty else { return }
+        queue.async {
+            path = (dataDir as NSString).appendingPathComponent("shell.log")
+            pending.append(stamp("=== launch " + note))
+            writeOut()
+        }
+    }
+
+    /// A line that must survive the next suspension: the launch, Core starting or stopping, a
+    /// lifecycle transition. Written through to the file at once.
+    static func note(_ line: String) {
+        guard enabled else { return }
+        queue.async {
+            pending.append(stamp(line))
+            writeOut()
+        }
+    }
+
+    /// One UI event from Core. Kept to the last `uiEventLimit` and flushed at most once a second.
+    static func uiEvent(_ kind: String, detail: String = "") {
+        guard enabled else { return }
+        let line = stamp("ui " + kind + (detail.isEmpty ? "" : " " + detail))
+        queue.async {
+            uiEvents.append(line)
+            if uiEvents.count > uiEventLimit { uiEvents.removeFirst(uiEvents.count - uiEventLimit) }
+            let now = ProcessInfo.processInfo.systemUptime
+            guard now - lastFlush >= minFlushIntervalS else { return }
+            flushUiEvents(now)
+        }
+    }
+
+    /// Empties the UI-event buffer into the file. Called on the way into a lifecycle transition so
+    /// that what the app was doing before it went away is on disk.
+    static func flush() {
+        guard enabled else { return }
+        queue.async { flushUiEvents(ProcessInfo.processInfo.systemUptime) }
+    }
+
+    // MARK: - On the log's own queue
+
+    private static func flushUiEvents(_ now: TimeInterval) {
+        guard !uiEvents.isEmpty else { return }
+        lastFlush = now
+        pending.append(contentsOf: uiEvents)
+        uiEvents.removeAll()
+        writeOut()
+    }
+
+    private static func stamp(_ line: String) -> String {
+        let uptime = ProcessInfo.processInfo.systemUptime
+        return String(format: "%@ +%.1f %@", isoNow(), uptime, line)
+    }
+
+    /// The OS clock, not Core's: this file exists to be read next to `idevicesyslog` and the
+    /// device's own crash reports, which are all stamped the same way.
+    private static func isoNow() -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        return formatter.string(from: Date())
+    }
+
+    private static func writeOut() {
+        guard !path.isEmpty, !pending.isEmpty else { return }
+        let blob = pending.joined(separator: "\n") + "\n"
+        pending.removeAll()
+        let url = URL(fileURLWithPath: path)
+        if let handle = FileHandle(forWritingAtPath: path) {
+            handle.seekToEndOfFile()
+            handle.write(Data(blob.utf8))
+            handle.closeFile()
+        } else {
+            try? blob.write(to: url, atomically: true, encoding: .utf8)
+        }
+        trimIfLarge(url)
+    }
+
+    private static func trimIfLarge(_ url: URL) {
+        let size = (try? FileManager.default.attributesOfItem(atPath: url.path)[.size]) as? NSNumber
+        guard let bytes = size?.intValue, bytes > maxBytes,
+              let whole = try? String(contentsOf: url, encoding: .utf8) else { return }
+        var lines = whole.components(separatedBy: "\n")
+        guard lines.count > keepLines else { return }
+        lines.removeFirst(lines.count - keepLines)
+        try? lines.joined(separator: "\n").write(to: url, atomically: true, encoding: .utf8)
+    }
+}

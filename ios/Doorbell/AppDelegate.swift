@@ -32,6 +32,10 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         boot = BootConfig.load()
         IOSAvailability.cacheScreenScale()
         IOSAvailability.PerfProbe.enabled = boot.debugTimings
+        ShellLog.enabled = boot.debugTimings
+        ShellLog.start(dataDir: BootConfig.dataDir(),
+                       note: "role=\(boot.role) door=\(boot.door) kiosk=\(boot.kiosk) "
+                           + "setup_required=\(boot.setupRequired)")
         if boot.debugScreenshots {
             let responder = ScreenshotResponder(dataDir: BootConfig.dataDir())
             screenshots = responder
@@ -54,7 +58,11 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
 
         let win = ActivityWindow(frame: UIScreen.main.bounds)
         window = win
-        application.isIdleTimerDisabled = true
+        // The panel must not let the device auto-lock: a suspended app's listening sockets are
+        // refused, the cluster calls the node dead, and it is evicted later without a crash
+        // report. Set here and re-asserted on every activation, because setting it once — before
+        // the window is even key — is not enough to keep it set.
+        ScreenAwake.want(true)
         if boot.setupRequired {
             let setup = BootstrapSetupViewController(boot: boot)
             setup.onSave = { [weak self, weak win, weak application] name, role, door in
@@ -113,7 +121,8 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         if BootConfig.migrateLegacyPskIntoSecureStore() { boot = BootConfig.load() }
 
         // Keep the UI available in offline mode if Core cannot start.
-        _ = core.start(dataDir: BootConfig.dataDir(), bootJson: boot.rawJson)
+        let coreStarted = core.start(dataDir: BootConfig.dataDir(), bootJson: boot.rawJson)
+        ShellLog.note("core.start ok=\(coreStarted)")
         runtime = RuntimeSupervisor(core: core, boot: boot,
                                     audioSessionReady: audioSessionReady)
         runtime?.start()
@@ -196,14 +205,47 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
     }
 
     func applicationWillTerminate(_ application: UIApplication) {
+        ShellLog.note("lifecycle willTerminate")
+        ShellLog.flush()
         NotificationCenter.default.removeObserver(self,
             name: UIDevice.orientationDidChangeNotification, object: nil)
         UIDevice.current.endGeneratingDeviceOrientationNotifications()
         runtime?.stop(clean: true)
         core.stop()
+        ShellLog.note("core.stop reason=willTerminate")
+    }
+
+    /// The transitions that explain a silent death, recorded so the next one can be read off the
+    /// device. Nothing here stops Core: a door station that resigned active — a system alert, a
+    /// notification banner, the screen locking — is still the household's doorbell, and taking the
+    /// node off the mesh for that would be the very failure this is here to catch. The idle-timer
+    /// override is re-asserted on activation because a screen that cleared it may not have put it
+    /// back.
+    func applicationDidBecomeActive(_ application: UIApplication) {
+        ScreenAwake.apply()
+        ShellLog.note("lifecycle didBecomeActive idle_timer_disabled="
+                          + "\(application.isIdleTimerDisabled)")
+    }
+
+    func applicationWillResignActive(_ application: UIApplication) {
+        ShellLog.note("lifecycle willResignActive")
+        ShellLog.flush()
+    }
+
+    func applicationDidEnterBackground(_ application: UIApplication) {
+        // Reaching here on a panel means the device locked or something took the foreground; the
+        // suspension that follows is what takes the node off the mesh.
+        ShellLog.note("lifecycle didEnterBackground idle_timer_disabled="
+                          + "\(application.isIdleTimerDisabled) wanted=\(ScreenAwake.wanted)")
+        ShellLog.flush()
+    }
+
+    func applicationWillEnterForeground(_ application: UIApplication) {
+        ShellLog.note("lifecycle willEnterForeground")
     }
 
     func applicationDidReceiveMemoryWarning(_ application: UIApplication) {
+        ShellLog.note("lifecycle memoryWarning")
         runtime?.handleMemoryPressure()
         guard let root = window?.rootViewController as? MainViewController else { return }
         root.enterSafeModeForMemoryPressure()
@@ -224,6 +266,7 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
     private func onUiEvent(_ ev: [String: Any]) {
         let eventKind = ConfigUtil.evStr(ev, "t")
         let type = ConfigUtil.evStr(ev, "type")
+        ShellLog.uiEvent(eventKind, detail: type)
         if eventKind == "event", boot.role != "door_station",
            type == "call_cancelled" || type == "call_answered" ||
            type == "call_ended" || type == "purpose_selected" {
@@ -324,6 +367,7 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         runtime?.stop(clean: false)
         runtime = nil
         core.stop()
+        ShellLog.note("core.stop reason=resetLocalPairing")
         guard Keychain.removeAll(), BootConfig.clearPersistedState(),
               let win = window as? ActivityWindow else {
             IOSAvailability.logDebug("local pairing reset failed")

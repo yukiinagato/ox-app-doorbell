@@ -53,14 +53,17 @@ final class DebugInfoViewController: UIViewController {
         refresh()
     }
 
+    /// The information page does not let the screen sleep either. A panel that auto-locks is
+    /// suspended, and a suspended node refuses its ports and is evicted with nothing written
+    /// anywhere to say why; leaving this page open is not worth that.
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
-        UIApplication.shared.isIdleTimerDisabled = false
+        ScreenAwake.apply()
     }
 
     override func viewDidDisappear(_ animated: Bool) {
         super.viewDidDisappear(animated)
-        UIApplication.shared.isIdleTimerDisabled = true
+        ScreenAwake.apply()
     }
 
     private func buildUI() {

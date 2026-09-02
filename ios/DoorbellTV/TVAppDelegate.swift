@@ -45,7 +45,9 @@ final class TVAppDelegate: UIResponder, UIApplicationDelegate {
         win.makeKeyAndVisible()
         window = win
 
-        application.isIdleTimerDisabled = true
+        // Same rule as the hand-held shells: the override is an intent that is re-asserted on
+        // every activation, not a flag set once at launch.
+        ScreenAwake.want(true)
         launchAudio.playConfigured(soundValue("launch_sound", "title_display"))
 
         pairingTexts.setLang(boot.uiLang)
@@ -143,6 +145,12 @@ final class TVAppDelegate: UIResponder, UIApplicationDelegate {
             [weak self] _ in self?.evaluatePairingGate()
         }
         presentPairingGate()
+    }
+
+    /// Nothing stops Core on a lifecycle transition; only a termination or a deliberate reset
+    /// does. A panel that resigned active is still a member of the cluster.
+    func applicationDidBecomeActive(_ application: UIApplication) {
+        ScreenAwake.apply()
     }
 
     func applicationWillTerminate(_ application: UIApplication) {

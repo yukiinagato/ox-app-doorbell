@@ -232,3 +232,127 @@ final class ClusterAndClockTests: XCTestCase {
         XCTAssertFalse(core.isRunning, "and building them started nothing")
     }
 }
+
+/// The panel must not let the device auto-lock, and no lifecycle transition may take the node off
+/// the mesh.
+///
+/// When iOS auto-locks it suspends the foreground app: the listening sockets are closed, so 47180
+/// and 47172 start refusing connections, the cluster marks the node dead, and the process is
+/// evicted later. Nothing is written — no crash report, no jetsam event, no resource report — so
+/// from the outside it is indistinguishable from a hang. These are the two properties that keep
+/// it from happening.
+final class PanelStaysAwakeTests: XCTestCase {
+
+    override func tearDown() {
+        ScreenAwake.want(true)
+        super.tearDown()
+    }
+
+    func testTheOverrideIsWantedByDefaultAndIsActuallyApplied() {
+        ScreenAwake.want(true)
+        XCTAssertTrue(ScreenAwake.wanted)
+        XCTAssertTrue(UIApplication.shared.isIdleTimerDisabled,
+                      "a door station must never let the device auto-lock")
+    }
+
+    /// Re-asserting is the whole point: several screens clear the flag, and one of them — the iOS
+    /// 9 admin alert — used to restore it from a single one of its three ways out.
+    func testReapplyingPutsTheOverrideBackAfterSomethingClearedIt() {
+        ScreenAwake.want(true)
+        UIApplication.shared.isIdleTimerDisabled = false
+        ScreenAwake.apply()
+        XCTAssertTrue(UIApplication.shared.isIdleTimerDisabled)
+    }
+
+    /// Leaving kiosk mode is the one deliberate exception, and re-applying must not undo it.
+    func testLeavingKioskModeIsRememberedAcrossAReassert() {
+        ScreenAwake.want(false)
+        XCTAssertFalse(UIApplication.shared.isIdleTimerDisabled)
+        ScreenAwake.apply()
+        XCTAssertFalse(UIApplication.shared.isIdleTimerDisabled,
+                       "an administrator's choice survives the next activation")
+    }
+}
+
+/// The record the shell keeps of its own life, so that the next death that leaves no crash report,
+/// no jetsam event and no resource report can still be explained from the device.
+final class ShellLogTests: XCTestCase {
+
+    private var dir = ""
+
+    override func setUp() {
+        super.setUp()
+        dir = (NSTemporaryDirectory() as NSString)
+            .appendingPathComponent("shell-log-\(UUID().uuidString)")
+        try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        ShellLog.enabled = true
+    }
+
+    override func tearDown() {
+        ShellLog.enabled = false
+        try? FileManager.default.removeItem(atPath: dir)
+        super.tearDown()
+    }
+
+    private var logPath: String {
+        return (dir as NSString).appendingPathComponent("shell.log")
+    }
+
+    /// The writes happen on the log's own queue, so the file is polled rather than assumed.
+    @discardableResult
+    private func waitForLog(containing needle: String) -> String {
+        let deadline = Date().addingTimeInterval(5)
+        while Date() < deadline {
+            if let body = try? String(contentsOfFile: logPath, encoding: .utf8),
+               body.contains(needle) {
+                return body
+            }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.02))
+        }
+        return (try? String(contentsOfFile: logPath, encoding: .utf8)) ?? ""
+    }
+
+    func testItRecordsTheLaunchCoreAndEveryLifecycleTransition() {
+        ShellLog.start(dataDir: dir, note: "role=door_station door=front")
+        ShellLog.note("core.start ok=true")
+        ShellLog.note("lifecycle didEnterBackground idle_timer_disabled=false")
+
+        let body = waitForLog(containing: "didEnterBackground")
+        XCTAssertTrue(body.contains("=== launch role=door_station door=front"))
+        XCTAssertTrue(body.contains("core.start ok=true"))
+        XCTAssertTrue(body.contains("lifecycle didEnterBackground idle_timer_disabled=false"))
+        // Every line carries a wall clock and the uptime, so it lines up with idevicesyslog and
+        // with the device's own crash reports.
+        for line in body.split(separator: "\n") {
+            XCTAssertTrue(line.contains(" +"), "each line is stamped: \(line)")
+            XCTAssertEqual(line.prefix(2), "20", "and starts with a date: \(line)")
+        }
+    }
+
+    /// Core announces `peers_changed` several times a second, so the events are buffered and
+    /// bounded rather than written one file append at a time.
+    func testUiEventsAreKeptButBounded() {
+        ShellLog.start(dataDir: dir, note: "role=door_station")
+        for index in 0..<200 { ShellLog.uiEvent("peers_changed", detail: "n\(index)") }
+        ShellLog.flush()
+
+        // The first event flushes straight away and the rest are buffered, so the newest one is
+        // what says the explicit flush has landed.
+        let body = waitForLog(containing: "n199")
+        let uiLines = body.split(separator: "\n").filter { $0.contains("ui peers_changed") }
+        XCTAssertTrue(body.contains("n199"), "the most recent event is kept")
+        XCTAssertLessThan(uiLines.count, 200, "but not all two hundred of them")
+        XCTAssertFalse(body.contains(" n5 "), "the oldest have fallen off the front")
+    }
+
+    func testItWritesNothingWhenTimingsAreOff() {
+        ShellLog.enabled = false
+        ShellLog.start(dataDir: dir, note: "role=door_station")
+        ShellLog.note("core.start ok=true")
+        ShellLog.uiEvent("peers_changed")
+        ShellLog.flush()
+        RunLoop.current.run(until: Date().addingTimeInterval(0.3))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: logPath),
+                       "a shipped panel writes nothing")
+    }
+}
