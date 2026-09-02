@@ -46,6 +46,8 @@ internal class DashboardView(
     private val missedBadge = ShellUi.pill(activity, "", palette.dangerSoft, palette.dangerInk)
     private lateinit var adminButton: Button
     private lateinit var noticeButton: Button
+    private lateinit var recentCallsHeading: TextView
+    private lateinit var seeAllButton: Button
     private val tileColumn = LinearLayout(activity).apply {
         orientation = LinearLayout.VERTICAL
     }
@@ -170,14 +172,18 @@ internal class DashboardView(
             gravity = Gravity.CENTER_VERTICAL
             isBaselineAligned = false
         }
+        recentCallsHeading = ShellUi.text(
+            activity, texts.t("dash.recent_calls", R.string.dash_recent_calls), 13f,
+            palette.muted, bold = true,
+        )
         callHeader.addView(
-            ShellUi.text(activity, texts.t("dash.recent_calls", R.string.dash_recent_calls),
-                         13f, palette.muted, bold = true),
+            recentCallsHeading,
             LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f),
         )
-        callHeader.addView(ShellUi.button(
+        seeAllButton = ShellUi.button(
             activity, texts.t("dash.see_all", R.string.dash_see_all), palette,
-        ) { HistoryActivity.launch(activity) })
+        ) { HistoryActivity.launch(activity) }
+        callHeader.addView(seeAllButton)
         callColumn.addView(callHeader, ShellUi.matchWrap())
         callColumn.addView(
             ScrollView(activity).apply {
@@ -235,7 +241,15 @@ internal class DashboardView(
         adminButton.setTextColor(ShellUi.opaque(palette.ink))
         noticeButton.background = ShellUi.rounded(activity, palette.surfaceAlt, 10)
         noticeButton.setTextColor(ShellUi.opaque(palette.ink))
+        recentCallsHeading.setTextColor(ShellUi.opaque(palette.muted))
+        seeAllButton.background = ShellUi.rounded(activity, palette.surfaceAlt, 10)
+        seeAllButton.setTextColor(ShellUi.opaque(palette.ink))
         sosSlider.applyPalette(palette)
+        // Labels are reapplied here too, so a language change reaches the controls built once.
+        adminButton.text = texts.t("admin.title", R.string.admin_title)
+        noticeButton.text = texts.t("notice.global_button", R.string.notice_global_button)
+        recentCallsHeading.text = texts.t("dash.recent_calls", R.string.dash_recent_calls)
+        seeAllButton.text = texts.t("dash.see_all", R.string.dash_see_all)
     }
 
     private fun updateClock(now: ClusterTime) {
