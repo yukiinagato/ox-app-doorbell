@@ -347,6 +347,12 @@ Delete it?</value></data>
   <data name="admin_with_snapshot" xml:space="preserve"><value>With snapshot</value></data>
   <data name="admin_write" xml:space="preserve"><value>Write</value></data>
   <data name="app_name" xml:space="preserve"><value>Doorbell</value></data>
+  <data name="call_return_device_hint" xml:space="preserve"><value>Tick &quot;use the cluster default&quot; to go back to the default</value></data>
+  <data name="call_return_hint" xml:space="preserve"><value>The call screen counts down in its title and returns home at zero. If the visitor cancels, the live view stays until the countdown ends; tapping the number cancels the countdown</value></data>
+  <data name="call_return_inherit" xml:space="preserve"><value>Use the cluster default</value></data>
+  <data name="call_return_invalid" xml:space="preserve"><value>The return countdown must be between 5 and 600 seconds</value></data>
+  <data name="call_return_s" xml:space="preserve"><value>Seconds before returning</value></data>
+  <data name="call_return_title" xml:space="preserve"><value>Return from the call screen</value></data>
   <data name="calling_cancel" xml:space="preserve"><value>Cancel</value></data>
   <data name="calling_cancel_failed" xml:space="preserve"><value>Could not cancel the call</value></data>
   <data name="calling_no_answer" xml:space="preserve"><value>No answer</value></data>

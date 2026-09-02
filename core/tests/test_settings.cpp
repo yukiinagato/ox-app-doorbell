@@ -1127,3 +1127,46 @@ TEST_CASE("doors: served_by names the alive station, and is null when nobody ser
   CHECK(cJSON_IsNull(json::get(ghost.get(), "served_by")));
   CHECK(json::getBool(ghost.get(), "configured"));
 }
+
+TEST_CASE("config: the incoming-call return countdown is bounded and overridable per device") {
+  SettingsNode fleet;
+  auto returnSeconds = [&fleet]() {
+    auto status = fleet.status();
+    return json::getInt(json::get(status.get(), "call"), "return_s");
+  };
+  // The default an indoor panel counts down from before going back to its home page.
+  CHECK(returnSeconds() == 60);
+
+  fleet.node->setConfigKey("call.indoor.return_s", "120");
+  CHECK(fleet.intAt("call.indoor.return_s") == 120);
+  CHECK(returnSeconds() == 120);
+
+  // Bounded: a countdown too short to read, or long enough to strand the panel, is refused.
+  fleet.node->setConfigKey("call.indoor.return_s", "4");
+  fleet.node->setConfigKey("call.indoor.return_s", "601");
+  fleet.node->setConfigKey("call.indoor.return_s", "60.5");
+  fleet.node->setConfigKey("call.indoor.return_s", "\"60\"");
+  CHECK(fleet.intAt("call.indoor.return_s") == 120);
+  CHECK(returnSeconds() == 120);
+
+  // A per-device override wins, and removing it returns to the cluster default.
+  const std::string self = fleet.node->nodeId();
+  fleet.node->setConfigKey("devices." + self + ".local.call.return_s", "20");
+  CHECK(returnSeconds() == 20);
+  fleet.node->setConfigKey("devices." + self + ".local.call.return_s", "900");
+  CHECK(returnSeconds() == 20);
+  auto removed = json::parse(
+      fleet.node->deleteConfigKeyJson("devices." + self + ".local.call.return_s"));
+  REQUIRE(removed);
+  REQUIRE(json::getBool(removed.get(), "ok"));
+  CHECK(returnSeconds() == 120);
+
+  // Container writes carry it too, and are validated as a whole.
+  SettingsNode bare("indoor_panel", "", /*seed_defaults=*/false);
+  bare.node->setConfigKey("call", "{\"indoor\":{\"return_s\":30}}");
+  CHECK(bare.intAt("call.indoor.return_s") == 30);
+  bare.node->setConfigKey("call", "{\"indoor\":{\"return_s\":9000}}");
+  bare.node->setConfigKey("call", "{\"indoor\":{\"return_s\":30},\"surprise\":1}");
+  bare.node->setConfigKey("call.indoor", "{\"return_s\":2}");
+  CHECK(bare.intAt("call.indoor.return_s") == 30);
+}

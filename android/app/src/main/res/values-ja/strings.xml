@@ -345,6 +345,12 @@
     <string name="admin_with_snapshot">写真付き</string>
     <string name="admin_write">書込</string>
     <string name="app_name">ドアホン</string>
+    <string name="call_return_device_hint">空欄にせず「クラスタの既定に合わせる」で既定に戻せます</string>
+    <string name="call_return_hint">着信画面のタイトルに残り秒数が出ます。0 になるとホームに戻ります。訪問者が取り消しても映像はそのまま残り、数字をタップすると戻りません</string>
+    <string name="call_return_inherit">クラスタの既定に合わせる</string>
+    <string name="call_return_invalid">戻るまでの秒数は 5 秒から 600 秒の間で指定してください</string>
+    <string name="call_return_s">戻るまでの秒数</string>
+    <string name="call_return_title">着信画面から戻るまで</string>
     <string name="calling_cancel">取消し</string>
     <string name="calling_cancel_failed">呼出を取り消せませんでした</string>
     <string name="calling_no_answer">応答がありません</string>

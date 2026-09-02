@@ -1526,6 +1526,52 @@ var AdminLogic = (function () {
     return { entries: [{ key: key, value: value }], dels: [] };
   }
 
+  var CALL_RETURN_DEFAULT = 60;
+  var CALL_RETURN_MIN = 5;
+  var CALL_RETURN_MAX = 600;
+
+  /* Seconds the incoming-call page counts down before an indoor panel goes back to its home
+   * page. Mirrors core: a per-device override wins over the cluster default. */
+  function callReturnSeconds(cfg, deviceId) {
+    cfg = isObj(cfg) ? cfg : {};
+    var device = isObj(cfg.devices) ? cfg.devices[deviceId] : null;
+    var local = isObj(device) && isObj(device.local) ? device.local : {};
+    var override = isObj(local.call) ? local.call.return_s : undefined;
+    var cluster = isObj(cfg.call) && isObj(cfg.call.indoor) ? cfg.call.indoor.return_s
+                                                            : undefined;
+    var value = typeof override === "number" ? override :
+                (typeof cluster === "number" ? cluster : CALL_RETURN_DEFAULT);
+    var rounded = Math.round(num(value, CALL_RETURN_DEFAULT));
+    if (!(rounded >= CALL_RETURN_MIN)) rounded = CALL_RETURN_MIN;
+    if (rounded > CALL_RETURN_MAX) rounded = CALL_RETURN_MAX;
+    return {
+      seconds: rounded,
+      source: typeof override === "number" ? "device" :
+              (typeof cluster === "number" ? "cluster" : "default")
+    };
+  }
+
+  // A blank or unparseable box is an error the operator sees, not a silent fall back to the
+  // default: clearing the field and saving must not quietly change the setting.
+  function callReturnValue(seconds) {
+    var parsed = parseFloat(seconds);
+    if (isNaN(parsed)) throw new Error("call.return_s");
+    var value = Math.round(parsed);
+    if (!(value >= CALL_RETURN_MIN) || value > CALL_RETURN_MAX) throw new Error("call.return_s");
+    return value;
+  }
+
+  function callReturnEntries(seconds) {
+    return [{ key: "call.indoor.return_s", value: callReturnValue(seconds) }];
+  }
+
+  /* Inheriting again deletes the leaf rather than writing the cluster value into the device. */
+  function deviceCallReturnEntries(id, f) {
+    var key = "devices." + id + ".local.call.return_s";
+    if (f.inherit) return { entries: [], dels: [key] };
+    return { entries: [{ key: key, value: callReturnValue(f.seconds) }], dels: [] };
+  }
+
   var NOTICE_PRESET_MAX = 8;
 
   /* notice.presets is an ordinary array an administrator edits; the dialogs render whatever is
@@ -2417,6 +2463,9 @@ var AdminLogic = (function () {
     noticePresetList: noticePresetList, effectiveNoticeModel: effectiveNoticeModel,
     doorUnlockEntries: doorUnlockEntries, doorUnlockModel: doorUnlockModel,
     doorRows: doorRows,
+    CALL_RETURN_DEFAULT: CALL_RETURN_DEFAULT, CALL_RETURN_MIN: CALL_RETURN_MIN,
+    CALL_RETURN_MAX: CALL_RETURN_MAX, callReturnSeconds: callReturnSeconds,
+    callReturnEntries: callReturnEntries, deviceCallReturnEntries: deviceCallReturnEntries,
     writeWarnings: writeWarnings,
     webSosEntries: webSosEntries, runtimeHealthRows: runtimeHealthRows,
     flattenConfig: flattenConfig, applyKey: applyKey, deleteKey: deleteKey,
@@ -3939,6 +3988,11 @@ if (typeof document !== "undefined") (function () {
         options: [{ v: "ja", label: t("language.name_ja") },
                   { v: "en", label: t("language.name_en") },
                   { v: "zh", label: t("language.name_zh") }] },
+      { id: "call_return", label: t("call.return_s"), type: "number",
+        value: L.callReturnSeconds(S.cfg, id).seconds,
+        hint: t("call.return_device_hint") },
+      { id: "call_return_inherit", label: t("call.return_inherit"), type: "check",
+        value: L.callReturnSeconds(S.cfg, id).source !== "device" },
       { id: "helper_mode", label: t("admin.helper_mode"), type: "select",
         value: recovery.helper_mode || "auto",
         options: [{ v: "auto", label: t("admin.helper_auto") },
@@ -3994,7 +4048,12 @@ if (typeof document !== "undefined") (function () {
         if (caps === null || typeof caps !== "object") return "caps_override: JSON?";
       }
       v.caps_override = caps;
-      saveAndRefresh(L.deviceEntries(id, v, d), null);
+      var plan;
+      try {
+        plan = L.deviceCallReturnEntries(id, { inherit: v.call_return_inherit,
+                                               seconds: v.call_return });
+      } catch (e) { return t("call.return_invalid"); }
+      saveAndRefresh(L.deviceEntries(id, v, d).concat(plan.entries), plan.dels);
     });
   }
 
@@ -4971,7 +5030,18 @@ if (typeof document !== "undefined") (function () {
            esc(t("admin.call_flow_supported")) +
            "</div>";
     }
-    h += "</div><div class='chead'><h2></h2><button class='btn small' data-act='add'>+ " +
+    h += "</div>";
+
+    var callReturn = L.callReturnSeconds(S.cfg, "");
+    h += "<div class='card'><h2>" + esc(t("call.return_title")) + "</h2>" +
+         "<div class='dim fhint' style='margin-bottom:10px'>" + esc(t("call.return_hint")) +
+         "</div><div class='frow'><label class='flab'>" + esc(t("call.return_s")) + "</label>" +
+         "<input type='number' id='callReturn' min='" + L.CALL_RETURN_MIN + "' max='" +
+         L.CALL_RETURN_MAX + "' value='" + esc(callReturn.seconds) + "'></div>" +
+         "<button class='btn small' id='callReturnSave'>" + esc(t("admin.save")) +
+         "</button></div>";
+
+    h += "<div class='chead'><h2></h2><button class='btn small' data-act='add'>+ " +
             esc(t("admin.add_rule")) + "</button></div>";
     for (var id in rs) {
       var r = rs[id];
@@ -5011,6 +5081,12 @@ if (typeof document !== "undefined") (function () {
            esc(t("admin.delete")) + "</button></div></div>";
     }
     el.innerHTML = h;
+    $("#callReturnSave").onclick = function () {
+      var entries;
+      try { entries = L.callReturnEntries($("#callReturn").value); }
+      catch (e) { msg(t("call.return_invalid")); return; }
+      saveAndRefresh(entries, null);
+    };
     bindActs(el, {
       add: function () { editRule(null); },
       edit: function (id) { editRule(id); },

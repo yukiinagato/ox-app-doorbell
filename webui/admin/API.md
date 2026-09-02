@@ -507,3 +507,14 @@ any extra field, or a renamed label, means an administrator has adopted the door
 `status.doors.<id>.served_by` gives the node id of the alive station serving that door, or `null`.
 Use it to tell "the station is offline" (`configured: true`, `served_by: null` — show the tile
 greyed) apart from "no station at all".
+
+## Returning from the incoming-call screen
+
+`call.indoor.return_s` (5..600 seconds, default 60) and its per-device override
+`devices.<id>.local.call.return_s` set how long an indoor panel stays on the incoming-call page.
+The title carries the countdown and the panel returns home at zero; `status.call.return_s` is the
+effective value for that node. Removing an override means deleting the leaf key, not writing the
+cluster value into the device.
+
+A visitor cancelling the call does not close the page: the live view stays until the countdown
+ends or someone leaves manually. Tapping the countdown number cancels the countdown for that call.

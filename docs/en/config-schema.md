@@ -517,6 +517,19 @@ correct for a real station that is merely down.
 `configured` separates "this door has an entry" from "a live station is serving a door nobody has
 set up yet".
 
+### Returning from the incoming-call screen
+
+`call.indoor.return_s` (5..600 seconds, default 60), with the per-device override
+`devices.<id>.local.call.return_s`, is how long an indoor panel stays on the incoming-call page.
+The page title carries the countdown -- "(60)" -- and the panel returns to its home page when it
+reaches zero. `status.call.return_s` reports the effective value for this node.
+
+Two behaviours matter for the shells. If the visitor cancels the call, the panel does **not**
+leave the page immediately: the live view stays until the countdown ends or someone leaves
+manually, because a resident who has just looked up should still get to see who was there.
+Tapping the countdown number cancels the countdown for that call, so a resident watching the door
+is never thrown back to the home page mid-look.
+
 ### Joining a cluster is silent
 
 Anti-entropy hands a joining node the cluster's entire event history at once. Those records are

@@ -340,6 +340,12 @@
 "admin.with_snapshot" = "写真付き";
 "admin.write" = "書込";
 "app.name" = "ドアホン";
+"call.return_device_hint" = "空欄にせず「クラスタの既定に合わせる」で既定に戻せます";
+"call.return_hint" = "着信画面のタイトルに残り秒数が出ます。0 になるとホームに戻ります。訪問者が取り消しても映像はそのまま残り、数字をタップすると戻りません";
+"call.return_inherit" = "クラスタの既定に合わせる";
+"call.return_invalid" = "戻るまでの秒数は 5 秒から 600 秒の間で指定してください";
+"call.return_s" = "戻るまでの秒数";
+"call.return_title" = "着信画面から戻るまで";
 "calling.cancel" = "取消し";
 "calling.cancel_failed" = "呼出を取り消せませんでした";
 "calling.no_answer" = "応答がありません";
