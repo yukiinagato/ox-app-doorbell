@@ -288,6 +288,9 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
     }
 
     override fun onPause() {
+        // Leaving with setup still required must re-open setup on the next resume;
+        // otherwise backing out of first-run setup strands the operator on an empty screen.
+        setupLaunchRequested = false
         sensorManager.unregisterListener(this)
         ui.removeCallbacks(clockTick)
         ui.removeCallbacks(purposeTimeout)
