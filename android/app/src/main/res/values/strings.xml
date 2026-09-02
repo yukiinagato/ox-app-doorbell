@@ -348,6 +348,12 @@ Delete it?</string>
     <string name="admin_with_snapshot">With snapshot</string>
     <string name="admin_write">Write</string>
     <string name="app_name">Doorbell</string>
+    <string name="call_return_device_hint">Tick &quot;use the cluster default&quot; to go back to the default</string>
+    <string name="call_return_hint">The call screen counts down in its title and returns home at zero. If the visitor cancels, the live view stays until the countdown ends; tapping the number cancels the countdown</string>
+    <string name="call_return_inherit">Use the cluster default</string>
+    <string name="call_return_invalid">The return countdown must be between 5 and 600 seconds</string>
+    <string name="call_return_s">Seconds before returning</string>
+    <string name="call_return_title">Return from the call screen</string>
     <string name="calling_cancel">Cancel</string>
     <string name="calling_cancel_failed">Could not cancel the call</string>
     <string name="calling_no_answer">No answer</string>

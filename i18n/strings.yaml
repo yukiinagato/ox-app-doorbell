@@ -1041,3 +1041,9 @@ pair.join_this_cluster: { ja: "この集まりに参加", en: "Join this cluster
 pair.scan_button: { ja: "QR を読み取る", en: "Scan QR", zh: "扫描二维码" }
 pair.link_from: { ja: "{cluster} への招待", en: "Invitation to {cluster}", zh: "加入 {cluster} 的邀请" }
 pair.link_leave_current: { ja: "この端末は既に別の集まりに参加しています。参加すると現在の設定はすべて消去されます。", en: "This device is already in another cluster. Joining erases all of its current settings.", zh: "此设备已加入其他集群。加入将清除其当前的全部设置。" }
+call.return_title: { ja: "着信画面から戻るまで", en: "Return from the call screen", zh: "从来电界面返回" }
+call.return_s: { ja: "戻るまでの秒数", en: "Seconds before returning", zh: "返回前的秒数" }
+call.return_hint: { ja: "着信画面のタイトルに残り秒数が出ます。0 になるとホームに戻ります。訪問者が取り消しても映像はそのまま残り、数字をタップすると戻りません", en: "The call screen counts down in its title and returns home at zero. If the visitor cancels, the live view stays until the countdown ends; tapping the number cancels the countdown", zh: "来电界面标题会显示倒计时，归零后返回主页。访客取消时实时画面仍会保留至倒计时结束；点按数字可取消倒计时" }
+call.return_device_hint: { ja: "空欄にせず「クラスタの既定に合わせる」で既定に戻せます", en: "Tick \"use the cluster default\" to go back to the default", zh: "勾选“使用集群默认值”即可恢复默认" }
+call.return_inherit: { ja: "クラスタの既定に合わせる", en: "Use the cluster default", zh: "使用集群默认值" }
+call.return_invalid: { ja: "戻るまでの秒数は 5 秒から 600 秒の間で指定してください", en: "The return countdown must be between 5 and 600 seconds", zh: "返回倒计时必须在 5 到 600 秒之间" }

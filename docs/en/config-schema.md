@@ -504,6 +504,84 @@ The 1 px 40% opposite-ink shadow stays, as the fallback for when even the better
 4.5:1. Shells that sample locally (because `source` is `image_unsampled`, or because the hardware
 cannot afford core's decode) apply the same rule, so the fleet agrees on one answer.
 
+An auto-seeded entry carries `seeded_by` (the node that created it) and `seeded_label` (the label
+it wrote). When that node next starts, or becomes paired, with a role other than `door_station` or
+a different `boot.door`, it deletes the entry it seeded — otherwise a station switched to an
+indoor panel leaves a ghost tile behind for a door nobody serves. It deletes only an entry that is
+still exactly what it wrote: any other field, or a renamed label, means an administrator has
+adopted the door, and an adopted door outlives the device that happened to create it. That is
+correct for a real station that is merely down.
+
+`status.doors.<id>.served_by` is the node id of the alive door station serving the door, or
+`null`. It is what separates "the station is offline" from "no station serves this door at all";
+`configured` separates "this door has an entry" from "a live station is serving a door nobody has
+set up yet".
+
+### Returning from the incoming-call screen
+
+`call.indoor.return_s` (5..600 seconds, default 60), with the per-device override
+`devices.<id>.local.call.return_s`, is how long an indoor panel stays on the incoming-call page.
+The page title carries the countdown -- "(60)" -- and the panel returns to its home page when it
+reaches zero. `status.call.return_s` reports the effective value for this node.
+
+Two behaviours matter for the shells. If the visitor cancels the call, the panel does **not**
+leave the page immediately: the live view stays until the countdown ends or someone leaves
+manually, because a resident who has just looked up should still get to see who was there.
+Tapping the countdown number cancels the countdown for that call, so a resident watching the door
+is never thrown back to the home page mid-look.
+
+### Joining a cluster is silent
+
+Anti-entropy hands a joining node the cluster's entire event history at once. Those records are
+applied to the call log in full, with their original outcomes, and **none of them ring**. A call
+event presents -- chime, incoming screen, missed-call alert, Telegram, MQTT -- only while its call
+is live now: still `ringing` on the door station, and inside the ring window the press itself
+declared (`expires_at_ms`, evaluated against corrected cluster time). A terminal event presents
+only while it closes a call this device is actually showing, or while it is recent enough for a
+missed-call alert to still mean something.
+
+The same principle covers announcements and SOS by construction: both are replicated
+configuration and replicated state, so a joining node applies the *current* value once and never
+replays the transitions that produced it.
+
+### Who may answer
+
+`sip.accounts.<node_id>.answer_mode` is `auto` (answer immediately) or `ring` (ring and wait for a
+person). **The default follows the role**: `auto` on a `door_station`, `ring` on an
+`indoor_panel`. `status.sip.answer_mode` reports the effective value.
+
+This matters for the call history: `outcome: "answered"` and `answered_by` are meant to record
+that a person picked up. An indoor panel left on the default must therefore not answer by itself.
+A household that wants an intercom can still set `auto` per device, and the history then
+attributes the call to that device.
+
+### The pairing QR payload
+
+The QR a device scans to join is a custom-scheme URI, so a device that already has the app
+installed opens straight into the join flow instead of a browser:
+
+```
+doorbell://pair?host=<ip:port>&pin=<6 digits>&exp=<unix seconds>&cluster=<name>
+```
+
+`host` and `pin` are required. `exp` is an absolute Unix second, so a scanner rejects a stale code
+without having to know when it was produced. `cluster` is the human-readable cluster name. Values
+are percent-encoded with the RFC 3986 unreserved set, so a name with spaces or Japanese survives
+the round trip; `+` is a literal plus, never a space. Only these four keys are defined and a
+parser **ignores** any other, so the format can gain one without breaking shells already shipped.
+
+Core builds it: read the `uri` field of `db_core_mint_join_token_json`,
+`db_core_start_pairing_json`, `POST /api/join-token`, `POST /api/pairing/start`, or the `token`
+object of `db_core_pairing_json` / `GET /api/pairing`. Never assemble the string in a shell.
+Always keep the host and PIN printed beside the code as well — someone scanning with a plain
+camera app has to be able to read and type them.
+
+`db_core_parse_pair_uri_json` validates a scanned code so every platform reaches the same verdict:
+`{"ok":true,"host":…,"pin":…,"exp":…,"cluster":…}` or `{"ok":false,"err":…}` with `err` one of
+`bad_scheme`, `missing_pin`, `missing_host`, `expired`. The expiry is checked against corrected
+cluster time when core is running, and against the platform clock otherwise, because a shell may
+scan a code before core has started.
+
 ## Time, power, and announcements
 
 The bundled time-zone table lives in `core/src/util/tz.{h,cpp}` and covers the zones the settings

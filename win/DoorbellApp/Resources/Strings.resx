@@ -350,6 +350,12 @@
   <data name="admin_with_snapshot" xml:space="preserve"><value>写真付き</value></data>
   <data name="admin_write" xml:space="preserve"><value>書込</value></data>
   <data name="app_name" xml:space="preserve"><value>ドアホン</value></data>
+  <data name="call_return_device_hint" xml:space="preserve"><value>空欄にせず「クラスタの既定に合わせる」で既定に戻せます</value></data>
+  <data name="call_return_hint" xml:space="preserve"><value>着信画面のタイトルに残り秒数が出ます。0 になるとホームに戻ります。訪問者が取り消しても映像はそのまま残り、数字をタップすると戻りません</value></data>
+  <data name="call_return_inherit" xml:space="preserve"><value>クラスタの既定に合わせる</value></data>
+  <data name="call_return_invalid" xml:space="preserve"><value>戻るまでの秒数は 5 秒から 600 秒の間で指定してください</value></data>
+  <data name="call_return_s" xml:space="preserve"><value>戻るまでの秒数</value></data>
+  <data name="call_return_title" xml:space="preserve"><value>着信画面から戻るまで</value></data>
   <data name="calling_cancel" xml:space="preserve"><value>取消し</value></data>
   <data name="calling_cancel_failed" xml:space="preserve"><value>呼出を取り消せませんでした</value></data>
   <data name="calling_no_answer" xml:space="preserve"><value>応答がありません</value></data>

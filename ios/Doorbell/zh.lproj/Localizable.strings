@@ -343,6 +343,12 @@
 "admin.with_snapshot" = "附照片";
 "admin.write" = "写入";
 "app.name" = "门铃";
+"call.return_device_hint" = "勾选“使用集群默认值”即可恢复默认";
+"call.return_hint" = "来电界面标题会显示倒计时，归零后返回主页。访客取消时实时画面仍会保留至倒计时结束；点按数字可取消倒计时";
+"call.return_inherit" = "使用集群默认值";
+"call.return_invalid" = "返回倒计时必须在 5 到 600 秒之间";
+"call.return_s" = "返回前的秒数";
+"call.return_title" = "从来电界面返回";
 "calling.cancel" = "取消";
 "calling.cancel_failed" = "无法取消呼叫";
 "calling.no_answer" = "无人应答";

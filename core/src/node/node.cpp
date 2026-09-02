@@ -34,6 +34,7 @@
 #include "util/common.h"
 #include "util/ids.h"
 #include "util/json.h"
+#include "util/pair_uri.h"
 #include "util/log.h"
 #include "util/sntp.h"
 #include "util/tz.h"
@@ -1522,8 +1523,45 @@ bool visitPurposeValid(const std::string& key, const cJSON* value, std::string* 
   return true;
 }
 
+// call.indoor.return_s and its per-device override: how long an indoor panel stays on the
+// incoming-call page before returning home.
+bool callReturnValid(const std::string& key, const cJSON* value, std::string* error) {
+  auto seconds_valid = [&error](const cJSON* seconds, const std::string& path) {
+    if (wholeNumberInRange(seconds, 5, 600)) return true;
+    *error = path + " must be a whole number of seconds between 5 and 600";
+    return false;
+  };
+  const std::string cluster_leaf = "call.indoor.return_s";
+  const std::string device_leaf = ".local.call.return_s";
+  auto ends_with = [&key](const std::string& suffix) {
+    return key.size() >= suffix.size() &&
+           key.compare(key.size() - suffix.size(), suffix.size(), suffix) == 0;
+  };
+  if (key == cluster_leaf || (key.rfind("devices.", 0) == 0 && ends_with(device_leaf)))
+    return seconds_valid(value, key);
+  // Container writes carry it inline.
+  if (key == "call" || key == "call.indoor") {
+    const cJSON* indoor = key == "call" ? json::get(value, "indoor") : value;
+    if (key == "call" && !objectHasOnly(value, {"indoor"}, "call", error)) return false;
+    if (!indoor) return true;
+    if (!objectHasOnly(indoor, {"return_s"}, "call.indoor", error)) return false;
+    const cJSON* seconds = json::get(indoor, "return_s");
+    return !seconds || seconds_valid(seconds, "call.indoor.return_s");
+  }
+  if (key.rfind("devices.", 0) == 0 && cJSON_IsObject(value)) {
+    const cJSON* local = key.find(".local") == std::string::npos
+        ? json::get(value, "local") : value;
+    const cJSON* call = json::get(local, "call");
+    if (ends_with(".local.call")) call = value;
+    const cJSON* seconds = json::get(call, "return_s");
+    if (seconds) return seconds_valid(seconds, key + ".return_s");
+  }
+  return true;
+}
+
 bool configWriteValid(const std::string& key, const cJSON* value, std::string* error,
                       std::vector<ConfigWarning>* warnings = nullptr) {
+  if (!callReturnValid(key, value, error)) return false;
   if (!secretContractValid(key, value, error)) return false;
   if (!visitPurposeValid(key, value, error)) return false;
   if (!eventRetentionValid(key, value, error)) return false;
@@ -3911,6 +3949,31 @@ struct Node::Impl {
 
   // ---------- call history ----------
 
+  // Anti-entropy hands a joining node the cluster's whole history at once. Applying those
+  // records to the call log is the point; re-enacting them is not. A call event presents only
+  // while its call is live right now, so a panel that has just joined imports the log silently
+  // instead of ringing once for every call the house has ever taken.
+  bool callEventIsLive(const EventRecord& ev) {
+    if (!callLifecycleType(ev.type)) return true;
+    const int64_t now = hlc->correctedWallMs();
+    const std::string id = eventCallId(ev);
+    if (ev.type == "press" || ev.type == "purpose_selected") {
+      auto projection = store.callProjection(id);
+      // Still ringing on the door station, and inside the ring window the press itself declared.
+      if (!projection || projection->state != "ringing") return false;
+      auto payload = json::parse(ev.payload_json.empty() ? "{}" : ev.payload_json);
+      const int64_t expires =
+          payload ? json::getInt(payload.get(), "expires_at_ms", 0) : 0;
+      if (expires > 0) return now < expires;
+      return now - ev.wall_ms <= callTtlMs();
+    }
+    // A terminal event matters while it closes a call this device is actually showing, and
+    // otherwise only while it is recent enough for a missed-call alert to still mean anything.
+    auto active = active_calls.find(ev.door);
+    if (!id.empty() && active != active_calls.end() && active->second.call_id == id) return true;
+    return now - ev.wall_ms <= callTtlMs();
+  }
+
   static bool callLifecycleType(const std::string& type) {
     return type == "press" || type == "purpose_selected" || type == "call_answered" ||
            type == "call_ended" || type == "call_cancelled" || type == "reply";
@@ -4316,6 +4379,11 @@ struct Node::Impl {
 
 
 
+    // Default by role, which is what the schema has always documented: a door station answers
+    // immediately, an indoor panel rings and waits for a person. The setting used to default to
+    // answering on every role, so an unconfigured indoor panel picked up the call by itself and
+    // the history recorded it as answered by a device nobody had touched.
+    s.auto_answer = opts.role == "door_station";
     std::string am = json::getString(acct, "answer_mode");
     if (am == "ring") s.auto_answer = false;
     else if (am == "auto") s.auto_answer = true;
@@ -4519,13 +4587,21 @@ struct Node::Impl {
         for (auto& entry : active_calls) {
           ActiveCall& call = entry.second;
           if (call.call_id != sip_call_id) continue;
-          if (call.state == "ringing") {
+          // Only a dialog someone is actually talking on may answer a call. An outbound
+          // listen-in dialog occupies the same primary slot as a real call, so without this a
+          // panel opening monitor sessions marked the ringing call answered by itself -- and a
+          // burst of them wrote that into the history for a call nobody had picked up.
+          const std::string dialog_mode = sipctl ? sipctl->callMode() : std::string();
+          if (call.state == "ringing" && SipCtl::dialogCanAnswer(dialog_mode)) {
             call.local_sip_established = true;
             if (call.timeout_timer) loop->cancel(call.timeout_timer);
             call.timeout_timer = 0;
             door_calling_until.erase(call.door);
             doReportCallAnswered(call.door, call.call_id, call.stage_revision, node_id,
                                  /*retry_on_persistence_failure=*/true);
+          } else if (call.state == "ringing") {
+            DB_LOGI(kTag, "listen-in dialog established while " + call.call_id +
+                              " rings; the call stays ringing");
           }
           break;
         }
@@ -5839,7 +5915,57 @@ struct Node::Impl {
       config->mutate(identity);
       if (!config->lastMutationCommitted()) return false;
     }
-    return ensureOwnDoorEntry();
+    return reclaimSeededDoorEntries() && ensureOwnDoorEntry();
+  }
+
+  // An entry is still exactly what this node seeded: nothing but the label it wrote, and that
+  // label unchanged. Anything else -- a building, a notice, an unlock setting, a rename -- is an
+  // administrator's work, and a door an administrator has adopted outlives the device that
+  // happened to create it.
+  bool seededDoorIsPristine(const cJSON* entry) const {
+    if (!cJSON_IsObject(entry)) return false;
+    const cJSON* field = nullptr;
+    cJSON_ArrayForEach(field, entry) {
+      const std::string name = field->string ? field->string : "";
+      if (name != "label" && name != "seeded_by" && name != "seeded_label") return false;
+    }
+    const std::string seeded_label = json::getString(entry, "seeded_label");
+    const cJSON* label = json::get(entry, "label");
+    if (!cJSON_IsObject(label)) return seeded_label.empty();
+    const cJSON* text = nullptr;
+    cJSON_ArrayForEach(text, label) {
+      if (!cJSON_IsString(text) || seeded_label != text->valuestring) return false;
+    }
+    return true;
+  }
+
+  // A door station that changes role, or moves to a different door, leaves behind the entry it
+  // created for the door it no longer serves. Left alone it becomes a ghost tile on every
+  // dashboard: a door with a name, permanently offline, that nobody serves.
+  bool reclaimSeededDoorEntries() {
+    if (!mesh || !mesh->isPaired()) return true;
+    const std::string still_serving =
+        opts.role == "door_station" ? opts.door : std::string();
+    std::vector<LwwMutation> stale;
+    const cJSON* doors = json::get(cfg.get(), "doors");
+    const cJSON* door = nullptr;
+    cJSON_ArrayForEach(door, doors) {
+      if (!door->string) continue;
+      const std::string id = door->string;
+      if (json::getString(door, "seeded_by") != node_id) continue;
+      if (id == still_serving) continue;
+      if (!seededDoorIsPristine(door)) {
+        DB_LOGI(kTag, "keeping door " + id + ": an administrator has edited it");
+        continue;
+      }
+      stale.push_back({"doors." + id, "", true});
+    }
+    if (stale.empty()) return true;
+    config->mutate(stale);
+    if (!config->lastMutationCommitted()) return false;
+    for (const auto& mutation : stale)
+      DB_LOGI(kTag, "removed " + mutation.key + ": this node no longer serves that door");
+    return true;
   }
 
   // A cluster founded by a door station used to end up with devices.<id>.door pointing at a door
@@ -5861,10 +5987,28 @@ struct Node::Impl {
     // id is a generated fallback and reads like one.
     const std::string name = opts.name.empty() ? opts.door : opts.name;
     for (const char* lang : {"ja", "en", "zh"}) json::set(label, lang, name);
+    // Provenance, so this node can take back exactly what it created and nothing else. Both
+    // fields are needed: seeded_by says who may reclaim it, and seeded_label says what was
+    // written, so a rename by an administrator is recognisable as an edit.
+    json::set(entry.get(), "seeded_by", node_id);
+    json::set(entry.get(), "seeded_label", name);
     config->mutate({{key, json::dump(entry.get()), false}});
     if (!config->lastMutationCommitted()) return false;
     DB_LOGI(kTag, "created the missing door entry " + key + " for this door station");
     return true;
+  }
+
+  // Seconds the incoming-call page counts down before an indoor panel returns to its home page.
+  // A per-device override wins, exactly like volume and appearance.
+  int callReturnSeconds() {
+    const cJSON* device = cfgAt("devices." + node_id + ".local.call");
+    const cJSON* seconds = json::get(device, "return_s");
+    if (!cJSON_IsNumber(seconds))
+      seconds = json::get(json::get(json::get(cfg.get(), "call"), "indoor"), "return_s");
+    int64_t value = cJSON_IsNumber(seconds) ? static_cast<int64_t>(seconds->valuedouble) : 60;
+    if (value < 5) value = 5;
+    if (value > 600) value = 600;
+    return static_cast<int>(value);
   }
 
   int64_t callTtlMs() const {
@@ -6533,6 +6677,13 @@ struct Node::Impl {
         ev.type == "call_answered" || ev.type == "call_ended" ||
         ev.type == "call_cancelled")
       applyCallEvent(ev);
+    // The projection above is the call log and is always applied. Everything below this line is
+    // presentation, and replicated history must not re-enact any of it.
+    const bool live = callEventIsLive(ev);
+    if (!live) {
+      if (callLifecycleType(ev.type)) notifyCallLogChanged();
+      return;
+    }
     if (ev.type == "press") {
       last_press_door = ev.door;
       last_press_by_door[ev.door] = {ev.origin, ev.seq};
@@ -7050,7 +7201,18 @@ struct Node::Impl {
     }
 
     json::Doc token = json::parse(mesh->tokenJson());
-    if (token) json::setItem(o.get(), "token", std::move(token));
+    if (token) {
+      // The PIN card renders its QR from this field, beside the printed host and PIN that a
+      // plain camera app can still read.
+      if (json::getBool(token.get(), "active")) {
+        const std::string pin = json::getString(token.get(), "pin");
+        const std::string host = json::getString(token.get(), "host");
+        if (!pin.empty() && !host.empty())
+          json::set(token.get(), "uri",
+                    pairUriFor(host, pin, json::getInt(token.get(), "expires_s", 0)));
+      }
+      json::setItem(o.get(), "token", std::move(token));
+    }
 
     json::Doc pend = json::parse(mesh->pendingJson());
     if (pend) json::setItem(o.get(), "pending", std::move(pend));
@@ -7076,13 +7238,26 @@ struct Node::Impl {
       json::setBool(result.get(), "ok", false);
       json::set(result.get(), "err", "pairing_unavailable");
     } else {
+      const int64_t expires_s =
+          std::max<int64_t>(0, (token.expires_mono - clock->monoMs()) / 1000);
       json::setBool(result.get(), "ok", true);
       json::set(result.get(), "host", host);
       json::set(result.get(), "pin", token.pin);
-      json::set(result.get(), "expires_s",
-                std::max<int64_t>(0, (token.expires_mono - clock->monoMs()) / 1000));
+      json::set(result.get(), "expires_s", expires_s);
+      // Shells render the QR from this and never assemble it themselves, so one definition of
+      // the format serves every platform.
+      json::set(result.get(), "uri", pairUriFor(host, token.pin, expires_s));
     }
     return json::dump(result.get());
+  }
+
+  // doorbell://pair?... for the current PIN. The expiry is absolute so a scanned code can be
+  // rejected without the scanner having to know when it was produced.
+  std::string pairUriFor(const std::string& host, const std::string& pin,
+                         int64_t expires_s) const {
+    const int64_t exp = expires_s > 0 ? hlc->correctedWallMs() / 1000 + expires_s : 0;
+    return pair_uri::build(host, pin,
+                           exp, json::getString(json::get(cfg.get(), "cluster"), "name"));
   }
 
   // The explicit "add several devices" window: open pairing mode, then mint a PIN so the same
@@ -7253,8 +7428,8 @@ struct Node::Impl {
     }
     // Founding or joining is the other moment this node becomes able to write cluster
     // configuration, so the door entry is ensured here as well as at startup.
-    if (!ensureOwnDoorEntry())
-      DB_LOGW(kTag, "could not create the door entry for this door station");
+    if (!reclaimSeededDoorEntries() || !ensureOwnDoorEntry())
+      DB_LOGW(kTag, "could not reconcile the door entry for this device");
     emitPairedEvent();
     emitPairingState();
   }
@@ -7282,8 +7457,39 @@ struct Node::Impl {
 
 
   // C9: leave the cluster and forget the secret. Used by "clear pairing" and by revocation.
+  // Everything about the cluster this device is leaving. Kept deliberately: the event log, and
+  // with it the call history, which is this device's own record of who rang its own doorbell
+  // (attribution may name a device that no longer exists); the local administrator digest, so a
+  // device does not sit unauthenticated between unpair and first-run setup; and node_id, which
+  // is this device's identity rather than the cluster's.
+  void forgetClusterStateOnLoop() {
+    // Hard-delete the rows instead of tombstoning them. A tombstone replicates, so re-pairing to
+    // the same cluster would push deletions for every device this replica had forgotten.
+    if (!store.configDeleteAll())
+      DB_LOGW(kTag, "leaving a cluster: replicated configuration could not be cleared");
+    config->resetReplica();
+    // Cached peer contracts are the gossip cache: they are what made an offline device from a
+    // previous cluster still resolve to a name, role, and manifest.
+    const size_t contracts = store.metaDeletePrefix("peer_ui_contract.");
+    // The one-shot seed markers belong to the old cluster too; the next cluster seeds its own
+    // defaults, and an administrator's later deletion of a seeded rule is remembered again then.
+    for (const char* marker :
+         {"seed_sos_rules_v1", "seed_missed_call_rule_v1", "seed_notice_presets_v1"})
+      store.metaDeletePrefix(marker);
+    rebuildCfg();
+    DB_LOGI(kTag, "left the cluster: configuration replica and " + std::to_string(contracts) +
+                      " cached peer contract(s) dropped");
+    // Re-seed straight away so the device is immediately usable as an unpaired first-run node
+    // with its own identity, rather than only after the next restart.
+    if (!seedConfig())
+      DB_LOGW(kTag, "first-run configuration could not be re-seeded after leaving the cluster");
+    applyEffectiveCaps();
+    scheduleSnapshotRefresh();
+  }
+
   void unpairOnLoop() {
     if (mesh) mesh->unpair();
+    forgetClusterStateOnLoop();
     Node::SecureDeleteFn del;
     {
       std::lock_guard<std::mutex> lk(cb_mu);
@@ -7374,6 +7580,10 @@ struct Node::Impl {
     json::set(sip, "state", sipRegName(sip_reg));
     json::set(sip, "call", sipCallName(sip_call));
     json::set(sip, "credential_source", sip_credential_source);
+    // Whether this node picks up by itself. An indoor panel defaults to ringing so that
+    // "answered" in the call history always means a person answered.
+    json::setBool(sip, "auto_answer", sipSettings().auto_answer);
+    json::set(sip, "answer_mode", sipSettings().auto_answer ? "auto" : "ring");
     if (!sip_peer_node.empty()) json::set(sip, "peer_node", sip_peer_node);
     if (!sip_peer_stream.empty()) json::set(sip, "peer_stream", sip_peer_stream);
     if (sipctl) {
@@ -7387,6 +7597,10 @@ struct Node::Impl {
       // reported even without a SIP backend, because the shell's toggle still has a position.
       cJSON* call = json::addObj(o.get(), "call");
       json::set(call, "state", sipCallName(sip_call));
+      json::set(call, "return_s", static_cast<int64_t>(callReturnSeconds()));
+      // "" two-way, "answer" an explicit takeover, "monitor" one-way listen-in. Only the first
+      // two may ever answer a call.
+      json::set(call, "dialog_mode", sipctl ? sipctl->callMode() : std::string());
       json::setBool(call, "mic_muted", sipctl ? sipctl->micMuted() : mic_muted_without_sip);
     }
     cJSON* leaders = json::addObj(o.get(), "leaders");
@@ -7500,10 +7714,31 @@ struct Node::Impl {
 
     {
       cJSON* doors = json::addObj(o.get(), "doors");
+      // The node id of the alive door station serving this door, or empty. Shells need the
+      // difference between "the station is offline" and "no station serves this door at all".
+      auto serving_station = [&](const std::string& door_id) {
+        if (door_id.empty()) return std::string();
+        if (opts.role == "door_station" && opts.door == door_id) return node_id;
+        if (!mesh) return std::string();
+        for (const auto& peer : mesh->peers()) {
+          if (peer.status != "alive" || peer.id == node_id) continue;
+          const cJSON* device = cfgAt("devices." + peer.id);
+          std::string role = json::getString(device, "role");
+          if (role.empty()) role = peer.role;
+          if (role != "door_station") continue;
+          std::string peer_door = json::getString(device, "door");
+          if (peer_door.empty()) peer_door = peer.door;
+          if (peer_door == door_id) return peer.id;
+        }
+        return std::string();
+      };
       auto add_door = [&](const std::string& id, const cJSON* configured,
                           const std::string& fallback_label) {
         if (id.empty() || json::get(doors, id.c_str())) return;
         cJSON* entry = json::addObj(doors, id.c_str());
+        const std::string station = serving_station(id);
+        if (station.empty()) json::setItem(entry, "served_by", json::Doc(cJSON_CreateNull()));
+        else json::set(entry, "served_by", station);
         const std::string label = labelIn(json::get(configured, "label"), "ja");
         json::set(entry, "label", label.empty() ? fallback_label : label);
         // configured:false means the door is live on the mesh but has no doors.<id> entry yet.
@@ -10255,6 +10490,28 @@ std::string Node::startPairingJson(int seconds) {
   std::string out;
   impl_->loop->callSync([&] { out = impl_->startPairingJsonOnLoop(seconds); });
   return out;
+}
+
+std::string Node::parsePairUriJson(const std::string& uri) {
+  int64_t now_unix_s = 0;
+  // Corrected cluster time when the node is running, the platform clock otherwise: a shell may
+  // scan a code before core has started.
+  if (!impl_->loop->callSync([&] { now_unix_s = impl_->hlc->correctedWallMs() / 1000; }))
+    now_unix_s = std::chrono::duration_cast<std::chrono::seconds>(
+                     std::chrono::system_clock::now().time_since_epoch())
+                     .count();
+  const pair_uri::Parsed parsed = pair_uri::parse(uri, now_unix_s);
+  auto out = json::obj();
+  json::setBool(out.get(), "ok", parsed.ok);
+  if (!parsed.ok) {
+    json::set(out.get(), "err", parsed.err);
+    return json::dump(out.get());
+  }
+  json::set(out.get(), "host", parsed.host);
+  json::set(out.get(), "pin", parsed.pin);
+  json::set(out.get(), "exp", parsed.exp);
+  json::set(out.get(), "cluster", parsed.cluster);
+  return json::dump(out.get());
 }
 
 std::string Node::mintJoinTokenJson(int seconds) {

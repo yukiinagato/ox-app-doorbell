@@ -86,6 +86,14 @@ class LwwMap {
 
   size_t gcTombstones(const VersionVector& fleet_min_vv, const std::string& older_than_hlc);
 
+  // Discard this replica of a cluster's state, for unpair and revoke. Every entry and every
+  // remote author's sequence knowledge is dropped locally, so a cluster joined afterwards is
+  // re-fetched in full rather than merged into stale rows. Nothing is tombstoned: a tombstone
+  // would replicate, and re-joining the same cluster would then delete the very entries this
+  // replica had forgotten. The local author's sequence counter is preserved so writes made after
+  // the reset never reuse an (author, seq) pair the old cluster may still hold.
+  void resetReplica();
+
 
 
   std::string materializeJson(const std::string& prefix = "") const;
