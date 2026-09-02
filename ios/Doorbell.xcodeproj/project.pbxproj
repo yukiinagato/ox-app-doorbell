@@ -13,6 +13,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		AC0000000000000000000004 /* ThemeInkTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC0000000000000000000003 /* ThemeInkTests.swift */; };
 		FB0000000000000000000021 /* CoreBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000002 /* CoreBridge.swift */; };
 		FB0000000000000000000022 /* BootConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000003 /* BootConfig.swift */; };
 		FB0000000000000000000023 /* Texts.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000004 /* Texts.swift */; };
@@ -132,7 +133,19 @@
 		F9000000000000000000007A /* VisitorScreenView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA000000000000000000003A /* VisitorScreenView.swift */; };
 /* End PBXBuildFile section */
 
+/* Begin PBXContainerItemProxy section */
+		AC0000000000000000000009 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = CB0000000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = CA0000000000000000000001;
+			remoteInfo = Doorbell;
+		};
+/* End PBXContainerItemProxy section */
+
 /* Begin PBXFileReference section */
+		AC0000000000000000000002 /* DoorbellTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DoorbellTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		AC0000000000000000000003 /* ThemeInkTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThemeInkTests.swift; sourceTree = "<group>"; };
 		FA0000000000000000000001 /* BridgingHeader.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = BridgingHeader.h; sourceTree = "<group>"; };
 		FA0000000000000000000002 /* CoreBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoreBridge.swift; sourceTree = "<group>"; };
 		FA0000000000000000000003 /* BootConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BootConfig.swift; sourceTree = "<group>"; };
@@ -187,6 +200,13 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		AC0000000000000000000007 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		DC0000000000000000000001 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -216,6 +236,7 @@
 			children = (
 				AB0000000000000000000002 /* Doorbell */,
 				AB0000000000000000000003 /* DoorbellTV */,
+				AC0000000000000000000005 /* DoorbellTests */,
 				AB0000000000000000000005 /* Audio */,
 				AB0000000000000000000004 /* Products */,
 			);
@@ -276,12 +297,21 @@
 			path = DoorbellTV;
 			sourceTree = "<group>";
 		};
+		AC0000000000000000000005 /* DoorbellTests */ = {
+			isa = PBXGroup;
+			children = (
+				AC0000000000000000000003 /* ThemeInkTests.swift */,
+			);
+			path = DoorbellTests;
+			sourceTree = "<group>";
+		};
 		AB0000000000000000000004 /* Products */ = {
 			isa = PBXGroup;
 			children = (
 				FA0000000000000000000016 /* Doorbell.app */,
 				FA0000000000000000000017 /* DoorbellTV.app */,
 				FA0000000000000000000021 /* DoorbellIOS9.app */,
+				AC0000000000000000000002 /* DoorbellTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -357,6 +387,23 @@
 			productReference = FA0000000000000000000021 /* DoorbellIOS9.app */;
 			productType = "com.apple.product-type.application";
 		};
+		AC0000000000000000000001 /* DoorbellTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AC000000000000000000000C /* Build configuration list for PBXNativeTarget "DoorbellTests" */;
+			buildPhases = (
+				AC0000000000000000000006 /* Sources */,
+				AC0000000000000000000007 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				AC0000000000000000000008 /* PBXTargetDependency */,
+			);
+			name = DoorbellTests;
+			productName = DoorbellTests;
+			productReference = AC0000000000000000000002 /* DoorbellTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -374,6 +421,10 @@
 					};
 					C90000000000000000000001 = {
 						CreatedOnToolsVersion = 15.0;
+					};
+					AC0000000000000000000001 = {
+						CreatedOnToolsVersion = 15.0;
+						TestTargetID = CA0000000000000000000001;
 					};
 				};
 			};
@@ -395,6 +446,7 @@
 				CA0000000000000000000001 /* Doorbell */,
 				CA0000000000000000000002 /* DoorbellTV */,
 				C90000000000000000000001 /* DoorbellIOS9 */,
+				AC0000000000000000000001 /* DoorbellTests */,
 			);
 		};
 /* End PBXProject section */
@@ -523,6 +575,14 @@
 /* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		AC0000000000000000000006 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AC0000000000000000000004 /* ThemeInkTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		DA0000000000000000000001 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -642,6 +702,14 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		AC0000000000000000000008 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = CA0000000000000000000001 /* Doorbell */;
+			targetProxy = AC0000000000000000000009 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin PBXVariantGroup section */
 		EA0000000000000000000001 /* Localizable.strings */ = {
@@ -891,6 +959,38 @@
 			};
 			name = Release;
 		};
+		AC000000000000000000000A /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				HEADER_SEARCH_PATHS = "$(SRCROOT)/../core/include";
+				IPHONEOS_DEPLOYMENT_TARGET = 12.0;
+				PRODUCT_BUNDLE_IDENTIFIER = jp.ox.doorbell.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Doorbell.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Doorbell";
+			};
+			name = Debug;
+		};
+		AC000000000000000000000B /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				HEADER_SEARCH_PATHS = "$(SRCROOT)/../core/include";
+				IPHONEOS_DEPLOYMENT_TARGET = 12.0;
+				PRODUCT_BUNDLE_IDENTIFIER = jp.ox.doorbell.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Doorbell.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Doorbell";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -926,6 +1026,15 @@
 			buildConfigurations = (
 				E90000000000000000000001 /* Debug */,
 				E90000000000000000000002 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		AC000000000000000000000C /* Build configuration list for PBXNativeTarget "DoorbellTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AC000000000000000000000A /* Debug */,
+				AC000000000000000000000B /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
