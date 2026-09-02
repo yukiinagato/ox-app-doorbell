@@ -219,6 +219,20 @@ static void TestDeliberateLineBreaksAndVersionLine(void) {
                               batteryPct:82 charging:NO]
               isEqualToString:@"居間 · core v1.2.3 · app v0.9.1 · 82%"],
           @"the footer carries core and app versions plus battery");
+  // A build id is forty hex characters on this project; the whole thing pushed
+  // the battery off the footer on the iPad 1.
+  Require([[DBUiTheme shortVersion:@"0.2.0+38f923938cf5f245c7462e011485eac44ef7c9e0"]
+              isEqualToString:@"0.2.0+38f9239"], @"the build hash is trimmed to seven");
+  Require([[DBUiTheme shortVersion:@"0.3.4"] isEqualToString:@"0.3.4"],
+          @"a plain version is untouched");
+  Require([[DBUiTheme shortVersion:@"0.3.4+abc"] isEqualToString:@"0.3.4+abc"],
+          @"and a short build id is kept whole");
+  Require([[DBUiTheme shortVersion:nil] length] == 0, @"nil is safe");
+  Require([[DBUiTheme versionLineForName:@"居間"
+                             coreVersion:@"0.2.0+38f923938cf5f245c7462e011485eac44ef7c9e0"
+                              appVersion:@"0.3.4" batteryPct:85 charging:YES]
+              rangeOfString:@"38f923938cf5f245"].location == NSNotFound,
+          @"so the footer never carries the full hash");
   Require([[DBUiTheme versionLineForName:@"居間" coreVersion:@"1.2.3" appVersion:@"0.9.1"
                               batteryPct:82 charging:YES] rangeOfString:@"⚡"].location
               != NSNotFound, @"charging is marked");

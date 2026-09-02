@@ -246,6 +246,7 @@ typedef enum {
 
   _mediaBadge = [[UILabel alloc] init];
   _mediaBadge.font = [UIFont boldSystemFontOfSize:14];
+  _mediaBadge.numberOfLines = 2;
   _mediaBadge.textAlignment = NSTextAlignmentCenter;
   _mediaBadge.layer.cornerRadius = 8;
   _mediaBadge.clipsToBounds = YES;
@@ -450,13 +451,8 @@ typedef enum {
   [_sos applyPalette:_palette];
   [_sos applyConfig:_cfg texts:_texts];
 
-  // An explicit semantic override still wins; otherwise the computed accent is
-  // what the visitor sees.
-  NSDictionary *callStyle = [self styleForSemanticID:@"call.primary"];
-  if ([callStyle objectForKey:@"background"] == nil) {
-    _callButton.backgroundColor = _palette.accent;
-    [_callButton setTitleColor:_palette.accentInk forState:UIControlStateNormal];
-  }
+  // The call button's colour is applied at the end of applySemanticStyles, so
+  // the semantic baseline cannot paint over the computed accent.
 
   BOOL showSos = NO;
   id roles = [DBConfigUtil dig:_cfg path:@"emergency.button_on_roles"];
@@ -913,8 +909,16 @@ typedef enum {
   UIColor *green = [UIColor colorWithRed:0.094 green:0.478 blue:0.235 alpha:1];
   UIColor *red = [UIColor colorWithRed:0.75 green:0.16 blue:0.13 alpha:1];
 
-  DBApplyDoorButtonStyle(_callButton, [self styleForSemanticID:@"call.primary"],
-                         white, green, 14);
+  NSDictionary *callStyle = [self styleForSemanticID:@"call.primary"];
+  DBApplyDoorButtonStyle(_callButton, callStyle, white, green, 14);
+  // An administrator's explicit colour wins; otherwise the button takes the
+  // accent computed from the effective background (spec §5.2). This runs after
+  // the semantic pass because that pass would otherwise paint the baseline
+  // green over it.
+  if (_palette != nil && [callStyle objectForKey:@"background"] == nil) {
+    _callButton.backgroundColor = _palette.accent;
+    [_callButton setTitleColor:_palette.accentInk forState:UIControlStateNormal];
+  }
   NSString *cancelID = _flowState == DBDoorFlowInCall ? @"call.end" : @"cancel.call";
   DBApplyDoorButtonStyle(_cancelButton, [self styleForSemanticID:cancelID],
                          white, red, 14);
@@ -1475,7 +1479,12 @@ typedef enum {
 
   // No visible admin entry: the corner is transparent and needs seven taps.
   _infoButton.frame = CGRectMake(size.width - 110, 0, 110, 110);
-  _mediaBadge.frame = CGRectMake(margin, top, compact ? 100 : 145, compact ? 26 : 30);
+  // Sized to its own text: "No video from door station" was ellipsised into
+  // nonsense at a fixed 145 points.
+  CGFloat badgeMax = MIN(size.width * 0.34, compact ? 180 : 300);
+  CGSize badgeFit = [_mediaBadge sizeThatFits:CGSizeMake(badgeMax, 60)];
+  _mediaBadge.frame = CGRectMake(margin, top, MIN(badgeMax, MAX(90, badgeFit.width + 16)),
+                                 MAX(compact ? 26 : 30, MIN(56, badgeFit.height + 8)));
 
   CGFloat clockSize = compact ? 46 : (portrait ? 84 : 72);
   _clockLabel.font = [UIFont systemFontOfSize:clockSize];

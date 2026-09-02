@@ -540,6 +540,9 @@ static const NSInteger kProxyEdge = 64;
     _hint.backgroundColor = [UIColor clearColor];
     _hint.textAlignment = NSTextAlignmentCenter;
     _hint.font = [UIFont boldSystemFontOfSize:20];
+    // Two lines rather than an ellipsis: this control must always read as what
+    // it does before someone slides it.
+    _hint.numberOfLines = 2;
     [_track addSubview:_hint];
 
     _hintSecondary = [[UILabel alloc] init];

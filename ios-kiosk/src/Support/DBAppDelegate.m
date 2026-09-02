@@ -1000,9 +1000,14 @@ static NSString *const DBScreenshotOutputPath = @"/var/mobile/Documents/screensh
          annotation:(id)annotation {
   (void)application; (void)source; (void)annotation;
   NSString *host = [url host] ?: @"";
-  if ([host length] == 0) host = [[url path] stringByTrimmingCharactersInSet:
-                                     [NSCharacterSet characterSetWithCharactersInString:@"/"]];
-  NSLog(@"[doorbell] openURL: %@ → host='%@'", url, host);
+  if ([host length] == 0) {
+    // A bare "doorbell://" has no path either, and messaging nil here used to
+    // put a literal (null) in the log.
+    host = [[url path] stringByTrimmingCharactersInSet:
+               [NSCharacterSet characterSetWithCharactersInString:@"/"]] ?: @"";
+  }
+  // ASCII only: ASL mangles a multi-byte arrow into one dash per character.
+  NSLog(@"[doorbell] openURL: %@ -> host='%@'", url, host);
   if ([host isEqualToString:@"pin"]) {
     [_router requestPinThen:nil];
     return YES;

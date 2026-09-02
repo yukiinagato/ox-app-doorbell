@@ -230,6 +230,7 @@ static const NSInteger kRecentCallLimit = 20;
 
   _membershipPill = [[DBPillLabel alloc] initWithFrame:CGRectZero];
   _membershipPill.font = [UIFont systemFontOfSize:19];
+  _membershipPill.numberOfLines = 2;
   [self addSubview:_membershipPill];
   _membershipButton = [UIButton buttonWithType:UIButtonTypeCustom];
   [_membershipButton addTarget:self action:@selector(onMembership)
@@ -294,6 +295,7 @@ static const NSInteger kRecentCallLimit = 20;
   _versionLabel = [[UILabel alloc] init];
   _versionLabel.backgroundColor = [UIColor clearColor];
   _versionLabel.font = [UIFont systemFontOfSize:16];
+  _versionLabel.numberOfLines = 2;
   [self addSubview:_versionLabel];
 
   _sos = [[DBSosSlider alloc] initWithFrame:CGRectZero];
@@ -1156,9 +1158,15 @@ static const NSInteger kRecentCallLimit = 20;
   _noticeDialog.frame = self.bounds;
   _secretCorner.frame = CGRectMake(size.width - 120, 0, 120, 120);
 
-  // Header: clock and date on the left, status controls on the right.
-  _clockLabel.frame = CGRectMake(pad, 14, size.width * 0.5, 84);
-  _dateLabel.frame = CGRectMake(pad + 4, 96, size.width * 0.5, 26);
+  // Header: clock and date on the left, status controls on the right. The
+  // boxes are derived from the fonts, so a larger size moves what follows
+  // instead of overlapping it.
+  CGFloat clockHeight = ceilf((float)_clockLabel.font.lineHeight) + 4;
+  CGFloat dateHeight = ceilf((float)_dateLabel.font.lineHeight) + 2;
+  _clockLabel.frame = CGRectMake(pad, 10, size.width * 0.5, clockHeight);
+  _dateLabel.frame = CGRectMake(pad + 4, CGRectGetMaxY(_clockLabel.frame) + 2,
+                                size.width * 0.5, dateHeight);
+  CGFloat headerBottom = CGRectGetMaxY(_dateLabel.frame);
 
   CGFloat rightX = size.width - pad;
   CGSize adminFit = [_adminButton sizeThatFits:CGSizeMake(200, 40)];
@@ -1179,10 +1187,14 @@ static const NSInteger kRecentCallLimit = 20;
     rightX -= missedWidth + 10;
   }
 
-  CGSize membershipFit = [_membershipPill sizeThatFits:CGSizeMake(size.width * 0.5, 34)];
-  CGFloat membershipWidth = MIN(size.width * 0.45, MAX(120, membershipFit.width));
-  _membershipPill.frame = CGRectMake(size.width - pad - membershipWidth, 66,
-                                     membershipWidth, 34);
+  // Two lines rather than an ellipsis: the membership line is the only place
+  // that says how many devices are connected.
+  CGFloat membershipWidth = MIN(size.width * 0.52, size.width - pad * 2);
+  CGSize membershipFit = [_membershipPill sizeThatFits:CGSizeMake(membershipWidth, 80)];
+  CGFloat membershipHeight = MAX(34, MIN(70, membershipFit.height));
+  _membershipPill.frame = CGRectMake(size.width - pad - membershipWidth,
+                                     CGRectGetMaxY(_adminButton.frame) + 8,
+                                     membershipWidth, membershipHeight);
   _membershipButton.frame = _membershipPill.frame;
 
   CGFloat bannerHeight = 0;
@@ -1190,11 +1202,12 @@ static const NSInteger kRecentCallLimit = 20;
     _pairBanner.frame = CGRectZero;
   } else {
     CGFloat bannerWidth = MIN(size.width - 2 * pad, 560);
-    _pairBanner.frame = CGRectMake((size.width - bannerWidth) / 2, 112, bannerWidth, 46);
+    _pairBanner.frame = CGRectMake((size.width - bannerWidth) / 2, headerBottom + 6,
+                                   bannerWidth, 46);
     bannerHeight = 54;
   }
 
-  CGFloat contentTop = 132 + bannerHeight;
+  CGFloat contentTop = headerBottom + 28 + bannerHeight;
   // The QR, the version line and the SOS slider are placed by one shared,
   // host-tested split so they can never overlap in either orientation.
   NSDictionary *footer = [DBUiTheme footerLayoutForViewWidth:size.width
@@ -1238,8 +1251,11 @@ static const NSInteger kRecentCallLimit = 20;
     }
   }
 
-  _recentCaption.frame = CGRectMake(listX, listY - 24, listWidth - 110, 20);
-  _seeAllButton.frame = CGRectMake(listX + listWidth - 104, listY - 28, 104, 30);
+  CGSize seeAllFit = [_seeAllButton sizeThatFits:CGSizeMake(listWidth, 36)];
+  CGFloat seeAllWidth = MIN(listWidth * 0.6, MAX(104, seeAllFit.width + 8));
+  _recentCaption.frame = CGRectMake(listX, listY - 26, listWidth - seeAllWidth - 10, 24);
+  _seeAllButton.frame = CGRectMake(listX + listWidth - seeAllWidth, listY - 30,
+                                   seeAllWidth, 34);
   _recentList.frame = CGRectMake(listX, listY, listWidth, listHeight);
   CGFloat rowY = 0;
   for (UILabel *label in _recentLabels) {
