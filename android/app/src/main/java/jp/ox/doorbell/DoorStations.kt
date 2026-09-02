@@ -144,7 +144,7 @@ internal object DoorStations {
      * Whether this station has a camera at all.
      *
      * A station with `caps.camera` false has nothing to watch, so the dashboard does not give it
-     * a tile: a tile is a picture and a the door action, and both are empty for a doorbell with no
+     * a tile: a tile is a picture and a view action, and both are empty for a doorbell with no
      * lens. The door stays addressable everywhere else -- the door monitor list, announcements,
      * unlock -- because it is still a door. Absent caps, or absent camera within them, means an
      * older peer that never published the capability, and those keep their tile.

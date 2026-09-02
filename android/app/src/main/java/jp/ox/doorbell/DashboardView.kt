@@ -1111,7 +1111,7 @@ internal class DashboardView(
     }
 
     /**
-     * The doors that get a tile. A tile is a picture and a 見る action, so a station that reports
+     * The doors that get a tile. A tile is a picture and a the label action, so a station that reports
      * caps.camera false is left out of the column -- there is nothing to show and nothing to
      * watch. The door itself stays reachable everywhere it matters: the monitor list, the
      * announcement dialog, and unlock all still address it.
