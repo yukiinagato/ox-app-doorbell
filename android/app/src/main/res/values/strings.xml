@@ -365,6 +365,7 @@ Delete it?</string>
     <string name="dash_notice_global">Announcement (all doors)</string>
     <string name="dash_recent_calls">Recent calls</string>
     <string name="dash_see_all">See all</string>
+    <string name="dash_tile_no_station">No door station</string>
     <string name="dash_tile_offline">Offline</string>
     <string name="dash_tile_open">View</string>
     <string name="dash_tile_watch">View</string>

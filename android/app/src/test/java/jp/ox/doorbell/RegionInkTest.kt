@@ -318,6 +318,34 @@ class RegionInkTest {
         assertTrue(VisitorLayout.footerStacked(568, 320))
     }
 
+    // ---------- the dashboard header ----------
+
+    /**
+     * The clock shared one row with the membership pill, 不在着信 and 管理. Those three want nearly
+     * the whole width of a portrait phone, so the clock -- which takes what is left -- rendered
+     * about one character wide, one glyph per line down the edge. Observed on the Moto.
+     */
+    @Test
+    fun aPortraitWindowNeverPutsTheClockBesideTheHeaderButtons() {
+        // The Moto in portrait, which is where it was seen.
+        assertTrue(VisitorLayout.dashboardHeaderStacked(411, 869))
+        assertTrue(VisitorLayout.dashboardHeaderStacked(360, 780))
+        // Any window taller than it is wide, at any size, including a portrait tablet.
+        assertTrue(VisitorLayout.dashboardHeaderStacked(768, 1024))
+        assertTrue(VisitorLayout.dashboardHeaderStacked(1024, 1366))
+        // A square window is not landscape either.
+        assertTrue(VisitorLayout.dashboardHeaderStacked(800, 800))
+    }
+
+    @Test
+    fun onlyAWideLandscapeWindowKeepsTheSingleRowHeader() {
+        assertFalse(VisitorLayout.dashboardHeaderStacked(1024, 768))
+        assertFalse(VisitorLayout.dashboardHeaderStacked(800, 600))
+        // A narrow landscape window has no room for the single row either.
+        assertTrue(VisitorLayout.dashboardHeaderStacked(568, 320))
+        assertTrue(VisitorLayout.dashboardHeaderStacked(480, 320))
+    }
+
     @Test
     fun breathingRoomIsAddedOnlyOutOfRealSlack() {
         // A tall screen with compact content gets a generous gap...

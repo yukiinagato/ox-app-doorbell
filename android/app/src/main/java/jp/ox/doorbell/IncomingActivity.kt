@@ -152,12 +152,18 @@ class IncomingActivity : Activity() {
         sosSlider = SosSlideView(this, ui)
         sosSlider.enabledProvider = { app.coreOk }
         sosSlider.onTrigger = { app.commitEmergency(true) }
-        findViewById<android.widget.FrameLayout>(R.id.sos_slot).addView(
+        val sosSlot = findViewById<android.widget.FrameLayout>(R.id.sos_slot)
+        sosSlot.addView(
             sosSlider,
             android.widget.FrameLayout.LayoutParams(
                 android.view.ViewGroup.LayoutParams.MATCH_PARENT, dp(56),
             ),
         )
+        // The same cluster rule as every other screen: emergency.button_on_roles, defaulting to
+        // the indoor panel alone when the cluster has never set it.
+        sosSlot.visibility =
+            if (SosSlideState.visibleForRole(cfg, app.boot.role)) android.view.View.VISIBLE
+            else android.view.View.GONE
         applyAppearance()
         buildControlRow(cfg)
         buildNoticeChip()

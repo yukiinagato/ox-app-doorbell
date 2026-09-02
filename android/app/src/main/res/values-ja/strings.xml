@@ -365,6 +365,7 @@
     <string name="dash_notice_global">お知らせ（全体）</string>
     <string name="dash_recent_calls">呼出履歴</string>
     <string name="dash_see_all">すべて見る</string>
+    <string name="dash_tile_no_station">門口機なし</string>
     <string name="dash_tile_offline">オフライン</string>
     <string name="dash_tile_open">見る</string>
     <string name="dash_tile_watch">見る</string>
