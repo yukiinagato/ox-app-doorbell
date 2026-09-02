@@ -53,7 +53,7 @@ class RecoveryPolicy {
   }
 
   static unsigned backoffSeconds(std::size_t retry_index) {
-    return kBackoffSeconds[std::min(retry_index, kBackoffSeconds.size() - 1)];
+    return kBackoffSeconds[(std::min)(retry_index, kBackoffSeconds.size() - 1)];
   }
 
   bool safeMode() const { return safe_mode_; }
