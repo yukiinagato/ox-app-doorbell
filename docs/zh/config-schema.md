@@ -39,7 +39,12 @@ mesh-PSK-derived key 和 XChaCha20-Poly1305 seal 成 schema-v2 CRDT record；mat
   },
 
   "doors": {
-    "d_front": { "building": "b_main",  "label": { "ja": "正面玄関" } },
+    "d_front": { "building": "b_main",  "label": { "ja": "正面玄関" },
+                 // 可选公告，显示在该门口的访客界面与室内仪表盘。
+                 // text 为 1-200 个字符；expires_ms 是绝对时间（毫秒），0 表示“直到取消”。
+                 // 过期公告在每分钟的 tick 中清除，并送出 notice_changed。
+                 "notice": { "text": "今日请走侧门",
+                             "from_device": "<node_id>", "created_ms": 0, "expires_ms": 0 } },
     "d_back":  { "building": "b_main",  "label": { "ja": "勝手口" } },
     "d_annex": { "building": "b_annex", "label": { "ja": "離れ玄関" } }
   },
@@ -53,6 +58,8 @@ mesh-PSK-derived key 和 XChaCha20-Poly1305 seal 成 schema-v2 CRDT record；mat
       "caps_override": { "mains_power": true }, // 对实测 capability 的管理侧覆盖
       "local": {                                // 每设备配置（同样会复制 — 可远程修改）
         "ui_lang": "ja", "volume": 80, "screen_brightness": 70,
+        // 各设备的音量覆盖（0-100）。缺失的级别继承 audio.volume。
+        "audio": { "volume": { "call": 80, "sos": 100, "idle": 60 } },
         "screensaver_after_s": 120,
         "video": { "playback": "low_latency",   // low_latency（默认）/ hls / mjpeg
                    "rotation": "auto" },          // 跟随姿态传感器 / 管理员固定 0、90、180、270 度
@@ -176,9 +183,29 @@ mesh-PSK-derived key 和 XChaCha20-Poly1305 seal 成 schema-v2 CRDT record；mat
     "pixel_shift_s": 300                        // 待机画面元素周期性移动数 px（防烧屏）
   },
 
+  // 集群时间。IANA 时区由 core 内置的表解析，因此没有可用 tz 数据库的平台上的外壳
+  // 也能显示与其他设备一致的时钟。下方的 integrations.tz_offset_min 仍然有效，
+  // 只要设置了 "zone" 就由它派生（含当前夏令时状态）；从未设置时区的安装仍以固定偏移为准。
+  "time": {
+    "zone": "Asia/Tokyo",                       // 内置表中的 IANA 标识符
+    // 独立时间服务。core 从不修改操作系统时钟：它用 SNTP 测量偏移，并把该偏移加到所有
+    // wall-clock 读取上（HLC、事件与呼叫记录时间戳、规则计划、静音时段、界面时钟）。
+    // 连续三个间隔没有成功同步后，偏移会被撤销。
+    "ntp": { "enabled": false,                  // 默认关闭
+             "servers": ["ntp.nict.jp", "time.google.com"],   // 1-4 个 "host" 或 "host:port"
+             "interval_s": 900 }                // 60..86400
+  },
+
+  // 集群默认音量（0-100）。设备可用 devices.<id>.local.audio.volume.{call,sos,idle} 覆盖；
+  // 对于早于这些键的安装，sos 还会回退到 emergency.alarm_volume。
+  "audio": { "volume": { "call": 80, "sos": 100, "idle": 60 } },
+
   "emergency": {                                // 室内紧急求助 (SOS)
     "button_on_roles": ["indoor_panel"],        // 显示 SOS 按钮的角色
-    "hold_to_trigger_s": 3,                     // 长按秒数（防误触）
+    "hold_to_trigger_s": 3,                     // 旧: 长按秒数；slide 模式下不使用
+    // 滑动触发控件。mode 为 "slide"（"hold" 仍被接受，以便旧配置继续通过校验）；
+    // countdown_s 为 0..10 秒的可取消倒计时，归零后才告知 core 发报。
+    "trigger": { "mode": "slide", "countdown_s": 3 },
     "alarm_sound": "siren1", "alarm_volume": 100,
     // true 時，即使 recipient 為零或 rule 只有 Push，已開啟 Web panel 仍顯示複製的 active SOS。
     // false 時，相符的 positive device_alert 或已送達 Push 仍可顯示。
@@ -341,6 +368,36 @@ status 必須另外回報實測 helper availability 與 effective mode。helper 
 degraded/error，不是 supervision 成功證據。atomic config apply 後，platform client 發送 fixed local
 `MODE <value>` 並驗證 helper status；helper 原子保存 mode，供 helper/OS restart 復原。config 不會衍生
 generic command/argv。
+
+## 时间、电源与公告
+
+内置时区表位于 `core/src/util/tz.{h,cpp}`，覆盖设置界面提供的亚洲、欧洲、美洲、大洋洲与非洲时区。
+它是现行规则的快照，不含历史数据：夏令时按规则族建模（欧盟 / 北美 / 澳大利亚南部 / 新西兰 /
+智利 / 以色列），早于现行规则的时刻会按今天的规则解析。`time.zone` 只接受表中能解析的值，
+因此界面上显示的时区始终就是实际使用的时区。
+
+`integrations.tz_offset_min` 仍是 Telegram 桥接与旧外壳的兼容面。只要设置了 `time.zone`，
+core 就会在启动时、时区变更时以及每分钟的 tick 中由时区重写它，从而跟随夏令时，
+而不是冻结在选定时区那一刻的偏移。从未设置 `time.zone` 的安装仍以固定偏移为准，不会被改写。
+
+`time.ntp` 默认关闭。开启后 core 在短命的工作线程上运行一个最小的 SNTP v4 客户端（RFC 4330）：
+每台服务器取 3 个样本，往返最短者胜出；往返超过 3 秒或偏移超过 24 小时的样本会被丢弃。
+测得的偏移加到 `IClock::wallMs()` 上，而 HLC、事件时间戳、呼叫记录、规则计划、静音时段
+以及界面上的所有时钟都读取它。操作系统时钟从不被写入；连续三个间隔同步失败后撤销该补偿，
+因此 NTP 服务器不可达的设备会退回纯系统时间，而不是继续按陈旧的测量值漂移。
+`POST /api/time/sync`（管理会话）启动一次立即同步；结果见 `status.time`，
+当时间源翻转或已应用的偏移变动超过 500 ms 时送出 `time_changed`。
+
+电源状态来自可选的 `db_platform_v2.power_state` 回调，每分钟轮询一次。它作为
+`status.self.power`（以及内容相同的 `status.node.power`）发布，经受限的 runtime 射影
+gossip 到 `peers[].power`，并在电量变动达到 5 个百分点或充电/外部供电翻转时送出 `power_changed`。
+报告 `mains` 的平台会在应用管理员覆盖之前，用该测量值取代创建时对 `mains_power` 的猜测。
+没有电池的设备报告 `battery_pct: -1`，外壳则完全隐藏该指示。
+
+公告是位于 `doors.<id>.notice` 的普通复制配置，因此可在重启后保留，并经与其他设置相同的 CRDT
+路径到达每台设备。过期公告在每分钟的 tick 中清除（tombstone 会复制且重复清除是 no-op，
+所以任何节点都可以执行），并送出 `notice_changed`。`POST` 与 `DELETE /api/doors/<id>/notice`
+接受管理会话或 panel 凭据，这正是室内公告对话框与管理界面门口标签页能写入同一个值的原因。
 
 ## runtime UI manifest
 

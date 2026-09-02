@@ -608,6 +608,22 @@ std::array<uint8_t, 32> joinProof(const std::array<uint8_t, 32>& k, const Bytes&
   return mac;
 }
 
+// Core-owned power section: exactly three scalars, clamped, so peers[].power can never become a
+// channel for arbitrary platform data.
+json::Doc powerProjection(const cJSON* section) {
+  if (!cJSON_IsObject(section)) return {};
+  const cJSON* battery = json::get(section, "battery_pct");
+  if (!cJSON_IsNumber(battery)) return {};
+  int64_t pct = static_cast<int64_t>(battery->valuedouble);
+  if (pct < -1) pct = -1;
+  if (pct > 100) pct = 100;
+  auto out = json::obj();
+  json::set(out.get(), "battery_pct", pct);
+  json::setBool(out.get(), "charging", json::getBool(section, "charging", false));
+  json::setBool(out.get(), "mains", json::getBool(section, "mains", false));
+  return out;
+}
+
 void sendJoinFrame(const ConnPtr& conn, const cJSON* msg) {
   std::string s = json::dump(msg);
   Bytes f;
@@ -645,6 +661,8 @@ bool projectMeshRuntimeJson(const std::string& runtime_json, std::string* projec
     auto clean = deviceAlertProjection(section);
     if (clean) json::setItem(projected.get(), key, std::move(clean));
   }
+  auto power = powerProjection(json::get(source.get(), "power"));
+  if (power) json::setItem(projected.get(), "power", std::move(power));
   const cJSON* ui_style = json::get(source.get(), "ui_style");
   if (ui_style) {
     auto clean = uiStyleProjection(ui_style);

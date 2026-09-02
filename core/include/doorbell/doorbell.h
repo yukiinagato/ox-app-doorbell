@@ -65,6 +65,15 @@ typedef struct db_platform_v2 {
   /* Optional: remove a secret. Return zero on success. NULL means the platform cannot delete,
    * and core then leaves an orphaned entry behind when pairing is cleared. */
   int (*secure_delete)(void* user, const char* key);
+  /* Optional: battery and power state, polled about once a minute on the core runloop. Allocate
+   * out_json with malloc; core releases it with release_buffer (or free() when that is NULL).
+   * Return zero on success. The document is
+   *   {"battery_pct":<-1..100>,"charging":bool,"mains":bool}
+   * where battery_pct is -1 on a device with no battery, charging means the battery is being
+   * charged right now, and mains means external power is connected. A measured mains value
+   * becomes the node's mains_power capability. NULL, a failure, or an empty document leaves the
+   * previous reading in place and the device simply reports no power state. */
+  int (*power_state)(void* user, char** out_json);
 } db_platform_v2;
 
 /* JSON events delivered from core to the platform UI. Examples:
@@ -84,7 +93,14 @@ typedef struct db_platform_v2 {
  *   "bg_image_path":"<local path>|null"}} for the idle-screen theme. The shell renders the
  *   local path directly; null means it is not cached and display is reissued after asset_ready.
  * {"t":"emergency","active":true,"alarm_sound":"siren1|asset:<sha256>","alarm_volume":100,
- *   "audio_path":"..."} where audio_path exists only for a cached custom alarm. */
+ *   "audio_path":"..."} where audio_path exists only for a cached custom alarm.
+ * {"t":"time_changed","source":"system|ntp","offset_ms":0,"zone":"Asia/Tokyo"} when the time
+ *   source flips or the applied correction moves by more than 500 ms. Every clock the shell
+ *   renders should be redrawn; timestamps already recorded are not rewritten.
+ * {"t":"power_changed","battery_pct":82,"charging":false,"mains":true} when the battery moves
+ *   by five points or more, or charging/mains flips.
+ * {"t":"notice_changed","door":"d_front","active":true} when a door announcement is published,
+ *   replaced, expired, or cleared anywhere in the cluster. */
 typedef void (*db_ui_event_cb)(void* user, const char* event_json);
 
 /* Create core with a writable data directory and bootstrap configuration in boot_json. */
@@ -166,6 +182,53 @@ DB_API int db_core_call_log_mark_seen(db_core* c, const char* up_to_hlc);
 
 /* Return fully materialized configuration JSON. Release with db_free. */
 DB_API char* db_core_config_json(db_core* c);
+
+/* ---- Time service ----
+ * Core never sets the operating-system clock. When time.ntp.enabled is on and a sync succeeded
+ * within three intervals, core adds its measured offset to every wall-clock reading: the HLC,
+ * event and call-history timestamps, rule schedules, and quiet hours. status.time reports
+ *   {"zone":"Asia/Tokyo","zone_known":true,"source":"system|ntp","enabled":bool,"ok":bool,
+ *    "offset_ms":0,"measured_offset_ms":0,"last_sync_ms":0,"rtt_ms":0,"server":"",
+ *    "interval_s":900,"offset_min":540,"syncing":false,"err":"…","local":{…}}
+ * where offset_ms is the correction actually applied (zero while the source is system) and
+ * measured_offset_ms is the last measurement regardless.
+ *
+ * Render a wall-clock instant in the configured IANA zone. wall_ms of zero means "now"; the zone
+ * comes from a table bundled in core, so a shell on a platform without a usable tz database is
+ * still correct. Returns
+ *   {"iso":"2026-09-02T21:30:00+09:00","date":"2026-09-02","hh":21,"mm":30,"ss":0,
+ *    "weekday":"wed","weekday_num":3,"offset_min":540,"dst":false,"known":true,
+ *    "wall_ms":…,"tz":"Asia/Tokyo"}
+ * known is false when the configured zone is absent from the table, in which case
+ * integrations.tz_offset_min was used. Release the result with db_free. */
+DB_API char* db_core_local_time_json(db_core* c, int64_t wall_ms);
+
+/* Start one immediate SNTP round, the same one POST /api/time/sync triggers. The exchange runs
+ * on a short-lived worker thread; poll status.time (or wait for time_changed) for the result.
+ * Returns 1 when a round started or one is already running, and 0 when NTP is disabled or the
+ * core is not started. */
+DB_API int db_core_time_sync_now(db_core* c);
+
+/* Effective audio volumes for one device. device_id may be NULL or empty for this node. The
+ * resolution order is the device override devices.<id>.local.audio.volume.<level>, then the
+ * cluster default audio.volume.<level>, then the built-in default (call 80, sos 100, idle 60);
+ * the sos level additionally falls back to emergency.alarm_volume so an existing installation
+ * keeps its configured alarm loudness. Returns
+ *   {"device":"<id>","call":80,"sos":100,"idle":60,"source":"device|cluster|default",
+ *    "sources":{"call":"…","sos":"…","idle":"…"}}
+ * where source is the strongest source among the three levels. Release with db_free. */
+DB_API char* db_core_audio_json(db_core* c, const char* device_id);
+
+/* ---- Announcements ----
+ * Publish a replicated announcement for one door. text is 1..200 characters; expires_ms is an
+ * absolute wall-clock deadline in milliseconds and zero means "until cleared". Core records the
+ * publishing device and the creation time, replicates the value as doors.<id>.notice, prunes it
+ * once the deadline passes, and emits notice_changed. Returns 0 on success and a negative value
+ * for a null core, an unknown door, text outside the length limit, or a persistence failure. */
+DB_API int db_core_set_door_notice(db_core* c, const char* door, const char* text,
+                                   int64_t expires_ms);
+/* Remove the announcement for one door. Clearing an absent announcement succeeds. */
+DB_API int db_core_clear_door_notice(db_core* c, const char* door);
 
 /* Runtime contracts reported by a platform shell. JSON must be an object and is copied by core. */
 DB_API void db_core_set_capabilities_json(db_core* c, const char* capabilities_json);

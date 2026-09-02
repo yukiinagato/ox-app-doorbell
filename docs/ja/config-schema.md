@@ -42,7 +42,12 @@ materialized config/export に plaintext を出しません。起動時は legac
   },
 
   "doors": {
-    "d_front": { "building": "b_main",  "label": { "ja": "正面玄関" } },
+    "d_front": { "building": "b_main",  "label": { "ja": "正面玄関" },
+                 // 任意のお知らせ。その門口の来訪者画面と室内ダッシュボードに表示する。
+                 // text は 1-200 文字、expires_ms は絶対時刻 (ミリ秒) で 0 は「取り消すまで」。
+                 // 期限切れは 1 分ごとの tick で削除し notice_changed を送出する。
+                 "notice": { "text": "本日は勝手口へお願いします",
+                             "from_device": "<node_id>", "created_ms": 0, "expires_ms": 0 } },
     "d_back":  { "building": "b_main",  "label": { "ja": "勝手口" } },
     "d_annex": { "building": "b_annex", "label": { "ja": "離れ玄関" } }
   },
@@ -56,6 +61,8 @@ materialized config/export に plaintext を出しません。起動時は legac
       "caps_override": { "mains_power": true }, // 実測 capability の管理上書き
       "local": {                                // 端末別設定 (これも複製 — 遠隔変更可)
         "ui_lang": "ja", "volume": 80, "screen_brightness": 70,
+        // 端末ごとの音量上書き (0-100)。無いレベルは audio.volume を継承する。
+        "audio": { "volume": { "call": 80, "sos": 100, "idle": 60 } },
         "screensaver_after_s": 120,
         "video": { "playback": "low_latency",   // low_latency（既定）/ hls / mjpeg
                    "rotation": "auto" },          // auto=姿勢センサ追随 / 0 / 90 / 180 / 270（管理者固定）
@@ -179,9 +186,30 @@ materialized config/export に plaintext を出しません。起動時は legac
     "pixel_shift_s": 300                        // 待機画面要素を数 px 周期移動 (焼付対策)
   },
 
+  // クラスタの時刻。IANA ゾーンは core に同梱した表で解決するため、tz データベースを持たない
+  // プラットフォームのシェルでも他の端末と同じ時計を表示できる。下の integrations.tz_offset_min
+  // は引き続き有効で、"zone" が設定されていればそこから (夏時間を含めて) 導出される。ゾーンを
+  // 一度も設定していない設置では従来どおり固定オフセットが真の値。
+  "time": {
+    "zone": "Asia/Tokyo",                       // 同梱表に含まれる IANA 識別子
+    // 独立時刻サービス。core は OS の時計を変更せず、SNTP で測ったオフセットをすべての
+    // wall-clock 読み出し (HLC、イベントと呼出履歴のタイムスタンプ、ルールのスケジュール、
+    // 静音時間帯、画面の時計) に加算する。同期が 3 間隔続けて失敗するとオフセットは破棄する。
+    "ntp": { "enabled": false,                  // 既定は無効
+             "servers": ["ntp.nict.jp", "time.google.com"],   // 1-4 個の "host" / "host:port"
+             "interval_s": 900 }                // 60..86400
+  },
+
+  // クラスタ既定の音量 (0-100)。端末は devices.<id>.local.audio.volume.{call,sos,idle} で
+  // 上書きする。sos はこのキーが無い旧設置のために emergency.alarm_volume にも fallback する。
+  "audio": { "volume": { "call": 80, "sos": 100, "idle": 60 } },
+
   "emergency": {                                // 室内緊急求助 (SOS)
     "button_on_roles": ["indoor_panel"],        // SOS ボタンを表示する役割
-    "hold_to_trigger_s": 3,                     // 長押し秒数 (誤操作防止)
+    "hold_to_trigger_s": 3,                     // 旧: 長押し秒数。slide モードでは未使用
+    // スライドで発報するコントロール。mode は "slide" ("hold" も旧設定のため引き続き有効)。
+    // countdown_s は 0..10 秒で、この間に取り消せる。0 になったとき core に発報を伝える。
+    "trigger": { "mode": "slide", "countdown_s": 3 },
     "alarm_sound": "siren1", "alarm_volume": 100,
     // true なら recipient がゼロまたは Push-only rule でも、開いている Web panel は複製済み
     // active SOS を表示する。false でも一致する positive device_alert/Push は表示できる。
@@ -348,6 +376,41 @@ effective mode を別に報告します。helper が届かない `on` は superv
 error です。atomic config apply 後、platform client は fixed local `MODE <value>` を送り helper status を
 確認します。helper は mode を原子的に保存し helper/OS restart 後も復元します。config から generic command/
 argv を生成しません。
+
+## 時刻・電源・お知らせ
+
+同梱のタイムゾーン表は `core/src/util/tz.{h,cpp}` にあり、設定 UI が提示するアジア・ヨーロッパ・
+南北アメリカ・オセアニア・アフリカのゾーンを収録する。現行規則のスナップショットで履歴データは
+持たない。夏時間は規制ごと (EU / 北米 / オーストラリア南部 / ニュージーランド / チリ / イスラエル)
+にモデル化しており、現行規則より前の時刻は現在の規則で解決される。`time.zone` は表で解決できない
+値を拒否するので、UI に出るゾーンは必ず実際に使われるゾーンと一致する。
+
+`integrations.tz_offset_min` は Telegram ブリッジと旧シェルのための互換面として残る。`time.zone`
+が設定されていれば、起動時・ゾーン変更時・1 分ごとの tick で core がゾーンから書き直すため、
+ゾーンを選んだ時点のオフセットで固定されず夏時間に追従する。`time.zone` を一度も設定していない
+設置では固定オフセットが真の値で、書き換えは行わない。
+
+`time.ntp` の既定は無効。有効にすると core は最小の SNTP v4 クライアント (RFC 4330) を短命の
+ワーカースレッドで実行する。サーバごとに 3 サンプル取り、往復時間が最小のものを採用し、往復 3 秒
+超またはオフセット 24 時間超のサンプルは捨てる。測定したオフセットは `IClock::wallMs()` に加算し、
+HLC・イベントのタイムスタンプ・呼出履歴・ルールのスケジュール・静音時間帯・画面の時計がすべて
+これを読む。OS の時計は決して書き換えない。3 間隔連続で同期に失敗すると補正を撤回するので、NTP
+サーバに到達できなくなった端末は古い測定値でずれ続けるのではなく素の system 時刻に戻る。
+`POST /api/time/sync` (管理セッション) は即時の 1 回を開始する。結果は `status.time` に出て、
+ソースが切り替わるか適用中のオフセットが 500 ms を超えて動いたとき `time_changed` を送出する。
+
+電源状態は任意の `db_platform_v2.power_state` コールバックから 1 分ごとに取得する。
+`status.self.power` (同じ内容の `status.node.power` も) として公開し、限定された runtime 射影を
+通して `peers[].power` に gossip し、電池が 5 ポイント以上動くか充電/外部電源が反転したとき
+`power_changed` を送出する。`mains` を報告するプラットフォームでは、管理者オーバーライドを適用
+する前に生成時の `mains_power` 推定をその測定値で置き換える。電池のない端末は `battery_pct: -1`
+を報告し、シェルは表示自体を隠す。
+
+お知らせは `doors.<id>.notice` という通常の複製設定なので、再起動しても残り、他の設定と同じ CRDT
+経路ですべての端末に届く。期限切れは 1 分ごとの tick で削除し (tombstone が複製され再実行は
+no-op なので、どのノードが削除してもよい)、`notice_changed` を送出する。
+`POST` / `DELETE /api/doors/<id>/notice` は管理セッションと panel 資格情報のどちらでも受け付ける。
+これにより室内のお知らせダイアログと管理画面の門口タブが同じ値を書ける。
 
 ## runtime UI manifest
 

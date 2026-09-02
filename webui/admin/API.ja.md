@@ -229,3 +229,80 @@ Core `delivery_result` event は local shell callback dispatch、shell unavailab
 no recipients、backend unavailable など dispatch attempt の証拠で、OS/browser presentation の証明では
 ありません。native client は runtime `device_alert` に channel 別 presentation/permission/TTL expiry/
 limitation を別に報告し、Admin は両 evidence level を区別します。
+
+## 時刻サービス
+
+`GET /api/status` は `time` オブジェクトを返します。
+
+```json
+{
+  "zone": "Asia/Tokyo", "zone_known": true,
+  "source": "system", "enabled": false, "ok": false,
+  "offset_ms": 0, "measured_offset_ms": 0,
+  "last_sync_ms": 0, "rtt_ms": 0, "server": "", "interval_s": 900,
+  "offset_min": 540, "syncing": false,
+  "local": { "iso": "2026-09-02T21:30:00+09:00", "date": "2026-09-02",
+             "hh": 21, "mm": 30, "ss": 0, "weekday": "wed", "weekday_num": 3,
+             "offset_min": 540, "dst": false, "known": true,
+             "wall_ms": 1772000000000, "tz": "Asia/Tokyo" }
+}
+```
+
+`source` が `ntp` になるのは `time.ntp.enabled` が true で、かつ 3 間隔以内に同期が成功している
+場合だけです。それ以外は `system` で `offset_ms` は 0 になります。`measured_offset_ms` は
+どちらの場合も最後の測定値を保持するので、NTP を切ったあとも測定結果を表示できます。
+`err` は同期失敗後に現れ、`no_response` / `bad_server` / `bad_reply` / `implausible` のいずれかです。
+Admin は `source` をそのまま表示し、`enabled` だけから推測してはいけません。有効でも到達できない
+時刻サービスは system 時刻で動いているからです。
+
+`POST /api/time/sync` (管理セッション) は即時の 1 回を開始し `{"ok":true,"started":true}` を返します。
+独立時刻サービスが無効なら `409 {"ok":false,"err":"ntp_disabled"}`、core 起動前なら
+`409 {"ok":false,"err":"not_started"}` です。交換は非同期なので、200 を同期完了とみなさず
+`/api/status` を読み直すか `time_changed` イベントを待ってください。
+
+`time.zone` は core 同梱の表にある識別子でなければ通常の設定 API でも拒否されます。派生値の
+`integrations.tz_offset_min` は core 自身が書き直すので、Admin のフォームから両方を書かないでください。
+
+## 音量
+
+クラスタ既定は `audio.volume.{call,sos,idle}` (0..100)、端末上書きは
+`devices.<id>.local.audio.volume.<level>` です。コンテナ書き込み (`audio` / `audio.volume` /
+`devices.<id>.local.audio`) は全体として検証するため、atomic batch で親オブジェクト経由に
+範囲外の値を紛れ込ませることはできません。上書きの解除は `null` の書き込みではなく leaf key の削除です。
+
+core の解決順は 端末上書き → クラスタ既定 → 組み込み既定 (call 80 / sos 100 / idle 60) で、
+sos だけは `emergency.alarm_volume` にも fallback します。`db_core_audio_json` は同じ解決結果を
+ネイティブシェルへ公開します。
+
+## お知らせ
+
+`POST /api/doors/<id>/notice` は `{"text":"…","expires_ms":0}` または
+`{"text":"…","ttl_s":3600}` を受け付けます。両方あるときは `expires_ms` が優先、0 は「取り消すまで」です。
+`DELETE /api/doors/<id>/notice` で解除し、存在しないお知らせの解除も成功扱いです。どちらも
+管理セッションと panel 資格情報の**どちらでも**受け付けます。室内のお知らせダイアログと管理画面の
+門口タブが同じ値を書くためです。
+
+値は `doors.<id>.notice` の通常の複製設定です。
+
+```json
+{ "text": "本日は勝手口へお願いします", "from_device": "<node_id>",
+  "created_ms": 1772000000000, "expires_ms": 0 }
+```
+
+`text` は Unicode コードポイントで 1..200 文字。`from_device` と `created_ms` は呼び出し側ではなく
+core が書きます。未知の門口、空文字、上限超過は `400 {"ok":false,"err":"rejected"}` で、既存の
+お知らせはそのまま残ります。期限切れは core が 1 分ごとの tick で削除し `notice_changed` を送出するので、
+表示中の panel が独自の期限タイマーを持つ必要はありません。
+
+## 電池と電源
+
+任意の platform power コールバックを実装した端末は `status.self.power` (同内容の
+`status.node.power` も) を公開し、`status.peers[].power` にも同じオブジェクトが現れます。
+
+```json
+{ "battery_pct": 82, "charging": false, "mains": true }
+```
+
+電池のない端末では `battery_pct` は `-1` で、UI は 0% 表示ではなく何も出さないでください。
+コールバックを実装しない端末には `power` キー自体がありません。これは「電池残量 0」とは別物です。
+peer の値は限定された runtime 射影を通るため、この 3 フィールド以外は運びません。

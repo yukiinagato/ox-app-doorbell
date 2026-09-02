@@ -98,6 +98,11 @@ class Node {
   using SecureDeleteFn = std::function<bool(const std::string& key)>;
   void setSecureStore(SecureGetFn get, SecurePutFn put);
   void setSecureDelete(SecureDeleteFn del);
+  // Battery and power state, polled on the one-minute housekeeping tick. The callback returns
+  // {"battery_pct":<-1..100>,"charging":bool,"mains":bool}; an empty string means "unknown this
+  // time" and leaves the previous reading in place. A platform without a battery reports -1.
+  using PowerStateFn = std::function<std::string()>;
+  void setPowerStateFn(PowerStateFn fn);
   void setRuntimeCapabilities(const std::string& capabilities_json);
   void setRuntimeStatus(const std::string& runtime_json);
   void setUiManifest(const std::string& manifest_json);
@@ -192,6 +197,20 @@ class Node {
   std::string statusJson();
   std::string debugJson();
   std::string configJson();
+
+  // Wall-clock rendering in the configured IANA zone. Pass 0 for "now". The result is
+  // {"iso","date","hh","mm","ss","weekday","weekday_num","offset_min","dst","known","wall_ms",
+  //  "tz"}.
+  std::string localTimeJson(int64_t wall_ms);
+  // Effective volumes for one device (empty means this node):
+  // {"device","call","sos","idle","source","sources":{...}}.
+  std::string audioJson(const std::string& device_id);
+  // Start one immediate SNTP round. Returns false when NTP is disabled or the node is stopped.
+  bool syncTimeNow();
+  // Replicated per-door announcement. expires_ms is an absolute wall-clock deadline; 0 means
+  // "until cleared". Returns false for an unknown door, invalid text, or a persistence failure.
+  bool setDoorNotice(const std::string& door, const std::string& text, int64_t expires_ms);
+  bool clearDoorNotice(const std::string& door);
 
   // Call history for the local device. since_ms is an inclusive lower bound on the row timestamp
   // and zero means "from the beginning"; limit is clamped to a bounded page. The result is

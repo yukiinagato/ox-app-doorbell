@@ -213,6 +213,18 @@ static db_core* createCore(const db_platform_v2& platform, const char* data_dir,
       fn(user, text.c_str(), lang.c_str());
     });
   }
+  if (c->plat.power_state) {
+    void* user = c->plat.user;
+    auto fn = c->plat.power_state;
+    db_platform_v2 copied_platform = c->plat;
+    c->node->setPowerStateFn([user, fn, copied_platform]() -> std::string {
+      char* out = nullptr;
+      const int rc = fn(user, &out);
+      std::string result = (rc == 0 && out) ? out : "";
+      releasePlatformBuffer(copied_platform, out);
+      return result;
+    });
+  }
   if (c->plat.device_info) {
     void* user = c->plat.user;
     auto fn = c->plat.device_info;
@@ -252,12 +264,15 @@ DB_API db_core* db_core_create_v2(const db_platform_v2* platform, const char* da
   v2.struct_size = sizeof(v2);
   v2.version = DB_PLATFORM_V2_VERSION;
   if (platform) {
-    // Only published layouts of this version are accepted: the current size, or the size before
-    // secure_delete was appended, so a shell that has not been rebuilt still starts.
-    const size_t kBaseSize = offsetof(db_platform_v2, secure_delete);
+    // Only published layouts of this version are accepted: the current size, or one of the
+    // earlier published sizes, so a shell that has not been rebuilt still starts. Fields added
+    // after the size it declares stay NULL and the corresponding feature is simply absent.
+    const size_t kSizeBeforeSecureDelete = offsetof(db_platform_v2, secure_delete);
+    const size_t kSizeBeforePowerState = offsetof(db_platform_v2, power_state);
     if (platform->version != DB_PLATFORM_V2_VERSION ||
         (platform->struct_size != sizeof(db_platform_v2) &&
-         platform->struct_size != kBaseSize)) {
+         platform->struct_size != kSizeBeforeSecureDelete &&
+         platform->struct_size != kSizeBeforePowerState)) {
       return nullptr;
     }
     std::memcpy(&v2, platform, platform->struct_size);
@@ -378,6 +393,32 @@ DB_API int db_core_call_log_mark_seen(db_core* c, const char* up_to_hlc) {
 DB_API char* db_core_config_json(db_core* c) {
   if (!c || !c->node) return nullptr;
   return dupString(c->node->configJson());
+}
+
+DB_API char* db_core_local_time_json(db_core* c, int64_t wall_ms) {
+  if (!c || !c->node) return nullptr;
+  return dupString(c->node->localTimeJson(wall_ms));
+}
+
+DB_API int db_core_time_sync_now(db_core* c) {
+  if (!c || !c->node) return 0;
+  return c->node->syncTimeNow() ? 1 : 0;
+}
+
+DB_API char* db_core_audio_json(db_core* c, const char* device_id) {
+  if (!c || !c->node) return nullptr;
+  return dupString(c->node->audioJson(device_id ? device_id : ""));
+}
+
+DB_API int db_core_set_door_notice(db_core* c, const char* door, const char* text,
+                                   int64_t expires_ms) {
+  if (!c || !c->node || !door || !*door || !text || !*text) return -1;
+  return c->node->setDoorNotice(door, text, expires_ms) ? 0 : -2;
+}
+
+DB_API int db_core_clear_door_notice(db_core* c, const char* door) {
+  if (!c || !c->node || !door || !*door) return -1;
+  return c->node->clearDoorNotice(door) ? 0 : -2;
 }
 
 DB_API void db_core_set_capabilities_json(db_core* c, const char* capabilities_json) {

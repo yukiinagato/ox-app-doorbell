@@ -518,6 +518,41 @@ TEST_CASE("mesh: peer runtime exposes only bounded semantic UI application repor
   CHECK(own_runtime.find("cancel.call") == std::string::npos);
 }
 
+TEST_CASE("mesh: the power section gossips as three clamped scalars and nothing else") {
+  std::string projected;
+  REQUIRE(projectMeshRuntimeJson(
+      R"({"power":{"battery_pct":250,"charging":true,"mains":false,"serial":"private"}})",
+      &projected));
+  auto clamped = json::parse(projected);
+  REQUIRE(clamped);
+  const cJSON* power = json::get(clamped.get(), "power");
+  REQUIRE(cJSON_IsObject(power));
+  CHECK(json::getInt(power, "battery_pct") == 100);
+  CHECK(json::getBool(power, "charging"));
+  CHECK_FALSE(json::getBool(power, "mains"));
+  CHECK(json::get(power, "serial") == nullptr);
+  REQUIRE(projectMeshRuntimeJson(R"({"power":{"battery_pct":-9}})", &projected));
+  CHECK(json::getInt(json::get(json::parse(projected).get(), "power"), "battery_pct") == -1);
+  // A power section without a battery reading carries no information and is dropped entirely.
+  REQUIRE(projectMeshRuntimeJson(R"({"power":{"charging":true}})", &projected));
+  CHECK(json::get(json::parse(projected).get(), "power") == nullptr);
+
+  Fleet f;
+  f.add(kIdA, "A", capsJson(10));
+  f.add(kIdB, "B", capsJson(9));
+  const std::vector<std::string> ids = {kIdA, kIdB};
+  REQUIRE(f.runUntil([&] { return f.mutualAlive(ids); }, 3000));
+  f.at(kIdA).mesh->setRuntime(
+      R"({"power":{"battery_pct":37,"charging":false,"mains":false},"secret":"private"})");
+  REQUIRE(f.runUntil([&] {
+    return f.at(kIdB).peer(kIdA).runtime_json.find("battery_pct") != std::string::npos;
+  }, 1000));
+  auto peer_runtime = json::parse(f.at(kIdB).peer(kIdA).runtime_json);
+  REQUIRE(peer_runtime);
+  CHECK(json::getInt(json::get(peer_runtime.get(), "power"), "battery_pct") == 37);
+  CHECK(json::get(peer_runtime.get(), "secret") == nullptr);
+}
+
 TEST_CASE("mesh: a duty without an eligible node has no leader") {
   Fleet f;
   f.add(kIdA, "A", capsJson(10, /*tls=*/false));

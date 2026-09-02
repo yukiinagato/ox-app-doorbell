@@ -224,3 +224,86 @@ migration from recreating it on restart.
 `events.retention_days` (1..3650, default 90) is the age floor of the local event-retention sweep,
 which always also keeps the newest 5,000 records per origin. Deletion additionally requires a
 durable replication coverage vector; until one exists, retention is a no-op.
+
+## Time service
+
+`GET /api/status` carries a `time` object:
+
+```json
+{
+  "zone": "Asia/Tokyo", "zone_known": true,
+  "source": "system", "enabled": false, "ok": false,
+  "offset_ms": 0, "measured_offset_ms": 0,
+  "last_sync_ms": 0, "rtt_ms": 0, "server": "", "interval_s": 900,
+  "offset_min": 540, "syncing": false,
+  "local": { "iso": "2026-09-02T21:30:00+09:00", "date": "2026-09-02",
+             "hh": 21, "mm": 30, "ss": 0, "weekday": "wed", "weekday_num": 3,
+             "offset_min": 540, "dst": false, "known": true,
+             "wall_ms": 1772000000000, "tz": "Asia/Tokyo" }
+}
+```
+
+`source` is `ntp` only while `time.ntp.enabled` is true *and* a sync succeeded within three
+intervals; otherwise it is `system` and `offset_ms` is 0. `measured_offset_ms` keeps the last
+measurement either way, so the card can show what was measured after NTP is switched off.
+`err` is present after a failed round and is one of `no_response`, `bad_server`, `bad_reply`, or
+`implausible`. Admin must render `source` and never infer it from `enabled` alone: an enabled but
+unreachable time service is still running on system time.
+
+`POST /api/time/sync` (Admin session) starts one immediate round and returns
+`{"ok":true,"started":true}`. It returns `409 {"ok":false,"err":"ntp_disabled"}` when the
+independent time service is off, and `409 {"ok":false,"err":"not_started"}` before Core is running.
+The exchange is asynchronous: re-read `/api/status` (or wait for the `time_changed` UI event)
+rather than treating the 200 as a completed sync.
+
+Writing `time.zone` through the normal configuration endpoints is rejected unless the identifier is
+in the table bundled in Core, and Core rewrites the derived `integrations.tz_offset_min` itself.
+Admin must not write both from the form.
+
+## Volumes
+
+Cluster defaults live in `audio.volume.{call,sos,idle}` (0..100) and a device overrides them at
+`devices.<id>.local.audio.volume.<level>`. Container writes (`audio`, `audio.volume`,
+`devices.<id>.local.audio`) are validated as a whole, so an atomic batch cannot smuggle an
+out-of-range level in through a parent object. Removing an override means deleting the leaf key,
+not writing `null`.
+
+Core resolves the effective level as device override → cluster default → built-in default
+(call 80, sos 100, idle 60), with `emergency.alarm_volume` as an extra fallback for the SOS level.
+`db_core_audio_json` exposes the same resolution to native shells.
+
+## Announcements
+
+`POST /api/doors/<id>/notice` accepts `{"text":"…","expires_ms":0}` or `{"text":"…","ttl_s":3600}`;
+`expires_ms` wins when both are present and 0 means "until cleared". `DELETE /api/doors/<id>/notice`
+clears it, and clearing an announcement that is not there succeeds. Both accept an authenticated
+Admin session **or** a panel credential, because the indoor announcement dialog and the Admin doors
+tab write the same value.
+
+The value is ordinary replicated configuration at `doors.<id>.notice`:
+
+```json
+{ "text": "Deliveries to the side gate today", "from_device": "<node_id>",
+  "created_ms": 1772000000000, "expires_ms": 0 }
+```
+
+`text` is 1..200 characters, counted in Unicode code points. `from_device` and `created_ms` are
+written by Core, not by the caller. An unknown door, empty text, or text over the limit is
+`400 {"ok":false,"err":"rejected"}` and leaves the current announcement untouched. Core prunes an
+expired announcement on its one-minute tick and emits `notice_changed`, so a panel that is showing
+one does not need its own expiry timer.
+
+## Battery and power
+
+A device that implements the optional platform power callback publishes
+`status.self.power` (and the identical `status.node.power`) and appears with the same object in
+`status.peers[].power`:
+
+```json
+{ "battery_pct": 82, "charging": false, "mains": true }
+```
+
+`battery_pct` is `-1` on a device with no battery, and the UI must then show nothing at all rather
+than a zero-percent indicator. A device that does not implement the callback has no `power` key,
+which is not the same as a battery at zero. Peer values arrive through the bounded runtime
+projection, so they carry these three fields and nothing else.

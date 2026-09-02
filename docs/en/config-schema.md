@@ -45,7 +45,13 @@ the plaintext subscription. Startup reseals a legacy raw record or removes it fa
   },
 
   "doors": {
-    "d_front": { "building": "b_main",  "label": { "ja": "正面玄関" } },
+    "d_front": { "building": "b_main",  "label": { "ja": "正面玄関" },
+                 // Optional announcement shown on that door's visitor screen and on the indoor
+                 // dashboard. text is 1-200 characters; expires_ms is an absolute wall-clock
+                 // deadline and 0 means "until cleared". Core prunes an expired notice on its
+                 // one-minute tick and emits notice_changed.
+                 "notice": { "text": "Deliveries to the side gate today",
+                             "from_device": "<node_id>", "created_ms": 0, "expires_ms": 0 } },
     "d_back":  { "building": "b_main",  "label": { "ja": "勝手口" } },
     "d_annex": { "building": "b_annex", "label": { "ja": "離れ玄関" } }
   },
@@ -59,6 +65,8 @@ the plaintext subscription. Startup reseals a legacy raw record or removes it fa
       "caps_override": { "mains_power": true }, // admin override of measured capabilities
       "local": {                                // per-device settings (also replicated — editable remotely)
         "ui_lang": "ja", "volume": 80, "screen_brightness": 70,
+        // Per-device volume overrides, 0-100. An absent level inherits audio.volume.
+        "audio": { "volume": { "call": 80, "sos": 100, "idle": 60 } },
         "screensaver_after_s": 120,
         "video": { "playback": "low_latency",   // low_latency (default) / hls / mjpeg
                    "rotation": "auto" },          // follow sensor / force 0, 90, 180, or 270 degrees
@@ -190,9 +198,34 @@ the plaintext subscription. Startup reseals a legacy raw record or removes it fa
     "pixel_shift_s": 300                        // periodically shift idle-screen elements by a few px (burn-in protection)
   },
 
+  // Cluster time. The IANA zone is resolved from a table bundled in core, so a shell on a
+  // platform without a usable tz database renders the same clock as every other device.
+  // integrations.tz_offset_min below stays valid and is derived from this zone (including its
+  // current daylight-saving state) whenever "zone" is set; an installation that never set a zone
+  // keeps the fixed offset as the source of truth.
+  "time": {
+    "zone": "Asia/Tokyo",                       // IANA identifier from the bundled table
+    // Independent time service. Core never sets the operating-system clock: it measures an
+    // offset by SNTP and adds it to every wall-clock reading (HLC, event and call-history
+    // timestamps, rule schedules, quiet hours, displayed clocks). The offset is dropped again
+    // after three intervals without a successful sync.
+    "ntp": { "enabled": false,                  // default off
+             "servers": ["ntp.nict.jp", "time.google.com"],   // 1-4 "host" or "host:port"
+             "interval_s": 900 }                // 60..86400
+  },
+
+  // Cluster default volumes, 0-100. A device overrides them with
+  // devices.<id>.local.audio.volume.{call,sos,idle}; the sos level additionally falls back to
+  // emergency.alarm_volume for an installation that predates these keys.
+  "audio": { "volume": { "call": 80, "sos": 100, "idle": 60 } },
+
   "emergency": {                                // indoor emergency call for help (SOS)
     "button_on_roles": ["indoor_panel"],        // roles that show the SOS button
-    "hold_to_trigger_s": 3,                     // long-press duration in seconds (prevents accidental triggering)
+    "hold_to_trigger_s": 3,                     // legacy long-press duration; unused by slide mode
+    // Slide-to-trigger control. mode is "slide" ("hold" stays accepted so an older
+    // configuration keeps validating); countdown_s is 0..10 seconds of cancellable countdown
+    // before core is told the emergency is real.
+    "trigger": { "mode": "slide", "countdown_s": 3 },
     "alarm_sound": "siren1", "alarm_volume": 100,
     // When true, an open Web panel renders replicated active SOS even if a rule has no
     // recipients or requests Web Push only. When false, a matching positive device_alert or
@@ -370,6 +403,46 @@ helper is a visible degraded/error condition, not a successful supervision claim
 config apply, the platform client sends the fixed local `MODE <value>` command and verifies helper
 status; the helper atomically persists that mode for helper/OS restart. No generic command or argv
 is derived from configuration.
+
+## Time, power, and announcements
+
+The bundled time-zone table lives in `core/src/util/tz.{h,cpp}` and covers the zones the settings
+UI offers across Asia, Europe, the Americas, Oceania, and Africa. It is a snapshot of the rules
+currently in force, with no historical data: daylight saving is modelled per regime (EU, North
+America, southern Australia, New Zealand, Chile, Israel), and an instant from before the current
+regime may resolve to today's rule. `time.zone` is rejected unless the table can resolve it, so a
+zone shown in the UI is always the zone actually used.
+
+`integrations.tz_offset_min` remains the compatibility surface for the Telegram bridge and older
+shells. Whenever `time.zone` is set, Core rewrites it from the zone -- on startup, on a zone
+change, and on the one-minute housekeeping tick, so it follows daylight saving instead of freezing
+at the offset that happened to be current when the zone was chosen. An installation that never set
+`time.zone` keeps the fixed offset as the source of truth and nothing rewrites it.
+
+`time.ntp` is off by default. When it is on, Core runs a minimal SNTP v4 client (RFC 4330) on a
+short-lived worker thread: three samples per server, the lowest round trip wins, and a sample is
+discarded when its round trip exceeds three seconds or its offset exceeds 24 hours. The measured
+offset is applied to `IClock::wallMs()`, which is what the HLC, event timestamps, call history,
+rule schedules, quiet hours, and every rendered clock read. The operating-system clock is never
+written, and the correction is withdrawn after three intervals without a successful sync, so a
+device whose NTP servers become unreachable falls back to plain system time rather than drifting on
+a stale measurement. `POST /api/time/sync` (admin session) starts one immediate round;
+`status.time` reports the result and `time_changed` is emitted when the source flips or the applied
+offset moves by more than 500 ms.
+
+Power state comes from the optional `db_platform_v2.power_state` callback, polled once a minute.
+It is published as `status.self.power` (and the identical `status.node.power`), gossiped into
+`peers[].power` through the bounded runtime projection, and reported as `power_changed` when the
+battery moves five points or more or charging/mains flips. A platform that reports `mains` replaces
+the create-time `mains_power` guess with that measurement before administrator overrides apply. A
+device with no battery reports `battery_pct: -1` and shells hide the indicator entirely.
+
+An announcement is ordinary replicated configuration at `doors.<id>.notice`, so it survives a
+restart and reaches every device through the same CRDT path as any other setting. Core prunes an
+expired notice on the one-minute tick -- any node may prune, because the tombstone replicates and a
+repeated prune is a no-op -- and emits `notice_changed`. `POST` and `DELETE /api/doors/<id>/notice`
+accept either an administrator session or a panel credential, which is what lets the indoor
+announcement dialog and the Admin doors tab write the same value.
 
 ## Runtime UI manifests
 

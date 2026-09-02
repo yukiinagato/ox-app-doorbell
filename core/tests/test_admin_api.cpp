@@ -1417,3 +1417,100 @@ TEST_CASE("admin API: pairing routes expose state, PIN, deny, scan, retry, and u
   CHECK(refused.find("host_unpaired") != std::string::npos);
   node.stop();
 }
+
+TEST_CASE("admin API: announcements and the manual time sync enforce their own callers") {
+  std::mt19937 rng(static_cast<uint32_t>(::getpid()) ^ 0x7c19u);
+  const int mesh_port = adminFreePort(rng);
+  const int http_port = adminFreePort(rng);
+  REQUIRE(mesh_port > 0);
+  REQUIRE(http_port > 0);
+
+  NodeOptions options;
+  options.data_dir = ":memory:";
+  options.name = "notice-api";
+  options.role = "door_station";
+  options.door = "d_front";
+  options.listen_addr = "127.0.0.1:" + std::to_string(mesh_port);
+  options.psk.fill(0x71);
+  options.enable_beacon = false;
+  options.http_port = http_port;
+  options.mesh_timing_template = adminTiming();
+  options.use_mesh_timing_template = true;
+  Node node(options);
+  std::map<std::string, std::string> secure_values;
+  node.setSecureStore(
+      [&](const std::string& key) {
+        auto it = secure_values.find(key);
+        return it == secure_values.end() ? std::string() : it->second;
+      },
+      [&](const std::string& key, const std::string& value) {
+        secure_values[key] = value;
+        return true;
+      });
+  REQUIRE(node.start());
+  const std::string session = adminLogin(http_port);
+  node.setConfigKey("doors.d_front", "{\"label\":{\"ja\":\"正面玄関\"}}");
+
+  // No session and no panel credential: refused before anything is written.
+  CHECK(adminReq(http_port, "POST", "/api/doors/d_front/notice", "{\"text\":\"hi\"}")
+            .find("HTTP/1.1 403") == 0);
+  // A path that is not the notice resource is not reachable through the prefix route.
+  CHECK(adminReq(http_port, "POST", "/api/doors/d_front", "{\"text\":\"hi\"}", session)
+            .find("HTTP/1.1 404") == 0);
+  CHECK(adminReq(http_port, "POST", "/api/doors/d_front/../secrets", "{}", session)
+            .find("HTTP/1.1 200") != 0);
+
+  auto published = bodyJson(adminReq(http_port, "POST", "/api/doors/d_front/notice",
+                                     "{\"text\":\"Side gate today\",\"ttl_s\":3600}", session));
+  REQUIRE(published);
+  CHECK(json::getBool(published.get(), "ok"));
+  auto config = json::parse(node.configJson());
+  REQUIRE(config);
+  const cJSON* notice =
+      json::get(json::get(json::get(config.get(), "doors"), "d_front"), "notice");
+  REQUIRE(cJSON_IsObject(notice));
+  CHECK(json::getString(notice, "text") == "Side gate today");
+  CHECK(json::getInt(notice, "expires_ms") > 0);
+
+  // An oversized announcement is refused and leaves the current one untouched.
+  CHECK(adminReq(http_port, "POST", "/api/doors/d_front/notice",
+                 "{\"text\":\"" + std::string(201, 'x') + "\"}", session)
+            .find("HTTP/1.1 400") == 0);
+  CHECK(adminReq(http_port, "POST", "/api/doors/d_unknown/notice", "{\"text\":\"hi\"}", session)
+            .find("HTTP/1.1 400") == 0);
+
+  // An indoor panel publishes with its panel credential, which is the same dialog as the web.
+  auto rotation =
+      bodyJson(adminReq(http_port, "POST", "/api/panel-token/rotate", "{}", session));
+  REQUIRE(rotation);
+  const std::string credential = json::getString(rotation.get(), "token");
+  REQUIRE(credential.size() == 32);
+  const std::string panel_session = panelLogin(http_port, credential);
+  CHECK(adminReq(http_port, "POST", "/api/doors/d_front/notice",
+                 "{\"text\":\"From the indoor panel\"}", "dbpanel=" + panel_session)
+            .find("HTTP/1.1 200") == 0);
+  CHECK(node.configJson().find("From the indoor panel") != std::string::npos);
+
+  CHECK(adminReq(http_port, "DELETE", "/api/doors/d_front/notice", "", session)
+            .find("HTTP/1.1 200") == 0);
+  CHECK(node.configJson().find("From the indoor panel") == std::string::npos);
+
+  // The manual sync button reports a clear reason instead of pretending to work while the
+  // independent time service is switched off.
+  auto refused = bodyJson(adminReq(http_port, "POST", "/api/time/sync", "{}", session));
+  REQUIRE(refused);
+  CHECK_FALSE(json::getBool(refused.get(), "ok"));
+  CHECK(json::getString(refused.get(), "err") == "ntp_disabled");
+  CHECK(adminReq(http_port, "POST", "/api/time/sync", "{}").find("HTTP/1.1 401") == 0);
+
+  auto status = bodyJson(adminReq(http_port, "GET", "/api/status", "", session));
+  REQUIRE(status);
+  const cJSON* time = json::get(status.get(), "time");
+  REQUIRE(cJSON_IsObject(time));
+  CHECK(json::getString(time, "zone") == "Asia/Tokyo");
+  CHECK(json::getString(time, "source") == "system");
+  CHECK(json::getBool(time, "enabled") == false);
+  CHECK(json::getInt(time, "offset_min") == 540);
+  CHECK(cJSON_IsObject(json::get(time, "local")));
+  node.stop();
+}

@@ -40,6 +40,103 @@ TEST_CASE("capi: a v2 shell built before secure_delete still starts") {
   CHECK(db_core_create_v2(&platform, ":memory:", "{\"http_port\":0}") == nullptr);
 }
 
+TEST_CASE("capi: a v2 shell built before power_state still starts") {
+  // power_state was appended after secure_delete, so both earlier published sizes remain valid
+  // and a shell that declares one of them keeps working with the newer field left NULL.
+  const size_t before_secure_delete = offsetof(db_platform_v2, secure_delete);
+  const size_t before_power_state = offsetof(db_platform_v2, power_state);
+  CHECK(before_secure_delete < before_power_state);
+  CHECK(before_power_state < sizeof(db_platform_v2));
+
+  for (size_t size : {before_secure_delete, before_power_state, sizeof(db_platform_v2)}) {
+    db_platform_v2 platform{};
+    platform.struct_size = static_cast<uint32_t>(size);
+    platform.version = DB_PLATFORM_V2_VERSION;
+    db_core* core = db_core_create_v2(&platform, ":memory:", "{\"http_port\":0}");
+    CAPTURE(size);
+    REQUIRE(core != nullptr);
+    db_core_destroy(core);
+  }
+
+  // Unpublished intermediate sizes stay rejected.
+  db_platform_v2 platform{};
+  platform.version = DB_PLATFORM_V2_VERSION;
+  platform.struct_size = static_cast<uint32_t>(before_power_state + 1);
+  CHECK(db_core_create_v2(&platform, ":memory:", "{\"http_port\":0}") == nullptr);
+  platform.struct_size = static_cast<uint32_t>(before_power_state - 1);
+  CHECK(db_core_create_v2(&platform, ":memory:", "{\"http_port\":0}") == nullptr);
+}
+
+TEST_CASE("capi: the power SPI feeds status and the settings entry points fail closed") {
+  struct Context {
+    int reads = 0;
+    int releases = 0;
+  } context;
+  db_platform_v2 platform{};
+  platform.struct_size = sizeof(platform);
+  platform.version = DB_PLATFORM_V2_VERSION;
+  platform.user = &context;
+  platform.power_state = [](void* user, char** value) -> int {
+    auto* context = static_cast<Context*>(user);
+    ++context->reads;
+    const char json[] = "{\"battery_pct\":64,\"charging\":true,\"mains\":true}";
+    *value = static_cast<char*>(std::malloc(sizeof(json)));
+    if (!*value) return -1;
+    std::memcpy(*value, json, sizeof(json));
+    return 0;
+  };
+  platform.release_buffer = [](void* user, void* value) {
+    ++static_cast<Context*>(user)->releases;
+    std::free(value);
+  };
+
+  // Every additive entry point tolerates a null handle.
+  CHECK(db_core_local_time_json(nullptr, 0) == nullptr);
+  CHECK(db_core_audio_json(nullptr, nullptr) == nullptr);
+  CHECK(db_core_time_sync_now(nullptr) == 0);
+  CHECK(db_core_set_door_notice(nullptr, "d_front", "hi", 0) < 0);
+  CHECK(db_core_clear_door_notice(nullptr, "d_front") < 0);
+
+  db_core* core = db_core_create_v2(
+      &platform, ":memory:",
+      "{\"name\":\"power-capi\",\"role\":\"indoor_panel\",\"listen_port\":0,\"http_port\":0}");
+  REQUIRE(core != nullptr);
+  REQUIRE(db_core_start(core) == 0);
+
+  char* status = db_core_status_json(core);
+  REQUIRE(status != nullptr);
+  const std::string status_json = status;
+  db_free(status);
+  CHECK(status_json.find("\"battery_pct\":64") != std::string::npos);
+  CHECK(status_json.find("\"charging\":true") != std::string::npos);
+
+  char* local = db_core_local_time_json(core, 1'772'000'000'000LL);
+  REQUIRE(local != nullptr);
+  const std::string local_json = local;
+  db_free(local);
+  CHECK(local_json.find("\"tz\":\"Asia/Tokyo\"") != std::string::npos);
+  CHECK(local_json.find("\"offset_min\":540") != std::string::npos);
+
+  char* audio = db_core_audio_json(core, nullptr);
+  REQUIRE(audio != nullptr);
+  const std::string audio_json = audio;
+  db_free(audio);
+  CHECK(audio_json.find("\"call\":80") != std::string::npos);
+  CHECK(audio_json.find("\"sos\":100") != std::string::npos);
+  CHECK(audio_json.find("\"idle\":60") != std::string::npos);
+
+  // NTP is off by default, so an explicit sync request reports that it did not start.
+  CHECK(db_core_time_sync_now(core) == 0);
+  // Announcements need a configured door; arguments are checked before any state is touched.
+  CHECK(db_core_set_door_notice(core, "", "hi", 0) < 0);
+  CHECK(db_core_set_door_notice(core, "d_missing", "hi", 0) < 0);
+
+  db_core_stop(core);
+  db_core_destroy(core);
+  CHECK(context.reads >= 1);
+  CHECK(context.releases == context.reads);
+}
+
 TEST_CASE("capi: legacy and v2 constructors accept their declared layouts") {
   db_platform legacy{};
   db_core* old_core = db_core_create(&legacy, ":memory:", "{\"http_port\":0}");

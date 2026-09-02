@@ -34,6 +34,8 @@
 #include "util/ids.h"
 #include "util/json.h"
 #include "util/log.h"
+#include "util/sntp.h"
+#include "util/tz.h"
 
 namespace db {
 
@@ -1012,9 +1014,225 @@ bool eventRetentionValid(const std::string& key, const cJSON* value, std::string
   return true;
 }
 
+// True when value is a whole number inside [low, high].
+bool wholeNumberInRange(const cJSON* value, int64_t low, int64_t high) {
+  if (!cJSON_IsNumber(value)) return false;
+  if (value->valuedouble != static_cast<double>(static_cast<int64_t>(value->valuedouble)))
+    return false;
+  const int64_t whole = static_cast<int64_t>(value->valuedouble);
+  return whole >= low && whole <= high;
+}
+
+bool volumeLevelValid(const cJSON* value, const std::string& path, std::string* error) {
+  if (wholeNumberInRange(value, 0, 100)) return true;
+  *error = path + " must be a whole number between 0 and 100";
+  return false;
+}
+
+// {call,sos,idle} container, each entry optional.
+bool volumeObjectValid(const cJSON* value, const std::string& path, std::string* error) {
+  if (!objectHasOnly(value, {"call", "sos", "idle"}, path, error)) return false;
+  for (const char* field : {"call", "sos", "idle"}) {
+    const cJSON* level = json::get(value, field);
+    if (level && !volumeLevelValid(level, path + "." + field, error)) return false;
+  }
+  return true;
+}
+
+// The "audio" container: {"volume": {call,sos,idle}}. A null pointer means the enclosing write
+// did not carry one, which is fine.
+bool audioObjectValid(const cJSON* audio, const std::string& path, std::string* error) {
+  if (!audio) return true;
+  if (!objectHasOnly(audio, {"volume"}, path, error)) return false;
+  const cJSON* volume = json::get(audio, "volume");
+  return !volume || volumeObjectValid(volume, path + ".volume", error);
+}
+
+// audio.volume.{call,sos,idle} and devices.<id>.local.audio.volume.{call,sos,idle}. Container
+// writes are validated as a whole so an atomic batch cannot smuggle an out-of-range level in
+// through a parent object.
+bool audioVolumeValid(const std::string& key, const cJSON* value, std::string* error) {
+  std::string tail;
+  std::string path;
+  if (key == "audio" || key.rfind("audio.", 0) == 0) {
+    tail = key;
+    path = key;
+  } else if (key.rfind("devices.", 0) == 0) {
+    const size_t local = key.find(".local");
+    if (local == std::string::npos)
+      return audioObjectValid(json::get(json::get(value, "local"), "audio"),
+                              key + ".local.audio", error);
+    const std::string after = key.substr(local + std::string(".local").size());
+    if (after.empty())
+      return audioObjectValid(json::get(value, "audio"), key + ".audio", error);
+    if (after.rfind(".audio", 0) != 0) return true;
+    tail = after.substr(1);  // drop the leading dot
+    path = key;
+  } else {
+    return true;
+  }
+  if (tail == "audio") return audioObjectValid(value, path, error);
+  if (tail == "audio.volume") return volumeObjectValid(value, path, error);
+  if (tail == "audio.volume.call" || tail == "audio.volume.sos" || tail == "audio.volume.idle")
+    return volumeLevelValid(value, path, error);
+  *error = "unknown audio configuration key " + key;
+  return false;
+}
+
+bool ntpServerListValid(const cJSON* value, std::string* error) {
+  if (!cJSON_IsArray(value)) {
+    *error = "time.ntp.servers must be an array of 1 to 4 host or host:port entries";
+    return false;
+  }
+  const int count = cJSON_GetArraySize(value);
+  if (count < 1 || count > 4) {
+    *error = "time.ntp.servers must contain between 1 and 4 entries";
+    return false;
+  }
+  const cJSON* entry = nullptr;
+  cJSON_ArrayForEach(entry, value) {
+    if (!cJSON_IsString(entry) || !sntp::parseServer(entry->valuestring, nullptr, nullptr)) {
+      *error = "time.ntp.servers entries must be \"host\" or \"host:port\"";
+      return false;
+    }
+  }
+  return true;
+}
+
+bool ntpObjectValid(const cJSON* value, const std::string& path, std::string* error) {
+  if (!objectHasOnly(value, {"enabled", "servers", "interval_s"}, path, error)) return false;
+  const cJSON* enabled = json::get(value, "enabled");
+  if (enabled && !cJSON_IsBool(enabled)) {
+    *error = "time.ntp.enabled must be a boolean";
+    return false;
+  }
+  const cJSON* servers = json::get(value, "servers");
+  if (servers && !ntpServerListValid(servers, error)) return false;
+  const cJSON* interval = json::get(value, "interval_s");
+  if (interval && !wholeNumberInRange(interval, 60, 86400)) {
+    *error = "time.ntp.interval_s must be a whole number of seconds between 60 and 86400";
+    return false;
+  }
+  return true;
+}
+
+// time.zone / time.ntp.*. A zone must be one the bundled table can actually resolve, otherwise
+// every clock in the fleet would silently fall back to a different offset than the one shown.
+bool timeConfigValid(const std::string& key, const cJSON* value, std::string* error) {
+  if (key != "time" && key.rfind("time.", 0) != 0) return true;
+  auto zone_valid = [&error](const cJSON* zone) {
+    if (cJSON_IsString(zone) && tz::zoneKnown(zone->valuestring)) return true;
+    *error = "time.zone must be an IANA identifier from the bundled time-zone table";
+    return false;
+  };
+  if (key == "time") {
+    if (!objectHasOnly(value, {"zone", "ntp"}, "time", error)) return false;
+    const cJSON* zone = json::get(value, "zone");
+    if (zone && !zone_valid(zone)) return false;
+    const cJSON* ntp = json::get(value, "ntp");
+    return !ntp || ntpObjectValid(ntp, "time.ntp", error);
+  }
+  if (key == "time.zone") return zone_valid(value);
+  if (key == "time.ntp") return ntpObjectValid(value, key, error);
+  if (key == "time.ntp.enabled") {
+    if (cJSON_IsBool(value)) return true;
+    *error = "time.ntp.enabled must be a boolean";
+    return false;
+  }
+  if (key == "time.ntp.servers") return ntpServerListValid(value, error);
+  if (key == "time.ntp.interval_s") {
+    if (wholeNumberInRange(value, 60, 86400)) return true;
+    *error = "time.ntp.interval_s must be a whole number of seconds between 60 and 86400";
+    return false;
+  }
+  *error = "unknown time configuration key " + key;
+  return false;
+}
+
+// Number of Unicode code points in a UTF-8 string, used for the announcement length limit so a
+// Japanese notice is measured the way an operator counts it.
+size_t utf8Length(const std::string& text) {
+  size_t count = 0;
+  for (unsigned char c : text) {
+    if ((c & 0xC0) != 0x80) count++;
+  }
+  return count;
+}
+
+// doors.<id>.notice: {text, from_device, created_ms, expires_ms} or null to clear.
+bool doorNoticeValid(const std::string& key, const cJSON* value, std::string* error) {
+  const std::string suffix = ".notice";
+  if (key.rfind("doors.", 0) != 0) return true;
+  const bool is_notice = key.size() > suffix.size() &&
+      key.compare(key.size() - suffix.size(), suffix.size(), suffix) == 0;
+  if (!is_notice) {
+    // A whole-door write may still carry a notice object; validate it in place.
+    if (!cJSON_IsObject(value)) return true;
+    const cJSON* embedded = json::get(value, "notice");
+    if (!embedded || cJSON_IsNull(embedded)) return true;
+    return doorNoticeValid(key + ".notice", embedded, error);
+  }
+  if (cJSON_IsNull(value)) return true;
+  if (!objectHasOnly(value, {"text", "from_device", "created_ms", "expires_ms"}, key, error))
+    return false;
+  const cJSON* text = json::get(value, "text");
+  if (!cJSON_IsString(text) || utf8Length(text->valuestring) == 0 ||
+      utf8Length(text->valuestring) > 200) {
+    *error = "door notice text must be between 1 and 200 characters";
+    return false;
+  }
+  const cJSON* from_device = json::get(value, "from_device");
+  if (from_device && !cJSON_IsString(from_device)) {
+    *error = "door notice from_device must be a string";
+    return false;
+  }
+  for (const char* field : {"created_ms", "expires_ms"}) {
+    const cJSON* stamp = json::get(value, field);
+    if (stamp && !wholeNumberInRange(stamp, 0, 4'102'444'800'000LL)) {
+      *error = std::string("door notice ") + field + " must be a whole millisecond timestamp";
+      return false;
+    }
+  }
+  return true;
+}
+
+// emergency.trigger.{mode,countdown_s}. "hold" stays accepted so a configuration written before
+// the slide control keeps validating; the shells implement slide only.
+bool emergencyTriggerValid(const std::string& key, const cJSON* value, std::string* error) {
+  auto mode_valid = [&error](const cJSON* mode) {
+    const std::string text = cJSON_IsString(mode) ? mode->valuestring : "";
+    if (text == "slide" || text == "hold") return true;
+    *error = "emergency.trigger.mode must be slide or hold";
+    return false;
+  };
+  auto countdown_valid = [&error](const cJSON* seconds) {
+    if (wholeNumberInRange(seconds, 0, 10)) return true;
+    *error = "emergency.trigger.countdown_s must be a whole number of seconds between 0 and 10";
+    return false;
+  };
+  if (key == "emergency.trigger.mode") return mode_valid(value);
+  if (key == "emergency.trigger.countdown_s") return countdown_valid(value);
+  if (key == "emergency.hold_to_trigger_s") return countdown_valid(value);
+  if (key == "emergency.trigger" || key == "emergency") {
+    const cJSON* trigger = key == "emergency" ? json::get(value, "trigger") : value;
+    if (!trigger) return true;
+    if (!objectHasOnly(trigger, {"mode", "countdown_s"}, "emergency.trigger", error))
+      return false;
+    const cJSON* mode = json::get(trigger, "mode");
+    if (mode && !mode_valid(mode)) return false;
+    const cJSON* countdown = json::get(trigger, "countdown_s");
+    return !countdown || countdown_valid(countdown);
+  }
+  return true;
+}
+
 bool configWriteValid(const std::string& key, const cJSON* value, std::string* error) {
   if (!secretContractValid(key, value, error)) return false;
   if (!eventRetentionValid(key, value, error)) return false;
+  if (!timeConfigValid(key, value, error)) return false;
+  if (!audioVolumeValid(key, value, error)) return false;
+  if (!doorNoticeValid(key, value, error)) return false;
+  if (!emergencyTriggerValid(key, value, error)) return false;
   if (!panelTokenGenerationValid(key, value, error)) return false;
   if (key == "web_push.subscriptions") {
     *error = "the Web Push subscription container is read-only";
@@ -1316,6 +1534,40 @@ struct Node::Impl {
   // Shell sensor angle and its administrator-resolved effective value are read by HTTP workers.
   std::atomic<int> sensor_video_rotation{0};
   std::atomic<int> effective_video_rotation{0};
+
+  // ---------- time service ----------
+  // A measured SNTP offset. It is applied to the shared clock (and therefore to the HLC, event
+  // timestamps and every rendered clock) only while NTP is enabled and the last sync is recent.
+  struct TimeState {
+    bool ok = false;
+    int64_t offset_ms = 0;
+    int64_t last_sync_wall_ms = 0;
+    int64_t last_sync_mono_ms = 0;
+    bool ever_synced = false;
+    int64_t rtt_ms = 0;
+    std::string server;
+    std::string last_error;
+  };
+  TimeState time_state;
+  uint64_t time_sync_timer = 0;
+  int time_sync_timer_interval_s = 0;
+  std::thread time_sync_thread;
+  bool time_sync_busy = false;
+  std::atomic<bool> time_sync_abort{false};
+  std::string reported_time_source = "system";
+  int64_t reported_time_offset_ms = 0;
+
+  // ---------- power ----------
+  struct PowerState {
+    bool known = false;
+    int battery_pct = -1;
+    bool charging = false;
+    bool mains = false;
+  };
+  PowerState power;
+  PowerState reported_power;
+  Node::PowerStateFn power_state_fn;
+  uint64_t minute_timer = 0;
 
   MotionDetector motion;
   std::mutex motion_mu;
@@ -1947,9 +2199,394 @@ struct Node::Impl {
     if (cb) cb(text, lang);
   }
 
-  int tzOffsetMin() {
+  // The configured IANA zone, or an empty string when the cluster has never set one. An empty
+  // zone keeps integrations.tz_offset_min authoritative, which is what an upgraded installation
+  // that only ever had the fixed offset expects.
+  std::string configuredTimeZone() const {
+    return json::getString(json::get(cfg.get(), "time"), "zone");
+  }
+
+  int legacyTzOffsetMin() const {
     const cJSON* integ = json::get(cfg.get(), "integrations");
     return static_cast<int>(json::getInt(integ, "tz_offset_min", 540));
+  }
+
+  // Offset east of UTC at a given instant, so schedules and quiet hours follow daylight saving
+  // instead of a frozen snapshot.
+  int tzOffsetMinAt(int64_t wall_ms) const {
+    const std::string zone = configuredTimeZone();
+    int offset = 0;
+    if (!zone.empty() && tz::offsetMinAt(zone, wall_ms, &offset)) return offset;
+    return legacyTzOffsetMin();
+  }
+
+  int tzOffsetMin() { return tzOffsetMinAt(hlc->correctedWallMs()); }
+
+  std::string localTimeJsonOnLoop(int64_t wall_ms) {
+    const int64_t at = wall_ms > 0 ? wall_ms : hlc->correctedWallMs();
+    const std::string zone = configuredTimeZone();
+    return tz::localTimeJson(zone, at, legacyTzOffsetMin());
+  }
+
+  // ---------- time service ----------
+  bool ntpEnabled() const {
+    return json::getBool(json::get(json::get(cfg.get(), "time"), "ntp"), "enabled", false);
+  }
+
+  int ntpIntervalS() const {
+    const int64_t seconds =
+        json::getInt(json::get(json::get(cfg.get(), "time"), "ntp"), "interval_s", 900);
+    if (seconds < 60) return 60;
+    if (seconds > 86400) return 86400;
+    return static_cast<int>(seconds);
+  }
+
+  std::vector<std::string> ntpServers() const {
+    std::vector<std::string> servers;
+    const cJSON* list = json::get(json::get(json::get(cfg.get(), "time"), "ntp"), "servers");
+    const cJSON* entry = nullptr;
+    cJSON_ArrayForEach(entry, list) {
+      if (cJSON_IsString(entry) && servers.size() < 4) servers.push_back(entry->valuestring);
+    }
+    if (servers.empty()) {
+      servers.push_back("ntp.nict.jp");
+      servers.push_back("time.google.com");
+    }
+    return servers;
+  }
+
+  // A measured offset is trusted for three sync intervals. After that the source falls back to
+  // system time rather than drifting on a stale correction.
+  bool timeSyncFresh() const {
+    if (!time_state.ok) return false;
+    const int64_t age = clock->monoMs() - time_state.last_sync_mono_ms;
+    return age >= 0 && age <= 3LL * ntpIntervalS() * 1000LL;
+  }
+
+  bool ntpActive() const { return ntpEnabled() && timeSyncFresh(); }
+
+  // Apply (or withdraw) the offset on the shared clock and report a meaningful change.
+  void applyTimeOffset() {
+    const bool active = ntpActive();
+    const int64_t offset = active ? time_state.offset_ms : 0;
+    if (clock->wallOffsetMs() != offset) clock->setWallOffsetMs(offset);
+    const std::string source = active ? "ntp" : "system";
+    const int64_t moved = offset - reported_time_offset_ms;
+    if (source == reported_time_source && (moved > -500 && moved < 500)) return;
+    reported_time_source = source;
+    reported_time_offset_ms = offset;
+    auto event = json::obj();
+    json::set(event.get(), "t", "time_changed");
+    json::set(event.get(), "source", source);
+    json::set(event.get(), "offset_ms", offset);
+    json::set(event.get(), "zone", configuredTimeZone());
+    uiNotify(json::dump(event.get()));
+  }
+
+  json::Doc timeStatusDoc() {
+    auto out = json::obj();
+    const std::string zone = configuredTimeZone();
+    json::set(out.get(), "zone", zone);
+    json::setBool(out.get(), "zone_known", !zone.empty() && tz::zoneKnown(zone));
+    const bool active = ntpActive();
+    json::set(out.get(), "source", active ? "ntp" : "system");
+    json::setBool(out.get(), "enabled", ntpEnabled());
+    json::setBool(out.get(), "ok", time_state.ok);
+    json::set(out.get(), "offset_ms", active ? time_state.offset_ms : static_cast<int64_t>(0));
+    json::set(out.get(), "measured_offset_ms", time_state.offset_ms);
+    json::set(out.get(), "last_sync_ms", time_state.ever_synced ? time_state.last_sync_wall_ms
+                                                               : static_cast<int64_t>(0));
+    json::set(out.get(), "rtt_ms", time_state.rtt_ms);
+    json::set(out.get(), "server", time_state.server);
+    json::set(out.get(), "interval_s", static_cast<int64_t>(ntpIntervalS()));
+    json::set(out.get(), "offset_min", static_cast<int64_t>(tzOffsetMin()));
+    json::setBool(out.get(), "syncing", time_sync_busy);
+    if (!time_state.last_error.empty()) json::set(out.get(), "err", time_state.last_error);
+    auto local = json::parse(localTimeJsonOnLoop(0));
+    json::setItem(out.get(), "local", local ? std::move(local) : json::obj());
+    return out;
+  }
+
+  // Re-arm the periodic sync whenever the interval or the enabled flag changes.
+  void reapplyTimeSchedule() {
+    const bool enabled = ntpEnabled();
+    const int interval = ntpIntervalS();
+    if (!enabled) {
+      if (time_sync_timer) {
+        loop->cancel(time_sync_timer);
+        time_sync_timer = 0;
+        time_sync_timer_interval_s = 0;
+      }
+      applyTimeOffset();
+      return;
+    }
+    if (time_sync_timer && time_sync_timer_interval_s == interval) return;
+    if (time_sync_timer) loop->cancel(time_sync_timer);
+    time_sync_timer_interval_s = interval;
+    time_sync_timer =
+        loop->postEvery(static_cast<int64_t>(interval) * 1000LL, [this] { startTimeSync(); });
+    startTimeSync();
+  }
+
+  // Kick one synchronization round. The exchange itself runs on a short-lived worker thread: a
+  // handful of UDP round trips must never stall the state runloop.
+  bool startTimeSync() {
+    if (!started || !ntpEnabled()) return false;
+    if (time_sync_busy) return true;
+    if (time_sync_thread.joinable()) time_sync_thread.join();
+    time_sync_busy = true;
+    time_sync_abort.store(false);
+    auto servers = ntpServers();
+    time_sync_thread = std::thread([this, servers] { timeSyncWorker(servers); });
+    scheduleSnapshotRefresh();
+    return true;
+  }
+
+  void timeSyncWorker(const std::vector<std::string>& servers) {
+    const int64_t deadline_mono = clock->monoMs() + 5000;
+    bool ok = false;
+    sntp::Sample best{};
+    std::string best_server;
+    std::string last_error = "no_response";
+    for (const auto& spec : servers) {
+      std::string host;
+      int port = sntp::kDefaultPort;
+      if (!sntp::parseServer(spec, &host, &port)) {
+        last_error = "bad_server";
+        continue;
+      }
+      for (int attempt = 0; attempt < 3; attempt++) {
+        if (time_sync_abort.load() || clock->monoMs() > deadline_mono) break;
+        uint8_t request[sntp::kPacketSize];
+        uint8_t response[sntp::kPacketSize];
+        const int64_t t1 = clock->systemWallMs();
+        sntp::buildRequest(request, t1);
+        if (!sntp::exchange(host, port, 800, request, response)) continue;
+        const int64_t t4 = clock->systemWallMs();
+        sntp::Reply reply;
+        if (!sntp::parseReply(response, sizeof(response), t1, &reply)) {
+          last_error = "bad_reply";
+          continue;
+        }
+        const sntp::Sample sample =
+            sntp::computeSample(t1, reply.receive_ms, reply.transmit_ms, t4);
+        if (!sntp::sampleSane(sample)) {
+          last_error = "implausible";
+          continue;
+        }
+        if (!ok || sample.rtt_ms < best.rtt_ms) {
+          best = sample;
+          best_server = spec;
+          ok = true;
+        }
+      }
+      if (time_sync_abort.load() || clock->monoMs() > deadline_mono) break;
+    }
+    const int64_t offset = best.offset_ms;
+    const int64_t rtt = best.rtt_ms;
+    loop->post([this, ok, offset, rtt, best_server, last_error] {
+      time_sync_busy = false;
+      if (ok) {
+        time_state.ok = true;
+        time_state.ever_synced = true;
+        time_state.offset_ms = offset;
+        time_state.rtt_ms = rtt;
+        time_state.server = best_server;
+        time_state.last_sync_mono_ms = clock->monoMs();
+        time_state.last_sync_wall_ms = clock->systemWallMs() + offset;
+        time_state.last_error.clear();
+      } else {
+        time_state.last_error = last_error;
+      }
+      applyTimeOffset();
+      scheduleSnapshotRefresh();
+    });
+  }
+
+  void stopTimeSync() {
+    time_sync_abort.store(true);
+    if (time_sync_thread.joinable()) time_sync_thread.join();
+    time_sync_busy = false;
+  }
+
+  // ---------- power ----------
+  json::Doc powerDoc() const {
+    auto out = json::obj();
+    json::set(out.get(), "battery_pct", static_cast<int64_t>(power.battery_pct));
+    json::setBool(out.get(), "charging", power.charging);
+    json::setBool(out.get(), "mains", power.mains);
+    return out;
+  }
+
+  void pollPowerState() {
+    Node::PowerStateFn fn;
+    {
+      std::lock_guard<std::mutex> lk(cb_mu);
+      fn = power_state_fn;
+    }
+    if (!fn) return;
+    const std::string raw = fn();
+    auto parsed = json::parse(raw);
+    if (!parsed || !cJSON_IsObject(parsed.get())) return;
+    PowerState next;
+    next.known = true;
+    int64_t pct = json::getInt(parsed.get(), "battery_pct", -1);
+    if (pct < -1) pct = -1;
+    if (pct > 100) pct = 100;
+    next.battery_pct = static_cast<int>(pct);
+    next.charging = json::getBool(parsed.get(), "charging", false);
+    next.mains = json::getBool(parsed.get(), "mains", false);
+    const bool first = !power.known;
+    power = next;
+    const int delta = next.battery_pct - reported_power.battery_pct;
+    const bool moved = delta >= 5 || delta <= -5;
+    if (first || moved || next.charging != reported_power.charging ||
+        next.mains != reported_power.mains ||
+        (next.battery_pct < 0) != (reported_power.battery_pct < 0)) {
+      reported_power = next;
+      publishMeshRuntime();
+      applyEffectiveCaps();
+      auto event = json::obj();
+      json::set(event.get(), "t", "power_changed");
+      json::set(event.get(), "battery_pct", static_cast<int64_t>(next.battery_pct));
+      json::setBool(event.get(), "charging", next.charging);
+      json::setBool(event.get(), "mains", next.mains);
+      uiNotify(json::dump(event.get()));
+      scheduleSnapshotRefresh();
+    }
+  }
+
+  // Peer-visible runtime carries the core-owned power section on top of whatever the shell
+  // published, so peers[].power works without every shell learning a new contract.
+  std::string meshRuntimeJson() const {
+    auto doc = json::parse(runtime_status_json);
+    if (!doc || !cJSON_IsObject(doc.get())) doc = json::obj();
+    if (power.known) json::setItem(doc.get(), "power", powerDoc());
+    return json::dump(doc.get());
+  }
+
+  void publishMeshRuntime() {
+    if (mesh) mesh->setRuntime(meshRuntimeJson());
+  }
+
+  // ---------- announcements ----------
+  json::Doc doorNoticeDoc(const std::string& text, int64_t expires_ms) const {
+    auto out = json::obj();
+    json::set(out.get(), "text", text);
+    json::set(out.get(), "from_device", node_id);
+    json::set(out.get(), "created_ms", hlc->correctedWallMs());
+    json::set(out.get(), "expires_ms", expires_ms > 0 ? expires_ms : static_cast<int64_t>(0));
+    return out;
+  }
+
+  bool doorExists(const std::string& door) const {
+    return cJSON_IsObject(json::get(json::get(cfg.get(), "doors"), door.c_str()));
+  }
+
+  bool setDoorNoticeOnLoop(const std::string& door, const std::string& text, int64_t expires_ms) {
+    if (door.empty() || !doorExists(door)) return false;
+    auto value = doorNoticeDoc(text, expires_ms);
+    std::string error;
+    const std::string key = "doors." + door + ".notice";
+    if (!configWriteValid(key, value.get(), &error)) {
+      DB_LOGW(kTag, "rejected door notice for " + door + " (" + error + ")");
+      return false;
+    }
+    config->mutate({{key, json::dump(value.get()), false}});
+    return config->lastMutationCommitted();
+  }
+
+  bool clearDoorNoticeOnLoop(const std::string& door) {
+    if (door.empty()) return false;
+    const std::string key = "doors." + door + ".notice";
+    if (!json::get(json::get(json::get(cfg.get(), "doors"), door.c_str()), "notice")) return true;
+    config->mutate({{key, "", true}});
+    return config->lastMutationCommitted();
+  }
+
+  // Drop announcements whose expiry has passed. Any node may prune; the tombstone replicates and
+  // a repeated prune is a no-op.
+  void pruneDoorNotices() {
+    const int64_t now = hlc->correctedWallMs();
+    std::vector<LwwMutation> expired;
+    const cJSON* doors = json::get(cfg.get(), "doors");
+    const cJSON* door = nullptr;
+    cJSON_ArrayForEach(door, doors) {
+      if (!door->string) continue;
+      const cJSON* notice = json::get(door, "notice");
+      if (!cJSON_IsObject(notice)) continue;
+      const int64_t expires = json::getInt(notice, "expires_ms", 0);
+      if (expires > 0 && now >= expires)
+        expired.push_back({std::string("doors.") + door->string + ".notice", "", true});
+    }
+    if (expired.empty()) return;
+    config->mutate(expired);
+  }
+
+  // ---------- volumes ----------
+  // Device override wins over the cluster default; emergency.alarm_volume remains the legacy
+  // source for the SOS level so an existing installation keeps its configured alarm loudness.
+  std::string audioJsonOnLoop(const std::string& device_arg) {
+    const std::string id = device_arg.empty() ? node_id : device_arg;
+    const cJSON* device_volume = cfgAt("devices." + id + ".local.audio.volume");
+    const cJSON* cluster_volume = cfgAt("audio.volume");
+    const int64_t alarm_volume =
+        json::getInt(json::get(cfg.get(), "emergency"), "alarm_volume", 100);
+    struct Field {
+      const char* name;
+      int64_t fallback;
+    };
+    const Field fields[] = {{"call", 80},
+                            {"sos", alarm_volume < 0 || alarm_volume > 100 ? 100 : alarm_volume},
+                            {"idle", 60}};
+    auto level = [](const cJSON* container, const char* name, int64_t* out) {
+      const cJSON* value = json::get(container, name);
+      if (!cJSON_IsNumber(value)) return false;
+      const int64_t whole = static_cast<int64_t>(value->valuedouble);
+      if (whole < 0 || whole > 100) return false;
+      *out = whole;
+      return true;
+    };
+    auto out = json::obj();
+    json::set(out.get(), "device", id);
+    cJSON* sources = json::addObj(out.get(), "sources");
+    bool any_device = false;
+    bool any_cluster = false;
+    for (const auto& field : fields) {
+      int64_t value = field.fallback;
+      const char* source = "default";
+      if (level(device_volume, field.name, &value)) {
+        source = "device";
+        any_device = true;
+      } else if (level(cluster_volume, field.name, &value)) {
+        source = "cluster";
+        any_cluster = true;
+      }
+      json::set(out.get(), field.name, value);
+      json::set(sources, field.name, source);
+    }
+    json::set(out.get(), "source",
+              any_device ? "device" : (any_cluster ? "cluster" : "default"));
+    return json::dump(out.get());
+  }
+
+  // ---------- one-minute housekeeping ----------
+  void minuteTick() {
+    pollPowerState();
+    pruneDoorNotices();
+    applyTimeOffset();
+    refreshDerivedTzOffset();
+  }
+
+  // integrations.tz_offset_min stays the compatibility surface for shells and the Telegram
+  // bridge; when a zone is configured it is a derived value that follows daylight saving.
+  void refreshDerivedTzOffset() {
+    const std::string zone = configuredTimeZone();
+    if (zone.empty()) return;
+    int offset = 0;
+    if (!tz::offsetMinAt(zone, hlc->correctedWallMs(), &offset)) return;
+    if (legacyTzOffsetMin() == offset) return;
+    config->mutate({{"integrations.tz_offset_min", std::to_string(offset), false}});
   }
 
   void scheduleSnapshotRefresh() {
@@ -3444,6 +4081,9 @@ struct Node::Impl {
       json::setBool(measured.get(), "mqtt_reachable", mqtt_probe_reachable);
       mqtt_source = "configured_endpoint_probe";
     }
+    // A platform that reports power state is measuring mains presence directly; that measurement
+    // replaces the create-time guess before administrator overrides are applied.
+    if (power.known) json::setBool(measured.get(), "mains_power", power.mains);
     const cJSON* device = cfgAt("devices." + node_id);
     const cJSON* override_caps = json::get(device, "caps_override");
     if (!cJSON_IsObject(override_caps))
@@ -3927,6 +4567,18 @@ struct Node::Impl {
     bool sip_changed = false;
     bool integrations_changed = false;
     bool panel_credential_changed = false;
+    bool time_changed = false;
+    std::set<std::string> notice_doors;
+    for (const auto& e : effective_entries) {
+      if (e.key == "time" || e.key.compare(0, 5, "time.") == 0) time_changed = true;
+      const std::string notice_suffix = ".notice";
+      if (e.key.compare(0, 6, "doors.") == 0 && e.key.size() > notice_suffix.size() &&
+          e.key.compare(e.key.size() - notice_suffix.size(), notice_suffix.size(),
+                        notice_suffix) == 0) {
+        notice_doors.insert(
+            e.key.substr(6, e.key.size() - 6 - notice_suffix.size()));
+      }
+    }
     for (const auto& e : effective_entries) {
       const bool self_device = e.key.compare(0, 8, "devices.") == 0 &&
           e.key.find(node_id) != std::string::npos;
@@ -3947,6 +4599,22 @@ struct Node::Impl {
     if (sip_changed) scheduleSipReapply();
     if (integrations_changed) applyEffectiveCaps();
     if (started && integrations_changed) netRefreshSnapshot();
+    if (time_changed && started) {
+      // A zone change is what drives every clock in the fleet, so the compatibility offset is
+      // rewritten immediately rather than waiting for the next housekeeping tick.
+      refreshDerivedTzOffset();
+      reapplyTimeSchedule();
+      applyTimeOffset();
+    }
+    for (const auto& door : notice_doors) {
+      auto notice_event = json::obj();
+      json::set(notice_event.get(), "t", "notice_changed");
+      json::set(notice_event.get(), "door", door);
+      const cJSON* current =
+          json::get(json::get(json::get(cfg.get(), "doors"), door.c_str()), "notice");
+      json::setBool(notice_event.get(), "active", cJSON_IsObject(current));
+      uiNotify(json::dump(notice_event.get()));
+    }
     scheduleBridgeReapply();
     if (started) evalDisplay();
     schedulePrefetch();
@@ -4069,7 +4737,7 @@ struct Node::Impl {
     effective_caps_json = computeEffectiveCaps();
     ms.caps_json = effective_caps_json;
     ms.ui_manifest_json = ui_manifest_json;
-    ms.runtime_json = runtime_status_json;
+    ms.runtime_json = meshRuntimeJson();
     Mesh::Callbacks cbs;
     cbs.on_peers_changed = [this] {
       cachePeerContracts();
@@ -4307,11 +4975,18 @@ struct Node::Impl {
 #endif
 
     display_timer = loop->postEvery(30'000, [this] { evalDisplay(); });
+    // Battery polling, announcement expiry, daylight-saving drift, and time-source freshness all
+    // share one slow tick; none of them needs finer resolution than a minute.
+    minute_timer = loop->postEvery(60'000, [this] { minuteTick(); });
     // Retention is a slow background sweep; six hours is frequent enough for a daily policy and
     // cheap enough for the oldest hardware in the fleet.
     event_retention_timer = loop->postEvery(6 * 3600'000, [this] { pruneEventsTick(); });
 
     started = true;
+    reapplyTimeSchedule();
+    pollPowerState();
+    pruneDoorNotices();
+    refreshDerivedTzOffset();
     startNetMonitor();
     restoreActiveCalls(/*notify=*/false);
     restoreTerminalCalls();
@@ -4334,7 +5009,18 @@ struct Node::Impl {
       std::vector<LwwMutation> defaults = {
           {"schema_version", "1", false},
           {"reply.display_ttl_s", "30", false},
-          {"integrations.tz_offset_min", "540", false}};
+          {"integrations.tz_offset_min", "540", false},
+          // A fresh installation gets the IANA zone as the source of truth; the fixed offset
+          // above stays in step as a derived compatibility value.
+          {"time.zone", "\"Asia/Tokyo\"", false},
+          {"time.ntp.enabled", "false", false},
+          {"time.ntp.servers", "[\"ntp.nict.jp\",\"time.google.com\"]", false},
+          {"time.ntp.interval_s", "900", false},
+          {"audio.volume.call", "80", false},
+          {"audio.volume.sos", "100", false},
+          {"audio.volume.idle", "60", false},
+          {"emergency.trigger.mode", "\"slide\"", false},
+          {"emergency.trigger.countdown_s", "3", false}};
       auto qr = [&](const char* id, const char* ja, const char* en, const char* zh, int order) {
         auto o = json::obj();
         cJSON* label = json::addObj(o.get(), "label");
@@ -5940,12 +6626,17 @@ struct Node::Impl {
     json::set(self, "version", opts.sw_version);
     auto caps = json::parse(effective_caps_json);
     json::setItem(self, "caps", caps ? std::move(caps) : json::obj());
+    if (power.known) json::setItem(self, "power", powerDoc());
 
     {
       cJSON* la = json::addArr(self, "local_addrs");
       for (const auto& a : db::net::localAddresses(true))
         json::push(la, json::Doc(cJSON_CreateString(a.c_str())));
     }
+    // status.self is an alias of status.node so a shell can read the documented self path
+    // without needing to know which of the two names predates the other.
+    json::setItem(o.get(), "self", json::Doc(cJSON_Duplicate(self, 1)));
+    json::setItem(o.get(), "time", timeStatusDoc());
     cJSON* sip = json::addObj(o.get(), "sip");
     json::set(sip, "backend", sipBackendName());
     json::setBool(sip, "available", sipBackendAvailable());
@@ -6075,6 +6766,13 @@ struct Node::Impl {
         std::string projected_runtime;
         auto peer_runtime = projectMeshRuntimeJson(p.runtime_json, &projected_runtime)
             ? json::parse(projected_runtime) : json::obj();
+        if (p.id == node_id) {
+          if (power.known) json::setItem(e, "power", powerDoc());
+        } else if (peer_runtime) {
+          const cJSON* peer_power = json::get(peer_runtime.get(), "power");
+          if (cJSON_IsObject(peer_power))
+            json::setItem(e, "power", json::Doc(cJSON_Duplicate(peer_power, 1)));
+        }
         json::setItem(e, "runtime",
                       peer_runtime ? std::move(peer_runtime) : json::obj());
         cJSON* addrs = json::addArr(e, "addrs");
@@ -6146,6 +6844,26 @@ struct Node::Impl {
   }
 
   // ---------- HTTP ----------
+  // Extract "<id>" from "/api/doors/<id>/notice". Returns an empty string for any other shape,
+  // so the prefix route cannot be used to reach an unrelated door resource.
+  static std::string doorNoticePathDoor(const std::string& uri) {
+    const std::string prefix = "/api/doors/";
+    const std::string suffix = "/notice";
+    const std::string path = uri.substr(0, uri.find('?'));
+    if (path.rfind(prefix, 0) != 0) return "";
+    if (path.size() <= prefix.size() + suffix.size()) return "";
+    if (path.compare(path.size() - suffix.size(), suffix.size(), suffix) != 0) return "";
+    const std::string door = path.substr(prefix.size(), path.size() - prefix.size() -
+                                                            suffix.size());
+    if (door.empty() || door.size() > 64) return "";
+    for (char c : door) {
+      const bool allowed = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+                           (c >= '0' && c <= '9') || c == '_' || c == '-';
+      if (!allowed) return "";
+    }
+    return door;
+  }
+
   bool checkSession(const HttpReq& req) {
     std::string tok = req.cookie("dbsess");
     if (tok.empty()) return false;
@@ -6175,7 +6893,10 @@ struct Node::Impl {
                     "/api/panel/", "/snapshot-proxy", "/call-frame", "/peer-frame.jpg",
                     // The call history is readable by a panel credential and by an admin
                     // session; both handlers below re-check the caller explicitly.
-                    "/api/call-log"});
+                    "/api/call-log",
+                    // Announcements accept an indoor panel credential as well as an admin
+                    // session. The handlers re-check the caller explicitly.
+                    "/api/doors/"});
 
     // /stream.mp4 follows the same LAN-public policy as /stream.mjpeg.
 
@@ -6907,6 +7628,44 @@ struct Node::Impl {
       if (!doEmergency(json::getBool(b.get(), "active"), "admin"))
         return HttpResp::json(
             "{\"ok\":false,\"err\":\"event_persistence_failed\"}", 500);
+      return HttpResp::json("{\"ok\":true}");
+    });
+
+    // One immediate SNTP round for the "sync now" button. The exchange is asynchronous; the
+    // caller re-reads /api/status to see the result.
+    httpd->route("POST", "/api/time/sync", [this](const HttpReq&) {
+      if (!ntpEnabled())
+        return HttpResp::json("{\"ok\":false,\"err\":\"ntp_disabled\"}", 409);
+      if (!startTimeSync())
+        return HttpResp::json("{\"ok\":false,\"err\":\"not_started\"}", 409);
+      return HttpResp::json("{\"ok\":true,\"started\":true}");
+    });
+
+    // Announcements. An indoor panel posts with its panel credential; the Admin doors tab posts
+    // with the administrator session.
+    httpd->route("POST", "/api/doors/*", [this](const HttpReq& req) {
+      const std::string door = doorNoticePathDoor(req.uri);
+      if (door.empty()) return HttpResp::json("{\"ok\":false,\"err\":\"not_found\"}", 404);
+      if (!checkSession(req) && !panelTokenOk(req))
+        return HttpResp::json("{\"ok\":false,\"err\":\"forbidden\"}", 403);
+      auto body = json::parse(req.body);
+      if (!body) return HttpResp::json("{\"ok\":false,\"err\":\"bad_body\"}", 400);
+      const std::string text = json::getString(body.get(), "text");
+      int64_t expires = json::getInt(body.get(), "expires_ms", 0);
+      const int64_t ttl_s = json::getInt(body.get(), "ttl_s", 0);
+      if (expires <= 0 && ttl_s > 0) expires = hlc->correctedWallMs() + ttl_s * 1000LL;
+      if (!setDoorNoticeOnLoop(door, text, expires))
+        return HttpResp::json("{\"ok\":false,\"err\":\"rejected\"}", 400);
+      return HttpResp::json("{\"ok\":true}");
+    });
+
+    httpd->route("DELETE", "/api/doors/*", [this](const HttpReq& req) {
+      const std::string door = doorNoticePathDoor(req.uri);
+      if (door.empty()) return HttpResp::json("{\"ok\":false,\"err\":\"not_found\"}", 404);
+      if (!checkSession(req) && !panelTokenOk(req))
+        return HttpResp::json("{\"ok\":false,\"err\":\"forbidden\"}", 403);
+      if (!clearDoorNoticeOnLoop(door))
+        return HttpResp::json("{\"ok\":false,\"err\":\"rejected\"}", 400);
       return HttpResp::json("{\"ok\":true}");
     });
 
@@ -7889,6 +8648,9 @@ bool Node::start() {
 void Node::stop() {
   if (!impl_ || !impl_->started) return;
   impl_->started = false;
+  // The SNTP worker holds a raw pointer to Impl, so it is stopped before anything else is torn
+  // down. It observes the abort flag between exchanges and each exchange is bounded.
+  impl_->stopTimeSync();
 #ifdef _WIN32
 
   if (impl_->camera) impl_->camera->stop();
@@ -7920,6 +8682,15 @@ void Node::stop() {
     if (impl_->event_retention_timer) {
       impl_->loop->cancel(impl_->event_retention_timer);
       impl_->event_retention_timer = 0;
+    }
+    if (impl_->minute_timer) {
+      impl_->loop->cancel(impl_->minute_timer);
+      impl_->minute_timer = 0;
+    }
+    if (impl_->time_sync_timer) {
+      impl_->loop->cancel(impl_->time_sync_timer);
+      impl_->time_sync_timer = 0;
+      impl_->time_sync_timer_interval_s = 0;
     }
     if (impl_->snapshot_timer) {
       impl_->loop->cancel(impl_->snapshot_timer);
@@ -7993,6 +8764,14 @@ void Node::setSecureDelete(SecureDeleteFn del) {
   impl_->secure_delete_fn = std::move(del);
 }
 
+void Node::setPowerStateFn(PowerStateFn fn) {
+  {
+    std::lock_guard<std::mutex> lk(impl_->cb_mu);
+    impl_->power_state_fn = std::move(fn);
+  }
+  impl_->loop->post([this] { impl_->pollPowerState(); });
+}
+
 void Node::setRuntimeCapabilities(const std::string& capabilities_json) {
   auto parsed = json::parse(capabilities_json);
   if (!parsed || !cJSON_IsObject(parsed.get()) || capabilities_json.size() > 64 * 1024) return;
@@ -8008,7 +8787,7 @@ void Node::setRuntimeStatus(const std::string& runtime_json) {
   if (!parsed || !cJSON_IsObject(parsed.get()) || runtime_json.size() > 64 * 1024) return;
   impl_->loop->post([this, runtime_json] {
     impl_->runtime_status_json = runtime_json;
-    if (impl_->mesh) impl_->mesh->setRuntime(runtime_json);
+    impl_->publishMeshRuntime();
     impl_->scheduleSnapshotRefresh();
   });
 }
@@ -8249,6 +9028,37 @@ std::string Node::configJson() {
   std::lock_guard<std::mutex> lk(impl_->snap_mu);
   if (impl_->config_snap.empty()) return "{}";
   return impl_->config_snap;
+}
+
+std::string Node::localTimeJson(int64_t wall_ms) {
+  std::string out;
+  if (!impl_->loop->callSync([&] { out = impl_->localTimeJsonOnLoop(wall_ms); }))
+    return tz::localTimeJson("", wall_ms, 540);
+  return out;
+}
+
+std::string Node::audioJson(const std::string& device_id) {
+  std::string out = "{}";
+  impl_->loop->callSync([&] { out = impl_->audioJsonOnLoop(device_id); });
+  return out;
+}
+
+bool Node::syncTimeNow() {
+  bool started = false;
+  impl_->loop->callSync([&] { started = impl_->startTimeSync(); });
+  return started;
+}
+
+bool Node::setDoorNotice(const std::string& door, const std::string& text, int64_t expires_ms) {
+  bool ok = false;
+  impl_->loop->callSync([&] { ok = impl_->setDoorNoticeOnLoop(door, text, expires_ms); });
+  return ok;
+}
+
+bool Node::clearDoorNotice(const std::string& door) {
+  bool ok = false;
+  impl_->loop->callSync([&] { ok = impl_->clearDoorNoticeOnLoop(door); });
+  return ok;
 }
 
 void Node::setConfigKey(const std::string& key, const std::string& value_json) {
