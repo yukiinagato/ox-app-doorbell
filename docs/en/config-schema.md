@@ -504,6 +504,19 @@ The 1 px 40% opposite-ink shadow stays, as the fallback for when even the better
 4.5:1. Shells that sample locally (because `source` is `image_unsampled`, or because the hardware
 cannot afford core's decode) apply the same rule, so the fleet agrees on one answer.
 
+An auto-seeded entry carries `seeded_by` (the node that created it) and `seeded_label` (the label
+it wrote). When that node next starts, or becomes paired, with a role other than `door_station` or
+a different `boot.door`, it deletes the entry it seeded — otherwise a station switched to an
+indoor panel leaves a ghost tile behind for a door nobody serves. It deletes only an entry that is
+still exactly what it wrote: any other field, or a renamed label, means an administrator has
+adopted the door, and an adopted door outlives the device that happened to create it. That is
+correct for a real station that is merely down.
+
+`status.doors.<id>.served_by` is the node id of the alive door station serving the door, or
+`null`. It is what separates "the station is offline" from "no station serves this door at all";
+`configured` separates "this door has an entry" from "a live station is serving a door nobody has
+set up yet".
+
 ### Joining a cluster is silent
 
 Anti-entropy hands a joining node the cluster's entire event history at once. Those records are

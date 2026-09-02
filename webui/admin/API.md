@@ -495,3 +495,15 @@ A door station also refuses monitor dialogs from a peer that keeps opening them 
 carrying media: after eight such dialogs within ten seconds it answers `486` with a
 `Retry-After: 10`. One panel churning listen-in sessions is otherwise enough to saturate a small
 door station, which is what took an iPad 1's HTTP listener down.
+
+## Auto-seeded doors are reclaimed, not orphaned
+
+A door station seeds `doors.<door>` for the door it serves and stamps it with `seeded_by` and
+`seeded_label`. If that device later starts with a different role or a different `boot.door`, it
+deletes the entry it seeded — a station switched to an indoor panel would otherwise leave a ghost
+tile for a door nobody serves. It only ever deletes an entry that is still exactly what it wrote:
+any extra field, or a renamed label, means an administrator has adopted the door, and it stays.
+
+`status.doors.<id>.served_by` gives the node id of the alive station serving that door, or `null`.
+Use it to tell "the station is offline" (`configured: true`, `served_by: null` — show the tile
+greyed) apart from "no station at all".
