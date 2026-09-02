@@ -297,20 +297,32 @@ namespace DoorbellApp
             {
                 Text = ClockOf(DictLong(row, "ts", 0)),
                 FontSize = detailed ? 16 : 14,
+                VerticalAlignment = VerticalAlignment.Center,
                 Foreground = (Brush)FindResource(missed ? "Danger" : "Dim"),
             };
             Grid.SetColumn(time, 0);
             grid.Children.Add(time);
 
+            // Two deliberate lines rather than an ellipsis: the door, then the purpose smaller
+            // and muted underneath it when there is one.
             string door = DoorLabel(DictStr(row, "door"));
             string purpose = PurposeLabel(DictStr(row, "purpose"));
-            var what = new TextBlock
+            var what = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+            what.Children.Add(new TextBlock
             {
-                Text = purpose.Length == 0 ? door : door + " · " + purpose,
+                Text = door,
                 FontSize = detailed ? 16 : 14,
-                TextTrimming = TextTrimming.CharacterEllipsis,
+                TextWrapping = TextWrapping.Wrap,
                 Foreground = (Brush)FindResource("Fg"),
-            };
+            });
+            if (purpose.Length != 0)
+                what.Children.Add(new TextBlock
+                {
+                    Text = purpose,
+                    FontSize = detailed ? 13 : 11,
+                    TextWrapping = TextWrapping.Wrap,
+                    Foreground = (Brush)FindResource("Dim"),
+                });
             Grid.SetColumn(what, 1);
             grid.Children.Add(what);
 
@@ -319,6 +331,7 @@ namespace DoorbellApp
                 Text = OutcomeText(row, outcome),
                 FontSize = detailed ? 15 : 13,
                 Margin = new Thickness(8, 0, 0, 0),
+                VerticalAlignment = VerticalAlignment.Center,
                 Foreground = (Brush)FindResource(missed ? "Danger" : "Dim"),
             };
             Grid.SetColumn(result, 2);

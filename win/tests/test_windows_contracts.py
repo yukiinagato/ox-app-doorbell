@@ -768,6 +768,116 @@ class WindowsContracts(unittest.TestCase):
         self.assertIn("MarkHistorySeen();", opened)
         self.assertIn('_historyFilter == "missed"', history)
 
+    def test_the_visitor_call_button_never_names_the_door(self):
+        window = read("win/DoorbellApp/MainWindow.xaml.cs")
+        catalog = read("i18n/strings.yaml")
+        # The button says only what it does; no device or door identity reaches a visitor.
+        self.assertIn('CallButton.Content = Texts.T("idle.call");', window)
+        self.assertNotIn('Texts.T("idle.call_button"', window)
+        self.assertNotIn("DoorLabel(App.Boot.Door)", window)
+        entry = re.search(r'^idle\.call: \{([^}]*)\}', catalog, re.M)
+        self.assertIsNotNone(entry, "idle.call must exist in the catalog")
+        self.assertEqual(
+            dict(re.findall(r'(\w+): "([^"]*)"', entry.group(1))),
+            {"ja": "呼出", "en": "Call", "zh": "呼叫"})
+
+    def test_the_incoming_page_returns_home_on_its_own_countdown(self):
+        window = read("win/DoorbellApp/MainWindow.xaml.cs")
+        xaml = read("win/DoorbellApp/MainWindow.xaml")
+
+        # The number is a real target, so it can be tapped to stop the return.
+        self.assertIn('x:Name="ReturnCountdown"', xaml)
+        self.assertIn('MouseLeftButtonDown="OnReturnCountdownClick"', xaml)
+        self.assertIn('x:Name="ReturnCountdownText"', xaml)
+
+        # Core reports the value; an older core falls back to sixty seconds.
+        seconds = window[window.index("private int ReturnSeconds()"):
+                         window.index("private void StartReturnCountdown()")]
+        self.assertIn('CoreClient.Dig(_status, "call.return_s")', seconds)
+        self.assertIn('CoreClient.Dig(_cfg, "call.indoor.return_s")', seconds)
+        self.assertIn("return 60;", seconds)
+
+        # Opening the page starts a fresh countdown.
+        show = window[window.index("IncomingView.Visibility = Visibility.Visible;"):
+                      window.index("private void StartIncomingVideo")]
+        self.assertIn("StartReturnCountdown();", show)
+        start = window[window.index("private void StartReturnCountdown()"):
+                       window.index("private void PauseReturnCountdown()")]
+        self.assertIn("_returnCancelled = false;", start)
+        self.assertIn("_returnSecondsLeft = ReturnSeconds();", start)
+
+        # Reaching zero returns to the home view.
+        tick = window[window.index("private void OnReturnTick()"):
+                      window.index("private void OnReturnCountdownClick")]
+        self.assertIn("_returnSecondsLeft--;", tick)
+        self.assertIn("CloseIncoming(true);", tick)
+
+        # Tapping the number stops the return and leaves the page up.
+        click = window[window.index("private void OnReturnCountdownClick"):
+                       window.index("private void RenderReturnCountdown()")]
+        self.assertIn("_returnCancelled = true;", click)
+        self.assertIn("_returnTimer.Stop();", click)
+        self.assertNotIn("CloseIncoming", click)
+
+        # The suffix is hidden once cancelled, while talking, or off the page.
+        render = window[window.index("private void RenderReturnCountdown()"):
+                        window.index("private void EndIncomingCall(")]
+        for condition in ("!_returnCancelled", "_returnSecondsLeft > 0", "!_inCall",
+                          "IncomingView.Visibility == Visibility.Visible"):
+            self.assertIn(condition, render)
+        self.assertIn('ReturnCountdownText.Text = "(" + _returnSecondsLeft + ")"', render)
+
+        # Answering pauses it; the count starts again from the full value afterwards.
+        self.assertIn("PauseReturnCountdown();", window)
+        pause = window[window.index("private void PauseReturnCountdown()"):
+                       window.index("private void StopReturnCountdown()")]
+        self.assertIn("_returnTimer.Stop();", pause)
+        self.assertNotIn("_returnSecondsLeft", pause)
+        idle = window[window.index("private void OnSipIdle"):
+                      window.index("private void ResumeLiveViewAfterCall")]
+        self.assertIn("else if (wasInCall) ResumeLiveViewAfterCall();", idle)
+        resume = window[window.index("private void ResumeLiveViewAfterCall"):
+                        window.index("private void ReportLifecycleEndedIfNeeded")]
+        self.assertIn("ShowIncoming(new UiEvent", resume)
+        self.assertIn("monitor", resume)
+
+        # A visitor who cancels does not close the page: the live view stays.
+        resolved = window[window.index("int resolvedStage = Math.Max(0,"):
+                          window.index('case "chime":')]
+        self.assertIn("EndIncomingCall(true, Texts.T(\"ring.cancelled\"))", resolved)
+        self.assertNotIn("CloseIncoming", resolved)
+        ended = window[window.index("private void EndIncomingCall("):
+                       window.index("private void CloseIncoming(")]
+        self.assertNotIn("IncomingView.Visibility = Visibility.Collapsed", ended)
+        self.assertNotIn("StopIncomingVideo", ended)
+        self.assertIn("RenderReturnCountdown();", ended)
+        # An unanswered call ends the same way rather than closing the page.
+        self.assertIn('EndIncomingCall(true, Texts.T("calling.no_answer"))', window)
+        # Leaving the page for real always stops the countdown.
+        close = window[window.index("private void CloseIncoming(bool hangup)"):
+                       window.index("private void OnAnswerClick")]
+        self.assertIn("StopReturnCountdown();", close)
+
+    def test_home_and_visitor_text_is_not_ellipsised(self):
+        dashboard = read("win/DoorbellApp/MainWindow.Dashboard.cs")
+        window = read("win/DoorbellApp/MainWindow.xaml.cs")
+        xaml = read("win/DoorbellApp/MainWindow.xaml")
+        # A history row breaks into two deliberate lines, the second smaller and muted, instead
+        # of trimming the door and purpose with an ellipsis.
+        self.assertNotIn("TextTrimming", dashboard)
+        self.assertNotIn("TextTrimming", window)
+        self.assertNotIn("TextTrimming", xaml)
+        row = dashboard[dashboard.index("private Grid BuildCallRow"):
+                        dashboard.index("private string OutcomeText")]
+        self.assertIn("var what = new StackPanel", row)
+        self.assertIn("FontSize = detailed ? 13 : 11,", row)
+        # Nothing on the visitor footer clips in a narrow window.
+        self.assertIn('x:Name="VisitorVersionLine" FontSize="14" TextWrapping="Wrap"', xaml)
+        # An icon inside a button shares the vertical centre line with its label.
+        icon = window[window.index("private Button MakePurposeButton"):
+                      window.index("private void OnPurposeClick")]
+        self.assertEqual(icon.count("VerticalAlignment = VerticalAlignment.Center"), 2)
+
     def test_incoming_screen_controls_notice_chip_and_debug_line(self):
         xaml = read("win/DoorbellApp/MainWindow.xaml")
         call = read("win/DoorbellApp/MainWindow.CallScreen.cs")

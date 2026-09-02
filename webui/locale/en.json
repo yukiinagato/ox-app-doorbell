@@ -404,6 +404,7 @@
  "history.today": "Today",
  "history.unread_banner": "{n} missed calls",
  "history.yesterday": "Yesterday",
+ "idle.call": "Call",
  "idle.call_button": "Call {unit}",
  "idle.choose_purpose": "Please choose your purpose",
  "idle.language": "Language",

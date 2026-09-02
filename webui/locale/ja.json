@@ -404,6 +404,7 @@
  "history.today": "今日",
  "history.unread_banner": "不在着信が {n} 件あります",
  "history.yesterday": "昨日",
+ "idle.call": "呼出",
  "idle.call_button": "{unit} 呼出",
  "idle.choose_purpose": "ご用件をお選びください",
  "idle.language": "言語",

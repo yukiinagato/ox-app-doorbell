@@ -411,6 +411,7 @@
   <data name="history_today" xml:space="preserve"><value>今天</value></data>
   <data name="history_unread_banner" xml:space="preserve"><value>有 {0} 个未接来电</value></data>
   <data name="history_yesterday" xml:space="preserve"><value>昨天</value></data>
+  <data name="idle_call" xml:space="preserve"><value>呼叫</value></data>
   <data name="idle_call_button" xml:space="preserve"><value>呼叫 {0}</value></data>
   <data name="idle_choose_purpose" xml:space="preserve"><value>请选择来访目的</value></data>
   <data name="idle_language" xml:space="preserve"><value>语言</value></data>

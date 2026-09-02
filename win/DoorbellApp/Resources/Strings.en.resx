@@ -411,6 +411,7 @@ Delete it?</value></data>
   <data name="history_today" xml:space="preserve"><value>Today</value></data>
   <data name="history_unread_banner" xml:space="preserve"><value>{0} missed calls</value></data>
   <data name="history_yesterday" xml:space="preserve"><value>Yesterday</value></data>
+  <data name="idle_call" xml:space="preserve"><value>Call</value></data>
   <data name="idle_call_button" xml:space="preserve"><value>Call {0}</value></data>
   <data name="idle_choose_purpose" xml:space="preserve"><value>Please choose your purpose</value></data>
   <data name="idle_language" xml:space="preserve"><value>Language</value></data>

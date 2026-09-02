@@ -32,6 +32,7 @@ namespace DoorbellApp
         private readonly DispatcherTimer _statsRefresh = new DispatcherTimer();
         private readonly DispatcherTimer _emergencyPresentationTimeout = new DispatcherTimer();
         private readonly DispatcherTimer _incomingTimeout = new DispatcherTimer();
+        private readonly DispatcherTimer _returnTimer = new DispatcherTimer();
         private readonly DispatcherTimer _answerDelay = new DispatcherTimer();
         private readonly DispatcherTimer _peerPoll = new DispatcherTimer();
         private readonly DispatcherTimer _h264Fallback = new DispatcherTimer();
@@ -131,6 +132,11 @@ namespace DoorbellApp
         private bool _monitorAudioOn;
         private bool _quickRepliesOpen;
         private string _noticeChipDoor = "";
+        // Seconds until the incoming page returns home on its own, and whether the resident
+        // stopped that return by tapping the number.
+        private int _returnSecondsLeft;
+        private bool _returnCancelled;
+        private string _returnDoor = "";
         private int _volumeCall = 80;
         private int _volumeSos = 100;
         private int _volumeIdle = 60;
@@ -190,7 +196,12 @@ namespace DoorbellApp
             };
 
             _incomingTimeout.Interval = TimeSpan.FromSeconds(30);
-            _incomingTimeout.Tick += (s, e) => CloseIncoming(true);
+            // A call nobody answered is over, but the live view stays until the return countdown
+            // ends or the resident leaves the page.
+            _incomingTimeout.Tick += (s, e) =>
+                EndIncomingCall(true, Texts.T("calling.no_answer"));
+            _returnTimer.Interval = TimeSpan.FromSeconds(1);
+            _returnTimer.Tick += (s, e) => OnReturnTick();
             _answerDelay.Interval = TimeSpan.FromMilliseconds(400);
             _answerDelay.Tick += (s, e) => { _answerDelay.Stop(); PlaceAnswerCall(); };
             _peerPoll.Interval = TimeSpan.FromMilliseconds(500);
@@ -277,7 +288,9 @@ namespace DoorbellApp
         private void ApplyStrings()
         {
             Title = Texts.T("app.name");
-            CallButton.Content = Texts.T("idle.call_button", DoorLabel(App.Boot.Door)).Trim();
+            // A visitor is not told which door or device they are standing at; the button says
+            // only what it does.
+            CallButton.Content = Texts.T("idle.call");
             TouchHint.Text = Texts.T("idle.touch_to_call");
             PurposeHint.Text = Texts.T("idle.choose_purpose");
             CallingText.Text = Texts.T("calling.title");
@@ -654,13 +667,19 @@ namespace DoorbellApp
 
         private Button MakePurposeButton(string id, string icon, string label)
         {
-            var panel = new StackPanel { HorizontalAlignment = HorizontalAlignment.Center };
+            var panel = new StackPanel
+            {
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+            };
             if (!string.IsNullOrEmpty(icon))
                 panel.Children.Add(new TextBlock
                 {
                     Text = icon,
                     FontSize = 34,
                     HorizontalAlignment = HorizontalAlignment.Center,
+                    VerticalAlignment = VerticalAlignment.Center,
+                    TextAlignment = TextAlignment.Center,
                 });
             panel.Children.Add(new TextBlock
             {
@@ -1635,11 +1654,14 @@ namespace DoorbellApp
                         }
                         int resolvedStage = Math.Max(0,
                             DictInt(ev.Data, "stage_revision", 0));
+                        // A visitor who cancels does not take the page with them: the live view
+                        // stays until the return countdown ends or the resident leaves it.
                         if (IncomingView.Visibility == Visibility.Visible &&
                             (eventType == "call_cancelled" ||
                              resolvedStage >= _incomingStageRevision) &&
                             CallMatches(ev.Str("call_id"), ev.Str("door"),
-                                        _incomingCallId, _incomingDoor)) CloseIncoming(true);
+                                        _incomingCallId, _incomingDoor))
+                            EndIncomingCall(true, Texts.T("ring.cancelled"));
                     }
                     break;
                 case "chime":
@@ -1992,6 +2014,8 @@ namespace DoorbellApp
                     BuildQuickReplies();
                     _incomingTimeout.Stop();
                     _incomingTimeout.Start();
+                    // The page keeps the deadline it opened with; a repeat chime is the same call.
+                    RenderReturnCountdown();
                     return;
                 }
                 // A different door stops the old stream and monitor SIP before switching targets.
@@ -2035,6 +2059,8 @@ namespace DoorbellApp
             StartIncomingVideo();
 
             IncomingView.Visibility = Visibility.Visible;
+            _returnDoor = _incomingDoor;
+            StartReturnCountdown();
             ShowCallOverlay(_incomingDoor);
             _statsRefresh.Stop();
             _statsRefresh.Start();
@@ -2208,8 +2234,113 @@ namespace DoorbellApp
             IncomingHint.Visibility = Visibility.Visible;
         }
 
+        /// <summary>
+        /// Seconds the incoming page stays up before returning home. Core reports it as
+        /// status.call.return_s; call.indoor.return_s is the configured value behind it.
+        /// </summary>
+        private int ReturnSeconds()
+        {
+            object value = CoreClient.Dig(_status, "call.return_s");
+            if (value == null) value = CoreClient.Dig(_cfg, "call.indoor.return_s");
+            int seconds;
+            if (value != null && int.TryParse(value.ToString(), out seconds) &&
+                seconds > 0 && seconds <= 3600) return seconds;
+            return 60;
+        }
+
+        /// <summary>Starts the return countdown for a newly opened page.</summary>
+        private void StartReturnCountdown()
+        {
+            _returnCancelled = false;
+            _returnSecondsLeft = ReturnSeconds();
+            _returnTimer.Stop();
+            _returnTimer.Start();
+            RenderReturnCountdown();
+        }
+
+        /// <summary>
+        /// Holds the countdown while the resident is talking. The page shows no number then, and
+        /// the count starts again from the full value once the call ends.
+        /// </summary>
+        private void PauseReturnCountdown()
+        {
+            _returnTimer.Stop();
+            RenderReturnCountdown();
+        }
+
+        private void StopReturnCountdown()
+        {
+            _returnTimer.Stop();
+            _returnSecondsLeft = 0;
+            _returnCancelled = false;
+            RenderReturnCountdown();
+        }
+
+        private void OnReturnTick()
+        {
+            _returnSecondsLeft--;
+            if (_returnSecondsLeft > 0)
+            {
+                RenderReturnCountdown();
+                return;
+            }
+            _returnTimer.Stop();
+            _returnSecondsLeft = 0;
+            CloseIncoming(true);
+        }
+
+        /// <summary>Tapping the number stops the return; the live view stays until it is left.</summary>
+        private void OnReturnCountdownClick(object sender, MouseButtonEventArgs e)
+        {
+            _returnCancelled = true;
+            _returnTimer.Stop();
+            RenderReturnCountdown();
+        }
+
+        private void RenderReturnCountdown()
+        {
+            bool showing = _returnTimer.IsEnabled && !_returnCancelled &&
+                           _returnSecondsLeft > 0 && !_inCall &&
+                           IncomingView.Visibility == Visibility.Visible;
+            ReturnCountdown.Visibility = showing ? Visibility.Visible : Visibility.Collapsed;
+            if (showing) ReturnCountdownText.Text = "(" + _returnSecondsLeft + ")";
+        }
+
+        /// <summary>
+        /// The call is over — the visitor cancelled, or nobody answered — but the page is not.
+        /// The live view stays until the countdown ends or the resident leaves it, so a visitor
+        /// who gives up and walks away can still be seen.
+        /// </summary>
+        private void EndIncomingCall(bool hangup, string message)
+        {
+            if (IncomingView.Visibility != Visibility.Visible) return;
+            _incomingTimeout.Stop();
+            _answerDelay.Stop();
+            StopPlayer(ref _callFeedback);
+            if (hangup && _sipMode != "" && !_inCall)
+            {
+                App.Core.SipHangup();
+                _sipMode = "";
+                _monitorAudioOn = false;
+                ApplyMonitorLabel();
+            }
+            _incomingCallId = "";
+            _monitorOnly = true;
+            AnswerButton.Visibility = Visibility.Collapsed;
+            OpenDoorButton.IsEnabled = false;
+            _quickRepliesOpen = false;
+            ApplyQuickReplyVisibility();
+            QuickReplyToggle.Visibility = Visibility.Collapsed;
+            IgnoreButton.Content = Texts.T("monitor.close");
+            IncomingHint.Text = message ?? "";
+            IncomingHint.Visibility = string.IsNullOrEmpty(message) ?
+                Visibility.Collapsed : Visibility.Visible;
+            RenderReturnCountdown();
+        }
+
         private void CloseIncoming(bool hangup)
         {
+            StopReturnCountdown();
             _incomingTimeout.Stop();
             _answerDelay.Stop();
             StopIncomingVideo();
@@ -2464,6 +2595,22 @@ namespace DoorbellApp
             if (wasInCall && IncomingView.Visibility == Visibility.Visible)
                 CloseIncoming(false);
             if (App.Boot.Role == "door_station") ShowIdle();
+            else if (wasInCall) ResumeLiveViewAfterCall();
+        }
+
+        /// <summary>
+        /// After a call ends the panel goes back to the live view for that door with a fresh
+        /// countdown, rather than dropping straight to the home screen.
+        /// </summary>
+        private void ResumeLiveViewAfterCall()
+        {
+            string door = !string.IsNullOrEmpty(_lifecycleDoor) ? _lifecycleDoor : _returnDoor;
+            if (string.IsNullOrEmpty(door) || _emergencyActive) return;
+            ShowIncoming(new UiEvent
+            {
+                T = "monitor",
+                Data = new Dictionary<string, object> { { "door", door } },
+            }, true);
         }
 
         private void ReportLifecycleEndedIfNeeded()
@@ -2496,6 +2643,7 @@ namespace DoorbellApp
             StartInCallMjpeg();
             StartInCallH264();
             InCallView.Visibility = Visibility.Visible;
+            PauseReturnCountdown();
             UpdateInCallPurpose();
             ShowCallOverlay(_lifecycleDoor.Length != 0 ? _lifecycleDoor : _incomingDoor);
             _statsRefresh.Stop();

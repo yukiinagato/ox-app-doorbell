@@ -409,6 +409,7 @@
     <string name="history_today">今日</string>
     <string name="history_unread_banner">不在着信が %1$s 件あります</string>
     <string name="history_yesterday">昨日</string>
+    <string name="idle_call">呼出</string>
     <string name="idle_call_button">%1$s 呼出</string>
     <string name="idle_choose_purpose">ご用件をお選びください</string>
     <string name="idle_language">言語</string>

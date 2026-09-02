@@ -404,6 +404,7 @@
  "history.today": "今天",
  "history.unread_banner": "有 {n} 个未接来电",
  "history.yesterday": "昨天",
+ "idle.call": "呼叫",
  "idle.call_button": "呼叫 {unit}",
  "idle.choose_purpose": "请选择来访目的",
  "idle.language": "语言",

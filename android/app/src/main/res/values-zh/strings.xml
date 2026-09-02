@@ -409,6 +409,7 @@
     <string name="history_today">今天</string>
     <string name="history_unread_banner">有 %1$s 个未接来电</string>
     <string name="history_yesterday">昨天</string>
+    <string name="idle_call">呼叫</string>
     <string name="idle_call_button">呼叫 %1$s</string>
     <string name="idle_choose_purpose">请选择来访目的</string>
     <string name="idle_language">语言</string>

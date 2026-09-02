@@ -1018,3 +1018,4 @@ settings.password_set_failed: { ja: "パスワードを設定できませんで�
 settings.password_length: { ja: "パスワードは {min}〜{max} 文字にしてください", en: "The password must be {min}–{max} characters", zh: "密码需为 {min}–{max} 个字符" }
 admin.password_set_prompt: { ja: "管理パスワードを設定", en: "Set the admin password", zh: "设置管理密码" }
 admin.password_too_short: { ja: "4 文字以上にしてください", en: "Use at least four characters", zh: "请至少输入四位" }
+idle.call: { ja: "呼出", en: "Call", zh: "呼叫" }
