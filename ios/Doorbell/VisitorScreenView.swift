@@ -89,6 +89,10 @@ final class VisitorScreenView: UIView {
         actionColumn.spacing = 18
         actionColumn.alignment = .center
 
+        // The bar keeps its own height; the spacer above it is what absorbs the slack.
+        sosControl.setContentHuggingPriority(.required, for: .vertical)
+        sosControl.setContentCompressionResistancePriority(.required, for: .vertical)
+
         root.axis = .vertical
         root.spacing = 18
         root.alignment = .fill

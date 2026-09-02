@@ -31,6 +31,10 @@ final class SosSlideControl: UIControl {
     private var timer: Timer?
 
     private static let thumbSide: CGFloat = 52
+    /// The bar is a bar. Inside a filling stack it has no intrinsic height to defend, so it took
+    /// whatever slack was going — a third of an iPad screen on the device. This is the same
+    /// compact band the Android shell uses.
+    static let barHeight: CGFloat = 78
 
     init(texts: Texts) {
         self.texts = texts
@@ -103,7 +107,7 @@ final class SosSlideControl: UIControl {
             track.bottomAnchor.constraint(equalTo: bottomAnchor),
             track.leadingAnchor.constraint(equalTo: leadingAnchor),
             track.trailingAnchor.constraint(equalTo: trailingAnchor),
-            track.heightAnchor.constraint(greaterThanOrEqualToConstant: 62),
+            track.heightAnchor.constraint(equalToConstant: SosSlideControl.barHeight),
             label.centerYAnchor.constraint(equalTo: track.centerYAnchor),
             label.leadingAnchor.constraint(equalTo: track.leadingAnchor,
                                            constant: SosSlideControl.thumbSide + 16),
