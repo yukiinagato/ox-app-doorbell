@@ -108,7 +108,7 @@ class HelperProcess:
                 "--terminate-grace-ms",
                 "60",
                 "--time-scale",
-                "0.01",
+                os.environ.get("DB_HELPER_TEST_TIME_SCALE", "0.01"),
             ]
         if stream:
             arguments += ["--test-stream", "yes"]
