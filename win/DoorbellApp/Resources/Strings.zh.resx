@@ -443,6 +443,29 @@
   <data name="monitor_live" xml:space="preserve"><value>实时画面</value></data>
   <data name="monitor_open" xml:space="preserve"><value>查看门口机</value></data>
   <data name="monitor_title" xml:space="preserve"><value>{0} 实时画面</value></data>
+  <data name="notice_active" xml:space="preserve"><value>显示中</value></data>
+  <data name="notice_clear" xml:space="preserve"><value>取消</value></data>
+  <data name="notice_cleared" xml:space="preserve"><value>公告已取消</value></data>
+  <data name="notice_empty" xml:space="preserve"><value>请输入内容</value></data>
+  <data name="notice_expires_at" xml:space="preserve"><value>截止</value></data>
+  <data name="notice_expiry" xml:space="preserve"><value>显示期限</value></data>
+  <data name="notice_expiry_1h" xml:space="preserve"><value>1 小时</value></data>
+  <data name="notice_expiry_custom" xml:space="preserve"><value>自定义</value></data>
+  <data name="notice_expiry_hours" xml:space="preserve"><value>显示小时数</value></data>
+  <data name="notice_expiry_today" xml:space="preserve"><value>今天结束</value></data>
+  <data name="notice_expiry_until_cleared" xml:space="preserve"><value>直到取消</value></data>
+  <data name="notice_failed" xml:space="preserve"><value>无法保存公告</value></data>
+  <data name="notice_from" xml:space="preserve"><value>发布者</value></data>
+  <data name="notice_none" xml:space="preserve"><value>没有公告</value></data>
+  <data name="notice_preset_absent" xml:space="preserve"><value>现在不在家</value></data>
+  <data name="notice_preset_construction" xml:space="preserve"><value>施工中，如有需要请呼叫</value></data>
+  <data name="notice_preset_delivery" xml:space="preserve"><value>快递请送到侧门</value></data>
+  <data name="notice_preview" xml:space="preserve"><value>门口的显示效果</value></data>
+  <data name="notice_publish" xml:space="preserve"><value>显示</value></data>
+  <data name="notice_saved" xml:space="preserve"><value>公告已显示</value></data>
+  <data name="notice_text" xml:space="preserve"><value>内容</value></data>
+  <data name="notice_title" xml:space="preserve"><value>公告</value></data>
+  <data name="notice_too_long" xml:space="preserve"><value>内容最多 200 个字符（当前 {0} 个）</value></data>
   <data name="notify_test" xml:space="preserve"><value>门铃测试通知</value></data>
   <data name="offline_body" xml:space="preserve"><value>无法呼叫，请直接敲门。</value></data>
   <data name="offline_reconnect" xml:space="preserve"><value>{0} 秒后重连</value></data>
@@ -625,6 +648,11 @@
   <data name="panel_unregistered" xml:space="preserve"><value>未注册</value></data>
   <data name="panel_visitor_calling" xml:space="preserve"><value>访客呼叫中</value></data>
   <data name="panel_webrtc_required" xml:space="preserve"><value>通话需要配置 Asterisk WebRTC (integrations.webrtc.ws_url) — 请参阅 deploy/asterisk/webrtc.md</value></data>
+  <data name="power_charging" xml:space="preserve"><value>充电中</value></data>
+  <data name="power_mains" xml:space="preserve"><value>已接电源</value></data>
+  <data name="power_no_battery" xml:space="preserve"><value>无电池</value></data>
+  <data name="power_title" xml:space="preserve"><value>电量</value></data>
+  <data name="power_unknown" xml:space="preserve"><value>未上报</value></data>
   <data name="purpose_cancel_call" xml:space="preserve"><value>取消呼叫</value></data>
   <data name="purpose_select_failed" xml:space="preserve"><value>无法发送来访目的</value></data>
   <data name="purpose_sent" xml:space="preserve"><value>已按 {0} 呼叫</value></data>
@@ -674,10 +702,60 @@ PIN：{1}</value></data>
   <data name="setup_scan_qr" xml:space="preserve"><value>扫描室内机二维码</value></data>
   <data name="setup_title" xml:space="preserve"><value>设置此设备</value></data>
   <data name="sip_unavailable" xml:space="preserve"><value>通话功能当前不可用</value></data>
+  <data name="sos_alarm_sound" xml:space="preserve"><value>警报声</value></data>
+  <data name="sos_alarm_volume" xml:space="preserve"><value>警报音量</value></data>
+  <data name="sos_button_on_roles" xml:space="preserve"><value>显示 SOS 的设备</value></data>
+  <data name="sos_cancel_requires_pin" xml:space="preserve"><value>解除时要求管理密码</value></data>
+  <data name="sos_countdown" xml:space="preserve"><value>{0} 秒后发出求助</value></data>
+  <data name="sos_countdown_s" xml:space="preserve"><value>可取消的倒计时（秒）</value></data>
+  <data name="sos_hint" xml:space="preserve"><value>触发后会通知所有家人的设备；不会自动联系警察或消防</value></data>
+  <data name="sos_mode_hold" xml:space="preserve"><value>长按触发（旧方式）</value></data>
+  <data name="sos_mode_slide" xml:space="preserve"><value>滑动触发</value></data>
+  <data name="sos_slide_hint" xml:space="preserve"><value>向右滑动求助</value></data>
+  <data name="sos_title" xml:space="preserve"><value>SOS</value></data>
+  <data name="sos_trigger_mode" xml:space="preserve"><value>触发方式</value></data>
   <data name="sound_button_click" xml:space="preserve"><value>光标移动 4（按钮）</value></data>
   <data name="sound_indoor_update" xml:space="preserve"><value>确认按钮 23（追加消息）</value></data>
   <data name="sound_none" xml:space="preserve"><value>不播放</value></data>
   <data name="sound_outdoor_call_alert" xml:space="preserve"><value>警报音 1（门口机呼叫）</value></data>
   <data name="sound_school_chime" xml:space="preserve"><value>学校铃声</value></data>
   <data name="sound_title_display" xml:space="preserve"><value>标题显示（启动）</value></data>
+  <data name="time_err_bad_reply" xml:space="preserve"><value>服务器的响应无效</value></data>
+  <data name="time_err_bad_server" xml:space="preserve"><value>服务器条目格式不正确</value></data>
+  <data name="time_err_implausible" xml:space="preserve"><value>测得的时间不可信，已丢弃</value></data>
+  <data name="time_err_no_response" xml:space="preserve"><value>时间服务器没有响应</value></data>
+  <data name="time_interval_s" xml:space="preserve"><value>同步间隔（秒）</value></data>
+  <data name="time_invalid_interval" xml:space="preserve"><value>同步间隔必须在 60 到 86400 秒之间</value></data>
+  <data name="time_invalid_servers" xml:space="preserve"><value>请输入 1 到 4 个时间服务器，每行一个</value></data>
+  <data name="time_invalid_zone" xml:space="preserve"><value>请从列表中选择时区</value></data>
+  <data name="time_last_sync" xml:space="preserve"><value>最后同步</value></data>
+  <data name="time_local_now" xml:space="preserve"><value>该时区的当前时间</value></data>
+  <data name="time_never" xml:space="preserve"><value>尚未同步</value></data>
+  <data name="time_ntp_enabled" xml:space="preserve"><value>从互联网校准时间</value></data>
+  <data name="time_ntp_hint" xml:space="preserve"><value>不会修改设备本身的时钟；门铃只在内部补偿差值</value></data>
+  <data name="time_ntp_off" xml:space="preserve"><value>请先开启“从互联网校准时间”并保存</value></data>
+  <data name="time_offset" xml:space="preserve"><value>补偿</value></data>
+  <data name="time_rtt" xml:space="preserve"><value>往返时间</value></data>
+  <data name="time_server" xml:space="preserve"><value>服务器</value></data>
+  <data name="time_servers" xml:space="preserve"><value>时间服务器</value></data>
+  <data name="time_servers_hint" xml:space="preserve"><value>每行一个，最多四个。非标准端口请使用 host:port</value></data>
+  <data name="time_source" xml:space="preserve"><value>时间来源</value></data>
+  <data name="time_source_ntp" xml:space="preserve"><value>互联网</value></data>
+  <data name="time_source_system" xml:space="preserve"><value>设备时钟</value></data>
+  <data name="time_status" xml:space="preserve"><value>当前状态</value></data>
+  <data name="time_sync_failed" xml:space="preserve"><value>无法开始同步</value></data>
+  <data name="time_sync_now" xml:space="preserve"><value>立即同步</value></data>
+  <data name="time_sync_started" xml:space="preserve"><value>已开始同步</value></data>
+  <data name="time_title" xml:space="preserve"><value>时间</value></data>
+  <data name="time_zone" xml:space="preserve"><value>时区</value></data>
+  <data name="time_zone_hint" xml:space="preserve"><value>此设置用于整个集群的时钟、呼叫记录与规则时段</value></data>
+  <data name="volume_call" xml:space="preserve"><value>呼叫</value></data>
+  <data name="volume_cluster_default" xml:space="preserve"><value>集群默认 {0}</value></data>
+  <data name="volume_device_title" xml:space="preserve"><value>此设备的音量</value></data>
+  <data name="volume_hint" xml:space="preserve"><value>集群默认值。可在“设备”标签页为单台设备覆盖</value></data>
+  <data name="volume_idle" xml:space="preserve"><value>日常</value></data>
+  <data name="volume_inherit" xml:space="preserve"><value>使用集群默认值</value></data>
+  <data name="volume_preview" xml:space="preserve"><value>试听</value></data>
+  <data name="volume_sos" xml:space="preserve"><value>SOS</value></data>
+  <data name="volume_title" xml:space="preserve"><value>音量</value></data>
 </root>

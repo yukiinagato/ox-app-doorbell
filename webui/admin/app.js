@@ -1056,6 +1056,285 @@ var AdminLogic = (function () {
     return merged;
   }
 
+
+  /* ---------------- Batch 2: time, volumes, announcements, SOS, battery ---------------- */
+
+  /* The zones core can actually resolve. Core rejects anything outside its bundled table, so a
+   * zone offered here that core does not know would be a select the operator cannot save.
+   * webui/tests/settings.test.js checks this list against core/src/util/tz.cpp. */
+  var TIME_ZONES = [
+    "UTC", "Asia/Tokyo", "Asia/Seoul", "Asia/Shanghai", "Asia/Hong_Kong", "Asia/Macau",
+    "Asia/Taipei", "Asia/Manila", "Asia/Singapore", "Asia/Kuala_Lumpur", "Asia/Vladivostok",
+    "Asia/Bangkok", "Asia/Jakarta", "Asia/Ho_Chi_Minh", "Asia/Yangon", "Asia/Dhaka",
+    "Asia/Kathmandu", "Asia/Kolkata", "Asia/Colombo", "Asia/Karachi", "Asia/Tashkent",
+    "Asia/Almaty", "Asia/Dubai", "Asia/Baku", "Asia/Tehran", "Asia/Baghdad", "Asia/Qatar",
+    "Asia/Riyadh", "Asia/Jerusalem", "Europe/London", "Europe/Dublin", "Europe/Lisbon",
+    "Europe/Madrid", "Europe/Paris", "Europe/Brussels", "Europe/Amsterdam", "Europe/Berlin",
+    "Europe/Zurich", "Europe/Vienna", "Europe/Rome", "Europe/Prague", "Europe/Warsaw",
+    "Europe/Budapest", "Europe/Stockholm", "Europe/Oslo", "Europe/Copenhagen", "Europe/Helsinki",
+    "Europe/Athens", "Europe/Bucharest", "Europe/Sofia", "Europe/Kyiv", "Europe/Riga",
+    "Europe/Tallinn", "Europe/Vilnius", "Europe/Istanbul", "Europe/Minsk", "Europe/Moscow",
+    "America/St_Johns", "America/Halifax", "America/New_York", "America/Toronto",
+    "America/Panama", "America/Bogota", "America/Lima", "America/Chicago", "America/Winnipeg",
+    "America/Mexico_City", "America/Denver", "America/Edmonton", "America/Phoenix",
+    "America/Los_Angeles", "America/Vancouver", "America/Anchorage", "America/Caracas",
+    "America/Santiago", "America/Sao_Paulo", "America/Montevideo",
+    "America/Argentina/Buenos_Aires", "Australia/Perth", "Australia/Darwin",
+    "Australia/Adelaide", "Australia/Brisbane", "Australia/Sydney", "Australia/Melbourne",
+    "Australia/Hobart", "Pacific/Port_Moresby", "Pacific/Guam", "Pacific/Auckland",
+    "Pacific/Fiji", "Pacific/Honolulu", "Africa/Accra", "Africa/Casablanca", "Africa/Lagos",
+    "Africa/Johannesburg", "Africa/Nairobi", "Atlantic/Reykjavik", "Atlantic/Azores"
+  ];
+
+  /* Region -> zones, in table order, for a grouped <select>. */
+  function timeZoneGroups() {
+    var groups = [], index = {};
+    for (var i = 0; i < TIME_ZONES.length; i++) {
+      var id = TIME_ZONES[i], slash = id.indexOf("/");
+      var region = slash < 0 ? id : id.slice(0, slash);
+      if (index[region] === undefined) {
+        index[region] = groups.length;
+        groups.push({ region: region, zones: [] });
+      }
+      groups[index[region]].zones.push(id);
+    }
+    return groups;
+  }
+
+  function timeZoneLabel(id) {
+    var slash = String(id == null ? "" : id).indexOf("/");
+    return slash < 0 ? String(id) : String(id).slice(slash + 1).replace(/_/g, " ");
+  }
+
+  /* Parse the server textarea: one "host" or "host:port" per line, at most four. Returns null
+   * when an entry cannot be a server, so the form can refuse instead of core rejecting it. */
+  function ntpServerList(text) {
+    var raw = String(text == null ? "" : text).split(/[\r\n,]+/), out = [];
+    for (var i = 0; i < raw.length; i++) {
+      var entry = raw[i].replace(/^\s+|\s+$/g, "");
+      if (!entry) continue;
+      if (out.length >= 4) return null;
+      if (!/^\[[0-9a-fA-F:]+\](:[0-9]{1,5})?$/.test(entry) &&
+          !/^[A-Za-z0-9._:-]+$/.test(entry)) return null;
+      var colon = entry.lastIndexOf(":");
+      if (entry.charAt(0) !== "[" && colon > 0 && entry.indexOf(":") === colon) {
+        var port = entry.slice(colon + 1);
+        if (!/^[0-9]{1,5}$/.test(port) || +port < 1 || +port > 65535) return null;
+      }
+      out.push(entry);
+    }
+    return out.length ? out : null;
+  }
+
+  /* Core owns integrations.tz_offset_min once a zone is set, so the form never writes it. */
+  function timeEntries(f) {
+    var servers = ntpServerList(f.servers);
+    if (TIME_ZONES.indexOf(String(f.zone)) < 0) throw new Error("zone");
+    if (!servers) throw new Error("servers");
+    var interval = Math.round(num(f.interval_s, 900));
+    if (interval < 60 || interval > 86400) throw new Error("interval_s");
+    return [{ key: "time.zone", value: String(f.zone) },
+            { key: "time.ntp.enabled", value: !!f.ntp_enabled },
+            { key: "time.ntp.servers", value: servers },
+            { key: "time.ntp.interval_s", value: interval }];
+  }
+
+  /* What the time card renders. source is reported by core and is never inferred from enabled:
+   * an enabled but unreachable time service is still running on the device clock. */
+  function timeStatusModel(status) {
+    var time = isObj(status) && isObj(status.time) ? status.time : {};
+    var source = time.source === "ntp" ? "ntp" : "system";
+    var errors = { no_response: "time.err_no_response", bad_server: "time.err_bad_server",
+                   bad_reply: "time.err_bad_reply", implausible: "time.err_implausible" };
+    return {
+      zone: typeof time.zone === "string" ? time.zone : "",
+      zoneKnown: time.zone_known !== false,
+      enabled: time.enabled === true,
+      source: source,
+      degraded: time.enabled === true && source !== "ntp",
+      offsetMs: num(time.offset_ms, 0),
+      measuredOffsetMs: num(time.measured_offset_ms, 0),
+      lastSyncMs: num(time.last_sync_ms, 0),
+      rttMs: num(time.rtt_ms, 0),
+      server: typeof time.server === "string" ? time.server : "",
+      intervalS: num(time.interval_s, 900),
+      syncing: time.syncing === true,
+      errorKey: typeof time.err === "string" && errors[time.err] ? errors[time.err] : "",
+      localIso: isObj(time.local) && typeof time.local.iso === "string" ? time.local.iso : ""
+    };
+  }
+
+  var VOLUME_LEVELS = ["call", "sos", "idle"];
+  var VOLUME_DEFAULTS = { call: 80, sos: 100, idle: 60 };
+
+  function volumeLevel(container, level) {
+    if (!isObj(container)) return undefined;
+    var value = container[level];
+    if (typeof value !== "number" || value < 0 || value > 100) return undefined;
+    return Math.round(value);
+  }
+
+  function clampVolume(value, fallback) {
+    var n = Math.round(num(value, fallback));
+    if (!(n >= 0)) n = 0;
+    if (n > 100) n = 100;
+    return n;
+  }
+
+  function volumeEntries(f) {
+    var entries = [];
+    for (var i = 0; i < VOLUME_LEVELS.length; i++) {
+      var level = VOLUME_LEVELS[i];
+      entries.push({ key: "audio.volume." + level,
+                     value: clampVolume(f[level], VOLUME_DEFAULTS[level]) });
+    }
+    return entries;
+  }
+
+  /* Inheriting again deletes the leaf keys rather than writing nulls, which is what core's
+   * device-override resolution expects. */
+  function deviceVolumeEntries(id, f) {
+    var entries = [], dels = [], i, level;
+    if (f.inherit) {
+      for (i = 0; i < VOLUME_LEVELS.length; i++)
+        dels.push("devices." + id + ".local.audio.volume." + VOLUME_LEVELS[i]);
+      return { entries: entries, dels: dels };
+    }
+    for (i = 0; i < VOLUME_LEVELS.length; i++) {
+      level = VOLUME_LEVELS[i];
+      entries.push({ key: "devices." + id + ".local.audio.volume." + level,
+                     value: clampVolume(f[level], VOLUME_DEFAULTS[level]) });
+    }
+    return { entries: entries, dels: dels };
+  }
+
+  /* Mirrors db_core_audio_json: device override, then cluster default, then the built-in level,
+   * with emergency.alarm_volume as the extra fallback for SOS. */
+  function effectiveVolumes(cfg, deviceId) {
+    cfg = isObj(cfg) ? cfg : {};
+    var device = isObj(cfg.devices) ? cfg.devices[deviceId] : null;
+    var local = isObj(device) && isObj(device.local) ? device.local : {};
+    var deviceVolume = isObj(local.audio) ? local.audio.volume : null;
+    var clusterVolume = isObj(cfg.audio) ? cfg.audio.volume : null;
+    var alarm = isObj(cfg.emergency) ? volumeLevel(cfg.emergency, "alarm_volume") : undefined;
+    var out = { device: String(deviceId || ""), sources: {}, source: "default" };
+    var strongest = "default";
+    for (var i = 0; i < VOLUME_LEVELS.length; i++) {
+      var level = VOLUME_LEVELS[i];
+      var fallback = level === "sos" && alarm !== undefined ? alarm : VOLUME_DEFAULTS[level];
+      var value = volumeLevel(deviceVolume, level), source = "device";
+      if (value === undefined) { value = volumeLevel(clusterVolume, level); source = "cluster"; }
+      if (value === undefined) { value = fallback; source = "default"; }
+      out[level] = value;
+      out.sources[level] = source;
+      if (source === "device") strongest = "device";
+      else if (source === "cluster" && strongest !== "device") strongest = "cluster";
+    }
+    out.source = strongest;
+    return out;
+  }
+
+  var NOTICE_MAX_CHARS = 200;
+  var NOTICE_PRESET_KEYS = ["notice.preset_absent", "notice.preset_delivery",
+                            "notice.preset_construction"];
+  var NOTICE_EXPIRY_PRESETS = ["1h", "today", "until_cleared", "custom"];
+
+  /* Absolute deadline for one expiry preset. 0 means "until cleared". "today" is the end of the
+   * local day at the cluster's offset, which is the boundary the operator has in mind. */
+  function noticeExpiryMs(preset, nowMs, offsetMin, customHours) {
+    var now = num(nowMs, 0);
+    if (preset === "until_cleared") return 0;
+    if (preset === "1h") return now + 3600000;
+    if (preset === "custom") {
+      var hours = num(customHours, 0);
+      if (!(hours > 0) || hours > 8760) return -1;
+      return now + Math.round(hours * 3600000);
+    }
+    if (preset === "today") {
+      var offset = num(offsetMin, 0) * 60000;
+      var local = now + offset;
+      var dayStart = Math.floor(local / 86400000) * 86400000;
+      return dayStart + 86400000 - offset;
+    }
+    return -1;
+  }
+
+  /* The POST body for /api/doors/<id>/notice, or {error:"..."} for a message the form refuses. */
+  function noticePayload(f, nowMs, offsetMin) {
+    var text = String(f.text == null ? "" : f.text).replace(/^\s+|\s+$/g, "");
+    var length = countCharacters(text);
+    if (!length) return { error: "notice.empty" };
+    if (length > NOTICE_MAX_CHARS) return { error: "notice.too_long", n: length };
+    var expires = noticeExpiryMs(f.expiry, nowMs, offsetMin, f.custom_hours);
+    if (expires < 0) return { error: "notice.expiry_custom" };
+    return { body: { text: text, expires_ms: expires } };
+  }
+
+  /* Unicode code points, so a Japanese announcement is counted the way core counts it. */
+  function countCharacters(text) {
+    var s = String(text == null ? "" : text), count = 0;
+    for (var i = 0; i < s.length; i++) {
+      var code = s.charCodeAt(i);
+      if (code >= 0xd800 && code <= 0xdbff && i + 1 < s.length) i++;
+      count++;
+    }
+    return count;
+  }
+
+  /* What the door row and the editor render for one door's announcement. */
+  function noticeModel(door, doorsCfg, nowMs) {
+    var entry = isObj(doorsCfg) ? doorsCfg[door] : null;
+    var notice = isObj(entry) && isObj(entry.notice) ? entry.notice : null;
+    if (!notice || typeof notice.text !== "string" || !notice.text)
+      return { active: false, text: "", expiresMs: 0, from: "", createdMs: 0, expired: false };
+    var expires = num(notice.expires_ms, 0);
+    return {
+      active: true,
+      text: notice.text,
+      from: typeof notice.from_device === "string" ? notice.from_device : "",
+      createdMs: num(notice.created_ms, 0),
+      expiresMs: expires,
+      expired: expires > 0 && num(nowMs, 0) >= expires
+    };
+  }
+
+  var SOS_TRIGGER_MODES = ["slide", "hold"];
+
+  function sosEntries(f, existingEmergency) {
+    var mode = SOS_TRIGGER_MODES.indexOf(String(f.mode)) >= 0 ? String(f.mode) : "slide";
+    var countdown = Math.round(num(f.countdown_s, 3));
+    if (countdown < 0) countdown = 0;
+    if (countdown > 10) countdown = 10;
+    var volume = clampVolume(f.alarm_volume,
+      volumeLevel(editableClone(existingEmergency), "alarm_volume") === undefined ? 100 :
+        volumeLevel(editableClone(existingEmergency), "alarm_volume"));
+    var roles = f.button_on_roles instanceof Array ? f.button_on_roles.slice() : [];
+    return [{ key: "emergency.trigger.mode", value: mode },
+            { key: "emergency.trigger.countdown_s", value: countdown },
+            { key: "emergency.button_on_roles", value: roles },
+            { key: "emergency.cancel_requires_pin", value: f.cancel_requires_pin !== false },
+            { key: "emergency.alarm_sound", value: String(f.alarm_sound || "siren1") },
+            { key: "emergency.alarm_volume", value: volume }];
+  }
+
+  /* Battery for the version line and the dashboard column. A device that does not report power
+   * has no row at all, which is not the same as a battery at zero. */
+  function powerModel(power) {
+    if (!isObj(power)) return { known: false, hasBattery: false, pct: -1,
+                                charging: false, mains: false, text: "" };
+    var pct = Math.round(num(power.battery_pct, -1));
+    var hasBattery = pct >= 0;
+    if (pct > 100) pct = 100;
+    return {
+      known: true,
+      hasBattery: hasBattery,
+      pct: pct,
+      charging: power.charging === true,
+      mains: power.mains === true,
+      text: hasBattery ? pct + "%" : ""
+    };
+  }
+
   function tzEntries(min) {
     return [{ key: "integrations.tz_offset_min", value: num(min, 540) }];
   }
@@ -1803,6 +2082,15 @@ var AdminLogic = (function () {
     sipAccountEntries: sipAccountEntries,
     sipAccountPlan: sipAccountPlan, mergeSecretPlans: mergeSecretPlans,
     tzEntries: tzEntries, quietEntries: quietEntries,
+    TIME_ZONES: TIME_ZONES, timeZoneGroups: timeZoneGroups, timeZoneLabel: timeZoneLabel,
+    ntpServerList: ntpServerList, timeEntries: timeEntries, timeStatusModel: timeStatusModel,
+    VOLUME_LEVELS: VOLUME_LEVELS, VOLUME_DEFAULTS: VOLUME_DEFAULTS,
+    volumeEntries: volumeEntries, deviceVolumeEntries: deviceVolumeEntries,
+    effectiveVolumes: effectiveVolumes,
+    NOTICE_MAX_CHARS: NOTICE_MAX_CHARS, NOTICE_PRESET_KEYS: NOTICE_PRESET_KEYS,
+    NOTICE_EXPIRY_PRESETS: NOTICE_EXPIRY_PRESETS, noticeExpiryMs: noticeExpiryMs,
+    noticePayload: noticePayload, noticeModel: noticeModel, countCharacters: countCharacters,
+    SOS_TRIGGER_MODES: SOS_TRIGGER_MODES, sosEntries: sosEntries, powerModel: powerModel,
     webSosEntries: webSosEntries, runtimeHealthRows: runtimeHealthRows,
     flattenConfig: flattenConfig, applyKey: applyKey, deleteKey: deleteKey,
     newId: newId, safeId: safeId,
@@ -1890,6 +2178,9 @@ if (typeof document !== "undefined") (function () {
       .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
       .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
   }
+
+  // AdminLogic's own isObj is scoped to its module, so the UI needs its own copy.
+  function isObj(v) { return v !== null && typeof v === "object" && !(v instanceof Array); }
 
   /* Mock data uses the same rendering functions as live data. */
   var MOCK_ID1 = "a1b2c3d4e5f60718293a4b5c6d7e8f90";
@@ -1997,7 +2288,10 @@ if (typeof document !== "undefined") (function () {
     schema_version: 1,
     buildings: { b_main: { label: { en: "Main House" } },
                  b_annex: { label: { en: "Annex" } } },
-    doors: { d_front: { building: "b_main", label: { en: "Front door" } },
+    doors: { d_front: { building: "b_main", label: { en: "Front door" },
+                        notice: { text: "Deliveries to the side gate today",
+                                  from_device: MOCK_ID2, created_ms: Date.now() - 600000,
+                                  expires_ms: Date.now() + 3600000 } },
              d_back: { building: "b_main", label: { en: "Back door" } } },
     devices: (function () {
       var d = {};
@@ -2009,7 +2303,8 @@ if (typeof document !== "undefined") (function () {
                                          h264_bitrate_kbps: 700 },
                                theme: { bg_color: "#1c1030" },
                                motion: { enabled: true, sensitivity: 40, min_interval_s: 30 } } };
-      d[MOCK_ID2] = { name: "living", role: "indoor_panel" };
+      d[MOCK_ID2] = { name: "living", role: "indoor_panel",
+                      local: { audio: { volume: { call: 40, sos: 100, idle: 25 } } } };
       return d;
     })(),
     households: { h_ox: { label: { en: "Owner" }, telegram_chat_ids: [123456789],
@@ -2071,13 +2366,29 @@ if (typeof document !== "undefined") (function () {
              var a = {}; a[MOCK_ID1] = { user: "door-front" }; return a;
            })() },
     panel: { token_refs: ["secret:panel.access.mock"] },
-    emergency: { web_active_page_alerts: true },
+    time: { zone: "Asia/Tokyo",
+            ntp: { enabled: true, servers: ["ntp.nict.jp", "time.google.com"],
+                   interval_s: 900 } },
+    audio: { volume: { call: 80, sos: 100, idle: 60 } },
+    emergency: { web_active_page_alerts: true, button_on_roles: ["indoor_panel"],
+                 cancel_requires_pin: true, alarm_sound: "siren1", alarm_volume: 100,
+                 trigger: { mode: "slide", countdown_s: 3 } },
     reply: { display_ttl_s: 30 }
   };
   var MOCK_STATUS = {
     node: { id: MOCK_ID1, name: "front-panel", role: "door_station", version: "0.1.0",
+            power: { battery_pct: -1, charging: false, mains: true },
             local_addrs: ["10.10.38.147", "240b:250:a0c4:5710:daa2:5eff:fe65:ff19",
                           "fd40:174a:3820:10:daa2:5eff:fe65:ff19"] },
+    self: { id: MOCK_ID1, name: "front-panel", role: "door_station", version: "0.1.0",
+            power: { battery_pct: -1, charging: false, mains: true } },
+    time: { zone: "Asia/Tokyo", zone_known: true, source: "ntp", enabled: true, ok: true,
+            offset_ms: 412, measured_offset_ms: 412, last_sync_ms: Date.now() - 120000,
+            rtt_ms: 18, server: "ntp.nict.jp", interval_s: 900, offset_min: 540,
+            syncing: false,
+            local: { iso: "2026-09-02T21:30:00+09:00", date: "2026-09-02", hh: 21, mm: 30,
+                     ss: 0, weekday: "wed", weekday_num: 3, offset_min: 540, dst: false,
+                     known: true, wall_ms: Date.now(), tz: "Asia/Tokyo" } },
     ui_manifest: L.defaultUiManifest("door_station"),
     features: { call_flow_v2: true, emergency_rules_v1: true, device_alert_v1: true },
     emergency: { active: false, device: "", wall_ms: 0 },
@@ -2088,9 +2399,11 @@ if (typeof document !== "undefined") (function () {
     assets: { cached: 1, total: 2 },
     peers: [
       { id: MOCK_ID1, name: "front-panel", role: "door_station", status: "alive", self: true,
-        sw: "0.1.0", addrs: ["10.0.1.10:47172"], door: "d_front", door_label: "Front door" },
+        sw: "0.1.0", addrs: ["10.0.1.10:47172"], door: "d_front", door_label: "Front door",
+        power: { battery_pct: -1, charging: false, mains: true } },
       { id: MOCK_ID2, name: "living", role: "indoor_panel", status: "dead", sw: "0.1.0",
-        features: { call_flow_v2: true }, addrs: [] }]
+        features: { call_flow_v2: true }, addrs: [],
+        power: { battery_pct: 82, charging: true, mains: true } }]
   };
   var MOCK_EVENTS = [
     { type: "press", door: "d_front", device: MOCK_ID1, wall_ms: Date.now() - 60000, payload: "{}" },
@@ -2140,6 +2453,32 @@ if (typeof document !== "undefined") (function () {
       return ok({ ok: true, hash: hash });
     }
     if (p === "/api/login") return ok({ ok: true });
+    if (p === "/api/time/sync") {
+      if (!((MOCK_CFG.time || {}).ntp || {}).enabled)
+        return setTimeout(function () { cb(409, { ok: false, err: "ntp_disabled" }); }, 0);
+      MOCK_STATUS.time = JSON.parse(JSON.stringify(MOCK_STATUS.time));
+      MOCK_STATUS.time.last_sync_ms = new Date().getTime();
+      MOCK_STATUS.time.offset_ms = 250 + Math.floor(Math.random() * 200);
+      MOCK_STATUS.time.measured_offset_ms = MOCK_STATUS.time.offset_ms;
+      MOCK_STATUS.time.rtt_ms = 12 + Math.floor(Math.random() * 30);
+      MOCK_STATUS.time.source = "ntp";
+      MOCK_STATUS.time.ok = true;
+      return ok({ ok: true, started: true });
+    }
+    if (/^\/api\/doors\/[^\/]+\/notice$/.test(p)) {
+      var noticeDoor = decodeURIComponent(p.split("/")[3]);
+      var doorEntry = (MOCK_CFG.doors || {})[noticeDoor];
+      if (!doorEntry) return setTimeout(function () { cb(400, { ok: false, err: "rejected" }); }, 0);
+      if (method === "DELETE") { delete doorEntry.notice; return ok({ ok: true }); }
+      var noticeText = String((body && body.text) || "");
+      if (!noticeText || L.countCharacters(noticeText) > L.NOTICE_MAX_CHARS)
+        return setTimeout(function () { cb(400, { ok: false, err: "rejected" }); }, 0);
+      var expires = (body && body.expires_ms) || 0;
+      if (!expires && body && body.ttl_s) expires = new Date().getTime() + body.ttl_s * 1000;
+      doorEntry.notice = { text: noticeText, from_device: MOCK_ID1,
+                           created_ms: new Date().getTime(), expires_ms: expires };
+      return ok({ ok: true });
+    }
     if (p === "/api/secrets") return ok({ ok: true });
     if (p === "/api/emergency") {
       MOCK_STATUS.emergency = { active: !!(body && body.active), device: MOCK_ID1,
@@ -2502,47 +2841,54 @@ if (typeof document !== "undefined") (function () {
 
 
   var audioEl = null;
-  function playAsset(hash) {
+  function playAsset(hash, gainScale) {
     if (!hash) { msg(t("admin.audio_none")); return; }
     if (MOCK) { msg(fmt(t("admin.mock_audio_play"), { value: hash.slice(0, 12) + "…" })); return; }
     if (!audioEl) audioEl = new Audio();
     audioEl.pause();
     audioEl.src = "/asset/" + hash;
+    audioEl.volume = gainScale === undefined ? 1 : gainScale;
     audioEl.play();
   }
 
   var ringtoneCtx = null;
-  function playPresetRingtone(name) {
+  // gain is 0..1 so a volume preview rehearses the configured level in this browser.
+  function playPresetRingtone(name, gainScale) {
     var AC = window.AudioContext || window.webkitAudioContext;
     if (!AC) { msg(t("admin.audio_preview_unsupported")); return; }
     if (!ringtoneCtx) ringtoneCtx = new AC();
     var seq = name === "classic" ? [[659, 0, .55], [523, .72, .55], [784, 1.42, .55]] :
               name === "ding2" ? [[659, 0, .38], [988, .58, .57]] :
               [[880, 0, .42], [1175, .50, .70]];
+    var peak = 0.22 * (gainScale === undefined ? 1 : gainScale);
+    if (peak < 0.0002) return;
     var now = ringtoneCtx.currentTime + .03;
     seq.forEach(function (s) {
       var osc = ringtoneCtx.createOscillator(), gain = ringtoneCtx.createGain();
       osc.frequency.value = s[0];
       gain.gain.setValueAtTime(0.0001, now + s[1]);
-      gain.gain.exponentialRampToValueAtTime(0.22, now + s[1] + .02);
+      gain.gain.exponentialRampToValueAtTime(peak, now + s[1] + .02);
       gain.gain.exponentialRampToValueAtTime(0.0001, now + s[1] + s[2]);
       osc.connect(gain); gain.connect(ringtoneCtx.destination);
       osc.start(now + s[1]); osc.stop(now + s[1] + s[2] + .02);
     });
   }
-  function playRingtone(value) {
+  // volume is the configured 0..100 level, or undefined to play at the browser's own level.
+  function playRingtone(value, volume) {
+    var scale = volume === undefined ? 1 : Math.max(0, Math.min(100, volume)) / 100;
     if (!value) { msg(t("admin.audio_none")); return; }
-    if (value.indexOf("asset:") === 0) { playAsset(value.slice(6)); return; }
+    if (value.indexOf("asset:") === 0) { playAsset(value.slice(6), scale); return; }
     if (BUILTIN_AUDIO[value]) {
       if (MOCK) { msg(fmt(t("admin.mock_audio_play"), { value: value })); return; }
       if (!audioEl) audioEl = new Audio();
       audioEl.pause();
       audioEl.src = "/audio/" + BUILTIN_AUDIO[value];
       audioEl.currentTime = 0;
+      audioEl.volume = scale;
       audioEl.play();
       return;
     }
-    playPresetRingtone(value);
+    playPresetRingtone(value, scale);
   }
 
 
@@ -2703,10 +3049,17 @@ if (typeof document !== "undefined") (function () {
       var stCls = p.status === "alive" ? "ok" : (p.status === "suspect" ? "warn" : "err");
       var duties = [];
       if (j.leaders) for (var d in j.leaders) if (j.leaders[d] === p.id) duties.push(d);
+      var power = L.powerModel(p.power);
+      var powerCell = !power.known ? "<span class='dim'>" + esc(t("power.unknown")) + "</span>" :
+        (!power.hasBattery ? "<span class='dim'>" + esc(t("power.no_battery")) + "</span>" :
+          "<span class='" + (power.pct <= 15 && !power.charging ? "err" : "") + "'>" +
+          esc(power.text) + "</span>" +
+          (power.charging ? " <span class='tag ok'>" + esc(t("power.charging")) + "</span>" : ""));
       rows += "<tr><td>" + esc(p.name || p.id.slice(0, 8)) +
               (p.self ? " <span class='tag'>self</span>" : "") + "</td><td>" +
               esc(p.role || "") + "</td><td class='" + stCls + "'>" + esc(p.status) +
               "</td><td>" + esc(duties.join(",")) + "</td><td>" + esc(p.sw || "") +
+              "</td><td>" + powerCell +
               "</td><td class='dim'>" + esc((p.addrs || []).join(" ")) + "</td></tr>";
     }
     $("#peersTbl tbody").innerHTML = rows;
@@ -2822,6 +3175,90 @@ if (typeof document !== "undefined") (function () {
     });
   }
 
+
+  /* Announcements are not written through the config batch: core stamps the author and the
+     creation time itself, so the editor posts to /api/doors/<id>/notice. */
+  function editDoorNotice(door) {
+    var model = L.noticeModel(door, cfgObj("doors"), new Date().getTime());
+    var presets = "";
+    for (var pi = 0; pi < L.NOTICE_PRESET_KEYS.length; pi++)
+      presets += "<button class='btn2 small' data-notice-preset='" +
+        esc(t(L.NOTICE_PRESET_KEYS[pi])) + "'>" + esc(t(L.NOTICE_PRESET_KEYS[pi])) + "</button> ";
+    var expirySelected = model.active && !model.expiresMs ? "until_cleared" : "1h";
+    var body = "<div class='dim fhint' style='margin-bottom:10px'>" + esc(doorLabel(door)) +
+      "</div><div class='frow'><label class='flab'>" + esc(t("notice.text")) + "</label>" +
+      "<textarea id='noticeText' maxlength='400' style='min-height:80px'>" +
+      esc(model.text) + "</textarea>" +
+      "<div class='dim fhint'><span id='noticeCount'>0</span> / " + L.NOTICE_MAX_CHARS +
+      "</div></div><div class='frow'>" + presets + "</div>" +
+      "<div class='frow'><label class='flab'>" + esc(t("notice.expiry")) + "</label>" +
+      "<select id='noticeExpiry'>" +
+      "<option value='1h'" + (expirySelected === "1h" ? " selected" : "") + ">" +
+      esc(t("notice.expiry_1h")) + "</option>" +
+      "<option value='today'>" + esc(t("notice.expiry_today")) + "</option>" +
+      "<option value='until_cleared'" +
+      (expirySelected === "until_cleared" ? " selected" : "") + ">" +
+      esc(t("notice.expiry_until_cleared")) + "</option>" +
+      "<option value='custom'>" + esc(t("notice.expiry_custom")) + "</option></select></div>" +
+      "<div class='frow' id='noticeCustomRow' style='display:none'><label class='flab'>" +
+      esc(t("notice.expiry_hours")) + "</label>" +
+      "<input type='number' id='noticeHours' min='1' max='8760' value='4'></div>" +
+      "<h3 style='margin-top:12px'>" + esc(t("notice.preview")) + "</h3>" +
+      "<div id='noticePreview' style='padding:10px 14px;border-radius:8px;" +
+      "background:#101418;border:1px solid var(--line);white-space:pre-wrap'></div>";
+
+    var modal = openModal(t("notice.title"), body, function (m) {
+      var offsetMin = L.timeStatusModel(S.status).zone ?
+        ((S.status.time || {}).offset_min || 0) : 0;
+      var plan = L.noticePayload({ text: m.querySelector("#noticeText").value,
+                                   expiry: m.querySelector("#noticeExpiry").value,
+                                   custom_hours: m.querySelector("#noticeHours").value },
+                                 new Date().getTime(), offsetMin);
+      if (plan.error) return plan.n === undefined ? t(plan.error) :
+        fmt(t(plan.error), { n: plan.n });
+      api("POST", "/api/doors/" + encodeURIComponent(door) + "/notice", plan.body,
+          function (st, result) {
+            if (st === 200 && result && result.ok) {
+              msg(t("notice.saved"));
+              refreshConfig(function () { renderTab(); });
+            } else msg(t("notice.failed"));
+          });
+      return "";
+    });
+    var root = modal || document.querySelector("#modal");
+    var text = root.querySelector("#noticeText");
+    var count = root.querySelector("#noticeCount");
+    var preview = root.querySelector("#noticePreview");
+    var expiry = root.querySelector("#noticeExpiry");
+    function sync() {
+      var length = L.countCharacters(text.value);
+      count.textContent = length;
+      count.className = length > L.NOTICE_MAX_CHARS ? "err" : "";
+      preview.textContent = text.value || t("notice.none");
+      root.querySelector("#noticeCustomRow").style.display =
+        expiry.value === "custom" ? "" : "none";
+    }
+    text.oninput = sync;
+    expiry.onchange = sync;
+    $all("[data-notice-preset]", root).forEach(function (button) {
+      button.onclick = function () {
+        text.value = button.getAttribute("data-notice-preset");
+        sync();
+      };
+    });
+    sync();
+  }
+
+  function clearDoorNotice(door) {
+    api("DELETE", "/api/doors/" + encodeURIComponent(door) + "/notice", null,
+        function (st, result) {
+          if (st === 200 && result && result.ok) {
+            msg(t("notice.cleared"));
+            refreshConfig(function () { renderTab(); });
+          } else msg(t("notice.failed"));
+        });
+  }
+
   function renderDoors() {
     var el = $("#tab-doors");
     var bs = cfgObj("buildings"), ds = cfgObj("doors");
@@ -2842,13 +3279,26 @@ if (typeof document !== "undefined") (function () {
          "</h2><button class='btn small' data-act='addD'>+ " +
          esc(t("admin.add_door")) + "</button></div><table><thead><tr>" +
          "<th>ID</th><th>" + esc(t("admin.label_ja")) + "</th><th>" +
-         esc(t("admin.building_assign")) + "</th><th></th></tr></thead><tbody>";
+         esc(t("admin.building_assign")) + "</th><th>" + esc(t("notice.title")) +
+         "</th><th></th></tr></thead><tbody>";
     for (var d in ds) {
+      var noticeModel = L.noticeModel(d, ds, new Date().getTime());
       h += "<tr><td class='dim'>" + esc(d) + "</td><td>" + esc(doorLabel(d)) + "</td><td>" +
            esc(ds[d].building ? L.labelOf(bs[ds[d].building], LANG, ds[d].building) : "—") +
+           "</td><td>" + (noticeModel.active ?
+             "<span class='tag ok'>" + esc(t("notice.active")) + "</span> " +
+             esc(noticeModel.text) +
+             (noticeModel.expiresMs ? "<div class='dim fhint'>" +
+               esc(t("notice.expires_at")) + ": " + esc(fmtTime(noticeModel.expiresMs)) +
+               "</div>" : "") :
+             "<span class='dim'>" + esc(t("notice.none")) + "</span>") +
            "</td><td class='ops'><button class='btn2' data-act='editD' data-id='" + esc(d) +
            "'>" + esc(t("admin.edit")) +
-           "</button> <button class='btn2 danger' data-act='delD' data-id='" + esc(d) + "'>" +
+           "</button> <button class='btn2' data-act='notice' data-id='" + esc(d) + "'>" +
+           esc(t("notice.title")) + "</button>" +
+           (noticeModel.active ? " <button class='btn2 danger' data-act='noticeClear' data-id='" +
+             esc(d) + "'>" + esc(t("notice.clear")) + "</button>" : "") +
+           " <button class='btn2 danger' data-act='delD' data-id='" + esc(d) + "'>" +
            esc(t("admin.delete")) + "</button></td></tr>";
     }
     h += "</tbody></table></div>";
@@ -2861,6 +3311,8 @@ if (typeof document !== "undefined") (function () {
       },
       addD: function () { editDoor(null); },
       editD: function (id) { editDoor(id); },
+      notice: function (id) { editDoorNotice(id); },
+      noticeClear: function (id) { clearDoorNotice(id); },
       delD: function (id) {
         confirmDelete(doorLabel(id), function () { saveAndRefresh(null, ["doors." + id]); });
       }
@@ -3189,6 +3641,46 @@ if (typeof document !== "undefined") (function () {
     updatePlaybackEstimate(id);
   }
 
+
+  // "80 / 100 / 60" plus a marker when this device overrides the cluster default.
+  function volumeSummary(id) {
+    var effective = L.effectiveVolumes(S.cfg, id);
+    var levels = [];
+    for (var i = 0; i < L.VOLUME_LEVELS.length; i++)
+      levels.push(effective[L.VOLUME_LEVELS[i]]);
+    return levels.join(" / ") + (effective.source === "device" ? " *" : "");
+  }
+
+  function editDeviceVolume(id) {
+    var effective = L.effectiveVolumes(S.cfg, id);
+    var cluster = L.effectiveVolumes({ audio: S.cfg.audio, emergency: S.cfg.emergency }, "");
+    var inherits = effective.source !== "device";
+    var body = "<div class='dim fhint' style='margin-bottom:10px'>" +
+      esc(deviceName(id)) + "</div>" +
+      "<label class='frow-check'><input type='checkbox' id='volInherit'" +
+      (inherits ? " checked" : "") + "> " + esc(t("volume.inherit")) + "</label>" +
+      "<div id='volRows'>" + volumeRowsHtml("devvol", effective, cluster) + "</div>";
+    var modal = openModal(t("volume.device_title"), body, function (m) {
+      var inherit = m.querySelector("#volInherit").checked;
+      var values = collectVolumeRows(m, "devvol");
+      values.inherit = inherit;
+      var plan = L.deviceVolumeEntries(id, values);
+      saveAndRefresh(plan.entries, plan.dels);
+    });
+    var root = modal || document.querySelector("#modal");
+    bindVolumeRows(root, "devvol");
+    var inheritBox = root.querySelector("#volInherit");
+    var rows = root.querySelector("#volRows");
+    function syncDisabled() {
+      $all("[data-vol],[data-vol-preview]", rows).forEach(function (control) {
+        control.disabled = inheritBox.checked;
+      });
+      rows.style.opacity = inheritBox.checked ? "0.5" : "1";
+    }
+    inheritBox.onchange = syncDisabled;
+    syncDisabled();
+  }
+
   function renderDevices() {
     var el = $("#tab-devices");
     var ds = cfgObj("devices");
@@ -3202,6 +3694,7 @@ if (typeof document !== "undefined") (function () {
             "</th><th>ID</th><th>" + esc(t("admin.dev_role")) + "</th><th>" +
             esc(t("admin.door_assign")) + "</th><th>" +
             esc(t("admin.online")) + "</th><th>" +
+            esc(t("volume.title")) + "</th><th>" +
             esc(t("admin.runtime_health")) +
             "</th><th></th></tr></thead><tbody>";
     var selfId = (S.status.node || {}).id || "";
@@ -3233,9 +3726,12 @@ if (typeof document !== "undefined") (function () {
            esc(d.role === "indoor_panel" ? t("admin.role_indoor") :
                (d.role ? t("admin.role_door") : "")) + "</td><td>" +
            esc(d.door ? doorLabel(d.door) : "—") + "</td><td class='" + stCls + "'>" +
-           esc(stTxt) + "</td><td>" + healthHtml +
+           esc(stTxt) + "</td><td class='dim mono'>" + esc(volumeSummary(nid)) +
+           "</td><td>" + healthHtml +
            "</td><td class='ops'><button class='btn2' data-act='edit' data-id='" +
            esc(nid) + "'>" + esc(t("admin.edit")) + "</button> " +
+           "<button class='btn2' data-act='vol' data-id='" + esc(nid) + "'>" +
+           esc(t("volume.title")) + "</button> " +
            "<button class='btn2' data-act='ui' data-id='" + esc(nid) + "'>" +
            esc(t("admin.native_ui")) + "</button>" +
            (nid === ((S.status.node || {}).id || "") ?
@@ -3280,6 +3776,7 @@ if (typeof document !== "undefined") (function () {
     h += "</div>";
     el.innerHTML = h;
     bindActs(el, { edit: function (id) { editDevice(id); },
+                  vol: function (id) { editDeviceVolume(id); },
                   ui: function (id) { editDeviceUi(id, "native"); },
                   webui: function (id) { editDeviceUi(id, "web"); } });
     bindPlaybackRows("pbGlobalRows");
@@ -4407,6 +4904,106 @@ if (typeof document !== "undefined") (function () {
   }
 
 
+
+  /* ---- Batch 2 shared UI pieces: volume sliders, the time card, announcements ---- */
+
+  /* One 0-100 slider per level with a live number and a preview button. The preview plays in
+     this browser, not on the remote device, so it is a rehearsal of the level rather than proof
+     that the target hardware is that loud. */
+  function volumeLabel(level) {
+    if (level === "call") return t("volume.call");
+    if (level === "sos") return t("volume.sos");
+    return t("volume.idle");
+  }
+
+  function volumeRowsHtml(prefix, values, inheritedFrom) {
+    var h = "";
+    for (var i = 0; i < L.VOLUME_LEVELS.length; i++) {
+      var level = L.VOLUME_LEVELS[i];
+      var value = values[level] === undefined ? L.VOLUME_DEFAULTS[level] : values[level];
+      h += "<div class='frow' data-vol-row='" + esc(prefix) + "' data-vol-level='" + esc(level) +
+           "'><label class='flab'>" + esc(volumeLabel(level)) + "</label>" +
+           "<div style='display:flex;gap:10px;align-items:center'>" +
+           "<input type='range' min='0' max='100' step='1' data-vol='" + esc(prefix + "-" + level) +
+           "' value='" + esc(value) + "' style='flex:1;min-width:140px'>" +
+           "<output data-vol-out='" + esc(prefix + "-" + level) + "' class='mono' " +
+           "style='min-width:3.5em;text-align:right'>" + esc(value) + "</output>" +
+           "<button class='btn2 small' data-vol-preview='" + esc(prefix + "-" + level) +
+           "' data-vol-sound='" + esc(level) + "'>" + esc(t("volume.preview")) + "</button></div>" +
+           (inheritedFrom ? "<div class='dim fhint'>" +
+             esc(fmt(t("volume.cluster_default"), { value: inheritedFrom[level] })) + "</div>" : "") +
+           "</div>";
+    }
+    return h;
+  }
+
+  function bindVolumeRows(root, prefix) {
+    for (var i = 0; i < L.VOLUME_LEVELS.length; i++) {
+      (function (level) {
+        var id = prefix + "-" + level;
+        var slider = root.querySelector("[data-vol='" + id + "']");
+        var out = root.querySelector("[data-vol-out='" + id + "']");
+        var preview = root.querySelector("[data-vol-preview='" + id + "']");
+        if (slider && out) slider.oninput = function () { out.textContent = slider.value; };
+        if (preview) preview.onclick = function () {
+          var cfgUi = cfgObj("ui"), emergency = cfgObj("emergency");
+          var sound = level === "sos" ? (emergency.alarm_sound || "siren1") :
+                      level === "call" ? (cfgUi.ringtone || "school_chime") :
+                                         (cfgUi.button_sound || "button_click");
+          playRingtone(sound, slider ? +slider.value : 100);
+        };
+      })(L.VOLUME_LEVELS[i]);
+    }
+  }
+
+  function collectVolumeRows(root, prefix) {
+    var out = {};
+    for (var i = 0; i < L.VOLUME_LEVELS.length; i++) {
+      var level = L.VOLUME_LEVELS[i];
+      var slider = root.querySelector("[data-vol='" + prefix + "-" + level + "']");
+      out[level] = slider ? +slider.value : L.VOLUME_DEFAULTS[level];
+    }
+    return out;
+  }
+
+  function timeZoneOptionsHtml(selected) {
+    var groups = L.timeZoneGroups(), h = "";
+    for (var g = 0; g < groups.length; g++) {
+      h += "<optgroup label='" + esc(groups[g].region) + "'>";
+      for (var z = 0; z < groups[g].zones.length; z++) {
+        var id = groups[g].zones[z];
+        h += "<option value='" + esc(id) + "'" + (id === selected ? " selected" : "") + ">" +
+             esc(L.timeZoneLabel(id)) + "</option>";
+      }
+      h += "</optgroup>";
+    }
+    if (selected && L.TIME_ZONES.indexOf(selected) < 0)
+      h = "<option value='" + esc(selected) + "' selected>" + esc(selected) + "</option>" + h;
+    return h;
+  }
+
+  /* The status block is rendered from core's reported source, never inferred from the toggle. */
+  function timeStatusHtml() {
+    var model = L.timeStatusModel(S.status);
+    var rows = [
+      [t("time.source"), t(model.source === "ntp" ? "time.source_ntp" : "time.source_system"),
+       model.degraded ? "warn" : "ok"],
+      [t("time.local_now"), model.localIso || "-", "dim"],
+      [t("time.offset"), (model.offsetMs > 0 ? "+" : "") + model.offsetMs + " ms", "dim"],
+      [t("time.last_sync"), model.lastSyncMs ? fmtTime(model.lastSyncMs) : t("time.never"), "dim"],
+      [t("time.server"), model.server || "-", "dim"],
+      [t("time.rtt"), model.rttMs ? model.rttMs + " ms" : "-", "dim"]];
+    var h = "";
+    for (var i = 0; i < rows.length; i++)
+      h += "<div><span class='dim'>" + esc(rows[i][0]) + ":</span> <span class='" +
+           esc(rows[i][2]) + "'>" + esc(rows[i][1]) + "</span></div>";
+    if (model.errorKey)
+      h += "<div class='warn'>" + esc(t(model.errorKey)) + "</div>";
+    if (!model.zoneKnown && model.zone)
+      h += "<div class='warn'>" + esc(model.zone) + "</div>";
+    return h;
+  }
+
   function renderSystem() {
     var el = $("#tab-system");
     var tok = S.panelToken || "";
@@ -4417,7 +5014,83 @@ if (typeof document !== "undefined") (function () {
     var base = window.location.protocol + "//" + window.location.host;
     var h = "";
 
+    var timeCfg = cfgObj("time");
+    var timeNtp = isObj(timeCfg.ntp) ? timeCfg.ntp : {};
+    var timeModel = L.timeStatusModel(S.status);
+    var serverText = (timeNtp.servers instanceof Array ? timeNtp.servers : []).join("\n");
+    h += "<div class='card'><h2>" + esc(t("time.title")) + "</h2>" +
+         "<div class='frow'><label class='flab'>" + esc(t("time.zone")) + "</label>" +
+         "<select id='timeZone'>" +
+         timeZoneOptionsHtml(timeCfg.zone || timeModel.zone || "Asia/Tokyo") + "</select>" +
+         "<div class='dim fhint'>" + esc(t("time.zone_hint")) + "</div></div>" +
+         "<label class='frow-check'><input type='checkbox' id='timeNtpEnabled'" +
+         (timeNtp.enabled === true ? " checked" : "") + "> " + esc(t("time.ntp_enabled")) +
+         "</label><div class='dim fhint'>" + esc(t("time.ntp_hint")) + "</div>" +
+         "<div class='frow'><label class='flab'>" + esc(t("time.servers")) + "</label>" +
+         "<textarea id='timeServers' style='min-height:74px'>" + esc(serverText) + "</textarea>" +
+         "<div class='dim fhint'>" + esc(t("time.servers_hint")) + "</div></div>" +
+         "<div class='frow'><label class='flab'>" + esc(t("time.interval_s")) + "</label>" +
+         "<input type='number' id='timeInterval' min='60' max='86400' value='" +
+         esc(timeNtp.interval_s === undefined ? 900 : timeNtp.interval_s) + "'></div>" +
+         "<div style='display:flex;gap:8px;flex-wrap:wrap;margin-top:8px'>" +
+         "<button class='btn small' id='timeSave'>" + esc(t("admin.save")) + "</button>" +
+         "<button class='btn2 small' id='timeSyncNow'>" + esc(t("time.sync_now")) +
+         "</button></div>" +
+         "<h3 style='margin-top:14px'>" + esc(t("time.status")) + "</h3>" +
+         "<div id='timeStatusBlock' class='fhint'>" + timeStatusHtml() + "</div></div>";
+
+    var clusterVolumes = L.effectiveVolumes(S.cfg, "");
+    h += "<div class='card'><h2>" + esc(t("volume.title")) + "</h2>" +
+         "<div class='dim fhint' style='margin-bottom:10px'>" + esc(t("volume.hint")) + "</div>" +
+         volumeRowsHtml("sysvol", clusterVolumes, null) +
+         "<button class='btn small' id='volSave' style='margin-top:8px'>" +
+         esc(t("admin.save")) + "</button></div>";
+
     var emergencyCfg = cfgObj("emergency");
+    var trigger = isObj(emergencyCfg.trigger) ? emergencyCfg.trigger : {};
+    var sosRoles = emergencyCfg.button_on_roles instanceof Array ?
+      emergencyCfg.button_on_roles : ["indoor_panel"];
+    h += "<div class='card'><h2>" + esc(t("sos.title")) + "</h2>" +
+         "<div class='dim fhint' style='margin-bottom:10px'>" + esc(t("sos.hint")) + "</div>" +
+         "<div class='frow'><label class='flab'>" + esc(t("sos.trigger_mode")) + "</label>" +
+         "<select id='sosMode'><option value='slide'" +
+         (trigger.mode === "hold" ? "" : " selected") + ">" + esc(t("sos.mode_slide")) +
+         "</option><option value='hold'" + (trigger.mode === "hold" ? " selected" : "") + ">" +
+         esc(t("sos.mode_hold")) + "</option></select></div>" +
+         "<div class='frow'><label class='flab'>" + esc(t("sos.countdown_s")) + "</label>" +
+         "<input type='number' id='sosCountdown' min='0' max='10' value='" +
+         esc(trigger.countdown_s === undefined ? 3 : trigger.countdown_s) + "'></div>" +
+         "<div class='frow'><label class='flab'>" + esc(t("sos.button_on_roles")) +
+         "</label><div class='mcwrap'>" +
+         "<label class='mc'><input type='checkbox' data-sos-role='indoor_panel'" +
+         (sosRoles.indexOf("indoor_panel") >= 0 ? " checked" : "") + "> " +
+         esc(t("admin.role_indoor")) + "</label>" +
+         "<label class='mc'><input type='checkbox' data-sos-role='door_station'" +
+         (sosRoles.indexOf("door_station") >= 0 ? " checked" : "") + "> " +
+         esc(t("admin.role_door")) + "</label></div></div>" +
+         "<label class='frow-check'><input type='checkbox' id='sosCancelPin'" +
+         (emergencyCfg.cancel_requires_pin !== false ? " checked" : "") + "> " +
+         esc(t("sos.cancel_requires_pin")) + "</label>" +
+         "<div class='frow'><label class='flab'>" + esc(t("sos.alarm_sound")) + "</label>" +
+         "<div style='display:flex;gap:8px;align-items:center'><select id='sosSound'>";
+    ringtoneOptions().forEach(function (option) {
+      h += "<option value='" + esc(option.v) + "'" +
+        ((emergencyCfg.alarm_sound || "siren1") === option.v ? " selected" : "") + ">" +
+        esc(option.label) + "</option>";
+    });
+    h += "</select><button class='btn2 small' id='sosSoundPlay'>▶ " +
+         esc(t("admin.audio_play")) + "</button></div></div>" +
+         "<div class='frow'><label class='flab'>" + esc(t("sos.alarm_volume")) + "</label>" +
+         "<div style='display:flex;gap:10px;align-items:center'>" +
+         "<input type='range' min='0' max='100' step='1' id='sosVolume' value='" +
+         esc(emergencyCfg.alarm_volume === undefined ? 100 : emergencyCfg.alarm_volume) +
+         "' style='flex:1;min-width:140px'>" +
+         "<output id='sosVolumeOut' class='mono' style='min-width:3.5em;text-align:right'>" +
+         esc(emergencyCfg.alarm_volume === undefined ? 100 : emergencyCfg.alarm_volume) +
+         "</output></div></div>" +
+         "<button class='btn small' id='sosSave' style='margin-top:8px'>" +
+         esc(t("admin.save")) + "</button></div>";
+
     var webSosEnabled = emergencyCfg.web_active_page_alerts !== false;
     h += "<div class='card'><h2>" +
          esc(t("admin.web_sos_title")) + "</h2>" +
@@ -4476,6 +5149,60 @@ if (typeof document !== "undefined") (function () {
          "<pre id='logOut' class='mono' " +
          "style='white-space:pre-wrap; font-size:11px; margin-top:8px'></pre></div>";
     el.innerHTML = h;
+
+    bindVolumeRows(el, "sysvol");
+    $("#timeSave").onclick = function () {
+      var entries;
+      try {
+        entries = L.timeEntries({ zone: $("#timeZone").value,
+                                  ntp_enabled: $("#timeNtpEnabled").checked,
+                                  servers: $("#timeServers").value,
+                                  interval_s: $("#timeInterval").value });
+      } catch (e) {
+        msg(t(e.message === "servers" ? "time.invalid_servers" :
+              (e.message === "interval_s" ? "time.invalid_interval" : "time.invalid_zone")));
+        return;
+      }
+      saveAndRefresh(entries, null);
+    };
+    $("#timeSyncNow").onclick = function () {
+      api("POST", "/api/time/sync", {}, function (st, result) {
+        if (st === 200 && result && result.ok) {
+          msg(t("time.sync_started"));
+          // The exchange is asynchronous; re-read status rather than assuming it finished.
+          setTimeout(function () {
+            refreshStatus(function () {
+              if ($("#timeStatusBlock")) $("#timeStatusBlock").innerHTML = timeStatusHtml();
+            });
+          }, 1200);
+        } else {
+          msg(t(result && result.err === "ntp_disabled" ? "time.ntp_off" :
+                "time.sync_failed"));
+        }
+      });
+    };
+    $("#volSave").onclick = function () {
+      saveAndRefresh(L.volumeEntries(collectVolumeRows(el, "sysvol")), null);
+    };
+    $("#sosVolume").oninput = function () {
+      $("#sosVolumeOut").textContent = $("#sosVolume").value;
+    };
+    $("#sosSoundPlay").onclick = function () {
+      playRingtone($("#sosSound").value, +$("#sosVolume").value);
+    };
+    $("#sosSave").onclick = function () {
+      var roles = [];
+      $all("[data-sos-role]", el).forEach(function (box) {
+        if (box.checked) roles.push(box.getAttribute("data-sos-role"));
+      });
+      saveAndRefresh(L.sosEntries({ mode: $("#sosMode").value,
+                                    countdown_s: $("#sosCountdown").value,
+                                    button_on_roles: roles,
+                                    cancel_requires_pin: $("#sosCancelPin").checked,
+                                    alarm_sound: $("#sosSound").value,
+                                    alarm_volume: $("#sosVolume").value },
+                                  cfgObj("emergency")), null);
+    };
 
     $("#cfgView").value = JSON.stringify(S.cfg, null, 2);
     $("#webSosSave").onclick = function () {

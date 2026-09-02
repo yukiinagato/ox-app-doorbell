@@ -443,6 +443,29 @@ Delete it?</value></data>
   <data name="monitor_live" xml:space="preserve"><value>Live video</value></data>
   <data name="monitor_open" xml:space="preserve"><value>View door stations</value></data>
   <data name="monitor_title" xml:space="preserve"><value>{0} live</value></data>
+  <data name="notice_active" xml:space="preserve"><value>Showing</value></data>
+  <data name="notice_clear" xml:space="preserve"><value>Clear</value></data>
+  <data name="notice_cleared" xml:space="preserve"><value>The announcement was cleared</value></data>
+  <data name="notice_empty" xml:space="preserve"><value>Enter a message</value></data>
+  <data name="notice_expires_at" xml:space="preserve"><value>Until</value></data>
+  <data name="notice_expiry" xml:space="preserve"><value>Show until</value></data>
+  <data name="notice_expiry_1h" xml:space="preserve"><value>1 hour</value></data>
+  <data name="notice_expiry_custom" xml:space="preserve"><value>Custom</value></data>
+  <data name="notice_expiry_hours" xml:space="preserve"><value>Hours to show</value></data>
+  <data name="notice_expiry_today" xml:space="preserve"><value>End of today</value></data>
+  <data name="notice_expiry_until_cleared" xml:space="preserve"><value>Until cleared</value></data>
+  <data name="notice_failed" xml:space="preserve"><value>Couldn't save the announcement</value></data>
+  <data name="notice_from" xml:space="preserve"><value>Posted by</value></data>
+  <data name="notice_none" xml:space="preserve"><value>No announcement</value></data>
+  <data name="notice_preset_absent" xml:space="preserve"><value>We are away right now</value></data>
+  <data name="notice_preset_construction" xml:space="preserve"><value>Building work in progress — please call out</value></data>
+  <data name="notice_preset_delivery" xml:space="preserve"><value>Deliveries to the side door, please</value></data>
+  <data name="notice_preview" xml:space="preserve"><value>How it looks at the door</value></data>
+  <data name="notice_publish" xml:space="preserve"><value>Show</value></data>
+  <data name="notice_saved" xml:space="preserve"><value>The announcement is now showing</value></data>
+  <data name="notice_text" xml:space="preserve"><value>Message</value></data>
+  <data name="notice_title" xml:space="preserve"><value>Announcement</value></data>
+  <data name="notice_too_long" xml:space="preserve"><value>The message is limited to 200 characters (currently {0})</value></data>
   <data name="notify_test" xml:space="preserve"><value>Doorbell test notification</value></data>
   <data name="offline_body" xml:space="preserve"><value>Calling unavailable. Please knock.</value></data>
   <data name="offline_reconnect" xml:space="preserve"><value>Reconnecting in {0}s</value></data>
@@ -625,6 +648,11 @@ Delete it?</value></data>
   <data name="panel_unregistered" xml:space="preserve"><value>Not registered</value></data>
   <data name="panel_visitor_calling" xml:space="preserve"><value>Visitor calling</value></data>
   <data name="panel_webrtc_required" xml:space="preserve"><value>Calling requires Asterisk WebRTC configuration (integrations.webrtc.ws_url) — see deploy/asterisk/webrtc.md</value></data>
+  <data name="power_charging" xml:space="preserve"><value>Charging</value></data>
+  <data name="power_mains" xml:space="preserve"><value>On mains power</value></data>
+  <data name="power_no_battery" xml:space="preserve"><value>No battery</value></data>
+  <data name="power_title" xml:space="preserve"><value>Battery</value></data>
+  <data name="power_unknown" xml:space="preserve"><value>Not reported</value></data>
   <data name="purpose_cancel_call" xml:space="preserve"><value>Cancel call</value></data>
   <data name="purpose_select_failed" xml:space="preserve"><value>Could not send the visit purpose</value></data>
   <data name="purpose_sent" xml:space="preserve"><value>Called as {0}</value></data>
@@ -674,10 +702,60 @@ This device joins automatically. Only if it does not, enter the indoor panel add
   <data name="setup_scan_qr" xml:space="preserve"><value>Scan indoor-panel QR</value></data>
   <data name="setup_title" xml:space="preserve"><value>Set up this device</value></data>
   <data name="sip_unavailable" xml:space="preserve"><value>Calling is currently unavailable</value></data>
+  <data name="sos_alarm_sound" xml:space="preserve"><value>Alarm sound</value></data>
+  <data name="sos_alarm_volume" xml:space="preserve"><value>Alarm volume</value></data>
+  <data name="sos_button_on_roles" xml:space="preserve"><value>Devices that show SOS</value></data>
+  <data name="sos_cancel_requires_pin" xml:space="preserve"><value>Require the admin password to clear it</value></data>
+  <data name="sos_countdown" xml:space="preserve"><value>Calling for help in {0}</value></data>
+  <data name="sos_countdown_s" xml:space="preserve"><value>Cancellable countdown (seconds)</value></data>
+  <data name="sos_hint" xml:space="preserve"><value>Triggering alerts every family device. It never calls the police or fire service automatically</value></data>
+  <data name="sos_mode_hold" xml:space="preserve"><value>Press and hold (legacy)</value></data>
+  <data name="sos_mode_slide" xml:space="preserve"><value>Slide to trigger</value></data>
+  <data name="sos_slide_hint" xml:space="preserve"><value>Slide right to call for help</value></data>
+  <data name="sos_title" xml:space="preserve"><value>SOS</value></data>
+  <data name="sos_trigger_mode" xml:space="preserve"><value>How it is triggered</value></data>
   <data name="sound_button_click" xml:space="preserve"><value>Cursor move 4 (button)</value></data>
   <data name="sound_indoor_update" xml:space="preserve"><value>Confirm 23 (additional message)</value></data>
   <data name="sound_none" xml:space="preserve"><value>Do not play</value></data>
   <data name="sound_outdoor_call_alert" xml:space="preserve"><value>Alert 1 (door-station call)</value></data>
   <data name="sound_school_chime" xml:space="preserve"><value>School chime</value></data>
   <data name="sound_title_display" xml:space="preserve"><value>Title display (startup)</value></data>
+  <data name="time_err_bad_reply" xml:space="preserve"><value>The server's answer wasn't valid</value></data>
+  <data name="time_err_bad_server" xml:space="preserve"><value>A server entry isn't written correctly</value></data>
+  <data name="time_err_implausible" xml:space="preserve"><value>The measured time wasn't plausible and was discarded</value></data>
+  <data name="time_err_no_response" xml:space="preserve"><value>No answer from the time servers</value></data>
+  <data name="time_interval_s" xml:space="preserve"><value>Sync interval (seconds)</value></data>
+  <data name="time_invalid_interval" xml:space="preserve"><value>The sync interval must be between 60 and 86400 seconds</value></data>
+  <data name="time_invalid_servers" xml:space="preserve"><value>Enter one to four time servers, one per line</value></data>
+  <data name="time_invalid_zone" xml:space="preserve"><value>Choose a time zone from the list</value></data>
+  <data name="time_last_sync" xml:space="preserve"><value>Last sync</value></data>
+  <data name="time_local_now" xml:space="preserve"><value>Current time in this zone</value></data>
+  <data name="time_never" xml:space="preserve"><value>Not synced yet</value></data>
+  <data name="time_ntp_enabled" xml:space="preserve"><value>Set the time from the Internet</value></data>
+  <data name="time_ntp_hint" xml:space="preserve"><value>The device's own clock is never changed; the doorbell corrects the difference internally</value></data>
+  <data name="time_ntp_off" xml:space="preserve"><value>Turn on &quot;Set the time from the Internet&quot; and save first</value></data>
+  <data name="time_offset" xml:space="preserve"><value>Correction</value></data>
+  <data name="time_rtt" xml:space="preserve"><value>Round trip</value></data>
+  <data name="time_server" xml:space="preserve"><value>Server</value></data>
+  <data name="time_servers" xml:space="preserve"><value>Time servers</value></data>
+  <data name="time_servers_hint" xml:space="preserve"><value>One per line, up to four. Use host:port for a non-standard port</value></data>
+  <data name="time_source" xml:space="preserve"><value>Time source</value></data>
+  <data name="time_source_ntp" xml:space="preserve"><value>Internet</value></data>
+  <data name="time_source_system" xml:space="preserve"><value>Device clock</value></data>
+  <data name="time_status" xml:space="preserve"><value>Current state</value></data>
+  <data name="time_sync_failed" xml:space="preserve"><value>Couldn't start the sync</value></data>
+  <data name="time_sync_now" xml:space="preserve"><value>Sync now</value></data>
+  <data name="time_sync_started" xml:space="preserve"><value>Sync started</value></data>
+  <data name="time_title" xml:space="preserve"><value>Time</value></data>
+  <data name="time_zone" xml:space="preserve"><value>Time zone</value></data>
+  <data name="time_zone_hint" xml:space="preserve"><value>This sets the clock, call history, and rule schedules for the whole cluster</value></data>
+  <data name="volume_call" xml:space="preserve"><value>Call</value></data>
+  <data name="volume_cluster_default" xml:space="preserve"><value>Cluster default {0}</value></data>
+  <data name="volume_device_title" xml:space="preserve"><value>Volume on this device</value></data>
+  <data name="volume_hint" xml:space="preserve"><value>Cluster defaults. Override them per device on the Devices tab</value></data>
+  <data name="volume_idle" xml:space="preserve"><value>Everyday</value></data>
+  <data name="volume_inherit" xml:space="preserve"><value>Use the cluster default</value></data>
+  <data name="volume_preview" xml:space="preserve"><value>Preview</value></data>
+  <data name="volume_sos" xml:space="preserve"><value>SOS</value></data>
+  <data name="volume_title" xml:space="preserve"><value>Volume</value></data>
 </root>

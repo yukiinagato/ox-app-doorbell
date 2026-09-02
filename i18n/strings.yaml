@@ -705,3 +705,82 @@ pair.err.no_mesh: { ja: "端末がまだ起動中です。少し待ってから�
 pair.err.pairing_unavailable: { ja: "コードを発行できませんでした。もう一度お試しください", en: "Couldn't create a code. Please try again", zh: "无法生成配对码，请重试" }
 
 sip.unavailable: { ja: "通話機能は現在利用できません", en: "Calling is currently unavailable", zh: "通话功能当前不可用" }
+# Batch 2 (WP-N): cluster time, volumes, door announcements, the SOS slider, and battery.
+time.title: { ja: "時刻", en: "Time", zh: "时间" }
+time.zone: { ja: "タイムゾーン", en: "Time zone", zh: "时区" }
+time.zone_hint: { ja: "この設定はクラスタ全体の時計・呼出履歴・ルールの時間帯に使われます", en: "This sets the clock, call history, and rule schedules for the whole cluster", zh: "此设置用于整个集群的时钟、呼叫记录与规则时段" }
+time.ntp_enabled: { ja: "インターネットで時刻を合わせる", en: "Set the time from the Internet", zh: "从互联网校准时间" }
+time.ntp_hint: { ja: "端末の OS 時計は変更しません。ずれた分だけドアホンの中で補正します", en: "The device's own clock is never changed; the doorbell corrects the difference internally", zh: "不会修改设备本身的时钟；门铃只在内部补偿差值" }
+time.servers: { ja: "時刻サーバー", en: "Time servers", zh: "时间服务器" }
+time.servers_hint: { ja: "1 行に 1 つ、最大 4 つ。ポートを変える場合は host:port", en: "One per line, up to four. Use host:port for a non-standard port", zh: "每行一个，最多四个。非标准端口请使用 host:port" }
+time.interval_s: { ja: "同期間隔 (秒)", en: "Sync interval (seconds)", zh: "同步间隔（秒）" }
+time.sync_now: { ja: "今すぐ同期", en: "Sync now", zh: "立即同步" }
+time.status: { ja: "現在の状態", en: "Current state", zh: "当前状态" }
+time.source: { ja: "時刻の出どころ", en: "Time source", zh: "时间来源" }
+time.source_system: { ja: "端末の時計", en: "Device clock", zh: "设备时钟" }
+time.source_ntp: { ja: "インターネット", en: "Internet", zh: "互联网" }
+time.offset: { ja: "補正", en: "Correction", zh: "补偿" }
+time.last_sync: { ja: "最終同期", en: "Last sync", zh: "最后同步" }
+time.server: { ja: "接続先", en: "Server", zh: "服务器" }
+time.rtt: { ja: "往復時間", en: "Round trip", zh: "往返时间" }
+time.never: { ja: "まだ同期していません", en: "Not synced yet", zh: "尚未同步" }
+time.local_now: { ja: "この時間帯の現在時刻", en: "Current time in this zone", zh: "该时区的当前时间" }
+time.sync_started: { ja: "同期を開始しました", en: "Sync started", zh: "已开始同步" }
+time.sync_failed: { ja: "同期を開始できませんでした", en: "Couldn't start the sync", zh: "无法开始同步" }
+time.err_no_response: { ja: "時刻サーバーから応答がありません", en: "No answer from the time servers", zh: "时间服务器没有响应" }
+time.err_bad_server: { ja: "サーバーの書き方が正しくありません", en: "A server entry isn't written correctly", zh: "服务器条目格式不正确" }
+time.err_bad_reply: { ja: "サーバーの応答が正しくありません", en: "The server's answer wasn't valid", zh: "服务器的响应无效" }
+time.err_implausible: { ja: "測定した時刻が信用できないため使いませんでした", en: "The measured time wasn't plausible and was discarded", zh: "测得的时间不可信，已丢弃" }
+time.ntp_off: { ja: "先に「インターネットで時刻を合わせる」を有効にして保存してください", en: "Turn on \"Set the time from the Internet\" and save first", zh: "请先开启“从互联网校准时间”并保存" }
+time.invalid_zone: { ja: "タイムゾーンを選び直してください", en: "Choose a time zone from the list", zh: "请从列表中选择时区" }
+time.invalid_servers: { ja: "時刻サーバーは 1 行に 1 つ、最大 4 つまでです", en: "Enter one to four time servers, one per line", zh: "请输入 1 到 4 个时间服务器，每行一个" }
+time.invalid_interval: { ja: "同期間隔は 60 秒から 86400 秒の間で指定してください", en: "The sync interval must be between 60 and 86400 seconds", zh: "同步间隔必须在 60 到 86400 秒之间" }
+volume.title: { ja: "音量", en: "Volume", zh: "音量" }
+volume.call: { ja: "呼出", en: "Call", zh: "呼叫" }
+volume.sos: { ja: "SOS", en: "SOS", zh: "SOS" }
+volume.idle: { ja: "通常", en: "Everyday", zh: "日常" }
+volume.preview: { ja: "試聴", en: "Preview", zh: "试听" }
+volume.hint: { ja: "クラスタ全体の既定値です。端末ごとの上書きは「デバイス」タブから設定します", en: "Cluster defaults. Override them per device on the Devices tab", zh: "集群默认值。可在“设备”标签页为单台设备覆盖" }
+volume.device_title: { ja: "この端末の音量", en: "Volume on this device", zh: "此设备的音量" }
+volume.inherit: { ja: "クラスタの既定に合わせる", en: "Use the cluster default", zh: "使用集群默认值" }
+volume.cluster_default: { ja: "クラスタ既定 {value}", en: "Cluster default {value}", zh: "集群默认 {value}" }
+notice.title: { ja: "お知らせ", en: "Announcement", zh: "公告" }
+notice.text: { ja: "本文", en: "Message", zh: "内容" }
+notice.expiry: { ja: "表示期限", en: "Show until", zh: "显示期限" }
+notice.expiry_1h: { ja: "1 時間", en: "1 hour", zh: "1 小时" }
+notice.expiry_today: { ja: "今日いっぱい", en: "End of today", zh: "今天结束" }
+notice.expiry_until_cleared: { ja: "取り消すまで", en: "Until cleared", zh: "直到取消" }
+notice.expiry_custom: { ja: "時間を指定", en: "Custom", zh: "自定义" }
+notice.expiry_hours: { ja: "表示する時間数", en: "Hours to show", zh: "显示小时数" }
+notice.publish: { ja: "表示する", en: "Show", zh: "显示" }
+notice.clear: { ja: "取り消す", en: "Clear", zh: "取消" }
+notice.none: { ja: "お知らせはありません", en: "No announcement", zh: "没有公告" }
+notice.active: { ja: "表示中", en: "Showing", zh: "显示中" }
+notice.from: { ja: "作成", en: "Posted by", zh: "发布者" }
+notice.expires_at: { ja: "期限", en: "Until", zh: "截止" }
+notice.preview: { ja: "門口での見え方", en: "How it looks at the door", zh: "门口的显示效果" }
+notice.empty: { ja: "本文を入力してください", en: "Enter a message", zh: "请输入内容" }
+notice.too_long: { ja: "本文は 200 文字までです (現在 {n} 文字)", en: "The message is limited to 200 characters (currently {n})", zh: "内容最多 200 个字符（当前 {n} 个）" }
+notice.saved: { ja: "お知らせを表示しました", en: "The announcement is now showing", zh: "公告已显示" }
+notice.cleared: { ja: "お知らせを取り消しました", en: "The announcement was cleared", zh: "公告已取消" }
+notice.failed: { ja: "お知らせを保存できませんでした", en: "Couldn't save the announcement", zh: "无法保存公告" }
+notice.preset_absent: { ja: "ただいま留守にしています", en: "We are away right now", zh: "现在不在家" }
+notice.preset_delivery: { ja: "宅配便は勝手口へお願いします", en: "Deliveries to the side door, please", zh: "快递请送到侧门" }
+notice.preset_construction: { ja: "工事中です。ご用の方はお声がけください", en: "Building work in progress — please call out", zh: "施工中，如有需要请呼叫" }
+sos.title: { ja: "SOS", en: "SOS", zh: "SOS" }
+sos.trigger_mode: { ja: "発報のしかた", en: "How it is triggered", zh: "触发方式" }
+sos.mode_slide: { ja: "スライドして発報", en: "Slide to trigger", zh: "滑动触发" }
+sos.mode_hold: { ja: "長押しで発報 (旧方式)", en: "Press and hold (legacy)", zh: "长按触发（旧方式）" }
+sos.countdown_s: { ja: "取り消せる秒数", en: "Cancellable countdown (seconds)", zh: "可取消的倒计时（秒）" }
+sos.button_on_roles: { ja: "SOS を表示する端末", en: "Devices that show SOS", zh: "显示 SOS 的设备" }
+sos.cancel_requires_pin: { ja: "解除に管理パスワードを求める", en: "Require the admin password to clear it", zh: "解除时要求管理密码" }
+sos.alarm_sound: { ja: "警報音", en: "Alarm sound", zh: "警报声" }
+sos.alarm_volume: { ja: "警報音の音量", en: "Alarm volume", zh: "警报音量" }
+sos.slide_hint: { ja: "右にスライドして助けを呼ぶ", en: "Slide right to call for help", zh: "向右滑动求助" }
+sos.countdown: { ja: "{n} 秒後に発報します", en: "Calling for help in {n}", zh: "{n} 秒后发出求助" }
+sos.hint: { ja: "発報すると家族全員の端末に通知します。警察や消防には自動で連絡しません", en: "Triggering alerts every family device. It never calls the police or fire service automatically", zh: "触发后会通知所有家人的设备；不会自动联系警察或消防" }
+power.title: { ja: "電池", en: "Battery", zh: "电量" }
+power.charging: { ja: "充電中", en: "Charging", zh: "充电中" }
+power.mains: { ja: "電源に接続", en: "On mains power", zh: "已接电源" }
+power.no_battery: { ja: "電池なし", en: "No battery", zh: "无电池" }
+power.unknown: { ja: "未対応", en: "Not reported", zh: "未上报" }
