@@ -535,9 +535,15 @@ class App : Application(), DoorbellCore.Listener {
     }
 
     /** True once core reports "ready" and the shell has its own durable secure reference. */
-    internal fun pairingReady(): Boolean {
-        if (!coreOk) return false
-        val pairing = core.pairingInfo() ?: return false
+    internal fun pairingReady(): Boolean =
+        pairingReadyFrom(if (coreOk) core.pairingInfo() else null)
+
+    /**
+     * The same rule against a pairing document the caller already holds, so a screen that has one
+     * -- or that read it off the main thread -- does not marshal into core's run loop again.
+     */
+    internal fun pairingReadyFrom(pairing: JSONObject?): Boolean {
+        if (!coreOk || pairing == null) return false
         if (PairingModel.state(pairing) != PairingModel.READY) return false
         return pairingPersistence.canMarkReady(
             pairing.optBoolean("paired"),

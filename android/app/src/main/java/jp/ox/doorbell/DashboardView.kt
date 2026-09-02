@@ -130,6 +130,12 @@ internal class DashboardView(
         var lastService: DoorService? = null
     }
     private var lastRows: List<CallRow> = emptyList()
+
+    /** At most one call-log read in flight: refreshes can arrive faster than the query returns. */
+    private var callsLoading = false
+
+    /** What the call rows currently on screen were built from, so an unchanged list is left be. */
+    private var callsRendered: Triple<List<CallRow>, Palette, String>? = null
     private var unreadMissed = 0
 
     private val stillTick = object : Runnable {
@@ -171,10 +177,15 @@ internal class DashboardView(
         applyArrangement()
     }
 
-    /** Redraw everything that depends on core state. Cheap enough for every relevant event. */
-    fun refresh() {
-        config = if (app.coreOk) app.core.config() else null
-        status = if (app.coreOk) app.core.status() else null
+    /**
+     * Redraw everything that depends on core state, from documents the host has already read.
+     *
+     * The host takes one status document per refresh and hands the same one to every surface, so
+     * a refresh costs one read of core rather than one per surface that wants to look at it.
+     */
+    fun refresh(status: JSONObject?, config: JSONObject?) {
+        this.config = config
+        this.status = status
         nodeId = status?.optJSONObject("node")?.optString("id").orEmpty()
         texts.setConfig(config)
         coreDisplay = CoreDisplays.parse(status?.optJSONObject("display"))
@@ -196,6 +207,12 @@ internal class DashboardView(
         loadCalls()
         applyArrangement()
     }
+
+    /** Refresh by reading core here, for the paths the host's coalescer does not drive. */
+    fun refresh() = refresh(
+        if (app.coreOk) app.core.status() else null,
+        if (app.coreOk) app.core.config() else null,
+    )
 
     /**
      * Called once a second by the host. Formats from the cached anchor and never touches core, so
@@ -907,12 +924,14 @@ internal class DashboardView(
     // ---------- recent calls ----------
 
     private fun loadCalls() {
-        if (!app.coreOk) return
+        if (!app.coreOk || callsLoading) return
+        callsLoading = true
         Thread({
             val document = app.core.callLog(0L, 0L, CallHistoryModel.DASHBOARD_ROWS)
             val rows = CallHistoryModel.parse(document)
             val missed = CallHistoryModel.unreadMissed(document)
             ui.post {
+                callsLoading = false
                 lastRows = rows
                 unreadMissed = missed
                 updateHeader()
@@ -921,7 +940,15 @@ internal class DashboardView(
         }, "doorbell-dashboard-calls").apply { isDaemon = true }.start()
     }
 
+    /**
+     * Rebuild the call rows, which is a view per row. Refreshes arrive once a second and the log
+     * changes far more rarely, so an unchanged list in unchanged colours and language is left on
+     * screen rather than torn down and built again.
+     */
     private fun renderCalls() {
+        val key = Triple(lastRows, palette, texts.lang)
+        if (callsRendered == key && callList.childCount > 0) return
+        callsRendered = key
         callList.removeAllViews()
         if (lastRows.isEmpty()) {
             callList.addView(
