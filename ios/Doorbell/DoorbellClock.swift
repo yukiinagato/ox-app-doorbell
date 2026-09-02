@@ -1,5 +1,17 @@
 import Foundation
 
+/// What a clock needs from Core: whether Core is up, and one zone-corrected reading. `CoreBridge`
+/// is the only production conformer; the protocol exists so a test can watch, and refuse, the
+/// calls a clock makes.
+protocol DoorbellClockCore: AnyObject {
+    /// False until `db_core_start` has returned successfully. A reading taken before that runs
+    /// inline on the caller's thread, beside Core building itself on its own.
+    var isRunning: Bool { get }
+    func localTime(wallMs: Int64) -> [String: Any]?
+}
+
+extension CoreBridge: DoorbellClockCore {}
+
 /// Every clock and every timestamp the shells draw comes from Core's `db_core_local_time_json`,
 /// so a device whose own clock is wrong — or that sits in another zone — still shows the
 /// household's time. The struct keeps the last successful reading so a momentary failure does not
@@ -23,7 +35,11 @@ struct DoorbellClock {
 
     private static let weekdayKeys = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"]
 
-    static func read(_ core: CoreBridge, wallMs: Int64 = 0) -> Reading? {
+    /// Nothing is read from a Core that has not finished starting: before that the export runs on
+    /// the caller's thread instead of Core's, which on a background queue puts a second thread
+    /// inside the node while `db_core_start` is still assembling it.
+    static func read(_ core: DoorbellClockCore, wallMs: Int64 = 0) -> Reading? {
+        guard core.isRunning else { return nil }
         guard let json = core.localTime(wallMs: wallMs) else { return nil }
         return Reading(hour: ConfigUtil.int(json, "hh", 0),
                        minute: ConfigUtil.int(json, "mm", 0),
@@ -198,11 +214,25 @@ final class DoorbellClockSource {
         return DoorbellClock.advance(base, bySeconds: Int(elapsed))
     }
 
+    /// Whether the last attempt was turned away because Core had not started. The screens poll
+    /// this so the first reading is taken as soon as Core is up rather than at the next half
+    /// minute.
+    private(set) var waitingForCore = false
+
     /// Re-takes the base from Core off the main thread. `completion` receives how long Core took,
     /// which is the number worth watching: it is the stall this indirection exists to keep off
     /// the run loop.
-    func refresh(_ core: CoreBridge, completion: ((TimeInterval) -> Void)? = nil) {
+    func refresh(_ core: DoorbellClockCore, completion: ((TimeInterval) -> Void)? = nil) {
         guard !refreshing else { return }
+        // The one rule this indirection exists to keep: never a loop-backed export off the main
+        // thread while Core is still starting. `db_core_local_time_json` is synchronous into
+        // Core's run loop, and before that loop is Running it executes the body on the calling
+        // thread — here a utility queue, beside `db_core_start` building the node.
+        guard core.isRunning else {
+            waitingForCore = true
+            return
+        }
+        waitingForCore = false
         refreshing = true
         DispatchQueue.global(qos: .utility).async { [weak self] in
             let started = ProcessInfo.processInfo.systemUptime
