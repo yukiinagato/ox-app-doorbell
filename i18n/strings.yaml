@@ -56,9 +56,9 @@ admin.title: { ja: "管理", en: "Admin", zh: "管理" }
 admin.page_title: { ja: "ドアホン管理", en: "Doorbell Admin", zh: "门铃管理" }
 admin.language: { ja: "言語", en: "Language", zh: "语言" }
 admin.ui_style: { ja: "UI スタイル", en: "UI style", zh: "UI 样式" }
-admin.pin_prompt: { ja: "PIN を入力してください", en: "Enter PIN", zh: "请输入 PIN" }
-admin.pin_wrong: { ja: "PIN が違います", en: "Wrong PIN", zh: "PIN 错误" }
-admin.locked: { ja: "10分間ロックされました", en: "Locked for 10 minutes", zh: "已锁定 10 分钟" }
+admin.pin_prompt: { ja: "管理パスワードを入力してください", en: "Enter the admin password", zh: "请输入管理密码" }
+admin.pin_wrong: { ja: "管理パスワードが違います", en: "Wrong admin password", zh: "管理密码错误" }
+admin.locked: { ja: "管理パスワードの入力を 10 分間ロックしました", en: "Admin password entry locked for 10 minutes", zh: "管理密码输入已锁定 10 分钟" }
 admin.login: { ja: "ログイン", en: "Log in", zh: "登录" }
 admin.join: { ja: "既存クラスタに参加", en: "Join existing cluster", zh: "加入现有集群" }
 admin.password: { ja: "管理パスワード", en: "Admin password", zh: "管理密码" }
@@ -286,11 +286,12 @@ admin.imported: { ja: "{n} 件を書き込みました", en: "Imported {n} entri
 admin.panel_token: { ja: "パネル token", en: "Panel token", zh: "面板 token" }
 admin.rotate: { ja: "ローテート", en: "Rotate", zh: "轮换" }
 admin.rotate_confirm: { ja: "旧 token は即時無効になります。よろしいですか?", en: "The old token becomes invalid immediately. Continue?", zh: "旧 token 将立即失效，继续吗？" }
+# DEPRECATED: superseded by pair.* — remove after all shells migrate
 admin.join_pin: { ja: "PIN で追加", en: "Add via PIN", zh: "用 PIN 添加" }
 admin.join_hint: { ja: "新しい端末でこの PIN と接続先を入力してください (10 分有効)", en: "Enter this PIN and the address on the new device (valid 10 min)", zh: "在新设备上输入此 PIN 与地址（10 分钟有效）" }
 admin.pair_hint: { ja: "同じ LAN 上の未設定デバイスを自動で見つけて追加します。新機の画面に出る QR も同じ働きです。", en: "Automatically finds and adds unconfigured devices on the same LAN. The QR shown on a new device does the same.", zh: "自动发现同一局域网内未配置的设备并添加。新设备屏幕上的二维码也是同样作用。" }
-admin.pair_mode: { ja: "配対モード (10 分)", en: "Pairing mode (10 min)", zh: "配对模式（10 分钟）" }
-admin.pair_mode_on: { ja: "配対モードを開始しました (10 分)", en: "Pairing mode started (10 min)", zh: "已开启配对模式（10 分钟）" }
+admin.pair_mode: { ja: "ペアリングモード (10 分)", en: "Pairing mode (10 min)", zh: "配对模式（10 分钟）" }
+admin.pair_mode_on: { ja: "ペアリングモードを開始しました (10 分)", en: "Pairing mode started (10 min)", zh: "已开启配对模式（10 分钟）" }
 admin.pair_mode_left: { ja: "自動追加 ON — 残り {m}:{s}", en: "Auto-add ON — {m}:{s} left", zh: "自动添加已开启 — 剩余 {m}:{s}" }
 admin.pair_none: { ja: "待機中のデバイスはありません", en: "No devices waiting", zh: "暂无等待中的设备" }
 admin.pair_approve: { ja: "承認", en: "Approve", zh: "批准" }
@@ -579,3 +580,74 @@ admin.audio_none: { ja: "音声なし (TTS)", en: "No audio (TTS)", zh: "无音�
 admin.audio_play: { ja: "試聴", en: "Play", zh: "试听" }
 admin.audio_preview_unsupported: { ja: "このブラウザは内蔵音の試聴に対応していません", en: "This browser cannot preview built-in sounds", zh: "此浏览器不支持试听内置声音" }
 admin.mock_audio_play: { ja: "mock: {value} を再生", en: "mock: playing {value}", zh: "mock：正在播放 {value}" }
+
+# ---- ペアリング (正規文言。全シェル共通。旧 admin.pair_* / admin.join_* を置き換える) ----
+# 用語は固定: クラスタ / Cluster / 集群、ペアリング PIN / Pairing PIN / 配对 PIN、
+# 管理パスワード / Admin password / 管理密码、追加 / Add / 添加。
+# 誤字の「配 + 対」、および 承認 / 招待 / 親機 / Approve / Invite / primary / 批准 / 邀请 /
+# 単独の "PIN" は user-facing に出さない (WP-G の用語 grep 対象)。
+pair.title_unpaired: { ja: "このドアホンをクラスタに追加", en: "Add this doorbell to a Cluster", zh: "将此门铃添加到集群" }
+pair.searching: { ja: "近くの端末を探しています…", en: "Looking for nearby devices…", zh: "正在查找附近设备…" }
+pair.searching_hint: { ja: "クラスタに参加済みの端末か管理画面で「追加」を押してください", en: "Press \"Add\" on a device already in the Cluster, or on the admin page", zh: "请在已加入集群的设备或管理页面上点击“添加”" }
+pair.joining: { ja: "クラスタに参加しています…", en: "Joining the Cluster…", zh: "正在加入集群…" }
+pair.joined: { ja: "クラスタに参加しました", en: "Joined the Cluster", zh: "已加入集群" }
+pair.created: { ja: "クラスタを作成しました", en: "Cluster created", zh: "已创建集群" }
+pair.created_next: { ja: "次の端末を追加しますか?", en: "Add the next device?", zh: "要添加下一个设备吗？" }
+pair.later: { ja: "あとで設定", en: "Set up later", zh: "稍后设置" }
+pair.not_set_up_banner: { ja: "クラスタ未設定 — タップして追加", en: "Not set up — tap to add", zh: "未设置 — 点击添加" }
+pair.create_home: { ja: "新しいクラスタを作る", en: "Create a new Cluster", zh: "新建集群" }
+pair.create_home_confirm: { ja: "この端末で新しいクラスタを作りますか? 他の端末がすでにある場合は、その端末から「追加」してください。", en: "Create a new Cluster on this device? If you already have another device, press \"Add\" on that device instead.", zh: "要在此设备上新建集群吗？如果已经有其他设备，请在那台设备上点击“添加”。" }
+pair.join_with_code: { ja: "ペアリング PIN で参加", en: "Join with a Pairing PIN", zh: "使用配对 PIN 加入" }
+pair.add_with_code: { ja: "ペアリング PIN で追加", en: "Add with a Pairing PIN", zh: "使用配对 PIN 添加" }
+pair.address_label: { ja: "接続先", en: "Address", zh: "连接地址" }
+pair.address_example: { ja: "例: 10.0.1.5:47172", en: "e.g. 10.0.1.5:47172", zh: "例如: 10.0.1.5:47172" }
+pair.code_label: { ja: "ペアリング PIN (6 桁)", en: "Pairing PIN (6 digits)", zh: "配对 PIN（6 位）" }
+pair.code_instructions: { ja: "新しい端末で「ペアリング PIN で参加」を選び、上の接続先とペアリング PIN を入力してください", en: "On the new device choose \"Join with a Pairing PIN\" and enter the address and code shown above", zh: "在新设备上选择“使用配对 PIN 加入”，然后输入上面的连接地址和配对 PIN" }
+pair.code_expires_in: { ja: "あと {m}:{s}", en: "{m}:{s} left", zh: "剩余 {m}:{s}" }
+pair.code_expired: { ja: "期限切れ — 新しいコードを発行", en: "Expired — get a new code", zh: "已过期 — 生成新码" }
+pair.code_attempts_left: { ja: "残り {n} 回", en: "{n} attempts left", zh: "剩余 {n} 次" }
+pair.copy: { ja: "コピー", en: "Copy", zh: "复制" }
+pair.nearby_title: { ja: "近くの端末", en: "Nearby devices", zh: "附近设备" }
+pair.nearby_none: { ja: "待機中の端末はありません", en: "No devices waiting", zh: "暂无等待中的设备" }
+pair.nearby_waiting_since: { ja: "{s} 秒前から待機", en: "waiting {s}s", zh: "已等待 {s} 秒" }
+pair.add: { ja: "追加", en: "Add", zh: "添加" }
+pair.adding: { ja: "追加中…", en: "Adding…", zh: "添加中…" }
+pair.added: { ja: "追加しました", en: "Added", zh: "已添加" }
+pair.add_failed: { ja: "追加できませんでした", en: "Couldn't add", zh: "添加失败" }
+pair.deny: { ja: "無視", en: "Ignore", zh: "忽略" }
+pair.add_all: { ja: "まとめて追加 (10 分)", en: "Add all nearby (10 min)", zh: "批量添加（10 分钟）" }
+pair.add_all_warning: { ja: "10 分間、見つかった端末をすべて自動で追加します", en: "Every device found in the next 10 minutes will be added automatically", zh: "10 分钟内发现的所有设备都将被自动添加" }
+pair.add_all_on: { ja: "まとめて追加 ON — あと {m}:{s} ({n} 台追加)", en: "Adding all — {m}:{s} left ({n} added)", zh: "批量添加已开启 — 剩余 {m}:{s}（已添加 {n} 台）" }
+pair.add_all_stop: { ja: "停止", en: "Stop", zh: "停止" }
+pair.qr_caption: { ja: "別の端末でこの QR を読み取ると追加できます", en: "Scan this QR from another device to add this one", zh: "用另一台设备扫描此二维码即可添加" }
+pair.scan_qr: { ja: "QR を読み取る", en: "Scan QR", zh: "扫描二维码" }
+pair.scan_hint: { ja: "新しい端末に表示された追加用 QR に合わせてください", en: "Point at the Add QR shown on the new device", zh: "请对准新设备上显示的添加二维码" }
+pair.membership: { ja: "クラスタ · {n} 台", en: "Cluster · {n} devices", zh: "集群 · {n} 台" }
+pair.membership_connected: { ja: "{n} 台接続中", en: "{n} connected", zh: "{n} 台已连接" }
+pair.created_badge: { ja: "クラスタを作成した端末", en: "Created this Cluster", zh: "创建了此集群" }
+pair.persist_error_title: { ja: "設定を保存できませんでした", en: "Couldn't save settings", zh: "无法保存设置" }
+pair.persist_error_body: { ja: "端末の安全な保存領域に書き込めませんでした。空き容量と権限を確認して再試行してください。", en: "This device couldn't write to its secure storage. Check free space and permissions, then try again.", zh: "无法写入此设备的安全存储区。请检查可用空间和权限后重试。" }
+pair.retry: { ja: "再試行", en: "Retry", zh: "重试" }
+pair.revoked: { ja: "この端末はクラスタから削除されました", en: "This device was removed from the Cluster", zh: "此设备已从集群中移除" }
+pair.clear_title: { ja: "この端末のペアリングを消去", en: "Clear pairing on this device", zh: "清除此设备的配对" }
+pair.clear_confirm: { ja: "クラスタから離脱し、この端末の設定をすべて消去します。元に戻せません。", en: "This device will leave the Cluster and all of its settings will be erased. This cannot be undone.", zh: "此设备将退出集群并清除其全部设置。此操作无法撤销。" }
+# エラーコード → 表示文言 (全シェル共通)。生のコードは「詳細」行以外に出さない。
+pair.err_detail: { ja: "詳細: {code}", en: "Details: {code}", zh: "详情: {code}" }
+pair.err.bad_pin: { ja: "ペアリング PIN が違います", en: "Wrong Pairing PIN", zh: "配对 PIN 不正确" }
+pair.err.expired: { ja: "ペアリング PIN の期限が切れました。相手の端末で新しいコードを発行してください", en: "The Pairing PIN expired. Get a new one on the other device", zh: "配对 PIN 已过期。请在对方设备上生成新的配对 PIN" }
+pair.err.no_token: { ja: "相手の端末で「ペアリング PIN で追加」が開始されていません", en: "The other device isn't offering a Pairing PIN right now", zh: "对方设备当前没有开启“使用配对 PIN 添加”" }
+pair.err.host_unpaired: { ja: "その端末はまだクラスタに参加していません。先にその端末でクラスタを作るか、別の端末を指定してください", en: "That device isn't in a Cluster yet. Create a Cluster on it first, or use a different device", zh: "该设备尚未加入集群。请先在该设备上新建集群，或改用其他设备" }
+pair.err.connect_failed: { ja: "接続先に届きません。アドレスと、同じネットワークにつながっているかを確認してください", en: "Can't reach that address. Check the address and make sure both devices are on the same network", zh: "无法连接到该地址。请检查连接地址，并确认两台设备处于同一网络" }
+pair.err.timeout: { ja: "応答がありませんでした。もう一度お試しください", en: "No response. Try again", zh: "没有收到响应。请重试" }
+pair.err.closed: { ja: "相手の端末との接続が切れました", en: "The other device disconnected", zh: "与对方设备的连接已断开" }
+pair.err.join_in_progress: { ja: "すでに参加処理中です", en: "Already joining", zh: "正在加入中" }
+pair.err.already_paired: { ja: "この端末はすでにクラスタに参加しています", en: "This device is already in a Cluster", zh: "此设备已加入集群" }
+pair.err.decrypt_failed: { ja: "安全確認に失敗しました。ネットワークに不審な端末がないか確認してください", en: "Security check failed. Make sure there is no untrusted device on the network", zh: "安全校验失败。请检查网络中是否存在可疑设备" }
+pair.err.bad_payload: { ja: "相手の端末のバージョンが合いません", en: "The other device's version isn't compatible", zh: "对方设备的版本不兼容" }
+pair.err.bad_challenge: { ja: "相手の端末のバージョンが合いません", en: "The other device's version isn't compatible", zh: "对方设备的版本不兼容" }
+pair.err.local_persist_failed: { ja: "この端末に設定を保存できませんでした", en: "Couldn't save settings on this device", zh: "无法在此设备上保存设置" }
+pair.err.persist_failed: { ja: "この端末に設定を保存できませんでした", en: "Couldn't save settings on this device", zh: "无法在此设备上保存设置" }
+pair.err.host_zero_psk: { ja: "相手の端末の設定が不正です", en: "The other device's setup is invalid", zh: "对方设备的设置无效" }
+pair.err.no_ack: { ja: "端末が応答しませんでした。電源が入っているか、同じネットワークにつながっているかを確認してください", en: "The device didn't respond. Check that it is powered on and on the same network", zh: "该设备没有响应。请确认设备已开机并处于同一网络" }
+pair.err.unknown: { ja: "追加できませんでした。もう一度お試しください", en: "Couldn't complete that. Please try again", zh: "操作未能完成，请重试" }
+

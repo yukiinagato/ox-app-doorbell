@@ -154,7 +154,7 @@ Delete it?</value></data>
   <data name="admin_list_or_all" xml:space="preserve"><value>Comma-separated values or all</value></data>
   <data name="admin_load_or_add" xml:space="preserve"><value>Load / add</value></data>
   <data name="admin_local_addrs" xml:space="preserve"><value>Local addresses</value></data>
-  <data name="admin_locked" xml:space="preserve"><value>Locked for 10 minutes</value></data>
+  <data name="admin_locked" xml:space="preserve"><value>Admin password entry locked for 10 minutes</value></data>
   <data name="admin_login" xml:space="preserve"><value>Log in</value></data>
   <data name="admin_logs" xml:space="preserve"><value>Logs</value></data>
   <data name="admin_mock_audio_play" xml:space="preserve"><value>mock: playing {0}</value></data>
@@ -189,8 +189,8 @@ Delete it?</value></data>
   <data name="admin_panel_token" xml:space="preserve"><value>Panel token</value></data>
   <data name="admin_pass" xml:space="preserve"><value>Password</value></data>
   <data name="admin_password" xml:space="preserve"><value>Admin password</value></data>
-  <data name="admin_pin_prompt" xml:space="preserve"><value>Enter PIN</value></data>
-  <data name="admin_pin_wrong" xml:space="preserve"><value>Wrong PIN</value></data>
+  <data name="admin_pin_prompt" xml:space="preserve"><value>Enter the admin password</value></data>
+  <data name="admin_pin_wrong" xml:space="preserve"><value>Wrong admin password</value></data>
   <data name="admin_playback_fallback_hint" xml:space="preserve"><value>Web skips HLS immediately. A later MJPEG strategy is prewarmed from time zero. Maximum extra wait before MJPEG:</value></data>
   <data name="admin_playback_one_required" xml:space="preserve"><value>Enable at least one playback strategy</value></data>
   <data name="admin_playback_pair_override" xml:space="preserve"><value>Indoor panel × door station override</value></data>
@@ -426,6 +426,69 @@ Delete it?</value></data>
   <data name="offline_body" xml:space="preserve"><value>Calling unavailable. Please knock.</value></data>
   <data name="offline_reconnect" xml:space="preserve"><value>Reconnecting in {0}s</value></data>
   <data name="offline_title" xml:space="preserve"><value>System offline</value></data>
+  <data name="pair_add" xml:space="preserve"><value>Add</value></data>
+  <data name="pair_add_all" xml:space="preserve"><value>Add all nearby (10 min)</value></data>
+  <data name="pair_add_all_on" xml:space="preserve"><value>Adding all — {0}:{1} left ({2} added)</value></data>
+  <data name="pair_add_all_stop" xml:space="preserve"><value>Stop</value></data>
+  <data name="pair_add_all_warning" xml:space="preserve"><value>Every device found in the next 10 minutes will be added automatically</value></data>
+  <data name="pair_add_failed" xml:space="preserve"><value>Couldn't add</value></data>
+  <data name="pair_add_with_code" xml:space="preserve"><value>Add with a Pairing PIN</value></data>
+  <data name="pair_added" xml:space="preserve"><value>Added</value></data>
+  <data name="pair_adding" xml:space="preserve"><value>Adding…</value></data>
+  <data name="pair_address_example" xml:space="preserve"><value>e.g. 10.0.1.5:47172</value></data>
+  <data name="pair_address_label" xml:space="preserve"><value>Address</value></data>
+  <data name="pair_clear_confirm" xml:space="preserve"><value>This device will leave the Cluster and all of its settings will be erased. This cannot be undone.</value></data>
+  <data name="pair_clear_title" xml:space="preserve"><value>Clear pairing on this device</value></data>
+  <data name="pair_code_attempts_left" xml:space="preserve"><value>{0} attempts left</value></data>
+  <data name="pair_code_expired" xml:space="preserve"><value>Expired — get a new code</value></data>
+  <data name="pair_code_expires_in" xml:space="preserve"><value>{0}:{1} left</value></data>
+  <data name="pair_code_instructions" xml:space="preserve"><value>On the new device choose &quot;Join with a Pairing PIN&quot; and enter the address and code shown above</value></data>
+  <data name="pair_code_label" xml:space="preserve"><value>Pairing PIN (6 digits)</value></data>
+  <data name="pair_copy" xml:space="preserve"><value>Copy</value></data>
+  <data name="pair_create_home" xml:space="preserve"><value>Create a new Cluster</value></data>
+  <data name="pair_create_home_confirm" xml:space="preserve"><value>Create a new Cluster on this device? If you already have another device, press &quot;Add&quot; on that device instead.</value></data>
+  <data name="pair_created" xml:space="preserve"><value>Cluster created</value></data>
+  <data name="pair_created_badge" xml:space="preserve"><value>Created this Cluster</value></data>
+  <data name="pair_created_next" xml:space="preserve"><value>Add the next device?</value></data>
+  <data name="pair_deny" xml:space="preserve"><value>Ignore</value></data>
+  <data name="pair_err_already_paired" xml:space="preserve"><value>This device is already in a Cluster</value></data>
+  <data name="pair_err_bad_challenge" xml:space="preserve"><value>The other device's version isn't compatible</value></data>
+  <data name="pair_err_bad_payload" xml:space="preserve"><value>The other device's version isn't compatible</value></data>
+  <data name="pair_err_bad_pin" xml:space="preserve"><value>Wrong Pairing PIN</value></data>
+  <data name="pair_err_closed" xml:space="preserve"><value>The other device disconnected</value></data>
+  <data name="pair_err_connect_failed" xml:space="preserve"><value>Can't reach that address. Check the address and make sure both devices are on the same network</value></data>
+  <data name="pair_err_decrypt_failed" xml:space="preserve"><value>Security check failed. Make sure there is no untrusted device on the network</value></data>
+  <data name="pair_err_expired" xml:space="preserve"><value>The Pairing PIN expired. Get a new one on the other device</value></data>
+  <data name="pair_err_host_unpaired" xml:space="preserve"><value>That device isn't in a Cluster yet. Create a Cluster on it first, or use a different device</value></data>
+  <data name="pair_err_host_zero_psk" xml:space="preserve"><value>The other device's setup is invalid</value></data>
+  <data name="pair_err_join_in_progress" xml:space="preserve"><value>Already joining</value></data>
+  <data name="pair_err_local_persist_failed" xml:space="preserve"><value>Couldn't save settings on this device</value></data>
+  <data name="pair_err_no_ack" xml:space="preserve"><value>The device didn't respond. Check that it is powered on and on the same network</value></data>
+  <data name="pair_err_no_token" xml:space="preserve"><value>The other device isn't offering a Pairing PIN right now</value></data>
+  <data name="pair_err_persist_failed" xml:space="preserve"><value>Couldn't save settings on this device</value></data>
+  <data name="pair_err_timeout" xml:space="preserve"><value>No response. Try again</value></data>
+  <data name="pair_err_unknown" xml:space="preserve"><value>Couldn't complete that. Please try again</value></data>
+  <data name="pair_err_detail" xml:space="preserve"><value>Details: {0}</value></data>
+  <data name="pair_join_with_code" xml:space="preserve"><value>Join with a Pairing PIN</value></data>
+  <data name="pair_joined" xml:space="preserve"><value>Joined the Cluster</value></data>
+  <data name="pair_joining" xml:space="preserve"><value>Joining the Cluster…</value></data>
+  <data name="pair_later" xml:space="preserve"><value>Set up later</value></data>
+  <data name="pair_membership" xml:space="preserve"><value>Cluster · {0} devices</value></data>
+  <data name="pair_membership_connected" xml:space="preserve"><value>{0} connected</value></data>
+  <data name="pair_nearby_none" xml:space="preserve"><value>No devices waiting</value></data>
+  <data name="pair_nearby_title" xml:space="preserve"><value>Nearby devices</value></data>
+  <data name="pair_nearby_waiting_since" xml:space="preserve"><value>waiting {0}s</value></data>
+  <data name="pair_not_set_up_banner" xml:space="preserve"><value>Not set up — tap to add</value></data>
+  <data name="pair_persist_error_body" xml:space="preserve"><value>This device couldn't write to its secure storage. Check free space and permissions, then try again.</value></data>
+  <data name="pair_persist_error_title" xml:space="preserve"><value>Couldn't save settings</value></data>
+  <data name="pair_qr_caption" xml:space="preserve"><value>Scan this QR from another device to add this one</value></data>
+  <data name="pair_retry" xml:space="preserve"><value>Retry</value></data>
+  <data name="pair_revoked" xml:space="preserve"><value>This device was removed from the Cluster</value></data>
+  <data name="pair_scan_hint" xml:space="preserve"><value>Point at the Add QR shown on the new device</value></data>
+  <data name="pair_scan_qr" xml:space="preserve"><value>Scan QR</value></data>
+  <data name="pair_searching" xml:space="preserve"><value>Looking for nearby devices…</value></data>
+  <data name="pair_searching_hint" xml:space="preserve"><value>Press &quot;Add&quot; on a device already in the Cluster, or on the admin page</value></data>
+  <data name="pair_title_unpaired" xml:space="preserve"><value>Add this doorbell to a Cluster</value></data>
   <data name="panel_answering" xml:space="preserve"><value>Answering…</value></data>
   <data name="panel_auth_failed" xml:space="preserve"><value>Panel authentication failed</value></data>
   <data name="panel_back" xml:space="preserve"><value>Back</value></data>

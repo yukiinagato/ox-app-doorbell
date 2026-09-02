@@ -154,7 +154,7 @@
   <data name="admin_list_or_all" xml:space="preserve"><value>カンマ区切り、または all</value></data>
   <data name="admin_load_or_add" xml:space="preserve"><value>読込／追加</value></data>
   <data name="admin_local_addrs" xml:space="preserve"><value>本機アドレス</value></data>
-  <data name="admin_locked" xml:space="preserve"><value>10分間ロックされました</value></data>
+  <data name="admin_locked" xml:space="preserve"><value>管理パスワードの入力を 10 分間ロックしました</value></data>
   <data name="admin_login" xml:space="preserve"><value>ログイン</value></data>
   <data name="admin_logs" xml:space="preserve"><value>ログ</value></data>
   <data name="admin_mock_audio_play" xml:space="preserve"><value>mock: {0} を再生</value></data>
@@ -178,9 +178,9 @@
   <data name="admin_pair_found_ok" xml:space="preserve"><value>この端末を親機にしました</value></data>
   <data name="admin_pair_hint" xml:space="preserve"><value>同じ LAN 上の未設定デバイスを自動で見つけて追加します。新機の画面に出る QR も同じ働きです。</value></data>
   <data name="admin_pair_invited" xml:space="preserve"><value>招待を送りました</value></data>
-  <data name="admin_pair_mode" xml:space="preserve"><value>配対モード (10 分)</value></data>
+  <data name="admin_pair_mode" xml:space="preserve"><value>ペアリングモード (10 分)</value></data>
   <data name="admin_pair_mode_left" xml:space="preserve"><value>自動追加 ON — 残り {0}:{1}</value></data>
-  <data name="admin_pair_mode_on" xml:space="preserve"><value>配対モードを開始しました (10 分)</value></data>
+  <data name="admin_pair_mode_on" xml:space="preserve"><value>ペアリングモードを開始しました (10 分)</value></data>
   <data name="admin_pair_none" xml:space="preserve"><value>待機中のデバイスはありません</value></data>
   <data name="admin_pair_override_active" xml:space="preserve"><value>現在この組合せの上書きを使用しています。</value></data>
   <data name="admin_pair_override_inherited" xml:space="preserve"><value>上書きはありません。編集値は全体設定を継承しています。</value></data>
@@ -189,8 +189,8 @@
   <data name="admin_panel_token" xml:space="preserve"><value>パネル token</value></data>
   <data name="admin_pass" xml:space="preserve"><value>パスワード</value></data>
   <data name="admin_password" xml:space="preserve"><value>管理パスワード</value></data>
-  <data name="admin_pin_prompt" xml:space="preserve"><value>PIN を入力してください</value></data>
-  <data name="admin_pin_wrong" xml:space="preserve"><value>PIN が違います</value></data>
+  <data name="admin_pin_prompt" xml:space="preserve"><value>管理パスワードを入力してください</value></data>
+  <data name="admin_pin_wrong" xml:space="preserve"><value>管理パスワードが違います</value></data>
   <data name="admin_playback_fallback_hint" xml:space="preserve"><value>Web は HLS を即時スキップします。後段の MJPEG は時刻 0 から予熱します。MJPEG までの最大追加待機:</value></data>
   <data name="admin_playback_one_required" xml:space="preserve"><value>少なくとも一つの再生方式を有効にしてください</value></data>
   <data name="admin_playback_pair_override" xml:space="preserve"><value>室内機 × 室外機の上書き</value></data>
@@ -426,6 +426,69 @@
   <data name="offline_body" xml:space="preserve"><value>呼び出しできません。直接ノックしてください。</value></data>
   <data name="offline_reconnect" xml:space="preserve"><value>再接続まで {0} 秒</value></data>
   <data name="offline_title" xml:space="preserve"><value>システムオフライン</value></data>
+  <data name="pair_add" xml:space="preserve"><value>追加</value></data>
+  <data name="pair_add_all" xml:space="preserve"><value>まとめて追加 (10 分)</value></data>
+  <data name="pair_add_all_on" xml:space="preserve"><value>まとめて追加 ON — あと {0}:{1} ({2} 台追加)</value></data>
+  <data name="pair_add_all_stop" xml:space="preserve"><value>停止</value></data>
+  <data name="pair_add_all_warning" xml:space="preserve"><value>10 分間、見つかった端末をすべて自動で追加します</value></data>
+  <data name="pair_add_failed" xml:space="preserve"><value>追加できませんでした</value></data>
+  <data name="pair_add_with_code" xml:space="preserve"><value>ペアリング PIN で追加</value></data>
+  <data name="pair_added" xml:space="preserve"><value>追加しました</value></data>
+  <data name="pair_adding" xml:space="preserve"><value>追加中…</value></data>
+  <data name="pair_address_example" xml:space="preserve"><value>例: 10.0.1.5:47172</value></data>
+  <data name="pair_address_label" xml:space="preserve"><value>接続先</value></data>
+  <data name="pair_clear_confirm" xml:space="preserve"><value>クラスタから離脱し、この端末の設定をすべて消去します。元に戻せません。</value></data>
+  <data name="pair_clear_title" xml:space="preserve"><value>この端末のペアリングを消去</value></data>
+  <data name="pair_code_attempts_left" xml:space="preserve"><value>残り {0} 回</value></data>
+  <data name="pair_code_expired" xml:space="preserve"><value>期限切れ — 新しいコードを発行</value></data>
+  <data name="pair_code_expires_in" xml:space="preserve"><value>あと {0}:{1}</value></data>
+  <data name="pair_code_instructions" xml:space="preserve"><value>新しい端末で「ペアリング PIN で参加」を選び、上の接続先とペアリング PIN を入力してください</value></data>
+  <data name="pair_code_label" xml:space="preserve"><value>ペアリング PIN (6 桁)</value></data>
+  <data name="pair_copy" xml:space="preserve"><value>コピー</value></data>
+  <data name="pair_create_home" xml:space="preserve"><value>新しいクラスタを作る</value></data>
+  <data name="pair_create_home_confirm" xml:space="preserve"><value>この端末で新しいクラスタを作りますか? 他の端末がすでにある場合は、その端末から「追加」してください。</value></data>
+  <data name="pair_created" xml:space="preserve"><value>クラスタを作成しました</value></data>
+  <data name="pair_created_badge" xml:space="preserve"><value>クラスタを作成した端末</value></data>
+  <data name="pair_created_next" xml:space="preserve"><value>次の端末を追加しますか?</value></data>
+  <data name="pair_deny" xml:space="preserve"><value>無視</value></data>
+  <data name="pair_err_already_paired" xml:space="preserve"><value>この端末はすでにクラスタに参加しています</value></data>
+  <data name="pair_err_bad_challenge" xml:space="preserve"><value>相手の端末のバージョンが合いません</value></data>
+  <data name="pair_err_bad_payload" xml:space="preserve"><value>相手の端末のバージョンが合いません</value></data>
+  <data name="pair_err_bad_pin" xml:space="preserve"><value>ペアリング PIN が違います</value></data>
+  <data name="pair_err_closed" xml:space="preserve"><value>相手の端末との接続が切れました</value></data>
+  <data name="pair_err_connect_failed" xml:space="preserve"><value>接続先に届きません。アドレスと、同じネットワークにつながっているかを確認してください</value></data>
+  <data name="pair_err_decrypt_failed" xml:space="preserve"><value>安全確認に失敗しました。ネットワークに不審な端末がないか確認してください</value></data>
+  <data name="pair_err_expired" xml:space="preserve"><value>ペアリング PIN の期限が切れました。相手の端末で新しいコードを発行してください</value></data>
+  <data name="pair_err_host_unpaired" xml:space="preserve"><value>その端末はまだクラスタに参加していません。先にその端末でクラスタを作るか、別の端末を指定してください</value></data>
+  <data name="pair_err_host_zero_psk" xml:space="preserve"><value>相手の端末の設定が不正です</value></data>
+  <data name="pair_err_join_in_progress" xml:space="preserve"><value>すでに参加処理中です</value></data>
+  <data name="pair_err_local_persist_failed" xml:space="preserve"><value>この端末に設定を保存できませんでした</value></data>
+  <data name="pair_err_no_ack" xml:space="preserve"><value>端末が応答しませんでした。電源が入っているか、同じネットワークにつながっているかを確認してください</value></data>
+  <data name="pair_err_no_token" xml:space="preserve"><value>相手の端末で「ペアリング PIN で追加」が開始されていません</value></data>
+  <data name="pair_err_persist_failed" xml:space="preserve"><value>この端末に設定を保存できませんでした</value></data>
+  <data name="pair_err_timeout" xml:space="preserve"><value>応答がありませんでした。もう一度お試しください</value></data>
+  <data name="pair_err_unknown" xml:space="preserve"><value>追加できませんでした。もう一度お試しください</value></data>
+  <data name="pair_err_detail" xml:space="preserve"><value>詳細: {0}</value></data>
+  <data name="pair_join_with_code" xml:space="preserve"><value>ペアリング PIN で参加</value></data>
+  <data name="pair_joined" xml:space="preserve"><value>クラスタに参加しました</value></data>
+  <data name="pair_joining" xml:space="preserve"><value>クラスタに参加しています…</value></data>
+  <data name="pair_later" xml:space="preserve"><value>あとで設定</value></data>
+  <data name="pair_membership" xml:space="preserve"><value>クラスタ · {0} 台</value></data>
+  <data name="pair_membership_connected" xml:space="preserve"><value>{0} 台接続中</value></data>
+  <data name="pair_nearby_none" xml:space="preserve"><value>待機中の端末はありません</value></data>
+  <data name="pair_nearby_title" xml:space="preserve"><value>近くの端末</value></data>
+  <data name="pair_nearby_waiting_since" xml:space="preserve"><value>{0} 秒前から待機</value></data>
+  <data name="pair_not_set_up_banner" xml:space="preserve"><value>クラスタ未設定 — タップして追加</value></data>
+  <data name="pair_persist_error_body" xml:space="preserve"><value>端末の安全な保存領域に書き込めませんでした。空き容量と権限を確認して再試行してください。</value></data>
+  <data name="pair_persist_error_title" xml:space="preserve"><value>設定を保存できませんでした</value></data>
+  <data name="pair_qr_caption" xml:space="preserve"><value>別の端末でこの QR を読み取ると追加できます</value></data>
+  <data name="pair_retry" xml:space="preserve"><value>再試行</value></data>
+  <data name="pair_revoked" xml:space="preserve"><value>この端末はクラスタから削除されました</value></data>
+  <data name="pair_scan_hint" xml:space="preserve"><value>新しい端末に表示された追加用 QR に合わせてください</value></data>
+  <data name="pair_scan_qr" xml:space="preserve"><value>QR を読み取る</value></data>
+  <data name="pair_searching" xml:space="preserve"><value>近くの端末を探しています…</value></data>
+  <data name="pair_searching_hint" xml:space="preserve"><value>クラスタに参加済みの端末か管理画面で「追加」を押してください</value></data>
+  <data name="pair_title_unpaired" xml:space="preserve"><value>このドアホンをクラスタに追加</value></data>
   <data name="panel_answering" xml:space="preserve"><value>応答中…</value></data>
   <data name="panel_auth_failed" xml:space="preserve"><value>パネル認証に失敗しました</value></data>
   <data name="panel_back" xml:space="preserve"><value>戻る</value></data>
