@@ -4,6 +4,7 @@
 #import "../Core/DBCallHistoryModel.h"
 #import "../Core/DBConfigUtil.h"
 #import "../Core/DBCoreBridge.h"
+#import "../Core/DBDoorTileModel.h"
 #import "../Core/DBNoticeModel.h"
 #import "../Core/DBPairingModel.h"
 #import "../Core/DBRefreshCoalescer.h"
@@ -29,10 +30,13 @@ static const NSInteger kRecentCallLimit = 20;
 
 // One door tile: a five-second still, the door label, and the announcement chip.
 @interface DBDoorTile : UIButton
-// Stable identity across status polls, so a tile is created once per door.
-@property(nonatomic, copy) NSString *peerKey;
+// Stable identity across status polls, so a tile is created once per door. The
+// door id is that identity: a door outlives the station serving it, and keying
+// on the peer threw the still away every time the serving node changed.
 @property(nonatomic, copy) NSString *doorId;
 @property(nonatomic, strong) NSDictionary *peer;
+@property(nonatomic, copy) NSString *snapshotURL;
+@property(nonatomic) BOOL online;
 @property(nonatomic, readonly) UIImageView *still;
 @property(nonatomic, readonly) DBPillLabel *caption;
 @property(nonatomic, readonly) DBNoticeChip *noticeChip;
@@ -40,15 +44,15 @@ static const NSInteger kRecentCallLimit = 20;
 @end
 
 @implementation DBDoorTile {
-  NSString *_peerKey;
   UIImageView *_still;
   DBPillLabel *_caption;
   DBNoticeChip *_noticeChip;
   UILabel *_offlineLabel;
 }
 
-@synthesize peerKey = _peerKey, doorId = _doorId, peer = _peer, still = _still,
-            caption = _caption, noticeChip = _noticeChip, offlineLabel = _offlineLabel;
+@synthesize doorId = _doorId, peer = _peer, snapshotURL = _snapshotURL, online = _online,
+            still = _still, caption = _caption, noticeChip = _noticeChip,
+            offlineLabel = _offlineLabel;
 
 - (id)initWithFrame:(CGRect)frame {
   self = [super initWithFrame:frame];
@@ -114,7 +118,7 @@ static const NSInteger kRecentCallLimit = 20;
   CGSize _samplerSize;
   CGSize _themeImageSize;
   BOOL _samplerBuilding;
-  NSArray *_doorPeers;
+  NSArray *_doorTileInfos;
   NSArray *_recentRows;
   NSInteger _unreadMissed;
   NSInteger _tzOffsetMinutes;
@@ -182,7 +186,7 @@ static const NSInteger kRecentCallLimit = 20;
     _boot = router.boot;
     _texts = router.texts;
     _audio = [[DBSiren alloc] init];
-    _doorPeers = [NSArray array];
+    _doorTileInfos = [NSArray array];
     _recentRows = [NSArray array];
     _doorTiles = [[NSMutableArray alloc] init];
     _recentLabels = [[NSMutableArray alloc] init];
@@ -498,7 +502,7 @@ static const NSInteger kRecentCallLimit = 20;
   if (status) {
     _status = status;
     _nodeId = [DBConfigUtil str:status path:@"node.id"] ?: @"";
-    _doorPeers = [DBConfigUtil doorPeers:status];
+    _doorTileInfos = [DBDoorTileModel tilesFromStatus:status config:_cfg boot:_boot];
     NSDictionary *display = [status objectForKey:@"display"];
     if ([display isKindOfClass:[NSDictionary class]]) {
       _display = display;
@@ -730,52 +734,54 @@ static const NSInteger kRecentCallLimit = 20;
 - (void)rebuildDoorTiles {
   NSMutableArray *live = [NSMutableArray array];
   NSMutableArray *keys = [NSMutableArray array];
-  for (NSDictionary *peer in _doorPeers) {
-    NSString *key = [DBConfigUtil evStr:peer key:@"id"];
-    if ([key length] == 0) key = [DBConfigUtil evStr:peer key:@"door"];
-    [keys addObject:key ?: @""];
-  }
+  for (DBDoorTileInfo *info in _doorTileInfos) [keys addObject:info.doorId];
   // Drop tiles whose door left the cluster.
   for (NSInteger i = (NSInteger)[_doorTiles count] - 1; i >= 0; i--) {
     DBDoorTile *tile = [_doorTiles objectAtIndex:(NSUInteger)i];
-    if (![keys containsObject:tile.peerKey ?: @""]) {
+    if (![keys containsObject:tile.doorId ?: @""]) {
       [tile removeFromSuperview];
       [_doorTiles removeObjectAtIndex:(NSUInteger)i];
     }
   }
   long long nowMs = (long long)([[NSDate date] timeIntervalSince1970] * 1000.0);
   NSInteger index = 0;
-  for (NSDictionary *peer in _doorPeers) {
-    NSString *key = [keys objectAtIndex:(NSUInteger)index];
+  for (DBDoorTileInfo *info in _doorTileInfos) {
     DBDoorTile *tile = nil;
     for (DBDoorTile *candidate in _doorTiles) {
-      if ([(candidate.peerKey ?: @"") isEqualToString:key]) {
+      if ([(candidate.doorId ?: @"") isEqualToString:info.doorId]) {
         tile = candidate;
         break;
       }
     }
     if (tile == nil) {
       tile = [[DBDoorTile alloc] initWithFrame:CGRectZero];
-      tile.peerKey = key;
+      tile.doorId = info.doorId;
       [tile addTarget:self action:@selector(onDoorTile:)
      forControlEvents:UIControlEventTouchUpInside];
       [self addSubview:tile];
       [_doorTiles addObject:tile];
     }
     [live addObject:tile];
-    tile.peer = peer;
-    tile.doorId = [DBConfigUtil evStr:peer key:@"door"];
+    tile.peer = info.peer;
+    tile.snapshotURL = info.snapshotURL;
+    tile.online = info.online;
     tile.tag = index++;
     tile.backgroundColor = _palette.elevated;
-    NSString *name = [DBConfigUtil evStr:peer key:@"door_label"];
-    if ([name length] == 0) name = [DBConfigUtil evStr:peer key:@"name"];
-    if ([name length] == 0) name = tile.doorId;
+    NSDictionary *doorEntry = [DBConfigUtil dig:_cfg
+        path:[NSString stringWithFormat:@"doors.%@", info.doorId]];
+    NSString *name = [DBConfigUtil labelOf:doorEntry lang:_boot.uiLang fallback:@""];
+    if ([name length] == 0) name = info.label;
+    if ([name length] == 0) name = [DBConfigUtil evStr:info.peer key:@"name"];
+    if ([name length] == 0) name = info.doorId;
     tile.caption.text = name;
     tile.caption.backgroundColor = [UIColor colorWithWhite:0 alpha:0.55];
     tile.caption.textColor = [UIColor whiteColor];
     tile.offlineLabel.textColor = _palette.mutedInk;
     tile.offlineLabel.text = [_texts ts:@"dash.tile_offline"];
-    tile.offlineLabel.hidden = (tile.still.image != nil);
+    // The badge reports the door station, never the state of the still cache.
+    // A tile whose first JPEG has not landed yet is online with a black frame.
+    tile.offlineLabel.hidden = info.online;
+    if (!info.online) tile.still.image = nil;
     NSDictionary *notice = [DBNoticeModel effectiveNoticeForDoor:tile.doorId config:_cfg
                                                             nowMs:nowMs];
     [tile.noticeChip applyPalette:_palette];
@@ -821,11 +827,10 @@ static const NSInteger kRecentCallLimit = 20;
   if (_safeMode || self.superview == nil) return;
   NSInteger generation = ++_snapshotGeneration;
   for (DBDoorTile *tile in _doorTiles) {
-    NSString *host = [DBConfigUtil peerHost:tile.peer];
-    if ([host length] == 0) continue;
-    NSString *urlString = [NSString stringWithFormat:@"http://%@:47180/snapshot.jpg",
-                           [DBConfigUtil urlHost:host]];
-    NSURL *url = [NSURL URLWithString:urlString];
+    // The still comes off the serving peer's own media origin, resolved once in
+    // DBMediaSource; the dashboard never guesses a host or a port of its own.
+    if (!tile.online || [tile.snapshotURL length] == 0) continue;
+    NSURL *url = [NSURL URLWithString:tile.snapshotURL];
     if (url == nil) continue;
     __weak DBDoorTile *weakTile = tile;
     __weak DBHomeScreen *weakSelf = self;
@@ -845,8 +850,7 @@ static const NSInteger kRecentCallLimit = 20;
         DBHomeScreen *screen = weakSelf;
         DBDoorTile *strongTile = weakTile;
         if (!screen || !strongTile || screen->_snapshotGeneration != generation) return;
-        if (thumbnail != nil) strongTile.still.image = thumbnail;
-        strongTile.offlineLabel.hidden = (strongTile.still.image != nil);
+        if (thumbnail != nil && strongTile.online) strongTile.still.image = thumbnail;
       });
     });
   }

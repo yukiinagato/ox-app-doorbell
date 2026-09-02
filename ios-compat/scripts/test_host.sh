@@ -35,6 +35,14 @@ CFLAGS=(-std=c99 -Wall -Wextra -Werror -O2 -I"$MINISIP")
 
 "$CC" -fobjc-arc -Wall -Wextra -Werror -O2 -isysroot "$MACOS_SDK" \
   -I"$REPO_ROOT/ios-kiosk/src/Core" \
+  "$REPO_ROOT/ios-kiosk/src/Core/DBBootConfig.m" \
+  "$REPO_ROOT/ios-kiosk/src/Core/DBMediaSource.m" \
+  "$REPO_ROOT/ios-kiosk/src/Core/DBDoorTileModel.m" \
+  "$REPO_ROOT/ios-compat/tests/door_tile_model_test.m" \
+  -framework Foundation -o "$OUT/door_tile_model_test"
+
+"$CC" -fobjc-arc -Wall -Wextra -Werror -O2 -isysroot "$MACOS_SDK" \
+  -I"$REPO_ROOT/ios-kiosk/src/Core" \
   "$REPO_ROOT/ios-kiosk/src/Core/DBCallEventTracker.m" \
   "$REPO_ROOT/ios-compat/tests/call_event_tracker_test.m" \
   -framework Foundation -o "$OUT/call_event_tracker_test"
@@ -113,6 +121,7 @@ fi
 
 "$OUT/minisip_uas_loopback"
 "$OUT/media_source_test"
+"$OUT/door_tile_model_test"
 "$OUT/call_event_tracker_test"
 [[ $MODERN_CALL_TEST -eq 1 ]] && "$OUT/modern_call_revision_test"
 "$OUT/http_media_test"

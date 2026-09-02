@@ -16,6 +16,7 @@
 #import "DBRecoveryClient.h"
 #import "DBSafeModeRecovery.h"
 #import "doorbell/doorbell.h"
+#import <math.h>
 
 void DBH264Dbg(NSString *fmt, ...);
 
@@ -749,6 +750,17 @@ static BOOL DBNativeKioskHealthy(void) {
 // iOS 5 has no screencap, so remote verification needs the app to draw itself.
 // The poll exists only when boot.json opts in, so an ordinary install pays
 // nothing: no timer, no stat, no file.
+// The rotation the root view controller applies for an interface orientation.
+// The screenshot has to undo exactly this to come out upright.
+static CGFloat DBRotationForInterfaceOrientation(UIInterfaceOrientation orientation) {
+  switch (orientation) {
+    case UIInterfaceOrientationPortraitUpsideDown: return (CGFloat)M_PI;
+    case UIInterfaceOrientationLandscapeLeft: return (CGFloat)(-M_PI_2);
+    case UIInterfaceOrientationLandscapeRight: return (CGFloat)M_PI_2;
+    default: return 0;
+  }
+}
+
 static NSString *const DBScreenshotRequestPath =
     @"/var/mobile/Documents/screenshot.request";
 static NSString *const DBScreenshotOutputPath = @"/var/mobile/Documents/screenshot.png";
@@ -772,17 +784,34 @@ static NSString *const DBScreenshotOutputPath = @"/var/mobile/Documents/screensh
   if (window == nil) return;
   CGSize size = window.bounds.size;
   if (size.width <= 0 || size.height <= 0) return;
-  UIGraphicsBeginImageContextWithOptions(size, YES, 0.0);
+  // On iOS 5 the window keeps the device's native portrait geometry and the
+  // root view controller carries the rotation, so rendering the window layer
+  // straight into a portrait context produces a landscape screen lying on its
+  // side. Draw into an upright canvas and undo the interface rotation instead.
+  UIInterfaceOrientation orientation =
+      [[UIApplication sharedApplication] statusBarOrientation];
+  CGFloat radians = DBRotationForInterfaceOrientation(orientation);
+  BOOL sideways = UIInterfaceOrientationIsLandscape(orientation);
+  CGSize canvas = sideways ? CGSizeMake(size.height, size.width) : size;
+  UIGraphicsBeginImageContextWithOptions(canvas, YES, 0.0);
   CGContextRef ctx = UIGraphicsGetCurrentContext();
-  if (ctx != NULL) [window.layer renderInContext:ctx];
+  if (ctx != NULL) {
+    // Both rectangles share a centre; rotating about it is all the correction
+    // a quarter turn needs, and it keeps the portrait path pixel-identical.
+    CGContextTranslateCTM(ctx, canvas.width / 2, canvas.height / 2);
+    CGContextRotateCTM(ctx, -radians);
+    CGContextTranslateCTM(ctx, -size.width / 2, -size.height / 2);
+    [window.layer renderInContext:ctx];
+  }
   UIImage *shot = UIGraphicsGetImageFromCurrentImageContext();
   UIGraphicsEndImageContext();
   if (shot == nil) return;
   NSData *png = UIImagePNGRepresentation(shot);
   if (png == nil) return;
   [png writeToFile:DBScreenshotOutputPath atomically:YES];
-  NSLog(@"[doorbell][debug] screenshot written (%lux%lu, %lu bytes)",
-        (unsigned long)size.width, (unsigned long)size.height, (unsigned long)[png length]);
+  NSLog(@"[doorbell][debug] screenshot written (%lux%lu, orientation %ld, %lu bytes)",
+        (unsigned long)canvas.width, (unsigned long)canvas.height, (long)orientation,
+        (unsigned long)[png length]);
 }
 
 - (void)restartIntoBootstrapSetup {
