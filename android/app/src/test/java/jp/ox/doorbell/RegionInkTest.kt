@@ -321,7 +321,7 @@ class RegionInkTest {
     // ---------- the dashboard header ----------
 
     /**
-     * The clock shared one row with the membership pill, 不在着信 and 管理. Those three want nearly
+     * The clock shared one row with the membership pill, the missed-calls badge and the admin button. Those three want nearly
      * the whole width of a portrait phone, so the clock -- which takes what is left -- rendered
      * about one character wide, one glyph per line down the edge. Observed on the Moto.
      */
