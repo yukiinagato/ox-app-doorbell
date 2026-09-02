@@ -465,3 +465,76 @@ TEST_CASE("node: the configured zone drives local time and the derived compatibi
 
   node.stop();
 }
+
+TEST_CASE("node: the read-only time and volume exports never wait for the run loop") {
+  // Device finding: both shells drove a one-second clock from db_core_local_time_json on their
+  // main thread, and the call took about three seconds whenever the loop was mid-SNTP or
+  // building a status document -- the displayed seconds advanced in threes. These exports are
+  // served from a published snapshot and must not enter the loop at all.
+  RealClock clock;
+  Runloop loop(clock);
+  NodeOptions options;
+  options.data_dir = ":memory:";
+  options.name = "snapshot-exports";
+  options.role = "indoor_panel";
+  options.listen_addr = "127.0.0.1:0";
+  options.enable_beacon = false;
+  options.http_port = 0;
+  NodeDeps deps;
+  deps.clock = &clock;
+  deps.loop = &loop;
+  Node node(options, std::move(deps));
+  REQUIRE(node.start());
+  node.setConfigKey("time.zone", "\"Asia/Tokyo\"");
+  node.setConfigKey("audio.volume.call", "37");
+  loop.pumpDue();
+
+  loop.start();
+  // Occupy the loop for half a second, the way one SNTP exchange or a large status build does.
+  std::atomic<bool> occupied{false};
+  REQUIRE(loop.post([&occupied] {
+    occupied = true;
+    std::this_thread::sleep_for(std::chrono::milliseconds(500));
+  }));
+  for (int i = 0; i < 500 && !occupied; i++)
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  REQUIRE(occupied.load());
+
+  const auto started_at = std::chrono::steady_clock::now();
+  const std::string first = node.localTimeJson(0);
+  const std::string volumes = node.audioJson("");
+  const auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                              std::chrono::steady_clock::now() - started_at)
+                              .count();
+  CHECK(elapsed_ms < 100);
+
+  // The snapshot is a real answer, not a placeholder.
+  auto local = json::parse(first);
+  REQUIRE(local);
+  CHECK(json::getString(local.get(), "tz") == "Asia/Tokyo");
+  CHECK(json::getInt(local.get(), "offset_min") == 540);
+  CHECK(json::getBool(local.get(), "known", false));
+  auto audio = json::parse(volumes);
+  REQUIRE(audio);
+  CHECK(json::getInt(audio.get(), "call") == 37);
+  CHECK(json::getString(json::get(audio.get(), "sources"), "call") == "cluster");
+
+  // Only the instant is read live, so a clock driven by this export keeps ticking through the
+  // stall instead of freezing until the loop drains.
+  std::this_thread::sleep_for(std::chrono::milliseconds(120));
+  auto later = json::parse(node.localTimeJson(0));
+  REQUIRE(later);
+  CHECK(json::getInt(later.get(), "wall_ms") > json::getInt(local.get(), "wall_ms"));
+
+  // Control: an export that still marshals to the loop does wait for it, which is what proves
+  // the loop was genuinely busy for the checks above.
+  const auto before_blocking = std::chrono::steady_clock::now();
+  node.debugJson();
+  const auto blocked_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                              std::chrono::steady_clock::now() - before_blocking)
+                              .count();
+  CHECK(blocked_ms >= 200);
+
+  node.stop();
+  loop.stop();
+}

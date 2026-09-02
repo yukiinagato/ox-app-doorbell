@@ -315,7 +315,10 @@ TEST_CASE("volumes: the effective level resolves device, cluster, then built-in 
   SettingsNode fleet;
   const std::string self = fleet.node->nodeId();
 
+  // Effective volumes come from a published snapshot, like configJson and statusJson, so drain
+  // the runloop before reading one.
   auto audio = [&fleet](const std::string& device) {
+    fleet.loop.pumpDue();
     auto parsed = json::parse(fleet.node->audioJson(device));
     REQUIRE(parsed);
     return parsed;
@@ -346,6 +349,7 @@ TEST_CASE("volumes: the effective level resolves device, cluster, then built-in 
   // levels apply and the SOS level follows the legacy alarm volume.
   SettingsNode legacy_fleet("indoor_panel", "", /*seed_defaults=*/false);
   legacy_fleet.node->setConfigKey("emergency.alarm_volume", "42");
+  legacy_fleet.loop.pumpDue();
   auto legacy = json::parse(legacy_fleet.node->audioJson(""));
   REQUIRE(legacy);
   CHECK(json::getInt(legacy.get(), "sos") == 42);

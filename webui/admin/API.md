@@ -270,7 +270,10 @@ not writing `null`.
 
 Core resolves the effective level as device override → cluster default → built-in default
 (call 80, sos 100, idle 60), with `emergency.alarm_volume` as an extra fallback for the SOS level.
-`db_core_audio_json` exposes the same resolution to native shells.
+`db_core_audio_json` exposes the same resolution to native shells. It and
+`db_core_local_time_json` are served from snapshots core's run loop republishes on every
+change, so a shell may call them from its UI thread; they never block on the loop, and a
+write becomes visible on the loop's next turn rather than inside the write call.
 
 ## Announcements
 
