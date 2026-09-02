@@ -288,3 +288,199 @@ TEST_CASE("capi: v2 device info is sampled when the runtime monitor starts") {
   CHECK(context.reads >= 1);
   CHECK(context.releases == context.reads);
 }
+
+TEST_CASE("capi: native config writes match the HTTP endpoints, warnings included") {
+  db_platform_v2 platform{};
+  platform.struct_size = sizeof(platform);
+  platform.version = DB_PLATFORM_V2_VERSION;
+  db_core* core = db_core_create_v2(
+      &platform, ":memory:",
+      "{\"name\":\"config-abi\",\"role\":\"indoor_panel\",\"listen_port\":0,\"http_port\":0}");
+  REQUIRE(core != nullptr);
+  REQUIRE(db_core_start(core) == 0);
+
+  // Null handles never trap; every one of these is an additive export.
+  CHECK(db_core_set_config_json(nullptr, "a", "1") < 0);
+  CHECK(db_core_config_batch_json(nullptr, "[]") == nullptr);
+  CHECK(db_core_delete_config_key(nullptr, "a") < 0);
+  CHECK(db_core_last_write_warnings_json(nullptr) == nullptr);
+  CHECK(db_core_set_config_json(core, "", "1") < 0);
+  CHECK(db_core_set_config_json(core, "audio.volume.call", nullptr) < 0);
+
+  CHECK(db_core_set_config_json(core, "audio.volume.call", "42") == 0);
+  char* config = db_core_config_json(core);
+  REQUIRE(config != nullptr);
+  CHECK(std::string(config).find("\"call\":42") != std::string::npos);
+  db_free(config);
+  // Core's validation applies exactly as it does over HTTP.
+  CHECK(db_core_set_config_json(core, "audio.volume.call", "900") < 0);
+  CHECK(db_core_set_config_json(core, "time.zone", "\"Mars/Olympus\"") < 0);
+  CHECK(db_core_set_config_json(core, "time.zone", "\"Europe/Paris\"") == 0);
+
+  // A colour that falls short of AA saves and reports the ratio instead of failing.
+  CHECK(db_core_set_config_json(core, "display.theme.bg_color", "\"#FFFFFF\"") == 0);
+  CHECK(db_core_set_config_json(core, "display.theme.call_button_bg", "\"#FEFEFE\"") == 0);
+  char* warnings = db_core_last_write_warnings_json(core);
+  REQUIRE(warnings != nullptr);
+  const std::string warning_json = warnings;
+  db_free(warnings);
+  CHECK(warning_json.find("theme.low_contrast") != std::string::npos);
+  CHECK(warning_json.find("call_button_bg") != std::string::npos);
+
+  // The batch form takes the same document as POST /api/config/batch and returns its result.
+  char* batch = db_core_config_batch_json(
+      core,
+      "{\"ops\":[{\"op\":\"set\",\"key\":\"audio.volume.sos\",\"value\":10},"
+      "{\"op\":\"set\",\"key\":\"audio.volume.idle\",\"value\":20}]}");
+  REQUIRE(batch != nullptr);
+  const std::string batch_json = batch;
+  db_free(batch);
+  CHECK(batch_json.find("\"ok\":true") != std::string::npos);
+  CHECK(batch_json.find("\"n\":2") != std::string::npos);
+  CHECK(batch_json.find("\"revision\"") != std::string::npos);
+
+  // A bare array is accepted too, so a shell need not wrap it.
+  char* bare = db_core_config_batch_json(
+      core, "[{\"op\":\"set\",\"key\":\"audio.volume.idle\",\"value\":30}]");
+  REQUIRE(bare != nullptr);
+  CHECK(std::string(bare).find("\"ok\":true") != std::string::npos);
+  db_free(bare);
+
+  // Nothing is written unless every operation validates.
+  char* rejected = db_core_config_batch_json(
+      core,
+      "{\"ops\":[{\"op\":\"set\",\"key\":\"audio.volume.sos\",\"value\":11},"
+      "{\"op\":\"set\",\"key\":\"audio.volume.idle\",\"value\":900}]}");
+  REQUIRE(rejected != nullptr);
+  CHECK(std::string(rejected).find("\"ok\":false") != std::string::npos);
+  db_free(rejected);
+  config = db_core_config_json(core);
+  REQUIRE(config != nullptr);
+  CHECK(std::string(config).find("\"sos\":10") != std::string::npos);
+  db_free(config);
+
+  CHECK(db_core_delete_config_key(core, "audio.volume.idle") == 0);
+  config = db_core_config_json(core);
+  REQUIRE(config != nullptr);
+  CHECK(std::string(config).find("\"idle\"") == std::string::npos);
+  db_free(config);
+
+  db_core_stop(core);
+  db_core_destroy(core);
+}
+
+TEST_CASE("capi: one cluster administrator password, shared lockout, SOS never blocked") {
+  db_platform_v2 platform{};
+  platform.struct_size = sizeof(platform);
+  platform.version = DB_PLATFORM_V2_VERSION;
+  db_core* core = db_core_create_v2(
+      &platform, ":memory:",
+      "{\"name\":\"admin-pw\",\"role\":\"indoor_panel\",\"listen_port\":0,\"http_port\":0}");
+  REQUIRE(core != nullptr);
+  REQUIRE(db_core_start(core) == 0);
+
+  CHECK(db_core_admin_password_verify(nullptr, "x") == -3);
+  CHECK(db_core_admin_password_verify(core, nullptr) == -3);
+  // Nothing set yet: the caller is told so rather than being told "wrong".
+  CHECK(db_core_admin_password_verify(core, "anything") == -2);
+
+  auto emergency = [core]() {
+    char* raw = db_core_status_json(core);
+    REQUIRE(raw != nullptr);
+    const std::string status = raw;
+    db_free(raw);
+    return status;
+  };
+  // With no password, clearing a running alarm must not be gated on one.
+  CHECK(emergency().find("\"cancel_requires_password\":false") != std::string::npos);
+  CHECK(emergency().find("\"admin_password_set\":false") != std::string::npos);
+
+  // Trust on first use: an empty current is accepted only while the cluster has no password.
+  CHECK(db_core_admin_password_set(core, "", "abc") == -1);  // too short
+  CHECK(db_core_admin_password_set(core, "", "first-password") == 0);
+  CHECK(db_core_admin_password_verify(core, "first-password") > 0);
+  CHECK(db_core_admin_password_verify(core, "wrong") == 0);
+  CHECK(db_core_admin_password_set(core, "", "second") == -2);
+  CHECK(db_core_admin_password_set(core, "wrong", "second") == -2);
+
+  // The digest is replicated, never the plaintext.
+  char* config = db_core_config_json(core);
+  REQUIRE(config != nullptr);
+  const std::string config_json = config;
+  db_free(config);
+  CHECK(config_json.find("admin") != std::string::npos);
+  CHECK(config_json.find("password_hash") != std::string::npos);
+  CHECK(config_json.find("first-password") == std::string::npos);
+
+  // Now that a password exists, the configured SOS policy applies.
+  CHECK(emergency().find("\"admin_password_set\":true") != std::string::npos);
+  CHECK(emergency().find("\"cancel_requires_password\":true") != std::string::npos);
+  CHECK(db_core_set_config_json(core, "emergency.cancel_requires_pin", "false") == 0);
+  CHECK(emergency().find("\"cancel_requires_password\":false") != std::string::npos);
+
+  CHECK(db_core_admin_password_set(core, "first-password", "second-password") == 0);
+  CHECK(db_core_admin_password_verify(core, "second-password") > 0);
+  CHECK(db_core_admin_password_verify(core, "first-password") == 0);
+
+  // Repeated failures pause every surface. The counter is shared across call sites, so the
+  // earlier wrong guesses in this test count toward it too.
+  bool locked = false;
+  for (int attempt = 0; attempt < 5 && !locked; attempt++)
+    locked = db_core_admin_password_verify(core, "nope") == -1;
+  CHECK(locked);
+  // The lockout refuses the correct password too; otherwise it would not be a lockout.
+  CHECK(db_core_admin_password_verify(core, "second-password") == -1);
+  CHECK(db_core_admin_password_set(core, "second-password", "third-password") == -3);
+
+  db_core_stop(core);
+  db_core_destroy(core);
+}
+
+TEST_CASE("capi: mic mute, call-log paging, and the bundled zone list") {
+  db_platform_v2 platform{};
+  platform.struct_size = sizeof(platform);
+  platform.version = DB_PLATFORM_V2_VERSION;
+  db_core* core = db_core_create_v2(
+      &platform, ":memory:",
+      "{\"name\":\"round7\",\"role\":\"indoor_panel\",\"listen_port\":0,\"http_port\":0}");
+  REQUIRE(core != nullptr);
+  REQUIRE(db_core_start(core) == 0);
+
+  auto status = [core]() {
+    char* raw = db_core_status_json(core);
+    REQUIRE(raw != nullptr);
+    const std::string out = raw;
+    db_free(raw);
+    return out;
+  };
+
+  CHECK(db_core_sip_set_mic_muted(nullptr, 1) < 0);
+  CHECK(status().find("\"mic_muted\":false") != std::string::npos);
+  CHECK(db_core_sip_set_mic_muted(core, 1) == 0);
+  CHECK(status().find("\"mic_muted\":true") != std::string::npos);
+  CHECK(db_core_sip_set_mic_muted(core, 0) == 0);
+  CHECK(status().find("\"mic_muted\":false") != std::string::npos);
+
+  // The paging variant answers the same shape and tolerates a null handle.
+  CHECK(db_core_call_log_json_v2(nullptr, 0, 0, 10) == nullptr);
+  char* page = db_core_call_log_json_v2(core, 0, 0, 10);
+  REQUIRE(page != nullptr);
+  const std::string page_json = page;
+  db_free(page);
+  CHECK(page_json.find("\"rows\":[]") != std::string::npos);
+  CHECK(page_json.find("\"unread_missed\":0") != std::string::npos);
+  char* older = db_core_call_log_json_v2(core, 0, 1'700'000'000'000LL, 10);
+  REQUIRE(older != nullptr);
+  CHECK(std::string(older).find("\"rows\":[]") != std::string::npos);
+  db_free(older);
+
+  // A native picker builds its zone list from what core can actually resolve.
+  const std::string zones = status();
+  CHECK(zones.find("\"zones\"") != std::string::npos);
+  CHECK(zones.find("\"Asia/Tokyo\"") != std::string::npos);
+  CHECK(zones.find("\"Europe/Berlin\"") != std::string::npos);
+  CHECK(zones.find("\"America/New_York\"") != std::string::npos);
+
+  db_core_stop(core);
+  db_core_destroy(core);
+}

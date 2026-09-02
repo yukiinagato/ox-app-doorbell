@@ -219,7 +219,9 @@ mesh-PSK-derived key 和 XChaCha20-Poly1305 seal 成 schema-v2 CRDT record；mat
   "visit_purposes": {                           // 访客事由按钮（用户可编辑; 默认 seed 见下）
     // 门口机上事由按钮 1 次点按 = 带该事由的按铃（快递员 1 个动作即完成）。
     // 大按钮「呼叫」是不带事由的通用按铃。标签跟随访客语言。
-    "p_visit":    { "label": { "ja": "訪問",       "en": "Visit",    "zh": "访客" }, "icon": "🏠", "order": 1 },
+    // "enabled": false 在不删除的前提下对访客隐藏该事由；文案、图标与顺序都会保留，
+    // 重新启用即可恢复。默认为 true。
+    "p_visit":    { "label": { "ja": "訪問",       "en": "Visit",    "zh": "访客" }, "icon": "🏠", "order": 1, "enabled": true },
     "p_delivery": { "label": { "ja": "宅配便",     "en": "Delivery", "zh": "快递" }, "icon": "📦", "order": 2 },
     "p_mail":     { "label": { "ja": "郵便",       "en": "Mail",     "zh": "邮件" }, "icon": "✉️", "order": 3 },
     "p_sales":    { "label": { "ja": "営業・集金", "en": "Sales",    "zh": "推销/收费" }, "icon": "💼", "order": 4 },
@@ -368,6 +370,39 @@ status 必須另外回報實測 helper availability 與 effective mode。helper 
 degraded/error，不是 supervision 成功證據。atomic config apply 後，platform client 發送 fixed local
 `MODE <value>` 並驗證 helper status；helper 原子保存 mode，供 helper/OS restart 復原。config 不會衍生
 generic command/argv。
+
+## 统一的管理密码、公告、开锁与外观
+
+`admin.password_hash` 是整个集群唯一的管理员凭据：Web 管理界面与每台设备的设置界面使用同一个密钥。
+它以 `{"salt":"<hex>","hash":"<hex>","algo":"blake2b-256","updated_ms":…}` 的形式复制，绝不保存明文，
+因此离线设备也能用手上已有的副本校验。任何界面上第一次输入的密码即成为集群密码（沿用 Web 登录既有的
+首次信任流程）。任一界面连续 5 次失败会让所有界面暂停 10 分钟；该计数由 `POST /api/login` 与
+`db_core_admin_password_verify` 共享。
+
+在此键出现之前，每个节点各自保存摘要，信息亭还另有退出码。该本地摘要在第一次校验成功前仍然有效，
+成功后即作为集群密码被复制。仍持有自己 `exit_pin.txt` 摘要的外壳，应在
+`db_core_admin_password_verify` 返回成功或“未设置”后停止使用并删除它，以免改了密码却留下另一个入口。
+
+**未设置密码时绝不能阻止解除正在响的 SOS。** 请读取 `status.emergency.cancel_requires_password`，
+它由 core 依据 `emergency.cancel_requires_pin` 与“确实设置了密码”两者共同计算。
+仅凭 `emergency.cancel_requires_pin` 就拦住解除操作，会让住户无法关掉自家的警报。
+
+`notice.global` 是集群范围的公告，`doors.<id>.notice` 会对单个门口覆盖它；
+`status.doors.<id>.notice` 返回解析后的值以及 `scope`（`door` 或 `global`）。
+`notice.presets` 是管理员可编辑的至多 8 条 `{id, text}`，公告对话框据此渲染；
+首次会 seed 三条，之后可自由编辑或删除。
+
+`doors.<id>.unlock.show_button` 决定是否显示开锁控件。默认是“能用才显示”：
+仅当配置了 `doors.<id>.unlock.command` 或 `sip.dtmf_actions` 中的第一个 `ha_command` 时为 true。
+管理员可以强制为任一取值。`status.doors.<id>.unlock` 返回 `configured`、`command`、`show_button`
+以及该结论来自默认还是管理员，因此外壳在按下之前就能决定。
+`POST /api/doors/<id>/open` 与 `db_core_open_door` 发出与 SIP 特服码相同的 `ha_command`，
+未配置时返回 `unlock_not_configured` 而不是静默无操作。
+
+`display.appearance` 取值为 `auto_system`、`auto_schedule`、`light`、`dark`；
+`display.appearance_schedule = {dark_from, light_from}` 在 `time.zone` 中求值。两者都可置于
+集群默认与 `devices.<id>.local.display`。公开的契约还带有 `follow_system`：为真时外壳优先使用
+操作系统自身的设置；没有该设置的平台（iOS 5、Android 10 以下）改用日程结果。
 
 ## 时间、电源与公告
 

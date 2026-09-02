@@ -1024,7 +1024,10 @@ final class MainViewController: UIViewController {
         sosSlider.countdownSeconds = max(0, min(10,
             ConfigUtil.int(cfg, "emergency.trigger.countdown_s", 3)))
         sosSlider.refreshStrings()
-        cancelRequiresPin = ConfigUtil.bool(cfg, "emergency.cancel_requires_pin", true)
+        // Core folds the setting together with "a password actually exists"; the setting
+        // alone would stand between a household and a running alarm on a cluster that
+        // has never set one.
+        cancelRequiresPin = core.sosCancelRequiresPassword
     }
 
     /// Called only once the slide countdown has elapsed.

@@ -197,6 +197,16 @@ class SettingsChildViewController: SettingsFormViewController {
         super.viewDidLoad()
     }
 
+    /// A value changed on a screen presented from this one is what the household just did; the
+    /// summaries here have to show it when they come back rather than the state they were built
+    /// with.
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        guard isViewLoaded, presentedViewController == nil else { return }
+        reloadConfig()
+        rebuild()
+    }
+
     func reloadConfig() {
         config = core.config()
         if let node = core.status()?["node"] as? [String: Any] {
@@ -376,13 +386,18 @@ final class DeviceSettingsViewController: SettingsChildViewController {
             setStatus(texts.t("settings.password_failed"))
             return
         }
-        let changed = core.setAdminPassword(current: currentPassword, new: newPassword)
-        setStatus(changed ? texts.t("settings.password_changed")
-            : texts.t("settings.password_failed"))
-        if changed {
+        switch core.setAdminPassword(current: currentPassword, new: newPassword) {
+        case .ok:
+            setStatus(texts.t("settings.password_changed"))
             currentPassword = ""
             newPassword = ""
             rebuild()
+        case .wrongCurrent:
+            setStatus(texts.t("admin.pin_wrong"))
+        case .lockedOut:
+            setStatus(texts.t("admin.locked"))
+        case .failed:
+            setStatus(texts.t("settings.password_failed"))
         }
     }
 

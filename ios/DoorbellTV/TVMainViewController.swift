@@ -238,7 +238,10 @@ final class TVMainViewController: UIViewController {
     private func refreshNodeInfo() {
         cfg = core.config()
         texts.setConfig(cfg)
-        cancelRequiresPin = ConfigUtil.bool(cfg, "emergency.cancel_requires_pin", true)
+        // Core folds the setting together with "a password actually exists"; the setting
+        // alone would stand between a household and a running alarm on a cluster that
+        // has never set one.
+        cancelRequiresPin = core.sosCancelRequiresPassword
         if let st = core.status() {
             if let node = st["node"] as? [String: Any] {
                 nodeId = ConfigUtil.evStr(node, "id")

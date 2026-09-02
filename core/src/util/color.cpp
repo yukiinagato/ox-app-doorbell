@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstdio>
 
+#define STBI_NO_THREAD_LOCALS
 #define STBI_NO_STDIO
 #include "stb_image.h"
 #include "util/common.h"

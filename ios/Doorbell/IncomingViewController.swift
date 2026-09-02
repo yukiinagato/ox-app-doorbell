@@ -109,7 +109,9 @@ final class IncomingViewController: UIViewController {
             self?.onUiEvent(ev)
         }
         debugTimer = IOSAvailability.scheduledTimer(withTimeInterval: 1, repeats: true) {
-            [weak self] _ in self?.refreshDebugLine()
+            [weak self] _ in
+            self?.refreshDebugLine()
+            self?.syncMicFromStatus()
         }
         restartAutoClose()
     }
@@ -710,6 +712,17 @@ final class IncomingViewController: UIViewController {
             return
         }
         micMuted = target
+        updateToggleTitles()
+    }
+
+    /// Core remembers the mute across a call and reapplies it when media becomes active, so the
+    /// toggle follows `status.call.mic_muted` rather than only what this screen last pressed.
+    private func syncMicFromStatus() {
+        guard let call = core.status()?["call"] as? [String: Any],
+              call["mic_muted"] != nil else { return }
+        let reported = ConfigUtil.evBool(call, "mic_muted")
+        guard reported != micMuted else { return }
+        micMuted = reported
         updateToggleTitles()
     }
 

@@ -457,10 +457,12 @@ final class CoreBridge {
     /// three entry points are resolved at runtime: a Core that does not export them yet leaves
     /// `supportsConfigWrite` false and the settings screens fall back to the HTTP endpoint.
     private typealias SetConfigKeyFn = @convention(c) (OpaquePointer?, UnsafePointer<CChar>?,
-                                                       UnsafePointer<CChar>?) -> Void
+                                                       UnsafePointer<CChar>?) -> Int32
     private typealias DeleteConfigKeyFn = @convention(c) (OpaquePointer?, UnsafePointer<CChar>?)
-        -> Void
+        -> Int32
     private typealias ConfigBatchFn = @convention(c) (OpaquePointer?, UnsafePointer<CChar>?)
+        -> UnsafeMutablePointer<CChar>?
+    private typealias WriteWarningsFn = @convention(c) (OpaquePointer?)
         -> UnsafeMutablePointer<CChar>?
 
     private static func symbol(_ name: String) -> UnsafeMutableRawPointer? {
@@ -473,6 +475,9 @@ final class CoreBridge {
         .map { unsafeBitCast($0, to: DeleteConfigKeyFn.self) }
     private static let configBatchFn: ConfigBatchFn? = symbol("db_core_config_batch_json")
         .map { unsafeBitCast($0, to: ConfigBatchFn.self) }
+    private static let writeWarningsFn: WriteWarningsFn? =
+        symbol("db_core_last_write_warnings_json")
+            .map { unsafeBitCast($0, to: WriteWarningsFn.self) }
 
     /// True when Core can apply a whole batch, or at least every single key, without HTTP.
     var supportsConfigWrite: Bool {
@@ -480,27 +485,53 @@ final class CoreBridge {
             (CoreBridge.setConfigKeyFn != nil && CoreBridge.deleteConfigKeyFn != nil)
     }
 
+    /// What Core said about a write: whether it committed, why not, and the readability warnings
+    /// it produced. A warning never means failure — §5.2 is explicit that a colour an
+    /// administrator typed is saved and only commented on.
+    struct WriteOutcome {
+        let ok: Bool
+        let error: String
+        /// Each entry is {"key","property","contrast","message_key"}.
+        let warnings: [[String: Any]]
+    }
+
     /// Applies the batch through Core. Returns nil when Core cannot do it, so the caller can fall
     /// back; the batch entry point is preferred because it is the only atomic one.
-    func applyConfigBatch(_ opsJson: String, operations: [(key: String, value: String?)]) -> Bool? {
+    func applyConfigBatch(_ opsJson: String,
+                          operations: [(key: String, value: String?)]) -> WriteOutcome? {
         guard let c = core else { return nil }
         if let batch = CoreBridge.configBatchFn {
-            guard let raw = batch(c, opsJson) else { return false }
+            guard let raw = batch(c, opsJson) else {
+                return WriteOutcome(ok: false, error: "config_persistence_failed", warnings: [])
+            }
             defer { db_free(raw) }
             let data = Data(bytes: UnsafeRawPointer(raw), count: strlen(raw))
             let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
-            return ConfigUtil.bool(object, "ok", false)
+            return WriteOutcome(ok: ConfigUtil.bool(object, "ok", false),
+                                error: ConfigUtil.str(object, "err") ?? "",
+                                warnings: (object?["warnings"] as? [[String: Any]]) ?? [])
         }
         guard let set = CoreBridge.setConfigKeyFn,
               let remove = CoreBridge.deleteConfigKeyFn else { return nil }
+        // Without the batch entry point the writes are no longer atomic, so the first refusal
+        // stops the run rather than leaving half a change behind.
         for operation in operations {
-            if let value = operation.value {
-                set(c, operation.key, value)
-            } else {
-                remove(c, operation.key)
+            let code = operation.value.map { set(c, operation.key, $0) }
+                ?? remove(c, operation.key)
+            guard code == 0 else {
+                return WriteOutcome(ok: false, error: "config_persistence_failed",
+                                    warnings: lastWriteWarnings())
             }
         }
-        return true
+        return WriteOutcome(ok: true, error: "", warnings: lastWriteWarnings())
+    }
+
+    /// The readability warnings the last single-key write produced. The batch form embeds its own.
+    private func lastWriteWarnings() -> [[String: Any]] {
+        guard let c = core, let fn = CoreBridge.writeWarningsFn, let raw = fn(c) else { return [] }
+        defer { db_free(raw) }
+        let data = Data(bytes: UnsafeRawPointer(raw), count: strlen(raw))
+        return ((try? JSONSerialization.jsonObject(with: data)) as? [[String: Any]]) ?? []
     }
 
     // MARK: - Administrator password
@@ -518,45 +549,80 @@ final class CoreBridge {
 
     var supportsAdminPassword: Bool { return CoreBridge.adminVerifyFn != nil }
 
-    /// nil when Core cannot answer, so the caller can fall back to the legacy local digest.
-    func verifyAdminPassword(_ password: String) -> Bool? {
-        guard let c = core, let verify = CoreBridge.adminVerifyFn else { return nil }
-        return verify(c, password) == 0
+    /// Core's answer, not a boolean: a wrong password and a cluster that has no password yet are
+    /// different situations, and treating either as "accepted" would open the settings screen.
+    enum AdminPasswordResult {
+        case accepted
+        case wrong
+        case lockedOut
+        /// No cluster password exists. The shell offers to set one instead of refusing entry.
+        case unset
+        /// Core cannot answer; the caller may fall back to the legacy per-node digest.
+        case unavailable
+    }
+
+    func verifyAdminPassword(_ password: String) -> AdminPasswordResult {
+        guard let c = core, let verify = CoreBridge.adminVerifyFn else { return .unavailable }
+        switch verify(c, password) {
+        case let code where code > 0: return .accepted
+        case 0: return .wrong
+        case -1: return .lockedOut
+        case -2: return .unset
+        default: return .unavailable
+        }
+    }
+
+    /// Whether the cluster has a password at all, without spending a verification attempt.
+    var adminPasswordIsSet: Bool {
+        guard let emergency = status()?["emergency"] as? [String: Any] else { return true }
+        return ConfigUtil.bool(emergency, "admin_password_set", true)
+    }
+
+    /// Clearing a running SOS alarm is never gated on a password the cluster does not have. Core
+    /// folds both halves into one flag; `emergency.cancel_requires_pin` alone would lock a
+    /// household out of its own alarm.
+    var sosCancelRequiresPassword: Bool {
+        guard let emergency = status()?["emergency"] as? [String: Any],
+              emergency["cancel_requires_password"] != nil else { return false }
+        return ConfigUtil.bool(emergency, "cancel_requires_password", false)
     }
 
     var supportsAdminPasswordChange: Bool { return CoreBridge.adminSetFn != nil }
 
-    /// `current` may be empty on an installation that has never set the password.
+    enum AdminPasswordChange {
+        case ok
+        case wrongCurrent
+        case lockedOut
+        case failed
+    }
+
+    /// `current` is empty only while the cluster has no password — the trust-on-first-use path
+    /// the first web login already takes.
     @discardableResult
-    func setAdminPassword(current: String, new: String) -> Bool {
-        guard let c = core, let set = CoreBridge.adminSetFn, !new.isEmpty else { return false }
-        return set(c, current, new) == 0
-    }
-
-    // MARK: - Global announcement
-
-    private typealias SetGlobalNoticeFn = @convention(c) (OpaquePointer?, UnsafePointer<CChar>?,
-                                                          Int64) -> Int32
-    private typealias ClearGlobalNoticeFn = @convention(c) (OpaquePointer?) -> Int32
-    private static let setGlobalNoticeFn: SetGlobalNoticeFn? = symbol("db_core_set_global_notice")
-        .map { unsafeBitCast($0, to: SetGlobalNoticeFn.self) }
-    private static let clearGlobalNoticeFn: ClearGlobalNoticeFn? =
-        symbol("db_core_clear_global_notice")
-            .map { unsafeBitCast($0, to: ClearGlobalNoticeFn.self) }
-
-    var supportsGlobalNotice: Bool { return CoreBridge.setGlobalNoticeFn != nil }
-
-    /// nil when Core has no entry point yet, so the caller can write the key instead.
-    func setGlobalNotice(text: String, expiresMs: Int64) -> Bool? {
-        guard let c = core, let set = CoreBridge.setGlobalNoticeFn, !text.isEmpty else {
-            return nil
+    func setAdminPassword(current: String, new: String) -> AdminPasswordChange {
+        guard let c = core, let set = CoreBridge.adminSetFn, !new.isEmpty else { return .failed }
+        switch set(c, current, new) {
+        case 0: return .ok
+        case -2: return .wrongCurrent
+        case -3: return .lockedOut
+        default: return .failed
         }
-        return set(c, text, expiresMs) == 0
     }
 
-    func clearGlobalNotice() -> Bool? {
-        guard let c = core, let clear = CoreBridge.clearGlobalNoticeFn else { return nil }
-        return clear(c) == 0
+    // MARK: - House-wide announcement
+
+    /// There is no separate global-announcement entry point: the door id `"*"` is the cluster-wide
+    /// announcement, stored at `notice.global`, and a door-specific one still wins over it.
+    static let globalNoticeDoor = "*"
+
+    @discardableResult
+    func setGlobalNotice(text: String, expiresMs: Int64) -> Bool {
+        return setDoorNotice(door: CoreBridge.globalNoticeDoor, text: text, expiresMs: expiresMs)
+    }
+
+    @discardableResult
+    func clearGlobalNotice() -> Bool {
+        return clearDoorNotice(door: CoreBridge.globalNoticeDoor)
     }
 
     // MARK: - Power state

@@ -196,6 +196,8 @@
   <data name="admin_panel_token" xml:space="preserve"><value>パネル token</value></data>
   <data name="admin_pass" xml:space="preserve"><value>パスワード</value></data>
   <data name="admin_password" xml:space="preserve"><value>管理パスワード</value></data>
+  <data name="admin_password_set_prompt" xml:space="preserve"><value>管理パスワードを設定</value></data>
+  <data name="admin_password_too_short" xml:space="preserve"><value>4 文字以上にしてください</value></data>
   <data name="admin_pin_prompt" xml:space="preserve"><value>管理パスワードを入力してください</value></data>
   <data name="admin_pin_wrong" xml:space="preserve"><value>管理パスワードが違います</value></data>
   <data name="admin_playback_fallback_hint" xml:space="preserve"><value>Web は HLS を即時スキップします。後段の MJPEG は時刻 0 から予熱します。MJPEG までの最大追加待機:</value></data>
@@ -471,12 +473,17 @@
   <data name="notice_global_button" xml:space="preserve"><value>お知らせ（全体）</value></data>
   <data name="notice_none" xml:space="preserve"><value>お知らせはありません</value></data>
   <data name="notice_preset_absent" xml:space="preserve"><value>ただいま留守にしています</value></data>
+  <data name="notice_preset_add" xml:space="preserve"><value>定型文を追加</value></data>
   <data name="notice_preset_construction" xml:space="preserve"><value>工事中です。ご用の方はお声がけください</value></data>
   <data name="notice_preset_delivery" xml:space="preserve"><value>宅配便は勝手口へお願いします</value></data>
+  <data name="notice_preset_invalid" xml:space="preserve"><value>定型文の本文を確認してください</value></data>
   <data name="notice_presets" xml:space="preserve"><value>よく使う文</value></data>
+  <data name="notice_presets_full" xml:space="preserve"><value>定型文は 8 件までです</value></data>
+  <data name="notice_presets_title" xml:space="preserve"><value>お知らせの定型文</value></data>
   <data name="notice_preview" xml:space="preserve"><value>門口での見え方</value></data>
   <data name="notice_publish" xml:space="preserve"><value>表示する</value></data>
   <data name="notice_saved" xml:space="preserve"><value>お知らせを表示しました</value></data>
+  <data name="notice_scope_global" xml:space="preserve"><value>全体のお知らせ</value></data>
   <data name="notice_target" xml:space="preserve"><value>表示する場所</value></data>
   <data name="notice_target_door" xml:space="preserve"><value>{0} のみ</value></data>
   <data name="notice_target_global" xml:space="preserve"><value>全体</value></data>
@@ -673,6 +680,8 @@
   <data name="power_title" xml:space="preserve"><value>電池</value></data>
   <data name="power_unknown" xml:space="preserve"><value>未対応</value></data>
   <data name="purpose_cancel_call" xml:space="preserve"><value>呼び出しを取り消す</value></data>
+  <data name="purpose_disabled" xml:space="preserve"><value>非表示</value></data>
+  <data name="purpose_enabled" xml:space="preserve"><value>表示する</value></data>
   <data name="purpose_select_failed" xml:space="preserve"><value>用件を送信できませんでした</value></data>
   <data name="purpose_sent" xml:space="preserve"><value>{0} で呼び出しました</value></data>
   <data name="purpose_skip" xml:space="preserve"><value>用件を選ばず続ける</value></data>
@@ -806,7 +815,32 @@ PIN: {1}</value></data>
   <data name="sound_outdoor_call_alert" xml:space="preserve"><value>警告音 1（室外機呼出）</value></data>
   <data name="sound_school_chime" xml:space="preserve"><value>学校のチャイム</value></data>
   <data name="sound_title_display" xml:space="preserve"><value>タイトル表示（起動）</value></data>
+  <data name="theme_appearance" xml:space="preserve"><value>外観</value></data>
+  <data name="theme_appearance_auto_schedule" xml:space="preserve"><value>時間帯で切り替える</value></data>
+  <data name="theme_appearance_auto_system" xml:space="preserve"><value>端末の設定に合わせる</value></data>
+  <data name="theme_appearance_dark" xml:space="preserve"><value>常にダーク</value></data>
+  <data name="theme_appearance_light" xml:space="preserve"><value>常にライト</value></data>
+  <data name="theme_auto" xml:space="preserve"><value>自動</value></data>
+  <data name="theme_background_source_color" xml:space="preserve"><value>背景色</value></data>
+  <data name="theme_background_source_image" xml:space="preserve"><value>背景画像の平均色</value></data>
+  <data name="theme_call_button" xml:space="preserve"><value>呼出ボタンの色</value></data>
   <data name="theme_contrast_warning" xml:space="preserve"><value>読みにくい可能性があります（{0}:1）</value></data>
+  <data name="theme_custom" xml:space="preserve"><value>指定色</value></data>
+  <data name="theme_dark_from" xml:space="preserve"><value>ダークにする時刻</value></data>
+  <data name="theme_ink" xml:space="preserve"><value>文字色</value></data>
+  <data name="theme_ink_region" xml:space="preserve"><value>表示箇所</value></data>
+  <data name="theme_light_from" xml:space="preserve"><value>ライトにする時刻</value></data>
+  <data name="theme_low_contrast" xml:space="preserve"><value>読みにくい可能性があります ({0}:1)</value></data>
+  <data name="theme_mode_dark" xml:space="preserve"><value>ダーク</value></data>
+  <data name="theme_mode_light" xml:space="preserve"><value>ライト</value></data>
+  <data name="theme_now" xml:space="preserve"><value>現在</value></data>
+  <data name="theme_region_clock" xml:space="preserve"><value>時計</value></data>
+  <data name="theme_region_date" xml:space="preserve"><value>日付</value></data>
+  <data name="theme_region_footer" xml:space="preserve"><value>フッター</value></data>
+  <data name="theme_region_hint" xml:space="preserve"><value>案内文</value></data>
+  <data name="theme_region_notice" xml:space="preserve"><value>お知らせ</value></data>
+  <data name="theme_region_status_line" xml:space="preserve"><value>状態表示</value></data>
+  <data name="theme_region_tile_label" xml:space="preserve"><value>タイルの見出し</value></data>
   <data name="time_err_bad_reply" xml:space="preserve"><value>サーバーの応答が正しくありません</value></data>
   <data name="time_err_bad_server" xml:space="preserve"><value>サーバーの書き方が正しくありません</value></data>
   <data name="time_err_implausible" xml:space="preserve"><value>測定した時刻が信用できないため使いませんでした</value></data>
@@ -836,6 +870,12 @@ PIN: {1}</value></data>
   <data name="time_title" xml:space="preserve"><value>時刻</value></data>
   <data name="time_zone" xml:space="preserve"><value>タイムゾーン</value></data>
   <data name="time_zone_hint" xml:space="preserve"><value>この設定はクラスタ全体の時計・呼出履歴・ルールの時間帯に使われます</value></data>
+  <data name="unlock_auto" xml:space="preserve"><value>設定されているときだけ表示</value></data>
+  <data name="unlock_command" xml:space="preserve"><value>送信するコマンド</value></data>
+  <data name="unlock_hide" xml:space="preserve"><value>表示しない</value></data>
+  <data name="unlock_not_configured" xml:space="preserve"><value>開錠の動作が設定されていません</value></data>
+  <data name="unlock_show" xml:space="preserve"><value>常に表示</value></data>
+  <data name="unlock_title" xml:space="preserve"><value>開錠ボタン</value></data>
   <data name="volume_call" xml:space="preserve"><value>呼出</value></data>
   <data name="volume_cluster_default" xml:space="preserve"><value>クラスタ既定 {0}</value></data>
   <data name="volume_device_title" xml:space="preserve"><value>この端末の音量</value></data>

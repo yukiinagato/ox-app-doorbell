@@ -19,6 +19,7 @@ def source(path):
 
 
 bridge = source("ios/Doorbell/CoreBridge.swift")
+admin = source("ios/Doorbell/AdminPinViewController.swift")
 theme = source("ios/Doorbell/DoorbellTheme.swift")
 clock = source("ios/Doorbell/DoorbellClock.swift")
 writer = source("ios/Doorbell/ConfigWriter.swift")
@@ -54,10 +55,9 @@ for symbol, flag in (("db_core_sip_set_mic_muted", "supportsMicMute"),
                      ("db_core_set_config_json", "supportsConfigWrite"),
                      ("db_core_config_batch_json", "supportsConfigWrite"),
                      ("db_core_delete_config_key", "supportsConfigWrite"),
+                     ("db_core_last_write_warnings_json", "supportsConfigWrite"),
                      ("db_core_admin_password_verify", "supportsAdminPassword"),
                      ("db_core_admin_password_set", "supportsAdminPasswordChange"),
-                     ("db_core_set_global_notice", "supportsGlobalNotice"),
-                     ("db_core_clear_global_notice", "supportsGlobalNotice"),
                      ("db_core_call_log_json_v2", "supportsCallLogPaging"),
                      ("db_core_mint_join_token_json", "supportsMintJoinToken")):
     assert f'symbol("{symbol}")' in bridge or f'"{symbol}"' in bridge, symbol
@@ -65,10 +65,40 @@ for symbol, flag in (("db_core_sip_set_mic_muted", "supportsMicMute"),
 assert 'dlsym(UnsafeMutableRawPointer(bitPattern: -2), name)' in bridge, \
     "runtime lookups go through one helper"
 
+# The signatures the runtime lookups assume are the ones core actually exports.
+header = source("core/include/doorbell/doorbell.h")
+assert "DB_API int db_core_set_config_json(" in header and \
+    "typealias SetConfigKeyFn = @convention(c) (OpaquePointer?, UnsafePointer<CChar>?,\n" \
+    "                                                       UnsafePointer<CChar>?) -> Int32" in bridge, \
+    "the single-key write returns a status code, not void"
+assert "DB_API int db_core_delete_config_key(" in header and \
+    "DeleteConfigKeyFn = @convention(c) (OpaquePointer?, UnsafePointer<CChar>?)\n        -> Int32" \
+    in bridge
+assert "db_core_set_global_notice" not in bridge and "db_core_set_global_notice" not in header, \
+    "there is no global-notice entry point; the house-wide announcement is the door \"*\""
+assert 'static let globalNoticeDoor = "*"' in bridge
+
+# A wrong password and a cluster that has never set one are different answers, and neither one
+# may open the settings screen by being mistaken for success.
+assert "enum AdminPasswordResult" in bridge
+assert "case let code where code > 0: return .accepted" in bridge
+assert "case -2: return .unset" in bridge
+assert "case .unset:" in admin and "admin.password_set_prompt" in admin, \
+    "an unset cluster password turns the gate into a set-once flow"
+assert 'core?.setAdminPassword(current: "", new: pin)' in admin
+# An alarm is never held behind a password the cluster does not have.
+assert "core.sosCancelRequiresPassword" in main and "core.sosCancelRequiresPassword" in tv
+assert 'ConfigUtil.bool(cfg, "emergency.cancel_requires_pin"' not in main + tv, \
+    "cancel_requires_pin alone would lock a household out of its own alarm"
+assert '"cancel_requires_password"' in bridge
+
+# Core's advisory readability warnings reach the status line; a warning is never a refusal.
+assert "case ok(contrasts: [Double])" in writer and "theme.contrast_warning" in writer
+assert "db_core_last_write_warnings_json" in bridge
+
 # The 管理パスワード is the cluster secret, and the old per-node digest is retired once Core has
 # accepted it on this device.
-admin = source("ios/Doorbell/AdminPinViewController.swift")
-assert "core?.verifyAdminPassword(pin)" in admin
+assert "core?.verifyAdminPassword(pin) ?? .unavailable" in admin
 assert "retireLegacyDigest()" in admin and "exit_pin.txt" in admin
 assert "FileManager.default.removeItem(atPath: path)" in admin
 assert "settings.change_password" in settings and "core.setAdminPassword(current:" in settings
