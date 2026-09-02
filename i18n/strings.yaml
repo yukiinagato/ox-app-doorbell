@@ -1047,3 +1047,9 @@ call.return_hint: { ja: "着信画面のタイトルに残り秒数が出ます�
 call.return_device_hint: { ja: "空欄にせず「クラスタの既定に合わせる」で既定に戻せます", en: "Tick \"use the cluster default\" to go back to the default", zh: "勾选“使用集群默认值”即可恢复默认" }
 call.return_inherit: { ja: "クラスタの既定に合わせる", en: "Use the cluster default", zh: "使用集群默认值" }
 call.return_invalid: { ja: "戻るまでの秒数は 5 秒から 600 秒の間で指定してください", en: "The return countdown must be between 5 and 600 seconds", zh: "返回倒计时必须在 5 到 600 秒之间" }
+pair.invitation_title: { ja: "招待を読み取りました", en: "Invitation scanned", zh: "已读取邀请" }
+pair.invitation_confirm: { ja: "{cluster} に参加しますか？", en: "Join {cluster}?", zh: "要加入 {cluster} 吗？" }
+pair.invitation_confirm_unnamed: { ja: "このクラスタに参加しますか？", en: "Join this Cluster?", zh: "要加入此集群吗？" }
+pair.invitation_replace: { ja: "この端末は別のクラスタに参加しています。参加すると今の設定は消えます", en: "This device is already in another Cluster. Joining erases its current setup", zh: "此设备已加入其他集群。加入将清除当前设置" }
+pair.invitation_expired: { ja: "この招待は期限切れです。相手の端末で新しいコードを表示してください", en: "This invitation has expired. Show a new code on the other device", zh: "此邀请已过期。请在对方设备上显示新的邀请码" }
+pair.invitation_invalid: { ja: "この招待を読み取れませんでした", en: "This invitation could not be read", zh: "无法读取此邀请" }

@@ -582,6 +582,12 @@
   <data name="pair_err_timeout" xml:space="preserve"><value>応答がありませんでした。もう一度お試しください</value></data>
   <data name="pair_err_unknown" xml:space="preserve"><value>追加できませんでした。もう一度お試しください</value></data>
   <data name="pair_err_detail" xml:space="preserve"><value>詳細: {0}</value></data>
+  <data name="pair_invitation_confirm" xml:space="preserve"><value>{0} に参加しますか？</value></data>
+  <data name="pair_invitation_confirm_unnamed" xml:space="preserve"><value>このクラスタに参加しますか？</value></data>
+  <data name="pair_invitation_expired" xml:space="preserve"><value>この招待は期限切れです。相手の端末で新しいコードを表示してください</value></data>
+  <data name="pair_invitation_invalid" xml:space="preserve"><value>この招待を読み取れませんでした</value></data>
+  <data name="pair_invitation_replace" xml:space="preserve"><value>この端末は別のクラスタに参加しています。参加すると今の設定は消えます</value></data>
+  <data name="pair_invitation_title" xml:space="preserve"><value>招待を読み取りました</value></data>
   <data name="pair_invite_cluster" xml:space="preserve"><value>クラスタ: {0}</value></data>
   <data name="pair_invite_expired" xml:space="preserve"><value>この招待は期限切れです。相手の端末で新しいコードを発行してください</value></data>
   <data name="pair_invite_invalid" xml:space="preserve"><value>この招待は読み取れませんでした</value></data>

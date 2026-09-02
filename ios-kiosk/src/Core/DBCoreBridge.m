@@ -1137,6 +1137,7 @@ static void *DBCoreSymbol(const char *name) {
 // symbol, and the shell then keeps the PIN card empty instead of silently
 // opening the bulk-add window, which would be the dangerous fallback.
 typedef char *(*DBMintJoinTokenFn)(db_core *, int);
+typedef char *(*DBParsePairUriFn)(db_core *, const char *);
 
 static DBMintJoinTokenFn DBMintJoinToken(void) {
   static DBMintJoinTokenFn fn = NULL;
@@ -1152,6 +1153,30 @@ static DBMintJoinTokenFn DBMintJoinToken(void) {
 
 + (BOOL)supportsJoinTokenMinting {
   return DBMintJoinToken() != NULL;
+}
+
+static DBParsePairUriFn DBParsePairUri(void) {
+  static DBParsePairUriFn fn = NULL;
+  static dispatch_once_t once;
+  dispatch_once(&once, ^{
+    fn = (DBParsePairUriFn)DBCoreSymbol("db_core_parse_pair_uri_json");
+  });
+  return fn;
+}
+
++ (BOOL)supportsPairUriParsing {
+  return DBParsePairUri() != NULL;
+}
+
+- (NSDictionary *)parsePairUri:(NSString *)uri {
+  DBParsePairUriFn parse = DBParsePairUri();
+  if (parse == NULL || [uri length] == 0) return nil;
+  NSString *value = [uri copy];
+  __block NSDictionary *out = nil;
+  dispatch_sync(_coreQueue, ^{
+    if (self->_core) out = [self takeJson:parse(self->_core, [value UTF8String])];
+  });
+  return out;
 }
 
 - (NSDictionary *)mintJoinTokenWithSeconds:(int)seconds {

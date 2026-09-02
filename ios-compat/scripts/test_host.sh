@@ -97,6 +97,7 @@ fi
   "$REPO_ROOT/ios-kiosk/src/Core/DBPurposeModel.m" \
   "$REPO_ROOT/ios-kiosk/src/Core/DBCallReturnCountdown.m" \
   "$REPO_ROOT/ios-kiosk/src/Core/DBSipChurnPolicy.m" \
+  "$REPO_ROOT/ios-kiosk/src/Core/DBPairUri.m" \
   "$REPO_ROOT/ios-kiosk/src/Core/DBBootConfig.m" \
   "$REPO_ROOT/ios-kiosk/src/Support/DBSafeModeRecovery.m" \
   "$REPO_ROOT/ios-compat/tests/native_settings_ux_test.m" \

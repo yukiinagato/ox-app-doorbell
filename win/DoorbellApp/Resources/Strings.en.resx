@@ -582,6 +582,12 @@ Delete it?</value></data>
   <data name="pair_err_timeout" xml:space="preserve"><value>No response. Try again</value></data>
   <data name="pair_err_unknown" xml:space="preserve"><value>Couldn't complete that. Please try again</value></data>
   <data name="pair_err_detail" xml:space="preserve"><value>Details: {0}</value></data>
+  <data name="pair_invitation_confirm" xml:space="preserve"><value>Join {0}?</value></data>
+  <data name="pair_invitation_confirm_unnamed" xml:space="preserve"><value>Join this Cluster?</value></data>
+  <data name="pair_invitation_expired" xml:space="preserve"><value>This invitation has expired. Show a new code on the other device</value></data>
+  <data name="pair_invitation_invalid" xml:space="preserve"><value>This invitation could not be read</value></data>
+  <data name="pair_invitation_replace" xml:space="preserve"><value>This device is already in another Cluster. Joining erases its current setup</value></data>
+  <data name="pair_invitation_title" xml:space="preserve"><value>Invitation scanned</value></data>
   <data name="pair_invite_cluster" xml:space="preserve"><value>Cluster: {0}</value></data>
   <data name="pair_invite_expired" xml:space="preserve"><value>This invitation has expired. Get a new one on the other device</value></data>
   <data name="pair_invite_invalid" xml:space="preserve"><value>This invitation could not be read</value></data>

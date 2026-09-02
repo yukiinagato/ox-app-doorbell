@@ -3,7 +3,7 @@
 #import "../Media/DBSipListener.h"
 
 @class DBCoreBridge, DBBootConfig, DBTexts, DBScreen, DBHomeScreen, DBDoorScreen,
-       DBIncomingScreen, DBSettingsScreen, DBHistoryScreen;
+       DBIncomingScreen, DBSettingsScreen, DBHistoryScreen, DBPairingScreen;
 
 
 // Main-thread screen state machine and sole owner of the active SIP session. Screens are retained
@@ -19,6 +19,7 @@
 @property(nonatomic, readonly) DBHomeScreen *home;
 @property(nonatomic, readonly) DBDoorScreen *door;
 @property(nonatomic, readonly) DBIncomingScreen *incoming;
+@property(nonatomic, readonly) DBPairingScreen *pairing;
 
 - (id)initWithBridge:(DBCoreBridge *)core boot:(DBBootConfig *)boot;
 - (void)start;

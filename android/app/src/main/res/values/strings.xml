@@ -580,6 +580,12 @@ Delete it?</string>
     <string name="pair_err_timeout">No response. Try again</string>
     <string name="pair_err_unknown">Couldn\'t complete that. Please try again</string>
     <string name="pair_err_detail">Details: %1$s</string>
+    <string name="pair_invitation_confirm">Join %1$s?</string>
+    <string name="pair_invitation_confirm_unnamed">Join this Cluster?</string>
+    <string name="pair_invitation_expired">This invitation has expired. Show a new code on the other device</string>
+    <string name="pair_invitation_invalid">This invitation could not be read</string>
+    <string name="pair_invitation_replace">This device is already in another Cluster. Joining erases its current setup</string>
+    <string name="pair_invitation_title">Invitation scanned</string>
     <string name="pair_invite_cluster">Cluster: %1$s</string>
     <string name="pair_invite_expired">This invitation has expired. Get a new one on the other device</string>
     <string name="pair_invite_invalid">This invitation could not be read</string>

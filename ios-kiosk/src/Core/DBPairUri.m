@@ -124,12 +124,17 @@ static BOOL DBIsSixAsciiDigits(NSString *pin) {
   return result;
 }
 
+// Core's document is {"ok":true,"host","pin","exp","cluster"} or
+// {"ok":false,"err":...} with the same four error names this class uses, so the
+// mapping is one-to-one.
 + (DBPairUri *)fromCoreDocument:(NSDictionary *)document {
   if (![document isKindOfClass:[NSDictionary class]]) return nil;
-  id error = [document objectForKey:@"err"];
-  if (![error isKindOfClass:[NSString class]]) error = [document objectForKey:@"error"];
-  if ([error isKindOfClass:[NSString class]] && [(NSString *)error length] > 0)
-    return [self refusalWith:(NSString *)error];
+  id ok = [document objectForKey:@"ok"];
+  if ([ok isKindOfClass:[NSNumber class]] && ![(NSNumber *)ok boolValue]) {
+    id error = [document objectForKey:@"err"];
+    return [self refusalWith:[error isKindOfClass:[NSString class]] ? (NSString *)error
+                                                                   : DBPairUriErrorBadScheme];
+  }
   id host = [document objectForKey:@"host"];
   id pin = [document objectForKey:@"pin"];
   if (![host isKindOfClass:[NSString class]] || ![pin isKindOfClass:[NSString class]])
@@ -140,8 +145,6 @@ static BOOL DBIsSixAsciiDigits(NSString *pin) {
   id cluster = [document objectForKey:@"cluster"];
   result->_cluster = [cluster isKindOfClass:[NSString class]] ? [cluster copy] : @"";
   id expires = [document objectForKey:@"exp"];
-  if (![expires isKindOfClass:[NSNumber class]])
-    expires = [document objectForKey:@"expires_at_s"];
   result->_expiresAtS = [expires isKindOfClass:[NSNumber class]]
       ? [(NSNumber *)expires longLongValue] : 0;
   result->_error = nil;

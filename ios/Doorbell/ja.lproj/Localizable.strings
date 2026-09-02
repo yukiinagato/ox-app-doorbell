@@ -575,6 +575,12 @@
 "pair.err.timeout" = "応答がありませんでした。もう一度お試しください";
 "pair.err.unknown" = "追加できませんでした。もう一度お試しください";
 "pair.err_detail" = "詳細: %@";
+"pair.invitation_confirm" = "%@ に参加しますか？";
+"pair.invitation_confirm_unnamed" = "このクラスタに参加しますか？";
+"pair.invitation_expired" = "この招待は期限切れです。相手の端末で新しいコードを表示してください";
+"pair.invitation_invalid" = "この招待を読み取れませんでした";
+"pair.invitation_replace" = "この端末は別のクラスタに参加しています。参加すると今の設定は消えます";
+"pair.invitation_title" = "招待を読み取りました";
 "pair.invite_cluster" = "クラスタ: %@";
 "pair.invite_expired" = "この招待は期限切れです。相手の端末で新しいコードを発行してください";
 "pair.invite_invalid" = "この招待は読み取れませんでした";

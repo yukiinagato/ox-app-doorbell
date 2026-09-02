@@ -8,6 +8,8 @@
 #import "../Media/DBH264Player.h"
 #import "../Media/DBLowLatencyH264Player.h"
 #import "../Net/DBMjpegClient.h"
+#import "../Core/DBPairUri.h"
+#import "../Screens/DBPairingScreen.h"
 #import "../Screens/DBRouter.h"
 #import "../Screens/DBIncomingScreen.h"
 #import "DBWatchdog.h"
@@ -1017,6 +1019,20 @@ static NSString *const DBScreenshotOutputPath = @"/var/mobile/Documents/screensh
   }
   // ASCII only: ASL mangles a multi-byte arrow into one dash per character.
   NSLog(@"[doorbell] openURL: %@ -> host='%@'", url, host);
+  if ([host isEqualToString:@"pair"]) {
+    // A scanned invitation, or one opened from another app. Core validates it
+    // when it can, because it checks the expiry against corrected cluster
+    // time; the shell parser is the fallback before core has started.
+    NSString *text = [url absoluteString];
+    DBPairUri *invitation = [DBPairUri fromCoreDocument:[_core parsePairUri:text]];
+    if (invitation == nil) {
+      invitation = [DBPairUri parse:text
+                               nowS:(long long)[[NSDate date] timeIntervalSince1970]];
+    }
+    [_router showPairing];
+    [[_router pairing] presentInvitation:invitation];
+    return YES;
+  }
   if ([host isEqualToString:@"pin"]) {
     [_router requestPinThen:nil];
     return YES;

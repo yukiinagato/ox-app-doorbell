@@ -5,6 +5,7 @@
 #import "DBCallReturnCountdown.h"
 #import "DBSipChurnPolicy.h"
 #import "DBNoticeModel.h"
+#import "DBPairUri.h"
 #import "DBPurposeModel.h"
 #import "DBSafeModeRecovery.h"
 #import "DBSosSlideModel.h"
@@ -952,6 +953,110 @@ static void TestSipChurnBackoff(void) {
   Require(requests == 1, @"the churn is reported once, not on every cycle");
 }
 
+#pragma mark - the doorbell://pair invitation
+
+static NSString *DBTestPairUri(NSString *host, NSString *pin, NSString *exp,
+                               NSString *cluster) {
+  NSMutableArray *query = [NSMutableArray array];
+  if (host) [query addObject:[@"host=" stringByAppendingString:host]];
+  if (pin) [query addObject:[@"pin=" stringByAppendingString:pin]];
+  if (exp) [query addObject:[@"exp=" stringByAppendingString:exp]];
+  if (cluster) [query addObject:[@"cluster=" stringByAppendingString:cluster]];
+  return [@"doorbell://pair?" stringByAppendingString:
+      [query componentsJoinedByString:@"&"]];
+}
+
+// The same cases the Swift shell pins, so both read one format and this class
+// can become a thin wrapper over db_core_parse_pair_uri_json without any
+// behaviour changing.
+static void TestPairUriParsing(void) {
+  const long long now = 1760000000LL;
+  NSString *good = DBTestPairUri(@"10.0.1.5:47172", @"482913", @"1760000600",
+                                 @"Keihan%20House");
+
+  DBPairUri *invitation = [DBPairUri parse:good nowS:now];
+  Require([invitation isValid], @"a well-formed invitation parses");
+  Require([invitation.host isEqualToString:@"10.0.1.5:47172"], @"the host is read");
+  Require([invitation.pin isEqualToString:@"482913"], @"the PIN is read");
+  Require(invitation.expiresAtS == 1760000600LL, @"and the expiry");
+  Require([invitation.cluster isEqualToString:@"Keihan House"],
+          @"the name arrives percent-decoded");
+
+  Require([[DBPairUri parse:DBTestPairUri(@"10.0.1.5:47172", @"482913", nil, nil)
+                       nowS:now] expiresAtS] == 0, @"an expiry is optional");
+  Require([[[DBPairUri parse:DBTestPairUri(@"10.0.1.5:47172", @"482913", @"1760000600", nil)
+                        nowS:now] cluster] length] == 0,
+          @"the name is decoration, not identity");
+  // A QR reader hands back exactly what was encoded, whitespace and all.
+  Require([[DBPairUri parse:[NSString stringWithFormat:@"  %@\n", good] nowS:now] isValid],
+          @"a scanned string is trimmed before it is judged");
+  // A QR encoder may upper-case the payload to save modules.
+  Require([[DBPairUri parse:@"DOORBELL://PAIR?host=10.0.1.5:47172&pin=482913" nowS:now]
+              isValid], @"the scheme and action are case insensitive");
+
+  // The expiry is the second the token stops working, not the last it works.
+  Require([[DBPairUri parse:DBTestPairUri(@"10.0.1.5:47172", @"482913", @"1760000000", nil)
+                       nowS:now].error isEqualToString:DBPairUriErrorExpired],
+          @"an invitation expiring this second is refused");
+  Require([[DBPairUri parse:DBTestPairUri(@"10.0.1.5:47172", @"482913", @"1760000001", nil)
+                       nowS:now] isValid], @"one second later it still works");
+
+  Require([[DBPairUri parse:@"doorbell://pair?host=10.0.1.5:47172" nowS:now].error
+              isEqualToString:DBPairUriErrorMissingPin], @"a missing PIN is refused");
+  Require([[DBPairUri parse:@"doorbell://pair?pin=482913" nowS:now].error
+              isEqualToString:DBPairUriErrorMissingHost], @"a missing host is refused");
+  // Five digits, seven, or six characters that are not all digits are a
+  // mis-scan; sending one would burn an attempt on a token that has few.
+  NSArray *badPins = [NSArray arrayWithObjects:@"48291", @"4829133", @"48291a",
+      @"\uFF14\uFF18\uFF12\uFF19\uFF11\uFF13", @"", nil];
+  for (NSString *bad in badPins) {
+    Require([[DBPairUri parse:DBTestPairUri(@"10.0.1.5:47172", bad, nil, nil) nowS:now].error
+                isEqualToString:DBPairUriErrorMissingPin],
+            [@"rejects the PIN " stringByAppendingString:bad]);
+  }
+  NSArray *notInvitations = [NSArray arrayWithObjects:@"doorbell://debug/ping",
+      @"https://example.com/pair?pin=482913", @"doorbell-pair:10.0.1.5|node|key",
+      @"", @"not a uri at all", nil];
+  for (NSString *bad in notInvitations) {
+    Require([[DBPairUri parse:bad nowS:now].error isEqualToString:DBPairUriErrorBadScheme],
+            [@"rejects " stringByAppendingString:bad]);
+  }
+  Require([[DBPairUri parse:nil nowS:now].error isEqualToString:DBPairUriErrorBadScheme],
+          @"and nil");
+
+  // Core's document maps one to one onto the same result.
+  DBPairUri *fromCore = [DBPairUri fromCoreDocument:
+      [NSDictionary dictionaryWithObjectsAndKeys:
+          [NSNumber numberWithBool:YES], @"ok", @"10.0.1.5:47172", @"host",
+          @"482913", @"pin", [NSNumber numberWithLongLong:1760000600LL], @"exp",
+          @"Ox House", @"cluster", nil]];
+  Require([fromCore isValid] && [fromCore.pin isEqualToString:@"482913"],
+          @"core's document is read");
+  Require([fromCore.cluster isEqualToString:@"Ox House"], @"including the name");
+  DBPairUri *refused = [DBPairUri fromCoreDocument:
+      [NSDictionary dictionaryWithObjectsAndKeys:
+          [NSNumber numberWithBool:NO], @"ok", @"expired", @"err", nil]];
+  Require([refused.error isEqualToString:DBPairUriErrorExpired],
+          @"core's refusal keeps its reason");
+  Require([DBPairUri fromCoreDocument:nil] == nil,
+          @"an absent document falls back to the local parse");
+  Require([DBPairUri fromCoreDocument:[NSDictionary dictionary]] == nil,
+          @"and so does one this shell does not understand");
+
+  // The invitation core publishes on the PIN card is what a scanner reads back.
+  NSDictionary *pairing = [NSDictionary dictionaryWithObject:
+      [NSDictionary dictionaryWithObjectsAndKeys:@"10.0.1.5:47172", @"host",
+          @"482913", @"pin", good, @"uri", nil] forKey:@"token"];
+  Require([[DBPairUri invitationUriInPairingInfo:pairing] isEqualToString:good],
+          @"the card draws what core published");
+  Require([[DBPairUri parse:[DBPairUri invitationUriInPairingInfo:pairing] nowS:now] isValid],
+          @"and a scanner can read it back");
+  NSDictionary *older = [NSDictionary dictionaryWithObject:
+      [NSDictionary dictionaryWithObject:@"482913" forKey:@"pin"] forKey:@"token"];
+  Require([[DBPairUri invitationUriInPairingInfo:older] length] == 0,
+          @"a core without the field publishes no invitation, and the card falls back");
+}
+
 #pragma mark - safe mode
 
 static void TestLocalSafeModeAutoClearTiming(void) {
@@ -1069,6 +1174,7 @@ int main(void) {
     TestHistoryWallClockRendering();
     TestNoticePrecedenceExpiryAndPresets();
     TestDisabledVisitPurposesLeaveEveryChooser();
+    TestPairUriParsing();
     TestIncomingReturnCountdown();
     TestSipChurnBackoff();
     TestLocalSafeModeAutoClearTiming();
