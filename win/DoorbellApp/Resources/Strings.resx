@@ -108,6 +108,7 @@
   <data name="admin_door_call_sound" xml:space="preserve"><value>室外機の呼出音</value></data>
   <data name="admin_door_list" xml:space="preserve"><value>ドア</value></data>
   <data name="admin_door_or_device" xml:space="preserve"><value>ドア／機器</value></data>
+  <data name="admin_door_unconfigured" xml:space="preserve"><value>未設定</value></data>
   <data name="admin_doors" xml:space="preserve"><value>ドア／建物</value></data>
   <data name="admin_drop_here" xml:space="preserve"><value>ここにファイルをドラッグ＆ドロップ／クリックで選択</value></data>
   <data name="admin_duty" xml:space="preserve"><value>duty</value></data>
