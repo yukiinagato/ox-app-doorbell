@@ -1336,6 +1336,445 @@ var AdminLogic = (function () {
     return String(s || "").replace(/[^A-Za-z0-9_]/g, "_");
   }
 
+  /* ---------------- Pairing (WP-W) ----------------
+   * Pure view models for the "Add device" tab. The UI renders what these return and never
+   * infers pairing state from `paired` / `persistence_ready`; `pairing.state` is authoritative.
+   */
+
+  // Error codes the core can report on a pairing route or event. Anything else falls back to
+  // pair.err.unknown, so a raw code is never the primary message.
+  var PAIR_ERR_CODES = ["bad_pin", "expired", "no_token", "host_unpaired", "connect_failed",
+    "timeout", "closed", "join_in_progress", "already_paired", "decrypt_failed", "bad_payload",
+    "bad_challenge", "local_persist_failed", "persist_failed", "host_zero_psk", "no_ack",
+    "bad_qr", "no_mesh", "pairing_unavailable"];
+
+  var PAIR_STATES = ["unpaired", "joining", "persist_error", "ready", "revoked"];
+
+  function pairErrKey(code) {
+    var c = String(code == null ? "" : code);
+    return PAIR_ERR_CODES.indexOf(c) >= 0 ? "pair.err." + c : "pair.err.unknown";
+  }
+
+  // {m, s} for pair.code_expires_in / pair.add_all_on, seconds always two digits.
+  function pairClock(seconds) {
+    var n = Math.max(0, Math.round(num(seconds, 0)));
+    return { m: Math.floor(n / 60), s: ("0" + (n % 60)).slice(-2) };
+  }
+
+  function pairDeviceLabel(d) {
+    d = isObj(d) ? d : {};
+    if (d.name) return String(d.name);
+    var model = d.model ? String(d.model) : "";
+    var id6 = String(d.id || "").slice(0, 6);
+    return model ? (id6 ? model + " " + id6 : model) : (id6 || "?");
+  }
+
+  function pairDeviceDetail(d) {
+    d = isObj(d) ? d : {};
+    var parts = [];
+    if (d.role) parts.push(String(d.role));
+    if (d.model) parts.push(String(d.model));
+    if (d.platform && d.platform !== d.model) parts.push(String(d.platform));
+    if (d.sw) parts.push("v" + String(d.sw));
+    return parts.join(" · ");
+  }
+
+  // How long a finished row keeps its result visible, and how long a row that left the pending
+  // list may wait for its device to show up as a peer before the add counts as failed.
+  var PAIR_ROW_LINGER_MS = 15000;
+
+  // Carry the per-row UI state across the 2 s snapshot poll. There is no SSE yet, so a row that
+  // was being added and has left `pending` is confirmed by the device appearing in status.peers:
+  // that peer diff is this panel's device_joined.
+  function pairMergeRows(prevRows, snapshot, peerIds, nowMs) {
+    prevRows = isObj(prevRows) ? prevRows : {};
+    var devices = ((isObj(snapshot) ? snapshot.pending : null) || {}).devices;
+    devices = devices instanceof Array ? devices : [];
+    var pending = {}, peers = {}, out = {}, i, id, st;
+    for (i = 0; i < devices.length; i++)
+      if (devices[i] && devices[i].id) pending[devices[i].id] = true;
+    peerIds = peerIds instanceof Array ? peerIds : [];
+    for (i = 0; i < peerIds.length; i++) peers[peerIds[i]] = true;
+    for (id in prevRows) {
+      if (!own(prevRows, id)) continue;
+      st = prevRows[id];
+      if (!isObj(st)) continue;
+      if (own(pending, id)) { out[id] = st; continue; }
+      if (st.state === "adding" && own(peers, id)) {
+        out[id] = { state: "added", at: nowMs, label: st.label };
+        continue;
+      }
+      if (nowMs - num(st.at, 0) < PAIR_ROW_LINGER_MS) { out[id] = st; continue; }
+      if (st.state === "adding")
+        out[id] = { state: "failed", err: "no_ack", at: nowMs, label: st.label };
+    }
+    return out;
+  }
+
+  // One nearby row: core's invite_state is authoritative, the local state covers the click
+  // before the next snapshot arrives and the "Added" confirmation after the row leaves pending.
+  function pairRowModel(device, local) {
+    device = isObj(device) ? device : {};
+    local = isObj(local) ? local : {};
+    var state = "idle", errKey = "";
+    if (device.invite_state === "sent" || device.invite_state === "acked") state = "adding";
+    if (local.state === "adding") state = "adding";
+    if (local.state === "failed") { state = "failed"; errKey = pairErrKey(local.err); }
+    // A failure reported by core outranks the optimistic state of the click that caused it.
+    if (device.invite_state === "failed") { state = "failed"; errKey = pairErrKey(device.last_error); }
+    if (local.state === "added") { state = "added"; errKey = ""; }
+    return {
+      id: String(device.id || local.id || ""),
+      label: device.id ? pairDeviceLabel(device) : String(local.label || ""),
+      detail: pairDeviceDetail(device),
+      age_s: Math.max(0, Math.round(num(device.age_s, 0))),
+      state: state,
+      errKey: errKey,
+      errCode: state === "failed" ? String(device.invite_state === "failed" ?
+        (device.last_error || "") : (local.err || "")) : "",
+      gone: !device.id
+    };
+  }
+
+  // The whole tab in one object: which view to draw and everything both views need.
+  function pairPanelModel(snapshot, rows) {
+    snapshot = isObj(snapshot) ? snapshot : {};
+    rows = isObj(rows) ? rows : {};
+    var state = String(snapshot.state || "");
+    if (PAIR_STATES.indexOf(state) < 0) state = snapshot.paired === true ? "ready" : "unpaired";
+    var self = isObj(snapshot.self) ? snapshot.self : {};
+    var home = isObj(snapshot.home) ? snapshot.home : {};
+    var token = isObj(snapshot.token) ? snapshot.token : {};
+    var pending = isObj(snapshot.pending) ? snapshot.pending : {};
+    var devices = pending.devices instanceof Array ? pending.devices : [];
+    var list = [], i, id, seen = {};
+    for (i = 0; i < devices.length; i++) {
+      if (!devices[i] || !devices[i].id) continue;
+      seen[devices[i].id] = true;
+      list.push(pairRowModel(devices[i], rows[devices[i].id]));
+    }
+    for (id in rows) {
+      if (!own(rows, id) || own(seen, id) || !isObj(rows[id])) continue;
+      if (rows[id].state === "added" || rows[id].state === "failed")
+        list.push(pairRowModel({}, {
+          id: id, state: rows[id].state, err: rows[id].err, label: rows[id].label
+        }));
+    }
+    var tokenActive = token.active === true;
+    return {
+      state: state,
+      onboarding: state !== "ready",
+      isFounder: snapshot.is_founder === true,
+      self: {
+        name: String(self.name || ""), model: String(self.model || ""),
+        addr: String(self.addr || ""), role: String(self.role || snapshot.role || "")
+      },
+      qrText: String(snapshot.pair_qr || ""),
+      memberCount: Math.max(0, Math.round(num(home.member_count, 0))),
+      connectedCount: Math.max(0, Math.round(num(home.connected_count, 0))),
+      token: {
+        active: tokenActive,
+        pin: tokenActive ? String(token.pin || "") : "",
+        host: String(token.host || self.addr || ""),
+        expires_s: tokenActive ? Math.max(0, Math.round(num(token.expires_s, 0))) : 0,
+        attemptsLeft: tokenActive ? Math.max(0, Math.round(num(token.attempts_left, 0))) : 0
+      },
+      pairingMode: {
+        active: pending.pairing_mode === true,
+        left_s: Math.max(0, Math.round(num(pending.pairing_mode_left_s, 0))),
+        addedCount: Math.max(0, Math.round(num(pending.auto_added_count, 0)))
+      },
+      rows: list
+    };
+  }
+
+  // The join form on an unpaired host: address plus a six-digit Pairing PIN.
+  function pairJoinPayload(host, pin) {
+    var h = String(host == null ? "" : host).replace(/^\s+|\s+$/g, "");
+    var p = String(pin == null ? "" : pin).replace(/[^0-9]/g, "");
+    if (!h) return { ok: false, field: "host" };
+    if (p.length !== 6) return { ok: false, field: "pin" };
+    return { ok: true, body: { host: h, pin: p } };
+  }
+
+  // A "doorbell-pair:<addr>|<id>|<pk>" payload, pasted or read from the camera.
+  function pairQrParse(text) {
+    var s = String(text == null ? "" : text).replace(/^\s+|\s+$/g, "");
+    if (s.indexOf("doorbell-pair:") !== 0) return null;
+    var body = s.slice("doorbell-pair:".length).split("|");
+    if (body.length !== 3 || !body[0] || !/^[0-9a-fA-F]{64}$/.test(body[2])) return null;
+    return { addr: body[0], id: body[1], pk: body[2] };
+  }
+
+  function pairQrTextValid(text) { return !!pairQrParse(text); }
+
+  /* ---- QR encoding (ISO/IEC 18004 byte mode, ECC level M) ----
+   * The panel draws `pairing.pair_qr` itself: the admin page is static and must not fetch a
+   * generator, and core's db_core_qr_encode is not reachable from the browser.
+   */
+  var QR_ECC_PER_BLOCK_M = [-1, 10, 16, 26, 18, 24, 16, 18, 22, 22, 26, 30, 22, 22, 24, 24, 28,
+    28, 26, 26, 26, 26, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28];
+  var QR_BLOCKS_M = [-1, 1, 1, 1, 2, 2, 4, 4, 4, 5, 5, 5, 8, 9, 9, 10, 10, 11, 13, 14, 16, 17, 17,
+    18, 20, 21, 23, 25, 26, 28, 29, 31, 33, 35, 37, 38, 40, 43, 45, 47, 49];
+
+  function qrRawDataModules(ver) {
+    var result = (16 * ver + 128) * ver + 64;
+    if (ver >= 2) {
+      var numAlign = Math.floor(ver / 7) + 2;
+      result -= (25 * numAlign - 10) * numAlign - 55;
+      if (ver >= 7) result -= 36;
+    }
+    return result;
+  }
+
+  function qrDataCodewords(ver) {
+    return Math.floor(qrRawDataModules(ver) / 8) - QR_ECC_PER_BLOCK_M[ver] * QR_BLOCKS_M[ver];
+  }
+
+  function qrAlignPositions(ver) {
+    if (ver === 1) return [];
+    var numAlign = Math.floor(ver / 7) + 2;
+    var step = Math.floor((ver * 8 + numAlign * 3 + 5) / (numAlign * 4 - 4)) * 2;
+    var out = [], i, pos;
+    for (i = 0; i < numAlign; i++) out.push(0);
+    out[0] = 6;
+    for (i = numAlign - 1, pos = ver * 4 + 10; i >= 1; i--, pos -= step) out[i] = pos;
+    return out;
+  }
+
+  function qrGfMul(x, y) {
+    var z = 0;
+    for (var i = 7; i >= 0; i--) {
+      z = ((z << 1) ^ ((z >>> 7) * 0x11D)) & 0xFF;
+      z = (z ^ (((y >>> i) & 1) * x)) & 0xFF;
+    }
+    return z;
+  }
+
+  function qrRsDivisor(degree) {
+    var result = [], i, j, root = 1;
+    for (i = 0; i < degree; i++) result.push(0);
+    result[degree - 1] = 1;
+    for (i = 0; i < degree; i++) {
+      for (j = 0; j < degree; j++) {
+        result[j] = qrGfMul(result[j], root);
+        if (j + 1 < degree) result[j] ^= result[j + 1];
+      }
+      root = qrGfMul(root, 0x02);
+    }
+    return result;
+  }
+
+  function qrRsRemainder(data, start, len, divisor) {
+    var degree = divisor.length, result = [], i, j, factor;
+    for (i = 0; i < degree; i++) result.push(0);
+    for (i = 0; i < len; i++) {
+      factor = data[start + i] ^ result[0];
+      result.shift();
+      result.push(0);
+      for (j = 0; j < degree; j++) result[j] ^= qrGfMul(divisor[j], factor);
+    }
+    return result;
+  }
+
+  function qrUtf8Bytes(s) {
+    var esc = encodeURIComponent(String(s == null ? "" : s)), out = [], i;
+    for (i = 0; i < esc.length; i++) {
+      if (esc.charAt(i) === "%") { out.push(parseInt(esc.substr(i + 1, 2), 16)); i += 2; }
+      else out.push(esc.charCodeAt(i));
+    }
+    return out;
+  }
+
+  function qrPenalty(mods, size) {
+    var penalty = 0, dark = 0, x, y, run, color, idx;
+    function at(px, py) { return mods[py * size + px]; }
+    for (y = 0; y < size; y++) {
+      run = 1; color = at(0, y);
+      for (x = 1; x < size; x++) {
+        if (at(x, y) === color) { run++; continue; }
+        if (run >= 5) penalty += 3 + (run - 5);
+        color = at(x, y); run = 1;
+      }
+      if (run >= 5) penalty += 3 + (run - 5);
+    }
+    for (x = 0; x < size; x++) {
+      run = 1; color = at(x, 0);
+      for (y = 1; y < size; y++) {
+        if (at(x, y) === color) { run++; continue; }
+        if (run >= 5) penalty += 3 + (run - 5);
+        color = at(x, y); run = 1;
+      }
+      if (run >= 5) penalty += 3 + (run - 5);
+    }
+    for (y = 0; y + 1 < size; y++)
+      for (x = 0; x + 1 < size; x++) {
+        color = at(x, y);
+        if (at(x + 1, y) === color && at(x, y + 1) === color && at(x + 1, y + 1) === color)
+          penalty += 3;
+      }
+    var finder = [1, 0, 1, 1, 1, 0, 1, 0, 0, 0, 0];
+    function matches(px, py, dx, dy) {
+      for (var k = 0; k < 11; k++) {
+        var qx = px + dx * k, qy = py + dy * k;
+        if (qx < 0 || qy < 0 || qx >= size || qy >= size) return false;
+        if (at(qx, qy) !== finder[k]) return false;
+      }
+      return true;
+    }
+    for (y = 0; y < size; y++)
+      for (x = 0; x < size; x++) {
+        if (matches(x, y, 1, 0)) penalty += 40;
+        if (matches(x, y, 0, 1)) penalty += 40;
+        if (matches(x, y, -1, 0)) penalty += 40;
+        if (matches(x, y, 0, -1)) penalty += 40;
+      }
+    for (idx = 0; idx < size * size; idx++) if (mods[idx]) dark++;
+    penalty += Math.floor(Math.abs(dark * 20 - size * size * 10) / (size * size)) * 10;
+    return penalty;
+  }
+
+  // Returns {size, modules:[0|1]} row major, or null when the text cannot be encoded.
+  function qrModules(text) {
+    var data = qrUtf8Bytes(text);
+    if (!data.length) return null;
+    var ver, cap = 0, ccBits, i, j, k;
+    for (ver = 1; ver <= 40; ver++) {
+      cap = qrDataCodewords(ver);
+      ccBits = ver < 10 ? 8 : 16;
+      if (4 + ccBits + data.length * 8 <= cap * 8) break;
+    }
+    if (ver > 40) return null;
+    ccBits = ver < 10 ? 8 : 16;
+
+    var bits = [];
+    function push(val, n) { for (var b = n - 1; b >= 0; b--) bits.push((val >>> b) & 1); }
+    push(4, 4);
+    push(data.length, ccBits);
+    for (i = 0; i < data.length; i++) push(data[i], 8);
+    push(0, Math.min(4, cap * 8 - bits.length));
+    while (bits.length % 8 !== 0) bits.push(0);
+    var dat = [], byteVal;
+    for (i = 0; i < bits.length; i += 8) {
+      byteVal = 0;
+      for (j = 0; j < 8; j++) byteVal = (byteVal << 1) | bits[i + j];
+      dat.push(byteVal);
+    }
+    for (var pad = 0xEC; dat.length < cap; pad = pad ^ 0xEC ^ 0x11) dat.push(pad);
+
+    var numBlocks = QR_BLOCKS_M[ver], eccLen = QR_ECC_PER_BLOCK_M[ver];
+    var rawCodewords = Math.floor(qrRawDataModules(ver) / 8);
+    var numShort = numBlocks - rawCodewords % numBlocks;
+    var shortLen = Math.floor(rawCodewords / numBlocks) - eccLen;
+    var div = qrRsDivisor(eccLen), coded = [], off = 0, ecc, datLen;
+    for (i = 0; i < rawCodewords; i++) coded.push(0);
+    for (i = 0; i < numBlocks; i++) {
+      datLen = shortLen + (i < numShort ? 0 : 1);
+      ecc = qrRsRemainder(dat, off, datLen, div);
+      for (j = 0, k = i; j < datLen; j++, k += numBlocks) {
+        if (j === shortLen) k -= numShort;
+        coded[k] = dat[off + j];
+      }
+      for (j = 0, k = cap + i; j < eccLen; j++, k += numBlocks) coded[k] = ecc[j];
+      off += datLen;
+    }
+
+    var size = ver * 4 + 17, mods = [], fn = [];
+    for (i = 0; i < size * size; i++) { mods.push(0); fn.push(0); }
+    function set(x, y, dark, isFn) {
+      if (x < 0 || y < 0 || x >= size || y >= size) return;
+      mods[y * size + x] = dark ? 1 : 0;
+      if (isFn) fn[y * size + x] = 1;
+    }
+    for (i = 0; i < size; i++) {
+      set(6, i, i % 2 === 0, 1);
+      set(i, 6, i % 2 === 0, 1);
+    }
+    function finderAt(cx, cy) {
+      for (var dy = -4; dy <= 4; dy++)
+        for (var dx = -4; dx <= 4; dx++) {
+          var dist = Math.max(Math.abs(dx), Math.abs(dy));
+          set(cx + dx, cy + dy, dist !== 2 && dist !== 4, 1);
+        }
+    }
+    finderAt(3, 3);
+    finderAt(size - 4, 3);
+    finderAt(3, size - 4);
+    var ap = qrAlignPositions(ver), n = ap.length, dx, dy;
+    for (i = 0; i < n; i++)
+      for (j = 0; j < n; j++) {
+        if ((i === 0 && j === 0) || (i === 0 && j === n - 1) || (i === n - 1 && j === 0)) continue;
+        for (dy = -2; dy <= 2; dy++)
+          for (dx = -2; dx <= 2; dx++)
+            set(ap[i] + dx, ap[j] + dy, Math.max(Math.abs(dx), Math.abs(dy)) !== 1, 1);
+      }
+    if (ver >= 7) {
+      var rem = ver;
+      for (i = 0; i < 12; i++) rem = (rem << 1) ^ ((rem >> 11) * 0x1F25);
+      var vbits = (ver << 12) | rem;
+      for (i = 0; i < 18; i++) {
+        var vbit = (vbits >> i) & 1;
+        set(size - 11 + i % 3, Math.floor(i / 3), vbit, 1);
+        set(Math.floor(i / 3), size - 11 + i % 3, vbit, 1);
+      }
+    }
+    function drawFormat(mask) {
+      var fdata = (0 << 3) | mask, frem = fdata, fi;
+      for (fi = 0; fi < 10; fi++) frem = (frem << 1) ^ ((frem >> 9) * 0x537);
+      var fbits = ((fdata << 10) | frem) ^ 0x5412;
+      for (fi = 0; fi <= 5; fi++) set(8, fi, (fbits >> fi) & 1, 1);
+      set(8, 7, (fbits >> 6) & 1, 1);
+      set(8, 8, (fbits >> 7) & 1, 1);
+      set(7, 8, (fbits >> 8) & 1, 1);
+      for (fi = 9; fi < 15; fi++) set(14 - fi, 8, (fbits >> fi) & 1, 1);
+      for (fi = 0; fi < 8; fi++) set(size - 1 - fi, 8, (fbits >> fi) & 1, 1);
+      for (fi = 8; fi < 15; fi++) set(8, size - 15 + fi, (fbits >> fi) & 1, 1);
+      set(8, size - 8, 1, 1);
+    }
+    drawFormat(0);
+
+    var bitIndex = 0, right, vert, x, y, upward;
+    for (right = size - 1; right >= 1; right -= 2) {
+      if (right === 6) right = 5;
+      for (vert = 0; vert < size; vert++)
+        for (j = 0; j < 2; j++) {
+          x = right - j;
+          upward = ((right + 1) & 2) === 0;
+          y = upward ? size - 1 - vert : vert;
+          if (fn[y * size + x] || bitIndex >= coded.length * 8) continue;
+          mods[y * size + x] = (coded[bitIndex >> 3] >> (7 - (bitIndex & 7))) & 1;
+          bitIndex++;
+        }
+    }
+
+    var best = null, bestPenalty = -1, mask, cand, idx, invert, score;
+    var baseMods = mods.slice(0);
+    for (mask = 0; mask < 8; mask++) {
+      mods = baseMods.slice(0);
+      for (y = 0; y < size; y++)
+        for (x = 0; x < size; x++) {
+          idx = y * size + x;
+          if (fn[idx]) continue;
+          switch (mask) {
+            case 0: invert = (x + y) % 2 === 0; break;
+            case 1: invert = y % 2 === 0; break;
+            case 2: invert = x % 3 === 0; break;
+            case 3: invert = (x + y) % 3 === 0; break;
+            case 4: invert = (Math.floor(x / 3) + Math.floor(y / 2)) % 2 === 0; break;
+            case 5: invert = (x * y) % 2 + (x * y) % 3 === 0; break;
+            case 6: invert = ((x * y) % 2 + (x * y) % 3) % 2 === 0; break;
+            default: invert = ((x + y) % 2 + (x * y) % 3) % 2 === 0; break;
+          }
+          if (invert) mods[idx] = mods[idx] ? 0 : 1;
+        }
+      drawFormat(mask);
+      cand = mods.slice(0);
+      score = qrPenalty(cand, size);
+      if (bestPenalty < 0 || score < bestPenalty) { bestPenalty = score; best = cand; }
+    }
+    return { size: size, modules: best, version: ver };
+  }
+
   return {
     parseList: parseList, parseChatIds: parseChatIds, labelObj: labelObj, labelOf: labelOf,
     buildingEntries: buildingEntries, doorEntries: doorEntries,
@@ -1374,7 +1813,16 @@ var AdminLogic = (function () {
     themeKey: themeKey, themeEntries: themeEntries,
     purposeEntries: purposeEntries, purposeReorderEntries: purposeReorderEntries,
     uiEntries: uiEntries,
-    placeholders: placeholders, placeholderDiff: placeholderDiff, i18nEntries: i18nEntries
+    placeholders: placeholders, placeholderDiff: placeholderDiff, i18nEntries: i18nEntries,
+
+    PAIR_ERR_CODES: PAIR_ERR_CODES, PAIR_STATES: PAIR_STATES,
+    PAIR_ROW_LINGER_MS: PAIR_ROW_LINGER_MS,
+    pairErrKey: pairErrKey, pairClock: pairClock, pairDeviceLabel: pairDeviceLabel,
+    pairDeviceDetail: pairDeviceDetail, pairMergeRows: pairMergeRows,
+    pairRowModel: pairRowModel, pairPanelModel: pairPanelModel,
+    pairJoinPayload: pairJoinPayload, pairQrParse: pairQrParse,
+    pairQrTextValid: pairQrTextValid,
+    qrModules: qrModules
   };
 })();
 
@@ -1447,9 +1895,101 @@ if (typeof document !== "undefined") (function () {
   var MOCK_ID1 = "a1b2c3d4e5f60718293a4b5c6d7e8f90";
   var MOCK_ID2 = "0f1e2d3c4b5a69788766554433221100";
 
-  var MOCK_PAIRMODE = 0;
-  var MOCK_PENDING = [{ id: "newpad01aa22bb33cc44dd55ee66ff7788", name: "indoor_panel · newpad",
-                        role: "indoor_panel", addr: "10.10.38.55:47172", age_s: 2 }];
+  /* The pairing mock is a small state machine so the whole flow -- unpaired host, add, join,
+   * invite failure, PIN expiry, bulk add -- can be exercised without hardware. */
+  var MOCK_PAIR = {
+    state: qs("pair") || "ready",
+    founder: true,
+    tokenPin: "",
+    tokenUntil: 0,
+    tokenAttempts: 3,
+    modeUntil: 0,
+    autoAdded: 0,
+    devices: [
+      { id: "newpad01aa22bb33cc44dd55ee66ff7788", name: "newpad", role: "indoor_panel",
+        addr: "10.10.38.55:47172", model: "Nexus 7", platform: "android", sw: "0.1.0",
+        seen: 0, invite_state: "none", attempts: 0, last_error: "", fate: "join", due: 0 },
+      { id: "oldbell99887766554433221100aabbcc", name: "", role: "door_station",
+        addr: "10.10.38.56:47172", model: "iPad 1", platform: "ios", sw: "0.1.0",
+        seen: 0, invite_state: "none", attempts: 0, last_error: "", fate: "fail", due: 0 }]
+  };
+
+  function mockPairInvite(id, manual) {
+    for (var i = 0; i < MOCK_PAIR.devices.length; i++) {
+      var d = MOCK_PAIR.devices[i];
+      if (d.id !== id || d.invite_state === "sent") continue;
+      d.invite_state = "sent";
+      d.attempts = manual ? 1 : 0;
+      d.last_error = "";
+      d.due = new Date().getTime() + (d.fate === "join" ? 3000 : 6000);
+      return true;
+    }
+    return false;
+  }
+
+  function mockPairTick() {
+    var now = new Date().getTime(), keep = [], i, d;
+    for (i = 0; i < MOCK_PAIR.devices.length; i++) {
+      d = MOCK_PAIR.devices[i];
+      if (!d.seen) d.seen = now;
+      if (d.invite_state === "sent" && d.due && now >= d.due) {
+        if (d.fate === "join") {
+          MOCK_STATUS.peers.push({ id: d.id, name: d.name || d.model, role: d.role,
+                                   status: "alive", sw: d.sw, addrs: [d.addr] });
+          if (now < MOCK_PAIR.modeUntil) MOCK_PAIR.autoAdded++;
+          continue;
+        }
+        d.invite_state = "failed";
+        d.last_error = "no_ack";
+        d.attempts = 3;
+      }
+      keep.push(d);
+    }
+    MOCK_PAIR.devices = keep;
+    if (now < MOCK_PAIR.modeUntil)
+      for (i = 0; i < MOCK_PAIR.devices.length; i++) mockPairInvite(MOCK_PAIR.devices[i].id, false);
+  }
+
+  function mockPairSnapshot() {
+    mockPairTick();
+    var now = new Date().getTime(), devices = [], i, d;
+    var active = MOCK_PAIR.tokenUntil > now;
+    for (i = 0; i < MOCK_PAIR.devices.length; i++) {
+      d = MOCK_PAIR.devices[i];
+      devices.push({ id: d.id, addr: d.addr, name: d.name, role: d.role, model: d.model,
+                     platform: d.platform, sw: d.sw,
+                     age_s: Math.round((now - d.seen) / 1000), invite_state: d.invite_state,
+                     attempts: d.attempts, last_error: d.last_error });
+    }
+    var paired = MOCK_PAIR.state === "ready" || MOCK_PAIR.state === "persist_error";
+    return {
+      state: MOCK_PAIR.state,
+      paired: paired,
+      persistence_ready: MOCK_PAIR.state !== "persist_error",
+      is_founder: MOCK_PAIR.founder,
+      psk_source: paired ? "secure_store" : "none",
+      psk_ref: paired ? "secret:mesh.psk" : null,
+      role: "door_station",
+      self: { id: MOCK_ID1, addr: "10.10.38.9:47172", name: "front-panel", role: "door_station",
+              pk: "de".repeat(32), model: "Pixel 4a", platform: "android", sw: "0.1.0" },
+      pair_qr: "doorbell-pair:10.10.38.9:47172|" + MOCK_ID1 + "|" + "de".repeat(32),
+      home: { member_count: MOCK_STATUS.peers.length,
+              connected_count: MOCK_STATUS.peers.length - 1 },
+      token: { active: active, expires_s: active ? Math.round((MOCK_PAIR.tokenUntil - now) / 1000) : 0,
+               attempts_left: active ? MOCK_PAIR.tokenAttempts : 0,
+               host: "10.10.38.9:47172", pin: active ? MOCK_PAIR.tokenPin : undefined },
+      pending: { pairing_mode: MOCK_PAIR.modeUntil > now,
+                 pairing_mode_left_s: Math.max(0, Math.round((MOCK_PAIR.modeUntil - now) / 1000)),
+                 auto_added_count: MOCK_PAIR.autoAdded,
+                 devices: paired ? devices : [] }
+    };
+  }
+
+  function mockPairMintToken() {
+    MOCK_PAIR.tokenPin = String(100000 + Math.floor(Math.random() * 899999));
+    MOCK_PAIR.tokenUntil = new Date().getTime() + 90000;
+    MOCK_PAIR.tokenAttempts = 3;
+  }
 
   var MOCK_IMG = "11223344556677889900aabbccddeeff11223344556677889900aabbccddeeff";
   var MOCK_WAV = "99887766554433221100ffeeddccbbaa99887766554433221100ffeeddccbbaa";
@@ -1578,12 +2118,7 @@ if (typeof document !== "undefined") (function () {
       if (p === "/api/config") return ok(MOCK_CFG);
       if (p === "/api/events") return ok({ events: MOCK_EVENTS });
       if (p === "/api/logs") return ok({ logs: ["I mock: this is a mock log entry"] });
-      if (p === "/api/pairing") return ok({ paired: true, role: "door_station",
-        pair_qr: "doorbell-pair:10.10.38.9:47172|" + MOCK_ID1 + "|" + "de".repeat(32),
-        self: { id: MOCK_ID1, addr: "10.10.38.9:47172", pk: "de".repeat(32) },
-        pending: { pairing_mode: MOCK_PAIRMODE > Date.now(),
-          pairing_mode_left_s: Math.max(0, Math.round((MOCK_PAIRMODE - Date.now()) / 1000)),
-          devices: MOCK_PENDING } });
+      if (p === "/api/pairing") return ok(mockPairSnapshot());
       return setTimeout(function () { cb(404, null); }, 0);
     }
     if (method === "DELETE" && p.indexOf("/api/assets/") === 0) {
@@ -1632,12 +2167,70 @@ if (typeof document !== "undefined") (function () {
         if (es[i].key) { L.applyKey(MOCK_CFG, es[i].key, JSON.stringify(es[i].value)); n++; }
       return ok({ ok: true, n: n });
     }
-    if (p === "/api/join-token") return ok({ ok: true, pin: "482913", expires_s: 600 });
-    if (p === "/api/pairing/mode") { MOCK_PAIRMODE = Date.now() + 600000; return ok({ ok: true, seconds: 600 }); }
-    if (p === "/api/pairing/found") return ok({ ok: true });
-    if (p === "/api/pairing/invite-direct") return ok({ ok: true });
+    if (p === "/api/join-token" || p === "/api/pairing/start") {
+      if (MOCK_PAIR.state !== "ready")
+        return setTimeout(function () { cb(409, { ok: false, err: "host_unpaired" }); }, 0);
+      mockPairMintToken();
+      if (p === "/api/pairing/start") {
+        MOCK_PAIR.modeUntil = new Date().getTime() + 600000;
+        MOCK_PAIR.autoAdded = 0;
+      }
+      return ok({ ok: true, host: "10.10.38.9:47172", pin: MOCK_PAIR.tokenPin, expires_s: 90 });
+    }
+    if (p === "/api/pairing/mode") {
+      if (MOCK_PAIR.state !== "ready")
+        return setTimeout(function () { cb(409, { ok: false, err: "host_unpaired" }); }, 0);
+      MOCK_PAIR.modeUntil = new Date().getTime() + 600000;
+      MOCK_PAIR.autoAdded = 0;
+      return ok({ ok: true, seconds: 600 });
+    }
+    if (p === "/api/pairing/stop") { MOCK_PAIR.modeUntil = 0; return ok({ ok: true }); }
+    if (p === "/api/pairing/found") {
+      if (MOCK_PAIR.state === "ready")
+        return setTimeout(function () { cb(409, { ok: false, err: "already_paired" }); }, 0);
+      MOCK_PAIR.state = "ready";
+      MOCK_PAIR.founder = true;
+      return ok({ ok: true });
+    }
+    if (p === "/api/pairing/join") {
+      if (MOCK_PAIR.state === "ready")
+        return setTimeout(function () { cb(409, { ok: false, err: "already_paired" }); }, 0);
+      if (!body || body.pin !== "424242")
+        return setTimeout(function () { cb(200, { ok: false, err: "bad_pin" }); }, 0);
+      MOCK_PAIR.state = "joining";
+      MOCK_PAIR.founder = false;
+      setTimeout(function () { MOCK_PAIR.state = "ready"; }, 2500);
+      return ok({ ok: true, pending: true });
+    }
+    if (p === "/api/pairing/retry-persist") {
+      MOCK_PAIR.state = "ready";
+      return ok({ ok: true });
+    }
+    if (p === "/api/pairing/unpair") {
+      MOCK_PAIR.state = "unpaired";
+      MOCK_PAIR.founder = false;
+      MOCK_PAIR.tokenUntil = 0;
+      MOCK_PAIR.modeUntil = 0;
+      return ok({ ok: true });
+    }
+    if (p === "/api/pairing/deny") {
+      if (!body || !body.id) return setTimeout(function () { cb(400, { ok: false, err: "no_id" }); }, 0);
+      MOCK_PAIR.devices = MOCK_PAIR.devices.filter(function (d) { return d.id !== body.id; });
+      return ok({ ok: true });
+    }
+    if (p === "/api/pairing/scan" || p === "/api/pairing/invite-direct") {
+      var parsed = L.pairQrParse((body && (body.text || body.qr)) || "");
+      if (!parsed) return setTimeout(function () { cb(400, { ok: false, err: "bad_qr" }); }, 0);
+      MOCK_PAIR.devices.push({ id: parsed.id, name: "", role: "indoor_panel", addr: parsed.addr,
+        model: "scanned", platform: "web", sw: "0.1.0", seen: new Date().getTime(),
+        invite_state: "none", attempts: 0, last_error: "", fate: "join", due: 0 });
+      mockPairInvite(parsed.id, true);
+      return ok({ ok: true });
+    }
     if (p === "/api/pairing/invite") {
-      MOCK_PENDING = MOCK_PENDING.filter(function (d) { return d.id !== (body && body.id); });
+      if (!body || !body.id) return setTimeout(function () { cb(400, { ok: false, err: "no_id" }); }, 0);
+      if (!mockPairInvite(body.id, true))
+        return setTimeout(function () { cb(400, { ok: false, err: "unknown_device" }); }, 0);
       return ok({ ok: true });
     }
     if (p === "/api/test/telegram") return ok({ ok: true });
@@ -3865,17 +4458,9 @@ if (typeof document !== "undefined") (function () {
     }
     h += "</div>";
 
-    h += "<div class='card'><h2>" + esc(t("admin.add_device")) + "</h2>" +
-         "<div class='dim fhint' style='margin-bottom:8px'>" +
-         esc(t("admin.pair_hint")) + "</div>" +
-         "<div id='pairPending'></div>" +
-         "<div style='display:flex; gap:8px; align-items:center; margin-top:10px; flex-wrap:wrap'>" +
-         "<button class='btn2 small' id='pairModeBtn'>" +
-         esc(t("admin.pair_mode")) + "</button>" +
-         "<span class='dim' id='pairModeStat'></span></div>" +
-         "<div style='margin-top:12px; border-top:1px solid var(--line,#2a333d); padding-top:10px'>" +
-         "<button class='btn2 small' id='joinBtn'>" + esc(t("admin.join_pin")) +
-         "</button><div id='joinOut'></div></div></div>";
+    h += "<div class='card'><h2>" + esc(t("pair.tab")) + "</h2>" +
+         "<button class='btn small' id='pairOpen'>" + esc(t("pair.open_panel")) +
+         "</button></div>";
 
     h += "<div class='card'><h2>" + esc(t("admin.raw_config")) + "</h2>" +
          "<textarea id='cfgView' readonly></textarea>" +
@@ -3952,18 +4537,7 @@ if (typeof document !== "undefined") (function () {
         });
       };
     }
-    $("#joinBtn").onclick = function () {
-      api("POST", "/api/join-token", {}, function (st, j) {
-        if (st !== 200 || !j || !j.ok) { msg(t("admin.save_failed")); return; }
-        var self = peerOf((S.status.node || {}).id) || {};
-        var addr = (self.addrs || [])[0] || window.location.hostname + ":47172";
-        $("#joinOut").innerHTML =
-          "<div class='pin'>" + esc(j.pin) + "</div><div class='mono' style='text-align:center'>" +
-          esc(addr) + "</div><div class='dim fhint' style='text-align:center'>" +
-          esc(t("admin.join_hint")) +
-          "</div>";
-      });
-    };
+    if ($("#pairOpen")) $("#pairOpen").onclick = function () { switchTab("pair"); };
     $("#cfgSet").onclick = function () {
       var key = $("#cfgKey").value.replace(/^\s+|\s+$/g, "");
       var val = $("#cfgVal").value.replace(/^\s+|\s+$/g, "");
@@ -3986,82 +4560,479 @@ if (typeof document !== "undefined") (function () {
       copyText($("#logOut").textContent || "", $("#logCopy"));
     };
     $("#logBtn").onclick();
-    if ($("#pairModeBtn")) $("#pairModeBtn").onclick = function () {
-      api("POST", "/api/pairing/mode", { seconds: 600 }, function (st, j) {
-        if (st === 200 && j && j.ok) {
-          msg(t("admin.pair_mode_on"));
-          refreshPairing();
-        } else msg(t("admin.save_failed"));
-      });
-    };
-    refreshPairing();
   }
 
 
-  function refreshPairing() {
-    if (S.tab !== "system") return;
-    api("GET", "/api/pairing", null, function (st, j) {
-      if (st !== 200 || !j) return;
-      var box = $("#pairPending");
-      if (!box) return;
+  /* ---------------- Add device (§5.0 onboarding + §5.1 panel) ----------------
+   * `pairing.state` from GET /api/pairing decides which view is drawn. The snapshot is polled
+   * every two seconds while the tab is open; peers from /api/status stand in for device_joined
+   * until the admin API gains an event stream.
+   */
 
-      if (j.paired === false) {
-        box.innerHTML =
-          "<div class='dim' style='padding:6px 0'>" +
-          esc(t("admin.pair_self_unpaired")) +
-          "</div><button class='btn small' id='pairFoundBtn'>" +
-          esc(t("admin.pair_found")) + "</button>";
-        var fb = $("#pairFoundBtn");
-        if (fb) fb.onclick = function () {
-          if (!window.confirm(t("admin.pair_found_confirm"))) return;
-          api("POST", "/api/pairing/found", {}, function (s2, j2) {
-            if (s2 === 200 && j2 && j2.ok) {
-              msg(t("admin.pair_found_ok"));
-              refreshPairing();
-            } else msg(t("admin.save_failed"));
-          });
-        };
-        var st2 = $("#pairModeStat");
-        if (st2) st2.textContent = "";
+  var PAIR = { snap: null, rows: {}, form: {}, poll: 0, tick: 0, scan: null, err: "",
+               joinErr: "", hadToken: false, created: false };
+
+  function pairPeerIds() {
+    var ps = S.status.peers || [], out = [], i;
+    for (i = 0; i < ps.length; i++) if (ps[i] && ps[i].id) out.push(ps[i].id);
+    return out;
+  }
+
+  function refreshPairing(cb) {
+    api("GET", "/api/pairing", null, function (st, j) {
+      if (st === 200 && j) {
+        PAIR.snap = j;
+        PAIR.rows = L.pairMergeRows(PAIR.rows, j, pairPeerIds(), new Date().getTime());
+        if (j.token && j.token.active) PAIR.hadToken = true;
+        if (j.state === "unpaired") { PAIR.hadToken = false; PAIR.created = false; }
+      }
+      if (S.tab === "pair") renderPair();
+      if (cb) cb();
+    });
+  }
+
+  function pairFail(st, j) {
+    PAIR.err = L.pairErrKey((j && j.err) || (st === 0 ? "connect_failed" : ""));
+  }
+
+  function pairPost(path, body, done) {
+    api("POST", path, body, function (st, j) {
+      var ok = st === 200 && (!j || j.ok !== false);
+      if (ok) PAIR.err = "";
+      else pairFail(st, j);
+      if (done) done(ok, j);
+      refreshPairing();
+    });
+  }
+
+  function drawPairQr(canvas, text) {
+    var m = L.qrModules(text);
+    if (!m || !canvas || !canvas.getContext) return false;
+    var quiet = 4, scale = Math.max(3, Math.ceil(248 / (m.size + quiet * 2)));
+    var px = (m.size + quiet * 2) * scale, x, y;
+    canvas.width = px;
+    canvas.height = px;
+    canvas.style.width = "100%";
+    canvas.style.maxWidth = px + "px";
+    var ctx = canvas.getContext("2d");
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, px, px);
+    ctx.fillStyle = "#000000";
+    for (y = 0; y < m.size; y++)
+      for (x = 0; x < m.size; x++)
+        if (m.modules[y * m.size + x])
+          ctx.fillRect((x + quiet) * scale, (y + quiet) * scale, scale, scale);
+    return true;
+  }
+
+  function pairErrHtml() {
+    if (!PAIR.err) return "";
+    return "<div class='card'><div class='err'>" + esc(t(PAIR.err)) + "</div></div>";
+  }
+
+  function pairSelfLine(m) {
+    var parts = [];
+    if (m.self.name) parts.push(m.self.name);
+    if (m.self.model) parts.push(m.self.model);
+    if (m.self.role) parts.push(m.self.role);
+    if (m.self.addr) parts.push(m.self.addr);
+    return parts.join(" · ");
+  }
+
+  function pairQrCardHtml(m) {
+    return "<div class='qrbox'>" +
+           (m.qrText ? "<canvas id='pairQr'></canvas>" :
+             "<div class='qrph dim'>" + esc(t("pair.qr_pending")) + "</div>") +
+           "<div class='dim fhint'>" + esc(t("pair.qr_caption")) + "</div></div>";
+  }
+
+  function pairOnboardingHtml(m) {
+    var h = "<div class='card'><h2>" + esc(t("pair.title_unpaired")) + "</h2>" +
+            "<div class='dim fhint mono'>" + esc(pairSelfLine(m)) + "</div>";
+    if (m.state === "persist_error") {
+      h += "<div class='err' style='margin-top:10px'>" +
+           esc(t("pair.persist_error_title")) + "</div><div class='dim fhint'>" +
+           esc(t("pair.persist_error_body")) + "</div>" +
+           "<button class='btn small' style='margin-top:10px' data-pair='retry'>" +
+           esc(t("pair.retry")) + "</button></div>";
+      return h + pairErrHtml();
+    }
+    if (m.state === "revoked") {
+      h += "<div class='err' style='margin-top:10px'>" + esc(t("pair.revoked")) + "</div>" +
+           "<button class='btn small' style='margin-top:10px' data-pair='unpair'>" +
+           esc(t("pair.clear_title")) + "</button></div>";
+      return h + pairErrHtml();
+    }
+    if (m.state === "joining") {
+      h += "<div style='margin-top:12px'><span class='spin'></span>" +
+           esc(t("pair.joining")) + "</div></div>";
+      return h + pairErrHtml();
+    }
+    h += "<div style='margin-top:12px'><span class='spin'></span>" +
+         esc(t("pair.searching")) + "</div><div class='dim fhint'>" +
+         esc(t("pair.searching_hint")) + "</div>" + pairQrCardHtml(m) + "</div>";
+    h += "<div class='card'><h2>" + esc(t("pair.create_home")) + "</h2>" +
+         "<div class='dim fhint' style='margin-bottom:10px'>" +
+         esc(t("pair.create_home_confirm")) + "</div>" +
+         "<button class='btn small' data-pair='found'>" +
+         esc(t("pair.create_home")) + "</button></div>";
+    h += "<div class='card'><h2>" + esc(t("pair.join_with_code")) + "</h2>" +
+         "<div class='frow'><label class='flab'>" + esc(t("pair.address_label")) + "</label>" +
+         "<input id='pairJoinHost' type='text' autocomplete='off' spellcheck='false' " +
+         "placeholder='" + esc(t("pair.address_example")) + "'></div>" +
+         "<div class='frow'><label class='flab'>" + esc(t("pair.code_label")) + "</label>" +
+         "<input id='pairJoinPin' type='text' inputmode='numeric' autocomplete='off' " +
+         "maxlength='6'></div>" +
+         "<button class='btn small' data-pair='join'>" + esc(t("pair.join_submit")) + "</button>" +
+         (PAIR.joinErr ? "<div class='err fhint'>" + esc(t(PAIR.joinErr)) + "</div>" : "") +
+         "</div>";
+    return h + pairErrHtml();
+  }
+
+  function pairRowHtml(r) {
+    var right, note = "", meta = [];
+    if (r.state === "adding") {
+      right = "<span class='dim'><span class='spin'></span>" + esc(t("pair.adding")) + "</span>";
+    } else if (r.state === "added") {
+      right = "<span class='ok'>" + esc(t("pair.added")) + " ✓</span>";
+    } else if (r.state === "failed") {
+      right = "<button class='btn small' data-pair='add' data-id='" + esc(r.id) + "'>" +
+              esc(t("pair.add")) + "</button>";
+      note = "<div class='err fhint'>" + esc(t("pair.add_failed")) + " — " + esc(t(r.errKey)) +
+             (r.errCode ? " <span class='dim'>" +
+               esc(fmt(t("pair.err_detail"), { code: r.errCode })) + "</span>" : "") + "</div>";
+    } else {
+      right = "<button class='btn small' data-pair='add' data-id='" + esc(r.id) + "'>" +
+              esc(t("pair.add")) + "</button> " +
+              "<button class='btn2 small' data-pair='deny' data-id='" + esc(r.id) + "'>" +
+              esc(t("pair.deny")) + "</button>";
+    }
+    if (r.detail) meta.push(esc(r.detail));
+    if (!r.gone) meta.push(esc(fmt(t("pair.nearby_waiting_since"), { s: r.age_s })));
+    return "<div class='pairrow'><div class='pairwho'><div>" + esc(r.label) + "</div>" +
+           "<div class='dim fhint'>" + meta.join(" · ") + "</div>" + note + "</div>" +
+           "<div class='ops'>" + right + "</div></div>";
+  }
+
+  function pairCodeCardHtml(m) {
+    var h = "<div class='card'><h2>" + esc(t("pair.add_with_code")) + "</h2>";
+    if (!m.token.active) {
+      if (PAIR.hadToken)
+        h += "<div class='warn' style='margin-bottom:8px'>" +
+             esc(t("pair.code_expired")) + "</div>";
+      return h + "<button class='btn small' data-pair='code'>" +
+             esc(t(PAIR.hadToken ? "pair.new_code" : "pair.add_with_code")) +
+             "</button></div>";
+    }
+    var left = L.pairClock(m.token.expires_s);
+    h += "<div class='frow'><label class='flab'>" + esc(t("pair.address_label")) + "</label>" +
+         "<div class='pairaddr'><span class='mono' id='pairHost'>" + esc(m.token.host) +
+         "</span><button class='btn2 small' data-pair='copyhost'>" + esc(t("pair.copy")) +
+         "</button></div></div>" +
+         "<div class='pin' id='pairPin'>" + esc(m.token.pin) + "</div>" +
+         "<div style='text-align:center'><button class='btn2 small' data-pair='copypin'>" +
+         esc(t("pair.copy")) + "</button></div>" +
+         "<div style='text-align:center; margin-top:8px'><span id='pairCodeLeft'>" +
+         esc(fmt(t("pair.code_expires_in"), left)) + "</span> · <span class='dim'>" +
+         esc(fmt(t("pair.code_attempts_left"), { n: m.token.attemptsLeft })) + "</span></div>" +
+         "<div class='dim fhint' style='margin-top:8px'>" +
+         esc(t("pair.code_instructions")) + "</div>" +
+         "<button class='btn2 small' style='margin-top:10px' data-pair='code'>" +
+         esc(t("pair.new_code")) + "</button>";
+    return h + "</div>";
+  }
+
+  function pairAddAllCardHtml(m) {
+    var h = "<div class='card'><h2>" + esc(t("pair.add_all")) + "</h2>";
+    if (m.pairingMode.active) {
+      var left = L.pairClock(m.pairingMode.left_s);
+      h += "<div class='warn' id='pairModeOn'>" + esc(fmt(t("pair.add_all_on"),
+             { m: left.m, s: left.s, n: m.pairingMode.addedCount })) + "</div>" +
+           "<button class='btn small' style='margin-top:10px' data-pair='stopall'>" +
+           esc(t("pair.add_all_stop")) + "</button>";
+    } else {
+      h += "<div class='warn fhint' style='margin-bottom:10px'>" +
+           esc(t("pair.add_all_warning")) + "</div>" +
+           "<button class='btn2 small' data-pair='addall'>" + esc(t("pair.add_all")) +
+           "</button>";
+    }
+    return h + "</div>";
+  }
+
+  function pairScanCardHtml() {
+    var h = "<div class='card'><h2>" + esc(t("pair.scan_qr")) + "</h2>";
+    if (pairScanSupported())
+      h += "<div class='dim fhint' style='margin-bottom:10px'>" + esc(t("pair.scan_hint")) +
+           "</div><button class='btn small' style='margin-bottom:12px' data-pair='scan'>" +
+           esc(t("pair.scan_qr")) + "</button>";
+    else
+      h += "<div class='warn fhint' style='margin-bottom:10px'>" +
+           esc(t("pair.scan_unavailable_http")) + "</div>";
+    h += "<div class='frow'><label class='flab'>" + esc(t("pair.scan_paste")) + "</label>" +
+         "<input id='pairPaste' type='text' autocomplete='off' spellcheck='false' " +
+         "placeholder='doorbell-pair:…'></div>" +
+         "<button class='btn2 small' data-pair='paste'>" + esc(t("pair.add")) + "</button>";
+    return h + "</div>";
+  }
+
+  function pairPanelHtml(m) {
+    var h = "<div class='card'><h2>" + esc(t("pair.tab")) + "</h2><div>" +
+            esc(fmt(t("pair.membership"), { n: m.memberCount })) + " · <span class='dim'>" +
+            esc(fmt(t("pair.membership_connected"), { n: m.connectedCount })) + "</span>" +
+            (m.isFounder ? " <span class='tag'>" + esc(t("pair.created_badge")) + "</span>" : "") +
+            "</div>";
+    if (PAIR.created)
+      h += "<div class='ok' style='margin-top:10px'>" + esc(t("pair.created")) + " ✓</div>" +
+           "<div class='dim fhint'>" + esc(t("pair.created_next")) + "</div>";
+    h += "</div>";
+
+    h += "<div class='card'><h2>" + esc(t("pair.nearby_title")) + "</h2>";
+    if (!m.rows.length)
+      h += "<div class='dim' style='padding:4px 0'><span class='spin'></span>" +
+           esc(t("pair.nearby_none")) + "</div>";
+    for (var i = 0; i < m.rows.length; i++) h += pairRowHtml(m.rows[i]);
+    h += "</div>";
+
+    h += pairCodeCardHtml(m) + pairAddAllCardHtml(m) + pairScanCardHtml();
+    h += "<div class='card'><h2>" + esc(t("pair.clear_title")) + "</h2>" +
+         "<div class='dim fhint' style='margin-bottom:10px'>" + esc(t("pair.clear_confirm")) +
+         "</div><button class='btn2 small danger' data-pair='unpair'>" +
+         esc(t("pair.clear_title")) + "</button></div>";
+    return h + pairErrHtml();
+  }
+
+  function pairBind(root) {
+    $all("[data-pair]", root).forEach(function (b) {
+      b.onclick = function () { pairAct(b.getAttribute("data-pair"), b.getAttribute("data-id"), b); };
+    });
+    var host = $("#pairJoinHost"), pin = $("#pairJoinPin"), paste = $("#pairPaste");
+    if (host) {
+      host.value = PAIR.form.host || "";
+      host.oninput = function () { PAIR.form.host = host.value; };
+    }
+    if (pin) {
+      pin.value = PAIR.form.pin || "";
+      pin.oninput = function () { PAIR.form.pin = pin.value; };
+    }
+    if (paste) {
+      paste.value = PAIR.form.paste || "";
+      paste.oninput = function () { PAIR.form.paste = paste.value; };
+    }
+  }
+
+  function renderPair() {
+    var el = $("#tab-pair");
+    if (!el) return;
+    if (!PAIR.snap) {
+      el.innerHTML = "<div class='card'><div class='dim'><span class='spin'></span>" +
+                     esc(t("pair.searching")) + "</div></div>";
+      return;
+    }
+    var m = L.pairPanelModel(PAIR.snap, PAIR.rows);
+    var active = document.activeElement, focusId = active && active.id ? active.id : "";
+    var caret = focusId && active.setSelectionRange ? active.selectionStart : -1;
+    el.innerHTML = m.onboarding ? pairOnboardingHtml(m) : pairPanelHtml(m);
+    pairBind(el);
+    if (m.qrText && $("#pairQr")) drawPairQr($("#pairQr"), m.qrText);
+    var again = focusId ? $("#" + focusId) : null;
+    if (again) {
+      again.focus();
+      if (caret >= 0 && again.setSelectionRange) {
+        try { again.setSelectionRange(caret, caret); } catch (e) {}
+      }
+    }
+  }
+
+  function pairAct(act, id, btn) {
+    var m = L.pairPanelModel(PAIR.snap || {}, PAIR.rows);
+    if (act === "add") {
+      PAIR.rows[id] = { state: "adding", at: new Date().getTime(),
+                        label: L.pairDeviceLabel(pairPendingOf(id)) };
+      renderPair();
+      pairPost("/api/pairing/invite", { id: id }, function (ok, j) {
+        if (ok) return;
+        PAIR.rows[id] = { state: "failed", err: (j && j.err) || "", at: new Date().getTime(),
+                          label: (PAIR.rows[id] || {}).label || "" };
+        PAIR.err = "";
+      });
+      return;
+    }
+    if (act === "deny") {
+      if (!window.confirm(t("pair.deny_confirm"))) return;
+      pairPost("/api/pairing/deny", { id: id }, function (ok) {
+        if (ok) delete PAIR.rows[id];
+      });
+      return;
+    }
+    if (act === "code") {
+      pairPost("/api/join-token", {}, function (ok) { if (ok) PAIR.hadToken = true; });
+      return;
+    }
+    if (act === "addall") {
+      if (!window.confirm(t("pair.add_all_warning"))) return;
+      pairPost("/api/pairing/start", { seconds: 600 });
+      return;
+    }
+    if (act === "stopall") { pairPost("/api/pairing/stop", {}); return; }
+    if (act === "retry") { pairPost("/api/pairing/retry-persist", {}); return; }
+    if (act === "unpair") {
+      if (!window.confirm(t("pair.clear_confirm"))) return;
+      pairPost("/api/pairing/unpair", {}, function (ok) {
+        if (ok) { PAIR.rows = {}; PAIR.hadToken = false; PAIR.created = false; }
+      });
+      return;
+    }
+    if (act === "found") {
+      if (!window.confirm(t("pair.create_home_confirm"))) return;
+      pairPost("/api/pairing/found", {}, function (ok) {
+        if (!ok) return;
+        PAIR.created = true;
+        pairPost("/api/join-token", {}, function (minted) { if (minted) PAIR.hadToken = true; });
+      });
+      return;
+    }
+    if (act === "join") {
+      var plan = L.pairJoinPayload(PAIR.form.host, PAIR.form.pin);
+      if (!plan.ok) {
+        PAIR.joinErr = plan.field === "pin" ? "pair.err.bad_pin" : "pair.err.connect_failed";
+        renderPair();
         return;
       }
-      var pend = j.pending || {}, devs = pend.devices || [];
-      var h = "";
-      if (!devs.length) {
-        h = "<div class='dim' style='padding:6px 0'>" +
-            esc(t("admin.pair_none")) + "</div>";
-      } else {
-        for (var i = 0; i < devs.length; i++) {
-          var d = devs[i];
-          h += "<div style='display:flex; justify-content:space-between; align-items:center; " +
-               "padding:8px; border:1px solid var(--line,#2a333d); border-radius:8px; " +
-               "margin-bottom:6px'><div><div>" + esc(d.name || d.id) +
-               "</div><div class='dim mono' style='font-size:11px'>" + esc(d.role || "") +
-               " · " + esc(d.addr || "") + "</div></div>" +
-               "<button class='btn small pairApprove' data-id='" + esc(d.id) + "'>" +
-               esc(t("admin.pair_approve")) + "</button></div>";
-        }
-      }
-      box.innerHTML = h;
-      $all(".pairApprove").forEach(function (b) {
-        b.onclick = function () {
-          b.disabled = true;
-          b.textContent = t("admin.pair_approving");
-          api("POST", "/api/pairing/invite", { id: b.getAttribute("data-id") }, function (s2, j2) {
-            if (s2 === 200 && j2 && j2.ok) msg(t("admin.pair_invited"));
-            else { b.disabled = false; msg(t("admin.save_failed")); }
-          });
-        };
+      PAIR.joinErr = "";
+      pairPost("/api/pairing/join", plan.body, function (ok, j) {
+        // The join card owns this error; the shared banner would only repeat it.
+        if (!ok) { PAIR.joinErr = L.pairErrKey(j && j.err); PAIR.err = ""; }
       });
-      var stat = $("#pairModeStat");
-      if (stat) {
-        if (pend.pairing_mode) {
-          var s = pend.pairing_mode_left_s || 0;
-          stat.textContent = fmt(t("admin.pair_mode_left"),
-            { m: Math.floor(s / 60), s: ("0" + (s % 60)).slice(-2) });
-        } else stat.textContent = "";
-      }
+      return;
+    }
+    if (act === "paste") {
+      var text = (PAIR.form.paste || "").replace(/^\s+|\s+$/g, "");
+      if (!L.pairQrTextValid(text)) { PAIR.err = "pair.err.bad_qr"; renderPair(); return; }
+      pairScanSubmit(text);
+      return;
+    }
+    if (act === "copyhost") { copyText(m.token.host, btn); return; }
+    if (act === "copypin") { copyText(m.token.pin, btn); return; }
+    if (act === "scan") { pairScanOpen(); return; }
+    if (act === "scanstop") { pairScanClose(); return; }
+  }
+
+  function pairPendingOf(id) {
+    var devs = ((PAIR.snap || {}).pending || {}).devices || [];
+    for (var i = 0; i < devs.length; i++) if (devs[i] && devs[i].id === id) return devs[i];
+    return {};
+  }
+
+  function pairScanSubmit(text) {
+    var parsed = L.pairQrParse(text);
+    if (parsed && parsed.id)
+      PAIR.rows[parsed.id] = { state: "adding", at: new Date().getTime(), label: parsed.addr };
+    PAIR.form.paste = "";
+    pairPost("/api/pairing/scan", { text: text }, function (ok, j) {
+      if (ok || !parsed || !parsed.id) return;
+      // The row carries the failure, so the shared banner stays quiet.
+      PAIR.err = "";
+      PAIR.rows[parsed.id] = { state: "failed", err: (j && j.err) || "",
+                               at: new Date().getTime(), label: parsed.addr };
     });
+  }
+
+  /* The camera path needs a secure context; on a plain-http LAN the paste field is the fallback. */
+  function pairScanSupported() {
+    return !!(window.isSecureContext && navigator.mediaDevices &&
+              navigator.mediaDevices.getUserMedia && window.BarcodeDetector);
+  }
+
+  function pairScanClose() {
+    var s = PAIR.scan;
+    PAIR.scan = null;
+    if (!s) return;
+    if (s.timer) clearInterval(s.timer);
+    if (s.stream) {
+      var tracks = s.stream.getTracks ? s.stream.getTracks() : [];
+      for (var i = 0; i < tracks.length; i++) tracks[i].stop();
+    }
+    if (s.box && s.box.parentNode) s.box.parentNode.removeChild(s.box);
+  }
+
+  function pairScanOpen() {
+    if (PAIR.scan) return;
+    var box = document.createElement("div");
+    box.className = "pairscan";
+    box.innerHTML = "<video id='pairScanVideo' autoplay playsinline muted></video>" +
+      "<div class='pairscanframe'></div>" +
+      "<div class='pairscanbar'><span id='pairScanMsg'>" + esc(t("pair.scan_hint")) +
+      "</span><button class='btn small' data-pair='scanstop'>" + esc(t("pair.scan_cancel")) +
+      "</button></div>";
+    document.body.appendChild(box);
+    PAIR.scan = { box: box, stream: null, timer: 0 };
+    pairBind(box);
+    var video = $("#pairScanVideo");
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } }).then(
+      function (stream) {
+        if (!PAIR.scan) {
+          var ts = stream.getTracks ? stream.getTracks() : [];
+          for (var i = 0; i < ts.length; i++) ts[i].stop();
+          return;
+        }
+        PAIR.scan.stream = stream;
+        video.srcObject = stream;
+        var detector = new window.BarcodeDetector({ formats: ["qr_code"] });
+        var busy = false;
+        PAIR.scan.timer = setInterval(function () {
+          if (busy || !PAIR.scan) return;
+          busy = true;
+          detector.detect(video).then(function (codes) {
+            busy = false;
+            for (var i = 0; i < codes.length; i++) {
+              if (!L.pairQrTextValid(codes[i].rawValue)) continue;
+              var text = codes[i].rawValue;
+              pairScanClose();
+              msg(t("pair.scanning"));
+              pairScanSubmit(text);
+              return;
+            }
+          }, function () { busy = false; });
+        }, 300);
+      },
+      function () {
+        var el = $("#pairScanMsg");
+        if (el) el.textContent = t("pair.scan_denied");
+      });
+  }
+
+  function pairTick() {
+    if (S.tab !== "pair" || !PAIR.snap) return;
+    var m = L.pairPanelModel(PAIR.snap, PAIR.rows);
+    var left = $("#pairCodeLeft");
+    if (left && m.token.active) {
+      PAIR.snap.token.expires_s = Math.max(0, m.token.expires_s - 1);
+      left.textContent = fmt(t("pair.code_expires_in"), L.pairClock(PAIR.snap.token.expires_s));
+    }
+    var on = $("#pairModeOn");
+    if (on && m.pairingMode.active) {
+      PAIR.snap.pending.pairing_mode_left_s = Math.max(0, m.pairingMode.left_s - 1);
+      var c = L.pairClock(PAIR.snap.pending.pairing_mode_left_s);
+      on.textContent = fmt(t("pair.add_all_on"),
+        { m: c.m, s: c.s, n: m.pairingMode.addedCount });
+    }
+  }
+
+  function pairTabEnter() {
+    renderPair();
+    refreshPairing();
+    // Peers come along for the ride: a pending device that has left the list and turned into a
+    // peer is the confirmation the row shows as "Added".
+    if (!PAIR.poll) PAIR.poll = setInterval(function () {
+      if (S.tab === "pair") refreshStatus(refreshPairing);
+    }, 2000);
+    if (!PAIR.tick) PAIR.tick = setInterval(pairTick, 1000);
+  }
+
+  function pairTabLeave() {
+    pairScanClose();
+    if (PAIR.poll) { clearInterval(PAIR.poll); PAIR.poll = 0; }
+    if (PAIR.tick) { clearInterval(PAIR.tick); PAIR.tick = 0; }
   }
 
 
@@ -4693,7 +5664,7 @@ if (typeof document !== "undefined") (function () {
     dash: renderDash, doors: renderDoors, devices: renderDevices, rules: renderRules,
     qr: renderQuickReplies, purposes: renderPurposes, texts: renderTexts, theme: renderTheme,
     assets: renderAssets, households: renderHouseholds, integrations: renderIntegrations,
-    events: renderEvents, system: renderSystem
+    events: renderEvents, pair: renderPair, system: renderSystem
   };
 
   function renderTab() {
@@ -4702,11 +5673,14 @@ if (typeof document !== "undefined") (function () {
   }
 
   function switchTab(name) {
+    var was = S.tab;
     S.tab = name;
     $all("nav button").forEach(function (b) {
       b.classList[b.getAttribute("data-tab") === name ? "add" : "remove"]("on");
     });
     for (var k in TABS) show($("#tab-" + k), k === name);
+    if (was === "pair" && name !== "pair") pairTabLeave();
+    if (name === "pair") { refreshStatus(pairTabEnter); return; }
     if (name === "events") refreshEvents(renderTab);
     else refreshConfig(function () { refreshStatus(renderTab); });
   }
@@ -4722,7 +5696,6 @@ if (typeof document !== "undefined") (function () {
       if (S.tab === "devices") renderDevices();
     });
     if (S.tab === "events") refreshEvents(renderEvents);
-    if (S.tab === "system") refreshPairing();
   }
 
   /* ---- i18n ---- */

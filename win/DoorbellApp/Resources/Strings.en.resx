@@ -458,11 +458,13 @@ Delete it?</value></data>
   <data name="pair_created_badge" xml:space="preserve"><value>Created this Cluster</value></data>
   <data name="pair_created_next" xml:space="preserve"><value>Add the next device?</value></data>
   <data name="pair_deny" xml:space="preserve"><value>Ignore</value></data>
+  <data name="pair_deny_confirm" xml:space="preserve"><value>Ignore this device? It will stay out of the list for a while.</value></data>
   <data name="pair_enter_address_and_code" xml:space="preserve"><value>Enter the address and the Pairing PIN</value></data>
   <data name="pair_err_already_paired" xml:space="preserve"><value>This device is already in a Cluster</value></data>
   <data name="pair_err_bad_challenge" xml:space="preserve"><value>The other device's version isn't compatible</value></data>
   <data name="pair_err_bad_payload" xml:space="preserve"><value>The other device's version isn't compatible</value></data>
   <data name="pair_err_bad_pin" xml:space="preserve"><value>Wrong Pairing PIN</value></data>
+  <data name="pair_err_bad_qr" xml:space="preserve"><value>That isn't a device QR. Paste the text shown on the new device exactly as it appears</value></data>
   <data name="pair_err_closed" xml:space="preserve"><value>The other device disconnected</value></data>
   <data name="pair_err_connect_failed" xml:space="preserve"><value>Can't reach that address. Check the address and make sure both devices are on the same network</value></data>
   <data name="pair_err_decrypt_failed" xml:space="preserve"><value>Security check failed. Make sure there is no untrusted device on the network</value></data>
@@ -472,12 +474,15 @@ Delete it?</value></data>
   <data name="pair_err_join_in_progress" xml:space="preserve"><value>Already joining</value></data>
   <data name="pair_err_local_persist_failed" xml:space="preserve"><value>Couldn't save settings on this device</value></data>
   <data name="pair_err_no_ack" xml:space="preserve"><value>The device didn't respond. Check that it is powered on and on the same network</value></data>
+  <data name="pair_err_no_mesh" xml:space="preserve"><value>The device is still starting up. Try again in a moment</value></data>
   <data name="pair_err_no_token" xml:space="preserve"><value>The other device isn't offering a Pairing PIN right now</value></data>
+  <data name="pair_err_pairing_unavailable" xml:space="preserve"><value>Couldn't create a code. Please try again</value></data>
   <data name="pair_err_persist_failed" xml:space="preserve"><value>Couldn't save settings on this device</value></data>
   <data name="pair_err_timeout" xml:space="preserve"><value>No response. Try again</value></data>
   <data name="pair_err_unknown" xml:space="preserve"><value>Couldn't complete that. Please try again</value></data>
   <data name="pair_err_detail" xml:space="preserve"><value>Details: {0}</value></data>
   <data name="pair_join_required" xml:space="preserve"><value>Enter the address and the Pairing PIN</value></data>
+  <data name="pair_join_submit" xml:space="preserve"><value>Join</value></data>
   <data name="pair_join_with_code" xml:space="preserve"><value>Join with a Pairing PIN</value></data>
   <data name="pair_joined" xml:space="preserve"><value>Joined the Cluster</value></data>
   <data name="pair_joining" xml:space="preserve"><value>Joining the Cluster…</value></data>
@@ -490,6 +495,7 @@ Delete it?</value></data>
   <data name="pair_new_code" xml:space="preserve"><value>Get a new code</value></data>
   <data name="pair_not_set_up_banner" xml:space="preserve"><value>Not set up — tap to add</value></data>
   <data name="pair_open_onboarding" xml:space="preserve"><value>Open the pairing screen</value></data>
+  <data name="pair_open_panel" xml:space="preserve"><value>Open &quot;Add device&quot;</value></data>
   <data name="pair_panel_title" xml:space="preserve"><value>Add a device</value></data>
   <data name="pair_persist_error_body" xml:space="preserve"><value>This device couldn't write to its secure storage. Check free space and permissions, then try again.</value></data>
   <data name="pair_persist_error_title" xml:space="preserve"><value>Couldn't save settings</value></data>
@@ -500,13 +506,18 @@ Delete it?</value></data>
   <data name="pair_role_door_station" xml:space="preserve"><value>Door station</value></data>
   <data name="pair_role_indoor_panel" xml:space="preserve"><value>Indoor panel</value></data>
   <data name="pair_scan_camera_denied" xml:space="preserve"><value>Camera access is not allowed. Grant camera permission in the device settings.</value></data>
-  <data name="pair_scan_denied" xml:space="preserve"><value>The camera is not available. Allow camera access for this app in Settings</value></data>
+  <data name="pair_scan_cancel" xml:space="preserve"><value>Cancel</value></data>
+  <data name="pair_scan_denied" xml:space="preserve"><value>Couldn't open the camera. Check the browser's camera permission</value></data>
   <data name="pair_scan_hint" xml:space="preserve"><value>Point at the Add QR shown on the new device</value></data>
   <data name="pair_scan_no_camera" xml:space="preserve"><value>This device has no camera. Scan from another device, or use a Pairing PIN.</value></data>
   <data name="pair_scan_opening" xml:space="preserve"><value>Starting the camera…</value></data>
+  <data name="pair_scan_paste" xml:space="preserve"><value>Paste the QR text</value></data>
   <data name="pair_scan_qr" xml:space="preserve"><value>Scan QR</value></data>
+  <data name="pair_scan_unavailable_http" xml:space="preserve"><value>The camera works only over https or localhost. Paste the QR text shown on the new device instead</value></data>
+  <data name="pair_scanning" xml:space="preserve"><value>Scanning…</value></data>
   <data name="pair_searching" xml:space="preserve"><value>Looking for nearby devices…</value></data>
   <data name="pair_searching_hint" xml:space="preserve"><value>Press &quot;Add&quot; on a device already in the Cluster, or on the admin page</value></data>
+  <data name="pair_tab" xml:space="preserve"><value>Add device</value></data>
   <data name="pair_title_unpaired" xml:space="preserve"><value>Add this doorbell to a Cluster</value></data>
   <data name="panel_answering" xml:space="preserve"><value>Answering…</value></data>
   <data name="panel_auth_failed" xml:space="preserve"><value>Panel authentication failed</value></data>

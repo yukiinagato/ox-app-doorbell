@@ -106,6 +106,29 @@
                       font:13px/1.4 "Hiragino Sans","Yu Gothic UI",system-ui,sans-serif; }
   .i18ntbl .k { font-family:ui-monospace,Menlo,monospace; font-size:12px; white-space:nowrap;
                 padding-top:14px; }
+  .spin { display:inline-block; width:11px; height:11px; margin-right:7px; border-radius:50%;
+          border:2px solid #2a333d; border-top-color:var(--acc); vertical-align:-1px;
+          animation:spin 0.9s linear infinite; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+  .pairrow { display:flex; justify-content:space-between; align-items:center; gap:10px;
+             padding:9px; border:1px solid #2a333d; border-radius:8px; margin-bottom:6px; }
+  .pairwho { min-width:0; word-break:break-word; }
+  .pairaddr { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .qrbox { margin-top:12px; text-align:center; }
+  .qrbox canvas { image-rendering:pixelated; border-radius:6px; background:#fff; padding:0;
+                  max-width:280px; }
+  .qrph { display:flex; align-items:center; justify-content:center; width:100%; max-width:280px;
+          height:240px; margin:0 auto; border:1px dashed #2a333d; border-radius:6px; }
+  .pairscan { position:fixed; inset:0; background:#04080c; z-index:40; display:flex;
+              align-items:center; justify-content:center; }
+  .pairscan video { width:100%; height:100%; object-fit:cover; }
+  .pairscanframe { position:absolute; width:min(64vw,64vh); height:min(64vw,64vh);
+                   border:3px solid var(--acc); border-radius:14px; pointer-events:none; }
+  .pairscanbar { position:absolute; left:0; right:0; bottom:0; padding:14px 16px;
+                 background:rgba(4,8,12,.78); display:flex; align-items:center; gap:12px;
+                 justify-content:space-between; color:#e8edf2; font-size:13px; }
+  [data-ui="retro"] .pairrow { border-color:#808080; }
+  [data-ui="retro"] .qrph { border-color:#808080; }
   .iconpick { margin-top:6px; }
   .iconpick button { font-size:17px; padding:3px 8px; margin:0 4px 4px 0; }
 
@@ -246,6 +269,7 @@
     <button data-tab="households"><svg class="ic"><use href="#i-users"/></svg><span data-i18n="admin.households"></span></button>
     <button data-tab="integrations"><svg class="ic"><use href="#i-link"/></svg><span data-i18n="admin.integrations"></span></button>
     <button data-tab="events"><svg class="ic"><use href="#i-clock"/></svg><span data-i18n="admin.events"></span></button>
+    <button data-tab="pair"><svg class="ic"><use href="#i-plus"/></svg><span data-i18n="pair.tab"></span></button>
     <button data-tab="system"><svg class="ic"><use href="#i-settings-2"/></svg><span data-i18n="admin.system"></span></button>
   </nav>
   <main>
@@ -274,6 +298,7 @@
     <section id="tab-households" class="hidden"></section>
     <section id="tab-integrations" class="hidden"></section>
     <section id="tab-events" class="hidden"></section>
+    <section id="tab-pair" class="hidden"></section>
     <section id="tab-system" class="hidden"></section>
   </main>
 </div>

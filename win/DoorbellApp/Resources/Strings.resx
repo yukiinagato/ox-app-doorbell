@@ -458,11 +458,13 @@
   <data name="pair_created_badge" xml:space="preserve"><value>クラスタを作成した端末</value></data>
   <data name="pair_created_next" xml:space="preserve"><value>次の端末を追加しますか?</value></data>
   <data name="pair_deny" xml:space="preserve"><value>無視</value></data>
+  <data name="pair_deny_confirm" xml:space="preserve"><value>この端末を無視しますか? しばらく一覧に表示されなくなります。</value></data>
   <data name="pair_enter_address_and_code" xml:space="preserve"><value>接続先とペアリング PIN を入力してください</value></data>
   <data name="pair_err_already_paired" xml:space="preserve"><value>この端末はすでにクラスタに参加しています</value></data>
   <data name="pair_err_bad_challenge" xml:space="preserve"><value>相手の端末のバージョンが合いません</value></data>
   <data name="pair_err_bad_payload" xml:space="preserve"><value>相手の端末のバージョンが合いません</value></data>
   <data name="pair_err_bad_pin" xml:space="preserve"><value>ペアリング PIN が違います</value></data>
+  <data name="pair_err_bad_qr" xml:space="preserve"><value>QR の内容が読み取れませんでした。新しい端末に表示された文字列をそのまま貼り付けてください</value></data>
   <data name="pair_err_closed" xml:space="preserve"><value>相手の端末との接続が切れました</value></data>
   <data name="pair_err_connect_failed" xml:space="preserve"><value>接続先に届きません。アドレスと、同じネットワークにつながっているかを確認してください</value></data>
   <data name="pair_err_decrypt_failed" xml:space="preserve"><value>安全確認に失敗しました。ネットワークに不審な端末がないか確認してください</value></data>
@@ -472,12 +474,15 @@
   <data name="pair_err_join_in_progress" xml:space="preserve"><value>すでに参加処理中です</value></data>
   <data name="pair_err_local_persist_failed" xml:space="preserve"><value>この端末に設定を保存できませんでした</value></data>
   <data name="pair_err_no_ack" xml:space="preserve"><value>端末が応答しませんでした。電源が入っているか、同じネットワークにつながっているかを確認してください</value></data>
+  <data name="pair_err_no_mesh" xml:space="preserve"><value>端末がまだ起動中です。少し待ってからお試しください</value></data>
   <data name="pair_err_no_token" xml:space="preserve"><value>相手の端末で「ペアリング PIN で追加」が開始されていません</value></data>
+  <data name="pair_err_pairing_unavailable" xml:space="preserve"><value>コードを発行できませんでした。もう一度お試しください</value></data>
   <data name="pair_err_persist_failed" xml:space="preserve"><value>この端末に設定を保存できませんでした</value></data>
   <data name="pair_err_timeout" xml:space="preserve"><value>応答がありませんでした。もう一度お試しください</value></data>
   <data name="pair_err_unknown" xml:space="preserve"><value>追加できませんでした。もう一度お試しください</value></data>
   <data name="pair_err_detail" xml:space="preserve"><value>詳細: {0}</value></data>
   <data name="pair_join_required" xml:space="preserve"><value>接続先とペアリング PIN を入力してください</value></data>
+  <data name="pair_join_submit" xml:space="preserve"><value>参加</value></data>
   <data name="pair_join_with_code" xml:space="preserve"><value>ペアリング PIN で参加</value></data>
   <data name="pair_joined" xml:space="preserve"><value>クラスタに参加しました</value></data>
   <data name="pair_joining" xml:space="preserve"><value>クラスタに参加しています…</value></data>
@@ -490,6 +495,7 @@
   <data name="pair_new_code" xml:space="preserve"><value>新しいコードを発行</value></data>
   <data name="pair_not_set_up_banner" xml:space="preserve"><value>クラスタ未設定 — タップして追加</value></data>
   <data name="pair_open_onboarding" xml:space="preserve"><value>ペアリング画面を開く</value></data>
+  <data name="pair_open_panel" xml:space="preserve"><value>「端末を追加」を開く</value></data>
   <data name="pair_panel_title" xml:space="preserve"><value>端末を追加</value></data>
   <data name="pair_persist_error_body" xml:space="preserve"><value>端末の安全な保存領域に書き込めませんでした。空き容量と権限を確認して再試行してください。</value></data>
   <data name="pair_persist_error_title" xml:space="preserve"><value>設定を保存できませんでした</value></data>
@@ -500,13 +506,18 @@
   <data name="pair_role_door_station" xml:space="preserve"><value>門口機</value></data>
   <data name="pair_role_indoor_panel" xml:space="preserve"><value>室内機</value></data>
   <data name="pair_scan_camera_denied" xml:space="preserve"><value>カメラの使用が許可されていません。端末の設定でカメラを許可してください。</value></data>
-  <data name="pair_scan_denied" xml:space="preserve"><value>カメラを使用できません。設定アプリでこのアプリにカメラの使用を許可してください</value></data>
+  <data name="pair_scan_cancel" xml:space="preserve"><value>キャンセル</value></data>
+  <data name="pair_scan_denied" xml:space="preserve"><value>カメラを開けませんでした。ブラウザのカメラ権限を確認してください</value></data>
   <data name="pair_scan_hint" xml:space="preserve"><value>新しい端末に表示された追加用 QR に合わせてください</value></data>
   <data name="pair_scan_no_camera" xml:space="preserve"><value>この端末にはカメラがありません。別の端末で読み取るか、ペアリング PIN を使ってください。</value></data>
   <data name="pair_scan_opening" xml:space="preserve"><value>カメラを起動しています…</value></data>
+  <data name="pair_scan_paste" xml:space="preserve"><value>QR の文字列を貼り付ける</value></data>
   <data name="pair_scan_qr" xml:space="preserve"><value>QR を読み取る</value></data>
+  <data name="pair_scan_unavailable_http" xml:space="preserve"><value>カメラは https か localhost でのみ使えます。新しい端末に表示された QR の文字列を貼り付けてください</value></data>
+  <data name="pair_scanning" xml:space="preserve"><value>読み取り中…</value></data>
   <data name="pair_searching" xml:space="preserve"><value>近くの端末を探しています…</value></data>
   <data name="pair_searching_hint" xml:space="preserve"><value>クラスタに参加済みの端末か管理画面で「追加」を押してください</value></data>
+  <data name="pair_tab" xml:space="preserve"><value>端末を追加</value></data>
   <data name="pair_title_unpaired" xml:space="preserve"><value>このドアホンをクラスタに追加</value></data>
   <data name="panel_answering" xml:space="preserve"><value>応答中…</value></data>
   <data name="panel_auth_failed" xml:space="preserve"><value>パネル認証に失敗しました</value></data>

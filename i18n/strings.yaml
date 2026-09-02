@@ -629,7 +629,6 @@ pair.add_all_stop: { ja: "停止", en: "Stop", zh: "停止" }
 pair.qr_caption: { ja: "別の端末でこの QR を読み取ると追加できます", en: "Scan this QR from another device to add this one", zh: "用另一台设备扫描此二维码即可添加" }
 pair.scan_qr: { ja: "QR を読み取る", en: "Scan QR", zh: "扫描二维码" }
 pair.scan_hint: { ja: "新しい端末に表示された追加用 QR に合わせてください", en: "Point at the Add QR shown on the new device", zh: "请对准新设备上显示的添加二维码" }
-pair.scan_denied: { ja: "カメラを使用できません。設定アプリでこのアプリにカメラの使用を許可してください", en: "The camera is not available. Allow camera access for this app in Settings", zh: "无法使用相机。请在系统设置中允许本应用使用相机" }
 pair.scan_opening: { ja: "カメラを起動しています…", en: "Starting the camera…", zh: "正在启动摄像头…" }
 pair.membership: { ja: "クラスタ · {n} 台", en: "Cluster · {n} devices", zh: "集群 · {n} 台" }
 pair.membership_connected: { ja: "{n} 台接続中", en: "{n} connected", zh: "{n} 台已连接" }
@@ -644,8 +643,6 @@ pair.join_required: { ja: "接続先とペアリング PIN を入力してくだ
 pair.scan_camera_denied: { ja: "カメラの使用が許可されていません。端末の設定でカメラを許可してください。", en: "Camera access is not allowed. Grant camera permission in the device settings.", zh: "未获得摄像头权限。请在设备设置中允许使用摄像头。" }
 pair.scan_no_camera: { ja: "この端末にはカメラがありません。別の端末で読み取るか、ペアリング PIN を使ってください。", en: "This device has no camera. Scan from another device, or use a Pairing PIN.", zh: "此设备没有摄像头。请用其他设备扫描，或改用配对 PIN。" }
 pair.panel_title: { ja: "端末を追加", en: "Add a device", zh: "添加设备" }
-pair.new_code: { ja: "新しいコードを発行", en: "Get a new code", zh: "生成新码" }
-pair.qr_pending: { ja: "追加用 QR を準備しています…", en: "Preparing the Add QR…", zh: "正在生成添加二维码…" }
 pair.confirm_tap_again: { ja: "もう一度押すと実行します", en: "Press again to confirm", zh: "再次按下以确认" }
 pair.open_onboarding: { ja: "ペアリング画面を開く", en: "Open the pairing screen", zh: "打开配对界面" }
 pair.enter_address_and_code: { ja: "接続先とペアリング PIN を入力してください", en: "Enter the address and the Pairing PIN", zh: "请输入连接地址和配对 PIN" }
@@ -671,3 +668,19 @@ pair.err.host_zero_psk: { ja: "相手の端末の設定が不正です", en: "Th
 pair.err.no_ack: { ja: "端末が応答しませんでした。電源が入っているか、同じネットワークにつながっているかを確認してください", en: "The device didn't respond. Check that it is powered on and on the same network", zh: "该设备没有响应。请确认设备已开机并处于同一网络" }
 pair.err.unknown: { ja: "追加できませんでした。もう一度お試しください", en: "Couldn't complete that. Please try again", zh: "操作未能完成，请重试" }
 
+
+# Web admin (WP-W): the pairing tab, its QR scanner, and the actions that only the admin page has.
+pair.tab: { ja: "端末を追加", en: "Add device", zh: "添加设备" }
+pair.open_panel: { ja: "「端末を追加」を開く", en: "Open \"Add device\"", zh: "打开“添加设备”" }
+pair.qr_pending: { ja: "追加用 QR を準備しています…", en: "Preparing the Add QR…", zh: "正在准备添加二维码…" }
+pair.new_code: { ja: "新しいコードを発行", en: "Get a new code", zh: "生成新码" }
+pair.join_submit: { ja: "参加", en: "Join", zh: "加入" }
+pair.deny_confirm: { ja: "この端末を無視しますか? しばらく一覧に表示されなくなります。", en: "Ignore this device? It will stay out of the list for a while.", zh: "要忽略此设备吗？它将在一段时间内不再出现在列表中。" }
+pair.scan_cancel: { ja: "キャンセル", en: "Cancel", zh: "取消" }
+pair.scanning: { ja: "読み取り中…", en: "Scanning…", zh: "扫描中…" }
+pair.scan_denied: { ja: "カメラを開けませんでした。ブラウザのカメラ権限を確認してください", en: "Couldn't open the camera. Check the browser's camera permission", zh: "无法打开摄像头。请检查浏览器的摄像头权限" }
+pair.scan_unavailable_http: { ja: "カメラは https か localhost でのみ使えます。新しい端末に表示された QR の文字列を貼り付けてください", en: "The camera works only over https or localhost. Paste the QR text shown on the new device instead", zh: "摄像头仅在 https 或 localhost 下可用。请改为粘贴新设备上显示的二维码文本" }
+pair.scan_paste: { ja: "QR の文字列を貼り付ける", en: "Paste the QR text", zh: "粘贴二维码文本" }
+pair.err.bad_qr: { ja: "QR の内容が読み取れませんでした。新しい端末に表示された文字列をそのまま貼り付けてください", en: "That isn't a device QR. Paste the text shown on the new device exactly as it appears", zh: "这不是设备二维码。请原样粘贴新设备上显示的文本" }
+pair.err.no_mesh: { ja: "端末がまだ起動中です。少し待ってからお試しください", en: "The device is still starting up. Try again in a moment", zh: "设备仍在启动中，请稍后重试" }
+pair.err.pairing_unavailable: { ja: "コードを発行できませんでした。もう一度お試しください", en: "Couldn't create a code. Please try again", zh: "无法生成配对码，请重试" }
