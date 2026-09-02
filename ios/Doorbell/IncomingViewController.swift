@@ -1,43 +1,36 @@
-// 来鈴画面 (室内機/TV — indoor_panel が press で表示。WPF IncomingView / Android
-// IncomingActivity と同役)。
-//   - 門口ライブ映像: statusJson peers[].stream (MJPEG) を自前デコード (MjpegClient)
-//   - 監聴: core の SIP で門口機の待受 (sip.direct_port 既定 47190) へ Asterisk 非経由の
-//     直接監聴呼 (X-Doorbell-Mode: monitor) — 門口機側はマイクのみ一方向で流す。
-//   - 応答: 監聴呼を切って 400ms 後に X-Doorbell-Mode: answer の直呼 — 門口機は鳴っている
-//     電話腿を取り消して双方向応答する (計画書 §12)。通話中は相手映像 (peer_stream) を表示し
-//     「終了」で切る。
-//   - クイック返信: config quick_replies を order 順。ラベルは**訪客言語**
-//     (quick_replies.<id>.label.<visitor_lang> — 無ければ ja)。
-//   - 用件 / 訪客言語バッジ: press イベント payload 由来 (「📦 宅配便」「🌐 EN」)。住人が読む
-//     ものなので用件名は室内側の言語 (boot.ui_lang) で表示する。
-//   - 応答されないまま 30 秒で自動クローズ (映像/監聴を持続させない。再チャイムで張り直し)。
-//     reply イベント (誰かが応対 — 複製で全ノードに届く) でも畳む。
-// tvOS: SIP (pjsip) 未リンクのため監聴/応答は出さない — 映像 + クイック返信のみ。
-//       ボタンは focusable で Siri Remote の D-pad/クリックで操作する。
-//       TODO(tvOS): pjsip の tvOS ビルドが通ったら iOS と同じ監聴/応答を有効化する。
 import UIKit
 
 final class IncomingViewController: UIViewController {
 
     private let core: CoreBridge
     private let boot: BootConfig
-    private let texts = Texts()          // 室内側の言語 (住人が読む面)
+    private let texts = Texts()
+    private let styleApplier = UIStyleApplier()
+    private var nodeId = ""
     private var door: String
-    private var purpose: String          // press payload の用件 id (バッジ用)
-    private var visitorLang: String      // press payload の訪客言語 (返信ラベル/バッジ用)
+    private var purpose: String
+    private var visitorLang: String
+    private var callId: String
+    private var stageRevision: Int
+    private var revisionLifecycle: CallRevisionLifecycle
+    private var lastChimeRevision: Int
 
     private var cfg: [String: Any]?
-    private var streamer: MjpegClient?
+    private var videoPlayer: AdaptiveH264MjpegPlayer?
     private var incomingStreamUrl = ""
-    private var peerHost: String?        // 門口機の mesh 実アドレス host (直呼宛先)
-    private var directPort = 47190       // config sip.direct_port (docs/network-ports.md)
-    private var sipMode = ""             // "" | "monitor" | "answer"
+    private var incomingStreamMp4Url = ""
+    private var peerHost: String?
+    private var directPort = 47190
+    private var sipMode = ""
     private var inCall = false
+    private var lifecycleAnswered = false
+    private var lifecycleEnded = false
+    private var safeMode = UserDefaults.standard.bool(forKey: "runtime.safe_mode")
     private var autoCloseTimer: Timer?
     private var answerDelayTimer: Timer?
 
-    // UI
     private let liveView = UIImageView()
+    private let h264View = UIView()
     private let noVideoLabel = UILabel()
     private let titleLabel = UILabel()
     private let purposeBadge = PaddedLabel()
@@ -47,39 +40,49 @@ final class IncomingViewController: UIViewController {
     private let replyStack = UIStackView()
     private let answerButton = UIButton(type: .system)
     private let monitorButton = UIButton(type: .system)
+    private let unlockButton = UIButton(type: .system)
     private let ignoreButton = UIButton(type: .system)
 
     private static let autoCloseS: TimeInterval = 30
+    private static let cancelledCloseS: TimeInterval = 15
     private static let handlerKey = "incoming"
 
-    init(core: CoreBridge, boot: BootConfig, door: String, purpose: String, visitorLang: String) {
+    init(core: CoreBridge, boot: BootConfig, door: String, purpose: String, visitorLang: String,
+         callId: String, stageRevision: Int = 0) {
         self.core = core
         self.boot = boot
         self.door = door
         self.purpose = purpose
         self.visitorLang = visitorLang
+        self.callId = callId
+        let normalizedRevision = max(0, stageRevision)
+        self.stageRevision = normalizedRevision
+        self.revisionLifecycle = CallRevisionLifecycle(stageRevision: normalizedRevision)
+        self.lastChimeRevision = normalizedRevision
         super.init(nibName: nil, bundle: nil)
         modalPresentationStyle = .fullScreen
     }
 
     required init?(coder: NSCoder) { fatalError("not supported") }
 
-    // MARK: - ライフサイクル
 
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = UIColor(red: 0.04, green: 0.05, blue: 0.07, alpha: 1)
         cfg = core.config()
+        if let node = core.status()?["node"] as? [String: Any] {
+            nodeId = ConfigUtil.evStr(node, "id")
+        }
         texts.setConfig(cfg)
         texts.setLang(boot.uiLang)
         directPort = ConfigUtil.int(cfg, "sip.direct_port", 47190)
         buildUi()
         applyContent()
 
-        // 門口機 peer 解決 (映像 URL + 直呼宛先 host)
         let peer = ConfigUtil.findDoorPeer(core.status(), door: door)
         peerHost = ConfigUtil.peerHost(peer)
         incomingStreamUrl = peer.flatMap { ConfigUtil.str($0, "stream") } ?? ""
+        incomingStreamMp4Url = peer.flatMap { ConfigUtil.str($0, "stream_mp4") } ?? ""
         answerButton.isEnabled = peerHost != nil
         startVideo(url: incomingStreamUrl)
 
@@ -89,34 +92,107 @@ final class IncomingViewController: UIViewController {
         restartAutoClose()
     }
 
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        videoPlayer?.layout()
+        applySemanticStyles()
+    }
+
     override func viewDidDisappear(_ animated: Bool) {
         super.viewDidDisappear(animated)
         core.removeHandler(IncomingViewController.handlerKey)
         autoCloseTimer?.invalidate()
         answerDelayTimer?.invalidate()
-        streamer?.stop()
-        streamer = nil
+        videoPlayer?.stop()
+        videoPlayer = nil
         if !sipMode.isEmpty {
             core.sipHangup()
+            reportEndedIfNeeded()
             sipMode = ""
         }
     }
 
-    /// 同じ画面が出ている間の再チャイム → 用件/言語を更新しタイマを張り直す (監聴等は継続)。
-    func refresh(purpose: String, visitorLang: String) {
+    func enterSafeModeForMemoryPressure() {
+        safeMode = true
+        videoPlayer?.stop()
+        videoPlayer = nil
+        liveView.image = nil
+        liveView.transform = .identity
+        noVideoLabel.isHidden = false
+        // Keep the established audio dialog and its End Call button visible. viewDidDisappear is
+        // still the single owner that hangs up when the user actually leaves this screen.
+    }
+
+    func refresh(purpose: String, visitorLang: String, callId: String, stageRevision: Int) {
+        let normalizedRevision = max(0, stageRevision)
+        let update = revisionLifecycle.observeWinningRevision(normalizedRevision)
+        guard update != .stale else { return }
         self.purpose = purpose
         self.visitorLang = visitorLang
+        self.callId = callId
+        self.stageRevision = revisionLifecycle.stageRevision
+        if update == .answerSuperseded { demoteSupersededAnswer() }
         cfg = core.config()
         applyContent()
         if !inCall { restartAutoClose() }
     }
 
-    // MARK: - UI 構築
+    /// Switch all media and SIP targets when another door rings while this view is visible.
+    /// A different call cannot displace an established dialog; a winning newer revision of the
+    /// same call can demote its stale answer leg.
+    func receive(door newDoor: String, purpose: String, visitorLang: String, callId newCallId: String,
+                 stageRevision newStageRevision: Int = 0) {
+        let targetDoor = newDoor.isEmpty ? door : newDoor
+        guard targetDoor != door || newCallId != callId else {
+            let normalizedRevision = max(0, newStageRevision)
+            guard normalizedRevision > lastChimeRevision else { return }
+            lastChimeRevision = normalizedRevision
+            let update = revisionLifecycle.observeWinningRevision(normalizedRevision)
+            self.purpose = purpose
+            self.visitorLang = visitorLang
+            self.stageRevision = max(self.stageRevision, normalizedRevision)
+            if update == .answerSuperseded { demoteSupersededAnswer() }
+            cfg = core.config()
+            applyContent()
+            if !inCall { restartAutoClose() }
+            return
+        }
+        guard !inCall else { return }
+        answerDelayTimer?.invalidate()
+        answerDelayTimer = nil
+        if !sipMode.isEmpty { core.sipHangup() }
+        sipMode = ""
+        self.door = targetDoor
+        self.purpose = purpose
+        self.visitorLang = visitorLang
+        self.callId = newCallId
+        stageRevision = max(0, newStageRevision)
+        revisionLifecycle = CallRevisionLifecycle(stageRevision: stageRevision)
+        lastChimeRevision = stageRevision
+        lifecycleAnswered = false
+        lifecycleEnded = false
+        cfg = core.config()
+        texts.setConfig(cfg)
+        directPort = ConfigUtil.int(cfg, "sip.direct_port", 47190)
+        applyContent()
+        hintLabel.isHidden = true
+        let peer = ConfigUtil.findDoorPeer(core.status(), door: targetDoor)
+        peerHost = ConfigUtil.peerHost(peer)
+        incomingStreamUrl = peer.flatMap { ConfigUtil.str($0, "stream") } ?? ""
+        incomingStreamMp4Url = peer.flatMap { ConfigUtil.str($0, "stream_mp4") } ?? ""
+        answerButton.isEnabled = peerHost != nil
+        startVideo(url: incomingStreamUrl)
+        restartAutoClose()
+    }
+
 
     private func buildUi() {
         liveView.contentMode = .scaleAspectFit
         liveView.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(liveView)
+
+        h264View.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(h264View)
 
         noVideoLabel.font = .systemFont(ofSize: 22)
         noVideoLabel.textColor = UIColor(white: 1, alpha: 0.45)
@@ -141,7 +217,6 @@ final class IncomingViewController: UIViewController {
         langBadge.layer.cornerRadius = 8
         langBadge.clipsToBounds = true
 
-        // バッジは潰さない (タイトル側が adjustsFontSizeToFitWidth で縮む)
         titleLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         purposeBadge.setContentCompressionResistancePriority(.required, for: .horizontal)
         langBadge.setContentCompressionResistancePriority(.required, for: .horizontal)
@@ -165,16 +240,23 @@ final class IncomingViewController: UIViewController {
 
         styleActionButton(answerButton, prominent: true)
         styleActionButton(monitorButton, prominent: false)
+        styleActionButton(unlockButton, prominent: false)
         styleActionButton(ignoreButton, prominent: false)
         answerButton.addTarget(self, action: #selector(onAnswer), for: .primaryActionTriggered)
         monitorButton.addTarget(self, action: #selector(onMonitor), for: .primaryActionTriggered)
+        unlockButton.addTarget(self, action: #selector(onUnlock), for: .primaryActionTriggered)
         ignoreButton.addTarget(self, action: #selector(onIgnore), for: .primaryActionTriggered)
+        unlockButton.isHidden = true
+        if core.sipBackend != "pjsip" {
+            answerButton.isHidden = true
+            monitorButton.isHidden = true
+        }
         #if os(tvOS)
-        // tvOS: SIP 無し (ヘッダコメント参照) — 監聴/応答は隠す
         answerButton.isHidden = true
-        monitorButton.isHidden = true
+        unlockButton.isHidden = true
         #endif
-        let actionRow = UIStackView(arrangedSubviews: [answerButton, monitorButton, ignoreButton])
+        let actionRow = UIStackView(arrangedSubviews: [answerButton, monitorButton,
+                                                        unlockButton, ignoreButton])
         actionRow.axis = .horizontal
         actionRow.spacing = 14
         actionRow.distribution = .fillEqually
@@ -186,7 +268,7 @@ final class IncomingViewController: UIViewController {
         rightCol.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(rightCol)
 
-        let g = view.safeAreaLayoutGuide
+        let g = IOSAvailability.safeAreaLayoutGuide(for: view)
         NSLayoutConstraint.activate([
             badgeRow.topAnchor.constraint(equalTo: g.topAnchor, constant: 18),
             badgeRow.leadingAnchor.constraint(equalTo: g.leadingAnchor, constant: 24),
@@ -197,17 +279,19 @@ final class IncomingViewController: UIViewController {
 
             liveView.topAnchor.constraint(equalTo: badgeRow.bottomAnchor, constant: 14),
             liveView.leadingAnchor.constraint(equalTo: g.leadingAnchor, constant: 24),
+            h264View.topAnchor.constraint(equalTo: liveView.topAnchor),
+            h264View.bottomAnchor.constraint(equalTo: liveView.bottomAnchor),
+            h264View.leadingAnchor.constraint(equalTo: liveView.leadingAnchor),
+            h264View.trailingAnchor.constraint(equalTo: liveView.trailingAnchor),
             rightCol.trailingAnchor.constraint(equalTo: g.trailingAnchor, constant: -24),
             rightCol.bottomAnchor.constraint(equalTo: g.bottomAnchor, constant: -18),
         ])
-        // 横持ち (kiosk タブレット/TV): 映像は左 58%、操作列は右。
         landscapeCs = [
             liveView.bottomAnchor.constraint(equalTo: g.bottomAnchor, constant: -18),
             liveView.widthAnchor.constraint(equalTo: g.widthAnchor, multiplier: 0.58),
             rightCol.topAnchor.constraint(equalTo: badgeRow.bottomAnchor, constant: 14),
             rightCol.leadingAnchor.constraint(equalTo: liveView.trailingAnchor, constant: 24),
         ]
-        // 縦持ち (スマホ室内機): 映像は上 38%、操作列は下。
         portraitCs = [
             liveView.trailingAnchor.constraint(equalTo: g.trailingAnchor, constant: -24),
             liveView.heightAnchor.constraint(equalTo: g.heightAnchor, multiplier: 0.38),
@@ -247,7 +331,6 @@ final class IncomingViewController: UIViewController {
         #endif
     }
 
-    /// 文言・バッジ・返信ボタンの貼り直し (初期表示 / 再チャイム / 訪客言語切替)。
     private func applyContent() {
         let doorEntry = ConfigUtil.dig(cfg, "doors.\(door)") as? [String: Any]
         let label = ConfigUtil.labelOf(doorEntry, boot.uiLang, door)
@@ -257,19 +340,18 @@ final class IncomingViewController: UIViewController {
         answerButton.setTitle(inCall ? texts.t("incall.end") : texts.t("ring.answer"),
                               for: .normal)
         monitorButton.setTitle(texts.t("ring.monitor"), for: .normal)
+        unlockButton.setTitle(texts.t("ring.unlock"), for: .normal)
         ignoreButton.setTitle(texts.t("ring.ignore"), for: .normal)
         updateBadges()
         buildReplyButtons()
     }
 
-    /// 来鈴画面の用件バッジ (「📦 宅配便」) と訪客言語バッジ (「🌐 EN」)。
     private func updateBadges() {
         let entry = purpose.isEmpty ? nil
             : ConfigUtil.dig(cfg, "visit_purposes.\(purpose)") as? [String: Any]
         if purpose.isEmpty {
             purposeBadge.isHidden = true
         } else {
-            // バッジは室内側の言語 (住人が読む) — 訪客言語ではない
             let label = ConfigUtil.labelOf(entry, boot.uiLang, purpose)
             let icon = entry?["icon"] as? String ?? ""
             purposeBadge.text = icon.isEmpty ? label : "\(icon) \(label)"
@@ -286,9 +368,9 @@ final class IncomingViewController: UIViewController {
         }
     }
 
-    /// クイック返信ボタン (config quick_replies を order 順)。ラベルは訪客言語。
     private func buildReplyButtons() {
         for v in replyStack.arrangedSubviews { v.removeFromSuperview() }
+        guard !inCall else { return }
         guard let replies = ConfigUtil.dig(cfg, "quick_replies") as? [String: Any],
               !replies.isEmpty else { return }
         let lang = visitorLang.isEmpty ? "ja" : visitorLang
@@ -308,29 +390,37 @@ final class IncomingViewController: UIViewController {
             b.accessibilityIdentifier = "qr_button_\(id)"
             b.addTarget(self, action: #selector(onReply(_:)), for: .primaryActionTriggered)
             replyStack.addArrangedSubview(b)
+            styleApplier.apply(config: cfg, nodeId: nodeId, semanticId: "reply.button", to: b)
         }
     }
 
-    // MARK: - 映像
+    private func applySemanticStyles() {
+        styleApplier.apply(config: cfg, nodeId: nodeId, semanticId: "ring.title", to: titleLabel)
+        for button in [answerButton, monitorButton, unlockButton, ignoreButton] {
+            styleApplier.apply(config: cfg, nodeId: nodeId, semanticId: "ring.action", to: button)
+        }
+        if inCall {
+            styleApplier.apply(config: cfg, nodeId: nodeId, semanticId: "call.end",
+                               to: answerButton)
+        }
+        for button in replyStack.arrangedSubviews {
+            styleApplier.apply(config: cfg, nodeId: nodeId, semanticId: "reply.button", to: button)
+        }
+    }
+
 
     private func startVideo(url: String) {
-        streamer?.stop()
-        streamer = nil
-        noVideoLabel.isHidden = false
-        liveView.image = nil
-        guard !url.isEmpty else { return }  // 「映像なし」表示のまま
-        streamer = MjpegClient(urlString: url) { [weak self] img in
-            self?.noVideoLabel.isHidden = true
-            self?.liveView.image = img
-        }
-        streamer?.start()
+        videoPlayer?.stop()
+        videoPlayer = AdaptiveH264MjpegPlayer(h264Host: h264View, mjpegView: liveView,
+                                              noVideoLabel: noVideoLabel)
+        videoPlayer?.start(h264URLString: incomingStreamMp4Url, mjpegURL: url,
+                           h264Enabled: !safeMode)
     }
 
-    // MARK: - タイマ
 
     private func restartAutoClose() {
         autoCloseTimer?.invalidate()
-        autoCloseTimer = Timer.scheduledTimer(withTimeInterval: IncomingViewController.autoCloseS,
+        autoCloseTimer = IOSAvailability.scheduledTimer(withTimeInterval: IncomingViewController.autoCloseS,
                                               repeats: false) { [weak self] _ in
             self?.close()
         }
@@ -341,24 +431,36 @@ final class IncomingViewController: UIViewController {
         dismiss(animated: true)
     }
 
-    // MARK: - 操作
+    private func demoteSupersededAnswer() {
+        answerDelayTimer?.invalidate()
+        answerDelayTimer = nil
+        lifecycleAnswered = false
+        lifecycleEnded = true
+        inCall = false
+        sipMode = ""
+        answerButton.isEnabled = false
+        unlockButton.isHidden = true
+        hintLabel.isHidden = true
+        core.sipHangup()
+    }
 
-    /// 応答: 監聴呼を切ってから 400ms 待って answer 直呼 (主呼は同時に 1 本 — sipctl の契約)。
-    /// 通話中の再押下 = 終了。
+
     @objc private func onAnswer() {
         guard let host = peerHost else { return }
-        if inCall {  // 「終了」
+        if inCall {
             core.sipHangup()
+            reportEndedIfNeeded()
             sipMode = ""
             close()
             return
         }
-        answerButton.isEnabled = false  // 二重発呼防止
-        autoCloseTimer?.invalidate()    // 応答操作中は自動クローズしない
+        revisionLifecycle.beginAnswer()
+        answerButton.isEnabled = false
+        autoCloseTimer?.invalidate()
         if sipMode == "monitor" {
             core.sipHangup()
             answerDelayTimer?.invalidate()
-            answerDelayTimer = Timer.scheduledTimer(withTimeInterval: 0.4,
+            answerDelayTimer = IOSAvailability.scheduledTimer(withTimeInterval: 0.4,
                                                     repeats: false) { [weak self] _ in
                 self?.placeAnswerCall(host: host)
             }
@@ -367,9 +469,10 @@ final class IncomingViewController: UIViewController {
         placeAnswerCall(host: host)
     }
 
-    /// 門口機へ直呼 (X-Doorbell-Mode: answer)。門口機側は電話腿を取消して双方向応答する。
     private func placeAnswerCall(host: String) {
         sipMode = "answer"
+        lifecycleAnswered = false
+        lifecycleEnded = false
         core.sipCall(target: "sip:\(host):\(directPort)", mode: "answer")
     }
 
@@ -379,21 +482,32 @@ final class IncomingViewController: UIViewController {
         core.sipCall(target: "sip:\(host):\(directPort)", mode: "monitor")
         hintLabel.text = texts.t("ring.monitoring")
         hintLabel.isHidden = false
+        #if os(iOS)
+        unlockButton.isHidden = false
+        #endif
     }
 
     @objc private func onIgnore() { close() }
 
-    @objc private func onReply(_ sender: UIButton) {
-        guard let id = sender.accessibilityIdentifier?.dropFirst("qr_button_".count) else { return }
-        core.quickReply(replyId: String(id), door: door)
-        hintLabel.text = texts.t("reply.sent", sender.currentTitle ?? "")
-        hintLabel.isHidden = false
-        // 画面は複製されてくる reply イベント (= 応対済み) で畳む — 届かなくても
-        // autoClose の安全弁がある (通話中は保つ)
-        if !inCall { restartAutoClose() }
+    @objc private func onUnlock() {
+        if core.sipSendDtmf("*1") {
+            hintLabel.text = texts.t("ring.unlock_sent")
+            hintLabel.isHidden = false
+        }
     }
 
-    // MARK: - core イベント (main queue)
+    @objc private func onReply(_ sender: UIButton) {
+        guard !inCall else { return }
+        guard let id = sender.accessibilityIdentifier?.dropFirst("qr_button_".count) else { return }
+        let accepted = core.quickReplyV2(replyId: String(id), door: door, callId: callId,
+                                         stageRevision: stageRevision)
+        hintLabel.text = accepted
+            ? texts.t("reply.sent", sender.currentTitle ?? "")
+            : texts.t("reply.failed")
+        hintLabel.isHidden = false
+        if accepted && !inCall { restartAutoClose() }
+    }
+
 
     private func onUiEvent(_ ev: [String: Any]) {
         switch ConfigUtil.evStr(ev, "t") {
@@ -402,16 +516,66 @@ final class IncomingViewController: UIViewController {
             if st == "in_call" {
                 onSipInCall(ev)
             } else if st == "idle" {
+                if revisionLifecycle.consumeSupersededIdle() {
+                    inCall = false
+                    sipMode = ""
+                    answerButton.isEnabled = peerHost != nil
+                    answerButton.setTitle(texts.t("ring.answer"), for: .normal)
+                    unlockButton.isHidden = true
+                    statusLabel.text = texts.t("reply.choose")
+                    restartAutoClose()
+                    return
+                }
                 let was = inCall
+                if was { reportEndedIfNeeded() }
                 inCall = false
                 sipMode = ""
-                if was { close() }  // 応答通話が終わった → 来鈴画面も畳む
+                if was { close() }
             }
         case "reply":
-            // 誰かが応対した → 来鈴画面は閉じる (自分の返信の複製でも同じ)
-            if !inCall { close() }
+            let d = ConfigUtil.evStr(ev, "door")
+            if !inCall && (d.isEmpty || d == door) { close() }
+        case "event":
+            let type = ConfigUtil.evStr(ev, "type")
+            let d = ConfigUtil.evStr(ev, "door")
+            guard d.isEmpty || d == door else { break }
+            let eventCallId = ConfigUtil.evStr(ev, "call_id")
+            guard eventCallId.isEmpty || eventCallId == callId else { break }
+            let eventStageRevision = ConfigUtil.int(ev, "stage_revision", 0)
+            if type == "purpose_selected" {
+                let updatedVisitorLang = ConfigUtil.evStr(ev, "visitor_lang")
+                refresh(purpose: ConfigUtil.evStr(ev, "purpose"),
+                        visitorLang: updatedVisitorLang.isEmpty ? visitorLang : updatedVisitorLang,
+                        callId: eventCallId.isEmpty ? callId : eventCallId,
+                        stageRevision: ConfigUtil.int(ev, "stage_revision", stageRevision))
+            } else if type == "call_answered",
+                      eventStageRevision >= stageRevision, !inCall {
+                close()
+            } else if type == "call_answered",
+                      eventStageRevision >= stageRevision, inCall {
+                let reportedOwner = ConfigUtil.evStr(ev, "dialog_owner")
+                let owner = reportedOwner.isEmpty ? ConfigUtil.evStr(ev, "device") : reportedOwner
+                if !owner.isEmpty, !nodeId.isEmpty, owner != nodeId {
+                    // Another confirmed answer won Core's deterministic ownership claim. End the
+                    // losing SIP leg without publishing call_ended for the winner's dialog.
+                    lifecycleAnswered = false
+                    lifecycleEnded = true
+                    inCall = false
+                    sipMode = ""
+                    core.sipHangup()
+                    close()
+                }
+            } else if type == "call_ended", eventStageRevision >= stageRevision {
+                reportEndedIfNeeded()
+                close()
+            } else if type == "call_cancelled", !inCall {
+                statusLabel.text = texts.t("ring.cancelled")
+                autoCloseTimer?.invalidate()
+                autoCloseTimer = IOSAvailability.scheduledTimer(
+                    withTimeInterval: IncomingViewController.cancelledCloseS,
+                    repeats: false) { [weak self] _ in self?.close() }
+            }
         case "visitor_lang":
-            // 来鈴中の訪客言語切替 → 返信ラベル/バッジを追随させる
             let d = ConfigUtil.evStr(ev, "door")
             if d.isEmpty || d == door {
                 visitorLang = ConfigUtil.evStr(ev, "lang")
@@ -419,20 +583,28 @@ final class IncomingViewController: UIViewController {
                 buildReplyButtons()
             }
         case "emergency":
-            // 警報 UI (MainViewController) に画面を譲る
-            if ConfigUtil.evBool(ev, "active") { close() }
+            // Yield only to a rule-selected visual in-app alert. A system-notification-only SOS
+            // must not disrupt an active incoming-call screen.
+            if ConfigUtil.evBool(ev, "active") &&
+                ConfigUtil.eventUsesChannel(ev, "in_app") &&
+                ConfigUtil.evBool(ev, "visual") { close() }
         default:
             break
         }
     }
 
-    /// SIP in_call — 応答が確立。相手映像 = peer_stream (無ければ来鈴と同じ門口 stream)。
     private func onSipInCall(_ ev: [String: Any]) {
-        guard sipMode == "answer" else { return }  // monitor は来鈴画面のまま (映像+監聴継続)
+        guard sipMode == "answer" else { return }
         inCall = true
-        autoCloseTimer?.invalidate()  // 通話中は自動クローズしない (映像は表示継続)
+        buildReplyButtons()
+        if !lifecycleAnswered {
+            lifecycleAnswered = core.reportCallAnswered(door: door, callId: callId,
+                                                         stageRevision: stageRevision)
+        }
+        autoCloseTimer?.invalidate()
         answerButton.isEnabled = true
         answerButton.setTitle(texts.t("incall.end"), for: .normal)
+        unlockButton.isHidden = false
         statusLabel.text = texts.t("incall.title")
         hintLabel.isHidden = true
         let stream = ConfigUtil.evStr(ev, "peer_stream")
@@ -440,9 +612,15 @@ final class IncomingViewController: UIViewController {
             startVideo(url: stream)
         }
     }
+
+    private func reportEndedIfNeeded() {
+        guard inCall, sipMode == "answer", lifecycleAnswered, !lifecycleEnded else { return }
+        lifecycleEnded = core.reportCallEnded(door: door, callId: callId,
+                                               stageRevision: stageRevision,
+                                               reason: "sip_ended")
+    }
 }
 
-/// 内側余白付きラベル (バッジ用)。
 final class PaddedLabel: UILabel {
     var insets = UIEdgeInsets(top: 5, left: 12, bottom: 5, right: 12)
 

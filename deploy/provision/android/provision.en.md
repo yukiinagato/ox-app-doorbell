@@ -14,13 +14,26 @@ procedure `deploy/provision/windows/provision.cmd`.
 3. Enable Developer Options (tap the build number 7 times) → turn **USB debugging** ON.
 4. Connect Wi-Fi to the home LAN (the mesh assumes a single segment — docs/en/network-ports.md).
 
-## 2. Installation
+## 2. Contract build and controlled installation
 
 ```sh
-# ビルド (開発機):
-cd android && ./gradlew assembleRelease   # または assembleDebug
-adb install -r app/build/outputs/apk/release/app-release.apk
+# Modern development/contract build
+cd android && ./gradlew -PdoorbellTier=modern \
+  assembleModernDebug testModernDebugUnitTest lintModernDebug
+
+# API 19 development/contract build (separate NDK/PJSIP cache)
+./gradlew -PdoorbellTier=legacy19 \
+  assembleLegacy19Debug testLegacy19DebugUnitTest lintLegacy19Debug
 ```
+
+The repository and hosted CI currently produce debug-key **debug-contract** APKs. They are test
+artifacts, not releases. The Gradle `release` build type also still selects the debug signing
+configuration, so do not distribute an `assemble*Release` result as production. A controlled
+release must first use a separately approved signing configuration and record the artifact,
+toolchain/NDK, API floor, ABIs, real-PJSIP dependency hashes, source revision, and signing identity.
+Install only the tier selected for the exact device. The API 19 allowlist is currently empty, so no
+KitKat SKU is represented as supported even if the debug-contract APK installs or its codec probe
+passes.
 
 ## 3. Becoming Device Owner (required for full kiosk)
 
@@ -42,13 +55,26 @@ On success it prints `Success: Device owner set to package jp.keihan.doorbell`.
 
 ## 4. Placing boot.json
 
-On first launch, defaults are generated at `filesDir/boot.json`. Edit and replace it:
+On first launch, defaults are generated at `filesDir/boot.json`. Never place the mesh PSK in this
+file. Before Core starts, the app requires the operator to choose **Door station** or **Indoor
+panel**. A door station also requires a door ID; the form supplies a random `door-xxxxxxxx`
+default that can be accepted as-is. The same form reappears if the role later becomes invalid or a
+door-station ID is missing. An indoor panel deliberately has no door assignment.
+
+The preferred initial commissioning path is in-app pairing: Core first calls
+`secure_put("mesh.psk")` and only after that succeeds records
+`{ "t": "paired", "psk_ref": "secret:mesh.psk" }`. A
+`pairing_persistence_error` means the device is **not ready** and must not be admitted to the mesh.
+
+For managed pre-provisioning, an approved out-of-band process must first put `mesh.psk` in the
+platform secure store. Only then may `boot.json` contain the non-secret reference shown below.
+Copying `psk_ref` alone does not provision or pair the device.
 
 ```sh
 adb shell "run-as jp.keihan.doorbell cat files/boot.json"   # 確認 (debug ビルドのみ run-as 可)
 cat > boot.json <<'EOF'
 { "name": "genkan-front", "role": "door_station", "door": "d_front",
-  "listen_port": 47172, "http_port": 47180, "psk_hex": "<64hex>",
+  "listen_port": 47172, "http_port": 47180, "psk_ref": "secret:mesh.psk",
   "seed_peers": ["10.0.1.10:47172"], "ui_lang": "ja", "kiosk": true }
 EOF
 adb push boot.json /sdcard/boot.json
@@ -56,8 +82,9 @@ adb shell "run-as jp.keihan.doorbell cp /sdcard/boot.json files/boot.json"
 adb shell rm /sdcard/boot.json
 ```
 
-For release builds (run-as unavailable), inject it via the admin webui
-(`http://<device>:47180/admin/`) or use a managed configuration via DO (late Phase 3).
+For release builds (run-as unavailable), configure non-secret fields through the authenticated
+admin webui (`http://<device>:47180/admin/`) or managed configuration via DO. Neither route may
+carry a plaintext PSK; secure-store provisioning remains a separate operation.
 
 ## 5. Replacing HOME (the launcher) and autostart
 
@@ -105,15 +132,19 @@ the TV remote (D-pad).
 ```sh
 # TV 側: 設定 → デバイス設定 → 開発者向けオプション (ビルド 7 連打) → USB/ネットワークデバッグ ON
 adb connect <TVのIP>:5555
-adb install -r app/build/outputs/apk/release/app-release.apk
+# Install the already selected, controlled tier artifact; do not substitute a CI debug-contract APK.
+adb install -r <approved-apk-path>
 ```
 
 ### 8.2 boot.json (a TV is an indoor_panel)
 
+Use this form only after in-app pairing has succeeded or an approved out-of-band process has
+already populated `mesh.psk` in the TV's platform secure store:
+
 ```sh
 cat > boot.json <<'EOF'
 { "name": "living-tv", "role": "indoor_panel",
-  "listen_port": 47172, "http_port": 47180, "psk_hex": "<64hex>",
+  "listen_port": 47172, "http_port": 47180, "psk_ref": "secret:mesh.psk",
   "seed_peers": ["10.0.1.10:47172"], "ui_lang": "ja", "kiosk": false }
 EOF
 adb push boot.json /sdcard/boot.json

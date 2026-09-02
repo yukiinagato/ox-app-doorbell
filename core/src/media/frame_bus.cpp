@@ -1,12 +1,12 @@
-// FrameBus 実装: 色変換 (BT.601 整数演算) + 簡易ダウンスケール + stb JPEG エンコード。
+
 #include "media/frame_bus.h"
 
 #include <cstring>
 #include <vector>
 
 #define STB_IMAGE_WRITE_IMPLEMENTATION
-#define STBI_WRITE_NO_STDIO  // to_func 経由のみ使う (ファイル I/O 不要)
-#if defined(__GNUC__)  // 第三者ヘッダの警告は抑制 (clang も __GNUC__ を定義する)
+#define STBI_WRITE_NO_STDIO
+#if defined(__GNUC__)
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wmissing-field-initializers"
 #endif
@@ -23,7 +23,7 @@ inline uint8_t clamp8(int v) {
   return static_cast<uint8_t>(v < 0 ? 0 : (v > 255 ? 255 : v));
 }
 
-// BT.601 (video range) YUV → RGB。整数演算 (x256 固定小数)。
+
 inline void yuvToRgb(int y, int u, int v, uint8_t* rgb) {
   int c = y - 16, d = u - 128, e = v - 128;
   rgb[0] = clamp8((298 * c + 409 * e + 128) >> 8);
@@ -31,7 +31,7 @@ inline void yuvToRgb(int y, int u, int v, uint8_t* rgb) {
   rgb[2] = clamp8((298 * c + 516 * d + 128) >> 8);
 }
 
-// NV12/NV21: Y 面 (stride×h) + 交錯色度面 (stride×h/2)。vu=true が NV21 (VU 順)。
+
 void nvToRgb(const uint8_t* data, int w, int h, int stride, bool vu, uint8_t* out) {
   const uint8_t* yp = data;
   const uint8_t* uvp = data + static_cast<size_t>(stride) * h;
@@ -48,7 +48,7 @@ void nvToRgb(const uint8_t* data, int w, int h, int stride, bool vu, uint8_t* ou
   }
 }
 
-// YUY2: 行ごとに Y0 U Y1 V の 4 バイト/2 画素
+
 void yuy2ToRgb(const uint8_t* data, int w, int h, int stride, uint8_t* out) {
   for (int r = 0; r < h; r++) {
     const uint8_t* row = data + static_cast<size_t>(r) * stride;
@@ -72,7 +72,7 @@ void bgraToRgb(const uint8_t* data, int w, int h, int stride, uint8_t* out) {
   }
 }
 
-// 2x2 平均で 1/2 縮小 (奇数端は切り捨て)。in-place 可 (出力は入力より小さい)。
+
 void halveRgb(std::vector<uint8_t>& rgb, int& w, int& h) {
   int nw = w / 2 > 0 ? w / 2 : 1;
   int nh = h / 2 > 0 ? h / 2 : 1;
@@ -127,7 +127,7 @@ void FrameBus::push(RawFrame&& f) {
     f.stride = f.format == 2 ? f.w * 2 : (f.format == 3 ? f.w * 4 : f.w);
   }
   size_t need = rawFrameBytes(f.format, f.w, f.h, f.stride);
-  if (need == 0 || f.data.size() < need) return;  // 未知形式/データ不足は破棄
+  if (need == 0 || f.data.size() < need) return;
   std::lock_guard<std::mutex> lk(mu_);
   latest_ = std::move(f);
   seq_++;
@@ -139,9 +139,9 @@ Bytes FrameBus::latestJpeg(int64_t* capture_ts_ms) {
   std::lock_guard<std::mutex> lk(mu_);
   if (seq_ == 0) return {};
   if (capture_ts_ms) *capture_ts_ms = latest_.ts_ms;
-  if (encoded_seq_ == seq_) return jpeg_cache_;  // 同一フレーム → キャッシュ
+  if (encoded_seq_ == seq_) return jpeg_cache_;
 
-  // 1) RGB24 へ変換
+
   int w = latest_.w, h = latest_.h;
   std::vector<uint8_t> rgb(static_cast<size_t>(w) * h * 3);
   switch (latest_.format) {
@@ -152,16 +152,16 @@ Bytes FrameBus::latestJpeg(int64_t* capture_ts_ms) {
     default: return {};
   }
 
-  // 2) max_width 超は 1/2 縮小の繰り返し (簡易ダウンスケール)
+
   while (max_width_ > 0 && w > max_width_ && w >= 2 && h >= 2) halveRgb(rgb, w, h);
 
-  // 3) JPEG 圧縮: 外部エンコーダ優先、失敗/未設定なら stb
+
   Bytes jpeg;
   if (external_) jpeg = external_(rgb.data(), w, h, quality_);
   if (jpeg.empty()) {
     stbi_write_jpg_to_func(&appendBytes, &jpeg, w, h, 3, rgb.data(), quality_);
   }
-  if (jpeg.empty()) return {};  // エンコード失敗 (キャッシュは無効のまま)
+  if (jpeg.empty()) return {};
 
   jpeg_cache_ = std::move(jpeg);
   encoded_seq_ = seq_;
@@ -173,7 +173,7 @@ void FrameBus::setJpegParams(int quality, int max_width) {
   std::lock_guard<std::mutex> lk(mu_);
   if (quality < 1) quality = 1;
   if (quality > 100) quality = 100;
-  if (quality_ != quality || max_width_ != max_width) encoded_seq_ = 0;  // 再エンコード
+  if (quality_ != quality || max_width_ != max_width) encoded_seq_ = 0;
   quality_ = quality;
   max_width_ = max_width;
 }

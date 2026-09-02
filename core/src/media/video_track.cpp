@@ -1,5 +1,5 @@
-// VideoTrack 実装。状態 (State) は shared_ptr で Reader と共有 — Node 破棄と
-// httpd ワーカーの生存順に依らずダングリングしない。
+
+
 #include "media/video_track.h"
 
 #include <algorithm>
@@ -13,8 +13,8 @@ namespace {
 constexpr const char* kTag = "video";
 
 uint32_t clampDur(int64_t d) {
-  if (d < 1) return 1;        // 非増加 ts (時計巻き戻り等) でも前進させる
-  if (d > 1000) return 1000;  // 長すぎる間隙 (エンコーダ停止明け) は 1s に丸める
+  if (d < 1) return 1;
+  if (d > 1000) return 1000;
   return static_cast<uint32_t>(d);
 }
 
@@ -49,21 +49,21 @@ struct VideoTrack::State {
   std::condition_variable cv;
   bool enabled = false;
   bool stopped = false;
-  uint64_t generation = 0;  // setEnabled(false) / SPS 変化で +1 → 既存購読者は ended
+  uint64_t generation = 0;
   int subscribers = 0;
 
   Bytes sps, pps;
-  Bytes init;  // init segment (SPS+PPS が揃った時点で生成)
+  Bytes init;
   std::string codec_str;
 
-  int64_t last_ts_ms = 0;             // 直前 access unit の採集時刻
-  uint32_t frame_dur_ms = 33;         // 直前区間から推定 (初回のみ 30fps 扱い)
+  int64_t last_ts_ms = 0;
+  uint32_t frame_dur_ms = 33;
   bool have_last_ts = false;
-  uint64_t frag_seq = 0;              // 直近 fragment の連番 (1 始まり)
-  Bytes frag;                         // 直近 fragment (リングは 1 本のみ — ライブ専用)
-  uint64_t base_dt = 0;               // 次 fragment の base media decode time (ms 累計)
+  uint64_t frag_seq = 0;
+  Bytes frag;
+  uint64_t base_dt = 0;
 
-  // ストリーム状態を捨てる (無効化 / SPS 変化時)。mu 保持前提。
+
   void resetLocked() {
     generation++;
     sps.clear();
@@ -85,13 +85,13 @@ VideoTrack::~VideoTrack() { stop(); }
 
 void VideoTrack::setEnabled(bool on) {
   std::lock_guard<std::mutex> lk(st_->mu);
-  if (on) st_->stopped = false;  // Node 再 start 時の蘇生 (stop() 後の再有効化)
+  if (on) st_->stopped = false;
   if (st_->enabled == on) return;
   st_->enabled = on;
   if (!on) {
     st_->resetLocked();
     st_->cv.notify_all();
-    DB_LOGI(kTag, "h264 track 無効化 (codec=mjpeg)");
+    DB_LOGI(kTag, "H.264 track disabled because codec=mjpeg");
   }
 }
 
@@ -108,23 +108,23 @@ void VideoTrack::push(const uint8_t* annexb, size_t len, bool key, int64_t ts_ms
 
   const Bytes old_sps = s.sps;
   fmp4::Sample sample = fmp4::toSample(annexb, len, &s.sps, &s.pps);
-  // SPS が変わった (解像度/プロファイル変更) → ストリーム仕切り直し。
-  // 既存購読者は ended → クライアントが再接続して新 init を受け取る (自己修復)。
+
+
   if (!s.init.empty() && !old_sps.empty() && s.sps != old_sps) {
     Bytes new_sps = s.sps, new_pps = s.pps;
     s.resetLocked();
     s.sps = std::move(new_sps);
     s.pps = std::move(new_pps);
     s.cv.notify_all();
-    DB_LOGI(kTag, "SPS 変化 — h264 ストリームを仕切り直し");
+    DB_LOGI(kTag, "SPS changed; restarting the H.264 stream");
   }
   if (s.init.empty() && !s.sps.empty() && !s.pps.empty()) {
     s.init = fmp4::buildInit(s.sps, s.pps);
     s.codec_str = fmp4::codecString(s.sps);
     s.cv.notify_all();
-    DB_LOGI(kTag, "h264 init segment 生成 (" + s.codec_str + ")");
+    DB_LOGI(kTag, "generated H.264 init segment (" + s.codec_str + ")");
   }
-  if (sample.data.empty()) return;  // SPS/PPS のみの push (MediaCodec の config 等)
+  if (sample.data.empty()) return;
   sample.key = sample.key || key;
   sample.ts_ms = ts_ms;
 
@@ -142,7 +142,7 @@ void VideoTrack::push(const uint8_t* annexb, size_t len, bool key, int64_t ts_ms
   s.frag = withCaptureTimes(
       fmp4::buildFragment(static_cast<uint32_t>(++s.frag_seq), s.base_dt, current),
       current);
-  s.base_dt += current[0].dur;  // base-media-decode-time の連続性 (tfdt)
+  s.base_dt += current[0].dur;
   s.cv.notify_all();
 }
 
@@ -199,13 +199,13 @@ Bytes VideoTrack::Reader::pull(int timeout_ms, bool* ended) {
     return {};
   }
   if (!init_sent_) {
-    if (s.init.empty()) return {};  // タイムアウト (エンコーダ起動待ち等) — 呼び直し可
+    if (s.init.empty()) return {};
     init_sent_ = true;
-    last_frag_ = s.frag_seq;  // ライブ端から: 次に確定する fragment から送る
+    last_frag_ = s.frag_seq;
     return s.init;
   }
   if (s.frag_seq > last_frag_) {
-    last_frag_ = s.frag_seq;  // 取りこぼした中間 fragment は捨てる (ライブ専用)
+    last_frag_ = s.frag_seq;
     return s.frag;
   }
   return {};

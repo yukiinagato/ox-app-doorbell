@@ -1,10 +1,7 @@
-/* doorbell-core 公開 C ABI。
- * プラットフォーム殻 (WPF P/Invoke, JNI, Swift) はこのヘッダだけを見る。
- * 規約:
- *  - 文字列はすべて UTF-8。core が返す char* は db_free() で解放。
- *  - コールバックは core 内部スレッドから呼ばれる。UI スレッドへの marshal は殻の責務。
- *  - 例外は境界を越えない。失敗は戻り値 (0=成功 / 負=エラー)。
- * Phase 0 では host テストから使う最小面のみ。camera/audio/sip は Phase 1 で拡張。
+/* Public doorbell-core C ABI.
+ * Strings are UTF-8. Memory returned by core is released with db_free().
+ * Platform callbacks may run on core worker threads and must marshal UI work themselves.
+ * Exceptions never cross this boundary; zero means success and negative values mean failure.
  */
 #ifndef DOORBELL_H
 #define DOORBELL_H
@@ -24,150 +21,203 @@ extern "C" {
 
 typedef struct db_core db_core;
 
-/* プラットフォーム提供機能 (SPI)。不要なものは NULL 可 (機能が無効になる)。 */
+/* Legacy platform SPI. This layout is frozen at six pointers for ABI compatibility.
+ * New integrations must use db_platform_v2 and db_core_create_v2(). */
 typedef struct db_platform {
   void* user;
-  /* HTTPS (Telegram 等)。同期呼び — core が専用スレッドから呼ぶのでブロックしてよい
-   * (Telegram getUpdates 長輪詢では最大 ~30 秒ブロックする)。
-   * headers_json: {"Content-Type":"..."} 形式。body は body_len バイト (0 可, バイナリ可)。
-   * resp_body_out: malloc した応答本文 (core が db_free する)。*http_status_out: HTTP 状態。
-   * 戻り 0=成功 (HTTP 4xx/5xx でも応答が取れれば 0)、負=トランスポート失敗。
-   * 注意: 在飛の呼び出しがある間 db_core_destroy はその完了を待つ。 */
+  /* Synchronous HTTPS transport. Core invokes it from a worker thread, so it may block;
+   * Telegram long polling can take about 30 seconds. headers_json is a JSON object and body
+   * may be empty or binary. Allocate resp_body_out with malloc; core releases it with db_free.
+   * Return zero when a response is received, including HTTP errors, and negative on transport
+   * failure. db_core_destroy waits for every in-flight request to finish. */
   int (*https_request)(void* user, const char* method, const char* url,
                        const char* headers_json, const uint8_t* body, size_t body_len,
                        char** resp_body_out, int* http_status_out);
-  /* 安全な鍵保管 (DPAPI/Keystore/Keychain)。value_out は core が db_free する */
+  /* Secure storage backed by DPAPI, Keystore, or Keychain. Core releases value_out. */
   int (*secure_get)(void* user, const char* key, char** value_out);
   int (*secure_put)(void* user, const char* key, const char* value);
-  /* ログ転送 (level: 0=debug..3=error)。NULL なら stderr のみ */
+  /* Log sink, where level ranges from zero (debug) to three (error). NULL uses stderr. */
   void (*log_line)(void* user, int level, const char* line);
-  /* TTS 朗読 (クイック返信の読み上げ)。lang: "ja" 等。NULL なら chime 音のみ */
+  /* TTS for quick replies. lang is a language code such as "ja". NULL leaves only the chime. */
   void (*tts_speak)(void* user, const char* text, const char* lang);
-  /* 端末情報 (debug 画面用)。JSON 文字列を malloc して *out_json に返す (core が db_free)。
-   * 各プラットフォームが取得できる範囲だけ埋める (欠けは省略可)。形式:
-   *   {"gateway":"10.10.38.1",
-   *    "wifi":{"ssid":"..","bssid":"..","rssi":-55,"link_mbps":72},
-   *    "battery":{"level":0.83,"state":"charging|unplugged|full","health":"..%"}}
-   * gateway は core の疎通監視 (ping) 対象にも使う。NULL なら wifi/battery/gateway 無し。
-   * 定期的に (core が) 呼ぶ。ブロック可 (別スレッドから)。戻り 0=成功。 */
-  int (*device_info)(void* user, char** out_json);
 } db_platform;
 
-/* core → 殻 への UI イベント通知 (JSON)。例:
+#define DB_PLATFORM_V2_VERSION 2u
+
+/* Versioned platform SPI. struct_size must be sizeof(db_platform_v2) and version must be
+ * DB_PLATFORM_V2_VERSION. release_buffer releases strings returned by platform callbacks;
+ * when NULL, core falls back to free() for compatibility with existing shells. */
+typedef struct db_platform_v2 {
+  uint32_t struct_size;
+  uint32_t version;
+  void* user;
+  int (*https_request)(void* user, const char* method, const char* url,
+                       const char* headers_json, const uint8_t* body, size_t body_len,
+                       char** resp_body_out, int* http_status_out);
+  int (*secure_get)(void* user, const char* key, char** value_out);
+  int (*secure_put)(void* user, const char* key, const char* value);
+  void (*log_line)(void* user, int level, const char* line);
+  void (*tts_speak)(void* user, const char* text, const char* lang);
+  int (*device_info)(void* user, char** out_json);
+  void (*release_buffer)(void* user, void* buffer);
+} db_platform_v2;
+
+/* JSON events delivered from core to the platform UI. Examples:
  * {"t":"state","state":"idle|calling|in_call|degraded|offline"}
  * {"t":"chime","sound":"ding1"} {"t":"config_changed"} {"t":"peers_changed"}
- * {"t":"reply","text":"ただいま留守にしています","ttl_s":30,"lang":"ja"}
- *   — クイック返信の面板表示。カスタム音声がキャッシュ済みなら "audio_path" (ローカル
- *     ファイル) が付く: 殻はそれを再生し TTS はしない (無ければ tts_speak が呼ばれる)。
- * {"t":"chime",...,"audio_path":"..."} — sound "asset:<sha256>" のカスタム音 (キャッシュ済時)
- * {"t":"visitor_lang","door":"d_front","lang":"en"} — 訪客言語の切替/復帰 (全ノード)
- * {"t":"asset_ready","hash":"<sha256>"} — 統一資産のキャッシュ完了 (背景画像等の再読込合図)
+ * {"t":"reply","text":"<localized text>","ttl_s":30,"lang":"ja"}
+ *   A cached custom reply includes a local audio_path. The shell plays it without TTS;
+ *   otherwise core calls tts_speak.
+ * {"t":"chime",...,"audio_path":"..."} for a cached sound "asset:<sha256>"
+ * {"t":"visitor_lang","door":"d_front","lang":"en"} for a replicated language change
+ * {"t":"asset_ready","hash":"<sha256>"} when a shared asset is ready locally
  * {"t":"display",...,"theme":{"bg_color":"#101418","bg_image":"<sha256>|null",
- *   "bg_image_path":"<ローカルパス>|null"}} — 待機画面テーマ。殻は bg_image_path を
- *   そのまま描画する (null = 未キャッシュ — asset_ready 後に display が再発行される)
+ *   "bg_image_path":"<local path>|null"}} for the idle-screen theme. The shell renders the
+ *   local path directly; null means it is not cached and display is reissued after asset_ready.
  * {"t":"emergency","active":true,"alarm_sound":"siren1|asset:<sha256>","alarm_volume":100,
- *   "audio_path":"..."} — 警報音。audio_path はカスタム音キャッシュ済時のみ (無ければ内蔵音) */
+ *   "audio_path":"..."} where audio_path exists only for a cached custom alarm. */
 typedef void (*db_ui_event_cb)(void* user, const char* event_json);
 
-/* 生成: data_dir は書込可能ディレクトリ。boot_json は初期設定
- * ({"listen_port":47172,"http_port":47180,"role":"door_station",...} — 詳細は docs)。 */
+/* Create core with a writable data directory and bootstrap configuration in boot_json. */
 DB_API db_core* db_core_create(const db_platform* platform, const char* data_dir,
                                const char* boot_json);
+DB_API db_core* db_core_create_v2(const db_platform_v2* platform, const char* data_dir,
+                                  const char* boot_json);
 DB_API int db_core_start(db_core* c);
 DB_API void db_core_stop(db_core* c);
 DB_API void db_core_destroy(db_core* c);
 
 DB_API void db_core_set_ui_callback(db_core* c, db_ui_event_cb cb, void* user);
 
-/* 呼出ボタン押下 (door_id は設定に基づく)。 */
+/* Report a call-button press for a configured door ID. */
 DB_API void db_core_press(db_core* c, const char* door_id);
 
-/* 用件付き按鈴 (訪客の用件ボタン 1 タップ)。purpose: 設定 visit_purposes のキー
- * (NULL/"" = 用件なし = db_core_press と同じ)。press イベント payload に
- * "purpose" と選択中の訪客言語 "visitor_lang" が載る。 */
+/* Report a press with a visit_purposes key. NULL or empty purpose is equivalent to db_core_press.
+ * The press payload includes purpose and the currently selected visitor_lang. */
 DB_API void db_core_press_purpose(db_core* c, const char* door_id, const char* purpose);
 
-/* 呼出済みイベントへの用件追記。purpose_selected を複製するが呼出ルールは再実行しない。 */
+/* Legacy purpose update: replicate purpose_selected without rerunning call rules. */
 DB_API void db_core_select_purpose(db_core* c, const char* door_id, const char* purpose);
 
-/* 室外機の取消。call_cancelled を全ノードへ複製する。 */
+/* Legacy door-side cancellation: replicate call_cancelled to every node. */
 DB_API void db_core_cancel_call(db_core* c, const char* door_id);
 
-/* 訪客言語切替 (門口機の言語ボタン)。door NULL/"" = 自機担当 door。
- * lang: "en" 等 (設定 ui.languages が候補)。"ja" で即時復帰。
- * ui.visitor_lang_revert_s 秒の無操作で自動的に ja へ戻る。全ノードの殻に
- * {"t":"visitor_lang","door":…,"lang":…} が届く。 */
+/* Versioned call flow. The returned call_id is released with db_free(). Updates are idempotent
+ * and rejected when call_id does not identify the active call for the door. */
+DB_API char* db_core_press_v2(db_core* c, const char* door_id, const char* purpose);
+DB_API int db_core_select_purpose_v2(db_core* c, const char* door_id, const char* call_id,
+                                     const char* purpose);
+DB_API int db_core_cancel_call_v2(db_core* c, const char* door_id, const char* call_id,
+                                  const char* reason);
+/* Bind a shell-owned SIP dialog to the matching visitor call. Report answered only after the
+ * dialog is established, and report ended only after that same dialog terminates. stage_revision
+ * must match the active call; monitor sessions must not use these APIs. Calls are idempotent. */
+DB_API int db_core_report_call_answered_v2(db_core* c, const char* door_id,
+                                           const char* call_id, int stage_revision);
+DB_API int db_core_report_call_ended_v2(db_core* c, const char* door_id,
+                                        const char* call_id, int stage_revision,
+                                        const char* reason);
+/* A restarted shell confirms whether it restored media/UI for a call. Failure, or no report within
+ * ten seconds after a recovery request, produces one global call_cancelled event. */
+DB_API void db_core_report_call_recovery(db_core* c, const char* call_id, int restored);
+
+/* Change the visitor language. Empty door selects the local shell's assigned door. lang must be
+ * listed in ui.languages. The selection returns to Japanese after ui.visitor_lang_revert_s of
+ * inactivity, and visitor_lang is delivered to every shell. */
 DB_API void db_core_set_visitor_lang(db_core* c, const char* door, const char* lang);
 
-/* ノード表・リーダー・SIP 状態などのスナップショット JSON。db_free で解放。 */
+/* Return a JSON snapshot of nodes, leaders, SIP state, and runtime state. Release with db_free. */
 DB_API char* db_core_status_json(db_core* c);
 
-/* debug 画面用 JSON (アドレス/wifi/電池/触発統計/疎通履歴)。core が db_free。 */
+/* Return diagnostic JSON for addresses, Wi-Fi, battery, press statistics, and reachability. */
 DB_API char* db_core_debug_json(db_core* c);
 
-/* materialize 済み設定全文 JSON (doors/quick_replies 等の表示に使う)。db_free で解放。 */
+/* Return fully materialized configuration JSON. Release with db_free. */
 DB_API char* db_core_config_json(db_core* c);
 
-/* 配対 (発見/招待; mesh §1.6 拡張)。db_free で解放。
- * pairing_json: {paired, self:{id,addr,pk,...}, pair_qr, pending:{devices[],pairing_mode}}。
- *   未配対機は self/pair_qr を QR 表示、配対済み機は pending を承認 UI に出す。 */
+/* Runtime contracts reported by a platform shell. JSON must be an object and is copied by core. */
+DB_API void db_core_set_capabilities_json(db_core* c, const char* capabilities_json);
+DB_API void db_core_set_runtime_status_json(db_core* c, const char* runtime_json);
+DB_API void db_core_set_ui_manifest_json(db_core* c, const char* manifest_json);
+DB_API char* db_core_capabilities_json(db_core* c);
+
+/* Return pairing discovery and invitation state. Unpaired shells display self/pair_qr; paired
+ * shells present pending devices for approval. Release the result with db_free. */
 DB_API char* db_core_pairing_json(db_core* c);
-/* 未配対機側: PIN + seed で能動参加。結果は ui コールバックで t:"join_result"/t:"paired"。 */
+/* Join an existing cluster with a PIN and seed. Completion is reported as
+ * t:"join_result" followed by t:"paired". The paired event contains psk_ref,
+ * never the PSK; secure_put must succeed before that event is emitted. */
 DB_API void db_core_join_cluster(db_core* c, const char* host, const char* pin);
-/* 未配対機側: この端末を新規クラスタの親機にする (ランダム PSK 生成)。1=実施, 0=既配対/失敗。
- * 成功時 ui コールバックに t:"paired" が届く (殻が boot.json 永続化)。 */
+/* Create a new cluster with a random PSK. Returns 1 when started and 0 when the
+ * node is already paired or creation fails. On success the shell persists the
+ * psk_ref from t:"paired" in boot.json; the secret itself is already in secure storage. */
 DB_API int db_core_found_cluster(db_core* c);
-/* 配対済み機側: 配対モードを seconds 秒 ON (期間中の未配対機を自動招待)。 */
+/* Enable pairing mode for the requested duration and automatically invite discovered devices. */
 DB_API void db_core_pairing_mode(db_core* c, int seconds);
-/* 配対済み機側: pending の 1 台 (node_id) を承認・招待。 */
+/* Start automatic pairing and mint a one-time PIN for manual joining. The returned JSON contains
+ * ok, host, pin, and expires_s; the PIN is never persisted. Release the result with db_free. */
+DB_API char* db_core_start_pairing_json(db_core* c, int seconds);
+/* Request that an indoor-panel administrator remove one connected peer. The peer receives an
+ * authenticated local-reset command and acknowledges it through its UI. */
+DB_API void db_core_remove_device(db_core* c, const char* node_id);
+/* Approve and invite one pending node. */
 DB_API void db_core_invite_device(db_core* c, const char* id);
-/* 配対済み機側: QR/入力から得た addr+id+pk へ直接招待 (発見に依存しない — 跨網段/QR 用)。 */
+/* Invite an address, ID, and public key directly without discovery, for QR or routed networks. */
 DB_API void db_core_invite_direct(db_core* c, const char* addr, const char* id, const char* pk);
 
-/* QR エンコード (自機告知 pair_qr / 管理 URL の表示用共通実装)。戻り値は size*size バイト
- * (行優先・1=暗)、*out_size に一辺のモジュール数。失敗 NULL。db_free((char*)p) で解放。 */
+/* Encode a QR bitmap as size*size row-major bytes, where one means dark. Returns NULL on failure;
+ * release the result with db_free. */
 DB_API unsigned char* db_core_qr_encode(const char* text, int* out_size);
 
-/* カメラフレーム push (Phase 1)。format: 0=NV21, 1=NV12, 2=YUY2, 3=BGRA */
+/* Push a camera frame. format: 0=NV21, 1=NV12, 2=YUY2, 3=BGRA. */
 DB_API void db_core_on_camera_frame(db_core* c, const uint8_t* data, int format, int width,
                                     int height, int stride, int64_t ts_ms);
 
-/* SIP 発呼/切断 (Phase 3: TV/室内機の門口監聴)。
- * target: 内線番号、または "sip:" で始まる完全 URI (Asterisk 非経由の直接呼 —
- *         例 "sip:10.0.1.5:47190"、宛先は status_json peers[].addrs から解決する)。
- * mode: NULL/"" = 通常 (双方向) / "monitor" = 一方向監聴 (受け側は自マイク音声のみ送る)。
- * PJSIP 無効ビルドでは no-op。 */
+/* Door-station orientation in clockwise degrees. Core normalizes to 0/90/180/270 and
+ * applies it to live-video metadata when devices.<self>.local.video.rotation is auto. */
+DB_API void db_core_set_video_sensor_rotation(db_core* c, int degrees);
+
+/* Place or end a SIP call. target is an extension or full sip: URI. Empty mode is bidirectional;
+ * "monitor" is one-way monitoring in which the receiver sends microphone audio only.
+ * This is a no-op in builds without PJSIP. */
 DB_API void db_core_sip_call(db_core* c, const char* target, const char* mode);
 DB_API void db_core_sip_hangup(db_core* c);
+DB_API int db_core_sip_send_dtmf(db_core* c, const char* digits);
 
-/* クイック返信の配送 (門口機の面板表示 + TTS + reply イベント)。
- * reply_id: 設定 quick_replies のキー。door: 対象 door_id ("" = 最新 press の door)。 */
+/* Deliver an unscoped announcement to the door UI, TTS, and event stream. Empty door selects the
+ * door from the latest press; while a schema-v2 call is active this legacy entry point fails
+ * closed and cannot terminate it. Use db_core_quick_reply_v2 for a call reply. */
 DB_API void db_core_quick_reply(db_core* c, const char* reply_id, const char* door);
+/* Scoped quick reply. Returns zero only when call_id and stage_revision identify the active call;
+ * invalid arguments return -1 and stale or rejected calls return -2. */
+DB_API int db_core_quick_reply_v2(db_core* c, const char* reply_id, const char* door,
+                                  const char* call_id, int stage_revision);
 
 DB_API void db_free(char* p);
 
 DB_API const char* db_core_version(void);
+/* Compile-time SIP backend identity. Release artifacts must report "pjsip"; "stub" is
+ * permitted only for explicitly marked development/display-only builds. */
+DB_API const char* db_core_sip_backend(void);
 
-/* SOS 緊急モード (Phase 3)。active=1 で発報 / 0 で解除。emergency / emergency_cancel
- * イベントが全ノードへ複製され、各殻に {"t":"emergency","active":bool} が届く。
- * 解除時の PIN 検証 (kiosk PIN 等) は殻の責務 — core は検証しない。 */
+/* Set or clear SOS. Emergency state is replicated to every node and delivered to each shell.
+ * Authorization and PIN verification for clearing SOS remain the shell's responsibility. */
 DB_API void db_core_emergency(db_core* c, int active);
+/* Durable SOS variant. Returns one only after the event and its materialized projection commit;
+ * shells should use this before showing an optimistic local acknowledgement. */
+DB_API int db_core_emergency_v2(db_core* c, int active);
 
-/* ---- H.264 流暢档 (Phase 6a) ----
- * コアは符号化済みデータを fMP4 に箱詰めして /stream.mp4 で配るだけ —
- * エンコードは殻/平台層の HW エンコーダ (Android MediaCodec / iOS VideoToolbox。
- * Windows のみ core 内の Media Foundation が camera_win と同居)。 */
+/* Core packages encoded H.264 into fMP4 at /stream.mp4. Platform hardware encoders produce the
+ * bitstream; Windows uses the Media Foundation implementation hosted in core. */
 
-/* 符号化フレーム投入 (任意スレッド可)。annexb: 1 アクセスユニット分の H.264 AnnexB
- * (start code 区切り。SPS/PPS 同梱可 — コアが抽出する。MediaCodec の CODEC_CONFIG
- * 出力だけを渡してもよい)。is_keyframe: IDR を含むなら 1。ts_ms: エンコーダの提示時刻。
- * config camera.codec が mjpeg の間は無視される。 */
+/* Push one H.264 Annex-B access unit from any thread. SPS/PPS may be included or sent alone as a
+ * codec-config buffer. Set is_keyframe for an IDR and ts_ms to the presentation timestamp.
+ * Frames are ignored while camera.codec is mjpeg. */
 DB_API void db_core_on_encoded_frame(db_core* c, const uint8_t* annexb, size_t len,
                                      int is_keyframe, int64_t ts_ms);
 
-/* 殻がエンコーダを回すべきか (省電力: 購読者ゼロならエンコードしない)。
- * config camera.codec が h264/auto かつ /stream.mp4 の購読者がいる時 1、それ以外 0。
- * 殻は 5 秒毎程度にこれを確認してエンコーダの起動/停止を切り替える。 */
+/* Return one when the shell should run its encoder: codec is h264/auto and /stream.mp4 has a
+ * subscriber. Poll roughly every five seconds to avoid encoding without consumers. */
 DB_API int db_core_video_encoder_wanted(db_core* c);
 
 #ifdef __cplusplus

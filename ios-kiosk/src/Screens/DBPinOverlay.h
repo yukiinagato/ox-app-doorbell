@@ -2,10 +2,9 @@
 
 @class DBRouter;
 
-// 管理 PIN 键盘覆盖层。UIViewController モーダルの代わりにコンテナに直接乗る
-// (dismiss の CA commit コンテキスト内で present する iOS 5.1 クラッシュ構造が
-//  物理的に存在しない)。SHA256 照合 + 5 失敗 10 分ロック。
-// DBScreen 継承で clearLabelBackgrounds: (この個体の UILabel 白背景対策) を共用する。
+// In-container PIN keypad. Avoiding modal presentation prevents the iOS 5 crash caused by
+// presenting inside a dismissal transaction. Verification uses SHA-256 and locks for ten minutes
+// after five failed attempts.
 @interface DBPinOverlay : DBScreen
 
 - (id)initWithRouter:(DBRouter *)router;

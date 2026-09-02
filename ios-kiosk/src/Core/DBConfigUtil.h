@@ -1,27 +1,33 @@
 #import <UIKit/UIKit.h>
 
-// 設定ツリーをドットパスで辿る ("doors.d_front.label.ja")。無ければ nil。
-// イベント dict からの型安全取り出し、door peer 解決、16進色パースなど共通 helper。
+// Shared typed accessors for dotted config paths, event dictionaries, peers, and colors.
 @interface DBConfigUtil : NSObject
 
 + (id)dig:(NSDictionary *)root path:(NSString *)dotpath;
-+ (NSString *)str:(NSDictionary *)root path:(NSString *)dotpath;          // 空文字は nil
++ (NSString *)str:(NSDictionary *)root path:(NSString *)dotpath;  // Empty strings become nil.
 + (NSInteger)intVal:(NSDictionary *)root path:(NSString *)dotpath def:(NSInteger)def;
++ (long long)longLongVal:(NSDictionary *)root path:(NSString *)dotpath def:(long long)def;
 + (double)doubleVal:(NSDictionary *)root path:(NSString *)dotpath def:(double)def;
 + (BOOL)boolVal:(NSDictionary *)root path:(NSString *)dotpath def:(BOOL)def;
 
 + (NSInteger)orderOf:(NSString *)identifier map:(NSDictionary *)map;
-+ (NSArray *)sortedByOrder:(NSDictionary *)map;  // keys を order → key 名順に
++ (NSArray *)sortedByOrder:(NSDictionary *)map;  // Sorts by order, then identifier.
 + (NSString *)labelOf:(NSDictionary *)entry lang:(NSString *)lang fallback:(NSString *)fallback;
 
-// イベント dict 取り出し (型が違っても安全)
+// Event accessors reject values with the wrong type.
 + (NSString *)evStr:(NSDictionary *)ev key:(NSString *)key;
 + (BOOL)evBool:(NSDictionary *)ev key:(NSString *)key;
 
-// status.peers から door_station の peer を探す (自分/ dead は除外)
+// Peer lookup excludes the local node and dead peers.
 + (NSDictionary *)findDoorPeer:(NSDictionary *)status door:(NSString *)door;
-+ (NSString *)peerHost:(NSDictionary *)peer;  // "1.2.3.4:47172" → "1.2.3.4"
++ (NSDictionary *)findPeer:(NSDictionary *)status nodeId:(NSString *)nodeId;
++ (NSDictionary *)findDoorPeer:(NSDictionary *)status host:(NSString *)host;
++ (NSArray *)doorPeers:(NSDictionary *)status;  // Live door stations with video.
++ (NSString *)peerHost:(NSDictionary *)peer;    // "1.2.3.4:47172" to "1.2.3.4".
++ (NSArray *)peerHosts:(NSDictionary *)peer;     // Stable, deduplicated address hosts.
++ (NSString *)urlHost:(NSString *)host;          // Adds URL brackets to IPv6 literals.
 
-+ (UIColor *)parseHexColor:(NSString *)s;  // "#101418"
++ (UIColor *)parseHexColor:(NSString *)s;  // "#101418".
++ (NSDictionary *)emergencyPalette:(NSDictionary *)event;
 
 @end

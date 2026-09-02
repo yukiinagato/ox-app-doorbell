@@ -1,0 +1,161 @@
+{
+  "schema_version": 1,
+  "checks": [
+    {
+      "id": "core-emergency-trigger-aliases",
+      "path": "core/src/events/rule_engine.cpp",
+      "ordered_literals": [
+        "if (t == \"emergency_on\") return \"emergency\"",
+        "if (t == \"emergency_off\") return \"emergency_cancel\""
+      ]
+    },
+    {
+      "id": "android-targeted-chime-routing",
+      "path": "android/app/src/main/java/jp/keihan/doorbell/App.kt",
+      "ordered_literals": [
+        "if (eventType == \"event\") handleLifecycleEvent(ev)",
+        "if (eventType == \"chime\" && boot.role != \"door_station\")",
+        "IncomingActivity.launch"
+      ]
+    },
+    {
+      "id": "android-bounded-chime-replay-gate",
+      "path": "android/app/src/main/java/jp/keihan/doorbell/ChimeGate.kt",
+      "ordered_literals": [
+        "schemaVersion < 2 || callId.isEmpty()",
+        "expiresAtMs > 0L && expiresAtMs <= nowMs",
+        "val key = \"$callId:$stageRevision\"",
+        "if (!seen.add(key)) return false",
+        "while (seen.size > MAX_SEEN)"
+      ]
+    },
+    {
+      "id": "android-sos-channel-and-ttl-projection",
+      "path": "android/app/src/main/java/jp/keihan/doorbell/EmergencyAlertController.kt",
+      "ordered_literals": [
+        "val inApp = value.uses(CHANNEL_IN_APP)",
+        "val systemNotification = value.uses(CHANNEL_SYSTEM_NOTIFICATION)",
+        "if (value.presentationUntilWallMs > 0L)"
+      ]
+    },
+    {
+      "id": "ios-targeted-chime-routing",
+      "path": "ios/Doorbell/AppDelegate.swift",
+      "ordered_literals": [
+        "let eventKind = ConfigUtil.evStr(ev, \"t\")",
+        "if eventKind == \"chime\" && boot.role != \"door_station\"",
+        "presentIncoming(door:"
+      ]
+    },
+    {
+      "id": "ios-in-app-sos-contract",
+      "path": "ios/Doorbell/MainViewController.swift",
+      "ordered_literals": [
+        "guard ConfigUtil.evBool(ev, \"active\") else { hideEmergency(); return }",
+        "guard ConfigUtil.eventUsesChannel(ev, \"in_app\") else { hideEmergency(); return }",
+        "if !ConfigUtil.evBool(ev, \"sticky\")",
+        "ConfigUtil.double(ev, \"ttl_s\", 0)"
+      ]
+    },
+    {
+      "id": "ios-system-sos-contract",
+      "path": "ios/Doorbell/AppDelegate.swift",
+      "ordered_literals": [
+        "let channels = ConfigUtil.eventChannels(event)",
+        "let ttl = max(0, ConfigUtil.double(event, \"ttl_s\", active ? 0 : 10))",
+        "guard channels.contains(\"system_notification\") else {",
+        "sticky_system_notification_unsupported"
+      ]
+    },
+    {
+      "id": "tvos-targeted-chime-routing",
+      "path": "ios/DoorbellTV/TVAppDelegate.swift",
+      "ordered_literals": [
+        "if t == \"chime\"",
+        "presentIncoming(door:"
+      ]
+    },
+    {
+      "id": "tvos-in-app-sos-contract",
+      "path": "ios/DoorbellTV/TVMainViewController.swift",
+      "ordered_literals": [
+        "let requestedInApp = ConfigUtil.eventUsesChannel(ev, \"in_app\")",
+        "guard active else {",
+        "guard requestedInApp else {",
+        "result: \"presented\"",
+        "result: \"ttl_expired\"",
+        "deviceAlertReporter(["
+      ]
+    },
+    {
+      "id": "ios-compat-targeted-chime-routing",
+      "path": "ios-kiosk/src/Screens/DBRouter.m",
+      "ordered_literals": [
+        "if ([type isEqualToString:@\"press\"] && ![_boot.role isEqualToString:@\"door_station\"])",
+        "} else if ([t isEqualToString:@\"chime\"])",
+        "acceptChimeEvent:ev nowMs:nowMs",
+        "[self showIncoming:"
+      ]
+    },
+    {
+      "id": "ios-compat-bounded-lifecycle-gate",
+      "path": "ios-kiosk/src/Core/DBCallEventTracker.m",
+      "ordered_literals": [
+        "static const NSUInteger kDBCallCacheLimit = 128",
+        "recordCancellationEvent:",
+        "recordAnsweredEvent:",
+        "recordEndedEvent:",
+        "acceptChimeEvent:",
+        "[schema integerValue] < 2",
+        "[_resolvedCallIDs objectForKey:callID]",
+        "[revision longLongValue] <= [accepted longLongValue]"
+      ]
+    },
+    {
+      "id": "ios-compat-sos-channel-and-ttl-projection",
+      "path": "ios-kiosk/src/Screens/DBRouter.m",
+      "ordered_literals": [
+        "BOOL inApp = DBEmergencyUsesChannel(ev, @\"in_app\")",
+        "BOOL systemNotification = DBEmergencyUsesChannel(ev, @\"system_notification\")",
+        "BOOL sticky = DBEmergencyBool(ev, @\"sticky\", active)",
+        "path:@\"ttl_s\" def:(active ? 0 : 10)"
+      ]
+    },
+    {
+      "id": "windows-targeted-chime-routing",
+      "path": "win/DoorbellApp/MainWindow.xaml.cs",
+      "ordered_literals": [
+        "if (eventType == \"press\")",
+        "case \"chime\":",
+        "if (App.Boot.Role == \"indoor_panel\") ShowIncoming(ev)"
+      ]
+    },
+    {
+      "id": "windows-sos-channel-and-ttl-projection",
+      "path": "win/DoorbellApp/MainWindow.xaml.cs",
+      "ordered_literals": [
+        "bool inApp = EventHasChannel(ev, \"in_app\")",
+        "bool systemNotification = EventHasChannel(ev, \"system_notification\")",
+        "bool sticky = EventBool(ev, \"sticky\", active)",
+        "double ttl = Math.Max(0, DictDouble(ev.Data, \"ttl_s\", active ? 0 : 10))"
+      ]
+    },
+    {
+      "id": "web-call-id-and-stage-merge-gate",
+      "path": "webui/panel/call-flow.js",
+      "ordered_literals": [
+        "if (localId && remoteId && localId !== remoteId)",
+        "if (remoteRev && remoteRev < localRev)",
+        "residentDisposition"
+      ]
+    },
+    {
+      "id": "web-push-sticky-notification",
+      "path": "webui/panel/sw.js",
+      "ordered_literals": [
+        "requireInteraction:",
+        "self.registration.showNotification"
+      ]
+    }
+  ]
+}

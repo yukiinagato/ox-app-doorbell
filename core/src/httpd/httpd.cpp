@@ -1,7 +1,7 @@
-// 内蔵 HTTP サーバ実装 (CivetWeb ラッパ)。httpd.h の仕様に従う:
-//  - static 資産 → /snapshot.jpg → /stream.mjpeg → route の順で振り分け
-//  - route ハンドラは Runloop へ marshal して同期実行 (5s タイムアウトで 503)
-//  - 認証ゲートは civetweb スレッド上で呼ぶ (public_prefixes は素通し)
+
+
+
+
 #include "httpd/httpd.h"
 
 #include <atomic>
@@ -19,10 +19,10 @@ namespace db {
 
 namespace {
 
-constexpr int64_t kHandlerTimeoutMs = 5000;  // route ハンドラの同期待ち上限
-constexpr size_t kMaxBodyBytes = 8 * 1024 * 1024;  // 暴走防止
-// /stream.mp4: init segment の初回待ち上限 (エンコーダは購読者が付いてから起動する —
-// 殻の wanted ポーリング (5s) + エンコーダ初期化 + 最初の SPS/PPS 到着ぶんを見込む)
+constexpr int64_t kHandlerTimeoutMs = 5000;
+constexpr size_t kMaxBodyBytes = 8 * 1024 * 1024;
+
+
 constexpr int kMp4FirstChunkTimeoutMs = 15000;
 
 int hexVal(char c) {
@@ -32,7 +32,7 @@ int hexVal(char c) {
   return -1;
 }
 
-// query/form 用 URL デコード ('+' は空白)。不正な %xx はそのまま残す。
+
 std::string urlDecode(const std::string& s) {
   std::string out;
   out.reserve(s.size());
@@ -50,7 +50,7 @@ std::string urlDecode(const std::string& s) {
   return out;
 }
 
-// "k=v&k2=v2" 形式から key を検索 (キー・値とも URL デコードして比較/返却)
+
 bool findParam(const std::string& data, const std::string& key, std::string* out) {
   size_t pos = 0;
   while (pos <= data.size()) {
@@ -96,7 +96,9 @@ const char* statusText(int code) {
     case 404: return "Not Found";
     case 405: return "Method Not Allowed";
     case 409: return "Conflict";
+    case 413: return "Payload Too Large";
     case 500: return "Internal Server Error";
+    case 501: return "Not Implemented";
     case 503: return "Service Unavailable";
     default: return "Status";
   }
@@ -168,11 +170,11 @@ struct Httpd::Impl {
   int port = 0;
   std::atomic<bool> stopping{false};
 
-  // 登録テーブル (civetweb スレッドから読まれる) — mu で保護
+
   std::mutex mu;
   struct Route {
     std::string method;
-    std::string path;  // prefix=true のとき末尾 '*' を除いた前缀
+    std::string path;
     bool prefix = false;
     Handler h;
   };
@@ -183,15 +185,17 @@ struct Httpd::Impl {
   };
   std::map<std::string, Asset> statics;
   std::function<Bytes(int64_t*)> jpeg_provider;
+  std::function<int()> video_rotation_provider;
   int stream_fps = 8;
   std::function<Mp4Pull()> mp4_provider;
+  Mp4ProxyProvider mp4_proxy_provider;
   std::function<bool(const HttpReq&)> gate;
   std::vector<std::string> public_prefixes;
 };
 
 namespace {
 
-// リクエストを HttpReq へ変換 (body も読む — mg_read はレスポンス前に呼ぶこと)
+
 HttpReq buildReq(struct mg_connection* conn) {
   const struct mg_request_info* ri = mg_get_request_info(conn);
   HttpReq req;
@@ -205,7 +209,7 @@ HttpReq buildReq(struct mg_connection* conn) {
   }
   if (ri->content_length != 0) {
     char buf[4096];
-    long long want = ri->content_length;  // -1 = 不明 (EOF まで)
+    long long want = ri->content_length;
     for (;;) {
       int n = mg_read(conn, buf, sizeof(buf));
       if (n <= 0) break;
@@ -217,7 +221,7 @@ HttpReq buildReq(struct mg_connection* conn) {
   return req;
 }
 
-// Content-Length + Connection: close で単純に書き出す
+
 void writeResp(struct mg_connection* conn, const HttpResp& r) {
   std::string head = "HTTP/1.1 " + std::to_string(r.status) + " " + statusText(r.status) + "\r\n";
   head += "Content-Type: " + r.content_type + "\r\n";
@@ -229,8 +233,8 @@ void writeResp(struct mg_connection* conn, const HttpResp& r) {
   if (!r.body.empty()) mg_write(conn, r.body.data(), r.body.size());
 }
 
-// /stream.mjpeg: provider を fps 間隔でポーリングして multipart 送信。
-// 書込失敗 (切断)・stop() (provider が外れる) で終了。
+
+
 int handleStream(struct mg_connection* conn, Httpd::Impl* impl) {
   std::function<Bytes(int64_t*)> prov;
   int fps;
@@ -249,6 +253,7 @@ int handleStream(struct mg_connection* conn, Httpd::Impl* impl) {
   std::snprintf(head, sizeof(head),
       "HTTP/1.1 200 OK\r\n"
       "Content-Type: multipart/x-mixed-replace; boundary=frame\r\n"
+      "Access-Control-Allow-Origin: *\r\n"
       "X-Doorbell-Server-Time-Ms: %lld\r\n"
       "Connection: close\r\n\r\n", static_cast<long long>(server_wall_ms));
   if (mg_write(conn, head, std::strlen(head)) <= 0) return 200;
@@ -259,15 +264,22 @@ int handleStream(struct mg_connection* conn, Httpd::Impl* impl) {
       std::lock_guard<std::mutex> lk(impl->mu);
       prov = impl->jpeg_provider;
     }
-    if (!prov) break;  // stop() で外された
+    if (!prov) break;
     int64_t capture_ms = 0;
     Bytes frame = prov(&capture_ms);
-    if (!frame.empty()) {  // 空 = フレーム無し → 今回はスキップ (重複送信は可)
-      char part[192];
+    if (!frame.empty()) {
+      int rotation = 0;
+      {
+        std::lock_guard<std::mutex> lk(impl->mu);
+        if (impl->video_rotation_provider) rotation = impl->video_rotation_provider();
+      }
+      char part[240];
       std::snprintf(part, sizeof(part),
                     "--frame\r\nContent-Type: image/jpeg\r\nContent-Length: %u\r\n"
-                    "X-Doorbell-Capture-Time-Ms: %lld\r\n\r\n",
-                    static_cast<unsigned>(frame.size()), static_cast<long long>(capture_ms));
+                    "X-Doorbell-Capture-Time-Ms: %lld\r\n"
+                    "X-Doorbell-Video-Rotation: %d\r\n\r\n",
+                    static_cast<unsigned>(frame.size()), static_cast<long long>(capture_ms),
+                    rotation);
       if (mg_write(conn, part, std::strlen(part)) <= 0) break;
       if (mg_write(conn, frame.data(), frame.size()) <= 0) break;
       if (mg_write(conn, "\r\n", 2) <= 0) break;
@@ -277,9 +289,9 @@ int handleStream(struct mg_connection* conn, Httpd::Impl* impl) {
   return 200;
 }
 
-// /stream.mp4: fMP4 ライブ配信。provider からセッション (pull) を得て、
-// init segment → fragment を逐次 mg_write する。切断/停止/購読終了で終わる。
-// pull は ~500ms 上限でブロックする契約 (httpd.h) — 停止フラグを小刻みに見られる。
+
+
+
 int handleStreamMp4(struct mg_connection* conn, Httpd::Impl* impl) {
   std::function<Httpd::Mp4Pull()> provider;
   {
@@ -291,7 +303,7 @@ int handleStreamMp4(struct mg_connection* conn, Httpd::Impl* impl) {
     writeResp(conn, HttpResp::text("h264 stream not available", 503));
     return 503;
   }
-  // 初回チャンク (init segment) が来るまでヘッダを書かない — 来なければ 503
+
   Bytes chunk;
   bool ended = false;
   const auto deadline = std::chrono::steady_clock::now() +
@@ -316,6 +328,7 @@ int handleStreamMp4(struct mg_connection* conn, Httpd::Impl* impl) {
       "HTTP/1.1 200 OK\r\n"
       "Content-Type: video/mp4\r\n"
       "Cache-Control: no-store\r\n"
+      "Access-Control-Allow-Origin: *\r\n"
       "X-Doorbell-Server-Time-Ms: %lld\r\n"
       "Connection: close\r\n\r\n",
       static_cast<long long>(server_wall_ms));
@@ -324,25 +337,63 @@ int handleStreamMp4(struct mg_connection* conn, Httpd::Impl* impl) {
     if (!chunk.empty()) {
       if (mg_write(conn, chunk.data(), chunk.size()) <= 0) break;
     } else {
-      // 新 fragment 無し (pull タイムアウト) — 8 バイトの `free` box を書いて
-      // 切断を検出する (ISOBMFF の頂層 free box は MSE/ffmpeg とも読み飛ばす)。
-      // これが無いと「クライアントが切ったのにフレームが来ない」間ループが
-      // 終われず、購読者数が減らない → エンコーダが止まらない。
+
+
+
+
       static const uint8_t kFreeBox[8] = {0, 0, 0, 8, 'f', 'r', 'e', 'e'};
       if (mg_write(conn, kFreeBox, sizeof(kFreeBox)) <= 0) break;
     }
     if (ended || impl->stopping.load()) break;
     {
       std::lock_guard<std::mutex> lk(impl->mu);
-      if (!impl->mp4_provider) break;  // stop() で外された
+      if (!impl->mp4_provider) break;
     }
     chunk = pull(&ended);
   }
   return 200;
 }
 
-// route ハンドラを Runloop へ marshal して同期実行。タイムアウトは 503
-// (ハンドラは後で走っても良い — 結果は破棄。共有状態は shared_ptr で寿命安全に)。
+int handleStreamProxyMp4(struct mg_connection* conn, Httpd::Impl* impl, const HttpReq& req) {
+  Httpd::Mp4ProxyProvider provider;
+  {
+    std::lock_guard<std::mutex> lk(impl->mu);
+    provider = impl->mp4_proxy_provider;
+  }
+  int status = 503;
+  Httpd::Mp4Pull pull = provider ? provider(req, &status) : nullptr;
+  if (!pull) {
+    writeResp(conn, HttpResp::text(status == 403 ? "forbidden" : "h264 proxy unavailable", status));
+    return status;
+  }
+  Bytes chunk;
+  bool ended = false;
+  const auto deadline = std::chrono::steady_clock::now() +
+                        std::chrono::milliseconds(kMp4FirstChunkTimeoutMs);
+  while (!impl->stopping.load() && !ended && chunk.empty() &&
+         std::chrono::steady_clock::now() < deadline)
+    chunk = pull(&ended);
+  if (chunk.empty()) {
+    writeResp(conn, HttpResp::text("upstream h264 unavailable", 503));
+    return 503;
+  }
+  const char* head =
+      "HTTP/1.1 200 OK\r\n"
+      "Content-Type: video/mp4\r\n"
+      "Cache-Control: no-store\r\n"
+      "X-Content-Type-Options: nosniff\r\n"
+      "Connection: close\r\n\r\n";
+  if (mg_write(conn, head, std::strlen(head)) <= 0) return 200;
+  for (;;) {
+    if (!chunk.empty() && mg_write(conn, chunk.data(), chunk.size()) <= 0) break;
+    if (ended || impl->stopping.load()) break;
+    chunk = pull(&ended);
+  }
+  return 200;
+}
+
+
+
 HttpResp runOnLoop(Httpd::Impl* impl, const Httpd::Handler& h, const HttpReq& req) {
   struct Pending {
     std::mutex m;
@@ -365,12 +416,12 @@ HttpResp runOnLoop(Httpd::Impl* impl, const Httpd::Handler& h, const HttpReq& re
   return std::move(p->resp);
 }
 
-// 全リクエストの入口 (civetweb ワーカースレッド上)
+
 int requestHandler(struct mg_connection* conn, void* cbdata) {
   auto* impl = static_cast<Httpd::Impl*>(cbdata);
   HttpReq req = buildReq(conn);
 
-  // --- 認証: gate 未設定なら全公開。public_prefixes (前缀一致) は素通し ---
+
   std::function<bool(const HttpReq&)> gate;
   {
     std::lock_guard<std::mutex> lk(impl->mu);
@@ -385,12 +436,12 @@ int requestHandler(struct mg_connection* conn, void* cbdata) {
       if (!is_public) gate = impl->gate;
     }
   }
-  if (gate && !gate(req)) {  // gate はロック外・civetweb スレッドで呼ぶ (ヘッダ記載通り)
+  if (gate && !gate(req)) {
     writeResp(conn, HttpResp::text("unauthorized", 401));
     return 401;
   }
 
-  // --- 1. static 資産 (完全一致) ---
+
   if (req.method == "GET" || req.method == "HEAD") {
     std::lock_guard<std::mutex> lk(impl->mu);
     auto it = impl->statics.find(req.uri);
@@ -422,11 +473,12 @@ int requestHandler(struct mg_connection* conn, void* cbdata) {
     return 200;
   }
 
-  // --- 3. /stream.mjpeg・/stream.mp4 ---
+  // --- 3. local streams and authenticated same-origin H.264 proxy ---
   if (req.uri == "/stream.mjpeg") return handleStream(conn, impl);
   if (req.uri == "/stream.mp4") return handleStreamMp4(conn, impl);
+  if (req.uri == "/stream-proxy.mp4") return handleStreamProxyMp4(conn, impl, req);
 
-  // --- 4. route: 完全一致優先 → 前缀 ("...*") の最長一致 ---
+
   Httpd::Handler h;
   {
     std::lock_guard<std::mutex> lk(impl->mu);
@@ -442,7 +494,7 @@ int requestHandler(struct mg_connection* conn, void* cbdata) {
         }
       } else if (!exact && req.uri.compare(0, r.path.size(), r.path) == 0 &&
                  r.path.size() >= best_len) {
-        // 同長は後勝ちにしない: '>' だと同じ前缀の再登録が拾えないため '>=' で最後の登録を優先
+
         best_len = r.path.size();
         h = r.h;
       }
@@ -466,7 +518,7 @@ Httpd::Httpd(Runloop& loop) : impl_(new Impl(loop)) {}
 Httpd::~Httpd() { stop(); }
 
 bool Httpd::start(int port) {
-  if (impl_->ctx) return false;  // 二重 start は不可
+  if (impl_->ctx) return false;
   impl_->stopping = false;
   std::string p = std::to_string(port);
   struct mg_callbacks cb;
@@ -478,13 +530,13 @@ bool Httpd::start(int port) {
                           nullptr};
     return mg_start(&cb, nullptr, opts);
   };
-  // IPv4 と IPv6 を「別々のリスナー」で張る ("47180,[::]:47180")。
-  // 単一 dual-stack ソケット ("+port") は iOS5 kernel で bind は通るが accept できない
-  // (silent failure)。別ソケットなら IPv4 は確実に動き、IPv6 は best-effort で追加。
+
+
+
   std::string dual = p + ",[::]:" + p;
   struct mg_context* ctx = tryStart(dual);
   std::string mode = dual;
-  if (!ctx) { ctx = tryStart(p); mode = p; }  // IPv6 を張れない環境は IPv4 のみ
+  if (!ctx) { ctx = tryStart(p); mode = p; }
   if (!ctx) {
     DB_LOGE("httpd", "mg_start failed port=" + p);
     return false;
@@ -500,13 +552,14 @@ void Httpd::stop() {
   if (!impl_->ctx) return;
   impl_->stopping = true;
   {
-    // provider を外す → 進行中の stream ループが終了し、mg_stop が完了できる。
-    // (provider の寿命が Httpd より先に尽きないことも保証される)
+
+
     std::lock_guard<std::mutex> lk(impl_->mu);
     impl_->jpeg_provider = nullptr;
     impl_->mp4_provider = nullptr;
+    impl_->mp4_proxy_provider = nullptr;
   }
-  mg_stop(impl_->ctx);  // 進行中の接続完了を待つ
+  mg_stop(impl_->ctx);
   impl_->ctx = nullptr;
   DB_LOGI("httpd", "stopped");
 }
@@ -538,9 +591,19 @@ void Httpd::setJpegProvider(std::function<Bytes(int64_t*)> provider, int stream_
   impl_->stream_fps = stream_fps;
 }
 
+void Httpd::setVideoRotationProvider(std::function<int()> provider) {
+  std::lock_guard<std::mutex> lk(impl_->mu);
+  impl_->video_rotation_provider = std::move(provider);
+}
+
 void Httpd::setMp4Provider(std::function<Mp4Pull()> provider) {
   std::lock_guard<std::mutex> lk(impl_->mu);
   impl_->mp4_provider = std::move(provider);
+}
+
+void Httpd::setMp4ProxyProvider(Mp4ProxyProvider provider) {
+  std::lock_guard<std::mutex> lk(impl_->mu);
+  impl_->mp4_proxy_provider = std::move(provider);
 }
 
 void Httpd::setAuth(std::function<bool(const HttpReq&)> gate,

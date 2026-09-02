@@ -1,12 +1,6 @@
-// ソケット API の POSIX / Winsock2 差異を閉じ込める互換層。
-// 方針: 呼び出し側 (tcp_transport / udp_beacon) には #ifdef を書かせない。
-//  - ハンドル型   : socket_t (POSIX=int / Windows=SOCKET) + kInvalidSocket
-//  - poll         : net::poll (Windows は WSAPoll)
-//  - 起床ペア     : makeWakePair (POSIX=socketpair / Windows=ループバック TCP ペア)
-//  - エラー判定   : errno / WSAGetLastError() の差異は lastError() + 述語に吸収
-//  - setsockopt   : Windows の char* キャストと型差 (SO_RCVTIMEO=DWORD ms 等) を吸収
-// 注意 (Windows): WSAPoll は Win10 以前だと接続失敗を POLLERR で報告しないことがある。
-// 呼び出し側は必ず接続デッドラインを併用すること (tcp_transport は kConnectTimeoutMs で対応済)。
+
+// POSIX/Winsock compatibility layer used by transports and discovery. Callers must enforce a
+// connection deadline because WSAPoll may omit POLLERR for failed connects on older Windows.
 #pragma once
 
 #if defined(_WIN32)
@@ -24,11 +18,18 @@
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <poll.h>
+#include <sys/ioctl.h>
 #include <sys/socket.h>
 #include <sys/time.h>
 #include <unistd.h>
+#if defined(__ANDROID__)
+#include <linux/if_addr.h>
+#include <linux/netlink.h>
+#include <linux/rtnetlink.h>
+#endif
 #endif
 
+#include <algorithm>
 #include <cerrno>
 #include <chrono>
 #include <climits>
@@ -44,7 +45,7 @@ namespace net {
 #if defined(_WIN32)
 using socket_t = SOCKET;
 using pollfd_t = WSAPOLLFD;
-using socklen_v = int;  // sockaddr 長・オプション長 (POSIX の socklen_t 相当)
+using socklen_v = int;
 constexpr socket_t kInvalidSocket = INVALID_SOCKET;
 #else
 using socket_t = int;
@@ -55,14 +56,15 @@ constexpr socket_t kInvalidSocket = -1;
 
 inline bool valid(socket_t s) { return s != kInvalidSocket; }
 
-// getifaddrs は POSIX だが Android では API24+ でしか宣言されない (minSdk 21 → 不可)。
-// 使える環境でだけ列挙し、他 (Windows / Android<24) はルート法へ回落する。
+
+
+// getifaddrs is unavailable before Android API 24, so those targets use route netlink.
 #if !defined(_WIN32) && !(defined(__ANDROID__) && __ANDROID_API__ < 24)
 #define DB_HAVE_GETIFADDRS 1
 #endif
 
-// ルーティング経由で主 IPv4 を得る (UDP connect → getsockname)。
-// パケットは飛ばさない。getifaddrs が使えない環境でも効く堅牢な方法。
+
+
 inline std::string primaryIPv4ViaRoute() {
 #if !defined(_WIN32)
   int fd = ::socket(AF_INET, SOCK_DGRAM, 0);
@@ -70,8 +72,8 @@ inline std::string primaryIPv4ViaRoute() {
   struct sockaddr_in dst;
   std::memset(&dst, 0, sizeof(dst));
   dst.sin_family = AF_INET;
-  dst.sin_port = htons(9);  // discard
-  ::inet_pton(AF_INET, "8.8.8.8", &dst.sin_addr);  // 既定経路の送信元 IP を解決させる
+  dst.sin_port = htons(9);  // Discard service; connect sends no packet here.
+  ::inet_pton(AF_INET, "8.8.8.8", &dst.sin_addr);  // Select the default-route source address.
   std::string out;
   if (::connect(fd, reinterpret_cast<struct sockaddr*>(&dst), sizeof(dst)) == 0) {
     struct sockaddr_in local;
@@ -89,9 +91,9 @@ inline std::string primaryIPv4ViaRoute() {
 #endif
 }
 
-// 実際の非ループバック ローカルアドレスを列挙する (advertise/表示用)。
-// includeV6=true で グローバル IPv6 も含める (リンクローカル fe80:: は除外)。
-// getifaddrs が無い環境 (Windows / Android<24) は主 IPv4 のみをルート法で返す。
+
+
+// Android before API 24 enumerates IPv4/IPv6 through route netlink instead of getifaddrs.
 inline std::vector<std::string> localAddresses(bool includeV6) {
   std::vector<std::string> out;
 #if defined(DB_HAVE_GETIFADDRS)
@@ -108,30 +110,119 @@ inline std::vector<std::string> localAddresses(bool includeV6) {
       if (::inet_ntop(AF_INET, &sin->sin_addr, buf, sizeof(buf))) out.emplace_back(buf);
     } else if (includeV6 && fam == AF_INET6) {
       auto* s6 = reinterpret_cast<struct sockaddr_in6*>(p->ifa_addr);
-      if (IN6_IS_ADDR_LINKLOCAL(&s6->sin6_addr)) continue;  // fe80:: は到達性が乏しい
+      if (IN6_IS_ADDR_LINKLOCAL(&s6->sin6_addr)) continue;
       if (::inet_ntop(AF_INET6, &s6->sin6_addr, buf, sizeof(buf))) out.emplace_back(buf);
     }
   }
   freeifaddrs(head);
+#elif defined(__ANDROID__)
+  // Android API 21-23 cannot use the getifaddrs declaration/ABI. Route netlink is stable
+  // there and, unlike SIOCGIFCONF, also returns AF_INET6 addresses.
+  int fd = ::socket(AF_NETLINK, SOCK_RAW, NETLINK_ROUTE);
+  int flagFd = ::socket(AF_INET, SOCK_DGRAM, 0);
+  if (fd >= 0) {
+    struct {
+      struct nlmsghdr hdr;
+      struct ifaddrmsg msg;
+    } req;
+    std::memset(&req, 0, sizeof(req));
+    req.hdr.nlmsg_len = NLMSG_LENGTH(sizeof(struct ifaddrmsg));
+    req.hdr.nlmsg_type = RTM_GETADDR;
+    req.hdr.nlmsg_flags = NLM_F_REQUEST | NLM_F_DUMP;
+    req.hdr.nlmsg_seq = 1;
+    req.msg.ifa_family = AF_UNSPEC;
+    struct sockaddr_nl kernel;
+    std::memset(&kernel, 0, sizeof(kernel));
+    kernel.nl_family = AF_NETLINK;
+    bool done = false;
+    if (::sendto(fd, &req, req.hdr.nlmsg_len, 0,
+                 reinterpret_cast<struct sockaddr*>(&kernel), sizeof(kernel)) >= 0) {
+      while (!done) {
+        char buf[16384];
+        int got = static_cast<int>(::recv(fd, buf, sizeof(buf), 0));
+        if (got <= 0) break;
+        unsigned int remain = static_cast<unsigned int>(got);
+        for (struct nlmsghdr* nh = reinterpret_cast<struct nlmsghdr*>(buf);
+             NLMSG_OK(nh, remain); nh = NLMSG_NEXT(nh, remain)) {
+          if (nh->nlmsg_type == NLMSG_DONE) { done = true; break; }
+          if (nh->nlmsg_type == NLMSG_ERROR) { done = true; break; }
+          if (nh->nlmsg_type != RTM_NEWADDR) continue;
+          auto* info = reinterpret_cast<struct ifaddrmsg*>(NLMSG_DATA(nh));
+          int family = info->ifa_family;
+          if (family != AF_INET && (family != AF_INET6 || !includeV6)) continue;
+          if (info->ifa_scope == RT_SCOPE_LINK || info->ifa_scope == RT_SCOPE_HOST) continue;
+
+          char ifname[IFNAMSIZ] = {0};
+          if (!::if_indextoname(info->ifa_index, ifname)) continue;
+          if (flagFd >= 0) {
+            struct ifreq flags;
+            std::memset(&flags, 0, sizeof(flags));
+            std::strncpy(flags.ifr_name, ifname, IFNAMSIZ - 1);
+            if (::ioctl(flagFd, SIOCGIFFLAGS, &flags) != 0 ||
+                !(flags.ifr_flags & IFF_UP) || (flags.ifr_flags & IFF_LOOPBACK)) continue;
+          }
+
+          const void* address = nullptr;
+          unsigned int addrFlags = info->ifa_flags;
+          bool preferred = true;
+          int attrsLen = IFA_PAYLOAD(nh);
+          for (struct rtattr* attr = IFA_RTA(info); RTA_OK(attr, attrsLen);
+               attr = RTA_NEXT(attr, attrsLen)) {
+            if (attr->rta_type == IFA_FLAGS && RTA_PAYLOAD(attr) >= sizeof(uint32_t))
+              std::memcpy(&addrFlags, RTA_DATA(attr), sizeof(uint32_t));
+            if (attr->rta_type == IFA_CACHEINFO &&
+                RTA_PAYLOAD(attr) >= sizeof(struct ifa_cacheinfo)) {
+              auto* cache = reinterpret_cast<const struct ifa_cacheinfo*>(RTA_DATA(attr));
+              if (cache->ifa_prefered == 0) preferred = false;
+            }
+            if ((family == AF_INET && attr->rta_type == IFA_LOCAL) ||
+                (address == nullptr && attr->rta_type == IFA_ADDRESS))
+              address = RTA_DATA(attr);
+          }
+          if (!preferred || address == nullptr) continue;
+          unsigned int bad = IFA_F_DEPRECATED | IFA_F_TENTATIVE | IFA_F_DADFAILED;
+          if (family == AF_INET6) bad |= IFA_F_TEMPORARY;
+          if ((addrFlags & bad) != 0) continue;
+
+          char ip[INET6_ADDRSTRLEN] = {0};
+          if (family == AF_INET6) {
+            auto* a6 = reinterpret_cast<const struct in6_addr*>(address);
+            if (IN6_IS_ADDR_LINKLOCAL(a6) || IN6_IS_ADDR_LOOPBACK(a6)) continue;
+          }
+          if (::inet_ntop(family, address, ip, sizeof(ip))) {
+            std::string value(ip);
+            if (std::find(out.begin(), out.end(), value) == out.end()) out.push_back(value);
+          }
+        }
+      }
+    }
+    ::close(fd);
+  }
+  if (flagFd >= 0) ::close(flagFd);
+  if (out.empty()) {
+    std::string ip = primaryIPv4ViaRoute();
+    if (!ip.empty()) out.push_back(ip);
+  }
 #else
   (void)includeV6;
-  std::string ip = primaryIPv4ViaRoute();  // getifaddrs 無し → 主 IPv4 のみ
+  std::string ip = primaryIPv4ViaRoute();
   if (!ip.empty()) out.push_back(ip);
 #endif
   return out;
 }
 
-// 主 IPv4。getifaddrs → 失敗ならルート法。両方失敗で空。
+
 inline std::string primaryIPv4() {
   auto v = localAddresses(false);
   if (!v.empty()) return v.front();
   return primaryIPv4ViaRoute();
 }
-// (tcpProbe は closeSocket/setNonBlock/poll 定義後に置く — 下方)
 
-// Winsock 初期化の RAII (POSIX では何もしない)。
-// WSAStartup/WSACleanup は OS 側で参照カウントされるため、
-// ソケットを持つオブジェクト (TcpTransport::Impl / UdpBeacon) が 1 個ずつ持てば足りる。
+
+
+
+
+// WSAStartup/WSACleanup are reference-counted, so each socket-owning component keeps one guard.
 class Init {
  public:
 #if defined(_WIN32)
@@ -181,10 +272,10 @@ inline int poll(pollfd_t* fds, size_t n, int timeout_ms) {
 #endif
 }
 
-// TCP 接続で到達性 + RTT を測る (ICMP 不要 = 特権不要・全 OS で動く)。
-// 接続成功 or 拒否(RST) は「到達」(host は生きている)。timeout は未到達。
-// host は IPv4/IPv6 リテラルでもホスト名でも可 (getaddrinfo)。rtt_ms に往復 ms (未到達で -1)。
-inline bool tcpProbe(const std::string& host, int port, int timeout_ms, int* rtt_ms) {
+// Measure TCP reachability and RTT without requiring ICMP privileges. A refused
+// connection proves that the host is reachable, but not that the endpoint is available.
+inline bool tcpProbePolicy(const std::string& host, int port, int timeout_ms, int* rtt_ms,
+                           bool refused_is_reachable) {
   if (rtt_ms) *rtt_ms = -1;
   struct addrinfo hints;
   std::memset(&hints, 0, sizeof(hints));
@@ -213,8 +304,7 @@ inline bool tcpProbe(const std::string& host, int port, int timeout_ms, int* rtt
         int err = 0;
         socklen_v len = sizeof(err);
         ::getsockopt(fd, SOL_SOCKET, SO_ERROR, reinterpret_cast<char*>(&err), &len);
-        // 接続成功(0) も 拒否(ECONNREFUSED) も「host 到達」とみなす
-        if (err == 0 || err == ECONNREFUSED) reachable = true;
+        if (err == 0 || (refused_is_reachable && err == ECONNREFUSED)) reachable = true;
       }
     }
     closeSocket(fd);
@@ -227,7 +317,16 @@ inline bool tcpProbe(const std::string& host, int port, int timeout_ms, int* rtt
   return reachable;
 }
 
-// 直前のソケット呼び出しのエラーコード (呼び出し直後に取ること)
+inline bool tcpProbe(const std::string& host, int port, int timeout_ms, int* rtt_ms) {
+  return tcpProbePolicy(host, port, timeout_ms, rtt_ms, true);
+}
+
+// Unlike the host probe, this reports true only when the configured service accepts TCP.
+inline bool tcpEndpointProbe(const std::string& host, int port, int timeout_ms, int* rtt_ms) {
+  return tcpProbePolicy(host, port, timeout_ms, rtt_ms, false);
+}
+
+
 inline int lastError() {
 #if defined(_WIN32)
   return ::WSAGetLastError();
@@ -236,7 +335,7 @@ inline int lastError() {
 #endif
 }
 
-// 「今は進めない、後で再試行」系 (EAGAIN/EWOULDBLOCK/EINTR 相当)
+
 inline bool errWouldBlock(int e) {
 #if defined(_WIN32)
   return e == WSAEWOULDBLOCK || e == WSAEINTR;
@@ -245,7 +344,7 @@ inline bool errWouldBlock(int e) {
 #endif
 }
 
-// 非ブロッキング connect の「進行中」判定 (POSIX=EINPROGRESS / Winsock=WSAEWOULDBLOCK)
+
 inline bool errConnectInProgress(int e) {
 #if defined(_WIN32)
   return e == WSAEWOULDBLOCK || e == WSAEINPROGRESS;
@@ -254,7 +353,7 @@ inline bool errConnectInProgress(int e) {
 #endif
 }
 
-// 送受信。負値=エラー (lastError() で詳細)。len は int 上限へクランプ。
+
 inline int sendSome(socket_t s, const void* buf, size_t len) {
   if (len > INT_MAX) len = INT_MAX;
 #if defined(_WIN32)
@@ -291,7 +390,7 @@ inline int recvFrom(socket_t s, void* buf, size_t len) {
 #endif
 }
 
-// setsockopt (Windows の const char* キャストを吸収)
+
 inline bool setSockOpt(socket_t s, int level, int opt, const void* val, socklen_v len) {
 #if defined(_WIN32)
   return ::setsockopt(s, level, opt, static_cast<const char*>(val), len) == 0;
@@ -311,8 +410,8 @@ inline int getSockError(socket_t s) {
   return err;
 }
 
-// TIME_WAIT 再バインド許可。Windows では既定で再バインドできるうえ、
-// SO_REUSEADDR は listen 中ポートの乗っ取りまで許してしまうため付けない。
+
+
 inline bool setReuseAddr(socket_t s) {
 #if defined(_WIN32)
   (void)s;
@@ -323,7 +422,7 @@ inline bool setReuseAddr(socket_t s) {
 #endif
 }
 
-// recv タイムアウト (POSIX=timeval / Windows=DWORD ミリ秒)
+
 inline bool setRecvTimeoutMs(socket_t s, int ms) {
 #if defined(_WIN32)
   DWORD v = static_cast<DWORD>(ms);
@@ -357,9 +456,9 @@ inline bool setMulticastLoop(socket_t s, bool on) {
 #endif
 }
 
-// IO スレッド起床用ペア。out[0]=読み側 (poll 対象)、out[1]=書き側。両方 non-block。
-// POSIX は socketpair、Windows は 127.0.0.1 のループバック TCP ペアで代用
-// (Winsock の pipe は poll 不可のため)。
+
+
+
 inline bool makeWakePair(socket_t out[2]) {
 #if defined(_WIN32)
   out[0] = out[1] = kInvalidSocket;
@@ -368,7 +467,7 @@ inline bool makeWakePair(socket_t out[2]) {
   sockaddr_in a{};
   a.sin_family = AF_INET;
   a.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-  a.sin_port = 0;  // OS 任せ
+  a.sin_port = 0;
   socklen_v alen = sizeof(a);
   socket_t w = kInvalidSocket, r = kInvalidSocket;
   bool ok = ::bind(lst, reinterpret_cast<sockaddr*>(&a), sizeof(a)) == 0 &&
@@ -406,13 +505,13 @@ inline bool makeWakePair(socket_t out[2]) {
 #endif
 }
 
-// 起床通知 (1 byte 書く)。バッファ満杯 = 既に起床要求済みなので失敗は無視してよい。
+
 inline void wakeSignal(socket_t s) {
   const char b = 'w';
   (void)sendSome(s, &b, 1);
 }
 
-// 起床通知の排水 (読み尽くす)
+
 inline void wakeDrain(socket_t s) {
   char buf[256];
   while (recvSome(s, buf, sizeof(buf)) > 0) {

@@ -1,5 +1,5 @@
-// 時計の注入点。実機は RealClock、テスト/シミュレーションは SimClock。
-// wallMs は旧端末では大きく狂い得る前提 (CMOS 電池切れ等) — 順序付けには HLC を使うこと。
+
+
 #pragma once
 
 #include <atomic>
@@ -11,8 +11,8 @@ namespace db {
 class IClock {
  public:
   virtual ~IClock() = default;
-  virtual int64_t wallMs() = 0;  // epoch ms (信頼しない)
-  virtual int64_t monoMs() = 0;  // 単調増加 ms (タイマー・心跳用)
+  virtual int64_t wallMs() = 0;
+  virtual int64_t monoMs() = 0;
 };
 
 class RealClock : public IClock {
@@ -29,7 +29,7 @@ class RealClock : public IClock {
   }
 };
 
-// テスト用: 手動で進める。wall と mono は独立に操作可能 (時計跳び注入)。
+
 class SimClock : public IClock {
  public:
   explicit SimClock(int64_t wall_start_ms = 1'700'000'000'000LL, int64_t mono_start_ms = 0)
@@ -40,7 +40,7 @@ class SimClock : public IClock {
     mono_ += ms;
     wall_ += ms;
   }
-  void setWall(int64_t ms) { wall_ = ms; }  // 時計跳びの注入
+  void setWall(int64_t ms) { wall_ = ms; }
   void setMono(int64_t ms) { mono_ = ms; }
 
  private:

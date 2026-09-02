@@ -1,9 +1,9 @@
-// Media Foundation H.264 encoder MFT による実装 (WIN32 のみ — CMake が除外制御)。
-//   スレッド内で COM/MF を初期化 (camera_win と同じ流儀)、MFTEnumEx で
-//   HW (async MFT) → SW (sync MFT) の順に encoder を選び、NV12 を食わせて
-//   AnnexB を取り出す。async MFT は METransformNeedInput/HaveOutput 駆動。
-// ※ mingw クロスでコンパイルが通ることを確認済み。実動作 (HW 選択・色・レート) は
-//   Windows VM / 実機 (Toughpad) 検証待ち。
+
+
+
+
+
+
 #include "media/encoder_win.h"
 
 #include <mfapi.h>
@@ -26,7 +26,7 @@ namespace {
 
 constexpr const char* kTag = "encoder";
 
-// 最小 COM スマートポインタ (camera_win.cpp と同じ最小実装 — WRL 非依存)
+
 template <typename T>
 class ComPtr {
  public:
@@ -58,8 +58,8 @@ std::string hrStr(HRESULT hr) {
   return buf;
 }
 
-// codecapi の GUID は mingw の import lib に無いことがある — 値を自前で実体化
-// (codecapi.h の STATIC_CODECAPI_* と同値)。
+
+
 const GUID kAVEncCommonRateControlMode = {
     0x1c0608e9, 0x370c, 0x4710, {0x8a, 0x58, 0xcb, 0x61, 0x81, 0xc4, 0x24, 0x23}};
 const GUID kAVEncCommonMeanBitRate = {
@@ -70,7 +70,7 @@ const GUID kAVLowLatencyMode = {
     0x9c27891a, 0xed7a, 0x40e1, {0x88, 0xe8, 0xb2, 0x27, 0x27, 0xa0, 0x24, 0xee}};
 constexpr UINT32 kRateControlCbr = 0;  // eAVEncCommonRateControlMode_CBR
 
-// YUY2 → NV12 (色度は偶数行から間引き — 表示用途に十分な簡易変換)
+
 void yuy2ToNv12(const uint8_t* src, int w, int h, int stride, uint8_t* dst) {
   uint8_t* y = dst;
   uint8_t* uv = dst + static_cast<size_t>(w) * h;
@@ -87,7 +87,7 @@ void yuy2ToNv12(const uint8_t* src, int w, int h, int stride, uint8_t* dst) {
   }
 }
 
-// NV12 の stride 詰め直し (stride == w ならそのままコピー)
+
 void packNv12(const uint8_t* src, int w, int h, int stride, uint8_t* dst) {
   for (int r = 0; r < h; r++)
     std::memcpy(dst + static_cast<size_t>(r) * w, src + static_cast<size_t>(r) * stride, w);
@@ -97,17 +97,17 @@ void packNv12(const uint8_t* src, int w, int h, int stride, uint8_t* dst) {
     std::memcpy(duv + static_cast<size_t>(r) * w, suv + static_cast<size_t>(r) * stride, w);
 }
 
-// エンコーダ MFT の器 (1 回の稼働ぶんの状態)
+
 struct Mft {
   ComPtr<IMFTransform> xf;
-  ComPtr<IMFMediaEventGenerator> gen;  // async MFT のみ
+  ComPtr<IMFMediaEventGenerator> gen;
   bool async = false;
-  bool provides_samples = false;  // MFT が出力サンプルを自前確保するか
+  bool provides_samples = false;
   DWORD in_id = 0, out_id = 0;
-  DWORD out_size = 0;  // 呼び出し側確保の場合のバッファサイズ
+  DWORD out_size = 0;
 };
 
-// HW (async) → SW (sync) の順で H.264 encoder MFT を作る
+
 bool createMft(Mft* m) {
   MFT_REGISTER_TYPE_INFO tin{MFMediaType_Video, MFVideoFormat_NV12};
   MFT_REGISTER_TYPE_INFO tout{MFMediaType_Video, MFVideoFormat_H264};
@@ -135,7 +135,7 @@ bool createMft(Mft* m) {
   }
   if (!m->xf) return false;
 
-  // async MFT (HW) はアンロック + イベント駆動が必須
+
   ComPtr<IMFAttributes> attrs;
   if (SUCCEEDED(m->xf->GetAttributes(attrs.put())) && attrs) {
     UINT32 is_async = 0;
@@ -144,12 +144,12 @@ bool createMft(Mft* m) {
       m->async = true;
       attrs->SetUINT32(MF_TRANSFORM_ASYNC_UNLOCK, TRUE);
       if (FAILED(m->xf->QueryInterface(IID_PPV_ARGS(m->gen.put())))) {
-        DB_LOGE(kTag, "async MFT だが IMFMediaEventGenerator が取れない");
+        DB_LOGE(kTag, "asynchronous MFT does not expose IMFMediaEventGenerator");
         return false;
       }
     }
   }
-  // ストリーム ID (E_NOTIMPL = 固定 0/0)
+
   DWORD ins = 0, outs = 0;
   if (SUCCEEDED(m->xf->GetStreamCount(&ins, &outs)) && (ins > 0 || outs > 0)) {
     DWORD in_ids[1] = {0}, out_ids[1] = {0};
@@ -161,7 +161,7 @@ bool createMft(Mft* m) {
   return true;
 }
 
-// メディアタイプ設定 (出力 H264 → 入力 NV12 の順 — encoder の作法) + レート制御
+
 bool configureMft(Mft* m, int w, int h, const EncoderWin::Params& p) {
   ComPtr<IMFMediaType> out;
   HRESULT hr = MFCreateMediaType(out.put());
@@ -173,10 +173,10 @@ bool configureMft(Mft* m, int w, int h, const EncoderWin::Params& p) {
   MFSetAttributeRatio(out.get(), MF_MT_FRAME_RATE, static_cast<UINT32>(p.fps), 1);
   MFSetAttributeRatio(out.get(), MF_MT_PIXEL_ASPECT_RATIO, 1, 1);
   out->SetUINT32(MF_MT_INTERLACE_MODE, MFVideoInterlace_Progressive);
-  out->SetUINT32(MF_MT_MPEG2_PROFILE, 66);  // eAVEncH264VProfile_Base (旧機/MSE 互換)
+  out->SetUINT32(MF_MT_MPEG2_PROFILE, 66);
   hr = m->xf->SetOutputType(m->out_id, out.get(), 0);
   if (FAILED(hr)) {
-    DB_LOGE(kTag, "SetOutputType 失敗: " + hrStr(hr));
+    DB_LOGE(kTag, "SetOutputType failed: " + hrStr(hr));
     return false;
   }
   ComPtr<IMFMediaType> in;
@@ -190,10 +190,10 @@ bool configureMft(Mft* m, int w, int h, const EncoderWin::Params& p) {
   in->SetUINT32(MF_MT_DEFAULT_STRIDE, static_cast<UINT32>(w));
   hr = m->xf->SetInputType(m->in_id, in.get(), 0);
   if (FAILED(hr)) {
-    DB_LOGE(kTag, "SetInputType 失敗: " + hrStr(hr));
+    DB_LOGE(kTag, "SetInputType failed: " + hrStr(hr));
     return false;
   }
-  // 任意の細目 (CBR / GOP / 低遅延) — 対応しない MFT では黙って無視
+
   ComPtr<ICodecAPI> capi;
   if (SUCCEEDED(m->xf->QueryInterface(IID_ICodecAPI, reinterpret_cast<void**>(capi.put())))) {
     VARIANT v;
@@ -214,7 +214,7 @@ bool configureMft(Mft* m, int w, int h, const EncoderWin::Params& p) {
   MFT_OUTPUT_STREAM_INFO osi{};
   if (SUCCEEDED(m->xf->GetOutputStreamInfo(m->out_id, &osi))) {
     m->provides_samples = (osi.dwFlags & MFT_OUTPUT_STREAM_PROVIDES_SAMPLES) != 0;
-    m->out_size = osi.cbSize ? osi.cbSize : static_cast<DWORD>(w) * h;  // 保険
+    m->out_size = osi.cbSize ? osi.cbSize : static_cast<DWORD>(w) * h;
   } else {
     m->out_size = static_cast<DWORD>(w) * h;
   }
@@ -223,7 +223,7 @@ bool configureMft(Mft* m, int w, int h, const EncoderWin::Params& p) {
   return true;
 }
 
-// NV12 フレーム → IMFSample (ts は ms → 100ns)
+
 bool makeSample(const RawFrame& f, int fps, IMFSample** out) {
   const DWORD size = static_cast<DWORD>(f.data.size());
   ComPtr<IMFSample> sample;
@@ -247,7 +247,7 @@ bool makeSample(const RawFrame& f, int fps, IMFSample** out) {
 }  // namespace
 
 void EncoderWin::start(const Params& p) {
-  stop();  // 再起動安全
+  stop();
   params_ = p;
   {
     std::lock_guard<std::mutex> lk(mu_);
@@ -266,8 +266,8 @@ void EncoderWin::stop() {
 
 void EncoderWin::feed(const RawFrame& f) {
   if (!running_.load()) return;
-  if (f.format != 1 && f.format != 2) return;  // NV12/YUY2 のみ (camera_win の交渉結果)
-  // fps 間引き (採集は MJPEG 用より速いことがある)
+  if (f.format != 1 && f.format != 2) return;
+
   const int64_t interval = 1000 / (params_.fps > 0 ? params_.fps : 25);
   if (last_fed_ms_ && f.ts_ms - last_fed_ms_ < interval) return;
   last_fed_ms_ = f.ts_ms;
@@ -286,7 +286,7 @@ void EncoderWin::feed(const RawFrame& f) {
   }
   {
     std::lock_guard<std::mutex> lk(mu_);
-    if (queue_.size() >= 2) queue_.pop_front();  // 遅延蓄積より最新優先 (ライブ専用)
+    if (queue_.size() >= 2) queue_.pop_front();
     queue_.push_back(std::move(nv12));
   }
   cv_.notify_all();
@@ -307,7 +307,7 @@ void EncoderWin::run() {
   bool co_ok = SUCCEEDED(co);
   HRESULT hr = MFStartup(MF_VERSION, MFSTARTUP_LITE);
   if (FAILED(hr)) {
-    DB_LOGE(kTag, "MFStartup 失敗: " + hrStr(hr));
+    DB_LOGE(kTag, "MFStartup failed: " + hrStr(hr));
     if (co_ok) ::CoUninitialize();
     running_ = false;
     return;
@@ -316,13 +316,13 @@ void EncoderWin::run() {
     Mft mft;
     bool ready = false;
     int w = 0, h = 0;
-    long need_input = 0;  // async: METransformNeedInput の未消化数
+    long need_input = 0;
 
-    // 出力を 1 個取り出して out_ へ流す。false = 出力なし (need more input)。
+
     auto drainOne = [&]() -> bool {
       MFT_OUTPUT_DATA_BUFFER ob{};
       ob.dwStreamID = mft.out_id;
-      ComPtr<IMFSample> own;  // 呼び出し側確保の場合のみ
+      ComPtr<IMFSample> own;
       if (!mft.provides_samples) {
         ComPtr<IMFMediaBuffer> buf;
         if (FAILED(MFCreateSample(own.put()))) return false;
@@ -335,7 +335,7 @@ void EncoderWin::run() {
       if (ob.pEvents) ob.pEvents->Release();
       if (ohr == MF_E_TRANSFORM_NEED_MORE_INPUT) return false;
       if (FAILED(ohr)) {
-        DB_LOGE(kTag, "ProcessOutput 失敗: " + hrStr(ohr));
+        DB_LOGE(kTag, "ProcessOutput failed: " + hrStr(ohr));
         running_ = false;
         return false;
       }
@@ -354,7 +354,7 @@ void EncoderWin::run() {
           cbuf->Unlock();
         }
       }
-      if (mft.provides_samples && s) s->Release();  // MFT 確保ぶんはこちらで解放
+      if (mft.provides_samples && s) s->Release();
       return true;
     };
 
@@ -363,7 +363,7 @@ void EncoderWin::run() {
       if (!makeSample(f, params_.fps, sample.put())) return;
       HRESULT ihr = mft.xf->ProcessInput(mft.in_id, sample.get(), 0);
       if (FAILED(ihr) && ihr != MF_E_NOTACCEPTING)
-        DB_LOGW(kTag, "ProcessInput 失敗: " + hrStr(ihr));
+        DB_LOGW(kTag, "ProcessInput failed: " + hrStr(ihr));
     };
 
     while (running_.load()) {
@@ -373,21 +373,21 @@ void EncoderWin::run() {
         w = f.w;
         h = f.h;
         if (!createMft(&mft) || !configureMft(&mft, w, h, params_)) {
-          DB_LOGE(kTag, "H.264 encoder MFT を初期化できない — 硬編なし (MJPEG のみ)");
+          DB_LOGE(kTag, "cannot initialize an H.264 encoder MFT; falling back to MJPEG");
           running_ = false;
           break;
         }
-        DB_LOGI(kTag, "H.264 エンコード開始 " + std::to_string(w) + "x" + std::to_string(h) +
+        DB_LOGI(kTag, "H.264 encoding started " + std::to_string(w) + "x" + std::to_string(h) +
                           " @" + std::to_string(params_.fps) + "fps " +
                           std::to_string(params_.bitrate_kbps) + "kbps" +
                           (mft.async ? " (async)" : " (sync)"));
         ready = true;
         if (!mft.async) feedOne(f);
-        // async は NeedInput が来るまでフレームを待たせる (このフレームは捨てる)
+
         continue;
       }
       if (mft.async) {
-        // イベント駆動: NO_WAIT で回し、input 要求が立っていればフレームを待つ
+
         ComPtr<IMFMediaEvent> ev;
         HRESULT ehr = mft.gen->GetEvent(MF_EVENT_FLAG_NO_WAIT, ev.put());
         if (ehr == S_OK && ev) {
@@ -407,7 +407,7 @@ void EncoderWin::run() {
             need_input--;
           }
         } else {
-          ::Sleep(5);  // イベント待ち (GetEvent ブロックは stop に応答できないため)
+          ::Sleep(5);
         }
       } else {
         RawFrame f;
@@ -421,11 +421,11 @@ void EncoderWin::run() {
       mft.xf->ProcessMessage(MFT_MESSAGE_NOTIFY_END_OF_STREAM, 0);
       mft.xf->ProcessMessage(MFT_MESSAGE_COMMAND_FLUSH, 0);
     }
-  }  // MFT をここで解放してから MFShutdown
+  }
   MFShutdown();
   if (co_ok) ::CoUninitialize();
   running_ = false;
-  DB_LOGI(kTag, "エンコードスレッド終了");
+  DB_LOGI(kTag, "encoding thread stopped");
 }
 
 }  // namespace db

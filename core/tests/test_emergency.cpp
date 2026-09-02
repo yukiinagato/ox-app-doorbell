@@ -1,7 +1,7 @@
-// SOS 緊急モードの統合テスト。
-//  - InMemNet + SimClock 共有 Runloop: 発報/解除の全ノード複製と uiNotify
-//  - 永続 Store: 再起動後 (イベント再生) の状態復元
-//  - 実 TCP + HTTP: /api/emergency (admin) と /api/panel/emergency (panel token, トリガのみ)
+
+
+
+
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
@@ -16,8 +16,11 @@
 #include "doctest.h"
 #include "mesh/mesh.h"
 #include "node/node.h"
+#include "store/store.h"
 #include "util/clock.h"
 #include "util/common.h"
+#include "util/hlc.h"
+#include "util/ids.h"
 #include "util/json.h"
 #include "util/runloop.h"
 
@@ -48,7 +51,7 @@ struct EmFleet {
   struct N {
     std::unique_ptr<Node> node;
     std::vector<std::string> ui;
-    // {"t":"emergency","active":<active>} の件数
+
     size_t emCount(bool active) const {
       size_t n = 0;
       for (const auto& e : ui) {
@@ -72,7 +75,7 @@ struct EmFleet {
     o.listen_addr = addr;
     o.advertise_addr = addr;
     o.psk = psk;
-    o.enable_beacon = false;  // 実 beacon 禁止 (稼働 fleet への迷入防止)
+    o.enable_beacon = false;
     o.http_port = 0;
     o.seed_default_config = seed_cfg;
     o.mesh_timing_template = timing();
@@ -86,6 +89,7 @@ struct EmFleet {
     N* raw = n.get();
     n->node.reset(new Node(o, std::move(d)));
     n->node->setUiEventCb([raw](const std::string& e) { raw->ui.push_back(e); });
+    n->node->setRuntimeCapabilities(R"({"features":{"device_alert_v1":true}})");
     nodes.push_back(std::move(n));
     return *nodes.back();
   }
@@ -106,7 +110,7 @@ bool statusEmergency(Node& node) {
 
 }  // namespace
 
-TEST_CASE("emergency: 発報 → 両ノード ui active=true → 解除 → false") {
+TEST_CASE("emergency: activation and clearing update UI state on both nodes") {
   EmFleet f;
   auto& a = f.add("A:1", "front", "door_station", "d_front", true);
   auto& b = f.add("B:1", "kitchen", "indoor_panel", "", false);
@@ -114,21 +118,29 @@ TEST_CASE("emergency: 発報 → 両ノード ui active=true → 解除 → fals
   REQUIRE(b.node->start());
   f.run(1500);
 
-  // 起動直後の初期状態は inactive (壳が初期状態を受け取れる)
+
   CHECK(a.emCount(false) >= 1);
   CHECK(b.emCount(false) >= 1);
   CHECK(a.emCount(true) == 0);
   CHECK(statusEmergency(*a.node) == false);
   const size_t a0 = a.emCount(false), b0 = b.emCount(false);
 
-  // B (室内機) が発報 → 全ノードで active=true がちょうど 1 回
+
   b.node->setEmergency(true, "panel");
   f.run(800);
   CHECK(a.emCount(true) == 1);
   CHECK(b.emCount(true) == 1);
   CHECK(statusEmergency(*a.node) == true);
   CHECK(statusEmergency(*b.node) == true);
-  // イベントとしても両ノードに届く
+  size_t delivery_results = 0;
+  for (const auto& raw : a.ui) {
+    auto event = json::parse(raw);
+    if (event && json::getString(event.get(), "t") == "event" &&
+        json::getString(event.get(), "type") == "delivery_result")
+      ++delivery_results;
+  }
+  CHECK(delivery_results >= 2);  // one local-shell dispatch record per targeted Core node
+
   {
     size_t n = 0;
     for (const auto& e : a.ui) {
@@ -140,13 +152,13 @@ TEST_CASE("emergency: 発報 → 両ノード ui active=true → 解除 → fals
     CHECK(n == 1);
   }
 
-  // 再発報 (同状態) は遷移ではない → uiNotify は増えない
+
   b.node->setEmergency(true, "panel");
   f.run(500);
   CHECK(a.emCount(true) == 1);
   CHECK(b.emCount(true) == 1);
 
-  // A 側から解除 → 全ノード false
+
   a.node->setEmergency(false, "admin");
   f.run(800);
   CHECK(a.emCount(false) == a0 + 1);
@@ -158,7 +170,76 @@ TEST_CASE("emergency: 発報 → 両ノード ui active=true → 解除 → fals
   b.node->stop();
 }
 
-TEST_CASE("emergency: 再起動後 (イベント再生) に状態が復元される") {
+TEST_CASE("emergency: state replication is independent from configurable alert recipients") {
+  EmFleet f;
+  auto& door = f.add("A:1", "front", "door_station", "d_front", true);
+  REQUIRE(door.node->start());
+  f.run(300);
+
+  door.node->setConfigKey(
+      "trigger_rules.r_sos_default_on",
+      "{\"enabled\":true,\"when\":{\"type\":\"emergency_on\"},\"actions\":[{"
+      "\"type\":\"device_alert\",\"targets\":{\"roles\":[\"indoor_panel\"]},"
+      "\"channels\":[\"in_app\"]}]}");
+  f.run(50);
+  door.node->setEmergency(true, "test");
+  f.run(300);
+  CHECK(statusEmergency(*door.node) == true);
+  CHECK(door.emCount(true) == 0);  // role target excludes the door station
+
+  door.node->setEmergency(false, "test");
+  f.run(300);
+  door.node->setConfigKey(
+      "trigger_rules.r_sos_default_on",
+      "{\"enabled\":true,\"when\":{\"type\":\"emergency_on\"},\"actions\":[{"
+      "\"type\":\"device_alert\",\"targets\":{\"roles\":[]},\"channels\":[]}]}");
+  f.run(50);
+  door.node->setEmergency(true, "test");
+  f.run(300);
+  CHECK(statusEmergency(*door.node) == true);
+  CHECK(door.emCount(true) == 0);  // an explicit zero-recipient/silent rule is valid
+
+  door.node->setEmergency(false, "test");
+  f.run(300);
+  door.node->setConfigKey(
+      "trigger_rules.r_sos_default_on",
+      "{\"enabled\":true,\"when\":{\"type\":\"emergency_on\"},\"actions\":[{"
+      "\"type\":\"device_alert\",\"targets\":{\"web_subscription_groups\":[\"guards\"]},"
+      "\"channels\":[\"in_app\"],\"presentation\":{\"background\":\"#102040\","
+      "\"foreground\":\"#FFFFFF\",\"accent\":\"#FFD166\"}}]}");
+  f.run(50);
+  door.node->setEmergency(true, "test");
+  f.run(300);
+  CHECK(statusEmergency(*door.node) == true);
+  CHECK(door.emCount(true) == 0);  // an explicit Web-only target never expands to native shells
+
+  door.node->setEmergency(false, "test");
+  f.run(300);
+  door.node->setConfigKey(
+      "trigger_rules.r_sos_default_on",
+      "{\"enabled\":true,\"when\":{\"type\":\"emergency_on\"},\"actions\":[{"
+      "\"type\":\"device_alert\",\"channels\":[\"in_app\"],\"presentation\":{"
+      "\"background\":\"#102040\",\"foreground\":\"#FFFFFF\","
+      "\"accent\":\"#FFD166\"}}]}");
+  f.run(50);
+  door.node->setEmergency(true, "test");
+  f.run(300);
+  bool palette_seen = false;
+  for (const auto& raw : door.ui) {
+    auto event = json::parse(raw);
+    if (!event || json::getString(event.get(), "t") != "emergency" ||
+        !json::getBool(event.get(), "active"))
+      continue;
+    palette_seen = json::getString(event.get(), "background") == "#102040" &&
+                   json::getString(event.get(), "foreground") == "#FFFFFF" &&
+                   json::getString(event.get(), "accent") == "#FFD166";
+  }
+  CHECK(palette_seen);
+
+  door.node->stop();
+}
+
+TEST_CASE("emergency: event replay restores state after restart") {
   const std::string dir = "tmp_test_emergency_" + std::to_string(::getpid());
 
   {
@@ -172,7 +253,7 @@ TEST_CASE("emergency: 再起動後 (イベント再生) に状態が復元され
     a.node->stop();
   }
 
-  // 再起動 (同じ data_dir) → 起動直後の uiNotify で active=true が届く
+
   {
     EmFleet f;
     auto& a = f.add("A:1", "front", "door_station", "d_front", false, dir);
@@ -182,7 +263,7 @@ TEST_CASE("emergency: 再起動後 (イベント再生) に状態が復元され
     CHECK(a.emCount(false) == 0);
     CHECK(statusEmergency(*a.node) == true);
 
-    // 解除 → 再々起動では inactive で復元
+
     a.node->setEmergency(false, "panel");
     f.run(500);
     CHECK(statusEmergency(*a.node) == false);
@@ -199,13 +280,106 @@ TEST_CASE("emergency: 再起動後 (イベント再生) に状態が復元され
     a.node->stop();
   }
 
-  // 後始末 (best-effort)
+
   for (const char* n : {"doorbell.db", "doorbell.db-wal", "doorbell.db-shm"})
     std::remove((dir + "/" + n).c_str());
   ::rmdir(dir.c_str());
 }
 
-// ---------- 実 TCP + HTTP: admin / panel API ----------
+TEST_CASE("emergency: startup does not present an older recovered activation over a newer clear") {
+  const std::string dir =
+      tempDir() + "/doorbell_stale_emergency_" + genTokenHex(8);
+  REQUIRE(makeDir(dir));
+  const std::string db_path = dir + "/doorbell.db";
+
+  EventRecord cleared;
+  cleared.origin = "cccccccc2222";
+  cleared.seq = 1;
+  cleared.type = "emergency_cancel";
+  cleared.device = cleared.origin;
+  cleared.hlc = HlcClock::format(20'000, 0, "cccccccc");
+  cleared.wall_ms = 20'000;
+  cleared.payload_json = R"({"schema_version":2,"source":"cccccccc2222"})";
+
+  EventRecord gap;
+  gap.origin = "bbbbbbbb1111";
+  gap.seq = 1;
+  gap.type = "motion";
+  gap.door = "d_front";
+  gap.device = gap.origin;
+  gap.hlc = HlcClock::format(5'000, 0, "bbbbbbbb");
+  gap.wall_ms = 5'000;
+  gap.payload_json = "{}";
+
+  EventRecord stale_active = gap;
+  stale_active.seq = 2;
+  stale_active.type = "emergency";
+  stale_active.hlc = HlcClock::format(10'000, 0, "bbbbbbbb");
+  stale_active.wall_ms = 10'000;
+  stale_active.payload_json =
+      R"({"schema_version":2,"source":"bbbbbbbb1111"})";
+
+  {
+    Store store;
+    REQUIRE(store.open(db_path));
+    LwwEntry stale_rule;
+    stale_rule.key = "trigger_rules.stale_emergency_chime";
+    stale_rule.value_json =
+        R"({"enabled":true,"when":{"type":"emergency_on"},"actions":[{"type":"chime","devices":"all","sound":"stale-marker"}]})";
+    stale_rule.hlc = HlcClock::format(1'000, 0, "dddddddd");
+    stale_rule.author = "dddddddd3333";
+    stale_rule.seq = 1;
+    REQUIRE(store.configPut(stale_rule));
+    REQUIRE(store.eventPut(cleared));
+    REQUIRE(store.eventAckDispatched(cleared.origin, cleared.seq));
+    REQUIRE(store.eventIngest(stale_active));
+    REQUIRE(store.eventIngest(gap));
+    CHECK(store.eventFrontier(stale_active.origin) == 0);
+    CHECK(store.eventDispatchFrontier(stale_active.origin) == 0);
+  }
+
+  {
+    EmFleet fleet;
+    auto& door = fleet.add("A:1", "front", "door_station", "d_front", true, dir);
+    REQUIRE(door.node->start());
+    fleet.loop.pumpDue();
+    CHECK(statusEmergency(*door.node) == false);
+    CHECK(door.emCount(true) == 0);
+    bool stale_chime = false;
+    for (const auto& raw : door.ui) {
+      auto event = json::parse(raw);
+      if (event && json::getString(event.get(), "t") == "chime" &&
+          json::getString(event.get(), "sound") == "stale-marker")
+        stale_chime = true;
+    }
+    CHECK_FALSE(stale_chime);
+    door.node->stop();
+  }
+
+  {
+    Store store;
+    REQUIRE(store.open(db_path));
+    CHECK(store.eventFrontier(stale_active.origin) == 2);
+    CHECK(store.eventDispatchFrontier(stale_active.origin) == 2);
+    const std::string stale_id = stale_active.origin + ":" +
+        std::to_string(stale_active.seq);
+    bool stale_delivery = false;
+    for (const auto& event : store.recentEvents(1000)) {
+      if (event.type != "delivery_result") continue;
+      auto payload = json::parse(event.payload_json);
+      if (payload && json::getString(payload.get(), "source_event_id") == stale_id)
+        stale_delivery = true;
+    }
+    CHECK_FALSE(stale_delivery);
+  }
+
+  for (const char* name : {"doorbell.db", "doorbell.db-wal", "doorbell.db-shm"})
+    std::remove((dir + "/" + name).c_str());
+  ::rmdir((dir + "/assets").c_str());
+  ::rmdir(dir.c_str());
+}
+
+
 
 namespace {
 
@@ -237,7 +411,10 @@ std::string emHttp(int port, const std::string& method, const std::string& path,
   sa.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
   REQUIRE(::connect(fd, reinterpret_cast<sockaddr*>(&sa), sizeof(sa)) == 0);
   std::string r = method + " " + path + " HTTP/1.1\r\nHost: 127.0.0.1\r\n";
-  if (!cookie.empty()) r += "Cookie: " + cookie + "\r\n";
+  if (!cookie.empty()) {
+    if (cookie.rfind("Bearer ", 0) == 0) r += "Authorization: " + cookie + "\r\n";
+    else r += "Cookie: " + cookie + "\r\n";
+  }
   if (!body.empty())
     r += "Content-Type: " + (ctype.empty() ? "application/json" : ctype) +
          "\r\nContent-Length: " + std::to_string(body.size()) + "\r\n";
@@ -258,7 +435,7 @@ std::string emHttp(int port, const std::string& method, const std::string& path,
 
 }  // namespace
 
-TEST_CASE("emergency API: panel トリガ 200 / panel 解除 403 / admin は両方可") {
+TEST_CASE("emergency API: panels may activate, while only admins may clear") {
   std::mt19937 rng(static_cast<uint32_t>(::getpid()) ^ 0xe5e5u);
   int mesh_port = emFreePort(rng);
   int http_port = emFreePort(rng);
@@ -276,19 +453,17 @@ TEST_CASE("emergency API: panel トリガ 200 / panel 解除 403 / admin は両�
   }
   o.http_port = http_port;
   Node node(o);
+  node.setSecureStore(
+      [](const std::string& key) { return key == "panel.test" ? "emergency-panel-token" : ""; },
+      [](const std::string&, const std::string&) { return true; });
   REQUIRE(node.start());
+  node.setConfigKey("panel.token_refs", "[\"secret:panel.test\"]");
+  const std::string panel_auth = "Bearer emergency-panel-token";
 
-  // panel token を設定から取得
-  auto cfg = json::parse(node.configJson());
-  REQUIRE(cfg);
-  cJSON* toks = json::get(json::get(cfg.get(), "panel"), "tokens");
-  REQUIRE(cJSON_GetArraySize(toks) == 1);
-  std::string k = cJSON_GetArrayItem(toks, 0)->valuestring;
 
-  // token 無し → 403 / 発報 → 200
   CHECK(emHttp(http_port, "POST", "/api/panel/emergency").find("403") != std::string::npos);
-  CHECK(emHttp(http_port, "POST", "/api/panel/emergency", "k=" + k,
-               "application/x-www-form-urlencoded")
+  CHECK(emHttp(http_port, "POST", "/api/panel/emergency", "",
+               "application/x-www-form-urlencoded", panel_auth)
             .find("{\"ok\":true}") != std::string::npos);
   {
     auto st = json::parse(node.statusJson());
@@ -296,9 +471,9 @@ TEST_CASE("emergency API: panel トリガ 200 / panel 解除 403 / admin は両�
     CHECK(json::getBool(json::get(st.get(), "emergency"), "active") == true);
   }
 
-  // panel からの解除は 403 (トリガのみ) — 状態は active のまま
-  std::string resp = emHttp(http_port, "POST", "/api/panel/emergency", "k=" + k + "&active=0",
-                            "application/x-www-form-urlencoded");
+
+  std::string resp = emHttp(http_port, "POST", "/api/panel/emergency", "active=0",
+                            "application/x-www-form-urlencoded", panel_auth);
   CHECK(resp.rfind("HTTP/1.1 403", 0) == 0);
   CHECK(resp.find("cancel not allowed") != std::string::npos);
   {
@@ -307,11 +482,11 @@ TEST_CASE("emergency API: panel トリガ 200 / panel 解除 403 / admin は両�
     CHECK(json::getBool(json::get(st.get(), "emergency"), "active") == true);
   }
 
-  // /api/emergency は admin セッションが必要 (未ログイン 401)
+
   CHECK(emHttp(http_port, "POST", "/api/emergency", "{\"active\":false}")
             .rfind("HTTP/1.1 401", 0) == 0);
 
-  // ログイン → admin 解除 → inactive
+
   std::string login = emHttp(http_port, "POST", "/api/login", "{\"password\":\"test123\"}");
   REQUIRE(login.rfind("HTTP/1.1 200", 0) == 0);
   auto cpos = login.find("dbsess=");
@@ -324,7 +499,7 @@ TEST_CASE("emergency API: panel トリガ 200 / panel 解除 403 / admin は両�
     REQUIRE(st);
     CHECK(json::getBool(json::get(st.get(), "emergency"), "active") == false);
   }
-  // active 欠落は 400
+
   CHECK(emHttp(http_port, "POST", "/api/emergency", "{}", "", cookie)
             .find("400") != std::string::npos);
 

@@ -5,15 +5,9 @@
         WindowStyle="None" ResizeMode="NoResize" WindowState="Maximized"
         Topmost="False" Cursor="Arrow" FontFamily="Yu Gothic UI, Meiryo UI, Segoe UI">
     <Grid ClipToBounds="True">
-        <!-- ============ テーマ背景 (display.theme / devices.<self>.local.theme) ============
-             bg_color は Window.Background に、bg_image は自機 httpd の /asset/<hash> から
-             取得して UniformToFill (中央クリップ) で最背面に敷く。夜間 red_tint は最前面の
-             NightTint がそのまま上に重なる (背景が明るくても夜間は暗くなる)。 -->
         <Image x:Name="ThemeBgImage" Stretch="UniformToFill" Visibility="Collapsed"
                IsHitTestVisible="False"/>
 
-        <!-- ============ 待機 ============ -->
-        <!-- 焼付対策: コンテナ全体を pixel_shift_s 毎に ±8px 平行移動する (IdleShift) -->
         <Grid x:Name="IdleView">
             <Grid.RenderTransform>
                 <TranslateTransform x:Name="IdleShift"/>
@@ -33,10 +27,12 @@
             <StackPanel Grid.Row="1" VerticalAlignment="Center" HorizontalAlignment="Center">
                 <Button x:Name="CallButton" Style="{StaticResource BigButton}"
                         MinWidth="420" MinHeight="180" Click="OnCallClick"/>
+                <Button x:Name="OpenMonitorButton" FontSize="22" Padding="28,12"
+                        Margin="0,18,0,0" Background="{StaticResource Card}"
+                        Foreground="{StaticResource Fg}" BorderBrush="{StaticResource Dim}"
+                        Visibility="Collapsed" Click="OnOpenMonitorClick"/>
                 <TextBlock x:Name="TouchHint" FontSize="24" Foreground="{StaticResource Dim}"
                            HorizontalAlignment="Center" Margin="0,26,0,0"/>
-                <!-- SOS: role が emergency.button_on_roles に含まれる時のみ表示。
-                     長押し hold_to_trigger_s 秒で発報 (誤操作防止 — 進捗バー表示) -->
                 <Border x:Name="SosButton" Visibility="Collapsed" Background="#C0392B"
                         CornerRadius="16" Margin="0,44,0,0" Padding="56,18" Cursor="Hand"
                         HorizontalAlignment="Center"
@@ -53,9 +49,6 @@
                     </StackPanel>
                 </Border>
             </StackPanel>
-            <!-- ==== 用件ボタン (config visit_purposes を order 順・2-3 列) ====
-                 1 タップで用件付き按鈴 (db_core_press_purpose)。狭い画面では横スクロール。
-                 ラベルは訪客言語に追従する (BuildPurposeButtons を言語切替でも再実行)。 -->
             <StackPanel x:Name="PurposeSection" Grid.Row="2" Visibility="Collapsed"
                         Margin="0,0,0,12">
                 <TextBlock x:Name="PurposeHint" FontSize="20" Foreground="{StaticResource Dim}"
@@ -66,7 +59,6 @@
                 </ScrollViewer>
             </StackPanel>
 
-            <!-- ==== 訪客言語バー (config ui.languages) + ノード情報 ==== -->
             <Grid Grid.Row="3" Margin="20,0,20,14">
                 <StackPanel x:Name="LangBar" Orientation="Horizontal"
                             HorizontalAlignment="Center" Visibility="Collapsed"/>
@@ -75,26 +67,30 @@
                 <Ellipse x:Name="MeshDot" Width="12" Height="12" Fill="#5DD39E"
                          HorizontalAlignment="Right" VerticalAlignment="Center"/>
             </Grid>
-            <!-- 隠し管理入口 (右上 200x200 を 5 秒内 7 連打) -->
             <Border Width="200" Height="200" Background="Transparent"
                     HorizontalAlignment="Right" VerticalAlignment="Top"
                     MouseLeftButtonDown="OnSecretCorner"/>
         </Grid>
 
-        <!-- ============ 呼び出し中 ============ -->
         <Grid x:Name="CallingView" Visibility="Collapsed" Background="{StaticResource Bg}">
             <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
                 <TextBlock x:Name="CallingText" FontSize="56" FontWeight="Bold"
                            Foreground="{StaticResource Fg}" HorizontalAlignment="Center"/>
                 <Ellipse x:Name="Pulse" Width="140" Height="140" Margin="0,50"
                          Stroke="#4DA3FF" StrokeThickness="6" HorizontalAlignment="Center"/>
+                <StackPanel x:Name="CallingPurposeSection" Visibility="Collapsed" Margin="20,0,20,24">
+                    <TextBlock x:Name="CallingPurposeHint" FontSize="20"
+                               Foreground="{StaticResource Dim}" HorizontalAlignment="Center"
+                               Margin="0,0,0,8"/>
+                    <UniformGrid x:Name="CallingPurposeGrid" Columns="3"
+                                 HorizontalAlignment="Center"/>
+                </StackPanel>
                 <Button x:Name="CancelButton" FontSize="28" Padding="40,16"
                         Background="{StaticResource Card}" Foreground="{StaticResource Fg}"
                         BorderBrush="{StaticResource Dim}" Click="OnCancelClick"/>
             </StackPanel>
         </Grid>
 
-        <!-- ============ クイック返信バナー (最前面オーバーレイ) ============ -->
         <Border x:Name="ReplyBanner" Visibility="Collapsed" VerticalAlignment="Center"
                 HorizontalAlignment="Center" Background="#243040" CornerRadius="20"
                 Padding="60,40" MaxWidth="900">
@@ -107,7 +103,6 @@
             </StackPanel>
         </Border>
 
-        <!-- ============ オフライン ============ -->
         <Border x:Name="OfflineView" Visibility="Collapsed" Background="#B5A21B00">
             <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
                 <TextBlock x:Name="OfflineTitle" FontSize="52" FontWeight="Bold"
@@ -117,11 +112,9 @@
             </StackPanel>
         </Border>
 
-        <!-- ============ 来鈴 (室内機: press イベント受信で全画面) ============
-             門口ライブ (MJPEG 自前デコード — MjpegStreamer) + 応答/モニタ/無視。
-             応答 = 門口機へ直呼 (sip:<host>:47190, X-Doorbell-Mode: answer)。
-             reply イベント / 30 秒タイムアウトで自動クローズ。 -->
         <Grid x:Name="IncomingView" Visibility="Collapsed" Background="#000000">
+            <MediaElement x:Name="IncomingH264" Stretch="Uniform" Visibility="Collapsed"
+                          LoadedBehavior="Manual" UnloadedBehavior="Manual" ScrubbingEnabled="False"/>
             <Image x:Name="IncomingLive" Stretch="Uniform"/>
             <TextBlock x:Name="IncomingNoVideo" FontSize="24" Foreground="{StaticResource Dim}"
                        HorizontalAlignment="Center" VerticalAlignment="Center"/>
@@ -129,8 +122,7 @@
                     HorizontalAlignment="Left" VerticalAlignment="Top" Margin="24">
                 <StackPanel>
                     <TextBlock x:Name="IncomingTitle" FontSize="34" FontWeight="Bold"
-                               Foreground="{StaticResource Fg}"/>
-                    <!-- 用件 / 訪客言語バッジ (press イベント payload 由来) -->
+                               Foreground="{StaticResource Fg}" Background="#0A0D12"/>
                     <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
                         <Border x:Name="PurposeBadge" Visibility="Collapsed" Background="#2A3A4C"
                                 CornerRadius="8" Padding="12,4">
@@ -147,26 +139,29 @@
                                Margin="0,6,0,0" Visibility="Collapsed"/>
                 </StackPanel>
             </Border>
-            <!-- クイック返信 (config quick_replies を order 順・ラベルは訪客言語) -->
             <WrapPanel x:Name="QuickReplyPanel" Orientation="Horizontal"
                        HorizontalAlignment="Center" VerticalAlignment="Bottom"
                        Margin="40,0,40,130" MaxWidth="1200"/>
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Center"
                         VerticalAlignment="Bottom" Margin="0,0,0,44">
                 <Button x:Name="AnswerButton" FontSize="30" FontWeight="Bold" Padding="56,20"
-                        Background="#1E8E4E" Foreground="#FFFFFF" BorderThickness="0"
+                        Background="#187A3C" Foreground="#FFFFFF" BorderThickness="0"
                         Click="OnAnswerClick"/>
                 <Button x:Name="MonitorButton" FontSize="30" Padding="44,20" Margin="24,0,0,0"
                         Background="{StaticResource Card}" Foreground="{StaticResource Fg}"
                         BorderBrush="{StaticResource Dim}" Click="OnMonitorClick"/>
+                <Button x:Name="OpenDoorButton" FontSize="30" Padding="44,20" Margin="24,0,0,0"
+                        Background="#B7791F" Foreground="#FFFFFF" BorderThickness="0"
+                        Click="OnOpenDoorClick"/>
                 <Button x:Name="IgnoreButton" FontSize="30" Padding="44,20" Margin="24,0,0,0"
                         Background="{StaticResource Card}" Foreground="{StaticResource Dim}"
                         BorderBrush="{StaticResource Dim}" Click="OnIgnoreClick"/>
             </StackPanel>
         </Grid>
 
-        <!-- ============ 通話中 (相手映像 = 対称 MJPEG / 網頁通話は /peer-frame.jpg 輪詢) ============ -->
         <Grid x:Name="InCallView" Visibility="Collapsed" Background="#000000">
+            <MediaElement x:Name="PeerH264" Stretch="Uniform" Visibility="Collapsed"
+                          LoadedBehavior="Manual" UnloadedBehavior="Manual" ScrubbingEnabled="False"/>
             <Image x:Name="PeerVideo" Stretch="Uniform"/>
             <Border Background="#C0141B22" CornerRadius="14" Padding="28,12"
                     HorizontalAlignment="Left" VerticalAlignment="Top" Margin="24">
@@ -177,9 +172,28 @@
                     Background="#C0392B" Foreground="#FFFFFF" BorderThickness="0"
                     HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,44"
                     Click="OnEndCallClick"/>
+            <Button x:Name="InCallOpenDoorButton" FontSize="24" Padding="36,14"
+                    Background="#B7791F" Foreground="#FFFFFF" BorderThickness="0"
+                    HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,34,50"
+                    Click="OnOpenDoorClick"/>
         </Grid>
 
-        <!-- ============ スクリーンセーバ (無操作 screensaver_after_s — 黒背景 + 漂う時計) ============ -->
+        <!-- Indoor proactive monitoring selects a door station without requiring a chime. -->
+        <Grid x:Name="MonitorPickerView" Visibility="Collapsed" Background="#E6101418">
+            <Border Background="{StaticResource Card}" CornerRadius="20" Padding="38"
+                    HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="760">
+                <StackPanel>
+                    <TextBlock x:Name="MonitorPickerTitle" FontSize="34" FontWeight="Bold"
+                               Foreground="{StaticResource Fg}" HorizontalAlignment="Center"/>
+                    <StackPanel x:Name="MonitorDoorList" Margin="0,24,0,18"/>
+                    <Button x:Name="MonitorPickerClose" FontSize="24" Padding="34,12"
+                            Background="{StaticResource Card}" Foreground="{StaticResource Fg}"
+                            BorderBrush="{StaticResource Dim}" HorizontalAlignment="Center"
+                            Click="OnMonitorPickerClose"/>
+                </StackPanel>
+            </Border>
+        </Grid>
+
         <Canvas x:Name="ScreensaverView" Visibility="Collapsed" Background="#000000">
             <StackPanel x:Name="SaverBlock" Canvas.Left="120" Canvas.Top="120">
                 <TextBlock x:Name="SaverClock" FontSize="64" FontWeight="Light"
@@ -189,7 +203,6 @@
             </StackPanel>
         </Canvas>
 
-        <!-- ============ 緊急事態 (SOS — 自端末発報 / 他端末発報の受信で表示) ============ -->
         <Grid x:Name="EmergencyView" Visibility="Collapsed" Background="#C62828">
             <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
                 <TextBlock x:Name="EmergencyTitle" FontSize="110" FontWeight="Bold"
@@ -203,7 +216,6 @@
             </StackPanel>
         </Grid>
 
-        <!-- ============ 夜間モード red tint (最前面・非ヒットテスト) ============ -->
         <Border x:Name="NightTint" Visibility="Collapsed" Background="#33FF2200"
                 IsHitTestVisible="False"/>
     </Grid>

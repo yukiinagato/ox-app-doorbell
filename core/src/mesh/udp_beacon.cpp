@@ -1,4 +1,4 @@
-// UDP multicast beacon の実装 (udp_beacon.h 参照)。
+
 #include "mesh/udp_beacon.h"
 
 #include <cstring>
@@ -11,7 +11,7 @@ namespace db {
 
 namespace {
 
-// mac = keyed BLAKE2b(psk, "beacon"||id||addr) の先頭 16B
+
 std::string beaconMac(const std::array<uint8_t, 32>& psk, const std::string& id,
                       const std::string& addr) {
   static const uint8_t kTag[6] = {'b', 'e', 'a', 'c', 'o', 'n'};
@@ -34,13 +34,13 @@ UdpBeacon::UdpBeacon(Runloop& loop, const std::array<uint8_t, 32>& psk, const st
 UdpBeacon::~UdpBeacon() { stop(); }
 
 bool UdpBeacon::openSockets_() {
-  // 送信ソケット
+
   send_fd_ = ::socket(AF_INET, SOCK_DGRAM, 0);
   if (!net::valid(send_fd_)) return false;
-  net::setMulticastTtl(send_fd_, 1);      // 同一 L2 のみ
-  net::setMulticastLoop(send_fd_, true);  // 同一ホスト内テスト用
+  net::setMulticastTtl(send_fd_, 1);
+  net::setMulticastLoop(send_fd_, true);
 
-  // 受信ソケット (ポート共有 + multicast join)
+
   recv_fd_ = ::socket(AF_INET, SOCK_DGRAM, 0);
   if (!net::valid(recv_fd_)) {
     net::closeSocket(send_fd_);
@@ -48,7 +48,7 @@ bool UdpBeacon::openSockets_() {
     return false;
   }
   int yes = 1;
-  // multicast 受信ポートは複数プロセスで共有できる必要がある (Windows も SO_REUSEADDR で可)
+
   net::setSockOpt(recv_fd_, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes));
 #ifdef SO_REUSEPORT
   net::setSockOpt(recv_fd_, SOL_SOCKET, SO_REUSEPORT, &yes, sizeof(yes));
@@ -61,7 +61,7 @@ bool UdpBeacon::openSockets_() {
     DB_LOGW("beacon", "bind failed");
     net::closeSocket(recv_fd_);
     recv_fd_ = net::kInvalidSocket;
-    // 送信専用でも続行 (受信できないだけ)
+
     return true;
   }
   ip_mreq mreq{};
@@ -70,7 +70,7 @@ bool UdpBeacon::openSockets_() {
   if (!net::setSockOpt(recv_fd_, IPPROTO_IP, IP_ADD_MEMBERSHIP, &mreq, sizeof(mreq))) {
     DB_LOGW("beacon", "multicast join failed");
   }
-  // recv タイムアウト (stop の応答性のため)
+
   net::setRecvTimeoutMs(recv_fd_, 200);
   return true;
 }
@@ -91,7 +91,7 @@ void UdpBeacon::announce(const std::string& node_id, const std::string& addr) {
   node_id_ = node_id;
   adv_addr_ = addr;
   if (!net::valid(send_fd_) && !openSockets_()) return;
-  if (timer_id_) return;  // 既に周期送信中
+  if (timer_id_) return;
   sendHello_();
   timer_id_ = loop_.postEvery(period_ms_, [this]() { sendHello_(); });
 }
@@ -109,7 +109,7 @@ void UdpBeacon::setPairFound(std::function<void(const PairBeacon&)> cb) {
 }
 
 void UdpBeacon::sendHello_() {
-  // 未配対ノードは PSK を持たない → 集群 HELLO ではなく平文 PAIR-ANNOUNCE を撒く。
+
   if (pair_on_.load()) {
     sendPairAnnounce_();
     return;
@@ -136,7 +136,7 @@ void UdpBeacon::sendHello_() {
 void UdpBeacon::sendPairAnnounce_() {
   auto o = json::obj();
   json::set(o.get(), "v", int64_t{1});
-  json::set(o.get(), "pair", int64_t{1});  // 未配対告知の目印 (MAC なし)
+  json::set(o.get(), "pair", int64_t{1});
   json::set(o.get(), "id", node_id_);
   json::set(o.get(), "addr", adv_addr_);
   json::set(o.get(), "name", pair_name_);
@@ -160,15 +160,15 @@ void UdpBeacon::recvLoop_() {
   char buf[2048];
   while (!stopping_) {
     int n = net::recvFrom(recv_fd_, buf, sizeof(buf) - 1);
-    if (n <= 0) continue;  // タイムアウト/エラーはループ継続 (stopping_ で抜ける)
+    if (n <= 0) continue;
     buf[n] = '\0';
     json::Doc doc = json::parse(buf);
     if (!doc) continue;
     const std::string id = json::getString(doc.get(), "id");
     const std::string addr = json::getString(doc.get(), "addr");
     if (id.empty() || addr.empty()) continue;
-    if (id == node_id_) continue;  // 自分の告知
-    // 未配対デバイスの PAIR-ANNOUNCE (MAC なし — PSK 非依存)
+    if (id == node_id_) continue;
+
     if (json::getInt(doc.get(), "pair", 0) == 1) {
       auto cb = on_pair_found_;
       if (cb) {
@@ -179,7 +179,7 @@ void UdpBeacon::recvLoop_() {
       continue;
     }
     const std::string mac = json::getString(doc.get(), "mac");
-    if (mac != beaconMac(psk_, id, addr)) continue;  // 他クラスタ/改竄 → 無視
+    if (mac != beaconMac(psk_, id, addr)) continue;
     DiscoveredPeer p{id, addr};
     auto cb = on_found_;
     if (cb) loop_.post([cb, p]() { cb(p); });

@@ -1,15 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- WPF 版 MainWindow.xaml と同じ 4 状態: 待機 / 呼び出し中 / 返信バナー / オフライン。
-     待機画面は上から 時計 / 大ボタン (用件なしの汎用呼出) / 用件ボタン / 訪客言語バー。
-     テーマ背景 (theme_bg) は最背面、夜間 red_tint (night_tint) は最前面に重なる。
-     カメラ Surface は采集維持のため 1dp で残すが、室外機 UI にはプレビュー表示しない。 -->
+<!-- Door-station idle, ringing, reply, and offline views. Camera capture is service-owned. -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/root_view"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@color/bg">
 
-    <!-- テーマ背景画像 (display.theme.bg_image / devices.<self>.local.theme.bg_image) -->
+    <!-- Theme background. -->
     <ImageView
         android:id="@+id/theme_bg"
         android:layout_width="match_parent"
@@ -18,18 +15,7 @@
         android:scaleType="centerCrop"
         android:visibility="gone"/>
 
-    <SurfaceView
-        android:id="@+id/camera_preview"
-        android:layout_width="1dp"
-        android:layout_height="1dp"
-        android:alpha="0"
-        android:layout_gravity="top|end"
-        android:layout_margin="0dp"/>
-
-    <!-- ============ 待機 ============ -->
-    <!-- weight で各段を画面高に比例配分 = どんな画面でも縦方向がはみ出さない。
-         大ボタンは match_parent + 左右マージン + maxWidth で横方向もはみ出さない。
-         訪客は一切スクロール不要で全要素が見え・押せる。 -->
+    <!-- Idle view uses weights so all safety controls remain visible without scrolling. -->
     <LinearLayout
         android:id="@+id/idle_view"
         android:layout_width="match_parent"
@@ -40,7 +26,7 @@
         android:paddingRight="12dp"
         android:paddingBottom="4dp">
 
-        <!-- 時計 (上段) -->
+        <!-- Clock. -->
         <LinearLayout
             android:id="@+id/idle_header"
             android:layout_width="match_parent"
@@ -66,7 +52,7 @@
                 android:textSize="15sp"/>
         </LinearLayout>
 
-        <!-- 大ボタン (中段・最大) -->
+        <!-- Primary call action. -->
         <LinearLayout
             android:id="@+id/call_section"
             android:layout_width="match_parent"
@@ -98,7 +84,7 @@
                 android:textSize="15sp"/>
         </LinearLayout>
 
-        <!-- ==== 用件ボタン (config visit_purposes を order 順・3 列) ==== -->
+        <!-- Visit-purpose actions. -->
         <LinearLayout
             android:id="@+id/purpose_section"
             android:layout_width="match_parent"
@@ -122,7 +108,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="4dp"
                 android:maxLines="1"
-                android:text="@string/purpose_ringing_hint"
+                android:text="@string/calling_title"
                 android:textColor="@color/accent"
                 android:textSize="13sp"/>
             <GridLayout
@@ -134,22 +120,45 @@
                 android:paddingLeft="12dp"
                 android:paddingRight="12dp"
                 android:useDefaultMargins="false"/>
-            <Button
-                android:id="@+id/purpose_skip_button"
+            <LinearLayout
+                style="?android:attr/buttonBarStyle"
                 android:layout_width="match_parent"
-                android:layout_height="56dp"
+                android:layout_height="52dp"
                 android:layout_marginLeft="16dp"
                 android:layout_marginTop="10dp"
                 android:layout_marginRight="16dp"
-                android:background="@drawable/bg_big_button"
-                android:maxLines="2"
-                android:text="@string/purpose_call_without_selection"
-                android:textColor="@color/fg"
-                android:textSize="20sp"
-                android:textStyle="bold"/>
+                android:baselineAligned="false"
+                android:orientation="horizontal">
+                <Button
+                    android:id="@+id/purpose_skip_button"
+                    style="?android:attr/buttonBarButtonStyle"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_marginEnd="4dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/bg_big_button"
+                    android:maxLines="2"
+                    android:text="@string/purpose_skip"
+                    android:textColor="@color/fg"
+                    android:textSize="18sp"
+                    android:textStyle="bold"/>
+                <Button
+                    android:id="@+id/purpose_cancel_button"
+                    style="?android:attr/buttonBarButtonStyle"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_marginStart="4dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/bg_card_button"
+                    android:maxLines="2"
+                    android:text="@string/purpose_cancel_call"
+                    android:textColor="@color/fg"
+                    android:textSize="18sp"
+                    android:visibility="gone"/>
+            </LinearLayout>
         </LinearLayout>
 
-        <!-- ==== 訪客言語バー (config ui.languages) + ノード情報 (下段) ==== -->
+        <!-- Visitor-language controls and node information. -->
         <FrameLayout
             android:layout_width="match_parent"
             android:layout_height="0dp"
@@ -174,7 +183,7 @@
         </FrameLayout>
     </LinearLayout>
 
-    <!-- ============ 呼び出し中 ============ -->
+    <!-- Ringing. -->
     <LinearLayout
         android:id="@+id/calling_view"
         android:layout_width="match_parent"
@@ -213,7 +222,7 @@
             android:textSize="26sp"/>
     </LinearLayout>
 
-    <!-- ============ クイック返信バナー (最前面オーバーレイ) ============ -->
+    <!-- Quick-reply overlay. -->
     <LinearLayout
         android:id="@+id/reply_banner"
         android:layout_width="wrap_content"
@@ -243,7 +252,7 @@
             android:textStyle="bold"/>
     </LinearLayout>
 
-    <!-- ============ オフライン ============ -->
+    <!-- Offline. -->
     <LinearLayout
         android:id="@+id/offline_view"
         android:layout_width="match_parent"
@@ -270,7 +279,7 @@
             android:textSize="24sp"/>
     </LinearLayout>
 
-    <!-- 隠し管理入口 (右上 200dp を 5 秒内 7 連打) -->
+    <!-- Hidden maintenance tap target. -->
     <View
         android:id="@+id/secret_corner"
         android:layout_width="200dp"
@@ -278,7 +287,7 @@
         android:layout_gravity="top|end"
         android:background="@android:color/transparent"/>
 
-    <!-- 夜間モード red tint (最前面・非タッチ。背景画像が明るくても夜間は暗くなる) -->
+    <!-- Non-interactive night tint above theme imagery. -->
     <View
         android:id="@+id/night_tint"
         android:layout_width="match_parent"
@@ -287,4 +296,19 @@
         android:clickable="false"
         android:focusable="false"
         android:visibility="gone"/>
+
+    <Button
+        android:id="@+id/sos_button"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|end"
+        android:layout_margin="16dp"
+        android:background="#B00020"
+        android:focusable="true"
+        android:minWidth="88dp"
+        android:minHeight="56dp"
+        android:text="@string/emergency_button"
+        android:textColor="#FFFFFF"
+        android:textSize="20sp"
+        android:textStyle="bold"/>
 </FrameLayout>

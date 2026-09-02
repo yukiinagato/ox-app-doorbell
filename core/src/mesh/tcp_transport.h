@@ -1,7 +1,8 @@
-// 実機用 TCP トランスポート (POSIX / Winsock2 — 差異は mesh/socket_compat.h に集約)。
-// ストリームを 4B BE length-prefix でフレーム化。
-//  - 専用 IO スレッド 1 本 (poll ループ + wake ペア起床)。コールバックは Runloop に post。
-// スレッド: 公開 API は任意スレッド可 (内部で IO スレッドへ引き渡す)。
+
+
+
+
+// Length-prefixed TCP transport. Socket workers marshal all completion callbacks to Runloop.
 #pragma once
 
 #include <memory>
@@ -17,7 +18,7 @@ class TcpTransport : public ITransport {
   explicit TcpTransport(Runloop& loop);
   ~TcpTransport() override;
 
-  // addr: "host:port"。host は "0.0.0.0" / "127.0.0.1" / IPv4 リテラル。
+
   bool listen(const std::string& addr, std::function<void(ConnPtr)> on_accept) override;
   void stopListening() override;
   void connect(const std::string& addr, std::function<void(ConnPtr)> cb) override;

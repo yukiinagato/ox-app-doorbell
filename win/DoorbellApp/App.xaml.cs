@@ -1,6 +1,6 @@
-// 起動: boot.json (%ProgramData%\Doorbell\boot.json) を読み core を起動、全画面 kiosk へ。
 using System;
 using System.IO;
+using System.Collections.Generic;
 using System.Windows;
 using System.Windows.Threading;
 using DoorbellApp.Core;
@@ -13,46 +13,138 @@ namespace DoorbellApp
         public static CoreClient Core { get; private set; }
         public static string DataDir { get; private set; }
         public static BootConfig Boot { get; private set; }
+        public static bool SafeMode { get; private set; }
+        private WatchdogHeartbeat _heartbeat;
+        private RuntimeProcessState _runtimeProcess;
+        private DispatcherTimer _runtimeStatusTimer;
+        private bool _uiRunning;
 
         protected override void OnStartup(StartupEventArgs e)
         {
             base.OnStartup(e);
             DispatcherUnhandledException += OnUnhandled;
+            SafeMode = e.Args != null && Array.IndexOf(e.Args, "--safe-mode") >= 0;
 
             DataDir = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "Doorbell");
             Directory.CreateDirectory(DataDir);
-            // 前回の管理解錠 flag を掃除 — 再起動でロック状態 (watchdog 前台守衛有効) に戻る
+            _runtimeProcess = RuntimeProcessState.Begin(
+                Path.Combine(DataDir, "runtime-process-v1.json"));
             try { File.Delete(Path.Combine(DataDir, "admin_unlocked.flag")); } catch { }
             Boot = BootConfig.Load(Path.Combine(DataDir, "boot.json"));
             L10n.SetLanguage(Boot.UiLang);
+            if (Boot.SetupRequired)
+            {
+                var setup = new BootstrapSetupWindow(Boot);
+                if (setup.ShowDialog() != true || setup.ResultConfig == null)
+                {
+                    Shutdown(0);
+                    return;
+                }
+                Boot = setup.ResultConfig;
+                L10n.SetLanguage(Boot.UiLang);
+            }
 
             Core = new CoreClient();
+            Core.UiEventReceived += OnCoreLifecycleEvent;
             if (!Core.Start(DataDir, Boot.RawJson))
             {
+                _runtimeProcess.RecordExit("core_start_failed");
                 MessageBox.Show("core の起動に失敗しました。ログを確認してください。", "Doorbell",
                                 MessageBoxButton.OK, MessageBoxImage.Error);
                 Shutdown(1);
                 return;
             }
-            // 文言解決 (i18n_overrides の前段) を core 設定と結線してから画面を作る
+            _heartbeat = new WatchdogHeartbeat();
+            Core.PublishRuntimeContracts(Boot.Role, SafeMode);
+            PublishRuntimeHealth();
             Texts.SetConfig(Core.Config());
             Texts.SetLang(Boot.UiLang);
 
             var w = new MainWindow();
             MainWindow = w;
             w.Show();
+            _uiRunning = true;
+            PublishRuntimeHealth();
+            _runtimeStatusTimer = new DispatcherTimer(
+                TimeSpan.FromSeconds(10), DispatcherPriority.Background,
+                (sender, args) => PublishRuntimeHealth(), Dispatcher);
+            _runtimeStatusTimer.Start();
+        }
+
+        private void PublishRuntimeHealth()
+        {
+            if (Core == null || _runtimeProcess == null) return;
+            Core.PublishRuntimeHealth(Boot.Role, SafeMode, _runtimeProcess.Snapshot(),
+                _heartbeat != null && _heartbeat.Available,
+                _heartbeat == null ? 0L : _heartbeat.LastSignalWallMs, _uiRunning);
+        }
+
+        private void OnCoreLifecycleEvent(UiEvent ev)
+        {
+            if (ev == null) return;
+            if (ev.T == "pairing_persistence_error")
+            {
+                ReportPairingPersistenceFailure("Core secure-store callback failed");
+                return;
+            }
+            if (ev.T != "paired" || ev.Data == null) return;
+            string secretRef = ev.Str("psk_ref");
+            var seeds = new List<string>();
+            object raw;
+            if (ev.Data.TryGetValue("seeds", out raw) && raw is System.Collections.IEnumerable &&
+                !(raw is string))
+                foreach (object value in (System.Collections.IEnumerable)raw)
+                    if (value != null && !string.IsNullOrWhiteSpace(value.ToString()))
+                        seeds.Add(value.ToString());
+            if (secretRef != "secret:mesh.psk")
+            {
+                ReportPairingPersistenceFailure("Core did not confirm secure mesh.psk storage");
+                return;
+            }
+            string updated = BootConfig.PersistPairingReference(Boot.FilePath, seeds);
+            if (updated != null)
+            {
+                Boot = BootConfig.Load(Boot.FilePath);
+                System.Diagnostics.Debug.WriteLine("paired: boot.json persisted atomically");
+            }
+            else
+            {
+                ReportPairingPersistenceFailure("boot.json secure-reference persistence failed");
+            }
+        }
+
+        private void ReportPairingPersistenceFailure(string detail)
+        {
+            System.Diagnostics.Debug.WriteLine("paired: " + detail);
+            try
+            {
+                File.AppendAllText(Path.Combine(DataDir, "pairing-error.log"),
+                    DateTime.UtcNow.ToString("o") + " " + detail + Environment.NewLine);
+            }
+            catch { }
+            Dispatcher.BeginInvoke(new Action(() => MessageBox.Show(MainWindow,
+                "Pairing succeeded but secure persistence failed. The device has not been " +
+                "marked ready; check pairing-error.log and free disk/permissions.",
+                "Doorbell pairing", MessageBoxButton.OK, MessageBoxImage.Error)));
         }
 
         private void OnUnhandled(object sender, DispatcherUnhandledExceptionEventArgs e)
         {
-            // kiosk 機: 例外で固まるより落ちて watchdog に再起動させる
+            _runtimeProcess?.RecordExit("unhandled_exception");
+            PublishRuntimeHealth();
             File.AppendAllText(Path.Combine(DataDir, "crash.log"),
                 DateTime.Now + " " + e.Exception + Environment.NewLine);
+            // Keep the exception unhandled so the service watchdog applies bounded restart policy.
         }
 
         protected override void OnExit(ExitEventArgs e)
         {
+            _runtimeStatusTimer?.Stop();
+            _runtimeProcess?.RecordExit("clean_exit");
+            _uiRunning = false;
+            PublishRuntimeHealth();
+            _heartbeat?.Dispose();
             Core?.Dispose();
             base.OnExit(e);
         }

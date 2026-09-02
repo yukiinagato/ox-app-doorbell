@@ -1,15 +1,3 @@
-// 門口機/室内機メイン画面: 待機 / 呼び出し中 / 通話中 / 返信バナー / スクリーンセーバ /
-// 緊急事態 の状態機 (WPF MainWindow / Android MainActivity と同じ)。
-// core からの UI イベント (state/chime/reply/display/emergency/visitor_lang/…) で遷移する。
-// 個性化: テーマ (display.theme / devices.<自>.local.theme の bg_color + bg_image —
-// 自機 httpd の /asset/<hash>?k=<panel token> から取得) / 訪客言語バー (ui.languages) /
-// 用件ボタン (visit_purposes) / カスタム音声 (audio_path)。
-// 表示制御 ({"t":"display"}): 輝度 = UIScreen.brightness、夜間 red_tint = 全画面赤オーバーレイ、
-// 焼付対策 = pixel_shift_s 毎の ±8px 平行移動 + 無操作 screensaver_after_s で
-// スクリーンセーバ (黒背景 + 低輝度 + 漂う時計)。
-// SOS: 長押し hold_to_trigger_s 秒で db_core_emergency(1)。発報中は全画面赤 + サイレン +
-// 「解除」→ PIN (AdminPinViewController) → db_core_emergency(0)。
-// 来鈴画面 (室内機) は AppDelegate が IncomingViewController を被せる — ここでは扱わない。
 import AudioToolbox
 import AVFoundation
 import UIKit
@@ -18,20 +6,19 @@ final class MainViewController: UIViewController {
 
     private let core: CoreBridge
     private let boot: BootConfig
+    private weak var runtime: RuntimeSupervisor?
     private let texts = Texts()
+    private let styleApplier = UIStyleApplier()
 
-    // ---- 個性化 (テーマ / 訪客言語 / 用件 / カスタム音声) ----
-    private var cfg: [String: Any]?          // 直近の core 設定 (config_changed で差替)
-    private var nodeId = ""                  // 自機 node_id (devices.<id>.local.theme 用)
-    private var panelToken = ""              // config panel.tokens[0] (/asset の ?k=)
-    private var visitorLang = "ja"           // 門口機の表示言語 (訪客言語)
-    private var themeColor: String?          // 適用済み bg_color
-    private var themeHash: String?           // 適用済み bg_image (sha256)
-    private let audio = SirenPlayer()        // reply/chime の audio_path + サイレン
+    private var cfg: [String: Any]?
+    private var nodeId = ""
+    private var visitorLang = "ja"
+    private var themeColor: String?
+    private var themeHash: String?
+    private let audio = SirenPlayer()
     private let callFeedbackAudio = SirenPlayer()
-    private var callTitleOverride: String?   // 用件付き按鈴の「{用件} で呼び出しました」
+    private var callTitleOverride: String?
 
-    // ---- 表示制御の実効値 (core {"t":"display"} / status_json.display 由来) ----
     private var brightness = 70
     private var night = false
     private var redTint = false
@@ -40,43 +27,60 @@ final class MainViewController: UIViewController {
     private var lastActivity = Date()
     private var screensaverOn = false
 
-    // ---- SOS ----
     private var emergencyActive = false
     private var sosHoldS = 3.0
     private var cancelRequiresPin = true
     private var sosDownAt = Date.distantPast
     private var sosHolding = false
 
-    // ---- 通話 (door_station の in_call) ----
     private var inCall = false
     private var peerPollBusy = false
+    private var activeCallId = ""
+    private var activeCallExpiresAtMs: Int64 = 0
+    private var reportedRecoveryCallId = ""
+    private var safeMode = UserDefaults.standard.bool(forKey: "runtime.safe_mode")
+    private var chimeGate = CallChimeRevisionGate()
+    private var h264EncoderFailed = false
+    private var lastEncoderDemand: Bool?
 
-    // ---- カメラ / H.264 (Phase 6a) ----
-    private lazy var camera = CameraFeeder(core: core)
-    private lazy var videoEncoder = VideoEncoderVT(core: core)
+    private lazy var camera = CameraFeeder(core: core) { [weak self] active, state in
+        self?.runtime?.recordCameraRuntime(active: active, state: state)
+    }
+    private lazy var videoEncoder: VideoEncoderVT = {
+        let encoder = VideoEncoderVT(core: core)
+        encoder.runtimeStatus = { [weak self] available, state in
+            guard let self = self else { return }
+            if state == "session_failed" || state == "encode_failed" ||
+                state == "invalid_output" || state == "failed" {
+                self.h264EncoderFailed = true
+            }
+            self.runtime?.recordH264Encode(available: available, state: state)
+        }
+        return encoder
+    }()
 
-    // ---- 隠し管理入口 ----
     private var secretTaps = 0
     private var secretFirst = Date.distantPast
 
-    // ---- タイマ (WPF DispatcherTimer 相当) ----
     private var clockTimer: Timer?
     private var callTimeoutTimer: Timer?
     private var replyTimer: Timer?
     private var pixelShiftTimer: Timer?
     private var saverDriftTimer: Timer?
     private var sosTimer: Timer?
+    private var emergencyPresentationTimer: Timer?
     private var peerPollTimer: Timer?
     private var encoderPollTimer: Timer?
 
-    // ---- UI 部品 ----
     private let themeBg = UIImageView()
     private let idleView = UIView()
     private let clockLabel = UILabel()
     private let dateLabel = UILabel()
     private let callButton = UIButton(type: .system)
+    private let monitorButton = UIButton(type: .system)
     private let touchHint = UILabel()
     private let nodeInfo = UILabel()
+    private let appVersionLabel = UILabel()
     private let purposeSection = UIStackView()
     private let purposeHint = UILabel()
     private let purposeGrid = UIStackView()
@@ -106,7 +110,7 @@ final class MainViewController: UIViewController {
     private let emergencyNote = UILabel()
     private let emergencyCancel = UIButton(type: .system)
 
-    private static let bgColor = UIColor(red: 0.063, green: 0.078, blue: 0.094, alpha: 1) // #101418
+    private static let bgColor = UIColor(red: 0.063, green: 0.078, blue: 0.094, alpha: 1)
     private static let fgColor = UIColor(white: 0.94, alpha: 1)
     private static let dimColor = UIColor(white: 0.62, alpha: 1)
     private static let cardColor = UIColor(white: 1, alpha: 0.10)
@@ -114,15 +118,15 @@ final class MainViewController: UIViewController {
     private static let nightClock = UIColor(red: 0.545, green: 0.141, blue: 0.110, alpha: 1)
     private static let saverClockColor = UIColor(red: 0.224, green: 0.259, blue: 0.298, alpha: 1)
 
-    init(core: CoreBridge, boot: BootConfig) {
+    init(core: CoreBridge, boot: BootConfig, runtime: RuntimeSupervisor?) {
         self.core = core
         self.boot = boot
+        self.runtime = runtime
         super.init(nibName: nil, bundle: nil)
     }
 
     required init?(coder: NSCoder) { fatalError("not supported") }
 
-    // MARK: - ライフサイクル
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -131,31 +135,53 @@ final class MainViewController: UIViewController {
         texts.setLang(visitorLang)
         buildUi()
         refreshNodeInfo()
+        restoreActiveCallIfNeeded()
         if !core.isRunning { offlineView.isHidden = false }
 
         core.addHandler("main") { [weak self] ev in self?.onUiEvent(ev) }
 
-        clockTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+        clockTimer = IOSAvailability.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
             self?.onClockTick()
         }
         updateClock()
-        // H.264 硬編の稼働制御 (Phase 6a): /stream.mp4 の購読者がいる間だけエンコーダを回す
-        encoderPollTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
+        encoderPollTimer = IOSAvailability.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
             self?.encoderPoll()
         }
         requestAvPermissionsThenStartCamera()
+        encoderPoll()
     }
 
-    /// 無操作検出 (DoorbellWindow.sendEvent から全タッチで呼ばれる)。
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        applySemanticStyles()
+    }
+
     func onActivity() {
         lastActivity = Date()
         exitScreensaver()
     }
 
-    // MARK: - UI 構築 (コード UI — Interface Builder 不使用)
+    func enterSafeModeForMemoryPressure() {
+        safeMode = true
+        camera.encoder = nil
+        videoEncoder.stop()
+        camera.stop()
+        themeBg.image = nil
+        themeBg.isHidden = true
+        // The SIP dialog and its End Call control must survive video memory pressure. Drop only
+        // decoder/image state; the user can continue a pure-audio established call or hang it up.
+        peerPollTimer?.invalidate()
+        peerPollTimer = nil
+        inCallStreamer?.stop()
+        inCallStreamer = nil
+        peerVideo.image = nil
+        peerVideo.transform = .identity
+        if inCall { inCallView.isHidden = false }
+        maybeStartCamera()
+    }
+
 
     private func buildUi() {
-        // 最背面: テーマ背景画像
         themeBg.contentMode = .scaleAspectFill
         themeBg.clipsToBounds = true
         themeBg.isHidden = true
@@ -168,7 +194,6 @@ final class MainViewController: UIViewController {
         buildOfflineView()
         buildScreensaver()
 
-        // 夜間 red tint (内容の上・警報の下)
         nightTint.backgroundColor = UIColor(red: 1.0, green: 0.13, blue: 0.0, alpha: 0.20)
         nightTint.isUserInteractionEnabled = false
         nightTint.isHidden = true
@@ -176,7 +201,6 @@ final class MainViewController: UIViewController {
 
         buildEmergencyView()
 
-        // 隠し管理入口 (右上 7 連打 / 5 秒内)
         let secret = UIButton(type: .custom)
         secret.translatesAutoresizingMaskIntoConstraints = false
         secret.addTarget(self, action: #selector(onSecretCorner), for: .touchUpInside)
@@ -219,10 +243,20 @@ final class MainViewController: UIViewController {
         callButton.accessibilityIdentifier = "call_primary"
         callButton.contentEdgeInsets = UIEdgeInsets(top: 26, left: 60, bottom: 26, right: 60)
         callButton.addTarget(self, action: #selector(onCallClick), for: .touchUpInside)
+        callButton.isHidden = boot.role != "door_station"
+
+        monitorButton.titleLabel?.font = .systemFont(ofSize: 24, weight: .semibold)
+        monitorButton.setTitleColor(MainViewController.fgColor, for: .normal)
+        monitorButton.backgroundColor = MainViewController.cardColor
+        monitorButton.layer.cornerRadius = 14
+        monitorButton.contentEdgeInsets = UIEdgeInsets(top: 16, left: 36, bottom: 16, right: 36)
+        monitorButton.addTarget(self, action: #selector(onMonitorOpen), for: .touchUpInside)
+        monitorButton.isHidden = boot.role == "door_station"
 
         touchHint.font = .systemFont(ofSize: 20)
         touchHint.textColor = MainViewController.dimColor
         touchHint.textAlignment = .center
+        touchHint.isHidden = boot.role != "door_station"
 
         purposeHint.font = .systemFont(ofSize: 20)
         purposeHint.textColor = MainViewController.dimColor
@@ -241,12 +275,13 @@ final class MainViewController: UIViewController {
         langBar.alignment = .center
 
         let stack = UIStackView(arrangedSubviews: [clockLabel, dateLabel, callButton, touchHint,
+                                                   monitorButton,
                                                    purposeSection, langBar])
         stack.axis = .vertical
         stack.spacing = 20
         stack.alignment = .center
-        stack.setCustomSpacing(6, after: clockLabel)
-        stack.setCustomSpacing(34, after: dateLabel)
+        IOSAvailability.setCustomSpacing(6, after: clockLabel, in: stack)
+        IOSAvailability.setCustomSpacing(34, after: dateLabel, in: stack)
         stack.translatesAutoresizingMaskIntoConstraints = false
         idleView.addSubview(stack)
         NSLayoutConstraint.activate([
@@ -258,6 +293,20 @@ final class MainViewController: UIViewController {
         nodeInfo.textColor = UIColor(white: 1, alpha: 0.35)
         nodeInfo.translatesAutoresizingMaskIntoConstraints = false
         idleView.addSubview(nodeInfo)
+
+        let appVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "-"
+        let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "-"
+        appVersionLabel.text = "APP v\(appVersion) (\(build))\nCore v…"
+        appVersionLabel.font = .monospacedDigitSystemFont(ofSize: 13, weight: .medium)
+        appVersionLabel.textColor = UIColor(white: 1, alpha: 0.78)
+        appVersionLabel.backgroundColor = UIColor(white: 0, alpha: 0.28)
+        appVersionLabel.layer.cornerRadius = 4
+        appVersionLabel.clipsToBounds = true
+        appVersionLabel.textAlignment = .left
+        appVersionLabel.numberOfLines = 2
+        appVersionLabel.accessibilityIdentifier = "app_version"
+        appVersionLabel.translatesAutoresizingMaskIntoConstraints = false
+        idleView.addSubview(appVersionLabel)
 
         sosButton.setTitle("SOS", for: .normal)
         sosButton.titleLabel?.font = .systemFont(ofSize: 24, weight: .heavy)
@@ -276,10 +325,12 @@ final class MainViewController: UIViewController {
         sosProgress.translatesAutoresizingMaskIntoConstraints = false
         idleView.addSubview(sosProgress)
 
-        let g = view.safeAreaLayoutGuide
+        let g = IOSAvailability.safeAreaLayoutGuide(for: view)
         NSLayoutConstraint.activate([
             nodeInfo.leadingAnchor.constraint(equalTo: g.leadingAnchor, constant: 16),
-            nodeInfo.bottomAnchor.constraint(equalTo: g.bottomAnchor, constant: -12),
+            nodeInfo.bottomAnchor.constraint(equalTo: appVersionLabel.topAnchor, constant: -4),
+            appVersionLabel.leadingAnchor.constraint(equalTo: g.leadingAnchor, constant: 16),
+            appVersionLabel.bottomAnchor.constraint(equalTo: g.bottomAnchor, constant: -8),
             sosButton.trailingAnchor.constraint(equalTo: g.trailingAnchor, constant: -20),
             sosButton.bottomAnchor.constraint(equalTo: g.bottomAnchor, constant: -20),
             sosProgress.leadingAnchor.constraint(equalTo: sosButton.leadingAnchor),
@@ -345,7 +396,7 @@ final class MainViewController: UIViewController {
         endCallButton.translatesAutoresizingMaskIntoConstraints = false
         inCallView.addSubview(endCallButton)
 
-        let g = view.safeAreaLayoutGuide
+        let g = IOSAvailability.safeAreaLayoutGuide(for: view)
         NSLayoutConstraint.activate([
             inCallTitle.topAnchor.constraint(equalTo: g.topAnchor, constant: 18),
             inCallTitle.centerXAnchor.constraint(equalTo: inCallView.centerXAnchor),
@@ -375,7 +426,7 @@ final class MainViewController: UIViewController {
         stack.translatesAutoresizingMaskIntoConstraints = false
         replyBanner.addSubview(stack)
 
-        let g = view.safeAreaLayoutGuide
+        let g = IOSAvailability.safeAreaLayoutGuide(for: view)
         NSLayoutConstraint.activate([
             replyBanner.topAnchor.constraint(equalTo: g.topAnchor, constant: 20),
             replyBanner.centerXAnchor.constraint(equalTo: view.centerXAnchor),
@@ -423,7 +474,6 @@ final class MainViewController: UIViewController {
         stack.alignment = .center
         stack.translatesAutoresizingMaskIntoConstraints = false
         screensaverView.addSubview(stack)
-        // 漂移は center 制約の constant を書き換える
         saverCenterX = stack.centerXAnchor.constraint(equalTo: screensaverView.centerXAnchor)
         saverCenterY = stack.centerYAnchor.constraint(equalTo: screensaverView.centerYAnchor)
         NSLayoutConstraint.activate([saverCenterX!, saverCenterY!])
@@ -462,14 +512,13 @@ final class MainViewController: UIViewController {
         ])
     }
 
-    // MARK: - 文言 (i18n_overrides → Localizable.strings)
 
-    /// 全画面の文言を現在言語で貼り直す。訪客言語の切替でも呼ばれる。
     private func applyStrings() {
         callButton.setTitle(
             texts.t("idle.call_button", doorLabel(boot.door))
                 .trimmingCharacters(in: .whitespaces), for: .normal)
         touchHint.text = texts.t("idle.touch_to_call")
+        monitorButton.setTitle(texts.t("monitor.open"), for: .normal)
         purposeHint.text = texts.t("idle.choose_purpose")
         callingText.text = callTitleOverride ?? texts.t("calling.title")
         cancelButton.setTitle(texts.t("calling.cancel"), for: .normal)
@@ -485,18 +534,15 @@ final class MainViewController: UIViewController {
         emergencyCancel.setTitle(texts.t("emergency.cancel"), for: .normal)
     }
 
-    /// ドアの表示名 (doors.<door>.label.<lang> → ja → door id)。
     private func doorLabel(_ door: String) -> String {
         if door.isEmpty { return "" }
         let entry = ConfigUtil.dig(cfg, "doors.\(door)") as? [String: Any]
         return ConfigUtil.labelOf(entry, texts.lang, door)
     }
 
-    // MARK: - 時計 / ノード情報
 
     private func onClockTick() {
         updateClock()
-        // 無操作 screensaver_after_s でスクリーンセーバへ (待機中のみ)
         if !screensaverOn && !emergencyActive && screensaverAfterS > 0 &&
             !idleView.isHidden && callingView.isHidden && offlineView.isHidden &&
             inCallView.isHidden && presentedViewController == nil &&
@@ -524,29 +570,22 @@ final class MainViewController: UIViewController {
         refreshConfigCache()
         if let st = core.status() {
             if let node = st["node"] as? [String: Any] {
-                nodeInfo.text = "\(ConfigUtil.evStr(node, "name")) · v\(ConfigUtil.evStr(node, "version"))"
+                nodeInfo.text = ConfigUtil.evStr(node, "name")
+                let appVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "-"
+                let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "-"
+                let coreVersion = ConfigUtil.evStr(node, "version")
+                appVersionLabel.text = "APP v\(appVersion) (\(build))\nCore v\(coreVersion.isEmpty ? "-" : coreVersion)"
                 nodeId = ConfigUtil.evStr(node, "id")
             }
-            // 起動直後の {"t":"display"}/{"t":"emergency"} は購読前に流れていることがある —
-            // status_json の同梱値で追い付く
+            // Display state is safe to restore directly. Emergency state is replicated even when
+            // the administrator selected zero presentation channels, so only a rule-produced
+            // device-alert event may restore its UI or sound.
             if let disp = st["display"] as? [String: Any] {
                 applyDisplayValues(disp)
             }
             if let em = st["emergency"] as? [String: Any] {
-                if ConfigUtil.evBool(em, "active") {
-                    let wasActive = emergencyActive
-                    showEmergency()
-                    // 再起動追い付き時もサイレンを鳴らす (カスタム音は状態からは引けない —
-                    // 内蔵サイレンで確実に鳴らす)
-                    if !wasActive {
-                        audio.startSiren(customPath: "",
-                                         volume: ConfigUtil.int(cfg, "emergency.alarm_volume", 100))
-                    }
-                } else {
-                    hideEmergency()
-                }
+                if !ConfigUtil.evBool(em, "active") { hideEmergency() }
             }
-            // 訪客言語の現在値 (status_json visitor_lang.<door>) — 再起動後の追い付き
             if boot.role == "door_station" && !boot.door.isEmpty {
                 let vl = ConfigUtil.str(st, "visitor_lang.\(boot.door)") ?? "ja"
                 setVisitorLang(vl)
@@ -557,27 +596,112 @@ final class MainViewController: UIViewController {
         buildPurposeButtons()
         buildLangBar()
         applyStrings()
+        applySemanticStyles()
     }
 
-    /// core 設定のキャッシュ更新 (Texts の上書き文言もここで差し替える)。
+    private func applySemanticStyles() {
+        let bindings: [(String, UIView)] = [
+            ("call.primary", callButton), ("cancel.call", cancelButton),
+            ("call.end", endCallButton), ("sos.trigger", sosButton),
+            ("sos.cancel", emergencyCancel), ("status.offline", offlineTitle),
+        ]
+        for (id, view) in bindings {
+            styleApplier.apply(config: cfg, nodeId: nodeId, semanticId: id, to: view)
+        }
+        for row in purposeGrid.arrangedSubviews {
+            for button in (row as? UIStackView)?.arrangedSubviews ?? [] {
+                styleApplier.apply(config: cfg, nodeId: nodeId, semanticId: "purpose.button",
+                                   to: button)
+            }
+        }
+    }
+
+    func handleCallRecovery(_ event: [String: Any]) {
+        restoreActiveCallIfNeeded(recoveryEvent: event)
+    }
+
+    private func restoreActiveCallIfNeeded() {
+        restoreActiveCallIfNeeded(recoveryEvent: nil)
+    }
+
+    private func restoreActiveCallIfNeeded(recoveryEvent: [String: Any]?) {
+        let requestedCallId = recoveryEvent.map { ConfigUtil.evStr($0, "call_id") } ?? ""
+        guard !nodeId.isEmpty,
+              let calls = core.status()?["active_calls"] as? [[String: Any]] else {
+            if !requestedCallId.isEmpty { reportRecovery(requestedCallId, restored: false) }
+            return
+        }
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        for call in calls {
+            let callDoor = ConfigUtil.evStr(call, "door")
+            let callId = ConfigUtil.evStr(call, "call_id")
+            if !requestedCallId.isEmpty && callId != requestedCallId { continue }
+            let origin = ConfigUtil.evStr(call, "origin")
+            let eventOwner = recoveryEvent.map { ConfigUtil.evStr($0, "dialog_owner") } ?? ""
+            let owner = eventOwner.isEmpty ? ConfigUtil.evStr(call, "dialog_owner") : eventOwner
+            let expiry = (call["expires_at_ms"] as? NSNumber)?.int64Value ?? 0
+            guard !callId.isEmpty else { continue }
+
+            let persistedState = ConfigUtil.evStr(call, "state")
+            let eventState = recoveryEvent.map { ConfigUtil.evStr($0, "state") } ?? ""
+            if persistedState == "in_call" || eventState == "in_call" {
+                if owner != nodeId {
+                    if !requestedCallId.isEmpty { return }
+                    continue
+                }
+                // Native PJSIP dialogs do not survive a process/Core restart. A restored view is
+                // not proof of an established audio dialog, so the owning node fails closed.
+                reportRecovery(callId, restored: false)
+                return
+            }
+
+            guard persistedState == "ringing" || eventState == "ringing" ||
+                    eventState == "purpose_pending" else { continue }
+            guard boot.role == "door_station", origin == nodeId,
+                  (callDoor.isEmpty || callDoor == boot.door) else {
+                if !requestedCallId.isEmpty { return }
+                continue
+            }
+            guard expiry > nowMs else {
+                reportRecovery(callId, restored: false)
+                return
+            }
+
+            activeCallId = callId
+            activeCallExpiresAtMs = expiry
+            let sound = (ConfigUtil.dig(cfg, "ui.call_sound") as? String) ??
+                "outdoor_call_alert"
+            callFeedbackAudio.playConfigured(sound,
+                loops: ConfigUtil.bool(cfg, "ui.call_sound_loop", false))
+            showCalling()
+
+            let callFlow = ConfigUtil.evStr(call, "call_flow")
+            let revision = ConfigUtil.int(call, "stage_revision", 0)
+            let purposePending = eventState == "purpose_pending" ||
+                (callFlow == "ring_then_purpose" && revision == 0 &&
+                 ConfigUtil.evStr(call, "purpose").isEmpty)
+            if purposePending && !emergencyActive && !availablePurposeIds().isEmpty {
+                showPurposeChoice(afterRing: true)
+            }
+            reportRecovery(callId, restored: true)
+            return
+        }
+
+        if !requestedCallId.isEmpty { reportRecovery(requestedCallId, restored: false) }
+    }
+
+    private func reportRecovery(_ callId: String, restored: Bool) {
+        guard !callId.isEmpty, reportedRecoveryCallId != callId else { return }
+        reportedRecoveryCallId = callId
+        core.reportCallRecovery(callId: callId, restored: restored)
+    }
+
     private func refreshConfigCache() {
         cfg = core.config()
         texts.setConfig(cfg)
-        panelToken = firstPanelToken()
     }
 
-    /// config panel.tokens[0] (資産取得 /asset/<hash>?k= に使う)。
-    private func firstPanelToken() -> String {
-        guard let toks = ConfigUtil.dig(cfg, "panel.tokens") as? [Any] else { return "" }
-        for t in toks {
-            if let s = t as? String, !s.isEmpty { return s }
-        }
-        return ""
-    }
 
-    // MARK: - 個性化 (テーマ / 用件 / 訪客言語)
-
-    /// 設定値を「端末別 (devices.<自>.local.theme.*) → 全体 (display.theme.*)」の優先順で引く。
     private func themeValue(_ leaf: String) -> String? {
         if !nodeId.isEmpty,
            let v = ConfigUtil.str(cfg, "devices.\(nodeId).local.theme.\(leaf)") {
@@ -586,7 +710,6 @@ final class MainViewController: UIViewController {
         return ConfigUtil.str(cfg, "display.theme.\(leaf)")
     }
 
-    /// テーマ適用: bg_color を背景に、bg_image (sha256) を最背面へ敷く。
     private func applyTheme() {
         let color = themeValue("bg_color")
         if color != themeColor {
@@ -603,29 +726,26 @@ final class MainViewController: UIViewController {
             themeBg.isHidden = true
             return
         }
-        if hash == themeHash && themeBg.image != nil { return }  // 適用済み
+        if hash == themeHash && themeBg.image != nil { return }
         themeHash = hash
         loadThemeImage(hash)
     }
 
-    /// 背景画像を自機 httpd から取得 (未キャッシュなら 404 — asset_ready で再試行)。
     private func loadThemeImage(_ hash: String) {
-        var urlStr = "http://127.0.0.1:\(boot.httpPort)/asset/\(hash)"
-        if !panelToken.isEmpty { urlStr += "?k=\(panelToken)" }
+        let urlStr = "http://127.0.0.1:\(boot.httpPort)/asset/\(hash)"
         guard let url = URL(string: urlStr) else { return }
         URLSession.shared.dataTask(with: url) { [weak self] data, resp, _ in
             guard let self = self, let data = data,
                   (resp as? HTTPURLResponse)?.statusCode == 200,
                   let img = UIImage(data: data) else { return }
             DispatchQueue.main.async {
-                guard self.themeHash == hash else { return }  // 途中で設定が変わった
+                guard self.themeHash == hash else { return }
                 self.themeBg.image = img
                 self.themeBg.isHidden = false
             }
         }.resume()
     }
 
-    /// 用件ボタン (config visit_purposes)。門口機の待機画面にだけ出す。
     private func buildPurposeButtons() {
         for v in purposeGrid.arrangedSubviews { v.removeFromSuperview() }
         guard boot.role == "door_station",
@@ -665,14 +785,21 @@ final class MainViewController: UIViewController {
 
     @objc private func onPurposeClick(_ sender: UIButton) {
         guard let id = sender.accessibilityIdentifier?.dropFirst("purpose_".count) else { return }
+        let purposeId = String(id)
         let purposes = ConfigUtil.dig(cfg, "visit_purposes") as? [String: Any]
-        let label = ConfigUtil.labelOf(purposes?[String(id)] as? [String: Any], texts.lang,
-                                       String(id))
-        core.pressPurpose(door: boot.door, purpose: String(id))
+        let label = ConfigUtil.labelOf(purposes?[purposeId] as? [String: Any], texts.lang,
+                                       purposeId)
+        if activeCallId.isEmpty {
+            beginCall(purpose: purposeId, title: texts.t("purpose.sent", label))
+            return
+        } else if !core.selectPurpose(door: boot.door, callId: activeCallId,
+                                      purpose: purposeId) {
+            showIdle(hint: texts.t("calling.no_answer"))
+            return
+        }
         showCalling(title: texts.t("purpose.sent", label))
     }
 
-    /// 訪客言語バー (config ui.languages)。門口機の待機画面下部。
     private func buildLangBar() {
         for v in langBar.arrangedSubviews { v.removeFromSuperview() }
         var list: [String] = []
@@ -711,11 +838,10 @@ final class MainViewController: UIViewController {
 
     @objc private func onLangClick(_ sender: UIButton) {
         guard let lang = sender.accessibilityIdentifier?.dropFirst("lang_".count) else { return }
-        core.setVisitorLang(door: boot.door, lang: String(lang))  // 複製で visitor_lang が返る
-        setVisitorLang(String(lang))                              // 体感優先で先に切替 (冪等)
+        core.setVisitorLang(door: boot.door, lang: String(lang))
+        setVisitorLang(String(lang))
     }
 
-    /// 表示言語を切り替えて訪客向け文言を貼り直す (自操作・他端末・自動復帰の共通経路)。
     private func setVisitorLang(_ lang: String) {
         let l = lang.isEmpty ? "ja" : lang
         if visitorLang == l { return }
@@ -726,7 +852,6 @@ final class MainViewController: UIViewController {
         updateLangBarSelection()
     }
 
-    // MARK: - 表示制御
 
     private func applyDisplayValues(_ d: [String: Any]) {
         brightness = ConfigUtil.int(d, "brightness", brightness)
@@ -738,7 +863,6 @@ final class MainViewController: UIViewController {
     }
 
     private func applyDisplay() {
-        // 夜間: red tint オーバーレイ + 時計を暗赤に
         nightTint.isHidden = !(night && redTint)
         clockLabel.textColor = night ? MainViewController.nightClock : MainViewController.fgColor
         dateLabel.textColor = night ? MainViewController.nightClock : MainViewController.dimColor
@@ -748,10 +872,9 @@ final class MainViewController: UIViewController {
         pixelShiftTimer?.invalidate()
         pixelShiftTimer = nil
         if pixelShiftS > 0 {
-            pixelShiftTimer = Timer.scheduledTimer(withTimeInterval: Double(pixelShiftS),
+            pixelShiftTimer = IOSAvailability.scheduledTimer(withTimeInterval: Double(pixelShiftS),
                                                    repeats: true) { [weak self] _ in
                 guard let self = self else { return }
-                // 焼付対策: 待機画面コンテナを ±8px 移動
                 self.idleView.transform = CGAffineTransform(
                     translationX: CGFloat(Int.random(in: -8...8)),
                     y: CGFloat(Int.random(in: -8...8)))
@@ -765,12 +888,10 @@ final class MainViewController: UIViewController {
         }
     }
 
-    /// 輝度設定 (UIScreen.brightness — 0-100%)。
     private func setBrightness(_ percent: Int) {
         UIScreen.main.brightness = CGFloat(max(0, min(100, percent))) / 100.0
     }
 
-    // MARK: - スクリーンセーバ
 
     private func enterScreensaver() {
         guard !screensaverOn else { return }
@@ -778,10 +899,10 @@ final class MainViewController: UIViewController {
         updateClock()
         screensaverView.isHidden = false
         moveSaverClock()
-        saverDriftTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
+        saverDriftTimer = IOSAvailability.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
             self?.moveSaverClock()
         }
-        setBrightness(min(brightness, 10))  // 低輝度
+        setBrightness(min(brightness, 10))
     }
 
     private func exitScreensaver() {
@@ -800,10 +921,7 @@ final class MainViewController: UIViewController {
         saverCenterY?.constant = CGFloat.random(in: -h / 2...h / 2)
     }
 
-    // MARK: - SOS
-
     private func refreshSosConfig() {
-        // 既定 (config 未設定時) は config-schema の既定 button_on_roles=["indoor_panel"]
         var show = boot.role == "indoor_panel"
         if let roles = ConfigUtil.dig(cfg, "emergency.button_on_roles") as? [Any] {
             show = roles.contains { ($0 as? String) == boot.role }
@@ -822,7 +940,7 @@ final class MainViewController: UIViewController {
             sosHolding = true
             sosProgress.progress = 0
             sosTimer?.invalidate()
-            sosTimer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] _ in
+            sosTimer = IOSAvailability.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] _ in
                 self?.onSosTick()
             }
         case .ended, .cancelled, .failed:
@@ -842,7 +960,7 @@ final class MainViewController: UIViewController {
         sosProgress.progress = Float(min(1, held / sosHoldS))
         if held >= sosHoldS {
             resetSosHold()
-            core.emergency(true)  // {"t":"emergency","active":true} が全ノードへ届き UI が出る
+            core.emergency(true)
         }
     }
 
@@ -853,21 +971,63 @@ final class MainViewController: UIViewController {
         sosProgress.progress = 0
     }
 
-    private func showEmergency() {
-        guard !emergencyActive else { return }
+    private func presentEmergency(_ ev: [String: Any]) {
+        emergencyPresentationTimer?.invalidate()
+        emergencyPresentationTimer = nil
+        guard ConfigUtil.evBool(ev, "active") else { hideEmergency(); return }
+        guard ConfigUtil.eventUsesChannel(ev, "in_app") else { hideEmergency(); return }
+        let palette = ConfigUtil.emergencyPalette(ev)
+        emergencyView.backgroundColor = palette.background
+        emergencyTitle.textColor = palette.foreground
+        emergencyNote.textColor = palette.foreground
+        emergencyCancel.backgroundColor = palette.accent
+        emergencyCancel.setTitleColor(ConfigUtil.readableTextColor(on: palette.accent),
+                                      for: .normal)
+        let visual = ev["visual"] == nil ? true : ConfigUtil.evBool(ev, "visual")
+        showEmergency(visual: visual)
+        let sound = ConfigUtil.evStr(ev, "alarm_sound")
+        let path = ConfigUtil.evStr(ev, "audio_path")
+        let volume = ConfigUtil.int(ev, "alarm_volume", 100)
+        if volume > 0 && (!sound.isEmpty || !path.isEmpty) {
+            audio.startSiren(customPath: path, volume: volume)
+        } else {
+            audio.stop()
+        }
+        if !ConfigUtil.evBool(ev, "sticky") {
+            let ttl = ConfigUtil.double(ev, "ttl_s", 0)
+            if ttl > 0 {
+                emergencyPresentationTimer = IOSAvailability.scheduledTimer(
+                    withTimeInterval: ttl, repeats: false) { [weak self] _ in
+                        self?.hideEmergency()
+                    }
+            }
+        }
+    }
+
+    private func showEmergency(visual: Bool) {
+        if emergencyActive {
+            emergencyView.isHidden = !visual
+            return
+        }
         emergencyActive = true
         exitScreensaver()
         callTimeoutTimer?.invalidate()
         callingView.isHidden = true
         replyBanner.isHidden = true
-        presentedViewController?.dismiss(animated: false)  // 来鈴/PIN より警報優先
-        emergencyView.isHidden = false
-        setBrightness(100)  // 警報中は最大輝度
+        if visual {
+            presentedViewController?.dismiss(animated: false)
+            emergencyView.isHidden = false
+            setBrightness(100)
+        } else {
+            emergencyView.isHidden = true
+        }
     }
 
     private func hideEmergency() {
         guard emergencyActive else { return }
         emergencyActive = false
+        emergencyPresentationTimer?.invalidate()
+        emergencyPresentationTimer = nil
         audio.stop()
         emergencyView.isHidden = true
         showIdle()
@@ -879,17 +1039,15 @@ final class MainViewController: UIViewController {
         if cancelRequiresPin {
             let dlg = AdminPinViewController(texts: texts)
             dlg.onUnlocked = { [weak self] in
-                self?.core.emergency(false)
-                self?.hideEmergency()  // core からの active=false 通知も来るが即時に畳む (冪等)
+                guard let self = self, self.core.emergency(false) else { return }
+                self.hideEmergency()
             }
             present(dlg, animated: true)
             return
         }
-        core.emergency(false)
-        hideEmergency()
+        if core.emergency(false) { hideEmergency() }
     }
 
-    // MARK: - 状態遷移
 
     private func showIdle(hint: String? = nil) {
         callFeedbackAudio.stop()
@@ -899,11 +1057,25 @@ final class MainViewController: UIViewController {
         callingView.isHidden = true
         offlineView.isHidden = true
         idleView.isHidden = false
+        activeCallId = ""
+        activeCallExpiresAtMs = 0
         if let h = hint { touchHint.text = h }
     }
 
-    /// 呼び出し中画面。title 指定時は「{用件} で呼び出しました」等に差し替える
-    /// (core からの state=calling で上書きされないよう callTitleOverride に覚える)。
+    private func coreExpiryForActiveCall() -> Int64 {
+        guard !activeCallId.isEmpty,
+              let calls = core.status()?["active_calls"] as? [[String: Any]] else { return 0 }
+        for call in calls where ConfigUtil.evStr(call, "call_id") == activeCallId {
+            if let number = call["expires_at_ms"] as? NSNumber {
+                return number.int64Value
+            }
+            if let value = call["expires_at_ms"] as? String {
+                return Int64(value) ?? 0
+            }
+        }
+        return 0
+    }
+
     private func showCalling(title: String? = nil) {
         exitScreensaver()
         if let t = title { callTitleOverride = t }
@@ -911,11 +1083,26 @@ final class MainViewController: UIViewController {
         idleView.isHidden = true
         callingView.isHidden = false
         callTimeoutTimer?.invalidate()
-        callTimeoutTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: false) { [weak self] _ in
-            guard let self = self else { return }
-            self.showIdle(hint: self.texts.t("calling.no_answer"))
+        if activeCallExpiresAtMs <= 0 { activeCallExpiresAtMs = coreExpiryForActiveCall() }
+        if activeCallExpiresAtMs > 0 {
+            let timeout = max(0.001,
+                Double(activeCallExpiresAtMs) / 1000 - Date().timeIntervalSince1970)
+            callTimeoutTimer = IOSAvailability.scheduledTimer(
+                withTimeInterval: timeout, repeats: false
+            ) { [weak self] _ in
+                guard let self = self else { return }
+                if !self.activeCallId.isEmpty {
+                    _ = self.core.cancelCall(door: self.boot.door, callId: self.activeCallId,
+                                             reason: "timeout")
+                }
+                self.showIdle(hint: self.texts.t("calling.no_answer"))
+            }
         }
         pulse.layer.removeAllAnimations()
+        if safeMode {
+            pulse.alpha = 1
+            return
+        }
         let anim = CABasicAnimation(keyPath: "opacity")
         anim.fromValue = 0.25
         anim.toValue = 1.0
@@ -925,7 +1112,6 @@ final class MainViewController: UIViewController {
         pulse.layer.add(anim, forKey: "pulse")
     }
 
-    // MARK: - core イベント (main queue)
 
     private func onUiEvent(_ ev: [String: Any]) {
         switch ConfigUtil.evStr(ev, "t") {
@@ -935,13 +1121,15 @@ final class MainViewController: UIViewController {
                 if boot.role == "door_station" { showCalling() }
             } else if st == "idle" {
                 onSipIdle()
-            } else if st == "in_call" {
+            } else if st == "in_call" || st == "answered" {
                 callFeedbackAudio.stop()
                 onSipInCall(ev)
             }
         case "chime":
+            guard chimeGate.accept(callId: ConfigUtil.evStr(ev, "call_id"),
+                                   stageRevision: ConfigUtil.int(ev, "stage_revision", 0))
+            else { break }
             exitScreensaver()
-            // カスタム音 (assets の audio_path) があればそれを、無ければ内蔵チャイム音
             let path = ConfigUtil.evStr(ev, "audio_path")
             if path.isEmpty {
                 audio.playConfigured(ConfigUtil.evStr(ev, "sound")) {
@@ -952,7 +1140,6 @@ final class MainViewController: UIViewController {
             }
         case "reply":
             exitScreensaver()
-            // カスタム音声があれば再生 (無い時は core が TTS 済み — 二重発話しない)
             let path = ConfigUtil.evStr(ev, "audio_path")
             if !path.isEmpty {
                 let spoken = ConfigUtil.evStr(ev, "text")
@@ -966,34 +1153,36 @@ final class MainViewController: UIViewController {
             var ttl = ConfigUtil.double(ev, "ttl_s", 30)
             if ttl <= 0 { ttl = 30 }
             replyTimer?.invalidate()
-            replyTimer = Timer.scheduledTimer(withTimeInterval: ttl, repeats: false) { [weak self] _ in
+            replyTimer = IOSAvailability.scheduledTimer(withTimeInterval: ttl, repeats: false) { [weak self] _ in
                 self?.replyBanner.isHidden = true
             }
-            // 訪客が見たら呼び出し継続は不要 → 待機へ
             callTimeoutTimer?.invalidate()
             showIdle()
+        case "event":
+            let type = ConfigUtil.evStr(ev, "type")
+            let eventCall = ConfigUtil.evStr(ev, "call_id")
+            if type == "press", !activeCallId.isEmpty, eventCall == activeCallId,
+               let expiry = ev["expires_at_ms"] as? NSNumber, expiry.int64Value > 0 {
+                activeCallExpiresAtMs = expiry.int64Value
+                if !callingView.isHidden { showCalling() }
+            }
+            if (type == "call_cancelled" || type == "call_ended") &&
+                (activeCallId.isEmpty || eventCall.isEmpty || eventCall == activeCallId) {
+                showIdle(hint: type == "call_cancelled" ? texts.t("ring.cancelled") : nil)
+            }
         case "visitor_lang":
-            // 訪客言語の切替 (自操作の複製 / 他端末からの変更 / 無操作復帰)
             let door = ConfigUtil.evStr(ev, "door")
             if boot.role == "door_station" && (door.isEmpty || door == boot.door) {
                 setVisitorLang(ConfigUtil.evStr(ev, "lang"))
             }
         case "asset_ready":
-            // 前取り完了 — 背景画像が待ちだったら読み直す
             if let h = themeHash, ConfigUtil.evStr(ev, "hash") == h, themeBg.image == nil {
                 loadThemeImage(h)
             }
         case "display":
             applyDisplayValues(ev)
         case "emergency":
-            // 自端末発報も他端末発報も同じ UI (イベント複製で届く)
-            if ConfigUtil.evBool(ev, "active") {
-                showEmergency()
-                let vol = ConfigUtil.int(ev, "alarm_volume", 100)
-                audio.startSiren(customPath: ConfigUtil.evStr(ev, "audio_path"), volume: vol)
-            } else {
-                hideEmergency()
-            }
+            presentEmergency(ev)
         case "peers_changed", "config_changed":
             refreshNodeInfo()
         default:
@@ -1001,22 +1190,19 @@ final class MainViewController: UIViewController {
         }
     }
 
-    // MARK: - 通話 (door_station 側の in_call — 室内機側は IncomingViewController)
 
-    /// SIP in_call — 門口機は相手映像 (peer_stream = 対称 MJPEG) を表示。
     private func onSipInCall(_ ev: [String: Any]) {
         inCall = true
         callingText.text = texts.t("incall.title")
         guard boot.role == "door_station" else { return }
         callTimeoutTimer?.invalidate()
         let stream = ConfigUtil.evStr(ev, "peer_stream")
-        if !stream.isEmpty {
-            showInCall(streamUrl: stream)  // 双方向映像の門口側 (相手 = 室内機)
-        } else {
-            // 相手不明 (電話/網頁) — 網頁通話なら自機 /peer-frame.jpg にフレームが来る
+        peerPollTimer?.invalidate()
+        peerPollTimer = nil
+        showInCall(streamUrl: stream.isEmpty ? nil : stream)
+        if stream.isEmpty && !safeMode {
             peerPollBusy = false
-            peerPollTimer?.invalidate()
-            peerPollTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
+            peerPollTimer = IOSAvailability.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
                 self?.pollPeerFrame()
             }
         }
@@ -1032,12 +1218,28 @@ final class MainViewController: UIViewController {
 
     private func showInCall(streamUrl: String?) {
         exitScreensaver()
+        idleView.isHidden = true
+        callingView.isHidden = true
         inCallStreamer?.stop()
         inCallStreamer = nil
         peerVideo.image = nil
-        if let u = streamUrl, !u.isEmpty {
-            inCallStreamer = MjpegClient(urlString: u) { [weak self] img in
-                self?.peerVideo.image = img
+        peerVideo.transform = .identity
+        if !safeMode, let u = streamUrl, !u.isEmpty {
+            inCallStreamer = MjpegClient(urlString: u) { [weak self] img, rotation in
+                guard let self = self else { return }
+                self.peerVideo.image = img
+                let r = ((rotation % 360) + 360) % 360
+                var scale: CGFloat = 1
+                if (r == 90 || r == 270), self.peerVideo.bounds.width > 0,
+                   self.peerVideo.bounds.height > 0, img.size.width > 0, img.size.height > 0 {
+                    let base = min(self.peerVideo.bounds.width / img.size.width,
+                                   self.peerVideo.bounds.height / img.size.height)
+                    let rotated = min(self.peerVideo.bounds.width / img.size.height,
+                                      self.peerVideo.bounds.height / img.size.width)
+                    if base > 0 { scale = rotated / base }
+                }
+                self.peerVideo.transform = CGAffineTransform(
+                    rotationAngle: CGFloat(r) * .pi / 180).scaledBy(x: scale, y: scale)
             }
             inCallStreamer?.start()
         }
@@ -1050,17 +1252,17 @@ final class MainViewController: UIViewController {
         inCallStreamer?.stop()
         inCallStreamer = nil
         peerVideo.image = nil
+        peerVideo.transform = .identity
         inCallView.isHidden = true
     }
 
     @objc private func onEndCallClick() {
-        core.sipHangup()  // state idle が来て closeInCall される (即時にも畳む)
-        closeInCall()
+        core.sipHangup()
+        onSipIdle()
     }
 
-    /// 網頁通話の相手映像: 自機 httpd の /peer-frame.jpg を輪詢 (通話中のみ)。
     private func pollPeerFrame() {
-        guard inCall, !peerPollBusy else { return }
+        guard inCall, !safeMode, !peerPollBusy else { return }
         peerPollBusy = true
         let url = URL(string: "http://127.0.0.1:\(boot.httpPort)/peer-frame.jpg")!
         URLSession.shared.dataTask(with: url) { [weak self] data, resp, _ in
@@ -1076,19 +1278,91 @@ final class MainViewController: UIViewController {
         }.resume()
     }
 
-    // MARK: - 操作
 
     @objc private func onCallClick() {
+        if callFlowMode() == "purpose_first", availablePurposeIds().isEmpty == false {
+            showPurposeChoice(afterRing: false)
+            return
+        }
+        beginCall(purpose: "", title: nil)
+        if !activeCallId.isEmpty, callFlowMode() == "ring_then_purpose",
+           availablePurposeIds().isEmpty == false {
+            showPurposeChoice(afterRing: true)
+        }
+    }
+
+    private func beginCall(purpose: String, title: String?) {
         let sound = (ConfigUtil.dig(cfg, "ui.call_sound") as? String) ?? "outdoor_call_alert"
         let loop = ConfigUtil.bool(cfg, "ui.call_sound_loop", false)
         callFeedbackAudio.playConfigured(sound, loops: loop)
-        core.press(door: boot.door)
-        showCalling()
+        guard let callId = core.pressV2(door: boot.door, purpose: purpose) else {
+            showIdle(hint: texts.t("offline.body"))
+            return
+        }
+        activeCallId = callId
+        activeCallExpiresAtMs = coreExpiryForActiveCall()
+        showCalling(title: title)
+    }
+
+    private func callFlowMode() -> String {
+        if let mode = ConfigUtil.dig(cfg, "ui.call_flow") as? String { return mode }
+        if let object = ConfigUtil.dig(cfg, "ui.call_flow") as? [String: Any],
+           let mode = object["mode"] as? String { return mode }
+        return "purpose_first"
+    }
+
+    private func availablePurposeIds() -> [String] {
+        guard let purposes = ConfigUtil.dig(cfg, "visit_purposes") as? [String: Any] else {
+            return []
+        }
+        return ConfigUtil.sortedByOrder(purposes)
+    }
+
+    private func showPurposeChoice(afterRing: Bool) {
+        guard presentedViewController == nil,
+              let purposes = ConfigUtil.dig(cfg, "visit_purposes") as? [String: Any] else { return }
+        let alert = UIAlertController(title: texts.t("idle.choose_purpose"), message: nil,
+                                      preferredStyle: .alert)
+        for purposeId in availablePurposeIds() {
+            let label = ConfigUtil.labelOf(purposes[purposeId] as? [String: Any], texts.lang,
+                                           purposeId)
+            alert.addAction(UIAlertAction(title: label, style: .default) { [weak self] _ in
+                guard let self = self else { return }
+                if afterRing {
+                    if self.core.selectPurpose(door: self.boot.door, callId: self.activeCallId,
+                                               purpose: purposeId) {
+                        self.showCalling(title: self.texts.t("purpose.sent", label))
+                    }
+                } else {
+                    self.beginCall(purpose: purposeId,
+                                   title: self.texts.t("purpose.sent", label))
+                }
+            })
+        }
+        if afterRing {
+            alert.addAction(UIAlertAction(title: texts.t("purpose.skip"), style: .default))
+            alert.addAction(UIAlertAction(title: texts.t("purpose.cancel_call"),
+                                          style: .destructive) { [weak self] _ in
+                self?.onCancelClick()
+            })
+        } else {
+            // Before emission, cancel is strictly local and produces no Core event.
+            alert.addAction(UIAlertAction(title: texts.t("admin.cancel"), style: .cancel))
+        }
+        present(alert, animated: true)
     }
 
     @objc private func onCancelClick() {
         callTimeoutTimer?.invalidate()
+        if !activeCallId.isEmpty {
+            _ = core.cancelCall(door: boot.door, callId: activeCallId, reason: "visitor")
+        }
         showIdle()
+    }
+
+    @objc private func onMonitorOpen() {
+        guard boot.role != "door_station", presentedViewController == nil else { return }
+        present(MonitorViewController(core: core, boot: boot), animated: true)
     }
 
     @objc private func onSecretCorner() {
@@ -1105,9 +1379,18 @@ final class MainViewController: UIViewController {
         present(dlg, animated: true)
     }
 
-    /// 管理解錠後の情報画面 (iOS の kiosk 解除は監督 SAM 側 — docs/provision.md 参照)。
     private func showAdminInfo() {
-        UIApplication.shared.isIdleTimerDisabled = false  // 保守中は自動ロックを許す
+#if !IOS9_COMPAT && !os(tvOS)
+        let monitorAction: (() -> Void)? = boot.role == "door_station" ? nil : { [weak self] in
+            self?.onMonitorOpen()
+        }
+        let page = DebugInfoViewController(
+            core: core, boot: boot, texts: texts,
+            onPairing: { [weak self] in self?.showPairingAdmin() },
+            onMonitor: monitorAction)
+        present(page, animated: true)
+#else
+        UIApplication.shared.isIdleTimerDisabled = false
         let st = core.status()
         let node = st?["node"] as? [String: Any]
         let peers = (st?["peers"] as? [Any])?.count ?? 0
@@ -1119,31 +1402,160 @@ final class MainViewController: UIViewController {
         """
         let a = UIAlertController(title: texts.t("admin.title"), message: msg,
                                   preferredStyle: .alert)
+        a.addAction(UIAlertAction(title: texts.t("admin.pair_mode"), style: .default) {
+            [weak self] _ in self?.showPairingAdmin()
+        })
+        if boot.role != "door_station" {
+            a.addAction(UIAlertAction(title: texts.t("monitor.open"), style: .default) {
+                [weak self] _ in self?.onMonitorOpen()
+            })
+        }
         a.addAction(UIAlertAction(title: "OK", style: .default) { _ in
             UIApplication.shared.isIdleTimerDisabled = true
         })
         present(a, animated: true)
+#endif
     }
 
-    // MARK: - カメラ / H.264 (Phase 6a)
-
-    /// カメラ+マイク権限を求めてから採集開始 (門口機/室内機どちらも — 対称 MJPEG 対講のため)。
-    private func requestAvPermissionsThenStartCamera() {
-        AVCaptureDevice.requestAccess(for: .video) { [weak self] _ in
-            DispatchQueue.main.async { self?.maybeStartCamera() }
+    private func showPairingAdmin() {
+        guard let pairing = core.pairing() else { return }
+        let paired = ConfigUtil.evBool(pairing, "paired")
+        let persistedObject = BootConfig.load().rawJson.data(using: .utf8).flatMap {
+            (try? JSONSerialization.jsonObject(with: $0)) as? [String: Any]
         }
-        AVCaptureDevice.requestAccess(for: .audio) { _ in }  // SIP 対講 (pjsip) 用
+        let persistedBoot = (persistedObject?["psk_ref"] as? String) == "secret:mesh.psk"
+        let persistenceReady = ConfigUtil.evBool(pairing, "persistence_ready") && persistedBoot
+        let message = paired && !persistenceReady
+            ? texts.t("admin.pair_secure_failed")
+            : (paired ? texts.t("admin.pair_hint") : texts.t("admin.pair_self_unpaired"))
+        let alert = UIAlertController(title: texts.t("admin.pair_mode"),
+                                      message: message,
+                                      preferredStyle: .alert)
+        if !paired {
+            alert.addAction(UIAlertAction(title: texts.t("admin.pair_found"), style: .default) {
+                [weak self] _ in _ = self?.core.createCluster()
+            })
+            alert.addAction(UIAlertAction(title: texts.t("admin.join"), style: .default) {
+                [weak self] _ in self?.showJoinCluster()
+            })
+        } else if persistenceReady {
+            alert.addAction(UIAlertAction(title: texts.t("admin.pair_mode"), style: .default) {
+                [weak self] _ in self?.core.pairingMode(seconds: 600)
+            })
+            if boot.role == "indoor_panel" {
+                alert.addAction(UIAlertAction(title: texts.t("admin.fleet"), style: .default) {
+                    [weak self] _ in self?.showFleetAdmin()
+                })
+            }
+            if let pending = pairing["pending"] as? [String: Any],
+               let devices = pending["devices"] as? [[String: Any]] {
+                for device in devices.prefix(4) {
+                    let id = ConfigUtil.evStr(device, "id")
+                    guard !id.isEmpty else { continue }
+                    let name = ConfigUtil.evStr(device, "name")
+                    alert.addAction(UIAlertAction(title: name.isEmpty ? id : name, style: .default) {
+                        [weak self] _ in self?.core.inviteDevice(id)
+                    })
+                }
+            }
+        }
+        alert.addAction(UIAlertAction(title: texts.t("admin.cancel"), style: .cancel))
+        alert.addAction(UIAlertAction(title: texts.t("admin.clear_pairing"), style: .destructive) {
+            _ in NotificationCenter.default.post(name: .doorbellResetLocalPairing, object: nil)
+        })
+        present(alert, animated: true)
     }
 
-    /// devices.<自>.local.camera の設定オブジェクト (無ければ nil)。
+    private func showFleetAdmin() {
+        let peers = (core.status()?["peers"] as? [[String: Any]] ?? []).filter {
+            ConfigUtil.evStr($0, "id") != nodeId
+        }
+        let alert = UIAlertController(title: texts.t("admin.fleet"),
+                                      message: peers.isEmpty ? texts.t("admin.pair_none") : nil,
+                                      preferredStyle: .actionSheet)
+        for peer in peers.prefix(8) {
+            let id = ConfigUtil.evStr(peer, "id")
+            guard !id.isEmpty else { continue }
+            let name = ConfigUtil.evStr(peer, "name")
+            let label = "\(texts.t("admin.remove_device")): \(name.isEmpty ? id : name)"
+            alert.addAction(UIAlertAction(title: label,
+                                          style: .destructive) { [weak self] _ in
+                self?.core.removeDevice(id)
+            })
+        }
+        alert.addAction(UIAlertAction(title: texts.t("admin.cancel"), style: .cancel))
+        present(alert, animated: true)
+    }
+
+    private func showJoinCluster() {
+        let alert = UIAlertController(title: texts.t("admin.join"), message: nil,
+                                      preferredStyle: .alert)
+        alert.addTextField { field in
+            field.placeholder = "10.0.0.10:47172"
+            field.autocapitalizationType = .none
+            field.keyboardType = .numbersAndPunctuation
+        }
+        alert.addTextField { field in
+            field.placeholder = "PIN"
+            field.keyboardType = .numberPad
+            field.isSecureTextEntry = true
+        }
+        alert.addAction(UIAlertAction(title: texts.t("admin.login"), style: .default) {
+            [weak self, weak alert] _ in
+            let host = alert?.textFields?.first?.text ?? ""
+            let pin = alert?.textFields?.dropFirst().first?.text ?? ""
+            self?.core.joinCluster(host: host, pin: pin)
+        })
+        alert.addAction(UIAlertAction(title: texts.t("setup.scan_qr"), style: .default) {
+            [weak self] _ in self?.showPairingScanner()
+        })
+        alert.addAction(UIAlertAction(title: texts.t("admin.cancel"), style: .cancel))
+        present(alert, animated: true)
+    }
+
+    private func showPairingScanner() {
+        let scanner = PairingQrScannerViewController { [weak self] value in
+            guard let self = self else { return }
+            let prefix = "doorbell-join:"
+            guard value.hasPrefix(prefix) else { return }
+            let parts = value.dropFirst(prefix.count).split(separator: "|", maxSplits: 1)
+            guard parts.count == 2 else { return }
+            let host = String(parts[0])
+            let pin = String(parts[1])
+            guard host.contains(":"), pin.count == 6,
+                  pin.allSatisfy({ $0.isNumber }) else { return }
+            self.core.joinCluster(host: host, pin: pin)
+        }
+        present(scanner, animated: true)
+    }
+
+
+    private func requestAvPermissionsThenStartCamera() {
+        runtime?.permissionsDidChange()
+        if boot.role == "door_station" {
+            AVCaptureDevice.requestAccess(for: .video) { [weak self] _ in
+                DispatchQueue.main.async {
+                    self?.runtime?.permissionsDidChange()
+                    self?.maybeStartCamera()
+                }
+            }
+        }
+        AVCaptureDevice.requestAccess(for: .audio) { [weak self] _ in
+            DispatchQueue.main.async { self?.runtime?.permissionsDidChange() }
+        }
+    }
+
     private func cameraLocalCfg() -> [String: Any]? {
         guard !nodeId.isEmpty else { return nil }
         return ConfigUtil.dig(cfg, "devices.\(nodeId).local.camera") as? [String: Any]
     }
 
     private func maybeStartCamera() {
-        // codec=h264/auto の間は h264_resolution を採集目標にする (Phase 6a)。
-        // MJPEG 側は core の frame_bus が縮小するので大きくても無害。
+        guard boot.role == "door_station" else { return }
+        if safeMode {
+            camera.start(targetW: 640, targetH: 360)
+            return
+        }
         let cam = cameraLocalCfg()
         var tw = 640
         var th = 480
@@ -1157,7 +1569,22 @@ final class MainViewController: UIViewController {
     }
 
     private func encoderPoll() {
-        let wanted = core.videoEncoderWanted()
+        guard boot.role == "door_station" else { return }
+        if safeMode || h264EncoderFailed || videoEncoder.hasTerminalFailure {
+            if videoEncoder.isRunning {
+                camera.encoder = nil
+                videoEncoder.stop()
+            }
+            return
+        }
+        // Keep the door station encoder warm whenever H.264 is configured. The stream endpoint
+        // cannot emit its HTTP response before an init segment exists, and legacy clients can
+        // time out before demand-only startup produces a keyframe.
+        let wanted = (cameraLocalCfg()?["codec"] as? String ?? "auto") != "mjpeg"
+        if lastEncoderDemand != wanted {
+            lastEncoderDemand = wanted
+            IOSAvailability.logDebug("h264 demand=\(wanted) running=\(videoEncoder.isRunning)")
+        }
         if wanted && !videoEncoder.isRunning {
             let cam = cameraLocalCfg()
             videoEncoder.start(fps: ConfigUtil.int(cam, "h264_fps", 25),
@@ -1167,5 +1594,57 @@ final class MainViewController: UIViewController {
             camera.encoder = nil
             videoEncoder.stop()
         }
+    }
+
+    func debugRefreshH264() {
+        IOSAvailability.logDebug("h264 debug refresh requested")
+        encoderPoll()
+    }
+}
+
+private final class PairingQrScannerViewController: UIViewController, AVCaptureMetadataOutputObjectsDelegate {
+    private let onValue: (String) -> Void
+    private let session = AVCaptureSession()
+    private var preview: AVCaptureVideoPreviewLayer?
+    private var delivered = false
+
+    init(onValue: @escaping (String) -> Void) {
+        self.onValue = onValue
+        super.init(nibName: nil, bundle: nil)
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:)") }
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        view.backgroundColor = .black
+        guard let camera = AVCaptureDevice.default(for: .video),
+              let input = try? AVCaptureDeviceInput(device: camera), session.canAddInput(input)
+        else { dismiss(animated: true); return }
+        session.addInput(input)
+        let output = AVCaptureMetadataOutput()
+        guard session.canAddOutput(output) else { dismiss(animated: true); return }
+        session.addOutput(output)
+        output.setMetadataObjectsDelegate(self, queue: .main)
+        output.metadataObjectTypes = [.qr]
+        let layer = AVCaptureVideoPreviewLayer(session: session)
+        layer.videoGravity = .resizeAspectFill
+        view.layer.addSublayer(layer)
+        preview = layer
+        session.startRunning()
+    }
+
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        preview?.frame = view.bounds
+    }
+
+    func metadataOutput(_ output: AVCaptureMetadataOutput,
+                        didOutput metadataObjects: [AVMetadataObject], from connection: AVCaptureConnection) {
+        guard !delivered, let code = metadataObjects.first as? AVMetadataMachineReadableCodeObject,
+              let value = code.stringValue else { return }
+        delivered = true
+        session.stopRunning()
+        dismiss(animated: true) { [onValue] in onValue(value) }
     }
 }

@@ -6,6 +6,9 @@
 #include <cstring>
 #include <atomic>
 #include <chrono>
+#include <cctype>
+#include <cmath>
+#include <deque>
 #include <mutex>
 #include <thread>
 #include <set>
@@ -35,7 +38,7 @@ namespace db {
 
 std::string sanitizeCaps(const std::string& caps_json, bool has_https) {
   auto doc = json::parse(caps_json);
-  if (!doc || !cJSON_IsObject(doc.get())) return caps_json;
+  if (!doc || !cJSON_IsObject(doc.get())) doc = json::obj();
   if (!has_https) json::setBool(doc.get(), "tls12", false);
   return json::dump(doc.get());
 }
@@ -59,8 +62,17 @@ std::string hostOf(const std::string& addr) {
   return p == std::string::npos ? addr : addr.substr(0, p);
 }
 
-// SIP の remote 表示 (例 "\"Door\" <sip:201@10.0.1.5>" / "sip:192.168.1.7:47190") から
-// user と host を取り出す。user 無し (直接呼) は user 空。IPv4 LAN 前提 (IPv6 括弧は非対応)。
+bool safeProbeHost(const std::string& host) {
+  if (host.empty() || host.size() > 253) return false;
+  for (unsigned char ch : host) {
+    if (!(std::isalnum(ch) || ch == '.' || ch == '-' || ch == ':' || ch == '[' || ch == ']'))
+      return false;
+  }
+  return true;
+}
+
+
+
 bool parseSipRemote(const std::string& remote, std::string* user, std::string* host) {
   std::string uri = remote;
   size_t lt = uri.find('<');
@@ -71,7 +83,7 @@ bool parseSipRemote(const std::string& remote, std::string* user, std::string* h
   size_t s = uri.find("sip:");
   if (s == std::string::npos) return false;
   uri = uri.substr(s + 4);
-  size_t sc = uri.find(';');  // ;transport= 等のパラメータ除去
+  size_t sc = uri.find(';');
   if (sc != std::string::npos) uri = uri.substr(0, sc);
   size_t at = uri.find('@');
   if (at != std::string::npos) {
@@ -84,7 +96,7 @@ bool parseSipRemote(const std::string& remote, std::string* user, std::string* h
   return !host->empty();
 }
 
-// "HH:MM" → 通算分。不正な書式は -1 (rule_engine と同じ規則)。
+
 int parseHhmm(const std::string& s) {
   int h = 0, m = 0;
   char tail = 0;
@@ -93,16 +105,16 @@ int parseHhmm(const std::string& s) {
   return h * 60 + m;
 }
 
-// 負値でも床方向へ丸める除算 (rule_engine と同じ — 現地時刻の分計算用)
+
 int64_t floorDiv(int64_t a, int64_t b) {
   int64_t q = a / b;
   if ((a % b) != 0 && ((a < 0) != (b < 0))) --q;
   return q;
 }
 
-// ---- 統一資産 (docs/config-schema.md assets) ----
-constexpr size_t kAssetMaxBytes = 3 * 1024 * 1024;        // wav/mp3/画像 ≤3MB
-constexpr int64_t kAssetGcGraceMs = 10 * 60 * 1000;       // 無参照資産の削除猶予 (10 分)
+
+constexpr size_t kAssetMaxBytes = 3 * 1024 * 1024;
+constexpr int64_t kAssetGcGraceMs = 10 * 60 * 1000;
 constexpr const char* kAssetTypes[] = {"image/jpeg", "image/png", "audio/mpeg", "audio/wav"};
 
 bool assetTypeAllowed(const std::string& type) {
@@ -111,7 +123,1071 @@ bool assetTypeAllowed(const std::string& type) {
   return false;
 }
 
-// 64 桁小文字 hex (sha256) か — /asset/<hash> のパス走査対策も兼ねる
+bool parseStyleColor(const std::string& value, double* luminance, int* alpha) {
+  if (value.size() != 7 || value[0] != '#') return false;
+  auto nibble = [](char c) -> int {
+    if (c >= '0' && c <= '9') return c - '0';
+    if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+    if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+    return -1;
+  };
+  int bytes[4] = {0, 0, 0, 255};
+  for (size_t i = 0; i < (value.size() - 1) / 2; ++i) {
+    int hi = nibble(value[1 + i * 2]);
+    int lo = nibble(value[2 + i * 2]);
+    if (hi < 0 || lo < 0) return false;
+    bytes[i] = hi * 16 + lo;
+  }
+  auto linear = [](double c) {
+    c /= 255.0;
+    return c <= 0.04045 ? c / 12.92 : std::pow((c + 0.055) / 1.055, 2.4);
+  };
+  if (luminance)
+    *luminance = 0.2126 * linear(bytes[0]) + 0.7152 * linear(bytes[1]) +
+                 0.0722 * linear(bytes[2]);
+  if (alpha) *alpha = bytes[3];
+  return true;
+}
+
+struct EmergencyPalette {
+  std::string background = "#8F1010";
+  std::string foreground = "#FFFFFF";
+  std::string accent = "#FFD166";
+};
+
+EmergencyPalette safeEmergencyPalette(const cJSON* presentation) {
+  EmergencyPalette fallback;
+  EmergencyPalette candidate;
+  candidate.background = json::getString(presentation, "background", fallback.background);
+  candidate.foreground = json::getString(presentation, "foreground", fallback.foreground);
+  candidate.accent = json::getString(presentation, "accent", fallback.accent);
+  double background = 0, foreground = 0, accent = 0;
+  int alpha = 255;
+  if (!parseStyleColor(candidate.background, &background, &alpha) ||
+      !parseStyleColor(candidate.foreground, &foreground, &alpha) ||
+      !parseStyleColor(candidate.accent, &accent, &alpha))
+    return fallback;
+  auto contrast = [](double a, double b) {
+    return (std::max(a, b) + 0.05) / (std::min(a, b) + 0.05);
+  };
+  if (contrast(foreground, background) < 4.5 || contrast(accent, background) < 3.0)
+    return fallback;
+  return candidate;
+}
+
+bool safetyUiElement(const std::string& element) {
+  return element == "sos.trigger" || element == "sos.cancel" ||
+      element == "cancel.call" || element == "call.end" ||
+      element == "maintenance.exit";
+}
+
+bool uiStyleOverrideValid(const std::string& key, const cJSON* value, std::string* error) {
+  const std::string marker = ".local.ui.elements.";
+  const size_t marker_pos = key.find(marker);
+  if (key.compare(0, 8, "devices.") != 0 || marker_pos == std::string::npos) return true;
+  if (!cJSON_IsObject(value)) {
+    *error = "style value must be an object";
+    return false;
+  }
+  const std::string element = key.substr(marker_pos + marker.size());
+  const bool safety = safetyUiElement(element);
+  double foreground = -1.0, background = -1.0, accent = -1.0, border = -1.0;
+  const cJSON* field = nullptr;
+  cJSON_ArrayForEach(field, value) {
+    if (!field->string) continue;
+    const std::string name = field->string;
+    if (name == "scale" || name == "font_scale") {
+      if (!cJSON_IsNumber(field) || field->valuedouble < 0.75 || field->valuedouble > 2.0) {
+        *error = name + " must be within 0.75..2.0";
+        return false;
+      }
+      if (safety && field->valuedouble < 1.0) {
+        *error = "safety-critical scale and font_scale must be at least 1.0";
+        return false;
+      }
+      continue;
+    }
+    if (name == "radius") {
+      if (!cJSON_IsNumber(field) || field->valuedouble < 0 || field->valuedouble > 64) {
+        *error = "radius must be within 0..64";
+        return false;
+      }
+      continue;
+    }
+    if (name == "foreground" || name == "background" || name == "accent" ||
+        name == "border") {
+      int alpha = 255;
+      double lum = 0;
+      if (!cJSON_IsString(field) || !parseStyleColor(field->valuestring, &lum, &alpha)) {
+        *error = name + " must be #RRGGBB";
+        return false;
+      }
+      if (name == "foreground") foreground = lum;
+      if (name == "background") background = lum;
+      if (name == "accent") accent = lum;
+      if (name == "border") border = lum;
+      continue;
+    }
+    *error = "unsupported style property: " + name;
+    return false;
+  }
+  auto contrast = [](double a, double b) {
+    return (std::max(a, b) + 0.05) / (std::min(a, b) + 0.05);
+  };
+  if (foreground >= 0 && background >= 0 && contrast(foreground, background) < 4.5) {
+    *error = "foreground/background contrast must be at least 4.5:1";
+    return false;
+  }
+  if (accent >= 0 && background >= 0 && contrast(accent, background) < 3.0) {
+    *error = "accent/background contrast must be at least 3:1";
+    return false;
+  }
+  if (border >= 0 && background >= 0 && contrast(border, background) < 3.0) {
+    *error = "border/background contrast must be at least 3:1";
+    return false;
+  }
+  return true;
+}
+
+bool uiStyleViewportValid(const std::string& key, const cJSON* value, const cJSON* viewport,
+                          std::string* error) {
+  if (!uiStyleOverrideValid(key, value, error)) return false;
+  if (key.find(".local.ui.elements.") == std::string::npos) return true;
+  const double scale_min = json::get(viewport, "scale_min") &&
+          cJSON_IsNumber(json::get(viewport, "scale_min"))
+      ? json::get(viewport, "scale_min")->valuedouble : 0.75;
+  const double scale_max = json::get(viewport, "scale_max") &&
+          cJSON_IsNumber(json::get(viewport, "scale_max"))
+      ? json::get(viewport, "scale_max")->valuedouble : 2.0;
+  const double minimum_touch = json::get(viewport, "minimum_touch") &&
+          cJSON_IsNumber(json::get(viewport, "minimum_touch"))
+      ? json::get(viewport, "minimum_touch")->valuedouble : 44.0;
+  for (const char* property : {"scale", "font_scale"}) {
+    const cJSON* field = json::get(value, property);
+    if (field && (!cJSON_IsNumber(field) || field->valuedouble < scale_min ||
+                  field->valuedouble > scale_max)) {
+      *error = std::string(property) + " is outside the target viewport limit";
+      return false;
+    }
+  }
+  const cJSON* radius = json::get(value, "radius");
+  if (radius && (!cJSON_IsNumber(radius) || radius->valuedouble > minimum_touch)) {
+    *error = "radius exceeds the target viewport touch metric";
+    return false;
+  }
+  return true;
+}
+
+bool uiManifestValid(const std::string& manifest_json, std::string* error) {
+  auto manifest = json::parse(manifest_json);
+  if (!manifest || !cJSON_IsObject(manifest.get()) ||
+      json::getInt(manifest.get(), "schema_version") != 1) {
+    *error = "ui_manifest must be a schema version 1 object";
+    return false;
+  }
+  const cJSON* viewport = json::get(manifest.get(), "viewport");
+  const std::string units = json::getString(manifest.get(), "units");
+  if (units != "logical" && units != "dp" && units != "pt" && units != "effective_px") {
+    *error = "ui_manifest units must be logical, dp, pt, or effective_px";
+    return false;
+  }
+  auto number = [viewport](const char* name) {
+    const cJSON* value = json::get(viewport, name);
+    return cJSON_IsNumber(value) ? value->valuedouble : 0.0;
+  };
+  const double minimum_touch = number("minimum_touch");
+  const double scale_min = number("scale_min");
+  const double scale_max = number("scale_max");
+  if (!cJSON_IsObject(viewport) || minimum_touch < 44 || scale_min < 0.75 ||
+      scale_max > 2.0 || scale_min > scale_max) {
+    *error = "ui_manifest viewport violates touch or scale limits";
+    return false;
+  }
+  const cJSON* elements = json::get(manifest.get(), "elements");
+  if (!cJSON_IsObject(elements) || !elements->child) {
+    *error = "ui_manifest requires semantic elements";
+    return false;
+  }
+  const std::set<std::string> allowed = {"scale", "font_scale", "foreground", "background",
+                                         "accent", "border", "radius"};
+  const cJSON* element = nullptr;
+  cJSON_ArrayForEach(element, elements) {
+    const std::string id = element->string ? element->string : "";
+    if (id.empty() || id.size() > 128 || !cJSON_IsObject(element)) {
+      *error = "ui_manifest contains an invalid semantic element";
+      return false;
+    }
+    for (char ch : id) {
+      if (!(std::isalnum(static_cast<unsigned char>(ch)) || ch == '.' || ch == '_' ||
+            ch == '-')) {
+        *error = "ui_manifest semantic IDs use an invalid character";
+        return false;
+      }
+    }
+    const cJSON* properties = json::get(element, "properties");
+    const cJSON* defaults = json::get(element, "defaults");
+    const cJSON* safety = json::get(element, "safety_critical");
+    if (!cJSON_IsArray(properties) || cJSON_GetArraySize(properties) == 0 ||
+        !cJSON_IsObject(defaults) || !cJSON_IsBool(safety) ||
+        (safetyUiElement(id) && !cJSON_IsTrue(safety))) {
+      *error = "ui_manifest elements require properties, defaults, and safety_critical";
+      return false;
+    }
+    std::set<std::string> declared;
+    const cJSON* property = nullptr;
+    cJSON_ArrayForEach(property, properties) {
+      const std::string name = cJSON_IsString(property) && property->valuestring
+          ? property->valuestring : "";
+      if (!allowed.count(name) || !declared.insert(name).second || !json::get(defaults, name.c_str())) {
+        *error = "ui_manifest properties must be unique, supported, and have defaults";
+        return false;
+      }
+    }
+    const cJSON* default_value = nullptr;
+    cJSON_ArrayForEach(default_value, defaults) {
+      if (!default_value->string || !declared.count(default_value->string)) {
+        *error = "ui_manifest defaults may contain only declared properties";
+        return false;
+      }
+    }
+    std::string style_error;
+    if (!uiStyleViewportValid("devices.manifest.local.ui.elements." + id, defaults, viewport,
+                              &style_error)) {
+      *error = "ui_manifest default for " + id + " is invalid: " + style_error;
+      return false;
+    }
+  }
+  return true;
+}
+
+const char* baseWebUiManifestJson() {
+  return R"({"schema_version":1,"units":"effective_px","viewport":{"minimum_touch":44,"scale_min":0.75,"scale_max":2.0},"elements":{"call.primary":{"properties":["scale","font_scale","foreground","background","accent","border","radius"],"defaults":{"scale":1,"font_scale":1,"foreground":"#E8EDF2","background":"#1A2027","accent":"#4DA3FF","border":"#4DA3FF","radius":12},"safety_critical":false},"cancel.call":{"properties":["scale","font_scale","foreground","background","accent","border","radius"],"defaults":{"scale":1,"font_scale":1,"foreground":"#FFFFFF","background":"#8D2932","accent":"#FFFFFF","border":"#FFFFFF","radius":12},"safety_critical":true},"call.end":{"properties":["scale","font_scale","foreground","background","accent","border","radius"],"defaults":{"scale":1,"font_scale":1,"foreground":"#FFFFFF","background":"#8D2932","accent":"#FFFFFF","border":"#FFFFFF","radius":12},"safety_critical":true},"purpose.button":{"properties":["scale","font_scale","foreground","background","accent","border","radius"],"defaults":{"scale":1,"font_scale":1,"foreground":"#E8EDF2","background":"#1A2027","accent":"#4DA3FF","border":"#4DA3FF","radius":12},"safety_critical":false},"ring.title":{"properties":["scale","font_scale","foreground","background","accent","border","radius"],"defaults":{"scale":1,"font_scale":1,"foreground":"#E8EDF2","background":"#1A2027","accent":"#4DA3FF","border":"#4DA3FF","radius":12},"safety_critical":false},"ring.action":{"properties":["scale","font_scale","foreground","background","accent","border","radius"],"defaults":{"scale":1,"font_scale":1,"foreground":"#E8EDF2","background":"#1A2027","accent":"#4DA3FF","border":"#4DA3FF","radius":12},"safety_critical":false},"status.offline":{"properties":["scale","font_scale","foreground","background","accent","border","radius"],"defaults":{"scale":1,"font_scale":1,"foreground":"#FFFFFF","background":"#8D2932","accent":"#FFFFFF","border":"#FFFFFF","radius":12},"safety_critical":false}}})";
+}
+
+const char* webOnlyUiElementsJson() {
+  return R"({"sos.trigger":{"properties":["scale","font_scale","foreground","background","accent","border","radius"],"defaults":{"scale":1,"font_scale":1,"foreground":"#FFFFFF","background":"#8F1010","accent":"#FFD166","border":"#FFFFFF","radius":12},"safety_critical":true},"reply.button":{"properties":["scale","font_scale","foreground","background","accent","border","radius"],"defaults":{"scale":1,"font_scale":1,"foreground":"#E8EDF2","background":"#1A2027","accent":"#4DA3FF","border":"#4DA3FF","radius":12},"safety_critical":false},"monitor.close":{"properties":["scale","font_scale","foreground","background","accent","border","radius"],"defaults":{"scale":1,"font_scale":1,"foreground":"#FFFFFF","background":"#274261","accent":"#4DA3FF","border":"#4DA3FF","radius":12},"safety_critical":false}})";
+}
+
+bool secretRefValid(const std::string& ref) {
+  if (ref.rfind("secret:", 0) != 0 || ref.size() <= 7 || ref.size() > 135) return false;
+  for (size_t i = 7; i < ref.size(); ++i) {
+    const unsigned char c = static_cast<unsigned char>(ref[i]);
+    if (!(std::isalnum(c) || c == '.' || c == '_' || c == '-')) return false;
+  }
+  return true;
+}
+
+bool webPushSenderUrlValid(const std::string& url) {
+  if (url.size() < 9 || url.size() > 2048 || url.rfind("https://", 0) != 0)
+    return false;
+  for (unsigned char ch : url) {
+    if (ch <= 0x20 || ch >= 0x7f || ch == '\\') return false;
+  }
+  const size_t authority_begin = 8;
+  const size_t authority_end = url.find_first_of("/?#", authority_begin);
+  const std::string authority = url.substr(
+      authority_begin, authority_end == std::string::npos
+          ? std::string::npos : authority_end - authority_begin);
+  if (authority.empty() || authority.find('@') != std::string::npos) return false;
+
+  std::string host;
+  std::string port;
+  if (authority[0] == '[') {
+    const size_t close = authority.find(']');
+    if (close == std::string::npos || close == 1) return false;
+    host = authority.substr(1, close - 1);
+    for (unsigned char ch : host) {
+      if (!(std::isxdigit(ch) || ch == ':' || ch == '.')) return false;
+    }
+    if (close + 1 < authority.size()) {
+      if (authority[close + 1] != ':') return false;
+      port = authority.substr(close + 2);
+    }
+  } else {
+    const size_t colon = authority.rfind(':');
+    if (colon != std::string::npos) {
+      if (authority.find(':') != colon) return false;
+      host = authority.substr(0, colon);
+      port = authority.substr(colon + 1);
+    } else {
+      host = authority;
+    }
+    if (host.empty() || host.front() == '.' || host.back() == '.' ||
+        host.front() == '-' || host.back() == '-' || host.find("..") != std::string::npos)
+      return false;
+    for (unsigned char ch : host) {
+      if (!(std::isalnum(ch) || ch == '.' || ch == '-')) return false;
+    }
+  }
+  if (!port.empty()) {
+    if (port.size() > 5 ||
+        !std::all_of(port.begin(), port.end(), [](unsigned char ch) { return std::isdigit(ch); }))
+      return false;
+    const long parsed = std::strtol(port.c_str(), nullptr, 10);
+    if (parsed < 1 || parsed > 65535) return false;
+  } else if (!authority.empty() && authority.back() == ':') {
+    return false;
+  }
+  return true;
+}
+
+struct P256Field {
+  uint32_t limb[8]{};  // Little-endian base-2^32 limbs.
+};
+
+constexpr uint32_t kP256Prime[8] = {
+    0xffffffffU, 0xffffffffU, 0xffffffffU, 0x00000000U,
+    0x00000000U, 0x00000000U, 0x00000001U, 0xffffffffU,
+};
+constexpr uint32_t kP256B[8] = {
+    0x27d2604bU, 0x3bce3c3eU, 0xcc53b0f6U, 0x651d06b0U,
+    0x769886bcU, 0xb3ebbd55U, 0xaa3a93e7U, 0x5ac635d8U,
+};
+
+bool p256AtLeast(const uint32_t* value, const uint32_t* bound) {
+  for (int i = 7; i >= 0; --i) {
+    if (value[i] != bound[i]) return value[i] > bound[i];
+  }
+  return true;
+}
+
+void p256SubtractRaw(uint32_t* value, const uint32_t* subtrahend) {
+  uint64_t borrow = 0;
+  for (size_t i = 0; i < 8; ++i) {
+    const uint64_t sub = static_cast<uint64_t>(subtrahend[i]) + borrow;
+    const uint64_t current = value[i];
+    value[i] = static_cast<uint32_t>(current - sub);
+    borrow = current < sub ? 1 : 0;
+  }
+}
+
+P256Field p256Add(const P256Field& left, const P256Field& right) {
+  P256Field out;
+  uint64_t carry = 0;
+  for (size_t i = 0; i < 8; ++i) {
+    const uint64_t sum = static_cast<uint64_t>(left.limb[i]) + right.limb[i] + carry;
+    out.limb[i] = static_cast<uint32_t>(sum);
+    carry = sum >> 32;
+  }
+  if (carry || p256AtLeast(out.limb, kP256Prime)) p256SubtractRaw(out.limb, kP256Prime);
+  return out;
+}
+
+P256Field p256Subtract(const P256Field& left, const P256Field& right) {
+  P256Field out;
+  uint64_t borrow = 0;
+  for (size_t i = 0; i < 8; ++i) {
+    const uint64_t sub = static_cast<uint64_t>(right.limb[i]) + borrow;
+    const uint64_t current = left.limb[i];
+    out.limb[i] = static_cast<uint32_t>(current - sub);
+    borrow = current < sub ? 1 : 0;
+  }
+  if (borrow) {
+    uint64_t carry = 0;
+    for (size_t i = 0; i < 8; ++i) {
+      const uint64_t sum = static_cast<uint64_t>(out.limb[i]) + kP256Prime[i] + carry;
+      out.limb[i] = static_cast<uint32_t>(sum);
+      carry = sum >> 32;
+    }
+  }
+  return out;
+}
+
+P256Field p256Reduce(const uint32_t* wide) {
+  uint32_t remainder[9]{};
+  for (int bit = 511; bit >= 0; --bit) {
+    uint64_t carry = static_cast<uint64_t>((wide[bit / 32] >> (bit % 32)) & 1U);
+    for (size_t i = 0; i < 9; ++i) {
+      const uint64_t shifted = (static_cast<uint64_t>(remainder[i]) << 1) | carry;
+      remainder[i] = static_cast<uint32_t>(shifted);
+      carry = shifted >> 32;
+    }
+    if (remainder[8] != 0 || p256AtLeast(remainder, kP256Prime)) {
+      uint64_t borrow = 0;
+      for (size_t i = 0; i < 8; ++i) {
+        const uint64_t sub = static_cast<uint64_t>(kP256Prime[i]) + borrow;
+        const uint64_t current = remainder[i];
+        remainder[i] = static_cast<uint32_t>(current - sub);
+        borrow = current < sub ? 1 : 0;
+      }
+      remainder[8] = static_cast<uint32_t>(remainder[8] - borrow);
+    }
+  }
+  P256Field out;
+  for (size_t i = 0; i < 8; ++i) out.limb[i] = remainder[i];
+  return out;
+}
+
+P256Field p256Multiply(const P256Field& left, const P256Field& right) {
+  uint32_t wide[16]{};
+  for (size_t i = 0; i < 8; ++i) {
+    uint64_t carry = 0;
+    for (size_t j = 0; j < 8; ++j) {
+      const uint64_t value = static_cast<uint64_t>(wide[i + j]) +
+                             static_cast<uint64_t>(left.limb[i]) * right.limb[j] + carry;
+      wide[i + j] = static_cast<uint32_t>(value);
+      carry = value >> 32;
+    }
+    for (size_t k = i + 8; carry != 0 && k < 16; ++k) {
+      const uint64_t value = static_cast<uint64_t>(wide[k]) + carry;
+      wide[k] = static_cast<uint32_t>(value);
+      carry = value >> 32;
+    }
+  }
+  return p256Reduce(wide);
+}
+
+P256Field p256FieldFromBigEndian(const Bytes& bytes, size_t offset) {
+  P256Field out;
+  for (size_t i = 0; i < 8; ++i) {
+    const size_t at = offset + (7 - i) * 4;
+    out.limb[i] = (static_cast<uint32_t>(bytes[at]) << 24) |
+                  (static_cast<uint32_t>(bytes[at + 1]) << 16) |
+                  (static_cast<uint32_t>(bytes[at + 2]) << 8) |
+                  static_cast<uint32_t>(bytes[at + 3]);
+  }
+  return out;
+}
+
+bool p256PublicPointValid(const Bytes& encoded) {
+  if (encoded.size() != 65 || encoded[0] != 0x04) return false;
+  const P256Field x = p256FieldFromBigEndian(encoded, 1);
+  const P256Field y = p256FieldFromBigEndian(encoded, 33);
+  if (p256AtLeast(x.limb, kP256Prime) || p256AtLeast(y.limb, kP256Prime)) return false;
+
+  const P256Field lhs = p256Multiply(y, y);
+  P256Field rhs = p256Multiply(p256Multiply(x, x), x);
+  rhs = p256Subtract(rhs, x);
+  rhs = p256Subtract(rhs, x);
+  rhs = p256Subtract(rhs, x);
+  P256Field b;
+  for (size_t i = 0; i < 8; ++i) b.limb[i] = kP256B[i];
+  rhs = p256Add(rhs, b);
+  return std::equal(lhs.limb, lhs.limb + 8, rhs.limb);
+}
+
+bool vapidPublicKeyValid(const std::string& key) {
+  if (key.size() != 87 && key.size() != 88) return false;
+  std::string encoded = key;
+  for (size_t i = 0; i < encoded.size(); ++i) {
+    const unsigned char ch = static_cast<unsigned char>(encoded[i]);
+    const bool padding = ch == '=' && i + 1 == encoded.size();
+    if (!(std::isalnum(ch) || ch == '-' || ch == '_' || padding)) return false;
+    if (encoded[i] == '-') encoded[i] = '+';
+    else if (encoded[i] == '_') encoded[i] = '/';
+  }
+  while (encoded.size() % 4) encoded.push_back('=');
+  Bytes decoded;
+  return base64Decode(encoded, decoded) && p256PublicPointValid(decoded);
+}
+
+bool vapidSubjectValid(const std::string& subject) {
+  if (subject.empty() || subject.size() > 512) return false;
+  for (unsigned char ch : subject)
+    if (ch <= 0x20 || ch >= 0x7f) return false;
+  if (subject.rfind("mailto:", 0) == 0) {
+    const std::string address = subject.substr(7);
+    const size_t at = address.find('@');
+    return at > 0 && at + 1 < address.size() && address.find('@', at + 1) == std::string::npos;
+  }
+  return webPushSenderUrlValid(subject);
+}
+
+bool webPushConfigSyntaxValid(const cJSON* config) {
+  if (!cJSON_IsObject(config)) return false;
+  const std::string sender_ref = json::getString(config, "sender_secret_ref");
+  return webPushSenderUrlValid(json::getString(config, "sender_url")) &&
+         vapidPublicKeyValid(json::getString(config, "vapid_public_key")) &&
+         vapidSubjectValid(json::getString(config, "vapid_subject")) &&
+         secretRefValid(json::getString(config, "vapid_private_key_ref")) &&
+         (sender_ref.empty() || secretRefValid(sender_ref));
+}
+
+bool jsonContainsExactString(const cJSON* value, const std::string& needle) {
+  if (!value) return false;
+  if (cJSON_IsString(value))
+    return value->valuestring && needle == value->valuestring;
+  if (!cJSON_IsArray(value) && !cJSON_IsObject(value)) return false;
+  const cJSON* child = nullptr;
+  cJSON_ArrayForEach(child, value) {
+    if (jsonContainsExactString(child, needle)) return true;
+  }
+  return false;
+}
+
+std::string lowerAscii(std::string value) {
+  std::transform(value.begin(), value.end(), value.begin(), [](unsigned char c) {
+    return static_cast<char>(std::tolower(c));
+  });
+  return value;
+}
+
+std::string lastPathPart(const std::string& path) {
+  const size_t dot = path.rfind('.');
+  return lowerAscii(dot == std::string::npos ? path : path.substr(dot + 1));
+}
+
+std::string percentDecodeForCredentialCheck(std::string value) {
+  auto hex = [](unsigned char ch) -> int {
+    if (ch >= '0' && ch <= '9') return ch - '0';
+    if (ch >= 'a' && ch <= 'f') return ch - 'a' + 10;
+    if (ch >= 'A' && ch <= 'F') return ch - 'A' + 10;
+    return -1;
+  };
+  for (int pass = 0; pass < 8; ++pass) {
+    std::string decoded;
+    decoded.reserve(value.size());
+    bool changed = false;
+    for (size_t i = 0; i < value.size(); ++i) {
+      if (value[i] == '%' && i + 2 < value.size()) {
+        const int hi = hex(static_cast<unsigned char>(value[i + 1]));
+        const int lo = hex(static_cast<unsigned char>(value[i + 2]));
+        if (hi >= 0 && lo >= 0) {
+          decoded.push_back(static_cast<char>(hi * 16 + lo));
+          i += 2;
+          changed = true;
+          continue;
+        }
+      }
+      decoded.push_back(value[i]);
+    }
+    value.swap(decoded);
+    if (!changed) break;
+  }
+  return value;
+}
+
+bool sensitiveCredentialName(std::string name, bool include_identity = false) {
+  name = lowerAscii(std::move(name));
+  name.erase(std::remove_if(name.begin(), name.end(), [](char ch) {
+               return ch == '_' || ch == '-' || ch == '.';
+             }), name.end());
+  static const std::set<std::string> exact = {
+      "accesstoken", "apikey", "apitoken", "auth", "authorization", "basicauth",
+      "bearer", "bearertoken", "bottoken", "clientsecret", "credential",
+      "credentials", "digestauth", "pass", "passwd", "password", "privatekey",
+      "proxyauth", "proxyauthorization", "psk", "pskhex", "refreshtoken", "secret",
+      "sippass", "token",
+      "vapidprivatekey", "xapikey"};
+  if (exact.count(name) || (include_identity && (name == "user" || name == "username")))
+    return true;
+  for (const char* suffix : {"password", "passwd", "secret", "credential",
+                             "authorization", "auth", "token", "apikey", "privatekey",
+                             "psk"}) {
+    const size_t n = std::strlen(suffix);
+    if (name.size() > n && name.compare(name.size() - n, n, suffix) == 0) return true;
+  }
+  return false;
+}
+
+bool credentialUrl(const std::string& raw_value) {
+  const std::string value = percentDecodeForCredentialCheck(raw_value);
+  const size_t scheme = value.find("://");
+  if (scheme == std::string::npos) return false;
+  const size_t authority = scheme + 3;
+  const size_t authority_end = value.find_first_of("/?#", authority);
+  const size_t at = value.find('@', authority);
+  if (at != std::string::npos && (authority_end == std::string::npos || at < authority_end))
+    return true;
+
+  auto contains_credential_parameter = [&](size_t begin, size_t end) {
+    size_t pos = begin;
+    while (pos < end) {
+      size_t part_end = value.find_first_of("&;", pos);
+      if (part_end == std::string::npos || part_end > end) part_end = end;
+      const size_t eq = value.find('=', pos);
+      size_t name_begin = pos;
+      const size_t nested_query = value.rfind('?', eq == std::string::npos || eq > part_end
+                                                       ? part_end : eq);
+      if (nested_query != std::string::npos && nested_query >= pos)
+        name_begin = nested_query + 1;
+      const size_t name_end = eq == std::string::npos || eq > part_end ? part_end : eq;
+      if (sensitiveCredentialName(value.substr(name_begin, name_end - name_begin), true))
+        return true;
+      if (part_end >= end) break;
+      pos = part_end + 1;
+    }
+    return false;
+  };
+
+  const size_t query = value.find('?', authority);
+  const size_t fragment = value.find('#', authority);
+  if (query != std::string::npos && (fragment == std::string::npos || query < fragment) &&
+      contains_credential_parameter(query + 1,
+                                    fragment == std::string::npos ? value.size() : fragment))
+    return true;
+  if (fragment != std::string::npos &&
+      contains_credential_parameter(fragment + 1, value.size()))
+    return true;
+  return false;
+}
+
+bool plaintextSecretName(const std::string& path) {
+  const std::string leaf = lastPathPart(path);
+  std::string canonical = leaf;
+  canonical.erase(std::remove_if(canonical.begin(), canonical.end(), [](char ch) {
+                    return ch == '_' || ch == '-';
+                  }), canonical.end());
+  if (lowerAscii(path) == "panel.tokens") return true;
+  return sensitiveCredentialName(canonical);
+}
+
+bool secretRefName(const std::string& path) {
+  const std::string leaf = lastPathPart(path);
+  std::string canonical = leaf;
+  canonical.erase(std::remove_if(canonical.begin(), canonical.end(), [](char ch) {
+                    return ch == '_' || ch == '-';
+                  }), canonical.end());
+  if (canonical.size() > 3 && canonical.compare(canonical.size() - 3, 3, "ref") == 0 &&
+      sensitiveCredentialName(canonical.substr(0, canonical.size() - 3)))
+    return true;
+  if (canonical != "ref") return false;
+  const size_t leaf_dot = path.rfind('.');
+  if (leaf_dot == std::string::npos || leaf_dot == 0) return false;
+  const size_t base_dot = path.rfind('.', leaf_dot - 1);
+  const size_t base_begin = base_dot == std::string::npos ? 0 : base_dot + 1;
+  return sensitiveCredentialName(path.substr(base_begin, leaf_dot - base_begin));
+}
+
+bool secretRefsName(const std::string& path) {
+  return lastPathPart(path) == "token_refs";
+}
+
+bool panelTokenGenerationValid(const std::string& key, const cJSON* value,
+                               std::string* error) {
+  const cJSON* generation_value = value;
+  if (key == "panel") {
+    generation_value = json::get(value, "token_generation");
+    if (!generation_value) return true;
+  } else if (key != "panel.token_generation") {
+    return true;
+  }
+  const std::string generation = cJSON_IsString(generation_value) &&
+          generation_value->valuestring
+      ? generation_value->valuestring : "";
+  if (generation.size() != 32 ||
+      !std::all_of(generation.begin(), generation.end(), [](unsigned char ch) {
+        return std::isdigit(ch) || (ch >= 'a' && ch <= 'f');
+      })) {
+    *error = "panel token generation must be 32 lowercase hexadecimal characters";
+    return false;
+  }
+  return true;
+}
+
+bool legacyRuntimeSecretPath(const std::string& path, std::string* ref_path,
+                             std::string* ref_field, std::string* kind) {
+  std::string field;
+  if (path == "integrations.mqtt.pass") {
+    field = "pass_ref";
+    *kind = "mqtt";
+  } else if (path == "integrations.telegram.bot_token") {
+    field = "bot_token_ref";
+    *kind = "telegram";
+  } else if (path == "integrations.webrtc.sip_pass") {
+    field = "sip_pass_ref";
+    *kind = "webrtc";
+  } else if (path.rfind("sip.accounts.", 0) == 0 && path.size() > 18 &&
+             path.compare(path.size() - 5, 5, ".pass") == 0) {
+    field = "pass_ref";
+    *kind = "sip";
+  } else {
+    return false;
+  }
+  const size_t dot = path.rfind('.');
+  *ref_path = path.substr(0, dot + 1) + field;
+  *ref_field = std::move(field);
+  return true;
+}
+
+bool secretContractValid(const std::string& path, const cJSON* value, std::string* error) {
+  if (secretRefName(path)) {
+    if (!cJSON_IsString(value) || !secretRefValid(value->valuestring ? value->valuestring : "")) {
+      *error = "invalid secret reference at " + path;
+      return false;
+    }
+    return true;
+  }
+  if (plaintextSecretName(path)) {
+    *error = "plaintext secret field " + path + " is forbidden; store a secret_ref instead";
+    return false;
+  }
+  if (secretRefsName(path)) {
+    if (!cJSON_IsArray(value) || cJSON_GetArraySize(value) == 0) {
+      *error = "secret reference list must be a non-empty array at " + path;
+      return false;
+    }
+    const cJSON* item = nullptr;
+    cJSON_ArrayForEach(item, value) {
+      if (!cJSON_IsString(item) ||
+          !secretRefValid(item->valuestring ? item->valuestring : "")) {
+        *error = "invalid secret reference in " + path;
+        return false;
+      }
+    }
+    return true;
+  }
+  if (cJSON_IsString(value) && credentialUrl(value->valuestring ? value->valuestring : "")) {
+    *error = "credentials in URLs are forbidden at " + path + "; use secret_ref";
+    return false;
+  }
+  if (cJSON_IsObject(value)) {
+    cJSON* child = nullptr;
+    cJSON_ArrayForEach(child, value) {
+      if (!child->string) continue;
+      const std::string child_path = path.empty() ? child->string : path + "." + child->string;
+      if (!secretContractValid(child_path, child, error)) return false;
+    }
+  } else if (cJSON_IsArray(value)) {
+    const cJSON* child = nullptr;
+    cJSON_ArrayForEach(child, value) {
+      if (!secretContractValid(path, child, error)) return false;
+    }
+  }
+  return true;
+}
+
+bool mediaSourceIdValid(const std::string& id) {
+  if (id.empty() || id.size() > 128) return false;
+  for (unsigned char ch : id)
+    if (!(std::isalnum(ch) || ch == '_' || ch == '-')) return false;
+  return true;
+}
+
+bool objectHasOnly(const cJSON* object, const std::set<std::string>& allowed,
+                   const std::string& label, std::string* error) {
+  if (!cJSON_IsObject(object)) {
+    *error = label + " must be an object";
+    return false;
+  }
+  const cJSON* field = nullptr;
+  cJSON_ArrayForEach(field, object) {
+    const std::string name = field->string ? field->string : "";
+    if (!allowed.count(name)) {
+      *error = label + " contains unsupported field " + name;
+      return false;
+    }
+  }
+  return true;
+}
+
+bool mediaSourceDefinitionValid(const cJSON* value, std::string* error) {
+  if (!objectHasOnly(value, {"schema_version", "kind", "streams", "secret_ref"},
+                     "media source", error))
+    return false;
+  if (json::getInt(value, "schema_version") != 1 ||
+      json::getString(value, "kind") != "ip_camera") {
+    *error = "unsupported media source schema or kind";
+    return false;
+  }
+  const cJSON* secret_ref = json::get(value, "secret_ref");
+  if (secret_ref &&
+      (!cJSON_IsString(secret_ref) ||
+       !secretRefValid(secret_ref->valuestring ? secret_ref->valuestring : ""))) {
+    *error = "invalid media source secret_ref";
+    return false;
+  }
+  const cJSON* streams = json::get(value, "streams");
+  if (!objectHasOnly(streams, {"h264", "mjpeg", "snapshot"},
+                     "media source streams", error))
+    return false;
+  bool any = false;
+  for (const char* name : {"h264", "mjpeg", "snapshot"}) {
+    const cJSON* stream = json::get(streams, name);
+    if (!stream) continue;
+    any = true;
+    const bool h264 = std::string(name) == "h264";
+    if (!objectHasOnly(stream, h264 ? std::set<std::string>{"url", "transport", "profile"}
+                                    : std::set<std::string>{"url"},
+                       std::string("media stream ") + name, error))
+      return false;
+    const std::string url = json::getString(stream, "url");
+    const bool scheme_ok = h264 ? url.rfind("rtsp://", 0) == 0
+                                : (url.rfind("http://", 0) == 0 ||
+                                   url.rfind("https://", 0) == 0);
+    if (!scheme_ok || url.size() > 4096 || credentialUrl(url)) {
+      *error = std::string("invalid or credential-bearing ") + name + " stream URL";
+      return false;
+    }
+    if (h264 && (json::getString(stream, "transport") != "tcp" ||
+                 json::getString(stream, "profile") != "baseline")) {
+      *error = "H.264 IP cameras require RTSP-over-TCP Baseline profile";
+      return false;
+    }
+  }
+  if (!any) {
+    *error = "media source must declare at least one stream";
+    return false;
+  }
+  return true;
+}
+
+bool webGroupNameValid(const std::string& group) {
+  return !group.empty() && group.size() <= 64 &&
+         std::all_of(group.begin(), group.end(), [](unsigned char ch) {
+           return std::isalnum(ch) || ch == '_' || ch == '.' || ch == ':' || ch == '-';
+         });
+}
+
+bool webPushSealedRecordValid(const std::string& key, const cJSON* value,
+                              std::string* error) {
+  const std::string prefix = "web_push.subscriptions.";
+  if (key.rfind(prefix, 0) != 0) return true;
+  const std::string id = key.substr(prefix.size());
+  const auto is_hex = [](const std::string& text, size_t exact = 0) {
+    if ((exact && text.size() != exact) || text.empty() || text.size() % 2 != 0) return false;
+    return std::all_of(text.begin(), text.end(), [](unsigned char ch) {
+      return std::isdigit(ch) || (ch >= 'a' && ch <= 'f') || (ch >= 'A' && ch <= 'F');
+    });
+  };
+  if (!is_hex(id, 32) || !cJSON_IsObject(value) ||
+      json::getInt(value, "schema_version") != 2) {
+    *error = "Web Push subscriptions require a sealed schema version 2 record";
+    return false;
+  }
+  const std::set<std::string> record_fields = {
+      "schema_version", "sealed_subscription", "page", "group", "updated_at_ms"};
+  const cJSON* field = nullptr;
+  cJSON_ArrayForEach(field, value) {
+    if (!field->string || !record_fields.count(field->string)) {
+      *error = "sealed Web Push records contain an unknown field";
+      return false;
+    }
+  }
+  const cJSON* sealed = json::get(value, "sealed_subscription");
+  if (!cJSON_IsObject(sealed) ||
+      json::getString(sealed, "algorithm") != "xchacha20-poly1305") {
+    *error = "Web Push subscription ciphertext must use XChaCha20-Poly1305";
+    return false;
+  }
+  const std::set<std::string> sealed_fields = {"algorithm", "nonce", "ciphertext"};
+  cJSON_ArrayForEach(field, sealed) {
+    if (!field->string || !sealed_fields.count(field->string)) {
+      *error = "sealed Web Push ciphertext contains an unknown field";
+      return false;
+    }
+  }
+  const std::string nonce = json::getString(sealed, "nonce");
+  const std::string ciphertext = json::getString(sealed, "ciphertext");
+  if (!is_hex(nonce, 48) || !is_hex(ciphertext) || ciphertext.size() < 34 ||
+      ciphertext.size() > 32 * 1024) {
+    *error = "sealed Web Push ciphertext has an invalid size or encoding";
+    return false;
+  }
+  const std::string page = json::getString(value, "page");
+  const std::string group = json::getString(value, "group");
+  const cJSON* updated = json::get(value, "updated_at_ms");
+  if (page.rfind("/panel/", 0) != 0 || page.size() > 256 || !webGroupNameValid(group) ||
+      !cJSON_IsNumber(updated)) {
+    *error = "sealed Web Push metadata is invalid";
+    return false;
+  }
+  return true;
+}
+
+bool configWriteValid(const std::string& key, const cJSON* value, std::string* error) {
+  if (!secretContractValid(key, value, error)) return false;
+  if (!panelTokenGenerationValid(key, value, error)) return false;
+  if (key == "web_push.subscriptions") {
+    *error = "the Web Push subscription container is read-only";
+    return false;
+  }
+  if (!webPushSealedRecordValid(key, value, error)) return false;
+  if (key == "devices") {
+    *error = "the devices container is read-only; write one device or semantic element leaf";
+    return false;
+  }
+  const std::string ui_path = ".local.ui";
+  const std::string element_path = ".local.ui.elements.";
+  const size_t ui_pos = key.find(ui_path);
+  const bool ui_namespace = ui_pos != std::string::npos &&
+      (ui_pos + ui_path.size() == key.size() || key[ui_pos + ui_path.size()] == '.');
+  const bool element_leaf = key.find(element_path) != std::string::npos;
+  if (key.rfind("devices.", 0) == 0 && ui_namespace && !element_leaf) {
+    *error = "UI containers are read-only; write one semantic element override at a time";
+    return false;
+  }
+  if (key.rfind("devices.", 0) == 0 && cJSON_IsObject(value) && !ui_namespace) {
+    const cJSON* embedded_ui = nullptr;
+    if (key.size() >= 6 && key.compare(key.size() - 6, 6, ".local") == 0)
+      embedded_ui = json::get(value, "ui");
+    else if (key.find(".local.") == std::string::npos)
+      embedded_ui = json::get(json::get(value, "local"), "ui");
+    if (embedded_ui) {
+      *error = "embedded UI containers are forbidden; use semantic element leaf keys";
+      return false;
+    }
+  }
+  if (!uiStyleOverrideValid(key, value, error)) return false;
+  const std::string helper_suffix = ".local.recovery.helper_mode";
+  if (key.rfind("devices.", 0) == 0 && key.size() >= helper_suffix.size() &&
+      key.compare(key.size() - helper_suffix.size(), helper_suffix.size(), helper_suffix) == 0) {
+    const std::string mode = cJSON_IsString(value) ? value->valuestring : "";
+    if (mode != "off" && mode != "auto" && mode != "on") {
+      *error = "helper_mode must be off, auto, or on";
+      return false;
+    }
+  }
+  if (key == "media_sources") {
+    if (!cJSON_IsObject(value)) {
+      *error = "media_sources must be an object";
+      return false;
+    }
+    const cJSON* source = nullptr;
+    cJSON_ArrayForEach(source, value) {
+      const std::string id = source->string ? source->string : "";
+      if (!mediaSourceIdValid(id) || !mediaSourceDefinitionValid(source, error)) {
+        if (error->empty()) *error = "invalid media source identifier";
+        return false;
+      }
+    }
+  } else if (key.rfind("media_sources.", 0) == 0) {
+    const std::string id = key.substr(std::string("media_sources.").size());
+    if (!mediaSourceIdValid(id)) {
+      *error = "media source writes must replace one complete source definition";
+      return false;
+    }
+    if (!mediaSourceDefinitionValid(value, error)) return false;
+  }
+  return true;
+}
+
+class RemoteMp4Stream {
+ public:
+  explicit RemoteMp4Stream(std::string host) : host_(std::move(host)) {}
+  ~RemoteMp4Stream() { close(); }
+
+  Bytes pull(bool* ended) {
+    if (ended) *ended = false;
+    if (!opened_ && !open()) {
+      if (ended) *ended = true;
+      return {};
+    }
+    if (!pending_.empty()) {
+      Bytes out;
+      const size_t n = std::min<size_t>(pending_.size(), 64 * 1024);
+      out.insert(out.end(), pending_.begin(), pending_.begin() + n);
+      pending_.erase(pending_.begin(), pending_.begin() + n);
+      return out;
+    }
+    net::pollfd_t pfd{};
+    pfd.fd = fd_;
+    pfd.events = POLLIN;
+    const int pr = net::poll(&pfd, 1, 500);
+    if (pr == 0) return {};
+    if (pr < 0 || (pfd.revents & (POLLERR | POLLHUP | POLLNVAL))) {
+      close();
+      if (ended) *ended = true;
+      return {};
+    }
+    uint8_t buf[64 * 1024];
+    const int n = net::recvSome(fd_, buf, sizeof(buf));
+    if (n > 0) return Bytes(buf, buf + n);
+    if (n < 0 && net::errWouldBlock(net::lastError())) return {};
+    close();
+    if (ended) *ended = true;
+    return {};
+  }
+
+ private:
+  bool open() {
+    opened_ = true;
+    addrinfo hints{};
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_socktype = SOCK_STREAM;
+    addrinfo* addresses = nullptr;
+    if (::getaddrinfo(host_.c_str(), "47180", &hints, &addresses) != 0 || !addresses)
+      return false;
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(3);
+    for (addrinfo* p = addresses; p && !net::valid(fd_); p = p->ai_next) {
+      net::socket_t candidate = ::socket(p->ai_family, p->ai_socktype, p->ai_protocol);
+      if (!net::valid(candidate)) continue;
+      net::setNonBlock(candidate);
+      const int rc = ::connect(candidate, p->ai_addr, static_cast<net::socklen_v>(p->ai_addrlen));
+      if (rc != 0 && !net::errConnectInProgress(net::lastError())) {
+        net::closeSocket(candidate);
+        continue;
+      }
+      net::pollfd_t pfd{};
+      pfd.fd = candidate;
+      pfd.events = POLLOUT;
+      const auto left = std::chrono::duration_cast<std::chrono::milliseconds>(
+          deadline - std::chrono::steady_clock::now()).count();
+      if (rc == 0 || (left > 0 && net::poll(&pfd, 1, static_cast<int>(left)) > 0 &&
+                      net::getSockError(candidate) == 0)) {
+        fd_ = candidate;
+      } else {
+        net::closeSocket(candidate);
+      }
+    }
+    ::freeaddrinfo(addresses);
+    if (!net::valid(fd_)) return false;
+    int yes = 1;
+    net::setSockOpt(fd_, IPPROTO_TCP, TCP_NODELAY, &yes, sizeof(yes));
+    const std::string request = "GET /stream.mp4 HTTP/1.1\r\nHost: " + host_ +
+                                "\r\nAccept: video/mp4\r\nConnection: close\r\n\r\n";
+    size_t sent = 0;
+    while (sent < request.size()) {
+      const int n = net::sendSome(fd_, request.data() + sent, request.size() - sent);
+      if (n > 0) {
+        sent += static_cast<size_t>(n);
+        continue;
+      }
+      if (n < 0 && net::errWouldBlock(net::lastError())) {
+        net::pollfd_t pfd{};
+        pfd.fd = fd_;
+        pfd.events = POLLOUT;
+        if (net::poll(&pfd, 1, 500) > 0) continue;
+      }
+      close();
+      return false;
+    }
+    std::string response;
+    const auto header_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    while (response.find("\r\n\r\n") == std::string::npos && response.size() < 64 * 1024 &&
+           std::chrono::steady_clock::now() < header_deadline) {
+      net::pollfd_t pfd{};
+      pfd.fd = fd_;
+      pfd.events = POLLIN;
+      if (net::poll(&pfd, 1, 500) <= 0) continue;
+      char buf[8192];
+      const int n = net::recvSome(fd_, buf, sizeof(buf));
+      if (n <= 0) {
+        if (n < 0 && net::errWouldBlock(net::lastError())) continue;
+        close();
+        return false;
+      }
+      response.append(buf, static_cast<size_t>(n));
+    }
+    const size_t end = response.find("\r\n\r\n");
+    if (end == std::string::npos ||
+        (response.rfind("HTTP/1.1 200", 0) != 0 && response.rfind("HTTP/1.0 200", 0) != 0)) {
+      close();
+      return false;
+    }
+    std::string headers = response.substr(0, end);
+    std::transform(headers.begin(), headers.end(), headers.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    if (headers.find("content-type: video/mp4") == std::string::npos) {
+      close();
+      return false;
+    }
+    pending_.assign(response.begin() + static_cast<std::ptrdiff_t>(end + 4), response.end());
+    return true;
+  }
+
+  void close() {
+    if (net::valid(fd_)) net::closeSocket(fd_);
+    fd_ = net::kInvalidSocket;
+  }
+
+  std::string host_;
+  net::socket_t fd_ = net::kInvalidSocket;
+  bool opened_ = false;
+  Bytes pending_;
+};
+
+
 bool isSha256HexStr(const std::string& s) {
   if (s.size() != 64) return false;
   for (char c : s) {
@@ -120,17 +1196,17 @@ bool isSha256HexStr(const std::string& s) {
   return true;
 }
 
-// "asset:<sha256>" 形式 (chime sound / emergency.alarm_sound) から hash を取り出す ("" = 非該当)
+
 std::string assetRefHash(const std::string& v) {
   if (v.rfind("asset:", 0) != 0) return "";
   std::string h = v.substr(6);
   return isSha256HexStr(h) ? h : "";
 }
 
-// ---------- 内蔵既定文言 (Node::text の最終回落) ----------
-// i18n/strings.yaml (文言の単一ソース) のうち「コアが自前で組む通知文」だけを写した表。
-// 殻の UI 文言 (idle.* / admin.* 等) は各殻の resx/strings.xml が持つのでここには置かない。
-// 追加する時は i18n/strings.yaml 側にも必ず同じキーを足すこと。
+
+
+
+
 struct BuiltinText {
   const char* key;
   const char* ja;
@@ -150,11 +1226,13 @@ constexpr BuiltinText kBuiltinTexts[] = {
     {"emergency.notify_on", "🚨 緊急事態です — {device} から発報 ({time})",
      "🚨 Emergency — triggered by {device} ({time})", "🚨 紧急情况 — 由 {device} 触发 ({time})"},
     {"emergency.notify_off", "✅ 緊急解除", "✅ Emergency cleared", "✅ 警报已解除"},
+    {"emergency.active_detail", "緊急モードが発報されています", "Emergency mode is active",
+     "紧急模式已触发"},
     {"reply.answered", "応答済み ({text})", "Replied ({text})", "已回复 ({text})"},
     {"notify.test", "ドアホン テスト通知", "Doorbell test notification", "门铃测试通知"},
 };
 
-// 内蔵既定表の引き (見つからなければ nullptr)。lang は ja/en/zh 以外なら ja 扱い。
+
 const char* builtinText(const std::string& key, const std::string& lang) {
   for (const auto& t : kBuiltinTexts) {
     if (key != t.key) continue;
@@ -165,7 +1243,7 @@ const char* builtinText(const std::string& key, const std::string& lang) {
   return nullptr;
 }
 
-// "{name}" プレースホルダの全置換
+
 void substArgs(std::string& s, const std::vector<std::pair<std::string, std::string>>& args) {
   for (const auto& kv : args) {
     const std::string ph = "{" + kv.first + "}";
@@ -197,28 +1275,102 @@ struct Node::Impl {
   std::unique_ptr<Mesh> mesh;
   std::unique_ptr<Httpd> httpd;
   std::unique_ptr<SipCtl> sipctl;
-  std::unique_ptr<HaBridge> bridge;  // HA MQTT ブリッジ (leader 時のみ接続)
-  std::unique_ptr<TelegramBridge> tg;  // Telegram ブリッジ (leader 時のみ送信)
-  FrameBus frame_bus;  // 帧総線 (任意スレッドから push / 需要駆動 JPEG)
-  // H.264 流暢档 (Phase 6a): 符号化フレームの共有点 (/stream.mp4 の源)。
-  // エンコードは殻/平台層 — コアは箱詰め (fMP4) と配信だけ。
+  std::unique_ptr<HaBridge> bridge;
+  std::unique_ptr<TelegramBridge> tg;
+  FrameBus frame_bus;
+
+
   VideoTrack video_track;
-  // 動体検知 (feed は採集スレッド — 設定変更と競合するため motion_mu_ で保護)
+  // Shell sensor angle and its administrator-resolved effective value are read by HTTP workers.
+  std::atomic<int> sensor_video_rotation{0};
+  std::atomic<int> effective_video_rotation{0};
+
   MotionDetector motion;
   std::mutex motion_mu;
-  // パネル状態 (loop 上でのみ触る): door → 呼出表示窓の期限 (mono ms)、最新クイック返信
+
   std::map<std::string, int64_t> door_calling_until;
+  enum class RecoveryLeaseKind { None, LocalProcess, DeadOwnerTakeover };
+  struct ActiveCall {
+    std::string call_id;
+    std::string door;
+    std::string origin;
+    std::string dialog_owner;
+    std::string purpose;
+    std::string state = "ringing";
+    int stage_revision = 0;
+    int64_t expires_wall_ms = 0;
+    uint64_t timeout_timer = 0;
+    unsigned timeout_retry_step = 0;
+    bool local_sip_established = false;
+    uint64_t recovery_timer = 0;
+    int64_t recovery_deadline_mono = 0;
+    bool recovery_notified = false;
+    unsigned recovery_retry_step = 0;
+    std::string recovery_reason;
+    RecoveryLeaseKind recovery_kind = RecoveryLeaseKind::None;
+  };
+  std::map<std::string, ActiveCall> active_calls;  // door -> active call
+  struct TerminalCall {
+    std::string call_id;
+    std::string door;
+    std::string purpose;
+    std::string state;
+    std::string reason;
+    std::string dialog_owner;
+    int stage_revision = 0;
+    int64_t expires_wall_ms = 0;
+    int64_t terminal_wall_ms = 0;
+    int64_t visible_until_mono = 0;
+    uint64_t order = 0;
+  };
+  static constexpr int64_t kPanelTerminalCallTtlMs = 30'000;
+  static constexpr size_t kMaxPanelTerminalCalls = 256;
+  std::map<std::string, TerminalCall> terminal_calls;  // door -> recent terminal state
+  uint64_t terminal_call_order = 0;
+  struct PendingLifecycle {
+    std::string call_id;
+    std::string door;
+    std::string owner;
+    std::string end_reason;
+    int stage_revision = 0;
+    bool answer_pending = false;
+    bool end_pending = false;
+    unsigned retry_step = 0;
+    uint64_t retry_timer = 0;
+    uint64_t order = 0;
+  };
+  static constexpr size_t kMaxPendingLifecycles = 256;
+  std::map<std::string, PendingLifecycle> pending_lifecycles;  // call_id -> ordered writes
+  uint64_t pending_lifecycle_order = 0;
+  struct WebDialogLease {
+    std::string door;
+    std::string owner;
+    uint64_t timer = 0;
+    unsigned retry_step = 0;
+  };
+  std::map<std::string, WebDialogLease> web_dialog_timers;  // call_id -> authority lease
+  std::set<std::string> cancelled_call_ids;
+  std::deque<std::string> cancelled_call_order;
+  std::string sip_call_id;
   std::string last_reply_text;
   int64_t last_reply_ts = 0;
 #ifdef _WIN32
-  std::unique_ptr<CameraWin> camera;  // door_station のみ起動
-  // Windows の H.264 硬編は core 内 (camera_win と同居 — 殻に採集ループが無いため)。
-  // wanted (購読者あり) の間だけ回す — encoder_timer が 5 秒毎に判定する。
+  std::unique_ptr<CameraWin> camera;
+
+
   std::unique_ptr<EncoderWin> encoder;
   uint64_t encoder_timer = 0;
 #endif
 
-  json::Doc cfg;  // materialize 済み設定 (loop 上でのみ触る)
+  json::Doc cfg;
+  std::string measured_caps_json = "{}";
+  std::string effective_caps_json = "{}";
+  std::string runtime_status_json = "{}";
+  std::string web_ui_style_report_json = "{}";
+  std::string ui_manifest_json = "{}";
+  bool suppress_config_callbacks = false;
+  bool config_persistence_failed = false;
+  uint64_t config_persistence_failures = 0;
   std::string node_id;
   uint64_t epoch = 1;
   bool started = false;
@@ -226,79 +1378,95 @@ struct Node::Impl {
   std::string status_snap;
   std::string config_snap;
   std::string pairing_snap;
-  bool snap_scheduled = false;  // snap_mu 保護
+  bool snap_scheduled = false;
   uint64_t snapshot_timer = 0;
+  std::set<std::string> playback_invalid_logged;
 
-  // press の追跡 (クイック返信の宛先解決・回執)
+
   std::string last_press_door;
   std::map<std::string, std::pair<std::string, uint64_t>> last_press_by_door;
 
-  // SIP 状態 (loop 上でのみ触る)
+
   SipRegState sip_reg = SipRegState::Idle;
   SipCallState sip_call = SipCallState::Idle;
-  // 通話中の相手 (対称 MJPEG 双方向映像用 — onSipCall InCall で解決)
-  std::string sip_peer_node;    // 相手の node_id ("" = 特定不能: PSTN/Groundwire 等)
-  std::string sip_peer_stream;  // 相手のライブ映像 URL (http://<host>:47180/stream.mjpeg)
-  // 網頁通話の相手映像スロット (POST /call-frame が置き、殻が /peer-frame.jpg で輪詢する。
-  // FrameBus とは別 — 自機カメラの絵と混ぜない。loop 上でのみ触る)
-  Bytes peer_frame;
-  int64_t peer_frame_mono = 0;  // 受信時刻 (monoMs)。3 秒で腐る
-  std::string dtmf_buf;          // 通話中の DTMF 機能碼バッファ
-  uint64_t dtmf_timer = 0;       // 3 秒無入力クリア
-  uint64_t sip_reapply_timer = 0;  // 設定変更のデバウンス (連続する sip.* 差分で再起動を繰り返さない)
-  uint64_t bridge_reapply_timer = 0;  // 同・HA ブリッジ用 (config 差分は複数キーで届く)
 
-  // Telegram leader の就任遷移検出 (就任時に未通知 press を拾い直す)
+  std::string sip_peer_node;
+  std::string sip_peer_stream;
+
+
+  Bytes peer_frame;
+  int64_t peer_frame_mono = 0;
+  std::string dtmf_buf;
+  uint64_t dtmf_timer = 0;
+  uint64_t sip_reapply_timer = 0;
+  uint64_t bridge_reapply_timer = 0;
+
+
   bool tg_was_active = false;
 
-  // 表示制御 (loop 上でのみ触る): 直近に通知した display JSON + 30 秒周期の再評価タイマー
+
   std::string last_display_json;
   uint64_t display_timer = 0;
 
-  // 統一資産キャッシュ (loop 上でのみ触る)。実体は assets_dir/<sha256>。
-  std::string assets_dir;                       // data_dir/assets (":memory:" はテンポラリ)
-  std::set<std::string> asset_fetching;         // mesh から取得中の hash (重複取得防止)
-  std::map<std::string, int64_t> asset_unref_since;  // GC 猶予: hash → 無参照を初観測した mono
-  uint64_t asset_prefetch_timer = 0;            // config 変更のデバウンス
 
-  // 訪客言語 (loop 上でのみ触る): door → 選択中言語 (主言語 ja は保持しない = 空)。
-  // 復帰タイマーは visitor_lang イベントを起こしたノードだけが張る (復帰イベントの重複防止)。
+  std::string assets_dir;
+  std::set<std::string> asset_fetching;
+  std::map<std::string, int64_t> asset_unref_since;
+  uint64_t asset_prefetch_timer = 0;
+
+
+
   std::map<std::string, std::string> visitor_lang_by_door;
   std::map<std::string, uint64_t> visitor_lang_revert_timer;  // door → timer id
 
-  // SOS 緊急モード (loop 上でのみ触る): 現在状態 = emergency / emergency_cancel の hlc 最大側
+
   bool emergency_active = false;
   std::string emergency_hlc;
 
-  // コールバック (任意スレッドから差し替え可)
+
   std::mutex cb_mu;
   UiEventCb ui_cb;
   TtsCb tts_cb;
   HttpsFn https_fn;
+  SecureGetFn secure_get_fn;
+  SecurePutFn secure_put_fn;
+  std::set<std::string> secret_migration_warnings;
+  std::string sip_credential_source = "none";
+  bool pairing_persistence_ready = false;
 
-  // 生存トークン: HttpsFn done (任意スレッド) が Impl 破棄後の loop へ触れないための弱参照
+
   std::shared_ptr<char> alive = std::make_shared<char>(0);
 
-  // 管理セッション (civetweb スレッドの auth gate とも共有)
-  std::mutex sess_mu;
-  std::set<std::string> sessions;
 
-  // ---------- 疎通監視 (debug 画面用) ----------
-  // 全て runloop 上でのみ触る (背景スレッド無し = iOS の suspend/resume と衝突しない)。
-  Node::DeviceInfoFn device_info_fn;      // 端末情報 SPI (gateway/wifi/battery)。cache 読取で速い
-  std::string device_info_json;            // 直近 device_info (gateway/wifi/battery)
-  std::string net_leader_addr;             // leader ノードの host (mesh から。空=自機/不明)
-  std::vector<std::pair<std::string, std::string>> net_custom;  // (label, "host:port") config 由来
-  uint64_t net_refresh_timer = 0;          // leader/custom スナップショット更新 (loop)
-  uint64_t net_probe_timer = 0;            // 疎通プローブ (1 tick 1 target)
+  std::mutex sess_mu;
+  std::mutex admin_credential_mu;
+  std::set<std::string> sessions;
+  struct PanelCredentialBinding {
+    std::string generation;
+    std::vector<std::string> refs;
+  };
+  std::map<std::string, PanelCredentialBinding> panel_sessions;
+
+
+
+  Node::DeviceInfoFn device_info_fn;
+  std::string device_info_json;
+  std::string net_leader_addr;
+  std::vector<std::pair<std::string, std::string>> net_custom;
+  uint64_t net_refresh_timer = 0;
+  uint64_t net_probe_timer = 0;
   size_t net_tick = 0;                     // round-robin index
+  std::string mqtt_probe_host;
+  int mqtt_probe_port = 1883;
+  bool mqtt_probe_known = false;
+  bool mqtt_probe_reachable = false;
 
   // ---------- helpers ----------
-  void uiNotify(const std::string& event_json) {
-    // イベント配送より先に快照を更新する — 受信側がイベントを見て status/config を
-    // 読み直したとき、必ずイベント時点以降の状態が見える (遅延更新だと古い快照を
-    // 読んだきり再通知が来ず、UI が停滞する)。loop 外から呼ばれた場合 (sipctl 等) は
-    // loop 上の状態に触れないよう post に退避。started 前後は init/stop が面倒を見る。
+  bool uiNotify(const std::string& event_json) {
+
+
+
+
     if (started && loop->onLoopThread()) {
       refreshSnapshots();
     } else {
@@ -310,6 +1478,422 @@ struct Node::Impl {
       cb = ui_cb;
     }
     if (cb) cb(event_json);
+    return static_cast<bool>(cb);
+  }
+
+  std::string secretValue(const std::string& ref) {
+    if (!secretRefValid(ref)) return "";
+    SecureGetFn get;
+    {
+      std::lock_guard<std::mutex> lk(cb_mu);
+      get = secure_get_fn;
+    }
+    return get ? get(ref.substr(7)) : "";
+  }
+
+  bool putSecret(const std::string& ref, const std::string& value) {
+    if (!secretRefValid(ref) || value.size() > 64 * 1024) return false;
+    SecurePutFn put;
+    {
+      std::lock_guard<std::mutex> lk(cb_mu);
+      put = secure_put_fn;
+    }
+    return put && put(ref.substr(7), value);
+  }
+
+  bool secureStoreAvailable(bool require_put) {
+    std::lock_guard<std::mutex> lk(cb_mu);
+    return require_put ? static_cast<bool>(secure_put_fn) : static_cast<bool>(secure_get_fn);
+  }
+
+  bool secureStoreReadWrite() { return secureStoreAvailable(false) && secureStoreAvailable(true); }
+
+  std::string migratedSecretRef(const std::string& logical_path) const {
+    uint8_t digest[16];
+    crypto_blake2b(digest, sizeof(digest),
+                   reinterpret_cast<const uint8_t*>(logical_path.data()), logical_path.size());
+    return "secret:migrated." + hexEncode(digest, sizeof(digest));
+  }
+
+  void noteSecretMigrationFailure(const std::string& kind, const std::string& reason) {
+    const std::string warning = "legacy_" + kind + "_credential_" + reason;
+    secret_migration_warnings.insert(warning);
+    DB_LOGW(kTag, "removed a legacy " + kind + " credential from replicated config; " + reason);
+  }
+
+  bool migrateLegacySecret(const std::string& logical_path, const std::string& kind,
+                           const cJSON* legacy_value, const std::string& configured_ref,
+                           std::string* effective_ref, bool* ref_changed) {
+    const bool existing_ref_valid = secretRefValid(configured_ref);
+    if (existing_ref_valid && !secretValue(configured_ref).empty()) {
+      *effective_ref = configured_ref;
+      *ref_changed = false;
+      return true;
+    }
+    if (!cJSON_IsString(legacy_value) || !legacy_value->valuestring ||
+        !*legacy_value->valuestring) {
+      *effective_ref = existing_ref_valid ? configured_ref : "";
+      *ref_changed = false;
+      noteSecretMigrationFailure(kind, "invalid_value");
+      return false;
+    }
+    if (!secureStoreReadWrite()) {
+      *effective_ref = existing_ref_valid ? configured_ref : "";
+      *ref_changed = false;
+      noteSecretMigrationFailure(kind, "secure_store_unavailable");
+      return false;
+    }
+    const std::string ref = existing_ref_valid ? configured_ref
+                                                : migratedSecretRef(logical_path);
+    if (!putSecret(ref, legacy_value->valuestring)) {
+      *effective_ref = existing_ref_valid ? configured_ref : "";
+      *ref_changed = false;
+      noteSecretMigrationFailure(kind, "secure_store_failed");
+      return false;
+    }
+    *effective_ref = ref;
+    *ref_changed = !existing_ref_valid;
+    return true;
+  }
+
+  bool migrateLegacySecretsInObject(cJSON* object, const std::string& object_path) {
+    if (!cJSON_IsObject(object)) return false;
+    std::vector<std::string> fields;
+    cJSON* child = nullptr;
+    cJSON_ArrayForEach(child, object) {
+      if (child->string) fields.emplace_back(child->string);
+    }
+    bool changed = false;
+    for (const auto& field : fields) {
+      child = json::get(object, field.c_str());
+      if (!child) continue;
+      const std::string path = object_path.empty() ? field : object_path + "." + field;
+      std::string ref_path;
+      std::string ref_field;
+      std::string kind;
+      if (legacyRuntimeSecretPath(path, &ref_path, &ref_field, &kind)) {
+        const cJSON* sibling_ref = json::get(object, ref_field.c_str());
+        std::string configured_ref = cJSON_IsString(sibling_ref) && sibling_ref->valuestring
+            ? sibling_ref->valuestring : "";
+        if (!secretRefValid(configured_ref)) {
+          const cJSON* materialized_ref = cfgAt(ref_path);
+          configured_ref = cJSON_IsString(materialized_ref) && materialized_ref->valuestring
+              ? materialized_ref->valuestring : "";
+        }
+        std::string effective_ref;
+        bool ref_changed = false;
+        const bool migrated = migrateLegacySecret(path, kind, child, configured_ref,
+                                                  &effective_ref, &ref_changed);
+        cJSON_DeleteItemFromObjectCaseSensitive(object, field.c_str());
+        if (migrated && (ref_changed || !secretRefValid(
+                cJSON_IsString(sibling_ref) && sibling_ref->valuestring
+                    ? sibling_ref->valuestring : "")))
+          json::set(object, ref_field.c_str(), effective_ref);
+        else if (!migrated && sibling_ref && !secretRefValid(
+                     cJSON_IsString(sibling_ref) && sibling_ref->valuestring
+                         ? sibling_ref->valuestring : ""))
+          cJSON_DeleteItemFromObjectCaseSensitive(object, ref_field.c_str());
+        changed = true;
+        continue;
+      }
+      if (cJSON_IsObject(child))
+        changed = migrateLegacySecretsInObject(child, path) || changed;
+      else if (cJSON_IsArray(child)) {
+        cJSON* item = nullptr;
+        cJSON_ArrayForEach(item, child) {
+          if (cJSON_IsObject(item))
+            changed = migrateLegacySecretsInObject(item, path) || changed;
+        }
+      }
+    }
+    return changed;
+  }
+
+  bool migrateLegacyRuntimeCredentials() {
+    std::vector<LwwMutation> mutations;
+    for (const auto& entry : config->all()) {
+      if (entry.deleted) continue;
+      auto value = json::parse(entry.value_json);
+      if (!value) value = json::Doc(cJSON_CreateString(entry.value_json.c_str()));
+      std::string ref_path;
+      std::string ref_field;
+      std::string kind;
+      if (legacyRuntimeSecretPath(entry.key, &ref_path, &ref_field, &kind)) {
+        std::string configured_ref;
+        const cJSON* materialized_ref = cfgAt(ref_path);
+        if (cJSON_IsString(materialized_ref) && materialized_ref->valuestring)
+          configured_ref = materialized_ref->valuestring;
+        std::string effective_ref;
+        bool ref_changed = false;
+        const bool migrated = migrateLegacySecret(entry.key, kind, value.get(), configured_ref,
+                                                  &effective_ref, &ref_changed);
+        if (migrated && ref_changed) {
+          auto ref_value = json::Doc(cJSON_CreateString(effective_ref.c_str()));
+          mutations.push_back({ref_path, json::dump(ref_value.get()), false});
+        }
+        mutations.push_back({entry.key, "", true});
+        continue;
+      }
+      if (migrateLegacySecretsInObject(value.get(), entry.key))
+        mutations.push_back({entry.key, json::dump(value.get()), false});
+    }
+    if (mutations.empty()) return true;
+    config->mutate(mutations);
+    if (!config->lastMutationCommitted()) {
+      secret_migration_warnings.insert("legacy_secret_scrub_config_persistence_failed");
+      DB_LOGE(kTag, "legacy secret scrub could not be persisted; refusing startup");
+      return false;
+    }
+    return true;
+  }
+
+  static bool constantTimeEqual(const std::string& a, const std::string& b) {
+    size_t diff = a.size() ^ b.size();
+    const size_t n = std::max(a.size(), b.size());
+    for (size_t i = 0; i < n; ++i) {
+      const unsigned char av = i < a.size() ? static_cast<unsigned char>(a[i]) : 0;
+      const unsigned char bv = i < b.size() ? static_cast<unsigned char>(b[i]) : 0;
+      diff |= static_cast<size_t>(av ^ bv);
+    }
+    return diff == 0;
+  }
+
+  std::vector<std::string> panelSecretRefs() {
+    std::vector<std::string> refs;
+    cJSON* configured = cfgAt("panel.token_refs");
+    const cJSON* item = nullptr;
+    cJSON_ArrayForEach(item, configured) {
+      if (!cJSON_IsString(item)) continue;
+      const std::string ref = item->valuestring ? item->valuestring : "";
+      if (secretRefValid(ref)) refs.push_back(ref);
+    }
+    return refs;
+  }
+
+  PanelCredentialBinding panelCredentialBinding() {
+    PanelCredentialBinding binding;
+    binding.refs = panelSecretRefs();
+    std::sort(binding.refs.begin(), binding.refs.end());
+    binding.refs.erase(std::unique(binding.refs.begin(), binding.refs.end()),
+                       binding.refs.end());
+    const cJSON* generation = cfgAt("panel.token_generation");
+    if (cJSON_IsString(generation) && generation->valuestring)
+      binding.generation = generation->valuestring;
+    return binding;
+  }
+
+  static bool samePanelCredentialBinding(const PanelCredentialBinding& a,
+                                         const PanelCredentialBinding& b) {
+    return a.generation == b.generation && a.refs == b.refs;
+  }
+
+  void invalidatePanelSessions() {
+    std::lock_guard<std::mutex> lk(sess_mu);
+    panel_sessions.clear();
+  }
+
+  bool panelCredentialOk(const std::string& candidate) {
+    if (candidate.empty()) return false;
+    bool matched = false;
+    for (const auto& ref : panelSecretRefs()) {
+      const std::string expected = secretValue(ref);
+      matched = constantTimeEqual(candidate, expected) || matched;
+    }
+    return matched;
+  }
+
+  bool issuePanelCredential(std::string* token, std::string* ref) {
+    if (!secureStoreReadWrite()) return false;
+    *token = genTokenHex(16);
+    *ref = "secret:panel.access." + genTokenHex(8);
+    return putSecret(*ref, *token);
+  }
+
+  bool migrateRawPanelCredentials() {
+    const auto raw_json = config->get("panel.tokens");
+    if (!raw_json) return true;
+    auto raw = json::parse(*raw_json);
+    std::vector<std::string> refs;
+    if (secureStoreReadWrite() && cJSON_IsArray(raw.get())) {
+      const cJSON* item = nullptr;
+      cJSON_ArrayForEach(item, raw.get()) {
+        if (!cJSON_IsString(item) || !item->valuestring || !*item->valuestring) continue;
+        const std::string ref = "secret:panel.access.migrated." + genTokenHex(8);
+        if (putSecret(ref, item->valuestring)) refs.push_back(ref);
+      }
+    }
+    std::vector<LwwMutation> mutations;
+    if (!refs.empty()) {
+      auto values = json::arr();
+      for (const auto& ref : refs)
+        json::push(values.get(), json::Doc(cJSON_CreateString(ref.c_str())));
+      mutations.push_back({"panel.token_refs", json::dump(values.get()), false});
+    }
+    mutations.push_back({"panel.tokens", "", true});
+    config->mutate(mutations);
+    if (!config->lastMutationCommitted()) {
+      for (const auto& ref : refs) putSecret(ref, "");
+      secret_migration_warnings.insert(
+          "legacy_panel_credential_scrub_config_persistence_failed");
+      DB_LOGE(kTag, "legacy panel credential scrub could not be persisted; refusing startup");
+      return false;
+    }
+    DB_LOGI(kTag, refs.empty()
+                      ? "removed legacy persisted panel credentials; rotate from Admin"
+                      : "migrated legacy panel credentials to platform secure storage");
+    return true;
+  }
+
+  static const char* webPushSealAad() { return "doorbell.web_push.subscription.v1"; }
+
+  bool webPushSealKey(std::array<uint8_t, 32>* key) const {
+    const std::array<uint8_t, 32>& live_psk = mesh ? mesh->settings().psk : opts.psk;
+    const bool configured = std::any_of(live_psk.begin(), live_psk.end(),
+                                        [](uint8_t value) { return value != 0; });
+    if (!configured) return false;
+    Bytes material(live_psk.begin(), live_psk.end());
+    const char* aad = webPushSealAad();
+    material.insert(material.end(), aad, aad + std::strlen(aad));
+    crypto_blake2b(key->data(), key->size(), material.data(), material.size());
+    return true;
+  }
+
+  static json::Doc normalizedWebPushSubscription(const cJSON* subscription) {
+    if (!cJSON_IsObject(subscription)) return {};
+    const std::string endpoint = json::getString(subscription, "endpoint");
+    const cJSON* keys = json::get(subscription, "keys");
+    const std::string p256dh = json::getString(keys, "p256dh");
+    const std::string auth = json::getString(keys, "auth");
+    if (endpoint.rfind("https://", 0) != 0 || endpoint.size() > 4096 ||
+        !cJSON_IsObject(keys) || p256dh.empty() || p256dh.size() > 1024 || auth.empty() ||
+        auth.size() > 512)
+      return {};
+    auto normalized = json::obj();
+    json::set(normalized.get(), "endpoint", endpoint);
+    if (const cJSON* expiration = json::get(subscription, "expirationTime")) {
+      if (cJSON_IsNull(expiration) || cJSON_IsNumber(expiration))
+        json::setItem(normalized.get(), "expirationTime",
+                      json::Doc(cJSON_Duplicate(expiration, 1)));
+    }
+    cJSON* normalized_keys = json::addObj(normalized.get(), "keys");
+    json::set(normalized_keys, "p256dh", p256dh);
+    json::set(normalized_keys, "auth", auth);
+    return normalized;
+  }
+
+  json::Doc sealWebPushRecord(const cJSON* subscription, const std::string& page,
+                              const std::string& group, int64_t updated_at_ms) const {
+    auto normalized = normalizedWebPushSubscription(subscription);
+    std::array<uint8_t, 32> key{};
+    if (!normalized || !webPushSealKey(&key)) return {};
+    const std::string plain = json::dump(normalized.get());
+    Bytes nonce = randomBytes(24);
+    Bytes cipher(16 + plain.size());
+    const char* aad = webPushSealAad();
+    crypto_aead_lock(cipher.data() + 16, cipher.data(), key.data(), nonce.data(),
+                     reinterpret_cast<const uint8_t*>(aad), std::strlen(aad),
+                     reinterpret_cast<const uint8_t*>(plain.data()), plain.size());
+    crypto_wipe(key.data(), key.size());
+
+    auto record = json::obj();
+    json::set(record.get(), "schema_version", static_cast<int64_t>(2));
+    cJSON* sealed = json::addObj(record.get(), "sealed_subscription");
+    json::set(sealed, "algorithm", "xchacha20-poly1305");
+    json::set(sealed, "nonce", hexEncode(nonce));
+    json::set(sealed, "ciphertext", hexEncode(cipher));
+    json::set(record.get(), "page", page);
+    json::set(record.get(), "group", group);
+    json::set(record.get(), "updated_at_ms", updated_at_ms);
+    return record;
+  }
+
+  json::Doc openWebPushRecord(const cJSON* record) const {
+    if (!cJSON_IsObject(record) || json::getInt(record, "schema_version") != 2) return {};
+    const cJSON* sealed = json::get(record, "sealed_subscription");
+    if (!cJSON_IsObject(sealed) ||
+        json::getString(sealed, "algorithm") != "xchacha20-poly1305")
+      return {};
+    Bytes nonce, cipher;
+    if (!hexDecode(json::getString(sealed, "nonce"), nonce) || nonce.size() != 24 ||
+        !hexDecode(json::getString(sealed, "ciphertext"), cipher) || cipher.size() < 17 ||
+        cipher.size() > 16 * 1024)
+      return {};
+    std::array<uint8_t, 32> key{};
+    if (!webPushSealKey(&key)) return {};
+    Bytes plain(cipher.size() - 16);
+    const char* aad = webPushSealAad();
+    const int rc = crypto_aead_unlock(
+        plain.data(), cipher.data(), key.data(), nonce.data(),
+        reinterpret_cast<const uint8_t*>(aad), std::strlen(aad),
+        cipher.data() + 16, plain.size());
+    crypto_wipe(key.data(), key.size());
+    if (rc != 0) return {};
+    auto subscription = json::parse(std::string(plain.begin(), plain.end()));
+    crypto_wipe(plain.data(), plain.size());
+    auto normalized = subscription ? normalizedWebPushSubscription(subscription.get()) : json::Doc{};
+    if (!normalized) return {};
+    auto opened = json::obj();
+    json::setItem(opened.get(), "subscription", std::move(normalized));
+    json::set(opened.get(), "page", json::getString(record, "page", "/panel/monitor"));
+    json::set(opened.get(), "group", json::getString(record, "group", "all"));
+    json::set(opened.get(), "updated_at_ms", json::getInt(record, "updated_at_ms"));
+    return opened;
+  }
+
+  json::Doc webPushSubscriptions() {
+    auto subscriptions = json::arr();
+    const cJSON* records = cfgAt("web_push.subscriptions");
+    const cJSON* record = nullptr;
+    cJSON_ArrayForEach(record, records) {
+      auto opened = openWebPushRecord(record);
+      if (opened) json::push(subscriptions.get(), std::move(opened));
+    }
+    return subscriptions;
+  }
+
+  bool migrateLegacyWebPushSubscriptions() {
+    std::vector<LwwMutation> mutations;
+    for (const auto& entry : config->all()) {
+      if (entry.deleted || entry.key.rfind("web_push.subscriptions.", 0) != 0) continue;
+      auto legacy = json::parse(entry.value_json);
+      if (!legacy || json::get(legacy.get(), "sealed_subscription")) continue;
+      cJSON* subscription = json::get(legacy.get(), "subscription");
+      auto temporary = subscription ? json::Doc(cJSON_Duplicate(subscription, 1)) : json::Doc{};
+      cJSON* keys = temporary ? json::get(temporary.get(), "keys") : nullptr;
+      if (cJSON_IsObject(keys) && json::getString(keys, "auth").empty()) {
+        const std::string auth_ref = json::getString(keys, "auth_ref");
+        const std::string auth = secretValue(auth_ref);
+        if (!auth.empty()) json::set(keys, "auth", auth);
+      }
+      auto sealed = temporary
+          ? sealWebPushRecord(temporary.get(), json::getString(legacy.get(), "page", "/panel/monitor"),
+                              json::getString(legacy.get(), "group", "all"),
+                              json::getInt(legacy.get(), "updated_at_ms"))
+          : json::Doc{};
+      if (sealed)
+        mutations.push_back({entry.key, json::dump(sealed.get()), false});
+      else
+        mutations.push_back({entry.key, "", true});
+    }
+    if (!mutations.empty()) {
+      config->mutate(mutations);
+      if (!config->lastMutationCommitted()) {
+        secret_migration_warnings.insert(
+            "legacy_web_push_scrub_config_persistence_failed");
+        DB_LOGE(kTag, "legacy Web Push scrub could not be persisted; refusing startup");
+        return false;
+      }
+      DB_LOGI(kTag, "sealed legacy Web Push subscriptions with the mesh credential; " +
+                        std::to_string(mutations.size()) + " record(s) processed");
+    }
+    return true;
+  }
+
+  static std::string webPushSubscriptionKey(const std::string& endpoint) {
+    uint8_t digest[16];
+    crypto_blake2b(digest, sizeof(digest),
+                   reinterpret_cast<const uint8_t*>(endpoint.data()), endpoint.size());
+    return hexEncode(digest, sizeof(digest));
   }
 
   void tts(const std::string& text, const std::string& lang) {
@@ -323,20 +1907,20 @@ struct Node::Impl {
 
   int tzOffsetMin() {
     const cJSON* integ = json::get(cfg.get(), "integrations");
-    return static_cast<int>(json::getInt(integ, "tz_offset_min", 540));  // 既定 JST
+    return static_cast<int>(json::getInt(integ, "tz_offset_min", 540));
   }
 
   void scheduleSnapshotRefresh() {
     std::lock_guard<std::mutex> lk(snap_mu);
     if (snap_scheduled) return;
     snap_scheduled = true;
-    if (!loop->post([this] { refreshSnapshots(); })) snap_scheduled = false;  // 停止後は放棄
+    if (!loop->post([this] { refreshSnapshots(); })) snap_scheduled = false;
   }
 
-  // video_track へ push し、inactive→active 遷移 (SPS/PPS 受領 = init segment 完成) を
-  // 快照へ反映する。status.video.active は uiNotify を伴わず変わる数少ない状態のため、
-  // ここで拾わないと 2 秒周期タイマーまで快照が古いまま。エンコーダスレッドから
-  // 呼ばれるので schedule (post) 経由で loop に退避する。
+
+
+
+
   void pushVideoTrack(const uint8_t* p, size_t n, bool key, int64_t ts) {
     bool was = video_track.active();
     video_track.push(p, n, key, ts);
@@ -344,7 +1928,7 @@ struct Node::Impl {
   }
 
   void refreshSnapshots() {
-    if (!started) {  // stop の解体中に残った予約を実行しない (init は started=true 後に呼ぶ)
+    if (!started) {
       std::lock_guard<std::mutex> lk(snap_mu);
       snap_scheduled = false;
       return;
@@ -362,10 +1946,11 @@ struct Node::Impl {
   void rebuildCfg() {
     cfg = json::parse(config->materializeJson());
     if (!cfg) cfg = json::obj();
+    playback_invalid_logged.clear();
     rules.setConfig(json::dump(cfg.get()));
   }
 
-  // 設定ツリーからドットパスで取得 (borrowed)
+
   cJSON* cfgAt(const std::string& dotpath) {
     cJSON* cur = cfg.get();
     size_t pos = 0;
@@ -379,18 +1964,144 @@ struct Node::Impl {
     return cur;
   }
 
-  // devices.<self>.local.camera の実効値 (無ければ 8/60/640x480 + ultra-low-latency)
+  struct PlaybackStrategy {
+    std::string id;
+    bool enabled = true;
+    int64_t startup_timeout_ms = 5000;
+    int64_t stall_timeout_ms = 3000;
+  };
+
+  using PlaybackProfile = std::vector<PlaybackStrategy>;
+
+  static bool playbackStrategyIdOk(const std::string& id) {
+    return id == "h264_low_latency" || id == "h264_hls" || id == "mjpeg";
+  }
+
+  bool parsePlaybackProfile(cJSON* profile, PlaybackProfile* out, const std::string& source) {
+    if (!cJSON_IsObject(profile)) return false;
+    cJSON* strategies = json::get(profile, "strategies");
+    if (!cJSON_IsArray(strategies) || cJSON_GetArraySize(strategies) < 1 ||
+        cJSON_GetArraySize(strategies) > 3) return false;
+    PlaybackProfile parsed;
+    std::set<std::string> ids;
+    bool any_enabled = false;
+    cJSON* it = nullptr;
+    cJSON_ArrayForEach(it, strategies) {
+      if (!cJSON_IsObject(it)) return false;
+      std::string id = json::getString(it, "id");
+      cJSON* enabled = json::get(it, "enabled");
+      cJSON* startup = json::get(it, "startup_timeout_ms");
+      cJSON* stall = json::get(it, "stall_timeout_ms");
+      if (!playbackStrategyIdOk(id) || ids.count(id) || !cJSON_IsBool(enabled) ||
+          !cJSON_IsNumber(startup) || !cJSON_IsNumber(stall)) return false;
+      PlaybackStrategy s;
+      s.id = id;
+      s.enabled = cJSON_IsTrue(enabled);
+      s.startup_timeout_ms = static_cast<int64_t>(startup->valuedouble);
+      s.stall_timeout_ms = static_cast<int64_t>(stall->valuedouble);
+      if (s.startup_timeout_ms < 100 || s.startup_timeout_ms > 60000 ||
+          s.stall_timeout_ms < 1000 || s.stall_timeout_ms > 60000) return false;
+      parsed.push_back(s);
+      ids.insert(id);
+      any_enabled = any_enabled || s.enabled;
+    }
+    if (!any_enabled) return false;
+    *out = std::move(parsed);
+    (void)source;
+    return true;
+  }
+
+  void warnInvalidPlayback(const std::string& source) {
+    if (playback_invalid_logged.insert(source).second)
+      DB_LOGW(kTag, "invalid video playback profile ignored: " + source);
+  }
+
+  static PlaybackProfile defaultPlaybackProfile() {
+    // A newly attached fMP4 client may have to wait for the next IDR.  The
+    // encoder's nominal GOP is one second, but device codecs may defer a
+    // requested IDR for several seconds. A short deadline races a healthy
+    // decoder and incorrectly falls back to MJPEG on slower clients (notably
+    // iPad 1). This is only a failure deadline; the first decoded frame is
+    // still displayed immediately.
+    return {{"h264_low_latency", true, 5000, 3000},
+            {"h264_hls", false, 5000, 5000},
+            {"mjpeg", true, 5000, 3000}};
+  }
+
+  PlaybackProfile legacyPlaybackProfile(const std::string& viewer) {
+    cJSON* video = cfgAt("devices." + viewer + ".local.video");
+    std::string legacy = json::getString(video, "playback");
+    if (legacy == "mjpeg") return {{"mjpeg", true, 5000, 3000}};
+    if (legacy == "hls")
+      return {{"h264_hls", true, 5000, 5000}, {"mjpeg", true, 5000, 3000}};
+    if (legacy == "low_latency")
+      return {{"h264_low_latency", true, 5000, 3000}, {"mjpeg", true, 5000, 3000}};
+    return {};
+  }
+
+  PlaybackProfile resolvePlaybackProfile(const std::string& viewer,
+                                          const std::string& source,
+                                          std::string* resolved_from = nullptr) {
+    PlaybackProfile profile;
+    // Apply pair-specific overrides only when the Web page is hosted by an indoor panel.
+    cJSON* viewer_dev = cfgAt("devices." + viewer);
+    bool viewer_is_indoor = json::getString(viewer_dev, "role") == "indoor_panel";
+    if (viewer_is_indoor && !source.empty()) {
+      std::string path = "video_playback.pairs." + viewer + "." + source;
+      cJSON* pair = cfgAt(path);
+      if (pair) {
+        if (parsePlaybackProfile(pair, &profile, path)) {
+          if (resolved_from) *resolved_from = "pair";
+          return profile;
+        }
+        warnInvalidPlayback(path);
+      }
+    }
+    cJSON* global = cfgAt("video_playback.global");
+    if (global) {
+      if (parsePlaybackProfile(global, &profile, "video_playback.global")) {
+        if (resolved_from) *resolved_from = "global";
+        return profile;
+      }
+      warnInvalidPlayback("video_playback.global");
+    }
+    profile = legacyPlaybackProfile(viewer);
+    if (!profile.empty()) {
+      if (resolved_from) *resolved_from = "legacy";
+      return profile;
+    }
+    if (resolved_from) *resolved_from = "default";
+    return defaultPlaybackProfile();
+  }
+
+  json::Doc playbackProfileDoc(const std::string& viewer, const std::string& source) {
+    std::string resolved_from;
+    PlaybackProfile profile = resolvePlaybackProfile(viewer, source, &resolved_from);
+    auto out = json::obj();
+    json::set(out.get(), "resolved_from", resolved_from);
+    cJSON* strategies = json::addArr(out.get(), "strategies");
+    for (const auto& s : profile) {
+      cJSON* e = json::pushObj(strategies);
+      json::set(e, "id", s.id);
+      json::setBool(e, "enabled", s.enabled);
+      json::set(e, "startup_timeout_ms", s.startup_timeout_ms);
+      json::set(e, "stall_timeout_ms", s.stall_timeout_ms);
+    }
+    return out;
+  }
+
+
   struct CamCfg {
     int fps = 8;
     int quality = 60;
     int w = 640, h = 480;
     std::string hint;
-    // H.264 流暢档 (docs/config-schema.md camera.codec 節)
+
     std::string codec = "auto";  // auto | mjpeg | h264
     int h264_w = 640, h264_h = 360;
     int h264_fps = 30;
     int h264_kbps = 700;
-    bool h264Enabled() const { return codec != "mjpeg"; }  // auto = 硬編があれば
+    bool h264Enabled() const { return codec != "mjpeg"; }
   };
   static void parseRes(const std::string& res, int* w, int* h) {
     size_t x = res.find('x');
@@ -422,19 +2133,41 @@ struct Node::Impl {
     return c;
   }
 
-  // fps/quality/解像度を FrameBus + httpd + video_track へ反映 (起動時と config_changed 時)
+  static int normalizeRotation(int degrees) {
+    int d = degrees % 360;
+    if (d < 0) d += 360;
+    return ((d + 45) / 90 * 90) % 360;
+  }
+
+  // Auto or absent follows the sensor; numeric cardinal values are administrator-fixed.
+  void applyVideoRotation() {
+    int rotation = sensor_video_rotation.load();
+    cJSON* video = cfgAt("devices." + node_id + ".local.video");
+    cJSON* forced = json::get(video, "rotation");
+    if (cJSON_IsNumber(forced)) {
+      rotation = normalizeRotation(forced->valueint);
+    } else if (cJSON_IsString(forced) && forced->valuestring &&
+               std::strcmp(forced->valuestring, "auto") != 0) {
+      char* end = nullptr;
+      long v = std::strtol(forced->valuestring, &end, 10);
+      if (end && *end == '\0') rotation = normalizeRotation(static_cast<int>(v));
+    }
+    effective_video_rotation.store(rotation);
+  }
+
+
   void applyCameraSettings() {
     CamCfg c = cameraCfg();
     frame_bus.setJpegParams(c.quality, c.w);
     if (httpd)
       httpd->setJpegProvider([this](int64_t* ts) { return frame_bus.latestJpeg(ts); }, c.fps);
-    // codec=mjpeg → track 停止 (購読者は切断・殻の wanted も 0 になる)。
-    // auto/h264 → 有効化 (auto で硬編が無い端末は殻が push しないだけ —
-    // /stream.mp4 は init 待ちタイムアウトの 503 になりクライアントは MJPEG へ回落)。
+
+
+
     video_track.setEnabled(c.h264Enabled());
   }
 
-  // 動体検知設定 (devices.<self>.local.motion) を反映 (起動時と config_changed 時)
+
   void applyMotionSettings() {
     cJSON* m = cfgAt("devices." + node_id + ".local.motion");
     MotionConfig mc;
@@ -445,9 +2178,9 @@ struct Node::Impl {
     motion.setConfig(mc);
   }
 
-  // ---------- 統一資産 (mesh blob 配布 + 能動キャッシュ) ----------
-  // 実体は assets_dir/<sha256>。台帳は config assets.<hash> = {size,type,origin,label}。
-  // 設定変更 (+起動/peers 変化) で参照中 hash を能動プリフェッチ — 再生/表示は常にローカル。
+
+
+
 
   std::string assetFilePath(const std::string& hash) { return assets_dir + "/" + hash; }
 
@@ -455,9 +2188,9 @@ struct Node::Impl {
     return isSha256HexStr(hash) && fileExists(assetFilePath(hash));
   }
 
-  // 設定が参照している資産 hash を収集する (プリフェッチ/GC の基準):
+
   //   display.theme.bg_image / devices.*.local.theme.bg_image /
-  //   quick_replies.*.audio.* / ui の各 sound / trigger_rules の chime sound
+
   //   "asset:*" / emergency.alarm_sound "asset:*"
   std::set<std::string> referencedAssets() {
     std::set<std::string> out;
@@ -497,7 +2230,7 @@ struct Node::Impl {
     return out;
   }
 
-  // config 差分は複数キーで届く — 200ms デバウンスしてから前取り評価
+
   void schedulePrefetch() {
     if (!started) return;
     if (asset_prefetch_timer) loop->cancel(asset_prefetch_timer);
@@ -507,11 +2240,11 @@ struct Node::Impl {
     });
   }
 
-  // 参照中で未キャッシュの資産を mesh から取得 + 参照が消えた資産の猶予付き GC
+
   void prefetchAssets() {
     if (!mesh) return;
     std::set<std::string> refs = referencedAssets();
-    // GC: 保持対象 = 参照中 ∪ 台帳掲載 (台帳から消された資産だけが回収対象)
+
     std::set<std::string> keep = refs;
     cJSON* ledger = json::get(cfg.get(), "assets");
     cJSON* it = nullptr;
@@ -520,21 +2253,21 @@ struct Node::Impl {
     }
     const int64_t now_mono = clock->monoMs();
     for (const std::string& name : listDir(assets_dir)) {
-      if (!isSha256HexStr(name)) continue;  // .tmp 等は触らない
+      if (!isSha256HexStr(name)) continue;
       if (keep.count(name)) {
         asset_unref_since.erase(name);
         continue;
       }
       auto u = asset_unref_since.find(name);
       if (u == asset_unref_since.end()) {
-        asset_unref_since[name] = now_mono;  // 猶予開始
+        asset_unref_since[name] = now_mono;
       } else if (now_mono - u->second >= kAssetGcGraceMs) {
         DB_LOGI(kTag, "asset GC: " + name.substr(0, 12) + "…");
         removeFile(assetFilePath(name));
         asset_unref_since.erase(u);
       }
     }
-    // 前取り
+
     for (const std::string& hash : refs) {
       if (assetCached(hash) || asset_fetching.count(hash)) continue;
       asset_fetching.insert(hash);
@@ -542,34 +2275,36 @@ struct Node::Impl {
       mesh->fetchBlob(hash, [this, w, hash](Bytes data) {
         if (w.expired()) return;
         asset_fetching.erase(hash);
-        if (data.empty()) return;  // 保持ノード不在 — 次の config/peers 変化で再試行
+        if (data.empty()) return;
         if (sha256Hex(data) != hash) {
-          DB_LOGW(kTag, "asset 検証失敗 (hash 不一致): " + hash.substr(0, 12) + "…");
+          DB_LOGW(kTag, "asset verification failed (hash mismatch): " +
+                           hash.substr(0, 12) + "…");
           return;
         }
         if (!writeFileBytes(assetFilePath(hash), data)) {
-          DB_LOGW(kTag, "asset 保存失敗: " + assetFilePath(hash));
+          DB_LOGW(kTag, "failed to save asset: " + assetFilePath(hash));
           return;
         }
-        DB_LOGI(kTag, "asset キャッシュ完了: " + hash.substr(0, 12) + "… (" +
+        DB_LOGI(kTag, "asset cached: " + hash.substr(0, 12) + "… (" +
                           std::to_string(data.size()) + "B)");
         auto o = json::obj();
         json::set(o.get(), "t", "asset_ready");
         json::set(o.get(), "hash", hash);
         uiNotify(json::dump(o.get()));
-        // テーマ背景がこの資産だった場合に bg_image_path が null → パスへ解決される
+
         evalDisplay();
       });
     }
   }
 
-  // 資産の登録 (POST /api/assets / Node::addAsset)。検証 → 保存 → 台帳へ。失敗は ""。
+
   std::string addAssetOnLoop(const Bytes& data, const std::string& type,
                              const std::string& label) {
     if (data.empty() || data.size() > kAssetMaxBytes || !assetTypeAllowed(type)) return "";
     const std::string hash = sha256Hex(data);
-    if (!fileExists(assetFilePath(hash)) && !writeFileBytes(assetFilePath(hash), data)) {
-      DB_LOGE(kTag, "asset 保存失敗: " + assetFilePath(hash));
+    const bool already_cached = fileExists(assetFilePath(hash));
+    if (!already_cached && !writeFileBytes(assetFilePath(hash), data)) {
+      DB_LOGE(kTag, "failed to save asset: " + assetFilePath(hash));
       return "";
     }
     auto o = json::obj();
@@ -578,24 +2313,38 @@ struct Node::Impl {
     json::set(o.get(), "origin", node_id);
     if (!label.empty()) json::set(o.get(), "label", label);
     config->set("assets." + hash, json::dump(o.get()));
+    if (!config->lastMutationCommitted()) {
+      if (!already_cached) removeFile(assetFilePath(hash));
+      return "";
+    }
     return hash;
   }
 
-  // chime の uiNotify。sound "asset:<hash>" のカスタム音はキャッシュ済みなら
-  // ローカルファイルパス (audio_path) を添える — 無ければ殻が既定音へ回落する。
+
+
   void notifyChime(const std::string& sound, const std::string& door) {
     auto o = json::obj();
+    json::set(o.get(), "schema_version", static_cast<int64_t>(2));
     json::set(o.get(), "t", "chime");
     json::set(o.get(), "sound", sound);
     if (!door.empty()) json::set(o.get(), "door", door);
+    auto call = active_calls.find(door);
+    if (call != active_calls.end()) {
+      json::set(o.get(), "call_id", call->second.call_id);
+      json::set(o.get(), "stage_revision", static_cast<int64_t>(call->second.stage_revision));
+      json::set(o.get(), "expires_at_ms", call->second.expires_wall_ms);
+      if (!call->second.purpose.empty()) json::set(o.get(), "purpose", call->second.purpose);
+      const std::string visitor_lang = visitorLangFor(door);
+      if (!visitor_lang.empty()) json::set(o.get(), "visitor_lang", visitor_lang);
+    }
     const std::string hash = assetRefHash(sound);
     if (!hash.empty() && assetCached(hash)) json::set(o.get(), "audio_path", assetFilePath(hash));
     uiNotify(json::dump(o.get()));
   }
 
-  // ---------- 訪客言語 ----------
-  // 状態はイベント (visitor_lang) 由来 — 全ノードが onEvent で追随する。
-  // 主言語 (ja) は「未選択」と同義でマップに持たない。
+
+
+
 
   std::string visitorLangFor(const std::string& door) {
     auto it = visitor_lang_by_door.find(door);
@@ -610,10 +2359,10 @@ struct Node::Impl {
     std::string door = door_arg;
     if (door.empty()) door = opts.door.empty() ? last_press_door : opts.door;
     if (door.empty() || lang.empty()) {
-      DB_LOGW(kTag, "setVisitorLang: door/lang 不足");
+      DB_LOGW(kTag, "setVisitorLang requires both door and language");
       return;
     }
-    if (visitorLangFor(door) == lang) return;  // 変化なし (連打/復帰の重複防止)
+    if (visitorLangFor(door) == lang) return;
     auto p = json::obj();
     json::set(p.get(), "lang", lang);
     events->append("visitor_lang", door, node_id, json::dump(p.get()));
@@ -626,11 +2375,11 @@ struct Node::Impl {
     visitor_lang_revert_timer.erase(t);
   }
 
-  // 復帰タイマーを張り直す (発信ノードのみが呼ぶ)
+
   void armVisitorRevert(const std::string& door) {
     cancelVisitorRevert(door);
     const int s = visitorRevertS();
-    if (s <= 0) return;  // 0 以下 = 自動復帰しない
+    if (s <= 0) return;
     visitor_lang_revert_timer[door] =
         loop->postDelayed(static_cast<int64_t>(s) * 1000, [this, door] {
           visitor_lang_revert_timer.erase(door);
@@ -638,7 +2387,7 @@ struct Node::Impl {
         });
   }
 
-  // visitor_lang イベント受理毎 (ローカル発・複製受信の両方)
+
   void applyVisitorLangEvent(const EventRecord& ev, bool is_local) {
     auto p = json::parse(ev.payload_json.empty() ? "{}" : ev.payload_json);
     const std::string lang = p ? json::getString(p.get(), "lang") : "";
@@ -648,7 +2397,7 @@ struct Node::Impl {
       cancelVisitorRevert(ev.door);
     } else {
       visitor_lang_by_door[ev.door] = lang;
-      cancelVisitorRevert(ev.door);  // 他ノード発の切替で自分の古いタイマーは無効
+      cancelVisitorRevert(ev.door);
       if (is_local && ev.origin == node_id) armVisitorRevert(ev.door);
     }
     auto o = json::obj();
@@ -658,20 +2407,20 @@ struct Node::Impl {
     uiNotify(json::dump(o.get()));
   }
 
-  // ---------- 表示制御 (display) ----------
-  // 実効値 = config display.* を基底に devices.<self>.local.display.* で上書き
-  // (スカラーはキー単位、night はオブジェクト単位で上書き)。night の窓判定は
-  // rule_engine と同じ規則 (補正済み壁時計 + tz_offset_min、from <= t < to、日跨ぎ対応)。
-  // theme (待機画面の背景) は display.theme を基底に devices.<self>.local.theme が
-  // キー単位で上書き — 室内機/管理画面は config を書くだけで「推送」になる (CRDT 即時同期)。
+
+
+
+
+
+
   struct DisplayState {
     int brightness = 70;
     bool night = false;
     bool red_tint = false;
     int screensaver_after_s = 120;
     int pixel_shift_s = 300;
-    std::string bg_color = "#101418";  // theme 背景色
-    std::string bg_image;              // theme 背景画像 (assets の sha256; "" = 無し)
+    std::string bg_color = "#101418";
+    std::string bg_image;
   };
 
   DisplayState displayState() {
@@ -685,7 +2434,7 @@ struct Node::Impl {
     d.brightness = static_cast<int>(num("brightness", 70));
     d.screensaver_after_s = static_cast<int>(num("screensaver_after_s", 120));
     d.pixel_shift_s = static_cast<int>(num("pixel_shift_s", 300));
-    {  // テーマ (devices.<self>.local.theme がキー単位で display.theme を上書き)
+    {
       cJSON* tbase = json::get(base, "theme");
       cJSON* tovr = cfgAt("devices." + node_id + ".local.theme");
       auto str = [&](const char* key) {
@@ -695,7 +2444,7 @@ struct Node::Impl {
       const std::string c = str("bg_color");
       if (!c.empty()) d.bg_color = c;
       d.bg_image = str("bg_image");
-      if (!isSha256HexStr(d.bg_image)) d.bg_image.clear();  // null/不正は「画像なし」
+      if (!isSha256HexStr(d.bg_image)) d.bg_image.clear();
     }
     cJSON* night = ovr ? json::get(ovr, "night") : nullptr;
     if (!night) night = json::get(base, "night");
@@ -708,7 +2457,7 @@ struct Node::Impl {
         const int64_t day = floorDiv(local, 86'400'000LL);
         const int minute = static_cast<int>((local - day * 86'400'000LL) / 60'000LL);
         d.night = (from < to) ? (from <= minute && minute < to)
-                              : (minute >= from || minute < to);  // 日跨ぎ窓
+                              : (minute >= from || minute < to);
       }
       if (d.night) {
         d.brightness = static_cast<int>(json::getInt(night, "brightness", 15));
@@ -718,9 +2467,9 @@ struct Node::Impl {
     return d;
   }
 
-  // display オブジェクトの中身 (uiNotify と status_json で共用)。
-  // theme.bg_image_path は「キャッシュ済みならローカル絶対パス / まだなら null」—
-  // 殻はパスを描画するだけでよい (未キャッシュ分は asset_ready 後に display が再発行される)。
+
+
+
   json::Doc displayDoc(const DisplayState& d) {
     auto o = json::obj();
     json::set(o.get(), "brightness", static_cast<int64_t>(d.brightness));
@@ -744,7 +2493,7 @@ struct Node::Impl {
     return o;
   }
 
-  // 30 秒周期 + config_changed + 起動直後に評価し、変化時だけ uiNotify する
+
   void evalDisplay(bool force = false) {
     auto o = displayDoc(displayState());
     json::set(o.get(), "t", "display");
@@ -754,28 +2503,349 @@ struct Node::Impl {
     uiNotify(j);
   }
 
-  // ---------- SOS 緊急モード ----------
-  // 現在状態 = emergency / emergency_cancel の hlc 最大側 (HLC 文字列は辞書順比較可)。
-  // quiet_hours・trigger_rules に依存しない組込動作 — Telegram/MQTT へは常に流れる。
-  void emergencyNotifyUi() {
+  // SOS state is the newest emergency/emergency_cancel HLC. State replication is unconditional;
+  // local presentation, Web Push, and external integrations remain rule-driven.
+  bool deviceAlertTargetsSelf(const cJSON* params) const {
+    const cJSON* explicit_targets = json::get(params, "targets");
+    const bool has_targets_object = cJSON_IsObject(explicit_targets);
+    const cJSON* targets = has_targets_object ? explicit_targets : params;
+    const cJSON* devices = json::get(targets, "devices");
+    const cJSON* roles = json::get(targets, "roles");
+    const bool has_selector = devices || roles;
+    // Legacy actions with no targets object retain all-node delivery. Once an explicit targets
+    // object exists, Web subscription groups alone must not implicitly address native shells.
+    if (!has_selector) return !has_targets_object;
+    auto matches = [](const cJSON* value, const std::string& candidate) {
+      if (cJSON_IsString(value))
+        return std::string(value->valuestring) == "all" || candidate == value->valuestring;
+      if (!cJSON_IsArray(value)) return false;
+      const cJSON* it = nullptr;
+      cJSON_ArrayForEach(it, value) {
+        if (cJSON_IsString(it) &&
+            (std::string(it->valuestring) == "all" || candidate == it->valuestring))
+          return true;
+      }
+      return false;
+    };
+    return matches(devices, node_id) || matches(roles, opts.role);
+  }
+
+  static bool alertUsesLocalChannel(const cJSON* params) {
+    const cJSON* channels = json::get(params, "channels");
+    if (!cJSON_IsArray(channels)) return true;
+    const cJSON* it = nullptr;
+    cJSON_ArrayForEach(it, channels) {
+      if (!cJSON_IsString(it)) continue;
+      const std::string channel = it->valuestring;
+      if (channel == "in_app" || channel == "system_notification") return true;
+    }
+    return false;
+  }
+
+  static bool alertUsesInApp(const cJSON* params) {
+    const cJSON* channels = json::get(params, "channels");
+    if (!cJSON_IsArray(channels)) return true;
+    const cJSON* channel = nullptr;
+    cJSON_ArrayForEach(channel, channels) {
+      if (cJSON_IsString(channel) && std::string(channel->valuestring) == "in_app") return true;
+    }
+    return false;
+  }
+
+  static bool alertUsesWebPush(const cJSON* params) {
+    const cJSON* channels = json::get(params, "channels");
+    if (!cJSON_IsArray(channels)) return false;
+    const cJSON* channel = nullptr;
+    cJSON_ArrayForEach(channel, channels) {
+      if (cJSON_IsString(channel) && std::string(channel->valuestring) == "web_push") return true;
+    }
+    return false;
+  }
+
+  static bool webPushGroupSelected(const cJSON* params, const std::string& group) {
+    const cJSON* explicit_targets = json::get(params, "targets");
+    const bool has_targets_object = cJSON_IsObject(explicit_targets);
+    const cJSON* targets = has_targets_object ? explicit_targets : params;
+    const cJSON* groups = json::get(targets, "web_subscription_groups");
+    if (!groups) groups = json::get(targets, "web_profiles");
+    // A legacy action without a targets object reaches every Web subscription. Once a targets
+    // object exists, Web delivery is opt-in and native-only selectors cannot leak to browsers.
+    if (!groups) return !has_targets_object;
+    if (cJSON_IsString(groups))
+      return std::string(groups->valuestring) == "all" || group == groups->valuestring;
+    if (!cJSON_IsArray(groups)) return false;
+    const cJSON* item = nullptr;
+    cJSON_ArrayForEach(item, groups) {
+      if (cJSON_IsString(item) &&
+          (std::string(item->valuestring) == "all" || group == item->valuestring))
+        return true;
+    }
+    return false;
+  }
+
+  static const cJSON* webPushGroupSelectors(const cJSON* params) {
+    const cJSON* explicit_targets = json::get(params, "targets");
+    const cJSON* targets = cJSON_IsObject(explicit_targets) ? explicit_targets : params;
+    const cJSON* groups = json::get(targets, "web_subscription_groups");
+    return groups ? groups : json::get(targets, "web_profiles");
+  }
+
+  static bool deviceAlertTargetsWebGroup(const cJSON* params, const std::string& group) {
+    const cJSON* explicit_targets = json::get(params, "targets");
+    const bool has_targets_object = cJSON_IsObject(explicit_targets);
+    const cJSON* targets = has_targets_object ? explicit_targets : params;
+    const cJSON* groups = json::get(targets, "web_subscription_groups");
+    if (!groups) groups = json::get(targets, "web_profiles");
+    if (groups) return webPushGroupSelected(params, group);
+    if (has_targets_object) return false;
+    // Device and role selectors address native shells, not an active browser page.
+    return !json::get(targets, "devices") && !json::get(targets, "roles");
+  }
+
+  json::Doc webAlertPresentation(const cJSON* params, bool active) const {
+    const cJSON* configured = json::get(params, "presentation");
+    const cJSON* emergency = json::get(cfg.get(), "emergency");
+    auto out = json::obj();
+    json::setBool(out.get(), "visual", json::getBool(configured, "visual", true));
+    json::setBool(out.get(), "sticky", json::getBool(configured, "sticky", active));
+    json::set(out.get(), "ttl_s", json::getInt(configured, "ttl_s", active ? 0 : 10));
+    const std::string sound = active
+        ? json::getString(configured, "sound",
+                          json::getString(emergency, "alarm_sound", "siren1"))
+        : json::getString(configured, "sound");
+    if (!sound.empty()) json::set(out.get(), "sound", sound);
+    json::set(out.get(), "volume",
+              json::getInt(configured, "volume", json::getInt(emergency, "alarm_volume", 100)));
+    const EmergencyPalette palette = safeEmergencyPalette(configured);
+    json::set(out.get(), "background", palette.background);
+    json::set(out.get(), "foreground", palette.foreground);
+    json::set(out.get(), "accent", palette.accent);
+    return out;
+  }
+
+  static std::string eventIdentity(const EventRecord& event) {
+    return event.origin + ":" + std::to_string(event.seq);
+  }
+
+  bool isCurrentEmergencyWinner(const EventRecord& event) {
+    auto winner = store.latestEventOfTypes("emergency", "emergency_cancel");
+    return winner && winner->origin == event.origin && winner->seq == event.seq &&
+        winner->type == event.type && winner->hlc == event.hlc;
+  }
+
+  json::Doc panelDeviceAlert(const std::string& group) {
+    auto source = store.latestEventOfTypes("emergency", "emergency_cancel");
+    if (!source) return json::Doc(cJSON_CreateNull());
+    for (const auto& action : rules.evaluate(*source, hlc->correctedWallMs(), tzOffsetMin())) {
+      if (action.type != "device_alert") continue;
+      auto params = json::parse(action.params_json.empty() ? "{}" : action.params_json);
+      // A matching Web Push rule remains an explicit Web presentation request even when the
+      // administrator disables raw active-page SOS handling. Project it into panel state so a
+      // subsequent poll cannot erase the Push overlay before its own TTL or clear event.
+      if (!params || (!alertUsesInApp(params.get()) && !alertUsesWebPush(params.get())) ||
+          !deviceAlertTargetsWebGroup(params.get(), group))
+        continue;
+      auto alert = json::obj();
+      json::set(alert.get(), "schema_version", static_cast<int64_t>(2));
+      json::setBool(alert.get(), "active", source->type == "emergency");
+      json::set(alert.get(), "event_id", eventIdentity(*source));
+      json::set(alert.get(), "origin", source->origin);
+      json::set(alert.get(), "seq", static_cast<int64_t>(source->seq));
+      json::set(alert.get(), "event_hlc", source->hlc);
+      json::set(alert.get(), "device", source->device);
+      json::set(alert.get(), "wall_ms", source->wall_ms);
+      if (const cJSON* channels = json::get(params.get(), "channels"))
+        json::setItem(alert.get(), "channels", json::Doc(cJSON_Duplicate(channels, 1)));
+      json::setItem(alert.get(), "presentation",
+                    webAlertPresentation(params.get(), source->type == "emergency"));
+      return alert;
+    }
+    return json::Doc(cJSON_CreateNull());
+  }
+
+  void recordWebPushDelivery(const EventRecord& source, int requested,
+                             const std::string& result, int http_status = 0,
+                             const cJSON* results = nullptr) {
+    auto payload = json::obj();
+    json::set(payload.get(), "schema_version", static_cast<int64_t>(1));
+    json::set(payload.get(), "source_event_id", eventIdentity(source));
+    json::set(payload.get(), "source_event_origin", source.origin);
+    json::set(payload.get(), "source_event_seq", static_cast<int64_t>(source.seq));
+    json::set(payload.get(), "source_event_hlc", source.hlc);
+    json::set(payload.get(), "channel", "web_push");
+    json::set(payload.get(), "requested", static_cast<int64_t>(requested));
+    json::set(payload.get(), "result", result);
+    if (http_status) json::set(payload.get(), "http_status", static_cast<int64_t>(http_status));
+    if (cJSON_IsArray(results)) {
+      cJSON* sanitized = json::addArr(payload.get(), "subscriptions");
+      const cJSON* item = nullptr;
+      cJSON_ArrayForEach(item, results) {
+        const std::string endpoint = json::getString(item, "endpoint");
+        if (endpoint.empty()) continue;
+        cJSON* out = json::pushObj(sanitized);
+        json::set(out, "subscription_id", webPushSubscriptionKey(endpoint));
+        json::set(out, "status", json::getString(item, "status", "unknown"));
+        if (json::get(item, "http_status"))
+          json::set(out, "http_status", json::getInt(item, "http_status"));
+      }
+    }
+    events->append("delivery_result", source.door, node_id, json::dump(payload.get()));
+  }
+
+  void deliverWebPush(const EventRecord& ev, const cJSON* params) {
+    if (!alertUsesWebPush(params) || !mesh || !mesh->isLeader("web_push")) return;
+    auto all = webPushSubscriptions();
+    auto recipients = json::arr();
+    const cJSON* record = nullptr;
+    cJSON_ArrayForEach(record, all.get()) {
+      if (!webPushGroupSelected(params, json::getString(record, "group", "all"))) continue;
+      json::push(recipients.get(), json::Doc(cJSON_Duplicate(record, 1)));
+    }
+    const int count = cJSON_GetArraySize(recipients.get());
+    if (count == 0) {
+      recordWebPushDelivery(ev, 0, "no_recipients");
+      return;
+    }
+    cJSON* push_cfg = cfgAt("integrations.web_push");
+    const std::string sender_url = json::getString(push_cfg, "sender_url");
+    const std::string private_key =
+        secretValue(json::getString(push_cfg, "vapid_private_key_ref"));
+    const std::string sender_ref = json::getString(push_cfg, "sender_secret_ref");
+    const std::string sender_token = secretValue(sender_ref);
+    if (!webPushConfigSyntaxValid(push_cfg) || private_key.empty() ||
+        (!sender_ref.empty() && sender_token.empty())) {
+      recordWebPushDelivery(ev, count, "backend_unavailable");
+      return;
+    }
+    auto request = json::obj();
+    json::set(request.get(), "schema_version", static_cast<int64_t>(1));
+    cJSON* vapid = json::addObj(request.get(), "vapid");
+    json::set(vapid, "public_key", json::getString(push_cfg, "vapid_public_key"));
+    json::set(vapid, "private_key", private_key);
+    json::set(vapid, "subject", json::getString(push_cfg, "vapid_subject"));
+    json::setItem(request.get(), "subscriptions", std::move(recipients));
+    cJSON* payload = json::addObj(request.get(), "payload");
+    const bool active = ev.type == "emergency";
+    std::string push_lang =
+        json::getString(cfgAt("devices." + node_id + ".local"), "ui_lang", "ja");
+    if (push_lang != "ja" && push_lang != "en" && push_lang != "zh") push_lang = "ja";
+    json::set(payload, "kind", active ? "emergency" : "emergency_cancel");
+    json::set(payload, "title", textOnLoop(active ? "emergency.title" : "emergency.notify_off",
+                                            push_lang, {}));
+    json::set(payload, "body",
+              textOnLoop(active ? "emergency.active_detail" : "emergency.notify_off",
+                         push_lang, {}));
+    json::set(payload, "tag", "doorbell-emergency");
+    json::set(payload, "url", "/panel/monitor");
+    json::setBool(payload, "active", active);
+    json::set(payload, "event_id", eventIdentity(ev));
+    json::set(payload, "origin", ev.origin);
+    json::set(payload, "seq", static_cast<int64_t>(ev.seq));
+    json::set(payload, "event_hlc", ev.hlc);
+    json::set(payload, "device", ev.device);
+    json::set(payload, "wall_ms", ev.wall_ms);
+    if (const cJSON* groups = webPushGroupSelectors(params))
+      json::setItem(payload, "web_subscription_groups",
+                    json::Doc(cJSON_Duplicate(groups, 1)));
+    json::setItem(payload, "presentation", webAlertPresentation(params, active));
+    auto header_doc = json::obj();
+    json::set(header_doc.get(), "Content-Type", "application/json");
+    if (!sender_token.empty())
+      json::set(header_doc.get(), "Authorization", "Bearer " + sender_token);
+    const std::string headers = json::dump(header_doc.get());
+    const Bytes body = toBytes(json::dump(request.get()));
+    const std::string source_origin = ev.origin;
+    const uint64_t source_seq = ev.seq;
+    const std::string source_hlc = ev.hlc;
+    const std::string source_door = ev.door;
+    const std::string source_device = ev.device;
+    httpsCall("POST", sender_url, headers, body,
+              [this, source_origin, source_seq, source_hlc, source_door, source_device, count](
+                  int status, const std::string& response) {
+      EventRecord source;
+      source.origin = source_origin;
+      source.seq = source_seq;
+      source.hlc = source_hlc;
+      source.door = source_door;
+      source.device = source_device;
+      auto response_json = json::parse(response);
+      recordWebPushDelivery(source, count,
+                            status >= 200 && status < 300 ? "accepted" : "failed", status,
+                            response_json ? json::get(response_json.get(), "results") : nullptr);
+    });
+  }
+
+  void emergencyNotifyUi(const EventRecord& ev, const cJSON* params) {
+    if (!deviceAlertTargetsSelf(params) || !alertUsesLocalChannel(params)) return;
+    const bool active = ev.type == "emergency";
     auto o = json::obj();
+    json::set(o.get(), "schema_version", static_cast<int64_t>(2));
     json::set(o.get(), "t", "emergency");
-    json::setBool(o.get(), "active", emergency_active);
-    // 警報音: emergency.alarm_sound ("siren1" 等の内蔵名 or "asset:<sha256>") + 音量。
-    // カスタム音がキャッシュ済みなら audio_path (chime と同じ流儀 — 無ければ殻は内蔵音)。
+    json::setBool(o.get(), "active", active);
+    json::set(o.get(), "event_id", eventIdentity(ev));
+    json::set(o.get(), "origin", ev.origin);
+    json::set(o.get(), "seq", static_cast<int64_t>(ev.seq));
+    json::set(o.get(), "event_hlc", ev.hlc);
+    auto payload = json::parse(ev.payload_json.empty() ? "{}" : ev.payload_json);
+    if (payload) json::set(o.get(), "source", json::getString(payload.get(), "source", ev.device));
     cJSON* em = json::get(cfg.get(), "emergency");
-    const std::string sound = json::getString(em, "alarm_sound", "siren1");
-    json::set(o.get(), "alarm_sound", sound);
-    json::set(o.get(), "alarm_volume", json::getInt(em, "alarm_volume", 100));
+    const cJSON* presentation = json::get(params, "presentation");
+    const std::string sound = active
+        ? json::getString(presentation, "sound", json::getString(em, "alarm_sound", "siren1"))
+        : json::getString(presentation, "sound");
+    json::setBool(o.get(), "visual", json::getBool(presentation, "visual", true));
+    json::setBool(o.get(), "sticky", json::getBool(presentation, "sticky", active));
+    json::set(o.get(), "ttl_s", json::getInt(presentation, "ttl_s", active ? 0 : 10));
+    if (!sound.empty()) json::set(o.get(), "alarm_sound", sound);
+    json::set(o.get(), "alarm_volume",
+              json::getInt(presentation, "volume", json::getInt(em, "alarm_volume", 100)));
+    const EmergencyPalette palette = safeEmergencyPalette(presentation);
+    json::set(o.get(), "background", palette.background);
+    json::set(o.get(), "foreground", palette.foreground);
+    json::set(o.get(), "accent", palette.accent);
+    if (cJSON* channels = json::get(params, "channels"))
+      json::setItem(o.get(), "channels", json::Doc(cJSON_Duplicate(channels, 1)));
     const std::string hash = assetRefHash(sound);
     if (!hash.empty() && assetCached(hash))
       json::set(o.get(), "audio_path", assetFilePath(hash));
-    uiNotify(json::dump(o.get()));
+    const bool dispatched = uiNotify(json::dump(o.get()));
+    auto delivery = json::obj();
+    json::set(delivery.get(), "schema_version", static_cast<int64_t>(1));
+    json::set(delivery.get(), "source_event_id", eventIdentity(ev));
+    json::set(delivery.get(), "source_event_origin", ev.origin);
+    json::set(delivery.get(), "source_event_seq", static_cast<int64_t>(ev.seq));
+    json::set(delivery.get(), "source_event_hlc", ev.hlc);
+    json::set(delivery.get(), "channel", "local_shell");
+    json::set(delivery.get(), "device_id", node_id);
+    json::set(delivery.get(), "role", opts.role);
+    json::set(delivery.get(), "result", dispatched ? "dispatched" : "shell_unavailable");
+    if (cJSON* channels = json::get(params, "channels"))
+      json::setItem(delivery.get(), "requested_channels",
+                    json::Doc(cJSON_Duplicate(channels, 1)));
+    events->append("delivery_result", ev.door, node_id, json::dump(delivery.get()));
   }
 
-  // 起動時: Store から状態を復元する (Telegram へは送らない — 遷移ではない)。
-  // 復元した hlc は observe する — 再起動で壁時計が巻き戻っていても、以後の
-  // ローカル発報/解除が必ず復元済み状態より新しい HLC を刻めるようにする。
+  void restoreEmergencyPresentation() {
+    auto ev = store.latestEventOfTypes("emergency", "emergency_cancel");
+    if (!ev) {
+      auto state = json::obj();
+      json::set(state.get(), "schema_version", static_cast<int64_t>(2));
+      json::set(state.get(), "t", "emergency");
+      json::setBool(state.get(), "active", false);
+      json::setBool(state.get(), "state_only", true);
+      uiNotify(json::dump(state.get()));
+      return;
+    }
+    for (const auto& action : rules.evaluate(*ev, hlc->correctedWallMs(), tzOffsetMin())) {
+      if (action.type != "device_alert") continue;
+      auto params = json::parse(action.params_json.empty() ? "{}" : action.params_json);
+      if (params) emergencyNotifyUi(*ev, params.get());
+    }
+  }
+
+
+
+
   void restoreEmergency() {
     auto ev = store.latestEventOfTypes("emergency", "emergency_cancel");
     if (!ev) return;
@@ -784,34 +2854,30 @@ struct Node::Impl {
     emergency_active = (ev->type == "emergency");
   }
 
-  // emergency / emergency_cancel イベント受理毎 (ローカル発・複製受信の両方)。
-  // 変化時: 全ノードで uiNotify、leader なら Telegram 🚨/✅ (bridge 側の active 判定に任せる)。
-  void applyEmergencyEvent(const EventRecord& ev) {
-    if (ev.hlc <= emergency_hlc) return;  // 古い/巻き戻しイベントは無視
+  // Emergency state is always replicated. Presentation and external delivery are rule actions.
+  bool applyEmergencyEvent(const EventRecord& ev) {
+    if (ev.hlc <= emergency_hlc) return false;  // Ignore stale or clock-regressed events.
     emergency_hlc = ev.hlc;
     const bool now = (ev.type == "emergency");
-    if (now == emergency_active) return;
+    if (now == emergency_active) return false;
     emergency_active = now;
-    emergencyNotifyUi();
-    if (tg) {
-      auto p = json::parse(ev.payload_json.empty() ? "{}" : ev.payload_json);
-      std::string source = p ? json::getString(p.get(), "source") : "";
-      if (source.empty()) source = ev.device;
-      tg->sendEmergency(now, source, ev.wall_ms);
-    }
+    return true;
   }
 
-  void doEmergency(bool active, const std::string& via) {
+  bool doEmergency(bool active, const std::string& via) {
     auto p = json::obj();
+    json::set(p.get(), "schema_version", static_cast<int64_t>(2));
     json::set(p.get(), "source", node_id);
     json::set(p.get(), "via", via);
-    events->append(active ? "emergency" : "emergency_cancel", "", node_id, json::dump(p.get()));
+    return events->append(active ? "emergency" : "emergency_cancel", "", node_id,
+                          json::dump(p.get())).seq != 0;
+  }
+
+  std::string referencedSecret(cJSON* object, const char* ref_key) {
+    return secretValue(json::getString(object, ref_key));
   }
 
   // ---------- SIP ----------
-  // 設定源: config の sip.server/port/transport + sip.accounts.<node_id>.{user,pass}。
-  // アカウント未設定時は boot 上書き (NodeOptions.sip_user/sip_pass) を使う。
-  // MVP は平文 pass — TODO(Phase2): secure_store (pass_ref) 経由に切り替え。
   SipSettings sipSettings() {
     SipSettings s;
     cJSON* sip = json::get(cfg.get(), "sip");
@@ -820,27 +2886,31 @@ struct Node::Impl {
     s.transport = json::getString(sip, "transport", "udp");
     cJSON* acct = cfgAt("sip.accounts." + node_id);
     s.user = json::getString(acct, "user");
-    s.password = json::getString(acct, "pass");
+    s.password = referencedSecret(acct, "pass_ref");
+    sip_credential_source = s.password.empty() ? "none" : "secure_store";
     if (s.user.empty()) s.user = opts.sip_user;
-    if (s.password.empty()) s.password = opts.sip_pass;
+    if (s.password.empty() && !opts.sip_pass.empty()) {
+      s.password = opts.sip_pass;
+      sip_credential_source = "boot";
+    }
     s.display_name = opts.name;
     s.null_audio = opts.sip_null_audio;
-    // 応答モード (config-schema sip.accounts.<id>.answer_mode):
-    //   "auto" = 即応答 (門口機既定) / "ring" = 着信 UI で手動応答 (室内機向け)。
-    // 未設定は従来どおり auto (SipSettings 既定)。
+
+
+
     std::string am = json::getString(acct, "answer_mode");
     if (am == "ring") s.auto_answer = false;
     else if (am == "auto") s.auto_answer = true;
-    // 直接呼の待受ポート (既定 47190 — docs/network-ports.md)
+
     s.direct_port = static_cast<int>(json::getInt(sip, "direct_port", s.direct_port));
-    // AEC 遅延は装機標定 (devices.<self>.local.aec.tail_ms) があれば上書き
+
     cJSON* aec = cfgAt("devices." + node_id + ".local.aec");
     int tail = aec ? static_cast<int>(json::getInt(aec, "tail_ms", 0)) : 0;
     if (tail > 0) s.ec_tail_ms = tail;
     return s;
   }
 
-  // sip.* の差分は複数キーで届く — 300ms デバウンスしてから updateSettings (再登録)
+
   void scheduleSipReapply() {
     if (!sipctl) return;
     if (sip_reapply_timer) loop->cancel(sip_reapply_timer);
@@ -850,13 +2920,13 @@ struct Node::Impl {
     });
   }
 
-  // 直接 INVITE の許可送信元 = mesh 成員 (dead 以外) の実アドレス host 群 + 自 host。
-  // peers 変化毎に更新する (計画書 §12: mesh 成員 IP 白名単 + 403)。
-  // suspect も含める: 一時的な heartbeat 遅延で通話中の対講が拒否されないように。
+
+
+
   void updateSipAllowedSources() {
     if (!sipctl || !mesh) return;
     std::vector<std::string> ips;
-    ips.push_back("127.0.0.1");  // 自機ループバック (単機テスト/自己監視)
+    ips.push_back("127.0.0.1");
     for (const auto& p : mesh->peers()) {
       if (p.status == "dead") continue;
       for (const auto& a : p.addrs) ips.push_back(hostOf(a));
@@ -864,11 +2934,11 @@ struct Node::Impl {
     sipctl->setAllowedSources(ips);
   }
 
-  // 通話相手の node_id と MJPEG URL を解決する (対称双方向映像):
-  //   - Asterisk 経由 (host == sip.server): remote user (内線) → sip.accounts.* の user 逆引き
-  //   - 直接呼: remote host → mesh peers[].addrs の host 照合
-  // 特定できない相手 (PSTN/Groundwire/網頁内線) は両方空のまま → 映像なし
-  // (門口機は /peer-frame.jpg の輪詢に降級 — 網頁通話の「映像も送る」経路)。
+
+
+
+
+
   void resolveCallPeer(const std::string& remote, std::string* node, std::string* stream) {
     node->clear();
     stream->clear();
@@ -876,7 +2946,7 @@ struct Node::Impl {
     if (!parseSipRemote(remote, &user, &host) || !mesh) return;
     const std::string server = json::getString(json::get(cfg.get(), "sip"), "server");
     if (!user.empty() && !server.empty() && host == server) {
-      // 内線 → node_id (config-schema: 門口機と室内機の両方が sip.accounts に載る)
+
       cJSON* accounts = cfgAt("sip.accounts");
       cJSON* it = nullptr;
       cJSON_ArrayForEach(it, accounts) {
@@ -886,7 +2956,7 @@ struct Node::Impl {
         }
       }
     } else {
-      // 直接呼: 送信元 host を peers の実アドレスと照合
+
       for (const auto& p : mesh->peers()) {
         if (p.id == node_id) continue;
         for (const auto& a : p.addrs) {
@@ -910,14 +2980,19 @@ struct Node::Impl {
     }
   }
 
-  // ---------- HA MQTT ブリッジ ----------
-  // 有効条件 = config integrations.mqtt.host 非空 かつ 自分が mqtt_bridge leader。
-  // リーダー交代 (on_leader_changed) と設定変更 (デバウンス) で再評価する。
+
+
+
   void reevalBridge() {
     if (!bridge) return;
-    const std::string host = json::getString(cfgAt("integrations.mqtt"), "host");
+    cJSON* mqtt = cfgAt("integrations.mqtt");
+    const std::string host = json::getString(mqtt, "host");
     const bool active = !host.empty() && mesh && mesh->isLeader("mqtt_bridge");
-    bridge->configure(json::dump(cfg.get()), node_id, active);
+    auto effective = json::Doc(cJSON_Duplicate(cfg.get(), 1));
+    cJSON* effective_mqtt = json::get(json::get(effective.get(), "integrations"), "mqtt");
+    const std::string password = referencedSecret(mqtt, "pass_ref");
+    if (effective_mqtt && !password.empty()) json::set(effective_mqtt, "pass", password);
+    bridge->configure(json::dump(effective.get()), node_id, active);
   }
 
   void scheduleBridgeReapply() {
@@ -930,36 +3005,40 @@ struct Node::Impl {
     });
   }
 
-  // ---------- Telegram ブリッジ ----------
-  // 有効条件 = config integrations.telegram.bot_token 非空 かつ 自分が telegram leader。
-  // MVP は平文 bot_token — TODO(Phase2 後半): bot_token_ref (secure store) 対応。
+  std::string telegramToken() {
+    return referencedSecret(cfgAt("integrations.telegram"), "bot_token_ref");
+  }
+
+
   void reevalTelegram() {
     if (!tg) return;
-    const std::string token =
-        json::getString(cfgAt("integrations.telegram"), "bot_token");
+    const std::string token = telegramToken();
     const bool active = !token.empty() && mesh && mesh->isLeader("telegram");
-    tg->configure(json::dump(cfg.get()), node_id, active);
-    // 就任遷移で未通知 press を拾い直す (設計 §1.5「宁重勿漏」: 前 leader が claim だけ
-    // 残して死んだ press をここで回収する。notified_at 済みは bridge 側で弾かれる)
+    auto effective = json::Doc(cJSON_Duplicate(cfg.get(), 1));
+    cJSON* effective_tg = json::get(json::get(effective.get(), "integrations"), "telegram");
+    if (effective_tg && !token.empty()) json::set(effective_tg, "bot_token", token);
+    tg->configure(json::dump(effective.get()), node_id, active);
+
+
     if (active && !tg_was_active) rescanPendingTelegram();
     tg_was_active = active;
   }
 
   void rescanPendingTelegram() {
-    const int64_t cutoff = hlc->correctedWallMs() - 15 * 60 * 1000;  // 直近 15 分のみ
+    const int64_t cutoff = hlc->correctedWallMs() - 15 * 60 * 1000;
     for (const auto& ev : store.recentEvents(50)) {
       if (ev.type != "press" || ev.wall_ms < cutoff) continue;
       auto n = json::parse(ev.notify_json.empty() ? "{}" : ev.notify_json);
-      if (n && !json::getString(n.get(), "notified_at").empty()) continue;  // 通知済み
-      if (n && json::get(n.get(), "replied")) continue;                     // 応対済み
+      if (n && !json::getString(n.get(), "notified_at").empty()) continue;
+      if (n && json::get(n.get(), "replied")) continue;
       for (const auto& a : rules.evaluate(ev, hlc->correctedWallMs(), tzOffsetMin())) {
         if (a.type == "telegram") tg->onAction(ev, a.params_json);
       }
     }
   }
 
-  // ---------- HTTPS (Telegram ブリッジ用) ----------
-  // HttpsFn (done は任意スレッド) を Runloop 上の done に変換する。未注入なら即失敗。
+
+
   void httpsCall(const std::string& method, const std::string& url, const std::string& headers,
                  const Bytes& body, std::function<void(int, std::string)> done) {
     HttpsFn fn;
@@ -974,8 +3053,8 @@ struct Node::Impl {
     std::weak_ptr<char> w = alive;
     Runloop* lp = loop;
     fn(method, url, headers, body, [w, lp, done](int status, std::string resp) {
-      // 任意スレッド → Runloop へ。Node 破棄後の応答は捨てる
-      // (capi は destroy 前に在飛の SPI 呼び出しの完了を待つ — doorbell_capi.cpp)。
+
+
       if (w.expired()) return;
       lp->post([w, done, status, resp] {
         if (!w.expired()) done(status, resp);
@@ -994,8 +3073,9 @@ struct Node::Impl {
   }
 
   void onSipCall(SipCallState st, const std::string& remote) {
+    const SipCallState previous = sip_call;
     sip_call = st;
-    // UI 状態機: calling / in_call / idle (Ended は過渡 — 通知しない)
+
     const char* s = nullptr;
     switch (st) {
       case SipCallState::Calling: s = "calling"; break;
@@ -1009,19 +3089,61 @@ struct Node::Impl {
         loop->cancel(dtmf_timer);
         dtmf_timer = 0;
       }
-      // 通話相手情報と網頁通話の相手映像スロットは通話と共に消える
+
       sip_peer_node.clear();
       sip_peer_stream.clear();
       peer_frame.clear();
       peer_frame_mono = 0;
     }
     if (st == SipCallState::InCall) {
-      // 相手を特定して映像 URL を添える (答接管で門口機側が in_call になる時も同経路)。
-      // 殻はこの URL を描画するだけ — 解決できない相手 (PSTN 等) は peer_stream 無し。
-      // TODO(Phase 6b): 站間通話画面の H.264 硬解。相手が h264 提供中なら
-      // peer_stream_mp4 (= <origin>/stream.mp4) も添えて、殻が MediaCodec/
-      // VideoToolbox/MF で硬解描画する。今回 (6a) は従来どおり MJPEG のみ。
       resolveCallPeer(remote, &sip_peer_node, &sip_peer_stream);
+      if (!sip_call_id.empty()) {
+        for (auto& entry : active_calls) {
+          ActiveCall& call = entry.second;
+          if (call.call_id != sip_call_id) continue;
+          if (call.state == "ringing") {
+            call.local_sip_established = true;
+            if (call.timeout_timer) loop->cancel(call.timeout_timer);
+            call.timeout_timer = 0;
+            door_calling_until.erase(call.door);
+            doReportCallAnswered(call.door, call.call_id, call.stage_revision, node_id,
+                                 /*retry_on_persistence_failure=*/true);
+          }
+          break;
+        }
+      }
+    }
+    if (st == SipCallState::Idle &&
+        (previous == SipCallState::InCall || previous == SipCallState::Ended) &&
+        !sip_call_id.empty()) {
+      auto pending = pending_lifecycles.find(sip_call_id);
+      if (pending != pending_lifecycles.end() && pending->second.owner == node_id) {
+        pending->second.end_pending = true;
+        pending->second.end_reason = "hangup";
+        if (pending->second.retry_timer) loop->cancel(pending->second.retry_timer);
+        pending->second.retry_timer = 0;
+        flushPendingLifecycle(sip_call_id);
+      } else {
+        for (auto& entry : active_calls) {
+          ActiveCall& call = entry.second;
+          // The durable dialog owner, not a losing local SIP leg, owns the terminal event.
+          if (call.call_id != sip_call_id) continue;
+          if (call.state == "in_call" && call.dialog_owner == node_id) {
+            doReportCallEnded(call.door, call.call_id, call.stage_revision, "hangup", node_id,
+                              /*retry_on_persistence_failure=*/true);
+          } else if (call.state == "ringing" && call.local_sip_established) {
+            queuePendingAnswer(call, node_id);
+            queuePendingEnd(call, node_id, "hangup");
+            pending = pending_lifecycles.find(call.call_id);
+            if (pending != pending_lifecycles.end()) {
+              if (pending->second.retry_timer) loop->cancel(pending->second.retry_timer);
+              pending->second.retry_timer = 0;
+              flushPendingLifecycle(call.call_id);
+            }
+          }
+          break;
+        }
+      }
     }
     if (!s) return;
     auto o = json::obj();
@@ -1035,8 +3157,8 @@ struct Node::Impl {
     uiNotify(json::dump(o.get()));
   }
 
-  // DTMF 機能碼: 受信 digit をバッファし sip.dtmf_actions のキー (例 "*1") と照合。
-  // 3 秒無入力でクリア。
+
+
   void onSipDtmf(char digit) {
     if (dtmf_timer) loop->cancel(dtmf_timer);
     dtmf_timer = loop->postDelayed(3000, [this] {
@@ -1052,7 +3174,7 @@ struct Node::Impl {
       dtmf_buf.clear();
       return;
     }
-    // どのキーの接頭辞でもない → 打ち直し扱い (今回の digit から再開)
+
     bool prefix = false;
     cJSON* it = nullptr;
     cJSON_ArrayForEach(it, acts) {
@@ -1070,18 +3192,18 @@ struct Node::Impl {
 
   void execDtmfAction(const std::string& code, cJSON* action) {
     std::string type = json::getString(action, "type");
-    DB_LOGI(kTag, "dtmf 機能碼 " + code + " -> " + type);
+    DB_LOGI(kTag, "DTMF feature code " + code + " -> " + type);
     if (type == "hangup") {
       if (sipctl) sipctl->hangup();
     } else if (type == "ha_command") {
-      // Phase 2 で MQTT bridge へ配線 — 今はイベント記録のみ
+
       auto p = json::parse(json::dump(action));
       json::set(p.get(), "code", code);
-      DB_LOGI(kTag, "ha_command (Phase 2 で MQTT へ): " + json::dump(p.get()));
+      DB_LOGI(kTag, "HA command queued for the MQTT bridge: " + json::dump(p.get()));
       std::string door = opts.door.empty() ? last_press_door : opts.door;
       events->append("dtmf_action", door, node_id, json::dump(p.get()));
     } else {
-      DB_LOGW(kTag, "未知の dtmf アクション: " + type);
+      DB_LOGW(kTag, "unknown DTMF action: " + type);
     }
   }
 
@@ -1112,9 +3234,9 @@ struct Node::Impl {
     return v;
   }
 
-  // ---------- 文言解決 (Node::text の実体 — loop 上でのみ) ----------
-  // i18n_overrides.<lang>.<key> → i18n_overrides.ja.<key> → 内蔵既定表 → key 自身。
-  // i18n_overrides のキーはドットを含む平キー ("event.press") — cfgAt で降りずに直接引く。
+  // Resolve text on the runloop for Node::text.
+  // Lookup order is the requested language, Japanese override, built-in text, then the key.
+  // Override names such as "event.press" are literal object keys, not nested config paths.
   std::string textOnLoop(const std::string& key, const std::string& lang_arg,
                          const std::vector<std::pair<std::string, std::string>>& args) {
     const std::string lang = lang_arg.empty() ? "ja" : lang_arg;
@@ -1128,36 +3250,566 @@ struct Node::Impl {
       const char* b = builtinText(key, lang);
       if (b) out = b;
     }
-    if (out.empty()) out = key;  // 未知キーはキー自身 (欠落を画面上で見つけやすくする)
+    if (out.empty()) out = key;  // Keep missing translations visible to operators.
     substArgs(out, args);
     return out;
   }
 
-  // ---------- 起動 ----------
+  // ---------- Startup ----------
+  std::string computeEffectiveCaps() {
+    auto measured = json::parse(measured_caps_json);
+    if (!measured || !cJSON_IsObject(measured.get())) measured = json::obj();
+    const bool measured_tls = json::getBool(measured.get(), "tls12", false);
+    std::string mqtt_source = cJSON_IsBool(json::get(measured.get(), "mqtt_reachable"))
+        ? "shell" : "unmeasured";
+    if (!mqtt_probe_host.empty() && mqtt_probe_known) {
+      json::setBool(measured.get(), "mqtt_reachable", mqtt_probe_reachable);
+      mqtt_source = "configured_endpoint_probe";
+    }
+    const cJSON* device = cfgAt("devices." + node_id);
+    const cJSON* override_caps = json::get(device, "caps_override");
+    if (!cJSON_IsObject(override_caps))
+      override_caps = json::get(json::get(device, "local"), "caps_override");
+    const std::set<std::string> operational_overrides = {
+        "wan", "mains_power", "mqtt_reachable", "wall_clock_sane"};
+    const cJSON* field = nullptr;
+    cJSON_ArrayForEach(field, override_caps) {
+      if (!field->string) continue;
+      const std::string key = field->string;
+      if (operational_overrides.count(key)) {
+        if (cJSON_IsBool(field)) {
+          json::setBool(measured.get(), key.c_str(), cJSON_IsTrue(field));
+          if (key == "mqtt_reachable") mqtt_source = "administrator_override";
+        }
+        continue;
+      }
+      cJSON* hardware_limit = json::get(measured.get(), key.c_str());
+      if (cJSON_IsBool(hardware_limit) && cJSON_IsBool(field)) {
+        // An override may disable a measured hardware feature, but cannot invent one.
+        json::setBool(measured.get(), key.c_str(), cJSON_IsTrue(hardware_limit) && cJSON_IsTrue(field));
+      } else if (cJSON_IsNumber(hardware_limit) && cJSON_IsNumber(field)) {
+        json::set(measured.get(), key.c_str(),
+                  std::min(hardware_limit->valuedouble, field->valuedouble));
+      }
+    }
+    // No administrator override can claim TLS when the platform has no HTTPS transport.
+    if (!opts.has_https || !measured_tls) json::setBool(measured.get(), "tls12", false);
+    cJSON* mqtt = cfgAt("integrations.mqtt");
+    const std::string mqtt_host = json::getString(mqtt, "host");
+    const std::string mqtt_ref = json::getString(mqtt, "pass_ref");
+    json::setBool(measured.get(), "mqtt_ready",
+                  !mqtt_host.empty() && (mqtt_ref.empty() || !referencedSecret(mqtt, "pass_ref").empty()));
+    json::setBool(measured.get(), "telegram_ready", !telegramToken().empty());
+    cJSON* web_push = cfgAt("integrations.web_push");
+    const std::string push_sender_ref = json::getString(web_push, "sender_secret_ref");
+    const bool push_sender_secret_ready =
+        push_sender_ref.empty() ||
+        (secretRefValid(push_sender_ref) &&
+         !referencedSecret(web_push, "sender_secret_ref").empty());
+    json::setBool(measured.get(), "web_push_ready",
+                  webPushConfigSyntaxValid(web_push) &&
+                  !referencedSecret(web_push, "vapid_private_key_ref").empty() &&
+                  push_sender_secret_ready);
+    json::set(measured.get(), "mqtt_reachability_source", mqtt_source);
+    json::setItem(measured.get(), "features", effectiveFeaturesDoc());
+    return json::dump(measured.get());
+  }
+
+  bool uiManifestSupports(const std::string& element = "") const {
+    auto manifest = json::parse(ui_manifest_json);
+    const cJSON* elements = manifest ? json::get(manifest.get(), "elements") : nullptr;
+    if (!cJSON_IsObject(elements) || !elements->child) return false;
+    return element.empty() || cJSON_IsObject(json::get(elements, element.c_str()));
+  }
+
+  std::string webUiManifestJson() const {
+    auto web = json::parse(baseWebUiManifestJson());
+    if (!web || !cJSON_IsObject(web.get())) return "{}";
+    auto web_only = json::parse(webOnlyUiElementsJson());
+    cJSON* web_elements = json::get(web.get(), "elements");
+    if (web_only && cJSON_IsObject(web_only.get()) && cJSON_IsObject(web_elements)) {
+      const cJSON* item = nullptr;
+      cJSON_ArrayForEach(item, web_only.get()) {
+        if (!item->string || json::get(web_elements, item->string)) continue;
+        cJSON_AddItemToObject(web_elements, item->string, cJSON_Duplicate(item, 1));
+      }
+    }
+
+    std::string manifest_error;
+    if (!uiManifestValid(ui_manifest_json, &manifest_error)) return json::dump(web.get());
+    auto native = json::parse(ui_manifest_json);
+    const cJSON* native_elements = native ? json::get(native.get(), "elements") : nullptr;
+    if (!cJSON_IsObject(native_elements) || !cJSON_IsObject(web_elements))
+      return json::dump(web.get());
+
+    cJSON* web_element = nullptr;
+    cJSON_ArrayForEach(web_element, web_elements) {
+      if (!web_element->string) continue;
+      const cJSON* native_element = json::get(native_elements, web_element->string);
+      if (!cJSON_IsObject(native_element)) continue;
+      const cJSON* native_properties = json::get(native_element, "properties");
+      const cJSON* native_defaults = json::get(native_element, "defaults");
+      const cJSON* web_properties = json::get(web_element, "properties");
+      const cJSON* web_defaults = json::get(web_element, "defaults");
+      auto properties = json::arr();
+      auto defaults = json::obj();
+      const cJSON* property = nullptr;
+      cJSON_ArrayForEach(property, web_properties) {
+        if (!cJSON_IsString(property) || !property->valuestring) continue;
+        bool supported = false;
+        const cJSON* native_property = nullptr;
+        cJSON_ArrayForEach(native_property, native_properties) {
+          if (cJSON_IsString(native_property) && native_property->valuestring &&
+              std::string(native_property->valuestring) == property->valuestring) {
+            supported = true;
+            break;
+          }
+        }
+        if (!supported) continue;
+        json::push(properties.get(), json::Doc(cJSON_CreateString(property->valuestring)));
+        const cJSON* value = json::get(native_defaults, property->valuestring);
+        if (!value) value = json::get(web_defaults, property->valuestring);
+        if (value)
+          json::setItem(defaults.get(), property->valuestring,
+                        json::Doc(cJSON_Duplicate(value, 1)));
+      }
+      if (cJSON_GetArraySize(properties.get()) == 0) continue;
+      json::setItem(web_element, "properties", std::move(properties));
+      json::setItem(web_element, "defaults", std::move(defaults));
+      if (json::getBool(native_element, "safety_critical"))
+        json::setBool(web_element, "safety_critical", true);
+    }
+    return json::dump(web.get());
+  }
+
+  bool webUiManifestSupports(const std::string& element) const {
+    auto manifest = json::parse(webUiManifestJson());
+    const cJSON* elements = manifest ? json::get(manifest.get(), "elements") : nullptr;
+    return cJSON_IsObject(json::get(elements, element.c_str()));
+  }
+
+  static std::string peerContractCacheKey(const std::string& id) {
+    return "peer_ui_contract." + id;
+  }
+
+  json::Doc cachedPeerContract(const std::string& id) {
+    auto raw = store.metaGet(peerContractCacheKey(id));
+    if (!raw || raw->size() > 128 * 1024) return {};
+    auto contract = json::parse(*raw);
+    if (!contract || json::getInt(contract.get(), "schema_version") != 1 ||
+        json::getString(contract.get(), "node_id") != id)
+      return {};
+    const cJSON* manifest = json::get(contract.get(), "ui_manifest");
+    const cJSON* caps = json::get(contract.get(), "caps");
+    const cJSON* features = json::get(caps, "features");
+    std::string manifest_error;
+    if (!cJSON_IsObject(manifest) || !cJSON_IsObject(features) ||
+        !json::getBool(features, "ui_manifest_v1") ||
+        !uiManifestValid(json::dump(manifest), &manifest_error))
+      return {};
+    const cJSON* runtime = json::get(contract.get(), "runtime");
+    if (runtime) {
+      std::string projected;
+      auto raw_runtime = json::dump(runtime);
+      auto clean_runtime = projectMeshRuntimeJson(raw_runtime, &projected)
+          ? json::parse(projected) : json::obj();
+      json::setItem(contract.get(), "runtime",
+                    clean_runtime ? std::move(clean_runtime) : json::obj());
+    }
+    return contract;
+  }
+
+  std::string cachedPeerUiManifest(const std::string& id) {
+    auto contract = cachedPeerContract(id);
+    const cJSON* manifest = contract ? json::get(contract.get(), "ui_manifest") : nullptr;
+    return cJSON_IsObject(manifest) ? json::dump(manifest) : "";
+  }
+
+  void cachePeerContracts() {
+    if (!mesh) return;
+    for (const auto& peer : mesh->peers()) {
+      if (peer.id.empty() || peer.id == node_id || peer.id.size() > 128) continue;
+      std::string manifest_error;
+      if (peer.ui_manifest_json.size() > 64 * 1024 ||
+          !uiManifestValid(peer.ui_manifest_json, &manifest_error))
+        continue;
+      auto manifest = json::parse(peer.ui_manifest_json);
+      auto caps = json::parse(peer.caps_json);
+      const cJSON* features = caps ? json::get(caps.get(), "features") : nullptr;
+      if (!manifest || !cJSON_IsObject(manifest.get()) || !cJSON_IsObject(features) ||
+          !json::getBool(features, "ui_manifest_v1"))
+        continue;
+      auto contract = json::obj();
+      json::set(contract.get(), "schema_version", static_cast<int64_t>(1));
+      json::set(contract.get(), "node_id", peer.id);
+      json::set(contract.get(), "role", peer.role);
+      if (!peer.door.empty()) json::set(contract.get(), "door", peer.door);
+      json::set(contract.get(), "sw", peer.sw_version);
+      json::set(contract.get(), "updated_wall_ms", hlc->correctedWallMs());
+      json::setItem(contract.get(), "caps",
+                    caps && cJSON_IsObject(caps.get()) ? std::move(caps) : json::obj());
+      json::setItem(contract.get(), "ui_manifest", std::move(manifest));
+      std::string projected_runtime;
+      auto runtime = projectMeshRuntimeJson(peer.runtime_json, &projected_runtime)
+          ? json::parse(projected_runtime) : json::obj();
+      json::setItem(contract.get(), "runtime",
+                    runtime ? std::move(runtime) : json::obj());
+      const std::string next = json::dump(contract.get());
+      auto previous = store.metaGet(peerContractCacheKey(peer.id));
+      if (!previous || *previous != next) store.metaSet(peerContractCacheKey(peer.id), next);
+    }
+  }
+
+  bool measuredFeature(const std::string& feature) const {
+    auto measured = json::parse(measured_caps_json);
+    if (!measured || !cJSON_IsObject(measured.get())) return false;
+    const cJSON* features = json::get(measured.get(), "features");
+    return cJSON_IsObject(features) && json::getBool(features, feature.c_str());
+  }
+
+  json::Doc effectiveFeaturesDoc() const {
+    auto features = json::obj();
+    for (const char* feature : {"emergency_rules_v1", "config_batch_v1",
+                                "sip_dtmf_v1", "media_sources_v1",
+                                "web_push_subscriptions_v1"})
+      json::setBool(features.get(), feature, true);
+    for (const char* feature : {"platform_v2", "call_flow_v2", "call_cancel_v2",
+                                "call_lifecycle_v2", "device_alert_v1", "runtime_recovery_v1",
+                                "helper_policy_v1"})
+      json::setBool(features.get(), feature, measuredFeature(feature));
+    json::setBool(features.get(), "ui_manifest_v1",
+                  measuredFeature("ui_manifest_v1") && uiManifestSupports());
+    return features;
+  }
+
+  bool selfFeature(const std::string& feature) const {
+    auto caps = json::parse(effective_caps_json);
+    return caps && json::getBool(json::get(caps.get(), "features"), feature.c_str());
+  }
+
+  static bool advertisedFeature(const std::string& caps_json, const std::string& feature) {
+    auto caps = json::parse(caps_json);
+    if (!caps) return false;
+    const cJSON* features = json::get(caps.get(), "features");
+    return cJSON_IsObject(features) && json::getBool(features, feature.c_str());
+  }
+
+  std::string relevantDoorStation(const std::string& door) const {
+    std::string station;
+    auto active = active_calls.find(door);
+    if (active != active_calls.end()) station = active->second.origin;
+    if (station.empty()) {
+      const cJSON* devices = json::get(cfg.get(), "devices");
+      const cJSON* device = nullptr;
+      cJSON_ArrayForEach(device, devices) {
+        if (device->string && json::getString(device, "role") == "door_station" &&
+            json::getString(device, "door") == door) {
+          if (station.empty() || std::string(device->string) < station)
+            station = device->string;
+        }
+      }
+    }
+    if (station.empty() && opts.role == "door_station" && opts.door == door) station = node_id;
+    return station;
+  }
+
+  bool doorFeature(const std::string& door, const std::string& feature) const {
+    const std::string station = relevantDoorStation(door);
+    if (station == node_id) return selfFeature(feature);
+    if (!mesh) return false;
+    for (const auto& peer : mesh->peers())
+      if (peer.id == station) return advertisedFeature(peer.caps_json, feature);
+    return false;
+  }
+
+  bool doorManifestSupports(const std::string& door, const std::string& element) const {
+    const std::string station = relevantDoorStation(door);
+    if (station == node_id) return uiManifestSupports(element);
+    if (!mesh) return false;
+    for (const auto& peer : mesh->peers()) {
+      if (peer.id != station) continue;
+      auto manifest = json::parse(peer.ui_manifest_json);
+      const cJSON* elements = manifest ? json::get(manifest.get(), "elements") : nullptr;
+      return cJSON_IsObject(json::get(elements, element.c_str()));
+    }
+    return false;
+  }
+
+  std::string effectiveCallFlow(const std::string& door) const {
+    const std::string configured =
+        json::getString(json::get(cfg.get(), "ui"), "call_flow", "purpose_first");
+    if (configured != "ring_then_purpose") return "purpose_first";
+    if (!doorFeature(door, "call_flow_v2") || !doorFeature(door, "call_cancel_v2") ||
+        !doorFeature(door, "ui_manifest_v1") ||
+        !doorManifestSupports(door, "purpose.button") ||
+        !doorManifestSupports(door, "cancel.call"))
+      return "purpose_first";
+    return configured;
+  }
+
+  bool configWriteValidEffective(const std::string& key, const cJSON* value,
+                                 std::string* error) {
+    if (!configWriteValid(key, value, error)) return false;
+    const std::string marker = ".local.ui.elements.";
+    const size_t marker_pos = key.find(marker);
+    if (marker_pos == std::string::npos || !cJSON_IsObject(value)) return true;
+
+    auto resolved = json::obj();
+    auto overlay = [&resolved](const cJSON* source) {
+      if (!cJSON_IsObject(source)) return;
+      for (const char* property : {"scale", "font_scale", "foreground", "background",
+                                   "accent", "border", "radius"}) {
+        const cJSON* item = json::get(source, property);
+        if (item)
+          json::setItem(resolved.get(), property, json::Doc(cJSON_Duplicate(item, 1)));
+      }
+    };
+
+    const std::string element = key.substr(marker_pos + marker.size());
+    const std::string device_prefix = "devices.";
+    if (key.rfind(device_prefix, 0) != 0 || marker_pos <= device_prefix.size()) {
+      *error = "semantic UI override is missing a target device";
+      return false;
+    }
+    const std::string target_id =
+        key.substr(device_prefix.size(), marker_pos - device_prefix.size());
+    std::string target_manifest_json;
+    if (target_id == node_id) {
+      std::string native_error;
+      if (uiManifestValid(ui_manifest_json, &native_error) && uiManifestSupports(element))
+        target_manifest_json = ui_manifest_json;
+      else if (webUiManifestSupports(element))
+        target_manifest_json = webUiManifestJson();
+    } else if (mesh) {
+      for (const auto& peer : mesh->peers()) {
+        if (peer.id != target_id) continue;
+        if (advertisedFeature(peer.caps_json, "ui_manifest_v1"))
+          target_manifest_json = peer.ui_manifest_json;
+        break;
+      }
+    }
+    if (target_manifest_json.empty()) target_manifest_json = cachedPeerUiManifest(target_id);
+    std::string manifest_error;
+    if (target_manifest_json.empty() ||
+        !uiManifestValid(target_manifest_json, &manifest_error)) {
+      *error = "target device has no valid ui_manifest";
+      return false;
+    }
+    auto manifest = json::parse(target_manifest_json);
+    const cJSON* manifest_element = manifest
+        ? json::get(json::get(manifest.get(), "elements"), element.c_str()) : nullptr;
+    if (!cJSON_IsObject(manifest_element)) {
+      *error = "target ui_manifest does not advertise semantic element " + element;
+      return false;
+    }
+    const cJSON* properties = json::get(manifest_element, "properties");
+    const cJSON* proposed = nullptr;
+    cJSON_ArrayForEach(proposed, value) {
+      bool declared = false;
+      const cJSON* property = nullptr;
+      cJSON_ArrayForEach(property, properties) {
+        if (cJSON_IsString(property) && proposed->string && property->valuestring &&
+            std::string(property->valuestring) == proposed->string) {
+          declared = true;
+          break;
+        }
+      }
+      if (!declared) {
+        *error = "target ui_manifest does not support property " +
+                 std::string(proposed->string ? proposed->string : "");
+        return false;
+      }
+    }
+    const cJSON* defaults = json::get(manifest_element, "defaults");
+    if (!defaults) defaults = json::get(manifest_element, "default");
+    overlay(defaults);
+    overlay(cfgAt(key));
+    overlay(value);
+    return uiStyleViewportValid(key, resolved.get(), json::get(manifest.get(), "viewport"), error);
+  }
+
+  void applyEffectiveCaps() {
+    const std::string next = computeEffectiveCaps();
+    if (next == effective_caps_json) return;
+    effective_caps_json = next;
+    if (mesh) mesh->setCaps(effective_caps_json);
+    scheduleSnapshotRefresh();
+  }
+
+  std::string capabilitiesJsonOnLoop() const {
+    auto root = json::obj();
+    json::set(root.get(), "schema_version", static_cast<int64_t>(2));
+    json::setItem(root.get(), "features", effectiveFeaturesDoc());
+    auto caps = json::parse(effective_caps_json);
+    json::setItem(root.get(), "caps", caps ? std::move(caps) : json::obj());
+    json::setItem(root.get(), "runtime", runtimeStatusDoc());
+    auto manifest = json::parse(ui_manifest_json);
+    json::setItem(root.get(), "ui_manifest", manifest ? std::move(manifest) : json::obj());
+    cJSON* web_ui = json::addObj(root.get(), "web_ui");
+    json::set(web_ui, "device_id", node_id);
+    auto web_manifest = json::parse(webUiManifestJson());
+    json::setItem(web_ui, "manifest",
+                  web_manifest ? std::move(web_manifest) : json::obj());
+    return json::dump(root.get());
+  }
+
+  json::Doc runtimeStatusDoc() const {
+    auto runtime = json::parse(runtime_status_json);
+    if (!runtime || !cJSON_IsObject(runtime.get())) runtime = json::obj();
+    auto web_report = json::parse(web_ui_style_report_json);
+    if (web_report && cJSON_IsObject(web_report.get()) && web_report.get()->child)
+      json::setItem(runtime.get(), "web_ui_style", std::move(web_report));
+    if (!secret_migration_warnings.empty()) {
+      cJSON* migration = json::addObj(runtime.get(), "core_secret_migration");
+      json::setBool(migration, "ok", false);
+      json::setBool(migration, "fail_closed", true);
+      cJSON* warnings = json::addArr(migration, "warnings");
+      for (const auto& warning : secret_migration_warnings)
+        json::push(warnings, json::Doc(cJSON_CreateString(warning.c_str())));
+    }
+    cJSON_DeleteItemFromObjectCaseSensitive(runtime.get(), "config_store");
+    if (config_persistence_failed) {
+      cJSON* persistence = json::addObj(runtime.get(), "config_store");
+      json::setBool(persistence, "ok", false);
+      json::setBool(persistence, "fail_closed", true);
+      json::set(persistence, "failures", static_cast<int64_t>(config_persistence_failures));
+      json::set(persistence, "active_state", "last_known_good");
+    }
+    return runtime;
+  }
+
+  bool onConfigChanges(const std::vector<LwwEntry>& entries, bool is_local, bool batch) {
+    if (entries.empty() || suppress_config_callbacks) return true;
+    std::vector<LwwEntry> effective_entries = entries;
+    std::vector<LwwEntry> rejected_entries;
+    std::vector<LwwEntry> tombstones_to_push;
+    if (!is_local) {
+      for (const auto& entry : entries) {
+        if (entry.deleted) continue;
+        auto value = json::parse(entry.value_json);
+        std::string error;
+        // Remote ingress can enforce context-free schema and safety rules, but must not depend on
+        // this receiver having already discovered the target's ui_manifest. The originating Admin
+        // performs manifest-dependent validation; the target shell still applies LKG fail-closed.
+        if (!value || !configWriteValid(entry.key, value.get(), &error)) {
+          DB_LOGW(kTag, "rejected unsafe remote config key " + entry.key + " (" +
+                            (error.empty() ? "invalid JSON" : error) + ")");
+          rejected_entries.push_back(entry);
+        }
+      }
+      if (!rejected_entries.empty()) {
+        std::vector<LwwMutation> tombstone_mutations;
+        tombstone_mutations.reserve(rejected_entries.size());
+        for (const auto& entry : rejected_entries)
+          tombstone_mutations.push_back({entry.key, "", true});
+
+        // The remote winners are already in the CRDT map. Replace every unsafe winner before a
+        // rebuild can expose it, while suppressing the nested observer callback. Persist the safe
+        // remote winners and locally-authored tombstones together as one visible transition.
+        suppress_config_callbacks = true;
+        tombstones_to_push = config->mutate(tombstone_mutations);
+        suppress_config_callbacks = false;
+
+        effective_entries.clear();
+        effective_entries.reserve(entries.size() + tombstones_to_push.size());
+        for (const auto& entry : entries) {
+          const bool rejected = std::any_of(
+              rejected_entries.begin(), rejected_entries.end(),
+              [&entry](const LwwEntry& candidate) { return candidate.key == entry.key; });
+          if (!rejected) effective_entries.push_back(entry);
+        }
+        effective_entries.insert(effective_entries.end(), tombstones_to_push.begin(),
+                                 tombstones_to_push.end());
+        batch = batch || effective_entries.size() > 1;
+      }
+    }
+    if (effective_entries.empty()) return true;
+    const bool persisted = (batch || effective_entries.size() > 1)
+        ? store.configPutBatch(effective_entries)
+        : store.configPut(effective_entries.front());
+    if (!persisted) {
+      const bool first_failure = !config_persistence_failed;
+      config_persistence_failed = true;
+      ++config_persistence_failures;
+      if (first_failure)
+        DB_LOGE(kTag, "config persistence failed; retaining the last-known-good state");
+      if (started) scheduleSnapshotRefresh();
+      return false;
+    }
+    if (config_persistence_failed) {
+      config_persistence_failed = false;
+      if (started) scheduleSnapshotRefresh();
+    }
+    rebuildCfg();
+    if (is_local && mesh) mesh->pushConfigDelta(entries);
+    if (!is_local && mesh && !tombstones_to_push.empty())
+      mesh->pushConfigDelta(tombstones_to_push);
+
+    bool self_device_changed = false;
+    bool sip_changed = false;
+    bool integrations_changed = false;
+    bool panel_credential_changed = false;
+    for (const auto& e : effective_entries) {
+      const bool self_device = e.key.compare(0, 8, "devices.") == 0 &&
+          e.key.find(node_id) != std::string::npos;
+      self_device_changed = self_device_changed || self_device;
+      sip_changed = sip_changed || e.key.compare(0, 4, "sip.") == 0 || self_device;
+      integrations_changed = integrations_changed || e.key == "integrations" ||
+          e.key.compare(0, 13, "integrations.") == 0;
+      panel_credential_changed = panel_credential_changed || e.key == "panel" ||
+          e.key == "panel.token_refs" || e.key == "panel.token_generation";
+    }
+    if (panel_credential_changed) invalidatePanelSessions();
+    if (self_device_changed) {
+      if (httpd) applyCameraSettings();
+      applyMotionSettings();
+      applyVideoRotation();
+      applyEffectiveCaps();
+    }
+    if (sip_changed) scheduleSipReapply();
+    if (integrations_changed) applyEffectiveCaps();
+    if (started && integrations_changed) netRefreshSnapshot();
+    scheduleBridgeReapply();
+    if (started) evalDisplay();
+    schedulePrefetch();
+    auto event = json::obj();
+    json::set(event.get(), "t", "config_changed");
+    json::set(event.get(), "count", static_cast<int64_t>(effective_entries.size()));
+    json::setBool(event.get(), "atomic", batch);
+    uiNotify(json::dump(event.get()));
+    return true;
+  }
+
   bool init() {
     // Store
     std::string db_path = opts.data_dir;
     if (db_path != ":memory:") {
-      makeDir(opts.data_dir);  // 既存でもよい
+      makeDir(opts.data_dir);
       db_path = opts.data_dir + "/doorbell.db";
     }
     if (!store.open(db_path)) {
       DB_LOGE(kTag, "store open failed: " + db_path);
       return false;
     }
-    // 身元
+
     auto id = store.metaGet("node_id");
     if (!id) {
       node_id = genNodeId();
-      store.metaSet("node_id", node_id);
+      if (!store.metaSet("node_id", node_id)) {
+        DB_LOGE(kTag, "node identity could not be persisted");
+        return false;
+      }
     } else {
       node_id = *id;
     }
     auto ep = store.metaGet("epoch");
     epoch = ep ? std::stoull(*ep) + 1 : 1;
-    store.metaSet("epoch", std::to_string(epoch));
+    if (!store.metaSet("epoch", std::to_string(epoch))) {
+      DB_LOGE(kTag, "node epoch could not be persisted");
+      return false;
+    }
 
-    // 統一資産のキャッシュ置き場 (":memory:" Store はテンポラリへ)
+
     assets_dir = (opts.data_dir == ":memory:")
                      ? tempDir() + "/doorbell-assets-" + node_id
                      : opts.data_dir + "/assets";
@@ -1169,33 +3821,15 @@ struct Node::Impl {
     events.reset(new EventLog(node_id, *hlc, store));
     events->loadHeads();
 
-    config->onChange([this](const LwwEntry& e, bool is_local) {
-      store.configPut(e);
-      rebuildCfg();
-      if (is_local && mesh) mesh->pushConfigDelta({e});
-      // 自機のカメラ設定 (fps/quality/解像度) の変更は即反映
-      if (e.key.compare(0, 8, "devices.") == 0 && e.key.find(node_id) != std::string::npos) {
-        if (httpd) applyCameraSettings();
-        applyMotionSettings();
-      }
-      // SIP 設定 (sip.* / 自機の aec) の変更 → デバウンス後に再登録
-      if (e.key.compare(0, 4, "sip.") == 0 ||
-          (e.key.compare(0, 8, "devices.") == 0 && e.key.find(node_id) != std::string::npos))
-        scheduleSipReapply();
-      // HA ブリッジは設定全文 (mqtt 接続先/doors/devices/…) に依存 — デバウンスして再評価
-      scheduleBridgeReapply();
-      // 表示制御 (display.* / devices.<self>.local.display.*) — 変化時だけ uiNotify される
-      if (started) evalDisplay();
-      // 統一資産: 参照が増えた/減った可能性 — デバウンスして前取り+GC を評価
-      schedulePrefetch();
-      uiNotify("{\"t\":\"config_changed\"}");
+    config->onCommit([this](const std::vector<LwwEntry>& entries, bool is_local, bool batch) {
+      return onConfigChanges(entries, is_local, batch);
     });
     events->onEvent([this](const EventRecord& ev, bool is_local) { onEvent(ev, is_local); });
 
-    // トランスポート
+
     if (!transport) transport.reset(new TcpTransport(*loop));
-    // beacon は未配対機でも生成する — PAIR-ANNOUNCE (平文・PSK 非依存) で自身を広告し、
-    // 集群ノードの承認/配対モードで招待を受け取るため (配対 §1.6 拡張)。
+
+
     if (!discovery && opts.enable_beacon) discovery.reset(new UdpBeacon(*loop, opts.psk));
 
     // Mesh
@@ -1203,7 +3837,7 @@ struct Node::Impl {
     ms.node_id = node_id;
     ms.epoch = epoch;
     ms.listen_addr = opts.listen_addr;
-    // advertise_addr 未指定なら実 LAN IPv4 を自動検出 (0.0.0.0 を配らない)。
+
     ms.advertise_addr = opts.advertise_addr;
     if (ms.advertise_addr.empty()) {
       std::string ip = db::net::primaryIPv4();
@@ -1211,10 +3845,23 @@ struct Node::Impl {
       std::string port = colon != std::string::npos ? opts.listen_addr.substr(colon + 1) : "47172";
       ms.advertise_addr = ip.empty() ? opts.listen_addr : (ip + ":" + port);
     }
-    {  // 診断: アドレス検出の内訳をログ
+    ms.advertise_addrs = {ms.advertise_addr};
+    // Gossip every interface on real networks so panels can choose a reachable management URL.
+    // In-memory tests disable beacons and retain their symbolic addresses.
+    if (opts.enable_beacon) {
+      auto colon = opts.listen_addr.rfind(':');
+      std::string port = colon != std::string::npos ? opts.listen_addr.substr(colon + 1) : "47172";
+      for (const auto& ip : db::net::localAddresses(true)) {
+        std::string addr = ip.find(':') == std::string::npos
+            ? ip + ":" + port : "[" + ip + "]:" + port;
+        if (std::find(ms.advertise_addrs.begin(), ms.advertise_addrs.end(), addr) ==
+            ms.advertise_addrs.end()) ms.advertise_addrs.push_back(addr);
+      }
+    }
+    {
       auto v4 = db::net::localAddresses(false);
       auto all = db::net::localAddresses(true);
-      DB_LOGI(kTag, "addr-detect: getifaddrs v4=" + std::to_string(v4.size()) +
+      DB_LOGI(kTag, "addr-detect: local v4=" + std::to_string(v4.size()) +
                         " all=" + std::to_string(all.size()) +
                         " route=" + db::net::primaryIPv4ViaRoute() +
                         " advertise=" + ms.advertise_addr);
@@ -1222,16 +3869,23 @@ struct Node::Impl {
     ms.seed_peers = opts.seed_peers;
     ms.psk = opts.psk;
     ms.role = opts.role;
+    ms.door = opts.role == "door_station" ? opts.door : "";
     ms.sw_version = opts.sw_version;
-    ms.caps_json = opts.caps_json;
+    effective_caps_json = computeEffectiveCaps();
+    ms.caps_json = effective_caps_json;
+    ms.ui_manifest_json = ui_manifest_json;
+    ms.runtime_json = runtime_status_json;
     Mesh::Callbacks cbs;
     cbs.on_peers_changed = [this] {
-      updateSipAllowedSources();  // 直接 INVITE の許可 IP を mesh 成員に追随させる
-      schedulePrefetch();         // 新しい peer が保持ノードかもしれない — 未取得資産を再試行
+      cachePeerContracts();
+      updateSipAllowedSources();
+      schedulePrefetch();
+      rearmCallTimeouts();
+      rearmCallRecoveryTakeovers();
       uiNotify("{\"t\":\"peers_changed\"}");
     };
     cbs.on_leader_changed = [this](const std::string& duty, const std::string& leader) {
-      // leader 交代は即座に反映 (自分が就任 → 開始 / 退任 → 停止)
+
       if (duty == "mqtt_bridge") reevalBridge();
       if (duty == "telegram") reevalTelegram();
       auto o = json::obj();
@@ -1242,19 +3896,21 @@ struct Node::Impl {
     };
     cbs.on_peer_alive_changed = [this](const std::string& id, bool alive) {
       updateSipAllowedSources();
+      rearmCallTimeouts();
+      rearmCallRecoveryTakeovers();
       onPeerAlive(id, alive);
     };
     cbs.on_command = [this](const std::string& from, const std::string& cmd) {
       onCommand(from, cmd);
     };
     cbs.on_pending_changed = [this] { uiNotify("{\"t\":\"pending_changed\"}"); };
-    // INVITE 受理 / PIN 参加で PSK を取得した → 殻に新 boot 設定を渡して永続化 + 再起動させる。
+
     cbs.on_paired = [this] { onBecamePaired(); };
     mesh.reset(new Mesh(*loop, *clock, *hlc, *transport, discovery.get(), store, *config,
                         *events, ms, cbs));
-    // 他ノードからの快照要求 (SNAP_REQ — Telegram 写真用) には最新 JPEG で応える
+
     mesh->setSnapshotProvider([this] { return frame_bus.latestJpeg(); });
-    // 資産 blob 要求 (BLOB_REQ) にはローカルキャッシュから応える
+
     mesh->setBlobProvider([this](const std::string& hash) {
       Bytes b;
       if (isSha256HexStr(hash)) readFileBytes(assetFilePath(hash), b);
@@ -1262,12 +3918,22 @@ struct Node::Impl {
     });
 
     rebuildCfg();
+    // Seal legacy Push endpoint/key material before the generic secret migration sees nested
+    // Web Push auth fields. Sealed records remain replicated for leader failover but are never
+    // exported in plaintext.
+    if (!migrateLegacyWebPushSubscriptions() || !migrateLegacyRuntimeCredentials()) {
+      DB_LOGE(kTag, "configuration credential migration failed closed");
+      return false;
+    }
 
-    // HA MQTT ブリッジ (接続するのは leader 就任後 — reevalBridge が判断)
+
     {
       HaBridge::Hooks hooks;
       hooks.on_reply = [this](const std::string& rid, const std::string& text,
-                              const std::string& door) { quickReply(rid, text, door, "mqtt"); };
+                              const std::string& door, const std::string& call_id,
+                              int revision) {
+        return quickReply(rid, text, door, "mqtt", call_id, revision);
+      };
       hooks.node_alive = [this] {
         std::vector<std::pair<std::string, bool>> v;
         if (mesh)
@@ -1282,7 +3948,7 @@ struct Node::Impl {
       bridge.reset(new HaBridge(*loop, std::move(hooks)));
     }
 
-    // Telegram ブリッジ (送信するのは telegram leader だけ — reevalTelegram が判断)
+
     {
       TelegramBridge::Hooks th;
       th.https = [this](const std::string& m, const std::string& u, const std::string& h,
@@ -1290,12 +3956,17 @@ struct Node::Impl {
         httpsCall(m, u, h, body, std::move(done));
       };
       th.on_reply = [this](const std::string& rid, const std::string& text,
-                           const std::string& door) { quickReply(rid, text, door, "telegram"); };
+                           const std::string& door, const std::string& call_id) {
+        auto active = active_calls.find(door);
+        if (active == active_calls.end() || active->second.call_id != call_id) return false;
+        return quickReply(rid, text, door, "telegram", call_id,
+                          active->second.stage_revision);
+      };
       th.get_event = [this](const std::string& o, uint64_t s) { return store.eventGet(o, s); };
       th.merge_notify = [this](const std::string& o, uint64_t s, const std::string& nj) {
         if (!events->mergeNotify(o, s, nj)) return;
-        // 回執は SYNC 差分に乗らない (既知イベントは deltaSince が送らない) —
-        // EVENT 再広播で全ノードへ複製する (受信側は mergeNotify で取り込む)
+
+
         auto ev = store.eventGet(o, s);
         if (ev && mesh) mesh->broadcastEvent(*ev);
       };
@@ -1309,17 +3980,20 @@ struct Node::Impl {
       };
       th.text = [this](const std::string& key, const std::string& lang,
                        const std::vector<std::pair<std::string, std::string>>& args) {
-        return textOnLoop(key, lang, args);  // ブリッジは loop 上でしか呼ばない
+        return textOnLoop(key, lang, args);
       };
       tg.reset(new TelegramBridge(*loop, store, std::move(th)));
     }
 
-    seedConfig();
+    if (!seedConfig()) {
+      DB_LOGE(kTag, "startup configuration could not be persisted; refusing startup");
+      return false;
+    }
     mesh->start();
-    reevalBridge();  // 単機構成で既に leader の場合に備えて一度評価
+    reevalBridge();
     reevalTelegram();
 
-    // SIP (sipctl)。server 未設定なら start は no-op — 設定が届いたら再適用される。
+
     {
       SipCtl::Callbacks scb;
       scb.on_reg_state = [this](SipRegState st, const std::string& reason) {
@@ -1331,7 +4005,7 @@ struct Node::Impl {
       scb.on_dtmf = [this](char d) { onSipDtmf(d); };
       sipctl.reset(new SipCtl(*loop, std::move(scb)));
       sipctl->start(sipSettings());
-      updateSipAllowedSources();  // 初期 peers (自分含む) を許可リストへ
+      updateSipAllowedSources();
     }
 
     if (opts.http_port > 0) {
@@ -1341,9 +4015,11 @@ struct Node::Impl {
         DB_LOGE(kTag, "httpd start failed on port " + std::to_string(opts.http_port));
         return false;
       }
-      applyCameraSettings();  // /snapshot.jpg・/stream.mjpeg の JPEG 提供者を配線
+      applyCameraSettings();
+      applyVideoRotation();
+      httpd->setVideoRotationProvider([this] { return effective_video_rotation.load(); });
     }
-    // 動体検知: 発火 (採集スレッド) → loop へ → motion イベント (door 担当の門口機のみ)
+
     motion.onMotion([this](int64_t /*ts_ms*/, double changed_pct) {
       loop->post([this, changed_pct] {
         if (!started || opts.role != "door_station" || opts.door.empty()) return;
@@ -1353,12 +4029,13 @@ struct Node::Impl {
       });
     });
     applyMotionSettings();
+    applyVideoRotation();  // Status exposes the effective rotation even without HTTP.
 #ifdef _WIN32
-    // Windows の門口機はカメラ採集 (Media Foundation) を起動。失敗はログのみ。
+
     if (opts.role == "door_station") {
       CamCfg c = cameraCfg();
-      // H.264 硬編 (encoder_win — MF encoder MFT)。出力 AnnexB は video_track へ。
-      // 未稼働中の feed は即 return するので採集経路への負担はない。
+
+
       encoder.reset(new EncoderWin([this](const uint8_t* p, size_t n, bool key, int64_t ts) {
         pushVideoTrack(p, n, key, ts);
       }));
@@ -1367,15 +4044,15 @@ struct Node::Impl {
           std::lock_guard<std::mutex> lk(motion_mu);
           motion.feed(f);
         }
-        if (encoder) encoder->feed(f);  // 稼働中のみ消費 (NV12 変換もエンコーダ側)
+        if (encoder) encoder->feed(f);
         frame_bus.push(std::move(f));
       }));
-      // codec=h264/auto の間は h264_resolution を採集目標にする (MJPEG 側は
-      // frame_bus の max_width 縮小で従来解像度のまま — 二重採集はしない)。
+
+
       int tw = c.h264Enabled() ? c.h264_w : c.w;
       int th = c.h264Enabled() ? c.h264_h : c.h;
       camera->start(c.hint, tw, th);
-      // wanted (購読者あり) の間だけエンコーダを回す (5 秒毎判定 — 省電力)
+
       encoder_timer = loop->postEvery(5'000, [this] {
         if (!encoder) return;
         bool want = video_track.enabled() && video_track.subscriberCount() > 0;
@@ -1391,27 +4068,32 @@ struct Node::Impl {
       });
     }
 #endif
-    // 表示制御: 30 秒周期の再評価 + 起動直後の 1 回発行 (壳が初期状態を受け取れる)
+
     display_timer = loop->postEvery(30'000, [this] { evalDisplay(); });
-    // SOS: 状態を Store から復元し、初期状態も 1 回発行する (再起動後のイベント再生に相当)
-    restoreEmergency();
 
     started = true;
+    startNetMonitor();
+    restoreActiveCalls(/*notify=*/false);
+    restoreTerminalCalls();
+    events->replayRecovered();
+    restoreEmergency();
+    notifyPendingRecoveries();
     snapshot_timer = loop->postEvery(2'000, [this] { refreshSnapshots(); });
     refreshSnapshots();
     evalDisplay(/*force=*/true);
-    emergencyNotifyUi();
-    prefetchAssets();  // 起動時: 参照中で未キャッシュの資産を前取り
+    restoreEmergencyPresentation();
+    prefetchAssets();
     DB_LOGI(kTag, "node " + node_id.substr(0, 8) + " (" + opts.name + ") started");
     return true;
   }
 
-  // 既定設定 (初回のみ) + 自機の devices エントリ登録
-  void seedConfig() {
+
+  bool seedConfig() {
     if (opts.seed_default_config && !config->get("schema_version")) {
-      config->set("schema_version", "1");
-      config->set("reply.display_ttl_s", "30");
-      config->set("integrations.tz_offset_min", "540");
+      std::vector<LwwMutation> defaults = {
+          {"schema_version", "1", false},
+          {"reply.display_ttl_s", "30", false},
+          {"integrations.tz_offset_min", "540", false}};
       auto qr = [&](const char* id, const char* ja, const char* en, const char* zh, int order) {
         auto o = json::obj();
         cJSON* label = json::addObj(o.get(), "label");
@@ -1420,22 +4102,26 @@ struct Node::Impl {
         json::set(label, "zh", zh);
         json::setBool(o.get(), "speak", true);
         json::set(o.get(), "order", static_cast<int64_t>(order));
-        config->set(std::string("quick_replies.") + id, json::dump(o.get()));
+        defaults.push_back(
+            {std::string("quick_replies.") + id, json::dump(o.get()), false});
       };
       qr("qr_away", "ただいま留守にしています", "We are away right now", "现在不在家", 1);
       qr("qr_no", "結構です", "Not interested", "不需要，谢谢", 2);
       qr("qr_wrong", "お間違いのようです", "Wrong address", "您可能找错地方了", 3);
       qr("qr_wait", "少々お待ちください", "One moment please", "请稍等", 4);
-      // 訪客言語 (門口機の言語切替に出す言語 + 無操作復帰秒)
-      config->set("ui.languages", "[\"ja\",\"en\",\"zh\"]");
-      config->set("ui.visitor_lang_revert_s", "60");
-      config->set("ui.launch_sound", "\"title_display\"");
-      config->set("ui.call_sound", "\"outdoor_call_alert\"");
-      config->set("ui.call_sound_loop", "false");
-      config->set("ui.button_sound", "\"button_click\"");
-      config->set("ui.update_sound", "\"indoor_update\"");
-      config->set("ui.ringtone", "\"school_chime\"");
-      // 訪客の用件ボタン (既定 seed — docs/config-schema.md visit_purposes)
+
+      defaults.insert(defaults.end(), {
+          {"ui.languages", "[\"ja\",\"en\",\"zh\"]", false},
+          {"ui.visitor_lang_revert_s", "60", false},
+          {"ui.launch_sound", "\"title_display\"", false},
+          {"ui.call_sound", "\"outdoor_call_alert\"", false},
+          {"ui.call_sound_loop", "false", false},
+          {"ui.button_sound", "\"button_click\"", false},
+          {"ui.update_sound", "\"indoor_update\"", false},
+          {"ui.ringtone", "\"school_chime\"", false},
+          {"ui.call_flow", "\"purpose_first\"", false},
+          {"ui.call_ttl_s", "60", false}});
+
       auto vp = [&](const char* id, const char* ja, const char* en, const char* zh,
                     const char* icon, int order) {
         auto o = json::obj();
@@ -1445,7 +4131,8 @@ struct Node::Impl {
         json::set(label, "zh", zh);
         json::set(o.get(), "icon", icon);
         json::set(o.get(), "order", static_cast<int64_t>(order));
-        config->set(std::string("visit_purposes.") + id, json::dump(o.get()));
+        defaults.push_back(
+            {std::string("visit_purposes.") + id, json::dump(o.get()), false});
       };
       vp("p_visit", "訪問", "Visit", "访客", "🏠", 1);
       vp("p_delivery", "宅配便", "Delivery", "快递", "📦", 2);
@@ -1453,29 +4140,742 @@ struct Node::Impl {
       vp("p_sales", "営業・集金", "Sales", "推销/收费", "💼", 4);
       vp("p_work", "検針・工事", "Utility", "检修/施工", "🔧", 5);
       vp("p_other", "その他", "Other", "其他", "❓", 6);
-      // パネルアクセストークン (webui/panel/API.md — 管理画面から差替可)
-      config->set("panel.tokens", "[\"" + genTokenHex(16) + "\"]");
+      config->mutate(defaults);
+      if (!config->lastMutationCommitted()) return false;
     }
-    // 自機のエントリ (差分がある時だけ書く — 起動毎の無駄な gossip を避ける)
-    auto dev = json::obj();
-    json::set(dev.get(), "name", opts.name);
-    json::set(dev.get(), "role", opts.role);
-    if (!opts.door.empty()) json::set(dev.get(), "door", opts.door);
-    std::string key = "devices." + node_id;
-    std::string want = json::dump(dev.get());
-    auto cur = config->get(key);
-    if (!cur || *cur != want) config->set(key, want);
+    // One-release migration: move legacy bearer values out of the replicated/exported CRDT.
+    // New installations issue panel credentials explicitly from the authenticated Admin UI.
+    if (!migrateRawPanelCredentials()) return false;
+    // Seed the safety-friendly default once. A tombstone made by an administrator remains deleted
+    // because the local meta marker prevents this migration from recreating the rule on restart.
+    if (!store.metaGet("seed_sos_rules_v1")) {
+      bool has_emergency_rule = false;
+      cJSON* existing_rules = json::get(cfg.get(), "trigger_rules");
+      cJSON* rule = nullptr;
+      cJSON_ArrayForEach(rule, existing_rules) {
+        const std::string t = json::getString(json::get(rule, "when"), "type");
+        if (t == "emergency" || t == "emergency_cancel" || t == "emergency_on" ||
+            t == "emergency_off")
+          has_emergency_rule = true;
+      }
+      if (!has_emergency_rule) {
+        const char* targets =
+            "{\"roles\":\"all\",\"web_profiles\":\"all\"}";
+        const std::string on = std::string("{\"enabled\":true,\"when\":{\"type\":") +
+            "\"emergency_on\"},\"actions\":[{\"type\":\"device_alert\",\"targets\":" +
+            targets +
+            ",\"channels\":[\"in_app\",\"system_notification\",\"web_push\"],"
+            "\"never_suppress\":true,\"presentation\":{\"visual\":true,"
+            "\"sticky\":true,\"ttl_s\":0}},{\"type\":\"telegram\","
+            "\"never_suppress\":true,\"households\":\"all\"}]}";
+        const std::string off = std::string("{\"enabled\":true,\"when\":{\"type\":") +
+            "\"emergency_off\"},\"actions\":[{\"type\":\"device_alert\",\"targets\":" +
+            targets +
+            ",\"channels\":[\"in_app\",\"system_notification\",\"web_push\"],"
+            "\"never_suppress\":true,\"presentation\":{\"visual\":true,"
+            "\"sticky\":false,\"ttl_s\":10}},{\"type\":\"telegram\","
+            "\"never_suppress\":true,\"households\":\"all\"}]}";
+        config->mutate({{"trigger_rules.r_sos_default_on", on, false},
+                        {"trigger_rules.r_sos_default_off", off, false}});
+        if (!config->lastMutationCommitted()) return false;
+      }
+      if (!store.metaSet("seed_sos_rules_v1", "1")) return false;
+    }
+
+    // The boot identity is the operational source of truth used by the shell and mesh. Keep the
+    // replicated self record aligned at leaf granularity: older Admin versions wrote both a
+    // devices.<id> object and later .name/.role/.door leaves, so replacing only the parent object
+    // cannot override a stale empty door leaf. Leaf writes also preserve unknown local settings.
+    const std::string key = "devices." + node_id;
+    const cJSON* current = cfgAt(key);
+    std::vector<LwwMutation> identity;
+    auto add_identity = [&](const char* field, const std::string& value) {
+      if (json::getString(current, field) == value) return;
+      auto encoded = json::Doc(cJSON_CreateString(value.c_str()));
+      identity.push_back({key + "." + field, json::dump(encoded.get()), false});
+    };
+    add_identity("name", opts.name);
+    add_identity("role", opts.role);
+    // An indoor panel deliberately has no assigned door; persisting the empty leaf clears any
+    // stale door-station assignment when an administrator changes the first-run role.
+    add_identity("door", opts.role == "door_station" ? opts.door : "");
+    if (!identity.empty()) {
+      config->mutate(identity);
+      if (!config->lastMutationCommitted()) return false;
+    }
+    return true;
   }
 
-  // ---------- イベント配送 ----------
+  int64_t callTtlMs() const {
+    int64_t seconds = json::getInt(json::get(cfg.get(), "ui"), "call_ttl_s", 60);
+    seconds = std::max<int64_t>(10, std::min<int64_t>(seconds, 300));
+    return seconds * 1000;
+  }
+
+  static std::string eventCallId(const EventRecord& ev) {
+    auto p = json::parse(ev.payload_json.empty() ? "{}" : ev.payload_json);
+    std::string id = p ? json::getString(p.get(), "call_id") : "";
+    if (id.empty() && ev.type == "press")
+      id = ev.origin + ":" + std::to_string(ev.seq);  // deterministic legacy-event identity
+    return id;
+  }
+
+  static bool validDialogId(const std::string& id) {
+    if (id.size() != 32) return false;
+    return std::all_of(id.begin(), id.end(), [](unsigned char c) {
+      return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f');
+    });
+  }
+
+  std::string webDialogOwner(const std::string& dialog_id) const {
+    if (!validDialogId(dialog_id)) return "";
+    const std::string material = node_id + ":" + dialog_id;
+    return node_id + ":web:" +
+        sha256Hex(reinterpret_cast<const uint8_t*>(material.data()), material.size()).substr(0, 24);
+  }
+
+  bool localWebDialogOwner(const std::string& owner) const {
+    return owner.rfind(node_id + ":web:", 0) == 0;
+  }
+
+  static std::string dialogOwnerNode(const std::string& owner) {
+    const size_t marker = owner.find(":web:");
+    return marker == std::string::npos ? owner : owner.substr(0, marker);
+  }
+
+  static int64_t callWriteRetryDelay(unsigned step) {
+    static constexpr int64_t delays_ms[] = {2'000, 5'000, 10'000, 30'000, 60'000};
+    return delays_ms[std::min<unsigned>(step, 4)];
+  }
+
+  void finishPendingLifecycle(const std::string& call_id) {
+    auto pending = pending_lifecycles.find(call_id);
+    if (pending == pending_lifecycles.end()) return;
+    if (pending->second.retry_timer) loop->cancel(pending->second.retry_timer);
+    pending_lifecycles.erase(pending);
+  }
+
+  void abandonPendingLifecycle(const std::string& call_id) {
+    std::string door;
+    auto pending = pending_lifecycles.find(call_id);
+    if (pending != pending_lifecycles.end()) door = pending->second.door;
+    finishPendingLifecycle(call_id);
+
+    auto active = active_calls.find(door);
+    if (active == active_calls.end() || active->second.call_id != call_id) return;
+    active->second.local_sip_established = false;
+    if (sip_call_id == call_id) {
+      if (sipctl) sipctl->hangupOwned(call_id);
+      sip_call_id.clear();
+    }
+    if (active->second.state == "ringing") scheduleCallTimeout(active->second);
+  }
+
+  bool pendingLifecycleIdentityValid(const PendingLifecycle& pending) const {
+    auto active = active_calls.find(pending.door);
+    if (active == active_calls.end() || active->second.call_id != pending.call_id ||
+        active->second.stage_revision != pending.stage_revision)
+      return false;
+    if (active->second.state == "ringing") return pending.answer_pending;
+    return active->second.state == "in_call" &&
+           active->second.dialog_owner == pending.owner;
+  }
+
+  bool reservePendingLifecycle(const std::string& call_id) {
+    if (pending_lifecycles.count(call_id)) return true;
+    for (auto it = pending_lifecycles.begin(); it != pending_lifecycles.end();) {
+      if (pendingLifecycleIdentityValid(it->second)) {
+        ++it;
+        continue;
+      }
+      if (it->second.retry_timer) loop->cancel(it->second.retry_timer);
+      it = pending_lifecycles.erase(it);
+    }
+    if (pending_lifecycles.size() >= kMaxPendingLifecycles) {
+      DB_LOGE(kTag, "call lifecycle retry queue is full");
+      return false;
+    }
+    PendingLifecycle pending;
+    pending.call_id = call_id;
+    pending.order = ++pending_lifecycle_order;
+    pending_lifecycles.emplace(call_id, std::move(pending));
+    return true;
+  }
+
+  void schedulePendingLifecycleRetry(const std::string& call_id) {
+    auto pending = pending_lifecycles.find(call_id);
+    if (pending == pending_lifecycles.end() || pending->second.retry_timer) return;
+    const int64_t delay = callWriteRetryDelay(pending->second.retry_step);
+    if (pending->second.retry_step < 4) ++pending->second.retry_step;
+    pending->second.retry_timer = loop->postDelayed(delay, [this, call_id] {
+      auto current = pending_lifecycles.find(call_id);
+      if (current == pending_lifecycles.end()) return;
+      current->second.retry_timer = 0;
+      flushPendingLifecycle(call_id);
+    });
+  }
+
+  void queuePendingAnswer(const ActiveCall& call, const std::string& owner) {
+    if (!reservePendingLifecycle(call.call_id)) return;
+    PendingLifecycle& pending = pending_lifecycles[call.call_id];
+    pending.call_id = call.call_id;
+    pending.door = call.door;
+    pending.owner = owner;
+    pending.stage_revision = call.stage_revision;
+    pending.answer_pending = true;
+    auto active = active_calls.find(call.door);
+    if (active != active_calls.end() && active->second.call_id == call.call_id) {
+      active->second.local_sip_established = true;
+      if (active->second.timeout_timer) loop->cancel(active->second.timeout_timer);
+      active->second.timeout_timer = 0;
+      door_calling_until.erase(call.door);
+    }
+    schedulePendingLifecycleRetry(call.call_id);
+  }
+
+  void queuePendingEnd(const ActiveCall& call, const std::string& owner,
+                       const std::string& reason) {
+    if (!reservePendingLifecycle(call.call_id)) return;
+    PendingLifecycle& pending = pending_lifecycles[call.call_id];
+    pending.call_id = call.call_id;
+    pending.door = call.door;
+    pending.owner = owner;
+    pending.stage_revision = call.stage_revision;
+    pending.end_pending = true;
+    pending.end_reason = reason.empty() ? "sip_ended" : reason.substr(0, 64);
+    schedulePendingLifecycleRetry(call.call_id);
+  }
+
+  bool callRecoveryTakeoverAuthority(const ActiveCall& call) const {
+    if (!mesh || call.state != "in_call" || call.dialog_owner.empty()) return false;
+    const std::string owner_node = dialogOwnerNode(call.dialog_owner);
+    if (owner_node.empty() || owner_node == node_id) return false;
+
+    bool owner_known_dead = false;
+    std::string authority = node_id;
+    for (const auto& peer : mesh->peers()) {
+      if (peer.id.empty()) continue;
+      if (peer.id == owner_node) owner_known_dead = peer.status == "dead";
+      if (peer.status != "dead" && peer.id < authority) authority = peer.id;
+    }
+    return owner_known_dead && authority == node_id;
+  }
+
+  void clearRecoveryLease(ActiveCall& call) {
+    if (call.recovery_timer) loop->cancel(call.recovery_timer);
+    call.recovery_timer = 0;
+    call.recovery_deadline_mono = 0;
+    call.recovery_notified = false;
+    call.recovery_retry_step = 0;
+    call.recovery_reason.clear();
+    call.recovery_kind = RecoveryLeaseKind::None;
+  }
+
+  void armRecoveryCancellation(ActiveCall& call, RecoveryLeaseKind kind,
+                               const std::string& reason, int64_t delay,
+                               bool reset_retry) {
+    if (call.recovery_timer) loop->cancel(call.recovery_timer);
+    if (reset_retry) call.recovery_retry_step = 0;
+    call.recovery_kind = kind;
+    call.recovery_reason = reason;
+    call.recovery_deadline_mono = clock->monoMs() + delay;
+    const std::string door = call.door;
+    const std::string call_id = call.call_id;
+    const std::string dialog_owner = call.dialog_owner;
+    call.recovery_timer = loop->postDelayed(delay, [this, door, call_id, dialog_owner, kind] {
+      auto active = active_calls.find(door);
+      if (active == active_calls.end() || active->second.call_id != call_id ||
+          active->second.dialog_owner != dialog_owner || active->second.recovery_kind != kind)
+        return;
+      if (kind == RecoveryLeaseKind::DeadOwnerTakeover &&
+          !callRecoveryTakeoverAuthority(active->second)) {
+        clearRecoveryLease(active->second);
+        return;
+      }
+      active->second.recovery_timer = 0;
+      active->second.recovery_deadline_mono = 0;
+      const std::string retry_reason = active->second.recovery_reason;
+      if (doCancelCall(door, call_id, retry_reason)) return;
+
+      const int64_t retry_delay = callWriteRetryDelay(active->second.recovery_retry_step);
+      if (active->second.recovery_retry_step < 4)
+        ++active->second.recovery_retry_step;
+      armRecoveryCancellation(active->second, kind, retry_reason, retry_delay,
+                              /*reset_retry=*/false);
+    });
+  }
+
+  void rearmCallRecoveryTakeovers() {
+    for (auto& entry : active_calls) {
+      ActiveCall& call = entry.second;
+      const bool should_take_over = callRecoveryTakeoverAuthority(call);
+      if (call.recovery_kind == RecoveryLeaseKind::DeadOwnerTakeover &&
+          !should_take_over) {
+        clearRecoveryLease(call);
+        continue;
+      }
+      if (!should_take_over || call.recovery_timer != 0) continue;
+      armRecoveryCancellation(call, RecoveryLeaseKind::DeadOwnerTakeover,
+                              "recovery_timeout", 10'000, /*reset_retry=*/true);
+    }
+  }
+
+  void cancelWebDialogLease(const std::string& call_id) {
+    auto timer = web_dialog_timers.find(call_id);
+    if (timer == web_dialog_timers.end()) return;
+    if (timer->second.timer) loop->cancel(timer->second.timer);
+    web_dialog_timers.erase(timer);
+  }
+
+  void armWebDialogLeaseTimer(const std::string& door, const std::string& call_id,
+                              const std::string& owner, int64_t delay,
+                              bool reset_retry) {
+    WebDialogLease& lease = web_dialog_timers[call_id];
+    if (lease.timer) loop->cancel(lease.timer);
+    lease.door = door;
+    lease.owner = owner;
+    if (reset_retry) lease.retry_step = 0;
+    lease.timer = loop->postDelayed(delay, [this, door, call_id, owner] {
+      auto lease_it = web_dialog_timers.find(call_id);
+      if (lease_it == web_dialog_timers.end() || lease_it->second.door != door ||
+          lease_it->second.owner != owner)
+        return;
+      lease_it->second.timer = 0;
+      auto active = active_calls.find(door);
+      if (active == active_calls.end() || active->second.call_id != call_id ||
+          active->second.dialog_owner != owner || active->second.state != "in_call") {
+        web_dialog_timers.erase(lease_it);
+        return;
+      }
+      if (doCancelCall(door, call_id, "recovery_timeout")) {
+        cancelWebDialogLease(call_id);
+        return;
+      }
+      lease_it = web_dialog_timers.find(call_id);
+      if (lease_it == web_dialog_timers.end()) return;
+      const int64_t retry_delay = callWriteRetryDelay(lease_it->second.retry_step);
+      if (lease_it->second.retry_step < 4) ++lease_it->second.retry_step;
+      armWebDialogLeaseTimer(door, call_id, owner, retry_delay, /*reset_retry=*/false);
+    });
+  }
+
+  void armWebDialogLease(const std::string& door, const std::string& call_id,
+                         const std::string& owner) {
+    cancelWebDialogLease(call_id);
+    armWebDialogLeaseTimer(door, call_id, owner, 10'000, /*reset_retry=*/true);
+  }
+
+  void rememberCancelled(const std::string& call_id) {
+    if (call_id.empty() || !cancelled_call_ids.insert(call_id).second) return;
+    cancelled_call_order.push_back(call_id);
+    while (cancelled_call_order.size() > 256) {
+      cancelled_call_ids.erase(cancelled_call_order.front());
+      cancelled_call_order.pop_front();
+    }
+  }
+
+  void pruneTerminalCalls() {
+    const int64_t now_mono = clock->monoMs();
+    for (auto it = terminal_calls.begin(); it != terminal_calls.end();) {
+      if (it->second.visible_until_mono <= now_mono)
+        it = terminal_calls.erase(it);
+      else
+        ++it;
+    }
+    while (terminal_calls.size() > kMaxPanelTerminalCalls) {
+      auto oldest = std::min_element(
+          terminal_calls.begin(), terminal_calls.end(), [](const auto& a, const auto& b) {
+            return a.second.order < b.second.order;
+          });
+      if (oldest == terminal_calls.end()) break;
+      terminal_calls.erase(oldest);
+    }
+  }
+
+  void rememberTerminalCall(const EventRecord& ev) {
+    if (ev.type != "call_cancelled" && ev.type != "call_ended" && ev.type != "reply") return;
+    const std::string call_id = eventCallId(ev);
+    if (call_id.empty() || ev.door.empty()) return;
+    auto projection = store.callProjection(call_id);
+    const std::string projected_state = ev.type == "call_cancelled" ? "cancelled" : "ended";
+    if (!projection || projection->door != ev.door || projection->state != projected_state ||
+        projection->updated_hlc != ev.hlc)
+      return;
+
+    int64_t terminal_wall_ms = ev.wall_ms;
+    if (terminal_wall_ms <= 0)
+      HlcClock::parse(ev.hlc, &terminal_wall_ms, nullptr, nullptr);
+    if (terminal_wall_ms <= 0) terminal_wall_ms = clock->wallMs();
+    const int64_t age_ms = std::max<int64_t>(0, clock->wallMs() - terminal_wall_ms);
+    if (age_ms >= kPanelTerminalCallTtlMs) return;
+
+    TerminalCall terminal;
+    terminal.call_id = projection->call_id;
+    terminal.door = projection->door;
+    terminal.purpose = projection->purpose;
+    terminal.reason = projection->terminal_reason;
+    terminal.state = ev.type == "call_ended" || ev.type == "reply"
+        ? "ended"
+        : (terminal.reason == "timeout" ? "expired" : "cancelled");
+    terminal.dialog_owner = projection->dialog_owner;
+    terminal.stage_revision = projection->stage_revision;
+    terminal.expires_wall_ms = projection->expires_wall_ms;
+    terminal.terminal_wall_ms = terminal_wall_ms;
+    terminal.visible_until_mono =
+        clock->monoMs() + (kPanelTerminalCallTtlMs - age_ms);
+    terminal.order = ++terminal_call_order;
+    terminal_calls[terminal.door] = std::move(terminal);
+    pruneTerminalCalls();
+  }
+
+  void restoreTerminalCalls() {
+    terminal_calls.clear();
+    for (const auto& ev : store.recentEvents(kMaxPanelTerminalCalls)) {
+      if (ev.type != "call_cancelled" && ev.type != "call_ended" && ev.type != "reply")
+        continue;
+      if (active_calls.count(ev.door) || terminal_calls.count(ev.door)) continue;
+      rememberTerminalCall(ev);
+    }
+  }
+
+  void clearActiveCall(const std::string& door, const std::string& call_id = "") {
+    auto it = active_calls.find(door);
+    if (it == active_calls.end() || (!call_id.empty() && it->second.call_id != call_id)) return;
+    if (it->second.timeout_timer) loop->cancel(it->second.timeout_timer);
+    if (it->second.recovery_timer) loop->cancel(it->second.recovery_timer);
+    finishPendingLifecycle(it->second.call_id);
+    cancelWebDialogLease(it->second.call_id);
+    if (sip_call_id == it->second.call_id) sip_call_id.clear();
+    active_calls.erase(it);
+    door_calling_until.erase(door);
+  }
+
+  void armCallTimeout(ActiveCall& call, int64_t delay, bool reset_retry) {
+    if (call.timeout_timer) loop->cancel(call.timeout_timer);
+    if (reset_retry) call.timeout_retry_step = 0;
+    const std::string door = call.door;
+    const std::string id = call.call_id;
+    const int revision = call.stage_revision;
+    call.timeout_timer = loop->postDelayed(delay, [this, door, id, revision] {
+      auto active = active_calls.find(door);
+      if (active == active_calls.end() || active->second.call_id != id ||
+          active->second.stage_revision != revision)
+        return;
+      active->second.timeout_timer = 0;
+      if (active->second.state != "ringing" || active->second.local_sip_established ||
+          !isCallTimeoutAuthority(active->second))
+        return;
+      if (doCancelCall(door, id, "timeout")) return;
+      const int64_t retry_delay = callWriteRetryDelay(active->second.timeout_retry_step);
+      if (active->second.timeout_retry_step < 4) ++active->second.timeout_retry_step;
+      armCallTimeout(active->second, retry_delay, /*reset_retry=*/false);
+    });
+  }
+
+  void scheduleCallTimeout(ActiveCall& call) {
+    if (call.timeout_timer) loop->cancel(call.timeout_timer);
+    call.timeout_timer = 0;
+    if (!isCallTimeoutAuthority(call) || call.state == "in_call" ||
+        call.local_sip_established)
+      return;
+    armCallTimeout(call, std::max<int64_t>(0, call.expires_wall_ms - hlc->correctedWallMs()),
+                   /*reset_retry=*/true);
+  }
+
+  bool isCallTimeoutAuthority(const ActiveCall& call) const {
+    if (call.origin == node_id) return true;
+    if (opts.role != "door_station" || opts.door != call.door) return false;
+
+    bool origin_alive = false;
+    if (mesh) {
+      for (const auto& peer : mesh->peers()) {
+        if (peer.id == call.origin && peer.status != "dead") {
+          origin_alive = true;
+          break;
+        }
+      }
+    }
+    if (origin_alive) return false;
+
+    std::string authority = node_id;
+    const cJSON* devices = json::get(cfg.get(), "devices");
+    const cJSON* device = nullptr;
+    cJSON_ArrayForEach(device, devices) {
+      if (!device->string || json::getString(device, "role") != "door_station" ||
+          json::getString(device, "door") != call.door)
+        continue;
+      bool alive = std::string(device->string) == node_id;
+      if (!alive && mesh) {
+        for (const auto& peer : mesh->peers()) {
+          if (peer.id == device->string && peer.status != "dead") {
+            alive = true;
+            break;
+          }
+        }
+      }
+      if (alive && std::string(device->string) < authority) authority = device->string;
+    }
+    return authority == node_id;
+  }
+
+  void rearmCallTimeouts() {
+    for (auto& entry : active_calls) scheduleCallTimeout(entry.second);
+  }
+
+  void syncLiveCallProjection(const Store::CallProjection& projection) {
+    auto current = active_calls.find(projection.door);
+    const bool dialog_changed = current == active_calls.end() ||
+        current->second.state != "in_call" ||
+        current->second.dialog_owner != projection.dialog_owner;
+    if (current != active_calls.end()) {
+      if (current->second.timeout_timer) loop->cancel(current->second.timeout_timer);
+      current->second.timeout_timer = 0;
+      if (projection.state != "in_call" || dialog_changed) {
+        clearRecoveryLease(current->second);
+        cancelWebDialogLease(current->second.call_id);
+      }
+    }
+
+    const bool local_sip_is_winner =
+        projection.state == "in_call" && projection.dialog_owner == node_id;
+    if (sip_call_id == projection.call_id && !local_sip_is_winner) {
+      if (sipctl) sipctl->hangupOwned(projection.call_id);
+      sip_call_id.clear();
+    }
+
+    ActiveCall next;
+    if (current != active_calls.end()) next = current->second;
+    next.call_id = projection.call_id;
+    next.door = projection.door;
+    next.origin = projection.origin;
+    next.dialog_owner = projection.dialog_owner;
+    next.purpose = projection.purpose;
+    next.state = projection.state;
+    next.stage_revision = projection.stage_revision;
+    next.expires_wall_ms = projection.expires_wall_ms;
+    next.local_sip_established = local_sip_is_winner;
+    active_calls[projection.door] = next;
+
+    auto pending = pending_lifecycles.find(projection.call_id);
+    if (pending != pending_lifecycles.end() &&
+        !pendingLifecycleIdentityValid(pending->second))
+      finishPendingLifecycle(projection.call_id);
+
+    if (projection.state == "ringing") {
+      const int64_t remaining =
+          std::max<int64_t>(0, projection.expires_wall_ms - hlc->correctedWallMs());
+      door_calling_until[projection.door] = clock->monoMs() + remaining;
+      scheduleCallTimeout(active_calls[projection.door]);
+    } else {
+      door_calling_until.erase(projection.door);
+    }
+    rearmCallRecoveryTakeovers();
+  }
+
+  void applyCallEvent(const EventRecord& ev) {
+    auto p = json::parse(ev.payload_json.empty() ? "{}" : ev.payload_json);
+    if (ev.type == "press") {
+      const std::string call_id = eventCallId(ev);
+      auto restored = active_calls.find(ev.door);
+      // A callback can be replayed after its side effects completed but before its dispatch ack.
+      // Preserve the recovery lease reconstructed from the durable projection for the same call.
+      if (restored != active_calls.end() && restored->second.call_id == call_id) return;
+      ActiveCall call;
+      call.call_id = call_id;
+      call.door = ev.door;
+      call.origin = ev.origin;
+      call.purpose = p ? json::getString(p.get(), "purpose") : "";
+      call.stage_revision = static_cast<int>(p ? json::getInt(p.get(), "stage_revision", 0) : 0);
+      call.expires_wall_ms = p ? json::getInt(p.get(), "expires_at_ms", ev.wall_ms + callTtlMs())
+                               : ev.wall_ms + callTtlMs();
+      clearActiveCall(ev.door);
+      terminal_calls.erase(ev.door);
+      active_calls[ev.door] = call;
+      const int64_t remaining = std::max<int64_t>(0, call.expires_wall_ms - hlc->correctedWallMs());
+      door_calling_until[ev.door] = clock->monoMs() + remaining;
+      scheduleCallTimeout(active_calls[ev.door]);
+      return;
+    }
+    if (ev.type == "purpose_selected") {
+      const std::string id = p ? json::getString(p.get(), "call_id") : "";
+      auto projection = store.callProjection(id);
+      if (!projection || projection->door != ev.door || projection->state != "ringing" ||
+          projection->updated_hlc != ev.hlc)
+        return;
+      syncLiveCallProjection(*projection);
+      return;
+    }
+    if (ev.type == "call_answered") {
+      const std::string id = p ? json::getString(p.get(), "call_id") : "";
+      auto projection = store.callProjection(id);
+      if (!projection || projection->door != ev.door || projection->state != "in_call" ||
+          projection->answered_hlc != ev.hlc)
+        return;
+      syncLiveCallProjection(*projection);
+      return;
+    }
+    if (ev.type == "call_ended") {
+      const std::string id = p ? json::getString(p.get(), "call_id") : "";
+      auto it = active_calls.find(ev.door);
+      if (!id.empty() && it != active_calls.end() && it->second.call_id == id) {
+        const int revision = static_cast<int>(
+            p ? json::getInt(p.get(), "stage_revision", -1) : -1);
+        if (revision != it->second.stage_revision) return;
+        if (sipctl && sip_call_id == id) sipctl->hangupOwned(id);
+        clearActiveCall(ev.door, id);
+      }
+      rememberTerminalCall(ev);
+      return;
+    }
+    if (ev.type == "call_cancelled") {
+      const std::string id = p ? json::getString(p.get(), "call_id") : "";
+      if (!id.empty()) rememberCancelled(id);
+      auto it = active_calls.find(ev.door);
+      if (it != active_calls.end() && (id.empty() || it->second.call_id == id)) {
+        if (sipctl && sip_call_id == it->second.call_id)
+          sipctl->hangupOwned(it->second.call_id);
+        clearActiveCall(ev.door, id);
+      }
+      rememberTerminalCall(ev);
+    }
+  }
+
+  void restoreActiveCalls(bool notify = true) {
+    for (const auto& projection : store.activeCallProjections()) {
+      ActiveCall call;
+      call.call_id = projection.call_id;
+      call.door = projection.door;
+      call.origin = projection.origin;
+      call.dialog_owner = projection.dialog_owner;
+      call.purpose = projection.purpose;
+      call.state = projection.state;
+      call.stage_revision = projection.stage_revision;
+      call.expires_wall_ms = projection.expires_wall_ms;
+      active_calls[call.door] = call;
+      if (call.state == "ringing") {
+        door_calling_until[call.door] =
+            clock->monoMs() +
+            std::max<int64_t>(0, call.expires_wall_ms - hlc->correctedWallMs());
+        scheduleCallTimeout(active_calls[call.door]);
+      }
+      const bool owns_recovery = call.state == "in_call"
+          ? (call.dialog_owner == node_id || localWebDialogOwner(call.dialog_owner))
+          : call.origin == node_id;
+      if (owns_recovery) {
+        armRecoveryCancellation(active_calls[call.door], RecoveryLeaseKind::LocalProcess,
+                                "recovery_timeout", 10'000, /*reset_retry=*/true);
+      }
+    }
+    rearmCallRecoveryTakeovers();
+    if (notify) notifyPendingRecoveries();
+  }
+
+  void notifyPendingRecoveries() {
+    if (!selfFeature("runtime_recovery_v1")) return;
+    for (auto& entry : active_calls) {
+      ActiveCall& call = entry.second;
+      if (!call.recovery_timer || call.recovery_notified ||
+          call.recovery_kind != RecoveryLeaseKind::LocalProcess)
+        continue;
+      auto event = json::obj();
+      json::set(event.get(), "t", "call_recovery_required");
+      json::set(event.get(), "call_id", call.call_id);
+      json::set(event.get(), "door", call.door);
+      json::set(event.get(), "origin", call.origin);
+      if (!call.dialog_owner.empty())
+        json::set(event.get(), "dialog_owner", call.dialog_owner);
+      json::set(event.get(), "state", call.state);
+      json::set(event.get(), "stage_revision", static_cast<int64_t>(call.stage_revision));
+      json::set(event.get(), "expires_at_ms", call.expires_wall_ms);
+      json::set(event.get(), "deadline_ms",
+                std::max<int64_t>(0, call.recovery_deadline_mono - clock->monoMs()));
+      call.recovery_notified = true;
+      uiNotify(json::dump(event.get()));
+    }
+  }
+
+  bool resolveCallRecovery(const std::string& call_id, bool restored) {
+    for (auto& kv : active_calls) {
+      auto& call = kv.second;
+      if (call.call_id != call_id || call.recovery_timer == 0 ||
+          call.recovery_kind != RecoveryLeaseKind::LocalProcess)
+        continue;
+      if (restored) {
+        clearRecoveryLease(call);
+        return true;
+      }
+      if (call.recovery_timer) loop->cancel(call.recovery_timer);
+      call.recovery_timer = 0;
+      call.recovery_deadline_mono = 0;
+      call.recovery_reason = "recovery_failed";
+      if (doCancelCall(call.door, call.call_id, call.recovery_reason)) return true;
+      const int64_t retry_delay = callWriteRetryDelay(call.recovery_retry_step);
+      if (call.recovery_retry_step < 4) ++call.recovery_retry_step;
+      armRecoveryCancellation(call, RecoveryLeaseKind::LocalProcess, call.recovery_reason,
+                              retry_delay, /*reset_retry=*/false);
+      return true;
+    }
+    return false;
+  }
+
+
   void onEvent(const EventRecord& ev, bool is_local) {
+    bool emergency_transition = true;
+    bool emergency_winner = true;
     if (is_local && mesh) mesh->broadcastEvent(ev);
+    if (ev.type == "press") {
+      const std::string id = eventCallId(ev);
+      auto projection = store.callProjection(id);
+      if (!projection || projection->state != "ringing") return;
+    }
+    if (ev.type == "purpose_selected") {
+      auto payload = json::parse(ev.payload_json.empty() ? "{}" : ev.payload_json);
+      const std::string id = payload ? json::getString(payload.get(), "call_id") : "";
+      const int revision = static_cast<int>(
+          payload ? json::getInt(payload.get(), "stage_revision", -1) : -1);
+      auto projection = store.callProjection(id);
+      if (id.empty() || !projection || projection->door != ev.door ||
+          projection->state != "ringing" || projection->stage_revision != revision ||
+          projection->updated_hlc != ev.hlc)
+        return;
+    }
+    if (ev.type == "call_cancelled") {
+      const std::string id = eventCallId(ev);
+      auto projection = store.callProjection(id);
+      if (!projection || projection->state != "cancelled" ||
+          projection->updated_hlc != ev.hlc)
+        return;
+    }
+    if (ev.type == "call_answered" || ev.type == "call_ended") {
+      const std::string id = eventCallId(ev);
+      auto projection = store.callProjection(id);
+      const std::string expected = ev.type == "call_answered" ? "in_call" : "ended";
+      if (!projection || projection->state != expected ||
+          (ev.type == "call_answered" && projection->answered_hlc != ev.hlc) ||
+          (ev.type == "call_ended" && projection->updated_hlc != ev.hlc))
+        return;
+    }
+    if (ev.type == "reply") {
+      auto payload = json::parse(ev.payload_json.empty() ? "{}" : ev.payload_json);
+      const std::string id = payload ? json::getString(payload.get(), "call_id") : "";
+      if (!id.empty()) {
+        const int revision = static_cast<int>(
+            payload ? json::getInt(payload.get(), "stage_revision", -1) : -1);
+        auto projection = store.callProjection(id);
+        if (!projection || projection->door != ev.door || projection->state != "ended" ||
+            projection->terminal_reason != "reply" ||
+            projection->stage_revision != revision || projection->updated_hlc != ev.hlc)
+          return;
+      }
+    }
+    if (ev.type == "press" || ev.type == "purpose_selected" ||
+        ev.type == "call_answered" || ev.type == "call_ended" ||
+        ev.type == "call_cancelled")
+      applyCallEvent(ev);
     if (ev.type == "press") {
       last_press_door = ev.door;
       last_press_by_door[ev.door] = {ev.origin, ev.seq};
-      // パネル表示用の呼出窓 (30 秒 or 返信で解除)
-      if (!ev.door.empty()) door_calling_until[ev.door] = clock->monoMs() + 30'000;
-      // 按鈴 = 訪客の操作 — 自分が復帰タイマーを持つ door なら無操作カウントを仕切り直す
+
       if (visitor_lang_revert_timer.count(ev.door)) armVisitorRevert(ev.door);
     } else if (ev.type == "reply") {
       auto p = json::parse(ev.payload_json);
@@ -1483,29 +4883,56 @@ struct Node::Impl {
         last_reply_text = json::getString(p.get(), "text");
         last_reply_ts = hlc->correctedWallMs();
       }
-      if (!ev.door.empty()) door_calling_until.erase(ev.door);
+      const std::string id = p ? json::getString(p.get(), "call_id") : "";
+      auto active = active_calls.find(ev.door);
+      if (!id.empty() && active != active_calls.end() && active->second.call_id == id &&
+          active->second.state == "ringing") {
+        auto projection = store.callProjection(id);
+        if (projection && projection->state == "ended" &&
+            projection->terminal_reason == "reply" && projection->updated_hlc == ev.hlc)
+          clearActiveCall(ev.door, id);
+      }
+      rememberTerminalCall(ev);
     } else if (ev.type == "emergency" || ev.type == "emergency_cancel") {
-      // 全ノードで状態再計算 (複製で自然に届く)。変化時 uiNotify + Telegram は中で行う。
-      applyEmergencyEvent(ev);
+      emergency_winner = isCurrentEmergencyWinner(ev);
+      emergency_transition = emergency_winner && applyEmergencyEvent(ev);
     } else if (ev.type == "visitor_lang") {
-      // 全ノードで door→言語 を追随 + uiNotify (復帰タイマーは発信ノードだけが張る)
+
       applyVisitorLangEvent(ev, is_local);
-    } else if (ev.type == "call_cancelled") {
-      if (!ev.door.empty()) door_calling_until.erase(ev.door);
     }
     {
       auto o = json::obj();
+      json::set(o.get(), "schema_version", static_cast<int64_t>(2));
       json::set(o.get(), "t", "event");
       json::set(o.get(), "type", ev.type);
+      json::set(o.get(), "event_id", eventIdentity(ev));
+      json::set(o.get(), "origin", ev.origin);
+      json::set(o.get(), "seq", static_cast<int64_t>(ev.seq));
       json::set(o.get(), "door", ev.door);
       json::set(o.get(), "device", ev.device);
-      if (ev.type == "press" || ev.type == "purpose_selected") {
+      if (ev.type == "press" || ev.type == "purpose_selected" ||
+          ev.type == "call_answered" || ev.type == "call_ended" ||
+          ev.type == "call_cancelled") {
         auto p = json::parse(ev.payload_json.empty() ? "{}" : ev.payload_json);
         if (p) {
+          const std::string call_id = json::getString(p.get(), "call_id");
           const std::string purpose = json::getString(p.get(), "purpose");
           const std::string vlang = json::getString(p.get(), "visitor_lang");
+          if (!call_id.empty()) json::set(o.get(), "call_id", call_id);
+          if (json::get(p.get(), "stage_revision"))
+            json::set(o.get(), "stage_revision", json::getInt(p.get(), "stage_revision"));
+          if (json::get(p.get(), "expires_at_ms"))
+            json::set(o.get(), "expires_at_ms", json::getInt(p.get(), "expires_at_ms"));
+          if (ev.type == "call_answered") {
+            auto active = active_calls.find(ev.door);
+            if (active != active_calls.end() && active->second.call_id == call_id &&
+                !active->second.dialog_owner.empty())
+              json::set(o.get(), "dialog_owner", active->second.dialog_owner);
+          }
+          const std::string reason = json::getString(p.get(), "reason");
           if (!purpose.empty()) json::set(o.get(), "purpose", purpose);
           if (!vlang.empty()) json::set(o.get(), "visitor_lang", vlang);
+          if (!reason.empty()) json::set(o.get(), "reason", reason);
         }
       }
       uiNotify(json::dump(o.get()));
@@ -1514,14 +4941,17 @@ struct Node::Impl {
     bool chime_notified = false;
     bool chime_action_seen = false;
     for (const auto& a : actions) {
+      if ((ev.type == "emergency" || ev.type == "emergency_cancel") &&
+          (!emergency_winner || !emergency_transition))
+        continue;
       auto p = json::parse(a.params_json.empty() ? "{}" : a.params_json);
       if (a.type == "chime") {
         chime_action_seen = true;
-        // devices 配列に自分が含まれる (または "all") 時だけ自分が鳴る
+
         bool mine = false;
         cJSON* devs = json::get(p.get(), "devices");
         if (!devs) {
-          mine = (opts.role == "indoor_panel");  // 省略時: 室内パネル全部
+          mine = (opts.role == "indoor_panel");
         } else if (cJSON_IsString(devs)) {
           mine = std::string(devs->valuestring) == "all";
         } else if (cJSON_IsArray(devs)) {
@@ -1536,25 +4966,37 @@ struct Node::Impl {
           chime_notified = true;
         }
       } else if (a.type == "auto_reply") {
-        // 用件別の自動応対 (例: 宅配 → 置き配案内)。該当 door の門口機だけが実行する
-        // (1 door 1 門口機 = exactly-once。表示+音声+reply イベントは quickReply と同経路)。
+
+
         if (opts.role == "door_station" && !ev.door.empty() && ev.door == opts.door) {
           const std::string rid = json::getString(p.get(), "reply_id");
           if (!rid.empty()) {
             DB_LOGI(kTag, "auto_reply -> " + rid);
-            quickReply(rid, "", ev.door, "auto");
+            auto call_payload = json::parse(ev.payload_json.empty() ? "{}" : ev.payload_json);
+            quickReply(rid, "", ev.door, "auto", eventCallId(ev),
+                       static_cast<int>(call_payload
+                                            ? json::getInt(call_payload.get(), "stage_revision", 0)
+                                            : 0));
           }
         }
+      } else if (a.type == "device_alert") {
+        if (ev.type == "emergency" || ev.type == "emergency_cancel") {
+          if (selfFeature("device_alert_v1")) emergencyNotifyUi(ev, p.get());
+          deliverWebPush(ev, p.get());
+        }
       } else if (a.type == "sip_call") {
-        // 発呼するのは押された門口機本人だけ
-        if (is_local && ev.origin == node_id && ev.type == "press") {
+
+        if (is_local && ev.origin == node_id &&
+            (ev.type == "press" || ev.type == "purpose_selected")) {
           std::string ext = json::getString(p.get(), "target_extension", "600");
           if (sipctl && sipctl->regState() == SipRegState::Registered) {
             DB_LOGI(kTag, "sip_call -> " + ext);
-            sipctl->call(ext);  // calling/in_call の uiNotify は on_call_state 経由
+            const std::string owner = eventCallId(ev);
+            if (sipctl->callOwned(owner, ext)) sip_call_id = owner;
           } else {
-            // SIP 未登録 → 降級 (chime/telegram/ha_event はルール経由で従来どおり発火)
-            DB_LOGW(kTag, "sip_call -> " + ext + " スキップ (SIP 未登録) — 降級");
+
+            DB_LOGW(kTag, "sip_call -> " + ext +
+                             " skipped because SIP is not registered; degrading");
             auto o = json::obj();
             json::set(o.get(), "t", "state");
             json::set(o.get(), "state", "degraded");
@@ -1563,26 +5005,27 @@ struct Node::Impl {
           }
         }
       } else if (a.type == "telegram") {
-        // leader だけが外部へ送る (claim による重複防止は bridge 側 — telegram.cpp §1.5)
+
         if (tg && mesh && mesh->isLeader("telegram")) tg->onAction(ev, a.params_json);
       } else if (a.type == "ha_event") {
-        // MQTT への発行はルールと独立に下の bridge->onEvent で行う (leader gate も同様)
+
       }
     }
-    // 呼出ルールをまだ設定していない家庭でも、室内パネルは必ず鳴る。
-    // 明示 chime がこの端末で実行された場合は二重再生しない。全体既定は ui.ringtone。
-    if (ev.type == "press" && opts.role == "indoor_panel" && !chime_action_seen &&
+
+
+    if ((ev.type == "press" || ev.type == "purpose_selected") &&
+        opts.role == "indoor_panel" && !chime_action_seen &&
         !chime_notified) {
       notifyChime(json::getString(json::get(cfg.get(), "ui"), "ringtone", "ding1"), ev.door);
     }
-    // HA MQTT ブリッジへ (リーダー時のみ — press/motion/offline/online/dtmf_action を発行)
+
     if (bridge && mesh && mesh->isLeader("mqtt_bridge")) bridge->onEvent(ev);
-    // Telegram ブリッジへ (press の追跡は非 leader でも必要。reply の「✅」通知と
-    // 送信可否は bridge 内の active 判定に任せる)
+
+
     if (tg) tg->onEvent(ev);
   }
 
-  // 生死変化 → offline/online イベント。重複防止: alive 集合の中で node_id 最大の者だけが記録
+
   void onPeerAlive(const std::string& id, bool alive) {
     auto peers = mesh->peers();
     std::string max_alive;
@@ -1596,14 +5039,30 @@ struct Node::Impl {
     auto c = json::parse(cmd_json);
     if (!c) return;
     std::string cmd = json::getString(c.get(), "cmd");
+    if (cmd == "pairing_revoked") {
+      if (json::getString(c.get(), "target") != node_id) return;
+      const auto peers = mesh ? mesh->peers() : std::vector<PeerInfo>{};
+      const auto sender = std::find_if(peers.begin(), peers.end(), [&](const PeerInfo& peer) {
+        return peer.id == from && peer.role == "indoor_panel";
+      });
+      if (sender == peers.end()) {
+        DB_LOGW(kTag, "ignored pairing reset from unauthorized peer");
+        return;
+      }
+      auto notice = json::obj();
+      json::set(notice.get(), "t", "pairing_revoked");
+      json::set(notice.get(), "by", from);
+      uiNotify(json::dump(notice.get()));
+      return;
+    }
     if (cmd == "chime") {
       notifyChime(json::getString(c.get(), "sound", "ding1"), json::getString(c.get(), "door"));
     } else if (cmd == "show_reply") {
       std::string text = json::getString(c.get(), "text");
       const std::string lang = json::getString(c.get(), "lang", "ja");
-      // カスタム音声 (quick_replies.<id>.audio.<lang> の sha256)。キャッシュ済みなら
-      // ローカルパスを uiNotify に添えて殻に再生させる — TTS はしない。
-      // 未キャッシュなら TTS へ回落 (音声の優先度: キャッシュ済 audio → TTS → 殻の提示音)。
+
+
+
       const std::string audio = json::getString(c.get(), "audio");
       const bool audio_ok = !audio.empty() && assetCached(audio);
       auto o = json::obj();
@@ -1622,15 +5081,35 @@ struct Node::Impl {
     }
   }
 
-  // ---------- クイック返信 ----------
-  void quickReply(const std::string& reply_id, const std::string& free_text,
-                  const std::string& door_arg, const std::string& via) {
+
+  bool quickReply(const std::string& reply_id, const std::string& free_text,
+                  const std::string& door_arg, const std::string& via,
+                  const std::string& expected_call_id = "", int expected_revision = -1) {
     std::string door = door_arg.empty() ? last_press_door : door_arg;
-    // 文言/音声は該当 door の訪客言語に追従 (訳が無ければ ja へ回落 — labelIn)
+    auto active = active_calls.find(door);
+    const bool scoped = !expected_call_id.empty();
+    if (active != active_calls.end()) {
+      if (!scoped || active->second.call_id != expected_call_id ||
+          active->second.stage_revision != expected_revision ||
+          active->second.state != "ringing") {
+        DB_LOGW(kTag, "quick reply rejected because the call identity is stale on door " + door);
+        return false;
+      }
+      auto projection = store.callProjection(expected_call_id);
+      if (!projection || projection->door != door || projection->state != "ringing" ||
+          projection->stage_revision != expected_revision) {
+        DB_LOGW(kTag, "quick reply rejected because the durable call is no longer ringing");
+        return false;
+      }
+    } else if (scoped) {
+      DB_LOGW(kTag, "quick reply rejected because the call is no longer active");
+      return false;
+    }
+
     const std::string lang = visitorLangFor(door);
     std::string text = free_text;
     bool speak = true;
-    std::string audio;  // quick_replies.<id>.audio.<lang> の sha256 (無ければ ja へ回落)
+    std::string audio;
     if (text.empty() && !reply_id.empty()) {
       cJSON* q = cfgAt("quick_replies." + reply_id);
       if (q) {
@@ -1644,13 +5123,36 @@ struct Node::Impl {
       }
     }
     if (text.empty()) {
-      DB_LOGW(kTag, "quickReply: 本文なし (reply_id=" + reply_id + ")");
-      return;
+      DB_LOGW(kTag, "quickReply has no body (reply_id=" + reply_id + ")");
+      return false;
     }
     int64_t ttl = 30;
     if (cJSON* r = cfgAt("reply.display_ttl_s")) ttl = static_cast<int64_t>(cJSON_IsNumber(r) ? r->valuedouble : 30);
 
-    // 宛先: 該当 door の door_station (door 不明なら全 door_station)
+
+    auto pl = json::obj();
+    json::set(pl.get(), "schema_version", static_cast<int64_t>(2));
+    json::set(pl.get(), "reply_id", reply_id);
+    json::set(pl.get(), "text", text);
+    json::set(pl.get(), "via", via);
+    if (scoped) {
+      json::set(pl.get(), "call_id", expected_call_id);
+      json::set(pl.get(), "stage_revision", static_cast<int64_t>(expected_revision));
+      json::set(pl.get(), "call_origin", active->second.origin);
+    }
+    const EventRecord replied = events->append("reply", door, node_id, json::dump(pl.get()));
+    if (replied.seq == 0) return false;
+    if (scoped) {
+      auto projection = store.callProjection(expected_call_id);
+      if (!projection || projection->door != door || projection->state != "ended" ||
+          projection->terminal_reason != "reply" ||
+          projection->stage_revision != expected_revision ||
+          projection->updated_hlc != replied.hlc) {
+        DB_LOGW(kTag, "quick reply lost call arbitration and was not displayed");
+        return false;
+      }
+    }
+
     auto c = json::obj();
     json::set(c.get(), "cmd", "show_reply");
     json::set(c.get(), "text", text);
@@ -1675,26 +5177,24 @@ struct Node::Impl {
       }
       sent++;
     }
-    if (sent == 0 && opts.role == "door_station") onCommand(node_id, cmd);  // 単機構成
+    if (sent == 0 && opts.role == "door_station") onCommand(node_id, cmd);
 
-    // reply イベント + 元 press への回執
-    auto pl = json::obj();
-    json::set(pl.get(), "reply_id", reply_id);
-    json::set(pl.get(), "text", text);
-    json::set(pl.get(), "via", via);
-    events->append("reply", door, node_id, json::dump(pl.get()));
     auto lp = last_press_by_door.find(door);
     if (lp != last_press_by_door.end()) {
-      auto n = json::obj();
-      json::set(n.get(), "hlc", hlc->tick());
-      cJSON* rep = json::addObj(n.get(), "replied");
-      json::set(rep, "reply_id", reply_id);
-      json::set(rep, "by", via);
-      events->mergeNotify(lp->second.first, lp->second.second, json::dump(n.get()));
+      auto press = store.eventGet(lp->second.first, lp->second.second);
+      if (press && (!scoped || eventCallId(*press) == expected_call_id)) {
+        auto n = json::obj();
+        json::set(n.get(), "hlc", hlc->tick());
+        cJSON* rep = json::addObj(n.get(), "replied");
+        json::set(rep, "reply_id", reply_id);
+        json::set(rep, "by", via);
+        events->mergeNotify(lp->second.first, lp->second.second, json::dump(n.get()));
+      }
     }
+    return true;
   }
 
-  // door の担当門口機 (door_station) の node_id ("" = 不在)
+
   std::string doorStation(const std::string& door_id) {
     cJSON* devices = json::get(cfg.get(), "devices");
     cJSON* dev = nullptr;
@@ -1707,8 +5207,8 @@ struct Node::Impl {
     return "";
   }
 
-  // node の httpd origin ("http://<host>:47180")。自機 = "" (相対 URL でよい)、不明 = 見つからず ""。
-  // 呼び出し側は自機かどうかを nid == node_id で区別すること。
+  // Return a peer node's HTTP origin; never proxy back to the local node.
+
   std::string nodeOrigin(const std::string& nid) {
     if (nid == node_id || !mesh) return "";
     for (const auto& p : mesh->peers()) {
@@ -1718,9 +5218,9 @@ struct Node::Impl {
     return "";
   }
 
-  // ---------- 疎通監視 (debug 画面) ----------
-  // loop 上: leader/custom ターゲットのスナップショットを更新 (mesh/config は loop 専有)
-  // leader/custom ターゲット + device_info を更新 (runloop 上。mutex 不要)。
+
+
+
   void netRefreshSnapshot() {
     std::string leader_host;
     if (mesh) {
@@ -1750,16 +5250,31 @@ struct Node::Impl {
     }
     net_leader_addr = leader_host;
     net_custom = std::move(custom);
-    // device_info も更新 (SPI は cache 読取で速い — ブロックしない)
+    cJSON* mqtt = cfgAt("integrations.mqtt");
+    const std::string configured_mqtt_host = json::getString(mqtt, "host");
+    const std::string next_mqtt_host = safeProbeHost(configured_mqtt_host)
+        ? configured_mqtt_host : "";
+    int next_mqtt_port = static_cast<int>(json::getInt(mqtt, "port", 1883));
+    if (next_mqtt_port < 1 || next_mqtt_port > 65535) next_mqtt_port = 1883;
+    if (next_mqtt_host != mqtt_probe_host || next_mqtt_port != mqtt_probe_port) {
+      mqtt_probe_host = next_mqtt_host;
+      mqtt_probe_port = next_mqtt_port;
+      mqtt_probe_known = false;
+      mqtt_probe_reachable = false;
+      applyEffectiveCaps();
+    }
+
     if (device_info_fn) {
       std::string di = device_info_fn();
       if (!di.empty()) device_info_json = di;
     }
   }
 
-  // 現在のターゲット一覧 (gateway + leader + custom)。runloop 上。
+
   std::vector<std::pair<std::string, std::pair<std::string, int>>> netTargets() {
     std::vector<std::pair<std::string, std::pair<std::string, int>>> targets;
+    if (!mqtt_probe_host.empty())
+      targets.push_back({"mqtt", {mqtt_probe_host, mqtt_probe_port}});
     std::string gw;
     if (!device_info_json.empty()) {
       json::Doc d = json::parse(device_info_json);
@@ -1777,15 +5292,17 @@ struct Node::Impl {
     return targets;
   }
 
-  // 1 tick で 1 ターゲットだけ短時間プローブ (runloop を最大 800ms しかブロックしない)。
-  // 背景スレッドを使わない = iOS の suspend/resume watchdog と衝突しない。
+
+
   void netProbeTick() {
     auto targets = netTargets();
     if (targets.empty()) return;
     auto& t = targets[net_tick % targets.size()];
     net_tick++;
     int rtt = -1;
-    bool ok = net::tcpProbe(t.second.first, t.second.second, 800, &rtt);
+    bool ok = t.first == "mqtt"
+        ? net::tcpEndpointProbe(t.second.first, t.second.second, 800, &rtt)
+        : net::tcpProbe(t.second.first, t.second.second, 800, &rtt);
     Store::NetProbe pr;
     pr.ts_ms = clock->wallMs();
     pr.target = t.first;
@@ -1793,6 +5310,12 @@ struct Node::Impl {
     pr.ok = ok;
     pr.rtt_ms = rtt;
     store.netProbePut(pr);
+    if (t.first == "mqtt" &&
+        (!mqtt_probe_known || mqtt_probe_reachable != ok)) {
+      mqtt_probe_known = true;
+      mqtt_probe_reachable = ok;
+      applyEffectiveCaps();
+    }
     if ((net_tick % 20) == 0) store.netProbePrune(clock->wallMs() - 7LL * 24 * 3600 * 1000);
   }
 
@@ -1807,43 +5330,56 @@ struct Node::Impl {
     if (net_probe_timer) { loop->cancel(net_probe_timer); net_probe_timer = 0; }
   }
 
-  // ---------- 配対 (発見/招待) ----------
 
-  // 配対 UI 用: 自身の告知情報 (QR) + 近隣の未配対デバイス一覧 + 配対モード状態。
+
+
   std::string pairingJsonOnLoop() {
     auto o = json::obj();
     if (!mesh) return json::dump(o.get());
     json::setBool(o.get(), "paired", mesh->isPaired());
+    json::setBool(o.get(), "persistence_ready", pairing_persistence_ready);
     json::set(o.get(), "role", opts.role);
-    // 自身の告知 (未配対時に QR へ載せる id/addr/pk) — QR 文字列も組んで渡す
+
     json::Doc self = json::parse(mesh->pairingSelfJson());
     if (self) {
-      // QR ペイロード: doorbell-pair:<addr>|<id>|<pk> (管理端末が読み取り invite する)
+
       const std::string qr = "doorbell-pair:" + json::getString(self.get(), "addr") + "|" +
                              json::getString(self.get(), "id") + "|" +
                              json::getString(self.get(), "pk");
       json::set(o.get(), "pair_qr", qr);
-      json::setItem(o.get(), "self", std::move(self));  // 入れ子オブジェクトとして添付
+      json::setItem(o.get(), "self", std::move(self));
     }
-    // 近隣の未配対デバイス + 配対モード
+
     json::Doc pend = json::parse(mesh->pendingJson());
     if (pend) json::setItem(o.get(), "pending", std::move(pend));
     return json::dump(o.get());
   }
 
-  // INVITE 受理 / PIN 参加で PSK を取得 → 殻へ新 boot 設定を通知 (殻が boot.json 永続化 + 再起動)。
+  // Store a newly paired PSK before telling the shell to persist its opaque reference.
   void onBecamePaired() {
     if (!mesh) return;
     const auto& s = mesh->settings();
+    const std::string secret_ref = "secret:mesh.psk";
+    const std::string psk_hex = hexEncode(s.psk.data(), s.psk.size());
+    if (!putSecret(secret_ref, psk_hex)) {
+      pairing_persistence_ready = false;
+      auto failure = json::obj();
+      json::set(failure.get(), "t", "pairing_persistence_error");
+      json::set(failure.get(), "reason", "secure_store_failed");
+      DB_LOGE(kTag, "paired: secure storage failed; refusing to expose the mesh PSK");
+      uiNotify(json::dump(failure.get()));
+      return;
+    }
+    pairing_persistence_ready = true;
     auto o = json::obj();
     json::set(o.get(), "t", "paired");
-    json::set(o.get(), "psk_hex", hexEncode(s.psk.data(), s.psk.size()));
+    json::set(o.get(), "psk_ref", secret_ref);
     json::set(o.get(), "psk_id", s.psk_id);
     cJSON* seeds = json::addArr(o.get(), "seeds");
     for (const auto& a : s.seed_peers)
       json::push(seeds, json::Doc(cJSON_CreateString(a.c_str())));
-    DB_LOGI(kTag, "paired: PSK 取得 (seeds=" + std::to_string(s.seed_peers.size()) +
-                      ") — 殻へ boot 永続化 + 再起動を要求");
+    DB_LOGI(kTag, "paired: mesh PSK stored securely; requesting boot reference persistence (seeds=" +
+                      std::to_string(s.seed_peers.size()) + ")");
     uiNotify(json::dump(o.get()));
   }
 
@@ -1859,9 +5395,9 @@ struct Node::Impl {
       json::Doc d = device_info_json.empty() ? json::Doc(nullptr) : json::parse(device_info_json);
       if (d) json::setItem(o.get(), "device", std::move(d));
     }
-    {  // 触発統計: 累計 press 回数 (全履歴 COUNT) + 最新 press
+    {
       cJSON* trig = json::addObj(o.get(), "triggers");
-      int64_t total = 0;  // O(1): meta の累計カウンタを読むだけ
+      int64_t total = 0;
       auto pc = store.metaGet("stat_press_total");
       if (pc) { try { total = std::stoll(*pc); } catch (...) { total = 0; } }
       json::set(trig, "total_press", total);
@@ -1874,7 +5410,7 @@ struct Node::Impl {
         json::set(l, "payload", last->payload_json);
       }
     }
-    {  // 疎通履歴 24h
+    {
       int64_t since = clock->wallMs() - 24LL * 3600 * 1000;
       cJSON* probes = json::addArr(o.get(), "net_probes");
       for (const auto& p : store.netProbesSince(since, 5000)) {
@@ -1898,19 +5434,24 @@ struct Node::Impl {
     json::set(self, "role", opts.role);
     json::set(self, "door", opts.door);
     json::set(self, "version", opts.sw_version);
-    // 本機の全ローカルアドレス (IPv4 + グローバル IPv6) — 表示/デバッグ用。
+    auto caps = json::parse(effective_caps_json);
+    json::setItem(self, "caps", caps ? std::move(caps) : json::obj());
+
     {
       cJSON* la = json::addArr(self, "local_addrs");
       for (const auto& a : db::net::localAddresses(true))
         json::push(la, json::Doc(cJSON_CreateString(a.c_str())));
     }
     cJSON* sip = json::addObj(o.get(), "sip");
+    json::set(sip, "backend", sipBackendName());
+    json::setBool(sip, "available", sipBackendAvailable());
     json::setBool(sip, "registered", sip_reg == SipRegState::Registered);
     json::set(sip, "state", sipRegName(sip_reg));
     json::set(sip, "call", sipCallName(sip_call));
+    json::set(sip, "credential_source", sip_credential_source);
     if (!sip_peer_node.empty()) json::set(sip, "peer_node", sip_peer_node);
     if (!sip_peer_stream.empty()) json::set(sip, "peer_stream", sip_peer_stream);
-    if (sipctl) {  // 直近通話の RTP 送受 (診断/実測テスト用 — tools/dev_intercom_test.sh)
+    if (sipctl) {
       int64_t tx = 0, rx = 0;
       sipctl->rtpStats(&tx, &rx);
       json::set(sip, "rtp_tx", tx);
@@ -1920,27 +5461,72 @@ struct Node::Impl {
     if (mesh) {
       json::set(leaders, "telegram", mesh->leaderFor("telegram"));
       json::set(leaders, "mqtt_bridge", mesh->leaderFor("mqtt_bridge"));
+      json::set(leaders, "web_push", mesh->leaderFor("web_push"));
     }
     cJSON* br = json::addObj(o.get(), "bridge");
     json::set(br, "mqtt", bridge ? bridge->mqttStatus() : "inactive");
-    // telegram には常接続の概念が無い (毎回 HTTPS) — active | inactive の 2 値
+
     json::set(br, "telegram", tg ? tg->status() : "inactive");
-    // 表示制御の実効値 (管理画面用) + SOS 現在状態
+    {
+      auto subscriptions = webPushSubscriptions();
+      cJSON* push = json::addObj(o.get(), "web_push");
+      cJSON* config = cfgAt("integrations.web_push");
+      const std::string sender_ref = json::getString(config, "sender_secret_ref");
+      const bool sender_configured = webPushConfigSyntaxValid(config);
+      const bool local_secret_ready =
+          sender_configured && !referencedSecret(config, "vapid_private_key_ref").empty() &&
+          (sender_ref.empty() || !referencedSecret(config, "sender_secret_ref").empty());
+      const std::string leader = mesh ? mesh->leaderFor("web_push") : "";
+      json::set(push, "subscriptions",
+                static_cast<int64_t>(cJSON_GetArraySize(subscriptions.get())));
+      json::setBool(push, "configured", sender_configured);
+      json::setBool(push, "local_secret_ready", local_secret_ready);
+      json::setBool(push, "delivery_backend", sender_configured && !leader.empty());
+      json::set(push, "leader", leader);
+      if (!sender_configured) json::set(push, "warning_code", "sender_config_invalid");
+      else if (leader.empty()) json::set(push, "warning_code", "no_ready_leader");
+    }
+
     json::setItem(o.get(), "display", displayDoc(displayState()));
     cJSON* em = json::addObj(o.get(), "emergency");
     json::setBool(em, "active", emergency_active);
-    // 自機の H.264 流暢档の状態 (管理画面/診断用)。active = SPS/PPS 受領済み =
-    // 実際に配信できる状態 (auto で硬編が無い端末は codec=auto でも active=false のまま)。
+    json::set(em, "hlc", emergency_hlc);
+    json::setItem(o.get(), "runtime", runtimeStatusDoc());
+    auto manifest = json::parse(ui_manifest_json);
+    json::setItem(o.get(), "ui_manifest", manifest ? std::move(manifest) : json::obj());
+    cJSON* web_ui = json::addObj(o.get(), "web_ui");
+    json::set(web_ui, "device_id", node_id);
+    auto web_manifest = json::parse(webUiManifestJson());
+    json::setItem(web_ui, "manifest",
+                  web_manifest ? std::move(web_manifest) : json::obj());
+    json::setItem(o.get(), "features", effectiveFeaturesDoc());
+    cJSON* calls = json::addArr(o.get(), "active_calls");
+    for (const auto& kv : active_calls) {
+      const ActiveCall& call = kv.second;
+      cJSON* item = json::pushObj(calls);
+      json::set(item, "call_id", call.call_id);
+      json::set(item, "door", call.door);
+      json::set(item, "origin", call.origin);
+      if (!call.dialog_owner.empty()) json::set(item, "dialog_owner", call.dialog_owner);
+      json::set(item, "stage_revision", static_cast<int64_t>(call.stage_revision));
+      json::set(item, "state", call.state);
+      json::set(item, "call_flow", effectiveCallFlow(call.door));
+      json::set(item, "expires_at_ms", call.expires_wall_ms);
+      if (!call.purpose.empty()) json::set(item, "purpose", call.purpose);
+    }
+
+
     {
       CamCfg cc = cameraCfg();
       cJSON* v = json::addObj(o.get(), "video");
       json::set(v, "codec", cc.codec);
       json::setBool(v, "active", video_track.active());
       json::set(v, "subscribers", static_cast<int64_t>(video_track.subscriberCount()));
+      json::set(v, "rotation", static_cast<int64_t>(effective_video_rotation.load()));
       std::string cs = video_track.codecString();
       if (!cs.empty()) json::set(v, "codec_str", cs);
     }
-    // 統一資産のキャッシュ被覆率 (台帳掲載のうちローカルにある数 — 管理画面用)
+
     {
       int64_t total = 0, cached = 0;
       cJSON* ledger = json::get(cfg.get(), "assets");
@@ -1954,46 +5540,103 @@ struct Node::Impl {
       json::set(as, "cached", cached);
       json::set(as, "total", total);
     }
-    // 訪客言語の現在状態 (door → 選択中言語; 主言語 ja の door は載らない)
+
     {
       cJSON* vl = json::addObj(o.get(), "visitor_lang");
       for (const auto& kv : visitor_lang_by_door) json::set(vl, kv.first.c_str(), kv.second);
     }
     cJSON* arr = json::addArr(o.get(), "peers");
+    std::set<std::string> visible_peers;
     if (mesh) {
       for (const auto& p : mesh->peers()) {
+        visible_peers.insert(p.id);
         cJSON* e = json::pushObj(arr);
         json::set(e, "id", p.id);
         json::set(e, "status", p.status);
         json::set(e, "role", p.role);
         json::set(e, "sw", p.sw_version);
         json::setBool(e, "self", p.id == node_id);
+        auto peer_caps = json::parse(p.caps_json);
+        json::setItem(e, "caps", peer_caps ? std::move(peer_caps) : json::obj());
+        auto advertised = json::parse(p.caps_json);
+        const cJSON* advertised_features = advertised
+            ? json::get(advertised.get(), "features") : nullptr;
+        json::setItem(e, "features",
+                      cJSON_IsObject(advertised_features)
+                          ? json::Doc(cJSON_Duplicate(advertised_features, 1)) : json::obj());
+        auto peer_manifest = json::parse(p.ui_manifest_json);
+        json::setItem(e, "ui_manifest", peer_manifest ? std::move(peer_manifest) : json::obj());
+        // Re-project at the HTTP boundary so a future mesh decoder cannot expose unrelated
+        // platform diagnostics through the administrator status response.
+        std::string projected_runtime;
+        auto peer_runtime = projectMeshRuntimeJson(p.runtime_json, &projected_runtime)
+            ? json::parse(projected_runtime) : json::obj();
+        json::setItem(e, "runtime",
+                      peer_runtime ? std::move(peer_runtime) : json::obj());
         cJSON* addrs = json::addArr(e, "addrs");
         for (const auto& a : p.addrs) json::push(addrs, json::Doc(cJSON_CreateString(a.c_str())));
-        // 表示名・door・ライブ映像 URL は設定から補完
+        // Enrich display name and door from config. During commissioning, a mesh-advertised
+        // door station can expose streams before its devices.* entry has replicated.
         cJSON* dev = cfgAt("devices." + p.id);
+        std::string peer_name = p.id.substr(0, 8);
+        std::string peer_role = p.role;
+        std::string codec = "auto";
+        if (!p.door.empty()) json::set(e, "door", p.door);
         if (dev) {
-          json::set(e, "name", json::getString(dev, "name", p.id.substr(0, 8)));
+          peer_name = json::getString(dev, "name", peer_name);
+          std::string configured_role = json::getString(dev, "role");
+          if (!configured_role.empty()) peer_role = configured_role;
           std::string door = json::getString(dev, "door");
           if (!door.empty()) {
             json::set(e, "door", door);
             cJSON* d = cfgAt("doors." + door);
             if (d) json::set(e, "door_label", labelIn(json::get(d, "label"), "ja"));
           }
-          if (json::getString(dev, "role") == "door_station" && !p.addrs.empty()) {
-            json::set(e, "stream", "http://" + hostOf(p.addrs[0]) + ":47180/stream.mjpeg");
-            // H.264 流暢档 (Phase 6a): codec が h264/auto の門口機は /stream.mp4 も持つ。
-            // auto で硬編が無い端末は接続時に 503 → クライアントは MJPEG へ自動回落する
-            // (远端の実際の可否は config からは分からないため URL は楽観的に載せる)。
-            cJSON* cam = json::get(json::get(dev, "local"), "camera");
-            std::string codec = json::getString(cam, "codec", "auto");
-            if (codec != "mjpeg") {
-              json::set(e, "stream_mp4",
-                        "http://" + hostOf(p.addrs[0]) + ":47180/stream.mp4");
-            }
-          }
+          cJSON* cam = json::get(json::get(dev, "local"), "camera");
+          codec = json::getString(cam, "codec", "auto");
+        }
+        json::set(e, "name", peer_name);
+        if (peer_role == "door_station" && !p.addrs.empty()) {
+          const std::string origin = "http://" + hostOf(p.addrs[0]) + ":47180";
+          json::set(e, "stream", origin + "/stream.mjpeg");
+          // Treat an unregistered peer as auto-capable; clients fall back to MJPEG on 503.
+          if (codec != "mjpeg") json::set(e, "stream_mp4", origin + "/stream.mp4");
+          json::setItem(e, "playback_profile", playbackProfileDoc(node_id, p.id));
         }
       }
+    }
+    const cJSON* configured_devices = json::get(cfg.get(), "devices");
+    const cJSON* configured_device = nullptr;
+    cJSON_ArrayForEach(configured_device, configured_devices) {
+      if (!configured_device->string) continue;
+      const std::string id = configured_device->string;
+      if (id == node_id || visible_peers.count(id)) continue;
+      cJSON* e = json::pushObj(arr);
+      json::set(e, "id", id);
+      json::set(e, "status", "offline");
+      json::set(e, "role", json::getString(configured_device, "role"));
+      json::set(e, "name", json::getString(configured_device, "name", id.substr(0, 8)));
+      json::setBool(e, "self", false);
+      json::addArr(e, "addrs");
+      const std::string door = json::getString(configured_device, "door");
+      if (!door.empty()) json::set(e, "door", door);
+      auto cached = cachedPeerContract(id);
+      const cJSON* cached_caps = cached ? json::get(cached.get(), "caps") : nullptr;
+      const cJSON* cached_manifest = cached ? json::get(cached.get(), "ui_manifest") : nullptr;
+      const cJSON* cached_runtime = cached ? json::get(cached.get(), "runtime") : nullptr;
+      json::setBool(e, "cached_contract", static_cast<bool>(cached));
+      json::setItem(e, "caps", cJSON_IsObject(cached_caps)
+          ? json::Doc(cJSON_Duplicate(cached_caps, 1)) : json::obj());
+      const cJSON* cached_features = cJSON_IsObject(cached_caps)
+          ? json::get(cached_caps, "features") : nullptr;
+      json::setItem(e, "features", cJSON_IsObject(cached_features)
+          ? json::Doc(cJSON_Duplicate(cached_features, 1)) : json::obj());
+      json::setItem(e, "ui_manifest", cJSON_IsObject(cached_manifest)
+          ? json::Doc(cJSON_Duplicate(cached_manifest, 1)) : json::obj());
+      json::setItem(e, "runtime", cJSON_IsObject(cached_runtime)
+          ? json::Doc(cJSON_Duplicate(cached_runtime, 1)) : json::obj());
+      if (cached) json::set(e, "contract_updated_wall_ms",
+                            json::getInt(cached.get(), "updated_wall_ms"));
     }
     return json::dump(o.get());
   }
@@ -2013,21 +5656,86 @@ struct Node::Impl {
       httpd->setStatic(assets[i].path, assets[i].content_type,
                        Bytes(assets[i].data, assets[i].data + assets[i].len));
 
-    // "/" (リダイレクトのみ) は gate 側で例外扱い — prefix リストに "/" を入れると全公開になる
-    // /api/panel/* と /snapshot-proxy /call-frame はハンドラ内で panel token (?k=) を検証する。
-    // /peer-frame.jpg は /snapshot.jpg と同格の LAN 公開 (殻の輪詢用 — webui/panel/API.md)
-    // /asset/ はハンドラ内で管理セッション or panel token を検証する (gate は素通し)。
-    httpd->setAuth([this](const HttpReq& r) { return r.uri == "/" || checkSession(r); },
-                   {"/api/login", "/locale/", "/panel/", "/admin/", "/stream.mjpeg",
-                    "/stream.mp4", "/snapshot.jpg", "/api/panel/", "/snapshot-proxy",
-                    "/call-frame", "/peer-frame.jpg", "/asset/"});
 
-    // /stream.mp4 (fMP4 ライブ — 認証は /stream.mjpeg と同扱いの LAN 公開 + 任意 ?k=)。
-    // 接続毎に video_track の購読を張る。Reader の破棄 (= 切断) が購読解除。
+    // Panel APIs use an HttpOnly panel session established from a fragment-delivered credential.
+
+
+    httpd->setAuth([this](const HttpReq& r) {
+      const bool public_asset_get =
+          r.method == "GET" && r.uri.size() == 7 + 64 && r.uri.compare(0, 7, "/asset/") == 0 &&
+          isSha256HexStr(r.uri.substr(7));
+      return r.uri == "/" || public_asset_get || checkSession(r);
+    },
+                   {"/api/login", "/locale/", "/panel/", "/admin/", "/stream.mjpeg",
+                    "/stream.mp4", "/stream-proxy.mp4", "/video-meta", "/snapshot.jpg",
+                    "/api/panel/", "/snapshot-proxy", "/call-frame", "/peer-frame.jpg"});
+
+    // /stream.mp4 follows the same LAN-public policy as /stream.mjpeg.
+
     httpd->setMp4Provider([this]() -> Httpd::Mp4Pull {
       if (!video_track.enabled()) return nullptr;  // codec=mjpeg → 503
       auto reader = video_track.subscribe();
       return [reader](bool* ended) { return reader->pull(500, ended); };
+    });
+
+    httpd->setMp4ProxyProvider([this](const HttpReq& req, int* status) -> Httpd::Mp4Pull {
+      std::string upstream_host;
+      bool local = false;
+      int resolved_status = 503;
+      loop->callSync([&] {
+        if (!panelTokenOk(req) && !checkSession(req)) {
+          resolved_status = 403;
+          return;
+        }
+        const std::string door = req.param("door");
+        if (door.empty()) {
+          resolved_status = 400;
+          return;
+        }
+        std::string target;
+        if (opts.role == "door_station" && opts.door == door) target = node_id;
+        cJSON* devices = json::get(cfg.get(), "devices");
+        cJSON* device = nullptr;
+        cJSON_ArrayForEach(device, devices) {
+          if (!device->string) continue;
+          if (json::getString(device, "role") == "door_station" &&
+              json::getString(device, "door") == door) {
+            target = device->string;
+            break;
+          }
+        }
+        if (target.empty()) {
+          resolved_status = 404;
+          return;
+        }
+        if (target == node_id) {
+          local = true;
+          resolved_status = 200;
+          return;
+        }
+        if (mesh) {
+          for (const auto& peer : mesh->peers()) {
+            if (peer.id == target && peer.status == "alive" && !peer.addrs.empty()) {
+              upstream_host = hostOf(peer.addrs.front());
+              resolved_status = 200;
+              return;
+            }
+          }
+        }
+      });
+      if (status) *status = resolved_status;
+      if (resolved_status != 200) return nullptr;
+      if (local) {
+        if (!video_track.enabled()) {
+          if (status) *status = 503;
+          return nullptr;
+        }
+        auto reader = video_track.subscribe();
+        return [reader](bool* ended) { return reader->pull(500, ended); };
+      }
+      if (upstream_host.empty()) return nullptr;
+      auto stream = std::make_shared<RemoteMp4Stream>(upstream_host);
+      return [stream](bool* ended) { return stream->pull(ended); };
     });
 
     httpd->route("GET", "/", [](const HttpReq&) {
@@ -2038,19 +5746,32 @@ struct Node::Impl {
       return r;
     });
 
+    // Lightweight orientation metadata for panels currently playing H.264.
+    httpd->route("GET", "/video-meta", [this](const HttpReq&) {
+      HttpResp r = HttpResp::json("{\"rotation\":" +
+                                  std::to_string(effective_video_rotation.load()) + "}");
+      r.headers["Cache-Control"] = "no-store";
+      return r;
+    });
+
     httpd->route("POST", "/api/login", [this](const HttpReq& req) {
       auto b = json::parse(req.body);
       std::string pw = b ? json::getString(b.get(), "password") : "";
       if (pw.empty()) return HttpResp::json("{\"ok\":false}", 401);
-      auto salt = store.metaGet("admin_pw_salt");
-      auto hash = store.metaGet("admin_pw_hash");
-      if (!salt || !hash) {  // 初回ログインでパスワード設定
-        std::string s = genTokenHex(16);
-        store.metaSet("admin_pw_salt", s);
-        store.metaSet("admin_pw_hash", hashPassword(pw, s));
-        DB_LOGI(kTag, "管理パスワードを初期設定した");
-      } else if (hashPassword(pw, *salt) != *hash) {
-        return HttpResp::json("{\"ok\":false}", 401);
+      {
+        std::lock_guard<std::mutex> auth_lock(admin_credential_mu);
+        auto salt = store.metaGet("admin_pw_salt");
+        auto hash = store.metaGet("admin_pw_hash");
+        if (!salt || !hash) {
+          std::string s = genTokenHex(16);
+          if (!store.metaSetBatch({{"admin_pw_salt", s},
+                                   {"admin_pw_hash", hashPassword(pw, s)}}))
+            return HttpResp::json(
+                "{\"ok\":false,\"err\":\"credential_persistence_failed\"}", 500);
+          DB_LOGI(kTag, "initialized the administrator password");
+        } else if (hashPassword(pw, *salt) != *hash) {
+          return HttpResp::json("{\"ok\":false}", 401);
+        }
       }
       std::string tok = genTokenHex(16);
       {
@@ -2093,52 +5814,190 @@ struct Node::Impl {
       return HttpResp::json(config->materializeJson());
     });
 
+    httpd->route("POST", "/api/secrets", [this](const HttpReq& req) {
+      if (!secureStoreAvailable(true))
+        return HttpResp::json("{\"ok\":false,\"err\":\"secure_store_unavailable\"}", 501);
+      auto body = json::parse(req.body);
+      const std::string ref = body ? json::getString(body.get(), "secret_ref") : "";
+      const std::string value = body ? json::getString(body.get(), "value") : "";
+      if (!secretRefValid(ref) || value.empty())
+        return HttpResp::json("{\"ok\":false,\"err\":\"bad secret_ref or value\"}", 400);
+      if (!putSecret(ref, value))
+        return HttpResp::json("{\"ok\":false,\"err\":\"secure_store_failed\"}", 500);
+      const auto active_panel_refs = panelSecretRefs();
+      if (std::find(active_panel_refs.begin(), active_panel_refs.end(), ref) !=
+          active_panel_refs.end())
+        invalidatePanelSessions();
+      applyEffectiveCaps();
+      scheduleBridgeReapply();
+      scheduleSipReapply();
+      return HttpResp::json("{\"ok\":true}");
+    });
+
+    httpd->route("POST", "/api/panel/session", [this](const HttpReq& req) {
+      auto body = json::parse(req.body);
+      const std::string credential = body ? json::getString(body.get(), "credential") : "";
+      if (!panelCredentialOk(credential))
+        return HttpResp::json("{\"ok\":false,\"err\":\"bad credential\"}", 403);
+      const std::string session = genTokenHex(16);
+      {
+        std::lock_guard<std::mutex> lk(sess_mu);
+        panel_sessions[session] = panelCredentialBinding();
+        if (panel_sessions.size() > 128) panel_sessions.erase(panel_sessions.begin());
+      }
+      HttpResp response = HttpResp::json("{\"ok\":true}");
+      response.headers["Cache-Control"] = "no-store";
+      response.headers["Set-Cookie"] =
+          "dbpanel=" + session + "; Path=/; HttpOnly; SameSite=Strict";
+      return response;
+    });
+
+    httpd->route("DELETE", "/api/secrets", [this](const HttpReq& req) {
+      if (!secureStoreAvailable(true))
+        return HttpResp::json("{\"ok\":false,\"err\":\"secure_store_unavailable\"}", 501);
+      auto body = json::parse(req.body);
+      const std::string ref = body ? json::getString(body.get(), "secret_ref") : "";
+      if (!secretRefValid(ref))
+        return HttpResp::json("{\"ok\":false,\"err\":\"bad secret_ref\"}", 400);
+      auto config_snapshot = json::parse(config->materializeJson());
+      if (config_snapshot && jsonContainsExactString(config_snapshot.get(), ref))
+        return HttpResp::json("{\"ok\":false,\"err\":\"secret_ref_in_use\"}", 409);
+      if (!putSecret(ref, ""))
+        return HttpResp::json("{\"ok\":false,\"err\":\"secure_store_failed\"}", 500);
+      applyEffectiveCaps();
+      scheduleBridgeReapply();
+      return HttpResp::json("{\"ok\":true}");
+    });
+
     httpd->route("POST", "/api/config", [this](const HttpReq& req) {
       auto b = json::parse(req.body);
       if (!b) return HttpResp::json("{\"ok\":false,\"err\":\"bad json\"}", 400);
       std::string key = json::getString(b.get(), "key");
       std::string value = json::getString(b.get(), "value");
       if (key.empty()) return HttpResp::json("{\"ok\":false,\"err\":\"no key\"}", 400);
-      setKey(key, value);
+      auto parsed = json::parse(value);
+      if (!parsed) parsed = json::Doc(cJSON_CreateString(value.c_str()));
+      std::string style_error;
+      if (!configWriteValidEffective(key, parsed.get(), &style_error)) {
+        auto out = json::obj();
+        json::setBool(out.get(), "ok", false);
+        json::set(out.get(), "err", style_error);
+        return HttpResp::json(json::dump(out.get()), 400);
+      }
+      if (!setKey(key, value))
+        return HttpResp::json(
+            "{\"ok\":false,\"err\":\"config_persistence_failed\"}", 500);
       return HttpResp::json("{\"ok\":true}");
     });
 
-    // 設定キー削除 (LwwMap tombstone — materialize からも消える)
+    httpd->route("POST", "/api/config/batch", [this](const HttpReq& req) {
+      auto body = json::parse(req.body);
+      cJSON* ops = body ? json::get(body.get(), "ops") : nullptr;
+      if (!cJSON_IsArray(ops) || cJSON_GetArraySize(ops) == 0)
+        return HttpResp::json("{\"ok\":false,\"err\":\"no ops\"}", 400);
+      if (cJSON_GetArraySize(ops) > 256)
+        return HttpResp::json("{\"ok\":false,\"err\":\"too many ops\"}", 413);
+      std::vector<LwwMutation> mutations;
+      std::set<std::string> keys;
+      cJSON* op = nullptr;
+      cJSON_ArrayForEach(op, ops) {
+        if (!cJSON_IsObject(op))
+          return HttpResp::json("{\"ok\":false,\"err\":\"bad op\"}", 400);
+        const std::string kind = json::getString(op, "op");
+        const std::string key = json::getString(op, "key");
+        if ((kind != "set" && kind != "delete") || key.empty() || key.size() > 512 ||
+            key.front() == '.' || key.back() == '.' || key.find("..") != std::string::npos)
+          return HttpResp::json("{\"ok\":false,\"err\":\"bad op or key\"}", 400);
+        if (!keys.insert(key).second)
+          return HttpResp::json("{\"ok\":false,\"err\":\"duplicate key\"}", 400);
+        LwwMutation mutation;
+        mutation.key = key;
+        mutation.deleted = kind == "delete";
+        if (!mutation.deleted) {
+          cJSON* value = json::get(op, "value");
+          if (!value)
+            return HttpResp::json("{\"ok\":false,\"err\":\"set without value\"}", 400);
+          std::string style_error;
+          if (!configWriteValidEffective(key, value, &style_error)) {
+            auto out = json::obj();
+            json::setBool(out.get(), "ok", false);
+            json::set(out.get(), "err", style_error);
+            return HttpResp::json(json::dump(out.get()), 400);
+          }
+          mutation.value_json = json::dump(value);
+        }
+        mutations.push_back(std::move(mutation));
+      }
+      const auto changed = config->mutate(mutations);
+      if (!config->lastMutationCommitted())
+        return HttpResp::json(
+            "{\"ok\":false,\"err\":\"config_persistence_failed\"}", 500);
+      auto result = json::obj();
+      json::setBool(result.get(), "ok", true);
+      json::set(result.get(), "n", static_cast<int64_t>(changed.size()));
+      if (!changed.empty()) {
+        json::set(result.get(), "revision", changed.back().hlc);
+        json::set(result.get(), "hlc", changed.back().hlc);  // one-release compatibility alias
+      }
+      return HttpResp::json(json::dump(result.get()));
+    });
+
+
     httpd->route("POST", "/api/config/delete", [this](const HttpReq& req) {
       auto b = json::parse(req.body);
       std::string key = b ? json::getString(b.get(), "key") : "";
       if (key.empty()) return HttpResp::json("{\"ok\":false,\"err\":\"no key\"}", 400);
       config->remove(key);
+      if (!config->lastMutationCommitted())
+        return HttpResp::json(
+            "{\"ok\":false,\"err\":\"config_persistence_failed\"}", 500);
       return HttpResp::json("{\"ok\":true}");
     });
 
-    // 設定インポート: {entries:[{key,value},...]} を順に setKey。value は任意の JSON 値
-    // (エクスポートは既存 GET /api/config — フラット化は管理画面側の責務)。
+
+
     httpd->route("POST", "/api/config/import", [this](const HttpReq& req) {
       auto b = json::parse(req.body);
       cJSON* entries = b ? json::get(b.get(), "entries") : nullptr;
       if (!entries || !cJSON_IsArray(entries))
         return HttpResp::json("{\"ok\":false,\"err\":\"no entries\"}", 400);
-      int64_t n = 0;
+      std::vector<LwwMutation> mutations;
+      std::set<std::string> keys;
       cJSON* it = nullptr;
       cJSON_ArrayForEach(it, entries) {
+        if (!cJSON_IsObject(it))
+          return HttpResp::json("{\"ok\":false,\"err\":\"bad entry\"}", 400);
         std::string key = json::getString(it, "key");
         cJSON* v = json::get(it, "value");
-        if (key.empty() || !v) continue;
-        setKey(key, json::dump(v));
-        n++;
+        if (key.empty() || !v || key.size() > 512 || key.front() == '.' || key.back() == '.' ||
+            key.find("..") != std::string::npos)
+          return HttpResp::json("{\"ok\":false,\"err\":\"bad key or value\"}", 400);
+        if (!keys.insert(key).second)
+          return HttpResp::json("{\"ok\":false,\"err\":\"duplicate key\"}", 400);
+        std::string style_error;
+        if (!configWriteValidEffective(key, v, &style_error)) {
+          auto out = json::obj();
+          json::setBool(out.get(), "ok", false);
+          json::set(out.get(), "err", style_error);
+          return HttpResp::json(json::dump(out.get()), 400);
+        }
+        mutations.push_back({key, json::dump(v), false});
       }
+      const auto changed = config->mutate(mutations);
+      if (!config->lastMutationCommitted())
+        return HttpResp::json(
+            "{\"ok\":false,\"err\":\"config_persistence_failed\"}", 500);
       auto o = json::obj();
       json::setBool(o.get(), "ok", true);
-      json::set(o.get(), "n", n);
+      json::set(o.get(), "n", static_cast<int64_t>(changed.size()));
       return HttpResp::json(json::dump(o.get()));
     });
 
-    // デバイス追加用の配対トークン発行 (PIN 6 桁・10 分有効 — mesh §1.6)
+
     httpd->route("POST", "/api/join-token", [this](const HttpReq&) {
       if (!mesh) return HttpResp::json("{\"ok\":false,\"err\":\"no mesh\"}", 503);
       auto t = mesh->createJoinToken();
-      if (t.pin.empty())  // 未配対 → 発行不可 (全ゼロ PSK を配らない)
+      if (t.pin.empty())
         return HttpResp::json("{\"ok\":false,\"err\":\"host_unpaired\"}", 409);
       auto o = json::obj();
       json::setBool(o.get(), "ok", true);
@@ -2147,7 +6006,7 @@ struct Node::Impl {
       return HttpResp::json(json::dump(o.get()));
     });
 
-    // このノードを新規クラスタの親機にする (未配対時のみ — 新規 PSK 生成)
+
     httpd->route("POST", "/api/pairing/found", [this](const HttpReq&) {
       if (!mesh) return HttpResp::json("{\"ok\":false,\"err\":\"no_mesh\"}", 503);
       bool ok = mesh->foundCluster();
@@ -2157,11 +6016,11 @@ struct Node::Impl {
       return HttpResp::json(json::dump(o.get()));
     });
 
-    // --- 配対 (発見/招待; 管理セッション必須) ---
-    // 自身の告知 QR + 近隣の未配対デバイス一覧 + 配対モード状態
+
+
     httpd->route("GET", "/api/pairing",
                  [this](const HttpReq&) { return HttpResp::json(pairingJsonOnLoop()); });
-    // 配対モードを ON (既定 600 秒 = 10 分)。期間中に現れた未配対機を自動招待。
+
     httpd->route("POST", "/api/pairing/mode", [this](const HttpReq& req) {
       if (!mesh) return HttpResp::json("{\"ok\":false,\"err\":\"no_mesh\"}", 503);
       auto b = json::parse(req.body);
@@ -2174,7 +6033,7 @@ struct Node::Impl {
       json::set(o.get(), "seconds", sec);
       return HttpResp::json(json::dump(o.get()));
     });
-    // 一覧の 1 台を承認 → {psk,seeds,cfg} を封緘 push
+
     httpd->route("POST", "/api/pairing/invite", [this](const HttpReq& req) {
       if (!mesh) return HttpResp::json("{\"ok\":false,\"err\":\"no_mesh\"}", 503);
       auto b = json::parse(req.body);
@@ -2183,7 +6042,7 @@ struct Node::Impl {
       mesh->inviteDevice(id);
       return HttpResp::json("{\"ok\":true}");
     });
-    // QR スキャンからの直接招待。body: {qr:"doorbell-pair:<addr>|<id>|<pk>"} または {addr,id,pk}
+
     httpd->route("POST", "/api/pairing/invite-direct", [this](const HttpReq& req) {
       if (!mesh) return HttpResp::json("{\"ok\":false,\"err\":\"no_mesh\"}", 503);
       auto b = json::parse(req.body);
@@ -2191,7 +6050,7 @@ struct Node::Impl {
       std::string id = b ? json::getString(b.get(), "id") : "";
       std::string pk = b ? json::getString(b.get(), "pk") : "";
       std::string qr = b ? json::getString(b.get(), "qr") : "";
-      if (!qr.empty()) {  // "doorbell-pair:<addr>|<id>|<pk>" を分解
+      if (!qr.empty()) {
         const std::string kPrefix = "doorbell-pair:";
         if (qr.rfind(kPrefix, 0) == 0) qr = qr.substr(kPrefix.size());
         auto p1 = qr.find('|'), p2 = qr.rfind('|');
@@ -2206,7 +6065,7 @@ struct Node::Impl {
       mesh->inviteDeviceDirect(addr, pk);
       return HttpResp::json("{\"ok\":true}");
     });
-    // 未配対機側: PIN + seed で能動的に参加 (管理 UI から。QR/承認と併存)
+
     httpd->route("POST", "/api/pairing/join", [this](const HttpReq& req) {
       if (!mesh) return HttpResp::json("{\"ok\":false,\"err\":\"no_mesh\"}", 503);
       if (mesh->isPaired()) return HttpResp::json("{\"ok\":false,\"err\":\"already_paired\"}", 409);
@@ -2215,7 +6074,7 @@ struct Node::Impl {
       std::string pin = b ? json::getString(b.get(), "pin") : "";
       if (host.empty() || pin.empty())
         return HttpResp::json("{\"ok\":false,\"err\":\"need host+pin\"}", 400);
-      // 結果は非同期 (uiNotify t:paired / t:join_result)。ここでは受理のみ返す。
+
       mesh->joinCluster(host, pin, [this](bool ok, const std::string& err) {
         auto o = json::obj();
         json::set(o.get(), "t", "join_result");
@@ -2226,17 +6085,17 @@ struct Node::Impl {
       return HttpResp::json("{\"ok\":true,\"pending\":true}");
     });
 
-    // Telegram テスト送信。chat_id 省略 = 全 households へ。
-    // 送れない理由 (leader でない / bot_token 未設定 / 宛先なし) は err コードで返す。
+
+
     httpd->route("POST", "/api/test/telegram", [this](const HttpReq& req) {
       auto b = json::parse(req.body);
       std::string chat = b ? json::getString(b.get(), "chat_id") : "";
-      if (json::getString(cfgAt("integrations.telegram"), "bot_token").empty())
+      if (telegramToken().empty())
         return HttpResp::json("{\"ok\":false,\"err\":\"no_token\"}");
       if (!tg || !mesh || !mesh->isLeader("telegram"))
         return HttpResp::json("{\"ok\":false,\"err\":\"not_leader\"}");
       if (chat.empty()) {
-        // 宛先の存在確認 (展開は bridge 側と同じ households.*.telegram_chat_ids)
+
         bool any = false;
         cJSON* hs = json::get(cfg.get(), "households");
         cJSON* h = nullptr;
@@ -2250,14 +6109,51 @@ struct Node::Impl {
       return HttpResp::json("{\"ok\":true}");
     });
 
-    // パネル token のローテート (旧 token は即失効 — panel.tokens を新 1 件に差し替え)
+    // Rotate a panel bearer in secure storage. Only its opaque reference is replicated/exported.
     httpd->route("POST", "/api/panel-token/rotate", [this](const HttpReq&) {
-      std::string tok = genTokenHex(16);
-      config->set("panel.tokens", "[\"" + tok + "\"]");
+      std::string tok, ref;
+      if (!issuePanelCredential(&tok, &ref))
+        return HttpResp::json("{\"ok\":false,\"err\":\"secure_store_unavailable\"}", 501);
+      const auto old_refs = panelSecretRefs();
+      std::vector<LwwMutation> mutations = {
+          {"panel.token_refs", "[\"" + ref + "\"]", false},
+          {"panel.token_generation", "\"" + genTokenHex(16) + "\"", false}};
+      if (config->get("panel.tokens"))
+        mutations.push_back({"panel.tokens", "", true});
+      config->mutate(mutations);
+      if (!config->lastMutationCommitted()) {
+        putSecret(ref, "");
+        return HttpResp::json(
+            "{\"ok\":false,\"err\":\"config_persistence_failed\"}", 500);
+      }
+      invalidatePanelSessions();
+      for (const auto& old_ref : old_refs) putSecret(old_ref, "");
       auto o = json::obj();
       json::setBool(o.get(), "ok", true);
       json::set(o.get(), "token", tok);
-      return HttpResp::json(json::dump(o.get()));
+      HttpResp response = HttpResp::json(json::dump(o.get()));
+      response.headers["Cache-Control"] = "no-store";
+      return response;
+    });
+
+    // Provision the current fleet reference on this node without mutating replicated config.
+    httpd->route("POST", "/api/panel-token/provision", [this](const HttpReq& req) {
+      if (!secureStoreReadWrite())
+        return HttpResp::json("{\"ok\":false,\"err\":\"secure_store_unavailable\"}", 501);
+      auto body = json::parse(req.body);
+      const std::string ref = body ? json::getString(body.get(), "secret_ref") : "";
+      const std::string token = body ? json::getString(body.get(), "token") : "";
+      if (!secretRefValid(ref) || token.empty() || token.size() > 4096)
+        return HttpResp::json("{\"ok\":false,\"err\":\"bad secret_ref or token\"}", 400);
+      const auto refs = panelSecretRefs();
+      if (std::find(refs.begin(), refs.end(), ref) == refs.end())
+        return HttpResp::json("{\"ok\":false,\"err\":\"panel_ref_not_active\"}", 409);
+      if (!putSecret(ref, token))
+        return HttpResp::json("{\"ok\":false,\"err\":\"secure_store_failed\"}", 500);
+      invalidatePanelSessions();
+      HttpResp response = HttpResp::json("{\"ok\":true}");
+      response.headers["Cache-Control"] = "no-store";
+      return response;
     });
 
     httpd->route("POST", "/api/press", [this](const HttpReq& req) {
@@ -2266,12 +6162,46 @@ struct Node::Impl {
       std::string purpose = b ? json::getString(b.get(), "purpose") : "";
       if (!purpose.empty() && !cfgAt("visit_purposes." + purpose))
         return HttpResp::json("{\"ok\":false,\"err\":\"unknown purpose\"}", 400);
-      doPress(door, purpose);
+      const std::string call_id = doPress(door, purpose);
+      if (call_id.empty())
+        return HttpResp::json(
+            "{\"ok\":false,\"err\":\"event_persistence_failed\"}", 500);
+      auto o = json::obj();
+      json::setBool(o.get(), "ok", true);
+      json::set(o.get(), "call_id", call_id);
+      const std::string effective_door = door.empty() ? opts.door : door;
+      auto active = active_calls.find(effective_door);
+      if (active != active_calls.end() && active->second.call_id == call_id) {
+        json::set(o.get(), "call_state", active->second.state);
+        json::set(o.get(), "stage_revision",
+                  static_cast<int64_t>(active->second.stage_revision));
+        json::set(o.get(), "expires_at_ms", active->second.expires_wall_ms);
+      }
+      return HttpResp::json(json::dump(o.get()));
+    });
+
+    httpd->route("POST", "/api/call/purpose", [this](const HttpReq& req) {
+      auto b = json::parse(req.body);
+      if (!b) return HttpResp::json("{\"ok\":false,\"err\":\"bad json\"}", 400);
+      const std::string door = json::getString(b.get(), "door");
+      const std::string call_id = json::getString(b.get(), "call_id");
+      const std::string purpose = json::getString(b.get(), "purpose");
+      if (!doSelectPurpose(door, call_id, purpose))
+        return HttpResp::json("{\"ok\":false,\"err\":\"stale call\"}", 409);
       return HttpResp::json("{\"ok\":true}");
     });
 
-    // 統一資産の登録 (管理セッション)。body = 実体 (raw)、?type=&label=。
-    // 3MB 超・許可外 type は 4xx。応答: {"ok":true,"hash":"<sha256>"}。
+    httpd->route("POST", "/api/call/cancel", [this](const HttpReq& req) {
+      auto b = json::parse(req.body);
+      if (!b) return HttpResp::json("{\"ok\":false,\"err\":\"bad json\"}", 400);
+      if (!doCancelCall(json::getString(b.get(), "door"), json::getString(b.get(), "call_id"),
+                        json::getString(b.get(), "reason", "visitor")))
+        return HttpResp::json("{\"ok\":false,\"err\":\"stale call\"}", 409);
+      return HttpResp::json("{\"ok\":true}");
+    });
+
+
+
     httpd->route("POST", "/api/assets", [this](const HttpReq& req) {
       const std::string type = req.param("type");
       if (!assetTypeAllowed(type))
@@ -2288,12 +6218,8 @@ struct Node::Impl {
       return HttpResp::json(json::dump(o.get()));
     });
 
-    // 資産の取得 (管理セッション or panel token ?k=)。ローカルキャッシュから返す/404。
-    // 内容アドレス (sha256) なので不変 — 長期キャッシュ可。
     httpd->route("GET", "/asset/*", [this](const HttpReq& req) {
-      if (!checkSession(req) && !panelTokenOk(req))
-        return HttpResp::json("{\"ok\":false,\"err\":\"bad token\"}", 403);
-      const std::string hash = req.uri.substr(7);  // "/asset/" 以降
+      const std::string hash = req.uri.substr(7);
       if (!isSha256HexStr(hash))
         return HttpResp::json("{\"ok\":false,\"err\":\"bad hash\"}", 400);
       Bytes data;
@@ -2307,21 +6233,24 @@ struct Node::Impl {
       return r;
     });
 
-    // 資産の削除 (管理セッション)。台帳 assets.<hash> を tombstone + ローカルキャッシュを
-    // 即削除する。他ノードは台帳消滅 (CRDT 複製) を見て猶予付き GC で自然に回収する。
-    // まだ設定から参照中の hash も削除できる (参照側は次回プリフェッチで保持ノード不在に
-    // なるだけ — 掃除は管理者の責務)。
+
+
+
+
     httpd->route("DELETE", "/api/assets/*", [this](const HttpReq& req) {
       const std::string hash = req.uri.substr(std::string("/api/assets/").size());
       if (!isSha256HexStr(hash))
         return HttpResp::json("{\"ok\":false,\"err\":\"bad hash\"}", 400);
       config->remove("assets." + hash);
+      if (!config->lastMutationCommitted())
+        return HttpResp::json(
+            "{\"ok\":false,\"err\":\"config_persistence_failed\"}", 500);
       removeFile(assetFilePath(hash));
       asset_unref_since.erase(hash);
       return HttpResp::json("{\"ok\":true}");
     });
 
-    // 訪客言語切替 (管理セッション)。{"door":…,"lang":…} — door 省略 = 自機担当 door。
+
     httpd->route("POST", "/api/visitor-lang", [this](const HttpReq& req) {
       auto b = json::parse(req.body);
       std::string lang = b ? json::getString(b.get(), "lang") : "";
@@ -2333,17 +6262,22 @@ struct Node::Impl {
     httpd->route("POST", "/api/reply", [this](const HttpReq& req) {
       auto b = json::parse(req.body);
       if (!b) return HttpResp::json("{\"ok\":false}", 400);
-      quickReply(json::getString(b.get(), "reply_id"), json::getString(b.get(), "text"),
-                 json::getString(b.get(), "door"), "web");
+      const std::string call_id = json::getString(b.get(), "call_id");
+      const int revision = static_cast<int>(json::getInt(b.get(), "stage_revision", -1));
+      if (!quickReply(json::getString(b.get(), "reply_id"), json::getString(b.get(), "text"),
+                      json::getString(b.get(), "door"), "web", call_id, revision))
+        return HttpResp::json("{\"ok\":false,\"err\":\"stale call\"}", 409);
       return HttpResp::json("{\"ok\":true}");
     });
 
-    // SOS 緊急モード (管理セッション)。{"active":true|false} — 発報も解除も可。
+
     httpd->route("POST", "/api/emergency", [this](const HttpReq& req) {
       auto b = json::parse(req.body);
       if (!b || !json::get(b.get(), "active"))
         return HttpResp::json("{\"ok\":false,\"err\":\"no active\"}", 400);
-      doEmergency(json::getBool(b.get(), "active"), "admin");
+      if (!doEmergency(json::getBool(b.get(), "active"), "admin"))
+        return HttpResp::json(
+            "{\"ok\":false,\"err\":\"event_persistence_failed\"}", 500);
       return HttpResp::json("{\"ok\":true}");
     });
 
@@ -2355,12 +6289,74 @@ struct Node::Impl {
       return HttpResp::json(json::dump(o.get()));
     });
 
-    // ---------- パネル API (webui/panel/API.md が契約; 認証は panel token ?k=) ----------
+    // ---------- Panel API (panel token authentication) ----------
+    httpd->route("GET", "/api/panel/push-vapid-public-key", [this](const HttpReq& req) {
+      if (!panelTokenOk(req)) return HttpResp::json("{\"ok\":false,\"err\":\"bad token\"}", 403);
+      const std::string key =
+          json::getString(cfgAt("integrations.web_push"), "vapid_public_key");
+      if (!vapidPublicKeyValid(key))
+        return HttpResp::json("{\"ok\":false,\"err\":\"web_push_not_configured\"}", 501);
+      auto out = json::obj();
+      json::setBool(out.get(), "ok", true);
+      json::set(out.get(), "public_key", key);
+      return HttpResp::json(json::dump(out.get()));
+    });
+
+    httpd->route("POST", "/api/panel/push-subscription", [this](const HttpReq& req) {
+      if (!panelTokenOk(req)) return HttpResp::json("{\"ok\":false,\"err\":\"bad token\"}", 403);
+      auto body = json::parse(req.body);
+      cJSON* subscription = body ? json::get(body.get(), "subscription") : nullptr;
+      auto normalized = normalizedWebPushSubscription(subscription);
+      if (!normalized)
+        return HttpResp::json("{\"ok\":false,\"err\":\"bad subscription\"}", 400);
+      const std::string endpoint = json::getString(normalized.get(), "endpoint");
+      std::string page = body ? json::getString(body.get(), "page") : "";
+      if (page.rfind("/panel/", 0) != 0) page = "/panel/monitor";
+      std::string group = body ? json::getString(body.get(), "group", "all") : "all";
+      if (!webGroupNameValid(group)) group = "all";
+      auto current = webPushSubscriptions();
+      bool replaced = false;
+      cJSON* item = nullptr;
+      cJSON_ArrayForEach(item, current.get()) {
+        cJSON* old_subscription = json::get(item, "subscription");
+        if (json::getString(old_subscription, "endpoint") == endpoint) replaced = true;
+      }
+      if (!replaced && cJSON_GetArraySize(current.get()) >= 256)
+        return HttpResp::json("{\"ok\":false,\"err\":\"subscription limit\"}", 409);
+      auto record = sealWebPushRecord(normalized.get(), page, group, hlc->correctedWallMs());
+      if (!record)
+        return HttpResp::json("{\"ok\":false,\"err\":\"mesh_secret_unavailable\"}", 503);
+      config->set("web_push.subscriptions." + webPushSubscriptionKey(endpoint),
+                  json::dump(record.get()));
+      if (!config->lastMutationCommitted())
+        return HttpResp::json(
+            "{\"ok\":false,\"err\":\"config_persistence_failed\"}", 500);
+      auto out = json::obj();
+      json::setBool(out.get(), "ok", true);
+      json::set(out.get(), "subscriptions",
+                static_cast<int64_t>(cJSON_GetArraySize(current.get()) + (replaced ? 0 : 1)));
+      return HttpResp::json(json::dump(out.get()));
+    });
+
+    httpd->route("DELETE", "/api/panel/push-subscription", [this](const HttpReq& req) {
+      if (!panelTokenOk(req)) return HttpResp::json("{\"ok\":false,\"err\":\"bad token\"}", 403);
+      auto body = json::parse(req.body);
+      const std::string endpoint = body ? json::getString(body.get(), "endpoint") : "";
+      if (endpoint.empty())
+        return HttpResp::json("{\"ok\":false,\"err\":\"no endpoint\"}", 400);
+      config->remove("web_push.subscriptions." + webPushSubscriptionKey(endpoint));
+      if (!config->lastMutationCommitted())
+        return HttpResp::json(
+            "{\"ok\":false,\"err\":\"config_persistence_failed\"}", 500);
+      return HttpResp::json("{\"ok\":true}");
+    });
+
     httpd->route("GET", "/api/panel/state", [this](const HttpReq& req) {
       if (!panelTokenOk(req)) return HttpResp::json("{\"ok\":false,\"err\":\"bad token\"}", 403);
       auto o = json::obj();
       cJSON* doors = json::addArr(o.get(), "doors");
       int64_t now_mono = clock->monoMs();
+      pruneTerminalCalls();
       cJSON* dcfg = json::get(cfg.get(), "doors");
       cJSON* it = nullptr;
       cJSON_ArrayForEach(it, dcfg) {
@@ -2371,25 +6367,102 @@ struct Node::Impl {
         json::set(e, "label", label.empty() ? std::string(it->string) : label);
         auto c = door_calling_until.find(it->string);
         json::setBool(e, "calling", c != door_calling_until.end() && c->second > now_mono);
-        // 訪客言語バッジ (選択中のみ — 主言語 ja は載らない)
+        auto active = active_calls.find(it->string);
+        const std::string flow = effectiveCallFlow(it->string);
+        json::set(e, "call_flow", flow);
+        if (active != active_calls.end()) {
+          json::set(e, "call_id", active->second.call_id);
+          json::set(e, "call_state",
+                    active->second.state == "in_call"
+                        ? "in_call"
+                        : (flow == "ring_then_purpose" &&
+                                   active->second.stage_revision == 0 &&
+                                   active->second.purpose.empty()
+                               ? "purpose_pending"
+                               : "ringing"));
+          json::set(e, "stage_revision", static_cast<int64_t>(active->second.stage_revision));
+          if (!active->second.dialog_owner.empty())
+            json::set(e, "dialog_owner", active->second.dialog_owner);
+          json::set(e, "expires_at_ms", active->second.expires_wall_ms);
+          json::setBool(e, "recovery_required",
+                        active->second.recovery_timer != 0 &&
+                        active->second.recovery_kind == RecoveryLeaseKind::LocalProcess);
+          if (!active->second.purpose.empty()) json::set(e, "purpose", active->second.purpose);
+        } else {
+          auto terminal = terminal_calls.find(it->string);
+          if (terminal != terminal_calls.end()) {
+            json::set(e, "call_id", terminal->second.call_id);
+            json::set(e, "call_state", terminal->second.state);
+            json::set(e, "stage_revision",
+                      static_cast<int64_t>(terminal->second.stage_revision));
+            json::set(e, "terminal_at_ms", terminal->second.terminal_wall_ms);
+            json::setBool(e, "recovery_required", false);
+            if (terminal->second.expires_wall_ms > 0)
+              json::set(e, "expires_at_ms", terminal->second.expires_wall_ms);
+            if (!terminal->second.reason.empty())
+              json::set(e, "terminal_reason", terminal->second.reason);
+            if (!terminal->second.dialog_owner.empty())
+              json::set(e, "dialog_owner", terminal->second.dialog_owner);
+            if (!terminal->second.purpose.empty())
+              json::set(e, "purpose", terminal->second.purpose);
+          }
+        }
+
         auto vl = visitor_lang_by_door.find(it->string);
         if (vl != visitor_lang_by_door.end()) json::set(e, "visitor_lang", vl->second);
-        // H.264 流暢档 (Phase 6a): 担当門口機の codec が h264/auto なら /stream.mp4 の
-        // URL を載せる (monitor.html の MSE 用)。auto で硬編が無い端末は接続 503 →
-        // クライアントは従来のスナップショット輪詢へ自動回落する。
+
+
+
         std::string station = doorStation(it->string);
         if (!station.empty()) {
+          json::set(e, "source_node_id", station);
+          json::setItem(e, "playback_profile", playbackProfileDoc(node_id, station));
+          std::string origin = station == node_id ? "" : nodeOrigin(station);
+          if (station == node_id || !origin.empty())
+            json::set(e, "stream_mjpeg", origin + "/stream.mjpeg");
           cJSON* cam = json::get(json::get(cfgAt("devices." + station), "local"), "camera");
           if (json::getString(cam, "codec", "auto") != "mjpeg") {
             if (station == node_id) {
-              json::set(e, "stream_mp4", "/stream.mp4");  // 自機担当 — 相対 URL
+              json::set(e, "stream_mp4", "/stream.mp4");
             } else {
-              std::string origin = nodeOrigin(station);
               if (!origin.empty()) json::set(e, "stream_mp4", origin + "/stream.mp4");
             }
           }
         }
       }
+      cJSON* quick_replies = json::addArr(o.get(), "quick_replies");
+      std::vector<const cJSON*> reply_items;
+      const cJSON* reply_cfg = json::get(cfg.get(), "quick_replies");
+      const cJSON* reply_item = nullptr;
+      cJSON_ArrayForEach(reply_item, reply_cfg) {
+        if (reply_item->string && cJSON_IsObject(reply_item) && reply_items.size() < 64)
+          reply_items.push_back(reply_item);
+      }
+      std::sort(reply_items.begin(), reply_items.end(), [](const cJSON* a, const cJSON* b) {
+        const int64_t ao = json::getInt(a, "order", 0);
+        const int64_t bo = json::getInt(b, "order", 0);
+        if (ao != bo) return ao < bo;
+        return std::string(a->string ? a->string : "") <
+               std::string(b->string ? b->string : "");
+      });
+      for (const cJSON* configured_reply : reply_items) {
+        cJSON* label = json::get(configured_reply, "label");
+        if (!cJSON_IsObject(label)) continue;
+        cJSON* exposed_reply = json::pushObj(quick_replies);
+        json::set(exposed_reply, "id", configured_reply->string);
+        json::set(exposed_reply, "label", labelIn(label, "ja"));
+        json::setItem(exposed_reply, "labels", json::Doc(cJSON_Duplicate(label, 1)));
+      }
+      json::set(o.get(), "call_flow", effectiveCallFlow(opts.door));
+      cJSON* emergency = json::addObj(o.get(), "emergency");
+      json::setBool(emergency, "active", emergency_active);
+      json::set(emergency, "hlc", emergency_hlc);
+      json::setBool(emergency, "web_active_page_alerts",
+                    json::getBool(json::get(cfg.get(), "emergency"),
+                                  "web_active_page_alerts", true));
+      std::string web_group = req.param("group");
+      if (!webGroupNameValid(web_group)) web_group = "all";
+      json::setItem(o.get(), "device_alert", panelDeviceAlert(web_group));
       cJSON* evs = json::addArr(o.get(), "events");
       for (const auto& ev : store.recentEvents(10)) {
         cJSON* e = json::pushObj(evs);
@@ -2397,7 +6470,7 @@ struct Node::Impl {
         json::set(e, "door", ev.door);
         json::set(e, "device", ev.device);
         json::set(e, "wall_ms", ev.wall_ms);
-        if (ev.type == "press" && !ev.payload_json.empty()) {  // 用件バッジ + 言語バッジ
+        if (ev.type == "press" && !ev.payload_json.empty()) {
           auto p = json::parse(ev.payload_json);
           const std::string purpose = p ? json::getString(p.get(), "purpose") : "";
           const std::string vlang = p ? json::getString(p.get(), "visitor_lang") : "";
@@ -2412,8 +6485,8 @@ struct Node::Impl {
       } else {
         json::setItem(o.get(), "reply", json::Doc(cJSON_CreateNull()));
       }
-      // Web パネルもネイティブ殻と同じ音設定を使う。asset:* は /asset/<hash>?k= で
-      // パネル token 認証され、内蔵 preset は /audio/<id>.mp3 から取得する。
+      // Web panels use the same sound settings as native shells. asset:* resolves via /asset/<hash>
+
       {
         cJSON* sounds = json::addObj(o.get(), "sounds");
         cJSON* ui = json::get(cfg.get(), "ui");
@@ -2424,8 +6497,8 @@ struct Node::Impl {
         json::set(sounds, "update", json::getString(ui, "update_sound", "indoor_update"));
         json::set(sounds, "ringtone", json::getString(ui, "ringtone", "school_chime"));
       }
-      // 訪客の用件ボタン (order 昇順 — 門口ページの描画用。ラベルは全言語同梱で
-      // 言語切替時の再取得を不要にする)
+
+
       {
         struct P {
           int64_t order;
@@ -2451,7 +6524,7 @@ struct Node::Impl {
             json::setItem(e, "label", json::Doc(cJSON_Duplicate(label, 1)));
         }
       }
-      // 訪客言語切替に出す言語 (config ui.languages — 無ければ ja のみ)
+
       {
         cJSON* arr = json::addArr(o.get(), "languages");
         cJSON* langs = cfgAt("ui.languages");
@@ -2464,12 +6537,75 @@ struct Node::Impl {
         if (cJSON_GetArraySize(arr) == 0)
           json::push(arr, json::Doc(cJSON_CreateString("ja")));
       }
+      {
+        cJSON* web_ui = json::addObj(o.get(), "web_ui");
+        json::set(web_ui, "device_id", node_id);
+        auto manifest = json::parse(webUiManifestJson());
+        json::setItem(web_ui, "manifest",
+                      manifest && cJSON_IsObject(manifest.get()) ? std::move(manifest)
+                                                                : json::obj());
+        cJSON* elements = cfgAt("devices." + node_id + ".local.ui.elements");
+        json::setItem(web_ui, "elements",
+                      cJSON_IsObject(elements)
+                          ? json::Doc(cJSON_Duplicate(elements, 1)) : json::obj());
+      }
       json::set(o.get(), "server_ts", hlc->correctedWallMs());
       return HttpResp::json(json::dump(o.get()));
     });
 
-    // パネルページの文言解決 (i18n_overrides の全文 + 言語一覧)。読込時 1 回取得する —
-    // ルックアップ順は overrides.<lang>.<key> → ページ内蔵文言 → キー (Node::text と同順)。
+
+    httpd->route("POST", "/api/panel/ui-report", [this](const HttpReq& req) {
+      if (!panelTokenOk(req)) return HttpResp::json("{\"ok\":false,\"err\":\"bad token\"}", 403);
+      if (req.body.size() > 16 * 1024)
+        return HttpResp::json("{\"ok\":false,\"err\":\"report too large\"}", 413);
+      auto body = json::parse(req.body);
+      const std::string page = body ? json::getString(body.get(), "page") : "";
+      const cJSON* applied = body ? json::get(body.get(), "applied") : nullptr;
+      const cJSON* rejected = body ? json::get(body.get(), "rejected") : nullptr;
+      const cJSON* lkg_used = body ? json::get(body.get(), "lkg_used") : nullptr;
+      const cJSON* lkg_persisted = body ? json::get(body.get(), "lkg_persisted") : nullptr;
+      const cJSON* elements = body ? json::get(body.get(), "elements") : nullptr;
+      const std::string error = body ? json::getString(body.get(), "last_error") : "";
+      if (!body || !cJSON_IsObject(body.get()) ||
+          json::getInt(body.get(), "schema_version") != 1 ||
+          (page != "door" && page != "monitor" && page != "call") ||
+          !cJSON_IsBool(applied) || !cJSON_IsBool(rejected) ||
+          !cJSON_IsBool(lkg_used) || !cJSON_IsBool(lkg_persisted) ||
+          !cJSON_IsArray(elements) || cJSON_GetArraySize(elements) > 64 ||
+          error.size() > 256)
+        return HttpResp::json("{\"ok\":false,\"err\":\"invalid UI report\"}", 400);
+      auto report = json::obj();
+      json::set(report.get(), "schema_version", static_cast<int64_t>(1));
+      json::set(report.get(), "client", "web");
+      json::set(report.get(), "device_id", node_id);
+      json::set(report.get(), "page", page);
+      json::setBool(report.get(), "applied", cJSON_IsTrue(applied));
+      json::setBool(report.get(), "rejected", cJSON_IsTrue(rejected));
+      json::setBool(report.get(), "lkg_used", cJSON_IsTrue(lkg_used));
+      json::setBool(report.get(), "lkg_persisted", cJSON_IsTrue(lkg_persisted));
+      if (!error.empty()) json::set(report.get(), "last_error", error);
+      cJSON* reported_elements = json::addArr(report.get(), "elements");
+      const cJSON* element = nullptr;
+      cJSON_ArrayForEach(element, elements) {
+        const std::string id = cJSON_IsString(element) && element->valuestring
+            ? element->valuestring : "";
+        if (id.empty() || id.size() > 128)
+          return HttpResp::json("{\"ok\":false,\"err\":\"invalid semantic element\"}", 400);
+        for (char ch : id) {
+          if (!(std::isalnum(static_cast<unsigned char>(ch)) || ch == '.' || ch == '_' ||
+                ch == '-'))
+            return HttpResp::json("{\"ok\":false,\"err\":\"invalid semantic element\"}", 400);
+        }
+        json::push(reported_elements, json::Doc(cJSON_CreateString(id.c_str())));
+      }
+      json::set(report.get(), "updated_at_ms", hlc->correctedWallMs());
+      web_ui_style_report_json = json::dump(report.get());
+      scheduleSnapshotRefresh();
+      return HttpResp::json("{\"ok\":true}");
+    });
+
+
+
     httpd->route("GET", "/api/panel/i18n", [this](const HttpReq& req) {
       if (!panelTokenOk(req)) return HttpResp::json("{\"ok\":false,\"err\":\"bad token\"}", 403);
       auto o = json::obj();
@@ -2500,11 +6636,166 @@ struct Node::Impl {
       std::string purpose = req.param("purpose");
       if (!purpose.empty() && !cfgAt("visit_purposes." + purpose))
         return HttpResp::json("{\"ok\":false,\"err\":\"unknown purpose\"}", 400);
-      doPress(door, purpose);
+      const std::string call_id = doPress(door, purpose);
+      if (call_id.empty())
+        return HttpResp::json(
+            "{\"ok\":false,\"err\":\"event_persistence_failed\"}", 500);
+      auto o = json::obj();
+      json::setBool(o.get(), "ok", true);
+      json::set(o.get(), "call_id", call_id);
+      auto active = active_calls.find(door);
+      if (active != active_calls.end() && active->second.call_id == call_id) {
+        json::set(o.get(), "call_state", active->second.state);
+        json::set(o.get(), "stage_revision",
+                  static_cast<int64_t>(active->second.stage_revision));
+        json::set(o.get(), "expires_at_ms", active->second.expires_wall_ms);
+      }
+      return HttpResp::json(json::dump(o.get()));
+    });
+
+    httpd->route("POST", "/api/panel/purpose", [this](const HttpReq& req) {
+      if (!panelTokenOk(req)) return HttpResp::json("{\"ok\":false,\"err\":\"bad token\"}", 403);
+      const std::string door = req.param("door");
+      if (effectiveCallFlow(door.empty() ? opts.door : door) != "ring_then_purpose")
+        return HttpResp::json("{\"ok\":false,\"err\":\"call flow unsupported\"}", 409);
+      const std::string call_id = req.param("call_id");
+      if (!doSelectPurpose(door, call_id, req.param("purpose")))
+        return HttpResp::json("{\"ok\":false,\"err\":\"stale call\"}", 409);
+      auto out = json::obj();
+      json::setBool(out.get(), "ok", true);
+      json::set(out.get(), "call_id", call_id);
+      auto active = active_calls.find(door.empty() ? opts.door : door);
+      if (active != active_calls.end())
+        json::set(out.get(), "stage_revision",
+                  static_cast<int64_t>(active->second.stage_revision));
+      return HttpResp::json(json::dump(out.get()));
+    });
+
+    httpd->route("POST", "/api/panel/reply", [this](const HttpReq& req) {
+      if (!panelTokenOk(req)) return HttpResp::json("{\"ok\":false,\"err\":\"bad token\"}", 403);
+      const std::string door = req.param("door").empty() ? opts.door : req.param("door");
+      const std::string reply_id = req.param("reply_id");
+      if (door.empty() || !cfgAt("doors." + door))
+        return HttpResp::json("{\"ok\":false,\"err\":\"unknown door\"}", 400);
+      cJSON* configured_reply = cfgAt("quick_replies." + reply_id);
+      if (reply_id.empty() || !cJSON_IsObject(configured_reply) ||
+          !cJSON_IsObject(json::get(configured_reply, "label")))
+        return HttpResp::json("{\"ok\":false,\"err\":\"unknown reply\"}", 400);
+      const std::string revision_text = req.param("stage_revision");
+      int revision = -1;
+      try {
+        size_t consumed = 0;
+        revision = std::stoi(revision_text, &consumed);
+        if (consumed != revision_text.size()) revision = -1;
+      } catch (...) {
+        revision = -1;
+      }
+      if (revision < 0)
+        return HttpResp::json("{\"ok\":false,\"err\":\"invalid stage revision\"}", 400);
+      auto active = active_calls.find(door);
+      if (active == active_calls.end() || active->second.call_id != req.param("call_id") ||
+          active->second.stage_revision != revision || active->second.state == "in_call")
+        return HttpResp::json("{\"ok\":false,\"err\":\"stale call\"}", 409);
+      if (!quickReply(reply_id, "", door, "web_panel", req.param("call_id"), revision))
+        return HttpResp::json("{\"ok\":false,\"err\":\"stale call\"}", 409);
+      auto out = json::obj();
+      json::setBool(out.get(), "ok", true);
+      json::set(out.get(), "call_id", req.param("call_id"));
+      return HttpResp::json(json::dump(out.get()));
+    });
+
+    httpd->route("POST", "/api/panel/cancel", [this](const HttpReq& req) {
+      if (!panelTokenOk(req)) return HttpResp::json("{\"ok\":false,\"err\":\"bad token\"}", 403);
+      const std::string door = req.param("door").empty() ? opts.door : req.param("door");
+      if (!doorFeature(door, "call_cancel_v2") ||
+          !doorManifestSupports(door, "cancel.call"))
+        return HttpResp::json("{\"ok\":false,\"err\":\"cancel unsupported\"}", 409);
+      if (!doCancelCall(req.param("door"), req.param("call_id"), "visitor"))
+        return HttpResp::json("{\"ok\":false,\"err\":\"stale call\"}", 409);
       return HttpResp::json("{\"ok\":true}");
     });
 
-    // 訪客言語切替 (panel token)。?door=&lang= — door 省略 = 自機担当 door。
+    httpd->route("POST", "/api/panel/call-lifecycle", [this](const HttpReq& req) {
+      if (!panelTokenOk(req)) return HttpResp::json("{\"ok\":false,\"err\":\"bad token\"}", 403);
+      const std::string door = req.param("door").empty() ? opts.door : req.param("door");
+      const std::string owner = webDialogOwner(req.param("dialog_id"));
+      if (owner.empty())
+        return HttpResp::json("{\"ok\":false,\"err\":\"invalid dialog identity\"}", 400);
+      const std::string revision_text = req.param("stage_revision");
+      int revision = -1;
+      try {
+        size_t consumed = 0;
+        revision = std::stoi(revision_text, &consumed);
+        if (consumed != revision_text.size()) revision = -1;
+      } catch (...) {
+        revision = -1;
+      }
+      if (revision < 0)
+        return HttpResp::json("{\"ok\":false,\"err\":\"invalid stage revision\"}", 400);
+      const std::string state = req.param("state");
+      bool ok = false;
+      if (state == "answered") {
+        ok = doReportCallAnswered(door, req.param("call_id"), revision, owner);
+        if (ok) armWebDialogLease(door, req.param("call_id"), owner);
+      } else if (state == "ended") {
+        ok = doReportCallEnded(door, req.param("call_id"), revision,
+                               req.param("reason").empty() ? "sip_ended" : req.param("reason"),
+                               owner);
+      } else if (state == "heartbeat") {
+        auto active = active_calls.find(door);
+        ok = active != active_calls.end() && active->second.call_id == req.param("call_id") &&
+             active->second.stage_revision == revision && active->second.state == "in_call" &&
+             active->second.dialog_owner == owner;
+        if (ok) armWebDialogLease(door, req.param("call_id"), owner);
+      } else {
+        return HttpResp::json("{\"ok\":false,\"err\":\"invalid lifecycle state\"}", 400);
+      }
+      if (!ok) return HttpResp::json("{\"ok\":false,\"err\":\"stale call\"}", 409);
+      auto response = json::obj();
+      json::setBool(response.get(), "ok", true);
+      json::set(response.get(), "dialog_owner", owner);
+      return HttpResp::json(json::dump(response.get()));
+    });
+
+    httpd->route("POST", "/api/panel/hangup", [this](const HttpReq& req) {
+      if (!panelTokenOk(req)) return HttpResp::json("{\"ok\":false,\"err\":\"bad token\"}", 403);
+      const std::string door = req.param("door").empty() ? opts.door : req.param("door");
+      if (!doorManifestSupports(door, "call.end"))
+        return HttpResp::json("{\"ok\":false,\"err\":\"hangup unsupported\"}", 409);
+      if (!doEndCall(door, req.param("call_id"), "visitor_hangup"))
+        return HttpResp::json("{\"ok\":false,\"err\":\"call is not in progress\"}", 409);
+      return HttpResp::json("{\"ok\":true}");
+    });
+
+    httpd->route("POST", "/api/panel/recovery", [this](const HttpReq& req) {
+      if (!panelTokenOk(req)) return HttpResp::json("{\"ok\":false,\"err\":\"bad token\"}", 403);
+      const std::string call_id = req.param("call_id");
+      const std::string door = req.param("door");
+      auto active = active_calls.find(door.empty() ? opts.door : door);
+      if (call_id.empty() || active == active_calls.end() ||
+          active->second.call_id != call_id || active->second.recovery_timer == 0 ||
+          active->second.recovery_kind != RecoveryLeaseKind::LocalProcess)
+        return HttpResp::json("{\"ok\":false,\"err\":\"no recovery pending\"}", 409);
+      const std::string restored = req.param("restored");
+      const bool did_restore = restored == "1" || restored == "true";
+      if (active->second.state == "in_call" && did_restore) {
+        if (!localWebDialogOwner(active->second.dialog_owner))
+          return HttpResp::json(
+              "{\"ok\":false,\"err\":\"native dialog recovery requires platform ABI\"}",
+              409);
+        const std::string owner = webDialogOwner(req.param("dialog_id"));
+        if (owner.empty() || owner != active->second.dialog_owner)
+          return HttpResp::json("{\"ok\":false,\"err\":\"wrong dialog owner\"}", 409);
+      }
+      if (!resolveCallRecovery(call_id, did_restore))
+        return HttpResp::json("{\"ok\":false,\"err\":\"no recovery pending\"}", 409);
+      if (did_restore && active->second.state == "in_call" &&
+          localWebDialogOwner(active->second.dialog_owner))
+        armWebDialogLease(active->second.door, call_id, active->second.dialog_owner);
+      return HttpResp::json("{\"ok\":true}");
+    });
+
+
     httpd->route("POST", "/api/panel/visitor-lang", [this](const HttpReq& req) {
       if (!panelTokenOk(req)) return HttpResp::json("{\"ok\":false,\"err\":\"bad token\"}", 403);
       const std::string lang = req.param("lang");
@@ -2516,21 +6807,23 @@ struct Node::Impl {
       return HttpResp::json("{\"ok\":true}");
     });
 
-    // SOS 発報 (panel token)。トリガのみ — 解除は不可 (403; 解除は kiosk PIN 経由の
-    // db_core_emergency か管理セッションの /api/emergency のみ)。
+
+
     httpd->route("POST", "/api/panel/emergency", [this](const HttpReq& req) {
       if (!panelTokenOk(req)) return HttpResp::json("{\"ok\":false,\"err\":\"bad token\"}", 403);
       const std::string act = req.param("active");
       if (act == "0" || act == "false")
         return HttpResp::json("{\"ok\":false,\"err\":\"cancel not allowed\"}", 403);
-      doEmergency(true, "web");
+      if (!doEmergency(true, "web"))
+        return HttpResp::json(
+            "{\"ok\":false,\"err\":\"event_persistence_failed\"}", 500);
       return HttpResp::json("{\"ok\":true}");
     });
 
     httpd->route("GET", "/snapshot-proxy", [this](const HttpReq& req) {
       if (!panelTokenOk(req)) return HttpResp::json("{\"ok\":false,\"err\":\"bad token\"}", 403);
       std::string door = req.param("door");
-      // その door を担当する door_station を設定から探す
+
       std::string target;
       cJSON* devices = json::get(cfg.get(), "devices");
       cJSON* it = nullptr;
@@ -2551,7 +6844,7 @@ struct Node::Impl {
         r.headers["Cache-Control"] = "no-store";
         return r;
       }
-      // 他ノード担当: 子機の認証免除 /snapshot.jpg へ 302 (契約で許容された方式)
+
       if (mesh) {
         for (const auto& p : mesh->peers()) {
           if (p.id == target && !p.addrs.empty()) {
@@ -2566,10 +6859,10 @@ struct Node::Impl {
       return HttpResp::json("{\"ok\":false,\"err\":\"station offline\"}", 503);
     });
 
-    // ---------- 網頁通話 (webui/panel/call.html — 契約は webui/panel/API.md) ----------
 
-    // 網頁通話の設定/宛先解決。webrtc = config integrations.webrtc (未設定なら通話ボタン無効)。
-    // doors[].extension = その door の担当門口機の内線 (sip.accounts.<node_id>.user)。
+
+
+
     httpd->route("GET", "/api/panel/call-info", [this](const HttpReq& req) {
       if (!panelTokenOk(req)) return HttpResp::json("{\"ok\":false,\"err\":\"bad token\"}", 403);
       auto o = json::obj();
@@ -2578,7 +6871,7 @@ struct Node::Impl {
       cJSON* wc = cfgAt("integrations.webrtc");
       json::set(w, "ws_url", json::getString(wc, "ws_url"));
       json::set(w, "sip_user", json::getString(wc, "sip_user"));
-      json::set(w, "sip_pass", json::getString(wc, "sip_pass"));
+      json::set(w, "sip_pass", referencedSecret(wc, "sip_pass_ref"));
       json::set(w, "server", json::getString(json::get(cfg.get(), "sip"), "server"));
       cJSON* doors = json::addObj(o.get(), "doors");
       cJSON* dcfg = json::get(cfg.get(), "doors");
@@ -2586,7 +6879,7 @@ struct Node::Impl {
       cJSON_ArrayForEach(it, dcfg) {
         if (!it->string) continue;
         cJSON* e = json::addObj(doors, it->string);
-        // 担当門口機 (door_station) の node_id → 内線 + 実アドレス
+
         std::string station;
         cJSON* devices = json::get(cfg.get(), "devices");
         cJSON* dev = nullptr;
@@ -2598,14 +6891,25 @@ struct Node::Impl {
           }
         }
         if (station.empty()) continue;
+        json::set(e, "source_node_id", station);
+        json::setItem(e, "playback_profile", playbackProfileDoc(node_id, station));
         json::set(e, "extension", json::getString(cfgAt("sip.accounts." + station), "user"));
         if (station == node_id) {
-          json::set(e, "station", "");  // 自機 — 相対 URL でよい
+          json::set(e, "station", "");
+          json::set(e, "stream_mjpeg", "/stream.mjpeg");
+          if (json::getString(json::get(json::get(cfgAt("devices." + station), "local"),
+                                             "camera"), "codec", "auto") != "mjpeg")
+            json::set(e, "stream_mp4", "/stream.mp4");
           json::setBool(e, "online", true);
         } else if (mesh) {
           for (const auto& p : mesh->peers()) {
             if (p.id == station && !p.addrs.empty()) {
-              json::set(e, "station", "http://" + hostOf(p.addrs[0]) + ":47180");
+              const std::string origin = "http://" + hostOf(p.addrs[0]) + ":47180";
+              json::set(e, "station", origin);
+              json::set(e, "stream_mjpeg", origin + "/stream.mjpeg");
+              if (json::getString(json::get(json::get(cfgAt("devices." + station), "local"),
+                                                   "camera"), "codec", "auto") != "mjpeg")
+                json::set(e, "stream_mp4", origin + "/stream.mp4");
               json::setBool(e, "online", p.status != "dead");
             }
           }
@@ -2614,9 +6918,9 @@ struct Node::Impl {
       return HttpResp::json(json::dump(o.get()));
     });
 
-    // ブラウザ → 門口機の「相手映像」フレーム投入 (通話中のみ受理)。
-    // body = JPEG 1 枚 (getUserMedia→canvas)。門口機殻は /peer-frame.jpg を輪詢して描画する。
-    // 他ホストのパネルページからの直接 POST を許すため CORS を返す (preflight は下の OPTIONS)。
+
+
+
     httpd->route("POST", "/call-frame", [this](const HttpReq& req) {
       auto cors = [](HttpResp r) {
         r.headers["Access-Control-Allow-Origin"] = "*";
@@ -2629,7 +6933,7 @@ struct Node::Impl {
         return cors(HttpResp::json("{\"ok\":false,\"err\":\"not this station\"}", 404));
       if (sip_call != SipCallState::InCall)
         return cors(HttpResp::json("{\"ok\":false,\"err\":\"not in call\"}", 409));
-      // JPEG 以外は拒否 (SOI マーカ検査 — Content-Type は信用しない)
+
       if (req.body.size() < 4 || static_cast<uint8_t>(req.body[0]) != 0xFF ||
           static_cast<uint8_t>(req.body[1]) != 0xD8)
         return cors(HttpResp::json("{\"ok\":false,\"err\":\"not jpeg\"}", 400));
@@ -2638,18 +6942,18 @@ struct Node::Impl {
       return cors(HttpResp::json("{\"ok\":true}"));
     });
     httpd->route("OPTIONS", "/call-frame", [](const HttpReq&) {
-      HttpResp r;  // CORS preflight (fetch が Content-Type: image/jpeg で送るため必要)
+      HttpResp r;
       r.status = 204;
       r.body = "";
       r.headers["Access-Control-Allow-Origin"] = "*";
       r.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS";
-      r.headers["Access-Control-Allow-Headers"] = "Content-Type";
+      r.headers["Access-Control-Allow-Headers"] = "Authorization, Content-Type";
       r.headers["Access-Control-Max-Age"] = "600";
       return r;
     });
 
-    // 網頁通話相手の最新フレーム (通話中の門口機殻が輪詢)。3 秒より古いフレームは 404
-    // (相手が映像送信を止めた/通話が終わった — 殻は「映像なし」表示へ戻る)。
+
+
     httpd->route("GET", "/peer-frame.jpg", [this](const HttpReq&) {
       if (peer_frame.empty() || clock->monoMs() - peer_frame_mono > 3000)
         return HttpResp::json("{\"ok\":false,\"err\":\"no frame\"}", 404);
@@ -2661,57 +6965,270 @@ struct Node::Impl {
     });
   }
 
-  // panel token (?k= / form k=) を config panel.tokens と照合
+  // Panel bearer values never appear in URLs. APIs accept only the revocable HttpOnly session.
   bool panelTokenOk(const HttpReq& req) {
-    std::string k = req.param("k");
-    if (k.empty()) return false;
-    cJSON* toks = cfgAt("panel.tokens");
-    cJSON* it = nullptr;
-    cJSON_ArrayForEach(it, toks) {
-      if (cJSON_IsString(it) && k == it->valuestring) return true;
+    const std::string session = req.cookie("dbpanel");
+    if (!session.empty()) {
+      const PanelCredentialBinding current = panelCredentialBinding();
+      std::lock_guard<std::mutex> lk(sess_mu);
+      auto existing = panel_sessions.find(session);
+      if (existing != panel_sessions.end()) {
+        if (samePanelCredentialBinding(existing->second, current)) return true;
+        panel_sessions.erase(existing);
+      }
     }
-    return false;
+    const auto auth = req.headers.find("authorization");
+    const std::string prefix = "Bearer ";
+    return auth != req.headers.end() && auth->second.rfind(prefix, 0) == 0 &&
+           panelCredentialOk(auth->second.substr(prefix.size()));
   }
 
-  void setKey(const std::string& key, const std::string& value) {
+  bool setKey(const std::string& key, const std::string& value) {
     auto v = json::parse(value);
     if (v) {
       config->set(key, value);
-    } else {  // 生文字列は JSON 文字列として包む
+    } else {
       auto s = json::Doc(cJSON_CreateString(value.c_str()));
       config->set(key, json::dump(s.get()));
     }
+    return config->lastMutationCommitted();
   }
 
-  // purpose: visit_purposes のキー ("" = 用件なしの汎用按鈴)。payload には purpose と
-  // 選択中の訪客言語を同梱する (docs/config-schema.md — Telegram/HA/panel の展示面が使う)。
-  void doPress(const std::string& door_arg, const std::string& purpose) {
+  std::string doPress(const std::string& door_arg, const std::string& purpose) {
     std::string door = door_arg.empty() ? opts.door : door_arg;
+    auto existing = active_calls.find(door);
+    if (existing != active_calls.end() && existing->second.state == "in_call")
+      return existing->second.call_id;
+    if (existing != active_calls.end() &&
+        existing->second.expires_wall_ms > hlc->correctedWallMs())
+      return existing->second.call_id;  // retry of a press while its call is still active
+    if (existing != active_calls.end() &&
+        !doCancelCall(door, existing->second.call_id, "timeout"))
+      return "";
+    const std::string call_id = genTokenHex(16);
     auto p = json::obj();
+    json::set(p.get(), "schema_version", static_cast<int64_t>(2));
+    json::set(p.get(), "call_id", call_id);
+    json::set(p.get(), "stage_revision", static_cast<int64_t>(0));
+    json::set(p.get(), "expires_at_ms", hlc->correctedWallMs() + callTtlMs());
     if (!purpose.empty()) json::set(p.get(), "purpose", purpose);
     const std::string vlang = visitorLangFor(door);
     if (vlang != "ja") json::set(p.get(), "visitor_lang", vlang);
-    events->append("press", door, node_id, json::dump(p.get()));
+    const EventRecord pressed = events->append("press", door, node_id, json::dump(p.get()));
+    return pressed.seq == 0 ? "" : call_id;
   }
 
-  void doSelectPurpose(const std::string& door_arg, const std::string& purpose) {
-    if (purpose.empty() || !cfgAt("visit_purposes." + purpose)) return;
+  bool doSelectPurpose(const std::string& door_arg, const std::string& call_id,
+                       const std::string& purpose) {
+    if (purpose.empty() || !cfgAt("visit_purposes." + purpose)) return false;
     const std::string door = door_arg.empty() ? opts.door : door_arg;
+    auto it = active_calls.find(door);
+    if (it == active_calls.end() || it->second.call_id != call_id ||
+        it->second.state != "ringing" || cancelled_call_ids.count(call_id))
+      return false;
+    if (it->second.purpose == purpose && it->second.stage_revision > 0) return true;
     auto p = json::obj();
+    json::set(p.get(), "schema_version", static_cast<int64_t>(2));
+    json::set(p.get(), "call_id", call_id);
+    const int revision = it->second.stage_revision + 1;
+    json::set(p.get(), "stage_revision", static_cast<int64_t>(revision));
+    json::set(p.get(), "expires_at_ms", it->second.expires_wall_ms);
     json::set(p.get(), "purpose", purpose);
-    events->append("purpose_selected", door, node_id, json::dump(p.get()));
+    const std::string vlang = visitorLangFor(door);
+    if (vlang != "ja") json::set(p.get(), "visitor_lang", vlang);
+    const EventRecord selected =
+        events->append("purpose_selected", door, node_id, json::dump(p.get()));
+    auto projection = store.callProjection(call_id);
+    return projection && projection->door == door && projection->state == "ringing" &&
+           projection->stage_revision == revision && projection->purpose == purpose &&
+           projection->updated_hlc == selected.hlc;
   }
 
-  void doCancelCall(const std::string& door_arg) {
+  bool doCancelCall(const std::string& door_arg, const std::string& call_id,
+                    const std::string& reason) {
     const std::string door = door_arg.empty() ? opts.door : door_arg;
-    events->append("call_cancelled", door, node_id, "{}");
+    if (call_id.empty()) return false;
+    if (cancelled_call_ids.count(call_id)) return true;
+    auto it = active_calls.find(door);
+    if (it == active_calls.end() || it->second.call_id != call_id) {
+      auto projection = store.callProjection(call_id);
+      return projection && projection->door == door && projection->state == "cancelled";
+    }
+    if (it->second.state == "in_call" && reason != "recovery_failed" &&
+        reason != "recovery_timeout")
+      return false;
+    auto p = json::obj();
+    json::set(p.get(), "schema_version", static_cast<int64_t>(2));
+    json::set(p.get(), "call_id", call_id);
+    json::set(p.get(), "stage_revision", static_cast<int64_t>(it->second.stage_revision));
+    json::set(p.get(), "reason", reason);
+    const EventRecord cancelled =
+        events->append("call_cancelled", door, node_id, json::dump(p.get()));
+    if (cancelled.seq == 0) return false;
+    auto projection = store.callProjection(call_id);
+    return projection && projection->door == door && projection->state == "cancelled" &&
+           projection->updated_hlc == cancelled.hlc;
+  }
+
+  bool doEndCall(const std::string& door_arg, const std::string& call_id,
+                 const std::string& reason) {
+    const std::string door = door_arg.empty() ? opts.door : door_arg;
+    if (call_id.empty()) return false;
+    auto it = active_calls.find(door);
+    if (it == active_calls.end() || it->second.call_id != call_id ||
+        it->second.state != "in_call" || it->second.dialog_owner.empty())
+      return false;
+    auto p = json::obj();
+    json::set(p.get(), "schema_version", static_cast<int64_t>(2));
+    json::set(p.get(), "call_id", call_id);
+    json::set(p.get(), "stage_revision", static_cast<int64_t>(it->second.stage_revision));
+    json::set(p.get(), "reason", reason);
+    json::set(p.get(), "requested_by", node_id);
+    // The accepted dialog owner remains the lifecycle authority. A visitor-side End action is
+    // represented as an owner-scoped terminal event so a losing SIP leg can never resolve it.
+    const EventRecord ended =
+        events->append("call_ended", door, it->second.dialog_owner, json::dump(p.get()));
+    if (ended.seq == 0) return false;
+    auto projection = store.callProjection(call_id);
+    return projection && projection->door == door && projection->state == "ended" &&
+           projection->updated_hlc == ended.hlc;
+  }
+
+  bool doReportCallAnswered(const std::string& door_arg, const std::string& call_id,
+                            int stage_revision, const std::string& reporter = "",
+                            bool retry_on_persistence_failure = false) {
+    const std::string door = door_arg.empty() ? opts.door : door_arg;
+    const std::string owner = reporter.empty() ? node_id : reporter;
+    if (call_id.empty() || stage_revision < 0) return false;
+    auto it = active_calls.find(door);
+    if (it == active_calls.end() || it->second.call_id != call_id ||
+        it->second.stage_revision != stage_revision)
+      return false;
+    if (it->second.state == "in_call") return it->second.dialog_owner == owner;
+    if (it->second.state != "ringing") return false;
+    auto p = json::obj();
+    json::set(p.get(), "schema_version", static_cast<int64_t>(2));
+    json::set(p.get(), "call_id", call_id);
+    json::set(p.get(), "call_origin", it->second.origin);
+    json::set(p.get(), "stage_revision", static_cast<int64_t>(stage_revision));
+    json::set(p.get(), "expires_at_ms", it->second.expires_wall_ms);
+    if (!it->second.purpose.empty()) json::set(p.get(), "purpose", it->second.purpose);
+    if (events->append("call_answered", door, owner, json::dump(p.get())).seq == 0) {
+      if (retry_on_persistence_failure) queuePendingAnswer(it->second, owner);
+      return false;
+    }
+    auto accepted = active_calls.find(door);
+    return accepted != active_calls.end() && accepted->second.call_id == call_id &&
+           accepted->second.stage_revision == stage_revision &&
+           accepted->second.state == "in_call" && accepted->second.dialog_owner == owner;
+  }
+
+  bool doReportCallEnded(const std::string& door_arg, const std::string& call_id,
+                         int stage_revision, const std::string& reason,
+                         const std::string& reporter = "",
+                         bool retry_on_persistence_failure = false) {
+    const std::string door = door_arg.empty() ? opts.door : door_arg;
+    const std::string owner = reporter.empty() ? node_id : reporter;
+    if (call_id.empty() || stage_revision < 0) return false;
+    auto it = active_calls.find(door);
+    if (it == active_calls.end()) {
+      auto projection = store.callProjection(call_id);
+      return projection && projection->door == door &&
+             projection->stage_revision == stage_revision && projection->state == "ended" &&
+             projection->dialog_owner == owner;
+    }
+    if (it->second.call_id != call_id || it->second.stage_revision != stage_revision ||
+        it->second.state != "in_call" || it->second.dialog_owner != owner)
+      return false;
+    auto p = json::obj();
+    json::set(p.get(), "schema_version", static_cast<int64_t>(2));
+    json::set(p.get(), "call_id", call_id);
+    json::set(p.get(), "stage_revision", static_cast<int64_t>(stage_revision));
+    json::set(p.get(), "reason", reason.empty() ? "sip_ended" : reason.substr(0, 64));
+    const EventRecord ended = events->append("call_ended", door, owner, json::dump(p.get()));
+    if (ended.seq == 0) {
+      if (retry_on_persistence_failure) queuePendingEnd(it->second, owner, reason);
+      return false;
+    }
+    auto projection = store.callProjection(call_id);
+    return projection && projection->door == door && projection->state == "ended" &&
+           projection->stage_revision == stage_revision &&
+           projection->dialog_owner == owner && projection->updated_hlc == ended.hlc;
+  }
+
+  void flushPendingLifecycle(const std::string& call_id) {
+    auto pending_it = pending_lifecycles.find(call_id);
+    if (pending_it == pending_lifecycles.end()) return;
+    if (!pendingLifecycleIdentityValid(pending_it->second)) {
+      abandonPendingLifecycle(call_id);
+      return;
+    }
+
+    PendingLifecycle pending = pending_it->second;
+    auto active = active_calls.find(pending.door);
+    if (pending.answer_pending) {
+      if (active->second.state == "ringing") {
+        if (!doReportCallAnswered(pending.door, call_id, pending.stage_revision,
+                                  pending.owner, /*retry_on_persistence_failure=*/false)) {
+          active = active_calls.find(pending.door);
+          if (active != active_calls.end() && active->second.call_id == call_id &&
+              active->second.stage_revision == pending.stage_revision &&
+              active->second.state == "ringing") {
+            schedulePendingLifecycleRetry(call_id);
+            return;
+          }
+          abandonPendingLifecycle(call_id);
+          return;
+        }
+      } else if (active->second.dialog_owner != pending.owner) {
+        abandonPendingLifecycle(call_id);
+        return;
+      }
+      pending_it = pending_lifecycles.find(call_id);
+      if (pending_it == pending_lifecycles.end()) return;
+      pending_it->second.answer_pending = false;
+      pending_it->second.retry_step = 0;
+    }
+
+    pending_it = pending_lifecycles.find(call_id);
+    if (pending_it == pending_lifecycles.end()) return;
+    if (!pending_it->second.end_pending) {
+      finishPendingLifecycle(call_id);
+      return;
+    }
+    pending = pending_it->second;
+    active = active_calls.find(pending.door);
+    if (active == active_calls.end() || active->second.call_id != call_id ||
+        active->second.stage_revision != pending.stage_revision ||
+        active->second.state != "in_call" || active->second.dialog_owner != pending.owner) {
+      abandonPendingLifecycle(call_id);
+      return;
+    }
+    if (!doReportCallEnded(pending.door, call_id, pending.stage_revision,
+                           pending.end_reason, pending.owner,
+                           /*retry_on_persistence_failure=*/false)) {
+      active = active_calls.find(pending.door);
+      if (active != active_calls.end() && active->second.call_id == call_id &&
+          active->second.stage_revision == pending.stage_revision &&
+          active->second.state == "in_call" && active->second.dialog_owner == pending.owner) {
+        schedulePendingLifecycleRetry(call_id);
+        return;
+      }
+      abandonPendingLifecycle(call_id);
+      return;
+    }
+    finishPendingLifecycle(call_id);
   }
 };
 
-// ---------------- 公開 API ----------------
+
 
 Node::Node(NodeOptions opts, NodeDeps deps) : impl_(new Impl) {
   impl_->opts = std::move(opts);
+  impl_->pairing_persistence_ready = std::any_of(
+      impl_->opts.psk.begin(), impl_->opts.psk.end(), [](uint8_t byte) { return byte != 0; });
+  impl_->measured_caps_json = impl_->opts.caps_json;
+  impl_->ui_manifest_json = "{}";
   if (deps.clock) {
     impl_->clock = deps.clock;
   } else {
@@ -2744,15 +7261,16 @@ void Node::stop() {
   if (!impl_ || !impl_->started) return;
   impl_->started = false;
 #ifdef _WIN32
-  // カメラ採集スレッドを先に止める (frame_bus への push を止めてから httpd を畳む)
+
   if (impl_->camera) impl_->camera->stop();
   if (impl_->encoder) impl_->encoder->stop();
 #endif
-  // /stream.mp4 の購読者を全員起こして切断させる (httpd->stop の mg_stop が
-  // 進行中接続の完了を待つため、先に終わらせておく)
+
+
   impl_->video_track.stop();
-  // 停止順: sipctl → httpd → mesh
+
   impl_->loop->callSync([&] {
+    impl_->stopNetMonitor();
     if (impl_->sip_reapply_timer) {
       impl_->loop->cancel(impl_->sip_reapply_timer);
       impl_->sip_reapply_timer = 0;
@@ -2785,11 +7303,23 @@ void Node::stop() {
 #endif
     for (auto& kv : impl_->visitor_lang_revert_timer) impl_->loop->cancel(kv.second);
     impl_->visitor_lang_revert_timer.clear();
-    if (impl_->tg) impl_->tg->stop();          // 輪詢/キュー駆動を止める (キューは永続)
+    for (auto& entry : impl_->active_calls) {
+      if (entry.second.timeout_timer) impl_->loop->cancel(entry.second.timeout_timer);
+      if (entry.second.recovery_timer) impl_->loop->cancel(entry.second.recovery_timer);
+      entry.second.timeout_timer = 0;
+      entry.second.recovery_timer = 0;
+    }
+    for (const auto& entry : impl_->web_dialog_timers)
+      if (entry.second.timer) impl_->loop->cancel(entry.second.timer);
+    impl_->web_dialog_timers.clear();
+    for (const auto& entry : impl_->pending_lifecycles)
+      if (entry.second.retry_timer) impl_->loop->cancel(entry.second.retry_timer);
+    impl_->pending_lifecycles.clear();
+    if (impl_->tg) impl_->tg->stop();
     if (impl_->bridge) impl_->bridge->stop();  // availability=offline (retain) → DISCONNECT
-    if (impl_->sipctl) impl_->sipctl->stop();  // 通話切断 → 登録解除 → pjsua_destroy
+    if (impl_->sipctl) impl_->sipctl->stop();
   });
-  // httpd は runloop の外から止める (worker が callSync 待ちのまま mg_stop すると死锁)
+
   if (impl_->httpd) impl_->httpd->stop();
   impl_->loop->callSync([&] {
     if (impl_->mesh) impl_->mesh->stop();
@@ -2814,25 +7344,125 @@ void Node::setHttpsFn(HttpsFn fn) {
 }
 
 void Node::setDeviceInfoFn(DeviceInfoFn fn) {
-  // 監視スレッド開始前に呼ばれる想定 (capi の create 時)。
+
   impl_->device_info_fn = std::move(fn);
 }
 
+void Node::setSecureStore(SecureGetFn get, SecurePutFn put) {
+  std::lock_guard<std::mutex> lk(impl_->cb_mu);
+  impl_->secure_get_fn = std::move(get);
+  impl_->secure_put_fn = std::move(put);
+}
+
+void Node::setRuntimeCapabilities(const std::string& capabilities_json) {
+  auto parsed = json::parse(capabilities_json);
+  if (!parsed || !cJSON_IsObject(parsed.get()) || capabilities_json.size() > 64 * 1024) return;
+  impl_->loop->post([this, capabilities_json] {
+    impl_->measured_caps_json = capabilities_json;
+    impl_->applyEffectiveCaps();
+    impl_->notifyPendingRecoveries();
+  });
+}
+
+void Node::setRuntimeStatus(const std::string& runtime_json) {
+  auto parsed = json::parse(runtime_json);
+  if (!parsed || !cJSON_IsObject(parsed.get()) || runtime_json.size() > 64 * 1024) return;
+  impl_->loop->post([this, runtime_json] {
+    impl_->runtime_status_json = runtime_json;
+    if (impl_->mesh) impl_->mesh->setRuntime(runtime_json);
+    impl_->scheduleSnapshotRefresh();
+  });
+}
+
+void Node::setUiManifest(const std::string& manifest_json) {
+  auto parsed = json::parse(manifest_json);
+  if (!parsed || !cJSON_IsObject(parsed.get()) || manifest_json.size() > 128 * 1024) return;
+  std::string error;
+  if (parsed->child && !uiManifestValid(manifest_json, &error)) {
+    DB_LOGE(kTag, "rejected ui_manifest: " + error);
+    return;
+  }
+  impl_->loop->post([this, manifest_json] {
+    impl_->ui_manifest_json = manifest_json;
+    impl_->applyEffectiveCaps();
+    if (impl_->mesh) impl_->mesh->setUiManifest(manifest_json);
+    impl_->scheduleSnapshotRefresh();
+  });
+}
+
+std::string Node::capabilitiesJson() {
+  std::string out;
+  impl_->loop->callSync([&] { out = impl_->capabilitiesJsonOnLoop(); });
+  return out;
+}
+
 void Node::press(const std::string& door_id, const std::string& purpose) {
-  std::string d = door_id;
-  std::string p = purpose;
-  impl_->loop->post([this, d, p] { impl_->doPress(d, p); });
+  (void)pressV2(door_id, purpose);
 }
 
 void Node::selectPurpose(const std::string& door_id, const std::string& purpose) {
   std::string d = door_id;
   std::string p = purpose;
-  impl_->loop->post([this, d, p] { impl_->doSelectPurpose(d, p); });
+  impl_->loop->post([this, d, p] {
+    const std::string door = d.empty() ? impl_->opts.door : d;
+    auto it = impl_->active_calls.find(door);
+    if (it != impl_->active_calls.end()) impl_->doSelectPurpose(door, it->second.call_id, p);
+  });
 }
 
 void Node::cancelCall(const std::string& door_id) {
   std::string d = door_id;
-  impl_->loop->post([this, d] { impl_->doCancelCall(d); });
+  impl_->loop->post([this, d] {
+    const std::string door = d.empty() ? impl_->opts.door : d;
+    auto it = impl_->active_calls.find(door);
+    if (it != impl_->active_calls.end()) impl_->doCancelCall(door, it->second.call_id, "visitor");
+  });
+}
+
+std::string Node::pressV2(const std::string& door_id, const std::string& purpose) {
+  std::string id;
+  impl_->loop->callSync([&] { id = impl_->doPress(door_id, purpose); });
+  return id;
+}
+
+bool Node::selectPurposeV2(const std::string& door_id, const std::string& call_id,
+                           const std::string& purpose) {
+  bool ok = false;
+  impl_->loop->callSync([&] { ok = impl_->doSelectPurpose(door_id, call_id, purpose); });
+  return ok;
+}
+
+bool Node::cancelCallV2(const std::string& door_id, const std::string& call_id,
+                        const std::string& reason) {
+  bool ok = false;
+  impl_->loop->callSync([&] { ok = impl_->doCancelCall(door_id, call_id, reason); });
+  return ok;
+}
+
+bool Node::reportCallAnsweredV2(const std::string& door_id, const std::string& call_id,
+                                int stage_revision) {
+  bool ok = false;
+  impl_->loop->callSync([&] {
+    ok = impl_->doReportCallAnswered(door_id, call_id, stage_revision, "",
+                                     /*retry_on_persistence_failure=*/true);
+  });
+  return ok;
+}
+
+bool Node::reportCallEndedV2(const std::string& door_id, const std::string& call_id,
+                             int stage_revision, const std::string& reason) {
+  bool ok = false;
+  impl_->loop->callSync([&] {
+    ok = impl_->doReportCallEnded(door_id, call_id, stage_revision, reason, "",
+                                  /*retry_on_persistence_failure=*/true);
+  });
+  return ok;
+}
+
+void Node::reportCallRecovery(const std::string& call_id, bool restored) {
+  impl_->loop->post([this, call_id, restored] {
+    impl_->resolveCallRecovery(call_id, restored);
+  });
 }
 
 void Node::setVisitorLang(const std::string& door_id, const std::string& lang) {
@@ -2867,28 +7497,37 @@ void Node::pushCameraFrame(const uint8_t* data, int format, int width, int heigh
                            int64_t ts_ms) {
   if (!data || width <= 0 || height <= 0) return;
   size_t n = rawFrameBytes(format, width, height, stride);
-  if (n == 0) return;  // 未知 format
+  if (n == 0) return;
   RawFrame f;
   f.format = format;
   f.w = width;
   f.h = height;
   f.stride = stride;
   f.ts_ms = ts_ms;
-  f.data.assign(data, data + n);  // コピーはこの 1 回だけ
+  f.data.assign(data, data + n);
   {
     std::lock_guard<std::mutex> lk(impl_->motion_mu);
-    impl_->motion.feed(f);  // 動体検知 (発火は onMotion → loop へ post)
+    impl_->motion.feed(f);
   }
   impl_->frame_bus.push(std::move(f));
 }
 
 void Node::pushEncodedFrame(const uint8_t* annexb, size_t len, bool key, int64_t ts_ms) {
-  // VideoTrack は自前ロック — 高頻度呼び出しなので loop へは marshal しない
+
   impl_->pushVideoTrack(annexb, len, key, ts_ms);
 }
 
 bool Node::videoEncoderWanted() {
   return impl_->video_track.enabled() && impl_->video_track.subscriberCount() > 0;
+}
+
+void Node::setVideoSensorRotation(int degrees) {
+  const int rotation = Impl::normalizeRotation(degrees);
+  if (impl_->sensor_video_rotation.exchange(rotation) == rotation) return;
+  impl_->loop->post([this] {
+    impl_->applyVideoRotation();
+    impl_->scheduleSnapshotRefresh();
+  });
 }
 
 void Node::sendQuickReply(const std::string& reply_id, const std::string& free_text,
@@ -2900,10 +7539,24 @@ void Node::sendQuickReply(const std::string& reply_id, const std::string& free_t
   impl_->loop->post([this, rid, txt, d, v] { impl_->quickReply(rid, txt, d, v); });
 }
 
+bool Node::sendQuickReplyV2(const std::string& reply_id, const std::string& free_text,
+                            const std::string& door_id, const std::string& call_id,
+                            int stage_revision) {
+  bool ok = false;
+  impl_->loop->callSync([&] {
+    ok = impl_->quickReply(reply_id, free_text, door_id, "app", call_id, stage_revision);
+  });
+  return ok;
+}
+
 void Node::setEmergency(bool active, const std::string& via) {
-  bool a = active;
-  std::string v = via;
-  impl_->loop->post([this, a, v] { impl_->doEmergency(a, v); });
+  (void)setEmergencyV2(active, via);
+}
+
+bool Node::setEmergencyV2(bool active, const std::string& via) {
+  bool ok = false;
+  impl_->loop->callSync([&] { ok = impl_->doEmergency(active, via); });
+  return ok;
 }
 
 std::string Node::statusJson() {
@@ -2925,7 +7578,17 @@ std::string Node::configJson() {
 }
 
 void Node::setConfigKey(const std::string& key, const std::string& value_json) {
-  impl_->loop->callSync([&] { impl_->setKey(key, value_json); });
+  auto parsed = json::parse(value_json);
+  if (!parsed) parsed = json::Doc(cJSON_CreateString(value_json.c_str()));
+  impl_->loop->callSync([&] {
+    std::string error;
+    if (!impl_->configWriteValidEffective(key, parsed.get(), &error)) {
+      DB_LOGE(kTag, "refused unsafe programmatic config write: " + key + " (" + error + ")");
+      return;
+    }
+    if (!impl_->setKey(key, value_json))
+      DB_LOGE(kTag, "programmatic config write was not persisted: " + key);
+  });
 }
 
 std::string Node::pairingJson() {
@@ -2965,6 +7628,53 @@ void Node::setPairingMode(int seconds) {
   });
 }
 
+void Node::removeDevice(const std::string& target) {
+  impl_->loop->post([this, target] {
+    if (!impl_->mesh || impl_->opts.role != "indoor_panel" || target.empty() ||
+        target == node_id_)
+      return;
+    const auto peers = impl_->mesh->peers();
+    const auto it = std::find_if(peers.begin(), peers.end(), [&](const PeerInfo& peer) {
+      return peer.id == target && peer.connected;
+    });
+    if (it == peers.end()) return;
+    auto command = json::obj();
+    json::set(command.get(), "cmd", "pairing_revoked");
+    json::set(command.get(), "target", target);
+    impl_->mesh->sendCommand(target, json::dump(command.get()));
+  });
+}
+
+std::string Node::startPairingJson(int seconds) {
+  std::string out;
+  const int bounded_seconds = std::max(1, std::min(seconds, 3600));
+  impl_->loop->callSync([&] {
+    auto result = json::obj();
+    if (!impl_->mesh || !impl_->mesh->isPaired()) {
+      json::setBool(result.get(), "ok", false);
+      json::set(result.get(), "err", "host_unpaired");
+      out = json::dump(result.get());
+      return;
+    }
+    impl_->mesh->setPairingMode(static_cast<int64_t>(bounded_seconds) * 1000);
+    const auto token = impl_->mesh->createJoinToken();
+    json::Doc self = json::parse(impl_->mesh->pairingSelfJson());
+    const std::string host = self ? json::getString(self.get(), "addr") : "";
+    if (token.pin.empty() || host.empty()) {
+      json::setBool(result.get(), "ok", false);
+      json::set(result.get(), "err", "pairing_unavailable");
+    } else {
+      json::setBool(result.get(), "ok", true);
+      json::set(result.get(), "host", host);
+      json::set(result.get(), "pin", token.pin);
+      json::set(result.get(), "expires_s", std::max<int64_t>(
+          0, (token.expires_mono - impl_->clock->monoMs()) / 1000));
+    }
+    out = json::dump(result.get());
+  });
+  return out;
+}
+
 void Node::inviteDevice(const std::string& id) {
   std::string did = id;
   impl_->loop->post([this, did] {
@@ -2974,7 +7684,7 @@ void Node::inviteDevice(const std::string& id) {
 
 void Node::inviteDeviceDirect(const std::string& addr, const std::string& id,
                               const std::string& pk) {
-  (void)id;  // id は将来のログ/照合用 (招待自体は addr+pk で成立)
+  (void)id;
   std::string a = addr;
   std::string p = pk;
   impl_->loop->post([this, a, p] {
@@ -2984,7 +7694,7 @@ void Node::inviteDeviceDirect(const std::string& addr, const std::string& id,
 
 Runloop& Node::loop() { return *impl_->loop; }
 
-// ---------- SIP 直接呼 (TV 監聴等 — 末尾追記: 並行作業との衝突回避) ----------
+
 
 void Node::sipCall(const std::string& target, const std::string& mode) {
   impl_->loop->callSync([&] {
@@ -2996,6 +7706,14 @@ void Node::sipHangup() {
   impl_->loop->callSync([&] {
     if (impl_->sipctl) impl_->sipctl->hangup();
   });
+}
+
+bool Node::sipSendDtmf(const std::string& digits) {
+  bool ok = false;
+  impl_->loop->callSync([&] {
+    if (impl_->sipctl) ok = impl_->sipctl->sendDtmf(digits);
+  });
+  return ok;
 }
 
 }  // namespace db

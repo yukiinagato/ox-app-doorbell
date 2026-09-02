@@ -1,19 +1,17 @@
-// MJPEG (multipart/x-mixed-replace) の自前デコーダ — 外部ライブラリ禁止の方針のため
-// HttpURLConnection + 境界パース + BitmapFactory で組む。
-// 子機 httpd の /stream.mjpeg はパート毎に Content-Length を必ず付ける (httpd.cpp) ので
-// ヘッダの Content-Length を読んで本文をそのまま切り出す。
-// 接続断は 2 秒後に自動再接続 (stop まで)。コールバックは読取スレッドから呼ばれる。
+// Bounded multipart MJPEG reader. Core's server supplies Content-Length on each part, allowing
+// exact frame extraction without a third-party parser. Callbacks run on the reader thread.
 package jp.keihan.doorbell
 
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.util.Log
 import java.io.BufferedInputStream
 import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.URL
 
-class MjpegStreamer(private val url: String, private val onFrame: (Bitmap) -> Unit) {
+class MjpegStreamer(private val url: String, private val onFrame: (Bitmap, Int) -> Unit) {
+
+    private data class Frame(val jpeg: ByteArray, val rotation: Int)
 
     @Volatile
     private var running = false
@@ -44,8 +42,8 @@ class MjpegStreamer(private val url: String, private val onFrame: (Bitmap) -> Un
                 val ins = BufferedInputStream(conn.inputStream, 64 * 1024)
                 while (running) {
                     val frame = readPart(ins) ?: break
-                    val bmp = BitmapFactory.decodeByteArray(frame, 0, frame.size) ?: continue
-                    if (running) onFrame(bmp)
+                    val bmp = BoundedBitmapDecoder.decode(frame.jpeg, MAX_WIDTH, MAX_HEIGHT) ?: continue
+                    if (running) onFrame(bmp, frame.rotation)
                 }
             } catch (e: Exception) {
                 if (running) Log.w(TAG, "stream error: $e")
@@ -57,20 +55,24 @@ class MjpegStreamer(private val url: String, private val onFrame: (Bitmap) -> Un
         }
     }
 
-    /** 1 パート読む: 境界/ヘッダ行 → Content-Length → JPEG 本文。ストリーム終端は null。 */
-    private fun readPart(ins: InputStream): ByteArray? {
+    /** Read one bounded part; return null at the stream boundary. */
+    private fun readPart(ins: InputStream): Frame? {
         var contentLength = -1
-        // ヘッダ行 (--frame, Content-Type, Content-Length, 空行)。空行でヘッダ終了。
+        var rotation = 0
+        // The blank line after the multipart headers begins the frame body.
         while (true) {
             val line = readLine(ins) ?: return null
             if (line.isEmpty()) {
                 if (contentLength > 0) break
-                continue  // 本文前の余分な空行 (境界直後) は読み飛ばす
+                continue
             }
             val p = line.split(':', limit = 2)
             if (p.size == 2 && p[0].trim().equals("Content-Length", ignoreCase = true)) {
                 contentLength = p[1].trim().toIntOrNull() ?: -1
                 if (contentLength <= 0 || contentLength > MAX_FRAME) return null
+            } else if (p.size == 2 &&
+                p[0].trim().equals("X-Doorbell-Video-Rotation", ignoreCase = true)) {
+                rotation = p[1].trim().toIntOrNull() ?: 0
             }
         }
         val buf = ByteArray(contentLength)
@@ -80,10 +82,10 @@ class MjpegStreamer(private val url: String, private val onFrame: (Bitmap) -> Un
             if (n < 0) return null
             off += n
         }
-        return buf
+        return Frame(buf, ((rotation % 360) + 360) % 360)
     }
 
-    /** \r\n 終端の 1 行 (ASCII)。終端到達は null。 */
+    /** Read one bounded CRLF-terminated ASCII line. */
     private fun readLine(ins: InputStream): String? {
         val sb = StringBuilder(64)
         while (true) {
@@ -91,12 +93,14 @@ class MjpegStreamer(private val url: String, private val onFrame: (Bitmap) -> Un
             if (c < 0) return null
             if (c == '\n'.code) return sb.toString().trimEnd('\r')
             sb.append(c.toChar())
-            if (sb.length > 512) return null  // 異常なヘッダ行
+            if (sb.length > 512) return null
         }
     }
 
     companion object {
         private const val TAG = "doorbell-mjpeg"
-        private const val MAX_FRAME = 4 * 1024 * 1024  // JPEG 1 枚の上限 (安全弁)
+        private const val MAX_FRAME = 4 * 1024 * 1024
+        private const val MAX_WIDTH = 1280
+        private const val MAX_HEIGHT = 720
     }
 }

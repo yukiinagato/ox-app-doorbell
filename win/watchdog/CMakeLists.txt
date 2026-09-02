@@ -1,10 +1,19 @@
 cmake_minimum_required(VERSION 3.16)
 project(doorbell_watchdog CXX)
 set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 add_executable(doorbell-watchdog main.cpp)
 target_compile_definitions(doorbell-watchdog PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN)
 if(MSVC)
-  # 静的 CRT — 配布先にランタイム不要
+  # Static CRT keeps the watchdog self-contained on deployed hosts.
   set_property(TARGET doorbell-watchdog PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded")
-  target_link_options(doorbell-watchdog PRIVATE /ENTRY:wmainCRTStartup /SUBSYSTEM:CONSOLE)
+  target_compile_options(doorbell-watchdog PRIVATE /W4 /WX /Brepro)
+  target_link_options(doorbell-watchdog PRIVATE /ENTRY:wmainCRTStartup /SUBSYSTEM:CONSOLE /Brepro)
+  target_link_libraries(doorbell-watchdog PRIVATE advapi32 shell32 user32 userenv wtsapi32)
+endif()
+
+include(CTest)
+if(BUILD_TESTING)
+  add_executable(doorbell-watchdog-tests tests.cpp)
+  add_test(NAME doorbell-watchdog-recovery-policy COMMAND doorbell-watchdog-tests)
 endif()

@@ -1,6 +1,6 @@
-# 開発用 Mosquitto (MQTT ブリッジ結合テスト用 — 本番は HA の Mosquitto アドオン)
+# Development Mosquitto instance for MQTT bridge integration tests. Production uses the HA add-on.
 #   docker compose up -d
-#   購読確認: docker exec doorbell-dev-mqtt mosquitto_sub -t '#' -v
+#   Verify subscriptions: docker exec doorbell-dev-mqtt mosquitto_sub -t '#' -v
 services:
   mosquitto:
     image: eclipse-mosquitto:2.0

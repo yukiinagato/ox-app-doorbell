@@ -1,6 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <string name="purpose_call_without_selection">不选择，直接继续</string>
-    <string name="purpose_ringing_hint">门铃已触发，来访目的可以不选</string>
-    <string name="ring_cancelled">访客已取消，画面将暂时保留</string>
-</resources>

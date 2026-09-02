@@ -1,14 +1,17 @@
-// LWW-Map CRDT (設計書 mesh §2)。
-// フラットな key→JSON値。key はドットパス ("doors.d_front.label" 等)。
-// 勝敗: (hlc, author) の大きい方。削除は tombstone (deleted=true) で表現。
-// delta 同期: author 毎の単調 seq による版本ベクトル。
-// スレッド: Runloop 上でのみ触る (内部ロック無し)。永続化は呼び出し側 (onChange で Store へ)。
+
+
+
+
+
+// Flat dot-path LWW-map CRDT. Winners are ordered by (HLC, author); deletes are tombstones and
+// per-author sequence numbers form the version vector. Use only on Runloop; there is no lock.
 #pragma once
 
 #include <cstdint>
 #include <functional>
 #include <map>
 #include <optional>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -18,60 +21,113 @@ namespace db {
 
 struct LwwEntry {
   std::string key;
-  std::string value_json;  // 任意の JSON テキスト (tombstone 時は空)
+  std::string value_json;
   bool deleted = false;
-  std::string hlc;     // 刻印
-  std::string author;  // 書いたノードの node_id
-  uint64_t seq = 0;    // author 内の単調連番 (1 始まり)
+  std::string hlc;
+  std::string author;
+  uint64_t seq = 0;
 };
 
-using VersionVector = std::map<std::string, uint64_t>;  // node_id → 最大 seq
+struct LwwMutation {
+  std::string key;
+  std::string value_json;
+  bool deleted = false;
+};
+
+// Each value is the highest contiguous sequence known for its author. Advertising a sparse
+// maximum would make an earlier delayed mutation invisible to anti-entropy.
+using VersionVector = std::map<std::string, uint64_t>;
 
 class LwwMap {
  public:
-  // on_change(entry, is_local): 状態が変わる度に呼ぶ (load 中は呼ばない)。
-  // 呼び出し側はこれで Store 永続化・gossip push・設定再構築を行う。
+
+
   using ChangeCb = std::function<void(const LwwEntry&, bool is_local)>;
+  using BatchChangeCb = std::function<void(const std::vector<LwwEntry>&, bool is_local)>;
+  // Runs after a tentative mutation but before observers. Returning false restores the complete
+  // pre-mutation CRDT state, including sequence/frontier bookkeeping, so durable stores can form
+  // the commit boundary without exposing or advertising an unpersisted winner.
+  using CommitCb =
+      std::function<bool(const std::vector<LwwEntry>&, bool is_local, bool batch)>;
 
   LwwMap(std::string self_id, HlcClock& hlc);
 
-  // 起動時に Store から全件流し込む。self の seq カウンタも復元する。
+
   void load(const std::vector<LwwEntry>& entries);
 
-  // ローカル書き込み (hlc/seq を採番し on_change(_, true))
+
   const LwwEntry& set(const std::string& key, const std::string& value_json);
   const LwwEntry& remove(const std::string& key);  // tombstone
+  // Applies a pre-validated local batch without exposing intermediate states to observers.
+  std::vector<LwwEntry> mutate(const std::vector<LwwMutation>& mutations);
 
-  // リモート適用。状態が変わったら true (+ on_change(_, false))。
-  // 変わらなくても version vector は前進し得る。
+
+
   bool applyRemote(const LwwEntry& e);
+  // Applies remote winners as one visible state transition. Version-vector knowledge is advanced
+  // for every entry, including duplicates and losing values.
+  std::vector<LwwEntry> applyRemoteBatch(const std::vector<LwwEntry>& entries);
+  // Applies an untruncated anti-entropy state delta and records the sender's contiguous frontier.
+  // Callers must not use this for live pushes or truncated pages: the advertised prefix is trusted
+  // even when overwritten mutations are no longer present in entries.
+  std::vector<LwwEntry> applyRemoteSnapshot(const std::vector<LwwEntry>& entries,
+                                            const VersionVector& complete_frontier);
 
-  std::optional<std::string> get(const std::string& key) const;  // tombstone は nullopt
-  // prefix 一致の (key, value_json) 一覧 (tombstone 除く、key 昇順)
+  std::optional<std::string> get(const std::string& key) const;
+
   std::vector<std::pair<std::string, std::string>> byPrefix(const std::string& prefix) const;
 
   VersionVector versionVector() const;
-  // remote_vv が知らない entry (自分の vv が上回る分) を返す
-  std::vector<LwwEntry> deltaSince(const VersionVector& remote_vv) const;
-  std::vector<LwwEntry> all() const;  // tombstone 含む (永続化・デバッグ用)
 
-  // fleet 全員の vv が到達済み && hlc が older_than_hlc より古い tombstone を物理削除
+  std::vector<LwwEntry> deltaSince(const VersionVector& remote_vv) const;
+  // Returns user-visible winners and tombstones; internal persistence metadata is excluded.
+  std::vector<LwwEntry> all() const;
+
+
   size_t gcTombstones(const VersionVector& fleet_min_vv, const std::string& older_than_hlc);
 
-  // ドットパス群から入れ子 JSON 文書を組み立てる (設定スナップショット用)。
-  // 値はそのまま埋め込む。配列は「値としての JSON 配列」で表現されている前提。
+
+
   std::string materializeJson(const std::string& prefix = "") const;
 
   void onChange(ChangeCb cb) { on_change_ = std::move(cb); }
+  void onBatchChange(BatchChangeCb cb) { on_batch_change_ = std::move(cb); }
+  void onCommit(CommitCb cb) { on_commit_ = std::move(cb); }
+  bool lastMutationCommitted() const { return last_mutation_committed_; }
   const std::string& selfId() const { return self_id_; }
 
  private:
+  struct StateSnapshot {
+    std::map<std::string, LwwEntry> map;
+    VersionVector vv;
+    std::map<std::string, std::set<uint64_t>> out_of_order_sequences;
+    VersionVector durable_remote_frontier;
+    uint64_t self_seq = 0;
+  };
+
+  StateSnapshot snapshot() const;
+  void restore(StateSnapshot&& state);
+  bool commit(const std::vector<LwwEntry>& changed, bool is_local, bool batch);
+  bool commit(const std::vector<LwwEntry>& durable_changed,
+              const std::vector<LwwEntry>& visible_changed, bool is_local, bool batch);
+  std::vector<LwwEntry> applyRemoteBatchImpl(const std::vector<LwwEntry>& entries,
+                                             const VersionVector* complete_frontier);
+  std::vector<LwwEntry> advanceDurableRemoteFrontiers();
+  void observeSequence(const std::string& author, uint64_t seq);
+  void trustSequencePrefix(const std::string& author, uint64_t seq);
+
   std::string self_id_;
   HlcClock& hlc_;
-  std::map<std::string, LwwEntry> map_;  // key → 現勝者 (tombstone 含む)
+  std::map<std::string, LwwEntry> map_;
   VersionVector vv_;
+  std::map<std::string, std::set<uint64_t>> out_of_order_sequences_;
+  VersionVector durable_remote_frontier_;
   uint64_t self_seq_ = 0;
+  LwwEntry rejected_entry_;
+  bool last_mutation_committed_ = true;
+  CommitCb on_commit_;
   ChangeCb on_change_;
+  BatchChangeCb on_batch_change_;
 };
 
 }  // namespace db

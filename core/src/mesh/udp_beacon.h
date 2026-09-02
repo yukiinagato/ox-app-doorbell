@@ -1,7 +1,8 @@
-// UDP multicast beacon discovery (239.255.71.71:47171)。
-// HELLO パケット: JSON {"v":1,"id":node_id,"addr":advertise_addr,"mac":hex}
-//   mac = BLAKE2b-256(key=psk, "beacon"||id||addr) の先頭 16B hex — 他クラスタの HELLO は無視。
-// 送信は Runloop タイマー、受信は専用スレッド (on_found は Runloop に post)。
+// UDP multicast discovery at 239.255.71.71:47171. Paired HELLO packets authenticate cluster
+// membership with a keyed MAC; the receiver thread posts discovery callbacks to Runloop.
+
+
+
 #pragma once
 
 #include <array>
@@ -31,7 +32,7 @@ class UdpBeacon : public IDiscovery {
                        const std::string& pk) override;
   void setPairFound(std::function<void(const PairBeacon&)> cb) override;
 
-  // 煙試験用の観測点 (CI ではループバック multicast が不安定なため送信可否のみ見る)
+
   int64_t sentCount() const { return sent_.load(); }
   int64_t sendErrorCount() const { return send_err_.load(); }
 
@@ -42,7 +43,7 @@ class UdpBeacon : public IDiscovery {
   bool openSockets_();
 
   Runloop& loop_;
-  // Winsock 参照 (POSIX では no-op のため maybe_unused)。ソケットより先に構築される
+
   [[maybe_unused]] net::Init winsock_;
   std::array<uint8_t, 32> psk_;
   std::string group_;
@@ -52,8 +53,8 @@ class UdpBeacon : public IDiscovery {
   std::function<void(const DiscoveredPeer&)> on_found_;
   std::function<void(const PairBeacon&)> on_pair_found_;
   std::string node_id_, adv_addr_;
-  // 配対告知 (未配対時のみ). recv スレッドは on_pair_found_ を読むだけ、
-  // pair_* 文字列と pair_on_ は Runloop スレッド (announce/sendHello_) のみが触る。
+
+
   std::atomic<bool> pair_on_{false};
   std::string pair_name_, pair_role_, pair_pk_;
   uint64_t timer_id_ = 0;

@@ -1,13 +1,11 @@
-// kiosk 加固:
-//  - WH_KEYBOARD_LL 低レベルフックで Win キー / Alt+Tab / Alt+F4 / Alt+Esc を吞む
-//    (Ctrl+Alt+Del は SAS のためユーザーランドでは不可 — 設計書どおり組policy側で緩和)
-//  - SetThreadExecutionState で画面常時点灯
 using System;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 
 namespace DoorbellApp.Kiosk
 {
+    // The low-level hook blocks shell shortcuts but cannot intercept the secure attention sequence;
+    // managed kiosk deployments must enforce Ctrl+Alt+Delete policy outside this process.
     public sealed class KioskHooks : IDisposable
     {
         private const int WH_KEYBOARD_LL = 13;
@@ -35,7 +33,7 @@ namespace DoorbellApp.Kiosk
                            ES_SYSTEM_REQUIRED = 0x00000001;
 
         private IntPtr _hook = IntPtr.Zero;
-        private HookProc _proc;  // rooted
+        private HookProc _proc;  // Keep the delegate rooted while the native hook owns its pointer.
 
         public void Enable()
         {

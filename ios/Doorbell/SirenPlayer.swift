@@ -1,9 +1,3 @@
-// SOS サイレン + カスタム音声再生。
-// - サイレン: 880/660Hz 交互 2 秒の PCM WAV を実行時生成してループ (WPF BuildSirenWav と同一
-//   波形 — 同梱音源なしで動く)。emergency イベントの audio_path (カスタム警報音) があれば
-//   そちらをループ再生し、失敗時に内蔵サイレンへ回落する。
-// - playAsset: reply/chime の audio_path (資産ローカルファイル) を 1 回再生。失敗時 fallback
-//   (TTS / 内蔵音) へ回落する。
 import AVFoundation
 import Foundation
 
@@ -11,9 +5,7 @@ final class SirenPlayer {
 
     private var player: AVAudioPlayer?
 
-    // MARK: - カスタム音声 (reply/chime)
 
-    /// 資産のローカルファイルを再生。失敗時は fallback (TTS / 内蔵音) へ回落する。
     func playAsset(path: String, fallback: (() -> Void)?) {
         guard !path.isEmpty, FileManager.default.fileExists(atPath: path) else {
             fallback?()
@@ -37,7 +29,6 @@ final class SirenPlayer {
         "title_display": "title_display.mp3"
     ]
 
-    /// ui.*_sound の値 (内蔵 preset / asset:<sha256> / 空文字) を再生する。
     func playConfigured(_ value: String, dataDir: String = BootConfig.dataDir(),
                         loops: Bool = false, fallback: (() -> Void)? = nil) {
         guard !value.isEmpty else { return }
@@ -61,9 +52,7 @@ final class SirenPlayer {
         if !p.play() { fallback?() }
     }
 
-    // MARK: - サイレン
 
-    /// 警報開始。customPath (emergency の audio_path) 優先、無ければ内蔵サイレン。
     func startSiren(customPath: String, volume: Int) {
         let vol = Float(max(0, min(100, volume))) / 100.0
         if !customPath.isEmpty, FileManager.default.fileExists(atPath: customPath),
@@ -85,7 +74,6 @@ final class SirenPlayer {
         player = nil
     }
 
-    /// 880/660Hz 交互 2 秒の警報音 (22.05kHz 16bit mono PCM WAV)。
     private static func sirenWav() -> Data {
         let rate = 22050
         let seconds = 2
@@ -112,8 +100,8 @@ final class SirenPlayer {
         d.append(contentsOf: Array("data".utf8)); le32(dataLen)
         for i in 0..<n {
             let t = Double(i) / Double(rate)
-            let freq = (i / (rate / 2)) % 2 == 0 ? 880.0 : 660.0  // 0.5 秒毎に交互
-            let env = min(1.0, Double(min(i, n - i)) / (Double(rate) * 0.02))  // クリック防止
+            let freq = (i / (rate / 2)) % 2 == 0 ? 880.0 : 660.0
+            let env = min(1.0, Double(min(i, n - i)) / (Double(rate) * 0.02))
             let s = Int16(sin(2 * Double.pi * freq * t) * 0.6 * Double(Int16.max) * env)
             var x = UInt16(bitPattern: s).littleEndian
             withUnsafeBytes(of: &x) { d.append(contentsOf: $0) }

@@ -1,4 +1,4 @@
-// RuleEngine のテスト (表駆動)。
+
 #include <string>
 #include <vector>
 
@@ -11,11 +11,11 @@ using namespace db;
 namespace {
 
 constexpr int64_t kDayMs = 86400000LL;
-// 2026-08-27 は木曜 (epoch 日数 20692)。曜日計算の既知日付アンカー。
+
 constexpr int64_t kThu = 20692;
 constexpr int64_t kFri = kThu + 1;
 
-// 現地時刻 (epoch 日数 day, h:m, tz オフセット分) を指す corrected_wall_ms を作る
+
 int64_t wallAtLocal(int64_t day, int h, int m, int tz_min) {
   return day * kDayMs + h * 3600000LL + m * 60000LL - static_cast<int64_t>(tz_min) * 60000LL;
 }
@@ -28,7 +28,7 @@ EventRecord makeEv(const std::string& type, const std::string& door, const std::
   return ev;
 }
 
-// 結果のアクション型をカンマ連結 (順序検証用)
+
 std::string typesOf(const std::vector<Action>& as) {
   std::string s;
   for (const auto& a : as) {
@@ -40,7 +40,7 @@ std::string typesOf(const std::vector<Action>& as) {
 
 }  // namespace
 
-TEST_CASE("rules: when マッチ (種別/doors/devices)") {
+TEST_CASE("rules: when matches event type, doors, and devices") {
   RuleEngine re;
   re.setConfig(R"({
     "trigger_rules": {
@@ -65,18 +65,18 @@ TEST_CASE("rules: when マッチ (種別/doors/devices)") {
     const char* type;
     const char* door;
     const char* device;
-    const char* want;  // 期待アクション型 (ルール ID 昇順)
+    const char* want;
   };
   const Row rows[] = {
-      {"press", "d_front", "", "sip_call"},          // button ルールにマッチ (別名)
-      {"button", "d_front", "", "sip_call"},         // 計画書語彙そのままでもマッチ
-      {"press", "d_back", "", ""},                   // doors 限定で非マッチ
-      {"motion", "d_back", "", "ha_event"},          // doors 省略 = 全ドア
+      {"press", "d_front", "", "sip_call"},
+      {"button", "d_front", "", "sip_call"},
+      {"press", "d_back", "", ""},
+      {"motion", "d_back", "", "ha_event"},
       {"motion", "d_front", "", "ha_event"},
-      {"offline", "", "c2d1", "telegram,chime"},     // devices all + 個別指定の両方
-      {"offline", "", "c9", "telegram"},             // devices 配列で非マッチ
-      {"online", "", "c2d1", ""},                    // 種別違い (offline ルールのみ)
-      {"answered", "d_front", "", ""},               // ルール無し種別
+      {"offline", "", "c2d1", "telegram,chime"},
+      {"offline", "", "c9", "telegram"},
+      {"online", "", "c2d1", ""},
+      {"answered", "d_front", "", ""},
   };
   for (const auto& r : rows) {
     CAPTURE(r.type);
@@ -86,7 +86,7 @@ TEST_CASE("rules: when マッチ (種別/doors/devices)") {
   }
 }
 
-TEST_CASE("rules: スケジュール窓 (日跨ぎ・曜日・境界)") {
+TEST_CASE("rules: schedule windows support weekdays, boundaries, and midnight spans") {
   RuleEngine re;
   re.setConfig(R"({
     "trigger_rules": {
@@ -110,19 +110,19 @@ TEST_CASE("rules: スケジュール窓 (日跨ぎ・曜日・境界)") {
     bool want;
   };
   const Row rows[] = {
-      // 日跨ぎ窓 22:00-06:00 (木曜起点)
-      {&mo, kThu, 23, 30, true},   // 木 23:30 → 当日夜側
-      {&mo, kFri, 5, 0, true},     // 金 05:00 → 窓は木曜起点なのでマッチ
-      {&mo, kThu, 12, 0, false},   // 木 12:00 → 窓外
-      {&mo, kThu, 5, 0, false},    // 木 05:00 → 前日は水曜で days 外
-      {&mo, kFri, 23, 30, false},  // 金 23:30 → days 外
-      {&mo, kThu, 22, 0, true},    // 境界 from <= t
-      {&mo, kFri, 6, 0, false},    // 境界 t < to
-      // 通常窓 09:00-17:00 (木曜のみ) — 既知日付で weekday 計算を検証
-      {&bt, kThu, 12, 0, true},    // 2026-08-27 は木曜
-      {&bt, kFri, 12, 0, false},   // 金曜は days 外
-      {&bt, kThu, 9, 0, true},     // 境界 from <= t
-      {&bt, kThu, 17, 0, false},   // 境界 t < to
+
+      {&mo, kThu, 23, 30, true},
+      {&mo, kFri, 5, 0, true},
+      {&mo, kThu, 12, 0, false},
+      {&mo, kThu, 5, 0, false},
+      {&mo, kFri, 23, 30, false},
+      {&mo, kThu, 22, 0, true},
+      {&mo, kFri, 6, 0, false},
+
+      {&bt, kThu, 12, 0, true},
+      {&bt, kFri, 12, 0, false},
+      {&bt, kThu, 9, 0, true},
+      {&bt, kThu, 17, 0, false},
   };
   for (const auto& r : rows) {
     CAPTURE(r.day);
@@ -132,7 +132,7 @@ TEST_CASE("rules: スケジュール窓 (日跨ぎ・曜日・境界)") {
   }
 }
 
-TEST_CASE("rules: tz_offset (JST +540) で現地時刻判定") {
+TEST_CASE("rules: tz_offset evaluates local time") {
   RuleEngine re;
   re.setConfig(R"({
     "trigger_rules": {
@@ -144,15 +144,15 @@ TEST_CASE("rules: tz_offset (JST +540) で現地時刻判定") {
   })");
   const EventRecord mo = makeEv("motion", "d_front", "");
   const int jst = 540;
-  // JST 23:30 = UTC 14:30 の同一時点: JST では窓内、UTC では窓外
+
   const int64_t wall = wallAtLocal(kThu, 23, 30, jst);
   CHECK(re.evaluate(mo, wall, jst).size() == 1);
   CHECK(re.evaluate(mo, wall, 0).empty());
-  // JST 05:00 (日跨ぎの朝側) もマッチ
+
   CHECK(re.evaluate(mo, wallAtLocal(kFri, 5, 0, jst), jst).size() == 1);
 }
 
-TEST_CASE("rules: quiet_hours の suppress / never_suppress") {
+TEST_CASE("rules: quiet_hours supports suppress and never_suppress") {
   RuleEngine re;
   re.setConfig(R"({
     "trigger_rules": {
@@ -170,17 +170,17 @@ TEST_CASE("rules: quiet_hours の suppress / never_suppress") {
     }
   })");
   const EventRecord bt = makeEv("press", "d_front", "");
-  // 窓内: chime は落ちる。telegram は suppress にあるが never_suppress が勝って残る。
+
   CHECK(typesOf(re.evaluate(bt, wallAtLocal(kThu, 23, 30, 0), 0)) == "sip_call,telegram");
   CHECK(typesOf(re.evaluate(bt, wallAtLocal(kFri, 6, 59, 0), 0)) == "sip_call,telegram");
-  // 窓外: 全部残る
+
   CHECK(typesOf(re.evaluate(bt, wallAtLocal(kThu, 12, 0, 0), 0)) == "chime,sip_call,telegram");
   CHECK(typesOf(re.evaluate(bt, wallAtLocal(kFri, 7, 0, 0), 0)) == "chime,sip_call,telegram");
 }
 
-TEST_CASE("rules: enabled=false / 複数ルールの決定的順序") {
+TEST_CASE("rules: disabled rules are skipped and multiple rules are deterministic") {
   RuleEngine re;
-  // JSON 上は b_rule を先に書くが、結果はルール ID 昇順 (a_rule → b_rule)
+
   re.setConfig(R"({
     "trigger_rules": {
       "b_rule": { "enabled": true,
@@ -195,10 +195,10 @@ TEST_CASE("rules: enabled=false / 複数ルールの決定的順序") {
     }
   })");
   const auto acts = re.evaluate(makeEv("press", "d_front", ""), wallAtLocal(kThu, 12, 0, 0), 0);
-  CHECK(typesOf(acts) == "sip_call,telegram");  // c_rule (無効) は出ない
+  CHECK(typesOf(acts) == "sip_call,telegram");
 }
 
-TEST_CASE("rules: actions params の passthrough (type 除去)") {
+TEST_CASE("rules: action parameters pass through without the type field") {
   RuleEngine re;
   re.setConfig(R"({
     "trigger_rules": {
@@ -218,15 +218,15 @@ TEST_CASE("rules: actions params の passthrough (type 除去)") {
   cJSON* hh = json::get(p.get(), "households");
   REQUIRE(cJSON_IsArray(hh));
   CHECK(cJSON_GetArraySize(hh) == 1);
-  CHECK(json::get(p.get(), "type") == nullptr);  // type は params から除去済み
+  CHECK(json::get(p.get(), "type") == nullptr);
 
   CHECK(acts[1].type == "ha_event");
-  CHECK(acts[1].params_json == "{}");  // 追加フィールド無し
+  CHECK(acts[1].params_json == "{}");
 }
 
-TEST_CASE("rules: when.purposes の用件別分岐 + auto_reply アクション") {
+TEST_CASE("rules: when.purposes branches by purpose and supports auto_reply") {
   RuleEngine re;
-  // ルール ID 昇順で評価される: r1_delivery → r2_any → r3_multi
+
   re.setConfig(R"({
     "trigger_rules": {
       "r1_delivery": { "enabled": true,
@@ -253,17 +253,17 @@ TEST_CASE("rules: when.purposes の用件別分岐 + auto_reply アクション"
     const char* want;
   };
   const Row rows[] = {
-      // 用件あり: 該当 purposes ルール + purposes 省略ルール (= 全用件) の両方が出る
+
       {R"({"purpose":"p_delivery"})", "auto_reply,telegram"},
       {R"({"purpose":"p_sales"})", "telegram,chime"},
       {R"({"purpose":"p_mail"})", "telegram,chime"},
-      // 用件なしの汎用按鈴は purposes 指定ルールに掛からない
+
       {R"({"purpose":""})", "telegram"},
       {"{}", "telegram"},
       {"", "telegram"},
-      // 未知の用件も同様 (掛かるのは purposes 省略ルールだけ)
+
       {R"({"purpose":"p_unknown"})", "telegram"},
-      // 訪客言語が同梱されていても判定には影響しない
+
       {R"({"purpose":"p_delivery","visitor_lang":"en"})", "auto_reply,telegram"},
   };
   for (const auto& r : rows) {
@@ -271,7 +271,7 @@ TEST_CASE("rules: when.purposes の用件別分岐 + auto_reply アクション"
     CHECK(typesOf(re.evaluate(pressWith(r.payload), noon, 0)) == r.want);
   }
 
-  // auto_reply の params は type 除去のうえ reply_id が渡る (Node が quickReply に使う)
+
   const auto acts = re.evaluate(pressWith(R"({"purpose":"p_delivery"})"), noon, 0);
   REQUIRE(acts.size() == 2);
   CHECK(acts[0].type == "auto_reply");
@@ -280,30 +280,30 @@ TEST_CASE("rules: when.purposes の用件別分岐 + auto_reply アクション"
   CHECK(json::getString(p.get(), "reply_id") == "qr_okihai");
   CHECK(json::get(p.get(), "type") == nullptr);
 
-  // 用件は press 以外の種別 (motion 等) の payload には無い → purposes 指定は掛からない
+
   EventRecord mo = makeEv("motion", "d_front", "");
   mo.payload_json = R"({"changed_pct":12.5})";
   CHECK(typesOf(re.evaluate(mo, noon, 0)) == "");
 }
 
-TEST_CASE("rules: 壊れた設定 JSON は空設定として扱う") {
+TEST_CASE("rules: malformed config JSON is treated as empty config") {
   RuleEngine re;
   const EventRecord bt = makeEv("press", "d_front", "");
   const int64_t noon = wallAtLocal(kThu, 12, 0, 0);
 
-  re.setConfig("{oops");  // パース不能
+  re.setConfig("{oops");
   CHECK(re.evaluate(bt, noon, 0).empty());
 
-  // 正しい設定に差し替えると動く
+
   re.setConfig(R"({"trigger_rules":{"r":{"when":{"type":"button"},
     "actions":[{"type":"sip_call"}]}}})");
   CHECK(re.evaluate(bt, noon, 0).size() == 1);
 
-  // 再び壊れた設定 → 空設定に置き換わる (古い設定を引きずらない)
+
   re.setConfig("not json at all");
   CHECK(re.evaluate(bt, noon, 0).empty());
 
-  // trigger_rules がオブジェクトでない場合も安全に空
+
   re.setConfig(R"({"trigger_rules": []})");
   CHECK(re.evaluate(bt, noon, 0).empty());
 }

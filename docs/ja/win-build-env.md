@@ -1,5 +1,8 @@
 # Windows ビルド環境 (Apple Silicon Mac + ローカル VM)
 
+これは環境構築案であり、現 revision の Windows VM/Toughpad 検証完了証跡ではありません。
+VM、toolchain、artifact、結果を記録してから build verified とし、実機 commissioning は別に行います。
+
 方針: 開発の反復はローカル VM、(任意で) リリース成果物は GitHub Actions。
 Docker は不可 — macOS の Docker は Linux コンテナのみで、WPF/.NET Framework の
 ビルドチェーンは Windows にしか存在しない。
@@ -13,8 +16,8 @@ Docker は不可 — macOS の Docker は Linux コンテナのみで、WPF/.NET
 | Parallels | 有料 | 体験最良。Microsoft 公認の Win11 ARM 提供フロー |
 
 - Windows 11 ARM64 を導入 (Microsoft 公式の Insider/ISO 経由、または Parallels の自動取得)。
-- ARM64 Windows は x86/x64 アプリをエミュレーション実行できる — Toughpad 向け x86/x64
-  成果物のビルドとテストは VM 内で可能。
+- ARM64 Windows は多くの x86/x64 tool をエミュレーションできますが、この VM 経路の完了済み
+  検証記録は repository にありません。候補 build 環境として扱います。
 
 ## 2. VM に入れるもの
 
@@ -39,7 +42,7 @@ Docker は不可 — macOS の Docker は Linux コンテナのみで、WPF/.NET
 win\build.cmd            :: core DLL (x86+x64, MSVC) + WPF app + テスト実行
 ```
 
-エラーが出たらそのまま Mac 側の Claude に貼り戻す。
+エラーと正確な toolchain version を release record に保存します。
 
 ## 5. Mac 側での事前検証 (mingw-w64)
 

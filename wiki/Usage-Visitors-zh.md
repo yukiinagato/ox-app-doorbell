@@ -1,6 +1,6 @@
 # 访客体验 —— 门口机前会发生什么
 
-> 日本語: [Usage-Visitors](Usage-Visitors) / English: [Usage-Visitors-en](Usage-Visitors-en)
+> English: [Usage-Visitors](Usage-Visitors) / 日本語: [Usage-Visitors-ja](Usage-Visitors-ja) / 繁體中文 (本頁)
 
 这一页不是「访客手册」—— 访客不会读说明书。
 它是**为了部署者设计访客动线**，以访客的视角追踪门口机前发生的事。
@@ -9,9 +9,8 @@
 
 - **大呼叫按钮** ——「タッチして呼び出してください（触摸以呼叫）」。犹豫的话按这一个就够了。
   （文案、背景部署者可自由更改 —— [管理员指南](Usage-Admin-zh)的主题/文案）
-- **事由按钮** —— 在「请选择您的来意」之下是 访问 / 快递 📦 / 邮件 ✉️ /
-  推销・收款 💼 / 抄表・施工 🔧 / 其他。**1 次点按直接完成按铃**。
-  快递员的动作只是「按 📦」—— 没有第 2 个画面。
+- **事由按鈕** —— 訪問 / 快遞 📦 / 郵件 ✉️ / 推銷・收款 💼 / 抄表・施工 🔧 / 其他。
+  `purpose_first` 在選擇事由後提交 ring；`ring_then_purpose` 先 ring，再顯示事由、略過事由與取消呼叫。
 - **语言按钮** —— 日本語 / English / 中文（部署者通过 `ui.languages` 选择）。
   切换后画面的全部文案立即变为该语言。
 
@@ -20,17 +19,23 @@
 
 ## 按下之后会发生什么
 
-1. 画面变为「呼叫中……」（有取消按钮）。
-2. 家里面门铃声、室内机、TV、电话、Telegram 正在并行运转 ——
-   访客看不到，但应答通常会在数秒到十几秒内返回。
+1. `purpose_first` 送出前，Back/Cancel 只回到 home、不發 event。送出後顯示「呼叫中……」與醒目的
+   「取消呼叫」。
+2. 配置的 rule 可執行 device chime、SIP call 或 integration；若 rule、target capability 或 service 不可用，
+   不保證該 action 執行。
 3. 应答有 3 种形式:
    - **通话** —— 扬声器里传来住户的声音。对着门口机的麦克风正常说话即可。
    - **快捷回复** —— 画面上以**大字**显示「请稍等」等，
      同时被朗读出来。显示约 30 秒后消失。
    - **自动应答** —— 视配置而定，按下的瞬间就返回回答
      （例: 快递 → 「请放在门口」）。
-4. 没人能应答时显示「无人应答」→ 回到待机画面。即便如此，住户那边
-   也留有带照片的通知。
+4. ringing 中「取消呼叫」會全域 cancel 相符 `call_id`，停止未接通 SIP leg 與尚未執行的 rule action。
+   通話建立後改為「結束通話」並使用 hangup，不再稱為 cancel。
+5. 到配置 TTL（未設時 60 秒）仍無人接聽，origin station 只送一次冪等的全域 cancel 並回 idle。
+   已送出的外部 message 不保證撤回。
+
+crash 後 ringing call 由 press-origin station 還原；in-call browser session 只有勝出的 dialog owner 能
+還原。10 秒內無法證明時，Core 只送一次全域 cancel，不留下曖昧 call。
 
 ## 语言切换的细节行为（设计上的用心）
 
@@ -57,8 +62,8 @@
   分别登记录音（[管理员指南](Usage-Admin-zh)的资产/快捷回复）。
 - **摄像头的朝向与高度**: Telegram 通知和事件历史的快照来自门口机的
   前置摄像头。请安装在能拍到脸的高度、不会逆光的朝向。
-- 没有音频的玄关（未越狱、用网页 door.html 打开的 iPad 1 等）会显示「本玄关无法通话
-  （仅通知）」。需要通话的玄关请放置原生应用设备。（iPad 1 越狱后可成为音频节点，
-  但没有摄像头，不适合充当拍摄访客的门口机；室内侧的用途见 [FAQ Q14](FAQ-zh)。）
+- 沒有 commissioned audio path 的入口要明確顯示 notification-only fallback。iPad 1 有 mic/speaker、
+  沒有 camera，也不是 outdoor-rated。作為受保護的 visitor UI 前，須完成實機 audio/recovery test，並
+  明確設定 LAN IP-camera 或 no-video profile；iPad 本身不提供訪客影像（見 [FAQ Q14](FAQ-zh)）。
 
 相关: 功能全貌见[功能总览](Features-zh)，住户侧的视角见[住户使用指南](Usage-Residents-zh)。

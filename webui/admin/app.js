@@ -1,18 +1,81 @@
-/* 管理画面 SPA (vanilla JS / ES5)。
-   構成:
-     1. AdminLogic — フォーム値 → フラット設定 key 群への分解 (DOM 非依存・node で単体テスト可)
-     2. UI — タブ描画・編集フォーム・API 呼び出し
-   設定書込の流儀: フォーム → AdminLogic.*Entries() → POST /api/config を 1 key ずつ順次。
-   削除は POST /api/config/delete (LwwMap tombstone)。?mock=1 で XHR せず内蔵データ描画。 */
 
-/* ================================================================ 1. 純粋ロジック */
+
+
 var AdminLogic = (function () {
   "use strict";
 
   function isObj(v) { return v !== null && typeof v === "object" && !(v instanceof Array); }
   function num(v, def) { var n = parseFloat(v); return isNaN(n) ? def : n; }
 
-  // "111, 222　333" → ["111","222","333"] (カンマ/読点/空白区切り)
+  function runtimeHealthRows(runtime) {
+    runtime = isObj(runtime) ? runtime : {};
+    function at(path) {
+      var cur = runtime, parts = path.split(".");
+      for (var i = 0; i < parts.length; i++) {
+        if (!isObj(cur) || !Object.prototype.hasOwnProperty.call(cur, parts[i])) return undefined;
+        cur = cur[parts[i]];
+      }
+      return cur;
+    }
+    function first(paths) {
+      for (var i = 0; i < paths.length; i++) {
+        var value = at(paths[i]);
+        if (value !== undefined && value !== null && value !== "") return value;
+      }
+      return undefined;
+    }
+    var rows = [];
+    var safe = first(["safe_mode.active", "safe_mode", "process_recovery.safe_mode",
+                      "windows.safe_mode", "ios_compat.safe_mode"]);
+    if (safe === true) rows.push({ key: "safe_mode", value: "active", severity: "err" });
+    else if (safe === false) rows.push({ key: "safe_mode", value: "off", severity: "ok" });
+    var helper = first(["recovery_helper.effective", "recovery.effective.mode",
+                        "helper_effective", "effective_mode", "helper_mode"]);
+    if (helper !== undefined) {
+      helper = String(helper);
+      rows.push({ key: "helper", value: helper,
+        severity: /(unavailable|degraded|mismatch|invalid)/.test(helper) ? "err" : "ok" });
+    }
+    var playback = at("media_playback"), codec;
+    if (isObj(playback) && playback.state) {
+      var playbackParts = [String(playback.state)];
+      if (playback.transport && playback.transport !== "none")
+        playbackParts.push(String(playback.transport));
+      if (playback.compositor && playback.compositor !== "none")
+        playbackParts.push(String(playback.compositor));
+      if (playback.displayed_frames !== undefined || playback.decoded_frames !== undefined)
+        playbackParts.push("frames=" + String(playback.displayed_frames || 0) + "/" +
+          String(playback.decoded_frames || 0));
+      if (playback.dropped_frames)
+        playbackParts.push("drop=" + String(playback.dropped_frames));
+      codec = playbackParts.join(" / ");
+    } else {
+      codec = first(["codec_health", "windows.h264_playback", "components.media",
+                     "media_source.state", "camera.state", "avc_encode.state"]);
+    }
+    if (codec !== undefined) {
+      codec = String(codec);
+      rows.push({ key: "codec", value: codec,
+        severity: /(failed|error|unavailable|uncertified|degraded|disabled)/.test(codec) ?
+          "warn" : "ok" });
+    }
+    var lastExit = first(["last_exit_reason", "process_recovery.last_exit_reason"]);
+    if (lastExit !== undefined)
+      rows.push({ key: "last_exit", value: String(lastExit), severity: "" });
+    var alert = first(["device_alert.result", "emergency_presentation.result"]);
+    if (alert !== undefined) {
+      alert = String(alert);
+      rows.push({ key: "alert", value: alert,
+        severity: /(rejected|denied|unsupported|failed|unavailable)/.test(alert) ? "warn" : "ok" });
+    }
+    var generation = first(["generation"]), heartbeat = first(["heartbeat_ms"]);
+    if (generation !== undefined || heartbeat !== undefined)
+      rows.push({ key: "heartbeat", value: "g" + String(generation === undefined ? "?" : generation) +
+        (heartbeat === undefined ? "" : " @" + String(heartbeat)), severity: "" });
+    return rows;
+  }
+
+
   function parseList(s) {
     if (!s) return [];
     var parts = String(s).split(/[,、，\s]+/), out = [];
@@ -20,7 +83,7 @@ var AdminLogic = (function () {
     return out;
   }
 
-  // chat ID は数値化できるものは数値で (Telegram API は数値 chat_id)
+
   function parseChatIds(s) {
     var l = parseList(s), out = [];
     for (var i = 0; i < l.length; i++)
@@ -28,7 +91,7 @@ var AdminLogic = (function () {
     return out;
   }
 
-  // 空欄は落とした label オブジェクト
+
   function labelObj(ja, en, zh) {
     var o = {};
     if (ja) o.ja = ja;
@@ -37,7 +100,25 @@ var AdminLogic = (function () {
     return o;
   }
 
-  // 表示用 label 解決 (lang → ja → 最初の値 → fallback)
+  function editableClone(existing) {
+    return isObj(existing) ? cloneJson(existing) : {};
+  }
+
+  function mergedLabel(existing, f) {
+    var out = isObj(existing) ? cloneJson(existing) : {};
+    ["ja", "en", "zh"].forEach(function (lang) {
+      if (f[lang]) out[lang] = f[lang];
+      else delete out[lang];
+    });
+    return out;
+  }
+
+  function hasOwnKeys(value) {
+    for (var key in value) if (own(value, key)) return true;
+    return false;
+  }
+
+
   function labelOf(entity, lang, fallback) {
     var l = entity && entity.label;
     if (isObj(l)) {
@@ -48,55 +129,69 @@ var AdminLogic = (function () {
     return fallback || "";
   }
 
-  // ---- 実体コレクション (1 実体 = 1 key の whole-value 書込) ----
-  function buildingEntries(id, f) {
-    return [{ key: "buildings." + id, value: { label: labelObj(f.ja, f.en, f.zh) } }];
+
+  function buildingEntries(id, f, existing) {
+    var value = editableClone(existing);
+    value.label = mergedLabel(value.label, f);
+    return [{ key: "buildings." + id, value: value }];
   }
 
-  function doorEntries(id, f) {
-    var v = { label: labelObj(f.ja, f.en, f.zh) };
+  function doorEntries(id, f, existing) {
+    var v = editableClone(existing);
+    v.label = mergedLabel(v.label, f);
     if (f.building) v.building = f.building;
+    else delete v.building;
     return [{ key: "doors." + id, value: v }];
   }
 
-  // 空欄を落とした audio マップ ({lang: sha256})。1 件も無ければ null (= キー自体を書かない)
+
   function audioObj(map) {
     var o = {}, n = 0;
     for (var k in map) if (map[k]) { o[k] = map[k]; n++; }
     return n ? o : null;
   }
 
-  function quickReplyEntries(id, f) {
-    var v = { label: labelObj(f.ja, f.en, f.zh), speak: !!f.speak, order: num(f.order, 1) };
-    var au = audioObj(f.audio || {});
-    if (au) v.audio = au;                       // audio.<lang> = 資産 sha256 (無指定 = TTS)
+  function quickReplyEntries(id, f, existing) {
+    var v = editableClone(existing);
+    v.label = mergedLabel(v.label, f);
+    v.speak = !!f.speak;
+    v.order = num(f.order, 1);
+    if (isObj(f.audio)) {
+      var au = isObj(v.audio) ? cloneJson(v.audio) : {};
+      for (var lang in f.audio) if (own(f.audio, lang)) {
+        if (f.audio[lang]) au[lang] = f.audio[lang];
+        else delete au[lang];
+      }
+      if (hasOwnKeys(au)) v.audio = au;
+      else delete v.audio;
+    }
     return [{ key: "quick_replies." + id, value: v }];
   }
 
-  // 並べ替え: 表示順の id 配列 + 現行値 → order 1..n を振り直した entries
-  // (whole-value 書込なので audio 等の既存フィールドは必ず持ち回す)
+
+
   function reorderEntries(sortedIds, qrs) {
     var out = [];
     for (var i = 0; i < sortedIds.length; i++) {
       var id = sortedIds[i], cur = (qrs && qrs[id]) || {};
-      var v = { label: cur.label || {}, speak: cur.speak !== false, order: i + 1 };
-      var au = audioObj(cur.audio || {});
-      if (au) v.audio = au;
+      var v = editableClone(cur);
+      v.order = i + 1;
       out.push({ key: "quick_replies." + id, value: v });
     }
     return out;
   }
 
-  function householdEntries(id, f) {
-    return [{ key: "households." + id,
-              value: { label: labelObj(f.ja, f.en, f.zh),
-                       telegram_chat_ids: parseChatIds(f.chat_ids),
-                       sip_extensions: parseList(f.sip_ext) } }];
+  function householdEntries(id, f, existing) {
+    var value = editableClone(existing);
+    value.label = mergedLabel(value.label, f);
+    value.telegram_chat_ids = parseChatIds(f.chat_ids);
+    value.sip_extensions = parseList(f.sip_ext);
+    return [{ key: "households." + id, value: value }];
   }
 
-  // ---- デバイス: 基底 key (devices.<id>) はノード自身が起動時に書く —
-  //      管理編集は深い field-level key で行う (materialize は深いパス優先で合成する) ----
-  function deviceEntries(id, f) {
+
+
+  function deviceEntries(id, f, existing) {
     var base = "devices." + id, e = [];
     e.push({ key: base + ".name", value: String(f.name || "") });
     e.push({ key: base + ".role", value: f.role || "door_station" });
@@ -104,76 +199,727 @@ var AdminLogic = (function () {
     e.push({ key: base + ".local.ui_lang", value: f.ui_lang || "ja" });
     e.push({ key: base + ".local.video.playback",
              value: f.video_playback || "low_latency" });
-    e.push({ key: base + ".local.camera",
-             value: { device_hint: f.cam_hint || "", mjpeg_fps: num(f.cam_fps, 8),
-                      mjpeg_quality: num(f.cam_quality, 60),
-                      resolution: f.cam_resolution || "640x480",
-                      // H.264 流暢档 (Phase 6a — docs/config-schema.md camera.codec 節)
-                      codec: f.cam_codec || "auto",
-                      h264_resolution: f.cam_h264_resolution || "640x360",
-                      h264_fps: num(f.cam_h264_fps, 30),
-                      h264_bitrate_kbps: num(f.cam_h264_bitrate, 700) } });
-    e.push({ key: base + ".local.motion",
-             value: { enabled: !!f.motion_enabled, sensitivity: num(f.motion_sensitivity, 40),
-                      min_interval_s: num(f.motion_interval, 30) } });
-    // caps_override は UI 側でパース済みオブジェクト (null = 書かない)
+    e.push({ key: base + ".local.video.rotation",
+             value: f.video_rotation || "auto" });
+    e.push({ key: base + ".local.recovery.helper_mode",
+             value: /^(off|auto|on)$/.test(f.helper_mode) ? f.helper_mode : "auto" });
+    var local = isObj(existing) && isObj(existing.local) ? existing.local : {};
+    var camera = editableClone(local.camera);
+    camera.device_hint = f.cam_hint || "";
+    camera.mjpeg_fps = num(f.cam_fps, 8);
+    camera.mjpeg_quality = num(f.cam_quality, 60);
+    camera.resolution = f.cam_resolution || "640x480";
+    camera.codec = f.cam_codec || "auto";
+    camera.h264_resolution = f.cam_h264_resolution || "640x360";
+    camera.h264_fps = num(f.cam_h264_fps, 30);
+    camera.h264_bitrate_kbps = num(f.cam_h264_bitrate, 700);
+    e.push({ key: base + ".local.camera", value: camera });
+    var motion = editableClone(local.motion);
+    motion.enabled = !!f.motion_enabled;
+    motion.sensitivity = num(f.motion_sensitivity, 40);
+    motion.min_interval_s = num(f.motion_interval, 30);
+    e.push({ key: base + ".local.motion", value: motion });
+
     if (isObj(f.caps_override)) e.push({ key: base + ".caps_override", value: f.caps_override });
     return e;
   }
 
-  // ---- 呼出ルール (whole-value) ----
-  // f = { enabled, whenType, doors:[], devices:[]|"all", always, windows:[{days,from,to}],
-  //       actions:[{type, target_extension?, households?, with_snapshot?, devices?, sound?}] }
-  function ruleEntries(id, f) {
-    var when = { type: f.whenType || "button" };
-    if (when.type === "device_offline") {
-      when.devices = (f.devices === "all" || !f.devices || !f.devices.length) ? "all" : f.devices;
-    } else if (f.doors && f.doors.length) {
-      when.doors = f.doors;
-    }
-    var v = { enabled: !!f.enabled, when: when };
-    if (f.always) {
-      v.schedule = { always: true };
-    } else {
-      var ws = [];
-      for (var i = 0; i < (f.windows || []).length; i++) {
-        var w = f.windows[i];
-        if (!w.from || !w.to) continue;
-        ws.push({ days: (w.days && w.days.length) ? w.days :
-                        ["mon", "tue", "wed", "thu", "fri", "sat", "sun"],
-                  from: w.from, to: w.to });
-      }
-      v.schedule = { windows: ws };
-    }
-    v.actions = [];
-    for (var j = 0; j < (f.actions || []).length; j++) {
-      var a = f.actions[j], o = { type: a.type };
-      if (a.type === "sip_call") o.target_extension = a.target_extension || "600";
-      else if (a.type === "telegram") {
-        o.households = a.households || [];
-        o.with_snapshot = !!a.with_snapshot;
-      } else if (a.type === "chime") {
-        if (a.devices && a.devices.length) o.devices = a.devices;  // 省略 = 室内機全部
-        o.sound = a.sound || "ding1";
-      }
-      v.actions.push(o);
-    }
-    return [{ key: "trigger_rules." + id, value: v }];
+  function defaultPlaybackProfile() {
+    return { strategies: [
+      { id: "h264_low_latency", enabled: true, startup_timeout_ms: 5000, stall_timeout_ms: 3000 },
+      { id: "h264_hls", enabled: false, startup_timeout_ms: 5000, stall_timeout_ms: 5000 },
+      { id: "mjpeg", enabled: true, startup_timeout_ms: 5000, stall_timeout_ms: 3000 }
+    ] };
   }
 
-  // ---- 統合 (field-level key — 兄弟 key を潰さない) ----
+  function normalizePlaybackProfile(profile) {
+    var src = profile && profile.strategies instanceof Array ? profile.strategies : [];
+    var defs = defaultPlaybackProfile().strategies, byId = {}, out = [], i, s;
+    for (i = 0; i < defs.length; i++) byId[defs[i].id] = defs[i];
+    for (i = 0; i < src.length; i++) {
+      s = src[i] || {};
+      if (!byId[s.id] || out.some(function (x) { return x.id === s.id; })) continue;
+      out.push({ id: s.id, enabled: s.enabled !== false,
+        startup_timeout_ms: num(s.startup_timeout_ms, byId[s.id].startup_timeout_ms),
+        stall_timeout_ms: num(s.stall_timeout_ms, byId[s.id].stall_timeout_ms) });
+    }
+    for (i = 0; i < defs.length; i++) {
+      s = defs[i];
+      if (!out.some(function (x) { return x.id === s.id; }))
+        out.push({ id: s.id, enabled: false, startup_timeout_ms: s.startup_timeout_ms,
+                   stall_timeout_ms: s.stall_timeout_ms });
+    }
+    return { strategies: out };
+  }
+
+  function playbackProfileEntries(viewer, source, profile, existing) {
+    var key = viewer && source ? "video_playback.pairs." + viewer + "." + source
+                               : "video_playback.global";
+    var value = editableClone(existing);
+    var edited = normalizePlaybackProfile(profile).strategies;
+    var previous = value.strategies instanceof Array ? value.strategies : [];
+    var known = {}, merged = [], i, j;
+    for (i = 0; i < edited.length; i++) known[edited[i].id] = true;
+    for (i = 0; i < edited.length; i++) {
+      var before = null;
+      for (j = 0; j < previous.length; j++) {
+        if (isObj(previous[j]) && previous[j].id === edited[i].id) {
+          before = previous[j];
+          break;
+        }
+      }
+      var strategy = editableClone(before);
+      strategy.id = edited[i].id;
+      strategy.enabled = edited[i].enabled;
+      strategy.startup_timeout_ms = edited[i].startup_timeout_ms;
+      strategy.stall_timeout_ms = edited[i].stall_timeout_ms;
+      merged.push(strategy);
+    }
+    var ordered = [], nextKnown = 0;
+    for (i = 0; i < previous.length; i++) {
+      var old = previous[i];
+      if (isObj(old) && own(known, old.id)) {
+        if (nextKnown < merged.length) ordered.push(merged[nextKnown++]);
+      } else {
+        ordered.push(cloneJson(old));
+      }
+    }
+    while (nextKnown < merged.length) ordered.push(merged[nextKnown++]);
+    value.strategies = ordered;
+    return [{ key: key, value: value }];
+  }
+
+  /* ---- Per-device semantic UI overrides ----
+     ui_manifest is a read-only runtime capability. Configuration may write only properties
+     allowed by that manifest under devices.<id>.local.ui.elements.<semantic_id>. */
+  var UI_PROPERTIES = ["scale", "font_scale", "foreground", "background",
+                       "accent", "border", "radius"];
+
+  function own(o, k) { return Object.prototype.hasOwnProperty.call(o, k); }
+  function unknownKeys(o, allowed, label, errors) {
+    if (!isObj(o)) return;
+    for (var k in o) if (own(o, k) && allowed.indexOf(k) < 0)
+      errors.push(label + ": unsupported field " + k);
+  }
+
+  function elementDesc(properties, safety) {
+    return {
+      properties: properties.slice(),
+      safety_critical: !!safety,
+      defaults: {
+        scale: 1, font_scale: 1, foreground: "#e8edf2", background: "#1a2027",
+        accent: "#4da3ff", border: "#4da3ff", radius: 12
+      }
+    };
+  }
+  function defaultUiManifest(role) {
+    var all = ["scale", "font_scale", "foreground", "background", "accent", "border", "radius"];
+    var e = {}, safety = { "cancel.call": true, "call.end": true, "sos.trigger": true,
+                           "sos.cancel": true, "maintenance.exit": true };
+    var ids = ["call.primary", "cancel.call", "call.end", "purpose.button", "sos.trigger",
+               "sos.cancel", "ring.title", "ring.action", "reply.button", "monitor.close",
+               "status.offline", "maintenance.exit"];
+    for (var i = 0; i < ids.length; i++) e[ids[i]] = elementDesc(all, !!safety[ids[i]]);
+    return { schema_version: 1, units: "logical",
+             viewport: { minimum_touch: 44, scale_min: 0.75, scale_max: 2.0 }, elements: e };
+  }
+
+  function validateUiManifest(manifest) {
+    var errors = [];
+    if (!isObj(manifest) || manifest.schema_version !== 1) errors.push("ui_manifest.schema_version must be 1");
+    if (!isObj(manifest) || ["logical", "dp", "pt", "effective_px"].indexOf(manifest.units) < 0)
+      errors.push("ui_manifest.units must be logical, dp, pt, or effective_px");
+    unknownKeys(manifest, ["schema_version", "units", "viewport", "elements"],
+                "ui_manifest", errors);
+    var vp = manifest && manifest.viewport, els = manifest && manifest.elements;
+    unknownKeys(vp, ["minimum_touch", "scale_min", "scale_max"],
+                "ui_manifest.viewport", errors);
+    if (!isObj(vp) || !isFinite(Number(vp.minimum_touch)) ||
+        !isFinite(Number(vp.scale_min)) || !isFinite(Number(vp.scale_max)) ||
+        !(Number(vp.minimum_touch) >= 1) || !(Number(vp.scale_min) > 0) ||
+        !(Number(vp.scale_max) >= Number(vp.scale_min)))
+      errors.push("ui_manifest.viewport is invalid");
+    if (!isObj(els)) errors.push("ui_manifest.elements is required");
+    if (isObj(els)) for (var id in els) {
+      if (!own(els, id)) continue;
+      var d = els[id], seen = {};
+      if (!/^[A-Za-z0-9_.-]+$/.test(id)) errors.push("invalid semantic ID: " + id);
+      if (!isObj(d) || !(d.properties instanceof Array)) {
+        errors.push(id + ".properties is required"); continue;
+      }
+      unknownKeys(d, ["properties", "safety_critical", "defaults"], id, errors);
+      for (var i = 0; i < d.properties.length; i++) {
+        var p = d.properties[i];
+        if (UI_PROPERTIES.indexOf(p) < 0) errors.push(id + ": unsupported property " + p);
+        else if (seen[p]) errors.push(id + ": duplicate property " + p);
+        seen[p] = true;
+      }
+      if (typeof d.safety_critical !== "boolean") errors.push(id + ".safety_critical is required");
+      if (!isObj(d.defaults)) errors.push(id + ".defaults is required");
+      else {
+        for (var dp = 0; dp < d.properties.length; dp++)
+          if (!own(d.defaults, d.properties[dp]))
+            errors.push(id + ".defaults requires " + d.properties[dp]);
+        for (var dk in d.defaults) if (own(d.defaults, dk) && !seen[dk])
+          errors.push(id + ".defaults has undeclared property " + dk);
+      }
+    }
+    if (!errors.length) for (var elementId in els) {
+      if (!own(els, elementId)) continue;
+      var checked = validateUiElementValue(manifest, elementId, els[elementId].defaults);
+      if (!checked.ok) errors = errors.concat(checked.errors);
+    }
+    return { ok: errors.length === 0, errors: errors };
+  }
+
+  function colorOk(v) { return /^#[0-9a-f]{6}$/i.test(String(v || "")); }
+  function luminance(hex) {
+    if (!colorOk(hex)) return 0;
+    var a = [1, 3, 5].map(function (i) {
+      var c = parseInt(hex.substr(i, 2), 16) / 255;
+      return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+    });
+    return 0.2126 * a[0] + 0.7152 * a[1] + 0.0722 * a[2];
+  }
+  function contrast(a, b) {
+    var x = luminance(a), y = luminance(b);
+    return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
+  }
+
+  function validateUiElementValue(manifest, id, value) {
+    var errors = [];
+    var desc = manifest && manifest.elements && manifest.elements[id];
+    if (!desc) return { ok: false, errors: ["element is absent from ui_manifest: " + id] };
+    if (!isObj(value)) return { ok: false, errors: [id + " override must be an object"] };
+    var vp = manifest.viewport || {}, min = Number(vp.scale_min), max = Number(vp.scale_max);
+    for (var k in value) {
+      if (!own(value, k)) continue;
+      if (desc.properties.indexOf(k) < 0) { errors.push(id + ": " + k + " is not allowed"); continue; }
+      if (k === "scale" || k === "font_scale") {
+        var n = Number(value[k]);
+        if (typeof value[k] !== "number" || !isFinite(n) || !(n >= min && n <= max))
+          errors.push(id + "." + k + " must be a number from " + min + " to " + max);
+        if (desc.safety_critical && (k === "scale" || k === "font_scale") && n < 1)
+          errors.push(id + ": safety-critical scale/font_scale cannot be less than 1");
+      } else if (k === "radius") {
+        var r = Number(value[k]);
+        if (typeof value[k] !== "number" || !isFinite(r) || !(r >= 0 && r <= Number(vp.minimum_touch)))
+          errors.push(id + ".radius must be a number from 0 to " + vp.minimum_touch + " logical units");
+      } else if (typeof value[k] !== "string" || !colorOk(value[k]))
+        errors.push(id + "." + k + " must be #RRGGBB");
+    }
+    var effective = {}, defaultValues = desc.defaults || {};
+    for (var defaultKey in defaultValues)
+      if (own(defaultValues, defaultKey)) effective[defaultKey] = defaultValues[defaultKey];
+    for (var overrideKey in value)
+      if (own(value, overrideKey)) effective[overrideKey] = value[overrideKey];
+    if (effective.foreground && effective.background &&
+        contrast(effective.foreground, effective.background) < 4.5)
+      errors.push(id + ": foreground/background contrast must be at least 4.5:1");
+    if (effective.accent && effective.background &&
+        contrast(effective.accent, effective.background) < 3)
+      errors.push(id + ": accent/background contrast must be at least 3:1");
+    if (effective.border && effective.background &&
+        contrast(effective.border, effective.background) < 3)
+      errors.push(id + ": border/background contrast must be at least 3:1");
+    return { ok: errors.length === 0, errors: errors };
+  }
+
+  function validateUiElementOverride(manifest, id, value) {
+    var mv = validateUiManifest(manifest);
+    return mv.ok ? validateUiElementValue(manifest, id, value) : mv;
+  }
+
+  function uiPreviewModel(manifest, values) {
+    var mv = validateUiManifest(manifest);
+    if (!mv.ok) throw new Error(mv.errors[0]);
+    var out = [];
+    var ids = Object.keys(manifest.elements).sort();
+    for (var i = 0; i < ids.length; i++) {
+      var id = ids[i], desc = manifest.elements[id];
+      var style = cloneJson(desc.defaults), override = values && values[id];
+      if (override !== undefined) {
+        var checked = validateUiElementValue(manifest, id, override);
+        if (!checked.ok) throw new Error(checked.errors[0]);
+        for (var key in override) if (own(override, key)) style[key] = override[key];
+      }
+      out.push({ id: id, safety_critical: desc.safety_critical, style: style });
+    }
+    return { units: manifest.units, minimum_touch: manifest.viewport.minimum_touch,
+             elements: out };
+  }
+
+  function uiElementValue(elements, semanticId) {
+    if (!isObj(elements)) return undefined;
+    if (own(elements, semanticId)) return elements[semanticId];
+    var cur = elements, segs = semanticId.split(".");
+    for (var i = 0; i < segs.length; i++) {
+      if (!isObj(cur) || !own(cur, segs[i])) return undefined;
+      cur = cur[segs[i]];
+    }
+    return cur;
+  }
+
+  function uiElementChanges(nodeId, manifest, values) {
+    var entries = [], dels = [], base = "devices." + nodeId + ".local.ui.elements.";
+    for (var id in values) {
+      if (!own(values, id)) continue;
+      if (!own(manifest.elements, id)) throw new Error("element is absent from ui_manifest: " + id);
+      var value = values[id], n = 0;
+      if (isObj(value)) for (var k in value) if (own(value, k)) n++;
+      if (!n) dels.push(base + id);
+      else {
+        var checked = validateUiElementOverride(manifest, id, value);
+        if (!checked.ok) throw new Error(checked.errors[0]);
+        entries.push({ key: base + id, value: value });
+      }
+    }
+    return { entries: entries, dels: dels };
+  }
+
+  function configBatchOps(entries, dels) {
+    var ops = [], seen = {}, i, key;
+    entries = entries || []; dels = dels || [];
+    for (i = 0; i < entries.length; i++) {
+      key = String((entries[i] && entries[i].key) || "");
+      if (!key || seen[key]) throw new Error("duplicate or empty config key: " + key);
+      validateUiConfigMutation(key, entries[i].value, false);
+      seen[key] = true;
+      ops.push({ op: "set", key: key, value: entries[i].value });
+    }
+    for (i = 0; i < dels.length; i++) {
+      key = String(dels[i] || "");
+      if (!key || seen[key]) throw new Error("duplicate or empty config key: " + key);
+      validateUiConfigMutation(key, undefined, true);
+      seen[key] = true;
+      ops.push({ op: "delete", key: key });
+    }
+    return ops;
+  }
+
+  // Write semantic UI overrides only as whole element objects. Raw import/editor paths may not
+  // create legacy styles, writable manifests, or scalar leaves that bypass server validation.
+  function validateUiConfigMutation(key, value, deleting) {
+    if (!/^devices\.[^.]+\.local\.ui(?:\.|$)/.test(key)) return;
+    var marker = ".local.ui.elements.", at = key.indexOf(marker);
+    var semantic = at >= 0 ? key.slice(at + marker.length) : "";
+    if (at < 0 || !/^[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*$/.test(semantic))
+      throw new Error("semantic UI writes are restricted to devices.<id>.local.ui.elements.<semantic_id>");
+    if (deleting) return;
+    if (!isObj(value)) throw new Error("semantic UI element override must be an object");
+    for (var k in value) if (own(value, k) && UI_PROPERTIES.indexOf(k) < 0)
+      throw new Error("unsupported semantic UI property: " + k);
+  }
+
+  // ---- Trigger rules (lossless whole-value merge) ----
+  var RULE_ACTION_TYPES = ["sip_call", "telegram", "ha_event", "chime", "device_alert"];
+  var ALERT_CHANNELS = ["in_app", "system_notification", "web_push"];
+
+  function cloneJson(v) {
+    if (v === undefined) return undefined;
+    return JSON.parse(JSON.stringify(v));
+  }
+
+  function sameJson(a, b) {
+    if (a === b) return true;
+    if (a === null || b === null || typeof a !== typeof b) return false;
+    if (a instanceof Array || b instanceof Array) {
+      if (!(a instanceof Array) || !(b instanceof Array) || a.length !== b.length) return false;
+      for (var i = 0; i < a.length; i++) if (!sameJson(a[i], b[i])) return false;
+      return true;
+    }
+    if (isObj(a) && isObj(b)) {
+      var ak = [], bk = [], k;
+      for (k in a) if (own(a, k)) ak.push(k);
+      for (k in b) if (own(b, k)) bk.push(k);
+      if (ak.length !== bk.length) return false;
+      for (i = 0; i < ak.length; i++) {
+        k = ak[i];
+        if (!own(b, k) || !sameJson(a[k], b[k])) return false;
+      }
+      return true;
+    }
+    return false;
+  }
+
+  function normalizeRuleEditor(rule) {
+    rule = isObj(rule) ? rule : {};
+    var when = isObj(rule.when) ? rule.when : {};
+    var schedule = isObj(rule.schedule) ? rule.schedule : null;
+    return {
+      enabled: rule.enabled !== false,
+      whenType: typeof when.type === "string" && when.type ? when.type : "button",
+      doors: when.doors instanceof Array ? cloneJson(when.doors) : [],
+      devices: when.devices === "all" ? "all" :
+               (when.devices instanceof Array ? cloneJson(when.devices) : "all"),
+      always: !schedule || schedule.always === true || !(schedule.windows instanceof Array),
+      windows: schedule && schedule.windows instanceof Array ? cloneJson(schedule.windows) : [],
+      actions: rule.actions instanceof Array ? cloneJson(rule.actions) : []
+    };
+  }
+
+  function mergeRuleEditor(original, editor) {
+    var hasOriginal = isObj(original);
+    var out = hasOriginal ? cloneJson(original) : {};
+    var before = normalizeRuleEditor(hasOriginal ? original : {});
+    editor = editor || {};
+
+    var enabled = own(editor, "enabled") ? editor.enabled !== false : before.enabled;
+    if (!hasOriginal || enabled !== before.enabled) out.enabled = enabled;
+
+    var whenType = own(editor, "whenType") && editor.whenType ? editor.whenType :
+                   (before.whenType || "button");
+    var when = isObj(out.when) ? out.when : {};
+    if (!hasOriginal || whenType !== before.whenType || !isObj(out.when)) when.type = whenType;
+    if (whenType === "device_offline") {
+      var editorDevices = own(editor, "devices") ? editor.devices : before.devices;
+      var devices = editorDevices === "all" ? "all" :
+                    (editorDevices instanceof Array ? cloneJson(editorDevices) : "all");
+      if (!hasOriginal || !sameJson(devices, before.devices)) when.devices = devices;
+    } else if (whenType === "button" || whenType === "motion") {
+      var doors = own(editor, "doors") && editor.doors instanceof Array ? cloneJson(editor.doors) :
+                  cloneJson(before.doors);
+      if (!hasOriginal || !sameJson(doors, before.doors)) {
+        if (doors.length) when.doors = doors;
+        else delete when.doors;
+      }
+    }
+    out.when = when;
+
+    var always = own(editor, "always") ? editor.always !== false : before.always;
+    var windows = own(editor, "windows") && editor.windows instanceof Array ?
+                  cloneJson(editor.windows) : cloneJson(before.windows);
+    if (!hasOriginal || always !== before.always || (!always && !sameJson(windows, before.windows))) {
+      var schedule = isObj(out.schedule) ? out.schedule : {};
+      if (always) {
+        schedule.always = true;
+        delete schedule.windows;
+      } else {
+        delete schedule.always;
+        schedule.windows = windows;
+      }
+      out.schedule = schedule;
+    }
+
+    var actions = own(editor, "actions") && editor.actions instanceof Array ?
+                  cloneJson(editor.actions) : cloneJson(before.actions);
+    if (!hasOriginal || !sameJson(actions, before.actions)) out.actions = actions;
+    return out;
+  }
+
+  function ruleEntries(id, f, original) {
+    return [{ key: "trigger_rules." + id, value: mergeRuleEditor(original, f) }];
+  }
+
+  function selector(value) {
+    if (value === "all") return { specified: true, all: true, values: [] };
+    if (typeof value === "string" && value) return { specified: true, all: false, values: [value] };
+    if (value instanceof Array) {
+      if (value.indexOf("all") >= 0) return { specified: true, all: true, values: [] };
+      return { specified: true, all: false, values: value.slice() };
+    }
+    return { specified: false, all: false, values: [] };
+  }
+
+  function selectorMatches(value, candidate) {
+    var s = selector(value);
+    return !s.specified || s.all || s.values.indexOf(candidate) >= 0;
+  }
+
+  function effectiveAlertChannels(action) {
+    return action && action.channels instanceof Array ? action.channels.slice() : ["in_app"];
+  }
+
+  function peerAlertChannelState(peer, channel) {
+    peer = isObj(peer) ? peer : {};
+    var caps = isObj(peer.caps) ? peer.caps :
+               (isObj(peer.capabilities) ? peer.capabilities : {});
+    var declared = caps.device_alert_channels instanceof Array ?
+                   caps.device_alert_channels : null;
+    var supportRoot = isObj(caps.device_alert_channel_support) ?
+                      caps.device_alert_channel_support : {};
+    var support = isObj(supportRoot.channels) && isObj(supportRoot.channels[channel]) ?
+                  supportRoot.channels[channel] : null;
+    if (support) {
+      var status = String(support.status || "");
+      if (support.supported === false || status === "unsupported")
+        return { status: "unsupported", permission: support.permission || "not_applicable" };
+      if (support.available === false || status === "unavailable" ||
+          support.permission === "denied" || support.permission === "required")
+        return { status: "unavailable", permission: support.permission || "unknown" };
+      if (support.supported === true || support.available === true || status === "available")
+        return { status: "supported", permission: support.permission || "unknown" };
+    }
+    if (declared)
+      return { status: declared.indexOf(channel) >= 0 ? "supported" : "unsupported",
+               permission: "unknown" };
+    return { status: "unknown", permission: "unknown" };
+  }
+
+  function validateAlertPresentation(presentation) {
+    var p = isObj(presentation) ? presentation : {};
+    var colors = {
+      background: own(p, "background") ? p.background : "#8F1010",
+      foreground: own(p, "foreground") ? p.foreground : "#FFFFFF",
+      accent: own(p, "accent") ? p.accent : "#FFD166"
+    };
+    var errors = [];
+    for (var name in colors) if (own(colors, name) && !colorOk(colors[name]))
+      errors.push(name + " requires #RRGGBB");
+    if (!errors.length && contrast(colors.foreground, colors.background) < 4.5)
+      errors.push("SOS text contrast must be at least 4.5:1");
+    if (!errors.length && contrast(colors.accent, colors.background) < 3)
+      errors.push("SOS accent contrast must be at least 3:1");
+    return { ok: errors.length === 0, errors: errors, colors: colors };
+  }
+
+  function subscriptionRecords(config) {
+    var records = config && config.web_push && config.web_push.subscriptions;
+    var out = [], k;
+    if (records instanceof Array) return records.slice();
+    if (isObj(records)) for (k in records) if (own(records, k) && isObj(records[k])) out.push(records[k]);
+    return out;
+  }
+
+  function sosDryRunPreview(rule, status, config) {
+    rule = isObj(rule) ? rule : {};
+    status = isObj(status) ? status : {};
+    config = isObj(config) ? config : {};
+    var whenType = rule.when && rule.when.type;
+    var preview = { is_sos: whenType === "emergency_on" || whenType === "emergency_off",
+      trigger: whenType || "", actions: [], target_devices: [], target_roles: [],
+      target_web_subscription_groups: [], offline_devices: [], channels: [],
+      unsupported_device_channels: [], unavailable_device_channels: [],
+      unknown_device_channels: [], local_recipients: 0, capable_local_recipients: 0,
+      web_push_recipients: null, recipients_known: true };
+    if (!preview.is_sos) return preview;
+
+    var peers = status.peers instanceof Array ? status.peers.slice() : [];
+    if (status.node && status.node.id) {
+      var hasSelf = false;
+      for (var spi = 0; spi < peers.length; spi++)
+        if (peers[spi] && peers[spi].id === status.node.id) hasSelf = true;
+      if (!hasSelf) peers.push({ id: status.node.id, role: status.node.role, status: "alive",
+                                self: true, caps: status.node.caps || {} });
+    }
+    var records = subscriptionRecords(config);
+    var pushStatus = isObj(status.web_push) ? status.web_push : {};
+    var seenDevices = {}, seenRoles = {}, seenGroups = {}, seenChannels = {}, seenOffline = {};
+    var localRecipients = {}, capableLocalRecipients = {}, webCount = 0, webKnown = true;
+    var unsupportedChannels = {}, unavailableChannels = {}, unknownChannels = {};
+    var actions = rule.actions instanceof Array ? rule.actions : [];
+    for (var ai = 0; ai < actions.length; ai++) {
+      var action = actions[ai];
+      if (!isObj(action) || action.type !== "device_alert") continue;
+      var hasTargetsObject = isObj(action.targets);
+      var targets = hasTargetsObject ? action.targets : action;
+      var devices = selector(targets.devices), roles = selector(targets.roles);
+      var groupValue = own(targets, "web_subscription_groups") ?
+                       targets.web_subscription_groups : targets.web_profiles;
+      var groups = selector(groupValue);
+      var channels = effectiveAlertChannels(action);
+      var actionPreview = { index: ai, devices: cloneJson(targets.devices),
+        roles: cloneJson(targets.roles), web_subscription_groups: cloneJson(groupValue),
+        channels: channels.slice(), matched_devices: [], offline_devices: [],
+        device_channel_results: [], web_push_recipients: null };
+      if (devices.all) seenDevices.all = true;
+      for (var di = 0; di < devices.values.length; di++) seenDevices[devices.values[di]] = true;
+      if (roles.all) seenRoles.all = true;
+      for (var ri = 0; ri < roles.values.length; ri++) seenRoles[roles.values[ri]] = true;
+      if (groups.all || (!hasTargetsObject && !groups.specified)) seenGroups.all = true;
+      for (var gi = 0; gi < groups.values.length; gi++) seenGroups[groups.values[gi]] = true;
+      for (var ci = 0; ci < channels.length; ci++) seenChannels[channels[ci]] = true;
+
+      var hasLocalSelector = devices.specified || roles.specified;
+      var legacyAllLocal = !hasTargetsObject && !hasLocalSelector;
+      for (var pi = 0; pi < peers.length; pi++) {
+        var peer = peers[pi] || {}, id = String(peer.id || ""), role = String(peer.role || "");
+        if (!id) continue;
+        var matches = legacyAllLocal ||
+                      (devices.specified && selectorMatches(targets.devices, id)) ||
+                      (roles.specified && selectorMatches(targets.roles, role));
+        if (!matches) continue;
+        actionPreview.matched_devices.push(id);
+        var requestedLocal = [];
+        if (channels.indexOf("in_app") >= 0) requestedLocal.push("in_app");
+        if (channels.indexOf("system_notification") >= 0)
+          requestedLocal.push("system_notification");
+        if (requestedLocal.length)
+          localRecipients[id] = true;
+        var hasCapableChannel = false;
+        for (var lci = 0; lci < requestedLocal.length; lci++) {
+          var localChannel = requestedLocal[lci];
+          var channelState = peerAlertChannelState(peer, localChannel);
+          var channelKey = id + ":" + localChannel;
+          actionPreview.device_channel_results.push({ device_id: id, channel: localChannel,
+            status: channelState.status, permission: channelState.permission });
+          if (channelState.status === "supported") hasCapableChannel = true;
+          else if (channelState.status === "unsupported") unsupportedChannels[channelKey] = true;
+          else if (channelState.status === "unavailable") unavailableChannels[channelKey] = true;
+          else { unknownChannels[channelKey] = true; hasCapableChannel = true; }
+        }
+        if (hasCapableChannel) capableLocalRecipients[id] = true;
+        if (peer.status !== "alive") {
+          actionPreview.offline_devices.push(id);
+          seenOffline[id] = true;
+        }
+      }
+      for (di = 0; di < devices.values.length; di++) {
+        var wanted = devices.values[di], found = false;
+        for (pi = 0; pi < peers.length; pi++) if (peers[pi] && peers[pi].id === wanted) found = true;
+        if (!found) { actionPreview.offline_devices.push(wanted); seenOffline[wanted] = true; }
+      }
+
+      if (channels.indexOf("web_push") >= 0) {
+        var legacyAllWeb = !hasTargetsObject && !groups.specified;
+        if (records.length) {
+          var matched = 0;
+          for (var si = 0; si < records.length; si++) {
+            var group = records[si].group || "all";
+            if (legacyAllWeb || groups.all || groups.values.indexOf(group) >= 0) matched++;
+          }
+          actionPreview.web_push_recipients = matched;
+          webCount += matched;
+        } else if (typeof pushStatus.subscriptions === "number") {
+          if (legacyAllWeb || groups.all) {
+            actionPreview.web_push_recipients = pushStatus.subscriptions;
+            webCount += pushStatus.subscriptions;
+          } else if (!groups.specified) {
+            actionPreview.web_push_recipients = 0;
+          } else {
+            actionPreview.web_push_recipients = pushStatus.subscriptions === 0 ? 0 : null;
+            if (pushStatus.subscriptions > 0) webKnown = false;
+          }
+        } else {
+          webKnown = false;
+        }
+      }
+      preview.actions.push(actionPreview);
+    }
+    for (var dk in localRecipients) if (own(localRecipients, dk)) preview.local_recipients++;
+    for (dk in capableLocalRecipients) if (own(capableLocalRecipients, dk))
+      preview.capable_local_recipients++;
+    preview.web_push_recipients = webKnown ? webCount : null;
+    preview.recipients_known = webKnown;
+    function keysWithoutAll(o) {
+      var a = [];
+      if (o.all) a.push("all");
+      for (var k in o) if (own(o, k) && k !== "all") a.push(k);
+      return a;
+    }
+    preview.target_devices = keysWithoutAll(seenDevices);
+    preview.target_roles = keysWithoutAll(seenRoles);
+    preview.target_web_subscription_groups = keysWithoutAll(seenGroups);
+    preview.offline_devices = keysWithoutAll(seenOffline);
+    preview.unsupported_device_channels = keysWithoutAll(unsupportedChannels);
+    preview.unavailable_device_channels = keysWithoutAll(unavailableChannels);
+    preview.unknown_device_channels = keysWithoutAll(unknownChannels);
+    preview.channels = keysWithoutAll(seenChannels);
+    return preview;
+  }
+
+  function sosRuleWarnings(rule, status, config) {
+    var preview = sosDryRunPreview(rule, status, config), warnings = [];
+    if (!preview.is_sos) return warnings;
+    var actions = rule && rule.actions instanceof Array ? rule.actions : [];
+    var alertActions = [], channels = {}, visuallyOrAudiblyPresented = false;
+    for (var i = 0; i < actions.length; i++) if (actions[i] && actions[i].type === "device_alert") {
+      var action = actions[i], ch = effectiveAlertChannels(action), p = isObj(action.presentation) ?
+                   action.presentation : {};
+      alertActions.push(action);
+      for (var j = 0; j < ch.length; j++) channels[ch[j]] = true;
+      var defaultSound = preview.trigger === "emergency_on" && !own(p, "sound");
+      var audible = (defaultSound || !!p.sound) && Number(own(p, "volume") ? p.volume : 100) > 0;
+      var visual = own(p, "visual") ? p.visual !== false : true;
+      if ((ch.indexOf("in_app") >= 0 && (visual || audible)) ||
+          ch.indexOf("system_notification") >= 0 || ch.indexOf("web_push") >= 0)
+        visuallyOrAudiblyPresented = true;
+    }
+    if (!alertActions.length) warnings.push({ code: "no_device_alert" });
+    var totalKnown = preview.local_recipients + (preview.web_push_recipients || 0);
+    if (preview.recipients_known && totalKnown === 0)
+      warnings.push({ code: "zero_recipients" });
+    if (!preview.channels.length || !visuallyOrAudiblyPresented)
+      warnings.push({ code: "all_channels_silent" });
+    if (channels.web_push) {
+      var push = status && isObj(status.web_push) ? status.web_push : {};
+      if (push.subscriptions === 0 || preview.web_push_recipients === 0)
+        warnings.push({ code: "no_web_push_subscriptions" });
+      if (push.delivery_backend !== true)
+        warnings.push({ code: "web_push_backend_unavailable" });
+    }
+    if (preview.offline_devices.length)
+      warnings.push({ code: "offline_devices", devices: preview.offline_devices.slice() });
+    if (preview.unsupported_device_channels.length)
+      warnings.push({ code: "unsupported_device_channels",
+                      channels: preview.unsupported_device_channels.slice() });
+    if (preview.unavailable_device_channels.length)
+      warnings.push({ code: "unavailable_device_channels",
+                      channels: preview.unavailable_device_channels.slice() });
+    if (preview.unknown_device_channels.length)
+      warnings.push({ code: "unknown_device_channels",
+                      channels: preview.unknown_device_channels.slice() });
+    return warnings;
+  }
+
+  function callFlowMode(value) {
+    if (isObj(value)) value = value.mode;
+    return value === "ring_then_purpose" ? value : "purpose_first";
+  }
+
+  function featureMapForPeer(peer, status) {
+    if (peer && peer.self && status && isObj(status.features)) return status.features;
+    if (peer && isObj(peer.features)) return peer.features;
+    if (peer && isObj(peer.capabilities) && isObj(peer.capabilities.features))
+      return peer.capabilities.features;
+    if (peer && isObj(peer.caps) && isObj(peer.caps.features)) return peer.caps.features;
+    return {};
+  }
+
+  function callFlowCompatibility(value, status) {
+    var mode = callFlowMode(value), peers = status && status.peers instanceof Array ?
+                status.peers.slice() : [];
+    if (!peers.length && status && status.node && status.node.id)
+      peers.push({ id: status.node.id, name: status.node.name, role: status.node.role,
+                   self: true, status: "alive" });
+    var out = { mode: mode, total: peers.length, supported: [], unsupported: [] };
+    for (var i = 0; i < peers.length; i++) {
+      var peer = peers[i] || {}, id = peer.id || peer.name || "unknown";
+      if (featureMapForPeer(peer, status).call_flow_v2 === true) out.supported.push(id);
+      else out.unsupported.push(id);
+    }
+    out.warning = mode === "ring_then_purpose" && out.unsupported.length > 0;
+    out.unknown_fleet = mode === "ring_then_purpose" && out.total === 0;
+    return out;
+  }
+
+
   function mqttEntries(f) {
     var e = [{ key: "integrations.mqtt.host", value: String(f.host || "") },
              { key: "integrations.mqtt.port", value: num(f.port, 1883) },
              { key: "integrations.mqtt.user", value: String(f.user || "") }];
-    if (f.pass) e.push({ key: "integrations.mqtt.pass", value: String(f.pass) });
+    if (f.pass_ref) e.push({ key: "integrations.mqtt.pass_ref", value: String(f.pass_ref) });
     return e;
   }
 
   function telegramEntries(f) {
     var e = [{ key: "integrations.telegram.poll_updates", value: !!f.poll_updates }];
-    if (f.bot_token) e.push({ key: "integrations.telegram.bot_token", value: String(f.bot_token) });
+    if (f.bot_token_ref)
+      e.push({ key: "integrations.telegram.bot_token_ref", value: String(f.bot_token_ref) });
     return e;
+  }
+
+  function webPushEntries(f) {
+    return [
+      { key: "integrations.web_push.sender_url", value: String(f.sender_url || "") },
+      { key: "integrations.web_push.vapid_public_key",
+        value: String(f.vapid_public_key || "") },
+      { key: "integrations.web_push.vapid_subject", value: String(f.vapid_subject || "") },
+      { key: "integrations.web_push.vapid_private_key_ref",
+        value: String(f.vapid_private_key_ref || "") },
+      { key: "integrations.web_push.sender_secret_ref",
+        value: String(f.sender_secret_ref || "") }
+    ];
   }
 
   function sipEntries(f) {
@@ -182,34 +928,167 @@ var AdminLogic = (function () {
             { key: "sip.transport", value: f.transport || "udp" }];
   }
 
-  // アカウントは whole-value — pass 空欄は既存 pass を温存する
+  function secretWrite(secretRef, value) {
+    return value ? { secret_ref: secretRef, value: String(value) } : null;
+  }
+
+  function localSecretProvisionPlan(secretRef, value) {
+    var write = secretWrite(secretRef, value);
+    return { entries: [], secrets: write ? [write] : [], retire_secret_refs: [] };
+  }
+
+  function panelProvisionPayload(secretRef, token) {
+    return { secret_ref: String(secretRef || ""), token: String(token || "") };
+  }
+
+  function canEditSipSecret(targetNodeId, servingNodeId) {
+    return !!targetNodeId && targetNodeId === servingNodeId;
+  }
+
+  var secretRefCounter = 0;
+  function freshSecretRef(scope) {
+    var bytes = null, token = "";
+    try {
+      var cryptoApi = typeof crypto !== "undefined" ? crypto : null;
+      if (cryptoApi && cryptoApi.getRandomValues) {
+        bytes = new Uint8Array(12);
+        cryptoApi.getRandomValues(bytes);
+      }
+    } catch (e) { bytes = null; }
+    if (bytes) {
+      for (var i = 0; i < bytes.length; i++) token += (bytes[i] + 256).toString(16).slice(-2);
+    } else {
+      secretRefCounter++;
+      token = Date.now().toString(16) + secretRefCounter.toString(16) +
+              Math.floor(Math.random() * 0x100000000).toString(16);
+    }
+    return "secret:" + safeId(scope) + "." + token;
+  }
+
+  function mqttPlan(f, existing) {
+    existing = existing || {};
+    var value = f.pass || existing.pass || "";
+    var oldRef = existing.pass_ref || "";
+    var ref = value ? freshSecretRef("mqtt") : oldRef;
+    return { entries: mqttEntries({ host: f.host, port: f.port, user: f.user,
+                                    pass_ref: value ? ref : existing.pass_ref }),
+             secrets: value ? [secretWrite(ref, value)] : [],
+             retire_secret_refs: value && oldRef && oldRef !== ref ? [oldRef] : [] };
+  }
+
+  function telegramPlan(f, existing) {
+    existing = existing || {};
+    var value = f.bot_token || existing.bot_token || "";
+    var oldRef = existing.bot_token_ref || "";
+    var ref = value ? freshSecretRef("telegram.bot") : oldRef;
+    return { entries: telegramEntries({ poll_updates: f.poll_updates,
+                                        bot_token_ref: value ? ref : existing.bot_token_ref }),
+             secrets: value ? [secretWrite(ref, value)] : [],
+             retire_secret_refs: value && oldRef && oldRef !== ref ? [oldRef] : [] };
+  }
+
+  function webPushPlan(f, existing) {
+    existing = existing || {};
+    var privateValue = String(f.vapid_private_key || "");
+    var oldPrivateRef = String(existing.vapid_private_key_ref || "");
+    var privateRef = privateValue ? freshSecretRef("webpush.vapid_private") : oldPrivateRef;
+    var bearerEnabled = !!f.sender_bearer_enabled;
+    var bearerValue = bearerEnabled ? String(f.sender_secret || "") : "";
+    var oldBearerRef = String(existing.sender_secret_ref || "");
+    var bearerRef = bearerEnabled ?
+      (bearerValue ? freshSecretRef("webpush.sender") : oldBearerRef) : "";
+    var secrets = [];
+    var retire = [];
+    if (privateValue) {
+      secrets.push(secretWrite(privateRef, privateValue));
+      if (oldPrivateRef && oldPrivateRef !== privateRef) retire.push(oldPrivateRef);
+    }
+    if (bearerValue) {
+      secrets.push(secretWrite(bearerRef, bearerValue));
+      if (oldBearerRef && oldBearerRef !== bearerRef) retire.push(oldBearerRef);
+    } else if (!bearerEnabled && oldBearerRef) {
+      retire.push(oldBearerRef);
+    }
+    return {
+      entries: webPushEntries({
+        sender_url: f.sender_url,
+        vapid_public_key: f.vapid_public_key,
+        vapid_subject: f.vapid_subject,
+        vapid_private_key_ref: privateRef,
+        sender_secret_ref: bearerRef
+      }),
+      secrets: secrets,
+      retire_secret_refs: retire
+    };
+  }
+
+  // SIP accounts are whole values, so clone unknown fields and replace only edited credentials.
   function sipAccountEntries(nodeId, user, pass, existing) {
-    var v = { user: String(user || "") };
-    var p = pass || (existing && existing.pass) || "";
-    if (p) v.pass = p;
+    var v = {}, k;
+    existing = existing || {};
+    for (k in existing) if (k !== "pass") v[k] = existing[k];
+    v.user = String(user || "");
+    if (pass || existing.pass) v.pass_ref = existing.pass_ref || "secret:sip." + safeId(nodeId);
     return [{ key: "sip.accounts." + nodeId, value: v }];
+  }
+
+  function sipAccountPlan(nodeId, user, pass, existing) {
+    existing = existing || {};
+    var value = pass || existing.pass || "";
+    var entries = sipAccountEntries(nodeId, user, value, existing);
+    var oldRef = existing.pass_ref || "", ref = oldRef;
+    if (value) {
+      ref = freshSecretRef("sip." + safeId(nodeId));
+      entries[0].value.pass_ref = ref;
+    }
+    return { entries: entries, secrets: value ? [secretWrite(ref, value)] : [],
+             retire_secret_refs: value && oldRef && oldRef !== ref ? [oldRef] : [] };
+  }
+
+  function mergeSecretPlans(entries, plans) {
+    var merged = { entries: (entries || []).slice(), secrets: [], retire_secret_refs: [] };
+    (plans || []).forEach(function (plan) {
+      if (!plan) return;
+      merged.entries = merged.entries.concat(plan.entries || []);
+      merged.secrets = merged.secrets.concat(plan.secrets || []);
+      merged.retire_secret_refs = merged.retire_secret_refs.concat(plan.retire_secret_refs || []);
+    });
+    return merged;
   }
 
   function tzEntries(min) {
     return [{ key: "integrations.tz_offset_min", value: num(min, 540) }];
   }
 
-  function quietEntries(f) {
+  function quietEntries(f, existing) {
+    var value = editableClone(existing);
+    var previous = value.windows instanceof Array ? value.windows : [];
     var ws = [];
     for (var i = 0; i < (f.windows || []).length; i++) {
       var w = f.windows[i];
-      if (w.from && w.to) ws.push({ from: w.from, to: w.to });
+      if (!w.from || !w.to) continue;
+      var previousIndex = own(w, "_existing_index") ? num(w._existing_index, -1) : i;
+      var windowValue = previousIndex >= 0 && isObj(previous[previousIndex]) ?
+        cloneJson(previous[previousIndex]) : {};
+      windowValue.from = w.from;
+      windowValue.to = w.to;
+      ws.push(windowValue);
     }
-    return [{ key: "quiet_hours.default",
-              value: { windows: ws, suppress: f.suppress || [],
-                       never_suppress: f.never_suppress || [] } }];
+    value.windows = ws;
+    value.suppress = cloneJson(f.suppress || []);
+    value.never_suppress = cloneJson(f.never_suppress || []);
+    return [{ key: "quiet_hours.default", value: value }];
   }
 
-  /* ---- 統一資産 (assets.<sha256> = {size,type,origin,label}) ---- */
-  var ASSET_MAX_BYTES = 3 * 1024 * 1024;                    // core の kAssetMaxBytes と同値
+  function webSosEntries(enabled) {
+    return [{ key: "emergency.web_active_page_alerts", value: enabled !== false }];
+  }
+
+
+  var ASSET_MAX_BYTES = 3 * 1024 * 1024;
   var ASSET_TYPES = ["image/jpeg", "image/png", "audio/mpeg", "audio/wav"];
 
-  // 許可 type の決定。ブラウザ申告 (audio/mp3 等の方言あり) → 拡張子の順。"" = 非対応
+
   function assetTypeOf(name, declared) {
     if (declared && ASSET_TYPES.indexOf(declared) >= 0) return declared;
     var n = String(name || "").toLowerCase();
@@ -220,14 +1099,14 @@ var AdminLogic = (function () {
     return "";
   }
 
-  // "asset:<sha256>" (chime sound / emergency.alarm_sound の書式) から hash を取り出す
+
   function assetRefHash(v) {
     return (typeof v === "string" && v.indexOf("asset:") === 0) ? v.slice(6) : "";
   }
 
-  // 資産 hash → 使用箇所の表示文字列配列。走査範囲は core の referencedAssets と同じ:
+
   //   display.theme.bg_image / devices.*.local.theme.bg_image / quick_replies.*.audio.* /
-  //   ui の各 sound / trigger_rules.*.actions[].sound / emergency.alarm_sound
+
   function assetRefs(cfg) {
     var out = {};
     function add(h, where) {
@@ -267,36 +1146,41 @@ var AdminLogic = (function () {
     return (v / 1048576).toFixed(2) + " MB";
   }
 
-  /* ---- テーマ (display.theme = 全体既定 / devices.<id>.local.theme = 端末別) ---- */
-  // core は theme を **キー単位** で上書き解決する (node.cpp displayState) —
-  // 端末別で bg_color だけ指定すれば bg_image は全体既定を継承する。ゆえに
-  //   継承 = そのキーを書かない / 「画像なし」 = null を明示、の 2 通りを区別する。
+
+
+
+
   function themeKey(scope) {
     return scope ? "devices." + scope + ".local.theme" : "display.theme";
   }
-  // f = { color_on, bg_color, image_on, bg_image }  (全体既定では *_on は無視 = 常に書く)
-  // 戻り: { entries, dels } — 端末別で両方「継承」ならキーごと削除する
-  function themeEntries(scope, f) {
-    var key = themeKey(scope), v = {}, n = 0;
-    if (!scope || f.color_on) { v.bg_color = f.bg_color || "#101418"; n++; }
-    if (!scope || f.image_on) { v.bg_image = f.bg_image || null; n++; }
-    if (!n) return { entries: [], dels: [key] };
+
+
+  function themeEntries(scope, f, existing) {
+    var key = themeKey(scope), v = editableClone(existing);
+    if (!scope || f.color_on) v.bg_color = f.bg_color || "#101418";
+    else delete v.bg_color;
+    if (!scope || f.image_on) v.bg_image = f.bg_image || null;
+    else delete v.bg_image;
+    if (!hasOwnKeys(v)) return { entries: [], dels: [key] };
     return { entries: [{ key: key, value: v }], dels: [] };
   }
 
-  /* ---- 訪客の用件 (visit_purposes.<id>) + 訪客言語 (ui.*) ---- */
-  function purposeEntries(id, f) {
-    return [{ key: "visit_purposes." + id,
-              value: { label: labelObj(f.ja, f.en, f.zh), icon: String(f.icon || ""),
-                       order: num(f.order, 1) } }];
+
+  function purposeEntries(id, f, existing) {
+    var value = editableClone(existing);
+    value.label = mergedLabel(value.label, f);
+    value.icon = String(f.icon || "");
+    value.order = num(f.order, 1);
+    return [{ key: "visit_purposes." + id, value: value }];
   }
 
   function purposeReorderEntries(sortedIds, cur) {
     var out = [];
     for (var i = 0; i < sortedIds.length; i++) {
       var id = sortedIds[i], c = (cur && cur[id]) || {};
-      out.push({ key: "visit_purposes." + id,
-                 value: { label: c.label || {}, icon: c.icon || "", order: i + 1 } });
+      var value = editableClone(c);
+      value.order = i + 1;
+      out.push({ key: "visit_purposes." + id, value: value });
     }
     return out;
   }
@@ -307,8 +1191,8 @@ var AdminLogic = (function () {
             { key: "ui.visitor_lang_revert_s", value: num(f.revert_s, 60) }];
   }
 
-  /* ---- 文言の実行時上書き (i18n_overrides.<lang>) ---- */
-  // 文字列中の {name} 集合 (重複除去・整列)
+
+
   function placeholders(s) {
     var out = [], m, re = /\{(\w+)\}/g, str = String(s == null ? "" : s);
     while ((m = re.exec(str)) !== null) if (out.indexOf(m[1]) < 0) out.push(m[1]);
@@ -316,22 +1200,22 @@ var AdminLogic = (function () {
     return out;
   }
 
-  // 既定文言と入力の {name} 集合の差。"" = 一致 (保存可) / 非空 = 不一致の説明
+
   function placeholderDiff(def, val) {
     var a = placeholders(def), b = placeholders(val), miss = [], extra = [], i;
     for (i = 0; i < a.length; i++) if (b.indexOf(a[i]) < 0) miss.push("{" + a[i] + "}");
     for (i = 0; i < b.length; i++) if (a.indexOf(b[i]) < 0) extra.push("{" + b[i] + "}");
     if (!miss.length && !extra.length) return "";
-    return (miss.length ? "不足 " + miss.join(" ") : "") +
+    return (miss.length ? "missing " + miss.join(" ") : "") +
            (miss.length && extra.length ? " / " : "") +
-           (extra.length ? "余分 " + extra.join(" ") : "");
+           (extra.length ? "extra " + extra.join(" ") : "");
   }
 
-  // 書込粒度は **言語単位の whole-value** (i18n_overrides.<lang>)。
-  // core は <lang> 直下を「ドットを含む平キー」で引く (node.cpp textOnLoop / panel の
-  // /api/panel/i18n) ため、i18n_overrides.<lang>.<key> と書くと materialize が
-  // idle → call_button の入れ子に展開してしまい、どこからも参照されなくなる。
-  // cur = 現行 i18n_overrides、changes = { <lang>: { <key>: "値" ("" = 上書き解除) } }
+
+
+
+
+
   function i18nEntries(cur, changes) {
     var entries = [], dels = [];
     for (var lang in changes) {
@@ -354,24 +1238,46 @@ var AdminLogic = (function () {
     return { entries: entries, dels: dels };
   }
 
-  // ---- インポート用フラット化 (書込粒度 = 各編集画面と同じ) ----
-  // 粒度が編集画面とズレると「深いパス優先」の合成で古い枝が残るため、必ずここを経由する。
+
+
   function flattenConfig(cfg) {
     var out = [];
     var ENTITY2 = { buildings: 1, doors: 1, households: 1, quick_replies: 1,
                     trigger_rules: 1, quiet_hours: 1 };
     function push(key, v) { if (v !== undefined) out.push({ key: key, value: v }); }
+    function flattenUiElements(base, node, path) {
+      if (!isObj(node)) { push(base + path, node); return; }
+      var keys = [], hasScalar = false;
+      for (var ek in node) if (own(node, ek)) {
+        keys.push(ek);
+        if (!isObj(node[ek])) hasScalar = true;
+      }
+      if (!keys.length) return;
+      // Materialization expands dots in semantic IDs into nested objects. The first object with
+      // scalar properties is one element override and is validated by the batch allow-list.
+      if (hasScalar) { push(base + path, node); return; }
+      for (var ei = 0; ei < keys.length; ei++)
+        flattenUiElements(base, node[keys[ei]], path ? path + "." + keys[ei] : keys[ei]);
+    }
     for (var k in cfg) {
       var v = cfg[k];
-      if (!isObj(v)) { push(k, v); continue; }              // scalar / 配列は葉
-      if (ENTITY2[k]) {                                     // 実体: depth2 whole-value
+      if (!isObj(v)) { push(k, v); continue; }
+      if (ENTITY2[k]) {
         for (var id in v) push(k + "." + id, v[id]);
-      } else if (k === "devices") {                         // field-level (+ local を 1 段展開)
+      } else if (k === "devices") {
         for (var did in v) {
           var d = v[did], b = "devices." + did;
           for (var f in d) {
             if (f === "local" && isObj(d.local)) {
-              for (var g in d.local) push(b + ".local." + g, d.local[g]);
+              for (var g in d.local) {
+                if (g === "ui" && isObj(d.local.ui)) {
+                  for (var ug in d.local.ui) {
+                    if (ug === "elements" && isObj(d.local.ui.elements))
+                      flattenUiElements(b + ".local.ui.elements.", d.local.ui.elements, "");
+                    else push(b + ".local.ui." + ug, d.local.ui[ug]);
+                  }
+                } else push(b + ".local." + g, d.local[g]);
+              }
             } else push(b + "." + f, d[f]);
           }
         }
@@ -379,7 +1285,7 @@ var AdminLogic = (function () {
         for (var sf in v) {
           if (sf === "accounts" && isObj(v.accounts)) {
             for (var aid in v.accounts) push("sip.accounts." + aid, v.accounts[aid]);
-          } else push("sip." + sf, v[sf]);                  // dtmf_actions は whole-value
+          } else push("sip." + sf, v[sf]);
         }
       } else if (k === "integrations") {
         for (var inf in v) {
@@ -387,14 +1293,14 @@ var AdminLogic = (function () {
             for (var ig in v[inf]) push("integrations." + inf + "." + ig, v[inf][ig]);
           } else push("integrations." + inf, v[inf]);
         }
-      } else {                                              // panel / cluster / reply / 未知
+      } else {
         for (var of in v) push(k + "." + of, v[of]);
       }
     }
     return out;
   }
 
-  // ---- mock 用: ドットパス書込/削除 (materialize の近似 — 深いパスで枝を作る) ----
+
   function applyKey(cfg, key, valueJson) {
     var v;
     try { v = JSON.parse(valueJson); } catch (e) { v = valueJson; }
@@ -418,14 +1324,14 @@ var AdminLogic = (function () {
     delete node[segs[segs.length - 1]];
   }
 
-  // 既存に無い連番 id ("r" → r1, r2, …)
+
   function newId(prefix, obj) {
     var i = 1;
     while (obj && obj[prefix + i] !== undefined) i++;
     return prefix + i;
   }
 
-  // config key セグメントとして安全な id に整形
+
   function safeId(s) {
     return String(s || "").replace(/[^A-Za-z0-9_]/g, "_");
   }
@@ -435,11 +1341,33 @@ var AdminLogic = (function () {
     buildingEntries: buildingEntries, doorEntries: doorEntries,
     quickReplyEntries: quickReplyEntries, reorderEntries: reorderEntries,
     householdEntries: householdEntries, deviceEntries: deviceEntries, ruleEntries: ruleEntries,
+    RULE_ACTION_TYPES: RULE_ACTION_TYPES, ALERT_CHANNELS: ALERT_CHANNELS,
+    normalizeRuleEditor: normalizeRuleEditor, mergeRuleEditor: mergeRuleEditor,
+    effectiveAlertChannels: effectiveAlertChannels,
+    validateAlertPresentation: validateAlertPresentation,
+    sosDryRunPreview: sosDryRunPreview, sosRuleWarnings: sosRuleWarnings,
+    callFlowMode: callFlowMode, callFlowCompatibility: callFlowCompatibility,
+    defaultPlaybackProfile: defaultPlaybackProfile,
+    normalizePlaybackProfile: normalizePlaybackProfile,
+    playbackProfileEntries: playbackProfileEntries,
+    UI_PROPERTIES: UI_PROPERTIES, defaultUiManifest: defaultUiManifest,
+    validateUiManifest: validateUiManifest, validateUiElementOverride: validateUiElementOverride,
+    uiElementValue: uiElementValue, uiElementChanges: uiElementChanges,
+    uiPreviewModel: uiPreviewModel,
+    colorOk: colorOk, contrast: contrast, configBatchOps: configBatchOps,
     mqttEntries: mqttEntries, telegramEntries: telegramEntries, sipEntries: sipEntries,
-    sipAccountEntries: sipAccountEntries, tzEntries: tzEntries, quietEntries: quietEntries,
+    webPushEntries: webPushEntries,
+    mqttPlan: mqttPlan, telegramPlan: telegramPlan, webPushPlan: webPushPlan,
+    localSecretProvisionPlan: localSecretProvisionPlan,
+    panelProvisionPayload: panelProvisionPayload,
+    canEditSipSecret: canEditSipSecret,
+    sipAccountEntries: sipAccountEntries,
+    sipAccountPlan: sipAccountPlan, mergeSecretPlans: mergeSecretPlans,
+    tzEntries: tzEntries, quietEntries: quietEntries,
+    webSosEntries: webSosEntries, runtimeHealthRows: runtimeHealthRows,
     flattenConfig: flattenConfig, applyKey: applyKey, deleteKey: deleteKey,
     newId: newId, safeId: safeId,
-    // 批次② (資産 / テーマ / 用件・訪客言語 / 文言)
+
     ASSET_MAX_BYTES: ASSET_MAX_BYTES, ASSET_TYPES: ASSET_TYPES,
     assetTypeOf: assetTypeOf, assetRefHash: assetRefHash, assetRefs: assetRefs,
     fmtBytes: fmtBytes, audioObj: audioObj,
@@ -471,16 +1399,16 @@ if (typeof document !== "undefined") (function () {
   function fmt(s, vars) {
     return s.replace(/\{(\w+)\}/g, function (m, n) { return vars[n] !== undefined ? vars[n] : m; });
   }
-  // Pixelarticons(MIT) スプライトのアイコンを返す。currentColor 継承。
+
   function icon(n) { return "<svg class='ic'><use href='#i-" + n + "'/></svg>"; }
-  // クリップボードへコピー (navigator.clipboard 優先・不可なら textarea + execCommand 回落)。
-  // 成否をボタン文言で一瞬フィードバックする。
+
+
   function copyText(text, btn) {
     function flash(ok) {
       if (!btn) return;
       var orig = btn.getAttribute("data-orig") || btn.innerHTML;
       btn.setAttribute("data-orig", orig);
-      btn.textContent = ok ? t("admin.copied", "コピーしました") : t("admin.copy_failed", "コピー失敗");
+      btn.textContent = ok ? t("admin.copied") : t("admin.copy_failed");
       setTimeout(function () { btn.innerHTML = orig; }, 1200);
     }
     if (navigator.clipboard && navigator.clipboard.writeText) {
@@ -508,29 +1436,29 @@ if (typeof document !== "undefined") (function () {
     m.style.opacity = 1;
     setTimeout(function () { m.style.opacity = 0; }, 2400);
   }
-  // HTML/属性値エスケープ (属性は ' 引用で埋め込むため引用符も潰す)
+
   function esc(s) {
     return String(s == null ? "" : s)
       .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
       .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
   }
 
-  /* ---------------- mock データ (?mock=1 — 描画は実データと同一関数を通す) ---------------- */
+  /* Mock data uses the same rendering functions as live data. */
   var MOCK_ID1 = "a1b2c3d4e5f60718293a4b5c6d7e8f90";
   var MOCK_ID2 = "0f1e2d3c4b5a69788766554433221100";
-  // 配対デモ状態 (mock)
-  var MOCK_PAIRMODE = 0;  // 配対モード期限 (ms epoch)
+
+  var MOCK_PAIRMODE = 0;
   var MOCK_PENDING = [{ id: "newpad01aa22bb33cc44dd55ee66ff7788", name: "indoor_panel · newpad",
                         role: "indoor_panel", addr: "10.10.38.55:47172", age_s: 2 }];
-  // 資産 hash は sha256 = 64 桁 hex (実 API と同じ桁数でないとリンクの見た目が変わる)
+
   var MOCK_IMG = "11223344556677889900aabbccddeeff11223344556677889900aabbccddeeff";
   var MOCK_WAV = "99887766554433221100ffeeddccbbaa99887766554433221100ffeeddccbbaa";
   var MOCK_CFG = {
     schema_version: 1,
-    buildings: { b_main: { label: { ja: "母屋", en: "Main House" } },
-                 b_annex: { label: { ja: "離れ" } } },
-    doors: { d_front: { building: "b_main", label: { ja: "正面玄関" } },
-             d_back: { building: "b_main", label: { ja: "勝手口" } } },
+    buildings: { b_main: { label: { en: "Main House" } },
+                 b_annex: { label: { en: "Annex" } } },
+    doors: { d_front: { building: "b_main", label: { en: "Front door" } },
+             d_back: { building: "b_main", label: { en: "Back door" } } },
     devices: (function () {
       var d = {};
       d[MOCK_ID1] = { name: "front-panel", role: "door_station", door: "d_front",
@@ -539,36 +1467,36 @@ if (typeof document !== "undefined") (function () {
                                          resolution: "640x480", codec: "auto",
                                          h264_resolution: "640x360", h264_fps: 30,
                                          h264_bitrate_kbps: 700 },
-                               theme: { bg_color: "#1c1030" },  // 端末別: 色だけ上書き
+                               theme: { bg_color: "#1c1030" },
                                motion: { enabled: true, sensitivity: 40, min_interval_s: 30 } } };
       d[MOCK_ID2] = { name: "living", role: "indoor_panel" };
       return d;
     })(),
-    households: { h_ox: { label: { ja: "オーナー" }, telegram_chat_ids: [123456789],
+    households: { h_ox: { label: { en: "Owner" }, telegram_chat_ids: [123456789],
                           sip_extensions: ["201"] } },
     quick_replies: {
-      qr_away: { label: { ja: "ただいま留守にしています", en: "Nobody is home" }, speak: true,
-                 order: 1, audio: { ja: MOCK_WAV } },
-      qr_no: { label: { ja: "結構です" }, speak: true, order: 2 },
-      qr_wait: { label: { ja: "少々お待ちください" }, speak: true, order: 3 } },
+      qr_away: { label: { en: "Nobody is home" }, speak: true,
+                 order: 1, audio: { en: MOCK_WAV } },
+      qr_no: { label: { en: "No, thank you" }, speak: true, order: 2 },
+      qr_wait: { label: { en: "Please wait" }, speak: true, order: 3 } },
     visit_purposes: {
-      p_visit: { label: { ja: "訪問", en: "Visit", zh: "访客" }, icon: "🏠", order: 1 },
-      p_delivery: { label: { ja: "宅配便", en: "Delivery", zh: "快递" }, icon: "📦", order: 2 },
-      p_mail: { label: { ja: "郵便", en: "Mail", zh: "邮件" }, icon: "✉️", order: 3 },
-      p_sales: { label: { ja: "営業・集金", en: "Sales", zh: "推销/收费" }, icon: "💼", order: 4 },
-      p_work: { label: { ja: "検針・工事", en: "Utility", zh: "检修/施工" }, icon: "🔧", order: 5 },
-      p_other: { label: { ja: "その他", en: "Other", zh: "其他" }, icon: "❓", order: 6 } },
+      p_visit: { label: { en: "Visit" }, icon: "🏠", order: 1 },
+      p_delivery: { label: { en: "Delivery" }, icon: "📦", order: 2 },
+      p_mail: { label: { en: "Mail" }, icon: "✉️", order: 3 },
+      p_sales: { label: { en: "Sales" }, icon: "💼", order: 4 },
+      p_work: { label: { en: "Utility" }, icon: "🔧", order: 5 },
+      p_other: { label: { en: "Other" }, icon: "❓", order: 6 } },
     ui: { languages: ["ja", "en", "zh"], visitor_lang_revert_s: 60,
           launch_sound: "title_display", call_sound: "outdoor_call_alert",
           call_sound_loop: false, button_sound: "button_click",
           update_sound: "indoor_update", ringtone: "school_chime" },
-    i18n_overrides: { ja: { "idle.touch_to_call": "タッチして呼び出してください" } },
+    i18n_overrides: { en: { "idle.touch_to_call": "Touch to call" } },
     display: { theme: { bg_color: "#12202c", bg_image: MOCK_IMG }, brightness: 70,
                screensaver_after_s: 120, pixel_shift_s: 300 },
     assets: (function () {
       var a = {};
-      a[MOCK_IMG] = { size: 812345, type: "image/jpeg", origin: MOCK_ID1, label: "玄関の桜.jpg" };
-      a[MOCK_WAV] = { size: 48210, type: "audio/wav", origin: MOCK_ID1, label: "留守です.wav" };
+      a[MOCK_IMG] = { size: 812345, type: "image/jpeg", origin: MOCK_ID1, label: "front-door.jpg" };
+      a[MOCK_WAV] = { size: 48210, type: "audio/wav", origin: MOCK_ID1, label: "nobody-home.wav" };
       return a;
     })(),
     trigger_rules: {
@@ -582,7 +1510,17 @@ if (typeof document !== "undefined") (function () {
                                     from: "22:00", to: "06:00" }] },
             actions: [{ type: "telegram", households: ["h_ox"], with_snapshot: true }] },
       r4: { enabled: false, when: { type: "device_offline", devices: "all" },
-            actions: [{ type: "telegram", households: ["h_ox"] }] } },
+            actions: [{ type: "telegram", households: ["h_ox"] }] },
+      r_sos_default_on: { enabled: true, when: { type: "emergency_on" },
+        actions: [{ type: "device_alert", targets: { roles: "all", web_profiles: "all" },
+          channels: ["in_app", "system_notification", "web_push"], never_suppress: true,
+          presentation: { visual: true, sticky: true, ttl_s: 0 } },
+          { type: "telegram", never_suppress: true, households: "all" }] },
+      r_sos_default_off: { enabled: true, when: { type: "emergency_off" },
+        actions: [{ type: "device_alert", targets: { roles: "all", web_profiles: "all" },
+          channels: ["in_app", "system_notification", "web_push"], never_suppress: true,
+          presentation: { visual: true, sticky: false, ttl_s: 10 } },
+          { type: "telegram", never_suppress: true, households: "all" }] } },
     quiet_hours: { "default": { windows: [{ from: "23:00", to: "07:00" }],
                                 suppress: ["chime"],
                                 never_suppress: ["sip_call", "telegram", "ha_event"] } },
@@ -592,70 +1530,36 @@ if (typeof document !== "undefined") (function () {
            accounts: (function () {
              var a = {}; a[MOCK_ID1] = { user: "door-front" }; return a;
            })() },
-    panel: { tokens: ["mocktoken0123456789abcdef0123456"] },
+    panel: { token_refs: ["secret:panel.access.mock"] },
+    emergency: { web_active_page_alerts: true },
     reply: { display_ttl_s: 30 }
   };
   var MOCK_STATUS = {
     node: { id: MOCK_ID1, name: "front-panel", role: "door_station", version: "0.1.0",
             local_addrs: ["10.10.38.147", "240b:250:a0c4:5710:daa2:5eff:fe65:ff19",
                           "fd40:174a:3820:10:daa2:5eff:fe65:ff19"] },
+    ui_manifest: L.defaultUiManifest("door_station"),
+    features: { call_flow_v2: true, emergency_rules_v1: true, device_alert_v1: true },
+    emergency: { active: false, device: "", wall_ms: 0 },
+    web_push: { subscriptions: 0, configured: false, delivery_backend: false },
     sip: { registered: false, state: "idle", call: "idle" },
     leaders: { telegram: MOCK_ID1, mqtt_bridge: MOCK_ID1 },
     bridge: { mqtt: "connected", telegram: "active" },
     assets: { cached: 1, total: 2 },
     peers: [
       { id: MOCK_ID1, name: "front-panel", role: "door_station", status: "alive", self: true,
-        sw: "0.1.0", addrs: ["10.0.1.10:47172"], door: "d_front", door_label: "正面玄関" },
+        sw: "0.1.0", addrs: ["10.0.1.10:47172"], door: "d_front", door_label: "Front door" },
       { id: MOCK_ID2, name: "living", role: "indoor_panel", status: "dead", sw: "0.1.0",
-        addrs: [] }]
+        features: { call_flow_v2: true }, addrs: [] }]
   };
   var MOCK_EVENTS = [
     { type: "press", door: "d_front", device: MOCK_ID1, wall_ms: Date.now() - 60000, payload: "{}" },
     { type: "reply", door: "d_front", device: MOCK_ID2, wall_ms: Date.now() - 50000,
-      payload: "{\"text\":\"すぐ行きます\"}" },
+      payload: "{\"text\":\"I will be right there\"}" },
     { type: "motion", door: "d_front", device: MOCK_ID1, wall_ms: Date.now() - 30000,
       payload: "{\"changed_pct\":12}" },
     { type: "offline", door: "", device: MOCK_ID2, wall_ms: Date.now() - 10000, payload: "{}" }];
 
-  // 文言タブ用の既定文言 (実機は /locale/<lang>.json = strings.yaml 生成物)。
-  // mock は訪客に見えるキーの代表だけを持つ — レイアウト確認用の縮小版。
-  var MOCK_LOCALE = {
-    ja: { "idle.call_button": "呼出", "idle.touch_to_call": "タッチして呼び出してください",
-          "idle.choose_purpose": "ご用件をお選びください", "idle.language": "言語",
-          "calling.title": "呼び出し中…", "calling.cancel": "取消",
-          "incall.title": "通話中", "incall.end": "終了",
-          "degraded.notified": "住人に通知しました",
-          "offline.title": "オフライン", "offline.body": "ネットワークに接続できません",
-          "reply.banner": "住人からのメッセージ", "reply.sent": "返信しました",
-          "purpose.sent": "{purpose} で呼び出しました",
-          "panel.title": "呼出パネル", "panel.press_hint": "ボタンを押すと住人に通知します",
-          "ring.incoming": "来客", "ring.purpose_badge": "用件: {purpose}",
-          "ring.lang_badge": "訪客言語: {lang}", "app.name": "ドアホン" },
-    en: { "idle.call_button": "Call", "idle.touch_to_call": "Touch to call",
-          "idle.choose_purpose": "Please choose your purpose", "idle.language": "Language",
-          "calling.title": "Calling…", "calling.cancel": "Cancel",
-          "incall.title": "In call", "incall.end": "End",
-          "degraded.notified": "The resident has been notified",
-          "offline.title": "Offline", "offline.body": "Cannot reach the network",
-          "reply.banner": "Message from the resident", "reply.sent": "Reply sent",
-          "purpose.sent": "Called as {purpose}",
-          "panel.title": "Call panel", "panel.press_hint": "Press a button to notify the resident",
-          "ring.incoming": "Visitor", "ring.purpose_badge": "Purpose: {purpose}",
-          "ring.lang_badge": "Visitor language: {lang}", "app.name": "Doorbell" },
-    zh: { "idle.call_button": "呼叫", "idle.touch_to_call": "触摸以呼叫",
-          "idle.choose_purpose": "请选择来访目的", "idle.language": "语言",
-          "calling.title": "呼叫中…", "calling.cancel": "取消",
-          "incall.title": "通话中", "incall.end": "结束",
-          "degraded.notified": "已通知住户",
-          "offline.title": "离线", "offline.body": "无法连接网络",
-          "reply.banner": "住户留言", "reply.sent": "已回复",
-          "purpose.sent": "已按 {purpose} 呼叫",
-          "panel.title": "呼叫面板", "panel.press_hint": "按下按钮即可通知住户",
-          "ring.incoming": "来客", "ring.purpose_badge": "目的: {purpose}",
-          "ring.lang_badge": "访客语言: {lang}", "app.name": "门铃" }
-  };
-
-  // mock の資産 hash 生成 (実機は sha256 — ここは内容から決まる 64 hex ならなんでもよい)
   function mockHash(seed) {
     var h = "";
     for (var i = 0; i < 8; i++) {
@@ -673,9 +1577,7 @@ if (typeof document !== "undefined") (function () {
       if (p === "/api/status") return ok(MOCK_STATUS);
       if (p === "/api/config") return ok(MOCK_CFG);
       if (p === "/api/events") return ok({ events: MOCK_EVENTS });
-      if (p === "/api/logs") return ok({ logs: ["I mock: これは mock ログです"] });
-      if (p.indexOf("/locale/") === 0)
-        return ok(MOCK_LOCALE[p.slice(8).replace(/\.json$/, "")] || {});
+      if (p === "/api/logs") return ok({ logs: ["I mock: this is a mock log entry"] });
       if (p === "/api/pairing") return ok({ paired: true, role: "door_station",
         pair_qr: "doorbell-pair:10.10.38.9:47172|" + MOCK_ID1 + "|" + "de".repeat(32),
         self: { id: MOCK_ID1, addr: "10.10.38.9:47172", pk: "de".repeat(32) },
@@ -691,7 +1593,7 @@ if (typeof document !== "undefined") (function () {
       MOCK_STATUS.assets.cached = MOCK_STATUS.assets.total;
       return ok({ ok: true });
     }
-    // 資産アップロード: UI 側が {size,type,label} に要約して渡す (raw body は投げない)
+
     if (p === "/api/assets") {
       var hash = mockHash((body && body.label) + ":" + (body && body.size));
       MOCK_CFG.assets = MOCK_CFG.assets || {};
@@ -703,6 +1605,25 @@ if (typeof document !== "undefined") (function () {
       return ok({ ok: true, hash: hash });
     }
     if (p === "/api/login") return ok({ ok: true });
+    if (p === "/api/secrets") return ok({ ok: true });
+    if (p === "/api/emergency") {
+      MOCK_STATUS.emergency = { active: !!(body && body.active), device: MOCK_ID1,
+                                wall_ms: new Date().getTime() };
+      return ok({ ok: true });
+    }
+    if (p === "/api/config/batch") {
+      var ops = (body && body.ops) || [], nextCfg, oi;
+      try { nextCfg = JSON.parse(JSON.stringify(MOCK_CFG)); }
+      catch (cloneErr) { return setTimeout(function () { cb(500, { ok: false, err: "clone" }); }, 0); }
+      for (oi = 0; oi < ops.length; oi++) {
+        if (!ops[oi].key || (ops[oi].op !== "set" && ops[oi].op !== "delete"))
+          return setTimeout(function () { cb(400, { ok: false, err: "bad op" }); }, 0);
+        if (ops[oi].op === "set") L.applyKey(nextCfg, ops[oi].key, JSON.stringify(ops[oi].value));
+        else L.deleteKey(nextCfg, ops[oi].key);
+      }
+      MOCK_CFG = nextCfg;
+      return ok({ ok: true, n: ops.length, revision: "mock-" + Date.now() });
+    }
     if (p === "/api/config") { L.applyKey(MOCK_CFG, body.key, body.value); return ok({ ok: true }); }
     if (p === "/api/config/delete") { L.deleteKey(MOCK_CFG, body.key); return ok({ ok: true }); }
     if (p === "/api/config/import") {
@@ -722,15 +1643,17 @@ if (typeof document !== "undefined") (function () {
     if (p === "/api/test/telegram") return ok({ ok: true });
     if (p === "/api/panel-token/rotate") {
       var tok = "mock" + Math.random().toString(16).slice(2, 10);
-      MOCK_CFG.panel = { tokens: [tok] };
+      MOCK_CFG.panel = { token_refs: ["secret:panel.access.mock"],
+                         token_generation: "0123456789abcdef0123456789abcdef" };
       return ok({ ok: true, token: tok });
     }
+    if (p === "/api/panel-token/provision") return ok({ ok: true });
     return setTimeout(function () { cb(404, null); }, 0);
   }
 
   /* ---------------- API ---------------- */
   function api(method, path, body, cb) {
-    if (MOCK) return mockApi(method, path, body, cb);
+    if (MOCK && path.indexOf("/locale/") !== 0) return mockApi(method, path, body, cb);
     var x = new XMLHttpRequest();
     x.open(method, path, true);
     x.setRequestHeader("X-Requested-With", "doorbell-admin");
@@ -745,37 +1668,96 @@ if (typeof document !== "undefined") (function () {
     x.send(body ? JSON.stringify(body) : null);
   }
 
-  // entries ([{key,value}]) を 1 件ずつ順次 POST → dels (key 配列) を順次削除 → cb(ok)
+  // Commit every set/delete in one request and preserve values as JSON. The server validates
+  // before an all-or-nothing commit; never fall back to legacy sequential partial writes.
   function postEntries(entries, dels, cb) {
-    var i = 0, j = 0;
+    var ops;
+    try { ops = L.configBatchOps(entries, dels); }
+    catch (e) { cb(false, { err: e.message }); return; }
+    if (!ops.length) { cb(true, { ok: true, n: 0 }); return; }
+    api("POST", "/api/config/batch", { ops: ops }, function (st, j) {
+      if (st === 200 && j && j.ok === true) { cb(true, j); return; }
+      cb(false, { unavailable: st === 404 || st === 501, status: st,
+                  err: (j && j.err) || ("HTTP " + st) });
+    });
+  }
+
+  function postSecrets(writes, cb) {
+    writes = writes || [];
+    var i = 0, written = [];
     function next() {
-      if (entries && i < entries.length) {
-        var e = entries[i++];
-        api("POST", "/api/config", { key: e.key, value: JSON.stringify(e.value) },
-            function (st) { if (st !== 200) return cb(false); next(); });
-        return;
-      }
-      if (dels && j < dels.length) {
-        api("POST", "/api/config/delete", { key: dels[j++] },
-            function (st) { if (st !== 200) return cb(false); next(); });
-        return;
-      }
-      cb(true);
+      if (i >= writes.length) { cb(true, { ok: true, written: written }); return; }
+      var write = writes[i++];
+      api("POST", "/api/secrets", write, function (st, j) {
+        if (st === 200 && j && j.ok === true) {
+          written.push(write.secret_ref); next(); return;
+        }
+        cb(false, { status: st, err: (j && j.err) || ("HTTP " + st), written: written });
+      });
     }
     next();
   }
 
-  // 保存 → 再取得 → 該当タブ再描画 の定型
+  function deleteSecrets(refs, cb) {
+    refs = refs || [];
+    var i = 0, failed = [];
+    function next() {
+      if (i >= refs.length) { cb(failed.length === 0, failed); return; }
+      var ref = refs[i++];
+      api("DELETE", "/api/secrets", { secret_ref: ref }, function (st, j) {
+        if (!(st === 200 && j && j.ok === true)) failed.push(ref);
+        next();
+      });
+    }
+    next();
+  }
+
+  function showSaveResult(ok, result, cleanupFailed) {
+    var text = t("admin.save_failed");
+    if (ok) text = t("admin.saved");
+    else if (result && result.unavailable)
+      text = t("admin.atomic_batch_unavailable");
+    else if (result && result.err) text += ": " + result.err;
+    if (cleanupFailed && cleanupFailed.length)
+      text += " (" + t("admin.secret_cleanup_deferred")
+        .replace("{n}", String(cleanupFailed.length)) + ")";
+    msg(text);
+    refreshConfig(function () { renderTab(); });
+  }
+
+  function savePlanAndRefresh(plan) {
+    postSecrets(plan.secrets, function (secretsOk, secretResult) {
+      if (!secretsOk) {
+        deleteSecrets(secretResult.written || [], function (_, failed) {
+          showSaveResult(false, secretResult, failed);
+        });
+        return;
+      }
+      postEntries(plan.entries, plan.dels || null, function (ok, result) {
+        // New material is written under a fresh ref. A failed config transaction therefore leaves
+        // the live account on its old credential; only the unreferenced staged value is removed.
+        var cleanup = ok ? (plan.retire_secret_refs || []) : (secretResult.written || []);
+        deleteSecrets(cleanup, function (_, failed) { showSaveResult(ok, result, failed); });
+      });
+    });
+  }
+
+
   function saveAndRefresh(entries, dels) {
-    postEntries(entries, dels, function (ok) {
-      msg(ok ? t("admin.saved", "保存しました") : t("admin.save_failed", "保存に失敗しました"));
+    postEntries(entries, dels, function (ok, result) {
+      var text = t("admin.save_failed");
+      if (ok) text = t("admin.saved");
+      else if (result && result.unavailable)
+        text = t("admin.atomic_batch_unavailable");
+      else if (result && result.err) text += ": " + result.err;
+      msg(text);
       refreshConfig(function () { renderTab(); });
     });
   }
 
-  /* ---------------- 状態 ---------------- */
-  // locales: 文言タブ用の既定文言キャッシュ (lang → /locale/<lang>.json)
-  var S = { cfg: {}, status: {}, events: [], tab: "dash", locales: {} };
+
+
+  var S = { cfg: {}, status: {}, events: [], tab: "dash", locales: {}, panelToken: "" };
 
   function cfgObj(k) { return (S.cfg && S.cfg[k]) || {}; }
   function doorLabel(id) { return L.labelOf(cfgObj("doors")[id], LANG, id); }
@@ -809,14 +1791,14 @@ if (typeof document !== "undefined") (function () {
     });
   }
 
-  /* ---------------- 汎用フォーム (モーダル) ---------------- */
-  // 用件アイコンの入力補助 (絵文字 1-2 文字)
+
+
   var PURPOSE_ICONS = ["🏠", "📦", "✉️", "💼", "🔧", "❓", "🚚", "🍽️", "🧹"];
 
   // fields: [{id,label,type,value,options,ph,hint}]
   //   type: text|password|number|time|select|check|multicheck|textarea|static|icon|audio
-  //   icon  = テキスト + 絵文字候補ボタン (bindIconPick で結線)
-  //   audio = 資産の音声から選ぶ select + 試聴ボタン (bindAudioPlay で結線)
+
+
   function fieldHtml(f) {
     var lab = "<label class='flab'>" + esc(f.label) + "</label>";
     var v = f.value === undefined || f.value === null ? "" : f.value;
@@ -852,7 +1834,7 @@ if (typeof document !== "undefined") (function () {
       }
       return "<div class='frow'>" + lab + "<select data-f='" + esc(f.id) + "'>" + ao +
              "</select> <button class='btn2' data-audioplay='" + esc(f.id) + "'>▶ " +
-             esc(t("admin.audio_play", "試聴")) + "</button></div>";
+             esc(t("admin.audio_play")) + "</button></div>";
     }
     if (f.type === "icon") {
       var ib = "";
@@ -904,8 +1886,8 @@ if (typeof document !== "undefined") (function () {
     m.innerHTML =
       "<div class='mbox card'><h2>" + esc(title) + "</h2><div class='mbody'>" + bodyHtml +
       "</div><div class='mbtns'>" +
-      "<button class='btn' id='mSave'>" + esc(t("admin.save", "保存")) + "</button>" +
-      "<button class='btn ghost' id='mCancel'>" + esc(t("admin.cancel", "キャンセル")) +
+      "<button class='btn' id='mSave'>" + esc(t("admin.save")) + "</button>" +
+      "<button class='btn ghost' id='mCancel'>" + esc(t("admin.cancel")) +
       "</button></div></div>";
     show(m, true);
     $("#mCancel").onclick = function () { show(m, false); };
@@ -925,11 +1907,11 @@ if (typeof document !== "undefined") (function () {
     });
   }
 
-  // 資産の音声を 1 つ再生 (試聴)。/asset/<hash> は管理セッションで取れる
+
   var audioEl = null;
   function playAsset(hash) {
-    if (!hash) { msg(t("admin.audio_none", "音声なし (TTS)")); return; }
-    if (MOCK) { msg("mock: " + hash.slice(0, 12) + "… を再生"); return; }
+    if (!hash) { msg(t("admin.audio_none")); return; }
+    if (MOCK) { msg(fmt(t("admin.mock_audio_play"), { value: hash.slice(0, 12) + "…" })); return; }
     if (!audioEl) audioEl = new Audio();
     audioEl.pause();
     audioEl.src = "/asset/" + hash;
@@ -939,7 +1921,7 @@ if (typeof document !== "undefined") (function () {
   var ringtoneCtx = null;
   function playPresetRingtone(name) {
     var AC = window.AudioContext || window.webkitAudioContext;
-    if (!AC) { msg("このブラウザは内蔵音の試聴に対応していません"); return; }
+    if (!AC) { msg(t("admin.audio_preview_unsupported")); return; }
     if (!ringtoneCtx) ringtoneCtx = new AC();
     var seq = name === "classic" ? [[659, 0, .55], [523, .72, .55], [784, 1.42, .55]] :
               name === "ding2" ? [[659, 0, .38], [988, .58, .57]] :
@@ -956,10 +1938,10 @@ if (typeof document !== "undefined") (function () {
     });
   }
   function playRingtone(value) {
-    if (!value) { msg("音声なし"); return; }
+    if (!value) { msg(t("admin.audio_none")); return; }
     if (value.indexOf("asset:") === 0) { playAsset(value.slice(6)); return; }
     if (BUILTIN_AUDIO[value]) {
-      if (MOCK) { msg("mock: " + value + " を再生"); return; }
+      if (MOCK) { msg(fmt(t("admin.mock_audio_play"), { value: value })); return; }
       if (!audioEl) audioEl = new Audio();
       audioEl.pause();
       audioEl.src = "/audio/" + BUILTIN_AUDIO[value];
@@ -970,7 +1952,7 @@ if (typeof document !== "undefined") (function () {
     playPresetRingtone(value);
   }
 
-  // icon 候補ボタン / audio 試聴ボタンの結線 (openForm 後に呼ぶ)
+
   function bindIconPick(root) {
     $all("[data-iconpick]", root).forEach(function (b) {
       b.onclick = function () {
@@ -989,11 +1971,11 @@ if (typeof document !== "undefined") (function () {
   }
 
   function confirmDelete(name, doIt) {
-    if (window.confirm(fmt(t("admin.confirm_delete", "{name} を削除しますか?"), { name: name })))
+    if (window.confirm(fmt(t("admin.confirm_delete"), { name: name })))
       doIt();
   }
 
-  /* ---------------- 選択肢ヘルパ ---------------- */
+
   function doorOptions(withEmpty) {
     var o = withEmpty ? [{ v: "", label: "—" }] : [];
     var ds = cfgObj("doors");
@@ -1019,16 +2001,20 @@ if (typeof document !== "undefined") (function () {
     for (var id in hs) o.push({ v: id, label: householdLabel(id) + " (" + id + ")" });
     return o;
   }
-  // 訪客言語 (ui.languages)。未設定なら ja のみ
-  var LANG_NAMES = { ja: "日本語", en: "English", zh: "中文", ko: "한국어", pt: "Português",
-                     es: "Español", vi: "Tiếng Việt" };
-  function langName(l) { return LANG_NAMES[l] ? LANG_NAMES[l] + " (" + l + ")" : l; }
+
+  var LANG_NAME_KEYS = { ja: "language.name_ja", en: "language.name_en",
+                         zh: "language.name_zh", ko: "language.name_ko",
+                         pt: "language.name_pt", es: "language.name_es",
+                         vi: "language.name_vi" };
+  function langName(l) {
+    return LANG_NAME_KEYS[l] ? t(LANG_NAME_KEYS[l]) + " (" + l + ")" : l;
+  }
   function uiLangs() {
     var ls = (cfgObj("ui") || {}).languages;
     return (ls instanceof Array && ls.length) ? ls : ["ja"];
   }
 
-  // 資産一覧 (label 昇順の hash 配列) と select 用の選択肢
+
   function assetIds(kind) {
     var as = cfgObj("assets"), ids = [];
     for (var h in as) {
@@ -1059,14 +2045,14 @@ if (typeof document !== "undefined") (function () {
     { v: "ding1", label: "Ding Dong" },
     { v: "ding2", label: "Double Chime" },
     { v: "classic", label: "Classic Bell" },
-    { v: "school_chime", label: "学校のチャイム" }
+    { v: "school_chime", label: t("sound.school_chime") }
   ];
   var SOUND_PRESETS = [
-    { v: "outdoor_call_alert", label: "警告音1（室外機呼出）" },
-    { v: "button_click", label: "カーソル移動4（ボタン）" },
-    { v: "school_chime", label: "学校のチャイム" },
-    { v: "indoor_update", label: "決定ボタン23（追加メッセージ）" },
-    { v: "title_display", label: "タイトル表示（起動）" }
+    { v: "outdoor_call_alert", label: t("sound.outdoor_call_alert") },
+    { v: "button_click", label: t("sound.button_click") },
+    { v: "school_chime", label: t("sound.school_chime") },
+    { v: "indoor_update", label: t("sound.indoor_update") },
+    { v: "title_display", label: t("sound.title_display") }
   ];
   var BUILTIN_AUDIO = {
     outdoor_call_alert: "outdoor_call_alert.mp3",
@@ -1076,7 +2062,7 @@ if (typeof document !== "undefined") (function () {
     title_display: "title_display.mp3"
   };
   function soundOptions(includeNone) {
-    var o = includeNone ? [{ v: "", label: "再生しない" }] : [];
+    var o = includeNone ? [{ v: "", label: t("sound.none") }] : [];
     o = o.concat(SOUND_PRESETS);
     assetIds("audio").forEach(function (h) {
       o.push({ v: "asset:" + h, label: "♫ " + assetLabel(h) + " (" + h.slice(0, 8) + ")" });
@@ -1092,8 +2078,7 @@ if (typeof document !== "undefined") (function () {
   }
 
   var DAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
-  var DAY_JA = { mon: "月", tue: "火", wed: "水", thu: "木", fri: "金", sat: "土", sun: "日" };
-  function dayLabel(d) { return t("day." + d, DAY_JA[d] || d); }
+  function dayLabel(d) { return t("day." + d); }
 
   function fmtTime(ms) {
     if (!ms) return "-";
@@ -1103,11 +2088,21 @@ if (typeof document !== "undefined") (function () {
            p(d.getHours()) + ":" + p(d.getMinutes()) + ":" + p(d.getSeconds());
   }
 
-  /* ================================================================ タブ描画 */
 
-  /* ---------------- 1. ダッシュボード ---------------- */
+
+
   function renderDash() {
     var j = S.status;
+    var emergency = j.emergency && j.emergency.active === true;
+    if ($("#adminEmergency")) show($("#adminEmergency"), emergency);
+    if ($("#adminEmergencyCancel")) $("#adminEmergencyCancel").onclick = function () {
+      if (!window.confirm(t("admin.sos_clear_confirm"))) return;
+      api("POST", "/api/emergency", { active: false }, function (st, result) {
+        if (st === 200 && result && result.ok) {
+          msg(t("admin.sos_cleared")); refreshStatus(renderDash);
+        } else msg(t("admin.sos_clear_failed"));
+      });
+    };
     var rows = "";
     var peers = j.peers || [];
     for (var i = 0; i < peers.length; i++) {
@@ -1126,18 +2121,18 @@ if (typeof document !== "undefined") (function () {
     $("#bridgeInfo").textContent =
       "MQTT: " + (br.mqtt || "-") + " / Telegram: " + (br.telegram || "-") +
       (j.sip ? " / SIP: " + j.sip.state : "");
-    // 本機の全ローカルアドレス (IPv4 + 全 IPv6)
+
     var la = (j.node && j.node.local_addrs) || [];
     var laEl = $("#localAddrs");
     if (laEl) {
       if (la.length) {
-        laEl.innerHTML = icon("info-box") + " " + t("admin.local_addrs", "本機アドレス") + ": " +
+        laEl.innerHTML = icon("info-box") + " " + t("admin.local_addrs") + ": " +
           la.map(function (a) { return esc(a); }).join("　");
       } else { laEl.textContent = ""; }
     }
-    // ライブ映像 (src は据え置き — 差し替えるとストリームが切れる)。
-    // stream_mp4 を持つ門口機は MSE (fMP4 — Phase 6a) で滑らか表示、
-    // 未対応/失敗/503 (auto で硬編なし) は従来の MJPEG <img> へ自動回落。
+
+
+
     var grid = $("#liveGrid"), want = {};
     for (var li = 0; li < peers.length; li++) {
       var pp = peers[li];
@@ -1150,113 +2145,54 @@ if (typeof document !== "undefined") (function () {
         stopLiveStream(id);
         grid.removeChild(cards[ci]);
       } else {
-        delete want[id];
+        var wantedMp4 = DoorbellPlayback.proxyMp4Url(want[id].door || "", "",
+                                                      want[id].stream_mp4, window.location);
+        var wantedKey = want[id].stream + "|" + wantedMp4 + "|" +
+                        JSON.stringify(want[id].playback_profile || {});
+        if (cards[ci].getAttribute("data-playback-key") === wantedKey) {
+          delete want[id];
+        } else {
+          stopLiveStream(id);
+          grid.removeChild(cards[ci]);
+        }
       }
     }
     for (var nid in want) {
       var p2 = want[nid], card = document.createElement("div");
       card.className = "card";
       card.setAttribute("data-node", nid);
+      var sameOriginMp4 = DoorbellPlayback.proxyMp4Url(p2.door || "", "", p2.stream_mp4,
+                                                        window.location);
+      card.setAttribute("data-playback-key", p2.stream + "|" + sameOriginMp4 + "|" +
+                        JSON.stringify(p2.playback_profile || {}));
       card.innerHTML = "<div class='dim' style='margin-bottom:6px'>" +
         esc(p2.door_label || p2.name || nid.slice(0, 8)) + "</div>";
       var mediaCss = "width:100%; border-radius:6px; background:#000; min-height:160px";
-      if (MSE_OK && p2.stream_mp4 && !liveMseFailed[nid]) {
-        var v = document.createElement("video");
-        v.muted = true;
-        v.autoplay = true;
-        v.setAttribute("muted", "");
-        v.setAttribute("playsinline", "");
-        v.style.cssText = mediaCss;
-        card.appendChild(v);
-        liveStreams[nid] = attachMse(v, p2.stream_mp4, liveMseFail(nid, card));
-      } else {
-        var img = document.createElement("img");
-        img.alt = "live";
-        img.style.cssText = mediaCss;
-        img.src = p2.stream;
-        card.appendChild(img);
-      }
+      var v = document.createElement("video");
+      v.muted = true;
+      v.autoplay = true;
+      v.setAttribute("muted", "");
+      v.setAttribute("playsinline", "");
+      v.style.cssText = mediaCss;
+      var img = document.createElement("img");
+      img.alt = "live";
+      img.style.cssText = mediaCss;
+      card.appendChild(img);
+      card.appendChild(v);
+      liveStreams[nid] = DoorbellPlayback.start({ profile: p2.playback_profile,
+        mp4: sameOriginMp4, mjpeg: p2.stream, mjpegMode: "image", video: v, img: img });
       grid.appendChild(card);
     }
   }
 
-  /* ---- H.264 流暢档 (MSE) — 管理ダッシュボードの live グリッド用 ----
-     feature-detect の中に隔離: 非対応ブラウザは MSE_OK=false で従来 MJPEG のみ。 */
-  var MSE_OK = !!(window.MediaSource && window.fetch && window.ReadableStream &&
-                  window.URL && window.URL.createObjectURL);
+  /* ---- Admin dashboard live grid ---- */
   var liveStreams = {};    // node_id → {stop}
-  var liveMseFailed = {};  // node_id → true (MJPEG へ回落済み)
 
   function stopLiveStream(id) {
     if (liveStreams[id]) { try { liveStreams[id].stop(); } catch (e) {} delete liveStreams[id]; }
   }
-  function liveMseFail(id, card) {
-    return function () {
-      liveMseFailed[id] = true;
-      stopLiveStream(id);
-      if (card.parentNode) card.parentNode.removeChild(card);  // 次の描画で img へ再構築
-    };
-  }
 
-  // /stream.mp4 を fetch ReadableStream → SourceBuffer へ逐次 append (monitor.html と同型)
-  function attachMse(video, url, onFail) {
-    var stopped = false, reader = null;
-    function fail() {
-      if (stopped) return;
-      stopped = true;
-      try { if (reader) reader.cancel(); } catch (e) {}
-      onFail();
-    }
-    video.onerror = fail;
-    var ms = new MediaSource();
-    ms.addEventListener("sourceopen", function () {
-      var sb;
-      try { sb = ms.addSourceBuffer('video/mp4; codecs="avc1.42E01E"'); }
-      catch (e) { fail(); return; }
-      var queue = [];
-      sb.addEventListener("error", fail);
-      sb.addEventListener("updateend", pump);
-      function pump() {
-        if (stopped || sb.updating) return;
-        try {
-          if (sb.buffered.length && video.currentTime - sb.buffered.start(0) > 30) {
-            sb.remove(0, video.currentTime - 10);
-            return;
-          }
-          if (queue.length) sb.appendBuffer(queue.shift());
-        } catch (e2) { fail(); }
-      }
-      fetch(url).then(function (resp) {
-        if (!resp.ok || !resp.body) { fail(); return; }
-        reader = resp.body.getReader();
-        (function read() {
-          reader.read().then(function (r) {
-            if (stopped) return;
-            if (r.done) { fail(); return; }
-            queue.push(r.value);
-            pump();
-            try {  // ライブ端へ追従
-              if (sb.buffered.length) {
-                var end = sb.buffered.end(sb.buffered.length - 1);
-                if (end - video.currentTime > 3) video.currentTime = end - 0.5;
-              }
-            } catch (e3) {}
-            read();
-          }, fail);
-        })();
-      }, fail);
-    });
-    video.src = window.URL.createObjectURL(ms);
-    var p = video.play && video.play();
-    if (p && p.catch) p.catch(function () {});
-    return { stop: function () {
-      stopped = true;
-      try { if (reader) reader.cancel(); } catch (e) {}
-      try { video.src = ""; } catch (e2) {}
-    } };
-  }
 
-  /* ---------------- 2. ドア/建物 ---------------- */
   function editBuilding(id) {
     var isNew = !id;
     var cur = isNew ? {} : cfgObj("buildings")[id] || {};
@@ -1264,13 +2200,13 @@ if (typeof document !== "undefined") (function () {
     var fields = [
       { id: "bid", label: "ID", type: isNew ? "text" : "static",
         value: isNew ? L.newId("b", cfgObj("buildings")) : id },
-      { id: "ja", label: t("admin.label_ja", "ラベル (日本語)"), value: lb.ja },
-      { id: "en", label: t("admin.label_en", "ラベル (英語)"), value: lb.en },
-      { id: "zh", label: t("admin.label_zh", "ラベル (中国語)"), value: lb.zh }];
-    openForm(t("admin.buildings", "建物"), fields, function (v) {
+      { id: "ja", label: t("admin.label_ja"), value: lb.ja },
+      { id: "en", label: t("admin.label_en"), value: lb.en },
+      { id: "zh", label: t("admin.label_zh"), value: lb.zh }];
+    openForm(t("admin.buildings"), fields, function (v) {
       var bid = isNew ? L.safeId(v.bid) : id;
       if (!bid) return "ID?";
-      saveAndRefresh(L.buildingEntries(bid, v), null);
+      saveAndRefresh(L.buildingEntries(bid, v, cur), null);
     });
   }
 
@@ -1281,46 +2217,46 @@ if (typeof document !== "undefined") (function () {
     var fields = [
       { id: "did", label: "ID", type: isNew ? "text" : "static",
         value: isNew ? L.newId("d", cfgObj("doors")) : id },
-      { id: "ja", label: t("admin.label_ja", "ラベル (日本語)"), value: lb.ja },
-      { id: "en", label: t("admin.label_en", "ラベル (英語)"), value: lb.en },
-      { id: "zh", label: t("admin.label_zh", "ラベル (中国語)"), value: lb.zh },
-      { id: "building", label: t("admin.building_assign", "所属建物"), type: "select",
+      { id: "ja", label: t("admin.label_ja"), value: lb.ja },
+      { id: "en", label: t("admin.label_en"), value: lb.en },
+      { id: "zh", label: t("admin.label_zh"), value: lb.zh },
+      { id: "building", label: t("admin.building_assign"), type: "select",
         value: cur.building || "", options: buildingOptions() }];
-    openForm(t("admin.door_list", "ドア"), fields, function (v) {
+    openForm(t("admin.door_list"), fields, function (v) {
       var did = isNew ? L.safeId(v.did) : id;
       if (!did) return "ID?";
-      saveAndRefresh(L.doorEntries(did, v), null);
+      saveAndRefresh(L.doorEntries(did, v, cur), null);
     });
   }
 
   function renderDoors() {
     var el = $("#tab-doors");
     var bs = cfgObj("buildings"), ds = cfgObj("doors");
-    var h = "<div class='card'><div class='chead'><h2>" + esc(t("admin.buildings", "建物")) +
+    var h = "<div class='card'><div class='chead'><h2>" + esc(t("admin.buildings")) +
             "</h2><button class='btn small' data-act='addB'>+ " +
-            esc(t("admin.add_building", "建物を追加")) + "</button></div><table><thead><tr>" +
+            esc(t("admin.add_building")) + "</button></div><table><thead><tr>" +
             "<th>ID</th><th>ja</th><th>en</th><th>zh</th><th></th></tr></thead><tbody>";
     for (var b in bs) {
       var lb = bs[b].label || {};
       h += "<tr><td class='dim'>" + esc(b) + "</td><td>" + esc(lb.ja || "") + "</td><td>" +
            esc(lb.en || "") + "</td><td>" + esc(lb.zh || "") + "</td><td class='ops'>" +
            "<button class='btn2' data-act='editB' data-id='" + esc(b) + "'>" +
-           esc(t("admin.edit", "編集")) + "</button> <button class='btn2 danger' data-act='delB' data-id='" +
-           esc(b) + "'>" + esc(t("admin.delete", "削除")) + "</button></td></tr>";
+           esc(t("admin.edit")) + "</button> <button class='btn2 danger' data-act='delB' data-id='" +
+           esc(b) + "'>" + esc(t("admin.delete")) + "</button></td></tr>";
     }
     h += "</tbody></table></div>";
-    h += "<div class='card'><div class='chead'><h2>" + esc(t("admin.door_list", "ドア")) +
+    h += "<div class='card'><div class='chead'><h2>" + esc(t("admin.door_list")) +
          "</h2><button class='btn small' data-act='addD'>+ " +
-         esc(t("admin.add_door", "ドアを追加")) + "</button></div><table><thead><tr>" +
-         "<th>ID</th><th>" + esc(t("admin.label_ja", "ラベル")) + "</th><th>" +
-         esc(t("admin.building_assign", "所属建物")) + "</th><th></th></tr></thead><tbody>";
+         esc(t("admin.add_door")) + "</button></div><table><thead><tr>" +
+         "<th>ID</th><th>" + esc(t("admin.label_ja")) + "</th><th>" +
+         esc(t("admin.building_assign")) + "</th><th></th></tr></thead><tbody>";
     for (var d in ds) {
       h += "<tr><td class='dim'>" + esc(d) + "</td><td>" + esc(doorLabel(d)) + "</td><td>" +
            esc(ds[d].building ? L.labelOf(bs[ds[d].building], LANG, ds[d].building) : "—") +
            "</td><td class='ops'><button class='btn2' data-act='editD' data-id='" + esc(d) +
-           "'>" + esc(t("admin.edit", "編集")) +
+           "'>" + esc(t("admin.edit")) +
            "</button> <button class='btn2 danger' data-act='delD' data-id='" + esc(d) + "'>" +
-           esc(t("admin.delete", "削除")) + "</button></td></tr>";
+           esc(t("admin.delete")) + "</button></td></tr>";
     }
     h += "</tbody></table></div>";
     el.innerHTML = h;
@@ -1338,7 +2274,7 @@ if (typeof document !== "undefined") (function () {
     });
   }
 
-  // data-act ボタンの一括バインド
+
   function bindActs(root, handlers) {
     $all("[data-act]", root).forEach(function (b) {
       var act = b.getAttribute("data-act");
@@ -1347,59 +2283,73 @@ if (typeof document !== "undefined") (function () {
     });
   }
 
-  /* ---------------- 3. デバイス ---------------- */
+
   function editDevice(id) {
     var d = cfgObj("devices")[id] || {};
-    var lo = d.local || {}, cam = lo.camera || {}, mo = lo.motion || {}, video = lo.video || {};
+    var lo = d.local || {}, cam = lo.camera || {}, mo = lo.motion || {}, video = lo.video || {},
+      recovery = lo.recovery || {};
     var fields = [
       { id: "nid", label: "ID", type: "static", value: id },
-      { id: "name", label: t("admin.dev_name", "名前"), value: d.name },
-      { id: "role", label: t("admin.dev_role", "役割"), type: "select",
+      { id: "name", label: t("admin.dev_name"), value: d.name },
+      { id: "role", label: t("admin.dev_role"), type: "select",
         value: d.role || "door_station",
-        options: [{ v: "door_station", label: t("admin.role_door", "門口機") },
-                  { v: "indoor_panel", label: t("admin.role_indoor", "室内機") }] },
-      { id: "door", label: t("admin.door_assign", "担当ドア"), type: "select",
+        options: [{ v: "door_station", label: t("admin.role_door") },
+                  { v: "indoor_panel", label: t("admin.role_indoor") }] },
+      { id: "door", label: t("admin.door_assign"), type: "select",
         value: d.door || "", options: doorOptions(true) },
-      { id: "ui_lang", label: t("admin.ui_lang", "表示言語"), type: "select",
+      { id: "ui_lang", label: t("admin.ui_lang"), type: "select",
         value: lo.ui_lang || "ja",
-        options: [{ v: "ja", label: "日本語" }, { v: "en", label: "English" },
-                  { v: "zh", label: "中文" }] },
-      { id: "video_playback", label: t("admin.video_playback", "室内機の映像再生方式"),
+        options: [{ v: "ja", label: t("language.name_ja") },
+                  { v: "en", label: t("language.name_en") },
+                  { v: "zh", label: t("language.name_zh") }] },
+      { id: "helper_mode", label: t("admin.helper_mode"), type: "select",
+        value: recovery.helper_mode || "auto",
+        options: [{ v: "auto", label: t("admin.helper_auto") },
+                  { v: "on", label: t("admin.helper_on") },
+                  { v: "off", label: t("admin.helper_off") }] },
+      { id: "video_playback", label: t("admin.video_playback"),
         type: "select", value: video.playback || "low_latency",
         options: [
-          { v: "low_latency", label: t("admin.video_low_latency", "低遅延 H.264 (推奨)") },
-          { v: "hls", label: t("admin.video_hls", "HLS (互換)") },
+          { v: "low_latency", label: t("admin.video_low_latency") },
+          { v: "hls", label: t("admin.video_hls") },
           { v: "mjpeg", label: "MJPEG" }
         ] },
-      { id: "cam_fps", label: t("admin.cam_fps", "フレームレート"), type: "number",
+      { id: "video_rotation", label: t("admin.video_rotation"),
+        type: "select", value: video.rotation === undefined ? "auto" : String(video.rotation),
+        options: [
+          { v: "auto", label: t("admin.rotation_auto") },
+          { v: "0", label: "0°" }, { v: "90", label: "90°" },
+          { v: "180", label: "180°" }, { v: "270", label: "270°" }
+        ] },
+      { id: "cam_fps", label: t("admin.cam_fps"), type: "number",
         value: cam.mjpeg_fps !== undefined ? cam.mjpeg_fps : 8 },
-      { id: "cam_quality", label: t("admin.cam_quality", "JPEG 品質"), type: "number",
+      { id: "cam_quality", label: t("admin.cam_quality"), type: "number",
         value: cam.mjpeg_quality !== undefined ? cam.mjpeg_quality : 60 },
-      { id: "cam_resolution", label: t("admin.cam_resolution", "解像度"),
+      { id: "cam_resolution", label: t("admin.cam_resolution"),
         value: cam.resolution || "640x480", ph: "640x480" },
-      { id: "cam_hint", label: t("admin.cam_hint", "カメラ指定"), value: cam.device_hint },
-      // H.264 流暢档 (Phase 6a): auto=硬編があれば h264、なければ mjpeg 回落
-      { id: "cam_codec", label: t("admin.cam_codec", "映像コーデック"), type: "select",
+      { id: "cam_hint", label: t("admin.cam_hint"), value: cam.device_hint },
+
+      { id: "cam_codec", label: t("admin.cam_codec"), type: "select",
         value: cam.codec || "auto",
-        options: [{ v: "auto", label: t("admin.codec_auto", "自動 (対応機なら H.264)") },
+        options: [{ v: "auto", label: t("admin.codec_auto") },
                   { v: "mjpeg", label: "MJPEG" },
                   { v: "h264", label: "H.264" }] },
-      { id: "cam_h264_resolution", label: t("admin.cam_h264_resolution", "H.264 解像度"),
+      { id: "cam_h264_resolution", label: t("admin.cam_h264_resolution"),
         value: cam.h264_resolution || "640x360", ph: "640x360" },
-      { id: "cam_h264_fps", label: t("admin.cam_h264_fps", "H.264 フレームレート"),
+      { id: "cam_h264_fps", label: t("admin.cam_h264_fps"),
         type: "number", value: cam.h264_fps !== undefined ? cam.h264_fps : 30 },
-      { id: "cam_h264_bitrate", label: t("admin.cam_h264_bitrate", "H.264 ビットレート (kbps)"),
+      { id: "cam_h264_bitrate", label: t("admin.cam_h264_bitrate"),
         type: "number",
         value: cam.h264_bitrate_kbps !== undefined ? cam.h264_bitrate_kbps : 700 },
-      { id: "motion_enabled", label: t("admin.motion", "動体検知"), type: "check",
+      { id: "motion_enabled", label: t("admin.motion"), type: "check",
         value: mo.enabled !== false },
-      { id: "motion_sensitivity", label: t("admin.motion_sensitivity", "感度"), type: "number",
+      { id: "motion_sensitivity", label: t("admin.motion_sensitivity"), type: "number",
         value: mo.sensitivity !== undefined ? mo.sensitivity : 40 },
-      { id: "motion_interval", label: t("admin.motion_interval", "最小間隔 (秒)"),
+      { id: "motion_interval", label: t("admin.motion_interval"),
         type: "number", value: mo.min_interval_s !== undefined ? mo.min_interval_s : 30 },
-      { id: "caps_override", label: t("admin.caps_override", "能力上書き (JSON)"),
+      { id: "caps_override", label: t("admin.caps_override"),
         type: "textarea", value: d.caps_override ? JSON.stringify(d.caps_override) : "" }];
-    openForm(t("admin.devices", "デバイス"), fields, function (v) {
+    openForm(t("admin.devices"), fields, function (v) {
       var caps = null;
       var ct = (v.caps_override || "").replace(/^\s+|\s+$/g, "");
       if (ct) {
@@ -1407,8 +2357,243 @@ if (typeof document !== "undefined") (function () {
         if (caps === null || typeof caps !== "object") return "caps_override: JSON?";
       }
       v.caps_override = caps;
-      saveAndRefresh(L.deviceEntries(id, v), null);
+      saveAndRefresh(L.deviceEntries(id, v, d), null);
     });
+  }
+
+  function editDeviceUi(id, surface) {
+    var d = cfgObj("devices")[id] || {}, lo = d.local || {}, ui = lo.ui || {};
+    var peer = peerOf(id) || {}, selfId = (S.status.node || {}).id || "";
+    var self = id === selfId, web = surface === "web";
+    if (web && !self) { msg("Web UI manifest is available only on this node"); return; }
+    var peerFeatures = isObj(peer.features) ? peer.features :
+      (isObj(peer.caps) && isObj(peer.caps.features) ? peer.caps.features : {});
+    if (!web && !self && peerFeatures.ui_manifest_v1 !== true) {
+      msg("ui_manifest unavailable: the target has not measured ui_manifest_v1"); return;
+    }
+    var advertised = web ? ((S.status.web_ui || {}).manifest || null) :
+      (self ? S.status.ui_manifest : peer.ui_manifest);
+    var runtimeManifest = advertised && typeof advertised === "object" &&
+      !(advertised instanceof Array) && Object.keys(advertised).length ? advertised : null;
+    if (!runtimeManifest) {
+      msg(t("admin.ui_manifest_unreported")); return;
+    }
+    var source = !self && peer.cached_contract ? "last-valid cached runtime status" :
+                 "runtime status";
+    var manifest = runtimeManifest;
+    var mv = L.validateUiManifest(manifest);
+    if (!mv.ok) { msg("ui_manifest unavailable/invalid: " + mv.errors[0]); return; }
+    var elements = ui.elements || {}, legacy = ui.style || {}, lp = legacy.palette || {};
+    var runtime = self ? (S.status.runtime || {}) : (peer.runtime || {});
+    var applyReport = web ? (runtime.web_ui_style || null) :
+      (runtime.ui_style || runtime.semantic_ui || null);
+    function legacyValue(prop) {
+      if (prop === "scale" || prop === "font_scale") return legacy.text_scale || 1;
+      if (prop === "foreground") return lp.text || "#e8edf2";
+      if (prop === "background") return lp.surface || lp.background || "#1a2027";
+      if (prop === "accent" || prop === "border") return lp.accent || "#4da3ff";
+      if (prop === "radius") return 12;
+      return "#e8edf2";
+    }
+    var h = "<div class='dim fhint' style='margin-bottom:10px'>manifest: " + esc(source) +
+      " · schema " + esc(manifest.schema_version) + " · units " + esc(manifest.units) +
+      " · minimum touch " + esc(manifest.viewport.minimum_touch) +
+      ". " + esc(t("admin.ui_manifest_readonly")) +
+      (legacy && Object.keys(legacy).length ? " " + esc(t("admin.ui_legacy_hint")) : "") +
+      (!self && peer.cached_contract ? " <span class='warn'>" +
+        esc(t("admin.ui_offline_queued")) +
+        "</span>" : "") +
+      "</div><div class='scrollx'><table><thead><tr><th>Element</th><th>Property</th>" +
+      "<th>Override</th><th>Value</th></tr></thead><tbody>";
+    var ids = Object.keys(manifest.elements).sort();
+    ids.forEach(function (semanticId) {
+      var desc = manifest.elements[semanticId], cur = L.uiElementValue(elements, semanticId);
+      cur = cur && typeof cur === "object" ? cur : {};
+      for (var pi = 0; pi < desc.properties.length; pi++) {
+        var prop = desc.properties[pi], on = cur[prop] !== undefined;
+        var value = on ? cur[prop] : (desc.defaults[prop] !== undefined ?
+          desc.defaults[prop] : legacyValue(prop));
+        var numeric = prop === "scale" || prop === "font_scale" || prop === "radius";
+        h += "<tr data-ui-row data-element='" + esc(semanticId) + "' data-property='" + esc(prop) +
+          "' data-had='" + (L.uiElementValue(elements, semanticId) !== undefined ? "1" : "0") + "'><td>" +
+          (pi === 0 ? "<span class='mono'>" + esc(semanticId) + "</span>" +
+            (desc.safety_critical ? " <span class='tag err'>safety</span>" : "") : "") +
+          "</td><td>" + esc(prop) + "</td><td><input type='checkbox' data-ui-on" +
+          (on ? " checked" : "") + "></td><td><input data-ui-value type='" +
+          (numeric ? "number" : "color") + "' value='" + esc(value) + "'" +
+          (numeric ? " min='0' step='0.05' style='width:110px'" : "") + "></td></tr>";
+      }
+    });
+    h += "</tbody></table></div><h3 style='margin-top:16px'>" +
+      esc(t("admin.theme_preview")) +
+      "</h3><div class='dim fhint'>Logical preview; the target viewport and minimum touch " +
+      "constraint remain authoritative.</div><div data-ui-preview " +
+      "style='display:flex;gap:12px;align-items:center;flex-wrap:wrap;padding:16px;" +
+      "margin-top:8px;background:#101418;border:1px solid var(--line)'></div>" +
+      "<div data-ui-preview-error class='warn' role='alert'></div>" +
+      "<div class='dim fhint' style='margin-top:10px'>" +
+      esc(web ? t("admin.web_ui_apply_report") :
+        t("admin.native_ui_apply_report")) + ": " +
+      esc(applyReport ? JSON.stringify(applyReport) :
+        (web ? "unavailable until a panel applies it" :
+          "unavailable until the client reports it")) +
+      "</div>";
+
+    function collectUiValues(modal) {
+      var values = {}, had = {};
+      $all("[data-ui-row]", modal).forEach(function (row) {
+        var semanticId = row.getAttribute("data-element"), prop = row.getAttribute("data-property");
+        if (!values[semanticId]) values[semanticId] = {};
+        had[semanticId] = had[semanticId] || row.getAttribute("data-had") === "1";
+        if (!row.querySelector("[data-ui-on]").checked) return;
+        var raw = row.querySelector("[data-ui-value]").value;
+        values[semanticId][prop] = (prop === "scale" || prop === "font_scale" || prop === "radius") ?
+          parseFloat(raw) : raw;
+      });
+      for (var semanticId in values) {
+        var count = 0; for (var prop in values[semanticId]) count++;
+        if (!count && !had[semanticId]) delete values[semanticId];
+      }
+      return values;
+    }
+
+    function renderUiPreview(modal) {
+      var root = modal.querySelector("[data-ui-preview]");
+      var error = modal.querySelector("[data-ui-preview-error]");
+      if (!root || !error) return;
+      var model;
+      try { model = L.uiPreviewModel(manifest, collectUiValues(modal)); }
+      catch (e) { error.textContent = e.message; return; }
+      error.textContent = "";
+      root.innerHTML = "";
+      for (var i = 0; i < model.elements.length; i++) {
+        var item = model.elements[i], style = item.style || {};
+        var sample = document.createElement("div");
+        sample.textContent = item.id;
+        sample.title = item.safety_critical ? "safety-critical" : item.id;
+        sample.style.display = "inline-flex";
+        sample.style.alignItems = "center";
+        sample.style.justifyContent = "center";
+        sample.style.boxSizing = "border-box";
+        sample.style.padding = "8px 12px";
+        sample.style.minWidth = model.minimum_touch + "px";
+        sample.style.minHeight = model.minimum_touch + "px";
+        sample.style.fontSize = (14 * Number(style.font_scale || 1)) + "px";
+        sample.style.color = style.foreground || "#e8edf2";
+        sample.style.backgroundColor = style.background || "#1a2027";
+        sample.style.border = "2px solid " + (style.border || style.accent || "#4da3ff");
+        sample.style.borderRadius = Number(style.radius || 0) + "px";
+        sample.style.transform = "scale(" + Number(style.scale || 1) + ")";
+        sample.style.transformOrigin = "center";
+        root.appendChild(sample);
+      }
+    }
+
+    var modal = openModal(deviceName(id) + " — " +
+      (web ? t("admin.web_ui") : t("admin.native_ui")), h,
+      function (modal) {
+      var values = collectUiValues(modal);
+      var changes;
+      try { changes = L.uiElementChanges(id, manifest, values); }
+      catch (e) { return e.message; }
+      if (!changes.entries.length && !changes.dels.length) {
+        msg(t("admin.no_changes")); return "";
+      }
+      saveAndRefresh(changes.entries, changes.dels);
+      return "";
+      });
+    $all("[data-ui-on], [data-ui-value]", modal).forEach(function (input) {
+      input.addEventListener("input", function () { renderUiPreview(modal); });
+      input.addEventListener("change", function () { renderUiPreview(modal); });
+    });
+    renderUiPreview(modal);
+  }
+
+  var pbReceiver = "", pbSource = "";
+  var PB_LABELS = { h264_low_latency: t("admin.video_low_latency"),
+                    h264_hls: t("admin.video_hls"), mjpeg: "MJPEG" };
+
+  function playbackRowsHtml(profile, tbodyId) {
+    var p = L.normalizePlaybackProfile(profile), h = "";
+    for (var i = 0; i < p.strategies.length; i++) {
+      var s = p.strategies[i];
+      h += "<tr draggable='true' data-pb-row data-id='" + esc(s.id) + "'>" +
+           "<td class='ops'><button class='btn2 small' data-pb-up>↑</button> " +
+           "<button class='btn2 small' data-pb-down>↓</button></td>" +
+           "<td><label><input type='checkbox' data-pb-enabled" +
+           (s.enabled ? " checked" : "") + "> " + esc(PB_LABELS[s.id] || s.id) +
+           (s.id === "h264_hls" ? " <span class='dim'>(iPad1 App)</span>" : "") +
+           "</label></td><td><input type='number' min='100' max='60000' step='100' " +
+           "data-pb-start value='" + esc(s.startup_timeout_ms) + "' style='width:100px'> ms</td>" +
+           "<td><input type='number' min='1000' max='60000' step='500' data-pb-stall value='" +
+           esc(s.stall_timeout_ms) + "' style='width:100px'> ms</td></tr>";
+    }
+    return "<table><thead><tr><th>" + esc(t("admin.order")) + "</th><th>" +
+           esc(t("admin.playback_strategy")) + "</th><th>" +
+           esc(t("admin.first_frame_timeout")) + "</th><th>" +
+           esc(t("admin.stall_timeout")) + "</th>" +
+           "</tr></thead><tbody id='" + tbodyId + "'>" + h + "</tbody></table>" +
+           "<div class='dim fhint'>" + esc(t("admin.playback_fallback_hint")) +
+           " <span id='" + tbodyId + "Estimate'>0</span> ms</div>";
+  }
+
+  function collectPlaybackRows(id) {
+    var rows = $all("[data-pb-row]", $(id)), out = [], enabled = 0;
+    for (var i = 0; i < rows.length; i++) {
+      var start = parseInt(rows[i].querySelector("[data-pb-start]").value, 10);
+      var stall = parseInt(rows[i].querySelector("[data-pb-stall]").value, 10);
+      var on = rows[i].querySelector("[data-pb-enabled]").checked;
+      if (!(start >= 100 && start <= 60000) || !(stall >= 1000 && stall <= 60000)) {
+        window.alert(t("admin.playback_timeout_range"));
+        return null;
+      }
+      enabled += on ? 1 : 0;
+      out.push({ id: rows[i].getAttribute("data-id"), enabled: on,
+                 startup_timeout_ms: start, stall_timeout_ms: stall });
+    }
+    if (!enabled) { window.alert(t("admin.playback_one_required")); return null; }
+    return { strategies: out };
+  }
+
+  function updatePlaybackEstimate(id) {
+    var rows = $all("[data-pb-row]", $(id)), ms = 0;
+    for (var i = 0; i < rows.length; i++) {
+      if (!rows[i].querySelector("[data-pb-enabled]").checked) continue;
+      if (rows[i].getAttribute("data-id") === "mjpeg") break;
+      ms += parseInt(rows[i].querySelector("[data-pb-start]").value, 10) || 0;
+    }
+    var out = $(id + "Estimate"); if (out) out.textContent = String(ms);
+  }
+
+  function bindPlaybackRows(id) {
+    var body = $(id), dragged = null;
+    if (!body) return;
+    $all("[data-pb-row]", body).forEach(function (row) {
+      row.ondragstart = function (e) {
+        dragged = row;
+        if (e && e.dataTransfer) {
+          e.dataTransfer.effectAllowed = "move";
+          e.dataTransfer.setData("text/plain", row.getAttribute("data-id"));
+        }
+      };
+      row.ondragover = function (e) { if (e.preventDefault) e.preventDefault(); };
+      row.ondrop = function (e) {
+        if (e.preventDefault) e.preventDefault();
+        if (dragged && dragged !== row) body.insertBefore(dragged, row);
+        updatePlaybackEstimate(id);
+      };
+      row.querySelector("[data-pb-up]").onclick = function () {
+        if (row.previousSibling) body.insertBefore(row, row.previousSibling);
+        updatePlaybackEstimate(id);
+      };
+      row.querySelector("[data-pb-down]").onclick = function () {
+        if (row.nextSibling) body.insertBefore(row.nextSibling, row);
+        updatePlaybackEstimate(id);
+      };
+      row.querySelector("[data-pb-enabled]").onchange = function () { updatePlaybackEstimate(id); };
+      row.querySelector("[data-pb-start]").oninput = function () { updatePlaybackEstimate(id); };
+    });
+    updatePlaybackEstimate(id);
   }
 
   function renderDevices() {
@@ -1416,53 +2601,142 @@ if (typeof document !== "undefined") (function () {
     var ds = cfgObj("devices");
     var ids = [];
     for (var id in ds) ids.push(id);
-    // peers にだけいる (config 未着) の端末も一応載せる
+
     (S.status.peers || []).forEach(function (p) {
       if (ids.indexOf(p.id) < 0) ids.push(p.id);
     });
-    var h = "<div class='card'><table><thead><tr><th>" + esc(t("admin.dev_name", "名前")) +
-            "</th><th>ID</th><th>" + esc(t("admin.dev_role", "役割")) + "</th><th>" +
-            esc(t("admin.door_assign", "担当ドア")) + "</th><th>" +
-            esc(t("admin.online", "オンライン")) + "</th><th></th></tr></thead><tbody>";
+    var h = "<div class='card'><table><thead><tr><th>" + esc(t("admin.dev_name")) +
+            "</th><th>ID</th><th>" + esc(t("admin.dev_role")) + "</th><th>" +
+            esc(t("admin.door_assign")) + "</th><th>" +
+            esc(t("admin.online")) + "</th><th>" +
+            esc(t("admin.runtime_health")) +
+            "</th><th></th></tr></thead><tbody>";
+    var selfId = (S.status.node || {}).id || "";
     ids.forEach(function (nid) {
       var d = ds[nid] || {};
       var p = peerOf(nid);
       var alive = p && p.status === "alive";
       var stCls = alive ? "ok" : (p && p.status === "suspect" ? "warn" : "err");
-      var stTxt = p ? p.status : t("admin.offline", "オフライン");
+      var stTxt = p ? p.status : t("admin.offline");
+      var runtime = nid === selfId ? (S.status.runtime || {}) : ((p && p.runtime) || {});
+      var health = L.runtimeHealthRows(runtime), healthHtml = "";
+      var healthLabels = {
+        safe_mode: t("admin.runtime_safe_mode"),
+        helper: t("admin.runtime_helper"),
+        codec: t("admin.runtime_codec"),
+        last_exit: t("admin.runtime_last_exit"),
+        alert: t("admin.runtime_alert"),
+        heartbeat: t("admin.runtime_heartbeat")
+      };
+      for (var hi = 0; hi < health.length; hi++)
+        healthHtml += "<div class='" + esc(health[hi].severity || "dim") + "'><span class='dim'>" +
+          esc(healthLabels[health[hi].key] || health[hi].key) + ":</span> " +
+          esc(health[hi].value) + "</div>";
+      if (!healthHtml) healthHtml = "<span class='warn'>" +
+        esc(t("admin.runtime_unreported")) + "</span>";
       h += "<tr class='" + (alive ? "" : "offline") + "'><td>" + esc(d.name || "") +
            (p && p.self ? " <span class='tag'>self</span>" : "") + "</td><td class='dim'>" +
            esc(nid.slice(0, 8)) + "</td><td>" +
-           esc(d.role === "indoor_panel" ? t("admin.role_indoor", "室内機") :
-               (d.role ? t("admin.role_door", "門口機") : "")) + "</td><td>" +
+           esc(d.role === "indoor_panel" ? t("admin.role_indoor") :
+               (d.role ? t("admin.role_door") : "")) + "</td><td>" +
            esc(d.door ? doorLabel(d.door) : "—") + "</td><td class='" + stCls + "'>" +
-           esc(stTxt) + "</td><td class='ops'><button class='btn2' data-act='edit' data-id='" +
-           esc(nid) + "'>" + esc(t("admin.edit", "編集")) + "</button></td></tr>";
+           esc(stTxt) + "</td><td>" + healthHtml +
+           "</td><td class='ops'><button class='btn2' data-act='edit' data-id='" +
+           esc(nid) + "'>" + esc(t("admin.edit")) + "</button> " +
+           "<button class='btn2' data-act='ui' data-id='" + esc(nid) + "'>" +
+           esc(t("admin.native_ui")) + "</button>" +
+           (nid === ((S.status.node || {}).id || "") ?
+             " <button class='btn2' data-act='webui' data-id='" + esc(nid) + "'>" +
+             esc(t("admin.web_ui")) + "</button>" : "") + "</td></tr>";
     });
     h += "</tbody></table></div>";
+
+    var vp = cfgObj("video_playback"), globalProfile = L.normalizePlaybackProfile(vp.global);
+    var indoors = [], outdoors = [];
+    for (var did in ds) {
+      if (ds[did].role === "indoor_panel") indoors.push(did);
+      if (ds[did].role === "door_station") outdoors.push(did);
+    }
+    if (indoors.indexOf(pbReceiver) < 0) pbReceiver = "";
+    if (outdoors.indexOf(pbSource) < 0) pbSource = "";
+    h += "<div class='card'><h2>" + esc(t("admin.video_playback_policy")) +
+         "</h2><h3>" + esc(t("admin.global")) + "</h3>" +
+         playbackRowsHtml(globalProfile, "pbGlobalRows") +
+         "<button class='btn small' id='pbGlobalSave'>" + esc(t("admin.save")) +
+         "</button><hr style='border:0;border-top:1px solid var(--line);margin:18px 0'>" +
+         "<h3>" + esc(t("admin.playback_pair_override")) +
+         "</h3><div style='display:flex;gap:8px;flex-wrap:wrap'>" +
+         "<select id='pbReceiver'><option value=''>" + esc(t("admin.choose_indoor")) + "</option>";
+    indoors.forEach(function (id) { h += "<option value='" + esc(id) + "'" +
+      (pbReceiver === id ? " selected" : "") + ">" + esc(deviceName(id)) + "</option>"; });
+    h += "</select><select id='pbSource'><option value=''>" + esc(t("admin.choose_door_station")) + "</option>";
+    outdoors.forEach(function (id) { h += "<option value='" + esc(id) + "'" +
+      (pbSource === id ? " selected" : "") + ">" + esc(deviceName(id)) + "</option>"; });
+    h += "</select><button class='btn2 small' id='pbPairLoad'>" +
+         esc(t("admin.load_or_add")) + "</button></div>";
+    if (pbReceiver && pbSource) {
+      var pairs = vp.pairs || {}, pair = (pairs[pbReceiver] || {})[pbSource];
+      h += "<div style='margin-top:12px'><div class='dim fhint'>" +
+           esc(t(pair ? "admin.pair_override_active" : "admin.pair_override_inherited")) + "</div>" +
+           playbackRowsHtml(pair || globalProfile, "pbPairRows") +
+           "<button class='btn small' id='pbPairSave'>" + esc(t("admin.save_pair_override")) +
+           "</button> " + (pair ? "<button class='btn2 danger small' id='pbPairDelete'>" +
+           esc(t("admin.delete_pair_override")) + "</button>" : "") +
+           "</div>";
+    }
+    h += "</div>";
     el.innerHTML = h;
-    bindActs(el, { edit: function (id) { editDevice(id); } });
+    bindActs(el, { edit: function (id) { editDevice(id); },
+                  ui: function (id) { editDeviceUi(id, "native"); },
+                  webui: function (id) { editDeviceUi(id, "web"); } });
+    bindPlaybackRows("pbGlobalRows");
+    if ($("pbPairRows")) bindPlaybackRows("pbPairRows");
+    $("pbGlobalSave").onclick = function () {
+      var p = collectPlaybackRows("pbGlobalRows");
+      if (p) saveAndRefresh(L.playbackProfileEntries("", "", p, vp.global), null);
+    };
+    $("pbPairLoad").onclick = function () {
+      pbReceiver = $("pbReceiver").value; pbSource = $("pbSource").value;
+      if (!pbReceiver || !pbSource) { window.alert(t("admin.choose_playback_pair")); return; }
+      renderDevices();
+    };
+    if ($("pbPairSave")) $("pbPairSave").onclick = function () {
+      var p = collectPlaybackRows("pbPairRows");
+      var pair = (((vp.pairs || {})[pbReceiver] || {})[pbSource]) || {};
+      if (p) saveAndRefresh(L.playbackProfileEntries(pbReceiver, pbSource, p, pair), null);
+    };
+    if ($("pbPairDelete")) $("pbPairDelete").onclick = function () {
+      saveAndRefresh(null, ["video_playback.pairs." + pbReceiver + "." + pbSource]);
+    };
   }
 
-  /* ---------------- 4. 呼出ルール (ビジュアルエディタ) ---------------- */
+
   function whenLabel(type) {
-    if (type === "motion") return t("admin.when_motion", "動体検知");
-    if (type === "device_offline") return t("admin.when_offline", "デバイス離線");
-    return t("admin.when_button", "呼出ボタン");
+    if (type === "motion") return t("admin.when_motion");
+    if (type === "device_offline") return t("admin.when_offline");
+    if (type === "emergency_on") return t("admin.when_emergency_on");
+    if (type === "emergency_off") return t("admin.when_emergency_off");
+    return t("admin.when_button");
   }
   function actionLabel(a) {
     if (a.type === "sip_call")
-      return t("admin.act_sip", "SIP 発呼") + " → " + (a.target_extension || "600");
+      return t("admin.act_sip") + " → " + (a.target_extension || "600");
     if (a.type === "telegram") {
-      var hs = (a.households || []).map(householdLabel).join(",");
-      return t("admin.act_telegram", "Telegram") + " → " + (hs || "?") +
+      var hs = a.households === "all" ? t("admin.all") :
+               (a.households instanceof Array ? a.households : []).map(householdLabel).join(",");
+      return t("admin.act_telegram") + " → " + (hs || "?") +
              (a.with_snapshot ? " 📷" : "");
     }
-    if (a.type === "chime") return t("admin.act_chime", "チャイム") + " (" + (a.sound || "ding1") + ")";
-    return t("admin.act_ha", "HA イベント");
+    if (a.type === "chime") return t("admin.act_chime") + " (" + (a.sound || "ding1") + ")";
+    if (a.type === "device_alert") {
+      var channels = L.effectiveAlertChannels(a).join(", ");
+      return t("admin.act_device_alert") + " (" + channels + ")";
+    }
+    if (a.type === "ha_event") return t("admin.act_ha");
+    return t("admin.unknown_action") + ": " + (a.type || "?");
   }
   function scheduleLabel(sc) {
-    if (!sc || sc.always) return t("admin.always", "常時");
+    if (!sc || sc.always) return t("admin.always");
     var ws = sc.windows || [];
     var parts = [];
     for (var i = 0; i < ws.length; i++) {
@@ -1470,15 +2744,46 @@ if (typeof document !== "undefined") (function () {
       var days = (w.days || DAYS).map(dayLabel).join("");
       parts.push(days + " " + (w.from || "") + "-" + (w.to || ""));
     }
-    return parts.join(" / ") || t("admin.always", "常時");
+    return parts.join(" / ") || t("admin.always");
   }
 
-  // アクション行の HTML (種類 select + 種類別パラメータ)
+  function selectorText(value) {
+    if (value === "all") return "all";
+    if (value instanceof Array) return value.join(", ");
+    return typeof value === "string" ? value : "";
+  }
+
+  function selectorInput(label, field, value, hint) {
+    return "<div style='min-width:180px;flex:1'><label class='flab'>" + esc(label) +
+           "</label><input type='text' data-ra='" + field + "' value='" +
+           esc(selectorText(value)) + "' placeholder='all' style='width:100%'>" +
+           (hint ? "<div class='dim fhint'>" + esc(hint) + "</div>" : "") + "</div>";
+  }
+
+  function alertPresentationDefaults(a) {
+    var p = a && a.presentation && typeof a.presentation === "object" ? a.presentation : {};
+    return { visual: p.visual !== false, sound: p.sound || "",
+      volume: p.volume === undefined ? 100 : p.volume,
+      sticky: p.sticky === true,
+      ttl_s: p.ttl_s === undefined ? 0 : p.ttl_s,
+      background: L.colorOk(p.background) ? p.background : "#8F1010",
+      foreground: L.colorOk(p.foreground) ? p.foreground : "#FFFFFF",
+      accent: L.colorOk(p.accent) ? p.accent : "#FFD166" };
+  }
+
+  // Action row HTML. Unknown action types are intentionally read-only and losslessly preserved.
   function actionRowHtml(idx, a) {
-    var typeOpts = [["sip_call", t("admin.act_sip", "SIP 発呼")],
-                    ["telegram", t("admin.act_telegram", "Telegram 通知")],
-                    ["ha_event", t("admin.act_ha", "HA イベント")],
-                    ["chime", t("admin.act_chime", "チャイム")]];
+    if (L.RULE_ACTION_TYPES.indexOf(a.type) < 0) {
+      return "<div class='arow' data-arow='" + idx + "' data-readonly='1'>" +
+             "<span class='tag warn'>" + esc(t("admin.unknown_action")) +
+             ": " + esc(a.type || "?") + "</span><span class='mono dim'>" +
+             esc(JSON.stringify(a)) + "</span></div>";
+    }
+    var typeOpts = [["sip_call", t("admin.act_sip")],
+                    ["telegram", t("admin.act_telegram")],
+                    ["ha_event", t("admin.act_ha")],
+                    ["chime", t("admin.act_chime")],
+                    ["device_alert", t("admin.act_device_alert")]];
     var sel = "<select data-ra='type' data-idx='" + idx + "'>";
     for (var i = 0; i < typeOpts.length; i++)
       sel += "<option value='" + typeOpts[i][0] + "'" +
@@ -1491,7 +2796,12 @@ if (typeof document !== "undefined") (function () {
                esc(a.target_extension || "600") + "' placeholder='600' style='width:90px'>";
     } else if (a.type === "telegram") {
       var hs = householdOptions();
-      params = "<span class='mcwrap'>";
+      (a.households instanceof Array ? a.households : []).forEach(function (id) {
+        if (!hs.some(function (o) { return o.v === id; })) hs.push({ v: id, label: id });
+      });
+      params = "<span class='mcwrap'><label class='mc'><input type='checkbox' " +
+               "data-ra='households_all'" + (a.households === "all" ? " checked" : "") +
+               "> " + esc(t("admin.all")) + "</label>";
       for (var k = 0; k < hs.length; k++)
         params += "<label class='mc'><input type='checkbox' data-ra='households' data-idx='" +
                   idx + "' value='" + esc(hs[k].v) + "'" +
@@ -1499,25 +2809,84 @@ if (typeof document !== "undefined") (function () {
                   esc(hs[k].label) + "</label>";
       params += "</span><label class='mc'><input type='checkbox' data-ra='with_snapshot' data-idx='" +
                 idx + "'" + (a.with_snapshot ? " checked" : "") + "> " +
-                esc(t("admin.with_snapshot", "写真付き")) + "</label>";
+                esc(t("admin.with_snapshot")) + "</label>";
     } else if (a.type === "chime") {
       var devs = deviceOptions();
+      (a.devices instanceof Array ? a.devices : []).forEach(function (id) {
+        if (!devs.some(function (o) { return o.v === id; })) devs.push({ v: id, label: id });
+      });
       params = "<span class='mcwrap'>";
       for (var m = 0; m < devs.length; m++)
         params += "<label class='mc'><input type='checkbox' data-ra='devices' data-idx='" + idx +
                   "' value='" + esc(devs[m].v) + "'" +
                   ((a.devices instanceof Array ? a.devices : []).indexOf(devs[m].v) >= 0 ?
                    " checked" : "") + "> " + esc(devs[m].label) + "</label>";
-      params += "</span><div class='dim fhint'>" +
-                esc(t("admin.all", "すべて")) + " = チェックなし</div>";
+      params += "</span><div class='dim fhint'>" + esc(t("admin.unchecked_all")) + "</div>";
       var ro = ringtoneOptions();
+      if (a.sound && !ro.some(function (o) { return o.v === a.sound; }))
+        ro.push({ v: a.sound, label: a.sound });
       params += " <select data-ra='sound' data-idx='" + idx + "'>";
       for (var ri = 0; ri < ro.length; ri++)
         params += "<option value='" + esc(ro[ri].v) + "'" +
                   (ro[ri].v === (a.sound || "ding1") ? " selected" : "") + ">" +
                   esc(ro[ri].label) + "</option>";
       params += "</select> <button class='btn2' data-ringplay='" + idx + "'>▶ " +
-                esc(t("admin.audio_play", "試聴")) + "</button>";
+                esc(t("admin.audio_play")) + "</button>";
+    } else if (a.type === "device_alert") {
+      var targets = a.targets && typeof a.targets === "object" ? a.targets : {};
+      var groups = Object.prototype.hasOwnProperty.call(targets, "web_subscription_groups") ?
+                   targets.web_subscription_groups : targets.web_profiles;
+      params = "<div style='display:flex;gap:8px;flex-wrap:wrap;flex-basis:100%'>" +
+        selectorInput(t("admin.alert_target_devices"), "target_devices",
+                      targets.devices, t("admin.list_or_all")) +
+        selectorInput(t("admin.alert_target_roles"), "target_roles",
+                      targets.roles, t("admin.list_or_all")) +
+        selectorInput(t("admin.alert_target_web_groups"),
+                      "target_web_groups", groups,
+                      t("admin.list_or_all")) + "</div>";
+      var channels = L.effectiveAlertChannels(a);
+      params += "<div class='mcwrap' style='flex-basis:100%'>";
+      [["in_app", t("admin.channel_in_app")],
+       ["system_notification", t("admin.channel_system_notification")],
+       ["web_push", t("admin.channel_web_push")]].forEach(function (ch) {
+        params += "<label class='mc'><input type='checkbox' data-ra='channel' value='" + ch[0] +
+                  "'" + (channels.indexOf(ch[0]) >= 0 ? " checked" : "") + "> " +
+                  esc(ch[1]) + "</label>";
+      });
+      params += "<label class='mc'><input type='checkbox' data-ra='never_suppress'" +
+                (a.never_suppress === true ? " checked" : "") + "> " +
+                esc(t("admin.never_suppress")) + "</label></div>";
+      var p = alertPresentationDefaults(a), sounds = soundOptions(true);
+      if (p.sound && !sounds.some(function (o) { return o.v === p.sound; }))
+        sounds.push({ v: p.sound, label: p.sound });
+      params += "<div style='display:flex;gap:8px;align-items:end;flex-wrap:wrap;flex-basis:100%'>" +
+                "<label class='mc'><input type='checkbox' data-ra='visual'" +
+                (p.visual ? " checked" : "") + "> " + esc(t("admin.alert_visual")) +
+                "</label><label class='mc'><input type='checkbox' data-ra='sticky'" +
+                (p.sticky ? " checked" : "") + "> " + esc(t("admin.alert_sticky")) +
+                "</label><div><label class='flab'>" + esc(t("admin.alert_sound")) +
+                "</label><select data-ra='alert_sound'>";
+      for (var si = 0; si < sounds.length; si++)
+        params += "<option value='" + esc(sounds[si].v) + "'" +
+                  (sounds[si].v === p.sound ? " selected" : "") + ">" +
+                  esc(sounds[si].label) + "</option>";
+      params += "</select></div><div><label class='flab'>" +
+                esc(t("admin.alert_volume")) +
+                "</label><input type='number' min='0' max='100' data-ra='volume' value='" +
+                esc(p.volume) + "' style='width:100px'></div><div><label class='flab'>" +
+                esc(t("admin.alert_ttl")) +
+                "</label><input type='number' min='0' data-ra='ttl_s' value='" +
+                esc(p.ttl_s) + "' style='width:100px'></div>" +
+                "<div><label class='flab'>" +
+                esc(t("admin.alert_background")) +
+                "</label><input type='color' data-ra='alert_background' value='" +
+                esc(p.background) + "'></div><div><label class='flab'>" +
+                esc(t("admin.alert_foreground")) +
+                "</label><input type='color' data-ra='alert_foreground' value='" +
+                esc(p.foreground) + "'></div><div><label class='flab'>" +
+                esc(t("admin.alert_accent")) +
+                "</label><input type='color' data-ra='alert_accent' value='" +
+                esc(p.accent) + "'></div></div>";
     }
     return "<div class='arow' data-arow='" + idx + "'>" + sel + " " + params +
            " <button class='btn2 danger' data-ra='del' data-idx='" + idx + "'>×</button></div>";
@@ -1536,6 +2905,63 @@ if (typeof document !== "undefined") (function () {
     return h;
   }
 
+  function sosWarningText(w) {
+    if (w.code === "no_device_alert")
+      return t("admin.sos_warn_no_device_alert");
+    if (w.code === "zero_recipients")
+      return t("admin.sos_warn_zero_recipients");
+    if (w.code === "all_channels_silent")
+      return t("admin.sos_warn_silent");
+    if (w.code === "no_web_push_subscriptions")
+      return t("admin.sos_warn_no_push_subscriptions");
+    if (w.code === "web_push_backend_unavailable")
+      return t("admin.sos_warn_push_backend");
+    if (w.code === "offline_devices")
+      return t("admin.sos_warn_offline") + ": " +
+             (w.devices || []).join(", ");
+    if (w.code === "unsupported_device_channels")
+      return t("admin.sos_warn_unsupported_channels") +
+             ": " + (w.channels || []).join(", ");
+    if (w.code === "unavailable_device_channels")
+      return t("admin.sos_warn_unavailable_channels") +
+             ": " + (w.channels || []).join(", ");
+    if (w.code === "unknown_device_channels")
+      return t("admin.sos_warn_unknown_channels") +
+             ": " + (w.channels || []).join(", ");
+    return w.code;
+  }
+
+  function sosPreviewHtml(rule) {
+    var preview = L.sosDryRunPreview(rule, S.status, S.cfg);
+    if (!preview.is_sos) return "";
+    var warnings = L.sosRuleWarnings(rule, S.status, S.cfg), h =
+      "<div class='card' role='status' style='margin-top:12px;border-color:var(--warn)'>" +
+      "<h2>" + esc(t("admin.sos_dry_run")) + "</h2>" +
+      "<div class='dim fhint'>" + esc(t("admin.sos_targets")) + ": " +
+      esc(t("admin.alert_target_devices")) + " [" +
+      esc(preview.target_devices.join(", ") || "default/all") + "]; " +
+      esc(t("admin.alert_target_roles")) + " [" +
+      esc(preview.target_roles.join(", ") || "default/all") + "]; " +
+      esc(t("admin.alert_target_web_groups")) + " [" +
+      esc(preview.target_web_subscription_groups.join(", ") || "default/all") + "]</div>" +
+      "<div class='dim fhint'>" + esc(t("admin.alert_channels")) + ": " +
+      esc(preview.channels.join(", ") || "none") + " · " +
+      esc(t("admin.sos_local_recipients")) + ": " +
+      preview.local_recipients + " (" + preview.capable_local_recipients + " " +
+      esc(t("admin.sos_capable_recipients")) + ") · Web Push: " +
+      (preview.web_push_recipients === null ? "?" : preview.web_push_recipients) + "</div>";
+    for (var i = 0; i < warnings.length; i++)
+      h += "<div class='warn' style='font-weight:600;margin-top:6px'>⚠ " +
+           esc(sosWarningText(warnings[i])) + "</div>";
+    if (!warnings.length)
+      h += "<div class='ok' style='margin-top:6px'>" +
+           esc(t("admin.sos_dry_run_ok")) +
+           "</div>";
+    return h + "<div class='dim fhint'>" +
+      esc(t("admin.sos_warning_nonblocking")) +
+      "</div></div>";
+  }
+
   function editRule(id) {
     var isNew = !id;
     var rid = isNew ? L.newId("r", cfgObj("trigger_rules")) : id;
@@ -1543,73 +2969,80 @@ if (typeof document !== "undefined") (function () {
       { enabled: true, when: { type: "button" }, schedule: { always: true },
         actions: [{ type: "chime" }] } :
       JSON.parse(JSON.stringify(cfgObj("trigger_rules")[id] || {}));
-    var st = {
-      enabled: cur.enabled !== false,
-      whenType: (cur.when && cur.when.type) || "button",
-      doors: (cur.when && cur.when.doors) || [],
-      devices: (cur.when && cur.when.devices) || "all",
-      always: !cur.schedule || !!cur.schedule.always,
-      windows: (cur.schedule && cur.schedule.windows) ?
-               JSON.parse(JSON.stringify(cur.schedule.windows)) : [],
-      actions: cur.actions ? JSON.parse(JSON.stringify(cur.actions)) : []
-    };
+    var st = L.normalizeRuleEditor(cur);
 
     function bodyHtml() {
       var h = "<div class='frow frow-check'><label><input type='checkbox' id='rEnabled'" +
-              (st.enabled ? " checked" : "") + "> " + esc(t("admin.enabled", "有効")) +
+              (st.enabled ? " checked" : "") + "> " + esc(t("admin.enabled")) +
               "</label></div>";
-      // 条件
-      h += "<div class='frow'><label class='flab'>" + esc(t("admin.rule_when", "条件")) +
+
+      h += "<div class='frow'><label class='flab'>" + esc(t("admin.rule_when")) +
            "</label><select id='rWhen'>";
-      [["button", t("admin.when_button", "呼出ボタン")], ["motion", t("admin.when_motion", "動体検知")],
-       ["device_offline", t("admin.when_offline", "デバイス離線")]].forEach(function (o) {
-        h += "<option value='" + o[0] + "'" + (st.whenType === o[0] ? " selected" : "") + ">" +
+      var whenOptions = [["button", t("admin.when_button")],
+       ["motion", t("admin.when_motion")],
+       ["device_offline", t("admin.when_offline")],
+       ["emergency_on", t("admin.when_emergency_on")],
+       ["emergency_off", t("admin.when_emergency_off")]];
+      if (!whenOptions.some(function (o) { return o[0] === st.whenType; }))
+        whenOptions.push([st.whenType, t("admin.unknown_trigger") + ": " + st.whenType]);
+      whenOptions.forEach(function (o) {
+        h += "<option value='" + esc(o[0]) + "'" + (st.whenType === o[0] ? " selected" : "") + ">" +
              esc(o[1]) + "</option>";
       });
       h += "</select></div>";
       if (st.whenType === "device_offline") {
-        h += "<div class='frow'><label class='flab'>" + esc(t("admin.rule_devices", "対象デバイス")) +
+        h += "<div class='frow'><label class='flab'>" + esc(t("admin.rule_devices")) +
              "</label><div class='mcwrap'><label class='mc'><input type='checkbox' id='rDevAll'" +
-             (st.devices === "all" ? " checked" : "") + "> " + esc(t("admin.all", "すべて")) +
+             (st.devices === "all" ? " checked" : "") + "> " + esc(t("admin.all")) +
              "</label>";
-        deviceOptions().forEach(function (o) {
+        var ruleDevices = deviceOptions();
+        (st.devices instanceof Array ? st.devices : []).forEach(function (id) {
+          if (!ruleDevices.some(function (o) { return o.v === id; }))
+            ruleDevices.push({ v: id, label: id });
+        });
+        ruleDevices.forEach(function (o) {
           h += "<label class='mc'><input type='checkbox' data-rdev='1' value='" + esc(o.v) + "'" +
                (st.devices instanceof Array && st.devices.indexOf(o.v) >= 0 ? " checked" : "") +
                "> " + esc(o.label) + "</label>";
         });
         h += "</div></div>";
-      } else {
-        h += "<div class='frow'><label class='flab'>" + esc(t("admin.rule_doors", "対象ドア")) +
+      } else if (st.whenType === "button" || st.whenType === "motion") {
+        h += "<div class='frow'><label class='flab'>" + esc(t("admin.rule_doors")) +
              "</label><div class='mcwrap'>";
-        doorOptions(false).forEach(function (o) {
+        var ruleDoors = doorOptions(false);
+        st.doors.forEach(function (id) {
+          if (!ruleDoors.some(function (o) { return o.v === id; }))
+            ruleDoors.push({ v: id, label: id });
+        });
+        ruleDoors.forEach(function (o) {
           h += "<label class='mc'><input type='checkbox' data-rdoor='1' value='" + esc(o.v) + "'" +
                (st.doors.indexOf(o.v) >= 0 ? " checked" : "") + "> " + esc(o.label) + "</label>";
         });
-        h += "</div><div class='dim fhint'>" + esc(t("admin.all", "すべて")) +
-             " = チェックなし</div></div>";
+        h += "</div><div class='dim fhint'>" + esc(t("admin.unchecked_all")) + "</div></div>";
       }
-      // スケジュール
-      h += "<div class='frow'><label class='flab'>" + esc(t("admin.schedule", "スケジュール")) +
+
+      h += "<div class='frow'><label class='flab'>" + esc(t("admin.schedule")) +
            "</label><label class='mc'><input type='radio' name='rSched' value='always'" +
-           (st.always ? " checked" : "") + "> " + esc(t("admin.always", "常時")) +
+           (st.always ? " checked" : "") + "> " + esc(t("admin.always")) +
            "</label><label class='mc'><input type='radio' name='rSched' value='windows'" +
-           (!st.always ? " checked" : "") + "> " + esc(t("admin.windows", "時間帯")) + "</label></div>";
+           (!st.always ? " checked" : "") + "> " + esc(t("admin.windows")) + "</label></div>";
       if (!st.always) {
         h += "<div id='rWins'>";
         for (var i = 0; i < st.windows.length; i++) h += windowRowHtml(i, st.windows[i]);
         h += "</div><button class='btn2' id='rAddWin'>+ " +
-             esc(t("admin.add_window", "時間帯を追加")) + "</button>";
+             esc(t("admin.add_window")) + "</button>";
       }
-      // アクション
-      h += "<div class='frow'><label class='flab'>" + esc(t("admin.actions", "アクション")) +
+
+      h += "<div class='frow'><label class='flab'>" + esc(t("admin.actions")) +
            "</label></div><div id='rActs'>";
       for (var j = 0; j < st.actions.length; j++) h += actionRowHtml(j, st.actions[j]);
       h += "</div><button class='btn2' id='rAddAct'>+ " +
-           esc(t("admin.add_action", "アクションを追加")) + "</button>";
+           esc(t("admin.add_action")) + "</button>";
+      h += sosPreviewHtml(L.mergeRuleEditor(cur, st));
       return h;
     }
 
-    // モーダル本体の再描画 (種類変更などの度に collect → state 更新 → 再描画)
+
     function collectState(m) {
       st.enabled = $("#rEnabled") ? $("#rEnabled").checked : st.enabled;
       var wSel = $("#rWhen");
@@ -1619,7 +3052,7 @@ if (typeof document !== "undefined") (function () {
         var devs = [];
         $all("[data-rdev]", m).forEach(function (el) { if (el.checked) devs.push(el.value); });
         st.devices = all || !devs.length ? "all" : devs;
-      } else {
+      } else if (st.whenType === "button" || st.whenType === "motion") {
         var doors = [];
         $all("[data-rdoor]", m).forEach(function (el) { if (el.checked) doors.push(el.value); });
         st.doors = doors;
@@ -1629,39 +3062,128 @@ if (typeof document !== "undefined") (function () {
       // windows
       var wins = [];
       $all("[data-wrow]", m).forEach(function (row) {
-        var idx = row.getAttribute("data-wrow");
+        var idx = parseInt(row.getAttribute("data-wrow"), 10);
         var days = [];
         $all("[data-rw='day'][data-idx='" + idx + "']", row).forEach(function (el) {
           if (el.checked) days.push(el.value);
         });
         var from = row.querySelector("[data-rw='from']"), to = row.querySelector("[data-rw='to']");
-        wins.push({ days: days, from: from ? from.value : "", to: to ? to.value : "" });
+        var oldWindow = st.windows[idx] || {}, nextWindow = JSON.parse(JSON.stringify(oldWindow));
+        nextWindow.days = days;
+        nextWindow.from = from ? from.value : "";
+        nextWindow.to = to ? to.value : "";
+        wins.push(nextWindow);
       });
       if ($all("[data-wrow]", m).length) st.windows = wins;
       // actions
       var acts = [];
       $all("[data-arow]", m).forEach(function (row) {
-        var idx = row.getAttribute("data-arow");
+        var idx = parseInt(row.getAttribute("data-arow"), 10);
+        var oldAction = st.actions[idx] || {}, a = JSON.parse(JSON.stringify(oldAction));
+        if (row.getAttribute("data-readonly") === "1") { acts.push(a); return; }
         var typeEl = row.querySelector("[data-ra='type']");
-        var a = { type: typeEl ? typeEl.value : "chime" };
+        var nextType = typeEl ? typeEl.value : (a.type || "chime");
+        var typeChanged = nextType !== a.type;
+        a.type = nextType;
+        if (typeChanged) {
+          if (nextType === "device_alert") {
+            a.targets = { devices: "all", roles: "all", web_subscription_groups: "all" };
+            a.channels = ["in_app", "system_notification", "web_push"];
+            a.never_suppress = true;
+            a.presentation = { visual: true,
+              sticky: st.whenType === "emergency_on",
+              ttl_s: st.whenType === "emergency_on" ? 0 : 10 };
+          }
+          acts.push(a); return;
+        }
         if (a.type === "sip_call") {
           var te = row.querySelector("[data-ra='target_extension']");
-          a.target_extension = te ? te.value : "600";
+          var target = te ? te.value : "600";
+          if (target !== (oldAction.target_extension || "600")) a.target_extension = target;
         } else if (a.type === "telegram") {
-          a.households = [];
+          var selectedHouseholds = [];
           $all("[data-ra='households']", row).forEach(function (el) {
-            if (el.checked) a.households.push(el.value);
+            if (el.checked) selectedHouseholds.push(el.value);
           });
+          var allHouseholds = row.querySelector("[data-ra='households_all']");
+          var nextHouseholds = allHouseholds && allHouseholds.checked ? "all" : selectedHouseholds;
+          if (JSON.stringify(nextHouseholds) !== JSON.stringify(oldAction.households || []))
+            a.households = nextHouseholds;
           var ws2 = row.querySelector("[data-ra='with_snapshot']");
-          a.with_snapshot = ws2 ? ws2.checked : false;
+          var withSnapshot = ws2 ? ws2.checked : false;
+          if (withSnapshot !== (oldAction.with_snapshot === true)) a.with_snapshot = withSnapshot;
         } else if (a.type === "chime") {
           var selectedDevices = [];
           $all("[data-ra='devices']", row).forEach(function (el) {
             if (el.checked) selectedDevices.push(el.value);
           });
-          if (selectedDevices.length) a.devices = selectedDevices;
+          if (JSON.stringify(selectedDevices) !== JSON.stringify(oldAction.devices || [])) {
+            if (selectedDevices.length) a.devices = selectedDevices;
+            else delete a.devices;
+          }
           var se = row.querySelector("[data-ra='sound']");
-          a.sound = se ? se.value : "ding1";
+          var sound = se ? se.value : "ding1";
+          if (sound !== (oldAction.sound || "ding1")) a.sound = sound;
+        } else if (a.type === "device_alert") {
+          var oldTargets = oldAction.targets && typeof oldAction.targets === "object" ?
+                           oldAction.targets : {};
+          var nextTargets = JSON.parse(JSON.stringify(oldTargets)), targetsChanged = false;
+          function collectSelector(field, key, oldValue) {
+            var input = row.querySelector("[data-ra='" + field + "']");
+            if (!input || input.value.trim() === selectorText(oldValue)) return;
+            var raw = input.value.trim();
+            nextTargets[key] = raw === "all" ? "all" : L.parseList(raw);
+            targetsChanged = true;
+          }
+          collectSelector("target_devices", "devices", oldTargets.devices);
+          collectSelector("target_roles", "roles", oldTargets.roles);
+          var oldGroups = Object.prototype.hasOwnProperty.call(oldTargets,
+                            "web_subscription_groups") ? oldTargets.web_subscription_groups :
+                            oldTargets.web_profiles;
+          collectSelector("target_web_groups", "web_subscription_groups", oldGroups);
+          if (targetsChanged) a.targets = nextTargets;
+
+          var selectedChannels = [];
+          $all("[data-ra='channel']", row).forEach(function (el) {
+            if (el.checked) selectedChannels.push(el.value);
+          });
+          if (JSON.stringify(selectedChannels) !==
+              JSON.stringify(L.effectiveAlertChannels(oldAction))) a.channels = selectedChannels;
+          var ns = row.querySelector("[data-ra='never_suppress']"), neverSuppress = !!(ns && ns.checked);
+          if (neverSuppress !== (oldAction.never_suppress === true)) a.never_suppress = neverSuppress;
+
+          var oldPresentation = oldAction.presentation && typeof oldAction.presentation === "object" ?
+                                oldAction.presentation : {};
+          var nextPresentation = JSON.parse(JSON.stringify(oldPresentation)), presentationChanged = false;
+          var defaults = alertPresentationDefaults(oldAction);
+          var visualEl = row.querySelector("[data-ra='visual']"), visual = !!(visualEl && visualEl.checked);
+          var stickyEl = row.querySelector("[data-ra='sticky']"), sticky = !!(stickyEl && stickyEl.checked);
+          var soundEl = row.querySelector("[data-ra='alert_sound']"), alertSound = soundEl ? soundEl.value : "";
+          var volumeEl = row.querySelector("[data-ra='volume']"), volume = Math.max(0, Math.min(100,
+                       parseInt(volumeEl ? volumeEl.value : defaults.volume, 10) || 0));
+          var ttlEl = row.querySelector("[data-ra='ttl_s']"), ttl = Math.max(0,
+                    parseInt(ttlEl ? ttlEl.value : defaults.ttl_s, 10) || 0);
+          var backgroundEl = row.querySelector("[data-ra='alert_background']");
+          var background = backgroundEl ? backgroundEl.value.toUpperCase() : defaults.background;
+          var foregroundEl = row.querySelector("[data-ra='alert_foreground']");
+          var foreground = foregroundEl ? foregroundEl.value.toUpperCase() : defaults.foreground;
+          var accentEl = row.querySelector("[data-ra='alert_accent']");
+          var accent = accentEl ? accentEl.value.toUpperCase() : defaults.accent;
+          if (visual !== defaults.visual) { nextPresentation.visual = visual; presentationChanged = true; }
+          if (sticky !== defaults.sticky) { nextPresentation.sticky = sticky; presentationChanged = true; }
+          if (alertSound !== defaults.sound) { nextPresentation.sound = alertSound; presentationChanged = true; }
+          if (volume !== Number(defaults.volume)) { nextPresentation.volume = volume; presentationChanged = true; }
+          if (ttl !== Number(defaults.ttl_s)) { nextPresentation.ttl_s = ttl; presentationChanged = true; }
+          if (background !== String(defaults.background).toUpperCase()) {
+            nextPresentation.background = background; presentationChanged = true;
+          }
+          if (foreground !== String(defaults.foreground).toUpperCase()) {
+            nextPresentation.foreground = foreground; presentationChanged = true;
+          }
+          if (accent !== String(defaults.accent).toUpperCase()) {
+            nextPresentation.accent = accent; presentationChanged = true;
+          }
+          if (presentationChanged) a.presentation = nextPresentation;
         }
         acts.push(a);
       });
@@ -1688,7 +3210,13 @@ if (typeof document !== "undefined") (function () {
       var aa = $("#rAddAct");
       if (aa) aa.onclick = function () {
         collectState(m);
-        st.actions.push({ type: "chime" });
+        st.actions.push(st.whenType === "emergency_on" || st.whenType === "emergency_off" ?
+          { type: "device_alert",
+            targets: { devices: "all", roles: "all", web_subscription_groups: "all" },
+            channels: ["in_app", "system_notification", "web_push"], never_suppress: true,
+            presentation: { visual: true, sticky: st.whenType === "emergency_on",
+                            ttl_s: st.whenType === "emergency_on" ? 0 : 10 } } :
+          { type: "chime" });
         rerender(m);
       };
       $all("[data-ra='type']", m).forEach(function (sel) {
@@ -1716,11 +3244,22 @@ if (typeof document !== "undefined") (function () {
           rerender(m);
         };
       });
+      if (st.whenType === "emergency_on" || st.whenType === "emergency_off") {
+        $all("[data-arow] input,[data-arow] select", m).forEach(function (field) {
+          if (field.getAttribute("data-ra") === "type") return;
+          field.onchange = function () { collectState(m); rerender(m); };
+        });
+      }
     }
 
-    var m = openModal(t("admin.rules", "呼出ルール") + " — " + rid, bodyHtml(), function (mm) {
+    var m = openModal(t("admin.rules") + " — " + rid, bodyHtml(), function (mm) {
       collectState(mm);
-      saveAndRefresh(L.ruleEntries(rid, st), null);
+      for (var ai = 0; ai < st.actions.length; ai++) {
+        if (!st.actions[ai] || st.actions[ai].type !== "device_alert") continue;
+        var validation = L.validateAlertPresentation(st.actions[ai].presentation);
+        if (!validation.ok) return validation.errors[0];
+      }
+      saveAndRefresh(L.ruleEntries(rid, st, cur), null);
     });
     bindDynamic(m);
   }
@@ -1728,18 +3267,40 @@ if (typeof document !== "undefined") (function () {
   function renderRules() {
     var el = $("#tab-rules");
     var rs = cfgObj("trigger_rules");
-    var h = "<div class='chead'><h2></h2><button class='btn small' data-act='add'>+ " +
-            esc(t("admin.add_rule", "ルールを追加")) + "</button></div>";
+    var configuredFlow = L.callFlowMode(cfgObj("ui").call_flow);
+    var flowSupport = L.callFlowCompatibility(configuredFlow, S.status);
+    var h = "<div class='card'><h2>" + esc(t("admin.call_flow")) +
+            "</h2><div style='display:flex;gap:8px;align-items:center;flex-wrap:wrap'>" +
+            "<select id='callFlowMode'><option value='purpose_first'" +
+            (configuredFlow === "purpose_first" ? " selected" : "") + ">purpose_first</option>" +
+            "<option value='ring_then_purpose'" +
+            (configuredFlow === "ring_then_purpose" ? " selected" : "") +
+            ">ring_then_purpose</option></select><button class='btn small' id='callFlowSave'>" +
+            esc(t("admin.save")) + "</button></div><div class='dim fhint'>" +
+            esc(t("admin.call_flow_purpose_first")) +
+            "</div>";
+    if (flowSupport.warning || flowSupport.unknown_fleet) {
+      var unsupported = flowSupport.unsupported.join(", ") || "capability data unavailable";
+      h += "<div class='warn' role='alert' style='font-weight:600;margin-top:8px'>⚠ " +
+           esc(t("admin.call_flow_mixed_warning")) +
+           " " + esc(unsupported) + "</div>";
+    } else if (configuredFlow === "ring_then_purpose") {
+      h += "<div class='ok fhint'>" +
+           esc(t("admin.call_flow_supported")) +
+           "</div>";
+    }
+    h += "</div><div class='chead'><h2></h2><button class='btn small' data-act='add'>+ " +
+            esc(t("admin.add_rule")) + "</button></div>";
     for (var id in rs) {
       var r = rs[id];
       var when = r.when || {};
       var target = "";
       if (when.type === "device_offline") {
-        target = when.devices === "all" || !when.devices ? t("admin.all", "すべて") :
+        target = when.devices === "all" || !when.devices ? t("admin.all") :
                  (when.devices || []).map(deviceName).join(", ");
       } else {
         target = (when.doors && when.doors.length) ?
-                 when.doors.map(doorLabel).join(", ") : t("admin.all", "すべて");
+                 when.doors.map(doorLabel).join(", ") : t("admin.all");
       }
       var acts = (r.actions || []).map(actionLabel);
       h += "<div class='card rule" + (r.enabled === false ? " offline" : "") + "'>" +
@@ -1747,14 +3308,25 @@ if (typeof document !== "undefined") (function () {
            " <span class='dim'>(" + esc(id) + ")</span></h2>" +
            "<label class='mc'><input type='checkbox' data-act='toggle' data-id='" + esc(id) +
            "'" + (r.enabled !== false ? " checked" : "") + "> " +
-           esc(t("admin.enabled", "有効")) + "</label></div>" +
-           "<div class='dim' style='margin:4px 0'>" + esc(t("admin.schedule", "スケジュール")) +
+           esc(t("admin.enabled")) + "</label></div>" +
+           "<div class='dim' style='margin:4px 0'>" + esc(t("admin.schedule")) +
            ": " + esc(scheduleLabel(r.schedule)) + "</div><div>";
       for (var i = 0; i < acts.length; i++) h += "<span class='chip'>" + esc(acts[i]) + "</span>";
+      if (when.type === "emergency_on" || when.type === "emergency_off") {
+        var sosWarnings = L.sosRuleWarnings(r, S.status, S.cfg);
+        var sosPreview = L.sosDryRunPreview(r, S.status, S.cfg);
+        h += "<div class='dim fhint'>" + esc(t("admin.sos_dry_run")) +
+             ": " + esc(t("admin.sos_local_recipients")) + " " +
+             sosPreview.local_recipients + " · Web Push " +
+             (sosPreview.web_push_recipients === null ? "?" : sosPreview.web_push_recipients) +
+             "</div>";
+        for (var wi = 0; wi < sosWarnings.length; wi++)
+          h += "<div class='warn fhint'>⚠ " + esc(sosWarningText(sosWarnings[wi])) + "</div>";
+      }
       h += "</div><div class='ops' style='margin-top:8px'><button class='btn2' data-act='edit' data-id='" +
-           esc(id) + "'>" + esc(t("admin.edit", "編集")) +
+           esc(id) + "'>" + esc(t("admin.edit")) +
            "</button> <button class='btn2 danger' data-act='del' data-id='" + esc(id) + "'>" +
-           esc(t("admin.delete", "削除")) + "</button></div></div>";
+           esc(t("admin.delete")) + "</button></div></div>";
     }
     el.innerHTML = h;
     bindActs(el, {
@@ -1764,7 +3336,17 @@ if (typeof document !== "undefined") (function () {
         confirmDelete(id, function () { saveAndRefresh(null, ["trigger_rules." + id]); });
       }
     });
-    // enabled トグル: whole-value を維持したまま enabled のみ差し替え
+    $("#callFlowSave").onclick = function () {
+      var mode = L.callFlowMode($("#callFlowMode").value);
+      saveAndRefresh([{ key: "ui.call_flow", value: mode }], null);
+    };
+    $("#callFlowMode").onchange = function () {
+      var selected = L.callFlowCompatibility($("#callFlowMode").value, S.status);
+      if (selected.warning || selected.unknown_fleet) {
+        msg(t("admin.call_flow_mixed_warning"));
+      }
+    };
+
     $all("[data-act='toggle']", el).forEach(function (cb) {
       cb.onchange = function () {
         var id = cb.getAttribute("data-id");
@@ -1775,7 +3357,7 @@ if (typeof document !== "undefined") (function () {
     });
   }
 
-  /* ---------------- 5. クイック返信 ---------------- */
+
   function sortedQrIds() {
     var qrs = cfgObj("quick_replies");
     var ids = [];
@@ -1795,29 +3377,29 @@ if (typeof document !== "undefined") (function () {
     var fields = [
       { id: "qid", label: "ID", type: isNew ? "text" : "static",
         value: isNew ? L.newId("qr_", qrs) : id },
-      { id: "ja", label: t("admin.label_ja", "文言 (日本語)"), value: lb.ja },
-      { id: "en", label: t("admin.label_en", "文言 (英語)"), value: lb.en },
-      { id: "zh", label: t("admin.label_zh", "文言 (中国語)"), value: lb.zh },
-      { id: "speak", label: t("admin.qr_speak", "読み上げ"), type: "check",
+      { id: "ja", label: t("admin.label_ja"), value: lb.ja },
+      { id: "en", label: t("admin.label_en"), value: lb.en },
+      { id: "zh", label: t("admin.label_zh"), value: lb.zh },
+      { id: "speak", label: t("admin.qr_speak"), type: "check",
         value: cur.speak !== false }];
-    // 訪客言語ごとのカスタム音声 (資産の音声から選択)。未指定 = 系統 TTS
+
     var au = cur.audio || {};
-    var opts = assetOptions("audio", t("admin.audio_none", "音声なし (TTS)"));
+    var opts = assetOptions("audio", t("admin.audio_none"));
     var langs = uiLangs();
     langs.forEach(function (lg) {
-      fields.push({ id: "audio_" + lg, label: "音声 — " + langName(lg), type: "audio",
+      fields.push({ id: "audio_" + lg, label: t("admin.audio") + " — " + langName(lg), type: "audio",
                     value: au[lg] || "", options: opts });
     });
-    var m = openForm(t("admin.quick_replies", "クイック返信"), fields, function (v) {
+    var m = openForm(t("admin.quick_replies"), fields, function (v) {
       var qid = isNew ? L.safeId(v.qid) : id;
       if (!qid) return "ID?";
       v.order = isNew ? sortedQrIds().length + 1 : (cur.order || 1);
-      // 画面に出ていない言語 (ui.languages から外した言語) の指定は残す
+
       var next = {};
       for (var k in au) next[k] = au[k];
       langs.forEach(function (lg) { next[lg] = v["audio_" + lg] || ""; });
       v.audio = next;
-      saveAndRefresh(L.quickReplyEntries(qid, v), null);
+      saveAndRefresh(L.quickReplyEntries(qid, v, cur), null);
     });
     bindAudioPlay(m);
   }
@@ -1827,10 +3409,10 @@ if (typeof document !== "undefined") (function () {
     var qrs = cfgObj("quick_replies");
     var ids = sortedQrIds();
     var h = "<div class='card'><div class='chead'><h2></h2><button class='btn small' data-act='add'>+ " +
-            esc(t("admin.add_reply", "返信を追加")) + "</button></div><table><thead><tr><th>#</th><th>" +
-            esc(t("admin.label_ja", "文言")) + "</th><th>" + esc(t("admin.qr_speak", "読み上げ")) +
-            // 列見出しは「音声」— admin.audio_play は試聴ボタン用の文言なので使わない
-            "</th><th>音声</th><th></th></tr></thead><tbody>";
+            esc(t("admin.add_reply")) + "</button></div><table><thead><tr><th>#</th><th>" +
+            esc(t("admin.label_ja")) + "</th><th>" + esc(t("admin.qr_speak")) +
+
+            "</th><th>" + esc(t("admin.audio")) + "</th><th></th></tr></thead><tbody>";
     ids.forEach(function (id, i) {
       var q = qrs[id], au = q.audio || {}, chips = "";
       for (var lg in au) {
@@ -1845,8 +3427,8 @@ if (typeof document !== "undefined") (function () {
            "<button class='btn2' data-act='up' data-id='" + esc(id) + "'>↑</button>" +
            "<button class='btn2' data-act='down' data-id='" + esc(id) + "'>↓</button> " +
            "<button class='btn2' data-act='edit' data-id='" + esc(id) + "'>" +
-           esc(t("admin.edit", "編集")) + "</button> <button class='btn2 danger' data-act='del' data-id='" +
-           esc(id) + "'>" + esc(t("admin.delete", "削除")) + "</button></td></tr>";
+           esc(t("admin.edit")) + "</button> <button class='btn2 danger' data-act='del' data-id='" +
+           esc(id) + "'>" + esc(t("admin.delete")) + "</button></td></tr>";
     });
     h += "</tbody></table></div>";
     el.innerHTML = h;
@@ -1871,7 +3453,7 @@ if (typeof document !== "undefined") (function () {
     });
   }
 
-  /* ---------------- 6. 通知先 (households) ---------------- */
+
   function editHousehold(id) {
     var isNew = !id;
     var hs = cfgObj("households");
@@ -1880,17 +3462,17 @@ if (typeof document !== "undefined") (function () {
     var fields = [
       { id: "hid", label: "ID", type: isNew ? "text" : "static",
         value: isNew ? L.newId("h", hs) : id },
-      { id: "ja", label: t("admin.label_ja", "ラベル (日本語)"), value: lb.ja },
-      { id: "en", label: t("admin.label_en", "ラベル (英語)"), value: lb.en },
-      { id: "zh", label: t("admin.label_zh", "ラベル (中国語)"), value: lb.zh },
-      { id: "chat_ids", label: t("admin.tg_chat_ids", "Telegram chat ID"),
+      { id: "ja", label: t("admin.label_ja"), value: lb.ja },
+      { id: "en", label: t("admin.label_en"), value: lb.en },
+      { id: "zh", label: t("admin.label_zh"), value: lb.zh },
+      { id: "chat_ids", label: t("admin.tg_chat_ids"),
         value: (cur.telegram_chat_ids || []).join(", "), ph: "123456789, -100200300" },
-      { id: "sip_ext", label: t("admin.sip_extensions", "SIP 内線"),
+      { id: "sip_ext", label: t("admin.sip_extensions"),
         value: (cur.sip_extensions || []).join(", "), ph: "201, 202" }];
-    openForm(t("admin.households", "通知先"), fields, function (v) {
+    openForm(t("admin.households"), fields, function (v) {
       var hid = isNew ? L.safeId(v.hid) : id;
       if (!hid) return "ID?";
-      saveAndRefresh(L.householdEntries(hid, v), null);
+      saveAndRefresh(L.householdEntries(hid, v, cur), null);
     });
   }
 
@@ -1898,8 +3480,8 @@ if (typeof document !== "undefined") (function () {
     var el = $("#tab-households");
     var hs = cfgObj("households");
     var h = "<div class='card'><div class='chead'><h2></h2><button class='btn small' data-act='add'>+ " +
-            esc(t("admin.add_household", "通知先を追加")) + "</button></div><table><thead><tr><th>" +
-            esc(t("admin.households", "通知先")) + "</th><th>Telegram</th><th>SIP</th><th></th></tr>" +
+            esc(t("admin.add_household")) + "</button></div><table><thead><tr><th>" +
+            esc(t("admin.households")) + "</th><th>Telegram</th><th>SIP</th><th></th></tr>" +
             "</thead><tbody>";
     for (var id in hs) {
       var hh = hs[id];
@@ -1907,8 +3489,8 @@ if (typeof document !== "undefined") (function () {
            ")</span></td><td class='dim'>" + esc((hh.telegram_chat_ids || []).join(", ")) +
            "</td><td class='dim'>" + esc((hh.sip_extensions || []).join(", ")) +
            "</td><td class='ops'><button class='btn2' data-act='edit' data-id='" + esc(id) + "'>" +
-           esc(t("admin.edit", "編集")) + "</button> <button class='btn2 danger' data-act='del' data-id='" +
-           esc(id) + "'>" + esc(t("admin.delete", "削除")) + "</button></td></tr>";
+           esc(t("admin.edit")) + "</button> <button class='btn2 danger' data-act='del' data-id='" +
+           esc(id) + "'>" + esc(t("admin.delete")) + "</button></td></tr>";
     }
     h += "</tbody></table></div>";
     el.innerHTML = h;
@@ -1922,11 +3504,12 @@ if (typeof document !== "undefined") (function () {
     });
   }
 
-  /* ---------------- 7. 統合 ---------------- */
+
   function renderIntegrations() {
     var el = $("#tab-integrations");
     var integ = cfgObj("integrations");
-    var mqtt = integ.mqtt || {}, tg = integ.telegram || {};
+    var mqtt = integ.mqtt || {}, tg = integ.telegram || {}, push = integ.web_push || {};
+    var pushStatus = S.status && S.status.web_push ? S.status.web_push : {};
     var sip = cfgObj("sip");
     var qh = (cfgObj("quiet_hours") || {})["default"] || {};
     var h = "";
@@ -1934,37 +3517,78 @@ if (typeof document !== "undefined") (function () {
     // MQTT
     h += "<div class='card'><h2>MQTT (Home Assistant)</h2>" +
          "<div class='grid2'>" +
-         "<div class='frow'><label class='flab'>" + esc(t("admin.host", "ホスト")) +
+         "<div class='frow'><label class='flab'>" + esc(t("admin.host")) +
          "</label><input id='mqHost' value='" + esc(mqtt.host || "") + "'></div>" +
-         "<div class='frow'><label class='flab'>" + esc(t("admin.port", "ポート")) +
+         "<div class='frow'><label class='flab'>" + esc(t("admin.port")) +
          "</label><input id='mqPort' type='number' value='" + esc(mqtt.port || 1883) + "'></div>" +
-         "<div class='frow'><label class='flab'>" + esc(t("admin.user", "ユーザー")) +
+         "<div class='frow'><label class='flab'>" + esc(t("admin.user")) +
          "</label><input id='mqUser' value='" + esc(mqtt.user || "") + "'></div>" +
-         "<div class='frow'><label class='flab'>" + esc(t("admin.pass", "パスワード")) +
-         "</label><input id='mqPass' type='password' placeholder='(未変更)'></div></div>" +
-         "<button class='btn small' id='mqSave'>" + esc(t("admin.save", "保存")) + "</button></div>";
+         "<div class='frow'><label class='flab'>" + esc(t("admin.pass")) +
+         "</label><input id='mqPass' type='password' placeholder='" +
+         esc(t("admin.secret_unchanged")) + "'></div></div>" +
+         "<button class='btn small' id='mqSave'>" + esc(t("admin.save")) + "</button>" +
+         (mqtt.pass_ref ? " <button class='btn2' id='mqProvision' disabled>" +
+          esc(t("admin.provision_this_node")) + "</button>" : "") + "</div>";
 
     // Telegram
     h += "<div class='card'><h2>Telegram</h2>" +
-         "<div class='frow'><label class='flab'>" + esc(t("admin.bot_token", "Bot token")) +
+         "<div class='frow'><label class='flab'>" + esc(t("admin.bot_token")) +
          "</label><input id='tgToken' type='password' placeholder='" +
-         (tg.bot_token ? "********（設定済み）" : "123456:ABC-…") + "'></div>" +
+         (tg.bot_token_ref ? "******** " + esc(t("admin.configured")) : "123456:ABC-…") + "'></div>" +
          "<div class='frow frow-check'><label><input type='checkbox' id='tgPoll'" +
-         (tg.poll_updates ? " checked" : "") + "> " + esc(t("admin.poll_updates", "返信ボタンを受信")) +
+         (tg.poll_updates ? " checked" : "") + "> " + esc(t("admin.poll_updates")) +
          "</label></div>" +
-         "<button class='btn small' id='tgSave'>" + esc(t("admin.save", "保存")) + "</button> " +
+         "<button class='btn small' id='tgSave'>" + esc(t("admin.save")) + "</button> " +
+         (tg.bot_token_ref ? "<button class='btn2' id='tgProvision' disabled>" +
+          esc(t("admin.provision_this_node")) + "</button> " : "") +
          "<span style='display:inline-block; width:16px'></span>" +
-         "<input id='tgTestChat' placeholder='chat_id (空 = 全通知先)' style='width:200px'> " +
-         "<button class='btn2' id='tgTest'>" + esc(t("admin.test_send", "テスト送信")) +
+         "<input id='tgTestChat' placeholder='" + esc(t("admin.telegram_test_chat")) +
+         "' style='width:200px'> " +
+         "<button class='btn2' id='tgTest'>" + esc(t("admin.test_send")) +
          "</button></div>";
+
+    h += "<div class='card'><h2>" + esc(t("admin.web_push_backend")) + "</h2>" +
+         "<div class='grid2'>" +
+         "<div class='frow'><label class='flab'>" + esc(t("admin.web_push_sender_url")) +
+         "</label><input id='wpSenderUrl' type='url' value='" +
+         esc(push.sender_url || "") + "' placeholder='https://push.example/send'></div>" +
+         "<div class='frow'><label class='flab'>" + esc(t("admin.web_push_subject")) +
+         "</label><input id='wpSubject' value='" + esc(push.vapid_subject || "") +
+         "' placeholder='mailto:doorbell@example.com'></div></div>" +
+         "<div class='frow'><label class='flab'>" + esc(t("admin.web_push_public_key")) +
+         "</label><input id='wpPublicKey' value='" + esc(push.vapid_public_key || "") +
+         "' autocomplete='off'></div>" +
+         "<div class='frow'><label class='flab'>" + esc(t("admin.web_push_private_key")) +
+         "</label><input id='wpPrivate' type='password' autocomplete='new-password' placeholder='" +
+         (push.vapid_private_key_ref ? esc(t("admin.secret_configured")) : "") + "'> " +
+         (push.vapid_private_key_ref ? "<button class='btn2' id='wpPrivateProvision' disabled>" +
+          esc(t("admin.provision_this_node")) + "</button>" : "") + "</div>" +
+         "<div class='frow frow-check'><label><input type='checkbox' id='wpBearerEnabled'" +
+         (push.sender_secret_ref ? " checked" : "") + "> " +
+         esc(t("admin.web_push_use_sender_bearer")) + "</label></div>" +
+         "<div class='frow'><label class='flab'>" + esc(t("admin.web_push_sender_bearer")) +
+         "</label><input id='wpBearer' type='password' autocomplete='new-password' placeholder='" +
+         (push.sender_secret_ref ? esc(t("admin.secret_configured")) : "") + "'> " +
+         (push.sender_secret_ref ? "<button class='btn2' id='wpBearerProvision' disabled>" +
+          esc(t("admin.provision_this_node")) + "</button>" : "") + "</div>" +
+         "<div class='dim' id='wpStatus'>" + esc(t("admin.web_push_status")) + ": " +
+         esc(t(pushStatus.configured ? "admin.enabled" : "admin.disabled")) + " · " +
+         esc(t("admin.web_push_local_secret")) + ": " +
+         esc(t(pushStatus.local_secret_ready ? "admin.ready" : "admin.not_ready")) + " · " +
+         esc(t("admin.web_push_delivery_backend")) + ": " +
+         esc(t(pushStatus.delivery_backend ? "admin.ready" : "admin.not_ready")) + " · " +
+         esc(t("admin.leader")) + ": " + esc(pushStatus.leader || "—") +
+         (pushStatus.warning_code ? " · " + esc(pushStatus.warning_code) : "") + "</div>" +
+         "<button class='btn small' id='wpSave' style='margin-top:8px'>" +
+         esc(t("admin.save")) + "</button></div>";
 
     // SIP
     h += "<div class='card'><h2>SIP</h2><div class='grid2'>" +
-         "<div class='frow'><label class='flab'>" + esc(t("admin.host", "ホスト")) +
+         "<div class='frow'><label class='flab'>" + esc(t("admin.host")) +
          "</label><input id='sipServer' value='" + esc(sip.server || "") + "'></div>" +
-         "<div class='frow'><label class='flab'>" + esc(t("admin.port", "ポート")) +
+         "<div class='frow'><label class='flab'>" + esc(t("admin.port")) +
          "</label><input id='sipPort' type='number' value='" + esc(sip.port || 5060) + "'></div>" +
-         "<div class='frow'><label class='flab'>" + esc(t("admin.transport", "トランスポート")) +
+         "<div class='frow'><label class='flab'>" + esc(t("admin.transport")) +
          "</label><select id='sipTransport'>";
     ["udp", "tcp", "tls"].forEach(function (tr) {
       h += "<option value='" + tr + "'" + ((sip.transport || "udp") === tr ? " selected" : "") +
@@ -1972,43 +3596,50 @@ if (typeof document !== "undefined") (function () {
     });
     h += "</select></div></div>" +
          "<h3 class='dim' style='margin:10px 0 4px'>" +
-         esc(t("admin.sip_accounts", "SIP アカウント (デバイス毎)")) + "</h3>" +
-         "<table><thead><tr><th>" + esc(t("admin.devices", "デバイス")) + "</th><th>" +
-         esc(t("admin.user", "ユーザー")) + "</th><th>" + esc(t("admin.pass", "パスワード")) +
+         esc(t("admin.sip_accounts")) + "</h3>" +
+         "<table><thead><tr><th>" + esc(t("admin.devices")) + "</th><th>" +
+         esc(t("admin.user")) + "</th><th>" + esc(t("admin.pass")) +
          "</th></tr></thead><tbody>";
     var accounts = sip.accounts || {};
+    var servingNodeId = S.status && S.status.node ? String(S.status.node.id || "") : "";
     var devIds = [];
     for (var did in cfgObj("devices")) devIds.push(did);
     for (var aid in accounts) if (devIds.indexOf(aid) < 0) devIds.push(aid);
     devIds.forEach(function (nid) {
       var a = accounts[nid] || {};
+      var localSecret = L.canEditSipSecret(nid, servingNodeId);
       h += "<tr><td>" + esc(deviceName(nid)) + " <span class='dim'>(" + esc(nid.slice(0, 8)) +
            ")</span></td><td><input data-sipacct-user='" + esc(nid) + "' value='" +
-           esc(a.user || "") + "'></td><td><input type='password' data-sipacct-pass='" +
-           esc(nid) + "' placeholder='" + (a.pass ? "(未変更)" : "") + "'></td></tr>";
+           esc(a.user || "") + "'></td><td>" + (localSecret ?
+           "<input type='password' data-sipacct-pass='" + esc(nid) + "' placeholder='" +
+           (a.pass_ref ? esc(t("admin.secret_unchanged")) : "") + "'>" +
+           (a.pass_ref ? " <button class='btn2' data-sipacct-provision='" + esc(nid) +
+            "' disabled>" + esc(t("admin.provision_this_node")) +
+            "</button>" : "") :
+           "<span class='dim'>" + esc(t("admin.secret_on_target_only")) + "</span>") + "</td></tr>";
     });
     h += "</tbody></table><button class='btn small' id='sipSave' style='margin-top:8px'>" +
-         esc(t("admin.save", "保存")) + "</button></div>";
+         esc(t("admin.save")) + "</button></div>";
 
-    // 全般 + 静音時間帯
-    h += "<div class='card'><h2>" + esc(t("admin.quiet_hours", "静音時間帯")) + " / TZ</h2>" +
-         "<div class='frow'><label class='flab'>" + esc(t("admin.tz_offset", "タイムゾーン (分)")) +
+
+    h += "<div class='card'><h2>" + esc(t("admin.quiet_hours")) + " / TZ</h2>" +
+         "<div class='frow'><label class='flab'>" + esc(t("admin.tz_offset")) +
          "</label><input id='tzMin' type='number' value='" +
          esc(integ.tz_offset_min !== undefined ? integ.tz_offset_min : 540) + "'></div>" +
-         "<div class='frow'><label class='flab'>" + esc(t("admin.windows", "時間帯")) +
+         "<div class='frow'><label class='flab'>" + esc(t("admin.windows")) +
          "</label><div id='qhWins'>";
     (qh.windows || []).forEach(function (w, i) {
       h += "<div class='arow' data-qhrow='" + i + "'><input type='time' data-qh='from' value='" +
            esc(w.from || "") + "'> – <input type='time' data-qh='to' value='" + esc(w.to || "") +
            "'> <button class='btn2 danger' data-qh='del'>×</button></div>";
     });
-    h += "</div><button class='btn2' id='qhAdd'>+ " + esc(t("admin.add_window", "時間帯を追加")) +
+    h += "</div><button class='btn2' id='qhAdd'>+ " + esc(t("admin.add_window")) +
          "</button></div>";
-    var ACT_TYPES = [["sip_call", t("admin.act_sip", "SIP 発呼")],
-                     ["telegram", t("admin.act_telegram", "Telegram")],
-                     ["ha_event", t("admin.act_ha", "HA イベント")],
-                     ["chime", t("admin.act_chime", "チャイム")]];
-    h += "<div class='frow'><label class='flab'>" + esc(t("admin.suppress", "抑制する")) +
+    var ACT_TYPES = [["sip_call", t("admin.act_sip")],
+                     ["telegram", t("admin.act_telegram")],
+                     ["ha_event", t("admin.act_ha")],
+                     ["chime", t("admin.act_chime")]];
+    h += "<div class='frow'><label class='flab'>" + esc(t("admin.suppress")) +
          "</label><div class='mcwrap'>";
     ACT_TYPES.forEach(function (a) {
       h += "<label class='mc'><input type='checkbox' data-qhsup='" + a[0] + "'" +
@@ -2016,28 +3647,70 @@ if (typeof document !== "undefined") (function () {
            "</label>";
     });
     h += "</div></div><div class='frow'><label class='flab'>" +
-         esc(t("admin.never_suppress", "常に許可")) + "</label><div class='mcwrap'>";
+         esc(t("admin.never_suppress")) + "</label><div class='mcwrap'>";
     ACT_TYPES.forEach(function (a) {
       h += "<label class='mc'><input type='checkbox' data-qhnev='" + a[0] + "'" +
            ((qh.never_suppress || []).indexOf(a[0]) >= 0 ? " checked" : "") + "> " + esc(a[1]) +
            "</label>";
     });
-    h += "</div></div><button class='btn small' id='qhSave'>" + esc(t("admin.save", "保存")) +
+    h += "</div></div><button class='btn small' id='qhSave'>" + esc(t("admin.save")) +
          "</button></div>";
 
     el.innerHTML = h;
 
     $("#mqSave").onclick = function () {
-      saveAndRefresh(L.mqttEntries({ host: $("#mqHost").value, port: $("#mqPort").value,
-                                     user: $("#mqUser").value, pass: $("#mqPass").value }), null);
+      savePlanAndRefresh(L.mqttPlan({ host: $("#mqHost").value, port: $("#mqPort").value,
+                                      user: $("#mqUser").value, pass: $("#mqPass").value }, mqtt));
     };
     $("#tgSave").onclick = function () {
-      saveAndRefresh(L.telegramEntries({ bot_token: $("#tgToken").value,
-                                         poll_updates: $("#tgPoll").checked }), null);
+      savePlanAndRefresh(L.telegramPlan({ bot_token: $("#tgToken").value,
+                                          poll_updates: $("#tgPoll").checked }, tg));
+    };
+    function bindLocalProvision(buttonId, inputId, secretRef) {
+      var button = $(buttonId), input = $(inputId);
+      if (!button || !input || !secretRef) return;
+      input.oninput = function () { button.disabled = !input.value; };
+      button.onclick = function () {
+        if (!input.value) return;
+        savePlanAndRefresh(L.localSecretProvisionPlan(secretRef, input.value));
+      };
+    }
+    bindLocalProvision("#mqProvision", "#mqPass", mqtt.pass_ref);
+    bindLocalProvision("#tgProvision", "#tgToken", tg.bot_token_ref);
+    bindLocalProvision("#wpPrivateProvision", "#wpPrivate", push.vapid_private_key_ref);
+    bindLocalProvision("#wpBearerProvision", "#wpBearer", push.sender_secret_ref);
+    function updateWebPushBearerState() {
+      var enabled = $("#wpBearerEnabled").checked;
+      $("#wpBearer").disabled = !enabled;
+      var provision = $("#wpBearerProvision");
+      if (provision) provision.disabled = !enabled || !$("#wpBearer").value;
+    }
+    $("#wpBearerEnabled").onchange = updateWebPushBearerState;
+    updateWebPushBearerState();
+    $("#wpSave").onclick = function () {
+      var privateValue = $("#wpPrivate").value;
+      var bearerEnabled = $("#wpBearerEnabled").checked;
+      var bearerValue = $("#wpBearer").value;
+      if (!privateValue && !push.vapid_private_key_ref) {
+        msg(t("admin.web_push_private_required"));
+        return;
+      }
+      if (bearerEnabled && !bearerValue && !push.sender_secret_ref) {
+        msg(t("admin.web_push_bearer_required"));
+        return;
+      }
+      savePlanAndRefresh(L.webPushPlan({
+        sender_url: $("#wpSenderUrl").value,
+        vapid_public_key: $("#wpPublicKey").value,
+        vapid_subject: $("#wpSubject").value,
+        vapid_private_key: privateValue,
+        sender_bearer_enabled: bearerEnabled,
+        sender_secret: bearerValue
+      }, push));
     };
     $("#tgTest").onclick = function () {
       api("POST", "/api/test/telegram", { chat_id: $("#tgTestChat").value }, function (st, j) {
-        if (st === 200 && j && j.ok) { msg(t("admin.test_sent", "テスト通知を送信しました")); return; }
+        if (st === 200 && j && j.ok) { msg(t("admin.test_sent")); return; }
         var err = j && j.err;
         var key = err === "not_leader" ? "admin.err_not_leader" :
                   err === "no_token" ? "admin.err_no_token" :
@@ -2048,17 +3721,28 @@ if (typeof document !== "undefined") (function () {
     $("#sipSave").onclick = function () {
       var entries = L.sipEntries({ server: $("#sipServer").value, port: $("#sipPort").value,
                                    transport: $("#sipTransport").value });
+      var plans = [];
       devIds.forEach(function (nid) {
         var u = el.querySelector("[data-sipacct-user='" + nid + "']");
         var p = el.querySelector("[data-sipacct-pass='" + nid + "']");
         var existing = accounts[nid] || {};
         if (!u) return;
-        if (!u.value && !(p && p.value) && !existing.user) return;  // 未使用行は書かない
-        entries = entries.concat(
-          L.sipAccountEntries(nid, u.value, p ? p.value : "", existing));
+        if (!u.value && !(p && p.value) && !existing.user) return;
+        plans.push(L.sipAccountPlan(nid, u.value, p ? p.value : "", existing));
       });
-      saveAndRefresh(entries, null);
+      savePlanAndRefresh(L.mergeSecretPlans(entries, plans));
     };
+    $all("[data-sipacct-provision]", el).forEach(function (button) {
+      var nid = button.getAttribute("data-sipacct-provision");
+      var input = el.querySelector("[data-sipacct-pass='" + nid + "']");
+      var existing = accounts[nid] || {};
+      if (!input || !existing.pass_ref) return;
+      input.oninput = function () { button.disabled = !input.value; };
+      button.onclick = function () {
+        if (!input.value) return;
+        savePlanAndRefresh(L.localSecretProvisionPlan(existing.pass_ref, input.value));
+      };
+    });
     $("#qhAdd").onclick = function () {
       var row = document.createElement("div");
       row.className = "arow";
@@ -2081,7 +3765,9 @@ if (typeof document !== "undefined") (function () {
       var wins = [];
       $all("[data-qhrow]", el).forEach(function (row) {
         var f = row.querySelector("[data-qh='from']"), to = row.querySelector("[data-qh='to']");
-        wins.push({ from: f ? f.value : "", to: to ? to.value : "" });
+        var originalIndex = parseInt(row.getAttribute("data-qhrow"), 10);
+        wins.push({ from: f ? f.value : "", to: to ? to.value : "",
+                    _existing_index: isNaN(originalIndex) ? -1 : originalIndex });
       });
       var sup = [], nev = [];
       $all("[data-qhsup]", el).forEach(function (c) {
@@ -2091,12 +3777,12 @@ if (typeof document !== "undefined") (function () {
         if (c.checked) nev.push(c.getAttribute("data-qhnev"));
       });
       var entries = L.tzEntries($("#tzMin").value).concat(
-        L.quietEntries({ windows: wins, suppress: sup, never_suppress: nev }));
+        L.quietEntries({ windows: wins, suppress: sup, never_suppress: nev }, qh));
       saveAndRefresh(entries, null);
     };
   }
 
-  /* ---------------- 8. イベント履歴 ---------------- */
+
   var evFilter = "";
   function renderEvents() {
     var el = $("#tab-events");
@@ -2105,10 +3791,12 @@ if (typeof document !== "undefined") (function () {
     var h = "<div class='card'><div class='chead'><h2></h2><select id='evFilter'>";
     types.forEach(function (ty) {
       h += "<option value='" + ty + "'" + (evFilter === ty ? " selected" : "") + ">" +
-           (ty || esc(t("admin.filter_type", "種別で絞り込み"))) + "</option>";
+           (ty || esc(t("admin.filter_type"))) + "</option>";
     });
-    h += "</select></div><table><thead><tr><th>時刻</th><th>種別</th><th>ドア/機器</th>" +
-         "<th>詳細</th></tr></thead><tbody>";
+    h += "</select></div><table><thead><tr><th>" + esc(t("panel.event_time")) +
+         "</th><th>" + esc(t("panel.event_type")) + "</th><th>" +
+         esc(t("admin.door_or_device")) + "</th><th>" + esc(t("admin.details")) +
+         "</th></tr></thead><tbody>";
     var evs = S.events || [];
     for (var i = 0; i < evs.length; i++) {
       var e = evs[i];
@@ -2125,60 +3813,89 @@ if (typeof document !== "undefined") (function () {
     };
   }
 
-  /* ---------------- 9. システム ---------------- */
+
   function renderSystem() {
     var el = $("#tab-system");
-    var toks = (cfgObj("panel") || {}).tokens || [];
-    var tok = toks[0] || "";
+    var tok = S.panelToken || "";
+    var panelCfg = cfgObj("panel");
+    var panelRefs = panelCfg.token_refs instanceof Array ? panelCfg.token_refs.filter(function (ref) {
+      return typeof ref === "string" && ref.indexOf("secret:") === 0;
+    }) : [];
     var base = window.location.protocol + "//" + window.location.host;
     var h = "";
-    // エクスポート / インポート
-    h += "<div class='card'><h2>" + esc(t("admin.export", "エクスポート")) + " / " +
-         esc(t("admin.import", "インポート")) + "</h2>" +
-         "<button class='btn small' id='sysExport'>" + icon("download") + " " + esc(t("admin.export", "エクスポート")) +
+
+    var emergencyCfg = cfgObj("emergency");
+    var webSosEnabled = emergencyCfg.web_active_page_alerts !== false;
+    h += "<div class='card'><h2>" +
+         esc(t("admin.web_sos_title")) + "</h2>" +
+         "<label class='frow-check'><input type='checkbox' id='webSosEnabled'" +
+         (webSosEnabled ? " checked" : "") + "> " +
+         esc(t("admin.web_sos_enabled")) +
+         "</label><div class='warn fhint'>" +
+         esc(t("admin.web_sos_warning")) +
+         "</div><button class='btn small' id='webSosSave' style='margin-top:8px'>" +
+         esc(t("admin.save")) + "</button></div>";
+
+    h += "<div class='card'><h2>" + esc(t("admin.export")) + " / " +
+         esc(t("admin.import")) + "</h2>" +
+         "<button class='btn small' id='sysExport'>" + icon("download") + " " + esc(t("admin.export")) +
          "</button><div class='dim fhint' style='margin:10px 0 4px'>" +
-         esc(t("admin.import_hint", "エクスポートした JSON を貼り付けてください")) + "</div>" +
+         esc(t("admin.import_hint")) + "</div>" +
          "<textarea id='sysImport' style='min-height:110px' placeholder='{ \"doors\": … }'></textarea>" +
          "<button class='btn small' id='sysImportBtn' style='margin-top:8px'>" +
-         esc(t("admin.import", "インポート")) + "</button></div>";
-    // パネル token
-    h += "<div class='card'><h2>" + esc(t("admin.panel_token", "パネル token")) + "</h2>" +
+         esc(t("admin.import")) + "</button></div>";
+
+    h += "<div class='card'><h2>" + esc(t("admin.panel_token")) + "</h2>" +
          "<div class='mono' id='panelTok'>" + esc(tok || "—") + "</div>";
     if (tok)
-      h += "<div class='dim fhint'><a href='" + esc(base + "/panel/door?k=" + tok) +
-           "' target='_blank'>/panel/door?k=…</a> · <a href='" +
-           esc(base + "/panel/monitor?k=" + tok) + "' target='_blank'>/panel/monitor?k=…</a></div>";
+      h += "<div class='dim fhint'><a href='" + esc(base + "/panel/door#k=" + tok) +
+           "' target='_blank'>/panel/door#k=…</a> · <a href='" +
+           esc(base + "/panel/monitor#k=" + tok) + "' target='_blank'>/panel/monitor#k=…</a></div>";
     h += "<button class='btn2' id='tokRotate' style='margin-top:8px'>" +
-         esc(t("admin.rotate", "ローテート")) + "</button></div>";
-    // デバイス配対 (自動発見 + 承認 / 配対モード / PIN)
-    h += "<div class='card'><h2>" + esc(t("admin.add_device", "デバイスを追加")) + "</h2>" +
+         esc(t("admin.rotate")) + "</button>";
+    if (panelRefs.length) {
+      h += "<div class='frow' style='margin-top:10px'><select id='panelProvisionRef'>";
+      panelRefs.forEach(function (ref) {
+        h += "<option value='" + esc(ref) + "'>" + esc(ref) + "</option>";
+      });
+      h += "</select><input id='panelProvisionToken' type='password' autocomplete='off' " +
+           "spellcheck='false' placeholder='********'><button class='btn2' " +
+           "id='panelProvision' disabled>" +
+           esc(t("admin.provision_this_node")) + "</button></div>";
+    }
+    h += "</div>";
+
+    h += "<div class='card'><h2>" + esc(t("admin.add_device")) + "</h2>" +
          "<div class='dim fhint' style='margin-bottom:8px'>" +
-         esc(t("admin.pair_hint", "同じ LAN 上の未設定デバイスを自動で見つけて追加します。" +
-                                  "新機の画面に出る QR も同じ働きです。")) + "</div>" +
+         esc(t("admin.pair_hint")) + "</div>" +
          "<div id='pairPending'></div>" +
          "<div style='display:flex; gap:8px; align-items:center; margin-top:10px; flex-wrap:wrap'>" +
          "<button class='btn2 small' id='pairModeBtn'>" +
-         esc(t("admin.pair_mode", "配対モード (10 分)")) + "</button>" +
+         esc(t("admin.pair_mode")) + "</button>" +
          "<span class='dim' id='pairModeStat'></span></div>" +
          "<div style='margin-top:12px; border-top:1px solid var(--line,#2a333d); padding-top:10px'>" +
-         "<button class='btn2 small' id='joinBtn'>" + esc(t("admin.join_pin", "PIN で追加")) +
+         "<button class='btn2 small' id='joinBtn'>" + esc(t("admin.join_pin")) +
          "</button><div id='joinOut'></div></div></div>";
-    // 生設定 + 個別書込 (旧 UI 踏襲)
-    h += "<div class='card'><h2>" + esc(t("admin.raw_config", "設定 (生 JSON)")) + "</h2>" +
+
+    h += "<div class='card'><h2>" + esc(t("admin.raw_config")) + "</h2>" +
          "<textarea id='cfgView' readonly></textarea>" +
          "<div style='display:flex; gap:8px; margin-top:10px'>" +
          "<input id='cfgKey' type='text' placeholder='doors.d_front.label' style='flex:1'>" +
-         "<input id='cfgVal' type='text' placeholder='{\"ja\":\"正面玄関\"}' style='flex:2'>" +
-         "<button class='btn' id='cfgSet'>書込</button></div></div>";
-    // ログ
-    h += "<div class='card'><h2>" + esc(t("admin.logs", "ログ")) + "</h2>" +
+         "<input id='cfgVal' type='text' placeholder='" +
+         esc(t("admin.config_value_placeholder")) + "' style='flex:2'>" +
+         "<button class='btn' id='cfgSet'>" + esc(t("admin.write")) + "</button></div></div>";
+
+    h += "<div class='card'><h2>" + esc(t("admin.logs")) + "</h2>" +
          "<button class='btn2' id='logBtn'>" + icon("reload") + "</button> " +
-         "<button class='btn2' id='logCopy'>" + icon("copy") + " " + esc(t("admin.copy", "コピー")) + "</button>" +
+         "<button class='btn2' id='logCopy'>" + icon("copy") + " " + esc(t("admin.copy")) + "</button>" +
          "<pre id='logOut' class='mono' " +
          "style='white-space:pre-wrap; font-size:11px; margin-top:8px'></pre></div>";
     el.innerHTML = h;
 
     $("#cfgView").value = JSON.stringify(S.cfg, null, 2);
+    $("#webSosSave").onclick = function () {
+      saveAndRefresh(L.webSosEntries($("#webSosEnabled").checked), null);
+    };
     $("#sysExport").onclick = function () {
       var blob = new Blob([JSON.stringify(S.cfg, null, 2)], { type: "application/json" });
       var a = document.createElement("a");
@@ -2194,35 +3911,56 @@ if (typeof document !== "undefined") (function () {
       var parsed;
       try { parsed = JSON.parse(txt); } catch (e) { msg("JSON?"); return; }
       var entries;
-      if (parsed instanceof Array) entries = parsed;                    // entries 配列そのもの
+      if (parsed instanceof Array) entries = parsed;
       else if (parsed && parsed.entries instanceof Array) entries = parsed.entries;
-      else entries = L.flattenConfig(parsed);                           // 全文 → フラット化
-      api("POST", "/api/config/import", { entries: entries }, function (st, j) {
-        if (st === 200 && j && j.ok) {
-          msg(fmt(t("admin.imported", "{n} 件を書き込みました"), { n: j.n }));
+      else entries = L.flattenConfig(parsed);
+      postEntries(entries, null, function (ok, j) {
+        if (ok) {
+          msg(fmt(t("admin.imported"), { n: j.n || entries.length }));
           refreshConfig(function () { renderTab(); });
-        } else msg(t("admin.save_failed", "保存に失敗しました"));
+        } else if (j && j.unavailable)
+          msg(t("admin.atomic_batch_unavailable"));
+        else msg(t("admin.save_failed") + ((j && j.err) ? ": " + j.err : ""));
       });
     };
     $("#tokRotate").onclick = function () {
-      if (!window.confirm(t("admin.rotate_confirm", "旧 token は即時無効になります。よろしいですか?")))
+      if (!window.confirm(t("admin.rotate_confirm")))
         return;
       api("POST", "/api/panel-token/rotate", {}, function (st, j) {
         if (st === 200 && j && j.ok) {
-          msg(t("admin.saved", "保存しました"));
+          S.panelToken = j.token || "";
+          msg(t("admin.saved"));
           refreshConfig(function () { renderTab(); });
-        } else msg(t("admin.save_failed", "保存に失敗しました"));
+        } else msg(t("admin.save_failed"));
       });
     };
+    if ($("#panelProvision")) {
+      $("#panelProvisionToken").oninput = function () {
+        $("#panelProvision").disabled = !this.value;
+      };
+      $("#panelProvision").onclick = function () {
+        var input = $("#panelProvisionToken");
+        if (!input.value) return;
+        api("POST", "/api/panel-token/provision",
+            L.panelProvisionPayload($("#panelProvisionRef").value, input.value),
+            function (st, j) {
+          if (st === 200 && j && j.ok) {
+            input.value = "";
+            $("#panelProvision").disabled = true;
+            msg(t("admin.saved"));
+          } else msg(t("admin.save_failed"));
+        });
+      };
+    }
     $("#joinBtn").onclick = function () {
       api("POST", "/api/join-token", {}, function (st, j) {
-        if (st !== 200 || !j || !j.ok) { msg(t("admin.save_failed", "失敗")); return; }
+        if (st !== 200 || !j || !j.ok) { msg(t("admin.save_failed")); return; }
         var self = peerOf((S.status.node || {}).id) || {};
         var addr = (self.addrs || [])[0] || window.location.hostname + ":47172";
         $("#joinOut").innerHTML =
           "<div class='pin'>" + esc(j.pin) + "</div><div class='mono' style='text-align:center'>" +
           esc(addr) + "</div><div class='dim fhint' style='text-align:center'>" +
-          esc(t("admin.join_hint", "新しい端末でこの PIN と接続先を入力してください (10 分有効)")) +
+          esc(t("admin.join_hint")) +
           "</div>";
       });
     };
@@ -2230,8 +3968,12 @@ if (typeof document !== "undefined") (function () {
       var key = $("#cfgKey").value.replace(/^\s+|\s+$/g, "");
       var val = $("#cfgVal").value.replace(/^\s+|\s+$/g, "");
       if (!key || !val) return;
-      api("POST", "/api/config", { key: key, value: val }, function (st) {
-        msg(st === 200 ? "OK" : "NG (" + st + ")");
+      var jsonValue;
+      try { jsonValue = JSON.parse(val); } catch (e) { msg(t("admin.valid_json_required")); return; }
+      postEntries([{ key: key, value: jsonValue }], null, function (ok, result) {
+        msg(ok ? "OK" : ((result && result.unavailable) ?
+          t("admin.atomic_batch_unavailable") : "NG" +
+          ((result && result.err) ? " (" + result.err + ")" : "")));
         refreshConfig(function () { renderTab(); });
       });
     };
@@ -2247,38 +3989,36 @@ if (typeof document !== "undefined") (function () {
     if ($("#pairModeBtn")) $("#pairModeBtn").onclick = function () {
       api("POST", "/api/pairing/mode", { seconds: 600 }, function (st, j) {
         if (st === 200 && j && j.ok) {
-          msg(t("admin.pair_mode_on", "配対モードを開始しました (10 分)"));
+          msg(t("admin.pair_mode_on"));
           refreshPairing();
-        } else msg(t("admin.save_failed", "失敗"));
+        } else msg(t("admin.save_failed"));
       });
     };
     refreshPairing();
   }
 
-  // 配対パネル更新 (System タブが開いている時だけ /api/pairing を叩き #pairPending を差し替える)
+
   function refreshPairing() {
     if (S.tab !== "system") return;
     api("GET", "/api/pairing", null, function (st, j) {
       if (st !== 200 || !j) return;
       var box = $("#pairPending");
       if (!box) return;
-      // このノード自身が未配対なら、承認/PIN は使えない — 親機化 (新規作成) を促す
+
       if (j.paired === false) {
         box.innerHTML =
           "<div class='dim' style='padding:6px 0'>" +
-          esc(t("admin.pair_self_unpaired",
-                 "この端末はまだクラスタに参加していません。最初の 1 台ならここで新規作成してください。")) +
+          esc(t("admin.pair_self_unpaired")) +
           "</div><button class='btn small' id='pairFoundBtn'>" +
-          esc(t("admin.pair_found", "この端末を親機にする (新規作成)")) + "</button>";
+          esc(t("admin.pair_found")) + "</button>";
         var fb = $("#pairFoundBtn");
         if (fb) fb.onclick = function () {
-          if (!window.confirm(t("admin.pair_found_confirm",
-                                "この端末を親機にして新しいクラスタを作成しますか?"))) return;
+          if (!window.confirm(t("admin.pair_found_confirm"))) return;
           api("POST", "/api/pairing/found", {}, function (s2, j2) {
             if (s2 === 200 && j2 && j2.ok) {
-              msg(t("admin.pair_found_ok", "この端末を親機にしました"));
+              msg(t("admin.pair_found_ok"));
               refreshPairing();
-            } else msg(t("admin.save_failed", "失敗"));
+            } else msg(t("admin.save_failed"));
           });
         };
         var st2 = $("#pairModeStat");
@@ -2289,7 +4029,7 @@ if (typeof document !== "undefined") (function () {
       var h = "";
       if (!devs.length) {
         h = "<div class='dim' style='padding:6px 0'>" +
-            esc(t("admin.pair_none", "待機中のデバイスはありません")) + "</div>";
+            esc(t("admin.pair_none")) + "</div>";
       } else {
         for (var i = 0; i < devs.length; i++) {
           var d = devs[i];
@@ -2299,17 +4039,17 @@ if (typeof document !== "undefined") (function () {
                "</div><div class='dim mono' style='font-size:11px'>" + esc(d.role || "") +
                " · " + esc(d.addr || "") + "</div></div>" +
                "<button class='btn small pairApprove' data-id='" + esc(d.id) + "'>" +
-               esc(t("admin.pair_approve", "承認")) + "</button></div>";
+               esc(t("admin.pair_approve")) + "</button></div>";
         }
       }
       box.innerHTML = h;
       $all(".pairApprove").forEach(function (b) {
         b.onclick = function () {
           b.disabled = true;
-          b.textContent = t("admin.pair_approving", "追加中…");
+          b.textContent = t("admin.pair_approving");
           api("POST", "/api/pairing/invite", { id: b.getAttribute("data-id") }, function (s2, j2) {
-            if (s2 === 200 && j2 && j2.ok) msg(t("admin.pair_invited", "招待を送りました"));
-            else { b.disabled = false; msg(t("admin.save_failed", "失敗")); }
+            if (s2 === 200 && j2 && j2.ok) msg(t("admin.pair_invited"));
+            else { b.disabled = false; msg(t("admin.save_failed")); }
           });
         };
       });
@@ -2317,14 +4057,14 @@ if (typeof document !== "undefined") (function () {
       if (stat) {
         if (pend.pairing_mode) {
           var s = pend.pairing_mode_left_s || 0;
-          stat.textContent = fmt(t("admin.pair_mode_left", "自動追加 ON — 残り {m}:{s}"),
+          stat.textContent = fmt(t("admin.pair_mode_left"),
             { m: Math.floor(s / 60), s: ("0" + (s % 60)).slice(-2) });
         } else stat.textContent = "";
       }
     });
   }
 
-  /* ---------------- 10. 用件 (visit_purposes) + 訪客言語 (ui.*) ---------------- */
+
   function sortedPurposeIds() {
     var ps = cfgObj("visit_purposes"), ids = [];
     for (var id in ps) ids.push(id);
@@ -2343,16 +4083,16 @@ if (typeof document !== "undefined") (function () {
     var fields = [
       { id: "pid", label: "ID", type: isNew ? "text" : "static",
         value: isNew ? L.newId("p_", ps) : id },
-      { id: "icon", label: "アイコン (絵文字 1-2 文字)", type: "icon", value: cur.icon || "" },
-      { id: "ja", label: t("admin.label_ja", "ラベル (日本語)"), value: lb.ja },
-      { id: "en", label: t("admin.label_en", "ラベル (英語)"), value: lb.en },
-      { id: "zh", label: t("admin.label_zh", "ラベル (中国語)"), value: lb.zh }];
-    var m = openForm(t("admin.purposes", "用件"), fields, function (v) {
+      { id: "icon", label: t("admin.purpose_icon"), type: "icon", value: cur.icon || "" },
+      { id: "ja", label: t("admin.label_ja"), value: lb.ja },
+      { id: "en", label: t("admin.label_en"), value: lb.en },
+      { id: "zh", label: t("admin.label_zh"), value: lb.zh }];
+    var m = openForm(t("admin.purposes"), fields, function (v) {
       var pid = isNew ? L.safeId(v.pid) : id;
       if (!pid) return "ID?";
-      if (!v.ja && !v.en && !v.zh) return t("admin.label_ja", "ラベル") + "?";
+      if (!v.ja && !v.en && !v.zh) return t("admin.label_ja") + "?";
       v.order = isNew ? sortedPurposeIds().length + 1 : (cur.order || 1);
-      saveAndRefresh(L.purposeEntries(pid, v), null);
+      saveAndRefresh(L.purposeEntries(pid, v, cur), null);
     });
     bindIconPick(m);
   }
@@ -2361,12 +4101,11 @@ if (typeof document !== "undefined") (function () {
     var el = $("#tab-purposes");
     var ps = cfgObj("visit_purposes"), ids = sortedPurposeIds();
     var ui = cfgObj("ui");
-    var h = "<div class='card'><div class='chead'><h2>" + esc(t("admin.purposes", "用件")) +
+    var h = "<div class='card'><div class='chead'><h2>" + esc(t("admin.purposes")) +
             "</h2><button class='btn small' data-act='add'>+ " +
-            esc(t("admin.add", "追加")) + "</button></div>" +
+            esc(t("admin.add")) + "</button></div>" +
             "<div class='dim fhint' style='margin-bottom:8px'>" +
-            "門口機では用件ボタン 1 タップ = その用件付きの按鈴になります " +
-            "(大ボタン「呼出」は用件なし)。ラベルは訪客言語に追従します。</div>" +
+            esc(t("admin.purpose_hint")) + "</div>" +
             "<table><thead><tr><th>#</th><th></th><th>ja</th><th>en</th><th>zh</th>" +
             "<th>ID</th><th></th></tr></thead><tbody>";
     ids.forEach(function (id, i) {
@@ -2378,27 +4117,28 @@ if (typeof document !== "undefined") (function () {
            "<button class='btn2' data-act='up' data-id='" + esc(id) + "'>↑</button>" +
            "<button class='btn2' data-act='down' data-id='" + esc(id) + "'>↓</button> " +
            "<button class='btn2' data-act='edit' data-id='" + esc(id) + "'>" +
-           esc(t("admin.edit", "編集")) + "</button> " +
+           esc(t("admin.edit")) + "</button> " +
            "<button class='btn2 danger' data-act='del' data-id='" + esc(id) + "'>" +
-           esc(t("admin.delete", "削除")) + "</button></td></tr>";
+           esc(t("admin.delete")) + "</button></td></tr>";
     });
     h += "</tbody></table></div>";
 
-    // 訪客言語 (ui.languages / ui.visitor_lang_revert_s)
+
     var langs = uiLangs();
-    h += "<div class='card'><h2>" + esc(t("admin.languages", "訪客言語")) + "</h2>" +
-         "<div class='frow'><label class='flab'>門口機の言語切替に出す言語</label>" +
+    h += "<div class='card'><h2>" + esc(t("admin.languages")) + "</h2>" +
+         "<div class='frow'><label class='flab'>" + esc(t("admin.visitor_languages")) + "</label>" +
          "<div class='mcwrap'>";
     ["ja", "en", "zh"].forEach(function (lg) {
       h += "<label class='mc'><input type='checkbox' data-uilang='" + lg + "'" +
            (langs.indexOf(lg) >= 0 ? " checked" : "") + "> " + esc(langName(lg)) + "</label>";
     });
-    h += "</div><div class='dim fhint'>先頭の ja が主言語です (未選択のときも ja に戻ります)</div>" +
-         "</div><div class='frow'><label class='flab'>無操作で主言語へ自動復帰する秒数 " +
-         "(visitor_lang_revert_s)</label><input id='uiRevert' type='number' value='" +
+    h += "</div><div class='dim fhint'>" + esc(t("admin.visitor_language_primary_hint")) + "</div>" +
+         "</div><div class='frow'><label class='flab'>" +
+         esc(t("admin.visitor_language_revert")) +
+         " (visitor_lang_revert_s)</label><input id='uiRevert' type='number' value='" +
          esc(ui.visitor_lang_revert_s !== undefined ? ui.visitor_lang_revert_s : 60) +
          "' style='width:120px'></div>" +
-         "<button class='btn small' id='uiSave'>" + esc(t("admin.save", "保存")) +
+         "<button class='btn small' id='uiSave'>" + esc(t("admin.save")) +
          "</button></div>";
     el.innerHTML = h;
 
@@ -2429,8 +4169,8 @@ if (typeof document !== "undefined") (function () {
     };
   }
 
-  /* ---------------- 11. 文言 (i18n_overrides) ---------------- */
-  // 訪客に見えるキーの子集 (既定表示)。「全キー表示」でこの絞り込みを外す
+
+
   var VISITOR_PREFIXES = ["idle.", "calling.", "incall.", "degraded.", "offline.", "reply.",
                           "purpose.", "panel.", "ring.", "emergency.", "event.", "notify.",
                           "app."];
@@ -2442,7 +4182,7 @@ if (typeof document !== "undefined") (function () {
     return false;
   }
 
-  // 既定文言 (/locale/<lang>.json) を必要な言語だけ取得してキャッシュ
+
   function ensureLocales(langs, cb) {
     var pend = [];
     langs.forEach(function (l) { if (S.locales[l] === undefined) pend.push(l); });
@@ -2455,7 +4195,7 @@ if (typeof document !== "undefined") (function () {
       });
     });
   }
-  // 既定文言 (その言語 → ja → キー自身)
+
   function defText(lang, key) {
     var d = S.locales[lang] || {};
     if (d[key]) return d[key];
@@ -2466,7 +4206,7 @@ if (typeof document !== "undefined") (function () {
   function renderTexts() {
     var el = $("#tab-texts");
     var langs = uiLangs();
-    if (langs.indexOf("ja") < 0) langs = ["ja"].concat(langs);   // 既定文言の土台は常に ja
+    if (langs.indexOf("ja") < 0) langs = ["ja"].concat(langs);
     ensureLocales(langs, function () { drawTexts(el, langs); });
   }
 
@@ -2475,18 +4215,17 @@ if (typeof document !== "undefined") (function () {
     var seen = {}, keys = [], i, k;
     for (i = 0; i < langs.length; i++) for (k in (S.locales[langs[i]] || {})) seen[k] = 1;
     for (i = 0; i < langs.length; i++)
-      for (k in (ov[langs[i]] || {})) seen[k] = 1;                // 既定に無い独自キーも拾う
+      for (k in (ov[langs[i]] || {})) seen[k] = 1;
     for (k in seen) if (textsAllKeys || isVisitorKey(k)) keys.push(k);
     keys.sort();
 
-    var h = "<div class='card'><div class='chead'><h2>" + esc(t("admin.texts", "文言")) +
+    var h = "<div class='card'><div class='chead'><h2>" + esc(t("admin.texts")) +
             "</h2><label class='mc'><input type='checkbox' id='txAll'" +
-            (textsAllKeys ? " checked" : "") + "> 全キー表示</label></div>" +
+            (textsAllKeys ? " checked" : "") + "> " + esc(t("admin.texts_show_all")) + "</label></div>" +
             "<div class='dim fhint' style='margin-bottom:8px'>" +
-            esc(t("admin.texts_hint", "空欄なら既定文言を使用します")) +
-            " · プレースホルダ (<span class='mono'>{name}</span>) は既定文言と同じ組でなければ" +
-            "保存できません。</div><div class='scrollx'><table class='i18ntbl'><thead><tr>" +
-            "<th>キー</th>";
+            esc(t("admin.texts_hint")) + " · " + esc(t("admin.texts_placeholder_hint")) +
+            "</div><div class='scrollx'><table class='i18ntbl'><thead><tr><th>" +
+            esc(t("admin.key")) + "</th>";
     langs.forEach(function (lg) { h += "<th>" + esc(langName(lg)) + "</th>"; });
     h += "</tr></thead><tbody>";
     keys.forEach(function (key) {
@@ -2499,7 +4238,7 @@ if (typeof document !== "undefined") (function () {
       h += "</tr>";
     });
     h += "</tbody></table></div><button class='btn small' id='txSave' style='margin-top:10px'>" +
-         esc(t("admin.save", "保存")) + "</button> <span class='dim fhint' id='txCount'></span>" +
+         esc(t("admin.save")) + "</button> <span class='dim fhint' id='txCount'></span>" +
          "</div>";
     el.innerHTML = h;
 
@@ -2523,18 +4262,19 @@ if (typeof document !== "undefined") (function () {
         changes[lg][key] = val;
         n++;
       });
-      if (err) { msg("プレースホルダ不一致 — " + err); return; }
-      if (!n) { msg(t("admin.saved", "変更はありません")); return; }
+      if (err) { msg(t("admin.texts_placeholder_mismatch") + " — " + err); return; }
+      if (!n) { msg(t("admin.saved")); return; }
       var e = L.i18nEntries(cfgObj("i18n_overrides"), changes);
       saveAndRefresh(e.entries, e.dels);
     };
-    $("#txCount").textContent = keys.length + " キー × " + langs.length + " 言語";
+    $("#txCount").textContent = fmt(t("admin.texts_count"),
+      { keys: keys.length, languages: langs.length });
   }
 
-  /* ---------------- 12. テーマ (display.theme / devices.*.local.theme) ---------------- */
+
   var THEME_PRESETS = ["#101418", "#12202c", "#1c1030", "#2a1a12",
                        "#0f2018", "#301820", "#f2efe6", "#000000"];
-  var themeScope = "";   // "" = 全体既定 / <device_id> = 端末別
+  var themeScope = "";
 
   function firstDoorId() {
     var ds = cfgObj("doors");
@@ -2546,7 +4286,7 @@ if (typeof document !== "undefined") (function () {
     return scope ? (((cfgObj("devices")[scope] || {}).local || {}).theme || {})
                  : ((cfgObj("display") || {}).theme || {});
   }
-  // 端末別プレビューの実効値 (端末別に指定が無いキーは全体既定を継承)
+
   function themeEffective(scope) {
     var base = themeCur(""), o = themeCur(scope);
     return { bg_color: (o.bg_color !== undefined && o.bg_color !== null && o.bg_color !== "")
@@ -2561,24 +4301,23 @@ if (typeof document !== "undefined") (function () {
     var colorOn = !scope || (own.bg_color !== undefined && own.bg_color !== null);
     var imageOn = !scope || own.bg_image !== undefined;
 
-    var h = "<div class='card'><div class='chead'><h2>" + esc(t("admin.theme", "テーマ (背景)")) +
+    var h = "<div class='card'><div class='chead'><h2>" + esc(t("admin.theme")) +
             "</h2><select id='thScope'><option value=''" + (scope ? "" : " selected") +
-            ">全体既定 (display.theme)</option>";
+            ">" + esc(t("admin.theme_global_default")) + " (display.theme)</option>";
     var devs = cfgObj("devices");
     for (var did in devs)
       h += "<option value='" + esc(did) + "'" + (scope === did ? " selected" : "") + ">" +
            esc(deviceName(did)) + " (" + esc(did.slice(0, 8)) + ")</option>";
     h += "</select></div><div class='dim fhint' style='margin-bottom:10px'>" +
-         (scope ? "端末別の上書き。項目ごとに「この端末で指定」を外すと全体既定を継承します。"
-                : "全端末の既定。端末別の上書きは上の選択で切り替えます。") +
-         " 保存すると CRDT で即時同期され、門口機の待機画面に反映されます。</div>";
+         esc(t(scope ? "admin.theme_device_hint" : "admin.theme_global_hint")) + " " +
+         esc(t("admin.theme_sync_hint")) + "</div>";
 
-    // 背景色
+
     h += "<div class='frow'><label class='flab'>" +
-         esc(t("admin.theme_bg_color", "背景色")) + "</label>";
+         esc(t("admin.theme_bg_color")) + "</label>";
     if (scope)
       h += "<label class='mc'><input type='checkbox' id='thColorOn'" +
-           (colorOn ? " checked" : "") + "> この端末で指定</label><br>";
+           (colorOn ? " checked" : "") + "> " + esc(t("admin.theme_override_here")) + "</label><br>";
     h += "<input type='color' id='thColor' value='" + esc(eff.bg_color) + "'>" +
          "<span class='mono' id='thColorTxt' style='margin-left:8px'>" + esc(eff.bg_color) +
          "</span><span class='swatches'>";
@@ -2588,37 +4327,38 @@ if (typeof document !== "undefined") (function () {
     });
     h += "</span></div>";
 
-    // 背景画像 (資産タブの画像から選択)
+
     h += "<div class='frow'><label class='flab'>" +
-         esc(t("admin.theme_bg_image", "背景画像")) + "</label>";
+         esc(t("admin.theme_bg_image")) + "</label>";
     if (scope)
       h += "<label class='mc'><input type='checkbox' id='thImageOn'" +
-           (imageOn ? " checked" : "") + "> この端末で指定</label><br>";
+           (imageOn ? " checked" : "") + "> " + esc(t("admin.theme_override_here")) + "</label><br>";
     h += "<select id='thImage'>";
-    assetOptions("image", "なし (背景色のみ)").forEach(function (o) {
+    assetOptions("image", t("admin.theme_no_image")).forEach(function (o) {
       h += "<option value='" + esc(o.v) + "'" + (o.v === eff.bg_image ? " selected" : "") +
            ">" + esc(o.label) + "</option>";
     });
-    h += "</select><div class='dim fhint'>画像は「資産」タブでアップロードします</div></div>";
+    h += "</select><div class='dim fhint'>" + esc(t("admin.theme_image_hint")) + "</div></div>";
 
-    // プレビュー
+
     h += "<div class='frow'><label class='flab'>" +
-         esc(t("admin.theme_preview", "プレビュー")) + "</label>" +
+         esc(t("admin.theme_preview")) + "</label>" +
          "<div class='tprev' id='thPrev'><div class='inner'>" +
          "<div class='pclock' id='thClock'>--:--:--</div>" +
-         // idle.call_button は "{unit} 呼出" — プレビューでは実際のドア名を入れる
+
          "<div class='pcall'>" +
-         esc(fmt(t("idle.call_button", "{unit} 呼出"),
+         esc(fmt(t("idle.call_button"),
                  { unit: doorLabel((cfgObj("devices")[scope] || {}).door ||
                                    firstDoorId() || "") })) + "</div>" +
          "<div class='pprow' id='thPurps'></div></div></div></div>";
-    h += "<button class='btn small' id='thSave'>" + esc(t("admin.save", "保存")) + "</button>";
+    h += "<button class='btn small' id='thSave'>" + esc(t("admin.save")) + "</button>";
     if (scope)
-      h += " <button class='btn2 danger' id='thReset'>端末別の上書きを削除</button>";
+      h += " <button class='btn2 danger' id='thReset'>" +
+           esc(t("admin.theme_reset_override")) + "</button>";
     h += "</div>";
     el.innerHTML = h;
 
-    // 用件ボタン風の矩形 (先頭 4 件のアイコン)
+
     var pids = sortedPurposeIds().slice(0, 4), pv = "";
     pids.forEach(function (pid) {
       pv += "<div class='pp'>" + esc((cfgObj("visit_purposes")[pid] || {}).icon || "・") + "</div>";
@@ -2636,7 +4376,7 @@ if (typeof document !== "undefined") (function () {
       var img = $("#thImage").value;
       $("#thColorTxt").textContent = c;
       p.style.backgroundColor = c;
-      // mock では /asset/<hash> は 404 — 背景色だけが見える (実機では画像が乗る)
+
       p.style.backgroundImage = img ? "url('/asset/" + img + "')" : "none";
     }
     $("#thColor").oninput = paint;
@@ -2652,51 +4392,52 @@ if (typeof document !== "undefined") (function () {
       var f = { bg_color: $("#thColor").value, bg_image: $("#thImage").value,
                 color_on: !scope || $("#thColorOn").checked,
                 image_on: !scope || $("#thImageOn").checked };
-      var e = L.themeEntries(scope, f);
+      var e = L.themeEntries(scope, f, own);
       saveAndRefresh(e.entries, e.dels);
     };
     if (scope) {
       $("#thReset").onclick = function () {
-        confirmDelete(deviceName(scope) + " のテーマ上書き", function () {
-          saveAndRefresh(null, [L.themeKey(scope)]);
+        confirmDelete(fmt(t("admin.theme_override_name"), { device: deviceName(scope) }), function () {
+          var reset = L.themeEntries(scope, { color_on: false, image_on: false }, own);
+          saveAndRefresh(reset.entries, reset.dels);
         });
       };
     }
   }
 
-  /* ---------------- 13. 資産 (画像・音声) ---------------- */
-  // 画像を上限バイト以内へ自動縮小 (canvas 再エンコード)。品質→寸法の順に落とす。
-  // 成功で JPEG の File を、失敗で (null, err) を返す。画像以外は呼ばない。
+
+
+
   function compressImageToLimit(file, maxBytes, cb) {
     if (typeof document.createElement("canvas").toBlob !== "function")
-      return cb(null, "この端末では自動縮小できません");
+      return cb(null, t("admin.image_resize_unavailable"));
     var url = URL.createObjectURL(file);
     var img = new Image();
-    img.onerror = function () { URL.revokeObjectURL(url); cb(null, "画像を読めませんでした"); };
+    img.onerror = function () { URL.revokeObjectURL(url); cb(null, t("admin.image_read_failed")); };
     img.onload = function () {
       URL.revokeObjectURL(url);
       var w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
-      var maxDim = 1920;  // まず長辺を 1920px 以内へ
+      var maxDim = 1920;
       var scale = Math.min(1, maxDim / Math.max(w, h));
       function attempt(sc, q) {
         var cw = Math.max(1, Math.round(w * sc)), ch = Math.max(1, Math.round(h * sc));
         var cv = document.createElement("canvas");
         cv.width = cw; cv.height = ch;
         var ctx = cv.getContext("2d");
-        ctx.fillStyle = "#000"; ctx.fillRect(0, 0, cw, ch);  // 透過は黒地に合成
+        ctx.fillStyle = "#000"; ctx.fillRect(0, 0, cw, ch);
         ctx.drawImage(img, 0, 0, cw, ch);
         cv.toBlob(function (blob) {
-          if (!blob) return cb(null, "縮小に失敗しました");
+          if (!blob) return cb(null, t("admin.image_resize_failed"));
           if (blob.size <= maxBytes) {
             var base = (file.name || "image").replace(/\.[^.]+$/, "") || "image";
             var out;
             try { out = new File([blob], base + ".jpg", { type: "image/jpeg" }); }
-            catch (e) { blob.name = base + ".jpg"; out = blob; }  // File 未対応環境
+            catch (e) { blob.name = base + ".jpg"; out = blob; }
             return cb(out, null);
           }
-          if (q > 0.45) return attempt(sc, q - 0.1);        // まず品質を落とす
-          if (sc > 0.12) return attempt(sc * 0.8, 0.8);     // 次に寸法を落とす
-          cb(null, "縮小しても上限に収まりませんでした");   // 下限に到達
+          if (q > 0.45) return attempt(sc, q - 0.1);
+          if (sc > 0.12) return attempt(sc * 0.8, 0.8);
+          cb(null, t("admin.image_resize_too_large"));
         }, "image/jpeg", q);
       }
       attempt(scale, 0.85);
@@ -2704,12 +4445,12 @@ if (typeof document !== "undefined") (function () {
     img.src = url;
   }
 
-  // 生バイト列を投げるので api() (JSON 専用) は通さない。進捗は upload.onprogress。
+
   function uploadAsset(file, label, onProgress, cb) {
     var type = L.assetTypeOf(file.name, file.type);
-    if (!type) return cb(false, "対応していない形式です (jpg / png / mp3 / wav)");
+    if (!type) return cb(false, t("admin.asset_format_unsupported"));
     if (file.size > L.ASSET_MAX_BYTES)
-      return cb(false, "3MB を超えています (" + L.fmtBytes(file.size) + ")");
+      return cb(false, fmt(t("admin.asset_too_large"), { size: L.fmtBytes(file.size) }));
     var url = "/api/assets?type=" + encodeURIComponent(type) +
               "&label=" + encodeURIComponent(label || file.name);
     if (MOCK) {
@@ -2720,7 +4461,7 @@ if (typeof document !== "undefined") (function () {
                  });
     }
     var fr = new FileReader();
-    fr.onerror = function () { cb(false, "ファイルを読めませんでした"); };
+    fr.onerror = function () { cb(false, t("admin.file_read_failed")); };
     fr.onload = function () {
       var x = new XMLHttpRequest();
       x.open("POST", url, true);
@@ -2755,71 +4496,75 @@ if (typeof document !== "undefined") (function () {
         out += "<option value='" + esc(opts[i].v) + "'" +
                (opts[i].v === value ? " selected" : "") + ">" + esc(opts[i].label) + "</option>";
       return out + "</select> <button class='btn2' data-soundpreview='" + id + "'>▶ " +
-             esc(t("admin.audio_play", "試聴")) + "</button>";
+             esc(t("admin.audio_play")) + "</button>";
     }
-    var h = "<div class='card'><h2>サウンド管理</h2><div class='grid2'>" +
-      "<div class='frow'><label class='flab'>App 起動音</label>" +
+    var h = "<div class='card'><h2>" + esc(t("admin.sound_manager")) +
+      "</h2><div class='grid2'>" +
+      "<div class='frow'><label class='flab'>" + esc(t("admin.launch_sound")) + "</label>" +
       selectHtml("launchSound", uiCfg.launch_sound === undefined ? "title_display" : uiCfg.launch_sound,
                  soundOptions(true)) + "</div>" +
-      "<div class='frow'><label class='flab'>室外機の呼出音</label>" +
+      "<div class='frow'><label class='flab'>" + esc(t("admin.door_call_sound")) + "</label>" +
       selectHtml("callSound", uiCfg.call_sound === undefined ? "outdoor_call_alert" : uiCfg.call_sound,
                  soundOptions(true)) +
       "<label class='check'><input id='callSoundLoop' type='checkbox'" +
-      (uiCfg.call_sound_loop ? " checked" : "") + "> 住客の応答または30秒のタイムアウトまで循環</label></div>" +
-      "<div class='frow'><label class='flab'>その他のボタン音</label>" +
+      (uiCfg.call_sound_loop ? " checked" : "") + "> " + esc(t("admin.call_sound_loop")) +
+      "</label></div><div class='frow'><label class='flab'>" +
+      esc(t("admin.button_sound")) + "</label>" +
       selectHtml("buttonSound", uiCfg.button_sound === undefined ? "button_click" : uiCfg.button_sound,
                  soundOptions(true)) + "</div>" +
-      "<div class='frow'><label class='flab'>室内機の鈴声</label>" +
+      "<div class='frow'><label class='flab'>" + esc(t("admin.indoor_ringtone")) + "</label>" +
       selectHtml("ringtoneSelect", uiCfg.ringtone || "school_chime", ringtoneOptions()) + "</div>" +
-      "<div class='frow'><label class='flab'>追加メッセージ通知音</label>" +
+      "<div class='frow'><label class='flab'>" + esc(t("admin.update_sound")) + "</label>" +
       selectHtml("updateSound", uiCfg.update_sound === undefined ? "indoor_update" : uiCfg.update_sound,
                  soundOptions(true)) + "</div></div>" +
-      "<button class='btn small' id='soundSettingsSave'>" + esc(t("admin.save", "保存")) + "</button>" +
-      "<div class='dim fhint'>内蔵プリセット、アップロードした音声、または「再生しない」を選択できます。</div></div>";
+      "<button class='btn small' id='soundSettingsSave'>" + esc(t("admin.save")) + "</button>" +
+      "<div class='dim fhint'>" + esc(t("admin.sound_manager_hint")) + "</div></div>";
 
-    // アップロード
-    h += "<div class='card'><h2>" + esc(t("admin.assets_upload", "アップロード")) + "</h2>" +
-            "<div class='grid2'><div class='frow'><label class='flab'>ファイル " +
-            "(jpg / png は自動縮小 · mp3 / wav は 3MB まで)</label>" +
+
+    h += "<div class='card'><h2>" + esc(t("admin.assets_upload")) + "</h2>" +
+            "<div class='grid2'><div class='frow'><label class='flab'>" +
+            esc(t("admin.asset_file_hint")) + "</label>" +
             "<input type='file' id='asFile' accept='image/jpeg,image/png,audio/mpeg,audio/wav'>" +
-            "</div><div class='frow'><label class='flab'>ラベル (省略時はファイル名)</label>" +
+            "</div><div class='frow'><label class='flab'>" + esc(t("admin.asset_label_hint")) +
+            "</label>" +
             "<input type='text' id='asLabel'></div></div>" +
             "<div id='asDrop' class='dropzone'>" +
-            esc(t("admin.drop_here", "ここにファイルをドラッグ&ドロップ / クリックで選択")) + "</div>" +
+            esc(t("admin.drop_here")) + "</div>" +
             "<button class='btn small' id='asUp'>" + icon("upload") + " " +
-            esc(t("admin.assets_upload", "アップロード")) + "</button>" +
+            esc(t("admin.assets_upload")) + "</button>" +
             "<div class='prog' id='asProg'><div></div></div>" +
             "<div class='dim fhint' id='asOut'></div></div>";
 
-    // キャッシュ状況 (自ノード)
-    h += "<div class='card'><h2>" + esc(t("admin.assets", "資産 (画像・音声)")) + "</h2>" +
+
+    h += "<div class='card'><h2>" + esc(t("admin.assets")) + "</h2>" +
          "<div class='frow'>" + esc(deviceName((S.status.node || {}).id) + " — ") +
-         esc(fmt(t("admin.assets_cached", "キャッシュ: {n}/{total}"),
+         esc(fmt(t("admin.assets_cached"),
                  { n: st.cached !== undefined ? st.cached : "?",
                    total: st.total !== undefined ? st.total : "?" })) +
-         "<div class='dim fhint'>他ノードは自動で前取りされます " +
-         "(設定が参照している資産を mesh 経由で取りに行き、再生・表示は常にローカル)。</div>" +
+         "<div class='dim fhint'>" + esc(t("admin.asset_prefetch_hint")) + "</div>" +
          "</div>";
     if (!ids.length) {
-      h += "<div class='dim'>資産はまだありません</div></div>";
+      h += "<div class='dim'>" + esc(t("admin.assets_empty")) + "</div></div>";
     } else {
-      h += "<div class='scrollx'><table><thead><tr><th>ラベル</th><th>種類</th><th>サイズ</th>" +
-           "<th>hash</th><th>使用箇所</th><th></th></tr></thead><tbody>";
+      h += "<div class='scrollx'><table><thead><tr><th>" + esc(t("admin.asset_label")) +
+           "</th><th>" + esc(t("admin.asset_type")) + "</th><th>" +
+           esc(t("admin.asset_size")) + "</th><th>hash</th><th>" +
+           esc(t("admin.asset_used_by")) + "</th><th></th></tr></thead><tbody>";
       ids.forEach(function (hh) {
         var a = as[hh], used = refs[hh] || [];
         var usedHtml = used.length
           ? used.map(function (u) { return esc(u); }).join("<br>")
-          : "<span class='dim'>未使用</span>";
+          : "<span class='dim'>" + esc(t("admin.asset_unused")) + "</span>";
         h += "<tr><td>" + esc(a.label || "—") + "</td><td class='dim'>" + esc(a.type || "") +
              "</td><td class='dim'>" + esc(L.fmtBytes(a.size)) + "</td>" +
              "<td class='mono dim'>" + esc(hh.slice(0, 12)) + "…</td>" +
              "<td class='refs'>" + usedHtml +
              "</td><td class='ops'><button class='btn2 danger' data-act='del' data-id='" +
-             esc(hh) + "'>" + esc(t("admin.delete", "削除")) + "</button></td></tr>";
+             esc(hh) + "'>" + esc(t("admin.delete")) + "</button></td></tr>";
       });
       h += "</tbody></table></div></div>";
-      // プレビュー (画像はサムネ / 音声は audio 要素)
-      h += "<div class='card'><h2>" + esc(t("admin.theme_preview", "プレビュー")) +
+
+      h += "<div class='card'><h2>" + esc(t("admin.theme_preview")) +
            "</h2><div class='agrid'>";
       ids.forEach(function (hh) {
         var a = as[hh], isImg = (a.type || "").indexOf("image/") === 0;
@@ -2853,40 +4598,42 @@ if (typeof document !== "undefined") (function () {
 
     var prog = $("#asProg"), bar = prog.firstChild, out = $("#asOut");
     function handleFile(f) {
-      if (!f) { msg("ファイルを選んでください"); return; }
+      if (!f) { msg(t("admin.asset_choose_file")); return; }
       var isImage = /^image\//.test(f.type) || /\.(jpe?g|png)$/i.test(f.name);
       function doUpload(fileToSend, note) {
         prog.style.display = "block";
         bar.style.width = "0";
         out.className = "dim fhint";
-        out.textContent = (note ? note + " · " : "") + "送信中…";
+        out.textContent = (note ? note + " · " : "") + t("admin.uploading");
         uploadAsset(fileToSend, $("#asLabel").value, function (p) {
           bar.style.width = Math.round(p * 100) + "%";
         }, function (ok, info) {
           prog.style.display = "none";
           out.className = ok ? "ok fhint" : "err fhint";
-          out.textContent = ok ? (note ? note + " · " : "") + "登録しました: " + info
-                               : "失敗: " + info;
-          if (ok) { msg(t("admin.saved", "保存しました")); refreshAll(); }
+          out.textContent = ok ? (note ? note + " · " : "") +
+            fmt(t("admin.asset_registered"), { info: info }) :
+            fmt(t("admin.asset_failed"), { info: info });
+          if (ok) { msg(t("admin.saved")); refreshAll(); }
         });
       }
       if (f.size > L.ASSET_MAX_BYTES) {
-        if (!isImage) {  // 音声は自動縮小不可 → 従来どおり拒否
+        if (!isImage) {
           out.className = "warn fhint";
-          out.textContent = "3MB を超えています (" + L.fmtBytes(f.size) +
-                            ") — 音声は縮小してからアップロードしてください";
+          out.textContent = fmt(t("admin.audio_too_large"), { size: L.fmtBytes(f.size) });
           return;
         }
-        // 画像は自動縮小して送る
+
         out.className = "dim fhint";
-        out.textContent = "3MB 超 (" + L.fmtBytes(f.size) + ") — 自動縮小中…";
+        out.textContent = fmt(t("admin.image_resizing"), { size: L.fmtBytes(f.size) });
         compressImageToLimit(f, L.ASSET_MAX_BYTES, function (small, err) {
           if (!small) {
             out.className = "err fhint";
-            out.textContent = "自動縮小に失敗: " + (err || "不明");
+            out.textContent = fmt(t("admin.image_resize_error"),
+              { error: err || t("info.unknown") });
             return;
           }
-          doUpload(small, "自動縮小 " + L.fmtBytes(f.size) + "→" + L.fmtBytes(small.size));
+          doUpload(small, fmt(t("admin.image_resized"),
+            { before: L.fmtBytes(f.size), after: L.fmtBytes(small.size) }));
         });
         return;
       }
@@ -2895,7 +4642,7 @@ if (typeof document !== "undefined") (function () {
     $("#asUp").onclick = function () {
       handleFile($("#asFile").files && $("#asFile").files[0]);
     };
-    // ドラッグ&ドロップ + クリックでファイル選択
+
     var dz = $("#asDrop");
     if (dz) {
       dz.onclick = function () { $("#asFile").click(); };
@@ -2920,16 +4667,15 @@ if (typeof document !== "undefined") (function () {
         var used = (refs[hash] || []);
         var name = assetLabel(hash);
         if (used.length &&
-            !window.confirm(name + " は " + used.length + " 箇所で使用中です (" +
-                            used.join(", ") + ")。削除すると参照先は背景色/TTS に戻ります。" +
-                            "続けますか?"))
+            !window.confirm(fmt(t("admin.asset_delete_in_use"),
+              { name: name, count: used.length, locations: used.join(", ") })))
           return;
-        // 専用 API: 台帳 tombstone + 自ノードのローカルキャッシュも即削除
-        // (/api/config/delete でも台帳は消えるが、実体は猶予付き GC 待ちになる)
+
+
         confirmDelete(name, function () {
           api("DELETE", "/api/assets/" + hash, null, function (st, j) {
-            if (st === 200 && j && j.ok) msg(t("admin.saved", "保存しました"));
-            else msg(t("admin.save_failed", "保存に失敗しました"));
+            if (st === 200 && j && j.ok) msg(t("admin.saved"));
+            else msg(t("admin.save_failed"));
             refreshAll();
           });
         });
@@ -2937,12 +4683,12 @@ if (typeof document !== "undefined") (function () {
     });
   }
 
-  // 設定 + 状態を取り直して現タブを再描画 (資産は status のキャッシュ数も更新する)
+
   function refreshAll() {
     refreshConfig(function () { refreshStatus(function () { renderTab(); }); });
   }
 
-  /* ================================================================ タブ切替・起動 */
+
   var TABS = {
     dash: renderDash, doors: renderDoors, devices: renderDevices, rules: renderRules,
     qr: renderQuickReplies, purposes: renderPurposes, texts: renderTexts, theme: renderTheme,
@@ -2969,30 +4715,34 @@ if (typeof document !== "undefined") (function () {
     b.onclick = function () { switchTab(b.getAttribute("data-tab")); };
   });
 
-  // 周期 refresh: 状態駆動タブ (dash/devices/events) だけ再描画 — フォーム編集を消さない
+
   function poll() {
     refreshStatus(function () {
       if (S.tab === "dash") renderDash();
       if (S.tab === "devices") renderDevices();
     });
     if (S.tab === "events") refreshEvents(renderEvents);
-    if (S.tab === "system") refreshPairing();  // 未配対デバイスの自動発見を追随
+    if (S.tab === "system") refreshPairing();
   }
 
   /* ---- i18n ---- */
   api("GET", "/locale/" + LANG + ".json", null, function (st, j) {
     if (st === 200 && j) {
       I18N = j;
+      document.title = t("admin.page_title");
       $all("[data-i18n]").forEach(function (el) {
-        el.textContent = t(el.getAttribute("data-i18n"), el.textContent);
+        el.textContent = t(el.getAttribute("data-i18n"));
       });
       $all("[data-i18n-ph]").forEach(function (el) {
-        el.placeholder = t(el.getAttribute("data-i18n-ph"), el.placeholder);
+        el.placeholder = t(el.getAttribute("data-i18n-ph"));
+      });
+      $all("[data-i18n-title]").forEach(function (el) {
+        el.title = t(el.getAttribute("data-i18n-title"));
       });
     }
   });
 
-  /* ---- 言語切替 (再読込。セッションは cookie 継続なので再ログイン不要) ---- */
+
   (function () {
     var sel = $("#langSel");
     if (!sel) return;
@@ -3004,7 +4754,7 @@ if (typeof document !== "undefined") (function () {
     };
   })();
 
-  /* ---- UI スタイル切替 (純 CSS: data-ui 属性。再読込不要で即時反映) ---- */
+
   (function () {
     var sel = $("#uiSel");
     if (!sel) return;
@@ -3021,7 +4771,7 @@ if (typeof document !== "undefined") (function () {
   $("#loginBtn").onclick = function () {
     api("POST", "/api/login", { password: $("#pw").value }, function (st) {
       if (st === 200) { show($("#login"), false); show($("#app"), true); boot(); }
-      else $("#loginErr").textContent = t("admin.pin_wrong", "パスワードが違います");
+      else $("#loginErr").textContent = t("admin.pin_wrong");
     });
   };
   $("#pw").addEventListener("keydown", function (e) {
@@ -3040,7 +4790,7 @@ if (typeof document !== "undefined") (function () {
     setInterval(poll, 5000);
   }
 
-  // 起動: 認証状態を status で確認
+
   api("GET", "/api/status", null, function (st) {
     if (st === 200 || MOCK) { show($("#app"), true); boot(); }
     else show($("#login"), true);

@@ -1,10 +1,29 @@
-> Japanese original: ../ja/config-schema.md (canonical)
-
 # Configuration Schema (canonical reference)
 
 Configuration is a flat key→JSON LWW-Map CRDT. Keys are dot paths. Below is the full picture after
 materialization. `*_ref: "secret:…"` refers to the secrets namespace (write-only in the admin UI,
 never displayed; stored in the platform secure store).
+
+`boot.json` is the local bootstrap profile, not part of this CRDT. Android, iOS/iPadOS (including
+iOS 5 compatibility), and Windows open a blocking setup screen before Core starts when the profile
+is new, lacks an explicit `setup_complete:true`, has a missing/invalid `role`, or a `door_station`
+has no valid `door`. The operator must
+choose `door_station` or `indoor_panel`; the door field is required only for a door station and is
+pre-filled with a random `door-xxxxxxxx` value that may be accepted unchanged. Valid door IDs are
+1–64 characters, begin with an ASCII letter or digit, and then contain only letters, digits, `_`,
+or `-`. A successful save writes `setup_complete:true` atomically. tvOS is intentionally fixed to
+the `indoor_panel` profile because it has no supported door-camera role.
+
+The mesh PSK is device-local bootstrap data, not a CRDT value. Core must first complete
+`secure_put("mesh.psk", …)`, then emits only
+`{"t":"paired","psk_ref":"secret:mesh.psk"}`. The shell persists that opaque reference with
+non-secret `seed_peers` in `boot.json`; it never receives a new `psk_hex`. A secure-store failure
+emits `pairing_persistence_error` and must remain not-ready. Legacy `psk_hex` is migration-only.
+
+Web Push is a deliberate exception only in encrypted form: Core stores each complete
+`endpoint`/`p256dh`/`auth` subscription as one schema-v2 CRDT record sealed with
+XChaCha20-Poly1305 under a mesh-PSK-derived key. Materialized configuration and exports never show
+the plaintext subscription. Startup reseals a legacy raw record or removes it fail-closed.
 
 ```jsonc
 {
@@ -13,6 +32,11 @@ never displayed; stored in the platform secure store).
     "name": "京阪ハウス",
     "psk_id": "k1",
     "seed_peers": ["10.0.1.10:47172"]          // safety net on a single L2 (the beacon is primary)
+  },
+
+  "panel": {
+    "token_refs": ["secret:panel.access.<random>"],
+    "token_generation": "0123456789abcdef0123456789abcdef"
   },
 
   "buildings": {
@@ -36,8 +60,9 @@ never displayed; stored in the platform secure store).
       "local": {                                // per-device settings (also replicated — editable remotely)
         "ui_lang": "ja", "volume": 80, "screen_brightness": 70,
         "screensaver_after_s": 120,
-        "video": { "playback": "low_latency" }, // low_latency (default) / hls / mjpeg
-        "camera": { "device_hint": "", "rotation": 0, "mjpeg_fps": 8,
+        "video": { "playback": "low_latency",   // low_latency (default) / hls / mjpeg
+                   "rotation": "auto" },          // follow sensor / force 0, 90, 180, or 270 degrees
+        "camera": { "device_hint": "", "mjpeg_fps": 8,
                     "mjpeg_quality": 60, "resolution": "640x480",
                     // codec: "auto" = probe for HW h264, fall back to mjpeg / "mjpeg" / "h264"
                     // with h264, /stream.mp4 (fMP4, platform HW encoder) becomes available and
@@ -45,6 +70,16 @@ never displayed; stored in the platform secure store).
                     "codec": "auto", "h264_resolution": "640x360", "h264_fps": 30,
                     "h264_bitrate_kbps": 700 },
         "kiosk": { "exit_pin_hash": "<pbkdf2>", "watchdog": true },
+        "recovery": { "helper_mode": "auto" }, // off | auto | on
+        // Semantic overrides are complete element objects. The native shell validates them
+        // against its top-level ui_manifest. The Web panel on the serving node validates the
+        // same path against status.web_ui.manifest.
+        "ui": { "elements": {
+          "call.primary": { "scale": 1.1, "foreground": "#FFFFFF",
+                            "background": "#1A2027", "accent": "#4DA3FF" },
+          "cancel.call": { "scale": 1.0, "foreground": "#FFFFFF",
+                           "background": "#8D2932" }
+        } },
         "motion": { "enabled": true, "sensitivity": 40, "min_interval_s": 30 },
         "aec": { "mode": "auto", "tail_ms": 0 },  // written by on-device calibration
         // Marker for a TV monitor (resident Android TV app). Operational notes:
@@ -57,6 +92,35 @@ never displayed; stored in the platform secure store).
         "tv": false
       }
     }
+  },
+
+  // External media sources are explicit configuration, never inferred from seed_peers.
+  // URL userinfo and plaintext credential fields are rejected; authentication is secret_ref.
+  "media_sources": {
+    "front_camera": {
+      "schema_version": 1, "kind": "ip_camera",
+      "streams": {
+        "mjpeg": { "url": "http://192.0.2.20/live.mjpeg" },
+        "snapshot": { "url": "https://192.0.2.20/snapshot.jpg" },
+        "h264": { "url": "rtsp://192.0.2.20/live", "transport": "tcp",
+                  "profile": "baseline" }
+      },
+      "secret_ref": "secret:media.front_camera"
+    }
+  },
+
+  // Receiver playback policy. Array order is priority; disabled strategies are skipped.
+  // A pair profile completely replaces global for that indoor/outdoor node-id pair.
+  "video_playback": {
+    "global": { "strategies": [
+      { "id": "h264_low_latency", "enabled": true,
+        "startup_timeout_ms": 5000, "stall_timeout_ms": 3000 },
+      { "id": "h264_hls", "enabled": false,
+        "startup_timeout_ms": 5000, "stall_timeout_ms": 5000 },
+      { "id": "mjpeg", "enabled": true,
+        "startup_timeout_ms": 5000, "stall_timeout_ms": 3000 }
+    ] },
+    "pairs": { "<indoor_node_id>": { "<outdoor_node_id>": { "strategies": [] } } }
   },
 
   "households": {
@@ -86,6 +150,7 @@ never displayed; stored in the platform secure store).
   },
 
   "ui": {
+    "call_flow": "purpose_first",             // purpose_first | ring_then_purpose
     "languages": ["ja", "en", "zh"],            // languages offered on the door station's visitor language switcher
     "launch_sound": "title_display",             // startup sound; empty string disables it
     "call_sound": "outdoor_call_alert",          // door-station call acknowledgement; empty disables it
@@ -129,13 +194,15 @@ never displayed; stored in the platform secure store).
     "button_on_roles": ["indoor_panel"],        // roles that show the SOS button
     "hold_to_trigger_s": 3,                     // long-press duration in seconds (prevents accidental triggering)
     "alarm_sound": "siren1", "alarm_volume": 100,
+    // When true, an open Web panel renders replicated active SOS even if a rule has no
+    // recipients or requests Web Push only. When false, a matching positive device_alert or
+    // delivered Web Push may still render it.
+    "web_active_page_alerts": true,
     "sip_call": { "enabled": false, "target_extension": "" },  // optional: call a user-defined destination via Asterisk
     "cancel_requires_pin": true                 // cancelling requires the kiosk PIN
   },
-  // Default emergency behavior (built-in, independent of rules): alarm UI + siren on all nodes,
-  // Telegram 🚨 to all households, MQTT doorbell/emergency (retain) — hook up lights/sirens/calls
-  // freely on the HA side. **No automatic calls to police or fire services** (recipients are family
-  // and user-defined phone destinations only — a human makes the judgment call).
+  // SOS active/clear state always replicates. Presentation and external delivery are rule-driven,
+  // may target zero recipients, and never imply an automatic police/fire-services call.
 
   "visit_purposes": {                           // visitor purpose buttons (user-editable; default seed below)
     // On the door station, one tap on a purpose button = a ring with that purpose attached
@@ -188,7 +255,33 @@ never displayed; stored in the platform secure store).
     "r4": { "enabled": true,
             "when": { "type": "device_offline", "devices": "all" },
             "actions": [ { "type": "telegram", "households": ["h_ox"] },
-                         { "type": "ha_event" } ] }
+                         { "type": "ha_event" } ] },
+    "r_sos_default_on": {
+      "enabled": true,
+      "when": { "type": "emergency_on" },
+      "actions": [
+        { "type": "device_alert",
+          "targets": { "roles": "all", "web_subscription_groups": "all" },
+          "channels": ["in_app", "system_notification", "web_push"],
+          "never_suppress": true,
+          "presentation": { "visual": true, "sound": "siren1", "volume": 100,
+                            "sticky": true, "ttl_s": 0, "background": "#8F1010",
+                            "foreground": "#FFFFFF", "accent": "#FFD166" } },
+        { "type": "telegram", "households": "all", "never_suppress": true }
+      ]
+    },
+    "r_sos_default_off": {
+      "enabled": true,
+      "when": { "type": "emergency_off" },
+      "actions": [
+        { "type": "device_alert",
+          "targets": { "roles": "all", "web_subscription_groups": "all" },
+          "channels": ["in_app", "system_notification", "web_push"],
+          "never_suppress": true,
+          "presentation": { "visual": true, "sticky": false, "ttl_s": 10 } },
+        { "type": "telegram", "households": "all", "never_suppress": true }
+      ]
+    }
   },
 
   "quiet_hours": {
@@ -204,38 +297,134 @@ never displayed; stored in the platform secure store).
     "telegram": { "bot_token_ref": "secret:tg_bot",
                   "poll_updates": true,          // getUpdates long-polling for inline button replies (leader)
                   "text_template": { "ja": "{door} に来客です ({time})" } },
+    // Web Push is delivered through a maintained HTTPS sender. Private material stays in each
+    // eligible leader candidate's local secure store; only references replicate.
+    "web_push": { "sender_url": "https://push-sender.example/doorbell/send",
+                  "vapid_public_key": "<base64url-public-key>",
+                  "vapid_private_key_ref": "secret:webpush.vapid_private",
+                  "vapid_subject": "mailto:doorbell@example.com",
+                  "sender_secret_ref": "secret:webpush.sender" }, // optional sender bearer token
     // Web calls (webui/panel/call.html — optional feature). Browsers cannot speak SIP/UDP, so
     // Asterisk is used as a WebRTC gateway (deploy/asterisk/webrtc.en.md).
     // Empty ws_url = call button disabled (video viewing/sending works independently of SIP).
-    // sip_user/sip_pass = the browser extension (the [260] template in webrtc.en.md).
-    "webrtc": { "ws_url": "ws://10.0.1.5:8088/ws", "sip_user": "260", "sip_pass": "…" },
+    // sip_user/sip_pass_ref = the browser extension (the [260] template in webrtc.en.md).
+    "webrtc": { "ws_url": "ws://10.0.1.5:8088/ws", "sip_user": "260",
+                "sip_pass_ref": "secret:webrtc.260" },
     "tz_offset_min": 540                         // JST. Used for schedule evaluation
   }
 }
 ```
 
+Provision a Web Push backend in two phases. First, on every node intended to be eligible for the
+`web_push` duty, use authenticated `POST /api/secrets` to write the same
+`vapid_private_key_ref` value locally (and `sender_secret_ref` when the sender requires a bearer
+token). Only after those writes succeed, atomically save the non-secret `integrations.web_push`
+fields and references. The sender URL must be HTTPS, and `vapid_public_key` must be an uncompressed
+P-256 public point encoded as base64url (65 bytes including the `0x04` prefix). Do not put either private value in config,
+exports, URLs, logs, or command lines. Verify `/api/status.web_push.delivery_backend:true`, a
+non-empty `leader`, and that each intended failover candidate reports measured `web_push_ready`
+before relying on Push-only SOS delivery. `configured:true` alone does not prove that a leader can
+read the local secret or reach a sender.
+
+Leader election additionally requires `tls12`, `wan`, `mains_power`, `wall_clock_sane`, and
+`web_push_ready`. Shipping shells fail closed with `wan:false` because a LAN/default route is not
+evidence of Internet reachability and no general sender probe is built in. After testing HTTPS
+egress to the configured sender from the exact node/network, an administrator may explicitly set
+`devices.<id>.caps_override.wan:true`; record that external test as the measurement source and
+remove the override when routing changes. Override `mains_power` only after commissioning a fixed
+power supply. An override must never be used to invent TLS support, a readable secret, or a working
+backend.
+
+An iOS compatibility `streams.h264` entry with `transport:"tcp"` selects bounded RTSP/RTP
+interleaved ingest, not a direct fMP4 URL. Runtime starts degraded as `rtsp_ingest_pending` and may
+advertise `rtsp_h264_forwarding` only after DESCRIBE/SETUP and an Annex-B IDR actually accepted by
+Core. Configuration alone is never availability evidence; iPad 1 real-camera qualification is pending.
+
+`panel.token_refs` and the non-secret 32-hex `panel.token_generation` are fleet configuration.
+Rotation replaces both in one commit. Every `dbpanel` session is bound to the current generation
+and canonical reference set, so a replicated rotation invalidates sessions on every node. Secret
+values do not replicate: use the authenticated Admin **Provision on this node** action on every
+panel-serving node, writing the same already-replicated reference without changing configuration.
+
+`devices.<id>.local.recovery.helper_mode` is the configured request, not proof that a helper is
+installed or effective. The Admin form defaults to `auto` and writes it through an authenticated
+atomic config batch; Core accepts only `off`, `auto`, or `on`. Capability/runtime status must
+separately report measured helper availability and the effective mode. `on` with no reachable
+helper is a visible degraded/error condition, not a successful supervision claim. After an atomic
+config apply, the platform client sends the fixed local `MODE <value>` command and verifies helper
+status; the helper atomically persists that mode for helper/OS restart. No generic command or argv
+is derived from configuration.
+
+## Runtime UI manifests
+
+The native shell publishes a read-only top-level `ui_manifest`; Core publishes the serving node's
+separate built-in Web contract as `web_ui.manifest`. Both use schema version 1 and constrain
+`scale`, `font_scale`, `foreground`, `background`, `accent`, `border`, and `radius`, minimum touch
+size, contrast, and safety-critical controls. They share the configuration path shown above, but
+Admin presents **Native UI** and **Web UI** as separate surfaces because their element sets differ.
+The current Web manifest covers `call.primary`, `cancel.call`, `call.end`, `purpose.button`,
+`ring.title`, `ring.action`, `status.offline`, `reply.button`, `monitor.close`, and the always-visible
+two-second hold control `sos.trigger`. The SOS style is also the safe baseline for the full-screen
+Web presentation; valid rule-projected presentation colors temporarily take precedence. Web omits
+`sos.cancel` because a panel session cannot clear replicated emergency state.
+
+Core durably caches each peer's last valid native manifest and capabilities. A configured offline
+device appears in status with `cached_contract:true`, so Admin may validate and save against that
+cached native contract across Core restart. This is not apply success: the exact renderer must
+reconnect, validate, and report before Admin marks the override applied. On rejection, it retains
+its last-known-good style. The Web manifest remains local to the node serving Admin and is not a
+replicated per-peer Web catalog; Admin cannot infer a remote/offline Web surface from a native
+manifest.
+
 ## Events (events table / gossip)
 
-- ID = `(origin_node, origin_seq)`, idempotent. Types: `press | motion | answered | missed | reply |
-  offline | online | config_changed | emergency | emergency_cancel | visitor_lang`
-- `emergency` payload: `{ "source": "<node_id>", "via": "panel|web|admin" }`. Exempt from
-  quiet_hours suppression (always notified on all channels). UI: `{"t":"emergency","active":true|false}`
+- ID = `(origin_node, origin_seq)`, idempotent. Types include `press | purpose_selected |
+  call_answered | call_ended | call_cancelled | motion | reply | offline | online |
+  config_changed | emergency | emergency_cancel | delivery_result | visitor_lang`.
+- `call_answered` and `call_ended` carry schema version, `door`, `call_id`, and `stage_revision`.
+  A manual-answer client claims only its answer-mode SIP dialog after connection; Core persists one
+  deterministic `dialog_owner`. A losing simultaneous dialog hangs up without ending the winner,
+  and a monitor session never claims ownership. `call_answered` stops the ring timeout and moves
+  only the exact call to `in_call`; visitor cancellation is then rejected. Owner hangup emits
+  `call_ended`. After restart, the press origin owns ringing recovery and `dialog_owner` owns
+  in-call recovery; failure within ten seconds emits one idempotent recovery cancellation.
+- `emergency` payload: `{ "source": "<node_id>", "via": "panel|web|admin" }`. State always
+  replicates. Presentation is produced only by matching rule actions. `never_suppress:true` exempts
+  that action from quiet hours; it does not force a recipient or override an explicit empty channel
+  list.
+- A legacy `device_alert` action with no `targets` object addresses all native nodes and all Web
+  subscription groups. Once a `targets` object is present, its selectors are explicit: one
+  containing only `web_subscription_groups` addresses no native shell, while one without
+  `web_subscription_groups` addresses no active Web page or Push subscription. `web_profiles` is a
+  read-only compatibility alias; new writes use `web_subscription_groups`. Web pages obtain their
+  group from `?group=<name>`, persist it locally, and use the same value for state polling and Push.
+- While `emergency.web_active_page_alerts` is true and SOS remains active, a non-sticky rule TTL
+  expires custom decoration and sound only; the safe red raw-SOS overlay remains until clear or
+  until that switch is disabled. TTL never clears replicated emergency state.
+- Core `delivery_result` records a dispatch attempt such as `local_shell:dispatched`,
+  `shell_unavailable`, `web_push:accepted`, `no_recipients`, or `backend_unavailable`. It is not
+  evidence that the OS displayed an alert. Each native shell separately publishes per-channel
+  presentation status under runtime `device_alert`, including applied visual/sound, permission,
+  TTL expiry, and limitations.
 - `visitor_lang` (a visitor switched language at the door station): payload `{ "lang": "en" }`. The
   press payload also carries `visitor_lang` (when a selection was made). Displayed on: the language
   badge on indoor/TV ring screens, /api/panel/state, the "🌐 EN" in Telegram notifications, and the
   HA attrs topic. **Quick replies are shown + spoken via TTS using this language's labels**
   (falling back to ja when no translation exists). When the revert timer expires, it returns to ja
   and clears.
-- `reply` event payload: `{ "reply_id": "qr_away", "text": "…", "via": "telegram|mqtt|web",
-  "target_press": "<origin>:<seq>" }`
+- `reply` event payload: `{ "schema_version": 2, "reply_id": "qr_away", "text": "…",
+  "via": "telegram|mqtt|web", "call_id": "…", "stage_revision": 0 }`. A reply for a
+  schema-v2 call must carry the exact call identity and revision; legacy unscoped replies remain
+  display-only while a call is active and never terminate a call.
 - press notify (LWW merge): `{ "hlc": "…", "claimed_by": "…", "notified_at": "…",
   "telegram_msg_ids": {"<chat_id>": msg_id}, "replied": {"reply_id": "qr_away", "by": "telegram"} }`
 
 ## MQTT (Phase 2 — implemented)
 
-The plan's topic table + `doorbell/<door_id>/reply/set` (subscribed; payload = reply_id or free
-text). Implementation: `core/src/bridge/` (mqtt_client = homegrown MQTT 3.1.1 QoS0, ha_bridge =
-HA integration).
+The plan's topic table + `doorbell/<door_id>/reply/set` (subscribed; payload = a scoped JSON object
+`{"reply_id":"qr_away","call_id":"<call-id>","stage_revision":0}` for an active call, or a
+legacy reply_id/free-text announcement only when no call is active). Implementation:
+`core/src/bridge/` (mqtt_client = homegrown MQTT 3.1.1 QoS0, ha_bridge = HA integration).
 
 - Enabled when: `integrations.mqtt.host` is non-empty AND this node is the mesh `mqtt_bridge` duty
   leader. Starts/stops automatically on leader changes and config changes. `/api/status` reports
@@ -255,8 +444,9 @@ HA integration).
 - Snapshots/cameras are not carried over MQTT — live video goes through go2rtc, and stills are
   fetched by an HA generic camera directly from the door station's `/snapshot.jpg`
   (see `deploy/ha/`).
-- MVP uses plaintext `user`/`pass` auth (moving `pass_ref` into the secure store is planned
-  together with sip).
+- MQTT authentication uses `user` plus `pass_ref`; the referenced value is resolved from the
+  platform secure store immediately before configuring the bridge. Plaintext `pass` writes are
+  rejected for new configuration and remain migration-only input.
 
 ## Unified Asset API / Visitor Language API (details finalized in the implementation)
 
@@ -265,8 +455,10 @@ HA integration).
   Response `{"hash":"<sha256>"}`. Empty body=400 / disallowed type=415 / over limit=413 /
   not logged in=401. Registration writes the ledger entry `assets.<hash>` =
   `{size,type,origin,label}`, replicated to all nodes via CRDT.
-- `GET /asset/<sha256>` — retrievable with an admin session **or** a panel token (`?k=`) (403/404).
-  `<sha256>` must be exactly 64 lowercase hex digits; anything else is 400 (path-traversal defense).
+- `GET /asset/<sha256>` — LAN-public compatibility read; it does not use an admin or panel
+  credential. Only a GET whose path contains exactly 64 lowercase hex digits after `/asset/` is
+  admitted without a session. A missing valid hash is 404; authenticated malformed hashes are 400.
+  Other methods and asset-shaped paths do not receive this public access (path-traversal defense).
 - `DELETE /api/assets/<sha256>` (admin session) — tombstones the ledger entry `assets.<hash>` and
   immediately deletes the local cache on this node. Other nodes see the ledger removal (CRDT
   replication) and reclaim it naturally via grace-period GC.

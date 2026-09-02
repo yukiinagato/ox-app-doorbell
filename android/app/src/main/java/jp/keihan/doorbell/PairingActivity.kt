@@ -1,7 +1,5 @@
-// 未配対 (全ゼロ PSK) の端末で出す配対引導画面。
-//  - 自機の配対 QR を表示 (管理者が『デバイスを追加』一覧で承認 or この QR を読み取る)
-//  - 手動フォールバック: seed アドレス + PIN で能動参加
-// core の "paired" イベント (App が転送) または pairingInfo ポーリングで配対完了を検知し自動終了。
+// Pairing UI for an unenrolled device. It offers QR enrollment and a seed-address/PIN fallback,
+// then closes when the paired event or polling confirms durable enrollment.
 package jp.keihan.doorbell
 
 import android.app.Activity
@@ -18,6 +16,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
 import android.widget.EditText
+import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -34,6 +33,7 @@ class PairingActivity : Activity(), DoorbellCore.Listener {
     private lateinit var subtitle: TextView
     private lateinit var hostField: EditText
     private lateinit var pinField: EditText
+    private lateinit var sosButton: Button
     private var lastQr: String = ""
 
     private val poll = object : Runnable {
@@ -54,7 +54,7 @@ class PairingActivity : Activity(), DoorbellCore.Listener {
     override fun onResume() {
         super.onResume()
         if (isPairedNow()) { finishPaired(); return }
-        app.activityListener = this   // core イベントの転送先を奪う
+        app.activityListener = this
         ui.removeCallbacks(poll)
         ui.postDelayed(poll, 3000)
     }
@@ -66,22 +66,32 @@ class PairingActivity : Activity(), DoorbellCore.Listener {
     }
 
     private fun isPairedNow(): Boolean =
-        app.coreOk && (app.core.pairingInfo()?.optBoolean("paired") == true)
+        app.coreOk && app.core.pairingInfo()?.let {
+            app.pairingPersistence.canMarkReady(
+                it.optBoolean("paired"),
+                it.optBoolean("persistence_ready"),
+                BootConfig.hasSecureMeshReference(app.boot.rawJson),
+            )
+        } == true
 
     private fun finishPaired() {
         ui.removeCallbacks(poll)
         finish()
     }
 
-    // ---------- core イベント (App から core 内部スレッドで転送 → main へ marshal) ----------
+    // App forwards Core-thread callbacks; UI work is marshaled to main.
     override fun onUiEvent(ev: JSONObject) {
         ui.post {
             when (ev.optString("t")) {
-                "paired" -> finishPaired()  // App.onPaired が boot.json を永続化済み
+                "paired" -> if (ev.optBoolean("secure_persisted")) finishPaired()
+                    else Toast.makeText(this, getString(R.string.admin_pair_secure_failed),
+                                        Toast.LENGTH_LONG).show()
+                "pairing_persistence_error" ->
+                    Toast.makeText(this, getString(R.string.admin_pair_secure_failed),
+                                   Toast.LENGTH_LONG).show()
                 "join_result" -> {
                     val ok = ev.optBoolean("ok")
-                    if (ok) finishPaired()
-                    else Toast.makeText(this, "参加できませんでした: ${ev.optString("err")}",
+                    if (!ok) Toast.makeText(this, "参加できませんでした: ${ev.optString("err")}",
                                         Toast.LENGTH_LONG).show()
                 }
             }
@@ -89,7 +99,7 @@ class PairingActivity : Activity(), DoorbellCore.Listener {
     }
     override fun onTts(text: String, lang: String) {}
 
-    // ---------- pairingInfo を反映 ----------
+    // Pairing state.
     private fun refresh() {
         val p = (if (app.coreOk) app.core.pairingInfo() else null) ?: return
         val self = p.optJSONObject("self")
@@ -101,9 +111,16 @@ class PairingActivity : Activity(), DoorbellCore.Listener {
             lastQr = qr
             qrView.setImageBitmap(qrBitmap(qr, 720))
         }
+        val nodeId = app.core.status()?.optJSONObject("node")?.optString("id").orEmpty()
+        SemanticUi.apply(
+            sosButton,
+            "sos.trigger",
+            if (app.safeMode) null else app.core.config(),
+            nodeId,
+        )
     }
 
-    // ---------- QR (core 共通エンコーダで行列 → Bitmap) ----------
+    // Convert the Core QR matrix into a bitmap.
     private fun qrBitmap(text: String, targetPx: Int): Bitmap? {
         val enc = app.core.qrEncode(text) ?: return null
         val size = enc[0]
@@ -126,14 +143,15 @@ class PairingActivity : Activity(), DoorbellCore.Listener {
         return bmp
     }
 
-    // ---------- UI 構築 (framework views のみ・自己完結) ----------
+    // Self-contained framework-view UI.
     private fun buildUi(): View {
         fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
+        val frame = FrameLayout(this)
         val scroll = ScrollView(this).apply { setBackgroundColor(Color.parseColor("#0E1621")) }
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
-            setPadding(dp(24), dp(32), dp(24), dp(32))
+            setPadding(dp(24), dp(32), dp(24), dp(104))
         }
         scroll.addView(root, ViewGroup.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
@@ -164,7 +182,7 @@ class PairingActivity : Activity(), DoorbellCore.Listener {
         }
         root.addView(statusText)
 
-        // 区切り + 手動 PIN 参加
+        // Manual PIN enrollment.
         root.addView(TextView(this).apply {
             text = "── または PIN で参加 ──"
             setTextColor(Color.parseColor("#63758A")); textSize = 13f
@@ -193,7 +211,7 @@ class PairingActivity : Activity(), DoorbellCore.Listener {
             topMargin = dp(12)
         })
 
-        // 最初の 1 台向け: 新規クラスタを作成 (この端末を親機に)
+        // Bootstrap a new cluster from the first device.
         root.addView(TextView(this).apply {
             text = "── はじめての 1 台 ──"
             setTextColor(Color.parseColor("#63758A")); textSize = 13f
@@ -209,7 +227,29 @@ class PairingActivity : Activity(), DoorbellCore.Listener {
             text = "この端末で新規作成"
             setOnClickListener { onFoundClick() }
         }, LinearLayout.LayoutParams(dp(280), ViewGroup.LayoutParams.WRAP_CONTENT))
-        return scroll
+        frame.addView(scroll, FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.MATCH_PARENT,
+        ))
+        sosButton = Button(this).apply {
+            text = getString(R.string.emergency_button)
+            contentDescription = getString(
+                R.string.emergency_hold_hint,
+                SosHoldTrigger.HOLD_SECONDS.toString(),
+            )
+            setBackgroundColor(Color.parseColor("#B00020"))
+            setTextColor(Color.WHITE)
+            textSize = 20f
+            minWidth = dp(88)
+            minHeight = dp(56)
+            isAllCaps = false
+            SosHoldTrigger.bind(this, ui, { app.coreOk }) { app.commitEmergency(true) }
+        }
+        frame.addView(sosButton, FrameLayout.LayoutParams(dp(104), dp(64), Gravity.BOTTOM or
+            Gravity.END).apply {
+            setMargins(dp(16), dp(16), dp(16), dp(16))
+        })
+        return frame
     }
 
     private fun onFoundClick() {

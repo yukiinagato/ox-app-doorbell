@@ -3,7 +3,12 @@
 #import <CoreMedia/CoreMedia.h>
 #import <CoreVideo/CVOpenGLESTextureCache.h>
 #import <OpenGLES/ES1/gl.h>
+#import <OpenGLES/ES1/glext.h>
+#ifdef DB_IOS_COMPAT_PUBLIC_VIDEOTOOLBOX
+#import <VideoToolbox/VideoToolbox.h>
+#else
 #import <dlfcn.h>
+#endif
 
 void DBH264Dbg(NSString *fmt, ...);
 
@@ -27,6 +32,67 @@ static OSStatus (*DbVTWait)(DbVTSessionRef);
 static OSStatus (*DbVTSetProperty)(CFTypeRef, CFStringRef, CFTypeRef);
 static CFStringRef const *DbVTHardwareKey;
 
+#ifdef DB_IOS_COMPAT_PUBLIC_VIDEOTOOLBOX
+static OSStatus DbPublicVTCreate(CFAllocatorRef allocator,
+                                 CMVideoFormatDescriptionRef format,
+                                 CFDictionaryRef decoderSpecification,
+                                 CFDictionaryRef imageAttributes,
+                                 const DbVTOutputRecord *record,
+                                 DbVTSessionRef *sessionOut) {
+  VTDecompressionOutputCallbackRecord callback;
+  callback.decompressionOutputCallback =
+      (VTDecompressionOutputCallback)record->callback;
+  callback.decompressionOutputRefCon = record->refCon;
+  VTDecompressionSessionRef session = NULL;
+  OSStatus status = VTDecompressionSessionCreate(
+      allocator, format, decoderSpecification, imageAttributes, &callback, &session);
+  if (sessionOut) *sessionOut = (DbVTSessionRef)session;
+  return status;
+}
+
+static OSStatus DbPublicVTDecode(DbVTSessionRef session, CMSampleBufferRef sample,
+                                 DbVTDecodeFlags flags, void *context,
+                                 DbVTDecodeInfoFlags *infoOut) {
+  VTDecodeInfoFlags info = 0;
+  OSStatus status = VTDecompressionSessionDecodeFrame(
+      (VTDecompressionSessionRef)session, sample, (VTDecodeFrameFlags)flags,
+      context, &info);
+  if (infoOut) *infoOut = (DbVTDecodeInfoFlags)info;
+  return status;
+}
+
+static void DbPublicVTInvalidate(DbVTSessionRef session) {
+  VTDecompressionSessionInvalidate((VTDecompressionSessionRef)session);
+}
+
+static OSStatus DbPublicVTWait(DbVTSessionRef session) {
+  return VTDecompressionSessionWaitForAsynchronousFrames(
+      (VTDecompressionSessionRef)session);
+}
+
+static OSStatus DbPublicVTSetProperty(CFTypeRef session, CFStringRef key,
+                                      CFTypeRef value) {
+  return VTSessionSetProperty((VTSessionRef)session, key, value);
+}
+
+static BOOL DbLoadVt(void) {
+  static dispatch_once_t once;
+  static BOOL ok;
+  dispatch_once(&once, ^{
+    DbVTCreate = DbPublicVTCreate;
+    DbVTDecode = DbPublicVTDecode;
+    DbVTInvalidate = DbPublicVTInvalidate;
+    DbVTWait = DbPublicVTWait;
+    DbVTSetProperty = DbPublicVTSetProperty;
+    // iOS VideoToolbox selects its hardware decoder by default. The public
+    // opt-in specification key was not available on iOS 9.
+    DbVTHardwareKey = NULL;
+    ok = YES;
+    DBH264Dbg(@"[vt] public VideoToolbox adapter ready");
+  });
+  return ok;
+}
+#else
 static BOOL DbLoadVt(void) {
   static dispatch_once_t once;
   static BOOL ok;
@@ -46,6 +112,7 @@ static BOOL DbLoadVt(void) {
   });
   return ok;
 }
+#endif
 
 typedef struct {
   const uint8_t *bytes;
@@ -169,6 +236,8 @@ static void DbVtOutput(void *, void *, OSStatus, DbVTDecodeInfoFlags,
   NSMutableDictionary *_captureMsByDts;
   NSUInteger _decodedFrames;
   NSUInteger _droppedFrames;
+  UIImageView *_compatImageView;
+  BOOL _loggedCompatFrame;
 }
 
 - (id)initWithFrame:(CGRect)frame {
@@ -179,7 +248,26 @@ static void DbVtOutput(void *, void *, OSStatus, DbVTDecodeInfoFlags,
     _captureMsByDts = [[NSMutableDictionary alloc] init];
     self.delegate = self;
     self.enableSetNeedsDisplay = YES;
-    self.drawableColorFormat = GLKViewDrawableColorFormatRGB565;
+    // The decoder compositor is a UIKit sibling. Keep this GLKView transparent
+    // until a decoded H.264 frame is available so an availability MJPEG stream
+    // remains visible during an H.264 probe or a transient decoder failure.
+    self.opaque = NO;
+    self.backgroundColor = [UIColor clearColor];
+    self.drawableColorFormat = GLKViewDrawableColorFormatRGBA8888;
+    // The original iPad's SGX535 can successfully decode and upload a BGRA
+    // frame while still presenting an all-black/white EAGL drawable.  Keep the
+    // hardware VideoToolbox decoder and direct fMP4 path, but composite the
+    // decoded BGRA snapshot through a normal UIKit layer above GLKView.  This
+    // costs one bounded 640x360 memory copy per displayed frame; it does not
+    // introduce a software H.264 decoder or another network fallback.
+    _compatImageView = [[UIImageView alloc] initWithFrame:self.bounds];
+    _compatImageView.autoresizingMask =
+        UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    _compatImageView.contentMode = UIViewContentModeScaleAspectFit;
+    _compatImageView.backgroundColor = [UIColor blackColor];
+    _compatImageView.opaque = YES;
+    _compatImageView.userInteractionEnabled = NO;
+    [self addSubview:_compatImageView];
     [EAGLContext setCurrentContext:context];
     CVReturn result = CVOpenGLESTextureCacheCreate(kCFAllocatorDefault, NULL,
         (CVEAGLContext)context, NULL, &_textureCache);
@@ -189,8 +277,32 @@ static void DbVtOutput(void *, void *, OSStatus, DbVTDecodeInfoFlags,
   return self;
 }
 
-- (NSUInteger)decodedFrames { return _decodedFrames; }
-- (NSUInteger)droppedFrames { return _droppedFrames; }
+- (NSUInteger)decodedFrames {
+  [_frameLock lock];
+  NSUInteger value = _decodedFrames;
+  [_frameLock unlock];
+  return value;
+}
+
+- (NSUInteger)droppedFrames {
+  [_frameLock lock];
+  NSUInteger value = _droppedFrames;
+  [_frameLock unlock];
+  return value;
+}
+
+- (NSUInteger)recordDroppedFrame {
+  [_frameLock lock];
+  NSUInteger value = ++_droppedFrames;
+  [_frameLock unlock];
+  return value;
+}
+
+- (void)setCompatibilityOutputView:(UIImageView *)view {
+  if (!view || view == _compatImageView) return;
+  [_compatImageView removeFromSuperview];
+  _compatImageView = view;
+}
 
 - (BOOL)startWithSps:(NSData *)sps pps:(NSData *)pps {
   if (_session) return YES;
@@ -248,7 +360,7 @@ static void DbVtOutput(void *, void *, OSStatus, DbVTDecodeInfoFlags,
   CMBlockBufferRef block = NULL;
   OSStatus status = CMBlockBufferCreateWithMemoryBlock(kCFAllocatorDefault, copy,
       length, kCFAllocatorMalloc, NULL, 0, length, 0, &block);
-  if (status || !block) { free(copy); _droppedFrames++; return; }
+  if (status || !block) { free(copy); [self recordDroppedFrame]; return; }
   CMSampleTimingInfo timing;
   timing.duration = CMTimeMake(durMs > 0 ? durMs : 1, 1000);
   timing.presentationTimeStamp = CMTimeMake(dtsMs, 1000);
@@ -257,7 +369,7 @@ static void DbVtOutput(void *, void *, OSStatus, DbVTDecodeInfoFlags,
   status = CMSampleBufferCreate(kCFAllocatorDefault, block, YES, NULL, NULL,
       _format, 1, 1, &timing, 1, &length, &sample);
   CFRelease(block);
-  if (status || !sample) { _droppedFrames++; return; }
+  if (status || !sample) { [self recordDroppedFrame]; return; }
   // Do not pass an owned malloc pointer as sourceFrameRefCon.  The iOS 5
   // decoder can invoke its output callback synchronously and still return an
   // error from VTDecompressionSessionDecodeFrame.  Freeing the pointer in both
@@ -278,8 +390,8 @@ static void DbVtOutput(void *, void *, OSStatus, DbVTDecodeInfoFlags,
     [_frameLock lock];
     [_captureMsByDts removeObjectForKey:dtsKey];
     [_frameLock unlock];
-    _droppedFrames++;
-    if (_droppedFrames < 8) DBH264Dbg(@"[vt] decode status=%d info=%u", (int)status, info);
+    NSUInteger dropped = [self recordDroppedFrame];
+    if (dropped < 8) DBH264Dbg(@"[vt] decode status=%d info=%u", (int)status, info);
   }
 }
 
@@ -297,13 +409,13 @@ static void DbVtOutput(void *, void *, OSStatus, DbVTDecodeInfoFlags,
     int64_t nowMs = (int64_t)([[NSDate date] timeIntervalSince1970] * 1000.0);
     int64_t age = nowMs - captureMs - _serverToClientOffsetMs;
     if (age > _maxQueueAgeMs) {
-      _droppedFrames++;
-      if (_droppedFrames < 8)
+      NSUInteger dropped = [self recordDroppedFrame];
+      if (dropped < 8)
         DBH264Dbg(@"[vt] drop stale decoded frame age=%lldms", (long long)age);
       return;
     }
   }
-  if (_decodedFrames == 0) {
+  if ([self decodedFrames] == 0) {
     OSType fmt = CVPixelBufferGetPixelFormatType(pixel);
     DBH264Dbg(@"[vt] output pixel=%c%c%c%c %lux%lu planes=%lu stride=%lu",
               (char)(fmt >> 24), (char)(fmt >> 16), (char)(fmt >> 8), (char)fmt,
@@ -350,12 +462,12 @@ static void DbVtOutput(void *refCon, void *frameRefCon, OSStatus status,
     int64_t nowMs = (int64_t)([[NSDate date] timeIntervalSince1970] * 1000.0);
     int64_t age = nowMs - captureMs - _serverToClientOffsetMs;
     if (age > _maxQueueAgeMs) {
-      _droppedFrames++;
+      [self recordDroppedFrame];
       CVBufferRelease(pixel);
       return;
     }
   }
-  glClearColor(0, 0, 0, 1); glClear(GL_COLOR_BUFFER_BIT);
+  glClearColor(0, 0, 0, 0); glClear(GL_COLOR_BUFFER_BIT);
   size_t width = CVPixelBufferGetWidth(pixel), height = CVPixelBufferGetHeight(pixel);
   // iOS 5's CVOpenGLESTextureCache reports success for VideoToolbox BGRA
   // buffers but produces an all-white texture on the iPad 1 (SGX535). Upload
@@ -403,6 +515,35 @@ static void DbVtOutput(void *refCon, void *frameRefCon, OSStatus status,
     glDisableClientState(GL_VERTEX_ARRAY);
     glDisableClientState(GL_TEXTURE_COORD_ARRAY);
     glDisable(GL_TEXTURE_2D);
+
+    // CGBitmapContextCreateImage is allowed to retain the context storage.
+    // Copy the decoder surface first so the UIImage remains valid after the
+    // CVPixelBuffer is unlocked and returned to VideoToolbox.
+    CFDataRef bytes = CFDataCreate(kCFAllocatorDefault, base, stride * height);
+    CGDataProviderRef provider = bytes ? CGDataProviderCreateWithCFData(bytes) : NULL;
+    CGColorSpaceRef colorSpace = provider ? CGColorSpaceCreateDeviceRGB() : NULL;
+    // VideoToolbox promises BGRA color channels, not meaningful UIKit alpha
+    // on every legacy decoder. Ignore the fourth byte so a valid frame cannot
+    // become transparent even when that byte is zero on the original iPad.
+    CGBitmapInfo bitmapInfo = kCGBitmapByteOrder32Little |
+        kCGImageAlphaNoneSkipFirst;
+    CGImageRef image = (provider && colorSpace) ? CGImageCreate(
+        width, height, 8, 32, stride, colorSpace, bitmapInfo, provider,
+        NULL, NO, kCGRenderingIntentDefault) : NULL;
+    if (image) {
+      _compatImageView.image = [UIImage imageWithCGImage:image];
+      if (!_loggedCompatFrame) {
+        const uint8_t *sample = (const uint8_t *)base +
+            (height / 2) * stride + (width / 2) * 4;
+        DBH264Dbg(@"[vt] UIKit BGRA compositor active center=%u,%u,%u,%u",
+                  sample[0], sample[1], sample[2], sample[3]);
+        _loggedCompatFrame = YES;
+      }
+      CGImageRelease(image);
+    }
+    if (colorSpace) CGColorSpaceRelease(colorSpace);
+    if (provider) CGDataProviderRelease(provider);
+    if (bytes) CFRelease(bytes);
     if (_onDisplayedFrame) _onDisplayedFrame(captureMs);
   }
   if (lock == kCVReturnSuccess)
@@ -421,6 +562,8 @@ static void DbVtOutput(void *refCon, void *frameRefCon, OSStatus status,
   if (_latest) { CVBufferRelease(_latest); _latest = NULL; }
   [_captureMsByDts removeAllObjects];
   [_frameLock unlock];
+  _compatImageView.image = nil;
+  _loggedCompatFrame = NO;
 }
 
 - (void)dealloc {

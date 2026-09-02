@@ -1,92 +1,61 @@
-# 設計理念 — なぜこういうドアホンなのか
+# Design Philosophy — Why This Kind of Doorbell
 
-> English: [Design-Philosophy-en](Design-Philosophy-en) / 中文: [Design-Philosophy-zh](Design-Philosophy-zh)
+> English (this page) / 日本語: [Design-Philosophy-ja](Design-Philosophy-ja) / 中文: [Design-Philosophy-zh](Design-Philosophy-zh)
 
-このプロジェクトは「市販ドアホンの置き換え」ではなく、**家というインフラの一部**として
-設計されています。根底にあるのはいくつかの信念です。順に物語として読んでください。
+Design goals are not release claims. Current implementation, build, hardware-certification, and unsupported status is recorded in the [capability matrix](https://github.com/yukiinagato/ox-app-doorbell/blob/main/docs/en/capability-matrix.md).
 
-## 1. サーバに命を預けない — サーバレス自愈
+This project is not a "replacement for an off-the-shelf doorbell" — it is designed as **part of the home's infrastructure**. A few convictions run through it. Read them in order, as a story.
 
-ふつうのスマートドアホンは、ハブやクラウド、あるいは Home Assistant のような
-「中心」が死んだ瞬間に、ただの板になります。ここでは真実源を **P2P メッシュ**に置きました。
-全端末が対等にゴシップし、設定もイベントも全ノードに複製されます。
+## 1. Never entrust your life to a server — serverless self-healing
 
-- Home Assistant が落ちても: 押鈴表示・チャイム・室内対講・パネルは動き続けます。
-- Asterisk (PBX) が落ちても: 対講は Asterisk 非経由の直接 SIP (UDP 47190) なので生きています。
-  死ぬのは「電話への発呼」という 1 本の腿だけです。
-- 端末が 1 台残れば: 設定はそこから全量復元できます。バックアップはあるに越したことは
-  ありませんが、日常の生存性はバックアップに依存しません。
+The source of truth for mesh state lives in a P2P mesh. Native nodes gossip and replicate configuration and events; optional integrations remain separate failure boundaries.
 
-外部への通知 (Telegram / MQTT) だけは重複を防ぐため「リーダー」ノードが代表して送りますが、
-リーダーは決定的アルゴリズムで自動選出され、倒れれば別のノードが引き継ぎます。
+- If Home Assistant goes down, implemented mesh-local actions can continue; HA, HomeKit, and HA-hosted media actions do not.
+- If Asterisk goes down, commissioned direct-SIP paths can continue; PBX/PSTN/WebRTC paths do not.
+- A surviving healthy native node can help restore replicated configuration. Backups and device-local secret recovery are still required.
 
-## 2. 旧端末を見捨てない — 降級の階梯
+Only external notifications (Telegram / MQTT) are sent by a single "leader" node to avoid duplicates — but the leader is elected automatically by a deterministic algorithm, and if it falls, another node takes over.
 
-玄関に置く端末に最新機は要りません。むしろ「引き出しに眠っている端末」こそ適材です。
-このシステムは意図的に長い降級の階梯を持ちます。
+## 2. Never abandon old devices — a ladder of graceful degradation
 
-- Windows: WPF + .NET Framework 4.8 — **Windows 7 SP1 の Toughpad** まで動きます。
-- Android: minSdk 21 (Android 5.0)。4.4 向けには legacy 経路。
-- iOS: iOS 12 以降 (9 向け legacy)。廃品 iPhone/iPad が門口機・室内機になります。
-- そのさらに下: **iPad 1 (A1219, iOS 5.1.1)** も一等ノードになります。越獄して自前ビルドの
-  原生 app を入れれば、完全な C++ コアを積んだメッシュノード — 門口の映像を見る・音声を聞く・
-  クイック返信・開錠まで可能 (外付けマイクで対講も可)。カメラが無いので自分の映像は送れず、
-  内蔵マイクが無いので外麦なしだと聞く専用、という上限だけは物理的な制約です
-  ([ipad1-jailbreak](https://github.com/yukiinagato/ox-app-doorbell/blob/main/deploy/provision/ios/ipad1-jailbreak.md))。
-  越獄したくなければ、網頁パネル (door.html / monitor.html) を Web クリップにして
-  押鈴と受鈴モニタとして使う従来の道も残っています。
-- 映像も同じ思想です: 基調は「どこでも映る」MJPEG。H.264 は対応機だけが使う上位档で、
-  非対応機は黙って MJPEG に降りるだけです ([Decisions](Decisions) 参照)。
+The device at your entrance does not need to be new. In fact, the devices "sleeping in a drawer" are the ideal candidates. This system deliberately maintains a long degradation ladder.
 
-## 3. 各平台ネイティブ — Electron を選ばなかった
+- Windows: WPF + .NET Framework 4.8 — runs all the way down to a **Windows 7 SP1 Toughpad**.
+- Android: minSdk 21 (Android 5.0). A legacy API 19 path exists for 4.4, but its production SKU allowlist is currently empty. The tracked debug-contract build is not a release or hardware-qualification claim.
+- iOS: iOS 12 and later (legacy path for 9). Retired iPhones/iPads become door stations and indoor stations.
+- An **iPad 1 (A1219/A1337, iOS 5.1.1)** has a compatibility shell. It has a built-in microphone and speaker but no camera, and it is not outdoor-rated. The bounded RTSP/RTP-over-TCP H.264 and Annex-B path is host/loopback-tested, including SDP/sprop, single NAL/STAP-A/FU-A and next-IDR recovery; it stays degraded until an IDR is actually accepted and has no real-camera iPad qualification. Audio, recovery, thermal/weather-resistant enclosure, power, and the optional host-tested root helper still require exact-device commissioning ([provisioning](https://github.com/yukiinagato/ox-app-doorbell/blob/main/deploy/provision/ios/ipad1-jailbreak.en.md)).
+- Video follows the same philosophy: MJPEG is the compatibility baseline. H.264 is an upper tier used only after the platform reports a working path; otherwise the session falls back to MJPEG (see [Decisions](Decisions)).
 
-低スペック旧端末で Electron/Web ラッパは重すぎ、カメラ・音声・kiosk・電源制御のような
-OS 深部の機能に届きません。そこで**共有 C++ コア (doorbell-core) + 各平台の薄いネイティブ殻**
-(WPF / Android / Swift) という構成にしました。ロジックは 1 箇所、UI と OS 統合だけが平台別です。
-殻は [core/include/doorbell/doorbell.h](https://github.com/yukiinagato/ox-app-doorbell/blob/main/core/include/doorbell/doorbell.h)
-の C ABI だけを見ます。
+## 3. Native on every platform — why not Electron
 
-## 4. 電話網という最強の冗長
+On low-spec old devices, Electron/web wrappers are too heavy and cannot reach deep OS features like camera, audio, kiosk mode, and power control. So the architecture is a **shared C++ core (doorbell-core) + a thin native shell per platform** (WPF / Android / Swift). Logic lives in one place; only UI and OS integration are platform-specific. The shells see nothing but the C ABI in [core/include/doorbell/doorbell.h](https://github.com/yukiinagato/ox-app-doorbell/blob/main/core/include/doorbell/doorbell.h).
 
-停電しても動き続けるネットワークは、実は昔から家にあります — 電話網です。
-Asterisk + ひかり電話 HGW を組み合わせ、押鈴で**宅内内線と外出先の携帯 (PSTN) を同時に**
-鳴らします。スマホアプリの push が届かない環境でも、電話は鳴ります。通話中に
-DTMF (*1 等) で開錠などの操作もできます。これは「スマートホームの上に電話を載せる」の
-ではなく、「電話網を最後の砦として設計に組み込む」発想です。
+## 4. The phone network as the ultimate redundancy
 
-## 5. 「宁重勿漏」— 漏らすくらいなら重ねて知らせる
+A network that can remain available when app push is not has actually been in your home all along — the telephone network. With a commissioned Asterisk/Hikari Denwa HGW path and matching rules, a bell press can ring indoor extensions and a mobile phone (PSTN) in parallel. During a call, configured DTMF codes can trigger actions such as unlocking. This is not "putting a phone on top of a smart home" — it is designing a separately tested telephone path as another line of defense.
 
-来客を 1 回逃すコストは、通知が 2 回鳴る煩わしさよりずっと大きい。押鈴 1 回で
-SIP 発呼・Telegram・HA イベント・室内チャイムが**並行**して走ります。静かにしたい時間帯は
-quiet_hours でチャイムだけを抑制できますが、既定では電話・Telegram・HA は
-`never_suppress` — 夜中でも来客と緊急は必ず届きます。
+## 5. "Better redundant than missed" — duplicate rather than drop
 
-## 6. 安全境界 — 警察・消防へは自動発信しない
+The cost of missing a visitor once far outweighs the annoyance of a notification arriving twice, so the rule engine can dispatch independent SIP, Telegram, HA, and chime actions in parallel. These actions remain rule-driven: an administrator can narrow recipients, silence channels, or remove an action entirely. `quiet_hours` is one possible condition, not a guarantee that every other channel will run.
 
-室内機の SOS (長押し発報) は全ノード警報 + サイレン + Telegram 🚨 + MQTT で
-**家族に**知らせます。しかし警察・消防への自動発信は意図的に実装していません。
-誤報のコストと、機械には状況判断ができないという理由からです。通報の判断は常に人が行い、
-システムはそのための情報 (映像・通知・任意のユーザー定義先への SIP 発呼) を最速で
-届けることに徹します。
+## 6. A safety boundary — no automatic calls to police or fire services
 
-## 7. 秘密の置き場所と、平文 LAN という割切り
+SOS active/clear state is always replicated to every Core node and restored after reconnection. What any device displays or sounds, and whether Web Push, Telegram, MQTT, or a user-defined SIP destination is used, is entirely rule-driven; an administrator may intentionally configure zero recipients or a silent presentation. Automatic dialing of police or fire services is deliberately not implemented because of false-alarm risk and the need for human judgment.
 
-- bot token・SIP パスワードなどの秘密は設定 CRDT に**平文では載せません**。
-  `secret:` 参照だけを複製し、実体は各端末の secure store (DPAPI / Keystore / Keychain) に
-  保管します。管理画面でも書込のみ・表示不可です。
-- 一方で、宅内 LAN の HTTP/映像ストリームは平文です。ここは「同一 L2 の家庭内ネットワーク」
-  という前提での現実的な割切りです — mesh 自体は PSK による HMAC/AEAD で保護され、
-  管理画面はパスワード、パネル/ストリームは token で守られますが、TLS 化は
-  リバースプロキシ (Caddy 等) を立てたい人の選択肢として残しています
-  ([deploy/asterisk/webrtc.ja.md](https://github.com/yukiinagato/ox-app-doorbell/blob/main/deploy/asterisk/webrtc.ja.md) 参照)。
+Open Web pages have a separate safety control. `emergency.web_active_page_alerts` defaults to `true`, so they render replicated SOS active/clear state even when the rule set has zero recipients or Push-only targeting. Turning it off does not block a positively matched `device_alert` or an actually delivered Push. Operationally, a Core `delivery_result` proves only that dispatch was attempted; the client's runtime per-channel report proves presentation.
 
-## 8. 録画しない
+When that raw-state path is on, a rule TTL may stop custom sound and decoration but cannot erase the safe red overlay while SOS remains active; only clear or switch-off does that. Explicit targets do not leak across surfaces: native-only selectors do not reach Web, Web-only groups do not reach native shells, and only a legacy action without `targets` keeps the all-target compatibility behavior. A Web page uses one persisted `?group=` value for both polling and Push.
 
-このシステムは監視カメラではなくドアホンです。常時録画はせず、イベント時の
-スナップショットと、必要な人が見るライブ映像だけを扱います。録画が欲しい場合は
-go2rtc/HA 側で好きに録れます — 境界の外に置いてあるだけです。
+## 7. Where secrets live, and the trusted-LAN boundary
+
+- Secrets such as bot tokens and SIP passwords are **never placed in the configuration CRDT in plain text**. Only `secret:` references are replicated; the actual values are stored in each device's secure store (DPAPI / Keystore / Keychain). Even in the admin UI they are write-only, never displayed.
+- A Push subscription must remain a complete opaque value, so its endpoint and `p256dh`/`auth` keys are sealed together in a schema-v2 CRDT record with XChaCha20-Poly1305 under a mesh-PSK-derived key. Configuration/export never reveals them in plaintext; startup reseals legacy raw records or removes them fail-closed.
+- Node HTTP/video is a trusted-LAN interface, not an Internet security boundary. Do not expose it publicly; use a maintained VPN or authenticated TLS reverse proxy. Treat panel URLs and tokens as secrets and keep them out of logs and public config ([security guide](https://github.com/yukiinagato/ox-app-doorbell/blob/main/docs/en/security.md)).
+
+## 8. No recording
+
+This system is a doorbell, not a surveillance camera. It does not record continuously; it deals only in event-time snapshots and live video watched by whoever needs it. If you want recordings, record freely on the go2rtc/HA side — that capability is simply placed outside the boundary.
 
 ---
 
-次: 機能の全体像は [Features](Features)、実装の中身は [Architecture](Architecture)、
-個々の設計判断の経緯は [Decisions](Decisions) へ。
+Next: for the feature overview see [Features](Features), for implementation internals see [Architecture](Architecture), and for the history behind individual design choices see [Decisions](Decisions).

@@ -3,6 +3,7 @@
 #import "../Core/DBBootConfig.h"
 #import "../Core/DBConfigUtil.h"
 #import "../Core/DBCoreBridge.h"
+#import "../Core/DBSemanticStyle.h"
 #import "../Core/DBTexts.h"
 #import "../Media/DBSiren.h"
 #import "DBRouter.h"
@@ -13,6 +14,22 @@ static UIColor *DBFg(void) { return [UIColor colorWithWhite:0.94 alpha:1]; }
 static UIColor *DBDim(void) { return [UIColor colorWithWhite:0.62 alpha:1]; }
 static UIColor *DBNightClk(void) { return [UIColor colorWithRed:0.545 green:0.141 blue:0.110 alpha:1]; }
 
+static CGRect DBHomeScaledFrame(CGRect base, CGFloat scale, CGSize bounds, CGFloat margin) {
+  CGFloat width = MIN(CGRectGetWidth(base) * scale, bounds.width - 2 * margin);
+  CGFloat height = MIN(CGRectGetHeight(base) * scale, bounds.height * 0.28);
+  CGFloat x = MIN(MAX(margin, CGRectGetMidX(base) - width / 2), bounds.width - margin - width);
+  CGFloat y = MIN(MAX(margin, CGRectGetMidY(base) - height / 2), bounds.height - margin - height);
+  return CGRectMake(x, y, MAX(44, width), MAX(44, height));
+}
+
+@interface DBHomeScreen ()
+- (NSDictionary *)styleForSemanticID:(NSString *)semanticID
+                            foreground:(UIColor *)foreground
+                            background:(UIColor *)background
+                                safety:(BOOL)safety;
+- (void)applySemanticStyles;
+@end
+
 @implementation DBHomeScreen {
   DBCoreBridge *_core;
   DBBootConfig *_boot;
@@ -21,17 +38,18 @@ static UIColor *DBNightClk(void) { return [UIColor colorWithRed:0.545 green:0.14
 
   NSDictionary *_cfg;
   NSString *_nodeId;
-  NSString *_panelToken;
   NSString *_themeHash;
-  NSMutableArray *_events;  // 直近イベント文字列 (最大 8)
+  NSMutableArray *_events;  // At most eight recent event strings.
+  NSArray *_doorPeers;      // Live door stations from status.peers.
 
-  // 表示制御
+  // Display state.
   NSInteger _brightness;
   BOOL _night;
   BOOL _redTint;
 
-  // SOS
+  // SOS state.
   BOOL _emergencyActive;
+  BOOL _safeMode;
   double _sosHoldS;
   BOOL _cancelRequiresPin;
   NSDate *_sosDownAt;
@@ -41,14 +59,14 @@ static UIColor *DBNightClk(void) { return [UIColor colorWithRed:0.545 green:0.14
   NSTimer *_clockTimer;
   NSTimer *_replyTimer;
 
-  // 隠し管理入口
+
   NSInteger _secretTaps;
   NSDate *_secretFirst;
 
-  // core スナップショットの非同期収集 (main を塞がない)
+
   dispatch_queue_t _refreshQueue;
-  BOOL _refreshBusy;   // _refreshQueue 実行中
-  BOOL _refreshDirty;  // 実行中に再要求が来た
+  BOOL _refreshBusy;
+  BOOL _refreshDirty;
 
   // UI
   UIImageView *_themeBg;
@@ -58,6 +76,7 @@ static UIColor *DBNightClk(void) { return [UIColor colorWithRed:0.545 green:0.14
   UILabel *_eventsLabel;
   UILabel *_nodeInfo;
   UIButton *_sosButton;
+  UIButton *_monitorButton;
   UIProgressView *_sosProgress;
   UIView *_nightTint;
   UIView *_replyBanner;
@@ -72,6 +91,11 @@ static UIColor *DBNightClk(void) { return [UIColor colorWithRed:0.545 green:0.14
   UIButton *_emergencyCancel;
   UIButton *_secretCorner;
   UIButton *_infoButton;
+  UIView *_monitorPicker;
+  UILabel *_monitorPickerTitle;
+  UIScrollView *_monitorPickerList;
+  NSMutableArray *_monitorPeerButtons;
+  UIButton *_monitorCancel;
 }
 
 - (id)initWithRouter:(DBRouter *)router {
@@ -83,8 +107,9 @@ static UIColor *DBNightClk(void) { return [UIColor colorWithRed:0.545 green:0.14
     _texts = router.texts;
     _audio = [[DBSiren alloc] init];
     _events = [[NSMutableArray alloc] init];
+    _doorPeers = @[];
+    _monitorPeerButtons = [[NSMutableArray alloc] init];
     _nodeId = @"";
-    _panelToken = @"";
     _brightness = 70;
     _sosHoldS = 3.0;
     _cancelRequiresPin = YES;
@@ -99,11 +124,11 @@ static UIColor *DBNightClk(void) { return [UIColor colorWithRed:0.545 green:0.14
 - (NSString *)screenName {
   return @"home";
 }
-#pragma mark - UI 構築
+
 
 - (UIButton *)buttonWithTitle:(NSString *)title font:(CGFloat)size
                         color:(UIColor *)color bg:(UIColor *)bg {
-  UIButton *b = [UIButton buttonWithType:UIButtonTypeCustom];  // iOS5: System は白背景回避
+  UIButton *b = [UIButton buttonWithType:UIButtonTypeCustom];
   [b setTitle:title forState:UIControlStateNormal];
   b.titleLabel.font = [UIFont boldSystemFontOfSize:size];
   [b setTitleColor:color forState:UIControlStateNormal];
@@ -164,6 +189,13 @@ static UIColor *DBNightClk(void) { return [UIColor colorWithRed:0.545 green:0.14
   _sosProgress.progress = 0;
   [self addSubview:_sosProgress];
 
+  _monitorButton = [self buttonWithTitle:@"" font:24 color:[UIColor whiteColor]
+                                      bg:[UIColor colorWithRed:0.10 green:0.42 blue:0.72 alpha:1]];
+  _monitorButton.layer.cornerRadius = 14;
+  [_monitorButton addTarget:self action:@selector(onMonitorList)
+             forControlEvents:UIControlEventTouchUpInside];
+  [self addSubview:_monitorButton];
+
   _nightTint = [[UIView alloc] init];
   _nightTint.backgroundColor = [UIColor colorWithRed:0.55 green:0.0 blue:0.0 alpha:0.35];
   _nightTint.userInteractionEnabled = NO;
@@ -172,6 +204,7 @@ static UIColor *DBNightClk(void) { return [UIColor colorWithRed:0.545 green:0.14
 
   [self buildReplyBanner];
   [self buildOfflineView];
+  [self buildMonitorPicker];
   [self buildEmergencyView];
 
   _secretCorner = [UIButton buttonWithType:UIButtonTypeCustom];
@@ -188,6 +221,30 @@ static UIColor *DBNightClk(void) { return [UIColor colorWithRed:0.545 green:0.14
   [self addSubview:_infoButton];
 
   [self clearLabelBackgrounds:self];
+}
+
+- (void)buildMonitorPicker {
+  _monitorPicker = [[UIView alloc] init];
+  _monitorPicker.backgroundColor = [UIColor colorWithRed:0.035 green:0.045 blue:0.06 alpha:0.98];
+  _monitorPicker.hidden = YES;
+  [self addSubview:_monitorPicker];
+
+  _monitorPickerTitle = [[UILabel alloc] init];
+  _monitorPickerTitle.font = [UIFont boldSystemFontOfSize:34];
+  _monitorPickerTitle.textColor = [UIColor whiteColor];
+  _monitorPickerTitle.textAlignment = NSTextAlignmentCenter;
+  [_monitorPicker addSubview:_monitorPickerTitle];
+
+  _monitorPickerList = [[UIScrollView alloc] init];
+  _monitorPickerList.alwaysBounceVertical = YES;
+  [_monitorPicker addSubview:_monitorPickerList];
+
+  _monitorCancel = [self buttonWithTitle:@"" font:22 color:[UIColor whiteColor]
+                                      bg:[UIColor colorWithWhite:1 alpha:0.14]];
+  _monitorCancel.layer.cornerRadius = 12;
+  [_monitorCancel addTarget:self action:@selector(onMonitorPickerCancel)
+             forControlEvents:UIControlEventTouchUpInside];
+  [_monitorPicker addSubview:_monitorCancel];
 }
 
 - (void)buildReplyBanner {
@@ -272,11 +329,21 @@ static UIColor *DBNightClk(void) { return [UIColor colorWithRed:0.545 green:0.14
   _infoButton.frame = CGRectMake(14, sz.height - 42, 34, 34);
   _nodeInfo.frame = CGRectMake(54, sz.height - 30, sz.width * 0.6, 20);
   CGFloat sosW = 150, sosH = 62;
-  _sosButton.frame = CGRectMake(sz.width - sosW - 20, sz.height - sosH - 20, sosW, sosH);
+  CGRect sosBase = CGRectMake(sz.width - sosW - 20, sz.height - sosH - 20, sosW, sosH);
+  NSDictionary *sosStyle = [self styleForSemanticID:@"sos.trigger"
+                                          foreground:[UIColor whiteColor]
+                                          background:[UIColor colorWithRed:0.78 green:0.08 blue:0.06 alpha:1]
+                                              safety:YES];
+  CGFloat sosScale = [DBSemanticStyle numberInStyle:sosStyle key:@"scale" fallback:1
+                                            minimum:1 maximum:2];
+  _sosButton.frame = DBHomeScaledFrame(sosBase, sosScale, sz, 12);
   _sosProgress.frame = CGRectMake(sz.width - sosW - 20, sz.height - sosH - 30, sosW, 4);
+  CGFloat monitorW = 240;
+  _monitorButton.frame = CGRectMake((sz.width - monitorW) / 2, sz.height - sosH - 20,
+                                    monitorW, sosH);
   _secretCorner.frame = CGRectMake(sz.width - 120, 0, 120, 120);
 
-  // reply banner (上部中央)
+
   CGFloat rbW = MIN(sz.width - 40, 560), rbH = 96;
   _replyBanner.frame = CGRectMake((sz.width - rbW) / 2, 20, rbW, rbH);
   _replyCaption.frame = CGRectMake(20, 12, rbW - 40, 24);
@@ -288,7 +355,29 @@ static UIColor *DBNightClk(void) { return [UIColor colorWithRed:0.545 green:0.14
   // emergency
   _emergencyTitle.frame = CGRectMake(0, sz.height / 2 - 120, sz.width, 80);
   _emergencyNote.frame = CGRectMake(20, sz.height / 2 - 20, sz.width - 40, 40);
-  _emergencyCancel.frame = CGRectMake(sz.width / 2 - 110, sz.height / 2 + 50, 220, 64);
+  CGRect emergencyBase = CGRectMake(sz.width / 2 - 110, sz.height / 2 + 50, 220, 64);
+  NSDictionary *cancelStyle = [self styleForSemanticID:@"sos.cancel"
+                                             foreground:[UIColor colorWithRed:0.55 green:0.05 blue:0.04 alpha:1]
+                                             background:[UIColor whiteColor] safety:YES];
+  CGFloat cancelScale = [DBSemanticStyle numberInStyle:cancelStyle key:@"scale" fallback:1
+                                               minimum:1 maximum:2];
+  _emergencyCancel.frame = DBHomeScaledFrame(emergencyBase, cancelScale, sz, 12);
+
+  // Door-station picker overlay.
+  _monitorPicker.frame = self.bounds;
+  _monitorPickerTitle.frame = CGRectMake(20, 54, sz.width - 40, 48);
+  CGFloat pickerMargin = sz.width > sz.height ? sz.width * 0.20 : 42;
+  CGFloat listY = 122;
+  CGFloat cancelH = 58;
+  _monitorPickerList.frame = CGRectMake(pickerMargin, listY, sz.width - 2 * pickerMargin,
+                                        sz.height - listY - cancelH - 42);
+  CGFloat rowY = 0;
+  for (UIButton *b in _monitorPeerButtons) {
+    b.frame = CGRectMake(0, rowY, _monitorPickerList.bounds.size.width, 64);
+    rowY += 76;
+  }
+  _monitorPickerList.contentSize = CGSizeMake(_monitorPickerList.bounds.size.width, rowY);
+  _monitorCancel.frame = CGRectMake(sz.width / 2 - 100, sz.height - cancelH - 18, 200, cancelH);
 }
 
 - (void)onScreenWillAppear {
@@ -301,12 +390,21 @@ static UIColor *DBNightClk(void) { return [UIColor colorWithRed:0.545 green:0.14
   }
   [self updateClock];
   [self refreshFromCore];
+  // The first status may contain only UDP discovery identity/address data. This
+  // convergence refresh picks up role/name metadata; duplicate updates merge safely.
+  __weak DBHomeScreen *wself = self;
+  dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.0 * NSEC_PER_SEC)),
+                 dispatch_get_main_queue(), ^{
+    DBHomeScreen *s = wself;
+    if (s && s.superview) [s refreshFromCore];
+  });
 }
 
 - (void)onScreenWillDisappear {
-  // 緊急/警報は画面を離れても継続 (home は根なので基本無い)。時計は継続。
+  // Alerts and the clock remain active while the root home view is covered.
+  _monitorPicker.hidden = YES;
 }
-#pragma mark - 文言 / 時計
+
 
 - (void)applyStrings {
   _replyCaption.text = [_texts ts:@"reply.banner"];
@@ -316,6 +414,9 @@ static UIColor *DBNightClk(void) { return [UIColor colorWithRed:0.545 green:0.14
   _emergencyTitle.text = [_texts ts:@"emergency.title"];
   _emergencyNote.text = [_texts ts:@"emergency.notified"];
   [_emergencyCancel setTitle:[_texts ts:@"emergency.cancel"] forState:UIControlStateNormal];
+  [_monitorButton setTitle:[_texts ts:@"monitor.open"] forState:UIControlStateNormal];
+  _monitorPickerTitle.text = [_texts ts:@"monitor.choose"];
+  [_monitorCancel setTitle:[_texts ts:@"monitor.close"] forState:UIControlStateNormal];
 }
 
 - (void)updateClock {
@@ -327,27 +428,20 @@ static UIColor *DBNightClk(void) { return [UIColor colorWithRed:0.545 green:0.14
              fromDate:[NSDate date]];
   _clockLabel.text = [NSString stringWithFormat:@"%02ld:%02ld:%02ld", (long)c.hour,
                                                 (long)c.minute, (long)c.second];
-  NSArray *yobi = @[@"日", @"月", @"火", @"水", @"木", @"金", @"土"];
-  _dateLabel.text = [NSString stringWithFormat:@"%ld年%ld月%ld日 (%@)", (long)c.year, (long)c.month,
-                     (long)c.day, [yobi objectAtIndex:((c.weekday - 1) % 7)]];
+  NSArray *weekdayKeys = @[@"day.sun", @"day.mon", @"day.tue", @"day.wed", @"day.thu",
+                            @"day.fri", @"day.sat"];
+  _dateLabel.text = [_texts t:@"date.full", [NSNumber numberWithLong:(long)c.year],
+                           [NSNumber numberWithLong:(long)c.month],
+                           [NSNumber numberWithLong:(long)c.day],
+                           [_texts ts:[weekdayKeys objectAtIndex:((c.weekday - 1) % 7)]], nil];
 }
 
-#pragma mark - core 反映
 
-- (NSString *)firstPanelToken {
-  id toks = [DBConfigUtil dig:_cfg path:@"panel.tokens"];
-  if ([toks isKindOfClass:[NSArray class]]) {
-    for (id t in (NSArray *)toks) {
-      if ([t isKindOfClass:[NSString class]] && [(NSString *)t length] > 0) return t;
-    }
-  }
-  return @"";
-}
 
 - (void)refreshFromCore {
-  // main スレッドでは重い core 呼び出しをしない (起動直後のイベント storm で
-  // core 内部ロックにより main が詰まり UI 無反応になるため — 実機で観測)。
-  // 背景の直列 queue で JSON を収集し、main で反映する。実行中の再要求は dirty 合併。
+
+
+
   @synchronized(self) {
     if (_refreshBusy) {
       _refreshDirty = YES;
@@ -375,13 +469,12 @@ static UIColor *DBNightClk(void) { return [UIColor colorWithRed:0.545 green:0.14
   });
 }
 
-// main スレッド。背景で収集済みのスナップショットを UI へ反映。
+
 - (void)applyCoreSnapshotWithConfig:(NSDictionary *)cfg status:(NSDictionary *)st {
   if (cfg) {
     _cfg = cfg;
     [_texts setConfig:_cfg];
     [_texts setLang:_boot.uiLang];
-    _panelToken = [self firstPanelToken];
   }
 
   if (st) {
@@ -394,22 +487,85 @@ static UIColor *DBNightClk(void) { return [UIColor colorWithRed:0.545 green:0.14
     if ([ps isKindOfClass:[NSArray class]]) peers = [(NSArray *)ps count];
     _statusLabel.text = [NSString stringWithFormat:@"%@ · peers %ld",
                          [DBConfigUtil evStr:node key:@"name"], (long)peers];
+    NSMutableArray *monitorPeers = [[DBConfigUtil doorPeers:st] mutableCopy];
+    NSMutableSet *knownHosts = [NSMutableSet set];
+    for (NSDictionary *peer in monitorPeers) {
+      // Record every address so NIC ordering changes cannot duplicate a peer.
+      for (NSString *host in [DBConfigUtil peerHosts:peer])
+        if ([host length] > 0) [knownHosts addObject:host];
+    }
+    // A mesh seed proves only connectivity. It may be an indoor panel, server,
+    // or gateway, so never synthesize a door_station or camera from seed_peers.
+    // `door_host`, in contrast, is an explicit local operator override and is a
+    // safe last-resort monitor target while peer metadata converges.
+    NSString *explicitDoorHost = _boot.doorHost;
+    if ([explicitDoorHost length] > 0 && ![knownHosts containsObject:explicitDoorHost]) {
+      [knownHosts addObject:explicitDoorHost];
+      NSString *urlHost = [DBConfigUtil urlHost:explicitDoorHost];
+      [monitorPeers addObject:@{
+        @"id" : [@"door-host:" stringByAppendingString:explicitDoorHost],
+        @"name" : explicitDoorHost,
+        @"role" : @"door_station",
+        @"status" : @"configured",
+        @"door" : (_boot.door ?: @""),
+        @"addrs" : @[ explicitDoorHost ],
+        @"stream" : [NSString stringWithFormat:@"http://%@:47180/stream.mjpeg", urlHost],
+        @"stream_mp4" : [NSString stringWithFormat:@"http://%@:47180/stream.mp4", urlHost]
+      }];
+    }
+    _doorPeers = [monitorPeers copy];
+    [self rebuildMonitorPicker];
     NSDictionary *disp = [st objectForKey:@"display"];
     if ([disp isKindOfClass:[NSDictionary class]]) [self applyDisplayEvent:disp];
-    NSDictionary *em = [st objectForKey:@"emergency"];
-    if ([em isKindOfClass:[NSDictionary class]]) {
-      if ([DBConfigUtil evBool:em key:@"active"]) {
-        [self showEmergencyEvent:em];
-      } else {
-        [self hideEmergencyEvent:em];
-      }
-    }
   }
   [self refreshSosConfig];
   [self applyTheme];
   [self applyStrings];
+  [self applySemanticStyles];
   _nodeInfo.text = [NSString stringWithFormat:@"%@ · %@", _boot.name, _nodeId];
   _offlineView.hidden = _core.isRunning;
+}
+
+- (void)rebuildMonitorPicker {
+  for (UIButton *b in _monitorPeerButtons) [b removeFromSuperview];
+  [_monitorPeerButtons removeAllObjects];
+  NSInteger idx = 0;
+  for (NSDictionary *peer in _doorPeers) {
+    NSString *name = [DBConfigUtil evStr:peer key:@"name"];
+    if ([name length] == 0) name = [DBConfigUtil evStr:peer key:@"id"];
+    NSString *door = [DBConfigUtil evStr:peer key:@"door_label"];
+    NSString *title = [door length] > 0
+        ? [NSString stringWithFormat:@"%@  ·  %@", name, door] : name;
+    UIButton *b = [self buttonWithTitle:title font:24 color:[UIColor whiteColor]
+                                      bg:[UIColor colorWithRed:0.10 green:0.42 blue:0.72 alpha:1]];
+    b.layer.cornerRadius = 12;
+    b.tag = idx++;
+    [b addTarget:self action:@selector(onMonitorPeer:) forControlEvents:UIControlEventTouchUpInside];
+    [_monitorPickerList addSubview:b];
+    [_monitorPeerButtons addObject:b];
+  }
+  _monitorButton.enabled = ([_doorPeers count] > 0);
+  _monitorButton.alpha = _monitorButton.enabled ? 1.0 : 0.35;
+  [self setNeedsLayout];
+}
+
+- (void)onMonitorList {
+  if ([_doorPeers count] == 0) return;
+  _monitorPicker.hidden = NO;
+  [self bringSubviewToFront:_monitorPicker];
+  [self setNeedsLayout];
+}
+
+- (void)onMonitorPeer:(UIButton *)sender {
+  NSInteger idx = sender.tag;
+  if (idx < 0 || idx >= (NSInteger)[_doorPeers count]) return;
+  NSDictionary *peer = [_doorPeers objectAtIndex:(NSUInteger)idx];
+  _monitorPicker.hidden = YES;
+  [_router showMonitorPeer:peer];
+}
+
+- (void)onMonitorPickerCancel {
+  _monitorPicker.hidden = YES;
 }
 
 - (void)refreshSosConfig {
@@ -442,7 +598,7 @@ static UIColor *DBNightClk(void) { return [UIColor colorWithRed:0.545 green:0.14
   while ([_events count] > 8) [_events removeLastObject];
   _eventsLabel.text = [_events componentsJoinedByString:@"\n"];
 }
-#pragma mark - テーマ / 表示制御
+
 
 - (NSString *)themeValue:(NSString *)leaf {
   if ([_nodeId length] > 0) {
@@ -454,6 +610,13 @@ static UIColor *DBNightClk(void) { return [UIColor colorWithRed:0.545 green:0.14
 }
 
 - (void)applyTheme {
+  if (_safeMode) {
+    _themeHash = nil;
+    _themeBg.image = nil;
+    _themeBg.hidden = YES;
+    self.backgroundColor = DBBg();
+    return;
+  }
   NSString *color = [self themeValue:@"bg_color"];
   UIColor *c = color ? [DBConfigUtil parseHexColor:color] : nil;
   self.backgroundColor = c ? c : DBBg();
@@ -469,11 +632,41 @@ static UIColor *DBNightClk(void) { return [UIColor colorWithRed:0.545 green:0.14
   [self loadThemeImage:hash];
 }
 
-// 主題背景は非同期取得 (解码も global で実施 → main は blit のみ)。
+- (NSDictionary *)styleForSemanticID:(NSString *)semanticID
+                            foreground:(UIColor *)foreground
+                            background:(UIColor *)background
+                                safety:(BOOL)safety {
+  return [DBSemanticStyle styleForConfig:_cfg deviceID:_nodeId semanticID:semanticID
+                          safetyCritical:safety baselineForeground:foreground
+                      baselineBackground:background baselineAccent:nil baselineBorder:nil];
+}
+
+- (void)applySemanticStyles {
+  UIColor *white = [UIColor whiteColor];
+  UIColor *red = [UIColor colorWithRed:0.78 green:0.08 blue:0.06 alpha:1];
+  NSDictionary *trigger = [self styleForSemanticID:@"sos.trigger" foreground:white
+                                         background:red safety:YES];
+  [DBSemanticStyle applyButton:_sosButton style:trigger foreground:white background:red
+                        border:nil radius:14 fontSize:24];
+
+  UIColor *darkRed = [UIColor colorWithRed:0.55 green:0.05 blue:0.04 alpha:1];
+  NSDictionary *cancel = [self styleForSemanticID:@"sos.cancel" foreground:darkRed
+                                        background:white safety:YES];
+  [DBSemanticStyle applyButton:_emergencyCancel style:cancel foreground:darkRed background:white
+                        border:nil radius:14 fontSize:26];
+
+  UIColor *neutral = [UIColor colorWithRed:0.17 green:0.18 blue:0.20 alpha:1];
+  NSDictionary *monitorClose = [self styleForSemanticID:@"monitor.close" foreground:white
+                                              background:neutral safety:YES];
+  [DBSemanticStyle applyButton:_monitorCancel style:monitorClose foreground:white
+                    background:[UIColor colorWithWhite:1 alpha:0.14]
+                        border:nil radius:12 fontSize:22];
+}
+
+
 - (void)loadThemeImage:(NSString *)hash {
-  NSMutableString *urlStr =
-      [NSMutableString stringWithFormat:@"http://127.0.0.1:%ld/asset/%@", (long)_boot.httpPort, hash];
-  if ([_panelToken length] > 0) [urlStr appendFormat:@"?k=%@", _panelToken];
+  NSString *urlStr =
+      [NSString stringWithFormat:@"http://127.0.0.1:%ld/asset/%@", (long)_boot.httpPort, hash];
   NSURL *url = [NSURL URLWithString:urlStr];
   if (url == nil) return;
   NSString *want = [hash copy];
@@ -482,6 +675,7 @@ static UIColor *DBNightClk(void) { return [UIColor colorWithRed:0.545 green:0.14
   [NSURLConnection sendAsynchronousRequest:req
                                      queue:[NSOperationQueue mainQueue]
                          completionHandler:^(NSURLResponse *resp, NSData *data, NSError *err) {
+    (void)err;
     DBHomeScreen *s = wself;
     if (!s) return;
     if (data == nil) return;
@@ -547,7 +741,7 @@ static UIColor *DBNightClk(void) { return [UIColor colorWithRed:0.545 green:0.14
   _sosProgress.progress = (float)MIN(1.0, held / _sosHoldS);
   if (held >= _sosHoldS) {
     [self resetSosHold];
-    [_core emergency:YES];
+    (void)[_core emergency:YES];
   }
 }
 
@@ -558,27 +752,55 @@ static UIColor *DBNightClk(void) { return [UIColor colorWithRed:0.545 green:0.14
   _sosProgress.progress = 0;
 }
 
-#pragma mark - 緊急
+
 
 - (void)showEmergencyEvent:(NSDictionary *)ev {
-  if (_emergencyActive) return;
   _emergencyActive = YES;
   _replyBanner.hidden = YES;
-  _emergencyView.hidden = NO;
-  [self setBrightness:100];
-  if (ev) {
+  NSDictionary *palette = [DBConfigUtil emergencyPalette:ev];
+  _emergencyView.backgroundColor = [palette objectForKey:@"background"];
+  _emergencyTitle.textColor = [palette objectForKey:@"foreground"];
+  _emergencyNote.textColor = [palette objectForKey:@"foreground"];
+  _emergencyCancel.backgroundColor = [palette objectForKey:@"accent"];
+  [_emergencyCancel setTitleColor:[palette objectForKey:@"accent_foreground"]
+                         forState:UIControlStateNormal];
+  id visualValue = [ev objectForKey:@"visual"];
+  BOOL visual = ![visualValue isKindOfClass:[NSNumber class]] || [visualValue boolValue];
+  _emergencyView.hidden = !visual;
+  if (visual) {
+    [self bringSubviewToFront:_emergencyView];
+    [self setBrightness:100];
+  }
+  NSString *sound = [DBConfigUtil evStr:ev key:@"alarm_sound"];
+  NSString *path = [DBConfigUtil evStr:ev key:@"audio_path"];
+  NSInteger volume = [DBConfigUtil intVal:ev path:@"alarm_volume" def:100];
+  if (([sound length] > 0 || [path length] > 0) && volume > 0) {
     [_audio startSiren:[DBConfigUtil evStr:ev key:@"audio_path"]
-                volume:[DBConfigUtil intVal:ev path:@"alarm_volume" def:100]];
+                volume:volume];
   } else {
-    [_audio startSiren:@"" volume:[DBConfigUtil intVal:_cfg path:@"emergency.alarm_volume" def:100]];
+    [_audio stop];
   }
 }
 
 - (void)hideEmergencyEvent:(NSDictionary *)ev {
-  if (!_emergencyActive) return;
+  (void)ev;
   _emergencyActive = NO;
   [_audio stop];
   _emergencyView.hidden = YES;
+  [self applyDisplay];
+}
+
+- (void)enterSafeMode {
+  _safeMode = YES;
+  _themeHash = nil;
+  _themeBg.image = nil;
+  _themeBg.hidden = YES;
+  self.backgroundColor = DBBg();
+}
+
+- (void)exitSafeMode {
+  if (!_safeMode) return;
+  _safeMode = NO;
   [self applyDisplay];
 }
 
@@ -594,11 +816,10 @@ static UIColor *DBNightClk(void) { return [UIColor colorWithRed:0.545 green:0.14
 }
 
 - (void)cancelEmergencyConfirmed {
-  [_core emergency:NO];
-  [self hideEmergencyEvent:nil];
+  if ([_core emergency:NO]) [self hideEmergencyEvent:nil];
 }
 
-#pragma mark - 音声イベント
+
 
 - (void)playChime:(NSDictionary *)ev {
   NSString *path = [DBConfigUtil evStr:ev key:@"audio_path"];
@@ -631,7 +852,7 @@ static UIColor *DBNightClk(void) { return [UIColor colorWithRed:0.545 green:0.14
   _replyBanner.hidden = YES;
 }
 
-#pragma mark - 隠し管理入口 / 情報
+
 
 - (void)onSecretCorner {
   NSDate *now = [NSDate date];
@@ -660,5 +881,3 @@ static UIColor *DBNightClk(void) { return [UIColor colorWithRed:0.545 green:0.14
 }
 
 @end
-
-

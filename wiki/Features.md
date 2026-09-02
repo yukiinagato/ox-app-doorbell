@@ -1,110 +1,131 @@
-# 機能総覧
+# Feature Overview
 
-> English: [Features-en](Features-en) / 中文: [Features-zh](Features-zh)
+> English (this page) / 日本語: [Features-ja](Features-ja) / 中文: [Features-zh](Features-zh)
 
-各機能の「何ができるか」を短くまとめます。使い方は [Usage-Residents](Usage-Residents) /
-[Usage-Admin](Usage-Admin) / [Usage-Visitors](Usage-Visitors)、仕組みは [Architecture](Architecture) へ。
+A short summary of what each feature can do. For usage see [Residents](Usage-Residents), [Admins](Usage-Admin), and [Visitors](Usage-Visitors); for how things work see [Architecture](Architecture). Capability status is qualified by the [capability matrix](https://github.com/yukiinagato/ox-app-doorbell/blob/main/docs/en/capability-matrix.md).
 
-## 呼出
+## Calling (ringing)
 
-門口機の大ボタン (汎用) または用件ボタン 1 タップで押鈴。イベントはルールエンジンに入り、
-SIP 発呼 / Telegram / HA イベント / 室内チャイム / 自動応答が設定どおり並行実行されます。
-ドア別・用件別・時間帯別に分岐できます。→ [Usage-Admin](Usage-Admin)
+A visitor rings with the door station's large button or a purpose button. The event enters the rule engine, which dispatches the configured actions. Rules can branch per door, purpose, and time. → [Usage-Admin](Usage-Admin)
 
-## 用件ボタン (visit_purposes)
+`purpose_first` selects a purpose before ringing; `ring_then_purpose` rings first and allows purpose
+selection or skipping afterward. A visitor can cancel while ringing, but an established call uses
+End call/hangup. Manual Web answers are scoped to one `dialog_id` owner so competing browsers
+cannot both own the call; recovery restores ringing at the origin and in-call only for that owner.
 
-訪問 / 宅配便 / 郵便 / 営業・集金 / 検針・工事 / その他 — 既定 6 種、自由に編集可能。
-宅配員は「宅配便」1 タップで押鈴まで完了します。用件は室内機・TV・Telegram・HA・管理画面の
-すべてに表示され、ルールの分岐条件 (`when.purposes`) にも使えます。→ [Usage-Visitors](Usage-Visitors)
+## Purpose buttons (visit_purposes)
 
-## 訪客言語切替
+Purpose choices are editable and can be used as rule conditions (`when.purposes`). Presentation in a shell or integration depends on that target's implemented UI/action path. → [Usage-Visitors](Usage-Visitors)
 
-門口機に言語ボタン (日/英/中 — `ui.languages` で選択) を表示。訪客が切り替えると
-全ノードにバッジで伝わり、**クイック返信の表示と読み上げも訪客の言語に追従**します。
-無操作 60 秒 (設定可) で日本語に自動復帰します。→ [Usage-Visitors](Usage-Visitors)
+## Visitor language switching
 
-## 対講 (三態) と応答接管
+The door station can show configured language buttons. Visitor-language state is replicated and quick-reply labels/TTS select that language with fallback. The configurable idle timer reverts to Japanese. → [Usage-Visitors](Usage-Visitors)
 
-Asterisk 非経由の直接 SIP (UDP 47190) で、(1) 音声のみ、(2) 門口映像 + 双方向音声、
-(3) 室内外双方向映像 (対称 MJPEG) の三態。電話に出た後でも室内機の「応答」で
-電話腿を切って室内対講に**接管**できます。PBX が落ちても動きます。→ [Architecture](Architecture)
+## Intercom (three modes) and answer takeover
 
-## 監聴 (モニタ)
+Direct SIP (UDP 47190) can bypass Asterisk for implemented monitor/answer paths when both exact artifacts link real SIP and media is available. PBX-independent operation must be commissioned on the deployment hardware. → [Architecture](Architecture)
 
-室内機・Android TV から門口機へ `X-Doorbell-Mode: monitor` の一方向呼 — 門口の音声・映像を
-気付かれずに確認できます。来鈴時の TV は全画面ライブ + 監聴が自動で立ち上がります。
+## Monitoring
 
-## クイック返信
+From an indoor station or Android TV, a one-way call to the door station with `X-Doorbell-Mode: monitor` — check the door's audio and video without being noticed. When the bell rings, the TV automatically brings up full-screen live video plus monitoring.
 
-「ただいま留守にしています」等の定型文 (多言語・自定義・並び順付き) を室内機 / TV リモコン /
-Telegram インラインボタン / HA / 網頁から送信 → 門口機に大字表示 + 読み上げ。
-読み上げは カスタム音声 (訪客言語別に登録可) → 系統 TTS → 提示音 の順でフォールバックします。
+## Quick replies
 
-## 自動応答 (auto_reply)
+Canned phrases like "We are out at the moment" (multilingual, customizable, ordered) can be sent from an indoor station / TV remote / Telegram inline buttons / HA / web pages → shown in large text on the door station and read aloud. Speech falls back in order: custom recording (registerable per visitor language) → system TTS → notification tone.
 
-ルールのアクションとして、押鈴に人が出ずとも門口機が自動でクイック返信を表示 + 読み上げます。
-定番は「宅配便なら『置き配をお願いします』を自動再生し、電話は鳴らさない」。→ [Usage-Admin](Usage-Admin)
+## Auto-reply (auto_reply)
 
-## 電話連携 (Asterisk + ひかり電話)
+As a rule action, an implemented door shell can display and speak a configured quick reply. → [Usage-Admin](Usage-Admin)
 
-押鈴で宅内内線と外出先携帯 (PSTN) を同時呼。通話中の DTMF 機能碼 (*1 = 開錠等、
-アクションは設定可能) に対応。分配ロジックは dialplan 側で自由に変更できます。
+## Phone integration (Asterisk + Hikari Denwa)
+
+A bell press rings indoor extensions and your mobile (PSTN) simultaneously. In-call DTMF feature codes are supported (*1 = unlock etc., actions configurable). The distribution logic can be freely changed on the dialplan side.
 → [deploy/asterisk/README.ja.md](https://github.com/yukiinagato/ox-app-doorbell/blob/main/deploy/asterisk/README.ja.md)
 
-## 通知
+## Notifications
 
-- **Telegram**: 押鈴を写真 + 用件 + 訪客言語バッジ付きで推送。インラインボタンで即返信。
-- **Home Assistant** (MQTT Discovery): 呼び鈴 event / 動体 / 端末オンライン / ブリッジ生存 /
-  緊急 / 訪客言語 sensor が自動出現。actionable 通知の断片も同梱。
-- **室内チャイム**: カスタム音 (`asset:<sha256>`) 対応。
-- 外部送信はリーダーノードのみが行い、重複通知を防ぎます。
+- **Telegram**: pushes each ring with a photo + purpose + visitor-language badge. Inline buttons reply instantly.
+- **Home Assistant** (MQTT Discovery): doorbell event / motion / device online / bridge liveness / emergency / visitor-language sensors appear automatically. Actionable-notification snippets are included.
+- **Indoor chime**: supports custom sounds (`asset:<sha256>`).
+- Only the leader node sends externally, preventing duplicate notifications.
 
-## SOS (緊急求助)
+## SOS (emergency call for help)
 
-室内機で長押し (既定 3 秒) → 全ノード警報 UI + サイレン + Telegram 🚨 + MQTT (HA 連動可)。
-解除には kiosk PIN。警察・消防への自動発信は行いません。→ [Design-Philosophy](Design-Philosophy)
+SOS active/clear state replicates to every Core node, while visual, sound, system notification,
+Web Push, Telegram, and MQTT delivery are rule-driven and may intentionally target nobody. The
+administrator switch `emergency.web_active_page_alerts` defaults to true, so an open Web page still
+shows replicated SOS for zero-recipient or Push-only rules; when disabled, a positive matching
+`device_alert` or delivered Push can still show it. Core `delivery_result` describes dispatch
+attempts; per-client channel reports describe actual presentation. With raw-state display on, rule
+TTL expires custom decoration/sound but not the safe red overlay, which remains until clear. A Web
+page persists its `?group=` value for both polling and Push. Explicit native-only targets do not
+reach Web, and Web-only targets do not reach native shells; legacy no-target actions reach all.
+Complete Push subscriptions are XChaCha20-Poly1305 sealed in CRDT and excluded from plaintext config/export. No
+automatic calls to police or fire services are implied. → [Design Philosophy](Design-Philosophy)
 
-## 動体検知
+## Motion detection
 
-門口機カメラの帧総線から動体を検出し、ルール (例: 夜間のみ Telegram + HA) に流します。
-感度・最小間隔は端末別に調整できます。
+Motion is detected from the door station camera's frame bus and fed into rules (e.g. night-only Telegram + HA). Sensitivity and minimum interval are adjustable per device.
 
-## 映像 — MJPEG 基調 + H.264 流暢档
+## Video — MJPEG baseline + H.264 smooth tier
 
-既定は全端末・全ブラウザで映る MJPEG。硬編を持つ端末は `codec: auto/h264` で
-HW エンコード fMP4 (`/stream.mp4`) を配信 — 通話画質が滑らかになり、HA 側の転码も不要に
-なります (go2rtc `#video=copy`)。購読者ゼロならエンコーダは止まる省電力設計。→ [Decisions](Decisions)
+MJPEG is the compatibility baseline. A platform may publish fMP4 (`/stream.mp4`) only after its encoder path is active and runtime status says it is ready; hardware certification is device-specific. → [Decisions](Decisions)
 
-## HomeKit 連携
+## HomeKit integration
 
-go2rtc + HA の HomeKit Bridge 経由で、iPhone の家庭 App に門鈴通知とライブ映像。
-ホームハブ (Apple TV / HomePod) があれば外出先からも見られます。
+Via go2rtc + HA's HomeKit Bridge, doorbell notifications and live video appear in the iPhone Home app. With a home hub (Apple TV / HomePod) you can also watch while away.
 → [deploy/ha/README.ja.md](https://github.com/yukiinagato/ox-app-doorbell/blob/main/deploy/ha/README.ja.md)
 
-## テーマ推送・文言編集・個性化
+## Theme push, text editing, personalization
 
-背景色 / 背景画像・文言 (i18n_overrides) ・用件・クイック返信・カスタム音声を
-室内機や管理画面から変更すると、CRDT で全端末にミリ秒同期。夜間モード (減光 + 赤色化)、
-スクリーンセーバ、焼付対策の pixel shift も設定できます。
+Change background colors / background images, text strings (i18n_overrides), purposes, quick replies, and custom recordings from an indoor station or the admin UI, and the CRDT syncs them to every device in milliseconds. Night mode (dimming + red shift), a screensaver, and burn-in-protection pixel shift are also configurable.
 
-## 資産配布 (assets)
+Per-device semantic sizing/color overrides are constrained by each renderer's manifest. Native
+clients publish top-level `ui_manifest`; the serving Core publishes a distinct local
+`web_ui.manifest`. Last-valid native peer contracts are durably cached, so a configured offline
+device can be validated/queued when marked `cached_contract:true`, but still needs a later apply
+report. Admin cannot edit an offline/remote Web surface when its Web manifest is unknown and does
+not fabricate one from a native peer manifest.
 
-背景画像・カスタム音声 (≤3MB) は sha256 台帳で管理され、**参照された時点で各端末が能動的に
-前取り** (mesh FETCH_BLOB) — 再生・表示は常にローカルファイルでミリ秒応答です。
-管理画面にノード毎のキャッシュ被覆率が出ます。
+## Asset distribution (assets)
 
-## kiosk 防盗
+Background images and custom recordings (≤3MB) are tracked in a sha256 ledger, and **each device proactively prefetches them the moment they are referenced** (mesh FETCH_BLOB) — playback and display are always from local files, responding in milliseconds. The admin UI shows per-node cache coverage.
 
-- Windows: シェル置換 + watchdog 前台守衛 (Update 弾窗を押し戻す) + 描画テンキー PIN
-- Android: Device Owner 完全ピン留め + keyguard 無効
-- iOS: 監督 + Single App Mode (解除は Configurator + 監督証明書のみ)
-- 全平台: 離線 30 秒以内に Telegram/HA へ通知 (端末盗難・断線の検知)
+## Kiosk anti-theft
 
-## 網頁パネル (legacy 対応)
+- Windows: shell replacement + watchdog foreground guard (pushes back Update pop-ups) + on-screen keypad PIN
+- Android: Device Owner full pinning + keyguard disabled
+- iOS: supervised + Single App Mode (exit only via Configurator + supervision certificate)
+- Offline events may drive Telegram/HA only when matching rules and commissioned integrations
+  select them; there is no universal 30-second or delivery guarantee.
 
-`door.html` (押鈴) / `monitor.html` (受鈴) は iPad 1 の iOS 5 Safari でも動きます。
-`call.html` (双方向通話) は現代ブラウザ + Asterisk WebRTC ゲートウェイ (任意機能) が必要です。
+## Web panels (legacy support)
 
-iPad 1 は網頁パネルに留まらず、越獄して自前ビルドの原生 app を入れれば**完全な原生ノード**
-(映像を見る・音声を聞く・クイック返信・開錠、外付けマイクで対講) にできます。手順は
-[deploy/provision/ios/ipad1-jailbreak.md](https://github.com/yukiinagato/ox-app-doorbell/blob/main/deploy/provision/ios/ipad1-jailbreak.md)。
+Legacy web panels are best-effort until tested on the exact Safari/device. `call.html` requires a
+modern secure browser context and configured Asterisk WebRTC.
+
+The iPad 1 compatibility shell has access to the built-in microphone/speaker but no camera. It
+requires exact-device commissioning and an explicit external-camera or no-video profile. Its
+bounded RTSP/RTP-over-TCP H.264 ingest and Annex-B forwarding are host/loopback-tested, including
+loss-to-next-IDR recovery; capability remains degraded until an actual IDR is accepted, and real-camera
+iPad qualification is pending. Separately, a bounded Android-to-Core-fMP4-to-iPad device smoke
+passed at 15–16 fps on the foreground iPad 1 renderer; unattended post-crash foreground resume is
+still open. The optional root helper is implemented and
+host-tested, and its iOS 5 lane has a reproducible staged DEB that leaves launchd disabled; it
+remains opt-in and hardware-unqualified. See
+[iPad 1 provisioning](https://github.com/yukiinagato/ox-app-doorbell/blob/main/deploy/provision/ios/ipad1-jailbreak.en.md).
+
+## Current artifact gates
+
+- Android API 19 currently has an empty formal SKU allowlist: zero supported SKUs. Its CI artifact
+  is a debug-contract build, not a distributable release.
+- tvOS has only a tracked unsigned Debug simulator build with real PJSIP; there is no tracked
+  Release/device artifact or Apple TV hardware verification.
+- iOS 9 arm64 has an unsigned device-link proof. The formal armv7 signing/hardware gate has not
+  been commissioned.
+- Cross-platform conformance is a golden behavioral model plus source-smoke contracts, not proof
+  that every runtime artifact executed the traces.
+- iPad 1 has a microphone/speaker but no camera and is not outdoor-rated. Its hardware, enclosure,
+  audio, and rollback gates remain open.
+- The local, unpushed `ios-legacy-0.2.0-final` tag exists, but `ios-compat` is still untracked in
+  this working tree and fresh-clone/device/rollback gates are open. Retain `ios-legacy` unchanged.

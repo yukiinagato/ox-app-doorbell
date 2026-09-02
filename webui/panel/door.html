@@ -1,23 +1,18 @@
 <!DOCTYPE html>
-<html lang="ja">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
-<!-- 長時間放置での JS 停止/メモリリークからの自愈 (iPad 1 Safari 対策) -->
+
 <meta http-equiv="refresh" content="300">
-<title>呼出パネル</title>
-<!--
-  Web 版門口子機 (iOS 5 Safari / iPad 1 対応)。ES5 のみ・XHR 短輪詢。
-  flexbox / WebSocket / 矢印関数 / let / const / template literal 禁止。
-  API 契約は同ディレクトリの API.md。?k=<panel token> を全 API に引き継ぐ。
-  ?mock=1 で XHR せず内蔵サンプルデータ描画 (file:// 検証用 — 描画は実データと同一関数)。
--->
+<title></title>
+
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html, body { height: 100%; }
   body { background: #101418; color: #e8edf2;
          font-family: "Hiragino Sans", "Yu Gothic UI", sans-serif; }
-  /* テーブルレイアウト (flexbox 不可) で縦方向を 帯/主領域/脚注 に分割 */
+
   #layout { display: table; width: 100%; height: 100%; border-collapse: collapse; }
   #layout > div { display: table-row; }
   #layout > div > div { display: table-cell; vertical-align: middle; }
@@ -30,7 +25,7 @@
   #main { text-align: center; padding: 10px; height: 100%; }
   h1 { font-size: 30px; color: #8a97a5; font-weight: normal; padding: 8px 0 4px; }
   #hint { font-size: 22px; color: #8a97a5; padding-bottom: 10px; }
-  /* 巨大呼出ボタン: 1〜4 個は縦積み全幅、5〜8 個は 2 列 (inline-block) */
+
   .doorBtn { display: inline-block; vertical-align: top; background: #1a2027;
              border: 3px solid #4da3ff; border-radius: 18px; color: #e8edf2;
              font-family: inherit; font-size: 52px; font-weight: bold;
@@ -41,38 +36,49 @@
   #callingView .big { font-size: 56px; font-weight: bold; color: #4da3ff;
                       padding: 30px 10px; line-height: 1.4; }
   #callingView .door { font-size: 34px; color: #8a97a5; }
+  #callStatus { min-height: 34px; color: #ffb454; font-size: 22px; padding: 4px 10px 16px; }
+  #cancelCall { background: #8d2932; border: 0; border-radius: 14px; color: #fff;
+                font-family: inherit; font-size: 30px; font-weight: bold; padding: 18px 54px; }
+  #cancelCall:disabled { opacity: .45; }
+  #purposeStep { display: none; padding: 4px 3% 16px; }
+  .purposeBtn { background: #1a2027; border: 2px solid #ffb454; border-radius: 12px;
+                color: #fff; font-family: inherit; font-size: 26px; margin: 6px;
+                min-width: 42%; padding: 18px 10px; }
   #note { background: #1a2027; border-top: 1px solid #2a333d; color: #ffb454;
           text-align: center; font-size: 24px; padding: 14px 10px; }
 </style>
 </head>
 <body>
 <div id="layout">
-  <!-- 帯類は inline style で隠す (#layout > div > div の table-cell 指定が
-       CSS の #id 単独指定より詳細度で勝つため) -->
-  <div><div id="offlineBand" style="display:none">オフライン — 再接続中…</div></div>
+
+  <div><div id="offlineBand" data-semantic-id="status.offline" style="display:none"></div></div>
   <div><div id="replyBanner" style="display:none">
-    <div class="cap">住人からのメッセージ</div>
+    <div class="cap" id="replyCaption"></div>
     <div class="txt" id="replyText"></div>
   </div></div>
   <div style="height:100%"><div id="main">
-    <h1 id="title">呼出パネル</h1>
-    <div id="hint">ボタンを押すと住人に通知します</div>
+    <h1 id="title"></h1>
+    <div id="hint"></div>
     <div id="doorList"></div>
     <div id="callingView">
       <div class="door" id="callingDoor"></div>
-      <div class="big" id="callingMsg">呼び出し中→通知済み</div>
+      <div class="big" id="callingMsg" data-semantic-id="ring.title"></div>
+      <div id="callStatus"></div>
+      <div id="purposeStep"></div>
+      <button id="cancelCall" data-semantic-id="cancel.call" type="button"></button>
     </div>
   </div></div>
-  <div><div id="note">この玄関では通話できません (通知のみ)</div></div>
+  <div><div id="note"></div></div>
 </div>
 
+<script src="/panel/runtime.js"></script>
+<script src="/panel/call-flow.js"></script>
 <script>
 (function () {
   "use strict";
-  var POLL_MS = 2000;         // 状態輪詢間隔
-  var CALLING_MS = 30000;     // 「呼び出し中」表示 → 待機へ戻るまで
-  var REPLY_MS = 30000;       // 返信バナー表示時間
-  var OFFLINE_AFTER = 5;      // XHR 連続失敗この回数で「オフライン」帯
+  var POLL_MS = 2000;
+  var REPLY_MS = 30000;
+  var OFFLINE_AFTER = 5;
 
   function $(id) { return document.getElementById(id); }
   function esc(s) {
@@ -87,21 +93,113 @@
 
   var TOKEN = qs("k");
   var MOCK = qs("mock") === "1";
-
-  // ---- i18n (失敗時はハードコード ja のまま。mock/file:// では取得しない) ----
   var I18N = {};
-  function t(k, def) { return I18N[k] || def; }
-  function applyI18n() {
-    $("title").innerHTML = esc(t("panel.title", "呼出パネル"));
-    $("hint").innerHTML = esc(t("panel.press_hint", "ボタンを押すと住人に通知します"));
-    $("note").innerHTML = esc(t("panel.no_audio_note", "この玄関では通話できません (通知のみ)"));
-    $("offlineBand").innerHTML = esc(t("panel.offline", "オフライン — 再接続中…"));
-    $("callingMsg").innerHTML = esc(t("panel.calling", "呼び出し中→通知済み"));
+  var LANG = "";
+  var LOADING_LANG = "";
+  var LOCALE_WAITERS = [];
+  var LOCALE_SERIAL = 0;
+  var QUERY_LANG = normalizeLang(qs("lang"));
+  var emergencyOverlay = null;
+
+  function normalizeLang(value) {
+    value = String(value || "").toLowerCase().split("-")[0];
+    return value === "ja" || value === "en" || value === "zh" ? value : "";
   }
-  if (!MOCK) {
-    xhr("GET", "/locale/ja.json", null, function (st, j) {
-      if (st === 200 && j) { I18N = j; applyI18n(); }
+  function t(key, values) {
+    var value = typeof I18N[key] === "string" ? I18N[key] : key;
+    values = values || {};
+    for (var name in values) if (Object.prototype.hasOwnProperty.call(values, name))
+      value = value.split("{" + name + "}").join(String(values[name]));
+    return value;
+  }
+  function finishLanguage(lang, catalog) {
+    LANG = lang;
+    I18N = catalog || {};
+    LOADING_LANG = "";
+    document.documentElement.setAttribute("lang", lang);
+    var waiters = LOCALE_WAITERS;
+    LOCALE_WAITERS = [];
+    for (var i = 0; i < waiters.length; i++) waiters[i]();
+  }
+  function loadLanguage(requested, cb) {
+    var lang = normalizeLang(requested) || "ja";
+    if (cb) LOCALE_WAITERS.push(cb);
+    if (LANG === lang && !LOADING_LANG) {
+      var ready = LOCALE_WAITERS;
+      LOCALE_WAITERS = [];
+      for (var i = 0; i < ready.length; i++) ready[i]();
+      return;
+    }
+    if (LOADING_LANG === lang) return;
+    LOADING_LANG = lang;
+    var serial = ++LOCALE_SERIAL;
+    xhr("GET", "/locale/" + lang + ".json", null, function (st, j) {
+      if (serial !== LOCALE_SERIAL) return;
+      if (st === 200 && j) { finishLanguage(lang, j); return; }
+      LOADING_LANG = "";
+      if (lang !== "en") { loadLanguage("en"); return; }
+      finishLanguage("en", {});
     });
+  }
+  function languageForState(state, doorId) {
+    if (QUERY_LANG) return QUERY_LANG;
+    var doors = (state && state.doors) || [], i, lang;
+    for (i = 0; doorId && i < doors.length; i++) if (doors[i].id === doorId) {
+      lang = normalizeLang(doors[i].visitor_lang);
+      if (lang) return lang;
+    }
+    for (i = 0; i < doors.length; i++) if (doors[i].calling) {
+      lang = normalizeLang(doors[i].visitor_lang);
+      if (lang) return lang;
+    }
+    for (i = 0; i < doors.length; i++) {
+      lang = normalizeLang(doors[i].visitor_lang);
+      if (lang) return lang;
+    }
+    return "ja";
+  }
+  function applyEmergencyI18n() {
+    var overlays = document.getElementsByClassName("dbEmergencyOverlay");
+    if (overlays.length) {
+      var headings = overlays[0].getElementsByTagName("h2");
+      var paragraphs = overlays[0].getElementsByTagName("p");
+      if (headings.length) headings[0].innerHTML = esc(t("emergency.title"));
+      if (paragraphs.length) paragraphs[0].innerHTML = esc(t("emergency.active_detail"));
+      if (paragraphs.length > 1)
+        paragraphs[1].innerHTML = esc(t("emergency.clear_instruction"));
+    }
+    var triggers = document.getElementsByClassName("dbSosTrigger");
+    if (triggers.length) {
+      var spans = triggers[0].getElementsByTagName("span");
+      triggers[0].setAttribute("aria-label", t("emergency.button"));
+      if (spans.length) spans[0].innerHTML = esc(t("emergency.button"));
+      if (spans.length > 1)
+        spans[1].innerHTML = esc(t("emergency.hold_hint", { sec: "2" }));
+    }
+  }
+  function installEmergency() {
+    emergencyOverlay = DoorbellPanelRuntime.installEmergencyOverlay({
+      title: t("emergency.title"),
+      detail: t("emergency.active_detail"),
+      clearInstruction: t("emergency.clear_instruction"),
+      triggerLabel: t("emergency.button"),
+      triggerHint: t("emergency.hold_hint", { sec: "2" })
+    });
+    applyEmergencyI18n();
+  }
+  function applyI18n() {
+    document.title = t("panel.title");
+    $("title").innerHTML = esc(t("panel.title"));
+    $("hint").innerHTML = esc(t("panel.press_hint"));
+    $("note").innerHTML = esc(t("panel.no_audio_note"));
+    $("offlineBand").innerHTML = esc(t("panel.offline"));
+    $("replyCaption").innerHTML = esc(t("reply.banner"));
+    if (!currentCall) {
+      $("callingMsg").innerHTML = esc(t("panel.calling"));
+      $("cancelCall").innerHTML = esc(t("calling.cancel"));
+    }
+    lastDoorsJson = "";
+    applyEmergencyI18n();
   }
 
   function xhr(method, path, formBody, cb) {
@@ -117,41 +215,79 @@
     try { x.send(formBody || null); } catch (e2) { cb(0, null); }
   }
 
-  // ---- mock データ (描画は実データと同一の render() を通す) ----
+
   var mockTick = 0;
   var mockState = {
     doors: [
-      { id: "d_front", label: "正面玄関", calling: false },
-      { id: "d_back", label: "裏口", calling: false },
-      { id: "d_garage", label: "ガレージ", calling: false }
+      { id: "d_front", label: "Front door", calling: false },
+      { id: "d_back", label: "Back door", calling: false },
+      { id: "d_garage", label: "Garage", calling: false }
     ],
     events: [], reply: null, server_ts: 0
   };
   function fetchState(cb) {
     if (MOCK) {
       mockTick++;
-      // 15 秒後に模擬返信を 1 回流す (バナー動作確認用)
+
       if (mockTick === Math.round(15000 / POLL_MS)) {
-        mockState.reply = { text: "すぐ行きます", ts: mockTick };
+        mockState.reply = { text: "Coming now", ts: mockTick };
       }
       mockState.server_ts = mockTick;
       cb(200, mockState);
       return;
     }
-    xhr("GET", "/api/panel/state?k=" + encodeURIComponent(TOKEN), null, cb);
+    xhr("GET", DoorbellPanelRuntime.panelStateUrl(), null, cb);
   }
-  function sendPress(doorId, cb) {
-    if (MOCK) { cb(200, { ok: true }); return; }
+  function sendPress(doorId, purpose, cb) {
+    if (MOCK) {
+      var callId = "mock-call-" + (++mockTick);
+      for (var i = 0; i < mockState.doors.length; i++) if (mockState.doors[i].id === doorId) {
+        mockState.doors[i].calling = true; mockState.doors[i].call_id = callId;
+        mockState.doors[i].call_state = "ringing"; mockState.doors[i].stage_revision = 0;
+        mockState.doors[i].expires_at_ms = new Date().getTime() + 60000;
+      }
+      cb(200, { ok: true, call_id: callId, call_state: "ringing", stage_revision: 0,
+                expires_at_ms: new Date().getTime() + 60000 }); return;
+    }
     xhr("POST", "/api/panel/press",
-        "door=" + encodeURIComponent(doorId) + "&k=" + encodeURIComponent(TOKEN), cb);
+        DoorbellCallFlow.pressForm(doorId, TOKEN, purpose), cb);
+  }
+  function sendPurpose(doorId, callId, purpose, cb) {
+    if (MOCK) { cb(200, { ok: true, call_id: callId, stage_revision: 2 }); return; }
+    xhr("POST", "/api/panel/purpose",
+        DoorbellCallFlow.purposeForm(doorId, callId, purpose, TOKEN), cb);
+  }
+  function sendCancel(doorId, callId, cb) {
+    if (!callId) { cb(409, { ok: false, err: "call_id unavailable" }); return; }
+    if (MOCK) {
+      for (var i = 0; i < mockState.doors.length; i++) if (mockState.doors[i].id === doorId) {
+        mockState.doors[i].calling = false; mockState.doors[i].call_state = "cancelled";
+      }
+      mockState.events.unshift({ type: "call_cancelled", door: doorId, call_id: callId,
+                                 wall_ms: new Date().getTime() });
+      cb(200, { ok: true, call_id: callId }); return;
+    }
+    xhr("POST", "/api/panel/cancel",
+        DoorbellCallFlow.cancelForm(doorId, callId, TOKEN), cb);
+  }
+  function sendHangup(doorId, callId, cb) {
+    if (!callId) { cb(409, { ok: false, err: "call_id unavailable" }); return; }
+    if (MOCK) {
+      for (var i = 0; i < mockState.doors.length; i++) if (mockState.doors[i].id === doorId) {
+        mockState.doors[i].calling = false; mockState.doors[i].call_state = "ended";
+      }
+      cb(200, { ok: true, call_id: callId }); return;
+    }
+    xhr("POST", "/api/panel/hangup",
+        DoorbellCallFlow.cancelForm(doorId, callId, TOKEN), cb);
   }
 
-  // ---- 呼出ボタン描画 (1〜8 個自適応: ≤4 は縦積み全幅、5+ は 2 列) ----
+
   var lastDoorsJson = "";
   function renderDoors(doors) {
     var jsonNow = "";
     for (var i = 0; i < doors.length; i++) jsonNow += doors[i].id + "|" + doors[i].label + ";";
-    if (jsonNow === lastDoorsJson) return;  // 変化なしなら再構築しない (押下中の消失防止)
+    if (jsonNow === lastDoorsJson) return;
     lastDoorsJson = jsonNow;
     var list = $("doorList");
     list.innerHTML = "";
@@ -161,32 +297,180 @@
       b.className = "doorBtn" + (half ? " half" : "");
       b.setAttribute("data-door", doors[k].id);
       b.setAttribute("data-label", doors[k].label);
+      b.setAttribute("data-semantic-id", "call.primary");
       b.innerHTML = esc(doors[k].label);
       b.onclick = onPress;
       list.appendChild(b);
     }
   }
 
-  // ---- 押下 → 呼び出し中表示 30 秒 → 待機へ ----
-  var callingTimer = null;
+  // purpose_first selects before ringing; ring_then_purpose selects after call_id creation.
+  var callingTimer = null, deadlineTimer = null;
+  var currentCall = null, lastCallFlow = "purpose_first", lastPurposes = [];
+  var recoveryPendingCall = "", recoveryReportedCall = "";
+
+  function reportRecovery(door, callId, state) {
+    if (!callId || recoveryPendingCall === callId || recoveryReportedCall === callId) return;
+    recoveryPendingCall = callId;
+    // A pending visitor call is recoverable once this page has rebuilt its waiting UI. An
+    // established SIP dialog is owned by the answering client and cannot be restored here.
+    var restored = state === "ringing" || state === "purpose_pending";
+    xhr("POST", "/api/panel/recovery",
+      DoorbellCallFlow.recoveryForm(door, callId, restored, TOKEN), function (st) {
+        recoveryPendingCall = "";
+        if (st >= 200 && st < 300) recoveryReportedCall = callId;
+      });
+  }
+  function setDoorButtonsDisabled(disabled) {
+    var bs = $("doorList").getElementsByTagName("button");
+    for (var i = 0; i < bs.length; i++) bs[i].disabled = !!disabled;
+  }
+  function labelIn(value) {
+    if (!value || typeof value !== "object") return value || "";
+    return value[LANG] || value.ja || value.en || value.zh || "";
+  }
+  function purposeButtons(afterRing) {
+    var box = $("purposeStep"), h = "";
+    for (var i = 0; i < lastPurposes.length; i++) {
+      var p = lastPurposes[i] || {}, label = labelIn(p.label) || p.id;
+      h += "<button class='purposeBtn' data-semantic-id='purpose.button' data-purpose='" + esc(p.id) + "'>" +
+           esc((p.icon || "") + " " + label) + "</button>";
+    }
+    h += "<button class='purposeBtn' data-semantic-id='purpose.button' data-purpose=''>" +
+      esc(t("purpose.skip")) + "</button>";
+    box.innerHTML = h;
+    box.style.display = "block";
+    var bs = box.getElementsByTagName("button");
+    for (var k = 0; k < bs.length; k++) bs[k].onclick = (function (b) {
+      return function () { choosePurpose(b.getAttribute("data-purpose"), afterRing); };
+    })(bs[k]);
+  }
+  function showCall(id, label, preflight) {
+    currentCall = { door: id, label: label, call_id: "", observed: false,
+                    preflight: !!preflight, cancelPending: false, stage_revision: 0,
+                    started: new Date().getTime() };
+    $("callingDoor").innerHTML = esc(label);
+    $("callingMsg").innerHTML = esc(preflight ? t("idle.choose_purpose") :
+      t("panel.calling"));
+    $("callStatus").innerHTML = esc(preflight ? t("panel.not_sent") : t("panel.sending"));
+    $("purposeStep").style.display = "none";
+    $("cancelCall").disabled = !preflight;
+    $("cancelCall").setAttribute("data-semantic-id", "cancel.call");
+    $("cancelCall").innerHTML = esc(preflight ? t("panel.back") : t("calling.cancel"));
+    $("doorList").style.display = "none"; $("hint").style.display = "none";
+    $("callingView").style.display = "block"; setDoorButtonsDisabled(true);
+  }
+  function resetCall() {
+    currentCall = null;
+    if (callingTimer) { clearTimeout(callingTimer); callingTimer = null; }
+    if (deadlineTimer) { clearTimeout(deadlineTimer); deadlineTimer = null; }
+    $("callingView").style.display = "none"; $("purposeStep").style.display = "none";
+    $("cancelCall").setAttribute("data-semantic-id", "cancel.call");
+    $("doorList").style.display = "block"; $("hint").style.display = "block";
+    setDoorButtonsDisabled(false);
+  }
+  function scheduleReset(c, delayMs) {
+    if (callingTimer) clearTimeout(callingTimer);
+    callingTimer = setTimeout(function () {
+      if (currentCall === c) resetCall();
+    }, delayMs);
+  }
+  function armDeadlineNotice(c) {
+    if (deadlineTimer) { clearTimeout(deadlineTimer); deadlineTimer = null; }
+    var delay = DoorbellCallFlow.deadlineDelay(c && c.expires_at_ms, new Date().getTime());
+    if (!delay) return;
+    deadlineTimer = setTimeout(function () {
+      deadlineTimer = null;
+      if (currentCall !== c || c.inCall || c.cancelPending) return;
+      $("callStatus").innerHTML = esc(t("panel.deadline_reached"));
+      // Keep call_id and the cancel control until Core reports a terminal state. A lost poll must
+      // never make the visitor lose control while the durable call may still be ringing.
+    }, delay);
+  }
+  function beginPress(purpose) {
+    var c = currentCall;
+    if (!c) return;
+    c.preflight = false; $("purposeStep").style.display = "none";
+    $("callingMsg").innerHTML = esc(t("panel.calling"));
+    $("callStatus").innerHTML = esc(t("panel.sending")); $("cancelCall").disabled = true;
+    $("cancelCall").innerHTML = esc(t("calling.cancel"));
+    sendPress(c.door, purpose, function (st, j) {
+      if (!currentCall || currentCall !== c) return;
+      if (st !== 200 || !j || j.ok !== true) {
+        $("callStatus").innerHTML = esc(t("panel.press_failed", {
+          reason: j && j.err ? ": " + j.err : ""
+        }));
+        scheduleReset(c, 3500); return;
+      }
+      c.call_id = j.call_id || "";
+      c.stage_revision = Math.max(c.stage_revision, Number(j.stage_revision) || 0);
+      c.expires_at_ms = Number(j.expires_at_ms) || 0;
+      armDeadlineNotice(c);
+      $("cancelCall").disabled = !c.call_id;
+      $("callStatus").innerHTML = esc(c.call_id ? t("panel.resident_notified") :
+        t("panel.resident_notified_no_cancel"));
+      if (lastCallFlow === "ring_then_purpose" && lastPurposes.length) purposeButtons(true);
+    });
+  }
   function onPress() {
     var id = this.getAttribute("data-door");
     var label = this.getAttribute("data-label");
-    sendPress(id, function () {});  // 応答は待たず即座に表示遷移 (老人・訪客向け即反応)
-    $("callingDoor").innerHTML = esc(label);
-    $("doorList").style.display = "none";
-    $("hint").style.display = "none";
-    $("callingView").style.display = "block";
-    if (callingTimer) clearTimeout(callingTimer);
-    callingTimer = setTimeout(function () {
-      $("callingView").style.display = "none";
-      $("doorList").style.display = "block";
-      $("hint").style.display = "block";
-    }, CALLING_MS);
+    if (currentCall) return;
+    var purposeFirst = lastCallFlow === "purpose_first" && lastPurposes.length;
+    showCall(id, label, purposeFirst);
+    if (purposeFirst) purposeButtons(false); else beginPress("");
   }
 
-  // ---- クイック返信バナー (state.reply の ts が前回より新しければ 30 秒表示) ----
-  var lastReplyTs = -1;  // -1 = 初回 poll 前 (初回に載っている古い返信は既読扱い)
+  function choosePurpose(purpose, afterRing) {
+    var c = currentCall;
+    if (!c) return;
+    $("purposeStep").style.display = "none";
+    if (!afterRing) { beginPress(purpose); return; }
+    if (!purpose) { $("callStatus").innerHTML = esc(t("panel.resident_notified")); return; }
+    if (!c.call_id) {
+      $("callStatus").innerHTML = esc(t("panel.purpose_call_missing")); return;
+    }
+    $("callStatus").innerHTML = esc(t("panel.purpose_sending"));
+    sendPurpose(c.door, c.call_id, purpose, function (st, j) {
+      if (!currentCall || currentCall !== c) return;
+      if (st === 200 && j && j.ok === true) {
+        c.stage_revision = Math.max(c.stage_revision, Number(j.stage_revision) || 0);
+        $("callStatus").innerHTML = esc(t("panel.purpose_delivered"));
+      } else $("callStatus").innerHTML = esc(t("panel.purpose_failed", {
+        reason: j && j.err ? ": " + j.err : ""
+      }));
+    });
+  }
+
+  $("cancelCall").onclick = function () {
+    var c = currentCall;
+    if (!c || c.cancelPending) return;
+    if (c.preflight) { resetCall(); return; }
+    if (!c.call_id) {
+      $("callStatus").innerHTML = esc(t("panel.cancel_missing_id")); return;
+    }
+    c.cancelPending = true; $("cancelCall").disabled = true;
+    var ending = !!c.inCall;
+    $("callStatus").innerHTML = esc(ending ? t("panel.call_ending") :
+      t("panel.cancel_sending"));
+    (ending ? sendHangup : sendCancel)(c.door, c.call_id, function (st, j) {
+      if (!currentCall || currentCall !== c) return;
+      if (st === 200 && j && j.ok === true) {
+        $("callStatus").innerHTML = esc(ending ? t("panel.call_end_accepted") :
+          t("panel.cancel_accepted"));
+      } else {
+        c.cancelPending = false; $("cancelCall").disabled = false;
+        $("callStatus").innerHTML = esc((st === 404 || st === 501) ?
+          (ending ? t("panel.call_end_unavailable") : t("panel.cancel_unavailable")) :
+          t(ending ? "panel.call_end_failed" : "panel.cancel_failed", {
+            reason: j && j.err ? ": " + j.err : ""
+          }));
+      }
+    });
+  };
+
+
+  var lastReplyTs = -1;
   var replyTimer = null;
   function renderReply(reply) {
     if (lastReplyTs === -1) { lastReplyTs = (reply && reply.ts) || 0; return; }
@@ -200,11 +484,71 @@
     }, REPLY_MS);
   }
 
-  // ---- 輪詢 + オフライン検知 (連続失敗 5 回で帯表示、以降も再試行継続) ----
+
   var failCount = 0;
   function render(state) {
+    var desiredLang = languageForState(state, currentCall && currentCall.door);
+    if (desiredLang !== LANG) {
+      loadLanguage(desiredLang, function () { applyI18n(); render(state); });
+      return;
+    }
+    emergencyOverlay.update(state);
+    lastCallFlow = DoorbellCallFlow.flowMode(state.call_flow);
+    lastPurposes = state.purposes || [];
     renderDoors(state.doors || []);
     renderReply(state.reply);
+    var match = null, i;
+    if (currentCall) {
+      for (i = 0; i < (state.doors || []).length; i++)
+        if (state.doors[i].id === currentCall.door) { match = state.doors[i]; break; }
+    } else {
+      for (i = 0; i < (state.doors || []).length; i++) if (state.doors[i].calling) {
+        match = state.doors[i]; showCall(match.id, match.label, false); break;
+      }
+    }
+    if (currentCall && match) {
+      var merged = DoorbellCallFlow.mergeState(currentCall, match);
+      if (merged.accepted) {
+        currentCall.stage_revision = merged.stage_revision;
+        currentCall.call_id = merged.call_id;
+        if (merged.expires_at_ms && merged.expires_at_ms !== currentCall.expires_at_ms) {
+          currentCall.expires_at_ms = merged.expires_at_ms;
+          armDeadlineNotice(currentCall);
+        }
+        currentCall.observed = currentCall.observed || !!match.calling;
+        currentCall.inCall = match.call_state === "answered" || match.call_state === "in_call";
+        if (currentCall.inCall && deadlineTimer) {
+          clearTimeout(deadlineTimer); deadlineTimer = null;
+        }
+        $("cancelCall").setAttribute("data-semantic-id", currentCall.inCall ?
+          "call.end" : "cancel.call");
+        $("cancelCall").disabled = currentCall.cancelPending || !currentCall.call_id;
+        $("cancelCall").innerHTML = esc(currentCall.inCall ? t("incall.end") :
+          t("calling.cancel"));
+        if (match.recovery_required)
+          reportRecovery(match.id, currentCall.call_id, match.call_state);
+        if (currentCall.inCall)
+          $("callStatus").innerHTML = esc(t("panel.resident_answered"));
+        else if (match.call_state === "purpose_pending" && lastCallFlow === "ring_then_purpose")
+          purposeButtons(true);
+        else if (match.call_state === "cancelled") {
+          $("callStatus").innerHTML = esc(t("panel.call_cancelled"));
+          scheduleReset(currentCall, 1600);
+        } else if (match.call_state === "expired" || match.call_state === "ended") {
+          $("callStatus").innerHTML = esc(t("panel.call_finished"));
+          scheduleReset(currentCall, 1600);
+        } else if (match.calling)
+          $("callStatus").innerHTML = esc(t("panel.resident_notified"));
+        else if (currentCall.observed) scheduleReset(currentCall, 1200);
+      } else if (merged.reason === "call_id") {
+        // Keep the stale cancel action disabled until the next call is rendered.
+        currentCall.cancelPending = true;
+        $("cancelCall").disabled = true;
+        $("callStatus").innerHTML = esc(t("panel.new_call_detected"));
+        scheduleReset(currentCall, 800);
+      }
+    }
+    DoorbellPanelRuntime.applySemanticUi(state, { page: "door" });
   }
   function poll() {
     fetchState(function (st, j) {
@@ -219,7 +563,16 @@
       setTimeout(poll, POLL_MS);
     });
   }
-  poll();
+  loadLanguage(QUERY_LANG || "ja", function () {
+    applyI18n();
+    installEmergency();
+    if (MOCK) { poll(); return; }
+    DoorbellPanelRuntime.establishSession(function (result) {
+      TOKEN = result.credential || "";
+      if (result.ok) poll();
+      else $("offlineBand").style.display = "table-cell";
+    });
+  });
 })();
 </script>
 </body>

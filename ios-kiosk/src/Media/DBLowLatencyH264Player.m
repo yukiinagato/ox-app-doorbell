@@ -15,6 +15,7 @@ void DBH264Dbg(NSString *fmt, ...);
   void (^_onState)(DBLowLatencyPlayerState);
   DBFmp4Demux *_demux;
   DBVtVideoView *_videoView;
+  UIImageView *_compatOverlay;
   DBLowLatencyPlayerState _state;
   NSUInteger _generation;
   BOOL _waitingForKeyframe;
@@ -27,6 +28,7 @@ void DBH264Dbg(NSString *fmt, ...);
   double _jitterMs;
   double _framesPerSecond;
   CFAbsoluteTime _lastStatsFrameAt;
+  NSUInteger _displayedFrames;
 }
 
 - (id)initWithURL:(NSString *)url container:(UIView *)container
@@ -46,6 +48,12 @@ void DBH264Dbg(NSString *fmt, ...);
   return DBVideoStatsMake(_latencyCount > 0, (NSInteger)_currentLatencyMs,
                           (NSInteger)(_jitterMs + 0.5), (CGFloat)_framesPerSecond);
 }
+
+- (CFAbsoluteTime)lastFrameAt { return _lastStatsFrameAt; }
+- (NSUInteger)decodedFrames { return [_videoView decodedFrames]; }
+- (NSUInteger)displayedFrames { return _displayedFrames; }
+- (NSUInteger)droppedFrames { return [_videoView droppedFrames]; }
+- (NSString *)presentationMode { return @"uikit_bgra_sibling"; }
 
 - (void)setState:(DBLowLatencyPlayerState)state {
   if (![NSThread isMainThread]) {
@@ -74,16 +82,36 @@ void DBH264Dbg(NSString *fmt, ...);
   _jitterMs = 0;
   _framesPerSecond = 0;
   _lastStatsFrameAt = 0;
+  _displayedFrames = 0;
   _waitingForKeyframe = YES;
   NSUInteger generation = _generation;
-  _videoView = [[DBVtVideoView alloc] initWithFrame:_container.bounds];
-  _videoView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-  _videoView.hidden = YES;
+  // Keep GLKView attached so its draw callback can make the compatibility
+  // UIImage, but do not let its legacy EAGL surface cover the availability
+  // layer while H.264 is still probing. On iOS 5, an ostensibly transparent
+  // GLK renderbuffer can still composite as black over a sibling MJPEG view.
+  _videoView = [[DBVtVideoView alloc] initWithFrame:CGRectMake(-1, -1, 1, 1)];
+  _videoView.autoresizingMask = UIViewAutoresizingNone;
+  _videoView.hidden = NO;
   [_container addSubview:_videoView];
+  // GLKView presents its renderbuffer directly on iOS 5. A UIKit image view
+  // nested inside it can have valid decoded content yet still be overwritten
+  // during presentation on the original iPad. Keep the compatibility BGRA
+  // compositor as a sibling above GLKView so Core Animation owns final display.
+  _compatOverlay = [[UIImageView alloc] initWithFrame:_container.bounds];
+  _compatOverlay.autoresizingMask =
+      UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+  _compatOverlay.contentMode = UIViewContentModeScaleAspectFit;
+  _compatOverlay.backgroundColor = [UIColor blackColor];
+  _compatOverlay.opaque = YES;
+  _compatOverlay.userInteractionEnabled = NO;
+  _compatOverlay.hidden = YES;
+  [_container addSubview:_compatOverlay];
+  [_videoView setCompatibilityOutputView:_compatOverlay];
   __weak DBLowLatencyH264Player *weakSelf = self;
   _videoView.onDisplayedFrame = ^(int64_t captureMs) {
     DBLowLatencyH264Player *player = weakSelf;
     if (!player || player->_generation != generation) return;
+    player->_displayedFrames++;
     if (captureMs > 0 && captureMs != player->_lastCaptureMs) {
       player->_lastCaptureMs = captureMs;
       int64_t nowMs = (int64_t)([[NSDate date] timeIntervalSince1970] * 1000.0);
@@ -114,6 +142,8 @@ void DBH264Dbg(NSString *fmt, ...);
     }
     if (player->_state == DBLowLatencyPlayerLoading) {
       player->_videoView.hidden = NO;
+      player->_compatOverlay.hidden = NO;
+      [player->_container bringSubviewToFront:player->_compatOverlay];
       DBH264Dbg(@"[vt] first frame displayed");
       [player setState:DBLowLatencyPlayerPlaying];
     }
@@ -177,6 +207,8 @@ void DBH264Dbg(NSString *fmt, ...);
   [_videoView shutdownDecoder];
   [_videoView removeFromSuperview];
   _videoView = nil;
+  [_compatOverlay removeFromSuperview];
+  _compatOverlay = nil;
 }
 
 - (void)dealloc {

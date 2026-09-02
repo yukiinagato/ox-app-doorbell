@@ -1,8 +1,8 @@
-// InMemNet: テスト/シミュレーション用のプロセス内ネットワーク (mesh.h 宣言)。
-// 配送はすべて Runloop.post/postDelayed 経由 (決定的)。故障注入:
-//  - partition(groups): 組間の配送遮断 + 既存接続の切断イベント
-//  - setDrop(prob,seed): 決定的 PRNG によるフレーム落とし (beacon にも適用)
-//  - killNode(addr):     全接続切断 + listen/beacon 停止 (再 makeTransport で復活)
+
+
+
+
+
 #include "mesh/mesh.h"
 
 #include <algorithm>
@@ -15,18 +15,18 @@ namespace db {
 
 namespace {
 
-constexpr int64_t kBeaconPeriodMs = 50;  // InMem beacon の再告知周期 (テスト時間スケール)
+constexpr int64_t kBeaconPeriodMs = 50;
 
 class InMemConnEnd;
 
-// ネットワーク全体の共有状態。conn/transport が InMemNet より長生きしても安全なよう shared_ptr。
+
 struct NetState {
   Runloop& loop;
   std::map<std::string, std::function<void(ConnPtr)>> listeners;   // listen addr → on_accept
   std::map<std::string, std::function<void(const DiscoveredPeer&)>> discoveries;  // addr → cb
-  std::map<std::string, std::function<void(const PairBeacon&)>> pair_found;  // addr → 配対発見 cb
+  std::map<std::string, std::function<void(const PairBeacon&)>> pair_found;
   std::set<std::string> killed;
-  std::map<std::string, int> group;  // partition (空 = 全通)
+  std::map<std::string, int> group;
   double drop_prob = 0.0;
   std::mt19937 drop_rng{1};
   int64_t delay_ms = 0;
@@ -56,7 +56,7 @@ struct NetState {
   }
 };
 
-// 接続の片端。send は相手端の on_frame へ Runloop 経由で配送。
+
 class InMemConnEnd : public IConn, public std::enable_shared_from_this<InMemConnEnd> {
  public:
   InMemConnEnd(std::shared_ptr<NetState> net, std::string local, std::string remote)
@@ -64,13 +64,13 @@ class InMemConnEnd : public IConn, public std::enable_shared_from_this<InMemConn
 
   void send(const Bytes& frame) override {
     if (!open_) return;
-    if (!net_->reachable(local_, remote_)) return;  // 分断/死亡中は闇に消える
-    if (net_->dropFrame()) return;                  // 決定的フレーム落とし
+    if (!net_->reachable(local_, remote_)) return;
+    if (net_->dropFrame()) return;
     std::weak_ptr<InMemConnEnd> wp = peer_;
     net_->loop.postDelayed(net_->delay_ms, [wp, frame]() {
       if (auto p = wp.lock()) {
         if (!p->open_) return;
-        // コピーを呼ぶ: 実行中に setCallbacks で差し替えられても閉包が壊れない
+
         auto cb = p->on_frame_;
         if (cb) cb(frame);
       }
@@ -80,7 +80,7 @@ class InMemConnEnd : public IConn, public std::enable_shared_from_this<InMemConn
   void close() override {
     if (!open_) return;
     open_ = false;
-    // 相手端には切断イベントを配送 (自端の on_close は呼ばない — 自発 close のため)
+
     std::weak_ptr<InMemConnEnd> wp = peer_;
     net_->loop.post([wp]() {
       if (auto p = wp.lock()) p->faultClose();
@@ -95,13 +95,13 @@ class InMemConnEnd : public IConn, public std::enable_shared_from_this<InMemConn
     on_close_ = std::move(on_close);
   }
 
-  // 故障注入/相手切断による強制クローズ (on_close を発火)
+
   void faultClose() {
     if (!open_) return;
     open_ = false;
     auto self = shared_from_this();
     net_->loop.post([self]() {
-      auto cb = self->on_close_;  // コピーを呼ぶ (差し替え耐性)
+      auto cb = self->on_close_;
       if (cb) cb();
     });
   }
@@ -118,7 +118,7 @@ class InMemConnEnd : public IConn, public std::enable_shared_from_this<InMemConn
   std::function<void()> on_close_;
 };
 
-// addr を跨ぐ既存接続を切断 (pred(local, remote) が true の端を faultClose)
+
 void severIf(NetState& net, const std::function<bool(const std::string&, const std::string&)>& pred) {
   net.gcConns();
   for (auto& w : net.conns) {
@@ -136,7 +136,7 @@ class InMemTransport : public ITransport {
   ~InMemTransport() override { stopListening(); }
 
   bool listen(const std::string& addr, std::function<void(ConnPtr)> on_accept) override {
-    if (net_->listeners.count(addr)) return false;  // 二重 listen
+    if (net_->listeners.count(addr)) return false;
     listen_addr_ = addr;
     net_->listeners[addr] = std::move(on_accept);
     return true;
@@ -157,14 +157,14 @@ class InMemTransport : public ITransport {
         cb(nullptr);
         return;
       }
-      auto a = std::make_shared<InMemConnEnd>(net, from, addr);   // 発起側
-      auto b = std::make_shared<InMemConnEnd>(net, addr, from);   // 受理側
+      auto a = std::make_shared<InMemConnEnd>(net, from, addr);
+      auto b = std::make_shared<InMemConnEnd>(net, addr, from);
       a->setPeer(b);
       b->setPeer(a);
       net->conns.push_back(a);
       net->conns.push_back(b);
       cb(a);
-      // cb 内で callbacks 設定済みになってから accept を渡す (同一 post 内で順に)
+
       it->second(b);
     });
   }
@@ -191,7 +191,7 @@ class InMemDiscovery : public IDiscovery {
   void announce(const std::string& node_id, const std::string& addr) override {
     node_id_ = node_id;
     adv_addr_ = addr;
-    if (timer_id_) return;  // 既に周期告知中 (内容だけ更新)
+    if (timer_id_) return;
     broadcast_();
     timer_id_ = net_->loop.postEvery(kBeaconPeriodMs, [this]() { broadcast_(); });
   }
@@ -222,7 +222,7 @@ class InMemDiscovery : public IDiscovery {
  private:
   void broadcast_() {
     if (net_->killed.count(addr_)) return;
-    if (pair_on_) {  // 未配対 → PAIR-ANNOUNCE を撒く (集群 HELLO は出さない)
+    if (pair_on_) {
       for (auto& kv : net_->pair_found) {
         if (kv.first == addr_) continue;
         if (!net_->reachable(addr_, kv.first)) continue;
@@ -236,7 +236,7 @@ class InMemDiscovery : public IDiscovery {
     for (auto& kv : net_->discoveries) {
       if (kv.first == addr_) continue;
       if (!net_->reachable(addr_, kv.first)) continue;
-      if (net_->dropFrame()) continue;  // beacon も落ち得る (UDP 相当)
+      if (net_->dropFrame()) continue;
       DiscoveredPeer p{node_id_, adv_addr_};
       auto cb = kv.second;
       net_->loop.post([cb, p]() { cb(p); });
@@ -262,7 +262,7 @@ InMemNet::InMemNet(Runloop& loop) : impl_(new Impl(loop)) {}
 InMemNet::~InMemNet() = default;
 
 std::unique_ptr<ITransport> InMemNet::makeTransport(const std::string& addr) {
-  impl_->net->killed.erase(addr);  // kill からの復活
+  impl_->net->killed.erase(addr);
   return std::unique_ptr<ITransport>(new InMemTransport(impl_->net, addr));
 }
 

@@ -1,0 +1,417 @@
+import AVFoundation
+import Foundation
+import UIKit
+
+/// Publishes measured capabilities and bounded crash-loop state to Core.
+/// Stock Apple platforms cannot relaunch themselves; supervised Single App Mode/MDM is the
+/// external recovery boundary and is reported honestly in the runtime manifest.
+final class RuntimeSupervisor {
+    private enum Key {
+        static let generation = "runtime.generation"
+        static let cleanExit = "runtime.clean_exit"
+        static let launches = "runtime.unexpected_launches"
+        static let safeMode = "runtime.safe_mode"
+        static let lastReason = "runtime.last_exit_reason"
+    }
+
+    private let core: CoreBridge
+    private let boot: BootConfig
+    private let audioSessionReady: Bool
+    private let defaults = UserDefaults.standard
+    private var heartbeat: Timer?
+    private var uiStyleObserver: NSObjectProtocol?
+    private var deviceInfoObservers: [NSObjectProtocol] = []
+    private var generation = 0
+    private var unexpectedLaunches: [TimeInterval] = []
+    private var deviceAlertReport: [String: Any] = [
+        "schema_version": 1,
+        "result": "not_requested",
+        "channels": [],
+    ]
+    private var cameraRuntimeState = "not_started"
+    private var h264EncodeState = "not_tested"
+    // The modern shell currently renders bounded MJPEG. Do not infer H.264 decode support from
+    // VideoToolbox being present until an integrated decoder has completed a real frame test.
+    private let h264DecodeState = "unsupported_no_decoder_path"
+
+    private(set) var safeMode = false
+
+    private var supportsUiManifest: Bool {
+        boot.role == "door_station" || boot.role == "indoor_panel"
+    }
+
+    private var supportsCallLifecycle: Bool {
+        #if os(tvOS)
+        return false
+        #else
+        return core.sipBackend == "pjsip"
+        #endif
+    }
+
+    init(core: CoreBridge, boot: BootConfig, audioSessionReady: Bool = false) {
+        self.core = core
+        self.boot = boot
+        self.audioSessionReady = audioSessionReady
+    }
+
+    func start() {
+        let now = Date().timeIntervalSince1970
+        generation = defaults.integer(forKey: Key.generation) + 1
+        defaults.set(generation, forKey: Key.generation)
+
+        unexpectedLaunches = (defaults.array(forKey: Key.launches) as? [Double] ?? [])
+            .filter { now - $0 < 300 }
+        if defaults.object(forKey: Key.cleanExit) != nil && !defaults.bool(forKey: Key.cleanExit) {
+            unexpectedLaunches.append(now)
+            defaults.set("unexpected_termination", forKey: Key.lastReason)
+        }
+        safeMode = defaults.bool(forKey: Key.safeMode) || unexpectedLaunches.count >= 3
+        defaults.set(unexpectedLaunches, forKey: Key.launches)
+        defaults.set(safeMode, forKey: Key.safeMode)
+        defaults.set(false, forKey: Key.cleanExit)
+
+        beginDeviceInfoUpdates()
+        publishCapabilities()
+        if supportsUiManifest { publishUiManifest() }
+        publishRuntime()
+        uiStyleObserver = NotificationCenter.default.addObserver(
+            forName: UIStyleApplier.reportChanged, object: nil, queue: .main
+        ) { [weak self] _ in self?.publishRuntime() }
+        heartbeat = IOSAvailability.scheduledTimer(withTimeInterval: 10, repeats: true) { [weak self] _ in
+            self?.core.refreshDeviceInfoCache()
+            self?.publishCapabilities()
+            self?.publishRuntime()
+        }
+    }
+
+    func stop(clean: Bool) {
+        heartbeat?.invalidate()
+        heartbeat = nil
+        endDeviceInfoUpdates()
+        if let observer = uiStyleObserver { NotificationCenter.default.removeObserver(observer) }
+        uiStyleObserver = nil
+        if clean {
+            defaults.set(true, forKey: Key.cleanExit)
+            defaults.set("clean_exit", forKey: Key.lastReason)
+        }
+        publishRuntime()
+    }
+
+    private func beginDeviceInfoUpdates() {
+        guard Thread.isMainThread else {
+            DispatchQueue.main.async { [weak self] in self?.beginDeviceInfoUpdates() }
+            return
+        }
+        guard deviceInfoObservers.isEmpty else { return }
+        #if os(iOS)
+        UIDevice.current.isBatteryMonitoringEnabled = true
+        #endif
+        core.refreshDeviceInfoCache()
+
+        let center = NotificationCenter.default
+        let active = center.addObserver(
+            forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main
+        ) { [weak self] _ in self?.core.refreshDeviceInfoCache() }
+        deviceInfoObservers.append(active)
+        #if os(iOS)
+        for name in [UIDevice.batteryLevelDidChangeNotification,
+                     UIDevice.batteryStateDidChangeNotification] {
+            let observer = center.addObserver(forName: name, object: nil, queue: .main) {
+                [weak self] _ in self?.core.refreshDeviceInfoCache()
+            }
+            deviceInfoObservers.append(observer)
+        }
+        #endif
+    }
+
+    private func endDeviceInfoUpdates() {
+        let center = NotificationCenter.default
+        for observer in deviceInfoObservers { center.removeObserver(observer) }
+        deviceInfoObservers.removeAll()
+    }
+
+    func handleMemoryPressure() {
+        safeMode = true
+        defaults.set(true, forKey: Key.safeMode)
+        defaults.set("memory_pressure", forKey: Key.lastReason)
+        publishRuntime()
+        publishCapabilities()
+    }
+
+    func clearSafeModeAfterMaintenance() {
+        safeMode = false
+        unexpectedLaunches.removeAll()
+        defaults.set(false, forKey: Key.safeMode)
+        defaults.set([], forKey: Key.launches)
+        defaults.set("maintenance_reset", forKey: Key.lastReason)
+        publishCapabilities()
+        publishRuntime()
+    }
+
+    func recordDeviceAlert(_ report: [String: Any]) {
+        if !Thread.isMainThread {
+            DispatchQueue.main.async { [weak self] in self?.recordDeviceAlert(report) }
+            return
+        }
+        deviceAlertReport = report
+        publishRuntime()
+    }
+
+    func permissionsDidChange() {
+        if !Thread.isMainThread {
+            DispatchQueue.main.async { [weak self] in self?.permissionsDidChange() }
+            return
+        }
+        publishCapabilities()
+        publishRuntime()
+    }
+
+    func recordCameraRuntime(active: Bool, state: String) {
+        if !Thread.isMainThread {
+            DispatchQueue.main.async { [weak self] in
+                self?.recordCameraRuntime(active: active, state: state)
+            }
+            return
+        }
+        cameraRuntimeState = active ? "active" : measuredState(state, fallback: "unavailable")
+        publishCapabilities()
+        publishRuntime()
+    }
+
+    func recordH264Encode(available: Bool, state: String) {
+        if !Thread.isMainThread {
+            DispatchQueue.main.async { [weak self] in
+                self?.recordH264Encode(available: available, state: state)
+            }
+            return
+        }
+        h264EncodeState = available ? "verified" : measuredState(state, fallback: "failed")
+        publishCapabilities()
+        publishRuntime()
+    }
+
+    private func measuredState(_ value: String, fallback: String) -> String {
+        let allowed = Set(["not_started", "starting", "permission_denied", "restricted",
+                           "no_device", "input_failed", "configuration_failed",
+                           "runtime_failed", "stopped", "testing", "session_failed",
+                           "encode_failed", "invalid_output", "failed",
+                           "unsupported_no_decoder_path"])
+        return allowed.contains(value) ? value : fallback
+    }
+
+    #if os(iOS)
+    private func permissionState(_ mediaType: AVMediaType) -> String {
+        switch AVCaptureDevice.authorizationStatus(for: mediaType) {
+        case .authorized: return "authorized"
+        case .denied: return "denied"
+        case .restricted: return "restricted"
+        default: return "not_determined"
+        }
+    }
+    #endif
+
+    private func publishCapabilities() {
+        #if os(tvOS)
+        let camera = false
+        let microphone = false
+        let cameraPermission = "not_applicable"
+        let microphonePermission = "not_applicable"
+        let mains = true
+        let nativeKiosk = UIAccessibility.isGuidedAccessEnabled
+        let cpuScore = 70
+        let alertChannels = ["in_app"]
+        #else
+        UIDevice.current.isBatteryMonitoringEnabled = true
+        let cameraPermission = permissionState(.video)
+        let microphonePermission = permissionState(.audio)
+        let camera = boot.role == "door_station" && cameraPermission == "authorized" &&
+            cameraRuntimeState == "active"
+        let microphone = microphonePermission == "authorized" && audioSessionReady &&
+            !(AVAudioSession.sharedInstance().availableInputs?.isEmpty ?? true)
+        let mains = UIDevice.current.batteryState == .charging ||
+            UIDevice.current.batteryState == .full
+        let nativeKiosk = UIAccessibility.isGuidedAccessEnabled
+        let cpuScore = 60
+        let alertChannels = ["in_app", "system_notification"]
+        #endif
+        let h264Encode = camera && h264EncodeState == "verified" && !safeMode
+        core.setCapabilities([
+            "schema_version": 2,
+            "platform": {
+                #if os(tvOS)
+                return "tvos"
+                #else
+                return "ios"
+                #endif
+            }(),
+            "tls12": true,
+            // Internet reachability is not inferred from a LAN route. Administrators may opt in
+            // through the operational caps override until a configured endpoint probe succeeds.
+            "wan": false,
+            "mains_power": mains,
+            "mqtt_reachable": false,
+            "wall_clock_sane": Date().timeIntervalSince1970 > 1_700_000_000,
+            "cpu_score": cpuScore,
+            "camera": camera,
+            "microphone": microphone,
+            "camera_permission": cameraPermission,
+            "microphone_permission": microphonePermission,
+            "h264_encode": h264Encode,
+            "h264_decode": false,
+            "sip_backend": core.sipBackend,
+            "sip": core.sipBackend == "pjsip",
+            "native_kiosk": nativeKiosk,
+            "root_helper": false,
+            "device_alert_channels": alertChannels,
+            "features": [
+                "platform_v2": true,
+                "call_flow_v2": true,
+                "call_cancel_v2": true,
+                "call_lifecycle_v2": supportsCallLifecycle,
+                "device_alert_v1": true,
+                "ui_manifest_v1": supportsUiManifest,
+                "runtime_recovery_v1": true,
+                "helper_policy_v1": false,
+            ],
+        ])
+    }
+
+    private func publishUiManifest() {
+        #if os(tvOS)
+        let ids = ["sos.cancel", "ring.title", "ring.action", "reply.button",
+                   "call.end", "monitor.close"]
+        let minimumTouch = 44
+        #else
+        let ids = ["call.primary", "cancel.call", "call.end", "purpose.button",
+                   "sos.trigger", "sos.cancel", "ring.title", "ring.action",
+                   "reply.button", "monitor.close", "status.offline"]
+        let minimumTouch = 44
+        #endif
+        let safety = Set(["cancel.call", "call.end", "sos.trigger", "sos.cancel"])
+        var elements: [String: Any] = [:]
+        for id in ids {
+            elements[id] = [
+                "properties": ["scale", "font_scale", "foreground", "background",
+                               "accent", "border", "radius"],
+                "safety_critical": safety.contains(id),
+                "defaults": uiDefaults(for: id),
+            ]
+        }
+        core.setUiManifest([
+            "schema_version": 1,
+            "units": "pt",
+            "viewport": ["minimum_touch": minimumTouch, "scale_min": 0.75,
+                         "scale_max": 2.0],
+            "elements": elements,
+        ])
+    }
+
+    private func uiDefaults(for semanticId: String) -> [String: Any] {
+        var foreground = "#E8EDF2"
+        var background = "#1A2027"
+        var accent = "#4DA3FF"
+        var border = "#4DA3FF"
+        var radius = 12
+        switch semanticId {
+        case "call.primary":
+            foreground = "#000000"
+            background = "#FFCC40"
+            accent = "#000000"
+            border = "#000000"
+            radius = 18
+        case "call.end", "sos.trigger":
+            foreground = "#FFFFFF"
+            background = "#C7291F"
+            accent = "#FFFFFF"
+            border = "#FFFFFF"
+            radius = 14
+        case "sos.cancel":
+            foreground = "#8C0D0A"
+            background = "#FFFFFF"
+            accent = "#8C0D0A"
+            border = "#8C0D0A"
+            radius = 14
+        case "ring.title":
+            foreground = "#FFFFFF"
+            background = "#0A0D12"
+        case "status.offline":
+            foreground = "#FFFFFF"
+            background = "#A21B00"
+            accent = "#FFFFFF"
+            border = "#FFFFFF"
+        default:
+            break
+        }
+        return [
+            "scale": 1.0,
+            "font_scale": 1.0,
+            "foreground": foreground,
+            "background": background,
+            "accent": accent,
+            "border": border,
+            "radius": radius,
+        ]
+    }
+
+    private func publishRuntime() {
+        #if os(tvOS)
+        let cameraPermission = "not_applicable"
+        let microphonePermission = "not_applicable"
+        let audioInputAvailable = false
+        #else
+        let cameraPermission = permissionState(.video)
+        let microphonePermission = permissionState(.audio)
+        let audioInputAvailable = !(AVAudioSession.sharedInstance().availableInputs?.isEmpty ?? true)
+        #endif
+        let codecHealth: String
+        if safeMode {
+            codecHealth = "safe_mode_low_resolution_mjpeg"
+        } else if h264EncodeState == "verified" {
+            codecHealth = "h264_encode_verified_mjpeg_decode"
+        } else if h264EncodeState == "encode_failed" ||
+                    h264EncodeState == "invalid_output" || h264EncodeState == "session_failed" ||
+                    h264EncodeState == "failed" {
+            codecHealth = "h264_encode_failed_mjpeg_fallback"
+        } else {
+            codecHealth = "h264_unverified_mjpeg_fallback"
+        }
+        core.setRuntimeStatus([
+            "schema_version": 1,
+            "generation": generation,
+            "heartbeat_ms": Int64(Date().timeIntervalSince1970 * 1000),
+            "last_exit_reason": defaults.string(forKey: Key.lastReason) ?? "first_launch",
+            "safe_mode": safeMode,
+            "crash_count_5m": unexpectedLaunches.count,
+            "codec_health": codecHealth,
+            "helper_mode": "off",
+            "helper_available": false,
+            "native_kiosk": "supervised_single_app_mode_or_mdm",
+            "active_call_recovery": "fail_closed_cancel_unless_dialog_restored",
+            "device_alert": deviceAlertReport,
+            "ui_style": UIStyleApplier.runtimeReport(),
+            "camera": [
+                "state": cameraRuntimeState,
+                "permission": cameraPermission,
+            ],
+            "avc_encode": [
+                "state": safeMode ? "disabled_safe_mode" : h264EncodeState,
+                "codec": "h264",
+            ],
+            "avc_decode": [
+                "state": safeMode ? "disabled_safe_mode" : h264DecodeState,
+                "codec": "h264",
+            ],
+            "sip": [
+                "state": audioSessionReady && audioInputAvailable
+                    ? "audio_input_active" : "audio_input_unavailable",
+                "permission": microphonePermission,
+            ],
+            "components": [
+                "core": core.isRunning ? "running" : "stopped",
+                "sip": core.sipBackend == "pjsip" ? "available" : "stub",
+                "media": safeMode ? "degraded" : "available",
+                "ui": "running",
+            ],
+        ])
+    }
+}

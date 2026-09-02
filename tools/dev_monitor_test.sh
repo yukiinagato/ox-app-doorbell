@@ -1,14 +1,15 @@
 #!/usr/bin/env bash
-# 門口監聴 (モニタ呼) の 2 プロセス半自動テスト。
+# Two-process semi-automated door-station monitoring test.
 #
-# シナリオ (TV 監聴の実運用と同型):
-#   A = 門口機 (8001)。dev Asterisk に登録し、press → 600 (自動応答エコー) と通話中になる。
-#   B = TV/室内機。Asterisk 非経由で A の SIP 待受 (udp 47190) へ直接 INVITE
-#       (X-Doorbell-Mode: monitor) → A がモニタ受理し「マイク→モニタ 一方向接続」する。
-#   B 終了 → A のモニタ呼だけが終わり、主呼 (600) は継続していることを確認。
+# Scenario, matching production TV monitoring behavior:
+#   A is door station 8001. It registers with development Asterisk and press establishes a call
+#   with the auto-answer echo extension 600.
+#   B is a TV or indoor panel. It sends a direct INVITE to A's SIP listener on UDP 47190 without
+#   Asterisk. X-Doorbell-Mode: monitor makes A accept one-way microphone audio to B.
+#   After B exits, only the monitor call ends and A's primary call with 600 remains active.
 #
-# 前提: deploy/dev/asterisk が稼働中 (docker compose up -d)、build/ に doorbell_host。
-# 使い方: tools/dev_monitor_test.sh   (終了コード 0 = 全チェック通過)
+# Prerequisites: deploy/dev/asterisk is running and build/doorbell_host exists.
+# Usage: tools/dev_monitor_test.sh (exit code 0 means every check passed)
 set -u
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 HOST_BIN="$ROOT/build/doorbell_host"
@@ -29,74 +30,74 @@ say()  { printf '\n== %s\n' "$*"; }
 ok()   { printf '   OK  %s\n' "$*"; PASS=$((PASS+1)); }
 ng()   { printf '   NG  %s\n' "$*"; FAIL=$((FAIL+1)); }
 
-# grep が当たるまで最大 $3 秒待つ
+# Wait at most $3 seconds for grep to match.
 wait_log() { # file pattern timeout_s desc
   local f=$1 pat=$2 t=$((10*$3))
   while (( t-- > 0 )); do
     grep -q "$pat" "$f" 2>/dev/null && { ok "$4"; return 0; }
     sleep 0.1
   done
-  ng "$4 (timeout: '$pat' が $f に出ない)"; return 1
+  ng "$4 (timeout: '$pat' did not appear in $f)"; return 1
 }
 
-[[ -x "$HOST_BIN" ]] || { echo "build/doorbell_host が無い — 先に cmake -S core -B build && cmake --build build"; exit 2; }
+[[ -x "$HOST_BIN" ]] || { echo "build/doorbell_host is missing. Run cmake -S core -B build && cmake --build build first."; exit 2; }
 if ! nc -uz 127.0.0.1 5060 2>/dev/null; then
-  echo "注意: dev Asterisk (127.0.0.1:5060/udp) の確認ができない — deploy/dev/asterisk を起動していること"
+  echo "Warning: development Asterisk did not respond at 127.0.0.1:5060/udp. Ensure deploy/dev/asterisk is running."
 fi
 if command -v lsof >/dev/null && lsof -nP -iUDP:47190 | grep -q .; then
-  echo "中止: udp 47190 を他プロセスが使用中 — 門口機 A の直接待受が立てられない"; exit 2
+  echo "Aborting: another process uses UDP 47190, so door station A cannot listen for direct calls."; exit 2
 fi
 
-# 開発 mesh (psk 0x5a 既定) に合流しないよう専用 PSK
+# Use a dedicated PSK so this test cannot join the default development mesh.
 PSK=$(printf '7e%.0s' {1..32})
 
-say "A (門口機 8001) 起動"
+say "Start A (door station 8001)"
 "$HOST_BIN" --data "$WORK/a" --name door-a --role door_station --door d_front \
   --listen 127.0.0.1:47272 --http $HTTP_A --psk "$PSK" \
   --sip-user 8001 --sip-pass devpass8001 --sip-null > "$LOG_A" 2>&1 &
 PID_A=$!
 sleep 1
 
-# 管理 API で SIP + 呼出ルールを設定 (初回ログインでパスワードが立つ)
+# Configure SIP and the call rule through the admin API; first login establishes the password.
 CK="$WORK/cookie.txt"
 curl -sf -c "$CK" -X POST "http://127.0.0.1:$HTTP_A/api/login" \
-  -d '{"password":"devtest"}' >/dev/null || { ng "admin ログイン"; exit 1; }
+  -d '{"password":"devtest"}' >/dev/null || { ng "admin login"; exit 1; }
 cfg() { curl -sf -b "$CK" -X POST "http://127.0.0.1:$HTTP_A/api/config" \
         -d "{\"key\":\"$1\",\"value\":$2}" >/dev/null || ng "config $1"; }
 cfg sip.server '"\"127.0.0.1\""'
 cfg sip.port '"5060"'
 cfg trigger_rules.mon '"{\"enabled\":true,\"when\":{\"type\":\"button\",\"doors\":[\"d_front\"]},\"actions\":[{\"type\":\"sip_call\",\"target_extension\":\"600\"}]}"'
 
-wait_log "$LOG_A" 'reg: registered' 10 "A: Asterisk 登録"
+wait_log "$LOG_A" 'reg: registered' 10 "A: registered with Asterisk"
 
-say "A: press → 600 へ発呼 (主呼)"
+say "A: press calls extension 600 as the primary call"
 curl -sf -b "$CK" -X POST "http://127.0.0.1:$HTTP_A/api/press" -d '{}' >/dev/null
-wait_log "$LOG_A" '主呼 #.*音声双方向接続' 10 "A: 主呼 600 と双方向接続 (in_call)"
+wait_log "$LOG_A" 'primary call #.*: bidirectional audio connected' 10 "A: primary call with 600 has two-way audio (in_call)"
 
-say "B (TV) 起動 — Asterisk 非経由で A へ直接モニタ呼"
+say "Start B (TV) with a direct monitor call to A without Asterisk"
 "$HOST_BIN" --data "$WORK/b" --name tv-b --role indoor_panel \
   --listen 127.0.0.1:47273 --http 0 --psk "$PSK" --sip-null \
   --monitor-call sip:127.0.0.1:47190 --monitor-delay-ms 2000 > "$LOG_B" 2>&1 &
 PID_B=$!
 
-wait_log "$LOG_B" '発呼 sip:127.0.0.1:47190 (mode=monitor)' 10 "B: 直呼発信 (X-Doorbell-Mode: monitor)"
-wait_log "$LOG_A" 'モニタ呼受理'                     10 "A: モニタ呼受理 (主呼進行中の追加着信)"
-wait_log "$LOG_A" 'マイク→モニタ 一方向接続'          10 "A: conf 接続 マイク→モニタ (一方向)"
-wait_log "$LOG_B" '"state":"in_call"'                10 "B: モニタ呼確立 (in_call)"
+wait_log "$LOG_B" 'calling sip:127.0.0.1:47190 (mode=monitor)' 10 "B: direct call uses X-Doorbell-Mode: monitor"
+wait_log "$LOG_A" 'accepted monitor call #' 10 "A: monitor call accepted alongside the primary call"
+wait_log "$LOG_A" 'monitor call #.*: one-way microphone audio connected' 10 "A: conference connects one-way microphone audio to the monitor"
+wait_log "$LOG_B" '"state":"in_call"' 10 "B: monitor call established (in_call)"
 
-say "監聴 3 秒 → B 終了"
+say "Monitor for three seconds, then stop B"
 sleep 3
 kill "$PID_B" 2>/dev/null; wait "$PID_B" 2>/dev/null; PID_B=""
-wait_log "$LOG_A" 'モニタ呼 #.*終了' 10 "A: モニタ呼のみ終了"
+wait_log "$LOG_A" 'monitor call #.* ended' 10 "A: only the monitor call ended"
 
-# 主呼が生きていること (A の /api/status)
+# Verify through A's /api/status that the primary call remains active.
 ST=$(curl -sf -b "$CK" "http://127.0.0.1:$HTTP_A/api/status")
 if printf '%s' "$ST" | grep -q '"call":[[:space:]]*"in_call"'; then
-  ok "A: 主呼 (600) は継続中"
+  ok "A: primary call with 600 remains active"
 else
-  ng "A: 主呼が落ちている: $(printf '%s' "$ST" | head -c 300)"
+  ng "A: primary call ended unexpectedly: $(printf '%s' "$ST" | head -c 300)"
 fi
 
-say "結果: PASS=$PASS FAIL=$FAIL  (ログ: $WORK)"
+say "Result: PASS=$PASS FAIL=$FAIL (logs: $WORK)"
 [[ $FAIL -eq 0 ]] || exit 1
 exit 0

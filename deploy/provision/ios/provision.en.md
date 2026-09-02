@@ -1,5 +1,3 @@
-> Japanese original: provision.ja.md (canonical)
-
 # Provisioning iOS Stations (supervised SAM kiosk / Ad Hoc distribution) + tvOS monitor
 
 Target: the iOS app in `ios/` (`jp.keihan.doorbell` — serves as both door station and indoor
@@ -13,8 +11,9 @@ running iOS 12+ as door stations and indoor panels. Counterpart of the Android p
   (requires an Apple Developer Program team — just pick a Team under Signing & Capabilities in
   Xcode. In CI, use `-allowProvisioningUpdates` or manual profiles).
   The core (C++) is built automatically by a run-script via CMake — the dev machine only needs
-  `cmake` and `python3`. If you want SIP, run `tools/build_pjsip_ios.sh` once beforehand
-  (without it, the app builds without SIP — calling/notifications/video/replies still work).
+  `cmake` and `python3`. Build the lane-matched PJSIP artifact first with
+  `tools/build_pjsip_ios.sh`. A SIP-stub build is development/display-only and must not be
+  distributed as a calling release.
 - Distribution is **Ad Hoc** (assuming a small number of home devices):
   1. Register each device's UDID in Apple Developer (limit 100 devices/year).
   2. Xcode → Product → Archive → Distribute App → **Ad Hoc** → export the ipa.
@@ -58,27 +57,37 @@ In Apple Configurator (free on the Mac App Store):
    - No passcode requirement (the ring screen is never blocked by the lock screen — under SAM the
      device never drops to the lock screen anyway)
 
-The app's hidden admin entrance (7 taps top-right → PIN keypad) works even under SAM —
-the default PIN is `000000` (write a SHA-256 hex to `<data_dir>/exit_pin.txt` and always change
-it). A correct PIN shows maintenance info (node id / peers / data dir) and temporarily releases
+The app's hidden admin entrance (7 taps top-right → PIN keypad) works even under SAM. Before
+enabling SAM, provision a unique PIN hash through the approved maintenance path; do not deploy a
+shared or factory value. A correct PIN shows maintenance info (node id / peers / data dir) and temporarily releases
 the auto screen-off. By SAM's nature, exiting the kiosk itself is only possible from
 Configurator.
 
 ## 3. Placing boot.json
 
-On first launch, defaults are generated at `Documents/boot.json`. Ways to edit (any works):
+On first launch, defaults are generated at `Documents/boot.json`. Before Core starts, iOS/iPadOS
+requires the operator to choose **Door station** or **Indoor panel**. A legacy profile without an
+explicit `setup_complete:true` is shown once for confirmation as well. Door station additionally
+requires a door ID and receives a random `door-xxxxxxxx` default; the screen reappears whenever
+the saved role is invalid or a door-station ID is missing. Indoor panel intentionally stores no
+door assignment. Ways to edit the resulting profile (any works):
 
 - **File sharing via Finder / Apple Configurator**: the app currently does not expose File
   Sharing, so injection via the admin webui is the primary route (below).
 - **Admin webui**: on another node already in the mesh, open `http://<ip>:47180/admin/` →
-  Devices → invite this device with a join PIN (the psk is delivered safely over this channel).
-- Format when writing it by hand (identical to WPF/Android):
+  Devices → invite this device with a join PIN.
+- Do not hand-write a PSK. After pairing, the non-secret persistent shape is:
 
 ```json
 { "name": "genkan-front", "role": "door_station", "door": "d_front",
-  "listen_port": 47172, "http_port": 47180, "psk_hex": "<64hex>",
+  "listen_port": 47172, "http_port": 47180, "psk_ref": "secret:mesh.psk",
   "seed_peers": ["10.0.1.10:47172"], "ui_lang": "ja", "kiosk": true }
 ```
+
+Core writes `mesh.psk` to Keychain first, then emits only
+`{t:"paired", psk_ref:"secret:mesh.psk"}` for boot persistence; the shell never receives a new
+`psk_hex`. `pairing_persistence_error` must remain not-ready. Never place a PSK, SIP password,
+token, or other credential in `boot.json`.
 
 **seed_peers is mandatory on iOS**: iOS 14+ requires a special entitlement for multicast
 send/receive (com.apple.developer.networking.multicast — granted by application to Apple), so do
@@ -96,10 +105,10 @@ Local Network).
   alarm full-screen display + siren + PIN cancel (keypad drawn on screen, operated with the
   remote) also appear.
 - **Limitations**:
-  - pjsip for tvOS is not set up — **listen-in/answering (SIP audio) is unavailable; video +
-    quick replies only** (see the TODO in ios/Doorbell/IncomingViewController.swift). For a TV
-    that needs audio, use the Android TV build, or on AppleTV go through go2rtc → HomeKit
-    (deploy/ha/).
+  - The source implements direct-SIP **listen-only audio** alongside video and quick replies. The
+    tracked CI job proves only an unsigned arm64 DoorbellTV **Debug** build for the tvOS simulator
+    with real PJSIP; it does not produce a tvOS Release/device artifact. Apple TV has no
+    microphone, so Answer is intentionally hidden and audio transmit/two-way talk is unsupported.
   - tvOS has no permanent local storage (the OS purges Caches at will). The boot.json
     equivalent is kept in UserDefaults, and the CRDT config / event DB live in Caches — if wiped,
     they are restored automatically from the mesh (self-healing). Do not use a lone Apple TV for
@@ -117,5 +126,8 @@ Local Network).
 4. Indoor panel: quick reply → large text + speech at the door station (AVSpeechSynthesizer).
 5. Indoor panel: Monitor → the door audio is audible / Answer → two-way call (speakerphone works
    thanks to VoiceProcessingIO's AEC).
-6. Long-press SOS → alarm on all nodes + siren → PIN cancel.
-7. Power loss → power restore: confirm automatic recovery (SAM relaunches automatically).
+6. tvOS: treat the tracked Debug simulator build as a source/build contract only. Before deployment,
+   create and record a separately signed device artifact, then verify Monitor audio/video and that
+   there is no Answer/transmit control on the exact Apple TV.
+7. Long-press SOS → verify the recipients/channels selected by the active rules, then PIN cancel.
+8. Power loss → power restore: confirm automatic recovery (SAM relaunches automatically).

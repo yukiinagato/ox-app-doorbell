@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "profile": "ios9-armv7-pjsip",
+  "platform": "iphoneos",
+  "minimum_os": "9.0",
+  "architectures": [
+    "armv7"
+  ],
+  "sip_backend": "real_pjsip",
+  "source_root": "ios-kiosk/src",
+  "ui_source_policy": "shared_no_copy",
+  "video_adapter": "public_videotoolbox",
+  "device_families": [
+    1,
+    2
+  ],
+  "compact_layout_breakpoint": 500,
+  "pjsip_version": "2.15.1",
+  "sdk": {
+    "canonical_prefix": "iphoneos9.",
+    "xcode_major": 7,
+    "license_attestation_required": true
+  },
+  "artifact_key_fields": [
+    "platform",
+    "minimum_os",
+    "architectures",
+    "sip_backend",
+    "signing_mode",
+    "sdk_settings_sha256"
+  ],
+  "signing_modes": [
+    "stock",
+    "jailbreak"
+  ],
+  "forbidden_formal_components": [
+    "mini_sip",
+    "sipctl_stub",
+    "private_videotoolbox_dlopen"
+  ]
+}

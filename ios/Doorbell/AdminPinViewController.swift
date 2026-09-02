@@ -1,11 +1,8 @@
-// 隠し管理入口 / SOS 解除の PIN ダイアログ (WPF AdminDialog / Android AdminPinDialog と同仕様)。
-// 5 回失敗で 10 分ロック (プロセス内)。入力は描画テンキーのみ — システム IME は使わない
-// (実体キーボード無しの門口機/TV 前提。tvOS ではボタンがフォーカス可能で Siri Remote 対応)。
-// ●伏字表示。照合先: <data_dir>/exit_pin.txt の SHA-256 hex (無ければ既定 PIN "000000" —
-// 初回設置手順で必ず変更するよう docs/provision.md に記載)。
 import CommonCrypto
 import UIKit
 
+// Five failed PIN attempts lock the process-local keypad for ten minutes. The configured PIN is
+// compared as a SHA-256 digest; deployments must replace the commissioning default.
 final class AdminPinViewController: UIViewController {
 
     private static let maxLen = 6
@@ -58,7 +55,6 @@ final class AdminPinViewController: UIViewController {
         stack.spacing = 10
         stack.translatesAutoresizingMaskIntoConstraints = false
 
-        // 3x4 描画テンキー (1-9 / ⌫ 0 OK)
         let rows: [[String]] = [["1", "2", "3"], ["4", "5", "6"], ["7", "8", "9"],
                                 ["back", "0", "ok"]]
         for r in rows {
@@ -87,7 +83,6 @@ final class AdminPinViewController: UIViewController {
             stack.addArrangedSubview(row)
         }
 
-        // 取消 (kiosk へ戻る)
         let cancel = UIButton(type: .system)
         cancel.setTitle(texts.t("calling.cancel"), for: .normal)
         cancel.titleLabel?.font = .systemFont(ofSize: 20)

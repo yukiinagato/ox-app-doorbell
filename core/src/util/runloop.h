@@ -1,9 +1,10 @@
-// 単一スレッドのイベントループ。コアの全状態はこのループ上でのみ触る。
-//
-// 2 つの動作モード:
-//  - threaded: start()/stop()。実機用 (RealClock 前提)。
-//  - manual:   start() を呼ばない。テスト/シミュレーション用 —
-//              SimClock を進めて pumpDue() を呼ぶ (決定的実行)。
+
+// Single-thread state executor. Production uses start/stop with RealClock; deterministic tests
+// leave it in manual mode, advance SimClock, and call pumpDue.
+
+
+
+
 #pragma once
 
 #include <condition_variable>
@@ -32,24 +33,25 @@ class Runloop {
   void stop();
 
   bool post(std::function<void()> fn) { return postDelayed(0, std::move(fn)) != 0; }
-  // 戻り値はタイマーID (cancel 用)。0 は停止中/無効。period_ms>0 なら繰り返し。
+
   uint64_t postDelayed(int64_t delay_ms, std::function<void()> fn, int64_t period_ms = 0);
   uint64_t postEvery(int64_t period_ms, std::function<void()> fn) {
     return postDelayed(period_ms, std::move(fn), period_ms);
   }
   void cancel(uint64_t id);
 
-  // 他スレッドから同期実行。manual/ループ内なら inline。実行できたら true を返す。
-  // Running で queue へ待機し、停止状態では false。
+
+
+  // Executes inline on the loop/manual thread, waits while running, and returns false after stop.
   bool callSync(const std::function<void()>& fn);
   bool onLoopThread() const;
 
   IClock& clock() { return clock_; }
 
-  // --- manual モード用 ---
-  // clock_.monoMs() 時点までに due のタスクを全部実行。実行件数を返す。
+
+
   size_t pumpDue();
-  // 次の due (mono ms)。無ければ -1。
+
   int64_t nextDueMono();
 
  private:
@@ -58,7 +60,7 @@ class Runloop {
     int64_t period_ms;
     std::function<void()> fn;
   };
-  using Key = std::pair<int64_t, uint64_t>;  // (due_mono, order) — 決定的順序
+  using Key = std::pair<int64_t, uint64_t>;
   struct SyncWaiter {
     std::mutex m;
     std::condition_variable cv;
@@ -68,13 +70,13 @@ class Runloop {
   enum class State { Manual, Running, Stopping, Stopped };
 
   void loopMain();
-  bool runOne_(std::unique_lock<std::mutex>& lk);  // due タスクを1件実行
+  bool runOne_(std::unique_lock<std::mutex>& lk);
 
   IClock& clock_;
   std::mutex mu_;
   std::condition_variable cv_;
   std::multimap<Key, Task> queue_;
-  std::set<uint64_t> cancelled_;  // 実行中に cancel された繰り返しタスク
+  std::set<uint64_t> cancelled_;
   uint64_t next_id_ = 1;
   uint64_t next_order_ = 1;
   State state_ = State::Manual;

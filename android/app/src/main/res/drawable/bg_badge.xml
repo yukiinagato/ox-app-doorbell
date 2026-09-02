@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 来鈴画面の用件/訪客言語バッジ (WPF 版 PurposeBadge/LangBadge と同じ見た目) -->
+<!-- Purpose and visitor-language badge. -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="rectangle">
     <solid android:color="@color/card"/>

@@ -17,5 +17,10 @@ typedef NS_ENUM(NSInteger, DBLowLatencyPlayerState) {
 - (void)stop;
 - (DBLowLatencyPlayerState)state;
 - (DBVideoStats)videoStats;  // displayed-frame stats; main thread
+- (CFAbsoluteTime)lastFrameAt;
+- (NSUInteger)decodedFrames;
+- (NSUInteger)displayedFrames;
+- (NSUInteger)droppedFrames;
+- (NSString *)presentationMode;
 
 @end

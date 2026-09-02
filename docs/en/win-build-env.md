@@ -1,6 +1,8 @@
-> Japanese original: ../ja/win-build-env.md (canonical)
-
 # Windows Build Environment (Apple Silicon Mac + local VM)
+
+This is a setup recipe, not evidence that the current revision passed a Windows VM or Toughpad
+validation run. Record the exact VM, toolchain, artifacts, and results before marking a build
+verified; real-hardware commissioning remains separate.
 
 Policy: iterate locally in a VM; (optionally) produce release artifacts on GitHub Actions.
 Docker is not an option — Docker on macOS only runs Linux containers, and the WPF/.NET Framework
@@ -15,8 +17,8 @@ build chain exists only on Windows.
 | Parallels | Paid | Best experience. Microsoft-endorsed Win11 ARM provisioning flow |
 
 - Install Windows 11 ARM64 (via Microsoft's official Insider/ISO channel, or Parallels' automatic download).
-- ARM64 Windows can run x86/x64 apps under emulation — building and testing the x86/x64
-  artifacts for the Toughpad is possible inside the VM.
+- ARM64 Windows can run many x86/x64 tools under emulation, but the repository does not contain a
+  completed validation record for this VM route. Treat it as a candidate build environment.
 
 ## 2. What to install in the VM
 
@@ -41,7 +43,7 @@ build chain exists only on Windows.
 win\build.cmd            :: core DLL (x86+x64, MSVC) + WPF app + run tests
 ```
 
-If errors appear, paste them straight back to Claude on the Mac side.
+Capture errors and the exact toolchain versions in the release record.
 
 ## 5. Pre-verification on the Mac (mingw-w64)
 

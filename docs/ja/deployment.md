@@ -1,79 +1,65 @@
-# 導入手順 (自宅への実ロールアウトのチェックリスト)
+# 配備ガイド
 
-順序どおりに進めれば、既存の HA / Asterisk / ひかり電話環境に全端末が組み込まれる。
-各節の詳細は括弧内の文書へ。
+[capability matrix](capability-matrix.md) で対象を選び、端末・OS/firmware・media path・enclosure・
+signed artifact ごとに commissioning します。compile 成功は実機認証ではありません。
 
-## 0. 事前準備
+## 1. trusted network と integration
 
-- [ ] HA ホスト (x86 iGPU or RPi4+) に Mosquitto アドオン + go2rtc が動いている
-- [ ] Asterisk に `deploy/asterisk/pjsip.conf` / `extensions.conf` を取り込み
-      (`CHANGE_ME_*` と携帯番号を書換、ひかり電話 HGW の内線番号を設定) — 手順は
-      `deploy/asterisk/README.ja.md`
-- [ ] Telegram bot (@ox_doorbell_bot) の token と家族の chat_id 一覧
-- [ ] 各端末の電池点検 (膨張チェック)。可能なら電池を外して直結給電
+- [ports](network-ports.md) を trusted LAN に制限し、遠隔 access は VPN または認証付き TLS reverse
+  proxy を使います。node HTTP/mesh/MiniSIP/MQTT/camera を Internet に直接公開しません。
+- Asterisk、MQTT/HA、Telegram、go2rtc/HomeKit は必要なものだけ設定し、停止時も試験します。
+- battery/power を点検し、入口機は屋外用の防水・防露・温度管理 enclosure に入れます。
 
-## 1. 最初の 1 台 (管理の起点)
+## 2. artifact の build と qualification
 
-任意のプラットフォームで良いが、常時給電の門口機 (Toughpad 推奨) が適する。
+- common check と platform release gate を実行し、実 PJSIP、target/arch/min OS/API/dependency/source/
+  signing identity を確認します。Android API 19、Windows VM/Toughpad、iOS 9 を未検証のまま認証済みと
+  記載しません。iOS 5 は [maintainer runbook](ios-compat-maintainer.md) を使います。
 
-- [ ] Windows: GitHub Actions の `doorbell-windows` artifact を展開 →
-      `deploy/provision/windows/provision.cmd` (管理者) → kiosk ユーザーで
-      `kiosk-enable.cmd` → 再ログイン (詳細: `win-build-env.md` §実機)
-- [ ] 初回起動で `%ProgramData%\Doorbell\boot.json` が生成される — `name` / `role` /
-      `door` / `psk_hex` (64hex を自作) / `seed_peers` を編集して再起動
-- [ ] ブラウザで `http://<端末IP>:47180/admin/` → 初回ログイン = 管理パスワード設定
-- [ ] **セキュリティ初期化**: kiosk 退出 PIN を変更 (`exit_pin.txt`、既定 000000)、
-      「システム」タブでパネル token を控える
+## 3. plaintext secret 無しで pair
 
-## 2. 設定の骨格 (管理画面で)
+app/admin の bounded pairing flow で親 node と追加 node の identity を確認します。Core が先に
+`secure_put("mesh.psk", …)` を成功させてから `{t:"paired", psk_ref:"secret:mesh.psk"}` だけを通知し、
+shell がその reference と秘密でない bootstrap 項目だけを `boot.json` に保存することを確認します。
+`pairing_persistence_error` は not-ready のまま扱います。SIP/MQTT/Telegram/WebRTC/camera credential も secure-
+storage 対応 UI/API から入力し、config には `secret:` reference だけを置きます。
 
-- [ ] ドア／建物: 各玄関 (d_front 等) と棟を登録、日英中ラベル
-- [ ] 統合: MQTT (HA の Mosquitto)、Telegram (token + poll_updates ON)、SIP
-      (Asterisk IP + 各端末の内線/パスワード)、tz
-- [ ] 通知先: households に家族の chat_id / 内線
-- [ ] 呼出ルール: ボタン押下 → SIP 600 + Telegram + チャイム。宅配 (p_delivery) だけ
-      auto_reply「置き配」+ 電話なし、などはお好みで
-- [ ] テーマ / 文言 / 用件 / クイック返信 / 資産 (背景画像・カスタム音声) を調整
+Web Push は、予定する各 `web_push` leader candidate の local secure store に、同じ複製済み reference
+で VAPID private 値と任意の sender bearer 値を配備します。その後、[config schema](config-schema.md)
+の HTTPS sender URL、VAPID public key/subject、secret reference を atomic に保存します。非空の Push
+leader と `delivery_backend:true` を status で確認し、`configured:true` だけを readiness と見なしません。
+shipping shell は configured endpoint probe がない限り `wan:false` です。各候補から exact HTTPS sender
+への egress を実測した後だけ、その node に `caps_override.wan:true` を設定し、試験記録を残して network
+変更時に外します。Push leader には `tls12`、`mains_power`、`wall_clock_sane`、`web_push_ready` も必要です。
 
-## 3. 端末の追加 (何台でも)
+cluster PSK、password、token、URL userinfo、signing secret を `boot.json`、CRDT JSON、command、log、
+文書へコピーしません。旧 `psk_hex` は移行入力専用です。
 
-- [ ] 管理画面「システム」→「デバイスを追加」で PIN 発行 (10 分有効)
-- [ ] 新端末でアプリ起動 → 初期設定で 既存ノード IP + PIN → PSK/設定が自動配布
-      (または boot.json に psk_hex/seed_peers を直書きでも可)
-- [ ] デバイスタブで名前・担当ドア・役割 (door_station / indoor_panel / TV) を割当
-- Android: `deploy/provision/android/provision.ja.md` (Device Owner 化 = 完全 kiosk、TV 節あり)
-- iOS: `deploy/provision/ios/provision.ja.md` (監督 + Single App Mode、Ad Hoc 署名と年次更新)
-- iPad 1 等の legacy: Safari で `http://<任意ノード>:47180/panel/door?k=<token>` を
-  Web クリップ化 (`monitor` も同様)。自動ロック=なし に設定
-- iPad 1 (A1219, iOS5.1.1) を越獄して原生ノード化する場合は
-  `deploy/provision/ios/ipad1-jailbreak.md` (完全 core・音声・開錠、外付けマイクで対講) を参照
+## 4. role と動作
 
-## 4. HA / HomeKit
+node name、role、door/building、language、rule と、shell が実測した capability だけを設定します。
+camera source は明示し、seed peer から推定しません。iPad 1 は内蔵 mic/speaker 有り、camera 無しなので、
+外部 MJPEG/snapshot/RTSP または no-video mode を使用します。bounded RTSP/TCP H.264 ingest と Annex-B
+転送は host/loopback 検証済みですが、IDR accept までは runtime degraded で、実 camera hardware
+qualification は未完了です。
 
-- [ ] Mosquitto へ接続された時点で HA に実体が自動出現 (呼び鈴 event / 動体 /
-      端末オンライン / 緊急 / 来訪者言語 sensor)
-- [ ] `deploy/ha/go2rtc.yaml` を各門口機の IP に合わせて取り込み
-      (codec=h264 の端末は `#video=copy` — トランスコード不要)
-- [ ] `deploy/ha/configuration-snippets.yaml` の HomeKit Bridge / ウォッチドッグ /
-      actionable 通知 / 開錠 automation を取り込み、entity_id を実物に合わせる
-- [ ] iPhone のホーム App にドアホン通知+ライブが出ることを確認。外出先から見るには
-      Apple TV / HomePod をホームハブに
+SOS rule は target/channel/presentation を明示し、dry-run の zero recipient、silent、unsupported/
+unavailable、Push subscription/backend warning を確認します。`emergency.web_active_page_alerts` の
+選択も記録します。各 Web group で `?group=` が poll/Push の両方を選ぶこと、native-only target が
+Web に届かないこと、rule TTL 後も raw-SOS が clear まで残ること、config/export に plaintext Push
+endpoint/key がないことを確認します。
 
-## 5. 動作検証 (端末追加のたび)
+## 5. 全 node の commissioning
 
-- [ ] 呼出 → 内線+携帯が鳴る / Telegram 写真+ボタン / HA 通知 / 室内チャイム
-- [ ] Telegram のボタンで返信 → 門口機に大きな文字+読み上げ
-- [ ] 室内機から「応答」→ 電話レッグが切れて双方向通話 (映像含む)
-- [ ] 通話中に携帯から *1 → HA の錠が開く
-- [ ] 端末の LAN ケーブルを抜く → 30 秒以内に Telegram/HA へオフライン通知
-- [ ] **HA と Asterisk を止めても**: 呼出表示・チャイム・室内通話・パネルが動き続ける
+artifact/signature/runtime status、ring/cancel/purpose/answer/hangup/reply/DTMF/unlock/SOS、重複・期限切れ
+event、Core `delivery_result` dispatch evidence と client channel presentation report の区別、
+camera/audio/rotation/color/fallback/AEC、integration 停止、network/peer/process/memory/reboot/
+power/rollback、kiosk maintenance、thermal/battery、長時間 soak を記録します。iOS root helper は実装・
+host test 済みで、launchd を有効化しない再現可能な armv7/iOS 5.1 staged DEB もあります。ただし実機
+qualification は未完了です。明示的 opt-in workflow、正確な binary、root-owned launchd、UID/GID/socket
+permission、maintenance lease、safe mode、rollback、soak が合格するまで依存しません。
 
-## 6. 運用
+## 6. 運用と復旧
 
-- 更新: GitHub Actions の artifact を配布 (Windows は watchdog が停止→差替→再起動を
-  許容。Android は DO サイレントインストール)。更新前にタグを打つと戻しやすい
-- iOS Ad Hoc 署名は **年 1 回の再署名が必須** — アプリ内の期限表示と Telegram の
-  30 日前警告に従う (恒久化は App Store 公開 = 計画 Phase 7)
-- 設定バックアップ: 管理画面「システム」→ エクスポート (どのノードでも全量)
-- 端末盗難時: 管理画面で PSK 再発行 → 全端末再ペアリング、SIP パスワード・bot token を回転
-- Windows Update は封鎖済み — 保守日に手動適用 (`provision.cmd` §6 参照)
+旧 signed artifact と manifest を別 rollback lane に保存します。config export は秘密の実値を含まない
+ため secret backup と分離します。[recovery](recovery.md) と [security](security.md) に従います。

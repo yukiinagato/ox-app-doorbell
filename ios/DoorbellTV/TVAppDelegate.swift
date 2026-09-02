@@ -1,11 +1,5 @@
-// tvOS 監視端 (DoorbellTV) の起動 — Android TV (role=indoor_panel + tv:true) と同じ立ち位置。
-// 常駐監視: フォアグラウンド前提 (TV は常時給電・自動ロックなし。isIdleTimerDisabled で
-// スクリーンセーバも抑止)。来客 (chime) で全画面来鈴 (IncomingViewController — 門口 MJPEG +
-// クイック返信を Siri Remote フォーカスで操作)。
-// boot.json 相当は UserDefaults "boot_json" (BootConfig 参照 — tvOS はローカル保存が
-// Caches のみのため)。data_dir は Caches — 消えても CRDT 設定は mesh から自動復元される。
-// 制約: pjsip の tvOS ビルドは未整備 — SIP 監聴/応答は不可 (来鈴は映像のみ。
-// core は sipctl スタブでビルドされ sipCall は no-op)。TODO は IncomingViewController 参照。
+// Apple TV has no microphone, so the tvOS PJSIP backend is restricted to listen-only monitoring.
+import AVFoundation
 import UIKit
 
 @UIApplicationMain
@@ -17,12 +11,18 @@ final class TVAppDelegate: UIResponder, UIApplicationDelegate {
     private let effects = SirenPlayer()
     private let launchAudio = SirenPlayer()
     private var soundConfig: [String: Any]?
+    private var runtime: RuntimeSupervisor?
 
     func application(_ application: UIApplication,
                      didFinishLaunchingWithOptions launchOptions:
                         [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         boot = BootConfig.load()
+        let session = AVAudioSession.sharedInstance()
+        try? session.setCategory(.playback, mode: .default)
+        try? session.setActive(true)
         _ = core.start(dataDir: BootConfig.dataDir(), bootJson: boot.rawJson)
+        runtime = RuntimeSupervisor(core: core, boot: boot)
+        runtime?.start()
         soundConfig = core.config()
         core.addHandler("app") { [weak self] ev in self?.onUiEvent(ev) }
 
@@ -30,33 +30,50 @@ final class TVAppDelegate: UIResponder, UIApplicationDelegate {
         win.onControlTap = { [weak self] in
             self?.effects.playConfigured(self?.soundValue("button_sound", "button_click") ?? "")
         }
-        win.rootViewController = TVMainViewController(core: core, boot: boot)
+        win.rootViewController = TVMainViewController(
+            core: core, boot: boot,
+            deviceAlertReporter: { [weak self] report in
+                self?.runtime?.recordDeviceAlert(report)
+            })
         win.makeKeyAndVisible()
         window = win
 
-        application.isIdleTimerDisabled = true  // 監視端 — スクリーンセーバへ落とさない
+        application.isIdleTimerDisabled = true
         launchAudio.playConfigured(soundValue("launch_sound", "title_display"))
         return true
     }
 
     func applicationWillTerminate(_ application: UIApplication) {
+        runtime?.stop(clean: true)
         core.stop()
     }
 
-    // MARK: - core イベント (main queue — CoreBridge が marshal 済み)
+    func applicationDidReceiveMemoryWarning(_ application: UIApplication) {
+        runtime?.handleMemoryPressure()
+    }
 
     private func onUiEvent(_ ev: [String: Any]) {
         let t = ConfigUtil.evStr(ev, "t")
         let type = ConfigUtil.evStr(ev, "type")
-        if t == "event" && (type == "call_cancelled" || type == "purpose_selected") {
+        if t == "event" && (type == "call_cancelled" || type == "call_answered" ||
+                            type == "call_ended" || type == "purpose_selected") {
             effects.playConfigured(soundValue("update_sound", "indoor_update"))
         }
         if t == "config_changed" { soundConfig = core.config() }
-        // 来客 (press イベントの複製 — WPF/iOS 室内機と同じ流儀) → 全画面来鈴。
-        if t == "event" && type == "press" {
+        if t == "paired" {
+            let secretRef = ConfigUtil.evStr(ev, "psk_ref")
+            let seeds = ev["seeds"] as? [String] ?? []
+            if secretRef == "secret:mesh.psk",
+               BootConfig.persistPairing(secretRef: secretRef, seeds: seeds) {
+                boot = BootConfig.load()
+            } else { presentPairingPersistenceError() }
+        }
+        if t == "pairing_persistence_error" { presentPairingPersistenceError() }
+        if t == "chime" {
             presentIncoming(door: ConfigUtil.evStr(ev, "door"),
                             purpose: ConfigUtil.evStr(ev, "purpose"),
-                            visitorLang: ConfigUtil.evStr(ev, "visitor_lang"))
+                            visitorLang: ConfigUtil.evStr(ev, "visitor_lang"),
+                            callId: ConfigUtil.evStr(ev, "call_id"))
         }
     }
 
@@ -64,15 +81,29 @@ final class TVAppDelegate: UIResponder, UIApplicationDelegate {
         (ConfigUtil.dig(soundConfig, "ui.\(key)") as? String) ?? fallback
     }
 
-    private func presentIncoming(door: String, purpose: String, visitorLang: String) {
+    private func presentPairingPersistenceError() {
+        guard let root = window?.rootViewController,
+              root.presentedViewController == nil else { return }
+        let alert = UIAlertController(
+            title: NSLocalizedString("admin.pair_mode", comment: ""),
+            message: NSLocalizedString("admin.pair_secure_failed", comment: ""),
+            preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: "OK", style: .default))
+        root.present(alert, animated: true)
+    }
+
+    private func presentIncoming(door: String, purpose: String, visitorLang: String,
+                                 callId: String) {
+        guard !callId.isEmpty else { return }
         guard let root = window?.rootViewController else { return }
         if let vc = root.presentedViewController as? IncomingViewController {
-            vc.refresh(purpose: purpose, visitorLang: visitorLang)
+            vc.receive(door: door, purpose: purpose, visitorLang: visitorLang, callId: callId)
             return
         }
         guard root.presentedViewController == nil else { return }
         let vc = IncomingViewController(core: core, boot: boot, door: door,
-                                        purpose: purpose, visitorLang: visitorLang)
+                                        purpose: purpose, visitorLang: visitorLang,
+                                        callId: callId)
         root.present(vc, animated: true)
     }
 }

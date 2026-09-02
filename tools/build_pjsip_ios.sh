@@ -1,88 +1,211 @@
 #!/usr/bin/env bash
-# iOS 用 pjsip 静的ライブラリのクロスビルド (configure-iphone)。
-# 産物: core/third_party/pjsip/ios/{iphoneos,iphonesimulator}/{lib,include}
-#       (gitignore 済みパス — プラットフォーム名は Xcode の $(PLATFORM_NAME) と同語彙)
-#
-# - 実機 arm64 + シミュレータ arm64 (Apple Silicon)。PLATFORMS="iphoneos" 等で絞れる。
-#   x86_64 Mac のシミュレータは SIM_ARCH=x86_64 で。
-# - 音声のみ (ホスト版 build_pjsip_host.sh と同等の --disable 群)。
-#   バックエンドは CoreAudio (AudioUnit) — VoiceProcessingIO (AEC/AGC 内蔵) は
-#   coreaudio_dev.m が実行時に検出して自動選択する (PJ_CONFIG_IPHONE の既定)。
-# - 最低 iOS 12.0 (シミュレータ arm64 は toolchain 都合で 14.0 に切り上がる — 実害なし)。
-# - pjsip は in-tree ビルドのため、src をホスト/Android ビルドと分離した作業樹
-#   (third_party/pjsip/ios-build/<platform>) へコピーしてから configure する。
-#   作業樹はビルド後に削除 (KEEP_BUILD=1 で保持)。
+# Cross-build real PJSIP static libraries for Apple device and simulator SDKs.
+# Artifacts are isolated by platform, architecture, and minimum OS:
+#   core/third_party/pjsip/ios/<platform>/<arch>/min-<os>/{include,lib}
+# The generated manifest is part of the local artifact contract and is not committed.
 set -euo pipefail
+
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SRC="$ROOT/core/third_party/pjsip/src"
 OUT="$ROOT/core/third_party/pjsip/ios"
 BUILD="$ROOT/core/third_party/pjsip/ios-build"
-PLATFORMS=${PLATFORMS:-"iphoneos iphonesimulator"}
+PLATFORMS=${PLATFORMS:-"iphoneos iphonesimulator appletvos appletvsimulator"}
 MIN_IOS_VER=${MIN_IOS_VER:-12.0}
+MIN_TVOS_VER=${MIN_TVOS_VER:-15.0}
+DEVICE_ARCH=${DEVICE_ARCH:-arm64}
 SIM_ARCH=${SIM_ARCH:-arm64}
 
-[[ -d "$SRC/pjlib" ]] || { echo "先に tools/fetch_pjsip.sh を実行"; exit 1; }
+[[ -d "$SRC/pjlib" ]] || {
+  echo "error: PJSIP source is missing; run tools/fetch_pjsip.sh first" >&2
+  exit 1
+}
 XCODE_DEV="$(xcode-select -p)"
-[[ -d "$XCODE_DEV" ]] || { echo "Xcode が見つからない (xcode-select -p)"; exit 1; }
+[[ -d "$XCODE_DEV" ]] || {
+  echo "error: Xcode is unavailable; check xcode-select -p" >&2
+  exit 1
+}
+command -v python3 >/dev/null || { echo "error: python3 is required" >&2; exit 1; }
 
-for PLAT in $PLATFORMS; do
-  case "$PLAT" in
+SOURCE_HASH="$(python3 - "$SRC" <<'PY'
+import hashlib
+import pathlib
+import sys
+
+root = pathlib.Path(sys.argv[1])
+digest = hashlib.sha256()
+for path in sorted(p for p in root.rglob("*") if p.is_file()):
+    relative = path.relative_to(root).as_posix().encode("utf-8")
+    digest.update(relative)
+    digest.update(b"\0")
+    digest.update(hashlib.sha256(path.read_bytes()).digest())
+print(digest.hexdigest())
+PY
+)"
+SOURCE_REVISION="$(git -C "$ROOT" rev-parse HEAD 2>/dev/null || echo unknown)"
+XCODE_VERSION="$(xcodebuild -version | paste -sd ' ' -)"
+
+for PLATFORM in $PLATFORMS; do
+  case "$PLATFORM" in
     iphoneos)
       DEVPATH="$XCODE_DEV/Platforms/iPhoneOS.platform/Developer"
-      MIN_IOS="-miphoneos-version-min=$MIN_IOS_VER"
-      ARCH="-arch arm64"
+      MIN_FLAG="-miphoneos-version-min=$MIN_IOS_VER"
+      ARCH_NAME="$DEVICE_ARCH"
+      MIN_VERSION="$MIN_IOS_VER"
       ;;
     iphonesimulator)
       DEVPATH="$XCODE_DEV/Platforms/iPhoneSimulator.platform/Developer"
-      MIN_IOS="-mios-simulator-version-min=$MIN_IOS_VER"
-      ARCH="-arch $SIM_ARCH"
+      MIN_FLAG="-mios-simulator-version-min=$MIN_IOS_VER"
+      ARCH_NAME="$SIM_ARCH"
+      MIN_VERSION="$MIN_IOS_VER"
       ;;
-    *) echo "不明な platform: $PLAT"; exit 1 ;;
+    appletvos)
+      DEVPATH="$XCODE_DEV/Platforms/AppleTVOS.platform/Developer"
+      MIN_FLAG="-mappletvos-version-min=$MIN_TVOS_VER"
+      ARCH_NAME="$DEVICE_ARCH"
+      MIN_VERSION="$MIN_TVOS_VER"
+      ;;
+    appletvsimulator)
+      DEVPATH="$XCODE_DEV/Platforms/AppleTVSimulator.platform/Developer"
+      MIN_FLAG="-mappletvsimulator-version-min=$MIN_TVOS_VER"
+      ARCH_NAME="$SIM_ARCH"
+      MIN_VERSION="$MIN_TVOS_VER"
+      ;;
+    *)
+      echo "error: unsupported Apple platform: $PLATFORM" >&2
+      exit 1
+      ;;
   esac
 
-  echo "== pjsip ios $PLAT ($ARCH, min $MIN_IOS_VER) =="
-  BDIR="$BUILD/$PLAT"
-  PREFIX="$OUT/$PLAT"
-  rm -rf "$BDIR" "$PREFIX"
-  mkdir -p "$BUILD"
-  cp -R "$SRC" "$BDIR"
+  ARCH_FLAG="-arch $ARCH_NAME"
+  ARTIFACT_KEY="$PLATFORM/$ARCH_NAME/min-$MIN_VERSION"
+  BUILD_DIR="$BUILD/$ARTIFACT_KEY"
+  PREFIX="$OUT/$ARTIFACT_KEY"
+  SDK_VERSION="$(xcrun --sdk "$PLATFORM" --show-sdk-version)"
+  SDK_BUILD="$(xcrun --sdk "$PLATFORM" --show-sdk-build-version)"
 
-  # iOS 用 config_site.h (Android 版と同じ流儀 — PJ_CONFIG_IPHONE のサンプル既定を
-  # 土台に上書き。CoreAudio + VoiceProcessingIO / Speex AEC 無効はサンプル側の既定)
-  cat > "$BDIR/pjlib/include/pj/config_site.h" <<'EOF'
-/* doorbell 用 pjsip 設定 — iOS (tools/build_pjsip_ios.sh が生成) */
-#define PJ_CONFIG_IPHONE 1
-#include <pj/config_site_sample.h>
+  echo "== PJSIP $PLATFORM ($ARCH_NAME, minimum OS $MIN_VERSION) =="
+  rm -rf "$BUILD_DIR" "$PREFIX"
+  mkdir -p "$(dirname "$BUILD_DIR")" "$(dirname "$PREFIX")"
+  cp -R "$SRC" "$BUILD_DIR"
 
-/* 音声のみ (ビデオは Phase 6 で別変体) */
-#undef PJMEDIA_HAS_VIDEO
-#define PJMEDIA_HAS_VIDEO 0
-
-/* ホスト版 config_site (fetch_pjsip.sh) と同じ呼数/アカウント数 */
-#undef PJSUA_MAX_CALLS
-#define PJSUA_MAX_CALLS 4
-#undef PJSUA_MAX_ACC
-#define PJSUA_MAX_ACC 2
-EOF
+  # This product uses PJSIP for audio calls only. Core owns H.264 separately.
+  install -d "$BUILD_DIR/pjlib/include/pj"
+  printf '%s\n' \
+    '/* Generated by tools/build_pjsip_ios.sh for the Doorbell Apple clients. */' \
+    '#define PJ_CONFIG_IPHONE 1' \
+    '#include <pj/config_site_sample.h>' \
+    '' \
+    '/* Doorbell negotiates G.711 only; keep optional codec objects out of every Apple lane. */' \
+    '#undef PJMEDIA_HAS_L16_CODEC' \
+    '#define PJMEDIA_HAS_L16_CODEC 0' \
+    '#undef PJMEDIA_HAS_GSM_CODEC' \
+    '#define PJMEDIA_HAS_GSM_CODEC 0' \
+    '#undef PJMEDIA_HAS_G722_CODEC' \
+    '#define PJMEDIA_HAS_G722_CODEC 0' \
+    '#undef PJMEDIA_HAS_G7221_CODEC' \
+    '#define PJMEDIA_HAS_G7221_CODEC 0' \
+    '#undef PJMEDIA_HAS_SPEEX_CODEC' \
+    '#define PJMEDIA_HAS_SPEEX_CODEC 0' \
+    '#undef PJMEDIA_HAS_ILBC_CODEC' \
+    '#define PJMEDIA_HAS_ILBC_CODEC 0' \
+    '' \
+    '#undef PJMEDIA_HAS_VIDEO' \
+    '#define PJMEDIA_HAS_VIDEO 0' \
+    '' \
+    '#undef PJSUA_MAX_CALLS' \
+    '#define PJSUA_MAX_CALLS 4' \
+    '#undef PJSUA_MAX_ACC' \
+    '#define PJSUA_MAX_ACC 2' \
+    > "$BUILD_DIR/pjlib/include/pj/config_site.h"
 
   (
-    cd "$BDIR"
-    # configure-iphone は DEVPATH/ARCH/MIN_IOS を環境から読む。
-    # --disable 群はホスト版 build_pjsip_host.sh と同じ (音声のみ + TLS なし)。
-    DEVPATH="$DEVPATH" ARCH="$ARCH" MIN_IOS="$MIN_IOS" \
+    cd "$BUILD_DIR"
+    DEVPATH="$DEVPATH" ARCH="$ARCH_FLAG" MIN_IOS="$MIN_FLAG" \
       ./configure-iphone --prefix="$PREFIX" \
       --disable-video --disable-opencore-amr --disable-silk --disable-sdl \
       --disable-ffmpeg --disable-v4l2 --disable-openh264 --disable-vpx \
+      --disable-l16-codec --disable-gsm-codec --disable-g722-codec \
+      --disable-g7221-codec --disable-speex-codec --disable-ilbc-codec \
+      --disable-speex-aec \
       --disable-darwin-ssl --disable-ssl \
-      > configure-iphone.log 2>&1 || { tail -30 configure-iphone.log; exit 1; }
+      > configure-iphone.log 2>&1 || {
+        tail -30 configure-iphone.log
+        exit 1
+      }
     make dep > /dev/null 2>&1 || true
-    # pjsip の Makefile は完全な並列安全ではない — 並列後に串行で補完 (host 版と同じ)
-    make -j8 > build.log 2>&1 || true
-    make >> build.log 2>&1 || { tail -30 build.log; exit 1; }
+    # Product artifacts need libraries only. Building upstream test executables cross-links
+    # disabled codecs and is neither a release gate nor portable across current Apple SDKs.
+    # The library makefiles are not fully parallel-safe, so finish with one serial pass.
+    make -j8 lib > build.log 2>&1 || true
+    make lib >> build.log 2>&1 || {
+      tail -30 build.log
+      exit 1
+    }
     make install > /dev/null
   )
-  echo "ok: $PREFIX"
-  ls "$PREFIX/lib" | head -3
-  [[ "${KEEP_BUILD:-0}" = "1" ]] || rm -rf "$BDIR"
+
+  LIBRARIES=()
+  while IFS= read -r -d '' LIBRARY; do
+    LIBRARIES+=("$LIBRARY")
+  done < <(find "$PREFIX/lib" -maxdepth 1 -type f -name 'lib*.a' -print0 | sort -z)
+  [[ ${#LIBRARIES[@]} -gt 0 ]] || { echo "error: PJSIP produced no archives" >&2; exit 1; }
+  for LIBRARY in "${LIBRARIES[@]}"; do
+    ACTUAL_ARCHS="$(xcrun lipo -archs "$LIBRARY")"
+    [[ "$ACTUAL_ARCHS" = "$ARCH_NAME" ]] || {
+      echo "error: $LIBRARY contains '$ACTUAL_ARCHS', expected '$ARCH_NAME'" >&2
+      exit 1
+    }
+    ACTUAL_MINIMUMS="$(xcrun otool -l "$LIBRARY" | \
+      awk '$1 == "minos" {print $2} $1 == "version" {print $2}' | sort -u | paste -sd ' ' -)"
+    [[ "$ACTUAL_MINIMUMS" = "$MIN_VERSION" ]] || {
+      echo "error: $LIBRARY records minimum OS '$ACTUAL_MINIMUMS', expected '$MIN_VERSION'" >&2
+      exit 1
+    }
+  done
+
+  ARCHIVE_HASH="$(python3 - "$PREFIX/lib" <<'PY'
+import hashlib
+import pathlib
+import sys
+
+root = pathlib.Path(sys.argv[1])
+digest = hashlib.sha256()
+for path in sorted(root.glob("lib*.a")):
+    digest.update(path.name.encode("utf-8"))
+    digest.update(b"\0")
+    digest.update(hashlib.sha256(path.read_bytes()).digest())
+print(digest.hexdigest())
+PY
+)"
+
+  python3 - "$PREFIX/artifact-manifest.json" <<PY
+import json
+import pathlib
+
+manifest = {
+    "schema_version": 1,
+    "artifact": "pjsip-static",
+    "platform": "$PLATFORM",
+    "architectures": ["$ARCH_NAME"],
+    "minimum_os": "$MIN_VERSION",
+    "sip_backend": "real_pjsip",
+    "pjsip_version": "2.15.1",
+    "pjsip_source_sha256": "$SOURCE_HASH",
+    "archive_set_sha256": "$ARCHIVE_HASH",
+    "source_revision": "$SOURCE_REVISION",
+    "toolchain": {
+        "xcode": "$XCODE_VERSION",
+        "sdk_version": "$SDK_VERSION",
+        "sdk_build": "$SDK_BUILD"
+    },
+    "signing_identity": "unsigned-static-library"
+}
+path = pathlib.Path("$PREFIX/artifact-manifest.json")
+path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+PY
+
+  echo "ok: $PREFIX (${#LIBRARIES[@]} archives, real PJSIP)"
+  [[ "${KEEP_BUILD:-0}" = "1" ]] || rm -rf "$BUILD_DIR"
 done
+
 echo "done: $OUT"

@@ -1,4 +1,4 @@
-// Telegram ブリッジの実装 (telegram.h 参照)。
+
 #include "bridge/telegram.h"
 
 #include <algorithm>
@@ -13,14 +13,14 @@ namespace db {
 namespace {
 constexpr const char* kTag = "telegram";
 constexpr const char* kApiBase = "https://api.telegram.org/bot";
-constexpr int64_t kClaimRecheckMs = 300;          // claim → 再確認までの待ち (設計 §1.5)
-constexpr int64_t kPumpPeriodMs = 1000;           // キュー駆動周期 (再試行の観測粒度)
-constexpr int64_t kQueueTtlMs = 24 * 3600'000LL;  // 24h で破棄
-constexpr int64_t kPollRetryMs = 5000;            // getUpdates 失敗時の待ち
-constexpr int64_t kPollGapMs = 50;                // 応答後の次回までの隙間 (即時再帰の抑止)
+constexpr int64_t kClaimRecheckMs = 300;
+constexpr int64_t kPumpPeriodMs = 1000;
+constexpr int64_t kQueueTtlMs = 24 * 3600'000LL;
+constexpr int64_t kPollRetryMs = 5000;
+constexpr int64_t kPollGapMs = 50;
 constexpr const char* kDefaultTemplateJa = "{door} に来客です ({time})";
 
-// バックオフ: 30s → 1m → 5m → 15m (cap)
+
 int64_t backoffMs(int attempts) {
   if (attempts <= 1) return 30'000;
   if (attempts == 2) return 60'000;
@@ -28,7 +28,7 @@ int64_t backoffMs(int attempts) {
   return 900'000;
 }
 
-// {placeholder} の全置換
+
 void replaceAll(std::string& s, const std::string& from, const std::string& to) {
   size_t pos = 0;
   while ((pos = s.find(from, pos)) != std::string::npos) {
@@ -37,14 +37,14 @@ void replaceAll(std::string& s, const std::string& from, const std::string& to) 
   }
 }
 
-// 負値でも床方向へ丸める除算 (rule_engine と同じ — 現地時刻の分計算用)
+
 int64_t floorDiv(int64_t a, int64_t b) {
   int64_t q = a / b;
   if ((a % b) != 0 && ((a < 0) != (b < 0))) --q;
   return q;
 }
 
-// multipart/form-data のテキスト欄
+
 void addFormField(Bytes& out, const std::string& boundary, const std::string& name,
                   const std::string& value) {
   std::string part = "--" + boundary + "\r\nContent-Disposition: form-data; name=\"" + name +
@@ -52,11 +52,16 @@ void addFormField(Bytes& out, const std::string& boundary, const std::string& na
   out.insert(out.end(), part.begin(), part.end());
 }
 
-// Telegram 応答から message_id を取り出す ({"ok":true,"result":{"message_id":N}})。無ければ 0。
+
 int64_t messageIdOf(const std::string& resp) {
   auto d = json::parse(resp);
   if (!d || !json::getBool(d.get(), "ok")) return 0;
   return json::getInt(json::get(d.get(), "result"), "message_id");
+}
+
+std::string payloadString(const EventRecord& ev, const char* key) {
+  auto payload = json::parse(ev.payload_json.empty() ? "{}" : ev.payload_json);
+  return payload ? json::getString(payload.get(), key) : "";
 }
 }  // namespace
 
@@ -65,7 +70,7 @@ TelegramBridge::TelegramBridge(Runloop& loop, Store& store, Hooks hooks)
 
 TelegramBridge::~TelegramBridge() { stop(); }
 
-// ---------------------------------------------------------------- 設定参照
+
 
 cJSON* TelegramBridge::cfgAt(const std::string& dotpath) const {
   cJSON* cur = cfg_.get();
@@ -81,7 +86,7 @@ cJSON* TelegramBridge::cfgAt(const std::string& dotpath) const {
   return cur;
 }
 
-// label オブジェクト → 指定言語 (無ければ ja → 先頭のいずれか)
+
 std::string TelegramBridge::labelIn(const cJSON* label_obj, const std::string& lang) const {
   if (!label_obj) return "";
   std::string v = json::getString(label_obj, lang.c_str());
@@ -129,7 +134,7 @@ bool TelegramBridge::pollEnabled() const {
   return json::getBool(cfgAt("integrations.telegram"), "poll_updates");
 }
 
-// ---------------------------------------------------------------- 本文組み立て
+
 
 std::string TelegramBridge::hhmm(int64_t wall_ms) const {
   const int64_t local = wall_ms + static_cast<int64_t>(tzOffsetMin()) * 60'000LL;
@@ -141,8 +146,8 @@ std::string TelegramBridge::hhmm(int64_t wall_ms) const {
   return buf;
 }
 
-// press payload の purpose/visitor_lang → 見出し行「📦 宅配便 🌐 EN」("" = どちらも無し)。
-// 用件名は visit_purposes.<id>.label.<通知言語>、バッジは訪客言語 (ja 以外の時だけ)。
+
+
 std::string TelegramBridge::purposeHeadline(const EventRecord& ev) const {
   auto p = json::parse(ev.payload_json.empty() ? "{}" : ev.payload_json);
   if (!p) return "";
@@ -150,7 +155,7 @@ std::string TelegramBridge::purposeHeadline(const EventRecord& ev) const {
   const std::string purpose = json::getString(p.get(), "purpose");
   if (!purpose.empty()) {
     cJSON* vp = cfgAt("visit_purposes." + purpose);
-    // 台帳に無い用件 id でも黙って落とさず id を出す (設定削除後の履歴通知など)
+
     std::string label = labelIn(json::get(vp, "label"), notifyLang());
     if (label.empty()) label = purpose;
     const std::string icon = json::getString(vp, "icon");
@@ -166,8 +171,8 @@ std::string TelegramBridge::purposeHeadline(const EventRecord& ev) const {
 }
 
 std::string TelegramBridge::pressCaption(const EventRecord& ev) const {
-  // ev.wall_ms は HLC 物理部 = 補正済み壁時計 (発生時刻)。
-  // 本文は text_template.<通知言語> (旧構成の ja のみも拾う) → 無ければ Node::text の event.press。
+
+
   const std::string lang = notifyLang();
   cJSON* tpl = cfgAt("integrations.telegram.text_template");
   std::string t = json::getString(tpl, lang.c_str());
@@ -175,23 +180,33 @@ std::string TelegramBridge::pressCaption(const EventRecord& ev) const {
   if (t.empty()) t = hooks_.text ? tr("event.press") : std::string(kDefaultTemplateJa);
   replaceAll(t, "{door}", doorLabel(ev.door));
   replaceAll(t, "{time}", hhmm(ev.wall_ms));
-  // 用件 + 訪客言語バッジを見出し行として前置 (一目で「宅配が来た」と分かるように)
+
   const std::string head = purposeHeadline(ev);
   return head.empty() ? t : head + "\n" + t;
 }
 
 std::string TelegramBridge::eventText(const EventRecord& ev) const {
-  // 文言は Node::text 経由 (config i18n_overrides で上書き可能)
+
   if (ev.type == "motion")
     return tr("event.motion", {{"door", doorLabel(ev.door)}, {"time", hhmm(ev.wall_ms)}});
   if (ev.type == "offline")
     return tr("event.offline", {{"device", deviceName(ev.device)}, {"time", hhmm(ev.wall_ms)}});
   if (ev.type == "online") return tr("event.online", {{"device", deviceName(ev.device)}});
+  if (ev.type == "emergency" || ev.type == "emergency_cancel") {
+    auto p = json::parse(ev.payload_json.empty() ? "{}" : ev.payload_json);
+    std::string source = p ? json::getString(p.get(), "source") : "";
+    if (source.empty()) source = ev.device;
+    return ev.type == "emergency"
+        ? tr("emergency.notify_on", {{"device", deviceName(source)}, {"time", hhmm(ev.wall_ms)}})
+        : tr("emergency.notify_off");
+  }
   return "";
 }
 
-// quick_replies を order 順に 1 列の inline_keyboard へ
-std::string TelegramBridge::replyMarkupJson(const std::string& door_id) const {
+
+std::string TelegramBridge::replyMarkupJson(const std::string& door_id,
+                                            const std::string& call_id) const {
+  (void)door_id;
   struct Btn {
     int64_t order;
     std::string id, label;
@@ -210,11 +225,16 @@ std::string TelegramBridge::replyMarkupJson(const std::string& door_id) const {
   });
   auto o = json::obj();
   cJSON* rows = json::addArr(o.get(), "inline_keyboard");
-  for (const auto& b : btns) {  // 1 列 = 行あたり 1 ボタン
+  for (const auto& b : btns) {
+    const std::string callback = "qr|" + b.id + "|" + call_id;
+    if (call_id.empty() || callback.size() > 64) {
+      DB_LOGW(kTag, "quick-reply button omitted because its scoped callback is too long");
+      continue;
+    }
     json::Doc row(cJSON_CreateArray());
     cJSON* btn = cJSON_CreateObject();
     json::set(btn, "text", b.label);
-    json::set(btn, "callback_data", "qr|" + b.id + "|" + door_id);
+    json::set(btn, "callback_data", callback);
     cJSON_AddItemToArray(row.get(), btn);
     json::push(rows, std::move(row));
   }
@@ -222,6 +242,9 @@ std::string TelegramBridge::replyMarkupJson(const std::string& door_id) const {
 }
 
 std::vector<std::string> TelegramBridge::resolveChats(const cJSON* households) const {
+  if (!households || (cJSON_IsString(households) &&
+                      std::string(households->valuestring) == "all"))
+    return allHouseholdChats();
   std::vector<std::string> out;
   auto add = [&out](const std::string& c) {
     if (!c.empty() && std::find(out.begin(), out.end(), c) == out.end()) out.push_back(c);
@@ -245,7 +268,7 @@ std::vector<std::string> TelegramBridge::resolveChats(const cJSON* households) c
   return out;
 }
 
-// ---------------------------------------------------------------- 構成
+
 
 void TelegramBridge::configure(const std::string& cfg_json, const std::string& node_id,
                                bool active) {
@@ -258,13 +281,13 @@ void TelegramBridge::configure(const std::string& cfg_json, const std::string& n
 
   const std::string token =
       json::getString(cfgAt("integrations.telegram"), "bot_token");
-  // TODO(Phase2 後半): bot_token_ref (secure store) 対応 — MVP は平文 bot_token のみ
+
   const bool act = active && !token.empty();
   const bool token_changed = token != token_;
   token_ = token;
 
   if (!act) {
-    if (active_) DB_LOGI(kTag, "ブリッジ停止 (leader でない / bot_token 未設定)");
+    if (active_) DB_LOGI(kTag, "bridge stopped because this node is not leader or bot_token is unset");
     active_ = false;
     if (pump_timer_) {
       loop_.cancel(pump_timer_);
@@ -274,20 +297,20 @@ void TelegramBridge::configure(const std::string& cfg_json, const std::string& n
       loop_.cancel(poll_timer_);
       poll_timer_ = 0;
     }
-    poll_gen_++;  // 在飛の getUpdates 応答を無効化
+    poll_gen_++;
     return;
   }
 
-  if (!active_) DB_LOGI(kTag, "ブリッジ開始 (telegram leader)");
+  if (!active_) DB_LOGI(kTag, "bridge started as Telegram leader");
   active_ = true;
   if (!pump_timer_) {
     pump_timer_ = loop_.postEvery(kPumpPeriodMs, [this] { pump(); });
     std::weak_ptr<char> w = alive_;
     loop_.post([this, w] {
-      if (!w.expired()) pump();  // 残留キューの即時再開
+      if (!w.expired()) pump();
     });
   }
-  if (token_changed) poll_gen_++;  // 旧 token での在飛応答を無効化
+  if (token_changed) poll_gen_++;
   if (pollEnabled()) {
     if (!poll_inflight_ && !poll_timer_) schedulePoll(0);
   } else {
@@ -299,7 +322,7 @@ void TelegramBridge::configure(const std::string& cfg_json, const std::string& n
   }
 }
 
-// 全 households の chat_ids を展開・去重 (resolveChats が担う)
+
 std::vector<std::string> TelegramBridge::allHouseholdChats() const {
   auto ids = json::arr();
   cJSON* hs = cfgAt("households");
@@ -310,7 +333,7 @@ std::vector<std::string> TelegramBridge::allHouseholdChats() const {
   return resolveChats(ids.get());
 }
 
-// 管理画面のテスト送信 — 通常キュー経由の sendMessage (失敗時のバックオフも共通)
+
 void TelegramBridge::sendTestMessage(const std::string& chat_id_or_empty) {
   if (!active_) return;
   std::vector<std::string> chats;
@@ -320,7 +343,7 @@ void TelegramBridge::sendTestMessage(const std::string& chat_id_or_empty) {
     chats = allHouseholdChats();
   }
   if (chats.empty()) {
-    DB_LOGW(kTag, "テスト送信: 宛先 chat_id が無い — スキップ");
+    DB_LOGW(kTag, "test message skipped because no destination chat_id is configured");
     return;
   }
   for (const auto& c : chats) {
@@ -331,14 +354,14 @@ void TelegramBridge::sendTestMessage(const std::string& chat_id_or_empty) {
   pump();
 }
 
-// SOS 緊急モードの遷移通知 — quiet_hours/ルール非依存の組込動作 (バイパス系は設けず
-// 通常キュー kind="message" を再利用。失敗時バックオフ/24h 破棄も共通)。
+
+
 void TelegramBridge::sendEmergency(bool active, const std::string& source_node,
                                    int64_t wall_ms) {
-  if (!active_) return;  // 送るのは telegram leader だけ (Node は全ノードから呼ぶ)
+  if (!active_) return;
   auto chats = allHouseholdChats();
   if (chats.empty()) {
-    DB_LOGW(kTag, "緊急通知: 宛先 chat_id が無い — スキップ");
+    DB_LOGW(kTag, "emergency notification skipped because no destination chat_id is configured");
     return;
   }
   const std::string text =
@@ -372,8 +395,8 @@ std::string TelegramBridge::apiUrl(const std::string& method) const {
   return kApiBase + token_ + "/" + method;
 }
 
-// 応答不問の単発 POST (answerCallbackQuery / editMessage* — 失敗容認)。
-// 失敗時は応答 body もログへ (Telegram の 400 は description に原因が載る)。
+
+
 void TelegramBridge::postJson(const std::string& api_method, const json::Doc& body_obj) {
   if (!hooks_.https) return;
   const std::string body = json::dump(body_obj.get());
@@ -383,14 +406,14 @@ void TelegramBridge::postJson(const std::string& api_method, const json::Doc& bo
                toBytes(body), [w, m](int status, std::string resp) {
                  if (w.expired()) return;
                  if (status < 200 || status >= 300)
-                   DB_LOGW(kTag, m + " 失敗 (status=" + std::to_string(status) +
-                                     ", body=" + resp.substr(0, 300) + ") — 容認");
+                   DB_LOGW(kTag, m + " failed (status=" + std::to_string(status) +
+                                     ", body=" + resp.substr(0, 300) + "); accepting response");
                });
 }
 
-// caption 追記。写真通知 (sendPhoto) には editMessageCaption、sendMessage に降級した通知には
-// caption が無く 400 "there is no caption in the message to edit" になる — その場合だけ
-// editMessageText へ降級して同文を書く (通知の文面 = caption なので text 全置換で等価)。
+
+
+
 void TelegramBridge::editCaptionOrText(const std::string& chat_id, int64_t message_id,
                                        const std::string& text) {
   if (!hooks_.https) return;
@@ -405,7 +428,7 @@ void TelegramBridge::editCaptionOrText(const std::string& chat_id, int64_t messa
       toBytes(body), [this, w, chat_id, message_id, text](int status, std::string resp) {
         if (w.expired()) return;
         if (status >= 200 && status < 300) return;
-        if (status == 400) {  // caption の無いメッセージ → editMessageText に降級
+        if (status == 400) {
           auto t = json::obj();
           json::set(t.get(), "chat_id", chat_id);
           json::set(t.get(), "message_id", message_id);
@@ -413,28 +436,49 @@ void TelegramBridge::editCaptionOrText(const std::string& chat_id, int64_t messa
           postJson("editMessageText", t);
           return;
         }
-        DB_LOGW(kTag, "editMessageCaption 失敗 (status=" + std::to_string(status) +
-                          ", body=" + resp.substr(0, 300) + ") — 容認");
+        DB_LOGW(kTag, "editMessageCaption failed (status=" + std::to_string(status) +
+                          ", body=" + resp.substr(0, 300) + "); accepting response");
       });
 }
 
-// ---------------------------------------------------------------- イベント
+
 
 void TelegramBridge::onEvent(const EventRecord& ev) {
   if (ev.type == "press") {
-    // 非 leader でも追跡する — 交代後の callback/reply の宛先解決に使う
+    const std::string call_id = callIdOf(ev);
+    if (!call_id.empty()) {
+      const CallSource source{ev.origin, ev.seq, ev.wall_ms};
+      press_source_by_call_[call_id] = source;
+      auto cancelled = cancelled_calls_.find(call_id);
+      if (cancelled != cancelled_calls_.end()) {
+        markSourceCancelled(source, call_id, cancelled->second.hlc);
+        suppressPendingQueue(call_id);
+      }
+    }
     last_press_by_door_[ev.door] = {ev.origin, ev.seq};
+    return;
+  }
+  if (ev.type == "call_cancelled") {
+    cancelPendingCall(ev);
     return;
   }
   if (ev.type != "reply" || !active_) return;
 
-  // reply → 「✅ {text}」。通知範囲は press と同じ = press notify の telegram_msg_ids。
+
   auto p = json::parse(ev.payload_json);
   const std::string text = p ? json::getString(p.get(), "text") : "";
   if (text.empty()) return;
-  auto lp = last_press_by_door_.find(ev.door);
-  if (lp == last_press_by_door_.end() || !hooks_.get_event) return;
-  auto press = hooks_.get_event(lp->second.first, lp->second.second);
+  const std::string call_id = p ? json::getString(p.get(), "call_id") : "";
+  std::optional<EventRecord> press;
+  if (!call_id.empty()) {
+    auto source = press_source_by_call_.find(call_id);
+    if (source != press_source_by_call_.end() && hooks_.get_event)
+      press = hooks_.get_event(source->second.origin, source->second.seq);
+  } else {
+    auto lp = last_press_by_door_.find(ev.door);
+    if (lp != last_press_by_door_.end() && hooks_.get_event)
+      press = hooks_.get_event(lp->second.first, lp->second.second);
+  }
   if (!press) return;
   auto n = json::parse(press->notify_json.empty() ? "{}" : press->notify_json);
   cJSON* ids = n ? json::get(n.get(), "telegram_msg_ids") : nullptr;
@@ -453,16 +497,16 @@ void TelegramBridge::onAction(const EventRecord& ev, const std::string& params_j
   auto p = json::parse(params_json.empty() ? "{}" : params_json);
   if (!p) return;
 
-  if (ev.type == "press") {
+  if (ev.type == "press" || ev.type == "purpose_selected") {
     claimAndSend(ev, p.get());
     return;
   }
-  // motion / offline / online → sendMessage (households はアクション params から)
+
   const std::string text = eventText(ev);
   if (text.empty()) return;
   auto chats = resolveChats(json::get(p.get(), "households"));
   if (chats.empty()) {
-    DB_LOGW(kTag, ev.type + ": households に telegram_chat_ids が無い — スキップ");
+    DB_LOGW(kTag, ev.type + ": skipped because households have no telegram_chat_ids");
     return;
   }
   for (const auto& c : chats) {
@@ -473,24 +517,30 @@ void TelegramBridge::onAction(const EventRecord& ev, const std::string& params_j
   pump();
 }
 
-// ---------------------------------------------------------------- press (設計 §1.5)
+
 
 void TelegramBridge::claimAndSend(const EventRecord& ev, const cJSON* params) {
   if (!hooks_.get_event || !hooks_.merge_notify || !hooks_.hlc_tick) return;
+  const std::string call_id = callIdOf(ev);
+  const CallSource source = sourceFor(ev, call_id);
+  if (callSuppressed(call_id, source)) {
+    DB_LOGI(kTag, "press: skipped because its call was cancelled");
+    return;
+  }
   auto chats = resolveChats(json::get(params, "households"));
   if (chats.empty()) {
-    DB_LOGW(kTag, "press: households に telegram_chat_ids が無い — スキップ");
+    DB_LOGW(kTag, "press: skipped because households have no telegram_chat_ids");
     return;
   }
   auto cur = hooks_.get_event(ev.origin, ev.seq);
   if (!cur) return;
   auto n = json::parse(cur->notify_json.empty() ? "{}" : cur->notify_json);
   if (n && !json::getString(n.get(), "notified_at").empty()) {
-    DB_LOGI(kTag, "press: 送信済み (notified_at あり) — スキップ");
+    DB_LOGI(kTag, "press: skipped because notified_at indicates prior delivery");
     return;
   }
 
-  // claim を先取りして 300ms 後に再確認 (他 leader の claim が勝ったら中止)
+
   {
     auto c = json::obj();
     json::set(c.get(), "hlc", hooks_.hlc_tick());
@@ -499,34 +549,40 @@ void TelegramBridge::claimAndSend(const EventRecord& ev, const cJSON* params) {
   }
   const bool with_snapshot = json::getBool(params, "with_snapshot");
   std::weak_ptr<char> w = alive_;
-  loop_.postDelayed(kClaimRecheckMs, [this, w, ev, chats, with_snapshot] {
+  loop_.postDelayed(kClaimRecheckMs, [this, w, ev, chats, with_snapshot, call_id, source] {
     if (w.expired() || !active_) return;
+    if (callSuppressed(call_id, source)) return;
     auto cur2 = hooks_.get_event(ev.origin, ev.seq);
     if (!cur2) return;
     auto n2 = json::parse(cur2->notify_json.empty() ? "{}" : cur2->notify_json);
     const std::string claimed = n2 ? json::getString(n2.get(), "claimed_by") : "";
     if (claimed != node_id_) {
-      DB_LOGI(kTag, "press: 他 leader の claim が勝った (" + claimed.substr(0, 8) + ") — 中止");
+      DB_LOGI(kTag, "press: another leader won the claim (" + claimed.substr(0, 8) + "); stopping");
       return;
     }
-    if (n2 && !json::getString(n2.get(), "notified_at").empty()) return;  // 送信済み
-    enqueuePress(ev, chats, with_snapshot);
+    if (n2 && !json::getString(n2.get(), "notified_at").empty()) return;
+    enqueuePress(ev, chats, with_snapshot, call_id, source);
   });
 }
 
 void TelegramBridge::enqueuePress(const EventRecord& ev, const std::vector<std::string>& chats,
-                                  bool with_snapshot) {
+                                  bool with_snapshot, const std::string& call_id,
+                                  const CallSource& source) {
   const std::string caption = pressCaption(ev);
-  const std::string markup = replyMarkupJson(ev.door);
-  auto enqueueAll = [this, ev, chats, caption, markup](const Bytes& jpeg) {
+  const std::string markup = replyMarkupJson(ev.door, call_id);
+  auto enqueueAll = [this, ev, chats, caption, markup, call_id, source](const Bytes& jpeg) {
+    if (callSuppressed(call_id, source)) return;
     for (const auto& c : chats) {
       auto pl = json::obj();
       json::set(pl.get(), "origin", ev.origin);
       json::set(pl.get(), "seq", static_cast<int64_t>(ev.seq));
       json::set(pl.get(), "door", ev.door);
+      json::set(pl.get(), "call_id", call_id);
+      json::set(pl.get(), "source_origin", source.origin);
+      json::set(pl.get(), "source_seq", static_cast<int64_t>(source.seq));
       json::set(pl.get(), "reply_markup", markup);
       if (jpeg.empty()) {
-        json::set(pl.get(), "text", caption);  // 快照無し → sendMessage に降級
+        json::set(pl.get(), "text", caption);
         enqueue("message", c, json::dump(pl.get()), Bytes());
       } else {
         json::set(pl.get(), "caption", caption);
@@ -539,7 +595,7 @@ void TelegramBridge::enqueuePress(const EventRecord& ev, const std::vector<std::
     std::weak_ptr<char> w = alive_;
     hooks_.fetch_snapshot(ev.origin, [w, enqueueAll](Bytes jpeg) {
       if (w.expired()) return;
-      enqueueAll(jpeg);  // 空 = 取得失敗 → sendMessage に降級
+      enqueueAll(jpeg);
     });
   } else {
     enqueueAll(Bytes());
@@ -555,7 +611,7 @@ void TelegramBridge::recordNotified(const std::string& origin, uint64_t seq,
   auto upd = json::obj();
   json::set(upd.get(), "hlc", hooks_.hlc_tick());
   json::set(upd.get(), "notified_at", hooks_.hlc_tick());
-  // telegram_msg_ids はフィールド単位 LWW — 既存分に自 chat を足した全量で上書きする
+
   cJSON* ids = json::addObj(upd.get(), "telegram_msg_ids");
   cJSON* prev = n ? json::get(n.get(), "telegram_msg_ids") : nullptr;
   const cJSON* it = nullptr;
@@ -567,7 +623,7 @@ void TelegramBridge::recordNotified(const std::string& origin, uint64_t seq,
   hooks_.merge_notify(origin, seq, json::dump(upd.get()));
 }
 
-// ---------------------------------------------------------------- 送信キュー
+
 
 void TelegramBridge::enqueue(const std::string& kind, const std::string& chat_id,
                              const std::string& payload, const Bytes& snapshot) {
@@ -576,23 +632,35 @@ void TelegramBridge::enqueue(const std::string& kind, const std::string& chat_id
   item.chat_id = chat_id;
   item.payload = payload;
   item.snapshot = snapshot;
-  item.next_retry_ms = nowWallMs();  // 即時送信可
+  item.next_retry_ms = nowWallMs();
   item.created_ms = nowWallMs();
-  store_.tgQueuePut(item);
+  const int64_t id = store_.tgQueuePut(item);
+  auto p = json::parse(payload.empty() ? "{}" : payload);
+  const std::string call_id = p ? json::getString(p.get(), "call_id") : "";
+  if (id > 0 && !call_id.empty()) queued_calls_[id] = {call_id, item.created_ms};
 }
 
 void TelegramBridge::pump() {
   if (!active_ || sending_) return;
-  store_.tgQueuePrune(nowWallMs() - kQueueTtlMs);  // 24h 超は破棄
-  auto due = store_.tgQueueDue(nowWallMs(), 1);
-  if (due.empty()) return;
-  sending_ = true;
-  sendItem(due[0]);
+  pruneCallTracking();
+  store_.tgQueuePrune(nowWallMs() - kQueueTtlMs);
+  while (active_ && !sending_) {
+    auto due = store_.tgQueueDue(nowWallMs(), 1);
+    if (due.empty()) return;
+    if (queueItemSuppressed(due[0])) {
+      store_.tgQueueDelete(due[0].id);
+      forgetQueueItem(due[0].id);
+      continue;
+    }
+    sending_ = true;
+    inflight_item_id_ = due[0].id;
+    sendItem(due[0]);
+  }
 }
 
 void TelegramBridge::sendItem(const Store::TgQueueItem& item) {
   auto p = json::parse(item.payload.empty() ? "{}" : item.payload);
-  if (!p || !hooks_.https) {  // 壊れた行 / HTTPS 経路なし → 破棄せず失敗扱い
+  if (!p || !hooks_.https) {
     onSendDone(item, -1, "");
     return;
   }
@@ -603,7 +671,7 @@ void TelegramBridge::sendItem(const Store::TgQueueItem& item) {
   };
 
   if (item.kind == "photo") {
-    // sendPhoto (multipart/form-data 手組み: chat_id, caption, reply_markup, photo)
+
     const std::string boundary = "----doorbellTg" + hexEncode(randomBytes(8));
     Bytes body;
     addFormField(body, boundary, "chat_id", item.chat_id);
@@ -641,30 +709,157 @@ void TelegramBridge::sendItem(const Store::TgQueueItem& item) {
 void TelegramBridge::onSendDone(const Store::TgQueueItem& item, int status,
                                 const std::string& resp) {
   sending_ = false;
+  inflight_item_id_ = 0;
   auto r = json::parse(resp);
   const bool ok = status >= 200 && status < 300 && r && json::getBool(r.get(), "ok");
   if (ok) {
     store_.tgQueueDelete(item.id);
+    forgetQueueItem(item.id);
     auto p = json::parse(item.payload.empty() ? "{}" : item.payload);
     const std::string origin = p ? json::getString(p.get(), "origin") : "";
-    if (!origin.empty()) {  // press → notified_at + telegram_msg_ids を回執
+    if (!origin.empty()) {
       recordNotified(origin, static_cast<uint64_t>(json::getInt(p.get(), "seq")), item.chat_id,
                      messageIdOf(resp));
     }
     std::weak_ptr<char> w = alive_;
     loop_.post([this, w] {
-      if (!w.expired()) pump();  // 次の due を直列で送る
+      if (!w.expired()) pump();
+    });
+    return;
+  }
+  if (queueItemSuppressed(item)) {
+    store_.tgQueueDelete(item.id);
+    forgetQueueItem(item.id);
+    std::weak_ptr<char> w = alive_;
+    loop_.post([this, w] {
+      if (!w.expired()) pump();
     });
     return;
   }
   const int attempts = item.attempts + 1;
   const int64_t delay = backoffMs(attempts);
-  DB_LOGW(kTag, item.kind + " 送信失敗 (status=" + std::to_string(status) + ", attempt=" +
-                    std::to_string(attempts) + ") — " + std::to_string(delay / 1000) + "s 後に再試行");
+  DB_LOGW(kTag, item.kind + " delivery failed (status=" + std::to_string(status) + ", attempt=" +
+                    std::to_string(attempts) + "); retrying after " + std::to_string(delay / 1000) + "s");
   store_.tgQueueRetry(item.id, attempts, nowWallMs() + delay);
 }
 
-// ---------------------------------------------------------------- getUpdates 長輪詢
+std::string TelegramBridge::callIdOf(const EventRecord& ev) {
+  std::string call_id = payloadString(ev, "call_id");
+  if (call_id.empty() && ev.type == "press")
+    call_id = ev.origin + ":" + std::to_string(ev.seq);
+  return call_id;
+}
+
+TelegramBridge::CallSource TelegramBridge::sourceFor(const EventRecord& ev,
+                                                     const std::string& call_id) const {
+  auto it = press_source_by_call_.find(call_id);
+  if (it != press_source_by_call_.end()) return it->second;
+  return {ev.origin, ev.seq, ev.wall_ms};
+}
+
+bool TelegramBridge::eventMarksCancelled(const CallSource& source,
+                                         const std::string& call_id) const {
+  if (source.origin.empty() || source.seq == 0 || !hooks_.get_event) return false;
+  auto event = hooks_.get_event(source.origin, source.seq);
+  if (!event) return false;
+  auto notify = json::parse(event->notify_json.empty() ? "{}" : event->notify_json);
+  return notify && json::getString(notify.get(), "telegram_cancelled_call_id") == call_id;
+}
+
+bool TelegramBridge::callSuppressed(const std::string& call_id,
+                                    const CallSource& source) const {
+  if (call_id.empty()) return false;
+  if (cancelled_calls_.find(call_id) != cancelled_calls_.end()) return true;
+  return eventMarksCancelled(source, call_id);
+}
+
+bool TelegramBridge::queueItemSuppressed(const Store::TgQueueItem& item) const {
+  auto payload = json::parse(item.payload.empty() ? "{}" : item.payload);
+  if (!payload) return false;
+  std::string call_id = json::getString(payload.get(), "call_id");
+  const std::string action_origin = json::getString(payload.get(), "origin");
+  const uint64_t action_seq = static_cast<uint64_t>(json::getInt(payload.get(), "seq"));
+  std::optional<EventRecord> action_event;
+  if (call_id.empty() && !action_origin.empty() && action_seq > 0 && hooks_.get_event) {
+    action_event = hooks_.get_event(action_origin, action_seq);
+    if (action_event) call_id = callIdOf(*action_event);
+  }
+  CallSource source;
+  source.origin = json::getString(payload.get(), "source_origin");
+  source.seq = static_cast<uint64_t>(json::getInt(payload.get(), "source_seq"));
+  if (source.origin.empty() || source.seq == 0) {
+    auto known_source = press_source_by_call_.find(call_id);
+    if (known_source != press_source_by_call_.end()) {
+      source = known_source->second;
+    } else {
+      source.origin = action_origin;
+      source.seq = action_seq;
+      if (action_event) source.wall_ms = action_event->wall_ms;
+    }
+  }
+  return callSuppressed(call_id, source);
+}
+
+void TelegramBridge::markSourceCancelled(const CallSource& source, const std::string& call_id,
+                                         const std::string& cancelled_hlc) {
+  if (source.origin.empty() || source.seq == 0 || !hooks_.merge_notify || !hooks_.hlc_tick) return;
+  auto marker = json::obj();
+  json::set(marker.get(), "hlc", hooks_.hlc_tick());
+  json::set(marker.get(), "telegram_cancelled_call_id", call_id);
+  json::set(marker.get(), "telegram_cancelled_at", cancelled_hlc);
+  hooks_.merge_notify(source.origin, source.seq, json::dump(marker.get()));
+}
+
+void TelegramBridge::suppressPendingQueue(const std::string& call_id) {
+  std::vector<int64_t> remove;
+  for (const auto& queued : queued_calls_) {
+    if (queued.second.first == call_id && queued.first != inflight_item_id_)
+      remove.push_back(queued.first);
+  }
+  for (int64_t id : remove) {
+    store_.tgQueueDelete(id);
+    forgetQueueItem(id);
+  }
+  if (!sending_) pump();
+}
+
+void TelegramBridge::cancelPendingCall(const EventRecord& ev) {
+  const std::string call_id = callIdOf(ev);
+  if (call_id.empty()) return;
+  auto& cancelled = cancelled_calls_[call_id];
+  cancelled.wall_ms = std::max(cancelled.wall_ms, ev.wall_ms > 0 ? ev.wall_ms : nowWallMs());
+  if (ev.hlc > cancelled.hlc) cancelled.hlc = ev.hlc;
+  auto source = press_source_by_call_.find(call_id);
+  if (source != press_source_by_call_.end())
+    markSourceCancelled(source->second, call_id, cancelled.hlc);
+  suppressPendingQueue(call_id);
+}
+
+void TelegramBridge::forgetQueueItem(int64_t id) { queued_calls_.erase(id); }
+
+void TelegramBridge::pruneCallTracking() {
+  const int64_t cutoff = nowWallMs() - kQueueTtlMs;
+  for (auto it = cancelled_calls_.begin(); it != cancelled_calls_.end();) {
+    if (it->second.wall_ms < cutoff)
+      it = cancelled_calls_.erase(it);
+    else
+      ++it;
+  }
+  for (auto it = press_source_by_call_.begin(); it != press_source_by_call_.end();) {
+    if (it->second.wall_ms > 0 && it->second.wall_ms < cutoff)
+      it = press_source_by_call_.erase(it);
+    else
+      ++it;
+  }
+  for (auto it = queued_calls_.begin(); it != queued_calls_.end();) {
+    if (it->second.second < cutoff)
+      it = queued_calls_.erase(it);
+    else
+      ++it;
+  }
+}
+
+
 
 void TelegramBridge::schedulePoll(int64_t delay_ms) {
   if (poll_timer_) loop_.cancel(poll_timer_);
@@ -694,7 +889,7 @@ void TelegramBridge::sendPoll() {
 void TelegramBridge::onPollDone(uint64_t gen, int status, const std::string& resp) {
   poll_inflight_ = false;
   if (!active_ || !pollEnabled()) return;
-  if (gen != poll_gen_) {  // 再構成後の旧応答 — 内容は捨てて新しい輪詢を張り直す
+  if (gen != poll_gen_) {
     schedulePoll(0);
     return;
   }
@@ -706,43 +901,50 @@ void TelegramBridge::onPollDone(uint64_t gen, int status, const std::string& res
   const cJSON* upd = nullptr;
   cJSON_ArrayForEach(upd, json::get(r.get(), "result")) {
     const int64_t uid = json::getInt(upd, "update_id", -1);
-    if (uid >= 0 && uid + 1 > poll_offset_) poll_offset_ = uid + 1;  // 再配送防止
+    if (uid >= 0 && uid + 1 > poll_offset_) poll_offset_ = uid + 1;
     cJSON* cq = json::get(upd, "callback_query");
     if (cq) handleCallbackQuery(cq);
   }
-  schedulePoll(kPollGapMs);  // 応答後ほぼ即時 (長輪詢はサーバ側 timeout=25 が待つ)
+  schedulePoll(kPollGapMs);
 }
 
 void TelegramBridge::handleCallbackQuery(const cJSON* cq) {
-  // data = "qr|<reply_id>|<door_id>"
+  // data = "qr|<reply_id>|<call_id>"; the call identity prevents an old button replying to a
+  // later visitor at the same door.
   const std::string data = json::getString(cq, "data");
   if (data.compare(0, 3, "qr|") != 0) return;
   const size_t sep = data.find('|', 3);
   if (sep == std::string::npos) return;
   const std::string reply_id = data.substr(3, sep - 3);
-  const std::string door = data.substr(sep + 1);
-  DB_LOGI(kTag, "callback_query: " + reply_id + " (door=" + door + ")");
-  if (hooks_.on_reply) hooks_.on_reply(reply_id, "", door);
+  const std::string call_id = data.substr(sep + 1);
+  auto projection = store_.callProjection(call_id);
+  const std::string door = projection ? projection->door : "";
+  const bool accepted = projection && projection->state == "ringing" && hooks_.on_reply &&
+                        hooks_.on_reply(reply_id, "", door, call_id);
+  DB_LOGI(kTag, "callback_query: " + reply_id + " (call=" + call_id.substr(0, 8) +
+                    ", accepted=" + (accepted ? "true" : "false") + ")");
 
-  // 回執トースト (失敗容認)
+  std::string rlabel = labelIn(json::get(cfgAt("quick_replies." + reply_id), "label"),
+                               notifyLang());
+  if (rlabel.empty()) rlabel = reply_id;
+
+
   {
     auto o = json::obj();
     json::set(o.get(), "callback_query_id", json::getString(cq, "id"));
-    json::set(o.get(), "text", "送信済み");
+    json::set(o.get(), "text", accepted ? tr("reply.sent", {{"text", rlabel}})
+                                          : tr("reply.failed"));
     postJson("answerCallbackQuery", o);
   }
 
-  // 該当 press の全 chat のメッセージからボタンを撤去し、caption に「✅ 応答済み」を追記
-  auto lp = last_press_by_door_.find(door);
-  if (lp == last_press_by_door_.end() || !hooks_.get_event) return;
-  auto press = hooks_.get_event(lp->second.first, lp->second.second);
+  if (!accepted || !hooks_.get_event) return;
+  auto source = press_source_by_call_.find(call_id);
+  if (source == press_source_by_call_.end()) return;
+  auto press = hooks_.get_event(source->second.origin, source->second.seq);
   if (!press) return;
   auto n = json::parse(press->notify_json.empty() ? "{}" : press->notify_json);
   cJSON* ids = n ? json::get(n.get(), "telegram_msg_ids") : nullptr;
-  // 「✅ 応答済み (…)」— reply.answered は {text} 付きだが、ここで判っているのは
-  // reply_id だけなのでラベルを引いて填める (無ければ id をそのまま)
-  std::string rlabel = labelIn(json::get(cfgAt("quick_replies." + reply_id), "label"), notifyLang());
-  if (rlabel.empty()) rlabel = reply_id;
+
   const std::string caption =
       pressCaption(*press) + "\n✅ " + tr("reply.answered", {{"text", rlabel}});
   const cJSON* it = nullptr;
@@ -753,17 +955,17 @@ void TelegramBridge::handleCallbackQuery(const cJSON* cq) {
       auto o = json::obj();
       json::set(o.get(), "chat_id", std::string(it->string));
       json::set(o.get(), "message_id", mid);
-      // ボタン撤去 = inline_keyboard を空配列にした InlineKeyboardMarkup を送る。
-      // 空オブジェクト {} は必須欄 inline_keyboard を欠き 400 Bad Request になる (実機で確認)。
+
+
       cJSON* markup = json::addObj(o.get(), "reply_markup");
       json::addArr(markup, "inline_keyboard");
       postJson("editMessageReplyMarkup", o);
     }
-    // caption 追記 (sendMessage 降級分は editMessageText へ自動降級)
+
     editCaptionOrText(it->string, mid, caption);
   }
-  // TODO(v1.1): 自由文返信 (bot へのテキストリプライ) — message.reply_to_message から
-  // 該当 press を特定し quickReply(free_text) へ配線する。
+
+
 }
 
 }  // namespace db

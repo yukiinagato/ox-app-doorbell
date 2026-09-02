@@ -28,7 +28,8 @@
 + (NSString *)fileNameForPreset:(NSString *)value {
   if ([value isEqualToString:@"outdoor_call_alert"]) return @"outdoor_call_alert.mp3";
   if ([value isEqualToString:@"button_click"]) return @"button_click.mp3";
-  if ([value isEqualToString:@"school_chime"]) return @"学校のチャイム.mp3";
+  if ([value isEqualToString:@"school_chime"])
+    return @"\u5b66\u6821\u306e\u30c1\u30e3\u30a4\u30e0.mp3";
   if ([value isEqualToString:@"indoor_update"]) return @"indoor_update.mp3";
   if ([value isEqualToString:@"title_display"]) return @"title_display.mp3";
   return nil;
@@ -91,7 +92,7 @@
   _player = nil;
 }
 
-// 880/660Hz 交互 2 秒の警報音 (22.05kHz 16bit mono PCM WAV)。
+
 + (NSData *)sirenWav {
   const int rate = 22050;
   const int seconds = 2;
@@ -121,8 +122,8 @@
   le32(dataLen);
   for (int i = 0; i < n; i++) {
     double t = (double)i / (double)rate;
-    double freq = ((i / (rate / 2)) % 2 == 0) ? 880.0 : 660.0;  // 0.5 秒毎に交互
-    double env = MIN(1.0, (double)MIN(i, n - i) / ((double)rate * 0.02));  // クリック防止
+    double freq = ((i / (rate / 2)) % 2 == 0) ? 880.0 : 660.0;
+    double env = MIN(1.0, (double)MIN(i, n - i) / ((double)rate * 0.02));
     short s = (short)(sin(2 * M_PI * freq * t) * 0.6 * (double)SHRT_MAX * env);
     uint16_t x = CFSwapInt16HostToLittle((uint16_t)s);
     [d appendBytes:&x length:2];
@@ -130,7 +131,7 @@
   return d;
 }
 
-// iOS 5 に追加ファイルを要求しない PCM 鈴音。取消時は通常の AVAudioPlayer として停止できる。
+
 + (NSData *)chimeWav:(NSString *)sound {
   const int rate = 22050;
   double seconds = [sound isEqualToString:@"classic"] ? 2.0 : 1.35;

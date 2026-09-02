@@ -1,8 +1,6 @@
-// 隠し管理入口の PIN ダイアログ (WPF 版 AdminDialog と同仕様)。5 回失敗で 10 分ロック
-// (プロセス内)。入力は描画テンキーのみ — システム IME は使わない (実体キーボード無しの
-// 門口機/TV 前提。ボタンは focusable で D-pad でも操作可)。●伏字表示。
-// 照合先: filesDir/exit_pin.txt の SHA-256 hex (無ければ既定 PIN "000000" —
-// 初回設置手順で必ず変更するよう docs に記載)。
+// Hidden maintenance PIN dialog. Five failures lock the process for ten minutes.
+// A focusable on-screen keypad supports installations without an IME or physical keyboard.
+// The SHA-256 digest lives in filesDir/exit_pin.txt; provisioning must replace the default PIN.
 package jp.keihan.doorbell
 
 import android.app.AlertDialog
@@ -86,7 +84,7 @@ object AdminPinDialog {
             }
         }
 
-        // 3x4 描画テンキー (1-9 / ⌫ 0 OK)
+        // 3x4 on-screen keypad (1-9 / backspace / 0 / OK).
         val rows = listOf(listOf("1", "2", "3"), listOf("4", "5", "6"),
                           listOf("7", "8", "9"), listOf("back", "0", "ok"))
         var first: Button? = null
@@ -96,7 +94,7 @@ object AdminPinDialog {
                 val b = Button(context).apply {
                     text = when (key) { "back" -> "⌫"; "ok" -> "OK"; else -> key }
                     textSize = 22f
-                    isFocusable = true  // TV の D-pad 対応
+                    isFocusable = true
                     isAllCaps = false
                     setOnClickListener { tap(key) }
                 }

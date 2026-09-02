@@ -1,6 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <string name="purpose_call_without_selection">選ばずに進む</string>
-    <string name="purpose_ringing_hint">呼び出し済みです。用件の選択は任意です</string>
-    <string name="ring_cancelled">訪客が呼び出しを取消しました</string>
-</resources>

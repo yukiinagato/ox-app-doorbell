@@ -1,94 +1,71 @@
-[日本語](ipad1-jailbreak.ja.md) | [English](ipad1-jailbreak.en.md) | [中文](ipad1-jailbreak.zh.md)
+[日本語](ipad1-jailbreak.ja.md) | English | [繁體中文](ipad1-jailbreak.zh.md)
 
-# Turning an iPad 1 (A1219, iOS 5.1.1) into a doorbell node
+# Provisioning an iPad 1 compatibility node
 
-Steps to turn a first-generation iPad (2010, A4, 256MB, **no camera, no microphone**)
-into a **first-class node of the doorbell mesh** with a jailbreak plus a self-built
-native app. The full C++17 core (doorbell-core) runs on armv7/iOS5.1 — this really
-works (proven on A0/B).
+This procedure is for a controlled, jailbroken iPad 1 (A1219/A1337) running iOS 5.1.1. It is not a
+claim of hardware certification. Follow the [maintainer runbook](../../../docs/en/ios-compat-maintainer.md)
+and record the exact device, artifact, package, jailbreak environment, and test results.
 
-## What this device can and cannot do (hardware limits)
+## Hardware limits
 
-| | Possible? | Reason |
-|---|---|---|
-| See the live video at the door | ✅ | Receives MJPEG, decodes on the A4 |
-| Hear the audio at the door | ✅ | Direct call to the door station over mini SIP, plays through the speaker |
-| Quick replies / unlock (on-screen) | ✅ | C ABI + SIP DTMF `*1` |
-| Config sync & events as a mesh node | ✅ | Full core on board |
-| **Send your own voice (two-way talk)** | ⚠️ external mic required | No built-in mic. Works if you plug in a headset (TRRS) / dock mic |
-| **Send your own video** | ❌ not possible | No camera physically present |
+The iPad 1 has a built-in microphone and speaker but no camera. Use the built-in microphone only
+after MiniSIP/RemoteIO input and two-way audio pass on that exact device. For video, configure an
+explicit external MJPEG/snapshot/RTSP camera source or use no-video mode. Bounded RTSP/RTP-over-TCP
+H.264 ingest and Annex-B forwarding pass the host/loopback contract, including SDP/sprop,
+single NAL/STAP-A/FU-A, and next-IDR recovery after loss. Runtime stays degraded until DESCRIBE,
+SETUP, and an actually accepted IDR; no real camera has passed iPad 1 qualification.
 
-## 0. Prerequisites (on the host Mac)
+The distinct Core fMP4 playback path has a bounded real-device smoke: an Android 14 door station
+rendered at 15–16 fps on the foreground iPad 1, including Wi-Fi rejoin and post-safe-mode rechecks.
+This does not qualify external-camera RTSP ingest or unattended post-crash foreground video resume;
+see `docs/evidence/ios5-ipad1-fmp4-smoke-2026-08-31.md`.
 
-The build artifacts and toolchain are already prepared in the repo under `tools/` and `ios-legacy/`:
-- `tools/sdk/iPhoneOS7.1.sdk` — extracted from the Xcode 5.1 DMG (sysroot; gitignored)
-- `tools/toolchain/ios5-armv7/` — self-built modern libc++/libc++abi/libunwind (regenerate with `tools/build_libcxx_ios5.sh`)
-- `ios-legacy/lib/libdoorbell_all.a` — armv7/iOS5.1 build of the core (`ios-legacy/scripts/build_core_ios5.sh`)
-- `ldid` (`brew install ldid`)
+The shell directly plays HTTP(S) MJPEG and snapshots. Camera credentials remain behind
+`secret_ref` and are resolved only into ephemeral Basic/Bearer request headers; URL credentials
+are rejected and platform TLS validation remains enabled. This JPEG path is local preview only
+(`jpeg_core_forwarding:false`), not a Core/mesh camera feed.
 
-To rebuild the SDK: `hdiutil attach` the Xcode 5.1 (or 4.x) DMG and copy
-`.../iPhoneOS.platform/Developer/SDKs/iPhoneOS7.1.sdk` into `tools/sdk/`.
+The device is not outdoor-rated. Entrance use requires a weatherproof, condensation-controlled,
+temperature-managed, continuously powered enclosure plus battery, cable, and thermal inspection.
 
-## 1. Jailbreak the iPad 1 (untethered)
+## Controlled installation
 
-**Legacy iOS Kit** (LukeZGD) — an untethered jailbreak tool for the iPad 1 that runs on modern macOS.
-1. `git clone https://github.com/LukeZGD/Legacy-iOS-Kit && cd Legacy-iOS-Kit`
-2. Connect the iPad 1 over USB → `./restore.sh` → pick **Jailbreak (untethered)** from the menu.
-   (If needed, first restore to 5.1.1 — Restore/Downgrade in the menu. For the NVRAM-clear
-   procedure see the Kit's wiki.)
-3. When done, the iPad has **Cydia** installed.
-- Alternatives: Absinthe 2.0 / redsn0w 0.9.12b1 (the untethered tools of that era, if you have a host that runs them).
+1. Prepare the jailbreak using its maintained upstream documentation and establish unique host
+   access credentials. Do not use or document a shared/default credential.
+2. From a controlled host, run:
 
-## 2. Post-jailbreak groundwork
+   ```sh
+   ios-compat/scripts/test_host.sh
+   ios-compat/scripts/build_core_ios5.sh
+   ios-compat/scripts/build_core_ios5.sh --install
+   ios-compat/scripts/build_app_ios5.sh
+   ios-compat/scripts/build_deb.sh
+   ```
 
-1. In Cydia, install **OpenSSH** (to push the app over SSH).
-2. Install **AppSync Unified** (to allow ldid pseudo-signed apps).
-   - Add the source `https://cydia.akemi.ai/` → install AppSync Unified.
-   - If the source is down, install via the Kit's App Management or `dpkg -i` the .deb manually.
-3. Note the iPad's IP (Settings > Wi-Fi). Default SSH: `root@<ip>` / password `alpine`
-   (**always change it with `passwd`**).
+3. Verify the artifact manifest, package contents, package digest, and rollback package. Install
+   with `ios-compat/scripts/install_deb.sh`; the SSH copy script is a maintenance fallback only.
+   That fallback writes a root-owned maintenance-restart marker before terminating the app so an
+   intentional update is not counted as a crash-loop failure.
+4. Pair from the application. Confirm Core stores `mesh.psk` in Keychain before emitting only
+   `{t:"paired", psk_ref:"secret:mesh.psk"}`, and `boot.json` contains that reference plus non-secret
+   bootstrap fields. A `pairing_persistence_error` must remain not-ready. Never paste a PSK into it.
+5. If using an external camera, adapt the examples in `ios-compat/profiles/`. Keep credentials
+   behind `secret_ref`; URL userinfo and camera inference from seed peers are forbidden. For RTSP,
+   verify the source remains degraded until an IDR is accepted and drops back to next-IDR recovery
+   after packet loss.
 
-## 3. Build the app and push it (host Mac)
+## Acceptance
 
-```bash
-cd app-doorbell
-bash ios-legacy/scripts/build_core_ios5.sh   # core .a (first time / on update)
-bash ios-legacy/scripts/build_app.sh          # produce Doorbell.app + ldid pseudo-signing
-# push (either one)
-scp -r ios-legacy/build/Doorbell.app root@<ipad-ip>:/Applications/
-ssh root@<ipad-ip> "uicache"                  # show it on the home screen
-#   ── or use Legacy iOS Kit's Install IPA
-```
+Verify cold boot, targeted ring without duplicates, cancel/stale-call handling, built-in microphone
+and speaker, MiniSIP setup/teardown and DTMF, media/RTSP/no-video behavior, Wi-Fi and peer loss, crash and
+memory pressure, power loss, rollback, kiosk maintenance access, and a long thermal/memory soak in
+the final enclosure.
 
-## 4. Initial setup on the iPad
-
-1. Launch "Doorbell" on the home screen.
-2. First-run settings (in-app or `/var/mobile/.../boot.plist`):
-   - `role` = `indoor_panel`
-   - `seed_peers` = one or more `IP:47172` of existing nodes (on the same L2, one is enough to reach the whole mesh)
-   - `psk_hex` = cluster PSK (the value issued by "Add device" in the admin UI, or the same as existing nodes)
-   - direct SIP target of the door station = `<door-station-IP>:47190`
-   - whether an external mic is present
-3. Once it joins the mesh, settings (theme, quick replies, subjects, language) sync automatically.
-
-## 5. External microphone (only if you want two-way talk)
-
-Since there is no built-in mic, **speaking** requires an external one:
-- Headphone jack: a headset with a mic (TRRS). Whether the iPad 1's 3.5mm jack accepts a
-  headset mic depends on the unit/accessory — if recognized, RemoteIO picks up the input.
-- Dock connector: a mic-capable dock accessory.
-If no mic is present / recognized, it runs "listen only" (you hear the door, your voice is silent).
-
-## 6. Verification
-
-- Ring → the iPad shows the door video full-screen and you hear the door's audio.
-- Quick-reply button → large text + text-to-speech on the door station.
-- Unlock button → the HA lock opens via the door station (DTMF `*1`).
-- Unplug the LAN cable / Wi-Fi → it leaves the mesh within tens of seconds, rejoins on recovery.
-- With an external mic: your voice comes out of the door speaker.
-
-## Notes
-
-- A jailbroken device is meant for this doorbell only, on the LAN (never expose it externally). Always change the SSH password.
-- Keep it powered and always on (the app disables the idle timer). Watch for battery swelling (if possible, remove the battery and power it directly).
-- Do not update the OS (stay on 5.1.1). To update the app, re-run §3.
+The optional root keepalive helper is implemented, host-tested, and available as a reproducible
+armv7/iOS 5.1 staged DEB. The package installs only the binary and inactive launchd template; use
+`ios-compat/scripts/install_helper_ios5.sh --stage` and do not enable it during normal app
+provisioning. There is still no completed iPad helper qualification. Recovery must work without it
+until an explicitly approved `DB_CONFIRM_ROOT_HELPER=YES ... --enable` run proves its root-owned
+plist, UID/GID and socket permissions, maintenance lease, crash/hang safe mode, rollback, and soak
+on the exact device. Keep the device on an isolated trusted LAN and never expose its SSH, MiniSIP,
+mesh, HTTP, or camera endpoints directly to the Internet.

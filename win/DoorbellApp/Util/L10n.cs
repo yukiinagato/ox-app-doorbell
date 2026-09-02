@@ -1,4 +1,3 @@
-// 文言 (tools/gen_i18n.py が生成した Resources/Strings*.resx)。既定 = ja。
 using System.Globalization;
 using System.Resources;
 using System.Threading;
@@ -18,7 +17,6 @@ namespace DoorbellApp.Util
             CultureInfo.DefaultThreadCurrentUICulture = culture;
         }
 
-        /// <summary>key はドット区切り (resx 内ではアンダースコア化されている)。</summary>
         public static string T(string key, params object[] args)
         {
             string s = null;

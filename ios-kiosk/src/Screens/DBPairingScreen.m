@@ -3,6 +3,7 @@
 #import "../Core/DBBootConfig.h"
 #import "../Core/DBConfigUtil.h"
 #import "../Core/DBCoreBridge.h"
+#import "../Core/DBTexts.h"
 #import "../Media/DBQrCode.h"
 #import "DBRouter.h"
 
@@ -21,8 +22,9 @@
   UILabel *_errorLabel;
   NSString *_lastQr;
   NSTimer *_poll;
-  BOOL _confirmingFound;  // 親機化の 2 段確認
-  BOOL _fetchBusy;        // 背景収集実行中 (重複 poll 防止)
+  BOOL _confirmingFound;
+  BOOL _fetchBusy;
+  BOOL _hasPersistenceError;
 }
 
 - (id)initWithRouter:(DBRouter *)router {
@@ -40,7 +42,7 @@
 }
 
 - (UIButton *)flatButton {
-  UIButton *b = [UIButton buttonWithType:UIButtonTypeCustom];  // iOS5: System=白背景回避
+  UIButton *b = [UIButton buttonWithType:UIButtonTypeCustom];
   return b;
 }
 
@@ -62,7 +64,7 @@
   [self addSubview:_scroll];
 
   _title = [[UILabel alloc] init];
-  _title.text = @"この端末を追加";
+  _title.text = [[_router texts] ts:@"admin.add_device"];
   _title.textColor = [UIColor whiteColor];
   _title.font = [UIFont boldSystemFontOfSize:26];
   _title.textAlignment = NSTextAlignmentCenter;
@@ -82,27 +84,27 @@
 
   _status = [[UILabel alloc] init];
   _status.numberOfLines = 0;
-  _status.text = @"配対を待っています…\n管理画面の「デバイスを追加」でこの端末を承認するか、この QR を読み取ってください。";
+  _status.text = [[_router texts] ts:@"setup.pair_waiting"];
   _status.textColor = [UIColor colorWithWhite:0.65 alpha:1];
   _status.font = [UIFont systemFontOfSize:14];
   _status.textAlignment = NSTextAlignmentCenter;
   [_scroll addSubview:_status];
 
   _sep = [[UILabel alloc] init];
-  _sep.text = @"── または PIN で参加 ──";
+  _sep.text = [[_router texts] ts:@"setup.or_join_pin"];
   _sep.textColor = [UIColor colorWithWhite:0.4 alpha:1];
   _sep.font = [UIFont systemFontOfSize:13];
   _sep.textAlignment = NSTextAlignmentCenter;
   [_scroll addSubview:_sep];
 
-  _host = [self textFieldWithPlaceholder:@"接続先 (例 10.0.1.5:47172)"];
+  _host = [self textFieldWithPlaceholder:[[_router texts] ts:@"setup.join_host"]];
   [_scroll addSubview:_host];
 
   _pinField = [self textFieldWithPlaceholder:@"PIN"];
   [_scroll addSubview:_pinField];
 
   _join = [self flatButton];
-  [_join setTitle:@"PIN で参加" forState:UIControlStateNormal];
+  [_join setTitle:[[_router texts] ts:@"setup.join_pin"] forState:UIControlStateNormal];
   _join.titleLabel.font = [UIFont boldSystemFontOfSize:18];
   [_join setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
   _join.backgroundColor = [UIColor colorWithRed:0.13 green:0.45 blue:0.85 alpha:1];
@@ -111,20 +113,24 @@
   [_scroll addSubview:_join];
 
   _foundSep = [[UILabel alloc] init];
-  _foundSep.text = @"── 新規クラスタ ──";
+  _foundSep.text = [[_router texts] ts:@"setup.new_cluster"];
   _foundSep.textColor = [UIColor colorWithWhite:0.4 alpha:1];
   _foundSep.font = [UIFont systemFontOfSize:13];
   _foundSep.textAlignment = NSTextAlignmentCenter;
   [_scroll addSubview:_foundSep];
 
   _found = [self flatButton];
-  [_found setTitle:@"この端末を親機にする" forState:UIControlStateNormal];
+  [_found setTitle:[[_router texts] ts:@"setup.pair_primary"] forState:UIControlStateNormal];
   _found.titleLabel.font = [UIFont boldSystemFontOfSize:16];
   [_found setTitleColor:[UIColor colorWithRed:0.85 green:0.55 blue:0.2 alpha:1]
                forState:UIControlStateNormal];
   [_found addTarget:self action:@selector(onFound)
    forControlEvents:UIControlEventTouchUpInside];
   [_scroll addSubview:_found];
+  if ([[_router boot].role isEqualToString:@"door_station"]) {
+    _foundSep.hidden = YES;
+    _found.hidden = YES;
+  }
 
   _errorLabel = [[UILabel alloc] init];
   _errorLabel.numberOfLines = 0;
@@ -136,7 +142,7 @@
 
   [self clearLabelBackgrounds:_scroll];
 }
-#pragma mark - poll / 更新
+
 
 - (void)startPolling {
   [self reload];
@@ -154,12 +160,12 @@
   _poll = nil;
 }
 
-// core 呼び出しは main で行わない (mesh タイムアウト中に core ロックで main が
-// 数秒〜15s+ 塞がる — 実機で watchdog 発火を確認)。背景収集 → main 反映。
+
+
 - (void)onPoll {
   if (_fetchBusy) return;
   _fetchBusy = YES;
-  DBCoreBridge *core = [_router core];  // block が強参照で保持 (ARC)
+  DBCoreBridge *core = [_router core];
   __weak DBPairingScreen *wself = self;
   dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
     NSDictionary *p = [core pairingInfo];
@@ -168,8 +174,9 @@
       if (!s) return;
       s->_fetchBusy = NO;
       if (!s.superview) return;
-      if ([p isKindOfClass:[NSDictionary class]] && [[p objectForKey:@"paired"] boolValue]) {
-        // 配対済み → router の paired イベントが永続化と自動 close を行う (冪等)。
+      if (!s->_hasPersistenceError && [p isKindOfClass:[NSDictionary class]] &&
+          [[p objectForKey:@"paired"] boolValue]) {
+
         [s.router closePairingAnimated:YES];
       } else {
         [s applyPairingInfo:p];
@@ -182,7 +189,7 @@
   [self onPoll];
 }
 
-// main スレッド。背景収集済みの pairingInfo を反映。
+
 - (void)applyPairingInfo:(NSDictionary *)p {
   if (![p isKindOfClass:[NSDictionary class]]) return;
   NSDictionary *selfInfo = [p objectForKey:@"self"];
@@ -200,7 +207,7 @@
   NSString *qr = [p objectForKey:@"pair_qr"];
   if ([qr isKindOfClass:[NSString class]] && [qr length] > 0 && ![qr isEqualToString:_lastQr]) {
     _lastQr = [qr copy];
-    // iPad1 の QR 生成は重い → 背景で作り main で反映。
+
     __weak DBPairingScreen *wself = self;
     NSString *qrCopy = [qr copy];
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
@@ -214,42 +221,68 @@
   [self setNeedsLayout];
 }
 
-#pragma mark - 操作
+
 
 - (void)handleJoinResult:(NSDictionary *)ev {
   if ([[ev objectForKey:@"ok"] boolValue]) {
-    [_router closePairingAnimated:YES];  // paired イベントでも閉じるが冪等
+    [_router closePairingAnimated:YES];
   } else {
-    _errorLabel.text = [NSString stringWithFormat:@"参加できませんでした: %@",
-                        [ev objectForKey:@"err"] ?: @"?"];
+    _errorLabel.text = [[_router texts] t:@"setup.join_failed",
+                         [ev objectForKey:@"err"] ?: @"?", nil];
   }
 }
 
-// 親機化は 2 段確認 (UIAlertView の代わりにボタン文言を変える)。
+- (void)handlePersistenceError {
+  _hasPersistenceError = YES;
+  _errorLabel.text = [[_router texts] ts:@"admin.pair_secure_failed"];
+  [self setNeedsLayout];
+}
+
+
 - (void)onFound {
+  _hasPersistenceError = NO;
   if (!_confirmingFound) {
     _confirmingFound = YES;
     _errorLabel.text = @" ";
-    [_found setTitle:@"よろしければもう一度タップ (既存クラスタに参加する場合はキャンセル)"
+    [_found setTitle:[[_router texts] ts:@"setup.confirm_new_cluster"]
             forState:UIControlStateNormal];
     return;
   }
   _confirmingFound = NO;
-  [_found setTitle:@"この端末を親機にする" forState:UIControlStateNormal];
+  [_found setTitle:[[_router texts] ts:@"setup.pair_primary"] forState:UIControlStateNormal];
   if ([[_router core] foundCluster]) {
-    [_router closePairingAnimated:YES];  // 親機化 → paired イベントも届く
+    NSDictionary *info = [[_router core] startPairingWithSeconds:600];
+    NSString *host = [info objectForKey:@"host"];
+    NSString *pin = [info objectForKey:@"pin"];
+    if ([[info objectForKey:@"ok"] boolValue] && [host length] > 0 && [pin length] > 0) {
+      _status.text = [[_router texts] t:@"setup.pair_host_pin", host, pin, nil];
+      NSString *qr = [NSString stringWithFormat:@"doorbell-join:%@|%@", host, pin];
+      _lastQr = qr;
+      _qr.image = [DBQrCode imageForString:qr targetPx:480];
+      _host.text = host;
+      _pinField.text = pin;
+      _host.enabled = NO;
+      _pinField.enabled = NO;
+      _join.hidden = YES;
+      _found.hidden = YES;
+      _foundSep.hidden = YES;
+      [self setNeedsLayout];
+    } else {
+      _errorLabel.text = [[_router texts] ts:@"setup.new_cluster_failed"];
+    }
   } else {
-    _errorLabel.text = @"親機化できませんでした";
+    _errorLabel.text = [[_router texts] ts:@"setup.new_cluster_failed"];
   }
 }
 
 - (void)onJoin {
+  _hasPersistenceError = NO;
   NSString *host =
       [_host.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
   NSString *pin =
       [_pinField.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
   if ([host length] == 0 || [pin length] == 0) {
-    _errorLabel.text = @"接続先と PIN を入力してください";
+    _errorLabel.text = [[_router texts] ts:@"setup.join_required"];
     return;
   }
   [_host resignFirstResponder];
@@ -285,8 +318,12 @@
   _pinField.frame = CGRectMake(pad, y, w, 40); y += 50;
   _join.frame = CGRectMake(pad, y, w, 46); y += 56;
 
-  _foundSep.frame = CGRectMake(pad, y, w, 20); y += 28;
-  _found.frame = CGRectMake(pad, y, w, 44); y += 54;
+  if (!_foundSep.hidden) {
+    _foundSep.frame = CGRectMake(pad, y, w, 20); y += 28;
+  }
+  if (!_found.hidden) {
+    _found.frame = CGRectMake(pad, y, w, 44); y += 54;
+  }
 
   CGSize errSz = [_errorLabel sizeThatFits:CGSizeMake(w, 9999)];
   _errorLabel.frame = CGRectMake(pad, y, w, MAX(errSz.height, 22)); y += MAX(errSz.height, 22) + 20;
@@ -298,4 +335,3 @@
 }
 
 @end
-

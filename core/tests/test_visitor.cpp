@@ -1,7 +1,7 @@
-// 訪客言語 + 用件 (visit_purposes) + 文言/音声連動の統合テスト。
-//  - visitor_lang イベントの複製・uiNotify・自動復帰 (ui.visitor_lang_revert_s)
-//  - press payload の purpose/visitor_lang と trigger_rules.when.purposes の分岐
-//  - auto_reply アクション (門口機の自動応対) と quick_replies.audio の優先再生
+
+
+
+
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
@@ -26,6 +26,8 @@
 using namespace db;
 
 namespace {
+
+std::string vis_panel_auth;
 
 struct VFleet {
   SimClock clock{1'700'000'000'000LL, 0};
@@ -62,7 +64,7 @@ struct VFleet {
       }
       return n;
     }
-    // 条件付き検索: t が一致し key==value を持つ通知の数
+
     size_t uiCountKv(const std::string& t, const char* key, const std::string& value) const {
       size_t n = 0;
       for (const auto& e : ui) {
@@ -72,7 +74,7 @@ struct VFleet {
       }
       return n;
     }
-    // 直近の t 通知 (無ければ nullptr Doc)
+
     json::Doc lastUi(const std::string& t) const {
       json::Doc out;
       for (const auto& e : ui) {
@@ -94,7 +96,7 @@ struct VFleet {
     o.listen_addr = addr;
     o.advertise_addr = addr;
     o.psk = psk;
-    o.enable_beacon = false;  // 実 beacon 禁止 (稼働 fleet への迷入防止)
+    o.enable_beacon = false;
     o.http_port = 0;
     o.seed_default_config = seed_cfg;
     o.mesh_timing_template = timing();
@@ -123,7 +125,7 @@ struct VFleet {
   }
 };
 
-// status_json の visitor_lang.<door> ("" = 未選択)
+
 std::string statusVisitorLang(Node& n, const std::string& door) {
   auto st = json::parse(n.statusJson());
   REQUIRE(st);
@@ -132,7 +134,7 @@ std::string statusVisitorLang(Node& n, const std::string& door) {
 
 }  // namespace
 
-TEST_CASE("visitor: 言語切替が複製され、press に載り、返信文言/TTS が追従する") {
+TEST_CASE("visitor: language changes replicate and affect press, replies, and TTS") {
   VFleet f;
   auto& a = f.add("A:1", "front", "door_station", "d_front", true);
   auto& b = f.add("B:1", "kitchen", "indoor_panel", "", false);
@@ -140,12 +142,12 @@ TEST_CASE("visitor: 言語切替が複製され、press に載り、返信文言
   REQUIRE(b.node->start());
   f.run(1500);
 
-  // 復帰を短縮 (既定 60 秒はテストに長い)
+
   a.node->setConfigKey("ui.visitor_lang_revert_s", "5");
   f.run(500);
 
-  // 門口機で英語を選択 → visitor_lang イベントが複製され両ノードで uiNotify
-  a.node->setVisitorLang("", "en");  // door 省略 = 自機担当 d_front
+
+  a.node->setVisitorLang("", "en");
   f.run(500);
   CHECK(a.uiCount("visitor_lang") == 1);
   CHECK(b.uiCount("visitor_lang") == 1);
@@ -153,8 +155,9 @@ TEST_CASE("visitor: 言語切替が複製され、press に載り、返信文言
   CHECK(statusVisitorLang(*a.node, "d_front") == "en");
   CHECK(statusVisitorLang(*b.node, "d_front") == "en");
 
-  // 用件付き按鈴: payload → 来鈴通知に purpose/visitor_lang が載る
-  a.node->press("", "p_delivery");
+
+  const std::string call_id = a.node->pressV2("d_front", "p_delivery");
+  REQUIRE(!call_id.empty());
   f.run(500);
   {
     auto ev = b.lastUi("event");
@@ -164,8 +167,8 @@ TEST_CASE("visitor: 言語切替が複製され、press に載り、返信文言
     CHECK(json::getString(ev.get(), "visitor_lang") == "en");
   }
 
-  // クイック返信は訪客言語で表示 + TTS (qr_away の en ラベル)
-  b.node->sendQuickReply("qr_away", "", "d_front", "web");
+
+  REQUIRE(b.node->sendQuickReplyV2("qr_away", "", "d_front", call_id, 0));
   f.run(500);
   {
     auto r = a.lastUi("reply");
@@ -177,17 +180,17 @@ TEST_CASE("visitor: 言語切替が複製され、press に載り、返信文言
   CHECK(a.tts[0].first == "We are away right now");
   CHECK(a.tts[0].second == "en");
 
-  // 無操作 5 秒 (最後の操作 = press で仕切り直し) → ja へ自動復帰 (イベントも複製)
+
   f.run(6000);
   CHECK(statusVisitorLang(*a.node, "d_front") == "");
   CHECK(statusVisitorLang(*b.node, "d_front") == "");
   CHECK(a.uiCountKv("visitor_lang", "lang", "ja") == 1);
   CHECK(b.uiCountKv("visitor_lang", "lang", "ja") == 1);
-  // 復帰イベントは 1 回だけ (発信ノードのみがタイマーを張る)
+
   CHECK(a.uiCount("event", "visitor_lang") == 2);  // en + ja
   CHECK(b.uiCount("event", "visitor_lang") == 2);
 
-  // 復帰後の press には visitor_lang が載らない
+
   a.node->press("");
   f.run(500);
   {
@@ -201,7 +204,7 @@ TEST_CASE("visitor: 言語切替が複製され、press に載り、返信文言
   b.node->stop();
 }
 
-TEST_CASE("visitor: when.purposes の分岐 + auto_reply (門口機の自動応対)") {
+TEST_CASE("visitor: when.purposes branches and auto_reply responds at the door station") {
   VFleet f;
   auto& a = f.add("A:1", "front", "door_station", "d_front", true);
   auto& b = f.add("B:1", "kitchen", "indoor_panel", "", false);
@@ -209,7 +212,7 @@ TEST_CASE("visitor: when.purposes の分岐 + auto_reply (門口機の自動応�
   REQUIRE(b.node->start());
   f.run(1500);
 
-  // 宅配のみ: 自動応対 (電話は鳴らさない)。それ以外: B で chime。
+
   std::string r_delivery = std::string("{\"enabled\":true,") +
       "\"when\":{\"type\":\"button\",\"doors\":[\"d_front\"],\"purposes\":[\"p_delivery\"]}," +
       "\"actions\":[{\"type\":\"auto_reply\",\"reply_id\":\"qr_wait\"}]}";
@@ -220,13 +223,15 @@ TEST_CASE("visitor: when.purposes の分岐 + auto_reply (門口機の自動応�
   a.node->setConfigKey("trigger_rules.r_chime", r_chime);
   f.run(500);
 
-  // 用件なしの汎用按鈴 → chime のみ (purposes 指定ルールは発火しない)
+
   a.node->press("");
   f.run(500);
   CHECK(b.uiCount("chime") == 1);
   CHECK(a.uiCount("reply") == 0);
+  a.node->cancelCall("d_front");
+  f.run(200);
 
-  // 宅配按鈴 → 門口機 A が自動でクイック返信を表示 + TTS + reply イベント複製
+
   a.node->press("", "p_delivery");
   f.run(800);
   CHECK(a.uiCount("reply") == 1);
@@ -239,9 +244,9 @@ TEST_CASE("visitor: when.purposes の分岐 + auto_reply (門口機の自動応�
   CHECK(a.tts[0].first == "少々お待ちください");
   CHECK(a.uiCount("event", "reply") == 1);
   CHECK(b.uiCount("event", "reply") == 1);
-  CHECK(b.uiCount("chime") == 2);  // 汎用ルールは用件付きでも鳴る
+  CHECK(b.uiCount("chime") == 2);
 
-  // 室内パネル発の用件付き按鈴でも、実行するのは該当 door の門口機 1 台だけ
+
   b.node->press("d_front", "p_delivery");
   f.run(800);
   CHECK(a.uiCount("reply") == 2);
@@ -252,50 +257,51 @@ TEST_CASE("visitor: when.purposes の分岐 + auto_reply (門口機の自動応�
   b.node->stop();
 }
 
-TEST_CASE("visitor: Node::text は i18n_overrides → ja → 内蔵既定 → key の順で解決する") {
+TEST_CASE("visitor: Node::text resolves override, Japanese, built-in default, then key") {
   VFleet f;
   auto& a = f.add("A:1", "front", "door_station", "d_front", true);
   REQUIRE(a.node->start());
   f.run(300);
 
-  // 内蔵既定 (置換込み)
+
   CHECK(a.node->text("event.press", "ja", {{"door", "正面玄関"}, {"time", "14:03"}}) ==
         "正面玄関 に来客です (14:03)");
   CHECK(a.node->text("event.press", "en", {{"door", "Front"}, {"time", "14:03"}}) ==
         "Visitor at Front (14:03)");
   CHECK(a.node->text("emergency.notify_off", "zh") == "✅ 警报已解除");
-  // 未知言語は ja 既定へ / 未知キーはキー自身
+
   CHECK(a.node->text("emergency.notify_off", "fr") == "✅ 緊急解除");
   CHECK(a.node->text("no.such.key", "ja") == "no.such.key");
 
-  // 実行時上書き (i18n_overrides — キーはドットを含む平キー)
+
   a.node->setConfigKey("i18n_overrides.ja", "{\"event.press\":\"{door}にお客様({time})\"}");
   a.node->setConfigKey("i18n_overrides.en", "{}");
   f.run(300);
   CHECK(a.node->text("event.press", "ja", {{"door", "母屋"}, {"time", "9:00"}}) ==
         "母屋にお客様(9:00)");
-  // en に訳が無ければ ja 上書きへ回落
+
   CHECK(a.node->text("event.press", "en", {{"door", "Main"}, {"time", "9:00"}}) ==
         "Mainにお客様(9:00)");
 
   a.node->stop();
 }
 
-TEST_CASE("visitor: quick_replies.audio はキャッシュ済みなら TTS より優先") {
+TEST_CASE("visitor: cached quick-reply audio takes precedence over TTS") {
   VFleet f;
   auto& a = f.add("A:1", "front", "door_station", "d_front", true);
   REQUIRE(a.node->start());
   f.run(500);
 
-  // カスタム音声を登録し qr_away に ja 音声として紐付け (flat key の合成)
+
   Bytes wav = toBytes("RIFF....WAVEfake");
   std::string hash = a.node->addAsset(wav, "audio/wav", "away.wav");
   REQUIRE(hash.size() == 64);
   a.node->setConfigKey("quick_replies.qr_away.audio", "{\"ja\":\"" + hash + "\"}");
   f.run(500);
 
-  a.node->press("");
-  a.node->sendQuickReply("qr_away", "", "d_front", "web");
+  const std::string call_id = a.node->pressV2("d_front", "");
+  REQUIRE(!call_id.empty());
+  REQUIRE(a.node->sendQuickReplyV2("qr_away", "", "d_front", call_id, 0));
   f.run(500);
   {
     auto r = a.lastUi("reply");
@@ -303,9 +309,9 @@ TEST_CASE("visitor: quick_replies.audio はキャッシュ済みなら TTS よ�
     CHECK(json::getString(r.get(), "audio") == hash);
     CHECK(json::getString(r.get(), "audio_path") == a.node->assetPath(hash));
   }
-  CHECK(a.tts.empty());  // 音声がある → TTS しない
+  CHECK(a.tts.empty());
 
-  // 訪客言語 en で en 音声が無い場合は ja 音声へ回落 (文言は en)
+
   a.node->setVisitorLang("d_front", "en");
   f.run(300);
   a.node->sendQuickReply("qr_away", "", "d_front", "web");
@@ -321,7 +327,7 @@ TEST_CASE("visitor: quick_replies.audio はキャッシュ済みなら TTS よ�
   a.node->stop();
 }
 
-// ---------- 実 TCP + HTTP (panel API 経由の訪客言語) ----------
+
 
 namespace {
 
@@ -353,6 +359,7 @@ std::string visReq(int port, const std::string& method, const std::string& path,
   sa.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
   REQUIRE(::connect(fd, reinterpret_cast<sockaddr*>(&sa), sizeof(sa)) == 0);
   std::string r = method + " " + path + " HTTP/1.1\r\nHost: 127.0.0.1\r\n";
+  if (!vis_panel_auth.empty()) r += "Authorization: Bearer " + vis_panel_auth + "\r\n";
   if (!cookie.empty()) r += "Cookie: dbsess=" + cookie + "\r\n";
   if (!body.empty())
     r += "Content-Type: " + (ctype.empty() ? "application/json" : ctype) +
@@ -377,7 +384,7 @@ std::string visBody(const std::string& resp) {
   return p == std::string::npos ? "" : resp.substr(p + 4);
 }
 
-// 条件が満たされるまで最大 max_ms 待つ (実時計)
+
 template <class F>
 bool visWaitFor(F cond, int max_ms = 5000) {
   for (int t = 0; t < max_ms; t += 50) {
@@ -389,7 +396,8 @@ bool visWaitFor(F cond, int max_ms = 5000) {
 
 }  // namespace
 
-TEST_CASE("visitor: panel API で言語切替 → state/press/events に反映 → 無操作で ja へ復帰") {
+TEST_CASE("visitor: panel language affects state, press, and events, then resets on idle") {
+  vis_panel_auth.clear();
   std::mt19937 rng(static_cast<uint32_t>(::getpid()) ^ 0x1a3cu);
   int mesh_port = visFreePort(rng);
   int http_port = visFreePort(rng);
@@ -403,9 +411,12 @@ TEST_CASE("visitor: panel API で言語切替 → state/press/events に反映 �
   o.door = "d_front";
   o.listen_addr = "127.0.0.1:" + std::to_string(mesh_port);
   o.psk.fill(0x3c);
-  o.enable_beacon = false;  // 実 beacon 禁止 (稼働 fleet への迷入防止)
+  o.enable_beacon = false;
   o.http_port = http_port;
   Node node(o);
+  node.setSecureStore(
+      [](const std::string& key) { return key == "panel.test" ? "visitor-panel-token" : ""; },
+      [](const std::string&, const std::string&) { return true; });
   std::mutex ui_mu;
   std::vector<std::string> ui;
   node.setUiEventCb([&](const std::string& e) {
@@ -414,30 +425,28 @@ TEST_CASE("visitor: panel API で言語切替 → state/press/events に反映 �
   });
   REQUIRE(node.start());
   node.setConfigKey("doors.d_front", "{\"label\":{\"ja\":\"正面玄関\"}}");
-  // 前半 (state/press/events/返信) は HTTP 往復が数回入るので復帰を長めに。
-  // 復帰そのものは後半で 1 秒に縮めて検証する。
+  node.setConfigKey("panel.token_refs", "[\"secret:panel.test\"]");
+
+
   node.setConfigKey("ui.visitor_lang_revert_s", "30");
 
-  // /api/events は管理 API (panel token では読めない) — 初回ログインでセッションを取る
+
   std::string login = visReq(http_port, "POST", "/api/login", "{\"password\":\"pw\"}");
   REQUIRE(login.rfind("HTTP/1.1 200", 0) == 0);
   size_t cpos = login.find("dbsess=");
   REQUIRE(cpos != std::string::npos);
   const std::string cookie = login.substr(cpos + 7, login.find(';', cpos) - (cpos + 7));
 
-  auto cfg = json::parse(node.configJson());
-  REQUIRE(cfg);
-  cJSON* toks = json::get(json::get(cfg.get(), "panel"), "tokens");
-  REQUIRE(cJSON_GetArraySize(toks) == 1);
-  const std::string k = cJSON_GetArrayItem(toks, 0)->valuestring;
+  const std::string k;
 
-  // 認証: token 無しは 403 / lang 欠落は 400
+
   CHECK(visReq(http_port, "POST", "/api/panel/visitor-lang?lang=en").find("403") !=
         std::string::npos);
+  vis_panel_auth = "visitor-panel-token";
   CHECK(visReq(http_port, "POST", "/api/panel/visitor-lang?k=" + k).find("400") !=
         std::string::npos);
 
-  // 英語へ切替 → state の door に visitor_lang=en
+
   REQUIRE(visReq(http_port, "POST", "/api/panel/visitor-lang?lang=en&k=" + k)
               .rfind("HTTP/1.1 200", 0) == 0);
   REQUIRE(visWaitFor([&] {
@@ -447,9 +456,16 @@ TEST_CASE("visitor: panel API で言語切替 → state/press/events に反映 �
     return json::getString(d0, "visitor_lang") == "en";
   }));
 
-  // 用件付き按鈴 → /api/events の press payload に purpose と visitor_lang
-  REQUIRE(visReq(http_port, "POST", "/api/panel/press?door=d_front&purpose=p_delivery&k=" + k)
-              .rfind("HTTP/1.1 200", 0) == 0);
+
+  const std::string press_response =
+      visReq(http_port, "POST", "/api/panel/press?door=d_front&purpose=p_delivery&k=" + k);
+  REQUIRE(press_response.rfind("HTTP/1.1 200", 0) == 0);
+  auto pressed = json::parse(visBody(press_response));
+  REQUIRE(pressed);
+  const std::string call_id = json::getString(pressed.get(), "call_id");
+  const int revision = static_cast<int>(json::getInt(pressed.get(), "stage_revision", -1));
+  REQUIRE(!call_id.empty());
+  REQUIRE(revision >= 0);
   REQUIRE(visWaitFor([&] {
     auto ev =
         json::parse(visBody(visReq(http_port, "GET", "/api/events?limit=20", "", "", cookie)));
@@ -466,8 +482,8 @@ TEST_CASE("visitor: panel API で言語切替 → state/press/events に反映 �
     return false;
   }));
 
-  // クイック返信は訪客言語 (en) のラベルで uiNotify される
-  node.sendQuickReply("qr_away", "", "d_front", "web");
+
+  REQUIRE(node.sendQuickReplyV2("qr_away", "", "d_front", call_id, revision));
   REQUIRE(visWaitFor([&] {
     std::lock_guard<std::mutex> lk(ui_mu);
     for (const auto& e : ui) {
@@ -480,19 +496,19 @@ TEST_CASE("visitor: panel API で言語切替 → state/press/events に反映 �
     return false;
   }));
 
-  // --- 自動復帰: ui.visitor_lang_revert_s = 1 秒で ja へ戻る ---
-  // 一度 ja に落としてから短い復帰時間で en を選び直す (タイマーは切替時に張られる)
+
+
   REQUIRE(visReq(http_port, "POST", "/api/panel/visitor-lang?lang=ja&k=" + k)
               .rfind("HTTP/1.1 200", 0) == 0);
   node.setConfigKey("ui.visitor_lang_revert_s", "1");
   {
     std::lock_guard<std::mutex> lk(ui_mu);
-    ui.clear();  // ここから先の visitor_lang 通知だけを数える
+    ui.clear();
   }
   REQUIRE(visReq(http_port, "POST", "/api/panel/visitor-lang?lang=en&k=" + k)
               .rfind("HTTP/1.1 200", 0) == 0);
 
-  // 無操作 1 秒 → ja へ自動復帰 (state から visitor_lang が消える)
+
   REQUIRE(visWaitFor([&] {
     auto st = json::parse(visBody(visReq(http_port, "GET", "/api/panel/state?k=" + k)));
     if (!st) return false;
@@ -509,7 +525,7 @@ TEST_CASE("visitor: panel API で言語切替 → state/press/events に反映 �
       if (json::getString(d.get(), "lang") == "ja") ja++;
     }
     CHECK(en == 1);
-    CHECK(ja == 1);  // 復帰イベントは 1 回だけ (タイマーの多重発火なし)
+    CHECK(ja == 1);
   }
 
   node.stop();

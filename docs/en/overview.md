@@ -1,75 +1,105 @@
-> Japanese original: ../ja/overview.md (canonical)
+# System overview
 
-# System Overview (features and architecture at a glance)
+ox-app-doorbell is a multi-node home doorbell/intercom. Native clients share the C++ core for mesh
+membership, replicated configuration/events, rules, HTTP APIs, media publication, and SIP control.
+Platform shells provide UI, camera/audio, secure storage, HTTPS, kiosk integration, and measured
+runtime capabilities through the versioned `db_platform_v2` ABI.
 
-A doorbell/intercom system for a private home (multiple buildings, multiple entrances, one shared LAN). Old, low-spec devices are repurposed as door stations and indoor panels. **Serverless self-healing** — the P2P mesh is the source of truth: even if HA/Asterisk goes down, the doorbell itself, intercom, and notifications keep working.
+English is canonical. See [capability status](capability-matrix.md), [deployment](deployment.md),
+[configuration](config-schema.md), [security](security.md), [recovery](recovery.md), and
+[network ports](network-ports.md).
 
-## Node roles
+## Roles and failure boundaries
 
-| role | Example devices | Main functions |
+| Role | Responsibility |
+|---|---|
+| `door_station` | Visitor UI, ring events, and the media/audio paths actually present on that device. The role does not imply a camera, microphone, outdoor rating, or hardware certification. |
+| `indoor_panel` | Targeted ring presentation, monitoring/answer controls, replies, and emergency UI as implemented by the shell. |
+| Browser panels | HTTP panel/API clients. Audio calling is conditional on a secure browser context and configured Asterisk WebRTC. |
+| Optional integrations | MQTT/Home Assistant, Telegram, Asterisk/PSTN, go2rtc/HomeKit. Their outage still affects actions that depend on them. |
+
+Replicated mesh state can converge without a central database. With suitable rules and real PJSIP,
+mesh-native chime/ring state and direct intercom can survive an HA or PBX outage. Telegram, HA,
+PSTN, browser WebRTC, and PBX-routed calls still depend on their corresponding services.
+
+## Implemented contracts
+
+- versioned call IDs, targeted schema-v2 chimes, cancellation, recovery reporting, and stale-event
+  rejection;
+- LWW-map configuration and event replication, runtime capabilities/status, rules, admin/panel APIs,
+  assets, MJPEG/snapshots, and fMP4 packaging for encoded H.264 supplied by a verified platform;
+- direct or registered SIP when the exact artifact links a real backend; `sipctl_stub` is never a
+  product calling path;
+- platform secure storage referenced by `secret:` identifiers; persistent config and exports do
+  not carry new plaintext credentials;
+- bounded platform recovery mechanisms whose limitations are reported rather than hidden.
+
+In the schema-v2 lifecycle, a manual-answer client binds the exact
+`door`/`call_id`/`stage_revision` to an answer-mode SIP dialog only. On connection,
+`call_answered` records one deterministic `dialog_owner`, cancels the ring timeout, and changes the
+matching call to `in_call`; visitor cancellation is then rejected. A losing simultaneous answer
+hangs up without ending the winner, and monitor sessions never claim ownership. Owner hangup emits
+`call_ended`. Restart recovery belongs to the press origin while ringing and to `dialog_owner`
+while in-call; failure within ten seconds emits one global idempotent recovery cancellation.
+
+SOS state always replicates, but recipient/channel presentation is rule-driven and may be empty.
+Open Web panels process replicated SOS by default. An administrator can set
+`emergency.web_active_page_alerts:false` to disable that raw-state path without disabling a
+matching positive `device_alert` or Web Push. Core delivery events describe dispatch attempts;
+specifically, `delivery_result` is not presentation proof. Clients separately report per-channel
+presentation and limitations. While the raw path is enabled,
+a rule TTL expires custom decoration/sound but the safe red raw-SOS overlay remains until clear or
+the switch is disabled.
+
+Core durably caches each peer's last-valid native UI manifest/capabilities. A configured offline
+device marked `cached_contract:true` can be validated and queued against that cached contract,
+but only a later renderer report proves application. Web manifests remain local to the serving
+Core node. A legacy alert with no `targets` object addresses all native nodes and Web groups.
+Explicit selectors are symmetric: Web-only groups address no native shell, while native-only
+selectors address no active Web page or Push subscription. A Web page reads `?group=<name>` and
+uses that persisted group for both state polling and Push enrollment. Complete Push subscription
+secrets are sealed together in a schema-v2 CRDT record with XChaCha20-Poly1305 under a
+mesh-PSK-derived key and never appear as plaintext in configuration/export.
+
+Capabilities are measured and advertised by each shell. A codec being enumerated, a source file
+compiling, or an OS version being targeted is not certification.
+
+## Platform summary
+
+| Platform | Source/build scope | Qualification status |
 |---|---|---|
-| door_station | Toughpad (Win) / Android / iOS mounted at the entrance | Call button, front camera, mic/speaker, kiosk |
-| indoor_panel | Indoor tablet / PC / phone | Ring display, answer/quick replies, monitoring, SOS |
-| indoor_panel + tv:true | Android TV | Full-screen live view on ring + direct listen-in, D-pad answering |
-| (Web) door.html/monitor.html/call.html | Browser (incl. iPad 1) | Web-based station / ring receiver / calls |
+| Android | API 21+ modern tier; API 19 armv7/NEON legacy tier with separate NDK/PJSIP caches | A moto g64y 5G/API 34 bounded critical-trim/fMP4 recovery smoke passed. The API 19 qualification list remains empty (zero supported SKUs); CI debug-contract APKs are not releases. |
+| Windows | .NET Framework 4.8 WPF shell and x86/x64 native cores | Release gates exist; Windows VM and Toughpad hardware validation remain outstanding. |
+| iOS | iOS 12+ Swift shell; iOS 9 arm64 compatibility target; iOS 5.1 armv7 Objective-C shell | iOS 9 arm64 has an unsigned link proof only; armv7's formal gate is uncommissioned. iOS 5 uses `ios-kiosk` and staged `ios-compat` tools. |
+| tvOS | Visual monitor/reply plus direct-SIP listen-only source path | Tracked CI proves only an unsigned Debug simulator build with real PJSIP; no Release/device or hardware qualification. No microphone, Answer/transmit unsupported. |
+| Web | Admin and resident/visitor panels, same-origin media, active-page SOS, and optional Push | WebRTC calls and Push are conditional; legacy Safari support is best-effort until device-tested. Web and native semantic manifests are separate, and remote Web manifests are not replicated. |
 
-Every node runs the shared C++ core (doorbell-core) and connects as an equal peer over the mesh.
+The first-generation iPad has a built-in microphone and speaker but no camera. It can be considered
+for an indoor role or an explicitly configured external-camera/no-video door profile only after
+real-device testing. It is not outdoor-rated and requires a weatherproof, condensation-controlled,
+temperature-managed enclosure for entrance use. Bounded RTSP/TCP H.264 ingest and Annex-B
+forwarding are host/loopback verified, but stay degraded until an actual IDR is accepted and remain
+unqualified with a real camera on iPad 1. HTTP(S) MJPEG/snapshot direct playback resolves only a
+`secret_ref` into ephemeral authorization headers and does not forward JPEG into Core. The optional
+fixed-purpose root helper is implemented and host-tested, with a reproducible staged DEB that leaves
+launchd disabled; it remains opt-in and unqualified on iOS hardware. Separately, a bounded
+Android-to-Core-fMP4-to-iPad smoke passed at 15–16 fps on the real iPad 1 foreground renderer;
+unattended post-crash foreground video resume and the broader hardware gates remain open.
 
-## Feature map
+## Repository verification entry points
 
-- **Calling**: door-station button (generic or one-tap per purpose) → rule engine → SIP call / chime /
-  Telegram / HA / auto-reply. Visitors can switch language and pick a purpose (visit/delivery/…).
-- **Intercom** (direct SIP without Asterisk, port 47190): audio only / door video + two-way audio /
-  two-way indoor-outdoor video (symmetric MJPEG). Supports listen-in (one-way) and answer takeover
-  (grab the phone leg and answer indoors). Survives PBX outages. Only browser calls go through the
-  Asterisk WebRTC gateway (optional).
-- **Phone integration** (Asterisk + Hikari Denwa): a ring simultaneously calls indoor extensions and
-  mobile phones away from home (PSTN); DTMF feature codes unlock the door, etc. See deploy/asterisk/.
-- **Notifications**: Telegram (photo + inline buttons for quick replies) / HA (MQTT Discovery: doorbell
-  event, motion, device offline, bridge liveness, emergency) / indoor chime. Only the leader node sends
-  external notifications (prevents duplicates).
-- **Video**: default is MJPEG (all devices, all browsers). The h264 profile (Phase 6) uses HW-encoded
-  fMP4 → smooth in-call video quality, no transcoding on HA. go2rtc → HomeKit brings doorbell
-  notifications + live view to the Apple Home app.
-- **Quick replies / away responses**: canned messages (multilingual, customizable) sent from
-  indoors/Telegram/HA/web → shown in large text at the door station and read aloud (system TTS or
-  custom audio). Follows the visitor's language.
-- **Emergency SOS**: long-press indoors → alarm on all nodes + siren + Telegram 🚨 + MQTT (HA hooks).
-  No automatic calls to police or fire services.
-- **Personalization (push)**: change background color/image, wording, purposes, languages, and audio
-  from the indoor panel/admin UI → synced in milliseconds via CRDT. Images/audio are proactively
-  prefetched to each door station (assets ledger) for instant playback.
-- **Anti-theft / kiosk**: exit requires an on-screen keypad PIN, shell-replacement autostart, watchdog
-  foreground guard (pushes back Windows Update popups etc.), offline alarm, Device Owner lock on
-  Android.
+```sh
+cmake -S core -B build -DDB_WITH_PJSIP=OFF
+cmake --build build -j4
+./build/doorbell_tests
+python3 tools/gen_i18n.py --check
+python3 tools/check_english_source.py
+```
 
-## Per-platform support matrix
+Target build commands and release gates are in the platform READMEs and the
+[capability matrix](capability-matrix.md). A passing host-core build is not evidence that a signed,
+SIP-enabled, hardware-specific artifact passed its release gates.
 
-| Feature | Windows (WPF) | Android | iOS | Web |
-|---|---|---|---|---|
-| Full door station | ✅ | ✅ | ✅ | door.html (no audio) |
-| Indoor intercom | ✅ | ✅ | ✅ | call.html (modern browsers) |
-| TV monitoring | — | ✅ (TV) | AppleTV=HomeKit / tvOS app=✅ (video only — SIP listen-in is TODO) | — |
-| Kiosk hardening | shell replacement + guard + keypad | Device Owner + guard | supervised SAM | — |
-| Screen-lock prevention | SetThreadExecutionState | keyguard disabled + STAY_ON | isIdleTimerDisabled | — |
-| Oldest supported | Win7 SP1 | 5.0 (4.4 legacy) | 12 (9 legacy); jailbroken iPad 1 / iOS5.1.1 is a native node too | iOS5 Safari |
-
-> **iPad 1 (A1219, iOS5.1.1) jailbroken native node**: jailbreak it and install the self-built native app and it becomes a first-class node with the full C++ core — see the door video, hear the audio, send quick replies, unlock; two-way talk with an external mic. Hardware limits: no camera = it cannot send its own video, no built-in mic = listen-only without an external mic. Steps: [deploy/provision/ios/ipad1-jailbreak.md](https://github.com/yukiinagato/ox-app-doorbell/blob/main/deploy/provision/ios/ipad1-jailbreak.md). Without a jailbreak, the Web version (door.html/monitor.html) is usable best-effort.
-
-## Repository layout & builds
-
-- Core/tests: `cmake -S core -B build && cmake --build build && ./build/doorbell_tests`
-- Host device simulation: `./build/doorbell_host --help` (bring up a station on Mac/Linux)
-- Platform apps are CI-built by GitHub Actions (`.github/workflows/build.yml`) →
-  Windows/Android artifacts can be downloaded from Artifacts.
-- iOS/tvOS: `xcodebuild -project ios/Doorbell.xcodeproj -scheme Doorbell|DoorbellTV`
-  (the core is built automatically by a run-script via CMake. For SIP, run
-  `tools/build_pjsip_ios.sh` first. Signing/kiosk/distribution: deploy/provision/ios/provision.en.md)
-- Development stack: `deploy/dev/{asterisk,mosquitto}/docker-compose.yml`
-
-## Configuration = a single CRDT
-
-All configuration lives in an LWW-Map CRDT (docs/en/config-schema.md is canonical). Write via the
-admin UI (`http://<ip>:47180/admin/` on any node) or the API and it propagates to the whole fleet in
-milliseconds. The source of truth is distributed — as long as one node survives, the configuration can
-be restored.
+`tools/conformance/run.py` is a golden reference-model replay plus narrow source-anchor smoke test.
+It is useful for protocol drift, but it does not execute client artifacts or prove rendering,
+timing, signing, or hardware behavior.

@@ -1,17 +1,9 @@
 #import <Foundation/Foundation.h>
 
-// doorbell-core C ABI の ObjC (ARC) ラッパ。
-// 設計ルール (ios-legacy で固めたもの):
-//  - コールバックは core 内部スレッドから届く → 必ず main へ marshal してから配送。
-//    ハンドラは add/remove の衝突を避けるためコピーして回す。
-//  - core が返す char* は db_free で解放。SPI が core へ渡す char* は malloc (core が free)。
-//  - db_platform:
-//      log_line      → NSLog
-//      tts_speak     → iOS5 に AVSpeechSynthesizer 無し (iOS7+) → 提示音へ回落
-//      https_request → NSURLConnection sendSynchronousRequest (同期契約・core 専用スレッド駆動)
-//      secure_get/put→ Keychain (kSecClassGenericPassword)
-//      device_info   → main スレッドで定期更新したキャッシュ JSON を返す (UIKit 非依存)
-#import <Foundation/Foundation.h>
+// ARC wrapper for the versioned doorbell-core C ABI. Platform callbacks may
+// arrive on Core threads; UI events are always marshalled to the main thread.
+// Buffers returned by platform v2 callbacks are malloc-owned and released via
+// the registered release_buffer callback.
 
 typedef void (^DBUiEventHandler)(NSDictionary *ev);
 
@@ -22,33 +14,79 @@ typedef void (^DBUiEventHandler)(NSDictionary *ev);
 - (BOOL)startWithDataDir:(NSString *)dataDir bootJson:(NSString *)bootJson;
 - (void)stop;
 
-// UI イベント購読 (main スレッドで届く)。key 重複は上書き。
+// UI event subscription. Handlers run on the main thread; duplicate keys replace the old handler.
 - (void)addHandler:(NSString *)key handler:(DBUiEventHandler)handler;
 - (void)removeHandler:(NSString *)key;
 
-// 直近で取得成功した config (無ければ nil)。呼び出しは任意スレッド可。
+// Most recently decoded config snapshot. Safe to call from any thread.
 - (NSDictionary *)lastConfig;
 
-// 操作 API (doorbell.h)
+// Versioned visitor-call API. pressV2 returns the Core-owned call identity used by every update.
+- (NSString *)pressV2:(NSString *)door purpose:(NSString *)purpose;
+- (BOOL)selectPurposeV2:(NSString *)door callID:(NSString *)callID purpose:(NSString *)purpose;
+- (BOOL)cancelCallV2:(NSString *)door callID:(NSString *)callID reason:(NSString *)reason;
+- (void)reportCallRecovery:(NSString *)callID restored:(BOOL)restored;
+- (BOOL)reportCallAnsweredV2:(NSString *)door callID:(NSString *)callID
+               stageRevision:(NSInteger)stageRevision;
+- (BOOL)reportCallEndedV2:(NSString *)door callID:(NSString *)callID
+             stageRevision:(NSInteger)stageRevision reason:(NSString *)reason;
+
+// One-release compatibility operations.
 - (void)press:(NSString *)door;
 - (void)pressPurpose:(NSString *)door purpose:(NSString *)purpose;
+- (void)cancelCall:(NSString *)door;
 - (void)setVisitorLang:(NSString *)door lang:(NSString *)lang;
 - (void)quickReply:(NSString *)replyId door:(NSString *)door;
-- (void)emergency:(BOOL)active;
+- (BOOL)quickReplyV2:(NSString *)replyId door:(NSString *)door callID:(NSString *)callID
+       stageRevision:(NSInteger)stageRevision;
+- (BOOL)emergency:(BOOL)active;
+
+// Core/PJSIP adapter used by the formal iOS 9 compatibility profile. The iOS
+// 5 profile keeps these calls unused and injects its MiniSIP implementation.
+- (void)coreSipCall:(NSString *)target mode:(NSString *)mode;
+- (void)coreSipHangup;
+- (BOOL)coreSipSendDtmf:(NSString *)digits;
 
 - (NSDictionary *)status;
 - (NSDictionary *)debugInfo;
-- (NSDictionary *)deviceInfoNow;  // gateway/wifi/battery を今取得 (main スレッド専用)
+- (NSDictionary *)deviceInfoNow;
 - (NSDictionary *)config;
 
-// 配対 (発見/招待)。{paired, self, pair_qr, pending:{devices,pairing_mode}}
-- (NSDictionary *)pairingInfo;
-- (void)joinCluster:(NSString *)host pin:(NSString *)pin;  // 未配対機側: PIN 参加
-- (BOOL)foundCluster;                                      // 未配対機側: 親機化
-- (void)setPairingMode:(int)seconds;                       // 配対済み機側: 配対モード ON
-- (void)inviteDevice:(NSString *)nodeId;                   // 配対済み機側: 承認
+// Merge one shell-owned runtime section and publish the resulting status to
+// Core. Values must be JSON objects and must not contain credentials.
+- (void)setRuntimeStatusSection:(NSString *)section value:(NSDictionary *)value;
 
-// 提示音 (カスタム音声再生失敗時の回落先)
+// Merge bounded root runtime fields such as generation and heartbeat. Values
+// must be JSON-safe measurements and must not contain credentials.
+- (void)setRuntimeStatusValues:(NSDictionary *)values;
+
+// Publish measured shell capabilities and the semantic UI contract. These are
+// runtime advertisements, not persisted configuration.
+- (void)setRuntimeCapabilities:(NSDictionary *)capabilities;
+- (void)setRuntimeCapability:(NSString *)capability enabled:(BOOL)enabled;
+- (void)setUIManifest:(NSDictionary *)manifest;
+
+// Store a shell-owned secret through the same Keychain implementation exposed
+// to ABI v2. Pairing keys are owned and stored by Core before it emits psk_ref.
+- (BOOL)storeSecret:(NSString *)key value:(NSString *)value;
+- (NSString *)loadSecret:(NSString *)key;
+
+// Forward one complete Annex-B access unit from an external camera without decoding it on A4.
+- (void)submitEncodedFrame:(NSData *)annexB keyframe:(BOOL)keyframe timestampMs:(int64_t)timestampMs;
+- (BOOL)trySubmitEncodedFrame:(NSData *)annexB keyframe:(BOOL)keyframe
+                   timestampMs:(int64_t)timestampMs;
+- (BOOL)videoEncoderWanted;
+
+
+- (NSDictionary *)pairingInfo;
+- (void)joinCluster:(NSString *)host pin:(NSString *)pin;
+- (BOOL)foundCluster;
+- (void)setPairingMode:(int)seconds;
+- (NSDictionary *)startPairingWithSeconds:(int)seconds;
+- (void)removeDevice:(NSString *)nodeId;
+- (void)inviteDevice:(NSString *)nodeId;
+
+
 - (void)chimeFallback;
 
 @end

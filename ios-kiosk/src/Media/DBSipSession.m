@@ -7,14 +7,14 @@
 - (void)deliverState:(NSNumber *)state;
 @end
 
-// ---- ミニ SIP コールバック (poll スレッド上で実行される。定義は @implementation の後) ----
+
 static void DBSipRxAudio(const int16_t *pcm, int n, void *user);
 static int DBSipPullTx(int16_t *pcm, int n, void *user);
 static void DBSipOnState(ms_state st, void *user);
 
 @implementation DBSipSession {
 @public
-  DBAudioIO *_audioForCb;  // コールバックから直接触るため @public
+  DBAudioIO *_audioForCb;
 @private
   NSString *_host;
   int _port;
@@ -35,11 +35,13 @@ static void DBSipOnState(ms_state st, void *user);
     _host = [host copy];
     _port = port;
     _mode = [mode copy];
-    _micEnabled = micEnabled;
+    // Monitor is receive-only. Keeping the recording path closed prevents old
+    // iOS versions from reverting output to the receiver and avoids echo.
+    _micEnabled = micEnabled && ![mode isEqualToString:@"monitor"];
     _pendingDtmf = [[NSMutableString alloc] init];
     pthread_mutex_init(&_dtmfLock, NULL);
     _audioForCb = [[DBAudioIO alloc] init];
-    _audioForCb.micEnabled = micEnabled;
+    _audioForCb.micEnabled = _micEnabled;
   }
   return self;
 }
@@ -54,14 +56,19 @@ static void DBSipOnState(ms_state st, void *user);
 - (void)start {
   if (_thread != nil) return;
   _stop = NO;
-  [_audioForCb start];
-  // NSThread は target をスレッド完走まで保持する (threadMain の最後まで self は生きる)。
+  if (![_audioForCb start]) {
+    [self performSelectorOnMainThread:@selector(deliverState:)
+                           withObject:[NSNumber numberWithInt:DBMiniSipEnded]
+                        waitUntilDone:NO];
+    return;
+  }
+
   _thread = [[NSThread alloc] initWithTarget:self selector:@selector(threadMain) object:nil];
   [_thread start];
 }
 
 - (void)hangup {
-  _stop = YES;  // poll スレッドが検知して ms_hangup + ms_free する
+  _stop = YES;
   [_audioForCb stop];
 }
 
@@ -83,16 +90,27 @@ static void DBSipOnState(ms_state st, void *user);
 
     const char *modeC = [_mode length] > 0 ? [_mode UTF8String] : "";
     _session = ms_call([_host UTF8String], _port, modeC, &cbs);
-    if (_session == NULL) {  // 接続失敗
+    if (_session == NULL) {
       [self performSelectorOnMainThread:@selector(deliverState:)
                              withObject:[NSNumber numberWithInt:DBMiniSipEnded]
                           waitUntilDone:NO];
       return;
     }
 
+    NSTimeInterval nextStatsLog = 0;
     while (!_stop) {
       int rc = ms_poll(_session, 20);
-      // 積まれた DTMF を同スレッドで送る
+      if (ms_get_state(_session) == MS_STATE_IN_CALL) {
+        NSTimeInterval now = [NSDate timeIntervalSinceReferenceDate];
+        if (now >= nextStatsLog) {
+          unsigned long tx = 0, rx = 0;
+          ms_get_stats(_session, &tx, &rx);
+          NSLog(@"[doorbell][sip] mode=%@ RTP tx=%lu rx=%lu remote=%s",
+                _mode, tx, rx, ms_get_remote_rtp(_session));
+          nextStatsLog = now + 2.0;
+        }
+      }
+
       pthread_mutex_lock(&_dtmfLock);
       if ([_pendingDtmf length] > 0) {
         const char *d = [_pendingDtmf UTF8String];
@@ -100,14 +118,17 @@ static void DBSipOnState(ms_state st, void *user);
         [_pendingDtmf setString:@""];
       }
       pthread_mutex_unlock(&_dtmfLock);
-      if (rc != 0) break;  // 終了 or 致命エラー
+      if (rc != 0) break;
     }
 
+    unsigned long finalTx = 0, finalRx = 0;
+    ms_get_stats(_session, &finalTx, &finalRx);
+    NSLog(@"[doorbell][sip] mode=%@ ended RTP tx=%lu rx=%lu", _mode, finalTx, finalRx);
     ms_hangup(_session);
     ms_free(_session);
     _session = NULL;
   }
-  // ここで NSThread の target 参照が外れる → ARC の最後の release。以後 self には触れない。
+
 }
 
 - (void)deliverState:(NSNumber *)state {
@@ -116,7 +137,7 @@ static void DBSipOnState(ms_state st, void *user);
 
 @end
 
-// ---- ミニ SIP コールバック定義 (ivar 可視) ----
+
 static void DBSipRxAudio(const int16_t *pcm, int n, void *user) {
   DBSipSession *me = (__bridge DBSipSession *)user;
   [me->_audioForCb enqueueRx:(const short *)pcm count:n];

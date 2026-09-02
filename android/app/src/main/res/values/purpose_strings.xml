@@ -1,6 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <string name="purpose_call_without_selection">Skip</string>
-    <string name="purpose_ringing_hint">The bell is ringing. Selecting a purpose is optional.</string>
-    <string name="ring_cancelled">Visitor cancelled — keeping the camera open briefly</string>
-</resources>

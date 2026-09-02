@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://doorbell.invalid/schemas/keepalive-v1.json",
+  "title": "Doorbell keepalive heartbeat v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "protocol",
+    "event",
+    "pid",
+    "bundle_id",
+    "app_version",
+    "role",
+    "policy",
+    "state",
+    "sequence",
+    "memory_warnings",
+    "unix_time"
+  ],
+  "properties": {
+    "protocol": { "const": 1 },
+    "event": {
+      "enum": ["started", "heartbeat", "memory_pressure", "stopping"]
+    },
+    "pid": { "type": "integer", "minimum": 1 },
+    "bundle_id": { "type": "string", "minLength": 1, "maxLength": 160 },
+    "app_version": { "type": "string", "minLength": 1, "maxLength": 80 },
+    "role": { "type": "string", "minLength": 1, "maxLength": 80 },
+    "policy": { "enum": ["auto", "on"] },
+    "state": { "type": "string", "minLength": 1, "maxLength": 120 },
+    "sequence": { "type": "integer", "minimum": 1 },
+    "memory_warnings": { "type": "integer", "minimum": 0 },
+    "unix_time": { "type": "number", "minimum": 0 }
+  }
+}

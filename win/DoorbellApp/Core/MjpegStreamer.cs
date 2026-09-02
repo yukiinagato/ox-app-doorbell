@@ -1,8 +1,3 @@
-// MJPEG (multipart/x-mixed-replace) の自前デコーダ — Android 版 MjpegStreamer.kt の C# 移植。
-// 子機 httpd の /stream.mjpeg はパート毎に Content-Length を必ず付ける (httpd.cpp) ので
-// ヘッダの Content-Length を読んで本文をそのまま切り出す。
-// 接続断は 2 秒後に自動再接続 (Stop まで)。コールバックは読取スレッドから呼ばれる —
-// BitmapImage は Freeze 済みなので受け側は Dispatcher へ渡すだけでよい。
 using System;
 using System.IO;
 using System.Net;
@@ -12,19 +7,24 @@ using System.Windows.Media.Imaging;
 
 namespace DoorbellApp.Core
 {
+    // Bounds on frame and header sizes limit untrusted multipart input. Frozen BitmapImage values
+    // may be handed safely from the reader thread to the WPF dispatcher.
     public sealed class MjpegStreamer
     {
-        private const int MaxFrame = 4 * 1024 * 1024;  // JPEG 1 枚の上限 (安全弁)
+        private const int MaxFrame = 4 * 1024 * 1024;
 
         private readonly string _url;
-        private readonly Action<BitmapImage> _onFrame;
+        private readonly Action<BitmapImage, int> _onFrame;
+        private readonly bool _lowResource;
         private volatile bool _running;
         private Thread _thread;
 
-        public MjpegStreamer(string url, Action<BitmapImage> onFrame)
+        public MjpegStreamer(string url, Action<BitmapImage, int> onFrame,
+                             bool lowResource = false)
         {
             _url = url;
             _onFrame = onFrame;
+            _lowResource = lowResource;
         }
 
         public void Start()
@@ -49,29 +49,38 @@ namespace DoorbellApp.Core
                 try
                 {
                     var req = (HttpWebRequest)WebRequest.Create(_url);
-                    req.Timeout = 4000;           // 接続
-                    req.ReadWriteTimeout = 10000; // フレーム間
+                    req.Timeout = 4000;
+                    req.ReadWriteTimeout = 10000;
                     using (var resp = req.GetResponse())
                     using (var raw = resp.GetResponseStream())
                     using (var ins = new BufferedStream(raw, 64 * 1024))
                     {
+                        DateTime nextDecode = DateTime.MinValue;
                         while (_running)
                         {
-                            byte[] frame = ReadPart(ins);
+                            int rotation;
+                            byte[] frame = ReadPart(ins, out rotation);
                             if (frame == null) break;
-                            var bmp = Decode(frame);
-                            if (bmp != null && _running) _onFrame(bmp);
+                            if (_lowResource && DateTime.UtcNow < nextDecode) continue;
+                            if (_lowResource)
+                                nextDecode = DateTime.UtcNow.AddMilliseconds(250);
+                            var bmp = Decode(frame, _lowResource ? 640 : 0);
+                            if (bmp != null && _running) _onFrame(bmp, rotation);
                         }
                     }
                 }
-                catch { /* 接続断/デコード失敗 → 下で再接続 */ }
+                catch {  }
                 if (!_running) break;
                 try { Thread.Sleep(2000); } catch (ThreadInterruptedException) { }
             }
         }
 
-        /// <summary>JPEG bytes → Freeze 済み BitmapImage (別スレッド → UI スレッド渡し可)。</summary>
         public static BitmapImage Decode(byte[] jpeg)
+        {
+            return Decode(jpeg, 0);
+        }
+
+        public static BitmapImage Decode(byte[] jpeg, int maximumPixelWidth)
         {
             try
             {
@@ -80,6 +89,7 @@ namespace DoorbellApp.Core
                 {
                     bmp.BeginInit();
                     bmp.CacheOption = BitmapCacheOption.OnLoad;
+                    if (maximumPixelWidth > 0) bmp.DecodePixelWidth = maximumPixelWidth;
                     bmp.StreamSource = ms;
                     bmp.EndInit();
                 }
@@ -89,10 +99,10 @@ namespace DoorbellApp.Core
             catch { return null; }
         }
 
-        /// <summary>1 パート読む: 境界/ヘッダ行 → Content-Length → JPEG 本文。終端は null。</summary>
-        private static byte[] ReadPart(Stream ins)
+        private static byte[] ReadPart(Stream ins, out int rotation)
         {
             int contentLength = -1;
+            rotation = 0;
             for (;;)
             {
                 string line = ReadLine(ins);
@@ -100,7 +110,7 @@ namespace DoorbellApp.Core
                 if (line.Length == 0)
                 {
                     if (contentLength > 0) break;
-                    continue;  // 境界直後の余分な空行は読み飛ばす
+                    continue;
                 }
                 int c = line.IndexOf(':');
                 if (c > 0 && line.Substring(0, c).Trim()
@@ -111,6 +121,12 @@ namespace DoorbellApp.Core
                         v <= 0 || v > MaxFrame)
                         return null;
                     contentLength = v;
+                }
+                else if (c > 0 && line.Substring(0, c).Trim()
+                         .Equals("X-Doorbell-Video-Rotation", StringComparison.OrdinalIgnoreCase))
+                {
+                    int.TryParse(line.Substring(c + 1).Trim(), out rotation);
+                    rotation = ((rotation % 360) + 360) % 360;
                 }
             }
             var buf = new byte[contentLength];
@@ -124,7 +140,6 @@ namespace DoorbellApp.Core
             return buf;
         }
 
-        /// <summary>\r\n 終端の 1 行 (ASCII)。終端到達は null。</summary>
         private static string ReadLine(Stream ins)
         {
             var sb = new StringBuilder(64);
@@ -134,7 +149,7 @@ namespace DoorbellApp.Core
                 if (ch < 0) return null;
                 if (ch == '\n') return sb.ToString().TrimEnd('\r');
                 sb.Append((char)ch);
-                if (sb.Length > 512) return null;  // 異常なヘッダ行
+                if (sb.Length > 512) return null;
             }
         }
     }

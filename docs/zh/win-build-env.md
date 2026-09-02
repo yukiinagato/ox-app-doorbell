@@ -1,6 +1,7 @@
-> 日文原文: ../ja/win-build-env.md（以日文为准）
-
 # Windows 构建环境（Apple Silicon Mac + 本地 VM）
+
+本頁是環境配置方案，不是目前 revision 已完成 Windows VM/Toughpad 驗證的證據。只有記錄 VM、
+toolchain、artifact 與結果後才能標為 build verified；實機 commissioning 另行處理。
 
 方针: 开发迭代用本地 VM，（可选）发布产物用 GitHub Actions。
 Docker 不可行 — macOS 上的 Docker 只有 Linux 容器，而 WPF/.NET Framework 的
@@ -15,8 +16,8 @@ Docker 不可行 — macOS 上的 Docker 只有 Linux 容器，而 WPF/.NET Fram
 | Parallels | 收费 | 体验最佳。Microsoft 认可的 Win11 ARM 获取流程 |
 
 - 安装 Windows 11 ARM64（通过 Microsoft 官方 Insider/ISO，或 Parallels 自动获取）。
-- ARM64 Windows 可以模拟运行 x86/x64 应用 — 面向 Toughpad 的 x86/x64
-  产物可在 VM 内构建和测试。
+- ARM64 Windows 可模擬許多 x86/x64 工具，但 repository 沒有此 VM 路徑已完成的驗證記錄。
+  應把它視為候選 build 環境。
 
 ## 2. VM 内需要安装的软件
 
@@ -41,7 +42,7 @@ Docker 不可行 — macOS 上的 Docker 只有 Linux 容器，而 WPF/.NET Fram
 win\build.cmd            :: core DLL (x86+x64, MSVC) + WPF app + 运行测试
 ```
 
-出错时把报错原样贴回 Mac 侧的 Claude。
+將錯誤與精確 toolchain version 保存到 release record。
 
 ## 5. Mac 侧的事前验证（mingw-w64）
 

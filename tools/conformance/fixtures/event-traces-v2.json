@@ -1,0 +1,620 @@
+{
+  "schema_version": 1,
+  "platform_profiles": [
+    {
+      "platform": "android-modern",
+      "device_id": "panel-local",
+      "role": "indoor_panel",
+      "features": {
+        "call_flow_v2": true,
+        "call_cancel_v2": true,
+        "call_lifecycle_v2": true,
+        "device_alert_v1": true
+      },
+      "channels": ["in_app", "system_notification"],
+      "web_groups": []
+    },
+    {
+      "platform": "android-api19",
+      "device_id": "panel-local",
+      "role": "indoor_panel",
+      "features": {
+        "call_flow_v2": true,
+        "call_cancel_v2": true,
+        "call_lifecycle_v2": true,
+        "device_alert_v1": true
+      },
+      "channels": ["in_app", "system_notification"],
+      "web_groups": []
+    },
+    {
+      "platform": "ios-modern",
+      "device_id": "panel-local",
+      "role": "indoor_panel",
+      "features": {
+        "call_flow_v2": true,
+        "call_cancel_v2": true,
+        "call_lifecycle_v2": true,
+        "device_alert_v1": true
+      },
+      "channels": ["in_app", "system_notification"],
+      "web_groups": []
+    },
+    {
+      "platform": "ios9-arm64",
+      "device_id": "panel-local",
+      "role": "indoor_panel",
+      "features": {
+        "call_flow_v2": true,
+        "call_cancel_v2": true,
+        "call_lifecycle_v2": true,
+        "device_alert_v1": true
+      },
+      "channels": ["in_app", "system_notification"],
+      "web_groups": []
+    },
+    {
+      "platform": "ios-compat",
+      "device_id": "panel-local",
+      "role": "indoor_panel",
+      "features": {
+        "call_flow_v2": true,
+        "call_cancel_v2": true,
+        "call_lifecycle_v2": true,
+        "device_alert_v1": true
+      },
+      "channels": ["in_app", "system_notification"],
+      "web_groups": []
+    },
+    {
+      "platform": "windows",
+      "device_id": "panel-local",
+      "role": "indoor_panel",
+      "features": {
+        "call_flow_v2": true,
+        "call_cancel_v2": true,
+        "call_lifecycle_v2": true,
+        "device_alert_v1": true
+      },
+      "channels": ["in_app", "system_notification"],
+      "web_groups": []
+    },
+    {
+      "platform": "tvos",
+      "device_id": "panel-local",
+      "role": "indoor_panel",
+      "features": {
+        "call_flow_v2": true,
+        "call_cancel_v2": true,
+        "call_lifecycle_v2": false,
+        "device_alert_v1": true
+      },
+      "channels": ["in_app"],
+      "web_groups": []
+    },
+    {
+      "platform": "web",
+      "device_id": "panel-local",
+      "role": "indoor_panel",
+      "features": {
+        "call_flow_v2": true,
+        "call_cancel_v2": true,
+        "call_lifecycle_v2": true,
+        "device_alert_v1": true
+      },
+      "channels": ["in_app", "web_push"],
+      "web_groups": ["all", "guards"]
+    }
+  ],
+  "traces": [
+    {
+      "name": "targeted-schema-v2-chime-is-the-only-incoming-trigger",
+      "now_ms": 1000,
+      "events": [
+        {
+          "schema_version": 2,
+          "t": "event",
+          "type": "press",
+          "call_id": "call-target",
+          "door": "front",
+          "purpose": "delivery",
+          "stage_revision": 0,
+          "expires_at_ms": 61000
+        },
+        {
+          "schema_version": 2,
+          "t": "event",
+          "type": "purpose_selected",
+          "call_id": "call-target",
+          "door": "front",
+          "purpose": "service",
+          "stage_revision": 1,
+          "expires_at_ms": 61000
+        },
+        {
+          "schema_version": 1,
+          "t": "chime",
+          "call_id": "call-target",
+          "door": "front",
+          "stage_revision": 1,
+          "expires_at_ms": 61000,
+          "delivered_to": "panel-local"
+        },
+        {
+          "schema_version": 2,
+          "t": "chime",
+          "call_id": "call-target",
+          "door": "front",
+          "stage_revision": 1,
+          "expires_at_ms": 61000,
+          "delivered_to": "panel-other"
+        },
+        {
+          "schema_version": 2,
+          "t": "chime",
+          "call_id": "call-target",
+          "door": "front",
+          "purpose": "service",
+          "stage_revision": 1,
+          "expires_at_ms": 61000,
+          "delivered_to": "panel-local"
+        }
+      ],
+      "expect": {
+        "effects": [
+          {"at": 4, "kind": "incoming_open", "call_id": "call-target", "stage_revision": 1},
+          {"at": 4, "kind": "ring_start", "call_id": "call-target", "stage_revision": 1}
+        ],
+        "rejections": [
+          {"at": 2, "reason": "schema_version"},
+          {"at": 3, "reason": "target"}
+        ],
+        "current_call": {
+          "call_id": "call-target",
+          "stage_revision": 1,
+          "purpose": "service",
+          "ringing": true,
+          "state": "ringing"
+        }
+      }
+    },
+    {
+      "name": "purpose-first-emits-one-complete-call",
+      "flow": "purpose_first",
+      "now_ms": 1000,
+      "events": [
+        {
+          "schema_version": 2,
+          "t": "event",
+          "type": "press",
+          "call_id": "call-purpose-first",
+          "door": "front",
+          "purpose": "delivery",
+          "stage_revision": 0,
+          "expires_at_ms": 61000
+        },
+        {
+          "schema_version": 2,
+          "t": "chime",
+          "call_id": "call-purpose-first",
+          "door": "front",
+          "purpose": "delivery",
+          "stage_revision": 0,
+          "expires_at_ms": 61000,
+          "delivered_to": "panel-local"
+        }
+      ],
+      "expect": {
+        "effects": [
+          {"at": 1, "kind": "incoming_open", "call_id": "call-purpose-first", "stage_revision": 0},
+          {"at": 1, "kind": "ring_start", "call_id": "call-purpose-first", "stage_revision": 0}
+        ],
+        "rejections": []
+      }
+    },
+    {
+      "name": "ring-then-purpose-revises-and-reruns-targeted-rules",
+      "flow": "ring_then_purpose",
+      "now_ms": 1000,
+      "events": [
+        {
+          "schema_version": 2,
+          "t": "event",
+          "type": "press",
+          "call_id": "call-ring-first",
+          "door": "front",
+          "stage_revision": 0,
+          "expires_at_ms": 61000
+        },
+        {
+          "schema_version": 2,
+          "t": "chime",
+          "call_id": "call-ring-first",
+          "door": "front",
+          "stage_revision": 0,
+          "expires_at_ms": 61000,
+          "delivered_to": "panel-local"
+        },
+        {
+          "schema_version": 2,
+          "t": "event",
+          "type": "purpose_selected",
+          "call_id": "call-ring-first",
+          "door": "front",
+          "purpose": "delivery",
+          "stage_revision": 1,
+          "expires_at_ms": 61000
+        },
+        {
+          "schema_version": 2,
+          "t": "chime",
+          "call_id": "call-ring-first",
+          "door": "front",
+          "stage_revision": 0,
+          "expires_at_ms": 61000,
+          "delivered_to": "panel-local"
+        },
+        {
+          "schema_version": 2,
+          "t": "chime",
+          "call_id": "call-ring-first",
+          "door": "front",
+          "purpose": "delivery",
+          "stage_revision": 1,
+          "expires_at_ms": 61000,
+          "delivered_to": "panel-local"
+        },
+        {
+          "schema_version": 2,
+          "t": "chime",
+          "call_id": "call-ring-first",
+          "door": "front",
+          "purpose": "delivery",
+          "stage_revision": 1,
+          "expires_at_ms": 61000,
+          "delivered_to": "panel-local"
+        }
+      ],
+      "expect": {
+        "effects": [
+          {"at": 1, "kind": "incoming_open", "call_id": "call-ring-first", "stage_revision": 0},
+          {"at": 1, "kind": "ring_start", "call_id": "call-ring-first", "stage_revision": 0},
+          {"at": 4, "kind": "incoming_refresh", "call_id": "call-ring-first", "stage_revision": 1},
+          {"at": 4, "kind": "ring_refresh", "call_id": "call-ring-first", "stage_revision": 1}
+        ],
+        "rejections": [
+          {"at": 3, "reason": "stale_revision"},
+          {"at": 5, "reason": "replay"}
+        ],
+        "current_call": {
+          "call_id": "call-ring-first",
+          "stage_revision": 1,
+          "purpose": "delivery",
+          "ringing": true,
+          "state": "ringing"
+        }
+      }
+    },
+    {
+      "name": "cancel-before-answer-is-idempotent-and-blocks-late-chime",
+      "now_ms": 1000,
+      "events": [
+        {
+          "schema_version": 2,
+          "t": "event",
+          "type": "press",
+          "call_id": "call-cancel",
+          "door": "front",
+          "stage_revision": 0,
+          "expires_at_ms": 61000
+        },
+        {
+          "schema_version": 2,
+          "t": "chime",
+          "call_id": "call-cancel",
+          "door": "front",
+          "stage_revision": 0,
+          "expires_at_ms": 61000,
+          "delivered_to": "panel-local"
+        },
+        {
+          "schema_version": 2,
+          "t": "event",
+          "type": "call_cancelled",
+          "call_id": "call-cancel",
+          "door": "front",
+          "stage_revision": 0
+        },
+        {
+          "schema_version": 2,
+          "t": "chime",
+          "call_id": "call-cancel",
+          "door": "front",
+          "stage_revision": 1,
+          "expires_at_ms": 61000,
+          "delivered_to": "panel-local"
+        },
+        {
+          "schema_version": 2,
+          "t": "event",
+          "type": "call_cancelled",
+          "call_id": "call-cancel",
+          "door": "front",
+          "stage_revision": 0
+        }
+      ],
+      "expect": {
+        "effects": [
+          {"at": 1, "kind": "incoming_open", "call_id": "call-cancel", "stage_revision": 0},
+          {"at": 1, "kind": "ring_start", "call_id": "call-cancel", "stage_revision": 0},
+          {"at": 2, "kind": "ring_stop", "call_id": "call-cancel"},
+          {"at": 2, "kind": "incoming_close", "call_id": "call-cancel", "reason": "cancelled"}
+        ],
+        "rejections": [
+          {"at": 3, "reason": "resolved_call"}
+        ],
+        "current_call": null
+      }
+    },
+    {
+      "name": "answer-elsewhere-stops-non-answering-ring",
+      "now_ms": 1000,
+      "events": [
+        {
+          "schema_version": 2,
+          "t": "event",
+          "type": "press",
+          "call_id": "call-answer",
+          "door": "front",
+          "stage_revision": 0,
+          "expires_at_ms": 61000
+        },
+        {
+          "schema_version": 2,
+          "t": "chime",
+          "call_id": "call-answer",
+          "door": "front",
+          "stage_revision": 0,
+          "expires_at_ms": 61000,
+          "delivered_to": "panel-local"
+        },
+        {
+          "schema_version": 2,
+          "t": "event",
+          "type": "call_answered",
+          "call_id": "call-answer",
+          "door": "front",
+          "device": "panel-other",
+          "stage_revision": 0
+        },
+        {
+          "schema_version": 2,
+          "t": "chime",
+          "call_id": "call-answer",
+          "door": "front",
+          "stage_revision": 1,
+          "expires_at_ms": 61000,
+          "delivered_to": "panel-local"
+        }
+      ],
+      "expect": {
+        "effects": [
+          {"at": 1, "kind": "incoming_open", "call_id": "call-answer", "stage_revision": 0},
+          {"at": 1, "kind": "ring_start", "call_id": "call-answer", "stage_revision": 0},
+          {"at": 2, "kind": "ring_stop", "call_id": "call-answer"},
+          {"at": 2, "kind": "incoming_close", "call_id": "call-answer", "reason": "answered"}
+        ],
+        "rejections": [
+          {"at": 3, "reason": "resolved_call"}
+        ],
+        "current_call": null
+      }
+    },
+    {
+      "name": "call-ended-clears-only-the-matching-call",
+      "now_ms": 1000,
+      "events": [
+        {
+          "schema_version": 2,
+          "t": "event",
+          "type": "press",
+          "call_id": "call-live",
+          "door": "front",
+          "stage_revision": 0,
+          "expires_at_ms": 61000
+        },
+        {
+          "schema_version": 2,
+          "t": "chime",
+          "call_id": "call-live",
+          "door": "front",
+          "stage_revision": 0,
+          "expires_at_ms": 61000,
+          "delivered_to": "panel-local"
+        },
+        {
+          "schema_version": 2,
+          "t": "event",
+          "type": "call_ended",
+          "call_id": "call-other",
+          "door": "side",
+          "stage_revision": 0
+        },
+        {
+          "schema_version": 2,
+          "t": "event",
+          "type": "call_ended",
+          "call_id": "call-live",
+          "door": "front",
+          "stage_revision": 0
+        }
+      ],
+      "expect": {
+        "effects": [
+          {"at": 1, "kind": "incoming_open", "call_id": "call-live", "stage_revision": 0},
+          {"at": 1, "kind": "ring_start", "call_id": "call-live", "stage_revision": 0},
+          {"at": 3, "kind": "ring_stop", "call_id": "call-live"},
+          {"at": 3, "kind": "incoming_close", "call_id": "call-live", "reason": "ended"}
+        ],
+        "rejections": [],
+        "current_call": null
+      }
+    },
+    {
+      "name": "sos-state-and-local-channels-remain-independent",
+      "requires_channels": ["in_app", "system_notification"],
+      "now_ms": 1000,
+      "events": [
+        {"schema_version": 2, "t": "event", "type": "emergency"},
+        {
+          "schema_version": 2,
+          "t": "emergency",
+          "active": true,
+          "trigger": "emergency_on",
+          "targets": {"roles": ["indoor_panel"]},
+          "channels": ["in_app"],
+          "sticky": true,
+          "ttl_s": 0
+        },
+        {
+          "schema_version": 2,
+          "t": "emergency",
+          "active": true,
+          "trigger": "emergency_on",
+          "targets": {"devices": ["panel-local"]},
+          "channels": ["system_notification"],
+          "sticky": false,
+          "ttl_s": 5
+        },
+        {"t": "tick", "advance_ms": 4999},
+        {"t": "tick", "advance_ms": 1},
+        {"schema_version": 2, "t": "event", "type": "emergency_cancel"},
+        {
+          "schema_version": 2,
+          "t": "emergency",
+          "active": false,
+          "trigger": "emergency_off",
+          "targets": {"devices": ["panel-local"]},
+          "channels": ["in_app", "system_notification"],
+          "sticky": false,
+          "ttl_s": 10
+        }
+      ],
+      "expect": {
+        "effects": [
+          {"at": 1, "kind": "alert_present", "channel": "in_app", "active": true, "sticky": true, "ttl_s": 0},
+          {"at": 2, "kind": "alert_present", "channel": "system_notification", "active": true, "sticky": false, "ttl_s": 5},
+          {"at": 4, "kind": "alert_expire", "channel": "system_notification"},
+          {"at": 6, "kind": "alert_clear", "channel": "in_app", "active": false, "sticky": false, "ttl_s": 10},
+          {"at": 6, "kind": "alert_clear", "channel": "system_notification", "active": false, "sticky": false, "ttl_s": 10}
+        ],
+        "rejections": [],
+        "state_transitions": [
+          {"at": 0, "active": true},
+          {"at": 5, "active": false}
+        ],
+        "emergency_active": false,
+        "presentations": {}
+      }
+    },
+    {
+      "name": "device-alert-targets-are-exact-and-ttl-is-bounded",
+      "requires_channels": ["in_app"],
+      "now_ms": 1000,
+      "events": [
+        {
+          "schema_version": 2,
+          "t": "emergency",
+          "active": true,
+          "trigger": "emergency_on",
+          "targets": {"roles": ["door_station"]},
+          "channels": ["in_app"],
+          "sticky": false,
+          "ttl_s": 2
+        },
+        {
+          "schema_version": 2,
+          "t": "emergency",
+          "active": true,
+          "trigger": "emergency_on",
+          "targets": {"devices": ["panel-local"]},
+          "channels": ["in_app"],
+          "sticky": false,
+          "ttl_s": 2
+        },
+        {"t": "tick", "advance_ms": 2000}
+      ],
+      "expect": {
+        "effects": [
+          {"at": 1, "kind": "alert_present", "channel": "in_app", "active": true, "sticky": false, "ttl_s": 2},
+          {"at": 2, "kind": "alert_expire", "channel": "in_app"}
+        ],
+        "rejections": [
+          {"at": 0, "reason": "target"}
+        ],
+        "presentations": {}
+      }
+    }
+  ],
+  "feature_gates": [
+    {
+      "name": "ring-then-purpose-all-declared",
+      "configured_call_flow": "ring_then_purpose",
+      "manifests": [
+        {"features": {"call_flow_v2": true}},
+        {"features": {"call_flow_v2": true}}
+      ],
+      "expect": "ring_then_purpose"
+    },
+    {
+      "name": "ring-then-purpose-mixed-fleet-falls-back",
+      "configured_call_flow": "ring_then_purpose",
+      "manifests": [
+        {"features": {"call_flow_v2": true}},
+        {"features": {}}
+      ],
+      "expect": "purpose_first"
+    },
+    {
+      "name": "ring-then-purpose-unknown-manifest-falls-back",
+      "configured_call_flow": "ring_then_purpose",
+      "manifests": [
+        {"features": {"call_flow_v2": true}},
+        {}
+      ],
+      "expect": "purpose_first"
+    },
+    {
+      "name": "feature-declaration-must-be-boolean",
+      "configured_call_flow": "ring_then_purpose",
+      "manifests": [
+        {"features": {"call_flow_v2": "true"}}
+      ],
+      "expect": "purpose_first"
+    },
+    {
+      "name": "purpose-first-needs-no-new-feature",
+      "configured_call_flow": "purpose_first",
+      "manifests": [{}],
+      "expect": "purpose_first"
+    },
+    {
+      "name": "device-alert-all-declared",
+      "feature": "device_alert_v1",
+      "manifests": [
+        {"features": {"device_alert_v1": true}},
+        {"features": {"device_alert_v1": true}}
+      ],
+      "expect": true
+    },
+    {
+      "name": "device-alert-mixed-fleet-is-disabled",
+      "feature": "device_alert_v1",
+      "manifests": [
+        {"features": {"device_alert_v1": true}},
+        {"features": {}}
+      ],
+      "expect": false
+    }
+  ]
+}

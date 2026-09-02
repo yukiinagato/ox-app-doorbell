@@ -1,171 +1,280 @@
-// H.264 ハードウェアエンコード (MediaCodec, API 21+) — Phase 6a の流暢档。
-// CameraFeeder の NV21 プレビューフレームを NV12 へ変換して食わせ、AnnexB 出力を
-// core (nativeOnEncodedFrame → fMP4 → /stream.mp4) へ流す。
-// 出力は専用スレッドで連続 drain し、次のカメラ callback まで待たせない。
-// 稼働制御は MainActivity のポーリング (core.videoEncoderWanted() —
-// /stream.mp4 の購読者がいる間だけ回す。購読者ゼロ = エンコードゼロで省電力)。
 package jp.keihan.doorbell
 
 import android.media.MediaCodec
 import android.media.MediaCodecInfo
+import android.media.MediaCodecList
 import android.media.MediaFormat
+import android.os.Build
+import android.os.Bundle
+import android.os.SystemClock
 import android.util.Log
+import java.util.ArrayDeque
 
-class VideoEncoder(private val core: DoorbellCore) {
+/** Camera1 NV21 to Baseline AVC with API 16-20 and API 21+ buffer adapters. */
+internal class VideoEncoder(
+    private val core: DoorbellCore,
+    private val listener: (Snapshot) -> Unit = {},
+    private val commissioningGate: EncoderCommissioningGate = AlwaysCommissionedEncoder,
+) {
+    data class Snapshot(
+        val state: String,
+        val codec: String = "",
+        val colorFormat: Int = 0,
+        val width: Int = 0,
+        val height: Int = 0,
+        val fps: Int = 0,
+        val certified: Boolean = false,
+        val error: String = "",
+    )
 
-    @Volatile
-    private var codec: MediaCodec? = null
+    private data class Candidate(
+        val codecName: String,
+        val colorFormat: Int,
+        val profileKeys: Boolean,
+    ) {
+        val id = "$codecName:$colorFormat:$profileKeys"
+    }
+
+    private data class QueuedTime(val ptsUs: Long, val captureMs: Long)
+
+    @Volatile private var codec: MediaCodec? = null
+    @Volatile private var drainRunning = false
+    @Volatile private var started = false
+    @Volatile private var terminalFailure = false
+    @Volatile var snapshot = Snapshot("idle")
+        private set
+
     private var width = 0
     private var height = 0
-    private var fps = 30
-    private var bitrateKbps = 700
-    private var lastFeedMs = 0L
-    private var configData: ByteArray? = null   // CODEC_CONFIG (SPS/PPS) — キーフレームに前置
-    private var nv12: ByteArray? = null         // NV21→NV12 変換の使い回しバッファ
-    @Volatile
-    private var drainRunning = false
+    private var fps = 15
+    private var bitrateKbps = 600
+    private var certified = false
+    private var forceCommissioned = false
+    private var allowSoftware = false
+    private var lastFeedElapsedMs = 0L
+    private var sessionStartNs = 0L
+    private var lastPtsUs = -1L
+    private var configData: ByteArray? = null
+    private var profileIdc: Int? = null
+    private var sawKeyframe = false
+    private var sawSps = false
+    private var sawPps = false
+    private var forwardingStarted = false
+    private var probeStartedMs = 0L
+    private var bufferAccess: CodecBufferAccess? = null
+    private var currentCandidate: Candidate? = null
     private var drainThread: Thread? = null
-    @Volatile
-    private var started = false                 // start()..stop() の間 true (稼働指示)
-    private var failed = false                  // createCodec 失敗 (次の start まで再試行しない)
+    private val rejectedCandidates = LinkedHashSet<String>()
+    private val queuedTimes = ArrayDeque<QueuedTime>()
 
-    /** 稼働指示中か (MediaCodec 自体の生成は最初のフレームまで遅延する)。 */
     val isRunning: Boolean get() = started
+    val hasTerminalFailure: Boolean get() = terminalFailure
 
-    /** config camera.h264_* を適用して開始。解像度はカメラのプレビューサイズに従う
-     *  (feed で最初のフレームが来た時に configure する — ここではパラメータ記憶のみ)。 */
     @Synchronized
-    fun start(fps: Int, bitrateKbps: Int) {
-        this.fps = if (fps > 0) fps else 30
-        this.bitrateKbps = if (bitrateKbps > 0) bitrateKbps else 700
-        // 既に走っていてパラメータだけ変わった場合は作り直す (次の feed で再 configure)
-        releaseCodec()
+    fun start(
+        fps: Int,
+        bitrateKbps: Int,
+        certified: Boolean = false,
+        allowSoftware: Boolean = false,
+    ) {
+        this.fps = fps.coerceIn(5, 30)
+        this.bitrateKbps = bitrateKbps.coerceIn(128, 4_000)
+        this.forceCommissioned = certified
+        this.certified = certified
+        this.allowSoftware = allowSoftware
+        releaseCodecLocked()
+        rejectedCandidates.clear()
+        terminalFailure = false
         width = 0
         height = 0
-        lastFeedMs = 0L
-        failed = false
+        lastFeedElapsedMs = 0L
         started = true
+        publish(Snapshot(if (certified) "waiting" else "waiting_uncommissioned",
+                         fps = this.fps, certified = certified))
     }
 
     @Synchronized
     fun stop() {
         started = false
-        releaseCodec()
+        terminalFailure = false
+        releaseCodecLocked()
+        publish(Snapshot("idle", certified = certified))
     }
 
-    private fun releaseCodec() {
-        val c = codec
-        codec = null
-        drainRunning = false
-        try {
-            c?.stop()  // dequeueOutputBuffer を即時解除
-        } catch (_: Exception) { }
-        try {
-            drainThread?.join(250)
-        } catch (_: InterruptedException) {
-            Thread.currentThread().interrupt()
-        }
-        drainThread = null
-        try {
-            c?.release()
-        } catch (_: Exception) { }
-        configData = null
-    }
-
-    /**
-     * カメラスレッドから NV21 フレームを投入。fps 間引き → NV12 変換 → 入力バッファ →
-     * 出力は専用 thread が連続ドレーンする。入力が詰まった場合は古い映像を
-     * 待たず現在フレームを捨てる (ライブ専用)。
-     * MediaCodec が使えない端末 (硬編なし) では null のまま = 何も流れない
-     * (codec=auto の想定回落: /stream.mp4 は 503 → クライアントが MJPEG へ)。
-     */
+    /** Ask a running encoder for an IDR when a new live subscriber attaches. */
     @Synchronized
-    fun feed(data: ByteArray, w: Int, h: Int, tsMs: Long) {
-        if (!started || failed) return
-        // fps 間引き (プレビューは 15-30fps 来ることがある)
-        if (lastFeedMs != 0L && tsMs - lastFeedMs < 1000L / fps) return
-        lastFeedMs = tsMs
+    fun requestKeyFrame(): Boolean {
+        val active = codec ?: return false
+        if (Build.VERSION.SDK_INT < 19) return false
+        return try {
+            active.setParameters(Bundle().apply { putInt("request-sync", 0) })
+            Log.i(TAG, "requested sync frame for new fMP4 subscriber")
+            true
+        } catch (e: Exception) {
+            Log.w(TAG, "sync-frame request failed: ${e.javaClass.simpleName}")
+            false
+        }
+    }
 
-        var c = codec
-        if (c == null || w != width || h != height) {
-            releaseCodec()
-            c = createCodec(w, h)
-            if (c == null) {
-                failed = true  // 硬編なし — 次の start() まで再試行しない (ログ 1 回)
-                return
-            }
-            codec = c
+    /** Non-blocking live input: a busy codec drops the newest camera frame. */
+    @Synchronized
+    fun feed(data: ByteArray, w: Int, h: Int, captureMs: Long) {
+        if (!started || terminalFailure || w <= 0 || h <= 0) return
+        val elapsed = SystemClock.elapsedRealtime()
+        if (lastFeedElapsedMs != 0L && elapsed - lastFeedElapsedMs < 1000L / fps) return
+        lastFeedElapsedMs = elapsed
+
+        var active = codec
+        if (active == null || w != width || h != height) {
+            releaseCodecLocked()
+            active = createNextCodec(w, h)
+            if (active == null) return
+            codec = active
             width = w
             height = h
-            startOutputDrain(c)
+            startOutputDrain(active)
         }
+
         try {
-            val inIdx = c.dequeueInputBuffer(0)
-            if (inIdx < 0) return  // 入力詰まり — このフレームは捨てる (ライブ専用)
-            val buf = c.getInputBuffer(inIdx) ?: return
-            buf.clear()
-            buf.put(nv21ToNv12(data, w, h))
-            c.queueInputBuffer(inIdx, 0, w * h * 3 / 2, tsMs * 1000, 0)
-        } catch (e: Exception) {
-            Log.w(TAG, "encode failed: $e")
-            releaseCodec()  // 次のフレームで作り直す
-        }
-    }
-
-    private fun createCodec(w: Int, h: Int): MediaCodec? {
-        return try {
-            val fmt = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, w, h)
-            fmt.setInteger(MediaFormat.KEY_COLOR_FORMAT,
-                MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420SemiPlanar)  // NV12 系
-            fmt.setInteger(MediaFormat.KEY_BIT_RATE, bitrateKbps * 1000)
-            fmt.setInteger(MediaFormat.KEY_FRAME_RATE, fps)
-            fmt.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, GOP_S)
-            // iPad 1 / iOS 5 のハードウェアデコーダは High Profile を受けられない。
-            // profile/level を省略すると一部の Android encoder が High を選ぶため、
-            // 互換性のある Baseline Level 3.1 を明示する。文字列 key を使うのは
-            // minSdk 21 で MediaFormat.KEY_LEVEL の API 差を踏まないため。
-            fmt.setInteger("profile", MediaCodecInfo.CodecProfileLevel.AVCProfileBaseline)
-            fmt.setInteger("level", MediaCodecInfo.CodecProfileLevel.AVCLevel31)
-            val c = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_VIDEO_AVC)
-            val encCaps = c.codecInfo.getCapabilitiesForType(MediaFormat.MIMETYPE_VIDEO_AVC)
-                .encoderCapabilities
-            if (encCaps.isBitrateModeSupported(
-                    MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_CBR)) {
-                fmt.setInteger(MediaFormat.KEY_BITRATE_MODE,
-                    MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_CBR)
+            val index = active.dequeueInputBuffer(0)
+            if (index < 0) return
+            val input = bufferAccess?.input(active, index)
+            if (input == null) {
+                active.queueInputBuffer(index, 0, 0, nextPtsUs(), 0)
+                failCurrent(active, "input buffer unavailable")
+                return
             }
-            // Encoder latency hint (frames). Optional keys are ignored by codecs which
-            // do not implement them; the active output format is logged for verification.
-            if (android.os.Build.VERSION.SDK_INT >= 26) fmt.setInteger("latency", 0)
-            c.configure(fmt, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
-            c.start()
-            Log.i(TAG, "h264 encoder start ${w}x$h @${fps}fps ${bitrateKbps}kbps")
-            c
+            input.clear()
+            val ptsUs = nextPtsUs()
+            val color = currentCandidate?.colorFormat ?: 0
+            if (!AvcByteStream.copyNv21(data, w, h, color, input)) {
+                active.queueInputBuffer(index, 0, 0, ptsUs, 0)
+                failCurrent(active, "unsupported input layout or capacity")
+                return
+            }
+            rememberCaptureTime(ptsUs, captureMs)
+            active.queueInputBuffer(index, 0, w * h * 3 / 2, ptsUs, 0)
         } catch (e: Exception) {
-            // 硬編なし/フォーマット不許容 — auto の回落先は MJPEG (core 側で 503)
-            Log.w(TAG, "MediaCodec unavailable: $e")
-            null
+            failCurrent(active, "input failed: ${e.javaClass.simpleName}")
         }
     }
 
-    /**
-     * MediaCodec の出力を常時待ち受ける。旧実装の dequeue(timeout=0) は出力が
-     * 数 ms 遅れただけで次の camera callback (33--60ms 後) まで放置していた。
-     */
-    private fun startOutputDrain(c: MediaCodec) {
+    @Synchronized
+    private fun createNextCodec(w: Int, h: Int): MediaCodec? {
+        val candidates = codecCandidates()
+        for (candidate in candidates) {
+            if (candidate.id in rejectedCandidates) continue
+            var local: MediaCodec? = null
+            try {
+                val format = MediaFormat.createVideoFormat(AVC_MIME, w, h)
+                format.setInteger(MediaFormat.KEY_COLOR_FORMAT, candidate.colorFormat)
+                format.setInteger(MediaFormat.KEY_BIT_RATE, bitrateKbps * 1000)
+                format.setInteger(MediaFormat.KEY_FRAME_RATE, fps)
+                format.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, GOP_SECONDS)
+                if (candidate.profileKeys) {
+                    format.setInteger("profile", MediaCodecInfo.CodecProfileLevel.AVCProfileBaseline)
+                    format.setInteger(
+                        "level",
+                        if (w * h > 640 * 480) MediaCodecInfo.CodecProfileLevel.AVCLevel31
+                        else MediaCodecInfo.CodecProfileLevel.AVCLevel3,
+                    )
+                }
+                local = MediaCodec.createByCodecName(candidate.codecName)
+                if (Build.VERSION.SDK_INT >= 21) CodecApi21.requestCbr(local, format)
+                if (Build.VERSION.SDK_INT >= 26) format.setInteger("latency", 0)
+                local.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
+                local.start()
+                val access = CodecBufferAccessFactory.create()
+                access.afterStart(local)
+                bufferAccess = access
+                currentCandidate = candidate
+                configData = null
+                profileIdc = null
+                sawKeyframe = false
+                sawSps = false
+                sawPps = false
+                forwardingStarted = false
+                certified = forceCommissioned || commissioningGate.isCommissioned(candidate.id)
+                probeStartedMs = SystemClock.elapsedRealtime()
+                sessionStartNs = System.nanoTime()
+                lastPtsUs = -1L
+                queuedTimes.clear()
+                publish(Snapshot(
+                    if (certified) "probing" else "probing_uncommissioned",
+                    candidate.codecName, candidate.colorFormat, w, h, fps, certified,
+                ))
+                Log.i(TAG, "probing ${candidate.codecName} color=${candidate.colorFormat} " +
+                    "${w}x$h @${fps}fps")
+                return local
+            } catch (e: Exception) {
+                rejectedCandidates.add(candidate.id)
+                try { local?.stop() } catch (_: Exception) { }
+                try { local?.release() } catch (_: Exception) { }
+                Log.w(TAG, "reject ${candidate.id}: ${e.javaClass.simpleName}: ${e.message}")
+            }
+        }
+        terminalFailure = true
+        publish(Snapshot("degraded", width = w, height = h, fps = fps,
+                         certified = certified, error = "no verified Baseline AVC encoder"))
+        return null
+    }
+
+    @Suppress("DEPRECATION")
+    private fun codecCandidates(): List<Candidate> {
+        val result = ArrayList<Candidate>()
+        val preferredColors = listOf(
+            MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420SemiPlanar,
+            MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Planar,
+            MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420PackedSemiPlanar,
+            MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420PackedPlanar,
+        )
+        for (i in 0 until MediaCodecList.getCodecCount()) {
+            val info = try { MediaCodecList.getCodecInfoAt(i) } catch (_: Exception) { continue }
+            if (!info.isEncoder || info.supportedTypes.none {
+                    it.equals(AVC_MIME, ignoreCase = true) }) continue
+            val lower = info.name.lowercase()
+            val software = lower.startsWith("omx.google.") || lower.contains("software") ||
+                lower.contains("ffmpeg") || lower.startsWith("c2.android.")
+            if (software && !allowSoftware) continue
+            val formats = try {
+                info.getCapabilitiesForType(AVC_MIME).colorFormats.toSet()
+            } catch (_: Exception) { emptySet() }
+            for (color in preferredColors) {
+                if (color !in formats || color !in AvcByteStream.safeByteColorFormats) continue
+                result.add(Candidate(info.name, color, true))
+                // Some KitKat codecs reject profile keys but still emit Baseline.  The relaxed
+                // attempt is accepted only after its SPS proves profile_idc=66.
+                result.add(Candidate(info.name, color, false))
+            }
+        }
+        return result
+    }
+
+    private fun startOutputDrain(active: MediaCodec) {
         drainRunning = true
         drainThread = Thread({
             val info = MediaCodec.BufferInfo()
-            while (drainRunning && codec === c) {
+            while (drainRunning && codec === active) {
+                var failure: String? = null
                 try {
-                    val outIdx = c.dequeueOutputBuffer(info, 5_000)
-                    if (outIdx >= 0) {
-                        handleOutput(c, outIdx, info)
-                    } else if (outIdx == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
-                        Log.i(TAG, "h264 output format ${c.outputFormat}")
+                    val index = active.dequeueOutputBuffer(info, 5_000)
+                    when {
+                        index >= 0 -> failure = handleOutput(active, index, info)
+                        index == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED ->
+                            failure = readCodecConfig(active.outputFormat)
+                        index == MediaCodec.INFO_OUTPUT_BUFFERS_CHANGED ->
+                            bufferAccess?.onOutputBuffersChanged(active)
                     }
+                    if (failure == null) failure = maybeCompleteCommissioning()
+                    if ((!sawKeyframe || !sawSps || !sawPps) &&
+                        SystemClock.elapsedRealtime() - probeStartedMs > PROBE_MS)
+                        failure = "no Baseline SPS/PPS/IDR within ${PROBE_MS}ms"
                 } catch (e: Exception) {
-                    if (drainRunning && codec === c) Log.w(TAG, "output drain failed: $e")
+                    if (drainRunning && codec === active)
+                        failure = "output failed: ${e.javaClass.simpleName}"
+                }
+                if (failure != null) {
+                    failCurrent(active, failure)
                     break
                 }
             }
@@ -175,50 +284,212 @@ class VideoEncoder(private val core: DoorbellCore) {
         }
     }
 
-    /** AnnexB output → core. MediaCodec の AVC 出力は start code 付き。 */
-    private fun handleOutput(c: MediaCodec, outIdx: Int, info: MediaCodec.BufferInfo) {
+    /** Returns a validation failure after the output buffer has been released. */
+    private fun handleOutput(
+        active: MediaCodec,
+        index: Int,
+        info: MediaCodec.BufferInfo,
+    ): String? {
+        var failure: String? = null
         try {
-            val buf = c.getOutputBuffer(outIdx)
-            if (buf != null && info.size > 0) {
-                val bytes = ByteArray(info.size)
-                buf.position(info.offset)
-                buf.get(bytes)
+            val source = bufferAccess?.output(active, index)
+            if (source != null && info.size in 1..AvcByteStream.MAX_ACCESS_UNIT) {
+                val copy = source.duplicate()
+                if (info.offset < 0 || info.offset + info.size > copy.capacity())
+                    return "invalid output buffer bounds"
+                copy.position(info.offset)
+                copy.limit(info.offset + info.size)
+                val raw = ByteArray(info.size)
+                copy.get(raw)
+                val annexB = AvcByteStream.toAnnexB(raw) ?: return "invalid AVC framing"
                 if (info.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG != 0) {
-                    // SPS/PPS。保存してキーフレームへ前置する (端末によっては
-                    // キーフレームに SPS/PPS が同梱されないため — core が抽出する)
-                    configData = bytes
+                    acceptCodecConfig(annexB)?.let { failure = it }
                 } else {
-                    val key = info.flags and MediaCodec.BUFFER_FLAG_KEY_FRAME != 0
-                    val cfg = configData
-                    val out = if (key && cfg != null) cfg + bytes else bytes
-                    core.onEncodedFrame(out, key, info.presentationTimeUs / 1000)
+                    observeParameterSets(annexB)
+                    val inlineProfile = AvcByteStream.profileIdc(annexB)
+                    if (inlineProfile != null) acceptProfile(inlineProfile)?.let { failure = it }
+                    val key = info.flags and MediaCodec.BUFFER_FLAG_SYNC_FRAME != 0 ||
+                        AvcByteStream.containsNalType(annexB, 5)
+                    if (failure == null && key && profileIdc == 66 && sawSps && sawPps) {
+                        sawKeyframe = true
+                        if (certified) {
+                            val config = configData
+                            val output = if (AvcByteStream.containsNalType(annexB, 7) &&
+                                AvcByteStream.containsNalType(annexB, 8)) annexB
+                            else AvcByteStream.prepend(config, annexB)
+                            core.onEncodedFrame(
+                                output,
+                                true,
+                                captureTimeFor(info.presentationTimeUs),
+                            )
+                            forwardingStarted = true
+                            publish(Snapshot(
+                                "active",
+                                currentCandidate?.codecName.orEmpty(),
+                                currentCandidate?.colorFormat ?: 0,
+                                width, height, fps, certified = true,
+                            ))
+                        }
+                    } else if (failure == null && certified && forwardingStarted) {
+                        core.onEncodedFrame(annexB, false, captureTimeFor(info.presentationTimeUs))
+                    }
                 }
             }
         } finally {
-            c.releaseOutputBuffer(outIdx, false)
+            try { active.releaseOutputBuffer(index, false) } catch (_: Exception) { }
         }
+        return failure
     }
 
-    /** NV21 (VUVU) → NV12 (UVUV)。Y 面はそのまま、色度は使い回しバッファへ入替コピー。 */
-    private fun nv21ToNv12(src: ByteArray, w: Int, h: Int): ByteArray {
-        val size = w * h * 3 / 2
-        var dst = nv12
-        if (dst == null || dst.size != size) {
-            dst = ByteArray(size)
-            nv12 = dst
+    private fun readCodecConfig(format: MediaFormat): String? {
+        val units = ArrayList<ByteArray>(2)
+        for (key in arrayOf("csd-0", "csd-1")) {
+            val buffer = try { format.getByteBuffer(key) } catch (_: Exception) { null } ?: continue
+            val copy = buffer.duplicate()
+            if (copy.remaining() <= 0 || copy.remaining() > AvcByteStream.MAX_ACCESS_UNIT) continue
+            val bytes = ByteArray(copy.remaining())
+            copy.get(bytes)
+            AvcByteStream.toAnnexB(bytes)?.let(units::add)
         }
-        System.arraycopy(src, 0, dst, 0, w * h)
-        var i = w * h
-        while (i + 1 < size) {
-            dst[i] = src[i + 1]      // U
-            dst[i + 1] = src[i]      // V
-            i += 2
+        if (units.isNotEmpty()) {
+            var combined: ByteArray? = null
+            for (unit in units) combined = AvcByteStream.prepend(combined, unit)
+            return combined?.let { acceptCodecConfig(it) }
         }
-        return dst
+        return null
+    }
+
+    private fun acceptCodecConfig(config: ByteArray): String? {
+        observeParameterSets(config)
+        val idc = AvcByteStream.profileIdc(config)
+        if (idc != null) {
+            val error = acceptProfile(idc)
+            if (error != null) return error
+        }
+        val previous = configData
+        configData = if (previous == null) config else {
+            val addsSps = !AvcByteStream.containsNalType(previous, 7) &&
+                AvcByteStream.containsNalType(config, 7)
+            val addsPps = !AvcByteStream.containsNalType(previous, 8) &&
+                AvcByteStream.containsNalType(config, 8)
+            if (addsSps || addsPps) AvcByteStream.prepend(previous, config) else previous
+        }
+        return null
+    }
+
+    private fun observeParameterSets(data: ByteArray) {
+        if (AvcByteStream.containsNalType(data, 7)) sawSps = true
+        if (AvcByteStream.containsNalType(data, 8)) sawPps = true
+    }
+
+    private fun maybeCompleteCommissioning(): String? {
+        if (certified || !sawSps || !sawPps || !sawKeyframe || profileIdc != 66) return null
+        val duration = SystemClock.elapsedRealtime() - probeStartedMs
+        if (duration < CodecSelfTestEvidence.MIN_DURATION_MS) return null
+        if (duration > CodecSelfTestEvidence.MAX_DURATION_MS)
+            return "AVC commissioning exceeded ${CodecSelfTestEvidence.MAX_DURATION_MS}ms"
+        val candidate = currentCandidate ?: return "AVC commissioning lost codec identity"
+        val evidence = CodecSelfTestEvidence(
+            width = width,
+            height = height,
+            fps = fps,
+            bitrateKbps = bitrateKbps,
+            profileIdc = profileIdc ?: 0,
+            sawSps = sawSps,
+            sawPps = sawPps,
+            sawIdr = sawKeyframe,
+            durationMs = duration,
+        )
+        if (!commissioningGate.recordMeasured(candidate.id, evidence))
+            return "AVC commissioning evidence was not persisted"
+        certified = true
+        publish(Snapshot(
+            "commissioned_waiting_idr",
+            candidate.codecName,
+            candidate.colorFormat,
+            width,
+            height,
+            fps,
+            certified = true,
+        ))
+        return null
+    }
+
+    private fun acceptProfile(idc: Int): String? {
+        profileIdc = idc
+        return if (idc == 66) null else "encoder ignored Baseline profile (profile_idc=$idc)"
+    }
+
+    @Synchronized
+    private fun failCurrent(active: MediaCodec, reason: String) {
+        if (codec !== active) return
+        currentCandidate?.let { rejectedCandidates.add(it.id) }
+        Log.w(TAG, "AVC candidate failed: $reason")
+        publish(Snapshot("retrying", currentCandidate?.codecName.orEmpty(),
+                         currentCandidate?.colorFormat ?: 0, width, height, fps,
+                         certified, reason))
+        releaseCodecLocked()
+    }
+
+    @Synchronized
+    private fun rememberCaptureTime(ptsUs: Long, captureMs: Long) {
+        queuedTimes.addLast(QueuedTime(ptsUs, captureMs))
+        while (queuedTimes.size > MAX_TIME_MAP) queuedTimes.removeFirst()
+    }
+
+    @Synchronized
+    private fun captureTimeFor(ptsUs: Long): Long {
+        while (queuedTimes.size > 1) {
+            val second = queuedTimes.elementAt(1)
+            if (second.ptsUs > ptsUs) break
+            queuedTimes.removeFirst()
+        }
+        val match = queuedTimes.peekFirst()
+        return if (match != null && kotlin.math.abs(match.ptsUs - ptsUs) <= 1_000_000L)
+            match.captureMs else System.currentTimeMillis()
+    }
+
+    private fun nextPtsUs(): Long {
+        val candidate = ((System.nanoTime() - sessionStartNs) / 1_000L).coerceAtLeast(0L)
+        lastPtsUs = candidate.coerceAtLeast(lastPtsUs + 1)
+        return lastPtsUs
+    }
+
+    @Synchronized
+    private fun releaseCodecLocked() {
+        val active = codec
+        codec = null
+        drainRunning = false
+        try { active?.stop() } catch (_: Exception) { }
+        val thread = drainThread
+        if (thread != null && thread !== Thread.currentThread()) {
+            try { thread.join(250) } catch (_: InterruptedException) {
+                Thread.currentThread().interrupt()
+            }
+        }
+        drainThread = null
+        try { active?.release() } catch (_: Exception) { }
+        bufferAccess = null
+        currentCandidate = null
+        configData = null
+        profileIdc = null
+        sawKeyframe = false
+        sawSps = false
+        sawPps = false
+        forwardingStarted = false
+        queuedTimes.clear()
+    }
+
+    private fun publish(value: Snapshot) {
+        snapshot = value
+        listener(value)
     }
 
     companion object {
         private const val TAG = "doorbell-encoder"
-        private const val GOP_S = 1  // 秒。HLS の初期 3 セグメント待ちと遅延を抑える
+        private const val AVC_MIME = "video/avc"
+        private const val GOP_SECONDS = 1
+        private const val PROBE_MS = 2_000L
+        private const val MAX_TIME_MAP = 90
     }
 }

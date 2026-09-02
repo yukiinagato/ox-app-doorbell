@@ -1,8 +1,5 @@
-// 文言解決の前段 (strings.xml の手前): config i18n_overrides.<lang>.<key> があればそれを使い、
-// 無ければ言語別 Resources (createConfigurationContext) の組込文言へ回落する。
-// 訪客言語 (門口機の言語バー) の現在値もここが持つ — Activity を作り直さずに切替できる。
-// 上書き文言のプレースホルダは i18n/strings.yaml と同じ名前付き ({unit} 等) で、出現順に
-// 引数で埋める (tools/gen_i18n.py が %1$s へ変換するのと同じ順序規約)。
+// Resolve configuration overrides before localized Android resources. Named placeholders use
+// the same encounter order as the generated positional placeholders from i18n/strings.yaml.
 package jp.keihan.doorbell
 
 import android.content.Context
@@ -13,7 +10,7 @@ import org.json.JSONObject
 
 class Texts(private val base: Context) {
 
-    /** 現在の表示言語 (門口機は訪客言語、室内機は boot.ui_lang)。 */
+    /** Current display language: visitor language at a door, boot.ui_lang indoors. */
     var lang: String = "ja"
         private set
 
@@ -21,13 +18,13 @@ class Texts(private val base: Context) {
     private var overrides: JSONObject? = null
     private var res: Resources = base.resources
 
-    /** 設定ツリーの差し替え (起動時 / config_changed)。 */
+    /** Replace the configuration tree at startup or after config_changed. */
     fun setConfig(cfg: JSONObject?) {
         config = cfg
         reload()
     }
 
-    /** 表示言語の切替 (組込文言の Resources もここで差し替える)。 */
+    /** Switch display language and its built-in resource context. */
     fun setLang(l: String) {
         lang = if (l.isEmpty()) "ja" else l
         reload()
@@ -47,8 +44,8 @@ class Texts(private val base: Context) {
     }
 
     /**
-     * key = i18n/strings.yaml のドットキー (上書きの照合用)、resId = 組込文言。
-     * 引数は上書き文言では出現順の名前付きプレースホルダ、組込文言では %1$s… に入る。
+     * key identifies an i18n/strings.yaml entry for override lookup; resId selects the built-in
+     * translation. Arguments fill named overrides by encounter order and positional resources.
      */
     fun t(key: String, resId: Int, vararg args: Any): String {
         val ov = overrides?.optString(key).orEmpty()
@@ -69,7 +66,7 @@ class Texts(private val base: Context) {
     companion object {
         private val PLACEHOLDER = Regex("\\{[A-Za-z_][A-Za-z0-9_]*\\}")
 
-        /** 言語の自言語表記 (訪客が自分の言語を見つけられるように)。 */
+        /** Native language names let visitors identify their language. */
         fun langDisplayName(lang: String): String = when (lang) {
             "ja" -> "日本語"
             "en" -> "English"

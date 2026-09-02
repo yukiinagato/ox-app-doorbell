@@ -64,6 +64,7 @@ static void SegSink(void *ctx, const uint8_t *data, size_t len);
   int64_t _statsBaseDtsMs;
   int64_t _statsLatestDtsMs;
   int64_t _statsLatestCaptureMs;
+  CFAbsoluteTime _lastFrameAt;
   double _statsFramesPerSecond;
   NSUInteger _reportedLatencyCount;
   int64_t _reportedLatencyMs;
@@ -122,6 +123,13 @@ static void SegSink(void *ctx, const uint8_t *data, size_t len) {
                           (NSInteger)(_reportedJitterMs + 0.5), (CGFloat)fps);
 }
 
+- (CFAbsoluteTime)lastFrameAt {
+  [_statsLock lock];
+  CFAbsoluteTime t = _lastFrameAt;
+  [_statsLock unlock];
+  return t;
+}
+
 - (void)setStateOnMain:(DBH264PlayerState)state {
   NSAssert([NSThread isMainThread], @"H.264 state/UI must stay on main");
   if (_state == state) return;
@@ -147,6 +155,7 @@ static void SegSink(void *ctx, const uint8_t *data, size_t len) {
   _statsBaseDtsMs = -1;
   _statsLatestDtsMs = 0;
   _statsLatestCaptureMs = 0;
+  _lastFrameAt = 0;
   _statsFramesPerSecond = 0;
   [_statsLock unlock];
   _reportedLatencyCount = 0;
@@ -240,6 +249,7 @@ static void SegSink(void *ctx, const uint8_t *data, size_t len) {
   if (captureMs > 0) {
     _statsLatestCaptureMs = captureMs;
     _statsLatestDtsMs = dtsMs;
+    _lastFrameAt = CFAbsoluteTimeGetCurrent();
   }
   if (durMs > 0) {
     double instantFps = 1000.0 / (double)durMs;

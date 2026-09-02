@@ -1,148 +1,104 @@
-# FAQ — よくある質問と現実的な答え
+# FAQ — Common Questions and Realistic Answers
 
-> English: [FAQ-en](FAQ-en) / 中文: [FAQ-zh](FAQ-zh)
+> English (this page) / 日本語: [FAQ-ja](FAQ-ja) / 中文: [FAQ-zh](FAQ-zh)
 
-## 障害・トラブル
+For platform and hardware answers, the [capability matrix](https://github.com/yukiinagato/ox-app-doorbell/blob/main/docs/en/capability-matrix.md), [security guide](https://github.com/yukiinagato/ox-app-doorbell/blob/main/docs/en/security.md), and [recovery guide](https://github.com/yukiinagato/ox-app-doorbell/blob/main/docs/en/recovery.md) take precedence.
 
-### Q1. チャイムが鳴らない。どこから見ればいい?
+## Failures and troubleshooting
 
-順に切り分けます: (1) 管理画面のダッシュボードで門口機・室内機が**オンライン**か、
-時刻同期警告が出ていないか。(2) イベント履歴に press が**記録されているか** —
-記録されていれば「押鈴は届いている、アクションの問題」、無ければ端末/mesh の問題。
-(3) 呼出ルールが有効か、対象ドアに合っているか、quiet_hours にチャイムが抑制されて
-いないか。(4) 電話だけ鳴らないなら Asterisk 側 (`pjsip show endpoints` /
-`pjsip show registrations`) を確認します。
+### Q1. The chime doesn't ring. Where do I start?
 
-### Q2. Home Assistant が落ちたらどうなる?
+Isolate in order: (1) On the admin dashboard, are the door station and indoor station **online**, with no time-sync warning? (2) Is a press **recorded** in the event history — if it is, "the ring arrived, the problem is in the actions"; if not, it is a device/mesh problem. (3) Is the call rule enabled, does it match the target door, and is the chime being suppressed by quiet_hours? (4) If only the phone fails to ring, check the Asterisk side (`pjsip show endpoints` / `pjsip show registrations`).
 
-**ドアホンは全部動き続けます。** 押鈴表示・チャイム・室内対講・Telegram・電話は無傷です。
-失われるのは HA 経由の機能 (HomeKit 通知・HA 自動化・go2rtc 映像) だけ。HA が戻れば
-MQTT ブリッジが自動再接続し、discovery と状態を全再発行します。
+### Q2. What happens if Home Assistant goes down?
 
-### Q3. Asterisk が落ちたら?
+Implemented mesh-local paths can continue. HA automations, HA/HomeKit notifications, and any HA-hosted media stop. Telegram and PBX paths have their own dependencies. Test the exact deployment rather than assuming full operation.
 
-対講・監聴は Asterisk 非経由の直接 SIP なので**そのまま動きます**。死ぬのは電話腿
-(内線・携帯への発呼・DTMF 開錠) と網頁ブラウザ通話だけです。→ [Architecture](Architecture)
+### Q3. And if Asterisk goes down?
 
-### Q4. 停電から復帰した後、何かする必要は?
+Configured direct SIP bypasses Asterisk, so that path can continue when the exact artifacts use real SIP and the peers remain reachable. PBX-routed extensions/mobile calls and browser WebRTC stop with Asterisk. → [Architecture](Architecture)
 
-原則ありません。各端末は自動起動 (シェル置換 / Device Owner / SAM) し、mesh に再合流し、
-設定は CRDT なので勝手に一致します。NTP 同期が済むまで時刻依存機能 (スケジュール・
-夜間モード) がずれる可能性はあります — ダッシュボードの「時刻未同期」警告が消えるのを
-確認してください。HGW/Asterisk の復帰が遅い場合、電話腿の再登録は retry (60 秒間隔) 頼みです。
+### Q4. Anything to do after recovering from a power outage?
 
-### Q5. 押鈴から通知まで妙に遅い
+Verify that every node actually restarted, rejoined, resolved its secure-store references, and reports the expected capabilities. Then test ring/audio/media/integrations; follow the [recovery guide](https://github.com/yukiinagato/ox-app-doorbell/blob/main/docs/en/recovery.md).
 
-Telegram/MQTT はリーダーだけが送ります。リーダー交代直後は数秒の空白があり得ます。
-恒常的に遅いなら、リーダーが電池駆動の弱い端末に載っていないか確認し、常時給電の端末に
-`caps_override: { "mains_power": true }` を付けてリーダー資格を寄せてください。
+### Q5. Notifications are oddly slow after a ring
 
-### Q6. 訪客言語が日本語に戻らない / 勝手に戻る
+Only the leader sends Telegram/MQTT. Right after a leader change there can be a gap of a few seconds. If it is consistently slow, check whether the leader has landed on a weak battery-powered device, and steer leader eligibility to a mains-powered device with `caps_override: { "mains_power": true }`.
 
-仕様です: 無操作 `ui.visitor_lang_revert_s` 秒 (既定 60) で日本語に自動復帰し、押鈴で
-タイマーが延びます。戻らない場合は押鈴やタッチが続いていないか、設定値が極端に
-大きくないかを見てください。訪客が `lang=ja` を選ぶと即時復帰します。
+### Q6. The visitor language doesn't revert to Japanese / reverts on its own
 
-### Q7. H.264 (滑らか映像) にしたのに映らない
+By design: after `ui.visitor_lang_revert_s` seconds of inactivity (default 60) it auto-reverts to Japanese, and a ring extends the timer. If it will not revert, check whether rings or touches keep coming, or whether the setting is extremely large. A visitor choosing `lang=ja` reverts it immediately.
 
-その端末に硬編が無い可能性があります。`codec: auto` は硬編探測に失敗すると MJPEG に
-降りており、`/stream.mp4` は 503 を返します。go2rtc のソース行を mjpeg 用
-(`#video=h264#hardware`) に書き換えてください。また `/stream.mp4` は購読者が付いてから
-エンコーダが起動するため、初回は数秒かかります。
+### Q7. I enabled H.264 (smooth video) but nothing shows
+
+That device may have no hardware encoder. With `codec: auto`, a failed hardware probe means it has fallen back to MJPEG, and `/stream.mp4` returns 503. Rewrite the go2rtc source line for mjpeg (`#video=h264#hardware`). Also, `/stream.mp4` starts its encoder only after a subscriber attaches, so the first view takes a few seconds.
 → [deploy/ha/README.ja.md](https://github.com/yukiinagato/ox-app-doorbell/blob/main/deploy/ha/README.ja.md)
 
-### Q8. 通話中に *1 を押しても錠が開かない
+### Q8. Pressing *1 during a call doesn't unlock the door
 
-PSTN→HGW の腿は DTMF が inband のことが多く、機種依存です。Asterisk の DSP 検出
-(現設定) で拾えるか実測し、駄目なら rfc4733 を試します。
-→ [deploy/asterisk/README.ja.md](https://github.com/yukiinagato/ox-app-doorbell/blob/main/deploy/asterisk/README.ja.md) の注意点
+On the PSTN→HGW leg, DTMF is often inband and model-dependent. Test whether Asterisk's DSP detection (the current setup) picks it up; if not, try rfc4733.
+→ the notes in [deploy/asterisk/README.ja.md](https://github.com/yukiinagato/ox-app-doorbell/blob/main/deploy/asterisk/README.ja.md)
 
-## 運用
+## Operations
 
-### Q9. 録画はしているの?
+### Q9. Is it recording?
 
-**していません。** 常時録画は設計の境界外です ([Design-Philosophy](Design-Philosophy))。
-残るのはイベント時のスナップショットとイベント履歴だけ。録画が欲しければ go2rtc/HA 側で
-`/stream.mjpeg` または `/stream.mp4` を録ってください — システムはそれを妨げません。
+**No.** Continuous recording is outside the design boundary ([Design Philosophy](Design-Philosophy)). Event snapshots and history remain; external recording is a separately commissioned go2rtc/HA responsibility.
 
-### Q10. Windows Update はどうすればいい?
+### Q10. What about Windows Update?
 
-門口機の Windows Update は provision で封鎖済みです (弾窗も watchdog が押し戻します)。
-放置せず、**保守日に手動適用**してください (`deploy/provision/windows/provision.cmd` §6)。
-「勝手に更新して玄関が文鎮化」と「永遠に未パッチ」の間の運用解です。
+Windows Update on door stations is blocked by provisioning (and the watchdog pushes back its pop-ups). Do not neglect it — **apply it manually on maintenance days** (`deploy/provision/windows/provision.cmd` §6). It is the operational middle ground between "an unattended update bricks the entrance" and "unpatched forever".
 
-### Q11. iOS 端末のアプリが急に起動しなくなった
+### Q11. The app on an iOS device suddenly won't launch
 
-ほぼ確実に **Ad Hoc プロファイルの年次失効**です。再署名した ipa を Apple Configurator で
-入れ直してください。期限はアプリ内表示と Telegram の 30 日前警告で予告されます。
-恒久対策は App Store (unlisted) 上架 (Phase 7 計画)。
+Almost certainly the **annual expiry of the Ad Hoc profile**. Reinstall a re-signed ipa with Apple Configurator. The deadline is announced by the in-app display and Telegram's 30-day advance warning. The permanent fix is App Store (unlisted) publication (planned for Phase 7).
 → [deploy/provision/ios/provision.ja.md](https://github.com/yukiinagato/ox-app-doorbell/blob/main/deploy/provision/ios/provision.ja.md)
 
-### Q12. 端末が盗まれた/紛失した。何をすべき?
+### Q12. A device was stolen/lost. What should I do?
 
-(1) 管理画面「システム」で **PSK を再発行** → 残りの全端末を再配対 (盗まれた端末は
-mesh に入れなくなります)。(2) SIP パスワードと Telegram bot token を回転。
-(3) パネル token をローテート。なお端末内の秘密は secure store (DPAPI/Keystore/Keychain)
-保管で、設定 CRDT に平文はありません。盗難自体は「⚠ オフライン」通知 (30 秒以内) で
-気付けます。
+Isolate/remove the device, rotate the mesh PSK and every SIP, MQTT, Telegram, WebRTC, media, admin, and panel credential/token it could access, then re-pair remaining nodes. Verify old values and the removed node are rejected. See the [security guide](https://github.com/yukiinagato/ox-app-doorbell/blob/main/docs/en/security.md).
 
-### Q13. バックアップはどう取る? 何台まで増やせる?
+### Q13. How do I back up? How many devices can I add?
 
-管理画面「システム」→ エクスポートでどのノードからでも全量 JSON が出ます。ただし
-日常の生存性は分散が担保 — 1 台生きていれば設定は復元できます。台数の実用上の制約は
-むしろ Asterisk/HGW の同時通話数 (通常 2) と Ad Hoc の UDID 上限 (100 台/年) です。
+Admin UI export captures replicated configuration but intentionally omits secret values. Back up artifact manifests/packages and recover device-local secrets separately. Capacity depends on the commissioned devices and integrations.
 
-## 端末・互換性
+## Devices and compatibility
 
-### Q14. iPad 1 (iOS 5) で何ができる?
+### Q14. What can an iPad 1 (iOS 5) do?
 
-2 通りあります。
+Two options.
 
-**(A) 越獄して原生ノードにする (推奨・完全機能)**: iPad 1 (A1219, iOS 5.1.1) を
-越獄して自前ビルドの原生 app を入れると、完全な C++ コアを積んだ**門铃メッシュの
-一等ノード**になります — 門口のライブ映像を見る・門口の音声を聞く・クイック返信・
-開錠まで可能で、外付けマイク (TRRS ヘッドセット/dock マイク) を挿せば対講もできます。
-ただしハードウェア上限は正直に: **カメラが無いので自分の映像は送れず**、**内蔵マイクが
-無いので外麦なしだと「聞く専用」** です。手順は
-[deploy/provision/ios/ipad1-jailbreak.md](https://github.com/yukiinagato/ox-app-doorbell/blob/main/deploy/provision/ios/ipad1-jailbreak.md)。
+**(A) Compatibility native shell**: the iPad 1 has a built-in microphone and speaker but no camera. The shell, MiniSIP, direct HTTP(S) MJPEG/snapshot, bounded RTSP-over-TCP H.264, and no-video profiles exist, but audio, recovery, and the final enclosure require exact-device commissioning. The H.264 ingest and Annex-B forwarding path passes the host/loopback contract; capability stays degraded until DESCRIBE/SETUP and an actually accepted IDR, and no real camera has passed iPad qualification. Separately, a bounded Android-to-Core-fMP4-to-iPad smoke passed at 15–16 fps on the foreground renderer; unattended post-crash foreground video resume is still open. The optional root helper is implemented and host-tested, and its iOS 5 lane has a reproducible staged DEB that leaves launchd disabled; it remains opt-in and unqualified on iPad hardware. Steps: [iPad 1 provisioning](https://github.com/yukiinagato/ox-app-doorbell/blob/main/deploy/provision/ios/ipad1-jailbreak.en.md).
 
-**(B) 越獄したくない → 従来の網頁パネル (best-effort)**: Safari で網頁パネルを開き
-Web クリップ化すれば `door.html` = 押鈴パネル (音声なし・通知のみ)、`monitor.html` =
-受鈴モニタとして使えます。双方向通話 (`call.html`) は現代ブラウザ + WebRTC ゲートウェイが
-必要なので不可。いずれの場合も自動ロックを「なし」にして常時給電で使います。
+The original iPad is not outdoor-rated. Do not treat this compatibility target as a qualified outdoor station until the exact camera, audio, thermal, weather-resistant enclosure, power, recovery, and helper combination has passed hardware commissioning.
 
-### Q15. 対応する最低 OS は?
+**(B) Don't want to jailbreak → the traditional web panel (best-effort)**: open the web panels in Safari and add them as Web Clips: `door.html` = ring panel (no audio, notification only), `monitor.html` = call monitor. Two-way calling (`call.html`) needs a modern browser + the WebRTC gateway, so it is not possible. Either way, set auto-lock to "never" and keep it permanently powered.
 
-Windows 7 SP1 (要 .NET Framework 4.8 + TLS1.2 パッチ — provision が設定) / Android 5.0
-(4.4 は legacy 経路) / iOS 12 (9 は legacy) / ブラウザは iOS 5 Safari まで。
-→ [docs/ja/overview.md](https://github.com/yukiinagato/ox-app-doorbell/blob/main/docs/ja/overview.md) の端末別対応表
+### Q15. What are the minimum supported OS versions?
 
-### Q16. Apple TV で監視できる?
+Build targets and qualification are different. See the [capability matrix](https://github.com/yukiinagato/ox-app-doorbell/blob/main/docs/en/capability-matrix.md). In particular, the Android API 19 production allowlist is currently empty, so there are **zero supported API 19 SKUs**. The tracked Android job is a debug-contract build, not a releasable or hardware-qualified artifact.
 
-Apple TV は HomeKit 経由 (家庭 App のカメラ表示・ホームハブ) が基本です。tvOS ネイティブ
-アプリは映像表示に対応済み、SIP 監聴は未実装 (TODO)。フル機能の TV 監視端が欲しければ
-Android TV を使ってください (来鈴全画面 + 直接監聴 + D-pad 返信)。
+### Q16. Can I monitor on an Apple TV?
 
-### Q17. ブラウザから通話したいのにマイクが使えない
+The intended tvOS boundary is listen-only because Apple TV has no microphone. Current tracked evidence is limited to an **unsigned Debug arm64 simulator build linked with real PJSIP**. There is no tracked Release build, signed device artifact, Apple TV run, or hardware/audio qualification, so do not treat tvOS monitoring as release-supported yet. HomeKit camera display/home-hub use is a separate integration.
 
-ブラウザの getUserMedia は **HTTPS ページ限定**です。子機のパネルは平文 HTTP なので、
-Caddy 等のリバースプロキシ + 内部 CA を立てるか、家庭内の決まった端末だけ Chrome の
-insecure-origin 例外を設定します。
+### Q17. I want to call from a browser but the microphone won't work
+
+A browser's getUserMedia is **HTTPS-only**. The stations' panels are plain HTTP, so either put up a reverse proxy like Caddy with an internal CA, or set Chrome's insecure-origin exception on the specific home devices only.
 → [deploy/asterisk/webrtc.ja.md](https://github.com/yukiinagato/ox-app-doorbell/blob/main/deploy/asterisk/webrtc.ja.md)
 
-### Q18. 夜間はチャイムを消したのに Asterisk の夜間分岐とずれる
+### Q18. I silenced the chime at night, but it disagrees with Asterisk's night branching
 
-quiet_hours は**アプリ側の補正済み時計**、dialplan の GotoIfTime は **Asterisk サーバの
-時計**で判定されます。両方に夜間設定を書くなら時刻を揃え、NTP を確認してください。
+quiet_hours is judged by **the app's corrected clock**, while the dialplan's GotoIfTime is judged by **the Asterisk server's clock**. If you configure night behavior in both places, align the times and verify NTP.
 
-### Q19. SOS を押したら警察に通報される?
+### Q19. Does pressing SOS call the police?
 
-**されません。** 通知先は家族 (Telegram/全端末警報) と、設定した場合のユーザー定義
-電話先だけです。通報の判断は人が行う設計です。解除は kiosk PIN が必要です。
-→ [Usage-Residents](Usage-Residents) / [Design-Philosophy](Design-Philosophy)
+**No.** SOS never calls police or fire services automatically. `emergency_on` and `emergency_off` state is replicated to every Core node, but recipients and presentation are selected entirely by rules. A deployment may target devices, roles, Web subscription groups, Telegram, MQTT, or user-defined SIP destinations; it may also deliberately have zero recipients or be silent.
 
-### Q20. 複数玄関で同時に押鈴されたら?
+For an open Web page, `emergency.web_active_page_alerts` defaults to `true`: active/clear state is rendered even when rules have zero recipients or select Push only. If an administrator turns it off, Web still processes a positively matched `device_alert` or a Push that is actually delivered. While it is on, a rule TTL can stop custom decoration/sound but the safe red overlay remains until clear. Explicit native-only targets do not reach Web; the page's persisted `?group=` selects both poll and Push delivery. Clearing SOS requires the configured PIN/permission. In diagnostics, `delivery_result` records only a Core dispatch attempt; the client runtime's per-channel report is the evidence that a visual, sound, or system notification was actually presented.
+→ [Usage-Residents](Usage-Residents) / [Design Philosophy](Design-Philosophy)
 
-HGW 内線の同時通話数 (通常 2) がボトルネックです。アプリ側はリーダー仲裁で外呼を
-直列化し、必要なら dialplan の Queue でも制御できます。宅内側 (チャイム・室内機・
-Telegram) は全玄関ぶん並行して普通に動きます。
+### Q20. What if multiple entrances ring at the same time?
+
+The bottleneck is the HGW extension's concurrent call count (usually 2). On the app side, the leader arbitrates and serializes outbound calls, and you can additionally control it with a Queue in the dialplan. Mesh-local and external actions are still selected by their matching rules; do not assume that chimes, indoor displays, or Telegram run for every entrance unless the configured rules say so.

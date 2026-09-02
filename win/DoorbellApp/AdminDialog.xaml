@@ -7,13 +7,11 @@
     <StackPanel Margin="24">
         <TextBlock x:Name="Prompt" FontSize="18" Foreground="{StaticResource Fg}"
                    HorizontalAlignment="Center"/>
-        <!-- 入力表示 (伏字)。実体キーボードが無い端末前提 — 入力は下の描画キーパッドで行う -->
         <TextBlock x:Name="PinDisplay" FontSize="40" FontWeight="Bold" Margin="0,14,0,0"
                    MinHeight="52" TextAlignment="Center" Foreground="{StaticResource Fg}"
                    Text=""/>
         <TextBlock x:Name="ErrorText" FontSize="14" Foreground="#FF6B6B" Margin="0,4,0,8"
                    HorizontalAlignment="Center" MinHeight="18"/>
-        <!-- 描画テンキー (タッチ専用端末対応)。OnPad の Tag でルーティング -->
         <UniformGrid Columns="3" Rows="4">
             <UniformGrid.Resources>
                 <Style TargetType="Button">

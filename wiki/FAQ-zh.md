@@ -1,6 +1,8 @@
 # FAQ —— 常见问题与现实的回答
 
-> 日本語: [FAQ](FAQ) / English: [FAQ-en](FAQ-en)
+> English: [FAQ](FAQ) / 日本語: [FAQ-ja](FAQ-ja) / 繁體中文 (本頁)
+
+platform 與 hardware 的答案以 [capability matrix](https://github.com/yukiinagato/ox-app-doorbell/blob/main/docs/zh/capability-matrix.md) 及 [recovery](https://github.com/yukiinagato/ox-app-doorbell/blob/main/docs/zh/recovery.md) 為準。
 
 ## 故障・排障
 
@@ -15,21 +17,19 @@
 
 ### Q2. Home Assistant 宕机会怎样?
 
-**门铃的一切照常运转。** 按铃显示、门铃声、室内对讲、Telegram、电话毫发无损。
-失去的只有经 HA 的功能（HomeKit 通知、HA 自动化、go2rtc 影像）。HA 恢复后
-MQTT 桥自动重连，并全量重发 discovery 和状态。
+已實作的 mesh-local path 可以繼續。HA automation、HA/HomeKit 通知及 HA 提供的 media 會停止。
+Telegram 和 PBX 也各有依賴項；不要假設全部功能仍正常，請測試實際部署組合。
 
 ### Q3. Asterisk 宕机呢?
 
-对讲、监听走的是不经 Asterisk 的直连 SIP，所以**照常运转**。死掉的只有电话腿
-（内线、向手机的呼叫、DTMF 开锁）和网页浏览器通话。→ [架构](Architecture-zh)
+已配置的 direct SIP 不經 Asterisk；如果實際 artifact 使用 real SIP 且 peer 仍可達，這條 path 可以繼續。
+PBX 路由的內線、手機呼叫及 browser WebRTC 會停止。→ [架构](Architecture-zh)
 
 ### Q4. 停电恢复后需要做什么吗?
 
-原则上不需要。各设备自动启动（替换 shell / Device Owner / SAM），重新加入 mesh，
-配置是 CRDT 所以自动一致。NTP 同步完成前，时间依赖功能（时间表、
-夜间模式）可能有偏差 —— 请确认仪表盘的「时钟未同步」警告消失。
-HGW/Asterisk 恢复较慢时，电话腿的重新注册只能靠 retry（60 秒间隔）。
+請確認每個 node 都確實重新啟動、加入 mesh、解析 secure-store 引用並回報預期 capability，
+再測試按鈴、audio、media 及 integration。依照
+[recovery guide](https://github.com/yukiinagato/ox-app-doorbell/blob/main/docs/zh/recovery.md) 操作。
 
 ### Q5. 从按铃到通知莫名地慢
 
@@ -83,14 +83,12 @@ PSTN→HGW 的腿 DTMF 常常是 inband，依赖机型。先实测 Asterisk 的 
 (1) 在管理界面「系统」**重新签发 PSK** → 剩余全部设备重新配对（被偷的设备
 将无法进入 mesh）。(2) 轮换 SIP 密码和 Telegram bot token。
 (3) 轮换面板 token。另外设备内的秘密保管在 secure store (DPAPI/Keystore/Keychain)
-里，配置 CRDT 中没有明文。失窃本身可通过「⚠ 离线」通知（30 秒内）
-察觉。
+里，配置 CRDT 中没有明文。只有在 rule 選擇 offline 通知且所選 integration 可用時，才會送出提醒。
 
 ### Q13. 备份怎么做? 最多能加到几台?
 
-管理界面「系统」→ 导出，从任意节点都能导出全量 JSON。不过
-日常的生存性由分布式担保 —— 只要 1 台活着配置就能恢复。台数的实际制约
-反而是 Asterisk/HGW 的并发通话数（通常 2）和 Ad Hoc 的 UDID 上限（100 台/年）。
+管理界面 export 會保存複製設定，但刻意不包含秘密值。另行備份 artifact manifest/package，
+並安排 device-local secret 的恢復方式。容量取決於已 commissioning 的裝置與 integration。
 
 ## 设备・兼容性
 
@@ -98,12 +96,18 @@ PSTN→HGW 的腿 DTMF 常常是 inband，依赖机型。先实测 Asterisk 的 
 
 有两种方式。
 
-**(A) 越狱成原生节点（推荐・完整功能）**: 把 iPad 1 (A1219, iOS 5.1.1) 越狱并装上
-自行构建的原生 app，它就成为搭载完整 C++ 核心的**门铃网格一等节点** —— 可以查看门口的
-实时视频、听门口的声音、快捷回复、开锁；插入外接麦克风（TRRS 耳麦/dock 麦克风）还能对讲。
-硬件上限如实相告: **没有摄像头，所以无法发送自己的视频**，**没有内置麦克风，所以不接
-外麦时为「仅收听」**。步骤见
-[deploy/provision/ios/ipad1-jailbreak.md](https://github.com/yukiinagato/ox-app-doorbell/blob/main/deploy/provision/ios/ipad1-jailbreak.md)。
+**(A) compatibility native shell**: iPad 1 有內建麥克風與揚聲器，但沒有 camera。shell、MiniSIP、
+direct HTTP(S) MJPEG/snapshot、bounded RTSP-over-TCP H.264 與 no-video profile 已實作；audio、recovery
+及最終 enclosure 仍須逐裝置 commissioning。H.264 ingest 與 Annex-B 轉送已通過 host/loopback contract；
+DESCRIBE/SETUP 與實際 IDR accept 前 capability 維持 degraded，且尚無真實 camera iPad qualification。
+另一項 bounded Android→Core fMP4→iPad smoke 已在 foreground renderer 確認 15–16 fps，但 crash 後
+unattended foreground video resume 仍未完成。
+optional root helper 已實作並通過 host test；iOS 5 lane 有不會啟用 launchd 的可重現 staged DEB，
+但 iPad 實機 qualification 尚未完成。
+[部署程序](https://github.com/yukiinagato/ox-app-doorbell/blob/main/deploy/provision/ios/ipad1-jailbreak.zh.md)。
+
+初代 iPad 並非戶外等級。實際 camera、audio、thermal、耐候 enclosure、power、recovery、helper
+組合通過硬體 commissioning 前，不得當作 qualified outdoor station。
 
 **(B) 不想越狱 → 传统网页面板（best-effort）**: 用 Safari 打开网页面板并做成 Web Clip:
 `door.html` = 按铃面板（无音频、仅通知），`monitor.html` = 接铃监视。双向通话
@@ -112,15 +116,17 @@ PSTN→HGW 的腿 DTMF 常常是 inband，依赖机型。先实测 Asterisk 的 
 
 ### Q15. 支持的最低 OS 是?
 
-Windows 7 SP1（需 .NET Framework 4.8 + TLS1.2 补丁 —— provision 会配置）/ Android 5.0
-（4.4 走 legacy 通道）/ iOS 12（9 走 legacy）/ 浏览器低至 iOS 5 Safari。
-→ [docs/ja/overview.md](https://github.com/yukiinagato/ox-app-doorbell/blob/main/docs/ja/overview.md) 的设备支持表
+build target 不等於 qualification。請看
+[capability matrix](https://github.com/yukiinagato/ox-app-doorbell/blob/main/docs/zh/capability-matrix.md)。
+尤其 Android API 19 的 production allowlist 目前為空，**supported SKU 是 0 台**；tracked Android job
+只是 debug-contract build，不是 release artifact 或 hardware qualification。
 
 ### Q16. 能用 Apple TV 监视吗?
 
-Apple TV 基本走 HomeKit（家庭 App 的摄像头显示、家居中枢）。tvOS 原生
-应用已支持影像显示，SIP 监听未实现 (TODO)。想要全功能的 TV 监视端
-请用 Android TV（来铃全屏 + 直接监听 + D-pad 回复）。
+Apple TV 沒有 microphone，因此 tvOS 的 product boundary 是 listen-only。目前 tracked evidence 只有
+**連結 real PJSIP 的 unsigned Debug arm64 simulator build**，沒有 Release build、signed device artifact、
+Apple TV 實際執行或 hardware/audio qualification。現階段不可把 tvOS monitor 當作 release-supported。
+HomeKit camera/home hub 屬於另一個 integration。
 
 ### Q17. 想从浏览器通话却用不了麦克风
 
@@ -136,12 +142,20 @@ quiet_hours 用的是**应用侧的校正后时钟**，dialplan 的 GotoIfTime �
 
 ### Q19. 按了 SOS 会报警到警察那里吗?
 
-**不会。** 通知对象只有家人（Telegram/全设备警报）以及配置了的用户自定义
-电话号码。报警的判断由人来做，这是设计使然。解除需要 kiosk PIN。
+**不會。** SOS 不會自動呼叫警察或消防。`emergency_on` 與 `emergency_off` 狀態會複製到所有
+Core node，但 recipient 和 presentation 完全由 rule 選擇。可以指定 device、role、Web subscription
+group、Telegram、MQTT 或自訂 SIP 目的地，也可以刻意設定零 recipient 或 silent。
+
+對開啟中的 Web page，`emergency.web_active_page_alerts` 預設為 `true`，即使 rule 是零 recipient
+或 Push-only，也會渲染 active/clear 狀態。管理員關閉後，Web 仍會處理正向匹配的 `device_alert`
+或實際送達的 Push。開啟時，rule TTL 即使停止 custom decoration/sound，安全紅色 overlay 仍保留至
+clear。明確 native-only target 不會到 Web；page 保存的 `?group=` 同時選擇 poll/Push delivery。
+clear 需要已配置的 PIN/permission。diagnostics 內的 `delivery_result` 只代表
+Core 嘗試 dispatch；visual、sound 或 system notification 是否真正呈現，要看 client runtime 的逐 channel report。
 → [住户使用指南](Usage-Residents-zh) / [设计理念](Design-Philosophy-zh)
 
 ### Q20. 多个玄关同时按铃会怎样?
 
 瓶颈是 HGW 内线的并发通话数（通常 2）。应用侧由 leader 仲裁把外呼
-串行化，必要时也可用 dialplan 的 Queue 控制。宅内侧（门铃声、室内机、
-Telegram）则按玄关数并行照常运转。
+串行化，必要时也可用 dialplan 的 Queue 控制。mesh-local 與外部 action 仍只由 matching rule
+選擇；不要假設每個玄關都必定執行 chime、indoor display 或 Telegram。

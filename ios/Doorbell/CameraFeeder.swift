@@ -1,55 +1,59 @@
-// AVCaptureSession 前面カメラ → NV12 (420YpCbCr8BiPlanarVideoRange) フレームを core へ push
-// (Android CameraFeeder と同役)。CVPixelBuffer の 2 面 (Y / 交錯 UV) を core が期待する
-// 連続レイアウト (stride=width) の使い回しバッファへ詰め替えて
-// db_core_on_camera_frame(format=1) に渡す。
-// H.264 硬編 (Phase 6a) への分岐は encoder に CVPixelBuffer をそのまま渡す
-// (VideoToolbox は biplanar を直接食える — 変換不要)。
 import AVFoundation
 import Foundation
 
+// Camera callbacks arrive on the dedicated capture queue. Each bi-planar NV12 frame is repacked
+// into tightly packed Y+UV storage whose lifetime covers the synchronous Core callback.
 final class CameraFeeder: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
 
     private let core: CoreBridge
+    private let runtimeStatus: (Bool, String) -> Void
     private var session: AVCaptureSession?
+    private var runtimeErrorObserver: NSObjectProtocol?
     private let queue = DispatchQueue(label: "doorbell-camera")
-    private var nv12: [UInt8] = []  // 詰め替え用の使い回しバッファ
+    private let runtimeLock = NSLock()
+    private var nv12: [UInt8] = []
+    private var reportedActive = false
+    private var reportedState = "not_started"
+    private var acceptingFrames = false
 
-    /// H.264 硬編への分岐先 (Phase 6a)。稼働中のみ feed される (nil = 分岐なし)。
-    /// MainViewController が wanted ポーリングで start/stop を切り替える。
     var encoder: VideoEncoderVT?
 
-    init(core: CoreBridge) {
+    init(core: CoreBridge, runtimeStatus: @escaping (Bool, String) -> Void = { _, _ in }) {
         self.core = core
+        self.runtimeStatus = runtimeStatus
         super.init()
     }
 
-    /// プレビュー層 (待機画面の自機映り込み確認用 — 無くても採集は動く)。
     private(set) var previewLayer: AVCaptureVideoPreviewLayer?
 
-    /// 前面カメラ (無ければ背面) を開いて採集開始。失敗時 false。
-    /// targetW/H: 解像度目標 (codec=h264/auto では h264_resolution を渡す —
-    /// MJPEG 側は core の frame_bus が max_width へ縮小するので大きくても無害)。
     @discardableResult
     func start(targetW: Int, targetH: Int) -> Bool {
         stop()
+        IOSAvailability.logDebug("camera start target=\(targetW)x\(targetH)")
         guard case .authorized = AVCaptureDevice.authorizationStatus(for: .video) else {
+            reportRuntime(active: false, state: "permission_denied")
             return false
         }
-        let dev = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .front)
-            ?? AVCaptureDevice.default(for: .video)
-        guard let device = dev, let input = try? AVCaptureDeviceInput(device: device) else {
+        guard let device = IOSAvailability.videoCaptureDevice() else {
+            reportRuntime(active: false, state: "no_device")
+            return false
+        }
+        guard let input = try? AVCaptureDeviceInput(device: device) else {
+            reportRuntime(active: false, state: "input_failed")
             return false
         }
         let s = AVCaptureSession()
         s.beginConfiguration()
-        // 目標解像度に一番近い preset (旧端末の帯域・CPU を考慮して控えめに選ぶ)
         let pixels = targetW * targetH
         if pixels >= 1280 * 720, s.canSetSessionPreset(.hd1280x720) {
             s.sessionPreset = .hd1280x720
         } else if s.canSetSessionPreset(.vga640x480) {
             s.sessionPreset = .vga640x480
         }
-        guard s.canAddInput(input) else { return false }
+        guard s.canAddInput(input) else {
+            reportRuntime(active: false, state: "configuration_failed")
+            return false
+        }
         s.addInput(input)
 
         let out = AVCaptureVideoDataOutput()
@@ -59,31 +63,45 @@ final class CameraFeeder: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate
         ]
         out.alwaysDiscardsLateVideoFrames = true
         out.setSampleBufferDelegate(self, queue: queue)
-        guard s.canAddOutput(out) else { return false }
+        guard s.canAddOutput(out) else {
+            reportRuntime(active: false, state: "configuration_failed")
+            return false
+        }
         s.addOutput(out)
         s.commitConfiguration()
 
         previewLayer = AVCaptureVideoPreviewLayer(session: s)
         session = s
+        setAcceptingFrames(true)
+        reportRuntime(active: false, state: "starting")
+        runtimeErrorObserver = NotificationCenter.default.addObserver(
+            forName: .AVCaptureSessionRuntimeError, object: s, queue: nil
+        ) { [weak self] _ in
+            self?.reportRuntime(active: false, state: "runtime_failed")
+        }
         queue.async { s.startRunning() }
         return true
     }
 
     func stop() {
+        setAcceptingFrames(false)
+        if let observer = runtimeErrorObserver {
+            NotificationCenter.default.removeObserver(observer)
+            runtimeErrorObserver = nil
+        }
         let s = session
         session = nil
         previewLayer = nil
         queue.async { s?.stopRunning() }
+        if s != nil { reportRuntime(active: false, state: "stopped") }
     }
-
-    // MARK: - AVCaptureVideoDataOutputSampleBufferDelegate (camera queue)
 
     func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer,
                        from connection: AVCaptureConnection) {
         guard let pb = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
+        reportRuntime(active: true, state: "active")
         let tsMs = Int64(Date().timeIntervalSince1970 * 1000)
 
-        // H.264 硬編への分岐 (稼働中のみ — encoder 側で fps 間引き)
         encoder?.feed(pixelBuffer: pb, tsMs: tsMs)
 
         CVPixelBufferLockBaseAddress(pb, .readOnly)
@@ -100,7 +118,6 @@ final class CameraFeeder: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate
 
         nv12.withUnsafeMutableBytes { dst in
             guard let d = dst.baseAddress else { return }
-            // Y 面 (stride 詰め)
             var src = yBase
             var off = 0
             for _ in 0..<h {
@@ -108,7 +125,6 @@ final class CameraFeeder: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate
                 src += yStride
                 off += w
             }
-            // 交錯 UV 面 (NV12 のまま)
             src = uvBase
             for _ in 0..<(h / 2) {
                 memcpy(d + off, src, w)
@@ -121,5 +137,28 @@ final class CameraFeeder: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate
             core.onCameraFrame(base, format: 1, width: Int32(w), height: Int32(h),
                                stride: Int32(w), tsMs: tsMs)
         }
+    }
+
+    private func reportRuntime(active: Bool, state: String) {
+        runtimeLock.lock()
+        if active && !acceptingFrames {
+            runtimeLock.unlock()
+            return
+        }
+        guard reportedActive != active || reportedState != state else {
+            runtimeLock.unlock()
+            return
+        }
+        reportedActive = active
+        reportedState = state
+        runtimeLock.unlock()
+        IOSAvailability.logDebug("camera state=\(state) active=\(active)")
+        runtimeStatus(active, state)
+    }
+
+    private func setAcceptingFrames(_ value: Bool) {
+        runtimeLock.lock()
+        acceptingFrames = value
+        runtimeLock.unlock()
     }
 }

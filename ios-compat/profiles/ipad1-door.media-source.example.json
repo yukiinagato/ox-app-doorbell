@@ -1,0 +1,33 @@
+{
+  "media_sources": {
+    "front_ip_camera": {
+      "schema_version": 1,
+      "kind": "ip_camera",
+      "streams": {
+        "h264": {
+          "url": "rtsp://192.0.2.20/live",
+          "transport": "tcp",
+          "profile": "baseline"
+        },
+        "mjpeg": {
+          "url": "http://192.0.2.20/live.mjpeg"
+        },
+        "snapshot": {
+          "url": "https://192.0.2.20/snapshot.jpg"
+        }
+      },
+      "secret_ref": "secret:media.front_ip_camera"
+    }
+  },
+  "devices": {
+    "replace-with-ipad-node-id": {
+      "role": "door_station",
+      "door": "front",
+      "local": {
+        "camera": {
+          "source_ref": "front_ip_camera"
+        }
+      }
+    }
+  }
+}

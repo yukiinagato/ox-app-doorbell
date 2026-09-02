@@ -1,91 +1,61 @@
-# iPad 1 (A1219, iOS 5.1.1) を門铃ノードにする
+[日本語] | [English](ipad1-jailbreak.en.md) | [繁體中文](ipad1-jailbreak.zh.md)
 
-初代 iPad (2010, A4, 256MB, **カメラ・マイク無し**) を、越獄 + 自前ビルドの
-ネイティブ app で**門铃メッシュの一等ノード**にする手順。完全な C++17 コア
-(doorbell-core) が armv7/iOS5.1 で動く — これは本当に動く (A0/B で実証済み)。
+# iPad 1 compatibility node の配備
 
-## この端末でできること / できないこと (ハードウェア上限)
+iOS 5.1.1 の越獄済み iPad 1 (A1219/A1337) を controlled node として扱う手順です。実機認証済みを
+意味しません。[maintainer runbook](../../../docs/ja/ios-compat-maintainer.md) に従い、端末、artifact、
+package、jailbreak 環境、試験結果を記録します。
 
-| | 可否 | 理由 |
-|---|---|---|
-| 門口のライブ映像を見る | ✅ | MJPEG 受信・A4 でデコード |
-| 門口の音声を聞く | ✅ | ミニ SIP で門口機へ直接呼、スピーカー再生 |
-| クイック返信・開錠 (画面操作) | ✅ | C ABI + SIP DTMF `*1` |
-| メッシュノードとして設定同期・イベント | ✅ | core 全載せ |
-| **自分の声を送る (対講)** | ⚠️ 外付けマイク必須 | 内蔵マイク無し。イヤホン端子(TRRS)/dock マイクを挿せば可 |
-| **自分の映像を送る** | ❌ 不可 | カメラが物理的に無い |
+## hardware 制限
 
-## 0. 前提 (母艦 Mac 側)
+iPad 1 は内蔵マイクとスピーカを持ち、camera を持ちません。内蔵マイクは、その端末で MiniSIP/
+RemoteIO input と双方向 audio が合格した後に使用します。映像は明示した外部 MJPEG/snapshot/RTSP
+camera または no-video mode を使います。bounded RTSP/RTP-over-TCP H.264 ingest と Annex-B 転送は
+SDP/sprop、single NAL/STAP-A/FU-A、loss 後の next-IDR recovery を含む host/loopback contract に合格済みです。
+runtime は DESCRIBE、SETUP、実 IDR accept まで degraded のままで、iPad 1 + 実 camera qualification は未完了です。
 
-ビルド成果物と工具链はリポジトリの `tools/` `ios-legacy/` に用意済み:
-- `tools/sdk/iPhoneOS7.1.sdk` — Xcode 5.1 DMG から抽出 (sysroot。gitignore)
-- `tools/toolchain/ios5-armv7/` — 自前ビルドの現代 libc++/libc++abi/libunwind (`tools/build_libcxx_ios5.sh` で再生成)
-- `ios-legacy/lib/libdoorbell_all.a` — armv7/iOS5.1 版 core (`ios-legacy/scripts/build_core_ios5.sh`)
-- `ldid` (`brew install ldid`)
+別の Core fMP4 playback path は bounded 実機 smoke に合格しました。Android 14 door station の映像を
+foreground iPad 1 が 15～16 fps で表示し、Wi-Fi rejoin と post-safe-mode recheck も合格しています。
+external-camera RTSP ingest と crash 後の unattended foreground video resume は未 qualification です。
+`docs/evidence/ios5-ipad1-fmp4-smoke-2026-08-31.md` を参照してください。
 
-SDK を作り直す場合: Xcode 5.1 (または 4.x) の DMG を `hdiutil attach` し、
-`.../iPhoneOS.platform/Developer/SDKs/iPhoneOS7.1.sdk` を `tools/sdk/` へコピー。
+shell は HTTP(S) MJPEG/snapshot を direct playback します。camera credential は `secret_ref` の背後に
+置き、ephemeral Basic/Bearer request header にだけ解決します。URL credential は拒否し platform TLS
+validation を維持します。この JPEG path は local preview のみ (`jpeg_core_forwarding:false`) で、
+Core/mesh camera feed ではありません。
 
-## 1. iPad 1 を越獄 (untethered)
+屋外対応品ではありません。入口設置には防水、防露、温度管理、連続給電した enclosure と battery/
+cable/thermal 点検が必要です。
 
-**Legacy iOS Kit** (LukeZGD) — 現代 macOS で動く、iPad 1 対応の untethered 越獄ツール。
-1. `git clone https://github.com/LukeZGD/Legacy-iOS-Kit && cd Legacy-iOS-Kit`
-2. iPad 1 を USB 接続 → `./restore.sh` → メニューから **Jailbreak (untethered)**。
-   (必要なら先に 5.1.1 へ復元 — メニューの Restore/Downgrade。NVRAM クリア手順は
-   Kit の wiki 参照)
-3. 完了後 iPad に **Cydia** が入る。
-- 代替: Absinthe 2.0 / redsn0w 0.9.12b1 (当時の untethered ツール、動く母艦があれば)。
+## controlled install
 
-## 2. 越獄後の下ごしらえ
+1. jailbreak の upstream 文書に従い、固有の host access credential を設定します。共通/default credential
+   を使用・記載しません。
+2. controlled host で次を実行します。
 
-1. Cydia で **OpenSSH** を入れる (SSH で app を送るため)。
-2. **AppSync Unified** を入れる (ldid 伪署名の app を許可)。
-   - ソース `https://cydia.akemi.ai/` を追加 → AppSync Unified をインストール。
-   - ソースが落ちている場合は Kit の App Management 経由 or .deb を `dpkg -i` で手動導入。
-3. iPad の IP を控える (設定 > Wi-Fi)。既定 SSH: `root@<ip>` / パスワード `alpine`
-   (**必ず `passwd` で変更する**)。
+   ```sh
+   ios-compat/scripts/test_host.sh
+   ios-compat/scripts/build_core_ios5.sh
+   ios-compat/scripts/build_core_ios5.sh --install
+   ios-compat/scripts/build_app_ios5.sh
+   ios-compat/scripts/build_deb.sh
+   ```
 
-## 3. app をビルドして送る (母艦 Mac)
+3. manifest、package 内容/digest、rollback package を確認し `ios-compat/scripts/install_deb.sh` で
+   install します。SSH direct copy は保守用 fallback です。この fallback は app を停止する前に
+   root-owned maintenance-restart marker を書き、意図した update を crash-loop failure として数えません。
+4. app から pair し、Core が Keychain に `mesh.psk` を保存してから
+   `{t:"paired", psk_ref:"secret:mesh.psk"}` だけを通知することと、`boot.json` の reference を確認します。
+   `pairing_persistence_error` は not-ready のままにし、PSK を file に貼りません。
+5. 外部 camera は `ios-compat/profiles/` の例を使い、credential は `secret_ref` に置きます。URL
+   userinfo と seed peer からの camera 推定は禁止です。RTSP は IDR accept まで degraded のままか、
+   packet loss 後に next-IDR recovery へ戻るかを検証します。
 
-```bash
-cd app-doorbell
-bash ios-legacy/scripts/build_core_ios5.sh   # core .a (初回/更新時)
-bash ios-legacy/scripts/build_app.sh          # Doorbell.app を生成 + ldid 伪署名
-# 送る (どちらか)
-scp -r ios-legacy/build/Doorbell.app root@<ipad-ip>:/Applications/
-ssh root@<ipad-ip> "uicache"                  # ホーム画面に反映
-#   ── または Legacy iOS Kit の Install IPA を使う
-```
-
-## 4. iPad 側の初期設定
-
-1. ホーム画面の「ドアホン」を起動。
-2. 初回設定 (アプリ内 or `/var/mobile/.../boot.plist`):
-   - `role` = `indoor_panel`
-   - `seed_peers` = 既存ノードの `IP:47172` を 1 つ以上 (同一 L2 なら 1 つで全網に繋がる)
-   - `psk_hex` = クラスタ PSK (管理画面「デバイスを追加」で発行された値、または既存と同じ)
-   - 門口機の direct SIP 目標 = `<門口機IP>:47190`
-   - 外付けマイクの有無
-3. メッシュに合流すると設定 (テーマ・クイック返信・用件・言語) が自動同期される。
-
-## 5. 外付けマイク (対講したい場合のみ)
-
-内蔵マイクが無いので、**話す**には外部マイクが要る:
-- イヤホン端子: マイク付きヘッドセット (TRRS)。iPad 1 の 3.5mm がヘッドセットマイクを
-  受けるかは個体/アクセサリ依存 — 認識すれば RemoteIO が入力を拾う。
-- dock コネクタ: マイク対応 dock アクセサリ。
-マイクが無い/認識しない場合は「聞く専用」(門口の声は聞こえる、こちらの声は無音) で動作する。
-
-## 6. 動作確認
-
-- 押鈴 → iPad が全画面で門口映像を表示し、門口の音声が聞こえる。
-- クイック返信ボタン → 門口機で大字表示＋読み上げ。
-- 開錠ボタン → 門口機経由で HA の錠が開く (DTMF `*1`)。
-- LAN ケーブル/Wi-Fi を切る → 数十秒でメッシュから離脱、復帰で再合流。
-- 外付けマイク有り: こちらの声が門口スピーカーから出る。
-
-## 注意
-
-- 越獄端末はこの門铃専用・LAN 内運用を前提 (外部公開しない)。SSH パスワードは必ず変更。
-- 常時給電・常時点灯 (app が idleTimer を無効化)。電池の膨張に注意 (可能なら電池を外し直結給電)。
-- OS 更新はしない (5.1.1 固定)。app 更新は §3 を再実行。
+cold boot、targeted ring、duplicate/stale/cancel、内蔵 mic/speaker、MiniSIP/DTMF、media/RTSP/no-video、
+Wi-Fi/peer/process/memory/power/rollback、kiosk maintenance、enclosure 内 long soak を合格させます。
+optional root keepalive helper は実装・host test 済みで、再現可能な armv7/iOS 5.1 staged DEB も生成
+できます。package は binary と無効な launchd template のみを配置し、通常の app provisioning では
+`ios-compat/scripts/install_helper_ios5.sh --stage` までにして有効化しません。iPad helper qualification は
+まだ未完了です。明示承認した `DB_CONFIRM_ROOT_HELPER=YES ... --enable` で root-owned plist、UID/GID/socket
+permission、maintenance lease、crash/hang safe mode、rollback、soak が実機合格するまで依存しません。
+隔離した trusted LAN で運用し、SSH/MiniSIP/mesh/HTTP/camera を Internet に公開しません。

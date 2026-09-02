@@ -1,85 +1,96 @@
-> Japanese original: ../ja/deployment.md (canonical)
+# Deployment guide
 
-# Deployment Guide (checklist for a real-home rollout)
+Use this checklist only after selecting targets in the [capability matrix](capability-matrix.md).
+Compilation is not hardware certification. Commission each exact device, OS/firmware, media path,
+enclosure, and signed artifact before relying on it.
 
-Follow the steps in order and every device will be integrated into your existing HA / Asterisk /
-Hikari Denwa environment. Details for each section are in the documents in parentheses.
+## 1. Prepare the trusted network and integrations
 
-## 0. Prerequisites
+- Place nodes on a trusted LAN and restrict the ports listed in [network ports](network-ports.md).
+  Use a maintained VPN or authenticated TLS reverse proxy for remote access; do not expose node
+  HTTP, mesh, MiniSIP, MQTT, or camera endpoints directly to the Internet.
+- Configure Asterisk, MQTT/Home Assistant, Telegram, go2rtc, and HomeKit only if required. Treat
+  each as an optional failure boundary and test behavior with it stopped.
+- Inspect device batteries and power supplies. An entrance device needs a suitable outdoor
+  enclosure; a software `door_station` role is not a weather rating.
 
-- [ ] The HA host (x86 iGPU or RPi4+) is running the Mosquitto add-on + go2rtc
-- [ ] Asterisk has `deploy/asterisk/pjsip.conf` / `extensions.conf` loaded
-      (replace `CHANGE_ME_*` and the mobile number, configure the Hikari Denwa HGW extension) —
-      instructions in `deploy/asterisk/README.en.md`
-- [ ] Token for the Telegram bot (@ox_doorbell_bot) and the family's chat_id list
-- [ ] Battery inspection on every device (check for swelling). Remove the battery and power
-      directly if possible
+## 2. Build and qualify artifacts
 
-## 1. The first device (the administrative starting point)
+- Run the common checks in [overview](overview.md), then the exact platform build and release gate.
+- Product artifacts must link real PJSIP and identify their target, architecture, minimum OS/API,
+  dependency hashes, source/build identity, and signing identity where applicable.
+- Keep modern Android and API 19 NDK/PJSIP caches separate. Do not mark API 19 hardware-certified
+  until its exact fingerprint passes `android/README.md` commissioning.
+- Treat Windows VM/Toughpad and iOS 9 hardware validation as pending until a controlled run is
+  recorded. Use [the iOS compatibility runbook](ios-compat-maintainer.md) for iOS 5.
 
-Any platform works, but an always-powered door station (Toughpad recommended) is best suited.
+## 3. Pair without plaintext secrets
 
-- [ ] Windows: extract the `doorbell-windows` artifact from GitHub Actions →
-      `deploy/provision/windows/provision.cmd` (as Administrator) → as the kiosk user run
-      `kiosk-enable.cmd` → log in again (details: `docs/en/win-build-env.md` §Real hardware)
-- [ ] First launch generates `%ProgramData%\Doorbell\boot.json` — edit `name` / `role` /
-      `door` / `psk_hex` (make your own 64-hex value) / `seed_peers` and restart
-- [ ] In a browser open `http://<device IP>:47180/admin/` → first login = set the admin password
-- [ ] **Security initialization**: change the kiosk exit PIN (`exit_pin.txt`, default 000000),
-      note down the panel token on the "System" tab
+1. Start one qualified native node and create or join the cluster through the application/admin
+   pairing flow.
+2. Invite each additional device with the bounded pairing flow and verify its identity before
+   approval.
+3. Confirm Core successfully called `secure_put("mesh.psk", …)` before emitting
+   `{t:"paired", psk_ref:"secret:mesh.psk"}`, and that the shell persisted only that reference plus
+   non-secret bootstrap fields in `boot.json`. `pairing_persistence_error` must remain not-ready.
+4. Enter SIP, MQTT, Telegram, WebRTC, and camera credentials through secure-storage-aware UI/API
+   paths. Configuration must contain `secret:` references, never values.
+5. For Web Push, provision the VAPID private value—and the optional sender bearer value—under the
+   same replicated references in every intended `web_push` leader candidate's local secure store.
+   Then atomically save the HTTPS sender URL, VAPID public key/subject, and secret references shown
+   in [the configuration schema](config-schema.md). Confirm status reports a non-empty Push leader
+   and `delivery_backend:true`; `configured:true` by itself is not readiness.
+6. Because shipping shells publish `wan:false` without a configured endpoint probe, test HTTPS
+   egress to the exact sender from each intended candidate and only then set that node's explicit
+   `caps_override.wan:true`. Record the test and remove the override after network changes. A Push
+   leader also requires measured `tls12`, `mains_power`, `wall_clock_sane`, and `web_push_ready`.
 
-## 2. Configuration skeleton (in the admin UI)
+Never copy a cluster PSK, password, token, URL userinfo, or signing secret into `boot.json`, CRDT
+JSON, a command line, a log, or documentation. Legacy `psk_hex` is migration input only.
 
-- [ ] Doors / buildings: register each entrance (d_front etc.) and building, with JA/EN/ZH labels
-- [ ] Integrations: MQTT (HA's Mosquitto), Telegram (token + poll_updates ON), SIP
-      (Asterisk IP + each device's extension/password), tz
-- [ ] Notification targets: family chat_ids / extensions in households
-- [ ] Call rules: ring → SIP 600 + Telegram + chime. Optionally e.g. delivery (p_delivery) only
-      gets auto_reply "leave the package" + no phone call — customize as you like
-- [ ] Adjust theme / wording / purposes / quick replies / assets (background images, custom audio)
+## 4. Configure roles and behavior
 
-## 3. Adding devices (as many as you like)
+- Assign node name, `door_station` or `indoor_panel`, door/building, language, rules, and only the
+  capabilities measured by that shell.
+- Configure camera sources explicitly. A seed peer is not a camera. iPad 1 has a built-in
+  microphone/speaker but no camera; use an explicit MJPEG/snapshot/RTSP source or honest no-video
+  mode. Its bounded RTSP/TCP H.264 ingest and Annex-B forwarding are host/loopback verified, but
+  runtime must stay degraded until an IDR is accepted and real-camera hardware qualification is pending.
+- Configure panel tokens as scoped secrets and distribute them only through an approved channel.
+- Keep safety actions explicit: SOS does not automatically contact emergency services; unlock and
+  external notifications require the configured controller/integration.
+- Configure SOS targets, channels, and presentation explicitly. Review the non-blocking dry-run
+  warnings for zero recipients, silence, unsupported/unavailable or rolling-upgrade-unknown
+  channels, and missing Push subscriptions/backend. Record the administrator's
+  `emergency.web_active_page_alerts` choice. For each Web group, verify that `?group=` drives both
+  polling and Push, native-only targets do not reach Web, raw-SOS remains after rule TTL until
+  clear, and config/export contains no plaintext Push endpoint or key material.
 
-- [ ] Admin UI "System" → "Add device" to issue a PIN (valid 10 minutes)
-- [ ] Launch the app on the new device → in initial setup enter an existing node's IP + PIN →
-      PSK/config are distributed automatically
-      (or write psk_hex/seed_peers directly into boot.json)
-- [ ] On the Devices tab assign name, assigned door, and role (door_station / indoor_panel / TV)
-- Android: `deploy/provision/android/provision.en.md` (Device Owner = full kiosk; has an Android TV section)
-- iOS: `deploy/provision/ios/provision.en.md` (supervision + Single App Mode, Ad Hoc signing and annual renewal)
-- Legacy devices such as iPad 1: in Safari open
-  `http://<any node>:47180/panel/door?k=<token>` and save it as a Web Clip (same for `monitor`).
-  Set Auto-Lock = Never
-- To jailbreak an iPad 1 (A1219, iOS5.1.1) into a native node, see
-  `deploy/provision/ios/ipad1-jailbreak.md` (full core, audio, unlock; two-way talk with an external mic)
+## 5. Commission every node
 
-## 4. HA / HomeKit
+Verify and record:
 
-- [ ] The moment it connects to Mosquitto, entities appear automatically in HA (doorbell event /
-      motion / device online / emergency / visitor language sensor)
-- [ ] Import `deploy/ha/go2rtc.yaml` adjusted to each door station's IP
-      (devices with codec=h264 use `#video=copy` — no transcoding)
-- [ ] Import the HomeKit Bridge / watchdog / actionable notifications / unlock automation from
-      `deploy/ha/configuration-snippets.yaml` and adjust the entity_ids to your setup
-- [ ] Confirm doorbell notifications + live view appear in the iPhone Home app. To view from
-      outside the home, use an Apple TV / HomePod as the home hub
+- artifact manifest/signature and runtime `sip_backend`, capabilities, status, and UI manifest;
+- targeted ring, cancel, purpose update, answer, hangup, quick reply, DTMF/unlock success and
+  failure, SOS activation/cancel, and stale/duplicate event rejection;
+- camera/audio routes, rotation, color, MJPEG fallback, codec startup/stall behavior, and AEC on the
+  actual hardware;
+- integration behavior both available and unavailable;
+- Core `delivery_result` dispatch evidence separately from each client channel's actual
+  presentation/permission/limitation report;
+- Wi-Fi/LAN loss, peer loss, process crash/hang, memory pressure, service suppression, reboot,
+  power loss, repeated-failure safe mode, and rollback;
+- kiosk escape/maintenance procedure, thermal behavior, battery/power safety, and long-duration
+  soak in the final enclosure.
 
-## 5. Verification (each time you add a device)
+The optional iOS root keepalive helper is implemented, host-tested, and has a reproducible staged
+armv7/iOS 5.1 DEB that does not enable launchd. Treat it as unavailable unless its explicit opt-in
+workflow and the exact binary, root-owned launchd configuration, permissions, maintenance lease,
+safe mode, rollback, and device soak are commissioned.
 
-- [ ] Ring → indoor extensions + mobile ring / Telegram photo + buttons / HA notification / indoor chime
-- [ ] Reply via a Telegram button → large text + TTS at the door station
-- [ ] "Answer" from the indoor panel → the phone leg drops and a two-way call starts (incl. video)
-- [ ] During the call press *1 on the mobile → the HA lock opens
-- [ ] Unplug a device's LAN cable → offline notification to Telegram/HA within 30 seconds
-- [ ] **Even with HA and Asterisk stopped**: ring display, chime, indoor intercom, and panels keep working
+## 6. Operate and recover
 
-## 6. Operations
-
-- Updates: distribute GitHub Actions artifacts (on Windows the watchdog tolerates
-  stop → replace → restart. Android uses DO silent install). Tag before updating for easy rollback
-- iOS Ad Hoc signing **must be renewed once a year** — follow the in-app expiry display and the
-  Telegram warning 30 days ahead (a permanent fix is App Store publication = planned Phase 7)
-- Configuration backup: admin UI "System" → Export (full export from any node)
-- If a device is stolen: reissue the PSK in the admin UI → re-pair all devices, rotate the SIP
-  passwords and bot token
-- Windows Update is blocked — apply manually on maintenance days (see `provision.cmd` §6)
+Keep the prior signed artifact and manifest in a separate rollback lane. Export replicated config
+regularly, but remember exports omit secret values. Track signing/profile expiry and maintenance
+windows. Follow [recovery](recovery.md) for rollback and [security](security.md) for credential
+rotation after device loss or suspected disclosure.

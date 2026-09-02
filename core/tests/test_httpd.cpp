@@ -1,4 +1,4 @@
-// Httpd のテスト。極小 HTTP クライアント (POSIX socket) で 127.0.0.1 を叩く。
+
 #include <atomic>
 #include <cstring>
 #include <map>
@@ -19,7 +19,7 @@ using namespace db;
 
 namespace {
 
-// 40000-60000 からランダムに試行して bind 確認 (pid シードで並行実行と衝突しにくく)
+
 int pickPort() {
   static std::mt19937 rng(static_cast<uint32_t>(::getpid()) * 2654435761u + 12345u);
   std::uniform_int_distribution<int> dist(40000, 60000);
@@ -51,7 +51,7 @@ int connectTo(int port) {
     ::close(fd);
     return -1;
   }
-  timeval tv{5, 0};  // recv 5s タイムアウト (テストのハング防止)
+  timeval tv{5, 0};
   ::setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
   return fd;
 }
@@ -67,7 +67,7 @@ void sendAll(int fd, const std::string& data) {
 
 struct CliResp {
   int status = -1;
-  std::map<std::string, std::string> headers;  // 小文字キー
+  std::map<std::string, std::string> headers;
   std::string body;
   std::string raw;
 };
@@ -99,7 +99,7 @@ CliResp parseResp(const std::string& raw) {
   return r;
 }
 
-// リクエストを送って接続クローズまで読む
+
 CliResp request(int port, const std::string& raw_req) {
   CliResp r;
   int fd = connectTo(port);
@@ -138,7 +138,7 @@ TEST_CASE("httpd: routing + params + cookie + static") {
 
   std::atomic<bool> on_loop{false};
   httpd.route("GET", "/api/ping", [&](const HttpReq&) {
-    on_loop = loop.onLoopThread();  // handler は Runloop 上で実行されること
+    on_loop = loop.onLoopThread();
     return HttpResp::json("{\"ok\":true}");
   });
   httpd.route("GET", "/api/config/get", [](const HttpReq&) { return HttpResp::text("exact"); });
@@ -155,7 +155,7 @@ TEST_CASE("httpd: routing + params + cookie + static") {
   REQUIRE(httpd.start(port));
   CHECK(httpd.port() == port);
 
-  // 完全一致 + handler が Runloop 上で走ること
+
   auto r = get(port, "/api/ping");
   CHECK(r.status == 200);
   CHECK(r.body == "{\"ok\":true}");
@@ -163,26 +163,26 @@ TEST_CASE("httpd: routing + params + cookie + static") {
   CHECK(r.headers["content-length"] == std::to_string(r.body.size()));
   CHECK(on_loop.load());
 
-  // 完全一致は前缀より優先
+
   CHECK(get(port, "/api/config/get").body == "exact");
-  // 前缀は最長一致
+
   CHECK(get(port, "/api/config/other").body == "cfg:/api/config/other");
   CHECK(get(port, "/api/zzz").body == "api:/api/zzz");
   // 404
   CHECK(get(port, "/nope").status == 404);
 
-  // POST body param (URL デコード)
+
   CHECK(postForm(port, "/api/echo", "name=hello%20world&x=1").body == "hello world");
-  CHECK(postForm(port, "/api/echo", "x=1").body == "");  // 無ければ def
-  // query param (URL デコード: %2F と '+')
+  CHECK(postForm(port, "/api/echo", "x=1").body == "");
+
   CHECK(get(port, "/api/q?msg=a%2Fb+c").body == "a/b c");
   CHECK(get(port, "/api/q").body == "?");
 
-  // cookie 解析
+
   CHECK(get(port, "/api/cookie", "Cookie: a=1; sid=abc123; b=2\r\n").body == "abc123");
   CHECK(get(port, "/api/cookie").body == "");
 
-  // static 資産
+
   auto s = get(port, "/admin/index.html");
   CHECK(s.status == 200);
   CHECK(s.body == "<html>admin</html>");
@@ -212,7 +212,7 @@ TEST_CASE("httpd: auth gate 401 + public_prefix") {
   auto ok = get(port, "/api/secret", "X-Token: secret\r\n");
   CHECK(ok.status == 200);
   CHECK(ok.body == "s3cr3t");
-  // public_prefix は素通し
+
   auto pub = get(port, "/pub/app.js");
   CHECK(pub.status == 200);
   CHECK(pub.body == "console.log(1)");
@@ -231,19 +231,20 @@ TEST_CASE("httpd: snapshot + stream") {
   REQUIRE(port > 0);
   REQUIRE(httpd.start(port));
 
-  // provider 無し → 503
+
   CHECK(get(port, "/snapshot.jpg").status == 503);
   CHECK(get(port, "/stream.mjpeg").status == 503);
 
   const std::string jpeg = "\xff\xd8JPEGDATA\xff\xd9";
   httpd.setJpegProvider([&](int64_t*) { return toBytes(jpeg); }, 30);
+  httpd.setVideoRotationProvider([] { return 270; });
 
   auto snap = get(port, "/snapshot.jpg");
   CHECK(snap.status == 200);
   CHECK(snap.headers["content-type"] == "image/jpeg");
   CHECK(snap.body == jpeg);
 
-  // stream: 最初の boundary + 1 フレーム読めたら切断して OK
+
   int fd = connectTo(port);
   REQUIRE(fd >= 0);
   sendAll(fd, "GET /stream.mjpeg HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n");
@@ -253,18 +254,20 @@ TEST_CASE("httpd: snapshot + stream") {
          got.find("Content-Type: image/jpeg") == std::string::npos ||
          got.find(jpeg) == std::string::npos) {
     ssize_t n = ::recv(fd, buf, sizeof(buf), 0);
-    REQUIRE(n > 0);  // タイムアウト/切断はテスト失敗
+    REQUIRE(n > 0);
     got.append(buf, static_cast<size_t>(n));
   }
   CHECK(got.find("multipart/x-mixed-replace; boundary=frame") != std::string::npos);
-  ::close(fd);  // 切断 → サーバ側は書込失敗で終了するはず
+  CHECK(got.find("Access-Control-Allow-Origin: *") != std::string::npos);
+  CHECK(got.find("X-Doorbell-Video-Rotation: 270") != std::string::npos);
+  ::close(fd);
 
-  // 進行中の stream があっても stop は安全に完了する
+
   httpd.stop();
   loop.stop();
 }
 
-TEST_CASE("httpd: stop 後の再 start") {
+TEST_CASE("httpd: restarts after stop") {
   RealClock clock;
   Runloop loop(clock);
   loop.start();
@@ -282,6 +285,45 @@ TEST_CASE("httpd: stop 後の再 start") {
   REQUIRE(httpd.start(port2));
   CHECK(httpd.port() == port2);
   CHECK(get(port2, "/api/ping").body == "pong");
+  httpd.stop();
+  loop.stop();
+}
+
+TEST_CASE("httpd: same-origin mp4 proxy authenticates before streaming") {
+  RealClock clock;
+  Runloop loop(clock);
+  loop.start();
+  Httpd httpd(loop);
+  httpd.setAuth([](const HttpReq&) { return false; }, {"/stream-proxy.mp4"});
+  httpd.setMp4ProxyProvider([](const HttpReq& req, int* status) -> Httpd::Mp4Pull {
+    if (req.param("k") != "panel-token") {
+      *status = 403;
+      return nullptr;
+    }
+    if (req.param("door") != "front") {
+      *status = 404;
+      return nullptr;
+    }
+    *status = 200;
+    auto part = std::make_shared<int>(0);
+    return [part](bool* ended) {
+      if ((*part)++ == 0) return toBytes("init-segment");
+      *ended = true;
+      return toBytes("media-fragment");
+    };
+  });
+
+  const int port = pickPort();
+  REQUIRE(port > 0);
+  REQUIRE(httpd.start(port));
+  CHECK(get(port, "/stream-proxy.mp4?door=front&k=bad").status == 403);
+  CHECK(get(port, "/stream-proxy.mp4?door=missing&k=panel-token").status == 404);
+  auto ok = get(port, "/stream-proxy.mp4?door=front&k=panel-token");
+  CHECK(ok.status == 200);
+  CHECK(ok.headers["content-type"] == "video/mp4");
+  CHECK(ok.headers["cache-control"] == "no-store");
+  CHECK(ok.body == "init-segmentmedia-fragment");
+
   httpd.stop();
   loop.stop();
 }

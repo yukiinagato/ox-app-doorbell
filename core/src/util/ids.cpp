@@ -12,12 +12,12 @@ std::string genNodeId() {
 }
 
 std::string genPin6() {
-  // 偏りを避ける rejection sampling
+
   for (;;) {
     Bytes b = randomBytes(4);
     uint32_t v = (uint32_t(b[0]) << 24) | (uint32_t(b[1]) << 16) | (uint32_t(b[2]) << 8) |
                  uint32_t(b[3]);
-    if (v < 4'000'000'000u) {  // 4e9 は 1e6 の倍数
+    if (v < 4'000'000'000u) {
       char buf[8];
       std::snprintf(buf, sizeof(buf), "%06u", v % 1'000'000u);
       return std::string(buf);

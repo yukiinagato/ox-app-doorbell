@@ -1,10 +1,8 @@
-// core 設定 (config_json / status_json) の共通ヘルパ — WPF CoreClient.Dig /
-// Android DoorbellCore.dig と同じ流儀。UI 側の型ゆるめの取り出しをここに集約する。
 import Foundation
+import UIKit
 
 enum ConfigUtil {
 
-    /// 設定ツリーをドットパスで辿る ("doors.d_front.label.ja" 等)。無ければ nil。
     static func dig(_ root: [String: Any]?, _ dotpath: String) -> Any? {
         var cur: Any? = root
         for part in dotpath.split(separator: ".") {
@@ -40,7 +38,6 @@ enum ConfigUtil {
         return def
     }
 
-    /// 設定オブジェクト直下のキーを order 昇順 (同値は id 順) に並べる。
     static func sortedByOrder(_ map: [String: Any]) -> [String] {
         func orderOf(_ id: String) -> Int {
             guard let e = map[id] as? [String: Any],
@@ -53,7 +50,6 @@ enum ConfigUtil {
         }
     }
 
-    /// ラベル多言語解決 (label.<lang> → label.ja → 既定)。
     static func labelOf(_ entry: [String: Any]?, _ lang: String, _ fallback: String) -> String {
         guard let label = entry?["label"] as? [String: Any] else { return fallback }
         if let s = label[lang] as? String, !s.isEmpty { return s }
@@ -61,7 +57,6 @@ enum ConfigUtil {
         return fallback
     }
 
-    /// イベント/設定の文字列取り出し ("" = 無し)。
     static func evStr(_ ev: [String: Any], _ key: String) -> String {
         if let s = ev[key] as? String { return s }
         if let v = ev[key], !(v is NSNull) { return "\(v)" }
@@ -74,7 +69,17 @@ enum ConfigUtil {
         return false
     }
 
-    /// statusJson peers[] からこの door 担当の door_station (自分以外・生存) を返す。
+    /// A legacy device-alert without an explicit channel remains an in-app alert. New events
+    /// always carry the rule-selected channel list, which clients must not collapse together.
+    static func eventChannels(_ ev: [String: Any]) -> Set<String> {
+        guard let raw = ev["channels"] as? [Any] else { return ["in_app"] }
+        return Set(raw.compactMap { $0 as? String })
+    }
+
+    static func eventUsesChannel(_ ev: [String: Any], _ channel: String) -> Bool {
+        return eventChannels(ev).contains(channel)
+    }
+
     static func findDoorPeer(_ st: [String: Any]?, door: String) -> [String: Any]? {
         guard let peers = st?["peers"] as? [[String: Any]] else { return nil }
         for p in peers {
@@ -87,7 +92,6 @@ enum ConfigUtil {
         return nil
     }
 
-    /// peer の addrs[0] "host:port" → host (mesh の実アドレス — Asterisk 非経由の直呼宛先)。
     static func peerHost(_ peer: [String: Any]?) -> String? {
         guard let addrs = peer?["addrs"] as? [Any] else { return nil }
         for a in addrs {
@@ -101,7 +105,6 @@ enum ConfigUtil {
         return nil
     }
 
-    /// "#RRGGBB" → UIColor 成分 (不正は nil)。
     static func parseHexColor(_ s: String) -> (r: CGFloat, g: CGFloat, b: CGFloat)? {
         var hex = s
         if hex.hasPrefix("#") { hex.removeFirst() }
@@ -109,5 +112,55 @@ enum ConfigUtil {
         return (CGFloat((v >> 16) & 0xFF) / 255.0,
                 CGFloat((v >> 8) & 0xFF) / 255.0,
                 CGFloat(v & 0xFF) / 255.0)
+    }
+
+    static func emergencyPalette(_ event: [String: Any]) ->
+        (background: UIColor, foreground: UIColor, accent: UIColor, limitation: String) {
+        let defaults = (background: UIColor(red: 0.55, green: 0.05, blue: 0.04, alpha: 1),
+                        foreground: UIColor.white, accent: UIColor.white,
+                        limitation: "")
+        let backgroundValue = evStr(event, "background")
+        let foregroundValue = evStr(event, "foreground")
+        let accentValue = evStr(event, "accent")
+        if backgroundValue.isEmpty && foregroundValue.isEmpty && accentValue.isEmpty {
+            return defaults
+        }
+        guard let background = exactPresentationColor(backgroundValue,
+                fallback: defaults.background),
+              let foreground = exactPresentationColor(foregroundValue,
+                fallback: defaults.foreground),
+              let accent = exactPresentationColor(accentValue, fallback: defaults.accent),
+              contrast(foreground, background) >= 4.5,
+              contrast(accent, background) >= 3.0 else {
+            return (defaults.background, defaults.foreground, defaults.accent,
+                    "invalid_emergency_presentation_colors")
+        }
+        return (background, foreground, accent, "")
+    }
+
+    static func readableTextColor(on background: UIColor) -> UIColor {
+        return contrast(.black, background) >= 4.5 ? .black : .white
+    }
+
+    private static func exactPresentationColor(_ value: String, fallback: UIColor) -> UIColor? {
+        if value.isEmpty { return fallback }
+        guard value.count == 7, value.hasPrefix("#"),
+              let rgb = parseHexColor(value) else { return nil }
+        return UIColor(red: rgb.r, green: rgb.g, blue: rgb.b, alpha: 1)
+    }
+
+    private static func contrast(_ first: UIColor, _ second: UIColor) -> CGFloat {
+        let a = luminance(first)
+        let b = luminance(second)
+        return (max(a, b) + 0.05) / (min(a, b) + 0.05)
+    }
+
+    private static func luminance(_ color: UIColor) -> CGFloat {
+        var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+        guard color.getRed(&r, green: &g, blue: &b, alpha: &a) else { return 0 }
+        func linear(_ value: CGFloat) -> CGFloat {
+            return value <= 0.03928 ? value / 12.92 : pow((value + 0.055) / 1.055, 2.4)
+        }
+        return 0.2126 * linear(r) + 0.7152 * linear(g) + 0.0722 * linear(b)
     }
 }

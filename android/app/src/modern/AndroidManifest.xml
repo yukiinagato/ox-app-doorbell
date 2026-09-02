@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- These declarations and attributes post-date KitKat. The legacy19 manifest keeps only
+         fields understood by API 19; cleartext LAN HTTP is allowed by that platform by default. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE"/>
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+
+    <application
+        android:banner="@drawable/banner_tv"
+        android:usesCleartextTraffic="true">
+
+        <activity
+            android:name=".MainActivity"
+            android:lockTaskMode="if_whitelisted"/>
+
+        <activity
+            android:name=".IncomingActivity"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"/>
+
+        <service
+            android:name=".DoorbellService"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Doorbell resident mesh, notification, and SIP runtime"/>
+        </service>
+    </application>
+</manifest>

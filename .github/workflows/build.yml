@@ -1,16 +1,62 @@
-# 各平台ネイティブアプリの CI ビルド
-#  - core: macOS でフルテスト (SIP/MQTT 結合テストは環境依存のため skip される)
-#  - windows: core DLL (x64/x86, MSVC) + watchdog + WPF アプリ → 成果物
-#  - android: assembleDebug (pjsip 未同梱時は SIP スタブ) → APK 成果物
-#  - ios: Phase 4 (Xcode プロジェクト作成後に追加)
+# Cross-platform build, contract, and artifact gates.
+# Hosted runners may build explicit development stubs for compile coverage, but
+# only jobs that prove a real SIP backend are allowed to upload client artifacts.
 name: build
 on:
   push:
     branches: [main]
   pull_request:
   workflow_dispatch:
+    inputs:
+      windows_release:
+        description: Build the Windows real-PJSIP bundle on the commissioned runner
+        required: false
+        type: boolean
+        default: false
+      ios5_release:
+        description: Build the iOS 5 armv7 artifact on the licensed legacy runner
+        required: false
+        type: boolean
+        default: false
 
 jobs:
+  source-policy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Reject newly added non-English developer text
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          if test "$EVENT_NAME" = pull_request; then
+            base="origin/$BASE_REF"
+          else
+            base="HEAD^"
+          fi
+          python3 tools/check_english_source.py --base "$base"
+
+  webui-conformance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: All WebUI tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          for test_file in webui/tests/*.test.js; do
+            node "$test_file"
+          done
+      - name: Cross-platform event trace conformance
+        run: python3 tools/conformance/run.py
+      - name: Conformance harness boundary tests
+        run: python3 -m unittest tools/tests/test_event_conformance.py
+
   core-macos:
     runs-on: macos-latest
     steps:
@@ -21,9 +67,13 @@ jobs:
           cmake --build build -j4
       - name: Tests
         run: ./build/doorbell_tests
+      - name: Generated assets and source-language policy
+        run: |
+          python3 tools/gen_i18n.py --check
+          python3 -m unittest discover -s tools/tests -p 'test_*.py'
 
   core-linux:
-    # 参考ビルド (Linux は正式ターゲット外 — 移植性の早期検知用)
+    # Linux is not a product target; this detects portability regressions early.
     runs-on: ubuntu-latest
     continue-on-error: true
     steps:
@@ -34,54 +84,67 @@ jobs:
           cmake --build build -j4
           ./build/doorbell_tests
 
-  windows:
+  windows-contract:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
       - uses: microsoft/setup-msbuild@v2
-      - name: core DLL x64
-        run: |
-          cmake -S core -B build-x64 -A x64 -DDB_BUILD_TESTS=OFF
-          cmake --build build-x64 --config Release -j
-      - name: core DLL x86
-        run: |
-          cmake -S core -B build-x86 -A Win32 -DDB_BUILD_TESTS=OFF
-          cmake --build build-x86 --config Release -j
-      - name: Place DLLs
+      - name: Portable Windows contract tests
+        run: python win/tests/test_windows_contracts.py
+      - name: Explicit development-stub compile coverage
         shell: cmd
+        env:
+          DB_ALLOW_SIP_STUB: "1"
+          DB_BUILD_ID: ci-stub-${{ github.run_id }}-${{ github.run_attempt }}
         run: |
-          mkdir win\DoorbellApp\lib\win-x64 2>nul
-          mkdir win\DoorbellApp\lib\win-x86 2>nul
-          copy /y build-x64\Release\doorbell.dll win\DoorbellApp\lib\win-x64\
-          copy /y build-x86\Release\doorbell.dll win\DoorbellApp\lib\win-x86\
-      - name: watchdog
-        run: |
-          cmake -S win/watchdog -B build-watchdog -A x64
-          cmake --build build-watchdog --config Release -j
-      - name: WPF app
-        run: msbuild win\DoorbellApp.sln /restore /p:Configuration=Release /m
-      - name: Collect artifact
+          win\build.cmd
+
+  windows-release:
+    if: github.event_name == 'workflow_dispatch' && inputs.windows_release
+    runs-on: [self-hosted, windows, x64, doorbell-pjsip]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: microsoft/setup-msbuild@v2
+      - name: Build and prove x64/x86 real-PJSIP bundle
         shell: cmd
-        run: |
-          mkdir dist
-          xcopy /e /i /y win\DoorbellApp\bin\Release\net48 dist\DoorbellApp
-          copy /y build-watchdog\Release\doorbell-watchdog.exe dist\
+        env:
+          DB_BUILD_ID: release-${{ github.sha }}-${{ github.run_attempt }}
+        run: win\build.cmd
       - uses: actions/upload-artifact@v4
         with:
-          name: doorbell-windows
-          path: dist/
-          retention-days: 14
+          name: doorbell-windows-${{ github.sha }}
+          path: win/dist/release-${{ github.sha }}-${{ github.run_attempt }}/
+          retention-days: 30
 
   android:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - tier: modern
+            pjsip_tier: api21
+            ndk: 27.1.12297006
+            min_sdk: 21
+            abis: "arm64-v8a armeabi-v7a x86_64"
+            gradle_tasks: "assembleModernDebug testModernDebugUnitTest lintModernDebug"
+            apk_dir: modern/debug
+          - tier: legacy19
+            pjsip_tier: api19
+            ndk: 25.2.9519653
+            min_sdk: 19
+            abis: "armeabi-v7a"
+            gradle_tasks: "assembleLegacy19Debug testLegacy19DebugUnitTest lintLegacy19Debug"
+            apk_dir: legacy19/debug
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "21"
-      # GitHub hosted runner は毎回初期化されるため、debug keystore を固定キャッシュする。
-      # これが無いと CI ごとに署名が変わり、実機で adb install -r できない。
+      # Keep the debug signing identity stable so managed devices can use adb install -r.
       - uses: actions/cache@v4
         with:
           path: ~/.android/debug.keystore
@@ -90,18 +153,173 @@ jobs:
         run: |
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
-            "ndk;27.1.12297006" "cmake;3.22.1" "platforms;android-35" "build-tools;35.0.0"
-      - name: assembleDebug (直接インストール可能な APK)
+            "ndk;${{ matrix.ndk }}" "cmake;3.22.1" "platforms;android-35" "build-tools;35.0.0"
+      - uses: actions/cache@v4
+        with:
+          path: core/third_party/pjsip/android/${{ matrix.pjsip_tier }}
+          key: pjsip-android-${{ matrix.pjsip_tier }}-ndk-${{ matrix.ndk }}-${{ runner.os }}-${{ hashFiles('core/third_party/pjsip.sha256', 'tools/build_pjsip_android.sh') }}
+      - name: Build PJSIP audio libraries
+        env:
+          PJSIP_TIER: ${{ matrix.pjsip_tier }}
+          ABIS: ${{ matrix.abis }}
+        run: |
+          missing=0
+          for abi in $ABIS; do
+            root="core/third_party/pjsip/android/$PJSIP_TIER/$abi"
+            test -f "$root/include/pjsua-lib/pjsua.h" || missing=1
+            test -f "$root/doorbell-build.properties" || missing=1
+            grep -q '^pjsip_version=2.15.1$' "$root/doorbell-build.properties" 2>/dev/null || missing=1
+            grep -q '^sip_backend=real_pjsip$' "$root/doorbell-build.properties" 2>/dev/null || missing=1
+            compgen -G "$root/lib/libpj-*.a" > /dev/null || missing=1
+          done
+          if test "$missing" = 1; then
+            tools/fetch_pjsip.sh
+            ANDROID_NDK_ROOT="$ANDROID_HOME/ndk/${{ matrix.ndk }}" \
+              tools/build_pjsip_android.sh
+          fi
+      - name: Build, unit test, and lint ${{ matrix.tier }}
         working-directory: android
-        run: ./gradlew --no-daemon assembleDebug
-      - name: Collect installable APK
+        run: ./gradlew --no-daemon -PdoorbellTier=${{ matrix.tier }} ${{ matrix.gradle_tasks }}
+      - name: Collect non-production debug contract
+        env:
+          TIER: ${{ matrix.tier }}
+          MIN_SDK: ${{ matrix.min_sdk }}
+          ABIS: ${{ matrix.abis }}
+          SOURCE_SHA: ${{ github.sha }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
         run: |
           mkdir -p dist
-          # debug APK は debug keystore で署名済み = adb install / 側載でそのまま入る
-          cp android/app/build/outputs/apk/debug/*.apk "dist/doorbell.apk"
+          cp android/app/build/outputs/apk/${{ matrix.apk_dir }}/*.apk \
+            "dist/doorbell-android-${TIER}-debug-contract.apk"
+          python3 - <<'PY'
+          import json
+          import os
+          import pathlib
+
+          tier = os.environ["TIER"]
+          metadata = {
+              "artifact_class": "debug-contract",
+              "production_release": False,
+              "tier": tier,
+              "build_type": "debug",
+              "min_sdk": int(os.environ["MIN_SDK"]),
+              "abis": os.environ["ABIS"].split(),
+              "sip_backend_contract": "real_pjsip",
+              "source_sha": os.environ["SOURCE_SHA"],
+              "workflow_run_id": os.environ["RUN_ID"],
+              "workflow_run_attempt": os.environ["RUN_ATTEMPT"],
+          }
+          path = pathlib.Path(f"dist/doorbell-android-{tier}-debug-contract.json")
+          path.write_text(json.dumps(metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+          PY
           ls -l dist/
+      - name: Verify debug contract API floor, APK integrity, ABI, and real SIP symbols
+        env:
+          PJSIP_TIER: ${{ matrix.pjsip_tier }}
+          ABIS: ${{ matrix.abis }}
+        run: |
+          apk="dist/doorbell-android-${{ matrix.tier }}-debug-contract.apk"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$apk"
+          badging="$($ANDROID_HOME/build-tools/35.0.0/aapt dump badging "$apk")"
+          echo "$badging" | grep -F "sdkVersion:'${{ matrix.min_sdk }}'"
+          nm="$ANDROID_HOME/ndk/${{ matrix.ndk }}/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-nm"
+          mkdir -p /tmp/doorbell-apk-libs
+          for abi in $ABIS; do
+            rm -f /tmp/doorbell-apk-libs/libdoorbell.so
+            unzip -j "$apk" "lib/$abi/libdoorbell.so" -d /tmp/doorbell-apk-libs
+            "$nm" -D /tmp/doorbell-apk-libs/libdoorbell.so | grep -E ' db_core_create_v2$'
+            "$nm" -D /tmp/doorbell-apk-libs/libdoorbell.so | grep -E ' pjsua_create$'
+            python3 - "$abi" "core/third_party/pjsip/android/$PJSIP_TIER/$abi/doorbell-build.properties" <<'PY'
+          import pathlib
+          import sys
+
+          abi, manifest_path = sys.argv[1:]
+          manifest = pathlib.Path(manifest_path).read_text(encoding="utf-8")
+          required = [f"abi={abi}", "pjsip_version=2.15.1", "sip_backend=real_pjsip",
+                      "pjsip_source_sha256=", "archive_set_sha256=", "source_revision="]
+          missing = [entry for entry in required if entry not in manifest]
+          if missing:
+              raise SystemExit(f"invalid PJSIP manifest {manifest_path}: missing {missing}")
+          PY
+          done
       - uses: actions/upload-artifact@v4
         with:
-          name: doorbell-android-apk
-          path: dist/doorbell.apk
+          name: doorbell-android-${{ matrix.tier }}-debug-contract-${{ github.sha }}
+          path: |
+            dist/doorbell-android-${{ matrix.tier }}-debug-contract.apk
+            dist/doorbell-android-${{ matrix.tier }}-debug-contract.json
+          if-no-files-found: error
+          retention-days: 30
+
+  apple-contract:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: core/third_party/pjsip/ios
+          key: pjsip-apple-${{ runner.os }}-${{ hashFiles('core/third_party/pjsip.sha256', 'tools/build_pjsip_ios.sh') }}
+      - name: Fetch pinned PJSIP source
+        run: tools/fetch_pjsip.sh
+      - name: Build keyed Apple PJSIP archives
+        run: |
+          # arm64 simulator binaries cannot carry an iOS 12 deployment target on current Xcode.
+          # Keep the iOS 12 contract real by compiling the simulator lane as x86_64; tvOS remains
+          # arm64 at its supported 15.0 floor.
+          if ! test -f core/third_party/pjsip/ios/iphonesimulator/x86_64/min-12.0/artifact-manifest.json; then
+            PLATFORMS=iphonesimulator SIM_ARCH=x86_64 MIN_IOS_VER=12.0 \
+              tools/build_pjsip_ios.sh
+          fi
+          if ! test -f core/third_party/pjsip/ios/iphoneos/arm64/min-12.0/artifact-manifest.json; then
+            PLATFORMS=iphoneos DEVICE_ARCH=arm64 MIN_IOS_VER=12.0 \
+              tools/build_pjsip_ios.sh
+          fi
+          if ! test -f core/third_party/pjsip/ios/appletvsimulator/arm64/min-15.0/artifact-manifest.json; then
+            PLATFORMS=appletvsimulator SIM_ARCH=arm64 MIN_TVOS_VER=15.0 \
+              tools/build_pjsip_ios.sh
+          fi
+      - name: Build modern iOS and tvOS shared sources
+        run: |
+          xcodebuild -project ios/Doorbell.xcodeproj -scheme Doorbell \
+            -configuration Debug -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            ARCHS=x86_64 ONLY_ACTIVE_ARCH=YES CODE_SIGNING_ALLOWED=NO build
+          xcodebuild -project ios/Doorbell.xcodeproj -scheme Doorbell \
+            -configuration Release -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            ARCHS=arm64 ONLY_ACTIVE_ARCH=YES CODE_SIGNING_ALLOWED=NO build
+          xcodebuild -project ios/Doorbell.xcodeproj -scheme DoorbellTV \
+            -configuration Debug -sdk appletvsimulator \
+            -destination 'generic/platform=tvOS Simulator' \
+            ARCHS=arm64 ONLY_ACTIVE_ARCH=YES CODE_SIGNING_ALLOWED=NO build
+      - name: iOS 9 arm64 real-PJSIP release gate
+        run: ios/scripts/build_ios9_arm64.sh
+      - name: iOS compatibility host contracts
+        run: ios-compat/scripts/test_host.sh
+
+  ios5-release:
+    if: github.event_name == 'workflow_dispatch' && inputs.ios5_release
+    runs-on: [self-hosted, macOS, ios5-armv7-licensed]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Build deterministic Core and signed armv7 application
+        env:
+          DB_BUILD_ID: release-${{ github.sha }}-${{ github.run_attempt }}
+        run: |
+          ios-compat/scripts/build_core_ios5.sh --install
+          ios-compat/scripts/build_app_ios5.sh
+          ios-compat/scripts/test_host.sh
+          ios-compat/scripts/build_deb.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: doorbell-ios5-armv7-${{ github.sha }}
+          path: |
+            ios-kiosk/build/Doorbell.app/
+            build/ios-compat/artifacts/ios5-armv7-pjsip-off/manifest.json
+            build/ios-compat/artifacts/ios5-armv7-app/manifest.json
+            build/ios-compat/artifacts/doorbell.deb
+            build/ios-compat/artifacts/doorbell.deb.sha256
           retention-days: 30

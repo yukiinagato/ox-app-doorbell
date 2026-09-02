@@ -1,9 +1,23 @@
-> 日文原文: ../ja/config-schema.md（以日文为准）
-
 # 配置 Schema（正准参考）
 
 配置是 LWW-Map CRDT 的扁平 key→JSON。key 为点号路径。以下是 materialize 后的整体形态。
 `*_ref: "secret:…"` 指向 secrets 命名空间（管理页面只写不显示，存于 platform secure store）。
+
+`boot.json` 是设备本地 bootstrap profile，不属于 CRDT。Android、iOS/iPadOS（包括 iOS 5
+兼容版）与 Windows 在 profile 为首次生成、缺少明确的 `setup_complete:true`、`role` 缺失/非法，或 `door_station` 没有有效 `door`
+时，会在 Core 启动前显示阻塞式设置界面。管理员必须选择 `door_station` 或 `indoor_panel`；只有门口机
+需要 door 字段，并会预填可直接确认的随机 `door-xxxxxxxx`。有效 door ID 长度为 1–64，首字符必须是
+ASCII 字母或数字，后续仅允许字母、数字、`_`、`-`。仅保存成功后才原子写入
+`setup_complete:true`。tvOS 没有受支持的门口摄像头角色，因此固定为 `indoor_panel`。
+
+mesh PSK 是裝置本機 bootstrap data，不是 CRDT 值。Core 先完成 `secure_put("mesh.psk", …)`，再只向
+shell 發出 `{"t":"paired","psk_ref":"secret:mesh.psk"}`。shell 將 opaque reference 與非秘密
+`seed_peers` 保存到 `boot.json`，不接收新的 `psk_hex`。secure store 失敗時發出
+`pairing_persistence_error` 並維持 not-ready。舊 `psk_hex` 僅供遷移。
+
+Web Push subscription 是僅以加密形式保存的例外。Core 把完整 `endpoint`/`p256dh`/`auth` 以
+mesh-PSK-derived key 和 XChaCha20-Poly1305 seal 成 schema-v2 CRDT record；materialized config/export
+不會出現 plaintext。啟動時會重新 seal legacy raw record，否則 fail-closed 刪除。
 
 ```jsonc
 {
@@ -12,6 +26,11 @@
     "name": "京阪ハウス",
     "psk_id": "k1",
     "seed_peers": ["10.0.1.10:47172"]          // 同一 L2，故仅作保险（beacon 为主）
+  },
+
+  "panel": {
+    "token_refs": ["secret:panel.access.<random>"],
+    "token_generation": "0123456789abcdef0123456789abcdef"
   },
 
   "buildings": {
@@ -35,8 +54,9 @@
       "local": {                                // 每设备配置（同样会复制 — 可远程修改）
         "ui_lang": "ja", "volume": 80, "screen_brightness": 70,
         "screensaver_after_s": 120,
-        "video": { "playback": "low_latency" }, // low_latency（默认）/ hls / mjpeg
-        "camera": { "device_hint": "", "rotation": 0, "mjpeg_fps": 8,
+        "video": { "playback": "low_latency",   // low_latency（默认）/ hls / mjpeg
+                   "rotation": "auto" },          // 跟随姿态传感器 / 管理员固定 0、90、180、270 度
+        "camera": { "device_hint": "", "mjpeg_fps": 8,
                     "mjpeg_quality": 60, "resolution": "640x480",
                     // codec: "auto"=探测硬编 h264，不可用则退回 mjpeg / "mjpeg" / "h264"
                     // h264 时启用 /stream.mp4（fMP4，平台 HW encoder），
@@ -44,6 +64,15 @@
                     "codec": "auto", "h264_resolution": "640x360", "h264_fps": 30,
                     "h264_bitrate_kbps": 700 },
         "kiosk": { "exit_pin_hash": "<pbkdf2>", "watchdog": true },
+        "recovery": { "helper_mode": "auto" }, // off | auto | on
+        // semantic override 是完整的 element object。native shell 依 top-level ui_manifest
+        // 驗證；同一 node 的 Web panel 依 status.web_ui.manifest 驗證。
+        "ui": { "elements": {
+          "call.primary": { "scale": 1.1, "foreground": "#FFFFFF",
+                            "background": "#1A2027", "accent": "#4DA3FF" },
+          "cancel.call": { "scale": 1.0, "foreground": "#FFFFFF",
+                           "background": "#8D2932" }
+        } },
         "motion": { "enabled": true, "sensitivity": 40, "min_interval_s": 30 },
         "aec": { "mode": "auto", "tail_ms": 0 },  // 装机标定时写入
         // TV 监视器（Android TV 常驻 app）的标记。运维笔记:
@@ -55,6 +84,35 @@
         "tv": false
       }
     }
+  },
+
+  // 外部 media source 必須明確設定，不可從 seed_peers 推測。URL userinfo 與 plaintext
+  // credential 會被拒絕，認證使用 secret_ref。
+  "media_sources": {
+    "front_camera": {
+      "schema_version": 1, "kind": "ip_camera",
+      "streams": {
+        "mjpeg": { "url": "http://192.0.2.20/live.mjpeg" },
+        "snapshot": { "url": "https://192.0.2.20/snapshot.jpg" },
+        "h264": { "url": "rtsp://192.0.2.20/live", "transport": "tcp",
+                  "profile": "baseline" }
+      },
+      "secret_ref": "secret:media.front_camera"
+    }
+  },
+
+  // 接收端播放策略。数组顺序即优先级，disabled 的策略会立即跳过。
+  // 配对设置会完整取代对应室内机×室外机的全局设置。
+  "video_playback": {
+    "global": { "strategies": [
+      { "id": "h264_low_latency", "enabled": true,
+        "startup_timeout_ms": 5000, "stall_timeout_ms": 3000 },
+      { "id": "h264_hls", "enabled": false,
+        "startup_timeout_ms": 5000, "stall_timeout_ms": 5000 },
+      { "id": "mjpeg", "enabled": true,
+        "startup_timeout_ms": 5000, "stall_timeout_ms": 3000 }
+    ] },
+    "pairs": { "<indoor_node_id>": { "<outdoor_node_id>": { "strategies": [] } } }
   },
 
   "households": {
@@ -81,6 +139,7 @@
   },
 
   "ui": {
+    "call_flow": "purpose_first",             // purpose_first | ring_then_purpose
     "languages": ["ja", "en", "zh"],            // 门口机访客语言切换里展示的语言
     "launch_sound": "title_display",             // 启动音；空字符串 = 不播放
     "call_sound": "outdoor_call_alert",          // 室外机呼出确认音；空字符串 = 不播放
@@ -121,13 +180,14 @@
     "button_on_roles": ["indoor_panel"],        // 显示 SOS 按钮的角色
     "hold_to_trigger_s": 3,                     // 长按秒数（防误触）
     "alarm_sound": "siren1", "alarm_volume": 100,
+    // true 時，即使 recipient 為零或 rule 只有 Push，已開啟 Web panel 仍顯示複製的 active SOS。
+    // false 時，相符的 positive device_alert 或已送達 Push 仍可顯示。
+    "web_active_page_alerts": true,
     "sip_call": { "enabled": false, "target_extension": "" },  // 可选: 经 Asterisk 呼叫用户定义的目标
     "cancel_requires_pin": true                 // 解除需 kiosk PIN
   },
-  // emergency 的默认行为（不依赖规则的内置动作）: 全节点警报 UI+警笛、
-  // 向所有 households 发 Telegram 🚨、MQTT doorbell/emergency (retain) — HA 侧可自由联动
-  // 灯光/警笛/呼叫等。**不会自动呼叫警察/消防**（通知对象仅为家人和
-  // 用户定义的电话目标 — 由人来判断）。
+  // SOS active/clear state 始終複製；顯示與外部投遞由 rule 決定，可設為零 recipient，
+  // 也不代表會自動呼叫警察或消防。
 
   "visit_purposes": {                           // 访客事由按钮（用户可编辑; 默认 seed 见下）
     // 门口机上事由按钮 1 次点按 = 带该事由的按铃（快递员 1 个动作即完成）。
@@ -178,7 +238,29 @@
     "r4": { "enabled": true,
             "when": { "type": "device_offline", "devices": "all" },
             "actions": [ { "type": "telegram", "households": ["h_ox"] },
-                         { "type": "ha_event" } ] }
+                         { "type": "ha_event" } ] },
+    "r_sos_default_on": {
+      "enabled": true, "when": { "type": "emergency_on" },
+      "actions": [
+        { "type": "device_alert", "targets": { "roles": "all", "web_subscription_groups": "all" },
+          "channels": ["in_app", "system_notification", "web_push"],
+          "never_suppress": true,
+          "presentation": { "visual": true, "sound": "siren1", "volume": 100,
+                            "sticky": true, "ttl_s": 0, "background": "#8F1010",
+                            "foreground": "#FFFFFF", "accent": "#FFD166" } },
+        { "type": "telegram", "households": "all", "never_suppress": true }
+      ]
+    },
+    "r_sos_default_off": {
+      "enabled": true, "when": { "type": "emergency_off" },
+      "actions": [
+        { "type": "device_alert", "targets": { "roles": "all", "web_subscription_groups": "all" },
+          "channels": ["in_app", "system_notification", "web_push"],
+          "never_suppress": true,
+          "presentation": { "visual": true, "sticky": false, "ttl_s": 10 } },
+        { "type": "telegram", "households": "all", "never_suppress": true }
+      ]
+    }
   },
 
   "quiet_hours": {
@@ -194,34 +276,112 @@
     "telegram": { "bot_token_ref": "secret:tg_bot",
                   "poll_updates": true,          // 内联按钮回复的 getUpdates 长轮询 (leader)
                   "text_template": { "ja": "{door} に来客です ({time})" } },
+    // Web Push 透過受維護的 HTTPS sender 投遞。private 值存放於每個 eligible leader candidate
+    // 的 local secure store，只複製 reference。
+    "web_push": { "sender_url": "https://push-sender.example/doorbell/send",
+                  "vapid_public_key": "<base64url-public-key>",
+                  "vapid_private_key_ref": "secret:webpush.vapid_private",
+                  "vapid_subject": "mailto:doorbell@example.com",
+                  "sender_secret_ref": "secret:webpush.sender" }, // optional sender bearer token
     // 网页通话（webui/panel/call.html — 可选功能）。浏览器无法直接说 SIP/UDP，
     // 故用 Asterisk 作 WebRTC 网关（deploy/asterisk/webrtc.zh.md）。
     // ws_url 为空 = 通话按钮禁用（视频浏览、视频发送与 SIP 无关，照常工作）。
-    // sip_user/sip_pass = 浏览器用内线（webrtc.zh.md 的 [260] 模板）。
-    "webrtc": { "ws_url": "ws://10.0.1.5:8088/ws", "sip_user": "260", "sip_pass": "…" },
+    // sip_user/sip_pass_ref = 瀏覽器用內線（webrtc.zh.md 的 [260] 模板）。
+    "webrtc": { "ws_url": "ws://10.0.1.5:8088/ws", "sip_user": "260",
+                "sip_pass_ref": "secret:webrtc.260" },
     "tz_offset_min": 540                         // JST。用于计划时段判定
   }
 }
 ```
 
+Web Push backend 分兩階段配置。先在每個預定參與 `web_push` duty 的節點，透過已驗證的
+`POST /api/secrets`，把同一 `vapid_private_key_ref` 實值寫入各自的 local secure store；若 sender
+需要 Bearer token，也同樣配置 `sender_secret_ref`。所有 secret write 成功後，才原子保存非秘密的
+`integrations.web_push` 欄位與 reference。sender URL 必須是 HTTPS；private 值不得出現在 config、
+`vapid_public_key` 必須是以 base64url 編碼、含 `0x04` 前綴的 65-byte 未壓縮 P-256 公鑰點；private 值不得出現在 config、
+export、URL、log 或 command line。依賴 Push-only SOS 前，確認
+`/api/status.web_push.delivery_backend:true`、非空 `leader`，以及每個預定 failover 候選都實測回報
+`web_push_ready`。只有 `configured:true` 不能證明 leader 能讀取 local secret 或連到 sender。
+
+leader election 還要求 `tls12`、`wan`、`mains_power`、`wall_clock_sane` 與 `web_push_ready` 全部為真。
+LAN/default route 不是 Internet reachability 證據，而且目前沒有通用 sender probe，所以 shipping shell
+會 fail-closed 回報 `wan:false`。只有在 exact node/network 實測能以 HTTPS 連到已配置 sender 後，管理員
+才可明確設定 `devices.<id>.caps_override.wan:true`；應記錄該外部測試作為 measurement source，route 改變
+時移除 override。只有完成固定供電 commissioning 才可 override `mains_power`。override 不得虛構 TLS
+support、可讀 secret 或 working backend。
+
+iOS compatibility 的 `streams.h264` 配合 `transport:"tcp"` 表示 bounded RTSP/RTP interleaved ingest，
+不是 direct fMP4 URL。runtime 起初為 `rtsp_ingest_pending` degraded state；只有 DESCRIBE/SETUP 完成且
+Annex-B IDR 實際被 Core 接受後，才可 advertise `rtsp_h264_forwarding`。單有 config 不代表 availability，
+iPad 1 搭配真實 camera 尚未 qualification。
+
+`panel.token_refs` 與非秘密的 32 位 hex `panel.token_generation` 都是 fleet 配置；輪換會在同一個
+commit 中替換兩者。每個 `dbpanel` session 都綁定當前 generation 與 canonical ref set，因此輪換
+複製到各節點後，所有節點的舊 session 都會失效。秘密實值不會複製；請在每個提供 panel 的節點上，
+透過已驗證的 Admin 使用 **配置到此節點**，把同一實值寫入已複製的同一 ref，且不修改配置。
+
+`devices.<id>.local.recovery.helper_mode` 是設定 request，不代表 helper 已安裝或生效。Admin form 預設為
+`auto`，並透過已驗證的 atomic config batch 寫入；Core 只接受 `off`、`auto`、`on`。capability/runtime
+status 必須另外回報實測 helper availability 與 effective mode。helper 不可達時設定 `on` 是可見的
+degraded/error，不是 supervision 成功證據。atomic config apply 後，platform client 發送 fixed local
+`MODE <value>` 並驗證 helper status；helper 原子保存 mode，供 helper/OS restart 復原。config 不會衍生
+generic command/argv。
+
+## runtime UI manifest
+
+native shell 公開 read-only top-level `ui_manifest`；Core 另為目前提供 Admin 的 node 公開
+`web_ui.manifest`。兩者都是 schema v1，限制 `scale`、`font_scale`、`foreground`、
+`background`、`accent`、`border`、`radius`、minimum touch、contrast 與安全 control。設定 path
+相同，但 element set 不同，所以 Admin 分開顯示 **Native UI** 與 **Web UI**。目前 Web manifest
+包含 `call.primary`、`cancel.call`、`call.end`、`purpose.button`、`ring.title`、`ring.action`、
+`status.offline`、`reply.button`、`monitor.close`，以及始終可見、需連續長按 2 秒的
+`sos.trigger`。SOS 樣式也是 Web 全螢幕提示的安全基準；有效的規則提示配色可暫時優先。
+Web panel session 無權解除已複製的 emergency state，因此不宣告 `sos.cancel`。
+
+Core 會永久 cache 每個 peer 最後有效的 native manifest/capability。configured offline device 會在
+status 顯示 `cached_contract:true`，Core restart 後 Admin 仍可依 cached native contract 驗證並保存。
+這不代表 apply success；exact renderer 必須重連、驗證並回報，拒絕時保留 last-known-good style。
+Web manifest 仍只屬於配信 Admin 的 node，不是 peer Web catalog；不能由 native manifest 推測
+remote/offline Web surface。
+
 ## 事件（events 表 / gossip）
 
-- ID = `(origin_node, origin_seq)` 幂等。类型: `press | motion | answered | missed | reply |
-  offline | online | config_changed | emergency | emergency_cancel | visitor_lang`
-- `emergency` payload: `{ "source": "<node_id>", "via": "panel|web|admin" }`。不受 quiet_hours 的
-  suppress 影响（始终全渠道通知）。UI: `{"t":"emergency","active":true|false}`
+- ID = `(origin_node, origin_seq)` 冪等。類型包含 `press | purpose_selected | call_answered |
+  call_ended | call_cancelled | motion | reply | offline | online | config_changed | emergency |
+  emergency_cancel | delivery_result | visitor_lang`。
+- `call_answered`/`call_ended` 帶 schema version、`door`、`call_id`、`stage_revision`。手動接聽
+  client 只在 answer-mode SIP dialog 接通後 claim exact tuple，Core 保存一個決定性的
+  `dialog_owner`。同時接聽的 loser hangup 時不能結束 winner，monitor 不 claim ownership。
+  `call_answered` 後拒絕 visitor cancel；owner hangup 對 exact call 發出 `call_ended`。restart 後
+  ringing 由 press origin、in-call 由 dialog owner 在 10 秒內復原，失敗只發出一次 idempotent
+  recovery cancel。
+- `emergency` state 始終複製，presentation 只由相符 rule action 產生。`never_suppress:true` 只讓
+  該 action 不受 quiet hours 抑制，不會強制 recipient 或覆蓋 explicit empty channels。
+- 沒有 `targets` object 的 legacy `device_alert` 會對所有 native node 與所有 Web subscription group。
+  只要存在 `targets`，selector 即為明確語意：只有 `web_subscription_groups` 時不對任何 native shell；
+  沒有 `web_subscription_groups` 時不對 active Web page/Push subscription。`web_profiles` 是 read-only
+  compatibility alias，新 write 使用 `web_subscription_groups`。Web page 從 `?group=<name>` 取得並在
+  local 保存 group，state poll 與 Push 使用同一值。
+- 當 `emergency.web_active_page_alerts` 為 true 且 SOS 仍 active，non-sticky rule TTL 只結束 custom
+  decoration/sound；安全的紅色 raw-SOS overlay 會保留至 clear 或 switch off。TTL 不會解除 replicated
+  emergency state。
+- Core `delivery_result` 是 `local_shell:dispatched`、`shell_unavailable`、`web_push:accepted`、
+  `no_recipients`、`backend_unavailable` 等 dispatch attempt 記錄，不證明 OS 已顯示。native shell
+  另在 runtime `device_alert` 回報各 channel 的 presentation、permission、TTL expiry 與 limitation。
 - `visitor_lang`（访客在门口机切换语言）: payload `{ "lang": "en" }`。press 的 payload 也会附带
   `visitor_lang`（已选择时）。展示面: 室内机/TV 来铃画面的语言徽标、
   /api/panel/state、Telegram 通知中的「🌐 EN」、HA attrs topic。**快捷回复会用该语言的
   标签显示+TTS**（无译文时回落到 ja）。revert 计时器超时后回到 ja 并解除。
-- `reply` 事件 payload: `{ "reply_id": "qr_away", "text": "…", "via": "telegram|mqtt|web",
-  "target_press": "<origin>:<seq>" }`
+- `reply` 事件 payload: `{ "schema_version": 2, "reply_id": "qr_away", "text": "…",
+  "via": "telegram|mqtt|web", "call_id": "…", "stage_revision": 0 }`。對 schema-v2 呼叫必須帶
+  精確 call_id 與 revision；舊格式回覆在通話進行中僅作顯示公告，不會結束通話。
 - press 的 notify（LWW 合并）: `{ "hlc": "…", "claimed_by": "…", "notified_at": "…",
   "telegram_msg_ids": {"<chat_id>": msg_id}, "replied": {"reply_id": "qr_away", "by": "telegram"} }`
 
 ## MQTT（Phase 2 — 已实现）
 
-计划书的 topic 表 + `doorbell/<door_id>/reply/set`（订阅; payload = reply_id 或自由文本）。
+计划书的 topic 表 + `doorbell/<door_id>/reply/set`（订阅; 通话中使用包含 `reply_id`、
+`call_id`、`stage_revision` 的 JSON；旧格式 reply_id/自由文本仅可在通话外作显示公告）。
 实现: `core/src/bridge/`（mqtt_client = 自研 MQTT 3.1.1 QoS0、ha_bridge = HA 集成）。
 
 - 启用条件: `integrations.mqtt.host` 非空 且为 mesh 的 `mqtt_bridge` duty leader。
@@ -240,7 +400,8 @@
   retain — SOS 紧急模式。ON/OFF 取 emergency / emergency_cancel 中 hlc 较大一侧）。
 - 快照/摄像头不走 MQTT — 实时画面用 go2rtc，静止图由 HA generic camera
   直接抓门口机的 `/snapshot.jpg`（参见 `deploy/ha/`）。
-- MVP 的认证为 `user`/`pass` 明文（`pass_ref` 的 secure store 化计划与 sip 同时处理）。
+- MQTT 認證使用 `user` 與 `pass_ref`，bridge 設定前才從 platform secure store 解析實值。新 config
+  的 plaintext `pass` 寫入會被拒絕，只保留舊設定遷移輸入。
 
 ## 统一资产 API / 访客语言 API（实现中确定的细节）
 
@@ -248,8 +409,10 @@
   允许的 type 仅 `image/jpeg` `image/png` `audio/mpeg` `audio/wav`，上限 3MB。
   响应 `{"hash":"<sha256>"}`。空 body=400 / type 不允许=415 / 超限=413 / 未登录=401。
   注册后写入台账 `assets.<hash>` = `{size,type,origin,label}` 并经 CRDT 复制到全节点。
-- `GET /asset/<sha256>` — 管理会话**或** panel token（`?k=`）均可获取 (403/404)。
-  `<sha256>` 固定为 64 位小写 hex，否则 400（防路径穿越）。
+- `GET /asset/<sha256>` — LAN 公开兼容读取，不使用管理或 panel credential。只有 `/asset/`
+  后恰为 64 位小写 hex 的 GET 才能在无会话时通过。有效 hash 尚未缓存时返回 404；
+  已认证请求中的无效 hash 返回 400。其他 method 或形似 asset 的 path 不享有公开访问
+  （防路径穿越）。
 - `DELETE /api/assets/<sha256>`（管理会话）— 把台账 `assets.<hash>` 置为 tombstone，
   并立即删除本节点的本地缓存。其他节点看到台账消失（CRDT 复制）后
   以带宽限期 GC 自然回收。

@@ -1,8 +1,3 @@
-// 隠し管理入口の PIN ダイアログ。5 回失敗で 10 分ロック (プロセス内)。
-// 入力は描画テンキーのみ (実体キーボードの無い門口機前提)。物理キーボードがあれば
-// 数字キー/Enter/Backspace も受ける (Window の KeyDown)。
-// PIN の照合先: %ProgramData%\Doorbell\exit_pin.txt の SHA-256 hex (無ければ既定 PIN "000000" +
-// 初回設置手順で必ず変更するよう docs に記載)。TODO: fleet 設定の kiosk.exit_pin_hash と統合。
 using System;
 using System.IO;
 using System.Security.Cryptography;
@@ -14,6 +9,8 @@ using DoorbellApp.Util;
 
 namespace DoorbellApp
 {
+    // Five failed PIN attempts lock the process-local keypad for ten minutes. The configured PIN is
+    // compared as a SHA-256 digest; deployments must replace the commissioning default.
     public partial class AdminDialog : Window
     {
         private const int MaxLen = 6;
@@ -41,7 +38,6 @@ namespace DoorbellApp
 
         private void OnPhysicalKey(object sender, KeyEventArgs e)
         {
-            // 物理キーボードがある環境の補助 (数字/テンキー/Enter/BS)
             if (e.Key >= Key.D0 && e.Key <= Key.D9) HandleKey(((int)(e.Key - Key.D0)).ToString());
             else if (e.Key >= Key.NumPad0 && e.Key <= Key.NumPad9)
                 HandleKey(((int)(e.Key - Key.NumPad0)).ToString());

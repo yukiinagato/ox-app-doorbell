@@ -1,4 +1,4 @@
-// HA MQTT ブリッジの実装 (ha_bridge.h 参照)。
+
 #include "bridge/ha_bridge.h"
 
 #include <map>
@@ -10,8 +10,8 @@ namespace db {
 namespace {
 constexpr const char* kTag = "ha_bridge";
 
-// object_id/unique_id/topic 断片用 — ASCII [0-9A-Za-z_-] 以外は '_' に潰す
-// (日本語は name にだけ載せる方針)。
+
+
 std::string sanitizeId(const std::string& s) {
   std::string out;
   out.reserve(s.size());
@@ -51,7 +51,7 @@ std::string HaBridge::labelJa(const cJSON* label_obj) const {
   return v;
 }
 
-// ---------------------------------------------------------------- 構成
+
 
 void HaBridge::configure(const std::string& cfg_json, const std::string& node_id, bool active) {
   const bool cfg_changed = cfg_json != cfg_json_;
@@ -71,7 +71,7 @@ void HaBridge::configure(const std::string& cfg_json, const std::string& node_id
   mo.port = static_cast<uint16_t>(json::getInt(mq, "port", 1883));
   mo.client_id = "doorbell-" + node_id_.substr(0, 8);
   mo.username = json::getString(mq, "user");
-  // MVP は平文 pass — TODO(Phase2 後半): secure_store (pass_ref) 経由に切り替え (sip と同様)
+
   mo.password = json::getString(mq, "pass");
   mo.keepalive_s = 30;
   mo.will_topic = base_ + "/bridge/availability";
@@ -79,7 +79,7 @@ void HaBridge::configure(const std::string& cfg_json, const std::string& node_id
   mo.will_retain = true;
 
   if (!active || mo.host.empty()) {
-    if (client_) DB_LOGI(kTag, "ブリッジ停止 (leader でない / mqtt.host 未設定)");
+    if (client_) DB_LOGI(kTag, "bridge stopped because this node is not leader or mqtt.host is unset");
     stopClient(true);
     active_ = false;
     return;
@@ -92,9 +92,9 @@ void HaBridge::configure(const std::string& cfg_json, const std::string& node_id
   if (!client_ || opts_changed) {
     stopClient(true);
     startClient(mo);
-    return;  // discovery/状態は on_connected で発行される
+    return;
   }
-  // 接続設定は同じで内容だけ変わった → 接続中なら retain 済み discovery/状態を上書き再発行
+
   if (cfg_changed && connected_) {
     publishDiscovery();
     publishState();
@@ -109,15 +109,15 @@ void HaBridge::startClient(const MqttClient::Options& mo) {
   cbs.on_message = [this](const std::string& t, const std::string& p, bool) { onMessage(t, p); };
   client_.reset(new MqttClient(loop_, mo, std::move(cbs)));
   client_->start();
-  DB_LOGI(kTag, "ブリッジ開始 → " + mo.host + ":" + std::to_string(mo.port));
+  DB_LOGI(kTag, "bridge started at " + mo.host + ":" + std::to_string(mo.port));
 }
 
 void HaBridge::stopClient(bool graceful) {
   if (!client_) return;
-  // graceful なら LWT の代わりに自分で offline (retain) を吐いてから DISCONNECT
-  // (DISCONNECT では LWT が発火しないため)。stop() が送信残をフラッシュしてくれる。
+
+
   if (graceful && connected_) pub(base_ + "/bridge/availability", "offline", true);
-  client_->stop();  // コールバック無効化 + IO スレッド join
+  client_->stop();
   client_.reset();
   connected_ = false;
 }
@@ -132,17 +132,17 @@ std::string HaBridge::mqttStatus() const {
   return connected_ ? "connected" : "disconnected";
 }
 
-// ---------------------------------------------------------------- 接続時
+
 
 void HaBridge::onConnected() {
   connected_ = true;
   pub(base_ + "/bridge/availability", "online", true);
   publishDiscovery();
   publishState();
-  // 購読は接続毎に張り直す (クライアントは clean session)
-  client_->subscribe(prefix_ + "/status");        // HA 再起動検知 → 再発行
-  client_->subscribe(base_ + "/+/reply/set");     // クイック返信下発
-  client_->subscribe(base_ + "/cmd/ack");         // 開錠等の命令回執 (現状ログのみ)
+
+  client_->subscribe(prefix_ + "/status");
+  client_->subscribe(base_ + "/+/reply/set");
+  client_->subscribe(base_ + "/cmd/ack");
 }
 
 void HaBridge::pub(const std::string& topic, const std::string& payload, bool retain) {
@@ -179,7 +179,7 @@ void HaBridge::setDoorDevice(cJSON* o, const std::string& door_id) {
 }
 
 void HaBridge::publishDiscovery() {
-  // --- 各 door: event (呼び鈴) + binary_sensor (動体検知) ---
+
   cJSON* doors = json::get(cfg_.get(), "doors");
   cJSON* it = nullptr;
   cJSON_ArrayForEach(it, doors) {
@@ -205,7 +205,7 @@ void HaBridge::publishDiscovery() {
       json::set(o.get(), "device_class", "motion");
       json::set(o.get(), "state_topic", base_ + "/" + did + "/motion");
       json::set(o.get(), "payload_on", "ON");
-      json::set(o.get(), "off_delay", static_cast<int64_t>(30));  // OFF は発行しない — 自動復帰
+      json::set(o.get(), "off_delay", static_cast<int64_t>(30));
       addAvailability(o.get(), did);
       json::set(o.get(), "unique_id", "doorbell_" + sid + "_motion");
       json::set(o.get(), "object_id", "doorbell_" + sid + "_motion");
@@ -214,7 +214,7 @@ void HaBridge::publishDiscovery() {
           true);
     }
     {
-      // 訪客言語 sensor (<base>/<door>/attrs の visitor_lang を実体化 — 未選択は "ja")
+
       auto o = json::obj();
       json::set(o.get(), "name", "訪客言語");
       json::set(o.get(), "state_topic", base_ + "/" + did + "/attrs");
@@ -229,7 +229,7 @@ void HaBridge::publishDiscovery() {
     }
   }
 
-  // --- 各 device: connectivity (防盗の「端末オフライン」を HA 実体化) ---
+
   cJSON* devs = json::get(cfg_.get(), "devices");
   cJSON_ArrayForEach(it, devs) {
     if (!it->string) continue;
@@ -242,7 +242,7 @@ void HaBridge::publishDiscovery() {
     json::set(o.get(), "state_topic", base_ + "/node/" + nid + "/availability");
     json::set(o.get(), "payload_on", "online");
     json::set(o.get(), "payload_off", "offline");
-    addAvailability(o.get(), "");  // bridge のみ (端末断そのものが状態なので door は付けない)
+    addAvailability(o.get(), "");
     json::set(o.get(), "unique_id", sid);
     json::set(o.get(), "object_id", sid);
     cJSON* dev = json::addObj(o.get(), "device");
@@ -254,13 +254,13 @@ void HaBridge::publishDiscovery() {
     pub(prefix_ + "/binary_sensor/" + sid + "/config", json::dump(o.get()), true);
   }
 
-  // --- SOS 緊急モード (組込動作 — quiet_hours/ルール非依存。HA 側でライト/サイレン連動) ---
+
   {
     auto o = json::obj();
     json::set(o.get(), "name", "緊急事態");
     json::set(o.get(), "device_class", "safety");
     json::set(o.get(), "state_topic", base_ + "/emergency");
-    addAvailability(o.get(), "");  // bridge のみ
+    addAvailability(o.get(), "");
     json::set(o.get(), "unique_id", "doorbell_emergency");
     json::set(o.get(), "object_id", "doorbell_emergency");
     cJSON* dev = json::addObj(o.get(), "device");
@@ -272,7 +272,7 @@ void HaBridge::publishDiscovery() {
     pub(prefix_ + "/binary_sensor/doorbell_emergency/config", json::dump(o.get()), true);
   }
 
-  // --- ブリッジ生存 sensor (deploy/ha の看門狗 automation が参照) ---
+
   {
     auto o = json::obj();
     json::set(o.get(), "name", "Doorbell Bridge");
@@ -280,7 +280,7 @@ void HaBridge::publishDiscovery() {
     json::set(o.get(), "state_topic", base_ + "/bridge/availability");
     json::set(o.get(), "payload_on", "online");
     json::set(o.get(), "payload_off", "offline");
-    // availability は付けない — LWT の offline を「off 状態」として見せる (unavailable ではなく)
+
     json::set(o.get(), "unique_id", "doorbell_bridge_online");
     json::set(o.get(), "object_id", "doorbell_bridge_online");
     cJSON* dev = json::addObj(o.get(), "device");
@@ -293,14 +293,14 @@ void HaBridge::publishDiscovery() {
   }
 }
 
-// ---------------------------------------------------------------- 現在状態
+
 
 void HaBridge::publishState() {
   std::map<std::string, bool> alive;
   if (hooks_.node_alive) {
     for (const auto& p : hooks_.node_alive()) alive[p.first] = p.second;
   }
-  alive[node_id_] = true;  // 自分 (leader) は生きている
+  alive[node_id_] = true;
 
   cJSON* devs = json::get(cfg_.get(), "devices");
   cJSON* it = nullptr;
@@ -311,7 +311,7 @@ void HaBridge::publishState() {
     const bool on = a != alive.end() && a->second;
     pub(base_ + "/node/" + nid + "/availability", on ? "online" : "offline", true);
   }
-  // door の可用性 = 担当 door_station の生死
+
   cJSON* doors = json::get(cfg_.get(), "doors");
   cJSON_ArrayForEach(it, doors) {
     if (!it->string) continue;
@@ -326,10 +326,10 @@ void HaBridge::publishState() {
     pub(base_ + "/" + did + "/availability", on ? "online" : "offline", true);
   }
   publishEmergency();
-  publishDoorAttrs();  // 全 door の訪客言語 (retain — 再接続/HA 再起動でも状態が残る)
+  publishDoorAttrs();
 }
 
-// SOS 現在状態 (Node が hlc 最大側で計算) を retain で発行 — 接続/再発行/遷移時に呼ぶ
+
 void HaBridge::publishEmergency() {
   const bool on = hooks_.emergency_active && hooks_.emergency_active();
   pub(base_ + "/emergency", on ? "ON" : "OFF", true);
@@ -339,11 +339,11 @@ std::string HaBridge::visitorLangOf(const std::string& door_id) const {
   if (!hooks_.visitor_langs) return "ja";
   for (const auto& kv : hooks_.visitor_langs())
     if (kv.first == door_id) return kv.second;
-  return "ja";  // 未選択 = 主言語
+  return "ja";
 }
 
-// door の付随属性 (現在の訪客言語) を retain で発行。press の event payload とは別に
-// 「今この門口に立っている訪客の言語」を状態として持たせる (HA の自動化条件に使える)。
+
+
 void HaBridge::publishDoorAttrs(const std::string& door_id) {
   auto one = [this](const std::string& did) {
     auto o = json::obj();
@@ -361,14 +361,14 @@ void HaBridge::publishDoorAttrs(const std::string& door_id) {
   }
 }
 
-// ---------------------------------------------------------------- イベント → 発行
+
 
 void HaBridge::onEvent(const EventRecord& ev) {
-  if (!client_ || !connected_) return;  // 未接続中のイベントは流さない (retain 状態は再接続時に再発行)
+  if (!client_ || !connected_) return;
   if (ev.type == "press") {
     if (ev.door.empty()) return;
-    // event payload に用件と訪客言語を同梱 (MQTT event platform は event_type 以外の
-    // キーをイベント属性として通す) — HA 側で「宅配だけ通知しない」等の自動化が書ける。
+
+
     auto o = json::obj();
     json::set(o.get(), "event_type", "press");
     auto p = json::parse(ev.payload_json.empty() ? "{}" : ev.payload_json);
@@ -381,20 +381,20 @@ void HaBridge::onEvent(const EventRecord& ev) {
     pub(base_ + "/" + ev.door + "/event", json::dump(o.get()), false);
   } else if (ev.type == "visitor_lang") {
     if (ev.door.empty()) return;
-    publishDoorAttrs(ev.door);  // 状態は Node が先に更新済み — 現在値を retain で流す
+    publishDoorAttrs(ev.door);
   } else if (ev.type == "motion") {
     if (ev.door.empty()) return;
-    pub(base_ + "/" + ev.door + "/motion", "ON", false);  // OFF は off_delay で自動復帰
+    pub(base_ + "/" + ev.door + "/motion", "ON", false);
   } else if (ev.type == "offline" || ev.type == "online") {
     const std::string& nid = ev.device;
     if (nid.empty()) return;
     const bool on = ev.type == "online";
     pub(base_ + "/node/" + nid + "/availability", on ? "online" : "offline", true);
-    // その node が door 担当なら door の可用性も更新
+
     const std::string door = json::getString(cfgAt("devices." + nid), "door");
     if (!door.empty()) pub(base_ + "/" + door + "/availability", on ? "online" : "offline", true);
   } else if (ev.type == "emergency" || ev.type == "emergency_cancel") {
-    // 状態は Node が hlc 最大側で計算済み (このイベント処理より先に更新される) — 現在値を発行
+
     publishEmergency();
   } else if (ev.type == "dtmf_action") {
     auto p = json::parse(ev.payload_json);
@@ -409,13 +409,13 @@ void HaBridge::onEvent(const EventRecord& ev) {
   }
 }
 
-// ---------------------------------------------------------------- 受信
+
 
 void HaBridge::onMessage(const std::string& topic, const std::string& payload) {
   if (topic == prefix_ + "/status") {
-    // HA 再起動 → discovery と状態を全再発行 (retain はあるが念のため揃える)
+
     if (payload == "online" && connected_) {
-      DB_LOGI(kTag, "HA online — discovery/状態を再発行");
+      DB_LOGI(kTag, "HA is online; republishing discovery and state");
       pub(base_ + "/bridge/availability", "online", true);
       publishDiscovery();
       publishState();
@@ -423,7 +423,7 @@ void HaBridge::onMessage(const std::string& topic, const std::string& payload) {
     return;
   }
   if (topic == base_ + "/cmd/ack") {
-    DB_LOGI(kTag, "cmd ack: " + payload);  // Phase 3: 面板/通話へのフィードバック配線予定
+    DB_LOGI(kTag, "cmd ack: " + payload);
     return;
   }
   // <base>/<door_id>/reply/set
@@ -434,13 +434,23 @@ void HaBridge::onMessage(const std::string& topic, const std::string& payload) {
     const std::string door = topic.substr(head.size(), topic.size() - head.size() - tail.size());
     if (door.empty() || door.find('/') != std::string::npos) return;
     if (!hooks_.on_reply) return;
-    // payload が quick_replies のキーならそれ、でなければ自由文
-    cJSON* qr = json::get(cfgAt("quick_replies"), payload.c_str());
-    if (qr) {
-      hooks_.on_reply(payload, "", door);
+
+    auto scoped = json::parse(payload);
+    bool accepted = false;
+    if (scoped && cJSON_IsObject(scoped.get())) {
+      const std::string reply_id = json::getString(scoped.get(), "reply_id");
+      const std::string text = json::getString(scoped.get(), "text");
+      const std::string call_id = json::getString(scoped.get(), "call_id");
+      const int revision = static_cast<int>(json::getInt(scoped.get(), "stage_revision", -1));
+      if (!call_id.empty() && revision >= 0)
+        accepted = hooks_.on_reply(reply_id, text, door, call_id, revision);
     } else {
-      hooks_.on_reply("", payload, door);
+      cJSON* qr = json::get(cfgAt("quick_replies"), payload.c_str());
+      accepted = qr ? hooks_.on_reply(payload, "", door, "", -1)
+                    : hooks_.on_reply("", payload, door, "", -1);
     }
+    if (!accepted)
+      DB_LOGW(kTag, "quick reply rejected because the MQTT command was stale or unscoped");
   }
 }
 

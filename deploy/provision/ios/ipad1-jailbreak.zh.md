@@ -1,92 +1,60 @@
-[日本語](ipad1-jailbreak.ja.md) | [English](ipad1-jailbreak.en.md) | [中文](ipad1-jailbreak.zh.md)
+[日本語](ipad1-jailbreak.ja.md) | [English](ipad1-jailbreak.en.md) | [繁體中文]
 
-# 将 iPad 1 (A1219, iOS 5.1.1) 变成门铃节点
+# 部署 iPad 1 compatibility node
 
-把初代 iPad (2010, A4, 256MB, **无摄像头、无麦克风**) 通过越狱 + 自行构建的
-原生 app 变成**门铃网格的一等节点**的步骤。完整的 C++17 核心 (doorbell-core)
-可在 armv7/iOS5.1 上运行 —— 这是真能跑的 (已在 A0/B 上验证)。
+本程序適用於受控、已越獄的 iOS 5.1.1 iPad 1 (A1219/A1337)，不代表硬體已認證。依
+[maintainer runbook](../../../docs/zh/ios-compat-maintainer.md) 記錄裝置、artifact、package、jailbreak
+環境與測試結果。
 
-## 此设备能做什么 / 不能做什么 (硬件上限)
+## 硬體限制
 
-| | 可否 | 原因 |
-|---|---|---|
-| 查看门口的实时视频 | ✅ | 接收 MJPEG，在 A4 上解码 |
-| 听门口的声音 | ✅ | 通过迷你 SIP 直呼门口机，扬声器播放 |
-| 快捷回复・开锁 (屏幕操作) | ✅ | C ABI + SIP DTMF `*1` |
-| 作为网格节点同步配置・事件 | ✅ | 完整搭载核心 |
-| **发送自己的声音 (对讲)** | ⚠️ 必须外接麦克风 | 无内置麦克风。插入耳机(TRRS)/dock 麦克风即可 |
-| **发送自己的视频** | ❌ 不可 | 物理上没有摄像头 |
+iPad 1 有內建麥克風與揚聲器，但沒有 camera。只有在該裝置的 MiniSIP/RemoteIO input 與雙向 audio
+通過後才使用內建麥克風。影像使用明確外部 MJPEG/snapshot/RTSP camera 或 no-video mode。bounded
+RTSP/RTP-over-TCP H.264 ingest 與 Annex-B 轉送已通過 host/loopback contract，包括 SDP/sprop、single
+NAL/STAP-A/FU-A，以及 loss 後等待 next IDR。runtime 在 DESCRIBE、SETUP 與實際 IDR accept 前維持
+degraded；iPad 1 搭配真實 camera 尚未 qualification。
 
-## 0. 前提 (母机 Mac 侧)
+另一條 Core fMP4 playback path 已通過 bounded 實機 smoke：Android 14 door station 畫面在 foreground
+iPad 1 以 15–16 fps 顯示，Wi-Fi rejoin 與 post-safe-mode recheck 也通過。external-camera RTSP ingest
+與 crash 後 unattended foreground video resume 仍未 qualification。參考
+`docs/evidence/ios5-ipad1-fmp4-smoke-2026-08-31.md`。
 
-构建产物与工具链已在仓库的 `tools/` `ios-legacy/` 中备好:
-- `tools/sdk/iPhoneOS7.1.sdk` — 从 Xcode 5.1 DMG 提取 (sysroot；已 gitignore)
-- `tools/toolchain/ios5-armv7/` — 自行构建的现代 libc++/libc++abi/libunwind (用 `tools/build_libcxx_ios5.sh` 重新生成)
-- `ios-legacy/lib/libdoorbell_all.a` — armv7/iOS5.1 版核心 (`ios-legacy/scripts/build_core_ios5.sh`)
-- `ldid` (`brew install ldid`)
+shell direct playback HTTP(S) MJPEG/snapshot。camera credential 保持在 `secret_ref` 後方，只解成
+ephemeral Basic/Bearer request header；拒絕 URL credential 並保留 platform TLS validation。此 JPEG
+path 只作 local preview (`jpeg_core_forwarding:false`)，不是 Core/mesh camera feed。
 
-若要重建 SDK: 用 `hdiutil attach` 挂载 Xcode 5.1 (或 4.x) 的 DMG，
-把 `.../iPhoneOS.platform/Developer/SDKs/iPhoneOS7.1.sdk` 复制到 `tools/sdk/`。
+裝置不是戶外產品。入口安裝需要防水、防凝露、溫控、連續供電 enclosure，以及 battery/cable/
+thermal 檢查。
 
-## 1. 越狱 iPad 1 (不完美/untethered)
+## controlled install
 
-**Legacy iOS Kit** (LukeZGD) — 可在现代 macOS 上运行、支持 iPad 1 的 untethered 越狱工具。
-1. `git clone https://github.com/LukeZGD/Legacy-iOS-Kit && cd Legacy-iOS-Kit`
-2. 用 USB 连接 iPad 1 → `./restore.sh` → 从菜单选择 **Jailbreak (untethered)**。
-   (如有需要，先恢复到 5.1.1 —— 菜单中的 Restore/Downgrade。NVRAM 清除步骤见 Kit 的 wiki)
-3. 完成后 iPad 上会装有 **Cydia**。
-- 替代方案: Absinthe 2.0 / redsn0w 0.9.12b1 (当年的 untethered 工具，若有能运行的母机)。
+1. 依 jailbreak upstream 文件操作並建立唯一 host access credential；不得使用或記錄共用/default
+   credential。
+2. 在 controlled host 執行：
 
-## 2. 越狱后的准备
+   ```sh
+   ios-compat/scripts/test_host.sh
+   ios-compat/scripts/build_core_ios5.sh
+   ios-compat/scripts/build_core_ios5.sh --install
+   ios-compat/scripts/build_app_ios5.sh
+   ios-compat/scripts/build_deb.sh
+   ```
 
-1. 在 Cydia 中安装 **OpenSSH** (用于通过 SSH 推送 app)。
-2. 安装 **AppSync Unified** (允许 ldid 伪签名的 app)。
-   - 添加源 `https://cydia.akemi.ai/` → 安装 AppSync Unified。
-   - 若源不可用，可经 Kit 的 App Management 或用 `dpkg -i` 手动安装 .deb。
-3. 记下 iPad 的 IP (设置 > Wi-Fi)。默认 SSH: `root@<ip>` / 密码 `alpine`
-   (**务必用 `passwd` 修改**)。
+3. 驗證 manifest、package 內容/digest、rollback package，再用
+   `ios-compat/scripts/install_deb.sh` 安裝。SSH direct copy 只作維護 fallback。該 fallback 在終止 app
+   前寫入 root-owned maintenance-restart marker，避免把有意的更新計入 crash loop。
+4. 從 app pair，確認 Core 先在 Keychain 保存 `mesh.psk`，之後只發出
+   `{t:"paired", psk_ref:"secret:mesh.psk"}`，而 `boot.json` 只有該 reference 與非秘密欄位。
+   `pairing_persistence_error` 必須維持 not-ready，不得把 PSK 貼入檔案。
+5. 外部 camera 使用 `ios-compat/profiles/` 範例，credential 放在 `secret_ref`。禁止 URL userinfo，
+   不可從 seed peer 推測 camera。RTSP 必須驗證在 IDR accept 前保持 degraded，且 packet loss 後會
+   回到 next-IDR recovery。
 
-## 3. 构建 app 并推送 (母机 Mac)
-
-```bash
-cd app-doorbell
-bash ios-legacy/scripts/build_core_ios5.sh   # 核心 .a (首次/更新时)
-bash ios-legacy/scripts/build_app.sh          # 生成 Doorbell.app + ldid 伪签名
-# 推送 (二选一)
-scp -r ios-legacy/build/Doorbell.app root@<ipad-ip>:/Applications/
-ssh root@<ipad-ip> "uicache"                  # 反映到主屏幕
-#   ── 或使用 Legacy iOS Kit 的 Install IPA
-```
-
-## 4. iPad 侧的初始设置
-
-1. 启动主屏幕上的「门铃」。
-2. 首次设置 (应用内 or `/var/mobile/.../boot.plist`):
-   - `role` = `indoor_panel`
-   - `seed_peers` = 一个或多个既有节点的 `IP:47172` (同一 L2 下，一个即可接入整个网格)
-   - `psk_hex` = 集群 PSK (管理界面「添加设备」发行的值，或与既有节点相同)
-   - 门口机的 direct SIP 目标 = `<门口机IP>:47190`
-   - 是否有外接麦克风
-3. 加入网格后，设置 (主题・快捷回复・事由・语言) 会自动同步。
-
-## 5. 外接麦克风 (仅在想对讲时)
-
-由于没有内置麦克风，**说话**需要外部麦克风:
-- 耳机口: 带麦克风的耳麦 (TRRS)。iPad 1 的 3.5mm 是否接受耳麦麦克风
-  取决于个体/配件 —— 若被识别，RemoteIO 会拾取输入。
-- dock 接口: 支持麦克风的 dock 配件。
-若无麦克风/无法识别，则以「仅收听」运行 (能听到门口的声音，己方声音为静音)。
-
-## 6. 运行确认
-
-- 按铃 → iPad 全屏显示门口视频，并能听到门口的声音。
-- 快捷回复按钮 → 门口机上大字显示 + 朗读。
-- 开锁按钮 → 经门口机打开 HA 的锁 (DTMF `*1`)。
-- 拔掉 LAN 网线/Wi-Fi → 几十秒内离开网格，恢复后重新加入。
-- 有外接麦克风时: 己方声音从门口扬声器传出。
-
-## 注意
-
-- 越狱设备以此门铃专用・LAN 内运行为前提 (不对外公开)。务必修改 SSH 密码。
-- 常供电・常亮 (app 会禁用 idleTimer)。注意电池鼓包 (可能的话拆下电池直接供电)。
-- 不更新 OS (固定 5.1.1)。更新 app 请重新执行 §3。
+驗證 cold boot、targeted ring、duplicate/stale/cancel、內建 mic/speaker、MiniSIP/DTMF、media/RTSP/no-video、
+Wi-Fi/peer/process/memory/power/rollback、kiosk maintenance 與 enclosure long soak。optional root keepalive
+helper 已實作並通過 host test，也能產生可重現的 armv7/iOS 5.1 staged DEB。package 只安裝 binary 與未啟用
+的 launchd template；一般 app provisioning 只執行 `ios-compat/scripts/install_helper_ios5.sh --stage`，不得
+直接啟用。iPad helper qualification 仍未完成；只有取得明確批准後，才能用
+`DB_CONFIRM_ROOT_HELPER=YES ... --enable` 驗證 root-owned plist、UID/GID/socket permission、maintenance
+lease、crash/hang safe mode、rollback 與 soak。在實機通過前不得依賴。置於隔離 trusted LAN，勿向
+Internet 暴露 SSH/MiniSIP/mesh/HTTP/camera。

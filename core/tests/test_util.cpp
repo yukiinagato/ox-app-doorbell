@@ -13,19 +13,19 @@
 
 using namespace db;
 
-TEST_CASE("db_core_qr_encode: 有効な QR 行列を返す (空入力は NULL)") {
+TEST_CASE("db_core_qr_encode returns a valid matrix and rejects empty input") {
   int size = -1;
   CHECK(db_core_qr_encode("", &size) == nullptr);
   CHECK(size == 0);
   unsigned char* m = db_core_qr_encode("doorbell-pair:10.0.1.5:47172|abc123|deadbeef", &size);
   REQUIRE(m != nullptr);
-  CHECK(size >= 21);          // QR 最小 (version 1) は 21x21
-  CHECK((size % 2) == 1);     // QR は常に奇数辺
-  // 左上ファインダは 7x7 の枠 — (0,0) と (6,6) は暗、(1,1) は明 (枠の内側)
+  CHECK(size >= 21);
+  CHECK((size % 2) == 1);
+
   CHECK(m[0 * size + 0] == 1);
   CHECK(m[6 * size + 6] == 1);
   CHECK(m[1 * size + 1] == 0);
-  // 全モジュールは 0/1 のみ
+
   bool onlyBinary = true;
   for (int i = 0; i < size * size; i++)
     if (m[i] > 1) onlyBinary = false;
@@ -44,22 +44,22 @@ TEST_CASE("hex roundtrip") {
   CHECK_FALSE(hexDecode("abc", out));
 }
 
-TEST_CASE("sha256 既知ベクタ (FIPS 180-4 / NIST)") {
+TEST_CASE("sha256 known vector from FIPS 180-4") {
   CHECK(sha256Hex(Bytes{}) ==
         "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
   CHECK(sha256Hex(toBytes("abc")) ==
         "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
   CHECK(sha256Hex(toBytes("abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq")) ==
         "248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1");
-  // 1,000,000 × 'a' (複数ブロック + バッファ境界)
+
   CHECK(sha256Hex(Bytes(1'000'000, 'a')) ==
         "cdc76e5c9914fb9281a1c7e284d73e67f1809a48a497200e046d39ccc7112cd0");
-  // 55/56/64 バイト境界 (パディングの分岐)
+
   CHECK(sha256Hex(Bytes(56, 'x')) == sha256Hex(Bytes(56, 'x')));
   CHECK(sha256Hex(Bytes(55, 'x')) != sha256Hex(Bytes(56, 'x')));
 }
 
-TEST_CASE("ファイル IO (writeFileBytes/readFileBytes/listDir)") {
+TEST_CASE("file IO covers writeFileBytes, readFileBytes, and listDir") {
   const std::string dir = tempDir() + "/db-test-io-" + genTokenHex(8);
   REQUIRE(makeDir(dir));
   const std::string path = dir + "/blob";
@@ -88,18 +88,18 @@ TEST_CASE("hlc monotonic + lexicographic order") {
   SimClock clock(1000);
   HlcClock hlc(clock, "aabbccdd");
   std::string a = hlc.tick();
-  std::string b = hlc.tick();  // 同一 ms → カウンタ増
+  std::string b = hlc.tick();
   CHECK(a < b);
   clock.advance(5);
   std::string c = hlc.tick();
   CHECK(b < c);
 
-  // 時計逆行しても HLC は単調
+
   clock.setWall(500);
   std::string d = hlc.tick();
   CHECK(c < d);
 
-  // parse/format 往復
+
   int64_t ms;
   int cnt;
   std::string node;
@@ -147,7 +147,7 @@ TEST_CASE("runloop manual mode: ordering, periodic, cancel") {
   loop.post([&] { got.push_back(1); });
   loop.postDelayed(10, [&] { got.push_back(3); });
   loop.post([&] { got.push_back(2); });
-  CHECK(loop.pumpDue() == 2);  // due=0 の 2 件のみ
+  CHECK(loop.pumpDue() == 2);
   clock.advance(10);
   loop.pumpDue();
   CHECK(got == std::vector<int>{1, 2, 3});
@@ -164,7 +164,7 @@ TEST_CASE("runloop manual mode: ordering, periodic, cancel") {
   loop.pumpDue();
   CHECK(ticks == 4);
 
-  // 実行中の自己 cancel (繰り返し)
+
   int n = 0;
   uint64_t id2 = 0;
   id2 = loop.postEvery(5, [&] {
@@ -178,7 +178,7 @@ TEST_CASE("runloop manual mode: ordering, periodic, cancel") {
   CHECK(n == 2);
 }
 
-TEST_CASE("runloop threaded mode: stop 後の call/post 振る舞い") {
+TEST_CASE("runloop threaded mode: call and post behavior after stop") {
   RealClock clock;
   Runloop loop(clock);
   loop.start();
@@ -190,7 +190,7 @@ TEST_CASE("runloop threaded mode: stop 後の call/post 振る舞い") {
   CHECK(count == 0);
 }
 
-TEST_CASE("runloop manual mode: callSync inline / post は pumpDue で実行") {
+TEST_CASE("runloop manual mode: callSync is inline and pumpDue executes posts") {
   SimClock clock(0, 0);
   Runloop loop(clock);
   int value = 0;
@@ -204,7 +204,7 @@ TEST_CASE("runloop manual mode: callSync inline / post は pumpDue で実行") {
   CHECK(value == 9);
 }
 
-TEST_CASE("runloop: stop へ向かう間の callSync がデッドロックしない") {
+TEST_CASE("runloop: callSync does not deadlock while stopping") {
   RealClock clock;
   Runloop loop(clock);
   loop.start();

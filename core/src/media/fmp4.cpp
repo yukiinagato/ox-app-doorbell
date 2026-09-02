@@ -1,6 +1,6 @@
-// fMP4 マキサ実装。box の入れ子は BoxWriter (open/close でサイズを後埋め) で組む。
-// SPS の解像度取り出しは EPB (emulation prevention byte 00 00 03) 除去 →
-// Exp-Golomb 読みの素直な実装 (baseline〜high profile まで)。
+
+
+
 #include "media/fmp4.h"
 
 #include <cstdio>
@@ -11,11 +11,11 @@ namespace fmp4 {
 
 namespace {
 
-// ---------- ビット読み (Exp-Golomb) ----------
+
 struct BitReader {
   const uint8_t* p;
   size_t n;
-  size_t pos = 0;  // ビット位置
+  size_t pos = 0;
   bool bad = false;
 
   BitReader(const uint8_t* data, size_t len) : p(data), n(len) {}
@@ -32,10 +32,10 @@ struct BitReader {
     }
     return v;
   }
-  uint32_t ue() {  // 符号なし Exp-Golomb
+  uint32_t ue() {
     int zeros = 0;
     while (!bad && u(1) == 0) {
-      if (++zeros > 31) {  // 壊れたビット列の暴走防止
+      if (++zeros > 31) {
         bad = true;
         return 0;
       }
@@ -43,23 +43,23 @@ struct BitReader {
     if (bad) return 0;
     return ((1u << zeros) - 1) + u(zeros);
   }
-  int32_t se() {  // 符号付き Exp-Golomb
+  int32_t se() {
     uint32_t k = ue();
     return (k & 1) ? static_cast<int32_t>((k + 1) / 2) : -static_cast<int32_t>(k / 2);
   }
 };
 
-// EPB (00 00 03) を除去した RBSP を返す (NAL ヘッダは含めない)
+
 Bytes unescapeRbsp(const uint8_t* nal, size_t len) {
   Bytes out;
   if (len < 1) return out;
   out.reserve(len - 1);
   size_t zeros = 0;
-  for (size_t i = 1; i < len; i++) {  // [0] = NAL ヘッダ
+  for (size_t i = 1; i < len; i++) {
     uint8_t b = nal[i];
     if (zeros >= 2 && b == 0x03) {
       zeros = 0;
-      continue;  // エスケープバイトを捨てる
+      continue;
     }
     zeros = (b == 0) ? zeros + 1 : 0;
     out.push_back(b);
@@ -67,7 +67,7 @@ Bytes unescapeRbsp(const uint8_t* nal, size_t len) {
   return out;
 }
 
-// scaling list の読み飛ばし (仕様 7.3.2.1.1.1 と同じ走り)
+
 void skipScalingList(BitReader& br, int size) {
   int last = 8, next = 8;
   for (int i = 0; i < size && !br.bad; i++) {
@@ -76,7 +76,7 @@ void skipScalingList(BitReader& br, int size) {
   }
 }
 
-// ---------- box 書き (サイズ後埋め) ----------
+
 struct BoxWriter {
   Bytes buf;
 
@@ -96,14 +96,14 @@ struct BoxWriter {
   void zeros(size_t n) { buf.insert(buf.end(), n, 0); }
   void fourcc(const char* c) { bytes(reinterpret_cast<const uint8_t*>(c), 4); }
 
-  // box を開く: サイズ 4 バイトを仮置きして開始位置を返す
+
   size_t open(const char* type) {
     size_t at = buf.size();
     u32(0);
     fourcc(type);
     return at;
   }
-  // full box (version + flags 付き)
+
   size_t openFull(const char* type, uint8_t version, uint32_t flags) {
     size_t at = open(type);
     u32((static_cast<uint32_t>(version) << 24) | (flags & 0xffffff));
@@ -118,23 +118,23 @@ struct BoxWriter {
   }
 };
 
-constexpr uint32_t kTimescale = 1000;  // ms 直結
+constexpr uint32_t kTimescale = 1000;
 constexpr uint32_t kTrackId = 1;
 
 }  // namespace
 
-// ---------- AnnexB 分割 ----------
+
 
 std::vector<NalView> splitAnnexB(const uint8_t* data, size_t len) {
   std::vector<NalView> out;
   if (!data || len < 4) return out;
   size_t i = 0;
-  size_t start = SIZE_MAX;  // 現在の NAL の先頭 (ヘッダバイト)
+  size_t start = SIZE_MAX;
   while (i + 2 < len) {
     if (data[i] == 0 && data[i + 1] == 0 && data[i + 2] == 1) {
       if (start != SIZE_MAX) {
         size_t end = i;
-        while (end > start && data[end - 1] == 0) end--;  // 4 バイト start code の余り 0
+        while (end > start && data[end - 1] == 0) end--;
         if (end > start) out.push_back({data + start, end - start, data[start] & 0x1f});
       }
       start = i + 3;
@@ -148,7 +148,7 @@ std::vector<NalView> splitAnnexB(const uint8_t* data, size_t len) {
   return out;
 }
 
-// ---------- SPS 解像度 ----------
+
 
 bool parseSpsDims(const uint8_t* sps, size_t len, int* w, int* h) {
   if (!sps || len < 4 || (sps[0] & 0x1f) != 7) return false;
@@ -159,7 +159,7 @@ bool parseSpsDims(const uint8_t* sps, size_t len, int* w, int* h) {
   br.u(8);  // constraint flags + reserved
   br.u(8);  // level_idc
   br.ue();  // seq_parameter_set_id
-  uint32_t chroma_format_idc = 1;  // 既定 4:2:0
+  uint32_t chroma_format_idc = 1;
   bool separate_colour = false;
   switch (profile_idc) {
     case 100: case 110: case 122: case 244: case 44:
@@ -189,7 +189,7 @@ bool parseSpsDims(const uint8_t* sps, size_t len, int* w, int* h) {
     br.se();  // offset_for_non_ref_pic
     br.se();  // offset_for_top_to_bottom_field
     uint32_t cycle = br.ue();
-    if (cycle > 256) return false;  // 壊れ検出
+    if (cycle > 256) return false;
     for (uint32_t i = 0; i < cycle; i++) br.se();
   }
   br.ue();  // max_num_ref_frames
@@ -207,7 +207,7 @@ bool parseSpsDims(const uint8_t* sps, size_t len, int* w, int* h) {
     crop_b = br.ue();
   }
   if (br.bad) return false;
-  // クロップ単位 (仕様 Table 6-1): 4:2:0/4:2:2 は横 2、4:2:0 は縦 2 (× フィールド係数)
+
   uint32_t sub_w = (chroma_format_idc == 1 || chroma_format_idc == 2) ? 2 : 1;
   uint32_t sub_h = (chroma_format_idc == 1) ? 2 : 1;
   if (chroma_format_idc == 0 || separate_colour) sub_w = sub_h = 1;
@@ -249,7 +249,7 @@ Sample toSample(const uint8_t* annexb, size_t len, Bytes* sps, Bytes* pps) {
         break;
     }
     if (nal.type == 5) s.key = true;
-    // 4 バイト BE 長前置 (avcC lengthSizeMinusOne=3 と対応)
+
     uint32_t n = static_cast<uint32_t>(nal.n);
     s.data.push_back(static_cast<uint8_t>(n >> 24));
     s.data.push_back(static_cast<uint8_t>(n >> 16));
@@ -264,7 +264,7 @@ Sample toSample(const uint8_t* annexb, size_t len, Bytes* sps, Bytes* pps) {
 
 Bytes buildInit(const Bytes& sps, const Bytes& pps) {
   int w = 0, h = 0;
-  parseSpsDims(sps.data(), sps.size(), &w, &h);  // 失敗時 0x0 (再生側は avcC を見る)
+  parseSpsDims(sps.data(), sps.size(), &w, &h);
 
   BoxWriter bw;
   // ftyp
@@ -285,11 +285,11 @@ Bytes buildInit(const Bytes& sps, const Bytes& pps) {
     bw.u32(0);           // creation_time
     bw.u32(0);           // modification_time
     bw.u32(kTimescale);  // timescale
-    bw.u32(0);           // duration (ライブ = 不明)
+    bw.u32(0);
     bw.u32(0x00010000);  // rate 1.0
     bw.u16(0x0100);      // volume 1.0
     bw.zeros(2 + 8);     // reserved
-    // 単位行列
+
     const uint32_t mat[9] = {0x00010000, 0, 0, 0, 0x00010000, 0, 0, 0, 0x40000000};
     for (uint32_t m : mat) bw.u32(m);
     bw.zeros(6 * 4);     // pre_defined
@@ -311,7 +311,7 @@ Bytes buildInit(const Bytes& sps, const Bytes& pps) {
     bw.u16(0);         // reserved
     const uint32_t mat[9] = {0x00010000, 0, 0, 0, 0x00010000, 0, 0, 0, 0x40000000};
     for (uint32_t m : mat) bw.u32(m);
-    bw.u32(static_cast<uint32_t>(w) << 16);  // width (16.16 固定小数)
+    bw.u32(static_cast<uint32_t>(w) << 16);
     bw.u32(static_cast<uint32_t>(h) << 16);  // height
     bw.close(tkhd);
   }
@@ -365,7 +365,7 @@ Bytes buildInit(const Bytes& sps, const Bytes& pps) {
     bw.u32(0x00480000);  // vertresolution
     bw.u32(0);           // reserved
     bw.u16(1);           // frame_count
-    bw.zeros(32);        // compressorname (空)
+    bw.zeros(32);
     bw.u16(0x0018);      // depth
     bw.u16(0xffff);      // pre_defined -1
     {
@@ -386,7 +386,7 @@ Bytes buildInit(const Bytes& sps, const Bytes& pps) {
     bw.close(avc1);
     bw.close(stsd);
   }
-  {  // 空の必須表 (サンプルは全部 fragment 側)
+  {
     size_t stts = bw.openFull("stts", 0, 0);
     bw.u32(0);
     bw.close(stts);
@@ -432,7 +432,7 @@ Bytes buildFragment(uint32_t seq, uint64_t base_dt, const std::vector<Sample>& s
   }
   size_t traf = bw.open("traf");
   {
-    // default-base-is-moof (0x020000): データオフセットは moof 先頭基準
+
     size_t tfhd = bw.openFull("tfhd", 0, 0x020000);
     bw.u32(kTrackId);
     bw.close(tfhd);
@@ -442,13 +442,13 @@ Bytes buildFragment(uint32_t seq, uint64_t base_dt, const std::vector<Sample>& s
     bw.u64(base_dt);
     bw.close(tfdt);
   }
-  size_t data_offset_at;  // trun の data_offset を moof 完成後に後埋め
+  size_t data_offset_at;
   {
     // data-offset(0x01) + sample-duration(0x100) + sample-size(0x200) + sample-flags(0x400)
     size_t trun = bw.openFull("trun", 0, 0x000701);
     bw.u32(static_cast<uint32_t>(samples.size()));
     data_offset_at = bw.buf.size();
-    bw.u32(0);  // data_offset (仮)
+    bw.u32(0);
     for (const Sample& s : samples) {
       bw.u32(s.dur);
       bw.u32(static_cast<uint32_t>(s.data.size()));
@@ -459,7 +459,7 @@ Bytes buildFragment(uint32_t seq, uint64_t base_dt, const std::vector<Sample>& s
   }
   bw.close(traf);
   bw.close(moof);
-  // data_offset = moof 全長 + mdat ヘッダ 8 バイト (mdat payload 先頭まで)
+
   uint32_t off = static_cast<uint32_t>(bw.buf.size() + 8);
   bw.buf[data_offset_at] = static_cast<uint8_t>(off >> 24);
   bw.buf[data_offset_at + 1] = static_cast<uint8_t>(off >> 16);

@@ -34,7 +34,7 @@ static NSTimeInterval sLockedUntil = 0;
 }
 
 - (UIButton *)keyButton {
-  UIButton *b = [UIButton buttonWithType:UIButtonTypeCustom];  // iOS5: System=白背景回避
+  UIButton *b = [UIButton buttonWithType:UIButtonTypeCustom];
   b.titleLabel.font = [UIFont boldSystemFontOfSize:30];
   [b setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
   [b setTitleColor:[UIColor whiteColor] forState:UIControlStateHighlighted];
@@ -80,7 +80,7 @@ static NSTimeInterval sLockedUntil = 0;
     UIButton *b = [self keyButton];
     NSString *label = key;
     if ([key isEqualToString:@"back"]) {
-      label = @"DEL";  // iOS5 の ⌫ 字形は A5 標準フォントで四角く崩れるため文字にする
+      label = @"DEL";
       [b setTitleColor:[UIColor colorWithRed:1.0 green:0.55 blue:0.45 alpha:1]
               forState:UIControlStateNormal];
     } else if ([key isEqualToString:@"ok"]) {
@@ -104,11 +104,11 @@ static NSTimeInterval sLockedUntil = 0;
           forControlEvents:UIControlEventTouchUpInside];
   [_card addSubview:_cancelButton];
 
-  // この個体 (iPad1 iOS5) は UILabel 既定背景が不透明白 — 白文字が白地に消える。
-  // DBHomeScreen/DBIncomingScreen と同様に全ラベル背景を透明化する (PIN 可読性の根因修正)。
+
+
   [self clearLabelBackgrounds:self];
-  // clearLabelBackgrounds は UILabel 全部を透明化するため、PIN 表示枠だけ clear 後に
-  // 改めて薄い背景を敷く (入力桁が見えやすい + 枠位置が分かる)。
+
+
   _display.backgroundColor = [UIColor colorWithWhite:1 alpha:0.07];
 }
 - (void)layoutSubviews {
@@ -136,10 +136,10 @@ static NSTimeInterval sLockedUntil = 0;
   _cancelButton.frame = CGRectMake(pad, y, cardW - 2 * pad, 34);
 }
 
-#pragma mark - 出入
+
 
 - (void)presentInView:(UIView *)parent then:(void (^)(void))onUnlocked {
-  if (self.superview) {  // 既に表示中 — 二重 overlay を避けて入力だけリセット
+  if (self.superview) {
     _onUnlocked = onUnlocked;
     [_pin setString:@""];
     _display.text = @"";
@@ -161,10 +161,13 @@ static NSTimeInterval sLockedUntil = 0;
   __weak DBPinOverlay *wself = self;
   [UIView animateWithDuration:0.2
       animations:^{ wself.alpha = 0.0; }
-      completion:^(BOOL finished) { [wself removeFromSuperview]; }];
+      completion:^(BOOL finished) {
+        (void)finished;
+        [wself removeFromSuperview];
+      }];
 }
 
-#pragma mark - 操作
+
 
 - (void)onCancel {
   _onUnlocked = nil;
@@ -208,7 +211,7 @@ static NSTimeInterval sLockedUntil = 0;
     void (^cb)(void) = _onUnlocked;
     _onUnlocked = nil;
     [self dismiss];
-    // モーダル機構がないため CA commit 再入問題は存在しない — 直ちに実行してよい。
+
     if (cb) cb();
     return;
   }
@@ -234,4 +237,3 @@ static NSTimeInterval sLockedUntil = 0;
 }
 
 @end
-

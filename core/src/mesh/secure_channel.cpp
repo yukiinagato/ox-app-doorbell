@@ -1,4 +1,4 @@
-// PSK 認証付き暗号チャネルの実装 (secure_channel.h 参照)。
+
 #include "mesh/secure_channel.h"
 
 #include <cstring>
@@ -28,7 +28,7 @@ uint64_t getU64BE(const uint8_t* p) {
   return v;
 }
 
-// AEAD nonce (24B): [dir 1][frame_no 8BE][zero 15] — 方向分離 + フレーム毎に一意
+
 void buildNonce(uint8_t out[24], uint8_t dir, uint64_t no) {
   std::memset(out, 0, 24);
   out[0] = dir;
@@ -54,7 +54,7 @@ SecureChannel::~SecureChannel() {
 }
 
 void SecureChannel::start() {
-  // conn は channel を弱参照で持つ (conn_ ⇔ callbacks の循環参照を避ける)
+
   std::weak_ptr<SecureChannel> w = shared_from_this();
   conn_->setCallbacks(
       [w](const Bytes& f) {
@@ -66,7 +66,7 @@ void SecureChannel::start() {
           self->notifyClose_();
         }
       });
-  // 握手タイムアウト (どちらの側も)
+
   timeout_id_ = loop_.postDelayed(hs_timeout_ms_, [w]() {
     auto self = w.lock();
     if (!self) return;
@@ -93,7 +93,7 @@ void SecureChannel::sendHello_(uint8_t type) {
 }
 
 void SecureChannel::deriveKey_() {
-  // session_key = BLAKE2b-256(key=psk, nonceA||nonceB||idA||idB)  (A=発起側)
+
   const std::string& id_a = initiator_ ? self_id_ : peer_id_;
   const std::string& id_b = initiator_ ? peer_id_ : self_id_;
   crypto_blake2b_ctx ctx;
@@ -107,7 +107,7 @@ void SecureChannel::deriveKey_() {
 }
 
 Bytes SecureChannel::confirmMac_(uint8_t dir) const {
-  // HMAC 相当: keyed BLAKE2b(session_key, "cfm"||dir||nonceA||nonceB)
+
   static const uint8_t kTag[3] = {'c', 'f', 'm'};
   crypto_blake2b_ctx ctx;
   crypto_blake2b_keyed_init(&ctx, 32, key_.data(), key_.size());
@@ -133,7 +133,7 @@ void SecureChannel::sendConfirm_() {
 
 bool SecureChannel::checkConfirm_(const Bytes& f) {
   if (f.size() != 2 + 32) return false;
-  const uint8_t expect_dir = initiator_ ? 1 : 0;  // 相手側の方向
+  const uint8_t expect_dir = initiator_ ? 1 : 0;
   if (f[1] != expect_dir) return false;
   Bytes expect = confirmMac_(expect_dir);
   return crypto_verify32(f.data() + 2, expect.data()) == 0;
@@ -145,7 +145,7 @@ void SecureChannel::becomeOpen_() {
     loop_.cancel(timeout_id_);
     timeout_id_ = 0;
   }
-  // 確立前にキューされた送信を流す
+
   std::deque<std::string> q;
   q.swap(pending_);
   for (const auto& m : q) sendMessage(m);
@@ -178,12 +178,12 @@ void SecureChannel::handleRawFrame(const Bytes& f) {
       deriveKey_();
       sendConfirm_();
       state_ = State::kAwaitConfirm;
-      // 相手の CONFIRM が先に着いていた場合は無い (順序保存の 1 本のストリーム前提)
+
       return;
     }
     case State::kAwaitConfirm: {
       if (type != kFrameConfirm || !checkConfirm_(f)) {
-        fail_("confirm mismatch");  // PSK 不一致もここで拒否される
+        fail_("confirm mismatch");
         return;
       }
       peer_confirmed_ = true;
@@ -197,19 +197,19 @@ void SecureChannel::handleRawFrame(const Bytes& f) {
       }
       const uint8_t expect_dir = initiator_ ? 1 : 0;
       if (f[1] != expect_dir) {
-        fail_("wrong direction");  // 方向反射 (自分の送信の折り返し) を拒否
+        fail_("wrong direction");
         return;
       }
       const uint64_t no = getU64BE(f.data() + 2);
       if (no < recv_min_no_) {
-        fail_("replayed frame");  // 再生 (巻き戻り) は即切断。欠番 (損失) は許容
+        fail_("replayed frame");
         return;
       }
       uint8_t nonce[24];
       buildNonce(nonce, expect_dir, no);
       const size_t clen = f.size() - kDataHeader;
       Bytes plain(clen);
-      // AD = ヘッダ (type||dir||frame_no) — ヘッダ改竄も検出
+
       if (crypto_aead_unlock(plain.data(), f.data() + 10, key_.data(), nonce, f.data(), 10,
                              f.data() + kDataHeader, clen) != 0) {
         fail_("decrypt failed");

@@ -1,4 +1,4 @@
-// Android 門口機アプリ (Phase 3 前倒し)。main flavor (minSdk 21) のみ。
+// Shared Android source with independently built modern and API 19 tiers.
 pluginManagement {
   repositories {
     google()

@@ -1,14 +1,36 @@
 #import "DBWatchdog.h"
+#import "DBRecoveryClient.h"
 #import <UIKit/UIKit.h>
+#import <unistd.h>
 
 static volatile int gWdPong = 0;
 static int gWdFail = 0;
+static NSString *const DBWatchdogBackoffIndexKey = @"runtime.watchdog_backoff_index";
+
+static unsigned int DBNextRelaunchDelay(void) {
+  NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+  NSInteger index = [defaults integerForKey:DBWatchdogBackoffIndexKey];
+  if (index < 0) index = 0;
+  [defaults setInteger:index + 1 forKey:DBWatchdogBackoffIndexKey];
+  [defaults synchronize];
+  return (unsigned int)[DBRecoveryClient restartBackoffSecondsForAttempt:(NSUInteger)index];
+}
+
+static void DBScheduleFixedRelaunch(unsigned int delaySeconds) {
+  pid_t child = fork();
+  if (child != 0) return;
+  sleep(delaySeconds);
+  const char *tool = "/usr/bin/uiopen";
+  char *const args[] = {(char *)tool, (char *)"doorbell://", NULL};
+  execv(tool, args);
+  _exit(127);
+}
 
 static void WDAppendLog(NSString *line) {
   NSString *path = @"/var/mobile/Documents/doorbell-hangs.log";
   NSFileManager *fm = [NSFileManager defaultManager];
   NSDictionary *attrs = [fm attributesOfItemAtPath:path error:NULL];
-  if ([attrs fileSize] > 256 * 1024) [fm removeItemAtPath:path error:NULL];  // 簡易ローテート
+  if ([attrs fileSize] > 256 * 1024) [fm removeItemAtPath:path error:NULL];
   NSString *out = [NSString stringWithFormat:@"%@ %@\n", [[NSDate date] description], line];
   FILE *f = fopen([path UTF8String], "a");
   if (f) {
@@ -19,11 +41,20 @@ static void WDAppendLog(NSString *line) {
 
 @implementation DBWatchdog {
   NSString *(^_nameProvider)(void);
+  BOOL (^_externalSupervisorProvider)(void);
 }
 
 - (id)initWithNameProvider:(NSString * (^)(void))nameProvider {
+  return [self initWithNameProvider:nameProvider externalSupervisorProvider:nil];
+}
+
+- (id)initWithNameProvider:(NSString * (^)(void))nameProvider
+ externalSupervisorProvider:(BOOL (^)(void))externalSupervisorProvider {
   self = [super init];
-  if (self) _nameProvider = [nameProvider copy];
+  if (self) {
+    _nameProvider = [nameProvider copy];
+    _externalSupervisorProvider = [externalSupervisorProvider copy];
+  }
   return self;
 }
 
@@ -31,15 +62,15 @@ static void WDAppendLog(NSString *line) {
   [NSThread detachNewThreadSelector:@selector(wdThreadMain) toTarget:self withObject:nil];
 }
 
-// メインスレッドから呼ばれる (runloop が回っている = 生きている証拠)
+
 - (void)wdPong {
   gWdPong = 1;
 }
 
 - (void)wdThreadMain {
-  [NSThread sleepForTimeInterval:5.0];  // 起動直後の猶予
+  [NSThread sleepForTimeInterval:5.0];
   while (YES) {
-    @autoreleasepool {  // 一巡ごとに解放 (ループが一生抜けないため外側に置かない)
+    @autoreleasepool {
       [NSThread sleepForTimeInterval:3.0];
       gWdPong = 0;
       [self performSelectorOnMainThread:@selector(wdPong) withObject:nil waitUntilDone:NO];
@@ -56,15 +87,21 @@ static void WDAppendLog(NSString *line) {
       } else {
         gWdFail = 0;
       }
-      if (gWdFail >= 3) {  // ~15 秒以上無応答
+      if (gWdFail >= 3) {
         WDAppendLog([NSString stringWithFormat:@"UI hung >15s — restarting app (screen %@)",
                      _nameProvider ? _nameProvider() : @"?"]);
-        NSLog(@"[doorbell] WATCHDOG: UI hung — restarting app");
-        // 自プロセスが消えた 1 秒後に SpringBoard へ再起動要求を出す子プロセスを残す
-        // (生きているプロセスへの open は前面化されるだけで再起動にならないため)
-        system("( sleep 1; /usr/bin/uiopen doorbell:// ) >/dev/null 2>&1 &");
+        BOOL supervised = _externalSupervisorProvider && _externalSupervisorProvider();
+        if (supervised) {
+          NSLog(@"[doorbell] WATCHDOG: UI hung — delegating restart to helper");
+          WDAppendLog(@"external supervisor reachable; delegating relaunch");
+        } else {
+          // A fixed argv fallback avoids exposing a shell or accepting runtime command input.
+          unsigned int delay = DBNextRelaunchDelay();
+          NSLog(@"[doorbell] WATCHDOG: UI hung — restarting app after %u seconds", delay);
+          DBScheduleFixedRelaunch(delay);
+        }
         [NSThread sleepForTimeInterval:0.3];
-        // 自殺。固まったメインスレッドを抱えたまま exit() の後始末をしないよう _exit。
+
         _exit(0);
       }
     }

@@ -1,12 +1,15 @@
-// Mesh 本体 (mesh.h 参照)。
-//  - 成員: 全量ノード表 gossip (PEERS) + 直連心跳 (PING/PONG)。生死は hb_seq の前進で判定
-//  - 選主: 無投票確定的 — duty 毎に (rank=cpu_score, node_id) 最大の eligible ノード + CLAIM lease
-//  - 同期: SYNC_REQ/RESP push-pull (LwwMap vv / EventLog heads)、EVENT は TTL2 の即時 flood
-//  - 配対: JOIN_* (PIN の HMAC チャレンジ) — 平文フレーム (kFrameJoin) で PSK 配布
-// スレッド: 全 API・全コールバックは Runloop 上。
+
+
+
+
+
+
 #include "mesh/mesh.h"
 
 #include <algorithm>
+#include <cmath>
+#include <cstring>
+#include <initializer_list>
 #include <set>
 #include <tuple>
 
@@ -22,19 +25,281 @@ namespace db {
 
 namespace {
 
-constexpr int64_t kJoinTokenTtlMs = 10 * 60 * 1000;  // 配対トークン 10 分
-constexpr size_t kSyncEventLimit = 200;              // 1 応答の最大イベント数
-constexpr int kEventTtl = 2;                         // EVENT 即時 push の flood TTL
-constexpr int64_t kSnapTimeoutMs = 5000;             // 快照取得タイムアウト
-constexpr size_t kSnapMaxBytes = 300 * 1024;         // 快照 JPEG 上限 (超過は失敗扱い)
-constexpr int64_t kBlobTimeoutMs = 10000;            // blob 取得タイムアウト (1 peer あたり)
-constexpr size_t kBlobMaxBytes = 3 * 1024 * 1024;    // blob 上限 (資産 3MB — config-schema)
-constexpr size_t kBlobChunkBytes = 256 * 1024;       // 1 チャンクの生バイト数 (base64 で +1/3)
+constexpr int64_t kJoinTokenTtlMs = 10 * 60 * 1000;
+constexpr size_t kSyncEventLimit = 200;
+constexpr int kEventTtl = 2;
+constexpr int64_t kSnapTimeoutMs = 5000;
+constexpr size_t kSnapMaxBytes = 300 * 1024;
+constexpr int64_t kBlobTimeoutMs = 10000;
+constexpr size_t kBlobMaxBytes = 3 * 1024 * 1024;
+constexpr size_t kBlobChunkBytes = 256 * 1024;
+constexpr size_t kRuntimeInputMaxBytes = 64 * 1024;
+constexpr size_t kRuntimeProjectionMaxBytes = 16 * 1024;
+constexpr size_t kUiStyleMaxElements = 64;
+constexpr size_t kUiStyleTextMaxBytes = 512;
+constexpr size_t kConfigKeyMaxBytes = 512;
+constexpr size_t kNodeIdHexChars = 32;
+constexpr size_t kHlcChars = 26;
+constexpr size_t kEventTypeMaxBytes = 64;
+constexpr size_t kEventEndpointMaxBytes = 256;
+constexpr size_t kEventJsonMaxBytes = 64 * 1024;
+constexpr double kInt64LimitExclusive = 9223372036854775808.0;
 
-// 予約メッセージ型 (将来 OTA 用 — 実装はまだ無い)
+
 [[maybe_unused]] constexpr const char* kMsgVersionAnnounce = "VERSION_ANNOUNCE";
+const char* const kDuties[] = {"telegram", "mqtt_bridge", "web_push"};
 
-// ---- シリアライズ ----
+bool boundedString(const cJSON* value, size_t max_bytes) {
+  return cJSON_IsString(value) && value->valuestring &&
+         std::strlen(value->valuestring) <= max_bytes;
+}
+
+bool semanticIdValid(const char* value) {
+  if (!value || value[0] == '\0' || std::strlen(value) > 96) return false;
+  for (const unsigned char ch : std::string(value)) {
+    if (!((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') ||
+          (ch >= '0' && ch <= '9') || ch == '.' || ch == '_' || ch == '-'))
+      return false;
+  }
+  return true;
+}
+
+bool semanticIdValid(const cJSON* value) {
+  return cJSON_IsString(value) && semanticIdValid(value->valuestring);
+}
+
+void copyStringIfBounded(cJSON* target, const cJSON* source, const char* key,
+                         size_t max_bytes) {
+  const cJSON* value = json::get(source, key);
+  if (boundedString(value, max_bytes)) json::set(target, key, value->valuestring);
+}
+
+void copyBoolIfPresent(cJSON* target, const cJSON* source, const char* key) {
+  const cJSON* value = json::get(source, key);
+  if (cJSON_IsBool(value)) json::setBool(target, key, cJSON_IsTrue(value));
+}
+
+bool runtimeToken(const cJSON* value, size_t max_bytes = 128) {
+  if (!boundedString(value, max_bytes)) return false;
+  for (const unsigned char ch : std::string(value->valuestring)) {
+    if (!((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') ||
+          (ch >= '0' && ch <= '9') || ch == '_' || ch == '-' || ch == '.' || ch == ':'))
+      return false;
+  }
+  return true;
+}
+
+void copyTokenIfPresent(cJSON* target, const cJSON* source, const char* key,
+                        size_t max_bytes = 128) {
+  const cJSON* value = json::get(source, key);
+  if (runtimeToken(value, max_bytes)) json::set(target, key, value->valuestring);
+}
+
+void copyNumberIfPresent(cJSON* target, const cJSON* source, const char* key,
+                         double maximum = 9.0e15) {
+  const cJSON* value = json::get(source, key);
+  if (cJSON_IsNumber(value) && std::isfinite(value->valuedouble) && value->valuedouble >= 0 &&
+      value->valuedouble <= maximum)
+    json::set(target, key, json::getInt(source, key));
+}
+
+bool inKeys(const std::string& key, std::initializer_list<const char*> keys) {
+  for (const char* allowed : keys)
+    if (key == allowed) return true;
+  return false;
+}
+
+json::Doc runtimeHealthObject(const cJSON* source, int depth = 0) {
+  if (!cJSON_IsObject(source) || depth > 3) return {};
+  auto out = json::obj();
+  const cJSON* item = nullptr;
+  size_t count = 0;
+  cJSON_ArrayForEach(item, source) {
+    if (++count > 64 || !item->string) break;
+    const std::string key = item->string;
+    if (cJSON_IsNumber(item) && inKeys(key, {"schema_version", "generation", "heartbeat_ms", "updated_at_ms",
+                     "crash_count_5m", "crashes_in_window", "window_ms", "restart_attempt",
+                     "next_backoff_ms", "native_kiosk_consecutive_failures",
+                     "native_kiosk_failure_count", "native_kiosk_failure_threshold",
+                     "memory_warnings", "ttl_s", "decoded_frames", "displayed_frames",
+                     "dropped_frames", "latency_ms", "jitter_ms", "fps_x10"})) {
+      copyNumberIfPresent(out.get(), source, item->string);
+    } else if (cJSON_IsBool(item) && inKeys(key, {"safe_mode", "local_safe_mode", "helper_safe_mode",
+                            "helper_available", "helper_installed", "helper_enabled",
+                            "helper_running", "helper_reachable", "helper_supervising",
+                            "mode_acknowledged", "config_valid", "valid", "enabled",
+                            "native_kiosk_available", "native_kiosk_api_available",
+                            "native_kiosk_healthy", "sip_available", "active", "restored",
+                            "state_persisted", "requested", "applied", "rejected",
+                            "unsupported", "visual_applied", "sound_applied",
+                            "sticky_applied"})) {
+      copyBoolIfPresent(out.get(), source, item->string);
+    } else if (cJSON_IsObject(item) &&
+               inKeys(key, {"configured", "effective", "measured", "helper_status", "media"})) {
+      auto nested = runtimeHealthObject(item, depth + 1);
+      if (nested) json::setItem(out.get(), item->string, std::move(nested));
+    } else if (cJSON_IsString(item) && inKeys(key, {"last_exit_reason", "codec_health", "helper_mode",
+                            "helper_effective", "effective_mode", "native_kiosk",
+                            "active_call_recovery", "configured", "effective", "requested_mode",
+                            "mode", "source", "state", "status", "reason", "last_event",
+                            "platform", "role", "process_arch", "sip_backend", "h264_playback",
+                            "mjpeg_playback", "audio_calling", "sip_audio", "media", "core",
+                            "ringer", "sos", "controls", "custom_visuals",
+                            "native_kiosk_health", "helper_version", "transport", "profile",
+                            "codec", "resolution", "compositor", "permission", "result",
+                            "limitation"})) {
+      copyTokenIfPresent(out.get(), source, item->string);
+    }
+  }
+  return out;
+}
+
+json::Doc componentsProjection(const cJSON* source) {
+  if (!cJSON_IsObject(source)) return {};
+  auto out = json::obj();
+  const cJSON* item = nullptr;
+  size_t count = 0;
+  cJSON_ArrayForEach(item, source) {
+    if (count >= 32) break;
+    if (!semanticIdValid(item->string) || !runtimeToken(item, 64)) continue;
+    json::set(out.get(), item->string, item->valuestring);
+    count++;
+  }
+  return out;
+}
+
+json::Doc deviceAlertProjection(const cJSON* source) {
+  if (!cJSON_IsObject(source)) return {};
+  auto out = runtimeHealthObject(source);
+  if (!out) return {};
+  copyTokenIfPresent(out.get(), source, "event_hlc", 128);
+  const cJSON* channels = json::get(source, "channels");
+  if (cJSON_IsArray(channels)) {
+    auto clean = json::arr();
+    const cJSON* item = nullptr;
+    size_t count = 0;
+    cJSON_ArrayForEach(item, channels) {
+      if (count >= 8) break;
+      if (!runtimeToken(item, 32)) continue;
+      json::push(clean.get(), json::Doc(cJSON_CreateString(item->valuestring)));
+      count++;
+    }
+    json::setItem(out.get(), "channels", std::move(clean));
+  }
+  const cJSON* results = json::get(source, "channel_results");
+  if (cJSON_IsArray(results)) {
+    auto clean = json::arr();
+    const cJSON* item = nullptr;
+    size_t count = 0;
+    cJSON_ArrayForEach(item, results) {
+      if (count >= 8) break;
+      auto result = runtimeHealthObject(item);
+      if (!result) continue;
+      copyTokenIfPresent(result.get(), item, "channel", 32);
+      json::push(clean.get(), std::move(result));
+      count++;
+    }
+    json::setItem(out.get(), "channel_results", std::move(clean));
+  }
+  return out;
+}
+
+json::Doc semanticIdArray(const cJSON* source) {
+  auto out = json::arr();
+  if (!cJSON_IsArray(source)) return out;
+  const cJSON* item = nullptr;
+  size_t count = 0;
+  cJSON_ArrayForEach(item, source) {
+    if (count >= kUiStyleMaxElements) break;
+    if (!semanticIdValid(item)) continue;
+    json::push(out.get(), json::Doc(cJSON_CreateString(item->valuestring)));
+    count++;
+  }
+  return out;
+}
+
+json::Doc uiStyleOutcome(const cJSON* source) {
+  if (!cJSON_IsObject(source)) return {};
+  auto out = json::obj();
+  copyStringIfBounded(out.get(), source, "source", 64);
+  copyStringIfBounded(out.get(), source, "result", 64);
+  copyStringIfBounded(out.get(), source, "error", kUiStyleTextMaxBytes);
+  copyStringIfBounded(out.get(), source, "validation_error", kUiStyleTextMaxBytes);
+  copyStringIfBounded(out.get(), source, "persistence_error", kUiStyleTextMaxBytes);
+  copyBoolIfPresent(out.get(), source, "applied");
+  copyBoolIfPresent(out.get(), source, "rejected");
+  copyBoolIfPresent(out.get(), source, "lkg_persisted");
+  copyBoolIfPresent(out.get(), source, "validation_valid");
+  copyBoolIfPresent(out.get(), source, "last_known_good_persisted");
+  return out;
+}
+
+json::Doc uiStyleProjection(const cJSON* source) {
+  if (!cJSON_IsObject(source)) return {};
+  const cJSON* schema = json::get(source, "schema_version");
+  if (!cJSON_IsNumber(schema) || schema->valuedouble != 1.0) return {};
+  auto out = json::obj();
+  json::set(out.get(), "schema_version", int64_t{1});
+  copyStringIfBounded(out.get(), source, "node_id", 128);
+  copyStringIfBounded(out.get(), source, "last_error", kUiStyleTextMaxBytes);
+  const cJSON* updated = json::get(source, "updated_at_ms");
+  if (cJSON_IsNumber(updated) && updated->valuedouble >= 0 &&
+      updated->valuedouble <= 9'000'000'000'000'000.0)
+    json::set(out.get(), "updated_at_ms", json::getInt(source, "updated_at_ms"));
+  const cJSON* minimum_touch = json::get(source, "minimum_touch_dp");
+  if (cJSON_IsNumber(minimum_touch) && minimum_touch->valuedouble >= 0 &&
+      minimum_touch->valuedouble <= 4096)
+    json::set(out.get(), "minimum_touch_dp", json::getInt(source, "minimum_touch_dp"));
+
+  for (const char* key : {"applied"}) {
+    const cJSON* value = json::get(source, key);
+    if (cJSON_IsArray(value)) json::setItem(out.get(), key, semanticIdArray(value));
+  }
+
+  const cJSON* rejected = json::get(source, "rejected");
+  if (cJSON_IsArray(rejected)) {
+    auto clean = json::arr();
+    const cJSON* item = nullptr;
+    size_t count = 0;
+    cJSON_ArrayForEach(item, rejected) {
+      if (count >= kUiStyleMaxElements) break;
+      const cJSON* semantic_id = json::get(item, "semantic_id");
+      if (!cJSON_IsObject(item) || !semanticIdValid(semantic_id)) continue;
+      cJSON* entry = json::pushObj(clean.get());
+      json::set(entry, "semantic_id", semantic_id->valuestring);
+      copyStringIfBounded(entry, item, "reason", kUiStyleTextMaxBytes);
+      count++;
+    }
+    json::setItem(out.get(), "rejected", std::move(clean));
+  }
+
+  const cJSON* last_known_good = json::get(source, "last_known_good");
+  if (cJSON_IsObject(last_known_good)) {
+    cJSON* clean = json::addObj(out.get(), "last_known_good");
+    for (const char* key : {"used", "persisted"}) {
+      const cJSON* value = json::get(last_known_good, key);
+      if (cJSON_IsArray(value)) json::setItem(clean, key, semanticIdArray(value));
+    }
+  }
+
+  const cJSON* elements = json::get(source, "elements");
+  if (cJSON_IsObject(elements)) {
+    cJSON* clean = json::addObj(out.get(), "elements");
+    const cJSON* item = nullptr;
+    size_t count = 0;
+    cJSON_ArrayForEach(item, elements) {
+      if (count >= kUiStyleMaxElements) break;
+      if (!semanticIdValid(item->string)) continue;
+      auto outcome = uiStyleOutcome(item);
+      if (!outcome) continue;
+      cJSON_AddItemToObject(clean, item->string, outcome.release());
+      count++;
+    }
+  }
+  return out;
+}
+
+
 
 json::Doc entryToJson(const LwwEntry& e) {
   auto o = json::obj();
@@ -47,15 +312,100 @@ json::Doc entryToJson(const LwwEntry& e) {
   return o;
 }
 
-LwwEntry entryFromJson(const cJSON* o) {
-  LwwEntry e;
-  e.key = json::getString(o, "k");
-  e.value_json = json::getString(o, "v");
-  e.deleted = json::getBool(o, "d");
-  e.hlc = json::getString(o, "h");
-  e.author = json::getString(o, "a");
-  e.seq = static_cast<uint64_t>(json::getInt(o, "s"));
-  return e;
+bool isAsciiHex(char value) {
+  return (value >= '0' && value <= '9') || (value >= 'a' && value <= 'f') ||
+         (value >= 'A' && value <= 'F');
+}
+
+bool sameAsciiHex(char lhs, char rhs) {
+  if (lhs >= 'A' && lhs <= 'F') lhs = static_cast<char>(lhs - 'A' + 'a');
+  if (rhs >= 'A' && rhs <= 'F') rhs = static_cast<char>(rhs - 'A' + 'a');
+  return lhs == rhs;
+}
+
+bool nodeIdValid(const char* value) {
+  if (!value || std::strlen(value) != kNodeIdHexChars) return false;
+  for (size_t i = 0; i < kNodeIdHexChars; ++i)
+    if (!isAsciiHex(value[i])) return false;
+  return true;
+}
+
+bool configKeyValid(const char* value) {
+  if (!value) return false;
+  const size_t size = std::strlen(value);
+  if (size == 0 || size > kConfigKeyMaxBytes || value[0] == '.' || value[size - 1] == '.')
+    return false;
+  for (size_t i = 0; i < size; ++i) {
+    const unsigned char ch = static_cast<unsigned char>(value[i]);
+    if (ch < 0x20 || ch == 0x7f || (ch == '.' && i + 1 < size && value[i + 1] == '.'))
+      return false;
+  }
+  return true;
+}
+
+bool hlcValidForAuthor(const char* value, const char* author) {
+  if (!value || !nodeIdValid(author) || std::strlen(value) != kHlcChars || value[12] != '-' ||
+      value[17] != '-')
+    return false;
+  for (size_t i = 0; i < 12; ++i)
+    if (!isAsciiHex(value[i])) return false;
+  for (size_t i = 13; i < 17; ++i)
+    if (!isAsciiHex(value[i])) return false;
+  for (size_t i = 18; i < kHlcChars; ++i) {
+    if (!isAsciiHex(value[i]) || !sameAsciiHex(value[i], author[i - 18])) return false;
+  }
+  return true;
+}
+
+bool wireSequence(const cJSON* value, bool allow_zero, uint64_t* out) {
+  // cJSON stores numbers as doubles. Values rounded to 2^63 are ambiguous, so the signed limit
+  // is exclusive and such boundary encodings fail closed instead of overflowing a cast.
+  if (!out || !cJSON_IsNumber(value) || !std::isfinite(value->valuedouble) ||
+      value->valuedouble < 0 || value->valuedouble >= kInt64LimitExclusive ||
+      std::trunc(value->valuedouble) != value->valuedouble)
+    return false;
+  const uint64_t decoded = static_cast<uint64_t>(value->valuedouble);
+  if (!allow_zero && decoded == 0) return false;
+  *out = decoded;
+  return true;
+}
+
+bool wireSignedInteger(const cJSON* value, int64_t* out) {
+  // Both boundaries are rejected because adjacent out-of-range JSON integers round to the same
+  // cJSON double. Normal wire values are far inside this interval.
+  if (!out || !cJSON_IsNumber(value) || !std::isfinite(value->valuedouble) ||
+      value->valuedouble <= -kInt64LimitExclusive ||
+      value->valuedouble >= kInt64LimitExclusive ||
+      std::trunc(value->valuedouble) != value->valuedouble)
+    return false;
+  *out = static_cast<int64_t>(value->valuedouble);
+  return true;
+}
+
+bool entryFromJson(const cJSON* o, LwwEntry* out) {
+  if (!out || !cJSON_IsObject(o)) return false;
+  const cJSON* key = json::get(o, "k");
+  const cJSON* value = json::get(o, "v");
+  const cJSON* deleted = json::get(o, "d");
+  const cJSON* hlc = json::get(o, "h");
+  const cJSON* author = json::get(o, "a");
+  uint64_t seq = 0;
+  if (!cJSON_IsString(key) || !configKeyValid(key->valuestring) || !cJSON_IsString(value) ||
+      !value->valuestring || !cJSON_IsBool(deleted) || !cJSON_IsString(hlc) ||
+      !cJSON_IsString(author) ||
+      !hlcValidForAuthor(hlc->valuestring, author->valuestring) ||
+      !wireSequence(json::get(o, "s"), false, &seq))
+    return false;
+
+  LwwEntry entry;
+  entry.key = key->valuestring;
+  entry.value_json = value->valuestring;
+  entry.deleted = cJSON_IsTrue(deleted);
+  entry.hlc = hlc->valuestring;
+  entry.author = author->valuestring;
+  entry.seq = seq;
+  *out = std::move(entry);
+  return true;
 }
 
 json::Doc eventToJson(const EventRecord& e) {
@@ -67,41 +417,172 @@ json::Doc eventToJson(const EventRecord& e) {
   json::set(o.get(), "device", e.device);
   json::set(o.get(), "hlc", e.hlc);
   json::set(o.get(), "wall", e.wall_ms);
-  json::set(o.get(), "payload", e.payload_json);
-  json::set(o.get(), "notify", e.notify_json);
+  json::set(o.get(), "payload", e.payload_json.empty() ? "{}" : e.payload_json);
+  json::set(o.get(), "notify", e.notify_json.empty() ? "{}" : e.notify_json);
   return o;
 }
 
-EventRecord eventFromJson(const cJSON* o) {
-  EventRecord e;
-  e.origin = json::getString(o, "origin");
-  e.seq = static_cast<uint64_t>(json::getInt(o, "seq"));
-  e.type = json::getString(o, "type");
-  e.door = json::getString(o, "door");
-  e.device = json::getString(o, "device");
-  e.hlc = json::getString(o, "hlc");
-  e.wall_ms = json::getInt(o, "wall");
-  e.payload_json = json::getString(o, "payload");
-  e.notify_json = json::getString(o, "notify");
-  return e;
+bool eventEndpointValid(const cJSON* value) {
+  if (!boundedString(value, kEventEndpointMaxBytes)) return false;
+  for (const unsigned char ch : std::string(value->valuestring)) {
+    if (ch < 0x20 || ch == 0x7f) return false;
+  }
+  return true;
+}
+
+bool eventJsonObject(const cJSON* value, std::string* normalized) {
+  if (!normalized || !boundedString(value, kEventJsonMaxBytes)) return false;
+  if (value->valuestring[0] == '\0') {
+    *normalized = "{}";
+    return true;
+  }
+  json::Doc parsed(cJSON_ParseWithOpts(value->valuestring, nullptr, /*require_null_terminated=*/1));
+  if (!parsed || !cJSON_IsObject(parsed.get())) return false;
+  *normalized = value->valuestring;
+  return true;
+}
+
+bool eventFromJson(const cJSON* o, EventRecord* out) {
+  if (!out || !cJSON_IsObject(o)) return false;
+  const cJSON* origin = json::get(o, "origin");
+  const cJSON* type = json::get(o, "type");
+  const cJSON* door = json::get(o, "door");
+  const cJSON* device = json::get(o, "device");
+  const cJSON* event_hlc = json::get(o, "hlc");
+  const cJSON* payload = json::get(o, "payload");
+  const cJSON* notify = json::get(o, "notify");
+  uint64_t seq = 0;
+  int64_t wall_ms = 0;
+  std::string payload_json;
+  std::string notify_json;
+  if (!cJSON_IsString(origin) || !nodeIdValid(origin->valuestring) ||
+      !wireSequence(json::get(o, "seq"), false, &seq) || !runtimeToken(type, kEventTypeMaxBytes) ||
+      type->valuestring[0] == '\0' || !eventEndpointValid(door) || !eventEndpointValid(device) ||
+      !cJSON_IsString(event_hlc) ||
+      !hlcValidForAuthor(event_hlc->valuestring, origin->valuestring) ||
+      !wireSignedInteger(json::get(o, "wall"), &wall_ms) ||
+      !eventJsonObject(payload, &payload_json) || !eventJsonObject(notify, &notify_json))
+    return false;
+
+  EventRecord event;
+  event.origin = origin->valuestring;
+  event.seq = seq;
+  event.type = type->valuestring;
+  event.door = door->valuestring;
+  event.device = device->valuestring;
+  event.hlc = event_hlc->valuestring;
+  event.wall_ms = wall_ms;
+  event.payload_json = std::move(payload_json);
+  event.notify_json = std::move(notify_json);
+  *out = std::move(event);
+  return true;
+}
+
+bool eventsFromJson(const cJSON* array, std::vector<EventRecord>* out) {
+  if (!out || !cJSON_IsArray(array) ||
+      static_cast<size_t>(cJSON_GetArraySize(array)) > kSyncEventLimit)
+    return false;
+  std::vector<EventRecord> decoded;
+  std::set<std::pair<std::string, uint64_t>> identities;
+  const cJSON* item = nullptr;
+  cJSON_ArrayForEach(item, array) {
+    EventRecord event;
+    if (!eventFromJson(item, &event) ||
+        !identities.emplace(event.origin, event.seq).second)
+      return false;
+    decoded.push_back(std::move(event));
+  }
+  *out = std::move(decoded);
+  return true;
+}
+
+struct WireHeartbeat {
+  std::string id;
+  uint64_t epoch = 0;
+  uint64_t sequence = 0;
+  std::string hlc;
+  std::string door;
+  bool has_door = false;
+};
+
+bool heartbeatFromJson(const cJSON* object, bool allow_empty_hlc, WireHeartbeat* out) {
+  if (!out || !cJSON_IsObject(object)) return false;
+  const cJSON* id = json::get(object, "id");
+  const cJSON* heartbeat_hlc = json::get(object, "hlc");
+  const cJSON* door = json::get(object, "door");
+  WireHeartbeat decoded;
+  if (!cJSON_IsString(id) || !nodeIdValid(id->valuestring) ||
+      !wireSequence(json::get(object, "epoch"), true, &decoded.epoch) ||
+      !wireSequence(json::get(object, "hb"), true, &decoded.sequence) ||
+      !cJSON_IsString(heartbeat_hlc) || !heartbeat_hlc->valuestring ||
+      (heartbeat_hlc->valuestring[0] == '\0'
+           ? !allow_empty_hlc
+           : !hlcValidForAuthor(heartbeat_hlc->valuestring, id->valuestring)) ||
+      (door && !eventEndpointValid(door)))
+    return false;
+  decoded.id = id->valuestring;
+  decoded.hlc = heartbeat_hlc->valuestring;
+  if (door) {
+    decoded.door = door->valuestring;
+    decoded.has_door = true;
+  }
+  *out = std::move(decoded);
+  return true;
+}
+
+bool dutyValid(const std::string& duty) {
+  for (const char* known : kDuties)
+    if (duty == known) return true;
+  return false;
 }
 
 void mapToJson(cJSON* obj, const std::map<std::string, uint64_t>& m) {
   for (const auto& kv : m) json::set(obj, kv.first.c_str(), static_cast<int64_t>(kv.second));
 }
 
-std::map<std::string, uint64_t> mapFromJson(const cJSON* obj) {
-  std::map<std::string, uint64_t> m;
+bool mapFromJson(const cJSON* obj, std::map<std::string, uint64_t>* out) {
+  if (!out || !cJSON_IsObject(obj)) return false;
+  std::map<std::string, uint64_t> decoded;
   const cJSON* it = nullptr;
   cJSON_ArrayForEach(it, obj) {
-    if (it->string && cJSON_IsNumber(it)) {
-      m[it->string] = static_cast<uint64_t>(it->valuedouble);
-    }
+    uint64_t seq = 0;
+    if (!nodeIdValid(it->string) || !wireSequence(it, true, &seq) ||
+        !decoded.emplace(it->string, seq).second)
+      return false;
   }
-  return m;
+  *out = std::move(decoded);
+  return true;
 }
 
-// ---- 配対の鍵導出 ----
+struct ConfigWirePayload {
+  std::vector<LwwEntry> entries;
+  VersionVector complete_frontier;
+  bool has_complete_frontier = false;
+};
+
+bool configPayloadFromJson(const cJSON* payload, ConfigWirePayload* out) {
+  if (!out || !cJSON_IsObject(payload)) return false;
+  const cJSON* cfg = json::get(payload, "cfg");
+  if (!cJSON_IsArray(cfg)) return false;
+
+  ConfigWirePayload decoded;
+  const cJSON* item = nullptr;
+  cJSON_ArrayForEach(item, cfg) {
+    LwwEntry entry;
+    if (!entryFromJson(item, &entry)) return false;
+    decoded.entries.push_back(std::move(entry));
+  }
+
+  const cJSON* complete_frontier = json::get(payload, "cfg_complete_vv");
+  if (complete_frontier) {
+    if (!mapFromJson(complete_frontier, &decoded.complete_frontier)) return false;
+    decoded.has_complete_frontier = true;
+  }
+  *out = std::move(decoded);
+  return true;
+}
+
+
 
 // K = BLAKE2b-256(pin || salt)
 std::array<uint8_t, 32> joinKey(const std::string& pin, const Bytes& salt) {
@@ -136,9 +617,45 @@ void sendJoinFrame(const ConnPtr& conn, const cJSON* msg) {
   conn->send(f);
 }
 
-const char* const kDuties[] = {"telegram", "mqtt_bridge"};
-
 }  // namespace
+
+bool projectMeshRuntimeJson(const std::string& runtime_json, std::string* projected_json) {
+  if (!projected_json || runtime_json.size() > kRuntimeInputMaxBytes) return false;
+  auto source = json::parse(runtime_json);
+  if (!source || !cJSON_IsObject(source.get())) return false;
+  auto projected = runtimeHealthObject(source.get());
+  if (!projected) projected = json::obj();
+  const cJSON* components = json::get(source.get(), "components");
+  if (components) {
+    auto clean = componentsProjection(components);
+    if (clean) json::setItem(projected.get(), "components", std::move(clean));
+  }
+  for (const char* key : {"process_recovery", "recovery_helper", "kiosk", "recovery",
+                          "windows", "ios_compat", "safe_mode", "runtime", "camera",
+                          "avc_encode", "avc_decode", "avc_commissioning", "media_source",
+                          "media_playback", "sip"}) {
+    const cJSON* section = json::get(source.get(), key);
+    if (!cJSON_IsObject(section)) continue;
+    auto clean = runtimeHealthObject(section);
+    if (clean) json::setItem(projected.get(), key, std::move(clean));
+  }
+  for (const char* key : {"device_alert", "emergency_presentation"}) {
+    const cJSON* section = json::get(source.get(), key);
+    if (!cJSON_IsObject(section)) continue;
+    auto clean = deviceAlertProjection(section);
+    if (clean) json::setItem(projected.get(), key, std::move(clean));
+  }
+  const cJSON* ui_style = json::get(source.get(), "ui_style");
+  if (ui_style) {
+    auto clean = uiStyleProjection(ui_style);
+    if (!clean) return false;
+    json::setItem(projected.get(), "ui_style", std::move(clean));
+  }
+  const std::string encoded = json::dump(projected.get());
+  if (encoded.size() > kRuntimeProjectionMaxBytes) return false;
+  *projected_json = encoded;
+  return true;
+}
 
 // ============================================================================
 
@@ -155,21 +672,21 @@ struct Mesh::Impl {
   Callbacks cbs;
   bool running = false;
 
-  // ---- 成員表 ----
+
   struct Peer {
     PeerInfo info;
-    int64_t last_adv_mono = 0;  // (epoch, hb_seq) が前進したローカル時刻
+    int64_t last_adv_mono = 0;
   };
-  std::map<std::string, Peer> peers;  // 自分含む
+  std::map<std::string, Peer> peers;
 
-  // ---- 接続 ----
-  std::map<std::string, std::shared_ptr<SecureChannel>> chans;  // 確立済み peer_id → chan
-  std::vector<std::shared_ptr<SecureChannel>> pending;          // 握手中
-  std::set<std::string> dialing;                                // connect() 応答待ちの addr
-  std::set<std::string> known_addrs;                            // 接続候補 addr
-  std::map<std::string, std::string> addr_owner;                // addr → node_id (既知分)
 
-  // ---- 選主 ----
+  std::map<std::string, std::shared_ptr<SecureChannel>> chans;
+  std::vector<std::shared_ptr<SecureChannel>> pending;
+  std::set<std::string> dialing;
+  std::set<std::string> known_addrs;
+  std::map<std::string, std::string> addr_owner;
+
+
   struct DutyState {
     std::string leader;
     int64_t last_claim_mono = -(int64_t{1} << 60);
@@ -177,7 +694,7 @@ struct Mesh::Impl {
   };
   std::map<std::string, DutyState> duties;
 
-  // ---- 配対 (host) ----
+
   struct Token {
     std::string pin;
     int64_t expires_mono = 0;
@@ -185,7 +702,7 @@ struct Mesh::Impl {
     bool active = false;
   } token;
 
-  // 受理直後の生接続 (握手/JOIN の種別判定前 + JOIN 進行中)
+
   struct Inbound {
     ConnPtr conn;
     Bytes challenge, salt;
@@ -193,7 +710,7 @@ struct Mesh::Impl {
   };
   std::vector<std::shared_ptr<Inbound>> inbound;
 
-  // ---- 配対 (joiner) ----
+
   struct JoinRun {
     ConnPtr conn;
     std::string pin;
@@ -205,47 +722,47 @@ struct Mesh::Impl {
   };
   std::shared_ptr<JoinRun> join;
 
-  // ---- 配対 (発見 → 招待 push; QR/承認/配対モード) ----
-  std::array<uint8_t, 32> pair_sk_{};   // 未配対時の一時 X25519 秘密鍵
-  std::array<uint8_t, 32> pair_pk_{};   // 対応公開鍵 (PAIR-ANNOUNCE / QR で公開)
+
+  std::array<uint8_t, 32> pair_sk_{};
+  std::array<uint8_t, 32> pair_pk_{};
   bool pair_keys_ready_ = false;
   struct Pending {
     std::string id, addr, name, role, pk;
     int64_t last_seen = 0;
   };
-  std::map<std::string, Pending> pending_;  // id → 近隣の未配対デバイス
-  int64_t pairing_mode_until_ = 0;          // >now = 配対モード中 (発見即自動招待)
-  static constexpr int64_t kPendingTtlMs = 30000;  // これ以上告知が途絶えたら一覧から除去
+  std::map<std::string, Pending> pending_;
+  int64_t pairing_mode_until_ = 0;
+  static constexpr int64_t kPendingTtlMs = 30000;
 
-  // ---- 快照 ----
-  std::function<Bytes()> snap_provider;  // 自ノードの最新 JPEG (Node が配線)
+
+  std::function<Bytes()> snap_provider;
   struct SnapWait {
     std::function<void(Bytes)> cb;
     uint64_t timeout_id = 0;
   };
-  std::map<uint64_t, SnapWait> snap_waits;  // rid → 応答待ち
+  std::map<uint64_t, SnapWait> snap_waits;
   uint64_t snap_rid = 0;
 
-  // ---- 資産 blob (BLOB_REQ/RESP — SNAP の一般化) ----
-  std::function<Bytes(const std::string&)> blob_provider;  // hash → 実体 (Node が配線)
-  struct BlobWait {                       // 1 peer への 1 取得試行 (失敗で次の peer へ)
+
+  std::function<Bytes(const std::string&)> blob_provider;
+  struct BlobWait {
     std::string hash;
-    std::vector<std::string> remaining;   // まだ試していない peer (順に試す)
-    std::map<uint64_t, Bytes> chunks;     // seq → 生バイト
-    uint64_t total_chunks = 0;            // 応答が宣言したチャンク数 (0 = 未着)
-    size_t total_bytes = 0;               // 受領済み生バイト (上限監視)
+    std::vector<std::string> remaining;
+    std::map<uint64_t, Bytes> chunks;
+    uint64_t total_chunks = 0;
+    size_t total_bytes = 0;
     std::function<void(Bytes)> cb;
     uint64_t timeout_id = 0;
   };
-  std::map<uint64_t, BlobWait> blob_waits;  // rid → 取得試行
+  std::map<uint64_t, BlobWait> blob_waits;
   uint64_t blob_rid = 0;
 
   std::vector<uint64_t> timers;
-  uint64_t sync_rr = 0;  // anti-entropy の相手選択 (決定的 round-robin)
-  // 生存トークン: post 済みラムダ/接続コールバックが Impl 破棄後に this へ触れないための弱参照
+  uint64_t sync_rr = 0;
+
   std::shared_ptr<char> alive = std::make_shared<char>(0);
 
-  // Impl 生存確認付きの post (`fn` は Impl メンバを触ってよい)
+
   void postGuarded(std::function<void()> fn) {
     std::weak_ptr<char> w = alive;
     loop.post([w, fn] {
@@ -261,21 +778,30 @@ struct Mesh::Impl {
   int64_t now() { return clock.monoMs(); }
   int64_t hsTimeoutMs() const { return st.reconnect_ms; }
 
-  // ------------------------------------------------------------------ 起動/停止
+
 
   void start() {
     if (running) return;
     running = true;
-    // 自分の成員レコード
+
     Peer& self = peers[st.node_id];
     self.info.id = st.node_id;
-    self.info.addrs = {st.advertise_addr};
+    self.info.addrs = st.advertise_addrs;
+    if (self.info.addrs.empty()) self.info.addrs.push_back(st.advertise_addr);
+    if (!st.advertise_addr.empty() && self.info.addrs.front() != st.advertise_addr) {
+      self.info.addrs.erase(std::remove(self.info.addrs.begin(), self.info.addrs.end(),
+                                        st.advertise_addr), self.info.addrs.end());
+      self.info.addrs.insert(self.info.addrs.begin(), st.advertise_addr);
+    }
     self.info.epoch = st.epoch;
     self.info.hb_seq = 0;
     self.info.hb_hlc = hlc.tick();
     self.info.status = "alive";
     self.info.caps_json = st.caps_json;
+    self.info.ui_manifest_json = st.ui_manifest_json;
+    self.info.runtime_json = st.runtime_json;
     self.info.role = st.role;
+    self.info.door = st.door;
     self.info.sw_version = st.sw_version;
     self.last_adv_mono = now();
 
@@ -286,16 +812,16 @@ struct Mesh::Impl {
     tp.listen(st.listen_addr, [this](ConnPtr c) { onAccept(std::move(c)); });
     if (disc) {
       disc->start([this](const DiscoveredPeer& p) { onDiscovered(p); });
-      // 告知モードは announce() より前に確定させる — announce の初回同期送信で
-      // 未配対機が誤って集群 HELLO を撒き、相手に幽霊 peer を作らせないため。
+
+
       std::weak_ptr<char> w = alive;
       if (isPaired()) {
-        // 配対済み: 近隣の未配対デバイスを発見して一覧化 (承認/配対モードで招待)
+
         disc->setPairFound([this, w](const PairBeacon& pb) {
           if (!w.expired() && running) onPairFound(pb);
         });
       } else {
-        // 未配対: 集群 HELLO ではなく PAIR-ANNOUNCE を撒いて招待を待つ
+
         ensurePairKeys();
         disc->setPairAnnounce(true, pairName(), st.role,
                               hexEncode(pair_pk_.data(), pair_pk_.size()));
@@ -319,7 +845,7 @@ struct Mesh::Impl {
     running = false;
     for (uint64_t id : timers) loop.cancel(id);
     timers.clear();
-    // コールバックを外してから閉じる (post 済みラムダから this へ触れないように)
+
     for (auto& kv : chans) {
       kv.second->setCallbacks({});
       kv.second->close();
@@ -335,7 +861,7 @@ struct Mesh::Impl {
       ib->conn->close();
     }
     inbound.clear();
-    // 快照/blob 待ちは失敗で解決してから捨てる (呼び出し側を待たせ続けない)
+
     for (auto& kv : snap_waits) {
       loop.cancel(kv.second.timeout_id);
       if (kv.second.cb) kv.second.cb(Bytes());
@@ -355,7 +881,7 @@ struct Mesh::Impl {
     return a == st.advertise_addr || a == st.listen_addr;
   }
 
-  // ------------------------------------------------------------------ 接続受理
+
 
   void onAccept(ConnPtr conn) {
     if (!running) {
@@ -373,7 +899,7 @@ struct Mesh::Impl {
         [this, wib] {
           if (auto p = wib.lock()) dropInbound(p);
         });
-    // 何も言ってこない接続はタイムアウトで捨てる
+
     std::weak_ptr<char> wa = alive;
     loop.postDelayed(hsTimeoutMs() * 4, [this, wa, wib] {
       if (wa.expired()) return;
@@ -388,21 +914,21 @@ struct Mesh::Impl {
     inbound.erase(std::remove(inbound.begin(), inbound.end(), ib), inbound.end());
   }
 
-  // 初回フレームの種別で JOIN (平文) と暗号握手を振り分ける
+
   void onInboundFrame(const std::shared_ptr<Inbound>& ib, const Bytes& f) {
     if (f.empty()) return;
     if (f[0] == kFrameJoin) {
       handleJoinHostFrame(ib, f);
       return;
     }
-    // 暗号チャネルへ昇格 (以降のフレームは channel が受ける)
+
     dropInbound(ib);
     auto ch = makeChannel(ib->conn, /*initiator=*/false);
     ch->start();
     ch->handleRawFrame(f);
   }
 
-  // ------------------------------------------------------------------ 暗号チャネル
+
 
   std::shared_ptr<SecureChannel> makeChannel(ConnPtr conn, bool initiator) {
     auto ch = std::make_shared<SecureChannel>(loop, std::move(conn), initiator, st.psk,
@@ -432,13 +958,13 @@ struct Mesh::Impl {
   void onChanEstablished(const std::shared_ptr<SecureChannel>& ch) {
     pending.erase(std::remove(pending.begin(), pending.end(), ch), pending.end());
     const std::string pid = ch->peerId();
-    if (pid.empty() || pid == st.node_id) {  // 自己接続は捨てる
+    if (pid.empty() || pid == st.node_id) {
       detachAndClose(ch);
       return;
     }
     auto it = chans.find(pid);
     if (it != chans.end() && it->second != ch) {
-      // 同時双方向接続の重複解消: node_id が小さい側の発起を残す規約
+
       auto initiatorId = [&](const std::shared_ptr<SecureChannel>& c) {
         return c->isInitiator() ? st.node_id : pid;
       };
@@ -453,14 +979,14 @@ struct Mesh::Impl {
       chans[pid] = ch;
     }
     Peer& p = peers[pid];
-    if (p.info.id.empty()) {  // 握手で初めて知ったノード
+    if (p.info.id.empty()) {
       p.info.id = pid;
       p.info.status = "alive";
       p.last_adv_mono = now();
     }
     p.info.connected = true;
     if (ch->isInitiator()) rememberAddr(ch->remoteAddr(), pid);
-    // 即時に成員表と anti-entropy を交換 (収束の高速化)
+
     sendPeersTo(*ch);
     sendSyncReq(*ch);
     if (cbs.on_peers_changed) cbs.on_peers_changed();
@@ -500,7 +1026,7 @@ struct Mesh::Impl {
     }
   }
 
-  // ------------------------------------------------------------------ 接続維持
+
 
   bool dialInProgress(const std::string& addr) const {
     if (dialing.count(addr)) return true;
@@ -514,7 +1040,7 @@ struct Mesh::Impl {
     if (!running) return;
     const int budget = st.max_neighbors - static_cast<int>(chans.size());
     if (budget <= 0) return;
-    // 候補: (優先度, 整列キー, addr)。優先: seed → leader → node_id 順 → 未知アドレス
+
     std::vector<std::tuple<int, std::string, std::string>> cand;
     std::set<std::string> leader_ids;
     for (const auto& d : duties) {
@@ -542,11 +1068,11 @@ struct Mesh::Impl {
       const int pri = seed ? 0 : (leader_ids.count(p.info.id) ? 1 : 2);
       cand.emplace_back(pri, p.info.id, addr);
     }
-    for (const auto& a : known_addrs) {  // 持ち主未知のアドレス (bootstrap 用)
+    for (const auto& a : known_addrs) {
       if (covered_addrs.count(a) || dialInProgress(a)) continue;
       auto own = addr_owner.find(a);
       if (own != addr_owner.end() && (chans.count(own->second) || own->second == st.node_id)) {
-        continue;  // 既に接続済みのノードの別アドレス
+        continue;
       }
       cand.emplace_back(3, a, a);
     }
@@ -567,7 +1093,7 @@ struct Mesh::Impl {
         return;
       }
       dialing.erase(addr);
-      if (!conn) return;  // 次の maintain で再試行
+      if (!conn) return;
       if (!running) {
         conn->close();
         return;
@@ -576,7 +1102,7 @@ struct Mesh::Impl {
     });
   }
 
-  // ------------------------------------------------------------------ 心跳と生死
+
 
   void heartbeatTick() {
     Peer& self = peers[st.node_id];
@@ -623,7 +1149,7 @@ struct Mesh::Impl {
     if (leader_dirty) leaderTick();
   }
 
-  // hb 前進の観測 (PING/PONG/PEERS 共通)。前進したら true。
+
   bool observeHb(const std::string& id, uint64_t epoch, uint64_t hb, const std::string& hb_hlc) {
     if (id.empty() || id == st.node_id) return false;
     if (!hb_hlc.empty()) hlc.observe(hb_hlc);
@@ -638,7 +1164,7 @@ struct Mesh::Impl {
     p.info.hb_seq = hb;
     p.info.hb_hlc = hb_hlc;
     p.last_adv_mono = now();
-    if (p.info.status == "dead") {  // epoch 増加 (再起動) 含め、前進が見えたら即復活
+    if (p.info.status == "dead") {
       p.info.status = "alive";
       if (cbs.on_peer_alive_changed) cbs.on_peer_alive_changed(id, true);
       if (cbs.on_peers_changed) cbs.on_peers_changed();
@@ -670,7 +1196,10 @@ struct Mesh::Impl {
       json::set(e, "status", p.status);
       json::set(e, "caps", p.caps_json);
       json::set(e, "role", p.role);
+      json::set(e, "door", p.door);
       json::set(e, "sw", p.sw_version);
+      json::set(e, "ui_manifest", p.ui_manifest_json);
+      json::set(e, "runtime", p.runtime_json);
     }
     ch.sendMessage(json::dump(o.get()));
   }
@@ -679,20 +1208,45 @@ struct Mesh::Impl {
     for (auto& kv : chans) sendPeersTo(*kv.second);
   }
 
-  void handlePeers(const cJSON* doc) {
+  void handlePeers(const cJSON* doc, const std::string& sender) {
     const cJSON* arr = json::get(doc, "peers");
+    if (!cJSON_IsArray(arr)) return;
+    std::vector<WireHeartbeat> heartbeats;
+    std::set<std::string> ids;
     const cJSON* e = nullptr;
+    cJSON_ArrayForEach(e, arr) {
+      WireHeartbeat heartbeat;
+      if (!heartbeatFromJson(e, /*allow_empty_hlc=*/true, &heartbeat) ||
+          !ids.insert(heartbeat.id).second)
+        return;
+      heartbeats.push_back(std::move(heartbeat));
+    }
+
     bool leader_dirty = false;
     bool new_node = false;
+    bool peer_details_changed = false;
+    size_t heartbeat_index = 0;
     cJSON_ArrayForEach(e, arr) {
-      const std::string id = json::getString(e, "id");
-      if (id.empty() || id == st.node_id) continue;  // 自分の情報は自分が正
+      const WireHeartbeat& heartbeat = heartbeats[heartbeat_index++];
+      const std::string& id = heartbeat.id;
+      if (id.empty() || id == st.node_id) continue;
       const bool fresh = peers.find(id) == peers.end();
-      const bool advanced = observeHb(id, static_cast<uint64_t>(json::getInt(e, "epoch")),
-                                      static_cast<uint64_t>(json::getInt(e, "hb")),
-                                      json::getString(e, "hlc"));
+      const bool advanced =
+          observeHb(id, heartbeat.epoch, heartbeat.sequence, heartbeat.hlc);
       Peer& p = peers[id];
-      if (fresh || advanced) {  // epoch/hb_seq の max 合成 — 古い情報では巻き戻らない
+      const auto reported_version = std::make_pair(heartbeat.epoch, heartbeat.sequence);
+      const auto current_version = std::make_pair(p.info.epoch, p.info.hb_seq);
+      // A directly connected node may revise its own runtime details at the current heartbeat.
+      // Relayed records still require a newer heartbeat so one peer cannot rewrite another.
+      const bool current_self_report = id == sender && reported_version == current_version;
+      if (fresh || advanced || current_self_report) {
+        const auto old_addrs = p.info.addrs;
+        const std::string old_caps = p.info.caps_json;
+        const std::string old_role = p.info.role;
+        const std::string old_door = p.info.door;
+        const std::string old_sw = p.info.sw_version;
+        const std::string old_manifest = p.info.ui_manifest_json;
+        const std::string old_runtime = p.info.runtime_json;
         std::vector<std::string> addrs;
         const cJSON* a = nullptr;
         cJSON_ArrayForEach(a, json::get(e, "addrs")) {
@@ -706,10 +1260,26 @@ struct Mesh::Impl {
           leader_dirty = true;
         }
         p.info.role = json::getString(e, "role", p.info.role);
+        if (heartbeat.has_door) p.info.door = heartbeat.door;
         p.info.sw_version = json::getString(e, "sw", p.info.sw_version);
+        p.info.ui_manifest_json = json::getString(e, "ui_manifest", p.info.ui_manifest_json);
+        const cJSON* runtime = json::get(e, "runtime");
+        if (cJSON_IsString(runtime) && runtime->valuestring) {
+          std::string projected;
+          if (projectMeshRuntimeJson(runtime->valuestring, &projected))
+            p.info.runtime_json = std::move(projected);
+        }
+        if (p.info.addrs != old_addrs || p.info.caps_json != old_caps ||
+            p.info.role != old_role || p.info.door != old_door ||
+            p.info.sw_version != old_sw ||
+            p.info.ui_manifest_json != old_manifest || p.info.runtime_json != old_runtime)
+          peer_details_changed = true;
       }
       if (fresh) new_node = true;
     }
+    // UDP discovery initially provides only identity/address. The following PEERS message
+    // supplies role, capabilities, and all interfaces, which still requires a UI refresh.
+    if (peer_details_changed && cbs.on_peers_changed) cbs.on_peers_changed();
     if (leader_dirty) leaderTick();
     if (new_node) {
       postGuarded([this] {
@@ -718,15 +1288,18 @@ struct Mesh::Impl {
     }
   }
 
-  // ------------------------------------------------------------------ 選主
+
 
   static bool capsEligible(const cJSON* caps, const std::string& duty) {
-    if (duty == "telegram") {
+    if (duty == "telegram" || duty == "web_push") {
+      const char* ready = duty == "telegram" ? "telegram_ready" : "web_push_ready";
       return json::getBool(caps, "tls12") && json::getBool(caps, "wan") &&
-             json::getBool(caps, "mains_power") && json::getBool(caps, "wall_clock_sane", true);
+             json::getBool(caps, "mains_power") && json::getBool(caps, "wall_clock_sane") &&
+             json::getBool(caps, ready);
     }
     if (duty == "mqtt_bridge") {
-      return json::getBool(caps, "mqtt_reachable") && json::getBool(caps, "mains_power");
+      return json::getBool(caps, "mqtt_reachable") && json::getBool(caps, "mains_power") &&
+             json::getBool(caps, "mqtt_ready");
     }
     return false;
   }
@@ -735,7 +1308,7 @@ struct Mesh::Impl {
     auto it = peers.find(id);
     if (it == peers.end()) return 0;
     json::Doc caps = json::parse(it->second.info.caps_json);
-    return caps ? json::getInt(caps.get(), "cpu_score") : 0;  // rank = cpu_score (欠損 0)
+    return caps ? json::getInt(caps.get(), "cpu_score") : 0;
   }
 
   bool notDead(const std::string& id) const {
@@ -744,7 +1317,7 @@ struct Mesh::Impl {
     return it != peers.end() && it->second.info.status != "dead";
   }
 
-  // duty の確定的勝者 = eligible な生存ノードのうち (rank, node_id) 最大
+
   std::string computeLeader(const std::string& duty) const {
     std::string best;
     int64_t best_rank = 0;
@@ -774,7 +1347,7 @@ struct Mesh::Impl {
       DutyState& d = duties[duty];
       const std::string w = computeLeader(duty);
       if (w == st.node_id && !w.empty()) {
-        // 自分が leader だと信じる → claim_ttl/3 周期の CLAIM 広播 (lease 更新)
+
         if (d.leader != w) d.term++;
         setLeader(duty, w);
         d.last_claim_mono = now();
@@ -782,7 +1355,7 @@ struct Mesh::Impl {
       } else {
         const bool lease_ok = !d.leader.empty() && notDead(d.leader) &&
                               (now() - d.last_claim_mono) < st.claim_ttl_ms;
-        if (!lease_ok) setLeader(duty, w);  // lease 切れ → 再計算に追随
+        if (!lease_ok) setLeader(duty, w);
       }
     }
   }
@@ -801,11 +1374,14 @@ struct Mesh::Impl {
   void handleClaim(const cJSON* doc) {
     const std::string duty = json::getString(doc, "duty");
     const std::string leader = json::getString(doc, "leader");
-    const int64_t rank = json::getInt(doc, "rank");
-    const uint64_t term = static_cast<uint64_t>(json::getInt(doc, "term"));
-    if (duty.empty() || leader.empty()) return;
+    int64_t rank = 0;
+    uint64_t term = 0;
+    if (!dutyValid(duty) || !nodeIdValid(leader.c_str()) ||
+        !wireSignedInteger(json::get(doc, "rank"), &rank) ||
+        !wireSequence(json::get(doc, "term"), true, &term))
+      return;
     DutyState& d = duties[duty];
-    if (leader == d.leader) {  // 現 leader の lease 更新
+    if (leader == d.leader) {
       d.last_claim_mono = now();
       d.term = std::max(d.term, term);
       return;
@@ -813,7 +1389,7 @@ struct Mesh::Impl {
     if (!notDead(leader)) return;
     const bool lease_expired = d.leader.empty() || !notDead(d.leader) ||
                                (now() - d.last_claim_mono) >= st.claim_ttl_ms;
-    // より高い (rank, id) の CLAIM で追随。lease 切れなら無条件に受ける。
+
     if (lease_expired ||
         std::make_tuple(rank, leader) > std::make_tuple(rankOf(d.leader), d.leader)) {
       setLeader(duty, leader);
@@ -822,14 +1398,14 @@ struct Mesh::Impl {
     }
   }
 
-  // ------------------------------------------------------------------ 同期
+
 
   void syncTick() {
     if (chans.empty()) return;
     std::vector<std::string> ids;
     ids.reserve(chans.size());
     for (const auto& kv : chans) ids.push_back(kv.first);
-    // 決定的な round-robin (テスト再現性のため乱数を使わない)
+
     const std::string& pick = ids[sync_rr++ % ids.size()];
     sendSyncReq(*chans[pick]);
   }
@@ -842,22 +1418,25 @@ struct Mesh::Impl {
     ch.sendMessage(json::dump(o.get()));
   }
 
-  // 相手の vv/heads に対する差分を SYNC_RESP に詰める
+
   json::Doc buildSyncResp(const cJSON* remote, bool fin) {
+    VersionVector rvv;
+    std::map<std::string, uint64_t> rheads;
+    if (!remote || !mapFromJson(json::get(remote, "vv"), &rvv) ||
+        !mapFromJson(json::get(remote, "heads"), &rheads))
+      return {};
+
     auto o = json::obj();
     json::set(o.get(), "t", "SYNC_RESP");
     json::setBool(o.get(), "fin", fin);
-    if (!fin) {  // 受けた側は差分を返しつつ自分の vv/heads も伝える (push-pull)
+    // Config deltas are intentionally unbounded. This explicit frontier lets a receiver
+    // acknowledge overwritten same-key sequences without granting that privilege to live pushes.
+    mapToJson(json::addObj(o.get(), "cfg_complete_vv"), config.versionVector());
+    if (!fin) {
       mapToJson(json::addObj(o.get(), "vv"), config.versionVector());
       mapToJson(json::addObj(o.get(), "heads"), events.heads());
     }
     cJSON* cfg = json::addArr(o.get(), "cfg");
-    VersionVector rvv;
-    std::map<std::string, uint64_t> rheads;
-    if (remote) {
-      rvv = mapFromJson(json::get(remote, "vv"));
-      rheads = mapFromJson(json::get(remote, "heads"));
-    }
     for (const auto& e : config.deltaSince(rvv)) json::push(cfg, entryToJson(e));
     cJSON* ev = json::addArr(o.get(), "ev");
     for (const auto& r : events.deltaSince(rheads, kSyncEventLimit)) {
@@ -866,30 +1445,60 @@ struct Mesh::Impl {
     return o;
   }
 
-  void applySyncPayload(const cJSON* doc) {
-    const cJSON* e = nullptr;
-    cJSON_ArrayForEach(e, json::get(doc, "cfg")) { config.applyRemote(entryFromJson(e)); }
-    cJSON_ArrayForEach(e, json::get(doc, "ev")) {
-      EventRecord rec = eventFromJson(e);
-      if (rec.origin.empty() || rec.seq == 0) continue;
-      if (events.applyRemote(rec)) {
-        if (cbs.on_event) cbs.on_event(rec);
-      } else if (!rec.notify_json.empty()) {
-        events.mergeNotify(rec.origin, rec.seq, rec.notify_json);  // 通知回執の LWW マージ
+  bool applySyncPayload(const cJSON* doc) {
+    ConfigWirePayload config_payload;
+    if (!configPayloadFromJson(doc, &config_payload)) return false;
+
+    VersionVector unused;
+    const cJSON* remote_vv = json::get(doc, "vv");
+    const cJSON* remote_heads = json::get(doc, "heads");
+    const cJSON* fin_value = json::get(doc, "fin");
+    const bool fin = fin_value ? cJSON_IsTrue(fin_value) : true;
+    if (fin_value && !cJSON_IsBool(fin_value)) return false;
+    if ((remote_vv && !mapFromJson(remote_vv, &unused)) ||
+        (remote_heads && !mapFromJson(remote_heads, &unused)) ||
+        (!fin && (!remote_vv || !remote_heads)))
+      return false;
+
+    std::vector<EventRecord> event_payload;
+    if (!eventsFromJson(json::get(doc, "ev"), &event_payload)) return false;
+
+    if (config_payload.has_complete_frontier) {
+      config.applyRemoteSnapshot(config_payload.entries, config_payload.complete_frontier);
+    } else {
+      config.applyRemoteBatch(config_payload.entries);
+    }
+    if (!config.lastMutationCommitted()) return false;
+
+    for (const EventRecord& rec : event_payload) {
+      std::vector<EventRecord> applied;
+      const bool inserted = events.applyRemote(rec, &applied);
+      if (cbs.on_event)
+        for (const auto& record : applied) cbs.on_event(record);
+      if (!inserted && !rec.notify_json.empty()) {
+        events.mergeNotify(rec.origin, rec.seq, rec.notify_json);
       }
     }
+    return true;
   }
 
   void handleSyncReq(SecureChannel& ch, const cJSON* doc) {
     auto resp = buildSyncResp(doc, /*fin=*/false);
+    if (!resp) {
+      DB_LOGW("mesh", "rejected malformed sync request from " + ch.peerId());
+      return;
+    }
     ch.sendMessage(json::dump(resp.get()));
   }
 
   void handleSyncResp(SecureChannel& ch, const cJSON* doc) {
-    applySyncPayload(doc);
+    if (!applySyncPayload(doc)) {
+      DB_LOGW("mesh", "rejected malformed sync response from " + ch.peerId());
+      return;
+    }
     if (!json::getBool(doc, "fin", true) && json::get(doc, "vv")) {
-      auto resp = buildSyncResp(doc, /*fin=*/true);  // pull の返し (3 往復目で完結)
-      ch.sendMessage(json::dump(resp.get()));
+      auto resp = buildSyncResp(doc, /*fin=*/true);
+      if (resp) ch.sendMessage(json::dump(resp.get()));
     }
   }
 
@@ -905,16 +1514,23 @@ struct Mesh::Impl {
 
   void handleEvent(SecureChannel& src, const cJSON* doc) {
     const cJSON* eo = json::get(doc, "ev");
-    if (!eo) return;
-    EventRecord rec = eventFromJson(eo);
-    if (rec.origin.empty() || rec.seq == 0) return;
-    if (!events.applyRemote(rec)) {
-      if (!rec.notify_json.empty()) events.mergeNotify(rec.origin, rec.seq, rec.notify_json);
-      return;  // 既知 → 転送もしない (flood 抑制)
+    EventRecord rec;
+    int64_t ttl = 1;
+    const cJSON* wire_ttl = json::get(doc, "ttl");
+    if (!eventFromJson(eo, &rec) ||
+        (wire_ttl && (!wireSignedInteger(wire_ttl, &ttl) || ttl < 1 || ttl > kEventTtl))) {
+      DB_LOGW("mesh", "rejected malformed event from " + src.peerId());
+      return;
     }
-    if (cbs.on_event) cbs.on_event(rec);
-    const int64_t ttl = json::getInt(doc, "ttl", 1);
-    if (ttl > 1) {  // 自分の接続先へ転送 (発信元は除く)
+    std::vector<EventRecord> applied;
+    const bool inserted = events.applyRemote(rec, &applied);
+    if (cbs.on_event)
+      for (const auto& record : applied) cbs.on_event(record);
+    if (!inserted) {
+      if (!rec.notify_json.empty()) events.mergeNotify(rec.origin, rec.seq, rec.notify_json);
+      return;
+    }
+    if (ttl > 1) {
       auto o = json::obj();
       json::set(o.get(), "t", "EVENT");
       json::set(o.get(), "ttl", ttl - 1);
@@ -964,17 +1580,17 @@ struct Mesh::Impl {
     for (auto& kv : chans) kv.second->sendMessage(msg);
   }
 
-  // ------------------------------------------------------------------ 快照
+
 
   void fetchSnapshot(const std::string& node_id, std::function<void(Bytes)> cb) {
-    if (node_id == st.node_id) {  // 自分の快照は provider を直接
+    if (node_id == st.node_id) {
       Bytes jpeg = snap_provider ? snap_provider() : Bytes();
       if (jpeg.size() > kSnapMaxBytes) jpeg.clear();
       loop.post([cb, jpeg] { cb(jpeg); });
       return;
     }
     auto it = chans.find(node_id);
-    if (it == chans.end()) {  // 直連チャネル無し (MVP: 中継しない) → 即失敗
+    if (it == chans.end()) {
       DB_LOGW("mesh", "fetchSnapshot: no direct channel to " + node_id.substr(0, 8));
       loop.post([cb] { cb(Bytes()); });
       return;
@@ -1000,18 +1616,18 @@ struct Mesh::Impl {
   void handleSnapReq(SecureChannel& ch, const cJSON* doc) {
     const int64_t rid = json::getInt(doc, "rid");
     Bytes jpeg = snap_provider ? snap_provider() : Bytes();
-    if (jpeg.size() > kSnapMaxBytes) jpeg.clear();  // 上限超は失敗扱い (空応答)
+    if (jpeg.size() > kSnapMaxBytes) jpeg.clear();
     auto o = json::obj();
     json::set(o.get(), "t", "SNAP_RESP");
     json::set(o.get(), "rid", rid);
-    json::set(o.get(), "jpeg", base64Encode(jpeg));  // 空 = 提供不可
+    json::set(o.get(), "jpeg", base64Encode(jpeg));
     ch.sendMessage(json::dump(o.get()));
   }
 
   void handleSnapResp(const cJSON* doc) {
     const uint64_t rid = static_cast<uint64_t>(json::getInt(doc, "rid"));
     auto it = snap_waits.find(rid);
-    if (it == snap_waits.end()) return;  // タイムアウト済み/未知
+    if (it == snap_waits.end()) return;
     loop.cancel(it->second.timeout_id);
     auto done = std::move(it->second.cb);
     snap_waits.erase(it);
@@ -1020,16 +1636,16 @@ struct Mesh::Impl {
     if (done) done(std::move(jpeg));
   }
 
-  // ------------------------------------------------------------------ 資産 blob
-  // BLOB_REQ{rid,hash} → 保持ノードが BLOB_RESP{rid,hash,found,seq,n,data(base64)} を
-  // チャンク列で返す (found:false は 1 通)。取得側は直連 peer を順に試す (1 試行 1 rid)。
+
+
+
 
   void fetchBlob(const std::string& hash, std::function<void(Bytes)> cb) {
     if (hash.empty()) {
       loop.post([cb] { cb(Bytes()); });
       return;
     }
-    // 自分が持っていれば provider から直接
+
     if (blob_provider) {
       Bytes local = blob_provider(hash);
       if (!local.empty() && local.size() <= kBlobMaxBytes) {
@@ -1037,22 +1653,22 @@ struct Mesh::Impl {
         return;
       }
     }
-    std::vector<std::string> candidates;  // 直連 peer (map 順 = node_id 順で決定的)
+    std::vector<std::string> candidates;
     for (const auto& kv : chans) candidates.push_back(kv.first);
     tryNextBlobPeer(hash, std::move(candidates), std::move(cb));
   }
 
   void tryNextBlobPeer(const std::string& hash, std::vector<std::string> remaining,
                        std::function<void(Bytes)> cb) {
-    // 先頭から、直連チャネルが今も生きている peer を選ぶ
+
     std::shared_ptr<SecureChannel> ch;
     while (!remaining.empty() && !ch) {
       auto it = chans.find(remaining.front());
       remaining.erase(remaining.begin());
       if (it != chans.end()) ch = it->second;
     }
-    if (!ch) {  // 候補が尽きた
-      DB_LOGW("mesh", "fetchBlob: 誰も持っていない " + hash.substr(0, 12));
+    if (!ch) {
+      DB_LOGW("mesh", "fetchBlob: no peer has " + hash.substr(0, 12));
       loop.post([cb] { cb(Bytes()); });
       return;
     }
@@ -1073,7 +1689,7 @@ struct Mesh::Impl {
     ch->sendMessage(json::dump(o.get()));
   }
 
-  // 現在の試行を失敗にして次の peer へ。候補が尽きたら空 Bytes で解決。
+
   void failBlobAttempt(uint64_t rid, bool cancel_timer) {
     auto it = blob_waits.find(rid);
     if (it == blob_waits.end()) return;
@@ -1089,7 +1705,7 @@ struct Mesh::Impl {
     const int64_t rid = json::getInt(doc, "rid");
     const std::string hash = json::getString(doc, "hash");
     Bytes data = blob_provider ? blob_provider(hash) : Bytes();
-    if (data.empty() || data.size() > kBlobMaxBytes) {  // 持っていない/上限超
+    if (data.empty() || data.size() > kBlobMaxBytes) {
       auto o = json::obj();
       json::set(o.get(), "t", "BLOB_RESP");
       json::set(o.get(), "rid", rid);
@@ -1117,10 +1733,10 @@ struct Mesh::Impl {
   void handleBlobResp(const cJSON* doc) {
     const uint64_t rid = static_cast<uint64_t>(json::getInt(doc, "rid"));
     auto it = blob_waits.find(rid);
-    if (it == blob_waits.end()) return;  // タイムアウト済み/未知
+    if (it == blob_waits.end()) return;
     BlobWait& w = it->second;
-    if (json::getString(doc, "hash") != w.hash) return;  // 不整合応答は無視
-    if (!json::getBool(doc, "found", false)) {           // この peer は持っていない → 次へ
+    if (json::getString(doc, "hash") != w.hash) return;
+    if (!json::getBool(doc, "found", false)) {
       failBlobAttempt(rid, /*cancel_timer=*/true);
       return;
     }
@@ -1129,17 +1745,17 @@ struct Mesh::Impl {
     Bytes chunk;
     if (n == 0 || seq >= n || !base64Decode(json::getString(doc, "data"), chunk) ||
         (w.total_chunks != 0 && w.total_chunks != n)) {
-      failBlobAttempt(rid, /*cancel_timer=*/true);  // 形式不正 → 次の peer へ
+      failBlobAttempt(rid, /*cancel_timer=*/true);
       return;
     }
     w.total_chunks = n;
     if (!w.chunks.count(seq)) w.total_bytes += chunk.size();
-    if (w.total_bytes > kBlobMaxBytes) {  // 上限超過 (異常応答)
+    if (w.total_bytes > kBlobMaxBytes) {
       failBlobAttempt(rid, /*cancel_timer=*/true);
       return;
     }
     w.chunks[seq] = std::move(chunk);
-    if (w.chunks.size() < w.total_chunks) return;  // まだ揃っていない
+    if (w.chunks.size() < w.total_chunks) return;
     Bytes data;
     data.reserve(w.total_bytes);
     for (auto& c : w.chunks) data.insert(data.end(), c.second.begin(), c.second.end());
@@ -1149,7 +1765,7 @@ struct Mesh::Impl {
     if (done) done(std::move(data));
   }
 
-  // ------------------------------------------------------------------ メッセージ分配
+
 
   void handleMessage(const std::shared_ptr<SecureChannel>& ch, const std::string& msg) {
     if (!running) return;
@@ -1160,12 +1776,11 @@ struct Mesh::Impl {
     }
     const std::string t = json::getString(doc.get(), "t");
     if (t == "PEERS") {
-      handlePeers(doc.get());
+      handlePeers(doc.get(), ch->peerId());
     } else if (t == "PING" || t == "PONG") {
-      observeHb(json::getString(doc.get(), "id"),
-                static_cast<uint64_t>(json::getInt(doc.get(), "epoch")),
-                static_cast<uint64_t>(json::getInt(doc.get(), "hb")),
-                json::getString(doc.get(), "hlc"));
+      WireHeartbeat heartbeat;
+      if (!heartbeatFromJson(doc.get(), /*allow_empty_hlc=*/false, &heartbeat)) return;
+      observeHb(heartbeat.id, heartbeat.epoch, heartbeat.sequence, heartbeat.hlc);
       if (t == "PING") {
         auto o = json::obj();
         json::set(o.get(), "t", "PONG");
@@ -1190,12 +1805,12 @@ struct Mesh::Impl {
       handleBlobResp(doc.get());
     } else if (t == "CMD") {
       if (cbs.on_command) {
-        cbs.on_command(json::getString(doc.get(), "from"), json::getString(doc.get(), "cmd"));
+        cbs.on_command(ch->peerId(), json::getString(doc.get(), "cmd"));
       }
-    }  // 未知の型は無視 (前方互換)
+    }
   }
 
-  // ------------------------------------------------------------------ 配対 host
+
 
   void sendJoinErr(const ConnPtr& conn, const std::string& err) {
     auto o = json::obj();
@@ -1209,7 +1824,7 @@ struct Mesh::Impl {
     if (!doc) return;
     const std::string t = json::getString(doc.get(), "t");
     if (t == "JOIN_REQ1") {
-      if (!isPaired()) {  // 未配対ノードは全ゼロ PSK を配ってしまう — 参加を拒否
+      if (!isPaired()) {
         sendJoinErr(ib->conn, "host_unpaired");
         return;
       }
@@ -1217,7 +1832,7 @@ struct Mesh::Impl {
         sendJoinErr(ib->conn, "no_token");
         return;
       }
-      if (now() >= token.expires_mono) {  // 期限切れ (10 分)
+      if (now() >= token.expires_mono) {
         token.active = false;
         sendJoinErr(ib->conn, "expired");
         return;
@@ -1244,11 +1859,11 @@ struct Mesh::Impl {
       const auto k = joinKey(token.pin, ib->salt);
       const auto expect = joinProof(k, ib->challenge, joiner_id);
       if (crypto_verify32(mac.data(), expect.data()) != 0) {
-        if (++token.fails >= 3) token.active = false;  // 3 回失敗で token 失効
+        if (++token.fails >= 3) token.active = false;
         sendJoinErr(ib->conn, "bad_pin");
         return;
       }
-      // 検証 OK → K で暗号化した {psk, seeds, 設定スナップショット} を配布
+
       const std::string plain = buildJoinPayloadJson();
       Bytes nonce = randomBytes(24);
       Bytes out(16 + plain.size());  // mac(16) || cipher
@@ -1259,11 +1874,11 @@ struct Mesh::Impl {
       json::set(o.get(), "n", hexEncode(nonce));
       json::set(o.get(), "c", hexEncode(out));
       sendJoinFrame(ib->conn, o.get());
-      token.active = false;  // 成功で消費
+      token.active = false;
     } else if (t == "INVITE") {
-      // 逆方向配対: 集群ノードが未配対の当機へ {psk,seeds,cfg} を封緘 push (QR/承認/配対モード)。
-      // 封緘鍵 = BLAKE2b(X25519(pair_sk, epk))。pair_sk は当機の一時鍵 (PAIR-ANNOUNCE/QR で pk を公開)。
-      if (isPaired() || !pair_keys_ready_) return;  // 既配対 or 未告知 → 無視
+
+
+      if (isPaired() || !pair_keys_ready_) return;
       Bytes epk, nonce, enc;
       if (!hexDecode(json::getString(doc.get(), "epk"), epk) || epk.size() != 32 ||
           !hexDecode(json::getString(doc.get(), "n"), nonce) || nonce.size() != 24 ||
@@ -1276,15 +1891,15 @@ struct Mesh::Impl {
       Bytes plain(enc.size() - 16);
       if (crypto_aead_unlock(plain.data(), enc.data(), key.data(), nonce.data(), nullptr, 0,
                              enc.data() + 16, plain.size()) != 0) {
-        return;  // 別鍵/改竄 — 静かに捨てる (LAN 上の他者の招待かも)
+        return;
       }
       json::Doc payload = json::parse(std::string(plain.begin(), plain.end()));
       if (!payload || !applyJoinPayload(payload.get())) return;
-      onBecamePaired();  // 永続化 + 再鍵 (Node へ通知)
+      onBecamePaired();
     }
   }
 
-  // JOIN_OK / INVITE 共通: 配布ペイロード {psk, psk_id, seeds[], cfg[]} を組む
+
   std::string buildJoinPayloadJson() {
     auto payload = json::obj();
     json::set(payload.get(), "psk", hexEncode(st.psk.data(), st.psk.size()));
@@ -1300,13 +1915,24 @@ struct Mesh::Impl {
     for (const auto& a : st.seed_peers) addSeed(a);
     cJSON* cfg = json::addArr(payload.get(), "cfg");
     for (const auto& e : config.all()) json::push(cfg, entryToJson(e));
+    mapToJson(json::addObj(payload.get(), "cfg_complete_vv"), config.versionVector());
     return json::dump(payload.get());
   }
 
-  // JOIN_OK / INVITE 共通: 受領した平文ペイロードを適用 (psk/seeds/cfg)。
+
   bool applyJoinPayload(const cJSON* payload) {
     Bytes psk;
     if (!hexDecode(json::getString(payload, "psk"), psk) || psk.size() != 32) return false;
+    ConfigWirePayload config_payload;
+    if (!configPayloadFromJson(payload, &config_payload)) return false;
+
+    if (config_payload.has_complete_frontier) {
+      config.applyRemoteSnapshot(config_payload.entries, config_payload.complete_frontier);
+    } else {
+      config.applyRemoteBatch(config_payload.entries);
+    }
+    if (!config.lastMutationCommitted()) return false;
+
     std::copy(psk.begin(), psk.end(), st.psk.begin());
     st.psk_id = json::getString(payload, "psk_id", st.psk_id);
     const cJSON* a = nullptr;
@@ -1319,16 +1945,12 @@ struct Mesh::Impl {
       }
       rememberAddr(addr, "");
     }
-    const cJSON* e = nullptr;
-    cJSON_ArrayForEach(e, json::get(payload, "cfg")) {
-      config.applyRemote(entryFromJson(e));
-    }
     return true;
   }
 
-  // ------------------------------------------------------------------ 配対 joiner
 
-  // j は値渡し: 呼び出し元の閉包が実行中に破棄されても安全に使い切る
+
+
   void finishJoin(std::shared_ptr<JoinRun> j, bool ok, const std::string& err) {
     if (j->finished) return;
     j->finished = true;
@@ -1347,7 +1969,7 @@ struct Mesh::Impl {
     });
     if (ok) {
       postGuarded([this] {
-        if (running) maintain();  // 正規接続へ移行
+        if (running) maintain();
       });
     }
   }
@@ -1356,11 +1978,11 @@ struct Mesh::Impl {
     if (join) finishJoin(join, false, err);
   }
 
-  // ------------------------------------------------------------------ 配対 (発見/招待)
+
 
   bool isPaired() const {
     for (uint8_t b : st.psk)
-      if (b) return true;  // 全ゼロ PSK = 未配対
+      if (b) return true;
     return false;
   }
 
@@ -1373,11 +1995,11 @@ struct Mesh::Impl {
   }
 
   std::string pairName() const {
-    // 表示名: 役割 + node_id 先頭 (Node が node_id に機器名を渡す想定)
+
     return st.role + " · " + (st.node_id.size() > 6 ? st.node_id.substr(0, 6) : st.node_id);
   }
 
-  // 未配対の当機が撒く告知内容 (QR にも同じ pk を載せる)
+
   std::string pairingSelfJson() {
     ensurePairKeys();
     auto o = json::obj();
@@ -1390,7 +2012,7 @@ struct Mesh::Impl {
     return json::dump(o.get());
   }
 
-  // 近隣で発見した未配対デバイス一覧 (期限切れは除去)
+
   std::string pendingJson() {
     const int64_t t = now();
     for (auto it = pending_.begin(); it != pending_.end();) {
@@ -1418,32 +2040,32 @@ struct Mesh::Impl {
   }
 
   void onPairFound(const PairBeacon& pb) {
-    if (!isPaired()) return;  // 未配対ノードは招待できない
+    if (!isPaired()) return;
     if (pb.id == st.node_id) return;
-    if (pb.pk.size() != 64) return;  // X25519 公開鍵 hex でない
+    if (pb.pk.size() != 64) return;
     auto pit = peers.find(pb.id);
-    if (pit != peers.end() && pit->second.info.connected) return;  // 既に接続済み集群成員
+    if (pit != peers.end() && pit->second.info.connected) return;
     auto it = pending_.find(pb.id);
     const bool isNew = it == pending_.end();
     pending_[pb.id] = Pending{pb.id, pb.addr, pb.name, pb.role, pb.pk, now()};
     if (now() < pairing_mode_until_) {
-      inviteDevice(pb.id);  // 配対モード中は自動招待
+      inviteDevice(pb.id);
     }
     if (isNew && cbs.on_pending_changed) cbs.on_pending_changed();
   }
 
-  // このノードを新規クラスタの親機にする (未配対時のみ)。ランダム PSK を生成し配対済みに遷移。
-  // これが無いと全端末が「招待待ち」のまま誰も PSK を持たず、集群を始められない。
+
+
   bool foundCluster() {
-    if (isPaired()) return false;  // 既に配対済み
+    if (isPaired()) return false;
     Bytes psk = randomBytes(32);
     std::copy(psk.begin(), psk.end(), st.psk.begin());
     if (st.psk_id.empty()) st.psk_id = "k1";
-    onBecamePaired();  // 永続化 (on_paired) + beacon 再鍵 + maintain
+    onBecamePaired();
     return true;
   }
 
-  // 配対モードを ttl_ms 間 ON にし、現在の待機デバイスを即招待
+
   void setPairingMode(int64_t ttl_ms) {
     pairing_mode_until_ = now() + ttl_ms;
     std::vector<std::string> ids;
@@ -1451,14 +2073,14 @@ struct Mesh::Impl {
     for (const auto& id : ids) inviteDevice(id);
   }
 
-  // 集群 → 未配対デバイスへ {psk,seeds,cfg} を封緘 push (一覧承認/配対モード)
+
   void inviteDevice(const std::string& id) {
     auto it = pending_.find(id);
     if (it == pending_.end()) return;
     sendInvite(it->second.addr, it->second.pk);
   }
 
-  // QR/入力から得た addr+pk へ直接招待 (発見前でも可 — 跨網段/QR スキャン用)
+
   void inviteDeviceDirect(const std::string& addr, const std::string& pk) {
     sendInvite(addr, pk);
   }
@@ -1467,7 +2089,7 @@ struct Mesh::Impl {
     if (!isPaired() || addr.empty()) return;
     Bytes pk;
     if (!hexDecode(pk_hex, pk) || pk.size() != 32) return;
-    // X25519 一時鍵 → 共有 → BLAKE2b で封緘鍵
+
     Bytes esk = randomBytes(32);
     std::array<uint8_t, 32> epk{}, shared{}, key{};
     crypto_x25519_public_key(epk.data(), esk.data());
@@ -1484,7 +2106,7 @@ struct Mesh::Impl {
     json::set(o.get(), "n", hexEncode(nonce));
     json::set(o.get(), "c", hexEncode(out));
     const std::string s = json::dump(o.get());
-    Bytes frame;  // kFrameJoin || JSON (SecureChannel を通さない平文フレーム)
+    Bytes frame;
     frame.reserve(1 + s.size());
     frame.push_back(kFrameJoin);
     frame.insert(frame.end(), s.begin(), s.end());
@@ -1496,7 +2118,7 @@ struct Mesh::Impl {
       }
       conn->setCallbacks([](const Bytes&) {}, [] {});
       conn->send(frame);
-      // 相手が適用する猶予を与えてから閉じる
+
       std::weak_ptr<char> w2 = alive;
       loop.postDelayed(1500, [w2, conn] {
         if (!w2.expired()) conn->close();
@@ -1504,8 +2126,8 @@ struct Mesh::Impl {
     });
   }
 
-  // 未配対 → 配対済みへの遷移 (INVITE 受理 / PIN 参加成功時)。
-  // beacon 告知を切替え、Node へ永続化 + 再鍵 (実機は再起動) を依頼。
+
+
   void onBecamePaired() {
     if (disc) {
       disc->setPairAnnounce(false, "", "", "");
@@ -1517,7 +2139,7 @@ struct Mesh::Impl {
     pending_.clear();
     pairing_mode_until_ = 0;
     postGuarded([this] {
-      if (running) maintain();  // 新 PSK で正規接続へ
+      if (running) maintain();
     });
     if (cbs.on_paired) cbs.on_paired();
   }
@@ -1612,21 +2234,25 @@ struct Mesh::Impl {
         return;
       }
       finishJoin(j, true, "");
-      onBecamePaired();  // PIN 参加でも永続化 + 再鍵 (Node へ通知)
+      onBecamePaired();
     } else if (t == "JOIN_ERR") {
       finishJoin(j, false, json::getString(doc.get(), "err", "error"));
     }
   }
 };
 
-// ============================================================================ 公開 API
+
 
 Mesh::Mesh(Runloop& loop, IClock& clock, HlcClock& hlc, ITransport& transport,
            IDiscovery* discovery, Store& store, LwwMap& config, EventLog& events,
            MeshSettings settings, Callbacks cbs)
     : settings_(std::move(settings)),
       impl_(new Impl(loop, clock, hlc, transport, discovery, store, config, events, settings_,
-                     std::move(cbs))) {}
+                     std::move(cbs))) {
+  std::string projected;
+  settings_.runtime_json = projectMeshRuntimeJson(settings_.runtime_json, &projected)
+      ? std::move(projected) : "{}";
+}
 
 Mesh::~Mesh() { impl_->stop(); }
 
@@ -1652,9 +2278,25 @@ void Mesh::setCaps(const std::string& caps_json) {
   auto it = impl_->peers.find(settings_.node_id);
   if (it != impl_->peers.end()) it->second.info.caps_json = caps_json;
   if (impl_->running) {
-    impl_->gossipAll();   // 変化を即 gossip
-    impl_->leaderTick();  // 再選主
+    impl_->gossipAll();
+    impl_->leaderTick();
   }
+}
+
+void Mesh::setUiManifest(const std::string& manifest_json) {
+  settings_.ui_manifest_json = manifest_json;
+  auto it = impl_->peers.find(settings_.node_id);
+  if (it != impl_->peers.end()) it->second.info.ui_manifest_json = manifest_json;
+  if (impl_->running) impl_->gossipAll();
+}
+
+void Mesh::setRuntime(const std::string& runtime_json) {
+  std::string projected;
+  if (!projectMeshRuntimeJson(runtime_json, &projected)) return;
+  settings_.runtime_json = projected;
+  auto it = impl_->peers.find(settings_.node_id);
+  if (it != impl_->peers.end()) it->second.info.runtime_json = std::move(projected);
+  if (impl_->running) impl_->gossipAll();
 }
 
 void Mesh::broadcastEvent(const EventRecord& ev) { impl_->broadcastEvent(ev); }
@@ -1686,7 +2328,7 @@ void Mesh::fetchBlob(const std::string& hash, std::function<void(Bytes)> cb) {
 }
 
 Mesh::JoinToken Mesh::createJoinToken() {
-  if (!impl_->isPaired()) return JoinToken{};  // 未配対では発行不可 (pin 空)
+  if (!impl_->isPaired()) return JoinToken{};
   impl_->token.pin = genPin6();
   impl_->token.expires_mono = impl_->now() + kJoinTokenTtlMs;
   impl_->token.fails = 0;

@@ -3,6 +3,7 @@
 #import "../Core/DBBootConfig.h"
 #import "../Core/DBConfigUtil.h"
 #import "../Core/DBCoreBridge.h"
+#import "../Core/DBTexts.h"
 #import "../Media/DBQrCode.h"
 #import "DBRouter.h"
 #import <arpa/inet.h>
@@ -11,7 +12,7 @@
 #import <sys/socket.h>
 #import <unistd.h>
 
-// 127.0.0.1:port へ TCP 接続を試みて LISTEN 中か判定 (localhost なので即座)。
+
 static BOOL DBPortListening(int port) {
   int fd = socket(AF_INET, SOCK_STREAM, 0);
   if (fd < 0) return NO;
@@ -63,7 +64,7 @@ static BOOL DBPortListening(int port) {
 }
 
 - (UIButton *)flatButton {
-  UIButton *b = [UIButton buttonWithType:UIButtonTypeCustom];  // iOS5: System=白背景回避
+  UIButton *b = [UIButton buttonWithType:UIButtonTypeCustom];
   return b;
 }
 
@@ -75,7 +76,7 @@ static BOOL DBPortListening(int port) {
   [self addSubview:_scroll];
 
   _title = [[UILabel alloc] init];
-  _title.text = @"本機情報 / Debug";
+  _title.text = [[_router texts] ts:@"info.title"];
   _title.font = [UIFont boldSystemFontOfSize:28];
   _title.textColor = [UIColor whiteColor];
   [_scroll addSubview:_title];
@@ -120,7 +121,7 @@ static BOOL DBPortListening(int port) {
   [_scroll addSubview:_qrUrl];
 
   _refresh = [self flatButton];
-  [_refresh setTitle:@"更新" forState:UIControlStateNormal];
+  [_refresh setTitle:[[_router texts] ts:@"info.refresh"] forState:UIControlStateNormal];
   _refresh.titleLabel.font = [UIFont systemFontOfSize:18];
   [_refresh setTitleColor:[UIColor colorWithRed:0.35 green:0.72 blue:1 alpha:1]
                  forState:UIControlStateNormal];
@@ -128,7 +129,7 @@ static BOOL DBPortListening(int port) {
   [_scroll addSubview:_refresh];
 
   _close = [self flatButton];
-  [_close setTitle:@"閉じる" forState:UIControlStateNormal];
+  [_close setTitle:[[_router texts] ts:@"monitor.close"] forState:UIControlStateNormal];
   _close.titleLabel.font = [UIFont boldSystemFontOfSize:18];
   [_close setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
   _close.backgroundColor = [UIColor colorWithRed:0.20 green:0.24 blue:0.30 alpha:1];
@@ -138,9 +139,9 @@ static BOOL DBPortListening(int port) {
 
   [self clearLabelBackgrounds:_scroll];
 }
-#pragma mark - データ収集 / 更新
 
-// core JSON は main で取らない。背景収集 → main で組み立て (deviceInfoNow は main 専用)。
+
+
 - (void)reload {
   DBCoreBridge *core = _core;
   __weak DBInfoScreen *wself = self;
@@ -162,7 +163,7 @@ static BOOL DBPortListening(int port) {
   NSDictionary *node = [st objectForKey:@"node"];
   if (![node isKindOfClass:[NSDictionary class]]) node = nil;
 
-  // アドレス収集 (core の local_addrs)
+
   id la = [node objectForKey:@"local_addrs"];
   if ([la isKindOfClass:[NSArray class]]) {
     for (id a in (NSArray *)la) {
@@ -176,23 +177,27 @@ static BOOL DBPortListening(int port) {
   }
 
   NSMutableString *info = [NSMutableString string];
-  [info appendFormat:@"node    : %@ (%@)\n", [DBConfigUtil evStr:node key:@"name"],
+  DBTexts *texts = [_router texts];
+  [info appendFormat:@"%@ : %@ (%@)\n", [texts ts:@"info.node"],
+                      [DBConfigUtil evStr:node key:@"name"],
                       [DBConfigUtil evStr:node key:@"id"] ?: @"-"];
-  [info appendFormat:@"role    : %@\n", _boot.role];
-  [info appendFormat:@"version : %@\n",
+  [info appendFormat:@"%@ : %@\n", [texts ts:@"info.role"], _boot.role];
+  [info appendFormat:@"%@ : %@\n", [texts ts:@"info.version"],
                       [[NSBundle mainBundle] objectForInfoDictionaryKey:
                                             @"CFBundleShortVersionString"] ?: @"-"];
-  [info appendFormat:@"mic     : %@\n", _boot.micEnabled ? @"有 (外付け)" : @"無"];
-  [info appendString:@"camera  : 無 (iPad1 はカメラ非搭載)\n"];
+  [info appendFormat:@"%@ : %@\n", [texts ts:@"info.microphone"],
+                      [texts ts:_boot.micEnabled ? @"info.external_present" : @"info.absent"]];
+  [info appendFormat:@"%@ : %@\n", [texts ts:@"info.camera"],
+                      [texts ts:@"info.camera_absent_ipad1"]];
 
-  // ネットワーク / Wi-Fi / 電池 (main スレッドで直接取得 — 安全)
+
   NSDictionary *device = [_core deviceInfoNow];
   if ([device isKindOfClass:[NSDictionary class]]) {
     NSString *gw = [device objectForKey:@"gateway"];
     NSDictionary *wifi = [device objectForKey:@"wifi"];
     NSDictionary *bat = [device objectForKey:@"battery"];
-    [info appendString:@"\n── ネットワーク ──\n"];
-    [info appendFormat:@"gateway : %@\n", gw ?: @"(不明)"];
+    [info appendFormat:@"\n── %@ ──\n", [texts ts:@"info.network"]];
+    [info appendFormat:@"gateway : %@\n", gw ?: [texts ts:@"info.unknown"]];
     if ([wifi isKindOfClass:[NSDictionary class]]) {
       [info appendFormat:@"SSID    : %@\n", [wifi objectForKey:@"ssid"] ?: @"-"];
       [info appendFormat:@"BSSID   : %@\n", [wifi objectForKey:@"bssid"] ?: @"-"];
@@ -201,23 +206,28 @@ static BOOL DBPortListening(int port) {
       id lvl = [bat objectForKey:@"level"];
       NSString *lvlStr =
           lvl ? [NSString stringWithFormat:@"%d%%", (int)([lvl floatValue] * 100)] : @"-";
-      [info appendFormat:@"battery : %@  (%@)", lvlStr, [bat objectForKey:@"state"] ?: @"?"];
+      [info appendFormat:@"%@ : %@  (%@)", [texts ts:@"info.battery"], lvlStr,
+                         [bat objectForKey:@"state"] ?: @"?"];
     }
   }
 
-  // 監視ポート
-  [info appendString:@"\n\n── 監視ポート ──\n"];
-  [info appendFormat:@"http  %ld : %@\n", (long)_boot.httpPort,
-                      DBPortListening((int)_boot.httpPort) ? @"LISTEN ✓" : @"閉"];
-  [info appendFormat:@"mesh  47172 : %@\n", DBPortListening(47172) ? @"LISTEN ✓" : @"閉"];
-  [info appendFormat:@"sip   %ld : UDP (直接呼)", (long)_boot.directPort];
 
-  // 触発統計
+  [info appendFormat:@"\n\n── %@ ──\n", [texts ts:@"info.ports"]];
+  [info appendFormat:@"http  %ld : %@\n", (long)_boot.httpPort,
+                      DBPortListening((int)_boot.httpPort) ? @"LISTEN ✓" :
+                      [texts ts:@"info.port_closed"]];
+  [info appendFormat:@"mesh  47172 : %@\n", DBPortListening(47172) ? @"LISTEN ✓" :
+                      [texts ts:@"info.port_closed"]];
+  [info appendFormat:@"sip   %ld : %@", (long)_boot.directPort,
+                      [texts ts:@"info.sip_direct"]];
+
+
   NSDictionary *trig =
       [dbg isKindOfClass:[NSDictionary class]] ? [dbg objectForKey:@"triggers"] : nil;
   if ([trig isKindOfClass:[NSDictionary class]]) {
-    [info appendString:@"\n\n── 触発 ──\n"];
-    [info appendFormat:@"累計触発回数 : %@\n", [trig objectForKey:@"total_press"] ?: @0];
+    [info appendFormat:@"\n\n── %@ ──\n", [texts ts:@"info.triggers"]];
+    [info appendFormat:@"%@ : %@\n", [texts ts:@"info.total_press"],
+                       [trig objectForKey:@"total_press"] ?: @0];
     NSDictionary *last = [trig objectForKey:@"last"];
     if ([last isKindOfClass:[NSDictionary class]]) {
       NSNumber *wallMs = [last objectForKey:@"wall_ms"];
@@ -228,15 +238,18 @@ static BOOL DBPortListening(int port) {
         [fmt setDateFormat:@"MM-dd HH:mm:ss"];
         timeStr = [fmt stringFromDate:d];
       }
-      [info appendFormat:@"最新触発 : %@  door=%@", timeStr, [last objectForKey:@"door"] ?: @"-"];
+      [info appendFormat:@"%@ : %@  door=%@", [texts ts:@"info.last_press"], timeStr,
+                         [last objectForKey:@"door"] ?: @"-"];
     } else {
-      [info appendString:@"最新触発 : (まだ無し)"];
+      [info appendFormat:@"%@ : %@", [texts ts:@"info.last_press"],
+                         [texts ts:@"info.no_press"]];
     }
   }
   _infoText.text = info;
 
-  // アドレス一覧
-  NSMutableString *addr = [NSMutableString stringWithString:@"── 本機の全アドレス ──\n"];
+
+  NSMutableString *addr = [NSMutableString stringWithFormat:@"── %@ ──\n",
+                            [texts ts:@"info.addresses"]];
   if ([_v4 count]) {
     [addr appendString:@"IPv4:\n"];
     for (NSString *s in _v4) [addr appendFormat:@"  %@\n", s];
@@ -245,7 +258,7 @@ static BOOL DBPortListening(int port) {
     [addr appendString:@"IPv6:\n"];
     for (NSString *s in _v6) [addr appendFormat:@"  %@\n", s];
   }
-  if (![_v4 count] && ![_v6 count]) [addr appendString:@"(取得中… ネットワーク未接続?)"];
+  if (![_v4 count] && ![_v6 count]) [addr appendString:[texts ts:@"info.addresses_loading"]];
   _addrText.text = addr;
 
   [_ipSeg setEnabled:([_v4 count] > 0) forSegmentAtIndex:0];
@@ -261,7 +274,7 @@ static BOOL DBPortListening(int port) {
   return [addr rangeOfString:@":"].location != NSNotFound;
 }
 - (NSString *)preferredV6 {
-  // グローバル (2xxx/3xxx) を ULA(fd) より優先
+
   for (NSString *s in _v6) {
     unichar c = [s length] ? [s characterAtIndex:0] : 0;
     if (c == '2' || c == '3') return s;
@@ -297,19 +310,20 @@ static BOOL DBPortListening(int port) {
   }
   if ([list count] > 1) {
     _cycleBtn.hidden = NO;
-    [_cycleBtn setTitle:[NSString stringWithFormat:@"アドレス切替 (%ld/%lu) ▸",
-                         (long)(_choiceIdx + 1), (unsigned long)[list count]]
+    [_cycleBtn setTitle:[[_router texts] t:@"info.address_cycle",
+                         [NSNumber numberWithLong:(long)(_choiceIdx + 1)],
+                         [NSNumber numberWithUnsignedLong:(unsigned long)[list count]], nil]
                forState:UIControlStateNormal];
   } else {
     _cycleBtn.hidden = YES;
   }
   if (url == nil) {
     _qr.image = nil;
-    _qrUrl.text = @"(アドレス無し)";
+    _qrUrl.text = [[_router texts] ts:@"info.no_address"];
     return;
   }
-  _qrUrl.text = [@"スキャンで管理後台へ:\n" stringByAppendingString:url];
-  // QR は iPad1 の CPU では重い → 背景生成 → main 反映。選択が変わっていたら破棄。
+  _qrUrl.text = [[[ _router texts] ts:@"info.scan_admin"] stringByAppendingFormat:@"\n%@", url];
+
   _qr.image = nil;
   __weak DBInfoScreen *wself = self;
   NSString *want = [url copy];
@@ -380,5 +394,3 @@ static BOOL DBPortListening(int port) {
 }
 
 @end
-
-

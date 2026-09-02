@@ -1,27 +1,27 @@
-# go2rtc 設定 (HA の go2rtc アドオン / 内蔵 go2rtc に取り込む)
+# go2rtc configuration for the HA add-on or built-in go2rtc instance.
 #
-# 子機の設定 camera.codec によってソースの書き方が変わる (Phase 6a):
-#   - codec = h264 / auto (対応機):  /stream.mp4 (fMP4, 子機側 HW エンコード済み)
-#       → `#video=copy` でそのまま通す — **HA 側の転码は不要** (CPU ほぼゼロ)。
-#   - codec = mjpeg (旧機・既定回落): /stream.mjpeg を HA 主機側で H.264 へ転码する
-#       — 旧端末側は JPEG を出すだけ。
-# `#hardware` は環境に合わせて: Intel = そのまま / RPi = #hardware=v4l2m2m / 無ければ外す (soft)
+# Source syntax depends on each door station's camera.codec setting:
+#   - h264/auto on supported devices: /stream.mp4 is fMP4 encoded by device hardware.
+#     Use `#video=copy`; HA does not transcode it and CPU use is negligible.
+#   - mjpeg on older devices or as fallback: HA transcodes /stream.mjpeg to H.264 while the
+#     old device emits only JPEG frames.
+# Select `#hardware` for the host: use it as-is on Intel, `#hardware=v4l2m2m` on Raspberry Pi,
+# or remove it for software encoding.
 
 streams:
-  # ---- codec=h264 の門口機 (転码不要 — copy で箱の詰め替えのみ) ----
+  # ---- codec=h264 door station: copy without transcoding ----
   genkan_front:
     - ffmpeg:http://10.0.1.11:47180/stream.mp4#video=copy
 
-  # ---- codec=mjpeg の門口機 (従来どおり HA 側で転码) ----
+  # ---- codec=mjpeg door station: transcode on the HA host ----
   genkan_annex:
     - ffmpeg:http://10.0.1.12:47180/stream.mjpeg#video=h264#hardware
 
-# メモ:
-# - /stream.mp4 は購読者が付いてから子機のエンコーダが起動する (最大 ~5 秒 + 初期化)。
-#   go2rtc は初回チャンク待ちに寛容だが、HomeKit 通知の初動を最速にしたい主玄関は
-#   従来どおり「常駐消費」を推奨 (consumer を常設すれば子機側エンコーダも回り続ける)。
-# - codec=auto の子機で硬編が無い場合 /stream.mp4 は 503 になる — その子機は
-#   /stream.mjpeg のソース行 (genkan_annex の形) に書き換えること。
-# - 門口機側で認証を有効にした場合は URL に ?k=<panel_token> を付ける
-#   (/stream.mp4 も /stream.mjpeg と同じ扱い)。
-# - go2rtc は消費者がいる時だけ ffmpeg を起動する。詳細は同ディレクトリの README.md。
+# Notes:
+# - The device encoder starts after /stream.mp4 gets a subscriber, with up to about five seconds
+#   of startup latency. Keep a consumer connected when the fastest HomeKit notification startup
+#   matters; this keeps the device encoder running.
+# - On a codec=auto device without hardware encoding, /stream.mp4 returns 503. Configure that
+#   device with an /stream.mjpeg source like genkan_annex instead.
+# - If door-station authentication is enabled, append ?k=<panel_token> to either stream URL.
+# - go2rtc starts ffmpeg only while a consumer is connected. See the README in this directory.

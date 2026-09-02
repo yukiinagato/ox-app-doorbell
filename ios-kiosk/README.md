@@ -1,67 +1,56 @@
-# ios-kiosk — iPad1 (iOS 5.1.1) 门铃 kiosk 殻 (ARC 重写版)
+# iOS kiosk client
 
-`ios-legacy/` 的彻底重构版。旧版保留不动; 本目录是新的生产实现。
+`ios-kiosk` is the Objective-C kiosk client for the jailbroken iPad 1 / iOS 5.1 compatibility
+target. English is canonical; the previous Chinese design notes are preserved in
+[`README.zh.md`](README.zh.md).
 
-## 为什么要重写 (旧版的问题诊断)
+The compatibility foundation, host tests, historical-SDK build entry points, and optional
+root-helper contract live under `ios-compat`. Use the maintained runbooks rather than instructions
+from `ios-legacy`:
 
-| # | 问题 | 根源 | 本版的解法 |
-|---|------|------|-----------|
-| 1 | **UI 一直没反应** | `DBMjpegClient` 的 `NSURLConnection` 挂在 main runloop, `parseLoop` 的 `while(YES)` 里 `[UIImage imageWithData:]` **主线程同步解码 JPEG**。A5 单核上周期性长阻塞 | BSD socket 专用线程收流 → 后台串行 queue 解码 (ImageIO 缩略图 = DCT 直接缩放, ≤640px) → **latest-wins 丢帧 + ~8fps 上限** → main 只做 blit |
-| 2 | **"闪退"** | 看门狗把 1 的卡死检测为 15s 无响应 → `_exit(0)` 自杀重启 → 用户看到闪退。卡和崩是同一条因果链 | 根因 1 消除后看门狗只兜真正的未知卡死; 日志带**当前屏幕名**便于取证 |
-| 3 | **present/dismiss 崩溃类** (CA commit 内 present 必崩、事件中 dismiss/dealloc 再入崩、UIAlertView 冲突) | iOS 5.1 UIKit 模态机薄脆; 旧版每修一处要加 0.7s dispatch_after 之类的补丁 | **整个代码库不存在 present/dismiss/UIAlertView**。屏幕 = 普通 UIView, `DBRouter` 单点 `addSubview/removeFromSuperview` 切换; PIN/确认 = 覆盖层; 配对错误 = 屏内 label |
-| 4 | **MRC 手工内存 bug** (堆破坏 → 二次来电冻结) | 4000 行手工 retain/release + `__unsafe_unretained` | **ARC** (`-fobjc-arc` + min iOS 5.1 实测可用; 所需 runtime 符号 iOS 5.0+ 全有, clang 不会发 iOS 8+ 的 `objc_alloc`) |
-| 5 | SIP delegate 跨线程所有权 | assign delegate + poll 线程回调 vs dealloc 竞争 | delegate = ARC weak + 显式 nil 化; `NSThread` 对 target 的强持有天然保证 "线程完走前对象不死" (旧 self-retain 手法的语义化); **全 app 单 SIP 会话**, 唯一所有者是 DBRouter |
+- [`../docs/en/ios-compat-maintainer.md`](../docs/en/ios-compat-maintainer.md)
+- [`../ios-compat/README.md`](../ios-compat/README.md)
+- [`../ios-compat/helper/README.md`](../ios-compat/helper/README.md)
 
-## 结构
+`ios-legacy` is archival and must not receive new features. Do not copy credentials into scripts,
+command lines, URLs, or `boot.json`. Pairing must first store `mesh.psk` through the platform
+secure-store callback and then expose only `psk_ref: "secret:mesh.psk"`; a
+`pairing_persistence_error` is not ready state.
 
-```
-ios-kiosk/
-├── Makefile                    # clang 直接驱动 (armv7 + min 5.1 + iPhoneOS7.1.sdk + ARC)
-├── scripts/
-│   ├── build_app.sh            # clean + make + ldid 伪签 + verify
-│   └── install_via_ssh.sh      # 安全安装流程 (见下)
-├── lib/libdoorbell_all.a       # core C++ 静态库 (armv7, 与旧版同一产物)
-├── mini_sip/                   # 纯 C mini SIP (原样复用)
-├── qr/                         # qrcodegen C (原样复用)
-└── src/
-    ├── Info.plist              # bundle id 不变 → 端机 boot.json/doorbell.db/配对状态直接继承
-    ├── main.m
-    ├── Support/                # DBAppDelegate (+最小 root VC), DBWatchdog
-    ├── Core/                   # DBCoreBridge (core C ABI 包装), DBBootConfig, DBConfigUtil, DBTexts (ja/en/zh)
-    ├── Net/                    # MJPEG/fMP4 客户端 + 本机 loopback HLS server
-    ├── Media/                  # SIP/音频/警铃/QR + fMP4→MPEG-TS→MPMoviePlayer H.264 路径
-    └── Screens/                # DBScreen 基类, DBRouter (状态机), DBHomeScreen,
-                                # DBIncomingScreen, DBPinOverlay, DBInfoScreen, DBPairingScreen
-```
+The local, unpushed `ios-legacy-0.2.0-final` tag exists, but `ios-compat` is still untracked in this
+working tree. Fresh-clone, iPad hardware, and rollback gates therefore remain open; keep the
+`ios-legacy` directory for now.
 
-## 事件流 (单点)
+## Hardware constraints
 
-```
-core 内部线程 ──ui event cb──▶ DBCoreBridge (marshal) ──▶ DBRouter.onCoreEvent (main)
-                                              │
-   press ──▶ DBIncomingScreen.showIncoming    │
-   reply/chime/display/emergency ──▶ DBHomeScreen
-   paired ──▶ persistPsk → closePairing       │
-   SIP state ──▶ DBIncomingScreen             │
-                                              ▼
-   屏幕切换只有一处: DBRouter.transitionTo (addSubview/removeFromSuperview + fade)
-```
+The iPad 1 has a built-in microphone but no camera. It can receive/listen and use its microphone
+when the implemented SIP path is available; it cannot send local camera video. Outdoor use still
+requires a separately qualified weatherproof enclosure, protected power, suitable temperature
+range, glare control, and moisture management. The repository does not certify such an enclosure.
 
-## 不变量 (改代码时必须维持)
+An explicit IP-camera source can provide HTTP(S) MJPEG/snapshot direct playback or bounded
+RTSP/TCP H.264 ingest. HTTP credentials stay behind `secret_ref` and become only ephemeral
+Basic/Bearer headers with platform TLS validation; URL credentials are rejected. JPEG is local
+preview only (`jpeg_core_forwarding:false`). H.264 capability remains degraded until a complete
+IDR is accepted, and no real camera has passed iPad 1 qualification.
 
-1. **不引入** `presentViewController` / `dismissViewControllerAnimated` / `UIAlertController` / `UIAlertView`。
-2. **main 线程不做解码** (JPEG/QR/图片解码一律后台), main 只做布局和 blit。
-3. 所有按钮 `UIButtonTypeCustom` (iOS5 System = RoundedRect 白渐变, 白字看不见)。
-4. 事件处理必须幂等 (重复事件无害); SIP 同时最多一个 session。
-5. MRC 语法 (`retain`/`release`/`NSAutoreleasePool`) 不可回退 — 本目录是 ARC。
+Manual resident answer binds exact `door`/`call_id`/`stage_revision` only to an answer-mode SIP
+dialog. Monitor does not own the visitor call; a losing simultaneous answer hangs up without
+ending the winner. Safe mode retains Core, MiniSIP audio, ringer, SOS, and controls, disables H.264
+and custom visuals, and uses bounded low-resolution MJPEG/snapshot when available.
 
-## 构建 / 安装
+## Build and verification
 
-```bash
-bash ios-kiosk/scripts/build_app.sh        # → ios-kiosk/build/Doorbell.app
-make -C ios-kiosk test                     # MPEG-TS PAT/PMT/PES/continuity 主机端测试
-bash ios-kiosk/scripts/install_via_ssh.sh  # USB (iproxy 2222) 或传 iPad IP 走 WiFi；已有 app 时快速更新
-bash ios-kiosk/scripts/install_via_ssh.sh --full  # 强制 uicache + respring
+Use the neutral compatibility scripts:
+
+```sh
+ios-compat/scripts/test_host.sh
+ios-compat/scripts/build_core_ios5.sh
+ios-compat/scripts/build_app_ios5.sh
 ```
 
-安装脚本会先把新 bundle 上传到 staging 路径。检测到已有 app 时，只停止 Doorbell、**删除旧 bundle 后移动 staging bundle (换新 inode，防 dyld SIGKILL 熔断)**，再启动新 app，不重启 SpringBoard。首次安装或指定 `--full` 时才执行 `uicache` 和 respring；修改图标、名称等系统缓存信息时应使用 `--full`。
+The iOS 5 device lane requires the licensed local historical SDK and compatibility libc++. Do not
+commit SDKs, signing material, generated static archives, jailbreak credentials, or device logs
+containing secrets. A successful host build is not iOS 5 hardware qualification; complete the
+cold-boot, audio, call lifecycle, recovery, long-run, and rollback checks in the maintainer runbook
+before marking a release hardware-certified.

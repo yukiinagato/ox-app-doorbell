@@ -1,15 +1,18 @@
-// Telegram ブリッジの統合テスト (モック HttpsFn — 実 Telegram 不要)。
-// InMemNet + SimClock 共有 Runloop で複数 Node を決定的にシミュレーションする
-// (test_node.cpp と同じ流儀)。
+
+
+
 #include <array>
 #include <map>
 #include <memory>
 #include <string>
 #include <vector>
 
+#include "bridge/telegram.h"
 #include "doctest.h"
+#include "events/events.h"
 #include "mesh/mesh.h"
 #include "node/node.h"
+#include "store/store.h"
 #include "util/clock.h"
 #include "util/common.h"
 #include "util/json.h"
@@ -19,22 +22,22 @@ using namespace db;
 
 namespace {
 
-// 捕捉した HTTPS リクエスト
+
 struct HttpsReq {
   std::string method, url, headers;
-  std::string body;  // 生バイト列 (multipart の JPEG 含む)
+  std::string body;
 };
 
-// モック HttpsFn: リクエストを記録し、API メソッドに応じて即時応答する。
-// done は同期呼びでよい (Node 側が Runloop へ marshal する契約)。
+
+
 struct MockHttps {
   std::vector<HttpsReq> reqs;
   int64_t next_msg_id = 100;
-  bool drop = false;     // true: done を呼ばない (応答が永遠に来ない)
-  int fail_status = 0;   // >0: 全リクエストへこの status で失敗応答
-  // API メソッド別の固定応答 (status, body) — 例: editMessageCaption だけ 400 にする
+  bool drop = false;
+  int fail_status = 0;
+
   std::map<std::string, std::pair<int, std::string>> respond_by_api;
-  std::string pending_updates = "[]";  // getUpdates が一度だけ返す result 配列
+  std::string pending_updates = "[]";
 
   Node::HttpsFn fn() {
     return [this](const std::string& m, const std::string& u, const std::string& h,
@@ -75,7 +78,7 @@ struct MockHttps {
   }
 };
 
-// telegram leader になれる caps (wan=false で不適格にできる)
+
 std::string tgCaps(int cpu, bool wan = true) {
   auto o = json::obj();
   json::setBool(o.get(), "tls12", true);
@@ -110,6 +113,7 @@ struct TgFleet {
   struct N {
     std::unique_ptr<Node> node;
     MockHttps https;
+    std::map<std::string, std::string> secrets;
     std::vector<std::string> ui;
     std::vector<std::string> tts;
     size_t uiCount(const std::string& t, const std::string& type = "") const {
@@ -136,7 +140,7 @@ struct TgFleet {
     o.listen_addr = addr;
     o.advertise_addr = addr;
     o.psk = psk;
-    o.enable_beacon = false;  // 実 beacon 禁止 (稼働 fleet への迷入防止)
+    o.enable_beacon = false;
     o.http_port = 0;
     o.caps_json = caps;
     o.seed_default_config = seed_cfg;
@@ -150,6 +154,17 @@ struct TgFleet {
     auto n = std::make_unique<N>();
     N* raw = n.get();
     n->node.reset(new Node(o, std::move(d)));
+    raw->secrets["telegram.test"] = "TESTTOKEN";
+    n->node->setSecureStore(
+        [raw](const std::string& key) {
+          auto it = raw->secrets.find(key);
+          return it == raw->secrets.end() ? std::string() : it->second;
+        },
+        [raw](const std::string& key, const std::string& value) {
+          if (value.empty()) raw->secrets.erase(key);
+          else raw->secrets[key] = value;
+          return true;
+        });
     n->node->setHttpsFn(raw->https.fn());
     n->node->setUiEventCb([raw](const std::string& e) { raw->ui.push_back(e); });
     n->node->setTtsCb([raw](const std::string& t, const std::string&) { raw->tts.push_back(t); });
@@ -177,11 +192,11 @@ struct TgFleet {
   }
 };
 
-// 標準の telegram 設定 (door/household/rule) を 1 ノードから投入する
+
 void seedTgConfig(Node& n, bool with_snapshot, bool poll_updates = false) {
   n.setConfigKey("doors.d_front", "{\"label\":{\"ja\":\"正面玄関\"}}");
   n.setConfigKey("households.h_ox", "{\"telegram_chat_ids\":[111]}");
-  n.setConfigKey("integrations.telegram.bot_token", "\"TESTTOKEN\"");
+  n.setConfigKey("integrations.telegram.bot_token_ref", "\"secret:telegram.test\"");
   n.setConfigKey("integrations.telegram.text_template", "{\"ja\":\"{door}に来客です ({time})\"}");
   if (poll_updates) n.setConfigKey("integrations.telegram.poll_updates", "true");
   n.setConfigKey("trigger_rules.r1",
@@ -191,16 +206,168 @@ void seedTgConfig(Node& n, bool with_snapshot, bool poll_updates = false) {
                      "\"with_snapshot\":" + (with_snapshot ? "true" : "false") + "}]}");
 }
 
-// BGRA 単色フレームを push (FrameBus → stb で JPEG 化される)
+
 void pushFrame(Node& n, uint8_t shade = 0x7f) {
   const int w = 32, h = 24;
   std::vector<uint8_t> px(static_cast<size_t>(w) * h * 4, shade);
   n.pushCameraFrame(px.data(), /*BGRA=*/3, w, h, w * 4, 1000);
 }
 
-const std::string kJpegSoi("\xff\xd8\xff", 3);  // JPEG マジック
+const std::string kJpegSoi("\xff\xd8\xff", 3);
 
 }  // namespace
+
+TEST_CASE("telegram: cancellation while snapshot is pending suppresses delivery") {
+  SimClock clock{1'700'000'000'000LL, 0};
+  Runloop loop{clock};
+  Store store;
+  REQUIRE(store.open(":memory:"));
+  HlcClock hlc{clock, "telegram-test"};
+  EventLog events{"telegram-test-node", hlc, store};
+  events.loadHeads();
+
+  std::function<void(Bytes)> finish_snapshot;
+  size_t sends = 0;
+  TelegramBridge::Hooks hooks;
+  hooks.https = [&sends](const std::string&, const std::string&, const std::string&, Bytes,
+                         std::function<void(int, std::string)> done) {
+    sends++;
+    done(200, R"({"ok":true,"result":{"message_id":100}})");
+  };
+  hooks.get_event = [&store](const std::string& origin, uint64_t seq) {
+    return store.eventGet(origin, seq);
+  };
+  hooks.merge_notify = [&events](const std::string& origin, uint64_t seq,
+                                  const std::string& notify) {
+    events.mergeNotify(origin, seq, notify);
+  };
+  hooks.hlc_tick = [&hlc] { return hlc.tick(); };
+  hooks.fetch_snapshot = [&finish_snapshot](const std::string&,
+                                             std::function<void(Bytes)> done) {
+    finish_snapshot = std::move(done);
+  };
+
+  TelegramBridge bridge{loop, store, std::move(hooks)};
+  bridge.configure(
+      R"({"integrations":{"telegram":{"bot_token":"TESTTOKEN"}},"households":{"h_ox":{"telegram_chat_ids":[111]}}})",
+      "telegram-test-node", true);
+  const std::string call_id = "snapshot-call";
+  EventRecord press = events.append(
+      "press", "d_front", "telegram-test-node",
+      R"({"schema_version":2,"call_id":"snapshot-call","stage_revision":0})");
+  bridge.onAction(press, R"({"households":["h_ox"],"with_snapshot":true})");
+  bridge.onEvent(press);
+
+  clock.advance(300);
+  loop.pumpDue();
+  REQUIRE(static_cast<bool>(finish_snapshot));
+  CHECK(sends == 0);
+
+  EventRecord cancelled = events.append(
+      "call_cancelled", "d_front", "telegram-test-node",
+      R"({"schema_version":2,"call_id":"snapshot-call","reason":"visitor"})");
+  bridge.onEvent(cancelled);
+  finish_snapshot(Bytes{0xff, 0xd8, 0xff});
+  loop.pumpDue();
+
+  CHECK(sends == 0);
+  CHECK(store.tgQueueCount() == 0);
+  auto persisted_press = store.eventGet(press.origin, press.seq);
+  REQUIRE(persisted_press.has_value());
+  auto notify = json::parse(persisted_press->notify_json);
+  REQUIRE(notify);
+  CHECK(json::getString(notify.get(), "telegram_cancelled_call_id") == call_id);
+
+  Store::TgQueueItem legacy_item;
+  legacy_item.kind = "message";
+  legacy_item.chat_id = "111";
+  legacy_item.payload = "{\"origin\":\"" + press.origin + "\",\"seq\":" +
+                        std::to_string(press.seq) + ",\"text\":\"late\"}";
+  legacy_item.next_retry_ms = clock.wallMs();
+  legacy_item.created_ms = clock.wallMs();
+  REQUIRE(store.tgQueuePut(legacy_item) > 0);
+  clock.advance(1000);
+  loop.pumpDue();
+  CHECK(sends == 0);
+  CHECK(store.tgQueueCount() == 0);
+  bridge.stop();
+}
+
+TEST_CASE("telegram: reordered cancellation persists when its press arrives later") {
+  SimClock clock{1'700'000'000'000LL, 0};
+  Runloop loop{clock};
+  Store store;
+  REQUIRE(store.open(":memory:"));
+  HlcClock hlc{clock, "telegram-reorder"};
+  EventLog events{"telegram-reorder-node", hlc, store};
+  events.loadHeads();
+
+  size_t sends = 0;
+  auto makeHooks = [&]() {
+    TelegramBridge::Hooks hooks;
+    hooks.https = [&sends](const std::string&, const std::string&, const std::string&, Bytes,
+                           std::function<void(int, std::string)> done) {
+      sends++;
+      done(200, R"({"ok":true,"result":{"message_id":100}})");
+    };
+    hooks.get_event = [&store](const std::string& origin, uint64_t seq) {
+      return store.eventGet(origin, seq);
+    };
+    hooks.merge_notify = [&events](const std::string& origin, uint64_t seq,
+                                    const std::string& notify) {
+      events.mergeNotify(origin, seq, notify);
+    };
+    hooks.hlc_tick = [&hlc] { return hlc.tick(); };
+    return hooks;
+  };
+
+  const std::string call_id = "reordered-call";
+  EventRecord press = events.append(
+      "press", "d_front", "telegram-reorder-node",
+      R"({"schema_version":2,"call_id":"reordered-call","stage_revision":0})");
+  clock.advance(1);
+  EventRecord cancelled = events.append(
+      "call_cancelled", "d_front", "telegram-reorder-node",
+      R"({"schema_version":2,"call_id":"reordered-call","reason":"visitor"})");
+
+  const std::string config =
+      R"({"integrations":{"telegram":{"bot_token":"TESTTOKEN"}},"households":{"h_ox":{"telegram_chat_ids":[111]}}})";
+  {
+    TelegramBridge bridge{loop, store, makeHooks()};
+    bridge.configure(config, "telegram-reorder-node", true);
+    bridge.onEvent(cancelled);
+    bridge.onEvent(press);
+
+    auto persisted_press = store.eventGet(press.origin, press.seq);
+    REQUIRE(persisted_press.has_value());
+    auto notify = json::parse(persisted_press->notify_json);
+    REQUIRE(notify);
+    CHECK(json::getString(notify.get(), "telegram_cancelled_call_id") == call_id);
+    CHECK(json::getString(notify.get(), "telegram_cancelled_at") == cancelled.hlc);
+  }
+
+  Store::TgQueueItem pending;
+  pending.kind = "message";
+  pending.chat_id = "111";
+  pending.payload = "{\"origin\":\"" + press.origin + "\",\"seq\":" +
+                    std::to_string(press.seq) + ",\"call_id\":\"" + call_id +
+                    "\",\"text\":\"late\"}";
+  pending.next_retry_ms = clock.wallMs();
+  pending.created_ms = clock.wallMs();
+  REQUIRE(store.tgQueuePut(pending) > 0);
+
+  {
+    TelegramBridge restarted{loop, store, makeHooks()};
+    restarted.configure(config, "telegram-reorder-node", true);
+    restarted.onAction(press, R"({"households":["h_ox"],"with_snapshot":false})");
+    loop.pumpDue();
+    clock.advance(1000);
+    loop.pumpDue();
+
+    CHECK(sends == 0);
+    CHECK(store.tgQueueCount() == 0);
+  }
+}
 
 TEST_CASE("telegram: press → sendPhoto (multipart: chat_id/caption/reply_markup/JPEG)") {
   TgFleet f;
@@ -208,16 +375,17 @@ TEST_CASE("telegram: press → sendPhoto (multipart: chat_id/caption/reply_marku
   REQUIRE(a.node->start());
   seedTgConfig(*a.node, /*with_snapshot=*/true);
   pushFrame(*a.node);
-  f.run(1500);  // leader 就任 + configure (デバウンス 300ms)
+  f.run(1500);
 
-  // status_json に bridge.telegram=active が出ている
+
   {
     auto st = json::parse(a.node->statusJson());
     REQUIRE(st);
     CHECK(json::getString(json::get(st.get(), "bridge"), "telegram") == "active");
   }
 
-  a.node->press("");
+  const std::string call_id = a.node->pressV2("d_front", "");
+  REQUIRE(!call_id.empty());
   REQUIRE(f.runUntil([&] { return a.https.count("sendPhoto") == 1; }, 3000));
 
   const HttpsReq* r = a.https.last("sendPhoto");
@@ -226,26 +394,26 @@ TEST_CASE("telegram: press → sendPhoto (multipart: chat_id/caption/reply_marku
   // URL: bot<token>/sendPhoto
   CHECK(r->url.rfind("https://api.telegram.org/botTESTTOKEN/sendPhoto", 0) == 0);
   CHECK(r->headers.find("multipart/form-data; boundary=") != std::string::npos);
-  // multipart 欄: chat_id / caption ({door}/{time} 展開) / reply_markup / JPEG バイト列
+
   CHECK(r->body.find("name=\"chat_id\"") != std::string::npos);
   CHECK(r->body.find("111") != std::string::npos);
   CHECK(r->body.find("正面玄関に来客です") != std::string::npos);
   CHECK(r->body.find("inline_keyboard") != std::string::npos);
-  CHECK(r->body.find("qr|qr_away|d_front") != std::string::npos);
-  CHECK(r->body.find("ただいま留守にしています") != std::string::npos);  // ボタン文言
+  CHECK(r->body.find("qr|qr_away|" + call_id) != std::string::npos);
+  CHECK(r->body.find("ただいま留守にしています") != std::string::npos);
   CHECK(r->body.find("filename=\"doorbell.jpg\"") != std::string::npos);
   CHECK(r->body.find(kJpegSoi) != std::string::npos);
-  // quick_replies が order 順 (qr_away が最初のボタン)
+
   CHECK(r->body.find("qr|qr_away|") < r->body.find("qr|qr_no|"));
 
-  // 同一イベントの再送は起きない (notified_at 済み + キュー消化済み)
+
   f.run(60'000);
   CHECK(a.https.count("sendPhoto") == 1);
 
   a.node->stop();
 }
 
-TEST_CASE("telegram: 複数 households の chat_id 展開と去重") {
+TEST_CASE("telegram: expands and deduplicates chat IDs across households") {
   TgFleet f;
   auto& a = f.add("A:1", "front", "door_station", "d_front", true, tgCaps(10));
   REQUIRE(a.node->start());
@@ -257,8 +425,9 @@ TEST_CASE("telegram: 複数 households の chat_id 展開と去重") {
                        "\"actions\":[{\"type\":\"telegram\",\"households\":[\"h_ox\",\"h_b\"]}]}");
   f.run(1500);
 
-  a.node->press("");
-  // with_snapshot 無し → sendMessage。chat は {111,222,333} — 222 は 1 回だけ
+  const std::string call_id = a.node->pressV2("d_front", "");
+  REQUIRE(!call_id.empty());
+
   REQUIRE(f.runUntil([&] { return a.https.count("sendMessage") == 3; }, 5000));
   size_t c111 = 0, c222 = 0, c333 = 0;
   for (const auto& r : a.https.reqs) {
@@ -269,19 +438,19 @@ TEST_CASE("telegram: 複数 households の chat_id 展開と去重") {
     if (chat == "111") c111++;
     if (chat == "222") c222++;
     if (chat == "333") c333++;
-    // 降級でも inline ボタンは付く
+
     CHECK(json::get(b.get(), "reply_markup"));
   }
   CHECK(c111 == 1);
   CHECK(c222 == 1);
   CHECK(c333 == 1);
   f.run(30'000);
-  CHECK(a.https.count("sendMessage") == 3);  // 去重・再送なし
+  CHECK(a.https.count("sendMessage") == 3);
 
   a.node->stop();
 }
 
-TEST_CASE("telegram: 失敗 (500) → バックオフ再試行 (30s) → 成功で打ち止め") {
+TEST_CASE("telegram: retries a server failure with backoff and stops after success") {
   TgFleet f;
   auto& a = f.add("A:1", "front", "door_station", "d_front", true, tgCaps(10));
   REQUIRE(a.node->start());
@@ -289,45 +458,66 @@ TEST_CASE("telegram: 失敗 (500) → バックオフ再試行 (30s) → 成功�
   f.run(1500);
 
   a.https.fail_status = 500;
-  a.node->press("");
+  const std::string call_id = a.node->pressV2("d_front", "");
+  REQUIRE(!call_id.empty());
   REQUIRE(f.runUntil([&] { return a.https.count("sendMessage") == 1; }, 3000));
-  // 失敗 → 30s のバックオフ内は再送しない
+
   f.run(20'000);
   CHECK(a.https.count("sendMessage") == 1);
-  // 30s 経過後に再試行 → 今度は成功
+
   a.https.fail_status = 0;
   REQUIRE(f.runUntil([&] { return a.https.count("sendMessage") == 2; }, 20'000));
-  // 成功後は再送しない (notified_at + キュー削除)
+
   f.run(120'000);
   CHECK(a.https.count("sendMessage") == 2);
 
   a.node->stop();
 }
 
-TEST_CASE("telegram: leader 死 (notified_at 記録後) → 新 leader は再送しない") {
+TEST_CASE("telegram: visitor cancellation suppresses claim and queued retry work") {
   TgFleet f;
-  auto& a = f.add("A:1", "front", "door_station", "d_front", true, tgCaps(20));
-  auto& b = f.add("B:1", "kitchen", "indoor_panel", "", false, tgCaps(10));
+  auto& a = f.add("A:1", "front", "door_station", "d_front", true, tgCaps(10));
   REQUIRE(a.node->start());
-  REQUIRE(b.node->start());
   seedTgConfig(*a.node, /*with_snapshot=*/false);
-  f.run(2000);  // 合流 + 設定複製 + A が telegram leader
+  f.run(1500);
 
-  a.node->press("");
+  const std::string claim_call = a.node->pressV2("d_front", "");
+  REQUIRE(!claim_call.empty());
+  REQUIRE(a.node->cancelCallV2("d_front", claim_call, "visitor"));
+  f.run(35'000);
+  CHECK(a.https.count("sendMessage") == 0);
+
+  a.https.fail_status = 500;
+  const std::string retry_call = a.node->pressV2("d_front", "");
+  REQUIRE(!retry_call.empty());
   REQUIRE(f.runUntil([&] { return a.https.count("sendMessage") == 1; }, 3000));
-  CHECK(b.https.count("sendMessage") == 0);  // 非 leader は送らない
-  f.run(500);  // 回執 (notified_at) の複製を待つ
-
-  f.net.killNode("A:1");
-  f.run(6000);  // B が leader 就任 → 未通知 press の拾い直し (rescan)
-  // notified_at 済みなので B は送らない
-  CHECK(b.https.count("sendMessage") == 0);
+  REQUIRE(a.node->cancelCallV2("d_front", retry_call, "visitor"));
+  a.https.fail_status = 0;
+  f.run(120'000);
+  CHECK(a.https.count("sendMessage") == 1);
 
   a.node->stop();
-  b.node->stop();
 }
 
-TEST_CASE("telegram: leader 死 (claim のみ・送信未達) → 新 leader が送る (宁重勿漏)") {
+TEST_CASE("telegram: cancellation does not retract a successfully delivered message") {
+  TgFleet f;
+  auto& a = f.add("A:1", "front", "door_station", "d_front", true, tgCaps(10));
+  REQUIRE(a.node->start());
+  seedTgConfig(*a.node, /*with_snapshot=*/false);
+  f.run(1500);
+
+  const std::string call_id = a.node->pressV2("d_front", "");
+  REQUIRE(!call_id.empty());
+  REQUIRE(f.runUntil([&] { return a.https.count("sendMessage") == 1; }, 3000));
+  REQUIRE(a.node->cancelCallV2("d_front", call_id, "visitor"));
+  f.run(60'000);
+
+  CHECK(a.https.count("sendMessage") == 1);
+  CHECK(a.https.count("deleteMessage") == 0);
+  a.node->stop();
+}
+
+TEST_CASE("telegram: a new leader does not resend after notified_at is recorded") {
   TgFleet f;
   auto& a = f.add("A:1", "front", "door_station", "d_front", true, tgCaps(20));
   auto& b = f.add("B:1", "kitchen", "indoor_panel", "", false, tgCaps(10));
@@ -336,13 +526,36 @@ TEST_CASE("telegram: leader 死 (claim のみ・送信未達) → 新 leader が
   seedTgConfig(*a.node, /*with_snapshot=*/false);
   f.run(2000);
 
-  a.https.drop = true;  // A は送信を発射するが応答が永遠に来ない (notified_at 未記録)
   a.node->press("");
   REQUIRE(f.runUntil([&] { return a.https.count("sendMessage") == 1; }, 3000));
-  f.run(300);  // claim の複製を待つ
+  CHECK(b.https.count("sendMessage") == 0);
+  f.run(500);
 
   f.net.killNode("A:1");
-  // B が leader 就任 → rescan → claim 奪取 (新しい hlc) → 300ms 再確認 → 送信
+  f.run(6000);
+
+  CHECK(b.https.count("sendMessage") == 0);
+
+  a.node->stop();
+  b.node->stop();
+}
+
+TEST_CASE("telegram: a new leader sends when its predecessor claimed but did not deliver") {
+  TgFleet f;
+  auto& a = f.add("A:1", "front", "door_station", "d_front", true, tgCaps(20));
+  auto& b = f.add("B:1", "kitchen", "indoor_panel", "", false, tgCaps(10));
+  REQUIRE(a.node->start());
+  REQUIRE(b.node->start());
+  seedTgConfig(*a.node, /*with_snapshot=*/false);
+  f.run(2000);
+
+  a.https.drop = true;
+  a.node->press("");
+  REQUIRE(f.runUntil([&] { return a.https.count("sendMessage") == 1; }, 3000));
+  f.run(300);
+
+  f.net.killNode("A:1");
+
   REQUIRE(f.runUntil([&] { return b.https.count("sendMessage") == 1; }, 8000));
   auto bb = json::parse(b.https.last("sendMessage")->body);
   REQUIRE(bb);
@@ -353,9 +566,9 @@ TEST_CASE("telegram: leader 死 (claim のみ・送信未達) → 新 leader が
   b.node->stop();
 }
 
-TEST_CASE("telegram: leader ≠ 押鈴ノード — fetchSnapshot で他ノードの JPEG が載る") {
+TEST_CASE("telegram: leader fetches a JPEG snapshot from the originating node") {
   TgFleet f;
-  // A: 門口機 (カメラあり) だが wan 無し → telegram 不適格。B: indoor_panel が leader。
+
   auto& a = f.add("A:1", "front", "door_station", "d_front", true, tgCaps(20, /*wan=*/false));
   auto& b = f.add("B:1", "kitchen", "indoor_panel", "", false, tgCaps(10));
   REQUIRE(a.node->start());
@@ -364,7 +577,7 @@ TEST_CASE("telegram: leader ≠ 押鈴ノード — fetchSnapshot で他ノー�
   pushFrame(*a.node);
   f.run(2000);
 
-  a.node->press("");  // 押鈴は A、送信は B (leader) — 快照は SNAP_REQ/RESP で A から取る
+  a.node->press("");
   REQUIRE(f.runUntil([&] { return b.https.count("sendPhoto") == 1; }, 5000));
   CHECK(a.https.count("sendPhoto") == 0);
   const HttpsReq* r = b.https.last("sendPhoto");
@@ -377,36 +590,37 @@ TEST_CASE("telegram: leader ≠ 押鈴ノード — fetchSnapshot で他ノー�
   b.node->stop();
 }
 
-TEST_CASE("telegram: getUpdates 長輪詢 — callback_query → quickReply/TTS + ボタン撤去") {
+TEST_CASE("telegram: getUpdates handles callback queries, replies, TTS, and button removal") {
   TgFleet f;
   auto& a = f.add("A:1", "front", "door_station", "d_front", true, tgCaps(10));
   REQUIRE(a.node->start());
   seedTgConfig(*a.node, /*with_snapshot=*/false, /*poll_updates=*/true);
   f.run(1500);
-  CHECK(a.https.count("getUpdates") >= 1);  // 輪詢が回っている
+  CHECK(a.https.count("getUpdates") >= 1);
 
-  // press → sendMessage (msg_id=100 が notify に記録される)
-  a.node->press("");
+
+  const std::string callback_call_id = a.node->pressV2("d_front", "");
+  REQUIRE(!callback_call_id.empty());
   REQUIRE(f.runUntil([&] { return a.https.count("sendMessage") == 1; }, 3000));
 
-  // 住人が inline ボタン「ただいま留守にしています」を押した
+
   a.https.pending_updates =
-      "[{\"update_id\":7,\"callback_query\":{\"id\":\"cbq1\","
-      "\"data\":\"qr|qr_away|d_front\","
+      std::string("[{\"update_id\":7,\"callback_query\":{\"id\":\"cbq1\",") +
+      "\"data\":\"qr|qr_away|" + callback_call_id + "\","
       "\"message\":{\"message_id\":100,\"chat\":{\"id\":111}}}}]";
 
-  // 門口機 (自分) に reply 表示 + TTS が届く
+
   REQUIRE(f.runUntil([&] { return a.uiCount("reply") == 1; }, 5000));
   REQUIRE(f.runUntil([&] { return !a.tts.empty(); }, 1000));
   CHECK(a.tts[0] == "ただいま留守にしています");
 
-  // answerCallbackQuery (送信済みトースト) + editMessageReplyMarkup (ボタン撤去)
+
   REQUIRE(f.runUntil([&] { return a.https.count("answerCallbackQuery") == 1; }, 2000));
   {
     auto bd = json::parse(a.https.last("answerCallbackQuery")->body);
     REQUIRE(bd);
     CHECK(json::getString(bd.get(), "callback_query_id") == "cbq1");
-    CHECK(json::getString(bd.get(), "text") == "送信済み");
+    CHECK(json::getString(bd.get(), "text") == "reply.sent");
   }
   REQUIRE(f.runUntil([&] { return a.https.count("editMessageReplyMarkup") == 1; }, 2000));
   {
@@ -417,8 +631,8 @@ TEST_CASE("telegram: getUpdates 長輪詢 — callback_query → quickReply/TTS 
     REQUIRE(bd);
     CHECK(json::getString(bd.get(), "chat_id") == "111");
     CHECK(json::getInt(bd.get(), "message_id") == 100);
-    // 撤去は空オブジェクトではなく {"inline_keyboard":[]} で送る
-    // (空 {} は必須欄 inline_keyboard を欠き Telegram が 400 を返す)
+
+
     cJSON* markup = json::get(bd.get(), "reply_markup");
     REQUIRE(markup);
     cJSON* kb = json::get(markup, "inline_keyboard");
@@ -426,11 +640,11 @@ TEST_CASE("telegram: getUpdates 長輪詢 — callback_query → quickReply/TTS 
     CHECK(cJSON_IsArray(kb));
     CHECK(cJSON_GetArraySize(kb) == 0);
   }
-  // caption 末尾に「✅ 応答済み」追記 (失敗容認だがリクエストは飛ぶ)
+
   REQUIRE(f.runUntil([&] { return a.https.count("editMessageCaption") == 1; }, 2000));
   CHECK(a.https.last("editMessageCaption")->body.find("✅ 応答済み") != std::string::npos);
 
-  // reply イベントの「✅ {text}」通知 (通知範囲 = press と同じ chat)
+
   REQUIRE(f.runUntil([&] { return a.https.count("sendMessage") >= 2; }, 3000));
   {
     auto bd = json::parse(a.https.last("sendMessage")->body);
@@ -439,7 +653,7 @@ TEST_CASE("telegram: getUpdates 長輪詢 — callback_query → quickReply/TTS 
     CHECK(json::getString(bd.get(), "text") == "✅ ただいま留守にしています");
   }
 
-  // offset 管理: 処理済み update は次回以降 offset=8 で要求される (再配送防止)
+
   REQUIRE(f.runUntil([&] {
     const HttpsReq* g = a.https.last("getUpdates");
     return g && g->url.find("offset=8") != std::string::npos;
@@ -448,28 +662,29 @@ TEST_CASE("telegram: getUpdates 長輪詢 — callback_query → quickReply/TTS 
   a.node->stop();
 }
 
-TEST_CASE("telegram: sendMessage 降級分の caption 追記 — 400 なら editMessageText へ降級") {
+TEST_CASE("telegram: sendMessage updates fall back to editMessageText after status 400") {
   TgFleet f;
   auto& a = f.add("A:1", "front", "door_station", "d_front", true, tgCaps(10));
   REQUIRE(a.node->start());
   seedTgConfig(*a.node, /*with_snapshot=*/false, /*poll_updates=*/true);
   f.run(1500);
 
-  // 実 Telegram の応答を模す: 文字メッセージに editMessageCaption を打つと 400
+
   a.https.respond_by_api["editMessageCaption"] = {
       400,
       "{\"ok\":false,\"error_code\":400,"
       "\"description\":\"Bad Request: there is no caption in the message to edit\"}"};
 
-  a.node->press("");  // with_snapshot=false → sendMessage (msg_id=100)
+  const std::string call_id = a.node->pressV2("d_front", "");
+  REQUIRE(!call_id.empty());  // with_snapshot=false → sendMessage (msg_id=100)
   REQUIRE(f.runUntil([&] { return a.https.count("sendMessage") == 1; }, 3000));
 
   a.https.pending_updates =
       "[{\"update_id\":9,\"callback_query\":{\"id\":\"cbq2\","
-      "\"data\":\"qr|qr_away|d_front\","
+      "\"data\":\"qr|qr_away|" + call_id + "\","
       "\"message\":{\"message_id\":100,\"chat\":{\"id\":111}}}}]";
 
-  // editMessageCaption 400 → editMessageText に同文で降級
+
   REQUIRE(f.runUntil([&] { return a.https.count("editMessageCaption") == 1; }, 5000));
   REQUIRE(f.runUntil([&] { return a.https.count("editMessageText") == 1; }, 2000));
   {
@@ -484,21 +699,21 @@ TEST_CASE("telegram: sendMessage 降級分の caption 追記 — 400 なら edit
   a.node->stop();
 }
 
-TEST_CASE("telegram: SOS 緊急 — leader が 🚨/✅ を全 chat へ (quiet_hours 非依存)") {
+TEST_CASE("telegram: SOS leader notifies every chat regardless of quiet hours") {
   TgFleet f;
-  // A が telegram leader。B (発報側) は wan 無しで不適格。
+
   auto& a = f.add("A:1", "front", "door_station", "d_front", true, tgCaps(20));
   auto& b = f.add("B:1", "kitchen", "indoor_panel", "", false, tgCaps(10, /*wan=*/false));
   REQUIRE(a.node->start());
   REQUIRE(b.node->start());
   seedTgConfig(*a.node, /*with_snapshot=*/false);
-  // 終日の quiet_hours で telegram を suppress — 緊急はルール非依存の組込動作なので影響しない
+
   a.node->setConfigKey(
       "quiet_hours.default",
       "{\"windows\":[{\"from\":\"00:00\",\"to\":\"24:00\"}],\"suppress\":[\"telegram\",\"chime\"]}");
-  f.run(2000);  // 合流 + 設定複製 + A が leader
+  f.run(2000);
 
-  // B が発報 → leader A だけが 🚨 を送る (発報元の端末名入り)
+
   b.node->setEmergency(true, "panel");
   REQUIRE(f.runUntil([&] { return a.https.count("sendMessage") == 1; }, 5000));
   CHECK(b.https.count("sendMessage") == 0);
@@ -511,13 +726,13 @@ TEST_CASE("telegram: SOS 緊急 — leader が 🚨/✅ を全 chat へ (quiet_h
     CHECK(text.find("kitchen から発報") != std::string::npos);
   }
 
-  // 解除 (A 側から) → ✅ 緊急解除
+
   a.node->setEmergency(false, "admin");
   REQUIRE(f.runUntil([&] { return a.https.count("sendMessage") == 2; }, 5000));
   CHECK(json::getString(json::parse(a.https.last("sendMessage")->body).get(), "text") ==
         "✅ 緊急解除");
 
-  // 遷移が無ければ再送しない
+
   f.run(5000);
   CHECK(a.https.count("sendMessage") == 2);
   CHECK(b.https.count("sendMessage") == 0);
@@ -526,25 +741,27 @@ TEST_CASE("telegram: SOS 緊急 — leader が 🚨/✅ を全 chat へ (quiet_h
   b.node->stop();
 }
 
-TEST_CASE("telegram: press 通知に用件見出し + 訪客言語バッジ (visit_purposes / visitor_lang)") {
+TEST_CASE("telegram: press notification includes purpose and visitor-language badge") {
   TgFleet f;
   auto& a = f.add("A:1", "front", "door_station", "d_front", true, tgCaps(10));
   REQUIRE(a.node->start());
   seedTgConfig(*a.node, /*with_snapshot=*/false);
   f.run(1500);
 
-  // 用件なし・主言語 → 見出し行は付かない (従来の 1 行のまま)
+
   a.node->press("");
   REQUIRE(f.runUntil([&] { return a.https.count("sendMessage") == 1; }, 3000));
   {
     auto bd = json::parse(a.https.last("sendMessage")->body);
     REQUIRE(bd);
     const std::string text = json::getString(bd.get(), "text");
-    CHECK(text.rfind("正面玄関に来客です (", 0) == 0);  // 見出し行なし = 本文が先頭
+    CHECK(text.rfind("正面玄関に来客です (", 0) == 0);
     CHECK(text.find('\n') == std::string::npos);
   }
+  a.node->cancelCall("d_front");
+  f.run(200);
 
-  // 訪客が英語を選び宅配ボタンで按鈴 → 「📦 宅配便 🌐 EN」+ 本文
+
   a.node->setVisitorLang("d_front", "en");
   f.run(300);
   a.node->press("", "p_delivery");
@@ -552,11 +769,13 @@ TEST_CASE("telegram: press 通知に用件見出し + 訪客言語バッジ (vis
   {
     const std::string text =
         json::getString(json::parse(a.https.last("sendMessage")->body).get(), "text");
-    CHECK(text.rfind("📦 宅配便 🌐 EN\n", 0) == 0);   // 見出し行が先頭
-    CHECK(text.find("正面玄関に来客です") != std::string::npos);  // 本文は通知言語 (ja) のまま
+    CHECK(text.rfind("📦 宅配便 🌐 EN\n", 0) == 0);
+    CHECK(text.find("正面玄関に来客です") != std::string::npos);
   }
+  a.node->cancelCall("d_front");
+  f.run(200);
 
-  // 用件のみ (言語は ja へ復帰) → バッジ無しの見出しだけ
+
   a.node->setVisitorLang("d_front", "ja");
   f.run(300);
   a.node->press("", "p_mail");
@@ -571,25 +790,25 @@ TEST_CASE("telegram: press 通知に用件見出し + 訪客言語バッジ (vis
   a.node->stop();
 }
 
-TEST_CASE("telegram: motion/offline の文言が i18n_overrides で差し替わる (Node::text 経由)") {
+TEST_CASE("telegram: i18n overrides replace motion and offline text through Node::text") {
   TgFleet f;
   auto& a = f.add("A:1", "front", "door_station", "d_front", true, tgCaps(10));
   REQUIRE(a.node->start());
   a.node->setConfigKey("doors.d_front", "{\"label\":{\"ja\":\"正面玄関\"}}");
   a.node->setConfigKey("households.h_ox", "{\"telegram_chat_ids\":[111]}");
-  a.node->setConfigKey("integrations.telegram.bot_token", "\"TESTTOKEN\"");
+  a.node->setConfigKey("integrations.telegram.bot_token_ref", "\"secret:telegram.test\"");
   a.node->setConfigKey("trigger_rules.r_motion",
                        std::string("{\"enabled\":true,\"when\":{\"type\":\"motion\"},") +
                            "\"actions\":[{\"type\":\"telegram\",\"households\":[\"h_ox\"]}]}");
   f.run(1500);
 
-  // 既定 (内蔵表)
+
   a.node->loop().callSync([] {});
-  a.node->press("");  // press にはルールが無い — motion を直接起こす代わりに text() で確認
+  a.node->press("");
   CHECK(a.node->text("event.motion", "ja", {{"door", "正面玄関"}, {"time", "09:13"}}) ==
         "正面玄関 で動きを検知 (09:13)");
 
-  // i18n_overrides で上書き → ブリッジの文面も追従する
+
   a.node->setConfigKey("i18n_overrides.ja",
                        "{\"event.motion\":\"🚶 {door} に動きあり {time}\","
                        "\"event.online\":\"{device} 復帰\"}");

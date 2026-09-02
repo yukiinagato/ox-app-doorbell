@@ -1,23 +1,23 @@
 # 住户使用指南 —— 应答来客
 
-> 日本語: [Usage-Residents](Usage-Residents) / English: [Usage-Residents-en](Usage-Residents-en)
+> English: [Usage-Residents](Usage-Residents) / 日本語: [Usage-Residents-ja](Usage-Residents-ja) / 繁體中文 (本頁)
 
-以家人的日常视角，用场景说明「这种时候该怎么做」。修改配置的方法见
+以家人的日常視角，用場景說明「這種時候該怎麼做」。哪些電話、app、integration 與 device 會
+反應，取決於已 commissioning 的 hardware 與 matching rule。修改配置的方法見
 [管理员指南](Usage-Admin-zh)，功能一览见[功能总览](Features-zh)。
 
 ## 场景 1: 在家时门铃响了
 
-来铃时，室内机上会显示**哪个玄关、事由（快递等）、访客的语言**以及门口的实时影像。
-应答方式有 4 种，哪一种都可以。
+matching rule 對 commissioned indoor station 時，可顯示**入口、事由、訪客語言**，並在
+source/playback path available 時顯示影像。以下 4 種是 conditional capability，不代表每個部署都有。
 
-1. **在室内机接听** —— 点「应答」就与门口机进入双向通话。只想用声音解决时
-   可选仅语音，想露脸时也可选双向影像。
-2. **用电话接听** —— 按铃的同时，宅内的内线电话和登记的手机已经在响了。
-   像平常一样接电话就能和门口通话。
+1. **在室內機接聽** —— real SIP/audio path commissioned 後，「接聽」使用已實作 audio/media profile。
+2. **用电话接听** —— matching SIP/PSTN rule 與 commissioning 完成的 PBX path 可用時，內線或
+   已登記手機可以響鈴。像平常一樣接聽即可和門口通話。
 3. **用快捷回复回应** —— 按下「请稍等」等按钮即可。会以大字显示在门口机上
    并被朗读。做饭腾不出手的时候很方便。
-4. **用 TV 遥控器回应** —— Android TV 的来铃画面会全屏盖上，门口的影像和声音
-   自动出现。用 D-pad 选择快捷回复按确认即可。
+4. **用 TV 遙控器回覆** —— rule 選擇的 commissioned Android TV path 可使用 incoming UI 與 D-pad
+   quick reply；media 只有在實測 profile available 時才開始。
 
 用电话接听之后如果「还是想用室内机说」，按室内机的「应答」就会
 挂断电话侧并切换为室内对讲（应答接管）。
@@ -29,11 +29,9 @@
 
 ## 场景 2: 外出时有来客
 
-- **Telegram 收到带照片的通知**。附有「📦 快递」这样的事由，如果访客切换了语言
-  还会带「🌐 EN」徽标。按消息下方的按钮，预设短语就会当场
-  显示并朗读在门口机上（以访客的语言）。
-- **手机也在响**（经由光纤电话的 PSTN）。接起来就能直接和门口通话，
-  通话中按 *1 还能打开玄关的锁（取决于配置）。即使在 push 到不了的深山里电话也会响。
+- **matching Telegram rule 啟用時**，通知可包含照片、事由、語言 badge 與已配置的 quick reply button。
+- **matching SIP/PSTN rule 與 commissioning 完成的 PBX path 可用時**，手機也可以響鈴。接聽即可
+  和門口通話；已配置的 DTMF action（例如 *1）可能用於開鎖。
 - **iPhone 的家庭 App**（已配置 HomeKit 联动时）也会出现门铃通知，可以确认
   实时影像。在外面查看需要 Apple TV / HomePod 的家居中枢。
 - **能架 VPN 的人**，只要进入宅内 LAN，网页面板、管理界面、浏览器通话等
@@ -51,12 +49,19 @@
 
 **长按室内机的紧急按钮 3 秒**即触发报警（长按是为了防误触）。
 
-- 全家的设备进入警报显示，警笛响起。
-- 全体家人的 Telegram 收到 🚨 通知。
-- 如果有 Home Assistant 联动，还可按配置联动灯光闪烁、外部警笛等。
+- SOS active 狀態會複製到所有 Core node，node 重新連線時會恢復。
+- visual alarm、sound、system notification、Web Push、Telegram、MQTT、SIP 目的地、Home Assistant
+  action 只在 matching rule 選中時執行。rule 可以刻意設為零 recipient 或 silent presentation。
+- 開啟中的 Web page 其 `emergency.web_active_page_alerts` 預設為 `true`，所以零 recipient 或
+  Push-only rule 仍會渲染 SOS active/clear 狀態。管理員關閉後，正向匹配的 `device_alert` 或實際
+  送達的 Push 仍可顯示。啟用期間，即使 rule TTL 結束 custom sound/color decoration，安全的紅色 SOS
+  overlay 仍保留至 clear。page 把管理員指定的 `?group=` 同時用於 poll 與 Push。
 
-**解除**从警报画面的「解除」进行 —— 需要输入 kiosk PIN（防捣乱措施）。
-解除后所有设备恢复正常，并通知「✅ 紧急解除」。
+**clear** 是需要已配置 PIN/permission 的授權操作。clear 狀態會複製到所有 Core node；device 是否
+顯示 clear 或送出另一則 clear 通知，仍取決於 rule 與 Web switch。
+
+管理界面的 delivery diagnostics 中，`delivery_result` 只表示 Core 嘗試 dispatch，不能證明 screen、
+sound 或 system notification 真正呈現；證據來自 client runtime 的逐 channel presentation report。
 
 重要的事: **不会自动呼叫警察或消防**。是否报警的判断必须由人来做，
 这是设计使然（参见[设计理念](Design-Philosophy-zh)）。需要的话可以在配置中
@@ -64,8 +69,8 @@
 
 ## 夜间的行为
 
-- **quiet_hours**（默认 23:00–07:00）: 只有室内门铃声会静音。电话、Telegram、HA 通知
-  半夜也必定送达 —— 这是为了不漏掉来客的默认设置。嫌吵的话在管理界面调整。
+- **quiet_hours**（默认 23:00–07:00）: matching rule 可用這段時間抑制或改變指定 action。它不
+  保證 phone、Telegram、HA 或其他 channel 一定執行；請在管理界面檢查 active rule。
 - **夜间模式**（默认 22:00–06:00）: 门口机、室内机的屏幕减光，显示偏红。
   这是为了不让走廊变得刺眼的功能。
 - 也可以组建「仅夜间的动体检测发到 Telegram」这样的规则（[管理员指南](Usage-Admin-zh)）。
@@ -74,6 +79,6 @@
 
 - 可以从室内机「推送」主题（门口机的背景）和文案 —— 比如换成节令问候。
   更改会毫秒级反映到所有设备。
-- 没来得及应答的来客，会带着快照留在管理界面的「事件历史」里。
-- 有设备从 LAN 消失，30 秒内 Telegram 就会收到「⚠ 离线」。
-  无论停电、断线还是被盗，都能第一时间察觉。
+- 未接聽訪客會留在 event history；只有所選 camera path 成功產生時才附 snapshot。
+- 若配置了 offline-device rule，node 從 LAN 消失時可以送 Telegram 或其他指定 alert；delivery 取決於
+  該 rule 與所選 integration。

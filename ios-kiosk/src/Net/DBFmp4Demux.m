@@ -1,6 +1,7 @@
 #import "DBFmp4Demux.h"
 void DBH264Dbg(NSString *fmt, ...);
 #import <arpa/inet.h>
+#import <errno.h>
 #import <netdb.h>
 #import <netinet/in.h>
 #import <sys/socket.h>
@@ -11,7 +12,7 @@ static const NSUInteger kMaxBufferBytes = 8 * 1024 * 1024;
 #define DB_MAX_SAMPLES_PER_MOOF 512
 static void *kFmp4QueueKey = &kFmp4QueueKey;
 
-// ---- BE 読み ----
+
 static uint32_t rd32(const uint8_t *p) {
   return ((uint32_t)p[0] << 24) | ((uint32_t)p[1] << 16) | ((uint32_t)p[2] << 8) | p[3];
 }
@@ -19,7 +20,7 @@ static uint64_t rd64(const uint8_t *p) {
   return ((uint64_t)rd32(p) << 32) | rd32(p + 4);
 }
 
-// trun の一時表 (各 demux インスタンスの cbQueue からのみ触る)
+
 typedef struct {
   uint32_t dur, size, flg;
 } DbTrunSample;
@@ -40,13 +41,13 @@ static BOOL sendAll(int fd, const void *bytes, size_t length) {
   volatile BOOL _running;
   int _sock;
 
-  // 解析状態 (_cbQueue 専属)
+
   dispatch_queue_t _cbQueue;
-  NSMutableData *_pending;  // 未消化バイト
+  NSMutableData *_pending;
   NSData *_sps, *_pps;
   BOOL _readySent, _failSent;
-  uint32_t _lastDurMs;  // trun duration の引き継ぎ (flags 無し時)
-  uint64_t _outDtsMs;   // 出力 sample の走査 DTS (ms)
+  uint32_t _lastDurMs;
+  uint64_t _outDtsMs;
   DbTrunSample _trun[DB_MAX_SAMPLES_PER_MOOF];
   uint32_t _trunCount;
   uint32_t _firstFlags;
@@ -67,7 +68,7 @@ static BOOL sendAll(int fd, const void *bytes, size_t length) {
     _cbQueue = dispatch_queue_create("doorbell.fmp4", DISPATCH_QUEUE_SERIAL);
     dispatch_queue_set_specific(_cbQueue, kFmp4QueueKey, kFmp4QueueKey, NULL);
     _pending = [[NSMutableData alloc] init];
-    _lastDurMs = 40;  // 25fps 初期値 (trun duration が来れば上書き)
+    _lastDurMs = 40;
   }
   return self;
 }
@@ -99,7 +100,7 @@ static BOOL sendAll(int fd, const void *bytes, size_t length) {
   }
 }
 
-// 1 接続 (HTTP GET → 受信ループ)。YES = EOF まで正常。
+
 - (BOOL)streamOnce {
   int fd = -1;
   if (![self connectSock:&fd]) return NO;
@@ -133,10 +134,17 @@ static BOOL sendAll(int fd, const void *bytes, size_t length) {
 
 - (BOOL)connectSock:(int *)fd {
   NSURL *u = [NSURL URLWithString:_url];
-  if (u == nil) return NO;
+  if (u == nil) {
+    DBH264Dbg(@"[fmp4] invalid URL: %@", _url);
+    return NO;
+  }
   NSString *host = [u host];
   NSInteger port = [u port] ? [[u port] integerValue] : 80;
   NSString *path = [u path] ?: @"/";
+  if (![host length] || port < 1 || port > 65535) {
+    DBH264Dbg(@"[fmp4] invalid endpoint host=%@ port=%ld", host, (long)port);
+    return NO;
+  }
   if ([path length] == 0) path = @"/";
   if ([[u query] length] > 0)
     path = [path stringByAppendingFormat:@"?%@", [u query]];
@@ -144,9 +152,17 @@ static BOOL sendAll(int fd, const void *bytes, size_t length) {
   memset(&hints, 0, sizeof(hints));
   hints.ai_family = AF_INET;
   hints.ai_socktype = SOCK_STREAM;
-  if (getaddrinfo([host UTF8String], NULL, &hints, &res) != 0 || res == NULL) return NO;
+  int gai = getaddrinfo([host UTF8String], NULL, &hints, &res);
+  if (gai != 0 || res == NULL) {
+    DBH264Dbg(@"[fmp4] DNS failed host=%@ error=%s", host, gai_strerror(gai));
+    return NO;
+  }
   int s = socket(AF_INET, SOCK_STREAM, 0);
-  if (s < 0) { freeaddrinfo(res); return NO; }
+  if (s < 0) {
+    DBH264Dbg(@"[fmp4] socket failed errno=%d", errno);
+    freeaddrinfo(res);
+    return NO;
+  }
   int one = 1;
   setsockopt(s, SOL_SOCKET, SO_NOSIGPIPE, &one, sizeof(one));
   struct timeval tv = {10, 0};
@@ -157,23 +173,40 @@ static BOOL sendAll(int fd, const void *bytes, size_t length) {
   a.sin_port = htons((uint16_t)port);
   a.sin_addr = ((struct sockaddr_in *)res->ai_addr)->sin_addr;
   freeaddrinfo(res);
-  if (connect(s, (struct sockaddr *)&a, sizeof(a)) < 0) { close(s); return NO; }
+  if (connect(s, (struct sockaddr *)&a, sizeof(a)) < 0) {
+    DBH264Dbg(@"[fmp4] TCP connect failed host=%@ port=%ld errno=%d", host,
+              (long)port, errno);
+    close(s);
+    return NO;
+  }
   NSMutableString *req = [NSMutableString stringWithFormat:
       @"GET %@ HTTP/1.1\r\nHost: %@:%ld\r\nUser-Agent: doorbell-kiosk\r\n"
        "Accept: video/mp4\r\nConnection: close\r\n\r\n", path, host, (long)port];
   NSData *rd = [req dataUsingEncoding:NSUTF8StringEncoding];
-  if (!sendAll(s, [rd bytes], [rd length])) { close(s); return NO; }
-  // HTTP 応答ヘッダを読み捨て (CRLFCRLF まで)
+  if (!sendAll(s, [rd bytes], [rd length])) {
+    DBH264Dbg(@"[fmp4] request write failed errno=%d", errno);
+    close(s);
+    return NO;
+  }
+
   NSMutableData *hdr = [NSMutableData data];
   while (_running) {
     uint8_t b = 0;
     ssize_t n = recv(s, (void *)&b, (size_t)1, 0);
-    if (n <= 0) { close(s); return NO; }
+    if (n <= 0) {
+      DBH264Dbg(@"[fmp4] response header ended n=%ld errno=%d", (long)n, errno);
+      close(s);
+      return NO;
+    }
     [hdr appendBytes:(const void *)&b length:1];
     NSUInteger L = [hdr length];
     const uint8_t *hb = (const uint8_t *)[hdr bytes];
     if (L >= 4 && hb[L-1]=='\n' && hb[L-2]=='\r' && hb[L-3]=='\n' && hb[L-4]=='\r') break;
-    if (L > 16 * 1024) { close(s); return NO; }
+    if (L > 16 * 1024) {
+      DBH264Dbg(@"[fmp4] response header too large");
+      close(s);
+      return NO;
+    }
   }
   NSString *head = [[NSString alloc] initWithData:hdr encoding:NSISOLatin1StringEncoding];
   if (![head hasPrefix:@"HTTP/1.1 200 "] && ![head hasPrefix:@"HTTP/1.0 200 "]) {
@@ -200,7 +233,7 @@ static BOOL sendAll(int fd, const void *bytes, size_t length) {
   return YES;
 }
 
-// ---- box 解析 (_cbQueue 上、_pending を消化) ----
+
 - (void)pumpLocked {
   const uint8_t *p = (const uint8_t *)[_pending bytes];
   NSUInteger len = [_pending length];
@@ -217,7 +250,7 @@ static BOOL sendAll(int fd, const void *bytes, size_t length) {
     } else if (size == 0) {
       break;
     }
-    if (size < hdr || len - consumed < size) break;  // 未着
+    if (size < hdr || len - consumed < size) break;
     const uint8_t *body = b + hdr;
     uint64_t bodyLen = size - hdr;
 
@@ -259,7 +292,7 @@ static BOOL sendAll(int fd, const void *bytes, size_t length) {
   if (d) [d fmp4DemuxFailed:self];
 }
 
-// moov を再帰下降で走査し avcC を探す (trak→mdia→minf→stbl→stsd→avc1→avcC)。
+
 - (void)parseInitLocked:(const uint8_t *)p len:(uint64_t)len {
   if ([self scanInitLocked:p len:len]) {
     _readySent = YES;
@@ -270,7 +303,7 @@ static BOOL sendAll(int fd, const void *bytes, size_t length) {
   }
 }
 
-// YES = avcC 発見済み (_sps/_pps 設定済み)
+
 - (BOOL)scanInitLocked:(const uint8_t *)p len:(uint64_t)len {
   while (len >= 8) {
     uint64_t size = rd32(p);
@@ -281,17 +314,17 @@ static BOOL sendAll(int fd, const void *bytes, size_t length) {
       size = rd64(p + 8);
       hdr = 16;
     }
-    if (size < hdr || size > len) return NO;  // 壊れ or 未完成
+    if (size < hdr || size > len) return NO;
     const uint8_t *body = p + hdr;
     uint64_t bodyLen = size - hdr;
     if (type == 'avcC') {
       return [self extractAvcC:body len:bodyLen];
     }
     if (type == 'stsd' && bodyLen > 8) {
-      // [version/flags(4) entry_count(4)] の後が sample entry
+
       if ([self scanInitLocked:body + 8 len:bodyLen - 8]) return YES;
     } else if ((type == 'avc1' || type == 'avc2' || type == 'encv') && bodyLen > 78) {
-      // VisualSampleEntry 固定 78 バイトの後が子 box
+
       if ([self scanInitLocked:body + 78 len:bodyLen - 78]) return YES;
     } else if (type == 'moov' || type == 'trak' || type == 'mdia' || type == 'minf' ||
                type == 'stbl' || type == 'mvex' || type == 'edts') {
@@ -319,8 +352,8 @@ static BOOL sendAll(int fd, const void *bytes, size_t length) {
   return YES;
 }
 
-// moof → traf 内の trun の sample 表を作る (flags 0x701: data_offset +
-// per-sample duration/size/flags — core buildFragment と対)。
+
+
 - (BOOL)parseMoofLocked:(const uint8_t *)p len:(uint64_t)len {
   const uint8_t *end = p + len;
   BOOL found = NO;
@@ -335,7 +368,7 @@ static BOOL sendAll(int fd, const void *bytes, size_t length) {
     }
     if (size < header || (uint64_t)(end - p) < size) return NO;
     if (type == 'traf') {
-      // traf 内部の trun を走査
+
       const uint8_t *q = p + header;
       const uint8_t *qEnd = p + size;
       while (qEnd - q >= 8) {
@@ -380,7 +413,7 @@ static BOOL sendAll(int fd, const void *bytes, size_t length) {
   BOOL hasDur = (flags & 0x000100) != 0;
   BOOL hasSize = (flags & 0x000200) != 0;
   BOOL hasFlg = (flags & 0x000400) != 0;
-  if (!hasSize) return NO;  // core の buildFragment は必ず size を書く
+  if (!hasSize) return NO;
   size_t fieldsPerSample = (hasDur ? 4 : 0) + 4 + (hasFlg ? 4 : 0);
   if ((uint64_t)(end - t) < (uint64_t)count * fieldsPerSample) return NO;
   for (uint32_t i = 0; i < count; i++) {
@@ -406,8 +439,8 @@ static BOOL sendAll(int fd, const void *bytes, size_t length) {
   return YES;
 }
 
-// mdat payload を trun 表に従って切り出し AVCC sample として delegate へ。
-// sample_flags bit24-25 (sample_depends_on) == 2 が I 帧。
+
+
 - (BOOL)emitSamplesLocked:(const uint8_t *)p len:(uint64_t)len {
   static int elog = 0;
   if (!elog) {
@@ -427,7 +460,7 @@ static BOOL sendAll(int fd, const void *bytes, size_t length) {
     BOOL key = ((flg >> 24) & 0x3) == 2;
     if (d) {
       NSData *s = [NSData dataWithBytes:p + off length:(NSUInteger)sz];
-      /* cbQueue 上で直接配送 (main に積むと A5 で追いつかない) */
+
       int64_t captureMs = i < _captureCount ? _captureMs[i] : 0;
       [d fmp4Demux:self sample:s key:key captureMs:captureMs
              dtsMs:(int64_t)dts durMs:(int64_t)_trun[i].dur];

@@ -1,137 +1,250 @@
 #!/usr/bin/env python3
-"""i18n/strings.yaml (制限付き 1 行形式) から各プラットフォームの文言資産を生成する。
+"""Generate deterministic platform localization assets from strings.yaml.
 
-依存なし (PyYAML 不使用 — 旧ビルド機対策)。形式:
-    key.path: { ja: "…", en: "…", zh: "…" }
+The input is intentionally a restricted, dependency-free subset of YAML so the
+generator also runs on legacy build hosts without PyYAML:
 
-出力:
-    webui/locale/{ja,en,zh}.json                 ({name} のまま)
-    android/app/src/main/res/values[-ja|-zh]/strings.xml  (%1$s… 出現順)
-    ios/Doorbell/{ja,en,zh}.lproj/Localizable.strings     (%@)
-    win/DoorbellApp/Strings.{ja,en,zh}.resx               ({0}…)
+    key.path: { ja: "...", en: "...", zh: "..." }
 
-検証: 言語間プレースホルダ不一致 = エラー (exit 1)。訳漏れ = 警告 + ja へフォールバック。
+Named placeholders use ``{name}``. Each renderer converts them to the native
+platform format. Missing translations fall back to Japanese for compatibility
+with the existing catalog; placeholder mismatches are fatal.
 """
+
+import argparse
 import json
 import os
 import re
 import sys
 
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SRC = os.path.join(ROOT, "i18n", "strings.yaml")
-LANGS = ["ja", "en", "zh"]
+LANGS = ("ja", "en", "zh")
 BASE = "ja"
 
-LINE_RE = re.compile(r'^([A-Za-z0-9_.]+):\s*\{\s*(.*)\s*\}\s*$')
+LINE_RE = re.compile(r"^([A-Za-z0-9_.]+):\s*\{\s*(.*)\s*\}\s*$")
 PAIR_RE = re.compile(r'(\w+):\s*"((?:[^"\\]|\\.)*)"')
-PH_RE = re.compile(r'\{(\w+)\}')
+PH_RE = re.compile(r"\{(\w+)\}")
+OPTIONAL_MISSING_PREFIXES = (os.path.join(ROOT, "webui", "locale") + os.sep,)
+
+
+class I18nError(Exception):
+    """Raised when the restricted catalog format or translations are invalid."""
 
 
 def parse(path):
-    entries = {}  # key -> {lang: text}
-    with open(path, encoding="utf-8") as f:
-        for ln, raw in enumerate(f, 1):
+    """Parse the restricted one-entry-per-line localization catalog."""
+    entries = {}
+    with open(path, encoding="utf-8") as source:
+        for line_number, raw in enumerate(source, 1):
             line = raw.strip()
             if not line or line.startswith("#"):
                 continue
-            m = LINE_RE.match(line)
-            if not m:
-                sys.exit(f"{path}:{ln}: 解析不能な行: {line!r}")
-            key, body = m.group(1), m.group(2)
-            langs = {}
-            for lm in PAIR_RE.finditer(body):
-                langs[lm.group(1)] = lm.group(2).replace('\\"', '"').replace("\\\\", "\\")
-            if BASE not in langs:
-                sys.exit(f"{path}:{ln}: {key} に原文 ({BASE}) がありません")
-            entries[key] = langs
+            match = LINE_RE.match(line)
+            if not match:
+                raise I18nError(
+                    f"{path}:{line_number}: unsupported catalog line: {line!r}"
+                )
+            key, body = match.group(1), match.group(2)
+            if key in entries:
+                raise I18nError(f"{path}:{line_number}: duplicate key: {key}")
+
+            translations = {}
+            cursor = 0
+            for pair in PAIR_RE.finditer(body):
+                if body[cursor:pair.start()].strip(" ,\t"):
+                    raise I18nError(
+                        f"{path}:{line_number}: unsupported mapping syntax for {key}"
+                    )
+                lang = pair.group(1)
+                if lang not in LANGS:
+                    raise I18nError(
+                        f"{path}:{line_number}: unsupported language {lang!r} for {key}"
+                    )
+                if lang in translations:
+                    raise I18nError(
+                        f"{path}:{line_number}: duplicate language {lang!r} for {key}"
+                    )
+                try:
+                    translations[lang] = json.loads('"' + pair.group(2) + '"')
+                except ValueError as error:
+                    raise I18nError(
+                        f"{path}:{line_number}: invalid quoted text for {key}: {error}"
+                    )
+                cursor = pair.end()
+            if body[cursor:].strip(" ,\t"):
+                raise I18nError(
+                    f"{path}:{line_number}: unsupported mapping syntax for {key}"
+                )
+            if BASE not in translations:
+                raise I18nError(
+                    f"{path}:{line_number}: {key} is missing base language {BASE!r}"
+                )
+            entries[key] = translations
     return entries
 
 
 def validate(entries):
-    errors = 0
-    for key, langs in entries.items():
-        base_ph = sorted(PH_RE.findall(langs[BASE]))
+    """Validate translation coverage and placeholder parity."""
+    errors = []
+    for key, translations in entries.items():
+        base_placeholders = sorted(PH_RE.findall(translations[BASE]))
         for lang in LANGS:
-            if lang not in langs:
-                print(f"warn: {key}: {lang} 訳なし → {BASE} にフォールバック", file=sys.stderr)
+            if lang not in translations:
+                print(
+                    f"warning: {key} has no {lang} translation; using {BASE}",
+                    file=sys.stderr,
+                )
                 continue
-            if sorted(PH_RE.findall(langs[lang])) != base_ph:
-                print(f"error: {key}: プレースホルダ不一致 ({lang})", file=sys.stderr)
-                errors += 1
+            if sorted(PH_RE.findall(translations[lang])) != base_placeholders:
+                errors.append(f"{key}: placeholder mismatch in {lang}")
     if errors:
-        sys.exit(1)
+        raise I18nError("\n".join(errors))
 
 
 def text(entries, key, lang):
+    """Return one translation, applying the catalog's base-language fallback."""
     return entries[key].get(lang, entries[key][BASE])
 
 
-def write(path, content):
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, "w", encoding="utf-8", newline="\n") as f:
-        f.write(content)
-    print(f"  {os.path.relpath(path, ROOT)}")
+def xml_escape(value):
+    return (
+        value.replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
+        .replace("'", "\\'")
+    )
 
 
-def xml_escape(s):
-    return (s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-            .replace('"', "&quot;").replace("'", "\\'"))
+def objective_c_escape(value):
+    return (
+        value.replace("\\", "\\\\")
+        .replace('"', '\\"')
+        .replace("\r", "\\r")
+        .replace("\n", "\\n")
+        .replace("\t", "\\t")
+    )
 
 
-def gen_web(entries):
+def add_output(outputs, relative_path, content):
+    outputs[os.path.join(ROOT, *relative_path.split("/"))] = content
+
+
+def render_web(entries, outputs):
     for lang in LANGS:
-        data = {k: text(entries, k, lang) for k in sorted(entries)}
-        write(os.path.join(ROOT, "webui", "locale", f"{lang}.json"),
-              json.dumps(data, ensure_ascii=False, indent=1) + "\n")
+        data = {key: text(entries, key, lang) for key in sorted(entries)}
+        add_output(
+            outputs,
+            f"webui/locale/{lang}.json",
+            json.dumps(data, ensure_ascii=False, indent=1) + "\n",
+        )
 
 
-def to_android(s):
-    # {name} → %1$s (出現順)
+def to_android(value):
     order = []
 
-    def rep(m):
-        name = m.group(1)
+    def replace_placeholder(match):
+        name = match.group(1)
         if name not in order:
             order.append(name)
         return f"%{order.index(name) + 1}$s"
-    return PH_RE.sub(rep, s)
+
+    return PH_RE.sub(replace_placeholder, value)
 
 
-def gen_android(entries):
+def render_android(entries, outputs):
     for lang in LANGS:
-        suffix = "" if lang == "en" else f"-{lang}"  # values/ は既定 (en), values-ja, values-zh
-        lines = ['<?xml version="1.0" encoding="utf-8"?>',
-                 "<!-- tools/gen_i18n.py が i18n/strings.yaml から生成 — 直接編集禁止",
-                 "     (ここへ書いた文言は次の生成で消える。追加は strings.yaml へ) -->",
-                 "<resources>"]
-        for k in sorted(entries):
-            name = k.replace(".", "_")
-            lines.append(f'    <string name="{name}">{xml_escape(to_android(text(entries, k, lang)))}</string>')
+        suffix = "" if lang == "en" else f"-{lang}"
+        lines = [
+            '<?xml version="1.0" encoding="utf-8"?>',
+            "<!-- Generated by tools/gen_i18n.py from i18n/strings.yaml; do not edit.",
+            "     Changes made here will be overwritten by the next generation. -->",
+            "<resources>",
+        ]
+        for key in sorted(entries):
+            name = key.replace(".", "_")
+            value = xml_escape(to_android(text(entries, key, lang)))
+            lines.append(f'    <string name="{name}">{value}</string>')
         lines.append("</resources>\n")
-        write(os.path.join(ROOT, "android", "app", "src", "main", "res",
-                           f"values{suffix}", "strings.xml"), "\n".join(lines))
+        add_output(
+            outputs,
+            f"android/app/src/main/res/values{suffix}/strings.xml",
+            "\n".join(lines),
+        )
 
 
-def gen_ios(entries):
+def render_ios(entries, outputs):
     for lang in LANGS:
-        lines = ["/* generated by tools/gen_i18n.py — 編集禁止 */"]
-        for k in sorted(entries):
-            v = PH_RE.sub("%@", text(entries, k, lang))
-            v = v.replace("\\", "\\\\").replace('"', '\\"')
-            lines.append(f'"{k}" = "{v}";')
-        write(os.path.join(ROOT, "ios", "Doorbell", f"{lang}.lproj",
-                           "Localizable.strings"), "\n".join(lines) + "\n")
+        lines = ["/* Generated by tools/gen_i18n.py; do not edit. */"]
+        for key in sorted(entries):
+            value = PH_RE.sub("%@", text(entries, key, lang))
+            lines.append(f'"{key}" = "{objective_c_escape(value)}";')
+        add_output(
+            outputs,
+            f"ios/Doorbell/{lang}.lproj/Localizable.strings",
+            "\n".join(lines) + "\n",
+        )
 
 
-def to_dotnet(s):
+def render_objective_c_dictionary(entries, outputs):
+    header = """/* Generated by tools/gen_i18n.py; do not edit. */
+#import <Foundation/Foundation.h>
+
+NSDictionary *DBGeneratedStringsForLanguage(NSString *language);
+"""
+    lines = [
+        "/* Generated by tools/gen_i18n.py; do not edit. */",
+        '#import "DBGeneratedStrings.h"',
+        "#import <dispatch/dispatch.h>",
+        "",
+    ]
+    function_names = {"ja": "Japanese", "en": "English", "zh": "Chinese"}
+    for lang in LANGS:
+        function_name = function_names[lang]
+        lines.extend(
+            [
+                f"static NSDictionary *DBGenerated{function_name}Strings(void) {{",
+                "  static NSDictionary *strings = nil;",
+                "  static dispatch_once_t onceToken;",
+                "  dispatch_once(&onceToken, ^{",
+                "    strings = [[NSDictionary alloc] initWithObjectsAndKeys:",
+            ]
+        )
+        for key in sorted(entries):
+            value = objective_c_escape(text(entries, key, lang))
+            lines.append(f'      @"{value}", @"{key}",')
+        lines.extend(["      nil];", "  });", "  return strings;", "}", ""])
+
+    lines.extend(
+        [
+            "NSDictionary *DBGeneratedStringsForLanguage(NSString *language) {",
+            '  if ([language isEqualToString:@"en"]) return DBGeneratedEnglishStrings();',
+            '  if ([language isEqualToString:@"zh"]) return DBGeneratedChineseStrings();',
+            "  return DBGeneratedJapaneseStrings();",
+            "}",
+            "",
+        ]
+    )
+    add_output(outputs, "ios-kiosk/src/Core/DBGeneratedStrings.h", header)
+    add_output(
+        outputs,
+        "ios-kiosk/src/Core/DBGeneratedStrings.m",
+        "\n".join(lines),
+    )
+
+
+def to_dotnet(value):
     order = []
 
-    def rep(m):
-        name = m.group(1)
+    def replace_placeholder(match):
+        name = match.group(1)
         if name not in order:
             order.append(name)
-        return f"{{{order.index(name)}}}"
-    return PH_RE.sub(rep, s)
+        return "{%d}" % order.index(name)
+
+    return PH_RE.sub(replace_placeholder, value)
 
 
 RESX_HEAD = """<?xml version="1.0" encoding="utf-8"?>
@@ -143,28 +256,100 @@ RESX_HEAD = """<?xml version="1.0" encoding="utf-8"?>
 """
 
 
-def gen_win(entries):
+def render_windows(entries, outputs):
     for lang in LANGS:
-        # 既定リソース (Strings.resx) は ja — 主言語。他言語はカルチャ別。
-        fname = "Strings.resx" if lang == "ja" else f"Strings.{lang}.resx"
+        filename = "Strings.resx" if lang == "ja" else f"Strings.{lang}.resx"
         parts = [RESX_HEAD]
-        for k in sorted(entries):
-            name = k.replace(".", "_")
-            v = xml_escape(to_dotnet(text(entries, k, lang))).replace("\\'", "'")
-            parts.append(f'  <data name="{name}" xml:space="preserve"><value>{v}</value></data>\n')
+        for key in sorted(entries):
+            name = key.replace(".", "_")
+            value = xml_escape(to_dotnet(text(entries, key, lang))).replace("\\'", "'")
+            parts.append(
+                f'  <data name="{name}" xml:space="preserve"><value>{value}</value></data>\n'
+            )
         parts.append("</root>\n")
-        write(os.path.join(ROOT, "win", "DoorbellApp", "Resources", fname), "".join(parts))
+        add_output(
+            outputs,
+            f"win/DoorbellApp/Resources/{filename}",
+            "".join(parts),
+        )
 
 
-def main():
-    entries = parse(SRC)
-    validate(entries)
-    print(f"gen_i18n: {len(entries)} keys → ")
-    gen_web(entries)
-    gen_android(entries)
-    gen_ios(entries)
-    gen_win(entries)
+def render_all(entries):
+    outputs = {}
+    render_web(entries, outputs)
+    render_android(entries, outputs)
+    render_ios(entries, outputs)
+    render_objective_c_dictionary(entries, outputs)
+    render_windows(entries, outputs)
+    return outputs
+
+
+def relative(path):
+    return os.path.relpath(path, ROOT)
+
+
+def check_outputs(outputs):
+    stale = []
+    for path, expected in sorted(outputs.items()):
+        try:
+            with open(path, encoding="utf-8") as current_file:
+                current = current_file.read()
+        except OSError:
+            if path.startswith(OPTIONAL_MISSING_PREFIXES):
+                continue
+            stale.append((path, "missing"))
+            continue
+        if current != expected:
+            stale.append((path, "stale"))
+    if stale:
+        for path, reason in stale:
+            print(f"{relative(path)}: {reason}; run tools/gen_i18n.py", file=sys.stderr)
+        return False
+    print(f"gen_i18n: {len(outputs)} generated files are current")
+    return True
+
+
+def write_outputs(outputs):
+    changed = 0
+    for path, content in sorted(outputs.items()):
+        current = None
+        try:
+            with open(path, encoding="utf-8") as current_file:
+                current = current_file.read()
+        except OSError:
+            pass
+        if current == content:
+            continue
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        temporary = path + ".tmp"
+        with open(temporary, "w", encoding="utf-8", newline="\n") as output:
+            output.write(content)
+        os.replace(temporary, path)
+        changed += 1
+        print(f"generated {relative(path)}")
+    print(f"gen_i18n: {changed} of {len(outputs)} files updated")
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="fail without writing when a generated file is missing or stale",
+    )
+    args = parser.parse_args(argv)
+    try:
+        entries = parse(SRC)
+        validate(entries)
+        outputs = render_all(entries)
+    except I18nError as error:
+        print(f"gen_i18n: {error}", file=sys.stderr)
+        return 1
+    if args.check:
+        return 0 if check_outputs(outputs) else 1
+    write_outputs(outputs)
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

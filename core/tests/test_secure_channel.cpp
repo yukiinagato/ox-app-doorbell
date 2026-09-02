@@ -1,5 +1,5 @@
-// SecureChannel 単体テスト: 握手・双方向 AEAD・PSK 不一致・改竄・再生。
-// 配送はテストが完全制御する Wire (キュー) で行い、改竄/再生を注入する。
+
+
 #include <algorithm>
 #include <deque>
 #include <memory>
@@ -15,10 +15,10 @@ using namespace db;
 
 namespace {
 
-// テスト制御の双方向キュー。フレームは pump されるまで滞留する。
+
 struct Wire {
   std::deque<Bytes> a2b, b2a;
-  std::vector<Bytes> log;  // 線上に流れた全フレーム (PSK 漏れ検査用)
+  std::vector<Bytes> log;
 };
 
 struct TestConn : public IConn {
@@ -51,7 +51,7 @@ struct TestConn : public IConn {
   }
 };
 
-// 両側 1 式 (SimClock/Runloop 共有)
+
 struct Pair {
   SimClock clock{0, 0};
   Runloop loop{clock};
@@ -83,7 +83,7 @@ struct Pair {
     b->start();
   }
 
-  // キューのフレームを交互に配送 (滞留が無くなるまで)
+
   void pump() {
     for (;;) {
       loop.pumpDue();
@@ -112,7 +112,7 @@ std::array<uint8_t, 32> mkPsk(uint8_t fill) {
   return k;
 }
 
-// needle が haystack 内に現れるか (PSK 漏れ検査)
+
 bool containsBytes(const Bytes& hay, const uint8_t* needle, size_t n) {
   if (hay.size() < n) return false;
   return std::search(hay.begin(), hay.end(), needle, needle + n) != hay.end();
@@ -120,7 +120,7 @@ bool containsBytes(const Bytes& hay, const uint8_t* needle, size_t n) {
 
 }  // namespace
 
-TEST_CASE("secure_channel: 正常握手 + 双方向 AEAD + PSK は線上に流れない") {
+TEST_CASE("secure_channel: handshake and bidirectional AEAD never expose the PSK") {
   auto psk = mkPsk(0x42);
   Pair p(psk, psk);
   p.pump();
@@ -135,7 +135,7 @@ TEST_CASE("secure_channel: 正常握手 + 双方向 AEAD + PSK は線上に流�
   p.a->sendMessage("{\"n\":2}");
   p.b->sendMessage("{\"r\":9}");
   p.pump();
-  REQUIRE(p.got_b.size() == 2);  // 順序保存
+  REQUIRE(p.got_b.size() == 2);
   CHECK(p.got_b[0] == "{\"n\":1}");
   CHECK(p.got_b[1] == "{\"n\":2}");
   REQUIRE(p.got_a.size() == 1);
@@ -143,7 +143,7 @@ TEST_CASE("secure_channel: 正常握手 + 双方向 AEAD + PSK は線上に流�
   CHECK(p.close_a == 0);
   CHECK(p.close_b == 0);
 
-  // 平文が暗号化されている (線上のフレームに現れない) + PSK も流れない
+
   for (const auto& f : p.wire.log) {
     const std::string needle = "\"n\":1";
     CHECK_FALSE(containsBytes(f, reinterpret_cast<const uint8_t*>(needle.data()), needle.size()));
@@ -151,10 +151,10 @@ TEST_CASE("secure_channel: 正常握手 + 双方向 AEAD + PSK は線上に流�
   }
 }
 
-TEST_CASE("secure_channel: 確立前の送信はキューされ確立後に流れる") {
+TEST_CASE("secure_channel: messages queue before establishment and flow afterward") {
   auto psk = mkPsk(0x01);
   Pair p(psk, psk);
-  p.a->sendMessage("early");  // 握手完了前
+  p.a->sendMessage("early");
   CHECK_FALSE(p.a->established());
   p.pump();
   CHECK(p.a->established());
@@ -162,7 +162,7 @@ TEST_CASE("secure_channel: 確立前の送信はキューされ確立後に流�
   CHECK(p.got_b[0] == "early");
 }
 
-TEST_CASE("secure_channel: PSK 不一致は確立前に拒否 (別クラスタに混ざらない)") {
+TEST_CASE("secure_channel: mismatched PSKs are rejected before establishment") {
   Pair p(mkPsk(0x11), mkPsk(0x22));
   p.a->sendMessage("secret");
   p.pump();
@@ -170,62 +170,62 @@ TEST_CASE("secure_channel: PSK 不一致は確立前に拒否 (別クラスタ�
   CHECK_FALSE(p.b->established());
   CHECK(p.est_a == 0);
   CHECK(p.est_b == 0);
-  CHECK(p.close_a + p.close_b >= 1);  // 少なくとも一方が確認失敗で切断
+  CHECK(p.close_a + p.close_b >= 1);
   CHECK(p.got_b.empty());
-  // キューされていた平文は一切流れていない
+
   for (const auto& f : p.wire.log) {
     const std::string needle = "secret";
     CHECK_FALSE(containsBytes(f, reinterpret_cast<const uint8_t*>(needle.data()), needle.size()));
   }
 }
 
-TEST_CASE("secure_channel: 改竄フレームで即切断") {
+TEST_CASE("secure_channel: a tampered frame disconnects immediately") {
   auto psk = mkPsk(0x33);
   Pair p(psk, psk);
   p.pump();
   REQUIRE(p.a->established());
   p.a->sendMessage("{\"x\":\"tamper-me\"}");
   REQUIRE(p.wire.a2b.size() == 1);
-  p.wire.a2b.front().back() ^= 0x01;  // 暗号文の末尾 1bit 反転
+  p.wire.a2b.front().back() ^= 0x01;
   p.pump();
   CHECK(p.got_b.empty());
-  CHECK(p.close_b >= 1);  // 復号失敗 → 即切断
+  CHECK(p.close_b >= 1);
   CHECK_FALSE(p.b->established());
 }
 
-TEST_CASE("secure_channel: ヘッダ (フレーム番号) 改竄も検出して切断") {
+TEST_CASE("secure_channel: header sequence tampering is detected and disconnected") {
   auto psk = mkPsk(0x44);
   Pair p(psk, psk);
   p.pump();
   REQUIRE(p.a->established());
   p.a->sendMessage("m");
   REQUIRE(p.wire.a2b.size() == 1);
-  p.wire.a2b.front()[9] ^= 0x01;  // frame_no の最下位バイト (AD として認証されている)
+  p.wire.a2b.front()[9] ^= 0x01;
   p.pump();
   CHECK(p.got_b.empty());
   CHECK(p.close_b >= 1);
 }
 
-TEST_CASE("secure_channel: 再生 (同一フレーム再送) は拒否・切断") {
+TEST_CASE("secure_channel: replaying the same frame is rejected and disconnected") {
   auto psk = mkPsk(0x55);
   Pair p(psk, psk);
   p.pump();
   REQUIRE(p.a->established());
   p.a->sendMessage("once");
   REQUIRE(p.wire.a2b.size() == 1);
-  const Bytes replay = p.wire.a2b.front();  // 生フレームを控えておく
+  const Bytes replay = p.wire.a2b.front();
   p.pump();
   REQUIRE(p.got_b.size() == 1);
   CHECK(p.close_b == 0);
-  // 同一フレームを再注入 → フレーム番号の巻き戻り検出で切断
+
   p.cb->on_frame(replay);
   p.pump();
-  CHECK(p.got_b.size() == 1);  // 二重配送されない
+  CHECK(p.got_b.size() == 1);
   CHECK(p.close_b >= 1);
   CHECK_FALSE(p.b->established());
 }
 
-TEST_CASE("secure_channel: 欠番 (フレーム損失) は許容 — 後続フレームは通る") {
+TEST_CASE("secure_channel: missing frames are allowed and later frames still pass") {
   auto psk = mkPsk(0x66);
   Pair p(psk, psk);
   p.pump();
@@ -233,17 +233,17 @@ TEST_CASE("secure_channel: 欠番 (フレーム損失) は許容 — 後続フ�
   p.a->sendMessage("lost");
   p.a->sendMessage("kept");
   REQUIRE(p.wire.a2b.size() == 2);
-  p.wire.a2b.pop_front();  // 1 枚目を落とす (lossy リンクの模擬)
+  p.wire.a2b.pop_front();
   p.pump();
   REQUIRE(p.got_b.size() == 1);
   CHECK(p.got_b[0] == "kept");
-  CHECK(p.close_b == 0);  // 損失では切断しない
+  CHECK(p.close_b == 0);
 }
 
-TEST_CASE("secure_channel: 握手タイムアウトで切断") {
+TEST_CASE("secure_channel: handshake timeout disconnects") {
   auto psk = mkPsk(0x77);
   Pair p(psk, psk);
-  // pump しない = HS1 が届かないまま時間だけ進める
+
   p.clock.advance(1001);
   p.loop.pumpDue();
   CHECK_FALSE(p.a->established());

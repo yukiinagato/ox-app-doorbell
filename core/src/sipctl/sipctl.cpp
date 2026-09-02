@@ -1,13 +1,13 @@
-// sipctl — pjsua (C API) による実装。
+
 //
-// スレッド/ライフサイクル設計:
-//  - 公開 API は Runloop 上から呼ばれる (ヘッダの契約)。pjsua は自前 worker スレッドを
-//    持ち、コールバックはそこから届く → Runloop::post で marshal する。コールバック内では
-//    Runloop::callSync を呼ばない (デッドロック)。post のみ。
-//  - pjsua はプロセス内単一インスタンス (g_impl)。start() で pjsua_create/init/start、
-//    stop() で 通話切断 → 登録解除 → pjsua_destroy。再 start 可能。
-//  - 破棄と post の競合は alive フラグ + 世代番号 (gen) で防ぐ:
-//    stop/再start の度に gen++ し、古い世代の post は無視。stopping 中の新規 post は抑止。
+
+
+
+
+
+
+
+
 #include "sipctl/sipctl.h"
 
 #include <pjsua-lib/pjsua.h>
@@ -22,6 +22,9 @@
 #include "util/log.h"
 
 namespace db {
+
+const char* sipBackendName() { return "pjsip"; }
+bool sipBackendAvailable() { return true; }
 
 namespace {
 constexpr const char* kTag = "sipctl";
@@ -41,11 +44,11 @@ bool sameSettings(const SipSettings& a, const SipSettings& b) {
          a.null_audio == b.null_audio && a.direct_port == b.direct_port;
 }
 
-// 受理する着信モニタ呼の上限 (PJSUA_MAX_CALLS=4 の内訳: 主呼 1 + モニタ 2 + 予備 1)
+
 constexpr int kMaxMonitorCalls = 2;
 
-// 着信 INVITE の X-Doorbell-Mode ヘッダ値 ("monitor" | "answer" | "")。
-// pjsua スレッドから呼ばれる (rdata はコールバック中のみ有効)。
+
+
 std::string doorbellMode(pjsip_rx_data* rdata) {
   if (!rdata || !rdata->msg_info.msg) return "";
   pj_str_t hname = pj_str(const_cast<char*>("X-Doorbell-Mode"));
@@ -55,7 +58,7 @@ std::string doorbellMode(pjsip_rx_data* rdata) {
   return std::string(h->hvalue.ptr, static_cast<size_t>(h->hvalue.slen));
 }
 
-// pjsua API を呼ぶ前のスレッド登録 (未登録スレッドからの防御。通常は create したループ)
+
 void ensurePjThread() {
   if (!pj_thread_is_registered()) {
     static thread_local pj_thread_desc desc;
@@ -71,20 +74,21 @@ struct SipCtl::Impl {
   Callbacks cbs;
   SipSettings st;
 
-  bool running = false;  // pjsua が生きている (loop 上でのみ触る)
+  bool running = false;
   pjsua_acc_id acc = PJSUA_INVALID_ID;
-  std::atomic<int> call_id{PJSUA_INVALID_ID};  // 進行中の主呼 (pjsua スレッドからも書く)
-  SipRegState reg_state = SipRegState::Idle;   // loop 上でのみ触る
+  std::atomic<int> call_id{PJSUA_INVALID_ID};
+  std::string call_owner;  // loop-owned token for visitor lifecycle cancellation
+  SipRegState reg_state = SipRegState::Idle;
   SipCallState call_state = SipCallState::Idle;
 
-  // 受理中のモニタ呼 (pjsua スレッドで増減、loop からも参照 — mon_mu 保護)。
-  // モニタ呼 = マイク (conf slot 0) → 相手 の一方向のみ接続する「聞くだけ」の呼。
-  // 主呼の状態機 (call_state / on_call_state) には一切影響させない。
+
+
+
   std::mutex mon_mu;
   std::vector<pjsua_call_id> monitors;
   std::atomic<int> mon_count{0};
 
-  // 直接 INVITE の許可送信元 IP (空 = 全許可)。loop から set、pjsua スレッドから参照。
+
   std::mutex src_mu;
   std::set<std::string> allowed_sources;
 
@@ -113,28 +117,28 @@ struct SipCtl::Impl {
     mon_count.store(0);
   }
 
-  // 直接 INVITE の送信元検査 (pjsua スレッド)。allowed_sources 非空なら
-  // server 自身 (Asterisk 経由) とリスト内 IP 以外を拒否する。
+
+
   bool sourceAllowed(pjsip_rx_data* rdata) {
     std::lock_guard<std::mutex> lk(src_mu);
-    if (allowed_sources.empty()) return true;  // 未設定 = 全許可 (従来挙動)
+    if (allowed_sources.empty()) return true;
     if (!rdata) return false;
     const std::string src = rdata->pkt_info.src_name;
-    if (!st.server.empty() && src == st.server) return true;  // Asterisk 経由
+    if (!st.server.empty() && src == st.server) return true;
     return allowed_sources.count(src) > 0;
   }
 
   std::shared_ptr<std::atomic<bool>> alive{new std::atomic<bool>(true)};
-  std::atomic<int> gen{0};             // stop/再start で ++ — 旧世代の post を無効化
-  std::atomic<bool> stopping{false};   // pjsua_destroy 中のコールバック post を抑止
+  std::atomic<int> gen{0};
+  std::atomic<bool> stopping{false};
 
-  // 直近通話の RTP 送受パケット数 (通話中は都度取得、破棄時に確定値を保存)
+
   mutable std::mutex stat_mu;
   int64_t last_tx = 0, last_rx = 0;
 
   Impl(Runloop& l, Callbacks c) : loop(l), cbs(std::move(c)) {}
 
-  // ---------- pjsua コールバック → Runloop への marshal ----------
+
   void postReg(SipRegState s, const std::string& reason) {
     if (stopping.load()) return;
     auto a = alive;
@@ -158,7 +162,8 @@ struct SipCtl::Impl {
       if (call_state == s) return;
       call_state = s;
       if (cbs.on_call_state) cbs.on_call_state(s, remote);
-      if (s == SipCallState::Ended) {  // Ended は過渡状態 — 続けて Idle へ
+      if (s == SipCallState::Ended) {
+        if (call_id.load() == PJSUA_INVALID_ID) call_owner.clear();
         call_state = SipCallState::Idle;
         if (cbs.on_call_state) cbs.on_call_state(SipCallState::Idle, remote);
       }
@@ -185,11 +190,11 @@ struct SipCtl::Impl {
     return "?";
   }
 
-  // ---------- 起動/停止 (loop 上) ----------
+
   void startOnLoop(const SipSettings& s);
   void stopOnLoop();
 
-  // ---------- pjsua コールバック (pjsua worker スレッド) ----------
+
   static void s_on_reg_state2(pjsua_acc_id acc_id, pjsua_reg_info* info);
   static void s_on_call_state(pjsua_call_id call_id, pjsip_event* e);
   static void s_on_incoming_call(pjsua_acc_id acc_id, pjsua_call_id call_id, pjsip_rx_data* rdata);
@@ -198,10 +203,10 @@ struct SipCtl::Impl {
   static void s_on_stream_destroyed(pjsua_call_id call_id, pjmedia_stream* strm, unsigned idx);
 };
 
-// プロセス内単一 pjsua の持ち主 (start 中の Impl)
+
 static std::atomic<SipCtl::Impl*> g_impl{nullptr};
 
-// ---------------- pjsua コールバック ----------------
+
 
 void SipCtl::Impl::s_on_reg_state2(pjsua_acc_id, pjsua_reg_info* info) {
   Impl* im = g_impl.load();
@@ -214,13 +219,13 @@ void SipCtl::Impl::s_on_reg_state2(pjsua_acc_id, pjsua_reg_info* info) {
     if (info->renew && p->expiration > 0)
       im->postReg(SipRegState::Registered, reason);
     else
-      im->postReg(SipRegState::Idle, reason);  // 登録解除完了
+      im->postReg(SipRegState::Idle, reason);
   } else if (p->code >= 300) {
-    // 401 は pjsua が資格情報で自動再試行する — ここへ来るのは最終失敗のみ。
-    // reg_retry_interval により pjsua が再試行を続ける間、状態は Failed のまま。
+
+
     im->postReg(SipRegState::Failed, reason);
   }
-  // 1xx は無視
+
 }
 
 void SipCtl::Impl::s_on_call_state(pjsua_call_id call_id, pjsip_event*) {
@@ -229,11 +234,11 @@ void SipCtl::Impl::s_on_call_state(pjsua_call_id call_id, pjsip_event*) {
   pjsua_call_info ci;
   if (pjsua_call_get_info(call_id, &ci) != PJ_SUCCESS) return;
   std::string remote(ci.remote_info.ptr, static_cast<size_t>(ci.remote_info.slen));
-  // モニタ呼・拒否済み呼は主呼の状態機 (postCall) を乱さない — 増減はログのみ
+
   if (im->call_id.load() != call_id) {
     if (ci.state == PJSIP_INV_STATE_DISCONNECTED && im->removeMonitor(call_id)) {
-      DB_LOGI(kTag, "モニタ呼 #" + std::to_string(call_id) + " 終了 (" + remote +
-                        ", 残 " + std::to_string(im->mon_count.load()) + " 本)");
+      DB_LOGI(kTag, "monitor call #" + std::to_string(call_id) + " ended (" + remote +
+                        ", remaining " + std::to_string(im->mon_count.load()) + ")");
     }
     return;
   }
@@ -260,25 +265,25 @@ void SipCtl::Impl::s_on_incoming_call(pjsua_acc_id, pjsua_call_id call_id,
                                       pjsip_rx_data* rdata) {
   Impl* im = g_impl.load();
   if (!im) return;
-  // 直接 INVITE の送信元検査 (allowlist 設定時のみ)
+
   if (!im->sourceAllowed(rdata)) {
-    DB_LOGW(kTag, std::string("着信拒否 403 (許可外の送信元 ") +
+    DB_LOGW(kTag, std::string("incoming call rejected with 403 (unlisted source ") +
                       (rdata ? rdata->pkt_info.src_name : "?") + ")");
     pjsua_call_answer(call_id, PJSIP_SC_FORBIDDEN, nullptr, nullptr);
     return;
   }
-  // 一方向モニタか双方向かの判別:
-  //   X-Doorbell-Mode: monitor → モニタ / answer → 双方向 (接管あり — 下記) / ヘッダ無し →
-  //   主呼進行中ならモニタ・アイドルなら従来の双方向自動応答 (逆呼び)。
-  // (Alert-Info 等の標準ヘッダによる判別は将来拡張 — 現状は自前ヘッダ + フォールバック)
+
+
+
+
   const std::string mode = doorbellMode(rdata);
   const bool busy = im->call_id.load() != PJSUA_INVALID_ID;
   bool want_monitor = (mode == "monitor") || (mode.empty() && busy);
 
-  // answer 接管 (室内機の応答): 主呼が進行中でも
-  //   a) 未確立 (Asterisk への電話腿がまだ鳴っている) → 主呼をキャンセルし、この着信を
-  //      新しい主呼として双方向応答する — 訪客は室内機と話すことになった。
-  //   b) 確立済み (電話で誰かが既に応答した) → 奪わずモニタとして受理 (一方向降級)。
+
+
+
+
   if (mode == "answer" && busy) {
     pjsua_call_id cur = im->call_id.load();
     pjsua_call_info mi;
@@ -286,25 +291,25 @@ void SipCtl::Impl::s_on_incoming_call(pjsua_acc_id, pjsua_call_id call_id,
                            pjsua_call_get_info(cur, &mi) == PJ_SUCCESS &&
                            mi.state == PJSIP_INV_STATE_CONFIRMED;
     if (confirmed) {
-      DB_LOGI(kTag, "answer 着信だが主呼 #" + std::to_string(cur) +
-                        " は応答済み — モニタへ降級");
-      want_monitor = true;  // (b) 下のモニタ受理経路へ
+      DB_LOGI(kTag, "incoming answer call cannot take over established primary call #" + std::to_string(cur) +
+                        " is already answered; falling back to monitor mode");
+      want_monitor = true;
     } else if (cur != PJSUA_INVALID_ID &&
                im->call_id.compare_exchange_strong(cur, call_id)) {
-      // (a) 接管: 先に主呼を差し替えてから旧主呼を切る — 旧主呼の DISCONNECTED が
-      // 主呼状態機 (postCall) に Ended を流さないため。新主呼の CONFIRMED で
-      // on_call_state が InCall (remote = 発呼元) を通知する。
-      DB_LOGI(kTag, "answer 接管: 未確立の主呼 #" + std::to_string(cur) +
-                        " をキャンセルし着信 #" + std::to_string(call_id) + " と双方向応答");
+
+
+
+      DB_LOGI(kTag, "answer takeover: canceling unestablished primary call #" + std::to_string(cur) +
+                        " and accepting incoming call #" + std::to_string(call_id) + " bidirectionally");
       pjsua_call_hangup(cur, 0, nullptr, nullptr);
       pjsua_call_answer(call_id, PJSIP_SC_OK, nullptr, nullptr);
       return;
     }
-    // CAS 失敗 (主呼が同時に消えた) → 下の通常経路 (アイドル扱い) へ
+
   }
 
   if (want_monitor) {
-    // モニタ呼: auto_answer 有効時のみ、上限 kMaxMonitorCalls 本まで追加受理
+
     if (!im->st.auto_answer || !im->addMonitor(call_id)) {
       pjsua_call_answer(call_id, PJSIP_SC_BUSY_HERE, nullptr, nullptr);  // 486
       return;
@@ -313,21 +318,21 @@ void SipCtl::Impl::s_on_incoming_call(pjsua_acc_id, pjsua_call_id call_id,
     std::string remote;
     if (pjsua_call_get_info(call_id, &ci) == PJ_SUCCESS)
       remote.assign(ci.remote_info.ptr, static_cast<size_t>(ci.remote_info.slen));
-    DB_LOGI(kTag, "モニタ呼受理 #" + std::to_string(call_id) + " (" + remote + ", 計 " +
-                      std::to_string(im->mon_count.load()) + " 本, mode=" +
+    DB_LOGI(kTag, "accepted monitor call #" + std::to_string(call_id) + " (" + remote + ", total " +
+                      std::to_string(im->mon_count.load()) + ", mode=" +
                       (mode.empty() ? "fallback" : mode) + ")");
     pjsua_call_answer(call_id, PJSIP_SC_OK, nullptr, nullptr);
     return;
   }
 
-  // 双方向 (主呼として受理)
+
   int expected = PJSUA_INVALID_ID;
   if (!im->call_id.compare_exchange_strong(expected, call_id)) {
-    pjsua_call_answer(call_id, PJSIP_SC_BUSY_HERE, nullptr, nullptr);  // 通話中 → 486
+    pjsua_call_answer(call_id, PJSIP_SC_BUSY_HERE, nullptr, nullptr);
     return;
   }
-  // mode=answer は呼び手が双方向を明示している → 即応答。
-  // 逆呼び (ヘッダ無し) は auto_answer なら 200 応答。st は start/stop 間で不変。
+
+
   if (mode == "answer" || im->st.auto_answer) {
     pjsua_call_answer(call_id, PJSIP_SC_OK, nullptr, nullptr);
   } else {
@@ -335,9 +340,9 @@ void SipCtl::Impl::s_on_incoming_call(pjsua_acc_id, pjsua_call_id call_id,
   }
 }
 
-// 音声メディア確立 → conference bridge へ配線 (pjsua は自動接続しない)。
-//   主呼: マイク (slot 0) ⇔ 呼 の双方向。
-//   モニタ呼: マイク (slot 0) → 呼 の一方向のみ (相手の音声はこちらへ流さない — TV は聞くだけ)。
+
+
+
 void SipCtl::Impl::s_on_call_media_state(pjsua_call_id call_id) {
   Impl* im = g_impl.load();
   if (!im) return;
@@ -347,28 +352,28 @@ void SipCtl::Impl::s_on_call_media_state(pjsua_call_id call_id) {
   const pjsua_conf_port_id slot = ci.conf_slot;
   if (slot == PJSUA_INVALID_ID) return;
   if (im->call_id.load() == call_id) {
-    pjsua_conf_connect(slot, 0);  // 相手 → スピーカ
-    pjsua_conf_connect(0, slot);  // マイク → 相手
-    DB_LOGI(kTag, "主呼 #" + std::to_string(call_id) + ": 音声双方向接続 (conf slot " +
+    pjsua_conf_connect(slot, 0);
+    pjsua_conf_connect(0, slot);
+    DB_LOGI(kTag, "primary call #" + std::to_string(call_id) + ": bidirectional audio connected (conf slot " +
                       std::to_string(slot) + " <-> 0)");
   } else if (im->isMonitor(call_id)) {
-    pjsua_conf_connect(0, slot);  // マイク → モニタ (一方向)
-    DB_LOGI(kTag, "モニタ呼 #" + std::to_string(call_id) +
-                      ": マイク→モニタ 一方向接続 (conf 0 -> slot " + std::to_string(slot) + ")");
+    pjsua_conf_connect(0, slot);
+    DB_LOGI(kTag, "monitor call #" + std::to_string(call_id) +
+                      ": one-way microphone audio connected (conf 0 -> slot " + std::to_string(slot) + ")");
   }
 }
 
 void SipCtl::Impl::s_on_dtmf_digit2(pjsua_call_id, const pjsua_dtmf_info* info) {
   Impl* im = g_impl.load();
   if (!im || !info) return;
-  if (info->method != PJSUA_DTMF_METHOD_RFC2833) return;  // RFC2833 のみ (SIP INFO は無視)
+  if (info->method != PJSUA_DTMF_METHOD_RFC2833) return;
   im->postDtmf(static_cast<char>(info->digit));
 }
 
 void SipCtl::Impl::s_on_stream_destroyed(pjsua_call_id call_id, pjmedia_stream* strm,
                                          unsigned idx) {
-  // 通話終了直前の確定統計 (DISCONNECTED 後は取得できないためここで保存)。
-  // rtpStats は主呼基準 — モニタ呼の統計では上書きしない。
+
+
   Impl* im = g_impl.load();
   if (!im || idx != 0 || im->call_id.load() != call_id) return;
   pjmedia_rtcp_stat st;
@@ -379,28 +384,28 @@ void SipCtl::Impl::s_on_stream_destroyed(pjsua_call_id call_id, pjmedia_stream* 
   }
 }
 
-// ---------------- 起動/停止 ----------------
+
 
 void SipCtl::Impl::startOnLoop(const SipSettings& s) {
   if (running) stopOnLoop();
   st = s;
-  // 登録モード = server と user が揃っている時のみ (user 無しで REGISTER は組めない —
-  // 例: fleet 設定に sip.server だけあり自機の sip.accounts が無い TV/新設端末)。
-  // それ以外でも direct_port が有効なら transport だけ立てる (直接呼の待受 — 自愈方針)。
-  // どちらも無効なら何もしない (SIP 無効運用も正常系)。
+
+
+
+
   const bool registered_mode = !st.server.empty() && !st.user.empty();
   if (!registered_mode && st.direct_port <= 0) return;
 
   Impl* expected = nullptr;
   if (!g_impl.compare_exchange_strong(expected, this)) {
-    // プロセス内複数 Node (テスト) では 2 台目以降がここへ来る — SIP 無しで続行
-    DB_LOGW(kTag, "pjsua は既に他の SipCtl が使用中 (プロセス内単一) — この Node は SIP 無効");
+
+    DB_LOGW(kTag, "pjsua is already owned by another SipCtl instance; SIP is disabled for this node");
     return;
   }
 
   pj_status_t rc = pjsua_create();
   if (rc != PJ_SUCCESS) {
-    DB_LOGE(kTag, "pjsua_create 失敗: " + std::to_string(rc));
+    DB_LOGE(kTag, "pjsua_create failed: " + std::to_string(rc));
     g_impl.store(nullptr);
     return;
   }
@@ -416,32 +421,32 @@ void SipCtl::Impl::startOnLoop(const SipSettings& s) {
 
   pjsua_logging_config log_cfg;
   pjsua_logging_config_default(&log_cfg);
-  // 既定はエラーのみ (通常ログは DB_LOG 側)。DB_SIP_LOG=1 で pjsua 詳細ログ (診断用)
+
   const bool verbose = std::getenv("DB_SIP_LOG") != nullptr;
   log_cfg.console_level = verbose ? 4 : 1;
   log_cfg.level = verbose ? 4 : 2;
 
   pjsua_media_config med;
   pjsua_media_config_default(&med);
-  med.clock_rate = 8000;   // PCMU のみ — 全経路 8kHz でリサンプル回避
-  med.no_vad = PJ_TRUE;    // 無音でも RTP を流し続ける (rtp_symmetric の返送起動に必要)
+  med.clock_rate = 8000;
+  med.no_vad = PJ_TRUE;
   if (!st.null_audio && st.ec_tail_ms > 0) {
-    med.ec_options = PJMEDIA_ECHO_WEBRTC;  // 実機: WebRTC AEC
+    med.ec_options = PJMEDIA_ECHO_WEBRTC;
     med.ec_tail_len = static_cast<unsigned>(st.ec_tail_ms);
   } else {
-    med.ec_tail_len = 0;  // null 音声はエコー無し
+    med.ec_tail_len = 0;
   }
 
   rc = pjsua_init(&cfg, &log_cfg, &med);
   if (rc != PJ_SUCCESS) {
-    DB_LOGE(kTag, "pjsua_init 失敗: " + std::to_string(rc));
+    DB_LOGE(kTag, "pjsua_init failed: " + std::to_string(rc));
     pjsua_destroy();
     g_impl.store(nullptr);
     return;
   }
 
-  // SIP トランスポート: direct_port で固定 listen (直接呼の宛先)。使用中 (同一ホストの
-  // 他プロセス等) なら空きポートへフォールバック — 登録運用は継続、直接着信のみ不可。
+
+
   pjsua_transport_config tcfg;
   pjsua_transport_config_default(&tcfg);
   tcfg.port = st.direct_port > 0 ? static_cast<unsigned>(st.direct_port) : 0;
@@ -450,22 +455,22 @@ void SipCtl::Impl::startOnLoop(const SipSettings& s) {
   pjsua_transport_id tid = -1;
   rc = pjsua_transport_create(tt, &tcfg, &tid);
   if (rc != PJ_SUCCESS && tcfg.port != 0) {
-    DB_LOGW(kTag, "SIP 固定ポート " + std::to_string(st.direct_port) +
-                      " が使用中 — 空きポートへフォールバック (直接着信は不可)");
+    DB_LOGW(kTag, "fixed SIP port " + std::to_string(st.direct_port) +
+                      " is in use; falling back to an ephemeral port without direct incoming calls");
     tcfg.port = 0;
     rc = pjsua_transport_create(tt, &tcfg, &tid);
   }
   if (rc != PJ_SUCCESS) {
-    DB_LOGE(kTag, "pjsua_transport_create 失敗: " + std::to_string(rc));
+    DB_LOGE(kTag, "pjsua_transport_create failed: " + std::to_string(rc));
     pjsua_destroy();
     g_impl.store(nullptr);
     return;
   }
 
   pjsua_start();
-  if (st.null_audio) pjsua_set_null_snd_dev();  // テストモード: 音声デバイス不要で RTP は流れる
+  if (st.null_audio) pjsua_set_null_snd_dev();
 
-  // codec: PCMU 優先、他は無効
+
   {
     pjsua_codec_info ci[32];
     unsigned n = 32;
@@ -479,23 +484,23 @@ void SipCtl::Impl::startOnLoop(const SipSettings& s) {
   }
 
   if (!registered_mode) {
-    // 直接呼専用モード: 登録なし。着信の受け皿 + 発信元としてローカルアカウントを作る
-    // (アカウント 0 件だと pjsua は着信を処理できない)。
+
+
     rc = pjsua_acc_add_local(tid, PJ_TRUE, &acc);
     if (rc != PJ_SUCCESS) {
-      DB_LOGE(kTag, "pjsua_acc_add_local 失敗: " + std::to_string(rc));
+      DB_LOGE(kTag, "pjsua_acc_add_local failed: " + std::to_string(rc));
       pjsua_destroy();
       g_impl.store(nullptr);
       return;
     }
-    // RTP 固定レンジはアカウント設定 — ローカルアカウントにも適用する
-    // (acc_get_config は pool へ複製する API — 一時 pool を使う)
+
+
     if (pj_pool_t* pool = pjsua_pool_create("db_lacc", 512, 512)) {
       pjsua_acc_config lcfg;
       pjsua_acc_config_default(&lcfg);
       if (pjsua_acc_get_config(acc, pool, &lcfg) == PJ_SUCCESS) {
         lcfg.rtp_cfg.port = static_cast<unsigned>(st.rtp_port_start);
-        lcfg.rtp_cfg.port_range = 99;  // 4000-4099 (FW 開放と一致)
+        lcfg.rtp_cfg.port_range = 99;
         pjsua_acc_modify(acc, &lcfg);
       }
       pj_pool_release(pool);
@@ -503,12 +508,12 @@ void SipCtl::Impl::startOnLoop(const SipSettings& s) {
     running = true;
     reg_state = SipRegState::Idle;
     call_state = SipCallState::Idle;
-    DB_LOGI(kTag, "SIP 開始 (直接呼のみ, 登録なし, " + st.transport + " port " +
+    DB_LOGI(kTag, "SIP started for direct calls without registration (" + st.transport + " port " +
                       std::to_string(tcfg.port == 0 ? 0 : st.direct_port) + ")");
     return;
   }
 
-  // アカウント (REGISTER 維持 + 自動再試行)
+
   std::string host = st.server + (st.port != 5060 ? ":" + std::to_string(st.port) : "");
   std::string tp = st.transport == "tcp" ? ";transport=tcp" : "";
   std::string id_uri = "sip:" + st.user + "@" + host + tp;
@@ -528,17 +533,17 @@ void SipCtl::Impl::startOnLoop(const SipSettings& s) {
   acfg.cred_info[0].data = pstr(st.password);
   acfg.reg_retry_interval = static_cast<unsigned>(st.reg_retry_s > 0 ? st.reg_retry_s : 30);
   acfg.rtp_cfg.port = static_cast<unsigned>(st.rtp_port_start);
-  acfg.rtp_cfg.port_range = 99;  // 4000-4099 (FW 開放と一致)
-  // Contact の NAT 書換を無効化: 同一 LAN 前提 (docs/network-ports.md)。Asterisk 側は
-  // rewrite_contact=yes が面倒を見る。有効のままだと NAT 検出時に Contact が書き換わり、
-  // このアカウントで応答した「直接呼」(Asterisk 非経由) の in-dialog 要求 (BYE 等) が
-  // 書換後の別アドレスへ飛んで届かなくなる (dev の Docker ブリッジで実測)。
+  acfg.rtp_cfg.port_range = 99;
+
+
+
+
   acfg.allow_contact_rewrite = PJ_FALSE;
   acfg.allow_via_rewrite = PJ_FALSE;
 
   rc = pjsua_acc_add(&acfg, PJ_TRUE, &acc);
   if (rc != PJ_SUCCESS) {
-    DB_LOGE(kTag, "pjsua_acc_add 失敗: " + std::to_string(rc));
+    DB_LOGE(kTag, "pjsua_acc_add failed: " + std::to_string(rc));
     pjsua_destroy();
     g_impl.store(nullptr);
     return;
@@ -547,35 +552,36 @@ void SipCtl::Impl::startOnLoop(const SipSettings& s) {
   running = true;
   reg_state = SipRegState::Registering;
   call_state = SipCallState::Idle;
-  DB_LOGI(kTag, "SIP 開始: " + st.user + "@" + host + " (" + st.transport + ")");
+  DB_LOGI(kTag, "SIP started: " + st.user + "@" + host + " (" + st.transport + ")");
   if (cbs.on_reg_state) cbs.on_reg_state(SipRegState::Registering, "");
 }
 
 void SipCtl::Impl::stopOnLoop() {
   if (!running) return;
-  gen.fetch_add(1);       // 旧世代の post を無効化
-  stopping.store(true);   // destroy 中のコールバック post を抑止
+  gen.fetch_add(1);
+  stopping.store(true);
   ensurePjThread();
-  DB_LOGI(kTag, "SIP 停止 (通話切断 → 登録解除 → pjsua_destroy)");
+  DB_LOGI(kTag, "stopping SIP: hang up, unregister, then destroy pjsua");
   pjsua_call_hangup_all();
-  if (acc != PJSUA_INVALID_ID) pjsua_acc_set_registration(acc, PJ_FALSE);  // 失敗は無視
-  pjsua_destroy();  // 未了の切断/解除も内部で完了させる
+  if (acc != PJSUA_INVALID_ID) pjsua_acc_set_registration(acc, PJ_FALSE);
+  pjsua_destroy();
   g_impl.store(nullptr);
   stopping.store(false);
   acc = PJSUA_INVALID_ID;
   call_id.store(PJSUA_INVALID_ID);
+  call_owner.clear();
   clearMonitors();
   running = false;
   reg_state = SipRegState::Idle;
   call_state = SipCallState::Idle;
 }
 
-// ---------------- 公開 API (Runloop 上から呼ばれる) ----------------
+
 
 SipCtl::SipCtl(Runloop& loop, Callbacks cbs) : impl_(new Impl(loop, std::move(cbs))) {}
 
 SipCtl::~SipCtl() {
-  // loop 稼働中なら loop 上で停止 (先に queue 済みの post を流し切ってから破棄)
+
   impl_->loop.callSync([this] { impl_->stopOnLoop(); });
   impl_->alive->store(false);
 }
@@ -586,23 +592,28 @@ void SipCtl::stop() { impl_->stopOnLoop(); }
 
 void SipCtl::updateSettings(const SipSettings& settings) {
   if (sameSettings(impl_->st, settings)) return;
-  DB_LOGI(kTag, "SIP 設定変更 → 再起動/再登録");
-  impl_->startOnLoop(settings);  // 内部で stop → start
+  DB_LOGI(kTag, "SIP settings changed; restarting and registering again");
+  impl_->startOnLoop(settings);
 }
 
 void SipCtl::call(const std::string& target, const std::string& mode) {
+  (void)callOwned("", target, mode);
+}
+
+bool SipCtl::callOwned(const std::string& owner, const std::string& target,
+                       const std::string& mode) {
   Impl* im = impl_.get();
   if (!im->running || im->acc == PJSUA_INVALID_ID) {
-    DB_LOGW(kTag, "call(" + target + "): SIP 未開始 — 無視");
-    return;
+    DB_LOGW(kTag, "call(" + target + "): SIP is not started; ignoring call");
+    return false;
   }
   if (im->call_id.load() != PJSUA_INVALID_ID) {
-    DB_LOGW(kTag, "call(" + target + "): 通話進行中 — 無視");
-    return;
+    DB_LOGW(kTag, "call(" + target + "): another call is active; ignoring call");
+    return false;
   }
   ensurePjThread();
-  // "sip:" で始まる完全 URI はそのまま直呼 (Asterisk 非経由)。それ以外は従来の内線
-  // (server 経由 — server 未設定なら不可)。
+
+
   std::string uri;
   if (target.compare(0, 4, "sip:") == 0) {
     uri = target;
@@ -612,11 +623,11 @@ void SipCtl::call(const std::string& target, const std::string& mode) {
     std::string tp = im->st.transport == "tcp" ? ";transport=tcp" : "";
     uri = "sip:" + target + "@" + host + tp;
   } else {
-    DB_LOGW(kTag, "call(" + target + "): server 未設定で内線発呼は不可 — 無視");
-    return;
+    DB_LOGW(kTag, "call(" + target + "): extension call requires a configured server");
+    return false;
   }
-  // mode 指定時は X-Doorbell-Mode ヘッダで意図を明示 (受け側の一方向/双方向判別)。
-  // pjsua_msg_data はスタックで良い — make_call 内で複製される。
+
+
   pjsua_msg_data md;
   pjsua_msg_data_init(&md);
   pjsip_generic_string_hdr mode_hdr;
@@ -631,11 +642,13 @@ void SipCtl::call(const std::string& target, const std::string& mode) {
   pj_status_t rc = pjsua_call_make_call(im->acc, &dst, nullptr, nullptr,
                                         mode.empty() ? nullptr : &md, &cid);
   if (rc != PJ_SUCCESS) {
-    DB_LOGE(kTag, "発呼失敗 " + uri + ": " + std::to_string(rc));
-    return;
+    DB_LOGE(kTag, "outbound call failed " + uri + ": " + std::to_string(rc));
+    return false;
   }
   im->call_id.store(cid);
-  DB_LOGI(kTag, "発呼 " + uri + (mode.empty() ? "" : " (mode=" + mode + ")"));
+  im->call_owner = owner;
+  DB_LOGI(kTag, "calling " + uri + (mode.empty() ? "" : " (mode=" + mode + ")"));
+  return true;
 }
 
 void SipCtl::setAllowedSources(const std::vector<std::string>& ips) {
@@ -654,12 +667,35 @@ void SipCtl::hangup() {
   pjsua_call_hangup_all();
 }
 
+bool SipCtl::hangupOwned(const std::string& owner) {
+  Impl* im = impl_.get();
+  const int cid = im->call_id.load();
+  if (!im->running || owner.empty() || im->call_owner != owner || cid == PJSUA_INVALID_ID)
+    return false;
+  ensurePjThread();
+  return pjsua_call_hangup(cid, 0, nullptr, nullptr) == PJ_SUCCESS;
+}
+
 void SipCtl::answer() {
   Impl* im = impl_.get();
   int cid = im->call_id.load();
   if (!im->running || cid == PJSUA_INVALID_ID) return;
   ensurePjThread();
   pjsua_call_answer(cid, PJSIP_SC_OK, nullptr, nullptr);
+}
+
+bool SipCtl::sendDtmf(const std::string& digits) {
+  Impl* im = impl_.get();
+  int cid = im->call_id.load();
+  if (!im->running || cid == PJSUA_INVALID_ID || digits.empty()) return false;
+  ensurePjThread();
+  pj_str_t value = pstr(digits);
+  const pj_status_t rc = pjsua_call_dial_dtmf(cid, &value);
+  if (rc != PJ_SUCCESS) {
+    DB_LOGW(kTag, "send DTMF failed: " + std::to_string(rc));
+    return false;
+  }
+  return true;
 }
 
 SipRegState SipCtl::regState() const { return impl_->reg_state; }

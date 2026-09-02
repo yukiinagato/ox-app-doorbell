@@ -5,6 +5,7 @@
   <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
   <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
   <data name="admin_act_chime" xml:space="preserve"><value>门铃声</value></data>
+  <data name="admin_act_device_alert" xml:space="preserve"><value>设备警报</value></data>
   <data name="admin_act_ha" xml:space="preserve"><value>HA 事件</value></data>
   <data name="admin_act_sip" xml:space="preserve"><value>SIP 呼叫</value></data>
   <data name="admin_act_telegram" xml:space="preserve"><value>Telegram 通知</value></data>
@@ -18,16 +19,56 @@
   <data name="admin_add_reply" xml:space="preserve"><value>添加回复</value></data>
   <data name="admin_add_rule" xml:space="preserve"><value>添加规则</value></data>
   <data name="admin_add_window" xml:space="preserve"><value>添加时间段</value></data>
+  <data name="admin_addresses" xml:space="preserve"><value>地址</value></data>
+  <data name="admin_alert_accent" xml:space="preserve"><value>SOS 强调色</value></data>
+  <data name="admin_alert_background" xml:space="preserve"><value>SOS 背景色</value></data>
+  <data name="admin_alert_channels" xml:space="preserve"><value>通道</value></data>
+  <data name="admin_alert_foreground" xml:space="preserve"><value>SOS 文字颜色</value></data>
+  <data name="admin_alert_sound" xml:space="preserve"><value>声音</value></data>
+  <data name="admin_alert_sticky" xml:space="preserve"><value>保持至解除</value></data>
+  <data name="admin_alert_target_devices" xml:space="preserve"><value>设备 ID</value></data>
+  <data name="admin_alert_target_roles" xml:space="preserve"><value>角色</value></data>
+  <data name="admin_alert_target_web_groups" xml:space="preserve"><value>Web 订阅组</value></data>
+  <data name="admin_alert_ttl" xml:space="preserve"><value>TTL 秒数</value></data>
+  <data name="admin_alert_visual" xml:space="preserve"><value>画面显示</value></data>
+  <data name="admin_alert_volume" xml:space="preserve"><value>音量 (0–100)</value></data>
   <data name="admin_all" xml:space="preserve"><value>全部</value></data>
   <data name="admin_always" xml:space="preserve"><value>全天</value></data>
+  <data name="admin_asset_choose_file" xml:space="preserve"><value>选择文件</value></data>
+  <data name="admin_asset_delete_in_use" xml:space="preserve"><value>{0} 正在 {1} 处使用：
+{2}
+仍要删除吗？</value></data>
+  <data name="admin_asset_failed" xml:space="preserve"><value>资源注册失败：{0}</value></data>
+  <data name="admin_asset_file_hint" xml:space="preserve"><value>请选择图片或音频文件</value></data>
+  <data name="admin_asset_format_unsupported" xml:space="preserve"><value>不支持的文件格式</value></data>
+  <data name="admin_asset_label" xml:space="preserve"><value>标签</value></data>
+  <data name="admin_asset_label_hint" xml:space="preserve"><value>可选的管理标签</value></data>
+  <data name="admin_asset_prefetch_hint" xml:space="preserve"><value>预取到目标设备</value></data>
+  <data name="admin_asset_registered" xml:space="preserve"><value>资源已注册：{0}</value></data>
+  <data name="admin_asset_size" xml:space="preserve"><value>大小</value></data>
+  <data name="admin_asset_too_large" xml:space="preserve"><value>文件过大（{0}）</value></data>
+  <data name="admin_asset_type" xml:space="preserve"><value>类型</value></data>
+  <data name="admin_asset_unused" xml:space="preserve"><value>未使用</value></data>
+  <data name="admin_asset_used_by" xml:space="preserve"><value>使用位置</value></data>
   <data name="admin_assets" xml:space="preserve"><value>资源 (图片/音频)</value></data>
   <data name="admin_assets_cached" xml:space="preserve"><value>已缓存 {0}/{1} 台</value></data>
+  <data name="admin_assets_empty" xml:space="preserve"><value>尚未注册资源</value></data>
   <data name="admin_assets_upload" xml:space="preserve"><value>上传</value></data>
+  <data name="admin_atomic_batch_unavailable" xml:space="preserve"><value>此节点无法使用原子配置 API (/api/config/batch)</value></data>
+  <data name="admin_audio" xml:space="preserve"><value>音频</value></data>
   <data name="admin_audio_none" xml:space="preserve"><value>无音频 (用 TTS)</value></data>
   <data name="admin_audio_play" xml:space="preserve"><value>试听</value></data>
+  <data name="admin_audio_preview_unsupported" xml:space="preserve"><value>此浏览器不支持试听内置声音</value></data>
+  <data name="admin_audio_too_large" xml:space="preserve"><value>音频文件过大（{0}）</value></data>
   <data name="admin_bot_token" xml:space="preserve"><value>Bot token (仅写入)</value></data>
   <data name="admin_building_assign" xml:space="preserve"><value>所属建筑</value></data>
   <data name="admin_buildings" xml:space="preserve"><value>建筑</value></data>
+  <data name="admin_button_sound" xml:space="preserve"><value>按键音</value></data>
+  <data name="admin_call_flow" xml:space="preserve"><value>访客呼叫流程</value></data>
+  <data name="admin_call_flow_mixed_warning" xml:space="preserve"><value>并非所有已报告节点都支持 ring_then_purpose；旧版或未测量客户端仍使用 purpose_first。</value></data>
+  <data name="admin_call_flow_purpose_first" xml:space="preserve"><value>purpose_first 在呼叫前询问来意；ring_then_purpose 先响铃，并允许之后更新来意。</value></data>
+  <data name="admin_call_flow_supported" xml:space="preserve"><value>当前所有已报告节点均声明支持 call_flow_v2。</value></data>
+  <data name="admin_call_sound_loop" xml:space="preserve"><value>循环呼叫音</value></data>
   <data name="admin_cam_codec" xml:space="preserve"><value>视频编码</value></data>
   <data name="admin_cam_fps" xml:space="preserve"><value>帧率 (fps)</value></data>
   <data name="admin_cam_h264_bitrate" xml:space="preserve"><value>H.264 码率 (kbps)</value></data>
@@ -39,18 +80,36 @@
   <data name="admin_camera" xml:space="preserve"><value>摄像头</value></data>
   <data name="admin_cancel" xml:space="preserve"><value>取消</value></data>
   <data name="admin_caps_override" xml:space="preserve"><value>能力覆盖 (JSON)</value></data>
+  <data name="admin_channel_in_app" xml:space="preserve"><value>应用内</value></data>
+  <data name="admin_channel_system_notification" xml:space="preserve"><value>系统通知</value></data>
+  <data name="admin_channel_web_push" xml:space="preserve"><value>Web Push</value></data>
+  <data name="admin_choose_door_station" xml:space="preserve"><value>门口机…</value></data>
+  <data name="admin_choose_indoor" xml:space="preserve"><value>室内机…</value></data>
+  <data name="admin_choose_playback_pair" xml:space="preserve"><value>请选择室内机和门口机</value></data>
+  <data name="admin_clear_pairing" xml:space="preserve"><value>清除此设备的配对</value></data>
   <data name="admin_clock_warn" xml:space="preserve"><value>时钟未同步</value></data>
   <data name="admin_codec_auto" xml:space="preserve"><value>自动 (支持则 H.264)</value></data>
+  <data name="admin_config_value_placeholder" xml:space="preserve"><value>{&quot;zh&quot;:&quot;正门&quot;}</value></data>
+  <data name="admin_configured" xml:space="preserve"><value>已配置</value></data>
   <data name="admin_confirm_delete" xml:space="preserve"><value>要删除 {0} 吗？</value></data>
+  <data name="admin_copied" xml:space="preserve"><value>已复制</value></data>
+  <data name="admin_copy" xml:space="preserve"><value>复制</value></data>
+  <data name="admin_copy_failed" xml:space="preserve"><value>复制失败</value></data>
   <data name="admin_dashboard" xml:space="preserve"><value>仪表盘</value></data>
   <data name="admin_delete" xml:space="preserve"><value>删除</value></data>
+  <data name="admin_delete_pair_override" xml:space="preserve"><value>删除并继承全局配置</value></data>
+  <data name="admin_details" xml:space="preserve"><value>详情</value></data>
   <data name="admin_dev_name" xml:space="preserve"><value>名称</value></data>
   <data name="admin_dev_role" xml:space="preserve"><value>角色</value></data>
   <data name="admin_devices" xml:space="preserve"><value>设备</value></data>
   <data name="admin_disabled" xml:space="preserve"><value>禁用</value></data>
   <data name="admin_door_assign" xml:space="preserve"><value>负责门口</value></data>
+  <data name="admin_door_call_sound" xml:space="preserve"><value>门口机呼叫音</value></data>
   <data name="admin_door_list" xml:space="preserve"><value>门口</value></data>
+  <data name="admin_door_or_device" xml:space="preserve"><value>门口 / 设备</value></data>
   <data name="admin_doors" xml:space="preserve"><value>门口/建筑</value></data>
+  <data name="admin_drop_here" xml:space="preserve"><value>将文件拖放到此处或点击选择</value></data>
+  <data name="admin_duty" xml:space="preserve"><value>职责</value></data>
   <data name="admin_edit" xml:space="preserve"><value>编辑</value></data>
   <data name="admin_enabled" xml:space="preserve"><value>启用</value></data>
   <data name="admin_err_no_chat" xml:space="preserve"><value>没有配置 chat ID</value></data>
@@ -58,30 +117,60 @@
   <data name="admin_err_not_leader" xml:space="preserve"><value>此设备不是 telegram 主节点</value></data>
   <data name="admin_events" xml:space="preserve"><value>事件记录</value></data>
   <data name="admin_export" xml:space="preserve"><value>导出</value></data>
+  <data name="admin_file_read_failed" xml:space="preserve"><value>读取文件失败</value></data>
   <data name="admin_filter_type" xml:space="preserve"><value>按类型筛选</value></data>
+  <data name="admin_first_frame_timeout" xml:space="preserve"><value>首帧超时</value></data>
+  <data name="admin_fleet" xml:space="preserve"><value>管理设备</value></data>
+  <data name="admin_global" xml:space="preserve"><value>全局</value></data>
+  <data name="admin_helper_auto" xml:space="preserve"><value>自动</value></data>
+  <data name="admin_helper_mode" xml:space="preserve"><value>保活辅助程序</value></data>
+  <data name="admin_helper_off" xml:space="preserve"><value>关闭</value></data>
+  <data name="admin_helper_on" xml:space="preserve"><value>始终启用</value></data>
   <data name="admin_host" xml:space="preserve"><value>主机</value></data>
   <data name="admin_households" xml:space="preserve"><value>通知对象</value></data>
+  <data name="admin_image_read_failed" xml:space="preserve"><value>读取图片失败</value></data>
+  <data name="admin_image_resize_error" xml:space="preserve"><value>图片缩放失败：{0}</value></data>
+  <data name="admin_image_resize_failed" xml:space="preserve"><value>图片缩放失败</value></data>
+  <data name="admin_image_resize_too_large" xml:space="preserve"><value>缩放后的图片仍然过大</value></data>
+  <data name="admin_image_resize_unavailable" xml:space="preserve"><value>此浏览器无法缩放图片</value></data>
+  <data name="admin_image_resized" xml:space="preserve"><value>图片已从 {0} 缩放至 {1}</value></data>
+  <data name="admin_image_resizing" xml:space="preserve"><value>正在缩放图片（{0}）…</value></data>
   <data name="admin_import" xml:space="preserve"><value>导入</value></data>
   <data name="admin_import_hint" xml:space="preserve"><value>粘贴导出的 JSON（拆平后逐项写入）</value></data>
   <data name="admin_imported" xml:space="preserve"><value>已写入 {0} 项</value></data>
+  <data name="admin_indoor_ringtone" xml:space="preserve"><value>室内机铃声</value></data>
   <data name="admin_integrations" xml:space="preserve"><value>集成</value></data>
+  <data name="admin_join" xml:space="preserve"><value>加入现有集群</value></data>
   <data name="admin_join_hint" xml:space="preserve"><value>在新设备上输入此 PIN 与地址（10 分钟有效）</value></data>
   <data name="admin_join_pin" xml:space="preserve"><value>用 PIN 添加</value></data>
+  <data name="admin_key" xml:space="preserve"><value>键</value></data>
   <data name="admin_label_en" xml:space="preserve"><value>标签 (英语)</value></data>
   <data name="admin_label_ja" xml:space="preserve"><value>标签 (日语)</value></data>
   <data name="admin_label_zh" xml:space="preserve"><value>标签 (中文)</value></data>
+  <data name="admin_language" xml:space="preserve"><value>语言</value></data>
   <data name="admin_languages" xml:space="preserve"><value>访客语言</value></data>
+  <data name="admin_launch_sound" xml:space="preserve"><value>启动音</value></data>
   <data name="admin_leader" xml:space="preserve"><value>主节点</value></data>
+  <data name="admin_list_or_all" xml:space="preserve"><value>逗号分隔，或填写 all</value></data>
+  <data name="admin_load_or_add" xml:space="preserve"><value>载入 / 新增</value></data>
+  <data name="admin_local_addrs" xml:space="preserve"><value>本机地址</value></data>
   <data name="admin_locked" xml:space="preserve"><value>已锁定 10 分钟</value></data>
   <data name="admin_login" xml:space="preserve"><value>登录</value></data>
   <data name="admin_logs" xml:space="preserve"><value>日志</value></data>
+  <data name="admin_mock_audio_play" xml:space="preserve"><value>mock：正在播放 {0}</value></data>
   <data name="admin_motion" xml:space="preserve"><value>移动侦测</value></data>
   <data name="admin_motion_interval" xml:space="preserve"><value>最小间隔 (秒)</value></data>
   <data name="admin_motion_sensitivity" xml:space="preserve"><value>灵敏度</value></data>
+  <data name="admin_native_ui" xml:space="preserve"><value>原生 UI</value></data>
+  <data name="admin_native_ui_apply_report" xml:space="preserve"><value>原生客户端应用结果</value></data>
   <data name="admin_never_suppress" xml:space="preserve"><value>始终允许</value></data>
+  <data name="admin_no_changes" xml:space="preserve"><value>没有更改</value></data>
+  <data name="admin_not_ready" xml:space="preserve"><value>未就绪</value></data>
   <data name="admin_notify" xml:space="preserve"><value>通知</value></data>
   <data name="admin_offline" xml:space="preserve"><value>离线</value></data>
   <data name="admin_online" xml:space="preserve"><value>在线</value></data>
+  <data name="admin_order" xml:space="preserve"><value>顺序</value></data>
+  <data name="admin_page_title" xml:space="preserve"><value>门铃管理</value></data>
   <data name="admin_pair_approve" xml:space="preserve"><value>批准</value></data>
   <data name="admin_pair_approving" xml:space="preserve"><value>添加中…</value></data>
   <data name="admin_pair_found" xml:space="preserve"><value>将此设备设为主机（新建）</value></data>
@@ -93,61 +182,167 @@
   <data name="admin_pair_mode_left" xml:space="preserve"><value>自动添加已开启 — 剩余 {0}:{1}</value></data>
   <data name="admin_pair_mode_on" xml:space="preserve"><value>已开启配对模式（10 分钟）</value></data>
   <data name="admin_pair_none" xml:space="preserve"><value>暂无等待中的设备</value></data>
+  <data name="admin_pair_override_active" xml:space="preserve"><value>当前使用此配对覆盖。</value></data>
+  <data name="admin_pair_override_inherited" xml:space="preserve"><value>尚无覆盖；编辑值继承自全局配置。</value></data>
+  <data name="admin_pair_secure_failed" xml:space="preserve"><value>无法安全保存配对密钥。请检查存储空间和权限。</value></data>
   <data name="admin_pair_self_unpaired" xml:space="preserve"><value>此设备尚未加入集群。若是第一台，请在此新建。</value></data>
   <data name="admin_panel_token" xml:space="preserve"><value>面板 token</value></data>
   <data name="admin_pass" xml:space="preserve"><value>密码</value></data>
   <data name="admin_password" xml:space="preserve"><value>管理密码</value></data>
   <data name="admin_pin_prompt" xml:space="preserve"><value>请输入 PIN</value></data>
   <data name="admin_pin_wrong" xml:space="preserve"><value>PIN 错误</value></data>
+  <data name="admin_playback_fallback_hint" xml:space="preserve"><value>Web 会立即跳过 HLS；后置 MJPEG 从零时刻开始预热。到 MJPEG 前的最大额外等待：</value></data>
+  <data name="admin_playback_one_required" xml:space="preserve"><value>请至少启用一种播放策略</value></data>
+  <data name="admin_playback_pair_override" xml:space="preserve"><value>室内机 × 门口机覆盖</value></data>
+  <data name="admin_playback_strategy" xml:space="preserve"><value>播放策略</value></data>
+  <data name="admin_playback_timeout_range" xml:space="preserve"><value>首帧超时须为 100–60000ms，中断超时须为 1000–60000ms</value></data>
   <data name="admin_poll_updates" xml:space="preserve"><value>接收回复按钮 (getUpdates)</value></data>
   <data name="admin_port" xml:space="preserve"><value>端口</value></data>
+  <data name="admin_provision_this_node" xml:space="preserve"><value>配置到此节点</value></data>
+  <data name="admin_purpose_hint" xml:space="preserve"><value>编辑访客可选择的来访目的</value></data>
+  <data name="admin_purpose_icon" xml:space="preserve"><value>图标</value></data>
   <data name="admin_purposes" xml:space="preserve"><value>来访目的</value></data>
   <data name="admin_qr_speak" xml:space="preserve"><value>朗读</value></data>
   <data name="admin_quick_replies" xml:space="preserve"><value>快捷回复</value></data>
   <data name="admin_quiet_hours" xml:space="preserve"><value>静音时段</value></data>
   <data name="admin_raw_config" xml:space="preserve"><value>配置 (原始 JSON，只读)</value></data>
+  <data name="admin_ready" xml:space="preserve"><value>就绪</value></data>
+  <data name="admin_remove_device" xml:space="preserve"><value>移出设备</value></data>
+  <data name="admin_removed" xml:space="preserve"><value>此设备已被移出集群</value></data>
   <data name="admin_role_door" xml:space="preserve"><value>门口机</value></data>
   <data name="admin_role_indoor" xml:space="preserve"><value>室内机</value></data>
   <data name="admin_rotate" xml:space="preserve"><value>轮换</value></data>
   <data name="admin_rotate_confirm" xml:space="preserve"><value>旧 token 将立即失效，继续吗？</value></data>
+  <data name="admin_rotation_auto" xml:space="preserve"><value>自动（设备姿态传感器）</value></data>
   <data name="admin_rule_devices" xml:space="preserve"><value>目标设备</value></data>
   <data name="admin_rule_doors" xml:space="preserve"><value>目标门口</value></data>
   <data name="admin_rule_when" xml:space="preserve"><value>触发条件</value></data>
   <data name="admin_rules" xml:space="preserve"><value>呼叫规则</value></data>
+  <data name="admin_runtime_alert" xml:space="preserve"><value>SOS 投递</value></data>
+  <data name="admin_runtime_codec" xml:space="preserve"><value>媒体</value></data>
+  <data name="admin_runtime_health" xml:space="preserve"><value>运行状态</value></data>
+  <data name="admin_runtime_heartbeat" xml:space="preserve"><value>心跳</value></data>
+  <data name="admin_runtime_helper" xml:space="preserve"><value>保活辅助程序</value></data>
+  <data name="admin_runtime_last_exit" xml:space="preserve"><value>上次退出</value></data>
+  <data name="admin_runtime_safe_mode" xml:space="preserve"><value>安全模式</value></data>
+  <data name="admin_runtime_unreported" xml:space="preserve"><value>未报告</value></data>
   <data name="admin_save" xml:space="preserve"><value>保存</value></data>
   <data name="admin_save_failed" xml:space="preserve"><value>保存失败</value></data>
+  <data name="admin_save_pair_override" xml:space="preserve"><value>保存配对覆盖</value></data>
   <data name="admin_saved" xml:space="preserve"><value>已保存</value></data>
   <data name="admin_schedule" xml:space="preserve"><value>时间表</value></data>
+  <data name="admin_secret_cleanup_deferred" xml:space="preserve"><value>有 {0} 个旧 secret 仍被引用或无法删除，清理已延后</value></data>
+  <data name="admin_secret_configured" xml:space="preserve"><value>已配置（留空保持不变）</value></data>
+  <data name="admin_secret_on_target_only" xml:space="preserve"><value>请在目标节点上配置</value></data>
+  <data name="admin_secret_unchanged" xml:space="preserve"><value>留空保持不变</value></data>
   <data name="admin_sip_accounts" xml:space="preserve"><value>SIP 账号 (每设备)</value></data>
   <data name="admin_sip_extensions" xml:space="preserve"><value>SIP 分机 (逗号分隔)</value></data>
+  <data name="admin_sos_active" xml:space="preserve"><value>紧急 SOS 已触发</value></data>
+  <data name="admin_sos_capable_recipients" xml:space="preserve"><value>可用或旧版未知</value></data>
+  <data name="admin_sos_clear_audit" xml:space="preserve"><value>解除操作会记录到管理会话并同步到所有节点。</value></data>
+  <data name="admin_sos_clear_confirm" xml:space="preserve"><value>要解除紧急 SOS 吗？</value></data>
+  <data name="admin_sos_clear_failed" xml:space="preserve"><value>解除紧急 SOS 失败</value></data>
+  <data name="admin_sos_cleared" xml:space="preserve"><value>紧急 SOS 已解除</value></data>
+  <data name="admin_sos_dry_run" xml:space="preserve"><value>SOS 试运行预览</value></data>
+  <data name="admin_sos_dry_run_ok" xml:space="preserve"><value>当前状态快照未检测到投递警告。</value></data>
+  <data name="admin_sos_local_recipients" xml:space="preserve"><value>本地接收方</value></data>
+  <data name="admin_sos_targets" xml:space="preserve"><value>目标</value></data>
+  <data name="admin_sos_warn_no_device_alert" xml:space="preserve"><value>SOS 状态会复制，但此规则没有设备警报动作。</value></data>
+  <data name="admin_sos_warn_no_push_subscriptions" xml:space="preserve"><value>已选择 Web Push，但没有匹配的订阅。</value></data>
+  <data name="admin_sos_warn_offline" xml:space="preserve"><value>离线或未发现的目标设备</value></data>
+  <data name="admin_sos_warn_push_backend" xml:space="preserve"><value>没有已测量且就绪的发送后端，Web Push 无法投递。</value></data>
+  <data name="admin_sos_warn_silent" xml:space="preserve"><value>所有已配置警报通道均为空或静音。</value></data>
+  <data name="admin_sos_warn_unavailable_channels" xml:space="preserve"><value>所请求的通知通道不可用或缺少权限</value></data>
+  <data name="admin_sos_warn_unknown_channels" xml:space="preserve"><value>滚动升级中的设备通知通道支持状态未知</value></data>
+  <data name="admin_sos_warn_unsupported_channels" xml:space="preserve"><value>目标设备不支持所请求的通知通道</value></data>
+  <data name="admin_sos_warn_zero_recipients" xml:space="preserve"><value>试运行得到的接收方为 0。</value></data>
+  <data name="admin_sos_warning_nonblocking" xml:space="preserve"><value>警告不会阻止保存；投递结果按设备记录。</value></data>
   <data name="admin_sound" xml:space="preserve"><value>铃声</value></data>
+  <data name="admin_sound_manager" xml:space="preserve"><value>声音管理</value></data>
+  <data name="admin_sound_manager_hint" xml:space="preserve"><value>选择各界面使用的音频资源</value></data>
+  <data name="admin_stall_timeout" xml:space="preserve"><value>中断超时</value></data>
+  <data name="admin_status" xml:space="preserve"><value>状态</value></data>
   <data name="admin_suppress" xml:space="preserve"><value>抑制</value></data>
   <data name="admin_sync_state" xml:space="preserve"><value>已同步 {0}/{1} 台</value></data>
   <data name="admin_system" xml:space="preserve"><value>系统</value></data>
   <data name="admin_target_ext" xml:space="preserve"><value>分机号</value></data>
+  <data name="admin_telegram_test_chat" xml:space="preserve"><value>chat_id（留空 = 所有通知对象）</value></data>
   <data name="admin_test_send" xml:space="preserve"><value>发送测试</value></data>
   <data name="admin_test_sent" xml:space="preserve"><value>已发送测试通知</value></data>
   <data name="admin_texts" xml:space="preserve"><value>文案</value></data>
+  <data name="admin_texts_count" xml:space="preserve"><value>{0} 条文案</value></data>
   <data name="admin_texts_hint" xml:space="preserve"><value>留空则使用默认文案</value></data>
+  <data name="admin_texts_placeholder_hint" xml:space="preserve"><value>各翻译中的占位符必须一致</value></data>
+  <data name="admin_texts_placeholder_mismatch" xml:space="preserve"><value>占位符不一致</value></data>
+  <data name="admin_texts_show_all" xml:space="preserve"><value>显示所有文案</value></data>
   <data name="admin_tg_chat_ids" xml:space="preserve"><value>Telegram chat ID (逗号分隔)</value></data>
   <data name="admin_theme" xml:space="preserve"><value>主题 (背景)</value></data>
   <data name="admin_theme_bg_color" xml:space="preserve"><value>背景色</value></data>
   <data name="admin_theme_bg_image" xml:space="preserve"><value>背景图片</value></data>
+  <data name="admin_theme_device_hint" xml:space="preserve"><value>仅适用于此设备的主题覆盖</value></data>
+  <data name="admin_theme_global_default" xml:space="preserve"><value>全局默认</value></data>
+  <data name="admin_theme_global_hint" xml:space="preserve"><value>应用于所有设备的默认主题</value></data>
+  <data name="admin_theme_image_hint" xml:space="preserve"><value>请选择已注册的图片资源</value></data>
+  <data name="admin_theme_no_image" xml:space="preserve"><value>无背景图片</value></data>
+  <data name="admin_theme_override_here" xml:space="preserve"><value>在此设备上覆盖</value></data>
+  <data name="admin_theme_override_name" xml:space="preserve"><value>设备覆盖：{0}</value></data>
   <data name="admin_theme_preview" xml:space="preserve"><value>预览</value></data>
+  <data name="admin_theme_reset_override" xml:space="preserve"><value>重置设备覆盖</value></data>
+  <data name="admin_theme_sync_hint" xml:space="preserve"><value>更改将同步到目标设备</value></data>
   <data name="admin_title" xml:space="preserve"><value>管理</value></data>
   <data name="admin_transport" xml:space="preserve"><value>传输</value></data>
   <data name="admin_tz_offset" xml:space="preserve"><value>时区偏移 (相对 UTC 分钟)</value></data>
   <data name="admin_ui_lang" xml:space="preserve"><value>显示语言</value></data>
+  <data name="admin_ui_legacy_hint" xml:space="preserve"><value>旧版 .style 仅用于初始值参考。</value></data>
+  <data name="admin_ui_manifest_readonly" xml:space="preserve"><value>Manifest 是只读客户端能力；仅保存 elements.&lt;semantic_id&gt; 值。</value></data>
+  <data name="admin_ui_manifest_unreported" xml:space="preserve"><value>ui_manifest 不可用；此节点未报告运行时能力。</value></data>
+  <data name="admin_ui_offline_queued" xml:space="preserve"><value>设备处于离线状态；已验证的更改将在重新连接后应用。</value></data>
+  <data name="admin_ui_style" xml:space="preserve"><value>UI 样式</value></data>
+  <data name="admin_unchecked_all" xml:space="preserve"><value>未选择表示全部</value></data>
+  <data name="admin_unknown_action" xml:space="preserve"><value>未知动作</value></data>
+  <data name="admin_unknown_trigger" xml:space="preserve"><value>未知触发器</value></data>
+  <data name="admin_update_sound" xml:space="preserve"><value>更新提示音</value></data>
+  <data name="admin_uploading" xml:space="preserve"><value>正在上传…</value></data>
   <data name="admin_user" xml:space="preserve"><value>用户</value></data>
+  <data name="admin_valid_json_required" xml:space="preserve"><value>请输入有效的 JSON 值</value></data>
+  <data name="admin_video_hls" xml:space="preserve"><value>HLS（兼容）</value></data>
+  <data name="admin_video_low_latency" xml:space="preserve"><value>低延迟 H.264（推荐）</value></data>
+  <data name="admin_video_playback" xml:space="preserve"><value>室内机视频播放方式</value></data>
+  <data name="admin_video_playback_policy" xml:space="preserve"><value>视频播放策略</value></data>
+  <data name="admin_video_rotation" xml:space="preserve"><value>视频旋转角度</value></data>
+  <data name="admin_visitor_language_primary_hint" xml:space="preserve"><value>第一种语言为默认语言</value></data>
+  <data name="admin_visitor_language_revert" xml:space="preserve"><value>呼叫后恢复默认语言</value></data>
+  <data name="admin_visitor_languages" xml:space="preserve"><value>可用的访客语言</value></data>
+  <data name="admin_web_push_backend" xml:space="preserve"><value>Web Push 发送后端</value></data>
+  <data name="admin_web_push_bearer_required" xml:space="preserve"><value>启用发送端认证时请输入 Bearer 令牌</value></data>
+  <data name="admin_web_push_delivery_backend" xml:space="preserve"><value>投递后端</value></data>
+  <data name="admin_web_push_local_secret" xml:space="preserve"><value>本机 secret</value></data>
+  <data name="admin_web_push_private_key" xml:space="preserve"><value>VAPID 私钥</value></data>
+  <data name="admin_web_push_private_required" xml:space="preserve"><value>请输入 VAPID 私钥</value></data>
+  <data name="admin_web_push_public_key" xml:space="preserve"><value>VAPID 公钥</value></data>
+  <data name="admin_web_push_sender_bearer" xml:space="preserve"><value>发送服务器 Bearer 令牌</value></data>
+  <data name="admin_web_push_sender_url" xml:space="preserve"><value>HTTPS 发送 URL</value></data>
+  <data name="admin_web_push_status" xml:space="preserve"><value>配置状态</value></data>
+  <data name="admin_web_push_subject" xml:space="preserve"><value>VAPID 主题</value></data>
+  <data name="admin_web_push_use_sender_bearer" xml:space="preserve"><value>使用发送服务器 Bearer 令牌</value></data>
+  <data name="admin_web_sos_enabled" xml:space="preserve"><value>在已打开的 Web 面板显示 SOS</value></data>
+  <data name="admin_web_sos_title" xml:space="preserve"><value>Web SOS 警报</value></data>
+  <data name="admin_web_sos_warning" xml:space="preserve"><value>关闭后，已打开的 Web 面板仅在收到匹配的 device_alert 或 Web Push 时显示 SOS。</value></data>
+  <data name="admin_web_ui" xml:space="preserve"><value>Web UI</value></data>
+  <data name="admin_web_ui_apply_report" xml:space="preserve"><value>Web 面板应用结果</value></data>
   <data name="admin_when_button" xml:space="preserve"><value>按铃</value></data>
+  <data name="admin_when_emergency_off" xml:space="preserve"><value>SOS 已解除</value></data>
+  <data name="admin_when_emergency_on" xml:space="preserve"><value>SOS 已触发</value></data>
   <data name="admin_when_motion" xml:space="preserve"><value>移动侦测</value></data>
   <data name="admin_when_offline" xml:space="preserve"><value>设备离线</value></data>
   <data name="admin_windows" xml:space="preserve"><value>时间段</value></data>
   <data name="admin_with_snapshot" xml:space="preserve"><value>附照片</value></data>
+  <data name="admin_write" xml:space="preserve"><value>写入</value></data>
   <data name="app_name" xml:space="preserve"><value>门铃</value></data>
   <data name="calling_cancel" xml:space="preserve"><value>取消</value></data>
   <data name="calling_no_answer" xml:space="preserve"><value>无人应答</value></data>
   <data name="calling_title" xml:space="preserve"><value>呼叫中…</value></data>
+  <data name="date_full" xml:space="preserve"><value>{0}年{1}月{2}日（{3}）</value></data>
   <data name="day_fri" xml:space="preserve"><value>五</value></data>
   <data name="day_mon" xml:space="preserve"><value>一</value></data>
   <data name="day_sat" xml:space="preserve"><value>六</value></data>
@@ -156,8 +351,10 @@
   <data name="day_tue" xml:space="preserve"><value>二</value></data>
   <data name="day_wed" xml:space="preserve"><value>三</value></data>
   <data name="degraded_notified" xml:space="preserve"><value>已通知，请稍候</value></data>
+  <data name="emergency_active_detail" xml:space="preserve"><value>紧急模式已触发</value></data>
   <data name="emergency_button" xml:space="preserve"><value>紧急</value></data>
   <data name="emergency_cancel" xml:space="preserve"><value>解除警报</value></data>
+  <data name="emergency_clear_instruction" xml:space="preserve"><value>请从管理页面或使用设备 PIN 解除警报。</value></data>
   <data name="emergency_hold_hint" xml:space="preserve"><value>长按 {0} 秒触发</value></data>
   <data name="emergency_notified" xml:space="preserve"><value>已通知家人</value></data>
   <data name="emergency_notify_off" xml:space="preserve"><value>✅ 警报已解除</value></data>
@@ -173,23 +370,163 @@
   <data name="idle_touch_to_call" xml:space="preserve"><value>触摸屏幕呼叫</value></data>
   <data name="incall_end" xml:space="preserve"><value>结束</value></data>
   <data name="incall_title" xml:space="preserve"><value>通话中</value></data>
+  <data name="info_absent" xml:space="preserve"><value>无</value></data>
+  <data name="info_active_calls" xml:space="preserve"><value>进行中的呼叫</value></data>
+  <data name="info_address_cycle" xml:space="preserve"><value>切换地址 ({0}/{1}) ▸</value></data>
+  <data name="info_addresses" xml:space="preserve"><value>本机全部地址</value></data>
+  <data name="info_addresses_loading" xml:space="preserve"><value>正在获取… 网络可能未连接</value></data>
+  <data name="info_battery" xml:space="preserve"><value>电池</value></data>
+  <data name="info_camera" xml:space="preserve"><value>摄像头</value></data>
+  <data name="info_camera_absent_ipad1" xml:space="preserve"><value>无（iPad 1 未配备摄像头）</value></data>
+  <data name="info_capabilities" xml:space="preserve"><value>能力</value></data>
+  <data name="info_components" xml:space="preserve"><value>组件</value></data>
+  <data name="info_device" xml:space="preserve"><value>设备</value></data>
+  <data name="info_external_present" xml:space="preserve"><value>有（外接）</value></data>
+  <data name="info_last_press" xml:space="preserve"><value>最近按铃</value></data>
+  <data name="info_machine" xml:space="preserve"><value>主机名</value></data>
+  <data name="info_memory" xml:space="preserve"><value>内存</value></data>
+  <data name="info_microphone" xml:space="preserve"><value>麦克风</value></data>
+  <data name="info_model" xml:space="preserve"><value>型号</value></data>
+  <data name="info_network" xml:space="preserve"><value>网络</value></data>
+  <data name="info_no_address" xml:space="preserve"><value>无地址</value></data>
+  <data name="info_no_data" xml:space="preserve"><value>无数据</value></data>
+  <data name="info_no_press" xml:space="preserve"><value>暂无</value></data>
+  <data name="info_node" xml:space="preserve"><value>节点</value></data>
+  <data name="info_peers" xml:space="preserve"><value>节点</value></data>
+  <data name="info_port_closed" xml:space="preserve"><value>关闭</value></data>
+  <data name="info_ports" xml:space="preserve"><value>监听端口</value></data>
+  <data name="info_refresh" xml:space="preserve"><value>刷新</value></data>
+  <data name="info_role" xml:space="preserve"><value>角色</value></data>
+  <data name="info_runtime" xml:space="preserve"><value>运行状态</value></data>
+  <data name="info_scan_admin" xml:space="preserve"><value>扫描以打开管理页面：</value></data>
+  <data name="info_sip_direct" xml:space="preserve"><value>UDP（直接呼叫）</value></data>
+  <data name="info_system" xml:space="preserve"><value>系统</value></data>
+  <data name="info_title" xml:space="preserve"><value>本机信息 / 调试</value></data>
+  <data name="info_total_press" xml:space="preserve"><value>累计按铃次数</value></data>
+  <data name="info_triggers" xml:space="preserve"><value>呼叫</value></data>
+  <data name="info_unknown" xml:space="preserve"><value>未知</value></data>
+  <data name="info_uptime" xml:space="preserve"><value>运行时间</value></data>
+  <data name="info_version" xml:space="preserve"><value>版本</value></data>
+  <data name="language_name_en" xml:space="preserve"><value>English</value></data>
+  <data name="language_name_es" xml:space="preserve"><value>Español</value></data>
+  <data name="language_name_ja" xml:space="preserve"><value>日本語</value></data>
+  <data name="language_name_ko" xml:space="preserve"><value>한국어</value></data>
+  <data name="language_name_pt" xml:space="preserve"><value>Português</value></data>
+  <data name="language_name_vi" xml:space="preserve"><value>Tiếng Việt</value></data>
+  <data name="language_name_zh" xml:space="preserve"><value>中文</value></data>
+  <data name="monitor_admin_qr" xml:space="preserve"><value>管理页面二维码</value></data>
+  <data name="monitor_admin_qr_none" xml:space="preserve"><value>没有管理地址</value></data>
+  <data name="monitor_admin_qr_select" xml:space="preserve"><value>选择管理页面的 IP 地址</value></data>
+  <data name="monitor_choose" xml:space="preserve"><value>选择要查看的门口机</value></data>
+  <data name="monitor_close" xml:space="preserve"><value>关闭</value></data>
+  <data name="monitor_live" xml:space="preserve"><value>实时画面</value></data>
+  <data name="monitor_open" xml:space="preserve"><value>查看门口机</value></data>
+  <data name="monitor_title" xml:space="preserve"><value>{0} 实时画面</value></data>
   <data name="notify_test" xml:space="preserve"><value>门铃测试通知</value></data>
   <data name="offline_body" xml:space="preserve"><value>无法呼叫，请直接敲门。</value></data>
   <data name="offline_reconnect" xml:space="preserve"><value>{0} 秒后重连</value></data>
   <data name="offline_title" xml:space="preserve"><value>系统离线</value></data>
+  <data name="panel_answering" xml:space="preserve"><value>正在接听…</value></data>
+  <data name="panel_auth_failed" xml:space="preserve"><value>面板认证失败</value></data>
+  <data name="panel_back" xml:space="preserve"><value>返回</value></data>
+  <data name="panel_call" xml:space="preserve"><value>通话</value></data>
+  <data name="panel_call_cancelled" xml:space="preserve"><value>呼叫已取消</value></data>
+  <data name="panel_call_end_accepted" xml:space="preserve"><value>已接受结束通话 — 正在等待状态同步</value></data>
+  <data name="panel_call_end_failed" xml:space="preserve"><value>结束通话失败{0}</value></data>
+  <data name="panel_call_end_unavailable" xml:space="preserve"><value>此节点无法使用结束通话 API</value></data>
+  <data name="panel_call_ended" xml:space="preserve"><value>通话已结束</value></data>
+  <data name="panel_call_ending" xml:space="preserve"><value>正在结束通话…</value></data>
+  <data name="panel_call_expired" xml:space="preserve"><value>呼叫已过期</value></data>
+  <data name="panel_call_failed" xml:space="preserve"><value>通话失败 ({0})</value></data>
+  <data name="panel_call_finished" xml:space="preserve"><value>呼叫已结束</value></data>
+  <data name="panel_call_title" xml:space="preserve"><value>通话面板</value></data>
   <data name="panel_calling" xml:space="preserve"><value>呼叫中→已通知</value></data>
+  <data name="panel_camera_failed" xml:space="preserve"><value>获取摄像头失败 ({0}) — 需要 HTTPS 或 localhost (webrtc.md §1)</value></data>
+  <data name="panel_cancel_accepted" xml:space="preserve"><value>已接受取消 — 正在等待状态同步</value></data>
+  <data name="panel_cancel_failed" xml:space="preserve"><value>取消失败{0}</value></data>
+  <data name="panel_cancel_missing_id" xml:space="preserve"><value>缺少 call_id，无法使用安全取消 API</value></data>
+  <data name="panel_cancel_sending" xml:space="preserve"><value>正在发送取消请求…</value></data>
+  <data name="panel_cancel_unavailable" xml:space="preserve"><value>此节点无法使用安全取消 API</value></data>
+  <data name="panel_deadline_reached" xml:space="preserve"><value>已到呼叫期限 — 正在确认结束状态</value></data>
+  <data name="panel_dialog_identity_missing" xml:space="preserve"><value>无法创建安全的浏览器通话标识，通话未开始</value></data>
+  <data name="panel_event_auto_reply" xml:space="preserve"><value>自动回复</value></data>
+  <data name="panel_event_call_answered" xml:space="preserve"><value>呼叫已接听</value></data>
+  <data name="panel_event_call_cancelled" xml:space="preserve"><value>呼叫已取消</value></data>
+  <data name="panel_event_call_ended" xml:space="preserve"><value>通话已结束</value></data>
+  <data name="panel_event_chime" xml:space="preserve"><value>门铃声</value></data>
+  <data name="panel_event_delivery_result" xml:space="preserve"><value>投递结果</value></data>
+  <data name="panel_event_device_alert" xml:space="preserve"><value>设备警报</value></data>
+  <data name="panel_event_door" xml:space="preserve"><value>门口</value></data>
+  <data name="panel_event_dtmf_action" xml:space="preserve"><value>DTMF 操作</value></data>
+  <data name="panel_event_emergency" xml:space="preserve"><value>紧急警报</value></data>
+  <data name="panel_event_emergency_cancel" xml:space="preserve"><value>紧急警报已解除</value></data>
+  <data name="panel_event_ha_command" xml:space="preserve"><value>HA 命令</value></data>
+  <data name="panel_event_ha_event" xml:space="preserve"><value>HA 事件</value></data>
+  <data name="panel_event_hangup" xml:space="preserve"><value>挂断</value></data>
+  <data name="panel_event_motion" xml:space="preserve"><value>移动侦测</value></data>
+  <data name="panel_event_press" xml:space="preserve"><value>呼叫</value></data>
+  <data name="panel_event_purpose_selected" xml:space="preserve"><value>已选择来访目的</value></data>
+  <data name="panel_event_quick_reply" xml:space="preserve"><value>快捷回复</value></data>
+  <data name="panel_event_reply" xml:space="preserve"><value>回复</value></data>
+  <data name="panel_event_sip_call" xml:space="preserve"><value>SIP 呼叫</value></data>
+  <data name="panel_event_telegram" xml:space="preserve"><value>Telegram 通知</value></data>
+  <data name="panel_event_time" xml:space="preserve"><value>时间</value></data>
+  <data name="panel_event_type" xml:space="preserve"><value>类型</value></data>
+  <data name="panel_event_visitor_lang" xml:space="preserve"><value>语言已更改</value></data>
+  <data name="panel_extension" xml:space="preserve"><value>分机 {0}</value></data>
+  <data name="panel_extension_unconfigured" xml:space="preserve"><value>此门口尚未在 sip.accounts 中配置分机</value></data>
+  <data name="panel_jssip_init_failed" xml:space="preserve"><value>JsSIP 初始化失败: {0}</value></data>
+  <data name="panel_lifecycle_connected_sync_failed" xml:space="preserve"><value>通话已连接，但生命周期同步失败，将安全结束通话</value></data>
+  <data name="panel_lifecycle_end_sync_failed" xml:space="preserve"><value>SIP 通话已结束，但生命周期同步失败</value></data>
+  <data name="panel_lifecycle_heartbeat_failed" xml:space="preserve"><value>通话生命周期心跳失败，将安全结束通话</value></data>
+  <data name="panel_lifecycle_identity_missing" xml:space="preserve"><value>呼叫缺少生命周期标识，无法安全接听</value></data>
+  <data name="panel_mock_incall" xml:space="preserve"><value>通话中 (mock)</value></data>
+  <data name="panel_mock_registered" xml:space="preserve"><value>分机 {0} 已注册 (mock)</value></data>
   <data name="panel_monitor_title" xml:space="preserve"><value>受铃监视</value></data>
+  <data name="panel_new_call_detected" xml:space="preserve"><value>检测到新呼叫 — 正在刷新状态</value></data>
   <data name="panel_no_audio_note" xml:space="preserve"><value>此门口无法通话（仅通知）</value></data>
+  <data name="panel_no_extension" xml:space="preserve"><value>无分机</value></data>
+  <data name="panel_no_video" xml:space="preserve"><value>无画面</value></data>
+  <data name="panel_not_sent" xml:space="preserve"><value>尚未发出呼叫</value></data>
   <data name="panel_offline" xml:space="preserve"><value>离线 — 重连中…</value></data>
+  <data name="panel_other_answered" xml:space="preserve"><value>其他设备已先接听此呼叫</value></data>
+  <data name="panel_press_failed" xml:space="preserve"><value>呼叫请求失败{0}</value></data>
   <data name="panel_press_hint" xml:space="preserve"><value>按下按钮即可通知住户</value></data>
+  <data name="panel_purpose_call_missing" xml:space="preserve"><value>缺少 call_id，无法安全关联来访目的</value></data>
+  <data name="panel_purpose_delivered" xml:space="preserve"><value>已将来访目的告知住户</value></data>
+  <data name="panel_purpose_failed" xml:space="preserve"><value>发送来访目的失败{0}</value></data>
+  <data name="panel_purpose_sending" xml:space="preserve"><value>正在发送来访目的…</value></data>
+  <data name="panel_push_disable" xml:space="preserve"><value>禁用通知</value></data>
+  <data name="panel_push_disabled" xml:space="preserve"><value>通知已禁用</value></data>
+  <data name="panel_push_disabling" xml:space="preserve"><value>正在禁用通知…</value></data>
+  <data name="panel_push_enable" xml:space="preserve"><value>启用通知</value></data>
+  <data name="panel_push_enabled" xml:space="preserve"><value>通知已启用</value></data>
+  <data name="panel_push_enabling" xml:space="preserve"><value>正在启用通知…</value></data>
+  <data name="panel_push_failed" xml:space="preserve"><value>通知设置失败</value></data>
+  <data name="panel_push_unavailable" xml:space="preserve"><value>此浏览器或节点无法使用 Web Push</value></data>
+  <data name="panel_recovery_failed" xml:space="preserve"><value>无法恢复通话状态，将安全结束通话</value></data>
+  <data name="panel_registered" xml:space="preserve"><value>分机 {0} 已注册</value></data>
+  <data name="panel_registration_failed" xml:space="preserve"><value>注册失败 ({0})</value></data>
+  <data name="panel_resident_answered" xml:space="preserve"><value>住户已接听</value></data>
+  <data name="panel_resident_notified" xml:space="preserve"><value>已通知住户</value></data>
+  <data name="panel_resident_notified_no_cancel" xml:space="preserve"><value>已通知住户 — 此节点不支持使用 call_id 安全取消</value></data>
+  <data name="panel_send_video" xml:space="preserve"><value>同时发送视频</value></data>
+  <data name="panel_sending" xml:space="preserve"><value>发送中…</value></data>
   <data name="panel_tap_sound" xml:space="preserve"><value>点按以启用声音</value></data>
   <data name="panel_title" xml:space="preserve"><value>呼叫面板</value></data>
+  <data name="panel_unregistered" xml:space="preserve"><value>未注册</value></data>
+  <data name="panel_visitor_calling" xml:space="preserve"><value>访客呼叫中</value></data>
+  <data name="panel_webrtc_required" xml:space="preserve"><value>通话需要配置 Asterisk WebRTC (integrations.webrtc.ws_url) — 请参阅 deploy/asterisk/webrtc.md</value></data>
+  <data name="purpose_cancel_call" xml:space="preserve"><value>取消呼叫</value></data>
   <data name="purpose_sent" xml:space="preserve"><value>已按 {0} 呼叫</value></data>
+  <data name="purpose_skip" xml:space="preserve"><value>跳过来访目的</value></data>
   <data name="reply_answered" xml:space="preserve"><value>已回复 ({0})</value></data>
   <data name="reply_banner" xml:space="preserve"><value>住户留言</value></data>
   <data name="reply_choose" xml:space="preserve"><value>选择快捷回复</value></data>
+  <data name="reply_failed" xml:space="preserve"><value>发送快捷回复失败</value></data>
   <data name="reply_sent" xml:space="preserve"><value>已发送: {0}</value></data>
   <data name="ring_answer" xml:space="preserve"><value>接听</value></data>
+  <data name="ring_cancelled" xml:space="preserve"><value>访客已取消呼叫</value></data>
   <data name="ring_ignore" xml:space="preserve"><value>忽略</value></data>
   <data name="ring_incoming" xml:space="preserve"><value>{0} 有访客</value></data>
   <data name="ring_lang_badge" xml:space="preserve"><value>访客语言: {0}</value></data>
@@ -197,4 +534,39 @@
   <data name="ring_monitoring" xml:space="preserve"><value>正在播放门口声音</value></data>
   <data name="ring_no_video" xml:space="preserve"><value>没有门口机画面</value></data>
   <data name="ring_purpose_badge" xml:space="preserve"><value>目的: {0}</value></data>
+  <data name="ring_unlock" xml:space="preserve"><value>开锁</value></data>
+  <data name="ring_unlock_sent" xml:space="preserve"><value>已发送开锁信号</value></data>
+  <data name="setup_confirm_new_cluster" xml:space="preserve"><value>再次点击以新建集群（如需加入现有集群请取消）</value></data>
+  <data name="setup_door" xml:space="preserve"><value>门口 ID</value></data>
+  <data name="setup_door_hint" xml:space="preserve"><value>仅限字母、数字、- 和 _</value></data>
+  <data name="setup_finish" xml:space="preserve"><value>保存并继续</value></data>
+  <data name="setup_invalid_door" xml:space="preserve"><value>请输入有效的门口 ID</value></data>
+  <data name="setup_join_failed" xml:space="preserve"><value>无法加入：{0}</value></data>
+  <data name="setup_join_host" xml:space="preserve"><value>连接地址（例如 10.0.1.5:47172）</value></data>
+  <data name="setup_join_pin" xml:space="preserve"><value>使用 PIN 加入</value></data>
+  <data name="setup_join_required" xml:space="preserve"><value>请输入连接地址和 PIN</value></data>
+  <data name="setup_message" xml:space="preserve"><value>请先确认此设备的角色。门口机需要唯一的门口 ID。</value></data>
+  <data name="setup_name" xml:space="preserve"><value>设备名称</value></data>
+  <data name="setup_new_cluster" xml:space="preserve"><value>── 新建集群 ──</value></data>
+  <data name="setup_new_cluster_failed" xml:space="preserve"><value>无法新建集群</value></data>
+  <data name="setup_or_join_pin" xml:space="preserve"><value>── 或使用 PIN 加入 ──</value></data>
+  <data name="setup_pair_door_message" xml:space="preserve"><value>请在室内机创建集群并开启 10 分钟配对。本门口机会自动加入；若未加入，请输入室内机的地址和 PIN。</value></data>
+  <data name="setup_pair_door_title" xml:space="preserve"><value>添加此门口机</value></data>
+  <data name="setup_pair_host_pin" xml:space="preserve"><value>已开启 10 分钟配对。
+请在门口机选择“加入现有集群”，然后输入：
+地址：{0}
+PIN：{1}</value></data>
+  <data name="setup_pair_primary" xml:space="preserve"><value>在此室内机创建集群</value></data>
+  <data name="setup_pair_wait" xml:space="preserve"><value>等待自动加入</value></data>
+  <data name="setup_pair_waiting" xml:space="preserve"><value>请在室内机创建集群并开启 10 分钟配对。
+本机将自动加入；仅在未加入时，才在下方输入室内机地址和 PIN。</value></data>
+  <data name="setup_role" xml:space="preserve"><value>角色</value></data>
+  <data name="setup_scan_qr" xml:space="preserve"><value>扫描室内机二维码</value></data>
+  <data name="setup_title" xml:space="preserve"><value>设置此设备</value></data>
+  <data name="sound_button_click" xml:space="preserve"><value>光标移动 4（按钮）</value></data>
+  <data name="sound_indoor_update" xml:space="preserve"><value>确认按钮 23（追加消息）</value></data>
+  <data name="sound_none" xml:space="preserve"><value>不播放</value></data>
+  <data name="sound_outdoor_call_alert" xml:space="preserve"><value>警报音 1（门口机呼叫）</value></data>
+  <data name="sound_school_chime" xml:space="preserve"><value>学校铃声</value></data>
+  <data name="sound_title_display" xml:space="preserve"><value>标题显示（启动）</value></data>
 </root>

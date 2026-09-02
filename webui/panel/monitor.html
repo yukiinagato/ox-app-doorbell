@@ -1,21 +1,10 @@
 <!DOCTYPE html>
-<html lang="ja">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>受鈴モニター</title>
-<!--
-  受鈴表示面板 (iOS 5 Safari / iPad 1 対応)。ES5 のみ・XHR 短輪詢。
-  flexbox / WebSocket / 矢印関数 / let / const / template literal 禁止。
-  API 契約は同ディレクトリの API.md。?k=<panel token> を全 API に引き継ぐ。
-  ?mock=1 で XHR せず内蔵サンプルデータ描画 (file:// 検証用 — 描画は実データと同一関数)。
-  MJPEG 昇格: UA 判定はしない。<body data-live="1"> を手動で付けた場合のみ
-  /snapshot-proxy?…&live=1 (MJPEG) を使う (詳細は API.md)。
-  H.264 流暢档 (Phase 6a): doors[].stream_mp4 (fMP4) があり MediaSource+fetch が
-  使えるブラウザだけ <video> + MSE で滑らか表示。判定は実行時 feature-detect のみ
-  (iPad 1 は MSE_OK=false で従来どおり)。構文は全て ES5 のまま (旧 Safari が
-  ページ全体を parse できること)。失敗/503/未対応は従来経路へ自動回落。
--->
+<title></title>
+
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html, body { height: 100%; }
@@ -25,8 +14,13 @@
                font-size: 26px; font-weight: bold; padding: 14px; cursor: pointer; }
   #offlineBand { display: none; background: #ff6b6b; color: #2a0505; text-align: center;
                  font-size: 26px; font-weight: bold; padding: 12px; }
+  #pushBar { padding: 8px 16px; color: #8a97a5; }
+  #pushBtn, #answerBtn, #monitorClose, #replyActions button {
+                        background: #274261; border: 1px solid #4da3ff; border-radius: 9px;
+                        color: #fff; font-size: 18px; padding: 9px 18px; margin: 5px; }
+  #pushBtn:disabled { opacity: .45; }
   h1 { font-size: 24px; color: #8a97a5; font-weight: normal; padding: 12px 16px 4px; }
-  /* 平時: スナップショット並び (inline-block) + イベント履歴テーブル */
+
   #snapGrid { padding: 8px 12px; }
   .snapCard { display: inline-block; vertical-align: top; background: #1a2027;
               border: 1px solid #2a333d; border-radius: 10px; padding: 10px;
@@ -40,37 +34,48 @@
   th, td { text-align: left; padding: 8px; border-bottom: 1px solid #242d36; }
   th { color: #8a97a5; font-weight: normal; font-size: 16px; }
   .dim { color: #8a97a5; }
-  /* 呼出中: 全画面表示 (position:fixed — iOS5 で可) */
+
   #callView { display: none; position: absolute; left: 0; top: 0; width: 100%;
               height: 100%; background: #101418; text-align: center; z-index: 10; }
   #callView .msg { font-size: 58px; font-weight: bold; color: #ffb454;
                    padding: 26px 10px; line-height: 1.3; }
   #callView img, #callView video { width: 92%; max-width: 900px; background: #000;
                                    border-radius: 10px; }
+  #callActions { padding: 14px; }
+  #replyActions { display: inline-flex; flex-wrap: wrap; justify-content: center; }
 </style>
 </head>
 <body>
-<div id="soundBand">タップして音を有効化</div>
-<div id="offlineBand">オフライン — 再接続中…</div>
-<h1 id="title">受鈴モニター</h1>
+<div id="soundBand"></div>
+<div id="offlineBand" data-semantic-id="status.offline"></div>
+<div id="pushBar"><button id="pushBtn" type="button"></button>
+  <span id="pushStatus"></span></div>
+<h1 id="title" data-semantic-id="ring.title"></h1>
 <div id="snapGrid"></div>
 <div id="evCard"><table>
-  <thead><tr><th>時刻</th><th>種別</th><th>ドア</th></tr></thead>
+  <thead><tr><th id="eventTime"></th><th id="eventType"></th><th id="eventDoor"></th></tr></thead>
   <tbody id="evBody"></tbody>
 </table></div>
 <div id="callView">
-  <div class="msg" id="callMsg"></div>
+  <div class="msg" id="callMsg" data-semantic-id="ring.title"></div>
   <img id="callImg" alt="">
-  <!-- H.264 流暢档 (MSE 対応ブラウザのみ表示 — iPad 1 では常に非表示のまま) -->
+
   <video id="callVideo" style="display:none" muted playsinline autoplay></video>
+  <div id="callActions">
+    <button id="answerBtn" data-semantic-id="ring.action" type="button"></button>
+    <span id="replyActions"></span>
+    <button id="monitorClose" data-semantic-id="monitor.close" type="button"></button>
+  </div>
 </div>
 
+<script src="/panel/playback.js"></script>
+<script src="/panel/runtime.js"></script>
 <script>
 (function () {
   "use strict";
-  var POLL_MS = 2000;       // 状態輪詢間隔
-  var SNAP_MS = 5000;       // 平時スナップショット差替間隔
-  var OFFLINE_AFTER = 5;    // XHR 連続失敗この回数で「オフライン」帯
+  var POLL_MS = 2000;
+  var SNAP_MS = 5000;
+  var OFFLINE_AFTER = 5;
 
   function $(id) { return document.getElementById(id); }
   function esc(s) {
@@ -92,98 +97,129 @@
 
   var TOKEN = qs("k");
   var MOCK = qs("mock") === "1";
-  // MJPEG 手動昇格 (UA 判定はしない — API.md 参照)
+  var QUERY_LANG = normalizeLang(qs("lang"));
+  var emergencyOverlay = null;
+
   var LIVE = document.body.getAttribute("data-live") === "1";
 
-  // ---- H.264 流暢档 (MSE) — feature-detect の中に完全隔離 ----
-  // iPad 1 (iOS 5) は MediaSource も fetch も無い → MSE_OK=false で以降のコードは
-  // 一切走らない (構文自体は ES5 なので parse は常に安全)。
-  var MSE_OK = !!(window.MediaSource && window.fetch && window.ReadableStream &&
-                  window.URL && window.URL.createObjectURL);
-  var mseFailed = {};    // door id → true (エラー/503/未対応 → 従来経路へ回落済み)
   var gridStreams = {};  // door id → {stop}
   var callStream = null;
+  var I18N = {};
+  var LANG = "";
+  var LOADING_LANG = "";
+  var LOCALE_WAITERS = [];
+  var LOCALE_SERIAL = 0;
+  var pushSubscribed = false;
+  var pushAction = "";
+  var pushPaintState = null;
 
-  function useMse(d) { return MSE_OK && !MOCK && d.stream_mp4 && !mseFailed[d.id]; }
+  function normalizeLang(value) {
+    value = String(value || "").toLowerCase().split("-")[0];
+    return value === "ja" || value === "en" || value === "zh" ? value : "";
+  }
+  function t(key, values) {
+    var value = typeof I18N[key] === "string" ? I18N[key] : key;
+    values = values || {};
+    for (var name in values) if (Object.prototype.hasOwnProperty.call(values, name))
+      value = value.split("{" + name + "}").join(String(values[name]));
+    return value;
+  }
+  function finishLanguage(lang, catalog) {
+    LANG = lang;
+    I18N = catalog || {};
+    LOADING_LANG = "";
+    document.documentElement.setAttribute("lang", lang);
+    var waiters = LOCALE_WAITERS;
+    LOCALE_WAITERS = [];
+    for (var i = 0; i < waiters.length; i++) waiters[i]();
+  }
+  function loadLanguage(requested, cb) {
+    var lang = normalizeLang(requested) || "ja";
+    if (cb) LOCALE_WAITERS.push(cb);
+    if (LANG === lang && !LOADING_LANG) {
+      var ready = LOCALE_WAITERS;
+      LOCALE_WAITERS = [];
+      for (var i = 0; i < ready.length; i++) ready[i]();
+      return;
+    }
+    if (LOADING_LANG === lang) return;
+    LOADING_LANG = lang;
+    var serial = ++LOCALE_SERIAL;
+    xhr("GET", "/locale/" + lang + ".json", null, function (st, j) {
+      if (serial !== LOCALE_SERIAL) return;
+      if (st === 200 && j) { finishLanguage(lang, j); return; }
+      LOADING_LANG = "";
+      if (lang !== "en") { loadLanguage("en"); return; }
+      finishLanguage("en", {});
+    });
+  }
+  function languageForState(state) {
+    if (QUERY_LANG) return QUERY_LANG;
+    var doors = (state && state.doors) || [], i, lang;
+    for (i = 0; i < doors.length; i++) if (doors[i].calling) {
+      lang = normalizeLang(doors[i].visitor_lang);
+      if (lang) return lang;
+    }
+    for (i = 0; i < doors.length; i++) {
+      lang = normalizeLang(doors[i].visitor_lang);
+      if (lang) return lang;
+    }
+    return "ja";
+  }
+  function applyEmergencyI18n() {
+    var overlays = document.getElementsByClassName("dbEmergencyOverlay");
+    if (overlays.length) {
+      var headings = overlays[0].getElementsByTagName("h2");
+      var paragraphs = overlays[0].getElementsByTagName("p");
+      if (headings.length) headings[0].innerHTML = esc(t("emergency.title"));
+      if (paragraphs.length) paragraphs[0].innerHTML = esc(t("emergency.active_detail"));
+      if (paragraphs.length > 1)
+        paragraphs[1].innerHTML = esc(t("emergency.clear_instruction"));
+    }
+    var triggers = document.getElementsByClassName("dbSosTrigger");
+    if (triggers.length) {
+      var spans = triggers[0].getElementsByTagName("span");
+      triggers[0].setAttribute("aria-label", t("emergency.button"));
+      if (spans.length) spans[0].innerHTML = esc(t("emergency.button"));
+      if (spans.length > 1)
+        spans[1].innerHTML = esc(t("emergency.hold_hint", { sec: "2" }));
+    }
+  }
+  function installEmergency() {
+    emergencyOverlay = DoorbellPanelRuntime.installEmergencyOverlay({
+      title: t("emergency.title"),
+      detail: t("emergency.active_detail"),
+      clearInstruction: t("emergency.clear_instruction"),
+      triggerLabel: t("emergency.button"),
+      triggerHint: t("emergency.hold_hint", { sec: "2" })
+    });
+    applyEmergencyI18n();
+  }
+  function applyI18n() {
+    document.title = t("panel.monitor_title");
+    $("title").innerHTML = esc(t("panel.monitor_title"));
+    $("soundBand").innerHTML = esc(t("panel.tap_sound"));
+    $("offlineBand").innerHTML = esc(t("panel.offline"));
+    $("answerBtn").innerHTML = esc(t("ring.answer"));
+    $("monitorClose").innerHTML = esc(t("monitor.close"));
+    $("eventTime").innerHTML = esc(t("panel.event_time"));
+    $("eventType").innerHTML = esc(t("panel.event_type"));
+    $("eventDoor").innerHTML = esc(t("panel.event_door"));
+    $("pushBtn").innerHTML = esc(pushSubscribed ? t("panel.push_disable") :
+      t("panel.push_enable"));
+    if (pushPaintState) paintPush(pushPaintState);
+    lastDoorsKey = "";
+    applyEmergencyI18n();
+  }
 
   function makeVideo() {
     var v = document.createElement("video");
-    v.muted = true;         // 自動再生許可の条件 (音声トラックは元々無い)
+    v.muted = true;
     v.autoplay = true;
     v.setAttribute("muted", "");
     v.setAttribute("playsinline", "");
     v.setAttribute("autoplay", "");
     return v;
-  }
-
-  // /stream.mp4 (fMP4) を fetch ReadableStream で読み SourceBuffer へ逐次 append。
-  // init+fragment の境界は意識しない (MSE は分割 append を許容する)。
-  // 失敗はすべて onFail へ — 呼び出し側が従来の <img> へ回落する。
-  function attachMse(video, url, onFail) {
-    var stopped = false;
-    var reader = null;
-    function fail() {
-      if (stopped) return;
-      stopped = true;
-      try { if (reader) reader.cancel(); } catch (e) {}
-      onFail();
-    }
-    video.onerror = fail;
-    var ms = new MediaSource();
-    ms.addEventListener("sourceopen", function () {
-      var sb;
-      // codec 文字列は総称でよい (実デコードは avcC を見る — Chrome/Safari/FF とも)
-      try { sb = ms.addSourceBuffer('video/mp4; codecs="avc1.42E01E"'); }
-      catch (e) { fail(); return; }
-      var queue = [];
-      sb.addEventListener("error", fail);
-      sb.addEventListener("updateend", pump);
-      function pump() {
-        if (stopped || sb.updating) return;
-        try {
-          // ライブ専用: 溜まった過去バッファを間引く (メモリ膨張防止)
-          if (sb.buffered.length && video.currentTime - sb.buffered.start(0) > 30) {
-            sb.remove(0, video.currentTime - 10);
-            return;  // updateend で再開
-          }
-          if (queue.length) sb.appendBuffer(queue.shift());
-        } catch (e2) { fail(); }
-      }
-      fetch(url).then(function (resp) {
-        if (!resp.ok || !resp.body) { fail(); return; }
-        reader = resp.body.getReader();
-        (function read() {
-          reader.read().then(function (r) {
-            if (stopped) return;
-            if (r.done) { fail(); return; }
-            queue.push(r.value);
-            pump();
-            try {  // ライブ端へ追従 (3 秒より遅れたら跳ぶ)
-              if (sb.buffered.length) {
-                var end = sb.buffered.end(sb.buffered.length - 1);
-                if (end - video.currentTime > 3) video.currentTime = end - 0.5;
-              }
-            } catch (e3) {}
-            read();
-          }, fail);
-        })();
-      }, fail);
-    });
-    video.src = window.URL.createObjectURL(ms);
-    var p = video.play && video.play();
-    if (p && p.catch) p.catch(function () {});  // 自動再生拒否は onerror/回落に任せる
-    return { stop: function () {
-      stopped = true;
-      try { if (reader) reader.cancel(); } catch (e) {}
-      try { video.src = ""; } catch (e2) {}
-    } };
-  }
-
-  function mseFailHandler(id) {
-    return function () {
-      mseFailed[id] = true;  // この door は従来経路 (スナップショット輪詢) へ
-      lastDoorsKey = "";     // 次の輪詢でグリッド再構築
-    };
   }
 
   function stopGridStreams() {
@@ -192,20 +228,6 @@
   }
   function stopCallStream() {
     if (callStream) { try { callStream.stop(); } catch (e) {} callStream = null; }
-  }
-
-  // ---- i18n (失敗時はハードコード ja のまま) ----
-  var I18N = {};
-  function t(k, def) { return I18N[k] || def; }
-  if (!MOCK) {
-    xhr("GET", "/locale/ja.json", null, function (st, j) {
-      if (st === 200 && j) {
-        I18N = j;
-        $("title").innerHTML = esc(t("panel.monitor_title", "受鈴モニター"));
-        $("soundBand").innerHTML = esc(t("panel.tap_sound", "タップして音を有効化"));
-        $("offlineBand").innerHTML = esc(t("panel.offline", "オフライン — 再接続中…"));
-      }
-    });
   }
 
   function xhr(method, path, formBody, cb) {
@@ -221,36 +243,41 @@
     try { x.send(formBody || null); } catch (e2) { cb(0, null); }
   }
 
-  // ---- mock データ (描画は実データと同一の render() を通す) ----
+
   var mockTick = 0;
   function mockState() {
     mockTick++;
-    var calling = mockTick > 8 && mockTick < 20;  // 16〜40 秒目に模擬呼出
+    var calling = mockTick > 8 && mockTick < 20;
     return {
       doors: [
-        { id: "d_front", label: "正面玄関", calling: calling },
-        { id: "d_back", label: "裏口", calling: false }
+        { id: "d_front", label: "Front door", calling: calling },
+        { id: "d_back", label: "Back door", calling: false }
       ],
       events: [
-        { type: "press", door: "正面玄関", wall_ms: 1756300000000 },
-        { type: "motion", door: "裏口", wall_ms: 1756290000000 }
+        { type: "press", door: "Front door", wall_ms: 1756300000000 },
+        { type: "motion", door: "Back door", wall_ms: 1756290000000 }
       ],
-      reply: null, server_ts: mockTick
+      reply: null,
+      quick_replies: [
+        { id: "soon", label: "Coming now" },
+        { id: "leave", label: "Please leave it at the door" }
+      ],
+      server_ts: mockTick
     };
   }
-  // 1x1 灰色 GIF (mock では snapshot を取得できないための代替)
+
   var GRAY = "data:image/gif;base64,R0lGODlhAQABAIAAADg4OAAAACwAAAAAAQABAAACAkQBADs=";
   function snapshotUrl(doorId, ts) {
     if (MOCK) return GRAY;
     return "/snapshot-proxy?door=" + encodeURIComponent(doorId) +
-           "&k=" + encodeURIComponent(TOKEN) + (LIVE ? "&live=1" : "&t=" + ts);
+           (LIVE ? "&live=1" : "&t=" + ts);
   }
   function fetchState(cb) {
     if (MOCK) { cb(200, mockState()); return; }
-    xhr("GET", "/api/panel/state?k=" + encodeURIComponent(TOKEN), null, cb);
+    xhr("GET", DoorbellPanelRuntime.panelStateUrl(), null, cb);
   }
 
-  // ---- ベストエフォート鈴声: 最初のタッチで <audio> を解錠、以降 play() ----
+
   var audio = null;
   var audioUnlocked = false;
   try {
@@ -267,16 +294,17 @@
   document.addEventListener("click", unlockAudio, false);
   function ring() {
     if (!audio || !audioUnlocked) return;
-    try { audio.currentTime = 0; audio.play(); } catch (e) {}  // 失敗しても無害に
+    try { audio.currentTime = 0; audio.play(); } catch (e) {}
   }
 
-  // ---- 平時: スナップショット並び (5 秒毎に単純 img 差替) + イベント履歴 ----
-  // MSE 対応ブラウザで stream_mp4 を持つ door は <video> ライブ (失敗で img へ回落)。
+
+
   var lastDoorsKey = "";
   function renderSnapGrid(doors) {
     var key = "";
     for (var i = 0; i < doors.length; i++)
-      key += doors[i].id + "|" + doors[i].label + "|" + (useMse(doors[i]) ? "v" : "s") + ";";
+      key += doors[i].id + "|" + doors[i].label + "|" + doors[i].stream_mp4 + "|" +
+             doors[i].stream_mjpeg + "|" + JSON.stringify(doors[i].playback_profile || {}) + ";";
     if (key === lastDoorsKey) return;
     lastDoorsKey = key;
     stopGridStreams();
@@ -287,80 +315,205 @@
       var card = document.createElement("div");
       card.className = "snapCard";
       card.innerHTML = "<div class='lbl'>" + esc(d.label) + "</div>";
-      if (useMse(d)) {
-        var v = makeVideo();
-        card.appendChild(v);
-        gridStreams[d.id] = attachMse(v, d.stream_mp4, mseFailHandler(d.id));
-      } else {
-        var img = document.createElement("img");
-        img.alt = "";
-        img.setAttribute("data-door", d.id);
-        img.src = snapshotUrl(d.id, +new Date());
-        card.appendChild(img);
-      }
+      var v = makeVideo();
+      var img = document.createElement("img");
+      img.alt = "";
+      if (!LIVE && !d.stream_mjpeg) img.setAttribute("data-snapshot-door", d.id);
+      card.appendChild(img);
+      card.appendChild(v);
+      var fallback = d.stream_mjpeg || snapshotUrl(d.id, +new Date());
+      gridStreams[d.id] = DoorbellPlayback.start({ profile: d.playback_profile,
+        mp4: DoorbellPlayback.proxyMp4Url(d.id, TOKEN, d.stream_mp4, window.location),
+        mjpeg: fallback, mjpegMode: "image", video: v, img: img });
       grid.appendChild(card);
     }
   }
-  setInterval(function () {  // 平時のみ差替 (MJPEG 昇格時は src 据え置き)
+  setInterval(function () {
     if (LIVE || $("callView").style.display === "block") return;
     var imgs = $("snapGrid").getElementsByTagName("img");
-    for (var i = 0; i < imgs.length; i++)
-      imgs[i].src = snapshotUrl(imgs[i].getAttribute("data-door"), +new Date());
+    for (var i = 0; i < imgs.length; i++) {
+      var did = imgs[i].getAttribute("data-snapshot-door");
+      if (did) imgs[i].src = snapshotUrl(did, +new Date());
+    }
   }, SNAP_MS);
 
   function renderEvents(events) {
+    var eventKeys = {
+      press: "panel.event_press",
+      motion: "panel.event_motion",
+      call_answered: "panel.event_call_answered",
+      call_cancelled: "panel.event_call_cancelled",
+      call_ended: "panel.event_call_ended",
+      delivery_result: "panel.event_delivery_result",
+      dtmf_action: "panel.event_dtmf_action",
+      purpose_selected: "panel.event_purpose_selected",
+      reply: "panel.event_reply",
+      auto_reply: "panel.event_auto_reply",
+      chime: "panel.event_chime",
+      device_alert: "panel.event_device_alert",
+      emergency: "panel.event_emergency",
+      emergency_cancel: "panel.event_emergency_cancel",
+      ha_command: "panel.event_ha_command",
+      ha_event: "panel.event_ha_event",
+      hangup: "panel.event_hangup",
+      sip_call: "panel.event_sip_call",
+      telegram: "panel.event_telegram",
+      visitor_lang: "panel.event_visitor_lang",
+      quick_reply: "panel.event_quick_reply"
+    };
     var rows = "";
     for (var i = 0; i < events.length && i < 10; i++) {
       var e = events[i];
-      rows += "<tr><td class='dim'>" + fmtTime(e.wall_ms) + "</td><td>" + esc(e.type) +
+      var type = eventKeys[e.type] ? t(eventKeys[e.type]) : e.type;
+      rows += "<tr><td class='dim'>" + fmtTime(e.wall_ms) + "</td><td>" + esc(type) +
               "</td><td>" + esc(e.door || e.device || "") + "</td></tr>";
     }
     $("evBody").innerHTML = rows;
   }
 
-  // ---- 呼出中: 全画面 + スナップショット (2 秒毎の輪詢に同期して差替) ----
-  // MSE 可なら <video> ライブ、それ以外は従来の img (MSE 失敗時も自動でこちらへ)。
+
+
   var callingDoorId = null;
-  function renderCall(doors) {
+  var callingDoorKey = "";
+  var activeCalling = null, dismissedCallKey = "";
+  var cancelledKey = "", cancelledUntil = 0, cancelledDoor = "";
+  function callIdentity(calling) {
+    return String(calling.call_id || (calling.id + "|" +
+      (calling.stage_revision || 0) + "|" + (calling.expires_at_ms || 0)));
+  }
+  function renderQuickReplies(calling, replies) {
+    var host = $("replyActions");
+    host.innerHTML = "";
+    for (var ri = 0; ri < (replies || []).length; ri++) {
+      var reply = replies[ri] || {};
+      var visitorLang = normalizeLang(calling.visitor_lang);
+      var visitorLabel = reply.labels &&
+        (reply.labels[visitorLang] || reply.labels[LANG] || reply.labels.ja ||
+         reply.labels.en || reply.labels.zh);
+      visitorLabel = visitorLabel || reply.label;
+      if (!reply.id || !visitorLabel) continue;
+      var chosenReply = { id: reply.id, label: visitorLabel };
+      var button = document.createElement("button");
+      button.type = "button";
+      button.setAttribute("data-semantic-id", "reply.button");
+      button.appendChild(document.createTextNode(visitorLabel));
+      button.onclick = (function (chosen, el) {
+        return function () {
+          if (!activeCalling || callIdentity(activeCalling) !== callIdentity(calling)) return;
+          el.disabled = true;
+          var body = "reply_id=" + encodeURIComponent(chosen.id) +
+            "&door=" + encodeURIComponent(calling.id) +
+            "&call_id=" + encodeURIComponent(calling.call_id || "") +
+            "&stage_revision=" + encodeURIComponent(calling.stage_revision || 0);
+          xhr("POST", "/api/panel/reply", body, function (status) {
+            if (status >= 200 && status < 300) {
+              $("callMsg").innerHTML = esc(t("reply.sent", { text: chosen.label }));
+            } else {
+              el.disabled = false;
+              $("callMsg").innerHTML = esc(t("reply.failed"));
+            }
+          });
+        };
+      })(chosenReply, button);
+      host.appendChild(button);
+    }
+  }
+  function renderCall(doors, events, quickReplies) {
     var calling = null;
     for (var i = 0; i < doors.length; i++) if (doors[i].calling) { calling = doors[i]; break; }
     var img = $("callImg");
     var vid = $("callVideo");
     if (calling) {
-      var msg = t("ring.incoming", "{door} で呼び出し中").replace("{door}", calling.label);
-      $("callMsg").innerHTML = esc(msg);
-      if (callingDoorId !== calling.id) ring();  // 新規呼出のみ鳴らす
-      if (useMse(calling)) {
-        img.style.display = "none";
-        vid.style.display = "";
-        if (callingDoorId !== calling.id || !callStream) {
-          stopCallStream();
-          callStream = attachMse(vid, calling.stream_mp4, mseFailHandler(calling.id));
-        }
-      } else {
+      var callKey = callIdentity(calling);
+      if (dismissedCallKey === callKey) {
+        activeCalling = calling;
+        callingDoorId = null;
+        callingDoorKey = "";
         stopCallStream();
-        vid.style.display = "none";
-        img.style.display = "";
-        if (!LIVE || callingDoorId !== calling.id)
-          img.src = snapshotUrl(calling.id, +new Date());
+        $("callView").style.display = "none";
+        return;
+      }
+      activeCalling = calling;
+      var msg = t("ring.incoming", { door: calling.label });
+      $("callMsg").innerHTML = esc(msg);
+      if (callingDoorId !== calling.id) ring();
+      var streamKey = calling.id + "|" + calling.stream_mp4 + "|" + calling.stream_mjpeg + "|" +
+                      JSON.stringify(calling.playback_profile || {});
+      if (callingDoorKey !== streamKey || !callStream) {
+        stopCallStream();
+        callStream = DoorbellPlayback.start({ profile: calling.playback_profile,
+          mp4: DoorbellPlayback.proxyMp4Url(calling.id, TOKEN, calling.stream_mp4, window.location),
+          mjpeg: calling.stream_mjpeg || snapshotUrl(calling.id, +new Date()),
+          mjpegMode: "image", video: vid, img: img });
+        callingDoorKey = streamKey;
       }
       callingDoorId = calling.id;
+      cancelledUntil = 0;
+      $("answerBtn").style.display = "";
+      $("answerBtn").onclick = function () {
+        var url = DoorbellPanelRuntime.panelUrl("call", TOKEN, MOCK, calling.id);
+        var hashAt = url.indexOf("#"), hash = hashAt >= 0 ? url.substring(hashAt) : "";
+        var base = hashAt >= 0 ? url.substring(0, hashAt) : url;
+        window.location.href = base + (base.indexOf("?") >= 0 ? "&" : "?") +
+          "lang=" + encodeURIComponent(LANG) + hash;
+      };
+      renderQuickReplies(calling, quickReplies);
+      $("monitorClose").onclick = function () {
+        dismissedCallKey = callKey;
+        callingDoorId = null;
+        callingDoorKey = "";
+        stopCallStream();
+        $("callView").style.display = "none";
+      };
       $("callView").style.display = "block";
     } else {
+      activeCalling = null;
+      $("replyActions").innerHTML = "";
+      var wasCalling = callingDoorId;
+      var newest = null;
+      for (var ei = 0; ei < (events || []).length; ei++) {
+        var ev = events[ei] || {};
+        if (ev.type === "call_cancelled" && (!newest || Number(ev.wall_ms) > Number(newest.wall_ms)))
+          newest = ev;
+      }
+      if (newest) {
+        var nk = (newest.call_id || "") + "|" + (newest.door || "") + "|" + (newest.wall_ms || 0);
+        if (nk !== cancelledKey) {
+          cancelledKey = nk;
+          // Do not replay an old cancellation merely because it is in the initial 10-event page.
+          if (wasCalling || (new Date().getTime() - Number(newest.wall_ms || 0) < 5000)) {
+            cancelledUntil = new Date().getTime() + 30000;
+            cancelledDoor = newest.door || wasCalling || "";
+          }
+        }
+      }
       callingDoorId = null;
+      callingDoorKey = "";
       stopCallStream();
       vid.style.display = "none";
       img.style.display = "";
-      $("callView").style.display = "none";
+      if (cancelledUntil > new Date().getTime()) {
+        $("callMsg").innerHTML = esc(t("ring.cancelled") +
+          (cancelledDoor ? " (" + cancelledDoor + ")" : ""));
+        $("answerBtn").style.display = "none";
+        $("callView").style.display = "block";
+      } else $("callView").style.display = "none";
     }
   }
 
-  // ---- 輪詢 + オフライン検知 (連続失敗 5 回で帯表示、以降も再試行継続) ----
+
   var failCount = 0;
   function render(state) {
+    var desiredLang = languageForState(state);
+    if (desiredLang !== LANG) {
+      loadLanguage(desiredLang, function () { applyI18n(); render(state); });
+      return;
+    }
+    emergencyOverlay.update(state);
     renderSnapGrid(state.doors || []);
     renderEvents(state.events || []);
-    renderCall(state.doors || []);
+    renderCall(state.doors || [], state.events || [], state.quick_replies || []);
+    DoorbellPanelRuntime.applySemanticUi(state, { page: "monitor" });
   }
   function poll() {
     fetchState(function (st, j) {
@@ -375,7 +528,47 @@
       setTimeout(poll, POLL_MS);
     });
   }
-  poll();
+  function paintPush(state) {
+    state = state || {};
+    pushPaintState = state;
+    if (state.subscribed !== undefined) pushSubscribed = !!state.subscribed;
+    var message = "";
+    if (state.message_key && typeof I18N[state.message_key] === "string")
+      message = t(state.message_key);
+    else if (state.unavailable) message = t("panel.push_unavailable");
+    else if (state.pending) message = t(pushAction === "disable" ?
+      "panel.push_disabling" : "panel.push_enabling");
+    else if (state.ok === false) message = t("panel.push_failed");
+    else message = t(pushSubscribed ? "panel.push_enabled" : "panel.push_disabled");
+    $("pushStatus").innerHTML = esc(message);
+    $("pushBtn").innerHTML = esc(pushSubscribed ? t("panel.push_disable") :
+      t("panel.push_enable"));
+    $("pushBtn").disabled = !!state.pending || !!state.unavailable;
+    if (!state.pending) pushAction = "";
+  }
+  function setupPushButton() {
+    var cap = DoorbellPanelRuntime.pushCapability();
+    if (!cap.available) {
+      paintPush({ unavailable: true }); return;
+    }
+    $("pushBtn").onclick = function () {
+      pushAction = pushSubscribed ? "disable" : "enable";
+      if (pushSubscribed) DoorbellPanelRuntime.unsubscribePush(TOKEN, paintPush);
+      else DoorbellPanelRuntime.subscribePush(TOKEN, "/panel/monitor", paintPush);
+    };
+    DoorbellPanelRuntime.pushSubscriptionState(paintPush);
+  }
+  loadLanguage(QUERY_LANG || "ja", function () {
+    applyI18n();
+    installEmergency();
+    setupPushButton();
+    if (MOCK) { poll(); return; }
+    DoorbellPanelRuntime.establishSession(function (result) {
+      TOKEN = result.credential || "";
+      if (result.ok) poll();
+      else $("offlineBand").style.display = "block";
+    });
+  });
 })();
 </script>
 </body>

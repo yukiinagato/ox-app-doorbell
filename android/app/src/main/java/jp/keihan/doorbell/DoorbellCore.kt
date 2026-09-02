@@ -1,29 +1,37 @@
-// doorbell-core (libdoorbell.so) の Kotlin ラッパ。
-// コールバック (onUiEventFromNative / onTtsFromNative) は core 内部スレッドから届く —
-// listener 側 (MainActivity) が Handler(mainLooper) で UI スレッドへ marshal する。
+// Kotlin wrapper for libdoorbell.so. Native callbacks arrive on Core-owned threads; listeners
+// must marshal UI work to the main looper.
 package jp.keihan.doorbell
 
+import android.content.Context
 import org.json.JSONObject
 
-class DoorbellCore {
+class DoorbellCore(context: Context) {
+    private val secureStore = AndroidSecureStore(context)
+    private val deviceInfo = AndroidDeviceInfo(context)
+    val secureStoreAvailable: Boolean = secureStore.selfTest()
 
     interface Listener {
-        /** core → 殻 UI イベント (JSON、doorbell.h 参照)。core 内部スレッドから呼ばれる。 */
+        /** Versioned JSON UI event from a Core-owned thread. */
         fun onUiEvent(ev: JSONObject)
-        /** クイック返信の TTS 朗読要求。core 内部スレッドから呼ばれる。 */
+        /** TTS request for a quick reply, delivered on a Core-owned thread. */
         fun onTts(text: String, lang: String)
     }
 
     @Volatile
     var listener: Listener? = null
 
+    @Volatile
     private var handle: Long = 0
 
     val isCreated: Boolean get() = handle != 0L
 
-    /** core 生成 + 起動。失敗時 false (ログは logcat の doorbell-core タグ)。 */
+    /** Create and start Core after verifying the ABI and real SIP backend. */
+    @Synchronized
     fun start(dataDir: String, bootJson: String): Boolean {
         if (handle != 0L) return true
+        val backend = backend()
+        if (backend.optInt("platform_abi") != 2 || backend.optString("sip") != "pjsip")
+            return false
         handle = nativeCreate(dataDir, bootJson)
         if (handle == 0L) return false
         nativeSetUiCallback(handle, true)
@@ -34,6 +42,7 @@ class DoorbellCore {
         return true
     }
 
+    @Synchronized
     fun destroy() {
         if (handle == 0L) return
         nativeSetUiCallback(handle, false)
@@ -46,12 +55,12 @@ class DoorbellCore {
         if (handle != 0L) nativePress(handle, doorId)
     }
 
-    /** 用件ボタンからの按鈴 (config visit_purposes の id — press payload に載る)。 */
+    /** Legacy press API carrying a configured visit-purpose identifier. */
     fun pressPurpose(doorId: String, purpose: String) {
         if (handle != 0L) nativePressPurpose(handle, doorId, purpose)
     }
 
-    /** 呼出済みの来客用件を補足する。呼出ルールは再実行されない。 */
+    /** Legacy purpose-selection API retained for one compatibility cycle. */
     fun selectPurpose(doorId: String, purpose: String) {
         if (handle != 0L) nativeSelectPurpose(handle, doorId, purpose)
     }
@@ -60,7 +69,37 @@ class DoorbellCore {
         if (handle != 0L) nativeCancelCall(handle, doorId)
     }
 
-    /** 訪客言語の切替 ("ja" で即時復帰)。全ノードへ複製され visitor_lang イベントが返る。 */
+    fun pressV2(doorId: String, purpose: String = ""): String? {
+        val value = if (handle != 0L) nativePressV2(handle, doorId, purpose) else null
+        return value?.takeIf { it.isNotEmpty() }
+    }
+
+    fun selectPurposeV2(doorId: String, callId: String, purpose: String): Boolean =
+        handle != 0L && nativeSelectPurposeV2(handle, doorId, callId, purpose) == 0
+
+    fun cancelCallV2(doorId: String, callId: String, reason: String): Boolean =
+        handle != 0L && nativeCancelCallV2(handle, doorId, callId, reason) == 0
+
+    fun reportCallAnsweredV2(doorId: String, callId: String, stageRevision: Int): Boolean =
+        handle != 0L &&
+            nativeReportCallAnsweredV2(handle, doorId, callId, stageRevision) == 0
+
+    fun reportCallEndedV2(
+        doorId: String,
+        callId: String,
+        stageRevision: Int,
+        reason: String,
+    ): Boolean = handle != 0L &&
+        nativeReportCallEndedV2(handle, doorId, callId, stageRevision, reason) == 0
+
+    fun reportCallRecovery(callId: String, restored: Boolean) {
+        if (handle != 0L) nativeReportCallRecovery(handle, callId, restored)
+    }
+
+    fun emergency(active: Boolean): Boolean =
+        handle != 0L && nativeEmergencyV2(handle, active)
+
+    /** Set the replicated visitor language for a door. */
     fun setVisitorLang(door: String, lang: String) {
         if (handle != 0L) nativeSetVisitorLang(handle, door, lang)
     }
@@ -69,25 +108,46 @@ class DoorbellCore {
 
     fun config(): JSONObject? = parse(if (handle != 0L) nativeConfigJson(handle) else null)
 
-    /** カメラフレーム push。format: 0=NV21 (Camera1 の既定), 1=NV12, 2=YUY2, 3=BGRA */
+    fun capabilities(): JSONObject? =
+        parse(if (handle != 0L) nativeCapabilitiesJson(handle) else null)
+
+    fun backend(): JSONObject = parse(nativeBackendJson()) ?: JSONObject()
+
+    fun setCapabilities(value: JSONObject) {
+        if (handle != 0L) nativeSetCapabilitiesJson(handle, value.toString())
+    }
+
+    fun setRuntimeStatus(value: JSONObject) {
+        if (handle != 0L) nativeSetRuntimeStatusJson(handle, value.toString())
+    }
+
+    fun setUiManifest(value: JSONObject) {
+        if (handle != 0L) nativeSetUiManifestJson(handle, value.toString())
+    }
+
+    /** Push a camera frame: 0=NV21, 1=NV12, 2=YUY2, 3=BGRA. */
     fun onCameraFrame(data: ByteArray, format: Int, width: Int, height: Int, stride: Int,
                       tsMs: Long) {
         if (handle != 0L) nativeOnCameraFrame(handle, data, format, width, height, stride, tsMs)
     }
 
-    /** 符号化済み H.264 (AnnexB) push — VideoEncoder から。core が fMP4 化して /stream.mp4 へ。 */
+    /** Publishes the door station sensor angle; a configured fixed angle wins in Core. */
+    fun setVideoSensorRotation(degrees: Int) {
+        if (handle != 0L) nativeSetVideoSensorRotation(handle, degrees)
+    }
+
+    /** Push an Annex-B H.264 access unit for Core's fMP4 stream. */
     fun onEncodedFrame(annexb: ByteArray, isKeyframe: Boolean, tsMs: Long) {
         if (handle != 0L) nativeOnEncodedFrame(handle, annexb, isKeyframe, tsMs)
     }
 
-    /** エンコーダを回すべきか (codec=h264/auto かつ /stream.mp4 購読者あり)。 */
+    /** Whether Core currently needs the H.264 encoder. */
     fun videoEncoderWanted(): Boolean =
         handle != 0L && nativeVideoEncoderWanted(handle)
 
     /**
-     * SIP 発呼。target: 内線番号 or "sip:host:port" 完全 URI (Asterisk 非経由の直接呼)。
-     * mode: "" = 通常 (双方向) / "monitor" = 一方向監聴 (門口マイクを聞くだけ)。
-     * PJSIP 無効ビルド (プリビルド無し) では no-op。
+     * Place a SIP call to an extension or complete SIP URI. Empty mode is bidirectional;
+     * "monitor" is receive-only audio.
      */
     fun sipCall(target: String, mode: String = "") {
         if (handle != 0L) nativeSipCall(handle, target, mode)
@@ -97,43 +157,52 @@ class DoorbellCore {
         if (handle != 0L) nativeSipHangup(handle)
     }
 
-    /** クイック返信の配送 (門口機の面板表示 + TTS)。door 空 = 最新 press の door。 */
+    fun sipSendDtmf(digits: String): Boolean =
+        handle != 0L && nativeSipSendDtmf(handle, digits) == 0
+
+    /** Deliver a display/TTS quick reply; an empty door selects the latest visitor call. */
     fun quickReply(replyId: String, door: String) {
         if (handle != 0L) nativeQuickReply(handle, replyId, door)
     }
 
+    /** Deliver a reply only to the exact active visitor-call revision. */
+    fun quickReplyV2(replyId: String, door: String, callId: String,
+                     stageRevision: Int): Boolean =
+        handle != 0L && replyId.isNotEmpty() && callId.isNotEmpty() && stageRevision >= 0 &&
+            nativeQuickReplyV2(handle, replyId, door, callId, stageRevision)
+
     fun version(): String = nativeVersion()
 
-    // ---------- 配対 (発見/招待) ----------
+    // Pairing discovery and invitation.
 
-    /** 配対 UI 用: {paired, self, pair_qr, pending:{devices,pairing_mode}}。 */
+    /** Pairing state for the enrollment UI. */
     fun pairingInfo(): JSONObject? = parse(if (handle != 0L) nativePairingJson(handle) else null)
 
-    /** 未配対機側: PIN + seed で能動参加。結果は onUiEvent の t:"join_result"/t:"paired"。 */
+    /** Join from an unpaired node using a seed address and PIN. */
     fun joinCluster(host: String, pin: String) {
         if (handle != 0L) nativeJoinCluster(handle, host, pin)
     }
 
-    /** 配対済み機側: 配対モードを seconds 秒 ON (期間中の未配対機を自動招待)。 */
+    /** Enable pairing mode for the requested duration. */
     fun setPairingMode(seconds: Int) {
         if (handle != 0L) nativePairingMode(handle, seconds)
     }
 
-    /** 配対済み機側: pending の 1 台 (node_id) を承認・招待。 */
+    /** Approve and invite one pending node. */
     fun inviteDevice(nodeId: String) {
         if (handle != 0L) nativeInviteDevice(handle, nodeId)
     }
 
-    /** QR エンコード (core 共通)。戻り値 [0]=一辺のモジュール数, [1..]=行優先 0/1。失敗 null。 */
+    /** Encode QR data as [side length, row-major module values...]. */
     fun qrEncode(text: String): IntArray? = if (text.isEmpty()) null else nativeQrEncode(text)
 
-    /** 未配対時: この端末を新規クラスタの親機にする (ランダム PSK 生成)。true=実施。 */
+    /** Bootstrap a new cluster from this unpaired device. */
     fun foundCluster(): Boolean = handle != 0L && nativeFoundCluster(handle)
 
     private fun parse(s: String?): JSONObject? =
         try { if (s == null) null else JSONObject(s) } catch (_: Exception) { null }
 
-    /** 設定ツリーをドットパスで辿る ("doors.d_front.label.ja" 等)。無ければ null。 */
+    /** Traverse the configuration tree by dotted path. */
     fun dig(root: JSONObject?, dotpath: String): Any? {
         var cur: Any? = root ?: return null
         for (part in dotpath.split(".")) {
@@ -143,22 +212,48 @@ class DoorbellCore {
         return cur
     }
 
-    // ---------- JNI から呼ばれる (core 内部スレッド) ----------
+    // JNI callbacks from Core-owned threads.
 
-    @Suppress("unused")  // jni_bridge.cpp から GetMethodID で参照
+    @Suppress("unused")
     private fun onUiEventFromNative(json: String) {
         val ev = try { JSONObject(json) } catch (_: Exception) { return }
         listener?.onUiEvent(ev)
     }
 
-    @Suppress("unused")  // jni_bridge.cpp から GetMethodID で参照
+    @Suppress("unused")
     private fun onTtsFromNative(text: String, lang: String) {
         listener?.onTts(text, lang)
     }
 
+    @Suppress("unused")
+    private fun onHttpsRequestFromNative(
+        method: String,
+        url: String,
+        headersJson: String,
+        body: ByteArray,
+    ): ByteArray? = AndroidHttpsClient.request(method, url, headersJson, body)
+
+    @Suppress("unused")
+    private fun onSecureGetFromNative(key: String): String? = secureStore.get(key)
+
+    @Suppress("unused")
+    private fun onSecurePutFromNative(key: String, value: String): Boolean =
+        secureStore.put(key, value)
+
+    @Suppress("unused")
+    private fun onDeviceInfoFromNative(): String = deviceInfo.snapshot()
+
+    fun isOnMainsPower(): Boolean = deviceInfo.isOnMainsPower()
+
+    internal fun putPlatformSecret(key: String, value: String): Boolean =
+        secureStore.put(key, value)
+
+    internal fun platformDeviceInfo(): JSONObject = parse(deviceInfo.snapshot()) ?: JSONObject()
+
     // ---------- native ----------
 
     private external fun nativeCreate(dataDir: String, bootJson: String): Long
+    private external fun nativeBackendJson(): String
     private external fun nativeStart(handle: Long): Int
     private external fun nativeStop(handle: Long)
     private external fun nativeDestroy(handle: Long)
@@ -167,17 +262,53 @@ class DoorbellCore {
     private external fun nativePressPurpose(handle: Long, doorId: String, purpose: String)
     private external fun nativeSelectPurpose(handle: Long, doorId: String, purpose: String)
     private external fun nativeCancelCall(handle: Long, doorId: String)
+    private external fun nativePressV2(handle: Long, doorId: String, purpose: String): String?
+    private external fun nativeSelectPurposeV2(
+        handle: Long,
+        doorId: String,
+        callId: String,
+        purpose: String,
+    ): Int
+    private external fun nativeCancelCallV2(
+        handle: Long,
+        doorId: String,
+        callId: String,
+        reason: String,
+    ): Int
+    private external fun nativeReportCallAnsweredV2(
+        handle: Long,
+        doorId: String,
+        callId: String,
+        stageRevision: Int,
+    ): Int
+    private external fun nativeReportCallEndedV2(
+        handle: Long,
+        doorId: String,
+        callId: String,
+        stageRevision: Int,
+        reason: String,
+    ): Int
+    private external fun nativeReportCallRecovery(handle: Long, callId: String, restored: Boolean)
+    private external fun nativeEmergencyV2(handle: Long, active: Boolean): Boolean
     private external fun nativeSetVisitorLang(handle: Long, door: String, lang: String)
     private external fun nativeStatusJson(handle: Long): String?
     private external fun nativeConfigJson(handle: Long): String?
+    private external fun nativeSetCapabilitiesJson(handle: Long, json: String)
+    private external fun nativeSetRuntimeStatusJson(handle: Long, json: String)
+    private external fun nativeSetUiManifestJson(handle: Long, json: String)
+    private external fun nativeCapabilitiesJson(handle: Long): String?
     private external fun nativeOnCameraFrame(handle: Long, data: ByteArray, format: Int,
                                              width: Int, height: Int, stride: Int, tsMs: Long)
+    private external fun nativeSetVideoSensorRotation(handle: Long, degrees: Int)
     private external fun nativeOnEncodedFrame(handle: Long, annexb: ByteArray,
                                               isKeyframe: Boolean, tsMs: Long)
     private external fun nativeVideoEncoderWanted(handle: Long): Boolean
     private external fun nativeSipCall(handle: Long, target: String, mode: String)
     private external fun nativeSipHangup(handle: Long)
+    private external fun nativeSipSendDtmf(handle: Long, digits: String): Int
     private external fun nativeQuickReply(handle: Long, replyId: String, door: String)
+    private external fun nativeQuickReplyV2(handle: Long, replyId: String, door: String,
+                                            callId: String, stageRevision: Int): Boolean
     private external fun nativeVersion(): String
     private external fun nativePairingJson(handle: Long): String?
     private external fun nativeJoinCluster(handle: Long, host: String, pin: String)

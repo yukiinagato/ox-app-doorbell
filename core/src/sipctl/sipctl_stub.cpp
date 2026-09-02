@@ -1,10 +1,13 @@
-// sipctl スタブ — DB_WITH_PJSIP=OFF (mingw クロス等、pjsip ホストビルド無し) 用。
-// 常に未登録 (Idle)。call は no-op + 警告ログ。
+
+
 #include "sipctl/sipctl.h"
 
 #include "util/log.h"
 
 namespace db {
+
+const char* sipBackendName() { return "stub"; }
+bool sipBackendAvailable() { return false; }
 
 namespace {
 constexpr const char* kTag = "sipctl";
@@ -21,16 +24,22 @@ SipCtl::~SipCtl() = default;
 
 void SipCtl::start(const SipSettings& settings) {
   if (!settings.server.empty())
-    DB_LOGW(kTag, "PJSIP 無効ビルド — SIP は使用不可 (server=" + settings.server + ")");
+    DB_LOGW(kTag, "PJSIP is disabled; SIP is unavailable (server=" + settings.server + ")");
 }
 void SipCtl::stop() {}
 void SipCtl::updateSettings(const SipSettings&) {}
 
 void SipCtl::call(const std::string& target, const std::string&) {
-  DB_LOGW(kTag, "call(" + target + "): PJSIP 無効ビルド — no-op");
+  DB_LOGW(kTag, "call(" + target + "): PJSIP is disabled; ignoring call");
 }
+bool SipCtl::callOwned(const std::string&, const std::string& target, const std::string&) {
+  DB_LOGW(kTag, "call(" + target + "): PJSIP backend unavailable");
+  return false;
+}
+bool SipCtl::hangupOwned(const std::string&) { return false; }
 void SipCtl::hangup() {}
 void SipCtl::answer() {}
+bool SipCtl::sendDtmf(const std::string&) { return false; }
 void SipCtl::setAllowedSources(const std::vector<std::string>&) {}
 
 SipRegState SipCtl::regState() const { return SipRegState::Idle; }

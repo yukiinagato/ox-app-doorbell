@@ -12,13 +12,23 @@
 3. 開発者向けオプションを有効化 (ビルド番号 7 連打) → **USB デバッグ** を ON。
 4. Wi-Fi を宅内 LAN に接続 (メッシュは同一セグメント前提 — docs/ja/network-ports.md)。
 
-## 2. インストール
+## 2. contract build と controlled install
 
 ```sh
-# ビルド (開発機):
-cd android && ./gradlew assembleRelease   # または assembleDebug
-adb install -r app/build/outputs/apk/release/app-release.apk
+# modern development/contract
+cd android && ./gradlew -PdoorbellTier=modern \
+  assembleModernDebug testModernDebugUnitTest lintModernDebug
+
+# API 19 development/contract (NDK/PJSIP cache は別)
+./gradlew -PdoorbellTier=legacy19 \
+  assembleLegacy19Debug testLegacy19DebugUnitTest lintLegacy19Debug
 ```
+
+repository/hosted CI の APK は debug key の **debug-contract** で release ではありません。現在の Gradle
+`release` build type も debug signing config を選ぶため、`assemble*Release` 結果を production 配布しないで
+ください。controlled release は別途 approved signing config と artifact/toolchain/NDK/API/ABI/
+real-PJSIP hash/source revision/signing identity を記録します。exact device の tier だけを install します。
+API 19 allowlist は空なので、install/probe 成功だけでは supported KitKat SKU になりません。
 
 ## 3. Device Owner 化 (完全 kiosk に必須)
 
@@ -39,13 +49,24 @@ adb shell dpm set-device-owner jp.keihan.doorbell/.AdminReceiver
 
 ## 4. boot.json 配置
 
-アプリ初回起動で `filesDir/boot.json` に既定が生成される。編集して差し替える:
+アプリ初回起動で `filesDir/boot.json` に既定が生成される。Core 起動前に **門口機** または
+**室内機** を選択する必要があります。門口機は door ID も必須で、そのまま確定できる random
+`door-xxxxxxxx` が入力済みです。後で role が不正になった場合や門口機の ID が欠落した場合も同じ画面が
+再表示されます。室内機には door assignment を設定しません。このファイルに mesh PSK を
+書いてはならない。初期セットアップではアプリ内ペアリングを推奨する。Core は最初に
+`secure_put("mesh.psk")` を呼び、成功した場合にだけ
+`{ "t": "paired", "psk_ref": "secret:mesh.psk" }` を記録する。
+`pairing_persistence_error` が発生した端末は **ready ではなく**、mesh に参加させてはならない。
+
+管理下で事前プロビジョニングする場合は、承認済みの帯域外手段で先に platform secure store の
+`mesh.psk` を設定する。その後に限り、以下の非秘密参照を `boot.json` に置ける。
+`psk_ref` だけをコピーしても、秘密の設定やペアリングは完了しない。
 
 ```sh
 adb shell "run-as jp.keihan.doorbell cat files/boot.json"   # 確認 (debug ビルドのみ run-as 可)
 cat > boot.json <<'EOF'
 { "name": "genkan-front", "role": "door_station", "door": "d_front",
-  "listen_port": 47172, "http_port": 47180, "psk_hex": "<64hex>",
+  "listen_port": 47172, "http_port": 47180, "psk_ref": "secret:mesh.psk",
   "seed_peers": ["10.0.1.10:47172"], "ui_lang": "ja", "kiosk": true }
 EOF
 adb push boot.json /sdcard/boot.json
@@ -53,8 +74,9 @@ adb shell "run-as jp.keihan.doorbell cp /sdcard/boot.json files/boot.json"
 adb shell rm /sdcard/boot.json
 ```
 
-release ビルド (run-as 不可) は管理 webui (`http://<端末>:47180/admin/`) から投入するか、
-DO 経由の managed configuration を使う (Phase 3 後半)。
+release ビルド (run-as 不可) は、認証済み管理 webui
+(`http://<端末>:47180/admin/`) または DO 経由の managed configuration で非秘密項目を設定する。
+どちらにも平文 PSK を渡してはならず、secure store の設定は別の操作として行う。
 
 ## 5. HOME (起動器) 置き換えと自動起動
 
@@ -99,15 +121,19 @@ adb uninstall jp.keihan.doorbell
 ```sh
 # TV 側: 設定 → デバイス設定 → 開発者向けオプション (ビルド 7 連打) → USB/ネットワークデバッグ ON
 adb connect <TVのIP>:5555
-adb install -r app/build/outputs/apk/release/app-release.apk
+# approved tier artifact のみ。CI debug-contract APK で代用しない。
+adb install -r <approved-apk-path>
 ```
 
 ### 8.2 boot.json (TV は indoor_panel)
 
+アプリ内ペアリングが成功した後、または承認済みの帯域外手段で TV の platform secure store に
+`mesh.psk` を設定済みの場合に限り、次の形式を使う:
+
 ```sh
 cat > boot.json <<'EOF'
 { "name": "living-tv", "role": "indoor_panel",
-  "listen_port": 47172, "http_port": 47180, "psk_hex": "<64hex>",
+  "listen_port": 47172, "http_port": 47180, "psk_ref": "secret:mesh.psk",
   "seed_peers": ["10.0.1.10:47172"], "ui_lang": "ja", "kiosk": false }
 EOF
 adb push boot.json /sdcard/boot.json

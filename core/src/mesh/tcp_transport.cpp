@@ -1,7 +1,7 @@
-// TCP トランスポートの実装 (tcp_transport.h 参照)。
-// 1 本の IO スレッドが poll で listen/接続/送受信を面倒みる。起床は wake ペア
-// (POSIX=socketpair / Windows=ループバック TCP)。ソケット差異は socket_compat.h に集約。
-// フレーム: [len 4B BE][payload]。コールバックはすべて Runloop へ post。
+
+
+
+
 #include "mesh/tcp_transport.h"
 
 #include <algorithm>
@@ -18,10 +18,10 @@ namespace db {
 
 namespace {
 
-constexpr size_t kMaxFrame = 8 * 1024 * 1024;  // プロトコル上限 (これ超えは即切断)
+constexpr size_t kMaxFrame = 8 * 1024 * 1024;
 constexpr int64_t kConnectTimeoutMs = 10000;
 
-// "host:port" を分解。失敗時 false。
+
 bool parseAddr(const std::string& addr, std::string* host, uint16_t* port) {
   size_t colon = addr.rfind(':');
   if (colon == std::string::npos || colon == 0 || colon + 1 >= addr.size()) return false;
@@ -53,13 +53,13 @@ class TcpConn;
 
 struct TcpTransport::Impl : public std::enable_shared_from_this<TcpTransport::Impl> {
   Runloop& loop;
-  net::Init winsock;  // Winsock 参照 (POSIX では no-op)。ソケットより先に構築される
+  net::Init winsock;
   std::mutex mu;
   std::thread io;
   bool started = false;
   bool stopping = false;
   net::socket_t wake_pipe[2] = {net::kInvalidSocket, net::kInvalidSocket};
-  std::deque<std::function<void()>> cmds;  // IO スレッドで実行するコマンド
+  std::deque<std::function<void()>> cmds;
 
   net::socket_t listen_fd = net::kInvalidSocket;
   std::string listen_addr;
@@ -83,7 +83,7 @@ struct TcpTransport::Impl : public std::enable_shared_from_this<TcpTransport::Im
   void removeConn(const std::shared_ptr<TcpConn>& c);
 };
 
-// 1 本の TCP 接続。outbox/コールバックは Impl::mu で保護。
+
 class TcpConn : public IConn, public std::enable_shared_from_this<TcpConn> {
  public:
   TcpConn(std::shared_ptr<TcpTransport::Impl> impl, net::socket_t fd, std::string remote)
@@ -106,7 +106,7 @@ class TcpConn : public IConn, public std::enable_shared_from_this<TcpConn> {
   void close() override {
     std::lock_guard<std::mutex> lk(impl_->mu);
     if (!open_ || closing_) return;
-    closing_ = true;  // outbox を吐き切ってから IO スレッドが閉じる
+    closing_ = true;
     impl_->wake();
   }
 
@@ -120,10 +120,10 @@ class TcpConn : public IConn, public std::enable_shared_from_this<TcpConn> {
       on_frame_ = std::move(on_frame);
       on_close_ = std::move(on_close);
       backlog.swap(pre_frames_);
-      // コールバック設定前に閉じていた場合も通知を落とさない
+
       if (closed_before_cb_ && on_close_) pending_close_notify_ = true;
     }
-    // 設定前に届いていたフレームを順に流す (Runloop 上で)
+
     auto self = shared_from_this();
     if (!backlog.empty() || pending_close_notify_) {
       impl_->loop.post([self, backlog]() {
@@ -143,7 +143,7 @@ class TcpConn : public IConn, public std::enable_shared_from_this<TcpConn> {
     }
   }
 
-  // ---- IO スレッド側 ----
+
 
   net::socket_t fd() const { return fd_; }
   bool wantWrite() {
@@ -155,7 +155,7 @@ class TcpConn : public IConn, public std::enable_shared_from_this<TcpConn> {
     return closing_ && outbox_.empty();
   }
 
-  // 送信。致命エラーで false。
+
   bool onWritable() {
     for (;;) {
       Bytes chunk;
@@ -177,7 +177,7 @@ class TcpConn : public IConn, public std::enable_shared_from_this<TcpConn> {
     }
   }
 
-  // 受信 + フレーム切り出し。致命エラー/EOF で false。
+
   bool onReadable() {
     uint8_t buf[65536];
     for (;;) {
@@ -190,12 +190,12 @@ class TcpConn : public IConn, public std::enable_shared_from_this<TcpConn> {
       inbuf_.insert(inbuf_.end(), buf, buf + n);
       if (static_cast<size_t>(n) < sizeof(buf)) break;
     }
-    // フレーム抽出
+
     size_t pos = 0;
     while (inbuf_.size() - pos >= 4) {
       const uint32_t len = (uint32_t(inbuf_[pos]) << 24) | (uint32_t(inbuf_[pos + 1]) << 16) |
                            (uint32_t(inbuf_[pos + 2]) << 8) | uint32_t(inbuf_[pos + 3]);
-      if (len > kMaxFrame) return false;  // 異常フレームは即切断
+      if (len > kMaxFrame) return false;
       if (inbuf_.size() - pos - 4 < len) break;
       Bytes frame(inbuf_.begin() + pos + 4, inbuf_.begin() + pos + 4 + len);
       deliver(std::move(frame));
@@ -213,7 +213,7 @@ class TcpConn : public IConn, public std::enable_shared_from_this<TcpConn> {
         std::lock_guard<std::mutex> lk(self->impl_->mu);
         cb = self->on_frame_;
         if (!cb) {
-          self->pre_frames_.push_back(frame);  // setCallbacks 前 → 取り置き
+          self->pre_frames_.push_back(frame);
           return;
         }
       }
@@ -221,7 +221,7 @@ class TcpConn : public IConn, public std::enable_shared_from_this<TcpConn> {
     });
   }
 
-  // IO スレッドが fd を閉じた後に呼ぶ (相手切断/エラー時のみ notify=true)
+
   void markClosed(bool notify) {
     bool had_cb;
     {
@@ -253,14 +253,14 @@ class TcpConn : public IConn, public std::enable_shared_from_this<TcpConn> {
   net::socket_t fd_;
   std::string remote_;
   bool open_ = true;
-  bool closing_ = false;         // 自発 close (flush 後にクローズ)
+  bool closing_ = false;
   bool close_notified_ = false;
   bool closed_before_cb_ = false;
   bool pending_close_notify_ = false;
   std::deque<Bytes> outbox_;
   size_t out_off_ = 0;
-  std::vector<uint8_t> inbuf_;    // IO スレッド専用
-  std::vector<Bytes> pre_frames_;  // setCallbacks 前に届いたフレームの取り置き
+  std::vector<uint8_t> inbuf_;
+  std::vector<Bytes> pre_frames_;
   std::function<void(const Bytes&)> on_frame_;
   std::function<void()> on_close_;
 };
@@ -299,7 +299,7 @@ void TcpTransport::Impl::removeConn(const std::shared_ptr<TcpConn>& c) {
 
 void TcpTransport::Impl::ioMain() {
   for (;;) {
-    // コマンド処理
+
     std::deque<std::function<void()>> q;
     {
       std::lock_guard<std::mutex> lk(mu);
@@ -308,7 +308,7 @@ void TcpTransport::Impl::ioMain() {
     for (auto& fn : q) fn();
     {
       std::unique_lock<std::mutex> lk(mu);
-      if (stopping) {  // 全 fd を回収して終了 (markClosed は mu を取るため unlock 後に)
+      if (stopping) {
         const net::socket_t lfd2 = listen_fd;
         listen_fd = net::kInvalidSocket;
         auto pcs = std::move(connecting);
@@ -326,7 +326,7 @@ void TcpTransport::Impl::ioMain() {
       }
     }
 
-    // poll セット構築
+
     std::vector<net::pollfd_t> pfds;
     std::vector<std::shared_ptr<TcpConn>> pconns;
     net::socket_t lfd;
@@ -347,7 +347,7 @@ void TcpTransport::Impl::ioMain() {
 
     net::poll(pfds.data(), pfds.size(), 200);
 
-    // wake ペア排水
+
     if (pfds[0].revents & POLLIN) net::wakeDrain(wake_pipe[0]);
 
     // accept
@@ -373,7 +373,7 @@ void TcpTransport::Impl::ioMain() {
       idx++;
     }
 
-    // 接続完了判定
+
     std::vector<PendingConnect> pcs;
     {
       std::lock_guard<std::mutex> lk(mu);
@@ -414,20 +414,20 @@ void TcpTransport::Impl::ioMain() {
       }
     }
 
-    // 送受信
+
     for (size_t i = 0; i < pconns.size(); i++) {
       auto& c = pconns[i];
       const short rev = pfds[conn_base + i].revents;
       bool ok = true;
-      if (rev & (POLLERR | POLLHUP | POLLNVAL)) ok = (rev & POLLIN) != 0;  // 読み残し優先
+      if (rev & (POLLERR | POLLHUP | POLLNVAL)) ok = (rev & POLLIN) != 0;
       if (ok && (rev & POLLIN)) ok = c->onReadable();
       if (ok && (rev & POLLOUT)) ok = c->onWritable();
-      if (ok && c->closingAndDrained()) {  // 自発 close: flush 後にクローズ (通知しない)
+      if (ok && c->closingAndDrained()) {
         net::closeSocket(c->fd());
         c->markClosed(false);
         std::lock_guard<std::mutex> lk(mu);
         removeConn(c);
-      } else if (!ok) {  // 相手切断/エラー
+      } else if (!ok) {
         net::closeSocket(c->fd());
         c->markClosed(true);
         std::lock_guard<std::mutex> lk(mu);
@@ -437,7 +437,7 @@ void TcpTransport::Impl::ioMain() {
   }
 }
 
-// ---------------------------------------------------------------- 公開 API
+
 
 TcpTransport::TcpTransport(Runloop& loop) : impl_(std::make_shared<Impl>(loop)) {}
 
@@ -472,7 +472,7 @@ bool TcpTransport::listen(const std::string& addr, std::function<void(ConnPtr)> 
     std::lock_guard<std::mutex> lk(impl_->mu);
     if (net::valid(impl_->listen_fd)) {
       net::closeSocket(fd);
-      return false;  // 二重 listen
+      return false;
     }
     impl_->listen_fd = fd;
     impl_->listen_addr = addr;

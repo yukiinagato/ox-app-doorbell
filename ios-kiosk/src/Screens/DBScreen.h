@@ -2,9 +2,8 @@
 
 @class DBRouter;
 
-// 画面の基底。iOS 5.1 の脆弱な UIViewController モーダル機構を一切使わないため、
-// 画面は単なる UIView。遷移は DBRouter が addSubview/removeFromSuperview で行い、
-// レイアウトは layoutSubviews だけで表現する (Auto Layout は iOS 6+ のため不使用)。
+// UIView-based screen foundation for iOS 5. Auto Layout is unavailable, so subclasses implement
+// layoutSubviews and Router performs transitions without UIViewController presentation.
 @interface DBScreen : UIView {
 @protected
   __weak DBRouter *_router;
@@ -12,11 +11,12 @@
 
 @property(nonatomic, weak) DBRouter *router;
 
-- (NSString *)screenName;  // watchdog 取证用
+- (NSString *)screenName;
 - (void)onScreenWillAppear;
 - (void)onScreenWillDisappear;
 
-// 全ラベル背景を透明化 (この個体は UILabel 既定背景が不透明白のため再帰で潰す)
+
+// Required workaround for devices whose legacy UILabel default background renders opaque white.
 - (void)clearLabelBackgrounds:(UIView *)v;
 
 @end

@@ -1,19 +1,24 @@
-// Node (組み立てルート) の統合テスト。
-//  - InMemNet + SimClock 共有 Runloop で複数 Node を決定的にシミュレーション
-//  - 実 TCP + 実 HTTP で API を煙試験
+
+
+
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include <unistd.h>
 
+#include <cstdio>
 #include <memory>
 #include <random>
 #include <string>
 #include <vector>
 
+#include <sqlite3.h>
+
 #include "doctest.h"
+#include "events/events.h"
 #include "mesh/mesh.h"
 #include "node/node.h"
+#include "store/store.h"
 #include "util/clock.h"
 #include "util/json.h"
 #include "util/runloop.h"
@@ -61,16 +66,17 @@ struct NFleet {
   std::vector<std::unique_ptr<N>> nodes;
 
   N& add(const std::string& addr, const std::string& name, const std::string& role,
-         const std::string& door, bool seed_cfg, bool zero_psk = false) {
+         const std::string& door, bool seed_cfg, bool zero_psk = false,
+         const std::string& data_dir = ":memory:") {
     NodeOptions o;
-    o.data_dir = ":memory:";
+    o.data_dir = data_dir;
     o.name = name;
     o.role = role;
     o.door = door;
     o.listen_addr = addr;
     o.advertise_addr = addr;
     o.psk = zero_psk ? std::array<uint8_t, 32>{} : psk;
-    o.enable_beacon = false;  // 実 beacon 禁止 (稼働 fleet への迷入防止)
+    o.enable_beacon = false;
     o.http_port = 0;
     o.seed_default_config = seed_cfg;
     o.mesh_timing_template = timing();
@@ -97,9 +103,173 @@ struct NFleet {
   }
 };
 
+int openProbeListener(int* port) {
+  int fd = ::socket(AF_INET, SOCK_STREAM, 0);
+  if (fd < 0) return -1;
+  int one = 1;
+  setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &one, sizeof(one));
+  sockaddr_in address{};
+  address.sin_family = AF_INET;
+  address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+  address.sin_port = 0;
+  if (::bind(fd, reinterpret_cast<sockaddr*>(&address), sizeof(address)) != 0 ||
+      ::listen(fd, 4) != 0) {
+    ::close(fd);
+    return -1;
+  }
+  socklen_t length = sizeof(address);
+  if (::getsockname(fd, reinterpret_cast<sockaddr*>(&address), &length) != 0) {
+    ::close(fd);
+    return -1;
+  }
+  *port = ntohs(address.sin_port);
+  return fd;
+}
+
+std::string nodeTempDir() {
+  char path[] = "/tmp/doorbell_node_durability_XXXXXX";
+  char* created = mkdtemp(path);
+  REQUIRE(created != nullptr);
+  return created;
+}
+
+bool setNodeConfigWriteFailure(const std::string& path, bool enabled) {
+  sqlite3* db = nullptr;
+  if (sqlite3_open(path.c_str(), &db) != SQLITE_OK) {
+    if (db) sqlite3_close(db);
+    return false;
+  }
+  const char* sql = enabled
+      ? "CREATE TRIGGER fail_config_write BEFORE INSERT ON config "
+        "BEGIN SELECT RAISE(FAIL,'injected config write failure'); END"
+      : "DROP TRIGGER IF EXISTS fail_config_write";
+  const bool ok = sqlite3_exec(db, sql, nullptr, nullptr, nullptr) == SQLITE_OK;
+  sqlite3_close(db);
+  return ok;
+}
+
+bool setNodeEventProjectionFailure(const std::string& path, bool enabled) {
+  sqlite3* db = nullptr;
+  if (sqlite3_open(path.c_str(), &db) != SQLITE_OK) {
+    if (db) sqlite3_close(db);
+    return false;
+  }
+  const char* sql = enabled
+      ? "CREATE TRIGGER fail_event_projection BEFORE UPDATE OF frontier "
+        "ON event_origin_state WHEN NEW.frontier > OLD.frontier "
+        "BEGIN SELECT RAISE(FAIL,'injected event projection failure'); END"
+      : "DROP TRIGGER IF EXISTS fail_event_projection";
+  const bool ok = sqlite3_exec(db, sql, nullptr, nullptr, nullptr) == SQLITE_OK;
+  sqlite3_close(db);
+  return ok;
+}
+
+void removeNodeTempDir(const std::string& dir) {
+  for (const char* name : {"doorbell.db", "doorbell.db-wal", "doorbell.db-shm"})
+    std::remove((dir + "/" + name).c_str());
+  ::rmdir((dir + "/assets").c_str());
+  ::rmdir(dir.c_str());
+}
+
 }  // namespace
 
-TEST_CASE("node: 2台が合流し既定設定が複製される") {
+TEST_CASE("node: startup applies and replays a durable event beyond the saved frontier") {
+  const std::string dir = nodeTempDir();
+  NodeOptions options;
+  options.data_dir = dir;
+  options.name = "event-recovery";
+  options.role = "indoor_panel";
+  options.listen_addr = "127.0.0.1:0";
+  options.psk.fill(0x41);
+  options.enable_beacon = false;
+  options.http_port = 0;
+
+  {
+    Node initial(options);
+    REQUIRE(initial.start());
+    initial.stop();
+  }
+  {
+    Store store;
+    REQUIRE(store.open(dir + "/doorbell.db"));
+    EventRecord event;
+    event.origin = "remote-sos-origin";
+    event.seq = 1;
+    event.type = "emergency";
+    event.device = "remote-sos-origin";
+    event.hlc = HlcClock::format(1'700'000'100'000LL, 0, "remote00");
+    event.wall_ms = 1'700'000'100'000LL;
+    event.payload_json = R"({"schema_version":2,"source":"remote-sos-origin"})";
+    REQUIRE(store.eventIngest(event));
+    CHECK(store.eventFrontier(event.origin) == 0);
+  }
+
+  std::vector<std::string> ui;
+  Node recovered(options);
+  recovered.setUiEventCb([&ui](const std::string& event) { ui.push_back(event); });
+  REQUIRE(recovered.start());
+  const auto status = json::parse(recovered.statusJson());
+  REQUIRE(status);
+  CHECK(json::getBool(json::get(status.get(), "emergency"), "active"));
+  bool replayed = false;
+  for (const auto& raw : ui) {
+    const auto event = json::parse(raw);
+    if (event && json::getString(event.get(), "t") == "event" &&
+        json::getString(event.get(), "type") == "emergency")
+      replayed = true;
+  }
+  CHECK(replayed);
+  recovered.stop();
+  {
+    Store store;
+    REQUIRE(store.open(dir + "/doorbell.db"));
+    CHECK(store.eventFrontier("remote-sos-origin") == 1);
+  }
+  removeNodeTempDir(dir);
+}
+
+TEST_CASE("node: remote config persistence failure rolls back and retries anti-entropy") {
+  NFleet fleet;
+  const std::string target_dir = nodeTempDir();
+  auto& source = fleet.add("A:1", "source", "door_station", "d_front", true);
+  auto& target = fleet.add("B:1", "target", "indoor_panel", "", false, false,
+                           target_dir);
+  REQUIRE(source.node->start());
+  REQUIRE(target.node->start());
+  fleet.run(1'200);
+
+  const std::string key = "durability.remote_retry";
+  REQUIRE(setNodeConfigWriteFailure(target_dir + "/doorbell.db", true));
+  source.node->setConfigKey(key, "7");
+  fleet.run(600);
+  CHECK(target.node->configJson().find("remote_retry") == std::string::npos);
+  auto status = json::parse(target.node->statusJson());
+  REQUIRE(status);
+  cJSON* config_store = json::get(json::get(status.get(), "runtime"), "config_store");
+  REQUIRE(config_store);
+  CHECK(json::getBool(config_store, "fail_closed"));
+
+  REQUIRE(setNodeConfigWriteFailure(target_dir + "/doorbell.db", false));
+  fleet.run(1'200);
+  CHECK(target.node->configJson().find("\"remote_retry\":7") != std::string::npos);
+  status = json::parse(target.node->statusJson());
+  REQUIRE(status);
+  CHECK(json::get(json::get(status.get(), "runtime"), "config_store") == nullptr);
+
+  source.node->stop();
+  target.node->stop();
+  {
+    Store store;
+    REQUIRE(store.open(target_dir + "/doorbell.db"));
+    bool persisted = false;
+    for (const auto& entry : store.configLoadAll())
+      persisted = persisted || (entry.key == key && entry.value_json == "7" && !entry.deleted);
+    CHECK(persisted);
+  }
+  removeNodeTempDir(target_dir);
+}
+
+TEST_CASE("node: two nodes join and replicate default config") {
   NFleet f;
   auto& a = f.add("A:1", "front", "door_station", "d_front", true);
   auto& b = f.add("B:1", "kitchen", "indoor_panel", "", false);
@@ -107,7 +277,7 @@ TEST_CASE("node: 2台が合流し既定設定が複製される") {
   REQUIRE(b.node->start());
   f.run(1500);
 
-  // 互いを alive 認識
+
   auto st = json::parse(b.node->statusJson());
   REQUIRE(st);
   cJSON* peers = json::get(st.get(), "peers");
@@ -115,14 +285,14 @@ TEST_CASE("node: 2台が合流し既定設定が複製される") {
   cJSON* it = nullptr;
   cJSON_ArrayForEach(it, peers) { CHECK(json::getString(it, "status") == "alive"); }
 
-  // A が seed した既定設定 (quick_replies) が B にも届いている
+
   auto cfg = json::parse(b.node->configJson());
   REQUIRE(cfg);
   cJSON* qr = json::get(json::get(cfg.get(), "quick_replies"), "qr_away");
   REQUIRE(qr);
   CHECK(json::getString(json::get(qr, "label"), "ja") == "ただいま留守にしています");
 
-  // devices エントリが双方の分ある
+
   cJSON* devs = json::get(cfg.get(), "devices");
   CHECK(cJSON_GetArraySize(devs) == 2);
 
@@ -130,7 +300,105 @@ TEST_CASE("node: 2台が合流し既定設定が複製される") {
   b.node->stop();
 }
 
-TEST_CASE("node: start 後に status / config のスナップショット JSON が取得できる") {
+TEST_CASE("node: boot identity repairs stale self role and door leaves") {
+  const std::string dir = nodeTempDir();
+  std::string node_id;
+  {
+    NFleet fleet;
+    auto& first = fleet.add("identity-old", "panel-old", "indoor_panel", "", true, false,
+                            dir);
+    REQUIRE(first.node->start());
+    auto status = json::parse(first.node->statusJson());
+    REQUIRE(status);
+    node_id = json::getString(json::get(status.get(), "node"), "id");
+    REQUIRE_FALSE(node_id.empty());
+    first.node->setConfigKey("devices." + node_id + ".role", "\"indoor_panel\"");
+    first.node->setConfigKey("devices." + node_id + ".door", "\"\"");
+    first.node->stop();
+  }
+
+  {
+    NFleet fleet;
+    auto& restarted = fleet.add("identity-new", "front-door", "door_station", "door-r4nd0m",
+                                true, false, dir);
+    REQUIRE(restarted.node->start());
+    auto cfg = json::parse(restarted.node->configJson());
+    REQUIRE(cfg);
+    const cJSON* self = json::get(json::get(cfg.get(), "devices"), node_id.c_str());
+    CHECK(json::getString(self, "name") == "front-door");
+    CHECK(json::getString(self, "role") == "door_station");
+    CHECK(json::getString(self, "door") == "door-r4nd0m");
+    restarted.node->stop();
+  }
+  removeNodeTempDir(dir);
+}
+
+TEST_CASE("node: playback strategy resolves pair, global, then legacy configuration") {
+  NFleet f;
+  auto& door = f.add("A:1", "front", "door_station", "d_front", true);
+  auto& indoor = f.add("B:1", "kitchen", "indoor_panel", "", false);
+  REQUIRE(door.node->start());
+  REQUIRE(indoor.node->start());
+  f.run(1200);
+  const std::string door_id = door.node->nodeId();
+  const std::string indoor_id = indoor.node->nodeId();
+
+  auto profileForDoor = [&]() -> json::Doc {
+    auto st = json::parse(indoor.node->statusJson());
+    cJSON* p = nullptr;
+    cJSON* it = nullptr;
+    cJSON_ArrayForEach(it, json::get(st.get(), "peers")) {
+      if (json::getString(it, "id") == door_id) { p = it; break; }
+    }
+    if (!p) return json::Doc(nullptr);
+    return json::Doc(cJSON_Duplicate(json::get(p, "playback_profile"), true));
+  };
+
+  indoor.node->setConfigKey("devices." + indoor_id + ".local.video.playback", "\"hls\"");
+  f.run(100);
+  auto p = profileForDoor();
+  REQUIRE(p);
+  CHECK(json::getString(p.get(), "resolved_from") == "legacy");
+  CHECK(json::getString(cJSON_GetArrayItem(json::get(p.get(), "strategies"), 0), "id") ==
+        "h264_hls");
+
+  const std::string global = R"({"strategies":[
+    {"id":"mjpeg","enabled":true,"startup_timeout_ms":5000,"stall_timeout_ms":3000},
+    {"id":"h264_low_latency","enabled":false,"startup_timeout_ms":300,"stall_timeout_ms":3000},
+    {"id":"h264_hls","enabled":false,"startup_timeout_ms":300,"stall_timeout_ms":5000}]})";
+  indoor.node->setConfigKey("video_playback.global", global);
+  f.run(100);
+  p = profileForDoor();
+  REQUIRE(p);
+  CHECK(json::getString(p.get(), "resolved_from") == "global");
+  CHECK(json::getString(cJSON_GetArrayItem(json::get(p.get(), "strategies"), 0), "id") ==
+        "mjpeg");
+
+  const std::string pair = R"({"strategies":[
+    {"id":"h264_low_latency","enabled":true,"startup_timeout_ms":300,"stall_timeout_ms":3000},
+    {"id":"mjpeg","enabled":true,"startup_timeout_ms":5000,"stall_timeout_ms":3000}]})";
+  indoor.node->setConfigKey("video_playback.pairs." + indoor_id + "." + door_id, pair);
+  f.run(100);
+  p = profileForDoor();
+  REQUIRE(p);
+  CHECK(json::getString(p.get(), "resolved_from") == "pair");
+  CHECK(json::getString(cJSON_GetArrayItem(json::get(p.get(), "strategies"), 0), "id") ==
+        "h264_low_latency");
+
+  // A pair profile with every strategy disabled safely falls back to the global profile.
+  indoor.node->setConfigKey("video_playback.pairs." + indoor_id + "." + door_id,
+                            R"({"strategies":[{"id":"mjpeg","enabled":false,
+                            "startup_timeout_ms":5000,"stall_timeout_ms":3000}]})");
+  f.run(100);
+  p = profileForDoor();
+  REQUIRE(p);
+  CHECK(json::getString(p.get(), "resolved_from") == "global");
+
+  door.node->stop();
+  indoor.node->stop();
+}
+
+TEST_CASE("node: status and config snapshot JSON are available after start") {
   NFleet f;
   auto& a = f.add("A:1", "front", "door_station", "d_front", true);
   REQUIRE(a.node->start());
@@ -143,7 +411,7 @@ TEST_CASE("node: start 後に status / config のスナップショット JSON �
   a.node->stop();
 }
 
-TEST_CASE("node: setConfigKey の反映がスナップショット経由で遅延反映される") {
+TEST_CASE("node: setConfigKey becomes visible through the deferred snapshot") {
   NFleet f;
   auto& a = f.add("A:1", "front", "door_station", "d_front", true);
   REQUIRE(a.node->start());
@@ -156,7 +424,34 @@ TEST_CASE("node: setConfigKey の反映がスナップショット経由で遅�
   a.node->stop();
 }
 
-TEST_CASE("sanitizeCaps: tls12 だけ環境で抑制") {
+TEST_CASE("node: video rotation follows the sensor unless fixed by an administrator") {
+  NFleet f;
+  auto& a = f.add("A:1", "front", "door_station", "d_front", true);
+  REQUIRE(a.node->start());
+
+  a.node->setVideoSensorRotation(91);  // Normalize to a cardinal angle.
+  f.run(20);
+  auto st = json::parse(a.node->statusJson());
+  REQUIRE(st);
+  CHECK(json::getInt(json::get(st.get(), "video"), "rotation") == 90);
+
+  a.node->setConfigKey("devices." + a.node->nodeId() + ".local.video.rotation", "270");
+  f.run(20);
+  a.node->setVideoSensorRotation(180);  // The fixed 270-degree override remains effective.
+  f.run(20);
+  st = json::parse(a.node->statusJson());
+  REQUIRE(st);
+  CHECK(json::getInt(json::get(st.get(), "video"), "rotation") == 270);
+
+  a.node->setConfigKey("devices." + a.node->nodeId() + ".local.video.rotation", "\"auto\"");
+  f.run(20);
+  st = json::parse(a.node->statusJson());
+  REQUIRE(st);
+  CHECK(json::getInt(json::get(st.get(), "video"), "rotation") == 180);
+  a.node->stop();
+}
+
+TEST_CASE("sanitizeCaps suppresses HTTPS when only TLS 1.2 is available") {
   auto caps1 = sanitizeCaps(R"({"tls12":true,"wan":true})", false);
   auto j1 = json::parse(caps1);
   REQUIRE(j1);
@@ -168,28 +463,513 @@ TEST_CASE("sanitizeCaps: tls12 だけ環境で抑制") {
   REQUIRE(j2);
   CHECK(json::getBool(j2.get(), "tls12") == true);
 
-  CHECK(sanitizeCaps("not-json", false) == "not-json");
-  CHECK(sanitizeCaps("not-json", true) == "not-json");
+  auto invalid_without_https = json::parse(sanitizeCaps("not-json", false));
+  REQUIRE(invalid_without_https);
+  CHECK(json::getBool(invalid_without_https.get(), "tls12") == false);
+  auto invalid_with_https = json::parse(sanitizeCaps("not-json", true));
+  REQUIRE(invalid_with_https);
+  CHECK(cJSON_IsObject(invalid_with_https.get()));
 }
 
-TEST_CASE("node: 配対 — 未配対機を発見 → 招待 → PSK 取得 (paired uiNotify + 設定複製)") {
+TEST_CASE("runtime capabilities: administrator overrides cannot exceed hardware measurements") {
+  NFleet fleet;
+  auto& node = fleet.add("A:1", "front", "door_station", "d_front", true);
+  REQUIRE(node.node->start());
+  node.node->setRuntimeCapabilities(
+      R"({"tls12":true,"wan":false,"mains_power":true,"h264_encode":false,"camera":true,"cpu_score":40})");
+  fleet.run(20);
+  const std::string key = "devices." + node.node->nodeId() + ".caps_override";
+  node.node->setConfigKey(
+      key,
+      R"({"wan":true,"h264_encode":true,"camera":false,"cpu_score":99,"sip_backend":"pjsip"})");
+  fleet.run(20);
+
+  auto manifest = json::parse(node.node->capabilitiesJson());
+  REQUIRE(manifest);
+  cJSON* caps = json::get(manifest.get(), "caps");
+  REQUIRE(caps);
+  CHECK(json::getBool(caps, "wan") == true);  // operational state may be overridden
+  CHECK(json::getBool(caps, "h264_encode") == false);  // hardware false cannot be raised
+  CHECK(json::getBool(caps, "camera") == false);       // hardware true may be disabled
+  CHECK(json::getInt(caps, "cpu_score") == 40);        // numeric ceiling is measured
+  CHECK(json::getString(caps, "sip_backend").empty()); // unmeasured features cannot be invented
+  node.node->stop();
+}
+
+TEST_CASE("runtime feature gating requires measured shell support and a real UI manifest") {
+  NFleet fleet;
+  auto& node = fleet.add("A:1", "front", "door_station", "d_front", true);
+  REQUIRE(node.node->start());
+  fleet.run(20);
+
+  auto initial = json::parse(node.node->capabilitiesJson());
+  REQUIRE(initial);
+  cJSON* initial_features = json::get(initial.get(), "features");
+  CHECK_FALSE(json::getBool(initial_features, "call_lifecycle_v2"));
+  CHECK_FALSE(json::getBool(initial_features, "call_flow_v2"));
+  CHECK_FALSE(json::getBool(initial_features, "call_cancel_v2"));
+  CHECK_FALSE(json::getBool(initial_features, "device_alert_v1"));
+  CHECK_FALSE(json::getBool(initial_features, "ui_manifest_v1"));
+  CHECK(cJSON_GetArraySize(json::get(json::get(initial.get(), "ui_manifest"), "elements")) == 0);
+
+  node.node->setRuntimeCapabilities(
+      R"({"call_flow_v2":true,"call_cancel_v2":true,"device_alert_v1":true,"runtime_recovery":true,"helper_policy_v1":true})");
+  fleet.run(20);
+  auto legacy_caps = json::parse(node.node->capabilitiesJson());
+  REQUIRE(legacy_caps);
+  cJSON* legacy_features = json::get(legacy_caps.get(), "features");
+  CHECK_FALSE(json::getBool(legacy_features, "call_flow_v2"));
+  CHECK_FALSE(json::getBool(legacy_features, "call_cancel_v2"));
+  CHECK_FALSE(json::getBool(legacy_features, "call_lifecycle_v2"));
+  CHECK_FALSE(json::getBool(legacy_features, "device_alert_v1"));
+  CHECK_FALSE(json::getBool(legacy_features, "runtime_recovery_v1"));
+  CHECK_FALSE(json::getBool(legacy_features, "helper_policy_v1"));
+
+  node.node->setConfigKey("ui.call_flow", "\"ring_then_purpose\"");
+  const std::string legacy_call = node.node->pressV2("d_front", "");
+  fleet.run(20);
+  auto legacy_status = json::parse(node.node->statusJson());
+  REQUIRE(legacy_status);
+  cJSON* legacy_calls = json::get(legacy_status.get(), "active_calls");
+  REQUIRE(cJSON_GetArraySize(legacy_calls) == 1);
+  CHECK(json::getString(cJSON_GetArrayItem(legacy_calls, 0), "call_flow") == "purpose_first");
+  CHECK(node.node->cancelCallV2("d_front", legacy_call, "visitor"));
+
+  node.node->setRuntimeCapabilities(
+      R"({"features":{"platform_v2":true,"call_flow_v2":true,"call_cancel_v2":true,"call_lifecycle_v2":true,"device_alert_v1":true,"ui_manifest_v1":true,"runtime_recovery_v1":true}})");
+  node.node->setUiManifest(
+      R"({"schema_version":1,"units":"logical","viewport":{"minimum_touch":44,"scale_min":0.75,"scale_max":2.0},"elements":{"purpose.button":{"properties":["scale","foreground","background"],"defaults":{"scale":1.0,"foreground":"#000000","background":"#FFFFFF"},"safety_critical":false},"cancel.call":{"properties":["scale","foreground","background"],"defaults":{"scale":1.0,"foreground":"#FFFFFF","background":"#000000"},"safety_critical":true},"sos.trigger":{"properties":["scale"],"defaults":{"scale":1.0},"safety_critical":true},"sos.cancel":{"properties":["scale"],"defaults":{"scale":1.0},"safety_critical":true}}})");
+  fleet.run(20);
+  const std::string modern_call = node.node->pressV2("d_front", "");
+  fleet.run(20);
+  auto modern_status = json::parse(node.node->statusJson());
+  REQUIRE(modern_status);
+  cJSON* modern_calls = json::get(modern_status.get(), "active_calls");
+  REQUIRE(cJSON_GetArraySize(modern_calls) == 1);
+  CHECK(json::getString(cJSON_GetArrayItem(modern_calls, 0), "call_flow") ==
+        "ring_then_purpose");
+  cJSON* modern_features = json::get(modern_status.get(), "features");
+  CHECK(json::getBool(modern_features, "call_flow_v2"));
+  CHECK(json::getBool(modern_features, "call_cancel_v2"));
+  CHECK(json::getBool(modern_features, "call_lifecycle_v2"));
+  CHECK(json::getBool(modern_features, "device_alert_v1"));
+  CHECK(json::getBool(modern_features, "ui_manifest_v1"));
+  const std::string accepted_manifest =
+      json::dump(json::get(modern_status.get(), "ui_manifest"));
+  node.node->setUiManifest(
+      R"({"schema_version":1,"units":"logical","viewport":{"minimum_touch":44,"scale_min":0.75,"scale_max":2.0},"elements":{"cancel.call":{"properties":["scale"],"safety_critical":true}}})");
+  fleet.run(20);
+  auto after_invalid_manifest = json::parse(node.node->statusJson());
+  REQUIRE(after_invalid_manifest);
+  CHECK(json::dump(json::get(after_invalid_manifest.get(), "ui_manifest")) ==
+        accepted_manifest);
+  CHECK(json::getBool(json::get(after_invalid_manifest.get(), "features"),
+                      "ui_manifest_v1"));
+
+  const std::string style_key =
+      "devices." + node.node->nodeId() + ".local.ui.elements.cancel.call";
+  node.node->setConfigKey(
+      style_key,
+      R"({"scale":1.0,"foreground":"#FFFFFF","background":"#000000","border":"#FFFFFF"})");
+  const std::string safe_config = node.node->configJson();
+  node.node->setConfigKey(style_key, R"({"foreground":"#000000"})");
+  CHECK(node.node->configJson() == safe_config);
+  node.node->setConfigKey(style_key, R"({"foreground":"#FFFFFFFF"})");
+  CHECK(node.node->configJson() == safe_config);
+  node.node->setConfigKey(style_key, R"({"scale":0.9})");
+  CHECK(node.node->configJson() == safe_config);
+
+  CHECK(node.node->cancelCallV2("d_front", modern_call, "visitor"));
+  node.node->stop();
+}
+
+TEST_CASE("mixed fleet derives call flow from the originating door shell") {
+  NFleet fleet;
+  auto& door = fleet.add("A:1", "front", "door_station", "d_front", true);
+  auto& indoor = fleet.add("B:1", "hall", "indoor_panel", "", false);
+  REQUIRE(door.node->start());
+  REQUIRE(indoor.node->start());
+  door.node->setConfigKey("ui.call_flow", "\"ring_then_purpose\"");
+  fleet.run(1'000);
+
+  const std::string legacy_call = door.node->pressV2("d_front", "");
+  fleet.run(300);
+  auto legacy = json::parse(indoor.node->statusJson());
+  REQUIRE(legacy);
+  cJSON* calls = json::get(legacy.get(), "active_calls");
+  REQUIRE(cJSON_GetArraySize(calls) == 1);
+  CHECK(json::getString(cJSON_GetArrayItem(calls, 0), "call_flow") == "purpose_first");
+  CHECK(door.node->cancelCallV2("d_front", legacy_call, "visitor"));
+  fleet.run(200);
+
+  door.node->setRuntimeCapabilities(
+      R"({"features":{"call_flow_v2":true,"call_cancel_v2":true,"ui_manifest_v1":true}})");
+  door.node->setUiManifest(
+      R"({"schema_version":1,"units":"logical","viewport":{"minimum_touch":44,"scale_min":0.75,"scale_max":2.0},"elements":{"purpose.button":{"properties":["scale"],"defaults":{"scale":1.0},"safety_critical":false},"cancel.call":{"properties":["scale"],"defaults":{"scale":1.0},"safety_critical":true}}})");
+  fleet.run(1'000);
+  const std::string modern_call = door.node->pressV2("d_front", "");
+  fleet.run(300);
+  auto modern = json::parse(indoor.node->statusJson());
+  REQUIRE(modern);
+  calls = json::get(modern.get(), "active_calls");
+  REQUIRE(cJSON_GetArraySize(calls) == 1);
+  CHECK(json::getString(cJSON_GetArrayItem(calls, 0), "call_flow") ==
+        "ring_then_purpose");
+  cJSON* peers = json::get(modern.get(), "peers");
+  bool advertised = false;
+  cJSON* peer = nullptr;
+  cJSON_ArrayForEach(peer, peers) {
+    if (json::getString(peer, "id") != door.node->nodeId()) continue;
+    advertised = json::getBool(json::get(peer, "features"), "call_flow_v2") &&
+                 json::getBool(json::get(peer, "features"), "ui_manifest_v1");
+  }
+  CHECK(advertised);
+
+  CHECK(door.node->cancelCallV2("d_front", modern_call, "visitor"));
+  door.node->stop();
+  indoor.node->stop();
+}
+
+TEST_CASE("offline semantic UI edits use the persisted last-valid peer manifest") {
+  const std::string dir = "/tmp/doorbell_ui_contract_" + std::to_string(::getpid());
+  std::string peer_id;
+  {
+    NFleet fleet;
+    auto& admin = fleet.add("A:1", "admin", "indoor_panel", "", true, false, dir);
+    auto& peer = fleet.add("B:1", "remote", "indoor_panel", "", false);
+    REQUIRE(admin.node->start());
+    REQUIRE(peer.node->start());
+    peer_id = peer.node->nodeId();
+    admin.node->setConfigKey("devices." + peer_id,
+                             R"({"name":"Remote panel","role":"indoor_panel"})");
+    peer.node->setRuntimeCapabilities(
+        R"({"device_alert_channels":["in_app"],"features":{"ui_manifest_v1":true}})");
+    peer.node->setUiManifest(
+        R"({"schema_version":1,"units":"pt","viewport":{"minimum_touch":44,"scale_min":0.75,"scale_max":2.0},"elements":{"ring.title":{"properties":["foreground","background"],"defaults":{"foreground":"#FFFFFF","background":"#101418"},"safety_critical":false}}})");
+    peer.node->setRuntimeStatus(
+        R"({"schema_version":1,"safe_mode":true,"device_alert":{"schema_version":1,"active":true,"result":"presented","secret":"private"},"ui_style":{"schema_version":1,"applied":["ring.title"],"rejected":[],"last_known_good":{"used":[],"persisted":["ring.title"]},"last_error":"","updated_at_ms":1700000000123,"elements":{"ring.title":{"source":"override","applied":true,"rejected":false,"lkg_persisted":true,"error":""}}}})");
+    fleet.run(1'000);
+    auto live = json::parse(admin.node->statusJson());
+    REQUIRE(live);
+    bool manifest_seen = false;
+    bool runtime_seen = false;
+    const cJSON* item = nullptr;
+    cJSON_ArrayForEach(item, json::get(live.get(), "peers")) {
+      if (json::getString(item, "id") == peer_id) {
+        manifest_seen = cJSON_IsObject(json::get(
+            json::get(item, "ui_manifest"), "elements"));
+        const cJSON* runtime = json::get(item, "runtime");
+        const cJSON* ui_style = json::get(runtime, "ui_style");
+        runtime_seen = cJSON_IsObject(ui_style) &&
+                       json::getInt(ui_style, "schema_version") == 1 &&
+                       cJSON_IsObject(json::get(json::get(ui_style, "elements"),
+                                                "ring.title")) &&
+                       json::getBool(runtime, "safe_mode") &&
+                       json::getBool(json::get(runtime, "device_alert"), "active") &&
+                       json::get(json::get(runtime, "device_alert"), "secret") == nullptr;
+      }
+    }
+    CHECK(manifest_seen);
+    CHECK(runtime_seen);
+    admin.node->stop();
+    peer.node->stop();
+  }
+  {
+    NFleet fleet;
+    auto& admin = fleet.add("A:1", "admin", "indoor_panel", "", false, false, dir);
+    REQUIRE(admin.node->start());
+    fleet.run(50);
+    auto offline = json::parse(admin.node->statusJson());
+    REQUIRE(offline);
+    bool cached_seen = false;
+    const cJSON* item = nullptr;
+    cJSON_ArrayForEach(item, json::get(offline.get(), "peers")) {
+      if (json::getString(item, "id") != peer_id) continue;
+      cached_seen = json::getString(item, "status") == "offline" &&
+                    json::getBool(item, "cached_contract") &&
+                    cJSON_IsObject(json::get(json::get(item, "ui_manifest"), "elements")) &&
+                    cJSON_IsObject(json::get(
+                        json::get(json::get(item, "runtime"), "ui_style"), "elements"));
+    }
+    CHECK(cached_seen);
+    admin.node->setConfigKey("devices." + peer_id + ".local.ui.elements.ring.title",
+                             R"({"foreground":"#F0F0F0"})");
+    fleet.run(50);
+    CHECK(admin.node->configJson().find("#F0F0F0") != std::string::npos);
+    admin.node->stop();
+  }
+  for (const char* name : {"doorbell.db", "doorbell.db-wal", "doorbell.db-shm"})
+    std::remove((dir + "/" + name).c_str());
+  ::rmdir((dir + "/assets").c_str());
+  ::rmdir(dir.c_str());
+}
+
+TEST_CASE("a live configured door authority expires a call after its origin stops") {
+  NFleet fleet;
+  auto& origin = fleet.add("A:1", "front-a", "door_station", "d_front", true);
+  auto& standby = fleet.add("B:1", "front-b", "door_station", "d_front", false);
+  REQUIRE(origin.node->start());
+  REQUIRE(standby.node->start());
+  fleet.run(1'000);
+  const std::string call_id = origin.node->pressV2("d_front", "");
+  REQUIRE(!call_id.empty());
+  fleet.run(300);
+  CHECK(standby.node->statusJson().find(call_id) != std::string::npos);
+
+  origin.node->stop();
+  fleet.run(61'000);
+  CHECK(standby.uiCount("event", "call_cancelled") == 1);
+  CHECK(standby.node->statusJson().find(call_id) == std::string::npos);
+  fleet.run(10'000);
+  CHECK(standby.uiCount("event", "call_cancelled") == 1);
+  standby.node->stop();
+}
+
+TEST_CASE("a dead dialog owner is cancelled once by the deterministic survivor") {
+  const std::string door_dir = nodeTempDir();
+  NFleet fleet;
+  auto& door = fleet.add("A:1", "front", "door_station", "d_front", true, false,
+                         door_dir);
+  auto& owner = fleet.add("B:1", "hall", "indoor_panel", "", false);
+  REQUIRE(door.node->start());
+  REQUIRE(owner.node->start());
+  fleet.run(1'000);
+
+  const std::string call_id = door.node->pressV2("d_front", "");
+  REQUIRE(!call_id.empty());
+  fleet.run(300);
+  REQUIRE(owner.node->reportCallAnsweredV2("d_front", call_id, 0));
+  fleet.run(300);
+  CHECK(door.node->statusJson().find("\"state\":\"in_call\"") != std::string::npos);
+
+  const std::string owner_id = owner.node->nodeId();
+  owner.node->stop();
+  bool owner_dead = false;
+  for (int i = 0; i < 50 && !owner_dead; ++i) {
+    fleet.run(20);
+    auto status = json::parse(door.node->statusJson());
+    const cJSON* peer = nullptr;
+    cJSON_ArrayForEach(peer, json::get(status.get(), "peers")) {
+      if (json::getString(peer, "id") == owner_id)
+        owner_dead = json::getString(peer, "status") == "dead";
+    }
+  }
+  REQUIRE(owner_dead);
+
+  door.node->reportCallRecovery(call_id, true);
+  REQUIRE(setNodeEventProjectionFailure(door_dir + "/doorbell.db", true));
+  fleet.run(9'990);
+  CHECK(door.uiCount("event", "call_cancelled") == 0);
+  fleet.run(20);
+  CHECK(door.uiCount("event", "call_cancelled") == 0);
+  CHECK(door.node->statusJson().find(call_id) != std::string::npos);
+  REQUIRE(setNodeEventProjectionFailure(door_dir + "/doorbell.db", false));
+  fleet.run(2'010);
+  CHECK(door.uiCount("event", "call_cancelled") == 1);
+  CHECK(door.node->statusJson().find(call_id) == std::string::npos);
+  fleet.run(11'000);
+  CHECK(door.uiCount("event", "call_cancelled") == 1);
+  door.node->stop();
+  removeNodeTempDir(door_dir);
+}
+
+TEST_CASE("a returning dialog owner cancels the survivor takeover lease") {
+  const std::string owner_dir =
+      "/tmp/doorbell_dialog_owner_return_" + std::to_string(::getpid());
+  NFleet fleet;
+  auto& door = fleet.add("A:1", "front", "door_station", "d_front", true);
+  auto& owner = fleet.add("B:1", "hall", "indoor_panel", "", false, false, owner_dir);
+  REQUIRE(door.node->start());
+  REQUIRE(owner.node->start());
+  fleet.run(1'000);
+
+  const std::string owner_id = owner.node->nodeId();
+  const std::string call_id = door.node->pressV2("d_front", "");
+  REQUIRE(!call_id.empty());
+  fleet.run(300);
+  REQUIRE(owner.node->reportCallAnsweredV2("d_front", call_id, 0));
+  fleet.run(300);
+
+  owner.node->stop();
+  bool owner_dead = false;
+  for (int i = 0; i < 50 && !owner_dead; ++i) {
+    fleet.run(20);
+    auto status = json::parse(door.node->statusJson());
+    const cJSON* peer = nullptr;
+    cJSON_ArrayForEach(peer, json::get(status.get(), "peers")) {
+      if (json::getString(peer, "id") == owner_id)
+        owner_dead = json::getString(peer, "status") == "dead";
+    }
+  }
+  REQUIRE(owner_dead);
+  door.node->reportCallRecovery(call_id, false);
+  fleet.run(20);
+  CHECK(door.node->statusJson().find(call_id) != std::string::npos);
+
+  owner.node.reset();
+  NodeOptions options;
+  options.data_dir = owner_dir;
+  options.name = "hall";
+  options.role = "indoor_panel";
+  options.listen_addr = "B:1";
+  options.advertise_addr = "B:1";
+  options.psk = fleet.psk;
+  options.enable_beacon = false;
+  options.http_port = 0;
+  options.seed_default_config = false;
+  options.caps_json = R"({"features":{"runtime_recovery_v1":true}})";
+  options.mesh_timing_template = NFleet::timing();
+  options.use_mesh_timing_template = true;
+  NodeDeps deps;
+  deps.clock = &fleet.clock;
+  deps.loop = &fleet.loop;
+  deps.transport = fleet.net.makeTransport("B:1");
+  deps.discovery = fleet.net.makeDiscovery("B:1");
+  NFleet::N* owner_shell = &owner;
+  owner.node.reset(new Node(options, std::move(deps)));
+  owner.node->setUiEventCb(
+      [owner_shell](const std::string& event) { owner_shell->ui.push_back(event); });
+  owner.node->setTtsCb([owner_shell](const std::string& text, const std::string&) {
+    owner_shell->tts.push_back(text);
+  });
+  REQUIRE(owner.node->start());
+  CHECK(owner.node->nodeId() == owner_id);
+  owner.node->reportCallRecovery(call_id, true);
+  fleet.run(20);
+
+  bool owner_alive = false;
+  for (int i = 0; i < 250 && !owner_alive; ++i) {
+    fleet.run(20);
+    auto status = json::parse(door.node->statusJson());
+    const cJSON* peer = nullptr;
+    cJSON_ArrayForEach(peer, json::get(status.get(), "peers")) {
+      if (json::getString(peer, "id") == owner_id)
+        owner_alive = json::getString(peer, "status") == "alive";
+    }
+  }
+  REQUIRE(owner_alive);
+  fleet.run(11'000);
+  CHECK(door.uiCount("event", "call_cancelled") == 0);
+  CHECK(door.node->statusJson().find(call_id) != std::string::npos);
+  CHECK(owner.node->statusJson().find(call_id) != std::string::npos);
+  CHECK(owner.node->reportCallEndedV2("d_front", call_id, 0, "hangup"));
+  fleet.run(500);
+  CHECK(door.node->statusJson().find(call_id) == std::string::npos);
+
+  door.node->stop();
+  owner.node->stop();
+  owner.node.reset();
+  for (const char* name : {"doorbell.db", "doorbell.db-wal", "doorbell.db-shm"})
+    std::remove((owner_dir + "/" + name).c_str());
+  ::rmdir((owner_dir + "/assets").c_str());
+  ::rmdir(owner_dir.c_str());
+}
+
+TEST_CASE("configured MQTT reachability is measured and administrator overrides stay explicit") {
+  int mqtt_port = 0;
+  int listener = openProbeListener(&mqtt_port);
+  REQUIRE(listener >= 0);
+
+  NFleet fleet;
+  auto& node = fleet.add("A:1", "bridge", "indoor_panel", "", true);
+  REQUIRE(node.node->start());
+  node.node->setRuntimeCapabilities(
+      R"({"mains_power":true,"mqtt_reachable":false,"wall_clock_sane":true})");
+  node.node->setConfigKey("integrations.mqtt.host", "\"127.0.0.1\"");
+  node.node->setConfigKey("integrations.mqtt.port", std::to_string(mqtt_port));
+  fleet.run(20);
+  auto unmeasured = json::parse(node.node->capabilitiesJson());
+  REQUIRE(unmeasured);
+  CHECK_FALSE(json::getBool(json::get(unmeasured.get(), "caps"), "mqtt_reachable"));
+  auto before_probe = json::parse(node.node->statusJson());
+  REQUIRE(before_probe);
+  CHECK(json::getString(json::get(before_probe.get(), "leaders"), "mqtt_bridge").empty());
+  fleet.run(6'100);
+
+  auto reachable = json::parse(node.node->capabilitiesJson());
+  REQUIRE(reachable);
+  cJSON* caps = json::get(reachable.get(), "caps");
+  CHECK(json::getBool(caps, "mqtt_reachable"));
+  CHECK(json::getString(caps, "mqtt_reachability_source") ==
+        "configured_endpoint_probe");
+  auto status = json::parse(node.node->statusJson());
+  REQUIRE(status);
+  CHECK(json::getString(json::get(status.get(), "leaders"), "mqtt_bridge") ==
+        node.node->nodeId());
+
+  ::close(listener);
+  int unreachable_port = 0;
+  int temporary_listener = openProbeListener(&unreachable_port);
+  REQUIRE(temporary_listener >= 0);
+  ::close(temporary_listener);
+  node.node->setConfigKey("integrations.mqtt.port", std::to_string(unreachable_port));
+  fleet.run(6'100);
+  auto unreachable = json::parse(node.node->capabilitiesJson());
+  REQUIRE(unreachable);
+  caps = json::get(unreachable.get(), "caps");
+  CHECK_FALSE(json::getBool(caps, "mqtt_reachable"));
+  CHECK(json::getString(caps, "mqtt_reachability_source") ==
+        "configured_endpoint_probe");
+
+  node.node->setConfigKey(
+      "devices." + node.node->nodeId() + ".caps_override",
+      R"({"mqtt_reachable":true})");
+  fleet.run(20);
+  auto overridden = json::parse(node.node->capabilitiesJson());
+  REQUIRE(overridden);
+  caps = json::get(overridden.get(), "caps");
+  CHECK(json::getBool(caps, "mqtt_reachable"));
+  CHECK(json::getString(caps, "mqtt_reachability_source") ==
+        "administrator_override");
+  node.node->stop();
+}
+
+TEST_CASE("pairing: secure-store failure never exposes a mesh PSK") {
+  NFleet fleet;
+  auto& node = fleet.add("J:1", "newpad", "indoor_panel", "", false, true);
+  node.node->setSecureStore(
+      [](const std::string&) { return std::string(); },
+      [](const std::string&, const std::string&) { return false; });
+  REQUIRE(node.node->start());
+  CHECK(node.node->foundCluster());
+  fleet.run(20);
+  CHECK(node.uiCount("paired") == 0);
+  CHECK(node.uiCount("pairing_persistence_error") == 1);
+  for (const auto& event : node.ui) CHECK(event.find("psk_hex") == std::string::npos);
+  auto pairing = json::parse(node.node->pairingJson());
+  REQUIRE(pairing);
+  CHECK(json::getBool(pairing.get(), "paired") == true);
+  CHECK(json::getBool(pairing.get(), "persistence_ready") == false);
+  node.node->stop();
+}
+
+TEST_CASE("node: pairing discovers and invites an unpaired device and supplies PSK") {
   NFleet f;
   auto& host = f.add("A:1", "front", "door_station", "d_front", /*seed_cfg=*/true);
   auto& joiner = f.add("J:1", "newpad", "indoor_panel", "", /*seed_cfg=*/false,
                        /*zero_psk=*/true);
+  std::string stored_psk;
+  joiner.node->setSecureStore(
+      [](const std::string&) { return std::string(); },
+      [&stored_psk](const std::string& key, const std::string& value) {
+        if (key != "mesh.psk") return false;
+        stored_psk = value;
+        return true;
+      });
   REQUIRE(host.node->start());
   REQUIRE(joiner.node->start());
 
-  // pairingJson は入れ子オブジェクトとして整形される (文字列化しない)
+
   auto pj0 = json::parse(joiner.node->pairingJson());
   REQUIRE(pj0);
   CHECK(json::getBool(pj0.get(), "paired") == false);
+  CHECK(json::getBool(pj0.get(), "persistence_ready") == false);
   cJSON* self = json::get(pj0.get(), "self");
-  REQUIRE(self);  // 入れ子オブジェクト (setItem)
+  REQUIRE(self);
   CHECK(json::getString(self, "pk").size() == 64);
   CHECK(json::getString(pj0.get(), "pair_qr").rfind("doorbell-pair:", 0) == 0);
 
-  // host が未配対機を発見して pending に載せる
+
   REQUIRE([&] {
     for (int i = 0; i < 200; i++) {
       f.run(50);
@@ -204,7 +984,7 @@ TEST_CASE("node: 配対 — 未配対機を発見 → 招待 → PSK 取得 (pai
     return false;
   }());
 
-  // 管理者が承認 → 招待 push → joiner が PSK 取得
+
   host.node->inviteDevice(joiner.node->nodeId());
   REQUIRE([&] {
     for (int i = 0; i < 200; i++) {
@@ -213,17 +993,24 @@ TEST_CASE("node: 配対 — 未配対機を発見 → 招待 → PSK 取得 (pai
     }
     return false;
   }());
-  // paired イベントに psk_hex/seeds が載る (殻が boot.json 永続化に使う)
-  std::string psk_hex;
+  // Core stores the PSK through the platform SPI and exposes only its opaque reference.
+  std::string psk_ref;
+  bool leaked_psk = false;
   for (const auto& e : joiner.ui) {
     auto d = json::parse(e);
-    if (d && json::getString(d.get(), "t") == "paired") psk_hex = json::getString(d.get(), "psk_hex");
+    if (d && json::getString(d.get(), "t") == "paired") {
+      psk_ref = json::getString(d.get(), "psk_ref");
+      leaked_psk = json::get(d.get(), "psk_hex") != nullptr;
+    }
   }
-  CHECK(psk_hex.size() == 64);
-  CHECK(psk_hex != std::string(64, '0'));  // 全ゼロでない = 実 PSK
-  // pairingJson が paired=true になり、既定設定 (host が seed した quick_replies) が届く
+  CHECK(psk_ref == "secret:mesh.psk");
+  CHECK(leaked_psk == false);
+  CHECK(stored_psk.size() == 64);
+  CHECK(stored_psk != std::string(64, '0'));
+
   auto pj1 = json::parse(joiner.node->pairingJson());
   CHECK(json::getBool(pj1.get(), "paired") == true);
+  CHECK(json::getBool(pj1.get(), "persistence_ready") == true);
   REQUIRE([&] {
     for (int i = 0; i < 200; i++) {
       f.run(50);
@@ -238,7 +1025,7 @@ TEST_CASE("node: 配対 — 未配対機を発見 → 招待 → PSK 取得 (pai
   joiner.node->stop();
 }
 
-TEST_CASE("node: press → ルール評価 → chime/sip/イベント複製が exactly-once") {
+TEST_CASE("node: press evaluates rules and replicates chime, SIP, and events exactly once") {
   NFleet f;
   auto& a = f.add("A:1", "front", "door_station", "d_front", true);
   auto& b = f.add("B:1", "kitchen", "indoor_panel", "", false);
@@ -246,7 +1033,7 @@ TEST_CASE("node: press → ルール評価 → chime/sip/イベント複製が e
   REQUIRE(b.node->start());
   f.run(1000);
 
-  // ルール: 正面玄関の按鈴 → B で chime + A から sip_call
+
   std::string rule = std::string("{\"enabled\":true,") +
       "\"when\":{\"type\":\"button\",\"doors\":[\"d_front\"]}," +
       "\"actions\":[{\"type\":\"chime\",\"devices\":[\"" + b.node->nodeId() + "\"],\"sound\":\"ding1\"}," +
@@ -254,16 +1041,16 @@ TEST_CASE("node: press → ルール評価 → chime/sip/イベント複製が e
   a.node->setConfigKey("trigger_rules.r1", rule);
   f.run(500);
 
-  a.node->press("");  // 自分の担当 door (d_front)
+  a.node->press("");
   f.run(800);
 
-  // B: press イベント 1 回 + chime 1 回。A: calling 状態 1 回。
+
   CHECK(b.uiCount("event", "press") == 1);
   CHECK(b.uiCount("chime") == 1);
   CHECK(a.uiCount("event", "press") == 1);
   CHECK(a.uiCount("state") == 1);
 
-  // さらに時間を進めても重複しない (SYNC の再配送は冪等)
+
   f.run(1000);
   CHECK(b.uiCount("event", "press") == 1);
   CHECK(b.uiCount("chime") == 1);
@@ -272,40 +1059,56 @@ TEST_CASE("node: press → ルール評価 → chime/sip/イベント複製が e
   b.node->stop();
 }
 
-TEST_CASE("node: クイック返信が門口機の表示 + TTS に届く") {
+TEST_CASE("node: quick replies reach the door-station display and TTS") {
   NFleet f;
   auto& a = f.add("A:1", "front", "door_station", "d_front", true);
   auto& b = f.add("B:1", "kitchen", "indoor_panel", "", false);
   REQUIRE(a.node->start());
   REQUIRE(b.node->start());
-  f.run(1500);  // 設定 (quick_replies, devices) の複製を待つ
+  f.run(1500);
 
-  a.node->press("");
+  const std::string first_call = a.node->pressV2("d_front", "");
+  REQUIRE(!first_call.empty());
   f.run(300);
 
-  // 室内パネル B から「留守にしています」を返す (web 経由想定)
-  b.node->sendQuickReply("qr_away", "", "d_front", "web");
+
+  REQUIRE(b.node->sendQuickReplyV2("qr_away", "", "d_front", first_call, 0));
   f.run(500);
 
   CHECK(a.uiCount("reply") == 1);
   REQUIRE(a.tts.size() == 1);
   CHECK(a.tts[0] == "ただいま留守にしています");
 
-  // reply イベントも複製される (両者の UI に event/reply が 1 回ずつ)
+
   CHECK(a.uiCount("event", "reply") == 1);
   CHECK(b.uiCount("event", "reply") == 1);
 
-  // 自由文も送れる
+
   b.node->sendQuickReply("", "10分で戻ります", "d_front", "web");
   f.run(500);
   REQUIRE(a.tts.size() == 2);
   CHECK(a.tts[1] == "10分で戻ります");
 
+  const std::string established_call = a.node->pressV2("d_front", "");
+  REQUIRE(!established_call.empty());
+  f.run(300);
+  REQUIRE(b.node->reportCallAnsweredV2("d_front", established_call, 0));
+  f.run(300);
+  const size_t replies_before = a.uiCount("reply");
+  const size_t tts_before = a.tts.size();
+  CHECK_FALSE(b.node->sendQuickReplyV2("qr_away", "", "d_front", established_call, 0));
+  b.node->sendQuickReply("qr_away", "", "d_front", "web");
+  f.run(500);
+  CHECK(a.uiCount("reply") == replies_before);
+  CHECK(a.tts.size() == tts_before);
+  CHECK(b.node->reportCallEndedV2("d_front", established_call, 0));
+  f.run(300);
+
   a.node->stop();
   b.node->stop();
 }
 
-TEST_CASE("node: 節点死で offline イベントが一度だけ記録される") {
+TEST_CASE("node: node death records one offline event") {
   NFleet f;
   auto& a = f.add("A:1", "front", "door_station", "d_front", true);
   auto& b = f.add("B:1", "annex", "door_station", "d_annex", false);
@@ -316,9 +1119,9 @@ TEST_CASE("node: 節点死で offline イベントが一度だけ記録される
   f.run(1500);
 
   f.net.killNode("B:1");
-  f.run(1000);  // dead 判定 + イベント複製
+  f.run(1000);
 
-  // 生存者 (A,C) のどちらでも offline イベントはちょうど 1 件
+
   CHECK(a.uiCount("event", "offline") == 1);
   CHECK(c.uiCount("event", "offline") == 1);
 
@@ -327,7 +1130,7 @@ TEST_CASE("node: 節点死で offline イベントが一度だけ記録される
   c.node->stop();
 }
 
-// ---------- 実 TCP + HTTP 煙試験 ----------
+
 
 namespace {
 int freePort(std::mt19937& rng) {
@@ -347,7 +1150,7 @@ int freePort(std::mt19937& rng) {
   return -1;
 }
 
-// 極小 HTTP クライアント (1 リクエスト 1 接続)
+
 std::string httpReq(int port, const std::string& raw) {
   int fd = ::socket(AF_INET, SOCK_STREAM, 0);
   REQUIRE(fd >= 0);
@@ -382,7 +1185,7 @@ std::string simpleReq(int port, const std::string& method, const std::string& pa
 }
 }  // namespace
 
-TEST_CASE("node: 実 TCP + HTTP API 煙試験 (login/status/press/events)") {
+TEST_CASE("node: real TCP and HTTP API smoke test covers login, status, press, and events") {
   std::mt19937 rng(static_cast<uint32_t>(::getpid()) ^ 0x9e37u);
   int mesh_port = freePort(rng);
   int http_port = freePort(rng);
@@ -396,23 +1199,23 @@ TEST_CASE("node: 実 TCP + HTTP API 煙試験 (login/status/press/events)") {
   o.door = "d_front";
   o.listen_addr = "127.0.0.1:" + std::to_string(mesh_port);
   o.psk.fill(0x5a);
-  o.enable_beacon = false;  // 実 beacon 禁止 (稼働 fleet への迷入防止)
+  o.enable_beacon = false;
   o.http_port = http_port;
-  Node node(o);  // 実物 deps (RealClock + TcpTransport + UdpBeacon)
+  Node node(o);
   REQUIRE(node.start());
 
-  // 未ログインの API は 401、/admin/ は公開
+
   CHECK(simpleReq(http_port, "GET", "/api/status").rfind("HTTP/1.1 401", 0) == 0);
   CHECK(simpleReq(http_port, "GET", "/admin/").find("200") != std::string::npos);
 
-  // 初回ログイン = パスワード設定
+
   std::string login = simpleReq(http_port, "POST", "/api/login", "{\"password\":\"test123\"}");
   REQUIRE(login.rfind("HTTP/1.1 200", 0) == 0);
   auto cpos = login.find("dbsess=");
   REQUIRE(cpos != std::string::npos);
   std::string cookie = login.substr(cpos, login.find(';', cpos) - cpos);
 
-  // 誤パスワードは 401
+
   CHECK(simpleReq(http_port, "POST", "/api/login", "{\"password\":\"wrong\"}")
             .rfind("HTTP/1.1 401", 0) == 0);
 
@@ -424,7 +1227,7 @@ TEST_CASE("node: 実 TCP + HTTP API 煙試験 (login/status/press/events)") {
   std::string ev = simpleReq(http_port, "GET", "/api/events?limit=10", "", cookie);
   CHECK(ev.find("\"press\"") != std::string::npos);
 
-  // locale 資産 (公開)
+
   CHECK(simpleReq(http_port, "GET", "/locale/ja.json").find("呼び出し中") != std::string::npos);
 
   node.stop();

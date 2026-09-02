@@ -5,6 +5,7 @@
   <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
   <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
   <data name="admin_act_chime" xml:space="preserve"><value>Chime</value></data>
+  <data name="admin_act_device_alert" xml:space="preserve"><value>Device alert</value></data>
   <data name="admin_act_ha" xml:space="preserve"><value>HA event</value></data>
   <data name="admin_act_sip" xml:space="preserve"><value>SIP call</value></data>
   <data name="admin_act_telegram" xml:space="preserve"><value>Telegram</value></data>
@@ -18,16 +19,56 @@
   <data name="admin_add_reply" xml:space="preserve"><value>Add reply</value></data>
   <data name="admin_add_rule" xml:space="preserve"><value>Add rule</value></data>
   <data name="admin_add_window" xml:space="preserve"><value>Add window</value></data>
+  <data name="admin_addresses" xml:space="preserve"><value>Addresses</value></data>
+  <data name="admin_alert_accent" xml:space="preserve"><value>SOS accent</value></data>
+  <data name="admin_alert_background" xml:space="preserve"><value>SOS background</value></data>
+  <data name="admin_alert_channels" xml:space="preserve"><value>Channels</value></data>
+  <data name="admin_alert_foreground" xml:space="preserve"><value>SOS text</value></data>
+  <data name="admin_alert_sound" xml:space="preserve"><value>Sound</value></data>
+  <data name="admin_alert_sticky" xml:space="preserve"><value>Sticky</value></data>
+  <data name="admin_alert_target_devices" xml:space="preserve"><value>Device IDs</value></data>
+  <data name="admin_alert_target_roles" xml:space="preserve"><value>Roles</value></data>
+  <data name="admin_alert_target_web_groups" xml:space="preserve"><value>Web subscription groups</value></data>
+  <data name="admin_alert_ttl" xml:space="preserve"><value>TTL seconds</value></data>
+  <data name="admin_alert_visual" xml:space="preserve"><value>Visual</value></data>
+  <data name="admin_alert_volume" xml:space="preserve"><value>Volume (0–100)</value></data>
   <data name="admin_all" xml:space="preserve"><value>All</value></data>
   <data name="admin_always" xml:space="preserve"><value>Always</value></data>
+  <data name="admin_asset_choose_file" xml:space="preserve"><value>Choose file</value></data>
+  <data name="admin_asset_delete_in_use" xml:space="preserve"><value>{0} is used in {1} locations:
+{2}
+Delete it?</value></data>
+  <data name="admin_asset_failed" xml:space="preserve"><value>Failed to register the asset: {0}</value></data>
+  <data name="admin_asset_file_hint" xml:space="preserve"><value>Choose an image or audio file</value></data>
+  <data name="admin_asset_format_unsupported" xml:space="preserve"><value>Unsupported file format</value></data>
+  <data name="admin_asset_label" xml:space="preserve"><value>Label</value></data>
+  <data name="admin_asset_label_hint" xml:space="preserve"><value>Optional administrative label</value></data>
+  <data name="admin_asset_prefetch_hint" xml:space="preserve"><value>Prefetch to target devices</value></data>
+  <data name="admin_asset_registered" xml:space="preserve"><value>Asset registered: {0}</value></data>
+  <data name="admin_asset_size" xml:space="preserve"><value>Size</value></data>
+  <data name="admin_asset_too_large" xml:space="preserve"><value>The file is too large ({0})</value></data>
+  <data name="admin_asset_type" xml:space="preserve"><value>Type</value></data>
+  <data name="admin_asset_unused" xml:space="preserve"><value>Unused</value></data>
+  <data name="admin_asset_used_by" xml:space="preserve"><value>Used by</value></data>
   <data name="admin_assets" xml:space="preserve"><value>Assets</value></data>
   <data name="admin_assets_cached" xml:space="preserve"><value>Cached on {0}/{1} nodes</value></data>
+  <data name="admin_assets_empty" xml:space="preserve"><value>No assets are registered</value></data>
   <data name="admin_assets_upload" xml:space="preserve"><value>Upload</value></data>
+  <data name="admin_atomic_batch_unavailable" xml:space="preserve"><value>The atomic configuration API (/api/config/batch) is unavailable on this node</value></data>
+  <data name="admin_audio" xml:space="preserve"><value>Audio</value></data>
   <data name="admin_audio_none" xml:space="preserve"><value>No audio (TTS)</value></data>
   <data name="admin_audio_play" xml:space="preserve"><value>Play</value></data>
+  <data name="admin_audio_preview_unsupported" xml:space="preserve"><value>This browser cannot preview built-in sounds</value></data>
+  <data name="admin_audio_too_large" xml:space="preserve"><value>The audio file is too large ({0})</value></data>
   <data name="admin_bot_token" xml:space="preserve"><value>Bot token (write-only)</value></data>
   <data name="admin_building_assign" xml:space="preserve"><value>Building</value></data>
   <data name="admin_buildings" xml:space="preserve"><value>Buildings</value></data>
+  <data name="admin_button_sound" xml:space="preserve"><value>Button sound</value></data>
+  <data name="admin_call_flow" xml:space="preserve"><value>Visitor call flow</value></data>
+  <data name="admin_call_flow_mixed_warning" xml:space="preserve"><value>ring_then_purpose is not supported by every reported peer. Older or unmeasured clients remain on purpose_first behavior.</value></data>
+  <data name="admin_call_flow_purpose_first" xml:space="preserve"><value>purpose_first asks for a purpose before emitting a call; ring_then_purpose rings first and permits a later purpose revision.</value></data>
+  <data name="admin_call_flow_supported" xml:space="preserve"><value>Every currently reported peer declares call_flow_v2.</value></data>
+  <data name="admin_call_sound_loop" xml:space="preserve"><value>Loop the call sound</value></data>
   <data name="admin_cam_codec" xml:space="preserve"><value>Video codec</value></data>
   <data name="admin_cam_fps" xml:space="preserve"><value>Frame rate (fps)</value></data>
   <data name="admin_cam_h264_bitrate" xml:space="preserve"><value>H.264 bitrate (kbps)</value></data>
@@ -39,18 +80,36 @@
   <data name="admin_camera" xml:space="preserve"><value>Camera</value></data>
   <data name="admin_cancel" xml:space="preserve"><value>Cancel</value></data>
   <data name="admin_caps_override" xml:space="preserve"><value>Capability override (JSON)</value></data>
+  <data name="admin_channel_in_app" xml:space="preserve"><value>In-app</value></data>
+  <data name="admin_channel_system_notification" xml:space="preserve"><value>System notification</value></data>
+  <data name="admin_channel_web_push" xml:space="preserve"><value>Web Push</value></data>
+  <data name="admin_choose_door_station" xml:space="preserve"><value>Door station…</value></data>
+  <data name="admin_choose_indoor" xml:space="preserve"><value>Indoor panel…</value></data>
+  <data name="admin_choose_playback_pair" xml:space="preserve"><value>Choose an indoor panel and door station</value></data>
+  <data name="admin_clear_pairing" xml:space="preserve"><value>Clear pairing on this device</value></data>
   <data name="admin_clock_warn" xml:space="preserve"><value>Clock not synced</value></data>
   <data name="admin_codec_auto" xml:space="preserve"><value>Auto (H.264 if supported)</value></data>
+  <data name="admin_config_value_placeholder" xml:space="preserve"><value>{&quot;en&quot;:&quot;Front door&quot;}</value></data>
+  <data name="admin_configured" xml:space="preserve"><value>Configured</value></data>
   <data name="admin_confirm_delete" xml:space="preserve"><value>Delete {0}?</value></data>
+  <data name="admin_copied" xml:space="preserve"><value>Copied</value></data>
+  <data name="admin_copy" xml:space="preserve"><value>Copy</value></data>
+  <data name="admin_copy_failed" xml:space="preserve"><value>Copy failed</value></data>
   <data name="admin_dashboard" xml:space="preserve"><value>Dashboard</value></data>
   <data name="admin_delete" xml:space="preserve"><value>Delete</value></data>
+  <data name="admin_delete_pair_override" xml:space="preserve"><value>Delete and inherit global</value></data>
+  <data name="admin_details" xml:space="preserve"><value>Details</value></data>
   <data name="admin_dev_name" xml:space="preserve"><value>Name</value></data>
   <data name="admin_dev_role" xml:space="preserve"><value>Role</value></data>
   <data name="admin_devices" xml:space="preserve"><value>Devices</value></data>
   <data name="admin_disabled" xml:space="preserve"><value>Disabled</value></data>
   <data name="admin_door_assign" xml:space="preserve"><value>Assigned door</value></data>
+  <data name="admin_door_call_sound" xml:space="preserve"><value>Door-station call sound</value></data>
   <data name="admin_door_list" xml:space="preserve"><value>Doors</value></data>
+  <data name="admin_door_or_device" xml:space="preserve"><value>Door / device</value></data>
   <data name="admin_doors" xml:space="preserve"><value>Doors &amp; Buildings</value></data>
+  <data name="admin_drop_here" xml:space="preserve"><value>Drop a file here or click to choose</value></data>
+  <data name="admin_duty" xml:space="preserve"><value>Duty</value></data>
   <data name="admin_edit" xml:space="preserve"><value>Edit</value></data>
   <data name="admin_enabled" xml:space="preserve"><value>Enabled</value></data>
   <data name="admin_err_no_chat" xml:space="preserve"><value>No chat IDs configured</value></data>
@@ -58,30 +117,60 @@
   <data name="admin_err_not_leader" xml:space="preserve"><value>This node is not the telegram leader</value></data>
   <data name="admin_events" xml:space="preserve"><value>Event history</value></data>
   <data name="admin_export" xml:space="preserve"><value>Export</value></data>
+  <data name="admin_file_read_failed" xml:space="preserve"><value>Failed to read the file</value></data>
   <data name="admin_filter_type" xml:space="preserve"><value>Filter by type</value></data>
+  <data name="admin_first_frame_timeout" xml:space="preserve"><value>First-frame timeout</value></data>
+  <data name="admin_fleet" xml:space="preserve"><value>Manage devices</value></data>
+  <data name="admin_global" xml:space="preserve"><value>Global</value></data>
+  <data name="admin_helper_auto" xml:space="preserve"><value>Auto</value></data>
+  <data name="admin_helper_mode" xml:space="preserve"><value>Recovery helper</value></data>
+  <data name="admin_helper_off" xml:space="preserve"><value>Off</value></data>
+  <data name="admin_helper_on" xml:space="preserve"><value>Always on</value></data>
   <data name="admin_host" xml:space="preserve"><value>Host</value></data>
   <data name="admin_households" xml:space="preserve"><value>Recipients</value></data>
+  <data name="admin_image_read_failed" xml:space="preserve"><value>Failed to read the image</value></data>
+  <data name="admin_image_resize_error" xml:space="preserve"><value>Failed to resize the image: {0}</value></data>
+  <data name="admin_image_resize_failed" xml:space="preserve"><value>Failed to resize the image</value></data>
+  <data name="admin_image_resize_too_large" xml:space="preserve"><value>The resized image is still too large</value></data>
+  <data name="admin_image_resize_unavailable" xml:space="preserve"><value>This browser cannot resize images</value></data>
+  <data name="admin_image_resized" xml:space="preserve"><value>Image resized from {0} to {1}</value></data>
+  <data name="admin_image_resizing" xml:space="preserve"><value>Resizing image ({0})…</value></data>
   <data name="admin_import" xml:space="preserve"><value>Import</value></data>
   <data name="admin_import_hint" xml:space="preserve"><value>Paste exported JSON (flattened and written key by key)</value></data>
   <data name="admin_imported" xml:space="preserve"><value>Imported {0} entries</value></data>
+  <data name="admin_indoor_ringtone" xml:space="preserve"><value>Indoor ringtone</value></data>
   <data name="admin_integrations" xml:space="preserve"><value>Integrations</value></data>
+  <data name="admin_join" xml:space="preserve"><value>Join existing cluster</value></data>
   <data name="admin_join_hint" xml:space="preserve"><value>Enter this PIN and the address on the new device (valid 10 min)</value></data>
   <data name="admin_join_pin" xml:space="preserve"><value>Add via PIN</value></data>
+  <data name="admin_key" xml:space="preserve"><value>Key</value></data>
   <data name="admin_label_en" xml:space="preserve"><value>Label (English)</value></data>
   <data name="admin_label_ja" xml:space="preserve"><value>Label (Japanese)</value></data>
   <data name="admin_label_zh" xml:space="preserve"><value>Label (Chinese)</value></data>
+  <data name="admin_language" xml:space="preserve"><value>Language</value></data>
   <data name="admin_languages" xml:space="preserve"><value>Visitor languages</value></data>
+  <data name="admin_launch_sound" xml:space="preserve"><value>Launch sound</value></data>
   <data name="admin_leader" xml:space="preserve"><value>Leader</value></data>
+  <data name="admin_list_or_all" xml:space="preserve"><value>Comma-separated values or all</value></data>
+  <data name="admin_load_or_add" xml:space="preserve"><value>Load / add</value></data>
+  <data name="admin_local_addrs" xml:space="preserve"><value>Local addresses</value></data>
   <data name="admin_locked" xml:space="preserve"><value>Locked for 10 minutes</value></data>
   <data name="admin_login" xml:space="preserve"><value>Log in</value></data>
   <data name="admin_logs" xml:space="preserve"><value>Logs</value></data>
+  <data name="admin_mock_audio_play" xml:space="preserve"><value>mock: playing {0}</value></data>
   <data name="admin_motion" xml:space="preserve"><value>Motion detection</value></data>
   <data name="admin_motion_interval" xml:space="preserve"><value>Min interval (s)</value></data>
   <data name="admin_motion_sensitivity" xml:space="preserve"><value>Sensitivity</value></data>
+  <data name="admin_native_ui" xml:space="preserve"><value>Native UI</value></data>
+  <data name="admin_native_ui_apply_report" xml:space="preserve"><value>Native client apply report</value></data>
   <data name="admin_never_suppress" xml:space="preserve"><value>Never suppress</value></data>
+  <data name="admin_no_changes" xml:space="preserve"><value>No changes</value></data>
+  <data name="admin_not_ready" xml:space="preserve"><value>Not ready</value></data>
   <data name="admin_notify" xml:space="preserve"><value>Notifications</value></data>
   <data name="admin_offline" xml:space="preserve"><value>Offline</value></data>
   <data name="admin_online" xml:space="preserve"><value>Online</value></data>
+  <data name="admin_order" xml:space="preserve"><value>Order</value></data>
+  <data name="admin_page_title" xml:space="preserve"><value>Doorbell Admin</value></data>
   <data name="admin_pair_approve" xml:space="preserve"><value>Approve</value></data>
   <data name="admin_pair_approving" xml:space="preserve"><value>Adding…</value></data>
   <data name="admin_pair_found" xml:space="preserve"><value>Make this the primary (create new)</value></data>
@@ -93,61 +182,167 @@
   <data name="admin_pair_mode_left" xml:space="preserve"><value>Auto-add ON — {0}:{1} left</value></data>
   <data name="admin_pair_mode_on" xml:space="preserve"><value>Pairing mode started (10 min)</value></data>
   <data name="admin_pair_none" xml:space="preserve"><value>No devices waiting</value></data>
+  <data name="admin_pair_override_active" xml:space="preserve"><value>This pair currently uses an override.</value></data>
+  <data name="admin_pair_override_inherited" xml:space="preserve"><value>No override exists; the editor inherits the global profile.</value></data>
+  <data name="admin_pair_secure_failed" xml:space="preserve"><value>The pairing key could not be stored securely. Check storage and permissions.</value></data>
   <data name="admin_pair_self_unpaired" xml:space="preserve"><value>This device hasn't joined a cluster yet. If it's your first device, create a new one here.</value></data>
   <data name="admin_panel_token" xml:space="preserve"><value>Panel token</value></data>
   <data name="admin_pass" xml:space="preserve"><value>Password</value></data>
   <data name="admin_password" xml:space="preserve"><value>Admin password</value></data>
   <data name="admin_pin_prompt" xml:space="preserve"><value>Enter PIN</value></data>
   <data name="admin_pin_wrong" xml:space="preserve"><value>Wrong PIN</value></data>
+  <data name="admin_playback_fallback_hint" xml:space="preserve"><value>Web skips HLS immediately. A later MJPEG strategy is prewarmed from time zero. Maximum extra wait before MJPEG:</value></data>
+  <data name="admin_playback_one_required" xml:space="preserve"><value>Enable at least one playback strategy</value></data>
+  <data name="admin_playback_pair_override" xml:space="preserve"><value>Indoor panel × door station override</value></data>
+  <data name="admin_playback_strategy" xml:space="preserve"><value>Strategy</value></data>
+  <data name="admin_playback_timeout_range" xml:space="preserve"><value>First-frame timeout must be 100–60000ms and stall timeout 1000–60000ms</value></data>
   <data name="admin_poll_updates" xml:space="preserve"><value>Receive replies (getUpdates)</value></data>
   <data name="admin_port" xml:space="preserve"><value>Port</value></data>
+  <data name="admin_provision_this_node" xml:space="preserve"><value>Provision on this node</value></data>
+  <data name="admin_purpose_hint" xml:space="preserve"><value>Edit the purposes visitors can choose</value></data>
+  <data name="admin_purpose_icon" xml:space="preserve"><value>Icon</value></data>
   <data name="admin_purposes" xml:space="preserve"><value>Purposes</value></data>
   <data name="admin_qr_speak" xml:space="preserve"><value>Speak aloud</value></data>
   <data name="admin_quick_replies" xml:space="preserve"><value>Quick replies</value></data>
   <data name="admin_quiet_hours" xml:space="preserve"><value>Quiet hours</value></data>
   <data name="admin_raw_config" xml:space="preserve"><value>Config (raw JSON, read-only)</value></data>
+  <data name="admin_ready" xml:space="preserve"><value>Ready</value></data>
+  <data name="admin_remove_device" xml:space="preserve"><value>Remove device</value></data>
+  <data name="admin_removed" xml:space="preserve"><value>This device was removed from the cluster</value></data>
   <data name="admin_role_door" xml:space="preserve"><value>Door station</value></data>
   <data name="admin_role_indoor" xml:space="preserve"><value>Indoor panel</value></data>
   <data name="admin_rotate" xml:space="preserve"><value>Rotate</value></data>
   <data name="admin_rotate_confirm" xml:space="preserve"><value>The old token becomes invalid immediately. Continue?</value></data>
+  <data name="admin_rotation_auto" xml:space="preserve"><value>Auto (device orientation sensor)</value></data>
   <data name="admin_rule_devices" xml:space="preserve"><value>Target devices</value></data>
   <data name="admin_rule_doors" xml:space="preserve"><value>Target doors</value></data>
   <data name="admin_rule_when" xml:space="preserve"><value>Trigger</value></data>
   <data name="admin_rules" xml:space="preserve"><value>Call rules</value></data>
+  <data name="admin_runtime_alert" xml:space="preserve"><value>SOS delivery</value></data>
+  <data name="admin_runtime_codec" xml:space="preserve"><value>Media</value></data>
+  <data name="admin_runtime_health" xml:space="preserve"><value>Runtime health</value></data>
+  <data name="admin_runtime_heartbeat" xml:space="preserve"><value>Heartbeat</value></data>
+  <data name="admin_runtime_helper" xml:space="preserve"><value>Helper</value></data>
+  <data name="admin_runtime_last_exit" xml:space="preserve"><value>Last exit</value></data>
+  <data name="admin_runtime_safe_mode" xml:space="preserve"><value>Safe mode</value></data>
+  <data name="admin_runtime_unreported" xml:space="preserve"><value>Not reported</value></data>
   <data name="admin_save" xml:space="preserve"><value>Save</value></data>
   <data name="admin_save_failed" xml:space="preserve"><value>Save failed</value></data>
+  <data name="admin_save_pair_override" xml:space="preserve"><value>Save pair override</value></data>
   <data name="admin_saved" xml:space="preserve"><value>Saved</value></data>
   <data name="admin_schedule" xml:space="preserve"><value>Schedule</value></data>
+  <data name="admin_secret_cleanup_deferred" xml:space="preserve"><value>Cleanup of {0} previous secret(s) was deferred because they are still referenced or could not be removed</value></data>
+  <data name="admin_secret_configured" xml:space="preserve"><value>Configured (leave blank to keep)</value></data>
+  <data name="admin_secret_on_target_only" xml:space="preserve"><value>Configure on the target node</value></data>
+  <data name="admin_secret_unchanged" xml:space="preserve"><value>Leave blank to keep</value></data>
   <data name="admin_sip_accounts" xml:space="preserve"><value>SIP accounts (per device)</value></data>
   <data name="admin_sip_extensions" xml:space="preserve"><value>SIP extensions (comma separated)</value></data>
+  <data name="admin_sos_active" xml:space="preserve"><value>Emergency SOS active</value></data>
+  <data name="admin_sos_capable_recipients" xml:space="preserve"><value>capable or legacy-unknown</value></data>
+  <data name="admin_sos_clear_audit" xml:space="preserve"><value>The clear action is recorded under the Admin session and synchronized to every node.</value></data>
+  <data name="admin_sos_clear_confirm" xml:space="preserve"><value>Clear the emergency SOS?</value></data>
+  <data name="admin_sos_clear_failed" xml:space="preserve"><value>Failed to clear emergency SOS</value></data>
+  <data name="admin_sos_cleared" xml:space="preserve"><value>Emergency SOS cleared</value></data>
+  <data name="admin_sos_dry_run" xml:space="preserve"><value>SOS dry-run preview</value></data>
+  <data name="admin_sos_dry_run_ok" xml:space="preserve"><value>No delivery warning detected by the current status snapshot.</value></data>
+  <data name="admin_sos_local_recipients" xml:space="preserve"><value>Local recipients</value></data>
+  <data name="admin_sos_targets" xml:space="preserve"><value>Targets</value></data>
+  <data name="admin_sos_warn_no_device_alert" xml:space="preserve"><value>SOS state will replicate, but this rule has no device alert action.</value></data>
+  <data name="admin_sos_warn_no_push_subscriptions" xml:space="preserve"><value>Web Push is selected, but there are no matching subscriptions.</value></data>
+  <data name="admin_sos_warn_offline" xml:space="preserve"><value>Offline or undiscovered target devices</value></data>
+  <data name="admin_sos_warn_push_backend" xml:space="preserve"><value>Web Push delivery is unavailable because no measured sender backend is ready.</value></data>
+  <data name="admin_sos_warn_silent" xml:space="preserve"><value>All configured alert channels are empty or silent.</value></data>
+  <data name="admin_sos_warn_unavailable_channels" xml:space="preserve"><value>Requested channels are unavailable or lack permission</value></data>
+  <data name="admin_sos_warn_unknown_channels" xml:space="preserve"><value>Channel support is unknown for rolling-upgrade devices</value></data>
+  <data name="admin_sos_warn_unsupported_channels" xml:space="preserve"><value>Target devices do not support requested channels</value></data>
+  <data name="admin_sos_warn_zero_recipients" xml:space="preserve"><value>Dry run resolves to zero recipients.</value></data>
+  <data name="admin_sos_warning_nonblocking" xml:space="preserve"><value>Warnings do not block saving; delivery results are recorded per device.</value></data>
   <data name="admin_sound" xml:space="preserve"><value>Sound</value></data>
+  <data name="admin_sound_manager" xml:space="preserve"><value>Sound manager</value></data>
+  <data name="admin_sound_manager_hint" xml:space="preserve"><value>Choose the audio assets used by each screen</value></data>
+  <data name="admin_stall_timeout" xml:space="preserve"><value>Stall timeout</value></data>
+  <data name="admin_status" xml:space="preserve"><value>Status</value></data>
   <data name="admin_suppress" xml:space="preserve"><value>Suppress</value></data>
   <data name="admin_sync_state" xml:space="preserve"><value>Synced to {0}/{1} nodes</value></data>
   <data name="admin_system" xml:space="preserve"><value>System</value></data>
   <data name="admin_target_ext" xml:space="preserve"><value>Extension</value></data>
+  <data name="admin_telegram_test_chat" xml:space="preserve"><value>chat_id (blank = all recipients)</value></data>
   <data name="admin_test_send" xml:space="preserve"><value>Send test</value></data>
   <data name="admin_test_sent" xml:space="preserve"><value>Test message queued</value></data>
   <data name="admin_texts" xml:space="preserve"><value>Texts</value></data>
+  <data name="admin_texts_count" xml:space="preserve"><value>{0} text entries</value></data>
   <data name="admin_texts_hint" xml:space="preserve"><value>Leave blank to use the default</value></data>
+  <data name="admin_texts_placeholder_hint" xml:space="preserve"><value>Placeholders must match across translations</value></data>
+  <data name="admin_texts_placeholder_mismatch" xml:space="preserve"><value>Placeholders do not match</value></data>
+  <data name="admin_texts_show_all" xml:space="preserve"><value>Show all texts</value></data>
   <data name="admin_tg_chat_ids" xml:space="preserve"><value>Telegram chat IDs (comma separated)</value></data>
   <data name="admin_theme" xml:space="preserve"><value>Theme</value></data>
   <data name="admin_theme_bg_color" xml:space="preserve"><value>Background color</value></data>
   <data name="admin_theme_bg_image" xml:space="preserve"><value>Background image</value></data>
+  <data name="admin_theme_device_hint" xml:space="preserve"><value>Theme override for this device only</value></data>
+  <data name="admin_theme_global_default" xml:space="preserve"><value>Global default</value></data>
+  <data name="admin_theme_global_hint" xml:space="preserve"><value>Default theme applied to all devices</value></data>
+  <data name="admin_theme_image_hint" xml:space="preserve"><value>Choose a registered image asset</value></data>
+  <data name="admin_theme_no_image" xml:space="preserve"><value>No background image</value></data>
+  <data name="admin_theme_override_here" xml:space="preserve"><value>Override on this device</value></data>
+  <data name="admin_theme_override_name" xml:space="preserve"><value>Device override: {0}</value></data>
   <data name="admin_theme_preview" xml:space="preserve"><value>Preview</value></data>
+  <data name="admin_theme_reset_override" xml:space="preserve"><value>Reset device override</value></data>
+  <data name="admin_theme_sync_hint" xml:space="preserve"><value>Changes are synchronized to target devices</value></data>
   <data name="admin_title" xml:space="preserve"><value>Admin</value></data>
   <data name="admin_transport" xml:space="preserve"><value>Transport</value></data>
   <data name="admin_tz_offset" xml:space="preserve"><value>TZ offset (minutes from UTC)</value></data>
   <data name="admin_ui_lang" xml:space="preserve"><value>UI language</value></data>
+  <data name="admin_ui_legacy_hint" xml:space="preserve"><value>Legacy .style is used only as an initial-value hint.</value></data>
+  <data name="admin_ui_manifest_readonly" xml:space="preserve"><value>The manifest is a read-only client capability; only elements.&lt;semantic_id&gt; values are saved.</value></data>
+  <data name="admin_ui_manifest_unreported" xml:space="preserve"><value>ui_manifest is unavailable because this node has not reported the runtime capability.</value></data>
+  <data name="admin_ui_offline_queued" xml:space="preserve"><value>The device is offline; validated changes are queued until it reconnects.</value></data>
+  <data name="admin_ui_style" xml:space="preserve"><value>UI style</value></data>
+  <data name="admin_unchecked_all" xml:space="preserve"><value>No selection means all</value></data>
+  <data name="admin_unknown_action" xml:space="preserve"><value>Unknown action</value></data>
+  <data name="admin_unknown_trigger" xml:space="preserve"><value>Unknown trigger</value></data>
+  <data name="admin_update_sound" xml:space="preserve"><value>Update sound</value></data>
+  <data name="admin_uploading" xml:space="preserve"><value>Uploading…</value></data>
   <data name="admin_user" xml:space="preserve"><value>User</value></data>
+  <data name="admin_valid_json_required" xml:space="preserve"><value>Enter a valid JSON value</value></data>
+  <data name="admin_video_hls" xml:space="preserve"><value>HLS (compatible)</value></data>
+  <data name="admin_video_low_latency" xml:space="preserve"><value>Low-latency H.264 (recommended)</value></data>
+  <data name="admin_video_playback" xml:space="preserve"><value>Indoor video playback</value></data>
+  <data name="admin_video_playback_policy" xml:space="preserve"><value>Video playback policy</value></data>
+  <data name="admin_video_rotation" xml:space="preserve"><value>Video rotation</value></data>
+  <data name="admin_visitor_language_primary_hint" xml:space="preserve"><value>The first language is the default</value></data>
+  <data name="admin_visitor_language_revert" xml:space="preserve"><value>Return to the default language after a call</value></data>
+  <data name="admin_visitor_languages" xml:space="preserve"><value>Available visitor languages</value></data>
+  <data name="admin_web_push_backend" xml:space="preserve"><value>Web Push sender backend</value></data>
+  <data name="admin_web_push_bearer_required" xml:space="preserve"><value>Enter the bearer token when sender authentication is enabled</value></data>
+  <data name="admin_web_push_delivery_backend" xml:space="preserve"><value>Delivery backend</value></data>
+  <data name="admin_web_push_local_secret" xml:space="preserve"><value>Local secret</value></data>
+  <data name="admin_web_push_private_key" xml:space="preserve"><value>VAPID private key</value></data>
+  <data name="admin_web_push_private_required" xml:space="preserve"><value>Enter the VAPID private key</value></data>
+  <data name="admin_web_push_public_key" xml:space="preserve"><value>VAPID public key</value></data>
+  <data name="admin_web_push_sender_bearer" xml:space="preserve"><value>Sender bearer token</value></data>
+  <data name="admin_web_push_sender_url" xml:space="preserve"><value>HTTPS sender URL</value></data>
+  <data name="admin_web_push_status" xml:space="preserve"><value>Configuration status</value></data>
+  <data name="admin_web_push_subject" xml:space="preserve"><value>VAPID subject</value></data>
+  <data name="admin_web_push_use_sender_bearer" xml:space="preserve"><value>Use a sender bearer token</value></data>
+  <data name="admin_web_sos_enabled" xml:space="preserve"><value>Show replicated SOS on open Web panels</value></data>
+  <data name="admin_web_sos_title" xml:space="preserve"><value>Web SOS alerts</value></data>
+  <data name="admin_web_sos_warning" xml:space="preserve"><value>When disabled, an open Web panel shows SOS only when a matching device_alert or Web Push is delivered.</value></data>
+  <data name="admin_web_ui" xml:space="preserve"><value>Web UI</value></data>
+  <data name="admin_web_ui_apply_report" xml:space="preserve"><value>Web panel apply report</value></data>
   <data name="admin_when_button" xml:space="preserve"><value>Button press</value></data>
+  <data name="admin_when_emergency_off" xml:space="preserve"><value>SOS cleared</value></data>
+  <data name="admin_when_emergency_on" xml:space="preserve"><value>SOS activated</value></data>
   <data name="admin_when_motion" xml:space="preserve"><value>Motion</value></data>
   <data name="admin_when_offline" xml:space="preserve"><value>Device offline</value></data>
   <data name="admin_windows" xml:space="preserve"><value>Time windows</value></data>
   <data name="admin_with_snapshot" xml:space="preserve"><value>With snapshot</value></data>
+  <data name="admin_write" xml:space="preserve"><value>Write</value></data>
   <data name="app_name" xml:space="preserve"><value>Doorbell</value></data>
   <data name="calling_cancel" xml:space="preserve"><value>Cancel</value></data>
   <data name="calling_no_answer" xml:space="preserve"><value>No answer</value></data>
   <data name="calling_title" xml:space="preserve"><value>Calling…</value></data>
+  <data name="date_full" xml:space="preserve"><value>{0}-{1}-{2} ({3})</value></data>
   <data name="day_fri" xml:space="preserve"><value>Fri</value></data>
   <data name="day_mon" xml:space="preserve"><value>Mon</value></data>
   <data name="day_sat" xml:space="preserve"><value>Sat</value></data>
@@ -156,8 +351,10 @@
   <data name="day_tue" xml:space="preserve"><value>Tue</value></data>
   <data name="day_wed" xml:space="preserve"><value>Wed</value></data>
   <data name="degraded_notified" xml:space="preserve"><value>Notified — please wait</value></data>
+  <data name="emergency_active_detail" xml:space="preserve"><value>Emergency mode is active</value></data>
   <data name="emergency_button" xml:space="preserve"><value>SOS</value></data>
   <data name="emergency_cancel" xml:space="preserve"><value>Cancel alarm</value></data>
+  <data name="emergency_clear_instruction" xml:space="preserve"><value>Clear the alarm from Admin or with the device PIN.</value></data>
   <data name="emergency_hold_hint" xml:space="preserve"><value>Hold {0}s to trigger</value></data>
   <data name="emergency_notified" xml:space="preserve"><value>Family has been notified</value></data>
   <data name="emergency_notify_off" xml:space="preserve"><value>✅ Emergency cleared</value></data>
@@ -173,23 +370,163 @@
   <data name="idle_touch_to_call" xml:space="preserve"><value>Touch to call</value></data>
   <data name="incall_end" xml:space="preserve"><value>End</value></data>
   <data name="incall_title" xml:space="preserve"><value>In call</value></data>
+  <data name="info_absent" xml:space="preserve"><value>Absent</value></data>
+  <data name="info_active_calls" xml:space="preserve"><value>Active calls</value></data>
+  <data name="info_address_cycle" xml:space="preserve"><value>Change address ({0}/{1}) ▸</value></data>
+  <data name="info_addresses" xml:space="preserve"><value>All local addresses</value></data>
+  <data name="info_addresses_loading" xml:space="preserve"><value>Loading… The network may be disconnected</value></data>
+  <data name="info_battery" xml:space="preserve"><value>Battery</value></data>
+  <data name="info_camera" xml:space="preserve"><value>Camera</value></data>
+  <data name="info_camera_absent_ipad1" xml:space="preserve"><value>Absent (iPad 1 has no camera)</value></data>
+  <data name="info_capabilities" xml:space="preserve"><value>Capabilities</value></data>
+  <data name="info_components" xml:space="preserve"><value>Components</value></data>
+  <data name="info_device" xml:space="preserve"><value>Device</value></data>
+  <data name="info_external_present" xml:space="preserve"><value>Present (external)</value></data>
+  <data name="info_last_press" xml:space="preserve"><value>Latest button press</value></data>
+  <data name="info_machine" xml:space="preserve"><value>Machine</value></data>
+  <data name="info_memory" xml:space="preserve"><value>Memory</value></data>
+  <data name="info_microphone" xml:space="preserve"><value>Microphone</value></data>
+  <data name="info_model" xml:space="preserve"><value>Model</value></data>
+  <data name="info_network" xml:space="preserve"><value>Network</value></data>
+  <data name="info_no_address" xml:space="preserve"><value>No address</value></data>
+  <data name="info_no_data" xml:space="preserve"><value>No data</value></data>
+  <data name="info_no_press" xml:space="preserve"><value>None yet</value></data>
+  <data name="info_node" xml:space="preserve"><value>Node</value></data>
+  <data name="info_peers" xml:space="preserve"><value>Peers</value></data>
+  <data name="info_port_closed" xml:space="preserve"><value>Closed</value></data>
+  <data name="info_ports" xml:space="preserve"><value>Listening ports</value></data>
+  <data name="info_refresh" xml:space="preserve"><value>Refresh</value></data>
+  <data name="info_role" xml:space="preserve"><value>Role</value></data>
+  <data name="info_runtime" xml:space="preserve"><value>Runtime</value></data>
+  <data name="info_scan_admin" xml:space="preserve"><value>Scan to open the Admin page:</value></data>
+  <data name="info_sip_direct" xml:space="preserve"><value>UDP (direct call)</value></data>
+  <data name="info_system" xml:space="preserve"><value>System</value></data>
+  <data name="info_title" xml:space="preserve"><value>Device information / Debug</value></data>
+  <data name="info_total_press" xml:space="preserve"><value>Total button presses</value></data>
+  <data name="info_triggers" xml:space="preserve"><value>Calls</value></data>
+  <data name="info_unknown" xml:space="preserve"><value>Unknown</value></data>
+  <data name="info_uptime" xml:space="preserve"><value>Uptime</value></data>
+  <data name="info_version" xml:space="preserve"><value>Version</value></data>
+  <data name="language_name_en" xml:space="preserve"><value>English</value></data>
+  <data name="language_name_es" xml:space="preserve"><value>Español</value></data>
+  <data name="language_name_ja" xml:space="preserve"><value>日本語</value></data>
+  <data name="language_name_ko" xml:space="preserve"><value>한국어</value></data>
+  <data name="language_name_pt" xml:space="preserve"><value>Português</value></data>
+  <data name="language_name_vi" xml:space="preserve"><value>Tiếng Việt</value></data>
+  <data name="language_name_zh" xml:space="preserve"><value>中文</value></data>
+  <data name="monitor_admin_qr" xml:space="preserve"><value>Admin page QR</value></data>
+  <data name="monitor_admin_qr_none" xml:space="preserve"><value>No admin address</value></data>
+  <data name="monitor_admin_qr_select" xml:space="preserve"><value>Choose an IP address for the admin page</value></data>
+  <data name="monitor_choose" xml:space="preserve"><value>Choose a door station</value></data>
+  <data name="monitor_close" xml:space="preserve"><value>Close</value></data>
+  <data name="monitor_live" xml:space="preserve"><value>Live video</value></data>
+  <data name="monitor_open" xml:space="preserve"><value>View door stations</value></data>
+  <data name="monitor_title" xml:space="preserve"><value>{0} live</value></data>
   <data name="notify_test" xml:space="preserve"><value>Doorbell test notification</value></data>
   <data name="offline_body" xml:space="preserve"><value>Calling unavailable. Please knock.</value></data>
   <data name="offline_reconnect" xml:space="preserve"><value>Reconnecting in {0}s</value></data>
   <data name="offline_title" xml:space="preserve"><value>System offline</value></data>
+  <data name="panel_answering" xml:space="preserve"><value>Answering…</value></data>
+  <data name="panel_auth_failed" xml:space="preserve"><value>Panel authentication failed</value></data>
+  <data name="panel_back" xml:space="preserve"><value>Back</value></data>
+  <data name="panel_call" xml:space="preserve"><value>Call</value></data>
+  <data name="panel_call_cancelled" xml:space="preserve"><value>The call was cancelled</value></data>
+  <data name="panel_call_end_accepted" xml:space="preserve"><value>Call end accepted — waiting for state synchronization</value></data>
+  <data name="panel_call_end_failed" xml:space="preserve"><value>Failed to end the call{0}</value></data>
+  <data name="panel_call_end_unavailable" xml:space="preserve"><value>The call-end API is unavailable on this node</value></data>
+  <data name="panel_call_ended" xml:space="preserve"><value>The call has ended</value></data>
+  <data name="panel_call_ending" xml:space="preserve"><value>Ending call…</value></data>
+  <data name="panel_call_expired" xml:space="preserve"><value>The call expired</value></data>
+  <data name="panel_call_failed" xml:space="preserve"><value>Call failed ({0})</value></data>
+  <data name="panel_call_finished" xml:space="preserve"><value>The call has finished</value></data>
+  <data name="panel_call_title" xml:space="preserve"><value>Call panel</value></data>
   <data name="panel_calling" xml:space="preserve"><value>Calling → notified</value></data>
+  <data name="panel_camera_failed" xml:space="preserve"><value>Camera access failed ({0}) — HTTPS or localhost is required (webrtc.md §1)</value></data>
+  <data name="panel_cancel_accepted" xml:space="preserve"><value>Cancellation accepted — waiting for state synchronization</value></data>
+  <data name="panel_cancel_failed" xml:space="preserve"><value>Cancellation failed{0}</value></data>
+  <data name="panel_cancel_missing_id" xml:space="preserve"><value>Safe cancellation is unavailable because call_id is missing</value></data>
+  <data name="panel_cancel_sending" xml:space="preserve"><value>Sending cancellation…</value></data>
+  <data name="panel_cancel_unavailable" xml:space="preserve"><value>The safe cancellation API is unavailable on this node</value></data>
+  <data name="panel_deadline_reached" xml:space="preserve"><value>The call deadline was reached — checking the terminal state</value></data>
+  <data name="panel_dialog_identity_missing" xml:space="preserve"><value>A secure browser dialog identity is unavailable; the call was not started</value></data>
+  <data name="panel_event_auto_reply" xml:space="preserve"><value>Automatic reply</value></data>
+  <data name="panel_event_call_answered" xml:space="preserve"><value>Call answered</value></data>
+  <data name="panel_event_call_cancelled" xml:space="preserve"><value>Call cancelled</value></data>
+  <data name="panel_event_call_ended" xml:space="preserve"><value>Call ended</value></data>
+  <data name="panel_event_chime" xml:space="preserve"><value>Chime</value></data>
+  <data name="panel_event_delivery_result" xml:space="preserve"><value>Delivery result</value></data>
+  <data name="panel_event_device_alert" xml:space="preserve"><value>Device alert</value></data>
+  <data name="panel_event_door" xml:space="preserve"><value>Door</value></data>
+  <data name="panel_event_dtmf_action" xml:space="preserve"><value>DTMF action</value></data>
+  <data name="panel_event_emergency" xml:space="preserve"><value>Emergency</value></data>
+  <data name="panel_event_emergency_cancel" xml:space="preserve"><value>Emergency cleared</value></data>
+  <data name="panel_event_ha_command" xml:space="preserve"><value>HA command</value></data>
+  <data name="panel_event_ha_event" xml:space="preserve"><value>HA event</value></data>
+  <data name="panel_event_hangup" xml:space="preserve"><value>Hangup</value></data>
+  <data name="panel_event_motion" xml:space="preserve"><value>Motion</value></data>
+  <data name="panel_event_press" xml:space="preserve"><value>Call</value></data>
+  <data name="panel_event_purpose_selected" xml:space="preserve"><value>Purpose selected</value></data>
+  <data name="panel_event_quick_reply" xml:space="preserve"><value>Quick reply</value></data>
+  <data name="panel_event_reply" xml:space="preserve"><value>Reply</value></data>
+  <data name="panel_event_sip_call" xml:space="preserve"><value>SIP call</value></data>
+  <data name="panel_event_telegram" xml:space="preserve"><value>Telegram notification</value></data>
+  <data name="panel_event_time" xml:space="preserve"><value>Time</value></data>
+  <data name="panel_event_type" xml:space="preserve"><value>Type</value></data>
+  <data name="panel_event_visitor_lang" xml:space="preserve"><value>Language changed</value></data>
+  <data name="panel_extension" xml:space="preserve"><value>Extension {0}</value></data>
+  <data name="panel_extension_unconfigured" xml:space="preserve"><value>This door has no extension configured in sip.accounts</value></data>
+  <data name="panel_jssip_init_failed" xml:space="preserve"><value>JsSIP initialization failed: {0}</value></data>
+  <data name="panel_lifecycle_connected_sync_failed" xml:space="preserve"><value>The call connected, but lifecycle synchronization failed; ending it safely</value></data>
+  <data name="panel_lifecycle_end_sync_failed" xml:space="preserve"><value>The SIP call ended, but lifecycle synchronization failed</value></data>
+  <data name="panel_lifecycle_heartbeat_failed" xml:space="preserve"><value>The call lifecycle heartbeat failed; ending it safely</value></data>
+  <data name="panel_lifecycle_identity_missing" xml:space="preserve"><value>This call cannot be answered safely because its lifecycle identity is unavailable</value></data>
+  <data name="panel_mock_incall" xml:space="preserve"><value>In call (mock)</value></data>
+  <data name="panel_mock_registered" xml:space="preserve"><value>Extension {0} registered (mock)</value></data>
   <data name="panel_monitor_title" xml:space="preserve"><value>Ring monitor</value></data>
+  <data name="panel_new_call_detected" xml:space="preserve"><value>A new call was detected — refreshing state</value></data>
   <data name="panel_no_audio_note" xml:space="preserve"><value>No voice at this door (notify only)</value></data>
+  <data name="panel_no_extension" xml:space="preserve"><value>No extension</value></data>
+  <data name="panel_no_video" xml:space="preserve"><value>No video</value></data>
+  <data name="panel_not_sent" xml:space="preserve"><value>Not sent yet</value></data>
   <data name="panel_offline" xml:space="preserve"><value>Offline — reconnecting…</value></data>
+  <data name="panel_other_answered" xml:space="preserve"><value>Another device answered this call first</value></data>
+  <data name="panel_press_failed" xml:space="preserve"><value>Call request failed{0}</value></data>
   <data name="panel_press_hint" xml:space="preserve"><value>Press a button to notify the resident</value></data>
+  <data name="panel_purpose_call_missing" xml:space="preserve"><value>The purpose cannot be linked safely because call_id is unavailable</value></data>
+  <data name="panel_purpose_delivered" xml:space="preserve"><value>The purpose was sent to the resident</value></data>
+  <data name="panel_purpose_failed" xml:space="preserve"><value>Failed to send the purpose{0}</value></data>
+  <data name="panel_purpose_sending" xml:space="preserve"><value>Sending purpose…</value></data>
+  <data name="panel_push_disable" xml:space="preserve"><value>Disable notifications</value></data>
+  <data name="panel_push_disabled" xml:space="preserve"><value>Notifications are disabled</value></data>
+  <data name="panel_push_disabling" xml:space="preserve"><value>Disabling notifications…</value></data>
+  <data name="panel_push_enable" xml:space="preserve"><value>Enable notifications</value></data>
+  <data name="panel_push_enabled" xml:space="preserve"><value>Notifications are enabled</value></data>
+  <data name="panel_push_enabling" xml:space="preserve"><value>Enabling notifications…</value></data>
+  <data name="panel_push_failed" xml:space="preserve"><value>Notification setup failed</value></data>
+  <data name="panel_push_unavailable" xml:space="preserve"><value>Web Push is unavailable in this browser or on this node</value></data>
+  <data name="panel_recovery_failed" xml:space="preserve"><value>The active call could not be restored; ending it safely</value></data>
+  <data name="panel_registered" xml:space="preserve"><value>Extension {0} registered</value></data>
+  <data name="panel_registration_failed" xml:space="preserve"><value>Registration failed ({0})</value></data>
+  <data name="panel_resident_answered" xml:space="preserve"><value>The resident answered</value></data>
+  <data name="panel_resident_notified" xml:space="preserve"><value>The resident has been notified</value></data>
+  <data name="panel_resident_notified_no_cancel" xml:space="preserve"><value>The resident has been notified — this node does not support safe call_id cancellation</value></data>
+  <data name="panel_send_video" xml:space="preserve"><value>Send video too</value></data>
+  <data name="panel_sending" xml:space="preserve"><value>Sending…</value></data>
   <data name="panel_tap_sound" xml:space="preserve"><value>Tap to enable sound</value></data>
   <data name="panel_title" xml:space="preserve"><value>Call panel</value></data>
+  <data name="panel_unregistered" xml:space="preserve"><value>Not registered</value></data>
+  <data name="panel_visitor_calling" xml:space="preserve"><value>Visitor calling</value></data>
+  <data name="panel_webrtc_required" xml:space="preserve"><value>Calling requires Asterisk WebRTC configuration (integrations.webrtc.ws_url) — see deploy/asterisk/webrtc.md</value></data>
+  <data name="purpose_cancel_call" xml:space="preserve"><value>Cancel call</value></data>
   <data name="purpose_sent" xml:space="preserve"><value>Called as {0}</value></data>
+  <data name="purpose_skip" xml:space="preserve"><value>Skip purpose</value></data>
   <data name="reply_answered" xml:space="preserve"><value>Replied ({0})</value></data>
   <data name="reply_banner" xml:space="preserve"><value>Message from resident</value></data>
   <data name="reply_choose" xml:space="preserve"><value>Choose a quick reply</value></data>
+  <data name="reply_failed" xml:space="preserve"><value>Failed to send the quick reply</value></data>
   <data name="reply_sent" xml:space="preserve"><value>Sent: {0}</value></data>
   <data name="ring_answer" xml:space="preserve"><value>Answer</value></data>
+  <data name="ring_cancelled" xml:space="preserve"><value>The visitor cancelled the call</value></data>
   <data name="ring_ignore" xml:space="preserve"><value>Ignore</value></data>
   <data name="ring_incoming" xml:space="preserve"><value>Visitor at {0}</value></data>
   <data name="ring_lang_badge" xml:space="preserve"><value>Visitor language: {0}</value></data>
@@ -197,4 +534,39 @@
   <data name="ring_monitoring" xml:space="preserve"><value>Live door audio on</value></data>
   <data name="ring_no_video" xml:space="preserve"><value>No video from door station</value></data>
   <data name="ring_purpose_badge" xml:space="preserve"><value>Purpose: {0}</value></data>
+  <data name="ring_unlock" xml:space="preserve"><value>Unlock</value></data>
+  <data name="ring_unlock_sent" xml:space="preserve"><value>Unlock signal sent</value></data>
+  <data name="setup_confirm_new_cluster" xml:space="preserve"><value>Tap again to create a cluster (cancel to join an existing cluster)</value></data>
+  <data name="setup_door" xml:space="preserve"><value>Door ID</value></data>
+  <data name="setup_door_hint" xml:space="preserve"><value>Letters, numbers, - and _ only</value></data>
+  <data name="setup_finish" xml:space="preserve"><value>Save and continue</value></data>
+  <data name="setup_invalid_door" xml:space="preserve"><value>Enter a valid door ID</value></data>
+  <data name="setup_join_failed" xml:space="preserve"><value>Could not join: {0}</value></data>
+  <data name="setup_join_host" xml:space="preserve"><value>Join address (for example, 10.0.1.5:47172)</value></data>
+  <data name="setup_join_pin" xml:space="preserve"><value>Join with PIN</value></data>
+  <data name="setup_join_required" xml:space="preserve"><value>Enter the join address and PIN</value></data>
+  <data name="setup_message" xml:space="preserve"><value>Confirm this device's role before continuing. A door station needs a unique door ID.</value></data>
+  <data name="setup_name" xml:space="preserve"><value>Device name</value></data>
+  <data name="setup_new_cluster" xml:space="preserve"><value>── New cluster ──</value></data>
+  <data name="setup_new_cluster_failed" xml:space="preserve"><value>Could not create a new cluster</value></data>
+  <data name="setup_or_join_pin" xml:space="preserve"><value>── Or join with a PIN ──</value></data>
+  <data name="setup_pair_door_message" xml:space="preserve"><value>Create the cluster on the indoor panel and start 10-minute pairing. This door station will join automatically. If it does not, enter the indoor panel address and PIN.</value></data>
+  <data name="setup_pair_door_title" xml:space="preserve"><value>Add this door station</value></data>
+  <data name="setup_pair_host_pin" xml:space="preserve"><value>Pairing is active for 10 minutes.
+On the door station, choose Join existing cluster and enter:
+Address: {0}
+PIN: {1}</value></data>
+  <data name="setup_pair_primary" xml:space="preserve"><value>Create cluster on this indoor panel</value></data>
+  <data name="setup_pair_wait" xml:space="preserve"><value>Wait for automatic join</value></data>
+  <data name="setup_pair_waiting" xml:space="preserve"><value>On the indoor panel, create the cluster and start 10-minute pairing.
+This device joins automatically. Only if it does not, enter the indoor panel address and PIN below.</value></data>
+  <data name="setup_role" xml:space="preserve"><value>Role</value></data>
+  <data name="setup_scan_qr" xml:space="preserve"><value>Scan indoor-panel QR</value></data>
+  <data name="setup_title" xml:space="preserve"><value>Set up this device</value></data>
+  <data name="sound_button_click" xml:space="preserve"><value>Cursor move 4 (button)</value></data>
+  <data name="sound_indoor_update" xml:space="preserve"><value>Confirm 23 (additional message)</value></data>
+  <data name="sound_none" xml:space="preserve"><value>Do not play</value></data>
+  <data name="sound_outdoor_call_alert" xml:space="preserve"><value>Alert 1 (door-station call)</value></data>
+  <data name="sound_school_chime" xml:space="preserve"><value>School chime</value></data>
+  <data name="sound_title_display" xml:space="preserve"><value>Title display (startup)</value></data>
 </root>

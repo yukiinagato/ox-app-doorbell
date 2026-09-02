@@ -103,13 +103,13 @@ bool base64Decode(const std::string& b64, Bytes& out) {
     uint32_t v = 0;
     for (int k = 0; k < 4; k++) {
       const char c = b64[i + k];
-      if (c == '=') {  // '=' は末尾ブロックの後ろ 2 文字のみ許可
+      if (c == '=') {
         if (i + 4 != b64.size() || k < 2) return false;
         pad++;
         v <<= 6;
         continue;
       }
-      if (pad > 0) return false;  // '=' の後に通常文字は不可
+      if (pad > 0) return false;
       const int d = b64Val(c);
       if (d < 0) return false;
       v = (v << 6) | static_cast<uint32_t>(d);
@@ -123,14 +123,14 @@ bool base64Decode(const std::string& b64, Bytes& out) {
 }
 
 // ---------------- SHA-256 (FIPS 180-4) ----------------
-// 依存を増やさないための自前実装 (仕様通りの素直な圧縮関数)。
-// 検証: NIST 既知ベクタ (tests/test_util.cpp)。
+
+
 
 namespace {
 
 struct Sha256Ctx {
   uint32_t h[8];
-  uint64_t total = 0;      // 取り込んだ総バイト数
+  uint64_t total = 0;
   uint8_t buf[64];
   size_t buf_len = 0;
 };
@@ -187,7 +187,7 @@ void sha256Block(Sha256Ctx& c, const uint8_t* p) {
 void sha256Update(Sha256Ctx& c, const uint8_t* data, size_t len) {
   c.total += len;
   while (len > 0) {
-    if (c.buf_len == 0 && len >= 64) {  // バッファを介さず直接
+    if (c.buf_len == 0 && len >= 64) {
       sha256Block(c, data);
       data += 64;
       len -= 64;
@@ -239,7 +239,7 @@ Bytes randomBytes(size_t n) {
   Bytes out(n);
   if (n == 0) return out;
 #if defined(_WIN32)
-  // CNG のシステム既定 RNG (Win7 SP1+)。暗号用途可。
+
   NTSTATUS st = BCryptGenRandom(nullptr, out.data(), static_cast<ULONG>(n),
                                 BCRYPT_USE_SYSTEM_PREFERRED_RNG);
   if (!BCRYPT_SUCCESS(st)) throw std::runtime_error("randomBytes: BCryptGenRandom failed");
@@ -279,7 +279,7 @@ bool readFileBytes(const std::string& path, Bytes& out) {
 }
 
 bool writeFileBytes(const std::string& path, const Bytes& data) {
-  // 半書きファイルを見せないよう .tmp へ書いて rename (同一ディレクトリ内なので原子的)
+
   const std::string tmp = path + ".tmp";
   FILE* f = std::fopen(tmp.c_str(), "wb");
   if (!f) return false;

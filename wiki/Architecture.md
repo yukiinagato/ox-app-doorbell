@@ -1,116 +1,128 @@
-# アーキテクチャ深掘り
+# Architecture Deep Dive
 
-> English: [Architecture-en](Architecture-en) / 中文: [Architecture-zh](Architecture-zh)
+> English (this page) / 日本語: [Architecture-ja](Architecture-ja) / 中文: [Architecture-zh](Architecture-zh)
 
-実装の中身に踏み込みます。正準の設定リファレンスは
-[docs/ja/config-schema.md](https://github.com/yukiinagato/ox-app-doorbell/blob/main/docs/ja/config-schema.md)、
-ポートは [docs/ja/network-ports.md](https://github.com/yukiinagato/ox-app-doorbell/blob/main/docs/ja/network-ports.md) を参照してください。
+This page digs into the implementation. For the canonical configuration reference see
+[docs/en/config-schema.md](https://github.com/yukiinagato/ox-app-doorbell/blob/main/docs/en/config-schema.md),
+and for ports see [docs/en/network-ports.md](https://github.com/yukiinagato/ox-app-doorbell/blob/main/docs/en/network-ports.md).
 
-## 全体構成
+## Overall layout
 
 ```
-        +-------------------- 同一 L2 LAN ---------------------+
+        +------------------- trusted L2 LAN -------------------+
         |                                                      |
-  [門口機 Win/Android/iOS]  [室内機]  [Android TV]  [ブラウザ] |
+  [door station]          [indoor panel] [Android TV] [browser]|
         |   \        mesh (UDP 47171 beacon / TCP 47172)   /   |
-        |    +----------- P2P mesh = 真実源 ---------------+    |
+        |    +--------- P2P replicated state ------------+    |
         |         |                |                            |
-        |    (leader のみ)    直接 SIP UDP 47190                |
-        |     MQTT 1883       (対講・監聴)                      |
+        |    (leader only)      direct SIP UDP 47190            |
+        |     MQTT 1883         (answer/monitor)                 |
         |     Telegram 443                                      |
         +------|-----------------------------------------------+
                v
-        [HA + Mosquitto + go2rtc]   [Asterisk] -- [ひかり電話 HGW] -- PSTN/携帯
+        [HA + Mosquitto + go2rtc]   [Asterisk] -- [phone gateway] -- PSTN
 ```
 
-全端末が共有 C++ コア (doorbell-core) を積み、平台殻 (WPF P/Invoke / JNI / Swift) は
-[doorbell.h](https://github.com/yukiinagato/ox-app-doorbell/blob/main/core/include/doorbell/doorbell.h)
-の C ABI だけを見ます。UI イベントは JSON コールバック (`{"t":"chime",...}` 等) で殻へ流れます。
+Native clients integrate the shared C++ core through the versioned `db_platform_v2` C ABI in
+[doorbell.h](https://github.com/yukiinagato/ox-app-doorbell/blob/main/core/include/doorbell/doorbell.h).
+UI events flow to the shells as JSON callbacks (`{"t":"chime",...}` etc.).
 
-## mesh — 発見・gossip・選主
+## mesh — discovery, gossip, leader election
 
-- **発見**: UDP 47171 のマルチキャスト beacon (HMAC 付き HELLO)。iOS 殻は Bonjour を併用。
-  保険として `cluster.seed_peers` の静的リストも使えます。
-- **輸送**: TCP 47172。PSK による AEAD で全通信を保護 (`secure_channel`)。
-- **gossip/sync**: 設定 CRDT とイベントログをノード間で反同期。新規ノードは合流時に
-  全量を吸い上げます。
-- **選主 (leader)**: 決定的アルゴリズムで duty 毎にリーダーを選出。外部送信
-  (MQTT / Telegram) はリーダーだけが行い、リーダーが消えれば自動で交代します。
-  capability (常時給電か、ネット外向きに出られるか等) は実測 + `caps_override` で申告し、
-  選主の資格に使われます。
-- 実装: `core/src/mesh/`。
+- **Discovery**: multicast beacons on UDP 47171 (HELLO with HMAC), with device-local `boot.json` `seed_peers` where multicast is unavailable.
+- **Transport**: TCP 47172. All traffic protected by PSK-based AEAD (`secure_channel`).
+- **gossip/sync**: the configuration CRDT and the event log are anti-entropy-synced between nodes. A new node pulls the full state when it joins.
+- **Leader election**: a deterministic algorithm elects a leader per duty. Only the leader performs external sends (MQTT / Telegram), and if the leader disappears, another node takes over automatically. Capabilities (mains power, outbound internet reachability, etc.) are declared via measurement plus `caps_override` and used as election qualifications.
+- Implementation: `core/src/mesh/`.
 
-## 設定 = LWW-Map CRDT + HLC
+## Configuration = LWW-Map CRDT + HLC
 
-設定はフラットな「ドットパス key → JSON 値」の Last-Writer-Wins Map です。
-タイムスタンプは HLC (Hybrid Logical Clock) — 実時計が狂った端末があっても
-因果順序が壊れません。どのノードで書いても勝敗が決定的に決まり、全ノードが
-同じ結果に収束します。管理画面もアプリ内設定も、すべてこの CRDT への書込です。
-秘密 (`*_ref: "secret:…"`) は参照だけを複製し、実体は各端末の secure store に置きます。
-実装: `core/src/crdt/lww_map.cpp` (プロパティテスト付き)。
+Configuration is a flat Last-Writer-Wins Map of "dot-path key → JSON value". Timestamps use HLC (Hybrid Logical Clock) — causal ordering survives even a device with a broken wall clock. Writes on any node resolve deterministically, and all nodes converge to the same result. The admin UI and in-app settings are all just writes into this CRDT. Secrets (`*_ref: "secret:…"`) replicate only the reference; the values live in each device's secure store.
+Implementation: `core/src/crdt/lww_map.cpp` (with property tests).
 
-## イベント複製と冪等
+## Event replication and idempotency
 
-イベント (press / motion / reply / offline / emergency / visitor_lang …) は
-`(origin_node, origin_seq)` を ID として gossip で複製されます — 同じイベントを
-何度受け取っても冪等です。press への応答状態 (誰が claim したか、Telegram の msg_id、
-どの返信で答えたか) は notify として LWW マージされ、「応答済み」が全端末で一致します。
-永続化は SQLite (`core/src/store/`)。
+Events (press / motion / reply / offline / emergency / visitor_lang …) are replicated by gossip with `(origin_node, origin_seq)` as their ID — receiving the same event any number of times is idempotent. The response state for a press (who claimed it, the Telegram msg_id, which reply answered it) is LWW-merged as notify, so "answered" is consistent across all devices. Persistence is SQLite (`core/src/store/`).
 
-## 直連 SIP 対講 (X-Doorbell-Mode)
+Schema-v2 call lifecycle is scoped by `(door, call_id, stage_revision)`. A visitor may cancel only
+while the call is ringing; after `answered`/`in_call`, the action is hangup and produces
+`call_ended`. A manual Web answer claims one random `dialog_id` and receives an opaque
+`dialog_owner`; a competing answer must terminate its losing SIP dialog. Restart recovery restores
+a ringing call at its press-origin node, but only the winning dialog owner may restore an in-call
+session. If that cannot be proved within ten seconds, Core emits one idempotent global cancel.
 
-站間対講は **Asterisk を経由しません**。各子機の sipctl が UDP 47190 を固定 listen し、
-室内機/TV は `sip:<host>:47190` へ直接 INVITE します。
+## Direct SIP intercom (X-Doorbell-Mode)
 
-- ヘッダ `X-Doorbell-Mode: answer` = 双方向対講 / `monitor` = 一方向監聴
-  (受け側は自マイク音声のみ送出)。
-- 受け付けるのは mesh 成員の IP のみ。SIP サーバや accounts が未設定でも直接呼は動きます。
-- Asterisk (UDP 5060) は「電話腿」専用: 内線 REGISTER・押鈴時の 600 番発呼・
-  ひかり電話 HGW 経由の PSTN 出局・DTMF 機能碼。PBX が死んでも対講と監聴は無傷です。
-- 応答接管: 室内機の「応答」は電話腿を切ってから直連対講を張ります。
-- 実装: `core/src/sipctl/` (PJSIP)。
+Station-to-station intercom **does not go through Asterisk**. Each station's sipctl listens on a fixed UDP 47190, and indoor stations/TVs send INVITE directly to `sip:<host>:47190`.
 
-## 媒体管線 — 帧総線から各消費者へ
+- Header `X-Doorbell-Mode: answer` = two-way intercom / `monitor` = one-way monitoring (the callee sends only its own microphone audio).
+- Only IPs of mesh members are accepted. Direct calls work even with no SIP server or accounts configured.
+- Asterisk (UDP 5060) is dedicated to the "phone leg": extension REGISTER, the 600 call on ring, PSTN egress via the Hikari Denwa HGW, and DTMF feature codes. If the PBX dies, intercom and monitoring are untouched.
+- Answer takeover: "Answer" on an indoor station drops the phone leg first, then establishes the direct intercom.
+- Implementation: `core/src/sipctl/` (PJSIP).
 
-カメラ採集は殻 (または Windows は core 内) が行い、`db_core_on_camera_frame` で
-コアの **帧総線 (FrameBus)** に入ります。消費者は現在 4 系統:
+## Media pipeline — from the frame bus to each consumer
+
+Camera capture is done by the shell (or inside the core on Windows) and enters the core's **frame bus (FrameBus)** via `db_core_on_camera_frame`. There are currently four consumer chains:
 
 ```
- camera → FrameBus ─┬─ MJPEG エンコード → /stream.mjpeg (誰でも映る基調)
-                    ├─ /snapshot.jpg (Telegram 写真・HA generic camera)
-                    ├─ MotionDetector (動体イベント)
-                    └─ (h264 档) 殻の HW エンコーダ → db_core_on_encoded_frame
-                                → fMP4 マキサ → /stream.mp4
+ camera → FrameBus ─┬─ MJPEG encoder → /stream.mjpeg (compatibility baseline)
+                    ├─ /snapshot.jpg (Telegram image / HA generic camera)
+                    ├─ MotionDetector (motion event)
+                    └─ shell hardware encoder → db_core_on_encoded_frame
+                                → fMP4 muxer → /stream.mp4
 ```
 
-- H.264 のエンコードは平台の HW (MediaCodec / VideoToolbox / Media Foundation)。
-  コアは AnnexB を受け取って fMP4 に箱詰めして配るだけです (自前マキサ、外部依存なし)。
-- `/stream.mp4` は購読者が付いた時だけエンコーダを回します (`db_core_video_encoder_wanted`)。
-  go2rtc は `#video=copy` で受けられるため HA 側の転码が不要になります。
-- 網頁通話のブラウザ→門口機映像は WebRTC ではなく「getUserMedia → canvas → JPEG を
-  `/call-frame` へ POST」という枯れた方式です ([Decisions](Decisions))。
+- H.264 encoding uses the platform's hardware (MediaCodec / VideoToolbox / Media Foundation). The core just receives AnnexB, boxes it into fMP4, and serves it (an in-house muxer, no external dependencies).
+- `/stream.mp4` spins up the encoder only while subscribers are attached (`db_core_video_encoder_wanted`). go2rtc can consume it with `#video=copy`, eliminating transcoding on the HA side.
+- For web calls, browser→door-station video uses `getUserMedia → canvas → POST JPEG to /call-frame` ([Decisions](Decisions)).
 
-## 資産配布
+## Asset distribution
 
-背景画像・カスタム音声は sha256 で台帳 (`assets.<hash>`) に登録され、実体 blob は
-アップロード先ノードに置かれます。**設定から参照された時点**で各ノードが mesh の
-FETCH_BLOB で能動前取りし (保持ノードならどこからでも取得可)、以後の再生・表示は
-常にローカルファイル = ミリ秒応答。台帳を tombstone にすると各ノードが猶予付き GC で
-回収します。取得系 API は 64 桁 hex 固定検証でパス走査を防ぎます。
+Background images and custom recordings are registered in a sha256 ledger (`assets.<hash>`), with the actual blob stored on the upload node. **The moment the configuration references one**, each node proactively prefetches it via the mesh's FETCH_BLOB (fetchable from any holding node); playback and display thereafter are always from a local file = millisecond response. Tombstoning a ledger entry makes each node reclaim it via grace-period GC. Fetch APIs enforce strict 64-hex-digit validation to prevent path traversal.
 
-## httpd — 1 ポートに全部
+## httpd — everything on one port
 
-各ノードの TCP 47180 (CivetWeb) が 管理 SPA (`/admin/`) / 網頁パネル (`/panel/…`) /
-MJPEG / fMP4 / snapshot / 管理 API / panel API を提供します。認証は
-管理 = パスワードセッション、panel/stream = `?k=<token>`。webui はビルド時に
-バイナリへ埋め込まれます (`embed_webui.py`) — 静的ファイル配布サーバさえ不要です。
+Each node's TCP 47180 (CivetWeb) serves the admin SPA (`/admin/`), web panels (`/panel/…`),
+MJPEG/fMP4/snapshots, and their APIs. Admin uses a password session. A panel credential is supplied
+once in a URL fragment (`#k=`, which HTTP never transmits), exchanged through
+`POST /api/panel/session`, and thereafter held in an HttpOnly cookie. Query/form credentials are
+rejected; cross-node uploads may use a bearer header. The Web UI is embedded into the binary at
+build time (`embed_webui.py`).
 
-## なぜリーダーだけが外部送信するのか
+## SOS delivery and semantic UI contracts
 
-全ノードが Telegram/MQTT へ送ると、同じ来客通知が台数分届きます。かといって
-「送信担当を固定」すると、その 1 台が単一障害点です。答えが「決定的選主 + 自動継任」:
-平時は 1 台だけが代表して送り (重複ゼロ)、その 1 台が消えれば数秒で別ノードが
-継ぎます (漏れゼロ)。イベント複製が冪等なので、交代の瞬間に二重送信が起きても
-notify の LWW マージで「応答済み」状態は壊れません。「宁重勿漏」の実装形です。
+SOS active/clear state is replicated to every Core node. Presentation and external delivery are
+rule-driven and can intentionally have zero recipients. The administrator switch
+`emergency.web_active_page_alerts` defaults to true and lets an open Web page render replicated SOS
+even for zero-recipient or Push-only rules. When disabled, a positive matching `device_alert` or a
+delivered Push can still render. Core `delivery_result` records a dispatch attempt; each client's
+runtime per-channel report records whether visual, sound, system-notification, or Web presentation
+was applied, suppressed, unsupported, or failed. While the raw path is enabled, a rule TTL expires
+custom decoration/sound but leaves the safe red raw-SOS overlay until SOS clear or switch-off.
 
-関連: 設計判断の経緯は [Decisions](Decisions)、機能目線は [Features](Features)。
+A legacy alert with no `targets` addresses all native nodes and Web groups. With an explicit
+`targets` object, selection is symmetric: Web-only groups address no native shell, and native-only
+selectors address no active Web page or Push subscription. Panel `?group=<name>` is validated,
+persisted, and reused for both state projection and Push enrollment. Core seals each complete Push
+`endpoint`/`p256dh`/`auth` value in one schema-v2 CRDT record with XChaCha20-Poly1305 under a
+mesh-PSK-derived key; plaintext is absent from config/export, and legacy raw records are resealed
+or removed fail-closed at startup.
+
+Native clients advertise a top-level semantic `ui_manifest`. The serving Core node separately
+publishes its built-in Web renderer manifest as `web_ui.manifest`. The latter is local, not a
+replicated catalog of remote Web surfaces; Admin must not infer a remote/offline Web editor from a
+native peer manifest or invent an unknown manifest. Core does durably cache each peer's last valid
+native manifest/capabilities: a configured offline device marked `cached_contract:true` can be
+validated and queued against that cache, but only its later renderer report proves application.
+
+## Why only the leader sends externally
+
+If every node sent to Telegram/MQTT, the same visitor notification could arrive once per device.
+Hard-coding one sender would instead create a single point of failure. Core therefore uses
+deterministic duty election and re-elects after mesh convergence. This normally limits dispatch to
+one leader, while replicated event identity and LWW claims bound duplicate state changes during
+handover. It is not a zero-miss or delivery-time guarantee: partitions, convergence delay, and the
+external provider remain visible through delivery diagnostics.
+
+Related: for the history behind design choices see [Decisions](Decisions); for the feature-level view see [Features](Features).

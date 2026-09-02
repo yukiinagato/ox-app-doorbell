@@ -1,7 +1,3 @@
-// tvOS 監視端の待機画面 — 時計 + ノード情報 + fleet 状態の常駐表示。
-// 来鈴 (chime) の全画面被せは TVAppDelegate → IncomingViewController。
-// ここは待機のほか、reply バナー / 緊急 (SOS) 警報の全画面赤 + サイレン + PIN 解除
-// (描画テンキー — Siri Remote フォーカス対応) を持つ。
 import UIKit
 
 final class TVMainViewController: UIViewController {
@@ -10,14 +6,19 @@ final class TVMainViewController: UIViewController {
     private let boot: BootConfig
     private let texts = Texts()
     private let audio = SirenPlayer()
+    private let styleApplier = UIStyleApplier()
+    private let deviceAlertReporter: ([String: Any]) -> Void
 
     private var cfg: [String: Any]?
     private var emergencyActive = false
+    private var emergencyPresentationTimer: Timer?
     private var cancelRequiresPin = true
+    private var nodeId = ""
 
     private let clockLabel = UILabel()
     private let dateLabel = UILabel()
     private let statusLabel = UILabel()
+    private let monitorButton = UIButton(type: .system)
     private let nodeInfo = UILabel()
     private let replyBanner = UIView()
     private let replyCaption = UILabel()
@@ -30,9 +31,11 @@ final class TVMainViewController: UIViewController {
     private var clockTimer: Timer?
     private var replyTimer: Timer?
 
-    init(core: CoreBridge, boot: BootConfig) {
+    init(core: CoreBridge, boot: BootConfig,
+         deviceAlertReporter: @escaping ([String: Any]) -> Void) {
         self.core = core
         self.boot = boot
+        self.deviceAlertReporter = deviceAlertReporter
         super.init(nibName: nil, bundle: nil)
     }
 
@@ -51,6 +54,12 @@ final class TVMainViewController: UIViewController {
         updateClock()
     }
 
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        styleApplier.apply(config: cfg, nodeId: nodeId, semanticId: "sos.cancel",
+                           to: emergencyCancel)
+    }
+
     private func buildUi() {
         clockLabel.font = UIFont.monospacedDigitSystemFont(ofSize: 140, weight: .thin)
         clockLabel.textColor = UIColor(white: 0.94, alpha: 1)
@@ -58,7 +67,10 @@ final class TVMainViewController: UIViewController {
         dateLabel.textColor = UIColor(white: 0.62, alpha: 1)
         statusLabel.font = .systemFont(ofSize: 30)
         statusLabel.textColor = UIColor(white: 0.62, alpha: 1)
-        let stack = UIStackView(arrangedSubviews: [clockLabel, dateLabel, statusLabel])
+        monitorButton.titleLabel?.font = .systemFont(ofSize: 30, weight: .semibold)
+        monitorButton.addTarget(self, action: #selector(openMonitor), for: .primaryActionTriggered)
+        let stack = UIStackView(arrangedSubviews: [clockLabel, dateLabel, statusLabel,
+                                                   monitorButton])
         stack.axis = .vertical
         stack.spacing = 16
         stack.alignment = .center
@@ -131,6 +143,7 @@ final class TVMainViewController: UIViewController {
 
     private func applyStrings() {
         statusLabel.text = texts.t("panel.monitor_title")
+        monitorButton.setTitle(texts.t("monitor.open"), for: .normal)
         replyCaption.text = texts.t("reply.banner")
         emergencyTitle.text = texts.t("emergency.title")
         emergencyNote.text = texts.t("emergency.notified")
@@ -153,29 +166,19 @@ final class TVMainViewController: UIViewController {
         cancelRequiresPin = ConfigUtil.bool(cfg, "emergency.cancel_requires_pin", true)
         if let st = core.status() {
             if let node = st["node"] as? [String: Any] {
+                nodeId = ConfigUtil.evStr(node, "id")
                 let peers = (st["peers"] as? [Any])?.count ?? 0
                 nodeInfo.text =
                     "\(ConfigUtil.evStr(node, "name")) · v\(ConfigUtil.evStr(node, "version"))" +
                     " · peers \(peers)"
             }
             if let em = st["emergency"] as? [String: Any] {
-                if ConfigUtil.evBool(em, "active") {
-                    let wasActive = emergencyActive
-                    showEmergency()
-                    // 再起動追い付き時もサイレンを鳴らす (内蔵音 — MainViewController と同じ)
-                    if !wasActive {
-                        audio.startSiren(customPath: "",
-                                         volume: ConfigUtil.int(cfg, "emergency.alarm_volume", 100))
-                    }
-                } else {
-                    hideEmergency()
-                }
+                if !ConfigUtil.evBool(em, "active") { hideEmergency() }
             }
         }
         applyStrings()
     }
 
-    // MARK: - core イベント (main queue)
 
     private func onUiEvent(_ ev: [String: Any]) {
         switch ConfigUtil.evStr(ev, "t") {
@@ -196,13 +199,7 @@ final class TVMainViewController: UIViewController {
                 self?.replyBanner.isHidden = true
             }
         case "emergency":
-            if ConfigUtil.evBool(ev, "active") {
-                showEmergency()
-                let vol = ConfigUtil.int(ev, "alarm_volume", 100)
-                audio.startSiren(customPath: ConfigUtil.evStr(ev, "audio_path"), volume: vol)
-            } else {
-                hideEmergency()
-            }
+            presentEmergency(ev)
         case "peers_changed", "config_changed":
             refreshNodeInfo()
         default:
@@ -210,20 +207,107 @@ final class TVMainViewController: UIViewController {
         }
     }
 
-    // MARK: - 緊急 (SOS)
+    @objc private func openMonitor() {
+        guard presentedViewController == nil else { return }
+        present(MonitorViewController(core: core, boot: boot), animated: true)
+    }
 
-    private func showEmergency() {
-        guard !emergencyActive else { return }
+
+    private func presentEmergency(_ ev: [String: Any]) {
+        emergencyPresentationTimer?.invalidate()
+        emergencyPresentationTimer = nil
+        let active = ConfigUtil.evBool(ev, "active")
+        let eventHlc = ConfigUtil.evStr(ev, "event_hlc")
+        let requestedInApp = ConfigUtil.eventUsesChannel(ev, "in_app")
+        guard active else {
+            hideEmergency()
+            reportDeviceAlert(eventHlc: eventHlc, active: false,
+                              result: requestedInApp ? "cleared" : "not_requested",
+                              visual: false, sound: false, sticky: false, ttl: 0,
+                              requested: requestedInApp)
+            return
+        }
+        guard requestedInApp else {
+            hideEmergency()
+            reportDeviceAlert(eventHlc: eventHlc, active: true, result: "not_requested",
+                              visual: false, sound: false, sticky: false, ttl: 0,
+                              requested: false)
+            return
+        }
+        let visual = ev["visual"] == nil ? true : ConfigUtil.evBool(ev, "visual")
+        showEmergency(visual: visual)
+        let sound = ConfigUtil.evStr(ev, "alarm_sound")
+        let path = ConfigUtil.evStr(ev, "audio_path")
+        let volume = min(100, max(0, ConfigUtil.int(ev, "alarm_volume", 100)))
+        let soundApplied = volume > 0 && (!sound.isEmpty || !path.isEmpty)
+        if soundApplied {
+            audio.startSiren(customPath: path, volume: volume)
+        } else {
+            audio.stop()
+        }
+        let sticky = ev["sticky"] == nil ? true : ConfigUtil.evBool(ev, "sticky")
+        let ttl = max(0, ConfigUtil.double(ev, "ttl_s", 0))
+        reportDeviceAlert(eventHlc: eventHlc, active: true, result: "presented",
+                          visual: visual, sound: soundApplied, sticky: sticky, ttl: ttl,
+                          requested: true)
+        if !sticky && ttl > 0 {
+            emergencyPresentationTimer = Timer.scheduledTimer(
+                withTimeInterval: ttl, repeats: false) { [weak self] _ in
+                    guard let self = self else { return }
+                    self.hideEmergency()
+                    self.reportDeviceAlert(eventHlc: eventHlc, active: true,
+                                           result: "ttl_expired", visual: false,
+                                           sound: false, sticky: false, ttl: ttl,
+                                           requested: true)
+                }
+        }
+    }
+
+    private func reportDeviceAlert(eventHlc: String, active: Bool, result: String,
+                                   visual: Bool, sound: Bool, sticky: Bool, ttl: Double,
+                                   requested: Bool) {
+        var channels: [[String: Any]] = []
+        if requested {
+            channels.append([
+                "channel": "in_app",
+                "result": result,
+                "visual_applied": visual,
+                "sound_applied": sound,
+                "sticky_applied": sticky,
+                "ttl_s": ttl,
+            ])
+        }
+        deviceAlertReporter([
+            "schema_version": 1,
+            "event_hlc": eventHlc,
+            "active": active,
+            "result": requested ? "applied" : "not_requested",
+            "channels": channels,
+            "updated_at_ms": Int64(Date().timeIntervalSince1970 * 1000),
+        ])
+    }
+
+    private func showEmergency(visual: Bool) {
+        if emergencyActive {
+            emergencyView.isHidden = !visual
+            return
+        }
         emergencyActive = true
-        presentedViewController?.dismiss(animated: false)  // 来鈴より警報優先
-        emergencyView.isHidden = false
-        setNeedsFocusUpdate()
-        updateFocusIfNeeded()
+        if visual {
+            presentedViewController?.dismiss(animated: false)
+            emergencyView.isHidden = false
+            setNeedsFocusUpdate()
+            updateFocusIfNeeded()
+        } else {
+            emergencyView.isHidden = true
+        }
     }
 
     private func hideEmergency() {
         guard emergencyActive else { return }
         emergencyActive = false
+        emergencyPresentationTimer?.invalidate()
+        emergencyPresentationTimer = nil
         audio.stop()
         emergencyView.isHidden = true
     }
@@ -232,13 +316,12 @@ final class TVMainViewController: UIViewController {
         if cancelRequiresPin {
             let dlg = AdminPinViewController(texts: texts)
             dlg.onUnlocked = { [weak self] in
-                self?.core.emergency(false)
-                self?.hideEmergency()
+                guard let self = self, self.core.emergency(false) else { return }
+                self.hideEmergency()
             }
             present(dlg, animated: true)
             return
         }
-        core.emergency(false)
-        hideEmergency()
+        if core.emergency(false) { hideEmergency() }
     }
 }

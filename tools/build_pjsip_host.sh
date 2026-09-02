@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# macOS ホスト用 pjsip 静的ライブラリのビルド (開発・テスト用)。
-# 産物: core/third_party/pjsip/host/{lib,include}
+# Build static PJSIP libraries for macOS development and tests.
+# Output: core/third_party/pjsip/host/{lib,include}
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SRC="$ROOT/core/third_party/pjsip/src"
 PREFIX="$ROOT/core/third_party/pjsip/host"
-[[ -d "$SRC/pjlib" ]] || { echo "先に tools/fetch_pjsip.sh を実行"; exit 1; }
+[[ -d "$SRC/pjlib" ]] || { echo "Run tools/fetch_pjsip.sh first."; exit 1; }
 
 cd "$SRC"
 if [[ ! -f build.mak ]]; then
@@ -15,8 +15,8 @@ if [[ ! -f build.mak ]]; then
     CFLAGS="-O2 -fPIC" CXXFLAGS="-O2 -fPIC" >/dev/null
 fi
 make dep >/dev/null 2>&1 || true
-# pjsip の Makefile は完全な並列安全ではない (g722 等でディレクトリ生成競合) —
-# 並列で走らせてから串行で補完する
+# PJSIP's Makefiles are not fully parallel-safe because targets such as g722 race while creating
+# directories. Run the parallel build first, then complete it serially.
 make -j8 >/dev/null 2>&1 || true
 make >/dev/null
 make install >/dev/null

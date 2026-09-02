@@ -1,12 +1,12 @@
 #import "DBAudioIO.h"
 #import <AudioUnit/AudioUnit.h>
 
-// 単一生産者・単一消費者リング (ロックフリー)。容量は 2 の冪。
-#define DB_RING_CAP 16384  // 16384 サンプル ≒ 2.0 秒 @ 8kHz
+
+#define DB_RING_CAP 16384
 typedef struct {
   short buf[DB_RING_CAP];
-  volatile uint32_t head;  // 消費側が進める
-  volatile uint32_t tail;  // 生産側が進める
+  volatile uint32_t head;
+  volatile uint32_t tail;
 } DBRing;
 
 static void DBRingReset(DBRing *r) { r->head = r->tail = 0; }
@@ -40,14 +40,14 @@ static int DBRingRead(DBRing *r, short *dst, int n) {
 @implementation DBAudioIO {
   AudioUnit _unit;
   BOOL _running;
-  DBRing _rx;  // SIP → 出力 (poll 生産 / render 消費)
-  DBRing _tx;  // 入力 → SIP (input 生産 / poll 消費)
+  DBRing _rx;
+  DBRing _tx;
   AudioBufferList *_inList;
 }
 
 @synthesize micEnabled = _micEnabled;
 
-// 出力 render: rxRing から取り出して埋める。不足は無音。
+
 static OSStatus DBRenderCb(void *inRefCon, AudioUnitRenderActionFlags *ioActionFlags,
                            const AudioTimeStamp *inTimeStamp, UInt32 inBusNumber,
                            UInt32 inNumberFrames, AudioBufferList *ioData) {
@@ -59,12 +59,12 @@ static OSStatus DBRenderCb(void *inRefCon, AudioUnitRenderActionFlags *ioActionF
     short *out = (short *)ioData->mBuffers[b].mData;
     int frames = (int)inNumberFrames;
     int got = DBRingRead(&self->_rx, out, frames);
-    for (int i = got; i < frames; i++) out[i] = 0;  // アンダーラン → 無音
+    for (int i = got; i < frames; i++) out[i] = 0;
   }
   return noErr;
 }
 
-// 入力 (外麦有時): AudioUnitRender で取り出し txRing へ。
+
 static OSStatus DBInputCb(void *inRefCon, AudioUnitRenderActionFlags *ioActionFlags,
                           const AudioTimeStamp *inTimeStamp, UInt32 inBusNumber,
                           UInt32 inNumberFrames, AudioBufferList *ioData) {
@@ -118,14 +118,25 @@ static AudioStreamBasicDescription DBFormat8k(void) {
 - (BOOL)start {
   if (_running) return YES;
 
-  // AudioSession (C API — iOS5 で確実。PlayAndRecord + スピーカ出力)。
+  // Listen-only sessions use MediaPlayback so old iPads cannot fall back to the
+  // effectively inaudible receiver route when a PlayAndRecord override fails.
   AudioSessionInitialize(NULL, NULL, NULL, NULL);
-  UInt32 category = kAudioSessionCategory_PlayAndRecord;
-  AudioSessionSetProperty(kAudioSessionProperty_AudioCategory, sizeof(category), &category);
-  UInt32 toSpeaker = 1;
-  AudioSessionSetProperty(kAudioSessionProperty_OverrideCategoryDefaultToSpeaker,
-                          sizeof(toSpeaker), &toSpeaker);
-  AudioSessionSetActive(true);
+  UInt32 category = _micEnabled ? kAudioSessionCategory_PlayAndRecord
+                                : kAudioSessionCategory_MediaPlayback;
+  OSStatus sessionStatus =
+      AudioSessionSetProperty(kAudioSessionProperty_AudioCategory, sizeof(category), &category);
+  if (_micEnabled) {
+    UInt32 toSpeaker = 1;
+    OSStatus routeStatus = AudioSessionSetProperty(
+        kAudioSessionProperty_OverrideCategoryDefaultToSpeaker, sizeof(toSpeaker), &toSpeaker);
+    if (routeStatus != noErr) NSLog(@"[doorbell] audio: speaker route failed %ld", (long)routeStatus);
+  }
+  OSStatus activeStatus = AudioSessionSetActive(true);
+  if (sessionStatus != noErr || activeStatus != noErr) {
+    NSLog(@"[doorbell] audio: session start failed category=%ld active=%ld",
+          (long)sessionStatus, (long)activeStatus);
+    return NO;
+  }
 
   AudioComponentDescription desc;
   memset(&desc, 0, sizeof(desc));
@@ -133,8 +144,11 @@ static AudioStreamBasicDescription DBFormat8k(void) {
   desc.componentSubType = kAudioUnitSubType_RemoteIO;
   desc.componentManufacturer = kAudioUnitManufacturer_Apple;
   AudioComponent comp = AudioComponentFindNext(NULL, &desc);
-  if (comp == NULL) return NO;
-  if (AudioComponentInstanceNew(comp, &_unit) != noErr) return NO;
+  if (comp == NULL) { AudioSessionSetActive(false); return NO; }
+  if (AudioComponentInstanceNew(comp, &_unit) != noErr) {
+    AudioSessionSetActive(false);
+    return NO;
+  }
 
   const AudioUnitElement outputBus = 0;
   const AudioUnitElement inputBus = 1;
@@ -171,12 +185,14 @@ static AudioStreamBasicDescription DBFormat8k(void) {
   if (AudioUnitInitialize(_unit) != noErr) {
     AudioComponentInstanceDispose(_unit);
     _unit = NULL;
+    AudioSessionSetActive(false);
     return NO;
   }
   if (AudioOutputUnitStart(_unit) != noErr) {
     AudioUnitUninitialize(_unit);
     AudioComponentInstanceDispose(_unit);
     _unit = NULL;
+    AudioSessionSetActive(false);
     return NO;
   }
   _running = YES;
@@ -207,4 +223,3 @@ static AudioStreamBasicDescription DBFormat8k(void) {
 }
 
 @end
-

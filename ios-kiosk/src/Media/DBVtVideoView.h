@@ -1,8 +1,7 @@
 #import <GLKit/GLKit.h>
 
-// Jailbroken iOS 5 low-latency H.264 renderer. VideoToolbox is loaded with
-// dlsym because the decoding API exists on the device but was not public until
-// later iOS releases.
+// Low-latency H.264 renderer shared by compatibility profiles. iOS 5 loads the
+// device-only decoder dynamically; iOS 9 links the public VideoToolbox API.
 @interface DBVtVideoView : GLKView
 
 @property(nonatomic, copy) void (^onDisplayedFrame)(int64_t captureMs);
@@ -12,6 +11,7 @@
 @property(nonatomic, readonly) NSUInteger decodedFrames;
 @property(nonatomic, readonly) NSUInteger droppedFrames;
 
+- (void)setCompatibilityOutputView:(UIImageView *)view;
 - (BOOL)startWithSps:(NSData *)sps pps:(NSData *)pps;
 - (void)pushSample:(NSData *)avcc
          captureMs:(int64_t)captureMs

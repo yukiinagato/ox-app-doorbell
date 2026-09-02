@@ -1,42 +1,37 @@
-// doorbell-core C ABI の Swift ラッパ (WPF CoreClient / Android DoorbellCore と同役)。
-// - コールバックは core 内部スレッドから届く → main queue へ marshal してから配送する。
-// - db_platform:
-//     log_line      → os_log
-//     tts_speak     → AVSpeechSynthesizer (ja/en/zh の音声)
-//     https_request → URLSession (同期契約 — core が専用スレッドから呼ぶので semaphore で待つ)
-//     secure_get/put→ Keychain (kSecClassGenericPassword)
-// - core が返す char* は db_free で解放。SPI が core へ渡す char* は malloc (core が free)。
+// Core invokes platform and UI callbacks on Core-owned threads. UI JSON is borrowed only for the
+// callback duration, so it is copied before dispatching to the main queue. HTTPS callbacks are
+// synchronous. Buffers returned through db_platform_v2 output pointers are malloc-owned and
+// released through release_buffer.
 import AVFoundation
 import Foundation
-import os.log
+import UIKit
 
-/// core → 殻 UI イベント (doorbell.h の JSON)。main queue で届く。
 typealias UiEventHandler = ([String: Any]) -> Void
 
 final class CoreBridge {
 
     private var core: OpaquePointer?
     private let synth = AVSpeechSynthesizer()
-    private let log = OSLog(subsystem: "jp.keihan.doorbell", category: "core")
+    private let deviceInfoCacheLock = NSLock()
+    private var deviceInfoCacheJSON =
+        "{\"schema_version\":1,\"platform\":\"apple\",\"battery_state\":\"unknown\"}"
 
-    /// UI イベント購読 (key → handler)。main queue で呼ばれる。
     private var handlers: [String: UiEventHandler] = [:]
 
     var isRunning: Bool { return core != nil }
 
-    // MARK: - ライフサイクル
 
-    /// core 生成 + 起動。失敗時 false (ログは os_log)。
     func start(dataDir: String, bootJson: String) -> Bool {
         if core != nil { return true }
+        refreshDeviceInfoCache()
         let user = Unmanaged.passUnretained(self).toOpaque()
-        var plat = db_platform()
+        var plat = db_platform_v2()
+        plat.struct_size = UInt32(MemoryLayout<db_platform_v2>.size)
+        plat.version = UInt32(DB_PLATFORM_V2_VERSION)
         plat.user = user
         plat.log_line = { user, level, line in
-            guard let user = user, let line = line else { return }
-            let me = Unmanaged<CoreBridge>.fromOpaque(user).takeUnretainedValue()
-            let type: OSLogType = level >= 3 ? .error : (level >= 2 ? .default : .info)
-            os_log("%{public}s", log: me.log, type: type, String(cString: line))
+            guard user != nil, let line = line else { return }
+            IOSAvailability.logCore(level: level, message: String(cString: line))
         }
         plat.tts_speak = { user, text, lang in
             guard let user = user, let text = text else { return }
@@ -56,21 +51,27 @@ final class CoreBridge {
         plat.secure_get = { _, key, valueOut in
             guard let key = key, let valueOut = valueOut else { return -1 }
             guard let v = Keychain.get(String(cString: key)) else { return -1 }
-            valueOut.pointee = strdup(v)  // core が db_free (= free) する
+            valueOut.pointee = strdup(v)
             return 0
         }
         plat.secure_put = { _, key, value in
             guard let key = key, let value = value else { return -1 }
             return Keychain.put(String(cString: key), String(cString: value)) ? 0 : -1
         }
+        plat.device_info = { user, valueOut in
+            guard let user = user, let valueOut = valueOut else { return -1 }
+            let me = Unmanaged<CoreBridge>.fromOpaque(user).takeUnretainedValue()
+            let json = me.cachedDeviceInfoJSON()
+            valueOut.pointee = strdup(json)
+            return valueOut.pointee == nil ? -1 : 0
+        }
+        plat.release_buffer = { _, buffer in free(buffer) }
 
-        core = db_core_create(&plat, dataDir, bootJson)
+        core = db_core_create_v2(&plat, dataDir, bootJson)
         guard let c = core else { return false }
         db_core_set_ui_callback(c, { user, evJson in
             guard let user = user, let evJson = evJson else { return }
             let me = Unmanaged<CoreBridge>.fromOpaque(user).takeUnretainedValue()
-            // コールバック引数は借用 (解放しない)。このスレッドで Data へコピーしてから
-            // main へ渡す (String bridging は避ける — takeJson のコメント参照)
             let data = Data(bytes: UnsafeRawPointer(evJson), count: strlen(evJson))
             guard let obj = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
             else { return }
@@ -92,9 +93,7 @@ final class CoreBridge {
         core = nil
     }
 
-    // MARK: - イベント購読
 
-    /// UI イベントの購読 (main queue で届く)。key 重複は上書き。
     func addHandler(_ key: String, _ handler: @escaping UiEventHandler) {
         handlers[key] = handler
     }
@@ -104,38 +103,78 @@ final class CoreBridge {
     }
 
     private func dispatch(_ ev: [String: Any]) {
-        // ハンドラ内での add/remove (来鈴画面の出入り等) と衝突しないようコピーして回す
         for h in Array(handlers.values) { h(ev) }
     }
 
-    // MARK: - 操作 API (doorbell.h)
 
     func press(door: String) {
         if let c = core { db_core_press(c, door) }
     }
 
-    /// 用件ボタンからの按鈴 (config visit_purposes の id — press payload に載る)。
     func pressPurpose(door: String, purpose: String) {
         if let c = core { db_core_press_purpose(c, door, purpose) }
     }
 
-    /// 訪客言語の切替 ("ja" で即時復帰)。全ノードへ複製され visitor_lang イベントが返る。
+    /// Start or reuse a versioned call and return its stable identifier.
+    func pressV2(door: String, purpose: String = "") -> String? {
+        guard let c = core, let p = db_core_press_v2(c, door, purpose) else { return nil }
+        defer { db_free(p) }
+        let id = String(cString: p)
+        return id.isEmpty ? nil : id
+    }
+
+    func selectPurpose(door: String, callId: String, purpose: String) -> Bool {
+        guard let c = core, !callId.isEmpty else { return false }
+        return db_core_select_purpose_v2(c, door, callId, purpose) == 0
+    }
+
+    func cancelCall(door: String, callId: String, reason: String = "visitor") -> Bool {
+        guard let c = core, !callId.isEmpty else { return false }
+        return db_core_cancel_call_v2(c, door, callId, reason) == 0
+    }
+
+    func reportCallRecovery(callId: String, restored: Bool) {
+        guard let c = core, !callId.isEmpty else { return }
+        db_core_report_call_recovery(c, callId, restored ? 1 : 0)
+    }
+
+    @discardableResult
+    func reportCallAnswered(door: String, callId: String, stageRevision: Int) -> Bool {
+        guard let c = core, !door.isEmpty, !callId.isEmpty else { return false }
+        return db_core_report_call_answered_v2(c, door, callId, Int32(stageRevision)) == 0
+    }
+
+    @discardableResult
+    func reportCallEnded(door: String, callId: String, stageRevision: Int,
+                         reason: String = "sip_ended") -> Bool {
+        guard let c = core, !door.isEmpty, !callId.isEmpty else { return false }
+        return db_core_report_call_ended_v2(c, door, callId, Int32(stageRevision), reason) == 0
+    }
+
     func setVisitorLang(door: String, lang: String) {
         if let c = core { db_core_set_visitor_lang(c, door, lang) }
     }
 
-    /// クイック返信の配送 (門口機の面板表示 + TTS)。door 空 = 最新 press の door。
     func quickReply(replyId: String, door: String) {
         if let c = core, !replyId.isEmpty { db_core_quick_reply(c, replyId, door) }
     }
 
-    /// SOS 緊急モード。true=発報 / false=解除 (解除前の PIN 検証は呼び出し側)。
-    func emergency(_ active: Bool) {
-        if let c = core { db_core_emergency(c, active ? 1 : 0) }
+    func quickReplyV2(replyId: String, door: String, callId: String,
+                      stageRevision: Int) -> Bool {
+        guard let c = core, !replyId.isEmpty, !callId.isEmpty, stageRevision >= 0 else {
+            return false
+        }
+        return db_core_quick_reply_v2(c, replyId, door, callId, Int32(stageRevision)) == 0
     }
 
-    /// SIP 発呼。target: 内線番号 or "sip:host:port" (直呼)。mode: ""/"monitor"/"answer"。
-    /// PJSIP 無効ビルド (tvOS) では no-op。
+    @discardableResult
+    func emergency(_ active: Bool) -> Bool {
+        guard let c = core else { return false }
+        return db_core_emergency_v2(c, active ? 1 : 0) != 0
+    }
+
+    /// Starts a SIP call to an extension or direct `sip:host:port` target.
+    /// tvOS publishes a real backend but invokes only the listen-only `monitor` mode.
     func sipCall(target: String, mode: String) {
         if let c = core, !target.isEmpty { db_core_sip_call(c, target, mode) }
     }
@@ -144,17 +183,89 @@ final class CoreBridge {
         if let c = core { db_core_sip_hangup(c) }
     }
 
+    @discardableResult
+    func sipSendDtmf(_ digits: String) -> Bool {
+        guard let c = core, !digits.isEmpty else { return false }
+        return db_core_sip_send_dtmf(c, digits) == 0
+    }
+
+    var sipBackend: String {
+        guard let p = db_core_sip_backend() else { return "unknown" }
+        return String(cString: p)
+    }
+
     func status() -> [String: Any]? { return takeJson(core.map { db_core_status_json($0) } ?? nil) }
+
+    func debugInfo() -> [String: Any]? {
+        return takeJson(core.map { db_core_debug_json($0) } ?? nil)
+    }
 
     func config() -> [String: Any]? { return takeJson(core.map { db_core_config_json($0) } ?? nil) }
 
-    /// カメラフレーム push。format: 0=NV21, 1=NV12, 2=YUY2, 3=BGRA
+    func capabilities() -> [String: Any]? {
+        takeJson(core.map { db_core_capabilities_json($0) } ?? nil)
+    }
+
+    func pairing() -> [String: Any]? {
+        takeJson(core.map { db_core_pairing_json($0) } ?? nil)
+    }
+
+    func joinCluster(host: String, pin: String) {
+        guard let c = core, !host.isEmpty, !pin.isEmpty else { return }
+        db_core_join_cluster(c, host, pin)
+    }
+
+    @discardableResult
+    func createCluster() -> Bool {
+        guard let c = core else { return false }
+        return db_core_found_cluster(c) != 0
+    }
+
+    func pairingMode(seconds: Int32) {
+        if let c = core { db_core_pairing_mode(c, max(0, seconds)) }
+    }
+
+    func startPairing(seconds: Int32 = 600) -> [String: Any]? {
+        guard let c = core else { return nil }
+        return takeJson(db_core_start_pairing_json(c, max(1, seconds)))
+    }
+
+    func removeDevice(_ id: String) {
+        if let c = core, !id.isEmpty { db_core_remove_device(c, id) }
+    }
+
+    func inviteDevice(_ id: String) {
+        if let c = core, !id.isEmpty { db_core_invite_device(c, id) }
+    }
+
+    func setCapabilities(_ value: [String: Any]) {
+        withJson(value) { json in
+            if let c = core { db_core_set_capabilities_json(c, json) }
+        }
+    }
+
+    func setRuntimeStatus(_ value: [String: Any]) {
+        withJson(value) { json in
+            if let c = core { db_core_set_runtime_status_json(c, json) }
+        }
+    }
+
+    func setUiManifest(_ value: [String: Any]) {
+        withJson(value) { json in
+            if let c = core { db_core_set_ui_manifest_json(c, json) }
+        }
+    }
+
     func onCameraFrame(_ data: UnsafePointer<UInt8>, format: Int32, width: Int32, height: Int32,
                        stride: Int32, tsMs: Int64) {
         if let c = core { db_core_on_camera_frame(c, data, format, width, height, stride, tsMs) }
     }
 
-    /// 符号化済み H.264 (AnnexB) push — VideoEncoderVT から。core が fMP4 化して /stream.mp4 へ。
+    /// Door-station orientation; Core gives an administrator-fixed angle precedence.
+    func setVideoSensorRotation(_ degrees: Int32) {
+        if let c = core { db_core_set_video_sensor_rotation(c, degrees) }
+    }
+
     func onEncodedFrame(_ annexb: Data, isKeyframe: Bool, tsMs: Int64) {
         guard let c = core else { return }
         annexb.withUnsafeBytes { (p: UnsafeRawBufferPointer) in
@@ -164,13 +275,11 @@ final class CoreBridge {
         }
     }
 
-    /// エンコーダを回すべきか (codec=h264/auto かつ /stream.mp4 購読者あり)。5 秒毎に確認する。
     func videoEncoderWanted() -> Bool {
         guard let c = core else { return false }
         return db_core_video_encoder_wanted(c) != 0
     }
 
-    // MARK: - TTS (クイック返信の読み上げ — カスタム音声再生失敗の回落先でも使う)
 
     func speak(text: String, lang: String) {
         guard !text.isEmpty else { return }
@@ -186,19 +295,80 @@ final class CoreBridge {
         synth.speak(utt)
     }
 
-    // MARK: - 内部
 
     private func takeJson(_ p: UnsafeMutablePointer<CChar>?) -> [String: Any]? {
         guard let p = p else { return nil }
         defer { db_free(p) }
-        // String 経由の bridging (data(using:)) は iOS 26 SDK でクラッシュを踏んだ —
-        // C バッファから直接 Data を作る (コピー 1 回で済み速くもある)
         let data = Data(bytes: UnsafeRawPointer(p), count: strlen(p))
         return (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
     }
 
-    /// SPI https_request の実装 (同期契約 — core の専用スレッドから呼ばれるのでブロック可。
-    /// Telegram getUpdates 長輪詢は最大 ~30 秒)。戻り 0=成功 (4xx/5xx でも応答が取れれば 0)。
+    private func withJson(_ value: [String: Any], _ body: (String) -> Void) {
+        guard JSONSerialization.isValidJSONObject(value),
+              let data = try? JSONSerialization.data(withJSONObject: value),
+              let json = String(data: data, encoding: .utf8) else { return }
+        body(json)
+    }
+
+    // UIKit-backed device state is sampled only on main. Core callbacks copy this immutable
+    // bounded snapshot under a lock and never call UIDevice from a Core-owned worker thread.
+    func refreshDeviceInfoCache() {
+        guard Thread.isMainThread else {
+            DispatchQueue.main.async { [weak self] in self?.refreshDeviceInfoCache() }
+            return
+        }
+        guard let json = CoreBridge.makeDeviceInfoJSONOnMainThread() else { return }
+        deviceInfoCacheLock.lock()
+        deviceInfoCacheJSON = json
+        deviceInfoCacheLock.unlock()
+    }
+
+    private func cachedDeviceInfoJSON() -> String {
+        deviceInfoCacheLock.lock()
+        let snapshot = deviceInfoCacheJSON
+        deviceInfoCacheLock.unlock()
+        return snapshot
+    }
+
+    private static func boundedDeviceInfoString(_ value: String, limit: Int) -> String {
+        String(value.prefix(limit))
+    }
+
+    private static func makeDeviceInfoJSONOnMainThread() -> String? {
+        guard Thread.isMainThread else { return nil }
+        #if os(tvOS)
+        let batteryState = "mains"
+        let batteryPercent: Any = NSNull()
+        #else
+        UIDevice.current.isBatteryMonitoringEnabled = true
+        let batteryState: String
+        switch UIDevice.current.batteryState {
+        case .charging: batteryState = "charging"
+        case .full: batteryState = "full"
+        case .unplugged: batteryState = "unplugged"
+        default: batteryState = "unknown"
+        }
+        let battery = UIDevice.current.batteryLevel
+        let batteryPercent: Any = battery < 0 ? NSNull() : Int(battery * 100)
+        #endif
+        let obj: [String: Any] = [
+            "schema_version": 1,
+            "platform": "apple",
+            "system": boundedDeviceInfoString(UIDevice.current.systemName, limit: 64),
+            "system_version": boundedDeviceInfoString(UIDevice.current.systemVersion, limit: 64),
+            "model": boundedDeviceInfoString(UIDevice.current.model, limit: 128),
+            "machine": boundedDeviceInfoString(ProcessInfo.processInfo.hostName, limit: 128),
+            "battery_state": batteryState,
+            "battery_percent": batteryPercent,
+            "low_power_mode": ProcessInfo.processInfo.isLowPowerModeEnabled,
+            "physical_memory": ProcessInfo.processInfo.physicalMemory,
+            "uptime_s": Int(ProcessInfo.processInfo.systemUptime),
+        ]
+        guard let data = try? JSONSerialization.data(withJSONObject: obj),
+              data.count <= 4_096 else { return nil }
+        return String(data: data, encoding: .utf8)
+    }
+
     private static func httpsRequestSync(
         method: String, url: String, headersJson: String, body: Data,
         respOut: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>?,
@@ -230,7 +400,6 @@ final class CoreBridge {
         statusOut?.pointee = httpStatus
         if let out = respOut {
             let d = respData ?? Data()
-            // core は db_free (= free) する契約 — malloc + NUL 終端でコピー
             guard let raw = malloc(d.count + 1) else { return -1 }
             let buf = raw.assumingMemoryBound(to: CChar.self)
             if !d.isEmpty {
@@ -243,9 +412,8 @@ final class CoreBridge {
     }
 }
 
-// MARK: - Keychain (SPI secure_get/put — SIP パスワード等の保管)
 
-private enum Keychain {
+enum Keychain {
     private static let service = "jp.keihan.doorbell.secure"
 
     static func get(_ key: String) -> String? {
@@ -271,7 +439,6 @@ private enum Keychain {
         let data = value.data(using: .utf8) ?? Data()
         var add = base
         add[kSecValueData as String] = data
-        // 端末ロック中 (再起動直後の pre-first-unlock) でも core が読めるように
         add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
         let status = SecItemAdd(add as CFDictionary, nil)
         if status == errSecDuplicateItem {
@@ -279,5 +446,14 @@ private enum Keychain {
                                  [kSecValueData as String: data] as CFDictionary) == errSecSuccess
         }
         return status == errSecSuccess
+    }
+
+    static func removeAll() -> Bool {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+        ]
+        let status = SecItemDelete(query as CFDictionary)
+        return status == errSecSuccess || status == errSecItemNotFound
     }
 }

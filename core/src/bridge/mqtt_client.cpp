@@ -1,7 +1,7 @@
-// MQTT 3.1.1 クライアントの実装 (mqtt_client.h 参照)。
-// 1 本の IO スレッドが 接続→CONNECT/CONNACK→送受信ポンプ→(切断)→バックオフ→再接続 を回す。
-// 起床は wake ペア (socket_compat)。コールバックは shared Impl 経由で Runloop へ post し、
-// 実行時に mutex 下で読み直す — stop() 後に届く残りは無害な no-op になる。
+
+
+
+
 #include "bridge/mqtt_client.h"
 
 #include <algorithm>
@@ -15,7 +15,7 @@
 #include "util/log.h"
 
 #if !defined(_WIN32)
-#include <netdb.h>  // getaddrinfo (Windows は ws2tcpip.h が提供)
+#include <netdb.h>
 #endif
 
 namespace db {
@@ -33,7 +33,7 @@ void putStr(Bytes& b, const std::string& s) {
   b.insert(b.end(), s.begin(), s.end());
 }
 
-// 固定ヘッダ (1B + remaining length) を前置
+
 Bytes withHeader(uint8_t first_byte, const Bytes& body) {
   Bytes out;
   uint8_t rl[4];
@@ -45,7 +45,7 @@ Bytes withHeader(uint8_t first_byte, const Bytes& body) {
   return out;
 }
 
-// 長さ前置 UTF-8 文字列の読み出し
+
 bool readStr(const Bytes& b, size_t* pos, std::string* out) {
   if (b.size() < *pos + 2) return false;
   const size_t n = (static_cast<size_t>(b[*pos]) << 8) | b[*pos + 1];
@@ -71,7 +71,7 @@ size_t encodeRemainingLength(uint32_t len, uint8_t out[4]) {
 int decodeRemainingLength(const uint8_t* data, size_t len, uint32_t* value, size_t* used) {
   uint32_t mult = 1, v = 0;
   for (size_t i = 0; i < 4; i++) {
-    if (i >= len) return 0;  // データ不足
+    if (i >= len) return 0;
     v += static_cast<uint32_t>(data[i] & 0x7f) * mult;
     if (!(data[i] & 0x80)) {
       *value = v;
@@ -80,7 +80,7 @@ int decodeRemainingLength(const uint8_t* data, size_t len, uint32_t* value, size
     }
     mult *= 128;
   }
-  return -1;  // 4 バイト目にも継続ビット = 不正
+  return -1;
 }
 
 Bytes encodeConnect(const ConnectOpts& o) {
@@ -114,7 +114,7 @@ Bytes encodeConnect(const ConnectOpts& o) {
 Bytes encodePublish(const std::string& topic, const std::string& payload, bool retain) {
   Bytes b;
   putStr(b, topic);
-  // QoS0 なので packet id なし — 直後が payload
+
   b.insert(b.end(), payload.begin(), payload.end());
   return withHeader(static_cast<uint8_t>(0x30 | (retain ? 0x01 : 0x00)), b);
 }
@@ -126,7 +126,7 @@ Bytes encodeSubscribe(uint16_t packet_id, const std::vector<std::string>& filter
     putStr(b, f);
     b.push_back(0);  // requested QoS 0
   }
-  return withHeader(0x82, b);  // 予約ビット 0b0010 必須
+  return withHeader(0x82, b);
 }
 
 Bytes encodePingReq() { return Bytes{0xC0, 0x00}; }
@@ -157,7 +157,7 @@ bool parsePublish(const Packet& p, std::string* topic, std::string* payload, boo
   size_t pos = 0;
   if (!readStr(p.body, &pos, topic)) return false;
   const uint8_t qos = (p.flags >> 1) & 0x3;
-  if (qos > 0) {  // packet id (本実装は QoS0 購読のみだが受信は寛容に)
+  if (qos > 0) {
     if (p.body.size() < pos + 2) return false;
     pos += 2;
   }
@@ -173,8 +173,8 @@ bool parsePublish(const Packet& p, std::string* topic, std::string* payload, boo
 namespace {
 constexpr const char* kTag = "mqtt";
 constexpr int64_t kConnectTimeoutMs = 10000;
-constexpr int64_t kStopFlushMs = 1000;                      // stop 時の送信残フラッシュ上限
-constexpr int64_t kBackoffMs[] = {2000, 5000, 15000, 30000};  // 再接続バックオフ (cap 30s)
+constexpr int64_t kStopFlushMs = 1000;
+constexpr int64_t kBackoffMs[] = {2000, 5000, 15000, 30000};
 
 int64_t steadyMs() {
   return std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -185,15 +185,15 @@ int64_t steadyMs() {
 
 struct MqttClient::Impl : public std::enable_shared_from_this<MqttClient::Impl> {
   Runloop& loop;
-  net::Init winsock;  // Winsock 参照 (POSIX では no-op)
+  net::Init winsock;
   const Options opts;
 
   std::mutex mu;
   Callbacks cbs;
   std::thread io;
   bool started = false;
-  bool stop_req = false;   // graceful (DISCONNECT を送る)
-  bool abort_req = false;  // テスト用即断 (LWT を飛ばす)
+  bool stop_req = false;
+  bool abort_req = false;
   bool is_connected = false;
   std::deque<Bytes> outbox;
   uint16_t next_packet_id = 1;
@@ -214,7 +214,7 @@ struct MqttClient::Impl : public std::enable_shared_from_this<MqttClient::Impl> 
     if (net::valid(wake[1])) net::wakeSignal(wake[1]);
   }
 
-  // ---------- Runloop への配送 (実行時に mutex 下でコールバックを読み直す) ----------
+
   void postConnected() {
     auto self = shared_from_this();
     loop.post([self] {
@@ -251,8 +251,8 @@ struct MqttClient::Impl : public std::enable_shared_from_this<MqttClient::Impl> 
     });
   }
 
-  // ---------- IO スレッド ----------
-  // バックオフ待ち。wake で中断可。stop/abort が来たら false。
+
+
   bool sleepBackoff(int64_t ms) {
     const int64_t deadline = steadyMs() + ms;
     for (;;) {
@@ -265,7 +265,7 @@ struct MqttClient::Impl : public std::enable_shared_from_this<MqttClient::Impl> 
     }
   }
 
-  // TCP 接続 (名前解決 + 非ブロッキング connect + デッドライン)。失敗は kInvalidSocket。
+
   net::socket_t connectTcp() {
     sockaddr_in sa{};
     sa.sin_family = AF_INET;
@@ -276,7 +276,7 @@ struct MqttClient::Impl : public std::enable_shared_from_this<MqttClient::Impl> 
       hints.ai_socktype = SOCK_STREAM;
       addrinfo* res = nullptr;
       if (::getaddrinfo(opts.host.c_str(), nullptr, &hints, &res) != 0 || !res) {
-        DB_LOGW(kTag, "名前解決失敗: " + opts.host);
+        DB_LOGW(kTag, "name resolution failed: " + opts.host);
         return net::kInvalidSocket;
       }
       sa.sin_addr = reinterpret_cast<sockaddr_in*>(res->ai_addr)->sin_addr;
@@ -311,7 +311,7 @@ struct MqttClient::Impl : public std::enable_shared_from_this<MqttClient::Impl> 
     }
   }
 
-  // 全量送信 (デッドライン付き)。stop/abort でも CONNECT/DISCONNECT のため送り切りを試みる。
+
   bool sendAll(net::socket_t fd, const Bytes& data, int64_t deadline) {
     size_t off = 0;
     while (off < data.size()) {
@@ -328,7 +328,7 @@ struct MqttClient::Impl : public std::enable_shared_from_this<MqttClient::Impl> 
     return true;
   }
 
-  // パケット 1 個受信 (デッドライン付き)。inbuf は接続ローカルの受信バッファ。
+
   bool readPacket(net::socket_t fd, std::vector<uint8_t>* inbuf, mqtt::Packet* out,
                   int64_t deadline) {
     for (;;) {
@@ -354,7 +354,7 @@ struct MqttClient::Impl : public std::enable_shared_from_this<MqttClient::Impl> 
     }
   }
 
-  // CONNECT → CONNACK。true = 受理。
+
   bool mqttHandshake(net::socket_t fd, std::vector<uint8_t>* inbuf) {
     mqtt::ConnectOpts co;
     co.client_id = opts.client_id;
@@ -370,7 +370,7 @@ struct MqttClient::Impl : public std::enable_shared_from_this<MqttClient::Impl> 
     if (!readPacket(fd, inbuf, &p, deadline)) return false;
     uint8_t rc = 0xff;
     if (!mqtt::parseConnack(p, &rc) || rc != 0) {
-      DB_LOGW(kTag, "CONNACK 拒否 rc=" + std::to_string(rc));
+      DB_LOGW(kTag, "CONNACK rejected with rc=" + std::to_string(rc));
       return false;
     }
     return true;
@@ -382,10 +382,10 @@ struct MqttClient::Impl : public std::enable_shared_from_this<MqttClient::Impl> 
       bool retain = false;
       if (mqtt::parsePublish(p, &topic, &payload, &retain)) postMessage(topic, payload, retain);
     }
-    // PINGRESP/SUBACK は受信時刻の更新 (pump 側) だけで十分
+
   }
 
-  // outbox を書けるだけ書く。致命エラーで false。*wrote = 1 バイトでも書けたか。
+
   bool flushSome(net::socket_t fd, bool* wrote) {
     for (;;) {
       Bytes chunk;
@@ -407,17 +407,17 @@ struct MqttClient::Impl : public std::enable_shared_from_this<MqttClient::Impl> 
       }
     }
   }
-  size_t out_off = 0;  // outbox 先頭の送信済みオフセット (IO スレッドのみ)
+  size_t out_off = 0;
 
-  // 接続確立後の送受信ポンプ。戻り値: true = エラー/EOF による切断 (再接続へ)、
-  // false = stop/abort による終了。fd はこの中で必ず閉じる。
+
+
   bool pump(net::socket_t fd, std::vector<uint8_t>* inbuf) {
     const int64_t ka_ms = static_cast<int64_t>(opts.keepalive_s) * 1000;
     int64_t last_send = steadyMs(), last_recv = last_send, last_ping = 0;
     for (;;) {
       {
         std::lock_guard<std::mutex> lk(mu);
-        if (abort_req) {  // テスト用即断 — DISCONNECT を送らない = ブローカーが LWT を発火
+        if (abort_req) {
           net::closeSocket(fd);
           return false;
         }
@@ -425,7 +425,7 @@ struct MqttClient::Impl : public std::enable_shared_from_this<MqttClient::Impl> 
           outbox.push_back(mqtt::encodeDisconnect());
         }
       }
-      if (stopping()) {  // graceful: 送信残 (+DISCONNECT) を吐き切ってから閉じる
+      if (stopping()) {
         const int64_t deadline = steadyMs() + kStopFlushMs;
         bool wrote = false;
         while (steadyMs() < deadline) {
@@ -478,7 +478,7 @@ struct MqttClient::Impl : public std::enable_shared_from_this<MqttClient::Impl> 
           mqtt::Packet p;
           int used = mqtt::decodePacket(inbuf->data() + pos, inbuf->size() - pos, &p);
           if (used == 0) break;
-          if (used < 0) {  // プロトコル不正は即切断
+          if (used < 0) {
             net::closeSocket(fd);
             return true;
           }
@@ -493,7 +493,7 @@ struct MqttClient::Impl : public std::enable_shared_from_this<MqttClient::Impl> 
         return true;
       }
       if (wrote) last_send = now;
-      // keepalive: 半周期の無送信で PINGREQ、2 周期の無受信で死んだとみなす
+
       if (ka_ms > 0) {
         if (now - std::max(last_send, last_ping) >= ka_ms / 2) {
           std::lock_guard<std::mutex> lk(mu);
@@ -501,7 +501,7 @@ struct MqttClient::Impl : public std::enable_shared_from_this<MqttClient::Impl> 
           last_ping = now;
         }
         if (now - last_recv >= ka_ms * 2) {
-          DB_LOGW(kTag, "keepalive 途絶 — 再接続する");
+          DB_LOGW(kTag, "keepalive timed out; reconnecting");
           net::closeSocket(fd);
           return true;
         }
@@ -532,24 +532,24 @@ struct MqttClient::Impl : public std::enable_shared_from_this<MqttClient::Impl> 
         is_connected = true;
         out_off = 0;
       }
-      DB_LOGI(kTag, "接続 " + opts.host + ":" + std::to_string(opts.port));
+      DB_LOGI(kTag, "connected to " + opts.host + ":" + std::to_string(opts.port));
       postConnected();
       const bool err = pump(fd, &inbuf);
       {
         std::lock_guard<std::mutex> lk(mu);
         is_connected = false;
-        outbox.clear();  // 古い接続宛の残りは捨てる (呼び出し側が再接続時に再発行)
+        outbox.clear();
         out_off = 0;
       }
       if (err) {
-        DB_LOGW(kTag, "切断 — バックオフ再接続へ");
+        DB_LOGW(kTag, "disconnected; reconnecting with backoff");
         postDisconnected();
       }
     }
   }
 };
 
-// ---------------------------------------------------------------- 公開 API
+
 
 MqttClient::MqttClient(Runloop& loop, Options opts, Callbacks cbs)
     : impl_(std::make_shared<Impl>(loop, std::move(opts), std::move(cbs))) {}
@@ -563,7 +563,7 @@ void MqttClient::start() {
   std::lock_guard<std::mutex> lk(impl_->mu);
   if (impl_->started) return;
   if (!net::makeWakePair(impl_->wake)) {
-    DB_LOGE(kTag, "wake ペア作成失敗");
+    DB_LOGE(kTag, "failed to create wake socket pair");
     return;
   }
   impl_->started = true;
@@ -575,7 +575,7 @@ void MqttClient::stop() {
   {
     std::lock_guard<std::mutex> lk(impl_->mu);
     impl_->stop_req = true;
-    // 以後のコールバックを無効化 (post 済みの残りも実行時に no-op になる)
+
     impl_->cbs = Callbacks{};
   }
   impl_->wakeIo();
@@ -596,7 +596,7 @@ void MqttClient::publish(const std::string& topic, const std::string& payload, b
   {
     std::lock_guard<std::mutex> lk(impl_->mu);
     if (!impl_->is_connected) {
-      DB_LOGD(kTag, "未接続 publish 破棄: " + topic);
+      DB_LOGD(kTag, "dropping publish while disconnected: " + topic);
       return;
     }
     impl_->outbox.push_back(mqtt::encodePublish(topic, payload, retain));
@@ -608,11 +608,11 @@ void MqttClient::subscribe(const std::string& topic_filter) {
   {
     std::lock_guard<std::mutex> lk(impl_->mu);
     if (!impl_->is_connected) {
-      DB_LOGD(kTag, "未接続 subscribe 破棄: " + topic_filter);
+      DB_LOGD(kTag, "dropping subscribe while disconnected: " + topic_filter);
       return;
     }
     uint16_t pid = impl_->next_packet_id++;
-    if (impl_->next_packet_id == 0) impl_->next_packet_id = 1;  // 0 は不正
+    if (impl_->next_packet_id == 0) impl_->next_packet_id = 1;
     impl_->outbox.push_back(mqtt::encodeSubscribe(pid, {topic_filter}));
   }
   impl_->wakeIo();

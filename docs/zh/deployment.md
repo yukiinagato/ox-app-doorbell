@@ -1,81 +1,62 @@
-> 日文原文: ../ja/deployment.md（以日文为准）
+# 部署指南
 
-# 部署步骤（实宅上线检查清单）
+先依 [capability matrix](capability-matrix.md) 選擇目標，再逐裝置、OS/韌體、media path、enclosure 與
+signed artifact commissioning。compile 成功不等於硬體認證。
 
-按顺序推进，即可把所有设备接入现有的 HA / Asterisk / 光电话（ひかり電話）环境。
-各节的细节见括号内标注的文档。
+## 1. trusted network 與 integration
 
-## 0. 事前准备
+- 將 [ports](network-ports.md) 限於 trusted LAN；遠端 access 使用 VPN 或有驗證的 TLS reverse proxy。
+  不可直接向 Internet 暴露 node HTTP/mesh/MiniSIP/MQTT/camera。
+- 只配置所需的 Asterisk、MQTT/HA、Telegram、go2rtc/HomeKit，並測試服務中斷時的行為。
+- 檢查 battery/power；入口裝置需要戶外防水、防凝露、溫控 enclosure。
 
-- [ ] HA 主机（x86 iGPU 或 RPi4+）上已运行 Mosquitto 插件 + go2rtc
-- [ ] 已将 `deploy/asterisk/pjsip.conf` / `extensions.conf` 导入 Asterisk
-      （改写 `CHANGE_ME_*` 和手机号码，配置光电话 HGW 的内线号码）— 步骤见
-      `deploy/asterisk/README.zh.md`
-- [ ] Telegram bot（@ox_doorbell_bot）的 token 和家人的 chat_id 清单
-- [ ] 检查各设备电池（是否鼓包）。可行的话拆掉电池改为直连供电
+## 2. build 與 qualification artifact
 
-## 1. 第一台设备（管理的起点）
+- 執行 common check 與 platform release gate，驗證真實 PJSIP、target/arch/min OS/API/dependency/source/
+  signing identity。Android API 19、Windows VM/Toughpad、iOS 9 在未完成驗證前不得宣稱已認證。
+  iOS 5 使用 [maintainer runbook](ios-compat-maintainer.md)。
 
-任意平台均可，但常供电的门口机（推荐 Toughpad）最合适。
+## 3. 不以 plaintext secret 配對
 
-- [ ] Windows: 解压 GitHub Actions 的 `doorbell-windows` artifact →
-      运行 `deploy/provision/windows/provision.cmd`（管理员）→ 在 kiosk 用户下执行
-      `kiosk-enable.cmd` → 重新登录（详情: `docs/zh/win-build-env.md` §实机）
-- [ ] 首次启动会生成 `%ProgramData%\Doorbell\boot.json` — 编辑 `name` / `role` /
-      `door` / `psk_hex`（自行生成 64 位 hex）/ `seed_peers` 后重启
-- [ ] 浏览器打开 `http://<设备IP>:47180/admin/` → 首次登录 = 设置管理密码
-- [ ] **安全初始化**: 修改 kiosk 退出 PIN（`exit_pin.txt`，默认 000000），
-      在「系统」标签页记下面板 token
+使用 app/admin 的 bounded pairing flow，確認 parent 與新 node identity。Core 必須先完成
+`secure_put("mesh.psk", …)`，之後只發出 `{t:"paired", psk_ref:"secret:mesh.psk"}`，shell 再把該 reference
+與非秘密 bootstrap 欄位寫入 `boot.json`。`pairing_persistence_error` 必須維持 not-ready。SIP/MQTT/
+Telegram/WebRTC/camera credential 透過支援 secure storage 的 UI/API 輸入，config 只存 `secret:` reference。
 
-## 2. 配置骨架（在管理页面）
+Web Push 必須在每個預定 `web_push` leader candidate 的 local secure store，以相同的已複製 reference
+配置 VAPID private 值與可選的 sender bearer 值；之後才原子保存 [config schema](config-schema.md) 中的
+HTTPS sender URL、VAPID public key/subject 與 secret reference。確認 status 有非空 Push leader 且
+`delivery_backend:true`，不可只把 `configured:true` 當成 readiness。
+shipping shell 在沒有 configured endpoint probe 時會回報 `wan:false`。逐一從候選節點實測能連到 exact
+HTTPS sender 後，才設定該節點的 `caps_override.wan:true`；保留測試紀錄，network 改變時移除 override。
+Push leader 也必須具備 `tls12`、`mains_power`、`wall_clock_sane` 與 `web_push_ready`。
 
-- [ ] 门／建筑: 注册各玄关（d_front 等）与楼栋，配日英中标签
-- [ ] 集成: MQTT（HA 的 Mosquitto）、Telegram（token + 打开 poll_updates）、SIP
-      （Asterisk IP + 各设备的内线/密码）、tz
-- [ ] 通知对象: 在 households 填家人的 chat_id / 内线
-- [ ] 呼叫规则: 按铃 → SIP 600 + Telegram + 门铃声。也可按喜好设置例如仅快递
-      （p_delivery）时 auto_reply「放门口」+ 不打电话
-- [ ] 调整主题 / 文案 / 事由 / 快捷回复 / 资产（背景图片、自定义语音）
+不得將 cluster PSK、password、token、URL userinfo 或 signing secret 複製到 `boot.json`、CRDT JSON、
+command、log 或文件。舊 `psk_hex` 僅供遷移輸入。
 
-## 3. 添加设备（任意台数）
+## 4. role 與行為
 
-- [ ] 管理页面「系统」→「添加设备」签发 PIN（10 分钟有效）
-- [ ] 在新设备上启动 App → 初始设置中输入 已有节点 IP + PIN → PSK/配置自动分发
-      （也可直接把 psk_hex/seed_peers 写进 boot.json）
-- [ ] 在设备标签页分配名称、负责的门、角色（door_station / indoor_panel / TV）
-- Android: `deploy/provision/android/provision.zh.md`（Device Owner 化 = 完全 kiosk，含 TV 一节）
-- iOS: `deploy/provision/ios/provision.zh.md`（受监督 + Single App Mode、Ad Hoc 签名与逐年更新）
-- iPad 1 等 legacy 设备: 用 Safari 把 `http://<任意节点>:47180/panel/door?k=<token>`
-  存为 Web 快捷方式（`monitor` 同理）。自动锁定设为「无」
-- 若要把 iPad 1 (A1219, iOS5.1.1) 越狱成原生节点，请参见
-  `deploy/provision/ios/ipad1-jailbreak.md`（完整 core・音频・开锁，接外麦还能对讲）
+只設定 shell 實測的 capability。camera source 必須明確指定，不可從 seed peer 推測。iPad 1 有內建
+mic/speaker、沒有 camera，應使用外部 MJPEG/snapshot/RTSP 或 no-video mode。bounded RTSP/TCP H.264
+ingest 與 Annex-B 轉送已通過 host/loopback 驗證，但在 IDR 被接受前 runtime 維持 degraded，真實 camera
+hardware qualification 尚未完成。
 
-## 4. HA / HomeKit
+SOS rule 應明確設定 target/channel/presentation，並檢查 dry-run 的 zero recipient、silent、unsupported/
+unavailable、Push subscription/backend warning；同時記錄 `emergency.web_active_page_alerts` 選擇。
+逐一驗證各 Web group 的 `?group=` 同時控制 poll/Push、native-only target 不到 Web、rule TTL 後 raw-SOS
+仍保留至 clear，以及 config/export 不含 plaintext Push endpoint/key。
 
-- [ ] 连上 Mosquitto 后，实体会自动出现在 HA（门铃 event / 移动侦测 /
-      设备在线 / 紧急 / 访客语言 sensor）
-- [ ] 按各门口机的 IP 修改并导入 `deploy/ha/go2rtc.yaml`
-      （codec=h264 的设备用 `#video=copy` — 无需转码）
-- [ ] 导入 `deploy/ha/configuration-snippets.yaml` 中的 HomeKit Bridge / 看门狗 /
-      actionable 通知 / 开锁 automation，把 entity_id 改成实际值
-- [ ] 确认 iPhone 家庭 App 能收到门铃通知+直播。想在外面观看需
-      Apple TV / HomePod 作为家庭中枢
+## 5. commissioning 每個 node
 
-## 5. 功能验证（每次添加设备后）
+記錄 artifact/signature/runtime status、ring/cancel/purpose/answer/hangup/reply/DTMF/unlock/SOS、重複或
+過期 event、Core `delivery_result` dispatch evidence 與 client channel presentation report 的區別、
+camera/audio/rotation/color/fallback/AEC、integration 中斷、network/peer/process/memory/
+reboot/power/rollback、kiosk maintenance、thermal/battery 與長時間 soak。iOS root helper 已實作並通過
+host test，也有不會啟用 launchd 的可重現 armv7/iOS 5.1 staged DEB，但實機 qualification 仍未完成。
+明確 opt-in workflow、exact binary、root-owned launchd、UID/GID/socket permission、maintenance lease、
+safe mode、rollback 與 soak 通過前不得依賴。
 
-- [ ] 按铃 → 内线+手机响铃 / Telegram 照片+按钮 / HA 通知 / 室内门铃声
-- [ ] 在 Telegram 点按钮回复 → 门口机大字显示+朗读
-- [ ] 从室内机点「应答」→ 电话腿被切断并进入双向通话（含视频）
-- [ ] 通话中从手机按 *1 → HA 的锁打开
-- [ ] 拔掉设备网线 → 30 秒内向 Telegram/HA 发离线通知
-- [ ] **停掉 HA 和 Asterisk 后**: 按铃显示、门铃声、室内对讲、面板仍持续工作
+## 6. 維運與復原
 
-## 6. 运维
-
-- 更新: 分发 GitHub Actions 的 artifact（Windows 由 watchdog 容许 停止→替换→重启。
-  Android 用 DO 静默安装）。更新前打 tag，便于回退
-- iOS Ad Hoc 签名**每年必须重新签名一次** — 遵循 App 内的到期显示和 Telegram 的
-  提前 30 天警告（永久化 = 上架 App Store，计划为 Phase 7）
-- 配置备份: 管理页面「系统」→ 导出（任一节点都能导出全量）
-- 设备被盗时: 在管理页面重新签发 PSK → 所有设备重新配对，轮换 SIP 密码和 bot token
-- Windows Update 已封锁 — 在维护日手动应用（参见 `provision.cmd` §6）
+舊 signed artifact 與 manifest 保留在獨立 rollback lane。config export 不含秘密實值，須與 secret backup
+分開。依 [recovery](recovery.md) 與 [security](security.md) 操作。

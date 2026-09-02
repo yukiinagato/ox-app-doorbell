@@ -1,10 +1,3 @@
-// 門口機メイン画面: 待機 / 呼び出し中 / 返信バナー / オフライン / スクリーンセーバ /
-// 緊急事態 の状態機。core からの UI イベント (state/chime/reply/display/emergency/…) で遷移する。
-// 表示制御 ({"t":"display"}): 輝度 = WMI (WmiMonitorBrightnessMethods, 失敗容認)、
-// 夜間 red_tint = 全画面 #33FF2200 オーバーレイ + 時計を暗赤に。焼付対策 = pixel_shift_s 毎の
-// ±8px 平行移動 + 無操作 screensaver_after_s でスクリーンセーバ (黒背景 + 低輝度 + 漂う時計)。
-// SOS: 長押し hold_to_trigger_s 秒で db_core_emergency(1)。発報中は全画面赤 + サイレン
-// (実行時生成 PCM wav ループ) + 「解除」→ AdminDialog PIN → db_core_emergency(0)。
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -34,26 +27,47 @@ namespace DoorbellApp
         private readonly DispatcherTimer _pixelShift = new DispatcherTimer();
         private readonly DispatcherTimer _saverDrift = new DispatcherTimer();
         private readonly DispatcherTimer _sosTimer = new DispatcherTimer();
-        private readonly DispatcherTimer _incomingTimeout = new DispatcherTimer();  // 来鈴 30s
-        private readonly DispatcherTimer _answerDelay = new DispatcherTimer();      // 監聴→応答の切替待ち
-        private readonly DispatcherTimer _peerPoll = new DispatcherTimer();         // /peer-frame.jpg 輪詢
+        private readonly DispatcherTimer _emergencyPresentationTimeout = new DispatcherTimer();
+        private readonly DispatcherTimer _incomingTimeout = new DispatcherTimer();
+        private readonly DispatcherTimer _answerDelay = new DispatcherTimer();
+        private readonly DispatcherTimer _peerPoll = new DispatcherTimer();
+        private readonly DispatcherTimer _h264Fallback = new DispatcherTimer();
+        private readonly DispatcherTimer _peerH264Retry = new DispatcherTimer();
         private readonly Random _rng = new Random();
 
-        // ---- 来鈴/通話 (室内対講) ----
-        private MjpegStreamer _incomingStreamer;   // 来鈴画面の門口ライブ
-        private MjpegStreamer _inCallStreamer;     // 通話中の相手映像 (対称 MJPEG)
+        private MjpegStreamer _incomingStreamer;
+        private MjpegStreamer _inCallStreamer;
+        private string _inCallMjpegUrl = "";
+        private string _inCallH264Url = "";
         private string _incomingDoor = "";
-        private string _incomingHost;              // 直呼宛先 (門口機の mesh 実アドレス host)
+        private string _incomingHost;
         private string _incomingStreamUrl;
-        private string _sipMode = "";              // "" | "monitor" | "answer"
+        private string _incomingStreamMp4Url;
+        private string _incomingCallId = "";
+        private int _incomingStageRevision;
+        private string _lifecycleDoor = "";
+        private string _lifecycleCallId = "";
+        private int _lifecycleStageRevision;
+        private bool _lifecycleAnswered;
+        private bool _lifecycleEnded;
+        private bool _suppressLosingSipIdle;
+        private readonly Dictionary<string, int> _acceptedChimeRevisions =
+            new Dictionary<string, int>();
+        private readonly Queue<string> _acceptedChimeOrder = new Queue<string>();
+        private const int AcceptedChimeCapacity = 128;
+        private string _activeCallId = "";
+        private long _activeCallExpiresAtMs;
+        private string _reportedRecoveryCallId = "";
+        private string _callFlow = "purpose_first";
+        private bool _monitorOnly;
+        private string _sipMode = "";
         private bool _inCall;
         private bool _peerPollBusy;
-        private int _directPort = 47190;           // config sip.direct_port (docs/network-ports.md)
+        private int _directPort = 47190;
         private int _secretTaps;
         private DateTime _secretFirst = DateTime.MinValue;
         private KioskHooks _kiosk;
 
-        // ---- 表示制御の実効値 (core {"t":"display"} / status_json.display 由来) ----
         private int _brightness = 70;
         private bool _night;
         private bool _redTint;
@@ -65,30 +79,33 @@ namespace DoorbellApp
         private static readonly Brush NightClockBrush = Frozen(new SolidColorBrush(Color.FromRgb(0x8B, 0x24, 0x1C)));
         private static readonly Brush SaverClockBrush = Frozen(new SolidColorBrush(Color.FromRgb(0x39, 0x42, 0x4C)));
 
-        // ---- 個性化 (テーマ / 訪客言語 / 用件 / カスタム音声) ----
-        private Dictionary<string, object> _cfg;   // 直近の core 設定 (config_changed で差替)
-        private string _nodeId = "";               // 自機 node_id (devices.<id>.local.theme 用)
-        private string _panelToken = "";           // config panel.tokens[0] (/asset の ?k=)
-        private string _visitorLang = "ja";        // 門口機の表示言語 (訪客言語)
-        private string _themeColor;                // 適用済み bg_color
-        private string _themeHash;                 // 適用済み bg_image (sha256)
-        private MediaPlayer _audio;                // reply/chime の audio_path 再生
-        private MediaPlayer _effects;              // ボタン / 追加通知
-        private MediaPlayer _callFeedback;         // 門口の呼出確認音
-        private MediaPlayer _launchAudio;          // 起動音
-        private Action _audioFallback;             // 再生失敗時の回落 (TTS / 内蔵音)
-        private string _callTitleOverride;         // 用件付き按鈴の「{用件} で呼び出しました」
-        private string _incomingPurpose = "";      // 来鈴中の用件 id (バッジ用)
-        private string _incomingLang = "";         // 来鈴中の訪客言語 (返信ラベル/バッジ用)
+        private Dictionary<string, object> _cfg;
+        private string _nodeId = "";
+        private string _visitorLang = "ja";
+        private string _themeColor;
+        private string _themeHash;
+        private MediaPlayer _audio;
+        private MediaPlayer _effects;
+        private MediaPlayer _callFeedback;
+        private MediaPlayer _launchAudio;
+        private Action _audioFallback;
+        private string _callTitleOverride;
+        private string _incomingPurpose = "";
+        private string _incomingLang = "";
+        private SemanticUiOverrides _semanticStyles;
+        private readonly SemanticUiApplier _semanticApplier = new SemanticUiApplier();
 
-        // ---- SOS ----
         private bool _emergencyActive;
+        private bool _emergencyVisual;
+        private Dictionary<string, object> _emergencyReport;
         private double _sosHoldS = 3;
         private bool _cancelRequiresPin = true;
         private DateTime _sosDownAt = DateTime.MinValue;
         private bool _sosHolding;
         private SoundPlayer _siren;
         private MemoryStream _sirenStream;
+        private MediaPlayer _emergencyAudio;
+        private readonly DeviceAlertNotifier _alertNotifier = new DeviceAlertNotifier();
 
         public MainWindow()
         {
@@ -102,34 +119,64 @@ namespace DoorbellApp
             _clock.Start();
             UpdateClock();
 
-            _callTimeout.Interval = TimeSpan.FromSeconds(30);
-            _callTimeout.Tick += (s, e) => { _callTimeout.Stop(); ShowIdle(Texts.T("calling.no_answer")); };
+            _callTimeout.Tick += (s, e) =>
+            {
+                _callTimeout.Stop();
+                if (CancelActiveCall("timeout")) ShowIdle(Texts.T("calling.no_answer"));
+                else CallingText.Text = Texts.T("calling.cancel_failed");
+            };
             _replyTimeout.Tick += (s, e) => { _replyTimeout.Stop(); ReplyBanner.Visibility = Visibility.Collapsed; };
 
-            // 焼付対策: pixel_shift_s 毎に待機画面コンテナを ±8px 移動
             _pixelShift.Tick += (s, e) =>
             {
                 IdleShift.X = _rng.Next(-8, 9);
                 IdleShift.Y = _rng.Next(-8, 9);
             };
-            // スクリーンセーバの時計漂移 (30 秒毎に位置替え)
             _saverDrift.Interval = TimeSpan.FromSeconds(30);
             _saverDrift.Tick += (s, e) => MoveSaverClock();
-            // SOS 長押しの進捗 (50ms 刻み)
             _sosTimer.Interval = TimeSpan.FromMilliseconds(50);
             _sosTimer.Tick += (s, e) => OnSosTick();
+            _emergencyPresentationTimeout.Tick += (s, e) =>
+            {
+                _emergencyPresentationTimeout.Stop();
+                ExpireEmergencyPresentation();
+            };
 
-            // 来鈴: 応答されないまま 30 秒で自動クローズ (映像/監聴を持続させない)
             _incomingTimeout.Interval = TimeSpan.FromSeconds(30);
             _incomingTimeout.Tick += (s, e) => CloseIncoming(true);
-            // 監聴中に応答: hangup → 400ms 待って answer 直呼 (主呼は同時に 1 本)
             _answerDelay.Interval = TimeSpan.FromMilliseconds(400);
             _answerDelay.Tick += (s, e) => { _answerDelay.Stop(); PlaceAnswerCall(); };
-            // 網頁通話の相手映像 (peer_stream 未解決時に自機の /peer-frame.jpg を輪詢)
             _peerPoll.Interval = TimeSpan.FromMilliseconds(500);
             _peerPoll.Tick += (s, e) => PollPeerFrame();
+            _h264Fallback.Interval = TimeSpan.FromSeconds(3);
+            _h264Fallback.Tick += (s, e) =>
+            {
+                _h264Fallback.Stop();
+                if (IncomingView.Visibility == Visibility.Visible &&
+                    IncomingH264.Visibility == Visibility.Visible) ScheduleIncomingH264Retry();
+            };
+            IncomingH264.MediaOpened += (s, e) =>
+            {
+                _h264Fallback.Stop();
+                IncomingH264.Opacity = 1;
+                IncomingLive.Visibility = Visibility.Collapsed;
+                IncomingNoVideo.Visibility = Visibility.Collapsed;
+            };
+            IncomingH264.MediaFailed += (s, e) => ScheduleIncomingH264Retry();
+            _peerH264Retry.Interval = TimeSpan.FromSeconds(3);
+            _peerH264Retry.Tick += (s, e) =>
+            {
+                _peerH264Retry.Stop();
+                if (InCallView.Visibility == Visibility.Visible) StartInCallH264();
+            };
+            PeerH264.MediaOpened += (s, e) =>
+            {
+                _peerH264Retry.Stop();
+                PeerH264.Opacity = 1;
+                PeerVideo.Visibility = Visibility.Collapsed;
+            };
+            PeerH264.MediaFailed += (s, e) => ScheduleInCallH264Retry();
 
-            // 無操作検出 (Preview 系は全 view のタッチ/クリック/キーで発火する)
             PreviewMouseDown += (s, e) => OnActivity();
             PreviewTouchDown += (s, e) => OnActivity();
             PreviewKeyDown += (s, e) => OnActivity();
@@ -151,13 +198,15 @@ namespace DoorbellApp
                 }
                 KioskHooks.KeepDisplayOn();
                 RefreshNodeInfo();
+                RecoverActiveCall();
                 _launchAudio = PlayConfigured(_launchAudio,
                     SoundValue("launch_sound", "title_display"), false);
             };
             Closing += (s, e) =>
             {
-                if (App.Boot.Kiosk && !_adminUnlocked) e.Cancel = true;  // kiosk 中は閉じさせない
+                if (App.Boot.Kiosk && !_adminUnlocked) e.Cancel = true;
                 else _kiosk?.Disable();
+                if (!e.Cancel) _alertNotifier.Dispose();
             };
         }
 
@@ -168,8 +217,6 @@ namespace DoorbellApp
         private static bool IsTrue(string v) =>
             v == "True" || v == "true" || v == "1";
 
-        /// <summary>全画面の文言を現在言語で貼り直す (Texts = i18n_overrides → resx の順で解決)。
-        /// 訪客言語の切替でも呼ばれる。</summary>
         private void ApplyStrings()
         {
             Title = Texts.T("app.name");
@@ -188,13 +235,20 @@ namespace DoorbellApp
             EmergencyCancelButton.Content = Texts.T("emergency.cancel");
             AnswerButton.Content = Texts.T("ring.answer");
             MonitorButton.Content = Texts.T("ring.monitor");
+            OpenDoorButton.Content = Texts.T("ring.open_door");
+            InCallOpenDoorButton.Content = Texts.T("ring.open_door");
+            InCallOpenDoorButton.Visibility = App.Boot.Role == "indoor_panel" ?
+                Visibility.Visible : Visibility.Collapsed;
             IgnoreButton.Content = Texts.T("ring.ignore");
             IncomingNoVideo.Text = Texts.T("ring.no_video");
             InCallTitle.Text = Texts.T("incall.title");
             EndCallButton.Content = Texts.T("incall.end");
+            OpenMonitorButton.Content = Texts.T("monitor.open");
+            MonitorPickerTitle.Text = Texts.T("monitor.choose");
+            MonitorPickerClose.Content = Texts.T("monitor.close");
+            CallingPurposeHint.Text = Texts.T("idle.choose_purpose");
         }
 
-        /// <summary>ドアの表示名 (doors.&lt;door&gt;.label.&lt;lang&gt; → ja → door id)。</summary>
         private string DoorLabel(string door)
         {
             if (string.IsNullOrEmpty(door)) return "";
@@ -206,7 +260,6 @@ namespace DoorbellApp
         private void OnClockTick()
         {
             UpdateClock();
-            // 無操作 screensaver_after_s でスクリーンセーバへ (待機中のみ)
             if (!_screensaverOn && !_emergencyActive && _screensaverAfterS > 0 &&
                 IdleView.Visibility == Visibility.Visible &&
                 CallingView.Visibility != Visibility.Visible &&
@@ -247,53 +300,71 @@ namespace DoorbellApp
                     }
                 }
                 catch { }
-                // 初期表示状態 (起動直後の {"t":"display"}/{"t":"emergency"} は購読前に流れている
-                // ことがある — status_json の同梱値で追い付く)
                 ApplyDisplayFromStatus(st);
             }
-            // 訪客言語の現在値 (status_json visitor_lang.<door>) — 再起動後の追い付き
             if (st != null && App.Boot.Role == "door_station" && !string.IsNullOrEmpty(App.Boot.Door))
             {
                 var vl = CoreClient.Dig(st, "visitor_lang." + App.Boot.Door);
                 SetVisitorLang(vl != null ? vl.ToString() : "ja");
             }
             RefreshSosConfig(_cfg);
-            // 直呼待受ポート (config sip.direct_port — 既定 47190)
             var dp = CoreClient.Dig(_cfg, "sip.direct_port");
             if (dp != null)
             {
                 int p;
                 if (int.TryParse(dp.ToString(), out p) && p > 0) _directPort = p;
             }
-            // 個性化 (テーマ / 用件 / 言語バー) — 文言は言語追従なので最後に貼り直す
+            // v2 contract is a top-level string. Keep the historical ui.call_flow
+            // read only so a staged fleet upgrade does not change behaviour mid-call.
+            var flow = CoreClient.Dig(_cfg, "call_flow") ??
+                       CoreClient.Dig(_cfg, "ui.call_flow");
+            _callFlow = flow != null && flow.ToString() == "ring_then_purpose" ?
+                "ring_then_purpose" : "purpose_first";
             ApplyTheme();
             BuildPurposeButtons();
             BuildLangBar();
             ApplyStrings();
+            _semanticStyles = SemanticUiOverrides.Load(_cfg, _nodeId, App.DataDir);
+            ApplySemanticStyles();
+            App.Core.PublishUiStyleStatus(App.Boot.Role, App.SafeMode,
+                                          _semanticStyles.RuntimeReport);
+            OpenMonitorButton.Visibility = App.Boot.Role == "indoor_panel" ?
+                Visibility.Visible : Visibility.Collapsed;
+            bool sip = App.Core.SipAvailable;
+            AnswerButton.IsEnabled = sip && !_suppressLosingSipIdle;
+            MonitorButton.IsEnabled = sip;
+            OpenDoorButton.IsEnabled = sip;
+            InCallOpenDoorButton.IsEnabled = sip;
         }
 
-        // ---------- 個性化 (テーマ / 訪客言語 / 用件) ----------
 
-        /// <summary>core 設定のキャッシュ更新 (Texts の上書き文言もここで差し替える)。</summary>
         private void RefreshConfigCache()
         {
             _cfg = App.Core.Config();
             Texts.SetConfig(_cfg);
-            _panelToken = FirstPanelToken(_cfg);
         }
 
-        /// <summary>config panel.tokens[0] (資産取得 /asset/&lt;hash&gt;?k= に使う)。</summary>
-        private static string FirstPanelToken(Dictionary<string, object> cfg)
+        private void ApplySemanticStyles()
         {
-            var toks = CoreClient.Dig(cfg, "panel.tokens") as System.Collections.IEnumerable;
-            if (toks == null || toks is string) return "";
-            foreach (var t in toks)
-                if (t != null && !string.IsNullOrEmpty(t.ToString())) return t.ToString();
-            return "";
+            if (_semanticStyles == null) return;
+            _semanticApplier.Apply(CallButton, _semanticStyles.Get("call.primary"), false);
+            _semanticApplier.Apply(CancelButton, _semanticStyles.Get("cancel.call"), true);
+            _semanticApplier.Apply(EndCallButton, _semanticStyles.Get("call.end"), true);
+            _semanticApplier.Apply(SosButton, _semanticStyles.Get("sos.trigger"), true);
+            _semanticApplier.Apply(EmergencyCancelButton, _semanticStyles.Get("sos.cancel"), true);
+            foreach (FrameworkElement child in PurposeGrid.Children)
+                _semanticApplier.Apply(child, _semanticStyles.Get("purpose.button"), false);
+            foreach (FrameworkElement child in CallingPurposeGrid.Children)
+                _semanticApplier.Apply(child, _semanticStyles.Get("purpose.button"), false);
+            foreach (FrameworkElement child in QuickReplyPanel.Children)
+                _semanticApplier.Apply(child, _semanticStyles.Get("reply.button"), false);
+            foreach (FrameworkElement child in new FrameworkElement[]
+                     { AnswerButton, MonitorButton, OpenDoorButton, IgnoreButton })
+                _semanticApplier.Apply(child, _semanticStyles.Get("ring.action"), false);
+            _semanticApplier.Apply(IncomingTitle, _semanticStyles.Get("ring.title"), false);
+            _semanticApplier.Apply(MonitorPickerClose, _semanticStyles.Get("monitor.close"), true);
         }
 
-        /// <summary>設定値を「端末別 (devices.&lt;self&gt;.local.theme.*) → 全体 (display.theme.*)」の
-        /// 優先順で引く。</summary>
         private string ThemeValue(string leaf)
         {
             object v = null;
@@ -303,9 +374,17 @@ namespace DoorbellApp
             return v != null ? v.ToString() : null;
         }
 
-        /// <summary>テーマ適用: bg_color を背景に、bg_image (sha256) を最背面へ敷く。</summary>
         private void ApplyTheme()
         {
+            if (App.SafeMode)
+            {
+                _themeColor = null;
+                _themeHash = null;
+                Background = (Brush)FindResource("Bg");
+                ThemeBgImage.Source = null;
+                ThemeBgImage.Visibility = Visibility.Collapsed;
+                return;
+            }
             string color = ThemeValue("bg_color");
             if (color != _themeColor)
             {
@@ -319,7 +398,7 @@ namespace DoorbellApp
                     }
                     catch (Exception ex)
                     {
-                        Debug.WriteLine("テーマ背景色が不正 (無視): " + color + " " + ex.Message);
+                        Debug.WriteLine("Ignoring invalid theme background color: " + color + " " + ex.Message);
                     }
                 }
                 else
@@ -336,16 +415,14 @@ namespace DoorbellApp
                 ThemeBgImage.Visibility = Visibility.Collapsed;
                 return;
             }
-            if (hash == _themeHash && ThemeBgImage.Source != null) return;  // 適用済み
+            if (hash == _themeHash && ThemeBgImage.Source != null) return;
             _themeHash = hash;
             LoadThemeImage(hash);
         }
 
-        /// <summary>背景画像を自機 httpd から取得 (未キャッシュなら 404 — asset_ready で再試行)。</summary>
         private void LoadThemeImage(string hash)
         {
             string url = "http://127.0.0.1:" + App.Boot.HttpPort + "/asset/" + hash;
-            if (!string.IsNullOrEmpty(_panelToken)) url += "?k=" + _panelToken;
             Task.Run(() =>
             {
                 byte[] data = null;
@@ -356,13 +433,12 @@ namespace DoorbellApp
                 }
                 catch (Exception ex)
                 {
-                    // 未取得 (mesh 前取り待ち) — {"t":"asset_ready"} を待って再試行する
-                    Debug.WriteLine("背景画像の取得失敗 (asset_ready 待ち): " + ex.Message);
+                    Debug.WriteLine("Theme image fetch failed; waiting for asset_ready: " + ex.Message);
                 }
                 if (data == null) return;
                 Dispatcher.BeginInvoke(new Action(() =>
                 {
-                    if (_themeHash != hash) return;  // 途中で設定が変わった
+                    if (_themeHash != hash) return;
                     try
                     {
                         var bmp = new BitmapImage();
@@ -376,13 +452,12 @@ namespace DoorbellApp
                     }
                     catch (Exception ex)
                     {
-                        Debug.WriteLine("背景画像のデコード失敗 (無視): " + ex.Message);
+                        Debug.WriteLine("Ignoring invalid theme image: " + ex.Message);
                     }
                 }));
             });
         }
 
-        /// <summary>設定のオブジェクト直下のキー一覧を order 昇順 (同値は id 順) で返す。</summary>
         private static List<string> SortedByOrder(Dictionary<string, object> map)
         {
             var ids = new List<string>();
@@ -408,7 +483,6 @@ namespace DoorbellApp
             return 999;
         }
 
-        /// <summary>ラベル多言語解決 (label.&lt;lang&gt; → label.ja → 既定)。</summary>
         private static string LabelOf(Dictionary<string, object> entry, string lang, string fallback)
         {
             var label = entry != null && entry.ContainsKey("label")
@@ -424,14 +498,15 @@ namespace DoorbellApp
             return fallback;
         }
 
-        /// <summary>用件ボタン (config visit_purposes)。門口機の待機画面にだけ出す。</summary>
         private void BuildPurposeButtons()
         {
             PurposeGrid.Children.Clear();
+            CallingPurposeGrid.Children.Clear();
             var purposes = CoreClient.Dig(_cfg, "visit_purposes") as Dictionary<string, object>;
             if (App.Boot.Role != "door_station" || purposes == null || purposes.Count == 0)
             {
                 PurposeSection.Visibility = Visibility.Collapsed;
+                CallingPurposeSection.Visibility = Visibility.Collapsed;
                 return;
             }
             foreach (var id in SortedByOrder(purposes))
@@ -442,8 +517,11 @@ namespace DoorbellApp
                 string iconText = entry != null && entry.TryGetValue("icon", out icon) && icon != null
                     ? icon.ToString() : "";
                 PurposeGrid.Children.Add(MakePurposeButton(id, iconText, label));
+                CallingPurposeGrid.Children.Add(MakePurposeButton(id, iconText, label));
             }
             PurposeSection.Visibility = Visibility.Visible;
+            CallingPurposeSection.Visibility = _callFlow == "ring_then_purpose" &&
+                !string.IsNullOrEmpty(_activeCallId) ? Visibility.Visible : Visibility.Collapsed;
         }
 
         private Button MakePurposeButton(string id, string icon, string label)
@@ -479,6 +557,8 @@ namespace DoorbellApp
                 Tag = id,
             };
             b.Click += OnPurposeClick;
+            if (_semanticStyles != null)
+                _semanticApplier.Apply(b, _semanticStyles.Get("purpose.button"), false);
             return b;
         }
 
@@ -492,11 +572,28 @@ namespace DoorbellApp
             var entry = purposes != null && purposes.ContainsKey(id)
                 ? purposes[id] as Dictionary<string, object> : null;
             string label = LabelOf(entry, Texts.Lang, id);
-            App.Core.PressPurpose(App.Boot.Door, id);
+            if (_callFlow == "ring_then_purpose" && !string.IsNullOrEmpty(_activeCallId))
+            {
+                if (!App.Core.SelectPurpose(App.Boot.Door, _activeCallId, id))
+                {
+                    CallingText.Text = Texts.T("purpose.select_failed");
+                    return;
+                }
+                CallingPurposeSection.Visibility = Visibility.Collapsed;
+            }
+            else
+            {
+                _activeCallId = App.Core.PressPurpose(App.Boot.Door, id) ?? "";
+                if (string.IsNullOrEmpty(_activeCallId))
+                {
+                    ShowOffline();
+                    return;
+                }
+                _activeCallExpiresAtMs = ResolveActiveCallExpiryMs();
+            }
             ShowCalling(Texts.T("purpose.sent", label));
         }
 
-        /// <summary>訪客言語バー (config ui.languages)。門口機の待機画面下部。</summary>
         private void BuildLangBar()
         {
             LangBar.Children.Clear();
@@ -531,7 +628,6 @@ namespace DoorbellApp
             UpdateLangBarSelection();
         }
 
-        /// <summary>言語の自言語表記 (訪客が自分の言語を見つけられるように)。</summary>
         private static string LangDisplayName(string lang)
         {
             switch (lang)
@@ -560,11 +656,10 @@ namespace DoorbellApp
             var b = sender as Button;
             if (b == null) return;
             string lang = b.Tag as string;
-            App.Core.SetVisitorLang(App.Boot.Door, lang);  // 複製で visitor_lang が返ってくる
-            SetVisitorLang(lang);                          // 体感優先で先に切り替える (冪等)
+            App.Core.SetVisitorLang(App.Boot.Door, lang);
+            SetVisitorLang(lang);
         }
 
-        /// <summary>表示言語を切り替えて訪客向け文言を貼り直す (自操作・他端末・自動復帰の共通経路)。</summary>
         private void SetVisitorLang(string lang)
         {
             if (string.IsNullOrEmpty(lang)) lang = "ja";
@@ -576,9 +671,7 @@ namespace DoorbellApp
             UpdateLangBarSelection();
         }
 
-        // ---------- カスタム音声 (reply / chime の audio_path) ----------
 
-        /// <summary>資産のローカルファイルを再生。失敗時は fallback (TTS / 内蔵音) へ回落する。</summary>
         private void PlayAudio(string path, Action fallback)
         {
             if (string.IsNullOrEmpty(path) || !File.Exists(path))
@@ -595,7 +688,7 @@ namespace DoorbellApp
                     _audio = new MediaPlayer();
                     _audio.MediaFailed += (s, e) =>
                     {
-                        Debug.WriteLine("カスタム音声の再生失敗 (回落): " + e.ErrorException);
+                        Debug.WriteLine("Custom audio playback failed; using fallback: " + e.ErrorException);
                         var fb = _audioFallback;
                         _audioFallback = null;
                         if (fb != null) fb();
@@ -606,7 +699,7 @@ namespace DoorbellApp
             }
             catch (Exception ex)
             {
-                Debug.WriteLine("カスタム音声を開けない (回落): " + ex.Message);
+                Debug.WriteLine("Custom audio could not be opened; using fallback: " + ex.Message);
                 _audioFallback = null;
                 if (fallback != null) fallback();
             }
@@ -682,7 +775,6 @@ namespace DoorbellApp
             player = null;
         }
 
-        // ---------- 表示制御 ----------
         private static int DictInt(Dictionary<string, object> d, string key, int def)
         {
             object v;
@@ -692,6 +784,23 @@ namespace DoorbellApp
                 if (int.TryParse(v.ToString(), out i)) return i;
             }
             return def;
+        }
+
+        private static long DictLong(Dictionary<string, object> d, string key, long def)
+        {
+            object value;
+            long number;
+            return d != null && d.TryGetValue(key, out value) && value != null &&
+                   long.TryParse(value.ToString(), out number) ? number : def;
+        }
+
+        private static double DictDouble(Dictionary<string, object> d, string key, double def)
+        {
+            object value;
+            double number;
+            return d != null && d.TryGetValue(key, out value) && value != null &&
+                   double.TryParse(value.ToString(), out number) &&
+                   !double.IsNaN(number) && !double.IsInfinity(number) ? number : def;
         }
 
         private static bool DictBool(Dictionary<string, object> d, string key)
@@ -712,23 +821,16 @@ namespace DoorbellApp
                 _pixelShiftS = DictInt(disp, "pixel_shift_s", _pixelShiftS);
                 ApplyDisplay();
             }
-            var em = CoreClient.Dig(st, "emergency") as Dictionary<string, object>;
-            if (em != null)
-            {
-                if (DictBool(em, "active")) ShowEmergency();
-                else HideEmergency();
-            }
         }
 
         private void ApplyDisplay()
         {
-            // 夜間: red tint オーバーレイ + 時計を暗赤に
             NightTint.Visibility = (_night && _redTint) ? Visibility.Visible : Visibility.Collapsed;
             ClockText.Foreground = _night ? NightClockBrush : (Brush)FindResource("Fg");
             DateText.Foreground = _night ? NightClockBrush : (Brush)FindResource("Dim");
             SaverClock.Foreground = _night ? NightClockBrush : SaverClockBrush;
 
-            if (_pixelShiftS > 0)
+            if (!App.SafeMode && _pixelShiftS > 0)
             {
                 _pixelShift.Interval = TimeSpan.FromSeconds(_pixelShiftS);
                 if (!_pixelShift.IsEnabled) _pixelShift.Start();
@@ -744,7 +846,6 @@ namespace DoorbellApp
                 SetBrightnessAsync(_screensaverOn ? Math.Min(_brightness, 10) : _brightness);
         }
 
-        /// <summary>輝度設定 (WMI WmiMonitorBrightnessMethods)。内蔵/対応モニタ以外は失敗容認ログのみ。</summary>
         private void SetBrightnessAsync(int percent)
         {
             if (percent < 0) percent = 0;
@@ -769,13 +870,11 @@ namespace DoorbellApp
                 }
                 catch (Exception ex)
                 {
-                    // 外部モニタ/仮想環境では未対応 — 容認 (表示制御の他要素は生きる)
-                    Debug.WriteLine("brightness 設定失敗 (容認): " + ex.Message);
+                    Debug.WriteLine("Brightness adjustment is unavailable: " + ex.Message);
                 }
             });
         }
 
-        // ---------- スクリーンセーバ ----------
         private void OnActivity()
         {
             _lastActivity = DateTime.Now;
@@ -789,8 +888,8 @@ namespace DoorbellApp
             UpdateClock();
             ScreensaverView.Visibility = Visibility.Visible;
             MoveSaverClock();
-            _saverDrift.Start();
-            SetBrightnessAsync(Math.Min(_brightness, 10));  // 低輝度
+            if (!App.SafeMode) _saverDrift.Start();
+            SetBrightnessAsync(Math.Min(_brightness, 10));
         }
 
         private void ExitScreensaver()
@@ -812,10 +911,8 @@ namespace DoorbellApp
             Canvas.SetTop(SaverBlock, _rng.NextDouble() * h);
         }
 
-        // ---------- SOS ----------
         private void RefreshSosConfig(Dictionary<string, object> cfg)
         {
-            // 既定 (config 未設定時) は config-schema の既定 button_on_roles=["indoor_panel"]
             bool show = App.Boot.Role == "indoor_panel";
             var roles = CoreClient.Dig(cfg, "emergency.button_on_roles") as System.Collections.IEnumerable;
             if (roles != null && !(roles is string))
@@ -836,7 +933,7 @@ namespace DoorbellApp
             SosHint.Text = Texts.T("emergency.hold_hint", _sosHoldS);
 
             var pin = CoreClient.Dig(cfg, "emergency.cancel_requires_pin");
-            _cancelRequiresPin = !(pin is bool) || (bool)pin;  // 既定 true
+            _cancelRequiresPin = !(pin is bool) || (bool)pin;
         }
 
         private void OnSosDown(object sender, MouseButtonEventArgs e)
@@ -856,7 +953,8 @@ namespace DoorbellApp
             if (held >= _sosHoldS)
             {
                 ResetSosHold();
-                App.Core.Emergency(true);  // {"t":"emergency","active":true} が全ノードへ届き UI が出る
+                if (!App.Core.Emergency(true))
+                    System.Diagnostics.Debug.WriteLine("SOS state was not durably committed");
             }
         }
 
@@ -871,28 +969,223 @@ namespace DoorbellApp
             if (SosButton.IsMouseCaptured) SosButton.ReleaseMouseCapture();
         }
 
-        private void ShowEmergency()
+        private void ShowEmergency(UiEvent ev)
         {
-            if (_emergencyActive) return;
-            _emergencyActive = true;
-            ExitScreensaver();
+            bool active = EventBool(ev, "active", false);
+            bool inApp = EventHasChannel(ev, "in_app");
+            bool systemNotification = EventHasChannel(ev, "system_notification");
+            bool visual = EventBool(ev, "visual", true);
+            bool sticky = EventBool(ev, "sticky", active);
+            double ttl = Math.Max(0, DictDouble(ev.Data, "ttl_s", active ? 0 : 10));
+            int volume = Math.Max(0, Math.Min(100, DictInt(ev.Data, "alarm_volume", 100)));
+            bool hasSound = !string.IsNullOrEmpty(ev.Str("alarm_sound")) ||
+                            !string.IsNullOrEmpty(ev.Str("audio_path"));
+            bool sound = hasSound && volume > 0;
+            bool systemSound = sound && (!inApp || !active);
+            var channelResults = new List<Dictionary<string, object>>();
+
+            _emergencyPresentationTimeout.Stop();
+            HideEmergency();
+            string colorLimitation = ApplyEmergencyPresentationColors(ev);
+
+            if (inApp)
+                channelResults.Add(AlertChannelResult(
+                    "in_app", active ? "presented" : "cleared", visual && active,
+                    sound && active, sticky && active, ttl, colorLimitation));
+
+            if (systemNotification)
+            {
+                bool posted = _alertNotifier.Show(
+                    Texts.T("emergency.title"),
+                    Texts.T(active ? "emergency.notified" : "emergency.cancel"), visual);
+                string limitation = sticky ? "sticky_system_notification_unsupported" : "";
+                if (sound && !systemSound) limitation = "sound_owned_by_in_app_channel";
+                string systemResult = !visual && !systemSound ?
+                    "suppressed_by_presentation" :
+                    (posted || systemSound ? "presented" : "unsupported");
+                channelResults.Add(AlertChannelResult(
+                    "system_notification", systemResult,
+                    visual && posted, systemSound, false, ttl, limitation));
+            }
+            object rawChannels;
+            if (ev.Data != null && ev.Data.TryGetValue("channels", out rawChannels) &&
+                rawChannels is System.Collections.IEnumerable && !(rawChannels is string))
+            {
+                foreach (object raw in (System.Collections.IEnumerable)rawChannels)
+                {
+                    string channel = raw == null ? "" : raw.ToString();
+                    if (channel == "in_app" || channel == "system_notification" ||
+                        string.IsNullOrEmpty(channel)) continue;
+                    channelResults.Add(AlertChannelResult(
+                        channel, "unsupported", false, false, false, 0,
+                        "unsupported_channel"));
+                }
+            }
+
+            PublishEmergencyReport(ev, active, channelResults);
+            if (!active)
+            {
+                if (systemSound) StartSiren(ev, volume, sticky);
+                if (systemNotification && !sticky && ttl > 0)
+                {
+                    _emergencyPresentationTimeout.Interval = TimeSpan.FromSeconds(ttl);
+                    _emergencyPresentationTimeout.Start();
+                }
+                return;
+            }
+
+            _emergencyActive = inApp;
+            _emergencyVisual = inApp && visual;
             _callTimeout.Stop();
-            CallingView.Visibility = Visibility.Collapsed;
-            ReplyBanner.Visibility = Visibility.Collapsed;
-            EmergencyView.Visibility = Visibility.Visible;
-            SetBrightnessAsync(100);  // 警報中は最大輝度
-            StartSiren();
+            if (_emergencyVisual)
+            {
+                ExitScreensaver();
+                CallingView.Visibility = Visibility.Collapsed;
+                ReplyBanner.Visibility = Visibility.Collapsed;
+                EmergencyView.Visibility = Visibility.Visible;
+                SetBrightnessAsync(100);
+            }
+            else EmergencyView.Visibility = Visibility.Collapsed;
+
+            if (sound && (inApp || systemNotification)) StartSiren(ev, volume, sticky);
+            else StopSiren();
+
+            if (!sticky && ttl > 0)
+            {
+                _emergencyPresentationTimeout.Interval = TimeSpan.FromSeconds(ttl);
+                _emergencyPresentationTimeout.Start();
+            }
         }
 
         private void HideEmergency()
         {
-            if (!_emergencyActive) return;
+            _emergencyPresentationTimeout.Stop();
+            _alertNotifier.Clear();
             _emergencyActive = false;
             StopSiren();
             EmergencyView.Visibility = Visibility.Collapsed;
-            ShowIdle();
+            if (_emergencyVisual) ShowIdle();
+            _emergencyVisual = false;
             _lastActivity = DateTime.Now;
             ApplyDisplay();
+        }
+
+        private void ExpireEmergencyPresentation()
+        {
+            HideEmergency();
+            if (_emergencyReport == null) return;
+            var previous = _emergencyReport["channels"] as List<Dictionary<string, object>>;
+            var expired = new List<Dictionary<string, object>>();
+            if (previous != null)
+            {
+                foreach (var item in previous)
+                {
+                    var next = new Dictionary<string, object>(item);
+                    string result = DictStr(next, "result");
+                    if (result != "unsupported" && result != "permission_denied")
+                        next["result"] = "ttl_expired";
+                    expired.Add(next);
+                }
+            }
+            _emergencyReport["channels"] = expired;
+            _emergencyReport["updated_at_ms"] = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            App.Core.PublishDeviceAlertStatus(App.Boot.Role, App.SafeMode, _emergencyReport);
+        }
+
+        private static Dictionary<string, object> AlertChannelResult(
+            string channel, string result, bool visual, bool sound, bool sticky,
+            double ttl, string limitation)
+        {
+            var value = new Dictionary<string, object>
+            {
+                { "channel", channel },
+                { "result", result },
+                { "visual_applied", visual },
+                { "sound_applied", sound },
+                { "sticky_applied", sticky },
+                { "ttl_s", ttl },
+            };
+            if (!string.IsNullOrEmpty(limitation)) value["limitation"] = limitation;
+            return value;
+        }
+
+        private string ApplyEmergencyPresentationColors(UiEvent ev)
+        {
+            const string defaultBackground = "#8C0D0A";
+            const string defaultForeground = "#FFFFFF";
+            const string defaultAccent = "#FFFFFF";
+            string background = ev == null ? "" : ev.Str("background");
+            string foreground = ev == null ? "" : ev.Str("foreground");
+            string accent = ev == null ? "" : ev.Str("accent");
+            background = string.IsNullOrEmpty(background) ? defaultBackground : background;
+            foreground = string.IsNullOrEmpty(foreground) ? defaultForeground : foreground;
+            accent = string.IsNullOrEmpty(accent) ? defaultAccent : accent;
+            bool valid = IsExactHexColor(background) && IsExactHexColor(foreground) &&
+                         IsExactHexColor(accent) &&
+                         SemanticColorSafety.HasContrast(foreground, background, 4.5) &&
+                         SemanticColorSafety.HasContrast(accent, background, 3.0);
+            if (!valid)
+            {
+                background = defaultBackground;
+                foreground = defaultForeground;
+                accent = defaultAccent;
+            }
+            var backgroundBrush = Frozen(new SolidColorBrush(
+                (Color)ColorConverter.ConvertFromString(background)));
+            var foregroundBrush = Frozen(new SolidColorBrush(
+                (Color)ColorConverter.ConvertFromString(foreground)));
+            var accentBrush = Frozen(new SolidColorBrush(
+                (Color)ColorConverter.ConvertFromString(accent)));
+            string accentText = SemanticColorSafety.HasContrast("#000000", accent, 4.5)
+                ? "#000000" : "#FFFFFF";
+            EmergencyView.Background = backgroundBrush;
+            EmergencyTitle.Foreground = foregroundBrush;
+            EmergencyNote.Foreground = foregroundBrush;
+            EmergencyCancelButton.Background = accentBrush;
+            EmergencyCancelButton.Foreground = Frozen(new SolidColorBrush(
+                (Color)ColorConverter.ConvertFromString(accentText)));
+            return valid ? "" : "invalid_emergency_presentation_colors";
+        }
+
+        private static bool IsExactHexColor(string value)
+        {
+            if (string.IsNullOrEmpty(value) || value.Length != 7 || value[0] != '#') return false;
+            for (int i = 1; i < value.Length; i++)
+                if (!Uri.IsHexDigit(value[i])) return false;
+            return true;
+        }
+
+        private void PublishEmergencyReport(UiEvent ev, bool active,
+            List<Dictionary<string, object>> channelResults)
+        {
+            _emergencyReport = new Dictionary<string, object>
+            {
+                { "schema_version", 1 },
+                { "event_hlc", ev.Str("event_hlc") },
+                { "active", active },
+                { "result", channelResults.Count == 0 ? "not_requested" : "applied" },
+                { "channels", channelResults },
+                { "updated_at_ms", DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() },
+            };
+            App.Core.PublishDeviceAlertStatus(App.Boot.Role, App.SafeMode, _emergencyReport);
+        }
+
+        private static bool EventBool(UiEvent ev, string key, bool fallback)
+        {
+            if (ev == null || ev.Data == null || !ev.Data.ContainsKey(key)) return fallback;
+            object value = ev.Data[key];
+            return value is bool ? (bool)value : IsTrue(value == null ? "" : value.ToString());
+        }
+
+        private static bool EventHasChannel(UiEvent ev, string channel)
+        {
+            object raw;
+            if (ev == null || ev.Data == null || !ev.Data.TryGetValue("channels", out raw) ||
+                !(raw is System.Collections.IEnumerable) || raw is string)
+                return channel == "in_app";
+            foreach (object value in (System.Collections.IEnumerable)raw)
+                if (value != null && value.ToString() == channel) return true;
+            return false;
         }
 
         private void OnEmergencyCancelClick(object sender, RoutedEventArgs e)
@@ -902,37 +1195,54 @@ namespace DoorbellApp
                 var dlg = new AdminDialog { Owner = this };
                 if (dlg.ShowDialog() != true) return;
             }
-            App.Core.Emergency(false);
-            HideEmergency();  // core からの active=false 通知も来るが即時に畳む (冪等)
+            if (App.Core.Emergency(false)) HideEmergency();
+            else System.Diagnostics.Debug.WriteLine("SOS clear was not durably committed");
         }
 
-        // ---------- サイレン (実行時生成 PCM wav ループ — 同梱音源なしで動く) ----------
-        private void StartSiren()
+        private void StartSiren(UiEvent ev, int volume, bool sticky)
         {
+            StopSiren();
             try
             {
-                if (_siren == null)
+                string path = ev == null ? "" : ev.Str("audio_path");
+                if (!string.IsNullOrEmpty(path) && File.Exists(path))
                 {
-                    _sirenStream = BuildSirenWav();
-                    _siren = new SoundPlayer(_sirenStream);
+                    var player = new MediaPlayer { Volume = volume / 100.0 };
+                    player.MediaEnded += (s, e) =>
+                    {
+                        if (sticky) { player.Position = TimeSpan.Zero; player.Play(); }
+                    };
+                    player.Open(new Uri(path));
+                    player.Play();
+                    _emergencyAudio = player;
+                    return;
                 }
+                _sirenStream = BuildSirenWav(volume);
+                _siren = new SoundPlayer(_sirenStream);
                 _sirenStream.Position = 0;
-                _siren.PlayLooping();
+                if (sticky) _siren.PlayLooping();
+                else _siren.Play();
             }
             catch (Exception ex)
             {
-                Debug.WriteLine("siren 再生失敗 (容認): " + ex.Message);
+                Debug.WriteLine("Siren playback is unavailable: " + ex.Message);
             }
         }
 
         private void StopSiren()
         {
             try { _siren?.Stop(); } catch { }
+            _siren = null;
+            _sirenStream?.Dispose();
+            _sirenStream = null;
+            if (_emergencyAudio != null)
+            {
+                try { _emergencyAudio.Stop(); _emergencyAudio.Close(); } catch { }
+                _emergencyAudio = null;
+            }
         }
 
-        /// <summary>880/660Hz 交互 2 秒の警報音 (22.05kHz 16bit mono PCM WAV)。
-        /// SoundPlayer に音量指定は無い — config emergency.alarm_volume は OS 音量に委ねる。</summary>
-        private static MemoryStream BuildSirenWav()
+        private static MemoryStream BuildSirenWav(int volume)
         {
             const int rate = 22050;
             const int seconds = 2;
@@ -953,12 +1263,14 @@ namespace DoorbellApp
             bw.Write((short)16);       // bits
             bw.Write(Encoding.ASCII.GetBytes("data"));
             bw.Write(dataLen);
+            double gain = Math.Max(0, Math.Min(100, volume)) / 100.0;
             for (int i = 0; i < n; i++)
             {
                 double t = (double)i / rate;
-                double freq = (i / (rate / 2)) % 2 == 0 ? 880.0 : 660.0;  // 0.5 秒毎に交互
-                double env = Math.Min(1.0, Math.Min(i, n - i) / (rate * 0.02));  // クリック防止
-                short s = (short)(Math.Sin(2 * Math.PI * freq * t) * 0.6 * short.MaxValue * env);
+                double freq = (i / (rate / 2)) % 2 == 0 ? 880.0 : 660.0;
+                double env = Math.Min(1.0, Math.Min(i, n - i) / (rate * 0.02));
+                short s = (short)(Math.Sin(2 * Math.PI * freq * t) *
+                                  0.6 * short.MaxValue * env * gain);
                 bw.Write(s);
             }
             bw.Flush();
@@ -966,31 +1278,73 @@ namespace DoorbellApp
             return ms;
         }
 
-        // ---------- 状態遷移 ----------
         private void ShowIdle(string hint = null)
         {
             StopPlayer(ref _callFeedback);
             _callTitleOverride = null;
             CallingView.Visibility = Visibility.Collapsed;
+            CallingPurposeSection.Visibility = Visibility.Collapsed;
             OfflineView.Visibility = Visibility.Collapsed;
             IdleView.Visibility = Visibility.Visible;
+            if (string.IsNullOrEmpty(_activeCallId)) _activeCallExpiresAtMs = 0;
             if (hint != null) TouchHint.Text = hint;
         }
 
-        /// <summary>呼び出し中画面。title 指定時は「{用件} で呼び出しました」等に差し替える
-        /// (core からの state=calling で上書きされないよう _callTitleOverride に覚える)。</summary>
-        private void ShowCalling(string title = null)
+        private void ShowOffline()
+        {
+            ExitScreensaver();
+            IdleView.Visibility = Visibility.Collapsed;
+            CallingView.Visibility = Visibility.Collapsed;
+            OfflineView.Visibility = Visibility.Visible;
+        }
+
+        private long ResolveActiveCallExpiryMs()
+        {
+            if (string.IsNullOrEmpty(_activeCallId)) return 0;
+            var status = App.Core.Status();
+            var calls = status != null && status.ContainsKey("active_calls")
+                ? status["active_calls"] as System.Collections.IEnumerable : null;
+            if (calls == null) return 0;
+            foreach (var item in calls)
+            {
+                var call = item as Dictionary<string, object>;
+                if (call != null && DictStr(call, "call_id") == _activeCallId)
+                    return DictLong(call, "expires_at_ms", 0);
+            }
+            return 0;
+        }
+
+        private void ShowCalling(string title = null, long expiresAtMs = 0)
         {
             ExitScreensaver();
             if (title != null) _callTitleOverride = title;
             CallingText.Text = _callTitleOverride ?? Texts.T("calling.title");
             IdleView.Visibility = Visibility.Collapsed;
             CallingView.Visibility = Visibility.Visible;
+            CallingPurposeSection.Visibility = _callFlow == "ring_then_purpose" &&
+                !string.IsNullOrEmpty(_activeCallId) ? Visibility.Visible : Visibility.Collapsed;
             _callTimeout.Stop();
-            _callTimeout.Start();
-            var anim = new DoubleAnimation(0.25, 1.0, TimeSpan.FromSeconds(0.9))
-            { AutoReverse = true, RepeatBehavior = RepeatBehavior.Forever };
-            Pulse.BeginAnimation(OpacityProperty, anim);
+            if (expiresAtMs > 0) _activeCallExpiresAtMs = expiresAtMs;
+            if (_activeCallExpiresAtMs <= 0)
+                _activeCallExpiresAtMs = ResolveActiveCallExpiryMs();
+            if (_activeCallExpiresAtMs > 0)
+            {
+                long remainingMs = _activeCallExpiresAtMs -
+                    DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+                _callTimeout.Interval = TimeSpan.FromMilliseconds(Math.Max(1, remainingMs));
+                _callTimeout.Start();
+            }
+            if (App.SafeMode)
+            {
+                Pulse.BeginAnimation(OpacityProperty, null);
+                Pulse.Opacity = 1.0;
+            }
+            else
+            {
+                var anim = new DoubleAnimation(0.25, 1.0, TimeSpan.FromSeconds(0.9))
+                { AutoReverse = true, RepeatBehavior = RepeatBehavior.Forever };
+                Pulse.BeginAnimation(OpacityProperty, anim);
+            }
         }
 
         private void OnUiEvent(UiEvent ev)
@@ -1001,37 +1355,113 @@ namespace DoorbellApp
                     var stv = ev.Str("state");
                     if (stv == "calling") { if (App.Boot.Role == "door_station") ShowCalling(); }
                     else if (stv == "idle") OnSipIdle();
-                    else if (stv == "in_call") { StopPlayer(ref _callFeedback); OnSipInCall(ev); }
+                    else if (stv == "in_call" || stv == "answered")
+                    {
+                        StopPlayer(ref _callFeedback);
+                        OnSipInCall(ev);
+                    }
+                    else if (stv == "degraded" && App.Boot.Role == "door_station")
+                        CallingText.Text = Texts.T("sip.unavailable");
+                    else if (stv == "offline") ShowOffline();
                     break;
                 case "event":
-                    // 受鈴室内面板: press で来鈴画面 (門口ライブ + 応答/モニタ/無視)。
-                    // reply (誰かが応対 — 複製イベントで全ノードに届く) で来鈴画面を畳む
-                    if (App.Boot.Role == "indoor_panel" && ev.Str("type") == "press")
-                        ShowIncoming(ev);
-                    else if (ev.Str("type") == "reply" && !_inCall &&
-                             IncomingView.Visibility == Visibility.Visible)
+                    string eventType = ev.Str("type");
+                    bool purposeApplied = false;
+                    // press is replicated to every node. It updates call identity only; the
+                    // targeted schema-v2 chime below is the sole trigger for ring UI/audio.
+                    if (eventType == "press")
+                    {
+                        if (App.Boot.Role == "door_station" &&
+                            (string.IsNullOrEmpty(ev.Str("door")) || ev.Str("door") == App.Boot.Door) &&
+                            string.IsNullOrEmpty(_activeCallId)) _activeCallId = ev.Str("call_id");
+                        if (ev.Str("call_id") == _activeCallId)
+                        {
+                            long expiry = DictLong(ev.Data, "expires_at_ms", 0);
+                            if (expiry > 0)
+                            {
+                                _activeCallExpiresAtMs = expiry;
+                                if (CallingView.Visibility == Visibility.Visible)
+                                    ShowCalling();
+                            }
+                        }
+                        if (App.Boot.Role == "indoor_panel") UpdateIncomingCallData(ev);
+                    }
+                    else if (eventType == "reply" && !_inCall &&
+                             IncomingView.Visibility == Visibility.Visible &&
+                             CallMatches(ev.Str("call_id"), ev.Str("door"),
+                                         _incomingCallId, _incomingDoor))
                         CloseIncoming(true);
+                    if (eventType == "purpose_selected")
+                        purposeApplied = HandlePurposeSelected(ev);
                     if (App.Boot.Role == "indoor_panel" &&
-                        (ev.Str("type") == "call_cancelled" || ev.Str("type") == "purpose_selected"))
+                        (eventType == "call_cancelled" || eventType == "call_answered" ||
+                         eventType == "call_ended" ||
+                         (eventType == "purpose_selected" && purposeApplied)))
                         _effects = PlayConfigured(_effects,
                             SoundValue("update_sound", "indoor_update"), false);
-                    if (ev.Str("type") == "call_cancelled") StopPlayer(ref _callFeedback);
+                    if (eventType == "call_answered")
+                    {
+                        StopPlayer(ref _callFeedback);
+                        int answeredStage = Math.Max(0,
+                            DictInt(ev.Data, "stage_revision", 0));
+                        string owner = ev.Str("dialog_owner");
+                        if (string.IsNullOrEmpty(owner)) owner = ev.Str("device");
+                        if (_inCall && ev.Str("call_id") == _lifecycleCallId &&
+                            !string.IsNullOrEmpty(owner) && !string.IsNullOrEmpty(_nodeId) &&
+                            owner != _nodeId)
+                        {
+                            // The earliest confirmed claim owns the call. Terminate this losing
+                            // SIP leg without publishing call_ended for the winning dialog.
+                            _lifecycleAnswered = false;
+                            _lifecycleEnded = true;
+                            _inCall = false;
+                            _sipMode = "";
+                            App.Core.SipHangup();
+                            CloseInCall();
+                            ShowIdle();
+                        }
+                        else if (!_inCall && IncomingView.Visibility == Visibility.Visible &&
+                            answeredStage >= _incomingStageRevision &&
+                            CallMatches(ev.Str("call_id"), ev.Str("door"),
+                                        _incomingCallId, _incomingDoor)) CloseIncoming(true);
+                    }
+                    if (eventType == "call_cancelled" || eventType == "call_ended")
+                    {
+                        StopPlayer(ref _callFeedback);
+                        if (CallMatches(ev.Str("call_id"), ev.Str("door"),
+                                        _activeCallId, App.Boot.Door))
+                        {
+                            _activeCallId = "";
+                            _activeCallExpiresAtMs = 0;
+                            _callTimeout.Stop();
+                            if (App.Boot.Role == "door_station") ShowIdle();
+                        }
+                        int resolvedStage = Math.Max(0,
+                            DictInt(ev.Data, "stage_revision", 0));
+                        if (IncomingView.Visibility == Visibility.Visible &&
+                            (eventType == "call_cancelled" ||
+                             resolvedStage >= _incomingStageRevision) &&
+                            CallMatches(ev.Str("call_id"), ev.Str("door"),
+                                        _incomingCallId, _incomingDoor)) CloseIncoming(true);
+                    }
                     break;
                 case "chime":
+                    if (!AcceptChimeRevision(ev)) break;
                     ExitScreensaver();
-                    // カスタム音 (assets の audio_path) があればそれを、無ければ内蔵音
+                    if (App.Boot.Role == "indoor_panel") ShowIncoming(ev);
                     if (!string.IsNullOrEmpty(ev.Str("audio_path")))
                         PlayAudio(ev.Str("audio_path"), () => SystemSounds.Exclamation.Play());
                     else
                         _audio = PlayConfigured(_audio, ev.Str("sound"), false,
                             () => SystemSounds.Exclamation.Play());
                     break;
+                case "call_recovery_required":
+                    RecoverCall(ev);
+                    break;
                 case "visitor_lang":
-                    // 訪客言語の切替 (自操作の複製 / 他端末からの変更 / 無操作復帰)
                     if (App.Boot.Role == "door_station" &&
                         (ev.Str("door") == App.Boot.Door || string.IsNullOrEmpty(ev.Str("door"))))
                         SetVisitorLang(ev.Str("lang"));
-                    // 来鈴中の室内機は返信ラベル/バッジを追随させる
                     if (IncomingView.Visibility == Visibility.Visible &&
                         ev.Str("door") == _incomingDoor)
                     {
@@ -1041,17 +1471,15 @@ namespace DoorbellApp
                     }
                     break;
                 case "asset_ready":
-                    // 前取り完了 — 背景画像が待ちだったら読み直す
                     if (!string.IsNullOrEmpty(_themeHash) && ev.Str("hash") == _themeHash &&
                         ThemeBgImage.Source == null)
                         LoadThemeImage(_themeHash);
                     break;
                 case "reply":
                     ExitScreensaver();
-                    // 誰かが応対した → 来鈴画面は閉じる (監聴中なら切る)
-                    if (IncomingView.Visibility == Visibility.Visible && !_inCall)
+                    if (IncomingView.Visibility == Visibility.Visible && !_inCall &&
+                        (string.IsNullOrEmpty(ev.Str("door")) || ev.Str("door") == _incomingDoor))
                         CloseIncoming(true);
-                    // カスタム音声があれば再生 (無い時は core が TTS 済み — 二重発話しない)
                     if (!string.IsNullOrEmpty(ev.Str("audio_path")))
                     {
                         string spoken = ev.Str("text");
@@ -1065,8 +1493,8 @@ namespace DoorbellApp
                     _replyTimeout.Interval = TimeSpan.FromSeconds(ttl <= 0 ? 30 : ttl);
                     _replyTimeout.Stop();
                     _replyTimeout.Start();
-                    // 訪客が見たら呼び出し継続は不要 → 待機へ
                     _callTimeout.Stop();
+                    _activeCallId = "";
                     ShowIdle();
                     break;
                 case "display":
@@ -1078,9 +1506,7 @@ namespace DoorbellApp
                     ApplyDisplay();
                     break;
                 case "emergency":
-                    // 自端末発報も他端末発報も同じ UI (イベント複製で届く)
-                    if (IsTrue(ev.Str("active"))) ShowEmergency();
-                    else HideEmergency();
+                    ShowEmergency(ev);
                     break;
                 case "peers_changed":
                 case "config_changed":
@@ -1089,7 +1515,6 @@ namespace DoorbellApp
             }
         }
 
-        // ---------- 来鈴 / 室内対講 (計画書 §12: 三モード通話) ----------
 
         private static string DictStr(Dictionary<string, object> d, string key)
         {
@@ -1097,7 +1522,203 @@ namespace DoorbellApp
             return d != null && d.TryGetValue(key, out v) && v != null ? v.ToString() : "";
         }
 
-        /// <summary>statusJson peers[] からこの door 担当の door_station (自分以外・生存) を返す。</summary>
+        private static bool CallMatches(string eventCallId, string eventDoor,
+                                        string currentCallId, string currentDoor)
+        {
+            if (!string.IsNullOrEmpty(eventCallId) && !string.IsNullOrEmpty(currentCallId))
+                return eventCallId == currentCallId;
+            return string.IsNullOrEmpty(eventDoor) || string.IsNullOrEmpty(currentDoor) ||
+                   eventDoor == currentDoor;
+        }
+
+        private bool AcceptChimeRevision(UiEvent ev)
+        {
+            string callId = ev.Str("call_id");
+            if (string.IsNullOrEmpty(callId)) return true;
+            int revision = Math.Max(0, DictInt(ev.Data, "stage_revision", 0));
+            int accepted;
+            if (_acceptedChimeRevisions.TryGetValue(callId, out accepted))
+            {
+                if (revision <= accepted) return false;
+                _acceptedChimeRevisions[callId] = revision;
+                return true;
+            }
+            _acceptedChimeRevisions[callId] = revision;
+            _acceptedChimeOrder.Enqueue(callId);
+            while (_acceptedChimeOrder.Count > AcceptedChimeCapacity)
+                _acceptedChimeRevisions.Remove(_acceptedChimeOrder.Dequeue());
+            return true;
+        }
+
+        private bool HandlePurposeSelected(UiEvent ev)
+        {
+            if (App.Boot.Role != "indoor_panel") return false;
+            string callId = ev.Str("call_id");
+            string door = ev.Str("door");
+            bool matchesIncoming = CallMatches(callId, door, _incomingCallId, _incomingDoor);
+            bool matchesAnswer = !string.IsNullOrEmpty(_lifecycleCallId) &&
+                CallMatches(callId, door, _lifecycleCallId, _lifecycleDoor);
+            if (!matchesIncoming && !matchesAnswer) return false;
+
+            int revision = Math.Max(0,
+                DictInt(ev.Data, "stage_revision", _incomingStageRevision));
+            int currentRevision = _incomingStageRevision;
+            if (matchesAnswer) currentRevision = Math.Max(currentRevision, _lifecycleStageRevision);
+            if (revision <= currentRevision) return false;
+
+            bool supersedesAnswer = matchesAnswer && !_monitorOnly &&
+                (_sipMode == "answer" || _answerDelay.IsEnabled || _inCall);
+            if (!supersedesAnswer)
+            {
+                UpdateIncomingCallData(ev);
+                return true;
+            }
+
+            _answerDelay.Stop();
+            _lifecycleAnswered = false;
+            _lifecycleEnded = true;
+            _lifecycleCallId = "";
+            _lifecycleDoor = "";
+            _inCall = false;
+            _sipMode = "";
+            _suppressLosingSipIdle = true;
+            CloseInCall();
+            ShowIncoming(ev);
+            AnswerButton.IsEnabled = false;
+            App.Core.SipHangup();
+            return true;
+        }
+
+        private void UpdateIncomingCallData(UiEvent ev)
+        {
+            if (ev == null) return;
+            string callId = ev.Str("call_id");
+            string door = ev.Str("door");
+            if (IncomingView.Visibility == Visibility.Visible &&
+                !CallMatches(callId, door, _incomingCallId, _incomingDoor)) return;
+            if (!string.IsNullOrEmpty(callId)) _incomingCallId = callId;
+            if (!string.IsNullOrEmpty(door)) _incomingDoor = door;
+            _incomingStageRevision = Math.Max(_incomingStageRevision,
+                DictInt(ev.Data, "stage_revision", _incomingStageRevision));
+            if (!string.IsNullOrEmpty(ev.Str("purpose"))) _incomingPurpose = ev.Str("purpose");
+            if (!string.IsNullOrEmpty(ev.Str("visitor_lang"))) _incomingLang = ev.Str("visitor_lang");
+            if (IncomingView.Visibility == Visibility.Visible)
+            {
+                UpdateIncomingBadges();
+                BuildQuickReplies();
+            }
+        }
+
+        private void RecoverActiveCall()
+        {
+            UiEvent pending = App.Core.TakePendingRecovery();
+            if (pending != null)
+            {
+                RecoverCall(pending);
+                return;
+            }
+            var status = App.Core.Status();
+            var calls = status != null && status.ContainsKey("active_calls")
+                ? status["active_calls"] as System.Collections.IEnumerable : null;
+            if (calls == null) return;
+            foreach (var item in calls)
+            {
+                var call = item as Dictionary<string, object>;
+                if (call == null) continue;
+                string state = DictStr(call, "state");
+                bool ownsDialog = state == "in_call" &&
+                                  DictStr(call, "dialog_owner") == _nodeId;
+                bool ownsWaiting = state == "ringing" && App.Boot.Role == "door_station" &&
+                                   DictStr(call, "origin") == _nodeId &&
+                                   (string.IsNullOrEmpty(DictStr(call, "door")) ||
+                                    DictStr(call, "door") == App.Boot.Door);
+                if (!ownsDialog && !ownsWaiting) continue;
+                var data = new Dictionary<string, object>(call) { { "t", "call_recovery_required" } };
+                RecoverCall(new UiEvent { T = "call_recovery_required", Data = data });
+                return;
+            }
+        }
+
+        private void RecoverCall(UiEvent ev)
+        {
+            string callId = ev == null ? "" : ev.Str("call_id");
+            if (string.IsNullOrEmpty(callId) || callId == _reportedRecoveryCallId) return;
+            var status = App.Core.Status();
+            if (string.IsNullOrEmpty(_nodeId))
+                _nodeId = DictStr(CoreClient.Dig(status, "node") as Dictionary<string, object>, "id");
+            if (string.IsNullOrEmpty(_nodeId))
+            {
+                ReportRecoveryOnce(callId, false);
+                return;
+            }
+
+            Dictionary<string, object> active = null;
+            var calls = status != null && status.ContainsKey("active_calls")
+                ? status["active_calls"] as System.Collections.IEnumerable : null;
+            if (calls != null)
+                foreach (var item in calls)
+                {
+                    var call = item as Dictionary<string, object>;
+                    if (call != null && DictStr(call, "call_id") == callId)
+                    {
+                        active = call;
+                        break;
+                    }
+                }
+            if (active == null)
+            {
+                string eventOwner = ev == null ? "" : ev.Str("dialog_owner");
+                if (string.IsNullOrEmpty(eventOwner) || eventOwner == _nodeId)
+                    ReportRecoveryOnce(callId, false);
+                return;
+            }
+
+            string persistedState = DictStr(active, "state");
+            string eventState = ev == null ? "" : ev.Str("state");
+            string owner = ev == null ? "" : ev.Str("dialog_owner");
+            if (string.IsNullOrEmpty(owner)) owner = DictStr(active, "dialog_owner");
+            if (persistedState == "in_call" || eventState == "in_call")
+            {
+                if (owner != _nodeId) return;
+                // A WPF process restart destroys the PJSIP dialog; rebuilding controls alone is
+                // never evidence that the established audio call survived.
+                ReportRecoveryOnce(callId, false);
+                return;
+            }
+
+            bool waiting = persistedState == "ringing" || eventState == "ringing" ||
+                           eventState == "purpose_pending";
+            bool localDoor = App.Boot.Role == "door_station" &&
+                             DictStr(active, "origin") == _nodeId &&
+                             (string.IsNullOrEmpty(DictStr(active, "door")) ||
+                              DictStr(active, "door") == App.Boot.Door);
+            if (!waiting || !localDoor) return;
+            long expiry = DictLong(active, "expires_at_ms", 0);
+            if (expiry <= DateTimeOffset.UtcNow.ToUnixTimeMilliseconds())
+            {
+                ReportRecoveryOnce(callId, false);
+                return;
+            }
+
+            _activeCallId = callId;
+            _activeCallExpiresAtMs = expiry;
+            string callFlow = DictStr(active, "call_flow");
+            if (callFlow == "ring_then_purpose" || callFlow == "purpose_first")
+                _callFlow = callFlow;
+            _callFeedback = PlayConfigured(_callFeedback,
+                SoundValue("call_sound", "outdoor_call_alert"),
+                ConfigBool("ui.call_sound_loop", false));
+            ShowCalling(null, expiry);
+            ReportRecoveryOnce(callId, true);
+        }
+
+        private void ReportRecoveryOnce(string callId, bool restored)
+        {
+            if (string.IsNullOrEmpty(callId) || callId == _reportedRecoveryCallId) return;
+            _reportedRecoveryCallId = callId;
+            App.Core.ReportCallRecovery(callId, restored);
+        }
+
         private static Dictionary<string, object> FindDoorPeer(Dictionary<string, object> st, string door)
         {
             var peers = (st != null && st.ContainsKey("peers"))
@@ -1117,7 +1738,6 @@ namespace DoorbellApp
             return null;
         }
 
-        /// <summary>peer の addrs[0] "host:port" → host (mesh の実アドレス — Asterisk 非経由)。</summary>
         private static string PeerHost(Dictionary<string, object> peer)
         {
             var addrs = (peer != null && peer.ContainsKey("addrs"))
@@ -1133,59 +1753,140 @@ namespace DoorbellApp
             return null;
         }
 
-        /// <summary>来鈴画面 (indoor_panel が press イベント受信時)。用件/訪客言語は
-        /// press イベント payload 由来 (バッジ表示 + クイック返信のラベル言語)。</summary>
-        private void ShowIncoming(UiEvent ev)
+        /// <summary>Targeted chime (or an explicit local monitor action) opens the incoming view.</summary>
+        private void ShowIncoming(UiEvent ev, bool monitorOnly = false)
         {
-            if (_emergencyActive || _inCall) return;  // 警報中/通話中は画面を奪わない
+            if (_emergencyActive || _inCall) return;
             string door = ev.Str("door");
+            string callId = ev.Str("call_id");
             if (IncomingView.Visibility == Visibility.Visible)
             {
-                // 同じ画面が出ている間の再チャイム → タイマだけ張り直す (監聴等は継続)
-                _incomingPurpose = ev.Str("purpose");
-                _incomingLang = ev.Str("visitor_lang");
-                UpdateIncomingBadges();
-                BuildQuickReplies();
-                _incomingTimeout.Stop();
-                _incomingTimeout.Start();
-                return;
+                if (!_monitorOnly && !monitorOnly &&
+                    CallMatches(callId, door, _incomingCallId, _incomingDoor))
+                {
+                    // A repeated chime from the same door keeps media and refreshes metadata only.
+                    if (!string.IsNullOrEmpty(callId)) _incomingCallId = callId;
+                    _incomingStageRevision = Math.Max(_incomingStageRevision,
+                        DictInt(ev.Data, "stage_revision", _incomingStageRevision));
+                    _incomingPurpose = ev.Str("purpose");
+                    _incomingLang = ev.Str("visitor_lang");
+                    UpdateIncomingBadges();
+                    BuildQuickReplies();
+                    _incomingTimeout.Stop();
+                    _incomingTimeout.Start();
+                    return;
+                }
+                // A different door stops the old stream and monitor SIP before switching targets.
+                CloseIncoming(true);
             }
             ExitScreensaver();
+            _monitorOnly = monitorOnly;
             _incomingDoor = door ?? "";
+            _incomingCallId = callId ?? "";
+            _incomingStageRevision = DictInt(ev.Data, "stage_revision", 0);
             _incomingPurpose = ev.Str("purpose");
             _incomingLang = ev.Str("visitor_lang");
-            IncomingTitle.Text = Texts.T("ring.incoming", DoorLabel(_incomingDoor));
+            IncomingTitle.Text = monitorOnly ? Texts.T("monitor.title", DoorLabel(_incomingDoor)) :
+                                               Texts.T("ring.incoming", DoorLabel(_incomingDoor));
             UpdateIncomingBadges();
             BuildQuickReplies();
+            QuickReplyPanel.Visibility = monitorOnly ? Visibility.Collapsed : QuickReplyPanel.Visibility;
             IncomingHint.Visibility = Visibility.Collapsed;
 
-            // 門口機 peer 解決 (映像 URL + 直呼宛先 host)
+            // Resolve the door peer into a video URL and direct-call host.
             var peer = FindDoorPeer(App.Core.Status(), _incomingDoor);
             _incomingHost = PeerHost(peer);
             _incomingStreamUrl = DictStr(peer, "stream");
-            AnswerButton.IsEnabled = !string.IsNullOrEmpty(_incomingHost);
+            _incomingStreamMp4Url = DictStr(peer, "stream_mp4");
+            bool sip = App.Core.SipAvailable && !string.IsNullOrEmpty(_incomingHost);
+            AnswerButton.Visibility = monitorOnly ? Visibility.Collapsed : Visibility.Visible;
+            AnswerButton.IsEnabled = sip;
+            MonitorButton.IsEnabled = sip;
+            OpenDoorButton.IsEnabled = false;
+            IgnoreButton.Content = monitorOnly ? Texts.T("monitor.close") : Texts.T("ring.ignore");
 
-            // 門口ライブ (MJPEG)。URL 不明なら「映像なし」のまま
-            if (_incomingStreamer != null) { _incomingStreamer.Stop(); _incomingStreamer = null; }
-            IncomingLive.Source = null;
-            IncomingNoVideo.Visibility = Visibility.Visible;
-            if (!string.IsNullOrEmpty(_incomingStreamUrl))
-            {
-                _incomingStreamer = new MjpegStreamer(_incomingStreamUrl, bmp =>
-                    Dispatcher.BeginInvoke(new Action(() =>
-                    {
-                        IncomingNoVideo.Visibility = Visibility.Collapsed;
-                        IncomingLive.Source = bmp;
-                    })));
-                _incomingStreamer.Start();
-            }
+            StartIncomingVideo();
 
             IncomingView.Visibility = Visibility.Visible;
             _incomingTimeout.Stop();
-            _incomingTimeout.Start();  // 30 秒で自動クローズ (再チャイムで張り直し)
+            if (!monitorOnly) _incomingTimeout.Start();  // Proactive monitoring remains until closed.
         }
 
-        /// <summary>来鈴画面の用件バッジ (「📦 宅配便」) と訪客言語バッジ (「🌐 EN」)。</summary>
+        private void StartIncomingVideo()
+        {
+            StopIncomingVideo();
+            IncomingNoVideo.Visibility = Visibility.Visible;
+            StartIncomingMjpeg(true);
+            StartIncomingH264();
+        }
+
+        private void StartIncomingH264()
+        {
+            if (App.SafeMode || string.IsNullOrEmpty(_incomingStreamMp4Url)) return;
+            try
+            {
+                IncomingH264.Opacity = 0;
+                IncomingH264.Source = new Uri(_incomingStreamMp4Url, UriKind.Absolute);
+                IncomingH264.Visibility = Visibility.Visible;
+                IncomingH264.Play();
+                _h264Fallback.Stop();
+                _h264Fallback.Start();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("H.264 start failed: " + ex.Message);
+                ScheduleIncomingH264Retry();
+            }
+        }
+
+        private void ScheduleIncomingH264Retry()
+        {
+            _h264Fallback.Stop();
+            try { IncomingH264.Stop(); } catch { }
+            IncomingH264.Source = null;
+            IncomingH264.Visibility = Visibility.Collapsed;
+            IncomingH264.Opacity = 1;
+            IncomingLive.Visibility = Visibility.Visible;
+            if (IncomingView.Visibility == Visibility.Visible && !App.SafeMode &&
+                !string.IsNullOrEmpty(_incomingStreamMp4Url)) _h264Fallback.Start();
+        }
+
+        private void StartIncomingMjpeg(bool keepH264 = false)
+        {
+            if (!keepH264)
+            {
+                _h264Fallback.Stop();
+                try { IncomingH264.Stop(); } catch { }
+                IncomingH264.Source = null;
+                IncomingH264.Visibility = Visibility.Collapsed;
+                IncomingH264.Opacity = 1;
+            }
+            IncomingLive.Visibility = Visibility.Visible;
+            if (_incomingStreamer != null) return;
+            if (string.IsNullOrEmpty(_incomingStreamUrl)) return;
+            _incomingStreamer = new MjpegStreamer(_incomingStreamUrl, (bmp, rotation) =>
+                Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    IncomingNoVideo.Visibility = Visibility.Collapsed;
+                    IncomingLive.Source = bmp;
+                    IncomingLive.LayoutTransform = new RotateTransform(rotation);
+                })), App.SafeMode);
+            _incomingStreamer.Start();
+        }
+
+        private void StopIncomingVideo()
+        {
+            _h264Fallback.Stop();
+            if (_incomingStreamer != null) { _incomingStreamer.Stop(); _incomingStreamer = null; }
+            try { IncomingH264.Stop(); } catch { }
+            IncomingH264.Source = null;
+            IncomingH264.Visibility = Visibility.Collapsed;
+            IncomingH264.Opacity = 1;
+            IncomingLive.Source = null;
+            IncomingLive.Visibility = Visibility.Visible;
+            IncomingLive.LayoutTransform = Transform.Identity;
+        }
+
         private void UpdateIncomingBadges()
         {
             var purposes = CoreClient.Dig(_cfg, "visit_purposes") as Dictionary<string, object>;
@@ -1198,7 +1899,6 @@ namespace DoorbellApp
             }
             else
             {
-                // バッジは室内側の言語 (住人が読む) — 訪客言語ではない
                 string label = LabelOf(entry, App.Boot.UiLang, _incomingPurpose);
                 object icon;
                 string iconText = entry != null && entry.TryGetValue("icon", out icon) && icon != null
@@ -1220,11 +1920,14 @@ namespace DoorbellApp
             }
         }
 
-        /// <summary>クイック返信ボタン (config quick_replies を order 順)。ラベルは訪客言語
-        /// (quick_replies.&lt;id&gt;.label.&lt;visitor_lang&gt; — 無ければ ja)。</summary>
         private void BuildQuickReplies()
         {
             QuickReplyPanel.Children.Clear();
+            if (_inCall)
+            {
+                QuickReplyPanel.Visibility = Visibility.Collapsed;
+                return;
+            }
             var replies = CoreClient.Dig(_cfg, "quick_replies") as Dictionary<string, object>;
             if (replies == null || replies.Count == 0)
             {
@@ -1248,6 +1951,8 @@ namespace DoorbellApp
                     Tag = id,
                 };
                 b.Click += OnQuickReplyClick;
+                if (_semanticStyles != null)
+                    _semanticApplier.Apply(b, _semanticStyles.Get("reply.button"), false);
                 QuickReplyPanel.Children.Add(b);
             }
             QuickReplyPanel.Visibility = Visibility.Visible;
@@ -1255,37 +1960,52 @@ namespace DoorbellApp
 
         private void OnQuickReplyClick(object sender, RoutedEventArgs e)
         {
+            if (_inCall) return;
             var b = sender as Button;
             if (b == null) return;
-            App.Core.QuickReply(b.Tag as string, _incomingDoor);
-            IncomingHint.Text = Texts.T("reply.sent", b.Content);
+            bool accepted = App.Core.QuickReplyV2(b.Tag as string, _incomingDoor,
+                                                  _incomingCallId, _incomingStageRevision);
+            IncomingHint.Text = accepted ? Texts.T("reply.sent", b.Content) :
+                                           Texts.T("reply.failed");
             IncomingHint.Visibility = Visibility.Visible;
-            // 画面は複製されてくる reply イベント (= 応対済み) で畳む — 届かなくても
-            // _incomingTimeout の安全弁がある
         }
 
         private void CloseIncoming(bool hangup)
         {
             _incomingTimeout.Stop();
             _answerDelay.Stop();
-            if (_incomingStreamer != null) { _incomingStreamer.Stop(); _incomingStreamer = null; }
+            StopIncomingVideo();
             IncomingView.Visibility = Visibility.Collapsed;
-            IncomingLive.Source = null;
             AnswerButton.IsEnabled = true;
             if (hangup && _sipMode != "" && !_inCall)
             {
                 App.Core.SipHangup();
                 _sipMode = "";
             }
+            _incomingCallId = "";
+            _monitorOnly = false;
+            AnswerButton.Visibility = Visibility.Visible;
+            IgnoreButton.Content = Texts.T("ring.ignore");
+            OpenDoorButton.IsEnabled = false;
         }
 
         private void OnAnswerClick(object sender, RoutedEventArgs e)
         {
-            if (string.IsNullOrEmpty(_incomingHost)) return;  // 門口機不明 — 応答不可
-            AnswerButton.IsEnabled = false;                   // 二重発呼防止
+            if (!App.Core.SipAvailable)
+            {
+                IncomingHint.Text = Texts.T("sip.unavailable");
+                IncomingHint.Visibility = Visibility.Visible;
+                return;
+            }
+            if (string.IsNullOrEmpty(_incomingHost)) return;
+            _lifecycleDoor = _incomingDoor;
+            _lifecycleCallId = _incomingCallId;
+            _lifecycleStageRevision = _incomingStageRevision;
+            _lifecycleAnswered = false;
+            _lifecycleEnded = false;
+            AnswerButton.IsEnabled = false;
             if (_sipMode == "monitor")
             {
-                // 監聴呼を切ってから応答 (主呼は同時に 1 本 — sipctl の契約)
                 App.Core.SipHangup();
                 _answerDelay.Stop();
                 _answerDelay.Start();
@@ -1294,95 +2014,248 @@ namespace DoorbellApp
             PlaceAnswerCall();
         }
 
-        /// <summary>門口機へ直呼 (X-Doorbell-Mode: answer)。門口機側は電話腿を取消して双方向応答する。</summary>
         private void PlaceAnswerCall()
         {
+            if (!App.Core.SipAvailable) return;
             _sipMode = "answer";
+            _lifecycleDoor = _incomingDoor;
+            _lifecycleCallId = _incomingCallId;
+            _lifecycleStageRevision = _incomingStageRevision;
+            _lifecycleAnswered = false;
+            _lifecycleEnded = false;
             App.Core.SipCall("sip:" + _incomingHost + ":" + _directPort, "answer");
+            OpenDoorButton.IsEnabled = true;
         }
 
         private void OnMonitorClick(object sender, RoutedEventArgs e)
         {
+            if (!App.Core.SipAvailable)
+            {
+                IncomingHint.Text = Texts.T("sip.unavailable");
+                IncomingHint.Visibility = Visibility.Visible;
+                return;
+            }
             if (string.IsNullOrEmpty(_incomingHost) || _sipMode != "") return;
             _sipMode = "monitor";
             App.Core.SipCall("sip:" + _incomingHost + ":" + _directPort, "monitor");
             IncomingHint.Text = Texts.T("ring.monitoring");
             IncomingHint.Visibility = Visibility.Visible;
+            OpenDoorButton.IsEnabled = true;
         }
 
         private void OnIgnoreClick(object sender, RoutedEventArgs e) => CloseIncoming(true);
 
-        private void OnEndCallClick(object sender, RoutedEventArgs e)
+        private void OnOpenDoorClick(object sender, RoutedEventArgs e)
         {
-            App.Core.SipHangup();  // state idle が来て CloseInCall される (即時にも畳む)
-            CloseInCall();
+            bool ok = App.Core.SipAvailable && _sipMode != "" &&
+                      App.Core.SipSendDtmf("*1");
+            string message = Texts.T(ok ? "ring.open_sent" : "ring.open_failed");
+            if (InCallView.Visibility == Visibility.Visible) InCallTitle.Text = message;
+            else { IncomingHint.Text = message; IncomingHint.Visibility = Visibility.Visible; }
         }
 
-        /// <summary>SIP in_call — 役割ごとに通話中画面へ。ev.peer_stream = 相手映像 (対称 MJPEG)。</summary>
+        private void OnOpenMonitorClick(object sender, RoutedEventArgs e)
+        {
+            MonitorDoorList.Children.Clear();
+            var status = App.Core.Status();
+            var peers = status != null && status.ContainsKey("peers") ?
+                status["peers"] as System.Collections.IEnumerable : null;
+            if (peers != null)
+                foreach (object raw in peers)
+                {
+                    var peer = raw as Dictionary<string, object>;
+                    if (peer == null || DictStr(peer, "role") != "door_station" ||
+                        DictStr(peer, "status") == "dead") continue;
+                    string door = DictStr(peer, "door");
+                    if (string.IsNullOrEmpty(door)) continue;
+                    var button = new Button
+                    {
+                        Content = DoorLabel(door), Tag = door, FontSize = 26,
+                        Padding = new Thickness(34, 16, 34, 16), Margin = new Thickness(6),
+                        Background = (Brush)FindResource("Card"),
+                        Foreground = (Brush)FindResource("Fg"),
+                        BorderBrush = (Brush)FindResource("Dim"),
+                    };
+                    button.Click += OnMonitorDoorClick;
+                    MonitorDoorList.Children.Add(button);
+                }
+            if (MonitorDoorList.Children.Count == 0)
+                MonitorDoorList.Children.Add(new TextBlock
+                {
+                    Text = Texts.T("ring.no_video"), FontSize = 20,
+                    Foreground = (Brush)FindResource("Dim"), TextAlignment = TextAlignment.Center,
+                });
+            MonitorPickerView.Visibility = Visibility.Visible;
+            _semanticApplier.Apply(MonitorPickerClose,
+                _semanticStyles == null ? null : _semanticStyles.Get("monitor.close"), true);
+        }
+
+        private void OnMonitorDoorClick(object sender, RoutedEventArgs e)
+        {
+            string door = (sender as Button)?.Tag as string;
+            if (string.IsNullOrEmpty(door)) return;
+            MonitorPickerView.Visibility = Visibility.Collapsed;
+            ShowIncoming(new UiEvent
+            {
+                T = "monitor",
+                Data = new Dictionary<string, object> { { "door", door } },
+            }, true);
+        }
+
+        private void OnMonitorPickerClose(object sender, RoutedEventArgs e) =>
+            MonitorPickerView.Visibility = Visibility.Collapsed;
+
+        private void OnEndCallClick(object sender, RoutedEventArgs e)
+        {
+            App.Core.SipHangup();
+            ReportLifecycleEndedIfNeeded();
+            OnSipIdle();
+        }
+
         private void OnSipInCall(UiEvent ev)
         {
             _inCall = true;
+            BuildQuickReplies();
             _incomingTimeout.Stop();
-            CallingText.Text = Texts.T("incall.title");  // CallingView 用 (映像なしの門口機)
+            CallingText.Text = Texts.T("incall.title");
             string stream = ev.Str("peer_stream");
             if (App.Boot.Role == "door_station")
             {
                 _callTimeout.Stop();
-                if (!string.IsNullOrEmpty(stream))
+                _peerPoll.Stop();
+                ShowInCall(stream);
+                if (string.IsNullOrEmpty(stream))
                 {
-                    ShowInCall(stream);        // 双方向映像の門口側 (相手 = 室内機)
-                }
-                else
-                {
-                    // 相手不明 (電話/網頁) — 網頁通話なら自機 /peer-frame.jpg にフレームが来る
                     _peerPollBusy = false;
                     _peerPoll.Start();
                 }
             }
             else if (_sipMode == "answer")
             {
-                // 室内機の応答が確立。相手映像 = peer_stream (無ければ来鈴と同じ門口 stream)
+                if (!_lifecycleAnswered)
+                    _lifecycleAnswered = App.Core.ReportCallAnswered(
+                        _lifecycleDoor, _lifecycleCallId, _lifecycleStageRevision);
                 if (string.IsNullOrEmpty(stream)) stream = _incomingStreamUrl;
                 CloseIncoming(false);
                 ShowInCall(stream);
             }
-            // _sipMode == "monitor" は来鈴画面のまま (映像 + 監聴継続)
         }
 
         private void OnSipIdle()
         {
+            if (_suppressLosingSipIdle)
+            {
+                _suppressLosingSipIdle = false;
+                _inCall = false;
+                _sipMode = "";
+                CloseInCall();
+                if (IncomingView.Visibility == Visibility.Visible)
+                {
+                    AnswerButton.IsEnabled = App.Core.SipAvailable &&
+                        !string.IsNullOrEmpty(_incomingHost);
+                    _incomingTimeout.Stop();
+                    _incomingTimeout.Start();
+                }
+                return;
+            }
             bool wasInCall = _inCall;
+            if (wasInCall) ReportLifecycleEndedIfNeeded();
             _inCall = false;
             _sipMode = "";
             CloseInCall();
             if (wasInCall && IncomingView.Visibility == Visibility.Visible)
-                CloseIncoming(false);  // 応答通話が終わった → 来鈴画面も畳む
+                CloseIncoming(false);
             if (App.Boot.Role == "door_station") ShowIdle();
+        }
+
+        private void ReportLifecycleEndedIfNeeded()
+        {
+            if (!_inCall || _sipMode != "answer" || !_lifecycleAnswered || _lifecycleEnded ||
+                string.IsNullOrEmpty(_lifecycleCallId)) return;
+            _lifecycleEnded = App.Core.ReportCallEnded(
+                _lifecycleDoor, _lifecycleCallId, _lifecycleStageRevision, "sip_ended");
         }
 
         private void ShowInCall(string streamUrl)
         {
             ExitScreensaver();
+            IdleView.Visibility = Visibility.Collapsed;
+            CallingView.Visibility = Visibility.Collapsed;
             if (_inCallStreamer != null) { _inCallStreamer.Stop(); _inCallStreamer = null; }
+            try { PeerH264.Stop(); } catch { }
+            PeerH264.Source = null;
+            PeerH264.Visibility = Visibility.Collapsed;
+            PeerH264.Opacity = 1;
             PeerVideo.Source = null;
-            if (!string.IsNullOrEmpty(streamUrl))
-            {
-                _inCallStreamer = new MjpegStreamer(streamUrl, bmp =>
-                    Dispatcher.BeginInvoke(new Action(() => PeerVideo.Source = bmp)));
-                _inCallStreamer.Start();
-            }
+            PeerVideo.Visibility = Visibility.Visible;
+            PeerVideo.LayoutTransform = Transform.Identity;
+            bool streamIsMp4 = !string.IsNullOrEmpty(streamUrl) &&
+                streamUrl.IndexOf(".mp4", StringComparison.OrdinalIgnoreCase) >= 0;
+            _inCallH264Url = streamIsMp4
+                ? streamUrl : _incomingStreamMp4Url;
+            _inCallMjpegUrl = streamIsMp4
+                ? _incomingStreamUrl : streamUrl;
+            StartInCallMjpeg();
+            StartInCallH264();
             InCallView.Visibility = Visibility.Visible;
+        }
+
+        private void StartInCallMjpeg()
+        {
+            PeerVideo.Visibility = Visibility.Visible;
+            if (_inCallStreamer != null || string.IsNullOrEmpty(_inCallMjpegUrl)) return;
+            _inCallStreamer = new MjpegStreamer(_inCallMjpegUrl, (bmp, rotation) =>
+                Dispatcher.BeginInvoke(new Action(() => {
+                    PeerVideo.Source = bmp;
+                    PeerVideo.LayoutTransform = new RotateTransform(rotation);
+                })), App.SafeMode);
+            _inCallStreamer.Start();
+        }
+
+        private void StartInCallH264()
+        {
+            if (App.SafeMode || string.IsNullOrEmpty(_inCallH264Url)) return;
+            try
+            {
+                PeerH264.Opacity = 0;
+                PeerH264.Source = new Uri(_inCallH264Url, UriKind.Absolute);
+                PeerH264.Visibility = Visibility.Visible;
+                PeerH264.Play();
+                _peerH264Retry.Stop();
+                _peerH264Retry.Start();
+            }
+            catch { ScheduleInCallH264Retry(); }
+        }
+
+        private void ScheduleInCallH264Retry()
+        {
+            _peerH264Retry.Stop();
+            try { PeerH264.Stop(); } catch { }
+            PeerH264.Source = null;
+            PeerH264.Visibility = Visibility.Collapsed;
+            PeerH264.Opacity = 1;
+            StartInCallMjpeg();
+            if (InCallView.Visibility == Visibility.Visible && !App.SafeMode &&
+                !string.IsNullOrEmpty(_inCallH264Url)) _peerH264Retry.Start();
         }
 
         private void CloseInCall()
         {
             _peerPoll.Stop();
+            _peerH264Retry.Stop();
             if (_inCallStreamer != null) { _inCallStreamer.Stop(); _inCallStreamer = null; }
+            try { PeerH264.Stop(); } catch { }
+            PeerH264.Source = null;
+            PeerH264.Visibility = Visibility.Collapsed;
+            PeerH264.Opacity = 1;
             PeerVideo.Source = null;
+            PeerVideo.Visibility = Visibility.Visible;
+            PeerVideo.LayoutTransform = Transform.Identity;
+            _inCallMjpegUrl = "";
+            _inCallH264Url = "";
             InCallView.Visibility = Visibility.Collapsed;
         }
 
-        /// <summary>網頁通話の相手映像: 自機 httpd の /peer-frame.jpg を輪詢 (通話中のみ)。</summary>
         private void PollPeerFrame()
         {
             if (!_inCall || _peerPollBusy) return;
@@ -1395,8 +2268,8 @@ namespace DoorbellApp
                     using (var wc = new System.Net.WebClient())
                         jpg = wc.DownloadData("http://127.0.0.1:47180/peer-frame.jpg");
                 }
-                catch { /* フレーム無し (404) = 相手が映像を送っていない */ }
-                var bmp = jpg != null ? MjpegStreamer.Decode(jpg) : null;
+                catch {  }
+                var bmp = jpg != null ? MjpegStreamer.Decode(jpg, App.SafeMode ? 640 : 0) : null;
                 Dispatcher.BeginInvoke(new Action(() =>
                 {
                     _peerPollBusy = false;
@@ -1407,20 +2280,45 @@ namespace DoorbellApp
             });
         }
 
-        // ---------- 操作 ----------
         private void OnCallClick(object sender, RoutedEventArgs e)
         {
             _callFeedback = PlayConfigured(_callFeedback,
                 SoundValue("call_sound", "outdoor_call_alert"),
                 ConfigBool("ui.call_sound_loop", false));
-            App.Core.Press(App.Boot.Door);
+            _activeCallId = App.Core.Press(App.Boot.Door) ?? "";
+            if (string.IsNullOrEmpty(_activeCallId))
+            {
+                ShowOffline();
+                return;
+            }
+            _activeCallExpiresAtMs = ResolveActiveCallExpiryMs();
             ShowCalling();
         }
 
         private void OnCancelClick(object sender, RoutedEventArgs e)
         {
-            _callTimeout.Stop();
-            ShowIdle();
+            if (CancelActiveCall("visitor"))
+            {
+                _callTimeout.Stop();
+                ShowIdle();
+            }
+            else
+            {
+                CallingText.Text = Texts.T("calling.cancel_failed");
+            }
+        }
+
+        private bool CancelActiveCall(string reason)
+        {
+            string callId = _activeCallId;
+            if (string.IsNullOrEmpty(callId)) return false;
+            bool ok = App.Core.CancelCall(App.Boot.Door, callId, reason);
+            if (ok)
+            {
+                _activeCallId = "";
+                _activeCallExpiresAtMs = 0;
+            }
+            return ok;
         }
 
         private void OnSecretCorner(object sender, MouseButtonEventArgs e)
@@ -1438,13 +2336,12 @@ namespace DoorbellApp
                 WindowState = WindowState.Normal;
                 WindowStyle = WindowStyle.SingleBorderWindow;
                 ResizeMode = ResizeMode.CanResize;
-                // watchdog の前台守衛を止める (存在中は引き戻さない — 再起動で自動削除)
                 try
                 {
                     File.WriteAllText(Path.Combine(App.DataDir, "admin_unlocked.flag"),
                                       DateTime.Now.ToString("s"));
                 }
-                catch { /* 書けなくても解錠自体は成立 */ }
+                catch {  }
             }
         }
     }

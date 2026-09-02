@@ -1,79 +1,64 @@
-# 住民向け使い方 — 来客への応答
+# For Residents — Answering Visitors
 
-> English: [Usage-Residents-en](Usage-Residents-en) / 中文: [Usage-Residents-zh](Usage-Residents-zh)
+> English (this page) / 日本語: [Usage-Residents-ja](Usage-Residents-ja) / 中文: [Usage-Residents-zh](Usage-Residents-zh)
 
-家族の日常目線で「こういう時どうするか」をシナリオで説明します。設定の変え方は
-[Usage-Admin](Usage-Admin)、機能の一覧は [Features](Features) へ。
+This page walks through everyday scenarios from a family member's point of view. Which phones, apps, integrations, and devices react is determined by the commissioned hardware and matching rules. For changing settings see [Administrator Guide](Usage-Admin); for the feature list see [Features](Features).
 
-## シナリオ 1: 在宅中にチャイムが鳴った
+## Scenario 1: The chime rings while you are home
 
-来鈴すると、室内機に**どの玄関か・用件 (宅配便など)・訪客の言語**と門口のライブ映像が出ます。
-応答の仕方は 4 通り、どれでも構いません。
+When a matching rule targets a commissioned indoor station, it can show **which entrance, the
+purpose, and the visitor's language**, plus video when that source/playback path is available. The
+following response paths are conditional capabilities, not a promise that every installation has all four.
 
-1. **室内機で出る** — 「応答」をタップすると門口機と双方向通話になります。声だけで
-   済ませたい時は音声のみ、顔を見せたい時は双方向映像も選べます。
-2. **電話で出る** — 押鈴と同時に宅内の内線電話と登録した携帯が鳴っています。
-   普通に電話に出れば門口と話せます。
-3. **クイック返信で返す** — 「少々お待ちください」等のボタンを押すだけ。門口機に
-   大きな文字で表示され、読み上げられます。手が離せない料理中などに便利です。
-4. **TV のリモコンで返す** — Android TV の来鈴画面が全画面で被さり、門口の映像と音声が
-   自動で出ます。D-pad でクイック返信を選んで決定を押すだけです。
+1. **Answer on the indoor station** — where a real SIP/audio path is commissioned, tap "Answer" for
+   the implemented audio or media profile.
+2. **Answer on the phone** — when a matching SIP/PSTN rule and the commissioned PBX path are available, an extension or registered mobile can ring. Answer it as usual to talk to the door.
+3. **Send a quick reply** — just press a button like "One moment, please". It appears in large text on the door station and is read aloud. Handy when your hands are full, e.g. while cooking.
+4. **Reply with the TV remote** — on a commissioned Android TV path selected by the rule, use the
+   incoming UI and D-pad quick replies; media starts only when its measured profile is available.
 
-電話で出た後に「やっぱり室内機で話したい」となったら、室内機の「応答」を押せば
-電話側が切れて室内対講に切り替わります (応答接管)。
+If you answered on the phone but decide you would rather talk on the indoor station after all, press "Answer" on the indoor station — the phone leg is dropped and the call switches to indoor intercom (answer takeover).
 
-### 様子だけ見たい (出たくない)
+### Just want to look (without answering)
 
-室内機や TV の「モニタ」で、門口の映像と音声を**一方向で**確認できます。こちらの音は
-一切送られません。営業らしき相手なら、そのまま「結構です」のクイック返信で完結です。
+Use "Monitor" on an indoor station or the TV to check the door's video and audio **one-way**. No sound from your side is transmitted. If it looks like a salesperson, finish it right there with a "No thank you" quick reply.
 
-## シナリオ 2: 外出中に来客があった
+## Scenario 2: A visitor arrives while you are out
 
-- **Telegram に写真付き通知**が届きます。「📦 宅配便」のような用件と、訪客が言語を
-  切り替えていれば「🌐 EN」のバッジ付きです。メッセージ下のボタンを押せば、その場で
-  門口機に定型文が表示・読み上げされます (訪客の言語で)。
-- **携帯電話にも着信**しています (ひかり電話経由の PSTN)。出れば門口とそのまま通話でき、
-  通話中に *1 を押せば玄関の錠が開きます (設定による)。push が届かない山奥でも電話は鳴ります。
-- **iPhone の家庭 App** (HomeKit 連携設定済みの場合) にも門鈴通知が出て、ライブ映像を
-  確認できます。外出先から見るには Apple TV / HomePod のホームハブが必要です。
-- **VPN を張れる人**は、宅内 LAN に入れば網頁パネル・管理画面・ブラウザ通話まで
-  全機能がそのまま使えます。
+- **If a matching Telegram rule is enabled**, its notification can include a photo, purpose such as "📦 Parcel delivery", language badge, and configured quick-reply buttons.
+- **If a matching SIP/PSTN rule and the commissioned PBX path are available**, your mobile can ring too. Answering connects you to the door; configured DTMF actions such as *1 may unlock it.
+- **The iPhone Home app** (if HomeKit integration is set up) also shows a doorbell notification and lets you check live video. Watching from outside the home requires an Apple TV / HomePod home hub.
+- **If you can run a VPN**, joining the home LAN gives you everything as-is: web panels, the admin UI, even browser calling.
 
-どの経路で応答しても、他の家族の画面には「応答済み」が表示され、二重対応を防ぎます。
+Whichever path you answer through, other family members' screens show "answered", preventing double handling.
 
-## シナリオ 3: 荷物だけ受け取りたい日
+## Scenario 3: A day when you only want packages delivered
 
-管理者に頼んで (または自分で管理画面から)「宅配便は自動で『置き配をお願いします』を
-読み上げ、電話は鳴らさない」ルールにできます。宅配員が用件ボタンを押した瞬間に
-門口機が答えるので、誰も何も操作しません。詳細は [Usage-Admin](Usage-Admin) のレシピ集へ。
+An administrator can configure a purpose-specific reply rule. Test the exact door shell and optional integrations before relying on it. See [Usage-Admin](Usage-Admin).
 
-## シナリオ 4: 緊急のとき (SOS)
+## Scenario 4: An emergency (SOS)
 
-室内機の**緊急ボタンを 3 秒長押し**すると発報します (誤操作防止のための長押しです)。
+**Long-press the emergency button on an indoor station for 3 seconds** to raise the alarm (the long press prevents accidental triggering).
 
-- 家じゅうの端末が警報表示になり、サイレンが鳴ります。
-- 家族全員の Telegram に 🚨 通知が飛びます。
-- Home Assistant 連携があれば、ライトの点滅や外部サイレン等も設定次第で連動します。
+- The SOS active state is replicated to every Core node and is restored when a node reconnects.
+- Visual alarms, sound, system notifications, Web Push, Telegram, MQTT, SIP targets, and Home Assistant actions happen only when matching rules select them. Rules may intentionally select zero recipients or a silent presentation.
+- On an open Web page, `emergency.web_active_page_alerts` defaults to `true`, so the page renders SOS active/clear state even for zero-recipient or Push-only rules. If an administrator disables it, a positively matched `device_alert` or an actually delivered Push can still be presented. While it is enabled, a rule TTL may stop custom sound/color decoration, but the safe red SOS overlay remains until clear. The page uses its administrator-assigned `?group=` for both polling and Push.
 
-**解除**は警報画面の「解除」から — kiosk PIN の入力が必要です (荒らし対策)。
-解除すると全端末が平常に戻り、「✅ 緊急解除」が通知されます。
+**To clear**, use the authorized clear action with its configured PIN/permission. The clear state is replicated to every Core node; whether a device displays or sends a separate clear notification is still rule- and Web-switch-dependent.
 
-大事なこと: **警察や消防へ自動発信はされません**。通報するかどうかの判断は必ず人が行う
-設計です ([Design-Philosophy](Design-Philosophy) 参照)。必要なら設定でユーザー定義の
-電話先 (家族の携帯など) への SIP 発呼を追加できます。
+In the administrator's delivery diagnostics, `delivery_result` means that Core attempted dispatch. It does not prove that a screen, sound, or system notification appeared; that evidence comes from the client's runtime per-channel presentation report.
 
-## 夜間の挙動
+Important: **no automatic call is made to the police or fire services**. The decision to report remains human (see [Design Philosophy](Design-Philosophy)).
 
-- **quiet_hours** (既定 23:00–07:00): 室内チャイムだけが黙ります。電話・Telegram・HA 通知は
-  夜中でも必ず届きます — 来客を漏らさないための既定です。うるさければ管理画面で調整を。
-- **夜間モード** (既定 22:00–06:00): 門口機・室内機の画面が減光し、赤みがかった表示に
-  なります。廊下がまぶしくならないための機能です。
-- 夜間の動体検知だけ Telegram に流す、といったルールも組めます ([Usage-Admin](Usage-Admin))。
+## Behavior at night
 
-## 覚えておくと便利な小ネタ
+- **quiet_hours** (default 23:00–07:00): matching rules can use this period to suppress or alter selected actions. It does not itself guarantee that phone, Telegram, HA, or any other channel will run; inspect the active rules in the admin UI.
+- **Night mode** (default 22:00–06:00): the door station and indoor station screens dim and take on a reddish tint, so the hallway is not glaring.
+- You can also build scheduled rules for implemented event/action paths ([Usage-Admin](Usage-Admin)).
 
-- 室内機からテーマ (門口機の背景) や文言を「推送」できます — 季節の挨拶に変えるなど。
-  変更は全端末にミリ秒で反映されます。
-- 応答しそこねた来客は、管理画面の「イベント履歴」にスナップショット付きで残っています。
-- 端末が 1 台 LAN から消えると 30 秒以内に Telegram に「⚠ オフライン」が届きます。
-  停電・断線・盗難のどれでも、まず気付けます。
+## Small tricks worth remembering
+
+- You can "push" a theme (the door station's background) or text strings from an indoor station — e.g. switch to a seasonal greeting. Changes propagate to all devices in milliseconds.
+- Visitors you failed to answer remain in the admin event history; a snapshot is included only
+  when the selected camera path produced one.
+- If an offline-device rule is configured, it can send Telegram or another selected alert when a node disappears from the LAN. Delivery depends on that rule and the selected integration.

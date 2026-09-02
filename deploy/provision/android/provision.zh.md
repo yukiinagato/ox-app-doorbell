@@ -14,13 +14,23 @@
 3. 启用开发者选项（连点版本号 7 次）→ 打开 **USB 调试**。
 4. 把 Wi-Fi 接入宅内 LAN（mesh 前提是同一网段 — docs/zh/network-ports.md）。
 
-## 2. 安装
+## 2. contract build 與 controlled install
 
 ```sh
-# 构建（开发机）:
-cd android && ./gradlew assembleRelease   # 或 assembleDebug
-adb install -r app/build/outputs/apk/release/app-release.apk
+# modern development/contract
+cd android && ./gradlew -PdoorbellTier=modern \
+  assembleModernDebug testModernDebugUnitTest lintModernDebug
+
+# API 19 development/contract（NDK/PJSIP cache 分開）
+./gradlew -PdoorbellTier=legacy19 \
+  assembleLegacy19Debug testLegacy19DebugUnitTest lintLegacy19Debug
 ```
+
+repository/hosted CI 產生的是 debug key **debug-contract** APK，不是 release。現在 Gradle `release`
+build type 也仍選用 debug signing config，因此不得把 `assemble*Release` 結果當 production 發佈。
+controlled release 必須另用 approved signing config，記錄 artifact/toolchain/NDK/API/ABI/real-PJSIP hash/
+source revision/signing identity，並只 install exact device 對應 tier。API 19 allowlist 目前為空，單是
+install/probe 成功不會成為 supported KitKat SKU。
 
 ## 3. Device Owner 化（完全 kiosk 必需）
 
@@ -41,13 +51,21 @@ adb shell dpm set-device-owner jp.keihan.doorbell/.AdminReceiver
 
 ## 4. 放置 boot.json
 
-App 首次启动会在 `filesDir/boot.json` 生成默认值。编辑后替换:
+App 首次启动会在 `filesDir/boot.json` 生成默认值。Core 启动前必须选择 **门口机** 或 **室内机**。
+门口机还必须设置 door ID，界面会预填可直接确认的随机 `door-xxxxxxxx`。之后如果 role 非法或门口机 ID
+丢失，同一设置界面会再次出现；室内机不配置 door assignment。不得把 mesh PSK 写入此文件。
+初次部署应优先使用 App 内配对：Core 先调用 `secure_put("mesh.psk")`，只有成功后才记录
+`{ "t": "paired", "psk_ref": "secret:mesh.psk" }`。
+出现 `pairing_persistence_error` 的设备**不处于 ready 状态**，不得加入 mesh。
+
+受管理设备如需预配置，必须先通过获批的带外流程把 `mesh.psk` 写入平台 secure store，
+之后才可在 `boot.json` 中使用下列非秘密引用。只复制 `psk_ref` 不会写入秘密，也不会完成配对。
 
 ```sh
 adb shell "run-as jp.keihan.doorbell cat files/boot.json"   # 确认（仅 debug 构建可 run-as）
 cat > boot.json <<'EOF'
 { "name": "genkan-front", "role": "door_station", "door": "d_front",
-  "listen_port": 47172, "http_port": 47180, "psk_hex": "<64hex>",
+  "listen_port": 47172, "http_port": 47180, "psk_ref": "secret:mesh.psk",
   "seed_peers": ["10.0.1.10:47172"], "ui_lang": "ja", "kiosk": true }
 EOF
 adb push boot.json /sdcard/boot.json
@@ -55,8 +73,9 @@ adb shell "run-as jp.keihan.doorbell cp /sdcard/boot.json files/boot.json"
 adb shell rm /sdcard/boot.json
 ```
 
-release 构建（不能 run-as）则从管理 webui（`http://<设备>:47180/admin/`）投放，
-或使用经 DO 的 managed configuration（Phase 3 后半）。
+release 构建（不能 run-as）应通过已认证的管理 webui
+（`http://<设备>:47180/admin/`）或经 DO 的 managed configuration 设置非秘密字段。
+两条路径都不得携带明文 PSK；secure store 必须通过独立操作进行配置。
 
 ## 5. 替换 HOME（启动器）与自动启动
 
@@ -101,15 +120,19 @@ adb uninstall jp.keihan.doorbell
 ```sh
 # TV 侧: 设置 → 设备设置 → 开发者选项（版本号连点 7 次）→ 打开 USB/网络调试
 adb connect <TV的IP>:5555
-adb install -r app/build/outputs/apk/release/app-release.apk
+# 只安裝 approved tier artifact，不用 CI debug-contract APK 代替。
+adb install -r <approved-apk-path>
 ```
 
 ### 8.2 boot.json（TV 是 indoor_panel）
 
+仅在 App 内配对已成功，或获批的带外流程已把 `mesh.psk` 写入 TV 的平台 secure store 后，
+才可使用以下形式：
+
 ```sh
 cat > boot.json <<'EOF'
 { "name": "living-tv", "role": "indoor_panel",
-  "listen_port": 47172, "http_port": 47180, "psk_hex": "<64hex>",
+  "listen_port": 47172, "http_port": 47180, "psk_ref": "secret:mesh.psk",
   "seed_peers": ["10.0.1.10:47172"], "ui_lang": "ja", "kiosk": false }
 EOF
 adb push boot.json /sdcard/boot.json

@@ -1,95 +1,116 @@
-# 管理者向けガイド — 管理画面の歩き方とレシピ集
+# Administrator Guide — Navigating the Admin UI, Plus Recipes
 
-> English: [Usage-Admin-en](Usage-Admin-en) / 中文: [Usage-Admin-zh](Usage-Admin-zh)
+> English (this page) / 日本語: [Usage-Admin-ja](Usage-Admin-ja) / 中文: [Usage-Admin-zh](Usage-Admin-zh)
 
-管理画面は**どのノードでも同じ**です: `http://<任意の端末IP>:47180/admin/`。
-どこで書いても CRDT が全端末へミリ秒で同期します。初回アクセス時のログインが
-管理パスワードの設定になります。導入そのものの手順は
-[docs/ja/deployment.md](https://github.com/yukiinagato/ox-app-doorbell/blob/main/docs/ja/deployment.md) を正としてください。
+The admin UI is served by every native node at `http://<device>:47180/admin/`. Changes enter the replicated CRDT. For installation and security requirements, use the English [deployment guide](https://github.com/yukiinagato/ox-app-doorbell/blob/main/docs/en/deployment.md) and [security guide](https://github.com/yukiinagato/ox-app-doorbell/blob/main/docs/en/security.md).
 
-## 13 タブの地図
+## A map of the 13 tabs
 
-| タブ | 何をする所か |
+| Tab | What it is for |
 |---|---|
-| ダッシュボード | ノード一覧 (リーダー / オンライン / 時刻同期)・ライブ映像・同期状態 |
-| デバイス | 端末毎の名前・役割 (門口機/室内機/TV)・担当ドア・カメラ (codec/解像度/fps)・動体・表示言語 |
-| ドア／建物 | 玄関と棟の登録、日英中ラベル |
-| 呼出ルール | 「いつ・どこで・何が起きたら・何をするか」(押鈴/動体/離線 × スケジュール × アクション) |
-| 通知先 | households — 家族の Telegram chat_id と SIP 内線 |
-| クイック返信 | 定型文の編集 (多言語・読み上げ・カスタム音声・並び順) |
-| 統合 | MQTT (HA) / Telegram / SIP (Asterisk) / WebRTC / タイムゾーン |
-| イベント履歴 | press / motion / reply / offline… の時系列、種別絞り込み |
-| 資産 | 背景画像・カスタム音声のアップロードとノード毎キャッシュ被覆率 |
-| テーマ | 門口機の背景色・背景画像 (プレビュー付き)・明るさ・夜間モード |
-| 文言 | 実行時の文言上書き (i18n_overrides) — 空欄なら既定文言 |
-| 用件 | 訪客の用件ボタン (ラベル・アイコン・並び順) の編集 |
-| システム | パネル token・追加 PIN 発行・設定エクスポート/インポート・ログ・生 JSON |
+| Dashboard | Node list (leader / online / time sync), live video, sync status |
+| Devices | Per-device name, role (door station/indoor station/TV), assigned door, camera (codec/resolution/fps), motion, display language |
+| Doors / Buildings | Registering entrances and buildings, with JA/EN/ZH labels |
+| Call rules | "When, where, on what event, do what" (press/motion/offline × schedule × actions) |
+| Recipients | households — each family member's Telegram chat_id and SIP extension |
+| Quick replies | Editing canned phrases (multilingual, speech, custom recordings, ordering) |
+| Integrations | MQTT (HA) / Telegram / SIP (Asterisk) / WebRTC / time zone |
+| Event history | Timeline of press / motion / reply / offline… with type filtering |
+| Assets | Uploading background images and custom recordings, per-node cache coverage |
+| Theme | Door station background color / background image (with preview), brightness, night mode |
+| Text | Runtime text overrides (i18n_overrides) — leave blank for the default wording |
+| Purposes | Editing visitor purpose buttons (labels, icons, ordering) |
+| System | Panel tokens, issuing enrollment PINs, config export/import, logs, raw JSON |
 
-## よく使うレシピ集
+## Frequently used recipes
 
-### 宅配便だけ自動「置き配」応答 (電話を鳴らさない)
+### Auto "leave the package" for parcel delivery only (no phone ringing)
 
-1. クイック返信タブに `置き配をお願いします` を追加 (必要なら英/中も。カスタム音声も可)。
-2. 呼出ルールタブで新ルール: 条件 = 呼出ボタン、用件 = 宅配便 (p_delivery) のみ。
-3. アクション = auto_reply (作成した返信を指定) + Telegram (記録用)。SIP 発呼は入れない。
-4. 既存の汎用ルール側で宅配便を除外するか、優先順を確認して完了です。
+1. In the Quick replies tab, add `置き配をお願いします` (add EN/ZH if needed; a custom recording works too).
+2. In the Call rules tab, create a new rule: condition = call button, purpose = parcel delivery (p_delivery) only.
+3. Actions = auto_reply (pointing at the reply you created) + Telegram (for the record). Do not include a SIP call.
+4. Either exclude parcel delivery from the existing generic rule or check rule priority, and you are done.
 
-### 夜間はチャイムを消音 (通知は残す)
+### Silence the chime at night (keep the notifications)
 
-統合 → 静音時間帯 (quiet_hours) で時間帯 (例 23:00–07:00) を設定し、「抑制する」に
-チャイムだけを入れます。SIP / Telegram / HA は「常に許可」のままに — 来客を漏らしません。
-なお Asterisk 側の夜間分岐 (dialplan の GotoIfTime) は**別の時計**で動くことに注意
-([FAQ](FAQ) 参照)。
+Integrations → quiet hours (`quiet_hours`): set the window and explicit suppression policy. Test it with each optional integration; Asterisk's own night branching uses a separate clock (see [FAQ](FAQ)).
 
-### 端末別の背景を設定する
+### Configure and preview SOS delivery
 
-資産タブで画像 (jpeg/png ≤3MB) をアップロード → テーマタブで全体既定を設定、
-端末別にしたい場合はデバイスタブの該当端末の local.theme を上書きします。アップロード後、
-各門口機が能動的に前取りするので、被覆率が揃ってから表示されます (数秒)。
+Create `emergency_on`/`emergency_off` rules with `device_alert` targets (device IDs, roles, or Web
+subscription groups), channels, and presentation. Visual presentation supports sound, volume,
+sticky/TTL, and background/foreground/accent colors. The dry run resolves each target's measured
+channel support and permission and warns—without blocking save—about zero recipients, silent
+rules, unavailable/unsupported or rolling-upgrade-unknown channels, missing Push subscriptions,
+and an unavailable Push backend.
 
-### 文言の季節替え
+`emergency.web_active_page_alerts` defaults to on. It makes an open Web page display replicated
+active SOS even when rules have zero recipients or are Push-only. If switched off, a positive
+matching `device_alert` or a delivered Push can still display. Treat Core `delivery_result` as a
+dispatch attempt; use the client's per-channel runtime report to verify actual presentation.
+With the raw path on, rule TTL ends custom decoration/sound but the safe red overlay stays until SOS
+clear or switch-off.
 
-文言タブで例えば `idle.touch_to_call` を「タッチして呼び出してください 🎍」に上書き。
-保存した瞬間に全門口機が再描画します。空欄に戻せば既定文言に戻ります。
-プレースホルダ ({name} 等) は保存時に整合検証されます。
+Targeting is explicit and symmetric: a target containing only `web_subscription_groups` addresses
+no native shell, and a target without that selector addresses no active Web page or Push
+subscription. A legacy `device_alert` action with no `targets` object retains its all-native-and-Web
+compatibility meaning. Give a Web panel `?group=guards`; it persists that valid group and uses it for
+both polling and Push enrollment. Core seals the full Push endpoint/key subscription in CRDT, so
+config/export does not contain it in plaintext; a fail-closed legacy migration may require
+re-enrollment.
 
-### 新しい端末の追加 (PIN 手順)
+### Setting a per-device background
 
-1. システムタブ →「デバイスを追加」→ 追加 PIN が発行されます (**10 分有効**)。
-2. 新端末でアプリを起動し、初期設定画面で既存ノードの IP とこの PIN を入力。
-3. PSK と設定が自動配布され、mesh に合流します。
-4. デバイスタブで名前・役割・担当ドアを割り当てて完了。
-   平台別の kiosk 化は [Android](https://github.com/yukiinagato/ox-app-doorbell/blob/main/deploy/provision/android/provision.ja.md) /
+Upload an image (jpeg/png ≤3MB) in the Assets tab → set the global default in the Theme tab; for per-device backgrounds, override local.theme on the device in the Devices tab. After upload, each door station prefetches proactively, so the image appears once coverage is complete (a few seconds).
+
+### Adjusting per-device semantic controls
+
+Use the device's manifest-driven editor for allowed size and color properties. Native
+`ui_manifest` and local `web_ui.manifest` are separate contracts. Core durably caches the last
+valid native peer manifest/capabilities, so a configured offline device can be edited when status
+shows `cached_contract:true`; this is validation against the cached contract, not proof that the
+offline renderer applied the change. Remote Web manifests are not catalogued, so only the Web UI
+served by the current Core node is editable. Final success requires the renderer's apply report.
+
+### Seasonal wording changes
+
+In the Text tab, override e.g. `idle.touch_to_call` with 「タッチして呼び出してください 🎍」. The instant you save, every door station redraws. Clear the field to restore the default wording. Placeholders ({name} etc.) are validated for consistency on save.
+
+### Adding a new device (PIN procedure)
+
+1. System tab → "Add device" → an enrollment PIN is issued (**valid for 10 minutes**).
+2. Launch the app on the new device and enter an existing node's IP and this PIN on the setup screen.
+3. The PSK and configuration are distributed automatically and the device joins the mesh.
+4. Assign a name, role, and door in the Devices tab, and you are done.
+   For per-platform kiosk setup see [Android](https://github.com/yukiinagato/ox-app-doorbell/blob/main/deploy/provision/android/provision.ja.md) /
    [iOS](https://github.com/yukiinagato/ox-app-doorbell/blob/main/deploy/provision/ios/provision.ja.md) /
-   Windows (`deploy/provision/windows/provision.cmd`) を参照。
+   Windows (`deploy/provision/windows/provision.cmd`).
 
-### パネル token の配布
+### Distributing panel tokens
 
-網頁パネル (door/monitor/call.html) と映像 URL は `?k=<token>` で認証します。
-token はシステムタブで確認・ローテートできます。**ローテートすると旧 token は即時無効**
-なので、配布済みの Web クリップ (iPad 1 等) や go2rtc の URL も更新してください。
+Admin issues a panel credential once. Put it in the launch URL fragment as `#k=<credential>`; the
+page exchanges it with `POST /api/panel/session` and then uses an HttpOnly cookie. Do not put
+credentials in query strings, stream URLs, logs, or configuration. Rotation invalidates the old
+credential immediately, so reissue affected Web Clips/sessions.
 
-## バックアップとリストア
+## Backup and restore
 
-- **エクスポート**: システムタブ → エクスポート。どのノードで実行しても全量が出ます
-  (secrets の実体は含まれません — secure store は端末ローカルです)。
-- **インポート**: エクスポートした JSON を貼り付けるとフラット化して逐項書き込まれます。
-- 日常の生存性は分散が担保します — 1 台生きていれば設定は残っています。エクスポートは
-  「全端末を同時に失う」災害向けの保険です。
+- **Export**: System tab → Export. Run it on any node and you get the full configuration (the actual secret values are not included — secure stores are device-local).
+- **Import**: paste an exported JSON; Admin validates all operations and writes one atomic
+  `/api/config/batch`. If the endpoint is unavailable, import fails instead of falling back to
+  sequential partial writes.
+- Day-to-day survivability is guaranteed by distribution — as long as one device is alive, the configuration survives. The export is insurance for the "lose every device at once" disaster.
 
-## 更新の当て方
+## Applying updates
 
-- **Windows**: GitHub Actions の `doorbell-windows` artifact を配布。watchdog が
-  停止 → 差替 → 再起動を許容します。
-- **Android**: Device Owner なら静默インストールできます。
-- **iOS**: Ad Hoc 署名は**年 1 回の再署名が必須**です。アプリ内の期限表示と
-  Telegram の 30 日前警告に従ってください ([FAQ](FAQ) も参照)。
-- 更新前にリポジトリへタグを打っておくと戻しやすくなります。
-- Windows Update は provision で封鎖済み — 保守日に手動適用します。
+- **Windows**: distribute the `doorbell-windows` artifact from GitHub Actions. The watchdog tolerates stop → replace → restart.
+- **Android**: with Device Owner, silent installs are possible.
+- **iOS**: track the actual provisioning-profile/signature expiry and renew before it blocks launch (see [FAQ](FAQ)).
+- Tagging the repository before an update makes rollback easier.
+- Windows Update is blocked by provisioning — apply it manually on maintenance days.
 
-## セキュリティ運用のチェックリスト
+## Security operations checklist
 
-- kiosk 退出 PIN を既定 (000000) から必ず変更する。
-- パネル token を控え、不要になった配布先が出たらローテート。
-- 端末盗難時: システムタブで PSK 再発行 → 全端末を再配対、SIP パスワードと
-  Telegram bot token も回転します ([FAQ](FAQ) の該当項参照)。
+- Provision a unique kiosk exit PIN before commissioning; never retain or document a shared factory value.
+- Keep track of panel tokens; rotate when a distribution target is no longer needed.
+- If a device is stolen: rotate the mesh PSK and every credential/token accessible to it, then re-pair remaining devices (see [FAQ](FAQ) and the security guide).

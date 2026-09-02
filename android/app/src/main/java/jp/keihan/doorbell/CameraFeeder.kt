@@ -1,33 +1,73 @@
-// Camera1 (android.hardware.Camera) 前面カメラ → NV21 プレビューフレームを core へ push。
-// minSdk 21 の旧端末では Camera2 の実装品質が低い機種が多いため、あえて Camera1 を使う。
-// setPreviewCallbackWithBuffer + 使い回しバッファ 3 枚で GC 圧を避ける。
+// Camera1 sends NV21 preview frames to Core.
+// Legacy devices have inconsistent Camera2 implementations, so Camera1 is intentional.
+// Three reusable callback buffers reduce garbage-collection pressure on API19 hardware.
 package jp.keihan.doorbell
 
 import android.graphics.ImageFormat
+import android.graphics.SurfaceTexture
 import android.hardware.Camera
 import android.util.Log
 import android.view.SurfaceHolder
 import kotlin.math.abs
 
 @Suppress("DEPRECATION")
-class CameraFeeder(private val core: DoorbellCore) {
+internal class CameraFeeder(private val core: DoorbellCore) {
+
+    private data class CameraMount(val id: Int, val facing: Int, val orientation: Int)
 
     private var camera: Camera? = null
+    private var headlessTexture: SurfaceTexture? = null
     private var width = 0
     private var height = 0
 
-    /** H.264 硬編への分岐先 (Phase 6a)。稼働中のみ feed される (null = 分岐なし)。
-     *  MainActivity が wanted ポーリングで start/stop を切り替える。 */
+    val frameWidth: Int get() = width
+    val frameHeight: Int get() = height
+
+    /** Optional H.264 encoder sink, enabled only while Core requests an encoded stream. */
     @Volatile
     var encoder: VideoEncoder? = null
 
+    // Camera1 delivers NV21 in the sensor's native orientation.  The remote display
+    // therefore needs the camera mount angle combined with the device orientation;
+    // forwarding only the latter leaves most phone cameras off by 90 degrees.
+    private val selectedCamera: CameraMount? by lazy {
+        val info = Camera.CameraInfo()
+        var fallback: CameraMount? = null
+        for (i in 0 until Camera.getNumberOfCameras()) {
+            Camera.getCameraInfo(i, info)
+            val mount = CameraMount(i, info.facing, info.orientation)
+            if (info.facing == Camera.CameraInfo.CAMERA_FACING_FRONT) return@lazy mount
+            if (fallback == null) fallback = mount
+        }
+        fallback
+    }
+
+    /** Clockwise correction needed to show a native camera frame upright remotely. */
+    fun frameRotationForDeviceRotation(deviceRotation: Int): Int {
+        val degrees = ((deviceRotation % 360) + 360) % 360
+        val mount = selectedCamera ?: return degrees
+        return if (mount.facing == Camera.CameraInfo.CAMERA_FACING_FRONT) {
+            (mount.orientation + degrees) % 360
+        } else {
+            (mount.orientation - degrees + 360) % 360
+        }
+    }
+
     /**
-     * 前面カメラ (無ければ背面) を開いてプレビュー開始。失敗時 false。
-     * targetW/H: プレビュー解像度の目標。codec=h264/auto では h264_resolution を渡す
-     * (MJPEG 側は core の frame_bus が max_width へ縮小するので大きくても無害)。
+     * Open the front camera, or the rear fallback, near the requested dimensions. Core scales
+     * oversized MJPEG frames, while the H.264 path uses the requested codec dimensions directly.
      */
     fun start(holder: SurfaceHolder, targetW: Int = 640, targetH: Int = 480,
-              targetFps: Int = 0): Boolean {
+              targetFps: Int = 0): Boolean =
+        startInternal(holder, targetW, targetH, targetFps)
+
+    /** Service-owned capture path; no Activity surface is required. */
+    fun startHeadless(targetW: Int = 640, targetH: Int = 480,
+                      targetFps: Int = 0): Boolean =
+        startInternal(null, targetW, targetH, targetFps)
+
+    private fun startInternal(holder: SurfaceHolder?, targetW: Int, targetH: Int,
+                              targetFps: Int): Boolean {
         stop()
         val id = pickCameraId()
         if (id < 0) return false
@@ -40,7 +80,7 @@ class CameraFeeder(private val core: DoorbellCore) {
             if (targetFps > 0) {
                 val range = pickPreviewFpsRange(params, targetFps * 1000)
                 params.setPreviewFpsRange(range[0], range[1])
-                // 録画用の連続取り込み経路を優先し、静止画向け ISP 停滞を避ける。
+                // Prefer continuous capture to avoid still-image ISP stalls on legacy devices.
                 params.setRecordingHint(true)
                 Log.i(TAG, "preview ${size.width}x${size.height} fps=${range[0]}..${range[1]}")
             }
@@ -53,15 +93,19 @@ class CameraFeeder(private val core: DoorbellCore) {
             cam.setPreviewCallbackWithBuffer { data, c ->
                 if (data != null) {
                     val now = System.currentTimeMillis()
-                    // H.264 を最優先で queue。MJPEG 用 frame bus の処理時間を
-                    // ultra-low-latency 経路へ持ち込まない。
+                    // Queue H.264 first so MJPEG frame-bus work does not delay the codec path.
                     encoder?.feed(data, width, height, now)
-                    // NV21: y ストライド = width (Camera1 のバッファは詰めて格納される)
+                    // Camera1 supplies tightly packed NV21 with a Y stride equal to width.
                     core.onCameraFrame(data, 0, width, height, width, now)
-                    c.addCallbackBuffer(data)  // バッファ返却 (使い回し)
+                    c.addCallbackBuffer(data)
                 }
             }
-            cam.setPreviewDisplay(holder)
+            if (holder != null) {
+                cam.setPreviewDisplay(holder)
+            } else {
+                headlessTexture = SurfaceTexture(0)
+                cam.setPreviewTexture(headlessTexture)
+            }
             cam.startPreview()
             camera = cam
             true
@@ -79,27 +123,24 @@ class CameraFeeder(private val core: DoorbellCore) {
             camera?.release()
         } catch (_: Exception) { }
         camera = null
+        try { headlessTexture?.release() } catch (_: Exception) { }
+        headlessTexture = null
+        width = 0
+        height = 0
     }
 
     private fun pickCameraId(): Int {
-        val info = Camera.CameraInfo()
-        var fallback = -1
-        for (i in 0 until Camera.getNumberOfCameras()) {
-            Camera.getCameraInfo(i, info)
-            if (info.facing == Camera.CameraInfo.CAMERA_FACING_FRONT) return i
-            if (fallback < 0) fallback = i
-        }
-        return fallback
+        return selectedCamera?.id ?: -1
     }
 
-    /** 目標 (既定 640x480) に最も近いプレビューサイズを選ぶ (旧端末の帯域・CPU を考慮)。 */
+    /** Choose the preview size nearest the target to bound legacy CPU and bandwidth use. */
     private fun pickPreviewSize(params: Camera.Parameters, tw: Int, th: Int): Camera.Size {
         val target = tw * th
         return params.supportedPreviewSizes.minByOrNull { abs(it.width * it.height - target) }
             ?: params.previewSize
     }
 
-    /** exact fixed fps を最優先。無ければ target を含む最も狭い範囲を選ぶ。 */
+    /** Prefer an exact fixed rate, then the narrowest range containing the target. */
     private fun pickPreviewFpsRange(params: Camera.Parameters, target: Int): IntArray {
         val ranges = params.supportedPreviewFpsRange
         if (ranges.isNullOrEmpty()) return intArrayOf(target, target)

@@ -1,126 +1,22 @@
 #import "DBTexts.h"
+#import "DBGeneratedStrings.h"
+
+static NSString *DBCanonicalTextKey(NSString *key) {
+  // Keep the pre-catalog key working for existing kiosk config overrides.
+  if ([key isEqualToString:@"ring.open_door"]) return @"ring.unlock";
+  return key;
+}
 
 @implementation DBTexts {
   NSDictionary *_config;
-  NSDictionary *_overrides;  // i18n_overrides[lang]
-  NSDictionary *_builtin;    // 現在言語の組込辞書
+  NSDictionary *_overrides;
+  NSDictionary *_builtin;
 }
 
 @synthesize lang = _lang;
 
-// 組込文言。ja を基底に en/zh を補う。
 + (NSDictionary *)builtinFor:(NSString *)lang {
-  static NSDictionary *ja = nil;
-  static NSDictionary *en = nil;
-  static NSDictionary *zh = nil;
-  static dispatch_once_t once;
-  dispatch_once(&once, ^{
-    ja = @{@"idle.call_button": @"{door}を呼び出す",
-           @"idle.touch_to_call": @"画面にタッチで呼び出し",
-           @"idle.choose_purpose": @"ご用件を選んでください",
-           @"calling.title": @"呼び出し中…",
-           @"calling.cancel": @"取消",
-           @"calling.no_answer": @"応答がありませんでした",
-           @"reply.banner": @"応対メッセージ",
-           @"reply.choose": @"返信を選んでください",
-           @"reply.sent": @"「{msg}」を送信しました",
-           @"offline.title": @"接続できません",
-           @"offline.body": @"ネットワークを確認してください",
-           @"emergency.button": @"SOS",
-           @"emergency.hold_hint": @"{sec}秒長押しで通報",
-           @"emergency.title": @"緊急通報中",
-           @"emergency.notified": @"全ノードへ通報しました",
-           @"emergency.cancel": @"解除",
-           @"incall.title": @"通話中",
-           @"incall.end": @"終了",
-           @"ring.incoming": @"{door} 来客",
-           @"ring.no_video": @"映像なし",
-           @"ring.answer": @"応答",
-           @"ring.monitor": @"聞く",
-           @"ring.ignore": @"無視",
-           @"ring.cancelled": @"訪客が呼び出しを取消しました",
-           @"ring.monitoring": @"門口の音声を聞いています",
-           @"ring.purpose_badge": @"用件: {label}",
-           @"ring.lang_badge": @"訪客言語: {lang}",
-           @"ring.open_door": @"開錠",
-           @"purpose.sent": @"「{label}」で呼び出しました",
-           @"admin.title": @"管理",
-           @"admin.pin_prompt": @"PIN を入力",
-           @"admin.pin_wrong": @"PIN が違います",
-           @"admin.locked": @"ロック中です。しばらく待ってください"};
-    en = @{@"idle.call_button": @"Call {door}",
-           @"idle.touch_to_call": @"Touch to call",
-           @"idle.choose_purpose": @"Select your purpose",
-           @"calling.title": @"Calling…",
-           @"calling.cancel": @"Cancel",
-           @"calling.no_answer": @"No answer",
-           @"reply.banner": @"Message",
-           @"reply.choose": @"Choose a reply",
-           @"reply.sent": @"Sent: {msg}",
-           @"offline.title": @"Offline",
-           @"offline.body": @"Check the network",
-           @"emergency.button": @"SOS",
-           @"emergency.hold_hint": @"Hold {sec}s to alert",
-           @"emergency.title": @"EMERGENCY",
-           @"emergency.notified": @"All nodes notified",
-           @"emergency.cancel": @"Cancel",
-           @"incall.title": @"In call",
-           @"incall.end": @"End",
-           @"ring.incoming": @"{door} visitor",
-           @"ring.no_video": @"No video",
-           @"ring.answer": @"Answer",
-           @"ring.monitor": @"Listen",
-           @"ring.ignore": @"Ignore",
-           @"ring.cancelled": @"Visitor cancelled the call",
-           @"ring.monitoring": @"Listening to the door",
-           @"ring.purpose_badge": @"Purpose: {label}",
-           @"ring.lang_badge": @"Visitor language: {lang}",
-           @"ring.open_door": @"Unlock",
-           @"purpose.sent": @"Called with {label}",
-           @"admin.title": @"Admin",
-           @"admin.pin_prompt": @"Enter PIN",
-           @"admin.pin_wrong": @"Wrong PIN",
-           @"admin.locked": @"Locked. Please wait."};
-    zh = [self zhDict];
-  });
-  if ([lang isEqualToString:@"en"]) return en;
-  if ([lang isEqualToString:@"zh"]) return zh;
-  return ja;
-}
-+ (NSDictionary *)zhDict {
-  return @{@"idle.call_button": @"呼叫{door}",
-           @"idle.touch_to_call": @"触摸屏幕呼叫",
-           @"idle.choose_purpose": @"请选择来访事由",
-           @"calling.title": @"呼叫中…",
-           @"calling.cancel": @"取消",
-           @"calling.no_answer": @"无人应答",
-           @"reply.banner": @"应答消息",
-           @"reply.choose": @"请选择回复",
-           @"reply.sent": @"已发送：{msg}",
-           @"offline.title": @"无法连接",
-           @"offline.body": @"请检查网络",
-           @"emergency.button": @"SOS",
-           @"emergency.hold_hint": @"长按{sec}秒报警",
-           @"emergency.title": @"紧急报警中",
-           @"emergency.notified": @"已通知全部节点",
-           @"emergency.cancel": @"解除",
-           @"incall.title": @"通话中",
-           @"incall.end": @"结束",
-           @"ring.incoming": @"{door} 来访",
-           @"ring.no_video": @"无视频",
-           @"ring.answer": @"应答",
-           @"ring.monitor": @"监听",
-           @"ring.ignore": @"忽略",
-           @"ring.cancelled": @"访客已取消，画面将暂时保留",
-           @"ring.monitoring": @"正在监听门口",
-           @"ring.purpose_badge": @"事由：{label}",
-           @"ring.lang_badge": @"访客语言：{lang}",
-           @"ring.open_door": @"开锁",
-           @"purpose.sent": @"已以「{label}」呼叫",
-           @"admin.title": @"管理",
-           @"admin.pin_prompt": @"输入 PIN",
-           @"admin.pin_wrong": @"PIN 错误",
-           @"admin.locked": @"已锁定，请稍候"};
+  return DBGeneratedStringsForLanguage(lang);
 }
 
 - (id)init {
@@ -152,7 +48,12 @@
 - (NSString *)resolveFmt:(NSString *)key {
   id ov = [_overrides objectForKey:key];
   if ([ov isKindOfClass:[NSString class]] && [(NSString *)ov length] > 0) return ov;
-  NSString *b = [_builtin objectForKey:key];
+  NSString *canonicalKey = DBCanonicalTextKey(key);
+  if (![canonicalKey isEqualToString:key]) {
+    ov = [_overrides objectForKey:canonicalKey];
+    if ([ov isKindOfClass:[NSString class]] && [(NSString *)ov length] > 0) return ov;
+  }
+  NSString *b = [_builtin objectForKey:canonicalKey];
   return b ? b : key;
 }
 
@@ -194,9 +95,10 @@
 }
 
 + (NSString *)langDisplayName:(NSString *)lang {
-  if ([lang isEqualToString:@"ja"]) return @"日本語";
+  NSDictionary *names = DBGeneratedStringsForLanguage(@"en");
+  if ([lang isEqualToString:@"ja"]) return [names objectForKey:@"language.name_ja"];
   if ([lang isEqualToString:@"en"]) return @"English";
-  if ([lang isEqualToString:@"zh"]) return @"中文";
+  if ([lang isEqualToString:@"zh"]) return [names objectForKey:@"language.name_zh"];
   return lang;
 }
 

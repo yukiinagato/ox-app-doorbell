@@ -1,44 +1,143 @@
 @echo off
-rem ================================================================
-rem  doorbell Windows 一括ビルド (VM 内で実行)
-rem    core DLL (MSVC x64+x86) + watchdog + WPF アプリ
-rem  前提: VS2022 (「.NET デスクトップ開発」+「C++ によるデスクトップ開発」)
-rem  普通のコマンドプロンプトから実行可 (VsDevCmd を自動で読み込む)
-rem ================================================================
-setlocal enabledelayedexpansion
+rem Reproducible Windows release build: core x64+x86, ABI/PJSIP gates,
+rem watchdog policy tests, WPF shell and atomic SHA256-labelled bundle.
+setlocal EnableExtensions EnableDelayedExpansion
 cd /d %~dp0..
 
 if "%VSCMD_VER%"=="" (
   set "VSWHERE=%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe"
-  if not exist "!VSWHERE!" echo vswhere.exe が見つかりません (VS2022 未導入?) & exit /b 1
+  if not exist "!VSWHERE!" (
+    echo ERROR: vswhere.exe not found. Install VS2022 C++ and .NET desktop workloads.
+    exit /b 1
+  )
   for /f "usebackq tokens=*" %%i in (`"!VSWHERE!" -latest -property installationPath`) do set "VSPATH=%%i"
   call "!VSPATH!\Common7\Tools\VsDevCmd.bat" -arch=x64 || exit /b 1
 )
 
-echo ==== core DLL (x64) ====
-cmake -S core -B build-msvc-x64 -A x64 -DDB_BUILD_TESTS=OFF || exit /b 1
+if "%DB_BUILD_ID%"=="" (
+  for /f "usebackq tokens=*" %%i in (`git rev-parse --verify HEAD`) do set "DB_GIT_SHA=%%i"
+  if "!DB_GIT_SHA!"=="" (
+    echo ERROR: set DB_BUILD_ID or build from a Git checkout.
+    exit /b 1
+  )
+  git diff --quiet --ignore-submodules --
+  if errorlevel 1 (
+    echo ERROR: dirty tree requires an explicit DB_BUILD_ID.
+    exit /b 1
+  )
+  git diff --cached --quiet --ignore-submodules --
+  if errorlevel 1 (
+    echo ERROR: staged changes require an explicit DB_BUILD_ID.
+    exit /b 1
+  )
+  set "DB_BUILD_ID=git-!DB_GIT_SHA!"
+)
+powershell -NoProfile -Command "if ($env:DB_BUILD_ID -notmatch '^[A-Za-z0-9._-]+$') { exit 1 }"
+if errorlevel 1 (
+  echo ERROR: DB_BUILD_ID may contain only letters, digits, dot, underscore and hyphen.
+  exit /b 1
+)
+
+if "%SOURCE_DATE_EPOCH%"=="" (
+  for /f "usebackq tokens=*" %%i in (`git show -s --format^=%%ct HEAD`) do set "SOURCE_DATE_EPOCH=%%i"
+)
+if "%SOURCE_DATE_EPOCH%"=="" (
+  echo ERROR: set SOURCE_DATE_EPOCH for a non-Git source tree.
+  exit /b 1
+)
+set "ZERO_AR_DATE=1"
+
+set "DB_REQUIRE_PJSIP=ON"
+set "DB_WITH_PJSIP=ON"
+set "DB_PROBE_ARG="
+if "%DB_ALLOW_SIP_STUB%"=="1" (
+  echo WARNING: building an explicitly marked development-only SIP stub artifact.
+  set "DB_REQUIRE_PJSIP=OFF"
+  set "DB_WITH_PJSIP=OFF"
+  set "DB_PJSIP_ROOT_X64="
+  set "DB_PJSIP_ROOT_X86="
+  set "DB_PROBE_ARG=--allow-stub"
+) else (
+  if "%DB_SIGN_CERT_SHA1%"=="" (
+    echo ERROR: release build requires DB_SIGN_CERT_SHA1 for Authenticode signing.
+    exit /b 1
+  )
+  if "%DB_PJSIP_ROOT_X64%"=="" (
+    echo ERROR: release build requires DB_PJSIP_ROOT_X64.
+    exit /b 1
+  )
+  if "%DB_PJSIP_ROOT_X86%"=="" (
+    echo ERROR: release build requires DB_PJSIP_ROOT_X86.
+    exit /b 1
+  )
+  if not exist "%DB_PJSIP_ROOT_X64%\include\pjsua-lib\pjsua.h" (
+    echo ERROR: invalid DB_PJSIP_ROOT_X64.
+    exit /b 1
+  )
+  if not exist "%DB_PJSIP_ROOT_X86%\include\pjsua-lib\pjsua.h" (
+    echo ERROR: invalid DB_PJSIP_ROOT_X86.
+    exit /b 1
+  )
+)
+
+echo ==== core DLL x64 (build !DB_BUILD_ID!) ====
+cmake -S core -B build-msvc-x64 -A x64 -DDB_BUILD_TESTS=OFF -DDB_WITH_PJSIP=!DB_WITH_PJSIP! -DDB_REQUIRE_PJSIP=!DB_REQUIRE_PJSIP! -DDB_PJSIP_ROOT="%DB_PJSIP_ROOT_X64%" -DDB_BUILD_ID_ARG="!DB_BUILD_ID!" -DCMAKE_C_FLAGS="/Brepro" -DCMAKE_CXX_FLAGS="/Brepro" -DCMAKE_SHARED_LINKER_FLAGS="/Brepro" || exit /b 1
 cmake --build build-msvc-x64 --config Release -j || exit /b 1
 
-echo ==== core DLL (x86 - 旧 Toughpad 用) ====
-cmake -S core -B build-msvc-x86 -A Win32 -DDB_BUILD_TESTS=OFF || exit /b 1
+echo ==== core DLL x86 ====
+cmake -S core -B build-msvc-x86 -A Win32 -DDB_BUILD_TESTS=OFF -DDB_WITH_PJSIP=!DB_WITH_PJSIP! -DDB_REQUIRE_PJSIP=!DB_REQUIRE_PJSIP! -DDB_PJSIP_ROOT="%DB_PJSIP_ROOT_X86%" -DDB_BUILD_ID_ARG="!DB_BUILD_ID!" -DCMAKE_C_FLAGS="/Brepro" -DCMAKE_CXX_FLAGS="/Brepro" -DCMAKE_SHARED_LINKER_FLAGS="/Brepro" || exit /b 1
 cmake --build build-msvc-x86 --config Release -j || exit /b 1
 
-echo ==== DLL 配置 ====
+echo ==== x64/x86 platform-v2 and SIP backend gates ====
+cmake -S win\abi-probe -B build-win-abi-x64 -A x64 -DDB_CORE_BUILD_DIR="%CD%\build-msvc-x64" || exit /b 1
+cmake --build build-win-abi-x64 --config Release -j || exit /b 1
+build-win-abi-x64\Release\doorbell-abi-probe.exe !DB_PROBE_ARG! || exit /b 1
+cmake -S win\abi-probe -B build-win-abi-x86 -A Win32 -DDB_CORE_BUILD_DIR="%CD%\build-msvc-x86" || exit /b 1
+cmake --build build-win-abi-x86 --config Release -j || exit /b 1
+build-win-abi-x86\Release\doorbell-abi-probe.exe !DB_PROBE_ARG! || exit /b 1
+
+echo ==== atomically stage native DLLs for WPF ====
 if not exist win\DoorbellApp\lib\win-x64 mkdir win\DoorbellApp\lib\win-x64
 if not exist win\DoorbellApp\lib\win-x86 mkdir win\DoorbellApp\lib\win-x86
-copy /y build-msvc-x64\Release\doorbell.dll win\DoorbellApp\lib\win-x64\ || exit /b 1
-copy /y build-msvc-x86\Release\doorbell.dll win\DoorbellApp\lib\win-x86\ || exit /b 1
+copy /b /y build-msvc-x64\Release\doorbell.dll win\DoorbellApp\lib\win-x64\doorbell.dll.new >nul || exit /b 1
+move /y win\DoorbellApp\lib\win-x64\doorbell.dll.new win\DoorbellApp\lib\win-x64\doorbell.dll >nul || exit /b 1
+copy /b /y build-msvc-x86\Release\doorbell.dll win\DoorbellApp\lib\win-x86\doorbell.dll.new >nul || exit /b 1
+move /y win\DoorbellApp\lib\win-x86\doorbell.dll.new win\DoorbellApp\lib\win-x86\doorbell.dll >nul || exit /b 1
 
-echo ==== watchdog ====
-cmake -S win\watchdog -B build-watchdog -A x64 || exit /b 1
+echo ==== watchdog and deterministic recovery-policy test ====
+cmake -S win\watchdog -B build-watchdog -A x64 -DBUILD_TESTING=ON || exit /b 1
 cmake --build build-watchdog --config Release -j || exit /b 1
+ctest --test-dir build-watchdog -C Release --output-on-failure || exit /b 1
 
-echo ==== WPF アプリ ====
-msbuild win\DoorbellApp.sln /restore /p:Configuration=Release /m || exit /b 1
+echo ==== WPF shell ====
+msbuild win\DoorbellApp.sln /restore /p:Configuration=Release /p:Deterministic=true /p:ContinuousIntegrationBuild=true /p:SourceRevisionId="!DB_BUILD_ID!" /m || exit /b 1
+
+echo ==== atomic release bundle and SHA256 manifest ====
+set "DB_DIST_PARENT=win\dist"
+set "DB_DIST=!DB_DIST_PARENT!\!DB_BUILD_ID!"
+set "DB_STAGE=!DB_DIST_PARENT!\.!DB_BUILD_ID!.!RANDOM!.tmp"
+if exist "!DB_DIST!" (
+  echo ERROR: refusing to overwrite existing artifact !DB_DIST!.
+  exit /b 1
+)
+if not exist "!DB_DIST_PARENT!" mkdir "!DB_DIST_PARENT!" || exit /b 1
+mkdir "!DB_STAGE!\app" || exit /b 1
+mkdir "!DB_STAGE!\checks" || exit /b 1
+xcopy win\DoorbellApp\bin\Release\net48\* "!DB_STAGE!\app\" /E /I /Q /Y >nul || exit /b 1
+copy /b build-watchdog\Release\doorbell-watchdog.exe "!DB_STAGE!\" >nul || exit /b 1
+copy /b build-win-abi-x64\Release\doorbell-abi-probe.exe "!DB_STAGE!\checks\doorbell-abi-probe-x64.exe" >nul || exit /b 1
+copy /b build-win-abi-x86\Release\doorbell-abi-probe.exe "!DB_STAGE!\checks\doorbell-abi-probe-x86.exe" >nul || exit /b 1
+set "DB_SIGNING_MODE=unsigned-development-stub"
+if not "%DB_ALLOW_SIP_STUB%"=="1" (
+  powershell -NoProfile -ExecutionPolicy Bypass -File win\tools\sign-bundle.ps1 -ArtifactRoot "!DB_STAGE!" -CertificateThumbprint "%DB_SIGN_CERT_SHA1%" || exit /b 1
+  set "DB_SIGNING_MODE=authenticode-sha256"
+)
+powershell -NoProfile -ExecutionPolicy Bypass -File win\tools\write-manifest.ps1 -ArtifactRoot "!DB_STAGE!" -BuildId "!DB_BUILD_ID!" -SourceDateEpoch "!SOURCE_DATE_EPOCH!" -SigningMode "!DB_SIGNING_MODE!" || exit /b 1
+move "!DB_STAGE!" "!DB_DIST!" >nul || exit /b 1
 
 echo.
-echo ==== 完了 ====
-echo   アプリ:     win\DoorbellApp\bin\Release\net48\DoorbellApp.exe
-echo   watchdog:  build-watchdog\Release\doorbell-watchdog.exe
-echo   起動設定:  %%ProgramData%%\Doorbell\boot.json (初回起動で生成される)
+echo ==== complete ====
+echo artifact: !DB_DIST!
+echo manifest: !DB_DIST!\SHA256SUMS
+echo service install (elevated): !DB_DIST!\doorbell-watchdog.exe --install !DB_DIST!\app\DoorbellApp.exe
 endlocal

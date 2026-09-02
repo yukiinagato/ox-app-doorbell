@@ -1,5 +1,3 @@
-> 日文原文: provision.ja.md（以日文为准）
-
 # iOS 子机的部署（受监督 SAM kiosk / Ad Hoc 分发）+ tvOS 监视端
 
 对象: `ios/` 的 iOS App（`jp.keihan.doorbell` — 门口机/室内机两用）与
@@ -12,8 +10,8 @@ tvOS App（`jp.keihan.doorbell.tv` — 监视端）。把 iOS 12 及以上的废
   （需要 Apple Developer Program 的团队设置 — 在 Xcode 的 Signing & Capabilities
   选择 Team 即可。CI 用 `-allowProvisioningUpdates` 或手动 profile）。
   core (C++) 由 run-script 用 CMake 自动构建 — 开发机上只需要 `cmake` 和 `python3`。
-  要用 SIP 的话先执行一次 `tools/build_pjsip_ios.sh`
-  （没有的话会以无 SIP 方式构建 — 呼叫/通知/视频/回复照常工作）。
+  先用 `tools/build_pjsip_ios.sh` 建立符合 lane 的 PJSIP artifact。SIP stub build 僅供
+  development/display，不得作為通話 release 發佈。
 - 分发用 **Ad Hoc**（面向家庭内少量设备）:
   1. 在 Apple Developer 注册各设备的 UDID（上限 100 台/年）。
   2. Xcode → Product → Archive → Distribute App → **Ad Hoc** → 导出 ipa。
@@ -53,26 +51,33 @@ iOS 上相当于 Android Device Owner 的常驻 kiosk 化，使用
    - 推迟软件更新（门口机不会自己掉进更新画面）
    - 免除密码（来铃画面不被锁屏挡住 — SAM 中本来就不会落到锁屏）
 
-App 内的隐藏管理入口（右上连点 7 次 → PIN 数字键盘）在 SAM 中也可用 —
-默认 PIN 是 `000000`（向 `<data_dir>/exit_pin.txt` 写入 SHA-256 hex 并务必修改）。
+App 內的隱藏管理員入口（右上連點 7 次 → PIN 數字鍵盤）在 SAM 中也可用。啟用 SAM 前須透過
+核准維護路徑設定唯一 PIN hash，不得以共用值或 factory 值部署。
 PIN 通过后显示维护信息（node id / peers / data dir）并临时放开自动熄屏。
 kiosk 本身的解除因 SAM 的性质只能在 Configurator 上做。
 
 ## 3. 放置 boot.json
 
-首次启动会在 `Documents/boot.json` 生成默认值。编辑手段（任一均可）:
+首次启动会在 `Documents/boot.json` 生成默认值。Core 启动前必须选择 **门口机** 或 **室内机**。旧 profile 若没有明确的 `setup_complete:true`，也会显示一次确认页面。
+门口机还必须设置 door ID，界面会预填可直接确认的随机 `door-xxxxxxxx`；保存的 role 非法或门口机 ID
+丢失时会再次显示。室内机不保存 door assignment。生成 profile 后可用以下任一方式编辑：
 
 - **Finder / Apple Configurator 的文件共享**: 目前 App 未开放 File Sharing，
   基本靠管理 webui 投放（见下）。
 - **管理 webui**: 在已入 mesh 的其他节点打开 `http://<ip>:47180/admin/` → 设备 →
-  用加入 PIN 把本设备接进来（psk 经由该通道安全下发）。
-- 手写时的格式（与 WPF/Android 相同）:
+  用加入 PIN 把本设备接进来。
+- 不得手寫 PSK。pair 後不含秘密的持久格式如下：
 
 ```json
 { "name": "genkan-front", "role": "door_station", "door": "d_front",
-  "listen_port": 47172, "http_port": 47180, "psk_hex": "<64hex>",
+  "listen_port": 47172, "http_port": 47180, "psk_ref": "secret:mesh.psk",
   "seed_peers": ["10.0.1.10:47172"], "ui_lang": "ja", "kiosk": true }
 ```
+
+Core 先將 `mesh.psk` 寫入 Keychain，再只向 shell 發出
+`{t:"paired", psk_ref:"secret:mesh.psk"}`，不傳送新的 `psk_hex`。
+`pairing_persistence_error` 必須維持 not-ready。不得把 PSK、SIP password、token 或其他 credential
+放進 `boot.json`。
 
 **seed_peers 在 iOS 上是必填**: iOS 14+ 的组播收发需要特殊 entitlement
 （com.apple.developer.networking.multicast — 需向 Apple 申请），因此不要指望 core 的
@@ -88,9 +93,9 @@ UDP beacon 自动发现。同一 L2 上有 1 台 seed，gossip 就能把所有�
   （门口直播 MJPEG + 用 Siri Remote 选快捷回复）。SOS 警报的全屏显示 + 警笛 +
   PIN 解除（用遥控器操作绘制数字键盘）也会出现。
 - **限制**:
-  - 面向 tvOS 的 pjsip 尚未就绪 — **监听/应答（SIP 语音）不可用，仅视频+快捷回复**
-    （见 ios/Doorbell/IncomingViewController.swift 的 TODO）。需要声音的 TV 用
-    Android TV 版，或 AppleTV 上经 go2rtc → HomeKit（deploy/ha/）。
+  - source 在畫面與快捷回复之外實作 direct-SIP **listen-only audio**。tracked CI 只證明 link real
+    PJSIP 的 unsigned arm64 DoorbellTV **Debug simulator** build，不產生 tvOS Release/device artifact。
+    Apple TV 沒有 mic，因此刻意隱藏 Answer，且不支援 audio transmit/雙向通話。
   - tvOS 没有本地持久存储（Caches 会被 OS 随时清理）。boot.json 等价物
     存在 UserDefaults，CRDT 配置、事件 DB 在 Caches — 即使被清也会从 mesh 自动恢复
     （自愈）。不要用于「只靠这一台长期保存事件历史」的用途。
@@ -106,5 +111,7 @@ UDP beacon 自动发现。同一 L2 上有 1 台 seed，gossip 就能把所有�
 4. 室内机: 快捷回复 → 门口机大字显示 + 朗读（AVSpeechSynthesizer）。
 5. 室内机: 监视 → 能听到门口声音 / 应答 → 双向通话（VoiceProcessingIO 的 AEC
    可实现免提）。
-6. 长按 SOS → 全节点警报 + 警笛 → PIN 解除。
-7. 断电→复电后自动恢复（SAM 自动重启）。
+6. tvOS: tracked Debug simulator build 只作 source/build contract。另建並記錄 signed device artifact，
+   在 exact Apple TV 驗證 Monitor audio/video 與沒有 Answer/transmit control。
+7. 長按 SOS → 驗證 active rule 選出的 recipient/channel → PIN 解除。
+8. 断电→复电后自动恢复（SAM 自动重启）。

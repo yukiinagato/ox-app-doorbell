@@ -1,64 +1,57 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- メッシュ通信 + 管理 webui -->
+    <!-- Mesh communication and the administration UI. -->
     <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE"/>
-    <!-- 訪客カメラ / 通話・監聴マイク (SIP) -->
+    <!-- Visitor camera and SIP call/monitor audio. -->
     <uses-permission android:name="android.permission.CAMERA"/>
     <uses-permission android:name="android.permission.RECORD_AUDIO"/>
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
-    <!-- 常駐 (core をプロセスごと生かす前台サービス) -->
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE"/>
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
-    <!-- TV: 前台アプリの上に来客モニタ画面を被せる (バックグラウンド起動の免除条件。
-         付与は adb: appops set jp.keihan.doorbell SYSTEM_ALERT_WINDOW allow — provision.md) -->
+    <!-- The foreground service keeps the Core process resident. -->
+    <!-- TV installations use an approved overlay to show a visitor above the foreground app. -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW"/>
 
-    <!-- カメラ無し端末 (通知専用ノード転用) にも入れられるように required=false -->
+    <!-- Camera and microphone hardware remain optional for alert-only nodes. -->
     <uses-feature android:name="android.hardware.camera.any" android:required="false"/>
+    <uses-feature android:name="android.hardware.camera" android:required="false"/>
     <uses-feature android:name="android.hardware.camera.front" android:required="false"/>
     <uses-feature android:name="android.hardware.microphone" android:required="false"/>
-    <!-- Android TV (Leanback): 室内監視器として同一 APK を入れる。タッチ非必須 -->
+    <uses-feature android:name="android.hardware.wifi" android:required="false"/>
+    <!-- The same APK supports Android TV as a non-touch indoor monitor. -->
     <uses-feature android:name="android.software.leanback" android:required="false"/>
     <uses-feature android:name="android.hardware.touchscreen" android:required="false"/>
 
     <application
         android:name=".App"
         android:allowBackup="false"
-        android:banner="@drawable/banner_tv"
-        android:icon="@android:drawable/sym_def_app_icon"
+        android:icon="@drawable/ic_doorbell"
         android:label="@string/app_name"
         android:theme="@style/Theme.Doorbell"
-        android:usesCleartextTraffic="true">
-        <!-- 平文 HTTP は LAN 内に閉じた用途のみ: 門口ライブ (MJPEG)・自機 httpd の
-             /asset/<hash> (テーマ背景/カスタム音声)。targetSdk 28+ の既定 (禁止) では
-             どちらも接続できない。 -->
-
+        tools:ignore="MissingTvBanner">
         <activity
             android:name=".MainActivity"
             android:configChanges="orientation|screenSize|keyboardHidden|screenLayout"
             android:excludeFromRecents="true"
             android:exported="true"
-            android:launchMode="singleTask"
-            android:lockTaskMode="if_whitelisted">
+            android:launchMode="singleTask">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
-            <!-- TV ランチャー (Leanback) からの起動 -->
+            <!-- Android TV launcher entry point. -->
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LEANBACK_LAUNCHER"/>
             </intent-filter>
         </activity>
 
-        <!-- kiosk: HOME 化 (起動器置き換え, provision.md) は別 alias に分離する。
-             MAIN/LAUNCHER と同一 activity に HOME を付けると一部 OEM ランチャーが
-             「ホームアプリ」扱いしてドロワーから隠す (= アイコンが見えない) ため。 -->
+        <!-- Keep HOME on a separate alias because some OEM launchers hide HOME activities
+             from the application drawer. -->
         <activity-alias
             android:name=".HomeAlias"
             android:targetActivity=".MainActivity"
@@ -71,35 +64,42 @@
             </intent-filter>
         </activity-alias>
 
-        <!-- 来客モニタ画面: chime イベントで前台に被さる (門口ライブ映像 + 監聴 + クイック返信)。
-             D-pad (TV リモコン) とタッチの両対応。 -->
+        <!-- Visitor monitor with live video, audio, and quick replies; supports touch and D-pad. -->
         <activity
             android:name=".IncomingActivity"
             android:configChanges="orientation|screenSize|keyboardHidden|screenLayout"
             android:excludeFromRecents="true"
             android:exported="false"
-            android:launchMode="singleTop"
-            android:showWhenLocked="true"
-            android:turnScreenOn="true"/>
+            android:launchMode="singleTop"/>
 
-        <!-- 未配対時の配対引導 (自機 QR 表示 + PIN 参加)。paired で自動終了。 -->
+        <activity
+            android:name=".EmergencyActivity"
+            android:configChanges="orientation|screenSize|keyboardHidden|screenLayout"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:launchMode="singleTop"/>
+
+        <!-- Pairing UI for QR display and PIN-based enrollment. -->
         <activity
             android:name=".PairingActivity"
             android:configChanges="orientation|screenSize|keyboardHidden|screenLayout"
             android:exported="false"
             android:launchMode="singleTop"/>
 
-        <!-- 常駐前台サービス: 通知 1 本で core プロセスを生かし続ける (TV/タブレット共通) -->
+        <!-- Mandatory local identity gate for first run and invalid boot profiles. -->
+        <activity
+            android:name=".BootSetupActivity"
+            android:configChanges="orientation|screenSize|keyboardHidden|screenLayout"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:launchMode="singleTop"/>
+
+        <!-- Resident foreground service shared by TV and tablet installations. -->
         <service
             android:name=".DoorbellService"
-            android:exported="false"
-            android:foregroundServiceType="specialUse">
-            <property
-                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="ドアホン子機の常駐 (メッシュ待受・来客通知・SIP 監聴)"/>
-        </service>
+            android:exported="false"/>
 
-        <!-- Device Owner 用 admin (adb: dpm set-device-owner jp.keihan.doorbell/.AdminReceiver) -->
+        <!-- Device Owner administrator component. -->
         <receiver
             android:name=".AdminReceiver"
             android:exported="true"
@@ -115,6 +115,7 @@
         <receiver android:name=".BootReceiver" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED"/>
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED"/>
             </intent-filter>
         </receiver>
     </application>

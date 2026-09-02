@@ -1,6 +1,6 @@
-# 開発用 Asterisk (SIP 結合テスト用 — 本番はユーザー自身の Asterisk)
+# Development Asterisk instance for SIP integration tests. Production uses the operator's PBX.
 #   docker compose up -d
-#   門口機: SIP server=ホストIP, user=8001, pass=devpass8001, 呼出先=600 (応答→音声→エコー)
+#   Door station: server=<host IP>, user=8001, pass=devpass8001, target=600 (answer/audio/echo)
 services:
   asterisk:
     image: andrius/asterisk:20.20.1_debian-trixie

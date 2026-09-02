@@ -1,5 +1,5 @@
-// MotionDetector 実装: 輝度面のブロック平均縮小 + 前フレーム絶対差。
-// 計算量はフレーム 1 回走査 + グリッド (32x24) 走査のみ — 低 fps の呼び出し側スレッドで完結する。
+
+
 #include "media/motion_detector.h"
 
 #include <algorithm>
@@ -10,14 +10,14 @@ namespace db {
 double MotionDetector::thresholdPercent(int sensitivity) {
   if (sensitivity < 0) sensitivity = 0;
   if (sensitivity > 100) sensitivity = 100;
-  // 単調減少の線形マップ: sensitivity 0 → 50% (ほぼ全面が動かないと発火しない)
-  //                       sensitivity 100 → 1% (わずかな変化でも発火)
+
+
   return 50.0 - 0.49 * sensitivity;
 }
 
-// BGRA 1 画素の輝度 (BT.601 係数の整数近似)
+
 static inline int bgraLuma(const uint8_t* p) {
-  return (29 * p[0] + 150 * p[1] + 77 * p[2]) >> 8;  // B,G,R 順
+  return (29 * p[0] + 150 * p[1] + 77 * p[2]) >> 8;
 }
 
 bool MotionDetector::downscaleLuma(const RawFrame& f, int stride,
@@ -34,13 +34,13 @@ bool MotionDetector::downscaleLuma(const RawFrame& f, int stride,
       int luma;
       switch (f.format) {
         case 0:  // NV21
-        case 1:  // NV12: Y 面そのまま
+        case 1:
           luma = row[c];
           break;
-        case 2:  // YUY2: Y0 U Y1 V — Y は偶数バイト
+        case 2:
           luma = row[c * 2];
           break;
-        case 3:  // BGRA: 変換
+        case 3:
           luma = bgraLuma(row + static_cast<size_t>(c) * 4);
           break;
         default:
@@ -64,7 +64,7 @@ void MotionDetector::setConfig(const MotionConfig& cfg) {
     streak_ = 0;
     last_pct_ = 0.0;
   } else if (!was_enabled) {
-    // 無効 → 有効: 前フレームが古い可能性があるので学習し直す
+
     seen_ = 0;
     prev_.clear();
     streak_ = 0;
@@ -78,10 +78,10 @@ void MotionDetector::feed(const RawFrame& f) {
   if (stride == 0) stride = f.format == 2 ? f.w * 2 : (f.format == 3 ? f.w * 4 : f.w);
   if (rawFrameBytes(f.format, f.w, f.h, stride) == 0 ||
       f.data.size() < rawFrameBytes(f.format, f.w, f.h, stride)) {
-    return;  // 未知形式 / データ不足
+    return;
   }
 
-  // 寸法変化 → グリッドを組み直して学習し直し
+
   if (f.w != frame_w_ || f.h != frame_h_) {
     frame_w_ = f.w;
     frame_h_ = f.h;
@@ -110,7 +110,7 @@ void MotionDetector::feed(const RawFrame& f) {
   seen_++;
   last_pct_ = pct;
 
-  // 学習期間: 差分の基準がまだ信用できない間は発火しない (連続カウントもしない)
+
   if (seen_ <= kLearnFrames) {
     streak_ = 0;
     return;
@@ -122,9 +122,9 @@ void MotionDetector::feed(const RawFrame& f) {
     streak_ = 0;
     return;
   }
-  if (streak_ < 2) return;  // 連続 2 フレームで初めて発火 (単発ノイズ排除)
+  if (streak_ < 2) return;
 
-  // min_interval_s 抑制 (ts_ms は呼び出し側の単調クロック前提)
+
   int64_t interval_ms = static_cast<int64_t>(cfg_.min_interval_s) * 1000;
   if (last_fire_ms_ != INT64_MIN && f.ts_ms - last_fire_ms_ < interval_ms) return;
 

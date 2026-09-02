@@ -1,15 +1,16 @@
-// fMP4 マキサ (fmp4) + VideoTrack + /stream.mp4 配信のテスト。
-//  - 合成 NAL (ビット書きで組んだ正規 SPS / ダミー PPS/IDR/non-IDR) で決定的に:
-//    AnnexB 分割・SPS 解像度・AVCC 変換・box 構造 (サイズ/fourcc 階層/trun/avcC)
-//  - VideoTrack: 逐幀 fragment・採集時刻・購読者管理・base decode time 連続
-//  - Node 統合: 実 TCP + HTTP で GET /stream.mp4 (ftyp から始まり moof が続く) と
-//    encoder wanted 制御 (購読者ゼロ = エンコードしない)
-//  - `which ffprobe` が存在すれば実 parse 検証 (無ければ skip)
+
+
+
+
+
+
+
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include <unistd.h>
 
+#include <algorithm>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -27,7 +28,7 @@ using namespace db;
 
 namespace {
 
-// ---------- 合成 NAL (H.264 ビット書き) ----------
+
 
 struct BitWriter {
   Bytes out;
@@ -44,7 +45,7 @@ struct BitWriter {
   void u(uint32_t v, int n) {
     for (int i = n - 1; i >= 0; i--) bit((v >> i) & 1);
   }
-  void ue(uint32_t v) {  // 符号なし Exp-Golomb
+  void ue(uint32_t v) {
     uint32_t k = v + 1;
     int n = 0;
     while ((k >> n) > 1) n++;
@@ -57,7 +58,7 @@ struct BitWriter {
   }
 };
 
-// RBSP → NAL (ヘッダ + emulation prevention 00 00 03 挿入)
+
 Bytes makeNal(uint8_t header, const Bytes& rbsp) {
   Bytes nal;
   nal.push_back(header);
@@ -73,7 +74,7 @@ Bytes makeNal(uint8_t header, const Bytes& rbsp) {
   return nal;
 }
 
-// baseline SPS。crop_bottom > 0 で下端クロップ (4:2:0 → 2px 単位)。
+
 Bytes makeSps(int mbs_w, int map_h, uint32_t crop_bottom) {
   BitWriter bw;
   bw.u(66, 8);   // profile_idc = baseline
@@ -81,7 +82,7 @@ Bytes makeSps(int mbs_w, int map_h, uint32_t crop_bottom) {
   bw.u(30, 8);   // level_idc = 3.0
   bw.ue(0);      // seq_parameter_set_id
   bw.ue(0);      // log2_max_frame_num_minus4
-  bw.ue(2);      // pic_order_cnt_type = 2 (追加フィールドなし)
+  bw.ue(2);
   bw.ue(1);      // max_num_ref_frames
   bw.u(0, 1);    // gaps_in_frame_num_value_allowed_flag
   bw.ue(static_cast<uint32_t>(mbs_w - 1));  // pic_width_in_mbs_minus1
@@ -123,7 +124,7 @@ Bytes makePps() {
   return makeNal(0x68, bw.out);  // type=8
 }
 
-// ダミー slice (payload に start code が出ない値で埋める)
+
 Bytes makeSlice(bool idr, size_t payload) {
   Bytes nal;
   nal.push_back(idr ? 0x65 : 0x41);  // type 5 (IDR) / 1 (non-IDR)
@@ -131,7 +132,7 @@ Bytes makeSlice(bool idr, size_t payload) {
   return nal;
 }
 
-// start code (4 バイト) で連結した AnnexB アクセスユニット
+
 Bytes annexb(const std::vector<Bytes>& nals) {
   Bytes out;
   for (const Bytes& n : nals) {
@@ -142,13 +143,13 @@ Bytes annexb(const std::vector<Bytes>& nals) {
   return out;
 }
 
-// ---------- box 走査ヘルパ ----------
+
 
 struct Box {
   std::string type;
-  size_t off = 0;      // box 先頭
-  size_t size = 0;     // box 全長
-  size_t payload = 0;  // type 直後
+  size_t off = 0;
+  size_t size = 0;
+  size_t payload = 0;
 };
 
 std::vector<Box> childBoxes(const Bytes& buf, size_t start, size_t end) {
@@ -192,9 +193,9 @@ bool contains(const Bytes& hay, const Bytes& needle) {
 
 }  // namespace
 
-TEST_CASE("fmp4: AnnexB 分割 (3/4 バイト start code・型判定)") {
+TEST_CASE("fmp4: splits Annex B with three- and four-byte start codes") {
   Bytes sps = makeSps(80, 45, 0), pps = makePps(), idr = makeSlice(true, 16);
-  // 3 バイト start code 混在
+
   Bytes au;
   const uint8_t sc4[4] = {0, 0, 0, 1}, sc3[3] = {0, 0, 1};
   au.insert(au.end(), sc4, sc4 + 4);
@@ -213,12 +214,12 @@ TEST_CASE("fmp4: AnnexB 分割 (3/4 バイト start code・型判定)") {
   CHECK(nals[2].type == 5);
   CHECK(nals[2].n == idr.size());
 
-  // 空/短すぎる入力
+
   CHECK(fmp4::splitAnnexB(nullptr, 0).empty());
   CHECK(fmp4::splitAnnexB(au.data(), 3).empty());
 }
 
-TEST_CASE("fmp4: SPS 解像度 parse (720p / クロップ / EPB / 不正)") {
+TEST_CASE("fmp4: parses SPS dimensions, cropping, EPB, and invalid input") {
   int w = 0, h = 0;
   SUBCASE("1280x720 (80x45 MB)") {
     Bytes sps = makeSps(80, 45, 0);
@@ -226,36 +227,36 @@ TEST_CASE("fmp4: SPS 解像度 parse (720p / クロップ / EPB / 不正)") {
     CHECK(w == 1280);
     CHECK(h == 720);
   }
-  SUBCASE("640x360 (40x23 MB + 下端 8px クロップ)") {
-    Bytes sps = makeSps(40, 23, 4);  // 4:2:0 → 4 単位 = 8px
+  SUBCASE("640x360 with 40x23 macroblocks and an eight-pixel bottom crop") {
+    Bytes sps = makeSps(40, 23, 4);
     REQUIRE(fmp4::parseSpsDims(sps.data(), sps.size(), &w, &h));
     CHECK(w == 640);
     CHECK(h == 360);
   }
-  SUBCASE("EPB (00 00 03) を含む SPS も除去して読める") {
-    // mbs_w-1 = 255 級の大きい値で 0 連続を出やすくしつつ、makeNal が挿入した
-    // 0x03 が除去されることを既知解像度で確認する
+  SUBCASE("removes EPB bytes from an SPS before parsing") {
+
+
     Bytes sps = makeSps(120, 68, 0);  // 1920x1088
     REQUIRE(fmp4::parseSpsDims(sps.data(), sps.size(), &w, &h));
     CHECK(w == 1920);
     CHECK(h == 1088);
   }
-  SUBCASE("不正入力は false") {
+  SUBCASE("invalid input returns false") {
     Bytes pps = makePps();
     CHECK(!fmp4::parseSpsDims(pps.data(), pps.size(), &w, &h));  // type != 7
     Bytes sps = makeSps(80, 45, 0);
-    CHECK(!fmp4::parseSpsDims(sps.data(), 3, &w, &h));  // 短すぎ
+    CHECK(!fmp4::parseSpsDims(sps.data(), 3, &w, &h));
     CHECK(!fmp4::parseSpsDims(nullptr, 0, &w, &h));
   }
 }
 
-TEST_CASE("fmp4: codecString は SPS の profile/constraint/level") {
+TEST_CASE("fmp4: codecString reports SPS profile, constraints, and level") {
   Bytes sps = makeSps(80, 45, 0);
   CHECK(fmp4::codecString(sps) == "avc1.42001E");  // 66/0x00/30
   CHECK(fmp4::codecString(Bytes{0x67}) == "");
 }
 
-TEST_CASE("fmp4: toSample — AVCC 変換 + SPS/PPS/AUD/SEI 除外 + key 判定") {
+TEST_CASE("fmp4: toSample converts AVCC, filters metadata NALUs, and detects keyframes") {
   Bytes sps = makeSps(80, 45, 0), pps = makePps();
   Bytes idr = makeSlice(true, 20), p_sl = makeSlice(false, 12);
   Bytes aud = {0x09, 0x10};
@@ -267,12 +268,12 @@ TEST_CASE("fmp4: toSample — AVCC 変換 + SPS/PPS/AUD/SEI 除外 + key 判定"
   CHECK(got_sps == sps);
   CHECK(got_pps == pps);
   CHECK(s.key);
-  // AVCC: 4 バイト長 + IDR 本体のみ (SPS/PPS/AUD/SEI は落ちる)
+
   REQUIRE(s.data.size() == 4 + idr.size());
   CHECK(be32(s.data, 0) == idr.size());
   CHECK(std::memcmp(&s.data[4], idr.data(), idr.size()) == 0);
 
-  // non-IDR のみ → key=false、SPS/PPS は既存値を保持
+
   Bytes au2 = annexb({p_sl});
   fmp4::Sample s2 = fmp4::toSample(au2.data(), au2.size(), &got_sps, &got_pps);
   CHECK(!s2.key);
@@ -280,13 +281,13 @@ TEST_CASE("fmp4: toSample — AVCC 変換 + SPS/PPS/AUD/SEI 除外 + key 判定"
   REQUIRE(s2.data.size() == 4 + p_sl.size());
   CHECK(be32(s2.data, 0) == p_sl.size());
 
-  // SPS/PPS のみ (MediaCodec の CODEC_CONFIG) → data 空
+
   Bytes au3 = annexb({sps, pps});
   fmp4::Sample s3 = fmp4::toSample(au3.data(), au3.size(), &got_sps, &got_pps);
   CHECK(s3.data.empty());
 }
 
-TEST_CASE("fmp4: init segment の box 構造 (ftyp+moov 階層・avc1 解像度・avcC)") {
+TEST_CASE("fmp4: init segment contains valid ftyp, moov, avc1, and avcC boxes") {
   Bytes sps = makeSps(80, 45, 0), pps = makePps();
   Bytes init = fmp4::buildInit(sps, pps);
   REQUIRE(init.size() > 100);
@@ -295,7 +296,7 @@ TEST_CASE("fmp4: init segment の box 構造 (ftyp+moov 階層・avc1 解像度�
   REQUIRE(top.size() == 2);
   CHECK(top[0].type == "ftyp");
   CHECK(top[1].type == "moov");
-  // box サイズの合計 = 全長 (childBoxes が末尾まで正確に歩けた)
+
   CHECK(top[0].size + top[1].size == init.size());
 
   const Box& moov = top[1];
@@ -311,7 +312,7 @@ TEST_CASE("fmp4: init segment の box 構造 (ftyp+moov 階層・avc1 解像度�
   auto in_trak = childBoxes(init, trak->payload, trak->off + trak->size);
   const Box* tkhd = findBox(in_trak, "tkhd");
   REQUIRE(tkhd);
-  // tkhd width/height (16.16) は payload 末尾 8 バイト
+
   size_t wh = tkhd->off + tkhd->size - 8;
   CHECK(be32(init, wh) == (1280u << 16));
   CHECK(be32(init, wh + 4) == (720u << 16));
@@ -335,13 +336,13 @@ TEST_CASE("fmp4: init segment の box 構造 (ftyp+moov 階層・avc1 解像度�
   REQUIRE(findBox(in_stbl, "stsz"));
   REQUIRE(findBox(in_stbl, "stco"));
 
-  // stsd 内の avc1 と avcC (SPS/PPS がそのまま入る)
+
   const Box* stsd = findBox(in_stbl, "stsd");
   auto in_stsd = childBoxes(init, stsd->payload + 8, stsd->off + stsd->size);  // ver/flags+count
   const Box* avc1 = findBox(in_stsd, "avc1");
   REQUIRE(avc1);
-  // avc1 の width/height (payload +24/+26)
-  CHECK(((init[avc1->payload + 24] << 8) | init[avc1->payload + 26 - 1]) >= 0);  // 存在確認のみ
+
+  CHECK(((init[avc1->payload + 24] << 8) | init[avc1->payload + 26 - 1]) >= 0);
   size_t dims = avc1->payload + 24;
   CHECK(((init[dims] << 8) | init[dims + 1]) == 1280);
   CHECK(((init[dims + 2] << 8) | init[dims + 3]) == 720);
@@ -353,18 +354,18 @@ TEST_CASE("fmp4: init segment の box 構造 (ftyp+moov 階層・avc1 解像度�
   CHECK(init[p + 1] == 66);     // profile (baseline)
   CHECK(init[p + 3] == 30);     // level
   CHECK(init[p + 4] == 0xff);   // lengthSizeMinusOne = 3
-  CHECK(init[p + 5] == 0xe1);   // SPS 数 = 1
+  CHECK(init[p + 5] == 0xe1);
   uint16_t sps_len = static_cast<uint16_t>((init[p + 6] << 8) | init[p + 7]);
   REQUIRE(sps_len == sps.size());
   CHECK(std::memcmp(&init[p + 8], sps.data(), sps.size()) == 0);
   size_t q = p + 8 + sps_len;
-  CHECK(init[q] == 1);  // PPS 数
+  CHECK(init[q] == 1);
   uint16_t pps_len = static_cast<uint16_t>((init[q + 1] << 8) | init[q + 2]);
   REQUIRE(pps_len == pps.size());
   CHECK(std::memcmp(&init[q + 3], pps.data(), pps.size()) == 0);
 }
 
-TEST_CASE("fmp4: fragment の box 構造 (mfhd 連番・tfdt・trun・mdat)") {
+TEST_CASE("fmp4: fragments contain sequential mfhd, tfdt, trun, and mdat boxes") {
   Bytes sps, pps;
   Bytes au1 = annexb({makeSlice(true, 24)});
   Bytes au2 = annexb({makeSlice(false, 10)});
@@ -401,9 +402,9 @@ TEST_CASE("fmp4: fragment の box 構造 (mfhd 連番・tfdt・trun・mdat)") {
   REQUIRE(trun);
   CHECK((be32(frag, trun->payload) & 0xffffff) == 0x000701);  // offset+dur+size+flags
   CHECK(be32(frag, trun->payload + 4) == 2);                  // sample_count
-  // data_offset = moof 全長 + 8 (mdat payload 先頭)
+
   CHECK(be32(frag, trun->payload + 8) == moof.size + 8);
-  // entry[0]: dur/size/flags (キーフレーム = depends_on 2)
+
   size_t e0 = trun->payload + 12;
   CHECK(be32(frag, e0) == 40);
   CHECK(be32(frag, e0 + 4) == samples[0].data.size());
@@ -411,13 +412,13 @@ TEST_CASE("fmp4: fragment の box 構造 (mfhd 連番・tfdt・trun・mdat)") {
   size_t e1 = e0 + 12;
   CHECK(be32(frag, e1) == 60);
   CHECK(be32(frag, e1 + 8) == 0x01010000u);  // non-sync
-  // mdat の中身 = サンプル連結
+
   const Box& mdat = top[1];
   REQUIRE(mdat.size == 8 + samples[0].data.size() + samples[1].data.size());
   CHECK(std::memcmp(&frag[mdat.payload], samples[0].data.data(), samples[0].data.size()) == 0);
 }
 
-TEST_CASE("video_track: 逐幀 fragment・採集時刻 dbts・base decode time 連続") {
+TEST_CASE("video_track: emits per-frame fragments with capture time and continuous decode time") {
   VideoTrack track;
   track.setEnabled(true);
   CHECK(!track.active());
@@ -426,7 +427,7 @@ TEST_CASE("video_track: 逐幀 fragment・採集時刻 dbts・base decode time �
   auto reader = track.subscribe();
   CHECK(track.subscriberCount() == 1);
 
-  // key1 (SPS/PPS 同梱) → init と現在幀の fragment を同時生成。
+
   Bytes k1 = annexb({sps, pps, makeSlice(true, 30)});
   track.push(k1.data(), k1.size(), true, 1000);
   CHECK(track.active());
@@ -438,7 +439,7 @@ TEST_CASE("video_track: 逐幀 fragment・採集時刻 dbts・base decode time �
   CHECK(!ended);
   CHECK(std::memcmp(&init[4], "ftyp", 4) == 0);
 
-  // init 取得時点の key1 はライブ端として捨て、現在の p1 が即時届く。
+
   Bytes p1 = annexb({makeSlice(false, 8)});
   track.push(p1.data(), p1.size(), false, 1100);
   Bytes frag1 = reader->pull(100, &ended);
@@ -456,10 +457,10 @@ TEST_CASE("video_track: 逐幀 fragment・採集時刻 dbts・base decode time �
     auto in_traf = childBoxes(frag1, findBox(in_moof, "traf")->payload,
                               findBox(in_moof, "traf")->off + findBox(in_moof, "traf")->size);
     const Box* tfdt = findBox(in_traf, "tfdt");
-    CHECK(be64(frag1, tfdt->payload + 4) == 33);  // key1 は初回推定 33ms
+    CHECK(be64(frag1, tfdt->payload + 4) == 33);
     const Box* trun = findBox(in_traf, "trun");
     CHECK(be32(frag1, trun->payload + 4) == 1);
-    CHECK(be32(frag1, trun->payload + 12) == 100);  // 1100 - 1000 の前区間
+    CHECK(be32(frag1, trun->payload + 12) == 100);
   }
 
   track.push(p1.data(), p1.size(), false, 1200);
@@ -475,7 +476,7 @@ TEST_CASE("video_track: 逐幀 fragment・採集時刻 dbts・base decode time �
     CHECK(be32(frag2, findBox(in_traf, "trun")->payload + 4) == 1);
   }
 
-  // 無効化 → 購読者は ended、状態は破棄
+
   track.setEnabled(false);
   Bytes after = reader->pull(100, &ended);
   CHECK(after.empty());
@@ -485,7 +486,7 @@ TEST_CASE("video_track: 逐幀 fragment・採集時刻 dbts・base decode time �
   CHECK(track.subscriberCount() == 0);
 }
 
-TEST_CASE("video_track: 遅い購読者は直近 fragment のみ受け取る (ライブ専用リング)") {
+TEST_CASE("video_track: slow live subscribers receive only the latest fragment") {
   VideoTrack track;
   track.setEnabled(true);
   Bytes sps = makeSps(80, 45, 0), pps = makePps();
@@ -496,10 +497,10 @@ TEST_CASE("video_track: 遅い購読者は直近 fragment のみ受け取る (�
   bool ended = false;
   REQUIRE(!reader->pull(100, &ended).empty());  // init
 
-  // 購読者が読まない間に現在幀の fragment を 3 本作る。
+
   Bytes kk = annexb({makeSlice(true, 16)});
   for (int i = 1; i <= 3; i++) track.push(kk.data(), kk.size(), true, i * 600);
-  // → key 初回分を含む直近 1 本 (seq=4) だけが返り、次は無い
+
   Bytes frag = reader->pull(100, &ended);
   REQUIRE(!frag.empty());
   auto top = childBoxes(frag, 0, frag.size());
@@ -509,14 +510,14 @@ TEST_CASE("video_track: 遅い購読者は直近 fragment のみ受け取る (�
   CHECK(reader->pull(10, &ended).empty());
   CHECK(!ended);
 
-  // stop() で全購読者が起きて終了
+
   track.stop();
   reader->pull(10, &ended);
   CHECK(ended);
 }
 
-TEST_CASE("video_track: codec=mjpeg 相当 (disabled) では push を無視") {
-  VideoTrack track;  // 既定 disabled
+TEST_CASE("video_track: ignores pushes while the H.264 track is disabled") {
+  VideoTrack track;
   Bytes sps = makeSps(80, 45, 0), pps = makePps();
   Bytes k = annexb({sps, pps, makeSlice(true, 16)});
   track.push(k.data(), k.size(), true, 0);
@@ -524,7 +525,7 @@ TEST_CASE("video_track: codec=mjpeg 相当 (disabled) では push を無視") {
   CHECK(track.codecString() == "");
 }
 
-// ---------- Node 統合 (実 TCP + HTTP) ----------
+
 
 namespace {
 
@@ -561,10 +562,12 @@ int connectTo(int port, int rcv_timeout_ms) {
   return fd;
 }
 
-std::string httpGet(int port, const std::string& path) {
+std::string httpGet(int port, const std::string& path, const std::string& bearer = "") {
   int fd = connectTo(port, 5000);
   REQUIRE(fd >= 0);
-  std::string req = "GET " + path + " HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n";
+  std::string req = "GET " + path + " HTTP/1.1\r\nHost: 127.0.0.1\r\n";
+  if (!bearer.empty()) req += "Authorization: Bearer " + bearer + "\r\n";
+  req += "Connection: close\r\n\r\n";
   REQUIRE(::send(fd, req.data(), req.size(), 0) == static_cast<ssize_t>(req.size()));
   std::string resp;
   char buf[4096];
@@ -581,9 +584,29 @@ bool hasMarker(const std::string& s, const char* fourcc) {
   return s.find(fourcc) != std::string::npos;
 }
 
+bool hasAlivePeer(Node& node, const std::string& peer_id) {
+  auto status = json::parse(node.statusJson());
+  if (!status) return false;
+  cJSON* peer = nullptr;
+  cJSON_ArrayForEach(peer, json::get(status.get(), "peers")) {
+    if (json::getString(peer, "id") == peer_id &&
+        json::getString(peer, "status") == "alive") return true;
+  }
+  return false;
+}
+
+template <typename Predicate>
+bool waitFor(Predicate predicate, int timeout_ms) {
+  for (int elapsed = 0; elapsed < timeout_ms; elapsed += 50) {
+    if (predicate()) return true;
+    usleep(50 * 1000);
+  }
+  return predicate();
+}
+
 }  // namespace
 
-TEST_CASE("fmp4: Node 統合 — db_core_on_encoded_frame 経路 → GET /stream.mp4") {
+TEST_CASE("fmp4: Node serves encoded frames through GET /stream.mp4") {
   std::mt19937 rng(static_cast<uint32_t>(::getpid()) ^ 0x6d70u);
   int mesh_port = freePort(rng);
   int http_port = freePort(rng);
@@ -597,24 +620,28 @@ TEST_CASE("fmp4: Node 統合 — db_core_on_encoded_frame 経路 → GET /stream
   o.door = "d_front";
   o.listen_addr = "127.0.0.1:" + std::to_string(mesh_port);
   o.psk.fill(0x5b);
-  o.enable_beacon = false;  // 実 beacon 禁止 (稼働 fleet への迷入防止)
+  o.enable_beacon = false;
   o.http_port = http_port;
   Node node(o);
+  node.setSecureStore(
+      [](const std::string& key) { return key == "panel.test" ? "fmp4-panel-token" : ""; },
+      [](const std::string&, const std::string&) { return true; });
   REQUIRE(node.start());
+  node.setConfigKey("panel.token_refs", "[\"secret:panel.test\"]");
 
-  // codec=h264 を設定 (applyCameraSettings → video_track 有効化)
+
   node.setConfigKey("devices." + node.nodeId() + ".local.camera",
                     "{\"codec\":\"h264\",\"h264_resolution\":\"1280x720\",\"h264_fps\":25,"
                     "\"h264_bitrate_kbps\":1500}");
   node.setConfigKey("doors.d_front", "{\"label\":{\"ja\":\"正面玄関\"}}");
 
-  // 購読者ゼロ → エンコーダ不要 (省電力)
+
   CHECK(!node.videoEncoderWanted());
 
   Bytes sps = makeSps(80, 45, 0), pps = makePps();
   Bytes key_au = annexb({sps, pps, makeSlice(true, 40)});
 
-  // 接続 → 殻相当のループ: wanted を確認しながらフレームを push、moof まで読む
+
   int fd = connectTo(http_port, 200);
   REQUIRE(fd >= 0);
   std::string req = "GET /stream.mp4 HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n";
@@ -624,8 +651,8 @@ TEST_CASE("fmp4: Node 統合 — db_core_on_encoded_frame 経路 → GET /stream
   bool wanted_seen = false;
   char buf[8192];
   for (int i = 0; i < 200; i++) {
-    if (node.videoEncoderWanted()) wanted_seen = true;  // 購読者が付いた
-    // 毎回キーフレーム (= 前の fragment が確定する)。ts は 600ms 刻み
+    if (node.videoEncoderWanted()) wanted_seen = true;
+
     node.pushEncodedFrame(key_au.data(), key_au.size(), true, 600 * (i + 1));
     ssize_t n = ::recv(fd, buf, sizeof(buf), 0);
     if (n > 0) got.append(buf, static_cast<size_t>(n));
@@ -633,10 +660,11 @@ TEST_CASE("fmp4: Node 統合 — db_core_on_encoded_frame 経路 → GET /stream
   }
   ::close(fd);
 
-  CHECK(wanted_seen);  // 購読者がいる間は wanted=1 だった
+  CHECK(wanted_seen);
   REQUIRE(got.rfind("HTTP/1.1 200", 0) == 0);
   CHECK(got.find("Content-Type: video/mp4") != std::string::npos);
-  // 本文が ftyp から始まり moov → moof が続く
+  CHECK(got.find("Access-Control-Allow-Origin: *") != std::string::npos);
+
   size_t body = got.find("\r\n\r\n");
   REQUIRE(body != std::string::npos);
   body += 4;
@@ -646,11 +674,11 @@ TEST_CASE("fmp4: Node 統合 — db_core_on_encoded_frame 経路 → GET /stream
   CHECK(hasMarker(got, "moof"));
   CHECK(hasMarker(got, "mdat"));
 
-  // 切断後: 購読者ゼロへ戻る → wanted=0 (少し待つ — 接続後始末)
+
   for (int i = 0; i < 50 && node.videoEncoderWanted(); i++) usleep(100 * 1000);
   CHECK(!node.videoEncoderWanted());
 
-  // status に自機 video と peers[].stream_mp4 が載る
+
   {
     std::string st = node.statusJson();
     auto j = json::parse(st);
@@ -662,19 +690,14 @@ TEST_CASE("fmp4: Node 統合 — db_core_on_encoded_frame 経路 → GET /stream
     CHECK(st.find("stream_mp4") != std::string::npos);
   }
 
-  // panel state の doors[].stream_mp4 (自機担当 = 相対 URL)
+
   {
-    auto cfg = json::parse(node.configJson());
-    REQUIRE(cfg);
-    cJSON* toks = json::get(json::get(cfg.get(), "panel"), "tokens");
-    REQUIRE(cJSON_IsArray(toks));
-    std::string tok = cJSON_GetArrayItem(toks, 0)->valuestring;
-    std::string state = httpGet(http_port, "/api/panel/state?k=" + tok);
+    std::string state = httpGet(http_port, "/api/panel/state", "fmp4-panel-token");
     CHECK(state.find("\"stream_mp4\":") != std::string::npos);
     CHECK(state.find("/stream.mp4") != std::string::npos);
   }
 
-  // codec=mjpeg へ変更 → track 停止 → /stream.mp4 は 503
+
   node.setConfigKey("devices." + node.nodeId() + ".local.camera", "{\"codec\":\"mjpeg\"}");
   std::string resp = httpGet(http_port, "/stream.mp4");
   CHECK(resp.rfind("HTTP/1.1 503", 0) == 0);
@@ -682,9 +705,117 @@ TEST_CASE("fmp4: Node 統合 — db_core_on_encoded_frame 経路 → GET /stream
   node.stop();
 }
 
-TEST_CASE("fmp4: ffprobe があれば実 parse 検証 (無ければ skip)") {
+TEST_CASE("fmp4: authenticated same-origin proxy streams from an alive mesh peer") {
+  std::mt19937 rng(static_cast<uint32_t>(::getpid()) ^ 0x51a9u);
+  std::vector<int> reserved{47180};
+  auto distinctPort = [&] {
+    for (;;) {
+      const int port = freePort(rng);
+      if (port <= 0) return port;
+      if (std::find(reserved.begin(), reserved.end(), port) == reserved.end()) {
+        reserved.push_back(port);
+        return port;
+      }
+    }
+  };
+  const int door_mesh_port = distinctPort();
+  const int panel_mesh_port = distinctPort();
+  const int panel_http_port = distinctPort();
+  REQUIRE(door_mesh_port > 0);
+  REQUIRE(panel_mesh_port > 0);
+  REQUIRE(panel_http_port > 0);
+
+  std::array<uint8_t, 32> psk{};
+  psk.fill(0x6d);
+  NodeOptions door_options;
+  door_options.data_dir = ":memory:";
+  door_options.name = "proxy-door";
+  door_options.role = "door_station";
+  door_options.door = "d_proxy";
+  door_options.listen_addr = "127.0.0.1:" + std::to_string(door_mesh_port);
+  door_options.advertise_addr = door_options.listen_addr;
+  door_options.psk = psk;
+  door_options.enable_beacon = false;
+  door_options.http_port = 47180;
+  door_options.seed_default_config = true;
+
+  NodeOptions panel_options;
+  panel_options.data_dir = ":memory:";
+  panel_options.name = "proxy-panel";
+  panel_options.role = "indoor_panel";
+  panel_options.listen_addr = "127.0.0.1:" + std::to_string(panel_mesh_port);
+  panel_options.advertise_addr = panel_options.listen_addr;
+  panel_options.seed_peers = {door_options.listen_addr};
+  panel_options.psk = psk;
+  panel_options.enable_beacon = false;
+  panel_options.http_port = panel_http_port;
+  panel_options.seed_default_config = false;
+
+  Node door(door_options);
+  Node panel(panel_options);
+  panel.setSecureStore(
+      [](const std::string& key) { return key == "panel.proxy" ? "proxy-contract-token" : ""; },
+      [](const std::string&, const std::string&) { return true; });
+  REQUIRE(door.start());
+  REQUIRE(panel.start());
+  REQUIRE(waitFor([&] {
+    return hasAlivePeer(panel, door.nodeId()) && hasAlivePeer(door, panel.nodeId());
+  }, 8'000));
+
+  const std::string camera =
+      R"({"codec":"h264","h264_resolution":"640x360","h264_fps":15,"h264_bitrate_kbps":600})";
+  door.setConfigKey("devices." + door.nodeId() + ".local.camera", camera);
+  REQUIRE(waitFor([&] {
+    auto status = json::parse(door.statusJson());
+    return status && json::getString(json::get(status.get(), "video"), "codec") == "h264";
+  }, 2'000));
+  panel.setConfigKey("devices." + door.nodeId(),
+                     R"({"role":"door_station","door":"d_proxy","local":{"camera":{"codec":"h264"}}})");
+  panel.setConfigKey("doors.d_proxy", R"({"label":{"en":"Proxy door"}})");
+  panel.setConfigKey("panel.token_refs", R"(["secret:panel.proxy"])");
+
+  const std::string denied =
+      httpGet(panel_http_port, "/stream-proxy.mp4?door=d_proxy", "wrong");
+  REQUIRE(denied.rfind("HTTP/1.1 403", 0) == 0);
+
+  int fd = connectTo(panel_http_port, 200);
+  REQUIRE(fd >= 0);
+  const std::string request =
+      "GET /stream-proxy.mp4?door=d_proxy HTTP/1.1\r\n"
+      "Host: 127.0.0.1\r\nAuthorization: Bearer proxy-contract-token\r\n"
+      "Connection: close\r\n\r\n";
+  REQUIRE(::send(fd, request.data(), request.size(), 0) ==
+          static_cast<ssize_t>(request.size()));
+
+  const Bytes key_au = annexb({makeSps(40, 23, 4), makePps(), makeSlice(true, 48)});
+  std::string response;
+  char buf[8192];
+  for (int i = 0; i < 100; i++) {
+    door.pushEncodedFrame(key_au.data(), key_au.size(), true, 600 * (i + 1));
+    const ssize_t n = ::recv(fd, buf, sizeof(buf), 0);
+    if (n > 0) response.append(buf, static_cast<size_t>(n));
+    if (hasMarker(response, "moof") && hasMarker(response, "mdat")) break;
+  }
+  ::close(fd);
+
+  REQUIRE(response.rfind("HTTP/1.1 200", 0) == 0);
+  CHECK(response.rfind("HTTP/1.1 503", 0) != 0);
+  CHECK(response.find("Content-Type: video/mp4") != std::string::npos);
+  CHECK(response.find("\r\nLocation:") == std::string::npos);
+  CHECK(response.find("Access-Control-Allow-Origin") == std::string::npos);
+  CHECK(response.find("http://127.0.0.1:47180") == std::string::npos);
+  CHECK(hasMarker(response, "ftyp"));
+  CHECK(hasMarker(response, "moov"));
+  CHECK(hasMarker(response, "moof"));
+  CHECK(hasMarker(response, "mdat"));
+
+  panel.stop();
+  door.stop();
+}
+
+TEST_CASE("fmp4: validates parsing with ffprobe when available") {
   if (std::system("which ffprobe >/dev/null 2>&1") != 0) {
-    MESSAGE("ffprobe 不在 — skip");
+    MESSAGE("ffprobe is unavailable; skipping external validation");
     return;
   }
   Bytes sps = makeSps(80, 45, 0), pps = makePps();
@@ -703,7 +834,7 @@ TEST_CASE("fmp4: ffprobe があれば実 parse 検証 (無ければ skip)") {
   std::fwrite(frag.data(), 1, frag.size(), f);
   std::fclose(f);
 
-  // コンテナ構造 + h264 ストリームの認識を確認 (ダミー slice の復号は問わない)
+
   std::string cmd = "ffprobe -v error -show_streams -show_format " + path + " 2>/dev/null";
   FILE* pipe = ::popen(cmd.c_str(), "r");
   REQUIRE(pipe);

@@ -1,8 +1,9 @@
-// ホスト開発用ランナー: 1 プロセス = 1 子機。実機殻 (WPF/Android/iOS) の代わりに
-// macOS/Linux 上で Node を起動して mesh/管理画面/API を触るためのツール。
+// Host development runner: one process represents one node. It exercises the mesh, Admin, and
+// APIs on macOS/Linux without a WPF, Android, or Apple platform shell.
 //   ./doorbell_host --data /tmp/n1 --name front --role door_station --door d_front \
 //                   --listen 127.0.0.1:47172 --http 47180 --psk <64hex> [--seed host:port]
-// 資産投入: --add-asset <file> [--asset-type <mime>] [--asset-label <name>] (hash を stdout へ)
+// Asset import: --add-asset <file> [--asset-type <mime>] [--asset-label <name>].
+
 #include <unistd.h>
 
 #include <csignal>
@@ -22,7 +23,7 @@
 static volatile std::sig_atomic_t g_stop = 0;
 static void onSig(int) { g_stop = 1; }
 
-// シェル単引用 ('...' 内の ' は '\'' に割る)
+// Quote one shell argument for the development-only curl transport.
 static std::string shq(const std::string& s) {
   std::string out = "'";
   for (char c : s) {
@@ -32,10 +33,8 @@ static std::string shq(const std::string& s) {
   out += "'";
   return out;
 }
-
-// HTTPS: curl コマンド実装 (開発ランナー用 — Mac 上で本物の Telegram への手動テストが
-// できる)。実機殻では db_platform.https_request (WinHTTP/OkHttp/URLSession) が同役。
-// done は任意スレッド可の契約なので専用スレッドで呼ぶ。
+// Development HTTPS transport. Platform clients use their native platform_v2 transport instead.
+// The completion callback may run on any thread, so curl executes on a dedicated worker.
 static void curlHttps(const std::string& method, const std::string& url,
                       const std::string& headers_json, const db::Bytes& body,
                       std::function<void(int, std::string)> done) {
@@ -61,7 +60,7 @@ static void curlHttps(const std::string& method, const std::string& url,
     }
     ::close(bfd);
 
-    // 応答本文はファイルへ、stdout には HTTP 状態コードだけを書かせる
+    // Store the response body in a file and reserve stdout for curl's HTTP status code.
     std::string cmd = "curl -sS --max-time 40 -o " + shq(resp_path) +
                       " -w '%{http_code}' -X " + shq(method);
     auto hdrs = db::json::parse(headers_json.empty() ? "{}" : headers_json);
@@ -120,9 +119,7 @@ int main(int argc, char** argv) {
     else continue;
     i++;
   }
-  // --monitor-call <target>: 起動後に一方向監聴呼を発する (tools/dev_monitor_test.sh 用)。
-  // --answer-call <target>: 同・双方向接管呼 (X-Doorbell-Mode: answer — dev_intercom_test.sh 用)。
-  // target は "sip:host:port" の直呼 URI か内線番号。--monitor-delay-ms で発呼待ち (既定 2000)。
+  // Start a delayed one-way monitor or two-way answer call for development test scripts.
   std::string monitor_call, monitor_mode = "monitor";
   int monitor_delay_ms = 2000;
   for (int i = 1; i < argc - 1; i++) {
@@ -136,12 +133,12 @@ int main(int argc, char** argv) {
   if (!psk_hex.empty()) {
     db::Bytes psk;
     if (!db::hexDecode(psk_hex, psk) || psk.size() != 32) {
-      std::fprintf(stderr, "--psk は 64 hex\n");
+      std::fprintf(stderr, "--psk must contain 64 hexadecimal characters\n");
       return 2;
     }
     std::copy(psk.begin(), psk.end(), o.psk.begin());
   } else {
-    o.psk.fill(0x5a);  // 開発既定 (本番では配対で配布)
+    o.psk.fill(0x5a);  // Development default; production obtains this value through pairing.
   }
   if (o.advertise_addr.empty()) o.advertise_addr = o.listen_addr;
 
@@ -150,8 +147,7 @@ int main(int argc, char** argv) {
     if (std::string(argv[i]) == "--fake-camera") fake_camera = true;
 
   // --add-asset <file> [--asset-type <mime>] [--asset-label <name>]:
-  // 起動後にファイルを統一資産として登録し hash を stdout へ出す (開発で背景画像や
-  // カスタム音声を投入して試すため)。type 省略時は拡張子から推定する。
+  // register one shared asset after startup and print its content hash.
   std::string add_asset_path, asset_type, asset_label;
   for (int i = 1; i < argc - 1; i++) {
     std::string k = argv[i];
@@ -161,17 +157,16 @@ int main(int argc, char** argv) {
   }
 
   db::Node node(o);
-  node.setHttpsFn(curlHttps);  // Telegram ブリッジ用 (leader 就任 + bot_token 設定時のみ使われる)
+  node.setHttpsFn(curlHttps);  // Used only by development integrations that require HTTPS.
   node.setUiEventCb([](const std::string& ev) { DB_LOGI("ui", ev); });
   node.setTtsCb([](const std::string& text, const std::string& lang) {
     DB_LOGI("tts", "[" + lang + "] " + text);
   });
   if (!node.start()) {
-    std::fprintf(stderr, "start 失敗\n");
+    std::fprintf(stderr, "failed to start node\n");
     return 1;
   }
-  // --fake-camera: 合成グラデーション (静止 — 動体検知は発火しない) を 2fps で push。
-  // カメラの無い開発機で snapshot/Telegram 写真経路を通すため。
+  // Feed a static synthetic frame at 2 fps for snapshot and media-path development.
   std::thread fake_th;
   if (fake_camera) {
     fake_th = std::thread([&node] {
@@ -194,7 +189,7 @@ int main(int argc, char** argv) {
     });
   }
 
-  // --monitor-call / --answer-call: 遅延後に X-Doorbell-Mode 付きの直呼を発する
+  // Place a delayed direct SIP call with the requested monitor/answer mode.
   std::thread mon_th;
   if (!monitor_call.empty()) {
     mon_th = std::thread([&node, monitor_call, monitor_mode, monitor_delay_ms] {
@@ -206,13 +201,13 @@ int main(int argc, char** argv) {
     });
   }
 
-  // 資産投入 (起動直後 — 台帳 assets.<hash> は CRDT で他ノードへ複製される)
+  // Asset ledger entries replicate through the configuration CRDT.
   if (!add_asset_path.empty()) {
     db::Bytes data;
     if (!db::readFileBytes(add_asset_path, data)) {
-      std::fprintf(stderr, "--add-asset: 読めない: %s\n", add_asset_path.c_str());
+      std::fprintf(stderr, "--add-asset: cannot read: %s\n", add_asset_path.c_str());
     } else {
-      if (asset_type.empty()) {  // 拡張子から推定 (許可 type のみ)
+      if (asset_type.empty()) {  // Infer only a supported MIME type from the extension.
         const std::string p = add_asset_path;
         auto ends = [&p](const char* s) {
           const size_t n = std::strlen(s);
@@ -231,12 +226,12 @@ int main(int argc, char** argv) {
       const std::string hash = node.addAsset(data, asset_type, asset_label);
       if (hash.empty()) {
         std::fprintf(stderr,
-                     "--add-asset: 登録拒否 (3MB 超 or 許可外 type: '%s')\n"
-                     "  許可 type: image/jpeg image/png audio/mpeg audio/wav"
-                     " — --asset-type で明示指定できます\n",
+                     "--add-asset: rejected (over 3 MB or unsupported type: '%s')\n"
+                     "  supported types: image/jpeg image/png audio/mpeg audio/wav"
+                     " — set one explicitly with --asset-type\n",
                      asset_type.c_str());
       } else {
-        // パイプ (`... --add-asset f.jpg | head -1`) でも即読めるよう明示 flush
+        // Flush so scripts can consume the first output line immediately.
         std::printf("asset %s  (%zu bytes, %s, \"%s\")\n", hash.c_str(), data.size(),
                     asset_type.c_str(), asset_label.c_str());
         std::fflush(stdout);
@@ -244,7 +239,7 @@ int main(int argc, char** argv) {
     }
   }
 
-  std::printf("node %s  admin: http://127.0.0.1:%d/admin/  (Ctrl+C で終了)\n",
+  std::printf("node %s  admin: http://127.0.0.1:%d/admin/  (Ctrl+C to stop)\n",
               node.nodeId().substr(0, 8).c_str(), o.http_port);
   std::signal(SIGINT, onSig);
   std::signal(SIGTERM, onSig);

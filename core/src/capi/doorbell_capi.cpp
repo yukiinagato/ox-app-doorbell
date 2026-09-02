@@ -1,9 +1,10 @@
-// C ABI 実装 (include/doorbell/doorbell.h)。平台殻はここだけを呼ぶ。
+
 #include "doorbell/doorbell.h"
 
 #include "qrcodegen.h"
 
 #include <condition_variable>
+#include <ctime>
 #include <cstdlib>
 #include <cstring>
 #include <memory>
@@ -13,15 +14,16 @@
 #include <vector>
 
 #include "node/node.h"
+#include "sipctl/sipctl.h"
 #include "util/common.h"
 #include "util/json.h"
 #include "util/log.h"
 
 using namespace db;
 
-// ---- バージョン ----
-// 基底バージョン + ビルドID (DB_BUILD_ID はビルドスクリプトが -D で注入。
-// 未定義ならローカルビルド扱い)。毎ビルドで変わるので実機で反映を確認できる。
+
+
+
 #ifndef DB_VERSION_BASE
 #define DB_VERSION_BASE "0.2.0"
 #endif
@@ -31,8 +33,8 @@ using namespace db;
 #define DB_VERSION_FULL DB_VERSION_BASE "+dev"
 #endif
 
-// SPI https_request (同期) の在飛計数。destroy 時に完了を待つ
-// (detach したスレッドが破棄済みの Node/loop へ done を返さないため)。
+
+
 struct HttpsInflight {
   std::mutex mu;
   std::condition_variable cv;
@@ -57,7 +59,7 @@ struct HttpsInflight {
 
 struct db_core {
   std::unique_ptr<Node> node;
-  db_platform plat{};
+  db_platform_v2 plat{};
   db_ui_event_cb ui_cb = nullptr;
   void* ui_user = nullptr;
   std::shared_ptr<HttpsInflight> https_inflight = std::make_shared<HttpsInflight>();
@@ -69,10 +71,17 @@ static char* dupString(const std::string& s) {
   return p;
 }
 
-extern "C" {
+static void releasePlatformBuffer(const db_platform_v2& platform, void* p) {
+  if (!p) return;
+  if (platform.release_buffer) {
+    platform.release_buffer(platform.user, p);
+  } else {
+    std::free(p);
+  }
+}
 
-DB_API db_core* db_core_create(const db_platform* platform, const char* data_dir,
-                               const char* boot_json) {
+static db_core* createCore(const db_platform_v2& platform, const char* data_dir,
+                           const char* boot_json) {
   if (!data_dir) return nullptr;
   auto b = json::parse(boot_json ? boot_json : "{}");
   if (!b) return nullptr;
@@ -86,9 +95,25 @@ DB_API db_core* db_core_create(const db_platform* platform, const char* data_dir
   opts.listen_addr = "0.0.0.0:" + std::to_string(listen_port);
   opts.advertise_addr = json::getString(b.get(), "advertise_addr");
   opts.http_port = static_cast<int>(json::getInt(b.get(), "http_port", 47180));
-  opts.caps_json = json::getString(b.get(), "caps", "{}");
-  opts.caps_json = sanitizeCaps(opts.caps_json, platform && platform->https_request != nullptr);
-  opts.sw_version = DB_VERSION_FULL;  // 表示/mesh 伝播用 (status.node.version)
+  if (cJSON* caps = json::get(b.get(), "caps")) {
+    opts.caps_json = cJSON_IsString(caps) ? caps->valuestring : json::dump(caps);
+  } else {
+    auto generated_caps = json::obj();
+    const bool has_network_transport = platform.https_request != nullptr;
+    json::setBool(generated_caps.get(), "tls12", has_network_transport);
+    // Transport availability does not prove that a configured Internet endpoint is reachable.
+    json::setBool(generated_caps.get(), "wan", false);
+    json::setBool(generated_caps.get(), "mains_power",
+                  opts.role == "door_station" || opts.role == "indoor_panel");
+    json::setBool(generated_caps.get(), "mqtt_reachable", false);
+    json::setBool(generated_caps.get(), "wall_clock_sane",
+                  std::time(nullptr) >= 1'577'836'800);
+    json::set(generated_caps.get(), "cpu_score", static_cast<int64_t>(0));
+    opts.caps_json = json::dump(generated_caps.get());
+  }
+  opts.caps_json = sanitizeCaps(opts.caps_json, platform.https_request != nullptr);
+  opts.has_https = platform.https_request != nullptr;
+  opts.sw_version = DB_VERSION_FULL;
   if (cJSON* seeds = json::get(b.get(), "seed_peers")) {
     cJSON* it = nullptr;
     cJSON_ArrayForEach(it, seeds) {
@@ -96,17 +121,25 @@ DB_API db_core* db_core_create(const db_platform* platform, const char* data_dir
     }
   }
   std::string psk_hex = json::getString(b.get(), "psk_hex");
+  const std::string psk_ref = json::getString(b.get(), "psk_ref");
+  if (psk_hex.empty() && psk_ref.rfind("secret:", 0) == 0 && psk_ref.size() > 7 &&
+      platform.secure_get) {
+    char* value = nullptr;
+    if (platform.secure_get(platform.user, psk_ref.c_str() + 7, &value) == 0 && value)
+      psk_hex = value;
+    releasePlatformBuffer(platform, value);
+  }
   if (!psk_hex.empty()) {
     Bytes psk;
     if (!hexDecode(psk_hex, psk) || psk.size() != 32) {
-      DB_LOGE("capi", "psk_hex が不正 (64 hex 必須)");
+      DB_LOGE("capi", "psk_hex must contain exactly 64 hexadecimal characters");
       return nullptr;
     }
     std::copy(psk.begin(), psk.end(), opts.psk.begin());
   }
 
   auto* c = new db_core;
-  if (platform) c->plat = *platform;
+  c->plat = platform;
   if (c->plat.log_line) {
     void* user = c->plat.user;
     auto fn = c->plat.log_line;
@@ -116,27 +149,44 @@ DB_API db_core* db_core_create(const db_platform* platform, const char* data_dir
   }
   c->node.reset(new Node(std::move(opts)));
   if (c->plat.https_request) {
-    // 同期 SPI を専用スレッドで呼んで非同期 HttpsFn に変換する (Telegram ブリッジ用)。
-    // done は任意スレッド可の契約 (Node 側で Runloop へ marshal される)。
     void* user = c->plat.user;
     auto fn = c->plat.https_request;
     auto inflight = c->https_inflight;
-    c->node->setHttpsFn([user, fn, inflight](
+    db_platform_v2 copied_platform = c->plat;
+    c->node->setHttpsFn([user, fn, inflight, copied_platform](
                             const std::string& method, const std::string& url,
                             const std::string& headers_json, const Bytes& body,
                             std::function<void(int, std::string)> done) {
       inflight->add();
-      std::thread([user, fn, inflight, method, url, headers_json, body, done] {
+      std::thread([user, fn, inflight, copied_platform, method, url, headers_json, body, done] {
         char* resp = nullptr;
         int status = 0;
         int rc = fn(user, method.c_str(), url.c_str(), headers_json.c_str(),
                     body.empty() ? nullptr : body.data(), body.size(), &resp, &status);
         std::string resp_body = resp ? resp : "";
-        if (resp) std::free(resp);  // 契約: resp_body_out は core が db_free (=free) する
+        releasePlatformBuffer(copied_platform, resp);
         done(rc == 0 ? status : -1, std::move(resp_body));
         inflight->done();
       }).detach();
     });
+  }
+  if (c->plat.secure_get || c->plat.secure_put) {
+    void* user = c->plat.user;
+    auto get_fn = c->plat.secure_get;
+    auto put_fn = c->plat.secure_put;
+    db_platform_v2 copied_platform = c->plat;
+    c->node->setSecureStore(
+        get_fn ? Node::SecureGetFn([user, get_fn, copied_platform](const std::string& key) {
+          char* value = nullptr;
+          const int rc = get_fn(user, key.c_str(), &value);
+          std::string result = (rc == 0 && value) ? value : "";
+          releasePlatformBuffer(copied_platform, value);
+          return result;
+        }) : Node::SecureGetFn{},
+        put_fn ? Node::SecurePutFn([user, put_fn](const std::string& key,
+                                                  const std::string& value) {
+          return put_fn(user, key.c_str(), value.c_str()) == 0;
+        }) : Node::SecurePutFn{});
   }
   if (c->plat.tts_speak) {
     void* user = c->plat.user;
@@ -148,15 +198,49 @@ DB_API db_core* db_core_create(const db_platform* platform, const char* data_dir
   if (c->plat.device_info) {
     void* user = c->plat.user;
     auto fn = c->plat.device_info;
-    c->node->setDeviceInfoFn([user, fn]() -> std::string {
+    db_platform_v2 copied_platform = c->plat;
+    c->node->setDeviceInfoFn([user, fn, copied_platform]() -> std::string {
       char* out = nullptr;
       int rc = fn(user, &out);
       std::string s = (rc == 0 && out) ? out : "";
-      if (out) std::free(out);  // 契約: out は core が db_free (=free)
+      releasePlatformBuffer(copied_platform, out);
       return s;
     });
   }
   return c;
+}
+
+extern "C" {
+
+DB_API db_core* db_core_create(const db_platform* platform, const char* data_dir,
+                               const char* boot_json) {
+  db_platform_v2 v2{};
+  v2.struct_size = sizeof(v2);
+  v2.version = DB_PLATFORM_V2_VERSION;
+  if (platform) {
+    v2.user = platform->user;
+    v2.https_request = platform->https_request;
+    v2.secure_get = platform->secure_get;
+    v2.secure_put = platform->secure_put;
+    v2.log_line = platform->log_line;
+    v2.tts_speak = platform->tts_speak;
+  }
+  return createCore(v2, data_dir, boot_json);
+}
+
+DB_API db_core* db_core_create_v2(const db_platform_v2* platform, const char* data_dir,
+                                  const char* boot_json) {
+  db_platform_v2 v2{};
+  v2.struct_size = sizeof(v2);
+  v2.version = DB_PLATFORM_V2_VERSION;
+  if (platform) {
+    if (platform->struct_size < sizeof(db_platform_v2) ||
+        platform->version != DB_PLATFORM_V2_VERSION) {
+      return nullptr;
+    }
+    std::memcpy(&v2, platform, sizeof(v2));
+  }
+  return createCore(v2, data_dir, boot_json);
 }
 
 DB_API int db_core_start(db_core* c) {
@@ -171,8 +255,8 @@ DB_API void db_core_stop(db_core* c) {
 DB_API void db_core_destroy(db_core* c) {
   if (!c) return;
   setLogSink(nullptr);
-  // 在飛の https_request (getUpdates 長輪詢を含む — 最大 ~30 秒) の完了を待ってから
-  // Node を破棄する。done は Node 内の弱参照で捨てられるが loop 自体の生存が要る。
+
+
   c->https_inflight->waitIdle();
   delete c;
 }
@@ -206,6 +290,44 @@ DB_API void db_core_cancel_call(db_core* c, const char* door_id) {
   if (c && c->node) c->node->cancelCall(door_id ? door_id : "");
 }
 
+DB_API char* db_core_press_v2(db_core* c, const char* door_id, const char* purpose) {
+  if (!c || !c->node) return nullptr;
+  return dupString(c->node->pressV2(door_id ? door_id : "", purpose ? purpose : ""));
+}
+
+DB_API int db_core_select_purpose_v2(db_core* c, const char* door_id, const char* call_id,
+                                     const char* purpose) {
+  if (!c || !c->node || !call_id || !*call_id || !purpose || !*purpose) return -1;
+  return c->node->selectPurposeV2(door_id ? door_id : "", call_id, purpose) ? 0 : -2;
+}
+
+DB_API int db_core_cancel_call_v2(db_core* c, const char* door_id, const char* call_id,
+                                  const char* reason) {
+  if (!c || !c->node || !call_id || !*call_id) return -1;
+  return c->node->cancelCallV2(door_id ? door_id : "", call_id,
+                               reason && *reason ? reason : "visitor") ? 0 : -2;
+}
+
+DB_API int db_core_report_call_answered_v2(db_core* c, const char* door_id,
+                                           const char* call_id, int stage_revision) {
+  if (!c || !c->node || !call_id || !*call_id || stage_revision < 0) return -1;
+  return c->node->reportCallAnsweredV2(door_id ? door_id : "", call_id,
+                                       stage_revision) ? 0 : -2;
+}
+
+DB_API int db_core_report_call_ended_v2(db_core* c, const char* door_id,
+                                        const char* call_id, int stage_revision,
+                                        const char* reason) {
+  if (!c || !c->node || !call_id || !*call_id || stage_revision < 0) return -1;
+  return c->node->reportCallEndedV2(door_id ? door_id : "", call_id,
+                                    stage_revision,
+                                    reason && *reason ? reason : "sip_ended") ? 0 : -2;
+}
+
+DB_API void db_core_report_call_recovery(db_core* c, const char* call_id, int restored) {
+  if (c && c->node && call_id && *call_id) c->node->reportCallRecovery(call_id, restored != 0);
+}
+
 DB_API void db_core_set_visitor_lang(db_core* c, const char* door, const char* lang) {
   if (c && c->node && lang && *lang) c->node->setVisitorLang(door ? door : "", lang);
 }
@@ -225,6 +347,24 @@ DB_API char* db_core_config_json(db_core* c) {
   return dupString(c->node->configJson());
 }
 
+DB_API void db_core_set_capabilities_json(db_core* c, const char* capabilities_json) {
+  if (c && c->node && capabilities_json)
+    c->node->setRuntimeCapabilities(capabilities_json);
+}
+
+DB_API void db_core_set_runtime_status_json(db_core* c, const char* runtime_json) {
+  if (c && c->node && runtime_json) c->node->setRuntimeStatus(runtime_json);
+}
+
+DB_API void db_core_set_ui_manifest_json(db_core* c, const char* manifest_json) {
+  if (c && c->node && manifest_json) c->node->setUiManifest(manifest_json);
+}
+
+DB_API char* db_core_capabilities_json(db_core* c) {
+  if (!c || !c->node) return nullptr;
+  return dupString(c->node->capabilitiesJson());
+}
+
 DB_API char* db_core_pairing_json(db_core* c) {
   if (!c || !c->node) return nullptr;
   return dupString(c->node->pairingJson());
@@ -237,6 +377,15 @@ DB_API void db_core_join_cluster(db_core* c, const char* host, const char* pin) 
 
 DB_API void db_core_pairing_mode(db_core* c, int seconds) {
   if (c && c->node) c->node->setPairingMode(seconds);
+}
+
+DB_API char* db_core_start_pairing_json(db_core* c, int seconds) {
+  if (!c || !c->node) return nullptr;
+  return dupString(c->node->startPairingJson(seconds));
+}
+
+DB_API void db_core_remove_device(db_core* c, const char* node_id) {
+  if (c && c->node && node_id && *node_id) c->node->removeDevice(node_id);
 }
 
 DB_API int db_core_found_cluster(db_core* c) {
@@ -253,8 +402,8 @@ DB_API void db_core_invite_direct(db_core* c, const char* addr, const char* id, 
     c->node->inviteDeviceDirect(addr, id, pk);
 }
 
-// QR エンコード (発見に依存しない自機告知/管理 URL 表示用の共通実装 — 各殻が描画)。
-// 戻り値: size*size バイト (行優先, 1=暗)。*out_size = 一辺のモジュール数。失敗 NULL。db_free。
+
+
 DB_API unsigned char* db_core_qr_encode(const char* text, int* out_size) {
   if (out_size) *out_size = 0;
   if (!text || !*text) return nullptr;
@@ -281,6 +430,10 @@ DB_API void db_core_on_camera_frame(db_core* c, const uint8_t* data, int format,
   c->node->pushCameraFrame(data, format, width, height, stride, ts_ms);
 }
 
+DB_API void db_core_set_video_sensor_rotation(db_core* c, int degrees) {
+  if (c && c->node) c->node->setVideoSensorRotation(degrees);
+}
+
 DB_API void db_core_sip_call(db_core* c, const char* target, const char* mode) {
   if (!c || !c->node || !target || !*target) return;
   c->node->sipCall(target, mode ? mode : "");
@@ -290,17 +443,38 @@ DB_API void db_core_sip_hangup(db_core* c) {
   if (c && c->node) c->node->sipHangup();
 }
 
+DB_API int db_core_sip_send_dtmf(db_core* c, const char* digits) {
+  if (!c || !c->node || !digits || !*digits) return -1;
+  return c->node->sipSendDtmf(digits) ? 0 : -2;
+}
+
 DB_API void db_core_quick_reply(db_core* c, const char* reply_id, const char* door) {
   if (!c || !c->node || !reply_id || !*reply_id) return;
   c->node->sendQuickReply(reply_id, "", door ? door : "", "app");
+}
+
+DB_API int db_core_quick_reply_v2(db_core* c, const char* reply_id, const char* door,
+                                  const char* call_id, int stage_revision) {
+  if (!c || !c->node || !reply_id || !*reply_id || !call_id || !*call_id ||
+      stage_revision < 0)
+    return -1;
+  return c->node->sendQuickReplyV2(reply_id, "", door ? door : "", call_id,
+                                   stage_revision) ? 0 : -2;
 }
 
 DB_API void db_free(char* p) { std::free(p); }
 
 DB_API const char* db_core_version(void) { return DB_VERSION_FULL; }
 
+DB_API const char* db_core_sip_backend(void) { return db::sipBackendName(); }
+
 DB_API void db_core_emergency(db_core* c, int active) {
-  if (c && c->node) c->node->setEmergency(active != 0, "panel");
+  (void)db_core_emergency_v2(c, active);
+}
+
+DB_API int db_core_emergency_v2(db_core* c, int active) {
+  if (!c || !c->node) return 0;
+  return c->node->setEmergencyV2(active != 0, "panel") ? 1 : 0;
 }
 
 DB_API void db_core_on_encoded_frame(db_core* c, const uint8_t* annexb, size_t len,

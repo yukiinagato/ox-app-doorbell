@@ -1,6 +1,6 @@
 # 架构深入
 
-> 日本語: [Architecture](Architecture) / English: [Architecture-en](Architecture-en)
+> English: [Architecture](Architecture) / 日本語: [Architecture-ja](Architecture-ja) / 繁體中文 (本頁)
 
 深入实现的内部。规范的配置参考见
 [docs/ja/config-schema.md](https://github.com/yukiinagato/ox-app-doorbell/blob/main/docs/ja/config-schema.md)，
@@ -23,14 +23,14 @@
         [HA + Mosquitto + go2rtc]   [Asterisk] -- [ひかり電話 HGW] -- PSTN/携帯
 ```
 
-所有设备都搭载共享 C++ 核心 (doorbell-core)，平台外壳（WPF P/Invoke / JNI / Swift）
-只看 [doorbell.h](https://github.com/yukiinagato/ox-app-doorbell/blob/main/core/include/doorbell/doorbell.h)
-的 C ABI。UI 事件以 JSON 回调（`{"t":"chime",...}` 等）流向外壳。
+native client 透過 [doorbell.h](https://github.com/yukiinagato/ox-app-doorbell/blob/main/core/include/doorbell/doorbell.h)
+的 versioned `db_platform_v2` C ABI 整合共用 C++ core。UI event 以 JSON callback
+（`{"t":"chime",...}` 等）送往 shell。
 
 ## mesh —— 发现・gossip・选主
 
-- **发现**: UDP 47171 的组播 beacon（带 HMAC 的 HELLO）。iOS 外壳并用 Bonjour。
-  作为保险也可以用 `cluster.seed_peers` 的静态列表。
+- **發現**: UDP 47171 multicast beacon（HMAC HELLO）；multicast 不可用時使用裝置本機
+  `boot.json` 的 `seed_peers`。
 - **传输**: TCP 47172。用 PSK 的 AEAD 保护全部通信 (`secure_channel`)。
 - **gossip/sync**: 在节点间反熵同步配置 CRDT 和事件日志。新节点在加入时
   吸取全量。
@@ -48,6 +48,12 @@
 收敛到同一结果。管理界面也好、应用内设置也好，全都是对这个 CRDT 的写入。
 秘密（`*_ref: "secret:…"`）只复制引用，实体放在各设备的 secure store 中。
 实现: `core/src/crdt/lww_map.cpp`（附属性测试）。
+
+schema-v2 call lifecycle 以 `(door, call_id, stage_revision)` 為範圍。訪客只能在 ringing 時 cancel；
+進入 `answered` / `in_call` 後，hangup 才會發出 `call_ended`。Web 手動接聽以一個隨機
+`dialog_id` claim 並取得 opaque `dialog_owner`，競爭失敗的 SIP dialog 必須終止。restart 時 ringing
+call 由 press-origin node 還原；in-call session 只有勝出的 dialog owner 能還原。若 10 秒內無法證明，
+Core 只發出一次冪等的全域 cancel。
 
 ## 事件复制与幂等
 
@@ -102,15 +108,38 @@ FETCH_BLOB 主动预取（只要是持有节点，从哪里都能取），此后
 
 各节点的 TCP 47180 (CivetWeb) 提供 管理 SPA (`/admin/`) / 网页面板 (`/panel/…`) /
 MJPEG / fMP4 / snapshot / 管理 API / panel API。认证方式:
-管理 = 密码会话，panel/stream = `?k=<token>`。webui 在构建时
-嵌入二进制 (`embed_webui.py`) —— 连静态文件分发服务器都不需要。
+管理使用密碼 session。panel credential 只在 URL fragment（`#k=`，HTTP 不會傳送）提供一次，經
+`POST /api/panel/session` 交換後使用 HttpOnly cookie。query/form credential 會被拒絕，只有
+cross-node upload 可使用 bearer header。webui 在 build 時嵌入 binary (`embed_webui.py`)。
+
+## SOS 配送與 semantic UI contract
+
+SOS active/clear 狀態會複製到所有 Core node；呈現與外部配送完全 rule-driven，也允許零收件者。
+管理員開關 `emergency.web_active_page_alerts` 預設 true，即使規則為零收件者或 Push-only，開啟中的
+Web page 仍可優先呈現複製的 SOS。設為 false 時，正向 matching `device_alert` 或已送達 Push 仍可呈現。
+Core `delivery_result` 只記錄 dispatch attempt；client runtime 的逐 channel report 才說明 visual、
+sound、system notification、Web presentation 是 applied、suppressed、unsupported 或 failed。raw path
+啟用期間，rule TTL 即使結束 custom decoration/sound，安全紅色 raw-SOS overlay 仍保留至 clear 或
+switch-off。
+
+沒有 `targets` 的 legacy alert 對所有 native node/Web group。明確 `targets` 採對稱語意：Web-only group
+不對 native shell，native-only selector 不對 active Web page/Push subscription。panel
+`?group=<name>` 經驗證、保存後，同時用於 state 投影與 Push enrollment。Core 把完整 Push
+`endpoint`/`p256dh`/`auth` 用 mesh-PSK-derived key 與 XChaCha20-Poly1305 seal 成一個 schema-v2 CRDT
+record；config/export 不含 plaintext，舊 raw record 在啟動時重新 seal，否則 fail-closed 刪除。
+
+native client 公開 top-level `ui_manifest`，配信中的 Core node 則另以 `web_ui.manifest` 公開 built-in
+Web renderer contract。Web manifest 只屬本機，不是 remote Web surface 的複製 catalog；Admin 不可從
+native peer manifest 推測 remote/offline Web editor，也不可捏造未知 manifest。Core 會永久 cache peer
+的 last-valid native manifest/capability；`cached_contract:true` 的 configured offline device 可依 cache
+驗證/queue，但只有後續 renderer report 能證明套用。
 
 ## 为什么只有 leader 才对外发送
 
-如果所有节点都向 Telegram/MQTT 发送，同一条来客通知会按台数重复送达。可要是
-「固定发送负责人」，那 1 台就成了单点故障。答案是「确定性选主 + 自动接任」:
-平时只有 1 台代表发送（零重复），那 1 台消失后数秒内由别的节点
-接任（零遗漏）。由于事件复制是幂等的，即使在交接瞬间发生了双重发送，
-notify 的 LWW 合并也不会破坏「已应答」状态。这就是「宁重勿漏」的实现形态。
+所有 node 都向 Telegram/MQTT 發送時，同一來客通知可能按裝置數重複；固定一台 sender 又會造成單點
+故障。Core 因此使用 deterministic duty election，並在 mesh convergence 後重新 election。通常只由一個
+leader dispatch，replicated event identity 與 LWW claim 把 handover 的重複 state change 限制在 bounded
+範圍。不過這不是 zero-miss 或 delivery-time 保證；partition、convergence delay、external provider 結果
+會如實顯示在 delivery diagnostics。
 
 相关: 设计判断的来龙去脉见[决策记录](Decisions-zh)，功能视角见[功能总览](Features-zh)。

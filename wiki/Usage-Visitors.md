@@ -1,65 +1,62 @@
-# 訪客体験 — 門口機の前で何が起こるか
+# The Visitor Experience — What Happens in Front of the Door Station
 
-> English: [Usage-Visitors-en](Usage-Visitors-en) / 中文: [Usage-Visitors-zh](Usage-Visitors-zh)
+> English (this page) / 日本語: [Usage-Visitors-ja](Usage-Visitors-ja) / 中文: [Usage-Visitors-zh](Usage-Visitors-zh)
 
-このページは「訪客向けマニュアル」ではありません — 訪客は説明書を読みません。
-**設置者が訪客導線を設計するため**に、門口機の前で起こることを訪客の目線で追います。
+This page is not a "visitor manual" — visitors do not read manuals. It exists **so the installer can design the visitor flow**, by following what happens in front of the door station from the visitor's point of view.
 
-## 待機画面に見えるもの
+## What the idle screen shows
 
-- **大きな呼出ボタン** — 「タッチして呼び出してください」。迷ったらこれ 1 つで済みます。
-  (文言・背景は設置者が自由に変えられます — [Usage-Admin](Usage-Admin) のテーマ/文言)
-- **用件ボタン** — 「ご用件をお選びください」の下に 訪問 / 宅配便 📦 / 郵便 ✉️ /
-  営業・集金 💼 / 検針・工事 🔧 / その他。**1 タップでそのまま押鈴まで完了**します。
-  宅配員の動作は「📦 を押す」だけ — 2 画面目はありません。
-- **言語ボタン** — 日本語 / English / 中文 (設置者が `ui.languages` で選択)。
-  切り替えると画面の全文言が即座にその言語になります。
+- **A large call button** — "Touch to call". When in doubt, this one button is all it takes.
+  (Wording and background are customizable by the installer — see Theme/Text in [Usage-Admin](Usage-Admin))
+- **Purpose buttons** — under "Please select your purpose": Visit / Parcel delivery 📦 / Mail ✉️ /
+  Sales & collection 💼 / Meter reading & construction 🔧 / Other. With `purpose_first`, choosing a
+  purpose submits the ring. With `ring_then_purpose`, the station rings first, then offers purpose
+  choices plus Skip purpose and Cancel call.
+- **Language buttons** — 日本語 / English / 中文 (the installer chooses via `ui.languages`). Switching instantly changes every string on the screen to that language.
 
-夜間は画面が減光・赤色化し、無操作が続くとスクリーンセーバ (時計) に落ちますが、
-触れれば即座に待機画面へ戻ります。
+At night the screen dims and shifts red; after prolonged inactivity it drops to a screensaver (a clock), but a touch returns it to the idle screen immediately.
 
-## 押した後に何が起こるか
+## What happens after pressing
 
-1. 画面が「呼び出し中…」になります (取消しボタンあり)。
-2. 家の中ではチャイム・室内機・TV・電話・Telegram が並行して動いています —
-   訪客には見えませんが、応答は数秒〜十数秒で返ってくるのが普通です。
-3. 応答の形は 3 通りです:
-   - **通話** — スピーカから住人の声。門口機のマイクで普通に話せます。
-   - **クイック返信** — 画面に**大きな文字**で「少々お待ちください」等が表示され、
-     同時に読み上げられます。表示は約 30 秒で消えます。
-   - **自動応答** — 設定によっては押した瞬間に返事が返ります
-     (例: 宅配便 → 「置き配をお願いします」)。
-4. 誰も出られない場合は「応答がありません」→ 待機画面に戻ります。それでも住人には
-   写真付きの通知が残っています。
+1. Before a `purpose_first` call is submitted, Back/Cancel only returns home and emits no event.
+   After submission, the screen changes to "Calling…" with a prominent Cancel call button.
+2. The configured rules may chime devices, place SIP calls, or use integrations. Nothing is implied
+   unless its rule, target capability, and service are available.
+3. The response takes one of three forms:
+   - **A call** — the resident's voice from the speaker. The visitor just talks normally into the door station's microphone.
+   - **A quick reply** — the screen shows **large text** like "One moment, please", spoken aloud at the same time. The display disappears after about 30 seconds.
+   - **An auto-reply** — depending on configuration, an answer comes back the instant the button is pressed (e.g. parcel delivery → "Please leave the package").
+4. While ringing, Cancel call globally cancels the matching `call_id` and stops pending SIP legs
+   and not-yet-run rule actions. After a call is established, the button becomes End call and uses
+   hangup; it is no longer called cancellation.
+5. If nobody answers before the configured TTL (60 seconds when absent), the originating station
+   sends one idempotent global cancellation and returns to idle. Already-sent external messages
+   are not guaranteed to be withdrawn.
 
-## 言語切替の細かい挙動 (設計上の配慮)
+After a crash, a ringing call is restored by its press-origin station. An in-call browser session
+can be restored only by the winning dialog owner. If recovery cannot be proved within ten seconds,
+Core sends one global cancel rather than leaving an ambiguous ringing session.
 
-- 訪客が言語を切り替えた事実は住人側にも「🌐 EN」のようなバッジで伝わります。
-- 住人が返すクイック返信は、**訪客が選んだ言語のラベルで表示・読み上げ**られます
-  (訳が未登録なら日本語に回落)。英語話者の訪客に日本語の音声だけが流れる、という
-  事故を防ぐ仕組みです。
-- 無操作が 60 秒 (設定 `ui.visitor_lang_revert_s`) 続くと自動的に日本語へ戻ります。
-  次の訪客が前の訪客の言語を引き継がないための復帰タイマーです。
+## Fine details of language switching (deliberate design)
 
-## システム障害時に訪客が見るもの
+- The fact that a visitor switched languages reaches the residents too, as a badge like "🌐 EN".
+- Quick replies sent by residents are **displayed and spoken using the label in the language the visitor chose** (falling back to Japanese if no translation is registered). This prevents the accident of an English-speaking visitor hearing only Japanese audio.
+- After 60 seconds of inactivity (setting `ui.visitor_lang_revert_s`) the station automatically reverts to Japanese. It is a reset timer so the next visitor does not inherit the previous visitor's language.
 
-- ネットワークが縮退しても呼出が通れば「呼び出し済み・応答をお待ちください」。
-- 完全にオフラインの場合は正直に表示します: 「**呼び出しできません。直接ノックして
-  ください。**」— 訪客を無言の板の前に立たせないための最終フォールバックです。
+## What a visitor sees during a system failure
 
-## 設置者向け: 訪客導線を設計するヒント
+- If the network is degraded but the ring goes through: "Called — please wait for a response."
+- If completely offline, it says so honestly: "**Cannot call. Please knock directly.**" — the final fallback, so a visitor is never left standing in front of a silent slab.
 
-- **用件は減らす勇気を**。ボタンが多いほど汎用ボタンに逃げられます。宅配・郵便が
-  大半の家なら、その 2 つ + その他で十分です (用件タブで編集・並び替え)。
-- **自動応答は「約束できる返事」だけに**。「置き配をお願いします」は良い自動応答ですが、
-  「すぐ行きます」を自動で流してはいけません。
-- **カスタム音声**を使うと TTS より聞き取りやすく、家の雰囲気も出せます。訪客言語別に
-  録音を登録できます ([Usage-Admin](Usage-Admin) の資産/クイック返信)。
-- **カメラの向きと高さ**: Telegram 通知とイベント履歴のスナップショットは門口機の
-  前面カメラです。顔が写る高さ・逆光にならない向きに設置してください。
-- 音声なしの玄関 (非越獄で網頁 door.html を開いた iPad 1 など) では「この玄関では
-  通話できません (通知のみ)」と表示されます。通話が要る玄関にはネイティブアプリ端末を
-  置いてください (iPad 1 も越獄すれば音声ノードになりますが、カメラが無いので門口機=
-  訪客を映す側には不向きです。室内側での用途は [FAQ Q14](FAQ) 参照)。
+## For installers: tips for designing the visitor flow
 
-関連: 機能の全体像は [Features](Features)、住人側の見え方は [Usage-Residents](Usage-Residents)。
+- **Have the courage to cut purposes.** The more buttons there are, the more visitors flee to the generic button. If parcels and mail are most of your traffic, those two plus "Other" are enough (edit and reorder in the Purposes tab).
+- **Auto-reply only what you can promise.** "Please leave the package" is a good auto-reply; never auto-play "Coming right away".
+- **Custom recordings** can be registered per visitor language (Assets/Quick replies in [Usage-Admin](Usage-Admin)).
+- **Camera angle and height**: the snapshots in Telegram notifications and the event history come from the door station's front camera. Mount it at a height that captures faces, facing away from backlight.
+- At an entrance with no commissioned audio path, present an explicit notification-only fallback.
+  An iPad 1 has a built-in microphone/speaker but no camera and is not outdoor-rated. A protected
+  iPad visitor UI requires real-device audio/recovery tests plus an explicit LAN IP-camera or
+  no-video profile; the iPad itself does not supply visitor video (see [FAQ Q14](FAQ)).
+
+Related: [Features](Features) and [For Residents](Usage-Residents).

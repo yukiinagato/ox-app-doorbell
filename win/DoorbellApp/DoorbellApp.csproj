@@ -1,5 +1,5 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <!-- .NET Framework 4.8 WPF (Win7 SP1〜Win11 単一パッケージ)。SDK スタイルで VS2022/dotnet build 両対応 -->
+  <!-- One .NET Framework 4.8 WPF package supports Windows 7 SP1 through Windows 11. -->
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net48</TargetFramework>
@@ -11,21 +11,27 @@
     <AssemblyName>DoorbellApp</AssemblyName>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
+    <Deterministic>true</Deterministic>
+    <ContinuousIntegrationBuild>true</ContinuousIntegrationBuild>
+    <PathMap>$(MSBuildProjectDirectory)=X:\src\win\DoorbellApp</PathMap>
     <Version>0.1.0</Version>
     <EnableDefaultEmbeddedResourceItems>true</EnableDefaultEmbeddedResourceItems>
   </PropertyGroup>
   <ItemGroup>
-    <!-- JSON (JavaScriptSerializer) と TTS (System.Speech) — .NET Framework 同梱、外部依存ゼロ -->
-    <!-- System.Web: System.Web.Extensions の依存 — 明示しないと新 SDK の XAML コンパイラが
-         MC1000 (System.Web 解決不能) で落ちる (CI で発現) -->
+    <!-- JSON and TTS use framework assemblies, with no external runtime dependency. -->
+    <!-- System.Web is an explicit transitive dependency of System.Web.Extensions. Omitting it can
+         make the newer SDK XAML compiler fail with MC1000 during CI builds. -->
     <Reference Include="System.Web" />
     <Reference Include="System.Web.Extensions" />
     <Reference Include="System.Speech" />
-    <!-- WMI (WmiMonitorBrightnessMethods — 遠隔輝度) も同梱アセンブリ -->
+    <!-- WMI provides remote brightness through WmiMonitorBrightnessMethods. -->
     <Reference Include="System.Management" />
+    <Reference Include="System.Security" />
+    <Reference Include="System.Drawing" />
+    <Reference Include="System.Windows.Forms" />
   </ItemGroup>
   <ItemGroup>
-    <!-- ネイティブ core DLL (win/build.cmd が core のビルド産物をここへ配置する) -->
+    <!-- win/build.cmd places the native Core DLL in this output tree. -->
     <None Include="lib\**\*.dll" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\..\assets\audio\*.mp3">
       <Link>Audio\%(Filename)%(Extension)</Link>

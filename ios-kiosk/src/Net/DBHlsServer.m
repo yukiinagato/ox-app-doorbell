@@ -34,7 +34,7 @@ static BOOL sendAll(int fd, const void *bytes, size_t length) {
   NSInteger _port;
   NSMutableArray *_segs;      // NSData (TS)
   NSMutableArray *_durs;      // NSNumber ms
-  uint64_t _firstSeq;         // _segs[0] の通し番号 (0 始まり)
+  uint64_t _firstSeq;
   long long _targetDuration;  // HLS target duration must not decrease
   NSLock *_lock;
   volatile BOOL _running;

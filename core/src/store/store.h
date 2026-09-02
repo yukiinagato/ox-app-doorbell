@@ -1,7 +1,5 @@
-// SQLite 永続化層 (WAL)。テーブル: meta / config / events / tg_queue / net_probe。
-// スレッド: 内部で全 public メソッドを mutex 直列化するためどのスレッドから呼んでも
-// 安全 (httpd の civetweb ワーカ / Runloop / 殻の背景 thread が混在しても可)。
-// 破損時は自動でバックアップ後に再生成 (mesh から再同期できる設計のため損失許容)。
+// Mutex-serialized SQLite WAL store. Public methods are safe across HTTP workers, Runloop, and
+// platform threads. Corrupt databases are backed up before recreation so the mesh can resync.
 #pragma once
 
 #include <cstdint>
@@ -9,6 +7,7 @@
 #include <mutex>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "crdt/lww_map.h"
@@ -26,85 +25,133 @@ class Store {
   Store(const Store&) = delete;
   Store& operator=(const Store&) = delete;
 
-  // path: ファイルパス、":memory:" も可 (テスト)。失敗時 false。
+
   bool open(const std::string& path);
   void close();
   bool isOpen() const { return db_ != nullptr; }
 
-  // --- meta (node_id, epoch, 管理パスワード hash 等の単純 KV) ---
-  std::optional<std::string> metaGet(const std::string& key);
-  void metaSet(const std::string& key, const std::string& value);
 
-  // --- config (LWW entries 全量) ---
-  void configPut(const LwwEntry& e);  // upsert (key が主キー)
-  void configDelete(const std::string& key);  // tombstone GC 後の物理削除
+  std::optional<std::string> metaGet(const std::string& key);
+  bool metaSet(const std::string& key, const std::string& value);
+  bool metaSetBatch(const std::vector<std::pair<std::string, std::string>>& entries);
+
+
+  bool configPut(const LwwEntry& e);
+  bool configPutBatch(const std::vector<LwwEntry>& entries);
+  void configDelete(const std::string& key);
   std::vector<LwwEntry> configLoadAll();
 
   // --- events ---
-  // 既存 (origin,seq) なら無視して false
+
   bool eventPut(const EventRecord& e);
+  // Allocates the origin sequence, persists the event, and advances every newly contiguous local
+  // record and its projection in one transaction. A failed write does not consume a sequence;
+  // the returned empty optional must be treated as an emission failure.
+  std::optional<EventRecord> eventAppendLocal(EventRecord e,
+                                              std::vector<EventRecord>* newly_applied = nullptr);
+  bool eventIngest(const EventRecord& e);
+  std::optional<EventRecord> eventApplyNext(const std::string& origin);
   bool eventExists(const std::string& origin, uint64_t seq);
   void eventSetNotify(const std::string& origin, uint64_t seq, const std::string& notify_json);
   std::optional<EventRecord> eventGet(const std::string& origin, uint64_t seq);
-  std::map<std::string, uint64_t> eventHeads();  // origin → MAX(seq)
-  // remote_heads を超える分を (hlc 昇順, limit 件まで)
+  // The advertised head is the largest contiguous sequence starting at one. max_seq is a
+  // separate durable allocation watermark and is not reduced when old events are pruned.
+  std::map<std::string, uint64_t> eventHeads();
+  uint64_t eventFrontier(const std::string& origin);
+  uint64_t eventMaxSeq(const std::string& origin);
+  // Applied events remain pending until their callback returns and this durable frontier is
+  // advanced. The query is bounded and preserves sequence order within every origin.
+  std::vector<EventRecord> pendingEventDispatches(size_t limit);
+  bool eventAckDispatched(const std::string& origin, uint64_t seq);
+  uint64_t eventDispatchFrontier(const std::string& origin);
+
   std::vector<EventRecord> eventsSince(const std::map<std::string, uint64_t>& remote_heads,
                                        size_t limit);
-  // 新しい順に limit 件 (管理画面用)
+
+  // Runtime queries expose only records at or below each origin's applied frontier. eventGet and
+  // eventsSince intentionally retain access to buffered gaps for anti-entropy.
   std::vector<EventRecord> recentEvents(size_t limit);
-  // 指定 type のイベント総数 (例: "press" = 累計触発回数)
+
   size_t countEventsOfType(const std::string& type);
-  // 指定 2 型のうち hlc 最大の 1 件 (緊急モードの状態復元用)。無ければ nullopt。
+
   std::optional<EventRecord> latestEventOfTypes(const std::string& t1, const std::string& t2);
-  // 上限管理: 件数 > max_events または hlc物理部が cutoff_wall_ms より古いものを削除
+
+  // Applied events cannot be deleted until replication carries an equivalent materialized-state
+  // snapshot and its complete per-origin coverage vector. Until then pruning fails closed.
   size_t pruneEvents(size_t max_events, int64_t cutoff_wall_ms);
 
-  // --- tg_queue (Telegram 送信キュー — bridge/telegram が使う永続再試行キュー) ---
+  struct CallProjection {
+    std::string call_id;
+    std::string door;
+    std::string origin;
+    std::string purpose;
+    std::string state;
+    int stage_revision = 0;
+    int64_t expires_wall_ms = 0;
+    std::string updated_hlc;
+    std::string terminal_reason;
+    std::string dialog_owner;
+    std::string answered_hlc;
+  };
+  // Each contiguous frontier advancement and its lifecycle projection share one transaction.
+  std::vector<CallProjection> activeCallProjections();
+  std::optional<CallProjection> callProjection(const std::string& call_id);
+
+
   struct TgQueueItem {
-    int64_t id = 0;           // AUTOINCREMENT (put で採番)
+    int64_t id = 0;
     std::string kind;         // "photo" | "message"
     std::string chat_id;
-    std::string payload;      // 種別ごとの JSON (caption/text/reply_markup/元イベント等)
-    Bytes snapshot;           // kind=photo の JPEG (無ければ空)
-    int attempts = 0;         // 送信試行回数
-    int64_t next_retry_ms = 0;  // これ以降に再試行 (壁時計 ms)
-    int64_t created_ms = 0;     // 投入時刻 (壁時計 ms; 24h 破棄の基準)
+    std::string payload;
+    Bytes snapshot;
+    int attempts = 0;
+    int64_t next_retry_ms = 0;
+    int64_t created_ms = 0;
   };
-  // --- net_probe (疎通監視の時系列 — debug 画面用。7日保持) ---
+
   struct NetProbe {
-    int64_t ts_ms = 0;       // 壁時計 ms
-    std::string target;      // ラベル (gateway / leader / <custom name>)
-    std::string host;        // 実際に叩いた host:port
-    bool ok = false;         // 到達 (TCP 接続 or RST) したか
-    int rtt_ms = -1;         // 往復 ms。-1 = タイムアウト (未到達)
+    int64_t ts_ms = 0;
+    std::string target;
+    std::string host;
+    bool ok = false;
+    int rtt_ms = -1;
   };
   void netProbePut(const NetProbe& p);
-  // since_ms 以降を古い順に limit 件 (折線グラフ用)
-  std::vector<NetProbe> netProbesSince(int64_t since_ms, size_t limit);
-  size_t netProbePrune(int64_t cutoff_ms);  // ts_ms < cutoff を物理削除
 
-  int64_t tgQueuePut(const TgQueueItem& item);  // 採番した id を返す (失敗 0)
-  // next_retry_ms <= now_ms のものを古い順に limit 件まで
+  std::vector<NetProbe> netProbesSince(int64_t since_ms, size_t limit);
+  size_t netProbePrune(int64_t cutoff_ms);
+
+  int64_t tgQueuePut(const TgQueueItem& item);
+
   std::vector<TgQueueItem> tgQueueDue(int64_t now_ms, size_t limit);
   void tgQueueRetry(int64_t id, int attempts, int64_t next_retry_ms);
   void tgQueueDelete(int64_t id);
-  size_t tgQueuePrune(int64_t cutoff_created_ms);  // created_ms が古いものを破棄
+  size_t tgQueuePrune(int64_t cutoff_created_ms);
   size_t tgQueueCount();
 
  private:
   bool exec(const char* sql);
-  bool migrate();  // mu_ 保持中に呼ぶこと (open のみ)
-  void closeLocked();  // mu_ 保持中に呼ぶ
-  // --- mu_ 保持中に呼ぶ内部版 (公開版はこのラッパ + ロック) ---
-  // 注意: これらをロック取得なしで直接呼べるのは mu_ を保持しているスレッドだけ。
-  // 公開版を mu_ 保持中に呼ぶと非再帰 mutex の二重ロックになり、macOS では即デッドロック、
-  // iOS 5 (armv7) の旧 pthread では通ってしまい SQLite が並行進入 → 返却メモリ破壊
-  // (殻側 NSJSONSerialization SIGSEGV / takeJson SUSPECT buffer の実害) になる。
+  bool migrate();  // Requires mu_.
+  void closeLocked();  // Requires mu_.
+
+
+
+
+
+  // Locked helpers avoid recursively acquiring the non-recursive mutex. This matters on old iOS
+  // pthread implementations, where re-entry can corrupt SQLite-owned return buffers.
   std::optional<std::string> metaGetLocked(const std::string& key);
-  void metaSetLocked(const std::string& key, const std::string& value);
+  bool metaSetLocked(const std::string& key, const std::string& value);
   size_t countEventsOfTypeLocked(const std::string& type);
+  bool persistEventLocked(const EventRecord& e, bool allow_existing, bool* inserted);
+  enum class EventApplyResult { Applied, NoNext, Error };
+  EventApplyResult eventApplyNextLocked(const std::string& origin, EventRecord* applied);
+  std::optional<std::string> callDoorFenceLocked(const std::string& door);
+  bool advanceCallDoorFenceLocked(const std::string& door, const std::string& call_id,
+                                  const std::string& hlc);
+  bool applyCallProjectionLocked(const EventRecord& e);
   sqlite3* db_ = nullptr;
-  mutable std::mutex mu_;  // 単一接続の直列化 (httpd ワーカ等の並行呼び対策)
+  mutable std::mutex mu_;  // Serializes the single SQLite connection.
 };
 
 }  // namespace db

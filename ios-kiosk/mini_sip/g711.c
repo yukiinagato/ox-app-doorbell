@@ -1,14 +1,14 @@
-/* g711.c — G.711 μ-law コーデック実装 (Sun 由来, public domain)。 */
+
 #include "g711.h"
 
-#define MS_BIAS 0x84 /* エンコード時の直流バイアス */
-#define MS_CLIP 8159 /* 14bit 表現でのクリップ上限 */
+#define MS_BIAS 0x84
+#define MS_CLIP 8159
 #define MS_SIGN_BIT 0x80
 #define MS_QUANT_MASK 0x0F
 #define MS_SEG_SHIFT 4
 #define MS_SEG_MASK 0x70
 
-/* セグメント境界 (14bit スケール)。線形値がどのセグメントに入るか二分せず線形探索 */
+
 static const int16_t kSegEnd[8] = {0x3F,  0x7F,  0xFF,  0x1FF,
                                    0x3FF, 0x7FF, 0xFFF, 0x1FFF};
 
@@ -26,11 +26,11 @@ uint8_t ms_linear2ulaw(int16_t pcm) {
   int seg;
   uint8_t uval;
 
-  /* 16bit → 13bit へ丸め (下位 2bit 落とし)。μ-law は 14bit 相当を量子化 */
+
   val = val >> 2;
   if (val < 0) {
     val = -val;
-    mask = 0x7F; /* 負: 符号ビットを落とす反転マスク */
+    mask = 0x7F;
   } else {
     mask = 0xFF;
   }
@@ -39,7 +39,7 @@ uint8_t ms_linear2ulaw(int16_t pcm) {
 
   seg = seg_search(val);
   if (seg >= 8) {
-    return (uint8_t)(0x7F ^ mask); /* 最大振幅 */
+    return (uint8_t)(0x7F ^ mask);
   }
   uval = (uint8_t)((seg << 4) | ((val >> (seg + 1)) & 0x0F));
   return (uint8_t)(uval ^ mask);

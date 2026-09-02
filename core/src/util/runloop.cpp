@@ -13,7 +13,7 @@ void Runloop::start() {
   std::lock_guard<std::mutex> lk(mu_);
   if (state_ != State::Manual) return;
   state_ = State::Running;
-  // Stopped の再起動はサポートしない: 実行中状態遷移を再現しきれないため。
+
   thread_ = std::thread([this] { loopMain(); });
 }
 
@@ -56,7 +56,7 @@ void Runloop::cancel(uint64_t id) {
       return;
     }
   }
-  // キューに無い = 実行中の繰り返しタスク (再スケジュール前) の可能性 → 印を残す
+
   cancelled_.insert(id);
 }
 

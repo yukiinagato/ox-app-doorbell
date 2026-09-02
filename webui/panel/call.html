@@ -1,21 +1,10 @@
 <!DOCTYPE html>
-<html lang="ja">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>通話パネル</title>
-<!--
-  網頁通話ページ (現代ブラウザ専用 — legacy iPad 1 は door.html/monitor.html を使う)。
-  - 音声: JsSIP (vendor/jssip.min.js — 自包含, CDN 不使用) で Asterisk の WebSocket
-    (config integrations.webrtc.ws_url) 経由、門口機の内線へ発呼する。
-    Asterisk 側設定は deploy/asterisk/webrtc.md。未設定なら通話ボタンは無効。
-  - 映像 (受け): 門口機の /stream.mjpeg を <img> で直接表示 (cross-origin <img> は可)。
-  - 映像 (送り): 「映像も送る」= getUserMedia → canvas → JPEG を門口機の
-    POST /call-frame?door=&k= へ 2fps で送る (門口機殻は /peer-frame.jpg を輪詢して描画)。
-    getUserMedia はセキュアコンテキスト必須 (webrtc.md §1 — HTTPS か localhost)。
-  - API 契約は同ディレクトリの API.md (/api/panel/state, /api/panel/call-info, /call-frame)。
-  - ?k=<panel token> を全 API へ引き継ぐ。?mock=1 = XHR/JsSIP 無しで描画確認。
--->
+<title></title>
+
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html, body { height: 100%; }
@@ -37,7 +26,8 @@
   #videoBox { position: relative; width: 100%; max-width: 960px; flex: 1; min-height: 240px;
               background: #000; border-radius: 12px; overflow: hidden;
               display: flex; align-items: center; justify-content: center; }
-  #liveImg { width: 100%; height: 100%; object-fit: contain; }
+  #liveImg, #liveVideo { width: 100%; height: 100%; object-fit: contain; }
+  #liveVideo { display: none; }
   #noVideo { position: absolute; color: #5d6b79; font-size: 20px; }
   #selfPreview { position: absolute; right: 10px; bottom: 10px; width: 160px;
                  border-radius: 8px; border: 1px solid #2a333d; display: none; }
@@ -56,61 +46,183 @@
 </style>
 </head>
 <body>
-<div id="offlineBand">オフライン — 再接続中…</div>
-<header><h1>通話パネル</h1><span id="regState"></span></header>
+<div id="offlineBand" data-semantic-id="status.offline"></div>
+<header><h1 id="title" data-semantic-id="ring.title"></h1><span id="regState"></span></header>
 <div id="doorTabs"></div>
 <main>
   <div id="videoBox">
     <img id="liveImg" alt="">
-    <div id="noVideo">映像なし</div>
+    <video id="liveVideo" muted autoplay playsinline></video>
+    <div id="noVideo"></div>
     <video id="selfPreview" muted autoplay playsinline></video>
   </div>
   <div id="controls">
-    <button id="callBtn" disabled>通話</button>
-    <label id="videoToggle"><input type="checkbox" id="sendVideo"> 映像も送る</label>
+    <button id="callBtn" data-semantic-id="ring.action" disabled></button>
+    <label id="videoToggle"><input type="checkbox" id="sendVideo"> <span id="videoToggleText"></span></label>
   </div>
   <div id="status"></div>
 </main>
 <audio id="remoteAudio" autoplay></audio>
 
 <script src="vendor/jssip.min.js"></script>
+<script src="/panel/playback.js"></script>
+<script src="/panel/call-flow.js"></script>
+<script src="/panel/runtime.js"></script>
 <script>
 "use strict";
 const qs = new URLSearchParams(location.search);
-const K = qs.get("k") || "";
+let K = qs.get("k") || "";
 const MOCK = qs.get("mock") === "1";
+const INITIAL_DOOR = qs.get("door") || "";
+const QUERY_LANG = normalizeLang(qs.get("lang"));
+let I18N = {};
+let LANG = "";
+let emergencyOverlay = null;
+
+function normalizeLang(value) {
+  value = String(value || "").toLowerCase().split("-")[0];
+  return value === "ja" || value === "en" || value === "zh" ? value : "";
+}
+
+function t(key, values) {
+  let value = typeof I18N[key] === "string" ? I18N[key] : key;
+  for (const [name, replacement] of Object.entries(values || {}))
+    value = value.split("{" + name + "}").join(String(replacement));
+  return value;
+}
+
+async function ensureLanguage(requested) {
+  const lang = normalizeLang(requested) || "ja";
+  if (LANG === lang) return;
+  try {
+    const response = await fetch("/locale/" + lang + ".json", { cache: "no-store" });
+    if (!response.ok) throw new Error("locale HTTP " + response.status);
+    I18N = await response.json();
+    LANG = lang;
+  } catch (error) {
+    if (lang !== "en") { await ensureLanguage("en"); return; }
+    I18N = {};
+    LANG = "en";
+  }
+  document.documentElement.setAttribute("lang", LANG);
+}
+
+function languageForState(state, doorId) {
+  if (QUERY_LANG) return QUERY_LANG;
+  const stateDoors = (state && state.doors) || [];
+  let match = doorId && stateDoors.find(door => door.id === doorId);
+  let lang = normalizeLang(match && match.visitor_lang);
+  if (lang) return lang;
+  match = stateDoors.find(door => door.calling && normalizeLang(door.visitor_lang));
+  lang = normalizeLang(match && match.visitor_lang);
+  if (lang) return lang;
+  match = stateDoors.find(door => normalizeLang(door.visitor_lang));
+  return normalizeLang(match && match.visitor_lang) || "ja";
+}
+
+function applyEmergencyI18n() {
+  const overlay = document.getElementsByClassName("dbEmergencyOverlay")[0];
+  if (overlay) {
+    const heading = overlay.getElementsByTagName("h2")[0];
+    const paragraphs = overlay.getElementsByTagName("p");
+    if (heading) heading.textContent = t("emergency.title");
+    if (paragraphs[0]) paragraphs[0].textContent = t("emergency.active_detail");
+    if (paragraphs[1]) paragraphs[1].textContent = t("emergency.clear_instruction");
+  }
+  const trigger = document.getElementsByClassName("dbSosTrigger")[0];
+  if (trigger) {
+    const spans = trigger.getElementsByTagName("span");
+    trigger.setAttribute("aria-label", t("emergency.button"));
+    if (spans[0]) spans[0].textContent = t("emergency.button");
+    if (spans[1]) spans[1].textContent = t("emergency.hold_hint", { sec: "2" });
+  }
+}
+
+function installEmergency() {
+  emergencyOverlay = DoorbellPanelRuntime.installEmergencyOverlay({
+    title: t("emergency.title"),
+    detail: t("emergency.active_detail"),
+    clearInstruction: t("emergency.clear_instruction"),
+    triggerLabel: t("emergency.button"),
+    triggerHint: t("emergency.hold_hint", { sec: "2" }),
+  });
+  applyEmergencyI18n();
+}
 
 const els = {
+  title: document.getElementById("title"),
   tabs: document.getElementById("doorTabs"),
   live: document.getElementById("liveImg"),
+  liveVideo: document.getElementById("liveVideo"),
   noVideo: document.getElementById("noVideo"),
   self: document.getElementById("selfPreview"),
   call: document.getElementById("callBtn"),
   sendVideo: document.getElementById("sendVideo"),
+  sendVideoText: document.getElementById("videoToggleText"),
   status: document.getElementById("status"),
   reg: document.getElementById("regState"),
   offline: document.getElementById("offlineBand"),
   audio: document.getElementById("remoteAudio"),
 };
-// stream 接続不可 (門口機オフライン等) → 「映像なし」表示へ
-els.live.onerror = () => { els.live.style.display = "none"; els.noVideo.style.display = ""; };
-els.live.onload = () => { els.live.style.display = ""; els.noVideo.style.display = "none"; };
-
 let doors = [];        // [{id,label,extension,station,online}]
-let selected = null;   // door オブジェクト
+let selected = null;
 let webrtc = null;     // {ws_url,sip_user,sip_pass,server}
 let ua = null;         // JsSIP.UA
-let session = null;    // 進行中の RTCSession
+let session = null;
+let sessionConfirmed = false;
+let activeLifecycle = null;
 let registered = false;
-let frameTimer = null; // 映像送信 (500ms = 2fps)
+let frameTimer = null;
 let camStream = null;
+let playback = null;
+let latestPanelState = null;
+let sessionRefreshPending = false;
+let registrationState = { state: "", reason: "" };
+let mockSessionActive = false;
+
+function renderRegistration() {
+  if (registrationState.state === "registered") {
+    els.reg.textContent = t(registrationState.mock ? "panel.mock_registered" :
+      "panel.registered", { extension: webrtc && webrtc.sip_user || "" });
+  } else if (registrationState.state === "unregistered") {
+    els.reg.textContent = t("panel.unregistered");
+  } else if (registrationState.state === "failed") {
+    els.reg.textContent = t("panel.registration_failed", {
+      reason: registrationState.reason || "?",
+    });
+  } else {
+    els.reg.textContent = "";
+  }
+}
+
+function applyI18n() {
+  document.title = t("panel.call_title");
+  els.title.textContent = t("panel.call_title");
+  els.noVideo.textContent = t("panel.no_video");
+  els.sendVideoText.textContent = t("panel.send_video");
+  els.offline.textContent = t("panel.offline");
+  if (session || mockSessionActive) els.call.textContent = t("incall.end");
+  else els.call.textContent = selected && (selected.calling ||
+    selected.call_state === "ringing" || selected.call_state === "purpose_pending") ?
+    t("ring.answer") : t("panel.call");
+  renderRegistration();
+  renderTabs();
+  applyEmergencyI18n();
+}
+
+function newDialogId() {
+  if (!window.crypto || !window.crypto.getRandomValues) return "";
+  const bytes = new Uint8Array(16);
+  window.crypto.getRandomValues(bytes);
+  return Array.prototype.map.call(bytes, b => ("0" + b.toString(16)).slice(-2)).join("");
+}
 
 function setStatus(msg, isErr) {
-  els.status.innerHTML = msg || "";
+  els.status.textContent = msg || "";
   els.status.className = isErr ? "err" : "";
 }
 
-// ---------- door 一覧 ----------
+
 function renderTabs() {
   els.tabs.innerHTML = "";
   for (const d of doors) {
@@ -118,7 +230,9 @@ function renderTabs() {
     b.textContent = d.label;
     const st = document.createElement("span");
     st.className = "st";
-    st.textContent = d.extension ? ("内線 " + d.extension) : "内線なし";
+    st.textContent = (d.calling || d.call_state === "ringing" || d.call_state === "purpose_pending") ?
+      t("panel.visitor_calling") : (d.extension ?
+        t("panel.extension", { extension: d.extension }) : t("panel.no_extension"));
     b.appendChild(st);
     if (selected && selected.id === d.id) b.classList.add("sel");
     b.onclick = () => selectDoor(d);
@@ -126,33 +240,56 @@ function renderTabs() {
   }
 }
 
-function selectDoor(d) {
-  if (session) return;  // 通話中は切替不可
+function playbackKey(d) {
+  return [d && d.id, d && d.stream_mjpeg, d && d.stream_mp4,
+          JSON.stringify((d && d.playback_profile) || {})].join("|");
+}
+
+function selectDoor(d, forcePlaybackRefresh) {
+  if (session && !forcePlaybackRefresh) return;  // Do not switch doors during an active call.
   selected = d;
   renderTabs();
-  // 門口ライブ (MJPEG — station が空 = このノード自身)
+  if (playback) { playback.stop(); playback = null; }
   if (MOCK) {
     els.live.style.display = "none";
+    els.liveVideo.style.display = "none";
     els.noVideo.style.display = "";
   } else {
-    els.live.style.display = "";
-    els.live.src = (d.station || "") + "/stream.mjpeg";
-    els.noVideo.style.display = "none";
+    const mp4 = DoorbellPlayback.proxyMp4Url(d.id, K, d.stream_mp4, window.location);
+    const mjpeg = "/snapshot-proxy?door=" + encodeURIComponent(d.id) + "&live=1";
+    playback = DoorbellPlayback.start({ profile: d.playback_profile,
+      mp4, mjpeg, mjpegMode: "image", video: els.liveVideo, img: els.live,
+      onState: (state) => { els.noVideo.style.display = state === "failed" ? "" : "none"; } });
   }
   updateCallButton();
 }
 
 function updateCallButton() {
-  if (session) { els.call.disabled = false; return; }
+  if (session) {
+    els.call.setAttribute("data-semantic-id", "call.end");
+    els.call.textContent = t("incall.end");
+    els.call.disabled = false;
+    if (latestPanelState) DoorbellPanelRuntime.applySemanticUi(latestPanelState, { page: "call" });
+    return;
+  }
+  els.call.setAttribute("data-semantic-id", "ring.action");
+  els.call.textContent = selected && (selected.calling || selected.call_state === "ringing" ||
+    selected.call_state === "purpose_pending") ? t("ring.answer") : t("panel.call");
   if (!webrtc || !webrtc.ws_url) {
     els.call.disabled = true;
-    setStatus("通話には Asterisk の WebRTC 設定 (integrations.webrtc.ws_url) が必要です — " +
-              "リポジトリの deploy/asterisk/webrtc.md 参照");
+    setStatus(t("panel.webrtc_required"));
     return;
   }
   if (!selected || !selected.extension) {
     els.call.disabled = true;
-    if (selected) setStatus("この玄関には内線 (sip.accounts) が未設定です");
+    if (selected) setStatus(t("panel.extension_unconfigured"));
+    return;
+  }
+  const answering = selected.calling || selected.call_state === "ringing" ||
+    selected.call_state === "purpose_pending";
+  if (answering && !selected.call_id) {
+    els.call.disabled = true;
+    setStatus(t("panel.lifecycle_identity_missing"), true);
     return;
   }
   els.call.disabled = !registered && !MOCK;
@@ -169,65 +306,187 @@ function initUa() {
       password: webrtc.sip_pass || "",
       register: true,
     });
-    ua.on("registered", () => { registered = true; els.reg.textContent = "内線 " +
-        webrtc.sip_user + " 登録済み"; updateCallButton(); });
-    ua.on("unregistered", () => { registered = false; els.reg.textContent = "未登録";
-        updateCallButton(); });
+    ua.on("registered", () => { registered = true;
+        registrationState = { state: "registered", reason: "" };
+        renderRegistration(); updateCallButton(); });
+    ua.on("unregistered", () => { registered = false;
+        registrationState = { state: "unregistered", reason: "" };
+        renderRegistration(); updateCallButton(); });
     ua.on("registrationFailed", (e) => { registered = false;
-        els.reg.textContent = "登録失敗 (" + (e.cause || "?") + ")"; updateCallButton(); });
+        registrationState = { state: "failed", reason: e.cause || "?" };
+        renderRegistration(); updateCallButton(); });
     ua.start();
   } catch (e) {
-    setStatus("JsSIP 初期化失敗: " + e, true);
+    setStatus(t("panel.jssip_init_failed", { reason: e }), true);
   }
 }
 
 function startCall() {
   if (!ua || !selected || !selected.extension) return;
-  setStatus("呼び出し中…");
-  els.call.textContent = "終了";
+  const answering = selected.calling || selected.call_state === "ringing" ||
+    selected.call_state === "purpose_pending";
+  if (answering && !selected.call_id) {
+    setStatus(t("panel.lifecycle_identity_missing"), true);
+    return;
+  }
+  const binding = answering ? {
+    door: selected.id,
+    callId: selected.call_id,
+    stageRevision: Number(selected.stage_revision) || 0,
+    dialogId: newDialogId(),
+    owner: "",
+    answered: false,
+    answerPromise: null,
+    ended: false,
+  } : null;
+  if (binding && !binding.dialogId) {
+    setStatus(t("panel.dialog_identity_missing"), true);
+    return;
+  }
+  activeLifecycle = binding;
+  setStatus(answering ? t("panel.answering") : t("calling.title"));
+  els.call.textContent = t("incall.end");
   els.call.classList.add("hang");
-  session = ua.call("sip:" + selected.extension + "@" + (webrtc.server || location.hostname), {
+  const newSession = ua.call("sip:" + selected.extension + "@" + (webrtc.server || location.hostname), {
     mediaConstraints: { audio: true, video: false },
   });
-  session.on("confirmed", () => {
-    setStatus("通話中");
+  session = newSession;
+  els.call.setAttribute("data-semantic-id", "call.end");
+  if (latestPanelState) DoorbellPanelRuntime.applySemanticUi(latestPanelState, { page: "call" });
+  newSession.on("confirmed", () => {
+    sessionConfirmed = true;
+    setStatus(t("incall.title"));
     if (els.sendVideo.checked) startSendingVideo();
+    if (binding) {
+      binding.answerPromise = postLifecycle(binding, "answered").then(result => {
+        binding.answered = result.ok;
+        binding.owner = result.dialog_owner || "";
+        if (!result.ok && session === newSession) {
+          setStatus(t("panel.lifecycle_connected_sync_failed"), true);
+          endCall("lifecycle_rejected");
+        }
+        return result.ok;
+      });
+    }
   });
-  session.on("ended", endCall);
-  session.on("failed", (e) => { setStatus("通話失敗 (" + (e.cause || "?") + ")", true); endCall(); });
-  session.connection.addEventListener("track", (ev) => {
+  newSession.on("ended", () => endCall("sip_ended"));
+  newSession.on("failed", (e) => {
+    setStatus(t("panel.call_failed", { reason: e.cause || "?" }), true);
+    endCall("transport_error");
+  });
+  newSession.connection.addEventListener("track", (ev) => {
     if (ev.streams && ev.streams[0]) els.audio.srcObject = ev.streams[0];
   });
 }
 
-function endCall() {
+async function postLifecycle(binding, state, reason) {
+  if (MOCK || !binding) return { ok: true, dialog_owner: "mock" };
+  try {
+    const response = await fetch("/api/panel/call-lifecycle", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: DoorbellCallFlow.lifecycleForm(binding.door, binding.callId,
+        binding.stageRevision, state, binding.dialogId, reason),
+    });
+    if (!response.ok) return { ok: false, dialog_owner: "" };
+    const body = await response.json();
+    return { ok: body.ok === true, dialog_owner: body.dialog_owner || binding.owner || "" };
+  } catch (e) {
+    return { ok: false, dialog_owner: "" };
+  }
+}
+
+function reportLifecycleEnd(binding, reason) {
+  if (!binding || binding.ended) return;
+  binding.ended = true;
+  Promise.resolve(binding.answerPromise || binding.answered).then(answered => {
+    if (answered) return postLifecycle(binding, "ended", reason || "sip_ended");
+    return { ok: false };
+  }).then(result => {
+    if (binding.answered && !result.ok)
+      setStatus(t("panel.lifecycle_end_sync_failed"), true);
+  });
+}
+
+function heartbeatLifecycle(binding) {
+  if (!binding || !binding.answered || binding.heartbeatPending) return;
+  binding.heartbeatPending = true;
+  postLifecycle(binding, "heartbeat").then(result => {
+    binding.heartbeatPending = false;
+    if (!result.ok && activeLifecycle === binding && session) {
+      setStatus(t("panel.lifecycle_heartbeat_failed"), true);
+      endCall("lifecycle_lease_lost");
+    }
+  });
+}
+
+async function reportRecovery(binding, restored) {
+  if (!binding) return false;
+  try {
+    const response = await fetch("/api/panel/recovery", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: DoorbellCallFlow.recoveryForm(binding.door, binding.callId, restored, "",
+        binding.dialogId),
+    });
+    return response.ok;
+  } catch (e) {
+    return false;
+  }
+}
+
+function endCall(reason) {
+  const binding = activeLifecycle;
   if (session) { try { if (!session.isEnded()) session.terminate(); } catch (e) { } }
   session = null;
+  sessionConfirmed = false;
+  activeLifecycle = null;
+  reportLifecycleEnd(binding, reason || "local_hangup");
   stopSendingVideo();
-  els.call.textContent = "通話";
   els.call.classList.remove("hang");
   updateCallButton();
 }
 
 els.call.onclick = () => {
-  if (MOCK) {  // 描画確認: 状態遷移だけ再現
-    if (els.call.textContent === "通話") { els.call.textContent = "終了";
-      els.call.classList.add("hang"); setStatus("通話中 (mock)"); }
-    else { els.call.textContent = "通話"; els.call.classList.remove("hang"); setStatus(""); }
+  if (MOCK) {
+    if (!mockSessionActive) {
+      mockSessionActive = true;
+      els.call.textContent = t("incall.end");
+      els.call.classList.add("hang"); setStatus(t("panel.mock_incall"));
+    } else {
+      mockSessionActive = false;
+      els.call.textContent = t("panel.call");
+      els.call.classList.remove("hang"); setStatus("");
+    }
     return;
   }
-  if (session) endCall();
+  if (session) endCall("local_hangup");
   else startCall();
 };
 
-// ---------- 「映像も送る」 (canvas → JPEG POST /call-frame) ----------
+window.addEventListener("pagehide", () => {
+  const binding = activeLifecycle;
+  if (!binding || !binding.answered || binding.ended || MOCK) return;
+  binding.ended = true;
+  try {
+    fetch("/api/panel/call-lifecycle", {
+      method: "POST",
+      keepalive: true,
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: DoorbellCallFlow.lifecycleForm(binding.door, binding.callId,
+        binding.stageRevision, "ended", binding.dialogId, "page_closed"),
+    });
+  } catch (e) { }
+});
+
+
 async function startSendingVideo() {
   if (frameTimer || !selected) return;
   try {
     camStream = await navigator.mediaDevices.getUserMedia({
       video: { width: { ideal: 320 }, height: { ideal: 240 } }, audio: false });
   } catch (e) {
-    setStatus("カメラ取得失敗 (" + e.name + ") — HTTPS/localhost が必要 (webrtc.md §1)", true);
+    setStatus(t("panel.camera_failed", { reason: e.name }), true);
     els.sendVideo.checked = false;
     return;
   }
@@ -235,7 +494,7 @@ async function startSendingVideo() {
   els.self.style.display = "block";
   const canvas = document.createElement("canvas");
   const target = (selected.station || "") + "/call-frame?door=" +
-      encodeURIComponent(selected.id) + "&k=" + encodeURIComponent(K);
+      encodeURIComponent(selected.id);
   let busy = false;
   frameTimer = setInterval(() => {
     if (busy || !session) return;
@@ -248,11 +507,12 @@ async function startSendingVideo() {
       if (!blob) return;
       busy = true;
       fetch(target, { method: "POST", body: blob,
-                      headers: { "Content-Type": "image/jpeg" } })
+                      headers: { "Content-Type": "image/jpeg",
+                                 "Authorization": "Bearer " + K } })
         .catch(() => { })
         .finally(() => { busy = false; });
     }, "image/jpeg", 0.7);
-  }, 500);  // 2fps — 門口機側 /peer-frame.jpg は 3 秒で腐る契約
+  }, 500);
 }
 
 function stopSendingVideo() {
@@ -267,41 +527,127 @@ els.sendVideo.onchange = () => {
   else stopSendingVideo();
 };
 
-// ---------- 起動 ----------
+
 async function load() {
   if (MOCK) {
     doors = [
-      { id: "d_front", label: "正面玄関", extension: "8001", station: "", online: true },
-      { id: "d_back", label: "勝手口", extension: "", station: "", online: false },
+      { id: "d_front", label: "Front door", extension: "8001", station: "", online: true },
+      { id: "d_back", label: "Back door", extension: "", station: "", online: false },
     ];
     webrtc = { ws_url: "ws://mock:8088/ws", sip_user: "260", server: "mock" };
     registered = true;
-    els.reg.textContent = "内線 260 登録済み (mock)";
+    registrationState = { state: "registered", reason: "", mock: true };
+    renderRegistration();
     selectDoor(doors[0]);
     return;
   }
   try {
+    const oldSelected = selected;
     const [st, ci] = await Promise.all([
-      fetch("/api/panel/state?k=" + encodeURIComponent(K)).then(r => r.json()),
-      fetch("/api/panel/call-info?k=" + encodeURIComponent(K)).then(r => r.json()),
+      fetch(DoorbellPanelRuntime.panelStateUrl()).then(r => {
+        if (!r.ok) { const e = new Error("state HTTP " + r.status); e.status = r.status; throw e; }
+        return r.json();
+      }),
+      fetch("/api/panel/call-info").then(r => {
+        if (!r.ok) { const e = new Error("call-info HTTP " + r.status); e.status = r.status; throw e; }
+        return r.json();
+      }),
     ]);
+    const languageDoor = oldSelected && oldSelected.id || INITIAL_DOOR ||
+      ((st.doors || []).find(door => door.calling) || {}).id || "";
+    const desiredLanguage = languageForState(st, languageDoor);
+    if (desiredLanguage !== LANG) {
+      await ensureLanguage(desiredLanguage);
+      applyI18n();
+    }
+    emergencyOverlay.update(st);
+    latestPanelState = st;
     els.offline.style.display = "none";
     webrtc = ci.webrtc || null;
     doors = (st.doors || []).map(d => {
       const info = (ci.doors || {})[d.id] || {};
       return { id: d.id, label: d.label, extension: info.extension || "",
-               station: info.station || "", online: info.online !== false };
+               station: info.station || "", online: info.online !== false,
+               source_node_id: info.source_node_id || d.source_node_id || "",
+               stream_mjpeg: info.stream_mjpeg || d.stream_mjpeg || "",
+               stream_mp4: info.stream_mp4 || d.stream_mp4 || "",
+               playback_profile: info.playback_profile || d.playback_profile || null,
+               calling: !!d.calling, call_id: d.call_id || "",
+               call_state: d.call_state || "", stage_revision: Number(d.stage_revision) || 0,
+               visitor_lang: d.visitor_lang || "",
+               dialog_owner: d.dialog_owner || "",
+               expires_at_ms: Number(d.expires_at_ms) || 0 };
     });
     renderTabs();
-    if (!selected && doors.length) selectDoor(doors[0]);
-    else updateCallButton();
+    const refreshed = oldSelected ? doors.find(d => d.id === oldSelected.id) : null;
+    if (!oldSelected && doors.length)
+      selectDoor(doors.find(d => d.id === INITIAL_DOOR) || doors[0]);
+    else if (oldSelected && !refreshed && doors.length) selectDoor(doors[0], true);
+    else if (refreshed && playbackKey(refreshed) !== playbackKey(oldSelected))
+      selectDoor(refreshed, true);
+    else { selected = refreshed; renderTabs(); updateCallButton(); }
+    if (refreshed && sessionConfirmed && activeLifecycle && refreshed.dialog_owner &&
+        activeLifecycle.owner && refreshed.dialog_owner !== activeLifecycle.owner) {
+      activeLifecycle.ended = true;
+      activeLifecycle = null;
+      setStatus(t("panel.other_answered"));
+      if (session) endCall("answered_elsewhere");
+    }
+    if (refreshed && refreshed.recovery_required && activeLifecycle && sessionConfirmed &&
+        refreshed.call_id === activeLifecycle.callId && !activeLifecycle.recoveryPending) {
+      activeLifecycle.recoveryPending = true;
+      reportRecovery(activeLifecycle, true).then(ok => {
+        if (activeLifecycle) activeLifecycle.recoveryPending = false;
+        if (!ok && session) {
+          setStatus(t("panel.recovery_failed"), true);
+          endCall("recovery_failed");
+        }
+      });
+    }
+    heartbeatLifecycle(activeLifecycle);
+    const disposition = DoorbellCallFlow.residentDisposition(
+      refreshed ? refreshed.call_state : "", sessionConfirmed, !!activeLifecycle);
+    if (disposition === "answered_elsewhere") {
+      setStatus(t("panel.other_answered"));
+      if (session) endCall();
+    }
+    if (disposition === "end") {
+      if (session) endCall();
+      setStatus(t("panel.call_ended"));
+    }
+    if (disposition === "cancelled" || disposition === "expired") {
+      setStatus(disposition === "cancelled" ? t("ring.cancelled") :
+                t("panel.call_expired"), true);
+      if (session) endCall();
+    }
     if (!ua) initUa();
+    DoorbellPanelRuntime.applySemanticUi(st, { page: "call" });
+    setTimeout(load, 2000);
   } catch (e) {
     els.offline.style.display = "block";
+    if (e && e.status === 403 && K && !sessionRefreshPending) {
+      sessionRefreshPending = true;
+      DoorbellPanelRuntime.establishSession(result => {
+        sessionRefreshPending = false;
+        setTimeout(load, result.ok ? 0 : 2000);
+      }, K);
+      return;
+    }
     setTimeout(load, 5000);
   }
 }
-load();
+async function start() {
+  await ensureLanguage(QUERY_LANG || "ja");
+  applyI18n();
+  installEmergency();
+  if (MOCK) { load(); return; }
+  DoorbellPanelRuntime.establishSession(result => {
+    K = result.credential || "";
+    if (result.ok) load();
+    else setStatus(t("panel.auth_failed"), true);
+  });
+}
+start();
 </script>
 </body>
 </html>

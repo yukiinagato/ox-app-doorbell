@@ -1,39 +1,39 @@
-**日本語**
+**English**
 
 - [Home](Home)
-- [設計理念](Design-Philosophy)
-- [機能総覧](Features)
-- [住民向け使い方](Usage-Residents)
-- [管理者ガイド](Usage-Admin)
-- [訪客体験](Usage-Visitors)
-- [アーキテクチャ](Architecture)
-- [意思決定録](Decisions)
+- [Design Philosophy](Design-Philosophy)
+- [Features](Features)
+- [For Residents](Usage-Residents)
+- [For Admins](Usage-Admin)
+- [Visitor Experience](Usage-Visitors)
+- [Architecture](Architecture)
+- [Decisions](Decisions)
 - [FAQ](FAQ)
 
 ---
 
-**English**
+**日本語**
 
-- [Home](Home-en)
-- [Design Philosophy](Design-Philosophy-en)
-- [Features](Features-en)
-- [For Residents](Usage-Residents-en)
-- [For Admins](Usage-Admin-en)
-- [Visitor Experience](Usage-Visitors-en)
-- [Architecture](Architecture-en)
-- [Decisions](Decisions-en)
-- [FAQ](FAQ-en)
+- [Home](Home-ja)
+- [設計理念](Design-Philosophy-ja)
+- [機能総覧](Features-ja)
+- [住民向け使い方](Usage-Residents-ja)
+- [管理者ガイド](Usage-Admin-ja)
+- [訪客体験](Usage-Visitors-ja)
+- [アーキテクチャ](Architecture-ja)
+- [意思決定録](Decisions-ja)
+- [FAQ](FAQ-ja)
 
 ---
 
-**中文**
+**繁體中文**
 
-- [首页](Home-zh)
-- [设计理念](Design-Philosophy-zh)
-- [功能总览](Features-zh)
-- [住户使用指南](Usage-Residents-zh)
-- [管理员指南](Usage-Admin-zh)
-- [访客体验](Usage-Visitors-zh)
-- [架构](Architecture-zh)
-- [决策记录](Decisions-zh)
+- [首頁](Home-zh)
+- [設計理念](Design-Philosophy-zh)
+- [功能總覽](Features-zh)
+- [住戶使用指南](Usage-Residents-zh)
+- [管理員指南](Usage-Admin-zh)
+- [訪客體驗](Usage-Visitors-zh)
+- [架構](Architecture-zh)
+- [決策記錄](Decisions-zh)
 - [FAQ](FAQ-zh)

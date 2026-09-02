@@ -1,8 +1,22 @@
-# 文言の単一ソース (ja が原文)。形式は 1 行 1 キーの制限付き YAML:
+# Single source for user-visible strings. The restricted YAML format uses one key per line:
 #   key.path: { ja: "…", en: "…", zh: "…" }
-# プレースホルダは {name} 形式。tools/gen_i18n.py が各プラットフォーム形式へ変換する。
+# Placeholders use {name}; tools/gen_i18n.py converts them for each platform.
 
 app.name: { ja: "ドアホン", en: "Doorbell", zh: "门铃" }
+language.name_ja: { ja: "日本語", en: "日本語", zh: "日本語" }
+language.name_en: { ja: "English", en: "English", zh: "English" }
+language.name_zh: { ja: "中文", en: "中文", zh: "中文" }
+language.name_ko: { ja: "한국어", en: "한국어", zh: "한국어" }
+language.name_pt: { ja: "Português", en: "Português", zh: "Português" }
+language.name_es: { ja: "Español", en: "Español", zh: "Español" }
+language.name_vi: { ja: "Tiếng Việt", en: "Tiếng Việt", zh: "Tiếng Việt" }
+
+sound.outdoor_call_alert: { ja: "警告音 1（室外機呼出）", en: "Alert 1 (door-station call)", zh: "警报音 1（门口机呼叫）" }
+sound.button_click: { ja: "カーソル移動 4（ボタン）", en: "Cursor move 4 (button)", zh: "光标移动 4（按钮）" }
+sound.school_chime: { ja: "学校のチャイム", en: "School chime", zh: "学校铃声" }
+sound.indoor_update: { ja: "決定ボタン 23（追加メッセージ）", en: "Confirm 23 (additional message)", zh: "确认按钮 23（追加消息）" }
+sound.title_display: { ja: "タイトル表示（起動）", en: "Title display (startup)", zh: "标题显示（启动）" }
+sound.none: { ja: "再生しない", en: "Do not play", zh: "不播放" }
 
 idle.call_button: { ja: "{unit} 呼出", en: "Call {unit}", zh: "呼叫 {unit}" }
 idle.touch_to_call: { ja: "タッチして呼び出してください", en: "Touch to call", zh: "触摸屏幕呼叫" }
@@ -24,13 +38,29 @@ ring.answer: { ja: "応答", en: "Answer", zh: "接听" }
 ring.ignore: { ja: "無視", en: "Ignore", zh: "忽略" }
 ring.monitor: { ja: "モニタ", en: "Monitor", zh: "监听" }
 ring.monitoring: { ja: "門口の音声を再生中", en: "Live door audio on", zh: "正在播放门口声音" }
+ring.cancelled: { ja: "訪客が呼び出しを取り消しました", en: "The visitor cancelled the call", zh: "访客已取消呼叫" }
+ring.unlock: { ja: "解錠", en: "Unlock", zh: "开锁" }
+ring.unlock_sent: { ja: "解錠信号を送信しました", en: "Unlock signal sent", zh: "已发送开锁信号" }
 ring.no_video: { ja: "門口機の映像がありません", en: "No video from door station", zh: "没有门口机画面" }
 
+monitor.open: { ja: "門口を見る", en: "View door stations", zh: "查看门口机" }
+monitor.choose: { ja: "見る門口機を選択", en: "Choose a door station", zh: "选择要查看的门口机" }
+monitor.title: { ja: "{device} ライブ", en: "{device} live", zh: "{device} 实时画面" }
+monitor.live: { ja: "リアルタイム映像", en: "Live video", zh: "实时画面" }
+monitor.close: { ja: "閉じる", en: "Close", zh: "关闭" }
+monitor.admin_qr: { ja: "管理ページ QR", en: "Admin page QR", zh: "管理页面二维码" }
+monitor.admin_qr_select: { ja: "管理ページの IP アドレスを選択", en: "Choose an IP address for the admin page", zh: "选择管理页面的 IP 地址" }
+monitor.admin_qr_none: { ja: "管理アドレスなし", en: "No admin address", zh: "没有管理地址" }
+
 admin.title: { ja: "管理", en: "Admin", zh: "管理" }
+admin.page_title: { ja: "ドアホン管理", en: "Doorbell Admin", zh: "门铃管理" }
+admin.language: { ja: "言語", en: "Language", zh: "语言" }
+admin.ui_style: { ja: "UI スタイル", en: "UI style", zh: "UI 样式" }
 admin.pin_prompt: { ja: "PIN を入力してください", en: "Enter PIN", zh: "请输入 PIN" }
 admin.pin_wrong: { ja: "PIN が違います", en: "Wrong PIN", zh: "PIN 错误" }
 admin.locked: { ja: "10分間ロックされました", en: "Locked for 10 minutes", zh: "已锁定 10 分钟" }
 admin.login: { ja: "ログイン", en: "Log in", zh: "登录" }
+admin.join: { ja: "既存クラスタに参加", en: "Join existing cluster", zh: "加入现有集群" }
 admin.password: { ja: "管理パスワード", en: "Admin password", zh: "管理密码" }
 admin.dashboard: { ja: "ダッシュボード", en: "Dashboard", zh: "仪表盘" }
 admin.devices: { ja: "デバイス", en: "Devices", zh: "设备" }
@@ -43,6 +73,9 @@ admin.system: { ja: "システム", en: "System", zh: "系统" }
 admin.add_device: { ja: "デバイスを追加", en: "Add device", zh: "添加设备" }
 admin.sync_state: { ja: "同期状態: {n}/{total} 台に反映済み", en: "Synced to {n}/{total} nodes", zh: "已同步 {n}/{total} 台" }
 admin.leader: { ja: "リーダー", en: "Leader", zh: "主节点" }
+admin.status: { ja: "状態", en: "Status", zh: "状态" }
+admin.duty: { ja: "duty", en: "Duty", zh: "职责" }
+admin.addresses: { ja: "アドレス", en: "Addresses", zh: "地址" }
 admin.online: { ja: "オンライン", en: "Online", zh: "在线" }
 admin.offline: { ja: "オフライン", en: "Offline", zh: "离线" }
 admin.clock_warn: { ja: "時刻未同期", en: "Clock not synced", zh: "时钟未同步" }
@@ -52,13 +85,13 @@ event.motion: { ja: "{door} で動きを検知 ({time})", en: "Motion at {door} 
 event.offline: { ja: "⚠ {device} オフライン (最終応答 {time})", en: "⚠ {device} offline (last seen {time})", zh: "⚠ {device} 离线 (最后在线 {time})" }
 event.online: { ja: "{device} オンライン復帰", en: "{device} back online", zh: "{device} 恢复在线" }
 
-# ---- SOS 緊急モード ----
+# ---- SOS emergency mode ----
 emergency.title: { ja: "緊急事態", en: "EMERGENCY", zh: "紧急情况" }
 emergency.button: { ja: "緊急", en: "SOS", zh: "紧急" }
 emergency.hold_hint: { ja: "長押しで発報 ({sec} 秒)", en: "Hold {sec}s to trigger", zh: "长按 {sec} 秒触发" }
 emergency.cancel: { ja: "解除", en: "Cancel alarm", zh: "解除警报" }
 emergency.notified: { ja: "家族に通知しました", en: "Family has been notified", zh: "已通知家人" }
-# 外部通知 (Telegram) の文言 — core の Node::text が内蔵既定として持つ
+# External Telegram notification text; Core also carries fail-safe defaults.
 emergency.notify_on: { ja: "🚨 緊急事態です — {device} から発報 ({time})", en: "🚨 Emergency — triggered by {device} ({time})", zh: "🚨 紧急情况 — 由 {device} 触发 ({time})" }
 emergency.notify_off: { ja: "✅ 緊急解除", en: "✅ Emergency cleared", zh: "✅ 警报已解除" }
 notify.test: { ja: "ドアホン テスト通知", en: "Doorbell test notification", zh: "门铃测试通知" }
@@ -69,7 +102,7 @@ reply.choose: { ja: "クイック返信を選択", en: "Choose a quick reply", z
 reply.answered: { ja: "応答済み ({text})", en: "Replied ({text})", zh: "已回复 ({text})" }
 admin.quick_replies: { ja: "クイック返信", en: "Quick replies", zh: "快捷回复" }
 
-# ---- 管理画面 (フル SPA) ----
+# ---- Admin SPA ----
 admin.households: { ja: "通知先", en: "Recipients", zh: "通知对象" }
 admin.add: { ja: "追加", en: "Add", zh: "添加" }
 admin.edit: { ja: "編集", en: "Edit", zh: "编辑" }
@@ -79,6 +112,28 @@ admin.cancel: { ja: "キャンセル", en: "Cancel", zh: "取消" }
 admin.confirm_delete: { ja: "{name} を削除しますか?", en: "Delete {name}?", zh: "要删除 {name} 吗？" }
 admin.saved: { ja: "保存しました", en: "Saved", zh: "已保存" }
 admin.save_failed: { ja: "保存に失敗しました", en: "Save failed", zh: "保存失败" }
+admin.atomic_batch_unavailable: { ja: "原子的設定 API (/api/config/batch) はこのノードで利用できません", en: "The atomic configuration API (/api/config/batch) is unavailable on this node", zh: "此节点无法使用原子配置 API (/api/config/batch)" }
+admin.no_changes: { ja: "変更はありません", en: "No changes", zh: "没有更改" }
+admin.secret_cleanup_deferred: { ja: "以前の secret {n} 件はまだ参照中か削除できないため、後で整理します", en: "Cleanup of {n} previous secret(s) was deferred because they are still referenced or could not be removed", zh: "有 {n} 个旧 secret 仍被引用或无法删除，清理已延后" }
+admin.provision_this_node: { ja: "このノードに配備", en: "Provision on this node", zh: "配置到此节点" }
+admin.secret_on_target_only: { ja: "対象ノードで設定してください", en: "Configure on the target node", zh: "请在目标节点上配置" }
+admin.secret_configured: { ja: "設定済み（変更しない場合は空欄）", en: "Configured (leave blank to keep)", zh: "已配置（留空保持不变）" }
+admin.secret_unchanged: { ja: "変更しない場合は空欄", en: "Leave blank to keep", zh: "留空保持不变" }
+admin.configured: { ja: "設定済み", en: "Configured", zh: "已配置" }
+admin.ready: { ja: "準備完了", en: "Ready", zh: "就绪" }
+admin.not_ready: { ja: "未準備", en: "Not ready", zh: "未就绪" }
+admin.web_push_backend: { ja: "Web Push 送信バックエンド", en: "Web Push sender backend", zh: "Web Push 发送后端" }
+admin.web_push_sender_url: { ja: "HTTPS 送信 URL", en: "HTTPS sender URL", zh: "HTTPS 发送 URL" }
+admin.web_push_public_key: { ja: "VAPID 公開鍵", en: "VAPID public key", zh: "VAPID 公钥" }
+admin.web_push_subject: { ja: "VAPID subject", en: "VAPID subject", zh: "VAPID 主题" }
+admin.web_push_private_key: { ja: "VAPID 秘密鍵", en: "VAPID private key", zh: "VAPID 私钥" }
+admin.web_push_use_sender_bearer: { ja: "送信サーバーの Bearer token を使用", en: "Use a sender bearer token", zh: "使用发送服务器 Bearer 令牌" }
+admin.web_push_sender_bearer: { ja: "送信サーバー Bearer token", en: "Sender bearer token", zh: "发送服务器 Bearer 令牌" }
+admin.web_push_status: { ja: "設定状態", en: "Configuration status", zh: "配置状态" }
+admin.web_push_local_secret: { ja: "本機 secret", en: "Local secret", zh: "本机 secret" }
+admin.web_push_delivery_backend: { ja: "配信バックエンド", en: "Delivery backend", zh: "投递后端" }
+admin.web_push_private_required: { ja: "VAPID 秘密鍵を入力してください", en: "Enter the VAPID private key", zh: "请输入 VAPID 私钥" }
+admin.web_push_bearer_required: { ja: "Bearer token を有効にする場合は値を入力してください", en: "Enter the bearer token when sender authentication is enabled", zh: "启用发送端认证时请输入 Bearer 令牌" }
 admin.enabled: { ja: "有効", en: "Enabled", zh: "启用" }
 admin.disabled: { ja: "無効", en: "Disabled", zh: "禁用" }
 admin.buildings: { ja: "建物", en: "Buildings", zh: "建筑" }
@@ -94,12 +149,78 @@ admin.dev_role: { ja: "役割", en: "Role", zh: "角色" }
 admin.role_door: { ja: "門口機", en: "Door station", zh: "门口机" }
 admin.role_indoor: { ja: "室内機", en: "Indoor panel", zh: "室内机" }
 admin.door_assign: { ja: "担当ドア", en: "Assigned door", zh: "负责门口" }
+setup.title: { ja: "端末を設定", en: "Set up this device", zh: "设置此设备" }
+setup.message: { ja: "続行する前に、この端末の役割を確認してください。門口機には一意のドア ID が必要です。", en: "Confirm this device's role before continuing. A door station needs a unique door ID.", zh: "请先确认此设备的角色。门口机需要唯一的门口 ID。" }
+setup.name: { ja: "端末名", en: "Device name", zh: "设备名称" }
+setup.role: { ja: "役割", en: "Role", zh: "角色" }
+setup.door: { ja: "ドア ID", en: "Door ID", zh: "门口 ID" }
+setup.door_hint: { ja: "英数字、-、_ のみ", en: "Letters, numbers, - and _ only", zh: "仅限字母、数字、- 和 _" }
+setup.finish: { ja: "保存して続行", en: "Save and continue", zh: "保存并继续" }
+setup.invalid_door: { ja: "有効なドア ID を入力してください", en: "Enter a valid door ID", zh: "请输入有效的门口 ID" }
+setup.pair_waiting: { ja: "室内機でクラスタを作成し、10 分間のペアリングを開始してください。\nこの端末は自動で参加します。参加しない場合だけ、下の室内機アドレスと PIN を入力してください。", en: "On the indoor panel, create the cluster and start 10-minute pairing.\nThis device joins automatically. Only if it does not, enter the indoor panel address and PIN below.", zh: "请在室内机创建集群并开启 10 分钟配对。\n本机将自动加入；仅在未加入时，才在下方输入室内机地址和 PIN。" }
+setup.pair_host_pin: { ja: "10 分間のペアリングを開始しました。\n門口機で「既存クラスタに参加」を選び、次を入力してください。\nアドレス: {host}\nPIN: {pin}", en: "Pairing is active for 10 minutes.\nOn the door station, choose Join existing cluster and enter:\nAddress: {host}\nPIN: {pin}", zh: "已开启 10 分钟配对。\n请在门口机选择“加入现有集群”，然后输入：\n地址：{host}\nPIN：{pin}" }
+setup.pair_primary: { ja: "この室内機を親機にしてクラスタを作成", en: "Create cluster on this indoor panel", zh: "在此室内机创建集群" }
+setup.pair_door_title: { ja: "門口機を追加", en: "Add this door station", zh: "添加此门口机" }
+setup.pair_door_message: { ja: "室内機でクラスタを作成して 10 分間のペアリングを開始してください。この門口機は自動で参加します。自動参加しない場合は室内機のアドレスと PIN を入力してください。", en: "Create the cluster on the indoor panel and start 10-minute pairing. This door station will join automatically. If it does not, enter the indoor panel address and PIN.", zh: "请在室内机创建集群并开启 10 分钟配对。本门口机会自动加入；若未加入，请输入室内机的地址和 PIN。" }
+setup.pair_wait: { ja: "自動参加を待つ", en: "Wait for automatic join", zh: "等待自动加入" }
+setup.scan_qr: { ja: "室内機の QR を読み取る", en: "Scan indoor-panel QR", zh: "扫描室内机二维码" }
+admin.clear_pairing: { ja: "この端末のペアリングを消去", en: "Clear pairing on this device", zh: "清除此设备的配对" }
+admin.fleet: { ja: "機器を管理", en: "Manage devices", zh: "管理设备" }
+admin.remove_device: { ja: "機器を削除", en: "Remove device", zh: "移出设备" }
+admin.removed: { ja: "この端末はクラスタから削除されました", en: "This device was removed from the cluster", zh: "此设备已被移出集群" }
+setup.or_join_pin: { ja: "── または PIN で参加 ──", en: "── Or join with a PIN ──", zh: "── 或使用 PIN 加入 ──" }
+setup.join_host: { ja: "接続先（例: 10.0.1.5:47172）", en: "Join address (for example, 10.0.1.5:47172)", zh: "连接地址（例如 10.0.1.5:47172）" }
+setup.join_pin: { ja: "PIN で参加", en: "Join with PIN", zh: "使用 PIN 加入" }
+setup.new_cluster: { ja: "── 新規クラスタ ──", en: "── New cluster ──", zh: "── 新建集群 ──" }
+setup.confirm_new_cluster: { ja: "もう一度タップして新規作成（既存クラスタへ参加する場合はキャンセル）", en: "Tap again to create a cluster (cancel to join an existing cluster)", zh: "再次点击以新建集群（如需加入现有集群请取消）" }
+setup.join_failed: { ja: "参加できませんでした: {error}", en: "Could not join: {error}", zh: "无法加入：{error}" }
+setup.new_cluster_failed: { ja: "新規クラスタを作成できませんでした", en: "Could not create a new cluster", zh: "无法新建集群" }
+setup.join_required: { ja: "接続先と PIN を入力してください", en: "Enter the join address and PIN", zh: "请输入连接地址和 PIN" }
+info.title: { ja: "本機情報 / Debug", en: "Device information / Debug", zh: "本机信息 / 调试" }
+info.device: { ja: "端末", en: "Device", zh: "设备" }
+info.system: { ja: "システム", en: "System", zh: "系统" }
+info.model: { ja: "モデル", en: "Model", zh: "型号" }
+info.machine: { ja: "ホスト名", en: "Machine", zh: "主机名" }
+info.memory: { ja: "メモリ", en: "Memory", zh: "内存" }
+info.uptime: { ja: "稼働時間", en: "Uptime", zh: "运行时间" }
+info.runtime: { ja: "実行状態", en: "Runtime", zh: "运行状态" }
+info.components: { ja: "コンポーネント", en: "Components", zh: "组件" }
+info.capabilities: { ja: "能力", en: "Capabilities", zh: "能力" }
+info.peers: { ja: "接続ノード", en: "Peers", zh: "节点" }
+info.active_calls: { ja: "進行中の呼出", en: "Active calls", zh: "进行中的呼叫" }
+info.no_data: { ja: "データなし", en: "No data", zh: "无数据" }
+info.refresh: { ja: "更新", en: "Refresh", zh: "刷新" }
+info.node: { ja: "ノード", en: "Node", zh: "节点" }
+info.role: { ja: "役割", en: "Role", zh: "角色" }
+info.version: { ja: "バージョン", en: "Version", zh: "版本" }
+info.microphone: { ja: "マイク", en: "Microphone", zh: "麦克风" }
+info.camera: { ja: "カメラ", en: "Camera", zh: "摄像头" }
+info.external_present: { ja: "有（外付け）", en: "Present (external)", zh: "有（外接）" }
+info.absent: { ja: "無", en: "Absent", zh: "无" }
+info.camera_absent_ipad1: { ja: "無（iPad 1 はカメラ非搭載）", en: "Absent (iPad 1 has no camera)", zh: "无（iPad 1 未配备摄像头）" }
+info.network: { ja: "ネットワーク", en: "Network", zh: "网络" }
+info.unknown: { ja: "不明", en: "Unknown", zh: "未知" }
+info.battery: { ja: "バッテリー", en: "Battery", zh: "电池" }
+info.ports: { ja: "監視ポート", en: "Listening ports", zh: "监听端口" }
+info.port_closed: { ja: "閉", en: "Closed", zh: "关闭" }
+info.sip_direct: { ja: "UDP（直接呼出）", en: "UDP (direct call)", zh: "UDP（直接呼叫）" }
+info.triggers: { ja: "呼出", en: "Calls", zh: "呼叫" }
+info.total_press: { ja: "累計呼出回数", en: "Total button presses", zh: "累计按铃次数" }
+info.last_press: { ja: "最新呼出", en: "Latest button press", zh: "最近按铃" }
+info.no_press: { ja: "まだありません", en: "None yet", zh: "暂无" }
+info.addresses: { ja: "本機の全アドレス", en: "All local addresses", zh: "本机全部地址" }
+info.addresses_loading: { ja: "取得中… ネットワーク未接続の可能性があります", en: "Loading… The network may be disconnected", zh: "正在获取… 网络可能未连接" }
+info.address_cycle: { ja: "アドレス切替 ({current}/{total}) ▸", en: "Change address ({current}/{total}) ▸", zh: "切换地址 ({current}/{total}) ▸" }
+info.no_address: { ja: "アドレスなし", en: "No address", zh: "无地址" }
+info.scan_admin: { ja: "スキャンして管理ページを開く:", en: "Scan to open the Admin page:", zh: "扫描以打开管理页面：" }
 admin.camera: { ja: "カメラ", en: "Camera", zh: "摄像头" }
 admin.cam_fps: { ja: "フレームレート (fps)", en: "Frame rate (fps)", zh: "帧率 (fps)" }
 admin.cam_quality: { ja: "JPEG 品質", en: "JPEG quality", zh: "JPEG 质量" }
 admin.cam_resolution: { ja: "解像度", en: "Resolution", zh: "分辨率" }
 admin.cam_hint: { ja: "カメラ指定 (device hint)", en: "Device hint", zh: "摄像头指定" }
 admin.cam_codec: { ja: "映像コーデック", en: "Video codec", zh: "视频编码" }
+admin.video_rotation: { ja: "映像の回転角度", en: "Video rotation", zh: "视频旋转角度" }
+admin.rotation_auto: { ja: "自動 (端末の姿勢センサ)", en: "Auto (device orientation sensor)", zh: "自动（设备姿态传感器）" }
 admin.codec_auto: { ja: "自動 (対応機なら H.264)", en: "Auto (H.264 if supported)", zh: "自动 (支持则 H.264)" }
 admin.cam_h264_resolution: { ja: "H.264 解像度", en: "H.264 resolution", zh: "H.264 分辨率" }
 admin.cam_h264_fps: { ja: "H.264 フレームレート (fps)", en: "H.264 frame rate (fps)", zh: "H.264 帧率 (fps)" }
@@ -117,6 +238,7 @@ admin.when_offline: { ja: "デバイス離線", en: "Device offline", zh: "设�
 admin.rule_doors: { ja: "対象ドア", en: "Target doors", zh: "目标门口" }
 admin.rule_devices: { ja: "対象デバイス", en: "Target devices", zh: "目标设备" }
 admin.all: { ja: "すべて", en: "All", zh: "全部" }
+admin.unchecked_all: { ja: "未選択の場合はすべて", en: "No selection means all", zh: "未选择表示全部" }
 admin.schedule: { ja: "スケジュール", en: "Schedule", zh: "时间表" }
 admin.always: { ja: "常時", en: "Always", zh: "全天" }
 admin.windows: { ja: "時間帯", en: "Time windows", zh: "时间段" }
@@ -142,6 +264,7 @@ admin.pass: { ja: "パスワード", en: "Password", zh: "密码" }
 admin.bot_token: { ja: "Bot token (書込のみ・表示されません)", en: "Bot token (write-only)", zh: "Bot token (仅写入)" }
 admin.poll_updates: { ja: "返信ボタンを受信 (getUpdates)", en: "Receive replies (getUpdates)", zh: "接收回复按钮 (getUpdates)" }
 admin.test_send: { ja: "テスト送信", en: "Send test", zh: "发送测试" }
+admin.telegram_test_chat: { ja: "chat_id（空欄 = 全通知先）", en: "chat_id (blank = all recipients)", zh: "chat_id（留空 = 所有通知对象）" }
 admin.test_sent: { ja: "テスト通知を送信しました", en: "Test message queued", zh: "已发送测试通知" }
 admin.err_not_leader: { ja: "この端末は telegram leader ではありません", en: "This node is not the telegram leader", zh: "此设备不是 telegram 主节点" }
 admin.err_no_token: { ja: "bot token が未設定です", en: "Bot token is not set", zh: "未设置 bot token" }
@@ -153,6 +276,9 @@ admin.quiet_hours: { ja: "静音時間帯", en: "Quiet hours", zh: "静音时段
 admin.suppress: { ja: "抑制する", en: "Suppress", zh: "抑制" }
 admin.never_suppress: { ja: "常に許可", en: "Never suppress", zh: "始终允许" }
 admin.filter_type: { ja: "種別で絞り込み", en: "Filter by type", zh: "按类型筛选" }
+admin.audio: { ja: "音声", en: "Audio", zh: "音频" }
+admin.door_or_device: { ja: "ドア／機器", en: "Door / device", zh: "门口 / 设备" }
+admin.details: { ja: "詳細", en: "Details", zh: "详情" }
 admin.export: { ja: "エクスポート", en: "Export", zh: "导出" }
 admin.import: { ja: "インポート", en: "Import", zh: "导入" }
 admin.import_hint: { ja: "エクスポートした JSON を貼り付けてください (フラット化して書き込みます)", en: "Paste exported JSON (flattened and written key by key)", zh: "粘贴导出的 JSON（拆平后逐项写入）" }
@@ -174,8 +300,32 @@ admin.pair_self_unpaired: { ja: "この端末はまだクラスタに参加し�
 admin.pair_found: { ja: "この端末を親機にする (新規作成)", en: "Make this the primary (create new)", zh: "将此设备设为主机（新建）" }
 admin.pair_found_confirm: { ja: "この端末を親機にして新しいクラスタを作成しますか?", en: "Make this device the primary and create a new cluster?", zh: "将此设备设为主机并新建集群吗？" }
 admin.pair_found_ok: { ja: "この端末を親機にしました", en: "This device is now the primary", zh: "已将此设备设为主机" }
+admin.pair_secure_failed: { ja: "配対鍵を安全に保存できませんでした。ストレージと権限を確認してください。", en: "The pairing key could not be stored securely. Check storage and permissions.", zh: "无法安全保存配对密钥。请检查存储空间和权限。" }
+admin.helper_mode: { ja: "保活ヘルパー", en: "Recovery helper", zh: "保活辅助程序" }
+admin.helper_auto: { ja: "自動", en: "Auto", zh: "自动" }
+admin.helper_on: { ja: "常に有効", en: "Always on", zh: "始终启用" }
+admin.helper_off: { ja: "無効", en: "Off", zh: "关闭" }
+admin.web_sos_title: { ja: "Web SOS 警報", en: "Web SOS alerts", zh: "Web SOS 警报" }
+admin.web_sos_enabled: { ja: "開いている Web パネルに SOS を表示", en: "Show replicated SOS on open Web panels", zh: "在已打开的 Web 面板显示 SOS" }
+admin.web_sos_warning: { ja: "無効時は、その Web グループ宛の device_alert または Web Push が届いた場合だけ表示します。", en: "When disabled, an open Web panel shows SOS only when a matching device_alert or Web Push is delivered.", zh: "关闭后，已打开的 Web 面板仅在收到匹配的 device_alert 或 Web Push 时显示 SOS。" }
+admin.sos_active: { ja: "緊急 SOS 発報中", en: "Emergency SOS active", zh: "紧急 SOS 已触发" }
+admin.sos_clear_audit: { ja: "解除操作は管理セッションとして記録され、全ノードへ同期されます。", en: "The clear action is recorded under the Admin session and synchronized to every node.", zh: "解除操作会记录到管理会话并同步到所有节点。" }
+admin.sos_clear_confirm: { ja: "緊急 SOS を解除しますか？", en: "Clear the emergency SOS?", zh: "要解除紧急 SOS 吗？" }
+admin.sos_cleared: { ja: "緊急 SOS を解除しました", en: "Emergency SOS cleared", zh: "紧急 SOS 已解除" }
+admin.sos_clear_failed: { ja: "緊急 SOS の解除に失敗しました", en: "Failed to clear emergency SOS", zh: "解除紧急 SOS 失败" }
+admin.runtime_health: { ja: "実行状態", en: "Runtime health", zh: "运行状态" }
+admin.runtime_safe_mode: { ja: "セーフモード", en: "Safe mode", zh: "安全模式" }
+admin.runtime_helper: { ja: "保活ヘルパー", en: "Helper", zh: "保活辅助程序" }
+admin.runtime_codec: { ja: "メディア", en: "Media", zh: "媒体" }
+admin.runtime_last_exit: { ja: "前回終了", en: "Last exit", zh: "上次退出" }
+admin.runtime_alert: { ja: "SOS 配信", en: "SOS delivery", zh: "SOS 投递" }
+admin.runtime_heartbeat: { ja: "ハートビート", en: "Heartbeat", zh: "心跳" }
+admin.runtime_unreported: { ja: "未報告", en: "Not reported", zh: "未报告" }
 admin.logs: { ja: "ログ", en: "Logs", zh: "日志" }
 admin.raw_config: { ja: "設定 (生 JSON・読取)", en: "Config (raw JSON, read-only)", zh: "配置 (原始 JSON，只读)" }
+admin.config_value_placeholder: { ja: "{\"ja\":\"正面玄関\"}", en: "{\"en\":\"Front door\"}", zh: "{\"zh\":\"正门\"}" }
+admin.write: { ja: "書込", en: "Write", zh: "写入" }
+admin.valid_json_required: { ja: "有効な JSON 値を入力してください", en: "Enter a valid JSON value", zh: "请输入有效的 JSON 值" }
 day.mon: { ja: "月", en: "Mon", zh: "一" }
 day.tue: { ja: "火", en: "Tue", zh: "二" }
 day.wed: { ja: "水", en: "Wed", zh: "三" }
@@ -183,6 +333,7 @@ day.thu: { ja: "木", en: "Thu", zh: "四" }
 day.fri: { ja: "金", en: "Fri", zh: "五" }
 day.sat: { ja: "土", en: "Sat", zh: "六" }
 day.sun: { ja: "日", en: "Sun", zh: "日" }
+date.full: { ja: "{year}年{month}月{day}日 ({weekday})", en: "{year}-{month}-{day} ({weekday})", zh: "{year}年{month}月{day}日（{weekday}）" }
 
 panel.title: { ja: "呼出パネル", en: "Call panel", zh: "呼叫面板" }
 panel.calling: { ja: "呼び出し中→通知済み", en: "Calling → notified", zh: "呼叫中→已通知" }
@@ -191,24 +342,240 @@ panel.monitor_title: { ja: "受鈴モニター", en: "Ring monitor", zh: "受铃
 panel.offline: { ja: "オフライン — 再接続中…", en: "Offline — reconnecting…", zh: "离线 — 重连中…" }
 panel.tap_sound: { ja: "タップして音を有効化", en: "Tap to enable sound", zh: "点按以启用声音" }
 panel.press_hint: { ja: "ボタンを押すと住人に通知します", en: "Press a button to notify the resident", zh: "按下按钮即可通知住户" }
+panel.call_title: { ja: "通話パネル", en: "Call panel", zh: "通话面板" }
+panel.no_video: { ja: "映像なし", en: "No video", zh: "无画面" }
+panel.call: { ja: "通話", en: "Call", zh: "通话" }
+panel.send_video: { ja: "映像も送る", en: "Send video too", zh: "同时发送视频" }
+panel.visitor_calling: { ja: "来客呼出中", en: "Visitor calling", zh: "访客呼叫中" }
+panel.extension: { ja: "内線 {extension}", en: "Extension {extension}", zh: "分机 {extension}" }
+panel.no_extension: { ja: "内線なし", en: "No extension", zh: "无分机" }
+panel.webrtc_required: { ja: "通話には Asterisk の WebRTC 設定 (integrations.webrtc.ws_url) が必要です — deploy/asterisk/webrtc.md を参照してください", en: "Calling requires Asterisk WebRTC configuration (integrations.webrtc.ws_url) — see deploy/asterisk/webrtc.md", zh: "通话需要配置 Asterisk WebRTC (integrations.webrtc.ws_url) — 请参阅 deploy/asterisk/webrtc.md" }
+panel.extension_unconfigured: { ja: "この玄関には内線 (sip.accounts) が設定されていません", en: "This door has no extension configured in sip.accounts", zh: "此门口尚未在 sip.accounts 中配置分机" }
+panel.lifecycle_identity_missing: { ja: "呼出の識別情報がないため、安全に応答できません", en: "This call cannot be answered safely because its lifecycle identity is unavailable", zh: "呼叫缺少生命周期标识，无法安全接听" }
+panel.dialog_identity_missing: { ja: "安全なブラウザ通話識別子を作成できなかったため、通話を開始しませんでした", en: "A secure browser dialog identity is unavailable; the call was not started", zh: "无法创建安全的浏览器通话标识，通话未开始" }
+panel.registered: { ja: "内線 {extension} 登録済み", en: "Extension {extension} registered", zh: "分机 {extension} 已注册" }
+panel.unregistered: { ja: "未登録", en: "Not registered", zh: "未注册" }
+panel.registration_failed: { ja: "登録失敗 ({reason})", en: "Registration failed ({reason})", zh: "注册失败 ({reason})" }
+panel.jssip_init_failed: { ja: "JsSIP 初期化失敗: {reason}", en: "JsSIP initialization failed: {reason}", zh: "JsSIP 初始化失败: {reason}" }
+panel.answering: { ja: "応答中…", en: "Answering…", zh: "正在接听…" }
+panel.call_failed: { ja: "通話失敗 ({reason})", en: "Call failed ({reason})", zh: "通话失败 ({reason})" }
+panel.lifecycle_connected_sync_failed: { ja: "通話は接続しましたが、状態同期に失敗したため安全に終了します", en: "The call connected, but lifecycle synchronization failed; ending it safely", zh: "通话已连接，但生命周期同步失败，将安全结束通话" }
+panel.lifecycle_end_sync_failed: { ja: "SIP 通話は終了しましたが、状態同期に失敗しました", en: "The SIP call ended, but lifecycle synchronization failed", zh: "SIP 通话已结束，但生命周期同步失败" }
+panel.lifecycle_heartbeat_failed: { ja: "通話状態のハートビートに失敗したため、安全に終了します", en: "The call lifecycle heartbeat failed; ending it safely", zh: "通话生命周期心跳失败，将安全结束通话" }
+panel.recovery_failed: { ja: "通話状態を復元できなかったため、安全に終了します", en: "The active call could not be restored; ending it safely", zh: "无法恢复通话状态，将安全结束通话" }
+panel.camera_failed: { ja: "カメラ取得失敗 ({reason}) — HTTPS または localhost が必要です (webrtc.md §1)", en: "Camera access failed ({reason}) — HTTPS or localhost is required (webrtc.md §1)", zh: "获取摄像头失败 ({reason}) — 需要 HTTPS 或 localhost (webrtc.md §1)" }
+panel.other_answered: { ja: "別の端末が先に応答しました", en: "Another device answered this call first", zh: "其他设备已先接听此呼叫" }
+panel.call_ended: { ja: "通話は終了しました", en: "The call has ended", zh: "通话已结束" }
+panel.call_expired: { ja: "呼出は期限切れになりました", en: "The call expired", zh: "呼叫已过期" }
+panel.auth_failed: { ja: "パネル認証に失敗しました", en: "Panel authentication failed", zh: "面板认证失败" }
+panel.mock_incall: { ja: "通話中 (mock)", en: "In call (mock)", zh: "通话中 (mock)" }
+panel.mock_registered: { ja: "内線 {extension} 登録済み (mock)", en: "Extension {extension} registered (mock)", zh: "分机 {extension} 已注册 (mock)" }
+panel.back: { ja: "戻る", en: "Back", zh: "返回" }
+panel.not_sent: { ja: "まだ発報していません", en: "Not sent yet", zh: "尚未发出呼叫" }
+panel.sending: { ja: "送信中…", en: "Sending…", zh: "发送中…" }
+panel.deadline_reached: { ja: "呼出期限に達しました — 終了状態を確認中です", en: "The call deadline was reached — checking the terminal state", zh: "已到呼叫期限 — 正在确认结束状态" }
+panel.press_failed: { ja: "呼出に失敗しました{reason}", en: "Call request failed{reason}", zh: "呼叫请求失败{reason}" }
+panel.resident_notified: { ja: "住人へ通知しました", en: "The resident has been notified", zh: "已通知住户" }
+panel.resident_notified_no_cancel: { ja: "住人へ通知しました — このノードは call_id を使う安全な取消に対応していません", en: "The resident has been notified — this node does not support safe call_id cancellation", zh: "已通知住户 — 此节点不支持使用 call_id 安全取消" }
+panel.purpose_call_missing: { ja: "call_id がないため用件を安全に関連付けできません", en: "The purpose cannot be linked safely because call_id is unavailable", zh: "缺少 call_id，无法安全关联来访目的" }
+panel.purpose_sending: { ja: "用件を送信中…", en: "Sending purpose…", zh: "正在发送来访目的…" }
+panel.purpose_delivered: { ja: "用件を住人へ伝えました", en: "The purpose was sent to the resident", zh: "已将来访目的告知住户" }
+panel.purpose_failed: { ja: "用件の送信に失敗しました{reason}", en: "Failed to send the purpose{reason}", zh: "发送来访目的失败{reason}" }
+panel.cancel_missing_id: { ja: "call_id がないため安全な取消 API を使用できません", en: "Safe cancellation is unavailable because call_id is missing", zh: "缺少 call_id，无法使用安全取消 API" }
+panel.call_ending: { ja: "通話を終了中…", en: "Ending call…", zh: "正在结束通话…" }
+panel.cancel_sending: { ja: "取消しを送信中…", en: "Sending cancellation…", zh: "正在发送取消请求…" }
+panel.call_end_accepted: { ja: "通話終了を受理しました — 状態同期を待っています", en: "Call end accepted — waiting for state synchronization", zh: "已接受结束通话 — 正在等待状态同步" }
+panel.cancel_accepted: { ja: "取消しを受理しました — 状態同期を待っています", en: "Cancellation accepted — waiting for state synchronization", zh: "已接受取消 — 正在等待状态同步" }
+panel.call_end_unavailable: { ja: "このノードでは通話終了 API を使用できません", en: "The call-end API is unavailable on this node", zh: "此节点无法使用结束通话 API" }
+panel.cancel_unavailable: { ja: "このノードでは安全な取消 API を使用できません", en: "The safe cancellation API is unavailable on this node", zh: "此节点无法使用安全取消 API" }
+panel.call_end_failed: { ja: "通話終了に失敗しました{reason}", en: "Failed to end the call{reason}", zh: "结束通话失败{reason}" }
+panel.cancel_failed: { ja: "取消しに失敗しました{reason}", en: "Cancellation failed{reason}", zh: "取消失败{reason}" }
+panel.resident_answered: { ja: "住人が応答しました", en: "The resident answered", zh: "住户已接听" }
+panel.call_cancelled: { ja: "呼出を取り消しました", en: "The call was cancelled", zh: "呼叫已取消" }
+panel.call_finished: { ja: "呼出は終了しました", en: "The call has finished", zh: "呼叫已结束" }
+panel.new_call_detected: { ja: "新しい呼出を検出しました — 状態を更新します", en: "A new call was detected — refreshing state", zh: "检测到新呼叫 — 正在刷新状态" }
+panel.push_enable: { ja: "通知を有効にする", en: "Enable notifications", zh: "启用通知" }
+panel.push_disable: { ja: "通知を無効にする", en: "Disable notifications", zh: "禁用通知" }
+panel.push_enabled: { ja: "通知は有効です", en: "Notifications are enabled", zh: "通知已启用" }
+panel.push_disabled: { ja: "通知は無効です", en: "Notifications are disabled", zh: "通知已禁用" }
+panel.push_enabling: { ja: "通知を有効にしています…", en: "Enabling notifications…", zh: "正在启用通知…" }
+panel.push_disabling: { ja: "通知を無効にしています…", en: "Disabling notifications…", zh: "正在禁用通知…" }
+panel.push_unavailable: { ja: "このブラウザまたはノードでは Web Push を使用できません", en: "Web Push is unavailable in this browser or on this node", zh: "此浏览器或节点无法使用 Web Push" }
+panel.push_failed: { ja: "通知設定に失敗しました", en: "Notification setup failed", zh: "通知设置失败" }
+panel.event_time: { ja: "時刻", en: "Time", zh: "时间" }
+panel.event_type: { ja: "種別", en: "Type", zh: "类型" }
+panel.event_door: { ja: "ドア", en: "Door", zh: "门口" }
+panel.event_press: { ja: "呼出", en: "Call", zh: "呼叫" }
+panel.event_motion: { ja: "動体検知", en: "Motion", zh: "移动侦测" }
+panel.event_call_answered: { ja: "応答", en: "Call answered", zh: "呼叫已接听" }
+panel.event_call_cancelled: { ja: "呼出取消", en: "Call cancelled", zh: "呼叫已取消" }
+panel.event_call_ended: { ja: "通話終了", en: "Call ended", zh: "通话已结束" }
+panel.event_delivery_result: { ja: "配信結果", en: "Delivery result", zh: "投递结果" }
+panel.event_dtmf_action: { ja: "DTMF 操作", en: "DTMF action", zh: "DTMF 操作" }
+panel.event_purpose_selected: { ja: "用件選択", en: "Purpose selected", zh: "已选择来访目的" }
+panel.event_reply: { ja: "返信", en: "Reply", zh: "回复" }
+panel.event_auto_reply: { ja: "自動返信", en: "Automatic reply", zh: "自动回复" }
+panel.event_chime: { ja: "チャイム", en: "Chime", zh: "门铃声" }
+panel.event_device_alert: { ja: "端末警報", en: "Device alert", zh: "设备警报" }
+panel.event_emergency: { ja: "緊急発報", en: "Emergency", zh: "紧急警报" }
+panel.event_emergency_cancel: { ja: "緊急解除", en: "Emergency cleared", zh: "紧急警报已解除" }
+panel.event_ha_command: { ja: "HA コマンド", en: "HA command", zh: "HA 命令" }
+panel.event_ha_event: { ja: "HA イベント", en: "HA event", zh: "HA 事件" }
+panel.event_hangup: { ja: "切断", en: "Hangup", zh: "挂断" }
+panel.event_sip_call: { ja: "SIP 発呼", en: "SIP call", zh: "SIP 呼叫" }
+panel.event_telegram: { ja: "Telegram 通知", en: "Telegram notification", zh: "Telegram 通知" }
+panel.event_visitor_lang: { ja: "言語変更", en: "Language changed", zh: "语言已更改" }
+panel.event_quick_reply: { ja: "クイック返信", en: "Quick reply", zh: "快捷回复" }
+reply.failed: { ja: "クイック返信の送信に失敗しました", en: "Failed to send the quick reply", zh: "发送快捷回复失败" }
+emergency.active_detail: { ja: "緊急モードが発報されています", en: "Emergency mode is active", zh: "紧急模式已触发" }
+emergency.clear_instruction: { ja: "解除は管理画面または端末の PIN 操作で行ってください。", en: "Clear the alarm from Admin or with the device PIN.", zh: "请从管理页面或使用设备 PIN 解除警报。" }
 
-# ---- 批次② UI (テーマ/言語/用件/資産) ----
+# ---- UI theme, language, purpose, and asset strings ----
 idle.choose_purpose: { ja: "ご用件をお選びください", en: "Please choose your purpose", zh: "请选择来访目的" }
 idle.language: { ja: "言語", en: "Language", zh: "语言" }
 purpose.sent: { ja: "{purpose} で呼び出しました", en: "Called as {purpose}", zh: "已按 {purpose} 呼叫" }
+purpose.skip: { ja: "用件を選ばず続ける", en: "Skip purpose", zh: "跳过来访目的" }
+purpose.cancel_call: { ja: "呼び出しを取り消す", en: "Cancel call", zh: "取消呼叫" }
 ring.purpose_badge: { ja: "用件: {purpose}", en: "Purpose: {purpose}", zh: "目的: {purpose}" }
 ring.lang_badge: { ja: "訪客言語: {lang}", en: "Visitor language: {lang}", zh: "访客语言: {lang}" }
 admin.assets: { ja: "資産 (画像・音声)", en: "Assets", zh: "资源 (图片/音频)" }
 admin.assets_upload: { ja: "アップロード", en: "Upload", zh: "上传" }
 admin.assets_cached: { ja: "キャッシュ: {n}/{total} 台", en: "Cached on {n}/{total} nodes", zh: "已缓存 {n}/{total} 台" }
+admin.assets_empty: { ja: "登録済みの資産はありません", en: "No assets are registered", zh: "尚未注册资源" }
+admin.asset_label: { ja: "ラベル", en: "Label", zh: "标签" }
+admin.asset_type: { ja: "種類", en: "Type", zh: "类型" }
+admin.asset_size: { ja: "サイズ", en: "Size", zh: "大小" }
+admin.asset_used_by: { ja: "使用箇所", en: "Used by", zh: "使用位置" }
+admin.asset_unused: { ja: "未使用", en: "Unused", zh: "未使用" }
+admin.asset_choose_file: { ja: "ファイルを選択", en: "Choose file", zh: "选择文件" }
+admin.asset_file_hint: { ja: "画像または音声ファイルを選択してください", en: "Choose an image or audio file", zh: "请选择图片或音频文件" }
+admin.asset_label_hint: { ja: "管理用ラベル（任意）", en: "Optional administrative label", zh: "可选的管理标签" }
+admin.asset_prefetch_hint: { ja: "対象端末へ事前配信", en: "Prefetch to target devices", zh: "预取到目标设备" }
+admin.asset_format_unsupported: { ja: "対応していないファイル形式です", en: "Unsupported file format", zh: "不支持的文件格式" }
+admin.asset_too_large: { ja: "ファイルが大きすぎます（{size}）", en: "The file is too large ({size})", zh: "文件过大（{size}）" }
+admin.file_read_failed: { ja: "ファイルを読み込めませんでした", en: "Failed to read the file", zh: "读取文件失败" }
+admin.uploading: { ja: "アップロード中…", en: "Uploading…", zh: "正在上传…" }
+admin.asset_registered: { ja: "資産を登録しました: {info}", en: "Asset registered: {info}", zh: "资源已注册：{info}" }
+admin.asset_failed: { ja: "資産の登録に失敗しました: {info}", en: "Failed to register the asset: {info}", zh: "资源注册失败：{info}" }
+admin.asset_delete_in_use: { ja: "{name} は {count} 箇所で使用中です:\n{locations}\n削除しますか？", en: "{name} is used in {count} locations:\n{locations}\nDelete it?", zh: "{name} 正在 {count} 处使用：\n{locations}\n仍要删除吗？" }
+admin.image_resize_unavailable: { ja: "このブラウザでは画像を縮小できません", en: "This browser cannot resize images", zh: "此浏览器无法缩放图片" }
+admin.image_read_failed: { ja: "画像を読み込めませんでした", en: "Failed to read the image", zh: "读取图片失败" }
+admin.image_resize_failed: { ja: "画像の縮小に失敗しました", en: "Failed to resize the image", zh: "图片缩放失败" }
+admin.image_resize_too_large: { ja: "縮小後も画像が大きすぎます", en: "The resized image is still too large", zh: "缩放后的图片仍然过大" }
+admin.image_resizing: { ja: "画像を縮小しています（{size}）…", en: "Resizing image ({size})…", zh: "正在缩放图片（{size}）…" }
+admin.image_resize_error: { ja: "画像の縮小に失敗しました: {error}", en: "Failed to resize the image: {error}", zh: "图片缩放失败：{error}" }
+admin.image_resized: { ja: "画像を {before} から {after} に縮小しました", en: "Image resized from {before} to {after}", zh: "图片已从 {before} 缩放至 {after}" }
+admin.audio_too_large: { ja: "音声ファイルが大きすぎます（{size}）", en: "The audio file is too large ({size})", zh: "音频文件过大（{size}）" }
+admin.sound_manager: { ja: "サウンド管理", en: "Sound manager", zh: "声音管理" }
+admin.sound_manager_hint: { ja: "各画面で使用する音声資産を選択します", en: "Choose the audio assets used by each screen", zh: "选择各界面使用的音频资源" }
+admin.launch_sound: { ja: "起動音", en: "Launch sound", zh: "启动音" }
+admin.door_call_sound: { ja: "室外機の呼出音", en: "Door-station call sound", zh: "门口机呼叫音" }
+admin.call_sound_loop: { ja: "呼出音を繰り返す", en: "Loop the call sound", zh: "循环呼叫音" }
+admin.button_sound: { ja: "ボタン音", en: "Button sound", zh: "按键音" }
+admin.indoor_ringtone: { ja: "室内機の着信音", en: "Indoor ringtone", zh: "室内机铃声" }
+admin.update_sound: { ja: "更新音", en: "Update sound", zh: "更新提示音" }
 admin.theme: { ja: "テーマ (背景)", en: "Theme", zh: "主题 (背景)" }
 admin.theme_bg_color: { ja: "背景色", en: "Background color", zh: "背景色" }
 admin.theme_bg_image: { ja: "背景画像", en: "Background image", zh: "背景图片" }
 admin.theme_preview: { ja: "プレビュー", en: "Preview", zh: "预览" }
+admin.theme_global_default: { ja: "全体既定", en: "Global default", zh: "全局默认" }
+admin.theme_global_hint: { ja: "すべての端末に適用する既定テーマです", en: "Default theme applied to all devices", zh: "应用于所有设备的默认主题" }
+admin.theme_device_hint: { ja: "この端末だけのテーマ上書きです", en: "Theme override for this device only", zh: "仅适用于此设备的主题覆盖" }
+admin.theme_sync_hint: { ja: "変更は対象端末へ同期されます", en: "Changes are synchronized to target devices", zh: "更改将同步到目标设备" }
+admin.theme_override_here: { ja: "この端末で上書き", en: "Override on this device", zh: "在此设备上覆盖" }
+admin.theme_override_name: { ja: "端末別上書き: {name}", en: "Device override: {name}", zh: "设备覆盖：{name}" }
+admin.theme_no_image: { ja: "背景画像なし", en: "No background image", zh: "无背景图片" }
+admin.theme_image_hint: { ja: "登録済み画像資産を選択してください", en: "Choose a registered image asset", zh: "请选择已注册的图片资源" }
+admin.theme_reset_override: { ja: "端末別上書きを解除", en: "Reset device override", zh: "重置设备覆盖" }
+admin.native_ui: { ja: "ネイティブ UI", en: "Native UI", zh: "原生 UI" }
+admin.web_ui: { ja: "Web UI", en: "Web UI", zh: "Web UI" }
+admin.native_ui_apply_report: { ja: "ネイティブ UI 適用結果", en: "Native client apply report", zh: "原生客户端应用结果" }
+admin.web_ui_apply_report: { ja: "Web UI 適用結果", en: "Web panel apply report", zh: "Web 面板应用结果" }
+admin.ui_offline_queued: { ja: "デバイスはオフラインです。検証済みの変更は再接続時まで待機します。", en: "The device is offline; validated changes are queued until it reconnects.", zh: "设备处于离线状态；已验证的更改将在重新连接后应用。" }
+admin.ui_manifest_unreported: { ja: "ui_manifest を利用できません。このノードは runtime capability を報告していません。", en: "ui_manifest is unavailable because this node has not reported the runtime capability.", zh: "ui_manifest 不可用；此节点未报告运行时能力。" }
+admin.ui_manifest_readonly: { ja: "Manifest は client capability のため読取専用です。保存先は elements.<semantic_id> のみです。", en: "The manifest is a read-only client capability; only elements.<semantic_id> values are saved.", zh: "Manifest 是只读客户端能力；仅保存 elements.<semantic_id> 值。" }
+admin.ui_legacy_hint: { ja: "legacy .style は初期値の参考にのみ使用します。", en: "Legacy .style is used only as an initial-value hint.", zh: "旧版 .style 仅用于初始值参考。" }
+admin.alert_background: { ja: "SOS 背景色", en: "SOS background", zh: "SOS 背景色" }
+admin.alert_foreground: { ja: "SOS 文字色", en: "SOS text", zh: "SOS 文字颜色" }
+admin.alert_accent: { ja: "SOS アクセント色", en: "SOS accent", zh: "SOS 强调色" }
+admin.sos_warn_unsupported_channels: { ja: "対象デバイスは要求された通知チャネルをサポートしていません", en: "Target devices do not support requested channels", zh: "目标设备不支持所请求的通知通道" }
+admin.sos_warn_unavailable_channels: { ja: "要求された通知チャネルは利用できないか、権限がありません", en: "Requested channels are unavailable or lack permission", zh: "所请求的通知通道不可用或缺少权限" }
+admin.sos_warn_unknown_channels: { ja: "ローリングアップグレード中のデバイスでは通知チャネル対応が不明です", en: "Channel support is unknown for rolling-upgrade devices", zh: "滚动升级中的设备通知通道支持状态未知" }
+admin.sos_capable_recipients: { ja: "対応済みまたは旧版で不明", en: "capable or legacy-unknown", zh: "可用或旧版未知" }
+admin.act_device_alert: { ja: "デバイス警報", en: "Device alert", zh: "设备警报" }
+admin.alert_channels: { ja: "チャネル", en: "Channels", zh: "通道" }
+admin.alert_sound: { ja: "音", en: "Sound", zh: "声音" }
+admin.alert_sticky: { ja: "解除まで保持", en: "Sticky", zh: "保持至解除" }
+admin.alert_target_devices: { ja: "デバイス ID", en: "Device IDs", zh: "设备 ID" }
+admin.alert_target_roles: { ja: "ロール", en: "Roles", zh: "角色" }
+admin.alert_target_web_groups: { ja: "Web 購読グループ", en: "Web subscription groups", zh: "Web 订阅组" }
+admin.alert_ttl: { ja: "TTL（秒）", en: "TTL seconds", zh: "TTL 秒数" }
+admin.alert_visual: { ja: "画面表示", en: "Visual", zh: "画面显示" }
+admin.alert_volume: { ja: "音量 (0–100)", en: "Volume (0–100)", zh: "音量 (0–100)" }
+admin.call_flow: { ja: "訪客呼出フロー", en: "Visitor call flow", zh: "访客呼叫流程" }
+admin.call_flow_mixed_warning: { ja: "ring_then_purpose は全 peer でサポートされていません。旧版または未計測の client は purpose_first のままです。", en: "ring_then_purpose is not supported by every reported peer. Older or unmeasured clients remain on purpose_first behavior.", zh: "并非所有已报告节点都支持 ring_then_purpose；旧版或未测量客户端仍使用 purpose_first。" }
+admin.call_flow_purpose_first: { ja: "purpose_first は呼出前に用件を選択します。ring_then_purpose は先に呼び出し、後から用件を更新できます。", en: "purpose_first asks for a purpose before emitting a call; ring_then_purpose rings first and permits a later purpose revision.", zh: "purpose_first 在呼叫前询问来意；ring_then_purpose 先响铃，并允许之后更新来意。" }
+admin.call_flow_supported: { ja: "現在報告中の全 peer が call_flow_v2 を宣言しています。", en: "Every currently reported peer declares call_flow_v2.", zh: "当前所有已报告节点均声明支持 call_flow_v2。" }
+admin.channel_in_app: { ja: "アプリ内", en: "In-app", zh: "应用内" }
+admin.channel_system_notification: { ja: "システム通知", en: "System notification", zh: "系统通知" }
+admin.channel_web_push: { ja: "Web Push", en: "Web Push", zh: "Web Push" }
+admin.copied: { ja: "コピーしました", en: "Copied", zh: "已复制" }
+admin.copy: { ja: "コピー", en: "Copy", zh: "复制" }
+admin.copy_failed: { ja: "コピー失敗", en: "Copy failed", zh: "复制失败" }
+admin.drop_here: { ja: "ここにファイルをドラッグ＆ドロップ／クリックで選択", en: "Drop a file here or click to choose", zh: "将文件拖放到此处或点击选择" }
+admin.global: { ja: "全体", en: "Global", zh: "全局" }
+admin.list_or_all: { ja: "カンマ区切り、または all", en: "Comma-separated values or all", zh: "逗号分隔，或填写 all" }
+admin.local_addrs: { ja: "本機アドレス", en: "Local addresses", zh: "本机地址" }
+admin.sos_dry_run: { ja: "SOS ドライラン表示", en: "SOS dry-run preview", zh: "SOS 试运行预览" }
+admin.sos_dry_run_ok: { ja: "現在の状態スナップショットでは配信警告はありません。", en: "No delivery warning detected by the current status snapshot.", zh: "当前状态快照未检测到投递警告。" }
+admin.sos_local_recipients: { ja: "ローカル受信先", en: "Local recipients", zh: "本地接收方" }
+admin.sos_targets: { ja: "対象", en: "Targets", zh: "目标" }
+admin.sos_warn_no_device_alert: { ja: "SOS 状態は複製されますが、このルールにはデバイス警報 action がありません。", en: "SOS state will replicate, but this rule has no device alert action.", zh: "SOS 状态会复制，但此规则没有设备警报动作。" }
+admin.sos_warn_no_push_subscriptions: { ja: "Web Push が選択されていますが、一致する購読がありません。", en: "Web Push is selected, but there are no matching subscriptions.", zh: "已选择 Web Push，但没有匹配的订阅。" }
+admin.sos_warn_offline: { ja: "オフラインまたは未検出の対象デバイス", en: "Offline or undiscovered target devices", zh: "离线或未发现的目标设备" }
+admin.sos_warn_push_backend: { ja: "実測済み送信 backend が準備できていないため Web Push を配信できません。", en: "Web Push delivery is unavailable because no measured sender backend is ready.", zh: "没有已测量且就绪的发送后端，Web Push 无法投递。" }
+admin.sos_warn_silent: { ja: "設定された警報チャネルはすべて空または無音です。", en: "All configured alert channels are empty or silent.", zh: "所有已配置警报通道均为空或静音。" }
+admin.sos_warn_zero_recipients: { ja: "ドライランの受信先は 0 件です。", en: "Dry run resolves to zero recipients.", zh: "试运行得到的接收方为 0。" }
+admin.sos_warning_nonblocking: { ja: "警告があっても保存できます。配信結果はデバイスごとに記録されます。", en: "Warnings do not block saving; delivery results are recorded per device.", zh: "警告不会阻止保存；投递结果按设备记录。" }
+admin.unknown_action: { ja: "不明な action", en: "Unknown action", zh: "未知动作" }
+admin.unknown_trigger: { ja: "不明な trigger", en: "Unknown trigger", zh: "未知触发器" }
+admin.video_hls: { ja: "HLS（互換）", en: "HLS (compatible)", zh: "HLS（兼容）" }
+admin.video_low_latency: { ja: "低遅延 H.264（推奨）", en: "Low-latency H.264 (recommended)", zh: "低延迟 H.264（推荐）" }
+admin.video_playback: { ja: "室内機の映像再生方式", en: "Indoor video playback", zh: "室内机视频播放方式" }
+admin.video_playback_policy: { ja: "映像再生ポリシー", en: "Video playback policy", zh: "视频播放策略" }
+admin.order: { ja: "順序", en: "Order", zh: "顺序" }
+admin.playback_strategy: { ja: "再生方式", en: "Strategy", zh: "播放策略" }
+admin.first_frame_timeout: { ja: "初回フレーム待機", en: "First-frame timeout", zh: "首帧超时" }
+admin.stall_timeout: { ja: "停止検出", en: "Stall timeout", zh: "中断超时" }
+admin.playback_fallback_hint: { ja: "Web は HLS を即時スキップします。後段の MJPEG は時刻 0 から予熱します。MJPEG までの最大追加待機:", en: "Web skips HLS immediately. A later MJPEG strategy is prewarmed from time zero. Maximum extra wait before MJPEG:", zh: "Web 会立即跳过 HLS；后置 MJPEG 从零时刻开始预热。到 MJPEG 前的最大额外等待：" }
+admin.playback_timeout_range: { ja: "初回フレームは 100–60000ms、停止検出は 1000–60000ms にしてください", en: "First-frame timeout must be 100–60000ms and stall timeout 1000–60000ms", zh: "首帧超时须为 100–60000ms，中断超时须为 1000–60000ms" }
+admin.playback_one_required: { ja: "少なくとも一つの再生方式を有効にしてください", en: "Enable at least one playback strategy", zh: "请至少启用一种播放策略" }
+admin.playback_pair_override: { ja: "室内機 × 室外機の上書き", en: "Indoor panel × door station override", zh: "室内机 × 门口机覆盖" }
+admin.choose_indoor: { ja: "室内機…", en: "Indoor panel…", zh: "室内机…" }
+admin.choose_door_station: { ja: "室外機…", en: "Door station…", zh: "门口机…" }
+admin.load_or_add: { ja: "読込／追加", en: "Load / add", zh: "载入 / 新增" }
+admin.pair_override_active: { ja: "現在この組合せの上書きを使用しています。", en: "This pair currently uses an override.", zh: "当前使用此配对覆盖。" }
+admin.pair_override_inherited: { ja: "上書きはありません。編集値は全体設定を継承しています。", en: "No override exists; the editor inherits the global profile.", zh: "尚无覆盖；编辑值继承自全局配置。" }
+admin.save_pair_override: { ja: "組合せ上書きを保存", en: "Save pair override", zh: "保存配对覆盖" }
+admin.delete_pair_override: { ja: "削除して全体設定を継承", en: "Delete and inherit global", zh: "删除并继承全局配置" }
+admin.choose_playback_pair: { ja: "室内機と室外機を選択してください", en: "Choose an indoor panel and door station", zh: "请选择室内机和门口机" }
+admin.when_emergency_off: { ja: "SOS 解除", en: "SOS cleared", zh: "SOS 已解除" }
+admin.when_emergency_on: { ja: "SOS 発報", en: "SOS activated", zh: "SOS 已触发" }
 admin.texts: { ja: "文言", en: "Texts", zh: "文案" }
 admin.texts_hint: { ja: "空欄なら既定文言を使用します", en: "Leave blank to use the default", zh: "留空则使用默认文案" }
+admin.texts_show_all: { ja: "すべての文言を表示", en: "Show all texts", zh: "显示所有文案" }
+admin.texts_placeholder_hint: { ja: "プレースホルダーは翻訳間で一致させてください", en: "Placeholders must match across translations", zh: "各翻译中的占位符必须一致" }
+admin.texts_placeholder_mismatch: { ja: "プレースホルダーが一致していません", en: "Placeholders do not match", zh: "占位符不一致" }
+admin.texts_count: { ja: "{count} 件の文言", en: "{count} text entries", zh: "{count} 条文案" }
+admin.key: { ja: "キー", en: "Key", zh: "键" }
 admin.purposes: { ja: "用件", en: "Purposes", zh: "来访目的" }
+admin.purpose_icon: { ja: "アイコン", en: "Icon", zh: "图标" }
+admin.purpose_hint: { ja: "来訪者が選択できる用件を編集します", en: "Edit the purposes visitors can choose", zh: "编辑访客可选择的来访目的" }
 admin.languages: { ja: "訪客言語", en: "Visitor languages", zh: "访客语言" }
+admin.visitor_languages: { ja: "利用可能な訪客言語", en: "Available visitor languages", zh: "可用的访客语言" }
+admin.visitor_language_primary_hint: { ja: "先頭の言語が既定になります", en: "The first language is the default", zh: "第一种语言为默认语言" }
+admin.visitor_language_revert: { ja: "呼出後に既定言語へ戻す", en: "Return to the default language after a call", zh: "呼叫后恢复默认语言" }
 admin.audio_none: { ja: "音声なし (TTS)", en: "No audio (TTS)", zh: "无音频 (用 TTS)" }
 admin.audio_play: { ja: "試聴", en: "Play", zh: "试听" }
-
+admin.audio_preview_unsupported: { ja: "このブラウザは内蔵音の試聴に対応していません", en: "This browser cannot preview built-in sounds", zh: "此浏览器不支持试听内置声音" }
+admin.mock_audio_play: { ja: "mock: {value} を再生", en: "mock: playing {value}", zh: "mock：正在播放 {value}" }

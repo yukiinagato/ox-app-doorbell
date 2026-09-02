@@ -1,6 +1,8 @@
 # 功能总览
 
-> 日本語: [Features](Features) / English: [Features-en](Features-en)
+> English: [Features](Features) / 日本語: [Features-ja](Features-ja) / 繁體中文 (本頁)
+
+以下說明功能概念；已實作、建置驗證、硬體認證與不支援的區分，以 [capability matrix](https://github.com/yukiinagato/ox-app-doorbell/blob/main/docs/zh/capability-matrix.md) 為準。
 
 简要汇总各功能「能做什么」。用法见[住户使用指南](Usage-Residents-zh) /
 [管理员指南](Usage-Admin-zh) / [访客体验](Usage-Visitors-zh)，机制见[架构](Architecture-zh)。
@@ -8,8 +10,12 @@
 ## 呼叫
 
 门口机的大按钮（通用）或事由按钮 1 次点按即完成按铃。事件进入规则引擎，
-按配置并行执行 SIP 呼叫 / Telegram / HA 事件 / 室内门铃声 / 自动应答。
+執行規則配置的 action。
 可按门、按事由、按时间段分支。→ [管理员指南](Usage-Admin-zh)
+
+`purpose_first` 先選事由再 ring；`ring_then_purpose` 先 ring，再選擇或略過事由。訪客只可在 ringing
+時 cancel，通話建立後應使用 End call/hangup。Web 手動接聽只由一個 `dialog_id` owner 持有；
+recovery 在 origin 還原 ringing，而 in-call 僅由該 owner 還原。
 
 ## 事由按钮 (visit_purposes)
 
@@ -61,8 +67,16 @@ Telegram 内联按钮 / HA / 网页发送 → 在门口机大字显示 + 朗读�
 
 ## SOS（紧急求助）
 
-在室内机长按（默认 3 秒）→ 全节点警报 UI + 警笛 + Telegram 🚨 + MQTT（可联动 HA）。
-解除需要 kiosk PIN。不会自动呼叫警察、消防。→ [设计理念](Design-Philosophy-zh)
+SOS active/clear 狀態會複製到所有 Core node，但 visual、sound、system notification、Web Push、
+Telegram、MQTT 配送完全 rule-driven，也可設定零收件者。管理員開關
+`emergency.web_active_page_alerts` 預設 true，所以即使零收件者或 Push-only rule，開啟中的 Web page
+仍呈現 SOS。false 時，正向 matching `device_alert` 或已送達 Push 仍可呈現。Core `delivery_result` 是
+dispatch attempt，client channel report 才是實際 presentation。raw-state 顯示期間，rule TTL 只結束
+custom decoration/sound，安全的紅色 overlay 保留至 clear。Web page 把 `?group=` 保存值供 poll/Push
+共用。explicit native-only target 不到 Web，Web-only target 不到 native shell；只有 legacy no-target
+action 會到所有對象。完整 Push subscription 在 CRDT 中以 XChaCha20-Poly1305 seal，不出現在 plaintext config/export。
+解除需要 kiosk PIN；不會自動呼叫警察、
+消防。→ [设计理念](Design-Philosophy-zh)
 
 ## 动体检测
 
@@ -87,6 +101,11 @@ Telegram 内联按钮 / HA / 网页发送 → 在门口机大字显示 + 朗读�
 从室内机或管理界面修改后，通过 CRDT 毫秒级同步到所有设备。还可以配置夜间模式
 （减光 + 偏红）、屏保、防烧屏的 pixel shift。
 
+每裝置 semantic size/color override 受 renderer manifest 約束。native client 公開 top-level
+`ui_manifest`，配信中的 Core 另行公開 local `web_ui.manifest`。last-valid native peer contract 會永久
+cache，`cached_contract:true` 的 configured offline device 可先驗證/queue，但仍需後續 apply report。
+remote/offline Web manifest 未知時，Admin 不會從 native peer manifest 捏造 Web editor。
+
 ## 资产分发 (assets)
 
 背景图片、自定义语音 (≤3MB) 由 sha256 台账管理，**在被引用的时刻各设备主动
@@ -98,13 +117,26 @@ Telegram 内联按钮 / HA / 网页发送 → 在门口机大字显示 + 朗读�
 - Windows: 替换 shell + watchdog 前台守卫（把 Update 弹窗压回去）+ 绘制数字键盘 PIN
 - Android: Device Owner 完全固定 + 禁用 keyguard
 - iOS: 监督模式 + Single App Mode（解除只能靠 Configurator + 监督证书）
-- 全平台: 离线 30 秒内通知 Telegram/HA（检测设备被盗、断线）
+- offline event 只有在 matching rule 與完成 commissioning 的 integration 選中時才會觸發
+  Telegram/HA，不保證所有平台 30 秒內或必然送達。
 
 ## 网页面板（legacy 支持）
 
-`door.html`（按铃）/ `monitor.html`（接铃）在 iPad 1 的 iOS 5 Safari 上也能运行。
-`call.html`（双向通话）需要现代浏览器 + Asterisk WebRTC 网关（可选功能）。
+legacy web panel 在目標 Safari/裝置完成實機測試前屬 best-effort。`call.html` 需要 modern secure
+context 與 Asterisk WebRTC。iPad 1 compatibility shell 可使用內建 mic/speaker，但沒有 camera；
+須逐裝置 commissioning 並設定外部 camera/no-video profile。bounded RTSP/RTP-over-TCP H.264 ingest
+與 Annex-B 轉送已通過 host/loopback test，但實際 IDR accept 前保持 degraded，且真實 camera iPad
+qualification 尚未完成。另一項 bounded Android→Core fMP4→iPad 實機 smoke 已在 foreground renderer
+確認 15–16 fps，但 crash 後 unattended foreground resume 仍未完成。
+optional root helper 已實作並通過 host test；iOS 5 lane 有不會啟用 launchd 的可重現 staged DEB，但
+實機 qualification 尚未完成。
 
-iPad 1 不必止步于网页面板: 把它越狱并装上自行构建的原生 app，就能成为**完整的原生节点**
-（查看视频・听声音・快捷回复・开锁，接外麦还能对讲）。步骤见
-[deploy/provision/ios/ipad1-jailbreak.md](https://github.com/yukiinagato/ox-app-doorbell/blob/main/deploy/provision/ios/ipad1-jailbreak.md)。
+## 目前 artifact gate
+
+- Android API 19 正式 SKU allowlist 為空，supported SKU 是 0；CI artifact 是 debug-contract，不是可配送 release。
+- tvOS 只有 real PJSIP 的 unsigned Debug simulator build；沒有 tracked Release/device artifact 或 Apple TV 實機證據。
+- iOS 9 arm64 只有 unsigned device-link proof；正式 armv7 signing/hardware gate 尚未 commission。
+- cross-platform conformance 是 golden behavior model + source-smoke contract，不代表所有 runtime artifact 都執行 trace。
+- iPad 1 有 mic/speaker、沒有 camera，也不是 outdoor-rated；hardware、enclosure、audio、rollback gate 未完成。
+- local 且未 push 的 `ios-legacy-0.2.0-final` tag 已存在，但此 working tree 的 `ios-compat` 尚未 tracked，
+  fresh-clone/device/rollback gate 未完成；保留且不修改 `ios-legacy`。

@@ -1,0 +1,24 @@
+{
+  "name": "ipad1-front-door",
+  "role": "door_station",
+  "door": "front",
+  "listen_port": 47172,
+  "http_port": 47180,
+  "ui_lang": "ja",
+  "kiosk": true,
+  "mic": true,
+  "sip": {
+    "backend": "minisip",
+    "direct_port": 47190
+  },
+  "media_source": {
+    "type": "auto"
+  },
+  "keepalive_helper": "auto",
+  "debug": {
+    "ui_dumps": false
+  },
+  "seed_peers": [
+    "192.0.2.10:47172"
+  ]
+}

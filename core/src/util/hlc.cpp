@@ -19,7 +19,7 @@ std::string HlcClock::format(int64_t physical_ms, int counter, const std::string
 
 bool HlcClock::parse(const std::string& hlc, int64_t* physical_ms, int* counter,
                      std::string* node8) {
-  // 形式: 12 hex '-' 4 hex '-' node8
+
   if (hlc.size() < 12 + 1 + 4 + 1 + 1) return false;
   if (hlc[12] != '-' || hlc[17] != '-') return false;
   unsigned long long ms = 0;
@@ -39,7 +39,7 @@ std::string HlcClock::tick() {
     counter_ = 0;
   } else {
     counter_++;
-    if (counter_ > 0xffff) {  // カウンタ溢れ: 物理部を1ms進める
+    if (counter_ > 0xffff) {
       last_ms_++;
       counter_ = 0;
     }

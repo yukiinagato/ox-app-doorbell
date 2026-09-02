@@ -1,8 +1,8 @@
-// FrameBus (帧総線) のテスト。
-//  - 合成フレーム (BGRA グラデーション / NV12 パターン) → 有効 JPEG (stb_image で検証)
-//  - 需要駆動エンコード (購読者ゼロ = エンコードゼロ / 同一フレームはキャッシュ)
-//  - max_width 縮小・外部エンコーダ差し替え
-//  - Node 統合: 実 TCP + HTTP で /snapshot.jpg・/stream.mjpeg
+
+
+
+
+
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
@@ -27,9 +27,9 @@ using namespace db;
 
 namespace {
 
-// ---------- 合成フレーム ----------
 
-// BGRA 横方向グラデーション (左=青 → 右=赤、G は行で変化)
+
+
 RawFrame makeBgra(int w, int h) {
   RawFrame f;
   f.format = 3;
@@ -49,7 +49,7 @@ RawFrame makeBgra(int w, int h) {
   return f;
 }
 
-// NV12 一様パターン (Y/U/V 固定)
+
 RawFrame makeNv12(int w, int h, uint8_t y, uint8_t u, uint8_t v) {
   RawFrame f;
   f.format = 1;
@@ -65,7 +65,7 @@ RawFrame makeNv12(int w, int h, uint8_t y, uint8_t u, uint8_t v) {
   return f;
 }
 
-// BT.601 (video range) の期待値 — frame_bus.cpp と同じ式
+
 void expectRgb(int y, int u, int v, int* rgb) {
   auto cl = [](int x) { return x < 0 ? 0 : (x > 255 ? 255 : x); };
   int c = y - 16, d = u - 128, e = v - 128;
@@ -99,9 +99,9 @@ bool near3(const uint8_t* got, const int* want, int tol) {
 
 }  // namespace
 
-TEST_CASE("media: BGRA → 有効 JPEG (寸法 + 色近似)") {
+TEST_CASE("media: converts BGRA to a valid JPEG with expected dimensions and color") {
   FrameBus bus;
-  bus.setJpegParams(90, 0);  // 縮小なし・高品質 (色検証のため)
+  bus.setJpegParams(90, 0);
   bus.push(makeBgra(64, 48));
   Bytes jpeg = bus.latestJpeg();
   REQUIRE(!jpeg.empty());
@@ -112,20 +112,20 @@ TEST_CASE("media: BGRA → 有効 JPEG (寸法 + 色近似)") {
   Decoded d = decodeJpeg(jpeg);
   CHECK(d.w == 64);
   CHECK(d.h == 48);
-  // 左上=青、右上=赤、右下は R+G (JPEG 損失 + 角のリンギング分の許容 tol)
+
   int blue[3] = {0, 0, 255}, red[3] = {255, 0, 0}, yellow[3] = {255, 255, 0};
   CHECK(near3(d.at(1, 1), blue, 40));
   CHECK(near3(d.at(62, 1), red, 40));
   CHECK(near3(d.at(62, 46), yellow, 40));
 }
 
-TEST_CASE("media: NV12/NV21/YUY2 の色変換 (BT.601)") {
-  // グレー (Y=126,U=V=128 → 128,128,128) と 赤系 (Y=81,U=90,V=240)
+TEST_CASE("media: converts NV12, NV21, and YUY2 colors using BT.601") {
+
   int gray[3], red[3];
   expectRgb(126, 128, 128, gray);
   expectRgb(81, 90, 240, red);
 
-  SUBCASE("NV12 一様グレー") {
+  SUBCASE("uniform gray NV12") {
     FrameBus bus;
     bus.setJpegParams(90, 0);
     bus.push(makeNv12(32, 32, 126, 128, 128));
@@ -134,23 +134,23 @@ TEST_CASE("media: NV12/NV21/YUY2 の色変換 (BT.601)") {
     CHECK(d.h == 32);
     CHECK(near3(d.at(16, 16), gray, 8));
   }
-  SUBCASE("NV12 赤") {
+  SUBCASE("red NV12") {
     FrameBus bus;
     bus.setJpegParams(90, 0);
     bus.push(makeNv12(32, 32, 81, 90, 240));
     Decoded d = decodeJpeg(bus.latestJpeg());
     CHECK(near3(d.at(16, 16), red, 12));
   }
-  SUBCASE("NV21 は UV 順が逆 (U と V を入れ替えて同じ結果)") {
+  SUBCASE("NV21 reverses UV order and produces the same result after swapping") {
     FrameBus bus;
     bus.setJpegParams(90, 0);
-    RawFrame f = makeNv12(32, 32, 81, 240, 90);  // データは VU 順で作る
-    f.format = 0;                                // NV21 として解釈させる
+    RawFrame f = makeNv12(32, 32, 81, 240, 90);
+    f.format = 0;
     bus.push(std::move(f));
     Decoded d = decodeJpeg(bus.latestJpeg());
     CHECK(near3(d.at(16, 16), red, 12));
   }
-  SUBCASE("YUY2 一様色") {
+  SUBCASE("uniform-color YUY2") {
     FrameBus bus;
     bus.setJpegParams(90, 0);
     RawFrame f;
@@ -173,46 +173,46 @@ TEST_CASE("media: NV12/NV21/YUY2 の色変換 (BT.601)") {
   }
 }
 
-TEST_CASE("media: エンコードは需要駆動 (購読者ゼロ = エンコードゼロ / キャッシュ)") {
+TEST_CASE("media: encoding is demand-driven and caches for active subscribers") {
   FrameBus bus;
-  // push 連発 — latestJpeg を呼ばなければエンコードは走らない
+
   for (int i = 0; i < 20; i++) bus.push(makeBgra(64, 48));
   CHECK(bus.frameCount() == 20);
   CHECK(bus.encodeCount() == 0);
 
-  // 同一フレームへの連続要求は 1 回だけエンコード (2 回目はキャッシュ)
+
   Bytes j1 = bus.latestJpeg();
   Bytes j2 = bus.latestJpeg();
   CHECK(bus.encodeCount() == 1);
   CHECK(j1 == j2);
 
-  // 新フレームが来たら次の要求で再エンコード
+
   bus.push(makeBgra(64, 48));
   (void)bus.latestJpeg();
   CHECK(bus.encodeCount() == 2);
 
-  // フレーム無しの bus は空を返す
+
   FrameBus empty;
   CHECK(empty.latestJpeg().empty());
   CHECK(empty.frameCount() == 0);
 }
 
-TEST_CASE("media: max_width 超過は 1/2 縮小の繰り返し") {
+TEST_CASE("media: repeatedly halves frames that exceed max_width") {
   FrameBus bus;
   bus.setJpegParams(80, 640);
   bus.push(makeBgra(1280, 720));
   Decoded d = decodeJpeg(bus.latestJpeg());
-  CHECK(d.w == 640);  // 1280 → 640 (1 回)
+  CHECK(d.w == 640);
   CHECK(d.h == 360);
 
-  bus.setJpegParams(80, 320);  // パラメータ変更で再エンコード
+  bus.setJpegParams(80, 320);
   Decoded d2 = decodeJpeg(bus.latestJpeg());
-  CHECK(d2.w == 320);  // 1280 → 640 → 320 (2 回)
+  CHECK(d2.w == 320);
   CHECK(d2.h == 180);
   CHECK(bus.encodeCount() == 2);
 }
 
-TEST_CASE("media: 外部エンコーダ差し替え (SPI) と stb フォールバック") {
+TEST_CASE("media: supports an external encoder SPI and stb fallback") {
   FrameBus bus;
   bus.setJpegParams(70, 0);
   int called = 0;
@@ -233,39 +233,39 @@ TEST_CASE("media: 外部エンコーダ差し替え (SPI) と stb フォール�
   CHECK(got_q == 70);
   CHECK(toString(j) == "EXTJPEG");
 
-  // 外部エンコーダが空を返したら stb へフォールバック
+
   bus.setExternalEncoder([&](const uint8_t*, int, int, int) {
     called++;
     return Bytes{};
   });
-  j = bus.latestJpeg();  // setExternalEncoder はキャッシュを無効化する
+  j = bus.latestJpeg();
   CHECK(called == 2);
   REQUIRE(j.size() >= 2);
   CHECK(j[0] == 0xff);
   CHECK(j[1] == 0xd8);
 
-  // 解除で stb 直行
+
   bus.setExternalEncoder(nullptr);
   j = bus.latestJpeg();
   CHECK(called == 2);
   CHECK(j[0] == 0xff);
 }
 
-TEST_CASE("media: データ不足/不正フレームは破棄") {
+TEST_CASE("media: discards undersized and invalid frames") {
   FrameBus bus;
   RawFrame f = makeBgra(64, 48);
-  f.data.resize(f.data.size() / 2);  // 足りない
+  f.data.resize(f.data.size() / 2);
   bus.push(std::move(f));
   CHECK(bus.frameCount() == 0);
 
   RawFrame g = makeBgra(64, 48);
-  g.format = 99;  // 未知形式
+  g.format = 99;
   bus.push(std::move(g));
   CHECK(bus.frameCount() == 0);
   CHECK(bus.latestJpeg().empty());
 }
 
-// ---------- Node 統合 (実 TCP + HTTP) ----------
+
 
 namespace {
 
@@ -302,7 +302,7 @@ int connectTo(int port) {
   return fd;
 }
 
-// GET して接続クローズまで読む (レスポンス全文)
+
 std::string httpGet(int port, const std::string& path) {
   int fd = connectTo(port);
   REQUIRE(fd >= 0);
@@ -321,7 +321,7 @@ std::string httpGet(int port, const std::string& path) {
 
 }  // namespace
 
-TEST_CASE("media: Node 統合 — pushCameraFrame → /snapshot.jpg・/stream.mjpeg") {
+TEST_CASE("media: Node serves pushed camera frames as snapshots and MJPEG") {
   std::mt19937 rng(static_cast<uint32_t>(::getpid()) ^ 0x6d65u);
   int mesh_port = freePort(rng);
   int http_port = freePort(rng);
@@ -335,15 +335,15 @@ TEST_CASE("media: Node 統合 — pushCameraFrame → /snapshot.jpg・/stream.mj
   o.door = "d_front";
   o.listen_addr = "127.0.0.1:" + std::to_string(mesh_port);
   o.psk.fill(0x5a);
-  o.enable_beacon = false;  // 実 beacon 禁止 (稼働 fleet への迷入防止)
+  o.enable_beacon = false;
   o.http_port = http_port;
   Node node(o);
   REQUIRE(node.start());
 
-  // フレーム未投入 → 503 (公開 prefix なのでログイン不要)
+
   CHECK(httpGet(http_port, "/snapshot.jpg").rfind("HTTP/1.1 503", 0) == 0);
 
-  // capi と同じ経路でフレーム投入 (BGRA 64x48)
+
   RawFrame f = makeBgra(64, 48);
   node.pushCameraFrame(f.data.data(), f.format, f.w, f.h, f.stride, 12345);
 
@@ -356,7 +356,7 @@ TEST_CASE("media: Node 統合 — pushCameraFrame → /snapshot.jpg・/stream.mj
   CHECK(static_cast<uint8_t>(snap[body + 4]) == 0xff);  // SOI
   CHECK(static_cast<uint8_t>(snap[body + 5]) == 0xd8);
 
-  // /stream.mjpeg: boundary + 1 フレーム受信で切断
+
   int fd = connectTo(http_port);
   REQUIRE(fd >= 0);
   std::string req =

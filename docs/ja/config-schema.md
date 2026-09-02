@@ -3,6 +3,25 @@
 設定は LWW-Map CRDT のフラットな key→JSON。キーはドットパス。以下は materialize 後の全体像。
 `*_ref: "secret:…"` は secrets 名前空間 (管理画面では書込のみ・表示不可、platform secure store 保管)。
 
+`boot.json` は CRDT ではなく端末ローカルの bootstrap profile です。Android、iOS/iPadOS
+（iOS 5 compatibility を含む）、Windows は、新規 profile、明示的な `setup_complete:true` の欠落、`role` の欠落/不正、または
+`door_station` の有効な `door` 欠落を検出すると、Core 起動前に blocking setup screen を表示します。
+operator は `door_station` / `indoor_panel` を選択します。door 欄は door station のみ必須で、
+そのまま確定できる random `door-xxxxxxxx` が初期入力されます。有効な door ID は 1～64 文字、先頭が
+ASCII 英数字、以降が英数字・`_`・`-` です。保存成功時だけ `setup_complete:true` を atomic に書きます。
+tvOS は対応する door-camera role がないため、意図的に `indoor_panel` 固定です。
+
+mesh PSK は CRDT 値ではなく端末ローカルの bootstrap data。Core は先に
+`secure_put("mesh.psk", …)` を完了し、shell へ
+`{"t":"paired","psk_ref":"secret:mesh.psk"}` だけを通知します。shell は opaque reference と秘密でない
+`seed_peers` を `boot.json` に保存し、新しい `psk_hex` は受け取りません。secure store 失敗時は
+`pairing_persistence_error` を通知して not-ready のままにします。旧 `psk_hex` は移行入力専用です。
+
+Web Push subscription は暗号化した例外です。Core は complete `endpoint`/`p256dh`/`auth` を
+mesh-PSK-derived key と XChaCha20-Poly1305 で seal した schema-v2 CRDT record として保存し、
+materialized config/export に plaintext を出しません。起動時は legacy raw record を再 seal し、
+できなければ fail-closed で削除します。
+
 ```jsonc
 {
   "schema_version": 1,
@@ -10,6 +29,11 @@
     "name": "京阪ハウス",
     "psk_id": "k1",
     "seed_peers": ["10.0.1.10:47172"]          // 同一 L2 なので保険 (beacon が主)
+  },
+
+  "panel": {
+    "token_refs": ["secret:panel.access.<random>"],
+    "token_generation": "0123456789abcdef0123456789abcdef"
   },
 
   "buildings": {
@@ -33,8 +57,9 @@
       "local": {                                // 端末別設定 (これも複製 — 遠隔変更可)
         "ui_lang": "ja", "volume": 80, "screen_brightness": 70,
         "screensaver_after_s": 120,
-        "video": { "playback": "low_latency" }, // low_latency（既定）/ hls / mjpeg
-        "camera": { "device_hint": "", "rotation": 0, "mjpeg_fps": 8,
+        "video": { "playback": "low_latency",   // low_latency（既定）/ hls / mjpeg
+                   "rotation": "auto" },          // auto=姿勢センサ追随 / 0 / 90 / 180 / 270（管理者固定）
+        "camera": { "device_hint": "", "mjpeg_fps": 8,
                     "mjpeg_quality": 60, "resolution": "640x480",
                     // codec: "auto"=ハードウェアエンコード (h264) を検出し不可なら mjpeg / "mjpeg" / "h264"
                     // h264 時は /stream.mp4 (fMP4, プラットフォームの HW エンコーダ) が有効になり
@@ -42,6 +67,15 @@
                     "codec": "auto", "h264_resolution": "640x360", "h264_fps": 30,
                     "h264_bitrate_kbps": 700 },
         "kiosk": { "exit_pin_hash": "<pbkdf2>", "watchdog": true },
+        "recovery": { "helper_mode": "auto" }, // off | auto | on
+        // semantic override は element 単位の完全な object。native shell は top-level
+        // ui_manifest、同じ node の Web panel は status.web_ui.manifest で検証する。
+        "ui": { "elements": {
+          "call.primary": { "scale": 1.1, "foreground": "#FFFFFF",
+                            "background": "#1A2027", "accent": "#4DA3FF" },
+          "cancel.call": { "scale": 1.0, "foreground": "#FFFFFF",
+                           "background": "#8D2932" }
+        } },
         "motion": { "enabled": true, "sensitivity": 40, "min_interval_s": 30 },
         "aec": { "mode": "auto", "tail_ms": 0 },  // 設置時キャリブレーションで書込
         // TV モニタ端末 (Android TV 常駐 app) の目印。運用ノート:
@@ -53,6 +87,35 @@
         "tv": false
       }
     }
+  },
+
+  // 外部 media source は明示設定し、seed_peers から推定しない。URL userinfo と plaintext
+  // credential は拒否し、認証は secret_ref を使う。
+  "media_sources": {
+    "front_camera": {
+      "schema_version": 1, "kind": "ip_camera",
+      "streams": {
+        "mjpeg": { "url": "http://192.0.2.20/live.mjpeg" },
+        "snapshot": { "url": "https://192.0.2.20/snapshot.jpg" },
+        "h264": { "url": "rtsp://192.0.2.20/live", "transport": "tcp",
+                  "profile": "baseline" }
+      },
+      "secret_ref": "secret:media.front_camera"
+    }
+  },
+
+  // 受信側の再生方針。配列順が優先度で、disabled の方式は即座に読み飛ばす。
+  // pair 設定は該当する室内機×門口機の global 設定を全体置換する。
+  "video_playback": {
+    "global": { "strategies": [
+      { "id": "h264_low_latency", "enabled": true,
+        "startup_timeout_ms": 5000, "stall_timeout_ms": 3000 },
+      { "id": "h264_hls", "enabled": false,
+        "startup_timeout_ms": 5000, "stall_timeout_ms": 5000 },
+      { "id": "mjpeg", "enabled": true,
+        "startup_timeout_ms": 5000, "stall_timeout_ms": 3000 }
+    ] },
+    "pairs": { "<indoor_node_id>": { "<outdoor_node_id>": { "strategies": [] } } }
   },
 
   "households": {
@@ -79,6 +142,7 @@
   },
 
   "ui": {
+    "call_flow": "purpose_first",             // purpose_first | ring_then_purpose
     "languages": ["ja", "en", "zh"],            // 門口機の来訪者言語切替に出す言語
     "launch_sound": "title_display",             // 起動音。空文字 = 再生しない
     "call_sound": "outdoor_call_alert",          // 門口機の呼出確認音。空文字 = 再生しない
@@ -119,13 +183,14 @@
     "button_on_roles": ["indoor_panel"],        // SOS ボタンを表示する役割
     "hold_to_trigger_s": 3,                     // 長押し秒数 (誤操作防止)
     "alarm_sound": "siren1", "alarm_volume": 100,
+    // true なら recipient がゼロまたは Push-only rule でも、開いている Web panel は複製済み
+    // active SOS を表示する。false でも一致する positive device_alert/Push は表示できる。
+    "web_active_page_alerts": true,
     "sip_call": { "enabled": false, "target_extension": "" },  // 任意: Asterisk でユーザー定義先へ発呼
     "cancel_requires_pin": true                 // 解除に kiosk PIN
   },
-  // emergency の既定挙動 (ルール非依存の組込動作): 全ノード警報 UI+サイレン、
-  // Telegram 🚨 を全 households へ、MQTT doorbell/emergency (retain) — HA 側でライト/サイレン/
-  // 発呼など自由に連動。**警察・消防への自動発信は行わない** (通知先は家族と
-  // ユーザー定義の電話先のみ — 判断は人が行う)。
+  // SOS active/clear state は常に複製する。表示と外部配信は rule-driven で、recipient はゼロにも
+  // できる。警察・消防への自動発信を意味しない。
 
   "visit_purposes": {                           // 来訪者の用件ボタン (ユーザー編集可能; 既定 seed 下記)
     // 門口機では用件ボタン 1 タップ = その用件付きの呼出 (宅配員は 1 動作で完了)。
@@ -176,7 +241,29 @@
     "r4": { "enabled": true,
             "when": { "type": "device_offline", "devices": "all" },
             "actions": [ { "type": "telegram", "households": ["h_ox"] },
-                         { "type": "ha_event" } ] }
+                         { "type": "ha_event" } ] },
+    "r_sos_default_on": {
+      "enabled": true, "when": { "type": "emergency_on" },
+      "actions": [
+        { "type": "device_alert", "targets": { "roles": "all", "web_subscription_groups": "all" },
+          "channels": ["in_app", "system_notification", "web_push"],
+          "never_suppress": true,
+          "presentation": { "visual": true, "sound": "siren1", "volume": 100,
+                            "sticky": true, "ttl_s": 0, "background": "#8F1010",
+                            "foreground": "#FFFFFF", "accent": "#FFD166" } },
+        { "type": "telegram", "households": "all", "never_suppress": true }
+      ]
+    },
+    "r_sos_default_off": {
+      "enabled": true, "when": { "type": "emergency_off" },
+      "actions": [
+        { "type": "device_alert", "targets": { "roles": "all", "web_subscription_groups": "all" },
+          "channels": ["in_app", "system_notification", "web_push"],
+          "never_suppress": true,
+          "presentation": { "visual": true, "sticky": false, "ttl_s": 10 } },
+        { "type": "telegram", "households": "all", "never_suppress": true }
+      ]
+    }
   },
 
   "quiet_hours": {
@@ -192,34 +279,121 @@
     "telegram": { "bot_token_ref": "secret:tg_bot",
                   "poll_updates": true,          // inline ボタン返信の getUpdates ロングポーリング (leader)
                   "text_template": { "ja": "{door} に来客です ({time})" } },
+    // Web Push は保守された HTTPS sender 経由で送信する。private 値は eligible leader candidate
+    // ごとの local secure store に置き、reference だけを複製する。
+    "web_push": { "sender_url": "https://push-sender.example/doorbell/send",
+                  "vapid_public_key": "<base64url-public-key>",
+                  "vapid_private_key_ref": "secret:webpush.vapid_private",
+                  "vapid_subject": "mailto:doorbell@example.com",
+                  "sender_secret_ref": "secret:webpush.sender" }, // optional sender bearer token
     // Web 通話 (webui/panel/call.html — 任意機能)。ブラウザは SIP/UDP を話せないため
     // Asterisk を WebRTC ゲートウェイに使う (deploy/asterisk/webrtc.ja.md)。
     // ws_url 空 = 通話ボタン無効 (映像閲覧・映像送信は SIP と独立に動く)。
-    // sip_user/sip_pass = ブラウザ用内線 (webrtc.ja.md の [260] テンプレート)。
-    "webrtc": { "ws_url": "ws://10.0.1.5:8088/ws", "sip_user": "260", "sip_pass": "…" },
+    // sip_user/sip_pass_ref = ブラウザ用内線 (webrtc.ja.md の [260] テンプレート)。
+    "webrtc": { "ws_url": "ws://10.0.1.5:8088/ws", "sip_user": "260",
+                "sip_pass_ref": "secret:webrtc.260" },
     "tz_offset_min": 540                         // JST。スケジュール判定に使用
   }
 }
 ```
 
+Web Push backend は 2 段階で配備します。まず `web_push` duty の候補にする各 node の認証済み
+`POST /api/secrets` で、同じ `vapid_private_key_ref` の実値を local secure store に書きます。sender が
+Bearer token を要求する場合は `sender_secret_ref` も同様です。全 secret write の成功後にだけ、秘密で
+ない `integrations.web_push` field と reference を atomic に保存します。sender URL は HTTPS 必須で、
+`vapid_public_key` は `0x04` prefix を含む 65-byte の非圧縮 P-256 public point を base64url で
+符号化した値でなければなりません。private 値を config/export/URL/log/command line に置きません。Push-only SOS に依存する前に、
+`/api/status.web_push.delivery_backend:true`、非空の `leader`、および failover 候補ごとの実測
+`web_push_ready` を確認します。`configured:true` だけでは、その leader が local secret を読めることや
+sender へ到達できることの証明になりません。
+
+leader election はさらに `tls12`、`wan`、`mains_power`、`wall_clock_sane`、`web_push_ready` を
+すべて要求します。LAN/default route は Internet reachability の証拠ではなく、汎用 sender probe もないため、
+shipping shell は fail-closed で `wan:false` を公開します。exact node/network から設定済み HTTPS sender
+への egress を試験した後だけ、管理者は `devices.<id>.caps_override.wan:true` を明示できます。その外部
+試験を measurement source として記録し、route 変更時は override を外します。`mains_power` の override は
+固定電源を commissioning した場合だけにします。override で TLS support、読める secret、working backend
+を捏造してはいけません。
+
+iOS compatibility の `streams.h264` と `transport:"tcp"` は direct fMP4 URL ではなく bounded
+RTSP/RTP interleaved ingest を選びます。runtime は `rtsp_ingest_pending` の degraded state から始まり、
+DESCRIBE/SETUP と Core が実際に accept した Annex-B IDR の後だけ `rtsp_h264_forwarding` を advertise
+できます。config だけでは availability の証拠にならず、iPad 1 + 実 camera qualification は未完了です。
+
+`panel.token_refs` と非 secret の 32 桁 hex `panel.token_generation` は fleet 設定です。rotation は
+両方を 1 commit で置換します。各 `dbpanel` session は現在の generation と canonical ref set に
+紐付くため、rotation が複製されると全 node の session が無効になります。secret 実値は複製されません。
+panel を配信する各 node の認証済み Admin で **このノードに配備** を使い、設定を変更せず、すでに
+複製済みの同じ ref に同じ実値を書きます。
+
+`devices.<id>.local.recovery.helper_mode` は設定上の request であり、helper の install/有効性の証拠では
+ありません。Admin form の既定は `auto` で、認証済み atomic config batch として書き込み、Core は
+`off`、`auto`、`on` 以外を拒否します。capability/runtime status は実測した helper availability と
+effective mode を別に報告します。helper が届かない `on` は supervision 成功ではなく visible degraded/
+error です。atomic config apply 後、platform client は fixed local `MODE <value>` を送り helper status を
+確認します。helper は mode を原子的に保存し helper/OS restart 後も復元します。config から generic command/
+argv を生成しません。
+
+## runtime UI manifest
+
+native shell は read-only の top-level `ui_manifest`、Core は Admin を配信する node 専用の
+`web_ui.manifest` を公開します。両者は schema v1 で、`scale`、`font_scale`、`foreground`、
+`background`、`accent`、`border`、`radius`、minimum touch、contrast、安全 control を制約します。
+設定 path は共通ですが、element set が違うため Admin は **Native UI** と **Web UI** を別 surface
+として表示します。現行 Web manifest は `call.primary`、`cancel.call`、`call.end`、
+`purpose.button`、`ring.title`、`ring.action`、`status.offline`、`reply.button`、`monitor.close`、
+常時表示の 2 秒長押し control `sos.trigger` を含みます。SOS style は full-screen Web
+presentation の安全 baseline にもなり、valid な rule presentation color は一時的に優先します。
+panel session は複製済み emergency state を解除できないため、Web は `sos.cancel` を宣言しません。
+
+Core は peer ごとの最後に有効な native manifest/capability を永続 cache します。configured offline
+device は status に `cached_contract:true` で現れ、Core restart 後も cached native contract に対して
+Admin が検証・保存できます。ただし apply success ではなく、exact renderer が再接続・検証・報告する
+必要があります。reject 時は last-known-good style を維持します。Web manifest は Admin を配信する
+node の local contract のままで、peer 別 catalog ではなく、native manifest から remote/offline Web
+surface を推測できません。
+
 ## イベント (events テーブル / gossip)
 
-- ID = `(origin_node, origin_seq)` 冪等。型: `press | motion | answered | missed | reply |
-  offline | online | config_changed | emergency | emergency_cancel | visitor_lang`
-- `emergency` payload: `{ "source": "<node_id>", "via": "panel|web|admin" }`。quiet_hours の
-  suppress 対象外 (常に全経路通知)。UI: `{"t":"emergency","active":true|false}`
+- ID = `(origin_node, origin_seq)` 冪等。型には `press | purpose_selected | call_answered |
+  call_ended | call_cancelled | motion | reply | offline | online | config_changed | emergency |
+  emergency_cancel | delivery_result | visitor_lang` がある。
+- `call_answered`/`call_ended` は schema version、`door`、`call_id`、`stage_revision` を持つ。
+  手動応答 client は answer-mode SIP dialog の接続後だけ exact tuple を claim し、Core は決定的な
+  `dialog_owner` を 1 つ保存します。同時応答の loser は winner を ended にせず hangup し、monitor は
+  ownership を claim しません。`call_answered` 後は visitor cancel を拒否し、owner hangup が exact
+  call の `call_ended` を発行します。restart 後は ringing は press origin、in-call は dialog owner が
+  10 秒以内に復旧し、失敗時は idempotent recovery cancel を 1 回だけ発行します。
+- `emergency` state は常に複製し、presentation は一致する rule action だけが生成します。
+  `never_suppress:true` はその action を quiet hours から除外しますが、recipient を強制せず explicit
+  empty channels を上書きしません。
+- `targets` object がない legacy `device_alert` は全 native node と全 Web subscription group を
+  対象にします。`targets` がある場合は selector が明示的で、`web_subscription_groups` だけなら
+  native shell は 1 台も対象にせず、逆に `web_subscription_groups` がなければ active Web page/Push
+  subscription は対象外です。`web_profiles` は read-only compatibility alias で、新規 write は
+  `web_subscription_groups` を使います。Web page は `?group=<name>` を local に保持し、state poll と
+  Push の両方へ同じ値を使います。
+- `emergency.web_active_page_alerts` が true で SOS が active の間、non-sticky rule TTL は custom
+  decoration/sound だけを終了し、安全な赤い raw-SOS overlay は clear または switch off まで残ります。
+  TTL は replicated emergency state を解除しません。
+- Core の `delivery_result` は `local_shell:dispatched`、`shell_unavailable`、
+  `web_push:accepted`、`no_recipients`、`backend_unavailable` など dispatch attempt の記録であり、OS
+  表示の証明ではありません。native shell は runtime `device_alert` に channel 別 presentation、
+  permission、TTL expiry、limitation を別途報告します。
 - `visitor_lang` (来訪者が門口機で言語を切替): payload `{ "lang": "en" }`。press の payload にも
   `visitor_lang` を同梱 (選択済みの場合)。表示先: 室内機/TV 着信画面の言語バッジ・
   /api/panel/state・Telegram 通知の「🌐 EN」・HA attrs topic。**クイック返信はこの言語の
   ラベルで表示+TTS** (訳が無ければ ja へフォールバック)。revert タイマー超過で ja へ戻り解除。
-- `reply` イベント payload: `{ "reply_id": "qr_away", "text": "…", "via": "telegram|mqtt|web",
-  "target_press": "<origin>:<seq>" }`
+- `reply` イベント payload: `{ "schema_version": 2, "reply_id": "qr_away", "text": "…",
+  "via": "telegram|mqtt|web", "call_id": "…", "stage_revision": 0 }`。schema-v2 の通話への返信は
+  正確な call_id と revision が必須で、旧形式の返信は通話中には表示専用となり通話を終了しません。
 - press の notify (LWW マージ): `{ "hlc": "…", "claimed_by": "…", "notified_at": "…",
   "telegram_msg_ids": {"<chat_id>": msg_id}, "replied": {"reply_id": "qr_away", "by": "telegram"} }`
 
 ## MQTT (Phase 2 — 実装済み)
 
-計画書の topic 表 + `doorbell/<door_id>/reply/set` (購読; payload = reply_id または自由文)。
+計画書の topic 表 + `doorbell/<door_id>/reply/set` (購読; 通話中は `reply_id`、`call_id`、
+`stage_revision` を含む JSON。旧形式の reply_id/自由文は通話外の表示専用)。
 実装: `core/src/bridge/` (mqtt_client = 自前 MQTT 3.1.1 QoS0、ha_bridge = HA 統合)。
 
 - 有効条件: `integrations.mqtt.host` 非空 かつ mesh の `mqtt_bridge` duty leader。
@@ -238,7 +412,8 @@
   retain — SOS 緊急モード。ON/OFF は emergency / emergency_cancel の hlc 最大側)。
 - スナップショット/カメラは MQTT に載せない — ライブ映像は go2rtc、静止画は HA generic camera
   が門口機の `/snapshot.jpg` を直接取る (`deploy/ha/` 参照)。
-- MVP は認証 `user`/`pass` 平文 (`pass_ref` の secure store 化は sip と同時に対応予定)。
+- MQTT 認証は `user` と `pass_ref` を使用し、bridge 設定直前に platform secure store から実値を
+  解決する。新規 config への平文 `pass` 書込は拒否され、旧設定の移行入力に限る。
 
 ## 統一資産 API / 来訪者言語 API (実装で確定した細部)
 
@@ -246,8 +421,10 @@
   許可 type は `image/jpeg` `image/png` `audio/mpeg` `audio/wav` のみ、上限 3MB。
   応答 `{"hash":"<sha256>"}`。空 body=400 / 許可外 type=415 / 上限超=413 / 未ログイン=401。
   登録すると台帳 `assets.<hash>` = `{size,type,origin,label}` が書かれ CRDT で全ノードへ複製される。
-- `GET /asset/<sha256>` — 管理セッション **または** panel token (`?k=`) で取得可 (403/404)。
-  `<sha256>` は 64 桁小文字 hex 固定で、それ以外は 400 (パス走査対策)。
+- `GET /asset/<sha256>` — LAN 公開の互換読込であり、管理または panel credential は使用しない。
+  セッションなしで許可されるのは、`/asset/` の後が正確に 64 桁の小文字 hex である GET のみ。
+  有効な hash が未キャッシュなら 404、認証済み要求の不正 hash は 400。他の method や
+  asset に似た path は公開扱いにならない (パス走査対策)。
 - `DELETE /api/assets/<sha256>` (管理セッション) — 台帳 `assets.<hash>` を tombstone にし、
   自ノードのローカルキャッシュも即削除する。他ノードは台帳消滅 (CRDT 複製) を見て
   猶予付き GC で自然に回収する。

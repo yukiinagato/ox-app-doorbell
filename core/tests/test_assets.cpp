@@ -1,6 +1,6 @@
-// 統一資産システム (mesh blob 配布 + 能動キャッシュ) の統合テスト。
-//  - InMemNet + SimClock: addAsset → config 複製 → 参照ノードが自動プリフェッチ
-//  - 実 TCP + HTTP: POST /api/assets / GET /asset/<hash> の認証と 4xx
+
+
+
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
@@ -54,7 +54,7 @@ struct AFleet {
       }
       return n;
     }
-    // 直近の asset_ready の hash ("" = 無し)
+
     std::string lastAssetReady() const {
       std::string h;
       for (const auto& e : ui) {
@@ -64,7 +64,7 @@ struct AFleet {
       }
       return h;
     }
-    // 直近の t 通知 (無ければ nullptr Doc)
+
     json::Doc lastUi(const std::string& t) const {
       json::Doc out;
       for (const auto& e : ui) {
@@ -86,7 +86,7 @@ struct AFleet {
     o.listen_addr = addr;
     o.advertise_addr = addr;
     o.psk = psk;
-    o.enable_beacon = false;  // 実 beacon 禁止 (稼働 fleet への迷入防止)
+    o.enable_beacon = false;
     o.http_port = 0;
     o.seed_default_config = seed_cfg;
     o.mesh_timing_template = timing();
@@ -100,6 +100,7 @@ struct AFleet {
     N* raw = n.get();
     n->node.reset(new Node(o, std::move(d)));
     n->node->setUiEventCb([raw](const std::string& e) { raw->ui.push_back(e); });
+    n->node->setRuntimeCapabilities(R"({"features":{"device_alert_v1":true}})");
     nodes.push_back(std::move(n));
     return *nodes.back();
   }
@@ -112,7 +113,7 @@ struct AFleet {
   }
 };
 
-// status_json の assets:{cached,total}
+
 std::pair<int64_t, int64_t> assetCounts(Node& n) {
   auto st = json::parse(n.statusJson());
   REQUIRE(st);
@@ -123,7 +124,7 @@ std::pair<int64_t, int64_t> assetCounts(Node& n) {
 
 }  // namespace
 
-TEST_CASE("assets: addAsset → config 複製 → 他ノードが自動プリフェッチ") {
+TEST_CASE("assets: addAsset replicates config and other nodes prefetch automatically") {
   AFleet f;
   auto& a = f.add("A:1", "front", "door_station", "d_front", true);
   auto& b = f.add("B:1", "kitchen", "indoor_panel", "", false);
@@ -131,18 +132,18 @@ TEST_CASE("assets: addAsset → config 複製 → 他ノードが自動プリフ
   REQUIRE(b.node->start());
   f.run(1500);
 
-  // A で背景画像を登録 (台帳 assets.<hash> が書かれ B にも複製される)
+
   Bytes img = toBytes("\xff\xd8***fake-jpeg-bytes***");
   std::string hash = a.node->addAsset(img, "image/jpeg", "桜.jpg");
   REQUIRE(hash.size() == 64);
   CHECK(hash == sha256Hex(img));
-  CHECK(a.node->assetPath(hash) != "");  // 登録元は即キャッシュ済み
+  CHECK(a.node->assetPath(hash) != "");
 
-  // 3MB 超・許可外 type は登録拒否
+
   CHECK(a.node->addAsset(Bytes(3 * 1024 * 1024 + 1, 0x11), "image/png", "big") == "");
   CHECK(a.node->addAsset(img, "application/zip", "zip") == "");
 
-  // 台帳だけでは前取りしない (参照されて初めて取る)
+
   f.run(1000);
   CHECK(b.node->assetPath(hash) == "");
   {
@@ -151,7 +152,7 @@ TEST_CASE("assets: addAsset → config 複製 → 他ノードが自動プリフ
     CHECK(total == 1);
   }
 
-  // display.theme.bg_image で参照 → B が能動プリフェッチ
+
   a.node->setConfigKey("display.theme.bg_image", "\"" + hash + "\"");
   f.run(1500);
   std::string bpath = b.node->assetPath(hash);
@@ -167,22 +168,22 @@ TEST_CASE("assets: addAsset → config 複製 → 他ノードが自動プリフ
     CHECK(total == 1);
   }
 
-  // 冪等: さらに時間を進めても再取得・重複通知しない
+
   f.run(1000);
   CHECK(b.uiCount("asset_ready") == 1);
 
-  // テーマ推送: display UI イベントに theme が合流し、キャッシュ完了後は
-  // bg_image_path がローカルパスへ解決されている (殻はパスを描画するだけ)
+
+
   {
     auto d = b.lastUi("display");
     REQUIRE(d);
     cJSON* theme = json::get(d.get(), "theme");
     REQUIRE(theme);
-    CHECK(json::getString(theme, "bg_color") == "#101418");  // 既定色
+    CHECK(json::getString(theme, "bg_color") == "#101418");
     CHECK(json::getString(theme, "bg_image") == hash);
     CHECK(json::getString(theme, "bg_image_path") == bpath);
   }
-  // status_json の display にも同じ theme が同梱される
+
   {
     auto st = json::parse(b.node->statusJson());
     REQUIRE(st);
@@ -190,7 +191,7 @@ TEST_CASE("assets: addAsset → config 複製 → 他ノードが自動プリフ
     REQUIRE(theme);
     CHECK(json::getString(theme, "bg_image_path") == bpath);
   }
-  // 端末別上書き (devices.<B>.local.theme) がキー単位で display.theme に勝つ
+
   a.node->setConfigKey("devices." + b.node->nodeId() + ".local.theme.bg_color",
                        "\"#223344\"");
   f.run(800);
@@ -200,14 +201,14 @@ TEST_CASE("assets: addAsset → config 複製 → 他ノードが自動プリフ
     cJSON* theme = json::get(d.get(), "theme");
     REQUIRE(theme);
     CHECK(json::getString(theme, "bg_color") == "#223344");
-    CHECK(json::getString(theme, "bg_image") == hash);  // 画像は基底 (display.theme) のまま
+    CHECK(json::getString(theme, "bg_image") == hash);
   }
 
   a.node->stop();
   b.node->stop();
 }
 
-TEST_CASE("assets: 1MB 級 (複数チャンク) の blob 転送") {
+TEST_CASE("assets: transfers a one-megabyte blob across multiple chunks") {
   AFleet f;
   auto& a = f.add("A:1", "front", "door_station", "d_front", true);
   auto& b = f.add("B:1", "kitchen", "indoor_panel", "", false);
@@ -215,12 +216,12 @@ TEST_CASE("assets: 1MB 級 (複数チャンク) の blob 転送") {
   REQUIRE(b.node->start());
   f.run(1500);
 
-  Bytes wav(1024 * 1024 + 123);  // 256KB チャンク × 5
+  Bytes wav(1024 * 1024 + 123);
   for (size_t i = 0; i < wav.size(); i++) wav[i] = static_cast<uint8_t>(i * 31 + (i >> 8));
   std::string hash = a.node->addAsset(wav, "audio/wav", "siren.wav");
   REQUIRE(hash.size() == 64);
 
-  // emergency.alarm_sound の "asset:*" 参照でも前取りされる
+
   a.node->setConfigKey("emergency.alarm_sound", "\"asset:" + hash + "\"");
   f.run(2000);
 
@@ -232,8 +233,8 @@ TEST_CASE("assets: 1MB 級 (複数チャンク) の blob 転送") {
   CHECK(got == wav);
   CHECK(b.lastAssetReady() == hash);
 
-  // SOS 発報: {"t":"emergency"} に警報音が同梱され、カスタム音はキャッシュ済みなので
-  // 各ノードが自分のローカルパスを audio_path として受け取る
+
+
   a.node->setEmergency(true, "panel");
   f.run(500);
   {
@@ -241,7 +242,7 @@ TEST_CASE("assets: 1MB 級 (複数チャンク) の blob 転送") {
     REQUIRE(e);
     CHECK(json::getBool(e.get(), "active"));
     CHECK(json::getString(e.get(), "alarm_sound") == "asset:" + hash);
-    CHECK(json::getInt(e.get(), "alarm_volume", -1) == 100);  // 既定音量
+    CHECK(json::getInt(e.get(), "alarm_volume", -1) == 100);
     CHECK(json::getString(e.get(), "audio_path") == bpath);
   }
   {
@@ -261,7 +262,7 @@ TEST_CASE("assets: 1MB 級 (複数チャンク) の blob 転送") {
   b.node->stop();
 }
 
-// ---------- 実 TCP + HTTP ----------
+
 
 namespace {
 
@@ -282,7 +283,7 @@ int assetFreePort(std::mt19937& rng) {
   return -1;
 }
 
-// 生 HTTP 往復 (バイナリ body 可・send は全量書き込み)
+
 std::string assetReq(int port, const std::string& method, const std::string& path,
                      const std::string& body = "", const std::string& cookie = "",
                      const std::string& ctype = "application/octet-stream") {
@@ -294,12 +295,15 @@ std::string assetReq(int port, const std::string& method, const std::string& pat
   sa.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
   REQUIRE(::connect(fd, reinterpret_cast<sockaddr*>(&sa), sizeof(sa)) == 0);
   std::string r = method + " " + path + " HTTP/1.1\r\nHost: 127.0.0.1\r\n";
-  if (!cookie.empty()) r += "Cookie: dbsess=" + cookie + "\r\n";
+  if (!cookie.empty()) {
+    if (cookie.rfind("Bearer ", 0) == 0) r += "Authorization: " + cookie + "\r\n";
+    else r += "Cookie: dbsess=" + cookie + "\r\n";
+  }
   if (!body.empty())
     r += "Content-Type: " + ctype + "\r\nContent-Length: " + std::to_string(body.size()) + "\r\n";
   r += "Connection: close\r\n\r\n" + body;
   size_t off = 0;
-  while (off < r.size()) {  // 大 body (3MB) でも全量送る
+  while (off < r.size()) {
     ssize_t n = ::send(fd, r.data() + off, r.size() - off, 0);
     REQUIRE(n > 0);
     off += static_cast<size_t>(n);
@@ -338,12 +342,12 @@ TEST_CASE("assets: HTTP API (POST /api/assets / GET /asset/<hash>)") {
   o.door = "d_front";
   o.listen_addr = "127.0.0.1:" + std::to_string(mesh_port);
   o.psk.fill(0x5a);
-  o.enable_beacon = false;  // 実 beacon 禁止 (稼働 fleet への迷入防止)
+  o.enable_beacon = false;
   o.http_port = http_port;
   Node node(o);
   REQUIRE(node.start());
 
-  // ログイン (初回 = パスワード設定)
+
   std::string login = assetReq(http_port, "POST", "/api/login", "{\"password\":\"pw\"}", "",
                                "application/json");
   REQUIRE(login.rfind("HTTP/1.1 200", 0) == 0);
@@ -351,11 +355,11 @@ TEST_CASE("assets: HTTP API (POST /api/assets / GET /asset/<hash>)") {
   REQUIRE(cpos != std::string::npos);
   std::string cookie = login.substr(cpos + 7, login.find(';', cpos) - (cpos + 7));
 
-  // 未ログインの登録は 401 (管理 API ゲート)
+
   CHECK(assetReq(http_port, "POST", "/api/assets?type=image/png", "x").rfind("HTTP/1.1 401", 0) ==
         0);
 
-  // 登録 (バイナリ body — \r\n や NUL を含む)
+
   std::string body = "PNG\r\n\x1a\n";
   body.push_back('\0');
   body += "payload";
@@ -367,7 +371,7 @@ TEST_CASE("assets: HTTP API (POST /api/assets / GET /asset/<hash>)") {
   std::string hash = json::getString(uj.get(), "hash");
   CHECK(hash == sha256Hex(toBytes(body)));
 
-  // 台帳 (config assets.<hash>) に size/type/origin/label が載る
+
   auto cfg = json::parse(node.configJson());
   REQUIRE(cfg);
   cJSON* entry = json::get(json::get(cfg.get(), "assets"), hash.c_str());
@@ -377,7 +381,7 @@ TEST_CASE("assets: HTTP API (POST /api/assets / GET /asset/<hash>)") {
   CHECK(json::getString(entry, "origin") == node.nodeId());
   CHECK(json::getString(entry, "label") == "t.png");
 
-  // 許可外 type / 空 body / 3MB 超は 4xx
+
   CHECK(assetReq(http_port, "POST", "/api/assets?type=application/zip", "x", cookie)
             .rfind("HTTP/1.1 415", 0) == 0);
   CHECK(assetReq(http_port, "POST", "/api/assets?type=image/png", "", cookie)
@@ -386,45 +390,44 @@ TEST_CASE("assets: HTTP API (POST /api/assets / GET /asset/<hash>)") {
                  std::string(3 * 1024 * 1024 + 1, 'z'), cookie)
             .rfind("HTTP/1.1 413", 0) == 0);
 
-  // 取得: 認証なし 403 / 管理セッション 200 / panel token 200 / 未知 hash 404
-  CHECK(assetReq(http_port, "GET", "/asset/" + hash).rfind("HTTP/1.1 403", 0) == 0);
-  std::string got = assetReq(http_port, "GET", "/asset/" + hash, "", cookie);
+
+  std::string got = assetReq(http_port, "GET", "/asset/" + hash);
   REQUIRE(got.rfind("HTTP/1.1 200", 0) == 0);
   CHECK(got.find("Content-Type: image/png") != std::string::npos);
   CHECK(assetBody(got) == body);
 
-  cJSON* toks = json::get(json::get(cfg.get(), "panel"), "tokens");
-  REQUIRE(cJSON_GetArraySize(toks) == 1);
-  std::string k = cJSON_GetArrayItem(toks, 0)->valuestring;
-  CHECK(assetReq(http_port, "GET", "/asset/" + hash + "?k=" + k).rfind("HTTP/1.1 200", 0) == 0);
-  CHECK(assetReq(http_port, "GET", "/asset/" + std::string(64, '0'), "", cookie)
+  CHECK(assetReq(http_port, "GET", "/asset/" + std::string(64, '0'))
             .rfind("HTTP/1.1 404", 0) == 0);
-  // hash 形式検証 (64 hex 以外は 400 — パス走査対策を兼ねる)
+
+  CHECK(assetReq(http_port, "GET", "/assetx/" + hash).rfind("HTTP/1.1 401", 0) == 0);
+  CHECK(assetReq(http_port, "POST", "/asset/" + hash, "x").rfind("HTTP/1.1 401", 0) == 0);
+  CHECK(assetReq(http_port, "GET", "/asset/" + hash + "/extra")
+            .rfind("HTTP/1.1 401", 0) == 0);
   CHECK(assetReq(http_port, "GET", "/asset/" + std::string(64, 'z'), "", cookie)
             .rfind("HTTP/1.1 400", 0) == 0);
 
-  // パス走査: 素の ../ も URL エンコード版もファイル実体を返さない。
-  // 実装は 64 桁小文字 hex 以外を弾くので通過し得ないが、退行検知のため明示的に固定する。
-  // 期待は「200 で中身を返さない」こと — civetweb が正規化した結果 "/" に落ちる形
-  // (/asset/../.. → /) は既存の /admin/ リダイレクト (302) になるが、これも漏洩ではない。
+
+
+
+
   for (const std::string& p :
        {std::string("/asset/../.."), std::string("/asset/../../etc/passwd"),
         std::string("/asset/..%2f..%2fetc%2fpasswd"), std::string("/asset/%2e%2e%2f%2e%2e"),
         std::string("/asset/" + std::string(63, 'a') + "/../../etc/passwd")}) {
-    const std::string r = assetReq(http_port, "GET", p, "", cookie);
+    const std::string r = assetReq(http_port, "GET", p);
     INFO("path=" << p << " resp=" << r.substr(0, 40));
-    CHECK(r.rfind("HTTP/1.1 200", 0) != 0);      // 実体は決して返さない
-    CHECK(r.find("root:") == std::string::npos);  // /etc/passwd の内容が漏れていない
+    CHECK(r.rfind("HTTP/1.1 200", 0) != 0);
+    CHECK(r.find("root:") == std::string::npos);
   }
 
-  // 削除: 未ログイン 401 / 不正 hash 400 / 正常 200 → 台帳 tombstone + キャッシュ即削除
+
   CHECK(assetReq(http_port, "DELETE", "/api/assets/" + hash).rfind("HTTP/1.1 401", 0) == 0);
   CHECK(assetReq(http_port, "DELETE", "/api/assets/xyz", "", cookie)
             .rfind("HTTP/1.1 400", 0) == 0);
   CHECK(assetReq(http_port, "DELETE", "/api/assets/" + hash, "", cookie)
             .rfind("HTTP/1.1 200", 0) == 0);
-  CHECK(node.assetPath(hash) == "");  // ローカルキャッシュも即消える
-  CHECK(assetReq(http_port, "GET", "/asset/" + hash, "", cookie).rfind("HTTP/1.1 404", 0) == 0);
+  CHECK(node.assetPath(hash) == "");
+  CHECK(assetReq(http_port, "GET", "/asset/" + hash).rfind("HTTP/1.1 404", 0) == 0);
   {
     auto cfg2 = json::parse(node.configJson());
     REQUIRE(cfg2);

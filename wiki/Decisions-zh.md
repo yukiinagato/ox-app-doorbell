@@ -1,6 +1,6 @@
 # 决策记录（ADR 风格）
 
-> 日本語: [Decisions](Decisions) / English: [Decisions-en](Decisions-en)
+> English: [Decisions](Decisions) / 日本語: [Decisions-ja](Decisions-ja) / 繁體中文 (本頁)
 
 以「背景 → 选项 → 决定 → 理由」的形式记录主要的设计判断。
 理念层面的内容见[设计理念](Design-Philosophy-zh)，实现见[架构](Architecture-zh)。
@@ -9,11 +9,12 @@
 
 - **背景**: 设备横跨 Win7 Toughpad 到最新 iPhone。单一编解码器无法兼顾。
 - **选项**: (a) 全部 MJPEG、(b) 全部 H.264、(c) 双层。
-- **决定**: (c)。基调是 MJPEG (`/stream.mjpeg`) —— 所有设备、所有浏览器（含 iPad 1 的越狱原生 app / Safari）都能显示。
-  只有拥有硬编的设备用 `codec: auto/h264` 追加 HW 编码 fMP4 (`/stream.mp4`)。
-- **理由**: MJPEG 连旧机的 CPU 都能解码，且毫无实现依赖。H.264 档只把
-  720p 流畅通话画质和「HA 免转码 (go2rtc `#video=copy`)」给到支持的设备。
-  auto 在硬编探测失败时默默降回 MJPEG —— 正是降级阶梯本身。
+- **決定**: (c)。MJPEG (`/stream.mjpeg`) 是 compatibility baseline；只有實測 hardware path healthy 的
+  device 可 publish HW-encoded fMP4 (`/stream.mp4`)。client 只在 exact renderer/source commissioning 後
+  claim 該 path。iOS 5 shell direct playback HTTP(S) MJPEG/snapshot；JPEG 留在 local，不 forward 到 Core。
+- **理由**: MJPEG 適合舊 CPU，但 compatibility 是逐 client implementation/test 結果，不是 universal
+  promise。qualified H.264 可用 go2rtc `#video=copy` 避免 HA transcoding。codec health 失敗時 `auto`
+  fallback 至 MJPEG；Android API 19 目前正式 supported SKU 是 0。
 
 ## D2: 站间对讲用直连 SIP（不依赖 PBX）
 

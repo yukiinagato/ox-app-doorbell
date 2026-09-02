@@ -1,12 +1,11 @@
-# iPad1 (A1219, iOS 5.1.1, armv7) kiosk 殻 — ios-kiosk 重写版 (ARC)。
-# ios-legacy と同一ツールチェーンだが、ObjC 層は ARC で書き直している
-# (-fobjc-arc は min iOS 5.1 で使用可 — 必要な runtime 記号は iOS 5.0+ に存在。
-#  現代 clang は deployment target を見て objc_alloc (iOS 8+) を出さない)。
-# 検証上限: コンパイル+リンク成功 + lipo(armv7) + otool(健全性)。
+# iPad 1 (A1219, iOS 5.1.1, armv7) kiosk shell rebuilt with ARC.
+# It shares the historical toolchain with ios-legacy, but its Objective-C layer
+# uses ARC. The iOS 5 runtime provides the required symbols, and the deployment
+# target prevents current clang versions from emitting iOS 8-only objc_alloc.
 #
-# 使い方:
-#   make            # コンパイル → リンク → Doorbell.app 組立 → ldid 伪签
-#   make verify     # lipo / otool / 未解決記号チェック
+# Usage:
+#   make            # Compile, link, assemble Doorbell.app, and apply an ldid signature.
+#   make verify     # Check architecture, load commands, and unresolved symbols.
 #   make clean
 
 ROOT      := $(abspath $(dir $(lastword $(MAKEFILE_LIST)))/..)
@@ -21,6 +20,7 @@ SDK       := $(ROOT)/tools/sdk/iPhoneOS7.1.sdk
 BUILD     := $(KIOSK)/build
 OBJ       := $(BUILD)/obj
 APP       := $(BUILD)/Doorbell.app
+ENTITLEMENTS := $(SRC_DIR)/Entitlements.plist
 
 CLANG     := $(shell xcrun -f clang)
 CXX       := $(shell xcrun -f clang++)
@@ -32,7 +32,7 @@ ARCH      := -arch armv7
 MINVER    := -miphoneos-version-min=5.1
 SYSROOT   := -isysroot $(SDK)
 
-# ObjC は ARC (iOS 5.1 target で正式サポート)。
+# Objective-C uses ARC, which is supported by the iOS 5.1 target.
 OBJCFLAGS := $(ARCH) $(MINVER) $(SYSROOT) -Wall -O2 -fobjc-arc \
              -I$(SRC_DIR) -I$(SRC_DIR)/Support -I$(SRC_DIR)/Core -I$(SRC_DIR)/Net \
              -I$(SRC_DIR)/Media -I$(SRC_DIR)/Screens \
@@ -45,7 +45,7 @@ FRAMEWORKS := -framework Foundation -framework UIKit -framework CoreGraphics \
               -framework CoreFoundation -framework SystemConfiguration \
               -framework ImageIO -framework MediaPlayer -framework CoreMedia \
               -framework CoreVideo -framework OpenGLES -framework GLKit
-# 静的 C++ ランタイム (順序: c++ → c++abi → unwind → builtins)。libdoorbell_all.a が要求。
+# Static C++ runtime in dependency order, required by libdoorbell_all.a.
 RTLIBS := $(TC_LIB)/libc++.a $(TC_LIB)/libc++abi.a $(TC_LIB)/libunwind.a $(CLANG_RT)
 
 OBJC_SRCS := $(shell find $(SRC_DIR) -name '*.m' | sort)
@@ -84,8 +84,8 @@ $(OBJ)/minisip_%.o: $(MINISIP)/%.c | $(OBJ)
 $(OBJ)/qr_%.o: $(QR)/%.c | $(OBJ)
 	$(CLANG) $(CFLAGS) -c $< -o $@
 
-# libdoorbell_all.a を依存に含める — core 再ビルド時に app を確実に再リンクする
-$(EXE): $(ALL_OBJS) $(LIB_DIR)/libdoorbell_all.a
+# Relink the app whenever the combined Core archive changes.
+$(EXE): $(ALL_OBJS) $(LIB_DIR)/libdoorbell_all.a $(ENTITLEMENTS)
 	@mkdir -p $(APP)
 	$(CLANG) $(ARCH) $(MINVER) $(SYSROOT) -o $@ \
 	  $(ALL_OBJS) $(LIB_DIR)/libdoorbell_all.a $(RTLIBS) $(FRAMEWORKS)
@@ -94,7 +94,7 @@ app: $(EXE)
 	@cp $(SRC_DIR)/Info.plist $(APP)/Info.plist
 	@cp $(SRC_DIR)/Resources/*.png $(APP)/ 2>/dev/null || true
 	@cp $(ROOT)/assets/audio/*.mp3 $(APP)/
-	@$(LDID) -S $(EXE)
+	@$(LDID) -S$(ENTITLEMENTS) $(EXE)
 	@echo "ok: $(APP)"
 
 $(HOST_TS_TEST): $(KIOSK)/tests/test_ts_mux.cpp $(SRC_DIR)/Media/DBTsMux.cpp \
@@ -108,12 +108,14 @@ test: $(HOST_TS_TEST)
 
 verify: app
 	@echo "-- lipo -info --"; lipo -info $(EXE)
-	@echo "-- otool -L (dylib 依存: libSystem/frameworks のみ = libc++ 静的) --"; otool -L $(EXE)
+	@echo "-- otool -L (only libSystem/framework dynamic dependencies are allowed) --"; otool -L $(EXE)
 	@echo "-- otool -l LC_VERSION_MIN_IPHONEOS --"; \
 	  otool -l $(EXE) | grep -A3 LC_VERSION_MIN_IPHONEOS | head -8
-	@echo "-- 未解決記号 (0 であること) --"; \
+	@echo "-- code-signature load command --"; \
+	  otool -l $(EXE) | grep -q LC_CODE_SIGNATURE; ldid -e $(EXE) >/dev/null
+	@echo "-- unresolved non-system symbols (must be zero) --"; \
 	  U=$$(nm -u $(EXE) 2>/dev/null | grep -v '^ *U _OBJC_' | grep -v dyld_stub_binder | grep '^ *U ' | wc -l); \
-	  echo "   未定義 (dynamic import 除く): $$U 行 (framework/libSystem 記号は動的解決 = 正常)"
+	  echo "   unresolved: $$U"; test "$$U" -eq 0
 
 clean:
 	rm -rf $(BUILD)
