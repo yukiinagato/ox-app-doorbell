@@ -34,6 +34,7 @@ namespace DoorbellApp
         private readonly DispatcherTimer _incomingTimeout = new DispatcherTimer();
         private readonly DispatcherTimer _returnTimer = new DispatcherTimer();
         private readonly DispatcherTimer _clockSync = new DispatcherTimer();
+        private readonly DispatcherTimer _homeRefresh = new DispatcherTimer();
         private readonly DispatcherTimer _answerDelay = new DispatcherTimer();
         private readonly DispatcherTimer _peerPoll = new DispatcherTimer();
         private readonly DispatcherTimer _h264Fallback = new DispatcherTimer();
@@ -88,6 +89,36 @@ namespace DoorbellApp
         private bool _screensaverOn;
         private static readonly Brush NightClockBrush = Frozen(new SolidColorBrush(Color.FromRgb(0x8B, 0x24, 0x1C)));
         private static readonly Brush SaverClockBrush = Frozen(new SolidColorBrush(Color.FromRgb(0x39, 0x42, 0x4C)));
+
+        // Core republishes peers_changed and config_changed far faster than a person can read
+        // them. Every handler asks for a refresh; the timer runs at most one a second, and that
+        // one takes a single status document off the UI thread and hands it to every consumer.
+        [Flags]
+        private enum HomeRefresh
+        {
+            None = 0,
+            Node = 1,
+            Notice = 2,
+            Tiles = 4,
+            History = 8,
+            Pairing = 16,
+            All = Node | Notice | Tiles | History | Pairing,
+        }
+
+        /// <summary>One read of core per refresh, taken on a worker and applied on the UI thread.</summary>
+        private sealed class HomeSnapshot
+        {
+            public Dictionary<string, object> Status;
+            public Dictionary<string, object> Config;
+            public Dictionary<string, object> Pairing;
+            public Dictionary<string, object> CallLog;
+            public Dictionary<string, object> Audio;
+            public string SipBackend = "";
+            public bool SipAvailable;
+        }
+
+        private HomeRefresh _pendingRefresh;
+        private bool _homeRefreshBusy;
 
         private Dictionary<string, object> _cfg;
         // The display contract core publishes: appearance, theme and the automatic contrast
@@ -163,7 +194,7 @@ namespace DoorbellApp
         {
             InitializeComponent();
             _visitorLang = App.Boot.UiLang;
-            RefreshConfigCache();
+            RefreshConfigCache(App.Core.Config());
             ApplyStrings();
             // Pick the home screen before the first frame so a role never flashes the other one.
             ApplyRoleHome();
@@ -173,6 +204,8 @@ namespace DoorbellApp
             _clock.Start();
             // Core's offset moves slowly, so it is re-read on its own schedule and whenever core
             // says the time source changed, never once per rendered second.
+            _homeRefresh.Interval = TimeSpan.FromSeconds(1);
+            _homeRefresh.Tick += (s, e) => { _homeRefresh.Stop(); RunHomeRefresh(); };
             _clockSync.Interval = TimeSpan.FromSeconds(30);
             _clockSync.Tick += (s, e) => SyncClockBase();
             _clockSync.Start();
@@ -262,7 +295,7 @@ namespace DoorbellApp
 
             PairingOverlay.DismissRequested += OnPairingDismissed;
             _pairingPoll.Interval = TimeSpan.FromSeconds(2);
-            _pairingPoll.Tick += (s, e) => RefreshPairingState();
+            _pairingPoll.Tick += (s, e) => RequestHomeRefresh(HomeRefresh.Pairing);
 
             _showVideoStats = LoadVideoStatsPreference();
             Loaded += (s, e) =>
@@ -275,9 +308,9 @@ namespace DoorbellApp
                     _kiosk.Enable();
                 }
                 KioskHooks.KeepDisplayOn();
-                RefreshNodeInfo();
-                RefreshCallHistory();
-                RefreshPairingState();
+                // The first paint does not wait out the coalescing window, but still reads
+                // core off the UI thread.
+                RunHomeRefresh(HomeRefresh.All);
                 _pairingPoll.Start();
                 RecoverActiveCall();
                 _launchAudio = PlayConfigured(_launchAudio,
@@ -415,6 +448,20 @@ namespace DoorbellApp
             return InZone(SystemUtcMs() + _clockOffsetMs);
         }
 
+        /// <summary>
+        /// The current hour and minute for the appearance schedule, taken from the cached clock
+        /// base so evaluating it costs no call into core.
+        /// </summary>
+        private Dictionary<string, object> ScheduleClock()
+        {
+            DateTime now = CorrectedNow();
+            return new Dictionary<string, object>
+            {
+                { "hh", now.Hour },
+                { "mm", now.Minute },
+            };
+        }
+
         /// <summary>One recorded wall-clock instant, rendered in the cluster time zone.</summary>
         private DateTime InZone(long wallMs)
         {
@@ -468,10 +515,82 @@ namespace DoorbellApp
             UpdateClock();
         }
 
-        private void RefreshNodeInfo()
+        /// <summary>
+        /// Asks for a home refresh. Several events inside the same second cost one refresh, which
+        /// is what keeps core's run loop free while peers gossip.
+        /// </summary>
+        private void RequestHomeRefresh(HomeRefresh kinds)
         {
-            RefreshConfigCache();
-            var st = App.Core.Status();
+            _pendingRefresh |= kinds;
+            if (!_homeRefresh.IsEnabled) _homeRefresh.Start();
+        }
+
+        private void RunHomeRefresh(HomeRefresh extra = HomeRefresh.None)
+        {
+            _pendingRefresh |= extra;
+            HomeRefresh kinds = _pendingRefresh;
+            if (kinds == HomeRefresh.None) return;
+            if (_homeRefreshBusy)
+            {
+                // A read is still in flight; try again on the next turn of the coalescer.
+                if (!_homeRefresh.IsEnabled) _homeRefresh.Start();
+                return;
+            }
+            _pendingRefresh = HomeRefresh.None;
+            _homeRefreshBusy = true;
+            Task.Run(() =>
+            {
+                HomeSnapshot snapshot = ReadHomeSnapshot(kinds);
+                Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    _homeRefreshBusy = false;
+                    ApplyHomeSnapshot(snapshot, kinds);
+                }));
+            });
+        }
+
+        /// <summary>
+        /// Runs on a worker. status/config/audio are served from run-loop snapshots and never
+        /// enter the loop; pairing and the call log do marshal into it, which is exactly why they
+        /// are read here rather than on the dispatcher.
+        /// </summary>
+        private HomeSnapshot ReadHomeSnapshot(HomeRefresh kinds)
+        {
+            var snapshot = new HomeSnapshot();
+            try
+            {
+                snapshot.Status = App.Core.Status();
+                snapshot.Config = App.Core.Config();
+                snapshot.Audio = App.Core.AudioVolumes(_nodeId);
+                snapshot.SipBackend = App.Core.SipBackend;
+                snapshot.SipAvailable = App.Core.SipAvailable;
+                if ((kinds & HomeRefresh.Pairing) != 0) snapshot.Pairing = App.Core.PairingInfo();
+                if ((kinds & HomeRefresh.History) != 0)
+                    snapshot.CallLog = App.Core.CallLog(0, RecentCallRows);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("home refresh read failed: " + ex.Message);
+            }
+            return snapshot;
+        }
+
+        private void ApplyHomeSnapshot(HomeSnapshot snapshot, HomeRefresh kinds)
+        {
+            if (snapshot == null) return;
+            // One status document for this refresh, shared by every consumer below.
+            if (snapshot.Status != null) _status = snapshot.Status;
+            if (snapshot.Config != null) RefreshConfigCache(snapshot.Config);
+            if ((kinds & HomeRefresh.Node) != 0) RefreshNodeInfo(snapshot);
+            if ((kinds & HomeRefresh.Notice) != 0) RefreshNoticeSurfaces();
+            if ((kinds & HomeRefresh.Tiles) != 0) RefreshDoorTiles(snapshot.Status);
+            if ((kinds & HomeRefresh.History) != 0) RefreshCallHistory(snapshot.CallLog);
+            if ((kinds & HomeRefresh.Pairing) != 0) RefreshPairingState(snapshot.Pairing);
+        }
+
+        private void RefreshNodeInfo(HomeSnapshot snapshot)
+        {
+            var st = snapshot.Status;
             if (st != null)
             {
                 try
@@ -495,7 +614,7 @@ namespace DoorbellApp
                 SetVisitorLang(vl != null ? vl.ToString() : "ja");
             }
             RefreshSosConfig(_cfg);
-            RefreshAudioVolumes();
+            ApplyAudioVolumes(snapshot.Audio);
             var dp = CoreClient.Dig(_cfg, "sip.direct_port");
             if (dp != null)
             {
@@ -516,8 +635,6 @@ namespace DoorbellApp
             ApplyRoleHome();
             RefreshAdminLink();
             RefreshDeviceCounters();
-            RefreshNoticeSurfaces();
-            RefreshDoorTiles();
             _semanticStyles = SemanticUiOverrides.Load(_cfg, _nodeId, App.DataDir);
             ApplySemanticStyles();
             PublishUiStyleWithAdvisories();
@@ -526,7 +643,7 @@ namespace DoorbellApp
             MicButton.Visibility = App.Core.SipMicMuteAvailable ?
                 Visibility.Visible : Visibility.Collapsed;
             InCallMicButton.Visibility = MicButton.Visibility;
-            bool sip = App.Core.SipAvailable;
+            bool sip = snapshot.SipAvailable;
             AnswerButton.IsEnabled = sip && !_suppressLosingSipIdle;
             MonitorButton.IsEnabled = sip;
             OpenDoorButton.IsEnabled = sip;
@@ -534,9 +651,9 @@ namespace DoorbellApp
         }
 
 
-        private void RefreshConfigCache()
+        private void RefreshConfigCache(Dictionary<string, object> config)
         {
-            _cfg = App.Core.Config();
+            _cfg = config;
             Texts.SetConfig(_cfg);
         }
 
@@ -939,9 +1056,8 @@ namespace DoorbellApp
         /// Effective 呼出 / SOS / 通常 volumes for this device, resolved by core from the device
         /// override and the cluster default (db_core_audio_json).
         /// </summary>
-        private void RefreshAudioVolumes()
+        private void ApplyAudioVolumes(Dictionary<string, object> levels)
         {
-            var levels = App.Core.AudioVolumes(_nodeId);
             if (levels == null) return;
             _volumeCall = Clamp(DictInt(levels, "call", _volumeCall));
             _volumeSos = Clamp(DictInt(levels, "sos", _volumeSos));
@@ -1785,11 +1901,16 @@ namespace DoorbellApp
                     ShowEmergency(ev);
                     break;
                 case "peers_changed":
+                    // Core republishes this on gossip, so it is coalesced like everything else.
+                    RequestHomeRefresh(HomeRefresh.Node | HomeRefresh.Tiles |
+                                       HomeRefresh.Pairing);
+                    break;
                 case "config_changed":
-                    RefreshNodeInfo();
+                    RequestHomeRefresh(HomeRefresh.Node | HomeRefresh.Notice |
+                                       HomeRefresh.Tiles);
                     break;
                 case "time_changed":
-                    // The source flipped or the correction moved: re-read the base, then redraw.
+                    // The base is re-read on a worker; the redraw itself touches no core call.
                     SyncClockBase();
                     UpdateClock();
                     ApplyAppearance();
@@ -1797,16 +1918,14 @@ namespace DoorbellApp
                 case "power_changed":
                     _batteryPct = DictInt(ev.Data, "battery_pct", _batteryPct);
                     _batteryCharging = EventBool(ev, "charging", _batteryCharging);
-                    RefreshNodeInfo();
+                    RequestHomeRefresh(HomeRefresh.Node);
                     break;
                 case "notice_changed":
-                    RefreshConfigCache();
-                    RefreshNoticeSurfaces();
-                    RefreshDoorTiles();
+                    RequestHomeRefresh(HomeRefresh.Notice | HomeRefresh.Tiles);
                     break;
                 case "call_log_changed":
                     _unreadMissed = DictInt(ev.Data, "unread_missed", _unreadMissed);
-                    RefreshCallHistory();
+                    RequestHomeRefresh(HomeRefresh.History);
                     break;
             }
         }
@@ -2842,7 +2961,7 @@ namespace DoorbellApp
                     _pairingSkipped = false;
                     ShowPairingOverlay();
                     PairingOverlay.HandleCoreEvent(ev);
-                    RefreshPairingState();
+                    RequestHomeRefresh(HomeRefresh.Pairing);
                     return;
                 case "pairing_state":
                 case "paired":
@@ -2852,14 +2971,14 @@ namespace DoorbellApp
                 case "join_token_changed":
                 case "pending_changed":
                     PairingOverlay.HandleCoreEvent(ev);
-                    RefreshPairingState();
+                    RequestHomeRefresh(HomeRefresh.Pairing);
                     return;
             }
         }
 
-        private void RefreshPairingState()
+        private void RefreshPairingState(Dictionary<string, object> pairing)
         {
-            var snapshot = PairingSnapshot.From(App.Core.PairingInfo());
+            var snapshot = PairingSnapshot.From(pairing);
             // {} means core has not published a snapshot yet: unknown, so do not show onboarding.
             if (!snapshot.Known) return;
             _pairing = snapshot;
@@ -2885,7 +3004,7 @@ namespace DoorbellApp
         {
             _pairingSkipped = true;
             PairingOverlay.Deactivate();
-            RefreshPairingState();
+            RequestHomeRefresh(HomeRefresh.Pairing);
         }
 
         private void OnPairBannerClick(object sender, MouseButtonEventArgs e)
@@ -2915,7 +3034,7 @@ namespace DoorbellApp
                 ShowPairingOverlay();
                 return;
             }
-            RefreshPairingState();
+            RequestHomeRefresh(HomeRefresh.Pairing);
         }
 
         private void OnSecretCorner(object sender, MouseButtonEventArgs e)

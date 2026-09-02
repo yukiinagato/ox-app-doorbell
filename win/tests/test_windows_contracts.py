@@ -771,14 +771,135 @@ class WindowsContracts(unittest.TestCase):
         node_info = window[window.index("private void RefreshNodeInfo"):
                            window.index("private void RefreshConfigCache")]
         self.assertNotIn("UpdateClock", node_info)
+        # Evaluating the appearance schedule reads the same cached base, not core.
+        self.assertIn("Appearance.Apply(_cfg, _nodeId, ScheduleClock(), _display);",
+                      read("win/DoorbellApp/MainWindow.Shell.cs"))
 
         # A history page renders its timestamps from the same base, not one call per row.
         self.assertNotIn("App.Core.LocalTime", dashboard)
         self.assertIn("InZone(wallMs)", dashboard)
 
+    # Exports that marshal into core's run loop and can wait for it, per the table above
+    # db_core_status_json in doorbell.h. status/config/local_time/audio are served from run-loop
+    # snapshots and are deliberately absent from this list.
+    LOOP_MARSHALLING_READS = (
+        "PairingInfo(", "CallLog(", "CallLogPage(", "CallLogMarkSeen(",
+        "AdminPasswordVerify(", "AdminPasswordSet(", "DebugJson(", "CapabilitiesJson(",
+    )
+
+    def test_every_home_event_routes_through_the_one_second_coalescer(self):
+        window = read("win/DoorbellApp/MainWindow.xaml.cs")
+        # Core republished peers_changed on every heartbeat until it was gated, and a shell that
+        # rebuilt the home screen per event saturated the run loop.
+        self.assertIn("_homeRefresh.Interval = TimeSpan.FromSeconds(1);", window)
+        self.assertIn("_homeRefresh.Tick += (s, e) => { _homeRefresh.Stop(); RunHomeRefresh(); };",
+                      window)
+        dispatch = window[window.index('case "peers_changed":'):
+                          window.index("private static string DictStr")]
+        for event in ("peers_changed", "config_changed", "power_changed", "notice_changed",
+                      "call_log_changed"):
+            handler = dispatch[dispatch.index('case "%s":' % event):]
+            handler = handler[:handler.index("break;")]
+            with self.subTest(event=event):
+                self.assertIn("RequestHomeRefresh(", handler)
+                # No handler rebuilds the home screen inline any more.
+                for direct in ("RefreshNodeInfo(", "RefreshDoorTiles(", "RefreshCallHistory(",
+                               "RefreshNoticeSurfaces(", "RefreshConfigCache("):
+                    self.assertNotIn(direct, handler)
+        # The two that legitimately do not refresh the home screen.
+        time_changed = dispatch[dispatch.index('case "time_changed":'):]
+        time_changed = time_changed[:time_changed.index("break;")]
+        self.assertIn("SyncClockBase();", time_changed)
+        self.assertNotIn("App.Core", time_changed)
+        asset = window[window.index('case "asset_ready":'):]
+        asset = asset[:asset.index("break;")]
+        self.assertNotIn("RefreshNodeInfo", asset)
+
+        # A refresh already in flight is retried rather than doubled up.
+        run = window[window.index("private void RunHomeRefresh("):
+                     window.index("private HomeSnapshot ReadHomeSnapshot(")]
+        self.assertIn("if (_homeRefreshBusy)", run)
+        self.assertIn("Task.Run(", run)
+        self.assertIn("Dispatcher.BeginInvoke(", run)
+
+    def test_one_status_document_is_shared_by_every_consumer(self):
+        window = read("win/DoorbellApp/MainWindow.xaml.cs")
+        dashboard = read("win/DoorbellApp/MainWindow.Dashboard.cs")
+        read_snapshot = window[window.index("private HomeSnapshot ReadHomeSnapshot("):
+                               window.index("private void ApplyHomeSnapshot(")]
+        self.assertEqual(read_snapshot.count("App.Core.Status()"), 1)
+        self.assertEqual(read_snapshot.count("App.Core.Config()"), 1)
+        apply_snapshot = window[window.index("private void ApplyHomeSnapshot("):
+                                window.index("private void RefreshNodeInfo(")]
+        self.assertIn("_status = snapshot.Status;", apply_snapshot)
+        self.assertIn("RefreshDoorTiles(snapshot.Status)", apply_snapshot)
+        self.assertIn("RefreshCallHistory(snapshot.CallLog)", apply_snapshot)
+        self.assertIn("RefreshPairingState(snapshot.Pairing)", apply_snapshot)
+        # The consumers take what they were handed instead of reading again.
+        tiles = dashboard[dashboard.index("private void RefreshDoorTiles("):
+                          dashboard.index("private static bool PeerHasCamera(")]
+        self.assertNotIn("App.Core.Status()", tiles)
+        history = dashboard[dashboard.index("private void RefreshCallHistory("):
+                            dashboard.index("private static List<Dictionary<string, object>> Rows(")]
+        self.assertNotIn("App.Core.CallLog", history)
+        pairing = window[window.index("private void RefreshPairingState("):
+                         window.index("private void ShowPairingOverlay()")]
+        self.assertNotIn("App.Core.PairingInfo()", pairing)
+
+    @staticmethod
+    def _worker_spans(text):
+        """Character ranges of every Task.Run / Task.Factory.StartNew body."""
+        spans = []
+        for match in re.finditer(r"Task\.(?:Run|Factory\.StartNew)\(", text):
+            depth = 0
+            index = text.index("(", match.end() - 1)
+            for position in range(index, len(text)):
+                if text[position] == "(":
+                    depth += 1
+                elif text[position] == ")":
+                    depth -= 1
+                    if depth == 0:
+                        spans.append((index, position))
+                        break
+        return spans
+
+    @staticmethod
+    def _method_span(text, signature):
+        start = text.index(signature)
+        end = text.find("\n        private ", start + len(signature))
+        return (start, len(text) if end < 0 else end)
+
+    def test_no_loop_marshalling_read_runs_on_the_ui_thread(self):
+        """Every call the doorbell.h table names as entering core's run loop is on a worker."""
+        for name in ("MainWindow.xaml.cs", "MainWindow.Dashboard.cs", "MainWindow.History.cs",
+                     "MainWindow.Notice.cs", "MainWindow.Shell.cs", "MainWindow.CallScreen.cs",
+                     "AdminDialog.xaml.cs", "Pairing/PairingOnboardingView.xaml.cs",
+                     "Pairing/AddDeviceWindow.xaml.cs"):
+            text = read("win/DoorbellApp/" + name)
+            spans = self._worker_spans(text)
+            if name == "MainWindow.xaml.cs":
+                # ReadHomeSnapshot is the coalescer's worker body in method form. It counts as
+                # off-thread only while every one of its call sites is itself inside a worker.
+                declaration = "private HomeSnapshot ReadHomeSnapshot("
+                prefix = "private HomeSnapshot "
+                for match in re.finditer(re.escape("ReadHomeSnapshot("), text):
+                    if text[max(0, match.start() - len(prefix)):match.start()] == prefix:
+                        continue
+                    self.assertTrue(
+                        any(start < match.start() < end for start, end in spans),
+                        "ReadHomeSnapshot is called on the UI thread")
+                spans.append(self._method_span(text, declaration))
+            for call in self.LOOP_MARSHALLING_READS:
+                for match in re.finditer(re.escape("App.Core." + call), text):
+                    inside = any(start < match.start() < end for start, end in spans)
+                    with self.subTest(name=name, call=call):
+                        self.assertTrue(
+                            inside,
+                            "%s calls App.Core.%s on the UI thread" % (name, call))
+
     def test_a_door_station_without_a_camera_gets_no_tile(self):
         dashboard = read("win/DoorbellApp/MainWindow.Dashboard.cs")
-        tiles = dashboard[dashboard.index("private void RefreshDoorTiles()"):
+        tiles = dashboard[dashboard.index("private void RefreshDoorTiles("):
                           dashboard.index("private static bool PeerHasCamera(")]
         self.assertIn("if (!PeerHasCamera(peer)) continue;", tiles)
         camera = dashboard[dashboard.index("private static bool PeerHasCamera("):
@@ -952,10 +1073,10 @@ class WindowsContracts(unittest.TestCase):
         self.assertIn("if (_batteryPct >= 0)", shell)
         # History: 50 rows a page, day groups, filters and mark-seen on open.
         self.assertIn("private const int HistoryPageRows = 50;", history)
-        self.assertIn("App.Core.CallLogMarkSeen(_latestCallHlc)", history)
+        self.assertIn("App.Core.CallLogMarkSeen(seenUpTo)", history)
         opened = history[history.index("private void OpenHistory"):
-                         history.index("private void OnHistoryCloseClick")]
-        self.assertIn("MarkHistorySeen();", opened)
+                         history.index("private void LoadHistoryPage(")]
+        self.assertIn("LoadHistoryPage(true, true);", opened)
         self.assertIn('_historyFilter == "missed"', history)
 
     def test_the_visitor_call_button_never_names_the_door(self):
@@ -1583,14 +1704,15 @@ class WindowsContracts(unittest.TestCase):
         self.assertIn("App.Core.SetGlobalNotice(dialog.NoticeBody, dialog.ExpiresMs)", notice)
         self.assertIn("App.Core.ClearGlobalNotice()", notice)
         # 50 rows a page with an exclusive before_ms upper bound.
-        page = history[history.index("private void LoadHistoryPage"):
+        page = history[history.index("private void LoadHistoryPage("):
                        history.index("private void OnHistoryCloseClick")]
-        self.assertIn("App.Core.CallLogPage(0, _historyBeforeMs, HistoryPageRows)", page)
+        self.assertIn("App.Core.CallLogPage(0, before, HistoryPageRows)", page)
         self.assertIn("_historyBeforeMs = oldest;", page)
         self.assertIn("public Dictionary<string, object> CallLogPage(long sinceMs, "
                       "long beforeMs, int limit)", client)
         # The growing-limit fallback stays for a core without before_ms.
-        self.assertIn("App.Core.CallLog(0, _historyLimit)", page)
+        self.assertIn("App.Core.CallLog(0, limit)", page)
+        self.assertIn("int limit = _historyLimit;", page)
 
     def test_native_config_writes_are_prepared(self):
         client = read("win/DoorbellApp/Core/CoreClient.cs")

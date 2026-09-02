@@ -21,10 +21,13 @@ namespace DoorbellApp
         private const int RecentCallRows = 20;
 
         /// <summary>Rebuilds the tile grid from the door stations core knows about.</summary>
-        private void RefreshDoorTiles()
+        /// <summary>
+        /// Renders the tiles from the status document the coalescer already read. It never takes
+        /// its own: one refresh means one status document, shared by every consumer.
+        /// </summary>
+        private void RefreshDoorTiles(Dictionary<string, object> status)
         {
             if (App.Boot.Role != "indoor_panel") { _tileRefresh.Stop(); return; }
-            var status = App.Core.Status();
             var peers = status != null && status.ContainsKey("peers") ?
                 status["peers"] as System.Collections.IEnumerable : null;
             var doors = new List<string>();
@@ -309,10 +312,14 @@ namespace DoorbellApp
         /// Reads the newest rows for the dashboard list and the missed badge. The badge clears
         /// when the full history page is opened, which is what moves the seen watermark.
         /// </summary>
-        private void RefreshCallHistory()
+        /// <summary>
+        /// Renders the dashboard list from a call log already read off the UI thread.
+        /// db_core_call_log_json marshals into core's run loop, so it never runs on the
+        /// dispatcher.
+        /// </summary>
+        private void RefreshCallHistory(Dictionary<string, object> log)
         {
             if (App.Boot.Role != "indoor_panel") return;
-            var log = App.Core.CallLog(0, RecentCallRows);
             RecentCallsList.Children.Clear();
             var rows = log == null ? null : Rows(log);
             if (rows == null || rows.Count == 0)

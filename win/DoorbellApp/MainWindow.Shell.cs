@@ -201,7 +201,7 @@ namespace DoorbellApp
         /// <summary>Applies display.appearance and then the per-region automatic ink.</summary>
         private void ApplyAppearance()
         {
-            Appearance.Apply(_cfg, _nodeId, App.Core.LocalTime(0), _display);
+            Appearance.Apply(_cfg, _nodeId, ScheduleClock(), _display);
             ApplyAutoInk();
             QueueInkPass();
         }
