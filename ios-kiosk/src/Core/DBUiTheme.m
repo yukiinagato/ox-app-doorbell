@@ -363,6 +363,24 @@ static double DBContrastAgainstLuminance(double inkLuminance, double backgroundL
   return ratio < 4.5;
 }
 
++ (BOOL)needsInkShadowForInk:(NSString *)inkHex
+                  background:(NSString *)backgroundHex
+                     darkest:(NSString *)darkestHex
+                    lightest:(NSString *)lightestHex {
+  // Both ink tokens sit outside the luminance range any real photograph
+  // covers, so the worst patch for a given ink is one of the two extremes;
+  // the average is checked too because it costs nothing and is the only value
+  // available when a region was not sampled.
+  if ([self needsInkShadowForInk:inkHex background:backgroundHex]) return YES;
+  if ([darkestHex length] > 0 &&
+      [self needsInkShadowForInk:inkHex background:darkestHex])
+    return YES;
+  if ([lightestHex length] > 0 &&
+      [self needsInkShadowForInk:inkHex background:lightestHex])
+    return YES;
+  return NO;
+}
+
 #pragma mark - per-region sampling
 
 + (NSInteger)maximumSampleEdge { return 16; }

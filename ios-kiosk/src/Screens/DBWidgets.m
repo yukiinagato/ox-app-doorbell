@@ -95,7 +95,7 @@ static const NSInteger kProxyEdge = 64;
   return sampler;
 }
 
-- (NSString *)averageHexInViewRect:(CGRect)rect {
+- (NSDictionary *)sampleInViewRect:(CGRect)rect {
   if (_pixels == nil) return nil;
   NSArray *box = [DBUiTheme samplePixelRectForViewX:rect.origin.x
                                                   y:rect.origin.y
@@ -122,6 +122,10 @@ static const NSInteger kProxyEdge = 64;
   const unsigned char *pixels = (const unsigned char *)[_pixels bytes];
   double red = 0, green = 0, blue = 0;
   NSInteger samples = 0;
+  double darkestLuminance = 2.0, lightestLuminance = -1.0;
+  DBRgb darkest, lightest;
+  darkest.r = darkest.g = darkest.b = 0;
+  lightest.r = lightest.g = lightest.b = 0;
   for (NSInteger row = y; row < y + height; row += strideY) {
     for (NSInteger column = x; column < x + width; column += strideX) {
       const unsigned char *pixel = pixels + (row * kProxyEdge + column) * 4;
@@ -129,6 +133,21 @@ static const NSInteger kProxyEdge = 64;
       green += pixel[1];
       blue += pixel[2];
       samples++;
+      DBRgb patch;
+      patch.r = pixel[0] / 255.0;
+      patch.g = pixel[1] / 255.0;
+      patch.b = pixel[2] / 255.0;
+      // The extremes are tracked here, in the one pass that already reads
+      // every patch, so the shadow test costs nothing extra.
+      double luminance = [DBUiTheme relativeLuminance:patch];
+      if (luminance < darkestLuminance) {
+        darkestLuminance = luminance;
+        darkest = patch;
+      }
+      if (luminance > lightestLuminance) {
+        lightestLuminance = luminance;
+        lightest = patch;
+      }
     }
   }
   if (samples == 0) return nil;
@@ -136,7 +155,14 @@ static const NSInteger kProxyEdge = 64;
   average.r = red / (samples * 255.0);
   average.g = green / (samples * 255.0);
   average.b = blue / (samples * 255.0);
-  return [DBUiTheme hexFromRgb:average];
+  return [NSDictionary dictionaryWithObjectsAndKeys:
+      [DBUiTheme hexFromRgb:average], @"average",
+      [DBUiTheme hexFromRgb:darkest], @"darkest",
+      [DBUiTheme hexFromRgb:lightest], @"lightest", nil];
+}
+
+- (NSString *)averageHexInViewRect:(CGRect)rect {
+  return [[self sampleInViewRect:rect] objectForKey:@"average"];
 }
 
 - (NSString *)averageHex {
@@ -271,13 +297,23 @@ static const NSInteger kProxyEdge = 64;
 
 // The pixels actually behind one region, or the flat background when there is
 // no theme image to sample.
-- (NSString *)backgroundHexForRegion:(NSString *)region frame:(CGRect)frame
-                            viewSize:(CGSize)viewSize {
+// The region's measured background: its average plus the extremes of the same
+// sample. Without a sampler the flat surface is all three.
+- (NSDictionary *)backgroundSampleForRegion:(NSString *)region frame:(CGRect)frame
+                                   viewSize:(CGSize)viewSize {
   (void)region;
   DBBackgroundSampler *sampler = [self samplerForViewSize:viewSize];
-  if (sampler == nil) return _surfaceHex;
-  NSString *sampled = [sampler averageHexInViewRect:frame];
-  return [sampled length] > 0 ? sampled : _surfaceHex;
+  NSDictionary *sample = sampler ? [sampler sampleInViewRect:frame] : nil;
+  if ([[sample objectForKey:@"average"] length] > 0) return sample;
+  return [NSDictionary dictionaryWithObjectsAndKeys:
+      _surfaceHex ?: @"", @"average", _surfaceHex ?: @"", @"darkest",
+      _surfaceHex ?: @"", @"lightest", nil];
+}
+
+- (NSString *)backgroundHexForRegion:(NSString *)region frame:(CGRect)frame
+                            viewSize:(CGSize)viewSize {
+  return [[self backgroundSampleForRegion:region frame:frame viewSize:viewSize]
+      objectForKey:@"average"];
 }
 
 - (NSString *)inkHexForRegion:(NSString *)region frame:(CGRect)frame
@@ -308,9 +344,12 @@ static const NSInteger kProxyEdge = 64;
 }
 
 - (BOOL)needsShadowForRegion:(NSString *)region frame:(CGRect)frame {
+  NSDictionary *sample = [self backgroundSampleForRegion:region frame:frame
+                                                viewSize:CGSizeZero];
   return [DBUiTheme needsInkShadowForInk:[self inkHexForRegion:region frame:frame]
-                              background:[self backgroundHexForRegion:region frame:frame
-                                                             viewSize:CGSizeZero]];
+                              background:[sample objectForKey:@"average"]
+                                 darkest:[sample objectForKey:@"darkest"]
+                                lightest:[sample objectForKey:@"lightest"]];
 }
 
 // One call per label: the ink measured behind its own frame, plus the 40 %
@@ -323,9 +362,13 @@ static const NSInteger kProxyEdge = 64;
   CGSize viewSize = label.superview ? label.superview.bounds.size : CGSizeZero;
   NSString *ink = [self inkHexForRegion:region frame:frame viewSize:viewSize];
   label.textColor = DBColorFromHex(ink, [self ink]);
-  NSString *background = [self backgroundHexForRegion:region frame:frame viewSize:viewSize];
-  // Only when even the better of the two inks stays below AA.
-  if (![DBUiTheme needsInkShadowForInk:ink background:background]) {
+  NSDictionary *sample = [self backgroundSampleForRegion:region frame:frame viewSize:viewSize];
+  // The ink follows the average; the shadow follows the worst patch, so a line
+  // crossing a pale wall and a dark jacket keeps its outline over the jacket.
+  if (![DBUiTheme needsInkShadowForInk:ink
+                            background:[sample objectForKey:@"average"]
+                               darkest:[sample objectForKey:@"darkest"]
+                              lightest:[sample objectForKey:@"lightest"]]) {
     label.shadowColor = nil;
     label.shadowOffset = CGSizeZero;
     return;

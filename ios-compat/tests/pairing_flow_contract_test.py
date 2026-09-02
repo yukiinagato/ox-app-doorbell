@@ -210,6 +210,22 @@ class ReadabilityContracts(unittest.TestCase):
         self.assertIn("averageHexInViewRect:frame", refine)
         self.assertIn("inkHexForSampledLuminance", refine)
 
+        # The sample carries its extremes, tracked in the pass that already
+        # reads every patch, and the shadow is gated on them: a line crossing a
+        # pale wall and a dark jacket averages fine and vanishes over the
+        # jacket. The ink itself still follows the average.
+        sample = widgets[widgets.index("- (NSDictionary *)sampleInViewRect:"):
+                         widgets.index("- (NSString *)averageHexInViewRect:")]
+        for key in ('@"average"', '@"darkest"', '@"lightest"'):
+            self.assertIn(key, sample)
+        self.assertIn("darkestLuminance", sample)
+        self.assertIn("lightestLuminance", sample)
+        apply_ink = widgets[widgets.index("- (void)applyInkToLabel:"):]
+        self.assertIn("backgroundSampleForRegion:region frame:frame viewSize:viewSize",
+                      apply_ink)
+        self.assertIn('darkest:[sample objectForKey:@"darkest"]', apply_ink)
+        self.assertIn('lightest:[sample objectForKey:@"lightest"]', apply_ink)
+
         # The ink is whichever of the two reads better, not a lightness
         # threshold: a midtone wallpaper took white ink under the old rule.
         theme = read("ios-kiosk/src/Core/DBUiTheme.m")

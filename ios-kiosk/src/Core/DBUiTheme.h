@@ -88,6 +88,16 @@ FOUNDATION_EXPORT NSString *const DBUiRegionTileLabel;
 // stays below the AA text threshold.
 + (BOOL)needsInkShadowForInk:(NSString *)inkHex background:(NSString *)backgroundHex;
 
+// The same question asked of a whole sampled region rather than its average.
+// A hint line crossing a pale wall and a dark jacket averages to something the
+// ink reads well against and still disappears over the jacket, so the shadow
+// is gated on the darkest and the lightest patch of the sample as well.
+// darkest and lightest may be nil, which falls back to the average alone.
++ (BOOL)needsInkShadowForInk:(NSString *)inkHex
+                  background:(NSString *)backgroundHex
+                     darkest:(NSString *)darkestHex
+                    lightest:(NSString *)lightestHex;
+
 // ---- per-region sampling of a theme image ----
 // Core averages the whole image because it has no layout geometry, so a caption
 // over a light corner of a mostly dark picture comes back white and unreadable.

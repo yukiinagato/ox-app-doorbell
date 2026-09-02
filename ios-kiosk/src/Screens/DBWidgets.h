@@ -32,6 +32,11 @@ NSString *DBHexFromColor(UIColor *color);
 // empty rect. averageHex is the same measurement over the whole view.
 - (NSString *)averageHexInViewRect:(CGRect)rect;
 - (NSString *)averageHex;
+// The same sample with its extremes: @{"average", "darkest", "lightest"} by
+// relative luminance. The average decides the ink; the extremes decide whether
+// it needs a shadow, because a line crossing a pale wall and a dark jacket
+// averages to something readable and still vanishes over the jacket.
+- (NSDictionary *)sampleInViewRect:(CGRect)rect;
 
 @end
 
