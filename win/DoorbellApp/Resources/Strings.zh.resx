@@ -360,10 +360,16 @@
   <data name="calling_cancel_failed" xml:space="preserve"><value>无法取消呼叫</value></data>
   <data name="calling_no_answer" xml:space="preserve"><value>无人应答</value></data>
   <data name="calling_title" xml:space="preserve"><value>呼叫中…</value></data>
+  <data name="cluster_devices_a11y" xml:space="preserve"><value>集群设备 {0} 台</value></data>
+  <data name="cluster_door_stations_a11y" xml:space="preserve"><value>门口机 {0}/{1} 台在线</value></data>
+  <data name="cluster_indoor_panels_a11y" xml:space="preserve"><value>室内机 {0}/{1} 台在线</value></data>
   <data name="dash_admin" xml:space="preserve"><value>管理</value></data>
+  <data name="dash_count_cluster" xml:space="preserve"><value>集群设备 {0} 台</value></data>
   <data name="dash_count_devices" xml:space="preserve"><value>设备 {0} 台</value></data>
   <data name="dash_count_door_stations" xml:space="preserve"><value>门口机 {0} / {1} 台在线</value></data>
-  <data name="dash_count_panels" xml:space="preserve"><value>室内机 {0} / {1} 台在线</value></data>
+  <data name="dash_count_doors" xml:space="preserve"><value>门口机 {0}/{1} 在线</value></data>
+  <data name="dash_count_indoor_panels" xml:space="preserve"><value>室内机 {0}/{1} 台在线</value></data>
+  <data name="dash_count_panels" xml:space="preserve"><value>室内机 {0}/{1} 在线</value></data>
   <data name="dash_doors" xml:space="preserve"><value>门口机</value></data>
   <data name="dash_last_answer" xml:space="preserve"><value>最后接听 {0}</value></data>
   <data name="dash_no_doors" xml:space="preserve"><value>尚未添加门口机</value></data>
