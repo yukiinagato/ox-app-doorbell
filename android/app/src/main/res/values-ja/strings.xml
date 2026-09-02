@@ -726,7 +726,7 @@
     <string name="ring_unlock_sent">解錠信号を送信しました</string>
     <string name="ring_unlock_unconfigured">解錠の動作が設定されていません</string>
     <string name="settings_about">本機情報</string>
-    <string name="settings_appearance">画面の明るさ設定</string>
+    <string name="settings_appearance">外観（ライト／ダーク）</string>
     <string name="settings_appearance_dark">暗い</string>
     <string name="settings_appearance_light">明るい</string>
     <string name="settings_appearance_range">ダーク %1$s → ライト %2$s</string>

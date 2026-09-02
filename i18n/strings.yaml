@@ -847,7 +847,7 @@ settings.role_door: { ja: "門口機", en: "Door station", zh: "门口机" }
 settings.role_restart: { ja: "役割を変えると再起動します", en: "Changing the role restarts the app", zh: "更改角色会重启应用" }
 settings.video_playback: { ja: "映像の受信方式", en: "Video playback", zh: "视频接收方式" }
 settings.helper_mode: { ja: "自動復帰ヘルパー", en: "Auto-restart helper", zh: "自动恢复守护" }
-settings.appearance: { ja: "画面の明るさ設定", en: "Appearance", zh: "外观" }
+settings.appearance: { ja: "外観（ライト／ダーク）", en: "Appearance", zh: "外观" }
 settings.appearance_light: { ja: "明るい", en: "Light", zh: "浅色" }
 settings.appearance_dark: { ja: "暗い", en: "Dark", zh: "深色" }
 settings.appearance_schedule: { ja: "時間帯で切り替え", en: "Switch by time of day", zh: "按时段切换" }

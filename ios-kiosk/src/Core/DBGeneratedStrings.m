@@ -729,7 +729,7 @@ static NSDictionary *DBGeneratedJapaneseStrings(void) {
       @"解錠信号を送信しました", @"ring.unlock_sent",
       @"解錠の動作が設定されていません", @"ring.unlock_unconfigured",
       @"本機情報", @"settings.about",
-      @"画面の明るさ設定", @"settings.appearance",
+      @"外観（ライト／ダーク）", @"settings.appearance",
       @"暗い", @"settings.appearance_dark",
       @"明るい", @"settings.appearance_light",
       @"ダーク {dark_from} → ライト {light_from}", @"settings.appearance_range",

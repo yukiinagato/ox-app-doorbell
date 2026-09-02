@@ -721,7 +721,7 @@
  "ring.unlock_sent": "解錠信号を送信しました",
  "ring.unlock_unconfigured": "解錠の動作が設定されていません",
  "settings.about": "本機情報",
- "settings.appearance": "画面の明るさ設定",
+ "settings.appearance": "外観（ライト／ダーク）",
  "settings.appearance_dark": "暗い",
  "settings.appearance_light": "明るい",
  "settings.appearance_range": "ダーク {dark_from} → ライト {light_from}",

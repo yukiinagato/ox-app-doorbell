@@ -728,7 +728,7 @@
   <data name="ring_unlock_sent" xml:space="preserve"><value>解錠信号を送信しました</value></data>
   <data name="ring_unlock_unconfigured" xml:space="preserve"><value>解錠の動作が設定されていません</value></data>
   <data name="settings_about" xml:space="preserve"><value>本機情報</value></data>
-  <data name="settings_appearance" xml:space="preserve"><value>画面の明るさ設定</value></data>
+  <data name="settings_appearance" xml:space="preserve"><value>外観（ライト／ダーク）</value></data>
   <data name="settings_appearance_dark" xml:space="preserve"><value>暗い</value></data>
   <data name="settings_appearance_light" xml:space="preserve"><value>明るい</value></data>
   <data name="settings_appearance_range" xml:space="preserve"><value>ダーク {0} → ライト {1}</value></data>
