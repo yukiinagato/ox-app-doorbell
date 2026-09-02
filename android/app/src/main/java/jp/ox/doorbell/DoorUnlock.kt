@@ -19,7 +19,20 @@ internal data class DoorUnlock(
     }
 }
 
+/** How an administrator answered 開錠ボタン: absent means "only when an action is configured". */
+internal enum class UnlockVisibility { AUTO, SHOW, HIDE }
+
 internal object DoorUnlocks {
+
+    /**
+     * Turn core's answer back into the three-way setting. "default" is the absence of
+     * doors.<id>.unlock.show_button, which the settings row writes by deleting the key.
+     */
+    fun visibilityOf(unlock: DoorUnlock): UnlockVisibility = when {
+        unlock.source != "admin" -> UnlockVisibility.AUTO
+        unlock.showButton -> UnlockVisibility.SHOW
+        else -> UnlockVisibility.HIDE
+    }
 
     /** Read core's answer for one door. Falls back to hidden when status has nothing to say. */
     fun read(status: JSONObject?, door: String): DoorUnlock {

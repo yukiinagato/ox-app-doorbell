@@ -53,6 +53,8 @@ class CoreExportsTest {
         assertEquals(AdminPasswordState.WRONG, AdminPassword.stateOf(0))
         assertEquals(AdminPasswordState.LOCKED, AdminPassword.stateOf(-1))
         assertEquals(AdminPasswordState.UNSET, AdminPassword.stateOf(-2))
+        // -3 is a malformed call and proves nothing about the cluster password.
+        assertEquals(AdminPasswordState.UNSUPPORTED, AdminPassword.stateOf(-3))
         // Null is "this core has no such export", not "wrong password".
         assertEquals(AdminPasswordState.UNSUPPORTED, AdminPassword.stateOf(null))
         assertEquals(AdminPasswordState.UNSUPPORTED, AdminPassword.stateOf(-100))
@@ -60,25 +62,75 @@ class CoreExportsTest {
 
     @Test
     fun anUnsetPasswordNeverBlocksClearingARunningAlarm() {
-        // cancel_requires_pin only applies once a cluster password exists.
-        assertFalse(AdminPassword.alarmClearNeedsPassword(true, AdminPasswordState.UNSET))
-        assertTrue(AdminPassword.alarmClearNeedsPassword(true, AdminPasswordState.OK))
-        assertTrue(AdminPassword.alarmClearNeedsPassword(true, AdminPasswordState.WRONG))
-        // An older core still gates, because the loopback login answers for it.
-        assertTrue(AdminPassword.alarmClearNeedsPassword(true, AdminPasswordState.UNSUPPORTED))
+        // Core folds "cancel_requires_pin AND a password exists" into one published answer.
+        val gated = JSONObject(
+            """{"emergency":{"cancel_requires_password":true,"cancel_requires_pin":true,
+                             "admin_password_set":true}}""",
+        )
+        val unset = JSONObject(
+            """{"emergency":{"cancel_requires_password":false,"cancel_requires_pin":true,
+                             "admin_password_set":false}}""",
+        )
+        assertTrue(AdminPassword.alarmClearNeedsPassword(gated))
+        assertFalse(AdminPassword.alarmClearNeedsPassword(unset))
     }
 
     @Test
-    fun anAlarmIsNeverGatedWhenTheSettingIsOff() {
-        for (state in AdminPasswordState.values())
-            assertFalse(AdminPassword.alarmClearNeedsPassword(false, state))
+    fun anOlderCoreAppliesTheSameConjunctionRatherThanTheFlagAlone() {
+        val requiresPinButNoPassword = JSONObject(
+            """{"emergency":{"cancel_requires_pin":true,"admin_password_set":false}}""",
+        )
+        val requiresPinWithPassword = JSONObject(
+            """{"emergency":{"cancel_requires_pin":true,"admin_password_set":true}}""",
+        )
+        assertFalse(AdminPassword.alarmClearNeedsPassword(requiresPinButNoPassword))
+        assertTrue(AdminPassword.alarmClearNeedsPassword(requiresPinWithPassword))
     }
 
     @Test
-    fun aNewPasswordIsRefusedOnlyForBeingEmpty() {
+    fun anAlarmIsNeverGatedWithoutTheSettingOrWithoutAStatus() {
+        assertFalse(AdminPassword.alarmClearNeedsPassword(null))
+        assertFalse(AdminPassword.alarmClearNeedsPassword(JSONObject()))
+        assertFalse(
+            AdminPassword.alarmClearNeedsPassword(
+                JSONObject("""{"emergency":{"cancel_requires_pin":false}}"""),
+            ),
+        )
+    }
+
+    @Test
+    fun whetherTheClusterHasAPasswordIsReadFromStatus() {
+        assertTrue(
+            AdminPassword.passwordSet(
+                JSONObject("""{"emergency":{"admin_password_set":true}}"""),
+            ),
+        )
+        assertFalse(
+            AdminPassword.passwordSet(
+                JSONObject("""{"emergency":{"admin_password_set":false}}"""),
+            ),
+        )
+        assertFalse(AdminPassword.passwordSet(null))
+    }
+
+    @Test
+    fun aNewPasswordMustMatchCoresLengthRule() {
         assertFalse(AdminPassword.newPasswordValid(""))
-        assertTrue(AdminPassword.newPasswordValid("a"))
-        assertTrue(AdminPassword.newPasswordValid("correct horse battery staple"))
+        assertFalse(AdminPassword.newPasswordValid("abc"))
+        assertTrue(AdminPassword.newPasswordValid("abcd"))
+        assertTrue(AdminPassword.newPasswordValid("x".repeat(AdminPassword.MAX_LENGTH)))
+        assertFalse(AdminPassword.newPasswordValid("x".repeat(AdminPassword.MAX_LENGTH + 1)))
+    }
+
+    @Test
+    fun theLegacyDigestIsRetiredOnlyOnceCoreAnswersAuthoritatively() {
+        // An accepted password and a lockout both prove core owns the cluster secret.
+        assertTrue(AdminPassword.retiresLocalDigest(AdminPasswordState.OK))
+        assertTrue(AdminPassword.retiresLocalDigest(AdminPasswordState.LOCKED))
+        // These do not, so the device keeps its only way in.
+        assertFalse(AdminPassword.retiresLocalDigest(AdminPasswordState.WRONG))
+        assertFalse(AdminPassword.retiresLocalDigest(AdminPasswordState.UNSET))
+        assertFalse(AdminPassword.retiresLocalDigest(AdminPasswordState.UNSUPPORTED))
     }
 
     // ---------- the batch document ----------
@@ -127,12 +179,70 @@ class CoreExportsTest {
     }
 
     @Test
-    fun anAdvisoryWarningRidesAlongWithASuccessfulWrite() {
-        // A colour below the WCAG ratio is saved and the notice is shown, never a rejection.
-        val saved = ConfigWriteResult(
-            true, warning = "読みにくい可能性があります（3.1:1）", status = 200,
+    fun theUnlockSettingIsThreeWayWithAbsenceMeaningAutomatic() {
+        // source "default" is the absence of doors.<id>.unlock.show_button.
+        assertEquals(
+            UnlockVisibility.AUTO,
+            DoorUnlocks.visibilityOf(DoorUnlock(configured = true, showButton = true,
+                                                source = "default")),
         )
+        assertEquals(
+            UnlockVisibility.SHOW,
+            DoorUnlocks.visibilityOf(DoorUnlock(configured = false, showButton = true,
+                                                source = "admin")),
+        )
+        assertEquals(
+            UnlockVisibility.HIDE,
+            DoorUnlocks.visibilityOf(DoorUnlock(configured = true, showButton = false,
+                                                source = "admin")),
+        )
+        assertEquals(UnlockVisibility.AUTO, DoorUnlocks.visibilityOf(DoorUnlock.UNKNOWN))
+    }
+
+    @Test
+    fun anAdvisoryWarningRidesAlongWithASuccessfulWrite() {
+        // A colour below the WCAG ratio is saved and the measured ratio is shown, not a rejection.
+        val warnings = JSONArray().put(
+            JSONObject()
+                .put("key", "display.theme.call_button_bg")
+                .put("property", "foreground")
+                .put("contrast", 3.14)
+                .put("message_key", "theme.low_contrast"),
+        )
+        val saved = ConfigWriteResult(true, status = 200, warnings = warnings)
         assertTrue(saved.ok)
-        assertEquals("読みにくい可能性があります（3.1:1）", saved.warning)
+        val warning = saved.warning!!
+        assertEquals("display.theme.call_button_bg", warning.key)
+        assertEquals("foreground", warning.property)
+        assertEquals("theme.low_contrast", warning.messageKey)
+        assertEquals("3.1", warning.ratioText())
+    }
+
+    @Test
+    fun aWriteWithoutWarningsHasNoAdvisory() {
+        assertEquals(null, ConfigWriteResult(true, status = 200).warning)
+        assertEquals(null, ConfigWriteResult(true, status = 200, warnings = JSONArray()).warning)
+        assertTrue(WriteWarnings.parse(null).isEmpty())
+    }
+
+    @Test
+    fun everyWarningIsParsedAndAnUnknownMessageKeyStillRenders() {
+        val warnings = JSONArray()
+            .put(JSONObject().put("key", "a").put("contrast", 2.0)
+                     .put("message_key", "theme.low_contrast"))
+            .put(JSONObject().put("key", "b").put("contrast", 4.4))
+            .put(JSONObject().put("key", "c").put("contrast", 1.5)
+                     .put("message_key", "theme.something_new"))
+        val parsed = WriteWarnings.parse(warnings)
+        assertEquals(3, parsed.size)
+        // An entry without message_key falls back to the documented low-contrast advisory.
+        assertEquals(WriteWarnings.LOW_CONTRAST, parsed[1].messageKey)
+        assertEquals("4.4", parsed[1].ratioText())
+        // An unknown key from a newer core still produces a rendered sentence.
+        assertEquals(
+            "theme.something_new@1.5",
+            WriteWarnings.message(parsed[2]) { key, ratio -> "$key@$ratio" },
+        )
+        assertEquals("", WriteWarnings.message(null) { _, _ -> "unused" })
     }
 }

@@ -779,7 +779,7 @@ class IncomingActivity : Activity() {
                         DoorUnlocks.queued(result) ->
                             texts.t("ring.unlock_sent", R.string.ring_unlock_sent)
                         DoorUnlocks.unconfigured(result) -> texts.t(
-                            "ring.unlock_unconfigured", R.string.ring_unlock_unconfigured,
+                            "unlock.not_configured", R.string.unlock_not_configured,
                         )
                         else -> texts.t("admin.save_failed", R.string.admin_save_failed)
                     },

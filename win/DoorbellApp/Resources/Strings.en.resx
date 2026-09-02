@@ -355,7 +355,7 @@ Delete it?</value></data>
   <data name="dash_admin" xml:space="preserve"><value>Admin</value></data>
   <data name="dash_doors" xml:space="preserve"><value>Door stations</value></data>
   <data name="dash_last_answer" xml:space="preserve"><value>Last answered {0}</value></data>
-  <data name="dash_no_doors" xml:space="preserve"><value>No door stations</value></data>
+  <data name="dash_no_doors" xml:space="preserve"><value>No door station has been added yet</value></data>
   <data name="dash_notice_global" xml:space="preserve"><value>Announcement (all doors)</value></data>
   <data name="dash_recent_calls" xml:space="preserve"><value>Recent calls</value></data>
   <data name="dash_see_all" xml:space="preserve"><value>See all</value></data>
@@ -371,7 +371,7 @@ Delete it?</value></data>
   <data name="day_tue" xml:space="preserve"><value>Tue</value></data>
   <data name="day_wed" xml:space="preserve"><value>Wed</value></data>
   <data name="degraded_notified" xml:space="preserve"><value>Notified — please wait</value></data>
-  <data name="door_hint_call" xml:space="preserve"><value>Press the button to call the household</value></data>
+  <data name="door_hint_call" xml:space="preserve"><value>Press the button to call the residents</value></data>
   <data name="door_lang_switch" xml:space="preserve"><value>Language</value></data>
   <data name="door_notice_for_this" xml:space="preserve"><value>Announce at this door</value></data>
   <data name="door_unlock_not_configured" xml:space="preserve"><value>No unlock action is configured</value></data>
@@ -393,8 +393,8 @@ Delete it?</value></data>
   <data name="history_duration" xml:space="preserve"><value>{0}</value></data>
   <data name="history_empty" xml:space="preserve"><value>No calls yet</value></data>
   <data name="history_filter_all" xml:space="preserve"><value>All</value></data>
-  <data name="history_filter_door" xml:space="preserve"><value>{0}</value></data>
-  <data name="history_filter_missed" xml:space="preserve"><value>Missed</value></data>
+  <data name="history_filter_door" xml:space="preserve"><value>{0} only</value></data>
+  <data name="history_filter_missed" xml:space="preserve"><value>Missed only</value></data>
   <data name="history_load_more" xml:space="preserve"><value>Load more</value></data>
   <data name="history_mark_seen" xml:space="preserve"><value>Mark all as seen</value></data>
   <data name="history_missed_badge" xml:space="preserve"><value>{0} missed</value></data>
@@ -503,7 +503,7 @@ Delete it?</value></data>
   <data name="notice_preset_construction" xml:space="preserve"><value>Building work in progress — please call out</value></data>
   <data name="notice_preset_delivery" xml:space="preserve"><value>Deliveries to the side door, please</value></data>
   <data name="notice_preset_invalid" xml:space="preserve"><value>Check the preset text</value></data>
-  <data name="notice_presets" xml:space="preserve"><value>Saved phrases</value></data>
+  <data name="notice_presets" xml:space="preserve"><value>Saved messages</value></data>
   <data name="notice_presets_full" xml:space="preserve"><value>At most eight presets</value></data>
   <data name="notice_presets_title" xml:space="preserve"><value>Announcement presets</value></data>
   <data name="notice_preview" xml:space="preserve"><value>How it looks at the door</value></data>
@@ -764,12 +764,12 @@ Delete it?</value></data>
   <data name="settings_configured" xml:space="preserve"><value>Configured</value></data>
   <data name="settings_contrast_warning" xml:space="preserve"><value>This may be hard to read ({0}:1)</value></data>
   <data name="settings_device_door" xml:space="preserve"><value>Assigned door</value></data>
-  <data name="settings_device_name" xml:space="preserve"><value>Name</value></data>
+  <data name="settings_device_name" xml:space="preserve"><value>Device name</value></data>
   <data name="settings_device_role" xml:space="preserve"><value>Role</value></data>
   <data name="settings_door" xml:space="preserve"><value>Assigned door</value></data>
   <data name="settings_doors" xml:space="preserve"><value>Doors</value></data>
   <data name="settings_exit_kiosk" xml:space="preserve"><value>Exit kiosk</value></data>
-  <data name="settings_helper_mode" xml:space="preserve"><value>Auto-restart helper</value></data>
+  <data name="settings_helper_mode" xml:space="preserve"><value>Recovery helper</value></data>
   <data name="settings_inherit" xml:space="preserve"><value>Use the cluster default</value></data>
   <data name="settings_no_password" xml:space="preserve"><value>No admin password is set yet. Sign in once on the web admin</value></data>
   <data name="settings_not_configured" xml:space="preserve"><value>Not set</value></data>
@@ -782,6 +782,7 @@ Delete it?</value></data>
   <data name="settings_password_current" xml:space="preserve"><value>Current password</value></data>
   <data name="settings_password_empty" xml:space="preserve"><value>Enter a password</value></data>
   <data name="settings_password_failed" xml:space="preserve"><value>Couldn't change the admin password</value></data>
+  <data name="settings_password_length" xml:space="preserve"><value>The password must be {0}–{1} characters</value></data>
   <data name="settings_password_mismatch" xml:space="preserve"><value>The two entries don't match</value></data>
   <data name="settings_password_new" xml:space="preserve"><value>New password</value></data>
   <data name="settings_password_set_failed" xml:space="preserve"><value>Couldn't set the password</value></data>
@@ -824,16 +825,16 @@ Delete it?</value></data>
   <data name="settings_unlock_button" xml:space="preserve"><value>Show the unlock button</value></data>
   <data name="settings_unlock_show_button" xml:space="preserve"><value>Show the unlock button</value></data>
   <data name="settings_value_unset" xml:space="preserve"><value>Not set</value></data>
-  <data name="settings_video_playback" xml:space="preserve"><value>How video is received</value></data>
-  <data name="settings_video_rotation" xml:space="preserve"><value>Video orientation</value></data>
+  <data name="settings_video_playback" xml:space="preserve"><value>Video playback</value></data>
+  <data name="settings_video_rotation" xml:space="preserve"><value>Video rotation</value></data>
   <data name="settings_volume_inherit" xml:space="preserve"><value>Use the cluster default</value></data>
-  <data name="settings_web_only" xml:space="preserve"><value>Set this in the web admin</value></data>
+  <data name="settings_web_only" xml:space="preserve"><value>Change this on the web admin</value></data>
   <data name="settings_web_only_labels" xml:space="preserve"><value>Wording overrides</value></data>
   <data name="settings_web_only_raw_config" xml:space="preserve"><value>Export and import configuration from the web admin</value></data>
-  <data name="settings_web_only_rule_actions" xml:space="preserve"><value>Edit what a rule does from the web admin</value></data>
-  <data name="settings_web_only_secrets" xml:space="preserve"><value>Enter connection credentials in each device's web admin</value></data>
+  <data name="settings_web_only_rule_actions" xml:space="preserve"><value>Edit rule actions on the web admin</value></data>
+  <data name="settings_web_only_secrets" xml:space="preserve"><value>Enter passwords and keys on the web admin</value></data>
   <data name="settings_web_only_text" xml:space="preserve"><value>Edit wording on the web admin</value></data>
-  <data name="settings_web_only_upload" xml:space="preserve"><value>Add images from the web admin</value></data>
+  <data name="settings_web_only_upload" xml:space="preserve"><value>Add images on the web admin</value></data>
   <data name="settings_web_only_wording" xml:space="preserve"><value>Reword the interface from the web admin</value></data>
   <data name="settings_web_push" xml:space="preserve"><value>Web Push</value></data>
   <data name="settings_zone_search" xml:space="preserve"><value>Search time zones</value></data>
@@ -971,6 +972,6 @@ Sends in {0}s</value></data>
   <data name="web_admin_open_failed" xml:space="preserve"><value>Couldn't open the browser</value></data>
   <data name="web_admin_other_address" xml:space="preserve"><value>Another address</value></data>
   <data name="web_admin_scan" xml:space="preserve"><value>Scan this with a phone</value></data>
-  <data name="web_admin_scan_hint" xml:space="preserve"><value>Scan this code with a phone</value></data>
+  <data name="web_admin_scan_hint" xml:space="preserve"><value>Scan this QR to open the admin page</value></data>
   <data name="web_admin_title" xml:space="preserve"><value>Web admin page</value></data>
 </root>

@@ -353,9 +353,9 @@
     <string name="dash_admin">管理</string>
     <string name="dash_doors">门口机</string>
     <string name="dash_last_answer">最后接听 %1$s</string>
-    <string name="dash_no_doors">没有门口机</string>
+    <string name="dash_no_doors">尚未添加门口机</string>
     <string name="dash_notice_global">公告（全部门口）</string>
-    <string name="dash_recent_calls">最近呼叫</string>
+    <string name="dash_recent_calls">呼叫记录</string>
     <string name="dash_see_all">查看全部</string>
     <string name="dash_tile_offline">离线</string>
     <string name="dash_tile_open">查看</string>
@@ -391,8 +391,8 @@
     <string name="history_duration">通话 %1$s</string>
     <string name="history_empty">暂无呼叫</string>
     <string name="history_filter_all">全部</string>
-    <string name="history_filter_door">%1$s</string>
-    <string name="history_filter_missed">未接</string>
+    <string name="history_filter_door">仅 %1$s</string>
+    <string name="history_filter_missed">仅未接</string>
     <string name="history_load_more">加载更多</string>
     <string name="history_mark_seen">全部标为已读</string>
     <string name="history_missed_badge">%1$s 个未接</string>
@@ -501,7 +501,7 @@
     <string name="notice_preset_construction">施工中，如有需要请呼叫</string>
     <string name="notice_preset_delivery">快递请送到侧门</string>
     <string name="notice_preset_invalid">请检查模板内容</string>
-    <string name="notice_presets">常用语句</string>
+    <string name="notice_presets">常用语</string>
     <string name="notice_presets_full">最多八条模板</string>
     <string name="notice_presets_title">公告模板</string>
     <string name="notice_preview">门口的显示效果</string>
@@ -762,12 +762,12 @@
     <string name="settings_configured">已设置</string>
     <string name="settings_contrast_warning">可能不易阅读（%1$s:1）</string>
     <string name="settings_device_door">负责门口</string>
-    <string name="settings_device_name">名称</string>
+    <string name="settings_device_name">设备名称</string>
     <string name="settings_device_role">角色</string>
     <string name="settings_door">负责的门口</string>
     <string name="settings_doors">门口</string>
     <string name="settings_exit_kiosk">退出信息亭模式</string>
-    <string name="settings_helper_mode">自动恢复守护</string>
+    <string name="settings_helper_mode">恢复助手</string>
     <string name="settings_inherit">使用集群默认值</string>
     <string name="settings_no_password">尚未设置管理密码，请先在网页管理中登录一次</string>
     <string name="settings_not_configured">未设置</string>
@@ -780,6 +780,7 @@
     <string name="settings_password_current">当前密码</string>
     <string name="settings_password_empty">请输入密码</string>
     <string name="settings_password_failed">无法更改管理密码</string>
+    <string name="settings_password_length">密码需为 %1$s–%2$s 个字符</string>
     <string name="settings_password_mismatch">两次输入不一致</string>
     <string name="settings_password_new">新密码</string>
     <string name="settings_password_set_failed">无法设置密码</string>
@@ -822,14 +823,14 @@
     <string name="settings_unlock_button">显示开锁按钮</string>
     <string name="settings_unlock_show_button">显示开锁按钮</string>
     <string name="settings_value_unset">未设置</string>
-    <string name="settings_video_playback">视频接收方式</string>
-    <string name="settings_video_rotation">视频方向</string>
+    <string name="settings_video_playback">视频播放</string>
+    <string name="settings_video_rotation">画面方向</string>
     <string name="settings_volume_inherit">使用集群默认值</string>
-    <string name="settings_web_only">请在网页管理中设置</string>
+    <string name="settings_web_only">此项目请在网页管理中修改</string>
     <string name="settings_web_only_labels">文案覆盖</string>
     <string name="settings_web_only_raw_config">请在网页管理中导出与导入配置</string>
-    <string name="settings_web_only_rule_actions">请在网页管理中编辑规则动作</string>
-    <string name="settings_web_only_secrets">请在各设备的网页管理中输入连接凭据</string>
+    <string name="settings_web_only_rule_actions">规则动作详情请在网页管理中编辑</string>
+    <string name="settings_web_only_secrets">密码与密钥请在网页管理中设置</string>
     <string name="settings_web_only_text">文案修改请在网页管理中进行</string>
     <string name="settings_web_only_upload">请在网页管理中添加图片</string>
     <string name="settings_web_only_wording">请在网页管理中修改文案</string>
@@ -969,6 +970,6 @@ PIN：%2$s</string>
     <string name="web_admin_open_failed">无法打开浏览器</string>
     <string name="web_admin_other_address">其他地址</string>
     <string name="web_admin_scan">请用手机扫描</string>
-    <string name="web_admin_scan_hint">请用手机扫描此二维码</string>
+    <string name="web_admin_scan_hint">扫描此二维码即可打开管理页面</string>
     <string name="web_admin_title">网页管理</string>
 </resources>

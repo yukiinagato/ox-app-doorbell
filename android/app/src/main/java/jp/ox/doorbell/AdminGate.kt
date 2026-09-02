@@ -51,8 +51,14 @@ internal object AdminGate {
     ) {
         val app = activity.application as? App
         val core = app?.core
-        val state = if (core != null && app.coreOk)
-            AdminPassword.stateOf(core.adminPasswordVerify("")) else AdminPasswordState.UNSUPPORTED
+        // status.emergency.admin_password_set answers "does the cluster have one" without
+        // spending an attempt against the shared lockout counter.
+        val state = when {
+            core == null || app?.coreOk != true -> AdminPasswordState.UNSUPPORTED
+            !core.exports.adminPassword -> AdminPasswordState.UNSUPPORTED
+            AdminPassword.passwordSet(core.status()) -> AdminPasswordState.OK
+            else -> AdminPasswordState.UNSET
+        }
         if (state == AdminPasswordState.UNSET) {
             promptForNewPassword(activity, texts, core) { onUnlocked(null) }
             return
@@ -113,10 +119,10 @@ internal object AdminGate {
                 ) AdminSession.open(port, password) else null to ""
                 ui.post {
                     if (activity.isFinishing) return@post
+                    if (AdminPassword.retiresLocalDigest(state)) retireLocalDigest(activity)
                     when {
                         state == AdminPasswordState.OK -> {
                             failures = 0
-                            retireLocalDigest(activity)
                             dialog.dismiss()
                             onUnlocked(session?.first)
                         }
@@ -195,7 +201,10 @@ internal object AdminGate {
             val value = first.text.toString()
             val repeat = second.text.toString()
             if (!AdminPassword.newPasswordValid(value)) {
-                error.text = texts.t("settings.password_empty", R.string.settings_password_empty)
+                error.text = texts.t(
+                    "settings.password_length", R.string.settings_password_length,
+                    AdminPassword.MIN_LENGTH.toString(), AdminPassword.MAX_LENGTH.toString(),
+                )
                 error.visibility = View.VISIBLE
                 return
             }
@@ -206,18 +215,28 @@ internal object AdminGate {
                 return
             }
             Thread({
+                // An empty current is accepted only while the cluster has no password; that is
+                // the same trust-on-first-use path the first web login takes.
                 val result = core?.adminPasswordSet("", value)
                 ui.post {
                     if (activity.isFinishing) return@post
-                    if (result == 0) {
-                        retireLocalDigest(activity)
-                        dialog.dismiss()
-                        onDone()
-                    } else {
-                        error.text = texts.t(
-                            "settings.password_set_failed", R.string.settings_password_set_failed,
-                        )
-                        error.visibility = View.VISIBLE
+                    when (result) {
+                        0 -> {
+                            retireLocalDigest(activity)
+                            dialog.dismiss()
+                            onDone()
+                        }
+                        -3 -> {
+                            error.text = texts.t("admin.locked", R.string.admin_locked)
+                            error.visibility = View.VISIBLE
+                        }
+                        else -> {
+                            error.text = texts.t(
+                                "settings.password_set_failed",
+                                R.string.settings_password_set_failed,
+                            )
+                            error.visibility = View.VISIBLE
+                        }
                     }
                 }
             }, "doorbell-admin-password-set").apply { isDaemon = true }.start()

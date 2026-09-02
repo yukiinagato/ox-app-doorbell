@@ -2,7 +2,6 @@
 // its own threads; this layer attaches them to the JVM and Kotlin marshals UI work to main.
 // A pthread TLS destructor detaches threads at exit to avoid per-callback attach churn.
 #include <android/log.h>
-#include <dlfcn.h>
 #include <jni.h>
 #include <pthread.h>
 
@@ -876,80 +875,17 @@ Java_jp_ox_doorbell_DoorbellCore_nativeOpenDoor(JNIEnv* env, jobject, jlong h, j
 // ---- Spec §5.5: native configuration writes, the cluster admin password, before_ms paging,
 //      and SIP microphone mute.
 //
-// These exports are being added to core. They are resolved at run time so this shell builds and
-// runs against a core that does not have them yet: every wrapper answers kUnsupported and the
-// Kotlin side then falls back to the loopback administration API, to the v1 call-log entry point,
-// and to platform microphone muting. Once core exports them the same binary uses them with no
-// further change. Unlike the PIN-minting path, a missing symbol here has a correct fallback, which
-// is why the lookup is right rather than dangerous.
-namespace {
-
-// Distinct from every documented core result so a caller can tell "core said no" from
-// "this core cannot answer".
-constexpr int kUnsupported = -100;
-
-template <typename Fn>
-Fn resolveExport(const char* name) {
-  return reinterpret_cast<Fn>(dlsym(RTLD_DEFAULT, name));
-}
-
-using SetConfigJsonFn = int (*)(db_core*, const char*, const char*);
-using ConfigBatchJsonFn = char* (*)(db_core*, const char*);
-using DeleteConfigKeyFn = int (*)(db_core*, const char*);
-using AdminPasswordVerifyFn = int (*)(db_core*, const char*);
-using AdminPasswordSetFn = int (*)(db_core*, const char*, const char*);
-using CallLogJsonV2Fn = char* (*)(db_core*, int64_t, int64_t, int);
-using SipSetMicMutedFn = int (*)(db_core*, int);
-
-SetConfigJsonFn setConfigJson() {
-  static SetConfigJsonFn fn = resolveExport<SetConfigJsonFn>("db_core_set_config_json");
-  return fn;
-}
-
-ConfigBatchJsonFn configBatchJson() {
-  static ConfigBatchJsonFn fn = resolveExport<ConfigBatchJsonFn>("db_core_config_batch_json");
-  return fn;
-}
-
-DeleteConfigKeyFn deleteConfigKey() {
-  static DeleteConfigKeyFn fn = resolveExport<DeleteConfigKeyFn>("db_core_delete_config_key");
-  return fn;
-}
-
-AdminPasswordVerifyFn adminPasswordVerify() {
-  static AdminPasswordVerifyFn fn =
-      resolveExport<AdminPasswordVerifyFn>("db_core_admin_password_verify");
-  return fn;
-}
-
-AdminPasswordSetFn adminPasswordSet() {
-  static AdminPasswordSetFn fn = resolveExport<AdminPasswordSetFn>("db_core_admin_password_set");
-  return fn;
-}
-
-CallLogJsonV2Fn callLogJsonV2() {
-  static CallLogJsonV2Fn fn = resolveExport<CallLogJsonV2Fn>("db_core_call_log_json_v2");
-  return fn;
-}
-
-SipSetMicMutedFn sipSetMicMuted() {
-  static SipSetMicMutedFn fn = resolveExport<SipSetMicMutedFn>("db_core_sip_set_mic_muted");
-  return fn;
-}
-
-}  // namespace
-
-// Which of the above this core actually offers, so the shell picks its path once instead of
-// probing on every action.
+// Core is compiled from this same tree into this same shared object, so these exports are present
+// at link time and are called directly. Resolving them at run time instead would risk a lookup
+// that quietly fails and sends every one of these features down its fallback path -- writes to the
+// loopback API, the microphone to platform muting, history to the unbounded v1 call -- with
+// nothing to show that it happened. The Kotlin fallbacks stay for a core that genuinely lacks a
+// path, which on Android is only a core that failed to start.
 extern "C" JNIEXPORT jstring JNICALL
 Java_jp_ox_doorbell_DoorbellCore_nativeCoreExportsJson(JNIEnv* env, jobject) {
-  const std::string json = std::string("{\"config_write\":") +
-      ((setConfigJson() && configBatchJson() && deleteConfigKey()) ? "true" : "false") +
-      ",\"admin_password\":" +
-      ((adminPasswordVerify() && adminPasswordSet()) ? "true" : "false") +
-      ",\"call_log_v2\":" + (callLogJsonV2() ? "true" : "false") +
-      ",\"mic_mute\":" + (sipSetMicMuted() ? "true" : "false") + "}";
-  return env->NewStringUTF(json.c_str());
+  return env->NewStringUTF(
+      "{\"config_write\":true,\"admin_password\":true,\"call_log_v2\":true,"
+      "\"mic_mute\":true}");
 }
 
 extern "C" JNIEXPORT jint JNICALL
@@ -957,9 +893,20 @@ Java_jp_ox_doorbell_DoorbellCore_nativeSetConfigJson(JNIEnv* env, jobject, jlong
                                                      jstring value_json) {
   Bridge* b = fromHandle(h);
   if (!b || !b->core) return -1;
-  SetConfigJsonFn fn = setConfigJson();
-  if (!fn) return kUnsupported;
-  return fn(b->core, toUtf8(env, key).c_str(), toUtf8(env, value_json).c_str());
+  return db_core_set_config_json(b->core, toUtf8(env, key).c_str(),
+                                 toUtf8(env, value_json).c_str());
+}
+
+// Readability warnings from the most recent single-key write. The batch form embeds the same
+// array in its result; this is how the one-key path reaches it.
+extern "C" JNIEXPORT jstring JNICALL
+Java_jp_ox_doorbell_DoorbellCore_nativeLastWriteWarningsJson(JNIEnv* env, jobject, jlong h) {
+  Bridge* b = fromHandle(h);
+  if (!b || !b->core) return nullptr;
+  char* s = db_core_last_write_warnings_json(b->core);
+  jstring out = toJString(env, b, s);
+  db_free(s);
+  return out;
 }
 
 extern "C" JNIEXPORT jstring JNICALL
@@ -967,9 +914,7 @@ Java_jp_ox_doorbell_DoorbellCore_nativeConfigBatchJson(JNIEnv* env, jobject, jlo
                                                        jstring ops_json) {
   Bridge* b = fromHandle(h);
   if (!b || !b->core) return nullptr;
-  ConfigBatchJsonFn fn = configBatchJson();
-  if (!fn) return nullptr;
-  char* s = fn(b->core, toUtf8(env, ops_json).c_str());
+  char* s = db_core_config_batch_json(b->core, toUtf8(env, ops_json).c_str());
   jstring out = toJString(env, b, s);
   db_free(s);
   return out;
@@ -979,19 +924,16 @@ extern "C" JNIEXPORT jint JNICALL
 Java_jp_ox_doorbell_DoorbellCore_nativeDeleteConfigKey(JNIEnv* env, jobject, jlong h, jstring key) {
   Bridge* b = fromHandle(h);
   if (!b || !b->core) return -1;
-  DeleteConfigKeyFn fn = deleteConfigKey();
-  if (!fn) return kUnsupported;
-  return fn(b->core, toUtf8(env, key).c_str());
+  return db_core_delete_config_key(b->core, toUtf8(env, key).c_str());
 }
 
 extern "C" JNIEXPORT jint JNICALL
 Java_jp_ox_doorbell_DoorbellCore_nativeAdminPasswordVerify(JNIEnv* env, jobject, jlong h,
                                                            jstring password) {
   Bridge* b = fromHandle(h);
-  if (!b || !b->core) return -1;
-  AdminPasswordVerifyFn fn = adminPasswordVerify();
-  if (!fn) return kUnsupported;
-  return fn(b->core, toUtf8(env, password).c_str());
+  // -3 is core's own "invalid arguments", which is what a missing core amounts to here.
+  if (!b || !b->core) return -3;
+  return db_core_admin_password_verify(b->core, toUtf8(env, password).c_str());
 }
 
 extern "C" JNIEXPORT jint JNICALL
@@ -999,9 +941,8 @@ Java_jp_ox_doorbell_DoorbellCore_nativeAdminPasswordSet(JNIEnv* env, jobject, jl
                                                         jstring current, jstring next) {
   Bridge* b = fromHandle(h);
   if (!b || !b->core) return -1;
-  AdminPasswordSetFn fn = adminPasswordSet();
-  if (!fn) return kUnsupported;
-  return fn(b->core, toUtf8(env, current).c_str(), toUtf8(env, next).c_str());
+  return db_core_admin_password_set(b->core, toUtf8(env, current).c_str(),
+                                    toUtf8(env, next).c_str());
 }
 
 extern "C" JNIEXPORT jstring JNICALL
@@ -1009,10 +950,8 @@ Java_jp_ox_doorbell_DoorbellCore_nativeCallLogJsonV2(JNIEnv* env, jobject, jlong
                                                      jlong before_ms, jint limit) {
   Bridge* b = fromHandle(h);
   if (!b || !b->core) return nullptr;
-  CallLogJsonV2Fn fn = callLogJsonV2();
-  if (!fn) return nullptr;
-  char* s = fn(b->core, static_cast<int64_t>(since_ms), static_cast<int64_t>(before_ms),
-               static_cast<int>(limit));
+  char* s = db_core_call_log_json_v2(b->core, static_cast<int64_t>(since_ms),
+                                     static_cast<int64_t>(before_ms), static_cast<int>(limit));
   jstring out = toJString(env, b, s);
   db_free(s);
   return out;
@@ -1022,7 +961,5 @@ extern "C" JNIEXPORT jint JNICALL
 Java_jp_ox_doorbell_DoorbellCore_nativeSipSetMicMuted(JNIEnv*, jobject, jlong h, jboolean muted) {
   Bridge* b = fromHandle(h);
   if (!b || !b->core) return -1;
-  SipSetMicMutedFn fn = sipSetMicMuted();
-  if (!fn) return kUnsupported;
-  return fn(b->core, muted == JNI_TRUE ? 1 : 0);
+  return db_core_sip_set_mic_muted(b->core, muted == JNI_TRUE ? 1 : 0);
 }

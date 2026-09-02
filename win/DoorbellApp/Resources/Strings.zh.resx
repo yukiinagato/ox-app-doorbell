@@ -355,9 +355,9 @@
   <data name="dash_admin" xml:space="preserve"><value>管理</value></data>
   <data name="dash_doors" xml:space="preserve"><value>门口机</value></data>
   <data name="dash_last_answer" xml:space="preserve"><value>最后接听 {0}</value></data>
-  <data name="dash_no_doors" xml:space="preserve"><value>没有门口机</value></data>
+  <data name="dash_no_doors" xml:space="preserve"><value>尚未添加门口机</value></data>
   <data name="dash_notice_global" xml:space="preserve"><value>公告（全部门口）</value></data>
-  <data name="dash_recent_calls" xml:space="preserve"><value>最近呼叫</value></data>
+  <data name="dash_recent_calls" xml:space="preserve"><value>呼叫记录</value></data>
   <data name="dash_see_all" xml:space="preserve"><value>查看全部</value></data>
   <data name="dash_tile_offline" xml:space="preserve"><value>离线</value></data>
   <data name="dash_tile_open" xml:space="preserve"><value>查看</value></data>
@@ -393,8 +393,8 @@
   <data name="history_duration" xml:space="preserve"><value>通话 {0}</value></data>
   <data name="history_empty" xml:space="preserve"><value>暂无呼叫</value></data>
   <data name="history_filter_all" xml:space="preserve"><value>全部</value></data>
-  <data name="history_filter_door" xml:space="preserve"><value>{0}</value></data>
-  <data name="history_filter_missed" xml:space="preserve"><value>未接</value></data>
+  <data name="history_filter_door" xml:space="preserve"><value>仅 {0}</value></data>
+  <data name="history_filter_missed" xml:space="preserve"><value>仅未接</value></data>
   <data name="history_load_more" xml:space="preserve"><value>加载更多</value></data>
   <data name="history_mark_seen" xml:space="preserve"><value>全部标为已读</value></data>
   <data name="history_missed_badge" xml:space="preserve"><value>{0} 个未接</value></data>
@@ -503,7 +503,7 @@
   <data name="notice_preset_construction" xml:space="preserve"><value>施工中，如有需要请呼叫</value></data>
   <data name="notice_preset_delivery" xml:space="preserve"><value>快递请送到侧门</value></data>
   <data name="notice_preset_invalid" xml:space="preserve"><value>请检查模板内容</value></data>
-  <data name="notice_presets" xml:space="preserve"><value>常用语句</value></data>
+  <data name="notice_presets" xml:space="preserve"><value>常用语</value></data>
   <data name="notice_presets_full" xml:space="preserve"><value>最多八条模板</value></data>
   <data name="notice_presets_title" xml:space="preserve"><value>公告模板</value></data>
   <data name="notice_preview" xml:space="preserve"><value>门口的显示效果</value></data>
@@ -764,12 +764,12 @@
   <data name="settings_configured" xml:space="preserve"><value>已设置</value></data>
   <data name="settings_contrast_warning" xml:space="preserve"><value>可能不易阅读（{0}:1）</value></data>
   <data name="settings_device_door" xml:space="preserve"><value>负责门口</value></data>
-  <data name="settings_device_name" xml:space="preserve"><value>名称</value></data>
+  <data name="settings_device_name" xml:space="preserve"><value>设备名称</value></data>
   <data name="settings_device_role" xml:space="preserve"><value>角色</value></data>
   <data name="settings_door" xml:space="preserve"><value>负责的门口</value></data>
   <data name="settings_doors" xml:space="preserve"><value>门口</value></data>
   <data name="settings_exit_kiosk" xml:space="preserve"><value>退出信息亭模式</value></data>
-  <data name="settings_helper_mode" xml:space="preserve"><value>自动恢复守护</value></data>
+  <data name="settings_helper_mode" xml:space="preserve"><value>恢复助手</value></data>
   <data name="settings_inherit" xml:space="preserve"><value>使用集群默认值</value></data>
   <data name="settings_no_password" xml:space="preserve"><value>尚未设置管理密码，请先在网页管理中登录一次</value></data>
   <data name="settings_not_configured" xml:space="preserve"><value>未设置</value></data>
@@ -782,6 +782,7 @@
   <data name="settings_password_current" xml:space="preserve"><value>当前密码</value></data>
   <data name="settings_password_empty" xml:space="preserve"><value>请输入密码</value></data>
   <data name="settings_password_failed" xml:space="preserve"><value>无法更改管理密码</value></data>
+  <data name="settings_password_length" xml:space="preserve"><value>密码需为 {0}–{1} 个字符</value></data>
   <data name="settings_password_mismatch" xml:space="preserve"><value>两次输入不一致</value></data>
   <data name="settings_password_new" xml:space="preserve"><value>新密码</value></data>
   <data name="settings_password_set_failed" xml:space="preserve"><value>无法设置密码</value></data>
@@ -824,14 +825,14 @@
   <data name="settings_unlock_button" xml:space="preserve"><value>显示开锁按钮</value></data>
   <data name="settings_unlock_show_button" xml:space="preserve"><value>显示开锁按钮</value></data>
   <data name="settings_value_unset" xml:space="preserve"><value>未设置</value></data>
-  <data name="settings_video_playback" xml:space="preserve"><value>视频接收方式</value></data>
-  <data name="settings_video_rotation" xml:space="preserve"><value>视频方向</value></data>
+  <data name="settings_video_playback" xml:space="preserve"><value>视频播放</value></data>
+  <data name="settings_video_rotation" xml:space="preserve"><value>画面方向</value></data>
   <data name="settings_volume_inherit" xml:space="preserve"><value>使用集群默认值</value></data>
-  <data name="settings_web_only" xml:space="preserve"><value>请在网页管理中设置</value></data>
+  <data name="settings_web_only" xml:space="preserve"><value>此项目请在网页管理中修改</value></data>
   <data name="settings_web_only_labels" xml:space="preserve"><value>文案覆盖</value></data>
   <data name="settings_web_only_raw_config" xml:space="preserve"><value>请在网页管理中导出与导入配置</value></data>
-  <data name="settings_web_only_rule_actions" xml:space="preserve"><value>请在网页管理中编辑规则动作</value></data>
-  <data name="settings_web_only_secrets" xml:space="preserve"><value>请在各设备的网页管理中输入连接凭据</value></data>
+  <data name="settings_web_only_rule_actions" xml:space="preserve"><value>规则动作详情请在网页管理中编辑</value></data>
+  <data name="settings_web_only_secrets" xml:space="preserve"><value>密码与密钥请在网页管理中设置</value></data>
   <data name="settings_web_only_text" xml:space="preserve"><value>文案修改请在网页管理中进行</value></data>
   <data name="settings_web_only_upload" xml:space="preserve"><value>请在网页管理中添加图片</value></data>
   <data name="settings_web_only_wording" xml:space="preserve"><value>请在网页管理中修改文案</value></data>
@@ -971,6 +972,6 @@ PIN：{1}</value></data>
   <data name="web_admin_open_failed" xml:space="preserve"><value>无法打开浏览器</value></data>
   <data name="web_admin_other_address" xml:space="preserve"><value>其他地址</value></data>
   <data name="web_admin_scan" xml:space="preserve"><value>请用手机扫描</value></data>
-  <data name="web_admin_scan_hint" xml:space="preserve"><value>请用手机扫描此二维码</value></data>
+  <data name="web_admin_scan_hint" xml:space="preserve"><value>扫描此二维码即可打开管理页面</value></data>
   <data name="web_admin_title" xml:space="preserve"><value>网页管理</value></data>
 </root>

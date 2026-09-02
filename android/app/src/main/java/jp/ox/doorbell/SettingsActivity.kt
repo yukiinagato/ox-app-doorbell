@@ -227,7 +227,7 @@ class SettingsActivity : Activity(), DoorbellCore.Listener {
         val lightFrom = published?.lightFrom
             ?: schedule?.optString("light_from").orEmpty().ifEmpty { "06:30" }
         card.row(choiceRow(
-            texts.t("settings.appearance", R.string.settings_appearance),
+            texts.t("theme.appearance", R.string.theme_appearance),
             "devices.$nodeId.local.display.appearance",
             listOf("auto_system", "auto_schedule", "light", "dark"),
             { appearanceLabel(it) },
@@ -350,16 +350,10 @@ class SettingsActivity : Activity(), DoorbellCore.Listener {
                     render()
                 }
             })
-            // Core reports the effective visibility and whether an action exists at all; the
-            // toggle writes the administrator's explicit answer.
+            // Three answers, not a toggle: an absent show_button means "only when an unlock
+            // action exists", which is core's "default" source; true and false force it.
             val unlock = DoorUnlocks.read(status, door)
-            card.row(toggleRow(
-                texts.t("settings.unlock_button", R.string.settings_unlock_button),
-                "doors.$door.unlock.show_button",
-                unlock.showButton,
-                if (unlock.configured) ""
-                else texts.t("ring.unlock_unconfigured", R.string.ring_unlock_unconfigured),
-            ))
+            card.row(unlockRow(door, unlock))
         }
         card.row(webOnlyRow(
             texts.t("admin.doors", R.string.admin_doors),
@@ -509,6 +503,36 @@ class SettingsActivity : Activity(), DoorbellCore.Listener {
 
     private fun webOnlyRow(title: String, reason: String): View =
         ShellUi.row(this, palette, title, note = reason) { openAdminPage() }
+
+    /** 開錠ボタン: 自動 (follow the configured action) / 常に表示 / 表示しない. */
+    private fun unlockRow(door: String, unlock: DoorUnlock): View {
+        val key = "doors.$door.unlock.show_button"
+        val choices = listOf(
+            UnlockVisibility.AUTO to texts.t("unlock.auto", R.string.unlock_auto),
+            UnlockVisibility.SHOW to texts.t("unlock.show", R.string.unlock_show),
+            UnlockVisibility.HIDE to texts.t("unlock.hide", R.string.unlock_hide),
+        )
+        val current = DoorUnlocks.visibilityOf(unlock)
+        val note = if (unlock.configured) ""
+            else texts.t("unlock.not_configured", R.string.unlock_not_configured)
+        return ShellUi.row(
+            this, palette, texts.t("unlock.title", R.string.unlock_title),
+            choices.first { it.first == current }.second, note, enabled = !readOnly,
+        ) {
+            AlertDialog.Builder(this)
+                .setTitle(texts.t("unlock.title", R.string.unlock_title))
+                .setItems(choices.map { it.second as CharSequence }.toTypedArray()) { _, which ->
+                    // "自動" is the absence of the key, so it is a delete rather than a write.
+                    when (choices[which].first) {
+                        UnlockVisibility.AUTO -> deleteKey(key)
+                        UnlockVisibility.SHOW -> write(key, "true") { }
+                        UnlockVisibility.HIDE -> write(key, "false") { }
+                    }
+                }
+                .setNegativeButton(texts.t("admin.cancel", R.string.admin_cancel), null)
+                .show()
+        }
+    }
 
     private fun toggleRow(
         title: String,
@@ -780,7 +804,7 @@ class SettingsActivity : Activity(), DoorbellCore.Listener {
         val ink = palette.inkOver(rgb)
         val ratio = UiContrast.contrast(ink, rgb)
         if (ratio >= UiContrast.TEXT_AA) return ""
-        return texts.t("settings.contrast_warning", R.string.settings_contrast_warning,
+        return texts.t("theme.low_contrast", R.string.theme_low_contrast,
                        UiContrast.ratioText(ratio))
     }
 
@@ -798,13 +822,14 @@ class SettingsActivity : Activity(), DoorbellCore.Listener {
             ui.post {
                 if (isFinishing) return@post
                 if (result.ok) {
-                    // A colour below the WCAG ratio is still saved; core returns the advisory
-                    // notice alongside the success and it is shown rather than swallowed.
-                    toast(
-                        result.warning.ifEmpty {
-                            texts.t("admin.saved", R.string.admin_saved)
-                        },
-                    )
+                    // A colour below the WCAG ratio is still saved; core returns the measured
+                    // advisory alongside the success and it is shown rather than swallowed.
+                    val advisory = WriteWarnings.message(result.warning) { key, ratio ->
+                        if (key == WriteWarnings.LOW_CONTRAST)
+                            texts.t(key, R.string.theme_low_contrast, ratio)
+                        else texts.t(key, R.string.admin_saved)
+                    }
+                    toast(advisory.ifEmpty { texts.t("admin.saved", R.string.admin_saved) })
                     refreshSnapshots()
                     texts.setConfig(config)
                     render()
@@ -919,10 +944,10 @@ class SettingsActivity : Activity(), DoorbellCore.Listener {
 
     private fun appearanceLabel(value: String): String = when (value) {
         "auto_schedule" ->
-            texts.t("settings.appearance_schedule", R.string.settings_appearance_schedule)
-        "light" -> texts.t("settings.appearance_light", R.string.settings_appearance_light)
-        "dark" -> texts.t("settings.appearance_dark", R.string.settings_appearance_dark)
-        else -> texts.t("settings.appearance_system", R.string.settings_appearance_system)
+            texts.t("theme.appearance_auto_schedule", R.string.theme_appearance_auto_schedule)
+        "light" -> texts.t("theme.appearance_light", R.string.theme_appearance_light)
+        "dark" -> texts.t("theme.appearance_dark", R.string.theme_appearance_dark)
+        else -> texts.t("theme.appearance_auto_system", R.string.theme_appearance_auto_system)
     }
 
     private fun ruleSummary(rule: JSONObject?): String {

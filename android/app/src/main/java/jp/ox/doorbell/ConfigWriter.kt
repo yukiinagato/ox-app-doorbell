@@ -27,8 +27,12 @@ internal interface ConfigWriter {
 /** Writes straight through core. Blocking, so callers stay off the main thread. */
 internal class NativeConfigWriter(private val core: DoorbellCore) : ConfigWriter {
 
-    override fun setKey(key: String, valueJson: String): ConfigWriteResult =
-        resultOf(core.setConfigJson(key, valueJson))
+    override fun setKey(key: String, valueJson: String): ConfigWriteResult {
+        val result = resultOf(core.setConfigJson(key, valueJson))
+        if (!result.ok) return result
+        // The write committed; a readability warning is advisory and is read straight afterwards.
+        return result.copy(warnings = core.lastWriteWarnings())
+    }
 
     override fun deleteKey(key: String): ConfigWriteResult =
         resultOf(core.deleteConfigKey(key))
@@ -37,14 +41,17 @@ internal class NativeConfigWriter(private val core: DoorbellCore) : ConfigWriter
         if (values.isEmpty()) return ConfigWriteResult(true)
         val document = core.configBatchJson(ConfigOps.build(values)) ?: return UNSUPPORTED
         val ok = document.optBoolean("ok", false)
-        return ConfigWriteResult(ok, document.optString("err"), if (ok) 200 else 400,
-                                 warning = document.optString("warning"))
+        return ConfigWriteResult(
+            ok, document.optString("err"), if (ok) 200 else 400,
+            warnings = document.optJSONArray("warnings"),
+        )
     }
 
-    private fun resultOf(result: Int?): ConfigWriteResult = when {
-        result == null -> UNSUPPORTED
-        result == 0 -> ConfigWriteResult(true, status = 200)
-        // Core rejects a value the same way the HTTP route does; the reason is in its log.
+    private fun resultOf(result: Int?): ConfigWriteResult = when (result) {
+        null -> UNSUPPORTED
+        0 -> ConfigWriteResult(true, status = 200)
+        // -1 is a malformed call from this shell; -2 is core refusing or failing to persist.
+        -1 -> ConfigWriteResult(false, "bad_request", status = 400)
         else -> ConfigWriteResult(false, "config_rejected", status = 400)
     }
 

@@ -56,27 +56,54 @@ internal enum class AdminPasswordState {
 
 internal object AdminPassword {
 
-    /** Map core's db_core_admin_password_verify result. Null means the export is absent. */
+    /** Core accepts a new password of this length; checked locally for a useful message. */
+    const val MIN_LENGTH = 4
+    const val MAX_LENGTH = 128
+
+    /**
+     * Map core's db_core_admin_password_verify result: positive accepted, 0 wrong, -1 locked out,
+     * -2 no cluster password yet, -3 invalid arguments. Null means the export is absent.
+     */
     fun stateOf(result: Int?): AdminPasswordState = when {
         result == null -> AdminPasswordState.UNSUPPORTED
         result > 0 -> AdminPasswordState.OK
         result == 0 -> AdminPasswordState.WRONG
         result == -1 -> AdminPasswordState.LOCKED
         result == -2 -> AdminPasswordState.UNSET
+        // -3 is a malformed call, which proves nothing about the cluster password.
         else -> AdminPasswordState.UNSUPPORTED
     }
 
     /**
      * Whether clearing a running SOS alarm has to ask for the password.
      *
-     * emergency.cancel_requires_pin only applies once a cluster password exists: an alarm must
-     * never be impossible to clear because nobody has set one yet (§5.5, "Unset password rule").
+     * Core already computes emergency.cancel_requires_pin AND a password actually being set, and
+     * publishes the answer as status.emergency.cancel_requires_password. Reading that is the whole
+     * rule: an unset password must never stand between a household and a running alarm.
      */
-    fun alarmClearNeedsPassword(cancelRequiresPin: Boolean, state: AdminPasswordState): Boolean {
-        if (!cancelRequiresPin) return false
-        return state != AdminPasswordState.UNSET
+    fun alarmClearNeedsPassword(status: org.json.JSONObject?): Boolean {
+        val emergency = status?.optJSONObject("emergency") ?: return false
+        if (emergency.has("cancel_requires_password"))
+            return emergency.optBoolean("cancel_requires_password", false)
+        // Older core: apply the same conjunction locally rather than gating on the flag alone.
+        val requiresPin = emergency.optBoolean("cancel_requires_pin", false)
+        val passwordSet = emergency.optBoolean("admin_password_set", true)
+        return requiresPin && passwordSet
     }
 
-    /** A new password is refused only for being empty; core owns any stronger rule. */
-    fun newPasswordValid(value: String): Boolean = value.isNotEmpty()
+    /** Whether the cluster has a password at all, as core reports it. */
+    fun passwordSet(status: org.json.JSONObject?): Boolean =
+        status?.optJSONObject("emergency")?.optBoolean("admin_password_set", false) ?: false
+
+    /** Core requires 4..128 characters; rejecting early gives a better message than -1 does. */
+    fun newPasswordValid(value: String): Boolean = value.length in MIN_LENGTH..MAX_LENGTH
+
+    /**
+     * Whether the legacy per-device digest may be deleted. Core's migration note: the local digest
+     * stays authoritative only until core answers authoritatively about the cluster password, so
+     * one password change cannot leave a device with a stale second way in. An accepted password
+     * and a lockout both prove core owns it; an argument error proves nothing.
+     */
+    fun retiresLocalDigest(state: AdminPasswordState): Boolean =
+        state == AdminPasswordState.OK || state == AdminPasswordState.LOCKED
 }
