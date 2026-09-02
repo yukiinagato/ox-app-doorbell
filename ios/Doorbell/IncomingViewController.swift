@@ -29,6 +29,8 @@ final class IncomingViewController: UIViewController {
     private var autoCloseTimer: Timer?
     private var answerDelayTimer: Timer?
 
+    private let themeBg = ThemeBackgroundView()
+    private let videoBackdrop = UIView()
     private let liveView = UIImageView()
     private let h264View = UIView()
     private let noVideoLabel = UILabel()
@@ -55,6 +57,7 @@ final class IncomingViewController: UIViewController {
     private var replyExpanded = false
     private var videoAspect: NSLayoutConstraint?
     private var palette = DoorbellPalette.dark
+    private var skin = DoorbellSkin.plain(.dark)
     private var displayDoc: [String: Any]?
 
     private static let debugHiddenKey = "incoming.debug_line_hidden"
@@ -139,6 +142,7 @@ final class IncomingViewController: UIViewController {
         videoPlayer = nil
         liveView.image = nil
         liveView.transform = .identity
+        themeBg.releaseImage()
         noVideoLabel.isHidden = false
         // Keep the established audio dialog and its End Call button visible. viewDidDisappear is
         // still the single owner that hangs up when the user actually leaves this screen.
@@ -208,6 +212,18 @@ final class IncomingViewController: UIViewController {
 
 
     private func buildUi() {
+        // The household's theme background reaches this screen too, so a call does not drop the
+        // panel back to a slab of grey. Only the picture keeps its own black frame.
+        themeBg.onImageLoaded = { [weak self] in self?.applySkin() }
+        themeBg.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(themeBg)
+
+        videoBackdrop.backgroundColor = .black
+        videoBackdrop.layer.cornerRadius = 12
+        videoBackdrop.clipsToBounds = true
+        videoBackdrop.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(videoBackdrop)
+
         liveView.contentMode = .scaleAspectFit
         liveView.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(liveView)
@@ -340,6 +356,14 @@ final class IncomingViewController: UIViewController {
 
         let g = IOSAvailability.safeAreaLayoutGuide(for: view)
         NSLayoutConstraint.activate([
+            themeBg.topAnchor.constraint(equalTo: view.topAnchor),
+            themeBg.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            themeBg.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            themeBg.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            videoBackdrop.topAnchor.constraint(equalTo: liveView.topAnchor),
+            videoBackdrop.bottomAnchor.constraint(equalTo: liveView.bottomAnchor),
+            videoBackdrop.leadingAnchor.constraint(equalTo: liveView.leadingAnchor),
+            videoBackdrop.trailingAnchor.constraint(equalTo: liveView.trailingAnchor),
             badgeRow.topAnchor.constraint(equalTo: g.topAnchor, constant: 18),
             badgeRow.leadingAnchor.constraint(equalTo: g.leadingAnchor, constant: 24),
             badgeRow.trailingAnchor.constraint(equalTo: g.trailingAnchor, constant: -24),
@@ -408,11 +432,6 @@ final class IncomingViewController: UIViewController {
         titleLabel.text = texts.t("ring.incoming", label)
         noVideoLabel.text = texts.t("ring.no_video")
         statusLabel.text = texts.t("reply.choose")
-        answerButton.setTitle(inCall ? texts.t("incall.end") : texts.t("ring.answer"),
-                              for: .normal)
-        unlockButton.setTitle(texts.t("ring.unlock"), for: .normal)
-        ignoreButton.setTitle(texts.t("ring.ignore"), for: .normal)
-        quickReplyButton.setTitle(texts.t("ring.quick_reply"), for: .normal)
         updateToggleTitles()
         updateUnlockVisibility()
         updateNoticeChip()
@@ -421,11 +440,28 @@ final class IncomingViewController: UIViewController {
     }
 
     /// Both toggles show their state, so nobody has to guess whether the door can hear the room.
+    ///
+    /// Every label in this row is authored in two parts — what the control does, then the state
+    /// it is in — and rendered with the smaller second line, because six controls share one row
+    /// and a state suffix is exactly the phrase that would otherwise be shrunk to fit. The colour
+    /// and size are read back off the button, so a semantic override an administrator set is
+    /// still what gets painted.
     private func updateToggleTitles() {
-        monitorButton.setTitle(monitorOn ? texts.t("ring.monitor_on")
-            : texts.t("ring.monitor_off"), for: .normal)
-        micButton.setTitle(micMuted ? texts.t("ring.mic_off") : texts.t("ring.mic_on"),
-                           for: .normal)
+        let titles: [(UIButton, String)] = [
+            (monitorButton, texts.t(monitorOn ? "ring.monitor_two_line_on"
+                                              : "ring.monitor_two_line_off")),
+            (answerButton, texts.t(inCall ? "incall.end" : "ring.answer")),
+            (micButton, texts.t(micMuted ? "ring.mic_two_line_off" : "ring.mic_two_line_on")),
+            (unlockButton, texts.t("ring.unlock")),
+            (quickReplyButton, texts.t("ring.quick_reply")),
+            (ignoreButton, texts.t("ring.ignore")),
+        ]
+        for (button, text) in titles {
+            DoorbellTheme.twoPartTitle(text, on: button,
+                                       primarySize: button.titleLabel?.font.pointSize ?? 22,
+                                       color: button.titleColor(for: .normal) ?? palette.ink,
+                                       focusColor: palette.onAccent)
+        }
         micButton.isEnabled = inCall
     }
 
@@ -446,26 +482,35 @@ final class IncomingViewController: UIViewController {
         displayDoc = core.status()?["display"] as? [String: Any]
         palette = DoorbellPalette.of(DoorbellTheme.appearance(
             display: displayDoc, config: cfg, nodeId: nodeId, localTime: core.localTime()))
-        applyPalette()
+        applySkin()
         noticeChip.update(active: notice != nil, palette: palette)
-        adminQr.palette = palette
+        adminQr.skin = skin
         adminQr.reload()
     }
 
-    /// The incoming screen follows the same light/dark appearance as the home screens; only the
-    /// video area stays black, because a picture is what belongs there.
-    private func applyPalette() {
-        view.backgroundColor = palette.background
-        titleLabel.textColor = palette.ink
-        statusLabel.textColor = palette.inkMuted
-        noVideoLabel.textColor = palette.inkMuted
-        debugLine.textColor = palette.inkMuted.withAlphaComponent(0.6)
+    /// The bare text on this screen — the door name, the prompt, the counters line — takes Core's
+    /// per-region automatic ink over the theme background. The controls are cards the shell
+    /// painted itself and keep the palette. The video keeps its own black frame, because a
+    /// picture is what belongs there.
+    private func applySkin() {
+        skin = themeBg.apply(display: displayDoc, config: cfg, nodeId: nodeId, palette: palette,
+                             httpPort: boot.httpPort, host: view)
+        skin.apply("status_line", to: titleLabel)
+        skin.apply("hint", to: statusLabel, quiet: true)
+        skin.apply("footer", to: debugLine, quiet: true)
+        // Over the video's black frame, not over the theme background.
+        noVideoLabel.textColor = UIColor(white: 1, alpha: 0.6)
         for button in [monitorButton, micButton, unlockButton, quickReplyButton, ignoreButton] {
-            button.setTitleColor(palette.ink, for: .normal)
-            button.backgroundColor = palette.surface
+            button.setTitleColor(skin.cardInk("status_line"), for: .normal)
+            button.backgroundColor = skin.surface
         }
         answerButton.setTitleColor(DoorbellTheme.readableInk(on: answerButton.backgroundColor
             ?? palette.accent), for: .normal)
+        purposeBadge.backgroundColor = palette.accent
+        purposeBadge.textColor = DoorbellTheme.readableInk(on: palette.accent)
+        langBadge.backgroundColor = palette.notice
+        langBadge.textColor = DoorbellTheme.readableInk(on: palette.notice)
+        updateToggleTitles()
     }
 
     private func openNoticeDialog() {
@@ -538,6 +583,9 @@ final class IncomingViewController: UIViewController {
         for button in replyStack.arrangedSubviews {
             styleApplier.apply(config: cfg, nodeId: nodeId, semanticId: "reply.button", to: button)
         }
+        // The style applier paints through setTitleColor/font, which an attributed title ignores;
+        // re-rendering the two-part labels afterwards is what carries the override onto them.
+        updateToggleTitles()
     }
 
 
@@ -720,7 +768,6 @@ final class IncomingViewController: UIViewController {
                     sipMode = ""
                     monitorOn = false
                     answerButton.isEnabled = peerHost != nil
-                    answerButton.setTitle(texts.t("ring.answer"), for: .normal)
                     updateToggleTitles()
                     updateUnlockVisibility()
                     statusLabel.text = texts.t("reply.choose")
@@ -811,7 +858,7 @@ final class IncomingViewController: UIViewController {
         }
         autoCloseTimer?.invalidate()
         answerButton.isEnabled = true
-        answerButton.setTitle(texts.t("incall.end"), for: .normal)
+        updateToggleTitles()
         updateUnlockVisibility()
         statusLabel.text = texts.t("incall.title")
         hintLabel.isHidden = true

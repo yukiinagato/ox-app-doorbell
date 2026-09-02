@@ -141,12 +141,52 @@ assert "NoticeChipView" in incoming, "the announcement is a compact chip"
 assert "purposeSlot.heightAnchor.constraint(equalToConstant:" in incoming, \
     "the purpose slot keeps its height so the layout never jumps"
 assert "applyVideoAspect" in incoming and "liveView.heightAnchor.constraint(equalTo:" in incoming
-assert "ring.monitor_on" in incoming and "ring.mic_on" in incoming
+# Both toggles show their state, and the state is the authored second line rather than a suffix
+# the button would have to shrink to fit.
+assert "ring.monitor_two_line_on" in incoming and "ring.mic_two_line_on" in incoming
+assert "DoorbellTheme.twoPartTitle(text, on: button," in incoming, \
+    "the control row renders its labels through the two-part renderer"
+assert 'color: button.titleColor(for: .normal)' in incoming, \
+    "a semantic foreground override must survive the two-part rendering"
 assert "incoming.debug_line_hidden" in incoming, "the debug line's state is remembered"
 assert "AdminQrView(core: core, boot: boot, texts: texts, compact: true)" in incoming
 assert "DoorUnlock.showsButton(status: core.status(), config: cfg,\n" in incoming
 assert "core.openDoor(door)" in incoming, "unlock uses Core's own open-door action"
 assert "door.unlock_not_configured" in incoming, "an unconfigured unlock must explain itself"
+
+# --- the theme background reaches every panel, not only the door station ----
+# The owner's decision: an indoor panel wears the household's theme background too, and §5's
+# automatic contrast — not a switch back to the palette — is what keeps its text readable.
+assert "class ThemeBackgroundView" in theme and "func apply(display:" in theme
+assert "struct DoorbellSkin" in theme and "func cardInk(" in theme, \
+    "bare text takes the region's automatic ink; cards this shell painted keep the palette"
+assert "surfaceSolid" in theme and "func solid(" in theme, \
+    "a card over a theme picture has to be opaque or its palette ink stops being readable"
+for region in ("clock", "date", "status_line", "hint", "tile_label", "footer", "notice"):
+    assert f'"{region}"' in theme + dashboard + visitor + incoming, region
+for shell, name in ((main, "MainViewController"), (tv, "TVMainViewController"),
+                    (incoming, "IncomingViewController"),
+                    (source("ios/Doorbell/MonitorViewController.swift"), "Monitor")):
+    assert "themeBg.apply(display:" in shell, name
+assert 'boot.role == "door_station"' not in main.split("private func applyTheme")[1][:400], \
+    "the theme background is no longer gated on the door station"
+assert 'skin.apply("clock", to: clockLabel)' in dashboard and \
+    'skin.apply("footer", to: versionLabel, quiet: true)' in dashboard
+assert "backgroundColor = .black" in incoming, "the video keeps its own black frame"
+
+# --- visit_purposes.<id>.enabled -------------------------------------------
+# One definition of "offered", used by both choosers; the settings list deliberately shows every
+# purpose, because that is where a switched-off one is switched back on.
+config_util = source("ios/Doorbell/ConfigUtil.swift")
+assert "func enabledPurposeIds(" in config_util and "func allPurposeIds(" in config_util
+assert 'bool(entry, "enabled", true)' in config_util, "an absent switch means offered"
+assert "ConfigUtil.enabledPurposeIds(cfg)" in main and \
+    main.count("ConfigUtil.enabledPurposeIds(cfg)") >= 2, \
+    "the door buttons and the ring-then-purpose chooser share one answer"
+assert "ConfigUtil.allPurposeIds(config)" in settings, "the settings list shows every purpose"
+assert "ConfigUtil.purposeIsEnabled(entry)" in settings
+assert 'write([.set("visit_purposes.\\(id).enabled", value)])' in settings, \
+    "the toggle writes that one key and nothing else"
 
 # --- dashboard -------------------------------------------------------------
 assert "/snapshot.jpg" in dashboard and "withTimeInterval: 5" in dashboard
@@ -164,6 +204,8 @@ assert "UIEdgeInsets(top: 6, left: 12, bottom: 6, right: 12)" in theme, \
     "coloured labels keep 6/12 padding"
 assert "func twoPart(" in theme and "primarySize * 0.8" in theme, \
     "a two-part label renders its second line smaller"
+assert "func twoPartTitle(" in theme and "for: .focused" in theme, \
+    "a button's two-part title keeps its split when tvOS focuses it"
 assert "0.2126" in theme and "func contrast(" in theme
 # The automatic theme is computed by Core and delivered in the display contract; it is never
 # stored, so a shell that read it from configuration would find nothing.

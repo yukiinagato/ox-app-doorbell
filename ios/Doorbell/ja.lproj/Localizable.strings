@@ -681,10 +681,14 @@
 "ring.lang_badge" = "訪客言語: %@";
 "ring.mic_off" = "マイク OFF";
 "ring.mic_on" = "マイク ON";
+"ring.mic_two_line_off" = "マイク\nOFF";
+"ring.mic_two_line_on" = "マイク\nON";
 "ring.mic_unavailable" = "この版ではマイクの切り替えができません";
 "ring.monitor" = "モニタ";
 "ring.monitor_off" = "モニター OFF";
 "ring.monitor_on" = "モニター ON";
+"ring.monitor_two_line_off" = "モニター\nOFF";
+"ring.monitor_two_line_on" = "モニター\nON";
 "ring.monitoring" = "門口の音声を再生中";
 "ring.no_video" = "門口機の映像がありません";
 "ring.open_door" = "ドアを開ける";

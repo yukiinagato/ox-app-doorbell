@@ -686,10 +686,18 @@
     <string name="ring_lang_badge">访客语言: %1$s</string>
     <string name="ring_mic_off">麦克风 关</string>
     <string name="ring_mic_on">麦克风 开</string>
+    <string name="ring_mic_two_line_off">麦克风
+关</string>
+    <string name="ring_mic_two_line_on">麦克风
+开</string>
     <string name="ring_mic_unavailable">此版本无法切换麦克风</string>
     <string name="ring_monitor">监听</string>
     <string name="ring_monitor_off">监听 关</string>
     <string name="ring_monitor_on">监听 开</string>
+    <string name="ring_monitor_two_line_off">监听
+关</string>
+    <string name="ring_monitor_two_line_on">监听
+开</string>
     <string name="ring_monitoring">正在播放门口声音</string>
     <string name="ring_no_video">没有门口机画面</string>
     <string name="ring_open_door">开门</string>

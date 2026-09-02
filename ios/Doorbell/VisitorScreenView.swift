@@ -28,7 +28,7 @@ final class VisitorScreenView: UIView {
     private var noticeExpanded = false
     private var noticeText = ""
     private var isLandscape = false
-    private var palette = DoorbellPalette.dark
+    private var skin = DoorbellSkin.plain(.dark)
 
     init(texts: Texts, callButton: UIButton, langBar: UIView, purposeSection: UIView,
          sosControl: SosSlideControl) {
@@ -215,25 +215,26 @@ final class VisitorScreenView: UIView {
         sosControl.isHidden = !visible
     }
 
-    /// Applies the palette and the computed call-button colour. The button colour comes from
-    /// Core's `auto_accent` when it is published, from the administrator's override when there is
-    /// one, and from the local complement computation otherwise.
-    func applyTheme(palette: DoorbellPalette, display: [String: Any]?,
-                    effectiveBackground: UIColor) {
-        self.palette = palette
+    /// Applies the skin and the computed call-button colour. Every label here is drawn straight
+    /// on the theme background, so each takes its own region's automatic ink. The button colour
+    /// comes from Core's `auto_accent` when it is published, from the administrator's override
+    /// when there is one, and from the local complement computation otherwise.
+    func apply(skin: DoorbellSkin) {
+        self.skin = skin
         let regions: [(String, UILabel)] = [("clock", clockLabel), ("date", dateLabel),
-                                            ("hint", hintLabel), ("status_line", footerLabel),
+                                            ("hint", hintLabel), ("footer", footerLabel),
                                             ("notice", noticeLabel)]
         for (region, label) in regions {
-            let ink = DoorbellTheme.ink(display: display, region: region,
-                                        background: effectiveBackground, palette: palette)
-            DoorbellTheme.applyInk(ink, over: effectiveBackground, to: label)
+            skin.apply(region, to: label, quiet: region == "footer" || region == "date")
         }
         noticeExpand.setTitleColor(noticeLabel.textColor, for: .normal)
 
-        let colors = DoorbellTheme.callButtonColors(display: display,
-                                                    background: effectiveBackground)
+        let colors = DoorbellTheme.callButtonColors(display: skin.display,
+                                                    background: skin.background)
         callButton.backgroundColor = colors.fill
+        // The call button keeps a plain title: it is one phrase, it already centres over as many
+        // lines as it needs, and `applyLayout` resizes its font per screen size — which an
+        // attributed title would freeze.
         callButton.setTitleColor(colors.ink, for: .normal)
     }
 }

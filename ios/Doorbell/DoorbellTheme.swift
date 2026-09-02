@@ -55,6 +55,182 @@ struct DoorbellPalette {
     static func of(_ appearance: DoorbellAppearance) -> DoorbellPalette {
         return appearance == .light ? .light : .dark
     }
+
+    /// `surface` and `surfaceStrong` are translucent so a card tints whatever it lies on. That is
+    /// only correct while the screen behind them is this palette's own background. A card on the
+    /// theme picture has to be opaque, or the picture shows through and the palette ink the card
+    /// carries stops being the readable one. Compositing the overlay over the palette background
+    /// gives exactly the colour a panel without a theme picture already shows.
+    var surfaceSolid: UIColor { return DoorbellTheme.solid(surface, over: background) }
+    var surfaceStrongSolid: UIColor {
+        return DoorbellTheme.solid(surfaceStrong, over: background)
+    }
+}
+
+/// Everything one screen needs to paint itself: the palette that owns every surface the shell
+/// draws, and the background the shell has painted under it.
+///
+/// The split matters because the two can disagree. `display.theme` is a cluster-wide decoration —
+/// the owner's picture or colour — while light/dark is a per-device appearance. A dark picture
+/// under a light palette is normal, and §5's automatic contrast is what keeps the bare text
+/// (clock, date, hint, footer) readable on it. Cards, chips, sheets and dialogs are layered on top
+/// and stay in the palette, because the shell painted them and knows what is behind their text.
+struct DoorbellSkin {
+
+    let palette: DoorbellPalette
+    let display: [String: Any]?
+    /// The colour a bare text region actually sits on: the theme colour, or the average of the
+    /// theme picture. Core measures it once for the cluster; the shell measures locally when the
+    /// contract is absent.
+    let background: UIColor
+    /// True while a configured theme colour or picture is painted under this screen. Core's
+    /// automatic ink describes that background, so it is only meaningful when it is showing.
+    let decorated: Bool
+
+    /// A screen with no theme decoration: every region falls back to the palette.
+    static func plain(_ palette: DoorbellPalette) -> DoorbellSkin {
+        return DoorbellSkin(palette: palette, display: nil, background: palette.background,
+                            decorated: false)
+    }
+
+    // MARK: - Text drawn straight on the background
+
+    /// Ink for one of the semantic regions Core publishes (`clock`, `date`, `status_line`,
+    /// `hint`, `tile_label`, `footer`, `notice`).
+    func ink(_ region: String) -> UIColor {
+        if let override = DoorbellTheme.inkOverride(display: display, region: region) {
+            return override
+        }
+        guard decorated else { return palette.ink }
+        return DoorbellTheme.ink(display: display, region: region, background: background,
+                                 palette: palette)
+    }
+
+    /// The quiet variant of a region's ink. Over a decoration it is the same ink moved towards
+    /// the background rather than made translucent, so it keeps a known contrast ratio.
+    func muted(_ region: String) -> UIColor {
+        guard decorated else {
+            return DoorbellTheme.inkOverride(display: display, region: region)
+                .map { DoorbellTheme.solid($0.withAlphaComponent(0.74), over: background) }
+                ?? palette.inkMuted
+        }
+        return DoorbellTheme.solid(ink(region).withAlphaComponent(0.74), over: background)
+    }
+
+    func apply(_ region: String, to label: UILabel, quiet: Bool = false) {
+        DoorbellTheme.applyInk(quiet ? muted(region) : ink(region), over: background, to: label)
+    }
+
+    // MARK: - Text on a card this shell painted
+
+    /// A card is a palette surface, so the palette's own ink is the readable one there. An
+    /// administrator's per-region override still wins, because it is a deliberate choice.
+    func cardInk(_ region: String) -> UIColor {
+        return DoorbellTheme.inkOverride(display: display, region: region) ?? palette.ink
+    }
+
+    func cardMuted(_ region: String) -> UIColor {
+        guard let override = DoorbellTheme.inkOverride(display: display, region: region) else {
+            return palette.inkMuted
+        }
+        return DoorbellTheme.solid(override.withAlphaComponent(0.74), over: surface)
+    }
+
+    /// Card and chip fills. Opaque, so the theme picture never leaks through the text on them.
+    var surface: UIColor { return palette.surfaceSolid }
+    var surfaceStrong: UIColor { return palette.surfaceStrongSolid }
+}
+
+/// The household's theme background as one screen paints it: a colour on the host view with the
+/// configured picture over it, plus the skin that says what text drawn on that ought to look like.
+///
+/// Every full-screen surface owns one — both home screens, the incoming screen, the monitor page —
+/// so no two of them can end up disagreeing about what is behind their text.
+final class ThemeBackgroundView: UIImageView {
+
+    /// Called once a picture has arrived, so the screen can repaint text against it.
+    var onImageLoaded: (() -> Void)?
+
+    private var loadedHash: String?
+    private var paintedColor: String?
+
+    init() {
+        super.init(frame: .zero)
+        contentMode = .scaleAspectFill
+        clipsToBounds = true
+        isHidden = true
+    }
+
+    required init?(coder: NSCoder) { fatalError("not supported") }
+
+    /// Core resolves `display.theme` with this device's own override and republishes the result,
+    /// so the contract is the first place to look; configuration is the fallback for a Core that
+    /// predates it.
+    private static func value(_ leaf: String, display: [String: Any]?, config: [String: Any]?,
+                              nodeId: String) -> String? {
+        if let v = ConfigUtil.str(display, "theme.\(leaf)"), !v.isEmpty { return v }
+        if !nodeId.isEmpty,
+           let v = ConfigUtil.str(config, "devices.\(nodeId).local.theme.\(leaf)"), !v.isEmpty {
+            return v
+        }
+        let v = ConfigUtil.str(config, "display.theme.\(leaf)")
+        return (v?.isEmpty == false) ? v : nil
+    }
+
+    @discardableResult
+    func apply(display: [String: Any]?, config: [String: Any]?, nodeId: String,
+               palette: DoorbellPalette, httpPort: Int, host: UIView) -> DoorbellSkin {
+        let color = ThemeBackgroundView.value("bg_color", display: display, config: config,
+                                              nodeId: nodeId)
+        let key = (color ?? "") + "/" + palette.appearance.rawValue
+        if key != paintedColor {
+            paintedColor = key
+            if let color = color, let rgb = ConfigUtil.parseHexColor(color) {
+                host.backgroundColor = UIColor(red: rgb.r, green: rgb.g, blue: rgb.b, alpha: 1)
+            } else {
+                host.backgroundColor = palette.background
+            }
+        }
+        let hash = ThemeBackgroundView.value("bg_image", display: display, config: config,
+                                             nodeId: nodeId) ?? ""
+        if hash.isEmpty {
+            loadedHash = nil
+            image = nil
+            isHidden = true
+        } else if hash != loadedHash || image == nil {
+            loadedHash = hash
+            DoorbellTheme.loadBackgroundImage(
+                hash: hash, path: ConfigUtil.str(display, "theme.bg_image_path"),
+                httpPort: httpPort) { [weak self] picture in
+                    guard let self = self, self.loadedHash == hash else { return }
+                    self.image = picture
+                    self.isHidden = false
+                    self.onImageLoaded?()
+                }
+        }
+        return skin(display: display, palette: palette, host: host, decorated: color != nil)
+    }
+
+    /// Drops the picture under memory pressure. The colour stays: a screen still has to have one.
+    func releaseImage() {
+        loadedHash = nil
+        image = nil
+        isHidden = true
+    }
+
+    private func skin(display: [String: Any]?, palette: DoorbellPalette, host: UIView,
+                      decorated: Bool) -> DoorbellSkin {
+        var background = host.backgroundColor ?? palette.background
+        // Core measures the served theme, image included, so every shell agrees on one answer.
+        if let published = DoorbellTheme.publishedBackground(display: display) {
+            background = published
+        } else if !isHidden, let picture = image,
+                  let average = DoorbellTheme.averageColor(of: picture) {
+            background = average
+        }
+        return DoorbellSkin(palette: palette, display: display, background: background,
+                            decorated: decorated || !isHidden)
+    }
 }
 
 enum DoorbellTheme {
@@ -153,6 +329,17 @@ enum DoorbellTheme {
         return 0.2126 * linear(r) + 0.7152 * linear(g) + 0.0722 * linear(b)
     }
 
+    /// Flattens a translucent colour onto an opaque one. Used wherever a surface that used to
+    /// tint the screen behind it now has to be a colour of its own.
+    static func solid(_ overlay: UIColor, over base: UIColor) -> UIColor {
+        var or: CGFloat = 0, og: CGFloat = 0, ob: CGFloat = 0, oa: CGFloat = 0
+        var br: CGFloat = 0, bg: CGFloat = 0, bb: CGFloat = 0, ba: CGFloat = 0
+        guard overlay.getRed(&or, green: &og, blue: &ob, alpha: &oa),
+              base.getRed(&br, green: &bg, blue: &bb, alpha: &ba) else { return overlay }
+        return UIColor(red: or * oa + br * (1 - oa), green: og * oa + bg * (1 - oa),
+                       blue: ob * oa + bb * (1 - oa), alpha: 1)
+    }
+
     static func contrast(_ first: UIColor, _ second: UIColor) -> CGFloat {
         let a = luminance(first), b = luminance(second)
         return (max(a, b) + 0.05) / (min(a, b) + 0.05)
@@ -186,9 +373,15 @@ enum DoorbellTheme {
     /// Ink for one semantic text region. Core publishes the administrator's overrides and the
     /// automatic decision in the display contract; without them the same luminance rule runs
     /// locally, so an older Core still produces legible text.
+    /// The colour an administrator pinned for one region, if any. Core republishes the overrides
+    /// it validated, so the shell reads them from the display contract rather than configuration.
+    static func inkOverride(display: [String: Any]?, region: String) -> UIColor? {
+        return color(hex: ConfigUtil.str(display, "theme.ink_override.\(region)"))
+    }
+
     static func ink(display: [String: Any]?, region: String, background: UIColor,
                     palette: DoorbellPalette) -> UIColor {
-        if let override = color(hex: ConfigUtil.str(display, "theme.ink_override.\(region)")) {
+        if let override = inkOverride(display: display, region: region) {
             return override
         }
         if let published = ConfigUtil.str(display, "theme.auto_ink.\(region)") {
@@ -323,6 +516,53 @@ enum DoorbellTheme {
                          .foregroundColor: color.withAlphaComponent(0.72),
                          .paragraphStyle: paragraph]))
         return result
+    }
+
+    /// Loads the theme picture Core named. Core publishes the cached file's path next to the
+    /// hash, so a panel that already holds the asset never goes near the network; the node's own
+    /// asset endpoint is the fallback while the file is still arriving. `completion` runs on the
+    /// main queue, and only with an image.
+    static func loadBackgroundImage(hash: String, path: String?, httpPort: Int,
+                                    completion: @escaping (UIImage) -> Void) {
+        if let path = path, !path.isEmpty, let image = UIImage(contentsOfFile: path) {
+            completion(image)
+            return
+        }
+        guard let url = URL(string: "http://127.0.0.1:\(httpPort)/asset/\(hash)") else { return }
+        URLSession.shared.dataTask(with: url) { data, response, _ in
+            guard let data = data, (response as? HTTPURLResponse)?.statusCode == 200,
+                  let image = UIImage(data: data) else { return }
+            DispatchQueue.main.async { completion(image) }
+        }.resume()
+    }
+
+    /// Renders an authored two-part label on a button. The break in the string is the only place
+    /// the text ever wraps, and the second line is smaller and quieter — a label that carries one
+    /// part renders as that one part. Every control that can outgrow its box goes through here
+    /// instead of shrinking a phrase to fit, which is what the deliberate-line-break rule asks
+    /// for. tvOS gets the same attributed title for the focused state, because the focus engine
+    /// would otherwise repaint a plain title and lose the split.
+    static func twoPartTitle(_ text: String, on button: UIButton, primarySize: CGFloat,
+                             color: UIColor, focusColor: UIColor? = nil, bold: Bool = true) {
+        button.titleLabel?.numberOfLines = 0
+        button.titleLabel?.textAlignment = .center
+        button.titleLabel?.adjustsFontSizeToFitWidth = false
+        // Assigning an identical title would still invalidate the button's intrinsic size, and
+        // this runs from `viewDidLayoutSubviews` on the incoming screen; comparing first keeps a
+        // re-render from starting another layout pass.
+        let attributed = twoPart(text, primarySize: primarySize, color: color, bold: bold)
+        if button.attributedTitle(for: .normal)?.isEqual(to: attributed) != true {
+            button.setTitle(nil, for: .normal)
+            button.setAttributedTitle(attributed, for: .normal)
+        }
+        #if os(tvOS)
+        let focused = twoPart(text, primarySize: primarySize, color: focusColor ?? color,
+                              bold: bold)
+        if button.attributedTitle(for: .focused)?.isEqual(to: focused) != true {
+            button.setAttributedTitle(focused, for: .focused)
+        }
+        #endif
+        button.accessibilityLabel = text.replacingOccurrences(of: "\n", with: " ")
     }
 
     /// Footer identity line: `name · core vX · app vY · battery`. The battery part disappears on a

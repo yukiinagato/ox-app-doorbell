@@ -867,3 +867,7 @@ settings.password_new: { ja: "新しいパスワード", en: "New password", zh:
 settings.password_changed: { ja: "管理パスワードを変更しました", en: "The admin password was changed", zh: "管理密码已更改" }
 settings.password_failed: { ja: "管理パスワードを変更できませんでした", en: "Couldn't change the admin password", zh: "无法更改管理密码" }
 settings.password_shared: { ja: "この端末と Web 管理で同じパスワードを使います", en: "The same password is used here and in the web admin", zh: "此设备与网页管理使用同一密码" }
+ring.monitor_two_line_on: { ja: "モニター\nON", en: "Monitor\nOn", zh: "监听\n开" }
+ring.monitor_two_line_off: { ja: "モニター\nOFF", en: "Monitor\nOff", zh: "监听\n关" }
+ring.mic_two_line_on: { ja: "マイク\nON", en: "Mic\nOn", zh: "麦克风\n开" }
+ring.mic_two_line_off: { ja: "マイク\nOFF", en: "Mic\nOff", zh: "麦克风\n关" }

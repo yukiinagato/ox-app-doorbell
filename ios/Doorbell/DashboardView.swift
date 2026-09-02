@@ -35,7 +35,7 @@ final class DashboardView: UIView {
     private let rightColumn = UIStackView()
 
     private var config: [String: Any]?
-    private var palette = DoorbellPalette.dark
+    private var skin = DoorbellSkin.plain(.dark)
     private var tiles: [String: DoorTileView] = [:]
     private var stillTimer: Timer?
 
@@ -63,10 +63,10 @@ final class DashboardView: UIView {
         clockLabel.accessibilityIdentifier = "dashboard_clock"
         dateLabel.font = .systemFont(ofSize: 20)
 
-        DoorbellTheme.pill(membershipPill, background: palette.surface, ink: palette.ink,
+        DoorbellTheme.pill(membershipPill, background: skin.surface, ink: skin.cardInk("status_line"),
                            fontSize: 15)
         membershipPill.accessibilityIdentifier = "membership_status"
-        DoorbellTheme.pill(missedBadge, background: palette.danger, ink: .white, fontSize: 15)
+        DoorbellTheme.pill(missedBadge, background: skin.palette.danger, ink: .white, fontSize: 15)
         missedBadge.accessibilityIdentifier = "missed_badge"
         missedBadge.isHidden = true
         missedBadge.isUserInteractionEnabled = true
@@ -170,13 +170,16 @@ final class DashboardView: UIView {
 
     // MARK: - Content
 
-    func reload(config: [String: Any]?, palette: DoorbellPalette) {
+    /// `skin` carries both halves of the answer: the household's theme background, which this
+    /// panel paints like the door station does, and the light/dark palette that owns the cards
+    /// laid on top of it.
+    func reload(config: [String: Any]?, skin: DoorbellSkin) {
         self.config = config
-        self.palette = palette
-        applyPalette()
+        self.skin = skin
+        applySkin()
         rebuildTiles()
-        recentCalls.reload(config: config, palette: palette)
-        adminQr.palette = palette
+        recentCalls.reload(config: config, skin: skin)
+        adminQr.skin = skin
         adminQr.reload()
         refreshMissedBadge()
         refreshVersionLine()
@@ -186,18 +189,22 @@ final class DashboardView: UIView {
         refreshStills()
     }
 
-    private func applyPalette() {
-        clockLabel.textColor = palette.ink
-        dateLabel.textColor = palette.inkMuted
-        historyHeader.textColor = palette.ink
-        versionLabel.textColor = palette.inkMuted
-        DoorbellTheme.pill(membershipPill, background: palette.surface, ink: palette.ink,
-                           fontSize: 15)
-        DoorbellTheme.pill(missedBadge, background: palette.danger,
-                           ink: DoorbellTheme.readableInk(on: palette.danger), fontSize: 15)
+    /// The clock, the date, the section heading and the identity line sit straight on the theme
+    /// background, so their colours come from Core's per-region automatic ink. Everything with a
+    /// fill of its own — pills, chips, buttons, the tiles, the call list — is a surface this view
+    /// painted from the palette, and keeps the palette's ink.
+    private func applySkin() {
+        skin.apply("clock", to: clockLabel)
+        skin.apply("date", to: dateLabel, quiet: true)
+        skin.apply("status_line", to: historyHeader)
+        skin.apply("footer", to: versionLabel, quiet: true)
+        DoorbellTheme.pill(membershipPill, background: skin.surface,
+                           ink: skin.cardInk("status_line"), fontSize: 15)
+        DoorbellTheme.pill(missedBadge, background: skin.palette.danger,
+                           ink: DoorbellTheme.readableInk(on: skin.palette.danger), fontSize: 15)
         for button in [adminButton, noticeButton, seeAllButton] {
-            button.setTitleColor(palette.ink, for: .normal)
-            button.backgroundColor = palette.surface
+            button.setTitleColor(skin.cardInk("status_line"), for: .normal)
+            button.backgroundColor = skin.surface
         }
     }
 
@@ -219,7 +226,7 @@ final class DashboardView: UIView {
     }
 
     func refreshHistory() {
-        recentCalls.reload(config: config, palette: palette)
+        recentCalls.reload(config: config, skin: skin)
         refreshMissedBadge()
     }
 
@@ -236,7 +243,7 @@ final class DashboardView: UIView {
         for (door, tile) in tiles {
             let notice = DoorbellNotice.effective(status: status, config: config, door: door,
                                                   nowMs: nowMs)
-            tile.updateNotice(active: notice != nil, palette: palette)
+            tile.updateNotice(active: notice != nil, skin: skin)
         }
     }
 
@@ -269,7 +276,7 @@ final class DashboardView: UIView {
             tile.apply(label: ConfigUtil.labelOf(entry, boot.uiLang, door),
                        online: peer != nil,
                        noticeActive: notice != nil,
-                       palette: palette)
+                       skin: skin)
         }
     }
 
@@ -380,19 +387,22 @@ final class DoorTileView: UIView {
 
     required init?(coder: NSCoder) { fatalError("not supported") }
 
-    func apply(label: String, online: Bool, noticeActive: Bool, palette: DoorbellPalette) {
+    /// The tile is an opaque card, so its caption keeps the palette's ink rather than the ink
+    /// Core measured for the theme background — an administrator's `tile_label` override still
+    /// wins, because that is a colour somebody chose on purpose.
+    func apply(label: String, online: Bool, noticeActive: Bool, skin: DoorbellSkin) {
         nameLabel.text = label
-        nameLabel.textColor = palette.ink
+        nameLabel.textColor = skin.cardInk("tile_label")
         stateLabel.text = online ? "" : texts.t("admin.offline")
-        stateLabel.textColor = palette.inkMuted
-        backgroundColor = palette.surface
+        stateLabel.textColor = skin.cardMuted("tile_label")
+        backgroundColor = skin.surface
         still.alpha = online ? 1 : 0.35
-        openButton.setTitleColor(palette.ink, for: .normal)
-        noticeChip.update(active: noticeActive, palette: palette)
+        openButton.setTitleColor(skin.cardInk("tile_label"), for: .normal)
+        noticeChip.update(active: noticeActive, palette: skin.palette)
     }
 
-    func updateNotice(active: Bool, palette: DoorbellPalette) {
-        noticeChip.update(active: active, palette: palette)
+    func updateNotice(active: Bool, skin: DoorbellSkin) {
+        noticeChip.update(active: active, palette: skin.palette)
     }
 
     func setStill(_ image: UIImage?) {

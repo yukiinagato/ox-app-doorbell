@@ -123,7 +123,12 @@ final class NoticeChipView: UIControl {
     func update(active: Bool, palette: DoorbellPalette) {
         dot.isHidden = !active
         dot.backgroundColor = palette.notice
-        backgroundColor = active ? palette.notice.withAlphaComponent(0.24) : palette.surface
+        // Opaque on both states: the chip may be lying on the household's theme picture, and a
+        // translucent fill would let that picture decide whether its label is readable.
+        backgroundColor = active
+            ? DoorbellTheme.solid(palette.notice.withAlphaComponent(0.24),
+                                  over: palette.background)
+            : palette.surfaceSolid
         label.textColor = palette.ink
     }
 

@@ -686,10 +686,18 @@
     <string name="ring_lang_badge">訪客言語: %1$s</string>
     <string name="ring_mic_off">マイク OFF</string>
     <string name="ring_mic_on">マイク ON</string>
+    <string name="ring_mic_two_line_off">マイク
+OFF</string>
+    <string name="ring_mic_two_line_on">マイク
+ON</string>
     <string name="ring_mic_unavailable">この版ではマイクの切り替えができません</string>
     <string name="ring_monitor">モニタ</string>
     <string name="ring_monitor_off">モニター OFF</string>
     <string name="ring_monitor_on">モニター ON</string>
+    <string name="ring_monitor_two_line_off">モニター
+OFF</string>
+    <string name="ring_monitor_two_line_on">モニター
+ON</string>
     <string name="ring_monitoring">門口の音声を再生中</string>
     <string name="ring_no_video">門口機の映像がありません</string>
     <string name="ring_open_door">ドアを開ける</string>

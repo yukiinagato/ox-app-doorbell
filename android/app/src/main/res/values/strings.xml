@@ -686,10 +686,18 @@ Delete it?</string>
     <string name="ring_lang_badge">Visitor language: %1$s</string>
     <string name="ring_mic_off">Mic off</string>
     <string name="ring_mic_on">Mic on</string>
+    <string name="ring_mic_two_line_off">Mic
+Off</string>
+    <string name="ring_mic_two_line_on">Mic
+On</string>
     <string name="ring_mic_unavailable">Muting the microphone isn\'t available in this build</string>
     <string name="ring_monitor">Monitor</string>
     <string name="ring_monitor_off">Monitor off</string>
     <string name="ring_monitor_on">Monitor on</string>
+    <string name="ring_monitor_two_line_off">Monitor
+Off</string>
+    <string name="ring_monitor_two_line_on">Monitor
+On</string>
     <string name="ring_monitoring">Live door audio on</string>
     <string name="ring_no_video">No video from door station</string>
     <string name="ring_open_door">Open door</string>

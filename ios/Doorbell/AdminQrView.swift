@@ -5,8 +5,11 @@ import UIKit
 /// in settings — because opening the page still needs the admin password.
 final class AdminQrView: UIView {
 
-    var palette = DoorbellPalette.dark {
-        didSet { applyPalette() }
+    /// The caption and the URL sit straight on the screen background — the footer of the
+    /// dashboard, the corner of the incoming screen — so they take the footer region's automatic
+    /// ink. The code itself is always drawn on white, because that is what a camera reads.
+    var skin = DoorbellSkin.plain(.dark) {
+        didSet { applySkin() }
     }
 
     private let core: CoreBridge
@@ -63,14 +66,14 @@ final class AdminQrView: UIView {
             imageView.widthAnchor.constraint(equalToConstant: side),
             imageView.heightAnchor.constraint(equalToConstant: side),
         ])
-        applyPalette()
+        applySkin()
     }
 
     required init?(coder: NSCoder) { fatalError("not supported") }
 
-    private func applyPalette() {
-        captionLabel.textColor = palette.inkMuted
-        urlLabel.textColor = palette.ink
+    private func applySkin() {
+        skin.apply("footer", to: captionLabel, quiet: true)
+        skin.apply("footer", to: urlLabel)
     }
 
     /// Rebuilds the QR when the node's reachable address changes. Rendering is cheap enough to run

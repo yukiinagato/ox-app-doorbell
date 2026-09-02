@@ -29,6 +29,7 @@ final class TVMainViewController: UIViewController {
     private let emergencyNote = UILabel()
     private let emergencyCancel = UIButton(type: .system)
 
+    private let themeBg = ThemeBackgroundView()
     private lazy var sosSlider = SosSlideControl(texts: texts)
     private lazy var dashboard = DashboardView(core: core, boot: boot, texts: texts,
                                                sosControl: sosSlider)
@@ -79,6 +80,16 @@ final class TVMainViewController: UIViewController {
     }
 
     private func buildUi() {
+        themeBg.onImageLoaded = { [weak self] in self?.refreshNodeInfo() }
+        themeBg.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(themeBg)
+        NSLayoutConstraint.activate([
+            themeBg.topAnchor.constraint(equalTo: view.topAnchor),
+            themeBg.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            themeBg.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            themeBg.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+        ])
+
         clockLabel.font = UIFont.monospacedDigitSystemFont(ofSize: 140, weight: .thin)
         clockLabel.textColor = UIColor(white: 0.94, alpha: 1)
         dateLabel.font = .systemFont(ofSize: 40)
@@ -243,8 +254,11 @@ final class TVMainViewController: UIViewController {
         let display = core.status()?["display"] as? [String: Any]
         palette = DoorbellPalette.of(DoorbellTheme.appearance(
             display: display, config: cfg, nodeId: nodeId, localTime: core.localTime()))
-        view.backgroundColor = palette.background
-        dashboard.reload(config: cfg, palette: palette)
+        // A living-room screen is an indoor panel like any other and wears the household's own
+        // theme background; light/dark then owns the cards the dashboard lays on top of it.
+        let skin = themeBg.apply(display: display, config: cfg, nodeId: nodeId, palette: palette,
+                                 httpPort: boot.httpPort, host: view)
+        dashboard.reload(config: cfg, skin: skin)
         // An Apple TV has no battery of its own; the version line simply omits it.
         applyStrings()
         updateClock()
