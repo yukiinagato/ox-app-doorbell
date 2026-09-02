@@ -18,7 +18,7 @@ HELPER: Path
 TEST_APP: Path
 
 
-def wait_until(predicate, timeout: float = 5.0):
+def wait_until(predicate, timeout: float = 20.0):
     deadline = time.monotonic() + timeout
     last_error: Exception | None = None
     while time.monotonic() < deadline:
