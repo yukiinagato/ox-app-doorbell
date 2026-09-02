@@ -794,7 +794,7 @@ class WindowsContracts(unittest.TestCase):
         self.assertIn("db_core_sip_set_mic_muted", read("win/DoorbellApp/Core/CoreClient.cs"))
         # Unlock stays, gated by the admin setting, and explains itself when unconfigured.
         self.assertIn('"doors." + (door ?? "") + ".unlock.show_button"', window)
-        self.assertIn('Texts.T("ring.open_unconfigured")', window)
+        self.assertIn('Texts.T("unlock.not_configured")', window)
 
     def test_announcements_have_three_entry_points_and_editable_presets(self):
         notice = read("win/DoorbellApp/MainWindow.Notice.cs")
@@ -954,25 +954,26 @@ class WindowsContracts(unittest.TestCase):
         interop = read("win/DoorbellApp/Core/CoreInterop.cs")
         client = read("win/DoorbellApp/Core/CoreClient.cs")
         probe = read("win/abi-probe/main.cpp")
-        pending = re.search(r"kPendingExports\[\] = \{(.*?)\};", probe, re.S)
-        self.assertIsNotNone(pending)
-        expected = {
-            "db_core_admin_password_verify", "db_core_admin_password_set",
-            "db_core_set_config_json", "db_core_config_batch_json",
+        # Core exports all of these now, so the release gate requires them. The shell still binds
+        # them through GetProcAddress rather than a hard DllImport, so a device left on an older
+        # Core hides or degrades the feature instead of terminating at the first call.
+        probed = {
+            "db_core_mint_join_token_json", "db_core_admin_password_verify",
+            "db_core_admin_password_set", "db_core_set_config_json",
+            "db_core_last_write_warnings_json", "db_core_config_batch_json",
             "db_core_delete_config_key", "db_core_call_log_json_v2",
             "db_core_sip_set_mic_muted",
         }
-        self.assertEqual(set(re.findall(r'"([a-z_0-9]+)"', pending.group(1))), expected)
-        # Every one of them is bound through the probe, and none is a hard DllImport that would
-        # terminate the shell on an older Core.
-        for symbol in sorted(expected):
+        required = required_probe_exports(probe)
+        for symbol in sorted(probed):
             with self.subTest(symbol=symbol):
                 self.assertIn('"%s"' % symbol, client)
+                self.assertIn(symbol, required)
                 self.assertNotIn("extern IntPtr " + symbol, interop)
                 self.assertNotIn("extern int " + symbol, interop)
         self.assertIn("private void ProbeOptionalExports()", client)
-        # A pending symbol must never sit in a required release-gate list at the same time.
-        self.assertFalse(expected & required_probe_exports(probe))
+        # Nothing is left warning-only now that core exports the whole set.
+        self.assertNotIn("kPendingExports", probe)
 
     def test_admin_password_is_one_cluster_secret(self):
         dialog = read("win/DoorbellApp/AdminDialog.xaml.cs")
@@ -995,7 +996,8 @@ class WindowsContracts(unittest.TestCase):
         self.assertIn("if (verdict == AdminPasswordVerdict.Accepted)", submit)
         # A cluster that already has a password is never opened with a stale device digest.
         self.assertIn("App.Core.AdminPasswordConfigured", submit)
-        self.assertLess(submit.index("AdminPasswordConfigured"), submit.index("LocalDigest()"))
+        self.assertLess(submit.index("AdminPasswordConfigured"),
+                        submit.index("Sha256Hex(password) != LocalDigest()"))
         # -2 asks the operator to choose the household password and publishes it.
         self.assertIn("if (verdict == AdminPasswordVerdict.NotSet)", submit)
         self.assertIn('App.Core.AdminPasswordSet("", password)', submit)
@@ -1003,7 +1005,8 @@ class WindowsContracts(unittest.TestCase):
         self.assertIn('"admin.password_set_failed"', dialog)
         # A core-owned lockout is never worked around with the local digest.
         locked = submit[submit.index("AdminPasswordVerdict.LockedOut"):]
-        self.assertLess(locked.index('L10n.T("admin.locked")'), locked.index("LocalDigest()"))
+        self.assertLess(locked.index('L10n.T("admin.locked")'),
+                        locked.index("Sha256Hex(password) != LocalDigest()"))
         # The local five-failure, ten-minute lockout stays as a second line of defence.
         self.assertIn("_lockedUntil = DateTime.Now.AddMinutes(10);", dialog)
         self.assertIn("if (++_fails >= 5)", dialog)
@@ -1018,6 +1021,20 @@ class WindowsContracts(unittest.TestCase):
         self.assertIn("if (App.Core.Emergency(false)) HideEmergency()", cancel)
         self.assertIn("internal static bool ClusterPasswordUnset()", dialog)
         self.assertIn("return AdminPasswordAvailable && !AdminPasswordConfigured;", client)
+        # Core folds "a password is actually set" into the flag the shell reads, and the header
+        # forbids gating the clear control on emergency.cancel_requires_pin alone.
+        sos = window[window.index("private void RefreshSosConfig"):
+                     window.index("private void ApplySosLabel")]
+        self.assertIn("App.Core.EmergencyCancelRequiresPassword(_status)", sos)
+        self.assertLess(sos.index("EmergencyCancelRequiresPassword"),
+                        sos.index('"emergency.cancel_requires_pin"'))
+        self.assertIn('Dig(status, "emergency.cancel_requires_password")', client)
+        # Once core can verify, this device stops keeping a second way in.
+        self.assertIn("private static void DropLocalDigest()", dialog)
+        self.assertIn("File.Delete(f)", dialog)
+        accepted = dialog[dialog.index("if (verdict == AdminPasswordVerdict.Accepted)"):
+                          dialog.index("if (verdict == AdminPasswordVerdict.Rejected)")]
+        self.assertIn("DropLocalDigest();", accepted)
 
     def test_global_notice_and_history_paging_use_the_new_abi(self):
         notice = read("win/DoorbellApp/MainWindow.Notice.cs")
@@ -1047,10 +1064,13 @@ class WindowsContracts(unittest.TestCase):
         self.assertIn("public delegate int SetConfigJsonFn(IntPtr core,", interop)
         self.assertIn("public delegate int DeleteConfigKeyFn(IntPtr core,", interop)
         self.assertIn("public delegate IntPtr ConfigBatchJsonFn(IntPtr core,", interop)
-        self.assertIn("public bool SetConfigJson(string json)", client)
+        self.assertIn("public delegate IntPtr LastWriteWarningsFn(IntPtr core);", interop)
+        # One write takes the key and the JSON-encoded value, exactly like POST /api/config.
+        self.assertIn("public bool SetConfigJson(string key, string valueJson)", client)
+        self.assertIn("_setConfigJson(_core, key, valueJson", client)
         self.assertIn("public bool DeleteConfigKey(string key)", client)
         self.assertIn("public string ConfigBatchJson(string json)", client)
-        self.assertIn("_setConfigJson(_core, json) == 0", client)
+        self.assertIn("public string LastWriteWarnings()", client)
         self.assertIn("_deleteConfigKey(_core, key) == 0", client)
         self.assertIn("CoreInterop.TakeUtf8(_configBatchJson(_core, json))", client)
         self.assertNotIn("ConfigResult", client)
