@@ -11,6 +11,8 @@
 #import "DBDoorScreen.h"
 #import "DBIncomingScreen.h"
 #import "DBInfoScreen.h"
+#import "DBAddDeviceScreen.h"
+#import "DBPairingModel.h"
 #import "DBPairingScreen.h"
 #import "DBPinOverlay.h"
 #import "DBScreen.h"
@@ -78,6 +80,8 @@ static BOOL DBCoreSipBackendCompiled(void) {
   DBIncomingScreen *_incoming;
   DBInfoScreen *_info;
   DBPairingScreen *_pairing;
+  DBAddDeviceScreen *_addDevice;
+  BOOL _pairingDeferred;
   DBPinOverlay *_pin;
   DBSipSession *_sip;
   DBSipListener *_sipListener;
@@ -180,6 +184,11 @@ static BOOL DBCoreSipBackendCompiled(void) {
 - (DBPairingScreen *)pairing {
   if (!_pairing) _pairing = [[DBPairingScreen alloc] initWithRouter:self];
   return _pairing;
+}
+
+- (DBAddDeviceScreen *)addDevice {
+  if (!_addDevice) _addDevice = [[DBAddDeviceScreen alloc] initWithRouter:self];
+  return _addDevice;
 }
 
 
@@ -548,27 +557,41 @@ static BOOL DBCoreSipBackendCompiled(void) {
 
 
 - (void)checkPairingDeferred {
+  if (_pairingDeferred) return;
   __weak DBRouter *wself = self;
   DBCoreBridge *core = _core;
   dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.8 * NSEC_PER_SEC)),
                  dispatch_get_main_queue(), ^{
     DBRouter *s = wself;
-    if (!s) return;
+    if (!s || s->_pairingDeferred) return;
     DBScreen *primary = [s->_boot.role isEqualToString:@"door_station"] ? s->_door : s->_home;
     if (s->_current != primary || !primary) return;
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
       NSDictionary *p = [core pairingInfo];
       dispatch_async(dispatch_get_main_queue(), ^{
         DBRouter *s2 = wself;
-        if (!s2) return;
+        if (!s2 || s2->_pairingDeferred) return;
         DBScreen *primary2 = [s2->_boot.role isEqualToString:@"door_station"] ? s2->_door : s2->_home;
         if (s2->_current != primary2) return;
-        if (![p isKindOfClass:[NSDictionary class]]) return;
-        if ([[p objectForKey:@"paired"] boolValue]) return;
+        // "{}" before the first snapshot is unknown, never unpaired: showing
+        // onboarding on top of a paired kiosk would be a false alarm.
+        NSString *state = [DBPairingModel stateFromPairingInfo:p];
+        if ([state isEqualToString:DBPairingStateUnknown] ||
+            [state isEqualToString:@"ready"]) return;
         [s2 showPairing];
       });
     });
   });
+}
+
+- (BOOL)currentIsPrimaryScreen {
+  DBScreen *primary = [_boot.role isEqualToString:@"door_station"] ? _door : _home;
+  return primary != nil && _current == primary;
+}
+
+- (void)pairingDeferredByUser {
+  _pairingDeferred = YES;
+  if (_home) [_home refreshFromCore];
 }
 
 - (void)showIncoming:(NSString *)door purpose:(NSString *)purpose lang:(NSString *)lang
@@ -604,6 +627,9 @@ static BOOL DBCoreSipBackendCompiled(void) {
 }
 
 - (void)showPairing {
+  // Opening onboarding on purpose (banner tap, revoke, clear pairing) cancels a
+  // previous 「あとで設定」.
+  _pairingDeferred = NO;
   [[self pairing] startPolling];
   [self transitionTo:_pairing animated:YES];
 }
@@ -611,6 +637,17 @@ static BOOL DBCoreSipBackendCompiled(void) {
 - (void)closePairingAnimated:(BOOL)animated {
   if (_current != _pairing) return;
   [_pairing stopPolling];
+  [self showHomeAnimated:animated];
+}
+
+- (void)showAddDevice {
+  [[self addDevice] startPolling];
+  [self transitionTo:_addDevice animated:YES];
+}
+
+- (void)closeAddDeviceAnimated:(BOOL)animated {
+  if (_current != _addDevice) return;
+  [_addDevice stopPolling];
   [self showHomeAnimated:animated];
 }
 
@@ -1096,20 +1133,58 @@ static BOOL DBCoreSipBackendCompiled(void) {
       @"pairing_persistence" : @"core_secure_put_failed",
     }];
     [[self pairing] handlePersistenceError];
+    _pairingDeferred = NO;
     if (_current != _pairing) [self showPairing];
     NSLog(@"[doorbell] pairing persistence failed before a secret reference was issued");
   } else if ([t isEqualToString:@"join_result"]) {
     if (_current == _pairing) [_pairing handleJoinResult:ev];
+  } else if ([t isEqualToString:@"invite_rejected"]) {
+    if (_current == _pairing) [_pairing handleInviteRejected:ev];
+  } else if ([t isEqualToString:@"pairing_state"]) {
+    NSString *state = [DBConfigUtil evStr:ev key:@"state"];
+    if (_current == _pairing) [_pairing handlePairingState:ev];
+    if (_current == _addDevice) [_addDevice handlePairingState:ev];
+    if ([state isEqualToString:@"ready"]) _pairingDeferred = NO;
+    // Membership changes the Home banner and can add or remove door stations.
+    if (_home) [_home refreshFromCore];
+    // Only ever replace the idle primary screen. A live call, the monitor, or
+    // the admin panel must not be torn down by a membership event.
+    if (![state isEqualToString:@"ready"] && ![state isEqualToString:@"revoked"] &&
+        !_pairingDeferred && [self currentIsPrimaryScreen])
+      [self showPairing];
+  } else if ([t isEqualToString:@"pairing_revoked"]) {
+    _pairingDeferred = NO;
+    [[self pairing] handleRevoked:ev];
+    if (_home) [_home refreshFromCore];
+    if (_current != _pairing && [self currentIsPrimaryScreen]) [self showPairing];
+  } else if ([t isEqualToString:@"pending_changed"]) {
+    if (_current == _addDevice) [_addDevice handlePendingChanged:ev];
+  } else if ([t isEqualToString:@"invite_result"]) {
+    if (_current == _addDevice) [_addDevice handleInviteResult:ev];
+  } else if ([t isEqualToString:@"device_joined"]) {
+    if (_current == _addDevice) [_addDevice handleDeviceJoined:ev];
+    // A door station that just joined must reach the monitor list without
+    // waiting for the next peers_changed.
+    if (_home) [_home refreshFromCore];
+    if (_current == _door) [_door refreshFromCore];
+    if (_current == _incoming) [_incoming refreshFromCore];
+  } else if ([t isEqualToString:@"pairing_mode_changed"]) {
+    if (_current == _addDevice) [_addDevice handlePairingModeChanged:ev];
+  } else if ([t isEqualToString:@"join_token_changed"]) {
+    if (_current == _addDevice) [_addDevice handleJoinTokenChanged:ev];
   } else if ([t isEqualToString:@"peers_changed"] || [t isEqualToString:@"config_changed"] ||
              [t isEqualToString:@"asset_ready"]) {
     if ([t isEqualToString:@"peers_changed"] || [t isEqualToString:@"config_changed"])
       [self refreshSelfDeviceIdentity];
     if ([t isEqualToString:@"config_changed"] || [t isEqualToString:@"asset_ready"])
       [self refreshSoundConfig];
-    if (_current == _home) [_home refreshFromCore];
+    // Refresh Home even while it is covered: its door list is what the idle
+    // 「門口を見る」 picker renders the moment the user returns to it.
+    if (_home) [_home refreshFromCore];
     if (_current == _door) [_door refreshFromCore];
     if (_current == _incoming) [_incoming refreshFromCore];
     if (_current == _pairing) [_pairing reload];
+    if (_current == _addDevice) [_addDevice reload];
   }
 }
 
@@ -1133,6 +1208,15 @@ static BOOL DBCoreSipBackendCompiled(void) {
       @"pairing_persistence" : @"psk_ref",
     }];
     NSLog(@"[doorbell] paired: secure PSK reference and seeds persisted");
+    _pairingDeferred = NO;
+    if (_home) [_home refreshFromCore];
+    // The create-Cluster flow leaves a Pairing PIN on screen that the operator
+    // has to read and type on the next device. Closing here is what made it
+    // visible for zero frames on the iPad.
+    if (_current == _pairing && [_pairing requiresUserDismissal]) {
+      [_pairing reload];
+      return;
+    }
     [self closePairingAnimated:YES];
   } else {
     [_core setRuntimeStatusSection:@"secure_store" value:@{
@@ -1143,6 +1227,7 @@ static BOOL DBCoreSipBackendCompiled(void) {
       @"pairing_persistence" : validReference ? @"boot_write_failed" : @"invalid_psk_ref",
     }];
     [[self pairing] handlePersistenceError];
+    _pairingDeferred = NO;
     if (_current != _pairing) [self showPairing];
     NSLog(@"[doorbell] paired: secure PSK reference persistence failed");
   }

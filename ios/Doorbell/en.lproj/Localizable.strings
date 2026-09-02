@@ -443,6 +443,7 @@
 "pair.code_expires_in" = "%@:%@ left";
 "pair.code_instructions" = "On the new device choose \"Join with a Pairing PIN\" and enter the address and code shown above";
 "pair.code_label" = "Pairing PIN (6 digits)";
+"pair.confirm_tap_again" = "Press again to confirm";
 "pair.copy" = "Copy";
 "pair.create_home" = "Create a new Cluster";
 "pair.create_home_confirm" = "Create a new Cluster on this device? If you already have another device, press \"Add\" on that device instead.";
@@ -450,6 +451,7 @@
 "pair.created_badge" = "Created this Cluster";
 "pair.created_next" = "Add the next device?";
 "pair.deny" = "Ignore";
+"pair.enter_address_and_code" = "Enter the address and the Pairing PIN";
 "pair.err.already_paired" = "This device is already in a Cluster";
 "pair.err.bad_challenge" = "The other device's version isn't compatible";
 "pair.err.bad_payload" = "The other device's version isn't compatible";
@@ -478,12 +480,18 @@
 "pair.nearby_none" = "No devices waiting";
 "pair.nearby_title" = "Nearby devices";
 "pair.nearby_waiting_since" = "waiting %@s";
+"pair.new_code" = "Get a new code";
 "pair.not_set_up_banner" = "Not set up — tap to add";
+"pair.open_onboarding" = "Open the pairing screen";
+"pair.panel_title" = "Add a device";
 "pair.persist_error_body" = "This device couldn't write to its secure storage. Check free space and permissions, then try again.";
 "pair.persist_error_title" = "Couldn't save settings";
 "pair.qr_caption" = "Scan this QR from another device to add this one";
+"pair.qr_pending" = "Preparing the Add QR…";
 "pair.retry" = "Retry";
 "pair.revoked" = "This device was removed from the Cluster";
+"pair.role_door_station" = "Door station";
+"pair.role_indoor_panel" = "Indoor panel";
 "pair.scan_camera_denied" = "Camera access is not allowed. Grant camera permission in the device settings.";
 "pair.scan_hint" = "Point at the Add QR shown on the new device";
 "pair.scan_no_camera" = "This device has no camera. Scan from another device, or use a Pairing PIN.";

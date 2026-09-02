@@ -448,6 +448,7 @@ Delete it?</string>
     <string name="pair_code_expires_in">%1$s:%2$s left</string>
     <string name="pair_code_instructions">On the new device choose &quot;Join with a Pairing PIN&quot; and enter the address and code shown above</string>
     <string name="pair_code_label">Pairing PIN (6 digits)</string>
+    <string name="pair_confirm_tap_again">Press again to confirm</string>
     <string name="pair_copy">Copy</string>
     <string name="pair_create_home">Create a new Cluster</string>
     <string name="pair_create_home_confirm">Create a new Cluster on this device? If you already have another device, press &quot;Add&quot; on that device instead.</string>
@@ -455,6 +456,7 @@ Delete it?</string>
     <string name="pair_created_badge">Created this Cluster</string>
     <string name="pair_created_next">Add the next device?</string>
     <string name="pair_deny">Ignore</string>
+    <string name="pair_enter_address_and_code">Enter the address and the Pairing PIN</string>
     <string name="pair_err_already_paired">This device is already in a Cluster</string>
     <string name="pair_err_bad_challenge">The other device\'s version isn\'t compatible</string>
     <string name="pair_err_bad_payload">The other device\'s version isn\'t compatible</string>
@@ -483,12 +485,18 @@ Delete it?</string>
     <string name="pair_nearby_none">No devices waiting</string>
     <string name="pair_nearby_title">Nearby devices</string>
     <string name="pair_nearby_waiting_since">waiting %1$ss</string>
+    <string name="pair_new_code">Get a new code</string>
     <string name="pair_not_set_up_banner">Not set up — tap to add</string>
+    <string name="pair_open_onboarding">Open the pairing screen</string>
+    <string name="pair_panel_title">Add a device</string>
     <string name="pair_persist_error_body">This device couldn\'t write to its secure storage. Check free space and permissions, then try again.</string>
     <string name="pair_persist_error_title">Couldn\'t save settings</string>
     <string name="pair_qr_caption">Scan this QR from another device to add this one</string>
+    <string name="pair_qr_pending">Preparing the Add QR…</string>
     <string name="pair_retry">Retry</string>
     <string name="pair_revoked">This device was removed from the Cluster</string>
+    <string name="pair_role_door_station">Door station</string>
+    <string name="pair_role_indoor_panel">Indoor panel</string>
     <string name="pair_scan_camera_denied">Camera access is not allowed. Grant camera permission in the device settings.</string>
     <string name="pair_scan_hint">Point at the Add QR shown on the new device</string>
     <string name="pair_scan_no_camera">This device has no camera. Scan from another device, or use a Pairing PIN.</string>

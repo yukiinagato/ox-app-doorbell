@@ -450,6 +450,7 @@
   <data name="pair_code_expires_in" xml:space="preserve"><value>剩余 {0}:{1}</value></data>
   <data name="pair_code_instructions" xml:space="preserve"><value>在新设备上选择“使用配对 PIN 加入”，然后输入上面的连接地址和配对 PIN</value></data>
   <data name="pair_code_label" xml:space="preserve"><value>配对 PIN（6 位）</value></data>
+  <data name="pair_confirm_tap_again" xml:space="preserve"><value>再次按下以确认</value></data>
   <data name="pair_copy" xml:space="preserve"><value>复制</value></data>
   <data name="pair_create_home" xml:space="preserve"><value>新建集群</value></data>
   <data name="pair_create_home_confirm" xml:space="preserve"><value>要在此设备上新建集群吗？如果已经有其他设备，请在那台设备上点击“添加”。</value></data>
@@ -457,6 +458,7 @@
   <data name="pair_created_badge" xml:space="preserve"><value>创建了此集群</value></data>
   <data name="pair_created_next" xml:space="preserve"><value>要添加下一个设备吗？</value></data>
   <data name="pair_deny" xml:space="preserve"><value>忽略</value></data>
+  <data name="pair_enter_address_and_code" xml:space="preserve"><value>请输入连接地址和配对 PIN</value></data>
   <data name="pair_err_already_paired" xml:space="preserve"><value>此设备已加入集群</value></data>
   <data name="pair_err_bad_challenge" xml:space="preserve"><value>对方设备的版本不兼容</value></data>
   <data name="pair_err_bad_payload" xml:space="preserve"><value>对方设备的版本不兼容</value></data>
@@ -485,12 +487,18 @@
   <data name="pair_nearby_none" xml:space="preserve"><value>暂无等待中的设备</value></data>
   <data name="pair_nearby_title" xml:space="preserve"><value>附近设备</value></data>
   <data name="pair_nearby_waiting_since" xml:space="preserve"><value>已等待 {0} 秒</value></data>
+  <data name="pair_new_code" xml:space="preserve"><value>生成新码</value></data>
   <data name="pair_not_set_up_banner" xml:space="preserve"><value>未设置 — 点击添加</value></data>
+  <data name="pair_open_onboarding" xml:space="preserve"><value>打开配对界面</value></data>
+  <data name="pair_panel_title" xml:space="preserve"><value>添加设备</value></data>
   <data name="pair_persist_error_body" xml:space="preserve"><value>无法写入此设备的安全存储区。请检查可用空间和权限后重试。</value></data>
   <data name="pair_persist_error_title" xml:space="preserve"><value>无法保存设置</value></data>
   <data name="pair_qr_caption" xml:space="preserve"><value>用另一台设备扫描此二维码即可添加</value></data>
+  <data name="pair_qr_pending" xml:space="preserve"><value>正在生成添加二维码…</value></data>
   <data name="pair_retry" xml:space="preserve"><value>重试</value></data>
   <data name="pair_revoked" xml:space="preserve"><value>此设备已从集群中移除</value></data>
+  <data name="pair_role_door_station" xml:space="preserve"><value>门口机</value></data>
+  <data name="pair_role_indoor_panel" xml:space="preserve"><value>室内机</value></data>
   <data name="pair_scan_camera_denied" xml:space="preserve"><value>未获得摄像头权限。请在设备设置中允许使用摄像头。</value></data>
   <data name="pair_scan_hint" xml:space="preserve"><value>请对准新设备上显示的添加二维码</value></data>
   <data name="pair_scan_no_camera" xml:space="preserve"><value>此设备没有摄像头。请用其他设备扫描，或改用配对 PIN。</value></data>

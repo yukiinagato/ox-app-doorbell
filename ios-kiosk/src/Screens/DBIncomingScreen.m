@@ -1,6 +1,7 @@
 #import "DBIncomingScreen.h"
 
 #import "../Core/DBBootConfig.h"
+#import "../Core/DBBackoffPolicy.h"
 #import "../Core/DBConfigUtil.h"
 #import "../Core/DBCoreBridge.h"
 #import "../Core/DBMediaSource.h"
@@ -72,6 +73,7 @@ static BOOL DBSameString(NSString *a, NSString *b) {
   NSInteger _videoSessionGen;
   NSInteger _videoAttemptGen;
   NSString *_currentVideoStrategy;
+  DBBackoffPolicy *_h264Backoff;  // Spaces out restarts against a dead HTTP endpoint.
   BOOL _videoStrategyPlaying;
   BOOL _mjpegAvailabilityDisabled;  // Profile turned the MJPEG layer off.
   UIImage *_pendingMjpegFrame;
@@ -138,6 +140,7 @@ static BOOL DBSameString(NSString *a, NSString *b) {
   self = [super initWithFrame:[UIScreen mainScreen].bounds];
   if (self) {
     _router = router;
+    _h264Backoff = [[DBBackoffPolicy alloc] init];
     _core = router.core;
     _boot = router.boot;
     _texts = router.texts;
@@ -907,6 +910,7 @@ static BOOL DBSameString(NSString *a, NSString *b) {
   }
   _videoSessionGen++;
   _videoAttemptGen = 0;
+  [_h264Backoff reset];
   _videoStrategyIndex = -1;
   _currentVideoStrategy = nil;
   _videoStrategyPlaying = NO;
@@ -1018,6 +1022,9 @@ static BOOL DBSameString(NSString *a, NSString *b) {
   }
   _videoStrategyPlaying = NO;
   _currentVideoStrategy = nil;
+  // Each strategy gets its own schedule; only the retry loop inside one
+  // strategy is what needs to be spaced out.
+  [_h264Backoff reset];
   _videoStrategyIndex++;
   while (_videoStrategyIndex < (NSInteger)[_videoStrategies count]) {
     NSDictionary *s = [_videoStrategies objectAtIndex:(NSUInteger)_videoStrategyIndex];
@@ -1049,7 +1056,15 @@ static BOOL DBSameString(NSString *a, NSString *b) {
     [self advanceVideoStrategy:reason];
     return;
   }
-  NSLog(@"[doorbell] keeping MJPEG visible; retrying %@ after %@", sid, reason);
+  // A door station whose mesh peer is alive but whose HTTP server never answers
+  // used to be restarted on a flat 2 s timer, which produced an endless
+  // "start fMP4 direct decode" / "response header ended" loop. Back off
+  // 1 -> 2 -> 5 -> 10 s (capped) and reset the schedule as soon as a transport
+  // reports that it is playing. MJPEG stays up as the availability layer
+  // throughout, and the wait is a timer, never a blocked main thread.
+  NSTimeInterval delay = [_h264Backoff nextDelay];
+  NSLog(@"[doorbell] keeping MJPEG visible; retrying %@ after %@ in %.0fs (attempt %lu)",
+        sid, reason, delay, (unsigned long)[_h264Backoff attempt]);
   NSInteger session = _videoSessionGen;
   NSInteger retry = ++_videoAttemptGen;
   [_lowLatency stop]; _lowLatency = nil;
@@ -1064,9 +1079,10 @@ static BOOL DBSameString(NSString *a, NSString *b) {
     _noVideoLabel.hidden = YES;
   }
   [self updateVideoStats:nil];
-  dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 2 * NSEC_PER_SEC),
+  __weak DBIncomingScreen *weakSelf = self;
+  dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(delay * NSEC_PER_SEC)),
                  dispatch_get_main_queue(), ^{
-    DBIncomingScreen *s = self;
+    DBIncomingScreen *s = weakSelf;
     if (!s || s->_videoSessionGen != session || s->_videoAttemptGen != retry ||
         ![s->_currentVideoStrategy isEqualToString:sid]) return;
     [s startCurrentVideoStrategy];
@@ -1113,6 +1129,7 @@ static BOOL DBSameString(NSString *a, NSString *b) {
           ![s->_currentVideoStrategy isEqualToString:@"h264_low_latency"]) return;
       if (st == DBLowLatencyPlayerPlaying) {
         s->_videoStrategyPlaying = YES;
+        [s->_h264Backoff reset];
         s->_activeVideoTransport = @"H.264 LOW-LAT";
         s->_noVideoLabel.hidden = YES;
         [s updateVideoStats:nil];
@@ -1143,6 +1160,7 @@ static BOOL DBSameString(NSString *a, NSString *b) {
           ![s->_currentVideoStrategy isEqualToString:@"h264_hls"]) return;
       if (st == DBH264PlayerPlaying) {
         s->_videoStrategyPlaying = YES;
+        [s->_h264Backoff reset];
         s->_activeVideoTransport = @"HLS H.264";
         s->_noVideoLabel.hidden = YES;
         [s updateVideoStats:nil];

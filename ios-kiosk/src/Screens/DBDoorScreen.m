@@ -2,6 +2,7 @@
 
 #import "../Core/DBBootConfig.h"
 #import "../Core/DBConfigUtil.h"
+#import "../Core/DBPairingModel.h"
 #import "../Core/DBCompatibilityProfile.h"
 #import "../Core/DBCoreBridge.h"
 #import "../Core/DBMediaSource.h"
@@ -142,6 +143,8 @@ typedef enum {
   UILabel *_emergencyNote;
   UIButton *_emergencyCancel;
   UIButton *_infoButton;
+  UIButton *_pairBanner;      // pair.not_set_up_banner while the node is not ready.
+  NSString *_pairingState;
 }
 
 - (id)initWithRouter:(DBRouter *)router {
@@ -239,6 +242,18 @@ typedef enum {
   _languageBar = [[UIView alloc] init];
   [self addSubview:_languageBar];
 
+  // A door station that was skipped with 「あとで設定」 keeps a persistent,
+  // tappable reminder instead of silently running unpaired.
+  _pairBanner = [self buttonWithTitle:@"" primary:NO];
+  _pairBanner.backgroundColor = [UIColor colorWithRed:0.72 green:0.45 blue:0.10 alpha:1];
+  _pairBanner.titleLabel.font = [UIFont boldSystemFontOfSize:18];
+  _pairBanner.layer.cornerRadius = 10;
+  _pairBanner.accessibilityIdentifier = @"door_pair_banner";
+  _pairBanner.hidden = YES;
+  [_pairBanner addTarget:self action:@selector(onPairBanner)
+        forControlEvents:UIControlEventTouchUpInside];
+  [self addSubview:_pairBanner];
+
   _infoButton = [self buttonWithTitle:@"i" primary:NO];
   _infoButton.titleLabel.font = [UIFont boldSystemFontOfSize:24];
   _infoButton.accessibilityIdentifier = @"door_admin_info";
@@ -318,9 +333,11 @@ typedef enum {
   dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
     NSDictionary *config = [core config];
     NSDictionary *status = [core status];
+    NSDictionary *pairing = [core pairingInfo];
     dispatch_async(dispatch_get_main_queue(), ^{
       DBDoorScreen *screen = weakSelf;
       if (!screen || generation != screen->_snapshotGeneration) return;
+      [screen applyPairingSnapshot:pairing];
       screen->_cfg = config;
       [screen->_texts setConfig:config];
       NSString *langPath = [NSString stringWithFormat:@"visitor_lang.%@", screen->_boot.door];
@@ -357,6 +374,21 @@ typedef enum {
       [screen setNeedsLayout];
     });
   });
+}
+
+- (void)applyPairingSnapshot:(NSDictionary *)pairing {
+  NSString *state = [DBPairingModel stateFromPairingInfo:pairing];
+  if (![state isEqualToString:DBPairingStateUnknown]) _pairingState = state;
+  BOOL ready = [_pairingState isEqualToString:@"ready"];
+  BOOL known = [_pairingState length] > 0 &&
+      ![_pairingState isEqualToString:DBPairingStateUnknown];
+  [_pairBanner setTitle:[_texts ts:@"pair.not_set_up_banner"] forState:UIControlStateNormal];
+  _pairBanner.hidden = ready || !known;
+  [self setNeedsLayout];
+}
+
+- (void)onPairBanner {
+  [_router showPairing];
 }
 
 - (void)publishMediaSourceStatus {
@@ -1230,10 +1262,20 @@ typedef enum {
   _infoButton.frame = CGRectMake(size.width - margin - 46, top + 2, 46, 46);
   _touchHint.frame = CGRectMake(margin, CGRectGetMaxY(_titleLabel.frame), size.width - 2 * margin,
                                 compact ? 28 : 34);
+  CGFloat bannerH = 0;
+  if (_pairBanner.hidden) {
+    _pairBanner.frame = CGRectZero;
+  } else {
+    bannerH = (compact ? 40 : 48) + 8;
+    CGFloat bannerW = MIN(size.width - 2 * margin, 560);
+    _pairBanner.frame = CGRectMake((size.width - bannerW) / 2,
+                                   CGRectGetMaxY(_touchHint.frame) + 4, bannerW,
+                                   bannerH - 8);
+  }
 
   CGFloat callW = compact ? MIN(230, size.width - 2 * margin) : MIN(390, size.width * 0.46);
   CGFloat callH = compact ? 82 : 118;
-  CGFloat callY = CGRectGetMaxY(_touchHint.frame) + (compact ? 4 : 12);
+  CGFloat callY = CGRectGetMaxY(_touchHint.frame) + bannerH + (compact ? 4 : 12);
   NSDictionary *callStyle = [self styleForSemanticID:@"call.primary"];
   CGFloat callScale = DBDoorStyleNumber(callStyle, @"scale", 1, 0.75, 2);
   _callButton.titleLabel.font = [UIFont boldSystemFontOfSize:

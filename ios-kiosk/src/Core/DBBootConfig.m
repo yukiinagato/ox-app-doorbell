@@ -114,6 +114,30 @@ static BOOL DBValidPskHex(NSString *value) {
       ? json : nil;
 }
 
++ (NSString *)unpairedJsonFromJson:(NSString *)json {
+  NSString *source = [json length] > 0 ? json : DBDefaultJson();
+  NSData *data = [source dataUsingEncoding:NSUTF8StringEncoding];
+  id obj = data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:NULL] : nil;
+  if (![obj isKindOfClass:[NSDictionary class]]) return nil;
+  NSMutableDictionary *d = [obj mutableCopy];
+  [d removeObjectForKey:@"psk_hex"];
+  [d removeObjectForKey:@"psk_ref"];
+  NSData *out = [NSJSONSerialization dataWithJSONObject:d options:0 error:NULL];
+  if (out == nil) return nil;
+  return [[NSString alloc] initWithData:out encoding:NSUTF8StringEncoding];
+}
+
++ (NSString *)clearPairingSecretRef {
+  NSString *path = [[self dataDir] stringByAppendingPathComponent:@"boot.json"];
+  NSString *current = [NSString stringWithContentsOfFile:path
+                                                 encoding:NSUTF8StringEncoding
+                                                    error:NULL];
+  NSString *json = [self unpairedJsonFromJson:current];
+  if ([json length] == 0) return nil;
+  return [json writeToFile:path atomically:YES encoding:NSUTF8StringEncoding error:NULL]
+      ? json : nil;
+}
+
 + (DBBootConfig *)loadConfiguration {
   DBBootConfig *c = [[DBBootConfig alloc] init];
   NSString *path = [[self dataDir] stringByAppendingPathComponent:@"boot.json"];

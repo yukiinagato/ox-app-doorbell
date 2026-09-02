@@ -3,6 +3,8 @@
 #import "../Core/DBBootConfig.h"
 #import "../Core/DBConfigUtil.h"
 #import "../Core/DBCoreBridge.h"
+#import "../Core/DBPairingModel.h"
+#import "../Core/DBRefreshCoalescer.h"
 #import "../Core/DBSemanticStyle.h"
 #import "../Core/DBTexts.h"
 #import "../Media/DBSiren.h"
@@ -65,8 +67,9 @@ static CGRect DBHomeScaledFrame(CGRect base, CGFloat scale, CGSize bounds, CGFlo
 
 
   dispatch_queue_t _refreshQueue;
-  BOOL _refreshBusy;
-  BOOL _refreshDirty;
+  DBRefreshCoalescer *_refreshGate;
+  NSTimer *_peersTimer;
+  NSString *_pairingState;
 
   // UI
   UIImageView *_themeBg;
@@ -91,6 +94,8 @@ static CGRect DBHomeScaledFrame(CGRect base, CGFloat scale, CGSize bounds, CGFlo
   UIButton *_emergencyCancel;
   UIButton *_secretCorner;
   UIButton *_infoButton;
+  UIButton *_membershipButton;   // Opens the Add-device panel behind the admin password.
+  UIButton *_pairBanner;         // pair.not_set_up_banner while the node is not ready.
   UIView *_monitorPicker;
   UILabel *_monitorPickerTitle;
   UIScrollView *_monitorPickerList;
@@ -116,6 +121,8 @@ static CGRect DBHomeScaledFrame(CGRect base, CGFloat scale, CGSize bounds, CGFlo
     _sosDownAt = [NSDate distantPast];
     _secretFirst = [NSDate distantPast];
     _refreshQueue = dispatch_queue_create("doorbell.home.refresh", DISPATCH_QUEUE_SERIAL);
+    _refreshGate = [[DBRefreshCoalescer alloc] init];
+    _pairingState = DBPairingStateUnknown;
     [self buildUi];
   }
   return self;
@@ -174,6 +181,22 @@ static CGRect DBHomeScaledFrame(CGRect base, CGFloat scale, CGSize bounds, CGFlo
   _nodeInfo.font = [UIFont systemFontOfSize:14];
   _nodeInfo.textColor = [UIColor colorWithWhite:1 alpha:0.35];
   [self addSubview:_nodeInfo];
+
+  // The membership line is the documented, non-hidden entry to the Add-device
+  // panel. It stays behind the admin password like every other admin action.
+  _membershipButton = [UIButton buttonWithType:UIButtonTypeCustom];
+  _membershipButton.backgroundColor = [UIColor clearColor];
+  [_membershipButton addTarget:self action:@selector(onMembership)
+              forControlEvents:UIControlEventTouchUpInside];
+  [self addSubview:_membershipButton];
+
+  _pairBanner = [self buttonWithTitle:@"" font:19 color:[UIColor whiteColor]
+                                   bg:[UIColor colorWithRed:0.72 green:0.45 blue:0.10 alpha:1]];
+  _pairBanner.layer.cornerRadius = 10;
+  _pairBanner.hidden = YES;
+  [_pairBanner addTarget:self action:@selector(onPairBanner)
+        forControlEvents:UIControlEventTouchUpInside];
+  [self addSubview:_pairBanner];
 
   _sosButton = [self buttonWithTitle:@"SOS" font:24 color:[UIColor whiteColor]
                                   bg:[UIColor colorWithRed:0.78 green:0.08 blue:0.06 alpha:1]];
@@ -324,7 +347,11 @@ static CGRect DBHomeScaledFrame(CGRect base, CGFloat scale, CGSize bounds, CGFlo
   _clockLabel.frame = CGRectMake(0, cy - 60, sz.width, 100);
   _dateLabel.frame = CGRectMake(0, cy + 44, sz.width, 30);
   _statusLabel.frame = CGRectMake(0, cy + 88, sz.width, 26);
+  _membershipButton.frame = CGRectMake(sz.width / 2 - 200, cy + 82, 400, 38);
   _eventsLabel.frame = CGRectMake(20, cy + 130, sz.width - 40, 180);
+  CGFloat bannerW = MIN(sz.width - 40, 560);
+  // Below the reply banner's slot so a quick reply cannot hide the reminder.
+  _pairBanner.frame = CGRectMake((sz.width - bannerW) / 2, 122, bannerW, 52);
 
   _infoButton.frame = CGRectMake(14, sz.height - 42, 34, 34);
   _nodeInfo.frame = CGRectMake(54, sz.height - 30, sz.width * 0.6, 20);
@@ -390,6 +417,16 @@ static CGRect DBHomeScaledFrame(CGRect base, CGFloat scale, CGSize bounds, CGFlo
   }
   [self updateClock];
   [self refreshFromCore];
+  // Mesh membership changes are event driven, but a lost or coalesced event
+  // must never leave a joined door station invisible in the monitor picker.
+  // This slow safety poll bounds that to five seconds.
+  if (!_peersTimer) {
+    _peersTimer = [NSTimer scheduledTimerWithTimeInterval:5.0
+                                                   target:self
+                                                 selector:@selector(refreshFromCore)
+                                                 userInfo:nil
+                                                  repeats:YES];
+  }
   // The first status may contain only UDP discovery identity/address data. This
   // convergence refresh picks up role/name metadata; duplicate updates merge safely.
   __weak DBHomeScreen *wself = self;
@@ -403,6 +440,15 @@ static CGRect DBHomeScaledFrame(CGRect base, CGFloat scale, CGSize bounds, CGFlo
 - (void)onScreenWillDisappear {
   // Alerts and the clock remain active while the root home view is covered.
   _monitorPicker.hidden = YES;
+  [_peersTimer invalidate];
+  _peersTimer = nil;
+}
+
+- (void)dealloc {
+  [_peersTimer invalidate];
+  [_clockTimer invalidate];
+  [_replyTimer invalidate];
+  [_sosTimer invalidate];
 }
 
 
@@ -439,34 +485,66 @@ static CGRect DBHomeScaledFrame(CGRect base, CGFloat scale, CGSize bounds, CGFlo
 
 
 - (void)refreshFromCore {
-
-
-
-  @synchronized(self) {
-    if (_refreshBusy) {
-      _refreshDirty = YES;
-      return;
-    }
-    _refreshBusy = YES;
-  }
+  // The refresh slot is owned by DBRefreshCoalescer. The previous inline gate
+  // kept `busy` set while it re-entered itself, which latched the flag on
+  // forever: after the first overlapping request this screen never read Core
+  // again, so a door station that joined later never reached the monitor list.
+  if (![_refreshGate beginRefresh]) return;
   DBCoreBridge *core = _core;
   __weak DBHomeScreen *wself = self;
   dispatch_async(_refreshQueue, ^{
     NSDictionary *cfg = [core config];
     NSDictionary *st = [core status];
+    NSDictionary *pairing = [core pairingInfo];
     dispatch_async(dispatch_get_main_queue(), ^{
       DBHomeScreen *s = wself;
       if (!s) return;
-      BOOL dirty = NO;
-      @synchronized(s) {
-        dirty = s->_refreshDirty;
-        s->_refreshDirty = NO;
-        if (!dirty) s->_refreshBusy = NO;
-      }
+      BOOL again = [s->_refreshGate endRefresh];
       [s applyCoreSnapshotWithConfig:cfg status:st];
-      if (dirty) [s refreshFromCore];
+      [s applyPairingSnapshot:pairing];
+      if (again) [s refreshFromCore];
     });
   });
+}
+
+- (void)applyPairingSnapshot:(NSDictionary *)pairing {
+  NSString *state = [DBPairingModel stateFromPairingInfo:pairing];
+  if (![state isEqualToString:DBPairingStateUnknown]) _pairingState = state;
+  NSInteger members = [DBConfigUtil intVal:pairing path:@"home.member_count" def:0];
+  NSInteger connected = [DBConfigUtil intVal:pairing path:@"home.connected_count" def:0];
+  BOOL founder = [DBConfigUtil boolVal:pairing path:@"is_founder" def:NO];
+  BOOL ready = [_pairingState isEqualToString:@"ready"];
+
+  if (ready && members > 0) {
+    NSMutableArray *parts = [NSMutableArray array];
+    [parts addObject:[_texts t:@"pair.membership",
+                          [NSString stringWithFormat:@"%ld", (long)members], nil]];
+    [parts addObject:[_texts t:@"pair.membership_connected",
+                          [NSString stringWithFormat:@"%ld", (long)connected], nil]];
+    if (founder) [parts addObject:[_texts ts:@"pair.created_badge"]];
+    _statusLabel.text = [parts componentsJoinedByString:@"  ·  "];
+  }
+  // The banner stays until the node is ready; tapping it reopens onboarding.
+  BOOL showBanner = !ready && ![_pairingState isEqualToString:DBPairingStateUnknown];
+  [_pairBanner setTitle:[_texts ts:@"pair.not_set_up_banner"] forState:UIControlStateNormal];
+  _pairBanner.hidden = !showBanner;
+}
+
+- (void)onMembership {
+  if (![_pairingState isEqualToString:@"ready"]) {
+    [_router showPairing];
+    return;
+  }
+  __weak DBHomeScreen *wself = self;
+  [_router requestPinThen:^{
+    DBHomeScreen *s = wself;
+    if (!s) return;
+    [s.router showAddDevice];
+  }];
+}
+
+- (void)onPairBanner {
+  [_router showPairing];
 }
 
 

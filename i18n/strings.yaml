@@ -641,6 +641,14 @@ pair.clear_confirm: { ja: "クラスタから離脱し、この端末の設定�
 pair.join_required: { ja: "接続先とペアリング PIN を入力してください", en: "Enter the address and the Pairing PIN", zh: "请输入连接地址和配对 PIN" }
 pair.scan_camera_denied: { ja: "カメラの使用が許可されていません。端末の設定でカメラを許可してください。", en: "Camera access is not allowed. Grant camera permission in the device settings.", zh: "未获得摄像头权限。请在设备设置中允许使用摄像头。" }
 pair.scan_no_camera: { ja: "この端末にはカメラがありません。別の端末で読み取るか、ペアリング PIN を使ってください。", en: "This device has no camera. Scan from another device, or use a Pairing PIN.", zh: "此设备没有摄像头。请用其他设备扫描，或改用配对 PIN。" }
+pair.panel_title: { ja: "端末を追加", en: "Add a device", zh: "添加设备" }
+pair.new_code: { ja: "新しいコードを発行", en: "Get a new code", zh: "生成新码" }
+pair.qr_pending: { ja: "追加用 QR を準備しています…", en: "Preparing the Add QR…", zh: "正在生成添加二维码…" }
+pair.confirm_tap_again: { ja: "もう一度押すと実行します", en: "Press again to confirm", zh: "再次按下以确认" }
+pair.open_onboarding: { ja: "ペアリング画面を開く", en: "Open the pairing screen", zh: "打开配对界面" }
+pair.enter_address_and_code: { ja: "接続先とペアリング PIN を入力してください", en: "Enter the address and the Pairing PIN", zh: "请输入连接地址和配对 PIN" }
+pair.role_door_station: { ja: "門口機", en: "Door station", zh: "门口机" }
+pair.role_indoor_panel: { ja: "室内機", en: "Indoor panel", zh: "室内机" }
 # エラーコード → 表示文言 (全シェル共通)。生のコードは「詳細」行以外に出さない。
 pair.err_detail: { ja: "詳細: {code}", en: "Details: {code}", zh: "详情: {code}" }
 pair.err.bad_pin: { ja: "ペアリング PIN が違います", en: "Wrong Pairing PIN", zh: "配对 PIN 不正确" }

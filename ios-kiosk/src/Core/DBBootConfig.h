@@ -59,4 +59,11 @@
 // Removes legacy psk_hex, writes psk_ref, and returns the updated JSON.
 + (NSString *)persistPairingSecretRef:(NSString *)secretRef seeds:(NSArray *)seeds;
 
+// Pure transformation that removes every pairing secret reference from a boot
+// profile. Used by "clear pairing" after Core has zeroed its own PSK.
++ (NSString *)unpairedJsonFromJson:(NSString *)json;
+
+// Atomically rewrites boot.json without psk_ref/psk_hex. Returns the new JSON.
++ (NSString *)clearPairingSecretRef;
+
 @end

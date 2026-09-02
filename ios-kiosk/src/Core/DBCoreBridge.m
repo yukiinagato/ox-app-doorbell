@@ -802,6 +802,28 @@ static void DBUiEventCb(void *user, const char *event_json) {
   });
 }
 
+- (void)denyDevice:(NSString *)nodeId {
+  if ([nodeId length] == 0) return;
+  NSString *idStr = [nodeId copy];
+  dispatch_async(_coreQueue, ^{
+    if (self->_core) db_core_deny_device(self->_core, [idStr UTF8String]);
+  });
+}
+
+- (BOOL)retryPairingPersistence {
+  __block BOOL ok = NO;
+  dispatch_sync(_coreQueue, ^{
+    ok = (self->_core && db_core_retry_pairing_persistence(self->_core) != 0) ? YES : NO;
+  });
+  return ok;
+}
+
+- (void)unpair {
+  dispatch_async(_coreQueue, ^{
+    if (self->_core) db_core_unpair(self->_core);
+  });
+}
+
 
 - (NSString *)cachedDeviceInfoJson {
   [_diLock lock];
