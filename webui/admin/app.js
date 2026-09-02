@@ -3423,19 +3423,25 @@ if (typeof document !== "undefined") (function () {
     return o;
   }
 
-  var RINGTONE_PRESETS = [
-    { v: "ding1", label: "Ding Dong" },
-    { v: "ding2", label: "Double Chime" },
-    { v: "classic", label: "Classic Bell" },
-    { v: "school_chime", label: t("sound.school_chime") }
-  ];
-  var SOUND_PRESETS = [
-    { v: "outdoor_call_alert", label: t("sound.outdoor_call_alert") },
-    { v: "button_click", label: t("sound.button_click") },
-    { v: "school_chime", label: t("sound.school_chime") },
-    { v: "indoor_update", label: t("sound.indoor_update") },
-    { v: "title_display", label: t("sound.title_display") }
-  ];
+  // Functions, not module-level arrays: the i18n catalog is fetched after script
+  // evaluation, so the translated labels must be looked up at render time.
+  function ringtonePresets() {
+    return [
+      { v: "ding1", label: "Ding Dong" },
+      { v: "ding2", label: "Double Chime" },
+      { v: "classic", label: "Classic Bell" },
+      { v: "school_chime", label: t("sound.school_chime") }
+    ];
+  }
+  function soundPresets() {
+    return [
+      { v: "outdoor_call_alert", label: t("sound.outdoor_call_alert") },
+      { v: "button_click", label: t("sound.button_click") },
+      { v: "school_chime", label: t("sound.school_chime") },
+      { v: "indoor_update", label: t("sound.indoor_update") },
+      { v: "title_display", label: t("sound.title_display") }
+    ];
+  }
   var BUILTIN_AUDIO = {
     outdoor_call_alert: "outdoor_call_alert.mp3",
     button_click: "button_click.mp3",
@@ -3445,14 +3451,14 @@ if (typeof document !== "undefined") (function () {
   };
   function soundOptions(includeNone) {
     var o = includeNone ? [{ v: "", label: t("sound.none") }] : [];
-    o = o.concat(SOUND_PRESETS);
+    o = o.concat(soundPresets());
     assetIds("audio").forEach(function (h) {
       o.push({ v: "asset:" + h, label: "♫ " + assetLabel(h) + " (" + h.slice(0, 8) + ")" });
     });
     return o;
   }
   function ringtoneOptions() {
-    var o = RINGTONE_PRESETS.slice();
+    var o = ringtonePresets();
     assetIds("audio").forEach(function (h) {
       o.push({ v: "asset:" + h, label: "♫ " + assetLabel(h) + " (" + h.slice(0, 8) + ")" });
     });
