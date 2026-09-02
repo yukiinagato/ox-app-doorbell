@@ -1,4 +1,5 @@
 #include <cstddef>
+#include <cstdint>
 #include <cstdlib>
 #include <cstring>
 #include <string>
@@ -19,6 +20,23 @@ TEST_CASE("capi: v2 platform rejects truncated and unknown layouts") {
 
   platform.struct_size = sizeof(platform);
   platform.version = DB_PLATFORM_V2_VERSION + 1;
+  CHECK(db_core_create_v2(&platform, ":memory:", "{\"http_port\":0}") == nullptr);
+}
+
+TEST_CASE("capi: a v2 shell built before secure_delete still starts") {
+  // secure_delete は末尾に追加しただけなので、追加前のサイズを名乗る既存シェルは
+  // 再ビルドせずにそのまま動く。追加後のフィールドは NULL 扱いになる。
+  const size_t base_size = offsetof(db_platform_v2, secure_delete);
+  CHECK(base_size < sizeof(db_platform_v2));
+  db_platform_v2 platform{};
+  platform.struct_size = static_cast<uint32_t>(base_size);
+  platform.version = DB_PLATFORM_V2_VERSION;
+  db_core* core = db_core_create_v2(&platform, ":memory:", "{\"http_port\":0}");
+  REQUIRE(core != nullptr);
+  db_core_destroy(core);
+
+  // 未公開の中間サイズは受け付けない。
+  platform.struct_size = static_cast<uint32_t>(base_size + 1);
   CHECK(db_core_create_v2(&platform, ":memory:", "{\"http_port\":0}") == nullptr);
 }
 

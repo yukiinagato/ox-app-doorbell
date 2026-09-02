@@ -34,6 +34,12 @@ struct NodeOptions {
   std::string caps_json = "{}";
   bool has_https = true;             // hard clamp for tls12 capability
   std::string sw_version = "0.1.0";
+  std::string model = "unknown";     // Hardware model shown on a pairing device card.
+  std::string platform = "unknown";  // Platform shown on a pairing device card.
+  // Where the configured PSK came from: "secure_store" (secret reference), "boot_plaintext"
+  // (psk_hex in boot.json), or "none". Reported as pairing.psk_source.
+  std::string psk_source = "none";
+  std::string psk_ref;               // "secret:<name>" when the PSK was read from secure storage.
   int http_port = 0;
   bool seed_default_config = true;
 
@@ -88,7 +94,10 @@ class Node {
   void setDeviceInfoFn(DeviceInfoFn fn);
   using SecureGetFn = std::function<std::string(const std::string& key)>;
   using SecurePutFn = std::function<bool(const std::string& key, const std::string& value)>;
+  // Deleting a secret is optional; a platform without it simply keeps the stale entry.
+  using SecureDeleteFn = std::function<bool(const std::string& key)>;
   void setSecureStore(SecureGetFn get, SecurePutFn put);
+  void setSecureDelete(SecureDeleteFn del);
   void setRuntimeCapabilities(const std::string& capabilities_json);
   void setRuntimeStatus(const std::string& runtime_json);
   void setUiManifest(const std::string& manifest_json);
@@ -194,6 +203,18 @@ class Node {
   void inviteDevice(const std::string& id);
 
   void inviteDeviceDirect(const std::string& addr, const std::string& id, const std::string& pk);
+  // Ignore one pending device for a while and drop it from the pending list.
+  void denyDevice(const std::string& id);
+  // Re-run the secure-store write after a persistence failure. Returns true once the PSK is
+  // stored; the resulting pairing_state event is emitted either way.
+  bool retryPairingPersistence();
+  // Leave the cluster and wipe the local pairing secret.
+  void unpair();
+  // Invite from a scanned or pasted "doorbell-pair:<addr>|<id>|<pk>" payload.
+  bool inviteFromQrText(const std::string& text);
+  // Decode QR codes from the existing camera-frame pipeline until stopped or the 120 s deadline.
+  void startQrScan();
+  void stopQrScan();
 
   void setConfigKey(const std::string& key, const std::string& value_json);
   const std::string& nodeId() const { return node_id_; }

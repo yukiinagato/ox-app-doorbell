@@ -5,6 +5,7 @@
 
 #include <condition_variable>
 #include <ctime>
+#include <cstddef>
 #include <cstdlib>
 #include <cstring>
 #include <memory>
@@ -13,6 +14,7 @@
 #include <thread>
 #include <vector>
 
+#include "media/qr_scanner.h"
 #include "node/node.h"
 #include "sipctl/sipctl.h"
 #include "util/common.h"
@@ -120,14 +122,23 @@ static db_core* createCore(const db_platform_v2& platform, const char* data_dir,
       if (cJSON_IsString(it)) opts.seed_peers.push_back(it->valuestring);
     }
   }
+  opts.model = json::getString(b.get(), "model", "unknown");
+  opts.platform = json::getString(b.get(), "platform", "unknown");
   std::string psk_hex = json::getString(b.get(), "psk_hex");
   const std::string psk_ref = json::getString(b.get(), "psk_ref");
+  // Provenance decides what pairing.psk_source reports: a secret reference resolved through the
+  // platform store, or a plaintext key still sitting in boot.json.
+  if (!psk_hex.empty()) opts.psk_source = "boot_plaintext";
   if (psk_hex.empty() && psk_ref.rfind("secret:", 0) == 0 && psk_ref.size() > 7 &&
       platform.secure_get) {
     char* value = nullptr;
     if (platform.secure_get(platform.user, psk_ref.c_str() + 7, &value) == 0 && value)
       psk_hex = value;
     releasePlatformBuffer(platform, value);
+    if (!psk_hex.empty()) {
+      opts.psk_source = "secure_store";
+      opts.psk_ref = psk_ref;
+    }
   }
   if (!psk_hex.empty()) {
     Bytes psk;
@@ -188,6 +199,13 @@ static db_core* createCore(const db_platform_v2& platform, const char* data_dir,
           return put_fn(user, key.c_str(), value.c_str()) == 0;
         }) : Node::SecurePutFn{});
   }
+  if (c->plat.secure_delete) {
+    void* user = c->plat.user;
+    auto del_fn = c->plat.secure_delete;
+    c->node->setSecureDelete([user, del_fn](const std::string& key) {
+      return del_fn(user, key.c_str()) == 0;
+    });
+  }
   if (c->plat.tts_speak) {
     void* user = c->plat.user;
     auto fn = c->plat.tts_speak;
@@ -234,11 +252,16 @@ DB_API db_core* db_core_create_v2(const db_platform_v2* platform, const char* da
   v2.struct_size = sizeof(v2);
   v2.version = DB_PLATFORM_V2_VERSION;
   if (platform) {
-    if (platform->struct_size < sizeof(db_platform_v2) ||
-        platform->version != DB_PLATFORM_V2_VERSION) {
+    // Only published layouts of this version are accepted: the current size, or the size before
+    // secure_delete was appended, so a shell that has not been rebuilt still starts.
+    const size_t kBaseSize = offsetof(db_platform_v2, secure_delete);
+    if (platform->version != DB_PLATFORM_V2_VERSION ||
+        (platform->struct_size != sizeof(db_platform_v2) &&
+         platform->struct_size != kBaseSize)) {
       return nullptr;
     }
-    std::memcpy(&v2, platform, sizeof(v2));
+    std::memcpy(&v2, platform, platform->struct_size);
+    v2.struct_size = sizeof(v2);
   }
   return createCore(v2, data_dir, boot_json);
 }
@@ -402,6 +425,19 @@ DB_API void db_core_invite_direct(db_core* c, const char* addr, const char* id, 
     c->node->inviteDeviceDirect(addr, id, pk);
 }
 
+DB_API void db_core_deny_device(db_core* c, const char* id) {
+  if (c && c->node && id && *id) c->node->denyDevice(id);
+}
+
+DB_API int db_core_retry_pairing_persistence(db_core* c) {
+  if (!c || !c->node) return 0;
+  return c->node->retryPairingPersistence() ? 1 : 0;
+}
+
+DB_API void db_core_unpair(db_core* c) {
+  if (c && c->node) c->node->unpair();
+}
+
 
 
 DB_API unsigned char* db_core_qr_encode(const char* text, int* out_size) {
@@ -422,6 +458,25 @@ DB_API unsigned char* db_core_qr_encode(const char* text, int* out_size) {
       out[y * size + x] = qrcodegen_getModule(qr.data(), x, y) ? 1 : 0;
   if (out_size) *out_size = size;
   return out;
+}
+
+DB_API int db_core_qr_decode(const uint8_t* gray, int w, int h, char** text_out) {
+  if (text_out) *text_out = nullptr;
+  if (!gray || !text_out || w <= 0 || h <= 0) return -1;
+  std::string text;
+  if (!db::qrDecodeGray(gray, w, h, &text)) return 1;
+  char* out = dupString(text);
+  if (!out) return -1;
+  *text_out = out;
+  return 0;
+}
+
+DB_API void db_core_qr_scan_start(db_core* c) {
+  if (c && c->node) c->node->startQrScan();
+}
+
+DB_API void db_core_qr_scan_stop(db_core* c) {
+  if (c && c->node) c->node->stopQrScan();
 }
 
 DB_API void db_core_on_camera_frame(db_core* c, const uint8_t* data, int format, int width,

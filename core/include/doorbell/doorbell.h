@@ -44,9 +44,11 @@ typedef struct db_platform {
 
 #define DB_PLATFORM_V2_VERSION 2u
 
-/* Versioned platform SPI. struct_size must be sizeof(db_platform_v2) and version must be
- * DB_PLATFORM_V2_VERSION. release_buffer releases strings returned by platform callbacks;
- * when NULL, core falls back to free() for compatibility with existing shells. */
+/* Versioned platform SPI. version must be DB_PLATFORM_V2_VERSION and struct_size must be either
+ * sizeof(db_platform_v2) or one of the earlier published sizes of this same version; any other
+ * value is rejected. Fields are only appended, so a shell built against an older header keeps
+ * working unchanged. release_buffer releases strings returned by platform callbacks; when NULL,
+ * core falls back to free() for compatibility with existing shells. */
 typedef struct db_platform_v2 {
   uint32_t struct_size;
   uint32_t version;
@@ -60,6 +62,9 @@ typedef struct db_platform_v2 {
   void (*tts_speak)(void* user, const char* text, const char* lang);
   int (*device_info)(void* user, char** out_json);
   void (*release_buffer)(void* user, void* buffer);
+  /* Optional: remove a secret. Return zero on success. NULL means the platform cannot delete,
+   * and core then leaves an orphaned entry behind when pairing is cleared. */
+  int (*secure_delete)(void* user, const char* key);
 } db_platform_v2;
 
 /* JSON events delivered from core to the platform UI. Examples:
@@ -141,12 +146,34 @@ DB_API void db_core_set_runtime_status_json(db_core* c, const char* runtime_json
 DB_API void db_core_set_ui_manifest_json(db_core* c, const char* manifest_json);
 DB_API char* db_core_capabilities_json(db_core* c);
 
-/* Return pairing discovery and invitation state. Unpaired shells display self/pair_qr; paired
- * shells present pending devices for approval. Release the result with db_free. */
+/* Return pairing discovery and invitation state. The snapshot is built when this is called, so
+ * countdowns tick over repeated polls. Shells render "state" and never infer it:
+ * {"state":"unpaired|joining|persist_error|ready|revoked",
+ *  "paired":bool,"persistence_ready":bool,"is_founder":bool,
+ *  "psk_source":"secure_store|boot_plaintext|none","psk_ref":"secret:mesh.psk"|null,"role":"...",
+ *  "self":{id,addr,name,role,pk,model,platform,sw},
+ *  "pair_qr":"doorbell-pair:<addr>|<id>|<pk>",
+ *  "home":{"member_count":int,"connected_count":int},
+ *  "token":{"active":bool,"expires_s":int,"attempts_left":int,"host":"<addr>","pin":"<6>"},
+ *  "pending":{"pairing_mode":bool,"pairing_mode_left_s":int,"auto_added_count":int,
+ *             "devices":[{id,addr,name,role,model,platform,sw,age_s,
+ *                         invite_state:"none|sent|acked|joined|failed",attempts,last_error}]}}
+ * token.pin is present only while token.active. Release the result with db_free.
+ *
+ * Pairing events delivered through the UI callback:
+ *   {"t":"pairing_state","state":...,"is_founder":bool,"psk_source":...} on every state change
+ *   {"t":"pending_changed"} {"t":"invite_result","id":...,"ok":bool,"err":...}
+ *   {"t":"device_joined","id":...,"name":...,"role":...}
+ *   {"t":"pairing_mode_changed","active":bool,"left_s":int,"auto_added_count":int}
+ *   {"t":"join_token_changed","active":bool,"expires_s":int,"attempts_left":int}
+ *   {"t":"invite_rejected","reason":...} on the invited device
+ *   {"t":"qr_scan_state","active":bool} {"t":"qr_scanned","text":...,"invited":bool}
+ *   plus the existing paired, pairing_persistence_error, join_result, and pairing_revoked. */
 DB_API char* db_core_pairing_json(db_core* c);
-/* Join an existing cluster with a PIN and seed. Completion is reported as
- * t:"join_result" followed by t:"paired". The paired event contains psk_ref,
- * never the PSK; secure_put must succeed before that event is emitted. */
+/* Join an existing cluster with a PIN and seed. Completion is reported as t:"join_result" first,
+ * then on success t:"paired" and t:"pairing_state". The paired event contains psk_ref,
+ * never the PSK; secure_put must succeed before that event is emitted, and a store failure is
+ * reported as join_result{ok:false,err:"persist_failed"} plus state "persist_error". */
 DB_API void db_core_join_cluster(db_core* c, const char* host, const char* pin);
 /* Create a new cluster with a random PSK. Returns 1 when started and 0 when the
  * node is already paired or creation fails. On success the shell persists the
@@ -164,10 +191,32 @@ DB_API void db_core_remove_device(db_core* c, const char* node_id);
 DB_API void db_core_invite_device(db_core* c, const char* id);
 /* Invite an address, ID, and public key directly without discovery, for QR or routed networks. */
 DB_API void db_core_invite_direct(db_core* c, const char* addr, const char* id, const char* pk);
+/* Drop one pending device and ignore its announcements for a while. */
+DB_API void db_core_deny_device(db_core* c, const char* id);
+/* Retry the secure-store write after state "persist_error". Returns 1 once the PSK is stored.
+ * A pairing_state event is emitted either way. */
+DB_API int db_core_retry_pairing_persistence(db_core* c);
+/* Leave the cluster: zero the PSK, delete the stored secret when the platform supports it, drop
+ * cluster state, and emit pairing_state with state "unpaired". The shell clears psk_ref and
+ * seed_peers from boot.json. */
+DB_API void db_core_unpair(db_core* c);
 
 /* Encode a QR bitmap as size*size row-major bytes, where one means dark. Returns NULL on failure;
  * release the result with db_free. */
 DB_API unsigned char* db_core_qr_encode(const char* text, int* out_size);
+
+/* Decode one 8-bit grayscale image, w*h bytes, row-major without padding. Returns 0 and assigns
+ * *text_out (release with db_free) on success, 1 when no code was found, and -1 on bad arguments.
+ * This call is synchronous and runs on the caller's thread. */
+DB_API int db_core_qr_decode(const uint8_t* gray, int w, int h, char** text_out);
+
+/* Scan mode. While active, core decodes the frames already delivered through
+ * db_core_on_camera_frame on its own thread at up to ten frames per second, emits
+ * {"t":"qr_scanned","text":...} once per distinct payload, and invites automatically when the
+ * payload is a "doorbell-pair:" QR. It stops after 120 seconds, and start/stop are reported as
+ * {"t":"qr_scan_state","active":bool}. */
+DB_API void db_core_qr_scan_start(db_core* c);
+DB_API void db_core_qr_scan_stop(db_core* c);
 
 /* Push a camera frame. format: 0=NV21, 1=NV12, 2=YUY2, 3=BGRA. */
 DB_API void db_core_on_camera_frame(db_core* c, const uint8_t* data, int format, int width,

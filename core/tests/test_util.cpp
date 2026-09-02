@@ -1,7 +1,12 @@
+#include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <cstdint>
 #include <cstdlib>
+#include <mutex>
+#include <string>
 #include <thread>
+#include <vector>
 
 #include "doctest.h"
 #include "doorbell/doorbell.h"
@@ -31,6 +36,161 @@ TEST_CASE("db_core_qr_encode returns a valid matrix and rejects empty input") {
     if (m[i] > 1) onlyBinary = false;
   CHECK(onlyBinary);
   db_free(reinterpret_cast<char*>(m));
+}
+
+
+namespace {
+
+// QR のモジュール行列を quirc が読める 8bit グレースケール画像に描く。実機のカメラ映像に近づける
+// ため、拡大率と 4 モジュールのクワイエットゾーンを付ける。暗いモジュールが 0、下地が 255。
+std::vector<uint8_t> rasterizeQr(const unsigned char* modules, int size, int scale, int quiet,
+                                 int* out_w, int* out_h) {
+  const int side = (size + quiet * 2) * scale;
+  std::vector<uint8_t> img(static_cast<size_t>(side) * side, 255);
+  for (int r = 0; r < size; r++) {
+    for (int c = 0; c < size; c++) {
+      if (!modules[r * size + c]) continue;
+      for (int dy = 0; dy < scale; dy++) {
+        uint8_t* row = img.data() + static_cast<size_t>((r + quiet) * scale + dy) * side;
+        std::fill(row + static_cast<size_t>(c + quiet) * scale,
+                  row + static_cast<size_t>(c + quiet + 1) * scale, uint8_t{0});
+      }
+    }
+  }
+  *out_w = side;
+  *out_h = side;
+  return img;
+}
+
+
+// グレースケール画像を NV21 フレームに詰める。彩度平面は 128（無彩色）で埋めるだけで、
+// 輝度平面がそのまま QR になる。
+std::vector<uint8_t> lumaToNv21(const std::vector<uint8_t>& luma, int w, int h) {
+  std::vector<uint8_t> nv21(static_cast<size_t>(w) * h +
+                                static_cast<size_t>(w) * ((h + 1) / 2),
+                            128);
+  std::copy(luma.begin(), luma.end(), nv21.begin());
+  return nv21;
+}
+
+}  // namespace
+
+
+TEST_CASE("db_core_qr_decode round-trips a generated pairing QR code") {
+  const std::string text = "doorbell-pair:10.0.1.5:47172|abc123|deadbeef";
+  int size = 0;
+  unsigned char* modules = db_core_qr_encode(text.c_str(), &size);
+  REQUIRE(modules != nullptr);
+  int w = 0, h = 0;
+  const std::vector<uint8_t> img = rasterizeQr(modules, size, 8, 4, &w, &h);
+  db_free(reinterpret_cast<char*>(modules));
+
+  char* decoded = nullptr;
+  CHECK(db_core_qr_decode(img.data(), w, h, &decoded) == 0);
+  REQUIRE(decoded != nullptr);
+  CHECK(std::string(decoded) == text);
+  db_free(decoded);
+
+  // 引数不正は -1、コードの写っていない画像は 1。どちらの場合も出力は NULL のまま。
+  decoded = reinterpret_cast<char*>(1);
+  CHECK(db_core_qr_decode(nullptr, w, h, &decoded) == -1);
+  CHECK(decoded == nullptr);
+  CHECK(db_core_qr_decode(img.data(), 0, h, &decoded) == -1);
+  CHECK(db_core_qr_decode(img.data(), w, -1, &decoded) == -1);
+  const std::vector<uint8_t> blank(static_cast<size_t>(w) * h, 255);
+  CHECK(db_core_qr_decode(blank.data(), w, h, &decoded) == 1);
+  CHECK(decoded == nullptr);
+}
+
+
+TEST_CASE("qr scan mode decodes a camera frame and reports it once") {
+  struct Sink {
+    std::mutex mu;
+    std::vector<std::string> events;
+
+    int count(const std::string& type) {
+      std::lock_guard<std::mutex> lk(mu);
+      int n = 0;
+      for (const auto& e : events)
+        if (e.find("\"t\":\"" + type + "\"") != std::string::npos) n++;
+      return n;
+    }
+
+    bool has(const std::string& needle) {
+      std::lock_guard<std::mutex> lk(mu);
+      for (const auto& e : events)
+        if (e.find(needle) != std::string::npos) return true;
+      return false;
+    }
+  } sink;
+
+  const std::string text = "doorbell-pair:10.0.1.7:47172|feedface|"
+                           "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+  int size = 0;
+  unsigned char* modules = db_core_qr_encode(text.c_str(), &size);
+  REQUIRE(modules != nullptr);
+  int w = 0, h = 0;
+  const std::vector<uint8_t> luma = rasterizeQr(modules, size, 6, 4, &w, &h);
+  db_free(reinterpret_cast<char*>(modules));
+  const std::vector<uint8_t> frame = lumaToNv21(luma, w, h);
+
+  db_platform_v2 platform{};
+  platform.struct_size = sizeof(platform);
+  platform.version = DB_PLATFORM_V2_VERSION;
+  db_core* core = db_core_create_v2(
+      &platform, ":memory:",
+      "{\"name\":\"qr-scan\",\"role\":\"door_station\",\"door\":\"d_front\","
+      "\"listen_port\":0,\"http_port\":0}");
+  REQUIRE(core != nullptr);
+  db_core_set_ui_callback(
+      core,
+      [](void* user, const char* json) {
+        auto* s = static_cast<Sink*>(user);
+        std::lock_guard<std::mutex> lk(s->mu);
+        s->events.push_back(json ? json : "");
+      },
+      &sink);
+  REQUIRE(db_core_start(core) == 0);
+
+  // 走査していない間は同じフレームを流しても何も起きない。
+  db_core_on_camera_frame(core, frame.data(), 0, w, h, w, 1);
+  std::this_thread::sleep_for(std::chrono::milliseconds(150));
+  CHECK(sink.count("qr_scanned") == 0);
+
+  db_core_qr_scan_start(core);
+  CHECK(sink.count("qr_scan_state") == 1);
+  CHECK(sink.has("\"t\":\"qr_scan_state\",\"active\":true"));
+
+  bool scanned = false;
+  for (int i = 0; i < 100 && !scanned; i++) {
+    db_core_on_camera_frame(core, frame.data(), 0, w, h, w, 2 + i);
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    scanned = sink.count("qr_scanned") >= 1;
+  }
+  CHECK(scanned);
+  CHECK(sink.has("\"text\":\"" + text + "\""));
+  // クラスタ未参加なので招待は行われない。参加済みなら invited:true で invite_result が続く。
+  CHECK(sink.has("\"invited\":false"));
+
+  // 2 秒のデバウンス内は同じ内容を再通知しない。
+  for (int i = 0; i < 10; i++) {
+    db_core_on_camera_frame(core, frame.data(), 0, w, h, w, 200 + i);
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+  }
+  CHECK(sink.count("qr_scanned") == 1);
+
+  db_core_qr_scan_stop(core);
+  CHECK(sink.has("\"t\":\"qr_scan_state\",\"active\":false"));
+  CHECK(sink.count("qr_scan_state") == 2);
+
+  // 停止後は再びフレームを無視する。
+  const int before = sink.count("qr_scanned");
+  db_core_on_camera_frame(core, frame.data(), 0, w, h, w, 400);
+  std::this_thread::sleep_for(std::chrono::milliseconds(150));
+  CHECK(sink.count("qr_scanned") == before);
+
+  db_core_stop(core);
+  db_core_destroy(core);
 }
 
 TEST_CASE("hex roundtrip") {

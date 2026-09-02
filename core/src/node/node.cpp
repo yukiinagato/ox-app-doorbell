@@ -18,6 +18,7 @@
 #include "bridge/telegram.h"
 #include "httpd/webui_assets.h"
 #include "media/frame_bus.h"
+#include "media/qr_scanner.h"
 #include "media/motion_detector.h"
 #include "media/video_track.h"
 #include "mesh/socket_compat.h"
@@ -1278,6 +1279,10 @@ struct Node::Impl {
   std::unique_ptr<HaBridge> bridge;
   std::unique_ptr<TelegramBridge> tg;
   FrameBus frame_bus;
+  // Pairing QR scan mode: fed from the same camera frames the door station already pushes.
+  QrScanner qr_scanner;
+  uint64_t qr_scan_timer = 0;
+  static constexpr int64_t kQrScanTtlMs = 120'000;
 
 
   VideoTrack video_track;
@@ -1430,9 +1435,18 @@ struct Node::Impl {
   HttpsFn https_fn;
   SecureGetFn secure_get_fn;
   SecurePutFn secure_put_fn;
+  Node::SecureDeleteFn secure_delete_fn;
   std::set<std::string> secret_migration_warnings;
   std::string sip_credential_source = "none";
   bool pairing_persistence_ready = false;
+  // Authoritative pairing state, reported as pairing.state and pairing_state events.
+  bool pairing_is_founder = false;
+  bool pairing_joining = false;   // a code join or an arriving invitation is being applied
+  bool pairing_revoked = false;   // removed by an administrator; the shell wipes and restarts
+  // A PIN join succeeded on the wire; its join_result waits for the secure-store outcome.
+  bool pairing_join_awaiting_persist = false;
+  std::string pairing_psk_source = "none";
+  std::string pairing_psk_ref;
 
 
   std::shared_ptr<char> alive = std::make_shared<char>(0);
@@ -3832,6 +3846,21 @@ struct Node::Impl {
 
     if (!discovery && opts.enable_beacon) discovery.reset(new UdpBeacon(*loop, opts.psk));
 
+    // Pairing identity survives restarts: the founder badge lives in store metadata and the PSK
+    // provenance comes from how the shell supplied the key in boot.json.
+    {
+      auto founder = store.metaGet("pairing.is_founder");
+      pairing_is_founder = founder && *founder == "1";
+      const bool has_psk = std::any_of(opts.psk.begin(), opts.psk.end(),
+                                       [](uint8_t byte) { return byte != 0; });
+      // "none" は「鍵がない」という意味なので、鍵を持っているのにそう名乗ることはできない。
+      // 出所を申告しないホスト（doorbell_host や組み込み利用）は平文鍵として扱う。
+      const bool declared = opts.psk_source == "secure_store" || opts.psk_source == "boot_plaintext";
+      pairing_psk_source = !has_psk ? "none" : (declared ? opts.psk_source : "boot_plaintext");
+      pairing_psk_ref = pairing_psk_source == "secure_store" ? opts.psk_ref : "";
+      if (!has_psk) pairing_is_founder = false;
+    }
+
     // Mesh
     MeshSettings ms = opts.use_mesh_timing_template ? opts.mesh_timing_template : MeshSettings{};
     ms.node_id = node_id;
@@ -3871,6 +3900,8 @@ struct Node::Impl {
     ms.role = opts.role;
     ms.door = opts.role == "door_station" ? opts.door : "";
     ms.sw_version = opts.sw_version;
+    ms.model = opts.model.empty() ? "unknown" : opts.model;
+    ms.platform = opts.platform.empty() ? "unknown" : opts.platform;
     effective_caps_json = computeEffectiveCaps();
     ms.caps_json = effective_caps_json;
     ms.ui_manifest_json = ui_manifest_json;
@@ -3906,6 +3937,46 @@ struct Node::Impl {
     cbs.on_pending_changed = [this] { uiNotify("{\"t\":\"pending_changed\"}"); };
 
     cbs.on_paired = [this] { onBecamePaired(); };
+    cbs.on_invite_result = [this](const std::string& id, bool ok, const std::string& err) {
+      auto o = json::obj();
+      json::set(o.get(), "t", "invite_result");
+      json::set(o.get(), "id", id);
+      json::setBool(o.get(), "ok", ok);
+      json::set(o.get(), "err", err);
+      uiNotify(json::dump(o.get()));
+    };
+    cbs.on_device_joined = [this](const std::string& id, const std::string& name,
+                                  const std::string& role) {
+      auto o = json::obj();
+      json::set(o.get(), "t", "device_joined");
+      json::set(o.get(), "id", id);
+      json::set(o.get(), "name", name);
+      json::set(o.get(), "role", role);
+      uiNotify(json::dump(o.get()));
+    };
+    cbs.on_pairing_mode_changed = [this](bool active, int64_t left_s, int added) {
+      auto o = json::obj();
+      json::set(o.get(), "t", "pairing_mode_changed");
+      json::setBool(o.get(), "active", active);
+      json::set(o.get(), "left_s", left_s);
+      json::set(o.get(), "auto_added_count", static_cast<int64_t>(added));
+      uiNotify(json::dump(o.get()));
+    };
+    cbs.on_join_token_changed = [this](bool active, int64_t expires_s, int attempts_left) {
+      auto o = json::obj();
+      json::set(o.get(), "t", "join_token_changed");
+      json::setBool(o.get(), "active", active);
+      json::set(o.get(), "expires_s", expires_s);
+      json::set(o.get(), "attempts_left", static_cast<int64_t>(attempts_left));
+      uiNotify(json::dump(o.get()));
+    };
+    cbs.on_invite_rejected = [this](const std::string& reason) {
+      auto o = json::obj();
+      json::set(o.get(), "t", "invite_rejected");
+      json::set(o.get(), "reason", reason);
+      uiNotify(json::dump(o.get()));
+    };
+    cbs.on_unpaired = [this] { pairing_joining = false; };
     mesh.reset(new Mesh(*loop, *clock, *hlc, *transport, discovery.get(), store, *config,
                         *events, ms, cbs));
 
@@ -5053,6 +5124,11 @@ struct Node::Impl {
       json::set(notice.get(), "t", "pairing_revoked");
       json::set(notice.get(), "by", from);
       uiNotify(json::dump(notice.get()));
+      // The shell shows "removed from the Cluster" on the revoked state; the key is dropped
+      // immediately so a revoked device cannot keep talking to the cluster.
+      pairing_revoked = true;
+      emitPairingState();
+      unpairOnLoop();
       return;
     }
     if (cmd == "chime") {
@@ -5333,11 +5409,27 @@ struct Node::Impl {
 
 
 
+  // The single state every shell renders. Shells must never infer it from paired/persistence_ready.
+  std::string pairingStateOnLoop() const {
+    if (pairing_revoked) return "revoked";
+    if (!mesh || !mesh->isPaired()) return pairing_joining ? "joining" : "unpaired";
+    if (!pairing_persistence_ready) return "persist_error";
+    return "ready";
+  }
+
   std::string pairingJsonOnLoop() {
     auto o = json::obj();
     if (!mesh) return json::dump(o.get());
+    json::set(o.get(), "state", pairingStateOnLoop());
     json::setBool(o.get(), "paired", mesh->isPaired());
     json::setBool(o.get(), "persistence_ready", pairing_persistence_ready);
+    json::setBool(o.get(), "is_founder", pairing_is_founder);
+    json::set(o.get(), "psk_source", pairing_psk_source);
+    if (pairing_psk_ref.empty()) {
+      json::setItem(o.get(), "psk_ref", json::Doc(cJSON_CreateNull()));
+    } else {
+      json::set(o.get(), "psk_ref", pairing_psk_ref);
+    }
     json::set(o.get(), "role", opts.role);
 
     json::Doc self = json::parse(mesh->pairingSelfJson());
@@ -5350,30 +5442,158 @@ struct Node::Impl {
       json::setItem(o.get(), "self", std::move(self));
     }
 
+    {
+      cJSON* home = json::addObj(o.get(), "home");
+      int64_t members = 0, connected = 0;
+      for (const auto& p : mesh->peers()) {
+        members++;
+        if (p.id == node_id || p.connected) connected++;
+      }
+      json::set(home, "member_count", members);
+      json::set(home, "connected_count", connected);
+    }
+
+    json::Doc token = json::parse(mesh->tokenJson());
+    if (token) json::setItem(o.get(), "token", std::move(token));
+
     json::Doc pend = json::parse(mesh->pendingJson());
     if (pend) json::setItem(o.get(), "pending", std::move(pend));
     return json::dump(o.get());
   }
 
-  // Store a newly paired PSK before telling the shell to persist its opaque reference.
-  void onBecamePaired() {
-    if (!mesh) return;
+
+  // Start pairing mode and mint a PIN in one step: {ok,host,pin,expires_s}.
+  std::string startPairingJsonOnLoop(int seconds) {
+    const int bounded_seconds = std::max(1, std::min(seconds, 3600));
+    auto result = json::obj();
+    if (!mesh || !mesh->isPaired()) {
+      json::setBool(result.get(), "ok", false);
+      json::set(result.get(), "err", "host_unpaired");
+      return json::dump(result.get());
+    }
+    mesh->setPairingMode(static_cast<int64_t>(bounded_seconds) * 1000);
+    const auto token = mesh->createJoinToken();
+    json::Doc self = json::parse(mesh->pairingSelfJson());
+    const std::string host = self ? json::getString(self.get(), "addr") : "";
+    if (token.pin.empty() || host.empty()) {
+      json::setBool(result.get(), "ok", false);
+      json::set(result.get(), "err", "pairing_unavailable");
+    } else {
+      json::setBool(result.get(), "ok", true);
+      json::set(result.get(), "host", host);
+      json::set(result.get(), "pin", token.pin);
+      json::set(result.get(), "expires_s",
+                std::max<int64_t>(0, (token.expires_mono - clock->monoMs()) / 1000));
+    }
+    return json::dump(result.get());
+  }
+
+
+  // "doorbell-pair:<addr>|<id>|<pk>" from a scanned or pasted QR code.
+  bool inviteFromQrOnLoop(const std::string& text) {
+    if (!mesh || !mesh->isPaired()) return false;
+    static const std::string kPrefix = "doorbell-pair:";
+    if (text.rfind(kPrefix, 0) != 0) return false;
+    const std::string body = text.substr(kPrefix.size());
+    const auto p1 = body.find('|');
+    const auto p2 = body.rfind('|');
+    if (p1 == std::string::npos || p2 == std::string::npos || p2 <= p1) return false;
+    const std::string addr = body.substr(0, p1);
+    const std::string pk = body.substr(p2 + 1);
+    if (addr.empty() || pk.size() != 64) return false;
+    mesh->inviteDeviceDirect(addr, pk);
+    return true;
+  }
+
+
+  void emitQrScanState(bool active) {
+    auto o = json::obj();
+    json::set(o.get(), "t", "qr_scan_state");
+    json::setBool(o.get(), "active", active);
+    uiNotify(json::dump(o.get()));
+  }
+
+
+  // A decoded payload arrives here on Runloop. A pairing payload is invited immediately so the
+  // shell only has to render the invite_result / device_joined events it already handles.
+  void onQrTextOnLoop(const std::string& text) {
+    auto o = json::obj();
+    json::set(o.get(), "t", "qr_scanned");
+    json::set(o.get(), "text", text);
+    const bool invited = inviteFromQrOnLoop(text);
+    json::setBool(o.get(), "invited", invited);
+    uiNotify(json::dump(o.get()));
+  }
+
+
+  void startQrScanOnLoop() {
+    if (qr_scan_timer) {
+      loop->cancel(qr_scan_timer);
+      qr_scan_timer = 0;
+    }
+    const bool was_active = qr_scanner.active();
+    if (!was_active) {
+      std::weak_ptr<char> w = alive;
+      qr_scanner.start([this, w](const std::string& text) {
+        // The decode runs on the scanner thread; node state is only touched on Runloop.
+        loop->post([this, w, text] {
+          if (w.expired()) return;
+          onQrTextOnLoop(text);
+        });
+      });
+    }
+    // Scanning holds the camera and the decoder; it always stops on its own.
+    std::weak_ptr<char> w = alive;
+    qr_scan_timer = loop->postDelayed(kQrScanTtlMs, [this, w] {
+      if (w.expired()) return;
+      qr_scan_timer = 0;
+      stopQrScanOnLoop();
+    });
+    if (!was_active) emitQrScanState(true);
+  }
+
+
+  void stopQrScanOnLoop() {
+    if (qr_scan_timer) {
+      loop->cancel(qr_scan_timer);
+      qr_scan_timer = 0;
+    }
+    if (!qr_scanner.active()) return;
+    qr_scanner.stop();
+    emitQrScanState(false);
+  }
+
+
+  void emitPairingState() {
+    auto o = json::obj();
+    json::set(o.get(), "t", "pairing_state");
+    json::set(o.get(), "state", pairingStateOnLoop());
+    json::setBool(o.get(), "is_founder", pairing_is_founder);
+    json::set(o.get(), "psk_source", pairing_psk_source);
+    uiNotify(json::dump(o.get()));
+  }
+
+
+  // Persist the cluster PSK into platform secure storage. Returns false when the platform has no
+  // writable store or the write failed; the caller decides which event to emit.
+  bool storePairingSecret() {
+    if (!mesh) return false;
     const auto& s = mesh->settings();
     const std::string secret_ref = "secret:mesh.psk";
-    const std::string psk_hex = hexEncode(s.psk.data(), s.psk.size());
-    if (!putSecret(secret_ref, psk_hex)) {
-      pairing_persistence_ready = false;
-      auto failure = json::obj();
-      json::set(failure.get(), "t", "pairing_persistence_error");
-      json::set(failure.get(), "reason", "secure_store_failed");
-      DB_LOGE(kTag, "paired: secure storage failed; refusing to expose the mesh PSK");
-      uiNotify(json::dump(failure.get()));
-      return;
-    }
+    if (!putSecret(secret_ref, hexEncode(s.psk.data(), s.psk.size()))) return false;
     pairing_persistence_ready = true;
+    pairing_psk_source = "secure_store";
+    pairing_psk_ref = secret_ref;
+    return true;
+  }
+
+
+  void emitPairedEvent() {
+    if (!mesh) return;
+    const auto& s = mesh->settings();
     auto o = json::obj();
     json::set(o.get(), "t", "paired");
-    json::set(o.get(), "psk_ref", secret_ref);
+    json::set(o.get(), "psk_ref", pairing_psk_ref);
     json::set(o.get(), "psk_id", s.psk_id);
     cJSON* seeds = json::addArr(o.get(), "seeds");
     for (const auto& a : s.seed_peers)
@@ -5381,6 +5601,91 @@ struct Node::Impl {
     DB_LOGI(kTag, "paired: mesh PSK stored securely; requesting boot reference persistence (seeds=" +
                       std::to_string(s.seed_peers.size()) + ")");
     uiNotify(json::dump(o.get()));
+  }
+
+
+  void emitPersistenceError() {
+    auto failure = json::obj();
+    json::set(failure.get(), "t", "pairing_persistence_error");
+    json::set(failure.get(), "reason", "secure_store_failed");
+    DB_LOGE(kTag, "paired: secure storage failed; refusing to expose the mesh PSK");
+    uiNotify(json::dump(failure.get()));
+  }
+
+  void emitJoinResult(bool ok, const std::string& err) {
+    auto o = json::obj();
+    json::set(o.get(), "t", "join_result");
+    json::setBool(o.get(), "ok", ok);
+    json::set(o.get(), "err", err);
+    uiNotify(json::dump(o.get()));
+  }
+
+  // Store a newly paired PSK before telling the shell to persist its opaque reference.
+  void onBecamePaired() {
+    if (!mesh) return;
+    pairing_joining = false;
+    pairing_revoked = false;
+    pairing_is_founder = mesh->isFounder();
+    store.metaSet("pairing.is_founder", pairing_is_founder ? "1" : "0");
+    const bool stored = storePairingSecret();
+    // C5: 鍵の保存に失敗した参加を ok:true と報告してはいけない。join_result は
+    // 保存の成否が確定してから、paired / pairing_state より前に必ず出す。
+    if (pairing_join_awaiting_persist) {
+      pairing_join_awaiting_persist = false;
+      emitJoinResult(stored, stored ? "" : "persist_failed");
+    }
+    if (!stored) {
+      pairing_persistence_ready = false;
+      emitPersistenceError();
+      emitPairingState();
+      return;
+    }
+    emitPairedEvent();
+    emitPairingState();
+  }
+
+
+  // C7: the shell may retry after a persist_error without re-running the whole join.
+  bool retryPairingPersistence() {
+    if (!mesh || !mesh->isPaired()) {
+      emitPairingState();
+      return false;
+    }
+    if (pairing_persistence_ready) {
+      emitPairingState();
+      return true;
+    }
+    if (!storePairingSecret()) {
+      emitPersistenceError();
+      emitPairingState();
+      return false;
+    }
+    emitPairedEvent();
+    emitPairingState();
+    return true;
+  }
+
+
+  // C9: leave the cluster and forget the secret. Used by "clear pairing" and by revocation.
+  void unpairOnLoop() {
+    if (mesh) mesh->unpair();
+    Node::SecureDeleteFn del;
+    {
+      std::lock_guard<std::mutex> lk(cb_mu);
+      del = secure_delete_fn;
+    }
+    // Deletion is optional: a platform without it keeps an orphaned entry that no boot.json
+    // reference points at any more.
+    if (del) del("mesh.psk");
+    pairing_persistence_ready = false;
+    pairing_is_founder = false;
+    pairing_joining = false;
+    pairing_revoked = false;
+    pairing_join_awaiting_persist = false;
+    pairing_psk_source = "none";
+    pairing_psk_ref.clear();
+    store.metaSet("pairing.is_founder", "0");
+    emitPairingState();
   }
 
   std::string debugJsonOnLoop() {
@@ -6023,6 +6328,9 @@ struct Node::Impl {
 
     httpd->route("POST", "/api/pairing/mode", [this](const HttpReq& req) {
       if (!mesh) return HttpResp::json("{\"ok\":false,\"err\":\"no_mesh\"}", 503);
+      // An unpaired node has no cluster to add anyone to; saying "ok" here strands the user.
+      if (!mesh->isPaired())
+        return HttpResp::json("{\"ok\":false,\"err\":\"host_unpaired\"}", 409);
       auto b = json::parse(req.body);
       int64_t sec = b ? json::getInt(b.get(), "seconds", 600) : 600;
       if (sec < 0) sec = 0;
@@ -6032,6 +6340,58 @@ struct Node::Impl {
       json::setBool(o.get(), "ok", true);
       json::set(o.get(), "seconds", sec);
       return HttpResp::json(json::dump(o.get()));
+    });
+
+
+    // C10: the panel-facing pairing surface. Older routes above stay for existing shells.
+    httpd->route("POST", "/api/pairing/start", [this](const HttpReq& req) {
+      auto b = json::parse(req.body);
+      int seconds = b ? static_cast<int>(json::getInt(b.get(), "seconds", 600)) : 600;
+      const std::string result = startPairingJsonOnLoop(seconds);
+      auto parsed = json::parse(result);
+      const bool ok = parsed && json::getBool(parsed.get(), "ok");
+      return HttpResp::json(result, ok ? 200 : 409);
+    });
+
+    httpd->route("POST", "/api/pairing/stop", [this](const HttpReq&) {
+      if (!mesh) return HttpResp::json("{\"ok\":false,\"err\":\"no_mesh\"}", 503);
+      mesh->setPairingMode(0);
+      return HttpResp::json("{\"ok\":true}");
+    });
+
+    httpd->route("POST", "/api/pairing/deny", [this](const HttpReq& req) {
+      if (!mesh) return HttpResp::json("{\"ok\":false,\"err\":\"no_mesh\"}", 503);
+      auto b = json::parse(req.body);
+      const std::string id = b ? json::getString(b.get(), "id") : "";
+      if (id.empty()) return HttpResp::json("{\"ok\":false,\"err\":\"no_id\"}", 400);
+      mesh->denyDevice(id);
+      return HttpResp::json("{\"ok\":true}");
+    });
+
+    httpd->route("POST", "/api/pairing/retry-persist", [this](const HttpReq&) {
+      const bool ok = retryPairingPersistence();
+      auto o = json::obj();
+      json::setBool(o.get(), "ok", ok);
+      if (!ok) json::set(o.get(), "err", "persist_failed");
+      return HttpResp::json(json::dump(o.get()), ok ? 200 : 500);
+    });
+
+    httpd->route("POST", "/api/pairing/unpair", [this](const HttpReq&) {
+      if (!mesh) return HttpResp::json("{\"ok\":false,\"err\":\"no_mesh\"}", 503);
+      unpairOnLoop();
+      return HttpResp::json("{\"ok\":true}");
+    });
+
+    // Web paste fallback for QR scanning in a non-secure browsing context.
+    httpd->route("POST", "/api/pairing/scan", [this](const HttpReq& req) {
+      if (!mesh) return HttpResp::json("{\"ok\":false,\"err\":\"no_mesh\"}", 503);
+      if (!mesh->isPaired())
+        return HttpResp::json("{\"ok\":false,\"err\":\"host_unpaired\"}", 409);
+      auto b = json::parse(req.body);
+      const std::string text = b ? json::getString(b.get(), "text") : "";
+      if (!inviteFromQrOnLoop(text))
+        return HttpResp::json("{\"ok\":false,\"err\":\"bad_qr\"}", 400);
+      return HttpResp::json("{\"ok\":true}");
     });
 
     httpd->route("POST", "/api/pairing/invite", [this](const HttpReq& req) {
@@ -7270,6 +7630,7 @@ void Node::stop() {
   impl_->video_track.stop();
 
   impl_->loop->callSync([&] {
+    impl_->stopQrScanOnLoop();
     impl_->stopNetMonitor();
     if (impl_->sip_reapply_timer) {
       impl_->loop->cancel(impl_->sip_reapply_timer);
@@ -7352,6 +7713,11 @@ void Node::setSecureStore(SecureGetFn get, SecurePutFn put) {
   std::lock_guard<std::mutex> lk(impl_->cb_mu);
   impl_->secure_get_fn = std::move(get);
   impl_->secure_put_fn = std::move(put);
+}
+
+void Node::setSecureDelete(SecureDeleteFn del) {
+  std::lock_guard<std::mutex> lk(impl_->cb_mu);
+  impl_->secure_delete_fn = std::move(del);
 }
 
 void Node::setRuntimeCapabilities(const std::string& capabilities_json) {
@@ -7509,7 +7875,17 @@ void Node::pushCameraFrame(const uint8_t* data, int format, int width, int heigh
     std::lock_guard<std::mutex> lk(impl_->motion_mu);
     impl_->motion.feed(f);
   }
+  // Scan mode reuses this pipeline; submit() only copies a frame and returns.
+  impl_->qr_scanner.submit(f);
   impl_->frame_bus.push(std::move(f));
+}
+
+void Node::startQrScan() {
+  impl_->loop->callSync([&] { impl_->startQrScanOnLoop(); });
+}
+
+void Node::stopQrScan() {
+  impl_->loop->callSync([&] { impl_->stopQrScanOnLoop(); });
 }
 
 void Node::pushEncodedFrame(const uint8_t* annexb, size_t len, bool key, int64_t ts_ms) {
@@ -7592,6 +7968,14 @@ void Node::setConfigKey(const std::string& key, const std::string& value_json) {
 }
 
 std::string Node::pairingJson() {
+  // C2: the snapshot must be live. Countdowns tick over db_core_pairing_json, so a cached copy
+  // would freeze the PIN timer and the pending list on every shell that polls it.
+  std::string fresh;
+  if (impl_->loop->callSync([&] { fresh = impl_->pairingJsonOnLoop(); }) && !fresh.empty()) {
+    std::lock_guard<std::mutex> lk(impl_->snap_mu);
+    impl_->pairing_snap = fresh;
+    return fresh;
+  }
   std::lock_guard<std::mutex> lk(impl_->snap_mu);
   if (impl_->pairing_snap.empty()) return "{}";
   return impl_->pairing_snap;
@@ -7609,23 +7993,61 @@ void Node::joinCluster(const std::string& host, const std::string& pin) {
   std::string h = host;
   std::string p = pin;
   impl_->loop->post([this, h, p] {
-    if (impl_->mesh && !impl_->mesh->isPaired()) {
-      impl_->mesh->joinCluster(h, p, [this](bool ok, const std::string& err) {
-        auto o = json::obj();
-        json::set(o.get(), "t", "join_result");
-        json::setBool(o.get(), "ok", ok);
-        json::set(o.get(), "err", err);
-        impl_->uiNotify(json::dump(o.get()));
-      });
+    if (!impl_->mesh) return;
+    auto done = [this](bool ok, const std::string& err) {
+      impl_->pairing_joining = false;
+      if (ok) {
+        // Mesh calls onBecamePaired on the next statement; it emits join_result once the
+        // secure-store outcome is known, so a failed write is never reported as a success.
+        impl_->pairing_join_awaiting_persist = true;
+        return;
+      }
+      impl_->emitJoinResult(false, err);
+      // A failed join leaves the node unpaired, so the state has to be republished.
+      impl_->emitPairingState();
+    };
+    // Never fail silently: an already-paired node reports why it refused.
+    if (impl_->mesh->isPaired()) {
+      done(false, "already_paired");
+      return;
     }
+    impl_->pairing_joining = true;
+    impl_->emitPairingState();
+    impl_->mesh->joinCluster(h, p, done);
   });
 }
 
 void Node::setPairingMode(int seconds) {
   int s = seconds;
   impl_->loop->post([this, s] {
-    if (impl_->mesh) impl_->mesh->setPairingMode(static_cast<int64_t>(s) * 1000);
+    // An unpaired node has no cluster key to hand out, so pairing mode would do nothing.
+    if (!impl_->mesh || (!impl_->mesh->isPaired() && s > 0)) return;
+    impl_->mesh->setPairingMode(static_cast<int64_t>(s) * 1000);
   });
+}
+
+void Node::denyDevice(const std::string& id) {
+  std::string did = id;
+  impl_->loop->post([this, did] {
+    if (impl_->mesh) impl_->mesh->denyDevice(did);
+  });
+}
+
+bool Node::retryPairingPersistence() {
+  bool ok = false;
+  impl_->loop->callSync([&] { ok = impl_->retryPairingPersistence(); });
+  return ok;
+}
+
+void Node::unpair() {
+  impl_->loop->callSync([&] { impl_->unpairOnLoop(); });
+}
+
+bool Node::inviteFromQrText(const std::string& text) {
+  bool ok = false;
+  std::string t = text;
+  impl_->loop->callSync([&] { ok = impl_->inviteFromQrOnLoop(t); });
+  return ok;
 }
 
 void Node::removeDevice(const std::string& target) {
@@ -7647,31 +8069,7 @@ void Node::removeDevice(const std::string& target) {
 
 std::string Node::startPairingJson(int seconds) {
   std::string out;
-  const int bounded_seconds = std::max(1, std::min(seconds, 3600));
-  impl_->loop->callSync([&] {
-    auto result = json::obj();
-    if (!impl_->mesh || !impl_->mesh->isPaired()) {
-      json::setBool(result.get(), "ok", false);
-      json::set(result.get(), "err", "host_unpaired");
-      out = json::dump(result.get());
-      return;
-    }
-    impl_->mesh->setPairingMode(static_cast<int64_t>(bounded_seconds) * 1000);
-    const auto token = impl_->mesh->createJoinToken();
-    json::Doc self = json::parse(impl_->mesh->pairingSelfJson());
-    const std::string host = self ? json::getString(self.get(), "addr") : "";
-    if (token.pin.empty() || host.empty()) {
-      json::setBool(result.get(), "ok", false);
-      json::set(result.get(), "err", "pairing_unavailable");
-    } else {
-      json::setBool(result.get(), "ok", true);
-      json::set(result.get(), "host", host);
-      json::set(result.get(), "pin", token.pin);
-      json::set(result.get(), "expires_s", std::max<int64_t>(
-          0, (token.expires_mono - impl_->clock->monoMs()) / 1000));
-    }
-    out = json::dump(result.get());
-  });
+  impl_->loop->callSync([&] { out = impl_->startPairingJsonOnLoop(seconds); });
   return out;
 }
 

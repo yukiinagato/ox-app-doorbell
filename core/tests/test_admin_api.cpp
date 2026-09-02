@@ -1277,3 +1277,143 @@ TEST_CASE("admin API: /api/test/telegram returns an error on a non-leader") {
         std::string::npos);
   node.stop();
 }
+
+TEST_CASE("admin API: pairing routes expose state, PIN, deny, scan, retry, and unpair") {
+  std::mt19937 rng(static_cast<uint32_t>(::getpid()) ^ 0x9a17u);
+  int mesh_port = adminFreePort(rng);
+  int http_port = adminFreePort(rng);
+  REQUIRE(mesh_port > 0);
+  REQUIRE(http_port > 0);
+
+  NodeOptions o;
+  o.data_dir = ":memory:";
+  o.name = "pairing-http";
+  o.role = "door_station";
+  o.door = "d_front";
+  o.listen_addr = "127.0.0.1:" + std::to_string(mesh_port);
+  o.psk.fill(0x44);  // boot.json の平文鍵で起動した既存クラスタ参加済み端末。
+  o.enable_beacon = false;
+  o.http_port = http_port;
+  o.caps_json = "{}";
+  o.mesh_timing_template = adminTiming();
+  o.use_mesh_timing_template = true;
+  Node node(o);
+  std::map<std::string, std::string> secrets;
+  std::vector<std::string> deleted;
+  node.setSecureStore(
+      [&](const std::string& key) {
+        auto it = secrets.find(key);
+        return it == secrets.end() ? std::string() : it->second;
+      },
+      [&](const std::string& key, const std::string& value) {
+        secrets[key] = value;
+        return true;
+      });
+  node.setSecureDelete([&](const std::string& key) {
+    deleted.push_back(key);
+    return secrets.erase(key) > 0;
+  });
+  REQUIRE(node.start());
+
+  // ペアリング系はすべて管理セッション必須。公開プレフィックスには入れない。
+  for (const char* path : {"/api/pairing/start", "/api/pairing/stop", "/api/pairing/deny",
+                           "/api/pairing/retry-persist", "/api/pairing/unpair",
+                           "/api/pairing/scan"}) {
+    CHECK(adminReq(http_port, "POST", path, "{}").find("401") != std::string::npos);
+  }
+  CHECK(adminReq(http_port, "GET", "/api/pairing").find("401") != std::string::npos);
+
+  const std::string sess = adminLogin(http_port);
+
+  {
+    auto d = bodyJson(adminReq(http_port, "GET", "/api/pairing", "", sess));
+    REQUIRE(d);
+    CHECK(json::getString(d.get(), "state") == "ready");
+    CHECK(json::getString(d.get(), "psk_source") == "boot_plaintext");
+    CHECK(cJSON_IsNull(json::get(d.get(), "psk_ref")));
+    CHECK(json::getString(d.get(), "pair_qr").rfind("doorbell-pair:", 0) == 0);
+    CHECK(json::getInt(json::get(d.get(), "home"), "member_count", 0) == 1);
+  }
+
+  // start は「まとめて追加」の窓と PIN を一度に返す。
+  std::string pin;
+  {
+    auto d = bodyJson(adminReq(http_port, "POST", "/api/pairing/start", "{\"seconds\":600}", sess));
+    REQUIRE(d);
+    CHECK(json::getBool(d.get(), "ok"));
+    pin = json::getString(d.get(), "pin");
+    CHECK(pin.size() == 6);
+    CHECK(json::getInt(d.get(), "expires_s", 0) > 0);
+    CHECK_FALSE(json::getString(d.get(), "host").empty());
+  }
+  {
+    auto d = bodyJson(adminReq(http_port, "GET", "/api/pairing", "", sess));
+    REQUIRE(d);
+    const cJSON* token = json::get(d.get(), "token");
+    CHECK(json::getBool(token, "active"));
+    CHECK(json::getString(token, "pin") == pin);
+    CHECK(json::getInt(token, "attempts_left", 0) == 3);
+    CHECK(json::getBool(json::get(d.get(), "pending"), "pairing_mode"));
+  }
+
+  CHECK(json::getBool(
+      bodyJson(adminReq(http_port, "POST", "/api/pairing/stop", "{}", sess)).get(), "ok"));
+  {
+    auto d = bodyJson(adminReq(http_port, "GET", "/api/pairing", "", sess));
+    REQUIRE(d);
+    CHECK_FALSE(json::getBool(json::get(d.get(), "pending"), "pairing_mode"));
+    // 停止しても PIN は生きたまま（入力中の端末を締め出さない）。
+    CHECK(json::getBool(json::get(d.get(), "token"), "active"));
+  }
+
+  CHECK(adminReq(http_port, "POST", "/api/pairing/deny", "{}", sess).find("400") !=
+        std::string::npos);
+  CHECK(json::getBool(
+      bodyJson(adminReq(http_port, "POST", "/api/pairing/deny",
+                        "{\"id\":\"00000000000000000000000000000001\"}", sess))
+          .get(),
+      "ok"));
+
+  // 貼り付け経路。壊れた文字列は 400、正しい QR 文字列は招待として受理される。
+  CHECK(adminReq(http_port, "POST", "/api/pairing/scan", "{\"text\":\"https://example.invalid\"}",
+                 sess)
+            .find("bad_qr") != std::string::npos);
+  const std::string qr = "doorbell-pair:127.0.0.1:1|00000000000000000000000000000002|" +
+                         std::string(64, 'a');
+  CHECK(json::getBool(
+      bodyJson(adminReq(http_port, "POST", "/api/pairing/scan", "{\"text\":\"" + qr + "\"}", sess))
+          .get(),
+      "ok"));
+
+  // すでに保存済み（起動時から鍵を持っている）端末では retry-persist は何もしない冪等な
+  // 成功応答になる。書き直しが要るのは persist_error のときだけ。
+  CHECK(json::getBool(
+      bodyJson(adminReq(http_port, "POST", "/api/pairing/retry-persist", "{}", sess)).get(), "ok"));
+  CHECK(secrets.empty());
+  {
+    auto d = bodyJson(adminReq(http_port, "GET", "/api/pairing", "", sess));
+    REQUIRE(d);
+    CHECK(json::getString(d.get(), "state") == "ready");
+    CHECK(json::getBool(d.get(), "persistence_ready"));
+  }
+
+  CHECK(json::getBool(bodyJson(adminReq(http_port, "POST", "/api/pairing/unpair", "{}", sess)).get(),
+                      "ok"));
+  CHECK(deleted == std::vector<std::string>{"mesh.psk"});
+  {
+    auto d = bodyJson(adminReq(http_port, "GET", "/api/pairing", "", sess));
+    REQUIRE(d);
+    CHECK(json::getString(d.get(), "state") == "unpaired");
+    CHECK(json::getString(d.get(), "psk_source") == "none");
+    CHECK_FALSE(json::getBool(d.get(), "paired"));
+  }
+
+  // クラスタ未参加の端末は「追加」できない。旧 /mode も新 /start も 409 で断る。
+  CHECK(adminReq(http_port, "POST", "/api/pairing/mode", "{\"seconds\":600}", sess)
+            .find("HTTP/1.1 409") == 0);
+  const std::string refused =
+      adminReq(http_port, "POST", "/api/pairing/start", "{\"seconds\":600}", sess);
+  CHECK(refused.find("HTTP/1.1 409") == 0);
+  CHECK(refused.find("host_unpaired") != std::string::npos);
+  node.stop();
+}

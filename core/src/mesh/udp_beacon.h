@@ -8,6 +8,7 @@
 #include <array>
 #include <atomic>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <thread>
 
@@ -28,9 +29,9 @@ class UdpBeacon : public IDiscovery {
   void announce(const std::string& node_id, const std::string& addr) override;
   void stop() override;
 
-  void setPairAnnounce(bool on, const std::string& name, const std::string& role,
-                       const std::string& pk) override;
+  void setPairAnnounce(const PairAnnounce& announce) override;
   void setPairFound(std::function<void(const PairBeacon&)> cb) override;
+  void setPsk(const std::array<uint8_t, 32>& psk) override;
 
 
   int64_t sentCount() const { return sent_.load(); }
@@ -45,6 +46,9 @@ class UdpBeacon : public IDiscovery {
   Runloop& loop_;
 
   [[maybe_unused]] net::Init winsock_;
+  // mu_ guards every field the receive thread also touches: the live PSK, the identity used to
+  // verify a HELLO MAC, and the discovery callbacks that Mesh reassigns when the node pairs.
+  mutable std::mutex mu_;
   std::array<uint8_t, 32> psk_;
   std::string group_;
   uint16_t port_;
@@ -56,7 +60,7 @@ class UdpBeacon : public IDiscovery {
 
 
   std::atomic<bool> pair_on_{false};
-  std::string pair_name_, pair_role_, pair_pk_;
+  PairAnnounce pair_;
   uint64_t timer_id_ = 0;
   net::socket_t send_fd_ = net::kInvalidSocket;
   net::socket_t recv_fd_ = net::kInvalidSocket;
