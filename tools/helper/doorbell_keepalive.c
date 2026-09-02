@@ -44,6 +44,8 @@
 #define DB_CRASH_WINDOW_MS 300000ULL
 /* Cold boot: launchd starts this daemon long before SpringBoard exists. */
 #define DB_BOOT_GRACE_MS 20000ULL
+/* Bounded re-open interval for a present app that never starts its heartbeat. */
+#define DB_ACTIVATE_INTERVAL_MS 15000ULL
 /* Bounded re-scan interval for the fixed process-presence probe. */
 #define DB_PRESENCE_SCAN_MS 1000ULL
 /* Absolute cap on launches performed while safe mode is latched. */
@@ -97,6 +99,7 @@ typedef struct {
   uint64_t startup_timeout_ms;
   uint64_t terminate_grace_ms;
   uint64_t boot_grace_ms;
+  uint64_t activate_interval_ms;
   uint64_t log_max_bytes;
   unsigned int safe_mode_launch_cap;
   double time_scale;
@@ -125,6 +128,9 @@ typedef struct {
   pid_t app_pid;
   pid_t terminating_pid;
   pid_t launcher_pid;
+  pid_t nudge_pid;
+  uint64_t next_activate_ms;
+  unsigned int activation_nudges;
   uint64_t last_sequence;
   uint64_t last_heartbeat_ms;
   uint64_t startup_deadline_ms;
@@ -702,7 +708,8 @@ static int db_render_status(db_state *state, uint64_t now, char *output,
       "\"next_restart_seconds\":%llu,\"maintenance_remaining_seconds\":%llu,"
       "\"peer_credentials\":\"%s\",\"last_reason\":\"%s\","
       "\"configured_mode\":\"%s\",\"disabled_by_file\":%s,"
-      "\"launch_inhibited\":%s,\"ui_ready\":%s,\"app_process_present\":%s}\n",
+      "\"launch_inhibited\":%s,\"ui_ready\":%s,\"app_process_present\":%s,"
+      "\"activation_nudges\":%u}\n",
       state->disabled_by_file ? "off" : db_mode_name(state->config.mode),
       db_supervision_state(state, now),
       state->armed && !state->disabled_by_file ? "true" : "false",
@@ -717,7 +724,8 @@ static int db_render_status(db_state *state, uint64_t now, char *output,
       state->disabled_by_file ? "true" : "false",
       state->launch_inhibited ? "true" : "false",
       !db_presence_gate_enabled(state) || state->ui_ready ? "true" : "false",
-      state->presence_present ? "true" : "false");
+      state->presence_present ? "true" : "false",
+      state->activation_nudges);
 }
 
 static bool db_write_status(db_state *state, uint64_t now) {
@@ -1011,6 +1019,69 @@ static bool db_launch_app(db_state *state, uint64_t now) {
   return true;
 }
 
+/* iOS 5 starts a fresh process from `uiopen` without activating it: Core comes up
+   and listens, but SpringBoard leaves the app in the background (or behind the
+   post-boot lock screen), so no heartbeat ever arrives and the screen stays on the
+   launcher. A second `uiopen` against the running process activates it (observed
+   on iPad 1, iOS 5.1.1). While a present app stays silent, re-run the fixed
+   launcher on a bounded interval. This is a nudge, not a launch: it charges no
+   failure, arms no backoff, counts against no cap, and stops on the first
+   heartbeat. After a boot it also brings the app to the front as soon as the
+   operator unlocks the device. */
+static void db_activate_app(db_state *state, uint64_t now) {
+  static char *const ios_argv[] = {
+      (char *)"/usr/bin/uiopen", (char *)"doorbell://", NULL};
+  char *const *arguments = NULL;
+  const char *executable = NULL;
+  bool drop_identity = false;
+  uint64_t interval;
+  pid_t child;
+  if (state->config.activate_interval_ms == 0) return;
+  if (!db_presence_gate_enabled(state) || !state->ui_ready) return;
+  if (state->launch_inhibited || state->stopping) return;
+  if (state->next_activate_ms != 0 && now < state->next_activate_ms) return;
+  if (state->nudge_pid > 0 && db_pid_alive(state->nudge_pid)) return;
+  if (state->config.profile == DB_PROFILE_IOS5) {
+    executable = ios_argv[0];
+    arguments = ios_argv;
+    drop_identity = true;
+#ifdef DB_KEEPALIVE_TESTING
+  } else if (state->config.profile == DB_PROFILE_TEST) {
+    static char *test_argv[2];
+    test_argv[0] = (char *)state->config.test_exec;
+    test_argv[1] = NULL;
+    executable = test_argv[0];
+    arguments = test_argv;
+#endif
+  }
+  if (executable == NULL || arguments == NULL) return;
+  if (!db_fixed_executable_allowed(executable)) return;
+  interval = (uint64_t)((double)state->config.activate_interval_ms * state->config.time_scale);
+  if (interval == 0) interval = 1;
+  state->next_activate_ms = now + interval;
+  child = fork();
+  if (child < 0) return;
+  if (child == 0) {
+    setenv("DOORBELL_ACTIVATE", "1", 1);
+    if (state->safe_mode) setenv("DOORBELL_SAFE_MODE", "1", 1);
+    else unsetenv("DOORBELL_SAFE_MODE");
+    if (drop_identity) {
+      gid_t child_gid = state->config.socket_gid_set
+                            ? state->config.socket_gid
+                            : (gid_t)state->config.app_uid;
+      if (setgroups(0, NULL) != 0 || setgid(child_gid) != 0 ||
+          setuid(state->config.app_uid) != 0) _exit(126);
+    }
+    execv(executable, arguments);
+    _exit(127);
+  }
+  state->nudge_pid = child;
+  state->activation_nudges++;
+  state->status_dirty = true;
+  db_log("doorbell-keepalive: activation nudge %u for a present app without heartbeat\n",
+         state->activation_nudges);
+}
+
 /* The launcher is fire-and-forget on iOS 5, so its exit status is the only direct
    evidence that `uiopen` reached SpringBoard. Discarding it turned every failed
    launch into an indistinguishable 30-second startup timeout. */
@@ -1018,6 +1089,11 @@ static void db_reap_children(db_state *state, uint64_t now) {
   int status;
   pid_t child;
   while ((child = waitpid(-1, &status, WNOHANG)) > 0) {
+    if (child == state->nudge_pid) {
+      /* Activation nudges are advisory: their exit status is never a failure. */
+      state->nudge_pid = 0;
+      continue;
+    }
     if (child != state->launcher_pid) continue;
     state->launcher_pid = 0;
     if (!state->waiting_start) continue;
@@ -1487,6 +1563,7 @@ static void db_supervise(db_state *state, uint64_t now) {
       state->waiting_start = false;
       state->next_restart_ms = 0;
       db_set_reason(state, "launch_pending_no_heartbeat");
+      db_activate_app(state, now);
       return;
     }
     db_record_failure(state, "startup_timeout", now);
@@ -1496,6 +1573,7 @@ static void db_supervise(db_state *state, uint64_t now) {
       (state->next_restart_ms == 0 || now >= state->next_restart_ms)) {
     if (state->presence_present) {
       db_set_reason(state, "launch_pending_no_heartbeat");
+      db_activate_app(state, now);
       return;
     }
     if (now < state->boot_grace_deadline_ms) {
@@ -1517,7 +1595,7 @@ static void db_usage(const char *program) {
           "usage: %s --socket PATH --status PATH --marker PATH --mode-file PATH "
           "--mode off|auto|on "
           "--profile ios5|android --app-uid UID [--socket-gid GID] "
-          "[--disable-file PATH] [--log-max-bytes BYTES]\n"
+          "[--disable-file PATH] [--log-max-bytes BYTES] [--activate-interval-ms MS]\n"
           "       %s --control begin|end|status|safe-mode-clear --socket PATH "
           "[--seconds 1..3600]\n",
           program, program);
@@ -1532,6 +1610,7 @@ static bool db_parse_arguments(int argc, char **argv, db_config *config) {
   config->startup_timeout_ms = DB_STARTUP_TIMEOUT_MS;
   config->terminate_grace_ms = DB_TERMINATE_GRACE_MS;
   config->boot_grace_ms = DB_BOOT_GRACE_MS;
+  config->activate_interval_ms = DB_ACTIVATE_INTERVAL_MS;
   config->log_max_bytes = DB_LOG_MAX_BYTES_DEFAULT;
   config->safe_mode_launch_cap = DB_SAFE_MODE_LAUNCH_CAP;
   config->time_scale = 1.0;
@@ -1588,6 +1667,8 @@ static bool db_parse_arguments(int argc, char **argv, db_config *config) {
       config->safe_mode_launch_cap = (unsigned int)number;
     } else if (strcmp(option, "--boot-grace-ms") == 0) {
       if (!db_parse_u64(value, &config->boot_grace_ms)) return false;
+    } else if (strcmp(option, "--activate-interval-ms") == 0) {
+      if (!db_parse_u64(value, &config->activate_interval_ms)) return false;
     } else if (strcmp(option, "--test-stream") == 0) {
       if (strcmp(value, "yes") != 0) return false;
       config->test_stream = true;

@@ -158,6 +158,18 @@ setup was relaunched on every startup timeout forever. Both sides are fixed: the
 When no heartbeat has arrived but a `Doorbell` process owned by the app UID exists, the state is
 `launch_pending_no_heartbeat` — the helper neither relaunches nor charges a failure.
 
+### Activation nudge (iOS 5 `uiopen` starts the app in the background)
+
+Observed on iPad 1 / iOS 5.1.1: a process started by the helper's `uiopen` comes up with Core
+running and listening, but SpringBoard never activates it — no heartbeat arrives and the screen
+stays on the launcher, or on the post-boot lock screen. A second `uiopen` against the running
+process activates it. While a present app stays silent (`launch_pending_no_heartbeat` with
+`app_process_present` true and SpringBoard up), the helper therefore re-runs the fixed launcher
+every `--activate-interval-ms` (default 15000; `0` disables). A nudge is not a launch: it charges
+no failure, arms no backoff, counts against no cap, runs with `DOORBELL_ACTIVATE=1`, and stops on
+the first heartbeat. After a boot the first nudge after the operator unlocks the device brings the
+app to the front. Status reports the running total as `activation_nudges`.
+
 ### Expected exits
 
 An exit the system asked for is not a crash. A `stopping` heartbeat marks the next process

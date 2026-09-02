@@ -478,10 +478,51 @@ class UnprovisionedAppTests(unittest.TestCase):
                     )
                     time.sleep(0.5)
                     status = read_status(helper.status)
-                    self.assertFalse(launch_log.exists())
+                    # Activation nudges may run, but nothing may be *launched*.
+                    if launch_log.exists():
+                        lines = launch_log.read_text(encoding="utf-8").splitlines()
+                        self.assertTrue(lines and all("activate=1" in l for l in lines))
                     self.assertTrue(status["app_process_present"])
                     self.assertEqual(status["restart_count_5m"], 0)
                     self.assertFalse(status["safe_mode"])
+            finally:
+                if app.poll() is None:
+                    app.terminate()
+                    app.wait(timeout=2)
+
+    def test_present_silent_app_gets_bounded_activation_nudges(self):
+        """iOS 5 `uiopen` starts the app in the background; a re-open activates it."""
+        with tempfile.TemporaryDirectory(prefix="dbh-nudge-", dir="/tmp") as temporary:
+            root = Path(temporary)
+            launch_log = root / "launch.log"
+            processes = root / "processes"
+            app = subprocess.Popen(["/bin/sleep", "8"])
+            try:
+                processes.write_text(
+                    f"SpringBoard\nDoorbell {app.pid}\n", encoding="utf-8"
+                )
+                with HelperProcess(
+                    root, "on",
+                    extra=["--test-process-file", str(processes),
+                           "--boot-grace-ms", "0", "--activate-interval-ms", "20000"],
+                    DB_KEEPALIVE_TEST_LOG=str(launch_log),
+                ) as helper:
+                    wait_until(
+                        lambda: read_status(helper.status)["state"]
+                        == "launch_pending_no_heartbeat"
+                    )
+                    wait_until(
+                        lambda: launch_log.exists()
+                        and launch_log.read_text(encoding="utf-8").count("activate=1") >= 2
+                    )
+                    status = read_status(helper.status)
+                    lines = launch_log.read_text(encoding="utf-8").splitlines()
+                    self.assertTrue(all("activate=1" in l for l in lines))
+                    self.assertEqual(status["state"], "launch_pending_no_heartbeat")
+                    self.assertEqual(status["restart_count_5m"], 0)
+                    self.assertGreaterEqual(status["activation_nudges"], 2)
+                    self.assertFalse(status["safe_mode"])
+                    self.assertEqual(status["app_pid"], 0)
             finally:
                 if app.poll() is None:
                     app.terminate()

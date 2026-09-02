@@ -4279,6 +4279,8 @@ struct Node::Impl {
           std::lock_guard<std::mutex> lk(motion_mu);
           motion.feed(f);
         }
+        // Scan mode must see core-owned frames too; submit() only copies while scanning.
+        qr_scanner.submit(f);
         if (encoder) encoder->feed(f);
         frame_bus.push(std::move(f));
       }));
