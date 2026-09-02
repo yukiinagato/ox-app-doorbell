@@ -38,9 +38,35 @@ class App : Application(), DoorbellCore.Listener {
     var safeMode: Boolean = false
         private set
 
+    private val foregroundListeners = ForegroundListenerRegistry()
+
     /** Foreground Activity that receives Core UI events. */
+    val activityListener: DoorbellCore.Listener?
+        get() = foregroundListeners.current
+
+    /** Called from Activity.onResume so a screen closing above never silences the one below. */
+    fun bindForeground(listener: DoorbellCore.Listener) = foregroundListeners.bind(listener)
+
+    /** Called from Activity.onPause and onDestroy. */
+    fun unbindForeground(listener: DoorbellCore.Listener) = foregroundListeners.unbind(listener)
+
     @Volatile
-    var activityListener: DoorbellCore.Listener? = null
+    private var pairingDeferredForSession = false
+
+    /**
+     * The operator chose "set up later" on the onboarding screen. The main UI then keeps a
+     * persistent banner instead of relaunching onboarding on every resume.
+     */
+    fun deferPairing() {
+        pairingDeferredForSession = true
+    }
+
+    /** Tapping the banner or the maintenance menu asks for onboarding again. */
+    fun resumePairingSetup() {
+        pairingDeferredForSession = false
+    }
+
+    val pairingDeferred: Boolean get() = pairingDeferredForSession
 
     @Volatile
     var incomingActivity: IncomingActivity? = null
@@ -143,6 +169,9 @@ class App : Application(), DoorbellCore.Listener {
         }
         if (eventType == "emergency") emergencyAlerts.onCoreEvent(ev)
         if (eventType == "pairing_persistence_error") pairingPersistence.recordFailure()
+        if (eventType == "pairing_state" &&
+            ev.optString("state") == PairingModel.UNPAIRED) onClusterLeft()
+        if (eventType == "pairing_revoked") pairingPersistence.recordFailure()
         val forwarded = if (eventType == "paired") {
             val persisted = onPaired(ev)
             JSONObject(ev.toString()).apply {
@@ -446,11 +475,41 @@ class App : Application(), DoorbellCore.Listener {
         android.os.Handler(mainLooper).post {
             android.widget.Toast.makeText(
                 this,
-                if (persisted) "配対しました" else "配対鍵を安全に保存できませんでした",
+                getString(if (persisted) R.string.pair_joined else R.string.pair_persist_error_title),
                 android.widget.Toast.LENGTH_LONG,
             ).show()
         }
         return persisted
+    }
+
+    /**
+     * Core reported that this device holds no cluster key any more, either because the
+     * administrator revoked it or because the maintenance menu cleared the pairing. Drop the
+     * boot reference so the shell fails closed and reopens onboarding.
+     */
+    internal fun onClusterLeft() {
+        // A failed join on a device that never had a key also reports "unpaired"; that must not
+        // discard the seed peers this device was configured with.
+        if (!BootConfig.hasSecureMeshReference(boot.rawJson)) return
+        pairingPersistence.recordFailure()
+        val rewritten = BootConfig.clearPskReference(File(filesDir, "boot.json"))
+        if (rewritten != null) {
+            boot = BootConfig.load(File(filesDir, "boot.json"))
+            Log.i(TAG, "cluster left: cleared the secure PSK reference and seeds")
+        }
+        pairingPersistence.initialize(BootConfig.hasSecureMeshReference(boot.rawJson))
+    }
+
+    /** True once core reports "ready" and the shell has its own durable secure reference. */
+    internal fun pairingReady(): Boolean {
+        if (!coreOk) return false
+        val pairing = core.pairingInfo() ?: return false
+        if (PairingModel.state(pairing) != PairingModel.READY) return false
+        return pairingPersistence.canMarkReady(
+            pairing.optBoolean("paired"),
+            pairing.optBoolean("persistence_ready"),
+            BootConfig.hasSecureMeshReference(boot.rawJson),
+        )
     }
 
     private fun migrateLegacyPairingSecret() {

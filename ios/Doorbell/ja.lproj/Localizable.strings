@@ -150,6 +150,12 @@
 "admin.locked" = "管理パスワードの入力を 10 分間ロックしました";
 "admin.login" = "ログイン";
 "admin.logs" = "ログ";
+"admin.menu_add_device" = "デバイスを追加";
+"admin.menu_boot_setup" = "初期設定";
+"admin.menu_close" = "閉じる";
+"admin.menu_exit_kiosk" = "キオスクを終了";
+"admin.menu_info" = "本機情報 / Debug";
+"admin.menu_title" = "メンテナンス";
 "admin.mock_audio_play" = "mock: %@ を再生";
 "admin.motion" = "動体検知";
 "admin.motion_interval" = "最小間隔 (秒)";
@@ -462,6 +468,7 @@
 "pair.err.timeout" = "応答がありませんでした。もう一度お試しください";
 "pair.err.unknown" = "追加できませんでした。もう一度お試しください";
 "pair.err_detail" = "詳細: %@";
+"pair.join_required" = "接続先とペアリング PIN を入力してください";
 "pair.join_with_code" = "ペアリング PIN で参加";
 "pair.joined" = "クラスタに参加しました";
 "pair.joining" = "クラスタに参加しています…";
@@ -477,7 +484,9 @@
 "pair.qr_caption" = "別の端末でこの QR を読み取ると追加できます";
 "pair.retry" = "再試行";
 "pair.revoked" = "この端末はクラスタから削除されました";
+"pair.scan_camera_denied" = "カメラの使用が許可されていません。端末の設定でカメラを許可してください。";
 "pair.scan_hint" = "新しい端末に表示された追加用 QR に合わせてください";
+"pair.scan_no_camera" = "この端末にはカメラがありません。別の端末で読み取るか、ペアリング PIN を使ってください。";
 "pair.scan_qr" = "QR を読み取る";
 "pair.searching" = "近くの端末を探しています…";
 "pair.searching_hint" = "クラスタに参加済みの端末か管理画面で「追加」を押してください";

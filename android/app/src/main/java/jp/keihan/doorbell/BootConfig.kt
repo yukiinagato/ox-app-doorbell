@@ -136,6 +136,27 @@ class BootConfig private constructor(
             } catch (_: Exception) { null }
         }
 
+        /**
+         * Drop the cluster secret reference and seeds after core reported state "unpaired".
+         * Returns the rewritten boot JSON, or null when nothing had to change or the write failed.
+         */
+        fun clearPskReference(file: File): String? {
+            val cur = readValidJson(file)
+                ?: readValidJson(File(file.parentFile, file.name + ".bak"))
+                ?: return null
+            return try {
+                val d = JSONObject(cur)
+                if (!d.has("psk_ref") && !d.has("psk_hex") && !d.has("seed_peers")) return null
+                d.remove("psk_ref")
+                d.remove("psk_hex")
+                d.remove("seed_peers")
+                val js = d.toString()
+                writeAndRename(File(file.parentFile, file.name + ".bak"), js)
+                writeAndRename(file, js)
+                js
+            } catch (_: Exception) { null }
+        }
+
         fun hasSecureMeshReference(rawJson: String): Boolean = try {
             JSONObject(rawJson).optString("psk_ref") == "secret:mesh.psk"
         } catch (_: Exception) { false }

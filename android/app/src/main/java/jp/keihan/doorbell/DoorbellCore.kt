@@ -106,6 +106,9 @@ class DoorbellCore(context: Context) {
 
     fun status(): JSONObject? = parse(if (handle != 0L) nativeStatusJson(handle) else null)
 
+    /** Diagnostic snapshot for the maintenance information screen. */
+    fun debugInfo(): JSONObject? = parse(if (handle != 0L) nativeDebugJson(handle) else null)
+
     fun config(): JSONObject? = parse(if (handle != 0L) nativeConfigJson(handle) else null)
 
     fun capabilities(): JSONObject? =
@@ -183,14 +186,49 @@ class DoorbellCore(context: Context) {
         if (handle != 0L) nativeJoinCluster(handle, host, pin)
     }
 
-    /** Enable pairing mode for the requested duration. */
+    /** Enable pairing mode for the requested duration; zero seconds closes the window. */
     fun setPairingMode(seconds: Int) {
         if (handle != 0L) nativePairingMode(handle, seconds)
     }
 
+    /**
+     * Open the bulk-add window and mint a Pairing PIN in one step. The result carries
+     * ok, host, pin, and expires_s, or ok=false with err.
+     */
+    fun startPairing(seconds: Int): JSONObject? =
+        parse(if (handle != 0L) nativeStartPairingJson(handle, seconds) else null)
+
     /** Approve and invite one pending node. */
     fun inviteDevice(nodeId: String) {
         if (handle != 0L) nativeInviteDevice(handle, nodeId)
+    }
+
+    /** Invite an address, ID, and public key directly, as carried by an Add QR. */
+    fun inviteDirect(addr: String, nodeId: String, pk: String) {
+        if (handle != 0L) nativeInviteDirect(handle, addr, nodeId, pk)
+    }
+
+    /** Drop one pending device and ignore its announcements for a while. */
+    fun denyDevice(nodeId: String) {
+        if (handle != 0L) nativeDenyDevice(handle, nodeId)
+    }
+
+    /** Re-run the secure-store write after pairing state "persist_error". */
+    fun retryPairingPersistence(): Boolean =
+        handle != 0L && nativeRetryPairingPersistence(handle)
+
+    /** Leave the cluster and drop the stored pre-shared key. */
+    fun unpair() {
+        if (handle != 0L) nativeUnpair(handle)
+    }
+
+    /** Decode camera frames already delivered through [onCameraFrame] until stopped. */
+    fun qrScanStart() {
+        if (handle != 0L) nativeQrScanStart(handle)
+    }
+
+    fun qrScanStop() {
+        if (handle != 0L) nativeQrScanStop(handle)
     }
 
     /** Encode QR data as [side length, row-major module values...]. */
@@ -239,6 +277,9 @@ class DoorbellCore(context: Context) {
     @Suppress("unused")
     private fun onSecurePutFromNative(key: String, value: String): Boolean =
         secureStore.put(key, value)
+
+    @Suppress("unused")
+    private fun onSecureDeleteFromNative(key: String): Boolean = secureStore.delete(key)
 
     @Suppress("unused")
     private fun onDeviceInfoFromNative(): String = deviceInfo.snapshot()
@@ -310,10 +351,18 @@ class DoorbellCore(context: Context) {
     private external fun nativeQuickReplyV2(handle: Long, replyId: String, door: String,
                                             callId: String, stageRevision: Int): Boolean
     private external fun nativeVersion(): String
+    private external fun nativeDebugJson(handle: Long): String?
     private external fun nativePairingJson(handle: Long): String?
     private external fun nativeJoinCluster(handle: Long, host: String, pin: String)
     private external fun nativePairingMode(handle: Long, seconds: Int)
+    private external fun nativeStartPairingJson(handle: Long, seconds: Int): String?
     private external fun nativeInviteDevice(handle: Long, nodeId: String)
+    private external fun nativeInviteDirect(handle: Long, addr: String, nodeId: String, pk: String)
+    private external fun nativeDenyDevice(handle: Long, nodeId: String)
+    private external fun nativeRetryPairingPersistence(handle: Long): Boolean
+    private external fun nativeUnpair(handle: Long)
+    private external fun nativeQrScanStart(handle: Long)
+    private external fun nativeQrScanStop(handle: Long)
     private external fun nativeQrEncode(text: String): IntArray?
     private external fun nativeFoundCluster(handle: Long): Boolean
 

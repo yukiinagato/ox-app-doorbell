@@ -155,6 +155,12 @@
     <string name="admin_locked">管理密码输入已锁定 10 分钟</string>
     <string name="admin_login">登录</string>
     <string name="admin_logs">日志</string>
+    <string name="admin_menu_add_device">添加设备</string>
+    <string name="admin_menu_boot_setup">初始设置</string>
+    <string name="admin_menu_close">关闭</string>
+    <string name="admin_menu_exit_kiosk">退出信息亭模式</string>
+    <string name="admin_menu_info">本机信息 / 调试</string>
+    <string name="admin_menu_title">维护</string>
     <string name="admin_mock_audio_play">mock：正在播放 %1$s</string>
     <string name="admin_motion">移动侦测</string>
     <string name="admin_motion_interval">最小间隔 (秒)</string>
@@ -467,6 +473,7 @@
     <string name="pair_err_timeout">没有收到响应。请重试</string>
     <string name="pair_err_unknown">操作未能完成，请重试</string>
     <string name="pair_err_detail">详情: %1$s</string>
+    <string name="pair_join_required">请输入连接地址和配对 PIN</string>
     <string name="pair_join_with_code">使用配对 PIN 加入</string>
     <string name="pair_joined">已加入集群</string>
     <string name="pair_joining">正在加入集群…</string>
@@ -482,7 +489,9 @@
     <string name="pair_qr_caption">用另一台设备扫描此二维码即可添加</string>
     <string name="pair_retry">重试</string>
     <string name="pair_revoked">此设备已从集群中移除</string>
+    <string name="pair_scan_camera_denied">未获得摄像头权限。请在设备设置中允许使用摄像头。</string>
     <string name="pair_scan_hint">请对准新设备上显示的添加二维码</string>
+    <string name="pair_scan_no_camera">此设备没有摄像头。请用其他设备扫描，或改用配对 PIN。</string>
     <string name="pair_scan_qr">扫描二维码</string>
     <string name="pair_searching">正在查找附近设备…</string>
     <string name="pair_searching_hint">请在已加入集群的设备或管理页面上点击“添加”</string>

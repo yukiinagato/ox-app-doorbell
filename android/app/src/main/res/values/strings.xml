@@ -155,6 +155,12 @@ Delete it?</string>
     <string name="admin_locked">Admin password entry locked for 10 minutes</string>
     <string name="admin_login">Log in</string>
     <string name="admin_logs">Logs</string>
+    <string name="admin_menu_add_device">Add a device</string>
+    <string name="admin_menu_boot_setup">Initial setup</string>
+    <string name="admin_menu_close">Close</string>
+    <string name="admin_menu_exit_kiosk">Exit kiosk</string>
+    <string name="admin_menu_info">Device information / Debug</string>
+    <string name="admin_menu_title">Maintenance</string>
     <string name="admin_mock_audio_play">mock: playing %1$s</string>
     <string name="admin_motion">Motion detection</string>
     <string name="admin_motion_interval">Min interval (s)</string>
@@ -467,6 +473,7 @@ Delete it?</string>
     <string name="pair_err_timeout">No response. Try again</string>
     <string name="pair_err_unknown">Couldn\'t complete that. Please try again</string>
     <string name="pair_err_detail">Details: %1$s</string>
+    <string name="pair_join_required">Enter the address and the Pairing PIN</string>
     <string name="pair_join_with_code">Join with a Pairing PIN</string>
     <string name="pair_joined">Joined the Cluster</string>
     <string name="pair_joining">Joining the Cluster…</string>
@@ -482,7 +489,9 @@ Delete it?</string>
     <string name="pair_qr_caption">Scan this QR from another device to add this one</string>
     <string name="pair_retry">Retry</string>
     <string name="pair_revoked">This device was removed from the Cluster</string>
+    <string name="pair_scan_camera_denied">Camera access is not allowed. Grant camera permission in the device settings.</string>
     <string name="pair_scan_hint">Point at the Add QR shown on the new device</string>
+    <string name="pair_scan_no_camera">This device has no camera. Scan from another device, or use a Pairing PIN.</string>
     <string name="pair_scan_qr">Scan QR</string>
     <string name="pair_searching">Looking for nearby devices…</string>
     <string name="pair_searching_hint">Press &quot;Add&quot; on a device already in the Cluster, or on the admin page</string>

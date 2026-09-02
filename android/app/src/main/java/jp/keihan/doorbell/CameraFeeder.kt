@@ -58,18 +58,18 @@ internal class CameraFeeder(private val core: DoorbellCore) {
      * oversized MJPEG frames, while the H.264 path uses the requested codec dimensions directly.
      */
     fun start(holder: SurfaceHolder, targetW: Int = 640, targetH: Int = 480,
-              targetFps: Int = 0): Boolean =
-        startInternal(holder, targetW, targetH, targetFps)
+              targetFps: Int = 0, preferBack: Boolean = false): Boolean =
+        startInternal(holder, targetW, targetH, targetFps, preferBack)
 
     /** Service-owned capture path; no Activity surface is required. */
     fun startHeadless(targetW: Int = 640, targetH: Int = 480,
                       targetFps: Int = 0): Boolean =
-        startInternal(null, targetW, targetH, targetFps)
+        startInternal(null, targetW, targetH, targetFps, preferBack = false)
 
     private fun startInternal(holder: SurfaceHolder?, targetW: Int, targetH: Int,
-                              targetFps: Int): Boolean {
+                              targetFps: Int, preferBack: Boolean): Boolean {
         stop()
-        val id = pickCameraId()
+        val id = pickCameraId(preferBack)
         if (id < 0) return false
         return try {
             val cam = Camera.open(id)
@@ -129,7 +129,17 @@ internal class CameraFeeder(private val core: DoorbellCore) {
         height = 0
     }
 
-    private fun pickCameraId(): Int {
+    /**
+     * The visitor camera faces the visitor, so it is the front one. A QR scanner points away
+     * from the operator, so it prefers a back-facing lens and falls back to whatever exists.
+     */
+    private fun pickCameraId(preferBack: Boolean): Int {
+        if (!preferBack) return selectedCamera?.id ?: -1
+        val info = Camera.CameraInfo()
+        for (i in 0 until Camera.getNumberOfCameras()) {
+            Camera.getCameraInfo(i, info)
+            if (info.facing == Camera.CameraInfo.CAMERA_FACING_BACK) return i
+        }
         return selectedCamera?.id ?: -1
     }
 
@@ -156,5 +166,12 @@ internal class CameraFeeder(private val core: DoorbellCore) {
 
     companion object {
         private const val TAG = "doorbell-camera"
+
+        /** Whether this hardware has any camera at all; TV boxes and some panels have none. */
+        fun deviceHasCamera(): Boolean = try {
+            Camera.getNumberOfCameras() > 0
+        } catch (_: Exception) {
+            false
+        }
     }
 }

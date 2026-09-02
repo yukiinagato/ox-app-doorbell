@@ -60,6 +60,7 @@ struct Bridge {
   jmethodID mid_https = nullptr;
   jmethodID mid_secure_get = nullptr;
   jmethodID mid_secure_put = nullptr;
+  jmethodID mid_secure_delete = nullptr;
   jmethodID mid_device_info = nullptr;
   jclass cls_string = nullptr;        // java/lang/String (GlobalRef)
   jmethodID mid_string_ctor = nullptr;  // String(byte[], String charset)
@@ -232,6 +233,18 @@ int platSecurePut(void* user, const char* key, const char* value) {
   return !exception && ok == JNI_TRUE ? 0 : -1;
 }
 
+int platSecureDelete(void* user, const char* key) {
+  auto* b = static_cast<Bridge*>(user);
+  JNIEnv* env = envForThisThread();
+  if (!b || !env || !b->obj || !b->mid_secure_delete) return -1;
+  jstring jk = toJString(env, b, key);
+  const jboolean ok = jk ?
+      env->CallBooleanMethod(b->obj, b->mid_secure_delete, jk) : JNI_FALSE;
+  const bool exception = clearJavaException(env, "secure_delete");
+  if (jk) env->DeleteLocalRef(jk);
+  return !exception && ok == JNI_TRUE ? 0 : -1;
+}
+
 int platDeviceInfo(void* user, char** out_json) {
   auto* b = static_cast<Bridge*>(user);
   if (!b || !out_json) return -1;
@@ -286,6 +299,8 @@ Java_jp_keihan_doorbell_DoorbellCore_nativeCreate(JNIEnv* env, jobject thiz, jst
       cls, "onSecureGetFromNative", "(Ljava/lang/String;)Ljava/lang/String;");
   b->mid_secure_put = env->GetMethodID(
       cls, "onSecurePutFromNative", "(Ljava/lang/String;Ljava/lang/String;)Z");
+  b->mid_secure_delete = env->GetMethodID(
+      cls, "onSecureDeleteFromNative", "(Ljava/lang/String;)Z");
   b->mid_device_info = env->GetMethodID(
       cls, "onDeviceInfoFromNative", "()Ljava/lang/String;");
   jclass str = env->FindClass("java/lang/String");
@@ -298,7 +313,8 @@ Java_jp_keihan_doorbell_DoorbellCore_nativeCreate(JNIEnv* env, jobject thiz, jst
   env->DeleteLocalRef(str);
   env->DeleteLocalRef(cls);
   if (!b->obj || !b->cls_string || !b->utf8 || !b->mid_ui_event || !b->mid_tts ||
-      !b->mid_https || !b->mid_secure_get || !b->mid_secure_put || !b->mid_device_info ||
+      !b->mid_https || !b->mid_secure_get || !b->mid_secure_put || !b->mid_secure_delete ||
+      !b->mid_device_info ||
       !b->mid_string_ctor || !b->mid_string_get_bytes) {
     clearJavaException(env, "nativeCreate method lookup");
     if (b->obj) env->DeleteGlobalRef(b->obj);
@@ -318,6 +334,7 @@ Java_jp_keihan_doorbell_DoorbellCore_nativeCreate(JNIEnv* env, jobject thiz, jst
   b->plat.tts_speak = platTtsSpeak;
   b->plat.device_info = platDeviceInfo;
   b->plat.release_buffer = platReleaseBuffer;
+  b->plat.secure_delete = platSecureDelete;
 
   const std::string dir = toUtf8(env, data_dir);
   const std::string boot = toUtf8(env, boot_json);
@@ -626,6 +643,16 @@ Java_jp_keihan_doorbell_DoorbellCore_nativeVersion(JNIEnv* env, jobject) {
   return env->NewStringUTF(db_core_version());
 }
 
+extern "C" JNIEXPORT jstring JNICALL
+Java_jp_keihan_doorbell_DoorbellCore_nativeDebugJson(JNIEnv* env, jobject, jlong h) {
+  Bridge* b = fromHandle(h);
+  if (!b || !b->core) return nullptr;
+  char* s = db_core_debug_json(b->core);
+  jstring out = toJString(env, b, s);
+  db_free(s);
+  return out;
+}
+
 // Pairing discovery and invitation.
 extern "C" JNIEXPORT jstring JNICALL
 Java_jp_keihan_doorbell_DoorbellCore_nativePairingJson(JNIEnv* env, jobject, jlong h) {
@@ -661,6 +688,56 @@ extern "C" JNIEXPORT jboolean JNICALL
 Java_jp_keihan_doorbell_DoorbellCore_nativeFoundCluster(JNIEnv*, jobject, jlong h) {
   Bridge* b = fromHandle(h);
   return (b && b->core && db_core_found_cluster(b->core)) ? JNI_TRUE : JNI_FALSE;
+}
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_jp_keihan_doorbell_DoorbellCore_nativeStartPairingJson(JNIEnv* env, jobject, jlong h,
+                                                            jint seconds) {
+  Bridge* b = fromHandle(h);
+  if (!b || !b->core) return nullptr;
+  char* s = db_core_start_pairing_json(b->core, static_cast<int>(seconds));
+  jstring out = toJString(env, b, s);
+  db_free(s);
+  return out;
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_jp_keihan_doorbell_DoorbellCore_nativeInviteDirect(JNIEnv* env, jobject, jlong h, jstring addr,
+                                                        jstring id, jstring pk) {
+  Bridge* b = fromHandle(h);
+  if (b && b->core)
+    db_core_invite_direct(b->core, toUtf8(env, addr).c_str(), toUtf8(env, id).c_str(),
+                          toUtf8(env, pk).c_str());
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_jp_keihan_doorbell_DoorbellCore_nativeDenyDevice(JNIEnv* env, jobject, jlong h, jstring id) {
+  Bridge* b = fromHandle(h);
+  if (b && b->core) db_core_deny_device(b->core, toUtf8(env, id).c_str());
+}
+
+extern "C" JNIEXPORT jboolean JNICALL
+Java_jp_keihan_doorbell_DoorbellCore_nativeRetryPairingPersistence(JNIEnv*, jobject, jlong h) {
+  Bridge* b = fromHandle(h);
+  return (b && b->core && db_core_retry_pairing_persistence(b->core)) ? JNI_TRUE : JNI_FALSE;
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_jp_keihan_doorbell_DoorbellCore_nativeUnpair(JNIEnv*, jobject, jlong h) {
+  Bridge* b = fromHandle(h);
+  if (b && b->core) db_core_unpair(b->core);
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_jp_keihan_doorbell_DoorbellCore_nativeQrScanStart(JNIEnv*, jobject, jlong h) {
+  Bridge* b = fromHandle(h);
+  if (b && b->core) db_core_qr_scan_start(b->core);
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_jp_keihan_doorbell_DoorbellCore_nativeQrScanStop(JNIEnv*, jobject, jlong h) {
+  Bridge* b = fromHandle(h);
+  if (b && b->core) db_core_qr_scan_stop(b->core);
 }
 
 // Core QR encoding returns [side length, row-major module values...] or null.

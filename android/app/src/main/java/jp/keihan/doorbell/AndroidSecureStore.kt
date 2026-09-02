@@ -71,6 +71,18 @@ internal class AndroidSecureStore(context: Context) {
         }
     }
 
+    /** Remove one secret. A key that was never stored is already in the requested state. */
+    @Synchronized
+    fun delete(key: String): Boolean {
+        if (!validKey(key)) return false
+        return try {
+            prefs.edit().remove(valueKey(key)).commit()
+        } catch (e: Exception) {
+            Log.w(TAG, "secure delete failed for key id", e)
+            false
+        }
+    }
+
     @Synchronized
     fun selfTest(): Boolean {
         val key = "platform.self_test"

@@ -59,6 +59,13 @@ admin.ui_style: { ja: "UI スタイル", en: "UI style", zh: "UI 样式" }
 admin.pin_prompt: { ja: "管理パスワードを入力してください", en: "Enter the admin password", zh: "请输入管理密码" }
 admin.pin_wrong: { ja: "管理パスワードが違います", en: "Wrong admin password", zh: "管理密码错误" }
 admin.locked: { ja: "管理パスワードの入力を 10 分間ロックしました", en: "Admin password entry locked for 10 minutes", zh: "管理密码输入已锁定 10 分钟" }
+# 管理パスワード解除後に出るメンテナンスメニュー (Android キオスク)。
+admin.menu_title: { ja: "メンテナンス", en: "Maintenance", zh: "维护" }
+admin.menu_info: { ja: "本機情報 / Debug", en: "Device information / Debug", zh: "本机信息 / 调试" }
+admin.menu_add_device: { ja: "デバイスを追加", en: "Add a device", zh: "添加设备" }
+admin.menu_boot_setup: { ja: "初期設定", en: "Initial setup", zh: "初始设置" }
+admin.menu_exit_kiosk: { ja: "キオスクを終了", en: "Exit kiosk", zh: "退出信息亭模式" }
+admin.menu_close: { ja: "閉じる", en: "Close", zh: "关闭" }
 admin.login: { ja: "ログイン", en: "Log in", zh: "登录" }
 admin.join: { ja: "既存クラスタに参加", en: "Join existing cluster", zh: "加入现有集群" }
 admin.password: { ja: "管理パスワード", en: "Admin password", zh: "管理密码" }
@@ -631,6 +638,9 @@ pair.retry: { ja: "再試行", en: "Retry", zh: "重试" }
 pair.revoked: { ja: "この端末はクラスタから削除されました", en: "This device was removed from the Cluster", zh: "此设备已从集群中移除" }
 pair.clear_title: { ja: "この端末のペアリングを消去", en: "Clear pairing on this device", zh: "清除此设备的配对" }
 pair.clear_confirm: { ja: "クラスタから離脱し、この端末の設定をすべて消去します。元に戻せません。", en: "This device will leave the Cluster and all of its settings will be erased. This cannot be undone.", zh: "此设备将退出集群并清除其全部设置。此操作无法撤销。" }
+pair.join_required: { ja: "接続先とペアリング PIN を入力してください", en: "Enter the address and the Pairing PIN", zh: "请输入连接地址和配对 PIN" }
+pair.scan_camera_denied: { ja: "カメラの使用が許可されていません。端末の設定でカメラを許可してください。", en: "Camera access is not allowed. Grant camera permission in the device settings.", zh: "未获得摄像头权限。请在设备设置中允许使用摄像头。" }
+pair.scan_no_camera: { ja: "この端末にはカメラがありません。別の端末で読み取るか、ペアリング PIN を使ってください。", en: "This device has no camera. Scan from another device, or use a Pairing PIN.", zh: "此设备没有摄像头。请用其他设备扫描，或改用配对 PIN。" }
 # エラーコード → 表示文言 (全シェル共通)。生のコードは「詳細」行以外に出さない。
 pair.err_detail: { ja: "詳細: {code}", en: "Details: {code}", zh: "详情: {code}" }
 pair.err.bad_pin: { ja: "ペアリング PIN が違います", en: "Wrong Pairing PIN", zh: "配对 PIN 不正确" }
