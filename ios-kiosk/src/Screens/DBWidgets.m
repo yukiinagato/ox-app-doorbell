@@ -799,7 +799,7 @@ static UIColor *DBSosTrackColor(void) {
     _trackInk = [UIColor whiteColor];
 
     _track = [[UIView alloc] init];
-    _track.layer.cornerRadius = 14;
+    _track.layer.cornerRadius = frame.size.height / 2;
     _track.clipsToBounds = YES;
     [self addSubview:_track];
 
@@ -819,7 +819,7 @@ static UIColor *DBSosTrackColor(void) {
     _hint = [[UILabel alloc] init];
     _hint.backgroundColor = [UIColor clearColor];
     _hint.textAlignment = NSTextAlignmentCenter;
-    _hint.font = [UIFont boldSystemFontOfSize:22];
+    _hint.font = [UIFont systemFontOfSize:17];
     _hint.numberOfLines = 1;
     [_track addSubview:_hint];
 
@@ -828,7 +828,7 @@ static UIColor *DBSosTrackColor(void) {
     _hintSecondary = [[UILabel alloc] init];
     _hintSecondary.backgroundColor = [UIColor clearColor];
     _hintSecondary.textAlignment = NSTextAlignmentCenter;
-    _hintSecondary.font = [UIFont systemFontOfSize:16];
+    _hintSecondary.font = [UIFont systemFontOfSize:13];
     _hintSecondary.numberOfLines = 1;
     [_track addSubview:_hintSecondary];
 
@@ -917,7 +917,7 @@ static UIColor *DBSosTrackColor(void) {
   [super layoutSubviews];
   CGSize size = self.bounds.size;
   _track.frame = self.bounds;
-  CGFloat radius = MIN(16, size.height / 2);
+  CGFloat radius = size.height / 2;
   _track.layer.cornerRadius = radius;
   CGFloat inset = 5;
   CGFloat knob = MAX(40, size.height - inset * 2);
