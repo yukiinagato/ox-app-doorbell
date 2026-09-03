@@ -389,10 +389,19 @@ struct BackdropStyle: Equatable {
 /// so no two of them can end up disagreeing about what is behind their text.
 final class ThemeBackgroundView: UIImageView {
 
+    typealias ImageLoader = (_ hash: String, _ path: String?, _ httpPort: Int,
+                             _ completion: @escaping (UIImage?, String) -> Void) -> Void
+
     /// Called once a picture has arrived, so the screen can repaint text against it.
     var onImageLoaded: (() -> Void)?
 
+    /// The hash that supplied the picture currently on screen. It changes only after a successful
+    /// decode, so a failed replacement leaves the last usable wallpaper visible.
     private var loadedHash: String?
+    private var requestedHash: String?
+    private var loadingHash: String?
+    private var activeLoadId = 0
+    private let imageLoader: ImageLoader
     private var paintedColor: String?
 
     /// One label registered for automatic re-inking, held weakly: a screen that goes away must
@@ -423,7 +432,8 @@ final class ThemeBackgroundView: UIImageView {
     /// it, small enough that building it never touches the full-size photograph twice.
     private static let proxySide: CGFloat = 128
 
-    init() {
+    init(imageLoader: @escaping ImageLoader = DoorbellTheme.loadBackgroundImage) {
+        self.imageLoader = imageLoader
         super.init(frame: .zero)
         contentMode = .scaleAspectFill
         clipsToBounds = true
@@ -472,17 +482,43 @@ final class ThemeBackgroundView: UIImageView {
         let hash = ThemeBackgroundView.value("bg_image", display: display, config: config,
                                              nodeId: nodeId) ?? ""
         if hash.isEmpty {
+            requestedHash = nil
+            loadingHash = nil
+            activeLoadId += 1
             loadedHash = nil
             setBackgroundImage(nil)
-        } else if hash != loadedHash || image == nil {
-            loadedHash = hash
-            DoorbellTheme.loadBackgroundImage(
-                hash: hash, path: ConfigUtil.str(display, "theme.bg_image_path"),
-                httpPort: httpPort) { [weak self] picture in
-                    guard let self = self, self.loadedHash == hash else { return }
-                    self.setBackgroundImage(picture)
-                    self.onImageLoaded?()
+        } else {
+            requestedHash = hash
+            guard loadedHash != hash || image == nil else {
+                return skin(display: display, config: config, nodeId: nodeId, palette: palette,
+                            host: host, decorated: color != nil)
+            }
+            guard loadingHash != hash else {
+                return skin(display: display, config: config, nodeId: nodeId, palette: palette,
+                            host: host, decorated: color != nil)
+            }
+            loadingHash = hash
+            activeLoadId += 1
+            let loadId = activeLoadId
+            Self.logLoad(hash: hash, source: "request", result: "started")
+            imageLoader(hash, ConfigUtil.str(display, "theme.bg_image_path"), httpPort) {
+                [weak self] picture, source in
+                guard let self = self else { return }
+                guard self.activeLoadId == loadId, self.requestedHash == hash,
+                      self.loadingHash == hash else {
+                    Self.logLoad(hash: hash, source: source, result: "stale")
+                    return
                 }
+                self.loadingHash = nil
+                guard let picture = picture else {
+                    Self.logLoad(hash: hash, source: source, result: "failed")
+                    return
+                }
+                self.loadedHash = hash
+                self.setBackgroundImage(picture)
+                Self.logLoad(hash: hash, source: source, result: "loaded")
+                self.onImageLoaded?()
+            }
         }
         return skin(display: display, config: config, nodeId: nodeId, palette: palette, host: host,
                     decorated: color != nil)
@@ -525,6 +561,10 @@ final class ThemeBackgroundView: UIImageView {
     func releaseImage() {
         loadedHash = nil
         setBackgroundImage(nil)
+    }
+
+    private static func logLoad(hash: String, source: String, result: String) {
+        IOSAvailability.logDebug("theme image hash=\(hash.prefix(8)) source=\(source) result=\(result)")
     }
 
     /// The ground the whole screen sits on. A picture that is actually drawn is measured here,
@@ -1050,19 +1090,26 @@ enum DoorbellTheme {
 
     /// Loads the theme picture Core named. Core publishes the cached file's path next to the
     /// hash, so a panel that already holds the asset never goes near the network; the node's own
-    /// asset endpoint is the fallback while the file is still arriving. `completion` runs on the
-    /// main queue, and only with an image.
+    /// asset endpoint is the fallback while the file is still arriving. `completion` always runs
+    /// on the main queue so callers can clear in-flight state after failures as well as successes.
     static func loadBackgroundImage(hash: String, path: String?, httpPort: Int,
-                                    completion: @escaping (UIImage) -> Void) {
+                                    completion: @escaping (UIImage?, String) -> Void) {
         if let path = path, !path.isEmpty, let image = UIImage(contentsOfFile: path) {
-            completion(image)
+            completion(image, "disk")
             return
         }
-        guard let url = URL(string: "http://127.0.0.1:\(httpPort)/asset/\(hash)") else { return }
+        guard let url = URL(string: "http://127.0.0.1:\(httpPort)/asset/\(hash)") else {
+            DispatchQueue.main.async { completion(nil, "url") }
+            return
+        }
         URLSession.shared.dataTask(with: url) { data, response, _ in
-            guard let data = data, (response as? HTTPURLResponse)?.statusCode == 200,
-                  let image = UIImage(data: data) else { return }
-            DispatchQueue.main.async { completion(image) }
+            let image: UIImage?
+            if let data = data, (response as? HTTPURLResponse)?.statusCode == 200 {
+                image = UIImage(data: data)
+            } else {
+                image = nil
+            }
+            DispatchQueue.main.async { completion(image, "http") }
         }.resume()
     }
 

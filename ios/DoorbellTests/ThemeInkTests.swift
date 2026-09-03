@@ -451,6 +451,125 @@ final class ThemeInkTests: XCTestCase {
 
 }
 
+final class ThemeBackgroundLoadTests: XCTestCase {
+
+    private func display(_ hash: String) -> [String: Any] {
+        return ["theme": ["bg_color": "#101418", "bg_image": hash]]
+    }
+
+    private func image(_ color: UIColor) -> UIImage {
+        UIGraphicsBeginImageContextWithOptions(CGSize(width: 2, height: 2), true, 1)
+        defer { UIGraphicsEndImageContext() }
+        color.setFill()
+        UIRectFill(CGRect(x: 0, y: 0, width: 2, height: 2))
+        return UIGraphicsGetImageFromCurrentImageContext() ?? UIImage()
+    }
+
+    func testFailureCompletesAndSameHashRetriesWithoutDuplicateRequests() {
+        var requests: [(String, (UIImage?, String) -> Void)] = []
+        let view = ThemeBackgroundView { hash, _, _, completion in
+            requests.append((hash, completion))
+        }
+        let host = UIView()
+        let first = image(.red)
+
+        view.apply(display: display("a"), config: nil, nodeId: "panel", palette: .dark,
+                   httpPort: 0, host: host)
+        view.apply(display: display("a"), config: nil, nodeId: "panel", palette: .dark,
+                   httpPort: 0, host: host)
+        XCTAssertEqual(requests.count, 1, "one in-flight hash has one request")
+
+        requests[0].1(nil, "disk")
+        view.apply(display: display("a"), config: nil, nodeId: "panel", palette: .dark,
+                   httpPort: 0, host: host)
+        XCTAssertEqual(requests.count, 2, "a completed failure leaves the hash retryable")
+        requests[1].1(first, "disk")
+        XCTAssertTrue(view.image === first)
+
+        view.apply(display: display("b"), config: nil, nodeId: "panel", palette: .dark,
+                   httpPort: 0, host: host)
+        XCTAssertEqual(requests.count, 3)
+        requests[2].1(nil, "http")
+        XCTAssertTrue(view.image === first, "a failed replacement keeps the old wallpaper")
+    }
+
+    func testStaleCompletionCannotReplaceTheCurrentHash() {
+        var requests: [(String, (UIImage?, String) -> Void)] = []
+        let view = ThemeBackgroundView { hash, _, _, completion in
+            requests.append((hash, completion))
+        }
+        let host = UIView()
+        let stale = image(.red)
+        let current = image(.blue)
+
+        view.apply(display: display("a"), config: nil, nodeId: "panel", palette: .dark,
+                   httpPort: 0, host: host)
+        view.apply(display: display("b"), config: nil, nodeId: "panel", palette: .dark,
+                   httpPort: 0, host: host)
+        view.apply(display: display("a"), config: nil, nodeId: "panel", palette: .dark,
+                   httpPort: 0, host: host)
+        XCTAssertEqual(requests.count, 3)
+
+        requests[0].1(stale, "http")
+        XCTAssertNil(view.image, "an earlier request for the same hash is still stale")
+        requests[2].1(current, "http")
+        XCTAssertTrue(view.image === current)
+    }
+}
+
+final class UIStyleApplierThemeOwnershipTests: XCTestCase {
+
+    private func config(_ style: [String: Any]?) -> [String: Any]? {
+        guard let style = style else { return nil }
+        return ["devices": ["panel": ["local": ["ui": ["elements":
+                    ["purpose.button": style]]]]]]
+    }
+
+    private func hex(_ color: UIColor?) -> String? {
+        return color.map { DoorbellTheme.hex($0) }
+    }
+
+    func testDefaultPassesPreserveOwnerRecolorsAndRemovalRestoresOnce() {
+        let applier = UIStyleApplier()
+        let button = UIButton(type: .system)
+        button.backgroundColor = .red
+        button.tintColor = .yellow
+        button.setTitleColor(.yellow, for: .normal)
+
+        applier.apply(config: nil, nodeId: "panel", semanticId: "purpose.button", to: button)
+        button.backgroundColor = .blue
+        button.tintColor = .green
+        button.setTitleColor(.green, for: .normal)
+        applier.apply(config: nil, nodeId: "panel", semanticId: "purpose.button", to: button)
+        XCTAssertEqual(hex(button.backgroundColor), "#0000ff")
+        XCTAssertEqual(hex(button.titleColor(for: .normal)), "#00ff00")
+
+        let override: [String: Any] = ["background": "#ffffff", "foreground": "#000000",
+                                       "accent": "#000000"]
+        applier.apply(config: config(override), nodeId: "panel", semanticId: "purpose.button",
+                      to: button)
+        XCTAssertEqual(hex(button.backgroundColor), "#ffffff")
+        XCTAssertEqual(hex(button.titleColor(for: .normal)), "#000000")
+
+        // The owner can repaint while an override is active. That newly rendered theme is what
+        // removal must reveal, rather than the colours from the button's first layout.
+        button.backgroundColor = .purple
+        button.tintColor = .orange
+        button.setTitleColor(.orange, for: .normal)
+        applier.apply(config: config(override), nodeId: "panel", semanticId: "purpose.button",
+                      to: button)
+        applier.apply(config: nil, nodeId: "panel", semanticId: "purpose.button", to: button)
+        XCTAssertEqual(hex(button.backgroundColor), "#800080")
+        XCTAssertEqual(hex(button.titleColor(for: .normal)), "#ff8000")
+
+        button.backgroundColor = .magenta
+        button.setTitleColor(.cyan, for: .normal)
+        applier.apply(config: nil, nodeId: "panel", semanticId: "purpose.button", to: button)
+        XCTAssertEqual(hex(button.backgroundColor), "#ff00ff")
+        XCTAssertEqual(hex(button.titleColor(for: .normal)), "#00ffff")
+    }
+}
+
 /// The darkening over the theme picture, now that an administrator owns it.
 ///
 /// A wallpaper behind text is unreadable however the ink is chosen, so every shell lays a scrim

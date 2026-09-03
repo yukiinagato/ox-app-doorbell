@@ -3913,11 +3913,15 @@ struct Node::Impl {
   }
 
   // Recomputed only when the effective background changes; decoding an image on every status
-  // poll would be pointless work on the oldest hardware in the fleet.
+  // poll would be pointless work on the oldest hardware in the fleet. Asset availability is an
+  // input too: prefetch can make the same configured hash sampleable after configuration has
+  // already been evaluated.
   const ThemeAuto& themeAutoState() {
     const std::string bg_color = themeBgColorOnLoop();
     const std::string bg_image = themeBgImageOnLoop();
-    const std::string input = bg_color + "|" + bg_image;
+    const std::string asset_state = bg_image.empty() ? "none" :
+        (assetCached(bg_image) ? "cached" : "missing");
+    const std::string input = bg_color + "|" + bg_image + "|" + asset_state;
     if (input == theme_auto_input) return theme_auto;
     theme_auto_input = input;
     ThemeAuto next;
