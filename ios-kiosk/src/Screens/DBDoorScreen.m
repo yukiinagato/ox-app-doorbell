@@ -9,6 +9,7 @@
 #import "../Core/DBSemanticStyle.h"
 #import "../Core/DBTexts.h"
 #import "../Core/DBNoticeModel.h"
+#import "../Core/DBIconAsset.h"
 #import "../Core/DBPurposeModel.h"
 #import "../Core/DBUiTheme.h"
 #import "../Media/DBSiren.h"
@@ -78,6 +79,9 @@ typedef enum {
 - (void)publishMediaSourceStatus;
 @end
 
+// The purpose grid's Tabler icon, above its label.
+static const CGFloat kPurposeIconSide = 28;
+
 @implementation DBDoorScreen {
   DBCoreBridge *_core;
   DBBootConfig *_boot;
@@ -132,6 +136,7 @@ typedef enum {
   UILabel *_purposeHint;
   UIScrollView *_purposeScroll;
   NSMutableArray *_purposeButtons;
+  NSMutableArray *_purposeIcons;   // UIImageView or NSNull, aligned with the buttons.
   NSArray *_purposeIds;
   UIView *_languageBar;
   NSMutableArray *_languageButtons;
@@ -182,6 +187,7 @@ typedef enum {
     _texts = router.texts;
     _visitorLang = [_boot.uiLang length] ? _boot.uiLang : @"ja";
     _purposeButtons = [[NSMutableArray alloc] init];
+    _purposeIcons = [[NSMutableArray alloc] init];
     _languageButtons = [[NSMutableArray alloc] init];
     _adminFirstTap = [NSDate distantPast];
     _feedbackAudio = [[DBSiren alloc] init];
@@ -1032,6 +1038,7 @@ typedef enum {
 - (void)rebuildPurposes {
   for (UIButton *button in _purposeButtons) [button removeFromSuperview];
   [_purposeButtons removeAllObjects];
+  [_purposeIcons removeAllObjects];
   NSDictionary *purposes = [DBConfigUtil dig:_cfg path:@"visit_purposes"];
   if (![purposes isKindOfClass:[NSDictionary class]]) purposes = nil;
   // A purpose an administrator switched off is not offered to the visitor, in
@@ -1041,7 +1048,13 @@ typedef enum {
     NSString *identifier = [_purposeIds objectAtIndex:(NSUInteger)i];
     NSDictionary *entry = [purposes objectForKey:identifier];
     NSString *label = [DBConfigUtil labelOf:entry lang:_visitorLang fallback:identifier];
-    NSString *icon = [DBPurposeModel displayIconForConfiguredIcon:
+    // A real icon when this shell has one for the purpose; otherwise whatever
+    // glyph the administrator typed, which is all an invented purpose has.
+    UIImage *asset = [DBIconAsset tintedImageNamed:
+        [DBPurposeModel iconNameForPurpose:identifier]
+                                             color:[UIColor whiteColor]
+                                              size:CGSizeMake(kPurposeIconSide, kPurposeIconSide)];
+    NSString *icon = asset != nil ? @"" : [DBPurposeModel displayIconForConfiguredIcon:
         [entry objectForKey:@"icon"]];
     NSString *title = [icon length] ? [NSString stringWithFormat:@"%@\n%@", icon, label] : label;
     UIButton *button = [self buttonWithTitle:title primary:NO];
@@ -1050,6 +1063,15 @@ typedef enum {
     [button addTarget:self action:@selector(onPurpose:) forControlEvents:UIControlEventTouchUpInside];
     [_purposeScroll addSubview:button];
     [_purposeButtons addObject:button];
+    // The icon rides above the label as its own view: iOS 5 button image and
+    // title insets fight each other once the title wraps to two lines.
+    UIImageView *iconView = nil;
+    if (asset != nil) {
+      iconView = [[UIImageView alloc] initWithImage:asset];
+      iconView.userInteractionEnabled = NO;
+      [button addSubview:iconView];
+    }
+    [_purposeIcons addObject:(iconView ?: (id)[NSNull null])];
   }
   _purposeHint.hidden = [_purposeButtons count] == 0;
   _purposeScroll.hidden = [_purposeButtons count] == 0;
@@ -1707,6 +1729,18 @@ typedef enum {
     button.titleLabel.font = [UIFont boldSystemFontOfSize:
         (compact ? 16 : 21) * purposeFontScale];
     button.frame = CGRectMake(col * (buttonW + gap), row * (buttonH + gap), buttonW, buttonH);
+    id icon = i < (NSInteger)[_purposeIcons count]
+        ? [_purposeIcons objectAtIndex:(NSUInteger)i] : [NSNull null];
+    if ([icon isKindOfClass:[UIImageView class]]) {
+      UIImageView *iconView = icon;
+      CGFloat top = compact ? 6 : 9;
+      iconView.frame = CGRectMake((buttonW - kPurposeIconSide) / 2, top,
+                                  kPurposeIconSide, kPurposeIconSide);
+      // Push the label clear of the icon rather than letting them overlap.
+      button.titleEdgeInsets = UIEdgeInsetsMake(top + kPurposeIconSide + 4, 0, 0, 0);
+    } else {
+      button.titleEdgeInsets = UIEdgeInsetsZero;
+    }
   }
   NSInteger rows = ([_purposeButtons count] + columns - 1) / columns;
   _purposeScroll.contentSize = CGSizeMake(_purposeScroll.bounds.size.width,
