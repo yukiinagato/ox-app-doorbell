@@ -2,6 +2,7 @@
 #import <Foundation/Foundation.h>
 
 #import "DBBackdropCompositor.h"
+#import "DBUiTheme.h"
 
 static void require(BOOL condition, NSString *message) {
   if (!condition) {
@@ -159,6 +160,92 @@ int main(void) {
     CGImageRelease(any);
     require([DBBackdropCompositor meanLuminanceOfImage:NULL] == 0,
             @"a missing image measures zero");
+
+    // --- The configured overlay: on, off, and something other than black. ---
+    white = newFlatImage(1.0, 64);
+    CGSize view = CGSizeMake(1024, 768);
+
+    // Enabled with an explicit colour and opacity.
+    NSDictionary *half = @{@"enabled" : @YES, @"color" : @"#000000", @"opacity" : @50};
+    backdrop = [DBBackdropCompositor newBackdropFromImage:white viewSize:view overlay:half];
+    require(near([DBBackdropCompositor meanLuminanceOfImage:backdrop], 0.5, 0.02),
+            @"a 50 per cent black overlay halves a white picture");
+    CGImageRelease(backdrop);
+
+    // Disabled: the picture is untouched, which is not the same as opacity 0
+    // being ignored.
+    NSDictionary *off = @{@"enabled" : @NO, @"color" : @"#000000", @"opacity" : @62};
+    backdrop = [DBBackdropCompositor newBackdropFromImage:white viewSize:view overlay:off];
+    require(near([DBBackdropCompositor meanLuminanceOfImage:backdrop], 1.0, 0.02),
+            @"a disabled overlay leaves the picture alone");
+    CGImageRelease(backdrop);
+
+    // A coloured overlay tints rather than only darkening: pure white under a
+    // fully opaque red must measure red's own luminance, 0.2126.
+    NSDictionary *red = @{@"enabled" : @YES, @"color" : @"#FF0000", @"opacity" : @100};
+    backdrop = [DBBackdropCompositor newBackdropFromImage:white viewSize:view overlay:red];
+    require(near([DBBackdropCompositor meanLuminanceOfImage:backdrop], 0.2126, 0.02),
+            @"a fully opaque red overlay leaves red, not grey");
+    CGImageRelease(backdrop);
+
+    // Absent keys fall back to today's behaviour rather than to nothing.
+    backdrop = [DBBackdropCompositor newBackdropFromImage:white viewSize:view overlay:@{}];
+    require(near([DBBackdropCompositor meanLuminanceOfImage:backdrop], 1.0 - alpha, 0.02),
+            @"an empty overlay dictionary is the 62 per cent default");
+    CGImageRelease(backdrop);
+    // Out-of-range opacity is clamped, not wrapped.
+    backdrop = [DBBackdropCompositor newBackdropFromImage:white viewSize:view
+                                                  overlay:@{@"opacity" : @999}];
+    require(near([DBBackdropCompositor meanLuminanceOfImage:backdrop], 0, 0.02),
+            @"an opacity above 100 clamps to fully opaque");
+    CGImageRelease(backdrop);
+    backdrop = [DBBackdropCompositor newBackdropFromImage:white viewSize:view
+                                                  overlay:@{@"opacity" : @0}];
+    require(near([DBBackdropCompositor meanLuminanceOfImage:backdrop], 1.0, 0.02),
+            @"a zero opacity draws no overlay at all");
+    CGImageRelease(backdrop);
+    CGImageRelease(white);
+
+    // --- Where the overlay is read from. ---
+    NSDictionary *defaults = [DBUiTheme backdropOverlayForConfig:@{} deviceId:@"n1"
+                                                         display:@{}];
+    require([[defaults objectForKey:@"enabled"] boolValue] &&
+            [[defaults objectForKey:@"color"] isEqualToString:@"#000000"] &&
+            near((CGFloat)[[defaults objectForKey:@"opacity"] doubleValue], 62, 0.001),
+            @"nothing configured means black at 62 per cent");
+
+    // Core's resolved answer in status.display wins.
+    NSDictionary *fromStatus = [DBUiTheme backdropOverlayForConfig:@{} deviceId:@"n1"
+        display:@{@"theme" : @{@"backdrop" : @{@"enabled" : @YES, @"color" : @"#101418",
+                                               @"opacity" : @40, @"source" : @"cluster"}}}];
+    require([[fromStatus objectForKey:@"color"] isEqualToString:@"#101418"] &&
+            near((CGFloat)[[fromStatus objectForKey:@"opacity"] doubleValue], 40, 0.001),
+            @"status.display.theme.backdrop is read");
+
+    // Then this device's own setting, then the cluster's.
+    NSDictionary *config = @{
+      @"display" : @{@"theme" : @{@"backdrop" : @{@"opacity" : @30}}},
+      @"devices" : @{@"n1" : @{@"local" : @{@"theme" : @{@"backdrop" : @{@"opacity" : @80}}}}},
+    };
+    require(near((CGFloat)[[[DBUiTheme backdropOverlayForConfig:config deviceId:@"n1"
+                                                        display:@{}]
+                              objectForKey:@"opacity"] doubleValue], 80, 0.001),
+            @"the device's own backdrop outranks the cluster's");
+    require(near((CGFloat)[[[DBUiTheme backdropOverlayForConfig:config deviceId:@"other"
+                                                        display:@{}]
+                              objectForKey:@"opacity"] doubleValue], 30, 0.001),
+            @"a device with no setting of its own takes the cluster's");
+    require(![[[DBUiTheme backdropOverlayForConfig:@{} deviceId:@"n1"
+                   display:@{@"theme" : @{@"backdrop" : @{@"enabled" : @NO}}}]
+                  objectForKey:@"enabled"] boolValue],
+            @"an administrator can turn the overlay off");
+
+    // --- Cards follow the appearance, never the wallpaper. ---
+    require([[DBUiTheme plateHexForMode:@"dark"] isEqualToString:@"#1A1E24"],
+            @"a dark cluster gets a dark plate");
+    require(![[DBUiTheme plateHexForMode:@"light"] isEqualToString:
+                  [DBUiTheme plateHexForMode:@"dark"]],
+            @"a light cluster gets a different plate");
 
     puts("PASS: DBBackdropCompositor darkens the theme picture by 62 per cent");
   }

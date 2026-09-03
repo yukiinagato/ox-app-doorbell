@@ -491,12 +491,18 @@ typedef enum {
                          (long)_boot.httpPort, hash];
   NSURL *url = [NSURL URLWithString:urlString];
   if (url == nil) return;
+  // The same administrator overlay the dashboard uses; this screen has no
+  // device id of its own to key a per-device override on, so it takes the
+  // cluster's answer and core's resolved one.
+  NSDictionary *overlay = [DBUiTheme backdropOverlayForConfig:_cfg deviceId:nil
+                                                      display:_display];
   __weak DBDoorScreen *weakSelf = self;
   dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_LOW, 0), ^{
-    UIImage *backdrop = [DBThemeBackdrop cachedBackdropForKey:want size:size];
+    UIImage *backdrop = [DBThemeBackdrop cachedBackdropForKey:want size:size
+                                                      overlay:overlay];
     if (backdrop == nil) {
       NSData *data = [NSData dataWithContentsOfURL:url];
-      backdrop = [DBThemeBackdrop backdropForData:data key:want size:size];
+      backdrop = [DBThemeBackdrop backdropForData:data key:want size:size overlay:overlay];
     }
     DBBackgroundSampler *sampler = [DBBackgroundSampler samplerWithImage:backdrop
                                                                 viewSize:size];

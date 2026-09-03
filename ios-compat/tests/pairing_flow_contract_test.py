@@ -247,6 +247,10 @@ class ReadabilityContracts(unittest.TestCase):
         # the main thread; the sampler then measures what is actually drawn.
         self.assertIn("DBThemeBackdrop cachedBackdropForKey:want size:size", load)
         self.assertIn("DBThemeBackdrop backdropForData:data key:want size:size", load)
+        # The administrator's overlay is part of the picture's identity, so a
+        # change of colour or opacity rebuilds rather than reusing the cache.
+        self.assertIn("backdropOverlayForConfig:", load)
+        self.assertIn("overlay:overlay", load)
         # The prepared bitmap is bounded and the darkening is deep enough to
         # read text over a bright wallpaper. Spec 5.1 wants the picture, so a
         # flat ground has to say which fault put it there.
@@ -258,6 +262,21 @@ class ReadabilityContracts(unittest.TestCase):
         self.assertIn("kCGBlendModeNormal", compositor)
         self.assertIn("aspectFillDrawRectForImageWidth", compositor)
         self.assertIn("DBBackdropCompositor newBackdropFromImage:upright", widgets)
+        # Icons are assets, never paths or emoji.
+        self.assertNotIn("UIBezierPath", widgets)
+        self.assertIn("DBIconAsset tintedImageNamed:", widgets)
+        self.assertIn("CGContextClipToMask", read("ios-kiosk/src/Core/DBIconAsset.m"))
+        # Cards, chips and scrims follow the appearance, not the wallpaper.
+        self.assertIn("if (_usesThemeBackground) return [_mode isEqualToString:@\"light\"];",
+                      widgets)
+        self.assertIn("+ (NSString *)plateHexForMode:", theme)
+        # The counters are a status line: ink and halo, no plate.
+        self.assertIn("counter.ink = [_palette inkForRegion:DBUiRegionStatusLine", home)
+        self.assertIn("counter.halo = [_palette needsShadowForRegion:", home)
+        # The SOS bar is the fleet red with a real knob, not a tinted plate.
+        self.assertIn("static UIColor *DBSosTrackColor(void)", widgets)
+        self.assertIn("_thumb = [[UIView alloc] init];", widgets)
+        self.assertIn("_thumbChevron = [[UIImageView alloc] init];", widgets)
         # Small text over a busy picture gets a plate; headings keep region ink.
         self.assertIn("static const CGFloat kScrimAlpha = 0.70;", home)
         self.assertIn("- (void)applyScrimTone", home)

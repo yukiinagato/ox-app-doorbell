@@ -22,10 +22,25 @@
 // rect is centred, so it reads the same in flipped and unflipped spaces.
 + (CGRect)aspectFillRectForContentSize:(CGSize)contentSize viewSize:(CGSize)viewSize;
 
-// The prepared, darkened backdrop for a view of viewSize. Returns NULL when
-// source is NULL or viewSize is empty. The caller owns the result.
+// The prepared, darkened backdrop for a view of viewSize, using the default
+// black-at-62 % overlay. Returns NULL when source is NULL or viewSize is empty.
+// The caller owns the result.
 + (CGImageRef)newBackdropFromImage:(CGImageRef)source
                           viewSize:(CGSize)viewSize CF_RETURNS_RETAINED;
+
+// The same, with the overlay an administrator configured:
+// @{"enabled": bool, "color": "#RRGGBB", "opacity": percent}, as
+// DBUiTheme backdropOverlayForConfig:deviceId:display: returns it. A disabled
+// overlay leaves the picture untouched; nil takes the defaults.
++ (CGImageRef)newBackdropFromImage:(CGImageRef)source
+                          viewSize:(CGSize)viewSize
+                           overlay:(NSDictionary *)overlay CF_RETURNS_RETAINED;
+
+// The overlay reduced to what the draw needs: a colour and an alpha in 0..1.
+// Returns NO when the overlay is disabled and nothing should be drawn.
++ (BOOL)overlay:(NSDictionary *)overlay
+       intoRed:(CGFloat *)red green:(CGFloat *)green blue:(CGFloat *)blue
+         alpha:(CGFloat *)alpha;
 
 // Mean relative luminance over every pixel, 0..1. This is the measurement the
 // darkening is judged by.

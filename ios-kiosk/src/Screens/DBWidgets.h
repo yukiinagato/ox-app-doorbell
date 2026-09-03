@@ -1,6 +1,7 @@
 #import <UIKit/UIKit.h>
 
 #import "../Core/DBAdminAddress.h"
+#import "../Core/DBIconAsset.h"
 #import "../Core/DBBackdropCompositor.h"
 #import "../Core/DBSosSlideModel.h"
 
@@ -28,10 +29,14 @@ NSString *DBHexFromColor(UIColor *color);
 @interface DBThemeBackdrop : NSObject
 
 // Decodes and prepares off the main thread. key identifies the picture, which
-// is the asset hash. Returns nil when the data is not an image.
-+ (UIImage *)backdropForData:(NSData *)data key:(NSString *)key size:(CGSize)size;
-// The prepared image when this exact picture and size were already built.
-+ (UIImage *)cachedBackdropForKey:(NSString *)key size:(CGSize)size;
+// is the asset hash, plus the overlay it was prepared with. Returns nil when
+// the data is not an image.
++ (UIImage *)backdropForData:(NSData *)data key:(NSString *)key size:(CGSize)size
+                     overlay:(NSDictionary *)overlay;
+// The prepared image when this exact picture, size and overlay were already
+// built.
++ (UIImage *)cachedBackdropForKey:(NSString *)key size:(CGSize)size
+                          overlay:(NSDictionary *)overlay;
 // How far the picture is darkened, so callers can describe it.
 + (CGFloat)darkeningAlpha;
 // The bitmap is prepared at the panel's aspect ratio but no more than this on
@@ -73,6 +78,7 @@ NSString *DBHexFromColor(UIColor *color);
 @property(nonatomic, readonly) UIColor *surface;
 @property(nonatomic, readonly) UIColor *elevated;   // tiles, rows, chips
 @property(nonatomic, readonly) UIColor *chipPlate; // opaque enough for a picture
+@property(nonatomic, readonly) UIColor *plate;    // card/scrim tone, follows the appearance
 @property(nonatomic, readonly) UIColor *separator;
 @property(nonatomic, readonly) UIColor *ink;
 @property(nonatomic, readonly) UIColor *mutedInk;
@@ -126,11 +132,19 @@ typedef enum {
   DBFleetGlyphIndoorPanel,
 } DBFleetGlyph;
 
+// The Tabler icon each counter asks DBIconAsset for.
+NSString *DBFleetGlyphIconName(DBFleetGlyph glyph);
+
+// One cluster counter: a Tabler icon and a number, drawn straight onto the
+// ground with region ink like a status line. No plate and no background -- it
+// is text, not a chip.
 @interface DBFleetCounter : UIView
 @property(nonatomic, assign) DBFleetGlyph glyph;
 @property(nonatomic, copy) NSString *value;
 @property(nonatomic, strong) UIColor *ink;
-@property(nonatomic, strong) UIColor *fill;
+// Set when the ink rule says this region needs a halo to survive the picture
+// behind it.
+@property(nonatomic, assign) BOOL halo;
 - (CGFloat)widthThatFits;
 @end
 
@@ -166,9 +180,14 @@ typedef enum {
 
 // Admin-page QR plus its URL. Visible on every indoor surface; opening the
 // admin still requires the password.
+// The footer block: the admin QR, then two left-aligned lines beside it -- the
+// address, then the version and battery line -- in one colour and one size.
 @interface DBAdminQrView : UIView
 - (void)setUrl:(NSString *)url caption:(NSString *)caption;
 - (void)applyPalette:(DBUiPalette *)palette;
+// Line 2. The caption is no longer drawn; it survives as the accessibility
+// label on line 1.
+- (void)setVersionLine:(NSString *)text;
 @property(nonatomic, readonly, copy) NSString *url;
 @end
 
