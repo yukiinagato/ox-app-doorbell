@@ -945,6 +945,14 @@ PIN: {1}</value></data>
   <data name="theme_appearance_dark" xml:space="preserve"><value>常にダーク</value></data>
   <data name="theme_appearance_light" xml:space="preserve"><value>常にライト</value></data>
   <data name="theme_auto" xml:space="preserve"><value>自動</value></data>
+  <data name="theme_backdrop" xml:space="preserve"><value>背景の暗幕</value></data>
+  <data name="theme_backdrop_enabled" xml:space="preserve"><value>背景の上に暗幕を重ねる</value></data>
+  <data name="theme_backdrop_hint" xml:space="preserve"><value>背景画像の上に重ねる半透明の層です。明るい写真の上でも文字が読めるようにするためのもので、色と濃さを指定できます。既定は黒の 62%。</value></data>
+  <data name="theme_backdrop_invalid" xml:space="preserve"><value>暗幕の濃さは 0 から 100 の整数で指定してください</value></data>
+  <data name="theme_backdrop_source_admin" xml:space="preserve"><value>クラスタの設定です</value></data>
+  <data name="theme_backdrop_source_default" xml:space="preserve"><value>既定値です</value></data>
+  <data name="theme_backdrop_source_device" xml:space="preserve"><value>この端末だけの設定です</value></data>
+  <data name="theme_backdrop_weak" xml:space="preserve"><value>背景画像の上で文字が読みにくくなる可能性があります</value></data>
   <data name="theme_background_source_color" xml:space="preserve"><value>背景色</value></data>
   <data name="theme_background_source_image" xml:space="preserve"><value>背景画像の平均色</value></data>
   <data name="theme_background_unsampled" xml:space="preserve"><value>背景画像を読み取れませんでした ({0})。文字色は端末側で判定します</value></data>
@@ -973,8 +981,9 @@ PIN: {1}</value></data>
   <data name="time_err_bad_server" xml:space="preserve"><value>サーバーの書き方が正しくありません</value></data>
   <data name="time_err_implausible" xml:space="preserve"><value>測定した時刻が信用できないため使いませんでした</value></data>
   <data name="time_err_no_response" xml:space="preserve"><value>時刻サーバーから応答がありません</value></data>
+  <data name="time_interval_hint" xml:space="preserve"><value>既定は 86400 秒 (1 日)。指定できるのは 3600 秒 (1 時間) から 604800 秒 (7 日) まで。時刻のずれは数日単位でしか変わらないため、これより頻繁に同期しても電池と通信量を使うだけです。失敗したときは 1 分後から順に間隔を空けて再試行します</value></data>
   <data name="time_interval_s" xml:space="preserve"><value>同期間隔 (秒)</value></data>
-  <data name="time_invalid_interval" xml:space="preserve"><value>同期間隔は 60 秒から 86400 秒の間で指定してください</value></data>
+  <data name="time_invalid_interval" xml:space="preserve"><value>同期間隔は 3600 秒から 604800 秒の間で指定してください</value></data>
   <data name="time_invalid_servers" xml:space="preserve"><value>時刻サーバーは 1 行に 1 つ、最大 4 つまでです</value></data>
   <data name="time_invalid_zone" xml:space="preserve"><value>タイムゾーンを選び直してください</value></data>
   <data name="time_last_sync" xml:space="preserve"><value>最終同期</value></data>
@@ -984,6 +993,7 @@ PIN: {1}</value></data>
   <data name="time_ntp_hint" xml:space="preserve"><value>端末の OS 時計は変更しません。ずれた分だけドアホンの中で補正します</value></data>
   <data name="time_ntp_off" xml:space="preserve"><value>先に「インターネットで時刻を合わせる」を有効にして保存してください</value></data>
   <data name="time_offset" xml:space="preserve"><value>補正</value></data>
+  <data name="time_retrying" xml:space="preserve"><value>同期に失敗しました。{0} 秒後に再試行します</value></data>
   <data name="time_rtt" xml:space="preserve"><value>往復時間</value></data>
   <data name="time_server" xml:space="preserve"><value>接続先</value></data>
   <data name="time_servers" xml:space="preserve"><value>時刻サーバー</value></data>

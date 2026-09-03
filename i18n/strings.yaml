@@ -756,7 +756,10 @@ time.err_implausible: { ja: "測定した時刻が信用できないため使い
 time.ntp_off: { ja: "先に「インターネットで時刻を合わせる」を有効にして保存してください", en: "Turn on \"Set the time from the Internet\" and save first", zh: "请先开启“从互联网校准时间”并保存" }
 time.invalid_zone: { ja: "タイムゾーンを選び直してください", en: "Choose a time zone from the list", zh: "请从列表中选择时区" }
 time.invalid_servers: { ja: "時刻サーバーは 1 行に 1 つ、最大 4 つまでです", en: "Enter one to four time servers, one per line", zh: "请输入 1 到 4 个时间服务器，每行一个" }
-time.invalid_interval: { ja: "同期間隔は 60 秒から 86400 秒の間で指定してください", en: "The sync interval must be between 60 and 86400 seconds", zh: "同步间隔必须在 60 到 86400 秒之间" }
+time.invalid_interval: { ja: "同期間隔は 3600 秒から 604800 秒の間で指定してください", en: "The sync interval must be between 3600 and 604800 seconds", zh: "同步间隔必须在 3600 到 604800 秒之间" }
+time.interval_hint: { ja: "既定は 86400 秒 (1 日)。指定できるのは 3600 秒 (1 時間) から 604800 秒 (7 日) まで。時刻のずれは数日単位でしか変わらないため、これより頻繁に同期しても電池と通信量を使うだけです。失敗したときは 1 分後から順に間隔を空けて再試行します", en: "The default is 86400 seconds (one day), and the range is 3600 seconds (one hour) to 604800 seconds (seven days). A clock correction only drifts over days, so syncing more often costs battery and traffic for nothing. After a failure the service retries from one minute, doubling up to an hour.", zh: "默认 86400 秒（一天），可设范围为 3600 秒（一小时）至 604800 秒（七天）。时钟偏差以天为单位变化，同步更频繁只会白白消耗电量和流量。失败后将从 1 分钟起重试，逐次加倍直至一小时。" }
+time.retrying: { ja: "同期に失敗しました。{seconds} 秒後に再試行します", en: "The last sync failed; retrying in {seconds} seconds", zh: "上次同步失败，将在 {seconds} 秒后重试" }
+
 volume.title: { ja: "音量", en: "Volume", zh: "音量" }
 volume.call: { ja: "呼出", en: "Call", zh: "呼叫" }
 volume.sos: { ja: "SOS", en: "SOS", zh: "SOS" }
@@ -955,6 +958,14 @@ theme.background_source_color: { ja: "背景色", en: "Background colour", zh: "
 theme.background_unsampled: { ja: "背景画像を読み取れませんでした ({reason})。文字色は端末側で判定します", en: "The background image could not be read ({reason}); each device decides its text colour", zh: "无法读取背景图片（{reason}），文字颜色由各设备自行判断" }
 theme.unsampled_too_large: { ja: "画像が大きすぎます", en: "image too large", zh: "图片过大" }
 theme.unsampled_decode_failed: { ja: "対応していない形式です", en: "unsupported format", zh: "不支持的格式" }
+theme.backdrop: { ja: "背景の暗幕", en: "Background dimming", zh: "背景遮罩" }
+theme.backdrop_enabled: { ja: "背景の上に暗幕を重ねる", en: "Draw a dimming layer over the background", zh: "在背景上叠加遮罩层" }
+theme.backdrop_hint: { ja: "背景画像の上に重ねる半透明の層です。明るい写真の上でも文字が読めるようにするためのもので、色と濃さを指定できます。既定は黒の 62%。", en: "A semi-transparent layer over the background image that keeps text readable on a bright photograph. Choose its colour and how strong it is; the default is black at 62%.", zh: "叠加在背景图片上的半透明层，用于在明亮照片上保持文字可读。可指定颜色与浓度，默认为黑色 62%。" }
+theme.backdrop_invalid: { ja: "暗幕の濃さは 0 から 100 の整数で指定してください", en: "The dimming strength must be a whole number between 0 and 100", zh: "遮罩浓度必须是 0 到 100 之间的整数" }
+theme.backdrop_weak: { ja: "背景画像の上で文字が読みにくくなる可能性があります", en: "Text may be hard to read over the background image", zh: "文字在背景图片上可能不易辨认" }
+theme.backdrop_source_default: { ja: "既定値です", en: "Using the built-in default.", zh: "使用内置默认值。" }
+theme.backdrop_source_admin: { ja: "クラスタの設定です", en: "Set for the whole cluster.", zh: "为整个集群设定。" }
+theme.backdrop_source_device: { ja: "この端末だけの設定です", en: "Set for this device only.", zh: "仅为该设备设定。" }
 theme.unsampled_missing: { ja: "この端末にまだ届いていません", en: "not on this device yet", zh: "尚未同步到本设备" }
 notice.scope_global: { ja: "全体のお知らせ", en: "House-wide", zh: "全局公告" }
 notice.presets_title: { ja: "お知らせの定型文", en: "Announcement presets", zh: "公告模板" }

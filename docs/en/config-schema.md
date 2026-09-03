@@ -190,7 +190,12 @@ the plaintext subscription. Startup reseals a legacy raw record or removes it fa
   "display": {                                  // display & burn-in protection (fleet default; override via devices.<id>.local.display)
     // theme: the door station background ("push" from the indoor panel/admin UI = just write this
     // setting. Synced instantly via CRDT)
-    "theme": { "bg_color": "#101418", "bg_image": null },   // bg_image: an assets sha256 or null
+    "theme": { "bg_color": "#101418", "bg_image": null,   // bg_image: an assets sha256 or null
+               // The semi-transparent layer a shell composites between the background image and
+               // everything drawn on it, so text stays readable over a bright photograph. On by
+               // default; every leaf is overridable per device under
+               // devices.<id>.local.theme.backdrop.*, and each leaf resolves on its own.
+               "backdrop": { "enabled": true, "color": "#000000", "opacity": 62 } },  // 0..100
     "brightness": 70,                           // 0-100 (remote adjustment — slider in the admin UI)
     "night": { "enabled": true, "from": "22:00", "to": "06:00",
                "brightness": 15, "red_tint": true },   // night mode (evaluated with the corrected clock)
@@ -209,9 +214,12 @@ the plaintext subscription. Startup reseals a legacy raw record or removes it fa
     // offset by SNTP and adds it to every wall-clock reading (HLC, event and call-history
     // timestamps, rule schedules, quiet hours, displayed clocks). The offset is dropped again
     // after three intervals without a successful sync.
+    // One round runs when the service is switched on, when the servers change, and at start-up;
+    // after that the interval. A failed round retries from one minute, doubling to at most an
+    // hour, rather than waiting a whole day. POST /api/time/sync triggers one by hand.
     "ntp": { "enabled": false,                  // default off
              "servers": ["ntp.nict.jp", "time.google.com"],   // 1-4 "host" or "host:port"
-             "interval_s": 900 }                // 60..86400
+             "interval_s": 86400 }              // 3600..604800; default once a day
   },
 
   // Cluster default volumes, 0-100. A device overrides them with
@@ -855,3 +863,22 @@ legacy reply_id/free-text announcement only when no call is active). Implementat
   `{"visitor_lang":"ja|en|zh"}` with retain, discovered as
   `sensor.doorbell_<door>_visitor_lang`. Telegram press notifications lead with
   `{icon} {purpose name}` and the visitor-language badge `🌐 EN`.
+
+### The background dimming layer
+
+`display.theme.backdrop` controls the semi-transparent layer a shell draws between the background
+image and everything on top of it, which is what keeps a clock legible over a bright photograph.
+`enabled` (default true), `color` (`#RRGGBB`, default `#000000`) and `opacity` (0-100, default 62)
+are each overridable per device under `devices.<id>.local.theme.backdrop.*`, and each resolves on
+its own: a panel in a brighter room can raise the opacity without restating the colour.
+
+Core publishes the resolved answer as
+`status.display.theme.backdrop = {enabled, color, opacity, source}`, where `source` is `device`,
+`admin` or `default` -- the strongest origin among the three values. The same object rides in the
+`display` UI event, so a shell paints from what core resolved rather than reading configuration
+itself.
+
+A write with a malformed colour or an opacity outside 0-100 is refused. Turning the layer off, or
+down below 20, is accepted but reported as a warning (`theme.backdrop_weak`) while a background
+image is configured: over a bright picture that is usually a mistake, and over a dark one it is
+not, and core cannot tell which.

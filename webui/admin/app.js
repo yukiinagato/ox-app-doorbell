@@ -1140,8 +1140,9 @@ var AdminLogic = (function () {
     var servers = ntpServerList(f.servers);
     if (TIME_ZONES.indexOf(String(f.zone)) < 0) throw new Error("zone");
     if (!servers) throw new Error("servers");
-    var interval = Math.round(num(f.interval_s, 900));
-    if (interval < 60 || interval > 86400) throw new Error("interval_s");
+    /* A measured correction is stable for days, so the floor is an hour and the ceiling a week. */
+    var interval = Math.round(num(f.interval_s, 86400));
+    if (interval < 3600 || interval > 604800) throw new Error("interval_s");
     return [{ key: "time.zone", value: String(f.zone) },
             { key: "time.ntp.enabled", value: !!f.ntp_enabled },
             { key: "time.ntp.servers", value: servers },
@@ -1166,7 +1167,10 @@ var AdminLogic = (function () {
       lastSyncMs: num(time.last_sync_ms, 0),
       rttMs: num(time.rtt_ms, 0),
       server: typeof time.server === "string" ? time.server : "",
-      intervalS: num(time.interval_s, 900),
+      intervalS: num(time.interval_s, 86400),
+      /* Seconds until the next attempt while the service is backing off after a
+       * failure; zero whenever the ordinary interval applies. */
+      retryInS: num(time.retry_in_s, 0),
       syncing: time.syncing === true,
       errorKey: typeof time.err === "string" && errors[time.err] ? errors[time.err] : "",
       localIso: isObj(time.local) && typeof time.local.iso === "string" ? time.local.iso : ""
@@ -1502,6 +1506,73 @@ var AdminLogic = (function () {
     };
   }
 
+  var BACKDROP_DEFAULTS = { enabled: true, color: "#000000", opacity: 62 };
+
+  /* Opacity as core validates it: a whole number 0-100. Throws rather than silently falling back
+   * so a blank or mistyped field is reported instead of quietly becoming the default. */
+  function backdropOpacityValue(raw) {
+    // Number("") is zero, which would silently turn a blank field into "no dimming at all".
+    if (raw === "" || raw === null || raw === undefined) throw new Error("backdrop_opacity");
+    var value = Math.round(Number(raw));
+    if (!isFinite(value) || value < 0 || value > 100) throw new Error("backdrop_opacity");
+    return value;
+  }
+
+  /* The semi-transparent layer a shell composites between the background image and everything
+   * drawn on it. Mirrors core: each leaf resolves on its own -- device override, then the
+   * cluster setting, then the built-in default -- and source names the strongest origin. */
+  function backdropModel(cfg, deviceId) {
+    cfg = isObj(cfg) ? cfg : {};
+    var display = isObj(cfg.display) ? cfg.display : {};
+    var theme = isObj(display.theme) ? display.theme : {};
+    var cluster = isObj(theme.backdrop) ? theme.backdrop : {};
+    var device = {};
+    if (deviceId && isObj(cfg.devices) && isObj(cfg.devices[deviceId])) {
+      var local = isObj(cfg.devices[deviceId].local) ? cfg.devices[deviceId].local : {};
+      var localTheme = isObj(local.theme) ? local.theme : {};
+      if (isObj(localTheme.backdrop)) device = localTheme.backdrop;
+    }
+    var fromDevice = false, fromAdmin = false;
+    function set(container, name) {
+      return isObj(container) && container[name] !== undefined && container[name] !== null;
+    }
+    function leaf(name) {
+      if (set(device, name)) { fromDevice = true; return device[name]; }
+      if (set(cluster, name)) { fromAdmin = true; return cluster[name]; }
+      return undefined;
+    }
+    var enabled = leaf("enabled");
+    var color = leaf("color");
+    var opacity = leaf("opacity");
+    var bounded = typeof opacity === "number" && isFinite(opacity) &&
+      Math.round(opacity) === opacity && opacity >= 0 && opacity <= 100;
+    return {
+      enabled: typeof enabled === "boolean" ? enabled : BACKDROP_DEFAULTS.enabled,
+      color: colorOk(color) ? String(color).toUpperCase() : BACKDROP_DEFAULTS.color,
+      opacity: bounded ? opacity : BACKDROP_DEFAULTS.opacity,
+      source: fromDevice ? "device" : (fromAdmin ? "admin" : "default"),
+      /* True where this device carries its own value, so the sheet can show what it overrides. */
+      overridden: { enabled: set(device, "enabled"), color: set(device, "color"),
+                    opacity: set(device, "opacity") }
+    };
+  }
+
+  /* What core publishes, so the tab shows the cluster's answer rather than only its own guess. */
+  function backdropStatusModel(status) {
+    var theme = isObj(status) && isObj(status.display) && isObj(status.display.theme)
+      ? status.display.theme : {};
+    var backdrop = isObj(theme.backdrop) ? theme.backdrop : {};
+    return {
+      enabled: backdrop.enabled !== false,
+      color: colorOk(backdrop.color) ? String(backdrop.color).toUpperCase()
+                                     : BACKDROP_DEFAULTS.color,
+      opacity: typeof backdrop.opacity === "number" ? backdrop.opacity
+                                                    : BACKDROP_DEFAULTS.opacity,
+      source: backdrop.source === "device" || backdrop.source === "admin"
+        ? backdrop.source : "default"
+    };
+  }
+
   /* Ink and call-button overrides live in the same theme object as the background, so they are
    * written through one entry. An empty value deletes the override and returns the region to
    * automatic rather than storing a colour that happens to match. */
@@ -1517,6 +1588,20 @@ var AdminLogic = (function () {
     }
     if (hasOwnKeys(ink)) value.ink_override = ink;
     else delete value.ink_override;
+    // The darkening layer rides in the same object. A device scope stores only the leaves it
+    // really overrides, so clearing one returns it to the cluster value instead of pinning
+    // today's cluster value onto this device for ever.
+    if (f.backdrop === null) {
+      delete value.backdrop;
+    } else if (isObj(f.backdrop)) {
+      var backdrop = {};
+      if (typeof f.backdrop.enabled === "boolean") backdrop.enabled = f.backdrop.enabled;
+      if (colorOk(f.backdrop.color)) backdrop.color = String(f.backdrop.color).toUpperCase();
+      if (f.backdrop.opacity !== undefined)
+        backdrop.opacity = backdropOpacityValue(f.backdrop.opacity);
+      if (hasOwnKeys(backdrop)) value.backdrop = backdrop;
+      else delete value.backdrop;
+    }
     // Never write back what core computed; those fields are read-only.
     delete value.auto_ink;
     delete value.auto_accent;
@@ -2459,6 +2544,9 @@ var AdminLogic = (function () {
     autoInk: autoInk, autoAccent: autoAccent, themeAutoModel: themeAutoModel,
     appearanceEntries: appearanceEntries, appearanceModel: appearanceModel,
     themeColorEntries: themeColorEntries,
+    backdropModel: backdropModel, backdropStatusModel: backdropStatusModel,
+    backdropOpacityValue: backdropOpacityValue,
+    BACKDROP_DEFAULTS: BACKDROP_DEFAULTS,
     NOTICE_PRESET_MAX: NOTICE_PRESET_MAX, noticePresetEntries: noticePresetEntries,
     noticePresetList: noticePresetList, effectiveNoticeModel: effectiveNoticeModel,
     doorUnlockEntries: doorUnlockEntries, doorUnlockModel: doorUnlockModel,
@@ -2712,7 +2800,8 @@ if (typeof document !== "undefined") (function () {
           call_sound_loop: false, button_sound: "button_click",
           update_sound: "indoor_update", ringtone: "school_chime" },
     i18n_overrides: { en: { "idle.touch_to_call": "Touch to call" } },
-    display: { theme: { bg_color: "#12202c", bg_image: MOCK_IMG }, brightness: 70,
+    display: { theme: { bg_color: "#12202c", bg_image: MOCK_IMG,
+                        backdrop: { opacity: 55 } }, brightness: 70,
                appearance: "auto_schedule",
                appearance_schedule: { dark_from: "19:00", light_from: "06:30" },
                screensaver_after_s: 120, pixel_shift_s: 300 },
@@ -2756,7 +2845,7 @@ if (typeof document !== "undefined") (function () {
     panel: { token_refs: ["secret:panel.access.mock"] },
     time: { zone: "Asia/Tokyo",
             ntp: { enabled: true, servers: ["ntp.nict.jp", "time.google.com"],
-                   interval_s: 900 } },
+                   interval_s: 86400 } },
     notice: { presets: [{ id: "np_absent", text: "不在です。荷物は玄関前へお願いします" },
                         { id: "np_back_door", text: "裏口へお回りください" },
                         { id: "np_construction", text: "工事中です。足元にご注意ください" }] },
@@ -2775,7 +2864,8 @@ if (typeof document !== "undefined") (function () {
             power: { battery_pct: -1, charging: false, mains: true } },
     time: { zone: "Asia/Tokyo", zone_known: true, source: "ntp", enabled: true, ok: true,
             offset_ms: 412, measured_offset_ms: 412, last_sync_ms: Date.now() - 120000,
-            rtt_ms: 18, server: "ntp.nict.jp", interval_s: 900, offset_min: 540,
+            rtt_ms: 18, server: "ntp.nict.jp", interval_s: 86400, retry_in_s: 0,
+            offset_min: 540,
             syncing: false,
             local: { iso: "2026-09-02T21:30:00+09:00", date: "2026-09-02", hh: 21, mm: 30,
                      ss: 0, weekday: "wed", weekday_num: 3, offset_min: 540, dst: false,
@@ -2794,7 +2884,9 @@ if (typeof document !== "undefined") (function () {
                                     notice: "light" },
                         auto_accent: { call_button: "#7F5E3D", call_button_ink: "light" },
                         ink_override: {},
-                        call_button_bg: "#7F5E3D", call_button_ink: "light" } },
+                        call_button_bg: "#7F5E3D", call_button_ink: "light",
+                        backdrop: { enabled: true, color: "#000000", opacity: 62,
+                                    source: "default" } } },
     doors: {
       d_front: { label: "Front door", configured: true, notice: null,
                  unlock: { configured: true, command: "unlock", show_button: true,
@@ -5677,6 +5769,10 @@ if (typeof document !== "undefined") (function () {
            esc(rows[i][2]) + "'>" + esc(rows[i][1]) + "</span></div>";
     if (model.errorKey)
       h += "<div class='warn'>" + esc(t(model.errorKey)) + "</div>";
+    /* Backing off is a state of its own: the service is neither working nor idle. */
+    if (model.retryInS > 0)
+      h += "<div class='warn'>" +
+           esc(t("time.retrying", { seconds: String(model.retryInS) })) + "</div>";
     if (!model.zoneKnown && model.zone)
       h += "<div class='warn'>" + esc(model.zone) + "</div>";
     return h;
@@ -5708,8 +5804,9 @@ if (typeof document !== "undefined") (function () {
          "<textarea id='timeServers' style='min-height:74px'>" + esc(serverText) + "</textarea>" +
          "<div class='dim fhint'>" + esc(t("time.servers_hint")) + "</div></div>" +
          "<div class='frow'><label class='flab'>" + esc(t("time.interval_s")) + "</label>" +
-         "<input type='number' id='timeInterval' min='60' max='86400' value='" +
-         esc(timeNtp.interval_s === undefined ? 900 : timeNtp.interval_s) + "'></div>" +
+         "<input type='number' id='timeInterval' min='3600' max='604800' step='3600' value='" +
+         esc(timeNtp.interval_s === undefined ? 86400 : timeNtp.interval_s) + "'>" +
+         "<div class='dim fhint'>" + esc(t("time.interval_hint")) + "</div></div>" +
          "<div style='display:flex;gap:8px;flex-wrap:wrap;margin-top:8px'>" +
          "<button class='btn small' id='timeSave'>" + esc(t("admin.save")) + "</button>" +
          "<button class='btn2 small' id='timeSyncNow'>" + esc(t("time.sync_now")) +
@@ -6707,6 +6804,12 @@ if (typeof document !== "undefined") (function () {
                                                            : (o.bg_image || "") };
   }
 
+  function backdropSourceLabel(source) {
+    if (source === "device") return t("theme.backdrop_source_device");
+    if (source === "admin") return t("theme.backdrop_source_admin");
+    return t("theme.backdrop_source_default");
+  }
+
   function renderTheme() {
     var el = $("#tab-theme");
     var scope = themeScope, own = themeCur(scope), eff = themeEffective(scope);
@@ -6752,10 +6855,33 @@ if (typeof document !== "undefined") (function () {
     });
     h += "</select><div class='dim fhint'>" + esc(t("admin.theme_image_hint")) + "</div></div>";
 
+    // The darkening layer over the background image. It stays on by default because a bright
+    // photograph makes light text unreadable, but every value here belongs to the administrator.
+    var backdrop = L.backdropModel(S.cfg, scope || "");
+    var backdropOn = !scope || backdrop.overridden.enabled || backdrop.overridden.color ||
+      backdrop.overridden.opacity;
+    h += "<div class='frow'><label class='flab'>" + esc(t("theme.backdrop")) + "</label>";
+    if (scope)
+      h += "<label class='mc'><input type='checkbox' id='thBackdropOn'" +
+           (backdropOn ? " checked" : "") + "> " + esc(t("admin.theme_override_here")) +
+           "</label><br>";
+    h += "<label class='mc'><input type='checkbox' id='thBackdropEnabled'" +
+         (backdrop.enabled ? " checked" : "") + "> " + esc(t("theme.backdrop_enabled")) +
+         "</label><br>" +
+         "<input type='color' id='thBackdropColor' value='" + esc(backdrop.color) + "'>" +
+         "<span class='mono' id='thBackdropColorTxt' style='margin-left:8px'>" +
+         esc(backdrop.color) + "</span><br>" +
+         "<input type='range' id='thBackdropOpacity' min='0' max='100' step='1' value='" +
+         esc(backdrop.opacity) + "' style='vertical-align:middle;max-width:220px'> " +
+         "<span class='mono' id='thBackdropOpacityTxt'>" + esc(backdrop.opacity) + "%</span>" +
+         "<div class='dim fhint'>" + esc(t("theme.backdrop_hint")) + " " +
+         esc(backdropSourceLabel(backdrop.source)) + "</div></div>";
+
 
     h += "<div class='frow'><label class='flab'>" +
          esc(t("admin.theme_preview")) + "</label>" +
-         "<div class='tprev' id='thPrev'><div class='inner'>" +
+         "<div class='tprev' id='thPrev'><div class='tbackdrop' id='thBackdrop'></div>" +
+         "<div class='inner'>" +
          "<div class='pclock' id='thClock'>--:--:--</div>" +
 
          "<div class='pcall'>" +
@@ -6871,7 +6997,30 @@ if (typeof document !== "undefined") (function () {
       });
       var inkEl = p.querySelector(".pclock");
       if (inkEl) inkEl.style.color = model.ink === "dark" ? "#101418" : "#F5F7FA";
+
+      // The darkening layer, drawn where a shell draws it: over the background, under the text.
+      var layer = $("#thBackdrop");
+      var override = !scope || !$("#thBackdropOn") || $("#thBackdropOn").checked;
+      var on = $("#thBackdropEnabled").checked;
+      var opacity = Math.round(Number($("#thBackdropOpacity").value));
+      if (!isFinite(opacity) || opacity < 0) opacity = 0;
+      if (opacity > 100) opacity = 100;
+      $("#thBackdropColorTxt").textContent = $("#thBackdropColor").value;
+      $("#thBackdropOpacityTxt").textContent = opacity + "%";
+      $("#thBackdropEnabled").disabled = !override;
+      $("#thBackdropColor").disabled = !override;
+      $("#thBackdropOpacity").disabled = !override;
+      if (layer) {
+        layer.style.backgroundColor = $("#thBackdropColor").value;
+        layer.style.opacity = on ? String(opacity / 100) : "0";
+      }
     }
+    $("#thBackdropEnabled").onchange = paint;
+    $("#thBackdropColor").oninput = paint;
+    $("#thBackdropColor").onchange = paint;
+    $("#thBackdropOpacity").oninput = paint;
+    $("#thBackdropOpacity").onchange = paint;
+    if ($("#thBackdropOn")) $("#thBackdropOn").onchange = paint;
     $("#thColor").oninput = paint;
     $("#thColor").onchange = paint;
     $("#thImage").onchange = paint;
@@ -6900,9 +7049,22 @@ if (typeof document !== "undefined") (function () {
         ink[row.getAttribute("data-region")] = row.querySelector("[data-ink-color]").value;
       });
       var base = (e.entries.length && e.entries[0].value) || {};
-      var colors = L.themeColorEntries(scope, { call_button_auto: !custom,
-                                                call_button_bg: $("#thBtnColor").value,
-                                                ink_override: ink }, base);
+      var keepBackdrop = !scope || !$("#thBackdropOn") || $("#thBackdropOn").checked;
+      var colors;
+      try {
+        colors = L.themeColorEntries(scope, {
+          call_button_auto: !custom,
+          call_button_bg: $("#thBtnColor").value,
+          ink_override: ink,
+          backdrop: keepBackdrop ? { enabled: $("#thBackdropEnabled").checked,
+                                     color: $("#thBackdropColor").value,
+                                     opacity: $("#thBackdropOpacity").value }
+                                 : null
+        }, base);
+      } catch (err) {
+        msg(t("theme.backdrop_invalid"));
+        return;
+      }
       var entries = (colors.entries.length ? colors.entries : e.entries).concat(
         L.appearanceEntries(scope, { mode: $("#thAppearance").value,
                                      dark_from: $("#thDarkFrom") ? $("#thDarkFrom").value : "",

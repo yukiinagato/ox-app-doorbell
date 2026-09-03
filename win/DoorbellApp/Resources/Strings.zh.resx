@@ -945,6 +945,14 @@ PIN：{1}</value></data>
   <data name="theme_appearance_dark" xml:space="preserve"><value>始终深色</value></data>
   <data name="theme_appearance_light" xml:space="preserve"><value>始终浅色</value></data>
   <data name="theme_auto" xml:space="preserve"><value>自动</value></data>
+  <data name="theme_backdrop" xml:space="preserve"><value>背景遮罩</value></data>
+  <data name="theme_backdrop_enabled" xml:space="preserve"><value>在背景上叠加遮罩层</value></data>
+  <data name="theme_backdrop_hint" xml:space="preserve"><value>叠加在背景图片上的半透明层，用于在明亮照片上保持文字可读。可指定颜色与浓度，默认为黑色 62%。</value></data>
+  <data name="theme_backdrop_invalid" xml:space="preserve"><value>遮罩浓度必须是 0 到 100 之间的整数</value></data>
+  <data name="theme_backdrop_source_admin" xml:space="preserve"><value>为整个集群设定。</value></data>
+  <data name="theme_backdrop_source_default" xml:space="preserve"><value>使用内置默认值。</value></data>
+  <data name="theme_backdrop_source_device" xml:space="preserve"><value>仅为该设备设定。</value></data>
+  <data name="theme_backdrop_weak" xml:space="preserve"><value>文字在背景图片上可能不易辨认</value></data>
   <data name="theme_background_source_color" xml:space="preserve"><value>背景颜色</value></data>
   <data name="theme_background_source_image" xml:space="preserve"><value>取自背景图片的平均色</value></data>
   <data name="theme_background_unsampled" xml:space="preserve"><value>无法读取背景图片（{0}），文字颜色由各设备自行判断</value></data>
@@ -973,8 +981,9 @@ PIN：{1}</value></data>
   <data name="time_err_bad_server" xml:space="preserve"><value>服务器条目格式不正确</value></data>
   <data name="time_err_implausible" xml:space="preserve"><value>测得的时间不可信，已丢弃</value></data>
   <data name="time_err_no_response" xml:space="preserve"><value>时间服务器没有响应</value></data>
+  <data name="time_interval_hint" xml:space="preserve"><value>默认 86400 秒（一天），可设范围为 3600 秒（一小时）至 604800 秒（七天）。时钟偏差以天为单位变化，同步更频繁只会白白消耗电量和流量。失败后将从 1 分钟起重试，逐次加倍直至一小时。</value></data>
   <data name="time_interval_s" xml:space="preserve"><value>同步间隔（秒）</value></data>
-  <data name="time_invalid_interval" xml:space="preserve"><value>同步间隔必须在 60 到 86400 秒之间</value></data>
+  <data name="time_invalid_interval" xml:space="preserve"><value>同步间隔必须在 3600 到 604800 秒之间</value></data>
   <data name="time_invalid_servers" xml:space="preserve"><value>请输入 1 到 4 个时间服务器，每行一个</value></data>
   <data name="time_invalid_zone" xml:space="preserve"><value>请从列表中选择时区</value></data>
   <data name="time_last_sync" xml:space="preserve"><value>最后同步</value></data>
@@ -984,6 +993,7 @@ PIN：{1}</value></data>
   <data name="time_ntp_hint" xml:space="preserve"><value>不会修改设备本身的时钟；门铃只在内部补偿差值</value></data>
   <data name="time_ntp_off" xml:space="preserve"><value>请先开启“从互联网校准时间”并保存</value></data>
   <data name="time_offset" xml:space="preserve"><value>补偿</value></data>
+  <data name="time_retrying" xml:space="preserve"><value>上次同步失败，将在 {0} 秒后重试</value></data>
   <data name="time_rtt" xml:space="preserve"><value>往返时间</value></data>
   <data name="time_server" xml:space="preserve"><value>服务器</value></data>
   <data name="time_servers" xml:space="preserve"><value>时间服务器</value></data>

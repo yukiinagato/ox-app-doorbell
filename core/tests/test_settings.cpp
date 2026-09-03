@@ -207,7 +207,7 @@ void removeSettingsTempDir(const std::string& dir) {
 TEST_CASE("config: the time keys accept only resolvable zones and bounded NTP settings") {
   SettingsNode fleet;
   CHECK(fleet.stringAt("time.zone") == "Asia/Tokyo");
-  CHECK(fleet.intAt("time.ntp.interval_s") == 900);
+  CHECK(fleet.intAt("time.ntp.interval_s") == 86400);
   CHECK(fleet.intAt("integrations.tz_offset_min") == 540);
 
   fleet.node->setConfigKey("time.zone", "\"Europe/Paris\"");
@@ -217,12 +217,16 @@ TEST_CASE("config: the time keys accept only resolvable zones and bounded NTP se
   fleet.node->setConfigKey("time.zone", "42");
   CHECK(fleet.stringAt("time.zone") == "Europe/Paris");
 
+  // A clock correction is stable for days: an hour is the floor and a week the ceiling.
   fleet.node->setConfigKey("time.ntp.interval_s", "3600");
   CHECK(fleet.intAt("time.ntp.interval_s") == 3600);
-  fleet.node->setConfigKey("time.ntp.interval_s", "59");
-  fleet.node->setConfigKey("time.ntp.interval_s", "86401");
-  fleet.node->setConfigKey("time.ntp.interval_s", "900.5");
+  fleet.node->setConfigKey("time.ntp.interval_s", "900");
+  fleet.node->setConfigKey("time.ntp.interval_s", "3599");
+  fleet.node->setConfigKey("time.ntp.interval_s", "604801");
+  fleet.node->setConfigKey("time.ntp.interval_s", "86400.5");
   CHECK(fleet.intAt("time.ntp.interval_s") == 3600);
+  fleet.node->setConfigKey("time.ntp.interval_s", "604800");
+  CHECK(fleet.intAt("time.ntp.interval_s") == 604800);
 
   fleet.node->setConfigKey("time.ntp.servers", "[\"ntp.example.org:1123\"]");
   CHECK(cJSON_GetArraySize(fleet.at("time.ntp.servers")) == 1);
@@ -238,9 +242,9 @@ TEST_CASE("config: the time keys accept only resolvable zones and bounded NTP se
   // exercised on an installation with no seeded leaves, because a leaf and its parent object are
   // independent CRDT keys and the leaf keeps winning after a parent write.
   SettingsNode bare("indoor_panel", "", /*seed_defaults=*/false);
-  bare.node->setConfigKey("time", "{\"zone\":\"Asia/Seoul\",\"ntp\":{\"interval_s\":120}}");
+  bare.node->setConfigKey("time", "{\"zone\":\"Asia/Seoul\",\"ntp\":{\"interval_s\":7200}}");
   CHECK(bare.stringAt("time.zone") == "Asia/Seoul");
-  CHECK(bare.intAt("time.ntp.interval_s") == 120);
+  CHECK(bare.intAt("time.ntp.interval_s") == 7200);
   bare.node->setConfigKey("time", "{\"zone\":\"Nowhere/Nothing\"}");
   CHECK(bare.stringAt("time.zone") == "Asia/Seoul");
   bare.node->setConfigKey("time", "{\"zone\":\"Asia/Tokyo\",\"surprise\":1}");
@@ -248,7 +252,7 @@ TEST_CASE("config: the time keys accept only resolvable zones and bounded NTP se
   bare.node->setConfigKey("time", "{\"zone\":\"Asia/Tokyo\",\"ntp\":{\"interval_s\":5}}");
   CHECK(bare.stringAt("time.zone") == "Asia/Seoul");
   bare.node->setConfigKey("time.ntp", "{\"enabled\":\"yes\"}");
-  CHECK(bare.intAt("time.ntp.interval_s") == 120);
+  CHECK(bare.intAt("time.ntp.interval_s") == 7200);
 }
 
 TEST_CASE("config: volume levels are bounded at every scope") {
@@ -1173,4 +1177,95 @@ TEST_CASE("config: the incoming-call return countdown is bounded and overridable
   bare.node->setConfigKey("call", "{\"indoor\":{\"return_s\":30},\"surprise\":1}");
   bare.node->setConfigKey("call.indoor", "{\"return_s\":2}");
   CHECK(bare.intAt("call.indoor.return_s") == 30);
+}
+
+TEST_CASE("display: the theme backdrop has defaults, overrides and a validated range") {
+  // The darkening layer over a background photograph stays, but it belongs to the administrator.
+  SettingsNode fleet;
+  const std::string self = fleet.node->nodeId();
+  auto backdrop = [&fleet]() {
+    auto status = fleet.status();
+    return json::Doc(cJSON_Duplicate(
+        json::get(json::get(json::get(status.get(), "display"), "theme"), "backdrop"), 1));
+  };
+
+  // Defaults: drawn, black, and strong enough for a bright photograph.
+  auto initial = backdrop();
+  REQUIRE(initial);
+  CHECK(json::getBool(initial.get(), "enabled", false));
+  CHECK(json::getString(initial.get(), "color") == "#000000");
+  CHECK(json::getInt(initial.get(), "opacity") == 62);
+  CHECK(json::getString(initial.get(), "source") == "default");
+
+  // A cluster setting is reported as the administrator's.
+  fleet.node->setConfigKey("display.theme.backdrop.opacity", "40");
+  auto cluster = backdrop();
+  CHECK(json::getInt(cluster.get(), "opacity") == 40);
+  CHECK(json::getString(cluster.get(), "color") == "#000000");
+  CHECK(json::getString(cluster.get(), "source") == "admin");
+
+  fleet.node->setConfigKey("display.theme.backdrop.color", "\"#101418\"");
+  fleet.node->setConfigKey("display.theme.backdrop.enabled", "false");
+  auto configured = backdrop();
+  CHECK(json::getString(configured.get(), "color") == "#101418");
+  CHECK_FALSE(json::getBool(configured.get(), "enabled", true));
+
+  // One panel in a brighter room darkens further without restating the colour: each leaf
+  // resolves on its own and the strongest origin names the source.
+  fleet.node->setConfigKey("devices." + self + ".local.theme.backdrop.opacity", "80");
+  fleet.node->setConfigKey("devices." + self + ".local.theme.backdrop.enabled", "true");
+  auto device = backdrop();
+  CHECK(json::getInt(device.get(), "opacity") == 80);
+  CHECK(json::getBool(device.get(), "enabled", false));
+  CHECK(json::getString(device.get(), "color") == "#101418");
+  CHECK(json::getString(device.get(), "source") == "device");
+
+  // Clearing the device override returns the cluster value rather than the built-in default.
+  fleet.node->deleteConfigKeyJson("devices." + self + ".local.theme.backdrop.opacity");
+  fleet.node->deleteConfigKeyJson("devices." + self + ".local.theme.backdrop.enabled");
+  auto cleared = backdrop();
+  CHECK(json::getInt(cleared.get(), "opacity") == 40);
+  CHECK_FALSE(json::getBool(cleared.get(), "enabled", true));
+  CHECK(json::getString(cleared.get(), "source") == "admin");
+
+  // Validation: format and range are refused, and a refused write leaves the value alone.
+  fleet.node->setConfigKey("display.theme.backdrop.opacity", "101");
+  CHECK(json::getInt(backdrop().get(), "opacity") == 40);
+  fleet.node->setConfigKey("display.theme.backdrop.opacity", "-1");
+  CHECK(json::getInt(backdrop().get(), "opacity") == 40);
+  fleet.node->setConfigKey("display.theme.backdrop.color", "\"black\"");
+  CHECK(json::getString(backdrop().get(), "color") == "#101418");
+  fleet.node->setConfigKey("display.theme.backdrop.enabled", "\"yes\"");
+  CHECK_FALSE(json::getBool(backdrop().get(), "enabled", true));
+  fleet.node->setConfigKey("display.theme.backdrop.nonsense", "1");
+  CHECK(json::get(backdrop().get(), "nonsense") == nullptr);
+
+  // The whole object in one write, the way the Theme tab saves it. A separate node because a
+  // container write does not displace leaf keys that were written independently -- each key is
+  // its own CRDT entry, and the leaves above are newer.
+  SettingsNode tab;
+  auto tab_backdrop = [&tab]() {
+    auto status = tab.status();
+    return json::Doc(cJSON_Duplicate(
+        json::get(json::get(json::get(status.get(), "display"), "theme"), "backdrop"), 1));
+  };
+  auto batch = json::parse(tab.node->configBatchJson(
+      "[{\"op\":\"set\",\"key\":\"display.theme\","
+      "\"value\":{\"bg_color\":\"#101418\","
+      "\"backdrop\":{\"enabled\":true,\"color\":\"#0A0A0A\",\"opacity\":55}}}]"));
+  REQUIRE(batch);
+  CHECK(json::getBool(batch.get(), "ok", false));
+  auto saved = tab_backdrop();
+  CHECK(json::getBool(saved.get(), "enabled", false));
+  CHECK(json::getString(saved.get(), "color") == "#0A0A0A");
+  CHECK(json::getInt(saved.get(), "opacity") == 55);
+  CHECK(json::getString(saved.get(), "source") == "admin");
+
+  // A container carrying an out-of-range opacity is refused whole, so the tab cannot half-save.
+  auto refused = json::parse(tab.node->configBatchJson(
+      "[{\"op\":\"set\",\"key\":\"display.theme\","
+      "\"value\":{\"backdrop\":{\"opacity\":250}}}]"));
+  REQUIRE(refused);
+  CHECK_FALSE(json::getBool(refused.get(), "ok", true));
+  CHECK(json::getInt(tab_backdrop().get(), "opacity") == 55);
 }

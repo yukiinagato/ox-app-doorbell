@@ -929,6 +929,14 @@
 "theme.appearance_dark" = "始终深色";
 "theme.appearance_light" = "始终浅色";
 "theme.auto" = "自动";
+"theme.backdrop" = "背景遮罩";
+"theme.backdrop_enabled" = "在背景上叠加遮罩层";
+"theme.backdrop_hint" = "叠加在背景图片上的半透明层，用于在明亮照片上保持文字可读。可指定颜色与浓度，默认为黑色 62%。";
+"theme.backdrop_invalid" = "遮罩浓度必须是 0 到 100 之间的整数";
+"theme.backdrop_source_admin" = "为整个集群设定。";
+"theme.backdrop_source_default" = "使用内置默认值。";
+"theme.backdrop_source_device" = "仅为该设备设定。";
+"theme.backdrop_weak" = "文字在背景图片上可能不易辨认";
 "theme.background_source_color" = "背景颜色";
 "theme.background_source_image" = "取自背景图片的平均色";
 "theme.background_unsampled" = "无法读取背景图片（%@），文字颜色由各设备自行判断";
@@ -957,8 +965,9 @@
 "time.err_bad_server" = "服务器条目格式不正确";
 "time.err_implausible" = "测得的时间不可信，已丢弃";
 "time.err_no_response" = "时间服务器没有响应";
+"time.interval_hint" = "默认 86400 秒（一天），可设范围为 3600 秒（一小时）至 604800 秒（七天）。时钟偏差以天为单位变化，同步更频繁只会白白消耗电量和流量。失败后将从 1 分钟起重试，逐次加倍直至一小时。";
 "time.interval_s" = "同步间隔（秒）";
-"time.invalid_interval" = "同步间隔必须在 60 到 86400 秒之间";
+"time.invalid_interval" = "同步间隔必须在 3600 到 604800 秒之间";
 "time.invalid_servers" = "请输入 1 到 4 个时间服务器，每行一个";
 "time.invalid_zone" = "请从列表中选择时区";
 "time.last_sync" = "最后同步";
@@ -968,6 +977,7 @@
 "time.ntp_hint" = "不会修改设备本身的时钟；门铃只在内部补偿差值";
 "time.ntp_off" = "请先开启“从互联网校准时间”并保存";
 "time.offset" = "补偿";
+"time.retrying" = "上次同步失败，将在 %@ 秒后重试";
 "time.rtt" = "往返时间";
 "time.server" = "服务器";
 "time.servers" = "时间服务器";

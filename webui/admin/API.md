@@ -234,8 +234,8 @@ durable replication coverage vector; until one exists, retention is a no-op.
   "zone": "Asia/Tokyo", "zone_known": true,
   "source": "system", "enabled": false, "ok": false,
   "offset_ms": 0, "measured_offset_ms": 0,
-  "last_sync_ms": 0, "rtt_ms": 0, "server": "", "interval_s": 900,
-  "offset_min": 540, "syncing": false,
+  "last_sync_ms": 0, "rtt_ms": 0, "server": "", "interval_s": 86400,
+  "offset_min": 540, "syncing": false, "retry_in_s": 0,
   "local": { "iso": "2026-09-02T21:30:00+09:00", "date": "2026-09-02",
              "hh": 21, "mm": 30, "ss": 0, "weekday": "wed", "weekday_num": 3,
              "offset_min": 540, "dst": false, "known": true,
@@ -249,6 +249,16 @@ measurement either way, so the card can show what was measured after NTP is swit
 `err` is present after a failed round and is one of `no_response`, `bad_server`, `bad_reply`, or
 `implausible`. Admin must render `source` and never infer it from `enabled` alone: an enabled but
 unreachable time service is still running on system time.
+
+`time.ntp.interval_s` defaults to 86400 (once a day) and accepts 3600 to 604800 -- one hour to
+seven days. A measured correction does not drift meaningfully over hours, so a shorter interval
+buys nothing and costs battery, traffic, and a wake-up on every device in the house. Core runs
+exactly one round when the service is switched on, when the servers change, and at start-up, and
+then follows the interval; changing the interval alone re-arms the timer without spending a round
+trip. After a failed round it retries from 60 seconds, doubling to a ceiling of one hour, rather
+than waiting out the whole interval. `retry_in_s` is that pending backoff in seconds and is 0
+whenever the ordinary interval applies -- a service that is backing off is neither working nor
+idle, and the card should say so.
 
 `POST /api/time/sync` (Admin session) starts one immediate round and returns
 `{"ok":true,"started":true}`. It returns `409 {"ok":false,"err":"ntp_disabled"}` when the
@@ -360,6 +370,17 @@ background photograph. `display.theme.auto_ink` and
 `devices.<id>.local.theme` equivalents. Always take the button text colour from
 `call_button_ink`: on a mid-luminance background no colour can both separate from it and carry
 white text, and core returns the best compromise rather than an unreadable button.
+
+`status.display.theme.backdrop` is the semi-transparent layer a shell composites between the
+background image and everything drawn on it -- what keeps a clock legible over a bright
+photograph. It resolves to `{"enabled":true,"color":"#000000","opacity":62,"source":"..."}`, where
+`source` is `device`, `admin` or `default`: the strongest origin among the three values. Configure
+it with `display.theme.backdrop.{enabled,color,opacity}` and override per device with
+`devices.<id>.local.theme.backdrop.*`; each leaf resolves independently, so one panel can raise
+the opacity without restating the colour. A malformed colour or an opacity outside 0-100 is
+refused; turning the layer off, or below 20 while a background image is configured, is accepted
+and reported as a `theme.backdrop_weak` warning. The same object rides in the `display` UI event,
+so a shell paints what core resolved rather than reading configuration itself.
 
 `status.video.publish` carries the counters core measures on the sending side: `frames`,
 `keyframes`, `fragments`, `dropped_forward`, `frame_interval_ms`, `fps_x10`. Latency, jitter and

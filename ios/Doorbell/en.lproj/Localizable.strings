@@ -929,6 +929,14 @@
 "theme.appearance_dark" = "Always dark";
 "theme.appearance_light" = "Always light";
 "theme.auto" = "Automatic";
+"theme.backdrop" = "Background dimming";
+"theme.backdrop_enabled" = "Draw a dimming layer over the background";
+"theme.backdrop_hint" = "A semi-transparent layer over the background image that keeps text readable on a bright photograph. Choose its colour and how strong it is; the default is black at 62%.";
+"theme.backdrop_invalid" = "The dimming strength must be a whole number between 0 and 100";
+"theme.backdrop_source_admin" = "Set for the whole cluster.";
+"theme.backdrop_source_default" = "Using the built-in default.";
+"theme.backdrop_source_device" = "Set for this device only.";
+"theme.backdrop_weak" = "Text may be hard to read over the background image";
 "theme.background_source_color" = "Background colour";
 "theme.background_source_image" = "Averaged from the background image";
 "theme.background_unsampled" = "The background image could not be read (%@); each device decides its text colour";
@@ -957,8 +965,9 @@
 "time.err_bad_server" = "A server entry isn't written correctly";
 "time.err_implausible" = "The measured time wasn't plausible and was discarded";
 "time.err_no_response" = "No answer from the time servers";
+"time.interval_hint" = "The default is 86400 seconds (one day), and the range is 3600 seconds (one hour) to 604800 seconds (seven days). A clock correction only drifts over days, so syncing more often costs battery and traffic for nothing. After a failure the service retries from one minute, doubling up to an hour.";
 "time.interval_s" = "Sync interval (seconds)";
-"time.invalid_interval" = "The sync interval must be between 60 and 86400 seconds";
+"time.invalid_interval" = "The sync interval must be between 3600 and 604800 seconds";
 "time.invalid_servers" = "Enter one to four time servers, one per line";
 "time.invalid_zone" = "Choose a time zone from the list";
 "time.last_sync" = "Last sync";
@@ -968,6 +977,7 @@
 "time.ntp_hint" = "The device's own clock is never changed; the doorbell corrects the difference internally";
 "time.ntp_off" = "Turn on \"Set the time from the Internet\" and save first";
 "time.offset" = "Correction";
+"time.retrying" = "The last sync failed; retrying in %@ seconds";
 "time.rtt" = "Round trip";
 "time.server" = "Server";
 "time.servers" = "Time servers";

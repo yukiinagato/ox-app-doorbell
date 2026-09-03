@@ -945,6 +945,14 @@ Sends in {0}s</value></data>
   <data name="theme_appearance_dark" xml:space="preserve"><value>Always dark</value></data>
   <data name="theme_appearance_light" xml:space="preserve"><value>Always light</value></data>
   <data name="theme_auto" xml:space="preserve"><value>Automatic</value></data>
+  <data name="theme_backdrop" xml:space="preserve"><value>Background dimming</value></data>
+  <data name="theme_backdrop_enabled" xml:space="preserve"><value>Draw a dimming layer over the background</value></data>
+  <data name="theme_backdrop_hint" xml:space="preserve"><value>A semi-transparent layer over the background image that keeps text readable on a bright photograph. Choose its colour and how strong it is; the default is black at 62%.</value></data>
+  <data name="theme_backdrop_invalid" xml:space="preserve"><value>The dimming strength must be a whole number between 0 and 100</value></data>
+  <data name="theme_backdrop_source_admin" xml:space="preserve"><value>Set for the whole cluster.</value></data>
+  <data name="theme_backdrop_source_default" xml:space="preserve"><value>Using the built-in default.</value></data>
+  <data name="theme_backdrop_source_device" xml:space="preserve"><value>Set for this device only.</value></data>
+  <data name="theme_backdrop_weak" xml:space="preserve"><value>Text may be hard to read over the background image</value></data>
   <data name="theme_background_source_color" xml:space="preserve"><value>Background colour</value></data>
   <data name="theme_background_source_image" xml:space="preserve"><value>Averaged from the background image</value></data>
   <data name="theme_background_unsampled" xml:space="preserve"><value>The background image could not be read ({0}); each device decides its text colour</value></data>
@@ -973,8 +981,9 @@ Sends in {0}s</value></data>
   <data name="time_err_bad_server" xml:space="preserve"><value>A server entry isn't written correctly</value></data>
   <data name="time_err_implausible" xml:space="preserve"><value>The measured time wasn't plausible and was discarded</value></data>
   <data name="time_err_no_response" xml:space="preserve"><value>No answer from the time servers</value></data>
+  <data name="time_interval_hint" xml:space="preserve"><value>The default is 86400 seconds (one day), and the range is 3600 seconds (one hour) to 604800 seconds (seven days). A clock correction only drifts over days, so syncing more often costs battery and traffic for nothing. After a failure the service retries from one minute, doubling up to an hour.</value></data>
   <data name="time_interval_s" xml:space="preserve"><value>Sync interval (seconds)</value></data>
-  <data name="time_invalid_interval" xml:space="preserve"><value>The sync interval must be between 60 and 86400 seconds</value></data>
+  <data name="time_invalid_interval" xml:space="preserve"><value>The sync interval must be between 3600 and 604800 seconds</value></data>
   <data name="time_invalid_servers" xml:space="preserve"><value>Enter one to four time servers, one per line</value></data>
   <data name="time_invalid_zone" xml:space="preserve"><value>Choose a time zone from the list</value></data>
   <data name="time_last_sync" xml:space="preserve"><value>Last sync</value></data>
@@ -984,6 +993,7 @@ Sends in {0}s</value></data>
   <data name="time_ntp_hint" xml:space="preserve"><value>The device's own clock is never changed; the doorbell corrects the difference internally</value></data>
   <data name="time_ntp_off" xml:space="preserve"><value>Turn on &quot;Set the time from the Internet&quot; and save first</value></data>
   <data name="time_offset" xml:space="preserve"><value>Correction</value></data>
+  <data name="time_retrying" xml:space="preserve"><value>The last sync failed; retrying in {0} seconds</value></data>
   <data name="time_rtt" xml:space="preserve"><value>Round trip</value></data>
   <data name="time_server" xml:space="preserve"><value>Server</value></data>
   <data name="time_servers" xml:space="preserve"><value>Time servers</value></data>

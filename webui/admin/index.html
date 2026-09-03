@@ -92,6 +92,9 @@
   .tprev { position:relative; width:300px; height:210px; border-radius:12px; overflow:hidden;
            border:1px solid #2a333d; background:#101418 center/cover no-repeat; color:#fff;
            text-shadow:0 1px 3px rgba(0,0,0,.75); text-align:center; }
+  /* The darkening layer sits over the background and under everything drawn on it, exactly
+     where a shell composites it. */
+  .tprev .tbackdrop { position:absolute; inset:0; pointer-events:none; }
   .tprev .inner { position:absolute; inset:0; display:flex; flex-direction:column;
                   align-items:center; justify-content:center; gap:9px; }
   .tprev .pclock { font-size:28px; font-weight:700; letter-spacing:1px; }
