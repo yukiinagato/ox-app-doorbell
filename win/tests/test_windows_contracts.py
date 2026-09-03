@@ -591,6 +591,30 @@ class WindowsContracts(unittest.TestCase):
         keypad = read("win/DoorbellApp/Pairing/PairingKeypad.xaml")
         for digit in "0123456789":
             self.assertIn('Content="%s" Tag="%s"' % (digit, digit), keypad)
+        self.assertIn('Background" Value="{DynamicResource Card}"', keypad)
+        self.assertNotIn('#0C1014', keypad)
+
+    def test_windows_network_discovery_never_advertises_the_wildcard_listener(self):
+        sockets = read("core/src/mesh/socket_compat.h")
+        self.assertIn("GetAdaptersAddresses", sockets)
+        self.assertIn("IF_TYPE_SOFTWARE_LOOPBACK", sockets)
+        self.assertIn("0.0.0.0 is valid for bind(), but never for pairing", sockets)
+        self.assertIn("::closesocket(fd)", sockets)
+
+    def test_windows_firewall_rules_require_consent_before_uac_repair(self):
+        firewall = read("win/DoorbellApp/Core/WindowsFirewall.cs")
+        app = read("win/DoorbellApp/App.xaml.cs")
+        self.assertIn('Type.GetTypeFromProgID("HNetCfg.FwPolicy2")', firewall)
+        self.assertIn('Verb = "runas"', firewall)
+        self.assertIn('ApplicationName = application', firewall)
+        self.assertIn('ports.MeshTcp + "," + ports.AdminTcp', firewall)
+        self.assertIn('ports.SipUdp == 0 ? ports.DiscoveryUdp.ToString()', firewall)
+        self.assertIn('Core.SipAvailable ? FirewallPort', app)
+        prompt = app[app.index("private void CheckWindowsFirewall"):
+                     app.index("private static int FirewallPort")]
+        self.assertIn('MessageBoxResult.Yes) return;', prompt)
+        self.assertLess(prompt.index('MessageBoxResult.Yes) return;'),
+                        prompt.index("WindowsFirewall.RequestRepair(ports)"))
 
     def test_add_device_panel_confirms_with_device_joined(self):
         panel = read("win/DoorbellApp/Pairing/AddDeviceWindow.xaml.cs")

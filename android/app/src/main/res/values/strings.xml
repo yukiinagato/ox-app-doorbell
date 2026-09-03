@@ -388,6 +388,11 @@ Delete it?</string>
     <string name="event_offline">⚠ %1$s offline (last seen %2$s)</string>
     <string name="event_online">%1$s back online</string>
     <string name="event_press">Visitor at %1$s (%2$s)</string>
+    <string name="firewall_check_unavailable">Couldn\'t check Windows Firewall rules. Confirm that inbound communication is allowed for this app.</string>
+    <string name="firewall_repair_failed">Couldn\'t add Windows Firewall rules. Approve the administrator prompt or ask your system administrator.</string>
+    <string name="firewall_repaired">Added the required Windows Firewall rules. Try joining the Cluster again.</string>
+    <string name="firewall_rules_missing">Windows Firewall may be blocking Cluster communication from other devices. Allow inbound communication for this app?</string>
+    <string name="firewall_title">Windows Firewall</string>
     <string name="history_answered_by">Answered by %1$s</string>
     <string name="history_duration">%1$s</string>
     <string name="history_empty">No calls yet</string>

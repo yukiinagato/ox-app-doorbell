@@ -383,6 +383,11 @@
 "event.offline" = "⚠ %@ オフライン (最終応答 %@)";
 "event.online" = "%@ オンライン復帰";
 "event.press" = "%@ に来客です (%@)";
+"firewall.check_unavailable" = "Windows ファイアウォールの通信規則を確認できませんでした。このアプリの受信通信が許可されていることを確認してください。";
+"firewall.repair_failed" = "Windows ファイアウォール通信規則を追加できませんでした。管理者として許可するか、システム管理者に依頼してください。";
+"firewall.repaired" = "必要な Windows ファイアウォール通信規則を追加しました。クラスタへの参加をもう一度お試しください。";
+"firewall.rules_missing" = "Windows ファイアウォールが、ほかの端末からこの端末へのクラスタ通信を遮断している可能性があります。このアプリの受信通信を許可しますか?";
+"firewall.title" = "Windows ファイアウォール";
 "history.answered_by" = "%@ が応答";
 "history.duration" = "通話 %@";
 "history.empty" = "まだ呼出はありません";

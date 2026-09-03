@@ -390,6 +390,11 @@ Delete it?</value></data>
   <data name="event_offline" xml:space="preserve"><value>⚠ {0} offline (last seen {1})</value></data>
   <data name="event_online" xml:space="preserve"><value>{0} back online</value></data>
   <data name="event_press" xml:space="preserve"><value>Visitor at {0} ({1})</value></data>
+  <data name="firewall_check_unavailable" xml:space="preserve"><value>Couldn't check Windows Firewall rules. Confirm that inbound communication is allowed for this app.</value></data>
+  <data name="firewall_repair_failed" xml:space="preserve"><value>Couldn't add Windows Firewall rules. Approve the administrator prompt or ask your system administrator.</value></data>
+  <data name="firewall_repaired" xml:space="preserve"><value>Added the required Windows Firewall rules. Try joining the Cluster again.</value></data>
+  <data name="firewall_rules_missing" xml:space="preserve"><value>Windows Firewall may be blocking Cluster communication from other devices. Allow inbound communication for this app?</value></data>
+  <data name="firewall_title" xml:space="preserve"><value>Windows Firewall</value></data>
   <data name="history_answered_by" xml:space="preserve"><value>Answered by {0}</value></data>
   <data name="history_duration" xml:space="preserve"><value>{0}</value></data>
   <data name="history_empty" xml:space="preserve"><value>No calls yet</value></data>
