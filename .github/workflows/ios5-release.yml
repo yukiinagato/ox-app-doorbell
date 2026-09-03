@@ -10,45 +10,7 @@ permissions:
   contents: read
 
 jobs:
-  runner-preflight:
-    runs-on: ubuntu-latest
-    outputs:
-      available: ${{ steps.runners.outputs.available }}
-    steps:
-      - name: Require an idle licensed runner
-        id: runners
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const requiredLabels = ["self-hosted", "macOS", "ios5-armv7-licensed"];
-            const runners = [];
-            for (let page = 1; ; page += 1) {
-              const { data } = await github.rest.actions.listSelfHostedRunnersForRepo({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                page,
-                per_page: 100,
-              });
-              runners.push(...data.runners);
-              if (data.runners.length < 100) break;
-            }
-            const matching = runners.filter((runner) => {
-              const labels = new Set(runner.labels.map((label) => label.name));
-              return runner.status === "online" && !runner.busy &&
-                requiredLabels.every((label) => labels.has(label));
-            });
-
-            core.setOutput("available", matching.length > 0 ? "true" : "false");
-            if (matching.length === 0) {
-              core.setFailed(
-                "No idle licensed iOS 5 runner is available " +
-                "(self-hosted, macOS, ios5-armv7-licensed)."
-              );
-            }
-
   ios5-release:
-    needs: runner-preflight
-    if: needs.runner-preflight.outputs.available == 'true'
     runs-on: [self-hosted, macOS, ios5-armv7-licensed]
     timeout-minutes: 60
     steps:
@@ -76,7 +38,7 @@ jobs:
 
   artifact-downloads:
     if: always()
-    needs: [runner-preflight, ios5-release]
+    needs: [ios5-release]
     runs-on: ubuntu-latest
     permissions:
       actions: read

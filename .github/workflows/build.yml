@@ -7,7 +7,66 @@ on:
     branches: [main]
   pull_request:
 
+concurrency:
+  group: build-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      android: ${{ steps.scope.outputs.android }}
+      apple: ${{ steps.scope.outputs.apple }}
+      core: ${{ steps.scope.outputs.core }}
+      helper: ${{ steps.scope.outputs.helper }}
+      webui: ${{ steps.scope.outputs.webui }}
+      windows: ${{ steps.scope.outputs.windows }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Select affected platform lanes
+        id: scope
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          BEFORE: ${{ github.event.before }}
+          EVENT_NAME: ${{ github.event_name }}
+          HEAD_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          changed_files="$RUNNER_TEMP/doorbell-changed-files"
+          if test "$EVENT_NAME" = pull_request; then
+            git diff --name-only "origin/$BASE_REF...$HEAD_SHA" > "$changed_files"
+          elif test -n "$BEFORE" && test "$BEFORE" != 0000000000000000000000000000000000000000 && \
+            git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
+            git diff --name-only "$BEFORE...$HEAD_SHA" > "$changed_files"
+          else
+            git diff-tree --no-commit-id --name-only -r "$HEAD_SHA" > "$changed_files"
+          fi
+
+          matches() {
+            grep -Eq "$1" "$changed_files"
+          }
+          shared=false
+          if matches '^(core/|i18n/|tools/|\.github/workflows/|CMakeLists\.txt$|cmake/)'; then
+            shared=true
+          fi
+          enabled() {
+            if test "$shared" = true || matches "$1"; then
+              printf '%s=true\n' "$2" >> "$GITHUB_OUTPUT"
+            else
+              printf '%s=false\n' "$2" >> "$GITHUB_OUTPUT"
+            fi
+          }
+
+          enabled '^android/' android
+          enabled '^(ios/|ios-kiosk/|ios-compat/)' apple
+          enabled '^core/' core
+          enabled '^(tools/helper/|ios-compat/helper/)' helper
+          enabled '^webui/' webui
+          enabled '^win/' windows
+
   source-policy:
     runs-on: ubuntu-latest
     steps:
@@ -27,6 +86,8 @@ jobs:
           python3 tools/check_english_source.py --base "$base"
 
   webui-conformance:
+    needs: changes
+    if: needs.changes.outputs.webui == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -46,6 +107,8 @@ jobs:
         run: python3 -m unittest tools/tests/test_event_conformance.py
 
   core-macos:
+    needs: changes
+    if: needs.changes.outputs.core == 'true'
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
@@ -62,6 +125,8 @@ jobs:
 
   core-linux:
     # Linux is not a product target; this detects portability regressions early.
+    needs: changes
+    if: needs.changes.outputs.core == 'true'
     runs-on: ubuntu-latest
     continue-on-error: true
     steps:
@@ -75,6 +140,8 @@ jobs:
   keepalive-helper:
     # The root keepalive helper is portable C99 and its host tests need no root,
     # so the daemon contract is proven on every push, not only on the Apple lane.
+    needs: changes
+    if: needs.changes.outputs.helper == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -84,6 +151,8 @@ jobs:
         run: python3 tools/tests/test_ios5_helper_package.py
 
   windows-contract:
+    needs: changes
+    if: needs.changes.outputs.windows == 'true'
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -99,6 +168,8 @@ jobs:
           win\build.cmd
 
   android:
+    needs: changes
+    if: needs.changes.outputs.android == 'true'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -233,6 +304,8 @@ jobs:
           retention-days: 30
 
   apple-contract:
+    needs: changes
+    if: needs.changes.outputs.apple == 'true'
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
@@ -285,8 +358,8 @@ jobs:
     # Keep the download list in the run summary instead of committing expiring
     # artifact URLs back to the repository. This also makes the actual
     # retention date visible beside every download.
-    if: always()
-    needs: [android]
+    if: always() && needs.changes.outputs.android == 'true'
+    needs: [changes, android]
     runs-on: ubuntu-latest
     permissions:
       actions: read

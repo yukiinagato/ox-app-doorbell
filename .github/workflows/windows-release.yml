@@ -10,45 +10,7 @@ permissions:
   contents: read
 
 jobs:
-  runner-preflight:
-    runs-on: ubuntu-latest
-    outputs:
-      available: ${{ steps.runners.outputs.available }}
-    steps:
-      - name: Require an idle commissioned runner
-        id: runners
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const requiredLabels = ["self-hosted", "windows", "x64", "doorbell-pjsip"];
-            const runners = [];
-            for (let page = 1; ; page += 1) {
-              const { data } = await github.rest.actions.listSelfHostedRunnersForRepo({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                page,
-                per_page: 100,
-              });
-              runners.push(...data.runners);
-              if (data.runners.length < 100) break;
-            }
-            const matching = runners.filter((runner) => {
-              const labels = new Set(runner.labels.map((label) => label.name));
-              return runner.status === "online" && !runner.busy &&
-                requiredLabels.every((label) => labels.has(label));
-            });
-
-            core.setOutput("available", matching.length > 0 ? "true" : "false");
-            if (matching.length === 0) {
-              core.setFailed(
-                "No idle commissioned Windows runner is available " +
-                "(self-hosted, windows, x64, doorbell-pjsip)."
-              );
-            }
-
   windows-release:
-    needs: runner-preflight
-    if: needs.runner-preflight.outputs.available == 'true'
     runs-on: [self-hosted, windows, x64, doorbell-pjsip]
     timeout-minutes: 60
     steps:
@@ -69,7 +31,7 @@ jobs:
 
   artifact-downloads:
     if: always()
-    needs: [runner-preflight, windows-release]
+    needs: [windows-release]
     runs-on: ubuntu-latest
     permissions:
       actions: read
