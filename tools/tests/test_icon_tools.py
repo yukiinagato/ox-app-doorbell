@@ -118,19 +118,35 @@ class GenIconsTest(unittest.TestCase):
             with open(os.path.join(ROOT, path), "r", encoding="utf-8") as handle:
                 self.assertIn(gen_icons.BANNER, handle.read(), path)
 
-    def test_geometry_survives_number_normalisation(self):
-        """Android and XAML get canonical numbers, and not one point moves.
+    def test_geometry_is_passed_through_unchanged(self):
+        """Every output but Android carries the vendored path data byte for byte.
+
+        These three consume SVG path syntax directly -- the XAML mini-language, the sprite, and
+        the flattener that writes the PDFs -- so any difference from the file on disk would be a
+        re-rendering, and a re-rendering is how a glyph starts drifting from its source.
+        """
+        for name in self.names:
+            data = gen_icons.path_data(gen_icons.read_source(name))
+            with open(os.path.join(ROOT, "win/DoorbellApp/Resources/Icons.xaml"),
+                      "r", encoding="utf-8") as handle:
+                self.assertIn(">" + data + "<", handle.read(), name)
+            with open(os.path.join(ROOT, "webui/icons/tabler-sprite.svg"),
+                      "r", encoding="utf-8") as handle:
+                self.assertIn('d="' + data + '"', handle.read(), name)
+
+    def test_android_geometry_is_numerically_equivalent(self):
+        """Android is the exception, and it has to be an exact one.
 
         Tabler writes leading-dot decimals; Android lint refuses them (InvalidVectorPath) as a
-        crash risk on some devices. The numbers are re-spelled, so the text is no longer
-        byte-identical to the vendored file -- which makes it worth proving the shapes are, by
-        flattening both and comparing every point.
+        crash risk on some devices, so android_path_data respells them. That makes the text
+        differ from the source, which is worth allowing only if the shape does not: both are
+        flattened here and every point compared.
         """
         for name in self.names:
             raw = gen_icons.path_data(gen_icons.read_source(name))
-            canonical = gen_icons.normalize_path_numbers(raw)
+            emitted = gen_icons.android_path_data(raw)
             before = svg_path.flatten(raw)
-            after = svg_path.flatten(canonical)
+            after = svg_path.flatten(emitted)
             self.assertEqual(len(before), len(after), name)
             for (closed_a, points_a), (closed_b, points_b) in zip(before, after):
                 self.assertEqual(closed_a, closed_b, name)
@@ -139,15 +155,11 @@ class GenIconsTest(unittest.TestCase):
                     self.assertAlmostEqual(x1, x2, places=9, msg=name)
                     self.assertAlmostEqual(y1, y2, places=9, msg=name)
 
-    def test_android_and_xaml_carry_the_canonical_geometry(self):
-        data = gen_icons.normalize_path_numbers(
-            gen_icons.path_data(gen_icons.read_source("door")))
+    def test_the_android_drawable_carries_the_respelled_geometry(self):
+        data = gen_icons.android_path_data(gen_icons.path_data(gen_icons.read_source("door")))
         with open(os.path.join(ROOT, "android/app/src/main/res/drawable/ic_tabler_door.xml"),
                   "r", encoding="utf-8") as handle:
             self.assertIn(data, handle.read())
-        with open(os.path.join(ROOT, "win/DoorbellApp/Resources/Icons.xaml"),
-                  "r", encoding="utf-8") as handle:
-            self.assertIn(">" + data + "<", handle.read())
 
     def test_no_leading_dot_numbers_reach_android(self):
         # The exact spelling Android lint rejects: "v.01" for a dot, which Tabler uses a lot.
