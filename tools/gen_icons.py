@@ -84,6 +84,21 @@ def sha256_file(path):
 
 # ---------------------------------------------------------------- Android
 
+# A decimal point that does not follow a digit starts a bare fraction: ".01" -> "0.01",
+# "-.5" -> "-0.5". Android's own lint rejects the bare spelling (InvalidVectorPath: it crashes
+# some devices' path parser), so the Android drawable is the one output that cannot carry it. The
+# value is identical, and iOS and Windows keep the upstream text byte for byte.
+_BARE_DECIMAL = re.compile(r"(?<![0-9])\.")
+
+
+def android_path_data(data):
+    return _BARE_DECIMAL.sub("0.", data)
+
+
+# No android:tint: "?attr/colorControlNormal" is an AppCompat attribute, and the Android shell
+# links only the Kotlin stdlib (app/build.gradle.kts), so every drawable carrying it failed
+# resource linking. The shells tint these at runtime with setColorFilter, which is also what lets
+# one icon take the ink of the region it sits in.
 def android_xml(name, data):
     return (
         '<?xml version="1.0" encoding="utf-8"?>\n'
@@ -92,10 +107,9 @@ def android_xml(name, data):
         '    android:width="24dp"\n'
         '    android:height="24dp"\n'
         '    android:viewportWidth="24"\n'
-        '    android:viewportHeight="24"\n'
-        '    android:tint="?attr/colorControlNormal">\n'
+        '    android:viewportHeight="24">\n'
         "    <path\n"
-        '        android:pathData="' + data + '"\n'
+        '        android:pathData="' + android_path_data(data) + '"\n'
         '        android:strokeColor="#FF000000"\n'
         '        android:strokeWidth="' + STROKE_WIDTH + '"\n'
         '        android:strokeLineCap="round"\n'
