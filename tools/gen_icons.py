@@ -67,6 +67,31 @@ def path_data(text):
     return " ".join(parts)
 
 
+def normalize_path_numbers(data):
+    """Re-emit path data with unambiguous numbers, leaving the geometry alone.
+
+    Tabler writes leading-dot decimals -- "v.01" for a dot, all over the set. Android lint
+    refuses those outright (InvalidVectorPath: "Use 0.01 instead of .01 to avoid crashes on some
+    devices"), and an implicitly separated pair like ".5.5" means two numbers to a strict parser
+    and something else to a lenient one. Every number is re-emitted with a leading digit and
+    every token separated by a space, so the same string is read the same way by Android, WPF
+    and a browser. A test flattens the original and the result and compares the points.
+    """
+    out = []
+    for token in svg_path.tokens(data):
+        if token[0].isalpha():
+            out.append(token)
+            continue
+        value = float(token)
+        text = ("%.6f" % value).rstrip("0").rstrip(".")
+        if text in ("", "-", "-0"):
+            text = "0"
+        if float(text) != value:
+            raise SystemExit("path number " + token + " does not survive six decimal places")
+        out.append(text)
+    return " ".join(out)
+
+
 def camel(name):
     return "".join(part.capitalize() for part in re.split(r"[-_]", name))
 
@@ -92,8 +117,12 @@ def android_xml(name, data):
         '    android:width="24dp"\n'
         '    android:height="24dp"\n'
         '    android:viewportWidth="24"\n'
-        '    android:viewportHeight="24"\n'
-        '    android:tint="?attr/colorControlNormal">\n'
+        '    android:viewportHeight="24">\n'
+        # A literal stroke, never a theme attribute. This project's views are framework views
+        # with no AppCompat or Material theme, so there is no ?attr/colorControlNormal to
+        # resolve; and the legacy19 tier rasterises vectors at build time, where even
+        # ?android:attr/ has no theme to read. The shells tint at runtime instead -- ImageView
+        # tint, or setTint on the drawable -- which is what Android's counters already do.
         "    <path\n"
         '        android:pathData="' + data + '"\n'
         '        android:strokeColor="#FF000000"\n'
@@ -113,7 +142,8 @@ def xaml_dictionary(icons):
              '<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"',
              '                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">']
     for name, data in icons:
-        lines.append('  <Geometry x:Key="Icon' + camel(name) + '">' + data + "</Geometry>")
+        lines.append('  <Geometry x:Key="Icon' + camel(name) + '">'
+                     + normalize_path_numbers(data) + "</Geometry>")
     lines.append("</ResourceDictionary>")
     return "\n".join(lines) + "\n"
 
@@ -276,7 +306,7 @@ def main():
     for name, data in icons:
         act(os.path.join(ROOT, "android/app/src/main/res/drawable",
                          "ic_tabler_" + name.replace("-", "_") + ".xml"),
-            android_xml(name, data), results)
+            android_xml(name, normalize_path_numbers(data)), results)
         imageset = os.path.join(ROOT, "ios/Doorbell/Assets.xcassets",
                                 "Tabler" + camel(name) + ".imageset")
         act(os.path.join(imageset, "Contents.json"), imageset_contents(), results)

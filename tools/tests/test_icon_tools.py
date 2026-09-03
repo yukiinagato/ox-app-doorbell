@@ -1,6 +1,7 @@
 """The icon pipeline: the path parser, the generator's outputs, and the hand-drawn-icon check."""
 
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -80,6 +81,36 @@ class GenIconsTest(unittest.TestCase):
                 self.assertTrue(os.path.exists(os.path.join(
                     ROOT, "ios-kiosk/resources/icons", "tabler_" + flat + suffix + ".png")))
 
+    def test_android_drawables_reference_no_theme_attribute(self):
+        """A generated drawable resolves on its own or it does not link.
+
+        The emitted vectors carried android:tint="?attr/colorControlNormal", which needs an
+        AppCompat or Material theme this project does not have -- its views are framework views.
+        The legacy19 tier is stricter still: it rasterises vectors at build time, where there is
+        no theme to read at all, so even ?android:attr/ is unusable. Colour is a literal and the
+        shells tint at runtime.
+        """
+        for name in self.names:
+            path = os.path.join(ROOT, "android/app/src/main/res/drawable",
+                                "ic_tabler_" + name.replace("-", "_") + ".xml")
+            with open(path, "r", encoding="utf-8") as handle:
+                text = handle.read()
+            self.assertNotIn("?attr/", text, path)
+            self.assertNotIn("?android:attr/", text, path)
+            self.assertIn('android:strokeColor="#FF000000"', text, path)
+            self.assertIn('android:strokeWidth="2"', text, path)
+            self.assertIn('android:strokeLineCap="round"', text, path)
+            self.assertIn('android:strokeLineJoin="round"', text, path)
+            self.assertNotIn("android:tint", text, path)
+
+    def test_the_generator_emits_no_theme_attribute(self):
+        # The same rule at the source, so a future edit to the template is caught here and not
+        # in an Android resource-linking failure.
+        emitted = gen_icons.android_xml("door", "M0 0 L4 4")
+        self.assertNotIn("?attr/", emitted)
+        self.assertNotIn("?android:attr/", emitted)
+        self.assertIn('android:strokeColor="#FF000000"', emitted)
+
     def test_outputs_carry_the_generated_banner(self):
         for path in ("android/app/src/main/res/drawable/ic_tabler_door.xml",
                      "win/DoorbellApp/Resources/Icons.xaml",
@@ -87,16 +118,47 @@ class GenIconsTest(unittest.TestCase):
             with open(os.path.join(ROOT, path), "r", encoding="utf-8") as handle:
                 self.assertIn(gen_icons.BANNER, handle.read(), path)
 
-    def test_geometry_is_passed_through_unchanged(self):
-        # Android and XAML take SVG path syntax as-is, so their geometry must be byte-identical
-        # to the vendored file rather than a re-rendering of it.
-        data = gen_icons.path_data(gen_icons.read_source("door"))
+    def test_geometry_survives_number_normalisation(self):
+        """Android and XAML get canonical numbers, and not one point moves.
+
+        Tabler writes leading-dot decimals; Android lint refuses them (InvalidVectorPath) as a
+        crash risk on some devices. The numbers are re-spelled, so the text is no longer
+        byte-identical to the vendored file -- which makes it worth proving the shapes are, by
+        flattening both and comparing every point.
+        """
+        for name in self.names:
+            raw = gen_icons.path_data(gen_icons.read_source(name))
+            canonical = gen_icons.normalize_path_numbers(raw)
+            before = svg_path.flatten(raw)
+            after = svg_path.flatten(canonical)
+            self.assertEqual(len(before), len(after), name)
+            for (closed_a, points_a), (closed_b, points_b) in zip(before, after):
+                self.assertEqual(closed_a, closed_b, name)
+                self.assertEqual(len(points_a), len(points_b), name)
+                for (x1, y1), (x2, y2) in zip(points_a, points_b):
+                    self.assertAlmostEqual(x1, x2, places=9, msg=name)
+                    self.assertAlmostEqual(y1, y2, places=9, msg=name)
+
+    def test_android_and_xaml_carry_the_canonical_geometry(self):
+        data = gen_icons.normalize_path_numbers(
+            gen_icons.path_data(gen_icons.read_source("door")))
         with open(os.path.join(ROOT, "android/app/src/main/res/drawable/ic_tabler_door.xml"),
                   "r", encoding="utf-8") as handle:
             self.assertIn(data, handle.read())
         with open(os.path.join(ROOT, "win/DoorbellApp/Resources/Icons.xaml"),
                   "r", encoding="utf-8") as handle:
             self.assertIn(">" + data + "<", handle.read())
+
+    def test_no_leading_dot_numbers_reach_android(self):
+        # The exact spelling Android lint rejects: "v.01" for a dot, which Tabler uses a lot.
+        pattern = re.compile(r"[\s,\-A-Za-z]\.\d")
+        for name in self.names:
+            path = os.path.join(ROOT, "android/app/src/main/res/drawable",
+                                "ic_tabler_" + name.replace("-", "_") + ".xml")
+            with open(path, "r", encoding="utf-8") as handle:
+                data = re.search(r'android:pathData="([^"]*)"', handle.read()).group(1)
+            self.assertIsNone(pattern.search(data), path + " has a leading-dot number")
+            self.assertFalse(data.startswith("."), path)
 
     def test_the_admin_sprite_resolves_every_reference(self):
         with open(os.path.join(ROOT, "webui/admin/index.html"), "r", encoding="utf-8") as handle:

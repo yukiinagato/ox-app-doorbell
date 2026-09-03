@@ -19,8 +19,13 @@ class PathError(ValueError):
     pass
 
 
-def _tokens(data):
+def tokens(data):
+    """Command letters and numbers, in order. Anything else in the string is ignored."""
     return _TOKEN.findall(data)
+
+
+def _tokens(data):
+    return tokens(data)
 
 
 def _flatten_cubic(p0, p1, p2, p3, steps):

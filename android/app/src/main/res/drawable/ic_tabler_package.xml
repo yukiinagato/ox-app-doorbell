@@ -4,10 +4,9 @@
     android:width="24dp"
     android:height="24dp"
     android:viewportWidth="24"
-    android:viewportHeight="24"
-    android:tint="?attr/colorControlNormal">
+    android:viewportHeight="24">
     <path
-        android:pathData="M12 3l8 4.5v9l-8 4.5l-8 -4.5v-9l8 -4.5 M12 12l8 -4.5 M12 12v9 M12 12l-8 -4.5 M16 5.25l-8 4.5"
+        android:pathData="M 12 3 l 8 4.5 v 9 l -8 4.5 l -8 -4.5 v -9 l 8 -4.5 M 12 12 l 8 -4.5 M 12 12 v 9 M 12 12 l -8 -4.5 M 16 5.25 l -8 4.5"
         android:strokeColor="#FF000000"
         android:strokeWidth="2"
         android:strokeLineCap="round"
