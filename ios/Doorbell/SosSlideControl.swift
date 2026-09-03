@@ -68,11 +68,29 @@ final class SosSlideControl: UIControl {
         label.translatesAutoresizingMaskIntoConstraints = false
         track.addSubview(label)
 
-        thumb.text = "»"
-        thumb.font = .systemFont(ofSize: 30, weight: .heavy)
+        // The double chevron is the vendored Tabler glyph, not the "\u{00BB}" character: a text
+        // guillemet is a different shape in every font the fleet's devices ship with, and on the
+        // older ones it is not the arrow this control means at all.
+        thumb.text = nil
         thumb.textAlignment = .center
         thumb.textColor = UIColor(red: 0.55, green: 0.10, blue: 0.09, alpha: 1)
         thumb.backgroundColor = .white
+        if let chevrons = TablerIcon.image("TablerChevronsRight") {
+            let mark = UIImageView(image: chevrons)
+            mark.tintColor = thumb.textColor
+            mark.contentMode = .scaleAspectFit
+            mark.translatesAutoresizingMaskIntoConstraints = false
+            thumb.addSubview(mark)
+            NSLayoutConstraint.activate([
+                mark.centerXAnchor.constraint(equalTo: thumb.centerXAnchor),
+                mark.centerYAnchor.constraint(equalTo: thumb.centerYAnchor),
+                mark.widthAnchor.constraint(equalToConstant: 28),
+                mark.heightAnchor.constraint(equalToConstant: 28),
+            ])
+        } else {
+            thumb.text = "\u{00BB}"
+            thumb.font = .systemFont(ofSize: 30, weight: .heavy)
+        }
         thumb.layer.cornerRadius = 12
         thumb.clipsToBounds = true
         thumb.translatesAutoresizingMaskIntoConstraints = false

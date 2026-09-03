@@ -737,6 +737,12 @@ enum DoorbellTheme {
         case "dark": return .dark
         case "auto_schedule": return scheduled(config: config, localTime: localTime)
         default:
+            // `auto_system` needs a system dark mode to follow. iOS 12 and the tvOS and iOS 9
+            // runtimes below it have none, so systemAppearance() answers nil and the schedule
+            // decides -- which is why a panel on 12.5 wears the light palette at midday and the
+            // dark one after 19:00. That is the designed degradation, not the wallpaper leaking
+            // into the surfaces: cards and chips are palette colours composited over the
+            // palette's own background, and the theme picture reaches only per-region ink.
             return systemAppearance() ?? scheduled(config: config, localTime: localTime)
         }
     }

@@ -409,3 +409,50 @@ final class CameraCapabilityTests: XCTestCase {
         XCTAssertFalse(AvPermissions.shouldWarn(role: "indoor_panel", permission: "denied"))
     }
 }
+
+/// The icon set is vendored, not drawn.
+final class TablerIconTests: XCTestCase {
+
+    private let everyIcon = ["TablerTopologyStar3", "TablerDoor", "TablerDeviceTablet",
+                             "TablerChevronRight", "TablerChevronsRight", "TablerHome",
+                             "TablerPackage", "TablerMail", "TablerBackspace", "TablerWorld"]
+
+    func testEveryVendoredIconIsInTheCatalogAndIsATemplate() {
+        for name in everyIcon {
+            guard let image = TablerIcon.image(name) else {
+                XCTFail("\(name) is missing from Assets.xcassets")
+                continue
+            }
+            XCTAssertEqual(image.renderingMode, .alwaysTemplate,
+                           "\(name) must take the ink of the region it sits in")
+            XCTAssertGreaterThan(image.size.width, 0, name)
+        }
+    }
+
+    func testAnIconNobodyVendoredDrawsNothingRatherThanSomethingWrong() {
+        XCTAssertNil(TablerIcon.image("TablerNoSuchGlyph"))
+    }
+
+    /// Core's seeded purposes wear a glyph; one an administrator invented keeps their own text.
+    func testOnlyTheSeededPurposesHaveAnIcon() {
+        XCTAssertNotNil(TablerIcon.purpose("p_visit"))
+        XCTAssertNotNil(TablerIcon.purpose("p_delivery"))
+        XCTAssertNotNil(TablerIcon.purpose("p_mail"))
+        XCTAssertNil(TablerIcon.purpose("p_gardener"))
+        XCTAssertNil(TablerIcon.purpose(""))
+        XCTAssertEqual(TablerIcon.purposeIcons["p_visit"], "TablerHome")
+        XCTAssertEqual(TablerIcon.purposeIcons["p_delivery"], "TablerPackage")
+        XCTAssertEqual(TablerIcon.purposeIcons["p_mail"], "TablerMail")
+    }
+
+    /// The three counter marks come from the catalog, and each is one of the vendored icons.
+    func testTheCounterMarksAreVendoredIcons() {
+        for kind in [ClusterIconView.Kind.cluster, .doorStation, .indoorPanel] {
+            XCTAssertTrue(everyIcon.contains(kind.iconName), kind.iconName)
+            XCTAssertNotNil(TablerIcon.image(kind.iconName), kind.iconName)
+        }
+        XCTAssertEqual(ClusterIconView.Kind.cluster.iconName, "TablerTopologyStar3")
+        XCTAssertEqual(ClusterIconView.Kind.doorStation.iconName, "TablerDoor")
+        XCTAssertEqual(ClusterIconView.Kind.indoorPanel.iconName, "TablerDeviceTablet")
+    }
+}

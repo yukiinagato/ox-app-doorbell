@@ -45,22 +45,31 @@ struct ClusterCounts: Equatable {
     }
 }
 
-/// The three small marks drawn beside the counts. They are drawn rather than set as text: an
-/// emoji renders differently on every one of these devices and carries a colour the palette does
-/// not choose, and the shell ships no icon font.
+/// The three small marks beside the counts, from the vendored Tabler set.
+///
+/// They used to be drawn here with UIBezierPath, which meant three glyphs nobody had reviewed,
+/// drifting from the same three marks on the other shells. They are template images now, so each
+/// takes the ink of the region it sits in.
 final class ClusterIconView: UIView {
 
     enum Kind {
         case cluster
         case doorStation
         case indoorPanel
+
+        var iconName: String {
+            switch self {
+            case .cluster: return "TablerTopologyStar3"
+            case .doorStation: return "TablerDoor"
+            case .indoorPanel: return "TablerDeviceTablet"
+            }
+        }
     }
 
-    private let kind: Kind
     static let side: CGFloat = 18
+    private let glyph = UIImageView()
 
     init(kind: Kind) {
-        self.kind = kind
         super.init(frame: CGRect(x: 0, y: 0, width: ClusterIconView.side,
                                  height: ClusterIconView.side))
         backgroundColor = .clear
@@ -69,6 +78,17 @@ final class ClusterIconView: UIView {
         widthAnchor.constraint(equalToConstant: ClusterIconView.side).isActive = true
         heightAnchor.constraint(equalToConstant: ClusterIconView.side).isActive = true
         isAccessibilityElement = false
+
+        glyph.image = TablerIcon.image(kind.iconName)
+        glyph.contentMode = .scaleAspectFit
+        glyph.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(glyph)
+        NSLayoutConstraint.activate([
+            glyph.topAnchor.constraint(equalTo: topAnchor),
+            glyph.bottomAnchor.constraint(equalTo: bottomAnchor),
+            glyph.leadingAnchor.constraint(equalTo: leadingAnchor),
+            glyph.trailingAnchor.constraint(equalTo: trailingAnchor),
+        ])
     }
 
     required init?(coder: NSCoder) { fatalError("not supported") }
@@ -77,80 +97,11 @@ final class ClusterIconView: UIView {
         return CGSize(width: ClusterIconView.side, height: ClusterIconView.side)
     }
 
-    /// Redrawn rather than tinted, because the ink comes from the palette and changes with it.
+    /// A template image follows its tint, so this is one assignment rather than a redraw.
     func apply(ink: UIColor) {
         guard tintColor != ink else { return }
         tintColor = ink
-        setNeedsDisplay()
-    }
-
-    override func draw(_ rect: CGRect) {
-        let ink = tintColor ?? .white
-        ink.setStroke()
-        ink.setFill()
-        let side = min(bounds.width, bounds.height)
-        let scale = side / ClusterIconView.side
-        let line = max(1, 1.4 * scale)
-        switch kind {
-        case .cluster:
-            drawCluster(in: bounds, line: line)
-        case .doorStation:
-            drawDoorStation(in: bounds, line: line)
-        case .indoorPanel:
-            drawIndoorPanel(in: bounds, line: line)
-        }
-    }
-
-    /// One node with three around it: the shape of a cluster rather than of any one device.
-    private func drawCluster(in rect: CGRect, line: CGFloat) {
-        let centre = CGPoint(x: rect.midX, y: rect.midY)
-        let radius = min(rect.width, rect.height) * 0.34
-        let satellite = min(rect.width, rect.height) * 0.13
-        let spokes = UIBezierPath()
-        for step in 0..<3 {
-            let angle = CGFloat(step) * (2 * CGFloat.pi / 3) - CGFloat.pi / 2
-            let point = CGPoint(x: centre.x + cos(angle) * radius,
-                                y: centre.y + sin(angle) * radius)
-            spokes.move(to: centre)
-            spokes.addLine(to: point)
-            UIBezierPath(ovalIn: CGRect(x: point.x - satellite, y: point.y - satellite,
-                                        width: satellite * 2, height: satellite * 2)).fill()
-        }
-        spokes.lineWidth = line
-        spokes.stroke()
-        let hub = min(rect.width, rect.height) * 0.11
-        UIBezierPath(ovalIn: CGRect(x: centre.x - hub, y: centre.y - hub,
-                                    width: hub * 2, height: hub * 2)).fill()
-    }
-
-    /// A doorway with its call button beside it.
-    private func drawDoorStation(in rect: CGRect, line: CGFloat) {
-        let width = rect.width * 0.46
-        let door = CGRect(x: rect.midX - width * 0.72, y: rect.height * 0.12,
-                          width: width, height: rect.height * 0.76)
-        let path = UIBezierPath(roundedRect: door, cornerRadius: door.width * 0.32)
-        path.lineWidth = line
-        path.stroke()
-        let button = min(rect.width, rect.height) * 0.09
-        UIBezierPath(ovalIn: CGRect(x: door.maxX + button * 1.4, y: rect.midY - button,
-                                    width: button * 2, height: button * 2)).fill()
-    }
-
-    /// A screen on a stand.
-    private func drawIndoorPanel(in rect: CGRect, line: CGFloat) {
-        let screen = CGRect(x: rect.width * 0.12, y: rect.height * 0.16,
-                            width: rect.width * 0.76, height: rect.height * 0.54)
-        let path = UIBezierPath(roundedRect: screen, cornerRadius: screen.height * 0.22)
-        path.lineWidth = line
-        path.stroke()
-        let stand = UIBezierPath()
-        stand.move(to: CGPoint(x: rect.midX, y: screen.maxY))
-        stand.addLine(to: CGPoint(x: rect.midX, y: rect.height * 0.82))
-        stand.move(to: CGPoint(x: rect.width * 0.3, y: rect.height * 0.84))
-        stand.addLine(to: CGPoint(x: rect.width * 0.7, y: rect.height * 0.84))
-        stand.lineWidth = line
-        stand.lineCapStyle = .round
-        stand.stroke()
+        glyph.tintColor = ink
     }
 }
 

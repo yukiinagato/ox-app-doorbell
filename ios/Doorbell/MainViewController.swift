@@ -801,6 +801,7 @@ final class MainViewController: UIViewController {
                 guard let button = view as? UIButton else { continue }
                 button.backgroundColor = skin.surface
                 button.setTitleColor(skin.cardInk("tile_label"), for: .normal)
+                button.tintColor = skin.cardInk("tile_label")
             }
         }
         idleSkin = skin
@@ -953,9 +954,21 @@ final class MainViewController: UIViewController {
             }
             let entry = purposes[id] as? [String: Any]
             let label = ConfigUtil.labelOf(entry, texts.lang, id)
+            // Core's seeded purposes wear a vendored Tabler glyph; a purpose an administrator
+            // invented has none, so the shell falls back to whatever text they configured --
+            // the same rule the Windows shell follows.
             let icon = entry?["icon"] as? String ?? ""
             let b = UIButton(type: .system)
-            b.setTitle(icon.isEmpty ? label : "\(icon)\n\(label)", for: .normal)
+            if let glyph = TablerIcon.purpose(id) {
+                b.setImage(glyph, for: .normal)
+                b.tintColor = idleSkin.cardInk("tile_label")
+                b.setTitle(label, for: .normal)
+                b.imageView?.contentMode = .scaleAspectFit
+                b.titleEdgeInsets = UIEdgeInsets(top: 34, left: -28, bottom: 0, right: 0)
+                b.imageEdgeInsets = UIEdgeInsets(top: -22, left: 0, bottom: 0, right: -28)
+            } else {
+                b.setTitle(icon.isEmpty ? label : "\(icon)\n\(label)", for: .normal)
+            }
             b.titleLabel?.font = .systemFont(ofSize: 20)
             b.titleLabel?.numberOfLines = 3
             b.titleLabel?.textAlignment = .center

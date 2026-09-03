@@ -416,3 +416,36 @@ enum AvPermissions {
 #endif
     }
 }
+
+/// The icon set. Tabler Icons (MIT), vendored at `assets/icons/tabler/` and compiled into
+/// `Assets.xcassets` as template PDFs.
+///
+/// Nothing here is drawn by hand. A glyph invented in Swift is one nobody has reviewed, it drifts
+/// from the same mark on the Android, Windows and kiosk shells, and it has to be re-invented for
+/// every new one. Emoji are worse: they render differently on every device the fleet contains and
+/// carry a colour the palette did not choose. Every icon is a template image, so it takes the
+/// ink of whatever region it sits in.
+enum TablerIcon {
+
+    /// Core's seeded purpose ids and the icon each one wears. A purpose an administrator invented
+    /// has no icon of its own; the shell falls back to whatever text they configured, exactly as
+    /// the Windows shell does.
+    static let purposeIcons = ["p_visit": "TablerHome",
+                               "p_delivery": "TablerPackage",
+                               "p_mail": "TablerMail"]
+
+    static func purpose(_ id: String) -> UIImage? {
+        guard let name = purposeIcons[id] else { return nil }
+        return image(name)
+    }
+
+    /// A template image, or nil when the catalog has no such icon — a caller that asks for one
+    /// that was never vendored draws nothing rather than something wrong.
+    static func image(_ name: String) -> UIImage? {
+        guard let image = UIImage(named: name) else { return nil }
+        if #available(iOS 13.0, tvOS 13.0, *) {
+            return image.withRenderingMode(.alwaysTemplate)
+        }
+        return image.withRenderingMode(.alwaysTemplate)
+    }
+}

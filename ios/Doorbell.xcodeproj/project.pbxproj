@@ -41,6 +41,8 @@
 		FB000000000000000000002B /* CameraFeeder.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA000000000000000000000C /* CameraFeeder.swift */; };
 		FB000000000000000000002C /* VideoEncoderVT.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA000000000000000000000D /* VideoEncoderVT.swift */; };
 		FB000000000000000000002D /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = FA000000000000000000000F /* LaunchScreen.storyboard */; };
+		FB00000000000000000000F1 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = FA00000000000000000000F0 /* Assets.xcassets */; };
+		FB00000000000000000000F2 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = FA00000000000000000000F0 /* Assets.xcassets */; };
 		FB000000000000000000002E /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = EA0000000000000000000001 /* Localizable.strings */; };
 		FB0000000000000000000030 /* outdoor_call_alert.mp3 in Resources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000018 /* outdoor_call_alert.mp3 */; };
 		FB0000000000000000000031 /* button_click.mp3 in Resources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000019 /* button_click.mp3 */; };
@@ -94,6 +96,7 @@
 		F90000000000000000000037 /* UIStyleApplier.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA000000000000000000001F /* UIStyleApplier.swift */; };
 		F90000000000000000000038 /* IOSAvailability.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000020 /* IOSAvailability.swift */; };
 		F9000000000000000000002D /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = FA000000000000000000000F /* LaunchScreen.storyboard */; };
+		F900000000000000000000F3 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = FA00000000000000000000F0 /* Assets.xcassets */; };
 		F9000000000000000000002E /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = EA0000000000000000000001 /* Localizable.strings */; };
 		F90000000000000000000030 /* outdoor_call_alert.mp3 in Resources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000018 /* outdoor_call_alert.mp3 */; };
 		F90000000000000000000031 /* button_click.mp3 in Resources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000019 /* button_click.mp3 */; };
@@ -183,6 +186,7 @@
 		FA000000000000000000000D /* VideoEncoderVT.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoEncoderVT.swift; sourceTree = "<group>"; };
 		FA000000000000000000000E /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		FA000000000000000000000F /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = "<group>"; };
+		FA00000000000000000000F0 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		FA0000000000000000000010 /* TVAppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TVAppDelegate.swift; sourceTree = "<group>"; };
 		FA0000000000000000000011 /* TVMainViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TVMainViewController.swift; sourceTree = "<group>"; };
 		FA0000000000000000000012 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
@@ -306,6 +310,7 @@
 				FA000000000000000000000D /* VideoEncoderVT.swift */,
 				EA0000000000000000000001 /* Localizable.strings */,
 				FA000000000000000000000F /* LaunchScreen.storyboard */,
+				FA00000000000000000000F0 /* Assets.xcassets */,
 				FA000000000000000000000E /* Info.plist */,
 			);
 			path = Doorbell;
@@ -488,6 +493,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				FB000000000000000000002D /* LaunchScreen.storyboard in Resources */,
+				FB00000000000000000000F1 /* Assets.xcassets in Resources */,
 				FB000000000000000000002E /* Localizable.strings in Resources */,
 				FB0000000000000000000030 /* outdoor_call_alert.mp3 in Resources */,
 				FB0000000000000000000031 /* button_click.mp3 in Resources */,
@@ -502,6 +508,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				FB000000000000000000004B /* Localizable.strings in Resources */,
+				FB00000000000000000000F2 /* Assets.xcassets in Resources */,
 				FB0000000000000000000050 /* outdoor_call_alert.mp3 in Resources */,
 				FB0000000000000000000051 /* button_click.mp3 in Resources */,
 				FB0000000000000000000052 /* 学校のチャイム.mp3 in Resources */,
@@ -515,6 +522,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				F9000000000000000000002D /* LaunchScreen.storyboard in Resources */,
+				F900000000000000000000F3 /* Assets.xcassets in Resources */,
 				F9000000000000000000002E /* Localizable.strings in Resources */,
 				F90000000000000000000030 /* outdoor_call_alert.mp3 in Resources */,
 				F90000000000000000000031 /* button_click.mp3 in Resources */,
