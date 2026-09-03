@@ -234,8 +234,8 @@ durable replication coverage vector; until one exists, retention is a no-op.
   "zone": "Asia/Tokyo", "zone_known": true,
   "source": "system", "enabled": false, "ok": false,
   "offset_ms": 0, "measured_offset_ms": 0,
-  "last_sync_ms": 0, "rtt_ms": 0, "server": "", "interval_s": 900,
-  "offset_min": 540, "syncing": false,
+  "last_sync_ms": 0, "rtt_ms": 0, "server": "", "interval_s": 86400,
+  "offset_min": 540, "syncing": false, "retry_in_s": 0,
   "local": { "iso": "2026-09-02T21:30:00+09:00", "date": "2026-09-02",
              "hh": 21, "mm": 30, "ss": 0, "weekday": "wed", "weekday_num": 3,
              "offset_min": 540, "dst": false, "known": true,
@@ -249,6 +249,16 @@ measurement either way, so the card can show what was measured after NTP is swit
 `err` is present after a failed round and is one of `no_response`, `bad_server`, `bad_reply`, or
 `implausible`. Admin must render `source` and never infer it from `enabled` alone: an enabled but
 unreachable time service is still running on system time.
+
+`time.ntp.interval_s` defaults to 86400 (once a day) and accepts 3600 to 604800 -- one hour to
+seven days. A measured correction does not drift meaningfully over hours, so a shorter interval
+buys nothing and costs battery, traffic, and a wake-up on every device in the house. Core runs
+exactly one round when the service is switched on, when the servers change, and at start-up, and
+then follows the interval; changing the interval alone re-arms the timer without spending a round
+trip. After a failed round it retries from 60 seconds, doubling to a ceiling of one hour, rather
+than waiting out the whole interval. `retry_in_s` is that pending backoff in seconds and is 0
+whenever the ordinary interval applies -- a service that is backing off is neither working nor
+idle, and the card should say so.
 
 `POST /api/time/sync` (Admin session) starts one immediate round and returns
 `{"ok":true,"started":true}`. It returns `409 {"ok":false,"err":"ntp_disabled"}` when the
@@ -270,7 +280,10 @@ not writing `null`.
 
 Core resolves the effective level as device override → cluster default → built-in default
 (call 80, sos 100, idle 60), with `emergency.alarm_volume` as an extra fallback for the SOS level.
-`db_core_audio_json` exposes the same resolution to native shells.
+`db_core_audio_json` exposes the same resolution to native shells. It and
+`db_core_local_time_json` are served from snapshots core's run loop republishes on every
+change, so a shell may call them from its UI thread; they never block on the loop, and a
+write becomes visible on the loop's next turn rather than inside the write call.
 
 ## Announcements
 
@@ -338,12 +351,42 @@ unconfigured, say so on the tap.
 
 `status.display.theme` carries the automatic contrast decision: `auto_background`, `auto_ink` per
 semantic region, `auto_accent` (`call_button` plus `call_button_ink`), the `ink_override` map, and
-the effective `call_button_bg` / `call_button_ink`. `display.theme.auto_ink` and
+the effective `call_button_bg` / `call_button_ink`.
+
+`auto_ink` names the ink token to draw on the background: whichever of dark or light has the
+higher WCAG contrast ratio against it. The two ratios cross at relative luminance 0.1791, not at
+mid luminance. When even the better ink is below 4.5:1 the shell adds the 40% opposite-ink shadow.
+
+`auto_background.source` is `color` when no background image is configured, `image` when one was
+sampled, and `image_unsampled` when an image **is** configured but core could not sample it — with
+a `reason` of `too_large` (past core's 16 MP decoded-pixel budget), `decode_failed`, or `missing`
+(not cached on this node yet). On `image_unsampled` the published `color`, `auto_ink` and
+`auto_accent` were derived from the flat theme colour, not from the picture on screen: do not
+trust them. Sample the image locally, or keep the previous ink until the asset arrives. Reporting
+`color` for a configured-but-unsampled image is what made shells paint light text over a light
+background photograph. `display.theme.auto_ink` and
 `display.theme.auto_accent` are computed and rejected on write; override with
 `display.theme.ink_override.<region>` and `display.theme.call_button_bg`, or their
 `devices.<id>.local.theme` equivalents. Always take the button text colour from
 `call_button_ink`: on a mid-luminance background no colour can both separate from it and carry
 white text, and core returns the best compromise rather than an unreadable button.
+
+`status.display.theme.backdrop` is the semi-transparent layer a shell composites between the
+background image and everything drawn on it -- what keeps a clock legible over a bright
+photograph. It resolves to `{"enabled":true,"color":"#000000","opacity":62,"source":"..."}`, where
+`source` is `device`, `admin` or `default`: the strongest origin among the three values. Configure
+it with `display.theme.backdrop.{enabled,color,opacity}` and override per device with
+`devices.<id>.local.theme.backdrop.*`; each leaf resolves independently, so one panel can raise
+the opacity without restating the colour. A malformed colour or an opacity outside 0-100 is
+refused; turning the layer off, or below 20 while a background image is configured, is accepted
+and reported as a `theme.backdrop_weak` warning. The same object rides in the `display` UI event,
+so a shell paints what core resolved rather than reading configuration itself.
+
+`status.display.theme.glass` resolves the integer `blur_radius` (0-40, default 32) and its
+`default|admin|device` source from `display.theme.glass.blur_radius` and the matching per-device
+override. A client applies this field only when it advertises `frosted_glass_radius_v1`. Modern
+iOS keeps its system-managed `UIBlurEffect` and therefore does not advertise the capability or
+offer a numeric radius.
 
 `status.video.publish` carries the counters core measures on the sending side: `frames`,
 `keyframes`, `fragments`, `dropped_forward`, `frame_interval_ms`, `fps_x10`. Latency, jitter and
@@ -401,3 +444,113 @@ it: wording, icon and order survive being switched off and back on. Disabled pur
 from the panel contract's `purposes` list and cannot be attached to a call. A door station still
 showing a stale button rings anyway, without the purpose — the visitor is never punished for a
 configuration change they cannot see. The 用件 tab offers a toggle alongside delete.
+
+## Doors always exist for a live door station
+
+A door station whose `boot.json` names a door creates `doors.<door>` itself when the entry is
+absent — on founding or joining a cluster and on every later start while paired — labelling it
+with the device name in all three languages. Before this, a cluster founded by a door station had
+no `doors.*` entries at all: `status.doors` was `{}`, `POST /api/doors/<id>/notice` answered
+`rejected`, and only the cluster-wide `POST /api/notice` worked. The entry is only ever created,
+never rewritten, so renaming a door, giving it a building, or reassigning the station in the 門口
+tab survives every restart.
+
+`status.doors` also lists any door served by an **alive door-station peer** that has no
+configuration entry yet, with `"configured": false` and the device's name as the label. Render
+those tiles normally — they are addressable, and the first announcement or unlock write creates the
+entry, after which the door reports `configured`. Offer the 門口 tab as the place to name it. A
+door nobody serves and nothing configures stays unknown and is refused with `400 rejected`.
+
+## History replicates silently, and only people answer
+
+A node joining a cluster receives the whole event history through anti-entropy. Those records land
+in the call log with their original outcomes and raise no presentation at all: no chime, no
+incoming screen, no missed-call `device_alert`, no Telegram or MQTT. A call event presents only
+while its call is live now — still `ringing` on the door station and inside the ring window the
+press declared (`expires_at_ms`, against corrected cluster time). Announcements and SOS are
+replicated *state*, so a joining node applies the current value once and never replays the
+transitions behind it.
+
+`status.sip.answer_mode` reports whether this node picks up by itself. The default follows the
+role — `auto` on a door station, `ring` on an indoor panel — so `outcome: "answered"` and
+`answered_by` in the call log mean a person answered. Setting
+`sip.accounts.<node_id>.answer_mode` to `auto` on an indoor panel is a deliberate intercom
+choice, and the history then attributes calls to that device.
+
+## Live streams and the HTTP worker pool
+
+`/stream.mjpeg`, `/stream.mp4` and `/stream-proxy.mp4` hold one HTTP worker thread each for as
+long as the stream runs. The pool is sized for that (16 workers), so ordinary API traffic is not
+starved by the live views a house has open. A door station whose camera produces no frames now
+probes its stream sockets every two seconds and releases the connection after thirty idle
+seconds — without that, a stream with no frames never touched the socket, never noticed a client
+that had gone away, and pinned its worker permanently. Four such connections used to make the
+port refuse everything while the process and the mesh carried on normally.
+
+Handler exceptions are contained at both boundaries: one that escapes a route handler answers
+`500` instead of unwinding the runloop that owns calls, the mesh and every timer, and one that
+reaches the civetweb C frame answers `500` instead of terminating the process. A handler that
+exceeds its five-second budget is logged with its URI, because a stalled runloop shows up there
+first, one worker at a time.
+
+## The pairing QR payload
+
+`POST /api/join-token` and `POST /api/pairing/start` both return a `uri` alongside `host`, `pin`
+and `expires_s`, and `GET /api/pairing`'s `token` object carries the same field while a PIN is
+live:
+
+```
+doorbell://pair?host=<ip:port>&pin=<6 digits>&exp=<unix seconds>&cluster=<name>
+```
+
+Render the QR from that string and never assemble it in the client — core owns the format so a
+device with the app installed opens a scanned code straight into the join flow. `host` and `pin`
+are required, `exp` is an absolute Unix second, and values are percent-encoded (a `+` is a literal
+plus, not a space), so a cluster name with spaces or Japanese survives. Unknown query keys are
+ignored by parsers, so the format can gain one without breaking shipped clients.
+
+Keep the host and PIN printed beside the code: someone scanning with a plain camera app reads and
+types them instead. `db_core_parse_pair_uri_json` validates a scanned code the same way on every
+platform, returning `bad_scheme`, `missing_pin`, `missing_host` or `expired` on failure.
+
+## Listen-in is not answering
+
+`status.call.dialog_mode` is the `X-Doorbell-Mode` of the dialog in this node's primary slot: `""`
+for an ordinary two-way call, `"answer"` for an explicit takeover, `"monitor"` for one-way
+listen-in. An outbound monitor dialog occupies the same slot as a real call, so core checks the
+mode before treating an established dialog as an answer — a panel opening listen-in leaves the
+call ringing and writes nothing into the history.
+
+A door station also refuses monitor dialogs from a peer that keeps opening them without ever
+carrying media: after eight such dialogs within ten seconds it answers `486` with a
+`Retry-After: 10`. One panel churning listen-in sessions is otherwise enough to saturate a small
+door station, which is what took an iPad 1's HTTP listener down.
+
+## Auto-seeded doors are reclaimed, not orphaned
+
+A door station seeds `doors.<door>` for the door it serves and stamps it with `seeded_by` and
+`seeded_label`. If that device later starts with a different role or a different `boot.door`, it
+deletes the entry it seeded — a station switched to an indoor panel would otherwise leave a ghost
+tile for a door nobody serves. It only ever deletes an entry that is still exactly what it wrote:
+any extra field, or a renamed label, means an administrator has adopted the door, and it stays.
+
+`status.doors.<id>.served_by` gives the node id of the alive station serving that door, or `null`.
+Use it to tell "the station is offline" (`configured: true`, `served_by: null` — show the tile
+greyed) apart from "no station at all".
+
+`served_by` and `peers[].status` come from one liveness map built once per status response, so a
+node named in `served_by` is always `alive` in `peers[]` and a node in any other state is never
+named. A configured device the mesh has not seen is reported `offline` and serves no door. A
+station that leaves and returns keeps its node id and refreshes its existing entry — including
+after a restart that reset its heartbeat counters — instead of appearing twice.
+
+## Returning from the incoming-call screen
+
+`call.indoor.return_s` (5..600 seconds, default 60) and its per-device override
+`devices.<id>.local.call.return_s` set how long an indoor panel stays on the incoming-call page.
+The title carries the countdown and the panel returns home at zero; `status.call.return_s` is the
+effective value for that node. Removing an override means deleting the leaf key, not writing the
+cluster value into the device.
+
+A visitor cancelling the call does not close the page: the live view stays until the countdown
+ends or someone leaves manually. Tapping the countdown number cancels the countdown for that call.

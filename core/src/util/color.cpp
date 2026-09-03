@@ -17,9 +17,11 @@ namespace {
 
 constexpr double kMinButtonContrast = 3.0;
 constexpr double kMinTextContrast = 4.5;
-// A decode budget the oldest supported hardware can survive. Anything larger falls back to the
-// theme colour rather than risking a multi-hundred-megabyte allocation on an iPad 1.
-constexpr long long kMaxPixels = 4'000'000LL;
+// Decoded-pixel budget. stb offers no downscale-on-decode, so this is the real transient cost:
+// three bytes per pixel, about 48 MB at the cap, freed as soon as the 16x16 sample is taken.
+// 16 MP covers what phone and tablet cameras produce -- the previous 4 MP budget silently
+// refused an ordinary 2200x2609 photo and the caller then reported the flat theme colour.
+constexpr long long kMaxPixels = 16'000'000LL;
 
 int hexNibble(char c) {
   if (c >= '0' && c <= '9') return c - '0';
@@ -121,7 +123,14 @@ Rgb fromHsl(const Hsl& hsl) {
 }
 
 const char* autoInk(const Rgb& background) {
-  return relativeLuminance(background) >= 0.5 ? "dark" : "light";
+  // Whichever ink token actually reads better against this background, measured with WCAG
+  // contrast against the two extremes the tokens sit near. Splitting at mid luminance (Y >= 0.5)
+  // instead put light ink on a light grey photograph: #BBBBB4 sits at Y 0.494, where white text
+  // scores 1.93:1 and dark text 9.58:1. The crossover of the two ratios is Y = 0.1791.
+  const double y = relativeLuminance(background);
+  const double dark_ink = contrastRatioLuminance(0.0, y);
+  const double light_ink = contrastRatioLuminance(1.0, y);
+  return dark_ink >= light_ink ? "dark" : "light";
 }
 
 Rgb autoAccent(const Rgb& background, const Rgb& text) {
@@ -177,21 +186,33 @@ Rgb autoAccent(const Rgb& background, const Rgb& text) {
 
 const char* accentInk(const Rgb& button) { return autoInk(button); }
 
-bool averageImageColor(const std::string& path, Rgb* out) {
-  if (path.empty() || !out) return false;
+const char* sampleStatusName(SampleStatus status) {
+  switch (status) {
+    case SampleStatus::kOk: return "ok";
+    case SampleStatus::kMissing: return "missing";
+    case SampleStatus::kTooLarge: return "too_large";
+    case SampleStatus::kDecodeFailed: return "decode_failed";
+  }
+  return "decode_failed";
+}
+
+SampleStatus averageImageColor(const std::string& path, Rgb* out) {
+  if (path.empty() || !out) return SampleStatus::kMissing;
   Bytes encoded;
-  if (!readFileBytes(path, encoded) || encoded.empty()) return false;
-  if (encoded.size() > static_cast<size_t>(16) * 1024 * 1024) return false;
+  if (!readFileBytes(path, encoded) || encoded.empty()) return SampleStatus::kMissing;
+  // An encoded file this large is past the asset ledger's own 3 MB upload cap; treat it as
+  // oversized rather than spending the decode on it.
+  if (encoded.size() > static_cast<size_t>(32) * 1024 * 1024) return SampleStatus::kTooLarge;
   const int encoded_len = static_cast<int>(encoded.size());
   int width = 0, height = 0, channels = 0;
   if (!stbi_info_from_memory(encoded.data(), encoded_len, &width, &height, &channels))
-    return false;
-  if (width <= 0 || height <= 0) return false;
-  if (static_cast<long long>(width) * height > kMaxPixels) return false;
+    return SampleStatus::kDecodeFailed;
+  if (width <= 0 || height <= 0) return SampleStatus::kDecodeFailed;
+  if (static_cast<long long>(width) * height > kMaxPixels) return SampleStatus::kTooLarge;
   int decoded_channels = 0;
   unsigned char* pixels =
       stbi_load_from_memory(encoded.data(), encoded_len, &width, &height, &decoded_channels, 3);
-  if (!pixels) return false;
+  if (!pixels) return SampleStatus::kDecodeFailed;
   // Sample a grid of at most 16x16 points; averaging every pixel of a photo buys no accuracy
   // for a luminance decision and costs real time on the oldest hardware.
   const int steps_x = std::min(width, 16);
@@ -212,7 +233,7 @@ bool averageImageColor(const std::string& path, Rgb* out) {
   out->r = toByte(sum_r / count / 255.0);
   out->g = toByte(sum_g / count / 255.0);
   out->b = toByte(sum_b / count / 255.0);
-  return true;
+  return SampleStatus::kOk;
 }
 
 }  // namespace color

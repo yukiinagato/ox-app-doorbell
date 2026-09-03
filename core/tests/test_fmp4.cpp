@@ -19,6 +19,7 @@
 #include <vector>
 
 #include "doctest.h"
+#include "test_env.h"
 #include "media/fmp4.h"
 #include "media/video_track.h"
 #include "node/node.h"
@@ -439,6 +440,16 @@ TEST_CASE("video_track: emits per-frame fragments with capture time and continuo
   CHECK(!ended);
   CHECK(std::memcmp(&init[4], "ftyp", 4) == 0);
 
+  Bytes initial_key = reader->pull(100, &ended);
+  REQUIRE(!initial_key.empty());
+  {
+    auto top = childBoxes(initial_key, 0, initial_key.size());
+    REQUIRE(top.size() == 3);
+    CHECK(top[0].type == "dbts");
+    CHECK(be64(initial_key, top[0].payload + 4) == 1000);
+    CHECK(top[1].type == "moof");
+  }
+
 
   Bytes p1 = annexb({makeSlice(false, 8)});
   track.push(p1.data(), p1.size(), false, 1100);
@@ -496,6 +507,7 @@ TEST_CASE("video_track: slow live subscribers receive only the latest fragment")
   track.push(k.data(), k.size(), true, 0);
   bool ended = false;
   REQUIRE(!reader->pull(100, &ended).empty());  // init
+  REQUIRE(!reader->pull(100, &ended).empty());  // cached random-access fragment
 
 
   Bytes kk = annexb({makeSlice(true, 16)});
@@ -516,6 +528,36 @@ TEST_CASE("video_track: slow live subscribers receive only the latest fragment")
   CHECK(ended);
 }
 
+TEST_CASE("video_track: a late subscriber receives the cached keyframe and requests a new one") {
+  VideoTrack track;
+  track.setEnabled(true);
+  Bytes sps = makeSps(80, 45, 0), pps = makePps();
+  Bytes key = annexb({sps, pps, makeSlice(true, 16)});
+  Bytes delta = annexb({makeSlice(false, 8)});
+  track.push(key.data(), key.size(), true, 1000);
+  track.push(delta.data(), delta.size(), false, 1040);
+
+  auto reader = track.subscribe();
+  CHECK(track.takeKeyframeRequest());
+  CHECK(!track.takeKeyframeRequest());
+
+  bool ended = false;
+  REQUIRE(!reader->pull(100, &ended).empty());  // init
+  Bytes cached = reader->pull(100, &ended);
+  REQUIRE(!cached.empty());
+  auto top = childBoxes(cached, 0, cached.size());
+  REQUIRE(top.size() == 3);
+  CHECK(be64(cached, top[0].payload + 4) == 1000);
+  CHECK(reader->pull(10, &ended).empty());
+
+  track.push(key.data(), key.size(), true, 1080);
+  Bytes fresh = reader->pull(100, &ended);
+  REQUIRE(!fresh.empty());
+  top = childBoxes(fresh, 0, fresh.size());
+  CHECK(be64(fresh, top[0].payload + 4) == 1080);
+  CHECK(track.stats().keyframe_requests == 1);
+}
+
 TEST_CASE("video_track: ignores pushes while the H.264 track is disabled") {
   VideoTrack track;
   Bytes sps = makeSps(80, 45, 0), pps = makePps();
@@ -529,21 +571,9 @@ TEST_CASE("video_track: ignores pushes while the H.264 track is disabled") {
 
 namespace {
 
-int freePort(std::mt19937& rng) {
-  std::uniform_int_distribution<int> dist(40000, 60000);
-  for (int i = 0; i < 50; i++) {
-    int port = dist(rng);
-    int fd = ::socket(AF_INET, SOCK_STREAM, 0);
-    if (fd < 0) continue;
-    sockaddr_in sa{};
-    sa.sin_family = AF_INET;
-    sa.sin_port = htons(static_cast<uint16_t>(port));
-    sa.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-    int ok = ::bind(fd, reinterpret_cast<sockaddr*>(&sa), sizeof(sa));
-    ::close(fd);
-    if (ok == 0) return port;
-  }
-  return -1;
+int freePort(std::mt19937& /*rng*/) {
+  // Ports come from one process-wide allocator; see core/tests/test_ports.h.
+  return db::testing::freeListenPort();
 }
 
 int connectTo(int port, int rcv_timeout_ms) {
@@ -636,7 +666,7 @@ TEST_CASE("fmp4: Node serves encoded frames through GET /stream.mp4") {
   node.setConfigKey("doors.d_front", "{\"label\":{\"ja\":\"正面玄関\"}}");
 
 
-  CHECK(!node.videoEncoderWanted());
+  CHECK(node.videoEncoderWanted());
 
   Bytes sps = makeSps(80, 45, 0), pps = makePps();
   Bytes key_au = annexb({sps, pps, makeSlice(true, 40)});
@@ -675,8 +705,7 @@ TEST_CASE("fmp4: Node serves encoded frames through GET /stream.mp4") {
   CHECK(hasMarker(got, "mdat"));
 
 
-  for (int i = 0; i < 50 && node.videoEncoderWanted(); i++) usleep(100 * 1000);
-  CHECK(!node.videoEncoderWanted());
+  CHECK(node.videoEncoderWanted());
 
 
   {
@@ -686,7 +715,7 @@ TEST_CASE("fmp4: Node serves encoded frames through GET /stream.mp4") {
     cJSON* video = json::get(j.get(), "video");
     REQUIRE(video);
     CHECK(json::getString(video, "codec") == "h264");
-    CHECK(json::getBool(video, "active", false));
+    CHECK(!json::getBool(video, "active", true));
     CHECK(st.find("stream_mp4") != std::string::npos);
   }
 
@@ -699,6 +728,7 @@ TEST_CASE("fmp4: Node serves encoded frames through GET /stream.mp4") {
 
 
   node.setConfigKey("devices." + node.nodeId() + ".local.camera", "{\"codec\":\"mjpeg\"}");
+  CHECK(!node.videoEncoderWanted());
   std::string resp = httpGet(http_port, "/stream.mp4");
   CHECK(resp.rfind("HTTP/1.1 503", 0) == 0);
 

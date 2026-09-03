@@ -7,6 +7,7 @@
 #include <unistd.h>
 
 #include <cstdio>
+#include <functional>
 #include <memory>
 #include <random>
 #include <string>
@@ -15,9 +16,11 @@
 #include <sqlite3.h>
 
 #include "doctest.h"
+#include "test_env.h"
 #include "events/events.h"
 #include "mesh/mesh.h"
 #include "node/node.h"
+#include "sipctl/sipctl.h"
 #include "store/store.h"
 #include "util/clock.h"
 #include "util/json.h"
@@ -1133,21 +1136,9 @@ TEST_CASE("node: node death records one offline event") {
 
 
 namespace {
-int freePort(std::mt19937& rng) {
-  std::uniform_int_distribution<int> dist(40000, 60000);
-  for (int i = 0; i < 50; i++) {
-    int port = dist(rng);
-    int fd = ::socket(AF_INET, SOCK_STREAM, 0);
-    if (fd < 0) continue;
-    sockaddr_in sa{};
-    sa.sin_family = AF_INET;
-    sa.sin_port = htons(static_cast<uint16_t>(port));
-    sa.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-    int ok = ::bind(fd, reinterpret_cast<sockaddr*>(&sa), sizeof(sa));
-    ::close(fd);
-    if (ok == 0) return port;
-  }
-  return -1;
+int freePort(std::mt19937& /*rng*/) {
+  // Ports come from one process-wide allocator; see core/tests/test_ports.h.
+  return db::testing::freeListenPort();
 }
 
 
@@ -1832,4 +1823,561 @@ TEST_CASE("pairing: minting a PIN neither opens the bulk-add window nor invites 
 
   host.node->stop();
   joiner.node->stop();
+}
+
+TEST_CASE("doors: an indoor panel lists a live door station's door even without a config entry") {
+  NFleet f;
+  auto& indoor = f.add("I:1", "living", "indoor_panel", "", /*seed_cfg=*/true);
+  auto& station = f.add("A:1", "front-panel", "door_station", "d_front", /*seed_cfg=*/false);
+  REQUIRE(indoor.node->start());
+  REQUIRE(station.node->start());
+
+  auto doorsOf = [](Node& node) {
+    auto status = json::parse(node.statusJson());
+    REQUIRE(status);
+    return json::Doc(cJSON_Duplicate(json::get(status.get(), "doors"), 1));
+  };
+
+  // The door station seeds its own entry, which replicates to the panel.
+  REQUIRE([&] {
+    for (int i = 0; i < 200; i++) {
+      f.run(50);
+      auto doors = doorsOf(*indoor.node);
+      if (doors && cJSON_IsObject(json::get(doors.get(), "d_front"))) return true;
+    }
+    return false;
+  }());
+  auto seeded = doorsOf(*indoor.node);
+  const cJSON* entry = json::get(seeded.get(), "d_front");
+  REQUIRE(cJSON_IsObject(entry));
+  CHECK(json::getBool(entry, "configured"));
+  CHECK(json::getString(entry, "label") == "front-panel");
+
+  // Now model the upgrade case: the door entry is gone but the station is still alive. The
+  // panel must keep the tile so announcements and unlock visibility have something to target.
+  auto removed = json::parse(indoor.node->deleteConfigKeyJson("doors.d_front"));
+  REQUIRE(removed);
+  REQUIRE(json::getBool(removed.get(), "ok"));
+  f.run(500);
+  auto degraded = doorsOf(*indoor.node);
+  const cJSON* live = json::get(degraded.get(), "d_front");
+  REQUIRE(cJSON_IsObject(live));
+  CHECK_FALSE(json::getBool(live, "configured"));
+  // The label falls back to the peer's device name rather than showing a blank tile.
+  CHECK(json::getString(live, "label") == "front-panel");
+  CHECK(cJSON_IsObject(json::get(live, "unlock")));
+
+  // The panel can still post an announcement to the door it is showing.
+  REQUIRE(indoor.node->setDoorNotice("d_front", "Side gate today", 0));
+  REQUIRE([&] {
+    for (int i = 0; i < 200; i++) {
+      f.run(50);
+      auto doors = doorsOf(*station.node);
+      const cJSON* notice = doors ? json::get(json::get(doors.get(), "d_front"), "notice")
+                                  : nullptr;
+      if (cJSON_IsObject(notice) &&
+          json::getString(notice, "text") == "Side gate today")
+        return true;
+    }
+    return false;
+  }());
+
+  // A door nobody serves is still refused.
+  CHECK_FALSE(indoor.node->setDoorNotice("d_nowhere", "hello", 0));
+
+  indoor.node->stop();
+  station.node->stop();
+}
+
+TEST_CASE("pairing: unpair then found leaves no peer from the previous cluster") {
+  // The regression: after unpairing all three devices and founding a fresh cluster on one of
+  // them, /api/status still listed the old cluster's members as offline peers. They came from
+  // devices.<id> entries that survived unpair in the replicated configuration, so the founder's
+  // brand-new cluster appeared to have members it had never met.
+  NFleet f;
+  auto& founder = f.add("A:1", "front-panel", "door_station", "d_front", /*seed_cfg=*/true);
+  auto& joiner = f.add("J:1", "living", "indoor_panel", "", /*seed_cfg=*/false);
+  REQUIRE(founder.node->start());
+  REQUIRE(joiner.node->start());
+  const std::string joiner_id = joiner.node->nodeId();
+
+  // Let the two become a cluster, so the founder learns the other device for real.
+  REQUIRE([&] {
+    for (int i = 0; i < 300; i++) {
+      f.run(50);
+      auto config = json::parse(founder.node->configJson());
+      if (config && json::get(json::get(config.get(), "devices"), joiner_id.c_str()))
+        return true;
+    }
+    return false;
+  }());
+  founder.node->setConfigKey("devices." + joiner_id + ".name", "\"doorbell-android\"");
+  f.run(200);
+
+  auto peerIds = [](Node& node) {
+    auto status = json::parse(node.statusJson());
+    REQUIRE(status);
+    std::set<std::string> ids;
+    const cJSON* peers = json::get(status.get(), "peers");
+    const cJSON* peer = nullptr;
+    cJSON_ArrayForEach(peer, peers) ids.insert(json::getString(peer, "id"));
+    return ids;
+  };
+  CHECK(peerIds(*founder.node).count(joiner_id) == 1);
+
+  // Both devices leave, as an operator resetting the house would do.
+  joiner.node->unpair();
+  founder.node->unpair();
+  f.run(200);
+
+  // The founder's own identity survives; the other device is gone from configuration entirely,
+  // not merely marked offline.
+  auto after = json::parse(founder.node->configJson());
+  REQUIRE(after);
+  const cJSON* devices = json::get(after.get(), "devices");
+  CHECK(json::get(devices, joiner_id.c_str()) == nullptr);
+  CHECK(cJSON_IsObject(json::get(devices, founder.node->nodeId().c_str())));
+  // The first-run defaults are re-seeded immediately, so the device is usable while unpaired.
+  CHECK(json::getInt(after.get(), "schema_version") == 1);
+
+  // Founding a fresh cluster starts with this device and nothing else.
+  REQUIRE(founder.node->foundCluster());
+  f.run(300);
+  const std::set<std::string> fresh = peerIds(*founder.node);
+  CHECK(fresh.count(joiner_id) == 0);
+  for (const std::string& id : fresh) CHECK(id == founder.node->nodeId());
+
+  // The history this device recorded is its own and is deliberately kept, even though its
+  // attribution may still name a device that has left.
+  auto history = json::parse(founder.node->callLogJson(0, 50));
+  REQUIRE(history);
+  CHECK(cJSON_IsArray(json::get(history.get(), "rows")));
+
+  founder.node->stop();
+  joiner.node->stop();
+}
+
+TEST_CASE("pairing: a replicated devices entry from the old cluster does not resurrect") {
+  // Purging must not be done with tombstones. A tombstone replicates, so re-pairing to the same
+  // cluster would push a deletion for every device the leaving node had forgotten -- and the
+  // forgotten entries must come back from the cluster instead.
+  NFleet f;
+  auto& keeper = f.add("K:1", "living", "indoor_panel", "", /*seed_cfg=*/true);
+  auto& leaver = f.add("L:1", "front-panel", "door_station", "d_front", /*seed_cfg=*/false);
+  REQUIRE(keeper.node->start());
+  REQUIRE(leaver.node->start());
+  const std::string keeper_id = keeper.node->nodeId();
+  const std::string leaver_id = leaver.node->nodeId();
+
+  REQUIRE([&] {
+    for (int i = 0; i < 300; i++) {
+      f.run(50);
+      auto config = json::parse(leaver.node->configJson());
+      if (config && json::get(json::get(config.get(), "devices"), keeper_id.c_str()))
+        return true;
+    }
+    return false;
+  }());
+  // A third device that only ever existed in configuration, like an old cluster member.
+  const std::string ghost_id(32, 'c');
+  keeper.node->setConfigKey("devices." + ghost_id + ".name", "\"doorbell-iPadmini3\"");
+  keeper.node->setConfigKey("devices." + ghost_id + ".role", "\"door_station\"");
+  REQUIRE([&] {
+    for (int i = 0; i < 300; i++) {
+      f.run(50);
+      auto config = json::parse(leaver.node->configJson());
+      if (config && json::get(json::get(config.get(), "devices"), ghost_id.c_str()))
+        return true;
+    }
+    return false;
+  }());
+
+  leaver.node->unpair();
+  f.run(200);
+  // Locally forgotten, including the ghost it had only ever replicated.
+  auto local = json::parse(leaver.node->configJson());
+  REQUIRE(local);
+  CHECK(json::get(json::get(local.get(), "devices"), ghost_id.c_str()) == nullptr);
+  CHECK(json::get(json::get(local.get(), "devices"), keeper_id.c_str()) == nullptr);
+
+  // The cluster it left is untouched: no deletion was replicated to it.
+  f.run(600);
+  auto remote = json::parse(keeper.node->configJson());
+  REQUIRE(remote);
+  const cJSON* remote_devices = json::get(remote.get(), "devices");
+  CHECK(cJSON_IsObject(json::get(remote_devices, ghost_id.c_str())));
+  CHECK(cJSON_IsObject(json::get(remote_devices, keeper_id.c_str())));
+  CHECK(cJSON_IsObject(json::get(remote_devices, leaver_id.c_str())));
+
+  keeper.node->stop();
+  leaver.node->stop();
+}
+
+TEST_CASE("calls: joining a cluster imports the history silently") {
+  // Owner observation: a newly paired indoor panel rang many times right after joining. Every
+  // historical press replicated by anti-entropy was dispatched while its projection was briefly
+  // "ringing", so the panel re-enacted calls the house had taken days earlier.
+  NFleet f;
+  auto& station = f.add("A:1", "front-panel", "door_station", "d_front", /*seed_cfg=*/true);
+  REQUIRE(station.node->start());
+  f.run(200);
+
+  for (int i = 0; i < 20; i++) {
+    const std::string call = station.node->pressV2("d_front", "");
+    REQUIRE_FALSE(call.empty());
+    REQUIRE(station.node->cancelCallV2("d_front", call, "visitor"));
+    f.run(2000);
+  }
+  // Every one of those calls is now well past its ring window.
+  f.run(180'000, 1000);
+
+  auto& panel = f.add("P:1", "living", "indoor_panel", "", /*seed_cfg=*/false);
+  REQUIRE(panel.node->start());
+  REQUIRE([&] {
+    for (int i = 0; i < 400; i++) {
+      f.run(50);
+      auto history = json::parse(panel.node->callLogJson(0, 100));
+      if (history && cJSON_GetArraySize(json::get(history.get(), "rows")) == 20) return true;
+    }
+    return false;
+  }());
+
+  // The history is there in full, and not one of those calls rang.
+  auto history = json::parse(panel.node->callLogJson(0, 100));
+  REQUIRE(history);
+  CHECK(cJSON_GetArraySize(json::get(history.get(), "rows")) == 20);
+  CHECK(panel.uiCount("chime") == 0);
+  CHECK(panel.uiCount("event", "press") == 0);
+  CHECK(panel.tts.empty());
+
+  // A call that is genuinely ringing when the panel joins rings exactly once.
+  panel.ui.clear();
+  const std::string live = station.node->pressV2("d_front", "p_delivery");
+  REQUIRE_FALSE(live.empty());
+  REQUIRE([&] {
+    for (int i = 0; i < 300; i++) {
+      f.run(50);
+      if (panel.uiCount("chime") >= 1) return true;
+    }
+    return false;
+  }());
+  f.run(2000);
+  CHECK(panel.uiCount("chime") == 1);
+  CHECK(panel.uiCount("event", "press") == 1);
+
+  station.node->stop();
+  panel.node->stop();
+}
+
+TEST_CASE("calls: an indoor panel rings and never answers by itself") {
+  // Real-device finding: the call log recorded outcome "answered", answered_by an indoor panel
+  // nobody had touched. SipSettings::auto_answer defaulted to true for every role, so an
+  // unconfigured panel picked up the incoming SIP call and its shell reported it as answered.
+  NFleet f;
+  auto& station = f.add("A:1", "front-panel", "door_station", "d_front", /*seed_cfg=*/true);
+  auto& panel = f.add("P:1", "living", "indoor_panel", "", /*seed_cfg=*/false);
+  REQUIRE(station.node->start());
+  REQUIRE(panel.node->start());
+  f.run(300);
+
+  auto answerMode = [](Node& node) {
+    auto status = json::parse(node.statusJson());
+    REQUIRE(status);
+    return json::getString(json::get(status.get(), "sip"), "answer_mode");
+  };
+  // The documented defaults, now actually applied: the door answers, the panel waits.
+  CHECK(answerMode(*station.node) == "auto");
+  CHECK(answerMode(*panel.node) == "ring");
+
+  // A household that wants an intercom can still opt in, per device.
+  panel.node->setConfigKey(
+      "sip.accounts." + panel.node->nodeId() + ".answer_mode", "\"auto\"");
+  f.run(300);
+  CHECK(answerMode(*panel.node) == "auto");
+  panel.node->setConfigKey(
+      "sip.accounts." + panel.node->nodeId() + ".answer_mode", "\"ring\"");
+  f.run(300);
+  CHECK(answerMode(*panel.node) == "ring");
+
+  // A ringing call that nobody answers is never attributed to anyone, and opening a listen-in
+  // (monitor) session while it rings is not an answer either. A monitor dialog is one-way audio
+  // that a panel opens by itself; core reports a call answered only for the primary dialog it
+  // owns, so a storm of monitor sessions cannot promote a ringing call to answered.
+  const std::string call = station.node->pressV2("d_front", "");
+  REQUIRE_FALSE(call.empty());
+  for (int i = 0; i < 20; i++) {
+    panel.node->sipCall("sip:127.0.0.1:47190", "monitor");
+    f.run(50);
+  }
+  f.run(1000);
+  auto history = json::parse(panel.node->callLogJson(0, 10));
+  REQUIRE(history);
+  const cJSON* rows = json::get(history.get(), "rows");
+  const cJSON* row = nullptr;
+  cJSON_ArrayForEach(row, rows) {
+    CHECK(json::getString(row, "outcome") != "answered");
+    CHECK(json::getString(row, "answered_by").empty());
+  }
+
+  station.node->stop();
+  panel.node->stop();
+}
+
+TEST_CASE("calls: a monitor dialog leaves a ringing call ringing") {
+  // The mode of the dialog in the primary slot is what decides whether it may answer. A panel
+  // opening listen-in must leave the call ringing and the history untouched.
+  NFleet f;
+  auto& station = f.add("A:1", "front-panel", "door_station", "d_front", /*seed_cfg=*/true);
+  auto& panel = f.add("P:1", "living", "indoor_panel", "", /*seed_cfg=*/false);
+  REQUIRE(station.node->start());
+  REQUIRE(panel.node->start());
+  f.run(300);
+
+  auto dialogMode = [](Node& node) {
+    auto status = json::parse(node.statusJson());
+    REQUIRE(status);
+    return json::getString(json::get(status.get(), "call"), "dialog_mode");
+  };
+  CHECK(dialogMode(*panel.node).empty());
+
+  const std::string call = station.node->pressV2("d_front", "");
+  REQUIRE_FALSE(call.empty());
+  f.run(300);
+
+  // The panel opens listen-in. The dialog mode follows it, and that mode is what the answer
+  // guard reads.
+  panel.node->sipCall("sip:127.0.0.1:47190", "monitor");
+  f.run(3000);  // let the published status snapshot catch up
+  CHECK(dialogMode(*panel.node) == "monitor");
+  CHECK_FALSE(SipCtl::dialogCanAnswer(dialogMode(*panel.node)));
+
+  // The call is still ringing on the door station and nothing has been attributed to anyone.
+  auto status = json::parse(station.node->statusJson());
+  REQUIRE(status);
+  const cJSON* calls = json::get(status.get(), "active_calls");
+  bool still_ringing = false;
+  const cJSON* entry = nullptr;
+  cJSON_ArrayForEach(entry, calls) {
+    if (json::getString(entry, "call_id") != call) continue;
+    still_ringing = json::getString(entry, "state") == "ringing";
+  }
+  CHECK(still_ringing);
+  for (Node* node : {station.node.get(), panel.node.get()}) {
+    auto history = json::parse(node->callLogJson(0, 10));
+    REQUIRE(history);
+    const cJSON* row = nullptr;
+    cJSON_ArrayForEach(row, json::get(history.get(), "rows")) {
+      CHECK(json::getString(row, "outcome") != "answered");
+      CHECK(json::getString(row, "answered_by").empty());
+    }
+  }
+
+  // A talk dialog is a different matter and is allowed to answer.
+  panel.node->sipCall("sip:127.0.0.1:47190", "answer");
+  f.run(3000);
+  CHECK(dialogMode(*panel.node) == "answer");
+  CHECK(SipCtl::dialogCanAnswer(dialogMode(*panel.node)));
+
+  station.node->stop();
+  panel.node->stop();
+}
+
+TEST_CASE("doors: served_by and the peer list never disagree about a station") {
+  // Device finding: /api/status listed a door station as "offline" in peers[] while
+  // doors["door-mini3"].served_by named that same station, and the node was answering HTTP the
+  // whole time. served_by is documented as the *alive* station, so the two views contradicted
+  // each other. They now read one liveness map, built once per status document.
+  NFleet f;
+  auto& panel = f.add("I:1", "living", "indoor_panel", "", /*seed_cfg=*/true);
+  auto& station = f.add("A:1", "mini3", "door_station", "door-mini3", /*seed_cfg=*/false);
+  REQUIRE(panel.node->start());
+  REQUIRE(station.node->start());
+
+  struct View {
+    std::string served_by;
+    std::string peer_status;
+    bool has_door = false;
+  };
+  auto view = [&](Node& node, const std::string& door, const std::string& peer_id) {
+    auto status = json::parse(node.statusJson());
+    REQUIRE(status);
+    View out;
+    const cJSON* entry = json::get(json::get(status.get(), "doors"), door.c_str());
+    out.has_door = cJSON_IsObject(entry);
+    if (out.has_door) {
+      const cJSON* served = json::get(entry, "served_by");
+      out.served_by = cJSON_IsString(served) ? served->valuestring : "";
+    }
+    const cJSON* peer = nullptr;
+    cJSON_ArrayForEach(peer, json::get(status.get(), "peers")) {
+      if (json::getString(peer, "id") == peer_id) out.peer_status = json::getString(peer, "status");
+    }
+    return out;
+  };
+  const std::string station_id = station.node->nodeId();
+  auto settle = [&](const std::function<bool(const View&)>& done) {
+    for (int i = 0; i < 600; i++) {
+      f.run(50);
+      if (done(view(*panel.node, "door-mini3", station_id))) return true;
+    }
+    return false;
+  };
+  // Whatever the state, the two halves of the status document must tell the same story.
+  auto consistent = [](const View& seen) {
+    if (!seen.served_by.empty() && seen.peer_status != "alive") return false;
+    if (seen.peer_status != "alive" && !seen.served_by.empty()) return false;
+    return true;
+  };
+
+  REQUIRE(settle([&](const View& seen) { return seen.served_by == station_id; }));
+  {
+    const View seen = view(*panel.node, "door-mini3", station_id);
+    CHECK(seen.served_by == station_id);
+    CHECK(seen.peer_status == "alive");
+    CHECK(consistent(seen));
+  }
+
+  // Flip the station offline: served_by must go null as soon as the peer stops being alive.
+  f.net.partition({{"I:1"}, {"A:1"}});
+  REQUIRE(settle([&](const View& seen) { return seen.served_by.empty(); }));
+  {
+    const View seen = view(*panel.node, "door-mini3", station_id);
+    CHECK(seen.served_by.empty());
+    CHECK(seen.peer_status != "alive");
+    // The door itself stays: it is configured, it simply has nobody serving it right now.
+    CHECK(seen.has_door);
+    CHECK(consistent(seen));
+  }
+
+  // ...and back. The same node id returns rather than arriving as a second entry.
+  f.net.heal();
+  REQUIRE(settle([&](const View& seen) { return seen.served_by == station_id; }));
+  {
+    const View seen = view(*panel.node, "door-mini3", station_id);
+    CHECK(seen.peer_status == "alive");
+    CHECK(consistent(seen));
+    auto status = json::parse(panel.node->statusJson());
+    REQUIRE(status);
+    size_t entries = 0;
+    const cJSON* peer = nullptr;
+    cJSON_ArrayForEach(peer, json::get(status.get(), "peers")) {
+      if (json::getString(peer, "id") == station_id) entries++;
+    }
+    CHECK(entries == 1);
+  }
+
+  // The agreement holds while the cluster keeps running, not only at the moments checked above.
+  for (int i = 0; i < 40; i++) {
+    f.run(100);
+    CHECK(consistent(view(*panel.node, "door-mini3", station_id)));
+  }
+
+  panel.node->stop();
+  station.node->stop();
+}
+
+TEST_CASE("doors: a live station advertisement outranks stale replicated identity") {
+  NFleet f;
+  auto& panel = f.add("I:1", "living", "indoor_panel", "", /*seed_cfg=*/true);
+  auto& station =
+      f.add("A:1", "moto", "door_station", "door-moto", /*seed_cfg=*/false);
+  REQUIRE(panel.node->start());
+  REQUIRE(station.node->start());
+  f.run(500);
+
+  const std::string station_id = station.node->nodeId();
+  // Reproduce the field state found on the iPad: the peer heartbeat says door station, while an
+  // older administrator write still describes the same node as an indoor panel with no door.
+  panel.node->setConfigKey("devices." + station_id + ".role", R"("indoor_panel")");
+  panel.node->setConfigKey("devices." + station_id + ".door", R"("")");
+  f.run(200);
+
+  auto status = json::parse(panel.node->statusJson());
+  REQUIRE(status);
+  const cJSON* door = json::get(json::get(status.get(), "doors"), "door-moto");
+  REQUIRE(cJSON_IsObject(door));
+  CHECK(json::getString(door, "served_by") == station_id);
+
+  const cJSON* peer = nullptr;
+  cJSON_ArrayForEach(peer, json::get(status.get(), "peers")) {
+    if (json::getString(peer, "id") != station_id) continue;
+    CHECK(json::getString(peer, "status") == "alive");
+    CHECK(json::getString(peer, "role") == "door_station");
+    CHECK(json::getString(peer, "door") == "door-moto");
+    CHECK_FALSE(json::getString(peer, "stream").empty());
+    CHECK_FALSE(json::getString(peer, "stream_mp4").empty());
+  }
+
+  panel.node->stop();
+  station.node->stop();
+}
+
+TEST_CASE("peers: a quiet cluster stops emitting peers_changed") {
+  // Device finding: core emitted peers_changed on every fresh advertisement, so with three
+  // devices heartbeating the shells received it several times a second, rebuilt their home
+  // screens each time, and saturated core's own run loop until the mesh timers starved and
+  // httpd stalled. A busy loop then delivers heartbeats late, which flaps peers between alive
+  // and suspect, which emits more events -- the spiral this test pins shut at both ends.
+  NFleet f;
+  auto& a = f.add("A:1", "front", "door_station", "d_front", /*seed_cfg=*/true);
+  auto& b = f.add("B:1", "kitchen", "indoor_panel", "", /*seed_cfg=*/false);
+  REQUIRE(a.node->start());
+  REQUIRE(b.node->start());
+  // A shell publishes runtime telemetry, and a real one refreshes it constantly. The values it
+  // carries -- uptime, frame counters, battery -- must never be mistaken for something to redraw.
+  a.node->setRuntimeStatus(R"({"uptime_s":1,"fps":15})");
+  b.node->setRuntimeStatus(R"({"uptime_s":1,"fps":15})");
+  f.run(2000);
+
+  const size_t settled_a = a.uiCount("peers_changed");
+  const size_t settled_b = b.uiCount("peers_changed");
+  // Discovering one peer is a couple of events, not a stream.
+  CHECK(settled_a <= 3);
+  CHECK(settled_b <= 3);
+
+  // Fifty heartbeats with nothing a shell renders changing, while the telemetry moves the whole
+  // time. The mesh keeps talking; the UI hears nothing.
+  for (int beat = 0; beat < 50; beat++) {
+    const std::string runtime =
+        "{\"uptime_s\":" + std::to_string(2 + beat) + ",\"fps\":15}";
+    a.node->setRuntimeStatus(runtime);
+    b.node->setRuntimeStatus(runtime);
+    f.run(30, 10);
+  }
+  CHECK(a.uiCount("peers_changed") == settled_a);
+  CHECK(b.uiCount("peers_changed") == settled_b);
+
+  // Now the spiral's own input: heartbeats arriving late enough that the peer drops out and
+  // recovers, over and over. Ten cycles of roughly a third of a second each.
+  for (int cycle = 0; cycle < 10; cycle++) {
+    f.net.partition({{"A:1"}, {"B:1"}});
+    f.run(170, 10);
+    f.net.heal();
+    f.run(170, 10);
+  }
+  // The peer really did flap: offline is emitted per death and is not affected by this change.
+  CHECK(a.uiCount("event", "offline") >= 5);
+  // Roughly 3.4 seconds elapsed, so the coalescing window allows at most seven events however
+  // often the state actually moved. Measured: 50 events before this change, 7 after.
+  CHECK(a.uiCount("peers_changed") - settled_a <= 8);
+
+  // One field a shell renders changes on an already-known peer: exactly one event.
+  f.run(1500);
+  const size_t before_change = a.uiCount("peers_changed");
+  b.node->setUiManifest(
+      R"({"schema_version":1,"units":"logical","viewport":{"minimum_touch":44,"scale_min":0.75,"scale_max":2.0},"elements":{"sos.trigger":{"properties":["scale"],"defaults":{"scale":1.0},"safety_critical":true}}})");
+  f.run(2000);
+  CHECK(a.uiCount("peers_changed") == before_change + 1);
+
+  // A new member is at most the peer appearing and its details filling in, never more.
+  const size_t before_join = a.uiCount("peers_changed");
+  auto& c = f.add("C:1", "annex", "door_station", "d_annex", /*seed_cfg=*/false);
+  REQUIRE(c.node->start());
+  f.run(2000);
+  CHECK(a.uiCount("peers_changed") > before_join);
+  CHECK(a.uiCount("peers_changed") - before_join <= 2);
+
+  a.node->stop();
+  b.node->stop();
+  c.node->stop();
 }

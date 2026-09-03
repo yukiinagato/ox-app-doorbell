@@ -15,7 +15,8 @@ namespace DoorbellApp.Core
         };
 
         public static Dictionary<string, object> Capabilities(string sipBackend, string role,
-                                                               bool safeMode, bool micMute)
+                                                               bool safeMode, bool micMute,
+                                                               bool camera)
         {
             bool pjsip = string.Equals(sipBackend, "pjsip", StringComparison.Ordinal);
             bool uiManifest = SupportsUiManifest(role);
@@ -44,6 +45,9 @@ namespace DoorbellApp.Core
                 { "system_notifications", systemNotifications },
                 // Battery/mains come from GetSystemPowerStatus through db_platform_v2.power_state.
                 { "power_state", true },
+                // True only while this node can actually serve frames. An indoor panel hides its
+                // door tile for a station that answers false, rather than showing a dead still.
+                { "camera", camera },
                 // True only when the loaded Core exports db_core_sip_set_mic_muted; the incoming
                 // screen hides the microphone toggle rather than offering a dead control.
                 { "sip_mic_mute", micMute },

@@ -78,7 +78,9 @@ class CoreDisplayTest {
     @Test
     fun aDarkButtonInkTokenIsHonouredEvenWhereWhiteWouldScoreHigher() {
         val theme = CoreTheme(
-            backgroundRgb = 0x808080, backgroundSource = "color", ink = emptyMap(),
+            backgroundRgb = 0x808080, backgroundSource = "color",
+            backgroundUnsampledReason = "", backgroundImage = "", backdrop = null,
+            ink = emptyMap(),
             inkOverride = emptyMap(), callButtonBg = 0xE8E8E8, callButtonInkLight = false,
         )
         // Core returns the best compromise on a mid-luminance background; never second-guess it.
@@ -122,19 +124,102 @@ class CoreDisplayTest {
             """.trimIndent(),
         )
         val theme = CoreDisplays.parse(display).theme!!
-        // Without a measurement core's answer stands.
-        assertEquals(Palette.LIGHT_INK, CoreDisplays.inkFor(theme, "footer", 0).inkRgb)
-        // With one, the region wins: this footer sits on the light part of the picture.
+        assertTrue(theme.hasBackgroundImage)
+        assertTrue(theme.imageSampledByCore)
+        // A region the shell measured wins: this footer sits on the light part of the picture.
         assertEquals(
             Palette.DARK_INK,
-            CoreDisplays.inkFor(theme, "footer", 0, sampledBackgroundRgb = 0xE9EDF0).inkRgb,
+            CoreDisplays.inkFor(theme, "footer", 0x101418, 0xE9EDF0, imageDrawnLocally = true)
+                .inkRgb,
         )
+        // Core's average is the fallback only for a region that could not be measured.
+        assertEquals(
+            Palette.LIGHT_INK,
+            CoreDisplays.inkFor(theme, "footer", 0x101418, null, imageDrawnLocally = true).inkRgb,
+        )
+    }
+
+    @Test
+    fun aPictureCoreDeclinedToSampleIsNotMistakenForAFlatColour() {
+        // The observed failure: core capped decoding at 4 MP and reported source "color" for a
+        // 5.7 MP JPEG. bg_image is the signal, so the shell samples anyway and gets it right.
+        val old = CoreDisplays.parse(
+            JSONObject(
+                """{"theme":{"bg_color":"#101418","bg_image":"big",
+                             "auto_background":{"color":"#101418","source":"color"},
+                             "auto_ink":{"footer":"light"}}}""",
+            ),
+        ).theme!!
+        assertTrue(old.hasBackgroundImage)
+        assertFalse(old.imageSampledByCore)
+        assertEquals(
+            BackgroundKind.IMAGE_DRAWN,
+            CoreDisplays.backgroundKind(old, imageDrawnLocally = true),
+        )
+        assertEquals(
+            Palette.DARK_INK,
+            CoreDisplays.inkFor(old, "footer", 0x101418, 0xE9EDF0, imageDrawnLocally = true).inkRgb,
+        )
+
+        // The newer core says so explicitly, with a reason; the decision is the same.
+        val fresh = CoreDisplays.parse(
+            JSONObject(
+                """{"theme":{"bg_color":"#101418","bg_image":"big",
+                             "auto_background":{"color":"#101418","source":"image_unsampled",
+                                                "reason":"too_many_pixels"},
+                             "auto_ink":{"footer":"light"}}}""",
+            ),
+        ).theme!!
+        assertEquals("image_unsampled", fresh.backgroundSource)
+        assertEquals("too_many_pixels", fresh.backgroundUnsampledReason)
+        assertFalse(fresh.imageSampledByCore)
+        assertEquals(
+            Palette.DARK_INK,
+            CoreDisplays.inkFor(fresh, "footer", 0x101418, 0xE9EDF0, imageDrawnLocally = true)
+                .inkRgb,
+        )
+    }
+
+    @Test
+    fun aThemeWithNoPictureIsAFlatColourWhateverSourceSays() {
+        val theme = CoreDisplays.parse(
+            JSONObject(
+                """{"theme":{"bg_color":"#EEF1F4","bg_image":null,
+                             "auto_background":{"color":"#EEF1F4","source":"color"},
+                             "auto_ink":{"clock":"dark"}}}""",
+            ),
+        ).theme!!
+        assertFalse(theme.hasBackgroundImage)
+        assertEquals(
+            BackgroundKind.FLAT_COLOUR,
+            CoreDisplays.backgroundKind(theme, imageDrawnLocally = false),
+        )
+        assertEquals(Palette.DARK_INK, CoreDisplays.inkFor(theme, "clock", 0xEEF1F4).inkRgb)
+    }
+
+    @Test
+    fun aPictureConfiguredButNotDrawnYetIsItsOwnCase() {
+        val theme = CoreDisplays.parse(
+            JSONObject(
+                """{"theme":{"bg_color":"#EEF1F4","bg_image":"pending",
+                             "auto_background":{"color":"#101418","source":"image"},
+                             "auto_ink":{"clock":"light"}}}""",
+            ),
+        ).theme!!
+        assertEquals(
+            BackgroundKind.IMAGE_NOT_DRAWN,
+            CoreDisplays.backgroundKind(theme, imageDrawnLocally = false),
+        )
+        // The light ground is what a visitor sees until the picture loads, so dark ink.
+        assertEquals(Palette.DARK_INK, CoreDisplays.inkFor(theme, "clock", 0xEEF1F4).inkRgb)
     }
 
     @Test
     fun aColourBackedThemeIsNotSecondGuessedByASample() {
         val theme = CoreDisplays.parse(published).theme!!
         assertEquals("color", theme.backgroundSource)
+        assertFalse(theme.hasBackgroundImage)
+        // No picture, so core's per-region answer stands even though a sample was offered.
         assertEquals(
             Palette.DARK_INK,
             CoreDisplays.inkFor(theme, "clock", 0, sampledBackgroundRgb = 0x000000).inkRgb,

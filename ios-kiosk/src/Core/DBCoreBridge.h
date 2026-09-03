@@ -51,6 +51,14 @@ typedef void (^DBUiEventHandler)(NSDictionary *ev);
 // Every clock in this shell is rendered from Core's local-time document so the
 // kiosk needs no operating-system time-zone database. wallMs of zero is "now".
 - (NSDictionary *)localTimeJson:(long long)wallMs;
+// Non-blocking "now" for per-second clock ticks. Core is asked for a fresh
+// base at most every 30 seconds, on a background queue; in between the shell
+// derives the civil parts from that base and the elapsed monotonic time. On an
+// iPad 1 the blocking variant, called once a second per visible screen, put the
+// main thread behind whatever else core's serial queue was doing.
+- (NSDictionary *)cachedLocalTime;
+// Drop the base so the next tick refetches, for the time_changed event.
+- (void)invalidateCachedLocalTime;
 // One immediate SNTP round; NO when NTP is off or Core is not started.
 - (BOOL)timeSyncNow;
 // Effective call/sos/idle volumes for one device (nil or empty = this node).
@@ -99,6 +107,7 @@ typedef void (^DBUiEventHandler)(NSDictionary *ev);
 - (BOOL)trySubmitEncodedFrame:(NSData *)annexB keyframe:(BOOL)keyframe
                    timestampMs:(int64_t)timestampMs;
 - (BOOL)videoEncoderWanted;
+- (BOOL)takeVideoKeyframeRequest;
 
 
 - (NSDictionary *)pairingInfo;
@@ -111,6 +120,11 @@ typedef void (^DBUiEventHandler)(NSDictionary *ev);
 // (spec §5.4). Returns nil on an older Core that lacks the export.
 - (NSDictionary *)mintJoinTokenWithSeconds:(int)seconds;
 + (BOOL)supportsJoinTokenMinting;
+// Validates a scanned pairing code through core, which checks the expiry
+// against corrected cluster time. Returns nil when the export is absent, and
+// the caller then parses locally.
+- (NSDictionary *)parsePairUri:(NSString *)uri;
++ (BOOL)supportsPairUriParsing;
 
 // ---- One cluster-wide admin password (spec §5.5) ----
 // The device 管理パスワード and the web admin password are the same secret,

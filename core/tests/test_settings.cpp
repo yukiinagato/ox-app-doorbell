@@ -1,3 +1,8 @@
+#include <unistd.h>
+
+#include <algorithm>
+
+#include <cstdio>
 #include <memory>
 #include <string>
 #include <vector>
@@ -6,6 +11,7 @@
 #include "node/node.h"
 #include "util/clock.h"
 #include "util/json.h"
+#include "util/common.h"
 #include "util/runloop.h"
 #include "util/tz.h"
 
@@ -32,6 +38,8 @@ struct SettingsNode {
     options.enable_beacon = false;
     options.http_port = 0;
     options.seed_default_config = seed_defaults;
+    // A non-zero PSK is what "paired" means, which is the state these settings are written in.
+    options.psk.fill(0x5a);
     NodeDeps deps;
     deps.clock = &clock;
     deps.loop = &loop;
@@ -111,12 +119,95 @@ int64_t utcMsForAppearance(int year, int month, int day, int hour, int minute) {
          minute * 60'000LL;
 }
 
+// A flat 8-bit greyscale PNG with stored-deflate blocks, so a multi-megapixel fixture needs no
+// compressor and stays about one byte per pixel on disk.
+Bytes makeTestGreyPng(int width, int height, const Bytes& raw) {
+  static const auto crc32Of = [](const uint8_t* data, size_t len) {
+    static uint32_t table[256];
+    static bool ready = false;
+    if (!ready) {
+      for (uint32_t i = 0; i < 256; i++) {
+        uint32_t c = i;
+        for (int k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320u ^ (c >> 1)) : (c >> 1);
+        table[i] = c;
+      }
+      ready = true;
+    }
+    uint32_t crc = 0xFFFFFFFFu;
+    for (size_t i = 0; i < len; i++) crc = table[(crc ^ data[i]) & 0xFF] ^ (crc >> 8);
+    return crc ^ 0xFFFFFFFFu;
+  };
+  auto append_be = [](Bytes& out, uint32_t value) {
+    out.push_back(static_cast<uint8_t>(value >> 24));
+    out.push_back(static_cast<uint8_t>(value >> 16));
+    out.push_back(static_cast<uint8_t>(value >> 8));
+    out.push_back(static_cast<uint8_t>(value));
+  };
+  auto append_chunk = [&](Bytes& out, const char tag[4], const Bytes& payload) {
+    append_be(out, static_cast<uint32_t>(payload.size()));
+    Bytes body(tag, tag + 4);
+    body.insert(body.end(), payload.begin(), payload.end());
+    out.insert(out.end(), body.begin(), body.end());
+    append_be(out, crc32Of(body.data(), body.size()));
+  };
+
+  uint32_t a = 1, b = 0;
+  for (uint8_t byte : raw) {
+    a = (a + byte) % 65521;
+    b = (b + a) % 65521;
+  }
+  Bytes zlib{0x78, 0x01};
+  size_t offset = 0;
+  while (offset < raw.size()) {
+    const size_t block = std::min<size_t>(raw.size() - offset, 65535);
+    const bool last = offset + block >= raw.size();
+    zlib.push_back(last ? 1 : 0);
+    zlib.push_back(static_cast<uint8_t>(block & 0xFF));
+    zlib.push_back(static_cast<uint8_t>(block >> 8));
+    zlib.push_back(static_cast<uint8_t>((~block) & 0xFF));
+    zlib.push_back(static_cast<uint8_t>((~block) >> 8));
+    zlib.insert(zlib.end(), raw.begin() + static_cast<std::ptrdiff_t>(offset),
+                raw.begin() + static_cast<std::ptrdiff_t>(offset + block));
+    offset += block;
+  }
+  append_be(zlib, (b << 16) | a);
+
+  Bytes header;
+  append_be(header, static_cast<uint32_t>(width));
+  append_be(header, static_cast<uint32_t>(height));
+  header.push_back(8);
+  header.push_back(0);
+  header.push_back(0);
+  header.push_back(0);
+  header.push_back(0);
+
+  Bytes png{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A};
+  append_chunk(png, "IHDR", header);
+  append_chunk(png, "IDAT", zlib);
+  append_chunk(png, "IEND", {});
+  return png;
+}
+
+std::string settingsTempDir() {
+  char path[] = "/tmp/doorbell_settings_doors_XXXXXX";
+  char* created = mkdtemp(path);
+  REQUIRE(created != nullptr);
+  return created;
+}
+
+void removeSettingsTempDir(const std::string& dir) {
+  for (const char* name : {"doorbell.db", "doorbell.db-wal", "doorbell.db-shm"})
+    std::remove((dir + "/" + name).c_str());
+  ::rmdir((dir + "/assets").c_str());
+  ::rmdir(dir.c_str());
+}
+
 }  // namespace
 
 TEST_CASE("config: the time keys accept only resolvable zones and bounded NTP settings") {
   SettingsNode fleet;
   CHECK(fleet.stringAt("time.zone") == "Asia/Tokyo");
-  CHECK(fleet.intAt("time.ntp.interval_s") == 900);
+  CHECK(fleet.intAt("time.ntp.interval_s") == 86400);
   CHECK(fleet.intAt("integrations.tz_offset_min") == 540);
 
   fleet.node->setConfigKey("time.zone", "\"Europe/Paris\"");
@@ -126,12 +217,16 @@ TEST_CASE("config: the time keys accept only resolvable zones and bounded NTP se
   fleet.node->setConfigKey("time.zone", "42");
   CHECK(fleet.stringAt("time.zone") == "Europe/Paris");
 
+  // A clock correction is stable for days: an hour is the floor and a week the ceiling.
   fleet.node->setConfigKey("time.ntp.interval_s", "3600");
   CHECK(fleet.intAt("time.ntp.interval_s") == 3600);
-  fleet.node->setConfigKey("time.ntp.interval_s", "59");
-  fleet.node->setConfigKey("time.ntp.interval_s", "86401");
-  fleet.node->setConfigKey("time.ntp.interval_s", "900.5");
+  fleet.node->setConfigKey("time.ntp.interval_s", "900");
+  fleet.node->setConfigKey("time.ntp.interval_s", "3599");
+  fleet.node->setConfigKey("time.ntp.interval_s", "604801");
+  fleet.node->setConfigKey("time.ntp.interval_s", "86400.5");
   CHECK(fleet.intAt("time.ntp.interval_s") == 3600);
+  fleet.node->setConfigKey("time.ntp.interval_s", "604800");
+  CHECK(fleet.intAt("time.ntp.interval_s") == 604800);
 
   fleet.node->setConfigKey("time.ntp.servers", "[\"ntp.example.org:1123\"]");
   CHECK(cJSON_GetArraySize(fleet.at("time.ntp.servers")) == 1);
@@ -147,9 +242,9 @@ TEST_CASE("config: the time keys accept only resolvable zones and bounded NTP se
   // exercised on an installation with no seeded leaves, because a leaf and its parent object are
   // independent CRDT keys and the leaf keeps winning after a parent write.
   SettingsNode bare("indoor_panel", "", /*seed_defaults=*/false);
-  bare.node->setConfigKey("time", "{\"zone\":\"Asia/Seoul\",\"ntp\":{\"interval_s\":120}}");
+  bare.node->setConfigKey("time", "{\"zone\":\"Asia/Seoul\",\"ntp\":{\"interval_s\":7200}}");
   CHECK(bare.stringAt("time.zone") == "Asia/Seoul");
-  CHECK(bare.intAt("time.ntp.interval_s") == 120);
+  CHECK(bare.intAt("time.ntp.interval_s") == 7200);
   bare.node->setConfigKey("time", "{\"zone\":\"Nowhere/Nothing\"}");
   CHECK(bare.stringAt("time.zone") == "Asia/Seoul");
   bare.node->setConfigKey("time", "{\"zone\":\"Asia/Tokyo\",\"surprise\":1}");
@@ -157,7 +252,7 @@ TEST_CASE("config: the time keys accept only resolvable zones and bounded NTP se
   bare.node->setConfigKey("time", "{\"zone\":\"Asia/Tokyo\",\"ntp\":{\"interval_s\":5}}");
   CHECK(bare.stringAt("time.zone") == "Asia/Seoul");
   bare.node->setConfigKey("time.ntp", "{\"enabled\":\"yes\"}");
-  CHECK(bare.intAt("time.ntp.interval_s") == 120);
+  CHECK(bare.intAt("time.ntp.interval_s") == 7200);
 }
 
 TEST_CASE("config: volume levels are bounded at every scope") {
@@ -224,7 +319,10 @@ TEST_CASE("volumes: the effective level resolves device, cluster, then built-in 
   SettingsNode fleet;
   const std::string self = fleet.node->nodeId();
 
+  // Effective volumes come from a published snapshot, like configJson and statusJson, so drain
+  // the runloop before reading one.
   auto audio = [&fleet](const std::string& device) {
+    fleet.loop.pumpDue();
     auto parsed = json::parse(fleet.node->audioJson(device));
     REQUIRE(parsed);
     return parsed;
@@ -255,6 +353,7 @@ TEST_CASE("volumes: the effective level resolves device, cluster, then built-in 
   // levels apply and the SOS level follows the legacy alarm volume.
   SettingsNode legacy_fleet("indoor_panel", "", /*seed_defaults=*/false);
   legacy_fleet.node->setConfigKey("emergency.alarm_volume", "42");
+  legacy_fleet.loop.pumpDue();
   auto legacy = json::parse(legacy_fleet.node->audioJson(""));
   REQUIRE(legacy);
   CHECK(json::getInt(legacy.get(), "sos") == 42);
@@ -715,4 +814,519 @@ TEST_CASE("theme: a hard-to-read colour is saved and reported, never refused") {
   REQUIRE(cJSON_IsArray(json::get(leaf.get(), "warnings")));
   CHECK(json::getString(cJSON_GetArrayItem(json::get(leaf.get(), "warnings"), 0), "property") ==
         "clock");
+}
+
+TEST_CASE("doors: a door station founding a cluster gets a door entry to target") {
+  // The regression: devices.<id>.door pointed at a door that had no doors.<id> entry, so
+  // status.doors was empty and every door-keyed surface had nothing to address.
+  SettingsNode fleet("door_station", "d_front");
+  CHECK(fleet.at("doors.d_front") != nullptr);
+  CHECK(fleet.stringAt("doors.d_front.label.ja") == "settings");
+  CHECK(fleet.stringAt("doors.d_front.label.en") == "settings");
+  CHECK(fleet.stringAt("doors.d_front.label.zh") == "settings");
+  CHECK(fleet.stringAt("devices." + fleet.node->nodeId() + ".door") == "d_front");
+
+  auto status = fleet.status();
+  const cJSON* entry = json::get(json::get(status.get(), "doors"), "d_front");
+  REQUIRE(cJSON_IsObject(entry));
+  CHECK(json::getBool(entry, "configured"));
+  CHECK(json::getString(entry, "label") == "settings");
+
+  // Everything keyed by door now has a target.
+  REQUIRE(fleet.node->setDoorNotice("d_front", "Side gate today", 0));
+  CHECK(fleet.stringAt("doors.d_front.notice.text") == "Side gate today");
+
+  // An indoor panel owns no door and seeds nothing.
+  SettingsNode indoor("indoor_panel", "");
+  CHECK(indoor.at("doors") == nullptr);
+  auto indoor_status = indoor.status();
+  const cJSON* indoor_doors = json::get(indoor_status.get(), "doors");
+  REQUIRE(cJSON_IsObject(indoor_doors));
+  CHECK(cJSON_GetArraySize(indoor_doors) == 0);
+}
+
+TEST_CASE("doors: seeding a door entry never overwrites what an administrator wrote") {
+  const std::string dir = settingsTempDir();
+  NodeOptions options;
+  options.data_dir = dir;
+  options.name = "front-panel";
+  options.role = "door_station";
+  options.door = "d_front";
+  options.listen_addr = "127.0.0.1:0";
+  options.enable_beacon = false;
+  options.http_port = 0;
+  options.psk.fill(0x5a);
+
+  {
+    Node node(options);
+    REQUIRE(node.start());
+    auto config = json::parse(node.configJson());
+    REQUIRE(config);
+    const cJSON* door = json::get(json::get(config.get(), "doors"), "d_front");
+    REQUIRE(cJSON_IsObject(door));
+    CHECK(json::getString(json::get(door, "label"), "ja") == "front-panel");
+    // The administrator renames it and files it under a building, as the doors tab does.
+    node.setConfigKey("doors.d_front.label.ja", "\"正面玄関\"");
+    node.setConfigKey("doors.d_front.label.en", "\"Front entrance\"");
+    node.setConfigKey("doors.d_front.building", "\"b_main\"");
+    node.stop();
+  }
+  {
+    // Every later start re-checks the entry, and must leave those edits alone.
+    Node node(options);
+    REQUIRE(node.start());
+    auto config = json::parse(node.configJson());
+    REQUIRE(config);
+    const cJSON* door = json::get(json::get(config.get(), "doors"), "d_front");
+    REQUIRE(cJSON_IsObject(door));
+    CHECK(json::getString(json::get(door, "label"), "ja") == "正面玄関");
+    CHECK(json::getString(json::get(door, "label"), "en") == "Front entrance");
+    CHECK(json::getString(door, "building") == "b_main");
+    node.stop();
+  }
+  removeSettingsTempDir(dir);
+}
+
+TEST_CASE("doors: a live door with no configuration entry still appears and is addressable") {
+  // The upgrade case: a cluster configured before this fix has devices.<id>.door but no
+  // doors.<id>. The tile must still render and still accept an announcement.
+  SettingsNode fleet("door_station", "d_front");
+  REQUIRE(fleet.at("doors.d_front") != nullptr);
+  // Simulate the old configuration by removing the entry the fix created.
+  auto removed = json::parse(fleet.node->deleteConfigKeyJson("doors.d_front"));
+  REQUIRE(removed);
+  REQUIRE(json::getBool(removed.get(), "ok"));
+  CHECK(fleet.at("doors.d_front") == nullptr);
+
+  auto status = fleet.status();
+  const cJSON* entry = json::get(json::get(status.get(), "doors"), "d_front");
+  REQUIRE(cJSON_IsObject(entry));
+  CHECK_FALSE(json::getBool(entry, "configured"));
+  // The label falls back to the device name so the tile is not blank.
+  CHECK(json::getString(entry, "label") == "settings");
+  CHECK(cJSON_IsObject(json::get(entry, "unlock")));
+  CHECK(cJSON_IsNull(json::get(entry, "notice")));
+
+  // An announcement posted to the tile the shell is showing must not be refused.
+  REQUIRE(fleet.node->setDoorNotice("d_front", "Still reachable", 0));
+  CHECK(fleet.stringAt("doors.d_front.notice.text") == "Still reachable");
+  auto after = fleet.status();
+  const cJSON* live = json::get(json::get(after.get(), "doors"), "d_front");
+  CHECK(json::getString(json::get(live, "notice"), "text") == "Still reachable");
+  // Writing the notice creates doors.d_front, so the door reports configured from now on.
+  CHECK(json::getBool(live, "configured"));
+
+  // A door nobody serves is still unknown.
+  CHECK_FALSE(fleet.node->setDoorNotice("d_nowhere", "hello", 0));
+}
+
+TEST_CASE("display: a configured background that cannot be sampled is never reported as color") {
+  // The regression: an oversized background made the sampler fail, and the theme then reported
+  // source "color" with the flat theme colour. Shells trusted that and painted ink chosen for
+  // #101418 over a photograph that looked nothing like it.
+  const std::string dir = settingsTempDir();
+  NodeOptions options;
+  options.data_dir = dir;
+  options.name = "theme-source";
+  options.role = "indoor_panel";
+  options.listen_addr = "127.0.0.1:0";
+  options.enable_beacon = false;
+  options.http_port = 0;
+  options.psk.fill(0x5a);
+
+  SimClock clock(1'700'000'000'000LL, 0);
+  Runloop loop(clock);
+  NodeDeps deps;
+  deps.clock = &clock;
+  deps.loop = &loop;
+  Node node(options, std::move(deps));
+  REQUIRE(node.start());
+  loop.pumpDue();
+
+  auto background = [&node, &loop]() {
+    loop.pumpDue();
+    auto status = json::parse(node.statusJson());
+    REQUIRE(status);
+    const cJSON* theme = json::get(json::get(status.get(), "display"), "theme");
+    return json::Doc(cJSON_Duplicate(json::get(theme, "auto_background"), 1));
+  };
+
+  // No image configured: the flat colour is the honest answer and carries no reason.
+  node.setConfigKey("display.theme.bg_color", "\"#9BD748\"");
+  auto flat = background();
+  REQUIRE(flat);
+  CHECK(json::getString(flat.get(), "source") == "color");
+  CHECK(json::getString(flat.get(), "color") == "#9BD748");
+  CHECK(json::get(flat.get(), "reason") == nullptr);
+
+  // An image that is configured but not cached here yet is not "color" either.
+  const std::string hash(64, 'a');
+  node.setConfigKey("display.theme.bg_image", "\"" + hash + "\"");
+  auto uncached = background();
+  CHECK(json::getString(uncached.get(), "source") == "image_unsampled");
+  CHECK(json::getString(uncached.get(), "reason") == "missing");
+
+  // A device can explicitly suppress the cluster image. Null means none; only an absent
+  // override inherits the global image.
+  const std::string device_image = "devices." + node.nodeId() + ".local.theme.bg_image";
+  node.setConfigKey(device_image, "null");
+  auto suppressed = background();
+  CHECK(json::getString(suppressed.get(), "source") == "color");
+  node.deleteConfigKeyJson(device_image);
+  auto inherited = background();
+  CHECK(json::getString(inherited.get(), "source") == "image_unsampled");
+
+  // A cached asset that is not a decodable image says so, rather than falling back silently.
+  Bytes junk(96, 0x41);
+  REQUIRE(writeFileBytes(dir + "/assets/" + hash, junk));
+  node.setConfigKey("display.theme.bg_color", "\"#9BD749\"");  // force a recompute
+  auto undecodable = background();
+  CHECK(json::getString(undecodable.get(), "source") == "image_unsampled");
+  CHECK(json::getString(undecodable.get(), "reason") == "decode_failed");
+  // The published colour still has to be something, but the source says not to trust it.
+  CHECK(json::getString(undecodable.get(), "color") == "#9BD749");
+
+  // A real photograph above the old 4 MP budget is sampled and reported as an image.
+  const std::string photo_hash(64, 'b');
+  Bytes photo;
+  {
+    // 2200x2609 flat grey, the shape of the background this was reported against.
+    const int width = 2200, height = 2609;
+    Bytes raw;
+    raw.reserve(static_cast<size_t>(height) * (width + 1));
+    for (int y = 0; y < height; y++) {
+      raw.push_back(0);
+      raw.insert(raw.end(), static_cast<size_t>(width), 0xC8);
+    }
+    photo = makeTestGreyPng(width, height, raw);
+  }
+  REQUIRE(writeFileBytes(dir + "/assets/" + photo_hash, photo));
+  node.setConfigKey("display.theme.bg_image", "\"" + photo_hash + "\"");
+  auto sampled = background();
+  CHECK(json::getString(sampled.get(), "source") == "image");
+  CHECK(json::getString(sampled.get(), "color") == "#C8C8C8");
+  CHECK(json::get(sampled.get(), "reason") == nullptr);
+
+  node.stop();
+  std::remove((dir + "/assets/" + hash).c_str());
+  std::remove((dir + "/assets/" + photo_hash).c_str());
+  removeSettingsTempDir(dir);
+}
+
+TEST_CASE("doors: a device that stops serving a door takes back the entry it seeded") {
+  // Device finding: the Moto was switched from door_station to indoor_panel and the door entry
+  // it had auto-seeded stayed in cluster configuration, so every dashboard showed a ghost tile
+  // for a door nobody serves.
+  const std::string dir = settingsTempDir();
+  NodeOptions options;
+  options.data_dir = dir;
+  options.name = "doorbell-android";
+  options.role = "door_station";
+  options.door = "door-b8a9a651";
+  options.listen_addr = "127.0.0.1:0";
+  options.enable_beacon = false;
+  options.http_port = 0;
+  options.psk.fill(0x5a);
+
+  {
+    Node node(options);
+    REQUIRE(node.start());
+    auto config = json::parse(node.configJson());
+    REQUIRE(config);
+    const cJSON* door = json::get(json::get(config.get(), "doors"), "door-b8a9a651");
+    REQUIRE(cJSON_IsObject(door));
+    // Provenance, so only the device that created it may take it back.
+    CHECK(json::getString(door, "seeded_by") == node.nodeId());
+    CHECK(json::getString(door, "seeded_label") == "doorbell-android");
+    node.stop();
+  }
+  {
+    // The same device comes back as an indoor panel.
+    NodeOptions changed = options;
+    changed.role = "indoor_panel";
+    changed.door = "";
+    Node node(changed);
+    REQUIRE(node.start());
+    auto config = json::parse(node.configJson());
+    REQUIRE(config);
+    CHECK(json::get(json::get(config.get(), "doors"), "door-b8a9a651") == nullptr);
+    // Nothing serves it, so nothing shows it either.
+    auto status = json::parse(node.statusJson());
+    REQUIRE(status);
+    CHECK(json::get(json::get(status.get(), "doors"), "door-b8a9a651") == nullptr);
+    node.stop();
+  }
+  removeSettingsTempDir(dir);
+}
+
+TEST_CASE("doors: an entry an administrator has adopted outlives the device that seeded it") {
+  const std::string dir = settingsTempDir();
+  NodeOptions options;
+  options.data_dir = dir;
+  options.name = "doorbell-android";
+  options.role = "door_station";
+  options.door = "door-b8a9a651";
+  options.listen_addr = "127.0.0.1:0";
+  options.enable_beacon = false;
+  options.http_port = 0;
+  options.psk.fill(0x5a);
+
+  {
+    Node node(options);
+    REQUIRE(node.start());
+    // An administrator renames it in the doors tab. That alone makes it theirs.
+    node.setConfigKey("doors.door-b8a9a651.label.ja", "\"正面玄関\"");
+    node.stop();
+  }
+  {
+    NodeOptions changed = options;
+    changed.role = "indoor_panel";
+    changed.door = "";
+    Node node(changed);
+    REQUIRE(node.start());
+    auto config = json::parse(node.configJson());
+    REQUIRE(config);
+    const cJSON* door = json::get(json::get(config.get(), "doors"), "door-b8a9a651");
+    REQUIRE(cJSON_IsObject(door));
+    CHECK(json::getString(json::get(door, "label"), "ja") == "正面玄関");
+    // It shows, and it shows as served by nobody -- which is the honest state for a station
+    // that is down, and is what an administrator needs to see to fix it.
+    auto status = json::parse(node.statusJson());
+    REQUIRE(status);
+    const cJSON* entry = json::get(json::get(status.get(), "doors"), "door-b8a9a651");
+    REQUIRE(cJSON_IsObject(entry));
+    CHECK(cJSON_IsNull(json::get(entry, "served_by")));
+    CHECK(json::getBool(entry, "configured"));
+    node.stop();
+  }
+  removeSettingsTempDir(dir);
+
+  // The same protection for any other field an administrator adds.
+  for (const char* edit : {"doors.door-b8a9a651.building",
+                           "doors.door-b8a9a651.unlock.command"}) {
+    const std::string dir2 = settingsTempDir();
+    NodeOptions first = options;
+    first.data_dir = dir2;
+    {
+      Node node(first);
+      REQUIRE(node.start());
+      node.setConfigKey(edit, "\"b_main\"");
+      node.stop();
+    }
+    NodeOptions changed = first;
+    changed.role = "indoor_panel";
+    changed.door = "";
+    Node node(changed);
+    REQUIRE(node.start());
+    auto config = json::parse(node.configJson());
+    REQUIRE(config);
+    CAPTURE(edit);
+    CHECK(cJSON_IsObject(json::get(json::get(config.get(), "doors"), "door-b8a9a651")));
+    node.stop();
+    removeSettingsTempDir(dir2);
+  }
+}
+
+TEST_CASE("doors: served_by names the alive station, and is null when nobody serves the door") {
+  SettingsNode fleet("door_station", "d_front");
+  auto entry = [&fleet](const char* door) {
+    auto status = fleet.status();
+    return json::Doc(cJSON_Duplicate(json::get(json::get(status.get(), "doors"), door), 1));
+  };
+  auto own = entry("d_front");
+  REQUIRE(own);
+  CHECK(json::getString(own.get(), "served_by") == fleet.node->nodeId());
+
+  // A door that exists in configuration but has no station is reported as served by nobody,
+  // which is what distinguishes "the station is offline" from "there is no station".
+  fleet.node->setConfigKey("doors.d_ghost", "{\"label\":{\"ja\":\"離れ\"}}");
+  auto ghost = entry("d_ghost");
+  REQUIRE(ghost);
+  CHECK(cJSON_IsNull(json::get(ghost.get(), "served_by")));
+  CHECK(json::getBool(ghost.get(), "configured"));
+}
+
+TEST_CASE("config: the incoming-call return countdown is bounded and overridable per device") {
+  SettingsNode fleet;
+  auto returnSeconds = [&fleet]() {
+    auto status = fleet.status();
+    return json::getInt(json::get(status.get(), "call"), "return_s");
+  };
+  // The default an indoor panel counts down from before going back to its home page.
+  CHECK(returnSeconds() == 60);
+
+  fleet.node->setConfigKey("call.indoor.return_s", "120");
+  CHECK(fleet.intAt("call.indoor.return_s") == 120);
+  CHECK(returnSeconds() == 120);
+
+  // Bounded: a countdown too short to read, or long enough to strand the panel, is refused.
+  fleet.node->setConfigKey("call.indoor.return_s", "4");
+  fleet.node->setConfigKey("call.indoor.return_s", "601");
+  fleet.node->setConfigKey("call.indoor.return_s", "60.5");
+  fleet.node->setConfigKey("call.indoor.return_s", "\"60\"");
+  CHECK(fleet.intAt("call.indoor.return_s") == 120);
+  CHECK(returnSeconds() == 120);
+
+  // A per-device override wins, and removing it returns to the cluster default.
+  const std::string self = fleet.node->nodeId();
+  fleet.node->setConfigKey("devices." + self + ".local.call.return_s", "20");
+  CHECK(returnSeconds() == 20);
+  fleet.node->setConfigKey("devices." + self + ".local.call.return_s", "900");
+  CHECK(returnSeconds() == 20);
+  auto removed = json::parse(
+      fleet.node->deleteConfigKeyJson("devices." + self + ".local.call.return_s"));
+  REQUIRE(removed);
+  REQUIRE(json::getBool(removed.get(), "ok"));
+  CHECK(returnSeconds() == 120);
+
+  // Container writes carry it too, and are validated as a whole.
+  SettingsNode bare("indoor_panel", "", /*seed_defaults=*/false);
+  bare.node->setConfigKey("call", "{\"indoor\":{\"return_s\":30}}");
+  CHECK(bare.intAt("call.indoor.return_s") == 30);
+  bare.node->setConfigKey("call", "{\"indoor\":{\"return_s\":9000}}");
+  bare.node->setConfigKey("call", "{\"indoor\":{\"return_s\":30},\"surprise\":1}");
+  bare.node->setConfigKey("call.indoor", "{\"return_s\":2}");
+  CHECK(bare.intAt("call.indoor.return_s") == 30);
+}
+
+TEST_CASE("display: the theme backdrop has defaults, overrides and a validated range") {
+  // The darkening layer over a background photograph stays, but it belongs to the administrator.
+  SettingsNode fleet;
+  const std::string self = fleet.node->nodeId();
+  auto backdrop = [&fleet]() {
+    auto status = fleet.status();
+    return json::Doc(cJSON_Duplicate(
+        json::get(json::get(json::get(status.get(), "display"), "theme"), "backdrop"), 1));
+  };
+
+  // Defaults: drawn, black, and strong enough for a bright photograph.
+  auto initial = backdrop();
+  REQUIRE(initial);
+  CHECK(json::getBool(initial.get(), "enabled", false));
+  CHECK(json::getString(initial.get(), "color") == "#000000");
+  CHECK(json::getInt(initial.get(), "opacity") == 62);
+  CHECK(json::getString(initial.get(), "source") == "default");
+
+  // A cluster setting is reported as the administrator's.
+  fleet.node->setConfigKey("display.theme.backdrop.opacity", "40");
+  auto cluster = backdrop();
+  CHECK(json::getInt(cluster.get(), "opacity") == 40);
+  CHECK(json::getString(cluster.get(), "color") == "#000000");
+  CHECK(json::getString(cluster.get(), "source") == "admin");
+
+  fleet.node->setConfigKey("display.theme.backdrop.color", "\"#101418\"");
+  fleet.node->setConfigKey("display.theme.backdrop.enabled", "false");
+  auto configured = backdrop();
+  CHECK(json::getString(configured.get(), "color") == "#101418");
+  CHECK_FALSE(json::getBool(configured.get(), "enabled", true));
+
+  // One panel in a brighter room darkens further without restating the colour: each leaf
+  // resolves on its own and the strongest origin names the source.
+  fleet.node->setConfigKey("devices." + self + ".local.theme.backdrop.opacity", "80");
+  fleet.node->setConfigKey("devices." + self + ".local.theme.backdrop.enabled", "true");
+  auto device = backdrop();
+  CHECK(json::getInt(device.get(), "opacity") == 80);
+  CHECK(json::getBool(device.get(), "enabled", false));
+  CHECK(json::getString(device.get(), "color") == "#101418");
+  CHECK(json::getString(device.get(), "source") == "device");
+
+  // Clearing the device override returns the cluster value rather than the built-in default.
+  fleet.node->deleteConfigKeyJson("devices." + self + ".local.theme.backdrop.opacity");
+  fleet.node->deleteConfigKeyJson("devices." + self + ".local.theme.backdrop.enabled");
+  auto cleared = backdrop();
+  CHECK(json::getInt(cleared.get(), "opacity") == 40);
+  CHECK_FALSE(json::getBool(cleared.get(), "enabled", true));
+  CHECK(json::getString(cleared.get(), "source") == "admin");
+
+  // Validation: format and range are refused, and a refused write leaves the value alone.
+  fleet.node->setConfigKey("display.theme.backdrop.opacity", "101");
+  CHECK(json::getInt(backdrop().get(), "opacity") == 40);
+  fleet.node->setConfigKey("display.theme.backdrop.opacity", "-1");
+  CHECK(json::getInt(backdrop().get(), "opacity") == 40);
+  fleet.node->setConfigKey("display.theme.backdrop.color", "\"black\"");
+  CHECK(json::getString(backdrop().get(), "color") == "#101418");
+  fleet.node->setConfigKey("display.theme.backdrop.enabled", "\"yes\"");
+  CHECK_FALSE(json::getBool(backdrop().get(), "enabled", true));
+  fleet.node->setConfigKey("display.theme.backdrop.nonsense", "1");
+  CHECK(json::get(backdrop().get(), "nonsense") == nullptr);
+
+  // The whole object in one write, the way the Theme tab saves it. A separate node because a
+  // container write does not displace leaf keys that were written independently -- each key is
+  // its own CRDT entry, and the leaves above are newer.
+  SettingsNode tab;
+  auto tab_backdrop = [&tab]() {
+    auto status = tab.status();
+    return json::Doc(cJSON_Duplicate(
+        json::get(json::get(json::get(status.get(), "display"), "theme"), "backdrop"), 1));
+  };
+  auto batch = json::parse(tab.node->configBatchJson(
+      "[{\"op\":\"set\",\"key\":\"display.theme\","
+      "\"value\":{\"bg_color\":\"#101418\","
+      "\"backdrop\":{\"enabled\":true,\"color\":\"#0A0A0A\",\"opacity\":55}}}]"));
+  REQUIRE(batch);
+  CHECK(json::getBool(batch.get(), "ok", false));
+  auto saved = tab_backdrop();
+  CHECK(json::getBool(saved.get(), "enabled", false));
+  CHECK(json::getString(saved.get(), "color") == "#0A0A0A");
+  CHECK(json::getInt(saved.get(), "opacity") == 55);
+  CHECK(json::getString(saved.get(), "source") == "admin");
+
+  // A container carrying an out-of-range opacity is refused whole, so the tab cannot half-save.
+  auto refused = json::parse(tab.node->configBatchJson(
+      "[{\"op\":\"set\",\"key\":\"display.theme\","
+      "\"value\":{\"backdrop\":{\"opacity\":250}}}]"));
+  REQUIRE(refused);
+  CHECK_FALSE(json::getBool(refused.get(), "ok", true));
+  CHECK(json::getInt(tab_backdrop().get(), "opacity") == 55);
+}
+
+TEST_CASE("display: frosted glass radius resolves per device and rejects invalid values") {
+  SettingsNode fleet;
+  const std::string self = fleet.node->nodeId();
+  auto glass = [&fleet]() {
+    auto status = fleet.status();
+    return json::Doc(cJSON_Duplicate(
+        json::get(json::get(json::get(status.get(), "display"), "theme"), "glass"), 1));
+  };
+
+  CHECK(json::getInt(glass().get(), "blur_radius") == 32);
+  CHECK(json::getString(glass().get(), "source") == "default");
+
+  fleet.node->setConfigKey("display.theme.glass.blur_radius", "30");
+  CHECK(json::getInt(glass().get(), "blur_radius") == 30);
+  CHECK(json::getString(glass().get(), "source") == "admin");
+
+  fleet.node->setConfigKey("devices." + self + ".local.theme.glass.blur_radius", "36");
+  CHECK(json::getInt(glass().get(), "blur_radius") == 36);
+  CHECK(json::getString(glass().get(), "source") == "device");
+
+  fleet.node->setConfigKey("devices." + self + ".local.theme.glass.blur_radius", "41");
+  CHECK(json::getInt(glass().get(), "blur_radius") == 36);
+  fleet.node->setConfigKey("display.theme.glass.blur_radius", "-1");
+  CHECK(json::getInt(glass().get(), "blur_radius") == 36);
+  fleet.node->setConfigKey("display.theme.glass.unknown", "1");
+  CHECK(json::get(glass().get(), "unknown") == nullptr);
+
+  fleet.node->deleteConfigKeyJson("devices." + self + ".local.theme.glass.blur_radius");
+  CHECK(json::getInt(glass().get(), "blur_radius") == 30);
+  CHECK(json::getString(glass().get(), "source") == "admin");
+
+  SettingsNode tab;
+  auto tab_glass = [&tab]() {
+    auto status = tab.status();
+    return json::Doc(cJSON_Duplicate(
+        json::get(json::get(json::get(status.get(), "display"), "theme"), "glass"), 1));
+  };
+  auto batch = json::parse(tab.node->configBatchJson(
+      "[{\"op\":\"set\",\"key\":\"display.theme\","
+      "\"value\":{\"bg_color\":\"#101418\",\"glass\":{\"blur_radius\":32}}}]"));
+  REQUIRE(batch);
+  CHECK(json::getBool(batch.get(), "ok", false));
+  CHECK(json::getInt(tab_glass().get(), "blur_radius") == 32);
+  auto refused = json::parse(tab.node->configBatchJson(
+      "[{\"op\":\"set\",\"key\":\"display.theme\","
+      "\"value\":{\"glass\":{\"blur_radius\":41}}}]"));
+  REQUIRE(refused);
+  CHECK_FALSE(json::getBool(refused.get(), "ok", true));
+  CHECK(json::getInt(tab_glass().get(), "blur_radius") == 32);
 }

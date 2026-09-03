@@ -199,8 +199,11 @@ class Node {
 
 
 
-  // True only while H.264/auto has at least one stream subscriber.
+  // True while H.264/auto is configured, so the platform keeps a low-cost encoder warm.
   bool videoEncoderWanted();
+
+  // Edge-triggered request from a newly attached stream subscriber. Reading clears the edge.
+  bool takeVideoKeyframeRequest();
 
   // Normalize door-station orientation to clockwise cardinal degrees for video metadata.
   // An explicit devices.<self>.local.video.rotation value takes precedence over the sensor.
@@ -258,6 +261,9 @@ class Node {
   // Mint or refresh the join PIN without opening the bulk-add window. seconds of zero keeps the
   // default PIN lifetime.
   std::string mintJoinTokenJson(int seconds);
+  // Validate a scanned doorbell://pair URI. Uses corrected cluster time for the expiry check
+  // when this node is running, so every shell reaches the same verdict.
+  std::string parsePairUriJson(const std::string& uri);
   void removeDevice(const std::string& node_id);
   void inviteDevice(const std::string& id);
 

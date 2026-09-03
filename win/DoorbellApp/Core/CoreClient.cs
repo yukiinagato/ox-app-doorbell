@@ -55,6 +55,7 @@ namespace DoorbellApp.Core
         private CoreInterop.DeleteConfigKeyFn _deleteConfigKey;
         private CoreInterop.CallLogJsonV2Fn _callLogJsonV2;
         private bool _optionalProbed;
+        private bool _cameraAvailable;
         private DpapiSecretStore _secretStore;
         private SpeechSynthesizer _tts;
         private readonly JavaScriptSerializer _json = new JavaScriptSerializer();
@@ -700,6 +701,16 @@ namespace DoorbellApp.Core
             catch { return null; }
         }
 
+        /// <summary>
+        /// Whether this node can serve camera frames right now. CameraProbe owns the answer and
+        /// republishes the contracts whenever it changes.
+        /// </summary>
+        public bool CameraAvailable
+        {
+            get { return _cameraAvailable; }
+            set { _cameraAvailable = value; }
+        }
+
         /// <summary>Removes one secure-store entry, for the revoke/unpair factory reset.</summary>
         public bool DeleteSecret(string key)
         {
@@ -817,7 +828,8 @@ namespace DoorbellApp.Core
                 string backend = SipBackend;
                 CoreInterop.db_core_set_capabilities_json(_core,
                     RuntimeContracts.Json(RuntimeContracts.Capabilities(backend, role, safeMode,
-                                                                        SipMicMuteAvailable)));
+                                                                        SipMicMuteAvailable,
+                                                                        _cameraAvailable)));
                 CoreInterop.db_core_set_runtime_status_json(_core,
                     RuntimeContracts.Json(RuntimeStatus(role, backend, safeMode)));
                 if (RuntimeContracts.SupportsUiManifest(role))

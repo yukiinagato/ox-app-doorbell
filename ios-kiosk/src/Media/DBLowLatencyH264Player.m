@@ -9,6 +9,7 @@ void DBH264Dbg(NSString *fmt, ...);
 
 @interface DBLowLatencyH264Player () <DBFmp4DemuxDelegate>
 - (void)scheduleDisplayWatchdog:(NSUInteger)generation;
+- (void)traceStartup:(NSString *)stage;
 @end
 
 @implementation DBLowLatencyH264Player {
@@ -32,6 +33,7 @@ void DBH264Dbg(NSString *fmt, ...);
   CFAbsoluteTime _lastStatsFrameAt;
   CFAbsoluteTime _lastDisplayedAt;
   CFAbsoluteTime _firstDisplayedAt;
+  CFAbsoluteTime _startupAt;
   NSUInteger _displayedFrames;
 }
 
@@ -68,6 +70,12 @@ void DBH264Dbg(NSString *fmt, ...);
 - (NSUInteger)droppedFrames { return [_videoView droppedFrames]; }
 - (NSString *)presentationMode { return @"uikit_bgra_sibling"; }
 
+- (void)traceStartup:(NSString *)stage {
+  long long elapsedMs = _startupAt > 0
+      ? (long long)((CFAbsoluteTimeGetCurrent() - _startupAt) * 1000.0) : 0;
+  DBH264Dbg(@"[startup] %@ +%lldms", stage, MAX(0LL, elapsedMs));
+}
+
 - (void)setState:(DBLowLatencyPlayerState)state {
   if (![NSThread isMainThread]) {
     dispatch_async(dispatch_get_main_queue(), ^{ [self setState:state]; });
@@ -88,6 +96,8 @@ void DBH264Dbg(NSString *fmt, ...);
   }
   if (_demux || _state != DBLowLatencyPlayerIdle || ![_url length] || !_container) return;
   _generation++;
+  _startupAt = CFAbsoluteTimeGetCurrent();
+  [self traceStartup:@"request_start"];
   _lastCaptureMs = 0;
   _latencyCount = 0;
   _latencySum = 0;
@@ -106,7 +116,7 @@ void DBH264Dbg(NSString *fmt, ...);
   // UIImage, but do not let its legacy EAGL surface cover the availability
   // layer while H.264 is still probing. On iOS 5, an ostensibly transparent
   // GLK renderbuffer can still composite as black over a sibling MJPEG view.
-  _videoView = [[DBVtVideoView alloc] initWithFrame:CGRectMake(-1, -1, 1, 1)];
+  _videoView = [DBVtVideoView takeWarmView];
   _videoView.autoresizingMask = UIViewAutoresizingNone;
   _videoView.hidden = NO;
   [_container addSubview:_videoView];
@@ -124,6 +134,7 @@ void DBH264Dbg(NSString *fmt, ...);
   _compatOverlay.hidden = YES;
   [_container addSubview:_compatOverlay];
   [_videoView setCompatibilityOutputView:_compatOverlay];
+  [self traceStartup:@"renderer_ready"];
   __weak DBLowLatencyH264Player *weakSelf = self;
   _videoView.onDisplayedFrame = ^(int64_t captureMs) {
     DBLowLatencyH264Player *player = weakSelf;
@@ -134,6 +145,7 @@ void DBH264Dbg(NSString *fmt, ...);
     if (player->_firstDisplayedAt == 0) {
       player->_firstDisplayedAt = displayedAt;
       DBH264Dbg(@"[vt] first frame displayed");
+      [player traceStartup:@"first_frame_displayed"];
     }
     if (captureMs > 0 && captureMs != player->_lastCaptureMs) {
       player->_lastCaptureMs = captureMs;
@@ -175,6 +187,7 @@ void DBH264Dbg(NSString *fmt, ...);
       [player->_container bringSubviewToFront:player->_compatOverlay];
       DBH264Dbg(@"[vt] sustained %lu displayed frames; H.264 takes over from MJPEG",
                 (unsigned long)player->_displayedFrames);
+      [player traceStartup:@"h264_takeover"];
       [player setState:DBLowLatencyPlayerPlaying];
       [player scheduleDisplayWatchdog:generation];
     }
@@ -229,6 +242,8 @@ void DBH264Dbg(NSString *fmt, ...);
   if (![_videoView startWithSps:sps pps:pps]) {
     DBH264Dbg(@"[vt] decoder start failed");
     [self setState:DBLowLatencyPlayerFailed];
+  } else {
+    [self traceStartup:@"decoder_configured"];
   }
 }
 
@@ -242,6 +257,7 @@ void DBH264Dbg(NSString *fmt, ...);
     if (!key) return;
     _waitingForKeyframe = NO;
     DBH264Dbg(@"[vt] first keyframe received");
+    [self traceStartup:@"first_keyframe_received"];
   }
   [_videoView pushSample:avcc captureMs:captureMs dtsMs:dtsMs durMs:durMs];
 }
@@ -262,8 +278,7 @@ void DBH264Dbg(NSString *fmt, ...);
   DBFmp4Demux *demux = _demux;
   _demux = nil;
   [demux stop];
-  [_videoView shutdownDecoder];
-  [_videoView removeFromSuperview];
+  [DBVtVideoView recycleWarmView:_videoView];
   _videoView = nil;
   [_compatOverlay removeFromSuperview];
   _compatOverlay = nil;

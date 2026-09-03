@@ -37,6 +37,25 @@
 | Native/Web semantic UI manifest | durable native cache + local Web scope 制限付きで実装済み | Core は peer の last-valid native manifest/capability を永続化。configured offline device は `cached_contract:true` として検証/queue できるが renderer apply report は後で必要。別の `web_ui.manifest` は serving node local で remote Web catalog ではない。 |
 | cross-platform conformance harness | golden model + source smoke | reference trace と狭い source literal を検査するだけで、client artifact、rendering、timing、hardware、release evidence ではない。 |
 
+## 磨りガラス blur の方針
+
+OS が effect を所有する場合は native system blur を正とします。特に modern iOS shell は
+`UIBlurEffect` を維持し、数値 radius を提供するためだけに custom renderer へ置き換えません。
+Apple は `UIBlurEffect` の public radius を提供しないため、この shell では radius control を
+表示せず、Web の device editor は保存値が適用されたように見せず system-managed と説明します。
+
+数値の磨りガラス radius を提供できるのは、shell 自身が blur renderer を所有する場合、または
+platform の public API が実際の radius parameter を提供する場合だけです。未対応 shell は設定を
+無視し、適用済み capability として advertise してはいけません。これは presentation capability
+であり、OS 間で見た目を完全一致させるためのものではありません。
+
+iOS 5 compatibility shell は OpenGL ES 2.0 の offscreen framebuffer で横・縦を二巡する
+separable blur を使用できます。background image、target size、radius の変更時だけ render して
+結果を cache し、memory pressure/backgrounding では GPU resource を解放します。ES 2.0 context、
+framebuffer、shader、texture allocation が使えない場合は bounded CPU blur に fallback します。
+`CIGaussianBlur` は iOS 5 では利用できないため Core Image を fallback にしません。GPU 利用と
+timing は compile だけでは証明できず、exact iPad 1 qualification の対象です。
+
 ## 現行 release gate
 
 対象の tests/lint、English-source/i18n check、成果物 metadata、実 PJSIP、lane 分離、secure

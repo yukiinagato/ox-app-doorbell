@@ -4,6 +4,11 @@
 // device-only decoder dynamically; iOS 9 links the public VideoToolbox API.
 @interface DBVtVideoView : GLKView
 
++ (void)prewarm;
++ (DBVtVideoView *)takeWarmView;
++ (void)recycleWarmView:(DBVtVideoView *)view;
++ (void)purgeWarmView;
+
 @property(nonatomic, copy) void (^onDisplayedFrame)(int64_t captureMs);
 @property(nonatomic) int64_t serverToClientOffsetMs;
 @property(nonatomic, readonly) NSUInteger decodedFrames;

@@ -250,6 +250,10 @@ class DoorbellCore(context: Context) {
     fun videoEncoderWanted(): Boolean =
         handle != 0L && nativeVideoEncoderWanted(handle)
 
+    /** Consume a new-subscriber edge so the active encoder can emit a fresh IDR. */
+    fun takeVideoKeyframeRequest(): Boolean =
+        handle != 0L && nativeTakeVideoKeyframeRequest(handle)
+
     /**
      * Place a SIP call to an extension or complete SIP URI. Empty mode is bidirectional;
      * "monitor" is receive-only audio.
@@ -340,6 +344,14 @@ class DoorbellCore(context: Context) {
     fun qrScanStop() {
         if (handle != 0L) nativeQrScanStop(handle)
     }
+
+    /**
+     * Parse a doorbell:// pairing link with core's own parser, which checks the expiry against
+     * corrected cluster time. Null when core is not running -- a link can be scanned before it
+     * starts -- and the shell then uses its own parse of the same grammar.
+     */
+    fun parsePairUri(uri: String): JSONObject? =
+        if (uri.isEmpty() || handle == 0L) null else parse(nativeParsePairUriJson(handle, uri))
 
     /** Encode QR data as [side length, row-major module values...]. */
     fun qrEncode(text: String): IntArray? = if (text.isEmpty()) null else nativeQrEncode(text)
@@ -492,6 +504,7 @@ class DoorbellCore(context: Context) {
     private external fun nativeOnEncodedFrame(handle: Long, annexb: ByteArray,
                                               isKeyframe: Boolean, tsMs: Long)
     private external fun nativeVideoEncoderWanted(handle: Long): Boolean
+    private external fun nativeTakeVideoKeyframeRequest(handle: Long): Boolean
     private external fun nativeSipCall(handle: Long, target: String, mode: String)
     private external fun nativeSipHangup(handle: Long)
     private external fun nativeSipSendDtmf(handle: Long, digits: String): Int
@@ -513,6 +526,7 @@ class DoorbellCore(context: Context) {
     private external fun nativeQrScanStart(handle: Long)
     private external fun nativeQrScanStop(handle: Long)
     private external fun nativeQrEncode(text: String): IntArray?
+    private external fun nativeParsePairUriJson(handle: Long, uri: String): String?
     private external fun nativeFoundCluster(handle: Long): Boolean
 
     companion object {

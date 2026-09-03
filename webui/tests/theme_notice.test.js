@@ -25,6 +25,23 @@ assert.strictEqual(L.autoInk("#9BD748"), "dark");
 assert.strictEqual(L.autoInk("#101418"), "light");
 assert.strictEqual(L.autoInk("#FFFFFF"), "dark");
 assert.strictEqual(L.autoInk("#000000"), "light");
+// The ink rule is "whichever token reads better", crossing at Y = 0.1791, not at mid luminance.
+// The same vectors core/tests/test_color.cpp pins, so the preview cannot drift from the fleet.
+assert.strictEqual(L.autoInk("#BBBBB4"), "dark", "the reported light-grey photograph");
+assert.strictEqual(L.autoInk("#404040"), "light", "a true mid-dark still wants light ink");
+assert.strictEqual(L.autoInk("#808080"), "dark", "mid grey is past the crossover");
+assert.strictEqual(L.autoInk("#767676"), "dark", "just above the crossover");
+assert.strictEqual(L.autoInk("#757575"), "light", "just below it");
+for (const sample of ["#9BD748", "#101418", "#BBBBB4", "#404040", "#808080", "#767676",
+                      "#757575", "#E8E2D5", "#2A2118", "#FFFFFF", "#000000"]) {
+  const dark = L.autoInk(sample) === "dark";
+  const chosen = L.contrast(dark ? "#000000" : "#FFFFFF", sample);
+  const other = L.contrast(dark ? "#FFFFFF" : "#000000", sample);
+  assert.ok(chosen >= other, "autoInk must pick the better ink for " + sample);
+}
+// core states the rule the same way, so a shell reading either source gets one answer.
+assert.ok(colorSource.includes("const double dark_ink = contrastRatioLuminance(0.0, y);"),
+  "db::color::autoInk must compare the two ink ratios, not split at mid luminance");
 assert.strictEqual(L.autoAccent("#101418", "#FFFFFF"), "#7F5E3D");
 for (const background of ["#9BD748", "#FFFFFF", "#101418", "#000000", "#E8E2D5"]) {
   const button = L.autoAccent(background, "#FFFFFF");
@@ -50,6 +67,31 @@ assert.strictEqual(previewing.callButton, "#8144D6");
 assert.strictEqual(previewing.ink, "dark");
 assert.strictEqual(previewing.callButtonInk, L.autoInk(previewing.callButton));
 assert.strictEqual(L.themeAutoModel({}, "").callButton, L.autoAccent("#101418", "#FFFFFF"));
+assert.strictEqual(published.unsampled, false);
+assert.strictEqual(published.reason, "");
+
+// A configured background core could not sample must never read as the flat theme colour: the
+// published ink came from #101418, not from the photograph actually on screen.
+const unsampled = L.themeAutoModel({ display: { theme: {
+  auto_background: { color: "#101418", source: "image_unsampled", reason: "too_large" },
+  auto_accent: { call_button: "#AA5522", call_button_ink: "light" }
+} } }, "");
+assert.strictEqual(unsampled.source, "image_unsampled");
+assert.strictEqual(unsampled.unsampled, true);
+assert.strictEqual(unsampled.reason, "too_large");
+// Core's accent is not preferred here, because it was derived from the flat colour.
+assert.notStrictEqual(unsampled.callButton, "#AA5522");
+assert.strictEqual(unsampled.callButton, L.autoAccent("#101418", "#FFFFFF"));
+for (const reason of ["decode_failed", "missing"]) {
+  const model = L.themeAutoModel({ display: { theme: {
+    auto_background: { color: "#101418", source: "image_unsampled", reason: reason } } } }, "");
+  assert.strictEqual(model.reason, reason);
+}
+// An unknown source is treated as the flat colour, which is what an older core reports.
+assert.strictEqual(L.themeAutoModel({ display: { theme: {
+  auto_background: { color: "#101418", source: "color" } } } }, "").unsampled, false);
+assert.strictEqual(L.themeAutoModel({ display: { theme: {
+  auto_background: { color: "#101418", source: "nonsense" } } } }, "").source, "color");
 
 // ---- theme colour overrides ------------------------------------------------------------------
 const auto = L.themeColorEntries("", { call_button_auto: true, ink_override: {} },
@@ -162,6 +204,34 @@ assert.deepStrictEqual(
   L.doorUnlockEntries("d_front", "auto", { show_button: true, command: "gate" }),
   { entries: [{ key: "doors.d_front.unlock", value: { command: "gate" } }], dels: [] });
 
+// ---- a live door with no configuration entry is still listed and still addressable ------------
+// The regression: a cluster founded by a door station had no doors.* entries at all, so the tab
+// listed nothing and every door-keyed surface had nothing to target.
+const doorStatus = { doors: {
+  d_front: { label: "Front door", configured: true },
+  d_annex: { label: "annex-panel", configured: false }
+} };
+const rows = L.doorRows({ doors: { d_front: { label: { ja: "正面玄関" } } } }, doorStatus);
+assert.deepStrictEqual(rows, [
+  { id: "d_front", configured: true, label: "正面玄関" },
+  { id: "d_annex", configured: false, label: "annex-panel" }
+]);
+// A configured door with no label of its own falls back to what core reports, then to its id.
+assert.strictEqual(L.doorRows({ doors: { d_x: {} } }, { doors: { d_x: { label: "front-panel",
+  configured: true } } })[0].label, "front-panel");
+assert.strictEqual(L.doorRows({ doors: { d_x: {} } }, {})[0].label, "d_x");
+// A door reported as configured is never listed twice, whichever side it came from.
+assert.strictEqual(L.doorRows({ doors: { d_front: {} } }, doorStatus).length, 2);
+assert.deepStrictEqual(L.doorRows({}, {}), []);
+// An unconfigured door still resolves an announcement and an unlock model rather than throwing.
+assert.strictEqual(L.effectiveNoticeModel("d_annex", { doors: {} }, Date.now()).active, false);
+assert.strictEqual(L.doorUnlockModel("d_annex", { doors: {} }, doorStatus).mode, "auto");
+const adminDoorsSource = fs.readFileSync(path.join(__dirname, "../admin/app.js"), "utf8");
+assert.ok(adminDoorsSource.includes("admin.door_unconfigured"),
+  "the doors tab must mark a door that has no configuration entry");
+assert.ok(/L\.doorRows\(S\.cfg, S\.status\)/.test(adminDoorsSource),
+  "the doors tab must render live doors, not only configured ones");
+
 // ---- advisory warnings ---------------------------------------------------------------------------
 assert.deepStrictEqual(L.writeWarnings({ ok: true }), []);
 assert.deepStrictEqual(L.writeWarnings({ ok: true, warnings: [
@@ -188,11 +258,16 @@ const referenced = [
   "theme.dark_from", "theme.light_from", "theme.now", "theme.mode_light", "theme.mode_dark",
   "theme.auto", "theme.custom",
   "theme.call_button", "theme.ink", "theme.ink_region", "theme.background_source_image",
-  "theme.background_source_color",
+  "theme.background_source_color", "theme.background_unsampled",
+  "theme.unsampled_too_large", "theme.unsampled_decode_failed", "theme.unsampled_missing",
   "notice.target", "notice.target_global", "notice.scope_global", "notice.presets_title",
   "notice.preset_add", "notice.presets_full", "notice.preset_invalid",
   "unlock.title", "unlock.auto", "unlock.show", "unlock.hide", "unlock.not_configured",
-  "unlock.command", "purpose.enabled", "purpose.disabled"
+  "unlock.command", "purpose.enabled", "purpose.disabled", "admin.door_unconfigured",
+  "theme.backdrop", "theme.backdrop_enabled", "theme.backdrop_hint", "theme.backdrop_invalid",
+  "theme.backdrop_weak", "theme.backdrop_source_default", "theme.backdrop_source_admin",
+  "theme.backdrop_source_device", "theme.glass_blur_radius", "theme.glass_blur_hint",
+  "theme.glass_blur_invalid", "theme.glass_blur_system", "theme.glass_blur_unavailable"
 ].concat(L.INK_REGIONS.map((region) => "theme.region_" + region));
 for (const language of ["ja", "en", "zh"]) {
   const catalog = JSON.parse(fs.readFileSync(
@@ -202,6 +277,84 @@ for (const language of ["ja", "en", "zh"]) {
       language + " is missing " + key);
   assert.ok(catalog["theme.low_contrast"].includes("{ratio}"),
     language + " theme.low_contrast needs {ratio}");
+  assert.ok(catalog["theme.background_unsampled"].includes("{reason}"),
+    language + " theme.background_unsampled needs {reason}");
 }
+
+// ---- the darkening layer over the background image -----------------------------------------
+// Defaults first: on, black, and strong enough for a bright photograph.
+const plain = L.backdropModel({}, "");
+assert.strictEqual(plain.enabled, true);
+assert.strictEqual(plain.color, "#000000");
+assert.strictEqual(plain.opacity, 62);
+assert.strictEqual(plain.source, "default");
+
+const clusterCfg = { display: { theme: { backdrop: { opacity: 40, color: "#101418" } } } };
+const cluster = L.backdropModel(clusterCfg, "");
+assert.strictEqual(cluster.opacity, 40);
+assert.strictEqual(cluster.color, "#101418");
+assert.strictEqual(cluster.enabled, true, "an unset leaf keeps the built-in default");
+assert.strictEqual(cluster.source, "admin");
+
+// Each leaf resolves on its own, so a device darkens further without restating the colour.
+const deviceCfg = {
+  display: { theme: { backdrop: { opacity: 40, color: "#101418" } } },
+  devices: { d1: { local: { theme: { backdrop: { opacity: 80 } } } } }
+};
+const device = L.backdropModel(deviceCfg, "d1");
+assert.strictEqual(device.opacity, 80);
+assert.strictEqual(device.color, "#101418");
+assert.strictEqual(device.source, "device");
+assert.deepStrictEqual(device.overridden, { enabled: false, color: false, opacity: true });
+// A device with no override of its own still reports the cluster's answer.
+assert.strictEqual(L.backdropModel(deviceCfg, "d2").opacity, 40);
+assert.strictEqual(L.backdropModel(deviceCfg, "d2").source, "admin");
+
+// Out-of-range or malformed stored values fall back rather than reaching a shell.
+const junk = { display: { theme: { backdrop: { opacity: 250, color: "black", enabled: "yes" } } } };
+assert.strictEqual(L.backdropModel(junk, "").opacity, 62);
+assert.strictEqual(L.backdropModel(junk, "").color, "#000000");
+assert.strictEqual(L.backdropModel(junk, "").enabled, true);
+
+// What core publishes is read straight through, including the source it decided.
+const publishedBackdrop = L.backdropStatusModel({
+  display: { theme: { backdrop: { enabled: false, color: "#0a0a0a", opacity: 55,
+                                  source: "device" } } } });
+assert.strictEqual(publishedBackdrop.enabled, false);
+assert.strictEqual(publishedBackdrop.color, "#0A0A0A");
+assert.strictEqual(publishedBackdrop.opacity, 55);
+assert.strictEqual(publishedBackdrop.source, "device");
+assert.strictEqual(L.backdropStatusModel({}).source, "default");
+
+// The write rides in the theme object, and a blank strength is reported instead of defaulted.
+const writtenBackdrop = L.themeColorEntries("", { call_button_auto: true, ink_override: {},
+                                          backdrop: { enabled: true, color: "#0a0a0a",
+                                                      opacity: "55" } }, {});
+assert.strictEqual(writtenBackdrop.entries.length, 1);
+assert.strictEqual(writtenBackdrop.entries[0].key, "display.theme");
+assert.deepStrictEqual(writtenBackdrop.entries[0].value.backdrop,
+                       { enabled: true, color: "#0A0A0A", opacity: 55 });
+assert.throws(() => L.themeColorEntries("", { backdrop: { opacity: "" } }, {}));
+assert.throws(() => L.themeColorEntries("", { backdrop: { opacity: 101 } }, {}));
+// Clearing a device override removes the key rather than pinning today's cluster value.
+const clearedBackdrop = L.themeColorEntries("d1", { call_button_auto: true,
+                                                   ink_override: {}, backdrop: null },
+                                                 { backdrop: { opacity: 80 } });
+assert.ok(!clearedBackdrop.entries.length || !clearedBackdrop.entries[0].value.backdrop);
+
+// ---- numeric frosted-glass radius is stored only for clients that apply it -------------------
+assert.strictEqual(L.glassBlurModel({}, "").radius, 32);
+const glassCfg = {
+  display: { theme: { glass: { blur_radius: 30 } } },
+  devices: { d1: { local: { theme: { glass: { blur_radius: 36 } } } } }
+};
+assert.deepStrictEqual(L.glassBlurModel(glassCfg, "d1"),
+                       { radius: 36, source: "device", overridden: true });
+assert.deepStrictEqual(L.glassBlurModel(glassCfg, "d2"),
+                       { radius: 30, source: "admin", overridden: false });
+const writtenGlass = L.themeColorEntries("d1", { glass: { blur_radius: "32" } }, {});
+assert.deepStrictEqual(writtenGlass.entries[0].value.glass, { blur_radius: 32 });
+assert.throws(() => L.themeColorEntries("d1", { glass: { blur_radius: 41 } }, {}));
+assert.throws(() => L.themeColorEntries("d1", { glass: { blur_radius: "" } }, {}));
 
 console.log("theme and notice tests: ok");

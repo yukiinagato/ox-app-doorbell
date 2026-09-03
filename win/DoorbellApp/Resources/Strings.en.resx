@@ -108,6 +108,8 @@ Delete it?</value></data>
   <data name="admin_door_call_sound" xml:space="preserve"><value>Door-station call sound</value></data>
   <data name="admin_door_list" xml:space="preserve"><value>Doors</value></data>
   <data name="admin_door_or_device" xml:space="preserve"><value>Door / device</value></data>
+  <data name="admin_door_required" xml:space="preserve"><value>Choose an assigned door for a door station</value></data>
+  <data name="admin_door_unconfigured" xml:space="preserve"><value>Not set up</value></data>
   <data name="admin_doors" xml:space="preserve"><value>Doors &amp; Buildings</value></data>
   <data name="admin_drop_here" xml:space="preserve"><value>Drop a file here or click to choose</value></data>
   <data name="admin_duty" xml:space="preserve"><value>Duty</value></data>
@@ -349,17 +351,33 @@ Delete it?</value></data>
   <data name="admin_with_snapshot" xml:space="preserve"><value>With snapshot</value></data>
   <data name="admin_write" xml:space="preserve"><value>Write</value></data>
   <data name="app_name" xml:space="preserve"><value>Doorbell</value></data>
+  <data name="call_return_device_hint" xml:space="preserve"><value>Tick &quot;use the cluster default&quot; to go back to the default</value></data>
+  <data name="call_return_hint" xml:space="preserve"><value>The call screen counts down in its title and returns home at zero. If the visitor cancels, the live view stays until the countdown ends; tapping the number cancels the countdown</value></data>
+  <data name="call_return_inherit" xml:space="preserve"><value>Use the cluster default</value></data>
+  <data name="call_return_invalid" xml:space="preserve"><value>The return countdown must be between 5 and 600 seconds</value></data>
+  <data name="call_return_s" xml:space="preserve"><value>Seconds before returning</value></data>
+  <data name="call_return_title" xml:space="preserve"><value>Return from the call screen</value></data>
   <data name="calling_cancel" xml:space="preserve"><value>Cancel</value></data>
   <data name="calling_cancel_failed" xml:space="preserve"><value>Could not cancel the call</value></data>
   <data name="calling_no_answer" xml:space="preserve"><value>No answer</value></data>
   <data name="calling_title" xml:space="preserve"><value>Calling…</value></data>
+  <data name="cluster_devices_a11y" xml:space="preserve"><value>{0} devices in the cluster</value></data>
+  <data name="cluster_door_stations_a11y" xml:space="preserve"><value>{0} of {1} door stations online</value></data>
+  <data name="cluster_indoor_panels_a11y" xml:space="preserve"><value>{0} of {1} indoor panels online</value></data>
   <data name="dash_admin" xml:space="preserve"><value>Admin</value></data>
+  <data name="dash_count_cluster" xml:space="preserve"><value>{0} devices in the cluster</value></data>
+  <data name="dash_count_devices" xml:space="preserve"><value>{0} devices</value></data>
+  <data name="dash_count_door_stations" xml:space="preserve"><value>Door stations {0} of {1} online</value></data>
+  <data name="dash_count_doors" xml:space="preserve"><value>{0} of {1} door stations online</value></data>
+  <data name="dash_count_indoor_panels" xml:space="preserve"><value>{0} of {1} indoor panels online</value></data>
+  <data name="dash_count_panels" xml:space="preserve"><value>{0} of {1} indoor panels online</value></data>
   <data name="dash_doors" xml:space="preserve"><value>Door stations</value></data>
   <data name="dash_last_answer" xml:space="preserve"><value>Last answered {0}</value></data>
   <data name="dash_no_doors" xml:space="preserve"><value>No door station has been added yet</value></data>
   <data name="dash_notice_global" xml:space="preserve"><value>Announcement (all doors)</value></data>
   <data name="dash_recent_calls" xml:space="preserve"><value>Recent calls</value></data>
   <data name="dash_see_all" xml:space="preserve"><value>See all</value></data>
+  <data name="dash_tile_no_station" xml:space="preserve"><value>No door station</value></data>
   <data name="dash_tile_offline" xml:space="preserve"><value>Offline</value></data>
   <data name="dash_tile_open" xml:space="preserve"><value>View</value></data>
   <data name="dash_tile_watch" xml:space="preserve"><value>View</value></data>
@@ -372,6 +390,8 @@ Delete it?</value></data>
   <data name="day_tue" xml:space="preserve"><value>Tue</value></data>
   <data name="day_wed" xml:space="preserve"><value>Wed</value></data>
   <data name="degraded_notified" xml:space="preserve"><value>Notified — please wait</value></data>
+  <data name="door_call_action" xml:space="preserve"><value>Call</value></data>
+  <data name="door_camera_denied" xml:space="preserve"><value>Camera access is not allowed — Settings › Privacy</value></data>
   <data name="door_hint_call" xml:space="preserve"><value>Press the button to call the residents</value></data>
   <data name="door_lang_switch" xml:space="preserve"><value>Language</value></data>
   <data name="door_notice_for_this" xml:space="preserve"><value>Announce at this door</value></data>
@@ -380,7 +400,7 @@ Delete it?</value></data>
   <data name="emergency_active_detail" xml:space="preserve"><value>Emergency mode is active</value></data>
   <data name="emergency_button" xml:space="preserve"><value>SOS</value></data>
   <data name="emergency_cancel" xml:space="preserve"><value>Cancel alarm</value></data>
-  <data name="emergency_clear_instruction" xml:space="preserve"><value>Clear the alarm from Admin or with the device PIN.</value></data>
+  <data name="emergency_clear_instruction" xml:space="preserve"><value>Clear the alarm from the Admin page or by entering the admin password on the device.</value></data>
   <data name="emergency_hold_hint" xml:space="preserve"><value>Hold {0}s to trigger</value></data>
   <data name="emergency_notified" xml:space="preserve"><value>Family has been notified</value></data>
   <data name="emergency_notify_off" xml:space="preserve"><value>✅ Emergency cleared</value></data>
@@ -410,7 +430,9 @@ Delete it?</value></data>
   <data name="history_today" xml:space="preserve"><value>Today</value></data>
   <data name="history_unread_banner" xml:space="preserve"><value>{0} missed calls</value></data>
   <data name="history_yesterday" xml:space="preserve"><value>Yesterday</value></data>
+  <data name="idle_call" xml:space="preserve"><value>Call</value></data>
   <data name="idle_call_button" xml:space="preserve"><value>Call {0}</value></data>
+  <data name="idle_call_button_verb" xml:space="preserve"><value>Call</value></data>
   <data name="idle_choose_purpose" xml:space="preserve"><value>Please choose your purpose</value></data>
   <data name="idle_language" xml:space="preserve"><value>Language</value></data>
   <data name="idle_touch_to_call" xml:space="preserve"><value>Touch to call</value></data>
@@ -572,12 +594,29 @@ Delete it?</value></data>
   <data name="pair_err_timeout" xml:space="preserve"><value>No response. Try again</value></data>
   <data name="pair_err_unknown" xml:space="preserve"><value>Couldn't complete that. Please try again</value></data>
   <data name="pair_err_detail" xml:space="preserve"><value>Details: {0}</value></data>
+  <data name="pair_invitation_confirm" xml:space="preserve"><value>Join {0}?</value></data>
+  <data name="pair_invitation_confirm_unnamed" xml:space="preserve"><value>Join this Cluster?</value></data>
+  <data name="pair_invitation_expired" xml:space="preserve"><value>This invitation has expired. Show a new code on the other device</value></data>
+  <data name="pair_invitation_invalid" xml:space="preserve"><value>This invitation could not be read</value></data>
+  <data name="pair_invitation_replace" xml:space="preserve"><value>This device is already in another Cluster. Joining erases its current setup</value></data>
+  <data name="pair_invitation_title" xml:space="preserve"><value>Invitation scanned</value></data>
+  <data name="pair_invite_cluster" xml:space="preserve"><value>Cluster: {0}</value></data>
+  <data name="pair_invite_expired" xml:space="preserve"><value>This invitation has expired. Get a new one on the other device</value></data>
+  <data name="pair_invite_invalid" xml:space="preserve"><value>This invitation could not be read</value></data>
+  <data name="pair_invite_join" xml:space="preserve"><value>Join this cluster</value></data>
+  <data name="pair_invite_leave_current" xml:space="preserve"><value>This device is already in a Cluster. Joining will leave it and erase all of this device's settings.</value></data>
+  <data name="pair_invite_missing_host" xml:space="preserve"><value>This invitation carries no address</value></data>
+  <data name="pair_invite_missing_pin" xml:space="preserve"><value>This invitation carries no Pairing PIN</value></data>
+  <data name="pair_invite_title" xml:space="preserve"><value>Cluster invitation</value></data>
   <data name="pair_join_required" xml:space="preserve"><value>Enter the address and the Pairing PIN</value></data>
   <data name="pair_join_submit" xml:space="preserve"><value>Join</value></data>
+  <data name="pair_join_this_cluster" xml:space="preserve"><value>Join this cluster</value></data>
   <data name="pair_join_with_code" xml:space="preserve"><value>Join with a Pairing PIN</value></data>
   <data name="pair_joined" xml:space="preserve"><value>Joined the Cluster</value></data>
   <data name="pair_joining" xml:space="preserve"><value>Joining the Cluster…</value></data>
   <data name="pair_later" xml:space="preserve"><value>Set up later</value></data>
+  <data name="pair_link_from" xml:space="preserve"><value>Invitation to {0}</value></data>
+  <data name="pair_link_leave_current" xml:space="preserve"><value>This device is already in another cluster. Joining erases all of its current settings.</value></data>
   <data name="pair_membership" xml:space="preserve"><value>Cluster · {0} devices</value></data>
   <data name="pair_membership_connected" xml:space="preserve"><value>{0} connected</value></data>
   <data name="pair_mint_unsupported" xml:space="preserve"><value>This device's core can't issue a Pairing PIN yet. Update it</value></data>
@@ -591,13 +630,14 @@ Delete it?</value></data>
   <data name="pair_panel_title" xml:space="preserve"><value>Add a device</value></data>
   <data name="pair_persist_error_body" xml:space="preserve"><value>This device couldn't write to its secure storage. Check free space and permissions, then try again.</value></data>
   <data name="pair_persist_error_title" xml:space="preserve"><value>Couldn't save settings</value></data>
-  <data name="pair_pin_unavailable" xml:space="preserve"><value>This core build cannot mint a PIN</value></data>
+  <data name="pair_pin_unavailable" xml:space="preserve"><value>This core build cannot issue a Pairing PIN</value></data>
   <data name="pair_qr_caption" xml:space="preserve"><value>Scan this QR from another device to add this one</value></data>
   <data name="pair_qr_pending" xml:space="preserve"><value>Preparing the Add QR…</value></data>
   <data name="pair_retry" xml:space="preserve"><value>Retry</value></data>
   <data name="pair_revoked" xml:space="preserve"><value>This device was removed from the Cluster</value></data>
   <data name="pair_role_door_station" xml:space="preserve"><value>Door station</value></data>
   <data name="pair_role_indoor_panel" xml:space="preserve"><value>Indoor panel</value></data>
+  <data name="pair_scan_button" xml:space="preserve"><value>Scan QR</value></data>
   <data name="pair_scan_camera_denied" xml:space="preserve"><value>Camera access is not allowed. Grant camera permission in the device settings.</value></data>
   <data name="pair_scan_cancel" xml:space="preserve"><value>Cancel</value></data>
   <data name="pair_scan_denied" xml:space="preserve"><value>Couldn't open the camera. Check the browser's camera permission</value></data>
@@ -713,7 +753,7 @@ Delete it?</value></data>
   <data name="purpose_disabled" xml:space="preserve"><value>Hidden</value></data>
   <data name="purpose_enabled" xml:space="preserve"><value>Shown</value></data>
   <data name="purpose_select_failed" xml:space="preserve"><value>Could not send the visit purpose</value></data>
-  <data name="purpose_sent" xml:space="preserve"><value>Called as {0}</value></data>
+  <data name="purpose_sent" xml:space="preserve"><value>Calling for {0}</value></data>
   <data name="purpose_skip" xml:space="preserve"><value>Skip purpose</value></data>
   <data name="reply_answered" xml:space="preserve"><value>Replied ({0})</value></data>
   <data name="reply_banner" xml:space="preserve"><value>Message from resident</value></data>
@@ -740,7 +780,7 @@ On</value></data>
 Off</value></data>
   <data name="ring_monitor_two_line_on" xml:space="preserve"><value>Monitor
 On</value></data>
-  <data name="ring_monitoring" xml:space="preserve"><value>Live door audio on</value></data>
+  <data name="ring_monitoring" xml:space="preserve"><value>Live door audio is on</value></data>
   <data name="ring_no_video" xml:space="preserve"><value>No video from door station</value></data>
   <data name="ring_open_door" xml:space="preserve"><value>Open door</value></data>
   <data name="ring_open_failed" xml:space="preserve"><value>Couldn't send the unlock signal</value></data>
@@ -749,6 +789,7 @@ On</value></data>
   <data name="ring_purpose_badge" xml:space="preserve"><value>Purpose: {0}</value></data>
   <data name="ring_quick_replies" xml:space="preserve"><value>Quick replies</value></data>
   <data name="ring_quick_reply" xml:space="preserve"><value>Quick reply</value></data>
+  <data name="ring_return_countdown_a11y" xml:space="preserve"><value>Seconds until this panel returns home (tap to stop)</value></data>
   <data name="ring_unlock" xml:space="preserve"><value>Unlock</value></data>
   <data name="ring_unlock_sent" xml:space="preserve"><value>Unlock signal sent</value></data>
   <data name="ring_unlock_unconfigured" xml:space="preserve"><value>No unlock action is configured for this door</value></data>
@@ -855,7 +896,7 @@ On</value></data>
   <data name="setup_join_failed" xml:space="preserve"><value>Could not join: {0}</value></data>
   <data name="setup_join_host" xml:space="preserve"><value>Join address (for example, 10.0.1.5:47172)</value></data>
   <data name="setup_join_pin" xml:space="preserve"><value>Join with PIN</value></data>
-  <data name="setup_join_required" xml:space="preserve"><value>Enter the join address and PIN</value></data>
+  <data name="setup_join_required" xml:space="preserve"><value>Enter the address and Pairing PIN</value></data>
   <data name="setup_message" xml:space="preserve"><value>Confirm this device's role before continuing. A door station needs a unique door ID.</value></data>
   <data name="setup_name" xml:space="preserve"><value>Device name</value></data>
   <data name="setup_new_cluster" xml:space="preserve"><value>── New cluster ──</value></data>
@@ -881,10 +922,10 @@ This device joins automatically. Only if it does not, enter the indoor panel add
   <data name="sos_button_on_roles" xml:space="preserve"><value>Devices that show SOS</value></data>
   <data name="sos_cancel_countdown" xml:space="preserve"><value>Cancel</value></data>
   <data name="sos_cancel_requires_pin" xml:space="preserve"><value>Require the admin password to clear it</value></data>
-  <data name="sos_countdown" xml:space="preserve"><value>Calling for help in {0}</value></data>
+  <data name="sos_countdown" xml:space="preserve"><value>Sending an alert in {0} seconds</value></data>
   <data name="sos_countdown_cancel" xml:space="preserve"><value>Cancel</value></data>
   <data name="sos_countdown_s" xml:space="preserve"><value>Cancellable countdown (seconds)</value></data>
-  <data name="sos_hint" xml:space="preserve"><value>Triggering alerts every family device. It never calls the police or fire service automatically</value></data>
+  <data name="sos_hint" xml:space="preserve"><value>Triggering an alert notifies every family device. It does not automatically contact the police or fire service.</value></data>
   <data name="sos_mode_hold" xml:space="preserve"><value>Press and hold (legacy)</value></data>
   <data name="sos_mode_slide" xml:space="preserve"><value>Slide to trigger</value></data>
   <data name="sos_slide_hint" xml:space="preserve"><value>Slide right to call for help</value></data>
@@ -906,12 +947,26 @@ Sends in {0}s</value></data>
   <data name="theme_appearance_dark" xml:space="preserve"><value>Always dark</value></data>
   <data name="theme_appearance_light" xml:space="preserve"><value>Always light</value></data>
   <data name="theme_auto" xml:space="preserve"><value>Automatic</value></data>
+  <data name="theme_backdrop" xml:space="preserve"><value>Background dimming</value></data>
+  <data name="theme_backdrop_enabled" xml:space="preserve"><value>Draw a dimming layer over the background</value></data>
+  <data name="theme_backdrop_hint" xml:space="preserve"><value>A semi-transparent layer over the background image that keeps text readable on a bright photograph. Choose its colour and how strong it is; the default is black at 62%.</value></data>
+  <data name="theme_backdrop_invalid" xml:space="preserve"><value>The dimming strength must be a whole number between 0 and 100</value></data>
+  <data name="theme_backdrop_source_admin" xml:space="preserve"><value>Set for the whole cluster.</value></data>
+  <data name="theme_backdrop_source_default" xml:space="preserve"><value>Using the built-in default.</value></data>
+  <data name="theme_backdrop_source_device" xml:space="preserve"><value>Set for this device only.</value></data>
+  <data name="theme_backdrop_weak" xml:space="preserve"><value>Text may be hard to read over the background image</value></data>
   <data name="theme_background_source_color" xml:space="preserve"><value>Background colour</value></data>
   <data name="theme_background_source_image" xml:space="preserve"><value>Averaged from the background image</value></data>
+  <data name="theme_background_unsampled" xml:space="preserve"><value>The background image could not be read ({0}); each device decides its text colour</value></data>
   <data name="theme_call_button" xml:space="preserve"><value>Call button colour</value></data>
   <data name="theme_contrast_warning" xml:space="preserve"><value>This may be hard to read ({0}:1)</value></data>
   <data name="theme_custom" xml:space="preserve"><value>Custom colour</value></data>
   <data name="theme_dark_from" xml:space="preserve"><value>Dark from</value></data>
+  <data name="theme_glass_blur_hint" xml:space="preserve"><value>Applied only by supported devices. Range 0-40; the default is 32.</value></data>
+  <data name="theme_glass_blur_invalid" xml:space="preserve"><value>The blur radius must be a whole number between 0 and 40</value></data>
+  <data name="theme_glass_blur_radius" xml:space="preserve"><value>Frosted-glass blur radius</value></data>
+  <data name="theme_glass_blur_system" xml:space="preserve"><value>This device uses OS-managed blur, so its radius cannot be changed.</value></data>
+  <data name="theme_glass_blur_unavailable" xml:space="preserve"><value>This device has not reported adjustable blur-radius support.</value></data>
   <data name="theme_ink" xml:space="preserve"><value>Text colour</value></data>
   <data name="theme_ink_region" xml:space="preserve"><value>Where</value></data>
   <data name="theme_light_from" xml:space="preserve"><value>Light from</value></data>
@@ -926,12 +981,16 @@ Sends in {0}s</value></data>
   <data name="theme_region_notice" xml:space="preserve"><value>Announcement</value></data>
   <data name="theme_region_status_line" xml:space="preserve"><value>Status line</value></data>
   <data name="theme_region_tile_label" xml:space="preserve"><value>Tile label</value></data>
+  <data name="theme_unsampled_decode_failed" xml:space="preserve"><value>Unsupported format</value></data>
+  <data name="theme_unsampled_missing" xml:space="preserve"><value>not on this device yet</value></data>
+  <data name="theme_unsampled_too_large" xml:space="preserve"><value>Image too large</value></data>
   <data name="time_err_bad_reply" xml:space="preserve"><value>The server's answer wasn't valid</value></data>
   <data name="time_err_bad_server" xml:space="preserve"><value>A server entry isn't written correctly</value></data>
   <data name="time_err_implausible" xml:space="preserve"><value>The measured time wasn't plausible and was discarded</value></data>
   <data name="time_err_no_response" xml:space="preserve"><value>No answer from the time servers</value></data>
+  <data name="time_interval_hint" xml:space="preserve"><value>The default is 86400 seconds (one day), and the range is 3600 seconds (one hour) to 604800 seconds (seven days). A clock correction only drifts over days, so syncing more often costs battery and traffic for nothing. After a failure the service retries from one minute, doubling up to an hour.</value></data>
   <data name="time_interval_s" xml:space="preserve"><value>Sync interval (seconds)</value></data>
-  <data name="time_invalid_interval" xml:space="preserve"><value>The sync interval must be between 60 and 86400 seconds</value></data>
+  <data name="time_invalid_interval" xml:space="preserve"><value>The sync interval must be between 3600 and 604800 seconds</value></data>
   <data name="time_invalid_servers" xml:space="preserve"><value>Enter one to four time servers, one per line</value></data>
   <data name="time_invalid_zone" xml:space="preserve"><value>Choose a time zone from the list</value></data>
   <data name="time_last_sync" xml:space="preserve"><value>Last sync</value></data>
@@ -941,6 +1000,7 @@ Sends in {0}s</value></data>
   <data name="time_ntp_hint" xml:space="preserve"><value>The device's own clock is never changed; the doorbell corrects the difference internally</value></data>
   <data name="time_ntp_off" xml:space="preserve"><value>Turn on &quot;Set the time from the Internet&quot; and save first</value></data>
   <data name="time_offset" xml:space="preserve"><value>Correction</value></data>
+  <data name="time_retrying" xml:space="preserve"><value>The last sync failed; retrying in {0} seconds</value></data>
   <data name="time_rtt" xml:space="preserve"><value>Round trip</value></data>
   <data name="time_server" xml:space="preserve"><value>Server</value></data>
   <data name="time_servers" xml:space="preserve"><value>Time servers</value></data>
@@ -956,7 +1016,7 @@ Sends in {0}s</value></data>
   <data name="time_zone" xml:space="preserve"><value>Time zone</value></data>
   <data name="time_zone_hint" xml:space="preserve"><value>This sets the clock, call history, and rule schedules for the whole cluster</value></data>
   <data name="unlock_auto" xml:space="preserve"><value>Show when configured</value></data>
-  <data name="unlock_command" xml:space="preserve"><value>Command sent</value></data>
+  <data name="unlock_command" xml:space="preserve"><value>Configured command</value></data>
   <data name="unlock_hide" xml:space="preserve"><value>Never show</value></data>
   <data name="unlock_not_configured" xml:space="preserve"><value>No unlock action is configured</value></data>
   <data name="unlock_show" xml:space="preserve"><value>Always show</value></data>
@@ -967,7 +1027,7 @@ Sends in {0}s</value></data>
   <data name="volume_cluster_default" xml:space="preserve"><value>Cluster default {0}</value></data>
   <data name="volume_device_title" xml:space="preserve"><value>Volume on this device</value></data>
   <data name="volume_hint" xml:space="preserve"><value>Cluster defaults. Override them per device on the Devices tab</value></data>
-  <data name="volume_idle" xml:space="preserve"><value>Everyday</value></data>
+  <data name="volume_idle" xml:space="preserve"><value>Normal</value></data>
   <data name="volume_inherit" xml:space="preserve"><value>Use the cluster default</value></data>
   <data name="volume_preview" xml:space="preserve"><value>Preview</value></data>
   <data name="volume_sos" xml:space="preserve"><value>SOS</value></data>

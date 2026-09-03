@@ -23,11 +23,25 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
     private var pairingGate: PairingViewController?
     private var pairingDeferred = false
     private var pairingGateTimer: Timer?
+    private var lastPairingFingerprint = ""
+    private var screenshots: ScreenshotResponder?
+    private var identityRestartPending = false
 
     func application(_ application: UIApplication,
                      didFinishLaunchingWithOptions launchOptions:
                         [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         boot = BootConfig.load()
+        IOSAvailability.cacheScreenScale()
+        IOSAvailability.PerfProbe.enabled = boot.debugTimings
+        ShellLog.enabled = boot.debugTimings
+        ShellLog.start(dataDir: BootConfig.dataDir(),
+                       note: "role=\(boot.role) door=\(boot.door) kiosk=\(boot.kiosk) "
+                           + "setup_required=\(boot.setupRequired)")
+        if boot.debugScreenshots {
+            let responder = ScreenshotResponder(dataDir: BootConfig.dataDir())
+            screenshots = responder
+            responder.start()
+        }
         if resetObserver == nil {
             resetObserver = NotificationCenter.default.addObserver(
                 forName: .doorbellResetLocalPairing, object: nil, queue: .main
@@ -45,7 +59,11 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
 
         let win = ActivityWindow(frame: UIScreen.main.bounds)
         window = win
-        application.isIdleTimerDisabled = true
+        // The panel must not let the device auto-lock: a suspended app's listening sockets are
+        // refused, the cluster calls the node dead, and it is evicted later without a crash
+        // report. Set here and re-asserted on every activation, because setting it once — before
+        // the window is even key — is not enough to keep it set.
+        ScreenAwake.want(true)
         if boot.setupRequired {
             let setup = BootstrapSetupViewController(boot: boot)
             setup.onSave = { [weak self, weak win, weak application] name, role, door in
@@ -66,9 +84,18 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
 
     func application(_ app: UIApplication, open url: URL,
                      options: [UIApplication.OpenURLOptionsKey: Any] = [:]) -> Bool {
-        guard url.scheme?.lowercased() == "doorbell", url.host?.lowercased() == "debug" else {
-            return false
+        guard url.scheme?.lowercased() == "doorbell" else { return false }
+        if url.host?.lowercased() == PairUri.action {
+            // The pairing screen owns the decision: it is the surface that can show the cluster
+            // being joined, say why an invitation cannot be used, and warn about leaving a
+            // cluster this device is already in.
+            pairingDeferred = false
+            presentPairingGate()
+            NotificationCenter.default.post(name: .doorbellPairInvitation,
+                                            object: url.absoluteString)
+            return true
         }
+        guard url.host?.lowercased() == "debug" else { return false }
         switch url.path.lowercased() {
         case "/ping", "/status":
             IOSAvailability.logDebug(debugSummary())
@@ -85,6 +112,10 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
                                             window win: ActivityWindow) {
         guard !appStarted else { return }
         appStarted = true
+        // The persisted profile is the identity boundary. An in-process role restart must not
+        // reuse a stale value retained by the controller graph it is replacing.
+        boot = BootConfig.load()
+        ShellLog.note("ui.start role=\(boot.role) door=\(boot.door)")
 
         // Configure speakerphone calling. PJSIP selects VoiceProcessingIO for AEC at runtime.
         let session = AVAudioSession.sharedInstance()
@@ -95,10 +126,20 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         if BootConfig.migrateLegacyPskIntoSecureStore() { boot = BootConfig.load() }
 
         // Keep the UI available in offline mode if Core cannot start.
-        _ = core.start(dataDir: BootConfig.dataDir(), bootJson: boot.rawJson)
+        let coreStarted = core.start(dataDir: BootConfig.dataDir(), bootJson: boot.rawJson)
+        ShellLog.note("core.start ok=\(coreStarted)")
         runtime = RuntimeSupervisor(core: core, boot: boot,
                                     audioSessionReady: audioSessionReady)
+        // Ask before the first capability document goes out. The prompt is asynchronous, so the
+        // first document may still say not_determined; what matters is that the ask is already in
+        // flight, and that the answer republishes the capabilities and starts capture.
+        AvPermissions.requestAtLaunch(role: boot.role) { [weak self] in
+            self?.runtime?.permissionsDidChange()
+        }
         runtime?.start()
+        if boot.role == "indoor_panel" {
+            AdaptiveH264MjpegPlayer.prewarm()
+        }
         if boot.role == "door_station" {
             UIDevice.current.beginGeneratingDeviceOrientationNotifications()
             NotificationCenter.default.addObserver(
@@ -141,7 +182,13 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         guard core.isRunning else { return }
         let snapshot = PairingSnapshot.load(core)
         guard snapshot.hasSnapshot else { return }
-        NotificationCenter.default.post(name: .doorbellPairingChanged, object: nil)
+        // Only a real change is announced. Posting unconditionally woke every observer twenty
+        // times a minute to re-parse the same pairing document and rebuild the same string.
+        let fingerprint = snapshot.changeFingerprint
+        if fingerprint != lastPairingFingerprint {
+            lastPairingFingerprint = fingerprint
+            NotificationCenter.default.post(name: .doorbellPairingChanged, object: nil)
+        }
         guard snapshot.state.blocksMainUi else {
             // A member device starts over with a clean slate: a later revocation must gate again.
             pairingDeferred = false
@@ -172,22 +219,59 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
     }
 
     func applicationWillTerminate(_ application: UIApplication) {
+        ShellLog.note("lifecycle willTerminate")
+        ShellLog.flush()
         NotificationCenter.default.removeObserver(self,
             name: UIDevice.orientationDidChangeNotification, object: nil)
         UIDevice.current.endGeneratingDeviceOrientationNotifications()
+        (window?.rootViewController as? MainViewController)?.prepareForCoreShutdown()
         runtime?.stop(clean: true)
         core.stop()
+        ShellLog.note("core.stop reason=willTerminate")
+    }
+
+    /// The transitions that explain a silent death, recorded so the next one can be read off the
+    /// device. Nothing here stops Core: a door station that resigned active — a system alert, a
+    /// notification banner, the screen locking — is still the household's doorbell, and taking the
+    /// node off the mesh for that would be the very failure this is here to catch. The idle-timer
+    /// override is re-asserted on activation because a screen that cleared it may not have put it
+    /// back.
+    func applicationDidBecomeActive(_ application: UIApplication) {
+        ScreenAwake.apply()
+        ShellLog.note("lifecycle didBecomeActive idle_timer_disabled="
+                          + "\(application.isIdleTimerDisabled)")
+    }
+
+    func applicationWillResignActive(_ application: UIApplication) {
+        ShellLog.note("lifecycle willResignActive")
+        ShellLog.flush()
+    }
+
+    func applicationDidEnterBackground(_ application: UIApplication) {
+        // Reaching here on a panel means the device locked or something took the foreground; the
+        // suspension that follows is what takes the node off the mesh.
+        ShellLog.note("lifecycle didEnterBackground idle_timer_disabled="
+                          + "\(application.isIdleTimerDisabled) wanted=\(ScreenAwake.wanted)")
+        ShellLog.flush()
+    }
+
+    func applicationWillEnterForeground(_ application: UIApplication) {
+        ShellLog.note("lifecycle willEnterForeground")
     }
 
     func applicationDidReceiveMemoryWarning(_ application: UIApplication) {
+        ShellLog.note("lifecycle memoryWarning")
         runtime?.handleMemoryPressure()
-        guard let root = window?.rootViewController as? MainViewController else { return }
-        root.enterSafeModeForMemoryPressure()
-        if let incoming = root.presentedViewController as? IncomingViewController {
-            incoming.enterSafeModeForMemoryPressure()
-        } else if let monitor = root.presentedViewController as? MonitorViewController {
-            monitor.enterSafeModeForMemoryPressure()
+        if let root = window?.rootViewController as? MainViewController {
+            root.enterSafeModeForMemoryPressure()
+            if let incoming = root.presentedViewController as? IncomingViewController {
+                incoming.enterSafeModeForMemoryPressure()
+            } else if let monitor = root.presentedViewController as? MonitorViewController {
+                monitor.enterSafeModeForMemoryPressure()
+            }
         }
+        // Safe-mode transitions release active players back into the reserve, so purge last.
+        AdaptiveH264MjpegPlayer.purgeWarmResources()
     }
 
     @objc private func deviceOrientationChanged() {
@@ -196,10 +280,66 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         core.setVideoSensorRotation(degrees)
     }
 
+    /// A remotely edited devices.<self> identity becomes the next local bootstrap identity.
+    private func applyReplicatedIdentity() -> Bool {
+        guard !identityRestartPending,
+              let node = core.status()?["node"] as? [String: Any],
+              let nodeID = node["id"] as? String, !nodeID.isEmpty,
+              let devices = core.config()?["devices"] as? [String: Any],
+              let device = devices[nodeID] as? [String: Any],
+              let role = device["role"] as? String, BootConfig.validRole(role)
+        else { return identityRestartPending }
+        let door = role == "door_station" ? (device["door"] as? String ?? "") : ""
+        guard role != "door_station" || BootConfig.validDoor(door) else { return false }
+        let rawName = (device["name"] as? String ?? boot.name)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let name = String(rawName.prefix(64)).isEmpty ? "doorbell" : String(rawName.prefix(64))
+        guard name != boot.name || role != boot.role || door != boot.door else { return false }
+        guard let updated = BootConfig.persistSetup(name: name, role: role, door: door) else {
+            ShellLog.note("replicated identity could not be persisted")
+            return false
+        }
+        boot = updated
+        identityRestartPending = true
+        DispatchQueue.main.async { [weak self] in self?.restartForIdentityChange() }
+        return true
+    }
+
+    private func restartForIdentityChange() {
+        guard identityRestartPending, let win = window as? ActivityWindow else { return }
+        pairingGateTimer?.invalidate()
+        pairingGateTimer = nil
+        pairingGate?.dismiss(animated: false)
+        pairingGate = nil
+        NotificationCenter.default.removeObserver(self,
+            name: UIDevice.orientationDidChangeNotification, object: nil)
+        UIDevice.current.endGeneratingDeviceOrientationNotifications()
+        (win.rootViewController as? MainViewController)?.prepareForCoreShutdown()
+        core.removeHandler("main")
+        win.onActivity = nil
+        win.onControlTap = nil
+        // Detach the old role's controller before Core is destroyed. Replacing it in the same
+        // main-loop turn left the old dashboard attached on iOS 12 even though the new Core had
+        // already adopted the door-station identity.
+        win.rootViewController = UIViewController()
+        runtime?.stop(clean: true)
+        runtime = nil
+        core.stop()
+        soundConfig = nil
+        lastPairingFingerprint = ""
+        appStarted = false
+        identityRestartPending = false
+        DispatchQueue.main.async { [weak self, weak win] in
+            guard let self = self, let win = win else { return }
+            self.startConfiguredApplication(UIApplication.shared, window: win)
+        }
+    }
+
 
     private func onUiEvent(_ ev: [String: Any]) {
         let eventKind = ConfigUtil.evStr(ev, "t")
         let type = ConfigUtil.evStr(ev, "type")
+        ShellLog.uiEvent(eventKind, detail: type)
         if eventKind == "event", boot.role != "door_station",
            type == "call_cancelled" || type == "call_answered" ||
            type == "call_ended" || type == "purpose_selected" {
@@ -208,6 +348,7 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         }
         if eventKind == "config_changed" {
             soundConfig = core.config()
+            _ = applyReplicatedIdentity()
         }
         if eventKind == "emergency" {
             let sosVolume = ConfigUtil.int(core.audioVolumes(), "sos",
@@ -297,9 +438,11 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         pairingDeferred = false
         pairingGateTimer?.invalidate()
         pairingGateTimer = nil
+        (window?.rootViewController as? MainViewController)?.prepareForCoreShutdown()
         runtime?.stop(clean: false)
         runtime = nil
         core.stop()
+        ShellLog.note("core.stop reason=resetLocalPairing")
         guard Keychain.removeAll(), BootConfig.clearPersistedState(),
               let win = window as? ActivityWindow else {
             IOSAvailability.logDebug("local pairing reset failed")

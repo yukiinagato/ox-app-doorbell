@@ -14,6 +14,7 @@ final class VideoEncoderVT {
     private var lastFeedMs: Int64 = 0
     private var failed = false
     private var started = false
+    private var forceNextKeyframe = false
     private var sessionGeneration: UInt64 = 0
     private let lock = NSRecursiveLock()
     private let measurementLock = NSLock()
@@ -46,6 +47,7 @@ final class VideoEncoderVT {
         height = 0
         lastFeedMs = 0
         failed = false
+        forceNextKeyframe = false
         started = true
         sessionGeneration &+= 1
         lock.unlock()
@@ -59,6 +61,12 @@ final class VideoEncoderVT {
         sessionGeneration &+= 1
         releaseSessionLocked()
         IOSAvailability.logDebug("h264 stop")
+    }
+
+    func requestKeyFrame() {
+        lock.lock()
+        if started && !failed { forceNextKeyframe = true }
+        lock.unlock()
     }
 
     private func releaseSessionLocked() {
@@ -91,9 +99,13 @@ final class VideoEncoderVT {
         guard let s = session else { return }
         let generation = sessionGeneration
         let pts = CMTime(value: tsMs, timescale: 1000)
+        let forceKeyframe = forceNextKeyframe
+        forceNextKeyframe = false
+        let frameProperties: CFDictionary? = forceKeyframe
+            ? [kVTEncodeFrameOptionKey_ForceKeyFrame: true] as CFDictionary : nil
         let rc = VTCompressionSessionEncodeFrame(
             s, imageBuffer: pixelBuffer, presentationTimeStamp: pts,
-            duration: .invalid, frameProperties: nil, infoFlagsOut: nil
+            duration: .invalid, frameProperties: frameProperties, infoFlagsOut: nil
         ) { [weak self] status, _, sbuf in
             guard let self = self else { return }
             guard self.isCurrentGeneration(generation) else { return }
@@ -108,6 +120,7 @@ final class VideoEncoderVT {
             }
         }
         if rc != noErr {
+            if forceKeyframe { forceNextKeyframe = true }
             failed = true
             IOSAvailability.logDebug("h264 encode frame failed status=\(rc)")
             reportRuntime(available: false, state: "encode_failed")

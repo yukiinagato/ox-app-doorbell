@@ -11,18 +11,16 @@ import android.graphics.Color
 import android.media.AudioManager
 import android.media.MediaPlayer
 import android.media.ToneGenerator
-import android.hardware.Sensor
-import android.hardware.SensorEvent
-import android.hardware.SensorEventListener
-import android.hardware.SensorManager
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
+import android.os.HandlerThread
 import android.os.Looper
+import android.os.Process
+import android.os.SystemClock
 import android.speech.tts.TextToSpeech
 import android.util.Log
 import android.view.View
-import android.view.Surface
 import android.view.WindowManager
 import android.view.animation.AlphaAnimation
 import android.view.animation.Animation
@@ -39,7 +37,7 @@ import java.util.Locale
 import org.json.JSONArray
 import org.json.JSONObject
 
-class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
+class MainActivity : Activity(), DoorbellCore.Listener {
 
     private val ui = Handler(Looper.getMainLooper())
     private lateinit var app: App
@@ -90,16 +88,30 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
     /** Resolved appearance for this screen; recomputed on every config or time change. */
     private var palette: Palette = Palette.DARK
 
+    private var lastClockText = ""
+    private var lastClockDate = ""
+    private var membershipRenderKey = ""
+
     /** Appearance and automatic theme as core published them; null on an older core. */
     private var coreDisplay: CoreDisplay = CoreDisplay(null, null)
 
     /** The latest status snapshot, which carries the resolved notice, unlock, and display. */
     private var statusSnapshot: JSONObject? = null
 
+    /** Home-screen refresh coalescing; see [HomeRefreshPolicy]. */
+    private var homeRefreshRunMs = 0L
+    private var homeRefreshQueued = false
+    private var homeRefreshWantsConfig = false
+    private var homeRefreshWantsFullRender = false
+    private var homeRefreshWantsCalls = false
+    private val homeRefreshTick = Runnable { runHomeRefresh() }
+
+    /** Where the coalesced refresh reads core, so the main thread never waits on the run loop. */
+    private var homeThread: HandlerThread? = null
+    private var homeHandler: Handler? = null
+
     private var tts: TextToSpeech? = null
     private var ttsReady = false
-    private val sensorManager by lazy { getSystemService(SENSOR_SERVICE) as SensorManager }
-    private var lastVideoRotation = -1
 
     private var secretTaps = 0
     private var secretFirstMs = 0L
@@ -166,6 +178,11 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
         bindViews()
         installRoleHome()
 
+        val worker = HandlerThread("doorbell-home", Process.THREAD_PRIORITY_BACKGROUND)
+        worker.start()
+        homeThread = worker
+        homeHandler = Handler(worker.looper)
+
         refreshConfigCache()
         texts.setLang(visitorLang)
         applyStrings()
@@ -225,12 +242,7 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
         maybeStartCamera()
         dashboard?.onResume()
         applyVisitorLayout()
-        if (app.boot.role == "door_station") {
-            publishDisplayRotationFallback()
-            sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)?.let {
-                sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_UI)
-            }
-        }
+        startRegionInkWatch()
     }
 
     /**
@@ -240,45 +252,58 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
      */
     private fun maybeShowPairing(): Boolean {
         if (!app.coreOk) return false
-        if (app.core.pairingInfo() == null) return false
-        if (app.pairingReady()) return false
+        val pairing = app.core.pairingInfo() ?: return false
+        if (app.pairingReadyFrom(pairing)) return false
         if (app.pairingDeferred) return false
         PairingActivity.launch(this)
         return true
     }
 
-    /** Membership status replaces the raw node identifier, and opens the Add-device panel. */
+    /**
+     * Membership status replaces the raw node identifier, and opens the Add-device panel.
+     *
+     * Reads core here, so it belongs to the one-shot paths: resume, and core reporting ready. The
+     * event stream goes through [scheduleHomeRefresh], which reads pairing off the main thread and
+     * renders through [renderMembership].
+     */
     private fun refreshMembership() {
-        val ready = app.pairingReady()
-        pairingBanner.visibility = if (ready) View.GONE else View.VISIBLE
-        if (!ready) {
-            pairingBanner.text = texts.t(
-                "pair.not_set_up_banner", R.string.pair_not_set_up_banner,
-            )
-            nodeInfo.text = texts.t("pair.not_set_up_banner", R.string.pair_not_set_up_banner)
-            return
-        }
-        if (dashboard != null) {
-            val pairing = app.core.pairingInfo()
-            nodeInfo.text = listOf(
+        val pairing = if (app.coreOk) app.core.pairingInfo() else null
+        renderMembership(pairing, app.pairingReadyFrom(pairing))
+    }
+
+    /** Render the membership pill and the pairing banner from an already-read pairing document. */
+    private fun renderMembership(pairing: JSONObject?, ready: Boolean) {
+        val membershipText = if (!ready) {
+            texts.t("pair.not_set_up_banner", R.string.pair_not_set_up_banner)
+        } else if (dashboard != null) {
+            listOf(
                 texts.t("pair.membership", R.string.pair_membership,
                         PairingModel.memberCount(pairing).toString()),
                 texts.t("pair.membership_connected", R.string.pair_membership_connected,
                         PairingModel.connectedCount(pairing).toString()),
             ).joinToString(" · ")
+        } else {
+            val status = statusSnapshot
+            val power = status?.optJSONObject("self")?.optJSONObject("power")
+            ShellUi.versionLine(
+                doorLabel(app.boot.door).ifEmpty { app.boot.name },
+                status?.optJSONObject("node")?.optString("version").orEmpty()
+                    .ifEmpty { app.core.version() },
+                appVersionName(),
+                power?.optInt("battery_pct", -1) ?: -1,
+                power?.optBoolean("charging", false) ?: false,
+            ) { texts.t("power.percent", R.string.power_percent, it.toString()) }
+        }
+        val renderKey = "${if (ready) 1 else 0}:$membershipText"
+        if (renderKey == membershipRenderKey) return
+        membershipRenderKey = renderKey
+        pairingBanner.visibility = if (ready) View.GONE else View.VISIBLE
+        if (!ready) {
+            pairingBanner.text = membershipText
+            nodeInfo.text = membershipText
             return
         }
-        // A visitor sees the door, the core and app versions, and the battery — nothing else.
-        val status = statusSnapshot ?: app.core.status()
-        val power = status?.optJSONObject("self")?.optJSONObject("power")
-        nodeInfo.text = ShellUi.versionLine(
-            doorLabel(app.boot.door).ifEmpty { app.boot.name },
-            status?.optJSONObject("node")?.optString("version").orEmpty()
-                .ifEmpty { app.core.version() },
-            appVersionName(),
-            power?.optInt("battery_pct", -1) ?: -1,
-            power?.optBoolean("charging", false) ?: false,
-        ) { texts.t("power.percent", R.string.power_percent, it.toString()) }
+        nodeInfo.text = membershipText
     }
 
     private fun appVersionName(): String = try {
@@ -329,48 +354,17 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
         // Leaving with setup still required must re-open setup on the next resume;
         // otherwise backing out of first-run setup strands the operator on an empty screen.
         setupLaunchRequested = false
-        sensorManager.unregisterListener(this)
         ui.removeCallbacks(clockTick)
         ui.removeCallbacks(purposeTimeout)
+        ui.removeCallbacks(homeRefreshTick)
+        homeRefreshQueued = false
+        homeRefreshWantsFullRender = false
+        homeRefreshWantsCalls = false
         dashboard?.onPause()
+        stopRegionInkWatch()
         if (::sosSlider.isInitialized) sosSlider.cancelCountdown()
         app.unbindForeground(this)
         super.onPause()
-    }
-
-    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
-
-    /** Applies camera mount correction before the first sensor event or without a sensor. */
-    @Suppress("DEPRECATION")
-    private fun publishDisplayRotationFallback() {
-        val deviceRotation = when (windowManager.defaultDisplay.rotation) {
-            Surface.ROTATION_90 -> 90
-            Surface.ROTATION_180 -> 180
-            Surface.ROTATION_270 -> 270
-            else -> 0
-        }
-        val rotation = app.runtime.frameRotationForDeviceRotation(deviceRotation)
-        if (rotation != lastVideoRotation) {
-            lastVideoRotation = rotation
-            app.core.setVideoSensorRotation(rotation)
-        }
-    }
-
-    override fun onSensorChanged(event: SensorEvent) {
-        if (event.sensor.type != Sensor.TYPE_ACCELEROMETER || event.values.size < 2) return
-        val x = event.values[0]
-        val y = event.values[1]
-        // Keep the last angle when the device lies flat and the in-plane gravity is unstable.
-        if (kotlin.math.max(kotlin.math.abs(x), kotlin.math.abs(y)) < 4f) return
-        val deviceRotation = if (kotlin.math.abs(x) > kotlin.math.abs(y)) {
-            if (x > 0) 90 else 270
-        } else {
-            if (y > 0) 0 else 180
-        }
-        val rotation = app.runtime.frameRotationForDeviceRotation(deviceRotation)
-        if (rotation == lastVideoRotation) return
-        lastVideoRotation = rotation
-        app.core.setVideoSensorRotation(rotation)
     }
 
     override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
@@ -386,6 +380,10 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
     }
 
     override fun onDestroy() {
+        ui.removeCallbacks(homeRefreshTick)
+        homeThread?.quit()
+        homeThread = null
+        homeHandler = null
         app.unbindForeground(this)
         tts?.shutdown()
         try { audio?.release() } catch (_: Exception) { }
@@ -486,8 +484,16 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
             it.tickClock()
             return
         }
-        val now = clusterClock.now()
-        clockText.text = now.clockText()
+        clusterClock.refreshIfStale()
+        val now = clusterClock.cached()
+        // Once a second, so only touch the views when the rendered value actually changed.
+        val clockValue = now.clockText()
+        if (clockValue != lastClockText) {
+            lastClockText = clockValue
+            clockText.text = clockValue
+        }
+        if (now.date == lastClockDate) return
+        lastClockDate = now.date
         val parts = now.date.split("-")
         dateText.text = if (parts.size != 3) now.date else String.format(
             Locale.US, "%s年%s月%s日 (%s)",
@@ -510,6 +516,10 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
         )
         dashboardHost.visibility = View.VISIBLE
         idleView.visibility = View.GONE
+        // The hidden 7-tap corner is the door station's only way into settings. An indoor panel
+        // has a visible 管理 button, and the invisible 200 dp target sat on top of the dashboard's
+        // header, swallowing taps meant for 管理 and すべて見る.
+        findViewById<View>(R.id.secret_corner).visibility = View.GONE
     }
 
     /**
@@ -537,7 +547,46 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
             notice != null, widthDp, heightDp,
         )
         applyFooterLayout(widthDp, heightDp)
+        scheduleGroupSpacing()
         scheduleRegionInk()
+    }
+
+    /**
+     * Breathing room between the visitor screen's groups, measured rather than assumed: the gap
+     * comes out of whatever vertical slack is actually left once the groups have been laid out, so
+     * a short screen keeps the tight layout it needs.
+     */
+    private fun scheduleGroupSpacing() {
+        if (dashboard != null) return
+        visitorSplit.post {
+            if (isFinishing || dashboard != null) return@post
+            for (column in arrayOf(visitorColumnA, visitorColumnB)) {
+                if (column.visibility != View.VISIBLE || column.childCount < 2) continue
+                var content = 0
+                for (index in 0 until column.childCount) {
+                    val child = column.getChildAt(index)
+                    if (child.visibility == View.GONE) continue
+                    content += child.height
+                }
+                val density = resources.displayMetrics.density
+                val gap = VisitorLayout.groupGapDp(
+                    (column.height / density).toInt(),
+                    (content / density).toInt(),
+                    column.childCount,
+                )
+                var changed = false
+                for (index in 1 until column.childCount) {
+                    val child = column.getChildAt(index)
+                    val params = child.layoutParams as? LinearLayout.LayoutParams ?: continue
+                    val margin = dp(gap)
+                    if (params.topMargin == margin) continue
+                    params.topMargin = margin
+                    child.layoutParams = params
+                    changed = true
+                }
+                if (changed) column.requestLayout()
+            }
+        }
     }
 
     /**
@@ -584,6 +633,7 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
         // A configured background colour or image wins; the palette ground is the fallback.
         if (themeValue("bg_color") == null && themeValue("bg_image").isNullOrEmpty())
             rootView.setBackgroundColor(ShellUi.opaque(palette.ground))
+        regionInkApplied.clear()
         applyRegionInk()
         sosSlider.applyPalette(palette)
         applyCallButtonAccent()
@@ -602,11 +652,22 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
         paintRegion(nodeInfo, "footer", muted = true)
     }
 
+    /** The last ink applied per region, so a layout pass that changes nothing does no work. */
+    private val regionInkApplied = HashMap<String, Int>()
+
     private fun paintRegion(view: TextView, region: String, muted: Boolean) {
-        val ground = effectiveBackgroundRgb()
-        val sampled = RegionInk.sample(themeBg, view, ground)
-        val result = CoreDisplays.inkFor(coreDisplay.theme, region, ground, sampled)
+        // The flat colour a visitor would see with no picture on screen; never core's average of
+        // the picture, which is only meaningful while the picture is actually painted.
+        val ground = flatBackgroundRgb()
+        val drawn = themeBg.visibility == View.VISIBLE && themeBg.drawable != null
+        val sample = if (drawn) RegionInk.sample(themeBg, view, ground) else null
+        val result = CoreDisplays.inkFor(
+            coreDisplay.theme, region, ground, sample?.averageRgb, drawn, sample = sample,
+        )
         val ink = if (muted) ShellUi.mute(result.inkRgb, palette.dark) else result.inkRgb
+        val signature = (if (result.needsShadow) 1 shl 25 else 0) or (ink and 0xffffff)
+        if (regionInkApplied[region] == signature) return
+        regionInkApplied[region] = signature
         view.setTextColor(ShellUi.opaque(ink))
         if (result.needsShadow) {
             val shadow = ShellUi.opaque(result.shadowRgb) and 0x00ffffff or
@@ -617,11 +678,35 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
         }
     }
 
-    /** The theme background moves under the text when the layout changes, so resample then. */
+    /**
+     * The regions move under the picture on every layout, and the picture itself arrives long
+     * after the first one. Both have to re-run the decision, or the screen keeps the ink it chose
+     * against a background nobody is looking at any more -- which is how a light illustration ended
+     * up carrying light text.
+     */
     private fun scheduleRegionInk() {
         if (dashboard != null) return
         rootView.post { if (!isFinishing) applyRegionInk() }
     }
+
+    private val regionInkOnLayout = android.view.ViewTreeObserver.OnGlobalLayoutListener {
+        if (!isFinishing) applyRegionInk()
+    }
+
+    private fun startRegionInkWatch() {
+        if (dashboard != null) return
+        rootView.viewTreeObserver.addOnGlobalLayoutListener(regionInkOnLayout)
+    }
+
+    private fun stopRegionInkWatch() {
+        if (dashboard != null) return
+        @Suppress("DEPRECATION")
+        rootView.viewTreeObserver.removeGlobalOnLayoutListener(regionInkOnLayout)
+    }
+
+    /** The flat colour behind the visitor screen, with no background image taken into account. */
+    private fun flatBackgroundRgb(): Int =
+        UiContrast.parseRgb(themeValue("bg_color")) ?: palette.ground
 
     /** The colour actually behind the visitor screen, averaged by core when it is an image. */
     private fun effectiveBackgroundRgb(): Int =
@@ -640,6 +725,89 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
         )
         callButton.background = ShellUi.rounded(this, background, 14)
         callButton.setTextColor(ShellUi.opaque(ink))
+    }
+
+    /**
+     * Ask for a home-screen refresh. Several events a second fold into one refresh; see
+     * [HomeRefreshPolicy]. [withConfig] also re-reads configuration and rebuilds what depends on
+     * it, which peer liveness never changes.
+     */
+    private fun scheduleHomeRefresh(
+        withConfig: Boolean = false,
+        fullRender: Boolean = true,
+        withCalls: Boolean = false,
+    ) {
+        if (withConfig) homeRefreshWantsConfig = true
+        if (withConfig || fullRender) homeRefreshWantsFullRender = true
+        if (withCalls) homeRefreshWantsCalls = true
+        if (homeRefreshQueued) return
+        homeRefreshQueued = true
+        ui.postDelayed(
+            homeRefreshTick,
+            HomeRefreshPolicy.delayMs(homeRefreshRunMs, SystemClock.elapsedRealtime()),
+        )
+    }
+
+    /** Read core for one coalesced refresh, off the main thread, and render what comes back. */
+    private fun runHomeRefresh() {
+        homeRefreshQueued = false
+        val worker = homeHandler
+        // Leave the pending flags alone when there is nothing to read: the configuration rebuild
+        // this refresh was carrying must still happen once core is back.
+        if (!app.coreOk || worker == null) return
+        homeRefreshRunMs = SystemClock.elapsedRealtime()
+        val withConfig = homeRefreshWantsConfig
+        val fullRender = homeRefreshWantsFullRender
+        val withCalls = homeRefreshWantsCalls
+        homeRefreshWantsConfig = false
+        homeRefreshWantsFullRender = false
+        homeRefreshWantsCalls = false
+        worker.post {
+            // One status document per refresh, shared by every surface that renders from it.
+            val status = app.core.status()
+            val config = if (withConfig) app.core.config() else null
+            val pairing = app.core.pairingInfo()
+            val ready = app.pairingReadyFrom(pairing)
+            ui.post {
+                applyHomeRefresh(status, config, pairing, ready, withConfig, fullRender, withCalls)
+            }
+        }
+    }
+
+    private fun applyHomeRefresh(
+        status: JSONObject?,
+        config: JSONObject?,
+        pairing: JSONObject?,
+        pairingReady: Boolean,
+        withConfig: Boolean,
+        fullRender: Boolean,
+        withCalls: Boolean,
+    ) {
+        if (isFinishing) return
+        statusSnapshot = status
+        coreDisplay = CoreDisplays.parse(status?.optJSONObject("display"))
+        status?.optJSONObject("node")?.optString("id")?.let { if (it.isNotEmpty()) nodeId = it }
+        if (!fullRender) {
+            renderMembership(pairing, pairingReady)
+            dashboard?.refreshRuntime(status, withCalls)
+            return
+        }
+        if (withConfig) {
+            applyConfigCache(config)
+            applyTheme()
+            buildPurposeButtons()
+            buildLangBar()
+            applyStrings()
+            applySemanticUi()
+            configureSos()
+        }
+        renderMembership(pairing, pairingReady)
+        status?.optJSONObject("display")?.let {
+            applyNightTint(it.optBoolean("night"), it.optBoolean("red_tint"))
+        }
+        applyAppearance()
+        applyVisitorLayout()
+        dashboard?.refresh(status, cfg)
     }
 
     private fun refreshNodeInfo() {
@@ -666,7 +834,8 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
         applySemanticUi()
         configureSos()
         applyVisitorLayout()
-        dashboard?.refresh()
+        homeRefreshRunMs = SystemClock.elapsedRealtime()
+        dashboard?.refresh(st, cfg)
     }
 
     /**
@@ -684,14 +853,13 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
         sosSlot.visibility = if (sosVisibleForRole()) View.VISIBLE else View.GONE
     }
 
-    /** emergency.button_on_roles decides whether this device offers the slider at all. */
-    private fun sosVisibleForRole(): Boolean {
-        val roles = app.core.dig(cfg, "emergency.button_on_roles") as? JSONArray ?: return true
-        if (roles.length() == 0) return true
-        for (index in 0 until roles.length())
-            if (roles.optString(index) == app.boot.role) return true
-        return false
-    }
+    /**
+     * emergency.button_on_roles decides whether this device offers the slider at all. An absent
+     * key is core's default of ["indoor_panel"], so this visitor screen shows no bar unless the
+     * cluster deliberately names door_station.
+     */
+    private fun sosVisibleForRole(): Boolean =
+        SosSlideState.visibleForRole(cfg, app.boot.role)
 
     private fun applySemanticUi() {
         val styleConfig = if (app.safeMode) null else cfg
@@ -709,8 +877,9 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
 
     /** Reapply all labels after a visitor-language change. */
     private fun applyStrings() {
-        callButton.text =
-            texts.t("idle.call_button", R.string.idle_call_button, doorLabel(app.boot.door)).trim()
+        // Just the verb. A visitor has no use for the device or door identifier, and it made the
+        // button read "DOORBELL-ANDROID 呼出" on the Moto; the door name lives in the footer.
+        callButton.text = texts.t("door.call_action", R.string.door_call_action)
         touchHint.text = texts.t("door.hint_call", R.string.door_hint_call)
         purposeHint.text = texts.t("idle.choose_purpose", R.string.idle_choose_purpose)
         purposeAutoHint.text = texts.t("calling.title", R.string.calling_title)
@@ -733,8 +902,10 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
 
     // Theme, purpose, and visitor-language configuration.
 
-    private fun refreshConfigCache() {
-        cfg = app.core.config()
+    private fun refreshConfigCache() = applyConfigCache(app.core.config())
+
+    private fun applyConfigCache(config: JSONObject?) {
+        cfg = config
         texts.setConfig(cfg)
         callFlowMode = CallFlowMode.parse(app.core.dig(cfg, "ui.call_flow")?.toString().orEmpty())
         val ttlSeconds = (app.core.dig(cfg, "ui.call_ttl_s") as? Number)?.toLong() ?: 60L
@@ -805,7 +976,9 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
                 conn.connectTimeout = 4000
                 conn.readTimeout = 8000
                 val bytes = BoundedBitmapDecoder.readLimited(conn.inputStream, 4 * 1024 * 1024)
-                bmp = bytes?.let { BoundedBitmapDecoder.decode(it, 1920, 1080) }
+                val width = themeBg.width.takeIf { it > 0 } ?: resources.displayMetrics.widthPixels
+                val height = themeBg.height.takeIf { it > 0 } ?: resources.displayMetrics.heightPixels
+                bmp = bytes?.let { BoundedBitmapDecoder.decodeAspectFill(it, width, height) }
             } catch (e: Exception) {
                 // asset_ready triggers another attempt after mesh prefetch completes.
                 Log.w(TAG, "Theme background is not available yet: $e")
@@ -817,6 +990,9 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
                 if (themeHash != hash || app.safeMode) return@post
                 themeBg.setImageBitmap(b)
                 themeBg.visibility = View.VISIBLE
+                // The background under every region just changed, so nothing decided against the
+                // previous one may be kept.
+                regionInkApplied.clear()
                 scheduleRegionInk()
             }
         }, "theme-bg").apply { isDaemon = true }.start()
@@ -966,6 +1142,21 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
 
     // ---------- Call state transitions ----------
 
+    /**
+     * True on an indoor panel, where the home screen is the dashboard and the door-station call
+     * flow has no screen of its own. Without this the dashboard is built and then immediately
+     * covered by the visitor idle view, which is what put a door station's call button on an
+     * indoor panel.
+     */
+    private val showsDashboard: Boolean get() = dashboard != null
+
+    /** Put the dashboard back in front after any call-flow transition. */
+    private fun restoreRoleHome() {
+        idleView.visibility = View.GONE
+        callingView.visibility = View.GONE
+        dashboardHost.visibility = View.VISIBLE
+    }
+
     private fun showIdle(hint: String? = null) {
         stopCallFeedback()
         choosingPurpose = false
@@ -973,8 +1164,13 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
         callTitleOverride = null
         ui.removeCallbacks(callTimeout)
         pulse.clearAnimation()
-        callingView.visibility = View.GONE
         offlineView.visibility = View.GONE
+        if (showsDashboard) {
+            restoreRoleHome()
+            updateCallActionLabel()
+            return
+        }
+        callingView.visibility = View.GONE
         idleView.visibility = View.VISIBLE
         idleHeader.visibility = View.VISIBLE
         callSection.visibility = View.VISIBLE
@@ -986,6 +1182,7 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
     }
 
     private fun showPurposeChooser() {
+        if (showsDashboard) return
         choosingPurpose = true
         idleView.visibility = View.VISIBLE
         callingView.visibility = View.GONE
@@ -1005,6 +1202,7 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
 
     /** Show ringing while preserving an explicit purpose confirmation title. */
     private fun showCalling(title: String? = null) {
+        if (showsDashboard) return
         choosingPurpose = false
         ui.removeCallbacks(purposeTimeout)
         if (title != null) callTitleOverride = title
@@ -1022,6 +1220,7 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
     }
 
     private fun showEstablished() {
+        if (showsDashboard) return
         choosingPurpose = false
         ui.removeCallbacks(purposeTimeout)
         ui.removeCallbacks(callTimeout)
@@ -1152,7 +1351,12 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
                     releasePlayer(launchAudio); launchAudio = null
                 }
             }
-            "pairing_state", "pairing_revoked", "peers_changed" -> refreshMembership()
+            // peers_changed lands in the coalesced refresh below, which renders membership too.
+            // It used to be caught here as well, and because a `when` takes only its first
+            // matching branch that swallowed the event: the header counters were then never
+            // recomputed after startup, and stood at whatever the cluster looked like when the
+            // last unrelated event arrived.
+            "pairing_state", "pairing_revoked" -> refreshMembership()
             "safe_mode" -> {
                 if (ev.optBoolean("active")) {
                     pulse.clearAnimation()
@@ -1224,28 +1428,29 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
                 applyNightTint(ev.optBoolean("night"), ev.optBoolean("red_tint"))
                 applyAppearance()
                 applyVisitorLayout()
-                dashboard?.refresh()
+                scheduleHomeRefresh()
             }
             // Cluster time, battery, and announcements each redraw only what they affect.
             "time_changed" -> {
+                // The correction moved, so the projected clock is wrong until it is re-anchored.
+                clusterClock.invalidate()
+                clusterClock.refreshIfStale()
+                dashboard?.onTimeChanged()
                 updateClock()
                 applyAppearance()
-                dashboard?.refresh()
+                scheduleHomeRefresh()
             }
-            "power_changed" -> {
-                refreshMembership()
-                dashboard?.refresh()
-            }
+            "power_changed" -> scheduleHomeRefresh(fullRender = false)
             // A door of "*" means the cluster-wide announcement moved, which affects every
             // door that has none of its own.
-            "notice_changed" -> {
-                statusSnapshot = app.core.status()
-                applyVisitorLayout()
-                dashboard?.refresh()
-            }
-            "call_log_changed" -> dashboard?.refresh()
-            "peers_changed", "config_changed" -> refreshNodeInfo()
+            "notice_changed" -> scheduleHomeRefresh()
+            "call_log_changed" -> scheduleHomeRefresh(fullRender = false, withCalls = true)
+            "peers_changed" -> scheduleHomeRefresh(fullRender = false)
+            "config_changed" -> scheduleHomeRefresh(withConfig = true)
             "event" -> {
+                val eventType = ev.optString("type")
+                if (eventType == "motion" || eventType == "press")
+                    dashboard?.prioritizeDoor(ev.optString("door"))
                 handleCallLifecycleEvent(ev)
             }
         }

@@ -10,16 +10,41 @@
 // the dark ink at Y >= 0.5 and the light ink below it. The 1 px opposite-ink shadow at 40 % is
 // added only when the chosen ink still falls short of 4.5:1.
 //
-// Precedence: an administrator's ink_override always wins; then core's per-region value where it
-// is authoritative (a flat background colour, which has no geometry to disagree about); then the
-// local sample. Over an image core's value is a whole-picture average, which is exactly the case
-// the header allows a shell to refine.
+// Precedence: an administrator's ink_override always wins; then, whenever a background image is
+// on screen, the local sample; then core's per-region value, which is authoritative only for a
+// flat colour.
+//
+// The signal for "there is a picture" is display.theme.bg_image, never auto_background.source. A
+// core that declines to average a large photograph reported source "color" for it, and a shell
+// that believed that painted light text onto a light picture -- the observed failure on a 5.7 MP
+// JPEG. Core now reports "image_unsampled" with a reason instead, and both spellings are handled
+// by simply not consulting source for this decision at all.
 package jp.ox.doorbell
 
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.view.View
+
+/**
+ * What the shell measured under one text region: the average colour that picks the ink, and the
+ * darkest and lightest patches within it, which decide whether the ink needs a shadow. A region
+ * spanning a pale wall and a dark jacket averages to something the ink clears comfortably while
+ * still being unreadable over part of its own width.
+ */
+internal data class RegionSample(
+    val averageRgb: Int,
+    val minLuminance: Double,
+    val maxLuminance: Double,
+) {
+    /** The worst contrast [inkRgb] achieves anywhere in the region. */
+    fun worstContrast(inkRgb: Int): Double {
+        val ink = UiContrast.luminance(inkRgb)
+        val low = (maxOf(ink, minLuminance) + 0.05) / (minOf(ink, minLuminance) + 0.05)
+        val high = (maxOf(ink, maxLuminance) + 0.05) / (minOf(ink, maxLuminance) + 0.05)
+        return minOf(low, high)
+    }
+}
 
 /** What to paint one text region with. */
 internal data class RegionInkResult(
@@ -31,6 +56,24 @@ internal data class RegionInkResult(
         get() = if (inkRgb == Palette.LIGHT_INK) Palette.DARK_INK else Palette.LIGHT_INK
 }
 
+/** What is actually behind the text, which decides whose answer is used. */
+internal enum class BackgroundKind {
+    /** No picture: core's per-region ink has no geometry to be wrong about. */
+    FLAT_COLOUR,
+
+    /** A picture is on screen: the local per-region sample decides. */
+    IMAGE_DRAWN,
+
+    /** A picture is configured but not yet painted, so the flat colour is what shows. */
+    IMAGE_NOT_DRAWN,
+
+    /**
+     * The shell painted this region's background itself, so it knows the exact colour and it is
+     * not the theme background core measured. The dashboard's cards and ground are this case.
+     */
+    KNOWN_SURFACE,
+}
+
 internal object RegionInkPolicy {
 
     /** The shadow is drawn at 40 % of the opposite ink, per §5. */
@@ -39,28 +82,48 @@ internal object RegionInkPolicy {
     /**
      * Resolve one region's ink.
      *
-     * [override] is the administrator's explicit colour for this region, [coreInkLight] is core's
-     * published decision, [coreAuthoritative] is true when core's value cannot be improved on
-     * locally (a flat colour rather than an averaged image), and [sampledBackgroundRgb] is what
-     * the shell measured under the region, or null when it could not measure.
+     * [override] is the administrator's explicit colour, [coreInkLight] is core's published
+     * decision, [background] says which rule applies, and [sampledBackgroundRgb] is what the shell
+     * measured under this region, or null when it could not measure.
      */
     fun resolve(
         override: Int?,
         coreInkLight: Boolean?,
-        coreAuthoritative: Boolean,
+        background: BackgroundKind,
         sampledBackgroundRgb: Int?,
         fallbackBackgroundRgb: Int,
+        sample: RegionSample? = null,
     ): RegionInkResult {
-        val background = sampledBackgroundRgb ?: fallbackBackgroundRgb
-        if (override != null) return RegionInkResult(
-            override, UiContrast.needsTextShadow(override, background),
-        )
-        // Core's answer stands where it has nothing to be wrong about, and wherever the shell
-        // could not measure the region itself.
-        val useCore = coreInkLight != null && (coreAuthoritative || sampledBackgroundRgb == null)
-        val light = if (useCore) coreInkLight!! else UiContrast.inkFor(background) == Ink.LIGHT
+        val measured = sampledBackgroundRgb ?: fallbackBackgroundRgb
+        // The shadow answers the region's worst patch when one was measured, not only its
+        // average: text crossing a dark jacket on a pale wall needs it even though the average
+        // clears 4.5:1.
+        fun shadowed(inkRgb: Int, againstRgb: Int): Boolean {
+            if (UiContrast.needsTextShadow(inkRgb, againstRgb)) return true
+            val worst = sample?.worstContrast(inkRgb) ?: return false
+            return worst < UiContrast.TEXT_AA
+        }
+        if (override != null) return RegionInkResult(override, shadowed(override, measured))
+        val light = when (background) {
+            // Nothing local to add: core measured the one colour there is.
+            BackgroundKind.FLAT_COLOUR ->
+                coreInkLight ?: (UiContrast.inkFor(measured) == Ink.LIGHT)
+            // The picture is on screen, so this region's own pixels decide. Core's whole-image
+            // answer is only the fallback for a region the shell could not measure.
+            BackgroundKind.IMAGE_DRAWN -> if (sampledBackgroundRgb != null)
+                UiContrast.inkFor(sampledBackgroundRgb) == Ink.LIGHT
+            else coreInkLight ?: (UiContrast.inkFor(measured) == Ink.LIGHT)
+            // The picture is not painted yet; core's ink describes it and not what is on screen.
+            BackgroundKind.IMAGE_NOT_DRAWN ->
+                UiContrast.inkFor(fallbackBackgroundRgb) == Ink.LIGHT
+            // A surface the shell painted: its colour is known exactly, and core measured a
+            // different background entirely.
+            BackgroundKind.KNOWN_SURFACE -> UiContrast.inkFor(measured) == Ink.LIGHT
+        }
         val ink = if (light) Palette.LIGHT_INK else Palette.DARK_INK
-        return RegionInkResult(ink, UiContrast.needsTextShadow(ink, background))
+        val against = if (background == BackgroundKind.IMAGE_NOT_DRAWN) fallbackBackgroundRgb
+            else measured
+        return RegionInkResult(ink, shadowed(ink, against))
     }
 }
 
@@ -74,7 +137,7 @@ internal object RegionInk {
      * through the same transform the region occupies. Returns null when there is nothing to
      * sample, and the caller then falls back to the flat background colour.
      */
-    fun sample(background: View?, region: View, groundRgb: Int): Int? {
+    fun sample(background: View?, region: View, groundRgb: Int): RegionSample? {
         if (background == null || background.visibility != View.VISIBLE) return null
         if (background.width <= 0 || background.height <= 0) return null
         if (region.width <= 0 || region.height <= 0) return null
@@ -104,7 +167,7 @@ internal object RegionInk {
             background.draw(canvas)
             val pixels = IntArray(SAMPLE * SAMPLE)
             bitmap.getPixels(pixels, 0, SAMPLE, 0, 0, SAMPLE, SAMPLE)
-            UiContrast.averageRgb(pixels)
+            summarise(pixels)
         } catch (_: Exception) {
             null
         } catch (_: OutOfMemoryError) {
@@ -112,5 +175,19 @@ internal object RegionInk {
         } finally {
             bitmap?.recycle()
         }
+    }
+
+    /** Average colour plus the darkest and lightest patch, over the downscaled cells. */
+    internal fun summarise(pixels: IntArray): RegionSample {
+        var min = Double.MAX_VALUE
+        var max = -1.0
+        for (pixel in pixels) {
+            if ((pixel ushr 24 and 0xff) == 0) continue
+            val luminance = UiContrast.luminance(pixel and 0xffffff)
+            if (luminance < min) min = luminance
+            if (luminance > max) max = luminance
+        }
+        if (max < 0.0) return RegionSample(0, 0.0, 0.0)
+        return RegionSample(UiContrast.averageRgb(pixels), min, max)
     }
 }

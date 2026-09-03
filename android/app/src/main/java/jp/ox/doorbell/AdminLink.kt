@@ -13,6 +13,37 @@ internal data class AdminLink(val url: String, val leaderUrl: String) {
     val hasLeader: Boolean get() = leaderUrl.isNotEmpty() && leaderUrl != url
 }
 
+/**
+ * QR bitmaps for the administration link, cached by (url, size).
+ *
+ * Encoding a QR and rasterising it is not free, and the dashboard footer was regenerating one on
+ * every status poll -- several times a second on a busy cluster, all on the main thread. The
+ * address only changes when the node's own IP or port does, so the bitmap is built once and reused
+ * until it does.
+ */
+internal object AdminQrCache {
+
+    private val cache = HashMap<String, android.graphics.Bitmap>(4)
+
+    fun get(core: DoorbellCore, url: String, sidePx: Int): android.graphics.Bitmap? {
+        if (url.isEmpty() || sidePx <= 0) return null
+        val key = "$url@$sidePx"
+        cache[key]?.let { if (!it.isRecycled) return it }
+        val bitmap = try { PairingUi.qrBitmap(core, url, sidePx) } catch (_: Exception) { null }
+            ?: return null
+        // A handful of sizes and one address; bound it anyway so a flapping IP cannot grow it.
+        if (cache.size >= MAX_ENTRIES) cache.clear()
+        cache[key] = bitmap
+        return bitmap
+    }
+
+    fun clear() {
+        cache.clear()
+    }
+
+    private const val MAX_ENTRIES = 6
+}
+
 internal object AdminLinks {
 
     /**
@@ -20,7 +51,11 @@ internal object AdminLinks {
      * node holds that duty. Falls back to loopback so the row is never blank.
      */
     fun resolve(status: JSONObject?, httpPort: Int): AdminLink {
-        val self = firstHost(status?.optJSONObject("node")?.optJSONArray("addrs"))
+        // status.node carries local_addrs; "addrs" only exists on peer entries, and reading that
+        // here left the dashboard QR pointing at 127.0.0.1, which no other device can open.
+        val node = status?.optJSONObject("node")
+        val self = firstHost(node?.optJSONArray("local_addrs"))
+            ?: firstHost(node?.optJSONArray("addrs"))
         val local = "http://${self ?: "127.0.0.1"}:$httpPort/admin/"
         val peers = status?.optJSONArray("peers")
         var leader = ""
@@ -64,7 +99,7 @@ internal object AdminLinks {
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
         val side = ShellUi.dp(context, sizeDp)
-        val bitmap = try { PairingUi.qrBitmap(core, link.url, side) } catch (_: Exception) { null }
+        val bitmap = AdminQrCache.get(core, link.url, side)
         if (bitmap != null) {
             addView(
                 ImageView(context).apply {

@@ -50,7 +50,14 @@
             <Button Content="7" Tag="7" Click="OnPad"/>
             <Button Content="8" Tag="8" Click="OnPad"/>
             <Button Content="9" Tag="9" Click="OnPad"/>
-            <Button Content="⌫" Tag="back" Click="OnPad"/>
+            <Button Tag="back" Click="OnPad">
+                <Viewbox Width="26" Height="26">
+                    <Path Data="{StaticResource IconBackspace}"
+                          Stroke="{DynamicResource Fg}" StrokeThickness="2"
+                          StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                          StrokeLineJoin="Round"/>
+                </Viewbox>
+            </Button>
             <Button Content="0" Tag="0" Click="OnPad"/>
             <Button x:Name="OkPadBtn" Content="OK" Tag="ok" Click="OnPad"
                     Background="{DynamicResource Accent}" Foreground="{DynamicResource OnAccent}"/>

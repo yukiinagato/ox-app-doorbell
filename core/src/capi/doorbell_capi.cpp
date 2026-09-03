@@ -511,6 +511,11 @@ DB_API void db_core_pairing_mode(db_core* c, int seconds) {
   if (c && c->node) c->node->setPairingMode(seconds);
 }
 
+DB_API char* db_core_parse_pair_uri_json(db_core* c, const char* uri) {
+  if (!c || !c->node || !uri) return nullptr;
+  return dupString(c->node->parsePairUriJson(uri));
+}
+
 DB_API char* db_core_mint_join_token_json(db_core* c, int seconds) {
   if (!c || !c->node) return nullptr;
   return dupString(c->node->mintJoinTokenJson(seconds));
@@ -655,6 +660,11 @@ DB_API void db_core_on_encoded_frame(db_core* c, const uint8_t* annexb, size_t l
 DB_API int db_core_video_encoder_wanted(db_core* c) {
   if (!c || !c->node) return 0;
   return c->node->videoEncoderWanted() ? 1 : 0;
+}
+
+DB_API int db_core_take_video_keyframe_request(db_core* c) {
+  if (!c || !c->node) return 0;
+  return c->node->takeVideoKeyframeRequest() ? 1 : 0;
 }
 
 }  // extern "C"

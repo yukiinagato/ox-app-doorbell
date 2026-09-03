@@ -179,6 +179,10 @@ TEST_CASE("capi: SIP backend identity is explicit") {
   CHECK((backend == "pjsip" || backend == "stub"));
 }
 
+TEST_CASE("capi: video keyframe request polling fails closed on a null core") {
+  CHECK(db_core_take_video_keyframe_request(nullptr) == 0);
+}
+
 TEST_CASE("capi: quick reply v2 carries exact call scope") {
   using QuickReplyV2 = int (*)(db_core*, const char*, const char*, const char*, int);
   QuickReplyV2 quick_reply = &db_core_quick_reply_v2;

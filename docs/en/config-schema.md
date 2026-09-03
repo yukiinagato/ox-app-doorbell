@@ -14,6 +14,13 @@ pre-filled with a random `door-xxxxxxxx` value that may be accepted unchanged. V
 or `-`. A successful save writes `setup_complete:true` atomically. tvOS is intentionally fixed to
 the `indoor_panel` profile because it has no supported door-camera role.
 
+After a device joins a cluster, `devices.<self>.name`, `.role`, and `.door` are its remotely
+editable desired identity. Android and iOS/iPadOS target shells validate a changed identity and
+write it to local
+`boot.json` atomically, then restart the UI and Core so the new role is advertised and used by the
+platform runtime. Until that restart finishes, peers use the target's live signed advertisement
+instead of a newer replicated identity that the target has not applied yet.
+
 The mesh PSK is device-local bootstrap data, not a CRDT value. Core must first complete
 `secure_put("mesh.psk", …)`, then emits only
 `{"t":"paired","psk_ref":"secret:mesh.psk"}`. The shell persists that opaque reference with
@@ -190,7 +197,13 @@ the plaintext subscription. Startup reseals a legacy raw record or removes it fa
   "display": {                                  // display & burn-in protection (fleet default; override via devices.<id>.local.display)
     // theme: the door station background ("push" from the indoor panel/admin UI = just write this
     // setting. Synced instantly via CRDT)
-    "theme": { "bg_color": "#101418", "bg_image": null },   // bg_image: an assets sha256 or null
+    "theme": { "bg_color": "#101418", "bg_image": null,   // bg_image: an assets sha256 or null
+               // The semi-transparent layer a shell composites between the background image and
+               // everything drawn on it, so text stays readable over a bright photograph. On by
+               // default; every leaf is overridable per device under
+               // devices.<id>.local.theme.backdrop.*, and each leaf resolves on its own.
+               "backdrop": { "enabled": true, "color": "#000000", "opacity": 62 },  // 0..100
+               "glass": { "blur_radius": 32 } },       // 0..40; capable shells only
     "brightness": 70,                           // 0-100 (remote adjustment — slider in the admin UI)
     "night": { "enabled": true, "from": "22:00", "to": "06:00",
                "brightness": 15, "red_tint": true },   // night mode (evaluated with the corrected clock)
@@ -209,9 +222,12 @@ the plaintext subscription. Startup reseals a legacy raw record or removes it fa
     // offset by SNTP and adds it to every wall-clock reading (HLC, event and call-history
     // timestamps, rule schedules, quiet hours, displayed clocks). The offset is dropped again
     // after three intervals without a successful sync.
+    // One round runs when the service is switched on, when the servers change, and at start-up;
+    // after that the interval. A failed round retries from one minute, doubling to at most an
+    // hour, rather than waiting a whole day. POST /api/time/sync triggers one by hand.
     "ntp": { "enabled": false,                  // default off
              "servers": ["ntp.nict.jp", "time.google.com"],   // 1-4 "host" or "host:port"
-             "interval_s": 900 }                // 60..86400
+             "interval_s": 86400 }              // 3600..604800; default once a day
   },
 
   // Cluster default volumes, 0-100. A device overrides them with
@@ -446,6 +462,150 @@ no-op.
 cluster scope and under `devices.<id>.local.display`. The published contract adds
 `follow_system`, which tells a shell to prefer the operating system's own setting; platforms
 without one (iOS 5, Android before 10) use the schedule result instead.
+
+A door station whose `boot.json` names a door creates `doors.<door>` itself when the entry is
+absent — on founding or joining a cluster and on every later start while paired — labelling it
+with the device name in all three languages. Without it a freshly founded cluster had
+`devices.<id>.door` pointing at a door that did not exist, `status.doors` was empty, and every
+door-keyed surface (announcements, unlock visibility, tiles) had nothing to address. The entry is
+only ever created, never rewritten: rename it, give it a building, or reassign the station in the
+Admin 門口 tab and those edits survive every restart. An indoor panel owns no door and seeds
+nothing.
+
+`status.doors` additionally lists any door served by an **alive door-station peer** that has no
+configuration entry yet, marked `"configured": false` and labelled with that device's name. An
+installation configured before this behaviour existed therefore still renders its tiles and still
+accepts an announcement for them; the first write creates the entry and it reports `configured`
+from then on. A door nobody serves and nothing configures remains unknown and is refused.
+
+`display.theme.auto_background` reports `{"color":"#RRGGBB","source":…}` and, when the source is
+`image_unsampled`, a `"reason"`. The three sources are distinct on purpose:
+
+| `source` | meaning |
+|---|---|
+| `color` | no background image is configured; `color` is the theme colour and is authoritative |
+| `image` | the background image was sampled; `color` is its average |
+| `image_unsampled` | an image **is** configured but core could not sample it; `color` is only the flat theme colour |
+
+`reason` is `too_large` (beyond core's decoded-pixel budget of 16 MP), `decode_failed` (not a JPEG
+or PNG this build decodes), or `missing` (the asset is not cached on this node yet). On
+`image_unsampled` a shell must **not** trust `auto_ink` or `auto_accent`: they were derived from
+the theme colour, not from the picture actually on screen. Sample the image locally and decide
+there, or leave the previous ink in place until the asset arrives.
+
+Core samples a grid of at most 16x16 points, but stb has no downscale-on-decode, so the decode is
+transient and costs about three bytes per pixel (roughly 48 MB at the cap) and is freed
+immediately. A shell on hardware that cannot afford that should sample locally regardless; the
+`source` field is what tells it core has not.
+
+### Choosing the ink
+
+`auto_ink` names the ink token to draw on the background: **whichever of dark or light has the
+higher WCAG contrast ratio against the sampled luminance**. The two ratios cross at Y = 0.1791,
+not at mid luminance, so a background that merely looks middling already wants dark ink.
+
+Splitting at Y >= 0.5 was the earlier rule and it fails in the band between the two thresholds: a
+light grey photograph averaging `#BBBBB4` sits at Y 0.494, where white ink scores 1.93:1 and dark
+ink 9.58:1. Worked vectors, which `core/tests/test_color.cpp` pins:
+
+| background | Y | dark ink | light ink | `auto_ink` |
+|---|---|---|---|---|
+| `#BBBBB4` | 0.494 | 10.88:1 | 1.93:1 | `dark` |
+| `#808080` | 0.216 | 5.32:1 | 3.95:1 | `dark` |
+| `#767676` | 0.1812 | 4.62:1 | 4.54:1 | `dark` |
+| `#757575` | 0.1779 | 4.56:1 | 4.61:1 | `light` |
+| `#404040` | 0.051 | 2.03:1 | 10.37:1 | `light` |
+
+The 1 px 40% opposite-ink shadow stays, as the fallback for when even the better ink is below
+4.5:1. Shells that sample locally (because `source` is `image_unsampled`, or because the hardware
+cannot afford core's decode) apply the same rule, so the fleet agrees on one answer.
+
+An auto-seeded entry carries `seeded_by` (the node that created it) and `seeded_label` (the label
+it wrote). When that node next starts, or becomes paired, with a role other than `door_station` or
+a different `boot.door`, it deletes the entry it seeded — otherwise a station switched to an
+indoor panel leaves a ghost tile behind for a door nobody serves. It deletes only an entry that is
+still exactly what it wrote: any other field, or a renamed label, means an administrator has
+adopted the door, and an adopted door outlives the device that happened to create it. That is
+correct for a real station that is merely down.
+
+`status.doors.<id>.served_by` is the node id of the alive door station serving the door, or
+`null`. It is what separates "the station is offline" from "no station serves this door at all";
+`configured` separates "this door has an entry" from "a live station is serving a door nobody has
+set up yet".
+
+`served_by` and `peers[].status` are read from one liveness map that the status response builds
+once, so the two can never contradict each other: a node named in `served_by` is always `alive`
+in `peers[]`, and a node that is anything else is never named. A configured device the mesh has
+not seen appears as `offline` and never serves a door.
+
+A station that goes away and comes back keeps its node id: it refreshes the entry it already had
+rather than adding a second one. This holds even when the station restarts with its heartbeat
+counters reset, which would otherwise look like a replay of an advertisement already seen.
+
+### Returning from the incoming-call screen
+
+`call.indoor.return_s` (5..600 seconds, default 60), with the per-device override
+`devices.<id>.local.call.return_s`, is how long an indoor panel stays on the incoming-call page.
+The page title carries the countdown -- "(60)" -- and the panel returns to its home page when it
+reaches zero. `status.call.return_s` reports the effective value for this node.
+
+Two behaviours matter for the shells. If the visitor cancels the call, the panel does **not**
+leave the page immediately: the live view stays until the countdown ends or someone leaves
+manually, because a resident who has just looked up should still get to see who was there.
+Tapping the countdown number cancels the countdown for that call, so a resident watching the door
+is never thrown back to the home page mid-look.
+
+### Joining a cluster is silent
+
+Anti-entropy hands a joining node the cluster's entire event history at once. Those records are
+applied to the call log in full, with their original outcomes, and **none of them ring**. A call
+event presents -- chime, incoming screen, missed-call alert, Telegram, MQTT -- only while its call
+is live now: still `ringing` on the door station, and inside the ring window the press itself
+declared (`expires_at_ms`, evaluated against corrected cluster time). A terminal event presents
+only while it closes a call this device is actually showing, or while it is recent enough for a
+missed-call alert to still mean something.
+
+The same principle covers announcements and SOS by construction: both are replicated
+configuration and replicated state, so a joining node applies the *current* value once and never
+replays the transitions that produced it.
+
+### Who may answer
+
+`sip.accounts.<node_id>.answer_mode` is `auto` (answer immediately) or `ring` (ring and wait for a
+person). **The default follows the role**: `auto` on a `door_station`, `ring` on an
+`indoor_panel`. `status.sip.answer_mode` reports the effective value.
+
+This matters for the call history: `outcome: "answered"` and `answered_by` are meant to record
+that a person picked up. An indoor panel left on the default must therefore not answer by itself.
+A household that wants an intercom can still set `auto` per device, and the history then
+attributes the call to that device.
+
+### The pairing QR payload
+
+The QR a device scans to join is a custom-scheme URI, so a device that already has the app
+installed opens straight into the join flow instead of a browser:
+
+```
+doorbell://pair?host=<ip:port>&pin=<6 digits>&exp=<unix seconds>&cluster=<name>
+```
+
+`host` and `pin` are required. `exp` is an absolute Unix second, so a scanner rejects a stale code
+without having to know when it was produced. `cluster` is the human-readable cluster name. Values
+are percent-encoded with the RFC 3986 unreserved set, so a name with spaces or Japanese survives
+the round trip; `+` is a literal plus, never a space. Only these four keys are defined and a
+parser **ignores** any other, so the format can gain one without breaking shells already shipped.
+
+Core builds it: read the `uri` field of `db_core_mint_join_token_json`,
+`db_core_start_pairing_json`, `POST /api/join-token`, `POST /api/pairing/start`, or the `token`
+object of `db_core_pairing_json` / `GET /api/pairing`. Never assemble the string in a shell.
+Always keep the host and PIN printed beside the code as well — someone scanning with a plain
+camera app has to be able to read and type them.
+
+`db_core_parse_pair_uri_json` validates a scanned code so every platform reaches the same verdict:
+`{"ok":true,"host":…,"pin":…,"exp":…,"cluster":…}` or `{"ok":false,"err":…}` with `err` one of
+`bad_scheme`, `missing_pin`, `missing_host`, `expired`. The expiry is checked against corrected
+cluster time when core is running, and against the platform clock otherwise, because a shell may
+scan a code before core has started.
 
 ## Time, power, and announcements
 
@@ -711,3 +871,28 @@ legacy reply_id/free-text announcement only when no call is active). Implementat
   `{"visitor_lang":"ja|en|zh"}` with retain, discovered as
   `sensor.doorbell_<door>_visitor_lang`. Telegram press notifications lead with
   `{icon} {purpose name}` and the visitor-language badge `🌐 EN`.
+
+### The background dimming layer
+
+`display.theme.backdrop` controls the semi-transparent layer a shell draws between the background
+image and everything on top of it, which is what keeps a clock legible over a bright photograph.
+`enabled` (default true), `color` (`#RRGGBB`, default `#000000`) and `opacity` (0-100, default 62)
+are each overridable per device under `devices.<id>.local.theme.backdrop.*`, and each resolves on
+its own: a panel in a brighter room can raise the opacity without restating the colour.
+
+Core publishes the resolved answer as
+`status.display.theme.backdrop = {enabled, color, opacity, source}`, where `source` is `device`,
+`admin` or `default` -- the strongest origin among the three values. The same object rides in the
+`display` UI event, so a shell paints from what core resolved rather than reading configuration
+itself.
+
+A write with a malformed colour or an opacity outside 0-100 is refused. Turning the layer off, or
+down below 20, is accepted but reported as a warning (`theme.backdrop_weak`) while a background
+image is configured: over a bright picture that is usually a mistake, and over a dark one it is
+not, and core cannot tell which.
+
+`display.theme.glass.blur_radius` is an integer from 0 through 40, defaults to 32, and may be
+overridden at `devices.<id>.local.theme.glass.blur_radius`. Core publishes the resolved value and
+its `default|admin|device` source in `status.display.theme.glass`. Only a client advertising
+`frosted_glass_radius_v1` applies it. Modern iOS deliberately does not advertise that capability:
+it keeps `UIBlurEffect`, whose radius is system-managed and has no public numeric setting.

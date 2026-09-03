@@ -28,6 +28,11 @@
 - (NSString *)preferredPreviewTransport;
 - (BOOL)supportsDirectJPEGPlayback;
 
+// "http://10.0.0.9:47180" for a peer, derived from the media URLs it
+// advertises and falling back to its first mesh address. Empty when the peer
+// carries neither.
++ (NSString *)originForPeer:(NSDictionary *)peer;
+
 + (DBMediaSource *)sourceForPeer:(NSDictionary *)peer
                           config:(NSDictionary *)config
                             boot:(DBBootConfig *)boot

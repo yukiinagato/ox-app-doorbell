@@ -210,10 +210,93 @@ class ReadabilityContracts(unittest.TestCase):
         self.assertIn("averageHexInViewRect:frame", refine)
         self.assertIn("inkHexForSampledLuminance", refine)
 
-        # The sampler is built off the main thread and only when it must be.
+        # The sample carries its extremes, tracked in the pass that already
+        # reads every patch, and the shadow is gated on them: a line crossing a
+        # pale wall and a dark jacket averages fine and vanishes over the
+        # jacket. The ink itself still follows the average.
+        sample = widgets[widgets.index("- (NSDictionary *)sampleInViewRect:"):
+                         widgets.index("- (NSString *)averageHexInViewRect:")]
+        for key in ('@"average"', '@"darkest"', '@"lightest"'):
+            self.assertIn(key, sample)
+        self.assertIn("darkestLuminance", sample)
+        self.assertIn("lightestLuminance", sample)
+        apply_ink = widgets[widgets.index("- (void)applyInkToLabel:"):]
+        self.assertIn("backgroundSampleForRegion:region frame:frame viewSize:viewSize",
+                      apply_ink)
+        self.assertIn('darkest:[sample objectForKey:@"darkest"]', apply_ink)
+        self.assertIn('lightest:[sample objectForKey:@"lightest"]', apply_ink)
+
+        # The ink is whichever of the two reads better, not a lightness
+        # threshold: a midtone wallpaper took white ink under the old rule.
+        theme = read("ios-kiosk/src/Core/DBUiTheme.m")
+        rule = theme[theme.index("+ (NSString *)inkModeForLuminance:"):
+                     theme.index("+ (double)inkCrossoverLuminance")]
+        self.assertIn("withDarkInk >= withLightInk", rule)
+        self.assertNotIn("luminance >= 0.5", rule)
+
+        # The sampler is built off the main thread and only when it must be...
         self.assertIn("DBBackgroundSampler samplerWithImage:image viewSize:size", home)
         self.assertIn("dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_LOW", home)
         self.assertIn("CGSizeEqualToSize(_samplerSize, size)", home)
+        # ...the decision re-runs once the image has finished loading...
+        load = home[home.index("- (void)loadThemeImage:"):
+                    home.index("- (void)refreshBackgroundSampler")]
+        self.assertIn("screen->_themeImage = backdrop", load)
+        self.assertIn("[screen refreshBackgroundSampler]", load)
+        # One prepared, darkened copy per picture and panel size, decoded off
+        # the main thread; the sampler then measures what is actually drawn.
+        self.assertIn("DBThemeBackdrop cachedBackdropForKey:want size:size", load)
+        self.assertIn("DBThemeBackdrop backdropForData:data key:want size:size", load)
+        # The administrator's overlay is part of the picture's identity, so a
+        # change of colour or opacity rebuilds rather than reusing the cache.
+        self.assertIn("backdropOverlayForConfig:", load)
+        self.assertIn("overlay:overlay", load)
+        # The prepared bitmap is bounded and the darkening is deep enough to
+        # read text over a bright wallpaper. Spec 5.1 wants the picture, so a
+        # flat ground has to say which fault put it there.
+        # The pixel work lives in a CoreGraphics-only unit so the darkening is
+        # measured by a host test rather than judged from a device photograph.
+        compositor = read("ios-kiosk/src/Core/DBBackdropCompositor.m")
+        self.assertIn("+ (CGFloat)maximumLongSide { return 1024; }", compositor)
+        self.assertIn("+ (CGFloat)darkeningAlpha { return 0.62; }", compositor)
+        self.assertIn("kCGBlendModeNormal", compositor)
+        self.assertIn("aspectFillDrawRectForImageWidth", compositor)
+        self.assertIn("DBBackdropCompositor newBackdropFromImage:upright", widgets)
+        # Icons are assets, never paths or emoji.
+        self.assertNotIn("UIBezierPath", widgets)
+        self.assertIn("DBIconAsset tintedImageNamed:", widgets)
+        self.assertIn("CGContextClipToMask", read("ios-kiosk/src/Core/DBIconAsset.m"))
+        # Cards, chips and scrims follow the appearance, not the wallpaper.
+        self.assertIn("if (_usesThemeBackground) return [_mode isEqualToString:@\"light\"];",
+                      widgets)
+        self.assertIn("+ (NSString *)plateHexForMode:", theme)
+        # The counters are a status line: ink and halo, no plate.
+        self.assertIn("counter.ink = [_palette inkForRegion:DBUiRegionStatusLine", home)
+        self.assertIn("counter.halo = [_palette needsShadowForRegion:", home)
+        # The SOS bar is the fleet red with a real knob, not a tinted plate.
+        self.assertIn("static UIColor *DBSosTrackColor(void)", widgets)
+        self.assertIn("_thumb = [[UIView alloc] init];", widgets)
+        self.assertIn("_thumbChevron = [[UIImageView alloc] init];", widgets)
+        # Small text over a busy picture gets a plate; headings keep region ink.
+        self.assertIn("static const CGFloat kScrimAlpha = 0.70;", home)
+        self.assertIn("- (void)applyScrimTone", home)
+        self.assertIn("_historyScrim.frame", home)
+        self.assertIn("_footerScrim.frame", home)
+        self.assertIn("colorWithAlphaComponent:kScrimAlpha", home)
+        for reason in ('@"safe_mode"', '@"no_theme_image_configured"',
+                       '@"theme_asset_fetch_failed"', '@"theme_asset_decode_failed"'):
+            self.assertIn(reason, home)
+        # The admin address is one line that shrinks before it truncates, and
+        # the host is the last thing to go.
+        self.assertIn("_urlLabel.numberOfLines = 1;", widgets)
+        self.assertIn("_urlLabel.adjustsFontSizeToFitWidth = YES;", widgets)
+        self.assertIn("_urlLabel.minimumFontSize = kQrUrlMinPt;", widgets)
+        self.assertIn("static const CGFloat kQrUrlMinPt = 9;", widgets)
+        self.assertIn("- (NSString *)addressForWidth:", widgets)
+        # ...and a sampler built for another view size is ignored, so a
+        # rotation falls back rather than reading the wrong pixels.
+        self.assertIn("- (DBBackgroundSampler *)samplerForViewSize:", widgets)
+        self.assertIn("CGSizeEqualToSize(_sampler.viewSize, viewSize)", widgets)
 
         # Each screen inks its regions after layout, when the frames are final.
         for source, name in ((home, "dashboard"), (door, "door screen"),

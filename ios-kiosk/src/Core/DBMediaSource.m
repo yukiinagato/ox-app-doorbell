@@ -132,14 +132,49 @@
       ? host : [NSString stringWithFormat:@"[%@]", host];
 }
 
-+ (NSString *)safeURL:(NSString *)raw host:(NSString *)host port:(NSInteger)port
+// The scheme-and-authority prefix of an absolute http(s) URL, kept as written
+// so an IPv6 literal keeps its brackets. Anything carrying credentials, a
+// query or a fragment in the authority is not an origin.
++ (NSString *)originOfURL:(NSString *)raw {
+  if ([raw length] == 0 || [raw length] > 4096) return @"";
+  NSRange separator = [raw rangeOfString:@"://"];
+  if (separator.location == NSNotFound) return @"";
+  NSString *scheme = [[raw substringToIndex:separator.location] lowercaseString];
+  if (![scheme isEqualToString:@"http"] && ![scheme isEqualToString:@"https"]) return @"";
+  NSString *rest = [raw substringFromIndex:separator.location + separator.length];
+  NSRange slash = [rest rangeOfString:@"/"];
+  NSString *authority = (slash.location == NSNotFound) ? rest
+                                                       : [rest substringToIndex:slash.location];
+  if ([authority length] == 0) return @"";
+  NSCharacterSet *forbidden = [NSCharacterSet characterSetWithCharactersInString:@"@?# \t"];
+  if ([authority rangeOfCharacterFromSet:forbidden].location != NSNotFound) return @"";
+  return [NSString stringWithFormat:@"%@://%@", scheme, authority];
+}
+
++ (NSString *)originForPeer:(NSDictionary *)peer {
+  // A door station advertises the origin that actually serves its media in the
+  // stream URLs themselves. addrs[0] is a mesh address: its port is never the
+  // HTTP port, and its host is only the first interface the mesh happened to
+  // learn. Deriving the still from the stream base is what keeps the two in
+  // step when a station moves interface or port.
+  NSArray *keys = @[ @"stream_mjpeg", @"stream", @"stream_mp4", @"snapshot_url",
+                     @"snapshot", @"video_meta_url" ];
+  for (NSString *key in keys) {
+    NSString *origin = [self originOfURL:[self stringFrom:peer keys:@[ key ]]];
+    if ([origin length] > 0) return origin;
+  }
+  NSString *host = [self peerHost:peer];
+  if ([host length] == 0) return @"";
+  return [NSString stringWithFormat:@"http://%@:47180", [self urlHost:host]];
+}
+
++ (NSString *)safeURL:(NSString *)raw origin:(NSString *)origin
               schemes:(NSArray *)schemes {
   if ([raw length] == 0 || [raw length] > 4096) return @"";
   NSString *value = [raw stringByTrimmingCharactersInSet:
       [NSCharacterSet whitespaceAndNewlineCharacterSet]];
-  if ([value hasPrefix:@"/"] && [host length] > 0) {
-    NSString *urlHost = [self urlHost:host];
-    value = [NSString stringWithFormat:@"http://%@:%ld%@", urlHost, (long)port, value];
+  if ([value hasPrefix:@"/"] && [origin length] > 0) {
+    value = [origin stringByAppendingString:value];
   }
   NSURL *url = [NSURL URLWithString:value];
   NSString *scheme = [[url scheme] lowercaseString];
@@ -217,8 +252,7 @@
                             door:(NSString *)door
                         deviceID:(NSString *)deviceID {
   DBMediaSource *out = [[DBMediaSource alloc] init];
-  NSString *host = [self peerHost:peer];
-  NSInteger port = 47180;
+  NSString *origin = [self originForPeer:peer];
   out.deviceID = [self deviceIDForPeer:peer config:config door:door explicit:deviceID];
   out.sourceRef = [self sourceRefForDevice:out.deviceID config:config];
 
@@ -239,7 +273,7 @@
     NSDictionary *mjpeg = [self dictionary:streams key:@"mjpeg"];
     NSDictionary *snapshot = [self dictionary:streams key:@"snapshot"];
     NSString *h264URL = [self safeURL:[self stringFrom:h264 keys:@[@"url"]]
-                                    host:nil port:0 schemes:@[@"rtsp"]];
+                                  origin:nil schemes:@[@"rtsp"]];
     NSString *transport = [self stringFrom:h264 keys:@[@"transport"]];
     NSString *profile = [self stringFrom:h264 keys:@[@"profile"]];
     BOOL validH264 = [h264 count] == 0 ||
@@ -259,9 +293,9 @@
     out.h264SourceAvailable = [h264 count] > 0 && validH264;
     out.requiresH264Ingest = out.h264SourceAvailable;
     out.mjpegURL = [self safeURL:[self stringFrom:mjpeg keys:@[@"url"]]
-                             host:nil port:0 schemes:@[@"http", @"https"]];
+                           origin:nil schemes:@[@"http", @"https"]];
     out.snapshotURL = [self safeURL:[self stringFrom:snapshot keys:@[@"url"]]
-                                    host:nil port:0 schemes:@[@"http", @"https"]];
+                             origin:nil schemes:@[@"http", @"https"]];
     out.kind = @"ip_camera";
     if (!validH264) {
       out.degradedReason = @"invalid_h264_stream";
@@ -320,20 +354,20 @@
   // address by itself is connectivity information, never proof of a camera or
   // a door-station role.
   BOOL knownDoorPeer = [[self stringFrom:peer keys:@[@"role"]] isEqualToString:@"door_station"];
-  if ([mjpeg length] == 0 && knownDoorPeer && [host length] > 0)
+  if ([mjpeg length] == 0 && knownDoorPeer && [origin length] > 0)
     mjpeg = @"/stream.mjpeg";
-  if ([mp4 length] == 0 && knownDoorPeer && [host length] > 0)
+  if ([mp4 length] == 0 && knownDoorPeer && [origin length] > 0)
     mp4 = @"/stream.mp4";
-  if ([snapshot length] == 0 && knownDoorPeer && [host length] > 0)
+  if ([snapshot length] == 0 && knownDoorPeer && [origin length] > 0)
     snapshot = @"/snapshot.jpg";
   if ([meta length] == 0 && knownDoorPeer && !localOverride &&
-      [host length] > 0)
+      [origin length] > 0)
     meta = @"/video-meta";
 
-  out.mjpegURL = [self safeURL:mjpeg host:host port:port schemes:@[@"http", @"https"]];
-  out.mp4URL = [self safeURL:mp4 host:host port:port schemes:@[@"http", @"https"]];
-  out.snapshotURL = [self safeURL:snapshot host:host port:port schemes:@[@"http", @"https"]];
-  out.videoMetaURL = [self safeURL:meta host:host port:port schemes:@[@"http", @"https"]];
+  out.mjpegURL = [self safeURL:mjpeg origin:origin schemes:@[@"http", @"https"]];
+  out.mp4URL = [self safeURL:mp4 origin:origin schemes:@[@"http", @"https"]];
+  out.snapshotURL = [self safeURL:snapshot origin:origin schemes:@[@"http", @"https"]];
+  out.videoMetaURL = [self safeURL:meta origin:origin schemes:@[@"http", @"https"]];
   out.kind = localOverride ? @"ip_camera" :
       ([out hasPreview] ? @"node" : @"none");
   if (localOverride && [out.degradedReason length] == 0)

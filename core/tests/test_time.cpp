@@ -6,6 +6,7 @@
 #include <atomic>
 #include <chrono>
 #include <cstring>
+#include <functional>
 #include <string>
 #include <thread>
 #include <vector>
@@ -464,4 +465,221 @@ TEST_CASE("node: the configured zone drives local time and the derived compatibi
   CHECK(json::getString(explicit_instant.get(), "iso") == "2026-01-15T13:00:00+01:00");
 
   node.stop();
+}
+
+TEST_CASE("node: the read-only time and volume exports never wait for the run loop") {
+  // Device finding: both shells drove a one-second clock from db_core_local_time_json on their
+  // main thread, and the call took about three seconds whenever the loop was mid-SNTP or
+  // building a status document -- the displayed seconds advanced in threes. These exports are
+  // served from a published snapshot and must not enter the loop at all.
+  RealClock clock;
+  Runloop loop(clock);
+  NodeOptions options;
+  options.data_dir = ":memory:";
+  options.name = "snapshot-exports";
+  options.role = "indoor_panel";
+  options.listen_addr = "127.0.0.1:0";
+  options.enable_beacon = false;
+  options.http_port = 0;
+  NodeDeps deps;
+  deps.clock = &clock;
+  deps.loop = &loop;
+  Node node(options, std::move(deps));
+  REQUIRE(node.start());
+  node.setConfigKey("time.zone", "\"Asia/Tokyo\"");
+  node.setConfigKey("audio.volume.call", "37");
+  loop.pumpDue();
+
+  loop.start();
+  // Occupy the loop for half a second, the way one SNTP exchange or a large status build does.
+  std::atomic<bool> occupied{false};
+  REQUIRE(loop.post([&occupied] {
+    occupied = true;
+    std::this_thread::sleep_for(std::chrono::milliseconds(500));
+  }));
+  for (int i = 0; i < 500 && !occupied; i++)
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  REQUIRE(occupied.load());
+
+  const auto started_at = std::chrono::steady_clock::now();
+  const std::string first = node.localTimeJson(0);
+  const std::string volumes = node.audioJson("");
+  const auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                              std::chrono::steady_clock::now() - started_at)
+                              .count();
+  CHECK(elapsed_ms < 100);
+
+  // The snapshot is a real answer, not a placeholder.
+  auto local = json::parse(first);
+  REQUIRE(local);
+  CHECK(json::getString(local.get(), "tz") == "Asia/Tokyo");
+  CHECK(json::getInt(local.get(), "offset_min") == 540);
+  CHECK(json::getBool(local.get(), "known", false));
+  auto audio = json::parse(volumes);
+  REQUIRE(audio);
+  CHECK(json::getInt(audio.get(), "call") == 37);
+  CHECK(json::getString(json::get(audio.get(), "sources"), "call") == "cluster");
+
+  // Only the instant is read live, so a clock driven by this export keeps ticking through the
+  // stall instead of freezing until the loop drains.
+  std::this_thread::sleep_for(std::chrono::milliseconds(120));
+  auto later = json::parse(node.localTimeJson(0));
+  REQUIRE(later);
+  CHECK(json::getInt(later.get(), "wall_ms") > json::getInt(local.get(), "wall_ms"));
+
+  // Control: an export that still marshals to the loop does wait for it, which is what proves
+  // the loop was genuinely busy for the checks above.
+  const auto before_blocking = std::chrono::steady_clock::now();
+  node.debugJson();
+  const auto blocked_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                              std::chrono::steady_clock::now() - before_blocking)
+                              .count();
+  CHECK(blocked_ms >= 200);
+
+  node.stop();
+  loop.stop();
+}
+
+TEST_CASE("node: NTP syncs once a day, once on a change, and backs off after a failure") {
+  // Owner rule: a clock correction is stable for days, so the service must not chatter. One
+  // round when it is switched on, one when the servers change, one at start-up, then the
+  // interval -- and after a failure it comes back sooner than the interval, doubling each time.
+  // One round is several packets (the exchange keeps the sample with the lowest round trip), so
+  // this counts rounds by whether the server was contacted at all, not by packets.
+  FakeNtpServer server(1500);
+  REQUIRE(server.start());
+  FakeNtpServer other(2500);
+  REQUIRE(other.start());
+  const int dead_port = server.port() == 65535 ? 65534 : server.port() + 1;
+
+  // The sim clock starts at real wall time so a measured offset stays inside SNTP's sanity
+  // bounds while the test moves hours at a time.
+  const int64_t now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                             std::chrono::system_clock::now().time_since_epoch())
+                             .count();
+  SimClock clock(now_ms, 0);
+  Runloop loop(clock);
+  NodeOptions options;
+  options.data_dir = ":memory:";
+  options.name = "ntp-schedule";
+  options.role = "indoor_panel";
+  options.listen_addr = "127.0.0.1:0";
+  options.enable_beacon = false;
+  options.http_port = 0;
+  NodeDeps deps;
+  deps.clock = &clock;
+  deps.loop = &loop;
+  Node node(options, std::move(deps));
+  REQUIRE(node.start());
+  loop.pumpDue();
+
+  auto time_status = [&node] {
+    auto parsed = json::parse(node.statusJson());
+    if (!parsed) return json::obj();
+    return json::Doc(cJSON_Duplicate(json::get(parsed.get(), "time"), 1));
+  };
+  auto retry_in_s = [&time_status] { return json::getInt(time_status().get(), "retry_in_s"); };
+  auto syncing = [&time_status] { return json::getBool(time_status().get(), "syncing", false); };
+  // Advance the simulated clock in small steps, draining the loop, so a timer due partway
+  // through the span runs where it would have. The exchange itself is on a worker thread, so
+  // each step also gives real time a moment to pass.
+  auto advance = [&clock, &loop](int64_t seconds) {
+    for (int64_t step = 0; step < seconds; step += 30) {
+      clock.advance(30'000);
+      loop.pumpDue();
+      std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+  };
+  auto settle = [&loop](const std::function<bool()>& done, int max_ms) {
+    for (int waited = 0; waited < max_ms; waited += 10) {
+      loop.pumpDue();
+      if (done()) return true;
+      std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    loop.pumpDue();
+    return done();
+  };
+  auto quiet = [&settle, &syncing] { REQUIRE(settle([&] { return !syncing(); }, 20000)); };
+
+  // Once a day out of the box.
+  CHECK(json::getInt(time_status().get(), "interval_s") == 86400);
+
+  node.setConfigKey("time.ntp.servers",
+                    "[\"127.0.0.1:" + std::to_string(server.port()) + "\"]");
+  node.setConfigKey("time.ntp.enabled", "true");
+  loop.pumpDue();
+  REQUIRE(settle([&] { return json::getBool(time_status().get(), "ok", false); }, 8000));
+  quiet();
+  CHECK(retry_in_s() == 0);
+  int seen = server.requests();
+  REQUIRE(seen > 0);
+
+  // An hour later, not a packet: the interval is a day.
+  advance(3600);
+  quiet();
+  CHECK(server.requests() == seen);
+
+  // Changing the interval re-arms the timer and spends no round trip of its own.
+  node.setConfigKey("time.ntp.interval_s", "3600");
+  loop.pumpDue();
+  quiet();
+  CHECK(json::getInt(time_status().get(), "interval_s") == 3600);
+  CHECK(server.requests() == seen);
+
+  // ...and then the shorter interval comes due.
+  advance(3700);
+  REQUIRE(settle([&] { return server.requests() > seen; }, 8000));
+  quiet();
+  seen = server.requests();
+
+  // Changing the servers is a reason to sync now, not at the next interval.
+  const int other_seen = other.requests();
+  node.setConfigKey("time.ntp.servers",
+                    "[\"127.0.0.1:" + std::to_string(other.port()) + "\"]");
+  loop.pumpDue();
+  REQUIRE(settle([&] { return other.requests() > other_seen; }, 8000));
+  quiet();
+  CHECK(server.requests() == seen);
+
+  // So is switching the service off and on again.
+  node.setConfigKey("time.ntp.enabled", "false");
+  loop.pumpDue();
+  quiet();
+  int other_now = other.requests();
+  advance(7200);
+  quiet();
+  CHECK(other.requests() == other_now);
+  node.setConfigKey("time.ntp.enabled", "true");
+  loop.pumpDue();
+  REQUIRE(settle([&] { return other.requests() > other_now; }, 8000));
+  quiet();
+
+  // A server that never answers: the round fails and the retry is a minute away, not a day.
+  node.setConfigKey("time.ntp.servers",
+                    "[\"127.0.0.1:" + std::to_string(dead_port) + "\"]");
+  loop.pumpDue();
+  REQUIRE(settle([&] { return retry_in_s() > 0; }, 30000));
+  CHECK(retry_in_s() == 60);
+  CHECK(json::getString(time_status().get(), "err") != "");
+  // The measurement that already succeeded is kept; only the schedule changed.
+  CHECK(json::getInt(time_status().get(), "measured_offset_ms") != 0);
+
+  // Nothing before the minute is up, and the next failure doubles the wait.
+  advance(30);
+  quiet();
+  CHECK(retry_in_s() == 60);
+  advance(90);
+  REQUIRE(settle([&] { return retry_in_s() >= 120; }, 30000));
+  CHECK(retry_in_s() == 120);
+
+  // A server that answers again clears the backoff.
+  node.setConfigKey("time.ntp.servers",
+                    "[\"127.0.0.1:" + std::to_string(server.port()) + "\"]");
+  loop.pumpDue();
+  REQUIRE(settle([&] { return retry_in_s() == 0; }, 15000));
+  CHECK(server.requests() > seen);
+
+  node.stop();
+  server.stop();
+  other.stop();
 }

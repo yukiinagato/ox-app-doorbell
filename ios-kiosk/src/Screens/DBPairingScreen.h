@@ -4,9 +4,16 @@
 // core-authoritative pairing state (unpaired | joining | persist_error) and
 // never infers it from side effects. The iPad 1 has no camera, so the Add QR is
 // display-only and the Pairing-PIN entry uses a drawn keypad.
+@class DBPairUri;
+
 @interface DBPairingScreen : DBScreen
 
 - (id)initWithRouter:(DBRouter *)router;
+
+// Prefills the join path from a scanned or opened doorbell://pair invitation
+// and asks before replacing an existing cluster. An expired or unreadable one
+// is explained inline instead of being acted on.
+- (void)presentInvitation:(DBPairUri *)invitation;
 - (void)startPolling;
 - (void)stopPolling;
 - (void)reload;

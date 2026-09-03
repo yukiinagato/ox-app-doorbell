@@ -6,9 +6,21 @@
 #   * tools/sdk/iPhoneOS7.1.sdk
 set -euo pipefail
 
+# --debug-entitlements adds get-task-allow so debugserver can attach. It is off
+# by default: a shipped build must not be debuggable.
+DEBUG_ENTITLEMENTS=0
+for arg in "$@"; do
+  case "$arg" in
+    --debug-entitlements) DEBUG_ENTITLEMENTS=1 ;;
+    -h|--help) echo "usage: $0 [--debug-entitlements]"; exit 0 ;;
+    *) echo "error: unknown argument $arg" >&2; exit 2 ;;
+  esac
+done
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 KIOSK="$(cd "$SCRIPT_DIR/.." && pwd)"
 ROOT="$(cd "$KIOSK/.." && pwd)"
+SRC_ENTITLEMENTS="$KIOSK/src/Entitlements.plist"
 
 echo "== Checking prerequisites =="
 missing=0
@@ -22,13 +34,28 @@ done
 [[ $missing -eq 0 ]] || { echo "error: required local inputs are missing"; exit 1; }
 command -v ldid >/dev/null 2>&1 || { echo "error: ldid is missing (brew install ldid)"; exit 1; }
 
+ENTITLEMENTS="$SRC_ENTITLEMENTS"
+if [[ $DEBUG_ENTITLEMENTS -eq 1 ]]; then
+  ENTITLEMENTS="$KIOSK/build/Entitlements.debug.plist"
+  mkdir -p "$(dirname "$ENTITLEMENTS")"
+  python3 - "$SRC_ENTITLEMENTS" "$ENTITLEMENTS" <<'PYEOF'
+import plistlib, sys
+with open(sys.argv[1], 'rb') as f:
+    plist = plistlib.load(f)
+plist['get-task-allow'] = True
+with open(sys.argv[2], 'wb') as f:
+    plistlib.dump(plist, f)
+PYEOF
+  echo "== debug entitlements: get-task-allow added (debuggable build) =="
+fi
+
 echo "== clean + build (make) =="
 make -C "$KIOSK" clean
-make -C "$KIOSK" app
+make -C "$KIOSK" app ENTITLEMENTS="$ENTITLEMENTS"
 
 echo
 echo "===== VERIFY ====="
-make -C "$KIOSK" verify
+make -C "$KIOSK" verify ENTITLEMENTS="$ENTITLEMENTS"
 
 APP="$KIOSK/build/Doorbell.app"
 echo

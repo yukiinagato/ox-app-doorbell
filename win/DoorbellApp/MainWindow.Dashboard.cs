@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
@@ -20,10 +21,13 @@ namespace DoorbellApp
         private const int RecentCallRows = 20;
 
         /// <summary>Rebuilds the tile grid from the door stations core knows about.</summary>
-        private void RefreshDoorTiles()
+        /// <summary>
+        /// Renders the tiles from the status document the coalescer already read. It never takes
+        /// its own: one refresh means one status document, shared by every consumer.
+        /// </summary>
+        private void RefreshDoorTiles(Dictionary<string, object> status)
         {
             if (App.Boot.Role != "indoor_panel") { _tileRefresh.Stop(); return; }
-            var status = App.Core.Status();
             var peers = status != null && status.ContainsKey("peers") ?
                 status["peers"] as System.Collections.IEnumerable : null;
             var doors = new List<string>();
@@ -34,6 +38,9 @@ namespace DoorbellApp
                 {
                     var peer = raw as Dictionary<string, object>;
                     if (peer == null || DictStr(peer, "role") != "door_station") continue;
+                    // A door station with no camera has nothing to watch, so it gets no tile. It
+                    // stays reachable through the monitor list and still takes announcements.
+                    if (!PeerHasCamera(peer)) continue;
                     string door = DictStr(peer, "door");
                     if (string.IsNullOrEmpty(door) || doors.Contains(door)) continue;
                     doors.Add(door);
@@ -96,6 +103,73 @@ namespace DoorbellApp
                 RefreshDoorTileStills();
             }
             else _tileRefresh.Stop();
+        }
+
+        /// <summary>
+        /// caps.camera says whether a peer can show live video. Only an explicit false hides the
+        /// tile: a shell that does not advertise the capability at all still gets one.
+        /// </summary>
+        private static bool PeerHasCamera(Dictionary<string, object> peer)
+        {
+            object value = CoreClient.Dig(peer, "caps.camera");
+            return !(value is bool) || (bool)value;
+        }
+
+        /// <summary>
+        /// The cluster, door-station and indoor-panel counters. status.peers carries every device
+        /// including this one; a mesh that has not listed us yet is counted from the boot profile
+        /// so the total is never short by one.
+        /// </summary>
+        private void RefreshDeviceCounters()
+        {
+            var peers = _status != null && _status.ContainsKey("peers") ?
+                _status["peers"] as System.Collections.IEnumerable : null;
+            int total = 0, doorsOnline = 0, doorsTotal = 0, panelsOnline = 0, panelsTotal = 0;
+            bool sawSelf = false;
+            if (peers != null)
+                foreach (object raw in peers)
+                {
+                    var peer = raw as Dictionary<string, object>;
+                    if (peer == null || string.IsNullOrEmpty(DictStr(peer, "id"))) continue;
+                    bool self = DictBool(peer, "self");
+                    if (self) sawSelf = true;
+                    // This device is plainly reachable from itself, whatever gossip says.
+                    bool online = self || DictStr(peer, "status") != "dead";
+                    total++;
+                    CountRole(DictStr(peer, "role"), online, ref doorsOnline, ref doorsTotal,
+                              ref panelsOnline, ref panelsTotal);
+                }
+            if (!sawSelf)
+            {
+                total++;
+                CountRole(App.Boot.Role, true, ref doorsOnline, ref doorsTotal,
+                          ref panelsOnline, ref panelsTotal);
+            }
+
+            ClusterCountText.Text = total.ToString();
+            DoorCountText.Text = doorsOnline + "/" + doorsTotal;
+            PanelCountText.Text = panelsOnline + "/" + panelsTotal;
+            AutomationProperties.SetName(ClusterCounter, Texts.T("dash.count_cluster", total));
+            AutomationProperties.SetName(DoorCounter,
+                Texts.T("dash.count_doors", doorsOnline, doorsTotal));
+            AutomationProperties.SetName(PanelCounter,
+                Texts.T("dash.count_panels", panelsOnline, panelsTotal));
+        }
+
+        private static void CountRole(string role, bool online, ref int doorsOnline,
+                                      ref int doorsTotal, ref int panelsOnline,
+                                      ref int panelsTotal)
+        {
+            if (role == "door_station")
+            {
+                doorsTotal++;
+                if (online) doorsOnline++;
+            }
+            else if (role == "indoor_panel")
+            {
+                panelsTotal++;
+                if (online) panelsOnline++;
+            }
         }
 
         private Border BuildDoorTile(string door)
@@ -238,10 +312,14 @@ namespace DoorbellApp
         /// Reads the newest rows for the dashboard list and the missed badge. The badge clears
         /// when the full history page is opened, which is what moves the seen watermark.
         /// </summary>
-        private void RefreshCallHistory()
+        /// <summary>
+        /// Renders the dashboard list from a call log already read off the UI thread.
+        /// db_core_call_log_json marshals into core's run loop, so it never runs on the
+        /// dispatcher.
+        /// </summary>
+        private void RefreshCallHistory(Dictionary<string, object> log)
         {
             if (App.Boot.Role != "indoor_panel") return;
-            var log = App.Core.CallLog(0, RecentCallRows);
             RecentCallsList.Children.Clear();
             var rows = log == null ? null : Rows(log);
             if (rows == null || rows.Count == 0)
@@ -297,20 +375,32 @@ namespace DoorbellApp
             {
                 Text = ClockOf(DictLong(row, "ts", 0)),
                 FontSize = detailed ? 16 : 14,
+                VerticalAlignment = VerticalAlignment.Center,
                 Foreground = (Brush)FindResource(missed ? "Danger" : "Dim"),
             };
             Grid.SetColumn(time, 0);
             grid.Children.Add(time);
 
+            // Two deliberate lines rather than an ellipsis: the door, then the purpose smaller
+            // and muted underneath it when there is one.
             string door = DoorLabel(DictStr(row, "door"));
             string purpose = PurposeLabel(DictStr(row, "purpose"));
-            var what = new TextBlock
+            var what = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+            what.Children.Add(new TextBlock
             {
-                Text = purpose.Length == 0 ? door : door + " · " + purpose,
+                Text = door,
                 FontSize = detailed ? 16 : 14,
-                TextTrimming = TextTrimming.CharacterEllipsis,
+                TextWrapping = TextWrapping.Wrap,
                 Foreground = (Brush)FindResource("Fg"),
-            };
+            });
+            if (purpose.Length != 0)
+                what.Children.Add(new TextBlock
+                {
+                    Text = purpose,
+                    FontSize = detailed ? 13 : 11,
+                    TextWrapping = TextWrapping.Wrap,
+                    Foreground = (Brush)FindResource("Dim"),
+                });
             Grid.SetColumn(what, 1);
             grid.Children.Add(what);
 
@@ -319,6 +409,7 @@ namespace DoorbellApp
                 Text = OutcomeText(row, outcome),
                 FontSize = detailed ? 15 : 13,
                 Margin = new Thickness(8, 0, 0, 0),
+                VerticalAlignment = VerticalAlignment.Center,
                 Foreground = (Brush)FindResource(missed ? "Danger" : "Dim"),
             };
             Grid.SetColumn(result, 2);
@@ -356,30 +447,18 @@ namespace DoorbellApp
             return LabelOf(entry, Texts.Lang, purpose);
         }
 
-        /// <summary>Renders a stored wall-clock instant with the cluster's own clock.</summary>
+        /// <summary>
+        /// Renders a stored wall-clock instant in the cluster time zone, from the same cached
+        /// base the clock uses. A history page must not make one call into core per row.
+        /// </summary>
         private string ClockOf(long wallMs)
         {
-            if (wallMs <= 0) return "";
-            var local = App.Core.LocalTime(wallMs);
-            if (local != null)
-            {
-                int hour = DictInt(local, "hh", -1);
-                int minute = DictInt(local, "mm", -1);
-                if (hour >= 0 && minute >= 0)
-                    return hour.ToString("00") + ":" + minute.ToString("00");
-            }
-            return new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc).AddMilliseconds(wallMs)
-                .ToLocalTime().ToString("HH:mm");
+            return wallMs <= 0 ? "" : InZone(wallMs).ToString("HH:mm");
         }
 
         private string DayOf(long wallMs)
         {
-            if (wallMs <= 0) return "";
-            var local = App.Core.LocalTime(wallMs);
-            string date = local == null ? "" : DictStr(local, "date");
-            if (!string.IsNullOrEmpty(date)) return date;
-            return new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc).AddMilliseconds(wallMs)
-                .ToLocalTime().ToString("yyyy-MM-dd");
+            return wallMs <= 0 ? "" : InZone(wallMs).ToString("yyyy-MM-dd");
         }
     }
 }

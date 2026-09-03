@@ -44,6 +44,37 @@ presentation/limitation です。raw path が
 有効な間、rule TTL は custom decoration/sound だけを終了し、安全な赤い raw-SOS overlay は clear
 または switch off まで残ります。
 
+## indoor camera preview の scheduling
+
+preview の負荷は door の設定総数ではなく、panel が同時表示できる数で制限します。1 台は aspect を
+保った大きな tile、2〜3 台は利用可能な viewport を分割し、それ以上は compact tile と明示的な
+scroll/page 選択を使います。Android は 1 cycle につき可視 tile を最大 3、modern iOS は 1 page 4、
+iPad 1 は 1 page 3 (safe mode は 1) だけ更新し、非表示 tile は snapshot を取得・decode しません。
+
+`press`/`motion` event は対象 door を active set の先頭へ昇格します。重複を除いた newest-first とし、
+burst が起きても active slot 数を超えて処理しません。resident は Android の scroll、iOS の番号付き
+camera page で event の選択を上書きできます。これは dashboard scheduling だけの規則であり、設定済み
+door はすべて direct monitor 可能なままです。
+
+## 映像起動 hot path
+
+H.264 設定の door station は viewer がいない間も platform encoder を稼働させます。Core は初期化
+segment と最新の完全な random-access fragment を保持し、新しい fMP4 subscriber に即時送信すると
+同時に、集約可能な keyframe request を発生させます。Android MediaCodec、Apple VideoToolbox、
+iOS 5 RTSP ingest (RTCP PLI)、Windows Media Foundation は encoder を再起動せず request を処理します。
+MJPEG path は bounded cache を background で準備し、live stream が追い付くまで 250 ms 以内の信頼
+できる frame を先に提示できます。
+
+Indoor shell は再利用可能な rendering resource を事前準備します。Android は停止状態の AVC decoder
+を 1 個、modern iOS は `AVPlayer`/`AVPlayerLayer` の組、iOS 5 は 1-pixel GL/VideoToolbox view を保持し、
+Windows は main window と共に media element を生成します。memory pressure 時にはこれら任意 reserve
+を解放できます。着信 preview は H.264 の frame 表示が実証されるまで availability layer として残り、
+応答後も再接続せず同じ transport/player を継続します。browser viewer も同じ Core-side cached JPEG
+または fMP4 bootstrap を受け取ります。visitor cancel は call lifecycle と呼出音だけを終了し、indoor
+panel の current preview は切断しません。transport の終了は resident の close 操作または通常の page
+deadline が担います。これは起動遅延を減らす仕組みであり、全 hardware が固定の
+glass-to-glass 目標を満たすという主張ではありません。実機 timing qualification は別途必要です。
+
 Core は peer の last-valid native UI manifest/capability を永続 cache します。`cached_contract:true` の
 configured offline device は cached contract に対して検証/queue できますが、適用証明は後の renderer
 report が必要です。Web manifest は serving Core node local のままです。`targets` object がない legacy

@@ -9,11 +9,20 @@ package jp.ox.doorbell
 
 import android.app.Activity
 import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.ColorFilter
+import android.graphics.Paint
+import android.graphics.Path
+import android.graphics.PixelFormat
+import android.graphics.Rect
+import android.graphics.RectF
+import android.graphics.drawable.Drawable
 import android.os.Handler
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
+import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -23,6 +32,66 @@ import java.net.URL
 import java.util.Locale
 import org.json.JSONObject
 
+private class FrostedBackdropDrawable(
+    private val owner: View,
+    private val canvasRoot: View,
+    private val radius: Float,
+) : Drawable() {
+
+    private var backdrop: Bitmap? = null
+    private var tintRgb = 0
+    private var borderRgb = 0
+    private val imagePaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+    private val shapePaint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val clip = Path()
+    private val ownerLocation = IntArray(2)
+    private val rootLocation = IntArray(2)
+
+    fun update(bitmap: Bitmap?, tint: Int, border: Int) {
+        backdrop = bitmap
+        tintRgb = tint
+        borderRgb = border
+        invalidateSelf()
+    }
+
+    override fun draw(canvas: Canvas) {
+        val box = RectF(bounds)
+        clip.reset()
+        clip.addRoundRect(box, radius, radius, Path.Direction.CW)
+        val saved = canvas.save()
+        canvas.clipPath(clip)
+        val image = backdrop
+        if (image != null && !image.isRecycled && canvasRoot.width > 0 && canvasRoot.height > 0) {
+            owner.getLocationInWindow(ownerLocation)
+            canvasRoot.getLocationInWindow(rootLocation)
+            val left = ownerLocation[0] - rootLocation[0]
+            val top = ownerLocation[1] - rootLocation[1]
+            val sx = image.width.toFloat() / canvasRoot.width
+            val sy = image.height.toFloat() / canvasRoot.height
+            val source = Rect(
+                (left * sx).toInt().coerceIn(0, image.width),
+                (top * sy).toInt().coerceIn(0, image.height),
+                ((left + owner.width) * sx).toInt().coerceIn(0, image.width),
+                ((top + owner.height) * sy).toInt().coerceIn(0, image.height),
+            )
+            if (source.width() > 0 && source.height() > 0)
+                canvas.drawBitmap(image, source, bounds, imagePaint)
+        }
+        canvas.drawColor((166 shl 24) or (tintRgb and 0xffffff))
+        canvas.restoreToCount(saved)
+        shapePaint.style = Paint.Style.STROKE
+        shapePaint.strokeWidth = 1f
+        shapePaint.color = (46 shl 24) or (borderRgb and 0xffffff)
+        canvas.drawRoundRect(box, radius, radius, shapePaint)
+    }
+
+    override fun setAlpha(alpha: Int) = Unit
+    override fun setColorFilter(colorFilter: ColorFilter?) = Unit
+
+    @Suppress("DEPRECATION", "OVERRIDE_DEPRECATION")
+    override fun getOpacity(): Int = PixelFormat.TRANSLUCENT
+}
+
 internal class DashboardView(
     private val activity: Activity,
     private val app: App,
@@ -30,7 +99,21 @@ internal class DashboardView(
     private val ui: Handler,
 ) {
 
-    val root: LinearLayout = LinearLayout(activity).apply {
+    /** What the host mounts: the theme backdrop, with the dashboard column above it. */
+    val root: FrameLayout = FrameLayout(activity)
+
+    /**
+     * The cluster's theme picture, already scaled and darkened, behind everything. GONE when the
+     * cluster has no picture, which leaves the flat ground colour the palette paints on [root].
+     */
+    private val themeBg = ImageView(activity).apply {
+        // The backdrop is prepared at exactly this view's size, so there is nothing left to fit.
+        scaleType = ImageView.ScaleType.FIT_XY
+        visibility = View.GONE
+    }
+
+    /** The dashboard itself, drawn over the backdrop. */
+    private val column = LinearLayout(activity).apply {
         orientation = LinearLayout.VERTICAL
     }
 
@@ -43,12 +126,26 @@ internal class DashboardView(
 
     private val clockText = ShellUi.text(activity, "", 40f, palette.ink)
     private val dateText = ShellUi.text(activity, "", 14f, palette.muted)
-    private val membershipPill = ShellUi.pill(activity, "", palette.surfaceAlt, palette.muted)
+    /** One icon-and-number counter in the header. */
+    private class Counter(val root: LinearLayout, val icon: ImageView, val value: TextView)
+
+    private val countersRow = LinearLayout(activity).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+    }
+    private val deviceCount = counter(R.drawable.ic_tabler_topology_star_3)
+    private val doorCount = counter(R.drawable.ic_tabler_door)
+    private val panelCount = counter(R.drawable.ic_tabler_device_tablet)
     private val missedBadge = ShellUi.pill(activity, "", palette.dangerSoft, palette.dangerInk)
     private lateinit var adminButton: Button
     private lateinit var noticeButton: Button
-    private lateinit var actionRow: LinearLayout
+    private lateinit var header: LinearLayout
+    private lateinit var clockBox: LinearLayout
+    private lateinit var headerActions: LinearLayout
     private lateinit var recentCallsHeading: TextView
+
+    /** The 門口 heading, rebuilt whenever the door set changes, so it is not a lateinit. */
+    private var doorsHeading: TextView? = null
     private lateinit var seeAllButton: Button
     private val tileColumn = LinearLayout(activity).apply {
         orientation = LinearLayout.VERTICAL
@@ -57,6 +154,11 @@ internal class DashboardView(
         orientation = LinearLayout.VERTICAL
     }
     private val bodySplit = LinearLayout(activity).apply { isBaselineAligned = false }
+    private lateinit var tileScroll: ScrollView
+
+    /** The scrim card the call rows sit on. */
+    private lateinit var callListScroll: ScrollView
+    private var tilesScrolled = false
     private val callList = LinearLayout(activity).apply {
         orientation = LinearLayout.VERTICAL
     }
@@ -65,11 +167,58 @@ internal class DashboardView(
         gravity = Gravity.CENTER_VERTICAL
         isBaselineAligned = false
     }
+    private val footerQr = ImageView(activity).apply {
+        scaleType = ImageView.ScaleType.FIT_CENTER
+        background = ShellUi.rounded(activity, 0xFFFFFF, 4)
+        val inset = ShellUi.dp(activity, 2)
+        setPadding(inset, inset, inset, inset)
+    }
+    private val footerAddress = ShellUi.text(activity, "", 11.5f, palette.ink).apply {
+        maxLines = 1
+        isSingleLine = true
+    }
     private val versionText = ShellUi.text(activity, "", 11.5f, palette.muted)
     private val sosSlider = SosSlideView(activity, ui)
 
     private val stills = HashMap<String, ImageView>()
+
+    /** One tile view per door, built once and then only updated. */
+    private val tiles = LinkedHashMap<String, DoorTile>()
+    private val previewPriorityDoors = ArrayList<String>()
+
+    /** The backdrop currently on screen, as picture-hash@width x height. */
+    private var backdropKey = ""
+
+    /** A backdrop request already in flight, so a burst of refreshes decodes once. */
+    private var backdropLoading = ""
+    private var softenedBackdrop: Bitmap? = null
+    private val footerGlass = FrostedBackdropDrawable(
+        footer, root, ShellUi.dp(activity, ShellUi.CARD_RADIUS_DP).toFloat(),
+    )
+
+    /** What the footer currently shows, so an unchanged poll does no work. */
+    private var footerUrl = ""
+    private var versionLine = ""
+
+    /** A door tile's mutable parts, so a status poll updates rather than rebuilds. */
+    private class DoorTile(
+        val root: LinearLayout,
+        val still: ImageView,
+        val chips: LinearLayout,
+        val label: TextView,
+        val noticeText: TextView,
+    ) {
+        var lastNotice: String = "\u0000"
+        var lastService: DoorService? = null
+    }
     private var lastRows: List<CallRow> = emptyList()
+
+    /** At most one call-log read in flight: refreshes can arrive faster than the query returns. */
+    private var callsLoading = false
+    private var stillsLoading = false
+
+    /** What the call rows currently on screen were built from, so an unchanged list is left be. */
+    private var callsRendered: Triple<List<CallRow>, Palette, String>? = null
     private var unreadMissed = 0
 
     private val stillTick = object : Runnable {
@@ -81,6 +230,17 @@ internal class DashboardView(
 
     init {
         build()
+        // The frame has no size until the first layout, and it changes size on rotation. Both
+        // decide which backdrop to prepare, and both move the regions around on top of it.
+        root.addOnLayoutChangeListener { _, left, top, right, bottom, oldLeft, oldTop,
+                                         oldRight, oldBottom ->
+            val resized = (right - left) != (oldRight - oldLeft) ||
+                (bottom - top) != (oldBottom - oldTop)
+            if (resized) {
+                applyThemeBackdrop()
+                scheduleRegionInk()
+            }
+        }
     }
 
     // ---------- lifecycle ----------
@@ -100,14 +260,20 @@ internal class DashboardView(
         applyArrangement()
     }
 
-    /** Redraw everything that depends on core state. Cheap enough for every relevant event. */
-    fun refresh() {
-        config = if (app.coreOk) app.core.config() else null
-        status = if (app.coreOk) app.core.status() else null
+    /**
+     * Redraw everything that depends on core state, from documents the host has already read.
+     *
+     * The host takes one status document per refresh and hands the same one to every surface, so
+     * a refresh costs one read of core rather than one per surface that wants to look at it.
+     */
+    fun refresh(status: JSONObject?, config: JSONObject?) {
+        this.config = config
+        this.status = status
         nodeId = status?.optJSONObject("node")?.optString("id").orEmpty()
         texts.setConfig(config)
         coreDisplay = CoreDisplays.parse(status?.optJSONObject("display"))
-        val now = clock.now()
+        clock.refreshIfStale()
+        val now = clock.cached()
         // Core resolves the appearance in the cluster time zone; auto_system still consults the
         // platform, and an older core falls back to the local computation.
         val appearance = coreDisplay.appearance
@@ -115,6 +281,7 @@ internal class DashboardView(
             Appearance.palette(CoreDisplays.isDark(appearance, systemDarkMode(activity)))
         else Appearance.resolve(config, nodeId, systemDarkMode(activity), now.minuteOfDay())
         applyPalette()
+        applyThemeBackdrop()
         updateClock(now)
         updateHeader()
         buildTiles()
@@ -124,23 +291,86 @@ internal class DashboardView(
         applyArrangement()
     }
 
-    /** Called once a second by the host so the clock keeps ticking without a full refresh. */
+    /** Update only runtime-backed widgets; theme and layout are configuration dependencies. */
+    fun refreshRuntime(status: JSONObject?, withCalls: Boolean) {
+        this.status = status
+        nodeId = status?.optJSONObject("node")?.optString("id").orEmpty()
+        updateHeader()
+        buildTiles()
+        updateFooter()
+        if (withCalls) loadCalls()
+    }
+
+    /** Refresh by reading core here, for the paths the host's coalescer does not drive. */
+    fun refresh() = refresh(
+        if (app.coreOk) app.core.status() else null,
+        if (app.coreOk) app.core.config() else null,
+    )
+
+    /**
+     * Called once a second by the host. Formats from the cached anchor and never touches core, so
+     * a busy run loop cannot hold the second hand back; the anchor itself is renewed on a worker.
+     */
     fun tickClock() {
-        updateClock(clock.now())
+        clock.refreshIfStale()
+        updateClock(clock.cached())
+    }
+
+    /** Core says the time moved, so the next tick re-reads it rather than projecting. */
+    fun onTimeChanged() {
+        clock.invalidate()
+        clock.refreshIfStale()
+    }
+
+    /**
+     * A press or motion event promotes that camera without allocating a second carousel. All
+     * doors remain in the scroll view, while only the cameras actually on screen are refreshed.
+     */
+    fun prioritizeDoor(door: String) {
+        if (door.isEmpty()) return
+        val promoted = tiles.remove(door) ?: return
+        previewPriorityDoors.remove(door)
+        previewPriorityDoors.add(0, door)
+        while (previewPriorityDoors.size > 3) previewPriorityDoors.removeAt(3)
+        val reordered = LinkedHashMap<String, DoorTile>()
+        reordered[door] = promoted
+        reordered.putAll(tiles)
+        tiles.clear()
+        tiles.putAll(reordered)
+        tileColumn.removeView(promoted.root)
+        tileColumn.addView(promoted.root, 1, ShellUi.matchWrap().apply {
+            topMargin = ShellUi.dp(activity, 8)
+        })
+        tileScroll.smoothScrollTo(0, 0)
+        fitTilesToViewport()
+        refreshStills()
     }
 
     // ---------- construction ----------
 
     private fun build() {
         val pad = ShellUi.dp(activity, 14)
-        root.setPadding(pad, pad, pad, pad)
+        root.addView(themeBg, FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT,
+        ))
+        root.addView(column, FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT,
+        ))
+        // The padding belongs to the column: the backdrop covers the whole frame, edge to edge.
+        column.setPadding(pad, pad, pad, pad)
 
-        val header = LinearLayout(activity).apply {
+        header = LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             isBaselineAligned = false
         }
-        val clockBox = LinearLayout(activity).apply {
+        // The clock and the date each keep to one line. Sharing a row with the header buttons left
+        // the clock about one character wide on a portrait phone, and it wrapped to one glyph per
+        // line down the edge; applyHeaderLayout gives portrait its own row, and this makes the
+        // failure unreachable even if a future arrangement gets the widths wrong again.
+        clockText.maxLines = 1
+        dateText.maxLines = 1
+        clockBox = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
             addView(clockText)
             addView(dateText)
@@ -148,11 +378,21 @@ internal class DashboardView(
         header.addView(clockBox, LinearLayout.LayoutParams(
             0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f,
         ))
-        val headerActions = LinearLayout(activity).apply {
+        headerActions = LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
-        headerActions.addView(membershipPill, chipParams())
+        noticeButton = ShellUi.button(
+            activity, texts.t("notice.global_button", R.string.notice_global_button), palette,
+        ) { openNoticeDialog("") }.apply { textSize = 13f }
+        headerActions.addView(noticeButton, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+        ))
+        for (counter in listOf(deviceCount, doorCount, panelCount))
+            countersRow.addView(counter.root, LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+            ).apply { leftMargin = if (counter === deviceCount) 0 else ShellUi.dp(activity, 10) })
+        headerActions.addView(countersRow, chipParams())
         headerActions.addView(missedBadge, chipParams())
         missedBadge.isFocusable = true
         missedBadge.isClickable = true
@@ -162,15 +402,24 @@ internal class DashboardView(
         ) { SettingsActivity.open(activity, app, texts) }
         headerActions.addView(adminButton, chipParams())
         header.addView(headerActions)
-        root.addView(header, ShellUi.matchWrap())
+        column.addView(header, ShellUi.matchWrap())
 
-        bodySplit.addView(tileColumn, LinearLayout.LayoutParams(
+        tileScroll = ScrollView(activity).apply {
+            // Deliberately not fillViewport: that re-measures the column to exactly the viewport
+            // height, and a column taller than the viewport then crushes the tile captions to a
+            // few pixels instead of scrolling.
+            isFillViewport = false
+            addView(tileColumn, LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+            ))
+        }
+        bodySplit.addView(tileScroll, LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
         ))
         bodySplit.addView(callColumn, LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
         ))
-        root.addView(bodySplit, LinearLayout.LayoutParams(
+        column.addView(bodySplit, LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f,
         ))
 
@@ -183,7 +432,12 @@ internal class DashboardView(
         recentCallsHeading = ShellUi.text(
             activity, texts.t("dash.recent_calls", R.string.dash_recent_calls), 13f,
             palette.muted, bold = true,
-        )
+        ).apply {
+            setPadding(
+                ShellUi.dp(activity, 4), ShellUi.dp(activity, 14),
+                ShellUi.dp(activity, 4), ShellUi.dp(activity, 6),
+            )
+        }
         callHeader.addView(
             recentCallsHeading,
             LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f),
@@ -191,44 +445,84 @@ internal class DashboardView(
         seeAllButton = ShellUi.button(
             activity, texts.t("dash.see_all", R.string.dash_see_all), palette,
         ) { HistoryActivity.launch(activity) }
+        seeAllButton.minimumHeight = 0
+        seeAllButton.minHeight = 0
+        seeAllButton.textSize = 13f
+        seeAllButton.setPadding(
+            ShellUi.dp(activity, 12), ShellUi.dp(activity, 6),
+            ShellUi.dp(activity, 12), ShellUi.dp(activity, 6),
+        )
         callHeader.addView(seeAllButton)
         callColumn.addView(callHeader, ShellUi.matchWrap())
+        // The rows sit on a translucent card rather than straight on the theme picture, so each
+        // one has a known surface and keeps its palette colour -- the outcome grey, the missed
+        // red -- instead of being measured against whatever part of the wallpaper it lands on.
+        callListScroll = ScrollView(activity).apply {
+            isFillViewport = true
+            val padH = ShellUi.dp(activity, 10)
+            val padV = ShellUi.dp(activity, 6)
+            setPadding(padH, padV, padH, padV)
+            clipToPadding = false
+            addView(callList, LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+            ))
+        }
         callColumn.addView(
-            ScrollView(activity).apply {
-                isFillViewport = true
-                addView(callList, LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
-                ))
+            callListScroll,
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f).apply {
+                topMargin = ShellUi.dp(activity, 8)
             },
-            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f),
         )
 
-        // Footer: the admin QR and address are always visible; opening the page still asks for
-        // the 管理パスワード.
-        root.addView(footer, ShellUi.matchWrap())
-        root.addView(versionText, ShellUi.matchWrap())
-
-        actionRow = LinearLayout(activity).apply {
-            orientation = LinearLayout.HORIZONTAL
+        val footerText = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_VERTICAL
-            isBaselineAligned = false
+            addView(footerAddress, ShellUi.matchWrap())
+            addView(versionText, ShellUi.matchWrap())
         }
-        val actions = actionRow
-        noticeButton = ShellUi.button(
-            activity, texts.t("notice.global_button", R.string.notice_global_button), palette,
-        ) { openNoticeDialog("") }
-        actions.addView(noticeButton, LinearLayout.LayoutParams(
-            0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f,
+        val footerInset = ShellUi.dp(activity, 8)
+        footer.setPadding(footerInset, footerInset, footerInset, footerInset)
+        footer.addView(footerQr, LinearLayout.LayoutParams(
+            ShellUi.dp(activity, 72), ShellUi.dp(activity, 72),
         ))
-        actions.addView(sosSlider, LinearLayout.LayoutParams(
-            0, ShellUi.dp(activity, 56), 1f,
-        ).apply { leftMargin = ShellUi.dp(activity, 8) })
-        root.addView(actions, ShellUi.matchWrap().apply {
+        footer.addView(footerText, LinearLayout.LayoutParams(
+            0, ViewGroup.LayoutParams.MATCH_PARENT, 1f,
+        ).apply { leftMargin = ShellUi.dp(activity, 10) })
+        column.addView(footer, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ShellUi.dp(activity, 88),
+        ))
+
+        column.addView(sosSlider, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ShellUi.dp(activity, 56),
+        ).apply {
             topMargin = ShellUi.dp(activity, 8)
         })
 
         sosSlider.enabledProvider = { app.coreOk }
         sosSlider.onTrigger = { app.commitEmergency(true) }
+    }
+
+    /**
+     * A counter: a small vector icon and a number. Drawn rather than written out, so the header
+     * stays readable at a glance and in any language; the spoken label carries the words.
+     */
+    private fun counter(iconRes: Int): Counter {
+        val icon = ImageView(activity).apply {
+            setImageResource(iconRes)
+            scaleType = ImageView.ScaleType.FIT_CENTER
+        }
+        val value = ShellUi.text(activity, "", 13f, palette.muted, bold = true)
+        val root = LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            addView(icon, LinearLayout.LayoutParams(
+                ShellUi.dp(activity, 16), ShellUi.dp(activity, 16),
+            ))
+            addView(value, LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+            ).apply { leftMargin = ShellUi.dp(activity, 4) })
+        }
+        return Counter(root, icon, value)
     }
 
     private fun chipParams(): LinearLayout.LayoutParams = LinearLayout.LayoutParams(
@@ -238,30 +532,179 @@ internal class DashboardView(
     // ---------- painting ----------
 
     private fun applyPalette() {
+        // The flat ground, which is what shows when the cluster has no theme picture and what
+        // shows through anywhere a picture does not cover.
         root.setBackgroundColor(ShellUi.opaque(palette.ground))
-        // The dashboard paints its own opaque ground, so each region's background is a known
-        // colour rather than an image; the same §5 rule still decides the ink, which keeps the
-        // footer and the tile labels readable when an administrator recolours the surfaces.
-        paintRegion(clockText, "clock", palette.ground, muted = false)
-        paintRegion(dateText, "date", palette.ground, muted = true)
-        paintRegion(versionText, "footer", palette.ground, muted = true)
-        membershipPill.background = ShellUi.rounded(activity, palette.surfaceAlt, 999, palette.line)
-        membershipPill.setTextColor(ShellUi.opaque(palette.muted))
+        // A new palette means every region's decision was taken against a colour that has gone.
+        regionInkApplied.clear()
         missedBadge.background = ShellUi.rounded(activity, palette.dangerSoft, 999)
         missedBadge.setTextColor(ShellUi.opaque(palette.dangerInk))
         adminButton.background = ShellUi.rounded(activity, palette.surfaceAlt, 10)
         adminButton.setTextColor(ShellUi.opaque(palette.ink))
         noticeButton.background = ShellUi.rounded(activity, palette.surfaceAlt, 10)
         noticeButton.setTextColor(ShellUi.opaque(palette.ink))
-        paintRegion(recentCallsHeading, "status_line", palette.ground, muted = true)
         seeAllButton.background = ShellUi.rounded(activity, palette.surfaceAlt, 10)
         seeAllButton.setTextColor(ShellUi.opaque(palette.ink))
+        callListScroll.background = ShellUi.scrim(activity, palette.surface)
+        footerAddress.setTextColor(ShellUi.opaque(palette.ink))
+        versionText.setTextColor(ShellUi.opaque(palette.muted))
+        footerAddress.setShadowLayer(0f, 0f, 0f, 0)
+        versionText.setShadowLayer(0f, 0f, 0f, 0)
+        footerGlass.update(softenedBackdrop, palette.surface, palette.line)
+        footer.background = footerGlass
         sosSlider.applyPalette(palette)
         // Labels are reapplied here too, so a language change reaches the controls built once.
         adminButton.text = texts.t("admin.title", R.string.admin_title)
         noticeButton.text = texts.t("notice.global_button", R.string.notice_global_button)
         recentCallsHeading.text = texts.t("dash.recent_calls", R.string.dash_recent_calls)
         seeAllButton.text = texts.t("dash.see_all", R.string.dash_see_all)
+        // The regions sit on the frame, so their ink depends on whether a picture is behind them
+        // and where each one lands on it. Once now, and again after the next layout.
+        applyRegionInk()
+        scheduleRegionInk()
+    }
+
+    // ---------- the theme backdrop ----------
+
+    /**
+     * Put the cluster's theme picture behind the dashboard, under the configured overlay
+     * (spec §5.1).
+     *
+     * The dashboard used to paint a flat ground while the rest of the fleet carried the theme.
+     * The picture is prepared once per (picture, view size, overlay) and cached, so a status poll
+     * every second and a clock tick every second cost a map lookup and nothing else; only a new
+     * picture, a real size change, or an administrator moving the overlay decodes, and that
+     * happens on a worker thread. The overlay is composited into the cached bitmap, which is also
+     * what RegionInk samples, so the ink is chosen against the pixels actually on screen.
+     */
+    private fun applyThemeBackdrop() {
+        val hash = if (app.safeMode) "" else coreDisplay.theme?.backgroundImage.orEmpty()
+        // An older core publishes no backdrop; that cluster keeps the overlay it always had.
+        val overlay = coreDisplay.theme?.backdrop ?: BackdropOverlay.LEGACY
+        if (hash.isEmpty()) {
+            // No picture configured, or safe mode: the palette's flat ground is the background.
+            if (backdropKey.isNotEmpty()) {
+                backdropKey = ""
+                themeBg.setImageDrawable(null)
+                themeBg.visibility = View.GONE
+                softenedBackdrop?.recycle()
+                softenedBackdrop = null
+                footerGlass.update(null, palette.surface, palette.line)
+                regionInkApplied.clear()
+                scheduleRegionInk()
+            }
+            return
+        }
+        val width = root.width
+        val height = root.height
+        // Before the first layout there is no size to prepare for; the layout listener returns.
+        if (width <= 0 || height <= 0) return
+        val blurRadius = coreDisplay.theme?.glassBlurRadius ?: 32
+        val key = ThemeBackdrop.cacheKey(hash, width, height, overlay) + "/glass@$blurRadius"
+        if (key == backdropKey) return
+        if (key == backdropLoading) return
+        backdropLoading = key
+        loadThemeBackdrop(hash, width, height, overlay, blurRadius, key)
+    }
+
+    /**
+     * Fetch the picture from this node's own asset endpoint and prepare it off the main thread.
+     * The endpoint is loopback, so it is available before any peer is.
+     */
+    private fun loadThemeBackdrop(
+        hash: String,
+        width: Int,
+        height: Int,
+        overlay: BackdropOverlay,
+        blurRadius: Int,
+        key: String,
+    ) {
+        val url = "http://127.0.0.1:${app.boot.httpPort}/asset/$hash"
+        Thread({
+            var prepared = ThemeBackdrop.cached(hash, width, height, overlay)
+            if (prepared == null) {
+                var bytes: ByteArray? = null
+                var connection: HttpURLConnection? = null
+                try {
+                    connection = URL(url).openConnection() as HttpURLConnection
+                    connection.connectTimeout = 4000
+                    connection.readTimeout = 8000
+                    bytes = BoundedBitmapDecoder.readLimited(connection.inputStream, 4 * 1024 * 1024)
+                } catch (error: Exception) {
+                    // The mesh prefetch may not have finished; the next refresh tries again.
+                    android.util.Log.w(TAG, "Theme backdrop is not available yet: $error")
+                } finally {
+                    try { connection?.disconnect() } catch (_: Exception) { }
+                }
+                prepared = ThemeBackdrop.build(bytes, hash, width, height, overlay)
+            }
+            val ready = prepared
+            val softened = ready?.let {
+                FrostedBlur.build(it, ShellUi.dp(activity, blurRadius))
+            }
+            ui.post {
+                backdropLoading = ""
+                if (ready == null) return@post
+                // The theme, the size or the overlay may have moved on while this was decoding.
+                val current = ThemeBackdrop.cacheKey(hash, root.width, root.height, overlay) +
+                    "/glass@${coreDisplay.theme?.glassBlurRadius ?: 32}"
+                if (current != key) {
+                    softened?.recycle()
+                    return@post
+                }
+                showBackdrop(key, ready, softened)
+            }
+        }, "doorbell-theme-bg").apply { isDaemon = true }.start()
+    }
+
+    private fun showBackdrop(key: String, bitmap: Bitmap, softened: Bitmap?) {
+        backdropKey = key
+        themeBg.setImageBitmap(bitmap)
+        themeBg.visibility = View.VISIBLE
+        softenedBackdrop?.recycle()
+        softenedBackdrop = softened
+        footerGlass.update(softenedBackdrop, palette.surface, palette.line)
+        // Everything decided against the previous background is now wrong.
+        regionInkApplied.clear()
+        scheduleRegionInk()
+    }
+
+    /** The last ink applied per region, so a layout that changes nothing does no work. */
+    private val regionInkApplied = HashMap<String, Int>()
+
+    /**
+     * The regions move under the picture on every layout, and the picture arrives after the first
+     * one, so the decision has to re-run or the dashboard keeps ink chosen against a background
+     * nobody is looking at any more.
+     */
+    private fun scheduleRegionInk() {
+        root.post { applyRegionInk() }
+    }
+
+    /**
+     * Every text that sits on the frame rather than on one of the dashboard's own opaque cards.
+     *
+     * A card carries its own known surface, so its label is decided against that. These have the
+     * theme picture behind them whenever one is up, and a busy photograph is what §5's per-region
+     * rule and its shadow exist for. The two section headings are included for the same reason
+     * the clock is: they sit on the frame, not on a card.
+     */
+    private fun applyRegionInk() {
+        paintRegion(clockText, "clock", palette.ground, muted = false)
+        paintRegion(dateText, "date", palette.ground, muted = true)
+        paintRegion(recentCallsHeading, "status_line", palette.ground, muted = true)
+        doorsHeading?.let { paintRegion(it, "status_line", palette.ground, muted = true,
+                                        cacheKey = "doors_heading") }
+        // The counters carry no plate of their own: they sit straight on the wallpaper, so they
+        // take the same per-region measurement the rest of the frame text does rather than a
+        // fixed palette token, and each icon follows the number beside it.
+        val counters = listOf(deviceCount, doorCount, panelCount)
+        for (index in counters.indices) {
+            val counter = counters[index]
+            paintRegion(counter.value, "status_line", palette.ground, muted = true,
+                        cacheKey = "counter_$index")
+            counter.icon.setColorFilter(counter.value.currentTextColor)
+        }
     }
 
     /**
@@ -269,9 +712,38 @@ internal class DashboardView(
      * override wins, then core's per-region decision, then the local measurement of whatever the
      * region actually sits on. A region that misses 4.5:1 gets the 40 % opposite-ink shadow.
      */
-    private fun paintRegion(view: TextView, region: String, backgroundRgb: Int, muted: Boolean) {
-        val result = CoreDisplays.inkFor(coreDisplay.theme, region, backgroundRgb, backgroundRgb)
+    private fun paintRegion(
+        view: TextView,
+        region: String,
+        backgroundRgb: Int,
+        muted: Boolean,
+        /** Null for a region that repeats across many views, which must never share one entry. */
+        cacheKey: String? = region,
+    ) {
+        // Two different backgrounds, and they take different rules. A card, a chip or a pill is a
+        // surface the dashboard painted itself, so its colour is known exactly and core's average
+        // of the theme picture says nothing about it. A region sitting straight on the frame,
+        // though, has the darkened theme picture behind it whenever one is up, and then the local
+        // sample of the pixels actually behind that region decides -- core averages the whole
+        // picture and may not have averaged it at all.
+        val drawn = themeBg.visibility == View.VISIBLE && themeBg.drawable != null
+        val overBackdrop = drawn && backgroundRgb == palette.ground
+        val sample = if (overBackdrop) RegionInk.sample(themeBg, view, backgroundRgb) else null
+        val result = CoreDisplays.inkFor(
+            coreDisplay.theme,
+            region,
+            backgroundRgb,
+            if (overBackdrop) sample?.averageRgb else backgroundRgb,
+            imageDrawnLocally = overBackdrop,
+            knownSurface = !overBackdrop,
+            sample = sample,
+        )
         val ink = if (muted) ShellUi.mute(result.inkRgb, palette.dark) else result.inkRgb
+        if (cacheKey != null) {
+            val signature = (if (result.needsShadow) 1 shl 25 else 0) or (ink and 0xffffff)
+            if (regionInkApplied[cacheKey] == signature) return
+            regionInkApplied[cacheKey] = signature
+        }
         view.setTextColor(ShellUi.opaque(ink))
         if (result.needsShadow) {
             val shadow = ShellUi.opaque(result.shadowRgb) and 0x00ffffff or
@@ -282,9 +754,31 @@ internal class DashboardView(
         }
     }
 
+    private var lastClock = ""
+    private var lastDate = ""
+
+    /** When the clock label last actually changed, for the tick-interval measurement. */
+    private var lastClockAtMs = 0L
+
+    /** Called once a second: only touches a TextView when the rendered value actually changed. */
     private fun updateClock(now: ClusterTime) {
-        clockText.text = now.clockText()
-        dateText.text = dateLine(now)
+        val clockValue = now.clockText()
+        if (clockValue != lastClock) {
+            // How long the displayed second actually lasted. A 1 Hz tick should read ~1000 ms;
+            // anything much larger means the tick was blocked before it got here.
+            val at = android.os.SystemClock.elapsedRealtime()
+            if (lastClockAtMs != 0L)
+                android.util.Log.i(CLOCK_TAG, "label $lastClock -> $clockValue after " +
+                    "${at - lastClockAtMs} ms")
+            lastClockAtMs = at
+            lastClock = clockValue
+            clockText.text = clockValue
+        }
+        val dateValue = dateLine(now)
+        if (dateValue != lastDate) {
+            lastDate = dateValue
+            dateText.text = dateValue
+        }
     }
 
     private fun dateLine(now: ClusterTime): String {
@@ -299,29 +793,55 @@ internal class DashboardView(
     }
 
     private fun updateHeader() {
-        val pairing = app.core.pairingInfo()
-        membershipPill.text = listOf(
-            texts.t("pair.membership", R.string.pair_membership,
-                    PairingModel.memberCount(pairing).toString()),
-            texts.t("pair.membership_connected", R.string.pair_membership_connected,
-                    PairingModel.connectedCount(pairing).toString()),
-        ).joinToString(" · ")
-        missedBadge.text = texts.t("history.missed_badge", R.string.history_missed_badge,
-                                   unreadMissed.toString())
-        missedBadge.visibility = if (unreadMissed > 0) View.VISIBLE else View.GONE
+        val counts = FleetCounting.of(status, config, app.boot.role, nodeId)
+        setTextIfChanged(deviceCount.value, counts.devices.toString())
+        setDescriptionIfChanged(deviceCount.root, texts.t(
+            "dash.count_devices", R.string.dash_count_devices, counts.devices.toString(),
+        ))
+        setTextIfChanged(
+            doorCount.value, "${counts.doorStations.online}/${counts.doorStations.total}",
+        )
+        setDescriptionIfChanged(doorCount.root, texts.t(
+            "dash.count_door_stations", R.string.dash_count_door_stations,
+            counts.doorStations.online.toString(), counts.doorStations.total.toString(),
+        ))
+        setTextIfChanged(panelCount.value, "${counts.panels.online}/${counts.panels.total}")
+        setDescriptionIfChanged(panelCount.root, texts.t(
+            "dash.count_indoor_panels", R.string.dash_count_indoor_panels,
+            counts.panels.online.toString(), counts.panels.total.toString(),
+        ))
+        setTextIfChanged(
+            missedBadge,
+            texts.t("history.missed_badge", R.string.history_missed_badge, unreadMissed.toString()),
+        )
+        val badgeVisibility = if (unreadMissed > 0) View.VISIBLE else View.GONE
+        if (missedBadge.visibility != badgeVisibility) missedBadge.visibility = badgeVisibility
+    }
+
+    private fun setTextIfChanged(view: TextView, value: String) {
+        if (view.text.toString() != value) view.text = value
+    }
+
+    private fun setDescriptionIfChanged(view: View, value: String) {
+        if (view.contentDescription?.toString() != value) view.contentDescription = value
     }
 
     private fun updateFooter() {
-        footer.removeAllViews()
-        footer.addView(
-            AdminLinks.view(
-                activity, palette, app.core, AdminLinks.resolve(status, app.boot.httpPort),
-                texts.t("web_admin.scan_hint", R.string.web_admin_scan_hint), 56,
-            ),
-            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f),
-        )
+        // The QR only changes when this node's own address does, so the footer is rebuilt on that
+        // rather than on every status poll.
+        val link = AdminLinks.resolve(status, app.boot.httpPort)
+        if (link.url != footerUrl) {
+            footerUrl = link.url
+            footerAddress.text = link.url
+            footerQr.contentDescription = texts.t(
+                "web_admin.scan_hint", R.string.web_admin_scan_hint,
+            )
+            footerQr.setImageBitmap(AdminQrCache.get(
+                app.core, link.url, ShellUi.dp(activity, 72),
+            ))
+        }
         val power = status?.optJSONObject("self")?.optJSONObject("power")
-        versionText.text = ShellUi.versionLine(
+        val line = ShellUi.versionLine(
             app.boot.name,
             status?.optJSONObject("node")?.optString("version").orEmpty()
                 .ifEmpty { app.core.version() },
@@ -329,6 +849,10 @@ internal class DashboardView(
             power?.optInt("battery_pct", -1) ?: -1,
             power?.optBoolean("charging", false) ?: false,
         ) { texts.t("power.percent", R.string.power_percent, it.toString()) }
+        if (line != versionLine) {
+            versionLine = line
+            versionText.text = line
+        }
     }
 
     private fun configureSos() {
@@ -342,83 +866,94 @@ internal class DashboardView(
         sosSlider.visibility = if (sosVisible()) View.VISIBLE else View.GONE
     }
 
-    /** emergency.button_on_roles decides whether this panel offers the slider at all. */
-    private fun sosVisible(): Boolean {
-        val roles = app.core.dig(config, "emergency.button_on_roles") as? org.json.JSONArray
-            ?: return true
-        for (index in 0 until roles.length())
-            if (roles.optString(index) == app.boot.role) return true
-        return roles.length() == 0
-    }
+    /**
+     * emergency.button_on_roles decides whether this panel offers the slider at all. An absent
+     * key is core's default of ["indoor_panel"]; an empty list is a deliberate "nowhere".
+     */
+    private fun sosVisible(): Boolean = SosSlideState.visibleForRole(config, app.boot.role)
 
     // ---------- door tiles ----------
 
+    /**
+     * Tiles are created once per door and then updated in place. Rebuilding them on every status
+     * poll -- which is what this used to do -- inflated a card, an image view and two labels per
+     * door several times a second, and that was the hitch on the home page.
+     */
     private fun buildTiles() {
-        tileColumn.removeAllViews()
-        stills.clear()
-        tileColumn.addView(
-            ShellUi.sectionHeading(activity, palette,
-                                   texts.t("settings.doors", R.string.settings_doors)),
-            ShellUi.matchWrap(),
-        )
-        val doors = doorIds()
-        if (doors.isEmpty()) {
+        val doors = tileDoorIds()
+        var structureChanged = false
+        // An empty door list on the very first build leaves tiles and doors both empty, which
+        // compared equal and skipped the block: the heading and the empty-state line were never
+        // added, so the whole section was missing rather than saying there were no doors. It only
+        // came back if a door later appeared, so a transient empty list hid the section for good.
+        if (tiles.keys.toList() != doors || tileColumn.childCount == 0) {
+            structureChanged = true
+            tileColumn.removeAllViews()
+            tiles.clear()
+            stills.clear()
             tileColumn.addView(
-                ShellUi.text(activity, texts.t("dash.no_doors", R.string.dash_no_doors), 14f,
-                             palette.muted),
+                ShellUi.sectionHeading(activity, palette,
+                                       texts.t("settings.doors", R.string.settings_doors))
+                    .also { doorsHeading = it },
                 ShellUi.matchWrap(),
             )
-            return
+            if (doors.isEmpty()) {
+                tileColumn.addView(
+                    ShellUi.text(activity, texts.t("dash.no_doors", R.string.dash_no_doors), 14f,
+                                 palette.muted),
+                    ShellUi.matchWrap(),
+                )
+                return
+            }
+            for (door in doors) {
+                val tile = createTile(door)
+                tiles[door] = tile
+                stills[door] = tile.still
+                tileColumn.addView(
+                    tile.root,
+                    ShellUi.matchWrap().apply { topMargin = ShellUi.dp(activity, 8) },
+                )
+            }
         }
-        val nowMs = clock.now().wallMs
-        for (door in doors) tileColumn.addView(
-            tileView(door, NoticeModel.resolve(status, config, door, nowMs)),
-            ShellUi.matchWrap().apply { topMargin = ShellUi.dp(activity, 8) },
-        )
+        val nowMs = clock.cached().wallMs
+        for ((door, tile) in tiles) updateTile(door, tile, NoticeModel.resolve(
+            status, config, door, nowMs,
+        ))
+        // A focusable tile pulls the scroll view to itself on first layout, which hid the 門口
+        // heading and clipped the first tile. Start at the top; the operator scrolls from there.
+        if (!tilesScrolled) {
+            tilesScrolled = true
+            tileScroll.post { tileScroll.scrollTo(0, 0) }
+        }
+        if (structureChanged) fitTilesToViewport()
     }
 
-    private fun tileView(door: String, notice: Notice?): View {
-        val peer = doorPeer(door)
-        val online = peer != null && peer.optString("status") != "dead"
+    /** The parts that never change for a door. Called once. */
+    /** The parts that never change for a door. Called once. */
+    private fun createTile(door: String): DoorTile {
         val card = ShellUi.card(activity, palette)
         card.isFocusable = true
         card.isClickable = true
-        card.setOnClickListener {
-            IncomingActivity.launch(activity, door)
-        }
+        card.setOnClickListener { IncomingActivity.launch(activity, door) }
 
         val still = ImageView(activity).apply {
             scaleType = ImageView.ScaleType.CENTER_CROP
             background = ShellUi.rounded(activity, palette.surfaceAlt, 8)
             contentDescription = doorLabel(door)
         }
-        stills[door] = still
-        card.addView(still, LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, ShellUi.dp(activity, 120),
-        ))
+        // The still is the only part that may shrink; the label and chips keep their height.
+        card.addView(
+            still,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ShellUi.dp(activity, 120),
+            ),
+        )
+        still.minimumHeight = ShellUi.dp(activity, 64)
 
         val chips = LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
             setPadding(0, ShellUi.dp(activity, 6), 0, 0)
         }
-        if (notice != null) {
-            // The status chip is compact, with a dot when an announcement is showing (§5.2).
-            val chip = ShellUi.pill(
-                activity, "● " + texts.t("notice.active", R.string.notice_active),
-                palette.noticeBg, palette.noticeInk,
-            )
-            chip.isFocusable = true
-            chip.isClickable = true
-            chip.setOnClickListener { openNoticeDialog(door) }
-            chips.addView(chip)
-        }
-        if (!online) chips.addView(
-            ShellUi.pill(activity, texts.t("dash.tile_offline", R.string.dash_tile_offline),
-                         palette.surfaceAlt, palette.muted),
-            LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
-            ).apply { leftMargin = ShellUi.dp(activity, 6) },
-        )
         card.addView(chips, ShellUi.matchWrap())
 
         val caption = LinearLayout(activity).apply {
@@ -427,70 +962,182 @@ internal class DashboardView(
             isBaselineAligned = false
             setPadding(0, ShellUi.dp(activity, 6), 0, 0)
         }
-        val tileLabel = ShellUi.text(activity, doorLabel(door), 16f, palette.ink, bold = true)
-        // A tile label sits on the card surface, which is a different background from the ground.
-        paintRegion(tileLabel, "tile_label", palette.surface, muted = false)
+        val label = ShellUi.text(activity, doorLabel(door), 16f, palette.ink, bold = true)
+        // A tile label sits on the card surface, a different background from the ground.
+        paintRegion(label, "tile_label", palette.surface, muted = false, cacheKey = null)
         caption.addView(
-            tileLabel,
+            label,
             LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f),
         )
         caption.addView(ShellUi.text(
             activity, texts.t("dash.tile_open", R.string.dash_tile_open), 13f, palette.accent,
         ))
         card.addView(caption, ShellUi.matchWrap())
-        if (notice != null) card.addView(
-            ShellUi.text(activity, notice.text, 13f, palette.muted).apply {
-                maxLines = 2
-                ellipsize = android.text.TextUtils.TruncateAt.END
-                paintRegion(this, "notice", palette.surface, muted = true)
-            },
-            ShellUi.matchWrap(),
+
+        val noticeText = ShellUi.text(activity, "", 13f, palette.muted).apply {
+            maxLines = 2
+            ellipsize = android.text.TextUtils.TruncateAt.END
+            visibility = View.GONE
+            paintRegion(this, "notice", palette.surface, muted = true, cacheKey = null)
+        }
+        card.addView(noticeText, ShellUi.matchWrap())
+        return DoorTile(card, still, chips, label, noticeText)
+    }
+
+    /** Everything a status poll can change, applied only when it actually changed. */
+    private fun updateTile(door: String, tile: DoorTile, notice: Notice?) {
+        val service = DoorStations.serviceOf(status, config, door)
+        val noticeKey = notice?.text ?: ""
+        if (tile.lastNotice == noticeKey && tile.lastService == service) return
+        tile.lastNotice = noticeKey
+        tile.lastService = service
+
+        tile.label.text = doorLabel(door)
+        tile.chips.removeAllViews()
+        if (notice != null) {
+            // A compact chip with a dot while an announcement is showing (§5.2).
+            val chip = ShellUi.pill(
+                activity, "● " + texts.t("notice.active", R.string.notice_active),
+                palette.noticeBg, palette.noticeInk,
+            )
+            chip.isFocusable = true
+            chip.isClickable = true
+            chip.setOnClickListener { openNoticeDialog(door) }
+            tile.chips.addView(chip)
+        }
+        // "The station is down" and "no station serves this door" are different problems with
+        // different fixes, and core's served_by is what separates them.
+        val serviceLabel = when (service) {
+            DoorService.SERVED -> ""
+            DoorService.STATION_OFFLINE ->
+                texts.t("dash.tile_offline", R.string.dash_tile_offline)
+            DoorService.NO_STATION ->
+                texts.t("dash.tile_no_station", R.string.dash_tile_no_station)
+        }
+        if (serviceLabel.isNotEmpty()) tile.chips.addView(
+            ShellUi.pill(activity, serviceLabel, palette.surfaceAlt, palette.muted),
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+            ).apply { leftMargin = if (tile.chips.childCount == 0) 0 else ShellUi.dp(activity, 6) },
         )
-        return card
+        tile.chips.visibility = if (tile.chips.childCount == 0) View.GONE else View.VISIBLE
+        tile.noticeText.text = noticeKey
+        tile.noticeText.visibility = if (notice != null) View.VISIBLE else View.GONE
     }
 
     /** Live stills refresh every five seconds; a failure simply leaves the previous frame. */
+    /**
+     * Refresh every tile's picture.
+     *
+     * The peer is resolved per door on each pass rather than captured with the tile, so a station
+     * that joins after its tile was built starts showing a picture on the next tick instead of
+     * staying blank until the door set changes. Each door is attempted independently: one station
+     * that is down must not stop the loop before it reaches the others, which is why the body is
+     * wrapped rather than relying on fetchStill alone to swallow everything.
+     */
     private fun refreshStills() {
-        if (stills.isEmpty()) return
-        val targets = stills.keys.toList()
+        if (stills.isEmpty() || stillsLoading) return
+        // Snapshot decoding and network I/O scale with what the resident can see, not with fleet
+        // size. Safe mode admits one; the normal lane admits at most three per refresh cycle.
+        val budget = if (app.safeMode) 1 else 3
+        val visible = Rect()
+        val targets = tiles.entries.filter { (_, tile) ->
+            tile.root.getLocalVisibleRect(visible) && visible.height() > 0
+        }.map { it.key }.take(budget).ifEmpty { tiles.keys.take(budget) }
+        if (targets.isEmpty()) return
+        stillsLoading = true
+        val snapshot = status
+        val settings = config
         Thread({
-            for (door in targets) {
-                val peer = doorPeer(door) ?: continue
-                val snapshot = peer.optString("snapshot").ifEmpty {
-                    val stream = peer.optString("stream")
-                    if (stream.isEmpty()) "" else stream.substringBeforeLast('/') + "/snapshot.jpg"
+            try {
+                for (door in targets) try {
+                    // Only a station the mesh says is alive. This used to accept any peer bound
+                    // to the door, because served_by and peers[].status could disagree and a
+                    // serving station was being reported offline; core resolves both from one
+                    // liveness source now, so the workaround is gone.
+                    val peer = DoorStations.alivePeer(snapshot, settings, door)
+                    if (peer == null) {
+                        // Say which peers were considered and how each resolved: "no station" on
+                        // its own cannot tell a door-id mismatch from a station that is down.
+                        logStill(door, "no alive station; " + DoorStations.why(snapshot, settings, door))
+                        continue
+                    }
+                    val url = DoorStations.stillUrl(peer)
+                    if (url.isEmpty()) {
+                        logStill(
+                            door,
+                            "station ${peer.optString("id")} (status " +
+                                "${peer.optString("status")}) advertises no snapshot or stream",
+                        )
+                        continue
+                    }
+                    val bitmap = fetchStill(door, url) ?: continue
+                    ui.post { stills[door]?.setImageBitmap(bitmap) }
+                } catch (error: Exception) {
+                    logStill(door, "failed: ${error.javaClass.simpleName}: ${error.message}")
                 }
-                if (snapshot.isEmpty()) continue
-                val bitmap = fetchStill(snapshot) ?: continue
-                ui.post { stills[door]?.setImageBitmap(bitmap) }
+            } finally {
+                ui.post { stillsLoading = false }
             }
         }, "doorbell-tiles").apply { isDaemon = true }.start()
     }
 
-    private fun fetchStill(url: String): Bitmap? {
+    /**
+     * One still. Every outcome is logged with the URL, the HTTP status, the byte count and
+     * whether the decode produced a bitmap.
+     *
+     * This used to swallow the exception silently, which is how a blocked request looked exactly
+     * like a station with no camera: an empty tile and nothing at all in logcat.
+     */
+    private fun fetchStill(door: String, url: String): Bitmap? {
         var connection: HttpURLConnection? = null
         return try {
             connection = URL(url).openConnection() as HttpURLConnection
             connection.connectTimeout = 2000
             connection.readTimeout = 3000
+            connection.useCaches = false
+            val code = connection.responseCode
+            if (code != HttpURLConnection.HTTP_OK) {
+                logStill(door, "$url -> HTTP $code")
+                return null
+            }
             val bytes = BoundedBitmapDecoder.readLimited(connection.inputStream, 2 * 1024 * 1024)
-            bytes?.let { BoundedBitmapDecoder.decode(it, 640, 480) }
-        } catch (_: Exception) {
+            if (bytes == null) {
+                logStill(door, "$url -> HTTP $code, body empty or over the 2 MB cap")
+                return null
+            }
+            val bitmap = BoundedBitmapDecoder.decode(bytes, 640, 480)
+            logStill(
+                door,
+                "$url -> HTTP $code, ${bytes.size} bytes, " +
+                    if (bitmap == null) "decode failed"
+                    else "decoded ${bitmap.width}x${bitmap.height}",
+            )
+            bitmap
+        } catch (error: Exception) {
+            // A cleartext-policy refusal arrives here as an IOException naming the peer address.
+            logStill(door, "$url -> ${error.javaClass.simpleName}: ${error.message}")
             null
         } finally {
             try { connection?.disconnect() } catch (_: Exception) { }
         }
     }
 
+    private fun logStill(door: String, message: String) {
+        android.util.Log.i("doorbell-still", "[$door] $message")
+    }
+
     // ---------- recent calls ----------
 
     private fun loadCalls() {
-        if (!app.coreOk) return
+        if (!app.coreOk || callsLoading) return
+        callsLoading = true
         Thread({
             val document = app.core.callLog(0L, 0L, CallHistoryModel.DASHBOARD_ROWS)
             val rows = CallHistoryModel.parse(document)
             val missed = CallHistoryModel.unreadMissed(document)
             ui.post {
+                callsLoading = false
                 lastRows = rows
                 unreadMissed = missed
                 updateHeader()
@@ -499,7 +1146,15 @@ internal class DashboardView(
         }, "doorbell-dashboard-calls").apply { isDaemon = true }.start()
     }
 
+    /**
+     * Rebuild the call rows, which is a view per row. Refreshes arrive once a second and the log
+     * changes far more rarely, so an unchanged list in unchanged colours and language is left on
+     * screen rather than torn down and built again.
+     */
     private fun renderCalls() {
+        val key = Triple(lastRows, palette, texts.lang)
+        if (callsRendered == key && callList.childCount > 0) return
+        callsRendered = key
         callList.removeAllViews()
         if (lastRows.isEmpty()) {
             callList.addView(
@@ -554,7 +1209,7 @@ internal class DashboardView(
         val heightDp = (metrics.heightPixels / metrics.density).toInt()
         val side = widthDp > heightDp && widthDp >= 600
         bodySplit.orientation = if (side) LinearLayout.HORIZONTAL else LinearLayout.VERTICAL
-        val tileParams = tileColumn.layoutParams as LinearLayout.LayoutParams
+        val tileParams = tileScroll.layoutParams as LinearLayout.LayoutParams
         val callParams = callColumn.layoutParams as LinearLayout.LayoutParams
         if (side) {
             tileParams.width = 0
@@ -573,37 +1228,95 @@ internal class DashboardView(
             callParams.weight = 1f
             callParams.leftMargin = 0
         }
-        tileColumn.layoutParams = tileParams
+        tileScroll.layoutParams = tileParams
         callColumn.layoutParams = callParams
-        applyActionLayout(widthDp)
+        applyHeaderLayout(widthDp, heightDp)
+        fitTilesToViewport()
     }
 
     /**
-     * On a narrow panel the announcement button and the SOS slider stack instead of halving each
-     * other's width, so neither the two-part slider label nor the button text is clipped.
+     * Portrait gives the clock its own full-width row above the pill and the buttons; landscape
+     * keeps the single row, with the clock taking the width the buttons leave.
      */
-    private fun applyActionLayout(widthDp: Int) {
-        val stacked = VisitorLayout.actionsStacked(widthDp)
-        actionRow.orientation = if (stacked) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL
-        val noticeParams = noticeButton.layoutParams as LinearLayout.LayoutParams
-        val sosParams = sosSlider.layoutParams as LinearLayout.LayoutParams
+    private fun applyHeaderLayout(widthDp: Int, heightDp: Int) {
+        val stacked = VisitorLayout.dashboardHeaderStacked(widthDp, heightDp)
+        header.orientation = if (stacked) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL
+        header.gravity = if (stacked) Gravity.START else Gravity.CENTER_VERTICAL
+        val clockParams = clockBox.layoutParams as LinearLayout.LayoutParams
+        val actionParams = headerActions.layoutParams as LinearLayout.LayoutParams
+        val countersParams = countersRow.layoutParams as LinearLayout.LayoutParams
         if (stacked) {
-            noticeParams.width = ViewGroup.LayoutParams.MATCH_PARENT
-            noticeParams.weight = 0f
-            sosParams.width = ViewGroup.LayoutParams.MATCH_PARENT
-            sosParams.weight = 0f
-            sosParams.leftMargin = 0
-            sosParams.topMargin = ShellUi.dp(activity, 8)
+            clockParams.width = ViewGroup.LayoutParams.MATCH_PARENT
+            clockParams.weight = 0f
+            actionParams.width = ViewGroup.LayoutParams.MATCH_PARENT
+            actionParams.topMargin = ShellUi.dp(activity, 8)
+            // The counters absorb the row's slack; they never need to shrink.
+            countersParams.width = ViewGroup.LayoutParams.WRAP_CONTENT
+            countersParams.weight = 1f
+            countersParams.leftMargin = 0
         } else {
-            noticeParams.width = 0
-            noticeParams.weight = 1f
-            sosParams.width = 0
-            sosParams.weight = 1f
-            sosParams.leftMargin = ShellUi.dp(activity, 8)
-            sosParams.topMargin = 0
+            clockParams.width = 0
+            clockParams.weight = 1f
+            actionParams.width = ViewGroup.LayoutParams.WRAP_CONTENT
+            actionParams.topMargin = 0
+            countersParams.width = ViewGroup.LayoutParams.WRAP_CONTENT
+            countersParams.weight = 0f
+            countersParams.leftMargin = ShellUi.dp(activity, 8)
         }
-        noticeButton.layoutParams = noticeParams
-        sosSlider.layoutParams = sosParams
+        clockBox.layoutParams = clockParams
+        headerActions.layoutParams = actionParams
+        countersRow.layoutParams = countersParams
+    }
+
+    private fun applyStillHeight(heightPx: Int) {
+        for (tile in tiles.values) {
+            val params = tile.still.layoutParams ?: continue
+            if (params.height == heightPx) continue
+            params.height = heightPx
+            tile.still.layoutParams = params
+        }
+    }
+
+    /**
+     * Size the preview so a whole tile fits in the space above the QR footer.
+     *
+     * The tile column is already constrained to end above the footer, but a tile taller than that
+     * area left its bottom row -- the door name and 見る -- cut off at the scroll boundary, which
+     * reads as the label disappearing under the footer. The still is the only part that may give
+     * up height, so it is measured against the real viewport instead of guessed per orientation.
+     * More doors than fit still scroll, but every row is whole.
+     */
+    private fun fitTilesToViewport() {
+        val tile = tiles.values.firstOrNull() ?: return
+        tileScroll.post {
+            val viewport = tileScroll.height
+            if (viewport <= 0 || tile.still.layoutParams == null) return@post
+            val card = tile.root
+            var others = card.paddingTop + card.paddingBottom
+            for (index in 0 until card.childCount) {
+                val child = card.getChildAt(index)
+                if (child === tile.still || child.visibility == View.GONE) continue
+                others += child.height +
+                    ((child.layoutParams as? LinearLayout.LayoutParams)?.topMargin ?: 0)
+            }
+            // The section heading shares the column, and each tile carries a top margin.
+            val heading = if (tileColumn.childCount > 0) tileColumn.getChildAt(0).height else 0
+            val count = tiles.size
+            val maxHeight = when {
+                count <= 1 -> minOf(tileScroll.width * 9 / 16, ShellUi.dp(activity, 280))
+                count <= 3 -> minOf(tileScroll.width * 9 / 16, ShellUi.dp(activity, 180))
+                else -> minOf(tileScroll.width * 9 / 16, ShellUi.dp(activity, 112))
+            }
+            applyStillHeight(VisitorLayout.tileStillHeightPx(
+                viewportPx = viewport,
+                headingPx = heading,
+                otherRowsPx = others,
+                gapPx = ShellUi.dp(activity, 16),
+                tileCount = count,
+                minPx = ShellUi.dp(activity, 56),
+                maxPx = maxOf(ShellUi.dp(activity, 56), maxHeight),
+            ))
+        }
     }
 
     // ---------- helpers ----------
@@ -614,20 +1327,19 @@ internal class DashboardView(
         }
     }
 
-    private fun doorIds(): List<String> {
-        val doors = app.core.dig(config, "doors") as? JSONObject ?: return emptyList()
-        return doors.keys().asSequence().sorted().toList()
-    }
+    /** Every configured door. The announcement dialog and the monitor list use all of them. */
+    private fun doorIds(): List<String> = DoorStations.allDoorIds(status, config)
 
-    private fun doorPeer(door: String): JSONObject? {
-        val peers = status?.optJSONArray("peers") ?: return null
-        for (index in 0 until peers.length()) {
-            val peer = peers.optJSONObject(index) ?: continue
-            if (peer.optString("role") != "door_station") continue
-            if (peer.optString("door") != door) continue
-            return peer
-        }
-        return null
+    /**
+     * The doors that get a tile. A tile is a picture and a the label action, so a station that reports
+     * caps.camera false is left out of the column -- there is nothing to show and nothing to
+     * watch. The door itself stays reachable everywhere it matters: the monitor list, the
+     * announcement dialog, and unlock all still address it.
+     */
+    private fun tileDoorIds(): List<String> {
+        val available = doorIds().filter { DoorStations.tileVisible(status, config, it) }
+        val promoted = previewPriorityDoors.filter { available.contains(it) }
+        return promoted + available.filterNot { promoted.contains(it) }
     }
 
     private fun doorLabel(door: String): String {
@@ -648,6 +1360,8 @@ internal class DashboardView(
     }
 
     private companion object {
+        const val TAG = "doorbell-dash"
+        const val CLOCK_TAG = "doorbell-clock"
         const val STILL_INTERVAL_MS = 5_000L
         val WEEKDAYS = arrayOf("日", "月", "火", "水", "木", "金", "土")
     }
