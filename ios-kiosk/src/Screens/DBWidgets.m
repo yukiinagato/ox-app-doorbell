@@ -10,6 +10,7 @@ UIColor *DBColorFromHex(NSString *hex, UIColor *fallback) {
   return [UIColor colorWithRed:(CGFloat)rgb.r green:(CGFloat)rgb.g blue:(CGFloat)rgb.b alpha:1];
 }
 
+// Where an aspect-filled picture lands in a view of the given size.
 CGRect DBAspectFitRect(CGRect available, CGSize contentSize) {
   NSArray *rect = [DBUiTheme aspectFitRectForContentWidth:contentSize.width
                                             contentHeight:contentSize.height
@@ -39,6 +40,89 @@ NSString *DBHexFromColor(UIColor *color) {
   }
   return [DBUiTheme hexFromRgb:rgb];
 }
+
+#pragma mark - theme backdrop
+
+@implementation DBThemeBackdrop
+
+// The picture work itself lives in DBBackdropCompositor, which is CoreGraphics
+// only so a host test can measure the mean luminance it produces instead of
+// anyone judging the darkening from a photograph of a panel.
++ (CGFloat)darkeningAlpha { return [DBBackdropCompositor darkeningAlpha]; }
+
++ (CGFloat)maximumLongSide { return [DBBackdropCompositor maximumLongSide]; }
+
++ (CGSize)preparedSizeForViewSize:(CGSize)size {
+  return [DBBackdropCompositor preparedSizeForViewSize:size];
+}
+
+// A JPEG carrying an EXIF rotation draws upright through UIImage and sideways
+// through its raw CGImage, so the orientation is resolved here, in UIKit,
+// before the pixels go to CoreGraphics.
++ (CGImageRef)newUprightImageFrom:(UIImage *)image CF_RETURNS_RETAINED {
+  if (image == nil || image.CGImage == NULL) return NULL;
+  if (image.imageOrientation == UIImageOrientationUp)
+    return CGImageRetain(image.CGImage);
+  UIGraphicsBeginImageContextWithOptions(image.size, YES, 1.0);
+  [image drawInRect:CGRectMake(0, 0, image.size.width, image.size.height)];
+  UIImage *upright = UIGraphicsGetImageFromCurrentImageContext();
+  UIGraphicsEndImageContext();
+  return upright.CGImage ? CGImageRetain(upright.CGImage) : NULL;
+}
+
++ (NSMutableDictionary *)cache {
+  static NSMutableDictionary *cache = nil;
+  static dispatch_once_t once;
+  dispatch_once(&once, ^{ cache = [[NSMutableDictionary alloc] init]; });
+  return cache;
+}
+
+// The overlay is part of the identity: changing its colour or opacity has to
+// produce a new picture, not hand back the one prepared under the old setting.
++ (NSString *)cacheKeyForKey:(NSString *)key size:(CGSize)size
+                     overlay:(NSDictionary *)overlay {
+  CGFloat r = 0, g = 0, b = 0, a = 0;
+  BOOL draws = [DBBackdropCompositor overlay:overlay intoRed:&r green:&g blue:&b alpha:&a];
+  return [NSString stringWithFormat:@"%@@%.0fx%.0f/%d:%.3f:%.3f:%.3f:%.3f", key ?: @"",
+                   size.width, size.height, draws ? 1 : 0, r, g, b, a];
+}
+
++ (UIImage *)cachedBackdropForKey:(NSString *)key size:(CGSize)size
+                          overlay:(NSDictionary *)overlay {
+  @synchronized([self cache]) {
+    return [[self cache] objectForKey:[self cacheKeyForKey:key size:size overlay:overlay]];
+  }
+}
+
++ (UIImage *)backdropForData:(NSData *)data key:(NSString *)key size:(CGSize)size
+                     overlay:(NSDictionary *)overlay {
+  if (size.width <= 0 || size.height <= 0) return nil;
+  UIImage *cached = [self cachedBackdropForKey:key size:size overlay:overlay];
+  if (cached != nil) return cached;
+  UIImage *source = data ? [UIImage imageWithData:data] : nil;
+  if (source == nil || source.size.width <= 0 || source.size.height <= 0) return nil;
+
+  // One draw at scale 1: the iPad 1 is not a Retina device and a 2x bitmap
+  // would quadruple the texture for nothing.
+  CGImageRef upright = [self newUprightImageFrom:source];
+  CGImageRef composited = [DBBackdropCompositor newBackdropFromImage:upright viewSize:size
+                                                            overlay:overlay];
+  CGImageRelease(upright);
+  if (composited == NULL) return nil;
+  UIImage *prepared = [UIImage imageWithCGImage:composited];
+  CGImageRelease(composited);
+  if (prepared == nil) return nil;
+  @synchronized([self cache]) {
+    NSMutableDictionary *cache = [self cache];
+    // A panel has one picture and at most two orientations; anything more is a
+    // leak, not a cache.
+    if ([cache count] > 4) [cache removeAllObjects];
+    [cache setObject:prepared forKey:[self cacheKeyForKey:key size:size overlay:overlay]];
+  }
+  return prepared;
+}
+
+@end
 
 #pragma mark - background sampler
 
@@ -95,7 +179,7 @@ static const NSInteger kProxyEdge = 64;
   return sampler;
 }
 
-- (NSString *)averageHexInViewRect:(CGRect)rect {
+- (NSDictionary *)sampleInViewRect:(CGRect)rect {
   if (_pixels == nil) return nil;
   NSArray *box = [DBUiTheme samplePixelRectForViewX:rect.origin.x
                                                   y:rect.origin.y
@@ -122,6 +206,10 @@ static const NSInteger kProxyEdge = 64;
   const unsigned char *pixels = (const unsigned char *)[_pixels bytes];
   double red = 0, green = 0, blue = 0;
   NSInteger samples = 0;
+  double darkestLuminance = 2.0, lightestLuminance = -1.0;
+  DBRgb darkest, lightest;
+  darkest.r = darkest.g = darkest.b = 0;
+  lightest.r = lightest.g = lightest.b = 0;
   for (NSInteger row = y; row < y + height; row += strideY) {
     for (NSInteger column = x; column < x + width; column += strideX) {
       const unsigned char *pixel = pixels + (row * kProxyEdge + column) * 4;
@@ -129,6 +217,21 @@ static const NSInteger kProxyEdge = 64;
       green += pixel[1];
       blue += pixel[2];
       samples++;
+      DBRgb patch;
+      patch.r = pixel[0] / 255.0;
+      patch.g = pixel[1] / 255.0;
+      patch.b = pixel[2] / 255.0;
+      // The extremes are tracked here, in the one pass that already reads
+      // every patch, so the shadow test costs nothing extra.
+      double luminance = [DBUiTheme relativeLuminance:patch];
+      if (luminance < darkestLuminance) {
+        darkestLuminance = luminance;
+        darkest = patch;
+      }
+      if (luminance > lightestLuminance) {
+        lightestLuminance = luminance;
+        lightest = patch;
+      }
     }
   }
   if (samples == 0) return nil;
@@ -136,7 +239,14 @@ static const NSInteger kProxyEdge = 64;
   average.r = red / (samples * 255.0);
   average.g = green / (samples * 255.0);
   average.b = blue / (samples * 255.0);
-  return [DBUiTheme hexFromRgb:average];
+  return [NSDictionary dictionaryWithObjectsAndKeys:
+      [DBUiTheme hexFromRgb:average], @"average",
+      [DBUiTheme hexFromRgb:darkest], @"darkest",
+      [DBUiTheme hexFromRgb:lightest], @"lightest", nil];
+}
+
+- (NSString *)averageHexInViewRect:(CGRect)rect {
+  return [[self sampleInViewRect:rect] objectForKey:@"average"];
 }
 
 - (NSString *)averageHex {
@@ -154,6 +264,8 @@ static const NSInteger kProxyEdge = 64;
   NSString *_mode;
   NSString *_surfaceHex;
   DBBackgroundSampler *_sampler;
+  BOOL _usesThemeBackground;
+  NSString *_requestedBackgroundHex;  // What the caller said its ground is.
 }
 
 @synthesize mode = _mode;
@@ -165,6 +277,7 @@ static const NSInteger kProxyEdge = 64;
                     backgroundHex:(NSString *)backgroundHex
                       minuteOfDay:(NSInteger)minuteOfDay {
   DBUiPalette *palette = [[DBUiPalette alloc] init];
+  palette->_usesThemeBackground = YES;
   palette->_config = config;
   palette->_display = display;
   palette->_deviceId = [deviceId copy] ?: @"";
@@ -175,26 +288,59 @@ static const NSInteger kProxyEdge = 64;
   // a caller's own sample is only used when core published none.
   NSString *effective = [DBUiTheme autoBackgroundHexInDisplay:display];
   DBRgb probe;
+  palette->_requestedBackgroundHex = [DBUiTheme parseHex:backgroundHex into:&probe]
+      ? [backgroundHex copy] : nil;
   if ([effective length] > 0)
     palette->_surfaceHex = [effective copy];
   else
-    palette->_surfaceHex = [DBUiTheme parseHex:backgroundHex into:&probe]
-        ? [backgroundHex copy]
-        : [[DBUiTheme surfaceHexForMode:palette->_mode] copy];
+    palette->_surfaceHex = palette->_requestedBackgroundHex
+        ?: [[DBUiTheme surfaceHexForMode:palette->_mode] copy];
   return palette;
 }
 
+// Whether the panel's own chrome sits on a light ground.
+//
+// Over a theme picture this follows the cluster appearance, not the wallpaper.
+// It used to follow the measured wallpaper so that washed-out chips would not
+// vanish on a bright picture, but the answer to that is a real plate, which
+// cards now have; following the wallpaper instead turned a dark cluster into a
+// light-grey panel the moment someone set a pale photograph. Text drawn
+// directly on the picture is unaffected -- that is the region-ink rule below,
+// which still measures the pixels behind it.
+//
+// A screen that paints its own ground (the door and incoming pages) keeps
+// measuring that ground, because there the surface is the chrome.
 - (BOOL)isLight {
-  return [_mode isEqualToString:@"light"];
+  if (_usesThemeBackground) return [_mode isEqualToString:@"light"];
+  return [[DBUiTheme inkModeForBackgroundHex:_surfaceHex fallbackMode:_mode]
+      isEqualToString:@"dark"];
 }
 
+// The tone every card, chip and scrim is cut from: the appearance's plate,
+// never the wallpaper's average.
+- (NSString *)plateHex {
+  return [DBUiTheme plateHexForMode:[self chromeMode]];
+}
+
+- (UIColor *)plate {
+  return DBColorFromHex([self plateHex], [UIColor blackColor]);
+}
+
+// The mode the chrome should use, as a token name.
+- (NSString *)chromeMode {
+  return [self isLight] ? @"light" : @"dark";
+}
+
+// The flat ground behind everything when there is no picture. Over a picture
+// nothing paints it, so it stays the appearance's own surface rather than the
+// wallpaper average core measured for the ink rule.
 - (UIColor *)surface {
-  return DBColorFromHex(_surfaceHex, [UIColor blackColor]);
+  NSString *hex = _usesThemeBackground ? [DBUiTheme surfaceHexForMode:_mode] : _surfaceHex;
+  return DBColorFromHex(hex, [UIColor blackColor]);
 }
 
 - (UIColor *)elevated {
-  return [self isLight] ? [UIColor colorWithWhite:0 alpha:0.06]
-                        : [UIColor colorWithWhite:1 alpha:0.08];
+  return [[self plate] colorWithAlphaComponent:0.72];
 }
 
 - (UIColor *)separator {
@@ -203,11 +349,11 @@ static const NSInteger kProxyEdge = 64;
 }
 
 - (UIColor *)ink {
-  return DBColorFromHex([DBUiTheme inkHexForMode:_mode], [UIColor whiteColor]);
+  return DBColorFromHex([DBUiTheme inkHexForMode:[self chromeMode]], [UIColor whiteColor]);
 }
 
 - (UIColor *)mutedInk {
-  return DBColorFromHex([DBUiTheme mutedInkHexForMode:_mode],
+  return DBColorFromHex([DBUiTheme mutedInkHexForMode:[self chromeMode]],
                         [UIColor colorWithWhite:0.6 alpha:1]);
 }
 
@@ -237,6 +383,12 @@ static const NSInteger kProxyEdge = 64;
                         : [UIColor colorWithRed:0.62 green:0.47 blue:0.10 alpha:1];
 }
 
+// A chip needs a real plate over a picture: an 8 % wash vanishes on a light
+// wallpaper and reads as nothing at all.
+- (UIColor *)chipPlate {
+  return [[self plate] colorWithAlphaComponent:0.85];
+}
+
 - (UIColor *)noticeInk {
   return [self isLight] ? [UIColor colorWithRed:0.20 green:0.14 blue:0.02 alpha:1]
                         : [UIColor whiteColor];
@@ -246,7 +398,40 @@ static const NSInteger kProxyEdge = 64;
   _sampler = sampler;
 }
 
+- (void)setUsesThemeBackground:(BOOL)usesThemeBackground {
+  _usesThemeBackground = usesThemeBackground;
+  // Core's measured theme background describes the wallpaper, not this
+  // screen's own chrome. A screen that paints its own ground says so, and its
+  // colour is then what everything is measured against -- otherwise the
+  // incoming page inherited a light wallpaper's dark ink onto black video
+  // chrome, which is exactly how the call title came out unreadable.
+  if (!usesThemeBackground) {
+    _surfaceHex = _requestedBackgroundHex
+        ?: [[DBUiTheme surfaceHexForMode:_mode] copy];
+  }
+}
+
+// A sampler built for a different view size maps region frames onto the wrong
+// pixels, which is exactly what a rotation produces for one layout pass. It is
+// ignored until the rebuild for the new size arrives.
+- (DBBackgroundSampler *)samplerForViewSize:(CGSize)viewSize {
+  if (_sampler == nil) return nil;
+  if (viewSize.width <= 0 || viewSize.height <= 0) return _sampler;
+  return CGSizeEqualToSize(_sampler.viewSize, viewSize) ? _sampler : nil;
+}
+
 - (NSString *)inkHexForRegion:(NSString *)region {
+  if (!_usesThemeBackground) {
+    // This screen's ground is its own chrome, so only an administrator's
+    // override outranks the measurement of that colour.
+    NSString *override = [DBUiTheme adminInkOverrideHexForRegion:region config:_config
+                                                        deviceId:_deviceId display:_display];
+    if ([override length] > 0) return override;
+    DBRgb rgb;
+    if ([DBUiTheme parseHex:_surfaceHex into:&rgb])
+      return [DBUiTheme inkHexForSampledLuminance:[DBUiTheme relativeLuminance:rgb]];
+    return [DBUiTheme inkHexForMode:_mode];
+  }
   return [DBUiTheme inkHexForRegion:region config:_config deviceId:_deviceId
                             display:_display backgroundHex:_surfaceHex appearanceMode:_mode];
 }
@@ -262,22 +447,36 @@ static const NSInteger kProxyEdge = 64;
 
 // The pixels actually behind one region, or the flat background when there is
 // no theme image to sample.
-- (NSString *)backgroundHexForRegion:(NSString *)region frame:(CGRect)frame {
+// The region's measured background: its average plus the extremes of the same
+// sample. Without a sampler the flat surface is all three.
+- (NSDictionary *)backgroundSampleForRegion:(NSString *)region frame:(CGRect)frame
+                                   viewSize:(CGSize)viewSize {
   (void)region;
-  if (_sampler == nil) return _surfaceHex;
-  NSString *sampled = [_sampler averageHexInViewRect:frame];
-  return [sampled length] > 0 ? sampled : _surfaceHex;
+  DBBackgroundSampler *sampler = [self samplerForViewSize:viewSize];
+  NSDictionary *sample = sampler ? [sampler sampleInViewRect:frame] : nil;
+  if ([[sample objectForKey:@"average"] length] > 0) return sample;
+  return [NSDictionary dictionaryWithObjectsAndKeys:
+      _surfaceHex ?: @"", @"average", _surfaceHex ?: @"", @"darkest",
+      _surfaceHex ?: @"", @"lightest", nil];
 }
 
-- (NSString *)inkHexForRegion:(NSString *)region frame:(CGRect)frame {
+- (NSString *)backgroundHexForRegion:(NSString *)region frame:(CGRect)frame
+                            viewSize:(CGSize)viewSize {
+  return [[self backgroundSampleForRegion:region frame:frame viewSize:viewSize]
+      objectForKey:@"average"];
+}
+
+- (NSString *)inkHexForRegion:(NSString *)region frame:(CGRect)frame
+                     viewSize:(CGSize)viewSize {
   // 1. An administrator's override, device before cluster, always wins.
   NSString *override = [DBUiTheme adminInkOverrideHexForRegion:region config:_config
                                                       deviceId:_deviceId display:_display];
   if ([override length] > 0) return override;
   // 2. Over a theme image, refine locally: core averaged the whole picture and
   //    says so, which is how a caption over a light corner came back white.
-  if (_sampler != nil) {
-    NSString *background = [_sampler averageHexInViewRect:frame];
+  DBBackgroundSampler *sampler = [self samplerForViewSize:viewSize];
+  if (sampler != nil) {
+    NSString *background = [sampler averageHexInViewRect:frame];
     DBRgb rgb;
     if ([background length] > 0 && [DBUiTheme parseHex:background into:&rgb])
       return [DBUiTheme inkHexForSampledLuminance:[DBUiTheme relativeLuminance:rgb]];
@@ -286,13 +485,21 @@ static const NSInteger kProxyEdge = 64;
   return [self inkHexForRegion:region];
 }
 
+- (NSString *)inkHexForRegion:(NSString *)region frame:(CGRect)frame {
+  return [self inkHexForRegion:region frame:frame viewSize:CGSizeZero];
+}
+
 - (UIColor *)inkForRegion:(NSString *)region frame:(CGRect)frame {
   return DBColorFromHex([self inkHexForRegion:region frame:frame], [self ink]);
 }
 
 - (BOOL)needsShadowForRegion:(NSString *)region frame:(CGRect)frame {
+  NSDictionary *sample = [self backgroundSampleForRegion:region frame:frame
+                                                viewSize:CGSizeZero];
   return [DBUiTheme needsInkShadowForInk:[self inkHexForRegion:region frame:frame]
-                              background:[self backgroundHexForRegion:region frame:frame]];
+                              background:[sample objectForKey:@"average"]
+                                 darkest:[sample objectForKey:@"darkest"]
+                                lightest:[sample objectForKey:@"lightest"]];
 }
 
 // One call per label: the ink measured behind its own frame, plus the 40 %
@@ -300,13 +507,22 @@ static const NSInteger kProxyEdge = 64;
 - (void)applyInkToLabel:(UILabel *)label region:(NSString *)region {
   if (label == nil) return;
   CGRect frame = label.frame;
-  label.textColor = [self inkForRegion:region frame:frame];
-  if (![self needsShadowForRegion:region frame:frame]) {
+  // The sampler is keyed to the view size it was built for, so a rotation that
+  // has not been resampled yet falls back instead of reading the wrong pixels.
+  CGSize viewSize = label.superview ? label.superview.bounds.size : CGSizeZero;
+  NSString *ink = [self inkHexForRegion:region frame:frame viewSize:viewSize];
+  label.textColor = DBColorFromHex(ink, [self ink]);
+  NSDictionary *sample = [self backgroundSampleForRegion:region frame:frame viewSize:viewSize];
+  // The ink follows the average; the shadow follows the worst patch, so a line
+  // crossing a pale wall and a dark jacket keeps its outline over the jacket.
+  if (![DBUiTheme needsInkShadowForInk:ink
+                            background:[sample objectForKey:@"average"]
+                               darkest:[sample objectForKey:@"darkest"]
+                              lightest:[sample objectForKey:@"lightest"]]) {
     label.shadowColor = nil;
     label.shadowOffset = CGSizeZero;
     return;
   }
-  NSString *ink = [self inkHexForRegion:region frame:frame];
   DBRgb rgb;
   BOOL inkIsDark = [DBUiTheme parseHex:ink into:&rgb] &&
       [DBUiTheme relativeLuminance:rgb] < 0.5;
@@ -352,6 +568,118 @@ static const NSInteger kProxyEdge = 64;
 @end
 
 #pragma mark - padded label
+
+NSString *DBFleetGlyphIconName(DBFleetGlyph glyph) {
+  switch (glyph) {
+    case DBFleetGlyphDoorStation: return @"door";
+    case DBFleetGlyphIndoorPanel: return @"device-tablet";
+    case DBFleetGlyphCluster:
+    default: return @"topology-star-3";
+  }
+}
+
+@implementation DBFleetCounter {
+  NSString *_value;
+  UIColor *_ink;
+}
+
+@synthesize glyph = _glyph, value = _value, ink = _ink, halo = _halo;
+
+static const CGFloat kFleetGlyphSide = 20;
+static const CGFloat kFleetGlyphGap = 6;
+
+- (id)initWithFrame:(CGRect)frame {
+  self = [super initWithFrame:frame];
+  if (self) {
+    // No plate: the counters read as a status line over whatever is behind
+    // them, so the view itself paints nothing.
+    self.backgroundColor = [UIColor clearColor];
+    self.opaque = NO;
+    self.isAccessibilityElement = YES;
+    _value = @"";
+    _ink = [UIColor whiteColor];
+  }
+  return self;
+}
+
+- (UIFont *)valueFont {
+  return [UIFont boldSystemFontOfSize:18];
+}
+
+- (void)setGlyph:(DBFleetGlyph)glyph {
+  if (_glyph == glyph) return;
+  _glyph = glyph;
+  [self setNeedsDisplay];
+}
+
+- (void)setValue:(NSString *)value {
+  NSString *next = value ?: @"";
+  if ([_value isEqualToString:next]) return;
+  _value = [next copy];
+  [self setNeedsDisplay];
+}
+
+- (void)setInk:(UIColor *)ink {
+  _ink = ink;
+  [self setNeedsDisplay];
+}
+
+- (void)setHalo:(BOOL)halo {
+  if (_halo == halo) return;
+  _halo = halo;
+  [self setNeedsDisplay];
+}
+
+// The icon is only part of the width when there is an icon to draw: until the
+// PNGs are vendored the counter is its number alone rather than a number with
+// an empty square beside it.
+- (BOOL)hasIcon {
+  return [DBIconAsset imageNamed:DBFleetGlyphIconName(_glyph)] != nil;
+}
+
+- (CGFloat)widthThatFits {
+  CGSize text = [_value sizeWithFont:[self valueFont]];
+  CGFloat width = ceilf((float)text.width);
+  if ([self hasIcon]) width += kFleetGlyphSide + kFleetGlyphGap;
+  return width;
+}
+
+- (void)drawRect:(CGRect)rect {
+  (void)rect;
+  CGSize size = self.bounds.size;
+  UIFont *font = [self valueFont];
+  CGSize text = [_value sizeWithFont:font];
+  UIImage *icon = [DBIconAsset tintedImageNamed:DBFleetGlyphIconName(_glyph) color:_ink
+                                           size:CGSizeMake(kFleetGlyphSide, kFleetGlyphSide)];
+  CGFloat iconWidth = icon != nil ? kFleetGlyphSide + kFleetGlyphGap : 0;
+  CGFloat contentWidth = iconWidth + ceilf((float)text.width);
+  CGFloat x = floorf((float)((size.width - contentWidth) / 2));
+  if (x < 0) x = 0;
+  CGFloat textY = floorf((float)((size.height - text.height) / 2));
+
+  // The halo is what keeps a status line legible where the picture behind it
+  // is the same tone as the ink; the ink rule decides when it is needed.
+  CGContextRef ctx = UIGraphicsGetCurrentContext();
+  if (_halo && ctx != NULL) {
+    // Same rule the labels use: a dark ink is haloed in white and a light ink
+    // in black, at the shared shadow alpha.
+    DBRgb rgb;
+    BOOL inkIsDark = [DBUiTheme parseHex:DBHexFromColor(_ink) into:&rgb] &&
+        [DBUiTheme relativeLuminance:rgb] < 0.5;
+    UIColor *halo = [(inkIsDark ? [UIColor whiteColor] : [UIColor blackColor])
+        colorWithAlphaComponent:(CGFloat)[DBUiTheme inkShadowAlpha]];
+    CGContextSetShadowWithColor(ctx, CGSizeMake(0, 1), 2, halo.CGColor);
+  }
+  if (icon != nil) {
+    [icon drawInRect:CGRectMake(x, floorf((float)((size.height - kFleetGlyphSide) / 2)),
+                                kFleetGlyphSide, kFleetGlyphSide)];
+  }
+  [_ink set];
+  [_value drawAtPoint:CGPointMake(x + iconWidth, textY) withFont:font];
+  if (_halo && ctx != NULL) CGContextSetShadowWithColor(ctx, CGSizeZero, 0, NULL);
+}
+
+@end
 
 @implementation DBPillLabel
 
@@ -436,12 +764,18 @@ static const NSInteger kProxyEdge = 64;
 
 #pragma mark - SOS slider
 
+// The fleet's SOS red, matching the Android and Swift shells.
+static UIColor *DBSosTrackColor(void) {
+  return [UIColor colorWithRed:0.608 green:0.110 blue:0.110 alpha:1];  // #9B1C1C
+}
+
 @implementation DBSosSlider {
   DBSosSlideModel *_model;
   DBTexts *_texts;
   UIView *_track;
   UIView *_fill;
   UIView *_thumb;
+  UIImageView *_thumbChevron;
   UILabel *_hint;
   UILabel *_hintSecondary;
   UILabel *_countdown;
@@ -451,6 +785,7 @@ static const NSInteger kProxyEdge = 64;
   UIColor *_danger;
   UIColor *_dangerInk;
   UIColor *_trackColor;
+  UIColor *_trackInk;
 }
 
 - (id)initWithFrame:(CGRect)frame {
@@ -460,31 +795,42 @@ static const NSInteger kProxyEdge = 64;
     _thumbSide = 56;
     _danger = [UIColor colorWithRed:0.78 green:0.08 blue:0.06 alpha:1];
     _dangerInk = [UIColor whiteColor];
-    _trackColor = [UIColor colorWithWhite:1 alpha:0.14];
+    _trackColor = DBSosTrackColor();
+    _trackInk = [UIColor whiteColor];
 
     _track = [[UIView alloc] init];
-    _track.layer.cornerRadius = 14;
+    _track.layer.cornerRadius = frame.size.height / 2;
     _track.clipsToBounds = YES;
     [self addSubview:_track];
 
     _fill = [[UIView alloc] init];
     [_track addSubview:_fill];
 
+    // The knob and its chevron were declared and laid out but never allocated,
+    // so every message to them was a no-op and the bar rendered as a bare
+    // track. They are real views now.
+    _thumb = [[UIView alloc] init];
+    _thumb.clipsToBounds = YES;
+    [_track addSubview:_thumb];
+    _thumbChevron = [[UIImageView alloc] init];
+    _thumbChevron.contentMode = UIViewContentModeCenter;
+    [_thumb addSubview:_thumbChevron];
+
     _hint = [[UILabel alloc] init];
     _hint.backgroundColor = [UIColor clearColor];
     _hint.textAlignment = NSTextAlignmentCenter;
-    _hint.font = [UIFont boldSystemFontOfSize:20];
+    _hint.font = [UIFont systemFontOfSize:17];
+    _hint.numberOfLines = 1;
     [_track addSubview:_hint];
 
+    // The sub-line is the deliberate second part of the label, smaller and
+    // muted, exactly as on Android and the Swift shell.
     _hintSecondary = [[UILabel alloc] init];
     _hintSecondary.backgroundColor = [UIColor clearColor];
     _hintSecondary.textAlignment = NSTextAlignmentCenter;
-    _hintSecondary.font = [UIFont systemFontOfSize:16];
+    _hintSecondary.font = [UIFont systemFontOfSize:13];
+    _hintSecondary.numberOfLines = 1;
     [_track addSubview:_hintSecondary];
-
-    _thumb = [[UIView alloc] init];
-    _thumb.layer.cornerRadius = 12;
-    [self addSubview:_thumb];
 
     _countdown = [[UILabel alloc] init];
     _countdown.backgroundColor = [UIColor clearColor];
@@ -522,7 +868,12 @@ static const NSInteger kProxyEdge = 64;
 - (void)applyPalette:(DBUiPalette *)palette {
   _danger = palette.danger;
   _dangerInk = palette.dangerInk;
-  _trackColor = palette.elevated;
+  // The SOS bar is the one control that does not follow the palette: it is the
+  // same dark red on every shell, so a resident recognises it before reading
+  // it. A translucent chip plate here is what made it look like an ordinary
+  // button wearing a pink smear.
+  _trackColor = DBSosTrackColor();
+  _trackInk = [UIColor whiteColor];
   [self applyState];
 }
 
@@ -536,17 +887,19 @@ static const NSInteger kProxyEdge = 64;
 - (void)applyState {
   BOOL counting = (_model.phase == DBSosPhaseCountdown);
   _track.backgroundColor = _trackColor;
-  _fill.backgroundColor = [_danger colorWithAlphaComponent:0.55];
+  _fill.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.16];
   _thumb.backgroundColor = _danger;
-  _hint.textColor = _dangerInk;
-  _hintSecondary.textColor = [_dangerInk colorWithAlphaComponent:0.75];
+  // The label is drawn on the track; the chevron is drawn on the red knob.
+  _hint.textColor = _trackInk;
+  _hintSecondary.textColor = [_trackInk colorWithAlphaComponent:0.80];
   _countdown.textColor = _dangerInk;
   _cancelHint.textColor = [_dangerInk colorWithAlphaComponent:0.85];
 
-  NSArray *parts = [DBUiTheme labelPartsFor:[_texts ts:@"sos.slide_hint"]];
-  _hint.text = [parts objectAtIndex:0];
-  _hintSecondary.text = [parts objectAtIndex:1];
-  _hintSecondary.hidden = ([[parts objectAtIndex:1] length] == 0) || counting;
+  // The same two-part label every shell shows: the action, then what happens.
+  _hint.text = [_texts ts:@"sos.slide_label"];
+  _hintSecondary.text = [_texts t:@"sos.slide_sub",
+      [NSString stringWithFormat:@"%ld", (long)_model.countdownSeconds], nil];
+  _hintSecondary.hidden = counting;
   _hint.hidden = counting;
   _thumb.hidden = counting;
   _countdown.hidden = !counting;
@@ -555,7 +908,7 @@ static const NSInteger kProxyEdge = 64;
     _track.backgroundColor = _danger;
     _countdown.text = [_texts t:@"sos.countdown",
         [NSString stringWithFormat:@"%ld", (long)_model.remainingSeconds], nil];
-    _cancelHint.text = [_texts ts:@"emergency.cancel"];
+    _cancelHint.text = [_texts ts:@"sos.countdown_cancel"];
   }
   [self setNeedsLayout];
 }
@@ -564,17 +917,32 @@ static const NSInteger kProxyEdge = 64;
   [super layoutSubviews];
   CGSize size = self.bounds.size;
   _track.frame = self.bounds;
-  CGFloat travel = MAX(0, size.width - _thumbSide - 8);
-  CGFloat x = 4 + travel * (CGFloat)_model.fraction;
-  _thumb.frame = CGRectMake(x, 4, _thumbSide, MAX(0, size.height - 8));
-  _fill.frame = CGRectMake(0, 0, x + _thumbSide / 2, size.height);
-  CGFloat textX = _thumbSide + 12;
-  CGFloat textW = MAX(0, size.width - textX - 12);
-  if (_hintSecondary.hidden) {
+  CGFloat radius = size.height / 2;
+  _track.layer.cornerRadius = radius;
+  CGFloat inset = 5;
+  CGFloat knob = MAX(40, size.height - inset * 2);
+  _thumbSide = knob;
+  CGFloat travel = MAX(0, size.width - knob - inset * 2);
+  CGFloat x = inset + travel * (CGFloat)_model.fraction;
+  _thumb.frame = CGRectMake(x, inset, knob, knob);
+  _thumb.layer.cornerRadius = knob / 2;
+  _thumbChevron.frame = _thumb.bounds;
+  _thumbChevron.image = [DBIconAsset tintedImageNamed:@"chevrons-right" color:_dangerInk
+                                                 size:CGSizeMake(26, 26)];
+  _fill.frame = CGRectMake(0, 0, x + knob / 2, size.height);
+
+  // The two label lines are centred across the whole bar, as they are on the
+  // other shells; the knob rides over them rather than pushing them right.
+  CGFloat textX = inset + knob + 8;
+  CGFloat textW = MAX(0, size.width - textX - inset - 8);
+  if (_hintSecondary.hidden || [_hintSecondary.text length] == 0) {
     _hint.frame = CGRectMake(textX, 0, textW, size.height);
   } else {
-    _hint.frame = CGRectMake(textX, 6, textW, size.height / 2);
-    _hintSecondary.frame = CGRectMake(textX, size.height / 2, textW, size.height / 2 - 6);
+    CGFloat primary = ceilf((float)_hint.font.lineHeight) + 2;
+    CGFloat secondary = ceilf((float)_hintSecondary.font.lineHeight) + 2;
+    CGFloat top = MAX(2, (size.height - primary - secondary) / 2);
+    _hint.frame = CGRectMake(textX, top, textW, primary);
+    _hintSecondary.frame = CGRectMake(textX, top + primary, textW, secondary);
   }
   _countdown.frame = CGRectMake(8, 4, MAX(0, size.width - 16), size.height / 2);
   _cancelHint.frame = CGRectMake(8, size.height / 2, MAX(0, size.width - 16),
@@ -657,10 +1025,15 @@ static const NSInteger kProxyEdge = 64;
 
 #pragma mark - admin QR
 
+// The address label shrinks between these before anything is dropped.
+static const CGFloat kQrUrlMaxPt = 15;
+static const CGFloat kQrUrlMinPt = 9;
+
 @implementation DBAdminQrView {
   UIImageView *_image;
   UILabel *_urlLabel;
-  UILabel *_caption;
+  UILabel *_versionLabel;
+  NSString *_caption;
   NSString *_url;
   NSInteger _generation;
 }
@@ -679,37 +1052,59 @@ static const NSInteger kProxyEdge = 64;
     _image.accessibilityIdentifier = @"admin_page_qr";
     [self addSubview:_image];
 
-    _caption = [[UILabel alloc] init];
-    _caption.backgroundColor = [UIColor clearColor];
-    _caption.font = [UIFont systemFontOfSize:12];
-    _caption.numberOfLines = 2;
-    [self addSubview:_caption];
 
     _urlLabel = [[UILabel alloc] init];
     _urlLabel.backgroundColor = [UIColor clearColor];
-    _urlLabel.font = [UIFont systemFontOfSize:12];
-    _urlLabel.numberOfLines = 2;
-    _urlLabel.lineBreakMode = NSLineBreakByCharWrapping;
+    _urlLabel.font = [UIFont systemFontOfSize:kQrUrlMaxPt];
+    // One line across the whole remaining width, shrinking to 9 pt before it
+    // gives up. Character wrapping used to put the address on a second line
+    // that the row is not tall enough to show, which is why it arrived as
+    // "http://10.10.38.147:47180/admi".
+    _urlLabel.numberOfLines = 1;
+    _urlLabel.lineBreakMode = NSLineBreakByTruncatingTail;
+    _urlLabel.adjustsFontSizeToFitWidth = YES;
+    _urlLabel.minimumFontSize = kQrUrlMinPt;
+    _urlLabel.isAccessibilityElement = YES;
     [self addSubview:_urlLabel];
+
+    // Line 2 matches line 1 exactly: same font, same colour, same left edge.
+    // They used to be two labels in two colours on two different baselines,
+    // which is what made the footer look like two unrelated fragments.
+    _versionLabel = [[UILabel alloc] init];
+    _versionLabel.backgroundColor = [UIColor clearColor];
+    _versionLabel.font = [UIFont systemFontOfSize:kQrUrlMaxPt];
+    _versionLabel.numberOfLines = 1;
+    _versionLabel.lineBreakMode = NSLineBreakByTruncatingTail;
+    _versionLabel.adjustsFontSizeToFitWidth = YES;
+    _versionLabel.minimumFontSize = kQrUrlMinPt;
+    [self addSubview:_versionLabel];
   }
   return self;
 }
 
 - (void)applyPalette:(DBUiPalette *)palette {
-  _caption.textColor = palette.mutedInk;
+  // Both lines take the same ink; the footer plate behind them is what makes
+  // it readable, so neither needs to be muted away from the other.
   _urlLabel.textColor = palette.ink;
+  _versionLabel.textColor = palette.ink;
+}
+
+- (void)setVersionLine:(NSString *)text {
+  _versionLabel.text = text ?: @"";
+  [self setNeedsLayout];
 }
 
 - (void)setUrl:(NSString *)url caption:(NSString *)caption {
-  _caption.text = caption ?: @"";
+  _caption = [caption copy] ?: @"";
   if ([url length] == 0) {
     _url = @"";
     _image.image = nil;
     _urlLabel.text = @"";
     return;
   }
-  _urlLabel.text = url;
-  if ([_url isEqualToString:url] && _image.image != nil) return;
+  BOOL sameUrl = [_url isEqualToString:url];
+  [self setNeedsLayout];
+  if (sameUrl && _image.image != nil) return;
   _url = [url copy];
   NSInteger generation = ++_generation;
   NSString *want = [url copy];
@@ -726,16 +1121,38 @@ static const NSInteger kProxyEdge = 64;
   });
 }
 
+// The address a person has to read off the screen, in the longest form that
+// fits the width at the smallest font we allow. The host and port are the part
+// they actually have to type, so the path goes first and the scheme second;
+// only a width too narrow for the host alone can truncate inside it.
+- (NSString *)addressForWidth:(CGFloat)width {
+  NSArray *candidates = [DBAdminAddress formsForUrl:_url];
+  if ([candidates count] == 0) return @"";
+  UIFont *smallest = [UIFont systemFontOfSize:kQrUrlMinPt];
+  for (NSString *candidate in candidates) {
+    if ([candidate sizeWithFont:smallest].width <= width) return candidate;
+  }
+  return [candidates lastObject];
+}
+
 - (void)layoutSubviews {
   [super layoutSubviews];
   CGSize size = self.bounds.size;
   CGFloat side = MIN(size.height, MAX(56, size.width * 0.42));
   _image.frame = CGRectMake(0, (size.height - side) / 2, side, side);
+  // Both lines start at the QR code's right edge and run to the end of the
+  // block, stacked, so the footer reads as one thing.
   CGFloat textX = side + 10;
   CGFloat textW = MAX(0, size.width - textX);
-  _caption.frame = CGRectMake(textX, (size.height - side) / 2, textW, 30);
-  _urlLabel.frame = CGRectMake(textX, (size.height - side) / 2 + 30, textW,
-                               MAX(0, side - 30));
+  CGFloat lineHeight = 22;
+  CGFloat top = floorf((float)((size.height - lineHeight * 2) / 2));
+  _urlLabel.frame = CGRectMake(textX, top, textW, lineHeight);
+  _versionLabel.frame = CGRectMake(textX, top + lineHeight, textW, lineHeight);
+  _urlLabel.text = [self addressForWidth:textW];
+  // The dropped caption is what told a screen reader what the address is for.
+  _urlLabel.accessibilityLabel = [_caption length] > 0
+      ? [NSString stringWithFormat:@"%@ %@", _caption, _urlLabel.text ?: @""]
+      : _urlLabel.text;
 }
 
 @end

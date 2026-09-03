@@ -49,12 +49,31 @@ assert.deepStrictEqual(timeEntries, [
 ]);
 // integrations.tz_offset_min is derived by core; writing it from the form would fight core.
 assert.ok(!timeEntries.some((e) => e.key === "integrations.tz_offset_min"));
+// A clock correction is stable for days: an hour is the floor and a week the ceiling, and the
+// default is once a day.
+assert.deepStrictEqual(
+  L.timeEntries({ zone: "Asia/Tokyo", ntp_enabled: false, servers: "ntp.nict.jp" })
+    .find((e) => e.key === "time.ntp.interval_s"),
+  { key: "time.ntp.interval_s", value: 86400 });
+assert.strictEqual(
+  L.timeEntries({ zone: "Asia/Tokyo", ntp_enabled: true, servers: "a", interval_s: 604800 })
+    .find((e) => e.key === "time.ntp.interval_s").value, 604800);
 for (const bad of [
-  { zone: "Mars/Olympus", servers: "a", interval_s: 900 },
-  { zone: "Asia/Tokyo", servers: "", interval_s: 900 },
+  { zone: "Mars/Olympus", servers: "a", interval_s: 86400 },
+  { zone: "Asia/Tokyo", servers: "", interval_s: 86400 },
   { zone: "Asia/Tokyo", servers: "a", interval_s: 59 },
-  { zone: "Asia/Tokyo", servers: "a", interval_s: 86401 }
+  { zone: "Asia/Tokyo", servers: "a", interval_s: 900 },
+  { zone: "Asia/Tokyo", servers: "a", interval_s: 3599 },
+  { zone: "Asia/Tokyo", servers: "a", interval_s: 604801 }
 ]) assert.throws(() => L.timeEntries(bad), "should refuse " + JSON.stringify(bad));
+
+// ---- the status card surfaces the failure backoff, which is neither working nor idle ------
+const backingOff = L.timeStatusModel({ time: { enabled: true, source: "system",
+                                               retry_in_s: 120, err: "no_response" } });
+assert.strictEqual(backingOff.retryInS, 120);
+assert.strictEqual(backingOff.errorKey, "time.err_no_response");
+assert.strictEqual(L.timeStatusModel({ time: {} }).retryInS, 0);
+assert.strictEqual(L.timeStatusModel({ time: {} }).intervalS, 86400);
 
 // ---- the status card reads core's reported source, never the toggle ----------------------
 const offModel = L.timeStatusModel({ time: { zone: "Asia/Tokyo", source: "system" } });
@@ -258,3 +277,49 @@ assert.ok(/api\\\/doors\\\/\[\^\\\/\]\+\\\/notice/.test(adminSource),
   "the mock must answer the notice endpoint");
 
 console.log("settings tests: ok");
+
+// ---- the incoming-call return countdown ---------------------------------------------------
+// An indoor panel counts down in the call-screen title and returns home at zero. The value is a
+// cluster default with a per-device override, resolved the same way core resolves it.
+assert.strictEqual(L.CALL_RETURN_DEFAULT, 60);
+assert.strictEqual(L.CALL_RETURN_MIN, 5);
+assert.strictEqual(L.CALL_RETURN_MAX, 600);
+assert.deepStrictEqual(L.callReturnSeconds({}, "dev1"), { seconds: 60, source: "default" });
+assert.deepStrictEqual(L.callReturnSeconds({ call: { indoor: { return_s: 45 } } }, "dev1"),
+  { seconds: 45, source: "cluster" });
+assert.deepStrictEqual(L.callReturnSeconds({
+  call: { indoor: { return_s: 45 } },
+  devices: { dev1: { local: { call: { return_s: 20 } } } }
+}, "dev1"), { seconds: 20, source: "device" });
+// A device without an override of its own still follows the cluster.
+assert.strictEqual(L.callReturnSeconds({
+  call: { indoor: { return_s: 45 } },
+  devices: { dev1: { local: { call: { return_s: 20 } } } }
+}, "dev2").source, "cluster");
+// An out-of-range stored value is clamped rather than shown as-is.
+assert.strictEqual(L.callReturnSeconds({ call: { indoor: { return_s: 5000 } } }, "d").seconds,
+  600);
+assert.strictEqual(L.callReturnSeconds({ call: { indoor: { return_s: 1 } } }, "d").seconds, 5);
+
+assert.deepStrictEqual(L.callReturnEntries(45), [{ key: "call.indoor.return_s", value: 45 }]);
+assert.deepStrictEqual(L.callReturnEntries("45"), [{ key: "call.indoor.return_s", value: 45 }]);
+for (const bad of [4, 601, "", "abc"])
+  assert.throws(() => L.callReturnEntries(bad), "should refuse " + bad);
+
+assert.deepStrictEqual(L.deviceCallReturnEntries("dev1", { inherit: false, seconds: 20 }),
+  { entries: [{ key: "devices.dev1.local.call.return_s", value: 20 }], dels: [] });
+// Inheriting deletes the leaf instead of copying the cluster value into the device.
+assert.deepStrictEqual(L.deviceCallReturnEntries("dev1", { inherit: true }),
+  { entries: [], dels: ["devices.dev1.local.call.return_s"] });
+assert.throws(() => L.deviceCallReturnEntries("dev1", { inherit: false, seconds: 601 }));
+
+for (const language of ["ja", "en", "zh"]) {
+  const catalog = JSON.parse(fs.readFileSync(
+    path.join(__dirname, "../locale/" + language + ".json"), "utf8"));
+  for (const key of ["call.return_title", "call.return_s", "call.return_hint",
+                     "call.return_device_hint", "call.return_inherit", "call.return_invalid"])
+    assert.ok(Object.prototype.hasOwnProperty.call(catalog, key),
+      language + " is missing " + key);
+}
+
+console.log("call return tests: ok");

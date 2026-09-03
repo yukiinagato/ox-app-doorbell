@@ -151,6 +151,12 @@ def to_android(value):
             order.append(name)
         return f"%{order.index(name) + 1}$s"
 
+    # Android formats a resource only when arguments are passed (getString(id, args)), and that path
+    # runs the value through String.format: a literal '%' next to a placeholder (e.g. "{n}%") must be
+    # doubled or the lookup throws and the raw key leaks into the UI. Placeholder-free strings are
+    # returned verbatim by getString(id), so their '%' must stay single.
+    if PH_RE.search(value):
+        value = value.replace("%", "%%")
     return PH_RE.sub(replace_placeholder, value)
 
 

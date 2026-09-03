@@ -108,9 +108,11 @@
   <data name="admin_door_call_sound" xml:space="preserve"><value>室外機の呼出音</value></data>
   <data name="admin_door_list" xml:space="preserve"><value>ドア</value></data>
   <data name="admin_door_or_device" xml:space="preserve"><value>ドア／機器</value></data>
+  <data name="admin_door_required" xml:space="preserve"><value>門口機には担当ドアを選択してください</value></data>
+  <data name="admin_door_unconfigured" xml:space="preserve"><value>未設定</value></data>
   <data name="admin_doors" xml:space="preserve"><value>ドア／建物</value></data>
   <data name="admin_drop_here" xml:space="preserve"><value>ここにファイルをドラッグ＆ドロップ／クリックで選択</value></data>
-  <data name="admin_duty" xml:space="preserve"><value>duty</value></data>
+  <data name="admin_duty" xml:space="preserve"><value>担当</value></data>
   <data name="admin_edit" xml:space="preserve"><value>編集</value></data>
   <data name="admin_enabled" xml:space="preserve"><value>有効</value></data>
   <data name="admin_err_no_chat" xml:space="preserve"><value>宛先 chat ID がありません</value></data>
@@ -124,7 +126,7 @@
   <data name="admin_fleet" xml:space="preserve"><value>機器を管理</value></data>
   <data name="admin_global" xml:space="preserve"><value>全体</value></data>
   <data name="admin_helper_auto" xml:space="preserve"><value>自動</value></data>
-  <data name="admin_helper_mode" xml:space="preserve"><value>保活ヘルパー</value></data>
+  <data name="admin_helper_mode" xml:space="preserve"><value>復帰ヘルパー</value></data>
   <data name="admin_helper_off" xml:space="preserve"><value>無効</value></data>
   <data name="admin_helper_on" xml:space="preserve"><value>常に有効</value></data>
   <data name="admin_host" xml:space="preserve"><value>ホスト</value></data>
@@ -172,7 +174,7 @@
   <data name="admin_native_ui_apply_report" xml:space="preserve"><value>ネイティブ UI 適用結果</value></data>
   <data name="admin_never_suppress" xml:space="preserve"><value>常に許可</value></data>
   <data name="admin_no_changes" xml:space="preserve"><value>変更はありません</value></data>
-  <data name="admin_not_ready" xml:space="preserve"><value>未準備</value></data>
+  <data name="admin_not_ready" xml:space="preserve"><value>準備未完了</value></data>
   <data name="admin_notify" xml:space="preserve"><value>通知</value></data>
   <data name="admin_offline" xml:space="preserve"><value>オフライン</value></data>
   <data name="admin_online" xml:space="preserve"><value>オンライン</value></data>
@@ -191,7 +193,7 @@
   <data name="admin_pair_none" xml:space="preserve"><value>待機中のデバイスはありません</value></data>
   <data name="admin_pair_override_active" xml:space="preserve"><value>現在この組合せの上書きを使用しています。</value></data>
   <data name="admin_pair_override_inherited" xml:space="preserve"><value>上書きはありません。編集値は全体設定を継承しています。</value></data>
-  <data name="admin_pair_secure_failed" xml:space="preserve"><value>配対鍵を安全に保存できませんでした。ストレージと権限を確認してください。</value></data>
+  <data name="admin_pair_secure_failed" xml:space="preserve"><value>ペアリングキーを安全に保存できませんでした。ストレージと権限を確認してください。</value></data>
   <data name="admin_pair_self_unpaired" xml:space="preserve"><value>この端末はまだクラスタに参加していません。最初の 1 台ならここで新規作成してください。</value></data>
   <data name="admin_panel_token" xml:space="preserve"><value>パネル token</value></data>
   <data name="admin_pass" xml:space="preserve"><value>パスワード</value></data>
@@ -232,7 +234,7 @@
   <data name="admin_runtime_codec" xml:space="preserve"><value>メディア</value></data>
   <data name="admin_runtime_health" xml:space="preserve"><value>実行状態</value></data>
   <data name="admin_runtime_heartbeat" xml:space="preserve"><value>ハートビート</value></data>
-  <data name="admin_runtime_helper" xml:space="preserve"><value>保活ヘルパー</value></data>
+  <data name="admin_runtime_helper" xml:space="preserve"><value>復帰ヘルパー</value></data>
   <data name="admin_runtime_last_exit" xml:space="preserve"><value>前回終了</value></data>
   <data name="admin_runtime_safe_mode" xml:space="preserve"><value>セーフモード</value></data>
   <data name="admin_runtime_unreported" xml:space="preserve"><value>未報告</value></data>
@@ -349,17 +351,33 @@
   <data name="admin_with_snapshot" xml:space="preserve"><value>写真付き</value></data>
   <data name="admin_write" xml:space="preserve"><value>書込</value></data>
   <data name="app_name" xml:space="preserve"><value>ドアホン</value></data>
+  <data name="call_return_device_hint" xml:space="preserve"><value>空欄にせず「クラスタの既定に合わせる」で既定に戻せます</value></data>
+  <data name="call_return_hint" xml:space="preserve"><value>着信画面のタイトルに残り秒数が出ます。0 になるとホームに戻ります。訪問者が取り消しても映像はそのまま残り、数字をタップすると戻りません</value></data>
+  <data name="call_return_inherit" xml:space="preserve"><value>クラスタの既定に合わせる</value></data>
+  <data name="call_return_invalid" xml:space="preserve"><value>戻るまでの秒数は 5 秒から 600 秒の間で指定してください</value></data>
+  <data name="call_return_s" xml:space="preserve"><value>戻るまでの秒数</value></data>
+  <data name="call_return_title" xml:space="preserve"><value>着信画面から戻るまで</value></data>
   <data name="calling_cancel" xml:space="preserve"><value>取消し</value></data>
   <data name="calling_cancel_failed" xml:space="preserve"><value>呼出を取り消せませんでした</value></data>
   <data name="calling_no_answer" xml:space="preserve"><value>応答がありません</value></data>
   <data name="calling_title" xml:space="preserve"><value>呼び出し中…</value></data>
+  <data name="cluster_devices_a11y" xml:space="preserve"><value>クラスタの端末 {0} 台</value></data>
+  <data name="cluster_door_stations_a11y" xml:space="preserve"><value>門口機 {0}/{1} 台オンライン</value></data>
+  <data name="cluster_indoor_panels_a11y" xml:space="preserve"><value>室内機 {0}/{1} 台オンライン</value></data>
   <data name="dash_admin" xml:space="preserve"><value>管理</value></data>
+  <data name="dash_count_cluster" xml:space="preserve"><value>クラスタの機器 {0} 台</value></data>
+  <data name="dash_count_devices" xml:space="preserve"><value>機器 {0} 台</value></data>
+  <data name="dash_count_door_stations" xml:space="preserve"><value>門口機 {0} / {1} 台オンライン</value></data>
+  <data name="dash_count_doors" xml:space="preserve"><value>門口機 {0}/{1} 台が接続中</value></data>
+  <data name="dash_count_indoor_panels" xml:space="preserve"><value>室内機 {0}/{1} 台オンライン</value></data>
+  <data name="dash_count_panels" xml:space="preserve"><value>室内機 {0}/{1} 台が接続中</value></data>
   <data name="dash_doors" xml:space="preserve"><value>門口機</value></data>
   <data name="dash_last_answer" xml:space="preserve"><value>最終応答 {0}</value></data>
   <data name="dash_no_doors" xml:space="preserve"><value>門口機がまだ登録されていません</value></data>
   <data name="dash_notice_global" xml:space="preserve"><value>お知らせ（全体）</value></data>
   <data name="dash_recent_calls" xml:space="preserve"><value>呼出履歴</value></data>
   <data name="dash_see_all" xml:space="preserve"><value>すべて見る</value></data>
+  <data name="dash_tile_no_station" xml:space="preserve"><value>門口機なし</value></data>
   <data name="dash_tile_offline" xml:space="preserve"><value>オフライン</value></data>
   <data name="dash_tile_open" xml:space="preserve"><value>見る</value></data>
   <data name="dash_tile_watch" xml:space="preserve"><value>見る</value></data>
@@ -372,6 +390,8 @@
   <data name="day_tue" xml:space="preserve"><value>火</value></data>
   <data name="day_wed" xml:space="preserve"><value>水</value></data>
   <data name="degraded_notified" xml:space="preserve"><value>呼び出し済み・応答をお待ちください</value></data>
+  <data name="door_call_action" xml:space="preserve"><value>呼出</value></data>
+  <data name="door_camera_denied" xml:space="preserve"><value>カメラの使用が許可されていません — 設定 › プライバシー</value></data>
   <data name="door_hint_call" xml:space="preserve"><value>ボタンを押すと住人を呼び出します</value></data>
   <data name="door_lang_switch" xml:space="preserve"><value>言語</value></data>
   <data name="door_notice_for_this" xml:space="preserve"><value>この門口機にお知らせ</value></data>
@@ -380,7 +400,7 @@
   <data name="emergency_active_detail" xml:space="preserve"><value>緊急モードが発報されています</value></data>
   <data name="emergency_button" xml:space="preserve"><value>緊急</value></data>
   <data name="emergency_cancel" xml:space="preserve"><value>解除</value></data>
-  <data name="emergency_clear_instruction" xml:space="preserve"><value>解除は管理画面または端末の PIN 操作で行ってください。</value></data>
+  <data name="emergency_clear_instruction" xml:space="preserve"><value>警報を解除するには、管理画面を使用するか、端末で管理パスワードを入力してください。</value></data>
   <data name="emergency_hold_hint" xml:space="preserve"><value>長押しで発報 ({0} 秒)</value></data>
   <data name="emergency_notified" xml:space="preserve"><value>家族に通知しました</value></data>
   <data name="emergency_notify_off" xml:space="preserve"><value>✅ 緊急解除</value></data>
@@ -410,7 +430,9 @@
   <data name="history_today" xml:space="preserve"><value>今日</value></data>
   <data name="history_unread_banner" xml:space="preserve"><value>不在着信が {0} 件あります</value></data>
   <data name="history_yesterday" xml:space="preserve"><value>昨日</value></data>
+  <data name="idle_call" xml:space="preserve"><value>呼出</value></data>
   <data name="idle_call_button" xml:space="preserve"><value>{0} 呼出</value></data>
+  <data name="idle_call_button_verb" xml:space="preserve"><value>呼出</value></data>
   <data name="idle_choose_purpose" xml:space="preserve"><value>ご用件をお選びください</value></data>
   <data name="idle_language" xml:space="preserve"><value>言語</value></data>
   <data name="idle_touch_to_call" xml:space="preserve"><value>タッチして呼び出してください</value></data>
@@ -426,7 +448,7 @@
   <data name="info_battery" xml:space="preserve"><value>バッテリー</value></data>
   <data name="info_camera" xml:space="preserve"><value>カメラ</value></data>
   <data name="info_camera_absent_ipad1" xml:space="preserve"><value>無（iPad 1 はカメラ非搭載）</value></data>
-  <data name="info_capabilities" xml:space="preserve"><value>能力</value></data>
+  <data name="info_capabilities" xml:space="preserve"><value>対応機能</value></data>
   <data name="info_components" xml:space="preserve"><value>コンポーネント</value></data>
   <data name="info_core_version" xml:space="preserve"><value>コア</value></data>
   <data name="info_device" xml:space="preserve"><value>端末</value></data>
@@ -469,10 +491,10 @@
   <data name="language_name_pt" xml:space="preserve"><value>Português</value></data>
   <data name="language_name_vi" xml:space="preserve"><value>Tiếng Việt</value></data>
   <data name="language_name_zh" xml:space="preserve"><value>中文</value></data>
-  <data name="monitor_admin_qr" xml:space="preserve"><value>管理ページ QR</value></data>
+  <data name="monitor_admin_qr" xml:space="preserve"><value>管理ページ用QRコード</value></data>
   <data name="monitor_admin_qr_none" xml:space="preserve"><value>管理アドレスなし</value></data>
   <data name="monitor_admin_qr_select" xml:space="preserve"><value>管理ページの IP アドレスを選択</value></data>
-  <data name="monitor_choose" xml:space="preserve"><value>見る門口機を選択</value></data>
+  <data name="monitor_choose" xml:space="preserve"><value>表示する門口機を選択</value></data>
   <data name="monitor_close" xml:space="preserve"><value>閉じる</value></data>
   <data name="monitor_live" xml:space="preserve"><value>リアルタイム映像</value></data>
   <data name="monitor_open" xml:space="preserve"><value>門口を見る</value></data>
@@ -495,7 +517,7 @@
   <data name="notice_expiry_until_cleared" xml:space="preserve"><value>取り消すまで</value></data>
   <data name="notice_failed" xml:space="preserve"><value>お知らせを保存できませんでした</value></data>
   <data name="notice_for_this_door" xml:space="preserve"><value>この門口機にお知らせ</value></data>
-  <data name="notice_from" xml:space="preserve"><value>作成</value></data>
+  <data name="notice_from" xml:space="preserve"><value>発信元</value></data>
   <data name="notice_global_button" xml:space="preserve"><value>お知らせ（全体）</value></data>
   <data name="notice_limit" xml:space="preserve"><value>200 文字まで</value></data>
   <data name="notice_none" xml:space="preserve"><value>お知らせはありません</value></data>
@@ -572,12 +594,29 @@
   <data name="pair_err_timeout" xml:space="preserve"><value>応答がありませんでした。もう一度お試しください</value></data>
   <data name="pair_err_unknown" xml:space="preserve"><value>追加できませんでした。もう一度お試しください</value></data>
   <data name="pair_err_detail" xml:space="preserve"><value>詳細: {0}</value></data>
+  <data name="pair_invitation_confirm" xml:space="preserve"><value>{0} に参加しますか？</value></data>
+  <data name="pair_invitation_confirm_unnamed" xml:space="preserve"><value>このクラスタに参加しますか？</value></data>
+  <data name="pair_invitation_expired" xml:space="preserve"><value>この招待は期限切れです。相手の端末で新しいコードを表示してください</value></data>
+  <data name="pair_invitation_invalid" xml:space="preserve"><value>この招待を読み取れませんでした</value></data>
+  <data name="pair_invitation_replace" xml:space="preserve"><value>この端末は別のクラスタに参加しています。参加すると今の設定は消えます</value></data>
+  <data name="pair_invitation_title" xml:space="preserve"><value>招待を読み取りました</value></data>
+  <data name="pair_invite_cluster" xml:space="preserve"><value>クラスタ: {0}</value></data>
+  <data name="pair_invite_expired" xml:space="preserve"><value>この招待は期限切れです。相手の端末で新しいコードを発行してください</value></data>
+  <data name="pair_invite_invalid" xml:space="preserve"><value>この招待は読み取れませんでした</value></data>
+  <data name="pair_invite_join" xml:space="preserve"><value>このクラスタに参加</value></data>
+  <data name="pair_invite_leave_current" xml:space="preserve"><value>この端末はすでに別のクラスタに参加しています。参加すると現在のクラスタから離脱し、この端末の設定はすべて消去されます。</value></data>
+  <data name="pair_invite_missing_host" xml:space="preserve"><value>この招待に接続先が含まれていません</value></data>
+  <data name="pair_invite_missing_pin" xml:space="preserve"><value>この招待にペアリング PIN が含まれていません</value></data>
+  <data name="pair_invite_title" xml:space="preserve"><value>クラスタへの招待</value></data>
   <data name="pair_join_required" xml:space="preserve"><value>接続先とペアリング PIN を入力してください</value></data>
   <data name="pair_join_submit" xml:space="preserve"><value>参加</value></data>
+  <data name="pair_join_this_cluster" xml:space="preserve"><value>このクラスタに参加</value></data>
   <data name="pair_join_with_code" xml:space="preserve"><value>ペアリング PIN で参加</value></data>
   <data name="pair_joined" xml:space="preserve"><value>クラスタに参加しました</value></data>
   <data name="pair_joining" xml:space="preserve"><value>クラスタに参加しています…</value></data>
   <data name="pair_later" xml:space="preserve"><value>あとで設定</value></data>
+  <data name="pair_link_from" xml:space="preserve"><value>{0} への招待</value></data>
+  <data name="pair_link_leave_current" xml:space="preserve"><value>この端末はすでに別のクラスタに参加しています。参加すると現在の設定はすべて消去されます。</value></data>
   <data name="pair_membership" xml:space="preserve"><value>クラスタ · {0} 台</value></data>
   <data name="pair_membership_connected" xml:space="preserve"><value>{0} 台接続中</value></data>
   <data name="pair_mint_unsupported" xml:space="preserve"><value>この端末のコアはペアリング PIN の発行に対応していません。更新してください</value></data>
@@ -591,17 +630,18 @@
   <data name="pair_panel_title" xml:space="preserve"><value>端末を追加</value></data>
   <data name="pair_persist_error_body" xml:space="preserve"><value>端末の安全な保存領域に書き込めませんでした。空き容量と権限を確認して再試行してください。</value></data>
   <data name="pair_persist_error_title" xml:space="preserve"><value>設定を保存できませんでした</value></data>
-  <data name="pair_pin_unavailable" xml:space="preserve"><value>この版のコアでは PIN を発行できません</value></data>
+  <data name="pair_pin_unavailable" xml:space="preserve"><value>この版のコアではペアリング PIN を発行できません</value></data>
   <data name="pair_qr_caption" xml:space="preserve"><value>別の端末でこの QR を読み取ると追加できます</value></data>
   <data name="pair_qr_pending" xml:space="preserve"><value>追加用 QR を準備しています…</value></data>
   <data name="pair_retry" xml:space="preserve"><value>再試行</value></data>
   <data name="pair_revoked" xml:space="preserve"><value>この端末はクラスタから削除されました</value></data>
   <data name="pair_role_door_station" xml:space="preserve"><value>門口機</value></data>
   <data name="pair_role_indoor_panel" xml:space="preserve"><value>室内機</value></data>
+  <data name="pair_scan_button" xml:space="preserve"><value>QR を読み取る</value></data>
   <data name="pair_scan_camera_denied" xml:space="preserve"><value>カメラの使用が許可されていません。端末の設定でカメラを許可してください。</value></data>
   <data name="pair_scan_cancel" xml:space="preserve"><value>キャンセル</value></data>
   <data name="pair_scan_denied" xml:space="preserve"><value>カメラを開けませんでした。ブラウザのカメラ権限を確認してください</value></data>
-  <data name="pair_scan_hint" xml:space="preserve"><value>新しい端末に表示された追加用 QR に合わせてください</value></data>
+  <data name="pair_scan_hint" xml:space="preserve"><value>新しい端末に表示された追加用QRコードにカメラを向けてください</value></data>
   <data name="pair_scan_no_camera" xml:space="preserve"><value>この端末にはカメラがありません。別の端末で読み取るか、ペアリング PIN を使ってください。</value></data>
   <data name="pair_scan_opening" xml:space="preserve"><value>カメラを起動しています…</value></data>
   <data name="pair_scan_paste" xml:space="preserve"><value>QR の文字列を貼り付ける</value></data>
@@ -668,7 +708,7 @@
   <data name="panel_lifecycle_identity_missing" xml:space="preserve"><value>呼出の識別情報がないため、安全に応答できません</value></data>
   <data name="panel_mock_incall" xml:space="preserve"><value>通話中 (mock)</value></data>
   <data name="panel_mock_registered" xml:space="preserve"><value>内線 {0} 登録済み (mock)</value></data>
-  <data name="panel_monitor_title" xml:space="preserve"><value>受鈴モニター</value></data>
+  <data name="panel_monitor_title" xml:space="preserve"><value>着信モニター</value></data>
   <data name="panel_new_call_detected" xml:space="preserve"><value>新しい呼出を検出しました — 状態を更新します</value></data>
   <data name="panel_no_audio_note" xml:space="preserve"><value>この玄関では通話できません (通知のみ)</value></data>
   <data name="panel_no_extension" xml:space="preserve"><value>内線なし</value></data>
@@ -708,12 +748,12 @@
   <data name="power_no_battery" xml:space="preserve"><value>電池なし</value></data>
   <data name="power_percent" xml:space="preserve"><value>{0}%</value></data>
   <data name="power_title" xml:space="preserve"><value>電池</value></data>
-  <data name="power_unknown" xml:space="preserve"><value>未対応</value></data>
+  <data name="power_unknown" xml:space="preserve"><value>未報告</value></data>
   <data name="purpose_cancel_call" xml:space="preserve"><value>呼び出しを取り消す</value></data>
   <data name="purpose_disabled" xml:space="preserve"><value>非表示</value></data>
   <data name="purpose_enabled" xml:space="preserve"><value>表示する</value></data>
   <data name="purpose_select_failed" xml:space="preserve"><value>用件を送信できませんでした</value></data>
-  <data name="purpose_sent" xml:space="preserve"><value>{0} で呼び出しました</value></data>
+  <data name="purpose_sent" xml:space="preserve"><value>呼び出し中（{0}）</value></data>
   <data name="purpose_skip" xml:space="preserve"><value>用件を選ばず続ける</value></data>
   <data name="reply_answered" xml:space="preserve"><value>応答済み ({0})</value></data>
   <data name="reply_banner" xml:space="preserve"><value>住人からのメッセージ</value></data>
@@ -740,7 +780,7 @@ ON</value></data>
 OFF</value></data>
   <data name="ring_monitor_two_line_on" xml:space="preserve"><value>モニター
 ON</value></data>
-  <data name="ring_monitoring" xml:space="preserve"><value>門口の音声を再生中</value></data>
+  <data name="ring_monitoring" xml:space="preserve"><value>玄関の音声を再生中</value></data>
   <data name="ring_no_video" xml:space="preserve"><value>門口機の映像がありません</value></data>
   <data name="ring_open_door" xml:space="preserve"><value>ドアを開ける</value></data>
   <data name="ring_open_failed" xml:space="preserve"><value>開錠信号を送信できませんでした</value></data>
@@ -749,6 +789,7 @@ ON</value></data>
   <data name="ring_purpose_badge" xml:space="preserve"><value>用件: {0}</value></data>
   <data name="ring_quick_replies" xml:space="preserve"><value>クイック返信</value></data>
   <data name="ring_quick_reply" xml:space="preserve"><value>クイック返信</value></data>
+  <data name="ring_return_countdown_a11y" xml:space="preserve"><value>自動で戻るまでの秒数（タップで解除）</value></data>
   <data name="ring_unlock" xml:space="preserve"><value>解錠</value></data>
   <data name="ring_unlock_sent" xml:space="preserve"><value>解錠信号を送信しました</value></data>
   <data name="ring_unlock_unconfigured" xml:space="preserve"><value>この門口機には開錠の操作が設定されていません</value></data>
@@ -855,7 +896,7 @@ ON</value></data>
   <data name="setup_join_failed" xml:space="preserve"><value>参加できませんでした: {0}</value></data>
   <data name="setup_join_host" xml:space="preserve"><value>接続先（例: 10.0.1.5:47172）</value></data>
   <data name="setup_join_pin" xml:space="preserve"><value>PIN で参加</value></data>
-  <data name="setup_join_required" xml:space="preserve"><value>接続先と PIN を入力してください</value></data>
+  <data name="setup_join_required" xml:space="preserve"><value>接続先とペアリング PIN を入力してください</value></data>
   <data name="setup_message" xml:space="preserve"><value>続行する前に、この端末の役割を確認してください。門口機には一意のドア ID が必要です。</value></data>
   <data name="setup_name" xml:space="preserve"><value>端末名</value></data>
   <data name="setup_new_cluster" xml:space="preserve"><value>── 新規クラスタ ──</value></data>
@@ -906,12 +947,26 @@ PIN: {1}</value></data>
   <data name="theme_appearance_dark" xml:space="preserve"><value>常にダーク</value></data>
   <data name="theme_appearance_light" xml:space="preserve"><value>常にライト</value></data>
   <data name="theme_auto" xml:space="preserve"><value>自動</value></data>
+  <data name="theme_backdrop" xml:space="preserve"><value>背景の暗幕</value></data>
+  <data name="theme_backdrop_enabled" xml:space="preserve"><value>背景の上に暗幕を重ねる</value></data>
+  <data name="theme_backdrop_hint" xml:space="preserve"><value>背景画像の上に重ねる半透明の層です。明るい写真の上でも文字が読めるようにするためのもので、色と濃さを指定できます。既定は黒の 62%。</value></data>
+  <data name="theme_backdrop_invalid" xml:space="preserve"><value>暗幕の濃さは 0 から 100 の整数で指定してください</value></data>
+  <data name="theme_backdrop_source_admin" xml:space="preserve"><value>クラスタの設定です</value></data>
+  <data name="theme_backdrop_source_default" xml:space="preserve"><value>既定値です</value></data>
+  <data name="theme_backdrop_source_device" xml:space="preserve"><value>この端末だけの設定です</value></data>
+  <data name="theme_backdrop_weak" xml:space="preserve"><value>背景画像の上で文字が読みにくくなる可能性があります</value></data>
   <data name="theme_background_source_color" xml:space="preserve"><value>背景色</value></data>
   <data name="theme_background_source_image" xml:space="preserve"><value>背景画像の平均色</value></data>
+  <data name="theme_background_unsampled" xml:space="preserve"><value>背景画像を読み取れませんでした ({0})。文字色は端末側で判定します</value></data>
   <data name="theme_call_button" xml:space="preserve"><value>呼出ボタンの色</value></data>
   <data name="theme_contrast_warning" xml:space="preserve"><value>読みにくい可能性があります（{0}:1）</value></data>
   <data name="theme_custom" xml:space="preserve"><value>指定色</value></data>
   <data name="theme_dark_from" xml:space="preserve"><value>ダークにする時刻</value></data>
+  <data name="theme_glass_blur_hint" xml:space="preserve"><value>対応端末だけに適用されます。0～40、既定値は 32 です。</value></data>
+  <data name="theme_glass_blur_invalid" xml:space="preserve"><value>ぼかし半径は 0 から 40 の整数で指定してください</value></data>
+  <data name="theme_glass_blur_radius" xml:space="preserve"><value>磨りガラスのぼかし半径</value></data>
+  <data name="theme_glass_blur_system" xml:space="preserve"><value>この端末は OS 管理のぼかしを使用するため、半径は変更できません。</value></data>
+  <data name="theme_glass_blur_unavailable" xml:space="preserve"><value>この端末は調整可能なぼかし半径を報告していません。</value></data>
   <data name="theme_ink" xml:space="preserve"><value>文字色</value></data>
   <data name="theme_ink_region" xml:space="preserve"><value>表示箇所</value></data>
   <data name="theme_light_from" xml:space="preserve"><value>ライトにする時刻</value></data>
@@ -926,12 +981,16 @@ PIN: {1}</value></data>
   <data name="theme_region_notice" xml:space="preserve"><value>お知らせ</value></data>
   <data name="theme_region_status_line" xml:space="preserve"><value>状態表示</value></data>
   <data name="theme_region_tile_label" xml:space="preserve"><value>タイルの見出し</value></data>
+  <data name="theme_unsampled_decode_failed" xml:space="preserve"><value>対応していない形式です</value></data>
+  <data name="theme_unsampled_missing" xml:space="preserve"><value>この端末にまだ届いていません</value></data>
+  <data name="theme_unsampled_too_large" xml:space="preserve"><value>画像が大きすぎます</value></data>
   <data name="time_err_bad_reply" xml:space="preserve"><value>サーバーの応答が正しくありません</value></data>
   <data name="time_err_bad_server" xml:space="preserve"><value>サーバーの書き方が正しくありません</value></data>
   <data name="time_err_implausible" xml:space="preserve"><value>測定した時刻が信用できないため使いませんでした</value></data>
   <data name="time_err_no_response" xml:space="preserve"><value>時刻サーバーから応答がありません</value></data>
+  <data name="time_interval_hint" xml:space="preserve"><value>既定は 86400 秒 (1 日)。指定できるのは 3600 秒 (1 時間) から 604800 秒 (7 日) まで。時刻のずれは数日単位でしか変わらないため、これより頻繁に同期しても電池と通信量を使うだけです。失敗したときは 1 分後から順に間隔を空けて再試行します</value></data>
   <data name="time_interval_s" xml:space="preserve"><value>同期間隔 (秒)</value></data>
-  <data name="time_invalid_interval" xml:space="preserve"><value>同期間隔は 60 秒から 86400 秒の間で指定してください</value></data>
+  <data name="time_invalid_interval" xml:space="preserve"><value>同期間隔は 3600 秒から 604800 秒の間で指定してください</value></data>
   <data name="time_invalid_servers" xml:space="preserve"><value>時刻サーバーは 1 行に 1 つ、最大 4 つまでです</value></data>
   <data name="time_invalid_zone" xml:space="preserve"><value>タイムゾーンを選び直してください</value></data>
   <data name="time_last_sync" xml:space="preserve"><value>最終同期</value></data>
@@ -941,6 +1000,7 @@ PIN: {1}</value></data>
   <data name="time_ntp_hint" xml:space="preserve"><value>端末の OS 時計は変更しません。ずれた分だけドアホンの中で補正します</value></data>
   <data name="time_ntp_off" xml:space="preserve"><value>先に「インターネットで時刻を合わせる」を有効にして保存してください</value></data>
   <data name="time_offset" xml:space="preserve"><value>補正</value></data>
+  <data name="time_retrying" xml:space="preserve"><value>同期に失敗しました。{0} 秒後に再試行します</value></data>
   <data name="time_rtt" xml:space="preserve"><value>往復時間</value></data>
   <data name="time_server" xml:space="preserve"><value>接続先</value></data>
   <data name="time_servers" xml:space="preserve"><value>時刻サーバー</value></data>

@@ -13,6 +13,11 @@ static NSString *const kLightSurface = @"#F4F6F8";
 static NSString *const kDarkSurface = @"#101418";
 static NSString *const kLightMuted = @"#4A525C";
 static NSString *const kDarkMuted = @"#9AA4B0";
+// The plate a card, chip or scrim is drawn from. It follows the appearance, not
+// the wallpaper: a dark cluster keeps dark cards over a bright picture, which is
+// what stops the panel looking like a light theme wearing someone else's photo.
+static NSString *const kLightPlate = @"#F4F6F8";
+static NSString *const kDarkPlate = @"#1A1E24";
 static NSString *const kFallbackAccent = @"#1F6FB2";
 
 // Foundation-only dotted lookup so this class stays host-testable.
@@ -220,6 +225,60 @@ static DBRgb DBHslToRgb(double h, double s, double l) {
   return (hex && [self parseHex:hex into:&probe]) ? hex : nil;
 }
 
+// The scrim drawn over the theme picture. Core resolves it into
+// status.display.theme.backdrop; the configuration paths are the fallback for a
+// core that does not publish it yet, per device before cluster. Absent
+// everywhere means today's behaviour: black at 62 %.
++ (NSDictionary *)backdropOverlayForConfig:(NSDictionary *)config
+                                  deviceId:(NSString *)deviceId
+                                   display:(NSDictionary *)display {
+  id resolved = DBThemeDig(display, @"theme.backdrop");
+  if (![resolved isKindOfClass:[NSDictionary class]] && [deviceId length] > 0) {
+    resolved = DBThemeDig(config, [NSString stringWithFormat:
+        @"devices.%@.local.theme.backdrop", deviceId]);
+  }
+  if (![resolved isKindOfClass:[NSDictionary class]])
+    resolved = DBThemeDig(config, @"display.theme.backdrop");
+  NSDictionary *backdrop = [resolved isKindOfClass:[NSDictionary class]] ? resolved : nil;
+
+  BOOL enabled = YES;
+  id rawEnabled = [backdrop objectForKey:@"enabled"];
+  if ([rawEnabled isKindOfClass:[NSNumber class]]) enabled = [(NSNumber *)rawEnabled boolValue];
+
+  NSString *color = @"#000000";
+  id rawColor = [backdrop objectForKey:@"color"];
+  DBRgb probe;
+  if ([rawColor isKindOfClass:[NSString class]] && [self parseHex:rawColor into:&probe])
+    color = rawColor;
+
+  // Percent, as core publishes it. An out-of-range number is clamped rather
+  // than rejected: a scrim is a presentation choice, not a contract.
+  double opacity = 62;
+  id rawOpacity = [backdrop objectForKey:@"opacity"];
+  if ([rawOpacity isKindOfClass:[NSNumber class]]) opacity = [(NSNumber *)rawOpacity doubleValue];
+  if (opacity < 0) opacity = 0;
+  if (opacity > 100) opacity = 100;
+
+  return [NSDictionary dictionaryWithObjectsAndKeys:
+      [NSNumber numberWithBool:enabled], @"enabled",
+      color, @"color",
+      [NSNumber numberWithDouble:opacity], @"opacity", nil];
+}
+
++ (NSUInteger)frostedGlassRadiusForConfig:(NSDictionary *)config
+                                 deviceId:(NSString *)deviceId
+                                  display:(NSDictionary *)display {
+  id raw = DBThemeDig(display, @"theme.glass.blur_radius");
+  if (![raw isKindOfClass:[NSNumber class]] && [deviceId length] > 0) {
+    raw = DBThemeDig(config, [NSString stringWithFormat:
+        @"devices.%@.local.theme.glass.blur_radius", deviceId]);
+  }
+  if (![raw isKindOfClass:[NSNumber class]])
+    raw = DBThemeDig(config, @"display.theme.glass.blur_radius");
+  NSInteger radius = [raw isKindOfClass:[NSNumber class]] ? [raw integerValue] : 24;
+  return (NSUInteger)MAX(0, MIN(40, radius));
+}
+
 + (NSString *)inkHexForRegion:(NSString *)region
                        config:(NSDictionary *)config
                      deviceId:(NSString *)deviceId
@@ -277,6 +336,10 @@ static DBRgb DBHslToRgb(double h, double s, double l) {
 + (NSString *)lightInkHex { return kDarkInk; }
 + (NSString *)darkInkHex { return kLightInk; }
 
++ (NSString *)plateHexForMode:(NSString *)mode {
+  return [mode isEqualToString:@"light"] ? kLightPlate : kDarkPlate;
+}
+
 + (NSString *)surfaceHexForMode:(NSString *)mode {
   return [mode isEqualToString:@"light"] ? kLightSurface : kDarkSurface;
 }
@@ -291,8 +354,35 @@ static DBRgb DBHslToRgb(double h, double s, double l) {
 
 #pragma mark - automatic ink
 
+// WCAG contrast against a background of the given luminance, for one ink.
+static double DBContrastAgainstLuminance(double inkLuminance, double backgroundLuminance) {
+  double hi = MAX(inkLuminance, backgroundLuminance);
+  double lo = MIN(inkLuminance, backgroundLuminance);
+  return (hi + 0.05) / (lo + 0.05);
+}
+
++ (double)luminanceOfHex:(NSString *)hex {
+  DBRgb rgb;
+  if (![self parseHex:hex into:&rgb]) return 0;
+  return [self relativeLuminance:rgb];
+}
+
 + (NSString *)inkModeForLuminance:(double)luminance {
-  return luminance >= 0.5 ? @"dark" : @"light";
+  // Whichever ink reads better wins. A lightness threshold gets midtones
+  // wrong: #BBBBB4 is just below Y = 0.5 yet white on it is 1.9:1 while the
+  // dark ink is 9.6:1.
+  if (luminance < 0) luminance = 0;
+  if (luminance > 1) luminance = 1;
+  double withDarkInk = DBContrastAgainstLuminance([self luminanceOfHex:kLightInk], luminance);
+  double withLightInk = DBContrastAgainstLuminance([self luminanceOfHex:kDarkInk], luminance);
+  return withDarkInk >= withLightInk ? @"dark" : @"light";
+}
+
++ (double)inkCrossoverLuminance {
+  // The two contrasts are equal when (Y + 0.05)^2 = (Yink_dark + 0.05)(Yink_light + 0.05).
+  double darkInk = [self luminanceOfHex:kLightInk];
+  double lightInk = [self luminanceOfHex:kDarkInk];
+  return sqrt((darkInk + 0.05) * (lightInk + 0.05)) - 0.05;
 }
 
 + (NSString *)inkModeForBackgroundHex:(NSString *)hex fallbackMode:(NSString *)fallbackMode {
@@ -328,10 +418,30 @@ static DBRgb DBHslToRgb(double h, double s, double l) {
   return [mode isEqualToString:@"dark"] ? kLightInk : kDarkInk;
 }
 
+// The ink handed in is already the better of the two, so this only fires when
+// neither ink reaches AA against that background.
 + (BOOL)needsInkShadowForInk:(NSString *)inkHex background:(NSString *)backgroundHex {
   double ratio = [self contrastBetweenHex:inkHex andHex:backgroundHex];
   if (ratio <= 0) return NO;
   return ratio < 4.5;
+}
+
++ (BOOL)needsInkShadowForInk:(NSString *)inkHex
+                  background:(NSString *)backgroundHex
+                     darkest:(NSString *)darkestHex
+                    lightest:(NSString *)lightestHex {
+  // Both ink tokens sit outside the luminance range any real photograph
+  // covers, so the worst patch for a given ink is one of the two extremes;
+  // the average is checked too because it costs nothing and is the only value
+  // available when a region was not sampled.
+  if ([self needsInkShadowForInk:inkHex background:backgroundHex]) return YES;
+  if ([darkestHex length] > 0 &&
+      [self needsInkShadowForInk:inkHex background:darkestHex])
+    return YES;
+  if ([lightestHex length] > 0 &&
+      [self needsInkShadowForInk:inkHex background:lightestHex])
+    return YES;
+  return NO;
 }
 
 #pragma mark - per-region sampling
@@ -533,8 +643,8 @@ static NSArray *DBRectArray(double x, double y, double width, double height) {
                                 sosVisible:(BOOL)sosVisible {
   const double pad = 20;
   const double gap = 12;
-  const double qrHeight = 76;
-  const double versionHeight = 18;
+  const double qrHeight = 72;
+  const double versionHeight = 40;  // Two lines rather than an ellipsis.
   const double sosHeight = 62;
   if (viewWidth <= 0 || viewHeight <= 0) {
     return [NSDictionary dictionaryWithObjectsAndKeys:
@@ -585,6 +695,26 @@ static NSArray *DBRectArray(double x, double y, double width, double height) {
       [NSNumber numberWithDouble:bandHeight], @"height", nil];
 }
 
++ (NSString *)shortVersion:(NSString *)version {
+  if (![version isKindOfClass:[NSString class]] || [version length] == 0) return @"";
+  NSRange plus = [version rangeOfString:@"+"];
+  if (plus.location == NSNotFound) return version;
+  NSString *base = [version substringToIndex:plus.location];
+  NSString *build = [version substringFromIndex:plus.location + 1];
+  if ([build length] <= 7) return version;
+  return [NSString stringWithFormat:@"%@+%@", base, [build substringToIndex:7]];
+}
+
++ (NSString *)appVersion:(NSString *)appVersion withCoreVersion:(NSString *)coreVersion {
+  if (![appVersion isKindOfClass:[NSString class]] || [appVersion length] == 0) return @"";
+  if ([appVersion rangeOfString:@"+"].location != NSNotFound) return [self shortVersion:appVersion];
+  NSRange plus = [coreVersion rangeOfString:@"+"];
+  if (plus.location == NSNotFound || plus.location + 1 >= [coreVersion length]) return appVersion;
+  NSString *build = [coreVersion substringFromIndex:plus.location + 1];
+  if ([build length] > 7) build = [build substringToIndex:7];
+  return [NSString stringWithFormat:@"%@+%@", appVersion, build];
+}
+
 + (NSString *)versionLineForName:(NSString *)name
                      coreVersion:(NSString *)coreVersion
                       appVersion:(NSString *)appVersion
@@ -592,10 +722,10 @@ static NSArray *DBRectArray(double x, double y, double width, double height) {
                         charging:(BOOL)charging {
   NSMutableArray *parts = [NSMutableArray array];
   if ([name length] > 0) [parts addObject:name];
-  [parts addObject:[NSString stringWithFormat:@"core v%@",
-      [coreVersion length] > 0 ? coreVersion : @"?"]];
-  [parts addObject:[NSString stringWithFormat:@"app v%@",
-      [appVersion length] > 0 ? appVersion : @"?"]];
+  NSString *core = [self shortVersion:coreVersion];
+  NSString *app = [self appVersion:appVersion withCoreVersion:coreVersion];
+  [parts addObject:[NSString stringWithFormat:@"core v%@", [core length] > 0 ? core : @"?"]];
+  [parts addObject:[NSString stringWithFormat:@"app v%@", [app length] > 0 ? app : @"?"]];
   // A device without a battery reports -1 and shows nothing at all.
   if (batteryPct >= 0) {
     [parts addObject:charging

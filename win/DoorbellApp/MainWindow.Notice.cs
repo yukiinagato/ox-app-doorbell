@@ -151,8 +151,9 @@ namespace DoorbellApp
                 ? App.Core.ClearDoorNotice(door)
                 : App.Core.ClearGlobalNotice();
             ShowCallMessage(Texts.T(ok ? "notice.cleared" : "notice.failed"));
-            RefreshConfigCache();
-            RefreshNoticeSurfaces();
+            // The write lands on core's next turn, so the redraw comes through the coalescer
+            // together with the notice_changed core will publish.
+            RequestHomeRefresh(HomeRefresh.Notice | HomeRefresh.Tiles);
         }
 
 
@@ -199,9 +200,7 @@ namespace DoorbellApp
                 ok = App.Core.SetDoorNotice(dialog.TargetDoor, dialog.NoticeBody,
                                             dialog.ExpiresMs);
             }
-            RefreshConfigCache();
-            RefreshNoticeSurfaces();
-            RefreshDoorTiles();
+            RequestHomeRefresh(HomeRefresh.Notice | HomeRefresh.Tiles);
             if (!ok) MessageBox.Show(this, Texts.T("notice.failed"), Texts.T("notice.title"),
                                      MessageBoxButton.OK, MessageBoxImage.Warning);
         }

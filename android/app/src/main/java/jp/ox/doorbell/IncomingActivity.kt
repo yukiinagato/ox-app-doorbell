@@ -46,6 +46,11 @@ class IncomingActivity : Activity() {
 
     /** モニター ON/OFF: whether the door's audio is being played on this panel. */
     private var monitorOn = true
+    private val monitorBackoff = MonitorBackoff()
+    private val monitorRetry = Runnable { startAudio() }
+    /** RTP counters when the current monitor leg opened, so its own media can be measured. */
+    private var monitorTxAtStart = 0L
+    private var monitorRxAtStart = 0L
 
     /** マイク: only meaningful once the answer leg is up. */
     private var micMuted = false
@@ -62,6 +67,18 @@ class IncomingActivity : Activity() {
     private var oldAudioMode = AudioManager.MODE_NORMAL
     private var oldSpeakerphone = false
     private val autoClose = Runnable { finish() }
+    private val returnCountdown = ReturnCountdown()
+    private val returnTick = object : Runnable {
+        override fun run() {
+            val snapshot = returnCountdown.tick()
+            renderDoorTitle()
+            if (snapshot.shouldReturnHome) {
+                finish()
+                return
+            }
+            if (snapshot.ticking) ui.postDelayed(this, 1000L)
+        }
+    }
     private val answerReplaceTimeout = Runnable {
         if (answerDelayPending) {
             answerDelayPending = false
@@ -135,12 +152,18 @@ class IncomingActivity : Activity() {
         sosSlider = SosSlideView(this, ui)
         sosSlider.enabledProvider = { app.coreOk }
         sosSlider.onTrigger = { app.commitEmergency(true) }
-        findViewById<android.widget.FrameLayout>(R.id.sos_slot).addView(
+        val sosSlot = findViewById<android.widget.FrameLayout>(R.id.sos_slot)
+        sosSlot.addView(
             sosSlider,
             android.widget.FrameLayout.LayoutParams(
                 android.view.ViewGroup.LayoutParams.MATCH_PARENT, dp(56),
             ),
         )
+        // The same cluster rule as every other screen: emergency.button_on_roles, defaulting to
+        // the indoor panel alone when the cluster has never set it.
+        sosSlot.visibility =
+            if (SosSlideState.visibleForRole(cfg, app.boot.role)) android.view.View.VISIBLE
+            else android.view.View.GONE
         applyAppearance()
         buildControlRow(cfg)
         buildNoticeChip()
@@ -162,8 +185,28 @@ class IncomingActivity : Activity() {
         applySemanticUi(cfg, st)
         ui.post(debugTick)
 
-        // Bound unanswered video and monitor-audio resource use.
-        scheduleAutoClose()
+        // The page returns to the home screen on its own after the configured delay; the resident
+        // can stop that by tapping the number.
+        returnCountdown.configure(ReturnCountdown.secondsFrom(st, cfg))
+        findViewById<TextView>(R.id.door_label).setOnClickListener {
+            returnCountdown.cancelByUser()
+            renderDoorTitle()
+        }
+        renderDoorTitle()
+        startReturnCountdown()
+    }
+
+    /** Door name plus the return countdown, which is the only thing that closes this page. */
+    private fun renderDoorTitle() {
+        val suffix = returnCountdown.snapshot().suffix
+        findViewById<TextView>(R.id.door_label).text =
+            if (suffix.isEmpty()) doorLabel() else "${doorLabel()} $suffix"
+    }
+
+    private fun startReturnCountdown() {
+        ui.removeCallbacks(returnTick)
+        ui.removeCallbacks(monitorRetry)
+        if (returnCountdown.snapshot().ticking) ui.postDelayed(returnTick, 1000L)
     }
 
     override fun onNewIntent(intent: Intent?) {
@@ -264,6 +307,7 @@ class IncomingActivity : Activity() {
     override fun onDestroy() {
         if (app.incomingActivity === this) app.incomingActivity = null
         ui.removeCallbacks(debugTick)
+        ui.removeCallbacks(returnTick)
         if (::sosSlider.isInitialized) sosSlider.cancelCountdown()
         ui.removeCallbacksAndMessages(null)
         answerRequested = false
@@ -289,8 +333,10 @@ class IncomingActivity : Activity() {
             if (isFinishing || inCall || answerRequested) return@runOnUiThread
             findViewById<TextView>(R.id.status_text).text =
                 texts.t("ring.cancelled", R.string.ring_cancelled)
-            ui.removeCallbacks(autoClose)
-            ui.postDelayed(autoClose, CANCELLED_CLOSE_MS)
+            // Deliberately no close timer: the live view stays until the countdown ends or the
+            // resident leaves, so a visitor hanging up does not snatch the picture away.
+            returnCountdown.onVisitorCancelled()
+            startReturnCountdown()
         }
     }
 
@@ -319,6 +365,13 @@ class IncomingActivity : Activity() {
         }
     }
 
+    /** The call ended without leaving the page: start the countdown again from the top. */
+    private fun restartReturnAfterCall() {
+        returnCountdown.resumeAfterCall()
+        renderDoorTitle()
+        startReturnCountdown()
+    }
+
     private fun demoteSupersededAnswer() {
         ui.removeCallbacks(answerReplaceTimeout)
         answerDelayPending = false
@@ -334,7 +387,7 @@ class IncomingActivity : Activity() {
         findViewById<TextView>(R.id.audio_hint).visibility = View.GONE
         updateControlLabels()
         applySemanticUi(app.core.config(), app.core.status())
-        scheduleAutoClose()
+        restartReturnAfterCall()
     }
 
     fun onCallAnswered(answeredDoor: String, answeredCallId: String, answeredStage: Int) {
@@ -371,11 +424,13 @@ class IncomingActivity : Activity() {
             eventStage >= stageRevision &&
             (eventDoor.isEmpty() || door.isEmpty() || eventDoor == door)
 
+    /**
+     * The page is closed by the return countdown alone. A visitor hanging up, or a call expiring,
+     * deliberately leaves the live view on screen so the resident can still see who was there.
+     */
     private fun scheduleAutoClose() {
         ui.removeCallbacks(autoClose)
-        val byExpiry = if (expiresAtMs > 0L) expiresAtMs - System.currentTimeMillis()
-            else AUTO_CLOSE_MS
-        ui.postDelayed(autoClose, byExpiry.coerceIn(0L, AUTO_CLOSE_MS))
+        startReturnCountdown()
     }
 
     fun onMemoryPressure() {
@@ -396,6 +451,9 @@ class IncomingActivity : Activity() {
             when (state) {
                 "in_call" -> if (answerRequested && !answerDelayPending) {
                     inCall = true
+                    ui.removeCallbacks(returnTick)
+                    returnCountdown.pauseForCall()
+                    renderDoorTitle()
                     findViewById<Button>(R.id.answer_button).apply {
                         text = texts.t("incall.end", R.string.incall_end)
                         isEnabled = true
@@ -427,9 +485,13 @@ class IncomingActivity : Activity() {
                         }
                         return@runOnUiThread
                     }
+                    val wasMonitorLeg = sipCalling && !answerRequested && !inCall
                     sipCalling = false
                     if (answerRequested || inCall) finish()
-                    else findViewById<TextView>(R.id.audio_hint).visibility = View.GONE
+                    else {
+                        findViewById<TextView>(R.id.audio_hint).visibility = View.GONE
+                        if (wasMonitorLeg) onMonitorLegEnded()
+                    }
                 }
             }
         }
@@ -517,12 +579,66 @@ class IncomingActivity : Activity() {
 
     // Direct monitor audio.
 
+    /**
+     * Open the receive-only door-audio leg.
+     *
+     * Idempotent, and rate-limited by [monitorBackoff]. Every entry point to this screen used to
+     * call this unconditionally, so re-entering for a new ring opened another dialog on top of
+     * the last one -- which is how an indoor panel came to open monitor dialogs against a mute
+     * door roughly twice a second until the door station fell over.
+     */
     private fun startAudio() {
-        if (!monitorOn) return
+        ui.removeCallbacks(monitorRetry)
+        if (!monitorOn || sipCalling) return
         val host = peerHost ?: return
+        if (!doorHasAudio()) {
+            monitorBackoff.onNoAudioCapability()
+            findViewById<TextView>(R.id.audio_hint).visibility = View.GONE
+            return
+        }
+        val nowMs = System.currentTimeMillis()
+        if (!monitorBackoff.mayStart(nowMs)) {
+            val wait = monitorBackoff.retryDelayMs(nowMs)
+            if (wait > 0L) ui.postDelayed(monitorRetry, wait)
+            return
+        }
+        val sip = app.core.status()?.optJSONObject("sip")
+        monitorTxAtStart = sip?.optLong("rtp_tx", 0L) ?: 0L
+        monitorRxAtStart = sip?.optLong("rtp_rx", 0L) ?: 0L
         app.core.sipCall("sip:$host:$directPort", "monitor")
         sipCalling = true
         findViewById<TextView>(R.id.audio_hint).visibility = View.VISIBLE
+    }
+
+    /**
+     * Whether the door can be listened to at all. Absent capability information is treated as
+     * "maybe", so the backoff — not this — is what protects an older door station.
+     */
+    private fun doorHasAudio(): Boolean {
+        val caps = findDoorPeer(app.core.status())?.optJSONObject("caps") ?: return true
+        if (!caps.has("audio")) return true
+        val audio = caps.opt("audio")
+        return when (audio) {
+            is Boolean -> audio
+            is JSONObject -> audio.optBoolean("in", true) || audio.optBoolean("out", true)
+            else -> true
+        }
+    }
+
+    /** A monitor leg has ended: decide whether it is worth opening another one. */
+    private fun onMonitorLegEnded() {
+        val sip = app.core.status()?.optJSONObject("sip")
+        val tx = (sip?.optLong("rtp_tx", 0L) ?: 0L) - monitorTxAtStart
+        val rx = (sip?.optLong("rtp_rx", 0L) ?: 0L) - monitorRxAtStart
+        if (MonitorBackoff.carriedMedia(tx, rx)) {
+            monitorBackoff.onMediaFlowed()
+            return
+        }
+        // Nothing on the wire: back off rather than reopening straight away.
+        val wait = monitorBackoff.onDeadDialog(System.currentTimeMillis())
+        ui.removeCallbacks(monitorRetry)
+        if (monitorOn && !inCall && !answerRequested && wait > 0L)
+            ui.postDelayed(monitorRetry, wait)
     }
 
     // Bidirectional answer takeover.
@@ -653,10 +769,8 @@ class IncomingActivity : Activity() {
         else
             texts.t("reply.failed", R.string.reply_failed)
         sent.visibility = View.VISIBLE
-        if (accepted) {
-            ui.removeCallbacks(autoClose)
-            if (!inCall) ui.postDelayed(autoClose, 3000)
-        }
+        // A sent reply leaves the page up too; the countdown decides when it goes.
+        if (accepted) startReturnCountdown()
     }
 
 
@@ -721,6 +835,8 @@ class IncomingActivity : Activity() {
     /** Stops or restarts the door audio leg without touching the call lifecycle. */
     private fun toggleMonitor() {
         monitorOn = !monitorOn
+        if (monitorOn) monitorBackoff.onToggledOn() else monitorBackoff.onToggledOff()
+        if (!monitorOn) ui.removeCallbacks(monitorRetry)
         if (inCall || answerRequested) {
             // While talking, the toggle only mutes local playback of the far end.
             setPlaybackMuted(!monitorOn)

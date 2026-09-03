@@ -1220,7 +1220,12 @@ struct Mesh::Impl {
   }
 
 
-  bool observeHb(const std::string& id, uint64_t epoch, uint64_t hb, const std::string& hb_hlc) {
+  // first_hand is true only for an advertisement the node made on its own connection. A record
+  // relayed inside a PEERS message is one node's opinion of another and is always subject to the
+  // strict monotonic rule: a partitioned peer's last heartbeat keeps circulating in gossip, and
+  // trusting it would flip that peer between dead and alive forever.
+  bool observeHb(const std::string& id, uint64_t epoch, uint64_t hb, const std::string& hb_hlc,
+                 bool first_hand = false) {
     if (id.empty() || id == st.node_id) return false;
     if (!hb_hlc.empty()) hlc.observe(hb_hlc);
     Peer& p = peers[id];
@@ -1229,7 +1234,20 @@ struct Mesh::Impl {
       p.info.id = id;
       p.info.status = "alive";
     }
-    if (!fresh && std::tie(epoch, hb) <= std::tie(p.info.epoch, p.info.hb_seq)) return false;
+    // Ordinarily an advertisement that does not move (epoch, sequence) forward is a duplicate or
+    // a replay and is ignored. A peer we have already declared dead is different: there is no
+    // live incarnation left to protect, and a device that comes back with restarted counters --
+    // reinstalled, or restored from a backup that lost its epoch -- would otherwise be ignored
+    // for good. It would answer HTTP perfectly well while every peer still called it offline.
+    // Accepting it is bounded: if the advertisement was a replay and the node is not really
+    // there, the next aging tick puts it back to dead.
+    const bool moves_forward =
+        std::tie(epoch, hb) > std::tie(p.info.epoch, p.info.hb_seq);
+    const bool returning = !moves_forward && first_hand && p.info.status == "dead";
+    if (!fresh && !moves_forward && !returning) return false;
+    if (returning)
+      DB_LOGI("mesh", "peer " + id.substr(0, 8) +
+                          " returned with restarted counters; accepting the new incarnation");
     p.info.epoch = epoch;
     p.info.hb_seq = hb;
     p.info.hb_hlc = hb_hlc;
@@ -1850,7 +1868,9 @@ struct Mesh::Impl {
     } else if (t == "PING" || t == "PONG") {
       WireHeartbeat heartbeat;
       if (!heartbeatFromJson(doc.get(), /*allow_empty_hlc=*/false, &heartbeat)) return;
-      observeHb(heartbeat.id, heartbeat.epoch, heartbeat.sequence, heartbeat.hlc);
+      // Straight from the node itself over its own authenticated connection.
+      observeHb(heartbeat.id, heartbeat.epoch, heartbeat.sequence, heartbeat.hlc,
+                /*first_hand=*/true);
       if (t == "PING") {
         auto o = json::obj();
         json::set(o.get(), "t", "PONG");

@@ -215,5 +215,58 @@ class PackagingTests(unittest.TestCase):
             package_tool.scan_credentials(self.app)
 
 
+class JailbreakEntitlementContracts(unittest.TestCase):
+    """The private TCC entitlement belongs to the jailbreak lane and to nothing else."""
+
+    def setUp(self) -> None:
+        self.tool = load_module(
+            "jailbreak_entitlements",
+            REPOSITORY / "ios-compat" / "tools" / "jailbreak_entitlements.py",
+        )
+
+    def test_camera_and_microphone_are_claimed(self) -> None:
+        # Without this, tccd on a /Applications install refuses both services without ever
+        # prompting, the shell reports camera_permission "denied", and every indoor panel hides
+        # the door station's tile.
+        entitlements = self.tool.jailbreak_entitlements("jp.ox.doorbell")
+        self.assertEqual(
+            entitlements["com.apple.private.tcc.allow"],
+            ["kTCCServiceCamera", "kTCCServiceMicrophone"],
+        )
+        self.assertEqual(entitlements["application-identifier"], "jp.ox.doorbell")
+        self.assertTrue(entitlements["com.apple.private.security.no-container"])
+
+    def test_it_writes_a_plist_ldid_can_read(self) -> None:
+        with tempfile.TemporaryDirectory() as root:
+            path = Path(root) / "jailbreak.plist"
+            self.tool.write("jp.ox.doorbell", str(path))
+            written = plistlib.loads(path.read_bytes())
+        self.assertIn("kTCCServiceCamera", written["com.apple.private.tcc.allow"])
+        self.assertIn("kTCCServiceMicrophone", written["com.apple.private.tcc.allow"])
+
+    def test_a_bundle_identifier_is_required(self) -> None:
+        with self.assertRaises(ValueError):
+            self.tool.jailbreak_entitlements("")
+
+    def test_only_the_jailbreak_branch_signs_with_it(self) -> None:
+        script = (REPOSITORY / "ios-compat" / "scripts" / "build_ios9_armv7.sh").read_text(
+            encoding="utf-8"
+        )
+        stock, _, jailbreak = script.partition("  LDID=")
+        # A private Apple entitlement is rejected outright by App Store and Ad Hoc signing, so it
+        # must never reach the codesign call the stock lane makes.
+        self.assertNotIn("jailbreak_entitlements", stock)
+        self.assertNotIn("tcc.allow", stock)
+        self.assertIn("jailbreak_entitlements.py", jailbreak)
+        self.assertIn('"$LDID" "-S$JB_ENTITLEMENTS" "$EXE"', jailbreak,
+                      "ldid must sign with the entitlements, not bare")
+
+    def test_the_stock_lane_still_signs_from_the_provisioning_profile(self) -> None:
+        script = (REPOSITORY / "ios-compat" / "scripts" / "build_ios9_armv7.sh").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('codesign --force --sign "$IDENTITY_SHA1" --entitlements', script)
+
+
 if __name__ == "__main__":
     unittest.main()

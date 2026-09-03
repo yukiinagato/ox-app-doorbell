@@ -8,7 +8,9 @@
 #include <unistd.h>
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
+#include <thread>
 #include <condition_variable>
 #include <cstdio>
 #include <cstdlib>
@@ -18,6 +20,7 @@
 #include <vector>
 
 #include "doctest.h"
+#include "test_env.h"
 #include "node/node.h"
 #include "sipctl/sipctl.h"
 #include "util/clock.h"
@@ -273,21 +276,9 @@ TEST_CASE("sip: setAllowedSources rejects a direct INVITE from an unlisted sourc
 
 
 namespace {
-int freePortSip(std::mt19937& rng) {
-  std::uniform_int_distribution<int> dist(40000, 60000);
-  for (int i = 0; i < 50; i++) {
-    int port = dist(rng);
-    int fd = ::socket(AF_INET, SOCK_STREAM, 0);
-    if (fd < 0) continue;
-    sockaddr_in sa{};
-    sa.sin_family = AF_INET;
-    sa.sin_port = htons(static_cast<uint16_t>(port));
-    sa.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-    int ok = ::bind(fd, reinterpret_cast<sockaddr*>(&sa), sizeof(sa));
-    ::close(fd);
-    if (ok == 0) return port;
-  }
-  return -1;
+int freePortSip(std::mt19937& /*rng*/) {
+  // Ports come from one process-wide allocator; see core/tests/test_ports.h.
+  return db::testing::freeListenPort();
 }
 
 struct UiRec {
@@ -361,4 +352,70 @@ TEST_CASE("sip: Node press rule transitions a SIP call from calling to in_call")
   CHECK(json::getBool(sip, "registered", false));
 
   node.stop();
+}
+
+TEST_CASE("sip: a listen-in dialog can never answer a call") {
+  // Real-device finding: a ringing call was recorded as answered by an indoor panel nobody had
+  // touched. An outbound monitor dialog occupies the same primary slot as a real call, so the
+  // "call established while ringing" branch fired for a listen-in session and reported it as an
+  // answer. Only a dialog someone is actually talking on may answer.
+  CHECK_FALSE(SipCtl::dialogCanAnswer("monitor"));
+  CHECK(SipCtl::dialogCanAnswer(""));        // an ordinary two-way call
+  CHECK(SipCtl::dialogCanAnswer("answer"));  // an explicit takeover by a person
+}
+
+TEST_CASE("sip: the event pump idles instead of polling every ten milliseconds") {
+  // Device finding: symbolicated iOS wakeups reports showed 176 wakeups a second against a
+  // 150/s budget with the doorbell doing nothing. pjsua's built-in worker polls every 10 ms for
+  // ever, idle or not, which is 100 of those on its own. The pump is ours now and its timeout
+  // follows the work.
+  const int busy = sipPumpTimeoutMs(/*calls_active=*/true, false, -1);
+  const int idle = sipPumpTimeoutMs(false, false, /*earliest_timer_ms=*/-1);
+  CHECK(busy == 10);
+  CHECK(idle >= 200);
+
+  // A registration in flight is work too, and so is a timer about to fire.
+  CHECK(sipPumpTimeoutMs(false, /*registration_pending=*/true, -1) == 10);
+  CHECK(sipPumpTimeoutMs(false, false, /*earliest_timer_ms=*/0) == 10);
+  CHECK(sipPumpTimeoutMs(false, false, 10) == 10);
+  // A timer further out is waited for exactly, never overshot...
+  CHECK(sipPumpTimeoutMs(false, false, 120) == 120);
+  // ...and one beyond the idle period does not drag the loop back up to its rate.
+  CHECK(sipPumpTimeoutMs(false, false, 5000) == idle);
+
+  // The rate the policy produces over a second, computed from the policy rather than measured
+  // against a clock. An earlier version of this test ran the loop for a real second and counted
+  // iterations, which measures the machine: a loaded CI runner sleeps late, does fewer rounds
+  // than it asked for, and failed the assertion while the policy was perfectly correct.
+  auto wakeups_per_second = [](bool calls_active, bool registration_pending) {
+    int64_t elapsed_ms = 0;
+    int wakeups = 0;
+    while (elapsed_ms < 1000) {
+      elapsed_ms += sipPumpTimeoutMs(calls_active, registration_pending, -1);
+      wakeups++;
+    }
+    return wakeups;
+  };
+  CHECK(wakeups_per_second(false, false) == 4);
+  CHECK(wakeups_per_second(/*calls_active=*/true, false) == 100);
+  CHECK(wakeups_per_second(false, /*registration_pending=*/true) == 100);
+  // The whole point: idling costs a twenty-fifth of what a call does.
+  CHECK(wakeups_per_second(true, false) >= wakeups_per_second(false, false) * 20);
+
+  // One loose bound on the real loop, to catch a pump that ignores its own policy. A sleep can
+  // only ever run late, so a slow or loaded machine drives this number down, never up -- there
+  // is no runner on which four expected wakeups become more than twenty.
+  std::atomic<uint64_t> iterations{0};
+  std::atomic<bool> stop{false};
+  std::thread pump([&] {
+    while (!stop.load()) {
+      const int timeout = sipPumpTimeoutMs(false, false, -1);
+      iterations.fetch_add(1);
+      std::this_thread::sleep_for(std::chrono::milliseconds(timeout));
+    }
+  });
+  std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+  stop.store(true);
+  pump.join();
+  CHECK(iterations.load() <= 20);
 }

@@ -612,6 +612,13 @@ Java_jp_ox_doorbell_DoorbellCore_nativeVideoEncoderWanted(JNIEnv*, jobject, jlon
   return (b && b->core && db_core_video_encoder_wanted(b->core)) ? JNI_TRUE : JNI_FALSE;
 }
 
+extern "C" JNIEXPORT jboolean JNICALL
+Java_jp_ox_doorbell_DoorbellCore_nativeTakeVideoKeyframeRequest(JNIEnv*, jobject, jlong h) {
+  Bridge* b = fromHandle(h);
+  return (b && b->core && db_core_take_video_keyframe_request(b->core))
+      ? JNI_TRUE : JNI_FALSE;
+}
+
 extern "C" JNIEXPORT void JNICALL
 Java_jp_ox_doorbell_DoorbellCore_nativeSipCall(JNIEnv* env, jobject, jlong h, jstring target,
                                                    jstring mode) {
@@ -962,4 +969,23 @@ Java_jp_ox_doorbell_DoorbellCore_nativeSipSetMicMuted(JNIEnv*, jobject, jlong h,
   Bridge* b = fromHandle(h);
   if (!b || !b->core) return -1;
   return db_core_sip_set_mic_muted(b->core, muted == JNI_TRUE ? 1 : 0);
+}
+
+// doorbell:// pairing-link parser. Core is compiled into this same shared object, so the export is
+// called directly like every other one; the node handle is passed because core checks the expiry
+// against corrected cluster time when it is running. Core returns null when it is not, and the
+// Kotlin side then falls back to its own parse of the same grammar.
+//
+// The result is built with toJString rather than NewStringUTF: a cluster name may be Japanese, and
+// NewStringUTF wants modified UTF-8, not the real UTF-8 core emits.
+extern "C" JNIEXPORT jstring JNICALL
+Java_jp_ox_doorbell_DoorbellCore_nativeParsePairUriJson(JNIEnv* env, jobject, jlong h,
+                                                        jstring uri) {
+  Bridge* b = fromHandle(h);
+  if (!b || !b->core) return nullptr;
+  char* s = db_core_parse_pair_uri_json(b->core, toUtf8(env, uri).c_str());
+  if (!s) return nullptr;
+  jstring out = toJString(env, b, s);
+  db_free(s);
+  return out;
 }

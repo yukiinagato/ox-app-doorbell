@@ -9,6 +9,24 @@ static const CFAbsoluteTime DBMjpegLowResourceFrameInterval = 0.5;
 static const CGFloat DBMjpegLowResourceMaximumPixel = 320;
 static const NSTimeInterval DBMjpegStallTimeout = 10.0;
 
+static void DBMjpegTrace(NSString *stage, CFAbsoluteTime started) {
+  long elapsed = (long)MAX(0, (CFAbsoluteTimeGetCurrent() - started) * 1000.0);
+  NSString *line = [NSString stringWithFormat:@"%@ +%ldms\n", stage ?: @"unknown", elapsed];
+  NSLog(@"[doorbell][video-startup] %@", [line stringByTrimmingCharactersInSet:
+      [NSCharacterSet whitespaceAndNewlineCharacterSet]]);
+  @synchronized([DBMjpegClient class]) {
+    NSArray *paths = NSSearchPathForDirectoriesInDomains(NSCachesDirectory, NSUserDomainMask, YES);
+    NSString *path = [[paths lastObject] stringByAppendingPathComponent:@"video-startup.log"];
+    NSData *data = [line dataUsingEncoding:NSUTF8StringEncoding];
+    if (![[NSFileManager defaultManager] fileExistsAtPath:path])
+      [[NSFileManager defaultManager] createFileAtPath:path contents:nil attributes:nil];
+    NSFileHandle *handle = [NSFileHandle fileHandleForWritingAtPath:path];
+    [handle seekToEndOfFile];
+    [handle writeData:data];
+    [handle closeFile];
+  }
+}
+
 @interface DBMjpegClient () <NSURLConnectionDataDelegate>
 - (void)threadMain;
 @end
@@ -40,6 +58,12 @@ static const NSTimeInterval DBMjpegStallTimeout = 10.0;
   double _framesPerSecond;
   CFAbsoluteTime _lastStatsFrameAt;
   BOOL _lowResourceMode;
+  CFAbsoluteTime _startupAt;
+  BOOL _tracedResponse;
+  BOOL _tracedData;
+  BOOL _tracedPart;
+  BOOL _tracedDecode;
+  BOOL _tracedMain;
 }
 
 @synthesize lowResourceMode = _lowResourceMode;
@@ -97,6 +121,9 @@ static const NSTimeInterval DBMjpegStallTimeout = 10.0;
   _jitterMs = 0;
   _framesPerSecond = 0;
   _lastStatsFrameAt = 0;
+  _startupAt = CFAbsoluteTimeGetCurrent();
+  _tracedResponse = _tracedData = _tracedPart = _tracedDecode = _tracedMain = NO;
+  DBMjpegTrace(@"request_start", _startupAt);
   _running = YES;
   [NSThread detachNewThreadSelector:@selector(threadMain) toTarget:self withObject:nil];
 }
@@ -132,6 +159,10 @@ static const NSTimeInterval DBMjpegStallTimeout = 10.0;
         if (!client || !client->_running) return;
         BOOL firstFrame = !client->_attemptHadFrame;
         client->_attemptHadFrame = YES;
+        if (!client->_tracedPart) {
+          client->_tracedPart = YES;
+          DBMjpegTrace(@"first_complete_multipart", client->_startupAt);
+        }
         if (firstFrame) [client emitState:@"streaming" reason:@""];
         int64_t serverMs = client->_parser.lastServerTimeMs;
         if (serverMs > 0) {
@@ -193,6 +224,10 @@ static const NSTimeInterval DBMjpegStallTimeout = 10.0;
     return;
   }
   NSInteger status = [(NSHTTPURLResponse *)response statusCode];
+  if (!_tracedResponse) {
+    _tracedResponse = YES;
+    DBMjpegTrace(@"http_response_headers", _startupAt);
+  }
   if (status < 200 || status >= 300) {
     _attemptReason = [NSString stringWithFormat:@"http_status_%ld", (long)status];
     _attemptFinished = YES;
@@ -203,6 +238,10 @@ static const NSTimeInterval DBMjpegStallTimeout = 10.0;
 - (void)connection:(NSURLConnection *)connection didReceiveData:(NSData *)data {
   (void)connection;
   if (_attemptFinished || !_running) return;
+  if (!_tracedData) {
+    _tracedData = YES;
+    DBMjpegTrace(@"first_network_bytes", _startupAt);
+  }
   _lastNetworkDataAt = CFAbsoluteTimeGetCurrent();
   if (![_parser appendData:data]) {
     _attemptReason = [_parser.errorReason length] ? _parser.errorReason : @"multipart_invalid";
@@ -255,10 +294,18 @@ static const NSTimeInterval DBMjpegStallTimeout = 10.0;
     _lastDecodeAt = CFAbsoluteTimeGetCurrent();
     UIImage *image = [self decodeJpeg:jpeg];
     if (!image || !_running) continue;
+    if (!_tracedDecode) {
+      _tracedDecode = YES;
+      DBMjpegTrace(@"first_jpeg_decoded", _startupAt);
+    }
     __weak DBMjpegClient *weakSelf = self;
     dispatch_async(dispatch_get_main_queue(), ^{
       DBMjpegClient *client = weakSelf;
       if (!client || !client->_running || !client->_onFrame) return;
+      if (!client->_tracedMain) {
+        client->_tracedMain = YES;
+        DBMjpegTrace(@"first_frame_on_main_thread", client->_startupAt);
+      }
       CFAbsoluteTime frameAt = CFAbsoluteTimeGetCurrent();
       if (client->_lastStatsFrameAt > 0) {
         CFAbsoluteTime delta = frameAt - client->_lastStatsFrameAt;

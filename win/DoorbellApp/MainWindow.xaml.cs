@@ -32,6 +32,9 @@ namespace DoorbellApp
         private readonly DispatcherTimer _statsRefresh = new DispatcherTimer();
         private readonly DispatcherTimer _emergencyPresentationTimeout = new DispatcherTimer();
         private readonly DispatcherTimer _incomingTimeout = new DispatcherTimer();
+        private readonly DispatcherTimer _returnTimer = new DispatcherTimer();
+        private readonly DispatcherTimer _clockSync = new DispatcherTimer();
+        private readonly DispatcherTimer _homeRefresh = new DispatcherTimer();
         private readonly DispatcherTimer _answerDelay = new DispatcherTimer();
         private readonly DispatcherTimer _peerPoll = new DispatcherTimer();
         private readonly DispatcherTimer _h264Fallback = new DispatcherTimer();
@@ -87,6 +90,36 @@ namespace DoorbellApp
         private static readonly Brush NightClockBrush = Frozen(new SolidColorBrush(Color.FromRgb(0x8B, 0x24, 0x1C)));
         private static readonly Brush SaverClockBrush = Frozen(new SolidColorBrush(Color.FromRgb(0x39, 0x42, 0x4C)));
 
+        // Core republishes peers_changed and config_changed far faster than a person can read
+        // them. Every handler asks for a refresh; the timer runs at most one a second, and that
+        // one takes a single status document off the UI thread and hands it to every consumer.
+        [Flags]
+        private enum HomeRefresh
+        {
+            None = 0,
+            Node = 1,
+            Notice = 2,
+            Tiles = 4,
+            History = 8,
+            Pairing = 16,
+            All = Node | Notice | Tiles | History | Pairing,
+        }
+
+        /// <summary>One read of core per refresh, taken on a worker and applied on the UI thread.</summary>
+        private sealed class HomeSnapshot
+        {
+            public Dictionary<string, object> Status;
+            public Dictionary<string, object> Config;
+            public Dictionary<string, object> Pairing;
+            public Dictionary<string, object> CallLog;
+            public Dictionary<string, object> Audio;
+            public string SipBackend = "";
+            public bool SipAvailable;
+        }
+
+        private HomeRefresh _pendingRefresh;
+        private bool _homeRefreshBusy;
+
         private Dictionary<string, object> _cfg;
         // The display contract core publishes: appearance, theme and the automatic contrast
         // decision. Both status.display and the {"t":"display"} event carry the same document.
@@ -131,6 +164,17 @@ namespace DoorbellApp
         private bool _monitorAudioOn;
         private bool _quickRepliesOpen;
         private string _noticeChipDoor = "";
+        // Seconds until the incoming page returns home on its own, and whether the resident
+        // stopped that return by tapping the number.
+        private int _returnSecondsLeft;
+        private bool _returnCancelled;
+        private string _returnDoor = "";
+        // The clock renders from a cached base: core's corrected wall clock and zone offset,
+        // refreshed off the UI thread, never asked for on the tick that draws a second.
+        private long _clockOffsetMs;
+        private int _clockZoneOffsetMin;
+        private bool _clockBaseKnown;
+        private bool _clockSyncBusy;
         private int _volumeCall = 80;
         private int _volumeSos = 100;
         private int _volumeIdle = 60;
@@ -150,7 +194,7 @@ namespace DoorbellApp
         {
             InitializeComponent();
             _visitorLang = App.Boot.UiLang;
-            RefreshConfigCache();
+            RefreshConfigCache(App.Core.Config());
             ApplyStrings();
             // Pick the home screen before the first frame so a role never flashes the other one.
             ApplyRoleHome();
@@ -158,6 +202,14 @@ namespace DoorbellApp
             _clock.Interval = TimeSpan.FromSeconds(1);
             _clock.Tick += (s, e) => OnClockTick();
             _clock.Start();
+            // Core's offset moves slowly, so it is re-read on its own schedule and whenever core
+            // says the time source changed, never once per rendered second.
+            _homeRefresh.Interval = TimeSpan.FromSeconds(1);
+            _homeRefresh.Tick += (s, e) => { _homeRefresh.Stop(); RunHomeRefresh(); };
+            _clockSync.Interval = TimeSpan.FromSeconds(30);
+            _clockSync.Tick += (s, e) => SyncClockBase();
+            _clockSync.Start();
+            SyncClockBase();
             UpdateClock();
 
             _callTimeout.Tick += (s, e) =>
@@ -190,7 +242,12 @@ namespace DoorbellApp
             };
 
             _incomingTimeout.Interval = TimeSpan.FromSeconds(30);
-            _incomingTimeout.Tick += (s, e) => CloseIncoming(true);
+            // A call nobody answered is over, but the live view stays until the return countdown
+            // ends or the resident leaves the page.
+            _incomingTimeout.Tick += (s, e) =>
+                EndIncomingCall(true, Texts.T("calling.no_answer"));
+            _returnTimer.Interval = TimeSpan.FromSeconds(1);
+            _returnTimer.Tick += (s, e) => OnReturnTick();
             _answerDelay.Interval = TimeSpan.FromMilliseconds(400);
             _answerDelay.Tick += (s, e) => { _answerDelay.Stop(); PlaceAnswerCall(); };
             _peerPoll.Interval = TimeSpan.FromMilliseconds(500);
@@ -238,7 +295,7 @@ namespace DoorbellApp
 
             PairingOverlay.DismissRequested += OnPairingDismissed;
             _pairingPoll.Interval = TimeSpan.FromSeconds(2);
-            _pairingPoll.Tick += (s, e) => RefreshPairingState();
+            _pairingPoll.Tick += (s, e) => RequestHomeRefresh(HomeRefresh.Pairing);
 
             _showVideoStats = LoadVideoStatsPreference();
             Loaded += (s, e) =>
@@ -251,9 +308,9 @@ namespace DoorbellApp
                     _kiosk.Enable();
                 }
                 KioskHooks.KeepDisplayOn();
-                RefreshNodeInfo();
-                RefreshCallHistory();
-                RefreshPairingState();
+                // The first paint does not wait out the coalescing window, but still reads
+                // core off the UI thread.
+                RunHomeRefresh(HomeRefresh.All);
                 _pairingPoll.Start();
                 RecoverActiveCall();
                 _launchAudio = PlayConfigured(_launchAudio,
@@ -277,7 +334,9 @@ namespace DoorbellApp
         private void ApplyStrings()
         {
             Title = Texts.T("app.name");
-            CallButton.Content = Texts.T("idle.call_button", DoorLabel(App.Boot.Door)).Trim();
+            // A visitor is not told which door or device they are standing at; the button says
+            // only what it does.
+            CallButton.Content = Texts.T("idle.call");
             TouchHint.Text = Texts.T("idle.touch_to_call");
             PurposeHint.Text = Texts.T("idle.choose_purpose");
             CallingText.Text = Texts.T("calling.title");
@@ -290,7 +349,8 @@ namespace DoorbellApp
             EmergencyTitle.Text = Texts.T("emergency.title");
             EmergencyNote.Text = Texts.T("emergency.notified");
             EmergencyCancelButton.Content = Texts.T("emergency.cancel");
-            AnswerButton.Content = Texts.T("ring.answer");
+            AnswerButton.Content = Texts.T(_inCall && IncomingView.Visibility == Visibility.Visible
+                ? "incall.end_call" : "ring.answer");
             MonitorButton.Content = Texts.T("ring.monitor");
             OpenDoorButton.Content = Texts.T("ring.open_door");
             InCallOpenDoorButton.Content = Texts.T("ring.open_door");
@@ -348,17 +408,12 @@ namespace DoorbellApp
                 EnterScreensaver();
         }
 
-        // Every clock is rendered from db_core_local_time_json, so the cluster time zone and any
-        // NTP correction apply without touching this machine's own clock.
+        // Ticks once a second from the cached base, so a second never waits on a call into core.
         private void UpdateClock()
         {
-            string time, date;
-            if (!CoreLocalTime(out time, out date))
-            {
-                var now = DateTime.Now;
-                time = now.ToString("HH:mm:ss");
-                date = now.ToString("yyyy年M月d日") + " (" + Weekday((int)now.DayOfWeek) + ")";
-            }
+            DateTime now = CorrectedNow();
+            string time = now.ToString("HH:mm:ss");
+            string date = now.ToString("yyyy年M月d日") + " (" + Weekday((int)now.DayOfWeek) + ")";
             ClockText.Text = time;
             DateText.Text = date;
             DashClock.Text = time;
@@ -376,35 +431,167 @@ namespace DoorbellApp
             return dayOfWeek >= 0 && dayOfWeek < names.Length ? names[dayOfWeek] : "";
         }
 
-        private bool CoreLocalTime(out string time, out string date)
+        private static readonly DateTime UnixEpoch =
+            new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+
+        private static long SystemUtcMs()
         {
-            time = "";
-            date = "";
-            var local = App.Core.LocalTime(0);
-            if (local == null) return false;
-            object known;
-            int hour = DictInt(local, "hh", -1);
-            int minute = DictInt(local, "mm", -1);
-            int second = DictInt(local, "ss", -1);
-            if (hour < 0 || minute < 0 || second < 0) return false;
-            time = hour.ToString("00") + ":" + minute.ToString("00") + ":" + second.ToString("00");
-            string iso = DictStr(local, "date");
-            DateTime parsed;
-            if (DateTime.TryParse(iso, System.Globalization.CultureInfo.InvariantCulture,
-                                  System.Globalization.DateTimeStyles.None, out parsed))
-                date = parsed.ToString("yyyy年M月d日") + " (" +
-                       Weekday((int)parsed.DayOfWeek) + ")";
-            else
-                date = iso;
-            if (local.TryGetValue("known", out known) && known is bool && !(bool)known)
-                System.Diagnostics.Debug.WriteLine("core reports an unknown time zone");
-            return true;
+            return (long)(DateTime.UtcNow - UnixEpoch).TotalMilliseconds;
         }
 
-        private void RefreshNodeInfo()
+        /// <summary>
+        /// Now, in the cluster time zone, from the cached base alone. Until core has answered
+        /// once this is simply the machine's own local clock.
+        /// </summary>
+        private DateTime CorrectedNow()
         {
-            RefreshConfigCache();
-            var st = App.Core.Status();
+            if (!_clockBaseKnown) return DateTime.Now;
+            return InZone(SystemUtcMs() + _clockOffsetMs);
+        }
+
+        /// <summary>
+        /// The current hour and minute for the appearance schedule, taken from the cached clock
+        /// base so evaluating it costs no call into core.
+        /// </summary>
+        private Dictionary<string, object> ScheduleClock()
+        {
+            DateTime now = CorrectedNow();
+            return new Dictionary<string, object>
+            {
+                { "hh", now.Hour },
+                { "mm", now.Minute },
+            };
+        }
+
+        /// <summary>One recorded wall-clock instant, rendered in the cluster time zone.</summary>
+        private DateTime InZone(long wallMs)
+        {
+            if (!_clockBaseKnown) return UnixEpoch.AddMilliseconds(wallMs).ToLocalTime();
+            return UnixEpoch.AddMilliseconds(wallMs + _clockZoneOffsetMin * 60000L);
+        }
+
+        /// <summary>
+        /// Re-reads core's corrected wall clock and zone offset on a worker thread, then hands
+        /// the two numbers back to the UI thread. Everything the clock draws comes from those.
+        /// </summary>
+        private void SyncClockBase()
+        {
+            if (_clockSyncBusy) return;
+            _clockSyncBusy = true;
+            Task.Run(() =>
+            {
+                long before = SystemUtcMs();
+                Dictionary<string, object> local = null;
+                try { local = App.Core.LocalTime(0); }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine("clock base unavailable: " + ex.Message);
+                }
+                long after = SystemUtcMs();
+                Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    _clockSyncBusy = false;
+                    ApplyClockBase(local, before, after);
+                }));
+            });
+        }
+
+        private void ApplyClockBase(Dictionary<string, object> local, long before, long after)
+        {
+            if (local == null) return;
+            long wallMs = DictLong(local, "wall_ms", 0);
+            if (wallMs <= 0) return;
+            object offset;
+            if (!local.TryGetValue("offset_min", out offset) || offset == null) return;
+            int zoneMinutes;
+            if (!int.TryParse(offset.ToString(), out zoneMinutes) ||
+                zoneMinutes < -900 || zoneMinutes > 900) return;
+            // The reading is from the middle of the call, so the round trip does not skew it.
+            _clockOffsetMs = wallMs - (before + (after - before) / 2);
+            _clockZoneOffsetMin = zoneMinutes;
+            _clockBaseKnown = true;
+            object known;
+            if (local.TryGetValue("known", out known) && known is bool && !(bool)known)
+                Debug.WriteLine("core reports an unknown time zone");
+            UpdateClock();
+        }
+
+        /// <summary>
+        /// Asks for a home refresh. Several events inside the same second cost one refresh, which
+        /// is what keeps core's run loop free while peers gossip.
+        /// </summary>
+        private void RequestHomeRefresh(HomeRefresh kinds)
+        {
+            _pendingRefresh |= kinds;
+            if (!_homeRefresh.IsEnabled) _homeRefresh.Start();
+        }
+
+        private void RunHomeRefresh(HomeRefresh extra = HomeRefresh.None)
+        {
+            _pendingRefresh |= extra;
+            HomeRefresh kinds = _pendingRefresh;
+            if (kinds == HomeRefresh.None) return;
+            if (_homeRefreshBusy)
+            {
+                // A read is still in flight; try again on the next turn of the coalescer.
+                if (!_homeRefresh.IsEnabled) _homeRefresh.Start();
+                return;
+            }
+            _pendingRefresh = HomeRefresh.None;
+            _homeRefreshBusy = true;
+            Task.Run(() =>
+            {
+                HomeSnapshot snapshot = ReadHomeSnapshot(kinds);
+                Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    _homeRefreshBusy = false;
+                    ApplyHomeSnapshot(snapshot, kinds);
+                }));
+            });
+        }
+
+        /// <summary>
+        /// Runs on a worker. status/config/audio are served from run-loop snapshots and never
+        /// enter the loop; pairing and the call log do marshal into it, which is exactly why they
+        /// are read here rather than on the dispatcher.
+        /// </summary>
+        private HomeSnapshot ReadHomeSnapshot(HomeRefresh kinds)
+        {
+            var snapshot = new HomeSnapshot();
+            try
+            {
+                snapshot.Status = App.Core.Status();
+                snapshot.Config = App.Core.Config();
+                snapshot.Audio = App.Core.AudioVolumes(_nodeId);
+                snapshot.SipBackend = App.Core.SipBackend;
+                snapshot.SipAvailable = App.Core.SipAvailable;
+                if ((kinds & HomeRefresh.Pairing) != 0) snapshot.Pairing = App.Core.PairingInfo();
+                if ((kinds & HomeRefresh.History) != 0)
+                    snapshot.CallLog = App.Core.CallLog(0, RecentCallRows);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("home refresh read failed: " + ex.Message);
+            }
+            return snapshot;
+        }
+
+        private void ApplyHomeSnapshot(HomeSnapshot snapshot, HomeRefresh kinds)
+        {
+            if (snapshot == null) return;
+            // One status document for this refresh, shared by every consumer below.
+            if (snapshot.Status != null) _status = snapshot.Status;
+            if (snapshot.Config != null) RefreshConfigCache(snapshot.Config);
+            if ((kinds & HomeRefresh.Node) != 0) RefreshNodeInfo(snapshot);
+            if ((kinds & HomeRefresh.Notice) != 0) RefreshNoticeSurfaces();
+            if ((kinds & HomeRefresh.Tiles) != 0) RefreshDoorTiles(snapshot.Status);
+            if ((kinds & HomeRefresh.History) != 0) RefreshCallHistory(snapshot.CallLog);
+            if ((kinds & HomeRefresh.Pairing) != 0) RefreshPairingState(snapshot.Pairing);
+        }
+
+        private void RefreshNodeInfo(HomeSnapshot snapshot)
+        {
+            var st = snapshot.Status;
             if (st != null)
             {
                 try
@@ -428,7 +615,7 @@ namespace DoorbellApp
                 SetVisitorLang(vl != null ? vl.ToString() : "ja");
             }
             RefreshSosConfig(_cfg);
-            RefreshAudioVolumes();
+            ApplyAudioVolumes(snapshot.Audio);
             var dp = CoreClient.Dig(_cfg, "sip.direct_port");
             if (dp != null)
             {
@@ -448,8 +635,7 @@ namespace DoorbellApp
             ApplyStrings();
             ApplyRoleHome();
             RefreshAdminLink();
-            RefreshNoticeSurfaces();
-            RefreshDoorTiles();
+            RefreshDeviceCounters();
             _semanticStyles = SemanticUiOverrides.Load(_cfg, _nodeId, App.DataDir);
             ApplySemanticStyles();
             PublishUiStyleWithAdvisories();
@@ -458,7 +644,7 @@ namespace DoorbellApp
             MicButton.Visibility = App.Core.SipMicMuteAvailable ?
                 Visibility.Visible : Visibility.Collapsed;
             InCallMicButton.Visibility = MicButton.Visibility;
-            bool sip = App.Core.SipAvailable;
+            bool sip = snapshot.SipAvailable;
             AnswerButton.IsEnabled = sip && !_suppressLosingSipIdle;
             MonitorButton.IsEnabled = sip;
             OpenDoorButton.IsEnabled = sip;
@@ -466,9 +652,9 @@ namespace DoorbellApp
         }
 
 
-        private void RefreshConfigCache()
+        private void RefreshConfigCache(Dictionary<string, object> config)
         {
-            _cfg = App.Core.Config();
+            _cfg = config;
             Texts.SetConfig(_cfg);
         }
 
@@ -511,6 +697,7 @@ namespace DoorbellApp
                 Background = (Brush)FindResource("Bg");
                 ThemeBgImage.Source = null;
                 ThemeBgImage.Visibility = Visibility.Collapsed;
+                ApplyThemeBackdrop();
                 return;
             }
             string color = ThemeValue("bg_color");
@@ -541,6 +728,7 @@ namespace DoorbellApp
                 _themeHash = null;
                 ThemeBgImage.Source = null;
                 ThemeBgImage.Visibility = Visibility.Collapsed;
+                ApplyThemeBackdrop();
                 return;
             }
             if (hash == _themeHash && ThemeBgImage.Source != null) return;
@@ -577,6 +765,8 @@ namespace DoorbellApp
                         bmp.Freeze();
                         ThemeBgImage.Source = bmp;
                         ThemeBgImage.Visibility = Visibility.Visible;
+                        ApplyThemeBackdrop();
+                        QueueInkPass();
                     }
                     catch (Exception ex)
                     {
@@ -652,15 +842,68 @@ namespace DoorbellApp
                 !string.IsNullOrEmpty(_activeCallId) ? Visibility.Visible : Visibility.Collapsed;
         }
 
+        /// <summary>
+        /// The Tabler icon for a purpose core seeds. An administrator's own purpose keeps whatever
+        /// icon they typed, because there is nothing to map it to.
+        /// </summary>
+        private static string PurposeIconKey(string id)
+        {
+            switch (id)
+            {
+                case "p_visit": return "IconHome";
+                case "p_delivery": return "IconPackage";
+                case "p_mail": return "IconMail";
+                default: return null;
+            }
+        }
+
+        /// <summary>
+        /// A Tabler geometry drawn the way the whole fleet draws them: stroked, never filled,
+        /// two units thick with round caps and joins, inside a Viewbox so the stroke scales with
+        /// the icon. Returns null when the key is not in the generated dictionary.
+        /// </summary>
+        private FrameworkElement TablerIcon(string key, double size, Brush stroke)
+        {
+            if (string.IsNullOrEmpty(key)) return null;
+            object geometry = TryFindResource(key);
+            if (!(geometry is Geometry)) return null;
+            var path = new System.Windows.Shapes.Path
+            {
+                Data = (Geometry)geometry,
+                Stroke = stroke,
+                StrokeThickness = 2,
+                StrokeStartLineCap = PenLineCap.Round,
+                StrokeEndLineCap = PenLineCap.Round,
+                StrokeLineJoin = PenLineJoin.Round,
+            };
+            return new Viewbox
+            {
+                Width = size,
+                Height = size,
+                Child = path,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+            };
+        }
+
         private Button MakePurposeButton(string id, string icon, string label)
         {
-            var panel = new StackPanel { HorizontalAlignment = HorizontalAlignment.Center };
-            if (!string.IsNullOrEmpty(icon))
+            var panel = new StackPanel
+            {
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+            };
+            FrameworkElement glyph = TablerIcon(PurposeIconKey(id), 34,
+                                                (Brush)FindResource("Fg"));
+            if (glyph != null) panel.Children.Add(glyph);
+            else if (!string.IsNullOrEmpty(icon))
                 panel.Children.Add(new TextBlock
                 {
                     Text = icon,
                     FontSize = 34,
                     HorizontalAlignment = HorizontalAlignment.Center,
+                    VerticalAlignment = VerticalAlignment.Center,
+                    TextAlignment = TextAlignment.Center,
                 });
             panel.Children.Add(new TextBlock
             {
@@ -865,9 +1108,8 @@ namespace DoorbellApp
         /// Effective 呼出 / SOS / 通常 volumes for this device, resolved by core from the device
         /// override and the cluster default (db_core_audio_json).
         /// </summary>
-        private void RefreshAudioVolumes()
+        private void ApplyAudioVolumes(Dictionary<string, object> levels)
         {
-            var levels = App.Core.AudioVolumes(_nodeId);
             if (levels == null) return;
             _volumeCall = Clamp(DictInt(levels, "call", _volumeCall));
             _volumeSos = Clamp(DictInt(levels, "sos", _volumeSos));
@@ -998,6 +1240,7 @@ namespace DoorbellApp
 
             if (!_emergencyActive)
                 SetBrightnessAsync(_screensaverOn ? Math.Min(_brightness, 10) : _brightness);
+            ApplyThemeBackdrop();
             ApplyAutoInk();
         }
 
@@ -1635,11 +1878,14 @@ namespace DoorbellApp
                         }
                         int resolvedStage = Math.Max(0,
                             DictInt(ev.Data, "stage_revision", 0));
+                        // A visitor who cancels does not take the page with them: the live view
+                        // stays until the return countdown ends or the resident leaves it.
                         if (IncomingView.Visibility == Visibility.Visible &&
                             (eventType == "call_cancelled" ||
                              resolvedStage >= _incomingStageRevision) &&
                             CallMatches(ev.Str("call_id"), ev.Str("door"),
-                                        _incomingCallId, _incomingDoor)) CloseIncoming(true);
+                                        _incomingCallId, _incomingDoor))
+                            EndIncomingCall(true, Texts.T("ring.cancelled"));
                     }
                     break;
                 case "chime":
@@ -1708,27 +1954,31 @@ namespace DoorbellApp
                     ShowEmergency(ev);
                     break;
                 case "peers_changed":
+                    // Core republishes this on gossip, so it is coalesced like everything else.
+                    RequestHomeRefresh(HomeRefresh.Node | HomeRefresh.Tiles |
+                                       HomeRefresh.Pairing);
+                    break;
                 case "config_changed":
-                    RefreshNodeInfo();
+                    RequestHomeRefresh(HomeRefresh.Node | HomeRefresh.Notice |
+                                       HomeRefresh.Tiles);
                     break;
                 case "time_changed":
-                    // The source flipped or the correction moved: redraw every clock now.
+                    // The base is re-read on a worker; the redraw itself touches no core call.
+                    SyncClockBase();
                     UpdateClock();
                     ApplyAppearance();
                     break;
                 case "power_changed":
                     _batteryPct = DictInt(ev.Data, "battery_pct", _batteryPct);
                     _batteryCharging = EventBool(ev, "charging", _batteryCharging);
-                    RefreshNodeInfo();
+                    RequestHomeRefresh(HomeRefresh.Node);
                     break;
                 case "notice_changed":
-                    RefreshConfigCache();
-                    RefreshNoticeSurfaces();
-                    RefreshDoorTiles();
+                    RequestHomeRefresh(HomeRefresh.Notice | HomeRefresh.Tiles);
                     break;
                 case "call_log_changed":
                     _unreadMissed = DictInt(ev.Data, "unread_missed", _unreadMissed);
-                    RefreshCallHistory();
+                    RequestHomeRefresh(HomeRefresh.History);
                     break;
             }
         }
@@ -1992,6 +2242,8 @@ namespace DoorbellApp
                     BuildQuickReplies();
                     _incomingTimeout.Stop();
                     _incomingTimeout.Start();
+                    // The page keeps the deadline it opened with; a repeat chime is the same call.
+                    RenderReturnCountdown();
                     return;
                 }
                 // A different door stops the old stream and monitor SIP before switching targets.
@@ -2015,6 +2267,8 @@ namespace DoorbellApp
             BuildQuickReplies();
             QuickReplyToggle.Visibility = monitorOnly ?
                 Visibility.Collapsed : Visibility.Visible;
+            MonitorButton.Visibility = Visibility.Visible;
+            IgnoreButton.Visibility = Visibility.Visible;
             IncomingHint.Visibility = Visibility.Collapsed;
 
             // Resolve the door peer into a video URL and direct-call host.
@@ -2035,6 +2289,8 @@ namespace DoorbellApp
             StartIncomingVideo();
 
             IncomingView.Visibility = Visibility.Visible;
+            _returnDoor = _incomingDoor;
+            StartReturnCountdown();
             ShowCallOverlay(_incomingDoor);
             _statsRefresh.Stop();
             _statsRefresh.Start();
@@ -2131,10 +2387,7 @@ namespace DoorbellApp
             else
             {
                 string label = LabelOf(entry, App.Boot.UiLang, _incomingPurpose);
-                object icon;
-                string iconText = entry != null && entry.TryGetValue("icon", out icon) && icon != null
-                    ? icon.ToString() + " " : "";
-                PurposeBadgeText.Text = iconText + label;
+                FillPurposeBadge(PurposeBadgeContent, entry, _incomingPurpose, label);
                 PurposeBadge.ToolTip = Texts.T("ring.purpose_badge", label);
                 PurposeBadge.Visibility = Visibility.Visible;
             }
@@ -2145,10 +2398,49 @@ namespace DoorbellApp
             }
             else
             {
-                LangBadgeText.Text = "🌐 " + _incomingLang.ToUpperInvariant();
+                LangBadgeText.Text = _incomingLang.ToUpperInvariant();
                 LangBadge.ToolTip = Texts.T("ring.lang_badge", LangDisplayName(_incomingLang));
                 LangBadge.Visibility = Visibility.Visible;
             }
+        }
+
+        /// <summary>
+        /// One purpose badge: the Tabler icon for a seeded purpose, or an administrator's own
+        /// icon text when there is nothing to map, then the label.
+        /// </summary>
+        private void FillPurposeBadge(System.Windows.Controls.Panel into,
+                                      Dictionary<string, object> entry, string id, string label)
+        {
+            if (into == null) return;
+            into.Children.Clear();
+            var stroke = ThemeContrast.Brush(Color.FromRgb(0xF2, 0xF5, 0xF8));
+            FrameworkElement glyph = TablerIcon(PurposeIconKey(id), 18, stroke);
+            if (glyph != null)
+            {
+                into.Children.Add(glyph);
+            }
+            else
+            {
+                object icon;
+                string iconText = entry != null && entry.TryGetValue("icon", out icon) &&
+                                  icon != null ? icon.ToString() : "";
+                if (iconText.Length != 0)
+                    into.Children.Add(new TextBlock
+                    {
+                        Text = iconText,
+                        FontSize = 18,
+                        VerticalAlignment = VerticalAlignment.Center,
+                        Foreground = stroke,
+                    });
+            }
+            into.Children.Add(new TextBlock
+            {
+                Text = label,
+                FontSize = 18,
+                Margin = new Thickness(into.Children.Count == 0 ? 0 : 8, 0, 0, 0),
+                VerticalAlignment = VerticalAlignment.Center,
+                Foreground = stroke,
+            });
         }
 
         private void BuildQuickReplies()
@@ -2208,8 +2500,113 @@ namespace DoorbellApp
             IncomingHint.Visibility = Visibility.Visible;
         }
 
+        /// <summary>
+        /// Seconds the incoming page stays up before returning home. Core reports it as
+        /// status.call.return_s; call.indoor.return_s is the configured value behind it.
+        /// </summary>
+        private int ReturnSeconds()
+        {
+            object value = CoreClient.Dig(_status, "call.return_s");
+            if (value == null) value = CoreClient.Dig(_cfg, "call.indoor.return_s");
+            int seconds;
+            if (value != null && int.TryParse(value.ToString(), out seconds) &&
+                seconds > 0 && seconds <= 3600) return seconds;
+            return 60;
+        }
+
+        /// <summary>Starts the return countdown for a newly opened page.</summary>
+        private void StartReturnCountdown()
+        {
+            _returnCancelled = false;
+            _returnSecondsLeft = ReturnSeconds();
+            _returnTimer.Stop();
+            _returnTimer.Start();
+            RenderReturnCountdown();
+        }
+
+        /// <summary>
+        /// Holds the countdown while the resident is talking. The page shows no number then, and
+        /// the count starts again from the full value once the call ends.
+        /// </summary>
+        private void PauseReturnCountdown()
+        {
+            _returnTimer.Stop();
+            RenderReturnCountdown();
+        }
+
+        private void StopReturnCountdown()
+        {
+            _returnTimer.Stop();
+            _returnSecondsLeft = 0;
+            _returnCancelled = false;
+            RenderReturnCountdown();
+        }
+
+        private void OnReturnTick()
+        {
+            _returnSecondsLeft--;
+            if (_returnSecondsLeft > 0)
+            {
+                RenderReturnCountdown();
+                return;
+            }
+            _returnTimer.Stop();
+            _returnSecondsLeft = 0;
+            CloseIncoming(true);
+        }
+
+        /// <summary>Tapping the number stops the return; the live view stays until it is left.</summary>
+        private void OnReturnCountdownClick(object sender, MouseButtonEventArgs e)
+        {
+            _returnCancelled = true;
+            _returnTimer.Stop();
+            RenderReturnCountdown();
+        }
+
+        private void RenderReturnCountdown()
+        {
+            bool showing = _returnTimer.IsEnabled && !_returnCancelled &&
+                           _returnSecondsLeft > 0 && !_inCall &&
+                           IncomingView.Visibility == Visibility.Visible;
+            ReturnCountdown.Visibility = showing ? Visibility.Visible : Visibility.Collapsed;
+            if (showing) ReturnCountdownText.Text = "(" + _returnSecondsLeft + ")";
+        }
+
+        /// <summary>
+        /// The call is over — the visitor cancelled, or nobody answered — but the page is not.
+        /// The live view stays until the countdown ends or the resident leaves it, so a visitor
+        /// who gives up and walks away can still be seen.
+        /// </summary>
+        private void EndIncomingCall(bool hangup, string message)
+        {
+            if (IncomingView.Visibility != Visibility.Visible) return;
+            _incomingTimeout.Stop();
+            _answerDelay.Stop();
+            StopPlayer(ref _callFeedback);
+            if (hangup && _sipMode != "" && !_inCall)
+            {
+                App.Core.SipHangup();
+                _sipMode = "";
+                _monitorAudioOn = false;
+                ApplyMonitorLabel();
+            }
+            _incomingCallId = "";
+            _monitorOnly = true;
+            AnswerButton.Visibility = Visibility.Collapsed;
+            OpenDoorButton.IsEnabled = false;
+            _quickRepliesOpen = false;
+            ApplyQuickReplyVisibility();
+            QuickReplyToggle.Visibility = Visibility.Collapsed;
+            IgnoreButton.Content = Texts.T("monitor.close");
+            IncomingHint.Text = message ?? "";
+            IncomingHint.Visibility = string.IsNullOrEmpty(message) ?
+                Visibility.Collapsed : Visibility.Visible;
+            RenderReturnCountdown();
+        }
+
         private void CloseIncoming(bool hangup)
         {
+            StopReturnCountdown();
             _incomingTimeout.Stop();
             _answerDelay.Stop();
             StopIncomingVideo();
@@ -2228,12 +2625,21 @@ namespace DoorbellApp
             ApplyQuickReplyVisibility();
             ApplyMonitorLabel();
             AnswerButton.Visibility = Visibility.Visible;
+            MonitorButton.Visibility = Visibility.Visible;
+            IgnoreButton.Visibility = Visibility.Visible;
             IgnoreButton.Content = Texts.T("ring.ignore");
             OpenDoorButton.IsEnabled = false;
         }
 
         private void OnAnswerClick(object sender, RoutedEventArgs e)
         {
+            if (_inCall)
+            {
+                App.Core.SipHangup();
+                ReportLifecycleEndedIfNeeded();
+                OnSipIdle();
+                return;
+            }
             if (!App.Core.SipAvailable)
             {
                 IncomingHint.Text = Texts.T("sip.unavailable");
@@ -2433,10 +2839,53 @@ namespace DoorbellApp
                 if (!_lifecycleAnswered)
                     _lifecycleAnswered = App.Core.ReportCallAnswered(
                         _lifecycleDoor, _lifecycleCallId, _lifecycleStageRevision);
-                if (string.IsNullOrEmpty(stream)) stream = _incomingStreamUrl;
-                CloseIncoming(false);
-                ShowInCall(stream);
+                EnterIncomingInCall();
             }
+        }
+
+        /// <summary>
+        /// Keep the preview transport and MediaElement alive when the resident answers. Replacing
+        /// the incoming page used to close a healthy HTTP/TCP stream and wait for another decoder
+        /// startup even though the video source had not changed.
+        /// </summary>
+        private void EnterIncomingInCall()
+        {
+            if (IncomingView.Visibility != Visibility.Visible) return;
+            StopReturnCountdown();
+            _incomingTimeout.Stop();
+            _answerDelay.Stop();
+            _monitorOnly = false;
+            _quickRepliesOpen = false;
+            ApplyQuickReplyVisibility();
+            QuickReplyToggle.Visibility = Visibility.Collapsed;
+            MonitorButton.Visibility = Visibility.Collapsed;
+            IgnoreButton.Visibility = Visibility.Collapsed;
+            IncomingTitle.Text = Texts.T("incall.title");
+            IncomingHint.Visibility = Visibility.Collapsed;
+            AnswerButton.Content = Texts.T("incall.end_call");
+            AnswerButton.Visibility = Visibility.Visible;
+            AnswerButton.IsEnabled = true;
+            OpenDoorButton.IsEnabled = true;
+        }
+
+        private void RestoreIncomingMonitorAfterCall()
+        {
+            _incomingCallId = "";
+            _monitorOnly = true;
+            _quickRepliesOpen = false;
+            ApplyQuickReplyVisibility();
+            QuickReplyToggle.Visibility = Visibility.Collapsed;
+            MonitorButton.Visibility = Visibility.Visible;
+            IgnoreButton.Visibility = Visibility.Visible;
+            IgnoreButton.Content = Texts.T("monitor.close");
+            IncomingTitle.Text = Texts.T("monitor.title", DoorLabel(_incomingDoor));
+            IncomingHint.Visibility = Visibility.Collapsed;
+            AnswerButton.Content = Texts.T("ring.answer");
+            AnswerButton.Visibility = Visibility.Collapsed;
+            AnswerButton.IsEnabled = App.Core.SipAvailable &&
+                !string.IsNullOrEmpty(_incomingHost);
+            OpenDoorButton.IsEnabled = false;
+            StartReturnCountdown();
         }
 
         private void OnSipIdle()
@@ -2462,8 +2911,25 @@ namespace DoorbellApp
             _sipMode = "";
             CloseInCall();
             if (wasInCall && IncomingView.Visibility == Visibility.Visible)
-                CloseIncoming(false);
+                RestoreIncomingMonitorAfterCall();
             if (App.Boot.Role == "door_station") ShowIdle();
+            else if (wasInCall && IncomingView.Visibility != Visibility.Visible)
+                ResumeLiveViewAfterCall();
+        }
+
+        /// <summary>
+        /// After a call ends the panel goes back to the live view for that door with a fresh
+        /// countdown, rather than dropping straight to the home screen.
+        /// </summary>
+        private void ResumeLiveViewAfterCall()
+        {
+            string door = !string.IsNullOrEmpty(_lifecycleDoor) ? _lifecycleDoor : _returnDoor;
+            if (string.IsNullOrEmpty(door) || _emergencyActive) return;
+            ShowIncoming(new UiEvent
+            {
+                T = "monitor",
+                Data = new Dictionary<string, object> { { "door", door } },
+            }, true);
         }
 
         private void ReportLifecycleEndedIfNeeded()
@@ -2496,6 +2962,7 @@ namespace DoorbellApp
             StartInCallMjpeg();
             StartInCallH264();
             InCallView.Visibility = Visibility.Visible;
+            PauseReturnCountdown();
             UpdateInCallPurpose();
             ShowCallOverlay(_lifecycleDoor.Length != 0 ? _lifecycleDoor : _incomingDoor);
             _statsRefresh.Stop();
@@ -2638,7 +3105,7 @@ namespace DoorbellApp
                     _pairingSkipped = false;
                     ShowPairingOverlay();
                     PairingOverlay.HandleCoreEvent(ev);
-                    RefreshPairingState();
+                    RequestHomeRefresh(HomeRefresh.Pairing);
                     return;
                 case "pairing_state":
                 case "paired":
@@ -2648,14 +3115,14 @@ namespace DoorbellApp
                 case "join_token_changed":
                 case "pending_changed":
                     PairingOverlay.HandleCoreEvent(ev);
-                    RefreshPairingState();
+                    RequestHomeRefresh(HomeRefresh.Pairing);
                     return;
             }
         }
 
-        private void RefreshPairingState()
+        private void RefreshPairingState(Dictionary<string, object> pairing)
         {
-            var snapshot = PairingSnapshot.From(App.Core.PairingInfo());
+            var snapshot = PairingSnapshot.From(pairing);
             // {} means core has not published a snapshot yet: unknown, so do not show onboarding.
             if (!snapshot.Known) return;
             _pairing = snapshot;
@@ -2667,9 +3134,7 @@ namespace DoorbellApp
                 Visibility.Visible : Visibility.Collapsed;
             MembershipStatus.Visibility = ready && !PairingOverlay.IsActive ?
                 Visibility.Visible : Visibility.Collapsed;
-            MembershipText.Text = Texts.T("pair.membership", _pairing.MemberCount.ToString());
-            MembershipBadge.Text = _pairing.IsFounder ? Texts.T("pair.created_badge") :
-                Texts.T("pair.membership_connected", _pairing.ConnectedCount.ToString());
+            RefreshDeviceCounters();
         }
 
         private void ShowPairingOverlay()
@@ -2683,7 +3148,7 @@ namespace DoorbellApp
         {
             _pairingSkipped = true;
             PairingOverlay.Deactivate();
-            RefreshPairingState();
+            RequestHomeRefresh(HomeRefresh.Pairing);
         }
 
         private void OnPairBannerClick(object sender, MouseButtonEventArgs e)
@@ -2713,7 +3178,7 @@ namespace DoorbellApp
                 ShowPairingOverlay();
                 return;
             }
-            RefreshPairingState();
+            RequestHomeRefresh(HomeRefresh.Pairing);
         }
 
         private void OnSecretCorner(object sender, MouseButtonEventArgs e)

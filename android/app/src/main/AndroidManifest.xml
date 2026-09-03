@@ -80,14 +80,23 @@
             android:exported="false"
             android:launchMode="singleTop"/>
 
-        <!-- Onboarding for a device that is not a cluster member yet. -->
+        <!-- Onboarding for a device that is not a cluster member yet. It is also the target of
+             the doorbell://pair link a PIN card's QR encodes, so any camera app can hand this
+             device an invitation. Joining still needs the confirm button on this screen. -->
         <activity
             android:name=".PairingActivity"
             android:configChanges="orientation|screenSize|keyboardHidden|screenLayout"
             android:excludeFromRecents="true"
-            android:exported="false"
+            android:exported="true"
             android:launchMode="singleTop"
-            android:windowSoftInputMode="adjustResize"/>
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter android:autoVerify="false">
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="doorbell" android:host="pair"/>
+            </intent-filter>
+        </activity>
 
         <!-- Add-device panel: nearby list, Pairing PIN card, bulk add, own QR. -->
         <activity

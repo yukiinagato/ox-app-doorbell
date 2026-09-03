@@ -21,6 +21,20 @@
 + (NSArray *)allPurposeIdsInConfig:(NSDictionary *)config;
 + (NSArray *)enabledPurposeIdsInConfig:(NSDictionary *)config;
 
+// iOS 5 predates emoji as we know them: a modern codepoint renders as an empty
+// box and a composed sequence renders as a box plus stray marks, which is what
+// the parcel and mail purposes showed on the panel. Anything outside the Basic Multilingual
+// Plane is dropped, variation selectors and joiners are stripped, and what is
+// left is a glyph this device can actually draw -- or nothing, which reads
+// better than a box next to a perfectly good label.
++ (NSString *)displayIconForConfiguredIcon:(NSString *)icon;
+
+// The Tabler icon for a built-in purpose, or nil for one this shell has no
+// icon for. A purpose an administrator invented has no mapping and keeps
+// whatever glyph they typed into `icon`, which is why the caller still needs
+// displayIconForConfiguredIcon: above as the fallback.
++ (NSString *)iconNameForPurpose:(NSString *)purposeId;
+
 // The configuration key the settings toggle writes.
 + (NSString *)enabledKeyForPurpose:(NSString *)purposeId;
 

@@ -38,6 +38,33 @@ replicated SOS；`emergency.web_active_page_alerts:false` 只停用 raw-state pa
 各 channel 的 presentation/limitation。raw path 啟用期間，rule TTL 只結束 custom decoration/sound；
 安全的紅色 raw-SOS overlay 保留至 clear 或 switch off。
 
+## 室內機相機預覽排程
+
+預覽負載依面板能同時顯示的數量設限，而不是依已配置門口機總數增長。只有一台時使用保持比例的大型
+貼片；兩三台平分可用 viewport；更多時改用 compact 貼片與明確的捲動／分頁選擇。Android 每輪最多
+更新三個可見貼片，modern iOS 每頁四個，iPad 1 每頁三個（safe mode 為一個）；隱藏貼片不抓取或
+解碼 snapshot。
+
+`press` 或 `motion` event 會把對應門口機提升至 active set 最前。提升結果去重並按最新事件排序；即使
+同時大量觸發，也只會替換有界的 active slot，不會對全部相機啟動工作。住戶可用 Android 捲動或 iOS
+的編號 camera page 覆蓋 event 選擇。這只規範 dashboard 排程；所有已配置門口機仍可直接 monitor。
+
+## 視訊啟動熱路徑
+
+設定為 H.264 的門口機會在尚無觀看者時維持 platform encoder 運行。Core 保留初始化 segment 與最新的
+完整 random-access fragment；新的 fMP4 subscriber 會立即收到兩者，同時產生一個可合併的 keyframe
+request。Android MediaCodec、Apple VideoToolbox、iOS 5 RTSP ingest（RTCP PLI）及 Windows Media
+Foundation 都會直接處理此 request，不重啟 encoder。MJPEG path 在背景建立有界 cache，live stream
+追上前可先提供不超過 250 ms 的可信 frame。
+
+室內機會預先準備可重用的 rendering resource：Android 保留一個 stopped AVC decoder，modern iOS
+保留一組 `AVPlayer`/`AVPlayerLayer`，iOS 5 保留一個 1-pixel GL/VideoToolbox view，Windows 則隨主視窗
+建立 media element。memory pressure 時可釋放這些非必要 reserve。響鈴 preview 會一直作為 availability
+layer，直到 H.264 確實顯示 frame；接聽後沿用同一 transport/player，不重新連線。browser viewer 也會
+取得相同的 Core-side cached JPEG 或 fMP4 bootstrap。訪客取消只結束 call lifecycle 與響鈴，不會拆除
+室內機目前的 preview；transport 由住戶的關閉操作或頁面正常期限結束。這些是縮短啟動延遲的機制，不代表所有硬體已達
+固定 glass-to-glass 目標；仍須以實機 timing qualification 為準。
+
 Core 永久 cache peer 的 last-valid native UI manifest/capability。`cached_contract:true` 的 configured
 offline device 可依 cached contract 驗證/queue，但只有後續 renderer report 能證明套用。Web manifest
 仍只屬 serving Core node。沒有 `targets` object 的 legacy alert 對所有 native node/Web group。明確

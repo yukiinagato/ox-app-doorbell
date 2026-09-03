@@ -95,6 +95,14 @@ class RecoverySafeModeContracts(unittest.TestCase):
         self.assertIn("_snapshotPoller.lowResourceMode = _safeMode", incoming)
         self.assertIn("maximumPixel = _lowResourceMode", mjpeg)
         self.assertIn("maximumPixel = _lowResourceMode", snapshot)
+        # The dashboard keeps its door still in safe mode, bounded smaller and
+        # taken less often. A panel latched in safe mode by the root helper can
+        # stay there for hours, and a black door tile is worse than a stale one.
+        home = read("ios-kiosk/src/Screens/DBHomeScreen.m")
+        self.assertNotIn("if (_safeMode || self.superview == nil) return;", home)
+        self.assertIn("kSafeModeSnapshotMaxSide", home)
+        self.assertIn("_safeMode ? kSafeModeSnapshotMaxSide : kSnapshotMaxSide", home)
+        self.assertIn("_snapshotTick % kSafeModeSnapshotEveryNTicks", home)
 
     def test_ios5_local_safe_mode_exits_after_a_healthy_window(self):
         app = read("ios-kiosk/src/Support/DBAppDelegate.m")
@@ -202,16 +210,17 @@ class RecoverySafeModeContracts(unittest.TestCase):
                     '@"last_at_ms"', '@"media_released"'):
             self.assertIn(key, app)
 
-    def test_ios5_call_cancel_stops_video_without_restarting_during_banner(self):
+    def test_ios5_call_cancel_retains_video_without_restarting_during_banner(self):
         incoming = read("ios-kiosk/src/Screens/DBIncomingScreen.m")
         cancelled = incoming[incoming.index("- (void)handleCallCancelled:"):
                              incoming.index("- (void)handlePurposeSelected:")]
         refresh = incoming[incoming.index("- (void)fetchAndApplyCoreSnapshot"):
                            incoming.index("- (void)applyContent")]
-        self.assertIn("++_snapshotGen", cancelled)
-        self.assertIn("[self stopVideoPlayers]", cancelled)
-        self.assertIn("_liveView.image = nil", cancelled)
-        self.assertIn('_activeVideoTransport = @"CANCELLED"', cancelled)
+        self.assertNotIn("++_snapshotGen", cancelled)
+        self.assertNotIn("[self stopVideoPlayers]", cancelled)
+        self.assertNotIn("_liveView.image = nil", cancelled)
+        self.assertNotIn('_activeVideoTransport = @"CANCELLED"', cancelled)
+        self.assertIn("video retained", cancelled)
         self.assertIn("_answerButton.enabled = NO", cancelled)
         self.assertIn("_monitorButton.enabled = NO", cancelled)
         self.assertIn("!s->_cancelled && (mediaChanged || videoStopped)", refresh)
@@ -350,7 +359,15 @@ class RecoverySafeModeContracts(unittest.TestCase):
         self.assertIn(".answerSuperseded", modern_refresh)
         self.assertIn("demoteSupersededAnswer()", modern_refresh)
         self.assertIn("consumeSupersededIdle()", modern_idle)
-        self.assertIn("restartAutoClose()", modern_idle)
+        # The losing answer leg goes back to the ringing screen instead of closing it. What it
+        # restarts is the indoor return countdown, which replaced the flat 30 s auto-close: the
+        # panel keeps the live view and goes home on its own clock, and the visitor hanging up
+        # does not take the screen away from a resident who is still walking towards it.
+        self.assertIn("restartReturnCountdown()", modern_idle)
+        self.assertNotIn("close()", modern_idle)
+        self.assertNotIn("restartAutoClose()", modern_idle)
+        # A dialog that simply ended hands the screen back to the same countdown, from the top.
+        self.assertIn("resumeReturnCountdown()", modern_idle)
         self.assertIn("return", modern_idle)
         self.assertNotIn("beginAnswer", modern_monitor)
 
@@ -391,7 +408,10 @@ class RecoverySafeModeContracts(unittest.TestCase):
         self.assertIn("presentPurposeAlertForActiveCall:YES", door)
 
     def test_emergency_colors_are_contrast_checked_and_report_fallback(self):
-        modern_util = read("ios/Doorbell/ConfigUtil.swift")
+        # The colour half of ConfigUtil lives in its own file so the parsing half stays
+        # host-compilable for the Swift call-revision test below; the rule it enforces is
+        # unchanged.
+        modern_util = read("ios/Doorbell/ConfigUtilColors.swift")
         modern_ui = read("ios/Doorbell/MainViewController.swift")
         modern_report = read("ios/Doorbell/AppDelegate.swift")
         compat_util = read("ios-kiosk/src/Core/DBConfigUtil.m")
@@ -444,8 +464,19 @@ class RecoverySafeModeContracts(unittest.TestCase):
 
         capabilities = runtime[runtime.index("private func publishCapabilities"):
                                runtime.index("private func publishUiManifest")]
-        self.assertIn('cameraPermission == "authorized"', capabilities)
-        self.assertIn('cameraRuntimeState == "active"', capabilities)
+        # The camera rule moved into AvPermissions so it can be unit-tested without driving
+        # AVCaptureDevice, but it is still the same rule and it is still what is published.
+        self.assertIn("AvPermissions.cameraOffered(role: boot.role, permission: cameraPermission",
+                      capabilities)
+        self.assertIn("runtime: cameraRuntimeState)", capabilities)
+        self.assertIn('permission == "authorized" && runtime == "active"', availability)
+        self.assertIn('role == "door_station"', availability)
+        # not_determined is reported honestly: a prompt nobody has answered is not a refusal, and
+        # an indoor panel hides the tile of a door whose camera capability is false.
+        self.assertIn('default: return "not_determined"', availability)
+        self.assertIn("AvPermissions.requestAtLaunch(role: boot.role)",
+                      read("ios/Doorbell/AppDelegate.swift"),
+                      "the ask happens before the first capability document")
         self.assertIn('microphonePermission == "authorized"', capabilities)
         self.assertIn("availableInputs?.isEmpty", capabilities)
         self.assertIn('h264EncodeState == "verified"', capabilities)
@@ -471,6 +502,24 @@ class RecoverySafeModeContracts(unittest.TestCase):
         self.assertNotIn("TimeInterval = 60", expiry)
         self.assertNotIn("60_000", main)
 
+    def test_modern_identity_restart_quiesces_camera_before_core_destroy(self):
+        delegate = read("ios/Doorbell/AppDelegate.swift")
+        main = read("ios/Doorbell/MainViewController.swift")
+        camera = read("ios/Doorbell/CameraFeeder.swift")
+
+        restart = delegate[delegate.index("private func restartForIdentityChange"):
+                           delegate.index("private func onUiEvent")]
+        self.assertLess(restart.index("prepareForCoreShutdown()"),
+                        restart.index("core.stop()"))
+        self.assertLess(restart.index("win.rootViewController = UIViewController()"),
+                        restart.index("core.stop()"))
+        self.assertIn("DispatchQueue.main.async", restart)
+        shutdown = main[main.index("func prepareForCoreShutdown"):
+                        main.index("private func buildUi")]
+        self.assertIn("camera.stopAndWait()", shutdown)
+        self.assertIn("videoEncoder.stop()", shutdown)
+        self.assertIn("queue.sync { s?.stopRunning() }", camera)
+        self.assertGreaterEqual(camera.count("guard isAcceptingFrames()"), 2)
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

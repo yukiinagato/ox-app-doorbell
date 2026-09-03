@@ -21,7 +21,22 @@ final class CoreBridge {
 
     private var handlers: [String: UiEventHandler] = [:]
 
-    var isRunning: Bool { return core != nil }
+    /// True only between a successful `db_core_start` and `stop()`. The pointer alone is not the
+    /// answer: `db_core_create_v2` hands one back while Core's run loop is still in its manual
+    /// state, and in that state every loop-backed export — `db_core_local_time_json`,
+    /// `db_core_status_json`, all of them — runs its body inline on whatever thread called it,
+    /// with no synchronisation against `db_core_start` building the node on the loop thread. A
+    /// shell that reads Core through this flag can never be the thread that does that.
+    private var started = false
+
+    /// Whether Core is up and safe to call. Everything in the shell that reads Core asks this
+    /// first; nothing may call a loop-backed export while a start is still in flight.
+    var isRunning: Bool { return core != nil && started }
+
+    /// The handle, but only once Core has started. Every loop-backed read goes through this, so a
+    /// screen built while `db_core_start` is still running reads nothing rather than stepping
+    /// into a half-built node on the wrong thread.
+    private var live: OpaquePointer? { return started ? core : nil }
 
 
     func start(dataDir: String, bootJson: String) -> Bool {
@@ -95,11 +110,17 @@ final class CoreBridge {
             core = nil
             return false
         }
+        // Only now is the run loop Running and the node built, so only now may anything else in
+        // the shell — including a background queue — call into Core.
+        started = true
         return true
     }
 
     func stop() {
         guard let c = core else { return }
+        // Closed before the teardown, so a reader that is already on its way in turns back at the
+        // gate rather than racing `db_core_stop`.
+        started = false
         db_core_set_ui_callback(c, nil, nil)
         db_core_stop(c)
         db_core_destroy(c)
@@ -207,20 +228,29 @@ final class CoreBridge {
         return String(cString: p)
     }
 
-    func status() -> [String: Any]? { return takeJson(core.map { db_core_status_json($0) } ?? nil) }
+    func status() -> [String: Any]? { return takeJson(live.map { db_core_status_json($0) } ?? nil) }
 
     func debugInfo() -> [String: Any]? {
-        return takeJson(core.map { db_core_debug_json($0) } ?? nil)
+        return takeJson(live.map { db_core_debug_json($0) } ?? nil)
     }
 
-    func config() -> [String: Any]? { return takeJson(core.map { db_core_config_json($0) } ?? nil) }
+    func config() -> [String: Any]? { return takeJson(live.map { db_core_config_json($0) } ?? nil) }
 
     func capabilities() -> [String: Any]? {
-        takeJson(core.map { db_core_capabilities_json($0) } ?? nil)
+        takeJson(live.map { db_core_capabilities_json($0) } ?? nil)
     }
 
     func pairing() -> [String: Any]? {
-        takeJson(core.map { db_core_pairing_json($0) } ?? nil)
+        takeJson(live.map { db_core_pairing_json($0) } ?? nil)
+    }
+
+    /// Core's own reading of a scanned `doorbell://pair` code, so every shell accepts and refuses
+    /// exactly the same invitations. Core checks the expiry against corrected cluster time when it
+    /// is running, which a shell cannot do. Nil when Core is not up yet — a code can be scanned
+    /// before it is — and the caller falls back to its own parse.
+    func parsePairUri(_ uri: String) -> [String: Any]? {
+        guard let c = live, !uri.isEmpty else { return nil }
+        return takeJson(db_core_parse_pair_uri_json(c, uri))
     }
 
     func joinCluster(host: String, pin: String) {
@@ -348,6 +378,11 @@ final class CoreBridge {
         return db_core_video_encoder_wanted(c) != 0
     }
 
+    func takeVideoKeyframeRequest() -> Bool {
+        guard let c = core else { return false }
+        return db_core_take_video_keyframe_request(c) != 0
+    }
+
 
     func speak(text: String, lang: String) {
         guard !text.isEmpty else { return }
@@ -370,7 +405,7 @@ final class CoreBridge {
     /// Every clock in the shells goes through this so a device with a wrong OS clock, or one in
     /// another zone, still shows the household's time.
     func localTime(wallMs: Int64 = 0) -> [String: Any]? {
-        guard let c = core else { return nil }
+        guard let c = live else { return nil }
         return takeJson(db_core_local_time_json(c, wallMs))
     }
 
@@ -383,7 +418,7 @@ final class CoreBridge {
 
     /// Effective call/sos/idle volumes for one device; empty selects this node.
     func audioVolumes(deviceId: String = "") -> [String: Any]? {
-        guard let c = core else { return nil }
+        guard let c = live else { return nil }
         return takeJson(db_core_audio_json(c, deviceId))
     }
 
@@ -411,7 +446,7 @@ final class CoreBridge {
     /// the oldest row already shown as the next `beforeMs` and filters locally, because the ABI
     /// exposes only a lower bound.
     func callLog(sinceMs: Int64 = 0, limit: Int = 50) -> [String: Any]? {
-        guard let c = core else { return nil }
+        guard let c = live else { return nil }
         return takeJson(db_core_call_log_json(c, sinceMs, Int32(limit)))
     }
 
@@ -425,7 +460,7 @@ final class CoreBridge {
     var supportsCallLogPaging: Bool { return CoreBridge.callLogV2Fn != nil }
 
     func callLogPage(sinceMs: Int64, beforeMs: Int64, limit: Int) -> [String: Any]? {
-        guard let c = core, let fn = CoreBridge.callLogV2Fn else { return nil }
+        guard let c = live, let fn = CoreBridge.callLogV2Fn else { return nil }
         return takeJson(fn(c, sinceMs, beforeMs, Int32(limit)))
     }
 

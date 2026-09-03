@@ -9,12 +9,16 @@ import UIKit
 final class VisitorScreenView: UIView {
 
     private let texts: Texts
-    private let clockLabel = UILabel()
-    private let dateLabel = UILabel()
-    private let noticeLabel = UILabel()
+    private let clockLabel = HaloLabel()
+    private let dateLabel = HaloLabel()
+    private let noticeLabel = HaloLabel()
     private let noticeExpand = UIButton(type: .system)
-    private let hintLabel = UILabel()
-    private let footerLabel = UILabel()
+    private let hintLabel = HaloLabel()
+    private let footerLabel = HaloLabel()
+    /// Shown only when the camera has actually been refused. A door station whose camera is off
+    /// disappears from every indoor panel's tile list, so the reason belongs on its own screen
+    /// where somebody standing at the door can read it.
+    private let cameraWarning = PaddedLabel()
 
     private let callButton: UIButton
     private let langBar: UIView
@@ -28,6 +32,13 @@ final class VisitorScreenView: UIView {
     private var noticeExpanded = false
     private var noticeText = ""
     private var isLandscape = false
+    /// Whether this device's role offers the SOS slider. Remembered because `applyLayout` takes
+    /// the whole stack apart and puts it back.
+    private var sosVisible = true
+    private var callWidth: NSLayoutConstraint?
+    /// The call button may not hug its label: the verb is two characters in Japanese, and a
+    /// button barely wider than a finger is not what a visitor should have to hunt for.
+    private static let callButtonMinimumColumnShare: CGFloat = 0.6
     private var skin = DoorbellSkin.plain(.dark)
 
     init(texts: Texts, callButton: UIButton, langBar: UIView, purposeSection: UIView,
@@ -60,6 +71,11 @@ final class VisitorScreenView: UIView {
         noticeLabel.numberOfLines = 2
         noticeLabel.textAlignment = .center
         noticeLabel.accessibilityIdentifier = "visitor_notice"
+        cameraWarning.font = .systemFont(ofSize: 17, weight: .semibold)
+        cameraWarning.numberOfLines = 2
+        cameraWarning.textAlignment = .center
+        cameraWarning.accessibilityIdentifier = "visitor_camera_warning"
+        cameraWarning.isHidden = true
         noticeExpand.setTitle("▾", for: .normal)
         noticeExpand.titleLabel?.font = .systemFont(ofSize: 22, weight: .bold)
         noticeExpand.accessibilityIdentifier = "visitor_notice_expand"
@@ -84,10 +100,18 @@ final class VisitorScreenView: UIView {
         noticeColumn.axis = .vertical
         noticeColumn.spacing = 8
         noticeColumn.addArrangedSubview(noticeRow)
+        noticeColumn.addArrangedSubview(cameraWarning)
 
         actionColumn.axis = .vertical
         actionColumn.spacing = 18
-        actionColumn.alignment = .center
+        // Children take the column's width: that is what bounds the purpose grid to the column it
+        // sits in, and what gives the three language chips one row of equal widths in landscape
+        // as well as portrait. Only the call button is centred at its own size.
+        actionColumn.alignment = .fill
+
+        // The bar keeps its own height; the spacer above it is what absorbs the slack.
+        sosControl.setContentHuggingPriority(.required, for: .vertical)
+        sosControl.setContentCompressionResistancePriority(.required, for: .vertical)
 
         root.axis = .vertical
         root.spacing = 18
@@ -111,8 +135,10 @@ final class VisitorScreenView: UIView {
         let wide = min(size.width, size.height) >= 768
         isLandscape = landscape
 
-        for view in root.arrangedSubviews { root.removeArrangedSubview(view) }
-        for view in root.arrangedSubviews { view.removeFromSuperview() }
+        for view in root.arrangedSubviews.reversed() {
+            root.removeArrangedSubview(view)
+            view.removeFromSuperview()
+        }
         for view in [noticeColumn, actionColumn] {
             for child in view.arrangedSubviews {
                 view.removeArrangedSubview(child)
@@ -143,7 +169,7 @@ final class VisitorScreenView: UIView {
         if landscape {
             // With a notice on screen, the language row belongs directly above the call button.
             actionColumn.addArrangedSubview(langBar)
-            actionColumn.addArrangedSubview(callButton)
+            actionColumn.addArrangedSubview(callButtonRow())
             actionColumn.addArrangedSubview(hintLabel)
             actionColumn.addArrangedSubview(purposeSection)
             let columns = UIStackView(arrangedSubviews: [
@@ -154,20 +180,45 @@ final class VisitorScreenView: UIView {
             columns.alignment = .center
             root.addArrangedSubview(columns)
             root.addArrangedSubview(footerLabel)
-            root.addArrangedSubview(sosControl)
+            if sosVisible { root.addArrangedSubview(sosControl) }
             return
         }
 
         root.addArrangedSubview(clockColumn)
         root.addArrangedSubview(noticeColumn)
         root.addArrangedSubview(langBar)
-        actionColumn.addArrangedSubview(callButton)
+        actionColumn.addArrangedSubview(callButtonRow())
         actionColumn.addArrangedSubview(hintLabel)
         actionColumn.addArrangedSubview(purposeSection)
         root.addArrangedSubview(actionColumn)
         root.addArrangedSubview(UIView())
         root.addArrangedSubview(footerLabel)
-        root.addArrangedSubview(sosControl)
+        if sosVisible { root.addArrangedSubview(sosControl) }
+    }
+
+    /// The call button, centred in a full-width row and never narrower than its share of it.
+    private func callButtonRow() -> UIView {
+        let row = centred(callButton)
+        callWidth?.isActive = false
+        let width = callButton.widthAnchor.constraint(
+            greaterThanOrEqualTo: row.widthAnchor,
+            multiplier: VisitorScreenView.callButtonMinimumColumnShare)
+        width.priority = UILayoutPriority(999)
+        width.isActive = true
+        callWidth = width
+        return row
+    }
+
+    /// Wraps a control that must keep its own size inside a full-width row.
+    private func centred(_ view: UIView) -> UIView {
+        let row = UIStackView(arrangedSubviews: [UIView(), view, UIView()])
+        row.axis = .horizontal
+        row.alignment = .center
+        row.distribution = .fill
+        if let first = row.arrangedSubviews.first, let last = row.arrangedSubviews.last {
+            first.widthAnchor.constraint(equalTo: last.widthAnchor).isActive = true
+        }
+        return row
     }
 
     private func stackVertically(_ views: [UIView]) -> UIStackView {
@@ -211,8 +262,26 @@ final class VisitorScreenView: UIView {
         footerLabel.text = text
     }
 
+    /// `nil` hides the banner. Nothing is said while a prompt is merely unanswered.
+    func updateCameraWarning(_ text: String?) {
+        cameraWarning.text = text
+        cameraWarning.isHidden = (text == nil)
+        applyCameraWarningSkin()
+    }
+
+    private func applyCameraWarningSkin() {
+        DoorbellTheme.pill(cameraWarning, background: skin.palette.danger,
+                           ink: DoorbellTheme.readableInk(on: skin.palette.danger), fontSize: 17)
+    }
+
+    /// A screen whose role offers no SOS slider does not merely hide one: it never puts one in
+    /// the hierarchy. Hiding was not enough, because a safety control's semantic style forces it
+    /// visible again on every layout pass.
     func setSosVisible(_ visible: Bool) {
+        guard visible != sosVisible else { return }
+        sosVisible = visible
         sosControl.isHidden = !visible
+        if bounds.width > 0 && bounds.height > 0 { applyLayout(for: bounds.size) }
     }
 
     /// Applies the skin and the computed call-button colour. Every label here is drawn straight
@@ -228,6 +297,7 @@ final class VisitorScreenView: UIView {
             skin.apply(region, to: label, quiet: region == "footer" || region == "date")
         }
         noticeExpand.setTitleColor(noticeLabel.textColor, for: .normal)
+        applyCameraWarningSkin()
 
         let colors = DoorbellTheme.callButtonColors(display: skin.display,
                                                     background: skin.background)

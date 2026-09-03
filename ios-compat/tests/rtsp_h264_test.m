@@ -25,6 +25,10 @@ static NSData *RTPPacket(uint16_t sequence, uint32_t timestamp, BOOL marker,
   header[5] = (uint8_t)(timestamp >> 16);
   header[6] = (uint8_t)(timestamp >> 8);
   header[7] = (uint8_t)timestamp;
+  header[8] = 0x11;
+  header[9] = 0x22;
+  header[10] = 0x33;
+  header[11] = 0x44;
   [packet appendBytes:payload length:payloadLength];
   return packet;
 }
@@ -155,8 +159,12 @@ static void *RunFakeRTSPServer(void *context) {
         [request rangeOfString:@"Session: test-session"].location == NSNotFound ||
         !SendResponse(fd, request, @[@"Session: test-session"], nil,
                       Interleaved(0, rtp))) goto done;
+    uint8_t pli[16] = {0};
+    ssize_t received = recv(fd, pli, sizeof(pli), MSG_WAITALL);
+    if (received != sizeof(pli) || pli[0] != '$' || pli[1] != 1 || pli[3] != 12 ||
+        pli[4] != 0x81 || pli[5] != 206 || pli[12] != 0x11 || pli[13] != 0x22 ||
+        pli[14] != 0x33 || pli[15] != 0x44) goto done;
     server->passed = 1;
-    usleep(100000);
   done:
     shutdown(fd, SHUT_RDWR);
     close(fd);
@@ -381,6 +389,7 @@ static void TestLoopbackHandshakeAndReconnectState(void) {
   Check(dispatch_semaphore_wait(forwarding,
           dispatch_time(DISPATCH_TIME_NOW, 3 * NSEC_PER_SEC)) == 0,
         @"OPTIONS/DESCRIBE/SETUP/PLAY gates capability on an accepted IDR");
+  Check([source requestKeyFrame], @"new subscriber request emits RTCP PLI on the RTCP channel");
   Check(dispatch_semaphore_wait(reconnecting,
           dispatch_time(DISPATCH_TIME_NOW, 3 * NSEC_PER_SEC)) == 0,
         @"closed RTSP session enters bounded reconnect state");

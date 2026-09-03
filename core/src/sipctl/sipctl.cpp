@@ -14,9 +14,15 @@
 
 #include <algorithm>
 #include <atomic>
+#include <thread>
+#include <chrono>
+#include <cstdio>
 #include <cstdlib>
+#include <deque>
+#include <map>
 #include <mutex>
 #include <set>
+#include <string>
 #include <vector>
 
 #include "util/log.h"
@@ -84,9 +90,64 @@ struct SipCtl::Impl {
 
 
 
+  // Guarded by mon_mu, which already serialises the dialog bookkeeping.
+  std::string call_mode;
+  void setCallMode(const std::string& mode) {
+    std::lock_guard<std::mutex> lk(mon_mu);
+    call_mode = mode;
+  }
+  std::string callMode() {
+    std::lock_guard<std::mutex> lk(mon_mu);
+    return call_mode;
+  }
+
   std::mutex mon_mu;
-  std::vector<pjsua_call_id> monitors;
+  struct MonitorLeg {
+    std::string peer;
+    bool had_media = false;
+  };
+  std::map<pjsua_call_id, MonitorLeg> monitors;
   std::atomic<int> mon_count{0};
+  // Peers whose monitor dialogs keep ending without ever carrying media. One panel churning
+  // listen-in sessions can otherwise occupy a door station indefinitely: each dialog costs an
+  // INVITE, media negotiation and a teardown, and on the oldest hardware that is enough to
+  // starve everything else on the device.
+  std::map<std::string, std::deque<int64_t>> empty_monitor_ends;
+  static constexpr size_t kEmptyMonitorLimit = 8;
+  static constexpr int64_t kEmptyMonitorWindowMs = 10'000;
+  static constexpr int kMonitorRetryAfterS = 10;
+
+  static int64_t nowMs() {
+    return std::chrono::duration_cast<std::chrono::milliseconds>(
+               std::chrono::steady_clock::now().time_since_epoch())
+        .count();
+  }
+
+  // True when this peer has recently produced more empty monitor dialogs than a working client
+  // ever would.
+  bool monitorPeerThrottled(const std::string& peer) {
+    std::lock_guard<std::mutex> lk(mon_mu);
+    auto it = empty_monitor_ends.find(peer);
+    if (it == empty_monitor_ends.end()) return false;
+    const int64_t cutoff = nowMs() - kEmptyMonitorWindowMs;
+    while (!it->second.empty() && it->second.front() < cutoff) it->second.pop_front();
+    if (it->second.empty()) {
+      empty_monitor_ends.erase(it);
+      return false;
+    }
+    return it->second.size() >= kEmptyMonitorLimit;
+  }
+
+  void noteEmptyMonitor(const std::string& peer) {
+    if (peer.empty()) return;
+    std::lock_guard<std::mutex> lk(mon_mu);
+    auto& ends = empty_monitor_ends[peer];
+    const int64_t now = nowMs();
+    const int64_t cutoff = now - kEmptyMonitorWindowMs;
+    while (!ends.empty() && ends.front() < cutoff) ends.pop_front();
+    ends.push_back(now);
+    if (ends.size() > kEmptyMonitorLimit * 4) ends.pop_front();
+  }
 
 
   std::mutex src_mu;
@@ -100,21 +161,32 @@ struct SipCtl::Impl {
     pjsua_conf_adjust_rx_level(0, mic_muted.load() ? 0.0f : 1.0f);
   }
 
-  bool addMonitor(pjsua_call_id cid) {
+  bool addMonitor(pjsua_call_id cid, const std::string& peer) {
     std::lock_guard<std::mutex> lk(mon_mu);
     if (static_cast<int>(monitors.size()) >= kMaxMonitorCalls) return false;
-    monitors.push_back(cid);
+    MonitorLeg leg;
+    leg.peer = peer;
+    monitors[cid] = leg;
     mon_count.store(static_cast<int>(monitors.size()));
     return true;
   }
   bool isMonitor(pjsua_call_id cid) {
     std::lock_guard<std::mutex> lk(mon_mu);
-    return std::find(monitors.begin(), monitors.end(), cid) != monitors.end();
+    return monitors.find(cid) != monitors.end();
   }
-  bool removeMonitor(pjsua_call_id cid) {
+  void noteMonitorMedia(pjsua_call_id cid) {
     std::lock_guard<std::mutex> lk(mon_mu);
-    auto it = std::find(monitors.begin(), monitors.end(), cid);
+    auto it = monitors.find(cid);
+    if (it != monitors.end()) it->second.had_media = true;
+  }
+  // Returns the peer when the leg existed, and reports whether it ever carried media.
+  bool removeMonitor(pjsua_call_id cid, std::string* peer = nullptr,
+                     bool* had_media = nullptr) {
+    std::lock_guard<std::mutex> lk(mon_mu);
+    auto it = monitors.find(cid);
     if (it == monitors.end()) return false;
+    if (peer) *peer = it->second.peer;
+    if (had_media) *had_media = it->second.had_media;
     monitors.erase(it);
     mon_count.store(static_cast<int>(monitors.size()));
     return true;
@@ -122,6 +194,7 @@ struct SipCtl::Impl {
   void clearMonitors() {
     std::lock_guard<std::mutex> lk(mon_mu);
     monitors.clear();
+    empty_monitor_ends.clear();
     mon_count.store(0);
   }
 
@@ -203,6 +276,49 @@ struct SipCtl::Impl {
   void stopOnLoop();
 
 
+  // ---- SIP event pump ----
+  // pjsua's own worker polls every 10 ms whether or not anything is happening. This one follows
+  // the work; see the note at the top of sipctl.h.
+  std::thread pump_thread;
+  std::atomic<bool> pump_stop{false};
+  std::atomic<bool> registration_pending{false};
+  // Iterations of the pump loop, so a test can measure the idle rate rather than infer it.
+  std::atomic<uint64_t> pump_iterations{0};
+
+  long earliestTimerMs() {
+    pjsip_endpoint* endpt = pjsua_get_pjsip_endpt();
+    if (!endpt) return -1;
+    pj_timer_heap_t* heap = pjsip_endpt_get_timer_heap(endpt);
+    if (!heap) return -1;
+    pj_time_val delay;
+    if (pj_timer_heap_earliest_time(heap, &delay) != PJ_SUCCESS) return -1;
+    if (delay.sec < 0 || delay.msec < 0) return 0;
+    if (delay.sec > 3600) return 3600L * 1000L;
+    return static_cast<long>(delay.sec) * 1000L + delay.msec;
+  }
+
+  void pumpLoop() {
+    ensurePjThread();
+    while (!pump_stop.load(std::memory_order_relaxed)) {
+      const int timeout = sipPumpTimeoutMs(pjsua_call_get_count() > 0,
+                                           registration_pending.load(std::memory_order_relaxed),
+                                           earliestTimerMs());
+      pump_iterations.fetch_add(1, std::memory_order_relaxed);
+      pjsua_handle_events(static_cast<unsigned>(timeout));
+    }
+  }
+
+  void startPump() {
+    pump_stop.store(false);
+    pump_iterations.store(0);
+    pump_thread = std::thread([this] { pumpLoop(); });
+  }
+
+  void stopPump() {
+    pump_stop.store(true);
+    if (pump_thread.joinable()) pump_thread.join();
+  }
+
   static void s_on_reg_state2(pjsua_acc_id acc_id, pjsua_reg_info* info);
   static void s_on_call_state(pjsua_call_id call_id, pjsip_event* e);
   static void s_on_incoming_call(pjsua_acc_id acc_id, pjsua_call_id call_id, pjsip_rx_data* rdata);
@@ -220,6 +336,9 @@ void SipCtl::Impl::s_on_reg_state2(pjsua_acc_id, pjsua_reg_info* info) {
   Impl* im = g_impl.load();
   if (!im || !info || !info->cbparam) return;
   const pjsip_regc_cbparam* p = info->cbparam;
+  // A final answer means the exchange is over and the pump can slow down again.
+  if (p->status != PJ_SUCCESS || p->code >= 200)
+    im->registration_pending.store(false, std::memory_order_relaxed);
   std::string reason = "code=" + std::to_string(p->code);
   if (p->status != PJ_SUCCESS) {
     im->postReg(SipRegState::Failed, "status=" + std::to_string(p->status));
@@ -244,9 +363,16 @@ void SipCtl::Impl::s_on_call_state(pjsua_call_id call_id, pjsip_event*) {
   std::string remote(ci.remote_info.ptr, static_cast<size_t>(ci.remote_info.slen));
 
   if (im->call_id.load() != call_id) {
-    if (ci.state == PJSIP_INV_STATE_DISCONNECTED && im->removeMonitor(call_id)) {
-      DB_LOGI(kTag, "monitor call #" + std::to_string(call_id) + " ended (" + remote +
-                        ", remaining " + std::to_string(im->mon_count.load()) + ")");
+    if (ci.state == PJSIP_INV_STATE_DISCONNECTED) {
+      std::string peer;
+      bool had_media = false;
+      if (im->removeMonitor(call_id, &peer, &had_media)) {
+        // A dialog that never carried media did nothing but cost the device work.
+        if (!had_media) im->noteEmptyMonitor(peer);
+        DB_LOGI(kTag, "monitor call #" + std::to_string(call_id) + " ended (" + remote +
+                          (had_media ? "" : ", no media") + ", remaining " +
+                          std::to_string(im->mon_count.load()) + ")");
+      }
     }
     return;
   }
@@ -262,6 +388,7 @@ void SipCtl::Impl::s_on_call_state(pjsua_call_id call_id, pjsip_event*) {
       break;
     case PJSIP_INV_STATE_DISCONNECTED:
       im->call_id.store(PJSUA_INVALID_ID);
+      im->setCallMode("");
       im->postCall(SipCallState::Ended, remote);
       break;
     default:
@@ -310,6 +437,7 @@ void SipCtl::Impl::s_on_incoming_call(pjsua_acc_id, pjsua_call_id call_id,
       DB_LOGI(kTag, "answer takeover: canceling unestablished primary call #" + std::to_string(cur) +
                         " and accepting incoming call #" + std::to_string(call_id) + " bidirectionally");
       pjsua_call_hangup(cur, 0, nullptr, nullptr);
+      im->setCallMode("answer");
       pjsua_call_answer(call_id, PJSIP_SC_OK, nullptr, nullptr);
       return;
     }
@@ -317,8 +445,25 @@ void SipCtl::Impl::s_on_incoming_call(pjsua_acc_id, pjsua_call_id call_id,
   }
 
   if (want_monitor) {
-
-    if (!im->st.auto_answer || !im->addMonitor(call_id)) {
+    const std::string peer = rdata ? std::string(rdata->pkt_info.src_name) : std::string();
+    // A client whose listen-in sessions keep ending without media is churning, not listening.
+    // Refusing it with a Retry-After keeps one misbehaving panel from occupying a door station.
+    if (im->monitorPeerThrottled(peer)) {
+      DB_LOGW(kTag, "refusing monitor call from " + peer +
+                        ": too many dialogs ended without media");
+      pjsua_msg_data msg_data;
+      pjsua_msg_data_init(&msg_data);
+      pjsip_generic_string_hdr retry;
+      pj_str_t name = pj_str(const_cast<char*>("Retry-After"));
+      char seconds[8];
+      std::snprintf(seconds, sizeof(seconds), "%d", Impl::kMonitorRetryAfterS);
+      pj_str_t value = pj_str(seconds);
+      pjsip_generic_string_hdr_init2(&retry, &name, &value);
+      pj_list_push_back(&msg_data.hdr_list, &retry);
+      pjsua_call_answer(call_id, PJSIP_SC_BUSY_HERE, nullptr, &msg_data);  // 486 + Retry-After
+      return;
+    }
+    if (!im->st.auto_answer || !im->addMonitor(call_id, peer)) {
       pjsua_call_answer(call_id, PJSIP_SC_BUSY_HERE, nullptr, nullptr);  // 486
       return;
     }
@@ -341,6 +486,7 @@ void SipCtl::Impl::s_on_incoming_call(pjsua_acc_id, pjsua_call_id call_id,
   }
 
 
+  im->setCallMode(mode);
   if (mode == "answer" || im->st.auto_answer) {
     pjsua_call_answer(call_id, PJSIP_SC_OK, nullptr, nullptr);
   } else {
@@ -367,6 +513,7 @@ void SipCtl::Impl::s_on_call_media_state(pjsua_call_id call_id) {
     DB_LOGI(kTag, "primary call #" + std::to_string(call_id) + ": bidirectional audio connected (conf slot " +
                       std::to_string(slot) + " <-> 0)");
   } else if (im->isMonitor(call_id)) {
+    im->noteMonitorMedia(call_id);
     pjsua_conf_connect(0, slot);
     DB_LOGI(kTag, "monitor call #" + std::to_string(call_id) +
                       ": one-way microphone audio connected (conf 0 -> slot " + std::to_string(slot) + ")");
@@ -422,6 +569,9 @@ void SipCtl::Impl::startOnLoop(const SipSettings& s) {
 
   pjsua_config cfg;
   pjsua_config_default(&cfg);
+  // No pjsua worker: its loop polls every 10 ms for ever, idle or not. We pump the events
+  // ourselves at a rate that follows the work. See the note at the top of sipctl.h.
+  cfg.thread_cnt = 0;
   cfg.cb.on_reg_state2 = &Impl::s_on_reg_state2;
   cfg.cb.on_call_state = &Impl::s_on_call_state;
   cfg.cb.on_incoming_call = &Impl::s_on_incoming_call;
@@ -478,6 +628,7 @@ void SipCtl::Impl::startOnLoop(const SipSettings& s) {
   }
 
   pjsua_start();
+  startPump();
   if (st.null_audio) pjsua_set_null_snd_dev();
 
 
@@ -560,6 +711,7 @@ void SipCtl::Impl::startOnLoop(const SipSettings& s) {
   }
 
   running = true;
+  registration_pending.store(true, std::memory_order_relaxed);
   reg_state = SipRegState::Registering;
   call_state = SipCallState::Idle;
   DB_LOGI(kTag, "SIP started: " + st.user + "@" + host + " (" + st.transport + ")");
@@ -574,6 +726,9 @@ void SipCtl::Impl::stopOnLoop() {
   DB_LOGI(kTag, "stopping SIP: hang up, unregister, then destroy pjsua");
   pjsua_call_hangup_all();
   if (acc != PJSUA_INVALID_ID) pjsua_acc_set_registration(acc, PJ_FALSE);
+  // The pump must be off the endpoint before it is torn down: handle_events on a destroyed
+  // endpoint is a use-after-free, not a no-op.
+  stopPump();
   pjsua_destroy();
   g_impl.store(nullptr);
   stopping.store(false);
@@ -657,6 +812,7 @@ bool SipCtl::callOwned(const std::string& owner, const std::string& target,
   }
   im->call_id.store(cid);
   im->call_owner = owner;
+  im->setCallMode(mode);
   DB_LOGI(kTag, "calling " + uri + (mode.empty() ? "" : " (mode=" + mode + ")"));
   return true;
 }
@@ -669,6 +825,8 @@ void SipCtl::setAllowedSources(const std::vector<std::string>& ips) {
 }
 
 int SipCtl::monitorCount() const { return impl_->mon_count.load(); }
+
+std::string SipCtl::callMode() const { return impl_->callMode(); }
 
 void SipCtl::hangup() {
   Impl* im = impl_.get();

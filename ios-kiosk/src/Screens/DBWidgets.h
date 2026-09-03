@@ -1,5 +1,8 @@
 #import <UIKit/UIKit.h>
 
+#import "../Core/DBAdminAddress.h"
+#import "../Core/DBIconAsset.h"
+#import "../Core/DBBackdropCompositor.h"
 #import "../Core/DBSosSlideModel.h"
 
 @class DBTexts;
@@ -15,6 +18,33 @@ UIColor *DBColorFromHex(NSString *hex, UIColor *fallback);
 // available area, so a portrait stream is shown portrait.
 CGRect DBAspectFitRect(CGRect available, CGSize contentSize);
 NSString *DBHexFromColor(UIColor *color);
+
+// The cluster's theme picture, prepared once for this panel.
+//
+// A full-size decode per layout is not affordable on an SGX535 with 256 MB, and
+// a bright wallpaper behind text is unreadable however the ink is chosen. The
+// backdrop is therefore decoded once per (image, size), scaled to the panel
+// with aspect fill and darkened, then reused. The same darkened image is what
+// the ink sampler measures, so the contrast decision matches what is on screen.
+@interface DBThemeBackdrop : NSObject
+
+// Decodes and prepares off the main thread. key identifies the picture, which
+// is the asset hash, plus the overlay it was prepared with. Returns nil when
+// the data is not an image.
++ (UIImage *)backdropForData:(NSData *)data key:(NSString *)key size:(CGSize)size
+                     overlay:(NSDictionary *)overlay;
+// The prepared image when this exact picture, size and overlay were already
+// built.
++ (UIImage *)cachedBackdropForKey:(NSString *)key size:(CGSize)size
+                          overlay:(NSDictionary *)overlay;
+// How far the picture is darkened, so callers can describe it.
++ (CGFloat)darkeningAlpha;
+// The bitmap is prepared at the panel's aspect ratio but no more than this on
+// its long side, then scaled back up by the view.
++ (CGFloat)maximumLongSide;
++ (CGSize)preparedSizeForViewSize:(CGSize)size;
+
+@end
 
 // A low-resolution copy of the theme background exactly as it is drawn on
 // screen, so each text region can be measured against the pixels actually
@@ -32,6 +62,11 @@ NSString *DBHexFromColor(UIColor *color);
 // empty rect. averageHex is the same measurement over the whole view.
 - (NSString *)averageHexInViewRect:(CGRect)rect;
 - (NSString *)averageHex;
+// The same sample with its extremes: @{"average", "darkest", "lightest"} by
+// relative luminance. The average decides the ink; the extremes decide whether
+// it needs a shadow, because a line crossing a pale wall and a dark jacket
+// averages to something readable and still vanishes over the jacket.
+- (NSDictionary *)sampleInViewRect:(CGRect)rect;
 
 @end
 
@@ -42,6 +77,8 @@ NSString *DBHexFromColor(UIColor *color);
 @property(nonatomic, readonly, copy) NSString *surfaceHex;
 @property(nonatomic, readonly) UIColor *surface;
 @property(nonatomic, readonly) UIColor *elevated;   // tiles, rows, chips
+@property(nonatomic, readonly) UIColor *chipPlate; // opaque enough for a picture
+@property(nonatomic, readonly) UIColor *plate;    // card/scrim tone, follows the appearance
 @property(nonatomic, readonly) UIColor *separator;
 @property(nonatomic, readonly) UIColor *ink;
 @property(nonatomic, readonly) UIColor *mutedInk;
@@ -71,6 +108,11 @@ NSString *DBHexFromColor(UIColor *color);
 // override still wins, and core's per-region value is used when the background
 // is a flat colour, where core's answer is exact.
 - (void)setBackgroundSampler:(DBBackgroundSampler *)sampler;
+// NO for a screen that paints its own chrome instead of the cluster's theme
+// picture, such as the incoming/monitor page. Core's published per-region ink
+// describes the theme background, so a screen that does not draw it must not
+// take that answer: on the device it made the call title dark grey on black.
+- (void)setUsesThemeBackground:(BOOL)usesThemeBackground;
 - (UIColor *)inkForRegion:(NSString *)region frame:(CGRect)frame;
 - (BOOL)needsShadowForRegion:(NSString *)region frame:(CGRect)frame;
 // Applies both to one label in a single call, which is what every screen wants.
@@ -78,6 +120,32 @@ NSString *DBHexFromColor(UIColor *color);
 // Average colour of a theme image, downsampled to 16x16 off the main thread.
 + (NSString *)averageHexForImage:(UIImage *)image;
 
+@end
+
+// The three cluster counters in the dashboard header: total devices, door
+// stations online/total, indoor panels online/total. Each is a glyph drawn in
+// code -- no image asset, no emoji, nothing an iOS 5 font may lack -- followed
+// by its number.
+typedef enum {
+  DBFleetGlyphCluster = 0,
+  DBFleetGlyphDoorStation,
+  DBFleetGlyphIndoorPanel,
+} DBFleetGlyph;
+
+// The Tabler icon each counter asks DBIconAsset for.
+NSString *DBFleetGlyphIconName(DBFleetGlyph glyph);
+
+// One cluster counter: a Tabler icon and a number, drawn straight onto the
+// ground with region ink like a status line. No plate and no background -- it
+// is text, not a chip.
+@interface DBFleetCounter : UIView
+@property(nonatomic, assign) DBFleetGlyph glyph;
+@property(nonatomic, copy) NSString *value;
+@property(nonatomic, strong) UIColor *ink;
+// Set when the ink rule says this region needs a halo to survive the picture
+// behind it.
+@property(nonatomic, assign) BOOL halo;
+- (CGFloat)widthThatFits;
 @end
 
 // Coloured background text always gets 6/12 padding and a radius (spec §0.7).
@@ -112,9 +180,14 @@ NSString *DBHexFromColor(UIColor *color);
 
 // Admin-page QR plus its URL. Visible on every indoor surface; opening the
 // admin still requires the password.
+// The footer block: the admin QR, then two left-aligned lines beside it -- the
+// address, then the version and battery line -- in one colour and one size.
 @interface DBAdminQrView : UIView
 - (void)setUrl:(NSString *)url caption:(NSString *)caption;
 - (void)applyPalette:(DBUiPalette *)palette;
+// Line 2. The caption is no longer drawn; it survives as the accessibility
+// label on line 1.
+- (void)setVersionLine:(NSString *)text;
 @property(nonatomic, readonly, copy) NSString *url;
 @end
 

@@ -11,6 +11,12 @@ operator は `door_station` / `indoor_panel` を選択します。door 欄は do
 ASCII 英数字、以降が英数字・`_`・`-` です。保存成功時だけ `setup_complete:true` を atomic に書きます。
 tvOS は対応する door-camera role がないため、意図的に `indoor_panel` 固定です。
 
+端末が cluster に参加した後は、`devices.<self>.name`、`.role`、`.door` が遠隔編集可能な
+desired identity になります。Android と iOS/iPadOS の対象 shell は変更された identity を検証し、ローカルの
+`boot.json` に atomic に保存してから UI と Core を再起動し、新しい role を広告して platform
+runtime に適用します。再起動が完了するまでは、対象端末がまだ適用していない新しい replicated
+identity ではなく、対象端末の live signed advertisement を peer が使用します。
+
 mesh PSK は CRDT 値ではなく端末ローカルの bootstrap data。Core は先に
 `secure_put("mesh.psk", …)` を完了し、shell へ
 `{"t":"paired","psk_ref":"secret:mesh.psk"}` だけを通知します。shell は opaque reference と秘密でない
@@ -178,7 +184,12 @@ materialized config/export に plaintext を出しません。起動時は legac
 
   "display": {                                  // 表示・焼付対策 (全端末既定; devices.<id>.local.display で上書き)
     // theme: 門口機の背景 (室内機/管理画面から「プッシュ配信」= この設定を書くだけ。CRDT で即時同期)
-    "theme": { "bg_color": "#101418", "bg_image": null },   // bg_image: assets の sha256 or null
+    "theme": { "bg_color": "#101418", "bg_image": null,   // bg_image: assets の sha256 or null
+               // 背景画像とその上に描かれるすべての要素の間に重ねる半透明の層。明るい写真の上でも
+               // 文字が読めるようにするためのもので、既定では有効。各項目は
+               // devices.<id>.local.theme.backdrop.* で端末ごとに上書きでき、項目ごとに独立して解決する。
+               "backdrop": { "enabled": true, "color": "#000000", "opacity": 62 },  // 0..100
+               "glass": { "blur_radius": 32 } },       // 0..40、対応 shell のみ
     "brightness": 70,                           // 0-100 (遠隔調整 — 管理画面のスライダー)
     "night": { "enabled": true, "from": "22:00", "to": "06:00",
                "brightness": 15, "red_tint": true },   // 夜間モード (補正済み時計で判定)
@@ -197,7 +208,7 @@ materialized config/export に plaintext を出しません。起動時は legac
     // 静音時間帯、画面の時計) に加算する。同期が 3 間隔続けて失敗するとオフセットは破棄する。
     "ntp": { "enabled": false,                  // 既定は無効
              "servers": ["ntp.nict.jp", "time.google.com"],   // 1-4 個の "host" / "host:port"
-             "interval_s": 900 }                // 60..86400
+             "interval_s": 86400 }              // 3600..604800、既定は 1 日 1 回
   },
 
   // クラスタ既定の音量 (0-100)。端末は devices.<id>.local.audio.volume.{call,sos,idle} で
@@ -415,6 +426,143 @@ argv を生成しません。
 true なら OS 自身の設定を優先する。OS に設定が無いプラットフォーム (iOS 5、Android 10 未満) は
 スケジュールの結果を使う。
 
+`boot.json` で門口を指定した門口機は、`doors.<door>` が無ければ自分で作成する。クラスタの作成時と
+参加時、そしてペアリング済みで起動するたびに確認し、端末名を 3 言語のラベルとして書き込む。これが
+無いと、作成直後のクラスタは `devices.<id>.door` が存在しない門口を指し、`status.doors` は空になり、
+門口をキーとするすべての面 (お知らせ・開錠ボタンの表示・タイル) に対象が無かった。エントリは作成のみで
+上書きは決してしない。名前の変更・建物の割り当て・担当機の変更は管理画面の 門口 タブで行い、その編集は
+再起動しても残る。室内機は門口を持たないので何も seed しない。
+
+`status.doors` にはさらに、**生存している門口機ピア**が担当していて設定エントリがまだ無い門口も
+含める。`"configured": false` を付け、その端末名をラベルにする。したがってこの挙動より前に構成された
+設置でもタイルは表示され、お知らせも受け付ける。最初の書き込みでエントリが作成され、以後は
+`configured` を報告する。誰も担当せず設定も無い門口は従来どおり不明として拒否する。
+
+`display.theme.auto_background` は `{"color":"#RRGGBB","source":…}` を返し、source が
+`image_unsampled` のときだけ `"reason"` を伴う。3 つの source は意図的に区別している。
+
+| `source` | 意味 |
+|---|---|
+| `color` | 背景画像が設定されていない。`color` はテーマ色そのもので信頼してよい |
+| `image` | 背景画像をサンプリングできた。`color` はその平均色 |
+| `image_unsampled` | 画像は設定されているが core がサンプリングできなかった。`color` は平らなテーマ色にすぎない |
+
+`reason` は `too_large` (core のデコード上限 16 MP 超)、`decode_failed` (このビルドで扱えない形式)、
+`missing` (このノードにまだ資産が無い) のいずれか。`image_unsampled` のとき、シェルは `auto_ink` と
+`auto_accent` を信頼してはならない。実際に画面に出ている画像ではなくテーマ色から導いた値だからである。
+自分で画像をサンプリングして判断するか、資産が届くまで直前のインクを維持すること。
+
+core は最大 16x16 点のグリッドをサンプリングするが、stb にはデコード時の縮小が無いため、デコードは
+一時的に 1 画素あたり約 3 バイト (上限で約 48 MB) を使い、直後に解放する。これを負担できない
+ハードウェアのシェルはいずれにせよ自前でサンプリングすること。core がサンプリングしていないことは
+`source` が伝える。
+
+### インクの選び方
+
+`auto_ink` は背景に直接描く文字のインクトークンを示す。**ダークとライトのうち、サンプリングした
+輝度に対する WCAG コントラスト比が高い方**を選ぶ。2 つの比が交差するのは Y = 0.1791 であり、
+中間輝度ではない。したがって「中間に見える」程度の背景でもすでにダークインクが適する。
+
+Y >= 0.5 で分ける旧規則は、この 2 つのしきい値の間で破綻する。平均 `#BBBBB4` の明るいグレーの
+写真は Y 0.494 にあり、ライトインクは 1.93:1、ダークインクは 9.58:1 になる。
+`core/tests/test_color.cpp` が固定している実測値:
+
+| 背景 | Y | ダーク | ライト | `auto_ink` |
+|---|---|---|---|---|
+| `#BBBBB4` | 0.494 | 10.88:1 | 1.93:1 | `dark` |
+| `#808080` | 0.216 | 5.32:1 | 3.95:1 | `dark` |
+| `#767676` | 0.1812 | 4.62:1 | 4.54:1 | `dark` |
+| `#757575` | 0.1779 | 4.56:1 | 4.61:1 | `light` |
+| `#404040` | 0.051 | 2.03:1 | 10.37:1 | `light` |
+
+1 px・40% の反対色シャドウは、選んだ方のインクでも 4.5:1 に届かない場合の fallback として残す。
+自前でサンプリングするシェル (`source` が `image_unsampled` の場合や、core のデコードを負担できない
+ハードウェア) も同じ規則を適用するので、フリート全体の答えは 1 つになる。
+
+自動生成されたエントリは `seeded_by` (作成したノード) と `seeded_label` (書き込んだラベル) を持つ。
+そのノードが次に起動する、またはペアリングされた時点で、役割が `door_station` でない、あるいは
+`boot.door` が変わっていれば、自分が作成したエントリを削除する。そうしないと、門口機から室内機に
+変更した端末が「誰も担当していない門口」のゴーストタイルを残す。削除するのは、書き込んだ内容の
+ままであるエントリだけである。他のフィールドが増えている、あるいはラベルが変更されている場合は
+管理者がその門口を引き取ったということであり、引き取られた門口は作成した端末より長く生き残る。
+これは単に停止しているだけの実在の門口機にとって正しい挙動である。
+
+`status.doors.<id>.served_by` は、その門口を担当している生存中の門口機のノード ID、いなければ
+`null`。「門口機がオフライン」と「そもそも担当する門口機がいない」を区別するのはこの値である。
+`configured` は「この門口に設定エントリがある」と「まだ設定されていない門口を生きた門口機が
+担当している」を区別する。
+
+`served_by` と `peers[].status` は、状態応答が一度だけ構築する単一の生存マップから読まれる。
+そのため両者が矛盾することはない。`served_by` に挙がるノードは `peers[]` で必ず `alive` であり、
+それ以外の状態のノードが挙がることはない。メッシュが一度も見ていない設定済み端末は `offline`
+として現れ、門口を担当することはない。
+
+いなくなって戻ってきた門口機はノード ID を保つ。二つ目のエントリが増えるのではなく、既存の
+エントリが更新される。心拍カウンタがリセットされた状態で再起動した場合も同様であり、そうで
+なければ既に見た広告の再送のように見えてしまう。
+
+### 着信画面から戻るまで
+
+`call.indoor.return_s` (5〜600 秒、既定 60)、および端末ごとの上書き
+`devices.<id>.local.call.return_s` は、室内機が着信画面に留まる時間である。画面タイトルに
+残り秒数「(60)」が出て、0 になるとホーム画面に戻る。この端末での実効値は
+`status.call.return_s` が返す。
+
+シェルにとって重要な挙動が 2 つある。訪問者が呼出を取り消しても、パネルは**すぐには**画面を
+離れない。カウントダウンが終わるか、利用者が自分で離れるまで映像を表示し続ける。顔を上げた
+住人が「誰が来ていたのか」を見られるようにするためである。カウントダウンの数字をタップすると
+その呼出についてカウントダウンを取り消す。門口を見ている住人が途中でホーム画面に戻されることは
+ない。
+
+### クラスタへの参加は無音で行う
+
+anti-entropy は参加したノードにクラスタのイベント履歴をまとめて渡す。これらは元の outcome の
+まま呼出履歴に取り込むが、**鳴らしてはならない**。呼出イベントが提示 (チャイム・着信画面・
+不在着信通知・Telegram・MQTT) されるのは、その呼出が「今」生きている場合だけである。すなわち
+門口機でまだ `ringing` であり、press 自身が宣言した呼出時間枠 (`expires_at_ms`、補正済み
+クラスタ時刻で判定) の内側にある場合に限る。終端イベントは、この端末が実際に表示中の呼出を
+閉じるときか、不在着信通知に意味がある程度に新しいときだけ提示する。
+
+お知らせと SOS は仕組み上これを満たす。どちらも複製された設定と状態なので、参加ノードは
+「現在の値」を 1 度適用するだけで、そこに至る遷移を再演することはない。
+
+### 誰が応答してよいか
+
+`sip.accounts.<node_id>.answer_mode` は `auto` (即時応答) か `ring` (呼び出して人を待つ)。
+**既定は役割に従う**: `door_station` は `auto`、`indoor_panel` は `ring`。実効値は
+`status.sip.answer_mode` が返す。
+
+これは呼出履歴の意味に直結する。`outcome: "answered"` と `answered_by` は「人が応答した」
+という記録である。したがって既定のままの室内機が自分で応答してはならない。インターコムとして
+使いたい世帯は端末ごとに `auto` を設定でき、その場合は履歴もその端末に帰属する。
+
+### ペアリング QR のペイロード
+
+参加のために読み取る QR はカスタムスキームの URI である。アプリが既に入っている端末なら、
+ブラウザではなく参加フローが直接開く。
+
+```
+doorbell://pair?host=<ip:port>&pin=<6 桁>&exp=<unix 秒>&cluster=<名前>
+```
+
+`host` と `pin` は必須。`exp` は絶対 Unix 秒なので、読み取り側は「いつ作られたか」を知らなくても
+期限切れを拒否できる。`cluster` は人が読むクラスタ名。値は RFC 3986 の unreserved 集合で
+percent-encode するため、空白や日本語を含む名前もそのまま往復する。`+` は空白ではなく
+文字どおりのプラス。定義されるキーはこの 4 つだけで、パーサは**それ以外を無視する**。
+これにより、既に出荷したシェルを壊さずにキーを追加できる。
+
+生成するのは core 側である。`db_core_mint_join_token_json`、`db_core_start_pairing_json`、
+`POST /api/join-token`、`POST /api/pairing/start`、または `db_core_pairing_json` /
+`GET /api/pairing` の `token` オブジェクトの `uri` を読むこと。シェルで文字列を組み立てては
+ならない。また、QR の横に host と PIN を必ず印字しておくこと。普通のカメラアプリで読む人は
+それを読んで入力する必要がある。
+
+`db_core_parse_pair_uri_json` は読み取った内容を検証し、どのプラットフォームでも同じ判定に
+なるようにする。`{"ok":true,"host":…,"pin":…,"exp":…,"cluster":…}` か
+`{"ok":false,"err":…}` を返し、`err` は `bad_scheme` / `missing_pin` / `missing_host` /
+`expired` のいずれか。期限判定には core 稼働中なら補正済みクラスタ時刻を、そうでなければ
+プラットフォームの時計を使う。core 起動前に読み取ることがあるためである。
+
 ## 時刻・電源・お知らせ
 
 同梱のタイムゾーン表は `core/src/util/tz.{h,cpp}` にあり、設定 UI が提示するアジア・ヨーロッパ・
@@ -584,3 +732,28 @@ surface を推測できません。
   (purpose/visitor_lang は該当時のみ)。`<base>/<door_id>/attrs` に
   `{"visitor_lang":"ja|en|zh"}` を retain で発行し、`sensor.doorbell_<door>_visitor_lang` として
   discovery する。Telegram の press 通知は先頭行に `{icon} {用件名}` と来訪者言語バッジ `🌐 EN`。
+
+### 背景の暗幕
+
+`display.theme.backdrop` は、背景画像とその上に描かれるすべての要素の間にシェルが重ねる半透明の
+層を制御する。明るい写真の上でも時計が読めるのはこの層のおかげである。`enabled` (既定 true)、
+`color` (`#RRGGBB`、既定 `#000000`)、`opacity` (0〜100、既定 62) はいずれも
+`devices.<id>.local.theme.backdrop.*` で端末ごとに上書きでき、しかも項目ごとに独立して解決する。
+明るい部屋にある一台だけ、色はそのままに濃さを上げる、といった指定ができる。
+
+解決結果は `status.display.theme.backdrop = {enabled, color, opacity, source}` として公開される。
+`source` は三つの値のうち最も強い出所を表し、`device`、`admin`、`default` のいずれかになる。同じ
+オブジェクトは `display` の UI イベントにも載るので、シェルは設定を自分で読むのではなく、コアが
+解決した値をそのまま描けばよい。
+
+色の書式が不正、あるいは濃さが 0〜100 の範囲外の書き込みは拒否される。層を無効にする、あるいは
+20 未満まで下げることは受け付けるが、背景画像が設定されている間は警告 (`theme.backdrop_weak`)
+として報告する。明るい写真の上では通常は誤りであり、暗い写真の上では誤りではない。どちらであるかは
+コアには判断できないためである。
+
+`display.theme.glass.blur_radius` は 0〜40 の整数で、既定値は 32 である。
+`devices.<id>.local.theme.glass.blur_radius` で端末ごとに上書きでき、解決値と
+`default|admin|device` の出所は `status.display.theme.glass` に公開される。
+`frosted_glass_radius_v1` を advertise する client だけがこの値を適用する。modern iOS はこの
+capability を advertise せず、public な数値 radius を持たない system-managed `UIBlurEffect` を
+そのまま使用する。

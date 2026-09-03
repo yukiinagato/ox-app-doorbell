@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -25,6 +27,7 @@ namespace DoorbellApp
         private int _historyLimit = HistoryPageRows;
         private long _historyBeforeMs;
         private bool _historyExhausted;
+        private bool _historyLoading;
 
         /// <summary>Opens the page and moves the seen watermark, which clears the badge.</summary>
         private void OpenHistory()
@@ -33,18 +36,21 @@ namespace DoorbellApp
             _historyDoorFilter = "";
             BuildHistoryDoorFilters();
             HistoryView.Visibility = Visibility.Visible;
-            LoadHistoryPage(true);
-            MarkHistorySeen();
+            LoadHistoryPage(true, true);
             RenderHistory();
         }
 
         /// <summary>
-        /// One page of 50. With db_core_call_log_json_v2 the next page is fetched with an
-        /// exclusive before_ms upper bound; an older core has no upper bound, so the single
-        /// request grows instead and stops at the 500 rows core clamps to.
+        /// One page of 50, read off the UI thread: db_core_call_log_json and its paging variant
+        /// are parameterized queries that marshal into core's run loop, so the dispatcher must
+        /// never wait on one. With before_ms the next page has an exclusive upper bound; an older
+        /// core has none, so the single request grows instead and stops at the 500 rows core
+        /// clamps to. markSeen rides along on the same worker so the watermark moves in one hop.
         /// </summary>
-        private void LoadHistoryPage(bool reset)
+        private void LoadHistoryPage(bool reset, bool markSeen = false)
         {
+            if (_historyLoading) return;
+            _historyLoading = true;
             if (reset)
             {
                 _historyRows.Clear();
@@ -52,45 +58,71 @@ namespace DoorbellApp
                 _historyExhausted = false;
                 _historyLimit = HistoryPageRows;
             }
-            if (App.Core.CallLogPagingAvailable)
+            bool paging = App.Core.CallLogPagingAvailable;
+            long before = _historyBeforeMs;
+            int limit = _historyLimit;
+            string seenUpTo = _latestCallHlc;
+            Task.Run(() =>
             {
-                var page = Rows(App.Core.CallLogPage(0, _historyBeforeMs, HistoryPageRows));
+                Dictionary<string, object> log = null;
+                bool seenMoved = false;
+                try
+                {
+                    if (markSeen) seenMoved = App.Core.CallLogMarkSeen(seenUpTo);
+                    log = paging ? App.Core.CallLogPage(0, before, HistoryPageRows)
+                                 : App.Core.CallLog(0, limit);
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine("call history read failed: " + ex.Message);
+                }
+                Dictionary<string, object> result = log;
+                bool moved = seenMoved;
+                Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    _historyLoading = false;
+                    ApplyHistoryPage(result, paging, markSeen, moved);
+                }));
+            });
+        }
+
+        private void ApplyHistoryPage(Dictionary<string, object> log, bool paging, bool markSeen,
+                                      bool seenMoved)
+        {
+            var page = Rows(log);
+            if (paging)
+            {
                 _historyRows.AddRange(page);
-                long oldest = page.Count == 0 ? 0 :
-                    DictLong(page[page.Count - 1], "ts", 0);
+                long oldest = page.Count == 0 ? 0 : DictLong(page[page.Count - 1], "ts", 0);
                 if (page.Count < HistoryPageRows || oldest <= 0) _historyExhausted = true;
                 else _historyBeforeMs = oldest;
             }
             else
             {
-                var all = Rows(App.Core.CallLog(0, _historyLimit));
                 _historyRows.Clear();
-                _historyRows.AddRange(all);
-                _historyExhausted = all.Count < _historyLimit ||
+                _historyRows.AddRange(page);
+                _historyExhausted = page.Count < _historyLimit ||
                                     _historyLimit >= HistoryMaxRows;
             }
             if (_historyRows.Count != 0) _latestCallHlc = DictStr(_historyRows[0], "hlc");
+            if (markSeen)
+            {
+                if (!seenMoved) Debug.WriteLine("call-log seen watermark was not moved");
+                _unreadMissed = 0;
+                MissedBadge.Visibility = Visibility.Collapsed;
+            }
+            RenderHistory();
         }
 
         private void OnHistoryCloseClick(object sender, RoutedEventArgs e)
         {
             HistoryView.Visibility = Visibility.Collapsed;
-            RefreshCallHistory();
+            RequestHomeRefresh(HomeRefresh.History);
         }
 
         private void OnHistoryMarkSeenClick(object sender, RoutedEventArgs e)
         {
-            MarkHistorySeen();
-            LoadHistoryPage(true);
-            RenderHistory();
-        }
-
-        private void MarkHistorySeen()
-        {
-            if (!App.Core.CallLogMarkSeen(_latestCallHlc))
-                System.Diagnostics.Debug.WriteLine("call-log seen watermark was not moved");
-            _unreadMissed = 0;
-            MissedBadge.Visibility = Visibility.Collapsed;
+            LoadHistoryPage(true, true);
         }
 
         private void OnHistoryFilterClick(object sender, RoutedEventArgs e)
@@ -121,7 +153,6 @@ namespace DoorbellApp
                 _historyLimit = Math.Min(HistoryMaxRows, _historyLimit + HistoryPageRows);
             }
             LoadHistoryPage(false);
-            RenderHistory();
         }
 
         private void BuildHistoryDoorFilters()

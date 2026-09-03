@@ -2,7 +2,10 @@
 
 #import "DBBootConfig.h"
 #import "DBCallHistoryModel.h"
+#import "DBCallReturnCountdown.h"
+#import "DBSipChurnPolicy.h"
 #import "DBNoticeModel.h"
+#import "DBPairUri.h"
 #import "DBPurposeModel.h"
 #import "DBSafeModeRecovery.h"
 #import "DBSosSlideModel.h"
@@ -63,10 +66,10 @@ static void TestCustomColoursWarnButAreNeverRejected(void) {
 }
 
 static void TestAutomaticInkPerRegionWithLocalFallback(void) {
-  // A light background asks for the dark ink token and a dark one for light ink.
+  // Whichever ink reads better wins; the crossover is near Y = 0.18, not 0.5.
   Require([[DBUiTheme inkModeForLuminance:0.9] isEqualToString:@"dark"], @"light bg -> dark ink");
-  Require([[DBUiTheme inkModeForLuminance:0.5] isEqualToString:@"dark"], @"the boundary is dark ink");
-  Require([[DBUiTheme inkModeForLuminance:0.2] isEqualToString:@"light"], @"dark bg -> light ink");
+  Require([[DBUiTheme inkModeForLuminance:0.5] isEqualToString:@"dark"], @"a midtone -> dark ink");
+  Require([[DBUiTheme inkModeForLuminance:0.05] isEqualToString:@"light"], @"dark bg -> light ink");
 
   NSDictionary *empty = [NSDictionary dictionary];
   NSString *onLight = [DBUiTheme inkHexForRegion:DBUiRegionClock config:empty deviceId:@"n1"
@@ -217,6 +220,24 @@ static void TestDeliberateLineBreaksAndVersionLine(void) {
                               batteryPct:82 charging:NO]
               isEqualToString:@"居間 · core v1.2.3 · app v0.9.1 · 82%"],
           @"the footer carries core and app versions plus battery");
+  // A build id is forty hex characters on this project; the whole thing pushed
+  // the battery off the footer on the iPad 1.
+  Require([[DBUiTheme shortVersion:@"0.2.0+38f923938cf5f245c7462e011485eac44ef7c9e0"]
+              isEqualToString:@"0.2.0+38f9239"], @"the build hash is trimmed to seven");
+  Require([[DBUiTheme shortVersion:@"0.3.4"] isEqualToString:@"0.3.4"],
+          @"a plain version is untouched");
+  Require([[DBUiTheme shortVersion:@"0.3.4+abc"] isEqualToString:@"0.3.4+abc"],
+          @"and a short build id is kept whole");
+  Require([[DBUiTheme shortVersion:nil] length] == 0, @"nil is safe");
+  Require([[DBUiTheme appVersion:@"0.3.8"
+                  withCoreVersion:@"0.2.0+38f923938cf5f245c7462e011485eac44ef7c9e0"]
+              isEqualToString:@"0.3.8+38f9239"],
+          @"the visible app version uses SemVer build metadata from the same commit");
+  Require([[DBUiTheme versionLineForName:@"居間"
+                             coreVersion:@"0.2.0+38f923938cf5f245c7462e011485eac44ef7c9e0"
+                              appVersion:@"0.3.4" batteryPct:85 charging:YES]
+              rangeOfString:@"38f923938cf5f245"].location == NSNotFound,
+          @"so the footer never carries the full hash");
   Require([[DBUiTheme versionLineForName:@"居間" coreVersion:@"1.2.3" appVersion:@"0.9.1"
                               batteryPct:82 charging:YES] rangeOfString:@"⚡"].location
               != NSNotFound, @"charging is marked");
@@ -366,27 +387,112 @@ static void TestPerRegionBackgroundSampling(void) {
                                                 proxyWidth:64 proxyHeight:64];
   Require([[degenerate objectAtIndex:2] integerValue] == 0, @"an empty view samples nothing");
 
-  // The threshold and the shadow rule, on the same vectors the spec gives.
+  // The ink is whichever of the two reads better against the sample, not a
+  // lightness threshold, so the crossover sits near Y = 0.18.
   Require([[DBUiTheme inkHexForSampledLuminance:0.9] isEqualToString:[DBUiTheme darkInkHex]],
           @"a light region takes the dark ink");
   Require([[DBUiTheme inkHexForSampledLuminance:0.5] isEqualToString:[DBUiTheme darkInkHex]],
-          @"the boundary belongs to the dark ink");
-  Require([[DBUiTheme inkHexForSampledLuminance:0.2] isEqualToString:[DBUiTheme lightInkHex]],
+          @"a midtone takes the dark ink, which a 0.5 threshold got wrong");
+  Require([[DBUiTheme inkHexForSampledLuminance:0.05] isEqualToString:[DBUiTheme lightInkHex]],
           @"a dark region takes the light ink");
-  // The reported defect in one line: a light patch under the clock must not
-  // keep the light ink core derived from the whole picture.
-  DBRgb lightPatch;
-  Require([DBUiTheme parseHex:@"#EFEFEF" into:&lightPatch], @"the sampled patch parses");
-  NSString *refined =
-      [DBUiTheme inkHexForSampledLuminance:[DBUiTheme relativeLuminance:lightPatch]];
-  Require([refined isEqualToString:[DBUiTheme darkInkHex]],
-          @"text over a light part of the image is dark, not white");
-  Require([DBUiTheme contrastBetweenHex:refined andHex:@"#EFEFEF"] >= 4.5,
-          @"and the result is legible");
-  Require(![DBUiTheme needsInkShadowForInk:refined background:@"#EFEFEF"],
+  double crossover = [DBUiTheme inkCrossoverLuminance];
+  RequireClose(crossover, 0.18, 0.01,
+               @"the crossover is where the two contrasts meet, near 0.179");
+  Require([[DBUiTheme inkHexForSampledLuminance:crossover + 0.02]
+              isEqualToString:[DBUiTheme darkInkHex]], @"just above it, dark ink");
+  Require([[DBUiTheme inkHexForSampledLuminance:crossover - 0.02]
+              isEqualToString:[DBUiTheme lightInkHex]], @"just below it, light ink");
+  // Whatever the sample, the chosen ink is never the worse of the two: this
+  // walks every grey and checks the choice against both real contrast ratios.
+  for (int channel = 0; channel <= 255; channel++) {
+    DBRgb grey;
+    grey.r = grey.g = grey.b = channel / 255.0;
+    NSString *hex = [DBUiTheme hexFromRgb:grey];
+    NSString *chosen =
+        [DBUiTheme inkHexForSampledLuminance:[DBUiTheme relativeLuminance:grey]];
+    NSString *other = [chosen isEqualToString:[DBUiTheme darkInkHex]]
+        ? [DBUiTheme lightInkHex] : [DBUiTheme darkInkHex];
+    Require([DBUiTheme contrastBetweenHex:chosen andHex:hex] >=
+                [DBUiTheme contrastBetweenHex:other andHex:hex] - 0.0001,
+            [NSString stringWithFormat:@"the chosen ink wins on %@", hex]);
+  }
+
+  // The reported wallpaper: #BBBBB4 averages Y = 0.494, just under a 0.5
+  // threshold, where white ink is about 1.9:1 and the dark ink about 9.6:1.
+  DBRgb wallpaper;
+  Require([DBUiTheme parseHex:@"#BBBBB4" into:&wallpaper], @"the wallpaper average parses");
+  double wallpaperY = [DBUiTheme relativeLuminance:wallpaper];
+  RequireClose(wallpaperY, 0.494, 0.005, @"and measures as reported");
+  NSString *wallpaperInk = [DBUiTheme inkHexForSampledLuminance:wallpaperY];
+  Require([wallpaperInk isEqualToString:[DBUiTheme darkInkHex]],
+          @"a midtone wallpaper takes the dark ink, not white");
+  Require([DBUiTheme contrastBetweenHex:wallpaperInk andHex:@"#BBBBB4"] >= 9.0,
+          @"which is the legible choice");
+  Require([DBUiTheme contrastBetweenHex:[DBUiTheme lightInkHex] andHex:@"#BBBBB4"] < 2.0,
+          @"where the light ink would have been unreadable");
+
+  // A genuinely dark region still takes the light ink.
+  DBRgb darkPatch;
+  Require([DBUiTheme parseHex:@"#404040" into:&darkPatch], @"the dark patch parses");
+  NSString *darkPatchInk =
+      [DBUiTheme inkHexForSampledLuminance:[DBUiTheme relativeLuminance:darkPatch]];
+  Require([darkPatchInk isEqualToString:[DBUiTheme lightInkHex]],
+          @"#404040 takes the light ink");
+  Require([DBUiTheme contrastBetweenHex:darkPatchInk andHex:@"#404040"] >= 4.5,
+          @"and reads well");
+
+  Require(![DBUiTheme needsInkShadowForInk:wallpaperInk background:@"#BBBBB4"],
           @"a legible pair takes no shadow");
-  Require([DBUiTheme needsInkShadowForInk:[DBUiTheme lightInkHex] background:@"#8A8A8A"],
-          @"a marginal pair takes the opposite-ink shadow");
+
+  // Device-verified on Android and now the fleet rule: the shadow is gated on
+  // the darkest and lightest patch of the region's sample, not on its average.
+  // A uniform wallpaper is one patch, so nothing changes there.
+  Require(![DBUiTheme needsInkShadowForInk:wallpaperInk background:@"#BBBBB4"
+                                   darkest:@"#BBBBB4" lightest:@"#BBBBB4"],
+          @"a uniform midtone region takes the dark ink and no shadow");
+
+  // A hint line crossing a pale wall and a dark jacket: the average reads well
+  // against the chosen ink and the line still vanishes over the jacket.
+  NSString *paleWall = @"#EDEDED";
+  NSString *darkJacket = @"#23201C";
+  DBRgb mixed;
+  mixed.r = (0xED + 0x23) / 510.0;
+  mixed.g = (0xED + 0x20) / 510.0;
+  mixed.b = (0xED + 0x1C) / 510.0;
+  NSString *twoToneAverage = [DBUiTheme hexFromRgb:mixed];
+  NSString *twoToneInk =
+      [DBUiTheme inkHexForSampledLuminance:[DBUiTheme relativeLuminance:mixed]];
+  Require([twoToneInk isEqualToString:[DBUiTheme darkInkHex]],
+          @"the average still picks the ink, and here that is the dark one");
+  Require(![DBUiTheme needsInkShadowForInk:twoToneInk background:twoToneAverage],
+          @"which reads fine against the average, so the old test passed");
+  Require([DBUiTheme contrastBetweenHex:twoToneInk andHex:darkJacket] < 4.5,
+          @"but not against the dark patch");
+  Require([DBUiTheme needsInkShadowForInk:twoToneInk background:twoToneAverage
+                                  darkest:darkJacket lightest:paleWall],
+          @"so a two-tone region takes the opposite-ink shadow");
+
+  // A light ink over a region whose lightest patch is nearly white is the
+  // mirror image of the same defect.
+  Require([DBUiTheme needsInkShadowForInk:[DBUiTheme lightInkHex] background:@"#3A3A3A"
+                                  darkest:@"#101010" lightest:@"#E8E8E8"],
+          @"and so does the light-ink mirror of it");
+  // Absent extremes fall back to the average alone, for a region never sampled.
+  Require(![DBUiTheme needsInkShadowForInk:wallpaperInk background:@"#BBBBB4"
+                                   darkest:nil lightest:nil],
+          @"a region with no sample is judged on its average alone");
+  // The only case that does is a background sitting at the crossover, where
+  // even the better ink is short of AA: #767676 measures Y = 0.18 and gives
+  // about 4.1:1 either way.
+  DBRgb worst;
+  Require([DBUiTheme parseHex:@"#767676" into:&worst], @"the crossover grey parses");
+  double worstY = [DBUiTheme relativeLuminance:worst];
+  RequireClose(worstY, crossover, 0.01, @"which is the crossover luminance");
+  NSString *worstInk = [DBUiTheme inkHexForSampledLuminance:worstY];
+  Require([DBUiTheme contrastBetweenHex:worstInk andHex:@"#767676"] < 4.5,
+          @"neither ink reaches AA there");
+  Require([DBUiTheme needsInkShadowForInk:worstInk background:@"#767676"],
+          @"so that region takes the opposite-ink shadow");
   RequireClose([DBUiTheme inkShadowAlpha], 0.4, 0.001, @"at 40 %");
   Require([DBUiTheme maximumSampleEdge] == 16, @"the covered area is reduced to 16x16");
 
@@ -689,6 +795,25 @@ static void TestNoticePrecedenceExpiryAndPresets(void) {
 // `visit_purposes.<id>.enabled` is a cross-platform key introduced by the iOS
 // package: a bool that defaults to true, so an installation that predates it
 // keeps every purpose. A disabled purpose leaves every chooser.
+// Purpose icons come from the shared library for the purposes this shell knows;
+// a purpose an administrator invented keeps whatever glyph they typed, which is
+// the only thing it has.
+static void TestPurposeIconsComeFromTheSharedLibrary(void) {
+  Require([[DBPurposeModel iconNameForPurpose:@"p_visit"] isEqualToString:@"home"],
+           @"the visit purpose uses the home icon");
+  Require([[DBPurposeModel iconNameForPurpose:@"p_delivery"] isEqualToString:@"package"],
+           @"the delivery purpose uses the package icon");
+  Require([[DBPurposeModel iconNameForPurpose:@"p_mail"] isEqualToString:@"mail"],
+           @"the mail purpose uses the mail icon");
+  Require([DBPurposeModel iconNameForPurpose:@"p_other"] == nil,
+           @"a purpose with no icon of ours falls back to the administrator's glyph");
+  Require([DBPurposeModel iconNameForPurpose:@"p_invented_by_the_owner"] == nil,
+           @"an invented purpose has no mapping");
+  Require([DBPurposeModel iconNameForPurpose:@""] == nil &&
+               [DBPurposeModel iconNameForPurpose:nil] == nil,
+           @"an empty or missing purpose id has no icon");
+}
+
 static void TestDisabledVisitPurposesLeaveEveryChooser(void) {
   NSDictionary *config = @{ @"visit_purposes" : @{
       @"p_delivery" : @{ @"order" : @2, @"enabled" : @YES },
@@ -726,9 +851,233 @@ static void TestDisabledVisitPurposesLeaveEveryChooser(void) {
   Require([[DBPurposeModel enabledKeyForPurpose:@""] length] == 0,
           @"an empty identifier never produces a writable key");
 
+  // iOS 5 draws an empty box for a modern emoji; the label alone is better.
+  Require([[DBPurposeModel displayIconForConfiguredIcon:@"\U0001F381"] length] == 0,
+          @"a gift emoji is dropped rather than drawn as a box");
+  Require([[DBPurposeModel displayIconForConfiguredIcon:@"\U0001F3E0"] length] == 0,
+          @"and a house emoji");
+  Require([[DBPurposeModel displayIconForConfiguredIcon:@"\u2709\uFE0F"]
+              isEqualToString:@"\u2709"],
+          @"a composed envelope keeps the glyph this device has and loses the selector");
+  Require([[DBPurposeModel displayIconForConfiguredIcon:@"\u2753"]
+              isEqualToString:@"\u2753"], @"a dingbat that iOS 5 has survives");
+  Require([[DBPurposeModel displayIconForConfiguredIcon:nil] length] == 0, @"nil is safe");
+  Require([[DBPurposeModel displayIconForConfiguredIcon:@""] length] == 0, @"empty is safe");
+
   Require([[DBPurposeModel allPurposeIdsInConfig:[NSDictionary dictionary]] count] == 0,
           @"an installation with no purposes renders none");
   Require([[DBPurposeModel enabledPurposeIdsInConfig:nil] count] == 0, @"and nil is safe");
+}
+
+#pragma mark - the indoor incoming page returns on its own
+
+static void TestIncomingReturnCountdown(void) {
+  Require([DBCallReturnCountdown defaultSeconds] == 60, @"the documented default");
+  Require([DBCallReturnCountdown secondsFromStatus:nil] == 60,
+          @"a core that does not report it yet falls back to sixty");
+  Require([DBCallReturnCountdown secondsFromStatus:@{ @"call" : @{ @"return_s" : @45 } }] == 45,
+          @"core's value is used when present");
+  Require([DBCallReturnCountdown secondsFromStatus:@{ @"call" : @{ @"return_s" : @0 } }] == 60,
+          @"a nonsense value never produces a page that closes instantly");
+  Require([DBCallReturnCountdown secondsFromStatus:@{ @"call" : @{ @"return_s" : @99999 } }]
+              == 60, @"nor one that never returns");
+
+  DBCallReturnCountdown *countdown = [[DBCallReturnCountdown alloc] init];
+  [countdown startWithSeconds:3];
+  Require(countdown.isVisible, @"the suffix is drawn while it runs");
+  Require(countdown.remaining == 3, @"starting at the full value");
+  Require(![countdown tick], @"two");
+  Require(countdown.remaining == 2, @"and it counts down");
+  Require(![countdown tick], @"one");
+  Require([countdown tick], @"reaching zero returns to the dashboard, once");
+  Require(![countdown tick], @"and never fires twice");
+  Require(!countdown.isVisible, @"the suffix goes when it is done");
+
+  // Tapping the number cancels it: the page stays until the resident leaves.
+  [countdown startWithSeconds:10];
+  Require([countdown cancelByUser], @"the tap cancels");
+  Require(!countdown.isVisible, @"the suffix disappears");
+  Require(countdown.isCancelledByUser, @"and it stays cancelled");
+  Require(![countdown tick], @"a cancelled countdown never returns on its own");
+  Require(![countdown cancelByUser], @"cancelling twice reports nothing");
+
+  // An answered call pauses it; the full value starts again afterwards.
+  [countdown startWithSeconds:30];
+  Require(![countdown tick], @"running");
+  Require(countdown.remaining == 29, @"29 left");
+  [countdown pauseForAnsweredCall];
+  Require(countdown.isPaused, @"answering pauses it");
+  Require(!countdown.isVisible, @"the suffix is hidden while talking");
+  Require(![countdown tick], @"and it does not run while talking");
+  Require(countdown.remaining == 29, @"nor lose time");
+  [countdown resumeAfterCall];
+  Require(countdown.isVisible, @"the suffix comes back when the call ends");
+  Require(countdown.remaining == 30, @"restarting from the full value, not the remainder");
+
+  // A cancel survives a call: the resident said they wanted to stay.
+  [countdown startWithSeconds:20];
+  Require([countdown cancelByUser], @"cancelled");
+  [countdown pauseForAnsweredCall];
+  [countdown resumeAfterCall];
+  Require(!countdown.isVisible, @"a call does not undo the resident's cancel");
+  Require(![countdown tick], @"and it still never returns on its own");
+
+  // A visitor cancelling the call is not modelled here at all: it must not
+  // touch the countdown, which is what keeps the live view on screen.
+  [countdown startWithSeconds:5];
+  Require(countdown.isVisible && countdown.remaining == 5,
+          @"the countdown is the only thing that closes the page");
+}
+
+#pragma mark - the door station's SIP listener under churn
+
+static void TestSipChurnBackoff(void) {
+  DBSipChurnPolicy *churn = [[DBSipChurnPolicy alloc] init];
+  // A dialog that carried audio never costs anything.
+  RequireClose([churn delayAfterDialogWithDuration:12.0 rtpPackets:400 at:100.0], 0.15, 0.001,
+               @"a real call is followed by an immediate re-listen");
+  Require(churn.churnCount == 0, @"and leaves no record");
+
+  // The device signature: empty monitor dialogs, about 1.5 a second.
+  double at = 200.0;
+  NSTimeInterval last = 0;
+  for (int i = 0; i < 6; i++) {
+    last = [churn delayAfterDialogWithDuration:0.05 rtpPackets:0 at:at];
+    at += 0.7;
+  }
+  Require(churn.churnCount == 6, @"every empty dialog is counted");
+  RequireClose(last, 3.0, 0.001, @"and they are spaced out to the cap");
+  Require([DBSipChurnPolicy delayForChurnCount:1] < [DBSipChurnPolicy delayForChurnCount:4],
+          @"the schedule escalates");
+  RequireClose([DBSipChurnPolicy delayForChurnCount:99], 3.0, 0.001, @"and is capped");
+
+  // One real dialog clears it: a door actually being monitored is never slowed.
+  RequireClose([churn delayAfterDialogWithDuration:0.05 rtpPackets:12 at:at], 0.15, 0.001,
+               @"a dialog with audio resets the spacing");
+  Require(churn.churnCount == 0, @"and the record");
+
+  // A long gap is not churn either.
+  DBSipChurnPolicy *sparse = [[DBSipChurnPolicy alloc] init];
+  [sparse delayAfterDialogWithDuration:0.05 rtpPackets:0 at:1000.0];
+  NSTimeInterval afterGap =
+      [sparse delayAfterDialogWithDuration:0.05 rtpPackets:0 at:1000.0 +
+          [DBSipChurnPolicy churnWindowSeconds] + 1.0];
+  RequireClose(afterGap, 0.15, 0.001, @"an occasional empty dialog is not a storm");
+
+  // The condition is logged once, not twice per dialog.
+  DBSipChurnPolicy *logging = [[DBSipChurnPolicy alloc] init];
+  double t = 0;
+  int requests = 0;
+  for (int i = 0; i < 10; i++) {
+    [logging delayAfterDialogWithDuration:0.05 rtpPackets:0 at:t];
+    if ([logging consumeChurnLogRequest]) requests++;
+    t += 0.5;
+  }
+  Require(requests == 1, @"the churn is reported once, not on every cycle");
+}
+
+#pragma mark - the doorbell://pair invitation
+
+static NSString *DBTestPairUri(NSString *host, NSString *pin, NSString *exp,
+                               NSString *cluster) {
+  NSMutableArray *query = [NSMutableArray array];
+  if (host) [query addObject:[@"host=" stringByAppendingString:host]];
+  if (pin) [query addObject:[@"pin=" stringByAppendingString:pin]];
+  if (exp) [query addObject:[@"exp=" stringByAppendingString:exp]];
+  if (cluster) [query addObject:[@"cluster=" stringByAppendingString:cluster]];
+  return [@"doorbell://pair?" stringByAppendingString:
+      [query componentsJoinedByString:@"&"]];
+}
+
+// The same cases the Swift shell pins, so both read one format and this class
+// can become a thin wrapper over db_core_parse_pair_uri_json without any
+// behaviour changing.
+static void TestPairUriParsing(void) {
+  const long long now = 1760000000LL;
+  NSString *good = DBTestPairUri(@"10.0.1.5:47172", @"482913", @"1760000600",
+                                 @"Keihan%20House");
+
+  DBPairUri *invitation = [DBPairUri parse:good nowS:now];
+  Require([invitation isValid], @"a well-formed invitation parses");
+  Require([invitation.host isEqualToString:@"10.0.1.5:47172"], @"the host is read");
+  Require([invitation.pin isEqualToString:@"482913"], @"the PIN is read");
+  Require(invitation.expiresAtS == 1760000600LL, @"and the expiry");
+  Require([invitation.cluster isEqualToString:@"Keihan House"],
+          @"the name arrives percent-decoded");
+
+  Require([[DBPairUri parse:DBTestPairUri(@"10.0.1.5:47172", @"482913", nil, nil)
+                       nowS:now] expiresAtS] == 0, @"an expiry is optional");
+  Require([[[DBPairUri parse:DBTestPairUri(@"10.0.1.5:47172", @"482913", @"1760000600", nil)
+                        nowS:now] cluster] length] == 0,
+          @"the name is decoration, not identity");
+  // A QR reader hands back exactly what was encoded, whitespace and all.
+  Require([[DBPairUri parse:[NSString stringWithFormat:@"  %@\n", good] nowS:now] isValid],
+          @"a scanned string is trimmed before it is judged");
+  // A QR encoder may upper-case the payload to save modules.
+  Require([[DBPairUri parse:@"DOORBELL://PAIR?host=10.0.1.5:47172&pin=482913" nowS:now]
+              isValid], @"the scheme and action are case insensitive");
+
+  // The expiry is the second the token stops working, not the last it works.
+  Require([[DBPairUri parse:DBTestPairUri(@"10.0.1.5:47172", @"482913", @"1760000000", nil)
+                       nowS:now].error isEqualToString:DBPairUriErrorExpired],
+          @"an invitation expiring this second is refused");
+  Require([[DBPairUri parse:DBTestPairUri(@"10.0.1.5:47172", @"482913", @"1760000001", nil)
+                       nowS:now] isValid], @"one second later it still works");
+
+  Require([[DBPairUri parse:@"doorbell://pair?host=10.0.1.5:47172" nowS:now].error
+              isEqualToString:DBPairUriErrorMissingPin], @"a missing PIN is refused");
+  Require([[DBPairUri parse:@"doorbell://pair?pin=482913" nowS:now].error
+              isEqualToString:DBPairUriErrorMissingHost], @"a missing host is refused");
+  // Five digits, seven, or six characters that are not all digits are a
+  // mis-scan; sending one would burn an attempt on a token that has few.
+  NSArray *badPins = [NSArray arrayWithObjects:@"48291", @"4829133", @"48291a",
+      @"\uFF14\uFF18\uFF12\uFF19\uFF11\uFF13", @"", nil];
+  for (NSString *bad in badPins) {
+    Require([[DBPairUri parse:DBTestPairUri(@"10.0.1.5:47172", bad, nil, nil) nowS:now].error
+                isEqualToString:DBPairUriErrorMissingPin],
+            [@"rejects the PIN " stringByAppendingString:bad]);
+  }
+  NSArray *notInvitations = [NSArray arrayWithObjects:@"doorbell://debug/ping",
+      @"https://example.com/pair?pin=482913", @"doorbell-pair:10.0.1.5|node|key",
+      @"", @"not a uri at all", nil];
+  for (NSString *bad in notInvitations) {
+    Require([[DBPairUri parse:bad nowS:now].error isEqualToString:DBPairUriErrorBadScheme],
+            [@"rejects " stringByAppendingString:bad]);
+  }
+  Require([[DBPairUri parse:nil nowS:now].error isEqualToString:DBPairUriErrorBadScheme],
+          @"and nil");
+
+  // Core's document maps one to one onto the same result.
+  DBPairUri *fromCore = [DBPairUri fromCoreDocument:
+      [NSDictionary dictionaryWithObjectsAndKeys:
+          [NSNumber numberWithBool:YES], @"ok", @"10.0.1.5:47172", @"host",
+          @"482913", @"pin", [NSNumber numberWithLongLong:1760000600LL], @"exp",
+          @"Ox House", @"cluster", nil]];
+  Require([fromCore isValid] && [fromCore.pin isEqualToString:@"482913"],
+          @"core's document is read");
+  Require([fromCore.cluster isEqualToString:@"Ox House"], @"including the name");
+  DBPairUri *refused = [DBPairUri fromCoreDocument:
+      [NSDictionary dictionaryWithObjectsAndKeys:
+          [NSNumber numberWithBool:NO], @"ok", @"expired", @"err", nil]];
+  Require([refused.error isEqualToString:DBPairUriErrorExpired],
+          @"core's refusal keeps its reason");
+  Require([DBPairUri fromCoreDocument:nil] == nil,
+          @"an absent document falls back to the local parse");
+  Require([DBPairUri fromCoreDocument:[NSDictionary dictionary]] == nil,
+          @"and so does one this shell does not understand");
+
+  // The invitation core publishes on the PIN card is what a scanner reads back.
+  NSDictionary *pairing = [NSDictionary dictionaryWithObject:
+      [NSDictionary dictionaryWithObjectsAndKeys:@"10.0.1.5:47172", @"host",
+          @"482913", @"pin", good, @"uri", nil] forKey:@"token"];
+  Require([[DBPairUri invitationUriInPairingInfo:pairing] isEqualToString:good],
+          @"the card draws what core published");
+  Require([[DBPairUri parse:[DBPairUri invitationUriInPairingInfo:pairing] nowS:now] isValid],
+          @"and a scanner can read it back");
+  NSDictionary *older = [NSDictionary dictionaryWithObject:
+      [NSDictionary dictionaryWithObject:@"482913" forKey:@"pin"] forKey:@"token"];
+  Require([[DBPairUri invitationUriInPairingInfo:older] length] == 0,
+          @"a core without the field publishes no invitation, and the card falls back");
 }
 
 #pragma mark - safe mode
@@ -848,6 +1197,10 @@ int main(void) {
     TestHistoryWallClockRendering();
     TestNoticePrecedenceExpiryAndPresets();
     TestDisabledVisitPurposesLeaveEveryChooser();
+    TestPurposeIconsComeFromTheSharedLibrary();
+    TestPairUriParsing();
+    TestIncomingReturnCountdown();
+    TestSipChurnBackoff();
     TestLocalSafeModeAutoClearTiming();
     TestRevokeClearsClusterIdentityAndSetup();
     NSLog(@"native_settings_ux_test ok");

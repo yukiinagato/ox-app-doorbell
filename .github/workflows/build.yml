@@ -37,6 +37,8 @@ jobs:
             base="HEAD^"
           fi
           python3 tools/check_english_source.py --base "$base"
+          # Icons come from one library through tools/gen_icons.py; nothing hand-drawn joins it.
+          python3 tools/check_icons.py --base "$base"
 
   webui-conformance:
     runs-on: ubuntu-latest
@@ -70,6 +72,7 @@ jobs:
       - name: Generated assets and source-language policy
         run: |
           python3 tools/gen_i18n.py --check
+          python3 tools/gen_icons.py --check
           python3 -m unittest discover -s tools/tests -p 'test_*.py'
 
   core-linux:

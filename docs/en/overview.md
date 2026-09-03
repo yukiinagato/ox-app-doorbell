@@ -64,6 +64,40 @@ mesh-PSK-derived key and never appear as plaintext in configuration/export.
 Capabilities are measured and advertised by each shell. A codec being enumerated, a source file
 compiling, or an OS version being targeted is not certification.
 
+## Indoor camera preview scheduling
+
+Preview work is bounded by what the panel can present, not by the number of configured doors. One
+camera receives a large, aspect-aware tile; two or three divide the usable viewport; larger fleets
+use compact tiles and an explicit scroll/page selection. Android refreshes at most three visible
+tiles per cycle. Modern iOS pages four tiles, while iPad 1 pages three (one in safe mode). Hidden
+tiles do not fetch or decode snapshots.
+
+A `press` or `motion` event promotes that door into the active set. Promotion is unique and
+most-recent-first; an event burst can replace only the bounded number of active slots, so it never
+starts work for every triggering camera. Residents can override the event set by scrolling on
+Android or advancing the numbered camera page on iOS. This is a dashboard scheduling policy only:
+all configured doors remain available for direct monitoring.
+
+## Video startup hot path
+
+A door station configured for H.264 keeps its platform encoder running before any viewer connects.
+Core retains the initialization segment and latest complete random-access fragment; a new fMP4
+subscriber receives both immediately and also raises a coalesced keyframe-request edge. Android
+MediaCodec, Apple VideoToolbox, iOS 5 RTSP ingest (RTCP PLI), and Windows Media Foundation consume
+that edge without restarting the encoder. The MJPEG path prepares a bounded cache in the background
+and may serve a trusted frame no more than 250 ms old while the live stream catches up.
+
+Indoor shells prepare reusable rendering resources before the call path needs them: Android keeps
+one stopped AVC decoder, modern iOS keeps an `AVPlayer`/`AVPlayerLayer` pair, iOS 5 keeps a one-pixel
+GL/VideoToolbox view, and Windows creates its media elements with the main window. Memory-pressure
+handlers may discard these optional reserves. A ringing preview remains the availability layer
+until H.264 proves that it displayed a frame, and the same transport/player continues into an
+answered call instead of reconnecting. Browser viewers receive the same Core-side cached JPEG or
+fMP4 bootstrap. A visitor cancellation ends the call lifecycle and ringing but does not tear down
+the indoor panel's current preview; the resident's close action or normal page deadline owns that
+transport. These are startup-latency mechanisms, not a claim that every device meets a fixed
+glass-to-glass target; hardware timing still requires measured qualification.
+
 ## Platform summary
 
 | Platform | Source/build scope | Qualification status |

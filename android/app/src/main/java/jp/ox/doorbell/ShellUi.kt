@@ -26,6 +26,9 @@ internal object ShellUi {
     const val PILL_PADDING_V_DP = 6
     const val PILL_PADDING_H_DP = 12
     const val PILL_RADIUS_DP = 8
+
+    /** The door tile's corner radius; a scrim behind a list matches it. */
+    const val CARD_RADIUS_DP = 12
     const val TOUCH_FLOOR_DP = 48
 
     fun dp(context: Context, value: Int): Int =
@@ -44,6 +47,21 @@ internal object ShellUi {
         setColor(opaque(fillRgb))
         cornerRadius = dp(context, radiusDp).toFloat()
         borderRgb?.let { setStroke(dp(context, 1), opaque(it)) }
+    }
+
+    /** 70 % of the card colour, as an alpha byte. */
+    const val SCRIM_ALPHA = 179
+
+    /**
+     * A translucent card: the shape and tone [card] uses, letting a little of what is behind it
+     * through. It is what goes under a list that sits on the theme picture -- the rows then have
+     * a known surface and keep their own palette colours, instead of every row having to be
+     * measured against whatever part of the wallpaper it happens to land on.
+     */
+    fun scrim(context: Context, fillRgb: Int, radiusDp: Int = CARD_RADIUS_DP,
+              alpha: Int = SCRIM_ALPHA): GradientDrawable = GradientDrawable().apply {
+        setColor((alpha.coerceIn(0, 255) shl 24) or (fillRgb and 0xffffff))
+        cornerRadius = dp(context, radiusDp).toFloat()
     }
 
     fun spacer(context: Context, heightDp: Int): View = View(context).apply {
@@ -168,7 +186,7 @@ internal object ShellUi {
     /** A grouped card used by the dashboard and the settings list. */
     fun card(context: Context, palette: Palette): LinearLayout = LinearLayout(context).apply {
         orientation = LinearLayout.VERTICAL
-        background = rounded(context, palette.surface, 12, palette.line)
+        background = rounded(context, palette.surface, CARD_RADIUS_DP, palette.line)
         val pad = dp(context, 12)
         setPadding(pad, pad, pad, pad)
     }

@@ -21,6 +21,7 @@
 #include <sqlite3.h>
 
 #include "doctest.h"
+#include "test_env.h"
 #include "node/node.h"
 #include "util/json.h"
 
@@ -28,21 +29,9 @@ using namespace db;
 
 namespace {
 
-int adminFreePort(std::mt19937& rng) {
-  std::uniform_int_distribution<int> dist(40000, 60000);
-  for (int i = 0; i < 50; i++) {
-    int port = dist(rng);
-    int fd = ::socket(AF_INET, SOCK_STREAM, 0);
-    if (fd < 0) continue;
-    sockaddr_in sa{};
-    sa.sin_family = AF_INET;
-    sa.sin_port = htons(static_cast<uint16_t>(port));
-    sa.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-    int ok = ::bind(fd, reinterpret_cast<sockaddr*>(&sa), sizeof(sa));
-    ::close(fd);
-    if (ok == 0) return port;
-  }
-  return -1;
+int adminFreePort(std::mt19937& /*rng*/) {
+  // Ports come from one process-wide allocator; see core/tests/test_ports.h.
+  return db::testing::freeListenPort();
 }
 
 
@@ -441,6 +430,7 @@ TEST_CASE("admin API: session gate + config delete/import + join-token + panel-t
   CHECK(video_meta.find("HTTP/1.1 200") == 0);
   CHECK(video_meta.find("{\"rotation\":0}") != std::string::npos);
   CHECK(video_meta.find("Cache-Control: no-store") != std::string::npos);
+  CHECK(video_meta.find("Access-Control-Allow-Origin: *") != std::string::npos);
 
 
   CHECK(adminReq(http_port, "POST", "/api/config/delete", "{\"key\":\"x\"}").find("401") !=
@@ -1644,6 +1634,151 @@ TEST_CASE("admin API: the cluster-wide notice, the unlock trigger, and PIN minti
   auto opened = bodyJson(adminReq(http_port, "GET", "/api/pairing", "", session));
   REQUIRE(opened);
   CHECK(json::getBool(json::get(opened.get(), "pending"), "pairing_mode"));
+
+  node.stop();
+}
+
+TEST_CASE("admin API: a door station with no working camera keeps serving HTTP after a press") {
+  // Real-device finding: an iPad 1 door station with no usable camera served pairing and
+  // POST /api/press, then port 47180 stopped accepting entirely -- refused even on loopback --
+  // while the mesh port stayed open, the process kept running and nothing crashed.
+  std::mt19937 rng(static_cast<uint32_t>(::getpid()) ^ 0x3f0du);
+  const int mesh_port = adminFreePort(rng);
+  const int http_port = adminFreePort(rng);
+  REQUIRE(mesh_port > 0);
+  REQUIRE(http_port > 0);
+
+  NodeOptions options;
+  options.data_dir = ":memory:";
+  options.name = "no-camera";
+  options.role = "door_station";
+  options.door = "door-ipad1";
+  options.listen_addr = "127.0.0.1:" + std::to_string(mesh_port);
+  options.psk.fill(0x5c);
+  options.enable_beacon = false;
+  options.http_port = http_port;
+  options.mesh_timing_template = adminTiming();
+  options.use_mesh_timing_template = true;
+  Node node(options);
+  REQUIRE(node.start());
+  const std::string session = adminLogin(http_port);
+
+  // No camera: the snapshot source never yields a frame.
+  CHECK(adminReq(http_port, "GET", "/snapshot.jpg").find("HTTP/1.1 503") == 0);
+
+  auto press = bodyJson(adminReq(http_port, "POST", "/api/press",
+                                 "{\"door\":\"door-ipad1\"}", session));
+  REQUIRE(press);
+  CHECK(json::getBool(press.get(), "ok"));
+
+  // The listener must still answer afterwards, repeatedly, on every kind of route.
+  for (int i = 0; i < 5; i++) {
+    auto status = bodyJson(adminReq(http_port, "GET", "/api/status", "", session));
+    REQUIRE(status);
+    CHECK(json::getString(json::get(status.get(), "node"), "role") == "door_station");
+    CHECK(adminReq(http_port, "GET", "/video-meta").find("HTTP/1.1 200") == 0);
+  }
+
+  // A live view against a camera-less station must not pin a worker thread for good. Several
+  // viewers open and go away; the port has to keep accepting throughout.
+  for (int round = 0; round < 6; round++) {
+    int fd = ::socket(AF_INET, SOCK_STREAM, 0);
+    REQUIRE(fd >= 0);
+    sockaddr_in address{};
+    address.sin_family = AF_INET;
+    address.sin_port = htons(static_cast<uint16_t>(http_port));
+    address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    REQUIRE(::connect(fd, reinterpret_cast<sockaddr*>(&address), sizeof(address)) == 0);
+    const std::string request =
+        "GET /stream.mjpeg HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n";
+    ::send(fd, request.data(), request.size(), 0);
+    // Abandon it the way a panel that navigates away does.
+    ::close(fd);
+    auto status = bodyJson(adminReq(http_port, "GET", "/api/status", "", session));
+    REQUIRE(status);
+    CHECK(json::getString(json::get(status.get(), "node"), "door") == "door-ipad1");
+  }
+
+  // And the press path itself is still usable, which is what the operator was locked out of.
+  CHECK(adminReq(http_port, "POST", "/api/press", "{\"door\":\"door-ipad1\"}", session)
+            .find("HTTP/1.1 200") == 0);
+  node.stop();
+}
+
+TEST_CASE("admin API: the pairing QR payload comes from core, on every surface that mints a PIN") {
+  std::mt19937 rng(static_cast<uint32_t>(::getpid()) ^ 0x9b21u);
+  const int mesh_port = adminFreePort(rng);
+  const int http_port = adminFreePort(rng);
+  REQUIRE(mesh_port > 0);
+  REQUIRE(http_port > 0);
+
+  NodeOptions options;
+  options.data_dir = ":memory:";
+  options.name = "qr-host";
+  options.role = "indoor_panel";
+  options.listen_addr = "127.0.0.1:" + std::to_string(mesh_port);
+  options.advertise_addr = "127.0.0.1:" + std::to_string(mesh_port);
+  options.psk.fill(0x77);
+  options.enable_beacon = false;
+  options.http_port = http_port;
+  options.mesh_timing_template = adminTiming();
+  options.use_mesh_timing_template = true;
+  Node node(options);
+  REQUIRE(node.start());
+  const std::string session = adminLogin(http_port);
+  // A name a shell must not have to encode itself.
+  node.setConfigKey("cluster.name", "\"京阪 ハウス\"");
+
+  auto checkUri = [&](const std::string& uri, const std::string& pin) {
+    CAPTURE(uri);
+    CHECK(uri.rfind("doorbell://pair?", 0) == 0);
+    CHECK(uri.find("\xe4\xba\xac") == std::string::npos);  // percent-encoded, never raw
+    auto parsed = bodyJson(adminReq(http_port, "GET", "/api/status", "", session));
+    (void)parsed;
+    auto round_trip = json::parse(node.parsePairUriJson(uri));
+    REQUIRE(round_trip);
+    CHECK(json::getBool(round_trip.get(), "ok"));
+    CHECK(json::getString(round_trip.get(), "pin") == pin);
+    CHECK(json::getString(round_trip.get(), "host") ==
+          "127.0.0.1:" + std::to_string(mesh_port));
+    CHECK(json::getString(round_trip.get(), "cluster") == "京阪 ハウス");
+    CHECK(json::getInt(round_trip.get(), "exp") > 0);
+  };
+
+  // Minting a PIN.
+  auto minted = bodyJson(adminReq(http_port, "POST", "/api/join-token", "{}", session));
+  REQUIRE(minted);
+  REQUIRE(json::getBool(minted.get(), "ok"));
+  checkUri(json::getString(minted.get(), "uri"), json::getString(minted.get(), "pin"));
+
+  // The bulk-add button.
+  auto started = bodyJson(adminReq(http_port, "POST", "/api/pairing/start",
+                                   "{\"seconds\":600}", session));
+  REQUIRE(started);
+  REQUIRE(json::getBool(started.get(), "ok"));
+  checkUri(json::getString(started.get(), "uri"), json::getString(started.get(), "pin"));
+
+  // The PIN card in the pairing snapshot, which is what the admin page renders.
+  auto pairing = bodyJson(adminReq(http_port, "GET", "/api/pairing", "", session));
+  REQUIRE(pairing);
+  const cJSON* token = json::get(pairing.get(), "token");
+  REQUIRE(cJSON_IsObject(token));
+  REQUIRE(json::getBool(token, "active"));
+  checkUri(json::getString(token, "uri"), json::getString(token, "pin"));
+  // The host and PIN stay printed beside the code for a plain camera app.
+  CHECK_FALSE(json::getString(token, "host").empty());
+  CHECK(json::getString(token, "pin").size() == 6);
+
+  // A scanned code is validated the same way everywhere, including the failures.
+  auto rejected = json::parse(node.parsePairUriJson("https://example.invalid/pair"));
+  REQUIRE(rejected);
+  CHECK_FALSE(json::getBool(rejected.get(), "ok"));
+  CHECK(json::getString(rejected.get(), "err") == "bad_scheme");
+  auto no_pin = json::parse(node.parsePairUriJson("doorbell://pair?host=10.0.1.10%3A47172"));
+  CHECK(json::getString(no_pin.get(), "err") == "missing_pin");
+  auto stale = json::parse(node.parsePairUriJson(
+      "doorbell://pair?host=10.0.1.10%3A47172&pin=123456&exp=1000000000"));
+  CHECK(json::getString(stale.get(), "err") == "expired");
 
   node.stop();
 }

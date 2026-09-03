@@ -235,7 +235,14 @@ PY
     --source-date-epoch "$SOURCE_DATE_EPOCH"
 else
   LDID="$(json_value signing.ldid)"
-  "$LDID" -S "$EXE"
+  # Signed with the jailbreak entitlement set, never bare: on this install path tccd refuses the
+  # camera and microphone outright -- no prompt, no TCC.db row -- unless the signature claims
+  # them. See ios-compat/tools/jailbreak_entitlements.py. These keys are private to Apple and are
+  # rejected by App Store and Ad Hoc signing, so they exist on this branch only.
+  JB_ENTITLEMENTS="$CACHE_ROOT/jailbreak-entitlements.plist"
+  python3 "$REPO_ROOT/ios-compat/tools/jailbreak_entitlements.py" \
+    "$(json_value bundle_identifier)" "$JB_ENTITLEMENTS"
+  "$LDID" "-S$JB_ENTITLEMENTS" "$EXE"
   "$LDID" -e "$EXE" >/dev/null
   ARTIFACT="$ARTIFACT_ROOT/Doorbell-ios9-armv7-${SHORT_VERSION}-${BUILD_VERSION}-jailbreak.deb"
   python3 "$PACKAGE_TOOL" --mode jailbreak --app "$APP" --output "$ARTIFACT" \

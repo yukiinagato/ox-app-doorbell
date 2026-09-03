@@ -27,7 +27,23 @@ internal data class CoreAppearance(
 internal data class CoreTheme(
     /** The colour actually behind the screen, averaged by core when the background is an image. */
     val backgroundRgb: Int?,
+    /**
+     * "color", "image", or "image_unsampled" when core declined to average the picture (it caps
+     * the pixels it will decode). An older core reported "color" in that last case, which is why
+     * this value alone must never be taken as proof that the background is a flat colour.
+     */
     val backgroundSource: String,
+    /** Why core did not sample, when it says so. Diagnostic only. */
+    val backgroundUnsampledReason: String,
+    /** display.theme.bg_image: the authoritative signal that the background is a picture. */
+    val backgroundImage: String,
+    /**
+     * display.theme.backdrop: the overlay composited over that picture. Null when core does not
+     * publish the field, which is the signal to keep the overlay this shell has always drawn.
+     */
+    val backdrop: BackdropOverlay?,
+    /** Numeric radius used only by shells that advertise frosted_glass_radius_v1. */
+    val glassBlurRadius: Int = 32,
     /** Per region: true for the light ink token, false for the dark one. */
     val ink: Map<String, Boolean>,
     /** Only the regions an administrator overrode, as explicit colours. */
@@ -36,7 +52,13 @@ internal data class CoreTheme(
     val callButtonBg: Int?,
     /** What to draw on it. Never re-derive this: core returns the best compromise. */
     val callButtonInkLight: Boolean,
-)
+) {
+    /** True when a background image is configured, whatever core managed to make of it. */
+    val hasBackgroundImage: Boolean get() = backgroundImage.isNotEmpty()
+
+    /** True when core actually averaged the picture rather than declining to. */
+    val imageSampledByCore: Boolean get() = backgroundSource == "image"
+}
 
 internal data class CoreDisplay(val appearance: CoreAppearance?, val theme: CoreTheme?)
 
@@ -91,10 +113,23 @@ internal object CoreDisplays {
             ?: UiContrast.parseRgb(accent?.optString("call_button"))
         val callButtonInk = theme.optString("call_button_ink")
             .ifEmpty { accent?.optString("call_button_ink").orEmpty() }
-        if (background == null && ink.isEmpty() && callButton == null) return null
+        // bg_image is JSON null when there is none, which optString renders as "null".
+        val image = theme.optString("bg_image").takeIf {
+            it.isNotEmpty() && it != "null" && !theme.isNull("bg_image")
+        }.orEmpty()
+        val backdrop = BackdropOverlay.parse(theme.optJSONObject("backdrop"))
+        val glassBlurRadius = theme.optJSONObject("glass")
+            ?.optInt("blur_radius", 32)?.coerceIn(0, 40) ?: 32
+        if (background == null && ink.isEmpty() && callButton == null && image.isEmpty() &&
+            backdrop == null)
+            return null
         return CoreTheme(
             backgroundRgb = background,
             backgroundSource = automatic?.optString("source").orEmpty(),
+            backgroundUnsampledReason = automatic?.optString("reason").orEmpty(),
+            backgroundImage = image,
+            backdrop = backdrop,
+            glassBlurRadius = glassBlurRadius,
             ink = ink,
             inkOverride = overrides,
             callButtonBg = callButton,
@@ -113,25 +148,63 @@ internal object CoreDisplays {
         else appearance.effectiveDark
 
     /**
-     * The ink for one region: an administrator override wins, then core's automatic decision,
-     * then the same rule recomputed locally against [fallbackBackgroundRgb].
+     * The ink for one region: an administrator override wins, then the rule for the kind of
+     * background actually on screen.
      *
-     * [sampledBackgroundRgb] is what the shell measured under this particular region. Over a
-     * background image core can only average the whole picture, so the local sample refines it;
-     * over a flat colour core's answer has no geometry to be wrong about and stands.
+     * [sampledBackgroundRgb] is what the shell measured under this particular region, and
+     * [imageDrawnLocally] says whether this shell is currently painting the background image.
+     * Core's per-region ink is authoritative only for a flat colour; whenever a picture is on
+     * screen the local sample decides, because core averages the whole image and may not have
+     * averaged it at all.
      */
     fun inkFor(
         theme: CoreTheme?,
         region: String,
         fallbackBackgroundRgb: Int,
         sampledBackgroundRgb: Int? = null,
-    ): RegionInkResult = RegionInkPolicy.resolve(
-        override = theme?.inkOverride?.get(region),
-        coreInkLight = theme?.ink?.get(region),
-        coreAuthoritative = theme != null && theme.backgroundSource != "image",
-        sampledBackgroundRgb = sampledBackgroundRgb,
-        fallbackBackgroundRgb = theme?.backgroundRgb ?: fallbackBackgroundRgb,
-    )
+        imageDrawnLocally: Boolean = false,
+        knownSurface: Boolean = false,
+        sample: RegionSample? = null,
+    ): RegionInkResult {
+        val kind = if (knownSurface) BackgroundKind.KNOWN_SURFACE
+            else backgroundKind(theme, imageDrawnLocally)
+        // Core's measured colour describes the theme background, so it is the right fallback
+        // while that is what is on screen -- the flat colour itself, or the picture being drawn.
+        // A surface the shell painted, and a picture that has not loaded, are neither.
+        val fallback = when (kind) {
+            BackgroundKind.FLAT_COLOUR -> theme?.backgroundRgb ?: fallbackBackgroundRgb
+            // Core averages the picture as it was uploaded; the overlay goes on afterwards. A
+            // region the shell could not sample must still be judged against what is on screen,
+            // or a bright wallpaper under a heavy overlay takes dark ink on a dark ground.
+            BackgroundKind.IMAGE_DRAWN -> ThemeBackdrop.under(
+                theme?.backgroundRgb ?: fallbackBackgroundRgb,
+                theme?.backdrop ?: BackdropOverlay.LEGACY,
+            )
+            BackgroundKind.IMAGE_NOT_DRAWN, BackgroundKind.KNOWN_SURFACE -> fallbackBackgroundRgb
+        }
+        return RegionInkPolicy.resolve(
+            override = theme?.inkOverride?.get(region),
+            coreInkLight = theme?.ink?.get(region),
+            background = kind,
+            sampledBackgroundRgb = sampledBackgroundRgb,
+            fallbackBackgroundRgb = fallback,
+            sample = sample,
+        )
+    }
+
+    /**
+     * Which rule applies. display.theme.bg_image is the signal, never auto_background.source: a
+     * core that declined to sample a large picture reported "color" for it, and a shell that
+     * trusted that painted light text onto a light photograph.
+     */
+    fun backgroundKind(theme: CoreTheme?, imageDrawnLocally: Boolean): BackgroundKind = when {
+        theme == null -> if (imageDrawnLocally) BackgroundKind.IMAGE_DRAWN
+            else BackgroundKind.FLAT_COLOUR
+        !theme.hasBackgroundImage && !imageDrawnLocally -> BackgroundKind.FLAT_COLOUR
+        imageDrawnLocally -> BackgroundKind.IMAGE_DRAWN
+        // Configured but not on screen: the flat colour is what a visitor is looking at.
+        else -> BackgroundKind.IMAGE_NOT_DRAWN
+    }
 
     /**
      * The call button's background and its text colour. Core's answer already carries the

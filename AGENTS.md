@@ -25,6 +25,14 @@ generated with `tools/gen_i18n.py`.
 
 ## Build and verification
 
+Every change to a shippable application's source or bundled resources must
+increment that application's user-visible semantic version and numeric build
+number in the same change. Bump only the affected deliverables: Android uses
+`android/app/build.gradle.kts`, modern iOS uses `ios/Doorbell/Info.plist`, and
+the iOS 5 compatibility app uses `ios-kiosk/src/Info.plist`. Verify deployments
+from the version and build number reported by the device; hashes remain an
+artifact-integrity check rather than the primary way to identify a release.
+
 ```sh
 cmake -S core -B build -DDB_WITH_PJSIP=OFF
 cmake --build build -j4

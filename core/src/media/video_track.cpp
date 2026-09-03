@@ -61,13 +61,17 @@ struct VideoTrack::State {
   bool have_last_ts = false;
   uint64_t frag_seq = 0;
   Bytes frag;
+  uint64_t key_frag_seq = 0;
+  Bytes key_frag;
   uint64_t base_dt = 0;
+  bool keyframe_request_pending = false;
 
   // Counters for the debug line. They are cumulative for the life of the track and are not
   // cleared by resetLocked(), so a mid-stream SPS change does not look like a restart.
   uint64_t frames = 0;
   uint64_t keyframes = 0;
   uint64_t dropped_forward = 0;
+  uint64_t keyframe_requests = 0;
 
 
   void resetLocked() {
@@ -81,6 +85,9 @@ struct VideoTrack::State {
     have_last_ts = false;
     frag_seq = 0;
     frag.clear();
+    key_frag_seq = 0;
+    key_frag.clear();
+    keyframe_request_pending = false;
     base_dt = 0;
   }
 };
@@ -150,8 +157,19 @@ void VideoTrack::push(const uint8_t* annexb, size_t len, bool key, int64_t ts_ms
   s.frag = withCaptureTimes(
       fmp4::buildFragment(static_cast<uint32_t>(++s.frag_seq), s.base_dt, current),
       current);
+  if (current[0].key) {
+    s.key_frag_seq = s.frag_seq;
+    s.key_frag = s.frag;
+  }
   s.base_dt += current[0].dur;
   s.cv.notify_all();
+}
+
+bool VideoTrack::takeKeyframeRequest() {
+  std::lock_guard<std::mutex> lk(st_->mu);
+  if (!st_->keyframe_request_pending) return false;
+  st_->keyframe_request_pending = false;
+  return true;
 }
 
 void VideoTrack::stop() {
@@ -176,7 +194,16 @@ std::string VideoTrack::codecString() const {
 }
 
 std::shared_ptr<VideoTrack::Reader> VideoTrack::subscribe() {
-  return std::make_shared<Reader>(st_);
+  auto reader = std::make_shared<Reader>(st_);
+  {
+    std::lock_guard<std::mutex> lk(st_->mu);
+    if (st_->enabled && !st_->stopped) {
+      st_->keyframe_request_pending = true;
+      st_->keyframe_requests++;
+    }
+  }
+  st_->cv.notify_all();
+  return reader;
 }
 
 // ---------- Reader ----------
@@ -184,6 +211,7 @@ std::shared_ptr<VideoTrack::Reader> VideoTrack::subscribe() {
 VideoTrack::Reader::Reader(std::shared_ptr<State> st) : st_(std::move(st)) {
   std::lock_guard<std::mutex> lk(st_->mu);
   generation_ = st_->generation;
+  subscribed_key_seq_ = st_->key_frag_seq;
   st_->subscribers++;
 }
 
@@ -199,6 +227,8 @@ Bytes VideoTrack::Reader::pull(int timeout_ms, bool* ended) {
   auto ready = [&] {
     if (s.stopped || s.generation != generation_ || !s.enabled) return true;
     if (!init_sent_) return !s.init.empty();
+    if (key_pending_) return !s.key_frag.empty();
+    if (waiting_for_fresh_key_) return s.key_frag_seq > last_frag_;
     return s.frag_seq > last_frag_;
   };
   if (!ready()) s.cv.wait_for(lk, std::chrono::milliseconds(timeout_ms), ready);
@@ -209,8 +239,22 @@ Bytes VideoTrack::Reader::pull(int timeout_ms, bool* ended) {
   if (!init_sent_) {
     if (s.init.empty()) return {};
     init_sent_ = true;
-    last_frag_ = s.frag_seq;
     return s.init;
+  }
+  if (key_pending_) {
+    if (s.key_frag.empty()) return {};
+    key_pending_ = false;
+    last_frag_ = s.key_frag_seq;
+    // If this random-access point predates the subscription, keep it on screen as the immediate
+    // preview but do not feed dependency-breaking delta frames. Resume on the requested fresh IDR.
+    waiting_for_fresh_key_ = subscribed_key_seq_ != 0 && s.key_frag_seq <= subscribed_key_seq_;
+    return s.key_frag;
+  }
+  if (waiting_for_fresh_key_) {
+    if (s.key_frag_seq <= last_frag_) return {};
+    waiting_for_fresh_key_ = false;
+    last_frag_ = s.key_frag_seq;
+    return s.key_frag;
   }
   if (s.frag_seq > last_frag_) {
     // Only the newest fragment is retained, so a subscriber that fell behind skips the ones in
@@ -229,6 +273,7 @@ VideoTrack::Stats VideoTrack::stats() const {
   out.keyframes = st_->keyframes;
   out.fragments = st_->frag_seq;
   out.dropped_forward = st_->dropped_forward;
+  out.keyframe_requests = st_->keyframe_requests;
   out.frame_interval_ms = st_->frame_dur_ms;
   out.last_frame_ts_ms = st_->last_ts_ms;
   return out;

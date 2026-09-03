@@ -16,6 +16,7 @@
 #include <vector>
 
 #include "doctest.h"
+#include "test_env.h"
 #include "mesh/mesh.h"
 #include "node/node.h"
 #include "util/clock.h"
@@ -331,21 +332,9 @@ TEST_CASE("visitor: cached quick-reply audio takes precedence over TTS") {
 
 namespace {
 
-int visFreePort(std::mt19937& rng) {
-  std::uniform_int_distribution<int> dist(40000, 60000);
-  for (int i = 0; i < 50; i++) {
-    int port = dist(rng);
-    int fd = ::socket(AF_INET, SOCK_STREAM, 0);
-    if (fd < 0) continue;
-    sockaddr_in sa{};
-    sa.sin_family = AF_INET;
-    sa.sin_port = htons(static_cast<uint16_t>(port));
-    sa.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-    int ok = ::bind(fd, reinterpret_cast<sockaddr*>(&sa), sizeof(sa));
-    ::close(fd);
-    if (ok == 0) return port;
-  }
-  return -1;
+int visFreePort(std::mt19937& /*rng*/) {
+  // Ports come from one process-wide allocator; see core/tests/test_ports.h.
+  return db::testing::freeListenPort();
 }
 
 std::string visReq(int port, const std::string& method, const std::string& path,

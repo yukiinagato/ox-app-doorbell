@@ -258,7 +258,7 @@ class HistoryActivity : Activity(), DoorbellCore.Listener {
         val detail = ArrayList<String>(2)
         if (row.answeredBy.isNotEmpty())
             detail.add(texts.t("history.answered_by", R.string.history_answered_by,
-                               row.answeredBy))
+                               deviceName(row.answeredBy)))
         val duration = CallHistoryModel.durationText(row.durationMs)
         if (duration.isNotEmpty())
             detail.add(texts.t("history.duration", R.string.history_duration, duration))
@@ -298,6 +298,15 @@ class HistoryActivity : Activity(), DoorbellCore.Listener {
         val yesterday = clock.format(clock.now().wallMs - 86_400_000L).date
         if (dayKey == yesterday) return texts.t("history.yesterday", R.string.history_yesterday)
         return dayKey
+    }
+
+    /** answered_by is a node id; a resident needs the device's name, not its hash. */
+    private fun deviceName(nodeId: String): String {
+        if (nodeId.isEmpty()) return ""
+        val name = app.core.dig(config, "devices.$nodeId.name")?.toString().orEmpty()
+        if (name.isNotEmpty()) return name
+        // Nothing configured for it: a short prefix beats a full 32-character hash.
+        return if (nodeId.length > 8) nodeId.substring(0, 8) else nodeId
     }
 
     private fun doorLabel(door: String): String {

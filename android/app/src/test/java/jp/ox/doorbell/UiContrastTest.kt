@@ -29,11 +29,53 @@ class UiContrastTest {
     }
 
     @Test
-    fun aLightRegionTakesDarkInkAndADarkRegionTakesLightInk() {
+    fun theInkChosenIsWhicheverActuallyReadsBetter() {
         assertEquals(Ink.DARK, UiContrast.inkFor(0xE9EDF0))
         assertEquals(Ink.DARK, UiContrast.inkFor(0xFFFFFF))
         assertEquals(Ink.LIGHT, UiContrast.inkFor(0x111820))
         assertEquals(Ink.LIGHT, UiContrast.inkFor(0x000000))
+    }
+
+    @Test
+    fun aMidToneBackgroundTakesDarkInkBecauseContrastIsNotLinearInLuminance() {
+        // The Moto wallpaper. Y = 0.494 sits just under a naive 0.5 midpoint, but the light ink
+        // manages only about 1.8:1 there while the dark ink gives about 9.4:1.
+        val wallpaper = 0xBBBBB4
+        assertTrue(UiContrast.luminance(wallpaper) < 0.5)
+        assertEquals(Ink.DARK, UiContrast.inkFor(wallpaper))
+        assertTrue(UiContrast.contrast(Palette.DARK_INK, wallpaper) > 9.0)
+        assertTrue(UiContrast.contrast(Palette.LIGHT_INK, wallpaper) < 2.0)
+    }
+
+    @Test
+    fun aGenuinelyDarkMidToneStillTakesLightInk() {
+        val charcoal = 0x404040
+        assertEquals(Ink.LIGHT, UiContrast.inkFor(charcoal))
+        assertTrue(UiContrast.contrast(Palette.LIGHT_INK, charcoal) > 9.0)
+    }
+
+    @Test
+    fun theInkCrossoverSitsWellBelowTheLuminanceMidpoint() {
+        val crossover = UiContrast.inkCrossoverLuminance(Palette.LIGHT_INK, Palette.DARK_INK)
+        assertTrue("crossover was $crossover", crossover in 0.15..0.22)
+        // Either side of it the choice flips, and nowhere near 0.5.
+        assertEquals(Ink.LIGHT, UiContrast.inkFor(luminanceGrey(crossover - 0.05)))
+        assertEquals(Ink.DARK, UiContrast.inkFor(luminanceGrey(crossover + 0.05)))
+    }
+
+    /** The neutral grey whose relative luminance is approximately [target]. */
+    private fun luminanceGrey(target: Double): Int {
+        var best = 0
+        var bestError = Double.MAX_VALUE
+        for (value in 0..255) {
+            val grey = (value shl 16) or (value shl 8) or value
+            val error = Math.abs(UiContrast.luminance(grey) - target)
+            if (error < bestError) {
+                bestError = error
+                best = grey
+            }
+        }
+        return best
     }
 
     @Test
