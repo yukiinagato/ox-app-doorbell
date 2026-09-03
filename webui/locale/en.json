@@ -383,6 +383,7 @@
  "day.wed": "Wed",
  "degraded.notified": "Notified — please wait",
  "door.call_action": "Call",
+ "door.camera_denied": "Camera access is not allowed — Settings › Privacy",
  "door.hint_call": "Press the button to call the residents",
  "door.lang_switch": "Language",
  "door.notice_for_this": "Announce at this door",

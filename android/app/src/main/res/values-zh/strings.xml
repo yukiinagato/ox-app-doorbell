@@ -388,6 +388,7 @@
     <string name="day_wed">三</string>
     <string name="degraded_notified">已通知，请稍候</string>
     <string name="door_call_action">呼叫</string>
+    <string name="door_camera_denied">未允许使用摄像头 — 设置 › 隐私</string>
     <string name="door_hint_call">按下按钮即可呼叫住户</string>
     <string name="door_lang_switch">语言</string>
     <string name="door_notice_for_this">在此门口机发布公告</string>

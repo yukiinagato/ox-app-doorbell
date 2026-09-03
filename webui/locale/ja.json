@@ -383,6 +383,7 @@
  "day.wed": "水",
  "degraded.notified": "呼び出し済み・応答をお待ちください",
  "door.call_action": "呼出",
+ "door.camera_denied": "カメラの使用が許可されていません — 設定 › プライバシー",
  "door.hint_call": "ボタンを押すと住人を呼び出します",
  "door.lang_switch": "言語",
  "door.notice_for_this": "この門口機にお知らせ",

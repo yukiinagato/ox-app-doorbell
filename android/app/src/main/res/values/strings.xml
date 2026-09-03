@@ -388,6 +388,7 @@ Delete it?</string>
     <string name="day_wed">Wed</string>
     <string name="degraded_notified">Notified — please wait</string>
     <string name="door_call_action">Call</string>
+    <string name="door_camera_denied">Camera access is not allowed — Settings › Privacy</string>
     <string name="door_hint_call">Press the button to call the residents</string>
     <string name="door_lang_switch">Language</string>
     <string name="door_notice_for_this">Announce at this door</string>

@@ -336,6 +336,91 @@ struct DoorbellSkin {
     var surfaceStrong: UIColor { return palette.surfaceStrongSolid }
 }
 
+/// The darkening laid over the theme picture, as an administrator configured it.
+///
+/// A wallpaper behind text is unreadable however carefully the ink is chosen, so every shell lays
+/// a scrim over the picture before anything is drawn on it. What that scrim is made of is now an
+/// administrator's decision rather than a constant: Core resolves `display.theme.backdrop` for the
+/// cluster with this device's `devices.<id>.local.theme.backdrop` override and republishes the
+/// result, and the shell draws whatever comes back.
+///
+/// The defaults are the values the shells shipped with, so a Core that predates the contract — or
+/// a cluster that has never touched the setting — looks exactly as it did.
+struct BackdropStyle: Equatable {
+
+    static let defaultColor = "#000000"
+    /// Percent. The top of the 55-65 % the readability rule allows: the dashboard is the
+    /// text-heaviest screen in the product, with a clock, a call list and two headings sitting
+    /// straight on the picture rather than on a card.
+    static let defaultOpacity = 62
+
+    var enabled: Bool
+    var color: String
+    /// Percent, 0...100. Clamped on the way in, because a value out of range is a typo in an
+    /// administrator's JSON, not a reason to draw nothing or to draw a wall of black.
+    var opacity: Int
+    /// Where Core says the resolved values came from. Advisory only: the shell draws what the
+    /// numbers say, whatever produced them.
+    var source: String
+
+    /// What the shells drew before any of this was configurable.
+    static let fallback = BackdropStyle(enabled: true, color: defaultColor,
+                                        opacity: defaultOpacity, source: "default")
+
+    /// No scrim at all: the picture as the loader produced it. What an administrator gets by
+    /// switching the backdrop off, and what a test that means to measure the picture itself asks
+    /// for rather than relying on the default.
+    static let off = BackdropStyle(enabled: false, color: defaultColor, opacity: 0,
+                                   source: "default")
+
+    var alpha: CGFloat { return CGFloat(min(100, max(0, opacity))) / 100 }
+
+    /// Whether anything is actually painted. A scrim that is off, or fully transparent, is not a
+    /// scrim, and the view draws no overlay at all rather than an invisible one.
+    var draws: Bool { return enabled && alpha > 0 }
+
+    var uiColor: UIColor {
+        let rgb = ConfigUtil.parseHexColor(color)
+            ?? ConfigUtil.parseHexColor(BackdropStyle.defaultColor) ?? (r: 0, g: 0, b: 0)
+        return UIColor(red: rgb.r, green: rgb.g, blue: rgb.b, alpha: alpha)
+    }
+
+    /// Core's resolved contract first, then this device's own override, then the cluster's, then
+    /// the shipped default — the same ladder every other theme leaf is read down, one leaf at a
+    /// time so a cluster colour and a device opacity can be set independently.
+    static func resolve(display: [String: Any]?, config: [String: Any]?,
+                        nodeId: String) -> BackdropStyle {
+        var style = BackdropStyle.fallback
+        if let raw = leaf("enabled", display: display, config: config, nodeId: nodeId) {
+            if let number = raw as? NSNumber { style.enabled = number.boolValue }
+        }
+        // An unparseable colour keeps the default rather than painting something nobody chose.
+        if let raw = leaf("color", display: display, config: config, nodeId: nodeId),
+           let text = raw as? String, ConfigUtil.parseHexColor(text) != nil {
+            style.color = text
+        }
+        if let raw = leaf("opacity", display: display, config: config, nodeId: nodeId) {
+            let value = (raw as? NSNumber).map { $0.intValue } ?? Int("\(raw)")
+            if let value = value { style.opacity = min(100, max(0, value)) }
+        }
+        if let raw = leaf("source", display: display, config: config, nodeId: nodeId),
+           let text = raw as? String, !text.isEmpty {
+            style.source = text
+        }
+        return style
+    }
+
+    private static func leaf(_ name: String, display: [String: Any]?, config: [String: Any]?,
+                             nodeId: String) -> Any? {
+        if let value = ConfigUtil.dig(display, "theme.backdrop.\(name)") { return value }
+        if !nodeId.isEmpty,
+           let value = ConfigUtil.dig(config, "devices.\(nodeId).local.theme.backdrop.\(name)") {
+            return value
+        }
+        return ConfigUtil.dig(config, "display.theme.backdrop.\(name)")
+    }
+}
+
 /// The household's theme background as one screen paints it: a colour on the host view with the
 /// configured picture over it, plus the skin that says what text drawn on that ought to look like.
 ///
@@ -362,6 +447,13 @@ final class ThemeBackgroundView: UIImageView {
     private var inkPassScheduled = false
     private var inkedViewport: CGSize = .zero
 
+    /// The darkening over the picture, as Core resolved it for this device.
+    private(set) var backdrop = BackdropStyle.fallback
+    /// The scrim itself. A plain view rather than pixels baked into the picture: the compositor
+    /// draws it for free, and the picture underneath stays the one the loader produced, so
+    /// changing the opacity costs no decode.
+    private let scrim = UIView()
+
     /// The drawn picture reduced to view space, and the factor from view points to its pixels.
     private var proxyImage: CGImage?
     private var proxyKey: String?
@@ -375,6 +467,10 @@ final class ThemeBackgroundView: UIImageView {
         contentMode = .scaleAspectFill
         clipsToBounds = true
         isHidden = true
+        scrim.isUserInteractionEnabled = false
+        scrim.isHidden = true
+        addSubview(scrim)
+        applyBackdropToScrim()
     }
 
     required init?(coder: NSCoder) { fatalError("not supported") }
@@ -411,6 +507,7 @@ final class ThemeBackgroundView: UIImageView {
                 host.backgroundColor = palette.background
             }
         }
+        setBackdrop(BackdropStyle.resolve(display: display, config: config, nodeId: nodeId))
         let hash = ThemeBackgroundView.value("bg_image", display: display, config: config,
                                              nodeId: nodeId) ?? ""
         if hash.isEmpty {
@@ -439,7 +536,28 @@ final class ThemeBackgroundView: UIImageView {
         isHidden = picture == nil
         proxyImage = nil
         proxyKey = nil
+        applyBackdropToScrim()
         scheduleInkPass()
+    }
+
+    /// Takes the resolved darkening. Nothing is re-rendered unless the values actually moved: the
+    /// administrator's settings screen republishes the whole display contract on every keystroke,
+    /// and rebuilding the sampling proxy for an unchanged scrim would put a decode on the main
+    /// thread for nothing.
+    func setBackdrop(_ style: BackdropStyle) {
+        guard style != backdrop else { return }
+        backdrop = style
+        proxyImage = nil
+        proxyKey = nil
+        applyBackdropToScrim()
+        scheduleInkPass()
+    }
+
+    /// The scrim is drawn only over a picture. There is nothing to darken on a flat theme colour,
+    /// and the palette already chose that colour to be readable.
+    private func applyBackdropToScrim() {
+        scrim.backgroundColor = backdrop.uiColor
+        scrim.isHidden = !(backdrop.draws && image != nil)
     }
 
     /// Drops the picture under memory pressure. The colour stays: a screen still has to have one.
@@ -493,8 +611,12 @@ final class ThemeBackgroundView: UIImageView {
     /// what keeps every region sample off a full-size photograph.
     private func proxy() -> (image: CGImage, scale: CGFloat)? {
         guard let picture = image, bounds.width >= 1, bounds.height >= 1 else { return nil }
+        // The picture, the viewport and the scrim: change any one of them and what is on screen
+        // is different, so the prepared copy has to be built again. Change none of them and this
+        // is a dictionary lookup.
         let key = "\(UInt(bitPattern: ObjectIdentifier(picture).hashValue))"
             + "|\(Int(bounds.width))x\(Int(bounds.height))"
+            + "|\(backdrop.enabled ? 1 : 0)/\(backdrop.color)/\(backdrop.opacity)"
         if key == proxyKey, let cached = proxyImage { return (cached, proxyScale) }
         let scale = min(1, ThemeBackgroundView.proxySide / max(bounds.width, bounds.height))
         let size = CGSize(width: max(1, (bounds.width * scale).rounded()),
@@ -502,6 +624,13 @@ final class ThemeBackgroundView: UIImageView {
         UIGraphicsBeginImageContextWithOptions(size, true, 1)
         defer { UIGraphicsEndImageContext() }
         picture.draw(in: DoorbellTheme.aspectFillRect(imageSize: picture.size, viewport: size))
+        // The scrim goes into the sampled copy too. Ink is decided from these pixels, and the
+        // pixels a resident is looking at are the darkened ones — measuring the bare photograph
+        // would put light text over a picture the scrim has already made dark.
+        if backdrop.draws {
+            backdrop.uiColor.setFill()
+            UIRectFillUsingBlendMode(CGRect(origin: .zero, size: size), .normal)
+        }
         guard let rendered = UIGraphicsGetImageFromCurrentImageContext()?.cgImage else {
             return nil
         }
@@ -529,6 +658,7 @@ final class ThemeBackgroundView: UIImageView {
 
     override func layoutSubviews() {
         super.layoutSubviews()
+        if scrim.frame != bounds { scrim.frame = bounds }
         guard bounds.size != inkedViewport else { return }
         inkedViewport = bounds.size
         proxyImage = nil

@@ -125,6 +125,12 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         ShellLog.note("core.start ok=\(coreStarted)")
         runtime = RuntimeSupervisor(core: core, boot: boot,
                                     audioSessionReady: audioSessionReady)
+        // Ask before the first capability document goes out. The prompt is asynchronous, so the
+        // first document may still say not_determined; what matters is that the ask is already in
+        // flight, and that the answer republishes the capabilities and starts capture.
+        AvPermissions.requestAtLaunch(role: boot.role) { [weak self] in
+            self?.runtime?.permissionsDidChange()
+        }
         runtime?.start()
         if boot.role == "door_station" {
             UIDevice.current.beginGeneratingDeviceOrientationNotifications()

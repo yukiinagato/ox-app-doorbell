@@ -390,6 +390,7 @@
   <data name="day_wed" xml:space="preserve"><value>三</value></data>
   <data name="degraded_notified" xml:space="preserve"><value>已通知，请稍候</value></data>
   <data name="door_call_action" xml:space="preserve"><value>呼叫</value></data>
+  <data name="door_camera_denied" xml:space="preserve"><value>未允许使用摄像头 — 设置 › 隐私</value></data>
   <data name="door_hint_call" xml:space="preserve"><value>按下按钮即可呼叫住户</value></data>
   <data name="door_lang_switch" xml:space="preserve"><value>语言</value></data>
   <data name="door_notice_for_this" xml:space="preserve"><value>在此门口机发布公告</value></data>

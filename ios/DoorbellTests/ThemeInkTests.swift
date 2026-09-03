@@ -265,6 +265,9 @@ final class ThemeInkTests: XCTestCase {
     func testAPictureIsInkedPerRegionWhateverCorePublished() {
         let background = ThemeBackgroundView()
         background.frame = CGRect(x: 0, y: 0, width: 320, height: 480)
+        // These measure how a region's ink follows the picture, so the picture has to reach the
+        // sampler as it was drawn. The scrim over it is the subject of BackdropStyleTests.
+        background.setBackdrop(.off)
         background.setBackgroundImage(twoToneImage(size: CGSize(width: 64, height: 96)))
         XCTAssertTrue(background.drawsImage)
 
@@ -350,6 +353,9 @@ final class ThemeInkTests: XCTestCase {
     func testTheOutlineFollowsTheRegionOnADrawnPicture() {
         let background = ThemeBackgroundView()
         background.frame = CGRect(x: 0, y: 0, width: 320, height: 480)
+        // These measure how a region's ink follows the picture, so the picture has to reach the
+        // sampler as it was drawn. The scrim over it is the subject of BackdropStyleTests.
+        background.setBackdrop(.off)
         background.setBackgroundImage(twoToneImage(size: CGSize(width: 64, height: 96)))
         let skin = DoorbellSkin(palette: .dark, display: display(["bg_image": "sha256:abc"]),
                                 background: darkGround, decorated: true, config: nil, nodeId: "",
@@ -386,6 +392,9 @@ final class ThemeInkTests: XCTestCase {
         let host = UIView(frame: CGRect(x: 0, y: 0, width: 320, height: 480))
         let background = ThemeBackgroundView()
         background.frame = host.bounds
+        // These measure how a region's ink follows the picture, so the picture has to reach the
+        // sampler as it was drawn. The scrim over it is the subject of BackdropStyleTests.
+        background.setBackdrop(.off)
         host.addSubview(background)
         let clock = UILabel(frame: CGRect(x: 20, y: 20, width: 280, height: 60))
         host.addSubview(clock)
@@ -411,6 +420,9 @@ final class ThemeInkTests: XCTestCase {
         let host = UIView(frame: CGRect(x: 0, y: 0, width: 320, height: 480))
         let background = ThemeBackgroundView()
         background.frame = host.bounds
+        // These measure how a region's ink follows the picture, so the picture has to reach the
+        // sampler as it was drawn. The scrim over it is the subject of BackdropStyleTests.
+        background.setBackdrop(.off)
         host.addSubview(background)
         let footer = UILabel(frame: CGRect(x: 20, y: 400, width: 280, height: 40))
         host.addSubview(footer)
@@ -531,4 +543,182 @@ final class ThemeInkTests: XCTestCase {
     }
 
 
+}
+
+/// The darkening over the theme picture, now that an administrator owns it.
+///
+/// A wallpaper behind text is unreadable however the ink is chosen, so every shell lays a scrim
+/// over the picture. What it is made of comes from Core's display contract; the three cases that
+/// matter are a cluster that has never touched the setting, one that has, and one that has turned
+/// the scrim off altogether.
+final class BackdropStyleTests: XCTestCase {
+
+    private func display(_ backdrop: [String: Any]) -> [String: Any] {
+        return ["theme": ["backdrop": backdrop]]
+    }
+
+    // MARK: - Resolving what an administrator asked for
+
+    func testAnAbsentContractKeepsWhatTheShellsShippedWith() {
+        let style = BackdropStyle.resolve(display: nil, config: nil, nodeId: "pad")
+        XCTAssertEqual(style, BackdropStyle.fallback)
+        XCTAssertTrue(style.enabled)
+        XCTAssertEqual(style.color, "#000000")
+        XCTAssertEqual(style.opacity, 62)
+        XCTAssertTrue(style.draws)
+        XCTAssertEqual(style.alpha, 0.62, accuracy: 0.0001)
+
+        // A contract that exists but says nothing about the backdrop is the same case.
+        let partial = BackdropStyle.resolve(display: ["theme": ["bg_color": "#101010"]],
+                                            config: nil, nodeId: "pad")
+        XCTAssertEqual(partial, BackdropStyle.fallback)
+    }
+
+    func testAConfiguredColourAndOpacityAreUsed() {
+        let style = BackdropStyle.resolve(
+            display: display(["enabled": true, "color": "#123456", "opacity": 30,
+                              "source": "cluster"]),
+            config: nil, nodeId: "pad")
+        XCTAssertTrue(style.enabled)
+        XCTAssertEqual(style.color, "#123456")
+        XCTAssertEqual(style.opacity, 30)
+        XCTAssertEqual(style.source, "cluster")
+        XCTAssertTrue(style.draws)
+
+        var red: CGFloat = 0, green: CGFloat = 0, blue: CGFloat = 0, alpha: CGFloat = 0
+        XCTAssertTrue(style.uiColor.getRed(&red, green: &green, blue: &blue, alpha: &alpha))
+        XCTAssertEqual(red, 0x12 / 255, accuracy: 0.005)
+        XCTAssertEqual(green, 0x34 / 255, accuracy: 0.005)
+        XCTAssertEqual(blue, 0x56 / 255, accuracy: 0.005)
+        XCTAssertEqual(alpha, 0.30, accuracy: 0.0001)
+    }
+
+    func testATurnedOffBackdropDrawsNothing() {
+        let style = BackdropStyle.resolve(
+            display: display(["enabled": false, "color": "#000000", "opacity": 62]),
+            config: nil, nodeId: "pad")
+        XCTAssertFalse(style.enabled)
+        XCTAssertFalse(style.draws, "an administrator who switched it off gets no overlay")
+
+        // Zero opacity is the same thing said another way.
+        let transparent = BackdropStyle.resolve(display: display(["opacity": 0]),
+                                                config: nil, nodeId: "pad")
+        XCTAssertTrue(transparent.enabled)
+        XCTAssertFalse(transparent.draws)
+    }
+
+    // MARK: - Where the values come from
+
+    func testThisDevicesOverrideBeatsTheClusterAndTheContractBeatsBoth() {
+        let config: [String: Any] = [
+            "display": ["theme": ["backdrop": ["opacity": 20, "color": "#111111"]]],
+            "devices": ["pad": ["local": ["theme": ["backdrop": ["opacity": 40]]]]],
+        ]
+        // No contract yet: this device's own opacity wins, the colour still comes from the cluster.
+        let local = BackdropStyle.resolve(display: nil, config: config, nodeId: "pad")
+        XCTAssertEqual(local.opacity, 40)
+        XCTAssertEqual(local.color, "#111111")
+
+        // Another device takes the cluster's value for both.
+        let other = BackdropStyle.resolve(display: nil, config: config, nodeId: "kitchen")
+        XCTAssertEqual(other.opacity, 20)
+
+        // Core's resolved contract, once it publishes one, is ahead of both.
+        let resolved = BackdropStyle.resolve(display: display(["opacity": 70]), config: config,
+                                             nodeId: "pad")
+        XCTAssertEqual(resolved.opacity, 70)
+    }
+
+    func testNonsenseIsClampedOrIgnoredRatherThanDrawn() {
+        let high = BackdropStyle.resolve(display: display(["opacity": 400]), config: nil,
+                                         nodeId: "pad")
+        XCTAssertEqual(high.opacity, 100)
+        let low = BackdropStyle.resolve(display: display(["opacity": -20]), config: nil,
+                                        nodeId: "pad")
+        XCTAssertEqual(low.opacity, 0)
+        let bad = BackdropStyle.resolve(display: display(["color": "not a colour"]), config: nil,
+                                        nodeId: "pad")
+        XCTAssertEqual(bad.color, BackdropStyle.defaultColor,
+                       "an unparseable colour keeps the default rather than painting a guess")
+    }
+
+    // MARK: - What actually reaches the screen
+
+    /// A bright picture, so the darkening is measurable rather than a matter of opinion.
+    private func brightPicture() -> UIImage {
+        let size = CGSize(width: 64, height: 64)
+        UIGraphicsBeginImageContextWithOptions(size, true, 1)
+        defer { UIGraphicsEndImageContext() }
+        UIColor.white.setFill()
+        UIRectFill(CGRect(origin: .zero, size: size))
+        return UIGraphicsGetImageFromCurrentImageContext() ?? UIImage()
+    }
+
+    private func makeView() -> ThemeBackgroundView {
+        let view = ThemeBackgroundView()
+        view.frame = CGRect(x: 0, y: 0, width: 200, height: 200)
+        let host = UIView(frame: view.frame)
+        host.addSubview(view)
+        view.setBackgroundImage(brightPicture())
+        view.layoutIfNeeded()
+        return view
+    }
+
+    func testTheScrimDarkensWhatTheInkIsMeasuredAgainst() {
+        let view = makeView()
+
+        view.setBackdrop(BackdropStyle(enabled: false, color: "#000000", opacity: 62,
+                                       source: "test"))
+        guard let bare = view.sample(in: nil) else { return XCTFail("no sample without a scrim") }
+
+        view.setBackdrop(BackdropStyle.fallback)
+        guard let dark = view.sample(in: nil) else { return XCTFail("no sample with a scrim") }
+
+        XCTAssertGreaterThan(bare.maxLuminance, 0.9, "the picture itself is white")
+        XCTAssertLessThan(dark.maxLuminance, bare.maxLuminance,
+                          "ink is decided from the pixels a resident actually sees")
+
+        // 62 % black composited over white leaves 38 % of each channel. Relative luminance is
+        // gamma-decoded, so that same pixel measures about 0.12 -- which is why a scrimmed
+        // picture takes light ink where the bare one took dark.
+        var red: CGFloat = 0, green: CGFloat = 0, blue: CGFloat = 0, alpha: CGFloat = 0
+        XCTAssertTrue(dark.average.getRed(&red, green: &green, blue: &blue, alpha: &alpha))
+        XCTAssertEqual(red, 0.38, accuracy: 0.02)
+        XCTAssertEqual(green, 0.38, accuracy: 0.02)
+        XCTAssertEqual(blue, 0.38, accuracy: 0.02)
+        XCTAssertEqual(DoorbellTheme.luminance(dark.average), 0.12, accuracy: 0.03)
+    }
+
+    func testTheOverlayIsTheAdministratorsColourNotAlwaysBlack() {
+        let view = makeView()
+        view.setBackdrop(BackdropStyle(enabled: true, color: "#FF0000", opacity: 100,
+                                       source: "test"))
+        guard let sample = view.sample(in: nil) else { return XCTFail("no sample") }
+        var red: CGFloat = 0, green: CGFloat = 0, blue: CGFloat = 0, alpha: CGFloat = 0
+        XCTAssertTrue(sample.average.getRed(&red, green: &green, blue: &blue, alpha: &alpha))
+        XCTAssertGreaterThan(red, 0.9)
+        XCTAssertLessThan(green, 0.1)
+        XCTAssertLessThan(blue, 0.1)
+    }
+
+    /// The prepared copy is keyed on the picture, the viewport and the scrim, so re-applying the
+    /// same settings is a lookup and changing them is a rebuild.
+    func testThePreparedBackdropIsRebuiltOnlyWhenSomethingMoved() {
+        let view = makeView()
+        view.setBackdrop(BackdropStyle.fallback)
+        let first = view.sample(in: nil)?.average
+        XCTAssertNotNil(first)
+
+        view.setBackdrop(BackdropStyle.fallback)
+        XCTAssertEqual(view.backdrop, BackdropStyle.fallback)
+        XCTAssertEqual(DoorbellTheme.luminance(view.sample(in: nil)?.average ?? .black),
+                       DoorbellTheme.luminance(first ?? .black), accuracy: 0.0001,
+                       "an unchanged scrim renders the same pixels")
+
+        view.setBackdrop(BackdropStyle(enabled: true, color: "#000000", opacity: 10,
+                                       source: "test"))
+        XCTAssertGreaterThan(DoorbellTheme.luminance(view.sample(in: nil)?.average ?? .black),
+                             DoorbellTheme.luminance(first ?? .black),
+                             "a lighter scrim is rendered again, not served from the cache")
+    }
 }

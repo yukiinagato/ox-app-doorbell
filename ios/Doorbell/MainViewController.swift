@@ -69,6 +69,7 @@ final class MainViewController: UIViewController {
     /// Core's own loop with no time for its mesh heartbeats, so the other nodes called it dead.
     /// The events are coalesced onto one rebuild.
     private static let homeRefreshCoalesceS: TimeInterval = 1
+    private var cameraPermissionWarned = false
     private var homeRefreshPending = false
     private var nodeInfoRefreshPending = false
     private var lastHomeRefreshUptime: TimeInterval = 0
@@ -761,6 +762,11 @@ final class MainViewController: UIViewController {
         // expiry are both minute-scale decisions, and the base is never more than half a minute
         // old — `time_changed` re-takes it the moment Core's idea of the time moves.
         let reading = clockSource.reading()
+        // The appearance, the theme picture and the scrim over it all come out of Core's display
+        // contract, and this is the freshest copy of it: the status document this pass is already
+        // holding. The values `applyDisplayValues` also owns — brightness, the night tint, the
+        // screensaver timers — keep their own state and are not re-armed here.
+        if let display = status?["display"] as? [String: Any] { displayDoc = display }
         palette = DoorbellPalette.of(DoorbellTheme.appearance(
             display: displayDoc, config: cfg, nodeId: nodeId,
             localTime: reading?.raw ?? core.localTime()))
@@ -1658,19 +1664,35 @@ final class MainViewController: UIViewController {
     }
 
 
+    /// The ask itself now happens at launch, before the first capability document. This asks
+    /// again — `requestAccess` on an answered permission returns the answer without prompting —
+    /// so that a screen built after the resident replied still starts capture and drops the
+    /// banner.
     private func requestAvPermissionsThenStartCamera() {
         runtime?.permissionsDidChange()
-        if boot.role == "door_station" {
-            AVCaptureDevice.requestAccess(for: .video) { [weak self] _ in
-                DispatchQueue.main.async {
-                    self?.runtime?.permissionsDidChange()
-                    self?.maybeStartCamera()
-                }
+        refreshCameraPermissionBanner()
+        AvPermissions.requestAtLaunch(role: boot.role) { [weak self] in
+            guard let self = self else { return }
+            self.runtime?.permissionsDidChange()
+            self.refreshCameraPermissionBanner()
+            if self.boot.role == "door_station",
+               AvPermissions.state(.video) == "authorized" {
+                self.maybeStartCamera()
             }
         }
-        AVCaptureDevice.requestAccess(for: .audio) { [weak self] _ in
-            DispatchQueue.main.async { self?.runtime?.permissionsDidChange() }
+    }
+
+    /// A door station that cannot see is worth saying out loud: from the other side of the mesh a
+    /// refused camera and a broken one look the same, and the tile simply disappears.
+    private func refreshCameraPermissionBanner() {
+        let permission = AvPermissions.state(.video)
+        let warn = AvPermissions.shouldWarn(role: boot.role, permission: permission)
+        if warn && !cameraPermissionWarned {
+            cameraPermissionWarned = true
+            ShellLog.note("camera permission refused: \(permission)")
         }
+        if !warn { cameraPermissionWarned = false }
+        visitorScreen?.updateCameraWarning(warn ? texts.t("door.camera_denied") : nil)
     }
 
     private func cameraLocalCfg() -> [String: Any]? {

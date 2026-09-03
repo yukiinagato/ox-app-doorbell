@@ -349,3 +349,70 @@ enum ShellLog {
         try? lines.joined(separator: "\n").write(to: url, atomically: true, encoding: .utf8)
     }
 }
+
+/// Camera and microphone permission, and what the cluster is told about them.
+///
+/// A door station that never asks is a door station with no picture: `authorizationStatus` starts
+/// at `notDetermined` and stays there until something calls `requestAccess`, and a capability
+/// document published before that says the camera is unavailable. Since an indoor panel now hides
+/// the tile of a door with `caps.camera` false, "we never asked" and "there is no camera" look
+/// identical from the other side of the mesh. So the ask happens at launch, before the first
+/// capability document goes out, and what came back is written down.
+enum AvPermissions {
+
+    static let settled = Notification.Name("DoorbellAvPermissionsSettled")
+
+    /// The contract's spelling of one permission. `not_determined` is reported honestly: it is
+    /// not a refusal, and calling it one loses the difference between a resident who said no and
+    /// a prompt nobody has answered yet.
+    ///
+    /// tvOS has no capture device to ask about before tvOS 17, and the TV shell is never a door
+    /// station, so there the answer is that the question does not apply.
+    static func state(_ mediaType: AVMediaType) -> String {
+#if os(tvOS)
+        return "not_applicable"
+#else
+        switch AVCaptureDevice.authorizationStatus(for: mediaType) {
+        case .authorized: return "authorized"
+        case .denied: return "denied"
+        case .restricted: return "restricted"
+        default: return "not_determined"
+        }
+#endif
+    }
+
+    /// Whether `caps.camera` may be true. A camera is offered only by a door station, only once
+    /// the resident has allowed it, and only while capture is actually running — a permission on
+    /// its own is a promise the mesh cannot rely on.
+    static func cameraOffered(role: String, permission: String, runtime: String) -> Bool {
+        return role == "door_station" && permission == "authorized" && runtime == "active"
+    }
+
+    /// Whether the screen should say so. Only a real refusal earns a banner; a prompt that has
+    /// not been answered is about to be.
+    static func shouldWarn(role: String, permission: String) -> Bool {
+        return role == "door_station" && (permission == "denied" || permission == "restricted")
+    }
+
+    /// Asks for everything this role needs, before the first capability document is published.
+    /// `completion` runs on the main thread each time an answer arrives, so the capabilities can
+    /// be republished and capture started the moment the resident allows it.
+    static func requestAtLaunch(role: String, completion: @escaping () -> Void) {
+        ShellLog.note("permissions at launch camera=\(state(.video)) mic=\(state(.audio))")
+        let settle = {
+            DispatchQueue.main.async {
+                ShellLog.note("permissions settled camera=\(state(.video)) mic=\(state(.audio))")
+                completion()
+                NotificationCenter.default.post(name: settled, object: nil)
+            }
+        }
+#if os(tvOS)
+        settle()
+#else
+        if role == "door_station" {
+            AVCaptureDevice.requestAccess(for: .video) { _ in settle() }
+        }
+        AVCaptureDevice.requestAccess(for: .audio) { _ in settle() }
+#endif
+    }
+}
