@@ -229,9 +229,9 @@ static void TestDeliberateLineBreaksAndVersionLine(void) {
   Require([[DBUiTheme shortVersion:@"0.3.4+abc"] isEqualToString:@"0.3.4+abc"],
           @"and a short build id is kept whole");
   Require([[DBUiTheme shortVersion:nil] length] == 0, @"nil is safe");
-  Require([[DBUiTheme appVersion:@"0.3.6"
+  Require([[DBUiTheme appVersion:@"0.3.7"
                   withCoreVersion:@"0.2.0+38f923938cf5f245c7462e011485eac44ef7c9e0"]
-              isEqualToString:@"0.3.6+38f9239"],
+              isEqualToString:@"0.3.7+38f9239"],
           @"the visible app version uses SemVer build metadata from the same commit");
   Require([[DBUiTheme versionLineForName:@"居間"
                              coreVersion:@"0.2.0+38f923938cf5f245c7462e011485eac44ef7c9e0"

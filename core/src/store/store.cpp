@@ -828,9 +828,11 @@ bool Store::applyCallProjectionLocked(const EventRecord& e) {
         " terminal_reason='reply',ended_wall_ms=excluded.ended_wall_ms"
         " WHERE call_projection.door=excluded.door"
         " AND call_projection.origin=excluded.origin"
-        " AND call_projection.state='ringing'"
+        " AND (call_projection.state='ringing' OR"
+        " (call_projection.state='cancelled' AND call_projection.stage_revision=excluded.stage_revision))"
         " AND call_projection.stage_revision=excluded.stage_revision"
-        " AND excluded.updated_hlc>=call_projection.updated_hlc");
+        " AND (excluded.updated_hlc>=call_projection.updated_hlc OR"
+        " call_projection.state='cancelled')");
     if (!terminal.ok()) return false;
     terminal.bind(1, call_id);
     terminal.bind(2, e.door);
@@ -1166,11 +1168,16 @@ bool Store::applyCallProjectionLocked(const EventRecord& e) {
   const std::string reason = payload ? json::getString(payload.get(), "reason") : "";
   if (e.type == "call_cancelled" && reason != "recovery_failed" &&
       reason != "recovery_timeout") {
-    Stmt current(db_, "SELECT state FROM call_projection WHERE call_id=?1");
+    Stmt current(db_, "SELECT state,terminal_reason FROM call_projection WHERE call_id=?1");
     if (!current.ok()) return false;
     current.bind(1, call_id);
-    if (current.step() == SQLITE_ROW && current.colText(0) == "in_call")
-      return true;
+    if (current.step() == SQLITE_ROW) {
+      const std::string current_state = current.colText(0);
+      const std::string current_reason = current.colText(1);
+      if (current_state == "in_call" ||
+          (current_state == "ended" && current_reason == "reply"))
+        return true;
+    }
   }
   Stmt terminal(db_,
                 "INSERT INTO call_projection(call_id,door,origin,purpose,state,stage_revision,"

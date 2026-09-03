@@ -430,6 +430,7 @@ TEST_CASE("admin API: session gate + config delete/import + join-token + panel-t
   CHECK(video_meta.find("HTTP/1.1 200") == 0);
   CHECK(video_meta.find("{\"rotation\":0}") != std::string::npos);
   CHECK(video_meta.find("Cache-Control: no-store") != std::string::npos);
+  CHECK(video_meta.find("Access-Control-Allow-Origin: *") != std::string::npos);
 
 
   CHECK(adminReq(http_port, "POST", "/api/config/delete", "{\"key\":\"x\"}").find("401") !=

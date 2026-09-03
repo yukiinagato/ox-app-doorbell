@@ -1,4 +1,5 @@
 import Foundation
+import QuartzCore
 import UIKit
 
 // Content-Length, header, and aggregate buffer limits bound untrusted multipart input. Frames are
@@ -13,6 +14,12 @@ final class MjpegClient: NSObject, URLSessionDataDelegate {
     private var expecting = -1
     private var expectingRotation = 0
     private var running = false
+    private var startupAt: CFTimeInterval = 0
+    private var tracedHeaders = false
+    private var tracedData = false
+    private var tracedPart = false
+    private var tracedDecode = false
+    private var tracedMain = false
 
     private static let maxFrame = 4 * 1024 * 1024
     private static let maxBuffer = 8 * 1024 * 1024
@@ -27,6 +34,13 @@ final class MjpegClient: NSObject, URLSessionDataDelegate {
     func start() {
         guard !running else { return }
         running = true
+        startupAt = CACurrentMediaTime()
+        tracedHeaders = false
+        tracedData = false
+        tracedPart = false
+        tracedDecode = false
+        tracedMain = false
+        trace("request_start")
         connect()
     }
 
@@ -56,6 +70,10 @@ final class MjpegClient: NSObject, URLSessionDataDelegate {
 
     func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
         guard running else { return }
+        if !tracedData {
+            tracedData = true
+            trace("first_network_bytes")
+        }
         buf.append(data)
         if buf.count > MjpegClient.maxBuffer {
             buf.removeAll(keepingCapacity: true)
@@ -102,14 +120,53 @@ final class MjpegClient: NSObject, URLSessionDataDelegate {
             let jpeg = buf.prefix(expecting)
             buf.removeFirst(expecting)
             expecting = -1
+            if !tracedPart {
+                tracedPart = true
+                trace("first_complete_multipart")
+            }
             if let img = UIImage(data: jpeg) {
+                if !tracedDecode {
+                    tracedDecode = true
+                    trace("first_jpeg_decoded")
+                }
                 let rotation = expectingRotation
                 DispatchQueue.main.async { [weak self] in
                     guard let self = self, self.running else { return }
+                    if !self.tracedMain {
+                        self.tracedMain = true
+                        self.trace("first_frame_on_main_thread")
+                    }
                     self.onFrame(img, rotation)
                 }
             }
         }
+    }
+
+    func urlSession(_ session: URLSession, dataTask: URLSessionDataTask,
+                    didReceive response: URLResponse,
+                    completionHandler: @escaping (URLSession.ResponseDisposition) -> Void) {
+        if !tracedHeaders {
+            tracedHeaders = true
+            trace("http_response_headers")
+        }
+        completionHandler(.allow)
+    }
+
+    private func trace(_ stage: String) {
+        let elapsed = max(0, Int((CACurrentMediaTime() - startupAt) * 1000))
+        let line = "\(stage) +\(elapsed)ms\n"
+        NSLog("[doorbell][video-startup] %@", line.trimmingCharacters(in: .whitespacesAndNewlines))
+        guard let directory = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).last
+        else { return }
+        let target = directory.appendingPathComponent("video-startup.log")
+        let data = line.data(using: .utf8) ?? Data()
+        if !FileManager.default.fileExists(atPath: target.path) {
+            FileManager.default.createFile(atPath: target.path, contents: nil)
+        }
+        guard let handle = try? FileHandle(forWritingTo: target) else { return }
+        handle.seekToEndOfFile()
+        handle.write(data)
+        handle.closeFile()
     }
 
     private func findHeaderEnd() -> (headerLen: Int, consumed: Int)? {

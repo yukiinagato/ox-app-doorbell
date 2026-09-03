@@ -37,6 +37,7 @@ class RuntimeSupervisor(private val app: App) {
         if (legacy19) commissioningStore else AlwaysCommissionedEncoder,
     )
     private lateinit var handler: Handler
+    private lateinit var orientation: VideoOrientationTracker
 
     @Volatile var isCoreReady = false
         private set
@@ -78,6 +79,12 @@ class RuntimeSupervisor(private val app: App) {
     init {
         thread.start()
         handler = Handler(thread.looper)
+        orientation = VideoOrientationTracker(
+            app,
+            handler,
+            camera::frameRotationForDeviceRotation,
+            app.core::setVideoSensorRotation,
+        )
         statusStore.update("android", JSONObject()
             .put("sdk", Build.VERSION.SDK_INT)
             .put("abi", Build.CPU_ABI)
@@ -114,6 +121,7 @@ class RuntimeSupervisor(private val app: App) {
             camera.encoder = null
             encoder.stop()
             camera.stop()
+            orientation.stop()
             cameraStarted = false
             setCoreReady(false, reason)
             publishRuntimeHealth(force = true)
@@ -135,6 +143,7 @@ class RuntimeSupervisor(private val app: App) {
             camera.encoder = null
             encoder.stop()
             camera.stop()
+            orientation.stop()
             cameraStarted = false
             resolutionIndex = 0
             currentActualResolution = ""
@@ -165,6 +174,7 @@ class RuntimeSupervisor(private val app: App) {
                 return@post
             }
             restartCamera()
+            orientation.stop()
             scannerActive = true
             val started = camera.start(holder, SCANNER_WIDTH, SCANNER_HEIGHT, 0, preferBack = true)
             if (!started) {
@@ -182,6 +192,7 @@ class RuntimeSupervisor(private val app: App) {
             scannerActive = false
             restartCamera()
             if (running && isCoreReady) ensureCamera()
+            if (running && isCoreReady && app.boot.role == "door_station") orientation.start()
         }
     }
 
@@ -198,9 +209,6 @@ class RuntimeSupervisor(private val app: App) {
             restartCamera()
         }
     }
-
-    fun frameRotationForDeviceRotation(deviceRotation: Int): Int =
-        camera.frameRotationForDeviceRotation(deviceRotation)
 
     fun trimMemory(level: Int) {
         handler.post {
@@ -297,6 +305,7 @@ class RuntimeSupervisor(private val app: App) {
             statusStore.update("native_backend", backend)
             statusStore.update("runtime", JSONObject().put("state", "ready"))
             app.core.setUiManifest(AndroidRuntimeContracts.uiManifest())
+            if (app.boot.role == "door_station") orientation.start() else orientation.stop()
             publishCapabilities()
             applyHelperConfiguration()
             refreshSafeMode()

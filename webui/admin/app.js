@@ -3713,6 +3713,71 @@ if (typeof document !== "undefined") (function () {
            p(d.getHours()) + ":" + p(d.getMinutes()) + ":" + p(d.getSeconds());
   }
 
+  function addressLinesHtml(addresses) {
+    return (addresses || []).map(function (address) {
+      return "<span class='peer-address'>" + esc(address) + "</span>";
+    }).join("");
+  }
+
+  function normalizedRotation(value) {
+    var rotation = Number(value);
+    if (!isFinite(rotation)) return 0;
+    rotation = ((Math.round(rotation / 90) * 90) % 360 + 360) % 360;
+    return rotation;
+  }
+
+  function applyLiveRotation(entry, value) {
+    if (!entry || !entry.frame) return;
+    var rotation = normalizedRotation(value);
+    if (entry.rotation === rotation) return;
+    entry.rotation = rotation;
+    var quarterTurn = rotation === 90 || rotation === 270;
+    var width = entry.mediaWidth || 4, height = entry.mediaHeight || 3;
+    entry.frame.style.aspectRatio = quarterTurn ? (height + " / " + width) : (width + " / " + height);
+    var transform = "translate(-50%,-50%) rotate(" + rotation + "deg)";
+    var mediaWidth = quarterTurn ? ((width / height) * 100) + "%" : "100%";
+    var mediaHeight = quarterTurn ? ((height / width) * 100) + "%" : "100%";
+    entry.img.style.width = entry.video.style.width = mediaWidth;
+    entry.img.style.height = entry.video.style.height = mediaHeight;
+    entry.img.style.transform = entry.video.style.transform = transform;
+  }
+
+  function watchLiveDimensions(entry) {
+    function learn(width, height) {
+      if (!width || !height) return;
+      entry.mediaWidth = width;
+      entry.mediaHeight = height;
+      var remembered = entry.rotation;
+      entry.rotation = -1;
+      applyLiveRotation(entry, remembered < 0 ? 0 : remembered);
+    }
+    entry.img.onload = function () { learn(entry.img.naturalWidth, entry.img.naturalHeight); };
+    entry.video.onloadedmetadata = function () {
+      learn(entry.video.videoWidth, entry.video.videoHeight);
+    };
+  }
+
+  function startLiveRotationPolling(entry, metaUrl) {
+    if (!entry || !metaUrl || typeof fetch !== "function") return;
+    var stopped = false;
+    function pollRotation() {
+      if (stopped) return;
+      fetch(metaUrl, { cache: "no-store", mode: "cors" }).then(function (response) {
+        return response.ok ? response.json() : null;
+      }).then(function (meta) {
+        if (meta && meta.rotation !== undefined) applyLiveRotation(entry, meta.rotation);
+      }).catch(function () {}).then(function () {
+        if (!stopped) entry.rotationTimer = setTimeout(pollRotation, 250);
+      });
+    }
+    entry.stopRotation = function () {
+      stopped = true;
+      if (entry.rotationTimer) clearTimeout(entry.rotationTimer);
+      entry.rotationTimer = 0;
+    };
+    pollRotation();
+  }
+
 
 
 
@@ -3744,9 +3809,9 @@ if (typeof document !== "undefined") (function () {
       rows += "<tr><td>" + esc(p.name || p.id.slice(0, 8)) +
               (p.self ? " <span class='tag'>self</span>" : "") + "</td><td>" +
               esc(p.role || "") + "</td><td class='" + stCls + "'>" + esc(p.status) +
-              "</td><td>" + esc(duties.join(",")) + "</td><td>" + esc(p.sw || "") +
-              "</td><td>" + powerCell +
-              "</td><td class='dim'>" + esc((p.addrs || []).join(" ")) + "</td></tr>";
+              "</td><td class='breakable'>" + esc(duties.join(",")) + "</td><td class='breakable'>" + esc(p.sw || "") +
+              "</td><td class='breakable'>" + powerCell +
+              "</td><td class='dim'>" + addressLinesHtml(p.addrs) + "</td></tr>";
     }
     $("#peersTbl tbody").innerHTML = rows;
     var br = j.bridge || {};
@@ -3758,8 +3823,8 @@ if (typeof document !== "undefined") (function () {
     var laEl = $("#localAddrs");
     if (laEl) {
       if (la.length) {
-        laEl.innerHTML = icon("info-circle") + " " + t("admin.local_addrs") + ": " +
-          la.map(function (a) { return esc(a); }).join("　");
+          laEl.innerHTML = icon("info-circle") + " " + t("admin.local_addrs") + ": " +
+          addressLinesHtml(la);
       } else { laEl.textContent = ""; }
     }
 
@@ -3791,7 +3856,7 @@ if (typeof document !== "undefined") (function () {
     }
     for (var nid in want) {
       var p2 = want[nid], card = document.createElement("div");
-      card.className = "card";
+      card.className = "card live-card";
       card.setAttribute("data-node", nid);
       var sameOriginMp4 = DoorbellPlayback.proxyMp4Url(p2.door || "", "", p2.stream_mp4,
                                                         window.location);
@@ -3799,29 +3864,38 @@ if (typeof document !== "undefined") (function () {
                         JSON.stringify(p2.playback_profile || {}));
       card.innerHTML = "<div class='dim' style='margin-bottom:6px'>" +
         esc(p2.door_label || p2.name || nid.slice(0, 8)) + "</div>";
-      var mediaCss = "width:100%; border-radius:6px; background:#000; min-height:160px";
+      var frame = document.createElement("div");
+      frame.className = "live-frame";
       var v = document.createElement("video");
       v.muted = true;
       v.autoplay = true;
       v.setAttribute("muted", "");
       v.setAttribute("playsinline", "");
-      v.style.cssText = mediaCss;
       var img = document.createElement("img");
       img.alt = "live";
-      img.style.cssText = mediaCss;
-      card.appendChild(img);
-      card.appendChild(v);
-      liveStreams[nid] = DoorbellPlayback.start({ profile: p2.playback_profile,
+      frame.appendChild(img);
+      frame.appendChild(v);
+      card.appendChild(frame);
+      var entry = { frame: frame, img: img, video: v, rotation: -1, mediaWidth: 4, mediaHeight: 3 };
+      entry.playback = DoorbellPlayback.start({ profile: p2.playback_profile,
         mp4: sameOriginMp4, mjpeg: p2.stream, mjpegMode: "image", video: v, img: img });
+      watchLiveDimensions(entry);
+      liveStreams[nid] = entry;
+      applyLiveRotation(entry, 0);
+      startLiveRotationPolling(entry, p2.video_meta);
       grid.appendChild(card);
     }
   }
 
   /* ---- Admin dashboard live grid ---- */
-  var liveStreams = {};    // node_id → {stop}
+  var liveStreams = {};    // node_id → playback and orientation lifecycle
 
   function stopLiveStream(id) {
-    if (liveStreams[id]) { try { liveStreams[id].stop(); } catch (e) {} delete liveStreams[id]; }
+    if (liveStreams[id]) {
+      try { if (liveStreams[id].stopRotation) liveStreams[id].stopRotation(); } catch (e) {}
+      try { if (liveStreams[id].playback) liveStreams[id].playback.stop(); } catch (e) {}
+      delete liveStreams[id];
+    }
   }
 
 
@@ -5724,7 +5798,9 @@ if (typeof document !== "undefined") (function () {
       h += "<option value='" + ty + "'" + (evFilter === ty ? " selected" : "") + ">" +
            (ty || esc(t("admin.filter_type"))) + "</option>";
     });
-    h += "</select></div><table><thead><tr><th>" + esc(t("panel.event_time")) +
+    h += "</select></div><table class='bounded-table'><colgroup><col style='width:14%'>" +
+         "<col style='width:15%'><col style='width:17%'><col style='width:54%'></colgroup>" +
+         "<thead><tr><th>" + esc(t("panel.event_time")) +
          "</th><th>" + esc(t("panel.event_type")) + "</th><th>" +
          esc(t("admin.door_or_device")) + "</th><th>" + esc(t("admin.details")) +
          "</th></tr></thead><tbody>";
@@ -5733,7 +5809,7 @@ if (typeof document !== "undefined") (function () {
       var e = evs[i];
       if (evFilter && e.type !== evFilter) continue;
       h += "<tr><td class='dim'>" + fmtTime(e.wall_ms) + "</td><td>" + esc(e.type) + "</td><td>" +
-           esc(e.door ? doorLabel(e.door) : deviceName(e.device)) + "</td><td class='dim'>" +
+           esc(e.door ? doorLabel(e.door) : deviceName(e.device)) + "</td><td class='dim event-detail'>" +
            esc(e.payload || "") + "</td></tr>";
     }
     h += "</tbody></table></div>";

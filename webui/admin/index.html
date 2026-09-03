@@ -74,6 +74,16 @@
   .mbtns { display:flex; gap:8px; margin-top:14px; }
 
   .scrollx { overflow-x:auto; }
+  .bounded-table { table-layout:fixed; }
+  .bounded-table th,.bounded-table td { min-width:0; vertical-align:top; }
+  .breakable,.peer-address { overflow-wrap:anywhere; word-break:break-word; }
+  .peer-address { display:block; line-height:1.35; }
+  .event-detail { white-space:pre-wrap; overflow-wrap:anywhere; word-break:break-word; }
+  .live-card { min-width:0; }
+  .live-frame { position:relative; width:100%; aspect-ratio:4/3; overflow:hidden;
+                border-radius:6px; background:#000; transition:aspect-ratio .12s ease; }
+  .live-frame>img,.live-frame>video { position:absolute; left:50%; top:50%; width:100%; height:100%;
+                object-fit:contain; background:#000; transform:translate(-50%,-50%); transform-origin:center; }
   .agrid { display:grid; grid-template-columns:repeat(auto-fill,minmax(210px,1fr)); gap:10px; }
   .acard { background:#141a21; border:1px solid #2a333d; border-radius:9px; padding:9px; }
   .athumb { width:100%; height:92px; border-radius:6px; background:#0c1014 center/cover no-repeat;
@@ -288,7 +298,8 @@
       </div>
       <div class="card"><div class="dim" id="bridgeInfo" style="margin-bottom:8px"></div>
         <div class="dim mono" id="localAddrs" style="margin-bottom:8px; font-size:12px"></div>
-        <table id="peersTbl">
+        <table id="peersTbl" class="bounded-table">
+        <colgroup><col style="width:11%"><col style="width:13%"><col style="width:8%"><col style="width:13%"><col style="width:20%"><col style="width:10%"><col style="width:25%"></colgroup>
         <thead><tr><th data-i18n="info.node"></th><th data-i18n="info.role"></th><th data-i18n="admin.status"></th><th data-i18n="admin.duty"></th><th data-i18n="info.version"></th><th data-i18n="power.title"></th><th data-i18n="admin.addresses"></th></tr></thead>
         <tbody></tbody></table></div>
       <div id="liveGrid" style="display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:12px"></div>

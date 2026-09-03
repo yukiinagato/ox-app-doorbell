@@ -77,6 +77,31 @@ std::string hostOf(const std::string& addr) {
   return p == std::string::npos ? addr : addr.substr(0, p);
 }
 
+// Mesh advertisements can contain the same interfaces in a different order on every refresh.
+// Pick a deterministic HTTP endpoint so live views are not torn down merely because that order
+// changed. Private IPv4 is preferred because it is directly reachable across the supported LAN.
+std::string preferredPeerHost(const std::vector<std::string>& addrs) {
+  std::vector<std::pair<int, std::string>> candidates;
+  for (const auto& addr : addrs) {
+    const std::string host = hostOf(addr);
+    if (host.empty()) continue;
+    int rank = 2;
+    int first = -1, second = -1, third = -1, fourth = -1;
+    char tail = '\0';
+    const bool ipv4 = std::sscanf(host.c_str(), "%d.%d.%d.%d%c", &first, &second,
+                                  &third, &fourth, &tail) == 4;
+    if (ipv4 && (first == 10 || (first == 192 && second == 168) ||
+                 (first == 172 && second >= 16 && second <= 31)))
+      rank = 0;
+    else if (ipv4)
+      rank = 1;
+    candidates.emplace_back(rank, host);
+  }
+  if (candidates.empty()) return "";
+  std::sort(candidates.begin(), candidates.end());
+  return candidates.front().second;
+}
+
 bool safeProbeHost(const std::string& host) {
   if (host.empty() || host.size() > 253) return false;
   for (unsigned char ch : host) {
@@ -2061,6 +2086,8 @@ struct Node::Impl {
   std::map<std::string, WebDialogLease> web_dialog_timers;  // call_id -> authority lease
   std::set<std::string> cancelled_call_ids;
   std::deque<std::string> cancelled_call_order;
+  std::set<std::string> presented_reply_event_ids;
+  std::deque<std::string> presented_reply_event_order;
   std::string sip_call_id;
   std::string last_reply_text;
   int64_t last_reply_ts = 0;
@@ -6995,6 +7022,8 @@ struct Node::Impl {
         clearActiveCall(ev.door, id);
       }
       rememberTerminalCall(ev);
+      if (opts.role == "door_station" && (opts.door.empty() || opts.door == ev.door))
+        presentReply(p.get(), ev.door, eventIdentity(ev));
       return;
     }
     if (ev.type == "call_cancelled") {
@@ -7189,7 +7218,7 @@ struct Node::Impl {
       json::set(o.get(), "device", ev.device);
       if (ev.type == "press" || ev.type == "purpose_selected" ||
           ev.type == "call_answered" || ev.type == "call_ended" ||
-          ev.type == "call_cancelled") {
+          ev.type == "call_cancelled" || ev.type == "reply") {
         auto p = json::parse(ev.payload_json.empty() ? "{}" : ev.payload_json);
         if (p) {
           const std::string call_id = json::getString(p.get(), "call_id");
@@ -7207,9 +7236,11 @@ struct Node::Impl {
               json::set(o.get(), "dialog_owner", active->second.dialog_owner);
           }
           const std::string reason = json::getString(p.get(), "reason");
+          const std::string text = json::getString(p.get(), "text");
           if (!purpose.empty()) json::set(o.get(), "purpose", purpose);
           if (!vlang.empty()) json::set(o.get(), "visitor_lang", vlang);
           if (!reason.empty()) json::set(o.get(), "reason", reason);
+          if (!text.empty()) json::set(o.get(), "text", text);
         }
       }
       uiNotify(json::dump(o.get()));
@@ -7318,6 +7349,39 @@ struct Node::Impl {
     events->append(alive ? "online" : "offline", "", id, "{}");
   }
 
+  bool rememberPresentedReply(const std::string& event_id) {
+    if (event_id.empty()) return true;
+    if (!presented_reply_event_ids.insert(event_id).second) return false;
+    presented_reply_event_order.push_back(event_id);
+    while (presented_reply_event_order.size() > 256) {
+      presented_reply_event_ids.erase(presented_reply_event_order.front());
+      presented_reply_event_order.pop_front();
+    }
+    return true;
+  }
+
+  void presentReply(const cJSON* payload, const std::string& door,
+                    const std::string& event_id) {
+    if (!payload || !rememberPresentedReply(event_id)) return;
+    const std::string text = json::getString(payload, "text");
+    if (text.empty()) return;
+    const std::string lang = json::getString(payload, "lang", "ja");
+    const std::string audio = json::getString(payload, "audio");
+    const bool audio_ok = !audio.empty() && assetCached(audio);
+    auto o = json::obj();
+    json::set(o.get(), "t", "reply");
+    json::set(o.get(), "text", text);
+    json::set(o.get(), "ttl_s", json::getInt(payload, "ttl_s", 30));
+    json::set(o.get(), "lang", lang);
+    if (!door.empty()) json::set(o.get(), "door", door);
+    if (audio_ok) {
+      json::set(o.get(), "audio", audio);
+      json::set(o.get(), "audio_path", assetFilePath(audio));
+    }
+    uiNotify(json::dump(o.get()));
+    if (!audio_ok && json::getBool(payload, "speak", true)) tts(text, lang);
+  }
+
   void onCommand(const std::string& from, const std::string& cmd_json) {
     auto c = json::parse(cmd_json);
     if (!c) return;
@@ -7346,24 +7410,8 @@ struct Node::Impl {
     if (cmd == "chime") {
       notifyChime(json::getString(c.get(), "sound", "ding1"), json::getString(c.get(), "door"));
     } else if (cmd == "show_reply") {
-      std::string text = json::getString(c.get(), "text");
-      const std::string lang = json::getString(c.get(), "lang", "ja");
-
-
-
-      const std::string audio = json::getString(c.get(), "audio");
-      const bool audio_ok = !audio.empty() && assetCached(audio);
-      auto o = json::obj();
-      json::set(o.get(), "t", "reply");
-      json::set(o.get(), "text", text);
-      json::set(o.get(), "ttl_s", json::getInt(c.get(), "ttl_s", 30));
-      json::set(o.get(), "lang", lang);
-      if (audio_ok) {
-        json::set(o.get(), "audio", audio);
-        json::set(o.get(), "audio_path", assetFilePath(audio));
-      }
-      uiNotify(json::dump(o.get()));
-      if (!audio_ok && json::getBool(c.get(), "speak", true)) tts(text, lang);
+      presentReply(c.get(), json::getString(c.get(), "door"),
+                   json::getString(c.get(), "event_id"));
     } else {
       DB_LOGW(kTag, "unknown command from " + from.substr(0, 8) + ": " + cmd);
     }
@@ -7423,6 +7471,10 @@ struct Node::Impl {
     json::set(pl.get(), "reply_id", reply_id);
     json::set(pl.get(), "text", text);
     json::set(pl.get(), "via", via);
+    json::set(pl.get(), "lang", lang);
+    json::setBool(pl.get(), "speak", speak);
+    json::set(pl.get(), "ttl_s", ttl);
+    if (!audio.empty()) json::set(pl.get(), "audio", audio);
     if (scoped) {
       json::set(pl.get(), "call_id", expected_call_id);
       json::set(pl.get(), "stage_revision", static_cast<int64_t>(expected_revision));
@@ -7447,6 +7499,8 @@ struct Node::Impl {
     json::setBool(c.get(), "speak", speak);
     json::set(c.get(), "ttl_s", ttl);
     json::set(c.get(), "lang", lang);
+    json::set(c.get(), "door", door);
+    json::set(c.get(), "event_id", eventIdentity(replied));
     if (!audio.empty()) json::set(c.get(), "audio", audio);
     std::string cmd = json::dump(c.get());
 
@@ -8333,7 +8387,10 @@ struct Node::Impl {
         json::setItem(e, "runtime",
                       peer_runtime ? std::move(peer_runtime) : json::obj());
         cJSON* addrs = json::addArr(e, "addrs");
-        for (const auto& a : p.addrs) json::push(addrs, json::Doc(cJSON_CreateString(a.c_str())));
+        std::vector<std::string> display_addrs = p.addrs;
+        std::sort(display_addrs.begin(), display_addrs.end());
+        for (const auto& a : display_addrs)
+          json::push(addrs, json::Doc(cJSON_CreateString(a.c_str())));
         // Enrich display name and door from config. During commissioning, a mesh-advertised
         // door station can expose streams before its devices.* entry has replicated.
         cJSON* dev = cfgAt("devices." + p.id);
@@ -8356,9 +8413,11 @@ struct Node::Impl {
           if (d) json::set(e, "door_label", labelIn(json::get(d, "label"), "ja"));
         }
         json::set(e, "name", peer_name);
-        if (peer_role == "door_station" && !p.addrs.empty()) {
-          const std::string origin = "http://" + hostOf(p.addrs[0]) + ":47180";
+        const std::string peer_http_host = preferredPeerHost(p.addrs);
+        if (peer_role == "door_station" && !peer_http_host.empty()) {
+          const std::string origin = "http://" + peer_http_host + ":47180";
           json::set(e, "stream", origin + "/stream.mjpeg");
+          json::set(e, "video_meta", origin + "/video-meta");
           // Treat an unregistered peer as auto-capable; clients fall back to MJPEG on 503.
           if (codec != "mjpeg") json::set(e, "stream_mp4", origin + "/stream.mp4");
           json::setItem(e, "playback_profile", playbackProfileDoc(node_id, p.id));
@@ -8782,6 +8841,7 @@ struct Node::Impl {
       HttpResp r = HttpResp::json("{\"rotation\":" +
                                   std::to_string(effective_video_rotation.load()) + "}");
       r.headers["Cache-Control"] = "no-store";
+      r.headers["Access-Control-Allow-Origin"] = "*";
       return r;
     });
 

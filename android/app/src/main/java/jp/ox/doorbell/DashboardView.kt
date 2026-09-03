@@ -291,6 +291,16 @@ internal class DashboardView(
         applyArrangement()
     }
 
+    /** Update only runtime-backed widgets; theme and layout are configuration dependencies. */
+    fun refreshRuntime(status: JSONObject?, withCalls: Boolean) {
+        this.status = status
+        nodeId = status?.optJSONObject("node")?.optString("id").orEmpty()
+        updateHeader()
+        buildTiles()
+        updateFooter()
+        if (withCalls) loadCalls()
+    }
+
     /** Refresh by reading core here, for the paths the host's coalescer does not drive. */
     fun refresh() = refresh(
         if (app.coreOk) app.core.status() else null,
@@ -784,23 +794,36 @@ internal class DashboardView(
 
     private fun updateHeader() {
         val counts = FleetCounting.of(status, config, app.boot.role, nodeId)
-        deviceCount.value.text = counts.devices.toString()
-        deviceCount.root.contentDescription = texts.t(
+        setTextIfChanged(deviceCount.value, counts.devices.toString())
+        setDescriptionIfChanged(deviceCount.root, texts.t(
             "dash.count_devices", R.string.dash_count_devices, counts.devices.toString(),
+        ))
+        setTextIfChanged(
+            doorCount.value, "${counts.doorStations.online}/${counts.doorStations.total}",
         )
-        doorCount.value.text = "${counts.doorStations.online}/${counts.doorStations.total}"
-        doorCount.root.contentDescription = texts.t(
+        setDescriptionIfChanged(doorCount.root, texts.t(
             "dash.count_door_stations", R.string.dash_count_door_stations,
             counts.doorStations.online.toString(), counts.doorStations.total.toString(),
-        )
-        panelCount.value.text = "${counts.panels.online}/${counts.panels.total}"
-        panelCount.root.contentDescription = texts.t(
+        ))
+        setTextIfChanged(panelCount.value, "${counts.panels.online}/${counts.panels.total}")
+        setDescriptionIfChanged(panelCount.root, texts.t(
             "dash.count_indoor_panels", R.string.dash_count_indoor_panels,
             counts.panels.online.toString(), counts.panels.total.toString(),
+        ))
+        setTextIfChanged(
+            missedBadge,
+            texts.t("history.missed_badge", R.string.history_missed_badge, unreadMissed.toString()),
         )
-        missedBadge.text = texts.t("history.missed_badge", R.string.history_missed_badge,
-                                   unreadMissed.toString())
-        missedBadge.visibility = if (unreadMissed > 0) View.VISIBLE else View.GONE
+        val badgeVisibility = if (unreadMissed > 0) View.VISIBLE else View.GONE
+        if (missedBadge.visibility != badgeVisibility) missedBadge.visibility = badgeVisibility
+    }
+
+    private fun setTextIfChanged(view: TextView, value: String) {
+        if (view.text.toString() != value) view.text = value
+    }
+
+    private fun setDescriptionIfChanged(view: View, value: String) {
+        if (view.contentDescription?.toString() != value) view.contentDescription = value
     }
 
     private fun updateFooter() {
@@ -858,11 +881,13 @@ internal class DashboardView(
      */
     private fun buildTiles() {
         val doors = tileDoorIds()
+        var structureChanged = false
         // An empty door list on the very first build leaves tiles and doors both empty, which
         // compared equal and skipped the block: the heading and the empty-state line were never
         // added, so the whole section was missing rather than saying there were no doors. It only
         // came back if a door later appeared, so a transient empty list hid the section for good.
         if (tiles.keys.toList() != doors || tileColumn.childCount == 0) {
+            structureChanged = true
             tileColumn.removeAllViews()
             tiles.clear()
             stills.clear()
@@ -900,7 +925,7 @@ internal class DashboardView(
             tilesScrolled = true
             tileScroll.post { tileScroll.scrollTo(0, 0) }
         }
-        fitTilesToViewport()
+        if (structureChanged) fitTilesToViewport()
     }
 
     /** The parts that never change for a door. Called once. */

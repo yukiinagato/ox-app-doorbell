@@ -66,8 +66,8 @@ android {
     applicationId = "jp.ox.doorbell"
     minSdk = 19
     targetSdk = 35
-    versionCode = 3
-    versionName = "0.3.2+${doorbellGitRevision.take(7)}"
+    versionCode = 4
+    versionName = "0.3.3+${doorbellGitRevision.take(7)}"
     buildConfigField("String", "DOORBELL_SOURCE_ID", "\"$doorbellSourceIdentity\"")
 
     externalNativeBuild {

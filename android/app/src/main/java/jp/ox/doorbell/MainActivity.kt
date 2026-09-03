@@ -11,10 +11,6 @@ import android.graphics.Color
 import android.media.AudioManager
 import android.media.MediaPlayer
 import android.media.ToneGenerator
-import android.hardware.Sensor
-import android.hardware.SensorEvent
-import android.hardware.SensorEventListener
-import android.hardware.SensorManager
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
@@ -25,7 +21,6 @@ import android.os.SystemClock
 import android.speech.tts.TextToSpeech
 import android.util.Log
 import android.view.View
-import android.view.Surface
 import android.view.WindowManager
 import android.view.animation.AlphaAnimation
 import android.view.animation.Animation
@@ -42,7 +37,7 @@ import java.util.Locale
 import org.json.JSONArray
 import org.json.JSONObject
 
-class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
+class MainActivity : Activity(), DoorbellCore.Listener {
 
     private val ui = Handler(Looper.getMainLooper())
     private lateinit var app: App
@@ -95,6 +90,7 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
 
     private var lastClockText = ""
     private var lastClockDate = ""
+    private var membershipRenderKey = ""
 
     /** Appearance and automatic theme as core published them; null on an older core. */
     private var coreDisplay: CoreDisplay = CoreDisplay(null, null)
@@ -106,6 +102,8 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
     private var homeRefreshRunMs = 0L
     private var homeRefreshQueued = false
     private var homeRefreshWantsConfig = false
+    private var homeRefreshWantsFullRender = false
+    private var homeRefreshWantsCalls = false
     private val homeRefreshTick = Runnable { runHomeRefresh() }
 
     /** Where the coalesced refresh reads core, so the main thread never waits on the run loop. */
@@ -114,8 +112,6 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
 
     private var tts: TextToSpeech? = null
     private var ttsReady = false
-    private val sensorManager by lazy { getSystemService(SENSOR_SERVICE) as SensorManager }
-    private var lastVideoRotation = -1
 
     private var secretTaps = 0
     private var secretFirstMs = 0L
@@ -247,12 +243,6 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
         dashboard?.onResume()
         applyVisitorLayout()
         startRegionInkWatch()
-        if (app.boot.role == "door_station") {
-            publishDisplayRotationFallback()
-            sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)?.let {
-                sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_UI)
-            }
-        }
     }
 
     /**
@@ -283,34 +273,37 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
 
     /** Render the membership pill and the pairing banner from an already-read pairing document. */
     private fun renderMembership(pairing: JSONObject?, ready: Boolean) {
-        pairingBanner.visibility = if (ready) View.GONE else View.VISIBLE
-        if (!ready) {
-            pairingBanner.text = texts.t(
-                "pair.not_set_up_banner", R.string.pair_not_set_up_banner,
-            )
-            nodeInfo.text = texts.t("pair.not_set_up_banner", R.string.pair_not_set_up_banner)
-            return
-        }
-        if (dashboard != null) {
-            nodeInfo.text = listOf(
+        val membershipText = if (!ready) {
+            texts.t("pair.not_set_up_banner", R.string.pair_not_set_up_banner)
+        } else if (dashboard != null) {
+            listOf(
                 texts.t("pair.membership", R.string.pair_membership,
                         PairingModel.memberCount(pairing).toString()),
                 texts.t("pair.membership_connected", R.string.pair_membership_connected,
                         PairingModel.connectedCount(pairing).toString()),
             ).joinToString(" · ")
+        } else {
+            val status = statusSnapshot
+            val power = status?.optJSONObject("self")?.optJSONObject("power")
+            ShellUi.versionLine(
+                doorLabel(app.boot.door).ifEmpty { app.boot.name },
+                status?.optJSONObject("node")?.optString("version").orEmpty()
+                    .ifEmpty { app.core.version() },
+                appVersionName(),
+                power?.optInt("battery_pct", -1) ?: -1,
+                power?.optBoolean("charging", false) ?: false,
+            ) { texts.t("power.percent", R.string.power_percent, it.toString()) }
+        }
+        val renderKey = "${if (ready) 1 else 0}:$membershipText"
+        if (renderKey == membershipRenderKey) return
+        membershipRenderKey = renderKey
+        pairingBanner.visibility = if (ready) View.GONE else View.VISIBLE
+        if (!ready) {
+            pairingBanner.text = membershipText
+            nodeInfo.text = membershipText
             return
         }
-        // A visitor sees the door, the core and app versions, and the battery — nothing else.
-        val status = statusSnapshot
-        val power = status?.optJSONObject("self")?.optJSONObject("power")
-        nodeInfo.text = ShellUi.versionLine(
-            doorLabel(app.boot.door).ifEmpty { app.boot.name },
-            status?.optJSONObject("node")?.optString("version").orEmpty()
-                .ifEmpty { app.core.version() },
-            appVersionName(),
-            power?.optInt("battery_pct", -1) ?: -1,
-            power?.optBoolean("charging", false) ?: false,
-        ) { texts.t("power.percent", R.string.power_percent, it.toString()) }
+        nodeInfo.text = membershipText
     }
 
     private fun appVersionName(): String = try {
@@ -361,51 +354,17 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
         // Leaving with setup still required must re-open setup on the next resume;
         // otherwise backing out of first-run setup strands the operator on an empty screen.
         setupLaunchRequested = false
-        sensorManager.unregisterListener(this)
         ui.removeCallbacks(clockTick)
         ui.removeCallbacks(purposeTimeout)
         ui.removeCallbacks(homeRefreshTick)
         homeRefreshQueued = false
+        homeRefreshWantsFullRender = false
+        homeRefreshWantsCalls = false
         dashboard?.onPause()
         stopRegionInkWatch()
         if (::sosSlider.isInitialized) sosSlider.cancelCountdown()
         app.unbindForeground(this)
         super.onPause()
-    }
-
-    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
-
-    /** Applies camera mount correction before the first sensor event or without a sensor. */
-    @Suppress("DEPRECATION")
-    private fun publishDisplayRotationFallback() {
-        val deviceRotation = when (windowManager.defaultDisplay.rotation) {
-            Surface.ROTATION_90 -> 90
-            Surface.ROTATION_180 -> 180
-            Surface.ROTATION_270 -> 270
-            else -> 0
-        }
-        val rotation = app.runtime.frameRotationForDeviceRotation(deviceRotation)
-        if (rotation != lastVideoRotation) {
-            lastVideoRotation = rotation
-            app.core.setVideoSensorRotation(rotation)
-        }
-    }
-
-    override fun onSensorChanged(event: SensorEvent) {
-        if (event.sensor.type != Sensor.TYPE_ACCELEROMETER || event.values.size < 2) return
-        val x = event.values[0]
-        val y = event.values[1]
-        // Keep the last angle when the device lies flat and the in-plane gravity is unstable.
-        if (kotlin.math.max(kotlin.math.abs(x), kotlin.math.abs(y)) < 4f) return
-        val deviceRotation = if (kotlin.math.abs(x) > kotlin.math.abs(y)) {
-            if (x > 0) 90 else 270
-        } else {
-            if (y > 0) 0 else 180
-        }
-        val rotation = app.runtime.frameRotationForDeviceRotation(deviceRotation)
-        if (rotation == lastVideoRotation) return
-        lastVideoRotation = rotation
-        app.core.setVideoSensorRotation(rotation)
     }
 
     override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
@@ -773,8 +732,14 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
      * [HomeRefreshPolicy]. [withConfig] also re-reads configuration and rebuilds what depends on
      * it, which peer liveness never changes.
      */
-    private fun scheduleHomeRefresh(withConfig: Boolean = false) {
+    private fun scheduleHomeRefresh(
+        withConfig: Boolean = false,
+        fullRender: Boolean = true,
+        withCalls: Boolean = false,
+    ) {
         if (withConfig) homeRefreshWantsConfig = true
+        if (withConfig || fullRender) homeRefreshWantsFullRender = true
+        if (withCalls) homeRefreshWantsCalls = true
         if (homeRefreshQueued) return
         homeRefreshQueued = true
         ui.postDelayed(
@@ -792,14 +757,20 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
         if (!app.coreOk || worker == null) return
         homeRefreshRunMs = SystemClock.elapsedRealtime()
         val withConfig = homeRefreshWantsConfig
+        val fullRender = homeRefreshWantsFullRender
+        val withCalls = homeRefreshWantsCalls
         homeRefreshWantsConfig = false
+        homeRefreshWantsFullRender = false
+        homeRefreshWantsCalls = false
         worker.post {
             // One status document per refresh, shared by every surface that renders from it.
             val status = app.core.status()
             val config = if (withConfig) app.core.config() else null
             val pairing = app.core.pairingInfo()
             val ready = app.pairingReadyFrom(pairing)
-            ui.post { applyHomeRefresh(status, config, pairing, ready, withConfig) }
+            ui.post {
+                applyHomeRefresh(status, config, pairing, ready, withConfig, fullRender, withCalls)
+            }
         }
     }
 
@@ -809,11 +780,18 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
         pairing: JSONObject?,
         pairingReady: Boolean,
         withConfig: Boolean,
+        fullRender: Boolean,
+        withCalls: Boolean,
     ) {
         if (isFinishing) return
         statusSnapshot = status
         coreDisplay = CoreDisplays.parse(status?.optJSONObject("display"))
         status?.optJSONObject("node")?.optString("id")?.let { if (it.isNotEmpty()) nodeId = it }
+        if (!fullRender) {
+            renderMembership(pairing, pairingReady)
+            dashboard?.refreshRuntime(status, withCalls)
+            return
+        }
         if (withConfig) {
             applyConfigCache(config)
             applyTheme()
@@ -1462,12 +1440,12 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
                 applyAppearance()
                 scheduleHomeRefresh()
             }
-            "power_changed" -> scheduleHomeRefresh()
+            "power_changed" -> scheduleHomeRefresh(fullRender = false)
             // A door of "*" means the cluster-wide announcement moved, which affects every
             // door that has none of its own.
             "notice_changed" -> scheduleHomeRefresh()
-            "call_log_changed" -> scheduleHomeRefresh()
-            "peers_changed" -> scheduleHomeRefresh()
+            "call_log_changed" -> scheduleHomeRefresh(fullRender = false, withCalls = true)
+            "peers_changed" -> scheduleHomeRefresh(fullRender = false)
             "config_changed" -> scheduleHomeRefresh(withConfig = true)
             "event" -> {
                 val eventType = ev.optString("type")

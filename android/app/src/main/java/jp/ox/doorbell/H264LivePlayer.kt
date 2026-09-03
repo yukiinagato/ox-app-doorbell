@@ -3,6 +3,7 @@ package jp.ox.doorbell
 import android.graphics.SurfaceTexture
 import android.media.MediaCodec
 import android.media.MediaFormat
+import android.os.SystemClock
 import android.util.Log
 import android.view.Surface
 import android.view.TextureView
@@ -38,10 +39,15 @@ internal class H264LivePlayer(
     private var drainRunning = false
     private var awaitingKeyframe = true
     private var firstFrame = false
+    private var startupMs = 0L
+    private var tracedFirstSample = false
 
     fun start() {
         if (running) return
         running = true
+        startupMs = SystemClock.elapsedRealtime()
+        tracedFirstSample = false
+        trace("request_start")
         view.surfaceTextureListener = this
         if (view.isAvailable) view.surfaceTexture?.let { startForSurface(it) }
     }
@@ -102,6 +108,7 @@ internal class H264LivePlayer(
             val code = local.responseCode
             if (code != HttpURLConnection.HTTP_OK)
                 throw Fmp4StreamReader.ParseException("HTTP $code")
+            trace("http_response_headers")
             Fmp4StreamReader(local.inputStream, this).pump { running }
             if (running) fail("fMP4 stream ended")
         } catch (e: Exception) {
@@ -137,6 +144,7 @@ internal class H264LivePlayer(
             firstFrame = false
             startDrain(active)
             listener.onConfigured(name, config.width, config.height)
+            trace("decoder_configured")
         } catch (e: Exception) {
             try { active?.stop() } catch (_: Exception) { }
             try { active?.release() } catch (_: Exception) { }
@@ -149,6 +157,10 @@ internal class H264LivePlayer(
         if (!running) return
         val active = decoder ?: return
         if (awaitingKeyframe && !sample.keyframe) return
+        if (!tracedFirstSample) {
+            tracedFirstSample = true
+            trace("first_decodable_sample")
+        }
         try {
             val index = active.dequeueInputBuffer(INPUT_TIMEOUT_US)
             if (index < 0) {
@@ -186,6 +198,7 @@ internal class H264LivePlayer(
                             if (render) listener.onFrameRendered(presentationTimeUs)
                             if (render && !firstFrame) {
                                 firstFrame = true
+                                trace("first_decoder_output")
                                 listener.onFirstFrame()
                             }
                         }
@@ -223,6 +236,10 @@ internal class H264LivePlayer(
         try { thread.join(250) } catch (_: InterruptedException) {
             Thread.currentThread().interrupt()
         }
+    }
+
+    private fun trace(stage: String) {
+        Log.i(TAG, "startup $stage +${SystemClock.elapsedRealtime() - startupMs}ms")
     }
 
     companion object {
