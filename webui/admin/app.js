@@ -3694,7 +3694,7 @@ if (typeof document !== "undefined") (function () {
     var laEl = $("#localAddrs");
     if (laEl) {
       if (la.length) {
-        laEl.innerHTML = icon("info-box") + " " + t("admin.local_addrs") + ": " +
+        laEl.innerHTML = icon("info-circle") + " " + t("admin.local_addrs") + ": " +
           la.map(function (a) { return esc(a); }).join("　");
       } else { laEl.textContent = ""; }
     }
