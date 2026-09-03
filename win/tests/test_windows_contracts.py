@@ -1466,6 +1466,68 @@ class WindowsContracts(unittest.TestCase):
         self.assertIn('"devices." + nodeId + ".local.theme.call_button_bg"', button)
         self.assertIn("return LocalAccent(background);", button)
 
+    def test_the_theme_backdrop_is_admin_configurable(self):
+        shell = read("win/DoorbellApp/MainWindow.Shell.cs")
+        xaml = read("win/DoorbellApp/MainWindow.xaml")
+
+        # The scrim is a sibling drawn straight after the picture and before every screen, so it
+        # darkens the wallpaper and never the door tiles or the call list plate above it.
+        self.assertIn('<Border x:Name="ThemeBackdrop"', xaml)
+        self.assertIn('x:Name="ThemeBackdrop" Visibility="Collapsed" IsHitTestVisible="False"',
+                      xaml)
+        order = [xaml.index('x:Name="%s"' % name) for name in
+                 ("ThemeBgImage", "ThemeBackdrop", "IdleView", "DoorTilesPanel",
+                  "RecentCallsPanel")]
+        self.assertEqual(order, sorted(order), "the scrim must sit under every plate")
+
+        resolved = shell[shell.index("private void ApplyThemeBackdrop()"):
+                         shell.index("private BackgroundSample OverBackdrop(")]
+        self.assertIn('CoreClient.Dig(_display, "theme.backdrop")', resolved)
+        self.assertIn("private const int DefaultBackdropOpacity = 62;", shell)
+
+        def backdrop(config, picture=True):
+            """The rule as implemented: enabled / colour / opacity, each with its own default."""
+            enabled, colour, percent = True, "#000000", 62
+            if config is not None:
+                if isinstance(config.get("enabled"), bool):
+                    enabled = config["enabled"]
+                if re.fullmatch(r"#[0-9A-Fa-f]{6}", str(config.get("color", ""))):
+                    colour = config["color"]
+                if isinstance(config.get("opacity"), int):
+                    percent = max(0, min(100, config["opacity"]))
+            draw = picture and enabled and percent > 0
+            return (draw, colour, percent / 100.0 if draw else 0.0)
+
+        # Absent: the built-in scrim.
+        self.assertEqual(backdrop(None), (True, "#000000", 0.62))
+        # Configured: colour and opacity both applied.
+        self.assertEqual(backdrop({"enabled": True, "color": "#123456", "opacity": 25}),
+                         (True, "#123456", 0.25))
+        # Disabled: nothing is drawn.
+        self.assertEqual(backdrop({"enabled": False, "color": "#123456", "opacity": 80}),
+                         (False, "#123456", 0.0))
+        # Only over a picture; a scrim over a flat theme colour would just be another colour.
+        self.assertEqual(backdrop(None, picture=False)[0], False)
+        self.assertIn("bool picture = ThemeBgImage.Visibility == Visibility.Visible &&", resolved)
+        self.assertIn("bool draw = picture && enabled && percent > 0;", resolved)
+        self.assertIn("ThemeBackdrop.Visibility = draw ? Visibility.Visible : "
+                      "Visibility.Collapsed;", resolved)
+        self.assertIn("ThemeBackdrop.Background = draw ? ThemeContrast.Brush(colour) : null;",
+                      resolved)
+        self.assertIn("ThemeBackdrop.Opacity = _backdropAlpha;", resolved)
+
+        # The ink decision sees the darkened picture, not the bright original.
+        self.assertIn("return OverBackdrop(region);", shell)
+        self.assertIn("return OverBackdrop(contract);", shell)
+        composite = shell[shell.index("private Color OverBackdrop(Color under)"):
+                          shell.index("/// <summary>Applies display.appearance")]
+        self.assertIn("under.R * (1 - a) + _backdropColour.R * a", composite)
+        # The scrim is resolved before the ink that has to see through it.
+        window = read("win/DoorbellApp/MainWindow.xaml.cs")
+        display = window[window.index("private void ApplyDisplay()"):
+                         window.index("private void SetBrightnessAsync")]
+        self.assertLess(display.index("ApplyThemeBackdrop();"), display.index("ApplyAutoInk();"))
+
     def test_the_footer_and_the_sos_slider_never_overlap(self):
         shell = read("win/DoorbellApp/MainWindow.Shell.cs")
         xaml = read("win/DoorbellApp/MainWindow.xaml")

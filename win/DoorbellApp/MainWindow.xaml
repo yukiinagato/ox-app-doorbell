@@ -9,6 +9,11 @@
     <Grid ClipToBounds="True">
         <Image x:Name="ThemeBgImage" Stretch="UniformToFill" Visibility="Collapsed"
                IsHitTestVisible="False"/>
+        <!-- The scrim that makes text and cards read over a bright wallpaper. It is a sibling
+             drawn immediately after the picture and before every screen, so it darkens the
+             picture and never the door tiles, the call list or any other plate above it.
+             Colour and opacity come from display.theme.backdrop. -->
+        <Border x:Name="ThemeBackdrop" Visibility="Collapsed" IsHitTestVisible="False"/>
 
         <Grid x:Name="IdleView">
             <Grid.RenderTransform>

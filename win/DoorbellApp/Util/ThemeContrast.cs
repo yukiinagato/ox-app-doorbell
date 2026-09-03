@@ -117,6 +117,23 @@ namespace DoorbellApp.Util
             return RatioOf(Luminance(first), Luminance(second));
         }
 
+        /// <summary>
+        /// The neutral grey with the given relative luminance. The three coefficients sum to one,
+        /// so for a grey the luminance is just the linearised channel, and this inverts it.
+        /// </summary>
+        public static Color GreyOfLuminance(double luminance)
+        {
+            if (luminance < 0) luminance = 0;
+            if (luminance > 1) luminance = 1;
+            double channel = luminance <= 0.0031308
+                ? luminance * 12.92
+                : 1.055 * Math.Pow(luminance, 1.0 / 2.4) - 0.055;
+            int value = (int)Math.Round(channel * 255.0);
+            if (value < 0) value = 0;
+            if (value > 255) value = 255;
+            return Color.FromRgb((byte)value, (byte)value, (byte)value);
+        }
+
         /// <summary>WCAG contrast between two relative luminances.</summary>
         public static double RatioOf(double first, double second)
         {

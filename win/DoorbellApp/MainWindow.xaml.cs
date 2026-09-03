@@ -696,6 +696,7 @@ namespace DoorbellApp
                 Background = (Brush)FindResource("Bg");
                 ThemeBgImage.Source = null;
                 ThemeBgImage.Visibility = Visibility.Collapsed;
+                ApplyThemeBackdrop();
                 return;
             }
             string color = ThemeValue("bg_color");
@@ -726,6 +727,7 @@ namespace DoorbellApp
                 _themeHash = null;
                 ThemeBgImage.Source = null;
                 ThemeBgImage.Visibility = Visibility.Collapsed;
+                ApplyThemeBackdrop();
                 return;
             }
             if (hash == _themeHash && ThemeBgImage.Source != null) return;
@@ -762,6 +764,8 @@ namespace DoorbellApp
                         bmp.Freeze();
                         ThemeBgImage.Source = bmp;
                         ThemeBgImage.Visibility = Visibility.Visible;
+                        ApplyThemeBackdrop();
+                        QueueInkPass();
                     }
                     catch (Exception ex)
                     {
@@ -1188,6 +1192,7 @@ namespace DoorbellApp
 
             if (!_emergencyActive)
                 SetBrightnessAsync(_screensaverOn ? Math.Min(_brightness, 10) : _brightness);
+            ApplyThemeBackdrop();
             ApplyAutoInk();
         }
 
