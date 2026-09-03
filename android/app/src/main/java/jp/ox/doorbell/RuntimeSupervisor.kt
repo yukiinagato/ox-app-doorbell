@@ -126,6 +126,32 @@ class RuntimeSupervisor(private val app: App) {
         handler.post { if (running && isCoreReady) ensureCamera() }
     }
 
+    /** Recreate Core so a locally saved name/role/door is advertised and replicated immediately. */
+    fun restartForIdentityChange() {
+        handler.post {
+            if (!running || !isCoreReady) return@post
+            handler.removeCallbacks(mediaPoll)
+            scannerActive = false
+            camera.encoder = null
+            encoder.stop()
+            camera.stop()
+            cameraStarted = false
+            resolutionIndex = 0
+            currentActualResolution = ""
+            triedActualResolutions.clear()
+            encoderExhausted = false
+            encoderRetryAtMs = 0L
+            cameraRetryAtMs = 0L
+            setCoreReady(false, "identity_changed")
+            publishRuntimeHealth(force = true)
+            app.core.destroy()
+            statusStore.update("runtime", JSONObject()
+                .put("state", "starting")
+                .put("reason", "identity_changed"))
+            startCore()
+        }
+    }
+
     /**
      * Lend the Camera1 capture path to a foreground QR scanner so it can show a preview while
      * frames keep reaching Core. A door station's headless capture is restarted on release.

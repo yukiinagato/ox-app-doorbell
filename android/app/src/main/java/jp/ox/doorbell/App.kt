@@ -52,6 +52,8 @@ class App : Application(), DoorbellCore.Listener {
 
     @Volatile
     private var pairingDeferredForSession = false
+    @Volatile
+    private var identityRestartPending = false
 
     /**
      * The operator chose "set up later" on the onboarding screen. The main UI then keeps a
@@ -149,11 +151,16 @@ class App : Application(), DoorbellCore.Listener {
 
     /** Completes the local identity gate before this device is allowed to join or originate calls. */
     fun completeBootSetup(name: String, role: String, door: String): Boolean {
+        val previous = boot
         val persisted = BootConfig.persistSetup(File(filesDir, "boot.json"), name, role, door)
             ?: return false
         boot = persisted
         bootSetupRequired = false
         pairingPersistence.initialize(BootConfig.hasSecureMeshReference(boot.rawJson))
+        val identityChanged = previous.name != persisted.name || previous.role != persisted.role ||
+            previous.door != persisted.door
+        if (identityChanged && ::runtime.isInitialized && runtime.isCoreReady)
+            activateIdentityChange(relaunchUi = true)
         startResidentService()
         return true
     }
@@ -179,8 +186,11 @@ class App : Application(), DoorbellCore.Listener {
                 put("secure_persisted", persisted)
             }
         } else ev
-        if (eventType == "config_changed" && ::runtime.isInitialized)
-            runtime.onConfigChanged()
+        if (eventType == "config_changed" && ::runtime.isInitialized) {
+            mainHandler.post {
+                if (!applyReplicatedIdentity()) runtime.onConfigChanged()
+            }
+        }
         if (eventType == "event") handleLifecycleEvent(ev)
 
         // IncomingActivity stays independent from the main activity listener, so it receives
@@ -202,6 +212,43 @@ class App : Application(), DoorbellCore.Listener {
             IncomingActivity.launch(this, lastPressDoor,
                                     lastPurpose, lastVisitorLang, lastCallId,
                                     lastStageRevision, lastCallExpiresAtMs)
+        }
+    }
+
+    /** Apply a remotely edited self identity to the local bootstrap profile and running shell. */
+    private fun applyReplicatedIdentity(): Boolean {
+        if (!runtime.isCoreReady || identityRestartPending) return identityRestartPending
+        val nodeId = core.status()?.optJSONObject("node")?.optString("id").orEmpty()
+        if (nodeId.isEmpty()) return false
+        val device = core.config()?.optJSONObject("devices")?.optJSONObject(nodeId) ?: return false
+        val role = device.optString("role").trim()
+        if (!BootConfig.validRole(role)) return false
+        val door = if (role == "door_station") device.optString("door").trim() else ""
+        if (role == "door_station" && !BootConfig.validDoor(door)) return false
+        val name = device.optString("name", boot.name).trim().take(64).ifEmpty { "doorbell" }
+        if (name == boot.name && role == boot.role && door == boot.door) return false
+        val persisted = BootConfig.persistSetup(File(filesDir, "boot.json"), name, role, door)
+        if (persisted == null) {
+            Log.e(TAG, "replicated identity could not be persisted")
+            return false
+        }
+        boot = persisted
+        bootSetupRequired = false
+        identityRestartPending = true
+        activateIdentityChange(relaunchUi = false)
+        return true
+    }
+
+    private fun activateIdentityChange(relaunchUi: Boolean) {
+        runtime.restartForIdentityChange()
+        mainHandler.post {
+            val visible = relaunchUi || activityListener != null || incomingActivity != null
+            if (visible) {
+                startActivity(Intent(this, MainActivity::class.java).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+                })
+            }
+            identityRestartPending = false
         }
     }
 

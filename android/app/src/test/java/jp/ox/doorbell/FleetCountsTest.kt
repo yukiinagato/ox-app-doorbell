@@ -79,7 +79,7 @@ class FleetCountsTest {
     }
 
     @Test
-    fun aConfiguredRoleOverridesWhatThePeerAdvertises() {
+    fun aLiveAdvertisedRoleOverridesStaleConfiguration() {
         val config = JSONObject(
             """{"devices":{"n-x":{"role":"door_station","door":"d1"}}}""",
         )
@@ -88,8 +88,8 @@ class FleetCountsTest {
             peer("n-x", "indoor_panel"),
         ), config)
         assertEquals(2, result.devices)
-        assertEquals(RoleCount(1, 1), result.doorStations)
-        assertEquals(RoleCount(1, 1), result.panels)
+        assertEquals(RoleCount(0, 0), result.doorStations)
+        assertEquals(RoleCount(2, 2), result.panels)
     }
 
     @Test

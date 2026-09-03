@@ -146,18 +146,22 @@ class DoorStationsTest {
         assertEquals(stationId, DoorStations.peerFor(st, null, door)!!.optString("id"))
     }
 
-    /**
-     * Core lets a configured devices.<id> entry override what a peer advertises, because during
-     * commissioning a station announces itself before its configuration has replicated.
-     */
     @Test
-    fun configuredRoleAndDoorOverrideWhatThePeerAdvertises() {
-        val st = status("""[{"id":"$stationId","role":"indoor_panel","status":"alive"}]""")
+    fun liveAdvertisementOverridesStaleConfiguredIdentity() {
+        val st = status("[${peer()}]")
+        val cfg = JSONObject(
+            """{"devices":{"$stationId":{"role":"indoor_panel","door":""}}}""",
+        )
+        assertNotNull(DoorStations.alivePeer(st, cfg, door))
+    }
+
+    @Test
+    fun configuredIdentityFillsFieldsMissingFromAnOlderPeer() {
+        val st = status("""[{"id":"$stationId","status":"alive"}]""")
         val cfg = JSONObject(
             """{"devices":{"$stationId":{"role":"door_station","door":"$door"}}}""",
         )
         assertNotNull(DoorStations.alivePeer(st, cfg, door))
-        // Without the configuration it is just an indoor panel with no door.
         assertNull(DoorStations.alivePeer(st, null, door))
     }
 

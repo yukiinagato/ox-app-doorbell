@@ -10,6 +10,11 @@
 ASCII 字母或数字，后续仅允许字母、数字、`_`、`-`。仅保存成功后才原子写入
 `setup_complete:true`。tvOS 没有受支持的门口摄像头角色，因此固定为 `indoor_panel`。
 
+设备加入 cluster 后，`devices.<self>.name`、`.role` 和 `.door` 是可远程编辑的目标身份。
+Android 与 iOS/iPadOS 目标 shell 会验证变更，将其原子写入本机 `boot.json`，然后重启 UI 与 Core，使新角色用于广播
+和平台运行时。在重启完成前，其他节点使用目标设备的实时签名广播，而不会让目标设备尚未应用的
+较新 replicated identity 覆盖它。
+
 mesh PSK 是裝置本機 bootstrap data，不是 CRDT 值。Core 先完成 `secure_put("mesh.psk", …)`，再只向
 shell 發出 `{"t":"paired","psk_ref":"secret:mesh.psk"}`。shell 將 opaque reference 與非秘密
 `seed_peers` 保存到 `boot.json`，不接收新的 `psk_hex`。secure store 失敗時發出

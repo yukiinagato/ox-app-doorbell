@@ -8165,19 +8165,22 @@ struct Node::Impl {
         for (const auto& entry : liveness) {
           if (entry.first == node_id || entry.second != "alive") continue;
           const cJSON* device = cfgAt("devices." + entry.first);
-          std::string role = json::getString(device, "role");
-          std::string peer_door = json::getString(device, "door");
-          if (role.empty() || peer_door.empty()) {
-            // Fall back to what the peer advertises while its devices.<id> entry catches up.
-            if (mesh) {
-              for (const auto& peer : mesh->peers()) {
-                if (peer.id != entry.first) continue;
-                if (role.empty()) role = peer.role;
-                if (peer_door.empty()) peer_door = peer.door;
-                break;
-              }
+          std::string role;
+          std::string peer_door;
+          if (mesh) {
+            for (const auto& peer : mesh->peers()) {
+              if (peer.id != entry.first) continue;
+              role = peer.role;
+              peer_door = peer.door;
+              break;
             }
           }
+          // A connected peer owns its operational identity. Replicated identity is only the
+          // fallback for older peers that do not advertise these fields yet; otherwise a stale
+          // role edit can hide a healthy station even while its signed heartbeat says it serves
+          // this door.
+          if (role.empty()) role = json::getString(device, "role");
+          if (peer_door.empty()) peer_door = json::getString(device, "door");
           if (role != "door_station" || peer_door != door_id) continue;
           return entry.first;
         }
@@ -8221,11 +8224,11 @@ struct Node::Impl {
         for (const auto& peer : mesh->peers()) {
           if (!peer_alive(peer.id)) continue;
           const cJSON* device = cfgAt("devices." + peer.id);
-          std::string role = json::getString(device, "role");
-          if (role.empty()) role = peer.role;
+          std::string role = peer.role;
+          if (role.empty()) role = json::getString(device, "role");
           if (role != "door_station") continue;
-          std::string door_id = json::getString(device, "door");
-          if (door_id.empty()) door_id = peer.door;
+          std::string door_id = peer.door;
+          if (door_id.empty()) door_id = json::getString(device, "door");
           add_station(peer.id, door_id, peer.id.substr(0, 8));
         }
       }
@@ -8282,20 +8285,21 @@ struct Node::Impl {
         cJSON* dev = cfgAt("devices." + p.id);
         std::string peer_name = p.id.substr(0, 8);
         std::string peer_role = p.role;
+        std::string peer_door = p.door;
         std::string codec = "auto";
-        if (!p.door.empty()) json::set(e, "door", p.door);
         if (dev) {
           peer_name = json::getString(dev, "name", peer_name);
           std::string configured_role = json::getString(dev, "role");
-          if (!configured_role.empty()) peer_role = configured_role;
-          std::string door = json::getString(dev, "door");
-          if (!door.empty()) {
-            json::set(e, "door", door);
-            cJSON* d = cfgAt("doors." + door);
-            if (d) json::set(e, "door_label", labelIn(json::get(d, "label"), "ja"));
-          }
+          if (peer_role.empty()) peer_role = configured_role;
+          if (peer_door.empty()) peer_door = json::getString(dev, "door");
           cJSON* cam = json::get(json::get(dev, "local"), "camera");
           codec = json::getString(cam, "codec", "auto");
+        }
+        json::set(e, "role", peer_role);
+        if (!peer_door.empty()) {
+          json::set(e, "door", peer_door);
+          cJSON* d = cfgAt("doors." + peer_door);
+          if (d) json::set(e, "door_label", labelIn(json::get(d, "label"), "ja"));
         }
         json::set(e, "name", peer_name);
         if (peer_role == "door_station" && !p.addrs.empty()) {

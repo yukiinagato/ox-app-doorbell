@@ -8,9 +8,8 @@
 //   2. Which URL carries its still? The peer's snapshot field when core publishes one, otherwise
 //      the snapshot beside its MJPEG stream.
 //
-// Peer matching mirrors core: a configured devices.<id> role or door wins over what the peer
-// advertises, because during commissioning a station announces itself before its configuration
-// entry has replicated.
+// Peer matching mirrors core: a live peer's advertised identity wins. Configuration is only the
+// fallback for an older peer that did not advertise role or door.
 package jp.ox.doorbell
 
 import org.json.JSONObject
@@ -203,15 +202,17 @@ internal object DoorStations {
         return hasCamera(peer)
     }
 
-    /** A configured role overrides what the peer advertises, exactly as core resolves it. */
+    /** A connected peer owns its operational role; configuration fills an absent old-peer field. */
     internal fun roleOf(config: JSONObject?, peer: JSONObject): String {
-        val configured = deviceOf(config, peer)?.optString("role").orEmpty()
-        return if (configured.isNotEmpty()) configured else peer.optString("role").orEmpty()
+        val advertised = peer.optString("role").orEmpty()
+        return if (advertised.isNotEmpty()) advertised
+        else deviceOf(config, peer)?.optString("role").orEmpty()
     }
 
     private fun doorOf(config: JSONObject?, peer: JSONObject): String {
-        val configured = deviceOf(config, peer)?.optString("door").orEmpty()
-        return if (configured.isNotEmpty()) configured else peer.optString("door").orEmpty()
+        val advertised = peer.optString("door").orEmpty()
+        return if (advertised.isNotEmpty()) advertised
+        else deviceOf(config, peer)?.optString("door").orEmpty()
     }
 
     private fun deviceOf(config: JSONObject?, peer: JSONObject): JSONObject? {

@@ -11,6 +11,12 @@ operator は `door_station` / `indoor_panel` を選択します。door 欄は do
 ASCII 英数字、以降が英数字・`_`・`-` です。保存成功時だけ `setup_complete:true` を atomic に書きます。
 tvOS は対応する door-camera role がないため、意図的に `indoor_panel` 固定です。
 
+端末が cluster に参加した後は、`devices.<self>.name`、`.role`、`.door` が遠隔編集可能な
+desired identity になります。Android と iOS/iPadOS の対象 shell は変更された identity を検証し、ローカルの
+`boot.json` に atomic に保存してから UI と Core を再起動し、新しい role を広告して platform
+runtime に適用します。再起動が完了するまでは、対象端末がまだ適用していない新しい replicated
+identity ではなく、対象端末の live signed advertisement を peer が使用します。
+
 mesh PSK は CRDT 値ではなく端末ローカルの bootstrap data。Core は先に
 `secure_put("mesh.psk", …)` を完了し、shell へ
 `{"t":"paired","psk_ref":"secret:mesh.psk"}` だけを通知します。shell は opaque reference と秘密でない

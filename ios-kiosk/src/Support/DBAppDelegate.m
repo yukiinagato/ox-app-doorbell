@@ -427,6 +427,8 @@ static BOOL DBNativeKioskHealthy(void) {
 - (void)publishRuntimeHealth:(NSTimer *)timer;
 - (void)armLocalSafeModeRecovery;
 - (void)handleMemoryPressureFromSource:(NSString *)source;
+- (BOOL)applyReplicatedIdentity;
+- (void)restartForIdentityChange;
 @end
 
 @implementation DBAppDelegate {
@@ -456,6 +458,7 @@ static BOOL DBNativeKioskHealthy(void) {
   NSUInteger _memoryPressureCount;
   NSString *_lastMemoryPressureSource;
   long long _lastMemoryPressureAtMs;
+  BOOL _identityRestartPending;
 }
 @synthesize window = _window;
 
@@ -502,6 +505,11 @@ static BOOL DBNativeKioskHealthy(void) {
   // Subscribe before Core starts so initial discovery and peer events are not lost.
   // DBCoreBridge delivers callbacks on the main queue after launch can complete.
   [_core addHandler:@"app" handler:^(NSDictionary *ev) { [router onCoreEvent:ev]; }];
+  __weak DBAppDelegate *identityDelegate = self;
+  [_core addHandler:@"identity-sync" handler:^(NSDictionary *ev) {
+    if ([[DBConfigUtil evStr:ev key:@"t"] isEqualToString:@"config_changed"])
+      [identityDelegate applyReplicatedIdentity];
+  }];
 
   // Keep the shell available in offline mode if Core cannot start.
   BOOL coreStarted = [_core startWithDataDir:[DBBootConfig dataDir] bootJson:_boot.rawJson];
@@ -647,6 +655,50 @@ static BOOL DBNativeKioskHealthy(void) {
                    dispatch_get_main_queue(), ^{ [self diagDump]; });
   }
   return YES;
+}
+
+// devices.<self>.name/role/door is remotely editable. Persist the replicated value before
+// crossing a clean process boundary so Core, the router, media and recovery all reopen with the
+// same operational identity.
+- (BOOL)applyReplicatedIdentity {
+  if (_identityRestartPending) return YES;
+  NSDictionary *node = [[_core status] objectForKey:@"node"];
+  NSString *nodeID = [node isKindOfClass:[NSDictionary class]]
+      ? [(NSDictionary *)node objectForKey:@"id"] : nil;
+  NSDictionary *devices = [[_core config] objectForKey:@"devices"];
+  NSDictionary *device = [devices isKindOfClass:[NSDictionary class]]
+      ? [(NSDictionary *)devices objectForKey:nodeID ?: @""] : nil;
+  if (![device isKindOfClass:[NSDictionary class]]) return NO;
+  NSString *role = [device objectForKey:@"role"];
+  if (![role isKindOfClass:[NSString class]] || ![DBBootConfig isValidRole:role]) return NO;
+  NSString *door = [role isEqualToString:@"door_station"] ? [device objectForKey:@"door"] : @"";
+  if (![door isKindOfClass:[NSString class]]) door = @"";
+  if ([role isEqualToString:@"door_station"] && ![DBBootConfig isValidDoor:door]) return NO;
+  NSString *name = [device objectForKey:@"name"];
+  if (![name isKindOfClass:[NSString class]]) name = _boot.name;
+  name = [name stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+  if ([name length] > 64) name = [name substringToIndex:64];
+  if ([name length] == 0) name = @"doorbell";
+  if ([name isEqualToString:_boot.name] && [role isEqualToString:_boot.role] &&
+      [door isEqualToString:_boot.door])
+    return NO;
+  if (![DBBootConfig persistSetupName:name role:role door:door]) {
+    NSLog(@"[doorbell] replicated identity could not be persisted");
+    return NO;
+  }
+  _identityRestartPending = YES;
+  dispatch_async(dispatch_get_main_queue(), ^{ [self restartForIdentityChange]; });
+  return YES;
+}
+
+- (void)restartForIdentityChange {
+  if (!_identityRestartPending) return;
+  [@"identity_change\n" writeToFile:DBRecoveryMaintenanceMarkerPath atomically:YES
+                            encoding:NSUTF8StringEncoding error:NULL];
+  BOOL supervised = _recovery.helperSupervising;
+  DBMarkCleanExit();
+  [_core stop];
+  [DBWatchdog restartForMaintenanceWithExternalSupervisor:supervised];
 }
 
 // The kiosk's local safe mode disables every H.264 strategy, so a latch that

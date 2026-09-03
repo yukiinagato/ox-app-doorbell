@@ -2276,6 +2276,42 @@ TEST_CASE("doors: served_by and the peer list never disagree about a station") {
   station.node->stop();
 }
 
+TEST_CASE("doors: a live station advertisement outranks stale replicated identity") {
+  NFleet f;
+  auto& panel = f.add("I:1", "living", "indoor_panel", "", /*seed_cfg=*/true);
+  auto& station =
+      f.add("A:1", "moto", "door_station", "door-moto", /*seed_cfg=*/false);
+  REQUIRE(panel.node->start());
+  REQUIRE(station.node->start());
+  f.run(500);
+
+  const std::string station_id = station.node->nodeId();
+  // Reproduce the field state found on the iPad: the peer heartbeat says door station, while an
+  // older administrator write still describes the same node as an indoor panel with no door.
+  panel.node->setConfigKey("devices." + station_id + ".role", R"("indoor_panel")");
+  panel.node->setConfigKey("devices." + station_id + ".door", R"("")");
+  f.run(200);
+
+  auto status = json::parse(panel.node->statusJson());
+  REQUIRE(status);
+  const cJSON* door = json::get(json::get(status.get(), "doors"), "door-moto");
+  REQUIRE(cJSON_IsObject(door));
+  CHECK(json::getString(door, "served_by") == station_id);
+
+  const cJSON* peer = nullptr;
+  cJSON_ArrayForEach(peer, json::get(status.get(), "peers")) {
+    if (json::getString(peer, "id") != station_id) continue;
+    CHECK(json::getString(peer, "status") == "alive");
+    CHECK(json::getString(peer, "role") == "door_station");
+    CHECK(json::getString(peer, "door") == "door-moto");
+    CHECK_FALSE(json::getString(peer, "stream").empty());
+    CHECK_FALSE(json::getString(peer, "stream_mp4").empty());
+  }
+
+  panel.node->stop();
+  station.node->stop();
+}
+
 TEST_CASE("peers: a quiet cluster stops emitting peers_changed") {
   // Device finding: core emitted peers_changed on every fresh advertisement, so with three
   // devices heartbeating the shells received it several times a second, rebuilt their home

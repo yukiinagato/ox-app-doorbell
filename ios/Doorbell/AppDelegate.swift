@@ -25,6 +25,7 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
     private var pairingGateTimer: Timer?
     private var lastPairingFingerprint = ""
     private var screenshots: ScreenshotResponder?
+    private var identityRestartPending = false
 
     func application(_ application: UIApplication,
                      didFinishLaunchingWithOptions launchOptions:
@@ -268,6 +269,50 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         core.setVideoSensorRotation(degrees)
     }
 
+    /// A remotely edited devices.<self> identity becomes the next local bootstrap identity.
+    private func applyReplicatedIdentity() -> Bool {
+        guard !identityRestartPending,
+              let node = core.status()?["node"] as? [String: Any],
+              let nodeID = node["id"] as? String, !nodeID.isEmpty,
+              let devices = core.config()?["devices"] as? [String: Any],
+              let device = devices[nodeID] as? [String: Any],
+              let role = device["role"] as? String, BootConfig.validRole(role)
+        else { return identityRestartPending }
+        let door = role == "door_station" ? (device["door"] as? String ?? "") : ""
+        guard role != "door_station" || BootConfig.validDoor(door) else { return false }
+        let rawName = (device["name"] as? String ?? boot.name)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let name = String(rawName.prefix(64)).isEmpty ? "doorbell" : String(rawName.prefix(64))
+        guard name != boot.name || role != boot.role || door != boot.door else { return false }
+        guard let updated = BootConfig.persistSetup(name: name, role: role, door: door) else {
+            ShellLog.note("replicated identity could not be persisted")
+            return false
+        }
+        boot = updated
+        identityRestartPending = true
+        DispatchQueue.main.async { [weak self] in self?.restartForIdentityChange() }
+        return true
+    }
+
+    private func restartForIdentityChange() {
+        guard identityRestartPending, let win = window as? ActivityWindow else { return }
+        pairingGateTimer?.invalidate()
+        pairingGateTimer = nil
+        pairingGate?.dismiss(animated: false)
+        pairingGate = nil
+        NotificationCenter.default.removeObserver(self,
+            name: UIDevice.orientationDidChangeNotification, object: nil)
+        UIDevice.current.endGeneratingDeviceOrientationNotifications()
+        runtime?.stop(clean: true)
+        runtime = nil
+        core.stop()
+        soundConfig = nil
+        lastPairingFingerprint = ""
+        appStarted = false
+        identityRestartPending = false
+        startConfiguredApplication(UIApplication.shared, window: win)
+    }
+
 
     private func onUiEvent(_ ev: [String: Any]) {
         let eventKind = ConfigUtil.evStr(ev, "t")
@@ -281,6 +326,7 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         }
         if eventKind == "config_changed" {
             soundConfig = core.config()
+            _ = applyReplicatedIdentity()
         }
         if eventKind == "emergency" {
             let sosVolume = ConfigUtil.int(core.audioVolumes(), "sos",

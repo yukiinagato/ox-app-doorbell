@@ -14,6 +14,13 @@ pre-filled with a random `door-xxxxxxxx` value that may be accepted unchanged. V
 or `-`. A successful save writes `setup_complete:true` atomically. tvOS is intentionally fixed to
 the `indoor_panel` profile because it has no supported door-camera role.
 
+After a device joins a cluster, `devices.<self>.name`, `.role`, and `.door` are its remotely
+editable desired identity. Android and iOS/iPadOS target shells validate a changed identity and
+write it to local
+`boot.json` atomically, then restart the UI and Core so the new role is advertised and used by the
+platform runtime. Until that restart finishes, peers use the target's live signed advertisement
+instead of a newer replicated identity that the target has not applied yet.
+
 The mesh PSK is device-local bootstrap data, not a CRDT value. Core must first complete
 `secure_put("mesh.psk", …)`, then emits only
 `{"t":"paired","psk_ref":"secret:mesh.psk"}`. The shell persists that opaque reference with
