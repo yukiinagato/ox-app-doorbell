@@ -202,12 +202,7 @@ final class RuntimeSupervisor {
 
     #if os(iOS)
     private func permissionState(_ mediaType: AVMediaType) -> String {
-        switch AVCaptureDevice.authorizationStatus(for: mediaType) {
-        case .authorized: return "authorized"
-        case .denied: return "denied"
-        case .restricted: return "restricted"
-        default: return "not_determined"
-        }
+        return AvPermissions.state(mediaType)
     }
     #endif
 
@@ -225,8 +220,8 @@ final class RuntimeSupervisor {
         UIDevice.current.isBatteryMonitoringEnabled = true
         let cameraPermission = permissionState(.video)
         let microphonePermission = permissionState(.audio)
-        let camera = boot.role == "door_station" && cameraPermission == "authorized" &&
-            cameraRuntimeState == "active"
+        let camera = AvPermissions.cameraOffered(role: boot.role, permission: cameraPermission,
+                                                 runtime: cameraRuntimeState)
         let microphone = microphonePermission == "authorized" && audioSessionReady &&
             !(AVAudioSession.sharedInstance().availableInputs?.isEmpty ?? true)
         let mains = UIDevice.current.batteryState == .charging ||

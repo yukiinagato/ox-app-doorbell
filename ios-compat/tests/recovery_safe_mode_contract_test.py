@@ -463,8 +463,19 @@ class RecoverySafeModeContracts(unittest.TestCase):
 
         capabilities = runtime[runtime.index("private func publishCapabilities"):
                                runtime.index("private func publishUiManifest")]
-        self.assertIn('cameraPermission == "authorized"', capabilities)
-        self.assertIn('cameraRuntimeState == "active"', capabilities)
+        # The camera rule moved into AvPermissions so it can be unit-tested without driving
+        # AVCaptureDevice, but it is still the same rule and it is still what is published.
+        self.assertIn("AvPermissions.cameraOffered(role: boot.role, permission: cameraPermission",
+                      capabilities)
+        self.assertIn("runtime: cameraRuntimeState)", capabilities)
+        self.assertIn('permission == "authorized" && runtime == "active"', availability)
+        self.assertIn('role == "door_station"', availability)
+        # not_determined is reported honestly: a prompt nobody has answered is not a refusal, and
+        # an indoor panel hides the tile of a door whose camera capability is false.
+        self.assertIn('default: return "not_determined"', availability)
+        self.assertIn("AvPermissions.requestAtLaunch(role: boot.role)",
+                      read("ios/Doorbell/AppDelegate.swift"),
+                      "the ask happens before the first capability document")
         self.assertIn('microphonePermission == "authorized"', capabilities)
         self.assertIn("availableInputs?.isEmpty", capabilities)
         self.assertIn('h264EncodeState == "verified"', capabilities)

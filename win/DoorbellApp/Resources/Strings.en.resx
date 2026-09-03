@@ -390,6 +390,7 @@ Delete it?</value></data>
   <data name="day_wed" xml:space="preserve"><value>Wed</value></data>
   <data name="degraded_notified" xml:space="preserve"><value>Notified — please wait</value></data>
   <data name="door_call_action" xml:space="preserve"><value>Call</value></data>
+  <data name="door_camera_denied" xml:space="preserve"><value>Camera access is not allowed — Settings › Privacy</value></data>
   <data name="door_hint_call" xml:space="preserve"><value>Press the button to call the residents</value></data>
   <data name="door_lang_switch" xml:space="preserve"><value>Language</value></data>
   <data name="door_notice_for_this" xml:space="preserve"><value>Announce at this door</value></data>

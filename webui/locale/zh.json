@@ -383,6 +383,7 @@
  "day.wed": "三",
  "degraded.notified": "已通知，请稍候",
  "door.call_action": "呼叫",
+ "door.camera_denied": "未允许使用摄像头 — 设置 › 隐私",
  "door.hint_call": "按下按钮即可呼叫住户",
  "door.lang_switch": "语言",
  "door.notice_for_this": "在此门口机发布公告",

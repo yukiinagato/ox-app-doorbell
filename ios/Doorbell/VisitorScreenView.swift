@@ -15,6 +15,10 @@ final class VisitorScreenView: UIView {
     private let noticeExpand = UIButton(type: .system)
     private let hintLabel = HaloLabel()
     private let footerLabel = HaloLabel()
+    /// Shown only when the camera has actually been refused. A door station whose camera is off
+    /// disappears from every indoor panel's tile list, so the reason belongs on its own screen
+    /// where somebody standing at the door can read it.
+    private let cameraWarning = PaddedLabel()
 
     private let callButton: UIButton
     private let langBar: UIView
@@ -67,6 +71,11 @@ final class VisitorScreenView: UIView {
         noticeLabel.numberOfLines = 2
         noticeLabel.textAlignment = .center
         noticeLabel.accessibilityIdentifier = "visitor_notice"
+        cameraWarning.font = .systemFont(ofSize: 17, weight: .semibold)
+        cameraWarning.numberOfLines = 2
+        cameraWarning.textAlignment = .center
+        cameraWarning.accessibilityIdentifier = "visitor_camera_warning"
+        cameraWarning.isHidden = true
         noticeExpand.setTitle("▾", for: .normal)
         noticeExpand.titleLabel?.font = .systemFont(ofSize: 22, weight: .bold)
         noticeExpand.accessibilityIdentifier = "visitor_notice_expand"
@@ -91,6 +100,7 @@ final class VisitorScreenView: UIView {
         noticeColumn.axis = .vertical
         noticeColumn.spacing = 8
         noticeColumn.addArrangedSubview(noticeRow)
+        noticeColumn.addArrangedSubview(cameraWarning)
 
         actionColumn.axis = .vertical
         actionColumn.spacing = 18
@@ -252,6 +262,18 @@ final class VisitorScreenView: UIView {
         footerLabel.text = text
     }
 
+    /// `nil` hides the banner. Nothing is said while a prompt is merely unanswered.
+    func updateCameraWarning(_ text: String?) {
+        cameraWarning.text = text
+        cameraWarning.isHidden = (text == nil)
+        applyCameraWarningSkin()
+    }
+
+    private func applyCameraWarningSkin() {
+        DoorbellTheme.pill(cameraWarning, background: skin.palette.danger,
+                           ink: DoorbellTheme.readableInk(on: skin.palette.danger), fontSize: 17)
+    }
+
     /// A screen whose role offers no SOS slider does not merely hide one: it never puts one in
     /// the hierarchy. Hiding was not enough, because a safety control's semantic style forces it
     /// visible again on every layout pass.
@@ -275,6 +297,7 @@ final class VisitorScreenView: UIView {
             skin.apply(region, to: label, quiet: region == "footer" || region == "date")
         }
         noticeExpand.setTitleColor(noticeLabel.textColor, for: .normal)
+        applyCameraWarningSkin()
 
         let colors = DoorbellTheme.callButtonColors(display: skin.display,
                                                     background: skin.background)

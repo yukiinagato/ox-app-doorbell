@@ -356,3 +356,56 @@ final class ShellLogTests: XCTestCase {
                        "a shipped panel writes nothing")
     }
 }
+
+/// What the cluster is told about this device's camera.
+///
+/// An indoor panel now hides the tile of a door station whose `caps.camera` is false, so the
+/// difference between "the resident refused" and "nobody has asked yet" is the difference between
+/// a door that is genuinely blind and one that has simply not finished launching. The rule is
+/// pulled out here because `AVCaptureDevice` cannot be driven from a test.
+final class CameraCapabilityTests: XCTestCase {
+
+    func testAnAuthorizedRunningCameraIsOffered() {
+        XCTAssertTrue(AvPermissions.cameraOffered(role: "door_station", permission: "authorized",
+                                                  runtime: "active"))
+        XCTAssertFalse(AvPermissions.shouldWarn(role: "door_station", permission: "authorized"))
+    }
+
+    /// The state this device was actually in: asked for, not yet answered. It is not a refusal,
+    /// so nothing is claimed and nothing is warned about.
+    func testAnUnansweredPromptOffersNoCameraAndRaisesNoBanner() {
+        XCTAssertFalse(AvPermissions.cameraOffered(role: "door_station",
+                                                   permission: "not_determined",
+                                                   runtime: "active"))
+        XCTAssertFalse(AvPermissions.shouldWarn(role: "door_station",
+                                                permission: "not_determined"),
+                       "a prompt nobody has answered is not a refusal")
+
+        // Once the resident allows it and capture comes up, the camera is offered.
+        XCTAssertTrue(AvPermissions.cameraOffered(role: "door_station", permission: "authorized",
+                                                  runtime: "active"))
+    }
+
+    func testARefusalOffersNoCameraAndIsWorthSayingOutLoud() {
+        XCTAssertFalse(AvPermissions.cameraOffered(role: "door_station", permission: "denied",
+                                                   runtime: "active"))
+        XCTAssertTrue(AvPermissions.shouldWarn(role: "door_station", permission: "denied"))
+        XCTAssertTrue(AvPermissions.shouldWarn(role: "door_station", permission: "restricted"),
+                      "a device under management is refused just as firmly")
+    }
+
+    /// A permission on its own is a promise the mesh cannot rely on: capture has to be running.
+    func testAPermissionWithoutRunningCaptureIsNotACamera() {
+        for runtime in ["idle", "starting", "failed", ""] {
+            XCTAssertFalse(AvPermissions.cameraOffered(role: "door_station",
+                                                       permission: "authorized",
+                                                       runtime: runtime), runtime)
+        }
+    }
+
+    func testAnIndoorPanelNeverOffersACameraAndIsNeverWarned() {
+        XCTAssertFalse(AvPermissions.cameraOffered(role: "indoor_panel", permission: "authorized",
+                                                   runtime: "active"))
+        XCTAssertFalse(AvPermissions.shouldWarn(role: "indoor_panel", permission: "denied"))
+    }
+}
