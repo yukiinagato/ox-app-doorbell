@@ -1,0 +1,106 @@
+# Controlled Windows package build. Kept separate from build.yml so selecting
+# this manual release lane does not spend hosted CI capacity on every contract job.
+name: Windows release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  runner-preflight:
+    runs-on: ubuntu-latest
+    outputs:
+      available: ${{ steps.runners.outputs.available }}
+    steps:
+      - name: Require an idle commissioned runner
+        id: runners
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const requiredLabels = ["self-hosted", "windows", "x64", "doorbell-pjsip"];
+            const runners = [];
+            for (let page = 1; ; page += 1) {
+              const { data } = await github.rest.actions.listSelfHostedRunnersForRepo({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                page,
+                per_page: 100,
+              });
+              runners.push(...data.runners);
+              if (data.runners.length < 100) break;
+            }
+            const matching = runners.filter((runner) => {
+              const labels = new Set(runner.labels.map((label) => label.name));
+              return runner.status === "online" && !runner.busy &&
+                requiredLabels.every((label) => labels.has(label));
+            });
+
+            core.setOutput("available", matching.length > 0 ? "true" : "false");
+            if (matching.length === 0) {
+              core.setFailed(
+                "No idle commissioned Windows runner is available " +
+                "(self-hosted, windows, x64, doorbell-pjsip)."
+              );
+            }
+
+  windows-release:
+    needs: runner-preflight
+    if: needs.runner-preflight.outputs.available == 'true'
+    runs-on: [self-hosted, windows, x64, doorbell-pjsip]
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: microsoft/setup-msbuild@v2
+      - name: Build and prove x64/x86 real-PJSIP bundle
+        shell: cmd
+        env:
+          DB_BUILD_ID: release-${{ github.sha }}-${{ github.run_attempt }}
+        run: win\build.cmd
+      - uses: actions/upload-artifact@v4
+        with:
+          name: doorbell-windows-${{ github.sha }}
+          path: win/dist/release-${{ github.sha }}-${{ github.run_attempt }}/
+          retention-days: 30
+
+  artifact-downloads:
+    if: always()
+    needs: [runner-preflight, windows-release]
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - name: Publish artifact download table
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data } = await github.rest.actions.listWorkflowRunArtifacts({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              run_id: context.runId,
+              per_page: 100,
+            });
+            const available = data.artifacts.filter((artifact) => !artifact.expired);
+            const artifactUrl = (id) =>
+              `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}` +
+              `/actions/runs/${context.runId}/artifacts/${id}`;
+
+            await core.summary.addHeading("CI artifact downloads", 2);
+            if (available.length === 0) {
+              await core.summary.addRaw("No downloadable Windows release artifact was produced.\n");
+            } else {
+              await core.summary.addRaw("| Platform / package | Download | Expires |\n");
+              await core.summary.addRaw("| --- | --- | --- |\n");
+              for (const artifact of available.sort((left, right) => left.name.localeCompare(right.name))) {
+                const expires = new Date(artifact.expires_at).toISOString().slice(0, 10);
+                await core.summary.addRaw(
+                  `| Windows x86/x64 release bundle | [${artifact.name}](${artifactUrl(artifact.id)}) | ${expires} |\n`
+                );
+              }
+            }
+            await core.summary.write();

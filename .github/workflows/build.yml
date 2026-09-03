@@ -6,18 +6,6 @@ on:
   push:
     branches: [main]
   pull_request:
-  workflow_dispatch:
-    inputs:
-      windows_release:
-        description: Build the Windows real-PJSIP bundle on the commissioned runner
-        required: false
-        type: boolean
-        default: false
-      ios5_release:
-        description: Build the iOS 5 armv7 artifact on the licensed legacy runner
-        required: false
-        type: boolean
-        default: false
 
 jobs:
   source-policy:
@@ -109,25 +97,6 @@ jobs:
           DB_BUILD_ID: ci-stub-${{ github.run_id }}-${{ github.run_attempt }}
         run: |
           win\build.cmd
-
-  windows-release:
-    if: github.event_name == 'workflow_dispatch' && inputs.windows_release
-    runs-on: [self-hosted, windows, x64, doorbell-pjsip]
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - uses: microsoft/setup-msbuild@v2
-      - name: Build and prove x64/x86 real-PJSIP bundle
-        shell: cmd
-        env:
-          DB_BUILD_ID: release-${{ github.sha }}-${{ github.run_attempt }}
-        run: win\build.cmd
-      - uses: actions/upload-artifact@v4
-        with:
-          name: doorbell-windows-${{ github.sha }}
-          path: win/dist/release-${{ github.sha }}-${{ github.run_attempt }}/
-          retention-days: 30
 
   android:
     runs-on: ubuntu-latest
@@ -312,38 +281,12 @@ jobs:
           DB_SKIP_HELPER_HOST_TESTS: "1"
         run: ios-compat/scripts/test_host.sh
 
-  ios5-release:
-    if: github.event_name == 'workflow_dispatch' && inputs.ios5_release
-    runs-on: [self-hosted, macOS, ios5-armv7-licensed]
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: Build deterministic Core and signed armv7 application
-        env:
-          DB_BUILD_ID: release-${{ github.sha }}-${{ github.run_attempt }}
-        run: |
-          ios-compat/scripts/build_core_ios5.sh --install
-          ios-compat/scripts/build_app_ios5.sh
-          ios-compat/scripts/test_host.sh
-          ios-compat/scripts/build_deb.sh
-      - uses: actions/upload-artifact@v4
-        with:
-          name: doorbell-ios5-armv7-${{ github.sha }}
-          path: |
-            ios-kiosk/build/Doorbell.app/
-            build/ios-compat/artifacts/ios5-armv7-pjsip-off/manifest.json
-            build/ios-compat/artifacts/ios5-armv7-app/manifest.json
-            build/ios-compat/artifacts/doorbell.deb
-            build/ios-compat/artifacts/doorbell.deb.sha256
-          retention-days: 30
-
   artifact-downloads:
     # Keep the download list in the run summary instead of committing expiring
     # artifact URLs back to the repository. This also makes the actual
     # retention date visible beside every download.
     if: always()
-    needs: [android, windows-release, ios5-release]
+    needs: [android]
     runs-on: ubuntu-latest
     permissions:
       actions: read
