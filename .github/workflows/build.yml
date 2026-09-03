@@ -337,3 +337,57 @@ jobs:
             build/ios-compat/artifacts/doorbell.deb
             build/ios-compat/artifacts/doorbell.deb.sha256
           retention-days: 30
+
+  artifact-downloads:
+    # Keep the download list in the run summary instead of committing expiring
+    # artifact URLs back to the repository. This also makes the actual
+    # retention date visible beside every download.
+    if: always()
+    needs: [android, windows-release, ios5-release]
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - name: Publish artifact download table
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data } = await github.rest.actions.listWorkflowRunArtifacts({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              run_id: context.runId,
+              per_page: 100,
+            });
+
+            const artifactUrl = (id) =>
+              `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}` +
+              `/actions/runs/${context.runId}/artifacts/${id}`;
+            const artifactKind = (name) => {
+              if (name.includes("android-modern")) return "Android API 21+ debug-contract APK";
+              if (name.includes("android-legacy19")) return "Android API 19 debug-contract APK";
+              if (name.includes("windows")) return "Windows x86/x64 release bundle";
+              if (name.includes("ios5")) return "iOS 5.1 armv7 package";
+              return "Build artifact";
+            };
+            const available = data.artifacts.filter((artifact) => !artifact.expired);
+
+            await core.summary.addHeading("CI artifact downloads", 2);
+            await core.summary.addRaw(
+              "These are CI artifacts, not a product release. Android artifacts are debug-key " +
+              "debug-contract APKs. GitHub access is required, and files expire on the date shown.\n\n"
+            );
+
+            if (available.length === 0) {
+              await core.summary.addRaw("No downloadable artifacts were produced by this run.\n");
+            } else {
+              await core.summary.addRaw("| Platform / package | Download | Expires |\n");
+              await core.summary.addRaw("| --- | --- | --- |\n");
+              for (const artifact of available.sort((left, right) => left.name.localeCompare(right.name))) {
+                const expires = new Date(artifact.expires_at).toISOString().slice(0, 10);
+                await core.summary.addRaw(
+                  `| ${artifactKind(artifact.name)} | [${artifact.name}](${artifactUrl(artifact.id)}) | ${expires} |\n`
+                );
+              }
+            }
+            await core.summary.write();
