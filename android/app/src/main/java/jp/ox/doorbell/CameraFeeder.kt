@@ -16,6 +16,7 @@ internal class CameraFeeder(private val core: DoorbellCore) {
     private data class CameraMount(val id: Int, val facing: Int, val orientation: Int)
 
     private var camera: Camera? = null
+    private var activeCameraMount: CameraMount? = null
     private var headlessTexture: SurfaceTexture? = null
     private var width = 0
     private var height = 0
@@ -45,7 +46,7 @@ internal class CameraFeeder(private val core: DoorbellCore) {
     /** Clockwise correction needed to show a native camera frame upright remotely. */
     fun frameRotationForDeviceRotation(deviceRotation: Int): Int {
         val degrees = ((deviceRotation % 360) + 360) % 360
-        val mount = selectedCamera ?: return degrees
+        val mount = activeCameraMount ?: selectedCamera ?: return degrees
         return if (mount.facing == Camera.CameraInfo.CAMERA_FACING_FRONT) {
             (mount.orientation + degrees) % 360
         } else {
@@ -72,6 +73,9 @@ internal class CameraFeeder(private val core: DoorbellCore) {
         val id = pickCameraId(preferBack)
         if (id < 0) return false
         return try {
+            val info = Camera.CameraInfo()
+            Camera.getCameraInfo(id, info)
+            activeCameraMount = CameraMount(id, info.facing, info.orientation)
             val cam = Camera.open(id)
             val params = cam.parameters
             val size = pickPreviewSize(params, targetW, targetH)
@@ -123,6 +127,7 @@ internal class CameraFeeder(private val core: DoorbellCore) {
             camera?.release()
         } catch (_: Exception) { }
         camera = null
+        activeCameraMount = null
         try { headlessTexture?.release() } catch (_: Exception) { }
         headlessTexture = null
         width = 0

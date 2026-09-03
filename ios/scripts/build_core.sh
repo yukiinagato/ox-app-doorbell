@@ -10,6 +10,11 @@ ARCHS="${ARCHS:-arm64}"
 CONFIGURATION="${CONFIGURATION:-Release}"
 CORE="$SRCROOT/../core"
 REPOSITORY_ROOT="$SRCROOT/.."
+BUILD_ID="${DB_BUILD_ID:-$(git -C "$REPOSITORY_ROOT" rev-parse HEAD 2>/dev/null || echo dev)}"
+[[ "$BUILD_ID" =~ ^[A-Za-z0-9._-]+$ ]] || {
+  echo "error: DB_BUILD_ID contains unsupported characters" >&2
+  exit 1
+}
 
 case "$PLATFORM_NAME" in
   iphoneos|iphonesimulator)
@@ -97,7 +102,7 @@ else
   echo "warning: building a development-only SIP stub because DB_ALLOW_SIP_STUB=1" >&2
 fi
 
-CONTRACT="$PLATFORM_NAME|$CMAKE_ARCHS|$MINIMUM_OS|$WITH_PJSIP|$PJSIP_ROOT"
+CONTRACT="$PLATFORM_NAME|$CMAKE_ARCHS|$MINIMUM_OS|$WITH_PJSIP|$PJSIP_ROOT|$BUILD_ID"
 STAMP="$BUILD_DIR/.build-contract"
 if [[ -f "$STAMP" && "$(cat "$STAMP")" != "$CONTRACT" ]]; then
   rm -rf "$BUILD_DIR"
@@ -114,6 +119,7 @@ printf '%s\n' "$CONTRACT" > "$STAMP"
   -DDB_PJSIP_ROOT="$PJSIP_ROOT" \
   -DDB_WITH_PJSIP="$WITH_PJSIP" \
   -DDB_REQUIRE_PJSIP="$REQUIRE_PJSIP" \
+  -DDB_BUILD_ID_ARG="$BUILD_ID" \
   -DDB_BUILD_TESTS=OFF \
   -DCMAKE_BUILD_TYPE=Release
 "$CMAKE" --build "$BUILD_DIR" --target doorbell_core -j "$(sysctl -n hw.ncpu)"

@@ -29,6 +29,12 @@ namespace DoorbellApp
         private const string RegionStatusLine = "status_line";
         private const string RegionTileLabel = "tile_label";
         private const string RegionNotice = "notice";
+        // Just over 60 % black is where the picture still reads and the cards over it still do.
+        // The same figure the kiosk compositor measures against.
+        private const int DefaultBackdropOpacity = 62;
+
+        private Color _backdropColour = Colors.Black;
+        private double _backdropAlpha;
 
         /// <summary>Door stations get the visitor screen; indoor panels get the dashboard.</summary>
         private void ApplyRoleHome()
@@ -198,10 +204,85 @@ namespace DoorbellApp
             Grid.SetColumnSpan(element, columnSpan);
         }
 
+        /// <summary>
+        /// The darkening over the theme picture. Administrators set colour and opacity through
+        /// display.theme.backdrop, per cluster or per device; core resolves the two and publishes
+        /// the answer in the display contract. An absent key keeps the built-in scrim, and
+        /// enabled false draws nothing at all. It only ever applies over a picture: painting a
+        /// scrim over a flat theme colour would just be a different, darker colour than the one
+        /// the administrator chose.
+        /// </summary>
+        private void ApplyThemeBackdrop()
+        {
+            bool picture = ThemeBgImage.Visibility == Visibility.Visible &&
+                           ThemeBgImage.Source != null;
+            bool enabled = true;
+            Color colour = Colors.Black;
+            int percent = DefaultBackdropOpacity;
+
+            var backdrop = CoreClient.Dig(_display, "theme.backdrop")
+                as Dictionary<string, object>;
+            if (backdrop != null)
+            {
+                object flag;
+                if (backdrop.TryGetValue("enabled", out flag) && flag is bool)
+                    enabled = (bool)flag;
+                Color parsed;
+                if (ThemeContrast.TryParse(DictStr(backdrop, "color"), out parsed))
+                    colour = parsed;
+                percent = DictInt(backdrop, "opacity", DefaultBackdropOpacity);
+                if (percent < 0) percent = 0;
+                if (percent > 100) percent = 100;
+            }
+
+            bool draw = picture && enabled && percent > 0;
+            _backdropColour = colour;
+            _backdropAlpha = draw ? percent / 100.0 : 0;
+            ThemeBackdrop.Visibility = draw ? Visibility.Visible : Visibility.Collapsed;
+            ThemeBackdrop.Background = draw ? ThemeContrast.Brush(colour) : null;
+            ThemeBackdrop.Opacity = _backdropAlpha;
+        }
+
+        /// <summary>
+        /// What a colour behind the scrim actually looks like on screen. The ink decision has to
+        /// see the darkened picture, not the bright original, or a wallpaper that reads as light
+        /// would take dark ink over a scrim that made it dark.
+        /// </summary>
+        private BackgroundSample OverBackdrop(BackgroundSample sample)
+        {
+            if (_backdropAlpha <= 0) return sample;
+            return new BackgroundSample
+            {
+                Average = OverBackdrop(sample.Average),
+                // The extremes decide the outline, so they are darkened too. They are held as
+                // luminances, so each is taken back to the grey that carries it, composited, and
+                // measured again.
+                DarkestLuminance = OverBackdropLuminance(sample.DarkestLuminance),
+                LightestLuminance = OverBackdropLuminance(sample.LightestLuminance),
+            };
+        }
+
+        private double OverBackdropLuminance(double luminance)
+        {
+            if (_backdropAlpha <= 0) return luminance;
+            return ThemeContrast.Luminance(
+                OverBackdrop(ThemeContrast.GreyOfLuminance(luminance)));
+        }
+
+        private Color OverBackdrop(Color under)
+        {
+            if (_backdropAlpha <= 0) return under;
+            double a = _backdropAlpha;
+            return Color.FromRgb(
+                (byte)Math.Round(under.R * (1 - a) + _backdropColour.R * a),
+                (byte)Math.Round(under.G * (1 - a) + _backdropColour.G * a),
+                (byte)Math.Round(under.B * (1 - a) + _backdropColour.B * a));
+        }
+
         /// <summary>Applies display.appearance and then the per-region automatic ink.</summary>
         private void ApplyAppearance()
         {
-            Appearance.Apply(_cfg, _nodeId, App.Core.LocalTime(0), _display);
+            Appearance.Apply(_cfg, _nodeId, ScheduleClock(), _display);
             ApplyAutoInk();
             QueueInkPass();
         }
@@ -226,7 +307,9 @@ namespace DoorbellApp
             InkText(NodeInfo, RegionFooter, 0.35);
             InkText(VisitorVersionLine, RegionFooter, 0.35);
             InkText(VisitorNoticeText, RegionNotice, 0);
-            InkText(MembershipText, RegionStatusLine, 0);
+            InkText(ClusterCountText, RegionStatusLine, 0);
+            InkText(DoorCountText, RegionStatusLine, 0);
+            InkText(PanelCountText, RegionStatusLine, 0);
             InkText(RecentCallsTitle, RegionTileLabel, 0);
             // The call screens draw over their own opaque surface, so the same rule resolves
             // there against that surface rather than against the theme background.
@@ -238,7 +321,7 @@ namespace DoorbellApp
 
             if (App.Boot.Role == "door_station")
             {
-                Color fill = ThemeContrast.CallButton(_display, background);
+                Color fill = ThemeContrast.CallButton(_display, _cfg, _nodeId, background);
                 CallButton.Background = ThemeContrast.Brush(fill);
                 CallButton.Foreground =
                     ThemeContrast.Brush(ThemeContrast.CallButtonInk(_display, fill));
@@ -254,11 +337,14 @@ namespace DoorbellApp
         {
             if (element == null) return;
             bool decideLocally;
-            Color background = BackgroundUnder(element, out decideLocally);
+            BackgroundSample sample = BackgroundUnder(element, out decideLocally);
+            // Core's published ink also has to be ignored when core says it never read the
+            // configured background image: it then describes the flat theme colour, not the photo.
+            decideLocally |= !ThemeContrast.CoreSampledBackground(_display);
             InkDecision decision =
-                ThemeContrast.Decide(_display, regionId, background, decideLocally);
+                ThemeContrast.Decide(_display, regionId, sample, decideLocally);
             element.Foreground = ThemeContrast.Brush(
-                muted > 0 ? MixTowards(decision.Ink, background, muted) : decision.Ink);
+                muted > 0 ? MixTowards(decision.Ink, sample.Average, muted) : decision.Ink);
             element.Effect = decision.NeedsShadow ? OutlineFor(decision.Shadow) : null;
         }
 
@@ -275,13 +361,15 @@ namespace DoorbellApp
         }
 
         /// <summary>
-        /// The colour behind one element. An opaque ancestor surface — a card, a call screen —
-        /// answers directly; otherwise the theme background image is sampled under exactly this
-        /// element's bounds, which is the refinement core cannot make without layout geometry.
+        /// What is behind one element. An opaque ancestor surface — a card, a call screen —
+        /// answers directly and uniformly; otherwise the theme background image is sampled under
+        /// exactly this element's bounds, which is the refinement core cannot make without layout
+        /// geometry, and the sample keeps its darkest and lightest patch so the outline can be
+        /// judged against the whole region rather than its average.
         /// decideLocally is true in both of those cases, because core's published token describes
         /// only the theme background as a whole; it is false when that whole is what applies.
         /// </summary>
-        private Color BackgroundUnder(FrameworkElement element, out bool decideLocally)
+        private BackgroundSample BackgroundUnder(FrameworkElement element, out bool decideLocally)
         {
             decideLocally = false;
             for (DependencyObject node = element; node != null && node != this;
@@ -292,7 +380,7 @@ namespace DoorbellApp
                 {
                     // Core never saw this surface, so its whole-image token cannot describe it.
                     decideLocally = true;
-                    return opaque.Value;
+                    return BackgroundSample.Uniform(opaque.Value);
                 }
             }
 
@@ -308,11 +396,11 @@ namespace DoorbellApp
                             new Size(element.ActualWidth, element.ActualHeight));
                         Int32Rect crop = ThemeContrast.MapUniformToFill(bitmap,
                             new Size(ActualWidth, ActualHeight), bounds);
-                        Color region;
-                        if (ThemeContrast.TryAverageRegion(bitmap, crop, out region))
+                        BackgroundSample region;
+                        if (ThemeContrast.TrySampleRegion(bitmap, crop, out region))
                         {
                             decideLocally = true;
-                            return region;
+                            return OverBackdrop(region);   // the scrim is part of what is seen
                         }
                     }
                 }
@@ -321,7 +409,7 @@ namespace DoorbellApp
                     // Not connected to this window's visual tree yet; the shared value applies.
                 }
             }
-            return EffectiveBackground();
+            return BackgroundSample.Uniform(EffectiveBackground());
         }
 
         private static Color? SurfaceColour(DependencyObject node)
@@ -349,11 +437,12 @@ namespace DoorbellApp
         {
             Color contract;
             // Core measured this once for the whole cluster, image averaging included.
-            if (ThemeContrast.TryContractBackground(_display, out contract)) return contract;
+            if (ThemeContrast.TryContractBackground(_display, out contract))
+                return OverBackdrop(contract);
             Color average;
             var bitmap = ThemeBgImage.Source as BitmapSource;
             if (ThemeBgImage.Visibility == Visibility.Visible && bitmap != null &&
-                ThemeContrast.TryAverage(bitmap, out average)) return average;
+                ThemeContrast.TryAverage(bitmap, out average)) return OverBackdrop(average);
             var brush = Background as SolidColorBrush;
             if (brush != null && brush.Color.A == 255) return brush.Color;
             return Appearance.Token("Bg");

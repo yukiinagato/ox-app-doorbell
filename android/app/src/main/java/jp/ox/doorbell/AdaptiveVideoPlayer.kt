@@ -2,6 +2,8 @@ package jp.ox.doorbell
 
 import android.graphics.Bitmap
 import android.os.Handler
+import android.os.SystemClock
+import android.util.Log
 import android.view.TextureView
 import android.view.View
 import android.widget.ImageView
@@ -31,6 +33,8 @@ internal class AdaptiveVideoPlayer(
     private var activeCodec = ""
     private var generation = 0
     private var h264Attempt = 0
+    private var startupMs = 0L
+    private var tracedMjpegUi = false
     private val stats = VideoStatsCounter()
     private val firstFrameDeadline = Runnable { failH264(h264Attempt, "H.264 first-frame timeout") }
     private val h264Retry = Runnable { startH264() }
@@ -50,6 +54,9 @@ internal class AdaptiveVideoPlayer(
         stop()
         stopped = false
         stats.reset()
+        startupMs = SystemClock.elapsedRealtime()
+        tracedMjpegUi = false
+        trace("session_start")
         stats.setCodec("")
         h264Visible = false
         activeCodec = ""
@@ -120,6 +127,7 @@ internal class AdaptiveVideoPlayer(
                     stats.setCodec(codec)
                     applyTextureTransform()
                     app.runtime.reportDecoderStatus("probing", codec)
+                    trace("h264_decoder_configured")
                 }
             }
 
@@ -132,6 +140,7 @@ internal class AdaptiveVideoPlayer(
                     image.visibility = View.GONE
                     noVideo.visibility = View.GONE
                     app.runtime.reportDecoderStatus("active", activeCodec)
+                    trace("h264_first_frame_visible")
                 }
             }
 
@@ -183,10 +192,18 @@ internal class AdaptiveVideoPlayer(
                 videoWidth = bitmap.width
                 videoHeight = bitmap.height
                 image.setImageBitmap(bitmap)
+                if (!tracedMjpegUi) {
+                    tracedMjpegUi = true
+                    trace("mjpeg_first_frame_visible")
+                }
                 if (!h264Visible) noVideo.visibility = View.GONE
                 applyImageRotation(bitmap, frameRotation)
             }
         }.also { it.start() }
+    }
+
+    private fun trace(stage: String) {
+        Log.i(TAG, "startup $stage +${SystemClock.elapsedRealtime() - startupMs}ms")
     }
 
     private fun fetchRotation(streamUrl: String, expectedGeneration: Int) {
@@ -250,6 +267,7 @@ internal class AdaptiveVideoPlayer(
     }
 
     companion object {
+        private const val TAG = "doorbell-video-startup"
         private const val H264_FIRST_FRAME_MS = 2_500L
         private const val H264_RETRY_MS = 5_000L
     }

@@ -35,11 +35,50 @@ CFLAGS=(-std=c99 -Wall -Wextra -Werror -O2 -I"$MINISIP")
 
 "$CC" -fobjc-arc -Wall -Wextra -Werror -O2 -isysroot "$MACOS_SDK" \
   -I"$REPO_ROOT/ios-kiosk/src/Core" \
+  "$REPO_ROOT/ios-kiosk/src/Core/DBBootConfig.m" \
+  "$REPO_ROOT/ios-kiosk/src/Core/DBMediaSource.m" \
+  "$REPO_ROOT/ios-kiosk/src/Core/DBDoorTileModel.m" \
+  "$REPO_ROOT/ios-compat/tests/door_tile_model_test.m" \
+  -framework Foundation -o "$OUT/door_tile_model_test"
+
+"$CC" -fobjc-arc -Wall -Wextra -Werror -O2 -isysroot "$MACOS_SDK" \
+  -I"$REPO_ROOT/ios-kiosk/src/Core" \
+  "$REPO_ROOT/ios-kiosk/src/Core/DBFleetCounts.m" \
+  "$REPO_ROOT/ios-compat/tests/fleet_counts_test.m" \
+  -framework Foundation -o "$OUT/fleet_counts_test"
+
+"$CC" -fobjc-arc -Wall -Wextra -Werror -O2 -isysroot "$MACOS_SDK" \
+  -I"$REPO_ROOT/ios-kiosk/src/Core" \
+  "$REPO_ROOT/ios-kiosk/src/Core/DBAdminAddress.m" \
+  "$REPO_ROOT/ios-compat/tests/admin_address_test.m" \
+  -framework Foundation -o "$OUT/admin_address_test"
+
+"$CC" -fobjc-arc -Wall -Wextra -Werror -O2 -isysroot "$MACOS_SDK" \
+  -I"$REPO_ROOT/ios-kiosk/src/Core" \
+  "$REPO_ROOT/ios-kiosk/src/Core/DBUiTheme.m" \
+  "$REPO_ROOT/ios-kiosk/src/Core/DBBackdropCompositor.m" \
+  "$REPO_ROOT/ios-compat/tests/backdrop_compositor_test.m" \
+  -framework Foundation -framework CoreGraphics -o "$OUT/backdrop_compositor_test"
+
+"$CC" -fobjc-arc -Wall -Wextra -Werror -O2 -isysroot "$MACOS_SDK" \
+  -I"$REPO_ROOT/ios-kiosk/src/Core" \
   "$REPO_ROOT/ios-kiosk/src/Core/DBCallEventTracker.m" \
   "$REPO_ROOT/ios-compat/tests/call_event_tracker_test.m" \
   -framework Foundation -o "$OUT/call_event_tracker_test"
 
+# The Swift call-revision test builds for the host, so every file it pulls in has
+# to be host-compilable. ConfigUtil.swift is Foundation and CoreGraphics only for
+# exactly this reason; its UIColor half lives in ConfigUtilColors.swift, which the
+# host never compiles. A UIKit import creeping back in here is a real regression,
+# so this fails rather than skipping.
+MODERN_CALL_TEST=1
+if grep -q "^import UIKit" "$REPO_ROOT/ios/Doorbell/ConfigUtil.swift" 2>/dev/null; then
+  echo "error: ios/Doorbell/ConfigUtil.swift imports UIKit again" >&2
+  echo "       Keep it host-compilable; UIKit helpers belong in ConfigUtilColors.swift." >&2
+  exit 1
+fi
 swiftc \
+  "$REPO_ROOT/ios/Doorbell/ConfigUtil.swift" \
   "$REPO_ROOT/ios/Doorbell/CallRevisionLifecycle.swift" \
   "$REPO_ROOT/ios-compat/tests/modern_call_revision_test.swift" \
   -o "$OUT/modern_call_revision_test"
@@ -81,6 +120,9 @@ swiftc \
   "$REPO_ROOT/ios-kiosk/src/Core/DBCallHistoryModel.m" \
   "$REPO_ROOT/ios-kiosk/src/Core/DBNoticeModel.m" \
   "$REPO_ROOT/ios-kiosk/src/Core/DBPurposeModel.m" \
+  "$REPO_ROOT/ios-kiosk/src/Core/DBCallReturnCountdown.m" \
+  "$REPO_ROOT/ios-kiosk/src/Core/DBSipChurnPolicy.m" \
+  "$REPO_ROOT/ios-kiosk/src/Core/DBPairUri.m" \
   "$REPO_ROOT/ios-kiosk/src/Core/DBBootConfig.m" \
   "$REPO_ROOT/ios-kiosk/src/Support/DBSafeModeRecovery.m" \
   "$REPO_ROOT/ios-compat/tests/native_settings_ux_test.m" \
@@ -96,8 +138,12 @@ swiftc \
 
 "$OUT/minisip_uas_loopback"
 "$OUT/media_source_test"
+"$OUT/door_tile_model_test"
+"$OUT/fleet_counts_test"
+"$OUT/admin_address_test"
+"$OUT/backdrop_compositor_test"
 "$OUT/call_event_tracker_test"
-"$OUT/modern_call_revision_test"
+[[ $MODERN_CALL_TEST -eq 1 ]] && "$OUT/modern_call_revision_test"
 "$OUT/http_media_test"
 "$OUT/rtsp_h264_test"
 "$OUT/compatibility_profile_test"
@@ -111,6 +157,7 @@ python3 "$REPO_ROOT/ios-compat/tests/sos_presentation_contract_test.py"
 python3 "$REPO_ROOT/ios-compat/tests/recovery_safe_mode_contract_test.py"
 python3 "$REPO_ROOT/ios-compat/tests/native_settings_contract_test.py"
 python3 "$REPO_ROOT/ios-compat/tests/pairing_flow_contract_test.py"
+python3 "$REPO_ROOT/ios-compat/tests/icon_asset_contract_test.py"
 python3 "$REPO_ROOT/ios-compat/tests/pairing_flow_contract_swift_test.py"
 # Root keepalive helper: daemon behaviour plus the staged-package/installer rails.
 if [[ -n "${DB_SKIP_HELPER_HOST_TESTS:-}" ]]; then

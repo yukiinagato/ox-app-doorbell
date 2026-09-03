@@ -8,6 +8,7 @@ package jp.ox.doorbell
 
 import android.Manifest
 import android.app.Activity
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Canvas
 import android.graphics.Color
@@ -29,6 +30,7 @@ import android.widget.TextView
 import org.json.JSONObject
 
 class QrScanActivity : Activity(), DoorbellCore.Listener, SurfaceHolder.Callback {
+
 
     private lateinit var app: App
     private lateinit var texts: Texts
@@ -150,6 +152,12 @@ class QrScanActivity : Activity(), DoorbellCore.Listener, SurfaceHolder.Callback
         when (ev.optString("t")) {
             "qr_scanned" -> {
                 val text = ev.optString("text")
+                // A pairing link belongs to whoever opened the scanner, not to the add flow.
+                if (PairUri.looksLikePairLink(text)) {
+                    setResult(RESULT_OK, Intent().putExtra(EXTRA_SCANNED_TEXT, text))
+                    finish()
+                    return
+                }
                 if (!PairingModel.isPairQr(text)) return
                 resultView.visibility = View.VISIBLE
                 resultView.setTextColor(PairingUi.DIM)
@@ -271,6 +279,8 @@ class QrScanActivity : Activity(), DoorbellCore.Listener, SurfaceHolder.Callback
     }
 
     companion object {
+        /** The decoded text handed back when the caller started this for a result. */
+        const val EXTRA_SCANNED_TEXT = "scanned_text"
         private const val PERMISSION_REQUEST = 21
         private const val JOINED_DWELL_MS = 1_500L
     }

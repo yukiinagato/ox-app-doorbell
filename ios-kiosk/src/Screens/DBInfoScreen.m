@@ -4,6 +4,7 @@
 #import "../Core/DBConfigUtil.h"
 #import "../Core/DBCoreBridge.h"
 #import "../Core/DBTexts.h"
+#import "../Core/DBUiTheme.h"
 #import "../Media/DBQrCode.h"
 #import "DBRouter.h"
 #import <arpa/inet.h>
@@ -186,8 +187,9 @@ static BOOL DBPortListening(int port) {
   [info appendFormat:@"%@ : %@\n", [texts ts:@"info.core_version"],
                       [_core coreVersion] ?: @"-"];
   [info appendFormat:@"%@ : %@\n", [texts ts:@"info.app_version"],
-                      [[NSBundle mainBundle] objectForInfoDictionaryKey:
-                                            @"CFBundleShortVersionString"] ?: @"-"];
+                      [DBUiTheme appVersion:[[NSBundle mainBundle]
+                          objectForInfoDictionaryKey:@"CFBundleShortVersionString"]
+                               withCoreVersion:[_core coreVersion]] ?: @"-"];
   // The kiosk's local safe mode is no longer an invisible latch: the state and
   // the remaining healthy window are shown here.
   NSString *safeModeState = [DBConfigUtil str:st path:@"runtime.safe_mode_state"];

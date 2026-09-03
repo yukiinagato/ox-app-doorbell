@@ -9,6 +9,7 @@
 #import "../Core/DBSemanticStyle.h"
 #import "../Core/DBTexts.h"
 #import "../Core/DBNoticeModel.h"
+#import "../Core/DBIconAsset.h"
 #import "../Core/DBPurposeModel.h"
 #import "../Core/DBUiTheme.h"
 #import "../Media/DBSiren.h"
@@ -78,6 +79,9 @@ typedef enum {
 - (void)publishMediaSourceStatus;
 @end
 
+// The purpose grid's Tabler icon, above its label.
+static const CGFloat kPurposeIconSide = 28;
+
 @implementation DBDoorScreen {
   DBCoreBridge *_core;
   DBBootConfig *_boot;
@@ -132,6 +136,7 @@ typedef enum {
   UILabel *_purposeHint;
   UIScrollView *_purposeScroll;
   NSMutableArray *_purposeButtons;
+  NSMutableArray *_purposeIcons;   // UIImageView or NSNull, aligned with the buttons.
   NSArray *_purposeIds;
   UIView *_languageBar;
   NSMutableArray *_languageButtons;
@@ -159,11 +164,18 @@ typedef enum {
   UIButton *_noticeExpand;
   BOOL _noticeExpanded;
   UILabel *_versionLabel;
+  UIImageView *_themeBg;
+  NSString *_themeHash;
+  CGSize _themeImageSize;
+  DBBackgroundSampler *_sampler;
+  CGSize _samplerSize;
+  BOOL _samplerBuilding;
   NSDictionary *_display;   // status.display: core-resolved appearance and theme.
   NSDictionary *_status;
   DBSosSlider *_sos;
   DBUiPalette *_palette;
   NSTimer *_clockTimer;
+  NSTimer *_keyframeTimer;
   NSInteger _tzOffsetMinutes;
 }
 
@@ -176,6 +188,7 @@ typedef enum {
     _texts = router.texts;
     _visitorLang = [_boot.uiLang length] ? _boot.uiLang : @"ja";
     _purposeButtons = [[NSMutableArray alloc] init];
+    _purposeIcons = [[NSMutableArray alloc] init];
     _languageButtons = [[NSMutableArray alloc] init];
     _adminFirstTap = [NSDate distantPast];
     _feedbackAudio = [[DBSiren alloc] init];
@@ -189,6 +202,7 @@ typedef enum {
 - (void)dealloc {
   // Never leave a repeating run-loop timer behind a released screen.
   [_clockTimer invalidate];
+  [_keyframeTimer invalidate];
   [_callTimer invalidate];
   [_replyTimer invalidate];
 }
@@ -220,6 +234,17 @@ typedef enum {
 - (void)buildUI {
   self.backgroundColor = [UIColor colorWithRed:0.04 green:0.05 blue:0.07 alpha:1];
 
+  // The cluster's theme picture sits behind everything, prepared once for this
+  // panel and darkened, with the per-region ink measured against it.
+  _themeBg = [[UIImageView alloc] initWithFrame:self.bounds];
+  _themeBg.autoresizingMask = UIViewAutoresizingFlexibleWidth |
+      UIViewAutoresizingFlexibleHeight;
+  _themeBg.contentMode = UIViewContentModeScaleAspectFill;
+  _themeBg.clipsToBounds = YES;
+  _themeBg.opaque = YES;
+  _themeBg.hidden = YES;
+  [self addSubview:_themeBg];
+
   _cameraPreviewView = [[UIImageView alloc] initWithFrame:self.bounds];
   _cameraPreviewView.autoresizingMask = UIViewAutoresizingFlexibleWidth |
       UIViewAutoresizingFlexibleHeight;
@@ -239,13 +264,14 @@ typedef enum {
   [self addSubview:_titleLabel];
 
   _touchHint = [[UILabel alloc] init];
-  _touchHint.font = [UIFont systemFontOfSize:21];
+  _touchHint.font = [UIFont systemFontOfSize:26];
   _touchHint.textColor = [UIColor colorWithWhite:1 alpha:0.65];
   _touchHint.textAlignment = NSTextAlignmentCenter;
   [self addSubview:_touchHint];
 
   _mediaBadge = [[UILabel alloc] init];
   _mediaBadge.font = [UIFont boldSystemFontOfSize:14];
+  _mediaBadge.numberOfLines = 2;
   _mediaBadge.textAlignment = NSTextAlignmentCenter;
   _mediaBadge.layer.cornerRadius = 8;
   _mediaBadge.clipsToBounds = YES;
@@ -307,7 +333,7 @@ typedef enum {
   // The visitor sees the announcement text only: no source line and no expiry.
   _noticeLabel = [[UILabel alloc] init];
   _noticeLabel.backgroundColor = [UIColor clearColor];
-  _noticeLabel.font = [UIFont systemFontOfSize:22];
+  _noticeLabel.font = [UIFont systemFontOfSize:26];
   _noticeLabel.numberOfLines = 2;
   _noticeLabel.hidden = YES;
   [self addSubview:_noticeLabel];
@@ -321,7 +347,7 @@ typedef enum {
 
   _versionLabel = [[UILabel alloc] init];
   _versionLabel.backgroundColor = [UIColor clearColor];
-  _versionLabel.font = [UIFont systemFontOfSize:13];
+  _versionLabel.font = [UIFont systemFontOfSize:16];
   _versionLabel.textAlignment = NSTextAlignmentCenter;
   [self addSubview:_versionLabel];
 
@@ -392,15 +418,25 @@ typedef enum {
                                                  selector:@selector(updateClock)
                                                  userInfo:nil repeats:YES];
   }
+  if (!_keyframeTimer) {
+    _keyframeTimer = [NSTimer scheduledTimerWithTimeInterval:0.1 target:self
+                                                    selector:@selector(pollKeyframeRequest:)
+                                                    userInfo:nil repeats:YES];
+  }
   [self updateClock];
   [self refreshFromCore];
   [self applyStrings];
 }
 
+- (void)pollKeyframeRequest:(NSTimer *)timer {
+  (void)timer;
+  if ([_core takeVideoKeyframeRequest]) [_rtspSource requestKeyFrame];
+}
+
 // Rendered from Core's local-time document: no operating-system time-zone
 // database is needed and the clock follows the cluster zone and NTP offset.
 - (void)updateClock {
-  NSDictionary *local = [_core localTimeJson:0];
+  NSDictionary *local = [_core cachedLocalTime];
   if (![local isKindOfClass:[NSDictionary class]]) return;
   NSInteger hh = [DBConfigUtil intVal:local path:@"hh" def:-1];
   if (hh < 0) return;
@@ -436,6 +472,71 @@ typedef enum {
 // The call button colour is computed from the effective background: hue rotated
 // by 180 degrees and lightness moved until it separates, with the local
 // fallback used whenever core published no auto_accent (spec §5.2).
+- (NSString *)themeValue:(NSString *)leaf {
+  if ([_deviceID length] > 0) {
+    NSString *value = [DBConfigUtil str:_cfg path:[NSString stringWithFormat:
+        @"devices.%@.local.theme.%@", _deviceID, leaf]];
+    if (value) return value;
+  }
+  return [DBConfigUtil str:_cfg path:[NSString stringWithFormat:@"display.theme.%@", leaf]];
+}
+
+- (void)refreshThemeBackdrop {
+  if (_safeMode) {
+    _themeHash = nil;
+    _themeBg.image = nil;
+    _themeBg.hidden = YES;
+    _sampler = nil;
+    return;
+  }
+  NSString *hash = [self themeValue:@"bg_image"];
+  CGSize size = self.bounds.size;
+  if ([hash length] == 0) {
+    _themeHash = nil;
+    _themeBg.image = nil;
+    _themeBg.hidden = YES;
+    _sampler = nil;
+    return;
+  }
+  if ([_themeHash isEqualToString:hash] && _themeBg.image != nil &&
+      CGSizeEqualToSize(_themeImageSize, size))
+    return;
+  if (size.width <= 0 || size.height <= 0) return;
+  _themeHash = [hash copy];
+  _themeImageSize = size;
+  NSString *want = [hash copy];
+  NSString *urlString = [NSString stringWithFormat:@"http://127.0.0.1:%ld/asset/%@",
+                         (long)_boot.httpPort, hash];
+  NSURL *url = [NSURL URLWithString:urlString];
+  if (url == nil) return;
+  // The same administrator overlay the dashboard uses; this screen has no
+  // device id of its own to key a per-device override on, so it takes the
+  // cluster's answer and core's resolved one.
+  NSDictionary *overlay = [DBUiTheme backdropOverlayForConfig:_cfg deviceId:nil
+                                                      display:_display];
+  __weak DBDoorScreen *weakSelf = self;
+  dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_LOW, 0), ^{
+    UIImage *backdrop = [DBThemeBackdrop cachedBackdropForKey:want size:size
+                                                      overlay:overlay];
+    if (backdrop == nil) {
+      NSData *data = [NSData dataWithContentsOfURL:url];
+      backdrop = [DBThemeBackdrop backdropForData:data key:want size:size overlay:overlay];
+    }
+    DBBackgroundSampler *sampler = [DBBackgroundSampler samplerWithImage:backdrop
+                                                                viewSize:size];
+    dispatch_async(dispatch_get_main_queue(), ^{
+      DBDoorScreen *screen = weakSelf;
+      if (!screen || ![screen->_themeHash isEqualToString:want]) return;
+      screen->_themeBg.image = backdrop;
+      screen->_themeBg.hidden = (backdrop == nil);
+      screen->_sampler = sampler;
+      screen->_samplerSize = size;
+      [screen->_palette setBackgroundSampler:sampler];
+      [screen applyRegionInk];
+    });
+  });
+}
+
 - (void)applyVisitorTheme {
   NSString *background = [DBConfigUtil str:_cfg path:[NSString stringWithFormat:
       @"devices.%@.local.theme.bg_color", _deviceID]];
@@ -443,21 +544,21 @@ typedef enum {
     background = [DBConfigUtil str:_cfg path:@"display.theme.bg_color"];
   _palette = [DBUiPalette paletteForConfig:_cfg deviceId:_deviceID display:_display
                              backgroundHex:background minuteOfDay:[self minuteOfDay]];
+  [self refreshThemeBackdrop];
+  [_palette setBackgroundSampler:_sampler];
   UIColor *surface = _palette.surface;
-  if (_cameraPreviewView.hidden) self.backgroundColor = surface;
+  if (_cameraPreviewView.hidden && _themeBg.hidden) self.backgroundColor = surface;
   // The per-region colours land after layout, when each frame is known.
   [self applyRegionInk];
   [_sos applyPalette:_palette];
   [_sos applyConfig:_cfg texts:_texts];
+  [self updateLanguageSelection];
 
-  // An explicit semantic override still wins; otherwise the computed accent is
-  // what the visitor sees.
-  NSDictionary *callStyle = [self styleForSemanticID:@"call.primary"];
-  if ([callStyle objectForKey:@"background"] == nil) {
-    _callButton.backgroundColor = _palette.accent;
-    [_callButton setTitleColor:_palette.accentInk forState:UIControlStateNormal];
-  }
+  // The call button's colour is applied at the end of applySemanticStyles, so
+  // the semantic baseline cannot paint over the computed accent.
 
+  // The same rule as every other shell: the bar is drawn when the cluster's
+  // emergency.button_on_roles names this role.
   BOOL showSos = NO;
   id roles = [DBConfigUtil dig:_cfg path:@"emergency.button_on_roles"];
   if ([roles isKindOfClass:[NSArray class]]) {
@@ -465,6 +566,10 @@ typedef enum {
       if ([role isKindOfClass:[NSString class]] &&
           [(NSString *)role isEqualToString:@"door_station"])
         showSos = YES;
+  }
+  if (showSos != !_sos.hidden) {
+    NSLog(@"[doorbell][sos] door station bar %@ (button_on_roles=%@)",
+          showSos ? @"shown" : @"hidden", roles ?: @"<unset>");
   }
   _sos.hidden = !showSos;
 
@@ -852,8 +957,9 @@ typedef enum {
   NSString *doorLabel = [self doorLabel];
   _titleLabel.text = doorLabel;
   _touchHint.text = [_texts ts:@"door.hint_call"];
-  [_callButton setTitle:[_texts t:@"idle.call_button", doorLabel, nil]
-               forState:UIControlStateNormal];
+  // A visitor is not told which device they are standing at: the button says
+  // only what it does (owner decision, batch 3).
+  [_callButton setTitle:[_texts ts:@"idle.call"] forState:UIControlStateNormal];
   // Round 5 dropped the purpose explainer; a control shows only what it does.
   _purposeHint.text = @"";
   _callingLabel.text = _flowState == DBDoorFlowInCall
@@ -912,14 +1018,31 @@ typedef enum {
   UIColor *green = [UIColor colorWithRed:0.094 green:0.478 blue:0.235 alpha:1];
   UIColor *red = [UIColor colorWithRed:0.75 green:0.16 blue:0.13 alpha:1];
 
-  DBApplyDoorButtonStyle(_callButton, [self styleForSemanticID:@"call.primary"],
-                         white, green, 14);
+  NSDictionary *callStyle = [self styleForSemanticID:@"call.primary"];
+  DBApplyDoorButtonStyle(_callButton, callStyle, white, green, 14);
+  // An administrator's explicit colour wins; otherwise the button takes the
+  // accent computed from the effective background (spec §5.2). This runs after
+  // the semantic pass because that pass would otherwise paint the baseline
+  // green over it.
+  if (_palette != nil && [callStyle objectForKey:@"background"] == nil) {
+    _callButton.backgroundColor = _palette.accent;
+    [_callButton setTitleColor:_palette.accentInk forState:UIControlStateNormal];
+  }
   NSString *cancelID = _flowState == DBDoorFlowInCall ? @"call.end" : @"cancel.call";
   DBApplyDoorButtonStyle(_cancelButton, [self styleForSemanticID:cancelID],
                          white, red, 14);
   NSDictionary *purposeStyle = [self styleForSemanticID:@"purpose.button"];
-  for (UIButton *button in _purposeButtons)
-    DBApplyDoorButtonStyle(button, purposeStyle, white, neutral, 14);
+  UIColor *chipInk = _palette ? _palette.ink : white;
+  UIColor *chipPlate = _palette ? _palette.chipPlate : neutral;
+  for (UIButton *button in _purposeButtons) {
+    DBApplyDoorButtonStyle(button, purposeStyle, chipInk, chipPlate, 14);
+    // An explicit semantic override still wins; otherwise the chip follows the
+    // measured ground, because white on a light wallpaper is unreadable.
+    if ([purposeStyle objectForKey:@"background"] == nil && _palette != nil) {
+      button.backgroundColor = chipPlate;
+      [button setTitleColor:chipInk forState:UIControlStateNormal];
+    }
+  }
   DBApplyDoorButtonStyle(_emergencyCancel, [self styleForSemanticID:@"sos.cancel"],
                          white, neutral, 14);
 }
@@ -927,6 +1050,7 @@ typedef enum {
 - (void)rebuildPurposes {
   for (UIButton *button in _purposeButtons) [button removeFromSuperview];
   [_purposeButtons removeAllObjects];
+  [_purposeIcons removeAllObjects];
   NSDictionary *purposes = [DBConfigUtil dig:_cfg path:@"visit_purposes"];
   if (![purposes isKindOfClass:[NSDictionary class]]) purposes = nil;
   // A purpose an administrator switched off is not offered to the visitor, in
@@ -936,8 +1060,14 @@ typedef enum {
     NSString *identifier = [_purposeIds objectAtIndex:(NSUInteger)i];
     NSDictionary *entry = [purposes objectForKey:identifier];
     NSString *label = [DBConfigUtil labelOf:entry lang:_visitorLang fallback:identifier];
-    NSString *icon = [entry objectForKey:@"icon"];
-    if (![icon isKindOfClass:[NSString class]]) icon = @"";
+    // A real icon when this shell has one for the purpose; otherwise whatever
+    // glyph the administrator typed, which is all an invented purpose has.
+    UIImage *asset = [DBIconAsset tintedImageNamed:
+        [DBPurposeModel iconNameForPurpose:identifier]
+                                             color:[UIColor whiteColor]
+                                              size:CGSizeMake(kPurposeIconSide, kPurposeIconSide)];
+    NSString *icon = asset != nil ? @"" : [DBPurposeModel displayIconForConfiguredIcon:
+        [entry objectForKey:@"icon"]];
     NSString *title = [icon length] ? [NSString stringWithFormat:@"%@\n%@", icon, label] : label;
     UIButton *button = [self buttonWithTitle:title primary:NO];
     button.tag = i;
@@ -945,6 +1075,15 @@ typedef enum {
     [button addTarget:self action:@selector(onPurpose:) forControlEvents:UIControlEventTouchUpInside];
     [_purposeScroll addSubview:button];
     [_purposeButtons addObject:button];
+    // The icon rides above the label as its own view: iOS 5 button image and
+    // title insets fight each other once the title wraps to two lines.
+    UIImageView *iconView = nil;
+    if (asset != nil) {
+      iconView = [[UIImageView alloc] initWithImage:asset];
+      iconView.userInteractionEnabled = NO;
+      [button addSubview:iconView];
+    }
+    [_purposeIcons addObject:(iconView ?: (id)[NSNull null])];
   }
   _purposeHint.hidden = [_purposeButtons count] == 0;
   _purposeScroll.hidden = [_purposeButtons count] == 0;
@@ -980,9 +1119,14 @@ typedef enum {
     UIButton *button = [_languageButtons objectAtIndex:(NSUInteger)i];
     NSString *lang = [_languages objectAtIndex:(NSUInteger)i];
     BOOL selected = [lang isEqualToString:_visitorLang];
+    // The unselected chips follow the measured ground; the selected one keeps
+    // its own blue, which reads on either.
     button.backgroundColor = selected
         ? [UIColor colorWithRed:0.18 green:0.52 blue:0.78 alpha:1]
-        : [UIColor colorWithWhite:1 alpha:0.12];
+        : (_palette ? _palette.chipPlate : [UIColor colorWithWhite:1 alpha:0.12]);
+    [button setTitleColor:(selected ? [UIColor whiteColor]
+                                    : (_palette ? _palette.ink : [UIColor whiteColor]))
+                 forState:UIControlStateNormal];
   }
 }
 
@@ -1354,6 +1498,10 @@ typedef enum {
   } else if (state == DBMiniSipInCall) {
     [self showInCall];
   } else if (state == DBMiniSipEnded) {
+    // Returning to a screen that is already idle costs a full re-theme and
+    // relayout for nothing, and the listener can end dialogs faster than the
+    // iPad 1 can lay out.
+    if (_flowState == DBDoorFlowIdle) return;
     [self showIdleWithHint:nil];
   }
 }
@@ -1470,7 +1618,12 @@ typedef enum {
 
   // No visible admin entry: the corner is transparent and needs seven taps.
   _infoButton.frame = CGRectMake(size.width - 110, 0, 110, 110);
-  _mediaBadge.frame = CGRectMake(margin, top, compact ? 100 : 145, compact ? 26 : 30);
+  // Sized to its own text: "No video from door station" was ellipsised into
+  // nonsense at a fixed 145 points.
+  CGFloat badgeMax = MIN(size.width * 0.34, compact ? 180 : 300);
+  CGSize badgeFit = [_mediaBadge sizeThatFits:CGSizeMake(badgeMax, 60)];
+  _mediaBadge.frame = CGRectMake(margin, top, MIN(badgeMax, MAX(90, badgeFit.width + 16)),
+                                 MAX(compact ? 26 : 30, MIN(56, badgeFit.height + 8)));
 
   CGFloat clockSize = compact ? 46 : (portrait ? 84 : 72);
   _clockLabel.font = [UIFont systemFontOfSize:clockSize];
@@ -1588,6 +1741,18 @@ typedef enum {
     button.titleLabel.font = [UIFont boldSystemFontOfSize:
         (compact ? 16 : 21) * purposeFontScale];
     button.frame = CGRectMake(col * (buttonW + gap), row * (buttonH + gap), buttonW, buttonH);
+    id icon = i < (NSInteger)[_purposeIcons count]
+        ? [_purposeIcons objectAtIndex:(NSUInteger)i] : [NSNull null];
+    if ([icon isKindOfClass:[UIImageView class]]) {
+      UIImageView *iconView = icon;
+      CGFloat top = compact ? 6 : 9;
+      iconView.frame = CGRectMake((buttonW - kPurposeIconSide) / 2, top,
+                                  kPurposeIconSide, kPurposeIconSide);
+      // Push the label clear of the icon rather than letting them overlap.
+      button.titleEdgeInsets = UIEdgeInsetsMake(top + kPurposeIconSide + 4, 0, 0, 0);
+    } else {
+      button.titleEdgeInsets = UIEdgeInsetsZero;
+    }
   }
   NSInteger rows = ([_purposeButtons count] + columns - 1) / columns;
   _purposeScroll.contentSize = CGSizeMake(_purposeScroll.bounds.size.width,

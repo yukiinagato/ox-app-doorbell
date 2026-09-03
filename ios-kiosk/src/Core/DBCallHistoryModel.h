@@ -41,4 +41,11 @@ FOUNDATION_EXPORT NSString *const DBCallHistoryFilterMissed;
 + (NSString *)clockForTs:(long long)ms offsetMinutes:(NSInteger)offsetMinutes;   // HH:MM
 + (NSString *)durationTextForMs:(long long)durationMs;                           // M:SS
 
+// The civil parts of one instant in a fixed offset, in the shape core's
+// local-time document uses: hh, mm, ss, date, weekday_num, wall_ms. The shell
+// derives per-second clock ticks from a cached base with this instead of
+// asking core every second, which on an iPad 1 meant a blocking hop onto
+// core's serial queue once a second per screen.
++ (NSDictionary *)localPartsForTs:(long long)ms offsetMinutes:(NSInteger)offsetMinutes;
+
 @end

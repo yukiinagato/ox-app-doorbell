@@ -3,6 +3,8 @@
 #include "sipctl/sipctl.h"
 
 #include <atomic>
+#include <mutex>
+#include <string>
 
 #include "util/log.h"
 
@@ -21,6 +23,8 @@ struct SipCtl::Impl {
   // Recorded even without a backend so status.call.mic_muted still reports what the shell asked
   // for on a display-only build.
   std::atomic<bool> mic_muted{false};
+  std::mutex mode_mu;
+  std::string call_mode;
   explicit Impl(Runloop& l, Callbacks c) : loop(l), cbs(std::move(c)) {}
 };
 
@@ -34,12 +38,24 @@ void SipCtl::start(const SipSettings& settings) {
 void SipCtl::stop() {}
 void SipCtl::updateSettings(const SipSettings&) {}
 
-void SipCtl::call(const std::string& target, const std::string&) {
+void SipCtl::call(const std::string& target, const std::string& mode) {
+  {
+    std::lock_guard<std::mutex> lk(impl_->mode_mu);
+    impl_->call_mode = mode;
+  }
   DB_LOGW(kTag, "call(" + target + "): PJSIP is disabled; ignoring call");
 }
-bool SipCtl::callOwned(const std::string&, const std::string& target, const std::string&) {
+bool SipCtl::callOwned(const std::string&, const std::string& target, const std::string& mode) {
+  {
+    std::lock_guard<std::mutex> lk(impl_->mode_mu);
+    impl_->call_mode = mode;
+  }
   DB_LOGW(kTag, "call(" + target + "): PJSIP backend unavailable");
   return false;
+}
+std::string SipCtl::callMode() const {
+  std::lock_guard<std::mutex> lk(impl_->mode_mu);
+  return impl_->call_mode;
 }
 bool SipCtl::hangupOwned(const std::string&) { return false; }
 void SipCtl::hangup() {}

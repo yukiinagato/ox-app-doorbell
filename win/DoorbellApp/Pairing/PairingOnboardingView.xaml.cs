@@ -33,6 +33,7 @@ namespace DoorbellApp.Pairing
         private bool _createRequested;
         private bool _createdCardArmed;
         private bool _active;
+        private bool _refreshing;
 
         /// <summary>Raised for "set up later", and after the joined confirmation has been read.</summary>
         public event Action DismissRequested;
@@ -153,9 +154,27 @@ namespace DoorbellApp.Pairing
             return text == "true" || text == "True" || text == "1";
         }
 
+        /// <summary>
+        /// db_core_pairing_json marshals into core's run loop, because its PIN countdown and
+        /// pending list have to be live, so the once-a-second poll reads it on a worker and
+        /// renders the result back on the dispatcher.
+        /// </summary>
         private void Refresh()
         {
-            var snapshot = PairingSnapshot.From(App.Core.PairingInfo());
+            if (_refreshing) return;
+            _refreshing = true;
+            Task.Factory.StartNew(() => App.Core.PairingInfo())
+                .ContinueWith(task => Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    _refreshing = false;
+                    ApplyPairingSnapshot(task.Status == TaskStatus.RanToCompletion ?
+                                         task.Result : null);
+                })));
+        }
+
+        private void ApplyPairingSnapshot(System.Collections.Generic.Dictionary<string, object> raw)
+        {
+            var snapshot = PairingSnapshot.From(raw);
             // An empty snapshot means core has not published pairing state yet. Rendering it as
             // "unpaired" would flash onboarding on a healthy paired device.
             if (!snapshot.Known) return;

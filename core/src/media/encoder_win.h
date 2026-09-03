@@ -42,6 +42,9 @@ class EncoderWin {
   void stop();
   bool running() const { return running_.load(); }
 
+  // Thread-safe edge consumed by the encoder thread once its MFT is ready.
+  void requestKeyFrame() { keyframe_requested_.store(true); }
+
 
 
   void feed(const RawFrame& f);
@@ -54,6 +57,7 @@ class EncoderWin {
   Params params_;
   std::thread th_;
   std::atomic<bool> running_{false};
+  std::atomic<bool> keyframe_requested_{false};
   std::mutex mu_;
   std::condition_variable cv_;
   std::deque<RawFrame> queue_;

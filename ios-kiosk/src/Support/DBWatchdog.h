@@ -12,4 +12,8 @@
  externalSupervisorProvider:(BOOL (^)(void))externalSupervisorProvider;
 - (void)start;
 
+// Persisted identity changes need the same supervised process boundary as a hang, but they are a
+// clean maintenance restart and therefore do not consume crash-loop backoff.
++ (void)restartForMaintenanceWithExternalSupervisor:(BOOL)externalSupervisor;
+
 @end

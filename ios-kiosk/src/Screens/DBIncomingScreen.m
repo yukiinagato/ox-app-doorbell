@@ -12,7 +12,9 @@
 #import "../Media/DBQrCode.h"
 #import "../Net/DBMjpegClient.h"
 #import "../Net/DBSnapshotPoller.h"
+#import "../Core/DBCallReturnCountdown.h"
 #import "../Core/DBNoticeModel.h"
+#import "../Core/DBPurposeModel.h"
 #import "../Core/DBUiTheme.h"
 #import "../Support/DBAppDelegate.h"
 #import "DBNoticeDialog.h"
@@ -114,6 +116,7 @@ static BOOL DBSameString(NSString *a, NSString *b) {
   NSInteger _snapshotGen;  // Discards stale background snapshots.
   NSString *_activeVideoTransport;
   NSArray *_adminHosts;
+  NSString *_adminQrUrl;   // The URL the cached QR bitmap encodes.
   NSInteger _adminHostIndex;
   NSInteger _adminQrGen;
 
@@ -132,6 +135,10 @@ static BOOL DBSameString(NSString *a, NSString *b) {
   UIButton *_monitorButton;
   UIButton *_openButton;
   UIButton *_ignoreButton;
+  DBCallReturnCountdown *_returnCountdown;
+  NSTimer *_returnTimer;
+  UILabel *_countdownLabel;
+  UIButton *_countdownButton;
   UIButton *_micButton;
   UIButton *_repliesButton;
   DBNoticeChip *_noticeChip;
@@ -179,6 +186,7 @@ static BOOL DBSameString(NSString *a, NSString *b) {
     _adminHosts = @[];
     _qrPickerButtons = [[NSMutableArray alloc] init];
     _debugLineHidden = [[NSUserDefaults standardUserDefaults] boolForKey:kDebugLineHiddenKey];
+    _returnCountdown = [[DBCallReturnCountdown alloc] init];
     [self buildUi];
   }
   return self;
@@ -305,6 +313,21 @@ static BOOL DBSameString(NSString *a, NSString *b) {
            forControlEvents:UIControlEventTouchUpInside];
   [self addSubview:_repliesButton];
 
+  // The countdown reads as a suffix of the title but is its own label, so the
+  // number itself is a comfortable tap target for cancelling it.
+  _countdownLabel = [[UILabel alloc] init];
+  _countdownLabel.backgroundColor = [UIColor clearColor];
+  _countdownLabel.font = [UIFont systemFontOfSize:26];
+  _countdownLabel.textAlignment = NSTextAlignmentLeft;
+  _countdownLabel.hidden = YES;
+  [self addSubview:_countdownLabel];
+  _countdownButton = [UIButton buttonWithType:UIButtonTypeCustom];
+  _countdownButton.backgroundColor = [UIColor clearColor];
+  _countdownButton.hidden = YES;
+  [_countdownButton addTarget:self action:@selector(onCancelCountdown)
+            forControlEvents:UIControlEventTouchUpInside];
+  [self addSubview:_countdownButton];
+
   _noticeChip = [[DBNoticeChip alloc] initWithFrame:CGRectZero];
   [_noticeChip addTarget:self action:@selector(onNoticeChip)
         forControlEvents:UIControlEventTouchUpInside];
@@ -318,10 +341,13 @@ static BOOL DBSameString(NSString *a, NSString *b) {
   [self addSubview:_debugLineTap];
 
   _adminQrButton = [UIButton buttonWithType:UIButtonTypeCustom];
+  // An opaque white plate with a radius and padding: a QR drawn straight onto
+  // dark video chrome is unreadable to a phone camera.
   _adminQrButton.backgroundColor = [UIColor whiteColor];
   _adminQrButton.layer.cornerRadius = 8;
   _adminQrButton.clipsToBounds = YES;
-  _adminQrButton.imageView.contentMode = UIViewContentModeCenter;
+  _adminQrButton.contentEdgeInsets = UIEdgeInsetsMake(6, 6, 6, 6);
+  _adminQrButton.imageView.contentMode = UIViewContentModeScaleAspectFit;
   _adminQrButton.accessibilityIdentifier = @"admin_page_qr";
   [_adminQrButton addTarget:self action:@selector(onAdminQrTapped)
            forControlEvents:UIControlEventTouchUpInside];
@@ -381,6 +407,7 @@ static BOOL DBSameString(NSString *a, NSString *b) {
   _adminHosts = @[];
   _adminHostIndex = 0;
   ++_adminQrGen;
+  _adminQrUrl = nil;
   [_adminQrButton setImage:nil forState:UIControlStateNormal];
   _adminQrButton.hidden = YES;
   _adminUrlLabel.hidden = YES;
@@ -413,6 +440,10 @@ static BOOL DBSameString(NSString *a, NSString *b) {
   _micMuted = NO;
   // A ringing call shows the quick replies straight away; monitoring does not.
   _repliesVisible = YES;
+  // The page now closes itself on this countdown instead of the old fixed
+  // auto-close, so a visitor cancelling no longer takes the live view away.
+  [_returnCountdown startWithSeconds:[DBCallReturnCountdown defaultSeconds]];
+  [self startReturnTimer];
   _noVideoLabel.hidden = NO;
   _liveView.image = nil;
 
@@ -479,6 +510,8 @@ static BOOL DBSameString(NSString *a, NSString *b) {
   _monitorAudioOn = NO;
   _micMuted = NO;
   _repliesVisible = NO;
+  [_returnCountdown reset];
+  [self stopReturnTimer];
   _noVideoLabel.hidden = NO;
   _liveView.image = nil;
   NSDictionary *cached = [_core lastConfig];
@@ -613,6 +646,11 @@ static BOOL DBSameString(NSString *a, NSString *b) {
       }
       NSString *selfId = [DBConfigUtil str:st path:@"node.id"];
       s->_nodeId = [selfId copy] ?: @"";
+      if (!s->_monitorOnly && s->_returnCountdown.isVisible) {
+        NSInteger configured = [DBCallReturnCountdown secondsFromStatus:st];
+        if (configured != s->_returnCountdown.fullSeconds)
+          [s->_returnCountdown startWithSeconds:configured];
+      }
       // Core remembers the mute flag across calls and reports it here, so the
       // toggle shows the real position instead of a local guess.
       if ([DBConfigUtil dig:st path:@"call.mic_muted"] != nil)
@@ -713,8 +751,11 @@ static BOOL DBSameString(NSString *a, NSString *b) {
 }
 
 - (void)applyPalette {
+  // The incoming page keeps its own near-black chrome so video reads well; it
+  // never draws the theme picture, so its ink is measured against that chrome.
   _palette = [DBUiPalette paletteForConfig:_cfg deviceId:_nodeId display:_display
-                             backgroundHex:nil minuteOfDay:[self minuteOfDay]];
+                             backgroundHex:@"#0A0D12" minuteOfDay:[self minuteOfDay]];
+  [_palette setUsesThemeBackground:NO];
   [_noticeChip applyPalette:_palette];
   [self applyRegionInk];
 }
@@ -733,7 +774,7 @@ static BOOL DBSameString(NSString *a, NSString *b) {
 }
 
 - (NSInteger)minuteOfDay {
-  NSDictionary *local = [_core localTimeJson:0];
+  NSDictionary *local = [_core cachedLocalTime];
   NSInteger hh = [DBConfigUtil intVal:local path:@"hh" def:-1];
   if (hh < 0) return 12 * 60;
   return hh * 60 + [DBConfigUtil intVal:local path:@"mm" def:0];
@@ -760,6 +801,49 @@ static BOOL DBSameString(NSString *a, NSString *b) {
     DBIncomingScreen *screen = weakSelf;
     if (screen && changed) [screen refreshFromCore];
   }];
+}
+
+#pragma mark - return countdown
+
+- (void)startReturnTimer {
+  if (_returnTimer) return;
+  _returnTimer = [NSTimer scheduledTimerWithTimeInterval:1.0 target:self
+                                                selector:@selector(onReturnTick:)
+                                                userInfo:nil repeats:YES];
+}
+
+- (void)stopReturnTimer {
+  [_returnTimer invalidate];
+  _returnTimer = nil;
+}
+
+- (void)onReturnTick:(NSTimer *)timer {
+  (void)timer;
+  BOOL expired = [_returnCountdown tick];
+  [self updateCountdownLabel];
+  if (expired) {
+    [self stopReturnTimer];
+    [self closeSelf];
+  }
+}
+
+- (void)updateCountdownLabel {
+  BOOL visible = !_monitorOnly && _returnCountdown.isVisible;
+  _countdownLabel.hidden = !visible;
+  _countdownButton.hidden = !visible;
+  if (!visible) return;
+  _countdownLabel.text = [NSString stringWithFormat:@"(%ld)",
+                                                    (long)_returnCountdown.remaining];
+  _countdownLabel.textColor = _palette ? _palette.mutedInk
+                                       : [UIColor colorWithWhite:1 alpha:0.6];
+  [self setNeedsLayout];
+}
+
+- (void)onCancelCountdown {
+  // The resident wants to stay on this page; nothing closes it after this.
+  if (![_returnCountdown cancelByUser]) return;
+  [self stopReturnTimer];
+  [self updateCountdownLabel];
 }
 
 - (void)onMic {
@@ -853,8 +937,8 @@ static BOOL DBSameString(NSString *a, NSString *b) {
     NSDictionary *entry =
         [DBConfigUtil dig:_cfg path:[NSString stringWithFormat:@"visit_purposes.%@", _purpose]];
     NSString *label = [DBConfigUtil labelOf:entry lang:_boot.uiLang fallback:_purpose];
-    NSString *icon = [entry objectForKey:@"icon"];
-    if (![icon isKindOfClass:[NSString class]]) icon = @"";
+    NSString *icon = [DBPurposeModel displayIconForConfiguredIcon:
+        [entry objectForKey:@"icon"]];
     NSString *purposeText = [_texts t:@"ring.purpose_badge", label, nil];
     _purposeBadge.text = [icon length] == 0
                              ? purposeText
@@ -939,6 +1023,7 @@ static BOOL DBSameString(NSString *a, NSString *b) {
   _adminQrButton.hidden = !available;
   _adminUrlLabel.hidden = !available;
   if (!available) {
+    _adminQrUrl = nil;
     [_adminQrButton setImage:nil forState:UIControlStateNormal];
     _adminUrlLabel.text = [_texts ts:@"monitor.admin_qr_none"];
     return;
@@ -950,6 +1035,15 @@ static BOOL DBSameString(NSString *a, NSString *b) {
   _adminUrlLabel.text = url;
   _adminQrButton.accessibilityLabel = [NSString stringWithFormat:@"%@: %@",
       [_texts ts:@"monitor.admin_qr"], url];
+  // Encoding a QR is pure CPU work this device cannot spare on every status
+  // refresh. The bitmap only depends on the URL, so it is regenerated when the
+  // address or port changes and cached otherwise.
+  if ([_adminQrUrl isEqualToString:url] &&
+      [_adminQrButton imageForState:UIControlStateNormal] != nil) {
+    [self setNeedsLayout];
+    return;
+  }
+  _adminQrUrl = [url copy];
   [_adminQrButton setImage:nil forState:UIControlStateNormal];
 
   __weak DBIncomingScreen *wself = self;
@@ -1569,6 +1663,16 @@ static BOOL DBSameString(NSString *a, NSString *b) {
 
 
 - (void)restartAutoClose {
+  // A ringing indoor page is governed by the return countdown (batch 3): the
+  // visitor cancelling must not take the live view away, and the old fixed
+  // auto-close would have done exactly that.
+  if (!_monitorOnly) {
+    [_autoCloseTimer invalidate];
+    _autoCloseTimer = nil;
+    _autoCloseTimerForCancelled = NO;
+    _autoCloseDeadlineMs = 0;
+    return;
+  }
   if (_monitorOnly) {
     [_autoCloseTimer invalidate];
     _autoCloseTimer = nil;
@@ -1619,17 +1723,11 @@ static BOOL DBSameString(NSString *a, NSString *b) {
   if ([door length] > 0 && [_door length] > 0 && ![door isEqualToString:_door]) return;
   if (_inCall) return;
   _cancelled = YES;
-  // Keep the cancelled banner visible briefly, but immediately release every
-  // decoder/network path. A later status refresh must not restart the stream.
-  ++_snapshotGen;
-  [self stopVideoPlayers];
-  _liveView.image = nil;
-  _pendingMjpegFrame = nil;
-  _activeVideoTransport = @"CANCELLED";
-  _noVideoLabel.hidden = NO;
+  // The visitor ended the call lifecycle, not the resident's view. Keep the existing transport,
+  // decoder and last frame alive until this screen's normal close deadline; refreshFromCore also
+  // respects _cancelled, so it will neither tear down nor replace this stream underneath us.
   _answerButton.enabled = NO;
   _monitorButton.enabled = NO;
-  [self updateVideoStats:nil];
   _statusLabel.text = [_texts ts:@"ring.cancelled"];
   _statusLabel.font = [UIFont boldSystemFontOfSize:24];
   _statusLabel.textColor = [UIColor whiteColor];
@@ -1639,8 +1737,7 @@ static BOOL DBSameString(NSString *a, NSString *b) {
   _statusLabel.clipsToBounds = YES;
   [self setNeedsLayout];
   [self restartAutoClose];
-  NSLog(@"[doorbell] call cancelled: chime and video stopped; banner remains for %.0fs",
-        kCancelledCloseS);
+  NSLog(@"[doorbell] call cancelled: video retained until the return deadline or resident close");
 }
 
 - (void)handlePurposeSelected:(NSDictionary *)ev {
@@ -1664,6 +1761,8 @@ static BOOL DBSameString(NSString *a, NSString *b) {
 
 - (void)onScreenWillAppear {
   [self startVideoStatsTimer];
+  if (!_monitorOnly && _returnCountdown.isVisible) [self startReturnTimer];
+  [self updateCountdownLabel];
   if (!_boot.diagnosticDumps) return;
   // Support-only snapshot. It is opt-in because a full-window bitmap can be a
   // meaningful fraction of the original iPad's available memory.
@@ -1680,6 +1779,8 @@ static BOOL DBSameString(NSString *a, NSString *b) {
 
 - (void)onScreenWillDisappear {
   ++_sipActionGen;
+  [self stopReturnTimer];
+  [_returnCountdown reset];
   [_autoCloseTimer invalidate];
   _autoCloseTimer = nil;
   _autoCloseDeadlineMs = 0;
@@ -1849,6 +1950,8 @@ static BOOL DBSameString(NSString *a, NSString *b) {
   if (state == DBMiniSipInCall) {
     if (![_sipMode isEqualToString:@"answer"]) return;
     _inCall = YES;
+    [_returnCountdown pauseForAnsweredCall];
+    [self updateCountdownLabel];
     [self buildReplyButtons];
     if (!_lifecycleAnswered) {
       _lifecycleAnswered = [_core reportCallAnsweredV2:_door callID:_callID
@@ -1869,13 +1972,15 @@ static BOOL DBSameString(NSString *a, NSString *b) {
     if (wasAnswer) [self reportLifecycleEndedIfNeeded];
     _inCall = NO;
     _answerPending = NO;
-    if (wasAnswer) {
-      [self closeSelf];
-    } else {
-      // Restore retry controls after monitor signaling or audio setup fails.
-      _sipMode = @"";
-      _hintLabel.hidden = YES;
-    }
+    _sipMode = @"";
+    _hintLabel.hidden = YES;
+    // The page no longer closes the moment a conversation ends: the resident
+    // keeps the live view and the full countdown starts again (batch 3).
+    [_returnCountdown resumeAfterCall];
+    if (_returnCountdown.isVisible) [self startReturnTimer];
+    [self updateCountdownLabel];
+    [self applyContent];
+    (void)wasAnswer;
   }
 }
 
@@ -2003,7 +2108,18 @@ static BOOL DBSameString(NSString *a, NSString *b) {
     _noticeChip.frame = CGRectMake(margin, headerY, chipWidth, 34);
     headerY += 42;
   }
-  _titleLabel.frame = CGRectMake(margin, headerY, MAX(0, headerRight - margin), 44);
+  CGFloat countdownWidth = _countdownLabel.hidden ? 0 : 74;
+  _titleLabel.frame = CGRectMake(margin, headerY,
+                                 MAX(0, headerRight - margin - countdownWidth), 44);
+  if (countdownWidth > 0) {
+    _countdownLabel.frame = CGRectMake(CGRectGetMaxX(_titleLabel.frame) + 6, headerY,
+                                       countdownWidth, 44);
+    // A comfortable target: the number is small but cancelling must be easy.
+    _countdownButton.frame = CGRectInset(_countdownLabel.frame, -10, -6);
+  } else {
+    _countdownLabel.frame = CGRectZero;
+    _countdownButton.frame = CGRectZero;
+  }
   headerY += 48;
 
   // The purpose slot keeps its height even while empty, so the layout never

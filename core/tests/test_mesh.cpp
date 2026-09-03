@@ -14,6 +14,7 @@
 
 #include "crdt/lww_map.h"
 #include "doctest.h"
+#include "test_env.h"
 #include "events/events.h"
 #include "mesh/mesh.h"
 #include "mesh/secure_channel.h"
@@ -369,23 +370,8 @@ size_t receivedMessageCount(const RawMeshPeer& peer, const std::string& type) {
 
 
 int pickPort() {
-  static std::mt19937 rng(static_cast<uint32_t>(::getpid()) * 2654435761u + 777u);
-  std::uniform_int_distribution<int> dist(40000, 60000);
-  for (int i = 0; i < 100; i++) {
-    int p = dist(rng);
-    int fd = ::socket(AF_INET, SOCK_STREAM, 0);
-    if (fd < 0) continue;
-    int yes = 1;
-    ::setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes));
-    sockaddr_in a{};
-    a.sin_family = AF_INET;
-    a.sin_port = htons(static_cast<uint16_t>(p));
-    a.sin_addr.s_addr = htonl(INADDR_ANY);
-    int ok = ::bind(fd, reinterpret_cast<sockaddr*>(&a), sizeof(a));
-    ::close(fd);
-    if (ok == 0) return p;
-  }
-  return 0;
+  // Ports come from one process-wide allocator; see core/tests/test_ports.h.
+  return db::testing::freeListenPort();
 }
 
 }  // namespace
@@ -2001,4 +1987,54 @@ TEST_CASE("udp_beacon: multicast smoke test sends without errors") {
   WARN_MESSAGE(beacon.sendErrorCount() == 0, "multicast send failed; environment may not support it");
   beacon.stop();
   loop.stop();
+}
+
+TEST_CASE("mesh: a dead peer that returns with restarted counters is accepted again") {
+  // Device finding: a station that had left and come back answered HTTP from every device while
+  // its peers still called it offline. An advertisement that does not move (epoch, sequence)
+  // forward is normally a duplicate or a replay and is ignored -- but a node that restarts with
+  // a lost epoch counter looks exactly like that, and stayed ignored for good.
+  Fleet f;
+  f.add(kIdA, "A", capsJson(10));
+  f.add(kIdB, "B", capsJson(9), {{}, true, /*epoch=*/7});
+  const std::vector<std::string> ids = {kIdA, kIdB};
+  REQUIRE(f.runUntil([&] { return f.mutualAlive(ids); }, 3000));
+  REQUIRE(f.runUntil([&] { return f.at(kIdA).peer(kIdB).hb_seq > 2; }, 3000));
+
+  f.net.killNode("B");
+  REQUIRE(f.runUntil([&] { return f.at(kIdA).peer(kIdB).status == "dead"; }, 3000));
+
+  // The same node id comes back with counters that restarted below what A remembers.
+  f.remove(kIdB);
+  f.add(kIdB, "B", capsJson(9), {{}, true, /*epoch=*/1});
+  REQUIRE(f.runUntil([&] { return f.at(kIdA).peer(kIdB).status == "alive"; }, 5000));
+  CHECK(f.at(kIdA).peer(kIdB).epoch == 1);
+  // One entry, not two: the returning node refreshes the record it already had.
+  size_t seen = 0;
+  for (const auto& peer : f.at(kIdA).mesh->peers())
+    if (peer.id == kIdB) seen++;
+  CHECK(seen == 1);
+  CHECK(f.mutualAlive(ids));
+}
+
+TEST_CASE("mesh: gossip about a partitioned peer never revives it") {
+  // The revival above is only for a node advertising on its own connection. A peer's last
+  // heartbeat keeps circulating in gossip long after it is gone, and trusting a relayed record
+  // would flip a partitioned node between dead and alive forever.
+  Fleet f;
+  f.add(kIdA, "A", capsJson(10));
+  f.add(kIdB, "B", capsJson(9));
+  f.add(kIdC, "C", capsJson(8));
+  const std::vector<std::string> ids = {kIdA, kIdB, kIdC};
+  REQUIRE(f.runUntil([&] { return f.mutualAlive(ids); }, 3000));
+
+  f.net.killNode("B");
+  REQUIRE(f.runUntil([&] { return f.at(kIdA).peer(kIdB).status == "dead"; }, 3000));
+  f.at(kIdA).alive_changes.clear();
+
+  // A and C keep gossiping, and B's last heartbeat is still in what they exchange.
+  f.run(4000);
+  CHECK(f.at(kIdA).peer(kIdB).status == "dead");
+  // Not one flap: a dead peer that is really gone stays dead.
+  CHECK(f.at(kIdA).alive_changes.empty());
 }

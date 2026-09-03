@@ -40,6 +40,10 @@ class VideoTrack {
 
   void push(const uint8_t* annexb, size_t len, bool key, int64_t ts_ms);
 
+  // A subscriber consumes the cached random-access point immediately, then asks the platform
+  // encoder for a fresh one. The shell polls and clears this edge with takeKeyframeRequest().
+  bool takeKeyframeRequest();
+
 
   void stop();
 
@@ -55,6 +59,7 @@ class VideoTrack {
     uint64_t keyframes = 0;
     uint64_t fragments = 0;       // fMP4 fragments published
     uint64_t dropped_forward = 0; // fragments a slow subscriber skipped past
+    uint64_t keyframe_requests = 0;
     uint32_t frame_interval_ms = 0;
     int64_t last_frame_ts_ms = 0;
   };
@@ -77,7 +82,10 @@ class VideoTrack {
    private:
     std::shared_ptr<State> st_;
     uint64_t generation_ = 0;
+    uint64_t subscribed_key_seq_ = 0;
     bool init_sent_ = false;
+    bool key_pending_ = true;
+    bool waiting_for_fresh_key_ = false;
     uint64_t last_frag_ = 0;
   };
   std::shared_ptr<Reader> subscribe();

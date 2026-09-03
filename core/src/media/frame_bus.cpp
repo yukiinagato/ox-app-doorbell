@@ -1,6 +1,8 @@
 
 #include "media/frame_bus.h"
 
+#include <algorithm>
+#include <chrono>
 #include <cstring>
 #include <vector>
 
@@ -18,6 +20,12 @@
 namespace db {
 
 namespace {
+
+int64_t steadyNowMs() {
+  return std::chrono::duration_cast<std::chrono::milliseconds>(
+             std::chrono::steady_clock::now().time_since_epoch())
+      .count();
+}
 
 inline uint8_t clamp8(int v) {
   return static_cast<uint8_t>(v < 0 ? 0 : (v > 255 ? 255 : v));
@@ -103,6 +111,8 @@ void appendBytes(void* ctx, void* data, int size) {
 
 }  // namespace
 
+FrameBus::~FrameBus() { setWarmCacheFps(0); }
+
 size_t rawFrameBytes(int format, int w, int h, int stride) {
   size_t s = static_cast<size_t>(stride);
   switch (format) {
@@ -131,6 +141,7 @@ void FrameBus::push(RawFrame&& f) {
   std::lock_guard<std::mutex> lk(mu_);
   latest_ = std::move(f);
   seq_++;
+  warm_cv_.notify_all();
 }
 
 Bytes FrameBus::latestJpeg() { return latestJpeg(nullptr); }
@@ -165,23 +176,86 @@ Bytes FrameBus::latestJpeg(int64_t* capture_ts_ms) {
 
   jpeg_cache_ = std::move(jpeg);
   encoded_seq_ = seq_;
+  encoded_capture_ts_ms_ = latest_.ts_ms;
+  encoded_at_steady_ms_ = steadyNowMs();
   encode_count_++;
   return jpeg_cache_;
 }
 
+Bytes FrameBus::previewJpeg(int64_t* capture_ts_ms) {
+  {
+    std::lock_guard<std::mutex> lk(mu_);
+    const int64_t age_ms = steadyNowMs() - encoded_at_steady_ms_;
+    if (!jpeg_cache_.empty() && encoded_at_steady_ms_ > 0 && age_ms >= 0 && age_ms <= 250) {
+      if (capture_ts_ms) *capture_ts_ms = encoded_capture_ts_ms_;
+      return jpeg_cache_;
+    }
+  }
+  return latestJpeg(capture_ts_ms);
+}
+
+void FrameBus::setWarmCacheFps(int fps) {
+  fps = std::max(0, std::min(fps, 15));
+  std::thread stopped;
+  {
+    std::lock_guard<std::mutex> lk(mu_);
+    warm_fps_ = fps;
+    if (fps > 0 && !warm_thread_.joinable()) {
+      warm_stop_ = false;
+      warm_thread_ = std::thread([this] {
+        auto next = std::chrono::steady_clock::now();
+        for (;;) {
+          int active_fps = 0;
+          {
+            std::unique_lock<std::mutex> lk(mu_);
+            warm_cv_.wait_until(lk, next, [this] {
+              return warm_stop_ || (warm_fps_ > 0 && seq_ != encoded_seq_);
+            });
+            if (warm_stop_) return;
+            active_fps = warm_fps_;
+          }
+          if (active_fps <= 0) continue;
+          const auto now = std::chrono::steady_clock::now();
+          if (now < next) {
+            std::this_thread::sleep_until(next);
+          }
+          latestJpeg();
+          next = std::chrono::steady_clock::now() +
+              std::chrono::milliseconds(1000 / active_fps);
+        }
+      });
+    } else if (fps == 0 && warm_thread_.joinable()) {
+      warm_stop_ = true;
+      warm_cv_.notify_all();
+      stopped = std::move(warm_thread_);
+    }
+  }
+  if (stopped.joinable()) stopped.join();
+}
+
 void FrameBus::setJpegParams(int quality, int max_width) {
-  std::lock_guard<std::mutex> lk(mu_);
-  if (quality < 1) quality = 1;
-  if (quality > 100) quality = 100;
-  if (quality_ != quality || max_width_ != max_width) encoded_seq_ = 0;
-  quality_ = quality;
-  max_width_ = max_width;
+  {
+    std::lock_guard<std::mutex> lk(mu_);
+    if (quality < 1) quality = 1;
+    if (quality > 100) quality = 100;
+    if (quality_ != quality || max_width_ != max_width) {
+      encoded_seq_ = 0;
+      encoded_at_steady_ms_ = 0;
+    }
+    quality_ = quality;
+    max_width_ = max_width;
+  }
+  warm_cv_.notify_all();
 }
 
 void FrameBus::setExternalEncoder(ExternalEncoder fn) {
-  std::lock_guard<std::mutex> lk(mu_);
-  external_ = std::move(fn);
-  encoded_seq_ = 0;
+  {
+    std::lock_guard<std::mutex> lk(mu_);
+    external_ = std::move(fn);
+    encoded_seq_ = 0;
+    encoded_at_steady_ms_ = 0;
+  }
+  warm_cv_.notify_all();
 }
 
 uint64_t FrameBus::frameCount() const {

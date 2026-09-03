@@ -84,6 +84,17 @@ final class CameraFeeder: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate
     }
 
     func stop() {
+        stop(waitUntilIdle: false)
+    }
+
+    /// Stops capture and waits for every queued sample-buffer callback to leave Core.
+    /// Call this before destroying Core; the ordinary stop path stays asynchronous so a camera
+    /// restart does not block the main thread on AVCaptureSession.
+    func stopAndWait() {
+        stop(waitUntilIdle: true)
+    }
+
+    private func stop(waitUntilIdle: Bool) {
         setAcceptingFrames(false)
         if let observer = runtimeErrorObserver {
             NotificationCenter.default.removeObserver(observer)
@@ -92,12 +103,17 @@ final class CameraFeeder: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate
         let s = session
         session = nil
         previewLayer = nil
-        queue.async { s?.stopRunning() }
+        if waitUntilIdle {
+            queue.sync { s?.stopRunning() }
+        } else {
+            queue.async { s?.stopRunning() }
+        }
         if s != nil { reportRuntime(active: false, state: "stopped") }
     }
 
     func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer,
                        from connection: AVCaptureConnection) {
+        guard isAcceptingFrames() else { return }
         guard let pb = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
         reportRuntime(active: true, state: "active")
         let tsMs = Int64(Date().timeIntervalSince1970 * 1000)
@@ -133,7 +149,7 @@ final class CameraFeeder: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate
             }
         }
         nv12.withUnsafeBufferPointer { p in
-            guard let base = p.baseAddress else { return }
+            guard isAcceptingFrames(), let base = p.baseAddress else { return }
             core.onCameraFrame(base, format: 1, width: Int32(w), height: Int32(h),
                                stride: Int32(w), tsMs: tsMs)
         }
@@ -160,5 +176,11 @@ final class CameraFeeder: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate
         runtimeLock.lock()
         acceptingFrames = value
         runtimeLock.unlock()
+    }
+
+    private func isAcceptingFrames() -> Bool {
+        runtimeLock.lock()
+        defer { runtimeLock.unlock() }
+        return acceptingFrames
     }
 }

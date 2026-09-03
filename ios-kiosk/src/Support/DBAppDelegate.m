@@ -7,13 +7,17 @@
 #import "../Core/DBTexts.h"
 #import "../Media/DBH264Player.h"
 #import "../Media/DBLowLatencyH264Player.h"
+#import "../Media/DBVtVideoView.h"
 #import "../Net/DBMjpegClient.h"
+#import "../Core/DBPairUri.h"
+#import "../Screens/DBPairingScreen.h"
 #import "../Screens/DBRouter.h"
 #import "../Screens/DBIncomingScreen.h"
 #import "DBWatchdog.h"
 #import "DBRecoveryClient.h"
 #import "DBSafeModeRecovery.h"
 #import "doorbell/doorbell.h"
+#import <math.h>
 
 void DBH264Dbg(NSString *fmt, ...);
 
@@ -231,6 +235,7 @@ static NSDictionary *DBShellCapabilities(DBBootConfig *boot, BOOL secureStoreAva
     @"ui_manifest_v1" : @(uiManifest),
     @"runtime_recovery_v1" : @YES,
     @"helper_policy_v1" : @YES,
+    @"frosted_glass_radius_v1" : @YES,
   };
   NSMutableDictionary *capabilities = [@{
     // A local route is not proof of Internet or broker reachability. Operational
@@ -256,6 +261,9 @@ static NSDictionary *DBShellCapabilities(DBBootConfig *boot, BOOL secureStoreAva
     @"microphone" : @YES,
     @"microphone_enabled" : @(boot.micEnabled),
     @"speaker" : @YES,
+    // Both keys: "camera" is what the cluster reads now, "camera_capture" is
+    // what older shells look for. The iPad 1 has no camera either way.
+    @"camera" : @NO,
     @"camera_capture" : @NO,
     @"mjpeg_http_preview" : @YES,
     @"mjpeg_https_preview" : @YES,
@@ -421,6 +429,8 @@ static BOOL DBNativeKioskHealthy(void) {
 - (void)publishRuntimeHealth:(NSTimer *)timer;
 - (void)armLocalSafeModeRecovery;
 - (void)handleMemoryPressureFromSource:(NSString *)source;
+- (BOOL)applyReplicatedIdentity;
+- (void)restartForIdentityChange;
 @end
 
 @implementation DBAppDelegate {
@@ -439,6 +449,7 @@ static BOOL DBNativeKioskHealthy(void) {
   NSString *_recoveryConfigSource;
   NSTimer *_nativeKioskProbeTimer;
   NSTimer *_runtimeHeartbeatTimer;
+  NSTimer *_screenshotTimer;
   BOOL _localSafeMode;
   BOOL _helperSafeModeActive;
   NSUInteger _safeModeRecoveryGeneration;
@@ -449,6 +460,7 @@ static BOOL DBNativeKioskHealthy(void) {
   NSUInteger _memoryPressureCount;
   NSString *_lastMemoryPressureSource;
   long long _lastMemoryPressureAtMs;
+  BOOL _identityRestartPending;
 }
 @synthesize window = _window;
 
@@ -495,6 +507,11 @@ static BOOL DBNativeKioskHealthy(void) {
   // Subscribe before Core starts so initial discovery and peer events are not lost.
   // DBCoreBridge delivers callbacks on the main queue after launch can complete.
   [_core addHandler:@"app" handler:^(NSDictionary *ev) { [router onCoreEvent:ev]; }];
+  __weak DBAppDelegate *identityDelegate = self;
+  [_core addHandler:@"identity-sync" handler:^(NSDictionary *ev) {
+    if ([[DBConfigUtil evStr:ev key:@"t"] isEqualToString:@"config_changed"])
+      [identityDelegate applyReplicatedIdentity];
+  }];
 
   // Keep the shell available in offline mode if Core cannot start.
   BOOL coreStarted = [_core startWithDataDir:[DBBootConfig dataDir] bootJson:_boot.rawJson];
@@ -543,6 +560,9 @@ static BOOL DBNativeKioskHealthy(void) {
   win.rootViewController = root;
   [win makeKeyAndVisible];
   self.window = win;
+
+  if ([_boot.role isEqualToString:@"indoor_panel"] && !_localSafeMode)
+    [DBVtVideoView prewarm];
 
   application.idleTimerDisabled = YES;  // keep-awake (kiosk)
 
@@ -617,6 +637,16 @@ static BOOL DBNativeKioskHealthy(void) {
   [_watchdog start];
   _runtimeHeartbeatTimer = [NSTimer scheduledTimerWithTimeInterval:10.0
       target:self selector:@selector(publishRuntimeHealth:) userInfo:nil repeats:YES];
+  [self startScreenshotHookIfEnabled];
+  if (_boot.debugScreenshots && [_boot.debugStartScreen length] > 0) {
+    // After the first layout, so the screen it opens is fully drawn.
+    DBRouter *startRouter = _router;
+    NSString *startScreen = [_boot.debugStartScreen copy];
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.0 * NSEC_PER_SEC)),
+                   dispatch_get_main_queue(), ^{
+      [startRouter showDebugStartScreen:startScreen];
+    });
+  }
   [self publishRuntimeHealth:nil];
   dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(300 * NSEC_PER_SEC)),
                  dispatch_get_main_queue(), ^{
@@ -630,6 +660,50 @@ static BOOL DBNativeKioskHealthy(void) {
                    dispatch_get_main_queue(), ^{ [self diagDump]; });
   }
   return YES;
+}
+
+// devices.<self>.name/role/door is remotely editable. Persist the replicated value before
+// crossing a clean process boundary so Core, the router, media and recovery all reopen with the
+// same operational identity.
+- (BOOL)applyReplicatedIdentity {
+  if (_identityRestartPending) return YES;
+  NSDictionary *node = [[_core status] objectForKey:@"node"];
+  NSString *nodeID = [node isKindOfClass:[NSDictionary class]]
+      ? [(NSDictionary *)node objectForKey:@"id"] : nil;
+  NSDictionary *devices = [[_core config] objectForKey:@"devices"];
+  NSDictionary *device = [devices isKindOfClass:[NSDictionary class]]
+      ? [(NSDictionary *)devices objectForKey:nodeID ?: @""] : nil;
+  if (![device isKindOfClass:[NSDictionary class]]) return NO;
+  NSString *role = [device objectForKey:@"role"];
+  if (![role isKindOfClass:[NSString class]] || ![DBBootConfig isValidRole:role]) return NO;
+  NSString *door = [role isEqualToString:@"door_station"] ? [device objectForKey:@"door"] : @"";
+  if (![door isKindOfClass:[NSString class]]) door = @"";
+  if ([role isEqualToString:@"door_station"] && ![DBBootConfig isValidDoor:door]) return NO;
+  NSString *name = [device objectForKey:@"name"];
+  if (![name isKindOfClass:[NSString class]]) name = _boot.name;
+  name = [name stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+  if ([name length] > 64) name = [name substringToIndex:64];
+  if ([name length] == 0) name = @"doorbell";
+  if ([name isEqualToString:_boot.name] && [role isEqualToString:_boot.role] &&
+      [door isEqualToString:_boot.door])
+    return NO;
+  if (![DBBootConfig persistSetupName:name role:role door:door]) {
+    NSLog(@"[doorbell] replicated identity could not be persisted");
+    return NO;
+  }
+  _identityRestartPending = YES;
+  dispatch_async(dispatch_get_main_queue(), ^{ [self restartForIdentityChange]; });
+  return YES;
+}
+
+- (void)restartForIdentityChange {
+  if (!_identityRestartPending) return;
+  [@"identity_change\n" writeToFile:DBRecoveryMaintenanceMarkerPath atomically:YES
+                            encoding:NSUTF8StringEncoding error:NULL];
+  BOOL supervised = _recovery.helperSupervising;
+  DBMarkCleanExit();
+  [_core stop];
+  [DBWatchdog restartForMaintenanceWithExternalSupervisor:supervised];
 }
 
 // The kiosk's local safe mode disables every H.264 strategy, so a latch that
@@ -690,6 +764,9 @@ static BOOL DBNativeKioskHealthy(void) {
     return;
   [_safeModeRecoveryTimer invalidate];
   _safeModeRecoveryTimer = nil;
+  // The screenshot hook is a boot.json debug opt-in, not part of recovery. It
+  // used to be torn down here, so remote verification stopped working at the
+  // exact moment the panel became healthy.
   DBMarkHealthyRuntime();
   _localSafeMode = NO;
   _safeModeEnteredAt = 0;
@@ -729,6 +806,73 @@ static BOOL DBNativeKioskHealthy(void) {
   window.rootViewController = setup;
   [window makeKeyAndVisible];
   self.window = window;
+}
+
+// iOS 5 has no screencap, so remote verification needs the app to draw itself.
+// The poll exists only when boot.json opts in, so an ordinary install pays
+// nothing: no timer, no stat, no file.
+// The rotation the root view controller applies for an interface orientation.
+// The screenshot has to undo exactly this to come out upright.
+static CGFloat DBRotationForInterfaceOrientation(UIInterfaceOrientation orientation) {
+  switch (orientation) {
+    case UIInterfaceOrientationPortraitUpsideDown: return (CGFloat)M_PI;
+    case UIInterfaceOrientationLandscapeLeft: return (CGFloat)(-M_PI_2);
+    case UIInterfaceOrientationLandscapeRight: return (CGFloat)M_PI_2;
+    default: return 0;
+  }
+}
+
+static NSString *const DBScreenshotRequestPath =
+    @"/var/mobile/Documents/screenshot.request";
+static NSString *const DBScreenshotOutputPath = @"/var/mobile/Documents/screenshot.png";
+
+- (void)startScreenshotHookIfEnabled {
+  if (!_boot.debugScreenshots || _screenshotTimer != nil) return;
+  NSLog(@"[doorbell][debug] screenshot hook armed at %@", DBScreenshotRequestPath);
+  _screenshotTimer = [NSTimer scheduledTimerWithTimeInterval:1.0 target:self
+                                                    selector:@selector(pollScreenshotRequest:)
+                                                    userInfo:nil repeats:YES];
+}
+
+- (void)pollScreenshotRequest:(NSTimer *)timer {
+  (void)timer;
+  NSFileManager *files = [NSFileManager defaultManager];
+  if (![files fileExistsAtPath:DBScreenshotRequestPath]) return;
+  // Remove the request first: a render that throws must not leave a request
+  // that fires again every second.
+  [files removeItemAtPath:DBScreenshotRequestPath error:NULL];
+  UIWindow *window = self.window ?: [[UIApplication sharedApplication] keyWindow];
+  if (window == nil) return;
+  CGSize size = window.bounds.size;
+  if (size.width <= 0 || size.height <= 0) return;
+  // On iOS 5 the window keeps the device's native portrait geometry and the
+  // root view controller carries the rotation, so rendering the window layer
+  // straight into a portrait context produces a landscape screen lying on its
+  // side. Draw into an upright canvas and undo the interface rotation instead.
+  UIInterfaceOrientation orientation =
+      [[UIApplication sharedApplication] statusBarOrientation];
+  CGFloat radians = DBRotationForInterfaceOrientation(orientation);
+  BOOL sideways = UIInterfaceOrientationIsLandscape(orientation);
+  CGSize canvas = sideways ? CGSizeMake(size.height, size.width) : size;
+  UIGraphicsBeginImageContextWithOptions(canvas, YES, 0.0);
+  CGContextRef ctx = UIGraphicsGetCurrentContext();
+  if (ctx != NULL) {
+    // Both rectangles share a centre; rotating about it is all the correction
+    // a quarter turn needs, and it keeps the portrait path pixel-identical.
+    CGContextTranslateCTM(ctx, canvas.width / 2, canvas.height / 2);
+    CGContextRotateCTM(ctx, -radians);
+    CGContextTranslateCTM(ctx, -size.width / 2, -size.height / 2);
+    [window.layer renderInContext:ctx];
+  }
+  UIImage *shot = UIGraphicsGetImageFromCurrentImageContext();
+  UIGraphicsEndImageContext();
+  if (shot == nil) return;
+  NSData *png = UIImagePNGRepresentation(shot);
+  if (png == nil) return;
+  [png writeToFile:DBScreenshotOutputPath atomically:YES];
+  NSLog(@"[doorbell][debug] screenshot written (%lux%lu, orientation %ld, %lu bytes)",
+        (unsigned long)canvas.width, (unsigned long)canvas.height, (long)orientation,
+        (unsigned long)[png length]);
 }
 
 - (void)restartIntoBootstrapSetup {
@@ -921,6 +1065,7 @@ static BOOL DBNativeKioskHealthy(void) {
   _lastMemoryPressureSource = [boundedSource copy];
   _lastMemoryPressureAtMs = wallSeconds > 0 ? (long long)(wallSeconds * 1000.0) : 0;
   [_router releaseMediaForMemoryPressure];
+  [DBVtVideoView purgeWarmView];
   [_h264Test stop];
   _h264Test = nil;
   [_vtTest stop];
@@ -957,9 +1102,28 @@ static BOOL DBNativeKioskHealthy(void) {
          annotation:(id)annotation {
   (void)application; (void)source; (void)annotation;
   NSString *host = [url host] ?: @"";
-  if ([host length] == 0) host = [[url path] stringByTrimmingCharactersInSet:
-                                     [NSCharacterSet characterSetWithCharactersInString:@"/"]];
-  NSLog(@"[doorbell] openURL: %@ → host='%@'", url, host);
+  if ([host length] == 0) {
+    // A bare "doorbell://" has no path either, and messaging nil here used to
+    // put a literal (null) in the log.
+    host = [[url path] stringByTrimmingCharactersInSet:
+               [NSCharacterSet characterSetWithCharactersInString:@"/"]] ?: @"";
+  }
+  // ASCII only: ASL mangles a multi-byte arrow into one dash per character.
+  NSLog(@"[doorbell] openURL: %@ -> host='%@'", url, host);
+  if ([host isEqualToString:@"pair"]) {
+    // A scanned invitation, or one opened from another app. Core validates it
+    // when it can, because it checks the expiry against corrected cluster
+    // time; the shell parser is the fallback before core has started.
+    NSString *text = [url absoluteString];
+    DBPairUri *invitation = [DBPairUri fromCoreDocument:[_core parsePairUri:text]];
+    if (invitation == nil) {
+      invitation = [DBPairUri parse:text
+                               nowS:(long long)[[NSDate date] timeIntervalSince1970]];
+    }
+    [_router showPairing];
+    [[_router pairing] presentInvitation:invitation];
+    return YES;
+  }
   if ([host isEqualToString:@"pin"]) {
     [_router requestPinThen:nil];
     return YES;

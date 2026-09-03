@@ -131,7 +131,7 @@ static NSArray *DBCommonTimeZones(void) {
   _table = [[UITableView alloc] initWithFrame:CGRectZero style:UITableViewStyleGrouped];
   _table.dataSource = self;
   _table.delegate = self;
-  _table.rowHeight = 68;  // Large rows: this is a wall panel, not a phone.
+  _table.rowHeight = 76;  // Large rows: this is a wall panel, not a phone.
   [self addSubview:_table];
 
   _qr = [[DBAdminQrView alloc] initWithFrame:CGRectZero];
@@ -820,9 +820,9 @@ static NSArray *DBCommonTimeZones(void) {
   }
   DBSettingsRow *row = [self rowAt:indexPath];
   cell.textLabel.text = row.title;
-  cell.textLabel.font = [UIFont systemFontOfSize:20];
+  cell.textLabel.font = [UIFont systemFontOfSize:23];
   cell.textLabel.numberOfLines = 2;
-  cell.detailTextLabel.font = [UIFont systemFontOfSize:17];
+  cell.detailTextLabel.font = [UIFont systemFontOfSize:20];
   cell.detailTextLabel.text = row.webOnly && [row.value length] == 0
       ? [_texts ts:@"settings.web_only"] : row.value;
   cell.textLabel.textColor = _palette.ink;

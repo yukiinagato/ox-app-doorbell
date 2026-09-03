@@ -190,12 +190,26 @@ var AdminLogic = (function () {
   }
 
 
+  function validDoorId(value) {
+    return /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/.test(String(value || ""));
+  }
+
+  function defaultDoorId(deviceId) {
+    var token = String(deviceId || "").replace(/[^A-Za-z0-9]/g, "").slice(0, 8);
+    return "door-" + (token || "device");
+  }
+
+
 
   function deviceEntries(id, f, existing) {
     var base = "devices." + id, e = [];
+    var role = String(f.role || "");
+    if (role !== "door_station" && role !== "indoor_panel") throw new Error("role_invalid");
+    var door = role === "door_station" ? String(f.door || "").trim() : "";
+    if (role === "door_station" && !validDoorId(door)) throw new Error("door_required");
     e.push({ key: base + ".name", value: String(f.name || "") });
-    e.push({ key: base + ".role", value: f.role || "door_station" });
-    e.push({ key: base + ".door", value: f.door || "" });
+    e.push({ key: base + ".role", value: role });
+    e.push({ key: base + ".door", value: door });
     e.push({ key: base + ".local.ui_lang", value: f.ui_lang || "ja" });
     e.push({ key: base + ".local.video.playback",
              value: f.video_playback || "low_latency" });
@@ -1140,8 +1154,9 @@ var AdminLogic = (function () {
     var servers = ntpServerList(f.servers);
     if (TIME_ZONES.indexOf(String(f.zone)) < 0) throw new Error("zone");
     if (!servers) throw new Error("servers");
-    var interval = Math.round(num(f.interval_s, 900));
-    if (interval < 60 || interval > 86400) throw new Error("interval_s");
+    /* A measured correction is stable for days, so the floor is an hour and the ceiling a week. */
+    var interval = Math.round(num(f.interval_s, 86400));
+    if (interval < 3600 || interval > 604800) throw new Error("interval_s");
     return [{ key: "time.zone", value: String(f.zone) },
             { key: "time.ntp.enabled", value: !!f.ntp_enabled },
             { key: "time.ntp.servers", value: servers },
@@ -1166,7 +1181,10 @@ var AdminLogic = (function () {
       lastSyncMs: num(time.last_sync_ms, 0),
       rttMs: num(time.rtt_ms, 0),
       server: typeof time.server === "string" ? time.server : "",
-      intervalS: num(time.interval_s, 900),
+      intervalS: num(time.interval_s, 86400),
+      /* Seconds until the next attempt while the service is backing off after a
+       * failure; zero whenever the ordinary interval applies. */
+      retryInS: num(time.retry_in_s, 0),
       syncing: time.syncing === true,
       errorKey: typeof time.err === "string" && errors[time.err] ? errors[time.err] : "",
       localIso: isObj(time.local) && typeof time.local.iso === "string" ? time.local.iso : ""
@@ -1395,8 +1413,15 @@ var AdminLogic = (function () {
              b: Math.round(channel(h - 1 / 3) * 255) };
   }
 
-  /* Y >= 0.5 means the background is light, so the ink on it must be dark. */
-  function autoInk(background) { return luminance(background) >= 0.5 ? "dark" : "light"; }
+  /* The ink token that reads better here: whichever of dark or light has the higher WCAG
+   * contrast against the background. The two ratios cross at Y = 0.1791, not at mid luminance --
+   * splitting at 0.5 put light text on a light grey photograph. Mirrors db::color::autoInk. */
+  function autoInk(background) {
+    var y = luminance(background);
+    var darkInk = (y + 0.05) / 0.05;
+    var lightInk = 1.05 / (y + 0.05);
+    return darkInk >= lightInk ? "dark" : "light";
+  }
 
   /* Mirrors db::color::autoAccent so the Theme tab can preview a background the operator has
    * not saved yet. Core recomputes and republishes the same value once the write lands. */
@@ -1441,12 +1466,21 @@ var AdminLogic = (function () {
     var background = colorOk(backgroundHex) ? backgroundHex :
       (isObj(theme.auto_background) && colorOk(theme.auto_background.color)
         ? theme.auto_background.color : "#101418");
-    var usePublished = !colorOk(backgroundHex) && colorOk(published.call_button);
+    var reported = isObj(theme.auto_background) ? theme.auto_background : {};
+    var source = reported.source === "image" || reported.source === "image_unsampled"
+      ? reported.source : "color";
+    // When core says it could not sample the configured image, its accent came from the flat
+    // theme colour rather than from the picture, so it is not worth preferring over a local
+    // computation. The tab says so either way.
+    var usePublished = !colorOk(backgroundHex) && colorOk(published.call_button) &&
+      source !== "image_unsampled";
     var button = usePublished ? published.call_button : autoAccent(background, "#FFFFFF");
     return {
       background: background,
-      source: isObj(theme.auto_background) && theme.auto_background.source === "image"
-        ? "image" : "color",
+      source: source,
+      unsampled: source === "image_unsampled",
+      reason: source === "image_unsampled" && typeof reported.reason === "string"
+        ? reported.reason : "",
       ink: autoInk(background),
       callButton: button,
       callButtonInk: autoInk(button),
@@ -1486,6 +1520,103 @@ var AdminLogic = (function () {
     };
   }
 
+  var BACKDROP_DEFAULTS = { enabled: true, color: "#000000", opacity: 62 };
+  var GLASS_BLUR_DEFAULT = 32;
+
+  /* Opacity as core validates it: a whole number 0-100. Throws rather than silently falling back
+   * so a blank or mistyped field is reported instead of quietly becoming the default. */
+  function backdropOpacityValue(raw) {
+    // Number("") is zero, which would silently turn a blank field into "no dimming at all".
+    if (raw === "" || raw === null || raw === undefined) throw new Error("backdrop_opacity");
+    var value = Math.round(Number(raw));
+    if (!isFinite(value) || value < 0 || value > 100) throw new Error("backdrop_opacity");
+    return value;
+  }
+
+  function glassBlurValue(raw) {
+    if (raw === "" || raw === null || raw === undefined) throw new Error("glass_blur_radius");
+    var value = Math.round(Number(raw));
+    if (!isFinite(value) || value < 0 || value > 40) throw new Error("glass_blur_radius");
+    return value;
+  }
+
+  function glassBlurModel(cfg, deviceId) {
+    cfg = isObj(cfg) ? cfg : {};
+    var display = isObj(cfg.display) ? cfg.display : {};
+    var theme = isObj(display.theme) ? display.theme : {};
+    var cluster = isObj(theme.glass) ? theme.glass : {};
+    var device = {};
+    if (deviceId && isObj(cfg.devices) && isObj(cfg.devices[deviceId])) {
+      var local = isObj(cfg.devices[deviceId].local) ? cfg.devices[deviceId].local : {};
+      var localTheme = isObj(local.theme) ? local.theme : {};
+      if (isObj(localTheme.glass)) device = localTheme.glass;
+    }
+    var ownRadius = device.blur_radius;
+    var clusterRadius = cluster.blur_radius;
+    var fromDevice = typeof ownRadius === "number";
+    var fromAdmin = !fromDevice && typeof clusterRadius === "number";
+    var radius = fromDevice ? ownRadius : (fromAdmin ? clusterRadius : GLASS_BLUR_DEFAULT);
+    if (!isFinite(radius) || Math.round(radius) !== radius || radius < 0 || radius > 40)
+      radius = GLASS_BLUR_DEFAULT;
+    return { radius: radius, source: fromDevice ? "device" : (fromAdmin ? "admin" : "default"),
+             overridden: fromDevice };
+  }
+
+  /* The semi-transparent layer a shell composites between the background image and everything
+   * drawn on it. Mirrors core: each leaf resolves on its own -- device override, then the
+   * cluster setting, then the built-in default -- and source names the strongest origin. */
+  function backdropModel(cfg, deviceId) {
+    cfg = isObj(cfg) ? cfg : {};
+    var display = isObj(cfg.display) ? cfg.display : {};
+    var theme = isObj(display.theme) ? display.theme : {};
+    var cluster = isObj(theme.backdrop) ? theme.backdrop : {};
+    var device = {};
+    if (deviceId && isObj(cfg.devices) && isObj(cfg.devices[deviceId])) {
+      var local = isObj(cfg.devices[deviceId].local) ? cfg.devices[deviceId].local : {};
+      var localTheme = isObj(local.theme) ? local.theme : {};
+      if (isObj(localTheme.backdrop)) device = localTheme.backdrop;
+    }
+    var fromDevice = false, fromAdmin = false;
+    function set(container, name) {
+      return isObj(container) && container[name] !== undefined && container[name] !== null;
+    }
+    function leaf(name) {
+      if (set(device, name)) { fromDevice = true; return device[name]; }
+      if (set(cluster, name)) { fromAdmin = true; return cluster[name]; }
+      return undefined;
+    }
+    var enabled = leaf("enabled");
+    var color = leaf("color");
+    var opacity = leaf("opacity");
+    var bounded = typeof opacity === "number" && isFinite(opacity) &&
+      Math.round(opacity) === opacity && opacity >= 0 && opacity <= 100;
+    return {
+      enabled: typeof enabled === "boolean" ? enabled : BACKDROP_DEFAULTS.enabled,
+      color: colorOk(color) ? String(color).toUpperCase() : BACKDROP_DEFAULTS.color,
+      opacity: bounded ? opacity : BACKDROP_DEFAULTS.opacity,
+      source: fromDevice ? "device" : (fromAdmin ? "admin" : "default"),
+      /* True where this device carries its own value, so the sheet can show what it overrides. */
+      overridden: { enabled: set(device, "enabled"), color: set(device, "color"),
+                    opacity: set(device, "opacity") }
+    };
+  }
+
+  /* What core publishes, so the tab shows the cluster's answer rather than only its own guess. */
+  function backdropStatusModel(status) {
+    var theme = isObj(status) && isObj(status.display) && isObj(status.display.theme)
+      ? status.display.theme : {};
+    var backdrop = isObj(theme.backdrop) ? theme.backdrop : {};
+    return {
+      enabled: backdrop.enabled !== false,
+      color: colorOk(backdrop.color) ? String(backdrop.color).toUpperCase()
+                                     : BACKDROP_DEFAULTS.color,
+      opacity: typeof backdrop.opacity === "number" ? backdrop.opacity
+                                                    : BACKDROP_DEFAULTS.opacity,
+      source: backdrop.source === "device" || backdrop.source === "admin"
+        ? backdrop.source : "default"
+    };
+  }
+
   /* Ink and call-button overrides live in the same theme object as the background, so they are
    * written through one entry. An empty value deletes the override and returns the region to
    * automatic rather than storing a colour that happens to match. */
@@ -1501,6 +1632,25 @@ var AdminLogic = (function () {
     }
     if (hasOwnKeys(ink)) value.ink_override = ink;
     else delete value.ink_override;
+    // The darkening layer rides in the same object. A device scope stores only the leaves it
+    // really overrides, so clearing one returns it to the cluster value instead of pinning
+    // today's cluster value onto this device for ever.
+    if (f.backdrop === null) {
+      delete value.backdrop;
+    } else if (isObj(f.backdrop)) {
+      var backdrop = {};
+      if (typeof f.backdrop.enabled === "boolean") backdrop.enabled = f.backdrop.enabled;
+      if (colorOk(f.backdrop.color)) backdrop.color = String(f.backdrop.color).toUpperCase();
+      if (f.backdrop.opacity !== undefined)
+        backdrop.opacity = backdropOpacityValue(f.backdrop.opacity);
+      if (hasOwnKeys(backdrop)) value.backdrop = backdrop;
+      else delete value.backdrop;
+    }
+    if (f.glass === null) {
+      delete value.glass;
+    } else if (isObj(f.glass)) {
+      value.glass = { blur_radius: glassBlurValue(f.glass.blur_radius) };
+    }
     // Never write back what core computed; those fields are read-only.
     delete value.auto_ink;
     delete value.auto_accent;
@@ -1508,6 +1658,52 @@ var AdminLogic = (function () {
     delete value.call_button_ink;
     if (!hasOwnKeys(value)) return { entries: [], dels: [key] };
     return { entries: [{ key: key, value: value }], dels: [] };
+  }
+
+  var CALL_RETURN_DEFAULT = 60;
+  var CALL_RETURN_MIN = 5;
+  var CALL_RETURN_MAX = 600;
+
+  /* Seconds the incoming-call page counts down before an indoor panel goes back to its home
+   * page. Mirrors core: a per-device override wins over the cluster default. */
+  function callReturnSeconds(cfg, deviceId) {
+    cfg = isObj(cfg) ? cfg : {};
+    var device = isObj(cfg.devices) ? cfg.devices[deviceId] : null;
+    var local = isObj(device) && isObj(device.local) ? device.local : {};
+    var override = isObj(local.call) ? local.call.return_s : undefined;
+    var cluster = isObj(cfg.call) && isObj(cfg.call.indoor) ? cfg.call.indoor.return_s
+                                                            : undefined;
+    var value = typeof override === "number" ? override :
+                (typeof cluster === "number" ? cluster : CALL_RETURN_DEFAULT);
+    var rounded = Math.round(num(value, CALL_RETURN_DEFAULT));
+    if (!(rounded >= CALL_RETURN_MIN)) rounded = CALL_RETURN_MIN;
+    if (rounded > CALL_RETURN_MAX) rounded = CALL_RETURN_MAX;
+    return {
+      seconds: rounded,
+      source: typeof override === "number" ? "device" :
+              (typeof cluster === "number" ? "cluster" : "default")
+    };
+  }
+
+  // A blank or unparseable box is an error the operator sees, not a silent fall back to the
+  // default: clearing the field and saving must not quietly change the setting.
+  function callReturnValue(seconds) {
+    var parsed = parseFloat(seconds);
+    if (isNaN(parsed)) throw new Error("call.return_s");
+    var value = Math.round(parsed);
+    if (!(value >= CALL_RETURN_MIN) || value > CALL_RETURN_MAX) throw new Error("call.return_s");
+    return value;
+  }
+
+  function callReturnEntries(seconds) {
+    return [{ key: "call.indoor.return_s", value: callReturnValue(seconds) }];
+  }
+
+  /* Inheriting again deletes the leaf rather than writing the cluster value into the device. */
+  function deviceCallReturnEntries(id, f) {
+    var key = "devices." + id + ".local.call.return_s";
+    if (f.inherit) return { entries: [], dels: [key] };
+    return { entries: [{ key: key, value: callReturnValue(f.seconds) }], dels: [] };
   }
 
   var NOTICE_PRESET_MAX = 8;
@@ -1556,6 +1752,37 @@ var AdminLogic = (function () {
     var wrapped = noticeModel("global", { global: { notice: global } }, nowMs);
     wrapped.scope = wrapped.active ? "global" : "none";
     return wrapped;
+  }
+
+  /* Every door the administrator can act on: the configured ones, then any door a live door
+   * station is serving that has no entry yet. Core reports the second kind with
+   * configured:false so an installation predating door seeding still shows its tiles. */
+  function doorRows(cfg, status) {
+    var configured = isObj(cfg) && isObj(cfg.doors) ? cfg.doors : {};
+    var reported = isObj(status) && isObj(status.doors) ? status.doors : {};
+    var rows = [], seen = {}, id;
+    for (id in configured) {
+      if (!own(configured, id)) continue;
+      seen[id] = true;
+      rows.push({ id: id, configured: true,
+                  label: labelOfDoor(configured[id], id, reported[id]) });
+    }
+    for (id in reported) {
+      if (!own(reported, id) || seen[id]) continue;
+      if (reported[id] && reported[id].configured === true) continue;
+      rows.push({ id: id, configured: false,
+                  label: typeof reported[id].label === "string" && reported[id].label
+                    ? reported[id].label : id });
+    }
+    return rows;
+  }
+
+  function labelOfDoor(entry, id, reported) {
+    var label = labelOf(entry, "ja", "");
+    if (label) return label;
+    if (isObj(reported) && typeof reported.label === "string" && reported.label)
+      return reported.label;
+    return id;
   }
 
   /* doors.<id>.unlock.show_button is a three-way choice: leave it to core (show the control when
@@ -1703,13 +1930,23 @@ var AdminLogic = (function () {
 
 
   function themeEntries(scope, f, existing) {
-    var key = themeKey(scope), v = editableClone(existing);
+    var key = themeKey(scope), v = editableClone(existing), entries = [], dels = [];
     if (!scope || f.color_on) v.bg_color = f.bg_color || "#101418";
     else delete v.bg_color;
-    if (!scope || f.image_on) v.bg_image = f.bg_image || null;
-    else delete v.bg_image;
-    if (!hasOwnKeys(v)) return { entries: [], dels: [key] };
-    return { entries: [{ key: key, value: v }], dels: [] };
+    // bg_image may already exist as its own CRDT leaf. Rewriting only the parent object cannot
+    // cover that leaf during materialization, so mutate the leaf explicitly when selecting
+    // "No background image" or returning a device to the cluster default.
+    delete v.bg_image;
+    if (!scope || f.image_on) {
+      if (f.bg_image) entries.push({ key: key + ".bg_image", value: f.bg_image });
+      else if (scope) entries.push({ key: key + ".bg_image", value: null });
+      else dels.push(key + ".bg_image");
+    } else {
+      dels.push(key + ".bg_image");
+    }
+    if (hasOwnKeys(v)) entries.unshift({ key: key, value: v });
+    else if (!entries.length) dels.unshift(key);
+    return { entries: entries, dels: dels };
   }
 
 
@@ -2023,6 +2260,9 @@ var AdminLogic = (function () {
         active: tokenActive,
         pin: tokenActive ? String(token.pin || "") : "",
         host: String(token.host || self.addr || ""),
+        // Core defines the QR payload (doorbell://pair?...) so a scanning device opens straight
+        // into the join flow. The page renders whatever core published and never builds it.
+        uri: tokenActive ? String(token.uri || "") : "",
         expires_s: tokenActive ? Math.max(0, Math.round(num(token.expires_s, 0))) : 0,
         attemptsLeft: tokenActive ? Math.max(0, Math.round(num(token.attempts_left, 0))) : 0
       },
@@ -2326,7 +2566,9 @@ var AdminLogic = (function () {
     parseList: parseList, parseChatIds: parseChatIds, labelObj: labelObj, labelOf: labelOf,
     buildingEntries: buildingEntries, doorEntries: doorEntries,
     quickReplyEntries: quickReplyEntries, reorderEntries: reorderEntries,
-    householdEntries: householdEntries, deviceEntries: deviceEntries, ruleEntries: ruleEntries,
+    householdEntries: householdEntries, validDoorId: validDoorId,
+    defaultDoorId: defaultDoorId,
+    deviceEntries: deviceEntries, ruleEntries: ruleEntries,
     RULE_ACTION_TYPES: RULE_ACTION_TYPES, ALERT_CHANNELS: ALERT_CHANNELS,
     normalizeRuleEditor: normalizeRuleEditor, mergeRuleEditor: mergeRuleEditor,
     effectiveAlertChannels: effectiveAlertChannels,
@@ -2363,9 +2605,18 @@ var AdminLogic = (function () {
     autoInk: autoInk, autoAccent: autoAccent, themeAutoModel: themeAutoModel,
     appearanceEntries: appearanceEntries, appearanceModel: appearanceModel,
     themeColorEntries: themeColorEntries,
+    backdropModel: backdropModel, backdropStatusModel: backdropStatusModel,
+    backdropOpacityValue: backdropOpacityValue,
+    BACKDROP_DEFAULTS: BACKDROP_DEFAULTS,
+    glassBlurValue: glassBlurValue, glassBlurModel: glassBlurModel,
+    GLASS_BLUR_DEFAULT: GLASS_BLUR_DEFAULT,
     NOTICE_PRESET_MAX: NOTICE_PRESET_MAX, noticePresetEntries: noticePresetEntries,
     noticePresetList: noticePresetList, effectiveNoticeModel: effectiveNoticeModel,
     doorUnlockEntries: doorUnlockEntries, doorUnlockModel: doorUnlockModel,
+    doorRows: doorRows,
+    CALL_RETURN_DEFAULT: CALL_RETURN_DEFAULT, CALL_RETURN_MIN: CALL_RETURN_MIN,
+    CALL_RETURN_MAX: CALL_RETURN_MAX, callReturnSeconds: callReturnSeconds,
+    callReturnEntries: callReturnEntries, deviceCallReturnEntries: deviceCallReturnEntries,
     writeWarnings: writeWarnings,
     webSosEntries: webSosEntries, runtimeHealthRows: runtimeHealthRows,
     flattenConfig: flattenConfig, applyKey: applyKey, deleteKey: deleteKey,
@@ -2544,12 +2795,21 @@ if (typeof document !== "undefined") (function () {
               connected_count: MOCK_STATUS.peers.length - 1 },
       token: { active: active, expires_s: active ? Math.round((MOCK_PAIR.tokenUntil - now) / 1000) : 0,
                attempts_left: active ? MOCK_PAIR.tokenAttempts : 0,
-               host: "10.10.38.9:47172", pin: active ? MOCK_PAIR.tokenPin : undefined },
+               host: "10.10.38.9:47172", pin: active ? MOCK_PAIR.tokenPin : undefined,
+               uri: active ? mockPairUri() : undefined },
       pending: { pairing_mode: MOCK_PAIR.modeUntil > now,
                  pairing_mode_left_s: Math.max(0, Math.round((MOCK_PAIR.modeUntil - now) / 1000)),
                  auto_added_count: MOCK_PAIR.autoAdded,
                  devices: paired ? devices : [] }
     };
+  }
+
+  // Core builds this for real; the mock mirrors the format so the card renders standalone.
+  function mockPairUri() {
+    return "doorbell://pair?host=" + encodeURIComponent("10.10.38.9:47172") +
+           "&pin=" + MOCK_PAIR.tokenPin +
+           "&exp=" + Math.round((MOCK_PAIR.tokenUntil || Date.now() + 90000) / 1000) +
+           "&cluster=" + encodeURIComponent("京阪ハウス");
   }
 
   function mockPairMintToken() {
@@ -2603,7 +2863,8 @@ if (typeof document !== "undefined") (function () {
           call_sound_loop: false, button_sound: "button_click",
           update_sound: "indoor_update", ringtone: "school_chime" },
     i18n_overrides: { en: { "idle.touch_to_call": "Touch to call" } },
-    display: { theme: { bg_color: "#12202c", bg_image: MOCK_IMG }, brightness: 70,
+    display: { theme: { bg_color: "#12202c", bg_image: MOCK_IMG,
+                        backdrop: { opacity: 55 } }, brightness: 70,
                appearance: "auto_schedule",
                appearance_schedule: { dark_from: "19:00", light_from: "06:30" },
                screensaver_after_s: 120, pixel_shift_s: 300 },
@@ -2647,7 +2908,7 @@ if (typeof document !== "undefined") (function () {
     panel: { token_refs: ["secret:panel.access.mock"] },
     time: { zone: "Asia/Tokyo",
             ntp: { enabled: true, servers: ["ntp.nict.jp", "time.google.com"],
-                   interval_s: 900 } },
+                   interval_s: 86400 } },
     notice: { presets: [{ id: "np_absent", text: "不在です。荷物は玄関前へお願いします" },
                         { id: "np_back_door", text: "裏口へお回りください" },
                         { id: "np_construction", text: "工事中です。足元にご注意ください" }] },
@@ -2666,7 +2927,8 @@ if (typeof document !== "undefined") (function () {
             power: { battery_pct: -1, charging: false, mains: true } },
     time: { zone: "Asia/Tokyo", zone_known: true, source: "ntp", enabled: true, ok: true,
             offset_ms: 412, measured_offset_ms: 412, last_sync_ms: Date.now() - 120000,
-            rtt_ms: 18, server: "ntp.nict.jp", interval_s: 900, offset_min: 540,
+            rtt_ms: 18, server: "ntp.nict.jp", interval_s: 86400, retry_in_s: 0,
+            offset_min: 540,
             syncing: false,
             local: { iso: "2026-09-02T21:30:00+09:00", date: "2026-09-02", hh: 21, mm: 30,
                      ss: 0, weekday: "wed", weekday_num: 3, offset_min: 540, dst: false,
@@ -2676,20 +2938,30 @@ if (typeof document !== "undefined") (function () {
                              follow_system: false,
                              schedule: { dark_from: "19:00", light_from: "06:30" } },
                theme: { bg_color: "#12202c",
-                        auto_background: { color: "#12202c", source: "color" },
+                        // The Moto's real state before the fix: an image is configured but was
+                        // never sampled, so the ink must not be taken from the flat colour.
+                        auto_background: { color: "#12202c", source: "image_unsampled",
+                                           reason: "too_large" },
                         auto_ink: { clock: "light", date: "light", status_line: "light",
                                     hint: "light", tile_label: "light", footer: "light",
                                     notice: "light" },
                         auto_accent: { call_button: "#7F5E3D", call_button_ink: "light" },
                         ink_override: {},
-                        call_button_bg: "#7F5E3D", call_button_ink: "light" } },
+                        call_button_bg: "#7F5E3D", call_button_ink: "light",
+                        backdrop: { enabled: true, color: "#000000", opacity: 62,
+                                    source: "default" } } },
     doors: {
-      d_front: { label: "Front door", notice: null,
+      d_front: { label: "Front door", configured: true, notice: null,
                  unlock: { configured: true, command: "unlock", show_button: true,
                            source: "default" } },
-      d_back: { label: "Back door", notice: null,
+      d_back: { label: "Back door", configured: true, notice: null,
                 unlock: { configured: false, command: "", show_button: false,
-                          source: "default" } } },
+                          source: "default" } },
+      // A door a live station serves that configuration has never heard of: the tile still
+      // renders and is still addressable, and naming it is the doors tab's job.
+      d_annex: { label: "annex-panel", configured: false, notice: null,
+                 unlock: { configured: false, command: "", show_button: false,
+                           source: "default" } } },
     notice: { global_active: false },
     call: { state: "idle", mic_muted: false },
     ui_manifest: L.defaultUiManifest("door_station"),
@@ -2739,6 +3011,8 @@ if (typeof document !== "undefined") (function () {
                            command: configured ? "unlock" : "",
                            show_button: forced === null ? configured : forced,
                            source: forced === null ? "default" : "admin" };
+      // Core reports a door as configured once an entry exists, however it came to exist.
+      doors[id].configured = !!((MOCK_CFG.doors || {})[id]);
       var notice = ((MOCK_CFG.doors || {})[id] || {}).notice ||
                    ((MOCK_CFG.notice || {}).global || null);
       doors[id].notice = notice || null;
@@ -2818,6 +3092,12 @@ if (typeof document !== "undefined") (function () {
     }
     if (/^\/api\/doors\/[^\/]+\/notice$/.test(p)) {
       var noticeDoor = decodeURIComponent(p.split("/")[3]);
+      // A door served by a live station is addressable even before it has a config entry; the
+      // first write creates one, exactly as core does.
+      if (!(MOCK_CFG.doors || {})[noticeDoor] && (MOCK_STATUS.doors || {})[noticeDoor]) {
+        MOCK_CFG.doors = MOCK_CFG.doors || {};
+        MOCK_CFG.doors[noticeDoor] = { label: { ja: MOCK_STATUS.doors[noticeDoor].label } };
+      }
       var doorEntry = (MOCK_CFG.doors || {})[noticeDoor];
       if (!doorEntry) return setTimeout(function () { cb(400, { ok: false, err: "rejected" }); }, 0);
       if (method === "DELETE") { delete doorEntry.notice; return ok({ ok: true }); }
@@ -2900,7 +3180,8 @@ if (typeof document !== "undefined") (function () {
         MOCK_PAIR.modeUntil = new Date().getTime() + 600000;
         MOCK_PAIR.autoAdded = 0;
       }
-      return ok({ ok: true, host: "10.10.38.9:47172", pin: MOCK_PAIR.tokenPin, expires_s: 90 });
+      return ok({ ok: true, host: "10.10.38.9:47172", pin: MOCK_PAIR.tokenPin, expires_s: 90,
+                  uri: mockPairUri() });
     }
     if (p === "/api/pairing/mode") {
       if (MOCK_PAIR.state !== "ready")
@@ -3145,6 +3426,16 @@ if (typeof document !== "undefined") (function () {
       return "<div class='frow'>" + lab + "<select data-f='" + esc(f.id) + "'>" + o +
              "</select></div>";
     }
+    if (f.type === "textlist") {
+      var listId = "field-list-" + f.id, suggestions = "";
+      for (var si = 0; si < (f.options || []).length; si++)
+        suggestions += "<option value='" + esc(f.options[si].v) + "'>" +
+                       esc(f.options[si].label || "") + "</option>";
+      return "<div class='frow'>" + lab + "<input type='text' data-f='" + esc(f.id) +
+             "' value='" + esc(v) + "' list='" + esc(listId) + "'><datalist id='" +
+             esc(listId) + "'>" + suggestions + "</datalist>" +
+             (f.hint ? "<div class='dim fhint'>" + esc(f.hint) + "</div>" : "") + "</div>";
+    }
     if (f.type === "multicheck") {
       var c = "";
       for (var k = 0; k < (f.options || []).length; k++) {
@@ -3316,7 +3607,8 @@ if (typeof document !== "undefined") (function () {
   function doorOptions(withEmpty) {
     var o = withEmpty ? [{ v: "", label: "—" }] : [];
     var ds = cfgObj("doors");
-    for (var id in ds) o.push({ v: id, label: doorLabel(id) + " (" + id + ")" });
+    for (var id in ds) if (L.validDoorId(id))
+      o.push({ v: id, label: doorLabel(id) + " (" + id + ")" });
     return o;
   }
   function buildingOptions() {
@@ -3378,19 +3670,25 @@ if (typeof document !== "undefined") (function () {
     return o;
   }
 
-  var RINGTONE_PRESETS = [
-    { v: "ding1", label: "Ding Dong" },
-    { v: "ding2", label: "Double Chime" },
-    { v: "classic", label: "Classic Bell" },
-    { v: "school_chime", label: t("sound.school_chime") }
-  ];
-  var SOUND_PRESETS = [
-    { v: "outdoor_call_alert", label: t("sound.outdoor_call_alert") },
-    { v: "button_click", label: t("sound.button_click") },
-    { v: "school_chime", label: t("sound.school_chime") },
-    { v: "indoor_update", label: t("sound.indoor_update") },
-    { v: "title_display", label: t("sound.title_display") }
-  ];
+  // Functions, not module-level arrays: the i18n catalog is fetched after script
+  // evaluation, so the translated labels must be looked up at render time.
+  function ringtonePresets() {
+    return [
+      { v: "ding1", label: "Ding Dong" },
+      { v: "ding2", label: "Double Chime" },
+      { v: "classic", label: "Classic Bell" },
+      { v: "school_chime", label: t("sound.school_chime") }
+    ];
+  }
+  function soundPresets() {
+    return [
+      { v: "outdoor_call_alert", label: t("sound.outdoor_call_alert") },
+      { v: "button_click", label: t("sound.button_click") },
+      { v: "school_chime", label: t("sound.school_chime") },
+      { v: "indoor_update", label: t("sound.indoor_update") },
+      { v: "title_display", label: t("sound.title_display") }
+    ];
+  }
   var BUILTIN_AUDIO = {
     outdoor_call_alert: "outdoor_call_alert.mp3",
     button_click: "button_click.mp3",
@@ -3400,14 +3698,14 @@ if (typeof document !== "undefined") (function () {
   };
   function soundOptions(includeNone) {
     var o = includeNone ? [{ v: "", label: t("sound.none") }] : [];
-    o = o.concat(SOUND_PRESETS);
+    o = o.concat(soundPresets());
     assetIds("audio").forEach(function (h) {
       o.push({ v: "asset:" + h, label: "♫ " + assetLabel(h) + " (" + h.slice(0, 8) + ")" });
     });
     return o;
   }
   function ringtoneOptions() {
-    var o = RINGTONE_PRESETS.slice();
+    var o = ringtonePresets();
     assetIds("audio").forEach(function (h) {
       o.push({ v: "asset:" + h, label: "♫ " + assetLabel(h) + " (" + h.slice(0, 8) + ")" });
     });
@@ -3423,6 +3721,71 @@ if (typeof document !== "undefined") (function () {
     function p(n) { return n < 10 ? "0" + n : n; }
     return d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate()) + " " +
            p(d.getHours()) + ":" + p(d.getMinutes()) + ":" + p(d.getSeconds());
+  }
+
+  function addressLinesHtml(addresses) {
+    return (addresses || []).map(function (address) {
+      return "<span class='peer-address'>" + esc(address) + "</span>";
+    }).join("");
+  }
+
+  function normalizedRotation(value) {
+    var rotation = Number(value);
+    if (!isFinite(rotation)) return 0;
+    rotation = ((Math.round(rotation / 90) * 90) % 360 + 360) % 360;
+    return rotation;
+  }
+
+  function applyLiveRotation(entry, value) {
+    if (!entry || !entry.frame) return;
+    var rotation = normalizedRotation(value);
+    if (entry.rotation === rotation) return;
+    entry.rotation = rotation;
+    var quarterTurn = rotation === 90 || rotation === 270;
+    var width = entry.mediaWidth || 4, height = entry.mediaHeight || 3;
+    entry.frame.style.aspectRatio = quarterTurn ? (height + " / " + width) : (width + " / " + height);
+    var transform = "translate(-50%,-50%) rotate(" + rotation + "deg)";
+    var mediaWidth = quarterTurn ? ((width / height) * 100) + "%" : "100%";
+    var mediaHeight = quarterTurn ? ((height / width) * 100) + "%" : "100%";
+    entry.img.style.width = entry.video.style.width = mediaWidth;
+    entry.img.style.height = entry.video.style.height = mediaHeight;
+    entry.img.style.transform = entry.video.style.transform = transform;
+  }
+
+  function watchLiveDimensions(entry) {
+    function learn(width, height) {
+      if (!width || !height) return;
+      entry.mediaWidth = width;
+      entry.mediaHeight = height;
+      var remembered = entry.rotation;
+      entry.rotation = -1;
+      applyLiveRotation(entry, remembered < 0 ? 0 : remembered);
+    }
+    entry.img.onload = function () { learn(entry.img.naturalWidth, entry.img.naturalHeight); };
+    entry.video.onloadedmetadata = function () {
+      learn(entry.video.videoWidth, entry.video.videoHeight);
+    };
+  }
+
+  function startLiveRotationPolling(entry, metaUrl) {
+    if (!entry || !metaUrl || typeof fetch !== "function") return;
+    var stopped = false;
+    function pollRotation() {
+      if (stopped) return;
+      fetch(metaUrl, { cache: "no-store", mode: "cors" }).then(function (response) {
+        return response.ok ? response.json() : null;
+      }).then(function (meta) {
+        if (meta && meta.rotation !== undefined) applyLiveRotation(entry, meta.rotation);
+      }).catch(function () {}).then(function () {
+        if (!stopped) entry.rotationTimer = setTimeout(pollRotation, 250);
+      });
+    }
+    entry.stopRotation = function () {
+      stopped = true;
+      if (entry.rotationTimer) clearTimeout(entry.rotationTimer);
+      entry.rotationTimer = 0;
+    };
+    pollRotation();
   }
 
 
@@ -3456,9 +3819,9 @@ if (typeof document !== "undefined") (function () {
       rows += "<tr><td>" + esc(p.name || p.id.slice(0, 8)) +
               (p.self ? " <span class='tag'>self</span>" : "") + "</td><td>" +
               esc(p.role || "") + "</td><td class='" + stCls + "'>" + esc(p.status) +
-              "</td><td>" + esc(duties.join(",")) + "</td><td>" + esc(p.sw || "") +
-              "</td><td>" + powerCell +
-              "</td><td class='dim'>" + esc((p.addrs || []).join(" ")) + "</td></tr>";
+              "</td><td class='breakable'>" + esc(duties.join(",")) + "</td><td class='breakable'>" + esc(p.sw || "") +
+              "</td><td class='breakable'>" + powerCell +
+              "</td><td class='dim'>" + addressLinesHtml(p.addrs) + "</td></tr>";
     }
     $("#peersTbl tbody").innerHTML = rows;
     var br = j.bridge || {};
@@ -3470,8 +3833,8 @@ if (typeof document !== "undefined") (function () {
     var laEl = $("#localAddrs");
     if (laEl) {
       if (la.length) {
-        laEl.innerHTML = icon("info-box") + " " + t("admin.local_addrs") + ": " +
-          la.map(function (a) { return esc(a); }).join("　");
+          laEl.innerHTML = icon("info-circle") + " " + t("admin.local_addrs") + ": " +
+          addressLinesHtml(la);
       } else { laEl.textContent = ""; }
     }
 
@@ -3503,7 +3866,7 @@ if (typeof document !== "undefined") (function () {
     }
     for (var nid in want) {
       var p2 = want[nid], card = document.createElement("div");
-      card.className = "card";
+      card.className = "card live-card";
       card.setAttribute("data-node", nid);
       var sameOriginMp4 = DoorbellPlayback.proxyMp4Url(p2.door || "", "", p2.stream_mp4,
                                                         window.location);
@@ -3511,29 +3874,38 @@ if (typeof document !== "undefined") (function () {
                         JSON.stringify(p2.playback_profile || {}));
       card.innerHTML = "<div class='dim' style='margin-bottom:6px'>" +
         esc(p2.door_label || p2.name || nid.slice(0, 8)) + "</div>";
-      var mediaCss = "width:100%; border-radius:6px; background:#000; min-height:160px";
+      var frame = document.createElement("div");
+      frame.className = "live-frame";
       var v = document.createElement("video");
       v.muted = true;
       v.autoplay = true;
       v.setAttribute("muted", "");
       v.setAttribute("playsinline", "");
-      v.style.cssText = mediaCss;
       var img = document.createElement("img");
       img.alt = "live";
-      img.style.cssText = mediaCss;
-      card.appendChild(img);
-      card.appendChild(v);
-      liveStreams[nid] = DoorbellPlayback.start({ profile: p2.playback_profile,
+      frame.appendChild(img);
+      frame.appendChild(v);
+      card.appendChild(frame);
+      var entry = { frame: frame, img: img, video: v, rotation: -1, mediaWidth: 4, mediaHeight: 3 };
+      entry.playback = DoorbellPlayback.start({ profile: p2.playback_profile,
         mp4: sameOriginMp4, mjpeg: p2.stream, mjpegMode: "image", video: v, img: img });
+      watchLiveDimensions(entry);
+      liveStreams[nid] = entry;
+      applyLiveRotation(entry, 0);
+      startLiveRotationPolling(entry, p2.video_meta);
       grid.appendChild(card);
     }
   }
 
   /* ---- Admin dashboard live grid ---- */
-  var liveStreams = {};    // node_id → {stop}
+  var liveStreams = {};    // node_id → playback and orientation lifecycle
 
   function stopLiveStream(id) {
-    if (liveStreams[id]) { try { liveStreams[id].stop(); } catch (e) {} delete liveStreams[id]; }
+    if (liveStreams[id]) {
+      try { if (liveStreams[id].stopRotation) liveStreams[id].stopRotation(); } catch (e) {}
+      try { if (liveStreams[id].playback) liveStreams[id].playback.stop(); } catch (e) {}
+      delete liveStreams[id];
+    }
   }
 
 
@@ -3568,7 +3940,7 @@ if (typeof document !== "undefined") (function () {
         value: cur.building || "", options: buildingOptions() }];
     openForm(t("admin.door_list"), fields, function (v) {
       var did = isNew ? L.safeId(v.did) : id;
-      if (!did) return "ID?";
+      if (!L.validDoorId(did)) return "ID?";
       saveAndRefresh(L.doorEntries(did, v, cur), null);
     });
   }
@@ -3760,11 +4132,16 @@ if (typeof document !== "undefined") (function () {
          "<th>ID</th><th>" + esc(t("admin.label_ja")) + "</th><th>" +
          esc(t("admin.building_assign")) + "</th><th>" + esc(t("notice.title")) +
          "</th><th>" + esc(t("unlock.title")) + "</th><th></th></tr></thead><tbody>";
-    for (var d in ds) {
+    L.doorRows(S.cfg, S.status).forEach(function (row) {
+      var d = row.id;
       var noticeModel = L.effectiveNoticeModel(d, S.cfg, new Date().getTime());
       var unlockModel = L.doorUnlockModel(d, S.cfg, S.status);
-      h += "<tr><td class='dim'>" + esc(d) + "</td><td>" + esc(doorLabel(d)) + "</td><td>" +
-           esc(ds[d].building ? L.labelOf(bs[ds[d].building], LANG, ds[d].building) : "—") +
+      h += "<tr" + (row.configured ? "" : " class='offline'") + "><td class='dim'>" + esc(d) +
+           "</td><td>" + esc(row.label) +
+           (row.configured ? "" : " <span class='tag warn'>" +
+             esc(t("admin.door_unconfigured")) + "</span>") + "</td><td>" +
+           esc((ds[d] && ds[d].building) ?
+             L.labelOf(bs[ds[d].building], LANG, ds[d].building) : "—") +
            "</td><td>" + (noticeModel.active ?
              "<span class='tag ok'>" +
              esc(noticeModel.scope === "global" ? t("notice.scope_global") : t("notice.active")) +
@@ -3787,9 +4164,9 @@ if (typeof document !== "undefined") (function () {
            (noticeModel.active && noticeModel.scope === "door" ?
              " <button class='btn2 danger' data-act='noticeClear' data-id='" +
              esc(d) + "'>" + esc(t("notice.clear")) + "</button>" : "") +
-           " <button class='btn2 danger' data-act='delD' data-id='" + esc(d) + "'>" +
-           esc(t("admin.delete")) + "</button></td></tr>";
-    }
+           (row.configured ? " <button class='btn2 danger' data-act='delD' data-id='" + esc(d) +
+             "'>" + esc(t("admin.delete")) + "</button>" : "") + "</td></tr>";
+    });
     h += "</tbody></table></div>";
 
     // Announcement presets: the same list the indoor dialog and the editor below render.
@@ -3847,16 +4224,22 @@ if (typeof document !== "undefined") (function () {
       { id: "nid", label: "ID", type: "static", value: id },
       { id: "name", label: t("admin.dev_name"), value: d.name },
       { id: "role", label: t("admin.dev_role"), type: "select",
-        value: d.role || "door_station",
+        value: d.role === "indoor_panel" ? "indoor_panel" : "door_station",
         options: [{ v: "door_station", label: t("admin.role_door") },
                   { v: "indoor_panel", label: t("admin.role_indoor") }] },
-      { id: "door", label: t("admin.door_assign"), type: "select",
-        value: d.door || "", options: doorOptions(true) },
+      { id: "door", label: t("admin.door_assign"), type: "textlist",
+        value: L.validDoorId(d.door) ? d.door : L.defaultDoorId(id),
+        options: doorOptions(false), hint: t("setup.invalid_door") },
       { id: "ui_lang", label: t("admin.ui_lang"), type: "select",
         value: lo.ui_lang || "ja",
         options: [{ v: "ja", label: t("language.name_ja") },
                   { v: "en", label: t("language.name_en") },
                   { v: "zh", label: t("language.name_zh") }] },
+      { id: "call_return", label: t("call.return_s"), type: "number",
+        value: L.callReturnSeconds(S.cfg, id).seconds,
+        hint: t("call.return_device_hint") },
+      { id: "call_return_inherit", label: t("call.return_inherit"), type: "check",
+        value: L.callReturnSeconds(S.cfg, id).source !== "device" },
       { id: "helper_mode", label: t("admin.helper_mode"), type: "select",
         value: recovery.helper_mode || "auto",
         options: [{ v: "auto", label: t("admin.helper_auto") },
@@ -3912,7 +4295,18 @@ if (typeof document !== "undefined") (function () {
         if (caps === null || typeof caps !== "object") return "caps_override: JSON?";
       }
       v.caps_override = caps;
-      saveAndRefresh(L.deviceEntries(id, v, d), null);
+      var plan;
+      try {
+        plan = L.deviceCallReturnEntries(id, { inherit: v.call_return_inherit,
+                                               seconds: v.call_return });
+      } catch (e) { return t("call.return_invalid"); }
+      var identityEntries;
+      try { identityEntries = L.deviceEntries(id, v, d); }
+      catch (e) {
+        return e.message === "door_required" ? t("admin.door_required") :
+               e.message === "role_invalid" ? t("admin.save_failed") : e.message;
+      }
+      saveAndRefresh(identityEntries.concat(plan.entries), plan.dels);
     });
   }
 
@@ -4065,8 +4459,12 @@ if (typeof document !== "undefined") (function () {
   }
 
   var pbReceiver = "", pbSource = "";
-  var PB_LABELS = { h264_low_latency: t("admin.video_low_latency"),
-                    h264_hls: t("admin.video_hls"), mjpeg: "MJPEG" };
+  /* Resolved at render time: I18N is fetched after this script runs. */
+  function pbLabel(id) {
+    if (id === "h264_low_latency") return t("admin.video_low_latency");
+    if (id === "h264_hls") return t("admin.video_hls");
+    return id === "mjpeg" ? "MJPEG" : id;
+  }
 
   function playbackRowsHtml(profile, tbodyId) {
     var p = L.normalizePlaybackProfile(profile), h = "";
@@ -4076,7 +4474,7 @@ if (typeof document !== "undefined") (function () {
            "<td class='ops'><button class='btn2 small' data-pb-up>↑</button> " +
            "<button class='btn2 small' data-pb-down>↓</button></td>" +
            "<td><label><input type='checkbox' data-pb-enabled" +
-           (s.enabled ? " checked" : "") + "> " + esc(PB_LABELS[s.id] || s.id) +
+           (s.enabled ? " checked" : "") + "> " + esc(pbLabel(s.id)) +
            (s.id === "h264_hls" ? " <span class='dim'>(iPad1 App)</span>" : "") +
            "</label></td><td><input type='number' min='100' max='60000' step='100' " +
            "data-pb-start value='" + esc(s.startup_timeout_ms) + "' style='width:100px'> ms</td>" +
@@ -4093,7 +4491,7 @@ if (typeof document !== "undefined") (function () {
   }
 
   function collectPlaybackRows(id) {
-    var rows = $all("[data-pb-row]", $(id)), out = [], enabled = 0;
+    var rows = $all("[data-pb-row]", $("#" + id)), out = [], enabled = 0;
     for (var i = 0; i < rows.length; i++) {
       var start = parseInt(rows[i].querySelector("[data-pb-start]").value, 10);
       var stall = parseInt(rows[i].querySelector("[data-pb-stall]").value, 10);
@@ -4111,17 +4509,17 @@ if (typeof document !== "undefined") (function () {
   }
 
   function updatePlaybackEstimate(id) {
-    var rows = $all("[data-pb-row]", $(id)), ms = 0;
+    var rows = $all("[data-pb-row]", $("#" + id)), ms = 0;
     for (var i = 0; i < rows.length; i++) {
       if (!rows[i].querySelector("[data-pb-enabled]").checked) continue;
       if (rows[i].getAttribute("data-id") === "mjpeg") break;
       ms += parseInt(rows[i].querySelector("[data-pb-start]").value, 10) || 0;
     }
-    var out = $(id + "Estimate"); if (out) out.textContent = String(ms);
+    var out = $("#" + id + "Estimate"); if (out) out.textContent = String(ms);
   }
 
   function bindPlaybackRows(id) {
-    var body = $(id), dragged = null;
+    var body = $("#" + id), dragged = null;
     if (!body) return;
     $all("[data-pb-row]", body).forEach(function (row) {
       row.ondragstart = function (e) {
@@ -4290,22 +4688,22 @@ if (typeof document !== "undefined") (function () {
                   ui: function (id) { editDeviceUi(id, "native"); },
                   webui: function (id) { editDeviceUi(id, "web"); } });
     bindPlaybackRows("pbGlobalRows");
-    if ($("pbPairRows")) bindPlaybackRows("pbPairRows");
-    $("pbGlobalSave").onclick = function () {
+    if ($("#pbPairRows")) bindPlaybackRows("pbPairRows");
+    $("#pbGlobalSave").onclick = function () {
       var p = collectPlaybackRows("pbGlobalRows");
       if (p) saveAndRefresh(L.playbackProfileEntries("", "", p, vp.global), null);
     };
-    $("pbPairLoad").onclick = function () {
-      pbReceiver = $("pbReceiver").value; pbSource = $("pbSource").value;
+    $("#pbPairLoad").onclick = function () {
+      pbReceiver = $("#pbReceiver").value; pbSource = $("#pbSource").value;
       if (!pbReceiver || !pbSource) { window.alert(t("admin.choose_playback_pair")); return; }
       renderDevices();
     };
-    if ($("pbPairSave")) $("pbPairSave").onclick = function () {
+    if ($("#pbPairSave")) $("#pbPairSave").onclick = function () {
       var p = collectPlaybackRows("pbPairRows");
       var pair = (((vp.pairs || {})[pbReceiver] || {})[pbSource]) || {};
       if (p) saveAndRefresh(L.playbackProfileEntries(pbReceiver, pbSource, p, pair), null);
     };
-    if ($("pbPairDelete")) $("pbPairDelete").onclick = function () {
+    if ($("#pbPairDelete")) $("#pbPairDelete").onclick = function () {
       saveAndRefresh(null, ["video_playback.pairs." + pbReceiver + "." + pbSource]);
     };
   }
@@ -4889,7 +5287,18 @@ if (typeof document !== "undefined") (function () {
            esc(t("admin.call_flow_supported")) +
            "</div>";
     }
-    h += "</div><div class='chead'><h2></h2><button class='btn small' data-act='add'>+ " +
+    h += "</div>";
+
+    var callReturn = L.callReturnSeconds(S.cfg, "");
+    h += "<div class='card'><h2>" + esc(t("call.return_title")) + "</h2>" +
+         "<div class='dim fhint' style='margin-bottom:10px'>" + esc(t("call.return_hint")) +
+         "</div><div class='frow'><label class='flab'>" + esc(t("call.return_s")) + "</label>" +
+         "<input type='number' id='callReturn' min='" + L.CALL_RETURN_MIN + "' max='" +
+         L.CALL_RETURN_MAX + "' value='" + esc(callReturn.seconds) + "'></div>" +
+         "<button class='btn small' id='callReturnSave'>" + esc(t("admin.save")) +
+         "</button></div>";
+
+    h += "<div class='chead'><h2></h2><button class='btn small' data-act='add'>+ " +
             esc(t("admin.add_rule")) + "</button></div>";
     for (var id in rs) {
       var r = rs[id];
@@ -4929,6 +5338,12 @@ if (typeof document !== "undefined") (function () {
            esc(t("admin.delete")) + "</button></div></div>";
     }
     el.innerHTML = h;
+    $("#callReturnSave").onclick = function () {
+      var entries;
+      try { entries = L.callReturnEntries($("#callReturn").value); }
+      catch (e) { msg(t("call.return_invalid")); return; }
+      saveAndRefresh(entries, null);
+    };
     bindActs(el, {
       add: function () { editRule(null); },
       edit: function (id) { editRule(id); },
@@ -5393,7 +5808,9 @@ if (typeof document !== "undefined") (function () {
       h += "<option value='" + ty + "'" + (evFilter === ty ? " selected" : "") + ">" +
            (ty || esc(t("admin.filter_type"))) + "</option>";
     });
-    h += "</select></div><table><thead><tr><th>" + esc(t("panel.event_time")) +
+    h += "</select></div><table class='bounded-table'><colgroup><col style='width:14%'>" +
+         "<col style='width:15%'><col style='width:17%'><col style='width:54%'></colgroup>" +
+         "<thead><tr><th>" + esc(t("panel.event_time")) +
          "</th><th>" + esc(t("panel.event_type")) + "</th><th>" +
          esc(t("admin.door_or_device")) + "</th><th>" + esc(t("admin.details")) +
          "</th></tr></thead><tbody>";
@@ -5402,7 +5819,7 @@ if (typeof document !== "undefined") (function () {
       var e = evs[i];
       if (evFilter && e.type !== evFilter) continue;
       h += "<tr><td class='dim'>" + fmtTime(e.wall_ms) + "</td><td>" + esc(e.type) + "</td><td>" +
-           esc(e.door ? doorLabel(e.door) : deviceName(e.device)) + "</td><td class='dim'>" +
+           esc(e.door ? doorLabel(e.door) : deviceName(e.device)) + "</td><td class='dim event-detail'>" +
            esc(e.payload || "") + "</td></tr>";
     }
     h += "</tbody></table></div>";
@@ -5509,6 +5926,10 @@ if (typeof document !== "undefined") (function () {
            esc(rows[i][2]) + "'>" + esc(rows[i][1]) + "</span></div>";
     if (model.errorKey)
       h += "<div class='warn'>" + esc(t(model.errorKey)) + "</div>";
+    /* Backing off is a state of its own: the service is neither working nor idle. */
+    if (model.retryInS > 0)
+      h += "<div class='warn'>" +
+           esc(t("time.retrying", { seconds: String(model.retryInS) })) + "</div>";
     if (!model.zoneKnown && model.zone)
       h += "<div class='warn'>" + esc(model.zone) + "</div>";
     return h;
@@ -5540,8 +5961,9 @@ if (typeof document !== "undefined") (function () {
          "<textarea id='timeServers' style='min-height:74px'>" + esc(serverText) + "</textarea>" +
          "<div class='dim fhint'>" + esc(t("time.servers_hint")) + "</div></div>" +
          "<div class='frow'><label class='flab'>" + esc(t("time.interval_s")) + "</label>" +
-         "<input type='number' id='timeInterval' min='60' max='86400' value='" +
-         esc(timeNtp.interval_s === undefined ? 900 : timeNtp.interval_s) + "'></div>" +
+         "<input type='number' id='timeInterval' min='3600' max='604800' step='3600' value='" +
+         esc(timeNtp.interval_s === undefined ? 86400 : timeNtp.interval_s) + "'>" +
+         "<div class='dim fhint'>" + esc(t("time.interval_hint")) + "</div></div>" +
          "<div style='display:flex;gap:8px;flex-wrap:wrap;margin-top:8px'>" +
          "<button class='btn small' id='timeSave'>" + esc(t("admin.save")) + "</button>" +
          "<button class='btn2 small' id='timeSyncNow'>" + esc(t("time.sync_now")) +
@@ -5962,6 +6384,11 @@ if (typeof document !== "undefined") (function () {
              "</button></div>";
     }
     var left = L.pairClock(m.token.expires_s);
+    // The code is for a device running the app; the printed host and PIN below it are for
+    // someone scanning with a plain camera app, who has to read and type them.
+    if (m.token.uri)
+      h += "<div style='text-align:center; margin-bottom:10px'>" +
+           "<canvas id='pairCodeQr'></canvas></div>";
     h += "<div class='frow'><label class='flab'>" + esc(t("pair.address_label")) + "</label>" +
          "<div class='pairaddr'><span class='mono' id='pairHost'>" + esc(m.token.host) +
          "</span><button class='btn2 small' data-pair='copyhost'>" + esc(t("pair.copy")) +
@@ -6071,6 +6498,7 @@ if (typeof document !== "undefined") (function () {
     el.innerHTML = m.onboarding ? pairOnboardingHtml(m) : pairPanelHtml(m);
     pairBind(el);
     if (m.qrText && $("#pairQr")) drawPairQr($("#pairQr"), m.qrText);
+    if (m.token.uri && $("#pairCodeQr")) drawPairQr($("#pairCodeQr"), m.token.uri);
     var again = focusId ? $("#" + focusId) : null;
     if (again) {
       again.focus();
@@ -6503,6 +6931,12 @@ if (typeof document !== "undefined") (function () {
     return "";
   }
 
+  function unsampledReasonLabel(reason) {
+    if (reason === "too_large") return t("theme.unsampled_too_large");
+    if (reason === "missing") return t("theme.unsampled_missing");
+    return t("theme.unsampled_decode_failed");
+  }
+
   function inkRegionLabel(region) {
     if (region === "clock") return t("theme.region_clock");
     if (region === "date") return t("theme.region_date");
@@ -6525,6 +6959,25 @@ if (typeof document !== "undefined") (function () {
                        ? o.bg_color : (base.bg_color || "#101418"),
              bg_image: (scope && o.bg_image === undefined) ? (base.bg_image || "")
                                                            : (o.bg_image || "") };
+  }
+
+  function backdropSourceLabel(source) {
+    if (source === "device") return t("theme.backdrop_source_device");
+    if (source === "admin") return t("theme.backdrop_source_admin");
+    return t("theme.backdrop_source_default");
+  }
+
+  function frostedGlassSupport(deviceId) {
+    if (!deviceId) return "adjustable";
+    var peer = peerOf(deviceId);
+    if (!peer) return "unavailable";
+    var caps = peer.caps || peer.capabilities || {};
+    var features = caps.features || peer.features || {};
+    if (caps.frosted_glass_radius_v1 === true || features.frosted_glass_radius_v1 === true)
+      return "adjustable";
+    var platform = String(caps.platform || peer.platform || "").toLowerCase();
+    return platform === "ios" || platform === "apple" || platform === "tvos"
+      ? "system" : "unavailable";
   }
 
   function renderTheme() {
@@ -6572,10 +7025,55 @@ if (typeof document !== "undefined") (function () {
     });
     h += "</select><div class='dim fhint'>" + esc(t("admin.theme_image_hint")) + "</div></div>";
 
+    // The darkening layer over the background image. It stays on by default because a bright
+    // photograph makes light text unreadable, but every value here belongs to the administrator.
+    var backdrop = L.backdropModel(S.cfg, scope || "");
+    var backdropOn = !scope || backdrop.overridden.enabled || backdrop.overridden.color ||
+      backdrop.overridden.opacity;
+    h += "<div class='frow'><label class='flab'>" + esc(t("theme.backdrop")) + "</label>";
+    if (scope)
+      h += "<label class='mc'><input type='checkbox' id='thBackdropOn'" +
+           (backdropOn ? " checked" : "") + "> " + esc(t("admin.theme_override_here")) +
+           "</label><br>";
+    h += "<label class='mc'><input type='checkbox' id='thBackdropEnabled'" +
+         (backdrop.enabled ? " checked" : "") + "> " + esc(t("theme.backdrop_enabled")) +
+         "</label><br>" +
+         "<input type='color' id='thBackdropColor' value='" + esc(backdrop.color) + "'>" +
+         "<span class='mono' id='thBackdropColorTxt' style='margin-left:8px'>" +
+         esc(backdrop.color) + "</span><br>" +
+         "<input type='range' id='thBackdropOpacity' min='0' max='100' step='1' value='" +
+         esc(backdrop.opacity) + "' style='vertical-align:middle;max-width:220px'> " +
+         "<span class='mono' id='thBackdropOpacityTxt'>" + esc(backdrop.opacity) + "%</span>" +
+         "<div class='dim fhint'>" + esc(t("theme.backdrop_hint")) + " " +
+         esc(backdropSourceLabel(backdrop.source)) + "</div></div>";
+
+    var glass = L.glassBlurModel(S.cfg, scope || "");
+    var glassSupport = frostedGlassSupport(scope);
+    var glassOn = !scope || glass.overridden;
+    h += "<div class='frow'><label class='flab'>" + esc(t("theme.glass_blur_radius")) +
+         "</label>";
+    if (glassSupport === "adjustable") {
+      if (scope)
+        h += "<label class='mc'><input type='checkbox' id='thGlassOn'" +
+             (glassOn ? " checked" : "") + "> " + esc(t("admin.theme_override_here")) +
+             "</label><br>";
+      h += "<input type='range' id='thGlassRadius' min='0' max='40' step='1' value='" +
+           esc(glass.radius) + "' style='vertical-align:middle;max-width:220px'> " +
+           "<span class='mono' id='thGlassRadiusTxt'>" + esc(glass.radius) + "</span>" +
+           "<div class='dim fhint'>" + esc(t("theme.glass_blur_hint")) + " " +
+           esc(backdropSourceLabel(glass.source)) + "</div>";
+    } else {
+      h += "<div class='dim fhint'>" +
+           esc(t(glassSupport === "system" ? "theme.glass_blur_system" :
+                                             "theme.glass_blur_unavailable")) + "</div>";
+    }
+    h += "</div>";
+
 
     h += "<div class='frow'><label class='flab'>" +
          esc(t("admin.theme_preview")) + "</label>" +
-         "<div class='tprev' id='thPrev'><div class='inner'>" +
+         "<div class='tprev' id='thPrev'><div class='tbackdrop' id='thBackdrop'></div>" +
+         "<div class='inner'>" +
          "<div class='pclock' id='thClock'>--:--:--</div>" +
 
          "<div class='pcall'>" +
@@ -6620,9 +7118,13 @@ if (typeof document !== "undefined") (function () {
          "</label> <input type='color' id='thBtnColor' value='" +
          esc(L.colorOk(buttonOverride) ? buttonOverride : autoModel.callButton) + "'>" +
          "<span class='mono' id='thBtnTxt' style='margin-left:8px'></span>" +
-         "<div class='dim fhint'>" +
-         esc(t(autoModel.source === "image" ? "theme.background_source_image"
-                                            : "theme.background_source_color")) + "</div></div>";
+         "<div class='" + (autoModel.unsampled ? "warn" : "dim") + " fhint'>" +
+         esc(autoModel.unsampled
+               ? fmt(t("theme.background_unsampled"),
+                     { reason: unsampledReasonLabel(autoModel.reason) })
+               : t(autoModel.source === "image" ? "theme.background_source_image"
+                                                : "theme.background_source_color")) +
+         "</div></div>";
 
     h += "<div class='frow'><label class='flab'>" + esc(t("theme.ink")) + "</label>" +
          "<div class='scrollx'><table><thead><tr><th>" + esc(t("theme.ink_region")) +
@@ -6687,7 +7189,36 @@ if (typeof document !== "undefined") (function () {
       });
       var inkEl = p.querySelector(".pclock");
       if (inkEl) inkEl.style.color = model.ink === "dark" ? "#101418" : "#F5F7FA";
+
+      // The darkening layer, drawn where a shell draws it: over the background, under the text.
+      var layer = $("#thBackdrop");
+      var override = !scope || !$("#thBackdropOn") || $("#thBackdropOn").checked;
+      var on = $("#thBackdropEnabled").checked;
+      var opacity = Math.round(Number($("#thBackdropOpacity").value));
+      if (!isFinite(opacity) || opacity < 0) opacity = 0;
+      if (opacity > 100) opacity = 100;
+      $("#thBackdropColorTxt").textContent = $("#thBackdropColor").value;
+      $("#thBackdropOpacityTxt").textContent = opacity + "%";
+      $("#thBackdropEnabled").disabled = !override;
+      $("#thBackdropColor").disabled = !override;
+      $("#thBackdropOpacity").disabled = !override;
+      if (layer) {
+        layer.style.backgroundColor = $("#thBackdropColor").value;
+        layer.style.opacity = on ? String(opacity / 100) : "0";
+      }
+      if ($("#thGlassRadius")) {
+        $("#thGlassRadiusTxt").textContent = $("#thGlassRadius").value;
+        $("#thGlassRadius").disabled = !!$("#thGlassOn") && !$("#thGlassOn").checked;
+      }
     }
+    $("#thBackdropEnabled").onchange = paint;
+    $("#thBackdropColor").oninput = paint;
+    $("#thBackdropColor").onchange = paint;
+    $("#thBackdropOpacity").oninput = paint;
+    $("#thBackdropOpacity").onchange = paint;
+    if ($("#thBackdropOn")) $("#thBackdropOn").onchange = paint;
+    if ($("#thGlassRadius")) $("#thGlassRadius").oninput = paint;
+    if ($("#thGlassOn")) $("#thGlassOn").onchange = paint;
     $("#thColor").oninput = paint;
     $("#thColor").onchange = paint;
     $("#thImage").onchange = paint;
@@ -6715,16 +7246,44 @@ if (typeof document !== "undefined") (function () {
         if (row.querySelector("[data-ink-auto]").checked) return;
         ink[row.getAttribute("data-region")] = row.querySelector("[data-ink-color]").value;
       });
-      var base = (e.entries.length && e.entries[0].value) || {};
-      var colors = L.themeColorEntries(scope, { call_button_auto: !custom,
-                                                call_button_bg: $("#thBtnColor").value,
-                                                ink_override: ink }, base);
-      var entries = (colors.entries.length ? colors.entries : e.entries).concat(
+      var base = {};
+      e.entries.forEach(function (entry) {
+        if (entry.key === L.themeKey(scope)) base = entry.value;
+      });
+      var keepBackdrop = !scope || !$("#thBackdropOn") || $("#thBackdropOn").checked;
+      var keepGlass = glassSupport === "adjustable" &&
+        (!scope || !$("#thGlassOn") || $("#thGlassOn").checked);
+      var colors;
+      try {
+        colors = L.themeColorEntries(scope, {
+          call_button_auto: !custom,
+          call_button_bg: $("#thBtnColor").value,
+          ink_override: ink,
+          backdrop: keepBackdrop ? { enabled: $("#thBackdropEnabled").checked,
+                                     color: $("#thBackdropColor").value,
+                                     opacity: $("#thBackdropOpacity").value }
+                                 : null,
+          glass: glassSupport !== "adjustable" ? undefined :
+                 (keepGlass ? { blur_radius: $("#thGlassRadius").value } : null)
+        }, base);
+      } catch (err) {
+        msg(t(err && err.message === "glass_blur_radius" ? "theme.glass_blur_invalid" :
+                                                       "theme.backdrop_invalid"));
+        return;
+      }
+      var leafEntries = e.entries.filter(function (entry) {
+        return entry.key !== L.themeKey(scope);
+      });
+      var entries = colors.entries.concat(leafEntries,
         L.appearanceEntries(scope, { mode: $("#thAppearance").value,
                                      dark_from: $("#thDarkFrom") ? $("#thDarkFrom").value : "",
                                      light_from: $("#thLightFrom") ? $("#thLightFrom").value
                                                                    : "" }));
-      saveAndRefresh(entries, colors.entries.length ? [] : e.dels);
+      var dels = e.dels.slice();
+      if (!colors.entries.length) colors.dels.forEach(function (key) {
+        if (dels.indexOf(key) < 0) dels.push(key);
+      });
+      saveAndRefresh(entries, dels);
     };
     if (scope) {
       $("#thReset").onclick = function () {
@@ -6914,7 +7473,7 @@ if (typeof document !== "undefined") (function () {
     el.innerHTML = h;
 
     $all("[data-soundpreview]", el).forEach(function (b) {
-      b.onclick = function () { playRingtone($(b.getAttribute("data-soundpreview")).value); };
+      b.onclick = function () { playRingtone($("#" + b.getAttribute("data-soundpreview")).value); };
     });
     $("#soundSettingsSave").onclick = function () {
       saveAndRefresh([

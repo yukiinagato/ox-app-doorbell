@@ -49,14 +49,35 @@ FOUNDATION_EXPORT NSString *const DBUiRegionTileLabel;
 
 // Theme tokens for one appearance mode.
 + (NSString *)surfaceHexForMode:(NSString *)mode;
+// The card/chip/scrim tone for an appearance mode, which never follows the
+// wallpaper.
++ (NSString *)plateHexForMode:(NSString *)mode;
+// The overlay drawn over the theme picture, as
+// @{"enabled": bool, "color": "#RRGGBB", "opacity": percent}. Defaults to
+// black at 62 % when nothing is configured anywhere.
++ (NSDictionary *)backdropOverlayForConfig:(NSDictionary *)config
+                                  deviceId:(NSString *)deviceId
+                                   display:(NSDictionary *)display;
+// Numeric radius for shells that advertise frosted_glass_radius_v1. Modern
+// iOS deliberately ignores this and keeps its system-managed UIBlurEffect.
++ (NSUInteger)frostedGlassRadiusForConfig:(NSDictionary *)config
+                                 deviceId:(NSString *)deviceId
+                                  display:(NSDictionary *)display;
 + (NSString *)inkHexForMode:(NSString *)mode;        // primary ink on that surface
 + (NSString *)mutedInkHexForMode:(NSString *)mode;
 + (NSString *)lightInkHex;
 + (NSString *)darkInkHex;
 
 // ---- automatic ink (§5) ----
-// "dark" means: use the dark ink token because the background is light.
+// "dark" means: use the dark ink token. The choice is whichever ink actually
+// reads better -- the one with the higher WCAG contrast ratio against the
+// measured luminance -- not a lightness threshold. A midtone wallpaper
+// averaging #BBBBB4 sits just under Y = 0.5 and would take white ink at 1.9:1
+// under a threshold rule, where the dark ink gives 9.6:1. The crossover falls
+// near Y = 0.18 for the ink tokens in use (Y = 0.179 for pure black on white).
 + (NSString *)inkModeForLuminance:(double)luminance;
+// The luminance at which the two inks read equally well, for tests and docs.
++ (double)inkCrossoverLuminance;
 + (NSString *)inkModeForBackgroundHex:(NSString *)hex fallbackMode:(NSString *)fallbackMode;
 // Resolution order: device ink_override -> cluster ink_override ->
 // core-published display.theme.auto_ink -> local computation from the effective
@@ -77,8 +98,19 @@ FOUNDATION_EXPORT NSString *const DBUiRegionTileLabel;
 // The effective background core measured (an averaged theme image, or the
 // theme colour). Returns nil when core published none.
 + (NSString *)autoBackgroundHexInDisplay:(NSDictionary *)display;
-// A 1 px shadow of the opposite ink is only added below the AA text threshold.
+// A 1 px shadow of the opposite ink is only added when even the better ink
+// stays below the AA text threshold.
 + (BOOL)needsInkShadowForInk:(NSString *)inkHex background:(NSString *)backgroundHex;
+
+// The same question asked of a whole sampled region rather than its average.
+// A hint line crossing a pale wall and a dark jacket averages to something the
+// ink reads well against and still disappears over the jacket, so the shadow
+// is gated on the darkest and the lightest patch of the sample as well.
+// darkest and lightest may be nil, which falls back to the average alone.
++ (BOOL)needsInkShadowForInk:(NSString *)inkHex
+                  background:(NSString *)backgroundHex
+                     darkest:(NSString *)darkestHex
+                    lightest:(NSString *)lightestHex;
 
 // ---- per-region sampling of a theme image ----
 // Core averages the whole image because it has no layout geometry, so a caption
@@ -167,6 +199,14 @@ FOUNDATION_EXPORT NSString *const DBUiRegionTileLabel;
                                 viewHeight:(double)viewHeight
                                   portrait:(BOOL)portrait
                                 sosVisible:(BOOL)sosVisible;
+
+// A build version fit for a footer: "0.2.0+38f9239…" keeps the identity of the
+// build without the forty hex characters that pushed the battery off screen.
++ (NSString *)shortVersion:(NSString *)version;
+
+// App Store bundle versions stay numeric; the visible build identity uses the
+// same short Git metadata as Core.
++ (NSString *)appVersion:(NSString *)appVersion withCoreVersion:(NSString *)coreVersion;
 
 // Version + battery footer line, shared by every screen (§5.1, §0.6).
 + (NSString *)versionLineForName:(NSString *)name

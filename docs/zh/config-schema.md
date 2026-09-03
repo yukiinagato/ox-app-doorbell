@@ -10,6 +10,11 @@
 ASCII 字母或数字，后续仅允许字母、数字、`_`、`-`。仅保存成功后才原子写入
 `setup_complete:true`。tvOS 没有受支持的门口摄像头角色，因此固定为 `indoor_panel`。
 
+设备加入 cluster 后，`devices.<self>.name`、`.role` 和 `.door` 是可远程编辑的目标身份。
+Android 与 iOS/iPadOS 目标 shell 会验证变更，将其原子写入本机 `boot.json`，然后重启 UI 与 Core，使新角色用于广播
+和平台运行时。在重启完成前，其他节点使用目标设备的实时签名广播，而不会让目标设备尚未应用的
+较新 replicated identity 覆盖它。
+
 mesh PSK 是裝置本機 bootstrap data，不是 CRDT 值。Core 先完成 `secure_put("mesh.psk", …)`，再只向
 shell 發出 `{"t":"paired","psk_ref":"secret:mesh.psk"}`。shell 將 opaque reference 與非秘密
 `seed_peers` 保存到 `boot.json`，不接收新的 `psk_hex`。secure store 失敗時發出
@@ -175,7 +180,12 @@ mesh-PSK-derived key 和 XChaCha20-Poly1305 seal 成 schema-v2 CRDT record；mat
 
   "display": {                                  // 显示与防烧屏（全设备默认; 可用 devices.<id>.local.display 覆盖）
     // theme: 门口机背景（从室内机/管理页面「推送」= 只是写这个配置。CRDT 即时同步）
-    "theme": { "bg_color": "#101418", "bg_image": null },   // bg_image: assets 的 sha256 或 null
+    "theme": { "bg_color": "#101418", "bg_image": null,   // bg_image: assets 的 sha256 或 null
+               // 叠加在背景图片与其上所有元素之间的半透明层，使文字在明亮照片上仍可辨认。
+               // 默认启用；每个字段都可通过 devices.<id>.local.theme.backdrop.* 按设备覆盖，
+               // 且各字段独立解析。
+               "backdrop": { "enabled": true, "color": "#000000", "opacity": 62 },  // 0..100
+               "glass": { "blur_radius": 32 } },       // 0..40，仅支持的 shell
     "brightness": 70,                           // 0-100（远程调节 — 管理页面的滑块）
     "night": { "enabled": true, "from": "22:00", "to": "06:00",
                "brightness": 15, "red_tint": true },   // 夜间模式（用校正后的时钟判定）
@@ -193,7 +203,7 @@ mesh-PSK-derived key 和 XChaCha20-Poly1305 seal 成 schema-v2 CRDT record；mat
     // 连续三个间隔没有成功同步后，偏移会被撤销。
     "ntp": { "enabled": false,                  // 默认关闭
              "servers": ["ntp.nict.jp", "time.google.com"],   // 1-4 个 "host" 或 "host:port"
-             "interval_s": 900 }                // 60..86400
+             "interval_s": 86400 }              // 3600..604800，默认每天一次
   },
 
   // 集群默认音量（0-100）。设备可用 devices.<id>.local.audio.volume.{call,sos,idle} 覆盖；
@@ -403,6 +413,150 @@ generic command/argv。
 `display.appearance_schedule = {dark_from, light_from}` 在 `time.zone` 中求值。两者都可置于
 集群默认与 `devices.<id>.local.display`。公开的契约还带有 `follow_system`：为真时外壳优先使用
 操作系统自身的设置；没有该设置的平台（iOS 5、Android 10 以下）改用日程结果。
+
+在 `boot.json` 中指定了门口的门口机，会在 `doors.<door>` 缺失时自行创建它：创建或加入集群时，
+以及此后每次在已配对状态下启动时都会检查，并用设备名称写入三种语言的标签。若无此项，
+刚创建的集群中 `devices.<id>.door` 会指向一个并不存在的门口，`status.doors` 为空，
+所有以门口为键的界面（公告、开锁按钮可见性、磁贴）都没有可寻址的目标。该条目只创建、绝不覆盖：
+改名、归入建筑或改派门口机都在管理界面的 门口 标签页进行，这些修改可在每次重启后保留。
+室内机不拥有门口，因此不会 seed 任何内容。
+
+`status.doors` 还会列出由**存活的门口机对等端**负责、但尚无配置条目的门口，
+标记为 `"configured": false`，并以该设备名称作为标签。因此在此行为出现之前完成配置的安装
+仍能渲染磁贴并接受公告；第一次写入会创建该条目，之后即报告 `configured`。
+无人负责且没有配置的门口仍视为未知并被拒绝。
+
+`display.theme.auto_background` 返回 `{"color":"#RRGGBB","source":…}`；当 source 为
+`image_unsampled` 时还带有 `"reason"`。三种 source 是有意区分的：
+
+| `source` | 含义 |
+|---|---|
+| `color` | 未配置背景图片；`color` 就是主题色，可以信任 |
+| `image` | 已对背景图片采样；`color` 是其平均色 |
+| `image_unsampled` | 确实配置了图片，但 core 无法采样；`color` 只是扁平的主题色 |
+
+`reason` 为 `too_large`（超过 core 的 16 MP 解码预算）、`decode_failed`（本构建无法解码的格式）
+或 `missing`（该节点尚未缓存此资产）。在 `image_unsampled` 时，外壳**不得**信任 `auto_ink` 与
+`auto_accent`：它们来自主题色，而不是屏幕上真正显示的图片。请在本地采样后自行判断，
+或在资产到达前保留先前的文字颜色。
+
+core 最多采样 16x16 个点，但 stb 没有解码时缩放，因此解码是瞬时的，约每像素 3 字节
+（上限约 48 MB），随后立即释放。承受不起该开销的硬件上的外壳无论如何都应自行采样；
+`source` 字段就是用来告知 core 未曾采样的。
+
+### 背景遮罩层
+
+`display.theme.backdrop` 控制外壳在背景图片与其上所有元素之间绘制的半透明层，正是它让时钟在明亮
+照片上依然可读。`enabled`（默认 true）、`color`（`#RRGGBB`，默认 `#000000`）与 `opacity`
+（0～100，默认 62）均可通过 `devices.<id>.local.theme.backdrop.*` 按设备覆盖，且各字段独立解析：
+位于较明亮房间的某一台可以只提高浓度，而不必重复指定颜色。
+
+解析结果发布为 `status.display.theme.backdrop = {enabled, color, opacity, source}`，其中 `source`
+表示三个值中最强的来源，取值为 `device`、`admin` 或 `default`。同一对象也随 `display` UI 事件下发，
+因此外壳直接绘制核心解析出的值，而无需自行读取配置。
+
+颜色格式不正确或浓度超出 0～100 的写入会被拒绝。关闭该层或将其降到 20 以下会被接受，但只要配置了
+背景图片就会以警告（`theme.backdrop_weak`）的形式报告：在明亮照片上这通常是失误，在深色照片上则不是，
+而核心无法分辨究竟属于哪一种。
+
+`display.theme.glass.blur_radius` 是 0～40 的整数，默认值为 32；可通过
+`devices.<id>.local.theme.glass.blur_radius` 按设备覆盖。解析值及其 `default|admin|device` 来源
+发布在 `status.display.theme.glass`。只有宣告 `frosted_glass_radius_v1` 的客户端才应用该值。
+现代 iOS 刻意不宣告此能力，并继续使用没有公开数值半径的、由系统管理的 `UIBlurEffect`。
+
+### 如何选择文字颜色
+
+`auto_ink` 指出要在背景上绘制的文字色标记：**在深色与浅色中，取对采样亮度具有更高 WCAG
+对比度的那一个**。两条比值曲线的交点在 Y = 0.1791，而非中间亮度，因此看起来“不深不浅”的背景
+其实已经更适合深色文字。
+
+以 Y >= 0.5 划分是旧规则，它在两个阈值之间失效：平均为 `#BBBBB4` 的浅灰照片位于 Y 0.494，
+此处浅色文字只有 1.93:1，而深色文字为 9.58:1。`core/tests/test_color.cpp` 固定的实测值：
+
+| 背景 | Y | 深色 | 浅色 | `auto_ink` |
+|---|---|---|---|---|
+| `#BBBBB4` | 0.494 | 10.88:1 | 1.93:1 | `dark` |
+| `#808080` | 0.216 | 5.32:1 | 3.95:1 | `dark` |
+| `#767676` | 0.1812 | 4.62:1 | 4.54:1 | `dark` |
+| `#757575` | 0.1779 | 4.56:1 | 4.61:1 | `light` |
+| `#404040` | 0.051 | 2.03:1 | 10.37:1 | `light` |
+
+1 px、40% 的反色阴影仍然保留，作为“即便较好的一方也低于 4.5:1”时的兜底。自行采样的外壳
+（`source` 为 `image_unsampled`，或硬件无法承担 core 的解码）应用同一规则，因此整个设备群
+得到同一个答案。
+
+自动创建的条目带有 `seeded_by`（创建它的节点）与 `seeded_label`（它写入的标签）。
+当该节点下次启动或完成配对时，若其角色不再是 `door_station`，或 `boot.door` 已改变，
+它会删除自己创建的那条条目——否则由门口机改为室内机的设备会留下一块无人负责的“幽灵”磁贴。
+它只删除仍与自己写入内容完全一致的条目：出现任何其他字段，或标签被改名，
+都意味着管理员已经接管了该门口，而被接管的门口应比恰好创建它的设备存活得更久。
+对于只是暂时离线的真实门口机而言，这才是正确的行为。
+
+`status.doors.<id>.served_by` 是正在负责该门口的存活门口机的节点 ID，若无则为 `null`。
+正是它区分了“门口机离线”与“根本没有门口机负责该门口”；而 `configured` 区分的是
+“该门口已有配置条目”与“存活的门口机正在负责一个尚未配置的门口”。
+
+`served_by` 与 `peers[].status` 读取同一份存活映射，该映射在构建状态响应时只生成一次，
+因此两者不可能互相矛盾：出现在 `served_by` 中的节点在 `peers[]` 中必为 `alive`，
+处于其他状态的节点绝不会被列出。网格从未见过的已配置设备显示为 `offline`，也不会负责门口。
+
+离开后又回来的门口机会保留其节点 ID：刷新已有条目，而不是新增第二条。
+即使门口机重启后心跳计数已归零也是如此——否则它看起来就像是已见过的广播的重放。
+
+### 从来电界面返回
+
+`call.indoor.return_s`（5～600 秒，默认 60）以及按设备的覆盖
+`devices.<id>.local.call.return_s`，决定室内机停留在来电界面的时长。界面标题会显示倒计时
+「(60)」，归零后返回主页。本节点的实际生效值由 `status.call.return_s` 给出。
+
+对外壳而言有两点很重要。访客取消呼叫时，面板**不会**立即离开该页面：实时画面会保留到倒计时结束，
+或用户自行离开为止——这样刚抬头的住户仍能看清刚才是谁来过。点按倒计时数字会取消该次呼叫的倒计时，
+正在查看门口的住户不会在中途被弹回主页。
+
+### 加入集群时保持安静
+
+anti-entropy 会把集群的全部事件历史一次性交给新加入的节点。这些记录应按其原始 outcome
+完整写入呼叫记录，但**不得响铃**。呼叫事件只有在它此刻仍然“存活”时才会呈现
+（提示音、来电界面、未接来电通知、Telegram、MQTT）：即在门口机上仍为 `ringing`，
+且处于该 press 自身声明的振铃窗口内（`expires_at_ms`，以校正后的集群时间判定）。
+终端事件只有在关闭本设备正在显示的呼叫时，或新到足以让未接来电提醒仍有意义时才呈现。
+
+公告与 SOS 天然满足这一原则：两者都是复制的配置与状态，新加入的节点只应用**当前值**一次，
+不会重演产生该值的历次变更。
+
+### 谁可以接听
+
+`sip.accounts.<node_id>.answer_mode` 为 `auto`（立即接听）或 `ring`（振铃并等待有人接听）。
+**默认值取决于角色**：`door_station` 为 `auto`，`indoor_panel` 为 `ring`。
+实际生效值由 `status.sip.answer_mode` 给出。
+
+这直接关系到呼叫记录的含义：`outcome: "answered"` 与 `answered_by` 记录的是“有人接听了”。
+因此保持默认设置的室内机不得自行接听。希望当作对讲机使用的家庭仍可按设备设置为 `auto`，
+此时记录也会归属到该设备。
+
+### 配对二维码的载荷
+
+用于加入集群的二维码是一个自定义 scheme 的 URI，因此已安装应用的设备扫描后会直接进入加入流程，
+而不是打开浏览器：
+
+```
+doorbell://pair?host=<ip:port>&pin=<6 位数字>&exp=<unix 秒>&cluster=<名称>
+```
+
+`host` 与 `pin` 为必填。`exp` 是绝对 Unix 秒，扫描方无需知道二维码何时生成即可拒绝过期的码。
+`cluster` 是供人阅读的集群名称。取值按 RFC 3986 的 unreserved 集合做百分号编码，
+因此含空格或日文的名称也能原样往返；`+` 是字面的加号，而非空格。
+仅定义这四个键，解析器会**忽略**其他键，因此格式日后可新增键而不破坏已发布的外壳。
+
+该字符串由 core 生成：请读取 `db_core_mint_join_token_json`、`db_core_start_pairing_json`、
+`POST /api/join-token`、`POST /api/pairing/start`，或 `db_core_pairing_json` /
+`GET /api/pairing` 的 `token` 对象中的 `uri` 字段。外壳不得自行拼接该字符串。
+同时务必在二维码旁继续显示 host 与 PIN——用普通相机应用扫描的人需要读取并手动输入它们。
+
+`db_core_parse_pair_uri_json` 用于校验扫描到的内容，使各平台得到一致结论：返回
+`{"ok":true,"host":…,"pin":…,"exp":…,"cluster":…}` 或 `{"ok":false,"err":…}`，
+其中 `err` 为 `bad_scheme`、`missing_pin`、`missing_host`、`expired` 之一。
+过期判定在 core 运行时使用校正后的集群时间，否则使用平台时钟，因为外壳可能在 core 启动前扫描。
 
 ## 时间、电源与公告
 

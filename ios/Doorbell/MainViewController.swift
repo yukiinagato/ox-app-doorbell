@@ -57,6 +57,24 @@ final class MainViewController: UIViewController {
     private var secretTaps = 0
     private var secretFirst = Date.distantPast
     private var pairingObserver: NSObjectProtocol?
+    /// The clock is drawn from this, never from a Core call on the tick itself.
+    private let clockSource = DoorbellClockSource()
+    private var clockRefreshTimer: Timer?
+    private var lastClockTickUptime: TimeInterval = 0
+    /// Core announces `peers_changed` on every *fresh* peer heartbeat, not only when the
+    /// membership actually moves, so a cluster of a handful of devices produces several a second.
+    /// Rebuilding the home page on each one meant a SQLite call-log query, an admin-QR address
+    /// lookup and a full ink pass per event — each of them a synchronous hop onto Core's run
+    /// loop. On the door station that is what took the app over the OS CPU limit, and it left
+    /// Core's own loop with no time for its mesh heartbeats, so the other nodes called it dead.
+    /// The events are coalesced onto one rebuild.
+    private static let homeRefreshCoalesceS: TimeInterval = 1
+    private var cameraPermissionWarned = false
+    private var homeRefreshPending = false
+    private var nodeInfoRefreshPending = false
+    private var lastHomeRefreshUptime: TimeInterval = 0
+    private var wakeObserver: NSObjectProtocol?
+    private var inviteObserver: NSObjectProtocol?
 
     private var clockTimer: Timer?
     private var callTimeoutTimer: Timer?
@@ -79,8 +97,14 @@ final class MainViewController: UIViewController {
     private let pairingBanner = UIButton(type: .system)
     private let appVersionLabel = UILabel()
     private let purposeSection = UIStackView()
+    /// The purpose grid's caption. §5.3 allows the door station one hint sentence and the
+    /// visitor screen spends it on `door.hint_call`, so this stays hidden there; the plain idle
+    /// view, which has no hint of its own, still shows it.
     private let purposeHint = UILabel()
     private let purposeGrid = UIStackView()
+    /// The grid never grows past this, however wide the panel is; below it the columns share
+    /// whatever width the layout actually offers.
+    private static let purposeGridMaxWidth: CGFloat = 552
     private let langBar = UIStackView()
     private lazy var sosSlider = SosSlideControl(texts: texts)
     private var dashboard: DashboardView?
@@ -129,7 +153,8 @@ final class MainViewController: UIViewController {
     required init?(coder: NSCoder) { fatalError("not supported") }
 
     deinit {
-        if let observer = pairingObserver {
+        for observer in [pairingObserver, wakeObserver, inviteObserver] {
+            guard let observer = observer else { continue }
             NotificationCenter.default.removeObserver(observer)
         }
     }
@@ -149,13 +174,26 @@ final class MainViewController: UIViewController {
         pairingObserver = NotificationCenter.default.addObserver(
             forName: .doorbellPairingChanged, object: nil, queue: .main
         ) { [weak self] _ in self?.refreshPairingStatus() }
+        // Anything that would have made somebody look at the panel wakes it the way a finger
+        // does, idle timer and all: the screenshot hook's wake request, and an invitation
+        // arriving for a device that is waiting to be added.
+        wakeObserver = NotificationCenter.default.addObserver(
+            forName: .doorbellWakeScreen, object: nil, queue: .main
+        ) { [weak self] _ in self?.onActivity() }
+        inviteObserver = NotificationCenter.default.addObserver(
+            forName: .doorbellPairInvitation, object: nil, queue: .main
+        ) { [weak self] _ in self?.onActivity() }
         refreshPairingStatus()
 
         clockTimer = IOSAvailability.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
             self?.onClockTick()
         }
+        refreshClockBase()
+        clockRefreshTimer = IOSAvailability.scheduledTimer(
+            withTimeInterval: DoorbellClockSource.refreshIntervalS, repeats: true
+        ) { [weak self] _ in self?.refreshClockBase() }
         updateClock()
-        encoderPollTimer = IOSAvailability.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+        encoderPollTimer = IOSAvailability.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
             self?.encoderPoll()
         }
         requestAvPermissionsThenStartCamera()
@@ -190,6 +228,12 @@ final class MainViewController: UIViewController {
         maybeStartCamera()
     }
 
+    /// No producer may retain or call Core after this returns.
+    func prepareForCoreShutdown() {
+        camera.stopAndWait()
+        camera.encoder = nil
+        videoEncoder.stop()
+    }
 
     private func buildUi() {
         themeBg.onImageLoaded = { [weak self] in self?.refreshHomeSurfaces() }
@@ -337,16 +381,25 @@ final class MainViewController: UIViewController {
         purposeHint.textAlignment = .center
         purposeGrid.axis = .vertical
         purposeGrid.spacing = 12
-        purposeGrid.alignment = .center
+        // Rows take the grid's width and divide it; the grid takes the width it is given, up to a
+        // comfortable maximum. Fixed-width buttons overflowed the landscape column and the third
+        // one was cut off at the screen edge.
+        purposeGrid.alignment = .fill
         purposeSection.axis = .vertical
         purposeSection.spacing = 12
         purposeSection.alignment = .center
+        purposeGrid.translatesAutoresizingMaskIntoConstraints = false
+        let gridWidth = purposeGrid.widthAnchor.constraint(
+            equalToConstant: MainViewController.purposeGridMaxWidth)
+        gridWidth.priority = UILayoutPriority(750)
+        gridWidth.isActive = true
         purposeSection.addArrangedSubview(purposeHint)
         purposeSection.addArrangedSubview(purposeGrid)
 
         langBar.axis = .horizontal
         langBar.spacing = 12
-        langBar.alignment = .center
+        langBar.alignment = .fill
+        langBar.distribution = .fillEqually
 
         sosSlider.accessibilityIdentifier = "sos_slider"
         sosSlider.onTriggered = { [weak self] in self?.triggerEmergency() }
@@ -361,6 +414,7 @@ final class MainViewController: UIViewController {
 
         let content: UIView
         if boot.role == "door_station" {
+            purposeHint.isHidden = true
             let screen = VisitorScreenView(texts: texts, callButton: callButton, langBar: langBar,
                                            purposeSection: purposeSection, sosControl: sosSlider)
             visitorScreen = screen
@@ -575,12 +629,12 @@ final class MainViewController: UIViewController {
 
 
     private func applyStrings() {
-        callButton.setTitle(
-            texts.t("idle.call_button", doorLabel(boot.door))
-                .trimmingCharacters(in: .whitespaces), for: .normal)
+        // The visitor is standing at this unit, so naming it on the button says nothing they do
+        // not already know, and on a narrow panel the id is what pushes the label onto a second
+        // line. The button carries the verb alone; the door's name stays in the footer.
+        callButton.setTitle(texts.t("idle.call_button_verb"), for: .normal)
         touchHint.text = texts.t("idle.touch_to_call")
         monitorButton.setTitle(texts.t("monitor.open"), for: .normal)
-        purposeHint.text = texts.t("idle.choose_purpose")
         callingText.text = callTitleOverride ?? texts.t("calling.title")
         cancelButton.setTitle(texts.t("calling.cancel"), for: .normal)
         replyCaption.text = texts.t("reply.banner")
@@ -604,6 +658,17 @@ final class MainViewController: UIViewController {
 
 
     private func onClockTick() {
+        // The interval between visible ticks is the whole complaint: the timer fires at 1 Hz, and
+        // what mattered was whether anything blocked the run loop between two of them.
+        let now = ProcessInfo.processInfo.systemUptime
+        if lastClockTickUptime > 0 {
+            IOSAvailability.PerfProbe.record("clock.tick", now - lastClockTickUptime)
+        }
+        lastClockTickUptime = now
+        // A base that was refused because Core had not started yet is retried here rather than at
+        // the next half minute, so a late start still puts a time on screen within a second of
+        // Core being ready. The retry costs one boolean while Core is down.
+        if clockSource.waitingForCore { refreshClockBase() }
         updateClock()
         if !screensaverOn && !emergencyActive && screensaverAfterS > 0 &&
             !idleView.isHidden && callingView.isHidden && offlineView.isHidden &&
@@ -613,14 +678,23 @@ final class MainViewController: UIViewController {
         }
     }
 
+    /// Re-takes the clock's base from Core, off the main thread.
+    private func refreshClockBase() {
+        clockSource.refresh(core) { [weak self] cost in
+            IOSAvailability.PerfProbe.record("clock.refresh", cost)
+            self?.updateClock()
+        }
+    }
+
     /// Every clock is rendered from Core's zone-corrected reading, so a device whose own clock is
     /// wrong — or that sits in another zone — still shows the household's time.
     private func updateClock() {
-        guard let reading = DoorbellClock.read(core) else { return }
+        guard let reading = clockSource.reading() else { return }
         clockLabel.text = reading.hhmmss
         dateLabel.text = DoorbellClock.longDate(reading, lang: texts.lang)
         visitorScreen?.updateClock(reading, lang: texts.lang)
-        dashboard?.updateClock()
+        // The dashboard is handed the same reading rather than asking Core for its own.
+        dashboard?.updateClock(reading)
         if screensaverOn {
             saverClock.text = clockLabel.text
             saverDate.text = dateLabel.text
@@ -632,10 +706,9 @@ final class MainViewController: UIViewController {
         if let st = core.status() {
             if let node = st["node"] as? [String: Any] {
                 nodeInfo.text = ConfigUtil.evStr(node, "name")
-                let appVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "-"
-                let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "-"
                 let coreVersion = ConfigUtil.evStr(node, "version")
-                appVersionLabel.text = "APP v\(appVersion) (\(build))\nCore v\(coreVersion.isEmpty ? "-" : coreVersion)"
+                let appVersion = DoorbellTheme.appVersion(coreVersion: coreVersion)
+                appVersionLabel.text = "APP v\(appVersion)\nCore v\(DoorbellTheme.shortVersion(coreVersion))"
                 nodeId = ConfigUtil.evStr(node, "id")
             }
             // Display state is safe to restore directly. Emergency state is replicated even when
@@ -661,26 +734,61 @@ final class MainViewController: UIViewController {
         applySemanticStyles()
     }
 
+    /// Coalesces the home rebuild onto at most one pass per second, however many events Core
+    /// announces in between. `withNodeInfo` asks for the wider pass that also re-reads the
+    /// configuration, this node's status and the pairing state.
+    private func scheduleHomeRefresh(withNodeInfo: Bool = false) {
+        if withNodeInfo { nodeInfoRefreshPending = true }
+        guard !homeRefreshPending else { return }
+        homeRefreshPending = true
+        let now = ProcessInfo.processInfo.systemUptime
+        let due = max(0, lastHomeRefreshUptime + MainViewController.homeRefreshCoalesceS - now)
+        DispatchQueue.main.asyncAfter(deadline: .now() + due) { [weak self] in
+            guard let self = self else { return }
+            self.homeRefreshPending = false
+            self.lastHomeRefreshUptime = ProcessInfo.processInfo.systemUptime
+            let wide = self.nodeInfoRefreshPending
+            self.nodeInfoRefreshPending = false
+            if wide { self.refreshNodeInfo() } else { self.refreshHomeSurfaces() }
+        }
+    }
+
     /// Recomputes the appearance and hands the current snapshot to whichever home screen this
     /// device shows. Both are pure renderers: they never read Core state on their own.
     private func refreshHomeSurfaces() {
+        IOSAvailability.PerfProbe.measure("home.refresh") { refreshHomeSurfacesBody() }
+    }
+
+    private func refreshHomeSurfacesBody() {
+        // One status document for the whole pass. This used to ask Core three separate times, and
+        // every one of those is a synchronous hop onto Core's run loop.
+        let status = core.status()
+        // The clock's own base, not a fresh Core call: the appearance schedule and a notice's
+        // expiry are both minute-scale decisions, and the base is never more than half a minute
+        // old — `time_changed` re-takes it the moment Core's idea of the time moves.
+        let reading = clockSource.reading()
+        // The appearance, the theme picture and the scrim over it all come out of Core's display
+        // contract, and this is the freshest copy of it: the status document this pass is already
+        // holding. The values `applyDisplayValues` also owns — brightness, the night tint, the
+        // screensaver timers — keep their own state and are not re-armed here.
+        if let display = status?["display"] as? [String: Any] { displayDoc = display }
         palette = DoorbellPalette.of(DoorbellTheme.appearance(
-            display: displayDoc, config: cfg, nodeId: nodeId, localTime: core.localTime()))
+            display: displayDoc, config: cfg, nodeId: nodeId,
+            localTime: reading?.raw ?? core.localTime()))
         let skin = applyTheme()
         applyVolumes()
         updateClock()
         applyIdleControlSkin(skin)
         if let dashboard = dashboard {
             dashboard.reload(config: cfg, skin: skin)
-            dashboard.updateMembership(membershipLabel.text ?? "", hidden: membershipLabel.isHidden)
         }
         if let visitor = visitorScreen {
-            let notice = DoorbellNotice.effective(status: core.status(), config: cfg,
+            let notice = DoorbellNotice.effective(status: status, config: cfg,
                                                   door: boot.door,
-                                                  nowMs: DoorbellClock.nowMs(core))
+                                                  nowMs: reading?.wallMs ?? DoorbellClock.nowMs(core))
             visitor.updateNotice(notice)
             visitor.updateHint(texts.t("door.hint_call"))
-            let power = (core.status()?["self"] as? [String: Any])?["power"] as? [String: Any]
+            let power = (status?["self"] as? [String: Any])?["power"] as? [String: Any]
             let label = doorLabel(boot.door)
             visitor.updateFooter(DoorbellTheme.versionLine(
                 name: label.isEmpty ? boot.name : label,
@@ -698,6 +806,7 @@ final class MainViewController: UIViewController {
                 guard let button = view as? UIButton else { continue }
                 button.backgroundColor = skin.surface
                 button.setTitleColor(skin.cardInk("tile_label"), for: .normal)
+                button.tintColor = skin.cardInk("tile_label")
             }
         }
         idleSkin = skin
@@ -712,13 +821,18 @@ final class MainViewController: UIViewController {
     }
 
     private func applySemanticStyles() {
-        let bindings: [(String, UIView)] = [
-            ("call.primary", callButton), ("cancel.call", cancelButton),
-            ("call.end", endCallButton), ("sos.trigger", sosSlider),
-            ("sos.cancel", emergencyCancel), ("status.offline", offlineTitle),
+        // This runs on every layout pass. The SOS slider is only a control on a screen whose role
+        // offers one; styling it anywhere else would put it back, because a safety control's style
+        // floor forces it visible.
+        let sosOffered = ConfigUtil.sosButtonVisible(config: cfg, role: boot.role)
+        let bindings: [(String, UIView, Bool)] = [
+            ("call.primary", callButton, true), ("cancel.call", cancelButton, true),
+            ("call.end", endCallButton, true), ("sos.trigger", sosSlider, sosOffered),
+            ("sos.cancel", emergencyCancel, true), ("status.offline", offlineTitle, true),
         ]
-        for (id, view) in bindings {
-            styleApplier.apply(config: cfg, nodeId: nodeId, semanticId: id, to: view)
+        for (id, view, offered) in bindings {
+            styleApplier.apply(config: cfg, nodeId: nodeId, semanticId: id, to: view,
+                               offered: offered)
         }
         for row in purposeGrid.arrangedSubviews {
             for button in (row as? UIStackView)?.arrangedSubviews ?? [] {
@@ -840,24 +954,46 @@ final class MainViewController: UIViewController {
                 row = UIStackView()
                 row!.axis = .horizontal
                 row!.spacing = 12
+                row!.distribution = .fillEqually
                 purposeGrid.addArrangedSubview(row!)
             }
             let entry = purposes[id] as? [String: Any]
             let label = ConfigUtil.labelOf(entry, texts.lang, id)
+            // Core's seeded purposes wear a vendored Tabler glyph; a purpose an administrator
+            // invented has none, so the shell falls back to whatever text they configured --
+            // the same rule the Windows shell follows.
             let icon = entry?["icon"] as? String ?? ""
             let b = UIButton(type: .system)
-            b.setTitle(icon.isEmpty ? label : "\(icon)\n\(label)", for: .normal)
+            if let glyph = TablerIcon.purpose(id) {
+                b.setImage(glyph, for: .normal)
+                b.tintColor = idleSkin.cardInk("tile_label")
+                b.setTitle(label, for: .normal)
+                b.imageView?.contentMode = .scaleAspectFit
+                b.titleEdgeInsets = UIEdgeInsets(top: 34, left: -28, bottom: 0, right: 0)
+                b.imageEdgeInsets = UIEdgeInsets(top: -22, left: 0, bottom: 0, right: -28)
+            } else {
+                b.setTitle(icon.isEmpty ? label : "\(icon)\n\(label)", for: .normal)
+            }
             b.titleLabel?.font = .systemFont(ofSize: 20)
             b.titleLabel?.numberOfLines = 3
             b.titleLabel?.textAlignment = .center
             b.setTitleColor(idleSkin.cardInk("tile_label"), for: .normal)
             b.backgroundColor = idleSkin.surface
             b.layer.cornerRadius = 12
-            b.widthAnchor.constraint(equalToConstant: 176).isActive = true
+            // The row divides its width equally, so a button only needs a floor it may not
+            // shrink below and a fixed height.
+            let minimum = b.widthAnchor.constraint(greaterThanOrEqualToConstant: 96)
+            minimum.priority = UILayoutPriority(999)
+            minimum.isActive = true
             b.heightAnchor.constraint(equalToConstant: 92).isActive = true
             b.accessibilityIdentifier = "purpose_\(id)"
             b.addTarget(self, action: #selector(onPurposeClick(_:)), for: .touchUpInside)
             row!.addArrangedSubview(b)
+        }
+        // A last row with one or two purposes in it keeps the column width of a full row rather
+        // than stretching its buttons across the grid.
+        if let last = row, last.arrangedSubviews.count % 3 != 0 {
+            for _ in last.arrangedSubviews.count..<3 { last.addArrangedSubview(UIView()) }
         }
         purposeSection.isHidden = false
     }
@@ -1013,11 +1149,10 @@ final class MainViewController: UIViewController {
     }
 
     private func refreshSosConfig() {
-        var show = boot.role == "indoor_panel"
-        if let roles = ConfigUtil.dig(cfg, "emergency.button_on_roles") as? [Any] {
-            show = roles.contains { ($0 as? String) == boot.role }
-        }
+        let show = ConfigUtil.sosButtonVisible(config: cfg, role: boot.role)
         sosSlider.isHidden = !show
+        // The visitor screen remembers it, so a rotation cannot put the slider back on a screen
+        // whose role does not offer one.
         visitorScreen?.setSosVisible(show)
         // The countdown is a shell state; Core hears about the emergency only when it reaches
         // zero. `emergency.hold_to_trigger_s` stays in old configurations but no longer drives it.
@@ -1230,7 +1365,16 @@ final class MainViewController: UIViewController {
             showIdle()
         case "event":
             let type = ConfigUtil.evStr(ev, "type")
+            if type == "motion" || type == "press" {
+                dashboard?.prioritizeDoor(ConfigUtil.evStr(ev, "door"))
+            }
             let eventCall = ConfigUtil.evStr(ev, "call_id")
+            if type == "press", boot.role == "door_station" {
+                // A visitor who pressed the button expects the screen to be there, and on a
+                // future physical button that press arrives here and nowhere else.
+                let door = ConfigUtil.evStr(ev, "door")
+                if door.isEmpty || door == boot.door { onActivity() }
+            }
             if type == "press", !activeCallId.isEmpty, eventCall == activeCallId,
                let expiry = ev["expires_at_ms"] as? NSNumber, expiry.int64Value > 0 {
                 activeCallExpiresAtMs = expiry.int64Value
@@ -1248,24 +1392,26 @@ final class MainViewController: UIViewController {
         case "asset_ready":
             // The theme picture may be the asset that just finished arriving; re-applying is a
             // no-op unless it is, because the background view remembers what it already holds.
-            if themeBg.image == nil { refreshHomeSurfaces() }
+            if themeBg.image == nil { scheduleHomeRefresh() }
         case "display":
             applyDisplayValues(ev)
-            refreshHomeSurfaces()
+            scheduleHomeRefresh()
         case "emergency":
             presentEmergency(ev)
         case "peers_changed", "config_changed":
-            refreshNodeInfo()
+            scheduleHomeRefresh(withNodeInfo: true)
         case "time_changed":
-            // The source or the applied correction moved: redraw every clock at once instead of
-            // waiting for the next tick, and re-evaluate a scheduled light/dark switch.
-            refreshHomeSurfaces()
+            // The source or the applied correction moved, so the base this clock is counting from
+            // is stale: re-take it, then redraw every clock at once instead of waiting for the
+            // next tick, and re-evaluate a scheduled light/dark switch.
+            refreshClockBase()
+            scheduleHomeRefresh()
         case "power_changed":
             core.refreshPowerStateCache()
-            refreshHomeSurfaces()
+            scheduleHomeRefresh()
         case "notice_changed":
             refreshConfigCache()
-            refreshHomeSurfaces()
+            scheduleHomeRefresh()
         case "call_log_changed":
             dashboard?.refreshHistory()
         case "pairing_state", "paired", "device_joined", "pairing_revoked", "pending_changed":
@@ -1461,7 +1607,10 @@ final class MainViewController: UIViewController {
         let settings = SettingsViewController(core: core, boot: boot, texts: texts)
         settings.onOpenAddDevice = { [weak self] in self?.showAddDevicePanel() }
         settings.onOpenDeviceInfo = { [weak self] in self?.showAdminInfo() }
-        settings.onExitKiosk = { UIApplication.shared.isIdleTimerDisabled = false }
+        // A deliberate exit from kiosk mode is the one thing allowed to let the screen sleep,
+        // and it is remembered, so re-asserting the override on the next activation does not
+        // silently undo the administrator's choice.
+        settings.onExitKiosk = { ScreenAwake.want(false) }
         present(settings, animated: true)
     }
 
@@ -1503,7 +1652,10 @@ final class MainViewController: UIViewController {
             onMonitor: monitorAction)
         present(page, animated: true)
 #else
-        UIApplication.shared.isIdleTimerDisabled = false
+        // This used to clear the idle timer here and put it back only from the OK button below.
+        // Leaving through either of the other two actions left the panel able to auto-lock — and
+        // an auto-locked panel is suspended, drops its listeners and is evicted without a trace.
+        // The dialog has no need to let the screen sleep, so it no longer asks.
         let st = core.status()
         let node = st?["node"] as? [String: Any]
         let peers = (st?["peers"] as? [Any])?.count ?? 0
@@ -1523,9 +1675,7 @@ final class MainViewController: UIViewController {
                 [weak self] _ in self?.onMonitorOpen()
             })
         }
-        a.addAction(UIAlertAction(title: "OK", style: .default) { _ in
-            UIApplication.shared.isIdleTimerDisabled = true
-        })
+        a.addAction(UIAlertAction(title: "OK", style: .default) { _ in ScreenAwake.apply() })
         present(a, animated: true)
 #endif
     }
@@ -1535,19 +1685,35 @@ final class MainViewController: UIViewController {
     }
 
 
+    /// The ask itself now happens at launch, before the first capability document. This asks
+    /// again — `requestAccess` on an answered permission returns the answer without prompting —
+    /// so that a screen built after the resident replied still starts capture and drops the
+    /// banner.
     private func requestAvPermissionsThenStartCamera() {
         runtime?.permissionsDidChange()
-        if boot.role == "door_station" {
-            AVCaptureDevice.requestAccess(for: .video) { [weak self] _ in
-                DispatchQueue.main.async {
-                    self?.runtime?.permissionsDidChange()
-                    self?.maybeStartCamera()
-                }
+        refreshCameraPermissionBanner()
+        AvPermissions.requestAtLaunch(role: boot.role) { [weak self] in
+            guard let self = self else { return }
+            self.runtime?.permissionsDidChange()
+            self.refreshCameraPermissionBanner()
+            if self.boot.role == "door_station",
+               AvPermissions.state(.video) == "authorized" {
+                self.maybeStartCamera()
             }
         }
-        AVCaptureDevice.requestAccess(for: .audio) { [weak self] _ in
-            DispatchQueue.main.async { self?.runtime?.permissionsDidChange() }
+    }
+
+    /// A door station that cannot see is worth saying out loud: from the other side of the mesh a
+    /// refused camera and a broken one look the same, and the tile simply disappears.
+    private func refreshCameraPermissionBanner() {
+        let permission = AvPermissions.state(.video)
+        let warn = AvPermissions.shouldWarn(role: boot.role, permission: permission)
+        if warn && !cameraPermissionWarned {
+            cameraPermissionWarned = true
+            ShellLog.note("camera permission refused: \(permission)")
         }
+        if !warn { cameraPermissionWarned = false }
+        visitorScreen?.updateCameraWarning(warn ? texts.t("door.camera_denied") : nil)
     }
 
     private func cameraLocalCfg() -> [String: Any]? {
@@ -1598,6 +1764,9 @@ final class MainViewController: UIViewController {
         } else if !wanted && videoEncoder.isRunning {
             camera.encoder = nil
             videoEncoder.stop()
+        }
+        if videoEncoder.isRunning && core.takeVideoKeyframeRequest() {
+            videoEncoder.requestKeyFrame()
         }
     }
 

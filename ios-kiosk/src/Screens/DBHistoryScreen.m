@@ -96,7 +96,7 @@ static const NSInteger kPageSize = 50;
   _table = [[UITableView alloc] initWithFrame:CGRectZero style:UITableViewStylePlain];
   _table.dataSource = self;
   _table.delegate = self;
-  _table.rowHeight = 64;
+  _table.rowHeight = 72;
   _table.separatorStyle = UITableViewCellSeparatorStyleSingleLine;
   [self addSubview:_table];
 
@@ -188,7 +188,7 @@ static const NSInteger kPageSize = 50;
 }
 
 - (NSInteger)minuteOfDay {
-  NSDictionary *local = [_core localTimeJson:0];
+  NSDictionary *local = [_core cachedLocalTime];
   NSInteger hh = [DBConfigUtil intVal:local path:@"hh" def:-1];
   if (hh < 0) return 12 * 60;
   return hh * 60 + [DBConfigUtil intVal:local path:@"mm" def:0];
@@ -304,6 +304,25 @@ static const NSInteger kPageSize = 50;
   return day;
 }
 
+// A node id is not something to show a resident: it is resolved to the device
+// name, and a name that cannot be resolved is left out rather than printed as
+// forty hex characters.
+- (NSString *)deviceNameForId:(NSString *)identifier {
+  if ([identifier length] == 0) return @"";
+  NSString *name = [DBConfigUtil str:_cfg
+      path:[NSString stringWithFormat:@"devices.%@.name", identifier]];
+  if ([name length] > 0) return name;
+  NSDictionary *peer = [DBConfigUtil findPeer:_status nodeId:identifier];
+  name = [DBConfigUtil evStr:peer key:@"name"];
+  if ([name length] > 0) return name;
+  NSString *selfName = [DBConfigUtil str:_status path:@"node.name"];
+  if ([[DBConfigUtil str:_status path:@"node.id"] isEqualToString:identifier] &&
+      [selfName length] > 0)
+    return selfName;
+  // An id that resolves to nothing is noise, not information.
+  return [identifier length] > 24 ? @"" : identifier;
+}
+
 - (NSString *)outcomeTextForRow:(NSDictionary *)row {
   NSString *outcome = [DBConfigUtil evStr:row key:@"outcome"];
   if ([outcome isEqualToString:@"answered"]) return [_texts ts:@"history.outcome_answered"];
@@ -332,18 +351,18 @@ static const NSInteger kPageSize = 50;
   long long ts = [DBConfigUtil longLongVal:row path:@"ts" def:0];
   cell.textLabel.text = [NSString stringWithFormat:@"%@   %@",
       [DBCallHistoryModel clockForTs:ts offsetMinutes:_tzOffsetMinutes], doorLabel];
-  cell.textLabel.font = [UIFont boldSystemFontOfSize:20];
+  cell.textLabel.font = [UIFont boldSystemFontOfSize:23];
 
   NSMutableArray *detail = [NSMutableArray array];
   [detail addObject:[self outcomeTextForRow:row]];
-  NSString *answeredBy = [DBConfigUtil evStr:row key:@"answered_by"];
+  NSString *answeredBy = [self deviceNameForId:[DBConfigUtil evStr:row key:@"answered_by"]];
   if ([answeredBy length] > 0)
     [detail addObject:[_texts t:@"history.answered_by", answeredBy, nil]];
   NSString *duration = [DBCallHistoryModel durationTextForMs:
       [DBConfigUtil longLongVal:row path:@"duration_ms" def:0]];
   if ([duration length] > 0) [detail addObject:[_texts t:@"history.duration", duration, nil]];
   cell.detailTextLabel.text = [detail componentsJoinedByString:@"  ·  "];
-  cell.detailTextLabel.font = [UIFont systemFontOfSize:16];
+  cell.detailTextLabel.font = [UIFont systemFontOfSize:19];
 
   cell.backgroundColor = _palette.surface;
   cell.textLabel.backgroundColor = [UIColor clearColor];

@@ -30,6 +30,7 @@ final class TVAppDelegate: UIResponder, UIApplicationDelegate {
         _ = core.start(dataDir: BootConfig.dataDir(), bootJson: boot.rawJson)
         runtime = RuntimeSupervisor(core: core, boot: boot)
         runtime?.start()
+        AdaptiveH264MjpegPlayer.prewarm()
         soundConfig = core.config()
         core.addHandler("app") { [weak self] ev in self?.onUiEvent(ev) }
 
@@ -45,7 +46,9 @@ final class TVAppDelegate: UIResponder, UIApplicationDelegate {
         win.makeKeyAndVisible()
         window = win
 
-        application.isIdleTimerDisabled = true
+        // Same rule as the hand-held shells: the override is an intent that is re-asserted on
+        // every activation, not a flag set once at launch.
+        ScreenAwake.want(true)
         launchAudio.playConfigured(soundValue("launch_sound", "title_display"))
 
         pairingTexts.setLang(boot.uiLang)
@@ -69,7 +72,6 @@ final class TVAppDelegate: UIResponder, UIApplicationDelegate {
         }
         return true
     }
-
 
     /// Apple TV gets the same unpaired gate as the handheld clients; it is display-only because
     /// the device has no camera.
@@ -145,12 +147,19 @@ final class TVAppDelegate: UIResponder, UIApplicationDelegate {
         presentPairingGate()
     }
 
+    /// Nothing stops Core on a lifecycle transition; only a termination or a deliberate reset
+    /// does. A panel that resigned active is still a member of the cluster.
+    func applicationDidBecomeActive(_ application: UIApplication) {
+        ScreenAwake.apply()
+    }
+
     func applicationWillTerminate(_ application: UIApplication) {
         runtime?.stop(clean: true)
         core.stop()
     }
 
     func applicationDidReceiveMemoryWarning(_ application: UIApplication) {
+        AdaptiveH264MjpegPlayer.purgeWarmResources()
         runtime?.handleMemoryPressure()
     }
 

@@ -13,6 +13,10 @@ struct CallLogRow {
     let hlc: String
     let seen: Bool
 
+    /// The row a reusable view holds before it has been pointed at a call.
+    static let empty = CallLogRow(id: "", callId: "", tsMs: 0, door: "", purpose: "",
+                                  outcome: "", answeredBy: "", durationMs: 0, hlc: "", seen: true)
+
     static func parse(_ value: [String: Any]) -> CallLogRow {
         return CallLogRow(id: ConfigUtil.evStr(value, "id"),
                           callId: ConfigUtil.evStr(value, "call_id"),
@@ -119,6 +123,10 @@ final class RecentCallsView: UIView {
     private let stack = UIStackView()
     private let emptyLabel = UILabel()
     private var skin = DoorbellSkin.plain(.dark)
+    private var rowViews: [CallHistoryRowView] = []
+    private var renderedRows: [String] = []
+    private var renderedLang = ""
+    private var renderedAppearance: DoorbellAppearance?
 
     init(core: CoreBridge, texts: Texts, lang: String) {
         self.core = core
@@ -163,17 +171,37 @@ final class RecentCallsView: UIView {
 
     required init?(coder: NSCoder) { fatalError("not supported") }
 
+    /// Rows are built once and updated in place. Tearing the list down and rebuilding it meant
+    /// twenty row views, each with four labels and five constraints, allocated on the main thread
+    /// every time anything on the page changed — and twenty Core round-trips to format the times.
+    /// An unchanged list now costs one comparison.
     func reload(config: [String: Any]?, skin: DoorbellSkin, limit: Int = 20) {
         self.skin = skin
-        backgroundColor = skin.surface
-        for view in stack.arrangedSubviews { view.removeFromSuperview() }
-        let rows = CallHistory.page(core, beforeMs: 0, limit: limit)
+        if backgroundColor != skin.surface { backgroundColor = skin.surface }
+        let rows = IOSAvailability.PerfProbe.measure("history.page") {
+            CallHistory.page(core, beforeMs: 0, limit: limit)
+        }
         emptyLabel.isHidden = !rows.isEmpty
         emptyLabel.textColor = skin.cardMuted("status_line")
-        for row in rows {
-            stack.addArrangedSubview(CallHistoryRowView(core: core, texts: texts, config: config,
-                                                        row: row, lang: lang,
-                                                        palette: skin.palette))
+
+        let identity = rows.map { "\($0.id)/\($0.outcome)" }
+        guard identity != renderedRows || lang != renderedLang
+                || skin.palette.appearance != renderedAppearance else { return }
+        renderedRows = identity
+        renderedLang = lang
+        renderedAppearance = skin.palette.appearance
+
+        while rowViews.count > rows.count {
+            rowViews.removeLast().removeFromSuperview()
+        }
+        while rowViews.count < rows.count {
+            let view = CallHistoryRowView(texts: texts)
+            rowViews.append(view)
+            stack.addArrangedSubview(view)
+        }
+        for (index, row) in rows.enumerated() {
+            rowViews[index].update(core: core, config: config, row: row, lang: lang,
+                                   palette: skin.palette)
         }
     }
 }
@@ -181,40 +209,30 @@ final class RecentCallsView: UIView {
 /// A single history entry. It is a control so the same view works with the tvOS focus engine.
 final class CallHistoryRowView: UIControl {
 
-    let row: CallLogRow
+    private(set) var row = CallLogRow.empty
+    private let texts: Texts
     private let timeLabel = UILabel()
     private let titleLabel = UILabel()
     private let subtitleLabel = UILabel()
     private let missedBadge = PaddedLabel()
+    /// The wall time the visible stamp was formatted from, so a reused row only asks Core again
+    /// when it is actually showing a different call.
+    private var renderedTsMs: Int64 = -1
+    private var renderedPalette: DoorbellAppearance?
 
-    init(core: CoreBridge, texts: Texts, config: [String: Any]?, row: CallLogRow, lang: String,
-         palette: DoorbellPalette) {
-        self.row = row
+    init(texts: Texts) {
+        self.texts = texts
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
-        accessibilityIdentifier = "history_row_\(row.id)"
 
-        timeLabel.text = DoorbellClock.timeOfDay(core, wallMs: row.tsMs)
         timeLabel.font = .monospacedDigitSystemFont(ofSize: 16, weight: .medium)
-        timeLabel.textColor = palette.inkMuted
         timeLabel.setContentHuggingPriority(.required, for: .horizontal)
-
-        titleLabel.text = CallHistory.title(config: config, row: row, lang: lang)
         titleLabel.font = .systemFont(ofSize: 17, weight: .medium)
-        titleLabel.textColor = palette.ink
-
-        subtitleLabel.text = CallHistory.subtitle(texts, config: config, row: row, lang: lang)
         subtitleLabel.font = .systemFont(ofSize: 15)
-        subtitleLabel.textColor = palette.inkMuted
 
-        DoorbellTheme.pill(missedBadge, background: palette.danger,
-                           ink: DoorbellTheme.readableInk(on: palette.danger), fontSize: 13)
-        missedBadge.text = texts.t("history.outcome_missed")
-        missedBadge.isHidden = row.outcome != "missed"
         // A pill hugs its text; only the title column takes the leftover width.
         missedBadge.setContentHuggingPriority(.required, for: .horizontal)
         missedBadge.setContentCompressionResistancePriority(.required, for: .horizontal)
-
         let textColumn = UIStackView(arrangedSubviews: [titleLabel, subtitleLabel])
         textColumn.axis = .vertical
         textColumn.spacing = 1
@@ -234,6 +252,35 @@ final class CallHistoryRowView: UIControl {
             stack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -4),
             heightAnchor.constraint(greaterThanOrEqualToConstant: 44),
         ])
+    }
+
+    /// Points an existing row at a different call. Only what actually differs is assigned: every
+    /// text or colour written here invalidates layout for the whole list.
+    func update(core: CoreBridge, config: [String: Any]?, row: CallLogRow, lang: String,
+                palette: DoorbellPalette) {
+        self.row = row
+        accessibilityIdentifier = "history_row_\(row.id)"
+
+        if row.tsMs != renderedTsMs {
+            renderedTsMs = row.tsMs
+            timeLabel.text = DoorbellClock.timeOfDay(core, wallMs: row.tsMs)
+        }
+        let title = CallHistory.title(config: config, row: row, lang: lang)
+        if titleLabel.text != title { titleLabel.text = title }
+        let subtitle = CallHistory.subtitle(texts, config: config, row: row, lang: lang)
+        if subtitleLabel.text != subtitle { subtitleLabel.text = subtitle }
+
+        if renderedPalette != palette.appearance {
+            renderedPalette = palette.appearance
+            timeLabel.textColor = palette.inkMuted
+            titleLabel.textColor = palette.ink
+            subtitleLabel.textColor = palette.inkMuted
+            DoorbellTheme.pill(missedBadge, background: palette.danger,
+                               ink: DoorbellTheme.readableInk(on: palette.danger), fontSize: 13)
+            missedBadge.text = texts.t("history.outcome_missed")
+        }
+        let missed = row.outcome != "missed"
+        if missedBadge.isHidden != missed { missedBadge.isHidden = missed }
     }
 
     required init?(coder: NSCoder) { fatalError("not supported") }
@@ -432,8 +479,9 @@ final class CallHistoryViewController: UIViewController {
                 header.textColor = palette.inkMuted
                 stack.addArrangedSubview(header)
             }
-            stack.addArrangedSubview(CallHistoryRowView(core: core, texts: texts, config: config,
-                                                        row: row, lang: lang, palette: palette))
+            let view = CallHistoryRowView(texts: texts)
+            view.update(core: core, config: config, row: row, lang: lang, palette: palette)
+            stack.addArrangedSubview(view)
         }
         loadMoreButton.removeFromSuperview()
         if !reachedEnd && rows.count >= CallHistory.pageSize {

@@ -40,6 +40,26 @@ inferred from compilation, an emulator, a codec list, or a platform version.
 | Native and Web semantic UI manifests | Implemented with durable native cache and local-Web scope limit | Core persists each peer's last-valid native manifest/capabilities; configured offline devices appear as `cached_contract:true` and can be validated/queued against that contract, but need a later renderer apply report. The distinct `web_ui.manifest` is local to the serving node and is not a remote Web catalog. |
 | Cross-platform conformance harness | Golden model plus source smoke | It replays reference traces for declared profiles and checks narrow ordered source literals. It does not run native/browser artifacts and is not rendering, timing, hardware, or release evidence. |
 
+## Frosted-glass blur policy
+
+Native system blur remains authoritative when the OS owns the effect. In particular, the modern
+iOS shell keeps `UIBlurEffect`; it must not replace that effect with a custom renderer merely to
+offer a numeric radius. Apple does not expose a public radius for `UIBlurEffect`, so the radius
+control is unavailable on that shell and its Web device editor must explain that the value is
+system-managed rather than pretend that a stored value was applied.
+
+A numeric frosted-glass radius may be offered only by a shell that either owns its blur renderer or
+uses a public platform API with a real radius parameter. Unsupported shells ignore the setting and
+must not advertise the control as applied. This is a presentation capability, not a reason to make
+the visual result identical across operating systems.
+
+The iOS 5 compatibility shell may use an OpenGL ES 2.0 offscreen, two-round separable blur. It must
+render only when the background image, target size, or radius changes, cache the result, release GPU
+resources on memory pressure/backgrounding, and fall back to a bounded CPU blur when the ES 2.0
+context, framebuffer, shader, or texture allocation is unavailable. Core Image is not the fallback:
+`CIGaussianBlur` is unavailable on iOS 5. GPU use and timing remain an exact-iPad-1 qualification
+claim, not something compilation alone proves.
+
 ## Release gates
 
 A release is blocked unless every applicable item is satisfied:

@@ -3,7 +3,7 @@
 #import "../Media/DBSipListener.h"
 
 @class DBCoreBridge, DBBootConfig, DBTexts, DBScreen, DBHomeScreen, DBDoorScreen,
-       DBIncomingScreen, DBSettingsScreen, DBHistoryScreen;
+       DBIncomingScreen, DBSettingsScreen, DBHistoryScreen, DBPairingScreen;
 
 
 // Main-thread screen state machine and sole owner of the active SIP session. Screens are retained
@@ -19,6 +19,7 @@
 @property(nonatomic, readonly) DBHomeScreen *home;
 @property(nonatomic, readonly) DBDoorScreen *door;
 @property(nonatomic, readonly) DBIncomingScreen *incoming;
+@property(nonatomic, readonly) DBPairingScreen *pairing;
 
 - (id)initWithBridge:(DBCoreBridge *)core boot:(DBBootConfig *)boot;
 - (void)start;
@@ -38,6 +39,10 @@
 // Native settings (spec §3) and the full-screen call history (spec §5.1).
 // Callers gate both behind the admin password on a door station; the indoor
 // 管理 entry does the same.
+// Debug aid: open one screen by name, bypassing the admin password. The caller
+// must have checked that boot.json turned the screenshot hook on.
+- (void)showDebugStartScreen:(NSString *)name;
+
 - (void)showSettings;
 - (void)closeSettingsAnimated:(BOOL)animated;
 - (void)showHistory;

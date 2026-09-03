@@ -53,7 +53,14 @@ final class UIStyleApplier {
         ]
     }
 
-    func apply(config: [String: Any]?, nodeId: String, semanticId: String, to view: UIView) {
+    /// `offered` says whether this control belongs on this screen at all — a door station has no
+    /// SOS slider unless an administrator put its role on `emergency.button_on_roles`. The safety
+    /// floor further down exists to stop a *style* hiding a safety control; without this flag it
+    /// also resurrected one the shell had never offered, on every layout pass, which is what kept
+    /// an SOS slider on the door station's visitor screen after the role gate had hidden it.
+    func apply(config: [String: Any]?, nodeId: String, semanticId: String, to view: UIView,
+               offered: Bool = true) {
+        guard offered else { return }
         guard !nodeId.isEmpty else { return }
         let base = captureBaseline(for: view)
         let key = "devices.\(nodeId).local.ui.elements.\(semanticId)"

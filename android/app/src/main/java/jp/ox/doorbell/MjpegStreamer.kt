@@ -3,6 +3,7 @@
 package jp.ox.doorbell
 
 import android.graphics.Bitmap
+import android.os.SystemClock
 import android.util.Log
 import java.io.BufferedInputStream
 import java.io.InputStream
@@ -16,10 +17,19 @@ class MjpegStreamer(private val url: String, private val onFrame: (Bitmap, Int) 
     @Volatile
     private var running = false
     private var thread: Thread? = null
+    private var startupMs = 0L
+    private var tracedHeaders = false
+    private var tracedPart = false
+    private var tracedDecode = false
 
     fun start() {
         if (running) return
         running = true
+        startupMs = SystemClock.elapsedRealtime()
+        tracedHeaders = false
+        tracedPart = false
+        tracedDecode = false
+        trace("request_start")
         thread = Thread({ loop() }, "mjpeg-$url").apply {
             isDaemon = true
             start()
@@ -40,9 +50,21 @@ class MjpegStreamer(private val url: String, private val onFrame: (Bitmap, Int) 
                 conn.connectTimeout = 4000
                 conn.readTimeout = 10000
                 val ins = BufferedInputStream(conn.inputStream, 64 * 1024)
+                if (!tracedHeaders) {
+                    tracedHeaders = true
+                    trace("http_response_headers")
+                }
                 while (running) {
                     val frame = readPart(ins) ?: break
+                    if (!tracedPart) {
+                        tracedPart = true
+                        trace("first_complete_multipart")
+                    }
                     val bmp = BoundedBitmapDecoder.decode(frame.jpeg, MAX_WIDTH, MAX_HEIGHT) ?: continue
+                    if (!tracedDecode) {
+                        tracedDecode = true
+                        trace("first_jpeg_decoded")
+                    }
                     if (running) onFrame(bmp, frame.rotation)
                 }
             } catch (e: Exception) {
@@ -53,6 +75,10 @@ class MjpegStreamer(private val url: String, private val onFrame: (Bitmap, Int) 
             if (!running) break
             try { Thread.sleep(2000) } catch (_: InterruptedException) { }
         }
+    }
+
+    private fun trace(stage: String) {
+        Log.i(TAG, "startup $stage +${SystemClock.elapsedRealtime() - startupMs}ms")
     }
 
     /** Read one bounded part; return null at the stream boundary. */

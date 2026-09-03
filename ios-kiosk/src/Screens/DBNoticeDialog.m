@@ -367,7 +367,7 @@
 // time zone, so the offset is computed from its local-time document instead of
 // from the operating system's calendar.
 - (long long)endOfDayOffsetMs {
-  NSDictionary *local = [_core localTimeJson:0];
+  NSDictionary *local = [_core cachedLocalTime];
   if (![local isKindOfClass:[NSDictionary class]]) return 0;
   NSInteger hh = [DBConfigUtil intVal:local path:@"hh" def:-1];
   NSInteger mm = [DBConfigUtil intVal:local path:@"mm" def:0];

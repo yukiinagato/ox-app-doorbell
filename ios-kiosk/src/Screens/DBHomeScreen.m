@@ -4,6 +4,9 @@
 #import "../Core/DBCallHistoryModel.h"
 #import "../Core/DBConfigUtil.h"
 #import "../Core/DBCoreBridge.h"
+#import "../Core/DBDoorTileModel.h"
+#import "../Core/DBFrostedBlur.h"
+#import "../Core/DBFleetCounts.h"
 #import "../Core/DBNoticeModel.h"
 #import "../Core/DBPairingModel.h"
 #import "../Core/DBRefreshCoalescer.h"
@@ -24,13 +27,134 @@ static CGRect DBRectFromArray(NSArray *rect) {
                     (CGFloat)[[rect objectAtIndex:3] doubleValue]);
 }
 
+@interface DBFrostedPlateView : UIView
+- (void)setBackdrop:(UIImage *)backdrop sourceFrame:(CGRect)sourceFrame
+         canvasSize:(CGSize)canvasSize tint:(UIColor *)tint border:(UIColor *)border;
+@end
+
+@implementation DBFrostedPlateView {
+  UIImage *_backdrop;
+  CGRect _sourceFrame;
+  CGSize _canvasSize;
+  UIColor *_tint;
+}
+
+- (void)setBackdrop:(UIImage *)backdrop sourceFrame:(CGRect)sourceFrame
+         canvasSize:(CGSize)canvasSize tint:(UIColor *)tint border:(UIColor *)border {
+  _backdrop = backdrop;
+  _sourceFrame = sourceFrame;
+  _canvasSize = canvasSize;
+  _tint = tint;
+  self.layer.borderWidth = 0.5;
+  self.layer.borderColor = border.CGColor;
+  [self setNeedsDisplay];
+}
+
+- (void)drawRect:(CGRect)rect {
+  (void)rect;
+  if (_backdrop && _sourceFrame.size.width > 0 && _sourceFrame.size.height > 0 &&
+      _canvasSize.width > 0 && _canvasSize.height > 0) {
+    CGFloat sx = self.bounds.size.width / _sourceFrame.size.width;
+    CGFloat sy = self.bounds.size.height / _sourceFrame.size.height;
+    [_backdrop drawInRect:CGRectMake(-_sourceFrame.origin.x * sx,
+                                     -_sourceFrame.origin.y * sy,
+                                     _canvasSize.width * sx, _canvasSize.height * sy)];
+  }
+  [_tint setFill];
+  UIRectFillUsingBlendMode(self.bounds, kCGBlendModeNormal);
+}
+
+@end
+
+@interface DBRecentCallRowView : UIView
+- (void)setClock:(NSString *)clock door:(NSString *)door outcome:(NSString *)outcome
+          missed:(BOOL)missed palette:(DBUiPalette *)palette;
+@end
+
+@implementation DBRecentCallRowView {
+  UILabel *_clock;
+  UILabel *_door;
+  UILabel *_outcome;
+  UIColor *_separator;
+}
+
+- (id)initWithFrame:(CGRect)frame {
+  self = [super initWithFrame:frame];
+  if (self) {
+    self.backgroundColor = [UIColor clearColor];
+    _clock = [[UILabel alloc] init];
+    _door = [[UILabel alloc] init];
+    _outcome = [[UILabel alloc] init];
+    for (UILabel *label in [NSArray arrayWithObjects:_clock, _door, _outcome, nil]) {
+      label.backgroundColor = [UIColor clearColor];
+      label.adjustsFontSizeToFitWidth = YES;
+      label.minimumFontSize = 13;
+      [self addSubview:label];
+    }
+    _clock.font = [UIFont systemFontOfSize:17];
+    _door.font = [UIFont boldSystemFontOfSize:18];
+    _outcome.font = [UIFont systemFontOfSize:17];
+    _outcome.textAlignment = NSTextAlignmentRight;
+  }
+  return self;
+}
+
+- (void)setClock:(NSString *)clock door:(NSString *)door outcome:(NSString *)outcome
+          missed:(BOOL)missed palette:(DBUiPalette *)palette {
+  _clock.text = clock;
+  _door.text = door;
+  _outcome.text = outcome;
+  UIColor *ink = missed ? palette.danger : palette.ink;
+  _clock.textColor = missed ? palette.danger : palette.mutedInk;
+  _door.textColor = ink;
+  _outcome.textColor = ink;
+  _separator = [palette.ink colorWithAlphaComponent:0.12];
+  [self setNeedsDisplay];
+}
+
+- (void)layoutSubviews {
+  [super layoutSubviews];
+  CGFloat width = self.bounds.size.width;
+  CGFloat height = self.bounds.size.height;
+  CGFloat clockWidth = MIN(62, width * 0.18);
+  CGFloat outcomeWidth = MIN(92, width * 0.26);
+  CGFloat gap = 10;
+  _clock.frame = CGRectMake(0, 0, clockWidth, height - 1);
+  _outcome.frame = CGRectMake(width - outcomeWidth, 0, outcomeWidth, height - 1);
+  _door.frame = CGRectMake(clockWidth + gap, 0,
+                           MAX(0, width - clockWidth - outcomeWidth - gap * 2), height - 1);
+}
+
+- (void)drawRect:(CGRect)rect {
+  (void)rect;
+  [_separator setStroke];
+  CGContextRef context = UIGraphicsGetCurrentContext();
+  CGContextSetLineWidth(context, 0.5);
+  CGContextMoveToPoint(context, 0, self.bounds.size.height - 0.5);
+  CGContextAddLineToPoint(context, self.bounds.size.width, self.bounds.size.height - 0.5);
+  CGContextStrokePath(context);
+}
+
+@end
+
 static const NSTimeInterval kSnapshotIntervalS = 5.0;
+// Safe mode keeps the door picture, smaller and less often. It is already the
+// bounded low-resolution snapshot the safe-mode contract asks for, and a panel
+// latched in safe mode for hours must not sit in front of a black door tile.
+static const CGFloat kSnapshotMaxSide = 320;
+static const CGFloat kSafeModeSnapshotMaxSide = 160;
+static const NSInteger kSafeModeSnapshotEveryNTicks = 3;
 static const NSInteger kRecentCallLimit = 20;
 
 // One door tile: a five-second still, the door label, and the announcement chip.
 @interface DBDoorTile : UIButton
+// Stable identity across status polls, so a tile is created once per door. The
+// door id is that identity: a door outlives the station serving it, and keying
+// on the peer threw the still away every time the serving node changed.
 @property(nonatomic, copy) NSString *doorId;
 @property(nonatomic, strong) NSDictionary *peer;
+@property(nonatomic, copy) NSString *snapshotURL;
+@property(nonatomic) BOOL online;
 @property(nonatomic, readonly) UIImageView *still;
 @property(nonatomic, readonly) DBPillLabel *caption;
 @property(nonatomic, readonly) DBNoticeChip *noticeChip;
@@ -44,8 +168,9 @@ static const NSInteger kRecentCallLimit = 20;
   UILabel *_offlineLabel;
 }
 
-@synthesize doorId = _doorId, peer = _peer, still = _still, caption = _caption,
-            noticeChip = _noticeChip, offlineLabel = _offlineLabel;
+@synthesize doorId = _doorId, peer = _peer, snapshotURL = _snapshotURL, online = _online,
+            still = _still, caption = _caption, noticeChip = _noticeChip,
+            offlineLabel = _offlineLabel;
 
 - (id)initWithFrame:(CGRect)frame {
   self = [super initWithFrame:frame];
@@ -61,11 +186,11 @@ static const NSInteger kRecentCallLimit = 20;
     _offlineLabel = [[UILabel alloc] init];
     _offlineLabel.backgroundColor = [UIColor clearColor];
     _offlineLabel.textAlignment = NSTextAlignmentCenter;
-    _offlineLabel.font = [UIFont systemFontOfSize:16];
+    _offlineLabel.font = [UIFont systemFontOfSize:19];
     _offlineLabel.userInteractionEnabled = NO;
     [self addSubview:_offlineLabel];
     _caption = [[DBPillLabel alloc] initWithFrame:CGRectZero];
-    _caption.font = [UIFont boldSystemFontOfSize:18];
+    _caption.font = [UIFont boldSystemFontOfSize:22];
     _caption.userInteractionEnabled = NO;
     [self addSubview:_caption];
     _noticeChip = [[DBNoticeChip alloc] initWithFrame:CGRectZero];
@@ -106,11 +231,14 @@ static const NSInteger kRecentCallLimit = 20;
   NSString *_nodeId;
   NSString *_themeHash;
   NSString *_themeAverageHex;   // Whole-image average, the fallback background.
+  NSString *_themeFallbackReason;   // Why the picture is not on screen.
+  NSDictionary *_themeOverlay;      // The scrim the picture was prepared with.
   UIImage *_themeImage;
   DBBackgroundSampler *_sampler;   // Per-region sampling of the theme image.
   CGSize _samplerSize;
+  CGSize _themeImageSize;
   BOOL _samplerBuilding;
-  NSArray *_doorPeers;
+  NSArray *_doorTileInfos;
   NSArray *_recentRows;
   NSInteger _unreadMissed;
   NSInteger _tzOffsetMinutes;
@@ -128,6 +256,9 @@ static const NSInteger kRecentCallLimit = 20;
   NSTimer *_snapshotTimer;
   NSTimer *_peersTimer;
   NSInteger _snapshotGeneration;
+  NSInteger _snapshotTick;
+  NSInteger _previewPage;
+  NSMutableArray *_previewPriorityDoors;
 
   NSInteger _secretTaps;
   NSDate *_secretFirst;
@@ -137,9 +268,13 @@ static const NSInteger kRecentCallLimit = 20;
 
   // UI
   UIImageView *_themeBg;
+  UIImage *_themeGlassImage;
+  NSUInteger _themeGlassRadius;
+  UIView *_historyScrim;   // Readability plate under the call list.
+  UIView *_footerScrim;    // ...and under the QR block and version line.
   UILabel *_clockLabel;
   UILabel *_dateLabel;
-  DBPillLabel *_membershipPill;
+  NSArray *_fleetCounters;   // Three DBFleetCounter, left to right.
   UIButton *_membershipButton;
   DBPillLabel *_missedBadge;
   UIButton *_missedButton;
@@ -178,9 +313,10 @@ static const NSInteger kRecentCallLimit = 20;
     _boot = router.boot;
     _texts = router.texts;
     _audio = [[DBSiren alloc] init];
-    _doorPeers = [NSArray array];
+    _doorTileInfos = [NSArray array];
     _recentRows = [NSArray array];
     _doorTiles = [[NSMutableArray alloc] init];
+    _previewPriorityDoors = [[NSMutableArray alloc] init];
     _recentLabels = [[NSMutableArray alloc] init];
     _nodeId = @"";
     _brightness = 70;
@@ -201,6 +337,7 @@ static const NSInteger kRecentCallLimit = 20;
 - (UIButton *)flatButton:(CGFloat)size {
   UIButton *button = [UIButton buttonWithType:UIButtonTypeCustom];
   button.titleLabel.font = [UIFont boldSystemFontOfSize:size];
+  button.titleLabel.adjustsFontSizeToFitWidth = NO;
   button.layer.cornerRadius = 10;
   button.clipsToBounds = YES;
   button.contentEdgeInsets = UIEdgeInsetsMake(6, 14, 6, 14);
@@ -210,30 +347,48 @@ static const NSInteger kRecentCallLimit = 20;
 - (void)buildUi {
   _themeBg = [[UIImageView alloc] init];
   _themeBg.contentMode = UIViewContentModeScaleAspectFill;
+  _themeBg.opaque = YES;
   _themeBg.clipsToBounds = YES;
   _themeBg.hidden = YES;
   [self addSubview:_themeBg];
+  // Two plates directly over the picture and under everything else. A busy
+  // wallpaper defeats per-region ink for a whole block of small text: the ink
+  // rule can pick a colour that wins on average and still lose over one bright
+  // patch. The door tiles already solve this by being cards, so the call list
+  // and the footer become cards too, at the same radius and tone.
+  _historyScrim = [self newScrimView];
+  _footerScrim = [self newScrimView];
 
   _clockLabel = [[UILabel alloc] init];
   _clockLabel.backgroundColor = [UIColor clearColor];
-  _clockLabel.font = [UIFont systemFontOfSize:76];
+  _clockLabel.font = [UIFont systemFontOfSize:96];
   [self addSubview:_clockLabel];
 
   _dateLabel = [[UILabel alloc] init];
   _dateLabel.backgroundColor = [UIColor clearColor];
-  _dateLabel.font = [UIFont systemFontOfSize:22];
+  _dateLabel.font = [UIFont systemFontOfSize:28];
   [self addSubview:_dateLabel];
 
-  _membershipPill = [[DBPillLabel alloc] initWithFrame:CGRectZero];
-  _membershipPill.font = [UIFont systemFontOfSize:16];
-  [self addSubview:_membershipPill];
+  // Three compact counters instead of one sentence: at a glance the owner wants
+  // how many devices there are and how many of each kind are answering.
+  NSMutableArray *counters = [NSMutableArray array];
+  DBFleetGlyph glyphs[3] = { DBFleetGlyphCluster, DBFleetGlyphDoorStation,
+                             DBFleetGlyphIndoorPanel };
+  for (NSUInteger i = 0; i < 3; i++) {
+    DBFleetCounter *counter = [[DBFleetCounter alloc] initWithFrame:CGRectZero];
+    counter.glyph = glyphs[i];
+    counter.userInteractionEnabled = NO;
+    [self addSubview:counter];
+    [counters addObject:counter];
+  }
+  _fleetCounters = counters;
   _membershipButton = [UIButton buttonWithType:UIButtonTypeCustom];
   [_membershipButton addTarget:self action:@selector(onMembership)
               forControlEvents:UIControlEventTouchUpInside];
   [self addSubview:_membershipButton];
 
   _missedBadge = [[DBPillLabel alloc] initWithFrame:CGRectZero];
-  _missedBadge.font = [UIFont boldSystemFontOfSize:17];
+  _missedBadge.font = [UIFont boldSystemFontOfSize:21];
   _missedBadge.hidden = YES;
   [self addSubview:_missedBadge];
   _missedButton = [UIButton buttonWithType:UIButtonTypeCustom];
@@ -242,7 +397,7 @@ static const NSInteger kRecentCallLimit = 20;
           forControlEvents:UIControlEventTouchUpInside];
   [self addSubview:_missedButton];
 
-  _adminButton = [self flatButton:18];
+  _adminButton = [self flatButton:19];
   [_adminButton addTarget:self action:@selector(onAdmin)
          forControlEvents:UIControlEventTouchUpInside];
   [self addSubview:_adminButton];
@@ -262,15 +417,19 @@ static const NSInteger kRecentCallLimit = 20;
 
   _doorsCaption = [[UILabel alloc] init];
   _doorsCaption.backgroundColor = [UIColor clearColor];
-  _doorsCaption.font = [UIFont systemFontOfSize:16];
+  _doorsCaption.font = [UIFont systemFontOfSize:20];
+  _doorsCaption.userInteractionEnabled = YES;
+  [_doorsCaption addGestureRecognizer:[[UITapGestureRecognizer alloc]
+      initWithTarget:self action:@selector(onNextDoorPreviewPage)]];
   [self addSubview:_doorsCaption];
 
   _recentCaption = [[UILabel alloc] init];
   _recentCaption.backgroundColor = [UIColor clearColor];
-  _recentCaption.font = [UIFont systemFontOfSize:16];
+  _recentCaption.font = [UIFont systemFontOfSize:20];
   [self addSubview:_recentCaption];
 
-  _seeAllButton = [self flatButton:16];
+  _seeAllButton = [self flatButton:19];
+  _seeAllButton.contentEdgeInsets = UIEdgeInsetsMake(2, 10, 2, 10);
   [_seeAllButton addTarget:self action:@selector(onHistory)
           forControlEvents:UIControlEventTouchUpInside];
   [self addSubview:_seeAllButton];
@@ -281,15 +440,19 @@ static const NSInteger kRecentCallLimit = 20;
 
   _recentEmpty = [[UILabel alloc] init];
   _recentEmpty.backgroundColor = [UIColor clearColor];
-  _recentEmpty.font = [UIFont systemFontOfSize:17];
+  _recentEmpty.font = [UIFont systemFontOfSize:20];
   [self addSubview:_recentEmpty];
 
   _qr = [[DBAdminQrView alloc] initWithFrame:CGRectZero];
   [self addSubview:_qr];
 
+  // Kept only so nothing else has to change shape; the footer's version line
+  // is drawn by the QR block now.
   _versionLabel = [[UILabel alloc] init];
+  _versionLabel.hidden = YES;
   _versionLabel.backgroundColor = [UIColor clearColor];
-  _versionLabel.font = [UIFont systemFontOfSize:13];
+  _versionLabel.font = [UIFont systemFontOfSize:16];
+  _versionLabel.numberOfLines = 2;
   [self addSubview:_versionLabel];
 
   _sos = [[DBSosSlider alloc] initWithFrame:CGRectZero];
@@ -307,9 +470,8 @@ static const NSInteger kRecentCallLimit = 20;
   [self buildEmergencyView];
 
   _secretCorner = [UIButton buttonWithType:UIButtonTypeCustom];
-  _secretCorner.backgroundColor = [UIColor clearColor];
-  [_secretCorner addTarget:self action:@selector(onSecretCorner)
-          forControlEvents:UIControlEventTouchUpInside];
+  _secretCorner.hidden = YES;
+  _secretCorner.userInteractionEnabled = NO;
   [self addSubview:_secretCorner];
 
   [self applyPalette];
@@ -431,7 +593,7 @@ static const NSInteger kRecentCallLimit = 20;
 // no operating-system time-zone database and follows the cluster zone and the
 // NTP correction exactly like every other shell.
 - (void)updateClock {
-  NSDictionary *local = [_core localTimeJson:0];
+  NSDictionary *local = [_core cachedLocalTime];
   if (![local isKindOfClass:[NSDictionary class]]) return;
   NSInteger hh = [DBConfigUtil intVal:local path:@"hh" def:-1];
   if (hh < 0) return;
@@ -490,7 +652,8 @@ static const NSInteger kRecentCallLimit = 20;
   if (status) {
     _status = status;
     _nodeId = [DBConfigUtil str:status path:@"node.id"] ?: @"";
-    _doorPeers = [DBConfigUtil doorPeers:status];
+    _doorTileInfos = [DBDoorTileModel tilesFromStatus:status config:_cfg boot:_boot];
+    [self updateFleetCounters];
     NSDictionary *display = [status objectForKey:@"display"];
     if ([display isKindOfClass:[NSDictionary class]]) {
       _display = display;
@@ -522,19 +685,7 @@ static const NSInteger kRecentCallLimit = 20;
 - (void)applyPairingSnapshot:(NSDictionary *)pairing {
   NSString *state = [DBPairingModel stateFromPairingInfo:pairing];
   if (![state isEqualToString:DBPairingStateUnknown]) _pairingState = state;
-  NSInteger members = [DBConfigUtil intVal:pairing path:@"home.member_count" def:0];
-  NSInteger connected = [DBConfigUtil intVal:pairing path:@"home.connected_count" def:0];
-  BOOL founder = [DBConfigUtil boolVal:pairing path:@"is_founder" def:NO];
   BOOL ready = [_pairingState isEqualToString:@"ready"];
-  if (ready && members > 0) {
-    NSMutableArray *parts = [NSMutableArray array];
-    [parts addObject:[_texts t:@"pair.membership",
-                          [NSString stringWithFormat:@"%ld", (long)members], nil]];
-    [parts addObject:[_texts t:@"pair.membership_connected",
-                          [NSString stringWithFormat:@"%ld", (long)connected], nil]];
-    if (founder) [parts addObject:[_texts ts:@"pair.created_badge"]];
-    _membershipPill.text = [parts componentsJoinedByString:@"  ·  "];
-  }
   BOOL showBanner = !ready && ![_pairingState isEqualToString:DBPairingStateUnknown];
   [_pairBanner setTitle:[_texts ts:@"pair.not_set_up_banner"] forState:UIControlStateNormal];
   _pairBanner.hidden = !showBanner;
@@ -571,8 +722,6 @@ static const NSInteger kRecentCallLimit = 20;
   [_palette setBackgroundSampler:_sampler];
   [self applyRegionInk];
 
-  _membershipPill.backgroundColor = _palette.elevated;
-  _membershipPill.textColor = _palette.ink;
   _missedBadge.backgroundColor = _palette.danger;
   _missedBadge.textColor = _palette.dangerInk;
   _adminButton.backgroundColor = _palette.elevated;
@@ -586,34 +735,88 @@ static const NSInteger kRecentCallLimit = 20;
   _offlineView.backgroundColor = _palette.surface;
   _offlineTitle.textColor = _palette.ink;
   _offlineBody.textColor = _palette.mutedInk;
+  [self applyScrimTone];
+}
+
+// A scrim plate: the surface colour at 70 %, so the picture still reads through
+// it while small text over it gets a stable ground. Card radius matches a door
+// tile, and it never takes touches away from the controls above it.
+- (UIView *)newScrimView {
+  UIView *scrim = [[DBFrostedPlateView alloc] initWithFrame:CGRectZero];
+  scrim.layer.cornerRadius = 12;
+  scrim.clipsToBounds = YES;
+  scrim.userInteractionEnabled = NO;
+  scrim.hidden = YES;
+  [self insertSubview:scrim aboveSubview:_themeBg];
+  return scrim;
+}
+
+static const CGFloat kScrimAlpha = 0.70;
+static const CGFloat kFooterGlassAlpha = 0.65;
+
+// The plates exist only over a picture; on a flat ground they would be a
+// visible rectangle of very slightly different colour for no benefit.
+- (void)applyScrimTone {
+  BOOL overPicture = !_themeBg.hidden && _themeBg.image != nil;
+  UIColor *fallbackTone = [_palette.surface colorWithAlphaComponent:kScrimAlpha];
+  _historyScrim.backgroundColor = overPicture ? [UIColor clearColor] : fallbackTone;
+  _footerScrim.backgroundColor = [UIColor clearColor];
+  _historyScrim.hidden = !overPicture;
+  _footerScrim.hidden = !overPicture;
+}
+
+// Why the dashboard is on a flat ground rather than the theme picture. The two
+// answers look identical on screen and are entirely different faults, so the
+// panel says which one it is exactly once per transition.
+- (void)noteThemeFallback:(NSString *)reason {
+  if ([_themeFallbackReason isEqualToString:reason]) return;
+  _themeFallbackReason = [reason copy];
+  if ([reason length] > 0)
+    NSLog(@"[doorbell] dashboard is on the flat auto background: %@", reason);
 }
 
 - (void)applyTheme {
   if (_safeMode) {
+    // Safe mode disables custom visuals by contract; the picture is one.
+    [self noteThemeFallback:@"safe_mode"];
     _themeHash = nil;
     _themeAverageHex = nil;
     _themeImage = nil;
+    _themeGlassImage = nil;
     _themeBg.image = nil;
     _themeBg.hidden = YES;
     [self refreshBackgroundSampler];
     self.backgroundColor = _palette.surface;
+    [self applyScrimTone];
     return;
   }
   NSString *color = [self themeValue:@"bg_color"];
   UIColor *parsed = color ? [DBConfigUtil parseHexColor:color] : nil;
   NSString *hash = [self themeValue:@"bg_image"];
   if ([hash length] == 0) {
+    [self noteThemeFallback:@"no_theme_image_configured"];
     _themeHash = nil;
     _themeAverageHex = nil;
     _themeImage = nil;
+    _themeGlassImage = nil;
     _themeBg.image = nil;
     _themeBg.hidden = YES;
     [self refreshBackgroundSampler];
     self.backgroundColor = parsed ?: _palette.surface;
+    [self applyScrimTone];
     return;
   }
   self.backgroundColor = parsed ?: _palette.surface;
-  if ([_themeHash isEqualToString:hash] && _themeBg.image != nil) return;
+  [self applyScrimTone];
+  NSDictionary *overlay = [DBUiTheme backdropOverlayForConfig:_cfg deviceId:_nodeId
+                                                      display:_display];
+  NSUInteger glassRadius = [DBUiTheme frostedGlassRadiusForConfig:_cfg deviceId:_nodeId
+                                                           display:_display];
+  BOOL sameOverlay = [_themeOverlay isEqualToDictionary:overlay];
+  if ([_themeHash isEqualToString:hash] && _themeBg.image != nil && sameOverlay &&
+      _themeGlassRadius == glassRadius) return;
+  _themeOverlay = overlay;
+  _themeGlassRadius = glassRadius;
   _themeHash = hash;
   [self loadThemeImage:hash];
 }
@@ -624,20 +827,45 @@ static const NSInteger kRecentCallLimit = 20;
   NSURL *url = [NSURL URLWithString:urlString];
   if (url == nil) return;
   NSString *want = [hash copy];
+  CGSize size = self.bounds.size;
+  // The administrator's overlay, resolved before the hop off the main thread so
+  // the worker reads no shared state.
+  NSDictionary *overlay = [DBUiTheme backdropOverlayForConfig:_cfg deviceId:_nodeId
+                                                      display:_display];
+  NSUInteger glassRadius = [DBUiTheme frostedGlassRadiusForConfig:_cfg deviceId:_nodeId
+                                                           display:_display];
   __weak DBHomeScreen *weakSelf = self;
   dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_LOW, 0), ^{
-    NSData *data = [NSData dataWithContentsOfURL:url];
-    UIImage *image = data ? [UIImage imageWithData:data] : nil;
-    // The average is computed here, off the main thread, because the ink rule
-    // needs it before the first paint that uses the image.
-    NSString *average = [DBUiPalette averageHexForImage:image];
+    // One decode, at panel size, darkened once and cached per picture and
+    // size; the sampler then measures the very pixels that are on screen.
+    UIImage *backdrop = [DBThemeBackdrop cachedBackdropForKey:want size:size
+                                                      overlay:overlay];
+    NSData *data = nil;
+    if (backdrop == nil) {
+      data = [NSData dataWithContentsOfURL:url];
+      backdrop = [DBThemeBackdrop backdropForData:data key:want size:size overlay:overlay];
+    }
+    BOOL usedGPU = NO;
+    UIImage *glass = [DBFrostedBlur blurredImage:backdrop radius:glassRadius usedGPU:&usedGPU];
+    if (backdrop && !glass) glass = backdrop;
+    NSString *average = [DBUiPalette averageHexForImage:backdrop];
     dispatch_async(dispatch_get_main_queue(), ^{
       DBHomeScreen *screen = weakSelf;
-      if (!screen || ![screen->_themeHash isEqualToString:want]) return;
-      screen->_themeBg.image = image;
-      screen->_themeBg.hidden = (image == nil);
+      if (!screen || ![screen->_themeHash isEqualToString:want] ||
+          screen->_themeGlassRadius != glassRadius ||
+          ![screen->_themeOverlay isEqualToDictionary:overlay] ||
+          !CGSizeEqualToSize(screen.bounds.size, size)) return;
+      [screen noteThemeFallback:(backdrop != nil) ? @""
+          : ([data length] == 0 ? @"theme_asset_fetch_failed" : @"theme_asset_decode_failed")];
+      screen->_themeBg.image = backdrop;
+      screen->_themeBg.hidden = (backdrop == nil);
       screen->_themeAverageHex = average;
-      screen->_themeImage = image;
+      screen->_themeImage = backdrop;
+      screen->_themeGlassImage = glass;
+      screen->_themeGlassRadius = glassRadius;
+      if (glass) NSLog(@"[doorbell] frosted glass radius=%lu renderer=%@",
+                       (unsigned long)glassRadius, usedGPU ? @"gpu" : @"cpu");
+      screen->_themeImageSize = size;
       screen->_samplerSize = CGSizeZero;
       [screen refreshBackgroundSampler];
       [screen applyPalette];
@@ -683,10 +911,10 @@ static const NSInteger kRecentCallLimit = 20;
   BOOL charging = [DBConfigUtil boolVal:power path:@"charging" def:NO];
   NSString *appVersion = [[NSBundle mainBundle]
       objectForInfoDictionaryKey:@"CFBundleShortVersionString"] ?: @"";
-  _versionLabel.text = [DBUiTheme versionLineForName:_boot.name
-                                         coreVersion:[_core coreVersion]
-                                          appVersion:appVersion
-                                          batteryPct:battery charging:charging];
+  [_qr setVersionLine:[DBUiTheme versionLineForName:_boot.name
+                                        coreVersion:[_core coreVersion]
+                                         appVersion:appVersion
+                                         batteryPct:battery charging:charging]];
   // The admin QR is always visible on an indoor panel; opening the admin still
   // asks for the password (spec §5.1).
   [_qr setUrl:[self adminUrl] caption:[_texts ts:@"web_admin.open"]];
@@ -708,61 +936,168 @@ static const NSInteger kRecentCallLimit = 20;
                                     (long)_boot.httpPort];
 }
 
+// Status arrives every five seconds and on every event. Tearing the tiles down
+// and rebuilding them each time threw away the still image and forced a fresh
+// decode, which is the hitch the owner sees on the dashboard. Tiles are now
+// created once per door and updated in place; only a membership change touches
+// the view tree.
+- (void)updateFleetCounters {
+  if ([_fleetCounters count] != 3) return;
+  DBFleetCounts *counts = [DBFleetCounts countsFromStatus:_status config:_cfg];
+  NSString *devices = [NSString stringWithFormat:@"%ld", (long)counts.devices];
+  NSString *doors = [NSString stringWithFormat:@"%ld/%ld", (long)counts.doorStationsOnline,
+                     (long)counts.doorStations];
+  NSString *panels = [NSString stringWithFormat:@"%ld/%ld", (long)counts.panelsOnline,
+                      (long)counts.panels];
+  DBFleetCounter *first = [_fleetCounters objectAtIndex:0];
+  DBFleetCounter *second = [_fleetCounters objectAtIndex:1];
+  DBFleetCounter *third = [_fleetCounters objectAtIndex:2];
+  first.value = devices;
+  second.value = doors;
+  third.value = panels;
+  // The glyphs carry the meaning on screen; a screen reader gets the sentence.
+  first.accessibilityLabel = [_texts t:@"dash.count_devices", devices, nil];
+  second.accessibilityLabel = [_texts t:@"dash.count_door_stations",
+      [NSString stringWithFormat:@"%ld", (long)counts.doorStationsOnline],
+      [NSString stringWithFormat:@"%ld", (long)counts.doorStations], nil];
+  third.accessibilityLabel = [_texts t:@"dash.count_panels",
+      [NSString stringWithFormat:@"%ld", (long)counts.panelsOnline],
+      [NSString stringWithFormat:@"%ld", (long)counts.panels], nil];
+  [self setNeedsLayout];
+}
+
 - (void)rebuildDoorTiles {
-  for (DBDoorTile *tile in _doorTiles) [tile removeFromSuperview];
-  [_doorTiles removeAllObjects];
+  NSMutableArray *live = [NSMutableArray array];
+  NSMutableArray *keys = [NSMutableArray array];
+  for (DBDoorTileInfo *info in _doorTileInfos) [keys addObject:info.doorId];
+  // Drop tiles whose door left the cluster.
+  for (NSInteger i = (NSInteger)[_doorTiles count] - 1; i >= 0; i--) {
+    DBDoorTile *tile = [_doorTiles objectAtIndex:(NSUInteger)i];
+    if (![keys containsObject:tile.doorId ?: @""]) {
+      [tile removeFromSuperview];
+      [_doorTiles removeObjectAtIndex:(NSUInteger)i];
+    }
+  }
   long long nowMs = (long long)([[NSDate date] timeIntervalSince1970] * 1000.0);
   NSInteger index = 0;
-  for (NSDictionary *peer in _doorPeers) {
-    DBDoorTile *tile = [[DBDoorTile alloc] initWithFrame:CGRectZero];
-    tile.peer = peer;
-    tile.doorId = [DBConfigUtil evStr:peer key:@"door"];
+  for (DBDoorTileInfo *info in _doorTileInfos) {
+    DBDoorTile *tile = nil;
+    for (DBDoorTile *candidate in _doorTiles) {
+      if ([(candidate.doorId ?: @"") isEqualToString:info.doorId]) {
+        tile = candidate;
+        break;
+      }
+    }
+    if (tile == nil) {
+      tile = [[DBDoorTile alloc] initWithFrame:CGRectZero];
+      tile.doorId = info.doorId;
+      [tile addTarget:self action:@selector(onDoorTile:)
+     forControlEvents:UIControlEventTouchUpInside];
+      [self addSubview:tile];
+      [_doorTiles addObject:tile];
+    }
+    [live addObject:tile];
+    tile.peer = info.peer;
+    tile.snapshotURL = info.snapshotURL;
+    tile.online = info.online;
     tile.tag = index++;
     tile.backgroundColor = _palette.elevated;
-    NSString *name = [DBConfigUtil evStr:peer key:@"door_label"];
-    if ([name length] == 0) name = [DBConfigUtil evStr:peer key:@"name"];
-    if ([name length] == 0) name = tile.doorId;
+    NSDictionary *doorEntry = [DBConfigUtil dig:_cfg
+        path:[NSString stringWithFormat:@"doors.%@", info.doorId]];
+    NSString *name = [DBConfigUtil labelOf:doorEntry lang:_boot.uiLang fallback:@""];
+    if ([name length] == 0) name = info.label;
+    if ([name length] == 0) name = [DBConfigUtil evStr:info.peer key:@"name"];
+    if ([name length] == 0) name = info.doorId;
     tile.caption.text = name;
     tile.caption.backgroundColor = [UIColor colorWithWhite:0 alpha:0.55];
     tile.caption.textColor = [UIColor whiteColor];
     tile.offlineLabel.textColor = _palette.mutedInk;
     tile.offlineLabel.text = [_texts ts:@"dash.tile_offline"];
-    tile.offlineLabel.hidden = YES;
+    // The badge reports the door station, never the state of the still cache.
+    // A tile whose first JPEG has not landed yet is online with a black frame.
+    tile.offlineLabel.hidden = info.online;
+    if (!info.online) tile.still.image = nil;
     NSDictionary *notice = [DBNoticeModel effectiveNoticeForDoor:tile.doorId config:_cfg
                                                             nowMs:nowMs];
     [tile.noticeChip applyPalette:_palette];
     [tile.noticeChip setChipTitle:[_texts ts:@"notice.chip"] active:YES];
     tile.noticeChip.hidden = (notice == nil);
-    [tile addTarget:self action:@selector(onDoorTile:)
-   forControlEvents:UIControlEventTouchUpInside];
-    [self addSubview:tile];
-    [_doorTiles addObject:tile];
   }
-  _doorsCaption.text = [_doorTiles count] > 0 ? [_texts ts:@"dash.doors"]
-                                              : [_texts ts:@"dash.no_doors"];
+  // Keep the array in configuration order without recreating anything.
+  [_doorTiles removeAllObjects];
+  [_doorTiles addObjectsFromArray:live];
+  [self applyDoorPreviewSelection];
+}
+
+// iPad 1 keeps at most three camera surfaces active (one in safe mode). A large fleet remains
+// reachable in pages, while press/motion events occupy the front of the active page. A burst is
+// bounded by the same capacity, so it cannot create an unbounded decode/network fan-out.
+- (NSArray *)visibleDoorTiles {
+  NSInteger total = (NSInteger)[_doorTiles count];
+  NSInteger capacity = _safeMode ? 1 : 3;
+  if (total <= capacity) return [NSArray arrayWithArray:_doorTiles];
+  NSMutableArray *selected = [NSMutableArray arrayWithCapacity:(NSUInteger)capacity];
+  for (NSString *door in _previewPriorityDoors) {
+    for (DBDoorTile *tile in _doorTiles) {
+      if ([tile.doorId isEqualToString:door] && ![selected containsObject:tile]) {
+        [selected addObject:tile];
+        break;
+      }
+    }
+    if ((NSInteger)[selected count] >= capacity) return selected;
+  }
+  NSInteger start = (_previewPage * capacity) % total;
+  for (NSInteger offset = 0; offset < total && (NSInteger)[selected count] < capacity; offset++) {
+    DBDoorTile *tile = [_doorTiles objectAtIndex:(NSUInteger)((start + offset) % total)];
+    if (![selected containsObject:tile]) [selected addObject:tile];
+  }
+  return selected;
+}
+
+- (void)applyDoorPreviewSelection {
+  NSArray *visible = [self visibleDoorTiles];
+  for (DBDoorTile *tile in _doorTiles) tile.hidden = ![visible containsObject:tile];
+  NSInteger total = (NSInteger)[_doorTiles count];
+  if (total == 0) {
+    _doorsCaption.text = [_texts ts:@"dash.no_doors"];
+  } else if (total > (NSInteger)[visible count]) {
+    _doorsCaption.text = [NSString stringWithFormat:@"%@ · %ld/%ld ›",
+        [_texts ts:@"dash.doors"], (long)[visible count], (long)total];
+  } else {
+    _doorsCaption.text = [_texts ts:@"dash.doors"];
+  }
   [self setNeedsLayout];
 }
 
+- (void)prioritizeDoorPreview:(NSString *)door {
+  if ([door length] == 0) return;
+  [_previewPriorityDoors removeObject:door];
+  [_previewPriorityDoors insertObject:door atIndex:0];
+  NSInteger capacity = _safeMode ? 1 : 3;
+  while ((NSInteger)[_previewPriorityDoors count] > capacity)
+    [_previewPriorityDoors removeLastObject];
+  _previewPage = 0;
+  [self applyDoorPreviewSelection];
+}
+
 - (void)rebuildRecentCalls {
-  for (UILabel *label in _recentLabels) [label removeFromSuperview];
+  for (UIView *rowView in _recentLabels) [rowView removeFromSuperview];
   [_recentLabels removeAllObjects];
   for (NSDictionary *row in _recentRows) {
-    UILabel *label = [[UILabel alloc] init];
-    label.backgroundColor = [UIColor clearColor];
-    label.font = [UIFont systemFontOfSize:17];
-    label.textColor = [DBCallHistoryModel rowIsMissed:row] ? _palette.danger : _palette.ink;
+    DBRecentCallRowView *rowView = [[DBRecentCallRowView alloc] init];
     NSString *door = [DBConfigUtil evStr:row key:@"door"];
     NSDictionary *doorEntry = [DBConfigUtil dig:_cfg
         path:[NSString stringWithFormat:@"doors.%@", door]];
     NSString *doorLabel = [DBConfigUtil labelOf:doorEntry lang:_boot.uiLang fallback:door];
     NSString *outcome = [DBConfigUtil evStr:row key:@"outcome"];
     NSString *outcomeKey = [NSString stringWithFormat:@"history.outcome_%@", outcome];
-    label.text = [NSString stringWithFormat:@"%@   %@   %@",
-        [DBCallHistoryModel clockForTs:[DBConfigUtil longLongVal:row path:@"ts" def:0]
-                         offsetMinutes:_tzOffsetMinutes],
-        doorLabel, [_texts ts:outcomeKey]];
-    [_recentList addSubview:label];
-    [_recentLabels addObject:label];
+    [rowView setClock:[DBCallHistoryModel
+                          clockForTs:[DBConfigUtil longLongVal:row path:@"ts" def:0]
+                       offsetMinutes:_tzOffsetMinutes]
+                   door:doorLabel outcome:[_texts ts:outcomeKey]
+                 missed:[DBCallHistoryModel rowIsMissed:row] palette:_palette];
+    [_recentList addSubview:rowView];
+    [_recentLabels addObject:rowView];
   }
   _recentEmpty.hidden = ([_recentLabels count] > 0);
   [self setNeedsLayout];
@@ -771,35 +1106,42 @@ static const NSInteger kRecentCallLimit = 20;
 #pragma mark - door stills
 
 - (void)refreshSnapshots {
-  if (_safeMode || self.superview == nil) return;
+  if (self.superview == nil) return;
+  _snapshotTick++;
+  if (_safeMode && (_snapshotTick % kSafeModeSnapshotEveryNTicks) != 0) return;
+  CGFloat maxSide = _safeMode ? kSafeModeSnapshotMaxSide : kSnapshotMaxSide;
   NSInteger generation = ++_snapshotGeneration;
-  for (DBDoorTile *tile in _doorTiles) {
-    NSString *host = [DBConfigUtil peerHost:tile.peer];
-    if ([host length] == 0) continue;
-    NSString *urlString = [NSString stringWithFormat:@"http://%@:47180/snapshot.jpg",
-                           [DBConfigUtil urlHost:host]];
-    NSURL *url = [NSURL URLWithString:urlString];
+  for (DBDoorTile *tile in [self visibleDoorTiles]) {
+    // The still comes off the serving peer's own media origin, resolved once in
+    // DBMediaSource; the dashboard never guesses a host or a port of its own.
+    if (!tile.online || [tile.snapshotURL length] == 0) continue;
+    NSURL *url = [NSURL URLWithString:tile.snapshotURL];
     if (url == nil) continue;
     __weak DBDoorTile *weakTile = tile;
     __weak DBHomeScreen *weakSelf = self;
-    // One still per door every five seconds, fetched and downscaled entirely
-    // off the main thread: a full-size JPEG decode on the main run loop of an
-    // iPad 1 is visible as a dropped clock second.
+    // One still per door every five seconds (fifteen in safe mode), fetched and
+    // downscaled entirely off the main thread: a full-size JPEG decode on the
+    // main run loop of an iPad 1 is visible as a dropped clock second.
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_LOW, 0), ^{
       NSURLRequest *request = [NSURLRequest requestWithURL:url
                                               cachePolicy:NSURLRequestReloadIgnoringLocalCacheData
                                           timeoutInterval:3.0];
       NSURLResponse *response = nil;
+      NSError *error = nil;
       NSData *data = [NSURLConnection sendSynchronousRequest:request returningResponse:&response
-                                                       error:NULL];
+                                                       error:&error];
       UIImage *image = data ? [UIImage imageWithData:data] : nil;
-      UIImage *thumbnail = [DBHomeScreen thumbnailForImage:image maxSide:320];
+      UIImage *thumbnail = [DBHomeScreen thumbnailForImage:image maxSide:maxSide];
+      // A door that is online but never shows a picture is otherwise silent.
+      if (thumbnail == nil) {
+        NSLog(@"[doorbell] still fetch failed for %@: %lu bytes, image=%d, %@", url,
+              (unsigned long)[data length], image != nil, error ?: (id)@"no error");
+      }
       dispatch_async(dispatch_get_main_queue(), ^{
         DBHomeScreen *screen = weakSelf;
         DBDoorTile *strongTile = weakTile;
         if (!screen || !strongTile || screen->_snapshotGeneration != generation) return;
-        if (thumbnail != nil) strongTile.still.image = thumbnail;
-        strongTile.offlineLabel.hidden = (strongTile.still.image != nil);
+        if (thumbnail != nil && strongTile.online) strongTile.still.image = thumbnail;
       });
     });
   }
@@ -824,6 +1166,17 @@ static const NSInteger kRecentCallLimit = 20;
 - (void)onDoorTile:(DBDoorTile *)sender {
   if (sender.peer == nil) return;
   [_router showMonitorPeer:sender.peer];
+}
+
+- (void)onNextDoorPreviewPage {
+  NSInteger total = (NSInteger)[_doorTiles count];
+  NSInteger capacity = _safeMode ? 1 : 3;
+  if (total <= capacity) return;
+  [_previewPriorityDoors removeAllObjects];
+  NSInteger pages = (total + capacity - 1) / capacity;
+  _previewPage = (_previewPage + 1) % MAX(1, pages);
+  [self applyDoorPreviewSelection];
+  [self refreshSnapshots];
 }
 
 - (void)onMembership {
@@ -938,7 +1291,9 @@ static const NSInteger kRecentCallLimit = 20;
 #pragma mark - events from the router
 
 - (void)appendEvent:(NSDictionary *)ev {
-  (void)ev;
+  NSString *type = [DBConfigUtil evStr:ev key:@"type"];
+  if ([type isEqualToString:@"motion"] || [type isEqualToString:@"press"])
+    [self prioritizeDoorPreview:[DBConfigUtil evStr:ev key:@"door"]];
   // The volatile ticker is gone: the dashboard renders the durable call log
   // instead, so a refresh is the correct response to any call-lifecycle event.
   [self refreshFromCore];
@@ -1013,9 +1368,15 @@ static const NSInteger kRecentCallLimit = 20;
   [_palette applyInkToLabel:_clockLabel region:DBUiRegionClock];
   [_palette applyInkToLabel:_dateLabel region:DBUiRegionDate];
   [_palette applyInkToLabel:_doorsCaption region:DBUiRegionStatusLine];
+  // The counters are a status line drawn by hand, so they take the same ink
+  // and the same halo decision the labels beside them take.
+  for (DBFleetCounter *counter in _fleetCounters) {
+    counter.ink = [_palette inkForRegion:DBUiRegionStatusLine frame:counter.frame];
+    counter.halo = [_palette needsShadowForRegion:DBUiRegionStatusLine frame:counter.frame];
+    [counter setNeedsDisplay];
+  }
   [_palette applyInkToLabel:_recentCaption region:DBUiRegionStatusLine];
   [_palette applyInkToLabel:_recentEmpty region:DBUiRegionHint];
-  [_palette applyInkToLabel:_versionLabel region:DBUiRegionStatusLine];
   for (DBDoorTile *tile in _doorTiles) {
     // A tile caption sits on its own translucent pill over live video, so it
     // is measured against the tile, not the wallpaper behind it.
@@ -1093,6 +1454,7 @@ static const NSInteger kRecentCallLimit = 20;
   _themeBg.image = nil;
   _themeBg.hidden = YES;
   for (DBDoorTile *tile in _doorTiles) tile.still.image = nil;
+  [self applyDoorPreviewSelection];
   [self applyPalette];
   self.backgroundColor = _palette.surface;
 }
@@ -1100,6 +1462,7 @@ static const NSInteger kRecentCallLimit = 20;
 - (void)exitSafeMode {
   if (!_safeMode) return;
   _safeMode = NO;
+  [self applyDoorPreviewSelection];
   [self applyTheme];
   [self applyDisplay];
   [self refreshSnapshots];
@@ -1117,11 +1480,17 @@ static const NSInteger kRecentCallLimit = 20;
   _offlineView.frame = self.bounds;
   _emergencyView.frame = self.bounds;
   _noticeDialog.frame = self.bounds;
-  _secretCorner.frame = CGRectMake(size.width - 120, 0, 120, 120);
+  _secretCorner.frame = CGRectZero;
 
-  // Header: clock and date on the left, status controls on the right.
-  _clockLabel.frame = CGRectMake(pad, 14, size.width * 0.5, 84);
-  _dateLabel.frame = CGRectMake(pad + 4, 96, size.width * 0.5, 26);
+  // Header: clock and date on the left, status controls on the right. The
+  // boxes are derived from the fonts, so a larger size moves what follows
+  // instead of overlapping it.
+  CGFloat clockHeight = ceilf((float)_clockLabel.font.lineHeight) + 4;
+  CGFloat dateHeight = ceilf((float)_dateLabel.font.lineHeight) + 2;
+  _clockLabel.frame = CGRectMake(pad, 10, size.width * 0.5, clockHeight);
+  _dateLabel.frame = CGRectMake(pad + 4, CGRectGetMaxY(_clockLabel.frame) - 4,
+                                size.width * 0.5, dateHeight);
+  CGFloat headerBottom = CGRectGetMaxY(_dateLabel.frame);
 
   CGFloat rightX = size.width - pad;
   CGSize adminFit = [_adminButton sizeThatFits:CGSizeMake(200, 40)];
@@ -1142,22 +1511,33 @@ static const NSInteger kRecentCallLimit = 20;
     rightX -= missedWidth + 10;
   }
 
-  CGSize membershipFit = [_membershipPill sizeThatFits:CGSizeMake(size.width * 0.5, 34)];
-  CGFloat membershipWidth = MIN(size.width * 0.45, MAX(120, membershipFit.width));
-  _membershipPill.frame = CGRectMake(size.width - pad - membershipWidth, 66,
-                                     membershipWidth, 34);
-  _membershipButton.frame = _membershipPill.frame;
+  // One row of counters, right aligned under the admin button. Each sizes to
+  // its own glyph and number, so a three-digit fleet does not clip.
+  CGFloat counterHeight = 34;
+  CGFloat counterTop = CGRectGetMaxY(_adminButton.frame) + 8;
+  CGFloat counterGap = 8;
+  CGFloat counterRight = size.width - pad;
+  for (NSInteger i = (NSInteger)[_fleetCounters count] - 1; i >= 0; i--) {
+    DBFleetCounter *counter = [_fleetCounters objectAtIndex:(NSUInteger)i];
+    CGFloat width = [counter widthThatFits];
+    counter.frame = CGRectMake(counterRight - width, counterTop, width, counterHeight);
+    counterRight -= width + counterGap;
+  }
+  CGFloat countersLeft = counterRight + counterGap;
+  _membershipButton.frame = CGRectMake(countersLeft, counterTop,
+                                       MAX(0, size.width - pad - countersLeft), counterHeight);
 
   CGFloat bannerHeight = 0;
   if (_pairBanner.hidden) {
     _pairBanner.frame = CGRectZero;
   } else {
     CGFloat bannerWidth = MIN(size.width - 2 * pad, 560);
-    _pairBanner.frame = CGRectMake((size.width - bannerWidth) / 2, 112, bannerWidth, 46);
+    _pairBanner.frame = CGRectMake((size.width - bannerWidth) / 2, headerBottom + 6,
+                                   bannerWidth, 46);
     bannerHeight = 54;
   }
 
-  CGFloat contentTop = 132 + bannerHeight;
+  CGFloat contentTop = headerBottom + 28 + bannerHeight;
   // The QR, the version line and the SOS slider are placed by one shared,
   // host-tested split so they can never overlap in either orientation.
   NSDictionary *footer = [DBUiTheme footerLayoutForViewWidth:size.width
@@ -1186,36 +1566,73 @@ static const NSInteger kRecentCallLimit = 20;
   }
 
   _doorsCaption.frame = CGRectMake(pad, contentTop - 24, tilesWidth, 20);
-  NSInteger count = (NSInteger)[_doorTiles count];
+  NSArray *visibleTiles = [self visibleDoorTiles];
+  NSInteger count = (NSInteger)[visibleTiles count];
   if (count > 0) {
     NSInteger columns = (count == 1) ? 1 : 2;
     NSInteger rows = (count + columns - 1) / columns;
     CGFloat gap = 12;
     CGFloat tileWidth = (tilesWidth - gap * (columns - 1)) / columns;
-    CGFloat tileHeight = MIN(200, (tilesHeight - gap * (rows - 1)) / MAX(1, rows));
+    CGFloat fitHeight = (tilesHeight - gap * (rows - 1)) / MAX(1, rows);
+    CGFloat aspectHeight = tileWidth * 9.0 / 16.0;
+    CGFloat tileHeight = MIN(fitHeight, count == 1 ? MIN(300, aspectHeight) : aspectHeight);
     for (NSInteger i = 0; i < count; i++) {
-      DBDoorTile *tile = [_doorTiles objectAtIndex:(NSUInteger)i];
+      DBDoorTile *tile = [visibleTiles objectAtIndex:(NSUInteger)i];
       tile.frame = CGRectMake(pad + (i % columns) * (tileWidth + gap),
                               contentTop + (i / columns) * (tileHeight + gap),
                               tileWidth, tileHeight);
     }
   }
 
-  _recentCaption.frame = CGRectMake(listX, listY - 24, listWidth - 110, 20);
-  _seeAllButton.frame = CGRectMake(listX + listWidth - 104, listY - 28, 104, 30);
-  _recentList.frame = CGRectMake(listX, listY, listWidth, listHeight);
-  CGFloat rowY = 0;
-  for (UILabel *label in _recentLabels) {
-    label.frame = CGRectMake(0, rowY, listWidth, 30);
-    rowY += 32;
+  CGSize seeAllFit = [_seeAllButton sizeThatFits:CGSizeMake(listWidth, 28)];
+  CGFloat seeAllWidth = MIN(listWidth * 0.6, MAX(104, seeAllFit.width + 8));
+  _recentCaption.frame = CGRectMake(listX, listY - 26, listWidth - seeAllWidth - 10, 24);
+  _seeAllButton.frame = CGRectMake(listX + listWidth - seeAllWidth, listY - 28,
+                                   seeAllWidth, 28);
+  // The plate covers the rows, not the heading: headings keep the region-ink
+  // rule over the picture, which is what the spec asks of them.
+  _historyScrim.frame = CGRectMake(listX, listY, listWidth, listHeight);
+  if ([_historyScrim isKindOfClass:[DBFrostedPlateView class]]) {
+    UIColor *tint = [_palette.surface colorWithAlphaComponent:kFooterGlassAlpha];
+    UIColor *border = [_palette.ink colorWithAlphaComponent:0.18];
+    [(DBFrostedPlateView *)_historyScrim setBackdrop:_themeGlassImage
+                                         sourceFrame:_historyScrim.frame
+                                          canvasSize:size tint:tint border:border];
   }
-  _recentList.contentSize = CGSizeMake(listWidth, rowY);
-  _recentEmpty.frame = CGRectMake(listX, listY + 8, listWidth, 26);
+  CGFloat historyInsetH = 12;
+  CGFloat historyInsetV = 8;
+  _recentList.frame = CGRectMake(listX + historyInsetH, listY + historyInsetV,
+                                 listWidth - historyInsetH * 2,
+                                 MAX(0, listHeight - historyInsetV * 2));
+  CGFloat rowY = 0;
+  for (DBRecentCallRowView *rowView in _recentLabels) {
+    rowView.frame = CGRectMake(0, rowY, _recentList.bounds.size.width, 38);
+    rowY += 38;
+  }
+  _recentList.contentSize = CGSizeMake(_recentList.bounds.size.width, rowY);
+  _recentEmpty.frame = CGRectMake(listX + historyInsetH, listY + historyInsetV,
+                                  listWidth - historyInsetH * 2, 26);
 
   // Footer: admin QR (always), version + battery, SOS slider.
-  _qr.frame = DBRectFromArray([footer objectForKey:@"qr"]);
-  _versionLabel.frame = DBRectFromArray([footer objectForKey:@"version"]);
+  // The address and the version line are now two stacked lines inside the QR
+  // block, so the block takes the width the version label used to occupy
+  // beside it.
+  CGRect footerBlock = CGRectUnion(DBRectFromArray([footer objectForKey:@"qr"]),
+                                   DBRectFromArray([footer objectForKey:@"version"]));
+  _qr.frame = footerBlock;
   _sos.frame = DBRectFromArray([footer objectForKey:@"sos"]);
+  // One plate under the whole footer block. The SOS bar is its own red control
+  // and is deliberately left outside it.
+  CGFloat footerPad = 8;
+  _footerScrim.frame = CGRectIsEmpty(footerBlock)
+      ? CGRectZero : CGRectInset(footerBlock, -footerPad, -footerPad);
+  if ([_footerScrim isKindOfClass:[DBFrostedPlateView class]]) {
+    UIColor *tint = [_palette.surface colorWithAlphaComponent:kFooterGlassAlpha];
+    UIColor *border = [_palette.ink colorWithAlphaComponent:0.18];
+    [(DBFrostedPlateView *)_footerScrim setBackdrop:_themeGlassImage
+                                        sourceFrame:_footerScrim.frame
+                                         canvasSize:size tint:tint border:border];
+  }
 
   CGFloat replyWidth = MIN(size.width - 40, 560);
   _replyBanner.frame = CGRectMake((size.width - replyWidth) / 2, 20, replyWidth, 96);
@@ -1228,6 +1645,11 @@ static const NSInteger kRecentCallLimit = 20;
   _emergencyNote.frame = CGRectMake(20, size.height / 2 - 20, size.width - 40, 40);
   _emergencyCancel.frame = CGRectMake(size.width / 2 - 110, size.height / 2 + 50, 220, 64);
 
+  // A rotation needs the picture rebuilt at the new panel size.
+  if ([_themeHash length] > 0 && !CGSizeEqualToSize(_themeImageSize, size)) {
+    _themeImageSize = size;
+    [self loadThemeImage:_themeHash];
+  }
   [self refreshBackgroundSampler];
   [self applyRegionInk];
 }

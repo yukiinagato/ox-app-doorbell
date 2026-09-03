@@ -91,6 +91,7 @@ internal object AndroidRuntimeContracts {
             .put("ui_manifest_v1", true)
             .put("runtime_recovery_v1", true)
             .put("helper_policy_v1", true)
+            .put("frosted_glass_radius_v1", true)
             .put("sos_trigger", true)
             .put("system_notifications", !app.emergencyAlerts.notificationPermissionNeeded())
             .put("device_alert_channels", deviceAlertChannels())
