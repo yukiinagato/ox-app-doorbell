@@ -3902,8 +3902,12 @@ struct Node::Impl {
     const cJSON* base = json::get(cfg.get(), "display");
     const cJSON* theme_base = json::get(base, "theme");
     const cJSON* theme_ovr = cfgAt("devices." + node_id + ".local.theme");
-    std::string hash = json::getString(theme_ovr, "bg_image");
-    if (hash.empty()) hash = json::getString(theme_base, "bg_image");
+    const cJSON* override_image = json::get(theme_ovr, "bg_image");
+    // Null is an explicit device-level "no image" choice. Only an absent leaf inherits the
+    // cluster image; treating null as an empty string and then falling back made the Web choice
+    // appear to save while the old background remained effective.
+    std::string hash = override_image ? json::getString(theme_ovr, "bg_image")
+                                      : json::getString(theme_base, "bg_image");
     return isSha256HexStr(hash) ? hash : "";
   }
 

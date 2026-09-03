@@ -273,14 +273,26 @@ const globalTheme = L.themeEntries("", {
 });
 assert.deepStrictEqual(globalTheme.entries[0].value.future,
   { contrast_mode: "adaptive" });
+assert.deepStrictEqual(globalTheme.entries[1], {
+  key: "display.theme.bg_image", value: "asset:new"
+});
+const globalThemeCleared = L.themeEntries("", {
+  bg_color: "#010203", bg_image: "", color_on: true, image_on: true
+}, { bg_color: "#ffffff", bg_image: "asset:old" });
+assert.deepStrictEqual(globalThemeCleared.dels, ["display.theme.bg_image"]);
+assert.strictEqual(Object.prototype.hasOwnProperty.call(
+  globalThemeCleared.entries[0].value, "bg_image"), false);
 const deviceTheme = L.themeEntries("dev", {
   bg_color: "#010203", bg_image: "", color_on: false, image_on: false
 }, { bg_color: "#ffffff", bg_image: "asset:old", future: { palette: ["blue"] } });
-assert.deepStrictEqual(deviceTheme.dels, []);
+assert.deepStrictEqual(deviceTheme.dels, ["devices.dev.local.theme.bg_image"]);
 assert.deepStrictEqual(deviceTheme.entries[0].value, { future: { palette: ["blue"] } });
 assert.deepStrictEqual(L.themeEntries("dev", {
   color_on: false, image_on: false
-}, {}).dels, ["devices.dev.local.theme"]);
+}, {}).dels, ["devices.dev.local.theme", "devices.dev.local.theme.bg_image"]);
+assert.deepStrictEqual(L.themeEntries("dev", {
+  bg_image: "", color_on: false, image_on: true
+}, {}).entries, [{ key: "devices.dev.local.theme.bg_image", value: null }]);
 
 const editedPurpose = L.purposeEntries("delivery", {
   ja: "Delivery", en: "", zh: "", icon: "📦", order: 3

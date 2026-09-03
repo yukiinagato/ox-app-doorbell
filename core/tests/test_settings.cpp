@@ -966,6 +966,16 @@ TEST_CASE("display: a configured background that cannot be sampled is never repo
   CHECK(json::getString(uncached.get(), "source") == "image_unsampled");
   CHECK(json::getString(uncached.get(), "reason") == "missing");
 
+  // A device can explicitly suppress the cluster image. Null means none; only an absent
+  // override inherits the global image.
+  const std::string device_image = "devices." + node.nodeId() + ".local.theme.bg_image";
+  node.setConfigKey(device_image, "null");
+  auto suppressed = background();
+  CHECK(json::getString(suppressed.get(), "source") == "color");
+  node.deleteConfigKeyJson(device_image);
+  auto inherited = background();
+  CHECK(json::getString(inherited.get(), "source") == "image_unsampled");
+
   // A cached asset that is not a decodable image says so, rather than falling back silently.
   Bytes junk(96, 0x41);
   REQUIRE(writeFileBytes(dir + "/assets/" + hash, junk));

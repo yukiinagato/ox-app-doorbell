@@ -1930,13 +1930,23 @@ var AdminLogic = (function () {
 
 
   function themeEntries(scope, f, existing) {
-    var key = themeKey(scope), v = editableClone(existing);
+    var key = themeKey(scope), v = editableClone(existing), entries = [], dels = [];
     if (!scope || f.color_on) v.bg_color = f.bg_color || "#101418";
     else delete v.bg_color;
-    if (!scope || f.image_on) v.bg_image = f.bg_image || null;
-    else delete v.bg_image;
-    if (!hasOwnKeys(v)) return { entries: [], dels: [key] };
-    return { entries: [{ key: key, value: v }], dels: [] };
+    // bg_image may already exist as its own CRDT leaf. Rewriting only the parent object cannot
+    // cover that leaf during materialization, so mutate the leaf explicitly when selecting
+    // "No background image" or returning a device to the cluster default.
+    delete v.bg_image;
+    if (!scope || f.image_on) {
+      if (f.bg_image) entries.push({ key: key + ".bg_image", value: f.bg_image });
+      else if (scope) entries.push({ key: key + ".bg_image", value: null });
+      else dels.push(key + ".bg_image");
+    } else {
+      dels.push(key + ".bg_image");
+    }
+    if (hasOwnKeys(v)) entries.unshift({ key: key, value: v });
+    else if (!entries.length) dels.unshift(key);
+    return { entries: entries, dels: dels };
   }
 
 
@@ -7236,7 +7246,10 @@ if (typeof document !== "undefined") (function () {
         if (row.querySelector("[data-ink-auto]").checked) return;
         ink[row.getAttribute("data-region")] = row.querySelector("[data-ink-color]").value;
       });
-      var base = (e.entries.length && e.entries[0].value) || {};
+      var base = {};
+      e.entries.forEach(function (entry) {
+        if (entry.key === L.themeKey(scope)) base = entry.value;
+      });
       var keepBackdrop = !scope || !$("#thBackdropOn") || $("#thBackdropOn").checked;
       var keepGlass = glassSupport === "adjustable" &&
         (!scope || !$("#thGlassOn") || $("#thGlassOn").checked);
@@ -7258,12 +7271,19 @@ if (typeof document !== "undefined") (function () {
                                                        "theme.backdrop_invalid"));
         return;
       }
-      var entries = (colors.entries.length ? colors.entries : e.entries).concat(
+      var leafEntries = e.entries.filter(function (entry) {
+        return entry.key !== L.themeKey(scope);
+      });
+      var entries = colors.entries.concat(leafEntries,
         L.appearanceEntries(scope, { mode: $("#thAppearance").value,
                                      dark_from: $("#thDarkFrom") ? $("#thDarkFrom").value : "",
                                      light_from: $("#thLightFrom") ? $("#thLightFrom").value
                                                                    : "" }));
-      saveAndRefresh(entries, colors.entries.length ? [] : e.dels);
+      var dels = e.dels.slice();
+      if (!colors.entries.length) colors.dels.forEach(function (key) {
+        if (dels.indexOf(key) < 0) dels.push(key);
+      });
+      saveAndRefresh(entries, dels);
     };
     if (scope) {
       $("#thReset").onclick = function () {
