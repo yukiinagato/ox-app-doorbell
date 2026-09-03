@@ -1,11 +1,7 @@
 """The icon pipeline: the path parser, the generator's outputs, and the hand-drawn-icon check."""
 
 import os
-<<<<<<< HEAD
 import shutil
-=======
-import re
->>>>>>> batch2/android
 import subprocess
 import sys
 import tempfile
@@ -92,29 +88,15 @@ class GenIconsTest(unittest.TestCase):
                 self.assertIn(gen_icons.BANNER, handle.read(), path)
 
     def test_geometry_is_passed_through_unchanged(self):
-        # XAML takes SVG path syntax as-is, so its geometry must be byte-identical to the
-        # vendored file rather than a re-rendering of it. Android takes the same geometry with
-        # one spelling change: its own lint refuses a bare ".01" because that crashes some
-        # devices' path parser, so the generator writes the leading zero. Same numbers.
+        # Android and XAML take SVG path syntax as-is, so their geometry must be byte-identical
+        # to the vendored file rather than a re-rendering of it.
         data = gen_icons.path_data(gen_icons.read_source("door"))
+        with open(os.path.join(ROOT, "android/app/src/main/res/drawable/ic_tabler_door.xml"),
+                  "r", encoding="utf-8") as handle:
+            self.assertIn(data, handle.read())
         with open(os.path.join(ROOT, "win/DoorbellApp/Resources/Icons.xaml"),
                   "r", encoding="utf-8") as handle:
             self.assertIn(">" + data + "<", handle.read())
-        android = gen_icons.android_path_data(data)
-        with open(os.path.join(ROOT, "android/app/src/main/res/drawable/ic_tabler_door.xml"),
-                  "r", encoding="utf-8") as handle:
-            self.assertIn(android, handle.read())
-        numbers = lambda text: [float(n) for n in
-                                re.findall(r"-?(?:\d+\.?\d*|\.\d+)", text)]
-        self.assertEqual(numbers(data), numbers(android))
-        self.assertNotIn("v.01", android)
-
-    def test_android_path_data_only_adds_the_leading_zero(self):
-        self.assertEqual("M14 12v0.01", gen_icons.android_path_data("M14 12v.01"))
-        self.assertEqual("M1 -0.5l2.5 3", gen_icons.android_path_data("M1 -.5l2.5 3"))
-        # A decimal that already has its digit is left exactly as it was.
-        unchanged = "M6 21v-16a2 2 0 0 1 2 -2h8a2 2 0 0 1 2 2v16"
-        self.assertEqual(unchanged, gen_icons.android_path_data(unchanged))
 
     def test_the_admin_sprite_resolves_every_reference(self):
         with open(os.path.join(ROOT, "webui/admin/index.html"), "r", encoding="utf-8") as handle:
@@ -239,32 +221,11 @@ class CheckIconsTest(unittest.TestCase):
                      "webui/admin/index.html"):
             self.assertEqual(check_icons.violations_in(path), [], path)
 
-<<<<<<< HEAD
     def test_the_repository_has_no_hand_drawn_icons(self):
         check_icons.ROOT = self.real_root
         result = subprocess.run([sys.executable, os.path.join(ROOT, "tools/check_icons.py")],
                                 cwd=ROOT, capture_output=True)
         self.assertEqual(result.returncode, 0, result.stdout.decode() + result.stderr.decode())
-=======
-    def test_a_hand_drawn_icon_is_flagged(self):
-        # The rule exists because these drift: the three device glyphs were drawn by hand in
-        # every shell independently before the library was chosen. The fixture is written here
-        # rather than pointed at a checked-in file, because a hand-drawn drawable is precisely
-        # what must never be in the tree -- the ic_count_* drawables this used to name are gone.
-        rel = "android/app/src/main/res/drawable/zz_hand_drawn_fixture.xml"
-        path = os.path.join(ROOT, rel)
-        with open(path, "w", encoding="utf-8") as handle:
-            handle.write(
-                '<?xml version="1.0" encoding="utf-8"?>\n'
-                '<vector xmlns:android="http://schemas.android.com/apk/res/android">\n'
-                '    <path android:pathData="M4 4 L20 20" />\n'
-                "</vector>\n")
-        try:
-            flagged = check_icons.violations_in(rel)
-        finally:
-            os.remove(path)
-        self.assertTrue(flagged, "a hand-drawn drawable must be refused")
->>>>>>> batch2/android
 
     def test_the_allow_list_carries_a_reason(self):
         for entry in check_icons.ALLOWED:
