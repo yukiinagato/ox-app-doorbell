@@ -144,6 +144,20 @@ assert.strictEqual(normalizedDevice.find(e => e.key ===
 assert.throws(() => L.deviceEntries("dev", {
   name: "Door", role: "door_station", door: ""
 }), /door_required/);
+assert.throws(() => L.deviceEntries("dev", {
+  name: "Door", role: "door_station", door: "bad door"
+}), /door_required/);
+assert.throws(() => L.deviceEntries("dev", {
+  name: "Door", role: "unexpected", door: "front"
+}), /role_invalid/);
+const trimmedDoor = L.deviceEntries("dev", {
+  name: "Door", role: "door_station", door: "  front  "
+});
+assert.strictEqual(trimmedDoor.find(e => e.key === "devices.dev.door").value, "front");
+assert.strictEqual(L.validDoorId("front-door_1"), true);
+assert.strictEqual(L.validDoorId("_front"), false);
+assert.strictEqual(L.defaultDoorId("75a2822c-ignored"), "door-75a2822c");
+assert.strictEqual(L.validDoorId(L.defaultDoorId("")), true);
 const indoorWithoutDoor = L.deviceEntries("dev", {
   name: "Panel", role: "indoor_panel", door: "stale-door"
 });

@@ -190,12 +190,23 @@ var AdminLogic = (function () {
   }
 
 
+  function validDoorId(value) {
+    return /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/.test(String(value || ""));
+  }
+
+  function defaultDoorId(deviceId) {
+    var token = String(deviceId || "").replace(/[^A-Za-z0-9]/g, "").slice(0, 8);
+    return "door-" + (token || "device");
+  }
+
+
 
   function deviceEntries(id, f, existing) {
     var base = "devices." + id, e = [];
-    var role = f.role || "door_station";
-    var door = role === "door_station" ? String(f.door || "") : "";
-    if (role === "door_station" && !door) throw new Error("door_required");
+    var role = String(f.role || "");
+    if (role !== "door_station" && role !== "indoor_panel") throw new Error("role_invalid");
+    var door = role === "door_station" ? String(f.door || "").trim() : "";
+    if (role === "door_station" && !validDoorId(door)) throw new Error("door_required");
     e.push({ key: base + ".name", value: String(f.name || "") });
     e.push({ key: base + ".role", value: role });
     e.push({ key: base + ".door", value: door });
@@ -2510,7 +2521,9 @@ var AdminLogic = (function () {
     parseList: parseList, parseChatIds: parseChatIds, labelObj: labelObj, labelOf: labelOf,
     buildingEntries: buildingEntries, doorEntries: doorEntries,
     quickReplyEntries: quickReplyEntries, reorderEntries: reorderEntries,
-    householdEntries: householdEntries, deviceEntries: deviceEntries, ruleEntries: ruleEntries,
+    householdEntries: householdEntries, validDoorId: validDoorId,
+    defaultDoorId: defaultDoorId,
+    deviceEntries: deviceEntries, ruleEntries: ruleEntries,
     RULE_ACTION_TYPES: RULE_ACTION_TYPES, ALERT_CHANNELS: ALERT_CHANNELS,
     normalizeRuleEditor: normalizeRuleEditor, mergeRuleEditor: mergeRuleEditor,
     effectiveAlertChannels: effectiveAlertChannels,
@@ -3366,6 +3379,16 @@ if (typeof document !== "undefined") (function () {
       return "<div class='frow'>" + lab + "<select data-f='" + esc(f.id) + "'>" + o +
              "</select></div>";
     }
+    if (f.type === "textlist") {
+      var listId = "field-list-" + f.id, suggestions = "";
+      for (var si = 0; si < (f.options || []).length; si++)
+        suggestions += "<option value='" + esc(f.options[si].v) + "'>" +
+                       esc(f.options[si].label || "") + "</option>";
+      return "<div class='frow'>" + lab + "<input type='text' data-f='" + esc(f.id) +
+             "' value='" + esc(v) + "' list='" + esc(listId) + "'><datalist id='" +
+             esc(listId) + "'>" + suggestions + "</datalist>" +
+             (f.hint ? "<div class='dim fhint'>" + esc(f.hint) + "</div>" : "") + "</div>";
+    }
     if (f.type === "multicheck") {
       var c = "";
       for (var k = 0; k < (f.options || []).length; k++) {
@@ -3537,7 +3560,8 @@ if (typeof document !== "undefined") (function () {
   function doorOptions(withEmpty) {
     var o = withEmpty ? [{ v: "", label: "—" }] : [];
     var ds = cfgObj("doors");
-    for (var id in ds) o.push({ v: id, label: doorLabel(id) + " (" + id + ")" });
+    for (var id in ds) if (L.validDoorId(id))
+      o.push({ v: id, label: doorLabel(id) + " (" + id + ")" });
     return o;
   }
   function buildingOptions() {
@@ -3795,7 +3819,7 @@ if (typeof document !== "undefined") (function () {
         value: cur.building || "", options: buildingOptions() }];
     openForm(t("admin.door_list"), fields, function (v) {
       var did = isNew ? L.safeId(v.did) : id;
-      if (!did) return "ID?";
+      if (!L.validDoorId(did)) return "ID?";
       saveAndRefresh(L.doorEntries(did, v, cur), null);
     });
   }
@@ -4079,11 +4103,12 @@ if (typeof document !== "undefined") (function () {
       { id: "nid", label: "ID", type: "static", value: id },
       { id: "name", label: t("admin.dev_name"), value: d.name },
       { id: "role", label: t("admin.dev_role"), type: "select",
-        value: d.role || "door_station",
+        value: d.role === "indoor_panel" ? "indoor_panel" : "door_station",
         options: [{ v: "door_station", label: t("admin.role_door") },
                   { v: "indoor_panel", label: t("admin.role_indoor") }] },
-      { id: "door", label: t("admin.door_assign"), type: "select",
-        value: d.door || "", options: doorOptions(true) },
+      { id: "door", label: t("admin.door_assign"), type: "textlist",
+        value: L.validDoorId(d.door) ? d.door : L.defaultDoorId(id),
+        options: doorOptions(false), hint: t("setup.invalid_door") },
       { id: "ui_lang", label: t("admin.ui_lang"), type: "select",
         value: lo.ui_lang || "ja",
         options: [{ v: "ja", label: t("language.name_ja") },
@@ -4157,7 +4182,8 @@ if (typeof document !== "undefined") (function () {
       var identityEntries;
       try { identityEntries = L.deviceEntries(id, v, d); }
       catch (e) {
-        return e.message === "door_required" ? t("admin.door_required") : e.message;
+        return e.message === "door_required" ? t("admin.door_required") :
+               e.message === "role_invalid" ? t("admin.save_failed") : e.message;
       }
       saveAndRefresh(identityEntries.concat(plan.entries), plan.dels);
     });
