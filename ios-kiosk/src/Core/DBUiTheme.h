@@ -49,6 +49,15 @@ FOUNDATION_EXPORT NSString *const DBUiRegionTileLabel;
 
 // Theme tokens for one appearance mode.
 + (NSString *)surfaceHexForMode:(NSString *)mode;
+// The card/chip/scrim tone for an appearance mode, which never follows the
+// wallpaper.
++ (NSString *)plateHexForMode:(NSString *)mode;
+// The overlay drawn over the theme picture, as
+// @{"enabled": bool, "color": "#RRGGBB", "opacity": percent}. Defaults to
+// black at 62 % when nothing is configured anywhere.
++ (NSDictionary *)backdropOverlayForConfig:(NSDictionary *)config
+                                  deviceId:(NSString *)deviceId
+                                   display:(NSDictionary *)display;
 + (NSString *)inkHexForMode:(NSString *)mode;        // primary ink on that surface
 + (NSString *)mutedInkHexForMode:(NSString *)mode;
 + (NSString *)lightInkHex;

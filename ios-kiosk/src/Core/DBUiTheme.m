@@ -13,6 +13,11 @@ static NSString *const kLightSurface = @"#F4F6F8";
 static NSString *const kDarkSurface = @"#101418";
 static NSString *const kLightMuted = @"#4A525C";
 static NSString *const kDarkMuted = @"#9AA4B0";
+// The plate a card, chip or scrim is drawn from. It follows the appearance, not
+// the wallpaper: a dark cluster keeps dark cards over a bright picture, which is
+// what stops the panel looking like a light theme wearing someone else's photo.
+static NSString *const kLightPlate = @"#F4F6F8";
+static NSString *const kDarkPlate = @"#1A1E24";
 static NSString *const kFallbackAccent = @"#1F6FB2";
 
 // Foundation-only dotted lookup so this class stays host-testable.
@@ -220,6 +225,46 @@ static DBRgb DBHslToRgb(double h, double s, double l) {
   return (hex && [self parseHex:hex into:&probe]) ? hex : nil;
 }
 
+// The scrim drawn over the theme picture. Core resolves it into
+// status.display.theme.backdrop; the configuration paths are the fallback for a
+// core that does not publish it yet, per device before cluster. Absent
+// everywhere means today's behaviour: black at 62 %.
++ (NSDictionary *)backdropOverlayForConfig:(NSDictionary *)config
+                                  deviceId:(NSString *)deviceId
+                                   display:(NSDictionary *)display {
+  id resolved = DBThemeDig(display, @"theme.backdrop");
+  if (![resolved isKindOfClass:[NSDictionary class]] && [deviceId length] > 0) {
+    resolved = DBThemeDig(config, [NSString stringWithFormat:
+        @"devices.%@.local.theme.backdrop", deviceId]);
+  }
+  if (![resolved isKindOfClass:[NSDictionary class]])
+    resolved = DBThemeDig(config, @"display.theme.backdrop");
+  NSDictionary *backdrop = [resolved isKindOfClass:[NSDictionary class]] ? resolved : nil;
+
+  BOOL enabled = YES;
+  id rawEnabled = [backdrop objectForKey:@"enabled"];
+  if ([rawEnabled isKindOfClass:[NSNumber class]]) enabled = [(NSNumber *)rawEnabled boolValue];
+
+  NSString *color = @"#000000";
+  id rawColor = [backdrop objectForKey:@"color"];
+  DBRgb probe;
+  if ([rawColor isKindOfClass:[NSString class]] && [self parseHex:rawColor into:&probe])
+    color = rawColor;
+
+  // Percent, as core publishes it. An out-of-range number is clamped rather
+  // than rejected: a scrim is a presentation choice, not a contract.
+  double opacity = 62;
+  id rawOpacity = [backdrop objectForKey:@"opacity"];
+  if ([rawOpacity isKindOfClass:[NSNumber class]]) opacity = [(NSNumber *)rawOpacity doubleValue];
+  if (opacity < 0) opacity = 0;
+  if (opacity > 100) opacity = 100;
+
+  return [NSDictionary dictionaryWithObjectsAndKeys:
+      [NSNumber numberWithBool:enabled], @"enabled",
+      color, @"color",
+      [NSNumber numberWithDouble:opacity], @"opacity", nil];
+}
+
 + (NSString *)inkHexForRegion:(NSString *)region
                        config:(NSDictionary *)config
                      deviceId:(NSString *)deviceId
@@ -276,6 +321,10 @@ static DBRgb DBHslToRgb(double h, double s, double l) {
 
 + (NSString *)lightInkHex { return kDarkInk; }
 + (NSString *)darkInkHex { return kLightInk; }
+
++ (NSString *)plateHexForMode:(NSString *)mode {
+  return [mode isEqualToString:@"light"] ? kLightPlate : kDarkPlate;
+}
 
 + (NSString *)surfaceHexForMode:(NSString *)mode {
   return [mode isEqualToString:@"light"] ? kLightSurface : kDarkSurface;

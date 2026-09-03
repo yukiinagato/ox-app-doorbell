@@ -121,6 +121,7 @@ static const NSInteger kRecentCallLimit = 20;
   NSString *_themeHash;
   NSString *_themeAverageHex;   // Whole-image average, the fallback background.
   NSString *_themeFallbackReason;   // Why the picture is not on screen.
+  NSDictionary *_themeOverlay;      // The scrim the picture was prepared with.
   UIImage *_themeImage;
   DBBackgroundSampler *_sampler;   // Per-region sampling of the theme image.
   CGSize _samplerSize;
@@ -325,7 +326,10 @@ static const NSInteger kRecentCallLimit = 20;
   _qr = [[DBAdminQrView alloc] initWithFrame:CGRectZero];
   [self addSubview:_qr];
 
+  // Kept only so nothing else has to change shape; the footer's version line
+  // is drawn by the QR block now.
   _versionLabel = [[UILabel alloc] init];
+  _versionLabel.hidden = YES;
   _versionLabel.backgroundColor = [UIColor clearColor];
   _versionLabel.font = [UIFont systemFontOfSize:16];
   _versionLabel.numberOfLines = 2;
@@ -599,10 +603,6 @@ static const NSInteger kRecentCallLimit = 20;
   [_palette setBackgroundSampler:_sampler];
   [self applyRegionInk];
 
-  for (DBFleetCounter *counter in _fleetCounters) {
-    counter.fill = _palette.elevated;
-    counter.ink = _palette.ink;
-  }
   _missedBadge.backgroundColor = _palette.danger;
   _missedBadge.textColor = _palette.dangerInk;
   _adminButton.backgroundColor = _palette.elevated;
@@ -685,7 +685,11 @@ static const CGFloat kScrimAlpha = 0.70;
   }
   self.backgroundColor = parsed ?: _palette.surface;
   [self applyScrimTone];
-  if ([_themeHash isEqualToString:hash] && _themeBg.image != nil) return;
+  NSDictionary *overlay = [DBUiTheme backdropOverlayForConfig:_cfg deviceId:_nodeId
+                                                      display:_display];
+  BOOL sameOverlay = [_themeOverlay isEqualToDictionary:overlay];
+  if ([_themeHash isEqualToString:hash] && _themeBg.image != nil && sameOverlay) return;
+  _themeOverlay = overlay;
   _themeHash = hash;
   [self loadThemeImage:hash];
 }
@@ -697,15 +701,20 @@ static const CGFloat kScrimAlpha = 0.70;
   if (url == nil) return;
   NSString *want = [hash copy];
   CGSize size = self.bounds.size;
+  // The administrator's overlay, resolved before the hop off the main thread so
+  // the worker reads no shared state.
+  NSDictionary *overlay = [DBUiTheme backdropOverlayForConfig:_cfg deviceId:_nodeId
+                                                      display:_display];
   __weak DBHomeScreen *weakSelf = self;
   dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_LOW, 0), ^{
     // One decode, at panel size, darkened once and cached per picture and
     // size; the sampler then measures the very pixels that are on screen.
-    UIImage *backdrop = [DBThemeBackdrop cachedBackdropForKey:want size:size];
+    UIImage *backdrop = [DBThemeBackdrop cachedBackdropForKey:want size:size
+                                                      overlay:overlay];
     NSData *data = nil;
     if (backdrop == nil) {
       data = [NSData dataWithContentsOfURL:url];
-      backdrop = [DBThemeBackdrop backdropForData:data key:want size:size];
+      backdrop = [DBThemeBackdrop backdropForData:data key:want size:size overlay:overlay];
     }
     NSString *average = [DBUiPalette averageHexForImage:backdrop];
     dispatch_async(dispatch_get_main_queue(), ^{
@@ -763,10 +772,10 @@ static const CGFloat kScrimAlpha = 0.70;
   BOOL charging = [DBConfigUtil boolVal:power path:@"charging" def:NO];
   NSString *appVersion = [[NSBundle mainBundle]
       objectForInfoDictionaryKey:@"CFBundleShortVersionString"] ?: @"";
-  _versionLabel.text = [DBUiTheme versionLineForName:_boot.name
-                                         coreVersion:[_core coreVersion]
-                                          appVersion:appVersion
-                                          batteryPct:battery charging:charging];
+  [_qr setVersionLine:[DBUiTheme versionLineForName:_boot.name
+                                        coreVersion:[_core coreVersion]
+                                         appVersion:appVersion
+                                         batteryPct:battery charging:charging]];
   // The admin QR is always visible on an indoor panel; opening the admin still
   // asks for the password (spec §5.1).
   [_qr setUrl:[self adminUrl] caption:[_texts ts:@"web_admin.open"]];
@@ -1160,9 +1169,15 @@ static const CGFloat kScrimAlpha = 0.70;
   [_palette applyInkToLabel:_clockLabel region:DBUiRegionClock];
   [_palette applyInkToLabel:_dateLabel region:DBUiRegionDate];
   [_palette applyInkToLabel:_doorsCaption region:DBUiRegionStatusLine];
+  // The counters are a status line drawn by hand, so they take the same ink
+  // and the same halo decision the labels beside them take.
+  for (DBFleetCounter *counter in _fleetCounters) {
+    counter.ink = [_palette inkForRegion:DBUiRegionStatusLine frame:counter.frame];
+    counter.halo = [_palette needsShadowForRegion:DBUiRegionStatusLine frame:counter.frame];
+    [counter setNeedsDisplay];
+  }
   [_palette applyInkToLabel:_recentCaption region:DBUiRegionStatusLine];
   [_palette applyInkToLabel:_recentEmpty region:DBUiRegionHint];
-  [_palette applyInkToLabel:_versionLabel region:DBUiRegionStatusLine];
   for (DBDoorTile *tile in _doorTiles) {
     // A tile caption sits on its own translucent pill over live video, so it
     // is measured against the tile, not the wallpaper behind it.
@@ -1385,12 +1400,15 @@ static const CGFloat kScrimAlpha = 0.70;
   _recentEmpty.frame = CGRectMake(listX, listY + 8, listWidth, 26);
 
   // Footer: admin QR (always), version + battery, SOS slider.
-  _qr.frame = DBRectFromArray([footer objectForKey:@"qr"]);
-  _versionLabel.frame = DBRectFromArray([footer objectForKey:@"version"]);
+  // The address and the version line are now two stacked lines inside the QR
+  // block, so the block takes the width the version label used to occupy
+  // beside it.
+  CGRect footerBlock = CGRectUnion(DBRectFromArray([footer objectForKey:@"qr"]),
+                                   DBRectFromArray([footer objectForKey:@"version"]));
+  _qr.frame = footerBlock;
   _sos.frame = DBRectFromArray([footer objectForKey:@"sos"]);
-  // One plate under the QR block, its caption and the version line. The SOS
-  // slider keeps its own plate and is deliberately left outside this one.
-  CGRect footerBlock = CGRectUnion(_qr.frame, _versionLabel.frame);
+  // One plate under the whole footer block. The SOS bar is its own red control
+  // and is deliberately left outside it.
   _footerScrim.frame = CGRectIsEmpty(footerBlock)
       ? CGRectZero : CGRectInset(footerBlock, -scrimPad, -scrimPad);
 

@@ -31,7 +31,44 @@
                     (CGFloat)[[rect objectAtIndex:3] doubleValue]);
 }
 
++ (BOOL)overlay:(NSDictionary *)overlay
+       intoRed:(CGFloat *)red green:(CGFloat *)green blue:(CGFloat *)blue
+         alpha:(CGFloat *)alpha {
+  CGFloat r = 0, g = 0, b = 0, a = [self darkeningAlpha];
+  if ([overlay isKindOfClass:[NSDictionary class]]) {
+    id enabled = [overlay objectForKey:@"enabled"];
+    if ([enabled isKindOfClass:[NSNumber class]] && ![(NSNumber *)enabled boolValue])
+      return NO;
+    id opacity = [overlay objectForKey:@"opacity"];
+    if ([opacity isKindOfClass:[NSNumber class]]) {
+      double percent = [(NSNumber *)opacity doubleValue];
+      a = (CGFloat)(percent < 0 ? 0 : (percent > 100 ? 1 : percent / 100.0));
+    }
+    DBRgb rgb;
+    id color = [overlay objectForKey:@"color"];
+    if ([color isKindOfClass:[NSString class]] && [DBUiTheme parseHex:color into:&rgb]) {
+      r = (CGFloat)rgb.r;
+      g = (CGFloat)rgb.g;
+      b = (CGFloat)rgb.b;
+    }
+  }
+  // A zero-opacity overlay is the same as no overlay; drawing it would cost a
+  // full-bitmap fill for nothing.
+  if (a <= 0) return NO;
+  if (red) *red = r;
+  if (green) *green = g;
+  if (blue) *blue = b;
+  if (alpha) *alpha = a;
+  return YES;
+}
+
 + (CGImageRef)newBackdropFromImage:(CGImageRef)source viewSize:(CGSize)viewSize {
+  return [self newBackdropFromImage:source viewSize:viewSize overlay:nil];
+}
+
++ (CGImageRef)newBackdropFromImage:(CGImageRef)source
+                          viewSize:(CGSize)viewSize
+                           overlay:(NSDictionary *)overlay {
   if (source == NULL || viewSize.width <= 0 || viewSize.height <= 0) return NULL;
   CGSize prepared = [self preparedSizeForViewSize:viewSize];
   size_t width = (size_t)prepared.width;
@@ -59,10 +96,14 @@
   CGContextTranslateCTM(ctx, 0, -prepared.height);
   // The scrim goes over the picture, in the same context, before the bitmap is
   // read back: an alpha-blended fill, never a copy, or it would paint flat
-  // black over everything instead of darkening it.
-  CGContextSetBlendMode(ctx, kCGBlendModeNormal);
-  CGContextSetRGBFillColor(ctx, 0, 0, 0, [self darkeningAlpha]);
-  CGContextFillRect(ctx, CGRectMake(0, 0, prepared.width, prepared.height));
+  // colour over everything instead of tinting it. An overlay an administrator
+  // turned off is simply not drawn.
+  CGFloat red = 0, green = 0, blue = 0, alpha = 0;
+  if ([self overlay:overlay intoRed:&red green:&green blue:&blue alpha:&alpha]) {
+    CGContextSetBlendMode(ctx, kCGBlendModeNormal);
+    CGContextSetRGBFillColor(ctx, red, green, blue, alpha);
+    CGContextFillRect(ctx, CGRectMake(0, 0, prepared.width, prepared.height));
+  }
 
   CGImageRef out = CGBitmapContextCreateImage(ctx);
   CGContextRelease(ctx);
