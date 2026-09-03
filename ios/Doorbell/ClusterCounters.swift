@@ -47,9 +47,9 @@ struct ClusterCounts: Equatable {
 
 /// The three small marks beside the counts, from the vendored Tabler set.
 ///
-/// They used to be drawn here with UIBezierPath, which meant three glyphs nobody had reviewed,
-/// drifting from the same three marks on the other shells. They are template images now, so each
-/// takes the ink of the region it sits in.
+/// They used to be stroked here by hand, which meant three glyphs nobody had reviewed, drifting
+/// from the same three marks on every other shell. They are generated template images now, so
+/// each takes the ink of the region it sits in and every shell shows the same mark.
 final class ClusterIconView: UIView {
 
     enum Kind {
