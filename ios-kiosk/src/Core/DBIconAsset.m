@@ -12,8 +12,12 @@
 // The bundle keeps the icons flat beside the other resources; the icons/
 // sub-path is tried too so a future packaging change does not silently drop
 // every glyph.
+//
+// tools/gen_icons.py writes tabler_<name>.png with hyphens folded to
+// underscores, so callers can use Tabler's own hyphenated names.
 + (NSString *)pathForName:(NSString *)name suffix:(NSString *)suffix {
-  NSString *base = [NSString stringWithFormat:@"ic_tabler_%@%@", name, suffix];
+  NSString *file = [name stringByReplacingOccurrencesOfString:@"-" withString:@"_"];
+  NSString *base = [NSString stringWithFormat:@"tabler_%@%@", file, suffix];
   NSString *path = [[NSBundle mainBundle] pathForResource:base ofType:@"png"];
   if (path == nil)
     path = [[NSBundle mainBundle] pathForResource:base ofType:@"png" inDirectory:@"icons"];
@@ -31,12 +35,10 @@
   for (NSString *suffix in order) {
     NSString *path = [self pathForName:name suffix:suffix];
     if (path == nil) continue;
+    // imageWithContentsOfFile: reads the @2x suffix itself and sets the scale,
+    // so the image already draws at the right size in points.
     UIImage *raw = [UIImage imageWithContentsOfFile:path];
-    if (raw == nil || raw.CGImage == NULL) continue;
-    CGFloat scale = [suffix isEqualToString:@"@2x"] ? 2 : 1;
-    if (scale == 1) return raw;
-    return [UIImage imageWithCGImage:raw.CGImage scale:scale
-                         orientation:UIImageOrientationUp];
+    if (raw != nil && raw.CGImage != NULL) return raw;
   }
   return nil;
 }

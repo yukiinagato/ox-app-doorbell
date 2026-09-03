@@ -29,6 +29,12 @@
 // better than a box next to a perfectly good label.
 + (NSString *)displayIconForConfiguredIcon:(NSString *)icon;
 
+// The Tabler icon for a built-in purpose, or nil for one this shell has no
+// icon for. A purpose an administrator invented has no mapping and keeps
+// whatever glyph they typed into `icon`, which is why the caller still needs
+// displayIconForConfiguredIcon: above as the fallback.
++ (NSString *)iconNameForPurpose:(NSString *)purposeId;
+
 // The configuration key the settings toggle writes.
 + (NSString *)enabledKeyForPurpose:(NSString *)purposeId;
 

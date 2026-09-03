@@ -791,6 +791,25 @@ static void TestNoticePrecedenceExpiryAndPresets(void) {
 // `visit_purposes.<id>.enabled` is a cross-platform key introduced by the iOS
 // package: a bool that defaults to true, so an installation that predates it
 // keeps every purpose. A disabled purpose leaves every chooser.
+// Purpose icons come from the shared library for the purposes this shell knows;
+// a purpose an administrator invented keeps whatever glyph they typed, which is
+// the only thing it has.
+static void TestPurposeIconsComeFromTheSharedLibrary(void) {
+  Require([[DBPurposeModel iconNameForPurpose:@"p_visit"] isEqualToString:@"home"],
+           @"the visit purpose uses the home icon");
+  Require([[DBPurposeModel iconNameForPurpose:@"p_delivery"] isEqualToString:@"package"],
+           @"the delivery purpose uses the package icon");
+  Require([[DBPurposeModel iconNameForPurpose:@"p_mail"] isEqualToString:@"mail"],
+           @"the mail purpose uses the mail icon");
+  Require([DBPurposeModel iconNameForPurpose:@"p_other"] == nil,
+           @"a purpose with no icon of ours falls back to the administrator's glyph");
+  Require([DBPurposeModel iconNameForPurpose:@"p_invented_by_the_owner"] == nil,
+           @"an invented purpose has no mapping");
+  Require([DBPurposeModel iconNameForPurpose:@""] == nil &&
+               [DBPurposeModel iconNameForPurpose:nil] == nil,
+           @"an empty or missing purpose id has no icon");
+}
+
 static void TestDisabledVisitPurposesLeaveEveryChooser(void) {
   NSDictionary *config = @{ @"visit_purposes" : @{
       @"p_delivery" : @{ @"order" : @2, @"enabled" : @YES },
@@ -1174,6 +1193,7 @@ int main(void) {
     TestHistoryWallClockRendering();
     TestNoticePrecedenceExpiryAndPresets();
     TestDisabledVisitPurposesLeaveEveryChooser();
+    TestPurposeIconsComeFromTheSharedLibrary();
     TestPairUriParsing();
     TestIncomingReturnCountdown();
     TestSipChurnBackoff();

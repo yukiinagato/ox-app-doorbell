@@ -58,6 +58,15 @@ static NSArray *DBSortedPurposeIds(NSDictionary *map) {
   return out;
 }
 
++ (NSString *)iconNameForPurpose:(NSString *)purposeId {
+  if (![purposeId isKindOfClass:[NSString class]] || [purposeId length] == 0) return nil;
+  NSDictionary *icons = [NSDictionary dictionaryWithObjectsAndKeys:
+      @"home", @"p_visit",
+      @"package", @"p_delivery",
+      @"mail", @"p_mail", nil];
+  return [icons objectForKey:purposeId];
+}
+
 + (NSString *)displayIconForConfiguredIcon:(NSString *)icon {
   if (![icon isKindOfClass:[NSString class]] || [icon length] == 0) return @"";
   NSMutableString *safe = [NSMutableString string];
