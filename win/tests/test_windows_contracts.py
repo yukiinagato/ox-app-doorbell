@@ -2,6 +2,7 @@
 """Host-runnable contract checks for the Windows client (no Windows SDK needed)."""
 
 from pathlib import Path
+import math
 import re
 import unittest
 import xml.etree.ElementTree as ET
@@ -221,7 +222,7 @@ class WindowsContracts(unittest.TestCase):
         self.assertNotIn("Runtime.getRuntime", client)
         self.assertIn('"devices.$nodeId.local.recovery.helper_mode"', supervisor)
         config_changed = supervisor[supervisor.index("fun onConfigChanged"):
-                                    supervisor.index("fun frameRotationForDeviceRotation")]
+                                    supervisor.index("fun trimMemory")]
         self.assertIn("applyHelperConfiguration()", config_changed)
         self.assertIn('statusStore.update("recovery_helper"', controller)
         self.assertIn('.put("configured", decision.configured)', controller)
@@ -729,7 +730,7 @@ class WindowsContracts(unittest.TestCase):
         self.assertIn('x:Name="SosSlide"', xaml)
         self.assertIn('x:Name="SosCountdownCancel"', xaml)
 
-    def test_every_clock_is_rendered_with_the_cluster_clock(self):
+    def test_the_clock_ticks_from_a_cached_base_not_a_call_per_second(self):
         interop = read("win/DoorbellApp/Core/CoreInterop.cs")
         client = read("win/DoorbellApp/Core/CoreClient.cs")
         window = read("win/DoorbellApp/MainWindow.xaml.cs")
@@ -737,12 +738,325 @@ class WindowsContracts(unittest.TestCase):
         self.assertIn("db_core_local_time_json", interop)
         self.assertIn("db_core_time_sync_now", interop)
         self.assertIn("public Dictionary<string, object> LocalTime(long wallMs)", client)
+
+        # One hertz, and the tick draws from the cached base rather than calling into core.
+        self.assertIn("_clock.Interval = TimeSpan.FromSeconds(1);", window)
+        self.assertIn("_clock.Tick += (s, e) => OnClockTick();", window)
         clock = window[window.index("private void UpdateClock"):
                        window.index("private static string Weekday")]
-        self.assertIn("CoreLocalTime(out time, out date)", clock)
+        self.assertIn("DateTime now = CorrectedNow();", clock)
         self.assertIn("DashClock.Text = time;", clock)
-        # Call-history timestamps use the same corrected clock.
-        self.assertIn("App.Core.LocalTime(wallMs)", dashboard)
+        self.assertNotIn("App.Core", clock)
+        self.assertNotIn("LocalTime", clock)
+        corrected = window[window.index("private DateTime CorrectedNow()"):
+                           window.index("private DateTime InZone(long wallMs)")]
+        self.assertIn("SystemUtcMs() + _clockOffsetMs", corrected)
+        self.assertNotIn("App.Core", corrected)
+
+        # The base is re-read on its own thirty-second timer, off the UI thread, and again
+        # whenever core reports the time source moved.
+        self.assertIn("_clockSync.Interval = TimeSpan.FromSeconds(30);", window)
+        self.assertIn("_clockSync.Tick += (s, e) => SyncClockBase();", window)
+        sync = window[window.index("private void SyncClockBase()"):
+                      window.index("private void ApplyClockBase(")]
+        self.assertIn("Task.Run(", sync)
+        self.assertIn("App.Core.LocalTime(0)", sync)
+        self.assertIn("Dispatcher.BeginInvoke(", sync)
+        self.assertIn("_clockSyncBusy", sync)
+        changed = window[window.index('case "time_changed":'):
+                         window.index('case "power_changed":')]
+        self.assertIn("SyncClockBase();", changed)
+
+        # The status poll is not what advances the clock.
+        node_info = window[window.index("private void RefreshNodeInfo"):
+                           window.index("private void RefreshConfigCache")]
+        self.assertNotIn("UpdateClock", node_info)
+        # Evaluating the appearance schedule reads the same cached base, not core.
+        self.assertIn("Appearance.Apply(_cfg, _nodeId, ScheduleClock(), _display);",
+                      read("win/DoorbellApp/MainWindow.Shell.cs"))
+
+        # A history page renders its timestamps from the same base, not one call per row.
+        self.assertNotIn("App.Core.LocalTime", dashboard)
+        self.assertIn("InZone(wallMs)", dashboard)
+
+    # Exports that marshal into core's run loop and can wait for it, per the table above
+    # db_core_status_json in doorbell.h. status/config/local_time/audio are served from run-loop
+    # snapshots and are deliberately absent from this list.
+    LOOP_MARSHALLING_READS = (
+        "PairingInfo(", "CallLog(", "CallLogPage(", "CallLogMarkSeen(",
+        "AdminPasswordVerify(", "AdminPasswordSet(", "DebugJson(", "CapabilitiesJson(",
+    )
+
+    def test_every_home_event_routes_through_the_one_second_coalescer(self):
+        window = read("win/DoorbellApp/MainWindow.xaml.cs")
+        # Core republished peers_changed on every heartbeat until it was gated, and a shell that
+        # rebuilt the home screen per event saturated the run loop.
+        self.assertIn("_homeRefresh.Interval = TimeSpan.FromSeconds(1);", window)
+        self.assertIn("_homeRefresh.Tick += (s, e) => { _homeRefresh.Stop(); RunHomeRefresh(); };",
+                      window)
+        dispatch = window[window.index('case "peers_changed":'):
+                          window.index("private static string DictStr")]
+        for event in ("peers_changed", "config_changed", "power_changed", "notice_changed",
+                      "call_log_changed"):
+            handler = dispatch[dispatch.index('case "%s":' % event):]
+            handler = handler[:handler.index("break;")]
+            with self.subTest(event=event):
+                self.assertIn("RequestHomeRefresh(", handler)
+                # No handler rebuilds the home screen inline any more.
+                for direct in ("RefreshNodeInfo(", "RefreshDoorTiles(", "RefreshCallHistory(",
+                               "RefreshNoticeSurfaces(", "RefreshConfigCache("):
+                    self.assertNotIn(direct, handler)
+        # The two that legitimately do not refresh the home screen.
+        time_changed = dispatch[dispatch.index('case "time_changed":'):]
+        time_changed = time_changed[:time_changed.index("break;")]
+        self.assertIn("SyncClockBase();", time_changed)
+        self.assertNotIn("App.Core", time_changed)
+        asset = window[window.index('case "asset_ready":'):]
+        asset = asset[:asset.index("break;")]
+        self.assertNotIn("RefreshNodeInfo", asset)
+
+        # A refresh already in flight is retried rather than doubled up.
+        run = window[window.index("private void RunHomeRefresh("):
+                     window.index("private HomeSnapshot ReadHomeSnapshot(")]
+        self.assertIn("if (_homeRefreshBusy)", run)
+        self.assertIn("Task.Run(", run)
+        self.assertIn("Dispatcher.BeginInvoke(", run)
+
+    def test_one_status_document_is_shared_by_every_consumer(self):
+        window = read("win/DoorbellApp/MainWindow.xaml.cs")
+        dashboard = read("win/DoorbellApp/MainWindow.Dashboard.cs")
+        read_snapshot = window[window.index("private HomeSnapshot ReadHomeSnapshot("):
+                               window.index("private void ApplyHomeSnapshot(")]
+        self.assertEqual(read_snapshot.count("App.Core.Status()"), 1)
+        self.assertEqual(read_snapshot.count("App.Core.Config()"), 1)
+        apply_snapshot = window[window.index("private void ApplyHomeSnapshot("):
+                                window.index("private void RefreshNodeInfo(")]
+        self.assertIn("_status = snapshot.Status;", apply_snapshot)
+        self.assertIn("RefreshDoorTiles(snapshot.Status)", apply_snapshot)
+        self.assertIn("RefreshCallHistory(snapshot.CallLog)", apply_snapshot)
+        self.assertIn("RefreshPairingState(snapshot.Pairing)", apply_snapshot)
+        # The consumers take what they were handed instead of reading again.
+        tiles = dashboard[dashboard.index("private void RefreshDoorTiles("):
+                          dashboard.index("private static bool PeerHasCamera(")]
+        self.assertNotIn("App.Core.Status()", tiles)
+        history = dashboard[dashboard.index("private void RefreshCallHistory("):
+                            dashboard.index("private static List<Dictionary<string, object>> Rows(")]
+        self.assertNotIn("App.Core.CallLog", history)
+        pairing = window[window.index("private void RefreshPairingState("):
+                         window.index("private void ShowPairingOverlay()")]
+        self.assertNotIn("App.Core.PairingInfo()", pairing)
+
+    @staticmethod
+    def _worker_spans(text):
+        """Character ranges of every Task.Run / Task.Factory.StartNew body."""
+        spans = []
+        for match in re.finditer(r"Task\.(?:Run|Factory\.StartNew)\(", text):
+            depth = 0
+            index = text.index("(", match.end() - 1)
+            for position in range(index, len(text)):
+                if text[position] == "(":
+                    depth += 1
+                elif text[position] == ")":
+                    depth -= 1
+                    if depth == 0:
+                        spans.append((index, position))
+                        break
+        return spans
+
+    @staticmethod
+    def _method_span(text, signature):
+        start = text.index(signature)
+        end = text.find("\n        private ", start + len(signature))
+        return (start, len(text) if end < 0 else end)
+
+    def test_no_loop_marshalling_read_runs_on_the_ui_thread(self):
+        """Every call the doorbell.h table names as entering core's run loop is on a worker."""
+        for name in ("MainWindow.xaml.cs", "MainWindow.Dashboard.cs", "MainWindow.History.cs",
+                     "MainWindow.Notice.cs", "MainWindow.Shell.cs", "MainWindow.CallScreen.cs",
+                     "AdminDialog.xaml.cs", "Pairing/PairingOnboardingView.xaml.cs",
+                     "Pairing/AddDeviceWindow.xaml.cs"):
+            text = read("win/DoorbellApp/" + name)
+            spans = self._worker_spans(text)
+            if name == "MainWindow.xaml.cs":
+                # ReadHomeSnapshot is the coalescer's worker body in method form. It counts as
+                # off-thread only while every one of its call sites is itself inside a worker.
+                declaration = "private HomeSnapshot ReadHomeSnapshot("
+                prefix = "private HomeSnapshot "
+                for match in re.finditer(re.escape("ReadHomeSnapshot("), text):
+                    if text[max(0, match.start() - len(prefix)):match.start()] == prefix:
+                        continue
+                    self.assertTrue(
+                        any(start < match.start() < end for start, end in spans),
+                        "ReadHomeSnapshot is called on the UI thread")
+                spans.append(self._method_span(text, declaration))
+            for call in self.LOOP_MARSHALLING_READS:
+                for match in re.finditer(re.escape("App.Core." + call), text):
+                    inside = any(start < match.start() < end for start, end in spans)
+                    with self.subTest(name=name, call=call):
+                        self.assertTrue(
+                            inside,
+                            "%s calls App.Core.%s on the UI thread" % (name, call))
+
+    def test_a_door_station_without_a_camera_gets_no_tile(self):
+        dashboard = read("win/DoorbellApp/MainWindow.Dashboard.cs")
+        tiles = dashboard[dashboard.index("private void RefreshDoorTiles("):
+                          dashboard.index("private static bool PeerHasCamera(")]
+        self.assertIn("if (!PeerHasCamera(peer)) continue;", tiles)
+        camera = dashboard[dashboard.index("private static bool PeerHasCamera("):
+                           dashboard.index("private void RefreshDeviceCounters()")]
+        self.assertIn('CoreClient.Dig(peer, "caps.camera")', camera)
+        # true shows, false hides, absent shows.
+        self.assertIn("return !(value is bool) || (bool)value;", camera)
+
+        def shows(caps):
+            """The rule as implemented: only an explicit false hides the tile."""
+            if "camera" not in caps:
+                return True
+            return bool(caps["camera"])
+
+        self.assertTrue(shows({"camera": True}))
+        self.assertFalse(shows({"camera": False}))
+        self.assertTrue(shows({}))
+        # The door itself stays reachable elsewhere: the monitor list is built from peers on its
+        # own, and announcements enumerate configured doors, not tiles.
+        window = read("win/DoorbellApp/MainWindow.xaml.cs")
+        monitor = window[window.index("private void OnOpenMonitorClick"):
+                         window.index("private void OnMonitorDoorClick")]
+        self.assertNotIn("PeerHasCamera", monitor)
+        notice = read("win/DoorbellApp/MainWindow.Notice.cs")
+        self.assertIn('CoreClient.Dig(_cfg, "doors") as Dictionary<string, object>', notice)
+
+    def test_the_shell_publishes_whether_it_can_serve_frames(self):
+        probe = read("win/DoorbellApp/Core/CameraProbe.cs")
+        contracts = read("win/DoorbellApp/Core/RuntimeContracts.cs")
+        client = read("win/DoorbellApp/Core/CoreClient.cs")
+        app = read("win/DoorbellApp/App.xaml.cs")
+
+        # caps.camera is advertised, and it is the probe's answer rather than a constant.
+        self.assertIn('{ "camera", camera },', contracts)
+        self.assertIn("bool micMute,\n                                                     "
+                      "          bool camera)", contracts)
+        self.assertIn("_cameraAvailable)));", client)
+        self.assertIn("public bool CameraAvailable", client)
+
+        # Core owns the capture on Windows and republishes it locally, so the shell asks the very
+        # endpoint a door tile fetches instead of opening the device a second time.
+        self.assertIn('"/snapshot.jpg"', probe)
+        self.assertNotIn("MediaCapture", probe)
+        rule = probe[probe.index("private bool Probe()"):probe.index("public void Dispose()")]
+        self.assertIn("response.StatusCode == HttpStatusCode.OK &&", rule)
+        self.assertIn("response.ContentLength != 0", rule)
+        self.assertIn("catch (WebException ex)", rule)
+        self.assertIn("return false;", rule)
+
+        def available(status, content_length):
+            """The rule as implemented: only a 200 carrying a frame counts."""
+            if status != 200:
+                return False          # 503 "no frame", or the server is not up
+            return content_length != 0
+
+        # Both values, from the two answers core actually gives.
+        self.assertTrue(available(200, 51234))
+        self.assertFalse(available(503, 8))
+        self.assertFalse(available(200, 0))
+
+        # A device appearing or disappearing flips the capability instead of stranding a tile.
+        self.assertIn("TimeSpan.FromMilliseconds(IntervalMs)", probe)
+        poll = probe[probe.index("private void Poll(object state)"):
+                     probe.index("private bool Probe()")]
+        self.assertIn("Interlocked.Exchange(ref _state, next) == next) return;", poll)
+        self.assertIn("handler(next == Present)", poll)
+        # Nothing is advertised before the first answer.
+        self.assertIn("private int _state = Unknown;", probe)
+        self.assertIn("Volatile.Read(ref _state) == Present", probe)
+        # The flip republishes the contracts.
+        self.assertIn("new CameraProbe(Boot.HttpPort, OnCameraAvailabilityChanged)", app)
+        changed = app[app.index("private void OnCameraAvailabilityChanged("):
+                      app.index("private void PublishRuntimeHealth()")]
+        self.assertIn("Core.CameraAvailable = available;", changed)
+        self.assertIn("Core.PublishRuntimeContracts(Boot.Role, SafeMode);", changed)
+        self.assertIn("_cameraProbe?.Dispose();", app)
+
+    def test_the_dashboard_counts_devices_by_role(self):
+        dashboard = read("win/DoorbellApp/MainWindow.Dashboard.cs")
+        xaml = read("win/DoorbellApp/MainWindow.xaml")
+        # Three counters, each a vector icon and a number. No emoji anywhere near them.
+        for name in ("ClusterCounter", "ClusterCountText", "DoorCounter", "DoorCountText",
+                     "PanelCounter", "PanelCountText"):
+            self.assertIn('x:Name="%s"' % name, xaml)
+        pill = xaml[xaml.index('<Border x:Name="MembershipStatus"'):
+                    xaml.index('<Border x:Name="MissedBadge"')]
+        self.assertEqual(pill.count("<Path "), 3)
+        for key in ("IconTopologyStar3", "IconDoor", "IconDeviceTablet"):
+            self.assertIn("{StaticResource %s}" % key, pill)
+        for glyph in pill:
+            self.assertLess(ord(glyph), 0x2190, "counter icons must be vector paths, not emoji")
+        # Screen readers get the meaning in the operator's language.
+        for key in ("dash.count_cluster", "dash.count_doors", "dash.count_panels"):
+            self.assertIn('Texts.T("%s"' % key, dashboard)
+        self.assertIn("AutomationProperties.SetName(ClusterCounter", dashboard)
+        self.assertIn("AutomationProperties.SetName(DoorCounter", dashboard)
+        self.assertIn("AutomationProperties.SetName(PanelCounter", dashboard)
+        catalog = read("i18n/strings.yaml")
+        for key in ("dash.count_cluster", "dash.count_doors", "dash.count_panels"):
+            # The whole line: a placeholder such as {n} also contains a brace.
+            entry = re.search(r"^%s: (.*)$" % re.escape(key), catalog, re.M)
+            self.assertIsNotNone(entry, key)
+            self.assertEqual(set(re.findall(r'(\w+): "', entry.group(1))), {"ja", "en", "zh"})
+
+        # The counting itself: peers carry self, and a mesh that has not listed us yet does not
+        # make the total short by one.
+        counters = dashboard[dashboard.index("private void RefreshDeviceCounters()"):
+                             dashboard.index("private static void CountRole(")]
+        self.assertIn('_status["peers"]', counters)
+        self.assertIn('bool self = DictBool(peer, "self");', counters)
+        self.assertIn('bool online = self || DictStr(peer, "status") != "dead";', counters)
+        self.assertIn("if (!sawSelf)", counters)
+        self.assertIn('DoorCountText.Text = doorsOnline + "/" + doorsTotal;', counters)
+        self.assertIn('PanelCountText.Text = panelsOnline + "/" + panelsTotal;', counters)
+
+        def count(peers, self_role):
+            """The rule as implemented."""
+            total = doors_on = doors_all = panels_on = panels_all = 0
+            saw_self = False
+
+            def add(role, online):
+                nonlocal doors_on, doors_all, panels_on, panels_all
+                if role == "door_station":
+                    doors_all += 1
+                    if online:
+                        doors_on += 1
+                elif role == "indoor_panel":
+                    panels_all += 1
+                    if online:
+                        panels_on += 1
+
+            for peer in peers:
+                if not peer.get("id"):
+                    continue
+                is_self = bool(peer.get("self"))
+                saw_self = saw_self or is_self
+                total += 1
+                add(peer.get("role", ""), is_self or peer.get("status") != "dead")
+            if not saw_self:
+                total += 1
+                add(self_role, True)
+            return total, (doors_on, doors_all), (panels_on, panels_all)
+
+        # A cluster of three: one door station that has gone dead, two panels, self listed.
+        peers = [
+            {"id": "a", "role": "door_station", "status": "dead"},
+            {"id": "b", "role": "indoor_panel", "status": "alive", "self": True},
+            {"id": "c", "role": "indoor_panel", "status": "alive"},
+        ]
+        self.assertEqual(count(peers, "indoor_panel"), (3, (0, 1), (2, 2)))
+        # The same cluster before the mesh has listed this device.
+        self.assertEqual(count(peers[:1] + peers[2:], "indoor_panel"), (3, (0, 1), (2, 2)))
+        # A dead entry that is nonetheless this device still counts as online.
+        self.assertEqual(
+            count([{"id": "b", "role": "indoor_panel", "status": "dead", "self": True}],
+                  "indoor_panel"),
+            (1, (0, 0), (1, 1)))
 
     def test_dashboard_shows_tiles_history_versions_and_battery(self):
         xaml = read("win/DoorbellApp/MainWindow.xaml")
@@ -761,11 +1075,127 @@ class WindowsContracts(unittest.TestCase):
         self.assertIn("if (_batteryPct >= 0)", shell)
         # History: 50 rows a page, day groups, filters and mark-seen on open.
         self.assertIn("private const int HistoryPageRows = 50;", history)
-        self.assertIn("App.Core.CallLogMarkSeen(_latestCallHlc)", history)
+        self.assertIn("App.Core.CallLogMarkSeen(seenUpTo)", history)
         opened = history[history.index("private void OpenHistory"):
-                         history.index("private void OnHistoryCloseClick")]
-        self.assertIn("MarkHistorySeen();", opened)
+                         history.index("private void LoadHistoryPage(")]
+        self.assertIn("LoadHistoryPage(true, true);", opened)
         self.assertIn('_historyFilter == "missed"', history)
+
+    def test_the_visitor_call_button_never_names_the_door(self):
+        window = read("win/DoorbellApp/MainWindow.xaml.cs")
+        catalog = read("i18n/strings.yaml")
+        # The button says only what it does; no device or door identity reaches a visitor.
+        self.assertIn('CallButton.Content = Texts.T("idle.call");', window)
+        self.assertNotIn('Texts.T("idle.call_button"', window)
+        self.assertNotIn("DoorLabel(App.Boot.Door)", window)
+        entry = re.search(r'^idle\.call: \{([^}]*)\}', catalog, re.M)
+        self.assertIsNotNone(entry, "idle.call must exist in the catalog")
+        self.assertEqual(
+            dict(re.findall(r'(\w+): "([^"]*)"', entry.group(1))),
+            {"ja": "呼出", "en": "Call", "zh": "呼叫"})
+
+    def test_the_incoming_page_returns_home_on_its_own_countdown(self):
+        window = read("win/DoorbellApp/MainWindow.xaml.cs")
+        xaml = read("win/DoorbellApp/MainWindow.xaml")
+
+        # The number is a real target, so it can be tapped to stop the return.
+        self.assertIn('x:Name="ReturnCountdown"', xaml)
+        self.assertIn('MouseLeftButtonDown="OnReturnCountdownClick"', xaml)
+        self.assertIn('x:Name="ReturnCountdownText"', xaml)
+
+        # Core reports the value; an older core falls back to sixty seconds.
+        seconds = window[window.index("private int ReturnSeconds()"):
+                         window.index("private void StartReturnCountdown()")]
+        self.assertIn('CoreClient.Dig(_status, "call.return_s")', seconds)
+        self.assertIn('CoreClient.Dig(_cfg, "call.indoor.return_s")', seconds)
+        self.assertIn("return 60;", seconds)
+
+        # Opening the page starts a fresh countdown.
+        show = window[window.index("IncomingView.Visibility = Visibility.Visible;"):
+                      window.index("private void StartIncomingVideo")]
+        self.assertIn("StartReturnCountdown();", show)
+        start = window[window.index("private void StartReturnCountdown()"):
+                       window.index("private void PauseReturnCountdown()")]
+        self.assertIn("_returnCancelled = false;", start)
+        self.assertIn("_returnSecondsLeft = ReturnSeconds();", start)
+
+        # Reaching zero returns to the home view.
+        tick = window[window.index("private void OnReturnTick()"):
+                      window.index("private void OnReturnCountdownClick")]
+        self.assertIn("_returnSecondsLeft--;", tick)
+        self.assertIn("CloseIncoming(true);", tick)
+
+        # Tapping the number stops the return and leaves the page up.
+        click = window[window.index("private void OnReturnCountdownClick"):
+                       window.index("private void RenderReturnCountdown()")]
+        self.assertIn("_returnCancelled = true;", click)
+        self.assertIn("_returnTimer.Stop();", click)
+        self.assertNotIn("CloseIncoming", click)
+
+        # The suffix is hidden once cancelled, while talking, or off the page.
+        render = window[window.index("private void RenderReturnCountdown()"):
+                        window.index("private void EndIncomingCall(")]
+        for condition in ("!_returnCancelled", "_returnSecondsLeft > 0", "!_inCall",
+                          "IncomingView.Visibility == Visibility.Visible"):
+            self.assertIn(condition, render)
+        self.assertIn('ReturnCountdownText.Text = "(" + _returnSecondsLeft + ")"', render)
+
+        # Answering pauses it; the count starts again from the full value afterwards.
+        self.assertIn("PauseReturnCountdown();", window)
+        pause = window[window.index("private void PauseReturnCountdown()"):
+                       window.index("private void StopReturnCountdown()")]
+        self.assertIn("_returnTimer.Stop();", pause)
+        self.assertNotIn("_returnSecondsLeft", pause)
+        idle = window[window.index("private void OnSipIdle"):
+                      window.index("private void ResumeLiveViewAfterCall")]
+        self.assertIn("RestoreIncomingMonitorAfterCall();", idle)
+        self.assertIn("IncomingView.Visibility != Visibility.Visible", idle)
+        enter = window[window.index("private void EnterIncomingInCall"):
+                       window.index("private void RestoreIncomingMonitorAfterCall")]
+        self.assertNotIn("CloseIncoming", enter)
+        self.assertNotIn("StopIncomingVideo", enter)
+        self.assertNotIn("ShowInCall", enter)
+        resume = window[window.index("private void ResumeLiveViewAfterCall"):
+                        window.index("private void ReportLifecycleEndedIfNeeded")]
+        self.assertIn("ShowIncoming(new UiEvent", resume)
+        self.assertIn("monitor", resume)
+
+        # A visitor who cancels does not close the page: the live view stays.
+        resolved = window[window.index("int resolvedStage = Math.Max(0,"):
+                          window.index('case "chime":')]
+        self.assertIn("EndIncomingCall(true, Texts.T(\"ring.cancelled\"))", resolved)
+        self.assertNotIn("CloseIncoming", resolved)
+        ended = window[window.index("private void EndIncomingCall("):
+                       window.index("private void CloseIncoming(")]
+        self.assertNotIn("IncomingView.Visibility = Visibility.Collapsed", ended)
+        self.assertNotIn("StopIncomingVideo", ended)
+        self.assertIn("RenderReturnCountdown();", ended)
+        # An unanswered call ends the same way rather than closing the page.
+        self.assertIn('EndIncomingCall(true, Texts.T("calling.no_answer"))', window)
+        # Leaving the page for real always stops the countdown.
+        close = window[window.index("private void CloseIncoming(bool hangup)"):
+                       window.index("private void OnAnswerClick")]
+        self.assertIn("StopReturnCountdown();", close)
+
+    def test_home_and_visitor_text_is_not_ellipsised(self):
+        dashboard = read("win/DoorbellApp/MainWindow.Dashboard.cs")
+        window = read("win/DoorbellApp/MainWindow.xaml.cs")
+        xaml = read("win/DoorbellApp/MainWindow.xaml")
+        # A history row breaks into two deliberate lines, the second smaller and muted, instead
+        # of trimming the door and purpose with an ellipsis.
+        self.assertNotIn("TextTrimming", dashboard)
+        self.assertNotIn("TextTrimming", window)
+        self.assertNotIn("TextTrimming", xaml)
+        row = dashboard[dashboard.index("private Grid BuildCallRow"):
+                        dashboard.index("private string OutcomeText")]
+        self.assertIn("var what = new StackPanel", row)
+        self.assertIn("FontSize = detailed ? 13 : 11,", row)
+        # Nothing on the visitor footer clips in a narrow window.
+        self.assertIn('x:Name="VisitorVersionLine" FontSize="14" TextWrapping="Wrap"', xaml)
+        # An icon inside a button shares the vertical centre line with its label.
+        icon = window[window.index("private Button MakePurposeButton"):
+                      window.index("private void OnPurposeClick")]
+        self.assertEqual(icon.count("VerticalAlignment = VerticalAlignment.Center"), 2)
 
     def test_incoming_screen_controls_notice_chip_and_debug_line(self):
         xaml = read("win/DoorbellApp/MainWindow.xaml")
@@ -831,11 +1261,12 @@ class WindowsContracts(unittest.TestCase):
         self.assertIn('"display.appearance_schedule.dark_from"', appearance)
         self.assertIn('"devices." + nodeId + ".local.display.appearance"', appearance)
         # An admin override wins over everything, then core's published decision, then the
-        # local rule; the local rule is the same WCAG threshold.
+        # local rule, which picks whichever ink actually reads better.
         decide = contrast[contrast.index("public static InkDecision Decide("):
-                          contrast.index("public static bool TryContractBackground")]
+                          contrast.index("public static bool CoreSampledBackground")]
         self.assertLess(decide.index("ink_override"), decide.index("auto_ink"))
-        self.assertIn("Luminance(background) >= 0.5 ? DarkInk : LightInk", decide)
+        self.assertIn("decision.Ink = BetterInk(background);", decide)
+        self.assertNotIn("Luminance(background) >= 0.5", contrast)
         button = contrast[contrast.index("public static Color CallButton("):
                           contrast.index("public static Color LocalAccent")]
         self.assertLess(button.index("call_button_bg"), button.index("auto_accent"))
@@ -853,7 +1284,7 @@ class WindowsContracts(unittest.TestCase):
         shell = read("win/DoorbellApp/MainWindow.Shell.cs")
         # Core has no layout geometry, so its auto_ink is one whole-image average. The shell has
         # the geometry and samples only the pixels under each element.
-        self.assertIn("public static bool TryAverageRegion(BitmapSource source, Int32Rect crop,",
+        self.assertIn("public static bool TrySampleRegion(BitmapSource source, Int32Rect crop,",
                       contrast)
         self.assertIn("public static Int32Rect MapUniformToFill(", contrast)
         # The mapping matches Stretch=UniformToFill: scale to cover, centre the overflow.
@@ -862,24 +1293,29 @@ class WindowsContracts(unittest.TestCase):
         self.assertIn("Math.Max(viewport.Width / imageWidth, viewport.Height / imageHeight)",
                       mapping)
         self.assertIn("(viewport.Width - imageWidth * scale) / 2.0", mapping)
-        # Downscale to at most 16x16 before averaging, per the spec's sampling rule.
-        average = contrast[contrast.index("public static bool TryAverage(BitmapSource source"):
-                           contrast.index("public static bool TryAverageRegion")]
-        self.assertIn("16.0 / Math.Max(1, source.PixelWidth)", average)
+        # Downscale to at most 16x16 before sampling, per the spec's rule.
+        sampler = contrast[contrast.index("public static bool TrySample(BitmapSource source"):
+                           contrast.index("public static bool TryAverage(BitmapSource source")]
+        self.assertIn("16.0 / Math.Max(1, source.PixelWidth)", sampler)
         self.assertIn("0.2126 * Channel(color.R)", contrast)
         # A per-region sample, and any opaque surface core never saw, decide locally.
         decide = contrast[contrast.index("public static InkDecision Decide("):
                           contrast.index("public static bool TryContractBackground")]
         self.assertIn("object auto = decideLocally ? null", decide)
-        self.assertIn("decision.NeedsShadow = Ratio(decision.Ink, background) < 4.5;", decide)
-        under = shell[shell.index("private Color BackgroundUnder("):
+        # The outline is the opposite of whatever ink was chosen, admin colours included, and is
+        # judged against the region's extremes rather than its average.
+        self.assertIn("decision.Shadow = BetterInk(decision.Ink);", decide)
+        self.assertIn("sample.DarkestLuminance", decide)
+        self.assertIn("sample.LightestLuminance", decide)
+        under = shell[shell.index("private BackgroundSample BackgroundUnder("):
                       shell.index("private static Color? SurfaceColour(")]
         self.assertIn("decideLocally = true;", under)
         self.assertIn("ThemeContrast.MapUniformToFill(bitmap,", under)
+        self.assertIn("ThemeContrast.TrySampleRegion(bitmap, crop, out region)", under)
         self.assertIn("element.TransformToAncestor(this).Transform(new Point(0, 0))", under)
         # The outline is 40 % of the opposite ink and only appears when contrast falls short.
         outline = shell[shell.index("private static DropShadowEffect OutlineFor("):
-                        shell.index("private Color BackgroundUnder(")]
+                        shell.index("private BackgroundSample BackgroundUnder(")]
         self.assertIn("Opacity = 0.4", outline)
         self.assertIn("decision.NeedsShadow ? OutlineFor(decision.Shadow) : null", shell)
         # Every region the spec lists, across the dashboard, visitor screen and call screens.
@@ -890,7 +1326,7 @@ class WindowsContracts(unittest.TestCase):
                                 ("TouchHint", "RegionHint"), ("NodeInfo", "RegionFooter"),
                                 ("VisitorVersionLine", "RegionFooter"),
                                 ("VisitorNoticeText", "RegionNotice"),
-                                ("MembershipText", "RegionStatusLine"),
+                                ("ClusterCountText", "RegionStatusLine"),
                                 ("IncomingTitle", "RegionStatusLine"),
                                 ("InCallTitle", "RegionStatusLine"),
                                 ("IncomingHint", "RegionHint")):
@@ -902,6 +1338,283 @@ class WindowsContracts(unittest.TestCase):
         for region in ("clock", "date", "status_line", "hint", "tile_label", "footer", "notice"):
             with self.subTest(region=region):
                 self.assertIn('= "%s";' % region, shell)
+
+    def test_automatic_ink_picks_the_higher_contrast_of_the_two(self):
+        """The decision is a WCAG contrast comparison, not a luminance threshold at 0.5.
+
+        A real wallpaper averaging #BBBBB4 sits at Y = 0.494, just under the old threshold, and
+        took light ink at 1.7:1 where dark ink gives 9.0:1. Comparing the ratios finds the true
+        crossover, near Y = 0.179, exactly.
+        """
+        contrast = read("win/DoorbellApp/Util/ThemeContrast.cs")
+        found = re.findall(
+            r"public static readonly Color (LightInk|DarkInk) = "
+            r"Color\.FromRgb\(0x([0-9A-Fa-f]{2}), 0x([0-9A-Fa-f]{2}), 0x([0-9A-Fa-f]{2})\);",
+            contrast)
+        self.assertEqual(len(found), 2, "both ink tokens must be declared as literal colours")
+        inks = {name: (int(r, 16), int(g, 16), int(b, 16)) for name, r, g, b in found}
+
+        def channel(value):
+            value /= 255.0
+            return value / 12.92 if value <= 0.04045 else ((value + 0.055) / 1.055) ** 2.4
+
+        def luminance(rgb):
+            return (0.2126 * channel(rgb[0]) + 0.7152 * channel(rgb[1]) +
+                    0.0722 * channel(rgb[2]))
+
+        def ratio(first, second):
+            a, b = luminance(first), luminance(second)
+            return (max(a, b) + 0.05) / (min(a, b) + 0.05)
+
+        def better(background):
+            return ("DarkInk" if ratio(inks["DarkInk"], background) >=
+                    ratio(inks["LightInk"], background) else "LightInk")
+
+        # The wallpaper from the device report, and a dark grey that must stay light.
+        self.assertEqual(better((0xBB, 0xBB, 0xB4)), "DarkInk")
+        self.assertEqual(better((0x40, 0x40, 0x40)), "LightInk")
+        # The chosen ink is always the readable one, and the old rule was not.
+        self.assertGreater(ratio(inks["DarkInk"], (0xBB, 0xBB, 0xB4)), 4.5)
+        self.assertLess(ratio(inks["LightInk"], (0xBB, 0xBB, 0xB4)), 4.5)
+        self.assertLess(luminance((0xBB, 0xBB, 0xB4)), 0.5)  # why the old threshold failed
+        # The crossover sits low in the range, near Y = 0.19 for these two tokens, not at 0.5.
+        self.assertEqual(better((0x7A, 0x7A, 0x7A)), "DarkInk")   # Y 0.195, just above it
+        self.assertEqual(better((0x76, 0x76, 0x76)), "LightInk")  # Y 0.181, just below it
+        crossover = math.sqrt((luminance(inks["LightInk"]) + 0.05) *
+                              (luminance(inks["DarkInk"]) + 0.05)) - 0.05
+        self.assertLess(crossover, 0.25)
+        self.assertGreater(crossover, 0.10)
+        # And the implementation is that comparison.
+        rule = contrast[contrast.index("public static Color BetterInk("):
+                        contrast.index("public static double Ratio(")]
+        self.assertIn("Ratio(DarkInk, background) >= Ratio(LightInk, background)", rule)
+        # Every local decision goes through it, including the call-button direction.
+        self.assertIn("bool preferDark = BetterInk(background) == DarkInk;", contrast)
+
+    def test_the_outline_answers_to_the_worst_patch_not_the_average(self):
+        """A region that spans light and dark fails over one of them even when its average reads.
+
+        Ink choice still follows the average; the 40 % opposite-ink outline is judged against the
+        darkest and the lightest patch of the 16x16 sample. Contrast falls off monotonically away
+        from the ink's own luminance, so the worst patch is always one of those two extremes.
+        """
+        contrast = read("win/DoorbellApp/Util/ThemeContrast.cs")
+        found = re.findall(
+            r"public static readonly Color (LightInk|DarkInk) = "
+            r"Color\.FromRgb\(0x([0-9A-Fa-f]{2}), 0x([0-9A-Fa-f]{2}), 0x([0-9A-Fa-f]{2})\);",
+            contrast)
+        inks = {name: (int(r, 16), int(g, 16), int(b, 16)) for name, r, g, b in found}
+
+        def channel(value):
+            value /= 255.0
+            return value / 12.92 if value <= 0.04045 else ((value + 0.055) / 1.055) ** 2.4
+
+        def luminance(rgb):
+            return (0.2126 * channel(rgb[0]) + 0.7152 * channel(rgb[1]) +
+                    0.0722 * channel(rgb[2]))
+
+        def ratio(first, second):
+            return (max(first, second) + 0.05) / (min(first, second) + 0.05)
+
+        def decide(average, darkest, lightest):
+            """The rule as implemented: ink from the average, outline from the extremes."""
+            ink = ("DarkInk" if ratio(luminance(inks["DarkInk"]), luminance(average)) >=
+                   ratio(luminance(inks["LightInk"]), luminance(average)) else "LightInk")
+            y = luminance(inks[ink])
+            outline = ratio(y, darkest) < 4.5 or ratio(y, lightest) < 4.5
+            return ink, outline
+
+        # A uniform wallpaper: dark ink, and nothing to outline against.
+        flat = luminance((0xBB, 0xBB, 0xB4))
+        self.assertEqual(decide((0xBB, 0xBB, 0xB4), flat, flat), ("DarkInk", False))
+
+        # The same average built out of a light half and a dark half. The average still asks for
+        # dark ink, but dark ink is unreadable over the dark half, so the outline appears.
+        dark_patch = luminance((0x20, 0x20, 0x20))
+        light_patch = luminance((0xF4, 0xF4, 0xEC))
+        ink, outline = decide((0xBB, 0xBB, 0xB4), dark_patch, light_patch)
+        self.assertEqual(ink, "DarkInk")
+        self.assertTrue(outline, "text spanning a dark patch needs the outline")
+        # The average alone would not have asked for it, which is the bug this rule fixes.
+        self.assertGreaterEqual(ratio(luminance(inks["DarkInk"]), flat), 4.5)
+
+        # And the implementation is that comparison, against both extremes.
+        decision = contrast[contrast.index("public static InkDecision Decide(Dictionary<string, "
+                                           "object> display, string regionId,\n"
+                                           "                                         "
+                                           "BackgroundSample sample"):
+                            contrast.index("public static bool CoreSampledBackground")]
+        self.assertIn("decision.Ink = BetterInk(background);", decision)
+        self.assertIn("RatioOf(ink, sample.DarkestLuminance) < 4.5 ||", decision)
+        self.assertIn("RatioOf(ink, sample.LightestLuminance) < 4.5", decision)
+        self.assertNotIn("Ratio(decision.Ink, background) < 4.5", contrast)
+        # The sampler records both extremes alongside the average.
+        sampler = contrast[contrast.index("public static bool TrySample(BitmapSource source"):
+                           contrast.index("public static bool TryAverage(BitmapSource source")]
+        self.assertIn("if (patch < darkest) darkest = patch;", sampler)
+        self.assertIn("if (patch > lightest) lightest = patch;", sampler)
+        # A flat surface is the degenerate sample, so a card behaves exactly as before.
+        uniform = contrast[contrast.index("public static BackgroundSample Uniform("):
+                           contrast.index("/// <summary>\n    /// The ink one text region")]
+        self.assertIn("DarkestLuminance = luminance,", uniform)
+        self.assertIn("LightestLuminance = luminance,", uniform)
+
+    def test_core_theme_values_are_dropped_when_core_never_read_the_image(self):
+        contrast = read("win/DoorbellApp/Util/ThemeContrast.cs")
+        shell = read("win/DoorbellApp/MainWindow.Shell.cs")
+        # auto_background.source "image_unsampled" means a background image is configured but
+        # core could not read it, so its colour, ink and accent describe the flat theme colour.
+        self.assertIn('source.ToString() != "image_unsampled"', contrast)
+        self.assertIn("if (!CoreSampledBackground(display)) return false;", contrast)
+        self.assertIn("decideLocally |= !ThemeContrast.CoreSampledBackground(_display);", shell)
+        # The administrator's own call-button colour still applies; core's accent does not.
+        button = contrast[contrast.index("public static Color CallButton("):
+                          contrast.index("public static Color CallButtonInk(")]
+        self.assertIn("if (!CoreSampledBackground(display))", button)
+        self.assertIn('"devices." + nodeId + ".local.theme.call_button_bg"', button)
+        self.assertIn("return LocalAccent(background);", button)
+
+    def test_icons_are_tabler_geometries_never_hand_drawn(self):
+        icons = read("win/DoorbellApp/Resources/Icons.xaml")
+        window = read("win/DoorbellApp/MainWindow.xaml")
+        app = read("win/DoorbellApp/App.xaml")
+        admin = read("win/DoorbellApp/AdminDialog.xaml")
+        code = read("win/DoorbellApp/MainWindow.xaml.cs")
+
+        # Icons.xaml is generated; the shell only ever references keys it already defines.
+        self.assertIn("Generated by tools/gen_icons.py", icons)
+        self.assertIn("Resources/Icons.xaml", app)
+        keys = set(re.findall(r'<Geometry x:Key="([^"]+)"', icons))
+        self.assertTrue(keys, "Icons.xaml must define geometries")
+        for key in keys:
+            with self.subTest(key=key):
+                self.assertRegex(key, r"^Icon[A-Z0-9]")
+        # Every key this shell asks for, from XAML and from code, resolves in that dictionary.
+        referenced = set()
+        for name in ("MainWindow.xaml", "App.xaml", "AdminDialog.xaml", "NoticeDialog.xaml",
+                     "WebAdminWindow.xaml", "MainWindow.xaml.cs"):
+            text = read("win/DoorbellApp/" + name)
+            referenced |= set(re.findall(r"\{StaticResource (Icon[A-Za-z0-9]+)\}", text))
+            referenced |= set(re.findall(r'"(Icon[A-Za-z0-9]+)"', text))
+        self.assertTrue(referenced, "the shell must reference generated icons")
+        for key in sorted(referenced):
+            with self.subTest(key=key):
+                self.assertIn(key, keys, "%s is not in the generated dictionary" % key)
+        # The cluster icon is the one the other shells draw.
+        self.assertIn("IconTopologyStar3", referenced)
+        # Tabler's bounding-box rectangle would draw as a stroked square.
+        for geometry in re.findall(r"<Geometry [^>]*>([^<]*)</Geometry>", icons):
+            with self.subTest(geometry=geometry[:30]):
+                self.assertNotIn("M0 0h24v24H0z", geometry)
+
+        # No icon geometry is authored inline any more, anywhere in the shell.
+        for name, text in (("MainWindow.xaml", window), ("App.xaml", app),
+                           ("AdminDialog.xaml", admin), ("NoticeDialog.xaml",
+                            read("win/DoorbellApp/NoticeDialog.xaml")),
+                           ("WebAdminWindow.xaml",
+                            read("win/DoorbellApp/WebAdminWindow.xaml"))):
+            for match in re.findall(r'Data="([^"]*)"', text):
+                with self.subTest(name=name, data=match[:40]):
+                    self.assertRegex(match, r"^\{StaticResource Icon[A-Za-z0-9]+\}$",
+                                     "%s draws a hand-authored path" % name)
+        self.assertNotIn("<Path Data=\"M", window)
+        self.assertNotIn("<Path Data=\"F", window)
+
+        # Tabler is stroke-based, so every icon is stroked and never filled, two units thick with
+        # round caps and joins, inside a Viewbox so the stroke scales with the icon.
+        for name, text in (("MainWindow.xaml", window), ("App.xaml", app),
+                           ("AdminDialog.xaml", admin)):
+            for block in re.findall(r"<Path\b[^>]*/>", text):
+                with self.subTest(name=name):
+                    self.assertIn("Stroke=", block)
+                    self.assertNotIn("Fill=", block)
+                    self.assertIn('StrokeThickness="2"', block)
+                    self.assertIn('StrokeStartLineCap="Round"', block)
+                    self.assertIn('StrokeLineJoin="Round"', block)
+            self.assertEqual(text.count("<Path "), text.count("<Viewbox "))
+
+        # The glyphs that used to stand in for icons are gone.
+        self.assertNotIn("»", app)
+        self.assertNotIn("⌫", admin)
+        self.assertNotIn("🌐", code)
+
+        # Icons built in code take the same shape, and a seeded purpose gets a real icon.
+        builder = code[code.index("private FrameworkElement TablerIcon("):
+                       code.index("private Button MakePurposeButton(")]
+        self.assertIn("StrokeThickness = 2,", builder)
+        self.assertIn("PenLineCap.Round", builder)
+        self.assertIn("PenLineJoin.Round", builder)
+        self.assertIn("new Viewbox", builder)
+        self.assertNotIn("Fill =", builder)
+        mapped = code[code.index("private static string PurposeIconKey("):
+                      code.index("private FrameworkElement TablerIcon(")]
+        for purpose, key in (("p_visit", "IconHome"), ("p_delivery", "IconPackage"),
+                             ("p_mail", "IconMail")):
+            self.assertIn('case "%s": return "%s";' % (purpose, key), mapped)
+        # An administrator's own purpose keeps whatever icon they typed.
+        self.assertIn("default: return null;", mapped)
+
+    def test_the_theme_backdrop_is_admin_configurable(self):
+        shell = read("win/DoorbellApp/MainWindow.Shell.cs")
+        xaml = read("win/DoorbellApp/MainWindow.xaml")
+
+        # The scrim is a sibling drawn straight after the picture and before every screen, so it
+        # darkens the wallpaper and never the door tiles or the call list plate above it.
+        self.assertIn('<Border x:Name="ThemeBackdrop"', xaml)
+        self.assertIn('x:Name="ThemeBackdrop" Visibility="Collapsed" IsHitTestVisible="False"',
+                      xaml)
+        order = [xaml.index('x:Name="%s"' % name) for name in
+                 ("ThemeBgImage", "ThemeBackdrop", "IdleView", "DoorTilesPanel",
+                  "RecentCallsPanel")]
+        self.assertEqual(order, sorted(order), "the scrim must sit under every plate")
+
+        resolved = shell[shell.index("private void ApplyThemeBackdrop()"):
+                         shell.index("private BackgroundSample OverBackdrop(")]
+        self.assertIn('CoreClient.Dig(_display, "theme.backdrop")', resolved)
+        self.assertIn("private const int DefaultBackdropOpacity = 62;", shell)
+
+        def backdrop(config, picture=True):
+            """The rule as implemented: enabled / colour / opacity, each with its own default."""
+            enabled, colour, percent = True, "#000000", 62
+            if config is not None:
+                if isinstance(config.get("enabled"), bool):
+                    enabled = config["enabled"]
+                if re.fullmatch(r"#[0-9A-Fa-f]{6}", str(config.get("color", ""))):
+                    colour = config["color"]
+                if isinstance(config.get("opacity"), int):
+                    percent = max(0, min(100, config["opacity"]))
+            draw = picture and enabled and percent > 0
+            return (draw, colour, percent / 100.0 if draw else 0.0)
+
+        # Absent: the built-in scrim.
+        self.assertEqual(backdrop(None), (True, "#000000", 0.62))
+        # Configured: colour and opacity both applied.
+        self.assertEqual(backdrop({"enabled": True, "color": "#123456", "opacity": 25}),
+                         (True, "#123456", 0.25))
+        # Disabled: nothing is drawn.
+        self.assertEqual(backdrop({"enabled": False, "color": "#123456", "opacity": 80}),
+                         (False, "#123456", 0.0))
+        # Only over a picture; a scrim over a flat theme colour would just be another colour.
+        self.assertEqual(backdrop(None, picture=False)[0], False)
+        self.assertIn("bool picture = ThemeBgImage.Visibility == Visibility.Visible &&", resolved)
+        self.assertIn("bool draw = picture && enabled && percent > 0;", resolved)
+        self.assertIn("ThemeBackdrop.Visibility = draw ? Visibility.Visible : "
+                      "Visibility.Collapsed;", resolved)
+        self.assertIn("ThemeBackdrop.Background = draw ? ThemeContrast.Brush(colour) : null;",
+                      resolved)
+        self.assertIn("ThemeBackdrop.Opacity = _backdropAlpha;", resolved)
+
+        # The ink decision sees the darkened picture, not the bright original.
+        self.assertIn("return OverBackdrop(region);", shell)
+        self.assertIn("return OverBackdrop(contract);", shell)
+        composite = shell[shell.index("private Color OverBackdrop(Color under)"):
+                          shell.index("/// <summary>Applies display.appearance")]
+        self.assertIn("under.R * (1 - a) + _backdropColour.R * a", composite)
+        # The scrim is resolved before the ink that has to see through it.
+        window = read("win/DoorbellApp/MainWindow.xaml.cs")
+        display = window[window.index("private void ApplyDisplay()"):
+                         window.index("private void SetBrightnessAsync")]
+        self.assertLess(display.index("ApplyThemeBackdrop();"), display.index("ApplyAutoInk();"))
 
     def test_the_footer_and_the_sos_slider_never_overlap(self):
         shell = read("win/DoorbellApp/MainWindow.Shell.cs")
@@ -1141,14 +1854,15 @@ class WindowsContracts(unittest.TestCase):
         self.assertIn("App.Core.SetGlobalNotice(dialog.NoticeBody, dialog.ExpiresMs)", notice)
         self.assertIn("App.Core.ClearGlobalNotice()", notice)
         # 50 rows a page with an exclusive before_ms upper bound.
-        page = history[history.index("private void LoadHistoryPage"):
+        page = history[history.index("private void LoadHistoryPage("):
                        history.index("private void OnHistoryCloseClick")]
-        self.assertIn("App.Core.CallLogPage(0, _historyBeforeMs, HistoryPageRows)", page)
+        self.assertIn("App.Core.CallLogPage(0, before, HistoryPageRows)", page)
         self.assertIn("_historyBeforeMs = oldest;", page)
         self.assertIn("public Dictionary<string, object> CallLogPage(long sinceMs, "
                       "long beforeMs, int limit)", client)
         # The growing-limit fallback stays for a core without before_ms.
-        self.assertIn("App.Core.CallLog(0, _historyLimit)", page)
+        self.assertIn("App.Core.CallLog(0, limit)", page)
+        self.assertIn("int limit = _historyLimit;", page)
 
     def test_native_config_writes_are_prepared(self):
         client = read("win/DoorbellApp/Core/CoreClient.cs")

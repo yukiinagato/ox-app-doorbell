@@ -36,6 +36,7 @@ typedef BOOL (^DBRTSPInterleavedFrameHandler)(uint8_t channel, NSData *frame);
             stateHandler:(DBRTSPH264StateHandler)stateHandler;
 - (void)start;
 - (void)stop;
+- (BOOL)requestKeyFrame;
 
 // Deterministic protocol helpers are public so malformed and oversized inputs
 // can be exercised without a camera or network in the host test suite.

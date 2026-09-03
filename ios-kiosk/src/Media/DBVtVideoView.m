@@ -224,6 +224,8 @@ static void DbVtOutput(void *, void *, OSStatus, DbVTDecodeInfoFlags,
 - (int64_t)takeCaptureMsForDts:(int64_t)dtsMs;
 @end
 
+static DBVtVideoView *DBWarmVideoView;
+
 @implementation DBVtVideoView {
   DbVTSessionRef _session;
   CMFormatDescriptionRef _format;
@@ -241,6 +243,38 @@ static void DbVtOutput(void *, void *, OSStatus, DbVTDecodeInfoFlags,
   NSUInteger _droppedFrames;
   UIImageView *_compatImageView;
   BOOL _loggedCompatFrame;
+}
+
++ (void)prewarm {
+  if (![NSThread isMainThread]) {
+    dispatch_async(dispatch_get_main_queue(), ^{ [self prewarm]; });
+    return;
+  }
+  if (DBWarmVideoView) return;
+  DBWarmVideoView = [[DBVtVideoView alloc] initWithFrame:CGRectMake(-1, -1, 1, 1)];
+  [DBWarmVideoView bindDrawable];
+}
+
++ (DBVtVideoView *)takeWarmView {
+  NSAssert([NSThread isMainThread], @"DBVtVideoView pool is main-thread only");
+  DBVtVideoView *view = DBWarmVideoView;
+  DBWarmVideoView = nil;
+  return view ?: [[DBVtVideoView alloc] initWithFrame:CGRectMake(-1, -1, 1, 1)];
+}
+
++ (void)recycleWarmView:(DBVtVideoView *)view {
+  if (!view) return;
+  NSAssert([NSThread isMainThread], @"DBVtVideoView pool is main-thread only");
+  [view shutdownDecoder];
+  view.onDisplayedFrame = nil;
+  [view removeFromSuperview];
+  view.frame = CGRectMake(-1, -1, 1, 1);
+  if (!DBWarmVideoView) DBWarmVideoView = view;
+}
+
++ (void)purgeWarmView {
+  NSAssert([NSThread isMainThread], @"DBVtVideoView pool is main-thread only");
+  DBWarmVideoView = nil;
 }
 
 - (id)initWithFrame:(CGRect)frame {

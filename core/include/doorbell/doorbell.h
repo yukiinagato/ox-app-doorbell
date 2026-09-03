@@ -79,6 +79,19 @@ typedef struct db_platform_v2 {
 /* JSON events delivered from core to the platform UI. Examples:
  * {"t":"state","state":"idle|calling|in_call|degraded|offline"}
  * {"t":"chime","sound":"ding1"} {"t":"config_changed"} {"t":"peers_changed"}
+ *
+ * Change events report change, not traffic. peers_changed is emitted only when the peer set or
+ * a rendered field of some peer -- status, role, door, name, addresses, capabilities, UI
+ * manifest, software version -- differs from the last one reported, and never more often than
+ * once every 500 ms however fast things move. Volatile peer telemetry (battery, uptime, frame
+ * counters) is deliberately not a change: battery has power_changed of its own. A peer that
+ * flaps offline and back inside the window produces no event at all, because nothing a shell
+ * would draw ended up different. config_changed is suppressed for a replicated write whose
+ * values this node already had -- anti-entropy re-sends the frontier on every reconnect -- but
+ * is always delivered for a write this device made, so a shell may still use it as the signal
+ * that its own save landed. notice_changed is emitted only when the announcement for that door
+ * differs from the one last reported. A shell must still coalesce: these are refresh hints, and
+ * rebuilding a screen per event is what saturated core's run loop on a three-device cluster.
  * {"t":"reply","text":"<localized text>","ttl_s":30,"lang":"ja"}
  *   A cached custom reply includes a local audio_path. The shell plays it without TTS;
  *   otherwise core calls tts_speak.
@@ -90,7 +103,9 @@ typedef struct db_platform_v2 {
  * {"t":"device_alert","kind":"call_missed","door":"d_front","call_id":"…","unread_missed":N,
  *   "visual":true,"sticky":false,"ttl_s":30,"channels":[…]} when a rule matches a missed call.
  * {"t":"display",...,"theme":{"bg_color":"#101418","bg_image":"<sha256>|null",
- *   "bg_image_path":"<local path>|null"}} for the idle-screen theme. The shell renders the
+ *   "bg_image_path":"<local path>|null","glass":{"blur_radius":32,"source":"…"}}} for the
+ *   idle-screen theme. A shell advertises `frosted_glass_radius_v1` only when it applies that
+ *   numeric radius; modern iOS keeps its system-managed UIBlurEffect instead. The shell renders the
  *   local path directly; null means it is not cached and display is reissued after asset_ready.
  * {"t":"emergency","active":true,"alarm_sound":"siren1|asset:<sha256>","alarm_volume":100,
  *   "audio_path":"..."} where audio_path exists only for a cached custom alarm.
@@ -152,7 +167,23 @@ DB_API void db_core_report_call_recovery(db_core* c, const char* call_id, int re
  * inactivity, and visitor_lang is delivered to every shell. */
 DB_API void db_core_set_visitor_lang(db_core* c, const char* door, const char* lang);
 
-/* Return a JSON snapshot of nodes, leaders, SIP state, and runtime state. Release with db_free. */
+/* Reading core from a UI thread
+ * -----------------------------
+ * db_core_status_json, db_core_config_json, db_core_local_time_json and db_core_audio_json are
+ * served from snapshots the run loop republishes when their inputs change. They are safe to call
+ * from any thread, never enter the loop, and never block behind whatever the loop is doing. The
+ * cost is that a value written through db_core_set_config_key appears on the next turn of the
+ * loop rather than synchronously inside the write call.
+ *
+ * Every other read-only export does marshal to the loop and can wait for it: db_core_pairing_json
+ * (its PIN countdown and pending list have to be live), db_core_call_log_json (a parameterized
+ * query against the database), db_core_capabilities_json and db_core_debug_json (built from live
+ * mesh and SIP state), db_core_text (depends on catalogs and language rules the loop owns),
+ * db_core_asset_path (consults the asset store), db_core_sip_mic_muted (PJSUA state), and
+ * db_core_verify_admin_password (its lockout counters must serialize). Call those off the UI
+ * thread, or accept that they can take as long as the loop's current task.
+ *
+ * Return a JSON snapshot of nodes, leaders, SIP state, and runtime state. Release with db_free. */
 DB_API char* db_core_status_json(db_core* c);
 
 /* Return diagnostic JSON for addresses, Wi-Fi, battery, press statistics, and reachability. */
@@ -243,7 +274,13 @@ DB_API int db_core_delete_config_key(db_core* c, const char* key);
  *    "weekday":"wed","weekday_num":3,"offset_min":540,"dst":false,"known":true,
  *    "wall_ms":…,"tz":"Asia/Tokyo"}
  * known is false when the configured zone is absent from the table, in which case
- * integrations.tz_offset_min was used. Release the result with db_free. */
+ * integrations.tz_offset_min was used.
+ *
+ * Safe to call from any thread, including a UI thread, and it never enters core's run loop: the
+ * zone and the offset come from a snapshot the loop republishes whenever configuration or the
+ * time service changes, and only the instant itself is read live. The call therefore costs
+ * microseconds even while core is synchronizing time or building a status document, and a clock
+ * driven from it keeps ticking through both. Release the result with db_free. */
 DB_API char* db_core_local_time_json(db_core* c, int64_t wall_ms);
 
 /* Start one immediate SNTP round, the same one POST /api/time/sync triggers. The exchange runs
@@ -259,7 +296,12 @@ DB_API int db_core_time_sync_now(db_core* c);
  * keeps its configured alarm loudness. Returns
  *   {"device":"<id>","call":80,"sos":100,"idle":60,"source":"device|cluster|default",
  *    "sources":{"call":"…","sos":"…","idle":"…"}}
- * where source is the strongest source among the three levels. Release with db_free. */
+ * where source is the strongest source among the three levels.
+ *
+ * Like db_core_local_time_json, this is served from a snapshot the run loop republishes on every
+ * configuration change: safe from any thread, never blocks on the loop. A value written through
+ * db_core_set_config_key is visible on the next turn of the loop, not synchronously within the
+ * write call. Release with db_free. */
 DB_API char* db_core_audio_json(db_core* c, const char* device_id);
 
 /* ---- Announcements ----
@@ -314,8 +356,10 @@ DB_API int db_core_open_door(db_core* c, const char* door);
  *   "ink_override":    {"clock":"#RRGGBB", …}      only the regions an administrator overrode
  *   "call_button_bg":  "#RRGGBB"                   what to paint: the override, else auto
  *   "call_button_ink": "light|dark"                what to draw on it
- * auto_ink is the WCAG decision for text drawn straight onto the background: dark ink over a
- * background whose relative luminance is at least 0.5, light ink otherwise. When the background
+ * auto_ink is the WCAG decision for text drawn straight onto the background: whichever ink token
+ * has the higher contrast ratio against it. The two ratios cross at relative luminance 0.1791,
+ * not at mid luminance, so a grey that looks middling already wants dark ink. When even the
+ * better ink is below 4.5:1 the shell adds the 40% opposite-ink shadow. When the background
  * is an image, core averages it; a shell may refine per region locally because core has no
  * layout geometry. Always take the button text colour from call_button_ink: on a mid-luminance
  * background no colour can both separate from it and carry white text, and core then returns
@@ -335,6 +379,7 @@ DB_API char* db_core_capabilities_json(db_core* c);
  *  "psk_source":"secure_store|boot_plaintext|none","psk_ref":"secret:mesh.psk"|null,"role":"...",
  *  "self":{id,addr,name,role,pk,model,platform,sw},
  *  "pair_qr":"doorbell-pair:<addr>|<id>|<pk>",
+ *  "token":{…,"uri":"doorbell://pair?host=…&pin=…&exp=…&cluster=…"} while a PIN is live,
  *  "home":{"member_count":int,"connected_count":int},
  *  "token":{"active":bool,"expires_s":int,"attempts_left":int,"host":"<addr>","pin":"<6>"},
  *  "pending":{"pairing_mode":bool,"pairing_mode_left_s":int,"auto_added_count":int,
@@ -384,6 +429,33 @@ DB_API char* db_core_start_pairing_json(db_core* c, int seconds);
  *   {"ok":true,"host":"10.0.1.10:47172","pin":"123456","expires_s":600}
  * or {"ok":false,"err":"host_unpaired"|"pairing_unavailable"}. Release with db_free. */
 DB_API char* db_core_mint_join_token_json(db_core* c, int seconds);
+
+/* ---- The pairing QR payload ----
+ * One definition of the format, so a device with the app installed opens a scanned code straight
+ * into the join flow and every shell renders the same thing:
+ *
+ *   doorbell://pair?host=<ip:port>&pin=<6 digits>&exp=<unix seconds>&cluster=<name>
+ *
+ * host and pin are required; exp is absolute, so a scanner can reject a stale code without
+ * knowing when it was produced; cluster is the human-readable cluster name. Values are
+ * percent-encoded with the RFC 3986 unreserved set, so a name with spaces or Japanese survives
+ * the round trip -- "+" is a literal plus, never a space. Only these four keys are defined and a
+ * parser ignores any other, so the format can gain one without breaking shipped shells.
+ *
+ * Render the QR from the "uri" field of db_core_mint_join_token_json,
+ * db_core_start_pairing_json, POST /api/join-token, POST /api/pairing/start, or
+ * db_core_pairing_json's token object. Never assemble the string in a shell. Keep the host and
+ * PIN printed beside the code as well: someone scanning with a plain camera app needs to be able
+ * to read and type them.
+ *
+ * db_core_parse_pair_uri_json validates a scanned code the same way everywhere. It returns
+ *   {"ok":true,"host":"10.0.1.10:47172","pin":"123456","exp":1772000000,"cluster":"Ox House"}
+ * or {"ok":false,"err":"bad_scheme"|"missing_pin"|"missing_host"|"expired"}. The expiry is
+ * checked against corrected cluster time when core is running and against the platform clock
+ * otherwise, because a shell may scan a code before core has started. The correction lives in an
+ * atomic on the shared clock, so this call is safe from any thread and does not enter the run
+ * loop either -- a camera callback can validate a code inline. Release with db_free. */
+DB_API char* db_core_parse_pair_uri_json(db_core* c, const char* uri);
 /* Request that an indoor-panel administrator remove one connected peer. The peer receives an
  * authenticated local-reset command and acknowledges it through its UI. */
 DB_API void db_core_remove_device(db_core* c, const char* node_id);
@@ -505,9 +577,13 @@ DB_API int db_core_emergency_v2(db_core* c, int active);
 DB_API void db_core_on_encoded_frame(db_core* c, const uint8_t* annexb, size_t len,
                                      int is_keyframe, int64_t ts_ms);
 
-/* Return one when the shell should run its encoder: codec is h264/auto and /stream.mp4 has a
- * subscriber. Poll roughly every five seconds to avoid encoding without consumers. */
+/* Return one when the shell should run its low-cost encoder: camera.codec is h264/auto. Keeping
+ * the encoder warm makes init data and a recent random-access point available before a call. */
 DB_API int db_core_video_encoder_wanted(db_core* c);
+
+/* Return one once for each burst of new H.264 subscribers and clear the pending edge. A running
+ * platform encoder should request an IDR immediately. Poll at most every 100 ms while encoding. */
+DB_API int db_core_take_video_keyframe_request(db_core* c);
 
 #ifdef __cplusplus
 }

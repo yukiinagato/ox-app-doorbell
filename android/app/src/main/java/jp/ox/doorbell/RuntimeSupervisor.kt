@@ -37,6 +37,7 @@ class RuntimeSupervisor(private val app: App) {
         if (legacy19) commissioningStore else AlwaysCommissionedEncoder,
     )
     private lateinit var handler: Handler
+    private lateinit var orientation: VideoOrientationTracker
 
     @Volatile var isCoreReady = false
         private set
@@ -55,7 +56,6 @@ class RuntimeSupervisor(private val app: App) {
     private var lastRuntimeHeartbeatMs = 0L
     private var lastCapabilityPublishMs = 0L
     private var lastEncoderSnapshot = VideoEncoder.Snapshot("idle")
-    private var lastEncoderWanted = false
     private var decoderState = "idle"
     private var lastRecoveryStatusJson = ""
     @Volatile private var safeMode = app.safeMode
@@ -71,13 +71,19 @@ class RuntimeSupervisor(private val app: App) {
             updateEncoderDemand()
             reconcileEmergencyState()
             publishCapabilitiesIfDue()
-            handler.postDelayed(this, if (encoder.isRunning) 1_000L else 250L)
+            handler.postDelayed(this, if (encoder.isRunning) 100L else 250L)
         }
     }
 
     init {
         thread.start()
         handler = Handler(thread.looper)
+        orientation = VideoOrientationTracker(
+            app,
+            handler,
+            camera::frameRotationForDeviceRotation,
+            app.core::setVideoSensorRotation,
+        )
         statusStore.update("android", JSONObject()
             .put("sdk", Build.VERSION.SDK_INT)
             .put("abi", Build.CPU_ABI)
@@ -114,6 +120,7 @@ class RuntimeSupervisor(private val app: App) {
             camera.encoder = null
             encoder.stop()
             camera.stop()
+            orientation.stop()
             cameraStarted = false
             setCoreReady(false, reason)
             publishRuntimeHealth(force = true)
@@ -124,6 +131,33 @@ class RuntimeSupervisor(private val app: App) {
 
     fun onPermissionsChanged() {
         handler.post { if (running && isCoreReady) ensureCamera() }
+    }
+
+    /** Recreate Core so a locally saved name/role/door is advertised and replicated immediately. */
+    fun restartForIdentityChange() {
+        handler.post {
+            if (!running || !isCoreReady) return@post
+            handler.removeCallbacks(mediaPoll)
+            scannerActive = false
+            camera.encoder = null
+            encoder.stop()
+            camera.stop()
+            orientation.stop()
+            cameraStarted = false
+            resolutionIndex = 0
+            currentActualResolution = ""
+            triedActualResolutions.clear()
+            encoderExhausted = false
+            encoderRetryAtMs = 0L
+            cameraRetryAtMs = 0L
+            setCoreReady(false, "identity_changed")
+            publishRuntimeHealth(force = true)
+            app.core.destroy()
+            statusStore.update("runtime", JSONObject()
+                .put("state", "starting")
+                .put("reason", "identity_changed"))
+            startCore()
+        }
     }
 
     /**
@@ -139,6 +173,7 @@ class RuntimeSupervisor(private val app: App) {
                 return@post
             }
             restartCamera()
+            orientation.stop()
             scannerActive = true
             val started = camera.start(holder, SCANNER_WIDTH, SCANNER_HEIGHT, 0, preferBack = true)
             if (!started) {
@@ -156,6 +191,7 @@ class RuntimeSupervisor(private val app: App) {
             scannerActive = false
             restartCamera()
             if (running && isCoreReady) ensureCamera()
+            if (running && isCoreReady && app.boot.role == "door_station") orientation.start()
         }
     }
 
@@ -172,9 +208,6 @@ class RuntimeSupervisor(private val app: App) {
             restartCamera()
         }
     }
-
-    fun frameRotationForDeviceRotation(deviceRotation: Int): Int =
-        camera.frameRotationForDeviceRotation(deviceRotation)
 
     fun trimMemory(level: Int) {
         handler.post {
@@ -271,6 +304,7 @@ class RuntimeSupervisor(private val app: App) {
             statusStore.update("native_backend", backend)
             statusStore.update("runtime", JSONObject().put("state", "ready"))
             app.core.setUiManifest(AndroidRuntimeContracts.uiManifest())
+            if (app.boot.role == "door_station") orientation.start() else orientation.stop()
             publishCapabilities()
             applyHelperConfiguration()
             refreshSafeMode()
@@ -365,8 +399,6 @@ class RuntimeSupervisor(private val app: App) {
             return
         }
         val wanted = app.core.videoEncoderWanted()
-        val newSubscriber = wanted && !lastEncoderWanted
-        lastEncoderWanted = wanted
         val commissioning = commissioningRequired()
         if (!wanted && !commissioning) {
             encoderExhausted = false
@@ -401,7 +433,7 @@ class RuntimeSupervisor(private val app: App) {
                     .put("fallback", "mjpeg"))
             }
         }
-        if (newSubscriber && encoder.isRunning) encoder.requestKeyFrame()
+        if (encoder.isRunning && app.core.takeVideoKeyframeRequest()) encoder.requestKeyFrame()
     }
 
     private fun tryLowerResolution(): Boolean {

@@ -44,6 +44,12 @@ static void WDAppendLog(NSString *line) {
   BOOL (^_externalSupervisorProvider)(void);
 }
 
++ (void)restartForMaintenanceWithExternalSupervisor:(BOOL)externalSupervisor {
+  if (!externalSupervisor) DBScheduleFixedRelaunch(1);
+  [NSThread sleepForTimeInterval:0.2];
+  _exit(0);
+}
+
 - (id)initWithNameProvider:(NSString * (^)(void))nameProvider {
   return [self initWithNameProvider:nameProvider externalSupervisorProvider:nil];
 }

@@ -7,6 +7,7 @@
 #import "../Core/DBTexts.h"
 #import "../Media/DBQrCode.h"
 #import "DBNumericKeypad.h"
+#import "../Core/DBPairUri.h"
 #import "DBRouter.h"
 
 static UIColor *DBPairBg(void) {
@@ -49,6 +50,7 @@ static UIColor *DBPairOk(void) {
   UILabel *_joinTitle;
   UILabel *_hostLabel;
   UITextField *_hostField;
+  NSString *_pendingInvitationPin;
   UILabel *_codeLabel;
   UILabel *_codeDisplay;
   DBNumericKeypad *_keypad;
@@ -433,7 +435,11 @@ static UIColor *DBPairOk(void) {
 }
 
 - (void)applyQrFromInfo:(NSDictionary *)info {
-  NSString *qr = [info objectForKey:@"pair_qr"];
+  // Core publishes the invitation the other shells encode; the older
+  // pair_qr payload is the fallback for a core that has none. The shell never
+  // assembles the string itself.
+  NSString *qr = [DBPairUri invitationUriInPairingInfo:info];
+  if ([qr length] == 0) qr = [info objectForKey:@"pair_qr"];
   if (![qr isKindOfClass:[NSString class]] || [qr length] == 0) return;
   if ([qr isEqualToString:_lastQr]) return;
   _lastQr = [qr copy];
@@ -616,6 +622,39 @@ static UIColor *DBPairOk(void) {
 - (void)onHostFieldDone:(id)sender {
   (void)sender;
   [_hostField resignFirstResponder];
+}
+
+// An invitation opened from a QR or a doorbell://pair link. The device is not
+// taken out of a cluster without being asked: joining is a full local reset.
+- (void)presentInvitation:(DBPairUri *)invitation {
+  DBTexts *texts = [_router texts];
+  _confirmingCreate = NO;
+  if (invitation == nil || ![invitation isValid]) {
+    NSString *reason = invitation.error;
+    _errorLabel.text = [texts ts:@"pair.invitation_title"];
+    _errorDetail.text = [texts ts:([reason isEqualToString:DBPairUriErrorExpired]
+                                       ? @"pair.invitation_expired"
+                                       : @"pair.invitation_invalid")];
+    [self applyState];
+    return;
+  }
+  _hostField.text = invitation.host;
+  _pendingInvitationPin = [invitation.pin copy];
+  // The PIN is filled in but not sent: the visitor of this screen still has to
+  // press join, which is the confirmation, and can see what they are joining.
+  _keypad.value = invitation.pin;
+  _errorLabel.text = [invitation.cluster length] > 0
+      ? [texts t:@"pair.invitation_confirm", invitation.cluster, nil]
+      : [texts ts:@"pair.invitation_confirm_unnamed"];
+  // Already in a cluster: say what joining costs before it happens.
+  _errorDetail.text = [_state isEqualToString:@"ready"]
+      ? [texts ts:@"pair.invitation_replace"] : @"";
+  [self applyState];
+}
+
+// The PIN from an invitation, submitted when the user confirms.
+- (NSString *)pendingInvitationPin {
+  return _pendingInvitationPin;
 }
 
 - (void)submitJoinWithCode:(NSString *)code {

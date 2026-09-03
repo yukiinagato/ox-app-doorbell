@@ -9,6 +9,11 @@
     <Grid ClipToBounds="True">
         <Image x:Name="ThemeBgImage" Stretch="UniformToFill" Visibility="Collapsed"
                IsHitTestVisible="False"/>
+        <!-- The scrim that makes text and cards read over a bright wallpaper. It is a sibling
+             drawn immediately after the picture and before every screen, so it darkens the
+             picture and never the door tiles, the call list or any other plate above it.
+             Colour and opacity come from display.theme.backdrop. -->
+        <Border x:Name="ThemeBackdrop" Visibility="Collapsed" IsHitTestVisible="False"/>
 
         <Grid x:Name="IdleView">
             <Grid.RenderTransform>
@@ -82,7 +87,7 @@
 
                 <Grid x:Name="VisitorFooter" Grid.Row="6" Grid.Column="0" Grid.ColumnSpan="2"
                       Margin="0,12,0,0">
-                    <TextBlock x:Name="VisitorVersionLine" FontSize="14"
+                    <TextBlock x:Name="VisitorVersionLine" FontSize="14" TextWrapping="Wrap"
                                Foreground="{DynamicResource Dim}" HorizontalAlignment="Left"
                                VerticalAlignment="Center"/>
                 </Grid>
@@ -110,12 +115,43 @@
                                 Padding="12,6" BorderBrush="{DynamicResource Line}"
                                 BorderThickness="1" Margin="5,0,0,0"
                                 MouseLeftButtonDown="OnMembershipClick">
+                            <!-- Three compact counters: the cluster, then how many door stations
+                                 and indoor panels are online. Vector icons, never emoji, so they
+                                 take the ink colour and stay crisp at any scale. -->
                             <StackPanel Orientation="Horizontal">
-                                <TextBlock x:Name="MembershipText" FontSize="14"
-                                           Foreground="{DynamicResource Fg}"/>
-                                <TextBlock x:Name="MembershipBadge" FontSize="12" Margin="10,0,0,0"
-                                           VerticalAlignment="Center"
-                                           Foreground="{DynamicResource Dim}"/>
+                                <StackPanel x:Name="ClusterCounter" Orientation="Horizontal"
+                                            VerticalAlignment="Center">
+                                    <Viewbox Width="16" Height="16" VerticalAlignment="Center">
+                                        <Path Data="{StaticResource IconTopologyStar3}" Stroke="{DynamicResource Dim}"
+                                              StrokeThickness="2" StrokeStartLineCap="Round"
+                                              StrokeEndLineCap="Round" StrokeLineJoin="Round"/>
+                                    </Viewbox>
+                                    <TextBlock x:Name="ClusterCountText" FontSize="14"
+                                               Margin="6,0,0,0" VerticalAlignment="Center"
+                                               Foreground="{DynamicResource Fg}"/>
+                                </StackPanel>
+                                <StackPanel x:Name="DoorCounter" Orientation="Horizontal"
+                                            Margin="14,0,0,0" VerticalAlignment="Center">
+                                    <Viewbox Width="16" Height="16" VerticalAlignment="Center">
+                                        <Path Data="{StaticResource IconDoor}" Stroke="{DynamicResource Dim}"
+                                              StrokeThickness="2" StrokeStartLineCap="Round"
+                                              StrokeEndLineCap="Round" StrokeLineJoin="Round"/>
+                                    </Viewbox>
+                                    <TextBlock x:Name="DoorCountText" FontSize="14"
+                                               Margin="6,0,0,0" VerticalAlignment="Center"
+                                               Foreground="{DynamicResource Fg}"/>
+                                </StackPanel>
+                                <StackPanel x:Name="PanelCounter" Orientation="Horizontal"
+                                            Margin="14,0,0,0" VerticalAlignment="Center">
+                                    <Viewbox Width="16" Height="16" VerticalAlignment="Center">
+                                        <Path Data="{StaticResource IconDeviceTablet}" Stroke="{DynamicResource Dim}"
+                                              StrokeThickness="2" StrokeStartLineCap="Round"
+                                              StrokeEndLineCap="Round" StrokeLineJoin="Round"/>
+                                    </Viewbox>
+                                    <TextBlock x:Name="PanelCountText" FontSize="14"
+                                               Margin="6,0,0,0" VerticalAlignment="Center"
+                                               Foreground="{DynamicResource Fg}"/>
+                                </StackPanel>
                             </StackPanel>
                         </Border>
                         <Border x:Name="MissedBadge" Visibility="Collapsed" Cursor="Hand"
@@ -283,21 +319,41 @@
             </Grid.RowDefinitions>
             <Grid Grid.Row="0" Margin="20,16,20,8">
                 <StackPanel HorizontalAlignment="Left">
-                    <TextBlock x:Name="IncomingTitle" FontSize="32" FontWeight="Bold"
-                               Foreground="#F2F5F8"/>
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock x:Name="IncomingTitle" FontSize="32" FontWeight="Bold"
+                                   VerticalAlignment="Center" Foreground="#F2F5F8"/>
+                        <!-- Seconds until the panel returns home. Tapping it stops the return
+                             and leaves the live view up. -->
+                        <Border x:Name="ReturnCountdown" Visibility="Collapsed" Cursor="Hand"
+                                Margin="10,0,0,0" CornerRadius="10" Padding="12,6"
+                                VerticalAlignment="Center" Background="#40FFFFFF"
+                                MouseLeftButtonDown="OnReturnCountdownClick">
+                            <TextBlock x:Name="ReturnCountdownText" FontSize="22"
+                                       VerticalAlignment="Center" Foreground="#F2F5F8"/>
+                        </Border>
+                    </StackPanel>
                     <!-- Fixed-height purpose slot: a purpose that arrives later never moves the
                          layout (ring_then_purpose). -->
                     <Grid x:Name="PurposeSlot" Height="36" Margin="0,6,0,0">
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                             <Border x:Name="PurposeBadge" Visibility="Collapsed"
                                     Background="#2A3A4C" CornerRadius="8" Padding="12,6">
-                                <TextBlock x:Name="PurposeBadgeText" FontSize="18"
-                                           Foreground="#F2F5F8"/>
+                                <StackPanel x:Name="PurposeBadgeContent"
+                                            Orientation="Horizontal"/>
                             </Border>
                             <Border x:Name="LangBadge" Visibility="Collapsed" Background="#2A3A4C"
                                     CornerRadius="8" Padding="12,6" Margin="10,0,0,0">
-                                <TextBlock x:Name="LangBadgeText" FontSize="18"
-                                           Foreground="#F2F5F8"/>
+                                <StackPanel Orientation="Horizontal">
+                                    <Viewbox Width="18" Height="18" VerticalAlignment="Center">
+                                        <Path Data="{StaticResource IconWorld}"
+                                              Stroke="#F2F5F8" StrokeThickness="2"
+                                              StrokeStartLineCap="Round"
+                                              StrokeEndLineCap="Round" StrokeLineJoin="Round"/>
+                                    </Viewbox>
+                                    <TextBlock x:Name="LangBadgeText" FontSize="18"
+                                               Margin="8,0,0,0" VerticalAlignment="Center"
+                                               Foreground="#F2F5F8"/>
+                                </StackPanel>
                             </Border>
                         </StackPanel>
                     </Grid>
@@ -349,8 +405,7 @@
                     <Border x:Name="InCallPurposeBadge" Visibility="Collapsed"
                             Background="#2A3A4C" CornerRadius="8" Padding="12,6"
                             HorizontalAlignment="Left" VerticalAlignment="Center">
-                        <TextBlock x:Name="InCallPurposeText" FontSize="18"
-                                   Foreground="#F2F5F8"/>
+                        <StackPanel x:Name="InCallPurposeContent" Orientation="Horizontal"/>
                     </Border>
                 </Grid>
             </StackPanel>

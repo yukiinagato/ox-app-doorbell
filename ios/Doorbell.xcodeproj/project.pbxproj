@@ -13,10 +13,24 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		AC0000000000000000000004 /* ThemeInkTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC0000000000000000000003 /* ThemeInkTests.swift */; };
+		AC000000000000000000000E /* IncomingReturnCountdownTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC000000000000000000000D /* IncomingReturnCountdownTests.swift */; };
+		AC0000000000000000000010 /* HomePerformanceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC000000000000000000000F /* HomePerformanceTests.swift */; };
+		AC0000000000000000000012 /* PairUriTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC0000000000000000000011 /* PairUriTests.swift */; };
+		AC0000000000000000000014 /* VisitorScreenLayoutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC0000000000000000000013 /* VisitorScreenLayoutTests.swift */; };
+		AC0000000000000000000016 /* MonitorRetryPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC0000000000000000000015 /* MonitorRetryPolicyTests.swift */; };
+		AC0000000000000000000018 /* SosVisibilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC0000000000000000000017 /* SosVisibilityTests.swift */; };
+		AC000000000000000000001A /* ClusterAndClockTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC0000000000000000000019 /* ClusterAndClockTests.swift */; };
 		FB0000000000000000000021 /* CoreBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000002 /* CoreBridge.swift */; };
 		FB0000000000000000000022 /* BootConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000003 /* BootConfig.swift */; };
 		FB0000000000000000000023 /* Texts.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000004 /* Texts.swift */; };
 		FB0000000000000000000024 /* ConfigUtil.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000005 /* ConfigUtil.swift */; };
+		AD0000000000000000000001 /* ConfigUtilColors.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD0000000000000000000004 /* ConfigUtilColors.swift */; };
+		AE0000000000000000000001 /* ClusterCounters.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE0000000000000000000004 /* ClusterCounters.swift */; };
+		AE0000000000000000000002 /* ClusterCounters.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE0000000000000000000004 /* ClusterCounters.swift */; };
+		AE0000000000000000000003 /* ClusterCounters.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE0000000000000000000004 /* ClusterCounters.swift */; };
+		AD0000000000000000000002 /* ConfigUtilColors.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD0000000000000000000004 /* ConfigUtilColors.swift */; };
+		AD0000000000000000000003 /* ConfigUtilColors.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD0000000000000000000004 /* ConfigUtilColors.swift */; };
 		FB0000000000000000000025 /* MjpegClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000006 /* MjpegClient.swift */; };
 		FB0000000000000000000026 /* SirenPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000007 /* SirenPlayer.swift */; };
 		FB0000000000000000000027 /* AdminPinViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000008 /* AdminPinViewController.swift */; };
@@ -27,6 +41,8 @@
 		FB000000000000000000002B /* CameraFeeder.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA000000000000000000000C /* CameraFeeder.swift */; };
 		FB000000000000000000002C /* VideoEncoderVT.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA000000000000000000000D /* VideoEncoderVT.swift */; };
 		FB000000000000000000002D /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = FA000000000000000000000F /* LaunchScreen.storyboard */; };
+		FB00000000000000000000F1 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = FA00000000000000000000F0 /* Assets.xcassets */; };
+		FB00000000000000000000F2 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = FA00000000000000000000F0 /* Assets.xcassets */; };
 		FB000000000000000000002E /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = EA0000000000000000000001 /* Localizable.strings */; };
 		FB0000000000000000000030 /* outdoor_call_alert.mp3 in Resources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000018 /* outdoor_call_alert.mp3 */; };
 		FB0000000000000000000031 /* button_click.mp3 in Resources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000019 /* button_click.mp3 */; };
@@ -80,6 +96,7 @@
 		F90000000000000000000037 /* UIStyleApplier.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA000000000000000000001F /* UIStyleApplier.swift */; };
 		F90000000000000000000038 /* IOSAvailability.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000020 /* IOSAvailability.swift */; };
 		F9000000000000000000002D /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = FA000000000000000000000F /* LaunchScreen.storyboard */; };
+		F900000000000000000000F3 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = FA00000000000000000000F0 /* Assets.xcassets */; };
 		F9000000000000000000002E /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = EA0000000000000000000001 /* Localizable.strings */; };
 		F90000000000000000000030 /* outdoor_call_alert.mp3 in Resources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000018 /* outdoor_call_alert.mp3 */; };
 		F90000000000000000000031 /* button_click.mp3 in Resources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000019 /* button_click.mp3 */; };
@@ -132,12 +149,33 @@
 		F9000000000000000000007A /* VisitorScreenView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA000000000000000000003A /* VisitorScreenView.swift */; };
 /* End PBXBuildFile section */
 
+/* Begin PBXContainerItemProxy section */
+		AC0000000000000000000009 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = CB0000000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = CA0000000000000000000001;
+			remoteInfo = Doorbell;
+		};
+/* End PBXContainerItemProxy section */
+
 /* Begin PBXFileReference section */
+		AC0000000000000000000002 /* DoorbellTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DoorbellTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		AC0000000000000000000003 /* ThemeInkTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThemeInkTests.swift; sourceTree = "<group>"; };
+		AC000000000000000000000D /* IncomingReturnCountdownTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IncomingReturnCountdownTests.swift; sourceTree = "<group>"; };
+		AC000000000000000000000F /* HomePerformanceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomePerformanceTests.swift; sourceTree = "<group>"; };
+		AC0000000000000000000011 /* PairUriTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PairUriTests.swift; sourceTree = "<group>"; };
+		AC0000000000000000000013 /* VisitorScreenLayoutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VisitorScreenLayoutTests.swift; sourceTree = "<group>"; };
+		AC0000000000000000000015 /* MonitorRetryPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MonitorRetryPolicyTests.swift; sourceTree = "<group>"; };
+		AC0000000000000000000017 /* SosVisibilityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SosVisibilityTests.swift; sourceTree = "<group>"; };
+		AC0000000000000000000019 /* ClusterAndClockTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClusterAndClockTests.swift; sourceTree = "<group>"; };
 		FA0000000000000000000001 /* BridgingHeader.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = BridgingHeader.h; sourceTree = "<group>"; };
 		FA0000000000000000000002 /* CoreBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoreBridge.swift; sourceTree = "<group>"; };
 		FA0000000000000000000003 /* BootConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BootConfig.swift; sourceTree = "<group>"; };
 		FA0000000000000000000004 /* Texts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Texts.swift; sourceTree = "<group>"; };
 		FA0000000000000000000005 /* ConfigUtil.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigUtil.swift; sourceTree = "<group>"; };
+		AD0000000000000000000004 /* ConfigUtilColors.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigUtilColors.swift; sourceTree = "<group>"; };
+		AE0000000000000000000004 /* ClusterCounters.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClusterCounters.swift; sourceTree = "<group>"; };
 		FA0000000000000000000006 /* MjpegClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MjpegClient.swift; sourceTree = "<group>"; };
 		FA0000000000000000000007 /* SirenPlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SirenPlayer.swift; sourceTree = "<group>"; };
 		FA0000000000000000000008 /* AdminPinViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdminPinViewController.swift; sourceTree = "<group>"; };
@@ -148,6 +186,7 @@
 		FA000000000000000000000D /* VideoEncoderVT.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoEncoderVT.swift; sourceTree = "<group>"; };
 		FA000000000000000000000E /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		FA000000000000000000000F /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = "<group>"; };
+		FA00000000000000000000F0 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		FA0000000000000000000010 /* TVAppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TVAppDelegate.swift; sourceTree = "<group>"; };
 		FA0000000000000000000011 /* TVMainViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TVMainViewController.swift; sourceTree = "<group>"; };
 		FA0000000000000000000012 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
@@ -187,6 +226,13 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		AC0000000000000000000007 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		DC0000000000000000000001 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -216,6 +262,7 @@
 			children = (
 				AB0000000000000000000002 /* Doorbell */,
 				AB0000000000000000000003 /* DoorbellTV */,
+				AC0000000000000000000005 /* DoorbellTests */,
 				AB0000000000000000000005 /* Audio */,
 				AB0000000000000000000004 /* Products */,
 			);
@@ -255,12 +302,15 @@
 				FA0000000000000000000003 /* BootConfig.swift */,
 				FA0000000000000000000004 /* Texts.swift */,
 				FA0000000000000000000005 /* ConfigUtil.swift */,
+				AD0000000000000000000004 /* ConfigUtilColors.swift */,
+				AE0000000000000000000004 /* ClusterCounters.swift */,
 				FA0000000000000000000006 /* MjpegClient.swift */,
 				FA0000000000000000000007 /* SirenPlayer.swift */,
 				FA000000000000000000000C /* CameraFeeder.swift */,
 				FA000000000000000000000D /* VideoEncoderVT.swift */,
 				EA0000000000000000000001 /* Localizable.strings */,
 				FA000000000000000000000F /* LaunchScreen.storyboard */,
+				FA00000000000000000000F0 /* Assets.xcassets */,
 				FA000000000000000000000E /* Info.plist */,
 			);
 			path = Doorbell;
@@ -276,12 +326,28 @@
 			path = DoorbellTV;
 			sourceTree = "<group>";
 		};
+		AC0000000000000000000005 /* DoorbellTests */ = {
+			isa = PBXGroup;
+			children = (
+				AC0000000000000000000003 /* ThemeInkTests.swift */,
+				AC000000000000000000000D /* IncomingReturnCountdownTests.swift */,
+				AC000000000000000000000F /* HomePerformanceTests.swift */,
+				AC0000000000000000000011 /* PairUriTests.swift */,
+				AC0000000000000000000013 /* VisitorScreenLayoutTests.swift */,
+				AC0000000000000000000015 /* MonitorRetryPolicyTests.swift */,
+				AC0000000000000000000017 /* SosVisibilityTests.swift */,
+				AC0000000000000000000019 /* ClusterAndClockTests.swift */,
+			);
+			path = DoorbellTests;
+			sourceTree = "<group>";
+		};
 		AB0000000000000000000004 /* Products */ = {
 			isa = PBXGroup;
 			children = (
 				FA0000000000000000000016 /* Doorbell.app */,
 				FA0000000000000000000017 /* DoorbellTV.app */,
 				FA0000000000000000000021 /* DoorbellIOS9.app */,
+				AC0000000000000000000002 /* DoorbellTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -357,6 +423,23 @@
 			productReference = FA0000000000000000000021 /* DoorbellIOS9.app */;
 			productType = "com.apple.product-type.application";
 		};
+		AC0000000000000000000001 /* DoorbellTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AC000000000000000000000C /* Build configuration list for PBXNativeTarget "DoorbellTests" */;
+			buildPhases = (
+				AC0000000000000000000006 /* Sources */,
+				AC0000000000000000000007 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				AC0000000000000000000008 /* PBXTargetDependency */,
+			);
+			name = DoorbellTests;
+			productName = DoorbellTests;
+			productReference = AC0000000000000000000002 /* DoorbellTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -374,6 +457,10 @@
 					};
 					C90000000000000000000001 = {
 						CreatedOnToolsVersion = 15.0;
+					};
+					AC0000000000000000000001 = {
+						CreatedOnToolsVersion = 15.0;
+						TestTargetID = CA0000000000000000000001;
 					};
 				};
 			};
@@ -395,6 +482,7 @@
 				CA0000000000000000000001 /* Doorbell */,
 				CA0000000000000000000002 /* DoorbellTV */,
 				C90000000000000000000001 /* DoorbellIOS9 */,
+				AC0000000000000000000001 /* DoorbellTests */,
 			);
 		};
 /* End PBXProject section */
@@ -405,6 +493,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				FB000000000000000000002D /* LaunchScreen.storyboard in Resources */,
+				FB00000000000000000000F1 /* Assets.xcassets in Resources */,
 				FB000000000000000000002E /* Localizable.strings in Resources */,
 				FB0000000000000000000030 /* outdoor_call_alert.mp3 in Resources */,
 				FB0000000000000000000031 /* button_click.mp3 in Resources */,
@@ -419,6 +508,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				FB000000000000000000004B /* Localizable.strings in Resources */,
+				FB00000000000000000000F2 /* Assets.xcassets in Resources */,
 				FB0000000000000000000050 /* outdoor_call_alert.mp3 in Resources */,
 				FB0000000000000000000051 /* button_click.mp3 in Resources */,
 				FB0000000000000000000052 /* 学校のチャイム.mp3 in Resources */,
@@ -432,6 +522,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				F9000000000000000000002D /* LaunchScreen.storyboard in Resources */,
+				F900000000000000000000F3 /* Assets.xcassets in Resources */,
 				F9000000000000000000002E /* Localizable.strings in Resources */,
 				F90000000000000000000030 /* outdoor_call_alert.mp3 in Resources */,
 				F90000000000000000000031 /* button_click.mp3 in Resources */,
@@ -523,6 +614,21 @@
 /* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		AC0000000000000000000006 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AC0000000000000000000004 /* ThemeInkTests.swift in Sources */,
+				AC000000000000000000000E /* IncomingReturnCountdownTests.swift in Sources */,
+				AC0000000000000000000010 /* HomePerformanceTests.swift in Sources */,
+				AC0000000000000000000012 /* PairUriTests.swift in Sources */,
+				AC0000000000000000000014 /* VisitorScreenLayoutTests.swift in Sources */,
+				AC0000000000000000000016 /* MonitorRetryPolicyTests.swift in Sources */,
+				AC0000000000000000000018 /* SosVisibilityTests.swift in Sources */,
+				AC000000000000000000001A /* ClusterAndClockTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		DA0000000000000000000001 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -557,6 +663,8 @@
 				FB0000000000000000000022 /* BootConfig.swift in Sources */,
 				FB0000000000000000000023 /* Texts.swift in Sources */,
 				FB0000000000000000000024 /* ConfigUtil.swift in Sources */,
+				AD0000000000000000000001 /* ConfigUtilColors.swift in Sources */,
+				AE0000000000000000000001 /* ClusterCounters.swift in Sources */,
 				FB0000000000000000000025 /* MjpegClient.swift in Sources */,
 				FB0000000000000000000026 /* SirenPlayer.swift in Sources */,
 				FB000000000000000000002B /* CameraFeeder.swift in Sources */,
@@ -596,6 +704,8 @@
 				FB0000000000000000000042 /* BootConfig.swift in Sources */,
 				FB0000000000000000000043 /* Texts.swift in Sources */,
 				FB0000000000000000000044 /* ConfigUtil.swift in Sources */,
+				AD0000000000000000000002 /* ConfigUtilColors.swift in Sources */,
+				AE0000000000000000000002 /* ClusterCounters.swift in Sources */,
 				FB0000000000000000000045 /* MjpegClient.swift in Sources */,
 				FB0000000000000000000046 /* SirenPlayer.swift in Sources */,
 			);
@@ -634,6 +744,8 @@
 				F90000000000000000000022 /* BootConfig.swift in Sources */,
 				F90000000000000000000023 /* Texts.swift in Sources */,
 				F90000000000000000000024 /* ConfigUtil.swift in Sources */,
+				AD0000000000000000000003 /* ConfigUtilColors.swift in Sources */,
+				AE0000000000000000000003 /* ClusterCounters.swift in Sources */,
 				F90000000000000000000025 /* MjpegClient.swift in Sources */,
 				F90000000000000000000026 /* SirenPlayer.swift in Sources */,
 				F9000000000000000000002B /* CameraFeeder.swift in Sources */,
@@ -642,6 +754,14 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		AC0000000000000000000008 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = CA0000000000000000000001 /* Doorbell */;
+			targetProxy = AC0000000000000000000009 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin PBXVariantGroup section */
 		EA0000000000000000000001 /* Localizable.strings */ = {
@@ -891,6 +1011,38 @@
 			};
 			name = Release;
 		};
+		AC000000000000000000000A /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				HEADER_SEARCH_PATHS = "$(SRCROOT)/../core/include";
+				IPHONEOS_DEPLOYMENT_TARGET = 12.0;
+				PRODUCT_BUNDLE_IDENTIFIER = jp.ox.doorbell.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Doorbell.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Doorbell";
+			};
+			name = Debug;
+		};
+		AC000000000000000000000B /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				HEADER_SEARCH_PATHS = "$(SRCROOT)/../core/include";
+				IPHONEOS_DEPLOYMENT_TARGET = 12.0;
+				PRODUCT_BUNDLE_IDENTIFIER = jp.ox.doorbell.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Doorbell.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Doorbell";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -926,6 +1078,15 @@
 			buildConfigurations = (
 				E90000000000000000000001 /* Debug */,
 				E90000000000000000000002 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		AC000000000000000000000C /* Build configuration list for PBXNativeTarget "DoorbellTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AC000000000000000000000A /* Debug */,
+				AC000000000000000000000B /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

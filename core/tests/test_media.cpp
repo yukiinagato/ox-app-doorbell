@@ -15,6 +15,7 @@
 #include <vector>
 
 #include "doctest.h"
+#include "test_env.h"
 #include "media/frame_bus.h"
 #include "node/node.h"
 
@@ -198,6 +199,35 @@ TEST_CASE("media: encoding is demand-driven and caches for active subscribers") 
   CHECK(empty.frameCount() == 0);
 }
 
+TEST_CASE("media: warm preview cache avoids first-subscriber encoding") {
+  FrameBus bus;
+  bus.setExternalEncoder([](const uint8_t*, int, int, int) { return toBytes("PREVIEW"); });
+  bus.setWarmCacheFps(15);
+
+  RawFrame first = makeBgra(64, 48);
+  // Platform capture clocks may be monotonic, media-relative, or wall-clock based. Cache age is
+  // therefore measured independently and must not interpret this timestamp as a wall clock.
+  first.ts_ms = 42;
+  const int64_t first_ts = first.ts_ms;
+  bus.push(std::move(first));
+  for (int i = 0; i < 50 && bus.encodeCount() == 0; i++) usleep(10 * 1000);
+  REQUIRE(bus.encodeCount() == 1);
+  bus.setWarmCacheFps(0);
+
+  RawFrame newer = makeBgra(64, 48);
+  newer.ts_ms = first_ts + 1;
+  bus.push(std::move(newer));
+  int64_t capture_ts = 0;
+  CHECK(toString(bus.previewJpeg(&capture_ts)) == "PREVIEW");
+  CHECK(capture_ts == first_ts);
+  CHECK(bus.encodeCount() == 1);
+
+  usleep(270 * 1000);
+  CHECK(toString(bus.previewJpeg(&capture_ts)) == "PREVIEW");
+  CHECK(capture_ts == first_ts + 1);
+  CHECK(bus.encodeCount() == 2);
+}
+
 TEST_CASE("media: repeatedly halves frames that exceed max_width") {
   FrameBus bus;
   bus.setJpegParams(80, 640);
@@ -270,21 +300,9 @@ TEST_CASE("media: discards undersized and invalid frames") {
 
 namespace {
 
-int freePort(std::mt19937& rng) {
-  std::uniform_int_distribution<int> dist(40000, 60000);
-  for (int i = 0; i < 50; i++) {
-    int port = dist(rng);
-    int fd = ::socket(AF_INET, SOCK_STREAM, 0);
-    if (fd < 0) continue;
-    sockaddr_in sa{};
-    sa.sin_family = AF_INET;
-    sa.sin_port = htons(static_cast<uint16_t>(port));
-    sa.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-    int ok = ::bind(fd, reinterpret_cast<sockaddr*>(&sa), sizeof(sa));
-    ::close(fd);
-    if (ok == 0) return port;
-  }
-  return -1;
+int freePort(std::mt19937& /*rng*/) {
+  // Ports come from one process-wide allocator; see core/tests/test_ports.h.
+  return db::testing::freeListenPort();
 }
 
 int connectTo(int port) {

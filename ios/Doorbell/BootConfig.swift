@@ -10,6 +10,12 @@ struct BootConfig {
     var httpPort = 47180
     var setupRequired = false
     var suggestedDoor = ""
+    /// Remote verification aid: with this on, the app writes the key window to
+    /// `<dataDir>/screenshot.png` whenever `<dataDir>/screenshot.request` appears. Absent or false
+    /// on every shipped panel, and nothing polls the file system until it is on.
+    var debugScreenshots = false
+    /// Logs a periodic summary of main-thread cost per home-page section. Off by default.
+    var debugTimings = false
 
     #if os(tvOS)
     private static let defaultJson =
@@ -85,6 +91,8 @@ struct BootConfig {
             c.kiosk = d["kiosk"] as? Bool ?? c.kiosk
             if let p = d["http_port"] as? Int, p > 0 { c.httpPort = p }
             if let complete = d["setup_complete"] as? Bool { setupComplete = complete }
+            c.debugScreenshots = d["debug_screenshots"] as? Bool ?? false
+            c.debugTimings = d["debug_timings"] as? Bool ?? false
         }
         c.suggestedDoor = validDoor(c.door) ? c.door : suggestedDoorId()
         c.setupRequired = !setupComplete || !validRole(c.role) ||

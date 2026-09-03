@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Security.Cryptography;
 using System.Text;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -24,6 +25,7 @@ namespace DoorbellApp
         private const int MaxLen = 128;
         private static int _fails;
         private static DateTime _lockedUntil = DateTime.MinValue;
+        private bool _verifying;
 
         public AdminDialog()
         {
@@ -120,8 +122,14 @@ namespace DoorbellApp
             return Sha256Hex("000000");
         }
 
+        /// <summary>
+        /// db_core_admin_password_verify marshals into core's run loop and serializes its lockout
+        /// counters, so it is never called on the dispatcher: the keypad simply waits for the
+        /// verdict rather than freezing the window behind whatever the loop is doing.
+        /// </summary>
         private void Submit()
         {
+            if (_verifying) return;
             if (DateTime.Now < _lockedUntil)
             {
                 Reject(L10n.T("admin.locked"));
@@ -133,9 +141,26 @@ namespace DoorbellApp
                 Reject(L10n.T("admin.pin_wrong"));
                 return;
             }
+            _verifying = true;
+            IsEnabled = false;
+            Task.Run(() =>
+            {
+                AdminPasswordVerdict result = App.Core == null ?
+                    AdminPasswordVerdict.Unavailable : App.Core.AdminPasswordVerify(password);
+                bool configured = App.Core != null && App.Core.AdminPasswordAvailable &&
+                                  App.Core.AdminPasswordConfigured;
+                Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    _verifying = false;
+                    IsEnabled = true;
+                    ApplyVerdict(result, configured, password);
+                }));
+            });
+        }
 
-            AdminPasswordVerdict verdict = App.Core == null ?
-                AdminPasswordVerdict.Unavailable : App.Core.AdminPasswordVerify(password);
+        private void ApplyVerdict(AdminPasswordVerdict verdict, bool clusterPassword,
+                                  string password)
+        {
             if (verdict == AdminPasswordVerdict.Accepted)
             {
                 DropLocalDigest();
@@ -156,19 +181,11 @@ namespace DoorbellApp
             if (verdict == AdminPasswordVerdict.NotSet)
             {
                 // First password for the whole house: whatever was typed becomes it.
-                if (!App.Core.AdminPasswordSet("", password))
-                {
-                    Reject(L10n.T("admin.password_set_failed"));
-                    return;
-                }
-                DropLocalDigest();
-                Accept();
+                PublishFirstPassword(password);
                 return;
             }
             // Core could not evaluate. A cluster that already carries a password hash must not be
             // opened with a stale device digest, so only an unconfigured cluster falls back.
-            bool clusterPassword = App.Core != null && App.Core.AdminPasswordAvailable &&
-                                   App.Core.AdminPasswordConfigured;
             if (clusterPassword)
             {
                 CountFailure();
@@ -182,11 +199,35 @@ namespace DoorbellApp
             // First successful local entry publishes this device's secret as the cluster password.
             if (App.Core != null && App.Core.AdminPasswordAvailable)
             {
-                if (App.Core.AdminPasswordSet("", password)) DropLocalDigest();
-                else System.Diagnostics.Debug.WriteLine(
-                    "cluster admin password was not published; local digest still applies");
+                PublishFirstPassword(password);
+                return;
             }
             Accept();
+        }
+
+        /// <summary>
+        /// Publishes the first cluster password, off the dispatcher for the same reason verify is.
+        /// </summary>
+        private void PublishFirstPassword(string password)
+        {
+            _verifying = true;
+            IsEnabled = false;
+            Task.Run(() =>
+            {
+                bool published = App.Core != null && App.Core.AdminPasswordSet("", password);
+                Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    _verifying = false;
+                    IsEnabled = true;
+                    if (published)
+                    {
+                        DropLocalDigest();
+                        Accept();
+                        return;
+                    }
+                    Reject(L10n.T("admin.password_set_failed"));
+                }));
+            });
         }
 
         private void Accept()

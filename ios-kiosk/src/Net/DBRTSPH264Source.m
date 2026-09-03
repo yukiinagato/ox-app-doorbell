@@ -312,6 +312,7 @@ static NSString *DBResolveControlURL(NSString *control, NSString *contentBase,
   DBRTSPH264StateHandler _stateHandler;
   dispatch_queue_t _queue;
   NSLock *_socketLock;
+  NSLock *_writeLock;
   int _socket;
   BOOL _stopped;
   NSUInteger _generation;
@@ -323,6 +324,7 @@ static NSString *DBResolveControlURL(NSString *control, NSString *contentBase,
   NSString *_session;
   uint8_t _rtpChannel;
   uint8_t _payloadType;
+  uint32_t _mediaSSRC;
   DBRTPH264Depacketizer *_depacketizer;
 }
 
@@ -516,6 +518,7 @@ static NSString *DBResolveControlURL(NSString *control, NSString *contentBase,
     _stateHandler = [stateHandler copy];
     _queue = dispatch_queue_create("doorbell.rtsp.h264", DISPATCH_QUEUE_SERIAL);
     _socketLock = [[NSLock alloc] init];
+    _writeLock = [[NSLock alloc] init];
     _socket = -1;
     _stopped = YES;
     _state = [_urlString length] ? @"idle" : @"invalid";
@@ -555,6 +558,7 @@ static NSString *DBResolveControlURL(NSString *control, NSString *contentBase,
 }
 
 - (void)closeSocket {
+  [_writeLock lock];
   [_socketLock lock];
   int fd = _socket;
   _socket = -1;
@@ -563,6 +567,7 @@ static NSString *DBResolveControlURL(NSString *control, NSString *contentBase,
     shutdown(fd, SHUT_RDWR);
     close(fd);
   }
+  [_writeLock unlock];
 }
 
 - (void)stop {
@@ -645,7 +650,7 @@ static NSString *DBResolveControlURL(NSString *control, NSString *contentBase,
   return YES;
 }
 
-- (BOOL)sendBytes:(NSData *)data socket:(int)fd {
+- (BOOL)sendBytesUnlocked:(NSData *)data socket:(int)fd {
   if ([data length] == 0 || [data length] > kDBRTSPMaxRequestBytes) return NO;
   const uint8_t *bytes = [data bytes];
   NSUInteger sent = 0;
@@ -658,6 +663,36 @@ static NSString *DBResolveControlURL(NSString *control, NSString *contentBase,
     sent += (NSUInteger)n;
   }
   return YES;
+}
+
+- (BOOL)sendBytes:(NSData *)data socket:(int)fd {
+  [_writeLock lock];
+  BOOL sent = [self sendBytesUnlocked:data socket:fd];
+  [_writeLock unlock];
+  return sent;
+}
+
+- (BOOL)requestKeyFrame {
+  [_writeLock lock];
+  [_socketLock lock];
+  int fd = _socket;
+  uint8_t channel = (uint8_t)(_rtpChannel + 1);
+  uint32_t mediaSSRC = _mediaSSRC;
+  [_socketLock unlock];
+  if (fd < 0 || mediaSSRC == 0) {
+    [_writeLock unlock];
+    return NO;
+  }
+  uint8_t packet[16] = {
+    '$', channel, 0, 12,
+    0x81, 206, 0, 2,
+    0x44, 0x42, 0x4c, 0x4c,
+    (uint8_t)(mediaSSRC >> 24), (uint8_t)(mediaSSRC >> 16),
+    (uint8_t)(mediaSSRC >> 8), (uint8_t)mediaSSRC,
+  };
+  BOOL sent = [self sendBytesUnlocked:[NSData dataWithBytes:packet length:sizeof(packet)] socket:fd];
+  [_writeLock unlock];
+  return sent;
 }
 
 - (BOOL)sendMethod:(NSString *)method target:(NSString *)target headers:(NSDictionary *)headers
@@ -776,6 +811,14 @@ static NSString *DBResolveControlURL(NSString *control, NSString *contentBase,
       initWithFrameHandler:^BOOL(uint8_t channel, NSData *frame) {
     DBRTSPH264Source *source = weakSelf;
     if (!source || channel != source->_rtpChannel) return YES;
+    if ([frame length] >= 12) {
+      const uint8_t *bytes = [frame bytes];
+      uint32_t ssrc = ((uint32_t)bytes[8] << 24) | ((uint32_t)bytes[9] << 16) |
+                      ((uint32_t)bytes[10] << 8) | bytes[11];
+      [source->_socketLock lock];
+      source->_mediaSSRC = ssrc;
+      [source->_socketLock unlock];
+    }
     BOOL ok = [source->_depacketizer consumeRTPPacket:frame
                                   expectedPayloadType:source->_payloadType];
     if (!ok) rejected++;
@@ -850,6 +893,9 @@ static NSString *DBResolveControlURL(NSString *control, NSString *contentBase,
     return reason ?: @"rtsp_play_failed";
 
   _forwardingMeasured = NO;
+  [_socketLock lock];
+  _mediaSSRC = 0;
+  [_socketLock unlock];
   __weak DBRTSPH264Source *weakSelf = self;
   _depacketizer = [[DBRTPH264Depacketizer alloc]
       initWithAccessUnitHandler:^(NSData *annexB, BOOL keyframe, uint32_t rtpTimestamp) {

@@ -3,6 +3,7 @@ package jp.ox.doorbell
 import android.graphics.SurfaceTexture
 import android.media.MediaCodec
 import android.media.MediaFormat
+import android.os.SystemClock
 import android.util.Log
 import android.view.Surface
 import android.view.TextureView
@@ -38,10 +39,15 @@ internal class H264LivePlayer(
     private var drainRunning = false
     private var awaitingKeyframe = true
     private var firstFrame = false
+    private var startupMs = 0L
+    private var tracedFirstSample = false
 
     fun start() {
         if (running) return
         running = true
+        startupMs = SystemClock.elapsedRealtime()
+        tracedFirstSample = false
+        trace("request_start")
         view.surfaceTextureListener = this
         if (view.isAvailable) view.surfaceTexture?.let { startForSurface(it) }
     }
@@ -59,7 +65,7 @@ internal class H264LivePlayer(
         joinUnlessCurrent(drainThread)
         networkThread = null
         drainThread = null
-        try { active?.release() } catch (_: Exception) { }
+        if (active != null) decoderPool().recycle(active)
         buffers = null
         try { surface?.release() } catch (_: Exception) { }
         surface = null
@@ -102,6 +108,7 @@ internal class H264LivePlayer(
             val code = local.responseCode
             if (code != HttpURLConnection.HTTP_OK)
                 throw Fmp4StreamReader.ParseException("HTTP $code")
+            trace("http_response_headers")
             Fmp4StreamReader(local.inputStream, this).pump { running }
             if (running) fail("fMP4 stream ended")
         } catch (e: Exception) {
@@ -125,7 +132,7 @@ internal class H264LivePlayer(
             val format = MediaFormat.createVideoFormat(AVC_MIME, config.width, config.height)
             format.setByteBuffer("csd-0", AvcByteStream.withStartCode(config.sps))
             format.setByteBuffer("csd-1", AvcByteStream.withStartCode(config.pps))
-            active = MediaCodec.createDecoderByType(AVC_MIME)
+            active = decoderPool().take() ?: MediaCodec.createDecoderByType(AVC_MIME)
             val name = active.name
             active.configure(format, target, null, 0)
             active.start()
@@ -137,9 +144,10 @@ internal class H264LivePlayer(
             firstFrame = false
             startDrain(active)
             listener.onConfigured(name, config.width, config.height)
+            trace("decoder_configured")
         } catch (e: Exception) {
             try { active?.stop() } catch (_: Exception) { }
-            try { active?.release() } catch (_: Exception) { }
+            decoderPool().discard(active)
             fail("decoder configure failed: ${e.javaClass.simpleName}")
         }
     }
@@ -149,6 +157,10 @@ internal class H264LivePlayer(
         if (!running) return
         val active = decoder ?: return
         if (awaitingKeyframe && !sample.keyframe) return
+        if (!tracedFirstSample) {
+            tracedFirstSample = true
+            trace("first_decodable_sample")
+        }
         try {
             val index = active.dequeueInputBuffer(INPUT_TIMEOUT_US)
             if (index < 0) {
@@ -186,6 +198,7 @@ internal class H264LivePlayer(
                             if (render) listener.onFrameRendered(presentationTimeUs)
                             if (render && !firstFrame) {
                                 firstFrame = true
+                                trace("first_decoder_output")
                                 listener.onFirstFrame()
                             }
                         }
@@ -214,15 +227,22 @@ internal class H264LivePlayer(
         val active = decoder
         decoder = null
         try { active?.stop() } catch (_: Exception) { }
-        try { active?.release() } catch (_: Exception) { }
+        decoderPool().discard(active)
         listener.onFailure(reason)
     }
+
+    private fun decoderPool(): H264DecoderPool =
+        (view.context.applicationContext as App).h264DecoderPool
 
     private fun joinUnlessCurrent(thread: Thread?) {
         if (thread == null || thread === Thread.currentThread()) return
         try { thread.join(250) } catch (_: InterruptedException) {
             Thread.currentThread().interrupt()
         }
+    }
+
+    private fun trace(stage: String) {
+        Log.i(TAG, "startup $stage +${SystemClock.elapsedRealtime() - startupMs}ms")
     }
 
     companion object {

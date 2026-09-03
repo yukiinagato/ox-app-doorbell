@@ -1,3 +1,4 @@
+import ImageIO
 import UIKit
 
 /// Indoor home screen. Everything the household needs at a glance: the household clock, who is
@@ -6,6 +7,8 @@ import UIKit
 ///
 /// The view owns no call state; `MainViewController` hosts it and routes every action.
 final class DashboardView: UIView {
+
+    private var lastCounts = ClusterCounts()
 
     var onOpenAdmin: (() -> Void)?
     var onOpenHistory: (() -> Void)?
@@ -16,27 +19,36 @@ final class DashboardView: UIView {
     private let boot: BootConfig
     private let texts: Texts
 
-    private let clockLabel = UILabel()
-    private let dateLabel = UILabel()
-    private let membershipPill = PaddedLabel()
+    private let clockLabel = HaloLabel()
+    private let dateLabel = HaloLabel()
+    /// Three counts with a drawn mark each, in place of the old one-line membership pill.
+    private lazy var counters = ClusterCountersView(texts: texts)
     private let missedBadge = PaddedLabel()
     private let adminButton = UIButton(type: .system)
     private let noticeButton = UIButton(type: .system)
-    private let historyHeader = UILabel()
+    private let doorPageButton = UIButton(type: .system)
+    private let historyHeader = HaloLabel()
     private let seeAllButton = UIButton(type: .system)
     private let tilesStack = UIStackView()
     private let recentCalls: RecentCallsView
     private let adminQr: AdminQrView
-    private let versionLabel = UILabel()
+    private let footerEffect = UIVisualEffectView(effect: UIBlurEffect(style: .dark))
     let sosControl: SosSlideControl
 
     private let columns = UIStackView()
     private let leftColumn = UIStackView()
     private let rightColumn = UIStackView()
+    private let leftHeader = UIStackView()
+    private let rightHeader = UIView()
+    private var headerHeightMatch: NSLayoutConstraint?
+    private var historyHeaderTop: NSLayoutConstraint?
 
     private var config: [String: Any]?
     private var skin = DoorbellSkin.plain(.dark)
     private var tiles: [String: DoorTileView] = [:]
+    private var allDoors: [String] = []
+    private var previewPriority: [String] = []
+    private var previewPage = 0
     private var stillTimer: Timer?
 
     init(core: CoreBridge, boot: BootConfig, texts: Texts, sosControl: SosSlideControl) {
@@ -63,9 +75,10 @@ final class DashboardView: UIView {
         clockLabel.accessibilityIdentifier = "dashboard_clock"
         dateLabel.font = .systemFont(ofSize: 20)
 
-        DoorbellTheme.pill(membershipPill, background: skin.surface, ink: skin.cardInk("status_line"),
+        DoorbellTheme.pill(missedBadge, background: skin.palette.danger,
+                           ink: DoorbellTheme.readableInk(on: skin.palette.danger),
                            fontSize: 15)
-        membershipPill.accessibilityIdentifier = "membership_status"
+        counters.accessibilityIdentifier = "cluster_counters"
         DoorbellTheme.pill(missedBadge, background: skin.palette.danger, ink: .white, fontSize: 15)
         missedBadge.accessibilityIdentifier = "missed_badge"
         missedBadge.isHidden = true
@@ -86,14 +99,26 @@ final class DashboardView: UIView {
         clockColumn.axis = .vertical
         clockColumn.spacing = 2
 
-        let statusRow = UIStackView(arrangedSubviews: [membershipPill, missedBadge, UIView(),
+        let statusRow = UIStackView(arrangedSubviews: [counters, missedBadge, UIView(),
                                                         adminButton])
         statusRow.axis = .horizontal
         statusRow.spacing = 12
         statusRow.alignment = .center
 
+        leftHeader.axis = .vertical
+        leftHeader.spacing = 14
+        leftHeader.addArrangedSubview(clockColumn)
+        leftHeader.addArrangedSubview(statusRow)
+
         tilesStack.axis = .vertical
         tilesStack.spacing = 12
+
+        style(doorPageButton, title: "", filled: false)
+        doorPageButton.titleLabel?.font = .systemFont(ofSize: 15, weight: .semibold)
+        doorPageButton.contentHorizontalAlignment = .left
+        doorPageButton.addTarget(self, action: #selector(nextDoorPage),
+                                 for: .primaryActionTriggered)
+        doorPageButton.isHidden = true
 
         historyHeader.text = texts.t("history.title")
         historyHeader.font = .systemFont(ofSize: 19, weight: .semibold)
@@ -104,22 +129,45 @@ final class DashboardView: UIView {
         historyRow.axis = .horizontal
         historyRow.spacing = 12
         historyRow.alignment = .center
+        historyRow.translatesAutoresizingMaskIntoConstraints = false
+        rightHeader.addSubview(historyRow)
+        let historyTop = historyRow.topAnchor.constraint(equalTo: rightHeader.topAnchor)
+        historyHeaderTop = historyTop
+        let match = rightHeader.heightAnchor.constraint(equalTo: leftHeader.heightAnchor)
+        headerHeightMatch = match
+        NSLayoutConstraint.activate([
+            historyTop,
+            historyRow.topAnchor.constraint(greaterThanOrEqualTo: rightHeader.topAnchor),
+            historyRow.bottomAnchor.constraint(equalTo: rightHeader.bottomAnchor),
+            historyRow.leadingAnchor.constraint(equalTo: rightHeader.leadingAnchor),
+            historyRow.trailingAnchor.constraint(equalTo: rightHeader.trailingAnchor),
+        ])
 
-        versionLabel.font = .monospacedDigitSystemFont(ofSize: 13, weight: .medium)
-        versionLabel.accessibilityIdentifier = "app_version"
-        versionLabel.numberOfLines = 0
-
+        footerEffect.layer.cornerRadius = 12
+        footerEffect.layer.borderWidth = 0.5
+        footerEffect.clipsToBounds = true
+        footerEffect.contentView.addSubview(adminQr)
+        NSLayoutConstraint.activate([
+            footerEffect.heightAnchor.constraint(equalToConstant: 88),
+            adminQr.topAnchor.constraint(equalTo: footerEffect.contentView.topAnchor, constant: 8),
+            adminQr.bottomAnchor.constraint(equalTo: footerEffect.contentView.bottomAnchor,
+                                            constant: -8),
+            adminQr.leadingAnchor.constraint(equalTo: footerEffect.contentView.leadingAnchor,
+                                             constant: 8),
+            adminQr.trailingAnchor.constraint(equalTo: footerEffect.contentView.trailingAnchor,
+                                              constant: -8),
+        ])
 
         leftColumn.axis = .vertical
         leftColumn.spacing = 14
-        for view in [clockColumn, statusRow, tilesStack, noticeButton] {
+        for view in [leftHeader, doorPageButton, tilesStack, noticeButton] {
             leftColumn.addArrangedSubview(view)
         }
         leftColumn.addArrangedSubview(UIView())
 
         rightColumn.axis = .vertical
-        rightColumn.spacing = 12
-        for view in [historyRow, recentCalls, adminQr, versionLabel, sosControl] {
+        rightColumn.spacing = 14
+        for view in [rightHeader, recentCalls, footerEffect, sosControl] {
             rightColumn.addArrangedSubview(view)
         }
         recentCalls.heightAnchor.constraint(greaterThanOrEqualToConstant: 160).isActive = true
@@ -164,6 +212,13 @@ final class DashboardView: UIView {
         let portrait = size.height > size.width
         columns.axis = portrait ? .vertical : .horizontal
         columns.distribution = portrait ? .fill : .fillEqually
+        if portrait {
+            headerHeightMatch?.isActive = false
+            historyHeaderTop?.isActive = true
+        } else {
+            historyHeaderTop?.isActive = false
+            headerHeightMatch?.isActive = true
+        }
         clockLabel.font = UIFont.monospacedDigitSystemFont(ofSize: portrait ? 48 : 64,
                                                            weight: .light)
     }
@@ -173,20 +228,30 @@ final class DashboardView: UIView {
     /// `skin` carries both halves of the answer: the household's theme background, which this
     /// panel paints like the door station does, and the light/dark palette that owns the cards
     /// laid on top of it.
+    /// One reload, one snapshot. Every part of this page used to fetch `core.status()` for
+    /// itself — five parses of the same JSON, microseconds apart, on the main thread.
     func reload(config: [String: Any]?, skin: DoorbellSkin) {
+        IOSAvailability.PerfProbe.measure("dashboard.reload") {
+            reloadBody(config: config, skin: skin)
+        }
+    }
+
+    private func reloadBody(config: [String: Any]?, skin: DoorbellSkin) {
         self.config = config
         self.skin = skin
+        let status = core.status()
+        let nowMs = DoorbellClock.nowMs(core)
+        lastCounts = ClusterCounts.from(status: status, selfRole: boot.role)
         applySkin()
-        rebuildTiles()
+        rebuildTiles(status: status, nowMs: nowMs)
         recentCalls.reload(config: config, skin: skin)
         adminQr.skin = skin
-        adminQr.reload()
+        adminQr.reload(status: status)
         refreshMissedBadge()
-        refreshVersionLine()
-        refreshNoticeState()
+        refreshVersionLine(status: status)
         sosControl.countdownSeconds = ConfigUtil.int(config, "emergency.trigger.countdown_s", 3)
         sosControl.refreshStrings()
-        refreshStills()
+        refreshStills(status: status)
     }
 
     /// The clock, the date, the section heading and the identity line sit straight on the theme
@@ -197,26 +262,22 @@ final class DashboardView: UIView {
         skin.apply("clock", to: clockLabel)
         skin.apply("date", to: dateLabel, quiet: true)
         skin.apply("status_line", to: historyHeader)
-        skin.apply("footer", to: versionLabel, quiet: true)
-        DoorbellTheme.pill(membershipPill, background: skin.surface,
-                           ink: skin.cardInk("status_line"), fontSize: 15)
+        footerEffect.contentView.backgroundColor = skin.surface.withAlphaComponent(0.65)
+        footerEffect.layer.borderColor = skin.cardInk("footer").withAlphaComponent(0.35).cgColor
+        counters.update(lastCounts, ink: skin.cardInk("status_line"))
         DoorbellTheme.pill(missedBadge, background: skin.palette.danger,
                            ink: DoorbellTheme.readableInk(on: skin.palette.danger), fontSize: 15)
-        for button in [adminButton, noticeButton, seeAllButton] {
+        for button in [adminButton, noticeButton, doorPageButton, seeAllButton] {
             button.setTitleColor(skin.cardInk("status_line"), for: .normal)
             button.backgroundColor = skin.surface
         }
     }
 
-    func updateClock() {
-        guard let reading = DoorbellClock.read(core) else { return }
+    /// The reading is handed in by the screen that owns the clock. Asking Core for a second one
+    /// meant two synchronous Core calls per tick on the main thread.
+    func updateClock(_ reading: DoorbellClock.Reading) {
         clockLabel.text = reading.hhmmss
         dateLabel.text = DoorbellClock.longDate(reading, lang: boot.uiLang)
-    }
-
-    func updateMembership(_ text: String, hidden: Bool) {
-        membershipPill.text = text
-        membershipPill.isHidden = hidden
     }
 
     func refreshMissedBadge() {
@@ -230,11 +291,12 @@ final class DashboardView: UIView {
         refreshMissedBadge()
     }
 
-    private func refreshVersionLine() {
-        let power = (core.status()?["self"] as? [String: Any])?["power"] as? [String: Any]
-        versionLabel.text = DoorbellTheme.versionLine(name: boot.name,
-                                                      coreVersion: DoorbellTheme.coreVersion(),
-                                                      texts: texts, power: power)
+    private func refreshVersionLine(status: [String: Any]? = nil) {
+        let snapshot = status ?? core.status()
+        let power = (snapshot?["self"] as? [String: Any])?["power"] as? [String: Any]
+        adminQr.setDetailText(DoorbellTheme.versionLine(name: boot.name,
+                                                        coreVersion: DoorbellTheme.coreVersion(),
+                                                        texts: texts, power: power))
     }
 
     func refreshNoticeState() {
@@ -247,11 +309,31 @@ final class DashboardView: UIView {
         }
     }
 
+    func prioritizeDoor(_ door: String) {
+        guard !door.isEmpty, allDoors.contains(door) else { return }
+        previewPriority.removeAll { $0 == door }
+        previewPriority.insert(door, at: 0)
+        if previewPriority.count > Self.previewCapacity {
+            previewPriority.removeLast(previewPriority.count - Self.previewCapacity)
+        }
+        previewPage = 0
+        let status = core.status()
+        rebuildTiles(status: status, nowMs: DoorbellClock.nowMs(core))
+        refreshStills(status: status)
+    }
+
     // MARK: - Door tiles
 
-    private func rebuildTiles() {
-        let doors = (ConfigUtil.dig(config, "doors") as? [String: Any])
-            .map { ConfigUtil.sortedByOrder($0) } ?? []
+    private func rebuildTiles(status: [String: Any]?, nowMs: Int64) {
+        // A door station with no camera has nothing for a tile to show. It stays reachable from
+        // the monitor page's device list and still delivers its notices.
+        allDoors = ConfigUtil.doorsWithCamera(config: config, status: status)
+        let doors = selectedDoors()
+        doorPageButton.isHidden = allDoors.count <= Self.previewCapacity
+        if !doorPageButton.isHidden {
+            doorPageButton.setTitle("\(texts.t("settings.doors")) · \(doors.count)/\(allDoors.count) ›",
+                                    for: .normal)
+        }
         let existing = Set(tiles.keys)
         if existing != Set(doors) {
             for view in tilesStack.arrangedSubviews { view.removeFromSuperview() }
@@ -265,8 +347,7 @@ final class DashboardView: UIView {
                 tilesStack.addArrangedSubview(tile)
             }
         }
-        let status = core.status()
-        let nowMs = DoorbellClock.nowMs(core)
+        for tile in tiles.values { tile.applyDensity(visibleCount: doors.count) }
         for door in doors {
             guard let tile = tiles[door] else { continue }
             let entry = ConfigUtil.dig(config, "doors.\(door)") as? [String: Any]
@@ -280,12 +361,31 @@ final class DashboardView: UIView {
         }
     }
 
+    private static let previewCapacity = 4
+
+    private func selectedDoors() -> [String] {
+        guard allDoors.count > Self.previewCapacity else { return allDoors }
+        var selected = previewPriority.filter { allDoors.contains($0) }
+        let start = (previewPage * Self.previewCapacity) % allDoors.count
+        for offset in 0..<allDoors.count where selected.count < Self.previewCapacity {
+            let door = allDoors[(start + offset) % allDoors.count]
+            if !selected.contains(door) { selected.append(door) }
+        }
+        return selected
+    }
+
     /// Live stills, five seconds apart, from the door station's own snapshot endpoint. An
     /// unreachable door greys out instead of freezing on a stale frame.
-    private func refreshStills() {
-        let status = core.status()
+    private func refreshStills(status: [String: Any]? = nil) {
+        IOSAvailability.PerfProbe.measure("dashboard.stills") {
+            refreshStillsBody(status: status)
+        }
+    }
+
+    private func refreshStillsBody(status: [String: Any]?) {
+        let snapshot = status ?? core.status()
         for (door, tile) in tiles {
-            guard let peer = ConfigUtil.findDoorPeer(status, door: door),
+            guard let peer = ConfigUtil.findDoorPeer(snapshot, door: door),
                   let url = snapshotUrl(peer: peer) else {
                 tile.setStill(nil)
                 continue
@@ -312,6 +412,16 @@ final class DashboardView: UIView {
     @objc private func openHistory() { onOpenHistory?() }
 
     @objc private func openGlobalNotice() { onOpenNotice?("") }
+
+    @objc private func nextDoorPage() {
+        guard allDoors.count > Self.previewCapacity else { return }
+        previewPriority.removeAll()
+        let pages = (allDoors.count + Self.previewCapacity - 1) / Self.previewCapacity
+        previewPage = (previewPage + 1) % pages
+        let status = core.status()
+        rebuildTiles(status: status, nowMs: DoorbellClock.nowMs(core))
+        refreshStills(status: status)
+    }
 }
 
 /// One door: its most recent still, its name, whether it is reachable, and whether an
@@ -328,8 +438,13 @@ final class DoorTileView: UIView {
     private let noticeChip: NoticeChipView
     private let openButton = UIButton(type: .system)
     private var pendingUrl: URL?
+    /// The last frame actually painted, so an unchanged scene costs nothing.
+    private var lastStillData: Data?
     private let session: URLSession
     private let texts: Texts
+    private var stillWidthConstraint: NSLayoutConstraint!
+    private var stillHeightConstraint: NSLayoutConstraint!
+    private var minimumHeightConstraint: NSLayoutConstraint!
 
     init(texts: Texts) {
         self.texts = texts
@@ -371,33 +486,59 @@ final class DoorTileView: UIView {
         row.translatesAutoresizingMaskIntoConstraints = false
         addSubview(row)
 
+        stillWidthConstraint = still.widthAnchor.constraint(equalToConstant: 132)
+        stillHeightConstraint = still.heightAnchor.constraint(equalToConstant: 84)
+        minimumHeightConstraint = heightAnchor.constraint(greaterThanOrEqualToConstant: 92)
         NSLayoutConstraint.activate([
             still.topAnchor.constraint(equalTo: topAnchor),
             still.leadingAnchor.constraint(equalTo: leadingAnchor),
-            still.widthAnchor.constraint(equalToConstant: 132),
-            still.heightAnchor.constraint(equalToConstant: 84),
+            stillWidthConstraint,
+            stillHeightConstraint,
             still.bottomAnchor.constraint(lessThanOrEqualTo: bottomAnchor),
             row.topAnchor.constraint(equalTo: topAnchor, constant: 8),
             row.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -8),
             row.leadingAnchor.constraint(equalTo: still.trailingAnchor, constant: 12),
             row.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
-            heightAnchor.constraint(greaterThanOrEqualToConstant: 92),
+            minimumHeightConstraint,
         ])
     }
 
     required init?(coder: NSCoder) { fatalError("not supported") }
 
+    func applyDensity(visibleCount: Int) {
+        switch visibleCount {
+        case ...1:
+            stillWidthConstraint.constant = 220
+            stillHeightConstraint.constant = 124
+            minimumHeightConstraint.constant = 132
+        case 2...3:
+            stillWidthConstraint.constant = 170
+            stillHeightConstraint.constant = 104
+            minimumHeightConstraint.constant = 112
+        default:
+            stillWidthConstraint.constant = 132
+            stillHeightConstraint.constant = 84
+            minimumHeightConstraint.constant = 92
+        }
+    }
+
     /// The tile is an opaque card, so its caption keeps the palette's ink rather than the ink
     /// Core measured for the theme background — an administrator's `tile_label` override still
     /// wins, because that is a colour somebody chose on purpose.
     func apply(label: String, online: Bool, noticeActive: Bool, skin: DoorbellSkin) {
-        nameLabel.text = label
-        nameLabel.textColor = skin.cardInk("tile_label")
-        stateLabel.text = online ? "" : texts.t("admin.offline")
-        stateLabel.textColor = skin.cardMuted("tile_label")
-        backgroundColor = skin.surface
-        still.alpha = online ? 1 : 0.35
-        openButton.setTitleColor(skin.cardInk("tile_label"), for: .normal)
+        if nameLabel.text != label { nameLabel.text = label }
+        let state = online ? "" : texts.t("admin.offline")
+        if stateLabel.text != state { stateLabel.text = state }
+        let ink = skin.cardInk("tile_label")
+        if nameLabel.textColor != ink {
+            nameLabel.textColor = ink
+            openButton.setTitleColor(ink, for: .normal)
+        }
+        let muted = skin.cardMuted("tile_label")
+        if stateLabel.textColor != muted { stateLabel.textColor = muted }
+        if backgroundColor != skin.surface { backgroundColor = skin.surface }
+        let alpha: CGFloat = online ? 1 : 0.35
+        if still.alpha != alpha { still.alpha = alpha }
         noticeChip.update(active: noticeActive, palette: skin.palette)
     }
 
@@ -406,18 +547,41 @@ final class DoorTileView: UIView {
     }
 
     func setStill(_ image: UIImage?) {
+        lastStillData = nil
         still.image = image
     }
 
     func loadStill(from url: URL) {
         pendingUrl = url
         session.dataTask(with: url) { [weak self] data, _, _ in
-            guard let data = data, let image = UIImage(data: data) else { return }
+            guard let self = self, let data = data, !data.isEmpty else { return }
+            guard data != self.lastStillData else { return }
+            guard let image = DoorTileView.thumbnail(from: data, fitting: self.still.bounds.size)
+            else { return }
             DispatchQueue.main.async {
-                guard let self = self, self.pendingUrl == url else { return }
+                guard self.pendingUrl == url else { return }
+                self.lastStillData = data
                 self.still.image = image
             }
         }.resume()
+    }
+
+    /// Decodes straight to the size the tile draws at. `UIImage(data:)` only records the bytes and
+    /// leaves the real work — a full-resolution JPEG decode and downscale — to the main thread at
+    /// commit time, which is exactly the periodic hitch this page had.
+    private static func thumbnail(from data: Data, fitting size: CGSize) -> UIImage? {
+        let side = max(size.width, size.height)
+        let pixels = Int((side > 0 ? side : 132) * IOSAvailability.screenScale())
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
+        let options: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceShouldCacheImmediately: true,
+            kCGImageSourceThumbnailMaxPixelSize: max(32, pixels),
+        ]
+        guard let thumb = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
+        else { return nil }
+        return UIImage(cgImage: thumb)
     }
 
     @objc private func open() { onOpen?() }

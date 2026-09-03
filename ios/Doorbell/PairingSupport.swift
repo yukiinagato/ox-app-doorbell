@@ -12,6 +12,13 @@ extension Notification.Name {
     static let doorbellPairingChanged = Notification.Name("doorbell.pairingChanged")
     /// Posted by a main screen's banner: reopen the onboarding screen the user deferred.
     static let doorbellOpenPairing = Notification.Name("doorbell.openPairing")
+    /// Something that a finger would have woken the panel for. Posted by the screenshot
+    /// hook's `wake` request and by anything that ought to put the screen in front of
+    /// somebody who is standing at it.
+    static let doorbellWakeScreen = Notification.Name("doorbell.wakeScreen")
+    /// A `doorbell://pair?…` invitation arrived — from a tapped link or the camera. The
+    /// URI travels as the notification object.
+    static let doorbellPairInvitation = Notification.Name("doorbell.pairInvitation")
     /// Posted when this device must return to its first-run state: the cluster key, the pairing
     /// fields and its own name, role and door are all discarded.
     static let doorbellResetLocalPairing = Notification.Name("doorbell.resetLocalPairing")
@@ -105,11 +112,25 @@ struct PairingSnapshot {
     let tokenAttemptsLeft: Int
     let tokenHost: String
     let tokenPin: String
+    /// `doorbell://pair?…`, the scannable form of the same token. Empty on a Core that
+    /// predates the field, in which case the card shows the address and PIN alone.
+    let tokenUri: String
 
     let pairingMode: Bool
     let pairingModeLeftS: Int
     let autoAddedCount: Int
     let devices: [PairingDevice]
+
+    /// Everything an observer of `.doorbellPairingChanged` actually redraws from. Compared once
+    /// per poll so an unchanged cluster costs nothing downstream.
+    var changeFingerprint: String {
+        return [state.rawValue, paired ? "1" : "0", persistenceReady ? "1" : "0",
+                isFounder ? "1" : "0", pskSource, role, selfId, selfName, selfAddr, pairQr,
+                "\(memberCount)", "\(connectedCount)", tokenActive ? "1" : "0",
+                "\(tokenExpiresS)", "\(tokenAttemptsLeft)", tokenHost, tokenPin, tokenUri,
+                pairingMode ? "1" : "0", "\(pairingModeLeftS)", "\(autoAddedCount)",
+                "\(devices.count)"].joined(separator: "|")
+    }
 
     init(_ raw: [String: Any]?) {
         let root = raw ?? [:]
@@ -140,6 +161,7 @@ struct PairingSnapshot {
         tokenAttemptsLeft = ConfigUtil.int(token, "attempts_left", 0)
         tokenHost = ConfigUtil.evStr(token, "host")
         tokenPin = ConfigUtil.evStr(token, "pin")
+        tokenUri = ConfigUtil.evStr(token, "uri")
 
         let pending = root["pending"] as? [String: Any] ?? [:]
         pairingMode = ConfigUtil.evBool(pending, "pairing_mode")
@@ -228,6 +250,7 @@ enum PairingTheme {
     static let buttonSize: CGFloat = 30
     static let codeSize: CGFloat = 64
     static let qrSize: CGFloat = 420
+    static let codeQrSize: CGFloat = 220
 #else
     static let titleSize: CGFloat = 30
     static let bodySize: CGFloat = 19
@@ -235,6 +258,7 @@ enum PairingTheme {
     static let buttonSize: CGFloat = 20
     static let codeSize: CGFloat = 44
     static let qrSize: CGFloat = 260
+    static let codeQrSize: CGFloat = 160
 #endif
 
     static func label(_ size: CGFloat, _ color: UIColor, bold: Bool = false) -> UILabel {
@@ -267,6 +291,88 @@ enum PairingTheme {
         view.backgroundColor = card
         view.layer.cornerRadius = 14
         return view
+    }
+}
+
+/// The pairing invitation a QR carries: `doorbell://pair?host=<ip:port>&pin=<6 digits>
+/// &exp=<unix seconds>&cluster=<name>`.
+///
+/// Core owns this format and reads it for every shell through `db_core_parse_pair_uri_json`,
+/// which additionally judges the expiry against corrected cluster time. `parse(_:core:)` asks Core
+/// first and only falls back to the local reading below when Core is not running — a code can be
+/// scanned before it has started, and an older Core does not export the call at all.
+struct PairUri: Equatable {
+    let host: String
+    let pin: String
+    /// Unix seconds. Zero when the invitation carries no expiry.
+    let expiresAtS: Int64
+    let cluster: String
+
+    /// Why an invitation cannot be acted on. Each is shown to the user in its own words rather
+    /// than as one "invalid code".
+    enum Failure: String, Error, Equatable {
+        case notAPairUri = "bad_scheme"
+        case missingHost = "missing_host"
+        case missingPin = "missing_pin"
+        case expired = "expired"
+
+        /// Core names the refusal in the `err` field; an unknown name from a newer Core is read as
+        /// "this code is not one we can act on" rather than crashing or silently accepting it.
+        init(coreError: String) {
+            self = Failure(rawValue: coreError) ?? .notAPairUri
+        }
+    }
+
+    static let scheme = "doorbell"
+    static let action = "pair"
+
+    /// The reading the shell acts on: Core's when it can give one, the local one otherwise.
+    static func parse(_ text: String, core: CoreBridge,
+                      nowS: Int64 = Int64(Date().timeIntervalSince1970))
+        -> Result<PairUri, Failure> {
+        guard let answer = core.parsePairUri(text) else { return parse(text, nowS: nowS) }
+        guard ConfigUtil.evBool(answer, "ok") else {
+            return .failure(Failure(coreError: ConfigUtil.evStr(answer, "err")))
+        }
+        let host = ConfigUtil.evStr(answer, "host")
+        let pin = ConfigUtil.evStr(answer, "pin")
+        guard !host.isEmpty else { return .failure(.missingHost) }
+        guard !pin.isEmpty else { return .failure(.missingPin) }
+        return .success(PairUri(host: host, pin: pin,
+                                expiresAtS: Int64(ConfigUtil.int(answer, "exp", 0)),
+                                cluster: ConfigUtil.evStr(answer, "cluster")))
+    }
+
+    /// The shell's own reading, used only when Core cannot answer. `nowS` is the wall clock to
+    /// judge the expiry against, so the caller decides whose clock counts and a test does not
+    /// depend on the machine's.
+    static func parse(_ text: String, nowS: Int64) -> Result<PairUri, Failure> {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let components = URLComponents(string: trimmed),
+              components.scheme?.lowercased() == scheme,
+              (components.host ?? "").lowercased() == action else {
+            return .failure(.notAPairUri)
+        }
+        var values: [String: String] = [:]
+        for item in components.queryItems ?? [] where !(item.value ?? "").isEmpty {
+            values[item.name.lowercased()] = item.value
+        }
+        let host = (values["host"] ?? "").trimmingCharacters(in: .whitespaces)
+        guard !host.isEmpty else { return .failure(.missingHost) }
+
+        // Six digits, and nothing that merely looks like them: a PIN with a stray character is a
+        // mis-scan, and sending it would burn one of the token's few attempts.
+        let pin = values["pin"] ?? ""
+        guard pin.count == 6, pin.allSatisfy({ $0.isASCII && $0.isNumber }) else {
+            return .failure(.missingPin)
+        }
+
+        let expiresAtS = Int64(values["exp"] ?? "") ?? 0
+        if expiresAtS > 0 && nowS >= expiresAtS { return .failure(.expired) }
+
+        // URLComponents has already percent-decoded the cluster name.
+        return .success(PairUri(host: host, pin: pin, expiresAtS: expiresAtS,
+                                cluster: values["cluster"] ?? ""))
     }
 }
 
@@ -420,9 +526,18 @@ final class PairingCodeCardView: UIView {
     private let instructions = UILabel()
     private let expired = UILabel()
     private let newCodeButton: UIButton
+    /// The same invitation as a QR, so the other device can point a camera at it instead of
+    /// copying six digits. Hidden entirely on a Core that does not publish `token.uri`.
+    private let uriQr = UIImageView()
+    private let core: CoreBridge?
+    private var renderedUri = ""
 
-    init(texts: Texts) {
+    /// The card renders the invitation QR through Core's encoder when it has one.
+    convenience init(texts: Texts) { self.init(texts: texts, core: nil) }
+
+    init(texts: Texts, core: CoreBridge?) {
         self.texts = texts
+        self.core = core
         newCodeButton = PairingTheme.button(texts.t("pair.add_with_code"), filled: true)
         super.init(frame: .zero)
         backgroundColor = PairingTheme.card
@@ -506,12 +621,20 @@ final class PairingCodeCardView: UIView {
         stack.spacing = 8
         stack.alignment = .leading
         stack.translatesAutoresizingMaskIntoConstraints = false
+        uriQr.contentMode = .scaleAspectFit
+        uriQr.isHidden = true
+        uriQr.accessibilityIdentifier = "pair_code_qr"
+        uriQr.translatesAutoresizingMaskIntoConstraints = false
+        stack.insertArrangedSubview(uriQr, at: stack.arrangedSubviews.count)
+
         addSubview(stack)
         NSLayoutConstraint.activate([
             stack.topAnchor.constraint(equalTo: topAnchor, constant: 16),
             stack.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -16),
             stack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 18),
             stack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -18),
+            uriQr.widthAnchor.constraint(equalToConstant: PairingTheme.codeQrSize),
+            uriQr.heightAnchor.constraint(equalToConstant: PairingTheme.codeQrSize),
         ])
         IOSAvailability.setCustomSpacing(16, after: addressRow, in: stack)
         IOSAvailability.setCustomSpacing(14, after: countdownRow, in: stack)
@@ -523,6 +646,7 @@ final class PairingCodeCardView: UIView {
     /// a user who looked away is told what happened instead of finding an empty box.
     func update(_ snapshot: PairingSnapshot) {
         let live = snapshot.tokenActive && snapshot.tokenExpiresS > 0
+        updateInvitationQr(live ? snapshot.tokenUri : "")
         addressValue.text = snapshot.tokenHost.isEmpty
             ? texts.t("pair.address_example") : snapshot.tokenHost
         codeValue.text = live && !snapshot.tokenPin.isEmpty ? snapshot.tokenPin : "······"
@@ -536,6 +660,27 @@ final class PairingCodeCardView: UIView {
         addressCopy.isEnabled = !snapshot.tokenHost.isEmpty
         codeCopy.isEnabled = live
         instructions.isHidden = !live
+    }
+
+    /// Core owns the payload; the shell only draws it. Encoding is a nested module loop and a
+    /// bitmap context, so it runs off the main thread and only when the invitation changed.
+    private func updateInvitationQr(_ uri: String) {
+        guard uri != renderedUri else { return }
+        renderedUri = uri
+        guard !uri.isEmpty, let core = core else {
+            uriQr.image = nil
+            uriQr.isHidden = true
+            return
+        }
+        let points = PairingTheme.codeQrSize
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let image = PairingQR.image(core: core, text: uri, points: points)
+            DispatchQueue.main.async {
+                guard let self = self, self.renderedUri == uri else { return }
+                self.uriQr.image = image
+                self.uriQr.isHidden = image == nil
+            }
+        }
     }
 
     @objc private func newCodeTapped() { onNewCode?() }

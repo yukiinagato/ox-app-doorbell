@@ -6,6 +6,7 @@
 #include <string>
 
 #include "doctest.h"
+#include "test_env.h"
 #include "httpd/httpd.h"
 #include "util/clock.h"
 #include "util/runloop.h"
@@ -21,23 +22,8 @@ namespace {
 
 
 int pickPort() {
-  static std::mt19937 rng(static_cast<uint32_t>(::getpid()) * 2654435761u + 12345u);
-  std::uniform_int_distribution<int> dist(40000, 60000);
-  for (int i = 0; i < 100; i++) {
-    int p = dist(rng);
-    int fd = ::socket(AF_INET, SOCK_STREAM, 0);
-    if (fd < 0) continue;
-    int yes = 1;
-    ::setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes));
-    sockaddr_in a{};
-    a.sin_family = AF_INET;
-    a.sin_port = htons(static_cast<uint16_t>(p));
-    a.sin_addr.s_addr = htonl(INADDR_ANY);
-    int ok = ::bind(fd, reinterpret_cast<sockaddr*>(&a), sizeof(a));
-    ::close(fd);
-    if (ok == 0) return p;
-  }
-  return 0;
+  // Ports come from one process-wide allocator; see core/tests/test_ports.h.
+  return db::testing::freeListenPort();
 }
 
 int connectTo(int port) {
@@ -326,4 +312,121 @@ TEST_CASE("httpd: same-origin mp4 proxy authenticates before streaming") {
 
   httpd.stop();
   loop.stop();
+}
+
+TEST_CASE("httpd: an IPv4-only listener serves, and IPv6 is added only where it works") {
+  // Device regression, iPad 1 on iOS 5.1.1: the dual-stack listener bound happily and then every
+  // accepted connection was reset. A listener string that binds is not proof the platform can
+  // serve from it, so the family is probed and IPv4-only is a first-class configuration rather
+  // than an error path.
+  CHECK(httpdListeningPorts(47180, true) == "47180,[::]:47180");
+  CHECK(httpdListeningPorts(47180, false) == "47180");
+  // IPv4 has to work for anything here to mean anything.
+  REQUIRE(httpdFamilyServable(AF_INET));
+
+  SUBCASE("forced IPv4-only still serves every route") {
+    RealClock clock;
+    Runloop loop(clock);
+    loop.start();
+    Httpd httpd(loop);
+    httpd.route("GET", "/api/ping", [](const HttpReq&) {
+      return HttpResp::json("{\"ok\":true}");
+    });
+    httpd.setStatic("/admin/index.html", "text/html", toBytes("<html>admin</html>"));
+
+    const int port = pickPort();
+    REQUIRE(port > 0);
+    // The fallback configuration, taken deliberately rather than after a failure.
+    REQUIRE(httpd.start(port, Httpd::Ipv6Mode::Off));
+    CHECK(httpd.port() == port);
+
+    auto answered = get(port, "/api/ping");
+    CHECK(answered.status == 200);
+    CHECK(answered.body == "{\"ok\":true}");
+    auto page = get(port, "/admin/index.html");
+    CHECK(page.status == 200);
+    CHECK(page.body == "<html>admin</html>");
+    // Not a one-off: the connection is accepted and answered every time, which is exactly what
+    // the device stopped doing.
+    for (int i = 0; i < 10; i++) CHECK(get(port, "/api/ping").status == 200);
+
+    httpd.stop();
+    loop.stop();
+  }
+
+  SUBCASE("the automatic path serves whatever the probe chose") {
+    // On a host with working IPv6 this exercises the dual-stack string; on one without, the
+    // fallback. Either way the server has to answer -- that is the whole point of probing.
+    RealClock clock;
+    Runloop loop(clock);
+    loop.start();
+    Httpd httpd(loop);
+    httpd.route("GET", "/api/ping", [](const HttpReq&) { return HttpResp::text("pong"); });
+
+    const int port = pickPort();
+    REQUIRE(port > 0);
+    REQUIRE(httpd.start(port, Httpd::Ipv6Mode::Auto));
+    CHECK(get(port, "/api/ping").body == "pong");
+
+    httpd.stop();
+    loop.stop();
+  }
+
+  SUBCASE("the IPv4 listener still comes up when [::] cannot bind") {
+    // The second net, exercised for real: hold the IPv6 wildcard on the port with V6ONLY set so
+    // IPv4 stays free, then start the server on that same port. The dual-stack string cannot
+    // bind, and an IPv4-only server is worth far more than none.
+    if (!httpdFamilyServable(AF_INET6)) return;  // nothing to take away on an IPv4-only host
+    const int port = pickPort();
+    REQUIRE(port > 0);
+    const int blocker = ::socket(AF_INET6, SOCK_STREAM, 0);
+    REQUIRE(blocker >= 0);
+    int only_v6 = 1;
+    REQUIRE(::setsockopt(blocker, IPPROTO_IPV6, IPV6_V6ONLY, &only_v6, sizeof(only_v6)) == 0);
+    sockaddr_in6 held{};
+    held.sin6_family = AF_INET6;
+    held.sin6_addr = in6addr_any;
+    held.sin6_port = htons(static_cast<uint16_t>(port));
+    REQUIRE(::bind(blocker, reinterpret_cast<sockaddr*>(&held), sizeof(held)) == 0);
+    REQUIRE(::listen(blocker, 1) == 0);
+
+    RealClock clock;
+    Runloop loop(clock);
+    loop.start();
+    Httpd httpd(loop);
+    httpd.route("GET", "/api/ping", [](const HttpReq&) { return HttpResp::text("pong"); });
+    REQUIRE(httpd.start(port, Httpd::Ipv6Mode::Auto));
+    CHECK(httpd.port() == port);
+    CHECK(get(port, "/api/ping").body == "pong");
+
+    httpd.stop();
+    loop.stop();
+    ::close(blocker);
+  }
+
+  SUBCASE("a repeated civetweb message is reported once, not once per connection") {
+    // The accept loop is the caller. On iOS 5 it produces two setsockopt failures for every
+    // single connection, and before this the callback took a global mutex, wrote to stderr and
+    // called the shell's log sink for each one, on the thread whose only job is to keep
+    // accepting. The first report still gets through; the rest cost a set lookup.
+    const std::string first = "probe message " + std::to_string(::getpid()) + " a";
+    const std::string second = "probe message " + std::to_string(::getpid()) + " b";
+    CHECK(httpdShouldLogCivetwebMessage(first));
+    CHECK_FALSE(httpdShouldLogCivetwebMessage(first));
+    CHECK_FALSE(httpdShouldLogCivetwebMessage(first));
+    // A different message is still news.
+    CHECK(httpdShouldLogCivetwebMessage(second));
+    CHECK_FALSE(httpdShouldLogCivetwebMessage(second));
+    // Memory is bounded, so a long-running server cannot accumulate messages for ever.
+    for (int i = 0; i < 200; i++)
+      httpdShouldLogCivetwebMessage("bounded " + std::to_string(::getpid()) + " " +
+                                    std::to_string(i));
+    CHECK(httpdShouldLogCivetwebMessage(first));
+  }
+
+  SUBCASE("a family that cannot even open a socket is refused") {
+    // The probe answers "no" rather than throwing for anything it cannot test.
+    CHECK_FALSE(httpdFamilyServable(AF_UNIX));
+    CHECK_FALSE(httpdFamilyServable(-1));
+  }
 }

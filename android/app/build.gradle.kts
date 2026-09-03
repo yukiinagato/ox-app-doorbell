@@ -1,3 +1,4 @@
+import java.io.File
 import java.security.MessageDigest
 
 plugins {
@@ -31,6 +32,23 @@ fun sourceIdentity(): String {
 
 val doorbellSourceIdentity = sourceIdentity()
 
+fun gitRevision(repository: File): String {
+  val override = System.getenv("DB_BUILD_ID")?.trim().orEmpty()
+  if (override.matches(Regex("^[0-9a-fA-F]{7,64}$"))) return override.lowercase()
+  return try {
+    val process = ProcessBuilder("git", "-C", repository.absolutePath, "rev-parse", "HEAD")
+      .redirectErrorStream(true)
+      .start()
+    val revision = process.inputStream.bufferedReader().use { it.readText() }.trim()
+    if (process.waitFor() == 0 && revision.matches(Regex("^[0-9a-fA-F]{40,64}$")))
+      revision.lowercase() else "dev"
+  } catch (_: Exception) {
+    "dev"
+  }
+}
+
+val doorbellGitRevision = gitRevision(rootProject.projectDir)
+
 val doorbellTier = providers.gradleProperty("doorbellTier").orElse("modern").get()
 require(doorbellTier == "modern" || doorbellTier == "legacy19") {
   "doorbellTier must be 'modern' or 'legacy19' (was '$doorbellTier')"
@@ -48,8 +66,8 @@ android {
     applicationId = "jp.ox.doorbell"
     minSdk = 19
     targetSdk = 35
-    versionCode = 1
-    versionName = "0.3.0"
+    versionCode = 7
+    versionName = "0.3.6+${doorbellGitRevision.take(7)}"
     buildConfigField("String", "DOORBELL_SOURCE_ID", "\"$doorbellSourceIdentity\"")
 
     externalNativeBuild {
@@ -59,6 +77,7 @@ android {
         arguments += listOf(
           "-DANDROID_STL=c++_static",
           "-DDB_BUILD_TESTS=OFF",
+          "-DDB_BUILD_ID_ARG=$doorbellGitRevision",
           "-DDB_WITH_PJSIP=ON")
         targets += "doorbell"
       }

@@ -33,6 +33,7 @@ namespace DoorbellApp.Pairing
         private PairingSnapshot _snapshot = new PairingSnapshot();
         private string _renderedQr = "";
         private bool _codeCardOpen;
+        private bool _refreshing;
 
         /// <summary>Set when an unpaired node asks the caller to reopen onboarding instead.</summary>
         public bool OnboardingRequested { get; private set; }
@@ -144,9 +145,26 @@ namespace DoorbellApp.Pairing
             return !string.IsNullOrEmpty(id) && _byId.TryGetValue(id, out row) ? row : null;
         }
 
+        /// <summary>
+        /// db_core_pairing_json marshals into core's run loop, so the once-a-second poll reads it
+        /// on a worker and renders the result back on the dispatcher.
+        /// </summary>
         private void Refresh()
         {
-            var snapshot = PairingSnapshot.From(App.Core.PairingInfo());
+            if (_refreshing) return;
+            _refreshing = true;
+            Task.Factory.StartNew(() => App.Core.PairingInfo())
+                .ContinueWith(task => Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    _refreshing = false;
+                    ApplyPairingSnapshot(task.Status == TaskStatus.RanToCompletion ?
+                                         task.Result : null);
+                })));
+        }
+
+        private void ApplyPairingSnapshot(Dictionary<string, object> raw)
+        {
+            var snapshot = PairingSnapshot.From(raw);
             if (!snapshot.Known) return;
             _snapshot = snapshot;
 

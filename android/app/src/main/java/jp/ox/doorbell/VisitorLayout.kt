@@ -25,6 +25,55 @@ internal object VisitorLayout {
     fun callButtonHeightDp(widthDp: Int): Int = if (widthDp >= TABLET_MIN_DP) 96 else 72
 
     /**
+     * The gap between the visitor screen's groups (clock, announcement, language row, call
+     * button). Breathing room is added only out of genuine slack: [contentDp] is what the groups
+     * measured without any gaps, so a short screen keeps the tight layout rather than pushing the
+     * call button off the bottom.
+     */
+    fun groupGapDp(availableDp: Int, contentDp: Int, groups: Int): Int {
+        if (groups <= 1) return 0
+        val slack = availableDp - contentDp
+        if (slack <= 0) return 0
+        // Spend at most two thirds of the slack, so the layout never ends up flush to the edges.
+        val perGap = (slack * 2 / 3) / (groups - 1)
+        for (step in SPACING_SCALE) if (perGap >= step) return step
+        return 0
+    }
+
+    /** The 4 dp-based spacing scale, largest first. */
+    val SPACING_SCALE = intArrayOf(32, 24, 16, 12, 8, 4)
+
+    /**
+     * How tall a door tile's preview may be so the whole tile fits above the QR footer.
+     *
+     * The tile column ends above the footer, but a tile taller than that area had its bottom row
+     * -- the door name and the 見る action -- cut off at the scroll boundary, which reads as the
+     * label vanishing under the footer. The preview is the only part that may give up height, so
+     * it is derived from the measured viewport rather than guessed per orientation.
+     *
+     * All values are pixels. [otherRowsPx] is everything in the card except the preview.
+     */
+    fun tileStillHeightPx(
+        viewportPx: Int,
+        headingPx: Int,
+        otherRowsPx: Int,
+        gapPx: Int,
+        tileCount: Int,
+        minPx: Int,
+        maxPx: Int,
+    ): Int {
+        if (viewportPx <= 0) return maxPx
+        // One camera may use the whole viewport. Two or three share it without forcing the
+        // resident to scroll just to compare them. A larger fleet deliberately sizes for three
+        // compact cards: the scroll position then becomes the resident's camera selection.
+        val fittingCount = tileCount.coerceIn(1, 3)
+        val available = (viewportPx - headingPx - gapPx * fittingCount) / fittingCount -
+            otherRowsPx
+        // Clamped: below the floor the preview is useless, above the ceiling it wastes the column.
+        return available.coerceIn(minPx, maxPx)
+    }
+
+    /**
      * Whether the footer stacks the version line above the SOS slider.
      *
      * They must never overlap or clip each other: the observed failure was the version line cut
@@ -34,8 +83,18 @@ internal object VisitorLayout {
     fun footerStacked(widthDp: Int, heightDp: Int): Boolean =
         widthDp < FOOTER_SPLIT_MIN_DP || widthDp <= heightDp
 
-    /** Whether the dashboard's announcement button and SOS slider stack rather than share a row. */
-    fun actionsStacked(widthDp: Int): Boolean = widthDp < FOOTER_SPLIT_MIN_DP
+    /**
+     * Whether the dashboard header puts the clock on its own row above the membership pill and
+     * the buttons, rather than sharing one row with them.
+     *
+     * The one-row header is a landscape arrangement: the clock takes the leftover width after the
+     * pill, the missed badge and 管理 have taken theirs. On a portrait phone those three want
+     * nearly the whole width, so "leftover" was about one character and the clock rendered one
+     * glyph per line down the left edge -- observed on the Moto. Portrait, and anything narrower
+     * than a tablet, therefore gets its own full-width clock row.
+     */
+    fun dashboardHeaderStacked(widthDp: Int, heightDp: Int): Boolean =
+        widthDp <= heightDp || widthDp < FOOTER_SPLIT_MIN_DP
 
     fun hintTextSizeSp(widthDp: Int): Float = if (widthDp >= TABLET_MIN_DP) 20f else 15f
 

@@ -135,10 +135,8 @@ namespace DoorbellApp
                 InCallPurposeBadge.Visibility = Visibility.Collapsed;
                 return;
             }
-            object icon;
-            string iconText = entry != null && entry.TryGetValue("icon", out icon) && icon != null
-                ? icon.ToString() + " " : "";
-            InCallPurposeText.Text = iconText + LabelOf(entry, Texts.Lang, _incomingPurpose);
+            FillPurposeBadge(InCallPurposeContent, entry, _incomingPurpose,
+                             LabelOf(entry, Texts.Lang, _incomingPurpose));
             InCallPurposeBadge.Visibility = Visibility.Visible;
         }
     }

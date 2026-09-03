@@ -1,11 +1,24 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Cleartext stays disabled everywhere except this node's own loopback administration API and
-     asset endpoint, which never leave the device. Mesh traffic and every remote request keep the
-     platform default. -->
+<!-- Cleartext HTTP is what the mesh speaks.
+
+     Every node serves its administration API, its snapshot and its two video streams over plain
+     HTTP on port 47180: core has no TLS listener there, and the cluster is a private LAN segment
+     whose traffic is authenticated by the cluster PSK rather than by transport security.
+
+     This file used to carry a base-config with cleartextTrafficPermitted="false" and an exception
+     for loopback only. That silently broke every peer request on the modern tier: from API 24 a
+     Network Security Config overrides the android:usesCleartextTraffic="true" that the modern
+     flavour manifest declares, so http://&lt;peer-ip&gt;:47180/... raised
+     "Cleartext HTTP traffic to &lt;ip&gt; not permitted" inside HttpURLConnection. The door tiles
+     swallowed it as an empty still and nothing reached logcat. legacy19 never saw it, because
+     API 19 predates the policy and permits cleartext outright, so the two tiers disagreed about
+     whether the product worked at all.
+
+     A Network Security Config cannot express "the local subnet": domain-config takes hostnames,
+     and peer addresses are DHCP addresses that change. Permitting cleartext is therefore the
+     honest declaration of what this app does, and it now matches the modern manifest rather than
+     contradicting it. Certificate trust stays at the platform default, so anything this app does
+     speak over HTTPS still validates normally. -->
 <network-security-config>
-    <base-config cleartextTrafficPermitted="false"/>
-    <domain-config cleartextTrafficPermitted="true">
-        <domain includeSubdomains="false">127.0.0.1</domain>
-        <domain includeSubdomains="false">localhost</domain>
-    </domain-config>
+    <base-config cleartextTrafficPermitted="true"/>
 </network-security-config>

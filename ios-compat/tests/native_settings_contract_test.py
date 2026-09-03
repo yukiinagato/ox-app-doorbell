@@ -32,6 +32,10 @@ visitor = source("ios/Doorbell/VisitorScreenView.swift")
 incoming = source("ios/Doorbell/IncomingViewController.swift")
 main = source("ios/Doorbell/MainViewController.swift")
 tv = source("ios/DoorbellTV/TVMainViewController.swift")
+app_delegate = source("ios/Doorbell/AppDelegate.swift")
+tv_delegate = source("ios/DoorbellTV/TVAppDelegate.swift")
+debug_info = source("ios/Doorbell/DebugInfoViewController.swift")
+availability = source("ios/Doorbell/IOSAvailability.swift")
 strings = source("i18n/strings.yaml")
 
 
@@ -112,8 +116,14 @@ assert "core.callLogPage(sinceMs: 0, beforeMs: beforeMs, limit: limit)" in histo
 # --- every clock goes through Core -----------------------------------------
 assert "func localTime(wallMs: Int64 = 0)" in bridge
 assert "core.localTime(wallMs: wallMs)" in clock
+# The iOS shell draws from a base Core gave it, re-taken off the main thread: db_core_local_time_json
+# is synchronous into Core and does not answer while Core is mid-SNTP, which made the panel's
+# seconds advance in threes. The reading still originates in Core, never in the OS calendar.
+assert "clockSource.reading()" in main, "MainViewController draws from the disciplined clock"
+assert "clockSource.refresh(core)" in main, "and re-takes its base from Core"
+assert "DoorbellClock.read(core)" in clock, "which is still Core's reading, not the OS calendar's"
+assert "clockSource.reading()" in tv, "TVMainViewController draws from the same source"
 for shell, name in ((main, "MainViewController"), (tv, "TVMainViewController")):
-    assert "DoorbellClock.read(core)" in shell, name
     assert "Calendar(identifier: .gregorian)" not in shell.split("private func updateClock")[1][:600], \
         f"{name} must not render its clock from the OS calendar"
 
@@ -200,8 +210,9 @@ for shell, name in ((main, "MainViewController"), (tv, "TVMainViewController"),
     assert "themeBg.apply(display:" in shell, name
 assert 'boot.role == "door_station"' not in main.split("private func applyTheme")[1][:400], \
     "the theme background is no longer gated on the door station"
-assert 'skin.apply("clock", to: clockLabel)' in dashboard and \
-    'skin.apply("footer", to: versionLabel, quiet: true)' in dashboard
+assert 'skin.apply("clock", to: clockLabel)' in dashboard
+assert "final class HaloLabel: UILabel {}" in theme and "override func drawText" not in theme, \
+    "the Swift indoor app uses automatic ink without text outlines"
 assert "backgroundColor = .black" in incoming, "the video keeps its own black frame"
 
 # --- visit_purposes.<id>.enabled -------------------------------------------
@@ -223,7 +234,9 @@ assert "/snapshot.jpg" in dashboard and "withTimeInterval: 5" in dashboard
 assert "history.missed_badge" in dashboard and "history.see_all" in dashboard
 assert "AdminQrView(core: core, boot: boot, texts: texts, compact: false)" in dashboard, \
     "the admin QR is always visible on an indoor panel"
-assert "DoorbellTheme.versionLine" in dashboard
+assert "footerEffect.heightAnchor.constraint(equalToConstant: 88)" in dashboard
+assert "let side: CGFloat = compact ? 64 : 72" in source("ios/Doorbell/AdminQrView.swift")
+assert "adminQr.setDetailText(DoorbellTheme.versionLine" in dashboard
 assert "func applyLayout(for size: CGSize)" in dashboard and \
     "func applyLayout(for size: CGSize)" in visitor, "both home screens are size-driven"
 assert "core.markCallLogSeen()" in history, "opening the history marks it seen"
@@ -256,5 +269,54 @@ for key in ("settings.title", "settings.section_device", "web_admin.open", "door
             "ring.mic_unavailable", "theme.contrast_warning"):
     assert f"\n{key}:" in strings, key
 assert "sos.slide_two_line" in sos, "the SOS label is a deliberate two-part string"
+
+# --- the panel stays awake, and stays on the mesh ---------------------------
+# An auto-locked device suspends its foreground app: the listening sockets are closed, so 47180
+# and 47172 refuse connections instead of stalling, the cluster marks the node dead, and the
+# process is evicted later with no crash report, no jetsam event and no resource report. From the
+# outside that is indistinguishable from a hang. The override that prevents it is an intent held
+# in one place and re-asserted on activation, never a flag set once at launch.
+assert "enum ScreenAwake" in availability, "one owner for the idle-timer override"
+assert "UIApplication.shared.isIdleTimerDisabled = wanted" in availability
+for name, shell in (("AppDelegate", app_delegate), ("TVAppDelegate", tv_delegate)):
+    assert "ScreenAwake.want(true)" in shell, f"{name} asks for a screen that never sleeps"
+    assert "func applicationDidBecomeActive" in shell and "ScreenAwake.apply()" in shell, \
+        f"{name} re-asserts the override on every activation, not only at launch"
+# Nothing may write the flag behind ScreenAwake's back: the iOS 9 admin alert used to clear it and
+# restore it from its OK button alone, so leaving through either of the other two actions left the
+# panel able to lock, for good.
+for name, shell in (("AppDelegate", app_delegate), ("MainViewController", main),
+                    ("DebugInfoViewController", debug_info), ("TVAppDelegate", tv_delegate)):
+    assert "isIdleTimerDisabled = " not in shell, \
+        f"{name} must change the idle timer through ScreenAwake"
+
+# A door station that resigned active is still the household's doorbell. Core is stopped only on a
+# real termination or a deliberate reset -- never on a lifecycle transition.
+for name, shell in (("AppDelegate", app_delegate), ("TVAppDelegate", tv_delegate)):
+    for handler in ("applicationDidBecomeActive", "applicationWillResignActive",
+                    "applicationDidEnterBackground", "applicationWillEnterForeground"):
+        marker = "func " + handler
+        if marker not in shell:
+            continue
+        body = shell.split(marker, 1)[1].split("\n    func ", 1)[0]
+        assert "core.stop()" not in body, f"{name}.{handler} must never stop Core"
+        assert "runtime?.stop(" not in body, f"{name}.{handler} must never stop the supervisor"
+    assert "func applicationWillTerminate" in shell and "core.stop()" in shell, \
+        f"{name} still stops Core on a real termination"
+
+# --- a silent death leaves a file behind ------------------------------------
+# The last one left nothing at all to read, so the shell now keeps its own record next to the
+# database: the launch, Core starting and stopping, every lifecycle transition and the most recent
+# UI events. Only when boot.json asks for timings, and the UI events are buffered so that
+# peers_changed several times a second does not become its own load.
+assert "enum ShellLog" in availability
+assert "shell.log" in availability, "written next to the database, readable over SSH"
+assert "minFlushIntervalS" in availability, "UI events are buffered, not written per event"
+assert "ShellLog.enabled = boot.debugTimings" in app_delegate, "off on a shipped panel"
+for line in ("ShellLog.start(", "ShellLog.note(\"core.start", "ShellLog.uiEvent(",
+             "lifecycle didBecomeActive", "lifecycle willResignActive",
+             "lifecycle didEnterBackground", "lifecycle willTerminate"):
+    assert line in app_delegate, line
+
 
 print("native settings contract test passed")

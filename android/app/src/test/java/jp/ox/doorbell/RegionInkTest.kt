@@ -15,111 +15,189 @@ class RegionInkTest {
     private val lightPatch = 0xE9EDF0
     private val darkPatch = 0x17202A
 
-    // ---------- precedence ----------
+    // ---------- the decision table ----------
+    //
+    // Rows: administrator override / a picture on screen (local sample) / a picture core averaged
+    // / a flat colour / a picture core declined to average. The last row is the observed failure:
+    // core reported source "color" for a 5.7 MP JPEG it would not decode, and a shell that
+    // believed it painted light text onto a light picture.
+
+    private fun ink(
+        override: Int? = null,
+        coreInkLight: Boolean? = null,
+        background: BackgroundKind,
+        sample: Int? = null,
+        fallback: Int = 0x808080,
+    ) = RegionInkPolicy.resolve(override, coreInkLight, background, sample, fallback)
 
     @Test
-    fun anAdministratorOverrideWinsOverEverything() {
-        val result = RegionInkPolicy.resolve(
-            override = 0xFF0000,
-            coreInkLight = true,
-            coreAuthoritative = true,
-            sampledBackgroundRgb = darkPatch,
-            fallbackBackgroundRgb = lightPatch,
-        )
-        assertEquals(0xFF0000, result.inkRgb)
+    fun overrideWinsOverEveryOtherRow() {
+        for (kind in BackgroundKind.values()) {
+            assertEquals(
+                "override lost to $kind",
+                0xFF0000,
+                ink(override = 0xFF0000, coreInkLight = true, background = kind,
+                    sample = darkPatch).inkRgb,
+            )
+        }
     }
 
     @Test
-    fun coresValueStandsOverAFlatBackgroundColour() {
-        // A flat colour has no geometry for core to be wrong about, so its answer is authoritative
-        // even though the shell also measured the region.
-        val result = RegionInkPolicy.resolve(
-            override = null,
-            coreInkLight = true,
-            coreAuthoritative = true,
-            sampledBackgroundRgb = lightPatch,
-            fallbackBackgroundRgb = lightPatch,
+    fun aPictureOnScreenIsDecidedByTheLocalSample() {
+        // Core said light for the whole picture; this region sits on its light part.
+        assertEquals(
+            Palette.DARK_INK,
+            ink(coreInkLight = true, background = BackgroundKind.IMAGE_DRAWN,
+                sample = lightPatch).inkRgb,
         )
-        assertEquals(Palette.LIGHT_INK, result.inkRgb)
+        assertEquals(
+            Palette.LIGHT_INK,
+            ink(coreInkLight = false, background = BackgroundKind.IMAGE_DRAWN,
+                sample = darkPatch).inkRgb,
+        )
     }
 
     @Test
-    fun theLocalSampleRefinesCoresWholeImageAverage() {
-        // The reported failure: core averaged the whole picture to "light ink", but this region
-        // sits on the light part of it, so the shell must choose dark ink instead.
-        val footer = RegionInkPolicy.resolve(
-            override = null,
-            coreInkLight = true,
-            coreAuthoritative = false,
-            sampledBackgroundRgb = lightPatch,
-            fallbackBackgroundRgb = 0x808080,
+    fun aPictureCoreAveragedIsStillDecidedLocallyWhereTheShellCanMeasure() {
+        // Core sampling the image does not make its one answer right for every region.
+        assertEquals(
+            Palette.DARK_INK,
+            ink(coreInkLight = true, background = BackgroundKind.IMAGE_DRAWN,
+                sample = lightPatch).inkRgb,
         )
-        assertEquals(Palette.DARK_INK, footer.inkRgb)
-
-        // A region on the dark part of the same image keeps light ink.
-        val clock = RegionInkPolicy.resolve(
-            override = null,
-            coreInkLight = true,
-            coreAuthoritative = false,
-            sampledBackgroundRgb = darkPatch,
-            fallbackBackgroundRgb = 0x808080,
+        // Only a region the shell could not measure falls back to core's average.
+        assertEquals(
+            Palette.LIGHT_INK,
+            ink(coreInkLight = true, background = BackgroundKind.IMAGE_DRAWN,
+                sample = null).inkRgb,
         )
-        assertEquals(Palette.LIGHT_INK, clock.inkRgb)
     }
 
     @Test
-    fun twoRegionsOnOneImageCanDisagree() {
-        fun ink(patch: Int) = RegionInkPolicy.resolve(
-            null, coreInkLight = true, coreAuthoritative = false,
-            sampledBackgroundRgb = patch, fallbackBackgroundRgb = 0x808080,
-        ).inkRgb
-        assertTrue(ink(lightPatch) != ink(darkPatch))
+    fun aFlatColourLeavesCoresAnswerStanding() {
+        assertEquals(
+            Palette.LIGHT_INK,
+            ink(coreInkLight = true, background = BackgroundKind.FLAT_COLOUR,
+                fallback = lightPatch).inkRgb,
+        )
+        // With nothing from core the same rule is applied locally.
+        assertEquals(
+            Palette.DARK_INK,
+            ink(background = BackgroundKind.FLAT_COLOUR, fallback = lightPatch).inkRgb,
+        )
     }
 
     @Test
-    fun coresValueIsUsedWhenTheShellCouldNotMeasureTheRegion() {
-        val result = RegionInkPolicy.resolve(
-            override = null,
-            coreInkLight = false,
-            coreAuthoritative = false,
-            sampledBackgroundRgb = null,
-            fallbackBackgroundRgb = lightPatch,
+    fun aPictureCoreDeclinedToSampleIsNeverTrusted() {
+        // The Moto failure: core answered "light" for a picture it never decoded. The shell
+        // measures the region itself and gets the opposite, correct, answer.
+        val result = ink(
+            coreInkLight = true, background = BackgroundKind.IMAGE_DRAWN, sample = lightPatch,
         )
         assertEquals(Palette.DARK_INK, result.inkRgb)
     }
 
     @Test
-    fun withNothingFromCoreTheRuleIsAppliedLocally() {
+    fun aPictureConfiguredButNotYetPaintedUsesWhatIsActuallyOnScreen() {
+        // Core's ink describes the picture; until it is drawn the flat colour is what shows.
         assertEquals(
             Palette.DARK_INK,
-            RegionInkPolicy.resolve(null, null, false, null, 0xFFFFFF).inkRgb,
+            ink(coreInkLight = true, background = BackgroundKind.IMAGE_NOT_DRAWN,
+                fallback = lightPatch).inkRgb,
+        )
+    }
+
+    @Test
+    fun aSurfaceTheShellPaintedIgnoresCoresThemeMeasurement() {
+        // The dashboard's cards are not the theme background core measured at all.
+        assertEquals(
+            Palette.DARK_INK,
+            ink(coreInkLight = true, background = BackgroundKind.KNOWN_SURFACE,
+                sample = lightPatch).inkRgb,
         )
         assertEquals(
             Palette.LIGHT_INK,
-            RegionInkPolicy.resolve(null, null, false, null, 0x000000).inkRgb,
+            ink(coreInkLight = false, background = BackgroundKind.KNOWN_SURFACE,
+                sample = darkPatch).inkRgb,
         )
+    }
+
+    @Test
+    fun twoRegionsOnOneImageCanDisagree() {
+        fun at(patch: Int) =
+            ink(coreInkLight = true, background = BackgroundKind.IMAGE_DRAWN, sample = patch).inkRgb
+        assertTrue(at(lightPatch) != at(darkPatch))
+    }
+
+    @Test
+    fun aPictureArrivingAfterTheFirstLayoutFlipsTheInk() {
+        // The exact sequence on the device: the screen binds before the asset is fetched, so the
+        // first decision is made against the flat #101418 ground and picks light ink. When the
+        // bitmap lands the region is measured for real -- a light wallpaper -- and the ink must
+        // flip. A decision taken once at bind time is how light text ended up on a light picture.
+        val theme = CoreDisplays.parse(
+            org.json.JSONObject(
+                """{"theme":{"bg_color":"#101418","bg_image":"asset",
+                             "auto_background":{"color":"#101418","source":"color"},
+                             "auto_ink":{"footer":"light"}}}""",
+            ),
+        ).theme!!
+
+        // 1. First layout: configured but not painted yet.
+        assertEquals(
+            BackgroundKind.IMAGE_NOT_DRAWN,
+            CoreDisplays.backgroundKind(theme, imageDrawnLocally = false),
+        )
+        val beforeImage = CoreDisplays.inkFor(theme, "footer", 0x101418, null, false)
+        assertEquals(Palette.LIGHT_INK, beforeImage.inkRgb)
+
+        // 2. The bitmap is painted and the region is sampled: the Moto wallpaper average.
+        assertEquals(
+            BackgroundKind.IMAGE_DRAWN,
+            CoreDisplays.backgroundKind(theme, imageDrawnLocally = true),
+        )
+        val afterImage = CoreDisplays.inkFor(theme, "footer", 0x101418, 0xBBBBB4, true)
+        assertEquals(Palette.DARK_INK, afterImage.inkRgb)
+        assertTrue(beforeImage.inkRgb != afterImage.inkRgb)
+    }
+
+    @Test
+    fun everyVisitorRegionFlipsTogetherWhenThePictureLands() {
+        // All four regions the visitor screen draws straight onto the background.
+        for (region in listOf("clock", "date", "hint", "footer")) {
+            val before = CoreDisplays.inkFor(null, region, 0x101418, null, false)
+            val after = CoreDisplays.inkFor(null, region, 0x101418, 0xBBBBB4, true)
+            assertEquals("$region before", Palette.LIGHT_INK, before.inkRgb)
+            assertEquals("$region after", Palette.DARK_INK, after.inkRgb)
+        }
     }
 
     // ---------- the shadow ----------
 
     @Test
-    fun theShadowIsAddedOnlyWhenTheChosenInkMissesTheTextRatio() {
-        // Mid grey defeats both ink tokens, so whichever is chosen needs the shadow.
-        val midGrey = RegionInkPolicy.resolve(null, null, false, 0x8A8A8A, 0x8A8A8A)
-        assertTrue(midGrey.needsShadow)
+    fun theShadowIsAddedOnlyWhenEvenTheBetterInkMissesTheTextRatio() {
+        // Only a narrow band around the crossover defeats both tokens; #787878 is its worst
+        // point, where the best either can manage is about 4.1:1.
+        val crossoverGrey = ink(background = BackgroundKind.FLAT_COLOUR, fallback = 0x787878)
+        assertTrue(crossoverGrey.needsShadow)
         // A properly dark background does not.
-        val dark = RegionInkPolicy.resolve(null, null, false, 0x101418, 0x101418)
+        val dark = ink(background = BackgroundKind.FLAT_COLOUR, fallback = 0x101418)
         assertFalse(dark.needsShadow)
         assertEquals(Palette.LIGHT_INK, dark.inkRgb)
+        // Nor does a mid grey that the better ink clears comfortably: under the old midpoint rule
+        // this one was given light ink at 3.2:1, and now takes dark ink at 5.3:1 with no shadow.
+        val midGrey = ink(background = BackgroundKind.FLAT_COLOUR, fallback = 0x8A8A8A)
+        assertEquals(Palette.DARK_INK, midGrey.inkRgb)
+        assertFalse(midGrey.needsShadow)
     }
 
     @Test
     fun theShadowIsTheOppositeInkAtFortyPercent() {
-        val overLight = RegionInkPolicy.resolve(null, null, false, 0xFFFFFF, 0xFFFFFF)
+        val overLight = ink(background = BackgroundKind.FLAT_COLOUR, fallback = 0xFFFFFF)
         assertEquals(Palette.DARK_INK, overLight.inkRgb)
         assertEquals(Palette.LIGHT_INK, overLight.shadowRgb)
 
-        val overDark = RegionInkPolicy.resolve(null, null, false, 0x000000, 0x000000)
+        val overDark = ink(background = BackgroundKind.FLAT_COLOUR, fallback = 0x000000)
         assertEquals(Palette.LIGHT_INK, overDark.inkRgb)
         assertEquals(Palette.DARK_INK, overDark.shadowRgb)
 
@@ -131,12 +209,61 @@ class RegionInkTest {
     @Test
     fun anOverrideThatIsHardToReadStillGetsTheShadowRatherThanBeingReplaced() {
         // A custom colour is never rejected; it is helped.
-        val result = RegionInkPolicy.resolve(
-            override = 0x9A9A9A, coreInkLight = null, coreAuthoritative = false,
-            sampledBackgroundRgb = 0x8A8A8A, fallbackBackgroundRgb = 0x8A8A8A,
+        val result = ink(
+            override = 0x9A9A9A, background = BackgroundKind.IMAGE_DRAWN,
+            sample = 0x8A8A8A, fallback = 0x8A8A8A,
         )
         assertEquals(0x9A9A9A, result.inkRgb)
         assertTrue(result.needsShadow)
+    }
+
+    @Test
+    fun aRegionCrossingLightAndDarkGetsTheShadowEvenThoughItsAverageIsFine() {
+        // The visitor hint crosses a pale wall and a dark jacket. The average clears 4.5:1 with
+        // dark ink, but over the jacket that same ink is unreadable, so the shadow is required.
+        val busy = RegionSample(averageRgb = 0xC8CCD0, minLuminance = 0.01, maxLuminance = 0.85)
+        val result = RegionInkPolicy.resolve(
+            override = null, coreInkLight = null, background = BackgroundKind.IMAGE_DRAWN,
+            sampledBackgroundRgb = busy.averageRgb, fallbackBackgroundRgb = 0x101418,
+            sample = busy,
+        )
+        assertEquals(Palette.DARK_INK, result.inkRgb)
+        assertTrue(UiContrast.contrast(result.inkRgb, busy.averageRgb) > 4.5)
+        assertTrue("a busy region needs the shadow", result.needsShadow)
+    }
+
+    @Test
+    fun anEvenRegionKeepsNoShadow() {
+        val flat = RegionSample(averageRgb = 0xE9EDF0, minLuminance = 0.80, maxLuminance = 0.86)
+        val result = RegionInkPolicy.resolve(
+            null, null, BackgroundKind.IMAGE_DRAWN, flat.averageRgb, 0x101418, flat,
+        )
+        assertEquals(Palette.DARK_INK, result.inkRgb)
+        assertFalse(result.needsShadow)
+    }
+
+    @Test
+    fun theWorstPatchIsMeasuredAgainstWhicheverSideTheInkSitsOn() {
+        val spread = RegionSample(0x808080, minLuminance = 0.0, maxLuminance = 1.0)
+        // Light ink is defeated by the light end, dark ink by the dark end; both are below AA.
+        assertTrue(spread.worstContrast(Palette.LIGHT_INK) < UiContrast.TEXT_AA)
+        assertTrue(spread.worstContrast(Palette.DARK_INK) < UiContrast.TEXT_AA)
+        // A region that is uniformly dark gives light ink its full ratio.
+        val dark = RegionSample(0x101418, minLuminance = 0.01, maxLuminance = 0.02)
+        assertTrue(dark.worstContrast(Palette.LIGHT_INK) > 10.0)
+    }
+
+    @Test
+    fun summarisingKeepsBothTheAverageAndTheExtremes() {
+        val pixels = IntArray(RegionInk.SAMPLE * RegionInk.SAMPLE) { index ->
+            if (index % 2 == 0) 0xFFFFFFFF.toInt() else 0xFF000000.toInt()
+        }
+        val sample = RegionInk.summarise(pixels)
+        assertEquals(0x7F7F7F, sample.averageRgb)
+        assertEquals(0.0, sample.minLuminance, 1e-9)
+        assertEquals(1.0, sample.maxLuminance, 1e-9)
+        // Whichever ink is chosen for the average, half the region defeats it.
+        assertTrue(sample.worstContrast(Palette.DARK_INK) < UiContrast.TEXT_AA)
     }
 
     // ---------- sampling maths ----------
@@ -164,11 +291,11 @@ class RegionInkTest {
         val mostlyDark = patch(20)
         assertEquals(
             Palette.DARK_INK,
-            RegionInkPolicy.resolve(null, null, false, mostlyLight, 0).inkRgb,
+            ink(background = BackgroundKind.IMAGE_DRAWN, sample = mostlyLight).inkRgb,
         )
         assertEquals(
             Palette.LIGHT_INK,
-            RegionInkPolicy.resolve(null, null, false, mostlyDark, 0).inkRgb,
+            ink(background = BackgroundKind.IMAGE_DRAWN, sample = mostlyDark).inkRgb,
         )
     }
 
@@ -191,11 +318,100 @@ class RegionInkTest {
         assertTrue(VisitorLayout.footerStacked(568, 320))
     }
 
+    // ---------- the dashboard header ----------
+
+    /**
+     * The clock shared one row with the membership pill, the missed-calls badge and the admin button. Those three want nearly
+     * the whole width of a portrait phone, so the clock -- which takes what is left -- rendered
+     * about one character wide, one glyph per line down the edge. Observed on the Moto.
+     */
     @Test
-    fun theDashboardActionsFollowTheSameWidthRule() {
-        assertTrue(VisitorLayout.actionsStacked(360))
-        assertTrue(VisitorLayout.actionsStacked(599))
-        assertFalse(VisitorLayout.actionsStacked(600))
-        assertFalse(VisitorLayout.actionsStacked(1024))
+    fun aPortraitWindowNeverPutsTheClockBesideTheHeaderButtons() {
+        // The Moto in portrait, which is where it was seen.
+        assertTrue(VisitorLayout.dashboardHeaderStacked(411, 869))
+        assertTrue(VisitorLayout.dashboardHeaderStacked(360, 780))
+        // Any window taller than it is wide, at any size, including a portrait tablet.
+        assertTrue(VisitorLayout.dashboardHeaderStacked(768, 1024))
+        assertTrue(VisitorLayout.dashboardHeaderStacked(1024, 1366))
+        // A square window is not landscape either.
+        assertTrue(VisitorLayout.dashboardHeaderStacked(800, 800))
     }
+
+    @Test
+    fun onlyAWideLandscapeWindowKeepsTheSingleRowHeader() {
+        assertFalse(VisitorLayout.dashboardHeaderStacked(1024, 768))
+        assertFalse(VisitorLayout.dashboardHeaderStacked(800, 600))
+        // A narrow landscape window has no room for the single row either.
+        assertTrue(VisitorLayout.dashboardHeaderStacked(568, 320))
+        assertTrue(VisitorLayout.dashboardHeaderStacked(480, 320))
+    }
+
+    @Test
+    fun breathingRoomIsAddedOnlyOutOfRealSlack() {
+        // A tall screen with compact content gets a generous gap...
+        assertEquals(32, VisitorLayout.groupGapDp(800, 400, 4))
+        // ...a snug one gets a small one...
+        assertEquals(8, VisitorLayout.groupGapDp(640, 600, 4))
+        // ...and a short screen keeps the tight layout rather than pushing the call button off.
+        assertEquals(0, VisitorLayout.groupGapDp(600, 600, 4))
+        assertEquals(0, VisitorLayout.groupGapDp(500, 600, 4))
+    }
+
+    @Test
+    fun theGapAlwaysComesFromTheDocumentedScale() {
+        for (available in 300..1200 step 7) {
+            val gap = VisitorLayout.groupGapDp(available, 400, 4)
+            assertTrue("gap $gap is off the scale",
+                       gap == 0 || VisitorLayout.SPACING_SCALE.contains(gap))
+        }
+    }
+
+    @Test
+    fun oneGroupNeedsNoGapAndSlackIsNeverFullySpent() {
+        assertEquals(0, VisitorLayout.groupGapDp(800, 100, 1))
+        // At most two thirds of the slack is spent, so the layout never sits flush to the edges.
+        val gap = VisitorLayout.groupGapDp(800, 400, 4)
+        assertTrue(gap * 3 <= (800 - 400))
+    }
+
+    @Test
+    fun aTileFitsWholeInTheSpaceAboveTheFooter() {
+        // Landscape: a short column, so the preview shrinks and the caption still fits.
+        // viewport 500, heading 96, caption+chips 130, gap 16 -> 258 for the preview.
+        assertEquals(258, VisitorLayout.tileStillHeightPx(500, 96, 130, 16, 1, 140, 400))
+        // Portrait: a tall column, so the preview stops at its ceiling rather than sprawling.
+        assertEquals(400, VisitorLayout.tileStillHeightPx(1400, 96, 130, 16, 1, 140, 400))
+        // Two or three cameras divide the usable height; a fleet larger than that sizes for
+        // three visible compact cards and lets the resident scroll the rest.
+        assertEquals(400, VisitorLayout.tileStillHeightPx(1400, 96, 130, 16, 2, 140, 400))
+        assertEquals(288, VisitorLayout.tileStillHeightPx(1400, 96, 130, 16, 3, 140, 400))
+        assertEquals(288, VisitorLayout.tileStillHeightPx(1400, 96, 130, 16, 30, 140, 400))
+    }
+
+    @Test
+    fun thePreviewNeverShrinksBelowItsFloorOrPastItsCeiling() {
+        // Even an absurdly short column keeps a usable preview; the column scrolls instead.
+        assertEquals(140, VisitorLayout.tileStillHeightPx(200, 96, 130, 16, 1, 140, 400))
+        // Not measured yet: the ceiling is the right default, and the caller runs again once the
+        // viewport has a height.
+        assertEquals(400, VisitorLayout.tileStillHeightPx(0, 96, 130, 16, 1, 140, 400))
+        for (viewport in 0..2000 step 13) {
+            val height = VisitorLayout.tileStillHeightPx(viewport, 96, 130, 16, 1, 140, 400)
+            assertTrue("out of range at $viewport", height in 140..400)
+        }
+    }
+
+    @Test
+    fun theCaptionRowIsNeverWhatGivesUpHeight() {
+        // Whatever the caption costs, the preview absorbs it: the tile total stays within the
+        // viewport until the preview hits its floor, and only then does the column scroll.
+        val viewport = 600
+        for (caption in 40..300 step 10) {
+            val still = VisitorLayout.tileStillHeightPx(viewport, 96, caption, 16, 1, 140, 400)
+            if (still > 140)
+                assertTrue("tile overflows with caption $caption",
+                           96 + caption + still + 16 <= viewport)
+        }
+    }
+
 }

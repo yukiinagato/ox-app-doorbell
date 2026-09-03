@@ -68,6 +68,8 @@ const GUID kAVEncMPVGOPSize = {
     0x95f31b26, 0x95a4, 0x41aa, {0x93, 0x03, 0x24, 0x6a, 0x7f, 0xc6, 0xee, 0xf1}};
 const GUID kAVLowLatencyMode = {
     0x9c27891a, 0xed7a, 0x40e1, {0x88, 0xe8, 0xb2, 0x27, 0x27, 0xa0, 0x24, 0xee}};
+const GUID kAVEncVideoForceKeyFrame = {
+    0x398c1b98, 0x8353, 0x475a, {0x9e, 0xf2, 0x8f, 0x26, 0x5d, 0x26, 0x03, 0x45}};
 constexpr UINT32 kRateControlCbr = 0;  // eAVEncCommonRateControlMode_CBR
 
 
@@ -101,6 +103,7 @@ void packNv12(const uint8_t* src, int w, int h, int stride, uint8_t* dst) {
 struct Mft {
   ComPtr<IMFTransform> xf;
   ComPtr<IMFMediaEventGenerator> gen;
+  ComPtr<ICodecAPI> codec_api;
   bool async = false;
   bool provides_samples = false;
   DWORD in_id = 0, out_id = 0;
@@ -194,22 +197,22 @@ bool configureMft(Mft* m, int w, int h, const EncoderWin::Params& p) {
     return false;
   }
 
-  ComPtr<ICodecAPI> capi;
-  if (SUCCEEDED(m->xf->QueryInterface(IID_ICodecAPI, reinterpret_cast<void**>(capi.put())))) {
+  if (SUCCEEDED(m->xf->QueryInterface(
+          IID_ICodecAPI, reinterpret_cast<void**>(m->codec_api.put())))) {
     VARIANT v;
     ::VariantInit(&v);
     v.vt = VT_UI4;
     v.ulVal = kRateControlCbr;
-    capi->SetValue(&kAVEncCommonRateControlMode, &v);
+    m->codec_api->SetValue(&kAVEncCommonRateControlMode, &v);
     v.ulVal = static_cast<ULONG>(p.bitrate_kbps) * 1000;
-    capi->SetValue(&kAVEncCommonMeanBitRate, &v);
+    m->codec_api->SetValue(&kAVEncCommonMeanBitRate, &v);
     v.ulVal = static_cast<ULONG>(p.fps * p.gop_s);
-    capi->SetValue(&kAVEncMPVGOPSize, &v);
+    m->codec_api->SetValue(&kAVEncMPVGOPSize, &v);
     VARIANT b;
     ::VariantInit(&b);
     b.vt = VT_BOOL;
     b.boolVal = VARIANT_TRUE;
-    capi->SetValue(&kAVLowLatencyMode, &b);
+    m->codec_api->SetValue(&kAVLowLatencyMode, &b);
   }
   MFT_OUTPUT_STREAM_INFO osi{};
   if (SUCCEEDED(m->xf->GetOutputStreamInfo(m->out_id, &osi))) {
@@ -255,6 +258,7 @@ void EncoderWin::start(const Params& p) {
     last_fed_ms_ = 0;
   }
   running_ = true;
+  keyframe_requested_ = false;
   th_ = std::thread([this] { run(); });
 }
 
@@ -359,6 +363,15 @@ void EncoderWin::run() {
     };
 
     auto feedOne = [&](const RawFrame& f) {
+      if (keyframe_requested_.exchange(false) && mft.codec_api) {
+        VARIANT force;
+        ::VariantInit(&force);
+        force.vt = VT_BOOL;
+        force.boolVal = VARIANT_TRUE;
+        HRESULT force_hr = mft.codec_api->SetValue(&kAVEncVideoForceKeyFrame, &force);
+        if (FAILED(force_hr))
+          DB_LOGW(kTag, "keyframe request failed: " + hrStr(force_hr));
+      }
       ComPtr<IMFSample> sample;
       if (!makeSample(f, params_.fps, sample.put())) return;
       HRESULT ihr = mft.xf->ProcessInput(mft.in_id, sample.get(), 0);

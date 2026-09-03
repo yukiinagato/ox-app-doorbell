@@ -473,13 +473,33 @@ TEST_CASE("store: scoped replies converge and never terminate a later call") {
   CHECK(ordered_a->terminal_reason == "reply");
   CHECK(reordered_a->terminal_reason == "reply");
 
-  EventRecord press_b = mkEv("cccccccc", 1, 3000);
+  EventRecord cancel_a = mkEv("aaaaaaaa", 2, 3000);
+  cancel_a.type = "call_cancelled";
+  cancel_a.payload_json =
+      R"({"schema_version":2,"call_id":"call-a","stage_revision":0,"reason":"visitor"})";
+  REQUIRE(ordered.eventPut(cancel_a));
+  const auto ordered_after_cancel = ordered.callProjection("call-a");
+  REQUIRE(ordered_after_cancel);
+  CHECK(ordered_after_cancel->state == "ended");
+  CHECK(ordered_after_cancel->terminal_reason == "reply");
+
+  Store cancel_first;
+  REQUIRE(cancel_first.open(":memory:"));
+  REQUIRE(cancel_first.eventPut(press_a));
+  REQUIRE(cancel_first.eventPut(cancel_a));
+  REQUIRE(cancel_first.eventPut(reply_a));
+  const auto cancel_first_projection = cancel_first.callProjection("call-a");
+  REQUIRE(cancel_first_projection);
+  CHECK(cancel_first_projection->state == "ended");
+  CHECK(cancel_first_projection->terminal_reason == "reply");
+
+  EventRecord press_b = mkEv("cccccccc", 1, 4000);
   press_b.payload_json = R"({"schema_version":2,"call_id":"call-b","stage_revision":0})";
   REQUIRE(ordered.eventPut(press_b));
   EventRecord delayed_reply_a = reply_a;
   delayed_reply_a.seq = 2;
-  delayed_reply_a.hlc = HlcClock::format(4000, 0, "bbbbbbbb");
-  delayed_reply_a.wall_ms = 4000;
+  delayed_reply_a.hlc = HlcClock::format(5000, 0, "bbbbbbbb");
+  delayed_reply_a.wall_ms = 5000;
   REQUIRE(ordered.eventPut(delayed_reply_a));
   const auto ordered_b = ordered.callProjection("call-b");
   REQUIRE(ordered_b);

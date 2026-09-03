@@ -233,3 +233,45 @@ for (const text of [qrText, "a", "x".repeat(300), "こんにちは QR"]) {
 assert.strictEqual(L.qrModules("z".repeat(3000)), null);
 
 console.log("pairing tests: ok");
+
+// ---- the pairing QR payload is core's, not the page's -------------------------------------
+// A device with the app installed must open a scanned code straight into the join flow, so the
+// format is defined once in core and the page renders whatever core published.
+{
+  const snapshot = {
+    state: "ready", paired: true, persistence_ready: true, is_founder: true,
+    self: { id: "a".repeat(32), addr: "10.0.1.10:47172", name: "front", role: "door_station" },
+    home: { member_count: 2, connected_count: 2 },
+    token: { active: true, pin: "123456", host: "10.0.1.10:47172", expires_s: 90,
+             attempts_left: 3,
+             uri: "doorbell://pair?host=10.0.1.10%3A47172&pin=123456&exp=1772000000" +
+                  "&cluster=%E4%BA%AC%E9%98%AA%E3%83%8F%E3%82%A6%E3%82%B9" },
+    pending: { pairing_mode: false, pairing_mode_left_s: 0, auto_added_count: 0, devices: [] }
+  };
+  const model = L.pairPanelModel(snapshot, { now: Date.now() });
+  assert.strictEqual(model.token.uri, snapshot.token.uri,
+    "the card renders core's uri verbatim");
+  // The printed host and PIN stay, for someone scanning with a plain camera app.
+  assert.strictEqual(model.token.host, "10.0.1.10:47172");
+  assert.strictEqual(model.token.pin, "123456");
+
+  // An expired or absent token carries no code to render.
+  const inactive = L.pairPanelModel(
+    Object.assign({}, snapshot, { token: { active: false, uri: snapshot.token.uri } }),
+    { now: Date.now() });
+  assert.strictEqual(inactive.token.uri, "");
+  const legacy = L.pairPanelModel(
+    Object.assign({}, snapshot, { token: { active: true, pin: "123456", expires_s: 90 } }),
+    { now: Date.now() });
+  assert.strictEqual(legacy.token.uri, "", "an older core that sends no uri renders no code");
+
+  // The page must not assemble the URI itself.
+  const source = fs.readFileSync(path.join(__dirname, "../admin/app.js"), "utf8");
+  assert.ok(/drawPairQr\(\$\("#pairCodeQr"\), m\.token\.uri\)/.test(source),
+    "the PIN card must draw core's uri");
+  const assembled = source.match(/"doorbell:\/\/pair\?host="/g) || [];
+  assert.strictEqual(assembled.length, 1,
+    "only the mock may build a doorbell://pair URI; the live path uses core's");
+}
+
+console.log("pairing uri tests: ok");

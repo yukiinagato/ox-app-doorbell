@@ -8,6 +8,29 @@ using DoorbellApp.Core;
 namespace DoorbellApp.Util
 {
     /// <summary>
+    /// What a background looks like under one text region: the average that decides the ink, and
+    /// the darkest and lightest patch of the 16x16 sample, which decide whether it needs an
+    /// outline. A flat surface is the degenerate case where all three agree.
+    /// </summary>
+    internal sealed class BackgroundSample
+    {
+        public Color Average;
+        public double DarkestLuminance;
+        public double LightestLuminance;
+
+        public static BackgroundSample Uniform(Color colour)
+        {
+            double luminance = ThemeContrast.Luminance(colour);
+            return new BackgroundSample
+            {
+                Average = colour,
+                DarkestLuminance = luminance,
+                LightestLuminance = luminance,
+            };
+        }
+    }
+
+    /// <summary>
     /// The ink one text region is drawn in, and whether it still needs the thin outline that
     /// keeps it legible when even the better ink misses the 4.5:1 body-text target.
     /// </summary>
@@ -77,19 +100,54 @@ namespace DoorbellApp.Util
                    0.0722 * Channel(color.B);
         }
 
+        /// <summary>
+        /// The ink token that actually reads better on a background: whichever of the two has the
+        /// higher WCAG contrast ratio against it. A luminance threshold at 0.5 gets this wrong in
+        /// the middle of the range — a wallpaper averaging #BBBBB4 sits at Y = 0.494 and would
+        /// take light ink at 1.7:1 where dark ink gives 9.0:1. The true crossover for these
+        /// tokens is near Y = 0.179, and comparing the ratios finds it exactly.
+        /// </summary>
+        public static Color BetterInk(Color background)
+        {
+            return Ratio(DarkInk, background) >= Ratio(LightInk, background) ? DarkInk : LightInk;
+        }
+
         public static double Ratio(Color first, Color second)
         {
-            double a = Luminance(first), b = Luminance(second);
-            return (Math.Max(a, b) + 0.05) / (Math.Min(a, b) + 0.05);
+            return RatioOf(Luminance(first), Luminance(second));
         }
 
         /// <summary>
-        /// Average colour of an image, sampled at no more than 16x16 as the spec requires. Returns
-        /// false when the source cannot be sampled, so the caller keeps the theme colour.
+        /// The neutral grey with the given relative luminance. The three coefficients sum to one,
+        /// so for a grey the luminance is just the linearised channel, and this inverts it.
         /// </summary>
-        public static bool TryAverage(BitmapSource source, out Color average)
+        public static Color GreyOfLuminance(double luminance)
         {
-            average = Colors.Black;
+            if (luminance < 0) luminance = 0;
+            if (luminance > 1) luminance = 1;
+            double channel = luminance <= 0.0031308
+                ? luminance * 12.92
+                : 1.055 * Math.Pow(luminance, 1.0 / 2.4) - 0.055;
+            int value = (int)Math.Round(channel * 255.0);
+            if (value < 0) value = 0;
+            if (value > 255) value = 255;
+            return Color.FromRgb((byte)value, (byte)value, (byte)value);
+        }
+
+        /// <summary>WCAG contrast between two relative luminances.</summary>
+        public static double RatioOf(double first, double second)
+        {
+            return (Math.Max(first, second) + 0.05) / (Math.Min(first, second) + 0.05);
+        }
+
+        /// <summary>
+        /// Sample an image at no more than 16x16 as the spec requires, keeping the average colour
+        /// and the darkest and lightest patch. Returns false when the source cannot be sampled,
+        /// so the caller keeps the theme colour.
+        /// </summary>
+        public static bool TrySample(BitmapSource source, out BackgroundSample sample)
+        {
+            sample = BackgroundSample.Uniform(Colors.Black);
             if (source == null) return false;
             try
             {
@@ -102,19 +160,42 @@ namespace DoorbellApp.Util
                 int stride = width * 4;
                 var pixels = new byte[stride * height];
                 converted.CopyPixels(pixels, stride, 0);
-                long r = 0, g = 0, b = 0;
                 int count = width * height;
+                if (count == 0) return false;
+                long r = 0, g = 0, b = 0;
+                double darkest = 1.0, lightest = 0.0;
                 for (int i = 0; i < count; i++)
                 {
-                    b += pixels[i * 4];
-                    g += pixels[i * 4 + 1];
-                    r += pixels[i * 4 + 2];
+                    byte blue = pixels[i * 4];
+                    byte green = pixels[i * 4 + 1];
+                    byte red = pixels[i * 4 + 2];
+                    b += blue;
+                    g += green;
+                    r += red;
+                    double patch = 0.2126 * Channel(red) + 0.7152 * Channel(green) +
+                                   0.0722 * Channel(blue);
+                    if (patch < darkest) darkest = patch;
+                    if (patch > lightest) lightest = patch;
                 }
-                if (count == 0) return false;
-                average = Color.FromRgb((byte)(r / count), (byte)(g / count), (byte)(b / count));
+                sample = new BackgroundSample
+                {
+                    Average = Color.FromRgb((byte)(r / count), (byte)(g / count),
+                                            (byte)(b / count)),
+                    DarkestLuminance = darkest,
+                    LightestLuminance = lightest,
+                };
                 return true;
             }
             catch { return false; }
+        }
+
+        /// <summary>The average alone, for callers that only need one flat colour.</summary>
+        public static bool TryAverage(BitmapSource source, out Color average)
+        {
+            BackgroundSample sample;
+            bool ok = TrySample(source, out sample);
+            average = sample.Average;
+            return ok;
         }
 
         /// <summary>
@@ -122,14 +203,14 @@ namespace DoorbellApp.Util
         /// its automatic ink from the whole image because it has no layout geometry, which reads
         /// white over a light corner; the shell has the geometry, so it refines per region.
         /// </summary>
-        public static bool TryAverageRegion(BitmapSource source, Int32Rect crop,
-                                            out Color average)
+        public static bool TrySampleRegion(BitmapSource source, Int32Rect crop,
+                                           out BackgroundSample sample)
         {
-            average = Colors.Black;
+            sample = BackgroundSample.Uniform(Colors.Black);
             if (source == null || crop.Width <= 0 || crop.Height <= 0) return false;
             try
             {
-                return TryAverage(new CroppedBitmap(source, crop), out average);
+                return TrySample(new CroppedBitmap(source, crop), out sample);
             }
             catch (ArgumentException) { return false; }
             catch (InvalidOperationException) { return false; }
@@ -173,6 +254,13 @@ namespace DoorbellApp.Util
         public static InkDecision Decide(Dictionary<string, object> display, string regionId,
                                          Color background, bool decideLocally)
         {
+            return Decide(display, regionId, BackgroundSample.Uniform(background), decideLocally);
+        }
+
+        public static InkDecision Decide(Dictionary<string, object> display, string regionId,
+                                         BackgroundSample sample, bool decideLocally)
+        {
+            Color background = sample.Average;
             var decision = new InkDecision();
             Color parsed;
             object over = CoreClient.Dig(display, "theme.ink_override." + regionId);
@@ -190,23 +278,44 @@ namespace DoorbellApp.Util
                 else if (token == "dark") { decision.Ink = DarkInk; decision.Source = "core"; }
                 else
                 {
-                    decision.Ink = Luminance(background) >= 0.5 ? DarkInk : LightInk;
+                    decision.Ink = BetterInk(background);
                     decision.Source = decideLocally ? "local_region" : "local";
                 }
             }
-            decision.Shadow = Luminance(decision.Ink) >= 0.5 ? DarkInk : LightInk;
-            decision.NeedsShadow = Ratio(decision.Ink, background) < 4.5;
+            // The outline is the opposite of whatever ink was chosen, including an admin colour.
+            decision.Shadow = BetterInk(decision.Ink);
+            // The ink is chosen against the average, but legibility is judged against every patch
+            // of the region: text that spans a light and a dark part of a photograph fails over
+            // one of them even when the average reads well. Contrast falls off monotonically away
+            // from the ink's own luminance, so the worst patch is one of the two extremes.
+            double ink = Luminance(decision.Ink);
+            decision.NeedsShadow = RatioOf(ink, sample.DarkestLuminance) < 4.5 ||
+                                   RatioOf(ink, sample.LightestLuminance) < 4.5;
             return decision;
         }
 
         /// <summary>
+        /// False when core reports auto_background.source "image_unsampled": a background image is
+        /// configured but core could not read it, so its colour, auto_ink and auto_accent all came
+        /// from the flat theme colour and describe nothing that is on screen. Shells must then
+        /// sample locally instead of trusting the published values.
+        /// </summary>
+        public static bool CoreSampledBackground(Dictionary<string, object> display)
+        {
+            object source = CoreClient.Dig(display, "theme.auto_background.source");
+            return source == null || source.ToString() != "image_unsampled";
+        }
+
+        /// <summary>
         /// The background core actually measured, image averaging included. Falls back to the
-        /// caller's own sample when the contract has no auto_background.
+        /// caller's own sample when the contract has no auto_background, or when core says it
+        /// never read the configured image.
         /// </summary>
         public static bool TryContractBackground(Dictionary<string, object> display,
                                                  out Color background)
         {
             background = Colors.Black;
+            if (!CoreSampledBackground(display)) return false;
             object value = CoreClient.Dig(display, "theme.auto_background.color");
             return value != null && TryParse(value.ToString(), out background);
         }
@@ -215,9 +324,24 @@ namespace DoorbellApp.Util
         /// Door-station call-button colour. Precedence: per-device override, cluster override, the
         /// core-published automatic accent, then the local complement computation.
         /// </summary>
-        public static Color CallButton(Dictionary<string, object> display, Color background)
+        public static Color CallButton(Dictionary<string, object> display,
+                                       Dictionary<string, object> config, string nodeId,
+                                       Color background)
         {
             Color parsed;
+            // An administrator's colour always applies. Core folds it into theme.call_button_bg,
+            // but that field also carries the computed accent, so when core never read the
+            // background image the override is taken from configuration instead.
+            if (!CoreSampledBackground(display))
+            {
+                object over = null;
+                if (!string.IsNullOrEmpty(nodeId))
+                    over = CoreClient.Dig(config,
+                        "devices." + nodeId + ".local.theme.call_button_bg");
+                if (over == null) over = CoreClient.Dig(config, "display.theme.call_button_bg");
+                if (over != null && TryParse(over.ToString(), out parsed)) return parsed;
+                return LocalAccent(background);
+            }
             // theme.call_button_bg is what core says to paint: the override when there is one,
             // otherwise the computed accent.
             object value = CoreClient.Dig(display, "theme.call_button_bg");
@@ -233,11 +357,15 @@ namespace DoorbellApp.Util
         /// </summary>
         public static Color CallButtonInk(Dictionary<string, object> display, Color fill)
         {
-            object value = CoreClient.Dig(display, "theme.call_button_ink");
-            if (value == null) value = CoreClient.Dig(display, "theme.auto_accent.call_button_ink");
-            string token = value == null ? "" : value.ToString();
-            if (token == "light") return Colors.White;
-            if (token == "dark") return Colors.Black;
+            if (CoreSampledBackground(display))
+            {
+                object value = CoreClient.Dig(display, "theme.call_button_ink");
+                if (value == null)
+                    value = CoreClient.Dig(display, "theme.auto_accent.call_button_ink");
+                string token = value == null ? "" : value.ToString();
+                if (token == "light") return Colors.White;
+                if (token == "dark") return Colors.Black;
+            }
             return TextOn(fill);
         }
 
@@ -252,7 +380,7 @@ namespace DoorbellApp.Util
             ToHsl(background, out h, out s, out l);
             h = (h + 180.0) % 360.0;
             if (s < 0.25) s = 0.55;
-            bool preferDark = Luminance(background) >= 0.5;
+            bool preferDark = BetterInk(background) == DarkInk;
             Color best = FromHsl(h, s, preferDark ? 0.2 : 0.8);
             double bestScore = -1;
             for (int step = 0; step <= 20; step++)
