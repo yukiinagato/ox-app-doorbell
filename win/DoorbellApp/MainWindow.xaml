@@ -121,30 +121,33 @@
                             <StackPanel Orientation="Horizontal">
                                 <StackPanel x:Name="ClusterCounter" Orientation="Horizontal"
                                             VerticalAlignment="Center">
-                                    <Path Width="16" Height="16" Stretch="Uniform"
-                                          VerticalAlignment="Center"
-                                          Fill="{DynamicResource Dim}"
-                                          Data="F1 M5.5,3.5 A2.5,2.5 0 1 0 10.5,3.5 A2.5,2.5 0 1 0 5.5,3.5 Z M1,12 A2.5,2.5 0 1 0 6,12 A2.5,2.5 0 1 0 1,12 Z M10,12 A2.5,2.5 0 1 0 15,12 A2.5,2.5 0 1 0 10,12 Z M7.2,5.6 L3.2,10.2 L4.4,11.1 L8.4,6.5 Z M8.8,5.6 L12.8,10.2 L11.6,11.1 L7.6,6.5 Z"/>
+                                    <Viewbox Width="16" Height="16" VerticalAlignment="Center">
+                                        <Path Data="{StaticResource Tabler.hierarchy-2}" Stroke="{DynamicResource Dim}"
+                                              StrokeThickness="2" StrokeStartLineCap="Round"
+                                              StrokeEndLineCap="Round" StrokeLineJoin="Round"/>
+                                    </Viewbox>
                                     <TextBlock x:Name="ClusterCountText" FontSize="14"
                                                Margin="6,0,0,0" VerticalAlignment="Center"
                                                Foreground="{DynamicResource Fg}"/>
                                 </StackPanel>
                                 <StackPanel x:Name="DoorCounter" Orientation="Horizontal"
                                             Margin="14,0,0,0" VerticalAlignment="Center">
-                                    <Path Width="16" Height="16" Stretch="Uniform"
-                                          VerticalAlignment="Center"
-                                          Fill="{DynamicResource Dim}"
-                                          Data="F0 M3.5,1 L12.5,1 L12.5,15 L3.5,15 Z M9.7,8 A0.9,0.9 0 1 0 11.5,8 A0.9,0.9 0 1 0 9.7,8 Z"/>
+                                    <Viewbox Width="16" Height="16" VerticalAlignment="Center">
+                                        <Path Data="{StaticResource Tabler.door}" Stroke="{DynamicResource Dim}"
+                                              StrokeThickness="2" StrokeStartLineCap="Round"
+                                              StrokeEndLineCap="Round" StrokeLineJoin="Round"/>
+                                    </Viewbox>
                                     <TextBlock x:Name="DoorCountText" FontSize="14"
                                                Margin="6,0,0,0" VerticalAlignment="Center"
                                                Foreground="{DynamicResource Fg}"/>
                                 </StackPanel>
                                 <StackPanel x:Name="PanelCounter" Orientation="Horizontal"
                                             Margin="14,0,0,0" VerticalAlignment="Center">
-                                    <Path Width="16" Height="16" Stretch="Uniform"
-                                          VerticalAlignment="Center"
-                                          Fill="{DynamicResource Dim}"
-                                          Data="F0 M1.5,2.5 L14.5,2.5 L14.5,11.5 L1.5,11.5 Z M3.5,4.5 L12.5,4.5 L12.5,9.5 L3.5,9.5 Z M6,12.5 L10,12.5 L10,14.5 L6,14.5 Z"/>
+                                    <Viewbox Width="16" Height="16" VerticalAlignment="Center">
+                                        <Path Data="{StaticResource Tabler.device-tablet}" Stroke="{DynamicResource Dim}"
+                                              StrokeThickness="2" StrokeStartLineCap="Round"
+                                              StrokeEndLineCap="Round" StrokeLineJoin="Round"/>
+                                    </Viewbox>
                                     <TextBlock x:Name="PanelCountText" FontSize="14"
                                                Margin="6,0,0,0" VerticalAlignment="Center"
                                                Foreground="{DynamicResource Fg}"/>
@@ -335,13 +338,22 @@
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                             <Border x:Name="PurposeBadge" Visibility="Collapsed"
                                     Background="#2A3A4C" CornerRadius="8" Padding="12,6">
-                                <TextBlock x:Name="PurposeBadgeText" FontSize="18"
-                                           Foreground="#F2F5F8"/>
+                                <StackPanel x:Name="PurposeBadgeContent"
+                                            Orientation="Horizontal"/>
                             </Border>
                             <Border x:Name="LangBadge" Visibility="Collapsed" Background="#2A3A4C"
                                     CornerRadius="8" Padding="12,6" Margin="10,0,0,0">
-                                <TextBlock x:Name="LangBadgeText" FontSize="18"
-                                           Foreground="#F2F5F8"/>
+                                <StackPanel Orientation="Horizontal">
+                                    <Viewbox Width="18" Height="18" VerticalAlignment="Center">
+                                        <Path Data="{StaticResource Tabler.world}"
+                                              Stroke="#F2F5F8" StrokeThickness="2"
+                                              StrokeStartLineCap="Round"
+                                              StrokeEndLineCap="Round" StrokeLineJoin="Round"/>
+                                    </Viewbox>
+                                    <TextBlock x:Name="LangBadgeText" FontSize="18"
+                                               Margin="8,0,0,0" VerticalAlignment="Center"
+                                               Foreground="#F2F5F8"/>
+                                </StackPanel>
                             </Border>
                         </StackPanel>
                     </Grid>
@@ -393,8 +405,7 @@
                     <Border x:Name="InCallPurposeBadge" Visibility="Collapsed"
                             Background="#2A3A4C" CornerRadius="8" Padding="12,6"
                             HorizontalAlignment="Left" VerticalAlignment="Center">
-                        <TextBlock x:Name="InCallPurposeText" FontSize="18"
-                                   Foreground="#F2F5F8"/>
+                        <StackPanel x:Name="InCallPurposeContent" Orientation="Horizontal"/>
                     </Border>
                 </Grid>
             </StackPanel>

@@ -841,6 +841,50 @@ namespace DoorbellApp
                 !string.IsNullOrEmpty(_activeCallId) ? Visibility.Visible : Visibility.Collapsed;
         }
 
+        /// <summary>
+        /// The Tabler icon for a purpose core seeds. An administrator's own purpose keeps whatever
+        /// icon they typed, because there is nothing to map it to.
+        /// </summary>
+        private static string PurposeIconKey(string id)
+        {
+            switch (id)
+            {
+                case "p_visit": return "Tabler.home";
+                case "p_delivery": return "Tabler.package";
+                case "p_mail": return "Tabler.mail";
+                default: return null;
+            }
+        }
+
+        /// <summary>
+        /// A Tabler geometry drawn the way the whole fleet draws them: stroked, never filled,
+        /// two units thick with round caps and joins, inside a Viewbox so the stroke scales with
+        /// the icon. Returns null when the key is not in the generated dictionary.
+        /// </summary>
+        private FrameworkElement TablerIcon(string key, double size, Brush stroke)
+        {
+            if (string.IsNullOrEmpty(key)) return null;
+            object geometry = TryFindResource(key);
+            if (!(geometry is Geometry)) return null;
+            var path = new System.Windows.Shapes.Path
+            {
+                Data = (Geometry)geometry,
+                Stroke = stroke,
+                StrokeThickness = 2,
+                StrokeStartLineCap = PenLineCap.Round,
+                StrokeEndLineCap = PenLineCap.Round,
+                StrokeLineJoin = PenLineJoin.Round,
+            };
+            return new Viewbox
+            {
+                Width = size,
+                Height = size,
+                Child = path,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+            };
+        }
+
         private Button MakePurposeButton(string id, string icon, string label)
         {
             var panel = new StackPanel
@@ -848,7 +892,10 @@ namespace DoorbellApp
                 HorizontalAlignment = HorizontalAlignment.Center,
                 VerticalAlignment = VerticalAlignment.Center,
             };
-            if (!string.IsNullOrEmpty(icon))
+            FrameworkElement glyph = TablerIcon(PurposeIconKey(id), 34,
+                                                (Brush)FindResource("Fg"));
+            if (glyph != null) panel.Children.Add(glyph);
+            else if (!string.IsNullOrEmpty(icon))
                 panel.Children.Add(new TextBlock
                 {
                     Text = icon,
@@ -2337,10 +2384,7 @@ namespace DoorbellApp
             else
             {
                 string label = LabelOf(entry, App.Boot.UiLang, _incomingPurpose);
-                object icon;
-                string iconText = entry != null && entry.TryGetValue("icon", out icon) && icon != null
-                    ? icon.ToString() + " " : "";
-                PurposeBadgeText.Text = iconText + label;
+                FillPurposeBadge(PurposeBadgeContent, entry, _incomingPurpose, label);
                 PurposeBadge.ToolTip = Texts.T("ring.purpose_badge", label);
                 PurposeBadge.Visibility = Visibility.Visible;
             }
@@ -2351,10 +2395,49 @@ namespace DoorbellApp
             }
             else
             {
-                LangBadgeText.Text = "🌐 " + _incomingLang.ToUpperInvariant();
+                LangBadgeText.Text = _incomingLang.ToUpperInvariant();
                 LangBadge.ToolTip = Texts.T("ring.lang_badge", LangDisplayName(_incomingLang));
                 LangBadge.Visibility = Visibility.Visible;
             }
+        }
+
+        /// <summary>
+        /// One purpose badge: the Tabler icon for a seeded purpose, or an administrator's own
+        /// icon text when there is nothing to map, then the label.
+        /// </summary>
+        private void FillPurposeBadge(System.Windows.Controls.Panel into,
+                                      Dictionary<string, object> entry, string id, string label)
+        {
+            if (into == null) return;
+            into.Children.Clear();
+            var stroke = ThemeContrast.Brush(Color.FromRgb(0xF2, 0xF5, 0xF8));
+            FrameworkElement glyph = TablerIcon(PurposeIconKey(id), 18, stroke);
+            if (glyph != null)
+            {
+                into.Children.Add(glyph);
+            }
+            else
+            {
+                object icon;
+                string iconText = entry != null && entry.TryGetValue("icon", out icon) &&
+                                  icon != null ? icon.ToString() : "";
+                if (iconText.Length != 0)
+                    into.Children.Add(new TextBlock
+                    {
+                        Text = iconText,
+                        FontSize = 18,
+                        VerticalAlignment = VerticalAlignment.Center,
+                        Foreground = stroke,
+                    });
+            }
+            into.Children.Add(new TextBlock
+            {
+                Text = label,
+                FontSize = 18,
+                Margin = new Thickness(into.Children.Count == 0 ? 0 : 8, 0, 0, 0),
+                VerticalAlignment = VerticalAlignment.Center,
+                Foreground = stroke,
+            });
         }
 
         private void BuildQuickReplies()

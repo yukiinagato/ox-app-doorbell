@@ -987,6 +987,8 @@ class WindowsContracts(unittest.TestCase):
         pill = xaml[xaml.index('<Border x:Name="MembershipStatus"'):
                     xaml.index('<Border x:Name="MissedBadge"')]
         self.assertEqual(pill.count("<Path "), 3)
+        for key in ("Tabler.hierarchy-2", "Tabler.door", "Tabler.device-tablet"):
+            self.assertIn("{StaticResource %s}" % key, pill)
         for glyph in pill:
             self.assertLess(ord(glyph), 0x2190, "counter icons must be vector paths, not emoji")
         # Screen readers get the meaning in the operator's language.
@@ -1465,6 +1467,77 @@ class WindowsContracts(unittest.TestCase):
         self.assertIn("if (!CoreSampledBackground(display))", button)
         self.assertIn('"devices." + nodeId + ".local.theme.call_button_bg"', button)
         self.assertIn("return LocalAccent(background);", button)
+
+    def test_icons_are_tabler_geometries_never_hand_drawn(self):
+        icons = read("win/DoorbellApp/Resources/Icons.xaml")
+        window = read("win/DoorbellApp/MainWindow.xaml")
+        app = read("win/DoorbellApp/App.xaml")
+        admin = read("win/DoorbellApp/AdminDialog.xaml")
+        code = read("win/DoorbellApp/MainWindow.xaml.cs")
+
+        # Every icon lives in the generated dictionary, keyed the way tools/gen_icons.py emits.
+        keys = set(re.findall(r'<Geometry x:Key="([^"]+)"', icons))
+        self.assertTrue(keys, "Icons.xaml must define geometries")
+        for key in keys:
+            with self.subTest(key=key):
+                self.assertTrue(key.startswith("Tabler."), key)
+        for required in ("Tabler.hierarchy-2", "Tabler.door", "Tabler.device-tablet",
+                         "Tabler.chevrons-right", "Tabler.backspace", "Tabler.home",
+                         "Tabler.package", "Tabler.mail", "Tabler.world"):
+            self.assertIn(required, keys)
+        # Tabler's bounding-box rectangle would draw as a stroked square.
+        for geometry in re.findall(r"<Geometry [^>]*>([^<]*)</Geometry>", icons):
+            with self.subTest(geometry=geometry[:30]):
+                self.assertNotIn("M0 0h24v24H0z", geometry)
+        self.assertIn("tools/gen_icons.py", icons)
+        self.assertIn("Resources/Icons.xaml", app)
+
+        # No icon geometry is authored inline any more, anywhere in the shell.
+        for name, text in (("MainWindow.xaml", window), ("App.xaml", app),
+                           ("AdminDialog.xaml", admin), ("NoticeDialog.xaml",
+                            read("win/DoorbellApp/NoticeDialog.xaml")),
+                           ("WebAdminWindow.xaml",
+                            read("win/DoorbellApp/WebAdminWindow.xaml"))):
+            for match in re.findall(r'Data="([^"]*)"', text):
+                with self.subTest(name=name, data=match[:40]):
+                    self.assertTrue(match.startswith("{StaticResource Tabler."),
+                                    "%s draws a hand-authored path" % name)
+        self.assertNotIn("<Path Data=\"M", window)
+        self.assertNotIn("<Path Data=\"F", window)
+
+        # Tabler is stroke-based, so every icon is stroked and never filled, two units thick with
+        # round caps and joins, inside a Viewbox so the stroke scales with the icon.
+        for name, text in (("MainWindow.xaml", window), ("App.xaml", app),
+                           ("AdminDialog.xaml", admin)):
+            for block in re.findall(r"<Path\b[^>]*/>", text):
+                with self.subTest(name=name):
+                    self.assertIn("Stroke=", block)
+                    self.assertNotIn("Fill=", block)
+                    self.assertIn('StrokeThickness="2"', block)
+                    self.assertIn('StrokeStartLineCap="Round"', block)
+                    self.assertIn('StrokeLineJoin="Round"', block)
+            self.assertEqual(text.count("<Path "), text.count("<Viewbox "))
+
+        # The glyphs that used to stand in for icons are gone.
+        self.assertNotIn("»", app)
+        self.assertNotIn("⌫", admin)
+        self.assertNotIn("🌐", code)
+
+        # Icons built in code take the same shape, and a seeded purpose gets a real icon.
+        builder = code[code.index("private FrameworkElement TablerIcon("):
+                       code.index("private Button MakePurposeButton(")]
+        self.assertIn("StrokeThickness = 2,", builder)
+        self.assertIn("PenLineCap.Round", builder)
+        self.assertIn("PenLineJoin.Round", builder)
+        self.assertIn("new Viewbox", builder)
+        self.assertNotIn("Fill =", builder)
+        mapped = code[code.index("private static string PurposeIconKey("):
+                      code.index("private FrameworkElement TablerIcon(")]
+        for purpose, key in (("p_visit", "Tabler.home"), ("p_delivery", "Tabler.package"),
+                             ("p_mail", "Tabler.mail")):
+            self.assertIn('case "%s": return "%s";' % (purpose, key), mapped)
+        # An administrator's own purpose keeps whatever icon they typed.
+        self.assertIn("default: return null;", mapped)
 
     def test_the_theme_backdrop_is_admin_configurable(self):
         shell = read("win/DoorbellApp/MainWindow.Shell.cs")
