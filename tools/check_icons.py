@@ -16,6 +16,10 @@ Shapes that are not icons -- a progress ring, a waveform, a slide-to-trigger tra
 and are listed in ALLOWED below, with the reason. Add to that list deliberately, not to make a
 red build go away.
 
+Comments are stripped before anything is matched. A doc comment that says "this used to be drawn
+with UIBezierPath and is a template image now" is a record of the rule being followed, and
+flagging it would teach people to stop writing that sentence.
+
   python3 tools/check_icons.py            check the whole tree
   python3 tools/check_icons.py --base REF  check only files changed since REF
 """
@@ -83,10 +87,109 @@ def all_files():
     return [line for line in out.decode("utf-8").splitlines() if line]
 
 
+C_FAMILY_SUFFIXES = (".m", ".mm", ".swift", ".h", ".js", ".css")
+MARKUP_SUFFIXES = (".xml", ".xaml", ".html", ".htm", ".svg")
+HASH_SUFFIXES = (".py", ".sh", ".yml", ".yaml")
+
+
+def strip_comments(text, rel):
+    """Blank out comment bodies, leaving every other character at its original offset.
+
+    Offsets are preserved rather than the comments deleted, so a line number counted in the
+    result still points at the line it does in the file. Which comment syntax applies is decided
+    by extension: "//" is only a comment in the C family, because in markup it is the middle of
+    every http:// URL, and "#" is only a comment where "#RRGGBB" is not a colour.
+    """
+    chars = list(text)
+    length = len(text)
+    lower_name = rel.lower()
+
+    def blank(start, end):
+        for index in range(start, min(end, length)):
+            if chars[index] != "\n":
+                chars[index] = " "
+
+    # In a view file a string literal is prose, never drawing code, so its contents are blanked
+    # as well -- "removed the UIBezierPath" in a log line is not a finding. Script and style
+    # files are different: webui builds real SVG markup inside string literals, and blanking
+    # those would hide an icon typed out there by hand, which is the very thing being looked for.
+    blank_strings = lower_name.endswith((".m", ".mm", ".swift", ".h"))
+
+    def skip_quoted(index, quote):
+        start = index
+        index += 1
+        while index < length:
+            if text[index] == "\\":
+                index += 2
+                continue
+            if text[index] == quote or text[index] == "\n":
+                index += 1
+                break
+            index += 1
+        if blank_strings:
+            blank(start, index)
+        return index
+
+    def blank_pair(opener, closer):
+        index = text.find(opener)
+        while index >= 0:
+            end = text.find(closer, index + len(opener))
+            end = length if end < 0 else end + len(closer)
+            blank(index, end)
+            index = text.find(opener, end)
+
+    if lower_name.endswith(C_FAMILY_SUFFIXES):
+        index = 0
+        while index < length:
+            char = text[index]
+            if char in "\"'":
+                index = skip_quoted(index, char)
+                continue
+            if char == "/" and index + 1 < length:
+                following = text[index + 1]
+                if following == "/":
+                    end = text.find("\n", index)
+                    end = length if end < 0 else end
+                    blank(index, end)
+                    index = end
+                    continue
+                if following == "*":
+                    end = text.find("*/", index + 2)
+                    end = length if end < 0 else end + 2
+                    blank(index, end)
+                    index = end
+                    continue
+            index += 1
+    elif lower_name.endswith(MARKUP_SUFFIXES):
+        blank_pair("<!--", "-->")
+        # Style blocks inside a page use C-style comments; URLs make "//" unsafe here.
+        blank_pair("/*", "*/")
+    elif lower_name.endswith(HASH_SUFFIXES):
+        index = 0
+        while index < length:
+            char = text[index]
+            if char in "\"'":
+                index = skip_quoted(index, char)
+                continue
+            if char == "#":
+                end = text.find("\n", index)
+                end = length if end < 0 else end
+                blank(index, end)
+                index = end
+                continue
+            index += 1
+    return "".join(chars)
+
+
 def read(rel):
+    """File contents, or None when the file is binary or unreadable.
+
+    A path that does not exist is a caller error, not an empty file: a test that names a file
+    the tree no longer has would otherwise pass by finding nothing in it.
+    """
     path = os.path.join(ROOT, rel)
     if not os.path.isfile(path):
-        return None
+        raise FileNotFoundError(path)
     try:
         with open(path, "r", encoding="utf-8") as handle:
             return handle.read()
@@ -95,13 +198,16 @@ def read(rel):
 
 
 def violations_in(rel):
+    """Findings for one existing file. Raises FileNotFoundError if the path is not there."""
+    text = read(rel)
     if allowed(rel):
         return []
-    text = read(rel)
     if text is None:
         return []
+    # The marker lives in a comment, so it is looked for before the comments are stripped.
     if GENERATED_MARKER in text:
         return []
+    text = strip_comments(text, rel)
     found = []
     if is_view_file(rel):
         for pattern, what in IOS_PATTERNS:
@@ -137,6 +243,9 @@ def main():
 
     found = []
     for rel in files:
+        # A diff against the base names files it deleted; there is nothing left to check.
+        if not os.path.isfile(os.path.join(ROOT, rel)):
+            continue
         found.extend(violations_in(rel))
 
     if not found:

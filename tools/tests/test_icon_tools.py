@@ -1,8 +1,10 @@
 """The icon pipeline: the path parser, the generator's outputs, and the hand-drawn-icon check."""
 
 import os
+import shutil
 import subprocess
 import sys
+import tempfile
 import unittest
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -118,19 +120,112 @@ class GenIconsTest(unittest.TestCase):
 
 
 class CheckIconsTest(unittest.TestCase):
+    """The checker is exercised against fixtures this test writes.
+
+    It used to name ic_count_cluster.xml in the repository, which passed only for as long as
+    that hand-drawn drawable existed -- the Android shell replaced it with the generated one and
+    the test started asserting that an absent file contains no icons. A test of "this is
+    refused" has to own the thing being refused.
+    """
+
+    def setUp(self):
+        self.tree = tempfile.mkdtemp(prefix="icon-check-")
+        self.real_root = check_icons.ROOT
+        check_icons.ROOT = self.tree
+        self.addCleanup(self._restore)
+
+    def _restore(self):
+        check_icons.ROOT = self.real_root
+        shutil.rmtree(self.tree, ignore_errors=True)
+
+    def fixture(self, rel, text):
+        path = os.path.join(self.tree, rel)
+        directory = os.path.dirname(path)
+        if not os.path.isdir(directory):
+            os.makedirs(directory)
+        with open(path, "w", encoding="utf-8") as handle:
+            handle.write(text)
+        return rel
+
+    def test_a_hand_drawn_drawable_is_flagged(self):
+        rel = self.fixture(
+            "android/app/src/main/res/drawable/ic_count_cluster.xml",
+            '<?xml version="1.0" encoding="utf-8"?>\n'
+            '<vector xmlns:android="http://schemas.android.com/apk/res/android">\n'
+            '    <path android:fillColor="#FFFFFFFF"\n'
+            '        android:pathData="M12,9m-2.6,0a2.6,2.6 0 1,0 5.2,0a2.6,2.6 0 1,0 -5.2,0" />\n'
+            "</vector>\n")
+        found = check_icons.violations_in(rel)
+        self.assertTrue(found, "a hand-drawn drawable must be refused")
+        self.assertEqual(found[0][1], 3, "the line number must point at the path")
+
+    def test_a_hand_drawn_ios_glyph_is_flagged(self):
+        rel = self.fixture("ios/Doorbell/Marks.swift",
+                           "import UIKit\n"
+                           "func draw() {\n"
+                           "    let ring = UIBezierPath()\n"
+                           "}\n")
+        self.assertTrue(check_icons.violations_in(rel))
+
+    def test_inline_web_svg_is_flagged(self):
+        rel = self.fixture("webui/panel/hand.html",
+                           "<div><svg viewBox='0 0 24 24'><path d='M0 0 L4 4'/></svg></div>\n")
+        self.assertTrue(check_icons.violations_in(rel))
+
+    def test_comments_are_not_code(self):
+        # The defect this guards: a doc comment recording that the drawing was removed read as
+        # drawing code, so following the rule and writing it down failed the build.
+        swift = self.fixture(
+            "ios/Doorbell/ClusterCounters.swift",
+            "/// They used to be drawn here with UIBezierPath, which meant three glyphs nobody\n"
+            "/// had reviewed. They are template images now.\n"
+            "// UIBezierPath\n"
+            "/* UIBezierPath\n"
+            "   across two lines */\n"
+            'let note = "removed the UIBezierPath drawing"\n'
+            "final class ClusterIconView: UIView {}\n")
+        self.assertEqual(check_icons.violations_in(swift), [])
+
+        xml = self.fixture(
+            "android/app/src/main/res/drawable/ic_commented.xml",
+            '<?xml version="1.0" encoding="utf-8"?>\n'
+            '<!-- was <path android:pathData="M0 0" />, now generated -->\n'
+            '<vector xmlns:android="http://schemas.android.com/apk/res/android" />\n')
+        self.assertEqual(check_icons.violations_in(xml), [])
+
+    def test_a_url_is_not_a_comment(self):
+        # "//" is a comment in the C family and the middle of every http:// URL everywhere else.
+        rel = self.fixture(
+            "android/app/src/main/res/drawable/ic_url.xml",
+            '<vector xmlns:android="http://schemas.android.com/apk/res/android">\n'
+            '    <path android:pathData="M0 0 L4 4" />\n'
+            "</vector>\n")
+        self.assertTrue(check_icons.violations_in(rel), "a URL must not comment out the file")
+
+    def test_markup_inside_a_script_string_is_still_seen(self):
+        # A view file's strings are prose, but webui builds real markup in string literals:
+        # blanking those would hide an icon typed out there by hand.
+        rel = self.fixture("webui/admin/hand.js",
+                           "var html = \"<svg viewBox='0 0 24 24'><path d='M0 0'/></svg>\";\n")
+        self.assertTrue(check_icons.violations_in(rel))
+
+    def test_a_missing_path_is_an_error(self):
+        with self.assertRaises(FileNotFoundError):
+            check_icons.violations_in("android/app/src/main/res/drawable/ic_not_here.xml")
+
     def test_generated_outputs_are_not_flagged(self):
+        check_icons.ROOT = self.real_root
         for path in ("android/app/src/main/res/drawable/ic_tabler_door.xml",
                      "win/DoorbellApp/Resources/Icons.xaml",
                      "webui/icons/tabler-sprite.svg",
                      "webui/admin/index.html"):
             self.assertEqual(check_icons.violations_in(path), [], path)
 
-    def test_a_hand_drawn_icon_is_flagged(self):
-        # The rule exists because these drift: the three device glyphs were drawn by hand in
-        # every shell independently before the library was chosen.
-        flagged = check_icons.violations_in(
-            "android/app/src/main/res/drawable/ic_count_cluster.xml")
-        self.assertTrue(flagged, "a hand-drawn drawable must be refused")
+    def test_the_repository_has_no_hand_drawn_icons(self):
+        check_icons.ROOT = self.real_root
+        result = subprocess.run([sys.executable, os.path.join(ROOT, "tools/check_icons.py")],
+                                cwd=ROOT, capture_output=True)
+        self.assertEqual(result.returncode, 0, result.stdout.decode() + result.stderr.decode())
 
     def test_the_allow_list_carries_a_reason(self):
         for entry in check_icons.ALLOWED:
