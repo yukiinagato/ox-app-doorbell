@@ -106,6 +106,7 @@ Delete it?</string>
     <string name="admin_door_call_sound">Door-station call sound</string>
     <string name="admin_door_list">Doors</string>
     <string name="admin_door_or_device">Door / device</string>
+    <string name="admin_door_required">Choose an assigned door for a door station</string>
     <string name="admin_door_unconfigured">Not set up</string>
     <string name="admin_doors">Doors &amp; Buildings</string>
     <string name="admin_drop_here">Drop a file here or click to choose</string>

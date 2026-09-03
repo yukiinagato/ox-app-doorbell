@@ -108,6 +108,7 @@ Delete it?</value></data>
   <data name="admin_door_call_sound" xml:space="preserve"><value>Door-station call sound</value></data>
   <data name="admin_door_list" xml:space="preserve"><value>Doors</value></data>
   <data name="admin_door_or_device" xml:space="preserve"><value>Door / device</value></data>
+  <data name="admin_door_required" xml:space="preserve"><value>Choose an assigned door for a door station</value></data>
   <data name="admin_door_unconfigured" xml:space="preserve"><value>Not set up</value></data>
   <data name="admin_doors" xml:space="preserve"><value>Doors &amp; Buildings</value></data>
   <data name="admin_drop_here" xml:space="preserve"><value>Drop a file here or click to choose</value></data>

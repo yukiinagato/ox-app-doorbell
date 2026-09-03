@@ -112,6 +112,10 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
                                             window win: ActivityWindow) {
         guard !appStarted else { return }
         appStarted = true
+        // The persisted profile is the identity boundary. An in-process role restart must not
+        // reuse a stale value retained by the controller graph it is replacing.
+        boot = BootConfig.load()
+        ShellLog.note("ui.start role=\(boot.role) door=\(boot.door)")
 
         // Configure speakerphone calling. PJSIP selects VoiceProcessingIO for AEC at runtime.
         let session = AVAudioSession.sharedInstance()
@@ -305,6 +309,13 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
             name: UIDevice.orientationDidChangeNotification, object: nil)
         UIDevice.current.endGeneratingDeviceOrientationNotifications()
         (win.rootViewController as? MainViewController)?.prepareForCoreShutdown()
+        core.removeHandler("main")
+        win.onActivity = nil
+        win.onControlTap = nil
+        // Detach the old role's controller before Core is destroyed. Replacing it in the same
+        // main-loop turn left the old dashboard attached on iOS 12 even though the new Core had
+        // already adopted the door-station identity.
+        win.rootViewController = UIViewController()
         runtime?.stop(clean: true)
         runtime = nil
         core.stop()
@@ -312,7 +323,10 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         lastPairingFingerprint = ""
         appStarted = false
         identityRestartPending = false
-        startConfiguredApplication(UIApplication.shared, window: win)
+        DispatchQueue.main.async { [weak self, weak win] in
+            guard let self = self, let win = win else { return }
+            self.startConfiguredApplication(UIApplication.shared, window: win)
+        }
     }
 
 

@@ -136,9 +136,18 @@ assert.deepStrictEqual(device.find(e => e.key ===
   "devices.dev.local.recovery.helper_mode"), {
     key: "devices.dev.local.recovery.helper_mode", value: "on"
   });
-const normalizedDevice = L.deviceEntries("dev", { helper_mode: "arbitrary" });
+const normalizedDevice = L.deviceEntries("dev", {
+  role: "indoor_panel", helper_mode: "arbitrary"
+});
 assert.strictEqual(normalizedDevice.find(e => e.key ===
   "devices.dev.local.recovery.helper_mode").value, "auto");
+assert.throws(() => L.deviceEntries("dev", {
+  name: "Door", role: "door_station", door: ""
+}), /door_required/);
+const indoorWithoutDoor = L.deviceEntries("dev", {
+  name: "Panel", role: "indoor_panel", door: "stale-door"
+});
+assert.strictEqual(indoorWithoutDoor.find(e => e.key === "devices.dev.door").value, "");
 
 const existingBuilding = {
   label: { ja: "Old", en: "Old English", fr: "Maison" },

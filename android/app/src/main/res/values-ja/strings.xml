@@ -106,6 +106,7 @@
     <string name="admin_door_call_sound">室外機の呼出音</string>
     <string name="admin_door_list">ドア</string>
     <string name="admin_door_or_device">ドア／機器</string>
+    <string name="admin_door_required">門口機には担当ドアを選択してください</string>
     <string name="admin_door_unconfigured">未設定</string>
     <string name="admin_doors">ドア／建物</string>
     <string name="admin_drop_here">ここにファイルをドラッグ＆ドロップ／クリックで選択</string>

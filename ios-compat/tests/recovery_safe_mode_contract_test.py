@@ -510,6 +510,9 @@ class RecoverySafeModeContracts(unittest.TestCase):
                            delegate.index("private func onUiEvent")]
         self.assertLess(restart.index("prepareForCoreShutdown()"),
                         restart.index("core.stop()"))
+        self.assertLess(restart.index("win.rootViewController = UIViewController()"),
+                        restart.index("core.stop()"))
+        self.assertIn("DispatchQueue.main.async", restart)
         shutdown = main[main.index("func prepareForCoreShutdown"):
                         main.index("private func buildUi")]
         self.assertIn("camera.stopAndWait()", shutdown)

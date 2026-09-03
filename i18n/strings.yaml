@@ -165,6 +165,7 @@ admin.dev_role: { ja: "役割", en: "Role", zh: "角色" }
 admin.role_door: { ja: "門口機", en: "Door station", zh: "门口机" }
 admin.role_indoor: { ja: "室内機", en: "Indoor panel", zh: "室内机" }
 admin.door_assign: { ja: "担当ドア", en: "Assigned door", zh: "负责门口" }
+admin.door_required: { ja: "門口機には担当ドアを選択してください", en: "Choose an assigned door for a door station", zh: "请为门口机选择负责门口" }
 setup.title: { ja: "端末を設定", en: "Set up this device", zh: "设置此设备" }
 setup.message: { ja: "続行する前に、この端末の役割を確認してください。門口機には一意のドア ID が必要です。", en: "Confirm this device's role before continuing. A door station needs a unique door ID.", zh: "请先确认此设备的角色。门口机需要唯一的门口 ID。" }
 setup.name: { ja: "端末名", en: "Device name", zh: "设备名称" }

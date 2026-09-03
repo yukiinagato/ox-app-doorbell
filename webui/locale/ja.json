@@ -101,6 +101,7 @@
  "admin.door_call_sound": "室外機の呼出音",
  "admin.door_list": "ドア",
  "admin.door_or_device": "ドア／機器",
+ "admin.door_required": "門口機には担当ドアを選択してください",
  "admin.door_unconfigured": "未設定",
  "admin.doors": "ドア／建物",
  "admin.drop_here": "ここにファイルをドラッグ＆ドロップ／クリックで選択",

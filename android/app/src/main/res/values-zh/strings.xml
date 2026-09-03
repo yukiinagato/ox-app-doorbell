@@ -106,6 +106,7 @@
     <string name="admin_door_call_sound">门口机呼叫音</string>
     <string name="admin_door_list">门口</string>
     <string name="admin_door_or_device">门口 / 设备</string>
+    <string name="admin_door_required">请为门口机选择负责门口</string>
     <string name="admin_door_unconfigured">未配置</string>
     <string name="admin_doors">门口/建筑</string>
     <string name="admin_drop_here">将文件拖放到此处或点击选择</string>

@@ -193,9 +193,12 @@ var AdminLogic = (function () {
 
   function deviceEntries(id, f, existing) {
     var base = "devices." + id, e = [];
+    var role = f.role || "door_station";
+    var door = role === "door_station" ? String(f.door || "") : "";
+    if (role === "door_station" && !door) throw new Error("door_required");
     e.push({ key: base + ".name", value: String(f.name || "") });
-    e.push({ key: base + ".role", value: f.role || "door_station" });
-    e.push({ key: base + ".door", value: f.door || "" });
+    e.push({ key: base + ".role", value: role });
+    e.push({ key: base + ".door", value: door });
     e.push({ key: base + ".local.ui_lang", value: f.ui_lang || "ja" });
     e.push({ key: base + ".local.video.playback",
              value: f.video_playback || "low_latency" });
@@ -4151,7 +4154,12 @@ if (typeof document !== "undefined") (function () {
         plan = L.deviceCallReturnEntries(id, { inherit: v.call_return_inherit,
                                                seconds: v.call_return });
       } catch (e) { return t("call.return_invalid"); }
-      saveAndRefresh(L.deviceEntries(id, v, d).concat(plan.entries), plan.dels);
+      var identityEntries;
+      try { identityEntries = L.deviceEntries(id, v, d); }
+      catch (e) {
+        return e.message === "door_required" ? t("admin.door_required") : e.message;
+      }
+      saveAndRefresh(identityEntries.concat(plan.entries), plan.dels);
     });
   }
 
