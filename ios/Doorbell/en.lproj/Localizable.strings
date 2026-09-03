@@ -393,7 +393,7 @@
 "emergency.active_detail" = "Emergency mode is active";
 "emergency.button" = "SOS";
 "emergency.cancel" = "Cancel alarm";
-"emergency.clear_instruction" = "Clear the alarm from Admin or with the device PIN.";
+"emergency.clear_instruction" = "Clear the alarm from the Admin page or by entering the admin password on the device.";
 "emergency.hold_hint" = "Hold %@s to trigger";
 "emergency.notified" = "Family has been notified";
 "emergency.notify_off" = "✅ Emergency cleared";
@@ -623,7 +623,7 @@
 "pair.panel_title" = "Add a device";
 "pair.persist_error_body" = "This device couldn't write to its secure storage. Check free space and permissions, then try again.";
 "pair.persist_error_title" = "Couldn't save settings";
-"pair.pin_unavailable" = "This core build cannot mint a PIN";
+"pair.pin_unavailable" = "This core build cannot issue a Pairing PIN";
 "pair.qr_caption" = "Scan this QR from another device to add this one";
 "pair.qr_pending" = "Preparing the Add QR…";
 "pair.retry" = "Retry";
@@ -746,7 +746,7 @@
 "purpose.disabled" = "Hidden";
 "purpose.enabled" = "Shown";
 "purpose.select_failed" = "Could not send the visit purpose";
-"purpose.sent" = "Called as %@";
+"purpose.sent" = "Calling for %@";
 "purpose.skip" = "Skip purpose";
 "reply.answered" = "Replied (%@)";
 "reply.banner" = "Message from resident";
@@ -769,7 +769,7 @@
 "ring.monitor_on" = "Monitor on";
 "ring.monitor_two_line_off" = "Monitor\nOff";
 "ring.monitor_two_line_on" = "Monitor\nOn";
-"ring.monitoring" = "Live door audio on";
+"ring.monitoring" = "Live door audio is on";
 "ring.no_video" = "No video from door station";
 "ring.open_door" = "Open door";
 "ring.open_failed" = "Couldn't send the unlock signal";
@@ -885,7 +885,7 @@
 "setup.join_failed" = "Could not join: %@";
 "setup.join_host" = "Join address (for example, 10.0.1.5:47172)";
 "setup.join_pin" = "Join with PIN";
-"setup.join_required" = "Enter the join address and PIN";
+"setup.join_required" = "Enter the address and Pairing PIN";
 "setup.message" = "Confirm this device's role before continuing. A door station needs a unique door ID.";
 "setup.name" = "Device name";
 "setup.new_cluster" = "── New cluster ──";
@@ -907,10 +907,10 @@
 "sos.button_on_roles" = "Devices that show SOS";
 "sos.cancel_countdown" = "Cancel";
 "sos.cancel_requires_pin" = "Require the admin password to clear it";
-"sos.countdown" = "Calling for help in %@";
+"sos.countdown" = "Sending an alert in %@ seconds";
 "sos.countdown_cancel" = "Cancel";
 "sos.countdown_s" = "Cancellable countdown (seconds)";
-"sos.hint" = "Triggering alerts every family device. It never calls the police or fire service automatically";
+"sos.hint" = "Triggering an alert notifies every family device. It does not automatically contact the police or fire service.";
 "sos.mode_hold" = "Press and hold (legacy)";
 "sos.mode_slide" = "Slide to trigger";
 "sos.slide_hint" = "Slide right to call for help";
@@ -965,9 +965,9 @@
 "theme.region_notice" = "Announcement";
 "theme.region_status_line" = "Status line";
 "theme.region_tile_label" = "Tile label";
-"theme.unsampled_decode_failed" = "unsupported format";
+"theme.unsampled_decode_failed" = "Unsupported format";
 "theme.unsampled_missing" = "not on this device yet";
-"theme.unsampled_too_large" = "image too large";
+"theme.unsampled_too_large" = "Image too large";
 "time.err_bad_reply" = "The server's answer wasn't valid";
 "time.err_bad_server" = "A server entry isn't written correctly";
 "time.err_implausible" = "The measured time wasn't plausible and was discarded";
@@ -1000,7 +1000,7 @@
 "time.zone" = "Time zone";
 "time.zone_hint" = "This sets the clock, call history, and rule schedules for the whole cluster";
 "unlock.auto" = "Show when configured";
-"unlock.command" = "Command sent";
+"unlock.command" = "Configured command";
 "unlock.hide" = "Never show";
 "unlock.not_configured" = "No unlock action is configured";
 "unlock.show" = "Always show";
@@ -1011,7 +1011,7 @@
 "volume.cluster_default" = "Cluster default %@";
 "volume.device_title" = "Volume on this device";
 "volume.hint" = "Cluster defaults. Override them per device on the Devices tab";
-"volume.idle" = "Everyday";
+"volume.idle" = "Normal";
 "volume.inherit" = "Use the cluster default";
 "volume.preview" = "Preview";
 "volume.sos" = "SOS";

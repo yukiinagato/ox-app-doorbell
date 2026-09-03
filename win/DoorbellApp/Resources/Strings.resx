@@ -112,7 +112,7 @@
   <data name="admin_door_unconfigured" xml:space="preserve"><value>未設定</value></data>
   <data name="admin_doors" xml:space="preserve"><value>ドア／建物</value></data>
   <data name="admin_drop_here" xml:space="preserve"><value>ここにファイルをドラッグ＆ドロップ／クリックで選択</value></data>
-  <data name="admin_duty" xml:space="preserve"><value>duty</value></data>
+  <data name="admin_duty" xml:space="preserve"><value>担当</value></data>
   <data name="admin_edit" xml:space="preserve"><value>編集</value></data>
   <data name="admin_enabled" xml:space="preserve"><value>有効</value></data>
   <data name="admin_err_no_chat" xml:space="preserve"><value>宛先 chat ID がありません</value></data>
@@ -126,7 +126,7 @@
   <data name="admin_fleet" xml:space="preserve"><value>機器を管理</value></data>
   <data name="admin_global" xml:space="preserve"><value>全体</value></data>
   <data name="admin_helper_auto" xml:space="preserve"><value>自動</value></data>
-  <data name="admin_helper_mode" xml:space="preserve"><value>保活ヘルパー</value></data>
+  <data name="admin_helper_mode" xml:space="preserve"><value>復帰ヘルパー</value></data>
   <data name="admin_helper_off" xml:space="preserve"><value>無効</value></data>
   <data name="admin_helper_on" xml:space="preserve"><value>常に有効</value></data>
   <data name="admin_host" xml:space="preserve"><value>ホスト</value></data>
@@ -174,7 +174,7 @@
   <data name="admin_native_ui_apply_report" xml:space="preserve"><value>ネイティブ UI 適用結果</value></data>
   <data name="admin_never_suppress" xml:space="preserve"><value>常に許可</value></data>
   <data name="admin_no_changes" xml:space="preserve"><value>変更はありません</value></data>
-  <data name="admin_not_ready" xml:space="preserve"><value>未準備</value></data>
+  <data name="admin_not_ready" xml:space="preserve"><value>準備未完了</value></data>
   <data name="admin_notify" xml:space="preserve"><value>通知</value></data>
   <data name="admin_offline" xml:space="preserve"><value>オフライン</value></data>
   <data name="admin_online" xml:space="preserve"><value>オンライン</value></data>
@@ -193,7 +193,7 @@
   <data name="admin_pair_none" xml:space="preserve"><value>待機中のデバイスはありません</value></data>
   <data name="admin_pair_override_active" xml:space="preserve"><value>現在この組合せの上書きを使用しています。</value></data>
   <data name="admin_pair_override_inherited" xml:space="preserve"><value>上書きはありません。編集値は全体設定を継承しています。</value></data>
-  <data name="admin_pair_secure_failed" xml:space="preserve"><value>配対鍵を安全に保存できませんでした。ストレージと権限を確認してください。</value></data>
+  <data name="admin_pair_secure_failed" xml:space="preserve"><value>ペアリングキーを安全に保存できませんでした。ストレージと権限を確認してください。</value></data>
   <data name="admin_pair_self_unpaired" xml:space="preserve"><value>この端末はまだクラスタに参加していません。最初の 1 台ならここで新規作成してください。</value></data>
   <data name="admin_panel_token" xml:space="preserve"><value>パネル token</value></data>
   <data name="admin_pass" xml:space="preserve"><value>パスワード</value></data>
@@ -234,7 +234,7 @@
   <data name="admin_runtime_codec" xml:space="preserve"><value>メディア</value></data>
   <data name="admin_runtime_health" xml:space="preserve"><value>実行状態</value></data>
   <data name="admin_runtime_heartbeat" xml:space="preserve"><value>ハートビート</value></data>
-  <data name="admin_runtime_helper" xml:space="preserve"><value>保活ヘルパー</value></data>
+  <data name="admin_runtime_helper" xml:space="preserve"><value>復帰ヘルパー</value></data>
   <data name="admin_runtime_last_exit" xml:space="preserve"><value>前回終了</value></data>
   <data name="admin_runtime_safe_mode" xml:space="preserve"><value>セーフモード</value></data>
   <data name="admin_runtime_unreported" xml:space="preserve"><value>未報告</value></data>
@@ -400,7 +400,7 @@
   <data name="emergency_active_detail" xml:space="preserve"><value>緊急モードが発報されています</value></data>
   <data name="emergency_button" xml:space="preserve"><value>緊急</value></data>
   <data name="emergency_cancel" xml:space="preserve"><value>解除</value></data>
-  <data name="emergency_clear_instruction" xml:space="preserve"><value>解除は管理画面または端末の PIN 操作で行ってください。</value></data>
+  <data name="emergency_clear_instruction" xml:space="preserve"><value>警報を解除するには、管理画面を使用するか、端末で管理パスワードを入力してください。</value></data>
   <data name="emergency_hold_hint" xml:space="preserve"><value>長押しで発報 ({0} 秒)</value></data>
   <data name="emergency_notified" xml:space="preserve"><value>家族に通知しました</value></data>
   <data name="emergency_notify_off" xml:space="preserve"><value>✅ 緊急解除</value></data>
@@ -448,7 +448,7 @@
   <data name="info_battery" xml:space="preserve"><value>バッテリー</value></data>
   <data name="info_camera" xml:space="preserve"><value>カメラ</value></data>
   <data name="info_camera_absent_ipad1" xml:space="preserve"><value>無（iPad 1 はカメラ非搭載）</value></data>
-  <data name="info_capabilities" xml:space="preserve"><value>能力</value></data>
+  <data name="info_capabilities" xml:space="preserve"><value>対応機能</value></data>
   <data name="info_components" xml:space="preserve"><value>コンポーネント</value></data>
   <data name="info_core_version" xml:space="preserve"><value>コア</value></data>
   <data name="info_device" xml:space="preserve"><value>端末</value></data>
@@ -491,10 +491,10 @@
   <data name="language_name_pt" xml:space="preserve"><value>Português</value></data>
   <data name="language_name_vi" xml:space="preserve"><value>Tiếng Việt</value></data>
   <data name="language_name_zh" xml:space="preserve"><value>中文</value></data>
-  <data name="monitor_admin_qr" xml:space="preserve"><value>管理ページ QR</value></data>
+  <data name="monitor_admin_qr" xml:space="preserve"><value>管理ページ用QRコード</value></data>
   <data name="monitor_admin_qr_none" xml:space="preserve"><value>管理アドレスなし</value></data>
   <data name="monitor_admin_qr_select" xml:space="preserve"><value>管理ページの IP アドレスを選択</value></data>
-  <data name="monitor_choose" xml:space="preserve"><value>見る門口機を選択</value></data>
+  <data name="monitor_choose" xml:space="preserve"><value>表示する門口機を選択</value></data>
   <data name="monitor_close" xml:space="preserve"><value>閉じる</value></data>
   <data name="monitor_live" xml:space="preserve"><value>リアルタイム映像</value></data>
   <data name="monitor_open" xml:space="preserve"><value>門口を見る</value></data>
@@ -517,7 +517,7 @@
   <data name="notice_expiry_until_cleared" xml:space="preserve"><value>取り消すまで</value></data>
   <data name="notice_failed" xml:space="preserve"><value>お知らせを保存できませんでした</value></data>
   <data name="notice_for_this_door" xml:space="preserve"><value>この門口機にお知らせ</value></data>
-  <data name="notice_from" xml:space="preserve"><value>作成</value></data>
+  <data name="notice_from" xml:space="preserve"><value>発信元</value></data>
   <data name="notice_global_button" xml:space="preserve"><value>お知らせ（全体）</value></data>
   <data name="notice_limit" xml:space="preserve"><value>200 文字まで</value></data>
   <data name="notice_none" xml:space="preserve"><value>お知らせはありません</value></data>
@@ -603,20 +603,20 @@
   <data name="pair_invite_cluster" xml:space="preserve"><value>クラスタ: {0}</value></data>
   <data name="pair_invite_expired" xml:space="preserve"><value>この招待は期限切れです。相手の端末で新しいコードを発行してください</value></data>
   <data name="pair_invite_invalid" xml:space="preserve"><value>この招待は読み取れませんでした</value></data>
-  <data name="pair_invite_join" xml:space="preserve"><value>この集まりに参加</value></data>
+  <data name="pair_invite_join" xml:space="preserve"><value>このクラスタに参加</value></data>
   <data name="pair_invite_leave_current" xml:space="preserve"><value>この端末はすでに別のクラスタに参加しています。参加すると現在のクラスタから離脱し、この端末の設定はすべて消去されます。</value></data>
   <data name="pair_invite_missing_host" xml:space="preserve"><value>この招待に接続先が含まれていません</value></data>
   <data name="pair_invite_missing_pin" xml:space="preserve"><value>この招待にペアリング PIN が含まれていません</value></data>
   <data name="pair_invite_title" xml:space="preserve"><value>クラスタへの招待</value></data>
   <data name="pair_join_required" xml:space="preserve"><value>接続先とペアリング PIN を入力してください</value></data>
   <data name="pair_join_submit" xml:space="preserve"><value>参加</value></data>
-  <data name="pair_join_this_cluster" xml:space="preserve"><value>この集まりに参加</value></data>
+  <data name="pair_join_this_cluster" xml:space="preserve"><value>このクラスタに参加</value></data>
   <data name="pair_join_with_code" xml:space="preserve"><value>ペアリング PIN で参加</value></data>
   <data name="pair_joined" xml:space="preserve"><value>クラスタに参加しました</value></data>
   <data name="pair_joining" xml:space="preserve"><value>クラスタに参加しています…</value></data>
   <data name="pair_later" xml:space="preserve"><value>あとで設定</value></data>
   <data name="pair_link_from" xml:space="preserve"><value>{0} への招待</value></data>
-  <data name="pair_link_leave_current" xml:space="preserve"><value>この端末は既に別の集まりに参加しています。参加すると現在の設定はすべて消去されます。</value></data>
+  <data name="pair_link_leave_current" xml:space="preserve"><value>この端末はすでに別のクラスタに参加しています。参加すると現在の設定はすべて消去されます。</value></data>
   <data name="pair_membership" xml:space="preserve"><value>クラスタ · {0} 台</value></data>
   <data name="pair_membership_connected" xml:space="preserve"><value>{0} 台接続中</value></data>
   <data name="pair_mint_unsupported" xml:space="preserve"><value>この端末のコアはペアリング PIN の発行に対応していません。更新してください</value></data>
@@ -630,7 +630,7 @@
   <data name="pair_panel_title" xml:space="preserve"><value>端末を追加</value></data>
   <data name="pair_persist_error_body" xml:space="preserve"><value>端末の安全な保存領域に書き込めませんでした。空き容量と権限を確認して再試行してください。</value></data>
   <data name="pair_persist_error_title" xml:space="preserve"><value>設定を保存できませんでした</value></data>
-  <data name="pair_pin_unavailable" xml:space="preserve"><value>この版のコアでは PIN を発行できません</value></data>
+  <data name="pair_pin_unavailable" xml:space="preserve"><value>この版のコアではペアリング PIN を発行できません</value></data>
   <data name="pair_qr_caption" xml:space="preserve"><value>別の端末でこの QR を読み取ると追加できます</value></data>
   <data name="pair_qr_pending" xml:space="preserve"><value>追加用 QR を準備しています…</value></data>
   <data name="pair_retry" xml:space="preserve"><value>再試行</value></data>
@@ -641,7 +641,7 @@
   <data name="pair_scan_camera_denied" xml:space="preserve"><value>カメラの使用が許可されていません。端末の設定でカメラを許可してください。</value></data>
   <data name="pair_scan_cancel" xml:space="preserve"><value>キャンセル</value></data>
   <data name="pair_scan_denied" xml:space="preserve"><value>カメラを開けませんでした。ブラウザのカメラ権限を確認してください</value></data>
-  <data name="pair_scan_hint" xml:space="preserve"><value>新しい端末に表示された追加用 QR に合わせてください</value></data>
+  <data name="pair_scan_hint" xml:space="preserve"><value>新しい端末に表示された追加用QRコードにカメラを向けてください</value></data>
   <data name="pair_scan_no_camera" xml:space="preserve"><value>この端末にはカメラがありません。別の端末で読み取るか、ペアリング PIN を使ってください。</value></data>
   <data name="pair_scan_opening" xml:space="preserve"><value>カメラを起動しています…</value></data>
   <data name="pair_scan_paste" xml:space="preserve"><value>QR の文字列を貼り付ける</value></data>
@@ -708,7 +708,7 @@
   <data name="panel_lifecycle_identity_missing" xml:space="preserve"><value>呼出の識別情報がないため、安全に応答できません</value></data>
   <data name="panel_mock_incall" xml:space="preserve"><value>通話中 (mock)</value></data>
   <data name="panel_mock_registered" xml:space="preserve"><value>内線 {0} 登録済み (mock)</value></data>
-  <data name="panel_monitor_title" xml:space="preserve"><value>受鈴モニター</value></data>
+  <data name="panel_monitor_title" xml:space="preserve"><value>着信モニター</value></data>
   <data name="panel_new_call_detected" xml:space="preserve"><value>新しい呼出を検出しました — 状態を更新します</value></data>
   <data name="panel_no_audio_note" xml:space="preserve"><value>この玄関では通話できません (通知のみ)</value></data>
   <data name="panel_no_extension" xml:space="preserve"><value>内線なし</value></data>
@@ -748,12 +748,12 @@
   <data name="power_no_battery" xml:space="preserve"><value>電池なし</value></data>
   <data name="power_percent" xml:space="preserve"><value>{0}%</value></data>
   <data name="power_title" xml:space="preserve"><value>電池</value></data>
-  <data name="power_unknown" xml:space="preserve"><value>未対応</value></data>
+  <data name="power_unknown" xml:space="preserve"><value>未報告</value></data>
   <data name="purpose_cancel_call" xml:space="preserve"><value>呼び出しを取り消す</value></data>
   <data name="purpose_disabled" xml:space="preserve"><value>非表示</value></data>
   <data name="purpose_enabled" xml:space="preserve"><value>表示する</value></data>
   <data name="purpose_select_failed" xml:space="preserve"><value>用件を送信できませんでした</value></data>
-  <data name="purpose_sent" xml:space="preserve"><value>{0} で呼び出しました</value></data>
+  <data name="purpose_sent" xml:space="preserve"><value>呼び出し中（{0}）</value></data>
   <data name="purpose_skip" xml:space="preserve"><value>用件を選ばず続ける</value></data>
   <data name="reply_answered" xml:space="preserve"><value>応答済み ({0})</value></data>
   <data name="reply_banner" xml:space="preserve"><value>住人からのメッセージ</value></data>
@@ -780,7 +780,7 @@ ON</value></data>
 OFF</value></data>
   <data name="ring_monitor_two_line_on" xml:space="preserve"><value>モニター
 ON</value></data>
-  <data name="ring_monitoring" xml:space="preserve"><value>門口の音声を再生中</value></data>
+  <data name="ring_monitoring" xml:space="preserve"><value>玄関の音声を再生中</value></data>
   <data name="ring_no_video" xml:space="preserve"><value>門口機の映像がありません</value></data>
   <data name="ring_open_door" xml:space="preserve"><value>ドアを開ける</value></data>
   <data name="ring_open_failed" xml:space="preserve"><value>開錠信号を送信できませんでした</value></data>
@@ -896,7 +896,7 @@ ON</value></data>
   <data name="setup_join_failed" xml:space="preserve"><value>参加できませんでした: {0}</value></data>
   <data name="setup_join_host" xml:space="preserve"><value>接続先（例: 10.0.1.5:47172）</value></data>
   <data name="setup_join_pin" xml:space="preserve"><value>PIN で参加</value></data>
-  <data name="setup_join_required" xml:space="preserve"><value>接続先と PIN を入力してください</value></data>
+  <data name="setup_join_required" xml:space="preserve"><value>接続先とペアリング PIN を入力してください</value></data>
   <data name="setup_message" xml:space="preserve"><value>続行する前に、この端末の役割を確認してください。門口機には一意のドア ID が必要です。</value></data>
   <data name="setup_name" xml:space="preserve"><value>端末名</value></data>
   <data name="setup_new_cluster" xml:space="preserve"><value>── 新規クラスタ ──</value></data>

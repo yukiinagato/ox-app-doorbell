@@ -398,7 +398,7 @@ Delete it?</string>
     <string name="emergency_active_detail">Emergency mode is active</string>
     <string name="emergency_button">SOS</string>
     <string name="emergency_cancel">Cancel alarm</string>
-    <string name="emergency_clear_instruction">Clear the alarm from Admin or with the device PIN.</string>
+    <string name="emergency_clear_instruction">Clear the alarm from the Admin page or by entering the admin password on the device.</string>
     <string name="emergency_hold_hint">Hold %1$ss to trigger</string>
     <string name="emergency_notified">Family has been notified</string>
     <string name="emergency_notify_off">✅ Emergency cleared</string>
@@ -628,7 +628,7 @@ Delete it?</string>
     <string name="pair_panel_title">Add a device</string>
     <string name="pair_persist_error_body">This device couldn\'t write to its secure storage. Check free space and permissions, then try again.</string>
     <string name="pair_persist_error_title">Couldn\'t save settings</string>
-    <string name="pair_pin_unavailable">This core build cannot mint a PIN</string>
+    <string name="pair_pin_unavailable">This core build cannot issue a Pairing PIN</string>
     <string name="pair_qr_caption">Scan this QR from another device to add this one</string>
     <string name="pair_qr_pending">Preparing the Add QR…</string>
     <string name="pair_retry">Retry</string>
@@ -751,7 +751,7 @@ Delete it?</string>
     <string name="purpose_disabled">Hidden</string>
     <string name="purpose_enabled">Shown</string>
     <string name="purpose_select_failed">Could not send the visit purpose</string>
-    <string name="purpose_sent">Called as %1$s</string>
+    <string name="purpose_sent">Calling for %1$s</string>
     <string name="purpose_skip">Skip purpose</string>
     <string name="reply_answered">Replied (%1$s)</string>
     <string name="reply_banner">Message from resident</string>
@@ -778,7 +778,7 @@ On</string>
 Off</string>
     <string name="ring_monitor_two_line_on">Monitor
 On</string>
-    <string name="ring_monitoring">Live door audio on</string>
+    <string name="ring_monitoring">Live door audio is on</string>
     <string name="ring_no_video">No video from door station</string>
     <string name="ring_open_door">Open door</string>
     <string name="ring_open_failed">Couldn\'t send the unlock signal</string>
@@ -894,7 +894,7 @@ On</string>
     <string name="setup_join_failed">Could not join: %1$s</string>
     <string name="setup_join_host">Join address (for example, 10.0.1.5:47172)</string>
     <string name="setup_join_pin">Join with PIN</string>
-    <string name="setup_join_required">Enter the join address and PIN</string>
+    <string name="setup_join_required">Enter the address and Pairing PIN</string>
     <string name="setup_message">Confirm this device\'s role before continuing. A door station needs a unique door ID.</string>
     <string name="setup_name">Device name</string>
     <string name="setup_new_cluster">── New cluster ──</string>
@@ -920,10 +920,10 @@ This device joins automatically. Only if it does not, enter the indoor panel add
     <string name="sos_button_on_roles">Devices that show SOS</string>
     <string name="sos_cancel_countdown">Cancel</string>
     <string name="sos_cancel_requires_pin">Require the admin password to clear it</string>
-    <string name="sos_countdown">Calling for help in %1$s</string>
+    <string name="sos_countdown">Sending an alert in %1$s seconds</string>
     <string name="sos_countdown_cancel">Cancel</string>
     <string name="sos_countdown_s">Cancellable countdown (seconds)</string>
-    <string name="sos_hint">Triggering alerts every family device. It never calls the police or fire service automatically</string>
+    <string name="sos_hint">Triggering an alert notifies every family device. It does not automatically contact the police or fire service.</string>
     <string name="sos_mode_hold">Press and hold (legacy)</string>
     <string name="sos_mode_slide">Slide to trigger</string>
     <string name="sos_slide_hint">Slide right to call for help</string>
@@ -979,9 +979,9 @@ Sends in %1$ss</string>
     <string name="theme_region_notice">Announcement</string>
     <string name="theme_region_status_line">Status line</string>
     <string name="theme_region_tile_label">Tile label</string>
-    <string name="theme_unsampled_decode_failed">unsupported format</string>
+    <string name="theme_unsampled_decode_failed">Unsupported format</string>
     <string name="theme_unsampled_missing">not on this device yet</string>
-    <string name="theme_unsampled_too_large">image too large</string>
+    <string name="theme_unsampled_too_large">Image too large</string>
     <string name="time_err_bad_reply">The server\'s answer wasn\'t valid</string>
     <string name="time_err_bad_server">A server entry isn\'t written correctly</string>
     <string name="time_err_implausible">The measured time wasn\'t plausible and was discarded</string>
@@ -1014,7 +1014,7 @@ Sends in %1$ss</string>
     <string name="time_zone">Time zone</string>
     <string name="time_zone_hint">This sets the clock, call history, and rule schedules for the whole cluster</string>
     <string name="unlock_auto">Show when configured</string>
-    <string name="unlock_command">Command sent</string>
+    <string name="unlock_command">Configured command</string>
     <string name="unlock_hide">Never show</string>
     <string name="unlock_not_configured">No unlock action is configured</string>
     <string name="unlock_show">Always show</string>
@@ -1025,7 +1025,7 @@ Sends in %1$ss</string>
     <string name="volume_cluster_default">Cluster default %1$s</string>
     <string name="volume_device_title">Volume on this device</string>
     <string name="volume_hint">Cluster defaults. Override them per device on the Devices tab</string>
-    <string name="volume_idle">Everyday</string>
+    <string name="volume_idle">Normal</string>
     <string name="volume_inherit">Use the cluster default</string>
     <string name="volume_preview">Preview</string>
     <string name="volume_sos">SOS</string>

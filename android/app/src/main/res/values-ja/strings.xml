@@ -110,7 +110,7 @@
     <string name="admin_door_unconfigured">未設定</string>
     <string name="admin_doors">ドア／建物</string>
     <string name="admin_drop_here">ここにファイルをドラッグ＆ドロップ／クリックで選択</string>
-    <string name="admin_duty">duty</string>
+    <string name="admin_duty">担当</string>
     <string name="admin_edit">編集</string>
     <string name="admin_enabled">有効</string>
     <string name="admin_err_no_chat">宛先 chat ID がありません</string>
@@ -124,7 +124,7 @@
     <string name="admin_fleet">機器を管理</string>
     <string name="admin_global">全体</string>
     <string name="admin_helper_auto">自動</string>
-    <string name="admin_helper_mode">保活ヘルパー</string>
+    <string name="admin_helper_mode">復帰ヘルパー</string>
     <string name="admin_helper_off">無効</string>
     <string name="admin_helper_on">常に有効</string>
     <string name="admin_host">ホスト</string>
@@ -172,7 +172,7 @@
     <string name="admin_native_ui_apply_report">ネイティブ UI 適用結果</string>
     <string name="admin_never_suppress">常に許可</string>
     <string name="admin_no_changes">変更はありません</string>
-    <string name="admin_not_ready">未準備</string>
+    <string name="admin_not_ready">準備未完了</string>
     <string name="admin_notify">通知</string>
     <string name="admin_offline">オフライン</string>
     <string name="admin_online">オンライン</string>
@@ -191,7 +191,7 @@
     <string name="admin_pair_none">待機中のデバイスはありません</string>
     <string name="admin_pair_override_active">現在この組合せの上書きを使用しています。</string>
     <string name="admin_pair_override_inherited">上書きはありません。編集値は全体設定を継承しています。</string>
-    <string name="admin_pair_secure_failed">配対鍵を安全に保存できませんでした。ストレージと権限を確認してください。</string>
+    <string name="admin_pair_secure_failed">ペアリングキーを安全に保存できませんでした。ストレージと権限を確認してください。</string>
     <string name="admin_pair_self_unpaired">この端末はまだクラスタに参加していません。最初の 1 台ならここで新規作成してください。</string>
     <string name="admin_panel_token">パネル token</string>
     <string name="admin_pass">パスワード</string>
@@ -232,7 +232,7 @@
     <string name="admin_runtime_codec">メディア</string>
     <string name="admin_runtime_health">実行状態</string>
     <string name="admin_runtime_heartbeat">ハートビート</string>
-    <string name="admin_runtime_helper">保活ヘルパー</string>
+    <string name="admin_runtime_helper">復帰ヘルパー</string>
     <string name="admin_runtime_last_exit">前回終了</string>
     <string name="admin_runtime_safe_mode">セーフモード</string>
     <string name="admin_runtime_unreported">未報告</string>
@@ -398,7 +398,7 @@
     <string name="emergency_active_detail">緊急モードが発報されています</string>
     <string name="emergency_button">緊急</string>
     <string name="emergency_cancel">解除</string>
-    <string name="emergency_clear_instruction">解除は管理画面または端末の PIN 操作で行ってください。</string>
+    <string name="emergency_clear_instruction">警報を解除するには、管理画面を使用するか、端末で管理パスワードを入力してください。</string>
     <string name="emergency_hold_hint">長押しで発報 (%1$s 秒)</string>
     <string name="emergency_notified">家族に通知しました</string>
     <string name="emergency_notify_off">✅ 緊急解除</string>
@@ -446,7 +446,7 @@
     <string name="info_battery">バッテリー</string>
     <string name="info_camera">カメラ</string>
     <string name="info_camera_absent_ipad1">無（iPad 1 はカメラ非搭載）</string>
-    <string name="info_capabilities">能力</string>
+    <string name="info_capabilities">対応機能</string>
     <string name="info_components">コンポーネント</string>
     <string name="info_core_version">コア</string>
     <string name="info_device">端末</string>
@@ -489,10 +489,10 @@
     <string name="language_name_pt">Português</string>
     <string name="language_name_vi">Tiếng Việt</string>
     <string name="language_name_zh">中文</string>
-    <string name="monitor_admin_qr">管理ページ QR</string>
+    <string name="monitor_admin_qr">管理ページ用QRコード</string>
     <string name="monitor_admin_qr_none">管理アドレスなし</string>
     <string name="monitor_admin_qr_select">管理ページの IP アドレスを選択</string>
-    <string name="monitor_choose">見る門口機を選択</string>
+    <string name="monitor_choose">表示する門口機を選択</string>
     <string name="monitor_close">閉じる</string>
     <string name="monitor_live">リアルタイム映像</string>
     <string name="monitor_open">門口を見る</string>
@@ -515,7 +515,7 @@
     <string name="notice_expiry_until_cleared">取り消すまで</string>
     <string name="notice_failed">お知らせを保存できませんでした</string>
     <string name="notice_for_this_door">この門口機にお知らせ</string>
-    <string name="notice_from">作成</string>
+    <string name="notice_from">発信元</string>
     <string name="notice_global_button">お知らせ（全体）</string>
     <string name="notice_limit">200 文字まで</string>
     <string name="notice_none">お知らせはありません</string>
@@ -601,20 +601,20 @@
     <string name="pair_invite_cluster">クラスタ: %1$s</string>
     <string name="pair_invite_expired">この招待は期限切れです。相手の端末で新しいコードを発行してください</string>
     <string name="pair_invite_invalid">この招待は読み取れませんでした</string>
-    <string name="pair_invite_join">この集まりに参加</string>
+    <string name="pair_invite_join">このクラスタに参加</string>
     <string name="pair_invite_leave_current">この端末はすでに別のクラスタに参加しています。参加すると現在のクラスタから離脱し、この端末の設定はすべて消去されます。</string>
     <string name="pair_invite_missing_host">この招待に接続先が含まれていません</string>
     <string name="pair_invite_missing_pin">この招待にペアリング PIN が含まれていません</string>
     <string name="pair_invite_title">クラスタへの招待</string>
     <string name="pair_join_required">接続先とペアリング PIN を入力してください</string>
     <string name="pair_join_submit">参加</string>
-    <string name="pair_join_this_cluster">この集まりに参加</string>
+    <string name="pair_join_this_cluster">このクラスタに参加</string>
     <string name="pair_join_with_code">ペアリング PIN で参加</string>
     <string name="pair_joined">クラスタに参加しました</string>
     <string name="pair_joining">クラスタに参加しています…</string>
     <string name="pair_later">あとで設定</string>
     <string name="pair_link_from">%1$s への招待</string>
-    <string name="pair_link_leave_current">この端末は既に別の集まりに参加しています。参加すると現在の設定はすべて消去されます。</string>
+    <string name="pair_link_leave_current">この端末はすでに別のクラスタに参加しています。参加すると現在の設定はすべて消去されます。</string>
     <string name="pair_membership">クラスタ · %1$s 台</string>
     <string name="pair_membership_connected">%1$s 台接続中</string>
     <string name="pair_mint_unsupported">この端末のコアはペアリング PIN の発行に対応していません。更新してください</string>
@@ -628,7 +628,7 @@
     <string name="pair_panel_title">端末を追加</string>
     <string name="pair_persist_error_body">端末の安全な保存領域に書き込めませんでした。空き容量と権限を確認して再試行してください。</string>
     <string name="pair_persist_error_title">設定を保存できませんでした</string>
-    <string name="pair_pin_unavailable">この版のコアでは PIN を発行できません</string>
+    <string name="pair_pin_unavailable">この版のコアではペアリング PIN を発行できません</string>
     <string name="pair_qr_caption">別の端末でこの QR を読み取ると追加できます</string>
     <string name="pair_qr_pending">追加用 QR を準備しています…</string>
     <string name="pair_retry">再試行</string>
@@ -639,7 +639,7 @@
     <string name="pair_scan_camera_denied">カメラの使用が許可されていません。端末の設定でカメラを許可してください。</string>
     <string name="pair_scan_cancel">キャンセル</string>
     <string name="pair_scan_denied">カメラを開けませんでした。ブラウザのカメラ権限を確認してください</string>
-    <string name="pair_scan_hint">新しい端末に表示された追加用 QR に合わせてください</string>
+    <string name="pair_scan_hint">新しい端末に表示された追加用QRコードにカメラを向けてください</string>
     <string name="pair_scan_no_camera">この端末にはカメラがありません。別の端末で読み取るか、ペアリング PIN を使ってください。</string>
     <string name="pair_scan_opening">カメラを起動しています…</string>
     <string name="pair_scan_paste">QR の文字列を貼り付ける</string>
@@ -706,7 +706,7 @@
     <string name="panel_lifecycle_identity_missing">呼出の識別情報がないため、安全に応答できません</string>
     <string name="panel_mock_incall">通話中 (mock)</string>
     <string name="panel_mock_registered">内線 %1$s 登録済み (mock)</string>
-    <string name="panel_monitor_title">受鈴モニター</string>
+    <string name="panel_monitor_title">着信モニター</string>
     <string name="panel_new_call_detected">新しい呼出を検出しました — 状態を更新します</string>
     <string name="panel_no_audio_note">この玄関では通話できません (通知のみ)</string>
     <string name="panel_no_extension">内線なし</string>
@@ -746,12 +746,12 @@
     <string name="power_no_battery">電池なし</string>
     <string name="power_percent">%1$s%%</string>
     <string name="power_title">電池</string>
-    <string name="power_unknown">未対応</string>
+    <string name="power_unknown">未報告</string>
     <string name="purpose_cancel_call">呼び出しを取り消す</string>
     <string name="purpose_disabled">非表示</string>
     <string name="purpose_enabled">表示する</string>
     <string name="purpose_select_failed">用件を送信できませんでした</string>
-    <string name="purpose_sent">%1$s で呼び出しました</string>
+    <string name="purpose_sent">呼び出し中（%1$s）</string>
     <string name="purpose_skip">用件を選ばず続ける</string>
     <string name="reply_answered">応答済み (%1$s)</string>
     <string name="reply_banner">住人からのメッセージ</string>
@@ -778,7 +778,7 @@ ON</string>
 OFF</string>
     <string name="ring_monitor_two_line_on">モニター
 ON</string>
-    <string name="ring_monitoring">門口の音声を再生中</string>
+    <string name="ring_monitoring">玄関の音声を再生中</string>
     <string name="ring_no_video">門口機の映像がありません</string>
     <string name="ring_open_door">ドアを開ける</string>
     <string name="ring_open_failed">開錠信号を送信できませんでした</string>
@@ -894,7 +894,7 @@ ON</string>
     <string name="setup_join_failed">参加できませんでした: %1$s</string>
     <string name="setup_join_host">接続先（例: 10.0.1.5:47172）</string>
     <string name="setup_join_pin">PIN で参加</string>
-    <string name="setup_join_required">接続先と PIN を入力してください</string>
+    <string name="setup_join_required">接続先とペアリング PIN を入力してください</string>
     <string name="setup_message">続行する前に、この端末の役割を確認してください。門口機には一意のドア ID が必要です。</string>
     <string name="setup_name">端末名</string>
     <string name="setup_new_cluster">── 新規クラスタ ──</string>

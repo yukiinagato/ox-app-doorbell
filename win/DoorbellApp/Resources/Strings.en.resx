@@ -400,7 +400,7 @@ Delete it?</value></data>
   <data name="emergency_active_detail" xml:space="preserve"><value>Emergency mode is active</value></data>
   <data name="emergency_button" xml:space="preserve"><value>SOS</value></data>
   <data name="emergency_cancel" xml:space="preserve"><value>Cancel alarm</value></data>
-  <data name="emergency_clear_instruction" xml:space="preserve"><value>Clear the alarm from Admin or with the device PIN.</value></data>
+  <data name="emergency_clear_instruction" xml:space="preserve"><value>Clear the alarm from the Admin page or by entering the admin password on the device.</value></data>
   <data name="emergency_hold_hint" xml:space="preserve"><value>Hold {0}s to trigger</value></data>
   <data name="emergency_notified" xml:space="preserve"><value>Family has been notified</value></data>
   <data name="emergency_notify_off" xml:space="preserve"><value>✅ Emergency cleared</value></data>
@@ -630,7 +630,7 @@ Delete it?</value></data>
   <data name="pair_panel_title" xml:space="preserve"><value>Add a device</value></data>
   <data name="pair_persist_error_body" xml:space="preserve"><value>This device couldn't write to its secure storage. Check free space and permissions, then try again.</value></data>
   <data name="pair_persist_error_title" xml:space="preserve"><value>Couldn't save settings</value></data>
-  <data name="pair_pin_unavailable" xml:space="preserve"><value>This core build cannot mint a PIN</value></data>
+  <data name="pair_pin_unavailable" xml:space="preserve"><value>This core build cannot issue a Pairing PIN</value></data>
   <data name="pair_qr_caption" xml:space="preserve"><value>Scan this QR from another device to add this one</value></data>
   <data name="pair_qr_pending" xml:space="preserve"><value>Preparing the Add QR…</value></data>
   <data name="pair_retry" xml:space="preserve"><value>Retry</value></data>
@@ -753,7 +753,7 @@ Delete it?</value></data>
   <data name="purpose_disabled" xml:space="preserve"><value>Hidden</value></data>
   <data name="purpose_enabled" xml:space="preserve"><value>Shown</value></data>
   <data name="purpose_select_failed" xml:space="preserve"><value>Could not send the visit purpose</value></data>
-  <data name="purpose_sent" xml:space="preserve"><value>Called as {0}</value></data>
+  <data name="purpose_sent" xml:space="preserve"><value>Calling for {0}</value></data>
   <data name="purpose_skip" xml:space="preserve"><value>Skip purpose</value></data>
   <data name="reply_answered" xml:space="preserve"><value>Replied ({0})</value></data>
   <data name="reply_banner" xml:space="preserve"><value>Message from resident</value></data>
@@ -780,7 +780,7 @@ On</value></data>
 Off</value></data>
   <data name="ring_monitor_two_line_on" xml:space="preserve"><value>Monitor
 On</value></data>
-  <data name="ring_monitoring" xml:space="preserve"><value>Live door audio on</value></data>
+  <data name="ring_monitoring" xml:space="preserve"><value>Live door audio is on</value></data>
   <data name="ring_no_video" xml:space="preserve"><value>No video from door station</value></data>
   <data name="ring_open_door" xml:space="preserve"><value>Open door</value></data>
   <data name="ring_open_failed" xml:space="preserve"><value>Couldn't send the unlock signal</value></data>
@@ -896,7 +896,7 @@ On</value></data>
   <data name="setup_join_failed" xml:space="preserve"><value>Could not join: {0}</value></data>
   <data name="setup_join_host" xml:space="preserve"><value>Join address (for example, 10.0.1.5:47172)</value></data>
   <data name="setup_join_pin" xml:space="preserve"><value>Join with PIN</value></data>
-  <data name="setup_join_required" xml:space="preserve"><value>Enter the join address and PIN</value></data>
+  <data name="setup_join_required" xml:space="preserve"><value>Enter the address and Pairing PIN</value></data>
   <data name="setup_message" xml:space="preserve"><value>Confirm this device's role before continuing. A door station needs a unique door ID.</value></data>
   <data name="setup_name" xml:space="preserve"><value>Device name</value></data>
   <data name="setup_new_cluster" xml:space="preserve"><value>── New cluster ──</value></data>
@@ -922,10 +922,10 @@ This device joins automatically. Only if it does not, enter the indoor panel add
   <data name="sos_button_on_roles" xml:space="preserve"><value>Devices that show SOS</value></data>
   <data name="sos_cancel_countdown" xml:space="preserve"><value>Cancel</value></data>
   <data name="sos_cancel_requires_pin" xml:space="preserve"><value>Require the admin password to clear it</value></data>
-  <data name="sos_countdown" xml:space="preserve"><value>Calling for help in {0}</value></data>
+  <data name="sos_countdown" xml:space="preserve"><value>Sending an alert in {0} seconds</value></data>
   <data name="sos_countdown_cancel" xml:space="preserve"><value>Cancel</value></data>
   <data name="sos_countdown_s" xml:space="preserve"><value>Cancellable countdown (seconds)</value></data>
-  <data name="sos_hint" xml:space="preserve"><value>Triggering alerts every family device. It never calls the police or fire service automatically</value></data>
+  <data name="sos_hint" xml:space="preserve"><value>Triggering an alert notifies every family device. It does not automatically contact the police or fire service.</value></data>
   <data name="sos_mode_hold" xml:space="preserve"><value>Press and hold (legacy)</value></data>
   <data name="sos_mode_slide" xml:space="preserve"><value>Slide to trigger</value></data>
   <data name="sos_slide_hint" xml:space="preserve"><value>Slide right to call for help</value></data>
@@ -981,9 +981,9 @@ Sends in {0}s</value></data>
   <data name="theme_region_notice" xml:space="preserve"><value>Announcement</value></data>
   <data name="theme_region_status_line" xml:space="preserve"><value>Status line</value></data>
   <data name="theme_region_tile_label" xml:space="preserve"><value>Tile label</value></data>
-  <data name="theme_unsampled_decode_failed" xml:space="preserve"><value>unsupported format</value></data>
+  <data name="theme_unsampled_decode_failed" xml:space="preserve"><value>Unsupported format</value></data>
   <data name="theme_unsampled_missing" xml:space="preserve"><value>not on this device yet</value></data>
-  <data name="theme_unsampled_too_large" xml:space="preserve"><value>image too large</value></data>
+  <data name="theme_unsampled_too_large" xml:space="preserve"><value>Image too large</value></data>
   <data name="time_err_bad_reply" xml:space="preserve"><value>The server's answer wasn't valid</value></data>
   <data name="time_err_bad_server" xml:space="preserve"><value>A server entry isn't written correctly</value></data>
   <data name="time_err_implausible" xml:space="preserve"><value>The measured time wasn't plausible and was discarded</value></data>
@@ -1016,7 +1016,7 @@ Sends in {0}s</value></data>
   <data name="time_zone" xml:space="preserve"><value>Time zone</value></data>
   <data name="time_zone_hint" xml:space="preserve"><value>This sets the clock, call history, and rule schedules for the whole cluster</value></data>
   <data name="unlock_auto" xml:space="preserve"><value>Show when configured</value></data>
-  <data name="unlock_command" xml:space="preserve"><value>Command sent</value></data>
+  <data name="unlock_command" xml:space="preserve"><value>Configured command</value></data>
   <data name="unlock_hide" xml:space="preserve"><value>Never show</value></data>
   <data name="unlock_not_configured" xml:space="preserve"><value>No unlock action is configured</value></data>
   <data name="unlock_show" xml:space="preserve"><value>Always show</value></data>
@@ -1027,7 +1027,7 @@ Sends in {0}s</value></data>
   <data name="volume_cluster_default" xml:space="preserve"><value>Cluster default {0}</value></data>
   <data name="volume_device_title" xml:space="preserve"><value>Volume on this device</value></data>
   <data name="volume_hint" xml:space="preserve"><value>Cluster defaults. Override them per device on the Devices tab</value></data>
-  <data name="volume_idle" xml:space="preserve"><value>Everyday</value></data>
+  <data name="volume_idle" xml:space="preserve"><value>Normal</value></data>
   <data name="volume_inherit" xml:space="preserve"><value>Use the cluster default</value></data>
   <data name="volume_preview" xml:space="preserve"><value>Preview</value></data>
   <data name="volume_sos" xml:space="preserve"><value>SOS</value></data>
