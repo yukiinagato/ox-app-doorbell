@@ -22,6 +22,19 @@
 
 namespace db {
 
+// The civetweb "listening_ports" string for a port. Separated out so the decision can be tested
+// without standing up a server.
+std::string httpdListeningPorts(int port, bool ipv6_usable);
+
+// Whether this civetweb message should reach the log, or has already been reported. The accept
+// loop calls this for every connection on a platform that refuses setsockopt on accepted
+// sockets, so a repeat costs a set lookup rather than a mutex, a stderr write and a shell sink.
+bool httpdShouldLogCivetwebMessage(const std::string& text);
+
+// True when a connection accepted from a listener of this address family tolerates the socket
+// options civetweb sets on every accept. Probed on an ephemeral port over loopback.
+bool httpdFamilyServable(int family);
+
 struct HttpReq {
   std::string method;  // GET/POST/...
   std::string uri;
@@ -51,7 +64,15 @@ class Httpd {
   explicit Httpd(Runloop& loop);
   ~Httpd();
 
-  bool start(int port);  // 0.0.0.0:port
+  // Whether to add an IPv6 wildcard listener beside the IPv4 one.
+  //
+  // Auto probes the platform first. iOS 5 will accept a connection from a dual-stack listener
+  // and then refuse setsockopt on the accepted socket, so a listener that binds is not by
+  // itself proof that the platform can serve from it. A shell that already knows better can
+  // pass Off and skip the probe.
+  enum class Ipv6Mode { Auto, Off };
+
+  bool start(int port, Ipv6Mode ipv6 = Ipv6Mode::Auto);  // 0.0.0.0:port
   void stop();
   int port() const;
 

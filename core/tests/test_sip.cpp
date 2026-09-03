@@ -383,28 +383,39 @@ TEST_CASE("sip: the event pump idles instead of polling every ten milliseconds")
   // ...and one beyond the idle period does not drag the loop back up to its rate.
   CHECK(sipPumpTimeoutMs(false, false, 5000) == idle);
 
-  // The rate the policy actually produces, measured rather than divided out: one thread doing
-  // what the pump does, with the poll replaced by a sleep of the same length.
-  auto rate_per_second = [](bool calls_active, bool registration_pending) {
-    std::atomic<uint64_t> iterations{0};
-    std::atomic<bool> stop{false};
-    std::thread pump([&] {
-      while (!stop.load()) {
-        const int timeout = sipPumpTimeoutMs(calls_active, registration_pending, -1);
-        iterations.fetch_add(1);
-        std::this_thread::sleep_for(std::chrono::milliseconds(timeout));
-      }
-    });
-    std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-    stop.store(true);
-    pump.join();
-    return iterations.load();
+  // The rate the policy produces over a second, computed from the policy rather than measured
+  // against a clock. An earlier version of this test ran the loop for a real second and counted
+  // iterations, which measures the machine: a loaded CI runner sleeps late, does fewer rounds
+  // than it asked for, and failed the assertion while the policy was perfectly correct.
+  auto wakeups_per_second = [](bool calls_active, bool registration_pending) {
+    int64_t elapsed_ms = 0;
+    int wakeups = 0;
+    while (elapsed_ms < 1000) {
+      elapsed_ms += sipPumpTimeoutMs(calls_active, registration_pending, -1);
+      wakeups++;
+    }
+    return wakeups;
   };
+  CHECK(wakeups_per_second(false, false) == 4);
+  CHECK(wakeups_per_second(/*calls_active=*/true, false) == 100);
+  CHECK(wakeups_per_second(false, /*registration_pending=*/true) == 100);
+  // The whole point: idling costs a twenty-fifth of what a call does.
+  CHECK(wakeups_per_second(true, false) >= wakeups_per_second(false, false) * 20);
 
-  const uint64_t idle_rate = rate_per_second(false, false);
-  CHECK(idle_rate <= 5);
-  // ...and a call brings it straight back to ten-millisecond polling.
-  const uint64_t call_rate = rate_per_second(/*calls_active=*/true, false);
-  CHECK(call_rate >= 50);
-  CHECK(call_rate > idle_rate * 10);
+  // One loose bound on the real loop, to catch a pump that ignores its own policy. A sleep can
+  // only ever run late, so a slow or loaded machine drives this number down, never up -- there
+  // is no runner on which four expected wakeups become more than twenty.
+  std::atomic<uint64_t> iterations{0};
+  std::atomic<bool> stop{false};
+  std::thread pump([&] {
+    while (!stop.load()) {
+      const int timeout = sipPumpTimeoutMs(false, false, -1);
+      iterations.fetch_add(1);
+      std::this_thread::sleep_for(std::chrono::milliseconds(timeout));
+    }
+  });
+  std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+  stop.store(true);
+  pump.join();
+  CHECK(iterations.load() <= 20);
 }
