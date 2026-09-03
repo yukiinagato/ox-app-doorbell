@@ -65,9 +65,9 @@ internal class DashboardView(
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
     }
-    private val deviceCount = counter(R.drawable.ic_count_cluster)
-    private val doorCount = counter(R.drawable.ic_count_door_station)
-    private val panelCount = counter(R.drawable.ic_count_indoor_panel)
+    private val deviceCount = counter(R.drawable.ic_tabler_topology_star_3)
+    private val doorCount = counter(R.drawable.ic_tabler_door)
+    private val panelCount = counter(R.drawable.ic_tabler_device_tablet)
     private val missedBadge = ShellUi.pill(activity, "", palette.dangerSoft, palette.dangerInk)
     private lateinit var adminButton: Button
     private lateinit var noticeButton: Button
@@ -400,10 +400,6 @@ internal class DashboardView(
         root.setBackgroundColor(ShellUi.opaque(palette.ground))
         // A new palette means every region's decision was taken against a colour that has gone.
         regionInkApplied.clear()
-        for (counter in listOf(deviceCount, doorCount, panelCount)) {
-            counter.value.setTextColor(ShellUi.opaque(palette.muted))
-            counter.icon.setColorFilter(ShellUi.opaque(palette.muted))
-        }
         missedBadge.background = ShellUi.rounded(activity, palette.dangerSoft, 999)
         missedBadge.setTextColor(ShellUi.opaque(palette.dangerInk))
         adminButton.background = ShellUi.rounded(activity, palette.surfaceAlt, 10)
@@ -428,15 +424,20 @@ internal class DashboardView(
     // ---------- the theme backdrop ----------
 
     /**
-     * Put the cluster's theme picture behind the dashboard, darkened (spec §5.1).
+     * Put the cluster's theme picture behind the dashboard, under the configured overlay
+     * (spec §5.1).
      *
      * The dashboard used to paint a flat ground while the rest of the fleet carried the theme.
-     * The picture is prepared once per (picture, view size) and cached, so a status poll every
-     * second and a clock tick every second cost a map lookup and nothing else; only a new picture
-     * or a real size change decodes, and that happens on a worker thread.
+     * The picture is prepared once per (picture, view size, overlay) and cached, so a status poll
+     * every second and a clock tick every second cost a map lookup and nothing else; only a new
+     * picture, a real size change, or an administrator moving the overlay decodes, and that
+     * happens on a worker thread. The overlay is composited into the cached bitmap, which is also
+     * what RegionInk samples, so the ink is chosen against the pixels actually on screen.
      */
     private fun applyThemeBackdrop() {
         val hash = if (app.safeMode) "" else coreDisplay.theme?.backgroundImage.orEmpty()
+        // An older core publishes no backdrop; that cluster keeps the overlay it always had.
+        val overlay = coreDisplay.theme?.backdrop ?: BackdropOverlay.LEGACY
         if (hash.isEmpty()) {
             // No picture configured, or safe mode: the palette's flat ground is the background.
             if (backdropKey.isNotEmpty()) {
@@ -452,19 +453,25 @@ internal class DashboardView(
         val height = root.height
         // Before the first layout there is no size to prepare for; the layout listener returns.
         if (width <= 0 || height <= 0) return
-        val key = ThemeBackdrop.cacheKey(hash, width, height)
+        val key = ThemeBackdrop.cacheKey(hash, width, height, overlay)
         if (key == backdropKey) return
-        ThemeBackdrop.cached(hash, width, height)?.let { showBackdrop(key, it); return }
+        ThemeBackdrop.cached(hash, width, height, overlay)?.let { showBackdrop(key, it); return }
         if (key == backdropLoading) return
         backdropLoading = key
-        loadThemeBackdrop(hash, width, height, key)
+        loadThemeBackdrop(hash, width, height, overlay, key)
     }
 
     /**
      * Fetch the picture from this node's own asset endpoint and prepare it off the main thread.
      * The endpoint is loopback, so it is available before any peer is.
      */
-    private fun loadThemeBackdrop(hash: String, width: Int, height: Int, key: String) {
+    private fun loadThemeBackdrop(
+        hash: String,
+        width: Int,
+        height: Int,
+        overlay: BackdropOverlay,
+        key: String,
+    ) {
         val url = "http://127.0.0.1:${app.boot.httpPort}/asset/$hash"
         Thread({
             var bytes: ByteArray? = null
@@ -480,12 +487,13 @@ internal class DashboardView(
             } finally {
                 try { connection?.disconnect() } catch (_: Exception) { }
             }
-            val prepared = ThemeBackdrop.build(bytes, hash, width, height)
+            val prepared = ThemeBackdrop.build(bytes, hash, width, height, overlay)
             ui.post {
                 backdropLoading = ""
                 if (prepared == null) return@post
-                // The theme or the size may have moved on while this was decoding.
-                if (ThemeBackdrop.cacheKey(hash, root.width, root.height) != key) return@post
+                // The theme, the size or the overlay may have moved on while this was decoding.
+                if (ThemeBackdrop.cacheKey(hash, root.width, root.height, overlay) != key)
+                    return@post
                 showBackdrop(key, prepared)
             }
         }, "doorbell-theme-bg").apply { isDaemon = true }.start()
@@ -527,6 +535,16 @@ internal class DashboardView(
         paintRegion(recentCallsHeading, "status_line", palette.ground, muted = true)
         doorsHeading?.let { paintRegion(it, "status_line", palette.ground, muted = true,
                                         cacheKey = "doors_heading") }
+        // The counters carry no plate of their own: they sit straight on the wallpaper, so they
+        // take the same per-region measurement the rest of the frame text does rather than a
+        // fixed palette token, and each icon follows the number beside it.
+        val counters = listOf(deviceCount, doorCount, panelCount)
+        for (index in counters.indices) {
+            val counter = counters[index]
+            paintRegion(counter.value, "status_line", palette.ground, muted = true,
+                        cacheKey = "counter_$index")
+            counter.icon.setColorFilter(counter.value.currentTextColor)
+        }
     }
 
     /**
@@ -691,7 +709,11 @@ internal class DashboardView(
      */
     private fun buildTiles() {
         val doors = tileDoorIds()
-        if (tiles.keys.toList() != doors) {
+        // An empty door list on the very first build leaves tiles and doors both empty, which
+        // compared equal and skipped the block: the heading and the empty-state line were never
+        // added, so the whole section was missing rather than saying there were no doors. It only
+        // came back if a door later appeared, so a transient empty list hid the section for good.
+        if (tiles.keys.toList() != doors || tileColumn.childCount == 0) {
             tileColumn.removeAllViews()
             tiles.clear()
             stills.clear()
@@ -1144,10 +1166,7 @@ internal class DashboardView(
     }
 
     /** Every configured door. The announcement dialog and the monitor list use all of them. */
-    private fun doorIds(): List<String> {
-        val doors = app.core.dig(config, "doors") as? JSONObject ?: return emptyList()
-        return doors.keys().asSequence().sorted().toList()
-    }
+    private fun doorIds(): List<String> = DoorStations.allDoorIds(status, config)
 
     /**
      * The doors that get a tile. A tile is a picture and a the label action, so a station that reports

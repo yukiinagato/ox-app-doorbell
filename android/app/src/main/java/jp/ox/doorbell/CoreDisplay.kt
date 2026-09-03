@@ -37,6 +37,11 @@ internal data class CoreTheme(
     val backgroundUnsampledReason: String,
     /** display.theme.bg_image: the authoritative signal that the background is a picture. */
     val backgroundImage: String,
+    /**
+     * display.theme.backdrop: the overlay composited over that picture. Null when core does not
+     * publish the field, which is the signal to keep the overlay this shell has always drawn.
+     */
+    val backdrop: BackdropOverlay?,
     /** Per region: true for the light ink token, false for the dark one. */
     val ink: Map<String, Boolean>,
     /** Only the regions an administrator overrode, as explicit colours. */
@@ -110,13 +115,16 @@ internal object CoreDisplays {
         val image = theme.optString("bg_image").takeIf {
             it.isNotEmpty() && it != "null" && !theme.isNull("bg_image")
         }.orEmpty()
-        if (background == null && ink.isEmpty() && callButton == null && image.isEmpty())
+        val backdrop = BackdropOverlay.parse(theme.optJSONObject("backdrop"))
+        if (background == null && ink.isEmpty() && callButton == null && image.isEmpty() &&
+            backdrop == null)
             return null
         return CoreTheme(
             backgroundRgb = background,
             backgroundSource = automatic?.optString("source").orEmpty(),
             backgroundUnsampledReason = automatic?.optString("reason").orEmpty(),
             backgroundImage = image,
+            backdrop = backdrop,
             ink = ink,
             inkOverride = overrides,
             callButtonBg = callButton,
@@ -159,8 +167,14 @@ internal object CoreDisplays {
         // while that is what is on screen -- the flat colour itself, or the picture being drawn.
         // A surface the shell painted, and a picture that has not loaded, are neither.
         val fallback = when (kind) {
-            BackgroundKind.FLAT_COLOUR, BackgroundKind.IMAGE_DRAWN ->
-                theme?.backgroundRgb ?: fallbackBackgroundRgb
+            BackgroundKind.FLAT_COLOUR -> theme?.backgroundRgb ?: fallbackBackgroundRgb
+            // Core averages the picture as it was uploaded; the overlay goes on afterwards. A
+            // region the shell could not sample must still be judged against what is on screen,
+            // or a bright wallpaper under a heavy overlay takes dark ink on a dark ground.
+            BackgroundKind.IMAGE_DRAWN -> ThemeBackdrop.under(
+                theme?.backgroundRgb ?: fallbackBackgroundRgb,
+                theme?.backdrop ?: BackdropOverlay.LEGACY,
+            )
             BackgroundKind.IMAGE_NOT_DRAWN, BackgroundKind.KNOWN_SURFACE -> fallbackBackgroundRgb
         }
         return RegionInkPolicy.resolve(

@@ -95,6 +95,30 @@ internal object DoorStations {
         return state != "dead" && state != "offline"
     }
 
+    /**
+     * Every door this cluster has, from core's live set and from configuration.
+     *
+     * status.doors is the authoritative set: core builds it from the configured doors *and* from
+     * every alive door station, so a station commissioned before its doors.<id> entry replicated
+     * -- or one whose door this node has simply not been told about yet -- is still a door with a
+     * station behind it. Reading configuration alone lost exactly that door, and with it the whole
+     * section. Configuration is unioned in rather than replaced so a door that is configured but
+     * has never had a station keeps its place, and so an older core without status.doors behaves
+     * as it always did.
+     */
+    fun allDoorIds(status: JSONObject?, config: JSONObject?): List<String> {
+        val ids = LinkedHashSet<String>()
+        status?.optJSONObject("doors")?.let { doors ->
+            val keys = doors.keys()
+            while (keys.hasNext()) keys.next()?.let { if (it.isNotEmpty()) ids.add(it) }
+        }
+        config?.optJSONObject("doors")?.let { doors ->
+            val keys = doors.keys()
+            while (keys.hasNext()) keys.next()?.let { if (it.isNotEmpty()) ids.add(it) }
+        }
+        return ids.sorted()
+    }
+
     /** Whether any device at all is bound to this door, in the peer list or in configuration. */
     fun anyStation(status: JSONObject?, config: JSONObject?, door: String): Boolean {
         if (door.isEmpty()) return false
@@ -157,8 +181,24 @@ internal object DoorStations {
         return caps.optBoolean("camera", true)
     }
 
-    /** Whether the dashboard should give this door a tile. A door with no station yet keeps one. */
+    /**
+     * Whether the dashboard should give this door a tile. A door with no station yet keeps one.
+     *
+     * A door core reports as *served* -- status.doors.<id>.served_by naming a station that is
+     * alive -- always keeps its tile, whatever the station advertises in caps.camera. served_by is
+     * core's own statement that a station is there and answering; caps.camera is an advertisement
+     * a device may publish conservatively, and the iOS door station on this cluster publishes
+     * false while it is actively serving its door. Hiding the tile then removed the only live door
+     * from the dashboard. The capability still suppresses the tile for a station that is present
+     * but not serving, which is the case it was written for: a doorbell with no lens.
+     */
     fun tileVisible(status: JSONObject?, config: JSONObject?, door: String): Boolean {
+        // Core naming a station in served_by is a positive statement, not the older inference
+        // "some alive station matches this door", so the capability still decides everywhere core
+        // has not said it explicitly.
+        val entry = status?.optJSONObject("doors")?.optJSONObject(door)
+        if (entry != null && servedBy(entry).isNotEmpty() &&
+            alivePeer(status, config, door) != null) return true
         val peer = peerFor(status, config, door) ?: return true
         return hasCamera(peer)
     }
