@@ -26,6 +26,51 @@ static CGRect DBRectFromArray(NSArray *rect) {
                     (CGFloat)[[rect objectAtIndex:3] doubleValue]);
 }
 
+@interface DBFrostedPlateView : UIView
+- (void)setBackdrop:(UIImage *)backdrop sourceFrame:(CGRect)sourceFrame
+         canvasSize:(CGSize)canvasSize tint:(UIColor *)tint border:(UIColor *)border;
+@end
+
+@implementation DBFrostedPlateView {
+  UIImage *_backdrop;
+  CGRect _sourceFrame;
+  CGSize _canvasSize;
+  UIColor *_tint;
+}
+
+- (void)setBackdrop:(UIImage *)backdrop sourceFrame:(CGRect)sourceFrame
+         canvasSize:(CGSize)canvasSize tint:(UIColor *)tint border:(UIColor *)border {
+  _backdrop = backdrop;
+  _sourceFrame = sourceFrame;
+  _canvasSize = canvasSize;
+  _tint = tint;
+  self.layer.borderWidth = 0.5;
+  self.layer.borderColor = border.CGColor;
+  [self setNeedsDisplay];
+}
+
+- (void)drawRect:(CGRect)rect {
+  (void)rect;
+  if (_backdrop && _sourceFrame.size.width > 0 && _sourceFrame.size.height > 0 &&
+      _canvasSize.width > 0 && _canvasSize.height > 0) {
+    CGSize reduced = CGSizeMake(MAX(1, ceil(self.bounds.size.width / 10)),
+                                MAX(1, ceil(self.bounds.size.height / 10)));
+    UIGraphicsBeginImageContextWithOptions(reduced, YES, 1.0);
+    CGFloat sx = reduced.width / _sourceFrame.size.width;
+    CGFloat sy = reduced.height / _sourceFrame.size.height;
+    [_backdrop drawInRect:CGRectMake(-_sourceFrame.origin.x * sx,
+                                     -_sourceFrame.origin.y * sy,
+                                     _canvasSize.width * sx, _canvasSize.height * sy)];
+    UIImage *softened = UIGraphicsGetImageFromCurrentImageContext();
+    UIGraphicsEndImageContext();
+    [softened drawInRect:self.bounds];
+  }
+  [_tint setFill];
+  UIRectFillUsingBlendMode(self.bounds, kCGBlendModeNormal);
+}
+
+@end
+
 static const NSTimeInterval kSnapshotIntervalS = 5.0;
 // Safe mode keeps the door picture, smaller and less often. It is already the
 // bounded low-resolution snapshot the safe-mode contract asks for, and a panel
@@ -350,9 +395,8 @@ static const NSInteger kRecentCallLimit = 20;
   [self buildEmergencyView];
 
   _secretCorner = [UIButton buttonWithType:UIButtonTypeCustom];
-  _secretCorner.backgroundColor = [UIColor clearColor];
-  [_secretCorner addTarget:self action:@selector(onSecretCorner)
-          forControlEvents:UIControlEventTouchUpInside];
+  _secretCorner.hidden = YES;
+  _secretCorner.userInteractionEnabled = NO;
   [self addSubview:_secretCorner];
 
   [self applyPalette];
@@ -623,7 +667,7 @@ static const NSInteger kRecentCallLimit = 20;
 // it while small text over it gets a stable ground. Card radius matches a door
 // tile, and it never takes touches away from the controls above it.
 - (UIView *)newScrimView {
-  UIView *scrim = [[UIView alloc] initWithFrame:CGRectZero];
+  UIView *scrim = [[DBFrostedPlateView alloc] initWithFrame:CGRectZero];
   scrim.layer.cornerRadius = 12;
   scrim.userInteractionEnabled = NO;
   scrim.hidden = YES;
@@ -632,14 +676,15 @@ static const NSInteger kRecentCallLimit = 20;
 }
 
 static const CGFloat kScrimAlpha = 0.70;
+static const CGFloat kFooterGlassAlpha = 0.65;
 
 // The plates exist only over a picture; on a flat ground they would be a
 // visible rectangle of very slightly different colour for no benefit.
 - (void)applyScrimTone {
   BOOL overPicture = !_themeBg.hidden && _themeBg.image != nil;
-  UIColor *tone = [_palette.surface colorWithAlphaComponent:kScrimAlpha];
-  _historyScrim.backgroundColor = tone;
-  _footerScrim.backgroundColor = tone;
+  UIColor *fallbackTone = [_palette.surface colorWithAlphaComponent:kScrimAlpha];
+  _historyScrim.backgroundColor = overPicture ? [UIColor clearColor] : fallbackTone;
+  _footerScrim.backgroundColor = [UIColor clearColor];
   _historyScrim.hidden = !overPicture;
   _footerScrim.hidden = !overPicture;
 }
@@ -1279,7 +1324,7 @@ static const CGFloat kScrimAlpha = 0.70;
   _offlineView.frame = self.bounds;
   _emergencyView.frame = self.bounds;
   _noticeDialog.frame = self.bounds;
-  _secretCorner.frame = CGRectMake(size.width - 120, 0, 120, 120);
+  _secretCorner.frame = CGRectZero;
 
   // Header: clock and date on the left, status controls on the right. The
   // boxes are derived from the fonts, so a larger size moves what follows
@@ -1388,8 +1433,15 @@ static const CGFloat kScrimAlpha = 0.70;
   // The plate covers the rows, not the heading: headings keep the region-ink
   // rule over the picture, which is what the spec asks of them.
   CGFloat scrimPad = 10;
-  _historyScrim.frame = CGRectMake(listX - scrimPad, listY - scrimPad,
-                                   listWidth + scrimPad * 2, listHeight + scrimPad * 2);
+  _historyScrim.frame = CGRectMake(listX - scrimPad, listY,
+                                   listWidth + scrimPad * 2, listHeight);
+  if ([_historyScrim isKindOfClass:[DBFrostedPlateView class]]) {
+    UIColor *tint = [_palette.surface colorWithAlphaComponent:kFooterGlassAlpha];
+    UIColor *border = [_palette.ink colorWithAlphaComponent:0.18];
+    [(DBFrostedPlateView *)_historyScrim setBackdrop:_themeBg.image
+                                         sourceFrame:_historyScrim.frame
+                                          canvasSize:size tint:tint border:border];
+  }
   _recentList.frame = CGRectMake(listX, listY, listWidth, listHeight);
   CGFloat rowY = 0;
   for (UILabel *label in _recentLabels) {
@@ -1409,8 +1461,16 @@ static const CGFloat kScrimAlpha = 0.70;
   _sos.frame = DBRectFromArray([footer objectForKey:@"sos"]);
   // One plate under the whole footer block. The SOS bar is its own red control
   // and is deliberately left outside it.
+  CGFloat footerPad = 8;
   _footerScrim.frame = CGRectIsEmpty(footerBlock)
-      ? CGRectZero : CGRectInset(footerBlock, -scrimPad, -scrimPad);
+      ? CGRectZero : CGRectInset(footerBlock, -footerPad, -footerPad);
+  if ([_footerScrim isKindOfClass:[DBFrostedPlateView class]]) {
+    UIColor *tint = [_palette.surface colorWithAlphaComponent:kFooterGlassAlpha];
+    UIColor *border = [_palette.ink colorWithAlphaComponent:0.18];
+    [(DBFrostedPlateView *)_footerScrim setBackdrop:_themeBg.image
+                                        sourceFrame:_footerScrim.frame
+                                         canvasSize:size tint:tint border:border];
+  }
 
   CGFloat replyWidth = MIN(size.width - 40, 560);
   _replyBanner.frame = CGRectMake((size.width - replyWidth) / 2, 20, replyWidth, 96);

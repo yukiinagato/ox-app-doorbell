@@ -629,7 +629,7 @@ static NSArray *DBRectArray(double x, double y, double width, double height) {
                                 sosVisible:(BOOL)sosVisible {
   const double pad = 20;
   const double gap = 12;
-  const double qrHeight = 76;
+  const double qrHeight = 72;
   const double versionHeight = 40;  // Two lines rather than an ellipsis.
   const double sosHeight = 62;
   if (viewWidth <= 0 || viewHeight <= 0) {
