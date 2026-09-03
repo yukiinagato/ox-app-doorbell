@@ -1141,8 +1141,10 @@ bool ntpObjectValid(const cJSON* value, const std::string& path, std::string* er
   const cJSON* servers = json::get(value, "servers");
   if (servers && !ntpServerListValid(servers, error)) return false;
   const cJSON* interval = json::get(value, "interval_s");
-  if (interval && !wholeNumberInRange(interval, 60, 86400)) {
-    *error = "time.ntp.interval_s must be a whole number of seconds between 60 and 86400";
+  if (interval && !wholeNumberInRange(interval, 3600, 604800)) {
+    *error = "time.ntp.interval_s must be a whole number of seconds between 3600 and 604800 "
+        "(one hour to seven days); a clock correction is stable for days, so syncing more "
+        "often only costs battery and traffic";
     return false;
   }
   return true;
@@ -1173,8 +1175,10 @@ bool timeConfigValid(const std::string& key, const cJSON* value, std::string* er
   }
   if (key == "time.ntp.servers") return ntpServerListValid(value, error);
   if (key == "time.ntp.interval_s") {
-    if (wholeNumberInRange(value, 60, 86400)) return true;
-    *error = "time.ntp.interval_s must be a whole number of seconds between 60 and 86400";
+    if (wholeNumberInRange(value, 3600, 604800)) return true;
+    *error = "time.ntp.interval_s must be a whole number of seconds between 3600 and 604800 "
+        "(one hour to seven days); a clock correction is stable for days, so syncing more "
+        "often only costs battery and traffic";
     return false;
   }
   *error = "unknown time configuration key " + key;
@@ -1431,6 +1435,48 @@ bool themeOverrideValid(const std::string& key, const cJSON* value, std::string*
     *error = "auto_ink and auto_accent are computed by core and cannot be written";
     return false;
   }
+  // The darkening layer a shell composites between the background image and the text. Every
+  // leaf is optional and a null clears an override, so a device can darken more than the
+  // cluster without restating the colour.
+  auto backdrop_leaf_valid = [&error, &color_valid](const std::string& leaf, const cJSON* value,
+                                                    const std::string& path) {
+    if (cJSON_IsNull(value)) return true;
+    if (leaf == "enabled") {
+      if (cJSON_IsBool(value)) return true;
+      *error = path + " must be true or false";
+      return false;
+    }
+    if (leaf == "color") return color_valid(value, path);
+    if (leaf == "opacity") {
+      if (wholeNumberInRange(value, 0, 100)) return true;
+      *error = path + " must be a whole number between 0 and 100";
+      return false;
+    }
+    *error = path + " is not a backdrop setting";
+    return false;
+  };
+  auto backdrop_object_valid = [&backdrop_leaf_valid, &error](const cJSON* value,
+                                                              const std::string& path) {
+    if (cJSON_IsNull(value)) return true;
+    if (!cJSON_IsObject(value)) {
+      *error = path + " must be an object";
+      return false;
+    }
+    const cJSON* item = nullptr;
+    cJSON_ArrayForEach(item, value) {
+      const std::string leaf = item->string ? item->string : "";
+      if (!backdrop_leaf_valid(leaf, item, path + "." + leaf)) return false;
+    }
+    return true;
+  };
+  const std::string backdrop_marker = "theme.backdrop";
+  const size_t backdrop_pos = key.find(backdrop_marker);
+  if (backdrop_pos != std::string::npos) {
+    const std::string tail = key.substr(backdrop_pos + backdrop_marker.size());
+    if (tail.empty()) return backdrop_object_valid(value, key);
+    if (tail[0] == '.') return backdrop_leaf_valid(tail.substr(1), value, key);
+  }
+
   const size_t ink_pos = key.find(ink_marker);
   if (ink_pos != std::string::npos) {
     const std::string tail = key.substr(ink_pos + ink_marker.size());
@@ -1452,6 +1498,8 @@ bool themeOverrideValid(const std::string& key, const cJSON* value, std::string*
       return false;
     const cJSON* ink = json::get(value, "ink_override");
     if (ink && !ink_map_valid(ink, key + ".ink_override")) return false;
+    const cJSON* backdrop = json::get(value, "backdrop");
+    if (backdrop && !backdrop_object_valid(backdrop, key + ".backdrop")) return false;
     if (json::get(value, "auto_ink") || json::get(value, "auto_accent")) {
       *error = "auto_ink and auto_accent are computed by core and cannot be written";
       return false;
@@ -1890,7 +1938,14 @@ struct Node::Impl {
   };
   TimeState time_state;
   uint64_t time_sync_timer = 0;
-  int time_sync_timer_interval_s = 0;
+  // Backoff after a failed round, in seconds. Zero means the next round is due at the configured
+  // interval; a day is far too long to wait after one failed exchange, and retrying at one
+  // minute forever is what the long interval exists to avoid.
+  static constexpr int kTimeSyncBackoffMinS = 60;
+  static constexpr int kTimeSyncBackoffMaxS = 3600;
+  int time_sync_backoff_s = 0;
+  bool time_sync_armed = false;
+  std::string time_sync_servers_key;
   std::thread time_sync_thread;
   bool time_sync_busy = false;
   std::atomic<bool> time_sync_abort{false};
@@ -2669,11 +2724,14 @@ struct Node::Impl {
     return json::getBool(json::get(json::get(cfg.get(), "time"), "ntp"), "enabled", false);
   }
 
+  // Once a day by default. A measured offset does not drift meaningfully over hours, so the
+  // old fifteen-minute round trip bought nothing and cost battery, traffic, and a wake-up on
+  // every device in the house. Configuration written before this rule is clamped on read.
   int ntpIntervalS() const {
     const int64_t seconds =
-        json::getInt(json::get(json::get(cfg.get(), "time"), "ntp"), "interval_s", 900);
-    if (seconds < 60) return 60;
-    if (seconds > 86400) return 86400;
+        json::getInt(json::get(json::get(cfg.get(), "time"), "ntp"), "interval_s", 86400);
+    if (seconds < 3600) return 3600;
+    if (seconds > 604800) return 604800;
     return static_cast<int>(seconds);
   }
 
@@ -2739,6 +2797,9 @@ struct Node::Impl {
     json::set(out.get(), "interval_s", static_cast<int64_t>(ntpIntervalS()));
     json::set(out.get(), "offset_min", static_cast<int64_t>(tzOffsetMin()));
     json::setBool(out.get(), "syncing", time_sync_busy);
+    // Zero while the schedule is running normally; the seconds until the next retry after a
+    // failed round, so an administrator can see the service is backing off rather than idle.
+    json::set(out.get(), "retry_in_s", static_cast<int64_t>(time_sync_backoff_s));
     if (!time_state.last_error.empty()) json::set(out.get(), "err", time_state.last_error);
     // The identifiers core can actually resolve, grouped the way a picker lists them. A shell
     // that offered a zone outside this table would show a setting core rejects on save.
@@ -2757,25 +2818,52 @@ struct Node::Impl {
     return out;
   }
 
-  // Re-arm the periodic sync whenever the interval or the enabled flag changes.
+  void cancelTimeSyncTimer() {
+    if (!time_sync_timer) return;
+    loop->cancel(time_sync_timer);
+    time_sync_timer = 0;
+  }
+
+  // One shot at a time, re-armed when each round finishes, so a failure can come back sooner
+  // than the interval without a second timer racing the first.
+  void armTimeSyncTimer() {
+    cancelTimeSyncTimer();
+    if (!started || !ntpEnabled()) return;
+    const int64_t delay_ms = time_sync_backoff_s > 0
+        ? static_cast<int64_t>(time_sync_backoff_s) * 1000LL
+        : static_cast<int64_t>(ntpIntervalS()) * 1000LL;
+    time_sync_timer = loop->postDelayed(delay_ms, [this] {
+      time_sync_timer = 0;
+      if (!startTimeSync()) armTimeSyncTimer();
+    });
+  }
+
+  // Exactly one round when the service is switched on, when the servers change, and at
+  // start-up -- then the interval. Changing the interval alone re-arms the timer without
+  // spending a round trip, which is the difference between an administrator adjusting a
+  // setting and a device deciding to talk to the internet.
   void reapplyTimeSchedule() {
-    const bool enabled = ntpEnabled();
-    const int interval = ntpIntervalS();
-    if (!enabled) {
-      if (time_sync_timer) {
-        loop->cancel(time_sync_timer);
-        time_sync_timer = 0;
-        time_sync_timer_interval_s = 0;
-      }
+    if (!ntpEnabled()) {
+      cancelTimeSyncTimer();
+      time_sync_armed = false;
+      time_sync_servers_key.clear();
+      time_sync_backoff_s = 0;
       applyTimeOffset();
       return;
     }
-    if (time_sync_timer && time_sync_timer_interval_s == interval) return;
-    if (time_sync_timer) loop->cancel(time_sync_timer);
-    time_sync_timer_interval_s = interval;
-    time_sync_timer =
-        loop->postEvery(static_cast<int64_t>(interval) * 1000LL, [this] { startTimeSync(); });
-    startTimeSync();
+    std::string servers_key;
+    for (const auto& server : ntpServers()) servers_key += server + "\n";
+    const bool sync_now = !time_sync_armed || servers_key != time_sync_servers_key;
+    time_sync_armed = true;
+    time_sync_servers_key = servers_key;
+    if (!sync_now) {
+      armTimeSyncTimer();
+      return;
+    }
+    time_sync_backoff_s = 0;
+    // A round in flight arms the next timer when it completes; one that refused to start still
+    // needs a schedule.
+    if (!startTimeSync()) armTimeSyncTimer();
   }
 
   // Kick one synchronization round. The exchange itself runs on a short-lived worker thread: a
@@ -2845,10 +2933,17 @@ struct Node::Impl {
         time_state.last_sync_mono_ms = clock->monoMs();
         time_state.last_sync_wall_ms = clock->systemWallMs() + offset;
         time_state.last_error.clear();
+        time_sync_backoff_s = 0;
       } else {
         time_state.last_error = last_error;
+        // Come back sooner than the interval, but doubling each time: a device with no route to
+        // a time server settles at one attempt an hour instead of one a minute forever.
+        time_sync_backoff_s = time_sync_backoff_s > 0
+            ? std::min(time_sync_backoff_s * 2, kTimeSyncBackoffMaxS)
+            : kTimeSyncBackoffMinS;
       }
       applyTimeOffset();
+      armTimeSyncTimer();
       scheduleSnapshotRefresh();
     });
   }
@@ -3891,6 +3986,53 @@ struct Node::Impl {
     return o;
   }
 
+  // The semi-transparent layer a shell composites between the background image and everything
+  // drawn on top of it. It is on by default because a bright photograph makes light text
+  // unreadable, but which colour, how strong, and whether it is drawn at all belong to the
+  // administrator -- and to one device when a single panel sits in a brighter room than the
+  // rest. Each leaf resolves on its own, so a device can darken further without restating the
+  // colour; source names the strongest origin among the three.
+  json::Doc backdropDoc() {
+    const cJSON* cluster = json::get(json::get(json::get(cfg.get(), "display"), "theme"),
+                                     "backdrop");
+    const cJSON* device = json::get(cfgAt("devices." + node_id + ".local.theme"), "backdrop");
+    bool from_device = false;
+    bool from_admin = false;
+    auto leaf = [&](const char* name) -> const cJSON* {
+      const cJSON* value = json::get(device, name);
+      if (value && !cJSON_IsNull(value)) {
+        from_device = true;
+        return value;
+      }
+      value = json::get(cluster, name);
+      if (value && !cJSON_IsNull(value)) {
+        from_admin = true;
+        return value;
+      }
+      return nullptr;
+    };
+    bool enabled = true;
+    if (const cJSON* value = leaf("enabled")) {
+      if (cJSON_IsBool(value)) enabled = cJSON_IsTrue(value);
+    }
+    std::string color = "#000000";
+    if (const cJSON* value = leaf("color")) {
+      color::Rgb parsed;
+      if (cJSON_IsString(value) && color::parseHex(value->valuestring, &parsed))
+        color = color::formatHex(parsed);
+    }
+    int64_t opacity = 62;
+    if (const cJSON* value = leaf("opacity")) {
+      if (wholeNumberInRange(value, 0, 100)) opacity = static_cast<int64_t>(value->valuedouble);
+    }
+    auto out = json::obj();
+    json::setBool(out.get(), "enabled", enabled);
+    json::set(out.get(), "color", color);
+    json::set(out.get(), "opacity", opacity);
+    json::set(out.get(), "source", from_device ? "device" : (from_admin ? "admin" : "default"));
+    return out;
+  }
+
   // Automatic contrast, published once by core so every shell in the cluster draws the same ink
   // and the same call button instead of each deriving its own from the same background.
   void themeAutoDoc(cJSON* theme) {
@@ -3937,6 +4079,7 @@ struct Node::Impl {
     }
     json::set(theme, "call_button_bg", effective_button);
     json::set(theme, "call_button_ink", effective_button_ink);
+    json::setItem(theme, "backdrop", backdropDoc());
   }
 
 
@@ -5324,6 +5467,48 @@ struct Node::Impl {
 
   // Readability of the theme colours an administrator sets by hand, measured against the
   // effective background of the node being configured. Reported, never enforced.
+  // The darkening layer is what keeps text legible over a photograph. Turning it off, or down
+  // to almost nothing, is a legitimate choice on a dark image and a mistake on a bright one --
+  // core cannot tell which, so it reports rather than refuses.
+  void backdropWarnings(const std::string& key, const cJSON* value,
+                        std::vector<ConfigWarning>* warnings) {
+    if (!warnings) return;
+    if (key.find("theme") == std::string::npos) return;
+    // Only meaningful while a background image is configured: over a flat colour the ink is
+    // already measured against the colour itself.
+    if (themeBgImageOnLoop().empty()) return;
+    const cJSON* backdrop = value;
+    if (key.find("theme.backdrop") == std::string::npos) {
+      backdrop = json::get(value, "backdrop");
+      if (!backdrop) return;
+    }
+    bool weak = false;
+    std::string property;
+    if (key.size() >= 8 && key.compare(key.size() - 8, 8, ".enabled") == 0) {
+      weak = cJSON_IsFalse(backdrop);
+      property = "enabled";
+    } else if (key.size() >= 8 && key.compare(key.size() - 8, 8, ".opacity") == 0) {
+      weak = wholeNumberInRange(backdrop, 0, 19);
+      property = "opacity";
+    } else if (cJSON_IsObject(backdrop)) {
+      const cJSON* enabled = json::get(backdrop, "enabled");
+      const cJSON* opacity = json::get(backdrop, "opacity");
+      if (cJSON_IsFalse(enabled)) {
+        weak = true;
+        property = "enabled";
+      } else if (wholeNumberInRange(opacity, 0, 19)) {
+        weak = true;
+        property = "opacity";
+      }
+    }
+    if (!weak) return;
+    ConfigWarning warning;
+    warning.key = key;
+    warning.property = property;
+    warning.message_key = "theme.backdrop_weak";
+    warnings->push_back(std::move(warning));
+  }
+
   void themeContrastWarnings(const std::string& key, const cJSON* value,
                              std::vector<ConfigWarning>* warnings) {
     if (!warnings) return;
@@ -5331,6 +5516,7 @@ struct Node::Impl {
         key == "display.theme" ||
         (key.rfind("devices.", 0) == 0 && key.size() >= 6 &&
          key.compare(key.size() - 6, 6, ".theme") == 0);
+    backdropWarnings(key, value, warnings);
     if (!is_theme_container && key.find("theme.call_button_bg") == std::string::npos &&
         key.find("theme.ink_override") == std::string::npos)
       return;
@@ -5983,7 +6169,7 @@ struct Node::Impl {
           {"time.zone", "\"Asia/Tokyo\"", false},
           {"time.ntp.enabled", "false", false},
           {"time.ntp.servers", "[\"ntp.nict.jp\",\"time.google.com\"]", false},
-          {"time.ntp.interval_s", "900", false},
+          {"time.ntp.interval_s", "86400", false},
           {"audio.volume.call", "80", false},
           {"audio.volume.sos", "100", false},
           {"audio.volume.idle", "60", false},
@@ -10228,11 +10414,9 @@ void Node::stop() {
       impl_->loop->cancel(impl_->minute_timer);
       impl_->minute_timer = 0;
     }
-    if (impl_->time_sync_timer) {
-      impl_->loop->cancel(impl_->time_sync_timer);
-      impl_->time_sync_timer = 0;
-      impl_->time_sync_timer_interval_s = 0;
-    }
+    impl_->cancelTimeSyncTimer();
+    impl_->time_sync_armed = false;
+    impl_->time_sync_backoff_s = 0;
     if (impl_->peers_emit_timer) {
       impl_->loop->cancel(impl_->peers_emit_timer);
       impl_->peers_emit_timer = 0;

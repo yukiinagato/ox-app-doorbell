@@ -14,6 +14,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <thread>
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
@@ -275,6 +276,49 @@ struct SipCtl::Impl {
   void stopOnLoop();
 
 
+  // ---- SIP event pump ----
+  // pjsua's own worker polls every 10 ms whether or not anything is happening. This one follows
+  // the work; see the note at the top of sipctl.h.
+  std::thread pump_thread;
+  std::atomic<bool> pump_stop{false};
+  std::atomic<bool> registration_pending{false};
+  // Iterations of the pump loop, so a test can measure the idle rate rather than infer it.
+  std::atomic<uint64_t> pump_iterations{0};
+
+  long earliestTimerMs() {
+    pjsip_endpoint* endpt = pjsua_get_pjsip_endpt();
+    if (!endpt) return -1;
+    pj_timer_heap_t* heap = pjsip_endpt_get_timer_heap(endpt);
+    if (!heap) return -1;
+    pj_time_val delay;
+    if (pj_timer_heap_earliest_time(heap, &delay) != PJ_SUCCESS) return -1;
+    if (delay.sec < 0 || delay.msec < 0) return 0;
+    if (delay.sec > 3600) return 3600L * 1000L;
+    return static_cast<long>(delay.sec) * 1000L + delay.msec;
+  }
+
+  void pumpLoop() {
+    ensurePjThread();
+    while (!pump_stop.load(std::memory_order_relaxed)) {
+      const int timeout = sipPumpTimeoutMs(pjsua_call_get_count() > 0,
+                                           registration_pending.load(std::memory_order_relaxed),
+                                           earliestTimerMs());
+      pump_iterations.fetch_add(1, std::memory_order_relaxed);
+      pjsua_handle_events(static_cast<unsigned>(timeout));
+    }
+  }
+
+  void startPump() {
+    pump_stop.store(false);
+    pump_iterations.store(0);
+    pump_thread = std::thread([this] { pumpLoop(); });
+  }
+
+  void stopPump() {
+    pump_stop.store(true);
+    if (pump_thread.joinable()) pump_thread.join();
+  }
+
   static void s_on_reg_state2(pjsua_acc_id acc_id, pjsua_reg_info* info);
   static void s_on_call_state(pjsua_call_id call_id, pjsip_event* e);
   static void s_on_incoming_call(pjsua_acc_id acc_id, pjsua_call_id call_id, pjsip_rx_data* rdata);
@@ -292,6 +336,9 @@ void SipCtl::Impl::s_on_reg_state2(pjsua_acc_id, pjsua_reg_info* info) {
   Impl* im = g_impl.load();
   if (!im || !info || !info->cbparam) return;
   const pjsip_regc_cbparam* p = info->cbparam;
+  // A final answer means the exchange is over and the pump can slow down again.
+  if (p->status != PJ_SUCCESS || p->code >= 200)
+    im->registration_pending.store(false, std::memory_order_relaxed);
   std::string reason = "code=" + std::to_string(p->code);
   if (p->status != PJ_SUCCESS) {
     im->postReg(SipRegState::Failed, "status=" + std::to_string(p->status));
@@ -522,6 +569,9 @@ void SipCtl::Impl::startOnLoop(const SipSettings& s) {
 
   pjsua_config cfg;
   pjsua_config_default(&cfg);
+  // No pjsua worker: its loop polls every 10 ms for ever, idle or not. We pump the events
+  // ourselves at a rate that follows the work. See the note at the top of sipctl.h.
+  cfg.thread_cnt = 0;
   cfg.cb.on_reg_state2 = &Impl::s_on_reg_state2;
   cfg.cb.on_call_state = &Impl::s_on_call_state;
   cfg.cb.on_incoming_call = &Impl::s_on_incoming_call;
@@ -578,6 +628,7 @@ void SipCtl::Impl::startOnLoop(const SipSettings& s) {
   }
 
   pjsua_start();
+  startPump();
   if (st.null_audio) pjsua_set_null_snd_dev();
 
 
@@ -660,6 +711,7 @@ void SipCtl::Impl::startOnLoop(const SipSettings& s) {
   }
 
   running = true;
+  registration_pending.store(true, std::memory_order_relaxed);
   reg_state = SipRegState::Registering;
   call_state = SipCallState::Idle;
   DB_LOGI(kTag, "SIP started: " + st.user + "@" + host + " (" + st.transport + ")");
@@ -674,6 +726,9 @@ void SipCtl::Impl::stopOnLoop() {
   DB_LOGI(kTag, "stopping SIP: hang up, unregister, then destroy pjsua");
   pjsua_call_hangup_all();
   if (acc != PJSUA_INVALID_ID) pjsua_acc_set_registration(acc, PJ_FALSE);
+  // The pump must be off the endpoint before it is torn down: handle_events on a destroyed
+  // endpoint is a use-after-free, not a no-op.
+  stopPump();
   pjsua_destroy();
   g_impl.store(nullptr);
   stopping.store(false);

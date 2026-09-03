@@ -175,7 +175,11 @@ mesh-PSK-derived key 和 XChaCha20-Poly1305 seal 成 schema-v2 CRDT record；mat
 
   "display": {                                  // 显示与防烧屏（全设备默认; 可用 devices.<id>.local.display 覆盖）
     // theme: 门口机背景（从室内机/管理页面「推送」= 只是写这个配置。CRDT 即时同步）
-    "theme": { "bg_color": "#101418", "bg_image": null },   // bg_image: assets 的 sha256 或 null
+    "theme": { "bg_color": "#101418", "bg_image": null,   // bg_image: assets 的 sha256 或 null
+               // 叠加在背景图片与其上所有元素之间的半透明层，使文字在明亮照片上仍可辨认。
+               // 默认启用；每个字段都可通过 devices.<id>.local.theme.backdrop.* 按设备覆盖，
+               // 且各字段独立解析。
+               "backdrop": { "enabled": true, "color": "#000000", "opacity": 62 } },  // 0..100
     "brightness": 70,                           // 0-100（远程调节 — 管理页面的滑块）
     "night": { "enabled": true, "from": "22:00", "to": "06:00",
                "brightness": 15, "red_tint": true },   // 夜间模式（用校正后的时钟判定）
@@ -193,7 +197,7 @@ mesh-PSK-derived key 和 XChaCha20-Poly1305 seal 成 schema-v2 CRDT record；mat
     // 连续三个间隔没有成功同步后，偏移会被撤销。
     "ntp": { "enabled": false,                  // 默认关闭
              "servers": ["ntp.nict.jp", "time.google.com"],   // 1-4 个 "host" 或 "host:port"
-             "interval_s": 900 }                // 60..86400
+             "interval_s": 86400 }              // 3600..604800，默认每天一次
   },
 
   // 集群默认音量（0-100）。设备可用 devices.<id>.local.audio.volume.{call,sos,idle} 覆盖；
@@ -433,6 +437,21 @@ generic command/argv。
 core 最多采样 16x16 个点，但 stb 没有解码时缩放，因此解码是瞬时的，约每像素 3 字节
 （上限约 48 MB），随后立即释放。承受不起该开销的硬件上的外壳无论如何都应自行采样；
 `source` 字段就是用来告知 core 未曾采样的。
+
+### 背景遮罩层
+
+`display.theme.backdrop` 控制外壳在背景图片与其上所有元素之间绘制的半透明层，正是它让时钟在明亮
+照片上依然可读。`enabled`（默认 true）、`color`（`#RRGGBB`，默认 `#000000`）与 `opacity`
+（0～100，默认 62）均可通过 `devices.<id>.local.theme.backdrop.*` 按设备覆盖，且各字段独立解析：
+位于较明亮房间的某一台可以只提高浓度，而不必重复指定颜色。
+
+解析结果发布为 `status.display.theme.backdrop = {enabled, color, opacity, source}`，其中 `source`
+表示三个值中最强的来源，取值为 `device`、`admin` 或 `default`。同一对象也随 `display` UI 事件下发，
+因此外壳直接绘制核心解析出的值，而无需自行读取配置。
+
+颜色格式不正确或浓度超出 0～100 的写入会被拒绝。关闭该层或将其降到 20 以下会被接受，但只要配置了
+背景图片就会以警告（`theme.backdrop_weak`）的形式报告：在明亮照片上这通常是失误，在深色照片上则不是，
+而核心无法分辨究竟属于哪一种。
 
 ### 如何选择文字颜色
 

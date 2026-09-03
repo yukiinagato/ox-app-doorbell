@@ -1,12 +1,12 @@
 {
   "images": [
     {
-      "filename": "world.pdf",
+      "filename": "icon.pdf",
       "idiom": "universal"
     }
   ],
   "info": {
-    "author": "xcode",
+    "author": "tools/gen_icons.py",
     "version": 1
   },
   "properties": {

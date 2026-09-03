@@ -49,12 +49,31 @@ assert.deepStrictEqual(timeEntries, [
 ]);
 // integrations.tz_offset_min is derived by core; writing it from the form would fight core.
 assert.ok(!timeEntries.some((e) => e.key === "integrations.tz_offset_min"));
+// A clock correction is stable for days: an hour is the floor and a week the ceiling, and the
+// default is once a day.
+assert.deepStrictEqual(
+  L.timeEntries({ zone: "Asia/Tokyo", ntp_enabled: false, servers: "ntp.nict.jp" })
+    .find((e) => e.key === "time.ntp.interval_s"),
+  { key: "time.ntp.interval_s", value: 86400 });
+assert.strictEqual(
+  L.timeEntries({ zone: "Asia/Tokyo", ntp_enabled: true, servers: "a", interval_s: 604800 })
+    .find((e) => e.key === "time.ntp.interval_s").value, 604800);
 for (const bad of [
-  { zone: "Mars/Olympus", servers: "a", interval_s: 900 },
-  { zone: "Asia/Tokyo", servers: "", interval_s: 900 },
+  { zone: "Mars/Olympus", servers: "a", interval_s: 86400 },
+  { zone: "Asia/Tokyo", servers: "", interval_s: 86400 },
   { zone: "Asia/Tokyo", servers: "a", interval_s: 59 },
-  { zone: "Asia/Tokyo", servers: "a", interval_s: 86401 }
+  { zone: "Asia/Tokyo", servers: "a", interval_s: 900 },
+  { zone: "Asia/Tokyo", servers: "a", interval_s: 3599 },
+  { zone: "Asia/Tokyo", servers: "a", interval_s: 604801 }
 ]) assert.throws(() => L.timeEntries(bad), "should refuse " + JSON.stringify(bad));
+
+// ---- the status card surfaces the failure backoff, which is neither working nor idle ------
+const backingOff = L.timeStatusModel({ time: { enabled: true, source: "system",
+                                               retry_in_s: 120, err: "no_response" } });
+assert.strictEqual(backingOff.retryInS, 120);
+assert.strictEqual(backingOff.errorKey, "time.err_no_response");
+assert.strictEqual(L.timeStatusModel({ time: {} }).retryInS, 0);
+assert.strictEqual(L.timeStatusModel({ time: {} }).intervalS, 86400);
 
 // ---- the status card reads core's reported source, never the toggle ----------------------
 const offModel = L.timeStatusModel({ time: { zone: "Asia/Tokyo", source: "system" } });

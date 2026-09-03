@@ -263,7 +263,10 @@ const referenced = [
   "notice.target", "notice.target_global", "notice.scope_global", "notice.presets_title",
   "notice.preset_add", "notice.presets_full", "notice.preset_invalid",
   "unlock.title", "unlock.auto", "unlock.show", "unlock.hide", "unlock.not_configured",
-  "unlock.command", "purpose.enabled", "purpose.disabled", "admin.door_unconfigured"
+  "unlock.command", "purpose.enabled", "purpose.disabled", "admin.door_unconfigured",
+  "theme.backdrop", "theme.backdrop_enabled", "theme.backdrop_hint", "theme.backdrop_invalid",
+  "theme.backdrop_weak", "theme.backdrop_source_default", "theme.backdrop_source_admin",
+  "theme.backdrop_source_device"
 ].concat(L.INK_REGIONS.map((region) => "theme.region_" + region));
 for (const language of ["ja", "en", "zh"]) {
   const catalog = JSON.parse(fs.readFileSync(
@@ -276,5 +279,66 @@ for (const language of ["ja", "en", "zh"]) {
   assert.ok(catalog["theme.background_unsampled"].includes("{reason}"),
     language + " theme.background_unsampled needs {reason}");
 }
+
+// ---- the darkening layer over the background image -----------------------------------------
+// Defaults first: on, black, and strong enough for a bright photograph.
+const plain = L.backdropModel({}, "");
+assert.strictEqual(plain.enabled, true);
+assert.strictEqual(plain.color, "#000000");
+assert.strictEqual(plain.opacity, 62);
+assert.strictEqual(plain.source, "default");
+
+const clusterCfg = { display: { theme: { backdrop: { opacity: 40, color: "#101418" } } } };
+const cluster = L.backdropModel(clusterCfg, "");
+assert.strictEqual(cluster.opacity, 40);
+assert.strictEqual(cluster.color, "#101418");
+assert.strictEqual(cluster.enabled, true, "an unset leaf keeps the built-in default");
+assert.strictEqual(cluster.source, "admin");
+
+// Each leaf resolves on its own, so a device darkens further without restating the colour.
+const deviceCfg = {
+  display: { theme: { backdrop: { opacity: 40, color: "#101418" } } },
+  devices: { d1: { local: { theme: { backdrop: { opacity: 80 } } } } }
+};
+const device = L.backdropModel(deviceCfg, "d1");
+assert.strictEqual(device.opacity, 80);
+assert.strictEqual(device.color, "#101418");
+assert.strictEqual(device.source, "device");
+assert.deepStrictEqual(device.overridden, { enabled: false, color: false, opacity: true });
+// A device with no override of its own still reports the cluster's answer.
+assert.strictEqual(L.backdropModel(deviceCfg, "d2").opacity, 40);
+assert.strictEqual(L.backdropModel(deviceCfg, "d2").source, "admin");
+
+// Out-of-range or malformed stored values fall back rather than reaching a shell.
+const junk = { display: { theme: { backdrop: { opacity: 250, color: "black", enabled: "yes" } } } };
+assert.strictEqual(L.backdropModel(junk, "").opacity, 62);
+assert.strictEqual(L.backdropModel(junk, "").color, "#000000");
+assert.strictEqual(L.backdropModel(junk, "").enabled, true);
+
+// What core publishes is read straight through, including the source it decided.
+const publishedBackdrop = L.backdropStatusModel({
+  display: { theme: { backdrop: { enabled: false, color: "#0a0a0a", opacity: 55,
+                                  source: "device" } } } });
+assert.strictEqual(publishedBackdrop.enabled, false);
+assert.strictEqual(publishedBackdrop.color, "#0A0A0A");
+assert.strictEqual(publishedBackdrop.opacity, 55);
+assert.strictEqual(publishedBackdrop.source, "device");
+assert.strictEqual(L.backdropStatusModel({}).source, "default");
+
+// The write rides in the theme object, and a blank strength is reported instead of defaulted.
+const writtenBackdrop = L.themeColorEntries("", { call_button_auto: true, ink_override: {},
+                                          backdrop: { enabled: true, color: "#0a0a0a",
+                                                      opacity: "55" } }, {});
+assert.strictEqual(writtenBackdrop.entries.length, 1);
+assert.strictEqual(writtenBackdrop.entries[0].key, "display.theme");
+assert.deepStrictEqual(writtenBackdrop.entries[0].value.backdrop,
+                       { enabled: true, color: "#0A0A0A", opacity: 55 });
+assert.throws(() => L.themeColorEntries("", { backdrop: { opacity: "" } }, {}));
+assert.throws(() => L.themeColorEntries("", { backdrop: { opacity: 101 } }, {}));
+// Clearing a device override removes the key rather than pinning today's cluster value.
+const clearedBackdrop = L.themeColorEntries("d1", { call_button_auto: true,
+                                                   ink_override: {}, backdrop: null },
+                                                 { backdrop: { opacity: 80 } });
+assert.ok(!clearedBackdrop.entries.length || !clearedBackdrop.entries[0].value.backdrop);
 
 console.log("theme and notice tests: ok");

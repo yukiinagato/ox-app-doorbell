@@ -944,6 +944,14 @@ PIN：%2$s</string>
     <string name="theme_appearance_dark">始终深色</string>
     <string name="theme_appearance_light">始终浅色</string>
     <string name="theme_auto">自动</string>
+    <string name="theme_backdrop">背景遮罩</string>
+    <string name="theme_backdrop_enabled">在背景上叠加遮罩层</string>
+    <string name="theme_backdrop_hint">叠加在背景图片上的半透明层，用于在明亮照片上保持文字可读。可指定颜色与浓度，默认为黑色 62%。</string>
+    <string name="theme_backdrop_invalid">遮罩浓度必须是 0 到 100 之间的整数</string>
+    <string name="theme_backdrop_source_admin">为整个集群设定。</string>
+    <string name="theme_backdrop_source_default">使用内置默认值。</string>
+    <string name="theme_backdrop_source_device">仅为该设备设定。</string>
+    <string name="theme_backdrop_weak">文字在背景图片上可能不易辨认</string>
     <string name="theme_background_source_color">背景颜色</string>
     <string name="theme_background_source_image">取自背景图片的平均色</string>
     <string name="theme_background_unsampled">无法读取背景图片（%1$s），文字颜色由各设备自行判断</string>
@@ -972,8 +980,9 @@ PIN：%2$s</string>
     <string name="time_err_bad_server">服务器条目格式不正确</string>
     <string name="time_err_implausible">测得的时间不可信，已丢弃</string>
     <string name="time_err_no_response">时间服务器没有响应</string>
+    <string name="time_interval_hint">默认 86400 秒（一天），可设范围为 3600 秒（一小时）至 604800 秒（七天）。时钟偏差以天为单位变化，同步更频繁只会白白消耗电量和流量。失败后将从 1 分钟起重试，逐次加倍直至一小时。</string>
     <string name="time_interval_s">同步间隔（秒）</string>
-    <string name="time_invalid_interval">同步间隔必须在 60 到 86400 秒之间</string>
+    <string name="time_invalid_interval">同步间隔必须在 3600 到 604800 秒之间</string>
     <string name="time_invalid_servers">请输入 1 到 4 个时间服务器，每行一个</string>
     <string name="time_invalid_zone">请从列表中选择时区</string>
     <string name="time_last_sync">最后同步</string>
@@ -983,6 +992,7 @@ PIN：%2$s</string>
     <string name="time_ntp_hint">不会修改设备本身的时钟；门铃只在内部补偿差值</string>
     <string name="time_ntp_off">请先开启“从互联网校准时间”并保存</string>
     <string name="time_offset">补偿</string>
+    <string name="time_retrying">上次同步失败，将在 %1$s 秒后重试</string>
     <string name="time_rtt">往返时间</string>
     <string name="time_server">服务器</string>
     <string name="time_servers">时间服务器</string>

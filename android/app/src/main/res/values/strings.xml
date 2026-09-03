@@ -944,6 +944,14 @@ Sends in %1$ss</string>
     <string name="theme_appearance_dark">Always dark</string>
     <string name="theme_appearance_light">Always light</string>
     <string name="theme_auto">Automatic</string>
+    <string name="theme_backdrop">Background dimming</string>
+    <string name="theme_backdrop_enabled">Draw a dimming layer over the background</string>
+    <string name="theme_backdrop_hint">A semi-transparent layer over the background image that keeps text readable on a bright photograph. Choose its colour and how strong it is; the default is black at 62%.</string>
+    <string name="theme_backdrop_invalid">The dimming strength must be a whole number between 0 and 100</string>
+    <string name="theme_backdrop_source_admin">Set for the whole cluster.</string>
+    <string name="theme_backdrop_source_default">Using the built-in default.</string>
+    <string name="theme_backdrop_source_device">Set for this device only.</string>
+    <string name="theme_backdrop_weak">Text may be hard to read over the background image</string>
     <string name="theme_background_source_color">Background colour</string>
     <string name="theme_background_source_image">Averaged from the background image</string>
     <string name="theme_background_unsampled">The background image could not be read (%1$s); each device decides its text colour</string>
@@ -972,8 +980,9 @@ Sends in %1$ss</string>
     <string name="time_err_bad_server">A server entry isn\'t written correctly</string>
     <string name="time_err_implausible">The measured time wasn\'t plausible and was discarded</string>
     <string name="time_err_no_response">No answer from the time servers</string>
+    <string name="time_interval_hint">The default is 86400 seconds (one day), and the range is 3600 seconds (one hour) to 604800 seconds (seven days). A clock correction only drifts over days, so syncing more often costs battery and traffic for nothing. After a failure the service retries from one minute, doubling up to an hour.</string>
     <string name="time_interval_s">Sync interval (seconds)</string>
-    <string name="time_invalid_interval">The sync interval must be between 60 and 86400 seconds</string>
+    <string name="time_invalid_interval">The sync interval must be between 3600 and 604800 seconds</string>
     <string name="time_invalid_servers">Enter one to four time servers, one per line</string>
     <string name="time_invalid_zone">Choose a time zone from the list</string>
     <string name="time_last_sync">Last sync</string>
@@ -983,6 +992,7 @@ Sends in %1$ss</string>
     <string name="time_ntp_hint">The device\'s own clock is never changed; the doorbell corrects the difference internally</string>
     <string name="time_ntp_off">Turn on &quot;Set the time from the Internet&quot; and save first</string>
     <string name="time_offset">Correction</string>
+    <string name="time_retrying">The last sync failed; retrying in %1$s seconds</string>
     <string name="time_rtt">Round trip</string>
     <string name="time_server">Server</string>
     <string name="time_servers">Time servers</string>

@@ -8,7 +8,9 @@
 #include <unistd.h>
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
+#include <thread>
 #include <condition_variable>
 #include <cstdio>
 #include <cstdlib>
@@ -360,4 +362,49 @@ TEST_CASE("sip: a listen-in dialog can never answer a call") {
   CHECK_FALSE(SipCtl::dialogCanAnswer("monitor"));
   CHECK(SipCtl::dialogCanAnswer(""));        // an ordinary two-way call
   CHECK(SipCtl::dialogCanAnswer("answer"));  // an explicit takeover by a person
+}
+
+TEST_CASE("sip: the event pump idles instead of polling every ten milliseconds") {
+  // Device finding: symbolicated iOS wakeups reports showed 176 wakeups a second against a
+  // 150/s budget with the doorbell doing nothing. pjsua's built-in worker polls every 10 ms for
+  // ever, idle or not, which is 100 of those on its own. The pump is ours now and its timeout
+  // follows the work.
+  const int busy = sipPumpTimeoutMs(/*calls_active=*/true, false, -1);
+  const int idle = sipPumpTimeoutMs(false, false, /*earliest_timer_ms=*/-1);
+  CHECK(busy == 10);
+  CHECK(idle >= 200);
+
+  // A registration in flight is work too, and so is a timer about to fire.
+  CHECK(sipPumpTimeoutMs(false, /*registration_pending=*/true, -1) == 10);
+  CHECK(sipPumpTimeoutMs(false, false, /*earliest_timer_ms=*/0) == 10);
+  CHECK(sipPumpTimeoutMs(false, false, 10) == 10);
+  // A timer further out is waited for exactly, never overshot...
+  CHECK(sipPumpTimeoutMs(false, false, 120) == 120);
+  // ...and one beyond the idle period does not drag the loop back up to its rate.
+  CHECK(sipPumpTimeoutMs(false, false, 5000) == idle);
+
+  // The rate the policy actually produces, measured rather than divided out: one thread doing
+  // what the pump does, with the poll replaced by a sleep of the same length.
+  auto rate_per_second = [](bool calls_active, bool registration_pending) {
+    std::atomic<uint64_t> iterations{0};
+    std::atomic<bool> stop{false};
+    std::thread pump([&] {
+      while (!stop.load()) {
+        const int timeout = sipPumpTimeoutMs(calls_active, registration_pending, -1);
+        iterations.fetch_add(1);
+        std::this_thread::sleep_for(std::chrono::milliseconds(timeout));
+      }
+    });
+    std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+    stop.store(true);
+    pump.join();
+    return iterations.load();
+  };
+
+  const uint64_t idle_rate = rate_per_second(false, false);
+  CHECK(idle_rate <= 5);
+  // ...and a call brings it straight back to ten-millisecond polling.
+  const uint64_t call_rate = rate_per_second(/*calls_active=*/true, false);
+  CHECK(call_rate >= 50);
+  CHECK(call_rate > idle_rate * 10);
 }

@@ -178,7 +178,11 @@ materialized config/export に plaintext を出しません。起動時は legac
 
   "display": {                                  // 表示・焼付対策 (全端末既定; devices.<id>.local.display で上書き)
     // theme: 門口機の背景 (室内機/管理画面から「プッシュ配信」= この設定を書くだけ。CRDT で即時同期)
-    "theme": { "bg_color": "#101418", "bg_image": null },   // bg_image: assets の sha256 or null
+    "theme": { "bg_color": "#101418", "bg_image": null,   // bg_image: assets の sha256 or null
+               // 背景画像とその上に描かれるすべての要素の間に重ねる半透明の層。明るい写真の上でも
+               // 文字が読めるようにするためのもので、既定では有効。各項目は
+               // devices.<id>.local.theme.backdrop.* で端末ごとに上書きでき、項目ごとに独立して解決する。
+               "backdrop": { "enabled": true, "color": "#000000", "opacity": 62 } },  // 0..100
     "brightness": 70,                           // 0-100 (遠隔調整 — 管理画面のスライダー)
     "night": { "enabled": true, "from": "22:00", "to": "06:00",
                "brightness": 15, "red_tint": true },   // 夜間モード (補正済み時計で判定)
@@ -197,7 +201,7 @@ materialized config/export に plaintext を出しません。起動時は legac
     // 静音時間帯、画面の時計) に加算する。同期が 3 間隔続けて失敗するとオフセットは破棄する。
     "ntp": { "enabled": false,                  // 既定は無効
              "servers": ["ntp.nict.jp", "time.google.com"],   // 1-4 個の "host" / "host:port"
-             "interval_s": 900 }                // 60..86400
+             "interval_s": 86400 }              // 3600..604800、既定は 1 日 1 回
   },
 
   // クラスタ既定の音量 (0-100)。端末は devices.<id>.local.audio.volume.{call,sos,idle} で
@@ -721,3 +725,21 @@ surface を推測できません。
   (purpose/visitor_lang は該当時のみ)。`<base>/<door_id>/attrs` に
   `{"visitor_lang":"ja|en|zh"}` を retain で発行し、`sensor.doorbell_<door>_visitor_lang` として
   discovery する。Telegram の press 通知は先頭行に `{icon} {用件名}` と来訪者言語バッジ `🌐 EN`。
+
+### 背景の暗幕
+
+`display.theme.backdrop` は、背景画像とその上に描かれるすべての要素の間にシェルが重ねる半透明の
+層を制御する。明るい写真の上でも時計が読めるのはこの層のおかげである。`enabled` (既定 true)、
+`color` (`#RRGGBB`、既定 `#000000`)、`opacity` (0〜100、既定 62) はいずれも
+`devices.<id>.local.theme.backdrop.*` で端末ごとに上書きでき、しかも項目ごとに独立して解決する。
+明るい部屋にある一台だけ、色はそのままに濃さを上げる、といった指定ができる。
+
+解決結果は `status.display.theme.backdrop = {enabled, color, opacity, source}` として公開される。
+`source` は三つの値のうち最も強い出所を表し、`device`、`admin`、`default` のいずれかになる。同じ
+オブジェクトは `display` の UI イベントにも載るので、シェルは設定を自分で読むのではなく、コアが
+解決した値をそのまま描けばよい。
+
+色の書式が不正、あるいは濃さが 0〜100 の範囲外の書き込みは拒否される。層を無効にする、あるいは
+20 未満まで下げることは受け付けるが、背景画像が設定されている間は警告 (`theme.backdrop_weak`)
+として報告する。明るい写真の上では通常は誤りであり、暗い写真の上では誤りではない。どちらであるかは
+コアには判断できないためである。
