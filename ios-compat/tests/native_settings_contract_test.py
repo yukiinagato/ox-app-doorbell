@@ -210,8 +210,9 @@ for shell, name in ((main, "MainViewController"), (tv, "TVMainViewController"),
     assert "themeBg.apply(display:" in shell, name
 assert 'boot.role == "door_station"' not in main.split("private func applyTheme")[1][:400], \
     "the theme background is no longer gated on the door station"
-assert 'skin.apply("clock", to: clockLabel)' in dashboard and \
-    'skin.apply("footer", to: versionLabel, quiet: true)' in dashboard
+assert 'skin.apply("clock", to: clockLabel)' in dashboard
+assert "final class HaloLabel: UILabel {}" in theme and "override func drawText" not in theme, \
+    "the Swift indoor app uses automatic ink without text outlines"
 assert "backgroundColor = .black" in incoming, "the video keeps its own black frame"
 
 # --- visit_purposes.<id>.enabled -------------------------------------------
@@ -233,7 +234,9 @@ assert "/snapshot.jpg" in dashboard and "withTimeInterval: 5" in dashboard
 assert "history.missed_badge" in dashboard and "history.see_all" in dashboard
 assert "AdminQrView(core: core, boot: boot, texts: texts, compact: false)" in dashboard, \
     "the admin QR is always visible on an indoor panel"
-assert "DoorbellTheme.versionLine" in dashboard
+assert "footerEffect.heightAnchor.constraint(equalToConstant: 88)" in dashboard
+assert "let side: CGFloat = compact ? 64 : 72" in source("ios/Doorbell/AdminQrView.swift")
+assert "adminQr.setDetailText(DoorbellTheme.versionLine" in dashboard
 assert "func applyLayout(for size: CGSize)" in dashboard and \
     "func applyLayout(for size: CGSize)" in visitor, "both home screens are size-driven"
 assert "core.markCallLogSeen()" in history, "opening the history marks it seen"

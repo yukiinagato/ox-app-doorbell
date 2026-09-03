@@ -1,8 +1,7 @@
 import UIKit
 
-/// The admin page's QR and URL. The owner asked for it to be permanently visible on indoor
-/// panels — small in a corner of the incoming/monitor screen, larger in the dashboard footer and
-/// in settings — because opening the page still needs the admin password.
+/// The admin page's QR and URL. It stays visible on indoor panels because opening the page still
+/// needs the admin password.
 final class AdminQrView: UIView {
 
     /// The caption and the URL sit straight on the screen background — the footer of the
@@ -19,6 +18,7 @@ final class AdminQrView: UIView {
     private let imageView = UIImageView()
     private let urlLabel = HaloLabel()
     private let captionLabel = HaloLabel()
+    private let detailLabel = HaloLabel()
     private var renderedUrl = ""
 
     init(core: CoreBridge, boot: BootConfig, texts: Texts, compact: Bool) {
@@ -39,25 +39,33 @@ final class AdminQrView: UIView {
         captionLabel.text = texts.t("web_admin.open")
         captionLabel.font = .systemFont(ofSize: compact ? 12 : 15, weight: .semibold)
         captionLabel.numberOfLines = 1
+        captionLabel.isHidden = !compact
 
-        urlLabel.font = .monospacedDigitSystemFont(ofSize: compact ? 11 : 15, weight: .regular)
-        urlLabel.numberOfLines = compact ? 1 : 2
+        urlLabel.font = .monospacedDigitSystemFont(ofSize: compact ? 11 : 13, weight: .regular)
+        urlLabel.numberOfLines = 1
         urlLabel.adjustsFontSizeToFitWidth = true
         urlLabel.minimumScaleFactor = 0.6
         urlLabel.accessibilityIdentifier = "admin_qr_url"
 
-        let column = UIStackView(arrangedSubviews: [captionLabel, urlLabel])
+        detailLabel.font = .monospacedDigitSystemFont(ofSize: 13, weight: .regular)
+        detailLabel.numberOfLines = 1
+        detailLabel.adjustsFontSizeToFitWidth = true
+        detailLabel.minimumScaleFactor = 0.6
+        detailLabel.accessibilityIdentifier = "app_version"
+        detailLabel.isHidden = compact
+
+        let column = UIStackView(arrangedSubviews: [captionLabel, urlLabel, detailLabel])
         column.axis = .vertical
         column.spacing = 2
 
         let row = UIStackView(arrangedSubviews: [imageView, column])
         row.axis = .horizontal
-        row.spacing = compact ? 8 : 14
+        row.spacing = compact ? 8 : 10
         row.alignment = .center
         row.translatesAutoresizingMaskIntoConstraints = false
         addSubview(row)
 
-        let side: CGFloat = compact ? 64 : 160
+        let side: CGFloat = compact ? 64 : 72
         NSLayoutConstraint.activate([
             row.topAnchor.constraint(equalTo: topAnchor),
             row.bottomAnchor.constraint(equalTo: bottomAnchor),
@@ -72,8 +80,18 @@ final class AdminQrView: UIView {
     required init?(coder: NSCoder) { fatalError("not supported") }
 
     private func applySkin() {
-        skin.apply("footer", to: captionLabel, quiet: true)
-        skin.apply("footer", to: urlLabel)
+        if compact {
+            skin.apply("footer", to: captionLabel, quiet: true)
+            skin.apply("footer", to: urlLabel)
+        } else {
+            let ink = skin.cardInk("footer")
+            urlLabel.textColor = ink
+            detailLabel.textColor = ink
+        }
+    }
+
+    func setDetailText(_ text: String) {
+        detailLabel.text = text
     }
 
     /// Rebuilds the QR when the node's reachable address changes. Rendering is cheap enough to run
@@ -90,7 +108,7 @@ final class AdminQrView: UIView {
         urlLabel.text = url
         // Encoding is a nested module loop and a bitmap context. It only runs when the address
         // actually changed, but when it does it has no business blocking a frame.
-        let points: CGFloat = compact ? 128 : 320
+        let points: CGFloat = compact ? 128 : 144
         let core = self.core
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             let image = PairingQR.image(core: core, text: url, points: points)

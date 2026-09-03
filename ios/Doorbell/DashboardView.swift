@@ -31,12 +31,16 @@ final class DashboardView: UIView {
     private let tilesStack = UIStackView()
     private let recentCalls: RecentCallsView
     private let adminQr: AdminQrView
-    private let versionLabel = HaloLabel()
+    private let footerEffect = UIVisualEffectView(effect: UIBlurEffect(style: .dark))
     let sosControl: SosSlideControl
 
     private let columns = UIStackView()
     private let leftColumn = UIStackView()
     private let rightColumn = UIStackView()
+    private let leftHeader = UIStackView()
+    private let rightHeader = UIView()
+    private var headerHeightMatch: NSLayoutConstraint?
+    private var historyHeaderTop: NSLayoutConstraint?
 
     private var config: [String: Any]?
     private var skin = DoorbellSkin.plain(.dark)
@@ -97,6 +101,11 @@ final class DashboardView: UIView {
         statusRow.spacing = 12
         statusRow.alignment = .center
 
+        leftHeader.axis = .vertical
+        leftHeader.spacing = 14
+        leftHeader.addArrangedSubview(clockColumn)
+        leftHeader.addArrangedSubview(statusRow)
+
         tilesStack.axis = .vertical
         tilesStack.spacing = 12
 
@@ -109,22 +118,45 @@ final class DashboardView: UIView {
         historyRow.axis = .horizontal
         historyRow.spacing = 12
         historyRow.alignment = .center
+        historyRow.translatesAutoresizingMaskIntoConstraints = false
+        rightHeader.addSubview(historyRow)
+        let historyTop = historyRow.topAnchor.constraint(equalTo: rightHeader.topAnchor)
+        historyHeaderTop = historyTop
+        let match = rightHeader.heightAnchor.constraint(equalTo: leftHeader.heightAnchor)
+        headerHeightMatch = match
+        NSLayoutConstraint.activate([
+            historyTop,
+            historyRow.topAnchor.constraint(greaterThanOrEqualTo: rightHeader.topAnchor),
+            historyRow.bottomAnchor.constraint(equalTo: rightHeader.bottomAnchor),
+            historyRow.leadingAnchor.constraint(equalTo: rightHeader.leadingAnchor),
+            historyRow.trailingAnchor.constraint(equalTo: rightHeader.trailingAnchor),
+        ])
 
-        versionLabel.font = .monospacedDigitSystemFont(ofSize: 13, weight: .medium)
-        versionLabel.accessibilityIdentifier = "app_version"
-        versionLabel.numberOfLines = 0
-
+        footerEffect.layer.cornerRadius = 12
+        footerEffect.layer.borderWidth = 0.5
+        footerEffect.clipsToBounds = true
+        footerEffect.contentView.addSubview(adminQr)
+        NSLayoutConstraint.activate([
+            footerEffect.heightAnchor.constraint(equalToConstant: 88),
+            adminQr.topAnchor.constraint(equalTo: footerEffect.contentView.topAnchor, constant: 8),
+            adminQr.bottomAnchor.constraint(equalTo: footerEffect.contentView.bottomAnchor,
+                                            constant: -8),
+            adminQr.leadingAnchor.constraint(equalTo: footerEffect.contentView.leadingAnchor,
+                                             constant: 8),
+            adminQr.trailingAnchor.constraint(equalTo: footerEffect.contentView.trailingAnchor,
+                                              constant: -8),
+        ])
 
         leftColumn.axis = .vertical
         leftColumn.spacing = 14
-        for view in [clockColumn, statusRow, tilesStack, noticeButton] {
+        for view in [leftHeader, tilesStack, noticeButton] {
             leftColumn.addArrangedSubview(view)
         }
         leftColumn.addArrangedSubview(UIView())
 
         rightColumn.axis = .vertical
-        rightColumn.spacing = 12
-        for view in [historyRow, recentCalls, adminQr, versionLabel, sosControl] {
+        rightColumn.spacing = 14
+        for view in [rightHeader, recentCalls, footerEffect, sosControl] {
             rightColumn.addArrangedSubview(view)
         }
         recentCalls.heightAnchor.constraint(greaterThanOrEqualToConstant: 160).isActive = true
@@ -169,6 +201,13 @@ final class DashboardView: UIView {
         let portrait = size.height > size.width
         columns.axis = portrait ? .vertical : .horizontal
         columns.distribution = portrait ? .fill : .fillEqually
+        if portrait {
+            headerHeightMatch?.isActive = false
+            historyHeaderTop?.isActive = true
+        } else {
+            historyHeaderTop?.isActive = false
+            headerHeightMatch?.isActive = true
+        }
         clockLabel.font = UIFont.monospacedDigitSystemFont(ofSize: portrait ? 48 : 64,
                                                            weight: .light)
     }
@@ -212,7 +251,8 @@ final class DashboardView: UIView {
         skin.apply("clock", to: clockLabel)
         skin.apply("date", to: dateLabel, quiet: true)
         skin.apply("status_line", to: historyHeader)
-        skin.apply("footer", to: versionLabel, quiet: true)
+        footerEffect.contentView.backgroundColor = skin.surface.withAlphaComponent(0.65)
+        footerEffect.layer.borderColor = skin.cardInk("footer").withAlphaComponent(0.35).cgColor
         counters.update(lastCounts, ink: skin.cardInk("status_line"))
         DoorbellTheme.pill(missedBadge, background: skin.palette.danger,
                            ink: DoorbellTheme.readableInk(on: skin.palette.danger), fontSize: 15)
@@ -243,9 +283,9 @@ final class DashboardView: UIView {
     private func refreshVersionLine(status: [String: Any]? = nil) {
         let snapshot = status ?? core.status()
         let power = (snapshot?["self"] as? [String: Any])?["power"] as? [String: Any]
-        versionLabel.text = DoorbellTheme.versionLine(name: boot.name,
-                                                      coreVersion: DoorbellTheme.coreVersion(),
-                                                      texts: texts, power: power)
+        adminQr.setDetailText(DoorbellTheme.versionLine(name: boot.name,
+                                                        coreVersion: DoorbellTheme.coreVersion(),
+                                                        texts: texts, power: power))
     }
 
     func refreshNoticeState() {
