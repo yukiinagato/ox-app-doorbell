@@ -1,6 +1,6 @@
-# Controlled Windows package build. Kept separate from build.yml so selecting
-# this manual release lane does not spend hosted CI capacity on every contract job.
-name: Windows release
+# GitHub-hosted unsigned test package. It remains separate from build.yml so
+# requesting a downloadable package does not spend capacity on every contract job.
+name: Windows test package
 
 on:
   workflow_dispatch:
@@ -10,28 +10,29 @@ permissions:
   contents: read
 
 jobs:
-  windows-release:
-    runs-on: [self-hosted, windows, x64, doorbell-pjsip]
+  windows-test-package:
+    runs-on: windows-2022
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
       - uses: microsoft/setup-msbuild@v2
-      - name: Build and prove x64/x86 real-PJSIP bundle
+      - name: Build unsigned development bundle
         shell: cmd
         env:
-          DB_BUILD_ID: release-${{ github.sha }}-${{ github.run_attempt }}
+          DB_ALLOW_SIP_STUB: "1"
+          DB_BUILD_ID: unsigned-test-${{ github.sha }}-${{ github.run_attempt }}
         run: win\build.cmd
       - uses: actions/upload-artifact@v4
         with:
-          name: doorbell-windows-${{ github.sha }}
-          path: win/dist/release-${{ github.sha }}-${{ github.run_attempt }}/
+          name: doorbell-windows-unsigned-test-${{ github.sha }}
+          path: win/dist/unsigned-test-${{ github.sha }}-${{ github.run_attempt }}/
           retention-days: 30
 
   artifact-downloads:
     if: always()
-    needs: [windows-release]
+    needs: [windows-test-package]
     runs-on: ubuntu-latest
     permissions:
       actions: read
@@ -53,15 +54,19 @@ jobs:
               `/actions/runs/${context.runId}/artifacts/${id}`;
 
             await core.summary.addHeading("CI artifact downloads", 2);
+            await core.summary.addRaw(
+              "This unsigned development bundle uses the SIP stub. It is not a product release " +
+              "and cannot be used for SIP calls.\n\n"
+            );
             if (available.length === 0) {
-              await core.summary.addRaw("No downloadable Windows release artifact was produced.\n");
+              await core.summary.addRaw("No downloadable Windows test artifact was produced.\n");
             } else {
               await core.summary.addRaw("| Platform / package | Download | Expires |\n");
               await core.summary.addRaw("| --- | --- | --- |\n");
               for (const artifact of available.sort((left, right) => left.name.localeCompare(right.name))) {
                 const expires = new Date(artifact.expires_at).toISOString().slice(0, 10);
                 await core.summary.addRaw(
-                  `| Windows x86/x64 release bundle | [${artifact.name}](${artifactUrl(artifact.id)}) | ${expires} |\n`
+                  `| Windows x86/x64 unsigned test bundle (SIP stub) | [${artifact.name}](${artifactUrl(artifact.id)}) | ${expires} |\n`
                 );
               }
             }
