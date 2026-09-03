@@ -662,4 +662,9 @@ DB_API int db_core_video_encoder_wanted(db_core* c) {
   return c->node->videoEncoderWanted() ? 1 : 0;
 }
 
+DB_API int db_core_take_video_keyframe_request(db_core* c) {
+  if (!c || !c->node) return 0;
+  return c->node->takeVideoKeyframeRequest() ? 1 : 0;
+}
+
 }  // extern "C"

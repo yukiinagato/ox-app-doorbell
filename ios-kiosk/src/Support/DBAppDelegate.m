@@ -7,6 +7,7 @@
 #import "../Core/DBTexts.h"
 #import "../Media/DBH264Player.h"
 #import "../Media/DBLowLatencyH264Player.h"
+#import "../Media/DBVtVideoView.h"
 #import "../Net/DBMjpegClient.h"
 #import "../Core/DBPairUri.h"
 #import "../Screens/DBPairingScreen.h"
@@ -560,6 +561,9 @@ static BOOL DBNativeKioskHealthy(void) {
   [win makeKeyAndVisible];
   self.window = win;
 
+  if ([_boot.role isEqualToString:@"indoor_panel"] && !_localSafeMode)
+    [DBVtVideoView prewarm];
+
   application.idleTimerDisabled = YES;  // keep-awake (kiosk)
 
   [_router start];
@@ -1061,6 +1065,7 @@ static NSString *const DBScreenshotOutputPath = @"/var/mobile/Documents/screensh
   _lastMemoryPressureSource = [boundedSource copy];
   _lastMemoryPressureAtMs = wallSeconds > 0 ? (long long)(wallSeconds * 1000.0) : 0;
   [_router releaseMediaForMemoryPressure];
+  [DBVtVideoView purgeWarmView];
   [_h264Test stop];
   _h264Test = nil;
   [_vtTest stop];

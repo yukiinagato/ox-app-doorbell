@@ -137,6 +137,9 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
             self?.runtime?.permissionsDidChange()
         }
         runtime?.start()
+        if boot.role == "indoor_panel" {
+            AdaptiveH264MjpegPlayer.prewarm()
+        }
         if boot.role == "door_station" {
             UIDevice.current.beginGeneratingDeviceOrientationNotifications()
             NotificationCenter.default.addObserver(
@@ -259,13 +262,16 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
     func applicationDidReceiveMemoryWarning(_ application: UIApplication) {
         ShellLog.note("lifecycle memoryWarning")
         runtime?.handleMemoryPressure()
-        guard let root = window?.rootViewController as? MainViewController else { return }
-        root.enterSafeModeForMemoryPressure()
-        if let incoming = root.presentedViewController as? IncomingViewController {
-            incoming.enterSafeModeForMemoryPressure()
-        } else if let monitor = root.presentedViewController as? MonitorViewController {
-            monitor.enterSafeModeForMemoryPressure()
+        if let root = window?.rootViewController as? MainViewController {
+            root.enterSafeModeForMemoryPressure()
+            if let incoming = root.presentedViewController as? IncomingViewController {
+                incoming.enterSafeModeForMemoryPressure()
+            } else if let monitor = root.presentedViewController as? MonitorViewController {
+                monitor.enterSafeModeForMemoryPressure()
+            }
         }
+        // Safe-mode transitions release active players back into the reserve, so purge last.
+        AdaptiveH264MjpegPlayer.purgeWarmResources()
     }
 
     @objc private func deviceOrientationChanged() {

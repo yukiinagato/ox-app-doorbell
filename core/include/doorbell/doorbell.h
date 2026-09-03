@@ -577,9 +577,13 @@ DB_API int db_core_emergency_v2(db_core* c, int active);
 DB_API void db_core_on_encoded_frame(db_core* c, const uint8_t* annexb, size_t len,
                                      int is_keyframe, int64_t ts_ms);
 
-/* Return one when the shell should run its encoder: codec is h264/auto and /stream.mp4 has a
- * subscriber. Poll roughly every five seconds to avoid encoding without consumers. */
+/* Return one when the shell should run its low-cost encoder: camera.codec is h264/auto. Keeping
+ * the encoder warm makes init data and a recent random-access point available before a call. */
 DB_API int db_core_video_encoder_wanted(db_core* c);
+
+/* Return one once for each burst of new H.264 subscribers and clear the pending edge. A running
+ * platform encoder should request an IDR immediately. Poll at most every 100 ms while encoding. */
+DB_API int db_core_take_video_keyframe_request(db_core* c);
 
 #ifdef __cplusplus
 }

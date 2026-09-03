@@ -30,6 +30,7 @@ final class TVAppDelegate: UIResponder, UIApplicationDelegate {
         _ = core.start(dataDir: BootConfig.dataDir(), bootJson: boot.rawJson)
         runtime = RuntimeSupervisor(core: core, boot: boot)
         runtime?.start()
+        AdaptiveH264MjpegPlayer.prewarm()
         soundConfig = core.config()
         core.addHandler("app") { [weak self] ev in self?.onUiEvent(ev) }
 
@@ -71,7 +72,6 @@ final class TVAppDelegate: UIResponder, UIApplicationDelegate {
         }
         return true
     }
-
 
     /// Apple TV gets the same unpaired gate as the handheld clients; it is display-only because
     /// the device has no camera.
@@ -159,6 +159,7 @@ final class TVAppDelegate: UIResponder, UIApplicationDelegate {
     }
 
     func applicationDidReceiveMemoryWarning(_ application: UIApplication) {
+        AdaptiveH264MjpegPlayer.purgeWarmResources()
         runtime?.handleMemoryPressure()
     }
 

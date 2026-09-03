@@ -612,6 +612,13 @@ Java_jp_ox_doorbell_DoorbellCore_nativeVideoEncoderWanted(JNIEnv*, jobject, jlon
   return (b && b->core && db_core_video_encoder_wanted(b->core)) ? JNI_TRUE : JNI_FALSE;
 }
 
+extern "C" JNIEXPORT jboolean JNICALL
+Java_jp_ox_doorbell_DoorbellCore_nativeTakeVideoKeyframeRequest(JNIEnv*, jobject, jlong h) {
+  Bridge* b = fromHandle(h);
+  return (b && b->core && db_core_take_video_keyframe_request(b->core))
+      ? JNI_TRUE : JNI_FALSE;
+}
+
 extern "C" JNIEXPORT void JNICALL
 Java_jp_ox_doorbell_DoorbellCore_nativeSipCall(JNIEnv* env, jobject, jlong h, jstring target,
                                                    jstring mode) {

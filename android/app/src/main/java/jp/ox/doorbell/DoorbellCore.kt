@@ -250,6 +250,10 @@ class DoorbellCore(context: Context) {
     fun videoEncoderWanted(): Boolean =
         handle != 0L && nativeVideoEncoderWanted(handle)
 
+    /** Consume a new-subscriber edge so the active encoder can emit a fresh IDR. */
+    fun takeVideoKeyframeRequest(): Boolean =
+        handle != 0L && nativeTakeVideoKeyframeRequest(handle)
+
     /**
      * Place a SIP call to an extension or complete SIP URI. Empty mode is bidirectional;
      * "monitor" is receive-only audio.
@@ -500,6 +504,7 @@ class DoorbellCore(context: Context) {
     private external fun nativeOnEncodedFrame(handle: Long, annexb: ByteArray,
                                               isKeyframe: Boolean, tsMs: Long)
     private external fun nativeVideoEncoderWanted(handle: Long): Boolean
+    private external fun nativeTakeVideoKeyframeRequest(handle: Long): Boolean
     private external fun nativeSipCall(handle: Long, target: String, mode: String)
     private external fun nativeSipHangup(handle: Long)
     private external fun nativeSipSendDtmf(handle: Long, digits: String): Int

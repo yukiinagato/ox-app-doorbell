@@ -107,6 +107,7 @@ typedef void (^DBUiEventHandler)(NSDictionary *ev);
 - (BOOL)trySubmitEncodedFrame:(NSData *)annexB keyframe:(BOOL)keyframe
                    timestampMs:(int64_t)timestampMs;
 - (BOOL)videoEncoderWanted;
+- (BOOL)takeVideoKeyframeRequest;
 
 
 - (NSDictionary *)pairingInfo;

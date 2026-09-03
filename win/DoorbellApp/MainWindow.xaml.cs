@@ -349,7 +349,8 @@ namespace DoorbellApp
             EmergencyTitle.Text = Texts.T("emergency.title");
             EmergencyNote.Text = Texts.T("emergency.notified");
             EmergencyCancelButton.Content = Texts.T("emergency.cancel");
-            AnswerButton.Content = Texts.T("ring.answer");
+            AnswerButton.Content = Texts.T(_inCall && IncomingView.Visibility == Visibility.Visible
+                ? "incall.end_call" : "ring.answer");
             MonitorButton.Content = Texts.T("ring.monitor");
             OpenDoorButton.Content = Texts.T("ring.open_door");
             InCallOpenDoorButton.Content = Texts.T("ring.open_door");
@@ -2266,6 +2267,8 @@ namespace DoorbellApp
             BuildQuickReplies();
             QuickReplyToggle.Visibility = monitorOnly ?
                 Visibility.Collapsed : Visibility.Visible;
+            MonitorButton.Visibility = Visibility.Visible;
+            IgnoreButton.Visibility = Visibility.Visible;
             IncomingHint.Visibility = Visibility.Collapsed;
 
             // Resolve the door peer into a video URL and direct-call host.
@@ -2622,12 +2625,21 @@ namespace DoorbellApp
             ApplyQuickReplyVisibility();
             ApplyMonitorLabel();
             AnswerButton.Visibility = Visibility.Visible;
+            MonitorButton.Visibility = Visibility.Visible;
+            IgnoreButton.Visibility = Visibility.Visible;
             IgnoreButton.Content = Texts.T("ring.ignore");
             OpenDoorButton.IsEnabled = false;
         }
 
         private void OnAnswerClick(object sender, RoutedEventArgs e)
         {
+            if (_inCall)
+            {
+                App.Core.SipHangup();
+                ReportLifecycleEndedIfNeeded();
+                OnSipIdle();
+                return;
+            }
             if (!App.Core.SipAvailable)
             {
                 IncomingHint.Text = Texts.T("sip.unavailable");
@@ -2827,10 +2839,53 @@ namespace DoorbellApp
                 if (!_lifecycleAnswered)
                     _lifecycleAnswered = App.Core.ReportCallAnswered(
                         _lifecycleDoor, _lifecycleCallId, _lifecycleStageRevision);
-                if (string.IsNullOrEmpty(stream)) stream = _incomingStreamUrl;
-                CloseIncoming(false);
-                ShowInCall(stream);
+                EnterIncomingInCall();
             }
+        }
+
+        /// <summary>
+        /// Keep the preview transport and MediaElement alive when the resident answers. Replacing
+        /// the incoming page used to close a healthy HTTP/TCP stream and wait for another decoder
+        /// startup even though the video source had not changed.
+        /// </summary>
+        private void EnterIncomingInCall()
+        {
+            if (IncomingView.Visibility != Visibility.Visible) return;
+            StopReturnCountdown();
+            _incomingTimeout.Stop();
+            _answerDelay.Stop();
+            _monitorOnly = false;
+            _quickRepliesOpen = false;
+            ApplyQuickReplyVisibility();
+            QuickReplyToggle.Visibility = Visibility.Collapsed;
+            MonitorButton.Visibility = Visibility.Collapsed;
+            IgnoreButton.Visibility = Visibility.Collapsed;
+            IncomingTitle.Text = Texts.T("incall.title");
+            IncomingHint.Visibility = Visibility.Collapsed;
+            AnswerButton.Content = Texts.T("incall.end_call");
+            AnswerButton.Visibility = Visibility.Visible;
+            AnswerButton.IsEnabled = true;
+            OpenDoorButton.IsEnabled = true;
+        }
+
+        private void RestoreIncomingMonitorAfterCall()
+        {
+            _incomingCallId = "";
+            _monitorOnly = true;
+            _quickRepliesOpen = false;
+            ApplyQuickReplyVisibility();
+            QuickReplyToggle.Visibility = Visibility.Collapsed;
+            MonitorButton.Visibility = Visibility.Visible;
+            IgnoreButton.Visibility = Visibility.Visible;
+            IgnoreButton.Content = Texts.T("monitor.close");
+            IncomingTitle.Text = Texts.T("monitor.title", DoorLabel(_incomingDoor));
+            IncomingHint.Visibility = Visibility.Collapsed;
+            AnswerButton.Content = Texts.T("ring.answer");
+            AnswerButton.Visibility = Visibility.Collapsed;
+            AnswerButton.IsEnabled = App.Core.SipAvailable &&
+                !string.IsNullOrEmpty(_incomingHost);
+            OpenDoorButton.IsEnabled = false;
+            StartReturnCountdown();
         }
 
         private void OnSipIdle()
@@ -2856,9 +2911,10 @@ namespace DoorbellApp
             _sipMode = "";
             CloseInCall();
             if (wasInCall && IncomingView.Visibility == Visibility.Visible)
-                CloseIncoming(false);
+                RestoreIncomingMonitorAfterCall();
             if (App.Boot.Role == "door_station") ShowIdle();
-            else if (wasInCall) ResumeLiveViewAfterCall();
+            else if (wasInCall && IncomingView.Visibility != Visibility.Visible)
+                ResumeLiveViewAfterCall();
         }
 
         /// <summary>

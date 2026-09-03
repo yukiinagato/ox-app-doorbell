@@ -222,7 +222,7 @@ class WindowsContracts(unittest.TestCase):
         self.assertNotIn("Runtime.getRuntime", client)
         self.assertIn('"devices.$nodeId.local.recovery.helper_mode"', supervisor)
         config_changed = supervisor[supervisor.index("fun onConfigChanged"):
-                                    supervisor.index("fun frameRotationForDeviceRotation")]
+                                    supervisor.index("fun trimMemory")]
         self.assertIn("applyHelperConfiguration()", config_changed)
         self.assertIn('statusStore.update("recovery_helper"', controller)
         self.assertIn('.put("configured", decision.configured)', controller)
@@ -1148,7 +1148,13 @@ class WindowsContracts(unittest.TestCase):
         self.assertNotIn("_returnSecondsLeft", pause)
         idle = window[window.index("private void OnSipIdle"):
                       window.index("private void ResumeLiveViewAfterCall")]
-        self.assertIn("else if (wasInCall) ResumeLiveViewAfterCall();", idle)
+        self.assertIn("RestoreIncomingMonitorAfterCall();", idle)
+        self.assertIn("IncomingView.Visibility != Visibility.Visible", idle)
+        enter = window[window.index("private void EnterIncomingInCall"):
+                       window.index("private void RestoreIncomingMonitorAfterCall")]
+        self.assertNotIn("CloseIncoming", enter)
+        self.assertNotIn("StopIncomingVideo", enter)
+        self.assertNotIn("ShowInCall", enter)
         resume = window[window.index("private void ResumeLiveViewAfterCall"):
                         window.index("private void ReportLifecycleEndedIfNeeded")]
         self.assertIn("ShowIncoming(new UiEvent", resume)

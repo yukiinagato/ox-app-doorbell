@@ -210,16 +210,17 @@ class RecoverySafeModeContracts(unittest.TestCase):
                     '@"last_at_ms"', '@"media_released"'):
             self.assertIn(key, app)
 
-    def test_ios5_call_cancel_stops_video_without_restarting_during_banner(self):
+    def test_ios5_call_cancel_retains_video_without_restarting_during_banner(self):
         incoming = read("ios-kiosk/src/Screens/DBIncomingScreen.m")
         cancelled = incoming[incoming.index("- (void)handleCallCancelled:"):
                              incoming.index("- (void)handlePurposeSelected:")]
         refresh = incoming[incoming.index("- (void)fetchAndApplyCoreSnapshot"):
                            incoming.index("- (void)applyContent")]
-        self.assertIn("++_snapshotGen", cancelled)
-        self.assertIn("[self stopVideoPlayers]", cancelled)
-        self.assertIn("_liveView.image = nil", cancelled)
-        self.assertIn('_activeVideoTransport = @"CANCELLED"', cancelled)
+        self.assertNotIn("++_snapshotGen", cancelled)
+        self.assertNotIn("[self stopVideoPlayers]", cancelled)
+        self.assertNotIn("_liveView.image = nil", cancelled)
+        self.assertNotIn('_activeVideoTransport = @"CANCELLED"', cancelled)
+        self.assertIn("video retained", cancelled)
         self.assertIn("_answerButton.enabled = NO", cancelled)
         self.assertIn("_monitorButton.enabled = NO", cancelled)
         self.assertIn("!s->_cancelled && (mediaChanged || videoStopped)", refresh)

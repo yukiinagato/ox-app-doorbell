@@ -56,7 +56,6 @@ class RuntimeSupervisor(private val app: App) {
     private var lastRuntimeHeartbeatMs = 0L
     private var lastCapabilityPublishMs = 0L
     private var lastEncoderSnapshot = VideoEncoder.Snapshot("idle")
-    private var lastEncoderWanted = false
     private var decoderState = "idle"
     private var lastRecoveryStatusJson = ""
     @Volatile private var safeMode = app.safeMode
@@ -72,7 +71,7 @@ class RuntimeSupervisor(private val app: App) {
             updateEncoderDemand()
             reconcileEmergencyState()
             publishCapabilitiesIfDue()
-            handler.postDelayed(this, if (encoder.isRunning) 1_000L else 250L)
+            handler.postDelayed(this, if (encoder.isRunning) 100L else 250L)
         }
     }
 
@@ -400,8 +399,6 @@ class RuntimeSupervisor(private val app: App) {
             return
         }
         val wanted = app.core.videoEncoderWanted()
-        val newSubscriber = wanted && !lastEncoderWanted
-        lastEncoderWanted = wanted
         val commissioning = commissioningRequired()
         if (!wanted && !commissioning) {
             encoderExhausted = false
@@ -436,7 +433,7 @@ class RuntimeSupervisor(private val app: App) {
                     .put("fallback", "mjpeg"))
             }
         }
-        if (newSubscriber && encoder.isRunning) encoder.requestKeyFrame()
+        if (encoder.isRunning && app.core.takeVideoKeyframeRequest()) encoder.requestKeyFrame()
     }
 
     private fun tryLowerResolution(): Boolean {

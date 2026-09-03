@@ -78,6 +78,26 @@ starts work for every triggering camera. Residents can override the event set by
 Android or advancing the numbered camera page on iOS. This is a dashboard scheduling policy only:
 all configured doors remain available for direct monitoring.
 
+## Video startup hot path
+
+A door station configured for H.264 keeps its platform encoder running before any viewer connects.
+Core retains the initialization segment and latest complete random-access fragment; a new fMP4
+subscriber receives both immediately and also raises a coalesced keyframe-request edge. Android
+MediaCodec, Apple VideoToolbox, iOS 5 RTSP ingest (RTCP PLI), and Windows Media Foundation consume
+that edge without restarting the encoder. The MJPEG path prepares a bounded cache in the background
+and may serve a trusted frame no more than 250 ms old while the live stream catches up.
+
+Indoor shells prepare reusable rendering resources before the call path needs them: Android keeps
+one stopped AVC decoder, modern iOS keeps an `AVPlayer`/`AVPlayerLayer` pair, iOS 5 keeps a one-pixel
+GL/VideoToolbox view, and Windows creates its media elements with the main window. Memory-pressure
+handlers may discard these optional reserves. A ringing preview remains the availability layer
+until H.264 proves that it displayed a frame, and the same transport/player continues into an
+answered call instead of reconnecting. Browser viewers receive the same Core-side cached JPEG or
+fMP4 bootstrap. A visitor cancellation ends the call lifecycle and ringing but does not tear down
+the indoor panel's current preview; the resident's close action or normal page deadline owns that
+transport. These are startup-latency mechanisms, not a claim that every device meets a fixed
+glass-to-glass target; hardware timing still requires measured qualification.
+
 ## Platform summary
 
 | Platform | Source/build scope | Qualification status |

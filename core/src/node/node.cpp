@@ -3584,12 +3584,13 @@ struct Node::Impl {
   void applyCameraSettings() {
     CamCfg c = cameraCfg();
     frame_bus.setJpegParams(c.quality, c.w);
+    frame_bus.setWarmCacheFps(opts.role == "door_station" ? c.fps : 0);
     if (httpd)
-      httpd->setJpegProvider([this](int64_t* ts) { return frame_bus.latestJpeg(ts); }, c.fps);
+      httpd->setJpegProvider([this](int64_t* ts) { return frame_bus.previewJpeg(ts); }, c.fps);
 
 
 
-    video_track.setEnabled(c.h264Enabled());
+    video_track.setEnabled(opts.role == "door_station" && c.h264Enabled());
   }
 
 
@@ -6197,9 +6198,9 @@ struct Node::Impl {
       int th = c.h264Enabled() ? c.h264_h : c.h;
       camera->start(c.hint, tw, th);
 
-      encoder_timer = loop->postEvery(5'000, [this] {
+      encoder_timer = loop->postEvery(100, [this] {
         if (!encoder) return;
-        bool want = video_track.enabled() && video_track.subscriberCount() > 0;
+        bool want = video_track.enabled();
         if (want && !encoder->running()) {
           CamCfg cc = cameraCfg();
           EncoderWin::Params p;
@@ -6209,6 +6210,7 @@ struct Node::Impl {
         } else if (!want && encoder->running()) {
           encoder->stop();
         }
+        if (video_track.takeKeyframeRequest()) encoder->requestKeyFrame();
       });
     }
 #endif
@@ -8219,6 +8221,7 @@ struct Node::Impl {
       json::set(publish, "keyframes", static_cast<int64_t>(stats.keyframes));
       json::set(publish, "fragments", static_cast<int64_t>(stats.fragments));
       json::set(publish, "dropped_forward", static_cast<int64_t>(stats.dropped_forward));
+      json::set(publish, "keyframe_requests", static_cast<int64_t>(stats.keyframe_requests));
       json::set(publish, "frame_interval_ms",
                 static_cast<int64_t>(stats.frame_interval_ms));
       json::set(publish, "fps_x10",
@@ -10508,6 +10511,7 @@ void Node::stop() {
 
 
   impl_->video_track.stop();
+  impl_->frame_bus.setWarmCacheFps(0);
 
   impl_->loop->callSync([&] {
     impl_->stopQrScanOnLoop();
@@ -10797,7 +10801,11 @@ void Node::pushEncodedFrame(const uint8_t* annexb, size_t len, bool key, int64_t
 }
 
 bool Node::videoEncoderWanted() {
-  return impl_->video_track.enabled() && impl_->video_track.subscriberCount() > 0;
+  return impl_->video_track.enabled();
+}
+
+bool Node::takeVideoKeyframeRequest() {
+  return impl_->video_track.takeKeyframeRequest();
 }
 
 void Node::setVideoSensorRotation(int degrees) {

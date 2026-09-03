@@ -193,7 +193,7 @@ final class MainViewController: UIViewController {
             withTimeInterval: DoorbellClockSource.refreshIntervalS, repeats: true
         ) { [weak self] _ in self?.refreshClockBase() }
         updateClock()
-        encoderPollTimer = IOSAvailability.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+        encoderPollTimer = IOSAvailability.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
             self?.encoderPoll()
         }
         requestAvPermissionsThenStartCamera()
@@ -1764,6 +1764,9 @@ final class MainViewController: UIViewController {
         } else if !wanted && videoEncoder.isRunning {
             camera.encoder = nil
             videoEncoder.stop()
+        }
+        if videoEncoder.isRunning && core.takeVideoKeyframeRequest() {
+            videoEncoder.requestKeyFrame()
         }
     }
 

@@ -378,6 +378,11 @@ final class CoreBridge {
         return db_core_video_encoder_wanted(c) != 0
     }
 
+    func takeVideoKeyframeRequest() -> Bool {
+        guard let c = core else { return false }
+        return db_core_take_video_keyframe_request(c) != 0
+    }
+
 
     func speak(text: String, lang: String) {
         guard !text.isEmpty else { return }

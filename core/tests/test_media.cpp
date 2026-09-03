@@ -199,6 +199,35 @@ TEST_CASE("media: encoding is demand-driven and caches for active subscribers") 
   CHECK(empty.frameCount() == 0);
 }
 
+TEST_CASE("media: warm preview cache avoids first-subscriber encoding") {
+  FrameBus bus;
+  bus.setExternalEncoder([](const uint8_t*, int, int, int) { return toBytes("PREVIEW"); });
+  bus.setWarmCacheFps(15);
+
+  RawFrame first = makeBgra(64, 48);
+  // Platform capture clocks may be monotonic, media-relative, or wall-clock based. Cache age is
+  // therefore measured independently and must not interpret this timestamp as a wall clock.
+  first.ts_ms = 42;
+  const int64_t first_ts = first.ts_ms;
+  bus.push(std::move(first));
+  for (int i = 0; i < 50 && bus.encodeCount() == 0; i++) usleep(10 * 1000);
+  REQUIRE(bus.encodeCount() == 1);
+  bus.setWarmCacheFps(0);
+
+  RawFrame newer = makeBgra(64, 48);
+  newer.ts_ms = first_ts + 1;
+  bus.push(std::move(newer));
+  int64_t capture_ts = 0;
+  CHECK(toString(bus.previewJpeg(&capture_ts)) == "PREVIEW");
+  CHECK(capture_ts == first_ts);
+  CHECK(bus.encodeCount() == 1);
+
+  usleep(270 * 1000);
+  CHECK(toString(bus.previewJpeg(&capture_ts)) == "PREVIEW");
+  CHECK(capture_ts == first_ts + 1);
+  CHECK(bus.encodeCount() == 2);
+}
+
 TEST_CASE("media: repeatedly halves frames that exceed max_width") {
   FrameBus bus;
   bus.setJpegParams(80, 640);

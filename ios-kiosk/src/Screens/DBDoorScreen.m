@@ -175,6 +175,7 @@ static const CGFloat kPurposeIconSide = 28;
   DBSosSlider *_sos;
   DBUiPalette *_palette;
   NSTimer *_clockTimer;
+  NSTimer *_keyframeTimer;
   NSInteger _tzOffsetMinutes;
 }
 
@@ -201,6 +202,7 @@ static const CGFloat kPurposeIconSide = 28;
 - (void)dealloc {
   // Never leave a repeating run-loop timer behind a released screen.
   [_clockTimer invalidate];
+  [_keyframeTimer invalidate];
   [_callTimer invalidate];
   [_replyTimer invalidate];
 }
@@ -416,9 +418,19 @@ static const CGFloat kPurposeIconSide = 28;
                                                  selector:@selector(updateClock)
                                                  userInfo:nil repeats:YES];
   }
+  if (!_keyframeTimer) {
+    _keyframeTimer = [NSTimer scheduledTimerWithTimeInterval:0.1 target:self
+                                                    selector:@selector(pollKeyframeRequest:)
+                                                    userInfo:nil repeats:YES];
+  }
   [self updateClock];
   [self refreshFromCore];
   [self applyStrings];
+}
+
+- (void)pollKeyframeRequest:(NSTimer *)timer {
+  (void)timer;
+  if ([_core takeVideoKeyframeRequest]) [_rtspSource requestKeyFrame];
 }
 
 // Rendered from Core's local-time document: no operating-system time-zone

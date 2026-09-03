@@ -8,7 +8,9 @@
 
 #include <cstdint>
 #include <functional>
+#include <condition_variable>
 #include <mutex>
+#include <thread>
 
 #include "util/common.h"
 
@@ -29,6 +31,7 @@ size_t rawFrameBytes(int format, int w, int h, int stride);
 
 class FrameBus {
  public:
+  ~FrameBus();
 
 
   using ExternalEncoder = std::function<Bytes(const uint8_t* rgb, int w, int h, int quality)>;
@@ -41,6 +44,12 @@ class FrameBus {
 
   Bytes latestJpeg();
   Bytes latestJpeg(int64_t* capture_ts_ms);
+
+  // Return a recently prepared preview without synchronously encoding a newer capture.
+  Bytes previewJpeg(int64_t* capture_ts_ms);
+
+  // Keep a bounded JPEG cache ready for the first HTTP subscriber. Zero disables warming.
+  void setWarmCacheFps(int fps);
 
 
   void setJpegParams(int quality, int max_width);
@@ -57,9 +66,15 @@ class FrameBus {
   uint64_t encoded_seq_ = 0;
   uint64_t encode_count_ = 0;
   Bytes jpeg_cache_;
+  int64_t encoded_capture_ts_ms_ = 0;
+  int64_t encoded_at_steady_ms_ = 0;
   int quality_ = 60;
   int max_width_ = 640;
   ExternalEncoder external_;
+  std::condition_variable warm_cv_;
+  std::thread warm_thread_;
+  bool warm_stop_ = false;
+  int warm_fps_ = 0;
 };
 
 }  // namespace db

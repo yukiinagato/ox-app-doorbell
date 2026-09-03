@@ -1723,17 +1723,11 @@ static BOOL DBSameString(NSString *a, NSString *b) {
   if ([door length] > 0 && [_door length] > 0 && ![door isEqualToString:_door]) return;
   if (_inCall) return;
   _cancelled = YES;
-  // Keep the cancelled banner visible briefly, but immediately release every
-  // decoder/network path. A later status refresh must not restart the stream.
-  ++_snapshotGen;
-  [self stopVideoPlayers];
-  _liveView.image = nil;
-  _pendingMjpegFrame = nil;
-  _activeVideoTransport = @"CANCELLED";
-  _noVideoLabel.hidden = NO;
+  // The visitor ended the call lifecycle, not the resident's view. Keep the existing transport,
+  // decoder and last frame alive until this screen's normal close deadline; refreshFromCore also
+  // respects _cancelled, so it will neither tear down nor replace this stream underneath us.
   _answerButton.enabled = NO;
   _monitorButton.enabled = NO;
-  [self updateVideoStats:nil];
   _statusLabel.text = [_texts ts:@"ring.cancelled"];
   _statusLabel.font = [UIFont boldSystemFontOfSize:24];
   _statusLabel.textColor = [UIColor whiteColor];
@@ -1743,8 +1737,7 @@ static BOOL DBSameString(NSString *a, NSString *b) {
   _statusLabel.clipsToBounds = YES;
   [self setNeedsLayout];
   [self restartAutoClose];
-  NSLog(@"[doorbell] call cancelled: chime and video stopped; banner remains for %.0fs",
-        kCancelledCloseS);
+  NSLog(@"[doorbell] call cancelled: video retained until the return deadline or resident close");
 }
 
 - (void)handlePurposeSelected:(NSDictionary *)ev {

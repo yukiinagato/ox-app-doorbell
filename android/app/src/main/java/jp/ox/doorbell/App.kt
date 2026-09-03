@@ -32,6 +32,7 @@ class App : Application(), DoorbellCore.Listener {
     internal val uiStyleLkg: UiStyleLkgStore by lazy(LazyThreadSafetyMode.SYNCHRONIZED) {
         UiStyleLkgStore(File(filesDir, "ui-style-lkg-v1.json"))
     }
+    internal val h264DecoderPool = H264DecoderPool()
     val coreOk: Boolean get() = ::runtime.isInitialized && runtime.isCoreReady
 
     @Volatile
@@ -132,6 +133,7 @@ class App : Application(), DoorbellCore.Listener {
         emergencyAlerts = EmergencyAlertController(this)
         processRecovery = ProcessRecovery(this).also { it.install() }
         safeMode = processRecovery.snapshot().safeMode
+        if (boot.role == "indoor_panel" && !safeMode) h264DecoderPool.warm()
         runtime = RuntimeSupervisor(this)
         DeviceOwnerPolicies.apply(this)
         if (!bootSetupRequired) {
@@ -630,12 +632,15 @@ class App : Application(), DoorbellCore.Listener {
 
     override fun onTrimMemory(level: Int) {
         if (::runtime.isInitialized) runtime.trimMemory(level)
+        if (level >= android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL)
+            h264DecoderPool.release()
         incomingActivity?.onMemoryPressure()
         activityListener?.onUiEvent(JSONObject().put("t", "memory_pressure").put("level", level))
         super.onTrimMemory(level)
     }
 
     override fun onLowMemory() {
+        h264DecoderPool.release()
         if (::runtime.isInitialized)
             runtime.trimMemory(android.content.ComponentCallbacks2.TRIM_MEMORY_COMPLETE)
         super.onLowMemory()

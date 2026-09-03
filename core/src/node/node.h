@@ -199,8 +199,11 @@ class Node {
 
 
 
-  // True only while H.264/auto has at least one stream subscriber.
+  // True while H.264/auto is configured, so the platform keeps a low-cost encoder warm.
   bool videoEncoderWanted();
+
+  // Edge-triggered request from a newly attached stream subscriber. Reading clears the edge.
+  bool takeVideoKeyframeRequest();
 
   // Normalize door-station orientation to clockwise cardinal degrees for video metadata.
   // An explicit devices.<self>.local.video.rotation value takes precedence over the sensor.

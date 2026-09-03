@@ -769,6 +769,14 @@ static void DBUiEventCb(void *user, const char *event_json) {
   return wanted;
 }
 
+- (BOOL)takeVideoKeyframeRequest {
+  __block BOOL requested = NO;
+  dispatch_sync(_coreQueue, ^{
+    if (self->_core) requested = db_core_take_video_keyframe_request(self->_core) != 0;
+  });
+  return requested;
+}
+
 
 - (NSDictionary *)lastConfig {
   [_cfgLock lock];

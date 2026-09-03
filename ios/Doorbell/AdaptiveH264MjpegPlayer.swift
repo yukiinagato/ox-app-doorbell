@@ -7,8 +7,8 @@ final class AdaptiveH264MjpegPlayer: NSObject {
     private let h264Host: UIView
     private let mjpegView: UIImageView
     private let noVideoLabel: UILabel
-    private let playerLayer = AVPlayerLayer()
-    private var player: AVPlayer?
+    private let playerLayer: AVPlayerLayer
+    private let player: AVPlayer
     private var playerItem: AVPlayerItem?
     private var mjpeg: MjpegClient?
     private var h264URL: URL?
@@ -42,11 +42,59 @@ final class AdaptiveH264MjpegPlayer: NSObject {
 
     private static let firstFrameTimeout: TimeInterval = 3
     private static let retryInterval: TimeInterval = 5
+    private static let warmLock = NSLock()
+    private static var warmResources: (AVPlayer, AVPlayerLayer)?
+
+    static func prewarm() {
+        let prepare = {
+            warmLock.lock()
+            defer { warmLock.unlock() }
+            guard warmResources == nil else { return }
+            let player = AVPlayer()
+            let layer = AVPlayerLayer(player: player)
+            layer.videoGravity = .resizeAspect
+            layer.isHidden = true
+            warmResources = (player, layer)
+        }
+        if Thread.isMainThread { prepare() }
+        else { DispatchQueue.main.async(execute: prepare) }
+    }
+
+    static func purgeWarmResources() {
+        warmLock.lock()
+        let resources = warmResources
+        warmResources = nil
+        warmLock.unlock()
+        resources?.0.replaceCurrentItem(with: nil)
+        resources?.1.player = nil
+        resources?.1.removeFromSuperlayer()
+    }
+
+    private static func takeWarmResources() -> (AVPlayer, AVPlayerLayer) {
+        warmLock.lock()
+        defer { warmLock.unlock() }
+        if let resources = warmResources {
+            warmResources = nil
+            return resources
+        }
+        let player = AVPlayer()
+        return (player, AVPlayerLayer(player: player))
+    }
+
+    private static func recycle(_ player: AVPlayer, layer: AVPlayerLayer) {
+        warmLock.lock()
+        defer { warmLock.unlock() }
+        guard warmResources == nil else { return }
+        warmResources = (player, layer)
+    }
 
     init(h264Host: UIView, mjpegView: UIImageView, noVideoLabel: UILabel) {
+        let resources = Self.takeWarmResources()
         self.h264Host = h264Host
         self.mjpegView = mjpegView
         self.noVideoLabel = noVideoLabel
+        player = resources.0
+        playerLayer = resources.1
         super.init()
         h264Host.clipsToBounds = true
         playerLayer.videoGravity = .resizeAspect
@@ -54,7 +102,11 @@ final class AdaptiveH264MjpegPlayer: NSObject {
         h264Host.layer.addSublayer(playerLayer)
     }
 
-    deinit { stop() }
+    deinit {
+        stop()
+        playerLayer.removeFromSuperlayer()
+        Self.recycle(player, layer: playerLayer)
+    }
 
     func start(h264URLString: String, mjpegURL: String, h264Enabled: Bool) {
         stop()
@@ -115,14 +167,13 @@ final class AdaptiveH264MjpegPlayer: NSObject {
         mjpegView.isHidden = false
 
         let item = AVPlayerItem(url: url)
-        let newPlayer = AVPlayer(playerItem: item)
-        newPlayer.actionAtItemEnd = .none
+        player.replaceCurrentItem(with: item)
+        player.actionAtItemEnd = .none
         if #available(iOS 10.0, tvOS 10.0, *) {
-            newPlayer.automaticallyWaitsToMinimizeStalling = false
+            player.automaticallyWaitsToMinimizeStalling = false
         }
-        player = newPlayer
         playerItem = item
-        playerLayer.player = newPlayer
+        playerLayer.player = player
         playerLayer.addObserver(self, forKeyPath: "readyForDisplay", options: [.new], context: nil)
         observingReady = true
         item.addObserver(self, forKeyPath: "status", options: [.new], context: nil)
@@ -132,7 +183,7 @@ final class AdaptiveH264MjpegPlayer: NSObject {
         NotificationCenter.default.addObserver(self, selector: #selector(h264Ended(_:)),
                                                name: .AVPlayerItemFailedToPlayToEndTime, object: item)
         applyH264Transform()
-        newPlayer.play()
+        player.play()
         firstFrameTimer = IOSAvailability.scheduledTimer(
             withTimeInterval: Self.firstFrameTimeout, repeats: false
         ) { [weak self] _ in
@@ -154,10 +205,10 @@ final class AdaptiveH264MjpegPlayer: NSObject {
             observingItem = false
         }
         NotificationCenter.default.removeObserver(self)
-        player?.pause()
-        player = nil
+        player.pause()
+        player.replaceCurrentItem(with: nil)
         playerItem = nil
-        playerLayer.player = nil
+        playerLayer.player = player
     }
 
     override func observeValue(forKeyPath keyPath: String?, of object: Any?,
