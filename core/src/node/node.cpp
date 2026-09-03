@@ -1477,6 +1477,35 @@ bool themeOverrideValid(const std::string& key, const cJSON* value, std::string*
     if (tail[0] == '.') return backdrop_leaf_valid(tail.substr(1), value, key);
   }
 
+  auto glass_valid = [&error](const cJSON* value, const std::string& path) {
+    if (cJSON_IsNull(value)) return true;
+    if (!cJSON_IsObject(value)) {
+      *error = path + " must be an object";
+      return false;
+    }
+    const cJSON* item = nullptr;
+    cJSON_ArrayForEach(item, value) {
+      const std::string leaf = item->string ? item->string : "";
+      if (leaf == "blur_radius" && wholeNumberInRange(item, 0, 40)) continue;
+      *error = path + "." + leaf +
+               (leaf == "blur_radius" ? " must be a whole number between 0 and 40"
+                                      : " is not a frosted-glass setting");
+      return false;
+    }
+    return true;
+  };
+  const std::string glass_marker = "theme.glass";
+  const size_t glass_pos = key.find(glass_marker);
+  if (glass_pos != std::string::npos) {
+    const std::string tail = key.substr(glass_pos + glass_marker.size());
+    if (tail.empty()) return glass_valid(value, key);
+    if (tail == ".blur_radius") {
+      if (cJSON_IsNull(value) || wholeNumberInRange(value, 0, 40)) return true;
+      *error = key + " must be a whole number between 0 and 40";
+      return false;
+    }
+  }
+
   const size_t ink_pos = key.find(ink_marker);
   if (ink_pos != std::string::npos) {
     const std::string tail = key.substr(ink_pos + ink_marker.size());
@@ -1500,6 +1529,8 @@ bool themeOverrideValid(const std::string& key, const cJSON* value, std::string*
     if (ink && !ink_map_valid(ink, key + ".ink_override")) return false;
     const cJSON* backdrop = json::get(value, "backdrop");
     if (backdrop && !backdrop_object_valid(backdrop, key + ".backdrop")) return false;
+    const cJSON* glass = json::get(value, "glass");
+    if (glass && !glass_valid(glass, key + ".glass")) return false;
     if (json::get(value, "auto_ink") || json::get(value, "auto_accent")) {
       *error = "auto_ink and auto_accent are computed by core and cannot be written";
       return false;
@@ -4033,6 +4064,28 @@ struct Node::Impl {
     return out;
   }
 
+  json::Doc glassDoc() {
+    const cJSON* cluster = json::get(json::get(json::get(cfg.get(), "display"), "theme"),
+                                     "glass");
+    const cJSON* device = json::get(cfgAt("devices." + node_id + ".local.theme"), "glass");
+    const cJSON* value = json::get(device, "blur_radius");
+    std::string source = "device";
+    if (!value || cJSON_IsNull(value)) {
+      value = json::get(cluster, "blur_radius");
+      source = "admin";
+    }
+    int64_t radius = 24;
+    if (value && !cJSON_IsNull(value) && wholeNumberInRange(value, 0, 40)) {
+      radius = static_cast<int64_t>(value->valuedouble);
+    } else {
+      source = "default";
+    }
+    auto out = json::obj();
+    json::set(out.get(), "blur_radius", radius);
+    json::set(out.get(), "source", source);
+    return out;
+  }
+
   // Automatic contrast, published once by core so every shell in the cluster draws the same ink
   // and the same call button instead of each deriving its own from the same background.
   void themeAutoDoc(cJSON* theme) {
@@ -4080,6 +4133,7 @@ struct Node::Impl {
     json::set(theme, "call_button_bg", effective_button);
     json::set(theme, "call_button_ink", effective_button_ink);
     json::setItem(theme, "backdrop", backdropDoc());
+    json::setItem(theme, "glass", glassDoc());
   }
 
 

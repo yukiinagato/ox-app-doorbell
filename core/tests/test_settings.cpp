@@ -1269,3 +1269,54 @@ TEST_CASE("display: the theme backdrop has defaults, overrides and a validated r
   CHECK_FALSE(json::getBool(refused.get(), "ok", true));
   CHECK(json::getInt(tab_backdrop().get(), "opacity") == 55);
 }
+
+TEST_CASE("display: frosted glass radius resolves per device and rejects invalid values") {
+  SettingsNode fleet;
+  const std::string self = fleet.node->nodeId();
+  auto glass = [&fleet]() {
+    auto status = fleet.status();
+    return json::Doc(cJSON_Duplicate(
+        json::get(json::get(json::get(status.get(), "display"), "theme"), "glass"), 1));
+  };
+
+  CHECK(json::getInt(glass().get(), "blur_radius") == 24);
+  CHECK(json::getString(glass().get(), "source") == "default");
+
+  fleet.node->setConfigKey("display.theme.glass.blur_radius", "30");
+  CHECK(json::getInt(glass().get(), "blur_radius") == 30);
+  CHECK(json::getString(glass().get(), "source") == "admin");
+
+  fleet.node->setConfigKey("devices." + self + ".local.theme.glass.blur_radius", "36");
+  CHECK(json::getInt(glass().get(), "blur_radius") == 36);
+  CHECK(json::getString(glass().get(), "source") == "device");
+
+  fleet.node->setConfigKey("devices." + self + ".local.theme.glass.blur_radius", "41");
+  CHECK(json::getInt(glass().get(), "blur_radius") == 36);
+  fleet.node->setConfigKey("display.theme.glass.blur_radius", "-1");
+  CHECK(json::getInt(glass().get(), "blur_radius") == 36);
+  fleet.node->setConfigKey("display.theme.glass.unknown", "1");
+  CHECK(json::get(glass().get(), "unknown") == nullptr);
+
+  fleet.node->deleteConfigKeyJson("devices." + self + ".local.theme.glass.blur_radius");
+  CHECK(json::getInt(glass().get(), "blur_radius") == 30);
+  CHECK(json::getString(glass().get(), "source") == "admin");
+
+  SettingsNode tab;
+  auto tab_glass = [&tab]() {
+    auto status = tab.status();
+    return json::Doc(cJSON_Duplicate(
+        json::get(json::get(json::get(status.get(), "display"), "theme"), "glass"), 1));
+  };
+  auto batch = json::parse(tab.node->configBatchJson(
+      "[{\"op\":\"set\",\"key\":\"display.theme\","
+      "\"value\":{\"bg_color\":\"#101418\",\"glass\":{\"blur_radius\":32}}}]"));
+  REQUIRE(batch);
+  CHECK(json::getBool(batch.get(), "ok", false));
+  CHECK(json::getInt(tab_glass().get(), "blur_radius") == 32);
+  auto refused = json::parse(tab.node->configBatchJson(
+      "[{\"op\":\"set\",\"key\":\"display.theme\","
+      "\"value\":{\"glass\":{\"blur_radius\":41}}}]"));
+  REQUIRE(refused);
+  CHECK_FALSE(json::getBool(refused.get(), "ok", true));
+  CHECK(json::getInt(tab_glass().get(), "blur_radius") == 32);
+}

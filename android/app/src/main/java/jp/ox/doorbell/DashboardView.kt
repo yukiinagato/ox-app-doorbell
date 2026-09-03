@@ -571,12 +571,12 @@ internal class DashboardView(
         val height = root.height
         // Before the first layout there is no size to prepare for; the layout listener returns.
         if (width <= 0 || height <= 0) return
-        val key = ThemeBackdrop.cacheKey(hash, width, height, overlay)
+        val blurRadius = coreDisplay.theme?.glassBlurRadius ?: 24
+        val key = ThemeBackdrop.cacheKey(hash, width, height, overlay) + "/glass@$blurRadius"
         if (key == backdropKey) return
-        ThemeBackdrop.cached(hash, width, height, overlay)?.let { showBackdrop(key, it); return }
         if (key == backdropLoading) return
         backdropLoading = key
-        loadThemeBackdrop(hash, width, height, overlay, key)
+        loadThemeBackdrop(hash, width, height, overlay, blurRadius, key)
     }
 
     /**
@@ -588,44 +588,53 @@ internal class DashboardView(
         width: Int,
         height: Int,
         overlay: BackdropOverlay,
+        blurRadius: Int,
         key: String,
     ) {
         val url = "http://127.0.0.1:${app.boot.httpPort}/asset/$hash"
         Thread({
-            var bytes: ByteArray? = null
-            var connection: HttpURLConnection? = null
-            try {
-                connection = URL(url).openConnection() as HttpURLConnection
-                connection.connectTimeout = 4000
-                connection.readTimeout = 8000
-                bytes = BoundedBitmapDecoder.readLimited(connection.inputStream, 4 * 1024 * 1024)
-            } catch (error: Exception) {
-                // The mesh prefetch may not have finished; the next refresh tries again.
-                android.util.Log.w(TAG, "Theme backdrop is not available yet: $error")
-            } finally {
-                try { connection?.disconnect() } catch (_: Exception) { }
+            var prepared = ThemeBackdrop.cached(hash, width, height, overlay)
+            if (prepared == null) {
+                var bytes: ByteArray? = null
+                var connection: HttpURLConnection? = null
+                try {
+                    connection = URL(url).openConnection() as HttpURLConnection
+                    connection.connectTimeout = 4000
+                    connection.readTimeout = 8000
+                    bytes = BoundedBitmapDecoder.readLimited(connection.inputStream, 4 * 1024 * 1024)
+                } catch (error: Exception) {
+                    // The mesh prefetch may not have finished; the next refresh tries again.
+                    android.util.Log.w(TAG, "Theme backdrop is not available yet: $error")
+                } finally {
+                    try { connection?.disconnect() } catch (_: Exception) { }
+                }
+                prepared = ThemeBackdrop.build(bytes, hash, width, height, overlay)
             }
-            val prepared = ThemeBackdrop.build(bytes, hash, width, height, overlay)
+            val ready = prepared
+            val softened = ready?.let {
+                FrostedBlur.build(it, ShellUi.dp(activity, blurRadius))
+            }
             ui.post {
                 backdropLoading = ""
-                if (prepared == null) return@post
+                if (ready == null) return@post
                 // The theme, the size or the overlay may have moved on while this was decoding.
-                if (ThemeBackdrop.cacheKey(hash, root.width, root.height, overlay) != key)
+                val current = ThemeBackdrop.cacheKey(hash, root.width, root.height, overlay) +
+                    "/glass@${coreDisplay.theme?.glassBlurRadius ?: 24}"
+                if (current != key) {
+                    softened?.recycle()
                     return@post
-                showBackdrop(key, prepared)
+                }
+                showBackdrop(key, ready, softened)
             }
         }, "doorbell-theme-bg").apply { isDaemon = true }.start()
     }
 
-    private fun showBackdrop(key: String, bitmap: Bitmap) {
+    private fun showBackdrop(key: String, bitmap: Bitmap, softened: Bitmap?) {
         backdropKey = key
         themeBg.setImageBitmap(bitmap)
         themeBg.visibility = View.VISIBLE
         softenedBackdrop?.recycle()
-        softenedBackdrop = Bitmap.createScaledBitmap(
-            bitmap, (bitmap.width / 10).coerceAtLeast(1),
-            (bitmap.height / 10).coerceAtLeast(1), true,
-        )
+        softenedBackdrop = softened
         footerGlass.update(softenedBackdrop, palette.surface, palette.line)
         // Everything decided against the previous background is now wrong.
         regionInkApplied.clear()

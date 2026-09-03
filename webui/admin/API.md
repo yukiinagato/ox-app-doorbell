@@ -382,6 +382,12 @@ refused; turning the layer off, or below 20 while a background image is configur
 and reported as a `theme.backdrop_weak` warning. The same object rides in the `display` UI event,
 so a shell paints what core resolved rather than reading configuration itself.
 
+`status.display.theme.glass` resolves the integer `blur_radius` (0-40, default 24) and its
+`default|admin|device` source from `display.theme.glass.blur_radius` and the matching per-device
+override. A client applies this field only when it advertises `frosted_glass_radius_v1`. Modern
+iOS keeps its system-managed `UIBlurEffect` and therefore does not advertise the capability or
+offer a numeric radius.
+
 `status.video.publish` carries the counters core measures on the sending side: `frames`,
 `keyframes`, `fragments`, `dropped_forward`, `frame_interval_ms`, `fps_x10`. Latency, jitter and
 displayed frames belong to each receiver's own player and arrive through its runtime status.

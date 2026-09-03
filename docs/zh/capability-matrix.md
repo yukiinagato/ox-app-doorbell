@@ -36,6 +36,22 @@
 | Native/Web semantic UI manifest | 已實作 durable native cache；Web scope 僅本 node | Core 永久保存 peer 的 last-valid native manifest/capability；configured offline device 以 `cached_contract:true` 驗證/queue，但仍需 renderer apply report。`web_ui.manifest` 只屬 serving node，不是 remote Web catalog。 |
 | cross-platform conformance harness | golden model + source smoke | 只重播 reference traces 與檢查 narrow source literals，不執行 client artifact，也不是 rendering/timing/hardware/release evidence。 |
 
+## 磨砂玻璃模糊策略
+
+由 OS 管理效果時，以原生系統模糊為準。尤其現代 iOS shell 保留 `UIBlurEffect`，不得只為提供
+數值半徑而換成自訂 renderer。Apple 沒有公開 `UIBlurEffect` 的半徑參數，因此該 shell 不提供
+半徑控制；Web 裝置編輯器應說明此效果由系統管理，不得讓使用者誤以為已套用儲存的數值。
+
+只有 shell 自行實作模糊 renderer，或平台公開 API 確實提供半徑參數時，才可以提供數值化的磨砂
+玻璃半徑。不支援的 shell 忽略此設定，且不得宣告控制已套用。這是 presentation capability，
+並不要求不同 OS 呈現完全相同的視覺結果。
+
+iOS 5 compatibility shell 可以使用 OpenGL ES 2.0 離屏 framebuffer，進行水平、垂直兩遍的
+可分離模糊。只有背景圖片、目標尺寸或半徑變更時才重新渲染並快取結果；收到 memory pressure
+或進入背景時釋放 GPU 資源。ES 2.0 context、framebuffer、shader 或 texture 配置不可用時，
+降級為有界 CPU 模糊。`CIGaussianBlur` 在 iOS 5 不可用，因此 Core Image 不作為 fallback。
+是否實際使用 GPU 及其耗時，必須在指定 iPad 1 上驗證，不能由編譯結果直接宣稱。
+
 ## 現行 release gate
 
 須完成目標 tests/lint、English-source/i18n check、成品 metadata、真實 PJSIP、lane 隔離、secure

@@ -5,6 +5,7 @@
 #import "../Core/DBConfigUtil.h"
 #import "../Core/DBCoreBridge.h"
 #import "../Core/DBDoorTileModel.h"
+#import "../Core/DBFrostedBlur.h"
 #import "../Core/DBFleetCounts.h"
 #import "../Core/DBNoticeModel.h"
 #import "../Core/DBPairingModel.h"
@@ -53,17 +54,11 @@ static CGRect DBRectFromArray(NSArray *rect) {
   (void)rect;
   if (_backdrop && _sourceFrame.size.width > 0 && _sourceFrame.size.height > 0 &&
       _canvasSize.width > 0 && _canvasSize.height > 0) {
-    CGSize reduced = CGSizeMake(MAX(1, ceil(self.bounds.size.width / 10)),
-                                MAX(1, ceil(self.bounds.size.height / 10)));
-    UIGraphicsBeginImageContextWithOptions(reduced, YES, 1.0);
-    CGFloat sx = reduced.width / _sourceFrame.size.width;
-    CGFloat sy = reduced.height / _sourceFrame.size.height;
+    CGFloat sx = self.bounds.size.width / _sourceFrame.size.width;
+    CGFloat sy = self.bounds.size.height / _sourceFrame.size.height;
     [_backdrop drawInRect:CGRectMake(-_sourceFrame.origin.x * sx,
                                      -_sourceFrame.origin.y * sy,
                                      _canvasSize.width * sx, _canvasSize.height * sy)];
-    UIImage *softened = UIGraphicsGetImageFromCurrentImageContext();
-    UIGraphicsEndImageContext();
-    [softened drawInRect:self.bounds];
   }
   [_tint setFill];
   UIRectFillUsingBlendMode(self.bounds, kCGBlendModeNormal);
@@ -200,6 +195,8 @@ static const NSInteger kRecentCallLimit = 20;
 
   // UI
   UIImageView *_themeBg;
+  UIImage *_themeGlassImage;
+  NSUInteger _themeGlassRadius;
   UIView *_historyScrim;   // Readability plate under the call list.
   UIView *_footerScrim;    // ...and under the QR block and version line.
   UILabel *_clockLabel;
@@ -706,6 +703,7 @@ static const CGFloat kFooterGlassAlpha = 0.65;
     _themeHash = nil;
     _themeAverageHex = nil;
     _themeImage = nil;
+    _themeGlassImage = nil;
     _themeBg.image = nil;
     _themeBg.hidden = YES;
     [self refreshBackgroundSampler];
@@ -721,6 +719,7 @@ static const CGFloat kFooterGlassAlpha = 0.65;
     _themeHash = nil;
     _themeAverageHex = nil;
     _themeImage = nil;
+    _themeGlassImage = nil;
     _themeBg.image = nil;
     _themeBg.hidden = YES;
     [self refreshBackgroundSampler];
@@ -732,9 +731,13 @@ static const CGFloat kFooterGlassAlpha = 0.65;
   [self applyScrimTone];
   NSDictionary *overlay = [DBUiTheme backdropOverlayForConfig:_cfg deviceId:_nodeId
                                                       display:_display];
+  NSUInteger glassRadius = [DBUiTheme frostedGlassRadiusForConfig:_cfg deviceId:_nodeId
+                                                           display:_display];
   BOOL sameOverlay = [_themeOverlay isEqualToDictionary:overlay];
-  if ([_themeHash isEqualToString:hash] && _themeBg.image != nil && sameOverlay) return;
+  if ([_themeHash isEqualToString:hash] && _themeBg.image != nil && sameOverlay &&
+      _themeGlassRadius == glassRadius) return;
   _themeOverlay = overlay;
+  _themeGlassRadius = glassRadius;
   _themeHash = hash;
   [self loadThemeImage:hash];
 }
@@ -750,6 +753,8 @@ static const CGFloat kFooterGlassAlpha = 0.65;
   // the worker reads no shared state.
   NSDictionary *overlay = [DBUiTheme backdropOverlayForConfig:_cfg deviceId:_nodeId
                                                       display:_display];
+  NSUInteger glassRadius = [DBUiTheme frostedGlassRadiusForConfig:_cfg deviceId:_nodeId
+                                                           display:_display];
   __weak DBHomeScreen *weakSelf = self;
   dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_LOW, 0), ^{
     // One decode, at panel size, darkened once and cached per picture and
@@ -761,16 +766,26 @@ static const CGFloat kFooterGlassAlpha = 0.65;
       data = [NSData dataWithContentsOfURL:url];
       backdrop = [DBThemeBackdrop backdropForData:data key:want size:size overlay:overlay];
     }
+    BOOL usedGPU = NO;
+    UIImage *glass = [DBFrostedBlur blurredImage:backdrop radius:glassRadius usedGPU:&usedGPU];
+    if (backdrop && !glass) glass = backdrop;
     NSString *average = [DBUiPalette averageHexForImage:backdrop];
     dispatch_async(dispatch_get_main_queue(), ^{
       DBHomeScreen *screen = weakSelf;
-      if (!screen || ![screen->_themeHash isEqualToString:want]) return;
+      if (!screen || ![screen->_themeHash isEqualToString:want] ||
+          screen->_themeGlassRadius != glassRadius ||
+          ![screen->_themeOverlay isEqualToDictionary:overlay] ||
+          !CGSizeEqualToSize(screen.bounds.size, size)) return;
       [screen noteThemeFallback:(backdrop != nil) ? @""
           : ([data length] == 0 ? @"theme_asset_fetch_failed" : @"theme_asset_decode_failed")];
       screen->_themeBg.image = backdrop;
       screen->_themeBg.hidden = (backdrop == nil);
       screen->_themeAverageHex = average;
       screen->_themeImage = backdrop;
+      screen->_themeGlassImage = glass;
+      screen->_themeGlassRadius = glassRadius;
+      if (glass) NSLog(@"[doorbell] frosted glass radius=%lu renderer=%@",
+                       (unsigned long)glassRadius, usedGPU ? @"gpu" : @"cpu");
       screen->_themeImageSize = size;
       screen->_samplerSize = CGSizeZero;
       [screen refreshBackgroundSampler];
@@ -1438,7 +1453,7 @@ static const CGFloat kFooterGlassAlpha = 0.65;
   if ([_historyScrim isKindOfClass:[DBFrostedPlateView class]]) {
     UIColor *tint = [_palette.surface colorWithAlphaComponent:kFooterGlassAlpha];
     UIColor *border = [_palette.ink colorWithAlphaComponent:0.18];
-    [(DBFrostedPlateView *)_historyScrim setBackdrop:_themeBg.image
+    [(DBFrostedPlateView *)_historyScrim setBackdrop:_themeGlassImage
                                          sourceFrame:_historyScrim.frame
                                           canvasSize:size tint:tint border:border];
   }
@@ -1467,7 +1482,7 @@ static const CGFloat kFooterGlassAlpha = 0.65;
   if ([_footerScrim isKindOfClass:[DBFrostedPlateView class]]) {
     UIColor *tint = [_palette.surface colorWithAlphaComponent:kFooterGlassAlpha];
     UIColor *border = [_palette.ink colorWithAlphaComponent:0.18];
-    [(DBFrostedPlateView *)_footerScrim setBackdrop:_themeBg.image
+    [(DBFrostedPlateView *)_footerScrim setBackdrop:_themeGlassImage
                                         sourceFrame:_footerScrim.frame
                                          canvasSize:size tint:tint border:border];
   }

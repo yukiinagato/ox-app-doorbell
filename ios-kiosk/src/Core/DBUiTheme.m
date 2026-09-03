@@ -265,6 +265,20 @@ static DBRgb DBHslToRgb(double h, double s, double l) {
       [NSNumber numberWithDouble:opacity], @"opacity", nil];
 }
 
++ (NSUInteger)frostedGlassRadiusForConfig:(NSDictionary *)config
+                                 deviceId:(NSString *)deviceId
+                                  display:(NSDictionary *)display {
+  id raw = DBThemeDig(display, @"theme.glass.blur_radius");
+  if (![raw isKindOfClass:[NSNumber class]] && [deviceId length] > 0) {
+    raw = DBThemeDig(config, [NSString stringWithFormat:
+        @"devices.%@.local.theme.glass.blur_radius", deviceId]);
+  }
+  if (![raw isKindOfClass:[NSNumber class]])
+    raw = DBThemeDig(config, @"display.theme.glass.blur_radius");
+  NSInteger radius = [raw isKindOfClass:[NSNumber class]] ? [raw integerValue] : 24;
+  return (NSUInteger)MAX(0, MIN(40, radius));
+}
+
 + (NSString *)inkHexForRegion:(NSString *)region
                        config:(NSDictionary *)config
                      deviceId:(NSString *)deviceId

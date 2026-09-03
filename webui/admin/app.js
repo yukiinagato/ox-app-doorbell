@@ -1521,6 +1521,7 @@ var AdminLogic = (function () {
   }
 
   var BACKDROP_DEFAULTS = { enabled: true, color: "#000000", opacity: 62 };
+  var GLASS_BLUR_DEFAULT = 24;
 
   /* Opacity as core validates it: a whole number 0-100. Throws rather than silently falling back
    * so a blank or mistyped field is reported instead of quietly becoming the default. */
@@ -1530,6 +1531,35 @@ var AdminLogic = (function () {
     var value = Math.round(Number(raw));
     if (!isFinite(value) || value < 0 || value > 100) throw new Error("backdrop_opacity");
     return value;
+  }
+
+  function glassBlurValue(raw) {
+    if (raw === "" || raw === null || raw === undefined) throw new Error("glass_blur_radius");
+    var value = Math.round(Number(raw));
+    if (!isFinite(value) || value < 0 || value > 40) throw new Error("glass_blur_radius");
+    return value;
+  }
+
+  function glassBlurModel(cfg, deviceId) {
+    cfg = isObj(cfg) ? cfg : {};
+    var display = isObj(cfg.display) ? cfg.display : {};
+    var theme = isObj(display.theme) ? display.theme : {};
+    var cluster = isObj(theme.glass) ? theme.glass : {};
+    var device = {};
+    if (deviceId && isObj(cfg.devices) && isObj(cfg.devices[deviceId])) {
+      var local = isObj(cfg.devices[deviceId].local) ? cfg.devices[deviceId].local : {};
+      var localTheme = isObj(local.theme) ? local.theme : {};
+      if (isObj(localTheme.glass)) device = localTheme.glass;
+    }
+    var ownRadius = device.blur_radius;
+    var clusterRadius = cluster.blur_radius;
+    var fromDevice = typeof ownRadius === "number";
+    var fromAdmin = !fromDevice && typeof clusterRadius === "number";
+    var radius = fromDevice ? ownRadius : (fromAdmin ? clusterRadius : GLASS_BLUR_DEFAULT);
+    if (!isFinite(radius) || Math.round(radius) !== radius || radius < 0 || radius > 40)
+      radius = GLASS_BLUR_DEFAULT;
+    return { radius: radius, source: fromDevice ? "device" : (fromAdmin ? "admin" : "default"),
+             overridden: fromDevice };
   }
 
   /* The semi-transparent layer a shell composites between the background image and everything
@@ -1615,6 +1645,11 @@ var AdminLogic = (function () {
         backdrop.opacity = backdropOpacityValue(f.backdrop.opacity);
       if (hasOwnKeys(backdrop)) value.backdrop = backdrop;
       else delete value.backdrop;
+    }
+    if (f.glass === null) {
+      delete value.glass;
+    } else if (isObj(f.glass)) {
+      value.glass = { blur_radius: glassBlurValue(f.glass.blur_radius) };
     }
     // Never write back what core computed; those fields are read-only.
     delete value.auto_ink;
@@ -2563,6 +2598,8 @@ var AdminLogic = (function () {
     backdropModel: backdropModel, backdropStatusModel: backdropStatusModel,
     backdropOpacityValue: backdropOpacityValue,
     BACKDROP_DEFAULTS: BACKDROP_DEFAULTS,
+    glassBlurValue: glassBlurValue, glassBlurModel: glassBlurModel,
+    GLASS_BLUR_DEFAULT: GLASS_BLUR_DEFAULT,
     NOTICE_PRESET_MAX: NOTICE_PRESET_MAX, noticePresetEntries: noticePresetEntries,
     noticePresetList: noticePresetList, effectiveNoticeModel: effectiveNoticeModel,
     doorUnlockEntries: doorUnlockEntries, doorUnlockModel: doorUnlockModel,
@@ -6844,6 +6881,19 @@ if (typeof document !== "undefined") (function () {
     return t("theme.backdrop_source_default");
   }
 
+  function frostedGlassSupport(deviceId) {
+    if (!deviceId) return "adjustable";
+    var peer = peerOf(deviceId);
+    if (!peer) return "unavailable";
+    var caps = peer.caps || peer.capabilities || {};
+    var features = caps.features || peer.features || {};
+    if (caps.frosted_glass_radius_v1 === true || features.frosted_glass_radius_v1 === true)
+      return "adjustable";
+    var platform = String(caps.platform || peer.platform || "").toLowerCase();
+    return platform === "ios" || platform === "apple" || platform === "tvos"
+      ? "system" : "unavailable";
+  }
+
   function renderTheme() {
     var el = $("#tab-theme");
     var scope = themeScope, own = themeCur(scope), eff = themeEffective(scope);
@@ -6910,6 +6960,28 @@ if (typeof document !== "undefined") (function () {
          "<span class='mono' id='thBackdropOpacityTxt'>" + esc(backdrop.opacity) + "%</span>" +
          "<div class='dim fhint'>" + esc(t("theme.backdrop_hint")) + " " +
          esc(backdropSourceLabel(backdrop.source)) + "</div></div>";
+
+    var glass = L.glassBlurModel(S.cfg, scope || "");
+    var glassSupport = frostedGlassSupport(scope);
+    var glassOn = !scope || glass.overridden;
+    h += "<div class='frow'><label class='flab'>" + esc(t("theme.glass_blur_radius")) +
+         "</label>";
+    if (glassSupport === "adjustable") {
+      if (scope)
+        h += "<label class='mc'><input type='checkbox' id='thGlassOn'" +
+             (glassOn ? " checked" : "") + "> " + esc(t("admin.theme_override_here")) +
+             "</label><br>";
+      h += "<input type='range' id='thGlassRadius' min='0' max='40' step='1' value='" +
+           esc(glass.radius) + "' style='vertical-align:middle;max-width:220px'> " +
+           "<span class='mono' id='thGlassRadiusTxt'>" + esc(glass.radius) + "</span>" +
+           "<div class='dim fhint'>" + esc(t("theme.glass_blur_hint")) + " " +
+           esc(backdropSourceLabel(glass.source)) + "</div>";
+    } else {
+      h += "<div class='dim fhint'>" +
+           esc(t(glassSupport === "system" ? "theme.glass_blur_system" :
+                                             "theme.glass_blur_unavailable")) + "</div>";
+    }
+    h += "</div>";
 
 
     h += "<div class='frow'><label class='flab'>" +
@@ -7048,6 +7120,10 @@ if (typeof document !== "undefined") (function () {
         layer.style.backgroundColor = $("#thBackdropColor").value;
         layer.style.opacity = on ? String(opacity / 100) : "0";
       }
+      if ($("#thGlassRadius")) {
+        $("#thGlassRadiusTxt").textContent = $("#thGlassRadius").value;
+        $("#thGlassRadius").disabled = !!$("#thGlassOn") && !$("#thGlassOn").checked;
+      }
     }
     $("#thBackdropEnabled").onchange = paint;
     $("#thBackdropColor").oninput = paint;
@@ -7055,6 +7131,8 @@ if (typeof document !== "undefined") (function () {
     $("#thBackdropOpacity").oninput = paint;
     $("#thBackdropOpacity").onchange = paint;
     if ($("#thBackdropOn")) $("#thBackdropOn").onchange = paint;
+    if ($("#thGlassRadius")) $("#thGlassRadius").oninput = paint;
+    if ($("#thGlassOn")) $("#thGlassOn").onchange = paint;
     $("#thColor").oninput = paint;
     $("#thColor").onchange = paint;
     $("#thImage").onchange = paint;
@@ -7084,6 +7162,8 @@ if (typeof document !== "undefined") (function () {
       });
       var base = (e.entries.length && e.entries[0].value) || {};
       var keepBackdrop = !scope || !$("#thBackdropOn") || $("#thBackdropOn").checked;
+      var keepGlass = glassSupport === "adjustable" &&
+        (!scope || !$("#thGlassOn") || $("#thGlassOn").checked);
       var colors;
       try {
         colors = L.themeColorEntries(scope, {
@@ -7093,10 +7173,13 @@ if (typeof document !== "undefined") (function () {
           backdrop: keepBackdrop ? { enabled: $("#thBackdropEnabled").checked,
                                      color: $("#thBackdropColor").value,
                                      opacity: $("#thBackdropOpacity").value }
-                                 : null
+                                 : null,
+          glass: glassSupport !== "adjustable" ? undefined :
+                 (keepGlass ? { blur_radius: $("#thGlassRadius").value } : null)
         }, base);
       } catch (err) {
-        msg(t("theme.backdrop_invalid"));
+        msg(t(err && err.message === "glass_blur_radius" ? "theme.glass_blur_invalid" :
+                                                       "theme.backdrop_invalid"));
         return;
       }
       var entries = (colors.entries.length ? colors.entries : e.entries).concat(

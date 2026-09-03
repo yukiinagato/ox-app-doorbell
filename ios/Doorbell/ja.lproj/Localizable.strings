@@ -946,6 +946,11 @@
 "theme.contrast_warning" = "読みにくい可能性があります（%@:1）";
 "theme.custom" = "指定色";
 "theme.dark_from" = "ダークにする時刻";
+"theme.glass_blur_hint" = "対応端末だけに適用されます。0～40、既定値は 24 です。";
+"theme.glass_blur_invalid" = "ぼかし半径は 0 から 40 の整数で指定してください";
+"theme.glass_blur_radius" = "磨りガラスのぼかし半径";
+"theme.glass_blur_system" = "この端末は OS 管理のぼかしを使用するため、半径は変更できません。";
+"theme.glass_blur_unavailable" = "この端末は調整可能なぼかし半径を報告していません。";
 "theme.ink" = "文字色";
 "theme.ink_region" = "表示箇所";
 "theme.light_from" = "ライトにする時刻";

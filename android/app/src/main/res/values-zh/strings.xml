@@ -960,6 +960,11 @@ PIN：%2$s</string>
     <string name="theme_contrast_warning">可能不易阅读（%1$s:1）</string>
     <string name="theme_custom">指定颜色</string>
     <string name="theme_dark_from">深色开始</string>
+    <string name="theme_glass_blur_hint">仅应用于支持此功能的设备。范围为 0–40，默认值为 24。</string>
+    <string name="theme_glass_blur_invalid">模糊半径必须是 0 到 40 之间的整数</string>
+    <string name="theme_glass_blur_radius">磨砂玻璃模糊半径</string>
+    <string name="theme_glass_blur_system">此设备使用 OS 管理的模糊效果，无法调整半径。</string>
+    <string name="theme_glass_blur_unavailable">此设备未报告可调模糊半径支持。</string>
     <string name="theme_ink">文字颜色</string>
     <string name="theme_ink_region">位置</string>
     <string name="theme_light_from">浅色开始</string>

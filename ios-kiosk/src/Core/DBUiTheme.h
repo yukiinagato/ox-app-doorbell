@@ -58,6 +58,11 @@ FOUNDATION_EXPORT NSString *const DBUiRegionTileLabel;
 + (NSDictionary *)backdropOverlayForConfig:(NSDictionary *)config
                                   deviceId:(NSString *)deviceId
                                    display:(NSDictionary *)display;
+// Numeric radius for shells that advertise frosted_glass_radius_v1. Modern
+// iOS deliberately ignores this and keeps its system-managed UIBlurEffect.
++ (NSUInteger)frostedGlassRadiusForConfig:(NSDictionary *)config
+                                 deviceId:(NSString *)deviceId
+                                  display:(NSDictionary *)display;
 + (NSString *)inkHexForMode:(NSString *)mode;        // primary ink on that surface
 + (NSString *)mutedInkHexForMode:(NSString *)mode;
 + (NSString *)lightInkHex;

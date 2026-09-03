@@ -42,6 +42,8 @@ internal data class CoreTheme(
      * publish the field, which is the signal to keep the overlay this shell has always drawn.
      */
     val backdrop: BackdropOverlay?,
+    /** Numeric radius used only by shells that advertise frosted_glass_radius_v1. */
+    val glassBlurRadius: Int = 24,
     /** Per region: true for the light ink token, false for the dark one. */
     val ink: Map<String, Boolean>,
     /** Only the regions an administrator overrode, as explicit colours. */
@@ -116,6 +118,8 @@ internal object CoreDisplays {
             it.isNotEmpty() && it != "null" && !theme.isNull("bg_image")
         }.orEmpty()
         val backdrop = BackdropOverlay.parse(theme.optJSONObject("backdrop"))
+        val glassBlurRadius = theme.optJSONObject("glass")
+            ?.optInt("blur_radius", 24)?.coerceIn(0, 40) ?: 24
         if (background == null && ink.isEmpty() && callButton == null && image.isEmpty() &&
             backdrop == null)
             return null
@@ -125,6 +129,7 @@ internal object CoreDisplays {
             backgroundUnsampledReason = automatic?.optString("reason").orEmpty(),
             backgroundImage = image,
             backdrop = backdrop,
+            glassBlurRadius = glassBlurRadius,
             ink = ink,
             inkOverride = overrides,
             callButtonBg = callButton,

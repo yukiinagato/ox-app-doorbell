@@ -960,6 +960,11 @@ PIN: %2$s</string>
     <string name="theme_contrast_warning">読みにくい可能性があります（%1$s:1）</string>
     <string name="theme_custom">指定色</string>
     <string name="theme_dark_from">ダークにする時刻</string>
+    <string name="theme_glass_blur_hint">対応端末だけに適用されます。0～40、既定値は 24 です。</string>
+    <string name="theme_glass_blur_invalid">ぼかし半径は 0 から 40 の整数で指定してください</string>
+    <string name="theme_glass_blur_radius">磨りガラスのぼかし半径</string>
+    <string name="theme_glass_blur_system">この端末は OS 管理のぼかしを使用するため、半径は変更できません。</string>
+    <string name="theme_glass_blur_unavailable">この端末は調整可能なぼかし半径を報告していません。</string>
     <string name="theme_ink">文字色</string>
     <string name="theme_ink_region">表示箇所</string>
     <string name="theme_light_from">ライトにする時刻</string>

@@ -234,6 +234,7 @@ static NSDictionary *DBShellCapabilities(DBBootConfig *boot, BOOL secureStoreAva
     @"ui_manifest_v1" : @(uiManifest),
     @"runtime_recovery_v1" : @YES,
     @"helper_policy_v1" : @YES,
+    @"frosted_glass_radius_v1" : @YES,
   };
   NSMutableDictionary *capabilities = [@{
     // A local route is not proof of Internet or broker reachability. Operational

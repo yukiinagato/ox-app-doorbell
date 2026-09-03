@@ -103,7 +103,9 @@ typedef struct db_platform_v2 {
  * {"t":"device_alert","kind":"call_missed","door":"d_front","call_id":"…","unread_missed":N,
  *   "visual":true,"sticky":false,"ttl_s":30,"channels":[…]} when a rule matches a missed call.
  * {"t":"display",...,"theme":{"bg_color":"#101418","bg_image":"<sha256>|null",
- *   "bg_image_path":"<local path>|null"}} for the idle-screen theme. The shell renders the
+ *   "bg_image_path":"<local path>|null","glass":{"blur_radius":24,"source":"…"}}} for the
+ *   idle-screen theme. A shell advertises `frosted_glass_radius_v1` only when it applies that
+ *   numeric radius; modern iOS keeps its system-managed UIBlurEffect instead. The shell renders the
  *   local path directly; null means it is not cached and display is reissued after asset_ready.
  * {"t":"emergency","active":true,"alarm_sound":"siren1|asset:<sha256>","alarm_volume":100,
  *   "audio_path":"..."} where audio_path exists only for a cached custom alarm.

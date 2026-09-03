@@ -266,7 +266,8 @@ const referenced = [
   "unlock.command", "purpose.enabled", "purpose.disabled", "admin.door_unconfigured",
   "theme.backdrop", "theme.backdrop_enabled", "theme.backdrop_hint", "theme.backdrop_invalid",
   "theme.backdrop_weak", "theme.backdrop_source_default", "theme.backdrop_source_admin",
-  "theme.backdrop_source_device"
+  "theme.backdrop_source_device", "theme.glass_blur_radius", "theme.glass_blur_hint",
+  "theme.glass_blur_invalid", "theme.glass_blur_system", "theme.glass_blur_unavailable"
 ].concat(L.INK_REGIONS.map((region) => "theme.region_" + region));
 for (const language of ["ja", "en", "zh"]) {
   const catalog = JSON.parse(fs.readFileSync(
@@ -340,5 +341,20 @@ const clearedBackdrop = L.themeColorEntries("d1", { call_button_auto: true,
                                                    ink_override: {}, backdrop: null },
                                                  { backdrop: { opacity: 80 } });
 assert.ok(!clearedBackdrop.entries.length || !clearedBackdrop.entries[0].value.backdrop);
+
+// ---- numeric frosted-glass radius is stored only for clients that apply it -------------------
+assert.strictEqual(L.glassBlurModel({}, "").radius, 24);
+const glassCfg = {
+  display: { theme: { glass: { blur_radius: 30 } } },
+  devices: { d1: { local: { theme: { glass: { blur_radius: 36 } } } } }
+};
+assert.deepStrictEqual(L.glassBlurModel(glassCfg, "d1"),
+                       { radius: 36, source: "device", overridden: true });
+assert.deepStrictEqual(L.glassBlurModel(glassCfg, "d2"),
+                       { radius: 30, source: "admin", overridden: false });
+const writtenGlass = L.themeColorEntries("d1", { glass: { blur_radius: "32" } }, {});
+assert.deepStrictEqual(writtenGlass.entries[0].value.glass, { blur_radius: 32 });
+assert.throws(() => L.themeColorEntries("d1", { glass: { blur_radius: 41 } }, {}));
+assert.throws(() => L.themeColorEntries("d1", { glass: { blur_radius: "" } }, {}));
 
 console.log("theme and notice tests: ok");

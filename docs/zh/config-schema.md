@@ -184,7 +184,8 @@ mesh-PSK-derived key 和 XChaCha20-Poly1305 seal 成 schema-v2 CRDT record；mat
                // 叠加在背景图片与其上所有元素之间的半透明层，使文字在明亮照片上仍可辨认。
                // 默认启用；每个字段都可通过 devices.<id>.local.theme.backdrop.* 按设备覆盖，
                // 且各字段独立解析。
-               "backdrop": { "enabled": true, "color": "#000000", "opacity": 62 } },  // 0..100
+               "backdrop": { "enabled": true, "color": "#000000", "opacity": 62 },  // 0..100
+               "glass": { "blur_radius": 24 } },       // 0..40，仅支持的 shell
     "brightness": 70,                           // 0-100（远程调节 — 管理页面的滑块）
     "night": { "enabled": true, "from": "22:00", "to": "06:00",
                "brightness": 15, "red_tint": true },   // 夜间模式（用校正后的时钟判定）
@@ -457,6 +458,11 @@ core 最多采样 16x16 个点，但 stb 没有解码时缩放，因此解码是
 颜色格式不正确或浓度超出 0～100 的写入会被拒绝。关闭该层或将其降到 20 以下会被接受，但只要配置了
 背景图片就会以警告（`theme.backdrop_weak`）的形式报告：在明亮照片上这通常是失误，在深色照片上则不是，
 而核心无法分辨究竟属于哪一种。
+
+`display.theme.glass.blur_radius` 是 0～40 的整数，默认值为 24；可通过
+`devices.<id>.local.theme.glass.blur_radius` 按设备覆盖。解析值及其 `default|admin|device` 来源
+发布在 `status.display.theme.glass`。只有宣告 `frosted_glass_radius_v1` 的客户端才应用该值。
+现代 iOS 刻意不宣告此能力，并继续使用没有公开数值半径的、由系统管理的 `UIBlurEffect`。
 
 ### 如何选择文字颜色
 
