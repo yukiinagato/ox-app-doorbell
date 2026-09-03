@@ -11,7 +11,7 @@
              box rather than a digits-only buffer (spec 5.5). -->
         <PasswordBox x:Name="PasswordEntry" FontSize="30" Margin="0,14,0,0" MinHeight="52"
                      MaxLength="128" Padding="12,6" HorizontalContentAlignment="Center"
-                     Background="#0C1014" Foreground="{DynamicResource Fg}"
+                     Background="{DynamicResource Card}" Foreground="{DynamicResource Fg}"
                      BorderBrush="{DynamicResource Line}" BorderThickness="1"/>
         <TextBlock x:Name="ErrorText" FontSize="14" Foreground="#FF6B6B" Margin="0,4,0,8"
                    HorizontalAlignment="Center" MinHeight="18" TextWrapping="Wrap"/>
@@ -21,7 +21,7 @@
                     <Setter Property="FontSize" Value="30"/>
                     <Setter Property="Margin" Value="5"/>
                     <Setter Property="MinHeight" Value="64"/>
-                    <Setter Property="Background" Value="#0C1014"/>
+                    <Setter Property="Background" Value="{DynamicResource Card}"/>
                     <Setter Property="Foreground" Value="{DynamicResource Fg}"/>
                     <Setter Property="BorderBrush" Value="{DynamicResource Line}"/>
                     <Setter Property="Template">

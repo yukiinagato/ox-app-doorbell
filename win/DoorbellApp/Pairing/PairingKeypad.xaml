@@ -7,7 +7,7 @@
                 <Setter Property="FontSize" Value="26"/>
                 <Setter Property="Margin" Value="4"/>
                 <Setter Property="MinHeight" Value="54"/>
-                <Setter Property="Background" Value="#0C1014"/>
+                <Setter Property="Background" Value="{DynamicResource Card}"/>
                 <Setter Property="Foreground" Value="{DynamicResource Fg}"/>
                 <Setter Property="BorderBrush" Value="{DynamicResource Line}"/>
                 <Setter Property="Cursor" Value="Hand"/>
@@ -22,7 +22,7 @@
                             </Border>
                             <ControlTemplate.Triggers>
                                 <Trigger Property="IsPressed" Value="True">
-                                    <Setter Property="Background" Value="#243040"/>
+                                    <Setter Property="Background" Value="{DynamicResource Line}"/>
                                 </Trigger>
                                 <Trigger Property="IsEnabled" Value="False">
                                     <Setter Property="Opacity" Value="0.45"/>
