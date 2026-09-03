@@ -1470,6 +1470,9 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
             "peers_changed" -> scheduleHomeRefresh()
             "config_changed" -> scheduleHomeRefresh(withConfig = true)
             "event" -> {
+                val eventType = ev.optString("type")
+                if (eventType == "motion" || eventType == "press")
+                    dashboard?.prioritizeDoor(ev.optString("door"))
                 handleCallLifecycleEvent(ev)
             }
         }

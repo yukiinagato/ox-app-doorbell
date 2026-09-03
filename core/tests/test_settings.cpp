@@ -1279,7 +1279,7 @@ TEST_CASE("display: frosted glass radius resolves per device and rejects invalid
         json::get(json::get(json::get(status.get(), "display"), "theme"), "glass"), 1));
   };
 
-  CHECK(json::getInt(glass().get(), "blur_radius") == 24);
+  CHECK(json::getInt(glass().get(), "blur_radius") == 32);
   CHECK(json::getString(glass().get(), "source") == "default");
 
   fleet.node->setConfigKey("display.theme.glass.blur_radius", "30");

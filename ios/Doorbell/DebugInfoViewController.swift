@@ -208,9 +208,8 @@ final class DebugInfoViewController: UIViewController {
         let device = debug?["device"] as? [String: Any] ?? [:]
         let runtime = status?["runtime"] as? [String: Any] ?? [:]
         let sip = status?["sip"] as? [String: Any] ?? [:]
-        let appVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "-"
-        let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "-"
         let coreVersion = value(node["version"], fallback: value(debugNode["version"], fallback: "-"))
+        let appVersion = DoorbellTheme.appVersion(coreVersion: coreVersion)
 
         var addresses = Set<String>()
         for value in (node["local_addrs"] as? [String] ?? []) where !value.isEmpty {
@@ -226,7 +225,7 @@ final class DebugInfoViewController: UIViewController {
         sections.append([
             line("info.node", value: "\(value(node["name"], fallback: value(debugNode["node"], fallback: "-"))) (\(value(node["id"], fallback: "-")))"),
             line("info.role", value: value(node["role"], fallback: boot.role)),
-            line("info.version", value: "App \(appVersion) (\(build)) · Core \(coreVersion)"),
+            line("info.version", value: "App \(appVersion) · Core \(DoorbellTheme.shortVersion(coreVersion))"),
             line("info.microphone", value: capabilityState(capabilities?["microphone"])),
             line("info.camera", value: capabilityState(capabilities?["camera"])),
         ])

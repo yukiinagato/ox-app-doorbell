@@ -38,6 +38,17 @@ replicated SOS；`emergency.web_active_page_alerts:false` 只停用 raw-state pa
 各 channel 的 presentation/limitation。raw path 啟用期間，rule TTL 只結束 custom decoration/sound；
 安全的紅色 raw-SOS overlay 保留至 clear 或 switch off。
 
+## 室內機相機預覽排程
+
+預覽負載依面板能同時顯示的數量設限，而不是依已配置門口機總數增長。只有一台時使用保持比例的大型
+貼片；兩三台平分可用 viewport；更多時改用 compact 貼片與明確的捲動／分頁選擇。Android 每輪最多
+更新三個可見貼片，modern iOS 每頁四個，iPad 1 每頁三個（safe mode 為一個）；隱藏貼片不抓取或
+解碼 snapshot。
+
+`press` 或 `motion` event 會把對應門口機提升至 active set 最前。提升結果去重並按最新事件排序；即使
+同時大量觸發，也只會替換有界的 active slot，不會對全部相機啟動工作。住戶可用 Android 捲動或 iOS
+的編號 camera page 覆蓋 event 選擇。這只規範 dashboard 排程；所有已配置門口機仍可直接 monitor。
+
 Core 永久 cache peer 的 last-valid native UI manifest/capability。`cached_contract:true` 的 configured
 offline device 可依 cached contract 驗證/queue，但只有後續 renderer report 能證明套用。Web manifest
 仍只屬 serving Core node。沒有 `targets` object 的 legacy alert 對所有 native node/Web group。明確

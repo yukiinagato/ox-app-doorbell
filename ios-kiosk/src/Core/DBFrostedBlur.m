@@ -153,6 +153,10 @@ static UIImage *DBGpuBlur(unsigned char *input, size_t width, size_t height, NSU
   BOOL ok = program && DBDrawPass(framebuffer, textures[1], textures[0], program, width, height,
                                   spread / (GLfloat)width, 0) &&
       DBDrawPass(framebuffer, textures[2], textures[1], program, width, height,
+                 0, spread / (GLfloat)height) &&
+      DBDrawPass(framebuffer, textures[1], textures[2], program, width, height,
+                 spread / (GLfloat)width, 0) &&
+      DBDrawPass(framebuffer, textures[2], textures[1], program, width, height,
                  0, spread / (GLfloat)height);
   unsigned char *output = ok ? (unsigned char *)malloc(width * height * 4) : NULL;
   if (output) {

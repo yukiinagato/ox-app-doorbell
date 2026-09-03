@@ -49,7 +49,7 @@ platform の public API が実際の radius parameter を提供する場合だ�
 無視し、適用済み capability として advertise してはいけません。これは presentation capability
 であり、OS 間で見た目を完全一致させるためのものではありません。
 
-iOS 5 compatibility shell は OpenGL ES 2.0 の offscreen framebuffer で横・縦の two-pass
+iOS 5 compatibility shell は OpenGL ES 2.0 の offscreen framebuffer で横・縦を二巡する
 separable blur を使用できます。background image、target size、radius の変更時だけ render して
 結果を cache し、memory pressure/backgrounding では GPU resource を解放します。ES 2.0 context、
 framebuffer、shader、texture allocation が使えない場合は bounded CPU blur に fallback します。

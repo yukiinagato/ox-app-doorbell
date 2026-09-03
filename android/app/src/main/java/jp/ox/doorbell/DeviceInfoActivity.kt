@@ -255,8 +255,7 @@ class DeviceInfoActivity : Activity() {
 
     private fun appVersion(): String = try {
         val info = packageManager.getPackageInfo(packageName, 0)
-        @Suppress("DEPRECATION")
-        "${info.versionName} (${info.versionCode})"
+        info.versionName.orEmpty()
     } catch (_: Exception) {
         "-"
     }

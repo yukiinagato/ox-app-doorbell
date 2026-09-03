@@ -946,7 +946,7 @@
 "theme.contrast_warning" = "This may be hard to read (%@:1)";
 "theme.custom" = "Custom colour";
 "theme.dark_from" = "Dark from";
-"theme.glass_blur_hint" = "Applied only by supported devices. Range 0-40; the default is 24.";
+"theme.glass_blur_hint" = "Applied only by supported devices. Range 0-40; the default is 32.";
 "theme.glass_blur_invalid" = "The blur radius must be a whole number between 0 and 40";
 "theme.glass_blur_radius" = "Frosted-glass blur radius";
 "theme.glass_blur_system" = "This device uses OS-managed blur, so its radius cannot be changed.";

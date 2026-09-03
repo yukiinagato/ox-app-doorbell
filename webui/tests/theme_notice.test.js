@@ -343,7 +343,7 @@ const clearedBackdrop = L.themeColorEntries("d1", { call_button_auto: true,
 assert.ok(!clearedBackdrop.entries.length || !clearedBackdrop.entries[0].value.backdrop);
 
 // ---- numeric frosted-glass radius is stored only for clients that apply it -------------------
-assert.strictEqual(L.glassBlurModel({}, "").radius, 24);
+assert.strictEqual(L.glassBlurModel({}, "").radius, 32);
 const glassCfg = {
   display: { theme: { glass: { blur_radius: 30 } } },
   devices: { d1: { local: { theme: { glass: { blur_radius: 36 } } } } }

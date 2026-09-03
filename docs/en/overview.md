@@ -64,6 +64,20 @@ mesh-PSK-derived key and never appear as plaintext in configuration/export.
 Capabilities are measured and advertised by each shell. A codec being enumerated, a source file
 compiling, or an OS version being targeted is not certification.
 
+## Indoor camera preview scheduling
+
+Preview work is bounded by what the panel can present, not by the number of configured doors. One
+camera receives a large, aspect-aware tile; two or three divide the usable viewport; larger fleets
+use compact tiles and an explicit scroll/page selection. Android refreshes at most three visible
+tiles per cycle. Modern iOS pages four tiles, while iPad 1 pages three (one in safe mode). Hidden
+tiles do not fetch or decode snapshots.
+
+A `press` or `motion` event promotes that door into the active set. Promotion is unique and
+most-recent-first; an event burst can replace only the bounded number of active slots, so it never
+starts work for every triggering camera. Residents can override the event set by scrolling on
+Android or advancing the numbered camera page on iOS. This is a dashboard scheduling policy only:
+all configured doors remain available for direct monitoring.
+
 ## Platform summary
 
 | Platform | Source/build scope | Qualification status |

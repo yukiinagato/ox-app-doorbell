@@ -962,7 +962,7 @@ Sends in {0}s</value></data>
   <data name="theme_contrast_warning" xml:space="preserve"><value>This may be hard to read ({0}:1)</value></data>
   <data name="theme_custom" xml:space="preserve"><value>Custom colour</value></data>
   <data name="theme_dark_from" xml:space="preserve"><value>Dark from</value></data>
-  <data name="theme_glass_blur_hint" xml:space="preserve"><value>Applied only by supported devices. Range 0-40; the default is 24.</value></data>
+  <data name="theme_glass_blur_hint" xml:space="preserve"><value>Applied only by supported devices. Range 0-40; the default is 32.</value></data>
   <data name="theme_glass_blur_invalid" xml:space="preserve"><value>The blur radius must be a whole number between 0 and 40</value></data>
   <data name="theme_glass_blur_radius" xml:space="preserve"><value>Frosted-glass blur radius</value></data>
   <data name="theme_glass_blur_system" xml:space="preserve"><value>This device uses OS-managed blur, so its radius cannot be changed.</value></data>

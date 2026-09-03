@@ -53,7 +53,7 @@ uses a public platform API with a real radius parameter. Unsupported shells igno
 must not advertise the control as applied. This is a presentation capability, not a reason to make
 the visual result identical across operating systems.
 
-The iOS 5 compatibility shell may use an OpenGL ES 2.0 offscreen, two-pass separable blur. It must
+The iOS 5 compatibility shell may use an OpenGL ES 2.0 offscreen, two-round separable blur. It must
 render only when the background image, target size, or radius changes, cache the result, release GPU
 resources on memory pressure/backgrounding, and fall back to a bounded CPU blur when the ES 2.0
 context, framebuffer, shader, or texture allocation is unavailable. Core Image is not the fallback:

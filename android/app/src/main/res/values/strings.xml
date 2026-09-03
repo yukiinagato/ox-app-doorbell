@@ -960,7 +960,7 @@ Sends in %1$ss</string>
     <string name="theme_contrast_warning">This may be hard to read (%1$s:1)</string>
     <string name="theme_custom">Custom colour</string>
     <string name="theme_dark_from">Dark from</string>
-    <string name="theme_glass_blur_hint">Applied only by supported devices. Range 0-40; the default is 24.</string>
+    <string name="theme_glass_blur_hint">Applied only by supported devices. Range 0-40; the default is 32.</string>
     <string name="theme_glass_blur_invalid">The blur radius must be a whole number between 0 and 40</string>
     <string name="theme_glass_blur_radius">Frosted-glass blur radius</string>
     <string name="theme_glass_blur_system">This device uses OS-managed blur, so its radius cannot be changed.</string>

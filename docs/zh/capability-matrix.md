@@ -46,7 +46,7 @@
 玻璃半徑。不支援的 shell 忽略此設定，且不得宣告控制已套用。這是 presentation capability，
 並不要求不同 OS 呈現完全相同的視覺結果。
 
-iOS 5 compatibility shell 可以使用 OpenGL ES 2.0 離屏 framebuffer，進行水平、垂直兩遍的
+iOS 5 compatibility shell 可以使用 OpenGL ES 2.0 離屏 framebuffer，進行兩輪水平、垂直的
 可分離模糊。只有背景圖片、目標尺寸或半徑變更時才重新渲染並快取結果；收到 memory pressure
 或進入背景時釋放 GPU 資源。ES 2.0 context、framebuffer、shader 或 texture 配置不可用時，
 降級為有界 CPU 模糊。`CIGaussianBlur` 在 iOS 5 不可用，因此 Core Image 不作為 fallback。

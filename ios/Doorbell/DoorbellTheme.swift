@@ -1101,10 +1101,8 @@ enum DoorbellTheme {
                             power: [String: Any]?) -> String {
         var parts: [String] = []
         if !name.isEmpty { parts.append(name) }
-        parts.append("core v" + (coreVersion.isEmpty ? "-" : coreVersion))
-        let app = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString")
-            as? String ?? "-"
-        parts.append("app v" + app)
+        parts.append("core v" + shortVersion(coreVersion))
+        parts.append("app v" + appVersion(coreVersion: coreVersion))
         let percent = ConfigUtil.int(power, "battery_pct", -1)
         if percent >= 0 {
             var battery = "\(percent)%"
@@ -1114,6 +1112,21 @@ enum DoorbellTheme {
             parts.append(battery)
         }
         return parts.joined(separator: " · ")
+    }
+
+    static func shortVersion(_ version: String) -> String {
+        guard !version.isEmpty else { return "-" }
+        let pieces = version.split(separator: "+", maxSplits: 1, omittingEmptySubsequences: false)
+        guard pieces.count == 2 else { return version }
+        return String(pieces[0]) + "+" + pieces[1].prefix(7)
+    }
+
+    static func appVersion(coreVersion: String) -> String {
+        let app = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString")
+            as? String ?? "-"
+        guard let plus = coreVersion.firstIndex(of: "+") else { return app }
+        let metadata = coreVersion[coreVersion.index(after: plus)...]
+        return metadata.isEmpty ? app : app + "+" + metadata.prefix(7)
     }
 
     static func coreVersion() -> String {

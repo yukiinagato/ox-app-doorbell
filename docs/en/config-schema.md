@@ -203,7 +203,7 @@ the plaintext subscription. Startup reseals a legacy raw record or removes it fa
                // default; every leaf is overridable per device under
                // devices.<id>.local.theme.backdrop.*, and each leaf resolves on its own.
                "backdrop": { "enabled": true, "color": "#000000", "opacity": 62 },  // 0..100
-               "glass": { "blur_radius": 24 } },       // 0..40; capable shells only
+               "glass": { "blur_radius": 32 } },       // 0..40; capable shells only
     "brightness": 70,                           // 0-100 (remote adjustment — slider in the admin UI)
     "night": { "enabled": true, "from": "22:00", "to": "06:00",
                "brightness": 15, "red_tint": true },   // night mode (evaluated with the corrected clock)
@@ -891,7 +891,7 @@ down below 20, is accepted but reported as a warning (`theme.backdrop_weak`) whi
 image is configured: over a bright picture that is usually a mistake, and over a dark one it is
 not, and core cannot tell which.
 
-`display.theme.glass.blur_radius` is an integer from 0 through 40, defaults to 24, and may be
+`display.theme.glass.blur_radius` is an integer from 0 through 40, defaults to 32, and may be
 overridden at `devices.<id>.local.theme.glass.blur_radius`. Core publishes the resolved value and
 its `default|admin|device` source in `status.display.theme.glass`. Only a client advertising
 `frosted_glass_radius_v1` applies it. Modern iOS deliberately does not advertise that capability:

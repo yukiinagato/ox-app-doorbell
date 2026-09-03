@@ -26,6 +26,7 @@ final class DashboardView: UIView {
     private let missedBadge = PaddedLabel()
     private let adminButton = UIButton(type: .system)
     private let noticeButton = UIButton(type: .system)
+    private let doorPageButton = UIButton(type: .system)
     private let historyHeader = HaloLabel()
     private let seeAllButton = UIButton(type: .system)
     private let tilesStack = UIStackView()
@@ -45,6 +46,9 @@ final class DashboardView: UIView {
     private var config: [String: Any]?
     private var skin = DoorbellSkin.plain(.dark)
     private var tiles: [String: DoorTileView] = [:]
+    private var allDoors: [String] = []
+    private var previewPriority: [String] = []
+    private var previewPage = 0
     private var stillTimer: Timer?
 
     init(core: CoreBridge, boot: BootConfig, texts: Texts, sosControl: SosSlideControl) {
@@ -109,6 +113,13 @@ final class DashboardView: UIView {
         tilesStack.axis = .vertical
         tilesStack.spacing = 12
 
+        style(doorPageButton, title: "", filled: false)
+        doorPageButton.titleLabel?.font = .systemFont(ofSize: 15, weight: .semibold)
+        doorPageButton.contentHorizontalAlignment = .left
+        doorPageButton.addTarget(self, action: #selector(nextDoorPage),
+                                 for: .primaryActionTriggered)
+        doorPageButton.isHidden = true
+
         historyHeader.text = texts.t("history.title")
         historyHeader.font = .systemFont(ofSize: 19, weight: .semibold)
         style(seeAllButton, title: texts.t("history.see_all"), filled: false)
@@ -149,7 +160,7 @@ final class DashboardView: UIView {
 
         leftColumn.axis = .vertical
         leftColumn.spacing = 14
-        for view in [leftHeader, tilesStack, noticeButton] {
+        for view in [leftHeader, doorPageButton, tilesStack, noticeButton] {
             leftColumn.addArrangedSubview(view)
         }
         leftColumn.addArrangedSubview(UIView())
@@ -256,7 +267,7 @@ final class DashboardView: UIView {
         counters.update(lastCounts, ink: skin.cardInk("status_line"))
         DoorbellTheme.pill(missedBadge, background: skin.palette.danger,
                            ink: DoorbellTheme.readableInk(on: skin.palette.danger), fontSize: 15)
-        for button in [adminButton, noticeButton, seeAllButton] {
+        for button in [adminButton, noticeButton, doorPageButton, seeAllButton] {
             button.setTitleColor(skin.cardInk("status_line"), for: .normal)
             button.backgroundColor = skin.surface
         }
@@ -298,12 +309,31 @@ final class DashboardView: UIView {
         }
     }
 
+    func prioritizeDoor(_ door: String) {
+        guard !door.isEmpty, allDoors.contains(door) else { return }
+        previewPriority.removeAll { $0 == door }
+        previewPriority.insert(door, at: 0)
+        if previewPriority.count > Self.previewCapacity {
+            previewPriority.removeLast(previewPriority.count - Self.previewCapacity)
+        }
+        previewPage = 0
+        let status = core.status()
+        rebuildTiles(status: status, nowMs: DoorbellClock.nowMs(core))
+        refreshStills(status: status)
+    }
+
     // MARK: - Door tiles
 
     private func rebuildTiles(status: [String: Any]?, nowMs: Int64) {
         // A door station with no camera has nothing for a tile to show. It stays reachable from
         // the monitor page's device list and still delivers its notices.
-        let doors = ConfigUtil.doorsWithCamera(config: config, status: status)
+        allDoors = ConfigUtil.doorsWithCamera(config: config, status: status)
+        let doors = selectedDoors()
+        doorPageButton.isHidden = allDoors.count <= Self.previewCapacity
+        if !doorPageButton.isHidden {
+            doorPageButton.setTitle("\(texts.t("settings.doors")) · \(doors.count)/\(allDoors.count) ›",
+                                    for: .normal)
+        }
         let existing = Set(tiles.keys)
         if existing != Set(doors) {
             for view in tilesStack.arrangedSubviews { view.removeFromSuperview() }
@@ -317,6 +347,7 @@ final class DashboardView: UIView {
                 tilesStack.addArrangedSubview(tile)
             }
         }
+        for tile in tiles.values { tile.applyDensity(visibleCount: doors.count) }
         for door in doors {
             guard let tile = tiles[door] else { continue }
             let entry = ConfigUtil.dig(config, "doors.\(door)") as? [String: Any]
@@ -328,6 +359,19 @@ final class DashboardView: UIView {
                        noticeActive: notice != nil,
                        skin: skin)
         }
+    }
+
+    private static let previewCapacity = 4
+
+    private func selectedDoors() -> [String] {
+        guard allDoors.count > Self.previewCapacity else { return allDoors }
+        var selected = previewPriority.filter { allDoors.contains($0) }
+        let start = (previewPage * Self.previewCapacity) % allDoors.count
+        for offset in 0..<allDoors.count where selected.count < Self.previewCapacity {
+            let door = allDoors[(start + offset) % allDoors.count]
+            if !selected.contains(door) { selected.append(door) }
+        }
+        return selected
     }
 
     /// Live stills, five seconds apart, from the door station's own snapshot endpoint. An
@@ -368,6 +412,16 @@ final class DashboardView: UIView {
     @objc private func openHistory() { onOpenHistory?() }
 
     @objc private func openGlobalNotice() { onOpenNotice?("") }
+
+    @objc private func nextDoorPage() {
+        guard allDoors.count > Self.previewCapacity else { return }
+        previewPriority.removeAll()
+        let pages = (allDoors.count + Self.previewCapacity - 1) / Self.previewCapacity
+        previewPage = (previewPage + 1) % pages
+        let status = core.status()
+        rebuildTiles(status: status, nowMs: DoorbellClock.nowMs(core))
+        refreshStills(status: status)
+    }
 }
 
 /// One door: its most recent still, its name, whether it is reachable, and whether an
@@ -388,6 +442,9 @@ final class DoorTileView: UIView {
     private var lastStillData: Data?
     private let session: URLSession
     private let texts: Texts
+    private var stillWidthConstraint: NSLayoutConstraint!
+    private var stillHeightConstraint: NSLayoutConstraint!
+    private var minimumHeightConstraint: NSLayoutConstraint!
 
     init(texts: Texts) {
         self.texts = texts
@@ -429,21 +486,41 @@ final class DoorTileView: UIView {
         row.translatesAutoresizingMaskIntoConstraints = false
         addSubview(row)
 
+        stillWidthConstraint = still.widthAnchor.constraint(equalToConstant: 132)
+        stillHeightConstraint = still.heightAnchor.constraint(equalToConstant: 84)
+        minimumHeightConstraint = heightAnchor.constraint(greaterThanOrEqualToConstant: 92)
         NSLayoutConstraint.activate([
             still.topAnchor.constraint(equalTo: topAnchor),
             still.leadingAnchor.constraint(equalTo: leadingAnchor),
-            still.widthAnchor.constraint(equalToConstant: 132),
-            still.heightAnchor.constraint(equalToConstant: 84),
+            stillWidthConstraint,
+            stillHeightConstraint,
             still.bottomAnchor.constraint(lessThanOrEqualTo: bottomAnchor),
             row.topAnchor.constraint(equalTo: topAnchor, constant: 8),
             row.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -8),
             row.leadingAnchor.constraint(equalTo: still.trailingAnchor, constant: 12),
             row.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
-            heightAnchor.constraint(greaterThanOrEqualToConstant: 92),
+            minimumHeightConstraint,
         ])
     }
 
     required init?(coder: NSCoder) { fatalError("not supported") }
+
+    func applyDensity(visibleCount: Int) {
+        switch visibleCount {
+        case ...1:
+            stillWidthConstraint.constant = 220
+            stillHeightConstraint.constant = 124
+            minimumHeightConstraint.constant = 132
+        case 2...3:
+            stillWidthConstraint.constant = 170
+            stillHeightConstraint.constant = 104
+            minimumHeightConstraint.constant = 112
+        default:
+            stillWidthConstraint.constant = 132
+            stillHeightConstraint.constant = 84
+            minimumHeightConstraint.constant = 92
+        }
+    }
 
     /// The tile is an opaque card, so its caption keeps the palette's ink rather than the ink
     /// Core measured for the theme background — an administrator's `tile_label` override still

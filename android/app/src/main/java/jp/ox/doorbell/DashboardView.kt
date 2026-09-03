@@ -139,7 +139,6 @@ internal class DashboardView(
     private val missedBadge = ShellUi.pill(activity, "", palette.dangerSoft, palette.dangerInk)
     private lateinit var adminButton: Button
     private lateinit var noticeButton: Button
-    private lateinit var actionRow: LinearLayout
     private lateinit var header: LinearLayout
     private lateinit var clockBox: LinearLayout
     private lateinit var headerActions: LinearLayout
@@ -185,6 +184,7 @@ internal class DashboardView(
 
     /** One tile view per door, built once and then only updated. */
     private val tiles = LinkedHashMap<String, DoorTile>()
+    private val previewPriorityDoors = ArrayList<String>()
 
     /** The backdrop currently on screen, as picture-hash@width x height. */
     private var backdropKey = ""
@@ -215,6 +215,7 @@ internal class DashboardView(
 
     /** At most one call-log read in flight: refreshes can arrive faster than the query returns. */
     private var callsLoading = false
+    private var stillsLoading = false
 
     /** What the call rows currently on screen were built from, so an unchanged list is left be. */
     private var callsRendered: Triple<List<CallRow>, Palette, String>? = null
@@ -311,6 +312,30 @@ internal class DashboardView(
         clock.refreshIfStale()
     }
 
+    /**
+     * A press or motion event promotes that camera without allocating a second carousel. All
+     * doors remain in the scroll view, while only the cameras actually on screen are refreshed.
+     */
+    fun prioritizeDoor(door: String) {
+        if (door.isEmpty()) return
+        val promoted = tiles.remove(door) ?: return
+        previewPriorityDoors.remove(door)
+        previewPriorityDoors.add(0, door)
+        while (previewPriorityDoors.size > 3) previewPriorityDoors.removeAt(3)
+        val reordered = LinkedHashMap<String, DoorTile>()
+        reordered[door] = promoted
+        reordered.putAll(tiles)
+        tiles.clear()
+        tiles.putAll(reordered)
+        tileColumn.removeView(promoted.root)
+        tileColumn.addView(promoted.root, 1, ShellUi.matchWrap().apply {
+            topMargin = ShellUi.dp(activity, 8)
+        })
+        tileScroll.smoothScrollTo(0, 0)
+        fitTilesToViewport()
+        refreshStills()
+    }
+
     // ---------- construction ----------
 
     private fun build() {
@@ -347,6 +372,12 @@ internal class DashboardView(
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
+        noticeButton = ShellUi.button(
+            activity, texts.t("notice.global_button", R.string.notice_global_button), palette,
+        ) { openNoticeDialog("") }.apply { textSize = 13f }
+        headerActions.addView(noticeButton, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+        ))
         for (counter in listOf(deviceCount, doorCount, panelCount))
             countersRow.addView(counter.root, LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
@@ -451,22 +482,9 @@ internal class DashboardView(
             ViewGroup.LayoutParams.MATCH_PARENT, ShellUi.dp(activity, 88),
         ))
 
-        actionRow = LinearLayout(activity).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            isBaselineAligned = false
-        }
-        val actions = actionRow
-        noticeButton = ShellUi.button(
-            activity, texts.t("notice.global_button", R.string.notice_global_button), palette,
-        ) { openNoticeDialog("") }
-        actions.addView(noticeButton, LinearLayout.LayoutParams(
-            0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f,
-        ))
-        actions.addView(sosSlider, LinearLayout.LayoutParams(
-            0, ShellUi.dp(activity, 56), 1f,
-        ).apply { leftMargin = ShellUi.dp(activity, 8) })
-        column.addView(actions, ShellUi.matchWrap().apply {
+        column.addView(sosSlider, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ShellUi.dp(activity, 56),
+        ).apply {
             topMargin = ShellUi.dp(activity, 8)
         })
 
@@ -571,7 +589,7 @@ internal class DashboardView(
         val height = root.height
         // Before the first layout there is no size to prepare for; the layout listener returns.
         if (width <= 0 || height <= 0) return
-        val blurRadius = coreDisplay.theme?.glassBlurRadius ?: 24
+        val blurRadius = coreDisplay.theme?.glassBlurRadius ?: 32
         val key = ThemeBackdrop.cacheKey(hash, width, height, overlay) + "/glass@$blurRadius"
         if (key == backdropKey) return
         if (key == backdropLoading) return
@@ -619,7 +637,7 @@ internal class DashboardView(
                 if (ready == null) return@post
                 // The theme, the size or the overlay may have moved on while this was decoding.
                 val current = ThemeBackdrop.cacheKey(hash, root.width, root.height, overlay) +
-                    "/glass@${coreDisplay.theme?.glassBlurRadius ?: 24}"
+                    "/glass@${coreDisplay.theme?.glassBlurRadius ?: 32}"
                 if (current != key) {
                     softened?.recycle()
                     return@post
@@ -993,13 +1011,21 @@ internal class DashboardView(
      * wrapped rather than relying on fetchStill alone to swallow everything.
      */
     private fun refreshStills() {
-        if (stills.isEmpty()) return
-        val targets = stills.keys.toList()
+        if (stills.isEmpty() || stillsLoading) return
+        // Snapshot decoding and network I/O scale with what the resident can see, not with fleet
+        // size. Safe mode admits one; the normal lane admits at most three per refresh cycle.
+        val budget = if (app.safeMode) 1 else 3
+        val visible = Rect()
+        val targets = tiles.entries.filter { (_, tile) ->
+            tile.root.getLocalVisibleRect(visible) && visible.height() > 0
+        }.map { it.key }.take(budget).ifEmpty { tiles.keys.take(budget) }
+        if (targets.isEmpty()) return
+        stillsLoading = true
         val snapshot = status
         val settings = config
         Thread({
-            for (door in targets) {
-                try {
+            try {
+                for (door in targets) try {
                     // Only a station the mesh says is alive. This used to accept any peer bound
                     // to the door, because served_by and peers[].status could disagree and a
                     // serving station was being reported offline; core resolves both from one
@@ -1025,6 +1051,8 @@ internal class DashboardView(
                 } catch (error: Exception) {
                     logStill(door, "failed: ${error.javaClass.simpleName}: ${error.message}")
                 }
+            } finally {
+                ui.post { stillsLoading = false }
             }
         }, "doorbell-tiles").apply { isDaemon = true }.start()
     }
@@ -1178,7 +1206,6 @@ internal class DashboardView(
         tileScroll.layoutParams = tileParams
         callColumn.layoutParams = callParams
         applyHeaderLayout(widthDp, heightDp)
-        applyActionLayout(widthDp)
         fitTilesToViewport()
     }
 
@@ -1249,43 +1276,22 @@ internal class DashboardView(
             }
             // The section heading shares the column, and each tile carries a top margin.
             val heading = if (tileColumn.childCount > 0) tileColumn.getChildAt(0).height else 0
+            val count = tiles.size
+            val maxHeight = when {
+                count <= 1 -> minOf(tileScroll.width * 9 / 16, ShellUi.dp(activity, 280))
+                count <= 3 -> minOf(tileScroll.width * 9 / 16, ShellUi.dp(activity, 180))
+                else -> minOf(tileScroll.width * 9 / 16, ShellUi.dp(activity, 112))
+            }
             applyStillHeight(VisitorLayout.tileStillHeightPx(
                 viewportPx = viewport,
                 headingPx = heading,
                 otherRowsPx = others,
                 gapPx = ShellUi.dp(activity, 16),
+                tileCount = count,
                 minPx = ShellUi.dp(activity, 56),
-                maxPx = ShellUi.dp(activity, 160),
+                maxPx = maxOf(ShellUi.dp(activity, 56), maxHeight),
             ))
         }
-    }
-
-    /**
-     * On a narrow panel the announcement button and the SOS slider stack instead of halving each
-     * other's width, so neither the two-part slider label nor the button text is clipped.
-     */
-    private fun applyActionLayout(widthDp: Int) {
-        val stacked = VisitorLayout.actionsStacked(widthDp)
-        actionRow.orientation = if (stacked) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL
-        val noticeParams = noticeButton.layoutParams as LinearLayout.LayoutParams
-        val sosParams = sosSlider.layoutParams as LinearLayout.LayoutParams
-        if (stacked) {
-            noticeParams.width = ViewGroup.LayoutParams.MATCH_PARENT
-            noticeParams.weight = 0f
-            sosParams.width = ViewGroup.LayoutParams.MATCH_PARENT
-            sosParams.weight = 0f
-            sosParams.leftMargin = 0
-            sosParams.topMargin = ShellUi.dp(activity, 8)
-        } else {
-            noticeParams.width = 0
-            noticeParams.weight = 1f
-            sosParams.width = 0
-            sosParams.weight = 1f
-            sosParams.leftMargin = ShellUi.dp(activity, 8)
-            sosParams.topMargin = 0
-        }
-        noticeButton.layoutParams = noticeParams
-        sosSlider.layoutParams = sosParams
     }
 
     // ---------- helpers ----------
@@ -1305,8 +1311,11 @@ internal class DashboardView(
      * watch. The door itself stays reachable everywhere it matters: the monitor list, the
      * announcement dialog, and unlock all still address it.
      */
-    private fun tileDoorIds(): List<String> =
-        doorIds().filter { DoorStations.tileVisible(status, config, it) }
+    private fun tileDoorIds(): List<String> {
+        val available = doorIds().filter { DoorStations.tileVisible(status, config, it) }
+        val promoted = previewPriorityDoors.filter { available.contains(it) }
+        return promoted + available.filterNot { promoted.contains(it) }
+    }
 
     private fun doorLabel(door: String): String {
         if (door.isEmpty()) return ""

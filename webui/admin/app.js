@@ -1521,7 +1521,7 @@ var AdminLogic = (function () {
   }
 
   var BACKDROP_DEFAULTS = { enabled: true, color: "#000000", opacity: 62 };
-  var GLASS_BLUR_DEFAULT = 24;
+  var GLASS_BLUR_DEFAULT = 32;
 
   /* Opacity as core validates it: a whole number 0-100. Throws rather than silently falling back
    * so a blank or mistyped field is reported instead of quietly becoming the default. */

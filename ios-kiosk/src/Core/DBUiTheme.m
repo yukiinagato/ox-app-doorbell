@@ -705,6 +705,16 @@ static NSArray *DBRectArray(double x, double y, double width, double height) {
   return [NSString stringWithFormat:@"%@+%@", base, [build substringToIndex:7]];
 }
 
++ (NSString *)appVersion:(NSString *)appVersion withCoreVersion:(NSString *)coreVersion {
+  if (![appVersion isKindOfClass:[NSString class]] || [appVersion length] == 0) return @"";
+  if ([appVersion rangeOfString:@"+"].location != NSNotFound) return [self shortVersion:appVersion];
+  NSRange plus = [coreVersion rangeOfString:@"+"];
+  if (plus.location == NSNotFound || plus.location + 1 >= [coreVersion length]) return appVersion;
+  NSString *build = [coreVersion substringFromIndex:plus.location + 1];
+  if ([build length] > 7) build = [build substringToIndex:7];
+  return [NSString stringWithFormat:@"%@+%@", appVersion, build];
+}
+
 + (NSString *)versionLineForName:(NSString *)name
                      coreVersion:(NSString *)coreVersion
                       appVersion:(NSString *)appVersion
@@ -713,7 +723,7 @@ static NSArray *DBRectArray(double x, double y, double width, double height) {
   NSMutableArray *parts = [NSMutableArray array];
   if ([name length] > 0) [parts addObject:name];
   NSString *core = [self shortVersion:coreVersion];
-  NSString *app = [self shortVersion:appVersion];
+  NSString *app = [self appVersion:appVersion withCoreVersion:coreVersion];
   [parts addObject:[NSString stringWithFormat:@"core v%@", [core length] > 0 ? core : @"?"]];
   [parts addObject:[NSString stringWithFormat:@"app v%@", [app length] > 0 ? app : @"?"]];
   // A device without a battery reports -1 and shows nothing at all.

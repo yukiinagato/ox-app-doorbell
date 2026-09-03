@@ -962,7 +962,7 @@ PIN: {1}</value></data>
   <data name="theme_contrast_warning" xml:space="preserve"><value>読みにくい可能性があります（{0}:1）</value></data>
   <data name="theme_custom" xml:space="preserve"><value>指定色</value></data>
   <data name="theme_dark_from" xml:space="preserve"><value>ダークにする時刻</value></data>
-  <data name="theme_glass_blur_hint" xml:space="preserve"><value>対応端末だけに適用されます。0～40、既定値は 24 です。</value></data>
+  <data name="theme_glass_blur_hint" xml:space="preserve"><value>対応端末だけに適用されます。0～40、既定値は 32 です。</value></data>
   <data name="theme_glass_blur_invalid" xml:space="preserve"><value>ぼかし半径は 0 から 40 の整数で指定してください</value></data>
   <data name="theme_glass_blur_radius" xml:space="preserve"><value>磨りガラスのぼかし半径</value></data>
   <data name="theme_glass_blur_system" xml:space="preserve"><value>この端末は OS 管理のぼかしを使用するため、半径は変更できません。</value></data>

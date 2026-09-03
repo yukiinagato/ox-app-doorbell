@@ -962,7 +962,7 @@ PIN：{1}</value></data>
   <data name="theme_contrast_warning" xml:space="preserve"><value>可能不易阅读（{0}:1）</value></data>
   <data name="theme_custom" xml:space="preserve"><value>指定颜色</value></data>
   <data name="theme_dark_from" xml:space="preserve"><value>深色开始</value></data>
-  <data name="theme_glass_blur_hint" xml:space="preserve"><value>仅应用于支持此功能的设备。范围为 0–40，默认值为 24。</value></data>
+  <data name="theme_glass_blur_hint" xml:space="preserve"><value>仅应用于支持此功能的设备。范围为 0–40，默认值为 32。</value></data>
   <data name="theme_glass_blur_invalid" xml:space="preserve"><value>模糊半径必须是 0 到 40 之间的整数</value></data>
   <data name="theme_glass_blur_radius" xml:space="preserve"><value>磨砂玻璃模糊半径</value></data>
   <data name="theme_glass_blur_system" xml:space="preserve"><value>此设备使用 OS 管理的模糊效果，无法调整半径。</value></data>

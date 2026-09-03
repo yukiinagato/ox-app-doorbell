@@ -189,7 +189,7 @@ materialized config/export に plaintext を出しません。起動時は legac
                // 文字が読めるようにするためのもので、既定では有効。各項目は
                // devices.<id>.local.theme.backdrop.* で端末ごとに上書きでき、項目ごとに独立して解決する。
                "backdrop": { "enabled": true, "color": "#000000", "opacity": 62 },  // 0..100
-               "glass": { "blur_radius": 24 } },       // 0..40、対応 shell のみ
+               "glass": { "blur_radius": 32 } },       // 0..40、対応 shell のみ
     "brightness": 70,                           // 0-100 (遠隔調整 — 管理画面のスライダー)
     "night": { "enabled": true, "from": "22:00", "to": "06:00",
                "brightness": 15, "red_tint": true },   // 夜間モード (補正済み時計で判定)
@@ -751,7 +751,7 @@ surface を推測できません。
 として報告する。明るい写真の上では通常は誤りであり、暗い写真の上では誤りではない。どちらであるかは
 コアには判断できないためである。
 
-`display.theme.glass.blur_radius` は 0〜40 の整数で、既定値は 24 である。
+`display.theme.glass.blur_radius` は 0〜40 の整数で、既定値は 32 である。
 `devices.<id>.local.theme.glass.blur_radius` で端末ごとに上書きでき、解決値と
 `default|admin|device` の出所は `status.display.theme.glass` に公開される。
 `frosted_glass_radius_v1` を advertise する client だけがこの値を適用する。modern iOS はこの

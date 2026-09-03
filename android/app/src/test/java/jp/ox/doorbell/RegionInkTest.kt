@@ -378,20 +378,25 @@ class RegionInkTest {
     fun aTileFitsWholeInTheSpaceAboveTheFooter() {
         // Landscape: a short column, so the preview shrinks and the caption still fits.
         // viewport 500, heading 96, caption+chips 130, gap 16 -> 258 for the preview.
-        assertEquals(258, VisitorLayout.tileStillHeightPx(500, 96, 130, 16, 140, 400))
+        assertEquals(258, VisitorLayout.tileStillHeightPx(500, 96, 130, 16, 1, 140, 400))
         // Portrait: a tall column, so the preview stops at its ceiling rather than sprawling.
-        assertEquals(400, VisitorLayout.tileStillHeightPx(1400, 96, 130, 16, 140, 400))
+        assertEquals(400, VisitorLayout.tileStillHeightPx(1400, 96, 130, 16, 1, 140, 400))
+        // Two or three cameras divide the usable height; a fleet larger than that sizes for
+        // three visible compact cards and lets the resident scroll the rest.
+        assertEquals(400, VisitorLayout.tileStillHeightPx(1400, 96, 130, 16, 2, 140, 400))
+        assertEquals(288, VisitorLayout.tileStillHeightPx(1400, 96, 130, 16, 3, 140, 400))
+        assertEquals(288, VisitorLayout.tileStillHeightPx(1400, 96, 130, 16, 30, 140, 400))
     }
 
     @Test
     fun thePreviewNeverShrinksBelowItsFloorOrPastItsCeiling() {
         // Even an absurdly short column keeps a usable preview; the column scrolls instead.
-        assertEquals(140, VisitorLayout.tileStillHeightPx(200, 96, 130, 16, 140, 400))
+        assertEquals(140, VisitorLayout.tileStillHeightPx(200, 96, 130, 16, 1, 140, 400))
         // Not measured yet: the ceiling is the right default, and the caller runs again once the
         // viewport has a height.
-        assertEquals(400, VisitorLayout.tileStillHeightPx(0, 96, 130, 16, 140, 400))
+        assertEquals(400, VisitorLayout.tileStillHeightPx(0, 96, 130, 16, 1, 140, 400))
         for (viewport in 0..2000 step 13) {
-            val height = VisitorLayout.tileStillHeightPx(viewport, 96, 130, 16, 140, 400)
+            val height = VisitorLayout.tileStillHeightPx(viewport, 96, 130, 16, 1, 140, 400)
             assertTrue("out of range at $viewport", height in 140..400)
         }
     }
@@ -402,18 +407,11 @@ class RegionInkTest {
         // viewport until the preview hits its floor, and only then does the column scroll.
         val viewport = 600
         for (caption in 40..300 step 10) {
-            val still = VisitorLayout.tileStillHeightPx(viewport, 96, caption, 16, 140, 400)
+            val still = VisitorLayout.tileStillHeightPx(viewport, 96, caption, 16, 1, 140, 400)
             if (still > 140)
                 assertTrue("tile overflows with caption $caption",
                            96 + caption + still + 16 <= viewport)
         }
     }
 
-    @Test
-    fun theDashboardActionsFollowTheSameWidthRule() {
-        assertTrue(VisitorLayout.actionsStacked(360))
-        assertTrue(VisitorLayout.actionsStacked(599))
-        assertFalse(VisitorLayout.actionsStacked(600))
-        assertFalse(VisitorLayout.actionsStacked(1024))
-    }
 }

@@ -706,10 +706,9 @@ final class MainViewController: UIViewController {
         if let st = core.status() {
             if let node = st["node"] as? [String: Any] {
                 nodeInfo.text = ConfigUtil.evStr(node, "name")
-                let appVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "-"
-                let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "-"
                 let coreVersion = ConfigUtil.evStr(node, "version")
-                appVersionLabel.text = "APP v\(appVersion) (\(build))\nCore v\(coreVersion.isEmpty ? "-" : coreVersion)"
+                let appVersion = DoorbellTheme.appVersion(coreVersion: coreVersion)
+                appVersionLabel.text = "APP v\(appVersion)\nCore v\(DoorbellTheme.shortVersion(coreVersion))"
                 nodeId = ConfigUtil.evStr(node, "id")
             }
             // Display state is safe to restore directly. Emergency state is replicated even when
@@ -1366,6 +1365,9 @@ final class MainViewController: UIViewController {
             showIdle()
         case "event":
             let type = ConfigUtil.evStr(ev, "type")
+            if type == "motion" || type == "press" {
+                dashboard?.prioritizeDoor(ConfigUtil.evStr(ev, "door"))
+            }
             let eventCall = ConfigUtil.evStr(ev, "call_id")
             if type == "press", boot.role == "door_station" {
                 // A visitor who pressed the button expects the screen to be there, and on a

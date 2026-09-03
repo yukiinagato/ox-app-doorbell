@@ -4074,7 +4074,7 @@ struct Node::Impl {
       value = json::get(cluster, "blur_radius");
       source = "admin";
     }
-    int64_t radius = 24;
+    int64_t radius = 32;
     if (value && !cJSON_IsNull(value) && wholeNumberInRange(value, 0, 40)) {
       radius = static_cast<int64_t>(value->valuedouble);
     } else {

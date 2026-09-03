@@ -204,6 +204,10 @@ FOUNDATION_EXPORT NSString *const DBUiRegionTileLabel;
 // build without the forty hex characters that pushed the battery off screen.
 + (NSString *)shortVersion:(NSString *)version;
 
+// App Store bundle versions stay numeric; the visible build identity uses the
+// same short Git metadata as Core.
++ (NSString *)appVersion:(NSString *)appVersion withCoreVersion:(NSString *)coreVersion;
+
 // Version + battery footer line, shared by every screen (§5.1, §0.6).
 + (NSString *)versionLineForName:(NSString *)name
                      coreVersion:(NSString *)coreVersion

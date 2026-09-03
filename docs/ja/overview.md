@@ -44,6 +44,18 @@ presentation/limitation です。raw path が
 有効な間、rule TTL は custom decoration/sound だけを終了し、安全な赤い raw-SOS overlay は clear
 または switch off まで残ります。
 
+## indoor camera preview の scheduling
+
+preview の負荷は door の設定総数ではなく、panel が同時表示できる数で制限します。1 台は aspect を
+保った大きな tile、2〜3 台は利用可能な viewport を分割し、それ以上は compact tile と明示的な
+scroll/page 選択を使います。Android は 1 cycle につき可視 tile を最大 3、modern iOS は 1 page 4、
+iPad 1 は 1 page 3 (safe mode は 1) だけ更新し、非表示 tile は snapshot を取得・decode しません。
+
+`press`/`motion` event は対象 door を active set の先頭へ昇格します。重複を除いた newest-first とし、
+burst が起きても active slot 数を超えて処理しません。resident は Android の scroll、iOS の番号付き
+camera page で event の選択を上書きできます。これは dashboard scheduling だけの規則であり、設定済み
+door はすべて direct monitor 可能なままです。
+
 Core は peer の last-valid native UI manifest/capability を永続 cache します。`cached_contract:true` の
 configured offline device は cached contract に対して検証/queue できますが、適用証明は後の renderer
 report が必要です。Web manifest は serving Core node local のままです。`targets` object がない legacy

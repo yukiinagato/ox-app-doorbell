@@ -43,7 +43,7 @@ internal data class CoreTheme(
      */
     val backdrop: BackdropOverlay?,
     /** Numeric radius used only by shells that advertise frosted_glass_radius_v1. */
-    val glassBlurRadius: Int = 24,
+    val glassBlurRadius: Int = 32,
     /** Per region: true for the light ink token, false for the dark one. */
     val ink: Map<String, Boolean>,
     /** Only the regions an administrator overrode, as explicit colours. */
@@ -119,7 +119,7 @@ internal object CoreDisplays {
         }.orEmpty()
         val backdrop = BackdropOverlay.parse(theme.optJSONObject("backdrop"))
         val glassBlurRadius = theme.optJSONObject("glass")
-            ?.optInt("blur_radius", 24)?.coerceIn(0, 40) ?: 24
+            ?.optInt("blur_radius", 32)?.coerceIn(0, 40) ?: 32
         if (background == null && ink.isEmpty() && callButton == null && image.isEmpty() &&
             backdrop == null)
             return null

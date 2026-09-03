@@ -58,11 +58,17 @@ internal object VisitorLayout {
         headingPx: Int,
         otherRowsPx: Int,
         gapPx: Int,
+        tileCount: Int,
         minPx: Int,
         maxPx: Int,
     ): Int {
         if (viewportPx <= 0) return maxPx
-        val available = viewportPx - headingPx - otherRowsPx - gapPx
+        // One camera may use the whole viewport. Two or three share it without forcing the
+        // resident to scroll just to compare them. A larger fleet deliberately sizes for three
+        // compact cards: the scroll position then becomes the resident's camera selection.
+        val fittingCount = tileCount.coerceIn(1, 3)
+        val available = (viewportPx - headingPx - gapPx * fittingCount) / fittingCount -
+            otherRowsPx
         // Clamped: below the floor the preview is useless, above the ceiling it wastes the column.
         return available.coerceIn(minPx, maxPx)
     }
@@ -76,9 +82,6 @@ internal object VisitorLayout {
      */
     fun footerStacked(widthDp: Int, heightDp: Int): Boolean =
         widthDp < FOOTER_SPLIT_MIN_DP || widthDp <= heightDp
-
-    /** Whether the dashboard's announcement button and SOS slider stack rather than share a row. */
-    fun actionsStacked(widthDp: Int): Boolean = widthDp < FOOTER_SPLIT_MIN_DP
 
     /**
      * Whether the dashboard header puts the clock on its own row above the membership pill and
