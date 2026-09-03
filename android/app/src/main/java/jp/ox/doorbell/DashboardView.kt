@@ -9,6 +9,14 @@ package jp.ox.doorbell
 
 import android.app.Activity
 import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.ColorFilter
+import android.graphics.Paint
+import android.graphics.Path
+import android.graphics.PixelFormat
+import android.graphics.Rect
+import android.graphics.RectF
+import android.graphics.drawable.Drawable
 import android.os.Handler
 import android.view.Gravity
 import android.view.View
@@ -23,6 +31,66 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.util.Locale
 import org.json.JSONObject
+
+private class FrostedBackdropDrawable(
+    private val owner: View,
+    private val canvasRoot: View,
+    private val radius: Float,
+) : Drawable() {
+
+    private var backdrop: Bitmap? = null
+    private var tintRgb = 0
+    private var borderRgb = 0
+    private val imagePaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+    private val shapePaint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val clip = Path()
+    private val ownerLocation = IntArray(2)
+    private val rootLocation = IntArray(2)
+
+    fun update(bitmap: Bitmap?, tint: Int, border: Int) {
+        backdrop = bitmap
+        tintRgb = tint
+        borderRgb = border
+        invalidateSelf()
+    }
+
+    override fun draw(canvas: Canvas) {
+        val box = RectF(bounds)
+        clip.reset()
+        clip.addRoundRect(box, radius, radius, Path.Direction.CW)
+        val saved = canvas.save()
+        canvas.clipPath(clip)
+        val image = backdrop
+        if (image != null && !image.isRecycled && canvasRoot.width > 0 && canvasRoot.height > 0) {
+            owner.getLocationInWindow(ownerLocation)
+            canvasRoot.getLocationInWindow(rootLocation)
+            val left = ownerLocation[0] - rootLocation[0]
+            val top = ownerLocation[1] - rootLocation[1]
+            val sx = image.width.toFloat() / canvasRoot.width
+            val sy = image.height.toFloat() / canvasRoot.height
+            val source = Rect(
+                (left * sx).toInt().coerceIn(0, image.width),
+                (top * sy).toInt().coerceIn(0, image.height),
+                ((left + owner.width) * sx).toInt().coerceIn(0, image.width),
+                ((top + owner.height) * sy).toInt().coerceIn(0, image.height),
+            )
+            if (source.width() > 0 && source.height() > 0)
+                canvas.drawBitmap(image, source, bounds, imagePaint)
+        }
+        canvas.drawColor((166 shl 24) or (tintRgb and 0xffffff))
+        canvas.restoreToCount(saved)
+        shapePaint.style = Paint.Style.STROKE
+        shapePaint.strokeWidth = 1f
+        shapePaint.color = (46 shl 24) or (borderRgb and 0xffffff)
+        canvas.drawRoundRect(box, radius, radius, shapePaint)
+    }
+
+    override fun setAlpha(alpha: Int) = Unit
+    override fun setColorFilter(colorFilter: ColorFilter?) = Unit
+
+    @Suppress("DEPRECATION", "OVERRIDE_DEPRECATION")
+    override fun getOpacity(): Int = PixelFormat.TRANSLUCENT
+}
 
 internal class DashboardView(
     private val activity: Activity,
@@ -100,6 +168,16 @@ internal class DashboardView(
         gravity = Gravity.CENTER_VERTICAL
         isBaselineAligned = false
     }
+    private val footerQr = ImageView(activity).apply {
+        scaleType = ImageView.ScaleType.FIT_CENTER
+        background = ShellUi.rounded(activity, 0xFFFFFF, 4)
+        val inset = ShellUi.dp(activity, 2)
+        setPadding(inset, inset, inset, inset)
+    }
+    private val footerAddress = ShellUi.text(activity, "", 11.5f, palette.ink).apply {
+        maxLines = 1
+        isSingleLine = true
+    }
     private val versionText = ShellUi.text(activity, "", 11.5f, palette.muted)
     private val sosSlider = SosSlideView(activity, ui)
 
@@ -113,6 +191,10 @@ internal class DashboardView(
 
     /** A backdrop request already in flight, so a burst of refreshes decodes once. */
     private var backdropLoading = ""
+    private var softenedBackdrop: Bitmap? = null
+    private val footerGlass = FrostedBackdropDrawable(
+        footer, root, ShellUi.dp(activity, ShellUi.CARD_RADIUS_DP).toFloat(),
+    )
 
     /** What the footer currently shows, so an unchanged poll does no work. */
     private var footerUrl = ""
@@ -309,7 +391,12 @@ internal class DashboardView(
         recentCallsHeading = ShellUi.text(
             activity, texts.t("dash.recent_calls", R.string.dash_recent_calls), 13f,
             palette.muted, bold = true,
-        )
+        ).apply {
+            setPadding(
+                ShellUi.dp(activity, 4), ShellUi.dp(activity, 14),
+                ShellUi.dp(activity, 4), ShellUi.dp(activity, 6),
+            )
+        }
         callHeader.addView(
             recentCallsHeading,
             LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f),
@@ -317,6 +404,13 @@ internal class DashboardView(
         seeAllButton = ShellUi.button(
             activity, texts.t("dash.see_all", R.string.dash_see_all), palette,
         ) { HistoryActivity.launch(activity) }
+        seeAllButton.minimumHeight = 0
+        seeAllButton.minHeight = 0
+        seeAllButton.textSize = 13f
+        seeAllButton.setPadding(
+            ShellUi.dp(activity, 12), ShellUi.dp(activity, 6),
+            ShellUi.dp(activity, 12), ShellUi.dp(activity, 6),
+        )
         callHeader.addView(seeAllButton)
         callColumn.addView(callHeader, ShellUi.matchWrap())
         // The rows sit on a translucent card rather than straight on the theme picture, so each
@@ -334,13 +428,28 @@ internal class DashboardView(
         }
         callColumn.addView(
             callListScroll,
-            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f),
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f).apply {
+                topMargin = ShellUi.dp(activity, 8)
+            },
         )
 
-        // Footer: the admin QR and address are always visible; opening the page still asks for
-        // the 管理パスワード.
-        column.addView(footer, ShellUi.matchWrap())
-        column.addView(versionText, ShellUi.matchWrap())
+        val footerText = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_VERTICAL
+            addView(footerAddress, ShellUi.matchWrap())
+            addView(versionText, ShellUi.matchWrap())
+        }
+        val footerInset = ShellUi.dp(activity, 8)
+        footer.setPadding(footerInset, footerInset, footerInset, footerInset)
+        footer.addView(footerQr, LinearLayout.LayoutParams(
+            ShellUi.dp(activity, 72), ShellUi.dp(activity, 72),
+        ))
+        footer.addView(footerText, LinearLayout.LayoutParams(
+            0, ViewGroup.LayoutParams.MATCH_PARENT, 1f,
+        ).apply { leftMargin = ShellUi.dp(activity, 10) })
+        column.addView(footer, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ShellUi.dp(activity, 88),
+        ))
 
         actionRow = LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -409,6 +518,12 @@ internal class DashboardView(
         seeAllButton.background = ShellUi.rounded(activity, palette.surfaceAlt, 10)
         seeAllButton.setTextColor(ShellUi.opaque(palette.ink))
         callListScroll.background = ShellUi.scrim(activity, palette.surface)
+        footerAddress.setTextColor(ShellUi.opaque(palette.ink))
+        versionText.setTextColor(ShellUi.opaque(palette.muted))
+        footerAddress.setShadowLayer(0f, 0f, 0f, 0)
+        versionText.setShadowLayer(0f, 0f, 0f, 0)
+        footerGlass.update(softenedBackdrop, palette.surface, palette.line)
+        footer.background = footerGlass
         sosSlider.applyPalette(palette)
         // Labels are reapplied here too, so a language change reaches the controls built once.
         adminButton.text = texts.t("admin.title", R.string.admin_title)
@@ -444,6 +559,9 @@ internal class DashboardView(
                 backdropKey = ""
                 themeBg.setImageDrawable(null)
                 themeBg.visibility = View.GONE
+                softenedBackdrop?.recycle()
+                softenedBackdrop = null
+                footerGlass.update(null, palette.surface, palette.line)
                 regionInkApplied.clear()
                 scheduleRegionInk()
             }
@@ -503,6 +621,12 @@ internal class DashboardView(
         backdropKey = key
         themeBg.setImageBitmap(bitmap)
         themeBg.visibility = View.VISIBLE
+        softenedBackdrop?.recycle()
+        softenedBackdrop = Bitmap.createScaledBitmap(
+            bitmap, (bitmap.width / 10).coerceAtLeast(1),
+            (bitmap.height / 10).coerceAtLeast(1), true,
+        )
+        footerGlass.update(softenedBackdrop, palette.surface, palette.line)
         // Everything decided against the previous background is now wrong.
         regionInkApplied.clear()
         scheduleRegionInk()
@@ -531,7 +655,6 @@ internal class DashboardView(
     private fun applyRegionInk() {
         paintRegion(clockText, "clock", palette.ground, muted = false)
         paintRegion(dateText, "date", palette.ground, muted = true)
-        paintRegion(versionText, "footer", palette.ground, muted = true)
         paintRegion(recentCallsHeading, "status_line", palette.ground, muted = true)
         doorsHeading?.let { paintRegion(it, "status_line", palette.ground, muted = true,
                                         cacheKey = "doors_heading") }
@@ -657,16 +780,15 @@ internal class DashboardView(
         // The QR only changes when this node's own address does, so the footer is rebuilt on that
         // rather than on every status poll.
         val link = AdminLinks.resolve(status, app.boot.httpPort)
-        if (link.url != footerUrl || footer.childCount == 0) {
+        if (link.url != footerUrl) {
             footerUrl = link.url
-            footer.removeAllViews()
-            footer.addView(
-                AdminLinks.view(
-                    activity, palette, app.core, link,
-                    texts.t("web_admin.scan_hint", R.string.web_admin_scan_hint), 56,
-                ),
-                LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f),
+            footerAddress.text = link.url
+            footerQr.contentDescription = texts.t(
+                "web_admin.scan_hint", R.string.web_admin_scan_hint,
             )
+            footerQr.setImageBitmap(AdminQrCache.get(
+                app.core, link.url, ShellUi.dp(activity, 72),
+            ))
         }
         val power = status?.optJSONObject("self")?.optJSONObject("power")
         val line = ShellUi.versionLine(

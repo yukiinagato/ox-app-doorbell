@@ -208,14 +208,14 @@ internal class SosSlideView(
         val secondaryText = if (snapshot.phase == SosPhase.COUNTDOWN)
             cancelText else label.secondary
         text.color = labelInk
-        text.typeface = Typeface.DEFAULT_BOLD
-        val primarySize = dp(14).toFloat()
+        text.typeface = Typeface.DEFAULT
+        val primarySize = dp(17).toFloat()
         text.textSize = primarySize
         val centerX = width / 2f
         if (secondaryText.isEmpty()) {
             canvas.drawText(primaryText, centerX, baselineFor(primarySize, 0f), text)
         } else {
-            val secondarySize = primarySize * TwoPartLabels.SECONDARY_SCALE
+            val secondarySize = dp(13).toFloat()
             canvas.drawText(primaryText, centerX,
                             baselineFor(primarySize, -secondarySize * 0.65f), text)
             text.typeface = Typeface.DEFAULT
