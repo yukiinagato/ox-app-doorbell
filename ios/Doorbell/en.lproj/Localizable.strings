@@ -403,6 +403,11 @@
 "event.offline" = "⚠ %@ offline (last seen %@)";
 "event.online" = "%@ back online";
 "event.press" = "Visitor at %@ (%@)";
+"firewall.check_unavailable" = "Couldn't check Windows Firewall rules. Confirm that inbound communication is allowed for this app.";
+"firewall.repair_failed" = "Couldn't add Windows Firewall rules. Approve the administrator prompt or ask your system administrator.";
+"firewall.repaired" = "Added the required Windows Firewall rules. Try joining the Cluster again.";
+"firewall.rules_missing" = "Windows Firewall may be blocking Cluster communication from other devices. Allow inbound communication for this app?";
+"firewall.title" = "Windows Firewall";
 "history.answered_by" = "Answered by %@";
 "history.duration" = "%@";
 "history.empty" = "No calls yet";

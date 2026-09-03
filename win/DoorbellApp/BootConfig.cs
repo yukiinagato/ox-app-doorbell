@@ -15,6 +15,7 @@ namespace DoorbellApp
         public string UiLang = "ja";
         public string PskRef = "";
         public bool Kiosk = true;
+        public int ListenPort = 47172;
         public int HttpPort = 47180;
         public string FilePath;
         public bool SetupRequired;
@@ -53,6 +54,11 @@ namespace DoorbellApp
                     {
                         int p;
                         if (int.TryParse(hp.ToString(), out p) && p > 0) c.HttpPort = p;
+                    }
+                    if (d.TryGetValue("listen_port", out var lp) && lp != null)
+                    {
+                        int p;
+                        if (int.TryParse(lp.ToString(), out p) && p > 0) c.ListenPort = p;
                     }
                 }
             }

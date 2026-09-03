@@ -408,6 +408,11 @@
     <string name="event_offline">⚠ %1$s 离线（最后在线：%2$s）</string>
     <string name="event_online">%1$s 恢复在线</string>
     <string name="event_press">%1$s 有访客（%2$s）</string>
+    <string name="firewall_check_unavailable">无法检查 Windows 防火墙规则。请确认已允许此应用接收通信。</string>
+    <string name="firewall_repair_failed">无法添加 Windows 防火墙通信规则。请在管理员提示中允许操作，或联系系统管理员。</string>
+    <string name="firewall_repaired">已添加所需的 Windows 防火墙通信规则。请重新尝试加入集群。</string>
+    <string name="firewall_rules_missing">Windows 防火墙可能正在阻止其他设备连接到此设备。是否允许此应用接收集群通信？</string>
+    <string name="firewall_title">Windows 防火墙</string>
     <string name="history_answered_by">由 %1$s 接听</string>
     <string name="history_duration">通话 %1$s</string>
     <string name="history_empty">暂无呼叫</string>

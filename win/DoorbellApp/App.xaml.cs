@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Threading;
 using DoorbellApp.Core;
@@ -24,6 +25,11 @@ namespace DoorbellApp
         {
             base.OnStartup(e);
             DispatcherUnhandledException += OnUnhandled;
+            if (WindowsFirewall.IsRepairRequest(e.Args))
+            {
+                Shutdown(WindowsFirewall.Configure(WindowsFirewall.PortsFromArguments(e.Args)) ? 0 : 1);
+                return;
+            }
             SafeMode = e.Args != null && Array.IndexOf(e.Args, "--safe-mode") >= 0;
 
             DataDir = Path.Combine(
@@ -68,6 +74,7 @@ namespace DoorbellApp
             var w = new MainWindow();
             MainWindow = w;
             w.Show();
+            Dispatcher.BeginInvoke(new Action(CheckWindowsFirewall));
             _uiRunning = true;
             PublishRuntimeHealth();
             _runtimeStatusTimer = new DispatcherTimer(
@@ -93,6 +100,38 @@ namespace DoorbellApp
             Core.PublishRuntimeHealth(Boot.Role, SafeMode, _runtimeProcess.Snapshot(),
                 _heartbeat != null && _heartbeat.Available,
                 _heartbeat == null ? 0L : _heartbeat.LastSignalWallMs, _uiRunning);
+        }
+
+        private void CheckWindowsFirewall()
+        {
+            var ports = new FirewallPorts(Boot.ListenPort, Boot.HttpPort, 47171,
+                Core.SipAvailable ? FirewallPort(CoreClient.Dig(Core.Config(), "sip.direct_port"),
+                                                  47190) : 0);
+            FirewallStatus status = WindowsFirewall.Check(ports);
+            if (status == FirewallStatus.Allowed) return;
+            if (status == FirewallStatus.Unavailable)
+            {
+                MessageBox.Show(MainWindow, Texts.T("firewall.check_unavailable"),
+                    Texts.T("firewall.title"), MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+            if (MessageBox.Show(MainWindow, Texts.T("firewall.rules_missing"),
+                Texts.T("firewall.title"), MessageBoxButton.YesNo, MessageBoxImage.Warning) !=
+                MessageBoxResult.Yes) return;
+            Task.Factory.StartNew(() => WindowsFirewall.RequestRepair(ports)).ContinueWith(task =>
+                Dispatcher.BeginInvoke(new Action(() => MessageBox.Show(MainWindow,
+                    task.Status == TaskStatus.RanToCompletion && task.Result ?
+                        Texts.T("firewall.repaired") : Texts.T("firewall.repair_failed"),
+                    Texts.T("firewall.title"), MessageBoxButton.OK,
+                    task.Status == TaskStatus.RanToCompletion && task.Result ?
+                        MessageBoxImage.Information : MessageBoxImage.Warning))));
+        }
+
+        private static int FirewallPort(object value, int fallback)
+        {
+            int port;
+            return value != null && int.TryParse(value.ToString(), out port) && port > 0 &&
+                port < 65536 ? port : fallback;
         }
 
         /// <summary>Drops psk_ref and seed_peers from boot.json after an unpair or a revoke.</summary>

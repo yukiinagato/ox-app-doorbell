@@ -410,6 +410,11 @@
   <data name="event_offline" xml:space="preserve"><value>⚠ {0} 离线（最后在线：{1}）</value></data>
   <data name="event_online" xml:space="preserve"><value>{0} 恢复在线</value></data>
   <data name="event_press" xml:space="preserve"><value>{0} 有访客（{1}）</value></data>
+  <data name="firewall_check_unavailable" xml:space="preserve"><value>无法检查 Windows 防火墙规则。请确认已允许此应用接收通信。</value></data>
+  <data name="firewall_repair_failed" xml:space="preserve"><value>无法添加 Windows 防火墙通信规则。请在管理员提示中允许操作，或联系系统管理员。</value></data>
+  <data name="firewall_repaired" xml:space="preserve"><value>已添加所需的 Windows 防火墙通信规则。请重新尝试加入集群。</value></data>
+  <data name="firewall_rules_missing" xml:space="preserve"><value>Windows 防火墙可能正在阻止其他设备连接到此设备。是否允许此应用接收集群通信？</value></data>
+  <data name="firewall_title" xml:space="preserve"><value>Windows 防火墙</value></data>
   <data name="history_answered_by" xml:space="preserve"><value>由 {0} 接听</value></data>
   <data name="history_duration" xml:space="preserve"><value>通话 {0}</value></data>
   <data name="history_empty" xml:space="preserve"><value>暂无呼叫</value></data>

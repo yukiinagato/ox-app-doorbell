@@ -26,6 +26,7 @@
     <Reference Include="System.Speech" />
     <!-- WMI provides remote brightness through WmiMonitorBrightnessMethods. -->
     <Reference Include="System.Management" />
+    <Reference Include="Microsoft.CSharp" />
     <Reference Include="System.Security" />
     <Reference Include="System.Drawing" />
     <Reference Include="System.Windows.Forms" />

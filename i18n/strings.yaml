@@ -709,6 +709,11 @@ pair.err.persist_failed: { ja: "この端末に設定を保存できませんで
 pair.err.host_zero_psk: { ja: "相手の端末の設定が不正です", en: "The other device's setup is invalid", zh: "对方设备的设置无效" }
 pair.err.no_ack: { ja: "端末が応答しませんでした。電源が入っているか、同じネットワークにつながっているかを確認してください", en: "The device didn't respond. Check that it is powered on and on the same network", zh: "该设备没有响应。请确认设备已开机并处于同一网络" }
 pair.err.unknown: { ja: "追加できませんでした。もう一度お試しください", en: "Couldn't complete that. Please try again", zh: "操作未能完成，请重试" }
+firewall.title: { ja: "Windows ファイアウォール", en: "Windows Firewall", zh: "Windows 防火墙" }
+firewall.rules_missing: { ja: "Windows ファイアウォールが、ほかの端末からこの端末へのクラスタ通信を遮断している可能性があります。このアプリの受信通信を許可しますか?", en: "Windows Firewall may be blocking Cluster communication from other devices. Allow inbound communication for this app?", zh: "Windows 防火墙可能正在阻止其他设备连接到此设备。是否允许此应用接收集群通信？" }
+firewall.check_unavailable: { ja: "Windows ファイアウォールの通信規則を確認できませんでした。このアプリの受信通信が許可されていることを確認してください。", en: "Couldn't check Windows Firewall rules. Confirm that inbound communication is allowed for this app.", zh: "无法检查 Windows 防火墙规则。请确认已允许此应用接收通信。" }
+firewall.repaired: { ja: "必要な Windows ファイアウォール通信規則を追加しました。クラスタへの参加をもう一度お試しください。", en: "Added the required Windows Firewall rules. Try joining the Cluster again.", zh: "已添加所需的 Windows 防火墙通信规则。请重新尝试加入集群。" }
+firewall.repair_failed: { ja: "Windows ファイアウォール通信規則を追加できませんでした。管理者として許可するか、システム管理者に依頼してください。", en: "Couldn't add Windows Firewall rules. Approve the administrator prompt or ask your system administrator.", zh: "无法添加 Windows 防火墙通信规则。请在管理员提示中允许操作，或联系系统管理员。" }
 
 
 # Web admin (WP-W): the pairing tab, its QR scanner, and the actions that only the admin page has.

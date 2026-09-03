@@ -410,6 +410,11 @@
   <data name="event_offline" xml:space="preserve"><value>⚠ {0} オフライン (最終応答 {1})</value></data>
   <data name="event_online" xml:space="preserve"><value>{0} オンライン復帰</value></data>
   <data name="event_press" xml:space="preserve"><value>{0} に来客です ({1})</value></data>
+  <data name="firewall_check_unavailable" xml:space="preserve"><value>Windows ファイアウォールの通信規則を確認できませんでした。このアプリの受信通信が許可されていることを確認してください。</value></data>
+  <data name="firewall_repair_failed" xml:space="preserve"><value>Windows ファイアウォール通信規則を追加できませんでした。管理者として許可するか、システム管理者に依頼してください。</value></data>
+  <data name="firewall_repaired" xml:space="preserve"><value>必要な Windows ファイアウォール通信規則を追加しました。クラスタへの参加をもう一度お試しください。</value></data>
+  <data name="firewall_rules_missing" xml:space="preserve"><value>Windows ファイアウォールが、ほかの端末からこの端末へのクラスタ通信を遮断している可能性があります。このアプリの受信通信を許可しますか?</value></data>
+  <data name="firewall_title" xml:space="preserve"><value>Windows ファイアウォール</value></data>
   <data name="history_answered_by" xml:space="preserve"><value>{0} が応答</value></data>
   <data name="history_duration" xml:space="preserve"><value>通話 {0}</value></data>
   <data name="history_empty" xml:space="preserve"><value>まだ呼出はありません</value></data>

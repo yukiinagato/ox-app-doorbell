@@ -403,6 +403,11 @@
 "event.offline" = "⚠ %@ 离线（最后在线：%@）";
 "event.online" = "%@ 恢复在线";
 "event.press" = "%@ 有访客（%@）";
+"firewall.check_unavailable" = "无法检查 Windows 防火墙规则。请确认已允许此应用接收通信。";
+"firewall.repair_failed" = "无法添加 Windows 防火墙通信规则。请在管理员提示中允许操作，或联系系统管理员。";
+"firewall.repaired" = "已添加所需的 Windows 防火墙通信规则。请重新尝试加入集群。";
+"firewall.rules_missing" = "Windows 防火墙可能正在阻止其他设备连接到此设备。是否允许此应用接收集群通信？";
+"firewall.title" = "Windows 防火墙";
 "history.answered_by" = "由 %@ 接听";
 "history.duration" = "通话 %@";
 "history.empty" = "暂无呼叫";

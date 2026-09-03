@@ -408,6 +408,11 @@
     <string name="event_offline">⚠ %1$s オフライン (最終応答 %2$s)</string>
     <string name="event_online">%1$s オンライン復帰</string>
     <string name="event_press">%1$s に来客です (%2$s)</string>
+    <string name="firewall_check_unavailable">Windows ファイアウォールの通信規則を確認できませんでした。このアプリの受信通信が許可されていることを確認してください。</string>
+    <string name="firewall_repair_failed">Windows ファイアウォール通信規則を追加できませんでした。管理者として許可するか、システム管理者に依頼してください。</string>
+    <string name="firewall_repaired">必要な Windows ファイアウォール通信規則を追加しました。クラスタへの参加をもう一度お試しください。</string>
+    <string name="firewall_rules_missing">Windows ファイアウォールが、ほかの端末からこの端末へのクラスタ通信を遮断している可能性があります。このアプリの受信通信を許可しますか?</string>
+    <string name="firewall_title">Windows ファイアウォール</string>
     <string name="history_answered_by">%1$s が応答</string>
     <string name="history_duration">通話 %1$s</string>
     <string name="history_empty">まだ呼出はありません</string>
