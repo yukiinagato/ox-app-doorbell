@@ -122,7 +122,7 @@
                                 <StackPanel x:Name="ClusterCounter" Orientation="Horizontal"
                                             VerticalAlignment="Center">
                                     <Viewbox Width="16" Height="16" VerticalAlignment="Center">
-                                        <Path Data="{StaticResource Tabler.hierarchy-2}" Stroke="{DynamicResource Dim}"
+                                        <Path Data="{StaticResource IconTopologyStar3}" Stroke="{DynamicResource Dim}"
                                               StrokeThickness="2" StrokeStartLineCap="Round"
                                               StrokeEndLineCap="Round" StrokeLineJoin="Round"/>
                                     </Viewbox>
@@ -133,7 +133,7 @@
                                 <StackPanel x:Name="DoorCounter" Orientation="Horizontal"
                                             Margin="14,0,0,0" VerticalAlignment="Center">
                                     <Viewbox Width="16" Height="16" VerticalAlignment="Center">
-                                        <Path Data="{StaticResource Tabler.door}" Stroke="{DynamicResource Dim}"
+                                        <Path Data="{StaticResource IconDoor}" Stroke="{DynamicResource Dim}"
                                               StrokeThickness="2" StrokeStartLineCap="Round"
                                               StrokeEndLineCap="Round" StrokeLineJoin="Round"/>
                                     </Viewbox>
@@ -144,7 +144,7 @@
                                 <StackPanel x:Name="PanelCounter" Orientation="Horizontal"
                                             Margin="14,0,0,0" VerticalAlignment="Center">
                                     <Viewbox Width="16" Height="16" VerticalAlignment="Center">
-                                        <Path Data="{StaticResource Tabler.device-tablet}" Stroke="{DynamicResource Dim}"
+                                        <Path Data="{StaticResource IconDeviceTablet}" Stroke="{DynamicResource Dim}"
                                               StrokeThickness="2" StrokeStartLineCap="Round"
                                               StrokeEndLineCap="Round" StrokeLineJoin="Round"/>
                                     </Viewbox>
@@ -345,7 +345,7 @@
                                     CornerRadius="8" Padding="12,6" Margin="10,0,0,0">
                                 <StackPanel Orientation="Horizontal">
                                     <Viewbox Width="18" Height="18" VerticalAlignment="Center">
-                                        <Path Data="{StaticResource Tabler.world}"
+                                        <Path Data="{StaticResource IconWorld}"
                                               Stroke="#F2F5F8" StrokeThickness="2"
                                               StrokeStartLineCap="Round"
                                               StrokeEndLineCap="Round" StrokeLineJoin="Round"/>

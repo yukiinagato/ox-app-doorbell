@@ -849,9 +849,9 @@ namespace DoorbellApp
         {
             switch (id)
             {
-                case "p_visit": return "Tabler.home";
-                case "p_delivery": return "Tabler.package";
-                case "p_mail": return "Tabler.mail";
+                case "p_visit": return "IconHome";
+                case "p_delivery": return "IconPackage";
+                case "p_mail": return "IconMail";
                 default: return null;
             }
         }

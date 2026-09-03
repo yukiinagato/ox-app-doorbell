@@ -52,7 +52,7 @@
             <Button Content="9" Tag="9" Click="OnPad"/>
             <Button Tag="back" Click="OnPad">
                 <Viewbox Width="26" Height="26">
-                    <Path Data="{StaticResource Tabler.backspace}"
+                    <Path Data="{StaticResource IconBackspace}"
                           Stroke="{DynamicResource Fg}" StrokeThickness="2"
                           StrokeStartLineCap="Round" StrokeEndLineCap="Round"
                           StrokeLineJoin="Round"/>
