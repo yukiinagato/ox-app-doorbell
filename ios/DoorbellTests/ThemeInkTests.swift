@@ -219,26 +219,13 @@ final class ThemeInkTests: XCTestCase {
         XCTAssertEqual(Double(white), 1, accuracy: 0.001, "a dark ink is outlined in white")
     }
 
-    /// The halo has to be a halo: a flat one-point label shadow is two device pixels on a 2x
-    /// panel and vanished into a photograph on the device.
-    func testTheHaloIsBlurredAndNearlyOpaque() {
-        XCTAssertGreaterThanOrEqual(Double(DoorbellTheme.outlineBlurRadius), 2)
-        XCTAssertGreaterThanOrEqual(Double(DoorbellTheme.outlineOpacity), 0.8)
-
+    func testApplyingAutomaticInkLeavesTextUndecorated() {
         let label = HaloLabel()
         let midGround = UIColor(white: 0.5, alpha: 1)
         DoorbellTheme.applyInk(DoorbellPalette.light.ink,
                                over: .sampled(.uniform(midGround)), to: label)
-        var alpha: CGFloat = 0
-        XCTAssertTrue(label.halo?.getWhite(nil, alpha: &alpha) ?? false)
-        XCTAssertEqual(Double(alpha), Double(DoorbellTheme.outlineOpacity), accuracy: 0.001)
-        XCTAssertNil(label.shadowColor, "the flat label shadow is not used any more")
-
-        // An ink that reads on its own carries no halo at all.
-        DoorbellTheme.applyInk(DoorbellPalette.dark.ink,
-                               over: .sampled(.uniform(UIColor(white: 0.02, alpha: 1))),
-                               to: label)
-        XCTAssertNil(label.halo)
+        XCTAssertNil(label.shadowColor)
+        XCTAssertEqual(label.shadowOffset, .zero)
     }
 
     // MARK: - Sampling the picture the shell actually draws
@@ -459,87 +446,6 @@ final class ThemeInkTests: XCTestCase {
         UIColor(white: 0.05, alpha: 1).setFill()
         UIRectFill(CGRect(x: 0, y: size.height / 2, width: size.width, height: size.height / 2))
         return UIGraphicsGetImageFromCurrentImageContext() ?? UIImage()
-    }
-
-    /// Renders a view and returns the grey level of every pixel. `layer.render(in:)` is enough
-    /// here because the halo is drawn by the label's own `drawText`, which this calls — unlike the
-    /// layer shadow it replaced, which needed a live window to appear at all.
-    static func grey(of view: UIView) -> [CGFloat]? {
-        let bounds = view.bounds
-        guard bounds.width >= 1, bounds.height >= 1 else { return nil }
-        UIGraphicsBeginImageContextWithOptions(bounds.size, true, 1)
-        defer { UIGraphicsEndImageContext() }
-        guard let canvas = UIGraphicsGetCurrentContext() else { return nil }
-        view.layer.render(in: canvas)
-        guard let image = UIGraphicsGetImageFromCurrentImageContext()?.cgImage else { return nil }
-        let width = image.width, height = image.height
-        var raw = [UInt8](repeating: 0, count: width * height * 4)
-        guard let context = CGContext(data: &raw, width: width, height: height,
-                                      bitsPerComponent: 8, bytesPerRow: width * 4,
-                                      space: CGColorSpaceCreateDeviceRGB(),
-                                      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
-        else { return nil }
-        context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
-        var levels: [CGFloat] = []
-        levels.reserveCapacity(width * height)
-        for index in stride(from: 0, to: raw.count, by: 4) {
-            let sum = Int(raw[index]) + Int(raw[index + 1]) + Int(raw[index + 2])
-            levels.append(CGFloat(sum) / 765)
-        }
-        return levels
-    }
-
-    // MARK: - The halo has to actually appear in pixels
-
-    /// Twice now the halo has been "set" and invisible on the panel. This renders a label the same
-    /// way the screenshot hook renders the window and looks for the light pixels, so a halo that
-    /// does not draw fails here instead of on the device.
-    func testTheHaloRendersAroundTheGlyphs() {
-        // A ground with a black patch in it: the dark ink cannot clear 4.5:1 against that, so the
-        // decision must ask for a white halo.
-        let sample = BackgroundSample(average: UIColor(white: 0.85, alpha: 1),
-                                      minLuminance: DoorbellTheme.luminance(.black),
-                                      maxLuminance: DoorbellTheme.luminance(.white))
-
-        // Every size a region on the theme background actually uses: the footer's 13 pt, the
-        // hint's 20 pt, the date's 24 pt and the clock's 76 pt. The stroke scales with the font,
-        // so each has to be checked — a width that reads on the clock was a sticker outline on
-        // the footer, and a width that suits the footer would vanish under the clock.
-        for pointSize in [13, 20, 24, 76] as [CGFloat] {
-            let withHalo = ThemeInkTests.litPixels(pointSize: pointSize) { label in
-                DoorbellTheme.applyInk(DoorbellPalette.light.ink, over: .sampled(sample),
-                                       to: label)
-                XCTAssertNotNil(label.halo, "the decision must ask for a halo")
-            }
-            // The same glyphs with the halo suppressed: the baseline is whatever anti-aliasing
-            // lights on its own, so the test calibrates itself rather than trusting a number.
-            let without = ThemeInkTests.litPixels(pointSize: pointSize) { label in
-                DoorbellTheme.applyInk(DoorbellPalette.light.ink, over: .sampled(sample),
-                                       to: label)
-                label.halo = nil
-            }
-            // 4x holds at every one of these sizes; the agreed floor is 2.5x.
-            XCTAssertGreaterThan(withHalo, Int(Double(without) * 4.0),
-                                 "\(pointSize) pt: the halo must dominate the anti-aliasing")
-        }
-    }
-
-    /// Draws one glyph through `configure` over a mid-grey ground and counts the pixels clearly
-    /// lighter than that ground — which, with dark ink, can only be halo.
-    private static func litPixels(pointSize: CGFloat = 64,
-                                  _ configure: (HaloLabel) -> Void) -> Int {
-        let label = HaloLabel()
-        label.text = "888"
-        label.font = .systemFont(ofSize: pointSize, weight: .bold)
-        label.textAlignment = .center
-        label.frame = CGRect(x: 0, y: 0, width: pointSize * 4, height: pointSize * 2)
-        configure(label)
-
-        let host = UIView(frame: label.bounds)
-        host.backgroundColor = UIColor(white: 0.5, alpha: 1)
-        host.addSubview(label)
-        host.layoutIfNeeded()
-        return (ThemeInkTests.grey(of: host) ?? []).filter { $0 > 0.72 }.count
     }
 
 

@@ -67,46 +67,10 @@ struct DoorbellPalette {
     }
 }
 
-/// A label that can carry §5's halo.
-///
-/// The outline is drawn by the label, not applied to it. Two other places were tried first and
-/// both failed on the panel: `UILabel.shadowColor` has no blur at all, and a CALayer shadow set on
-/// the label's own layer renders essentially nothing around glyphs — a rendered probe of it found
-/// 39 lit pixels where a halo needs hundreds. Drawing it in `drawText` also means it survives the
-/// label rewriting its own text, which the clock does once a second and which an attributed
-/// `NSShadow` would not.
-final class HaloLabel: UILabel {
-
-    /// The halo colour, already carrying its opacity, or nil for none.
-    var halo: UIColor? {
-        didSet {
-            guard halo != oldValue else { return }
-            setNeedsDisplay()
-        }
-    }
-
-    override func drawText(in rect: CGRect) {
-        guard let halo = halo, let context = UIGraphicsGetCurrentContext() else {
-            super.drawText(in: rect)
-            return
-        }
-        // A soft blur on its own was measured at roughly a hundred lit pixels around a 64 pt
-        // glyph — visible in a screenshot, not enough to read against a photograph. The halo is
-        // therefore a stroked outline with the blur behind it: the stroke gives every glyph a
-        // hard edge of its own, the blur settles that edge into the picture. The fill is drawn
-        // afterwards so the ink itself is never touched by either.
-        context.saveGState()
-        context.setShadow(offset: .zero, blur: DoorbellTheme.outlineBlurRadius,
-                          color: halo.cgColor)
-        context.setLineWidth(DoorbellTheme.outlineStroke(forPointSize: font.pointSize))
-        context.setLineJoin(.round)
-        context.setStrokeColor(halo.cgColor)
-        context.setTextDrawingMode(.stroke)
-        super.drawText(in: rect)
-        super.drawText(in: rect)
-        context.restoreGState()
-    }
-}
+/// Historical name retained so the shared screens do not need a mechanical rename. On the Swift
+/// indoor app it is deliberately a plain label: automatic light/dark ink is used without an
+/// outline or shadow.
+final class HaloLabel: UILabel {}
 
 /// Where one region's ink came from. Every batch-2 shell names the same four sources, so a panel
 /// that came back with white text over a light picture is diagnosed the same way everywhere.
@@ -275,9 +239,8 @@ struct DoorbellSkin {
         paint(region, to: label, quiet: quiet)
     }
 
-    /// Paints one label from the geometry it has right now. The outline is decided against the
-    /// colour actually painted, quiet variant included, and against the whole ground rather than
-    /// its average.
+    /// Paints one label from the geometry it has right now, including the quiet variant, against
+    /// the whole ground rather than only its average.
     func paint(_ region: String, to label: UILabel, quiet: Bool) {
         let rect = sampler?.regionRect(of: label)
         let ground = self.ground(in: rect)
@@ -287,9 +250,7 @@ struct DoorbellSkin {
         logSample(region, rect: rect, ground: ground, decision: decision)
     }
 
-    /// What the region was actually measured on. Off unless `boot.json` asks for timings — this
-    /// is the line that says whether a halo is missing because the sample was wrong or because
-    /// the ink genuinely cleared 4.5:1.
+    /// What the region was actually measured on. Off unless `boot.json` asks for timings.
     private func logSample(_ region: String, rect: CGRect?, ground: InkGround,
                            decision: InkDecision) {
         guard IOSAvailability.PerfProbe.enabled else { return }
@@ -310,7 +271,7 @@ struct DoorbellSkin {
         }
         detail += " ink=" + DoorbellTheme.hex(decision.ink)
             + " src=" + decision.source.rawValue
-            + " halo=" + (decision.shadow == nil ? "no" : "yes")
+            + " contrast_fallback=" + (decision.shadow == nil ? "no" : "yes")
         IOSAvailability.logDebug(detail)
     }
 
@@ -971,36 +932,13 @@ enum DoorbellTheme {
         return color(hex: ConfigUtil.str(display, "theme.auto_background.color"))
     }
 
-    /// Blur of the halo drawn behind text that misses AA somewhere in its own region, and how
-    /// solid it is. A flat 40 % at a one-point offset — which is what `UILabel.shadowColor` can
-    /// express — is two device pixels of unblurred colour on a 2x panel, and the device showed it
-    /// simply is not visible behind a busy photograph. A blurred halo at close to full opacity is.
-    static let outlineBlurRadius: CGFloat = 3
-    static let outlineOpacity: Float = 0.9
-    /// Width of the stroked edge drawn around each glyph, in points, for a given text size. A
-    /// single width cannot serve a 13 pt footer and a 108 pt clock: 4 pt read as a sticker outline
-    /// around the small text on the panel. A fourteenth of the point size tracks the stroke
-    /// weight of the glyphs themselves — footer ≈ 1 pt, hint ≈ 1.5 pt, date ≈ 1.7 pt — and the cap
-    /// keeps the clock at the 4 pt that already reads well rather than growing to 8.
-    static let outlineStrokeDivisor: CGFloat = 14
-    static let outlineStrokeMin: CGFloat = 0.75
-    static let outlineStrokeMax: CGFloat = 4
-
-    static func outlineStroke(forPointSize pointSize: CGFloat) -> CGFloat {
-        guard pointSize > 0 else { return outlineStrokeMin }
-        return min(outlineStrokeMax, max(outlineStrokeMin, pointSize / outlineStrokeDivisor))
-    }
-
-    /// A halo is drawn when the chosen ink misses AA anywhere on the ground under the region.
-    /// Only a `HaloLabel` can carry one; every region that sits straight on the theme background
-    /// is one, and a label that is not simply takes the ink.
+    /// Applies the selected automatic ink without decorating the glyphs. The Swift indoor app
+    /// intentionally leaves both UILabel shadow properties disabled.
     static func applyInk(_ ink: UIColor, over ground: InkGround, to label: UILabel) {
         let decided = decision(ink: ink, ground: ground, source: .local)
         label.textColor = decided.ink
         label.shadowColor = nil
         label.shadowOffset = .zero
-        guard let halo = label as? HaloLabel else { return }
-        halo.halo = decided.shadow?.withAlphaComponent(CGFloat(outlineOpacity))
     }
 
     /// Call-button colour for a door station: the complement of the effective background, moved in

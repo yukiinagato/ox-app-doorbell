@@ -56,7 +56,7 @@ final class SosSlideControl: UIControl {
         accessibilityTraits = .button
 
         track.backgroundColor = UIColor(red: 0.55, green: 0.10, blue: 0.09, alpha: 1)
-        track.layer.cornerRadius = 14
+        track.layer.cornerRadius = SosSlideControl.barHeight / 2
         // The track and everything drawn on it are decoration: the control itself has to receive
         // the touch, or hit testing would hand the drag to a subview and nothing would track.
         track.isUserInteractionEnabled = false
@@ -91,7 +91,7 @@ final class SosSlideControl: UIControl {
             thumb.text = "\u{00BB}"
             thumb.font = .systemFont(ofSize: 30, weight: .heavy)
         }
-        thumb.layer.cornerRadius = 12
+        thumb.layer.cornerRadius = SosSlideControl.thumbSide / 2
         thumb.clipsToBounds = true
         thumb.translatesAutoresizingMaskIntoConstraints = false
         track.addSubview(thumb)
@@ -151,7 +151,8 @@ final class SosSlideControl: UIControl {
 
     private func applyIdleLabel() {
         label.attributedText = DoorbellTheme.twoPart(
-            texts.t("sos.slide_two_line", "\(countdownSeconds)"), primarySize: 22, color: .white)
+            texts.t("sos.slide_two_line", "\(countdownSeconds)"), primarySize: 17,
+            color: .white, bold: false)
         accessibilityLabel = texts.t("sos.slide_two_line", "\(countdownSeconds)")
             .replacingOccurrences(of: "\n", with: " ")
     }
