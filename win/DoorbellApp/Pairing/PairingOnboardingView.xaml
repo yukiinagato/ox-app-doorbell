@@ -83,7 +83,7 @@
                                            Foreground="{DynamicResource Dim}"/>
                                 <TextBox x:Name="AddressBox" FontSize="22" Margin="0,6,0,0"
                                          MinHeight="44" Padding="10,6" MaxLength="128"
-                                         Background="#0C1014" Foreground="{DynamicResource Fg}"
+                                         Background="{DynamicResource Card}" Foreground="{DynamicResource Fg}"
                                          CaretBrush="{DynamicResource Fg}" BorderBrush="{DynamicResource Line}"/>
                                 <TextBlock x:Name="EntryAddressExample" FontSize="13"
                                            Margin="0,4,0,0"

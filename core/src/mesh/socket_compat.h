@@ -9,6 +9,7 @@
 #endif
 #include <winsock2.h>
 #include <ws2tcpip.h>
+#include <iphlpapi.h>
 #else
 #include <arpa/inet.h>
 #include <fcntl.h>
@@ -34,6 +35,7 @@
 #include <chrono>
 #include <climits>
 #include <cstddef>
+#include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <string>
@@ -66,7 +68,27 @@ inline bool valid(socket_t s) { return s != kInvalidSocket; }
 
 
 inline std::string primaryIPv4ViaRoute() {
-#if !defined(_WIN32)
+#if defined(_WIN32)
+  SOCKET fd = ::socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+  if (fd == INVALID_SOCKET) return std::string();
+  struct sockaddr_in dst;
+  std::memset(&dst, 0, sizeof(dst));
+  dst.sin_family = AF_INET;
+  dst.sin_port = htons(9);
+  ::inet_pton(AF_INET, "8.8.8.8", &dst.sin_addr);
+  std::string out;
+  if (::connect(fd, reinterpret_cast<struct sockaddr*>(&dst), sizeof(dst)) == 0) {
+    struct sockaddr_in local;
+    std::memset(&local, 0, sizeof(local));
+    socklen_v len = sizeof(local);
+    if (::getsockname(fd, reinterpret_cast<struct sockaddr*>(&local), &len) == 0) {
+      char buf[INET_ADDRSTRLEN] = {0};
+      if (::inet_ntop(AF_INET, &local.sin_addr, buf, sizeof(buf))) out = buf;
+    }
+  }
+  ::closesocket(fd);
+  return out;
+#else
   int fd = ::socket(AF_INET, SOCK_DGRAM, 0);
   if (fd < 0) return std::string();
   struct sockaddr_in dst;
@@ -86,8 +108,6 @@ inline std::string primaryIPv4ViaRoute() {
   }
   ::close(fd);
   return out;
-#else
-  return std::string();
 #endif
 }
 
@@ -96,7 +116,56 @@ inline std::string primaryIPv4ViaRoute() {
 // Android before API 24 enumerates IPv4/IPv6 through route netlink instead of getifaddrs.
 inline std::vector<std::string> localAddresses(bool includeV6) {
   std::vector<std::string> out;
-#if defined(DB_HAVE_GETIFADDRS)
+#if defined(_WIN32)
+  // getifaddrs is not available on Windows. Enumerate active adapters instead of falling back
+  // to the wildcard listener address: 0.0.0.0 is valid for bind(), but never for pairing.
+  ULONG bytes = 15 * 1024;
+  std::vector<unsigned char> storage(bytes);
+  ULONG result = ERROR_BUFFER_OVERFLOW;
+  for (int attempt = 0; attempt != 2 && result == ERROR_BUFFER_OVERFLOW; ++attempt) {
+    auto* adapters = reinterpret_cast<IP_ADAPTER_ADDRESSES*>(storage.data());
+    result = ::GetAdaptersAddresses(AF_UNSPEC,
+                                    GAA_FLAG_SKIP_ANYCAST | GAA_FLAG_SKIP_MULTICAST |
+                                        GAA_FLAG_SKIP_DNS_SERVER,
+                                    nullptr, adapters, &bytes);
+    if (result == ERROR_BUFFER_OVERFLOW) storage.resize(bytes);
+  }
+  if (result != NO_ERROR) return out;
+  auto* adapters = reinterpret_cast<IP_ADAPTER_ADDRESSES*>(storage.data());
+  for (auto* adapter = adapters; adapter != nullptr; adapter = adapter->Next) {
+    if (adapter->OperStatus != IfOperStatusUp || adapter->IfType == IF_TYPE_SOFTWARE_LOOPBACK)
+      continue;
+    for (auto* unicast = adapter->FirstUnicastAddress; unicast != nullptr;
+         unicast = unicast->Next) {
+      const sockaddr* address = unicast->Address.lpSockaddr;
+      if (address == nullptr) continue;
+      char text[INET6_ADDRSTRLEN] = {0};
+      if (address->sa_family == AF_INET) {
+        const auto* sin = reinterpret_cast<const sockaddr_in*>(address);
+        const uint32_t value = ntohl(sin->sin_addr.s_addr);
+        if (value == 0 || (value >> 24) == 127) continue;
+        if (!::InetNtopA(AF_INET, const_cast<in_addr*>(&sin->sin_addr), text, sizeof(text)))
+          continue;
+      } else if (includeV6 && address->sa_family == AF_INET6) {
+        const auto* sin6 = reinterpret_cast<const sockaddr_in6*>(address);
+        const auto* bytes6 = reinterpret_cast<const unsigned char*>(&sin6->sin6_addr);
+        bool unspecified = true;
+        for (size_t i = 0; i != 16; ++i) unspecified = unspecified && bytes6[i] == 0;
+        bool loopback = true;
+        for (size_t i = 0; i != 15; ++i) loopback = loopback && bytes6[i] == 0;
+        loopback = loopback && bytes6[15] == 1;
+        bool linkLocal = bytes6[0] == 0xfe && (bytes6[1] & 0xc0) == 0x80;
+        if (unspecified || loopback || linkLocal) continue;
+        if (!::InetNtopA(AF_INET6, const_cast<in6_addr*>(&sin6->sin6_addr), text, sizeof(text)))
+          continue;
+      } else {
+        continue;
+      }
+      std::string value(text);
+      if (std::find(out.begin(), out.end(), value) == out.end()) out.push_back(value);
+    }
+  }
+#elif defined(DB_HAVE_GETIFADDRS)
   struct ifaddrs* head = nullptr;
   if (getifaddrs(&head) != 0 || head == nullptr) return out;
   for (struct ifaddrs* p = head; p != nullptr; p = p->ifa_next) {
