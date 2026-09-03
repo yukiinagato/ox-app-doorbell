@@ -998,7 +998,9 @@ class MainActivity : Activity(), DoorbellCore.Listener, SensorEventListener {
                 conn.connectTimeout = 4000
                 conn.readTimeout = 8000
                 val bytes = BoundedBitmapDecoder.readLimited(conn.inputStream, 4 * 1024 * 1024)
-                bmp = bytes?.let { BoundedBitmapDecoder.decode(it, 1920, 1080) }
+                val width = themeBg.width.takeIf { it > 0 } ?: resources.displayMetrics.widthPixels
+                val height = themeBg.height.takeIf { it > 0 } ?: resources.displayMetrics.heightPixels
+                bmp = bytes?.let { BoundedBitmapDecoder.decodeAspectFill(it, width, height) }
             } catch (e: Exception) {
                 // asset_ready triggers another attempt after mesh prefetch completes.
                 Log.w(TAG, "Theme background is not available yet: $e")

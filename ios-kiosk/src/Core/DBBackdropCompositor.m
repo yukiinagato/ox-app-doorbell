@@ -9,7 +9,7 @@
 // this cluster ships.
 + (CGFloat)darkeningAlpha { return 0.62; }
 
-+ (CGFloat)maximumLongSide { return 512; }
++ (CGFloat)maximumLongSide { return 1024; }
 
 + (CGSize)preparedSizeForViewSize:(CGSize)size {
   CGFloat longSide = MAX(size.width, size.height);

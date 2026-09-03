@@ -133,14 +133,14 @@ int main(void) {
 
     // --- The bounded bitmap. ---
     CGSize prepared = [DBBackdropCompositor preparedSizeForViewSize:CGSizeMake(1024, 768)];
-    require(near(prepared.width, 512, 0.5) && near(prepared.height, 384, 0.5),
-            @"a 1024x768 panel prepares a 512x384 bitmap");
+    require(near(prepared.width, 1024, 0.5) && near(prepared.height, 768, 0.5),
+            @"an iPad 1 prepares its backdrop at native resolution");
     require(near(prepared.width / prepared.height, 1024.0 / 768.0, 0.01),
             @"the prepared bitmap keeps the panel's aspect ratio");
     CGImageRef sized = [DBBackdropCompositor newBackdropFromImage:(white = newFlatImage(1.0, 64))
                                                          viewSize:CGSizeMake(1024, 768)];
-    require(CGImageGetWidth(sized) == 512 && CGImageGetHeight(sized) == 384,
-            @"the composited bitmap is the prepared size, not the panel size");
+    require(CGImageGetWidth(sized) == 1024 && CGImageGetHeight(sized) == 768,
+            @"the composited bitmap keeps the panel's native resolution");
     CGImageRelease(sized);
     CGImageRelease(white);
 
@@ -148,7 +148,8 @@ int main(void) {
     prepared = [DBBackdropCompositor preparedSizeForViewSize:CGSizeMake(480, 320)];
     require(near(prepared.width, 480, 0.5) && near(prepared.height, 320, 0.5),
             @"a small panel is not scaled up");
-    require([DBBackdropCompositor maximumLongSide] == 512, @"the bound is 512 points");
+    require([DBBackdropCompositor maximumLongSide] == 1024,
+            @"the bound preserves an iPad 1 display");
 
     // Degenerate inputs return nothing rather than a bitmap of nothing.
     require([DBBackdropCompositor newBackdropFromImage:NULL

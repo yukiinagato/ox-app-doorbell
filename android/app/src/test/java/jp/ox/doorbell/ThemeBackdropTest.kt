@@ -108,6 +108,25 @@ class ThemeBackdropTest {
         assertEquals(0, ThemeBackdrop.fillRect(100, 100, -5, -5).width)
     }
 
+    /** A portrait upload must retain the horizontal detail a landscape screen displays. */
+    @Test
+    fun aPortraitWallpaperIsCroppedBeforeItIsSampledForLandscape() {
+        val plan = BoundedBitmapDecoder.aspectFillPlan(2200, 2609, 2400, 1080)!!
+        assertEquals(0, plan.cropLeft)
+        assertEquals(2200, plan.cropRight)
+        assertEquals(990, plan.cropHeight)
+        assertEquals(1, plan.sampleSize)
+    }
+
+    /** Large inputs may be sampled, but never below the resolution of their visible crop. */
+    @Test
+    fun aLargeWallpaperKeepsAtLeastTheTargetResolution() {
+        val plan = BoundedBitmapDecoder.aspectFillPlan(12000, 8000, 2400, 1080)!!
+        assertEquals(4, plan.sampleSize)
+        assertTrue(plan.cropWidth / plan.sampleSize >= 2400)
+        assertTrue(plan.cropHeight / plan.sampleSize >= 1080)
+    }
+
     // ---------- the darkening ----------
 
     /** Spec §5.1 asks for 55-65 %, so cards and captions keep their contrast over any picture. */

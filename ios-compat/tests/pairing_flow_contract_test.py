@@ -257,7 +257,7 @@ class ReadabilityContracts(unittest.TestCase):
         # The pixel work lives in a CoreGraphics-only unit so the darkening is
         # measured by a host test rather than judged from a device photograph.
         compositor = read("ios-kiosk/src/Core/DBBackdropCompositor.m")
-        self.assertIn("+ (CGFloat)maximumLongSide { return 512; }", compositor)
+        self.assertIn("+ (CGFloat)maximumLongSide { return 1024; }", compositor)
         self.assertIn("+ (CGFloat)darkeningAlpha { return 0.62; }", compositor)
         self.assertIn("kCGBlendModeNormal", compositor)
         self.assertIn("aspectFillDrawRectForImageWidth", compositor)

@@ -198,21 +198,11 @@ internal object ThemeBackdrop {
     ): Bitmap? {
         if (bytes == null || bytes.isEmpty() || width <= 0 || height <= 0) return null
         cached(hash, width, height, overlay)?.let { return it }
-        // Decode no larger than the view: a 12 MP upload would otherwise be held at full size
-        // just to be drawn into a few hundred thousand pixels.
-        val source = BoundedBitmapDecoder.decode(bytes, width, height) ?: return null
+        // Decode only the source region that aspect fill displays, already at the view size. This
+        // preserves detail without retaining the unused part of a large portrait photograph.
+        val source = BoundedBitmapDecoder.decodeAspectFill(bytes, width, height) ?: return null
         val prepared = try {
-            // RGB_565 halves the texture and the backdrop has no transparency to preserve.
-            val out = Bitmap.createBitmap(width, height, Bitmap.Config.RGB_565)
-            val canvas = Canvas(out)
-            canvas.drawColor(Color.BLACK)
-            val fill = fillRect(source.width, source.height, width, height)
-            canvas.drawBitmap(
-                source,
-                Rect(0, 0, source.width, source.height),
-                Rect(fill.left, fill.top, fill.right, fill.bottom),
-                null,
-            )
+            val canvas = Canvas(source)
             // A disabled or fully transparent overlay leaves the picture exactly as it arrived.
             if (!overlay.transparent) canvas.drawARGB(
                 overlay.alphaByte,
@@ -220,13 +210,13 @@ internal object ThemeBackdrop {
                 overlay.rgb ushr 8 and 0xff,
                 overlay.rgb and 0xff,
             )
-            out
+            source
         } catch (_: Exception) {
+            source.recycle()
             null
         } catch (_: OutOfMemoryError) {
-            null
-        } finally {
             source.recycle()
+            null
         }
         if (prepared == null) return null
         synchronized(cache) {
