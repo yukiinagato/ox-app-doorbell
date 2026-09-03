@@ -228,6 +228,12 @@ final class MainViewController: UIViewController {
         maybeStartCamera()
     }
 
+    /// No producer may retain or call Core after this returns.
+    func prepareForCoreShutdown() {
+        camera.stopAndWait()
+        camera.encoder = nil
+        videoEncoder.stop()
+    }
 
     private func buildUi() {
         themeBg.onImageLoaded = { [weak self] in self?.refreshHomeSurfaces() }

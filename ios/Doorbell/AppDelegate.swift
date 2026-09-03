@@ -217,6 +217,7 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         NotificationCenter.default.removeObserver(self,
             name: UIDevice.orientationDidChangeNotification, object: nil)
         UIDevice.current.endGeneratingDeviceOrientationNotifications()
+        (window?.rootViewController as? MainViewController)?.prepareForCoreShutdown()
         runtime?.stop(clean: true)
         core.stop()
         ShellLog.note("core.stop reason=willTerminate")
@@ -303,6 +304,7 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         NotificationCenter.default.removeObserver(self,
             name: UIDevice.orientationDidChangeNotification, object: nil)
         UIDevice.current.endGeneratingDeviceOrientationNotifications()
+        (win.rootViewController as? MainViewController)?.prepareForCoreShutdown()
         runtime?.stop(clean: true)
         runtime = nil
         core.stop()
@@ -416,6 +418,7 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         pairingDeferred = false
         pairingGateTimer?.invalidate()
         pairingGateTimer = nil
+        (window?.rootViewController as? MainViewController)?.prepareForCoreShutdown()
         runtime?.stop(clean: false)
         runtime = nil
         core.stop()

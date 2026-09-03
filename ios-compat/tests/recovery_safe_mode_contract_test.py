@@ -501,6 +501,21 @@ class RecoverySafeModeContracts(unittest.TestCase):
         self.assertNotIn("TimeInterval = 60", expiry)
         self.assertNotIn("60_000", main)
 
+    def test_modern_identity_restart_quiesces_camera_before_core_destroy(self):
+        delegate = read("ios/Doorbell/AppDelegate.swift")
+        main = read("ios/Doorbell/MainViewController.swift")
+        camera = read("ios/Doorbell/CameraFeeder.swift")
+
+        restart = delegate[delegate.index("private func restartForIdentityChange"):
+                           delegate.index("private func onUiEvent")]
+        self.assertLess(restart.index("prepareForCoreShutdown()"),
+                        restart.index("core.stop()"))
+        shutdown = main[main.index("func prepareForCoreShutdown"):
+                        main.index("private func buildUi")]
+        self.assertIn("camera.stopAndWait()", shutdown)
+        self.assertIn("videoEncoder.stop()", shutdown)
+        self.assertIn("queue.sync { s?.stopRunning() }", camera)
+        self.assertGreaterEqual(camera.count("guard isAcceptingFrames()"), 2)
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
