@@ -15,6 +15,71 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Rect
+import org.json.JSONObject
+
+/**
+ * The overlay composited over the theme picture, as an administrator configured it
+ * (status.display.theme.backdrop, from the cluster keys display.theme.backdrop.* or this device's
+ * devices.<id>.local.theme.backdrop.*; core resolves which layer wins and publishes the answer).
+ *
+ * The overlay is what makes the clock, the call list and the footer read over a bright wallpaper,
+ * so an administrator who turns it off or lightens it is taking that legibility on deliberately.
+ * The shell renders what it is told and does not second-guess the value.
+ */
+internal data class BackdropOverlay(
+    val enabled: Boolean,
+    /** The overlay colour as 0xRRGGBB. */
+    val rgb: Int,
+    /** How much of that colour is composited over the picture, as a percentage. */
+    val opacity: Int,
+) {
+
+    /**
+     * What Canvas composites with. This goes through the same float path the fixed overlay always
+     * used, so a cluster that never configures a backdrop keeps exactly the pixels it had.
+     */
+    val alphaByte: Int get() = ThemeBackdrop.overlayAlpha(opacity / 100f)
+
+    /** True when there is nothing to composite and the picture is drawn as it arrived. */
+    val transparent: Boolean get() = !enabled || alphaByte == 0
+
+    /**
+     * Identifies this overlay in a prepared backdrop's cache key. The overlay is baked into the
+     * bitmap, so a changed colour or opacity has to miss the cache and prepare the picture again.
+     */
+    val cacheTag: String get() =
+        if (!enabled) "off" else Integer.toHexString(rgb and 0xFFFFFF) + "@" + opacity
+
+    companion object {
+
+        /** Core's defaults, applied to whatever a published backdrop document leaves out. */
+        const val DEFAULT_RGB = 0x000000
+        const val DEFAULT_OPACITY = 62
+
+        /**
+         * What a core that does not publish the field gets: the fixed overlay this dashboard has
+         * always drawn. It is deliberately not core's default -- an existing cluster upgrading to
+         * a shell that understands the field must not have its wallpaper visibly re-darkened
+         * before an administrator has chosen anything.
+         */
+        val LEGACY = BackdropOverlay(
+            enabled = true,
+            rgb = DEFAULT_RGB,
+            opacity = Math.round(ThemeBackdrop.DARKEN_ALPHA * 100f),
+        )
+
+        /** Parse status.display.theme.backdrop. Null means an older core published none. */
+        fun parse(backdrop: JSONObject?): BackdropOverlay? {
+            if (backdrop == null) return null
+            return BackdropOverlay(
+                enabled = backdrop.optBoolean("enabled", true),
+                rgb = UiContrast.parseRgb(backdrop.optString("color")) ?: DEFAULT_RGB,
+                // Anything outside 0..100 is not a percentage; clamp rather than refuse to draw.
+                opacity = backdrop.optInt("opacity", DEFAULT_OPACITY).coerceIn(0, 100),
+            )
+        }
+    }
+}
 
 /** Where the source picture lands inside the view, in view pixels. */
 internal data class BackdropRect(val left: Int, val top: Int, val right: Int, val bottom: Int) {
@@ -37,8 +102,16 @@ internal object ThemeBackdrop {
     /** A panel has one picture and at most two orientations; more than this is a leak. */
     const val CACHE_LIMIT = 4
 
-    /** Identifies one prepared backdrop. The picture is identified by its asset hash. */
-    fun cacheKey(hash: String, width: Int, height: Int): String = "$hash@${width}x$height"
+    /**
+     * Identifies one prepared backdrop. The picture is identified by its asset hash, and the
+     * overlay is part of the identity because it is composited into the bitmap that gets cached.
+     */
+    fun cacheKey(
+        hash: String,
+        width: Int,
+        height: Int,
+        overlay: BackdropOverlay = BackdropOverlay.LEGACY,
+    ): String = "$hash@${width}x$height/${overlay.cacheTag}"
 
     /**
      * Aspect fill: cover the view entirely and centre the overflow, so a picture is never
@@ -73,6 +146,25 @@ internal object ThemeBackdrop {
         return (r shl 16) or (g shl 8) or b
     }
 
+    /**
+     * One colour as it appears under [overlay], composited the same way the bitmap is.
+     *
+     * This is what a region's background actually looks like when the shell could not sample it:
+     * core averages the picture as uploaded, and the overlay is applied afterwards, so choosing
+     * ink against core's average alone reads a bright wallpaper that is not what is on screen.
+     */
+    fun under(rgb: Int, overlay: BackdropOverlay): Int {
+        if (overlay.transparent) return rgb and 0xFFFFFF
+        val over = overlay.alphaByte / 255.0
+        val keep = 1.0 - over
+        fun mix(shift: Int): Int {
+            val base = (rgb ushr shift) and 0xff
+            val paint = (overlay.rgb ushr shift) and 0xff
+            return Math.round(base * keep + paint * over).toInt().coerceIn(0, 255)
+        }
+        return (mix(16) shl 16) or (mix(8) shl 8) or mix(0)
+    }
+
     /** The overlay as an opaque-black alpha byte, which is what Canvas wants. */
     fun overlayAlpha(alpha: Float = DARKEN_ALPHA): Int =
         (alpha.coerceIn(0f, 1f) * 255f).toInt().coerceIn(0, 255)
@@ -81,9 +173,14 @@ internal object ThemeBackdrop {
 
     private val cache = LinkedHashMap<String, Bitmap>()
 
-    /** The prepared picture when this exact picture and size were already built. */
-    fun cached(hash: String, width: Int, height: Int): Bitmap? = synchronized(cache) {
-        cache[cacheKey(hash, width, height)]
+    /** The prepared picture when this exact picture, size and overlay were already built. */
+    fun cached(
+        hash: String,
+        width: Int,
+        height: Int,
+        overlay: BackdropOverlay = BackdropOverlay.LEGACY,
+    ): Bitmap? = synchronized(cache) {
+        cache[cacheKey(hash, width, height, overlay)]
     }
 
     /**
@@ -92,9 +189,15 @@ internal object ThemeBackdrop {
      * Returns null when the bytes are not an image or the size is not real yet, and the caller
      * then leaves the flat ground colour up rather than showing half a backdrop.
      */
-    fun build(bytes: ByteArray?, hash: String, width: Int, height: Int): Bitmap? {
+    fun build(
+        bytes: ByteArray?,
+        hash: String,
+        width: Int,
+        height: Int,
+        overlay: BackdropOverlay = BackdropOverlay.LEGACY,
+    ): Bitmap? {
         if (bytes == null || bytes.isEmpty() || width <= 0 || height <= 0) return null
-        cached(hash, width, height)?.let { return it }
+        cached(hash, width, height, overlay)?.let { return it }
         // Decode no larger than the view: a 12 MP upload would otherwise be held at full size
         // just to be drawn into a few hundred thousand pixels.
         val source = BoundedBitmapDecoder.decode(bytes, width, height) ?: return null
@@ -110,7 +213,13 @@ internal object ThemeBackdrop {
                 Rect(fill.left, fill.top, fill.right, fill.bottom),
                 null,
             )
-            canvas.drawARGB(overlayAlpha(), 0, 0, 0)
+            // A disabled or fully transparent overlay leaves the picture exactly as it arrived.
+            if (!overlay.transparent) canvas.drawARGB(
+                overlay.alphaByte,
+                overlay.rgb ushr 16 and 0xff,
+                overlay.rgb ushr 8 and 0xff,
+                overlay.rgb and 0xff,
+            )
             out
         } catch (_: Exception) {
             null
@@ -126,7 +235,7 @@ internal object ThemeBackdrop {
                 val oldest = cache.keys.firstOrNull()
                 if (oldest != null) cache.remove(oldest)?.recycle()
             }
-            cache[cacheKey(hash, width, height)] = prepared
+            cache[cacheKey(hash, width, height, overlay)] = prepared
         }
         return prepared
     }

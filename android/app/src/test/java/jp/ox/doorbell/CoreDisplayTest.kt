@@ -79,7 +79,8 @@ class CoreDisplayTest {
     fun aDarkButtonInkTokenIsHonouredEvenWhereWhiteWouldScoreHigher() {
         val theme = CoreTheme(
             backgroundRgb = 0x808080, backgroundSource = "color",
-            backgroundUnsampledReason = "", backgroundImage = "", ink = emptyMap(),
+            backgroundUnsampledReason = "", backgroundImage = "", backdrop = null,
+            ink = emptyMap(),
             inkOverride = emptyMap(), callButtonBg = 0xE8E8E8, callButtonInkLight = false,
         )
         // Core returns the best compromise on a mid-luminance background; never second-guess it.

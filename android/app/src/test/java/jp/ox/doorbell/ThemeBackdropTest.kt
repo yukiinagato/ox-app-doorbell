@@ -19,7 +19,7 @@ class ThemeBackdropTest {
 
     @Test
     fun onePreparedCopyPerPictureAndSize() {
-        assertEquals("abc@800x600", ThemeBackdrop.cacheKey("abc", 800, 600))
+        assertEquals("abc@800x600/0@65", ThemeBackdrop.cacheKey("abc", 800, 600))
         // A different picture, or either dimension, is a different copy.
         assertNotEquals(
             ThemeBackdrop.cacheKey("abc", 800, 600),
@@ -28,6 +28,26 @@ class ThemeBackdropTest {
         assertNotEquals(
             ThemeBackdrop.cacheKey("abc", 800, 600),
             ThemeBackdrop.cacheKey("abc", 600, 800),
+        )
+    }
+
+    /**
+     * The overlay is composited into the prepared bitmap, so moving it has to prepare the picture
+     * again rather than leave the old darkening on screen.
+     */
+    @Test
+    fun aMovedOverlayIsADifferentPreparedCopy() {
+        val configured = BackdropOverlay(enabled = true, rgb = 0x000000, opacity = 62)
+        val lighter = configured.copy(opacity = 30)
+        val tinted = configured.copy(rgb = 0x102030)
+        val off = configured.copy(enabled = false)
+        val keys = listOf(configured, lighter, tinted, off, BackdropOverlay.LEGACY)
+            .map { ThemeBackdrop.cacheKey("abc", 800, 600, it) }
+        assertEquals(keys.size, keys.toSet().size)
+        // The same overlay is the same copy: an unchanged status document must hit the cache.
+        assertEquals(
+            ThemeBackdrop.cacheKey("abc", 800, 600, configured),
+            ThemeBackdrop.cacheKey("abc", 800, 600, configured.copy()),
         )
     }
 

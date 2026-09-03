@@ -256,6 +256,66 @@ class DoorStationsTest {
         assertTrue(DoorStations.tileVisible(st, null, door))
     }
 
+    // ---------- the door set, and the section that shows it ----------
+
+    /**
+     * Captured from the Moto with the mini 3 door station online. The station is alive, serves
+     * door-mini3, core names it in served_by -- and it advertises caps.camera false, which used to
+     * take its tile away and with it the whole section. A served door always keeps its tile.
+     */
+    private val deviceDocument = JSONObject(
+        """{"doors":{"door-mini3":{"served_by":"787e91b5a11d87d5ac77f232afac84c0"}},
+            "peers":[
+              {"id":"75cd2ca1a972de0d6672cd2730f284b5","name":"ipad1-monitor",
+               "role":"indoor_panel","status":"alive","caps":{"camera":false}},
+              {"id":"787e91b5a11d87d5ac77f232afac84c0","name":"doorbell-ios",
+               "role":"door_station","status":"alive","door":"door-mini3",
+               "caps":{"camera":false}},
+              {"id":"8e98f79ed7837aa221a48e2e4e4a1c0a","name":"doorbell-android",
+               "role":"indoor_panel","status":"alive","self":true,"caps":{}}
+            ]}""",
+    )
+
+    @Test
+    fun theServedDoorFromTheDeviceKeepsItsTile() {
+        val config = JSONObject("""{"doors":{"door-mini3":{}}}""")
+        assertEquals(
+            DoorService.SERVED,
+            DoorStations.serviceOf(deviceDocument, config, "door-mini3"),
+        )
+        assertTrue(DoorStations.tileVisible(deviceDocument, config, "door-mini3"))
+        assertEquals(listOf("door-mini3"), DoorStations.allDoorIds(deviceDocument, config))
+    }
+
+    /**
+     * A station core has not named in served_by still loses its tile on caps.camera false: that
+     * is the case the capability was written for, a doorbell with no lens.
+     */
+    @Test
+    fun aStationCoreHasNotNamedAsServingStillLosesItsTileWithoutACamera() {
+        val st = status("""[{"id":"$stationId","role":"door_station","door":"$door",
+                            "status":"alive","caps":{"camera":false}}]""")
+        assertFalse(DoorStations.tileVisible(st, null, door))
+    }
+
+    /** Core's live door set carries a door this node has no configuration entry for yet. */
+    @Test
+    fun theDoorSetUnionsCoresLiveDoorsWithConfiguration() {
+        val st = JSONObject("""{"doors":{"door-mini3":{},"door-front":{}}}""")
+        val config = JSONObject("""{"doors":{"door-back":{},"door-front":{}}}""")
+        assertEquals(
+            listOf("door-back", "door-front", "door-mini3"),
+            DoorStations.allDoorIds(st, config),
+        )
+        // A commissioned station whose doors.<id> has not replicated is still a door.
+        assertEquals(listOf("door-mini3"), DoorStations.allDoorIds(st.let {
+            JSONObject("""{"doors":{"door-mini3":{}}}""")
+        }, null))
+        // An older core with no status.doors behaves exactly as it always did.
+        assertEquals(listOf("door-back", "door-front"), DoorStations.allDoorIds(null, config))
+        assertEquals(emptyList<String>(), DoorStations.allDoorIds(null, null))
+    }
+
     // ---------- served_by reading ----------
 
     @Test

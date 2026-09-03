@@ -11,6 +11,7 @@ import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.RectF
 import android.graphics.Typeface
+import android.graphics.drawable.Drawable
 import android.os.Handler
 import android.os.Looper
 import android.view.KeyEvent
@@ -31,6 +32,18 @@ internal class SosSlideView(
 
     /** Gate that keeps the control inert while core is not ready. */
     var enabledProvider: () -> Boolean = { true }
+
+    /**
+     * The thumb's two icons, from the fleet's Tabler set rather than a typed glyph: a font's
+     * guillemet and multiplication sign are whatever the platform's font happens to draw, and on
+     * the older panels that is not the same shape twice.
+     */
+    private val slideIcon: Drawable? by lazy { icon(R.drawable.ic_tabler_chevron_right) }
+    private val cancelIcon: Drawable? by lazy { icon(R.drawable.ic_tabler_x) }
+
+    @Suppress("DEPRECATION")
+    private fun icon(resource: Int): Drawable? =
+        try { resources.getDrawable(resource)?.mutate() } catch (_: Exception) { null }
 
     private val state = SosSlideState(SosSlideState.DEFAULT_COUNTDOWN_S)
     private var palette: Palette = Palette.DARK
@@ -222,13 +235,21 @@ internal class SosSlideView(
             RectF(left, dp(4).toFloat(), left + size, (dp(4) + size).toFloat()),
             size / 2f, size / 2f, fill,
         )
-        text.color = if (UiContrast.inkFor(palette.danger) == Ink.DARK)
+        val thumbInk = if (UiContrast.inkFor(palette.danger) == Ink.DARK)
             opaque(Palette.DARK_INK) else opaque(Palette.LIGHT_INK)
-        text.typeface = Typeface.DEFAULT_BOLD
-        text.textSize = size * 0.5f
-        val glyph = if (snapshot.phase == SosPhase.COUNTDOWN) "✕" else "»"
-        canvas.drawText(glyph, left + size / 2f,
-                        dp(4) + size / 2f + text.textSize * 0.36f, text)
+        val icon = if (snapshot.phase == SosPhase.COUNTDOWN) cancelIcon else slideIcon
+        if (icon != null) {
+            // The same square the glyph occupied, centred in the thumb.
+            val box = size * 0.5f
+            val centreX = left + size / 2f
+            val centreY = dp(4) + size / 2f
+            icon.setBounds(
+                Math.round(centreX - box / 2f), Math.round(centreY - box / 2f),
+                Math.round(centreX + box / 2f), Math.round(centreY + box / 2f),
+            )
+            icon.setColorFilter(thumbInk, android.graphics.PorterDuff.Mode.SRC_IN)
+            icon.draw(canvas)
+        }
 
         if (isFocused) {
             fill.color = opaque(palette.accent)
