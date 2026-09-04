@@ -390,6 +390,11 @@ error です。atomic config apply 後、platform client は fixed local `MODE <
 確認します。helper は mode を原子的に保存し helper/OS restart 後も復元します。config から generic command/
 argv を生成しません。
 
+modern iOS のローカル `boot.json` `keepalive_helper` の既定は `off` です。明示的に opt-in した `auto` は、
+設定済み helper mode を保ち、実測した Guided Access または Single App Mode が active の間は短い maintenance
+lease を更新します。helper supervision が fallback になるのは測定が inactive の間だけです。未 qualification の
+launcher で supervised kiosk restart 経路を置き換えることはありません。
+
 ## 単一の管理パスワード・お知らせ・開錠・外観
 
 `admin.password_hash` はクラスタ全体で唯一の管理者資格情報で、Web 管理画面と各端末の設定画面は

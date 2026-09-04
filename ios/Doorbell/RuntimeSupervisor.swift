@@ -17,9 +17,10 @@ final class RuntimeSupervisor {
 
     private let core: CoreBridge
     private let boot: BootConfig
-    private let audioSessionReady: Bool
+    private var audioSessionReady: Bool
     private let defaults = UserDefaults.standard
     private var heartbeat: Timer?
+    private var mainHeartbeat: Timer?
     private var uiStyleObserver: NSObjectProtocol?
     private var deviceInfoObservers: [NSObjectProtocol] = []
     private var generation = 0
@@ -31,6 +32,16 @@ final class RuntimeSupervisor {
     ]
     private var cameraRuntimeState = "not_started"
     private var h264EncodeState = "not_tested"
+    private var mainThreadHeartbeat = ProcessInfo.processInfo.systemUptime
+    #if os(iOS)
+    private var keepalive: KeepaliveClient?
+    private var nativeKioskActive = false
+    private var helperSupervising = false
+    private var helperPolicy = "off"
+    private lazy var hangMarkerPath = (BootConfig.dataDir() as NSString)
+        .appendingPathComponent("runtime-hang.marker")
+    private lazy var hangSentinel = MainRunLoopHangSentinel(markerPath: hangMarkerPath)
+    #endif
     // The modern shell currently renders bounded MJPEG. Do not infer H.264 decode support from
     // VideoToolbox being present until an integrated decoder has completed a real frame test.
     private let h264DecodeState = "unsupported_no_decoder_path"
@@ -53,9 +64,19 @@ final class RuntimeSupervisor {
         self.core = core
         self.boot = boot
         self.audioSessionReady = audioSessionReady
+        #if os(iOS)
+        self.helperPolicy = boot.keepaliveHelperPolicy
+        #endif
     }
 
     func start() {
+        guard heartbeat == nil else {
+            refreshHelperPolicy()
+            noteMainThreadResponsive()
+            publishCapabilities()
+            publishRuntime()
+            return
+        }
         let now = Date().timeIntervalSince1970
         generation = defaults.integer(forKey: Key.generation) + 1
         defaults.set(generation, forKey: Key.generation)
@@ -70,6 +91,25 @@ final class RuntimeSupervisor {
         defaults.set(unexpectedLaunches, forKey: Key.launches)
         defaults.set(safeMode, forKey: Key.safeMode)
         defaults.set(false, forKey: Key.cleanExit)
+        #if os(iOS)
+        if MainRunLoopHangSentinel.consumeMarker(at: hangMarkerPath) {
+            defaults.set("main_run_loop_stall_3x5s", forKey: Key.lastReason)
+        }
+        #endif
+        noteMainThreadResponsive()
+
+        #if os(iOS)
+        refreshNativeKioskMeasurement()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
+            self?.refreshNativeKioskMeasurement()
+        }
+        hangSentinel.start()
+        updateExternalSupervisorSnapshot()
+        if UIApplication.shared.applicationState != .background {
+            hangSentinel.armAfterForegroundGrace()
+        }
+        configureKeepaliveFallback()
+        #endif
 
         beginDeviceInfoUpdates()
         publishCapabilities()
@@ -79,15 +119,32 @@ final class RuntimeSupervisor {
             forName: UIStyleApplier.reportChanged, object: nil, queue: .main
         ) { [weak self] _ in self?.publishRuntime() }
         heartbeat = IOSAvailability.scheduledTimer(withTimeInterval: 10, repeats: true) { [weak self] _ in
+            self?.noteMainThreadResponsive()
+            #if os(iOS)
+            self?.refreshNativeKioskMeasurement()
+            #endif
             self?.core.refreshDeviceInfoCache()
             self?.publishCapabilities()
             self?.publishRuntime()
+        }
+        mainHeartbeat = IOSAvailability.scheduledTimer(withTimeInterval: 3, repeats: true) {
+            [weak self] _ in self?.noteMainThreadResponsive()
         }
     }
 
     func stop(clean: Bool) {
         heartbeat?.invalidate()
         heartbeat = nil
+        mainHeartbeat?.invalidate()
+        mainHeartbeat = nil
+        #if os(iOS)
+        keepalive?.stop()
+        keepalive = nil
+        helperSupervising = false
+        updateExternalSupervisorSnapshot()
+        hangSentinel.disarmForBackground()
+        hangSentinel.stop()
+        #endif
         endDeviceInfoUpdates()
         if let observer = uiStyleObserver { NotificationCenter.default.removeObserver(observer) }
         uiStyleObserver = nil
@@ -110,11 +167,29 @@ final class RuntimeSupervisor {
         core.refreshDeviceInfoCache()
 
         let center = NotificationCenter.default
+        #if os(iOS)
         let active = center.addObserver(
             forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main
-        ) { [weak self] _ in self?.core.refreshDeviceInfoCache() }
+        ) { [weak self] _ in
+            self?.noteMainThreadResponsive()
+            self?.hangSentinel.armAfterForegroundGrace()
+            self?.refreshNativeKioskMeasurement()
+            self?.core.refreshDeviceInfoCache()
+        }
         deviceInfoObservers.append(active)
-        #if os(iOS)
+        let guidedAccess = center.addObserver(
+            forName: UIAccessibility.guidedAccessStatusDidChangeNotification,
+            object: nil, queue: .main
+        ) { [weak self] _ in self?.refreshNativeKioskMeasurement() }
+        deviceInfoObservers.append(guidedAccess)
+        let background = center.addObserver(
+            forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main
+        ) { [weak self] _ in self?.hangSentinel.disarmForBackground() }
+        deviceInfoObservers.append(background)
+        let foreground = center.addObserver(
+            forName: UIApplication.willEnterForegroundNotification, object: nil, queue: .main
+        ) { [weak self] _ in self?.hangSentinel.armAfterForegroundGrace() }
+        deviceInfoObservers.append(foreground)
         for name in [UIDevice.batteryLevelDidChangeNotification,
                      UIDevice.batteryStateDidChangeNotification] {
             let observer = center.addObserver(forName: name, object: nil, queue: .main) {
@@ -132,6 +207,10 @@ final class RuntimeSupervisor {
     }
 
     func handleMemoryPressure() {
+        noteMainThreadResponsive()
+        #if os(iOS)
+        keepalive?.noteMemoryPressure()
+        #endif
         safeMode = true
         defaults.set(true, forKey: Key.safeMode)
         defaults.set("memory_pressure", forKey: Key.lastReason)
@@ -166,6 +245,94 @@ final class RuntimeSupervisor {
         publishCapabilities()
         publishRuntime()
     }
+
+    func updateAudioSessionReady(_ value: Bool) {
+        audioSessionReady = value
+        refreshHelperPolicy()
+        publishCapabilities()
+        publishRuntime()
+    }
+
+    func configDidChange() {
+        if !Thread.isMainThread {
+            DispatchQueue.main.async { [weak self] in self?.configDidChange() }
+            return
+        }
+        refreshHelperPolicy()
+        publishCapabilities()
+        publishRuntime()
+    }
+
+    private func noteMainThreadResponsive() {
+        guard Thread.isMainThread else { return }
+        mainThreadHeartbeat = ProcessInfo.processInfo.systemUptime
+    }
+
+    private func uiComponentState() -> String {
+        return ProcessInfo.processInfo.systemUptime - mainThreadHeartbeat < 12 ? "responsive" : "stalled"
+    }
+
+    #if os(iOS)
+    private func refreshNativeKioskMeasurement() {
+        guard Thread.isMainThread else { return }
+        let measured = UIAccessibility.isGuidedAccessEnabled
+        guard measured != nativeKioskActive else { return }
+        nativeKioskActive = measured
+        updateExternalSupervisorSnapshot()
+        configureKeepaliveFallback()
+    }
+
+    private func updateExternalSupervisorSnapshot() {
+        hangSentinel.setExternalSupervisorActive(nativeKioskActive || helperSupervising)
+    }
+
+    private func refreshHelperPolicy() {
+        guard Thread.isMainThread else {
+            DispatchQueue.main.async { [weak self] in self?.refreshHelperPolicy() }
+            return
+        }
+        var resolved = boot.keepaliveHelperPolicy
+        if core.isRunning, let status = core.status(),
+           let selfNode = status["self"] as? [String: Any],
+           let id = selfNode["id"] as? String, !id.isEmpty,
+           let value = ConfigUtil.str(core.config(), "devices.\(id).local.recovery.helper_mode"),
+           value == "off" || value == "auto" || value == "on" {
+            resolved = value
+        }
+        guard resolved != helperPolicy else {
+            configureKeepaliveFallback()
+            return
+        }
+        helperPolicy = resolved
+        helperSupervising = false
+        updateExternalSupervisorSnapshot()
+        configureKeepaliveFallback()
+    }
+
+    private func configureKeepaliveFallback() {
+        if let keepalive = keepalive {
+            keepalive.reconfigure(policy: helperPolicy, nativeKioskActive: nativeKioskActive)
+            return
+        }
+        let client = KeepaliveClient(policy: helperPolicy, role: boot.role,
+                                     nativeKioskActive: nativeKioskActive) { [weak self] in
+            self?.keepaliveState() ?? "unknown"
+        }
+        client.statusChanged = { [weak self] in
+            guard let self = self else { return }
+            self.helperSupervising = self.keepalive?.supervising ?? false
+            self.updateExternalSupervisorSnapshot()
+            self.publishCapabilities()
+            self.publishRuntime()
+        }
+        keepalive = client
+        client.start()
+    }
+
+    private func keepaliveState() -> String {
+        return "ui_\(uiComponentState())_core_\(core.isRunning ? "running" : "stopped")"
+    }
+    #endif
 
     func recordCameraRuntime(active: Bool, state: String) {
         if !Thread.isMainThread {
@@ -213,7 +380,7 @@ final class RuntimeSupervisor {
         let cameraPermission = "not_applicable"
         let microphonePermission = "not_applicable"
         let mains = true
-        let nativeKiosk = UIAccessibility.isGuidedAccessEnabled
+        let nativeKiosk = false
         let cpuScore = 70
         let alertChannels = ["in_app"]
         #else
@@ -226,7 +393,7 @@ final class RuntimeSupervisor {
             !(AVAudioSession.sharedInstance().availableInputs?.isEmpty ?? true)
         let mains = UIDevice.current.batteryState == .charging ||
             UIDevice.current.batteryState == .full
-        let nativeKiosk = UIAccessibility.isGuidedAccessEnabled
+        let nativeKiosk = nativeKioskActive
         let cpuScore = 60
         let alertChannels = ["in_app", "system_notification"]
         #endif
@@ -257,7 +424,13 @@ final class RuntimeSupervisor {
             "sip_backend": core.sipBackend,
             "sip": core.sipBackend == "pjsip",
             "native_kiosk": nativeKiosk,
-            "root_helper": false,
+            "root_helper": {
+                #if os(iOS)
+                return keepalive?.available ?? false
+                #else
+                return false
+                #endif
+            }(),
             "device_alert_channels": alertChannels,
             "features": [
                 "platform_v2": true,
@@ -267,7 +440,13 @@ final class RuntimeSupervisor {
                 "device_alert_v1": true,
                 "ui_manifest_v1": supportsUiManifest,
                 "runtime_recovery_v1": true,
-                "helper_policy_v1": false,
+                "helper_policy_v1": {
+                    #if os(iOS)
+                    return helperPolicy != "off"
+                    #else
+                    return false
+                    #endif
+                }(),
             ],
         ])
     }
@@ -379,9 +558,37 @@ final class RuntimeSupervisor {
             "safe_mode": safeMode,
             "crash_count_5m": unexpectedLaunches.count,
             "codec_health": codecHealth,
-            "helper_mode": "off",
-            "helper_available": false,
-            "native_kiosk": "supervised_single_app_mode_or_mdm",
+            "helper_mode": {
+                #if os(iOS)
+                if helperPolicy == "off" { return "off" }
+                // This field is the helper's effective protocol mode and remains within the
+                // off/auto/on contract. Native kiosk ownership is reported separately below.
+                return keepalive?.mode ?? "unavailable"
+                #else
+                return "off"
+                #endif
+            }(),
+            "helper_available": {
+                #if os(iOS)
+                return keepalive?.available ?? false
+                #else
+                return false
+                #endif
+            }(),
+            "native_kiosk": {
+                #if os(iOS)
+                return nativeKioskActive ? "guided_access_active" : "not_active"
+                #else
+                return "not_applicable"
+                #endif
+            }(),
+            "native_kiosk_measurement": {
+                #if os(iOS)
+                return ["guided_access": nativeKioskActive]
+                #else
+                return ["guided_access": false]
+                #endif
+            }(),
             "active_call_recovery": "fail_closed_cancel_unless_dialog_restored",
             "device_alert": deviceAlertReport,
             "ui_style": UIStyleApplier.runtimeReport(),
@@ -406,7 +613,7 @@ final class RuntimeSupervisor {
                 "core": core.isRunning ? "running" : "stopped",
                 "sip": core.sipBackend == "pjsip" ? "available" : "stub",
                 "media": safeMode ? "degraded" : "available",
-                "ui": "running",
+                "ui": uiComponentState(),
             ],
         ])
     }

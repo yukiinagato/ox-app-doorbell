@@ -46,7 +46,15 @@ app. Android `DISABLE` is a transient disarm permitted in `auto`, not a persiste
   target-device validation remains a release gate. Its safe mode keeps Core, ringer, SOS, controls,
   and real-PJSIP audio available; it disables custom visuals/animation and H.264 and uses bounded
   low-resolution MJPEG when a JPEG source exists.
-- Modern iOS relies on supervised Single App Mode plus the app's runtime supervisor; signing expiry
+- Modern iOS sends bounded main-thread probes from a background queue only while foregrounded. Three
+  consecutive five-second probe failures record `main_run_loop_stall_3x5s` and, when Guided Access
+  is measured active, end the process with `SIGABRT` so the supervised kiosk can relaunch it with
+  crash evidence. The sentinel disarms in the background. Per Apple TN2448,
+  `UIAccessibility.isGuidedAccessEnabled` measures both Guided Access and Single App Mode; the
+  client listens for its status-change notification, checks again two seconds after launch, and
+  continues its bounded ten-second recheck. `auto` keeps its configured helper mode and renews a
+  short maintenance lease while that measurement is active; helper supervision is the fallback
+  only while it is inactive. Its modern launcher is a separate qualification gate. Signing expiry
   is an operational failure and must be scheduled.
 - iOS 5 safe mode keeps Core, MiniSIP audio, ringer, SOS, and controls. It disables H.264
   ingest/decode and custom visuals, then uses bounded low-resolution HTTP(S) MJPEG/snapshot direct

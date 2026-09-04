@@ -85,15 +85,8 @@
   CGSize sourceSize = CGSizeMake((CGFloat)CGImageGetWidth(source),
                                  (CGFloat)CGImageGetHeight(source));
   CGContextSetInterpolationQuality(ctx, kCGInterpolationHigh);
-  // A bitmap context puts its origin at the bottom left, so CGContextDrawImage
-  // lays the picture in upside down relative to the way UIKit drew it here
-  // before. Flip the space so the result matches what the panel showed.
-  CGContextTranslateCTM(ctx, 0, prepared.height);
-  CGContextScaleCTM(ctx, 1, -1);
   CGContextDrawImage(ctx, [self aspectFillRectForContentSize:sourceSize viewSize:prepared],
                      source);
-  CGContextScaleCTM(ctx, 1, -1);
-  CGContextTranslateCTM(ctx, 0, -prepared.height);
   // The scrim goes over the picture, in the same context, before the bitmap is
   // read back: an alpha-blended fill, never a copy, or it would paint flat
   // colour over everything instead of tinting it. An overlay an administrator

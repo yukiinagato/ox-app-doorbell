@@ -42,7 +42,7 @@ final class VideoEncoderVT {
         lock.lock()
         self.fps = fps > 0 ? fps : 25
         self.bitrateKbps = bitrateKbps > 0 ? bitrateKbps : 1500
-        releaseSessionLocked()
+        let retired = detachSessionLocked()
         width = 0
         height = 0
         lastFeedMs = 0
@@ -51,15 +51,18 @@ final class VideoEncoderVT {
         started = true
         sessionGeneration &+= 1
         lock.unlock()
+        invalidateRetiredSession(retired)
         IOSAvailability.logDebug("h264 start fps=\(self.fps) bitrate_kbps=\(self.bitrateKbps)")
         reportRuntime(available: false, state: "testing")
     }
 
     func stop() {
-        lock.lock(); defer { lock.unlock() }
+        lock.lock()
         started = false
         sessionGeneration &+= 1
-        releaseSessionLocked()
+        let retired = detachSessionLocked()
+        lock.unlock()
+        invalidateRetiredSession(retired)
         IOSAvailability.logDebug("h264 stop")
     }
 
@@ -69,34 +72,66 @@ final class VideoEncoderVT {
         lock.unlock()
     }
 
-    private func releaseSessionLocked() {
-        if let s = session {
-            VTCompressionSessionInvalidate(s)
-            session = nil
-        }
+    // VideoToolbox may synchronously drain an output callback during invalidate. The callback
+    // reads `sessionGeneration` under `lock`, so the session must be detached while locked and
+    // invalidated only after the lifecycle lock has been released.
+    private func detachSessionLocked() -> VTCompressionSession? {
+        let retired = session
+        session = nil
+        return retired
+    }
+
+    private func invalidateRetiredSession(_ retired: VTCompressionSession?) {
+        guard let retired = retired else { return }
+        VTCompressionSessionInvalidate(retired)
     }
 
     func feed(pixelBuffer: CVPixelBuffer, tsMs: Int64) {
         lock.lock()
-        defer { lock.unlock() }
-        guard started, !failed else { return }
-        if lastFeedMs != 0 && tsMs - lastFeedMs < Int64(1000 / fps) { return }
+        guard started, !failed else {
+            lock.unlock()
+            return
+        }
+        if lastFeedMs != 0 && tsMs - lastFeedMs < Int64(1000 / fps) {
+            lock.unlock()
+            return
+        }
         lastFeedMs = tsMs
 
         let w = Int32(CVPixelBufferGetWidth(pixelBuffer))
         let h = Int32(CVPixelBufferGetHeight(pixelBuffer))
-        if session == nil || w != width || h != height {
-            releaseSessionLocked()
-            guard let s = createSessionLocked(w: w, h: h) else {
+        let s: VTCompressionSession
+        while true {
+            if let current = session, width == w, height == h {
+                s = current
+                break
+            }
+            let retired = detachSessionLocked()
+            // A callback from the old dimensions must not mark the replacement session failed.
+            sessionGeneration &+= 1
+            let transition = sessionGeneration
+            lock.unlock()
+            invalidateRetiredSession(retired)
+            lock.lock()
+            guard started, !failed else {
+                lock.unlock()
+                return
+            }
+            // Another feed may have created a session while this thread drained VideoToolbox.
+            // Re-check both generation and dimensions before creating or selecting a session.
+            guard sessionGeneration == transition, session == nil else { continue }
+            let created = createSessionLocked(w: w, h: h)
+            guard let createdSession = created.session else {
                 failed = true
+                lock.unlock()
+                invalidateRetiredSession(created.retired)
                 reportRuntime(available: false, state: "session_failed")
                 return
             }
-            session = s
+            session = createdSession
             width = w
             height = h
         }
-        guard let s = session else { return }
         let generation = sessionGeneration
         let pts = CMTime(value: tsMs, timescale: 1000)
         let forceKeyframe = forceNextKeyframe
@@ -125,6 +160,7 @@ final class VideoEncoderVT {
             IOSAvailability.logDebug("h264 encode frame failed status=\(rc)")
             reportRuntime(available: false, state: "encode_failed")
         }
+        lock.unlock()
     }
 
     private func isCurrentGeneration(_ value: UInt64) -> Bool {
@@ -132,7 +168,8 @@ final class VideoEncoderVT {
         return started && sessionGeneration == value
     }
 
-    private func createSessionLocked(w: Int32, h: Int32) -> VTCompressionSession? {
+    private func createSessionLocked(w: Int32, h: Int32) ->
+        (session: VTCompressionSession?, retired: VTCompressionSession?) {
         var s: VTCompressionSession?
         let rc = VTCompressionSessionCreate(
             allocator: nil, width: w, height: h, codecType: kCMVideoCodecType_H264,
@@ -140,7 +177,7 @@ final class VideoEncoderVT {
             outputCallback: nil, refcon: nil, compressionSessionOut: &s)
         guard rc == noErr, let sess = s else {
             IOSAvailability.logDebug("h264 session create failed status=\(rc) size=\(w)x\(h)")
-            return nil
+            return (nil, nil)
         }
         VTSessionSetProperty(sess, key: kVTCompressionPropertyKey_RealTime,
                              value: kCFBooleanTrue)
@@ -157,11 +194,10 @@ final class VideoEncoderVT {
         let prepare = VTCompressionSessionPrepareToEncodeFrames(sess)
         guard prepare == noErr else {
             IOSAvailability.logDebug("h264 session prepare failed status=\(prepare)")
-            VTCompressionSessionInvalidate(sess)
-            return nil
+            return (nil, sess)
         }
         IOSAvailability.logDebug("h264 session ready size=\(w)x\(h)")
-        return sess
+        return (sess, nil)
     }
 
     private func markTerminalFailure(_ state: String) {

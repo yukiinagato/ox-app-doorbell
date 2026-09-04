@@ -34,8 +34,13 @@ network loss。
 
 Android 的 process 內復原無法處理所有 force-stop。Windows watchdog 已實作，但仍待 elevated VM/實機
 驗證。Windows safe mode 保留 Core/ringer/SOS/control/real-PJSIP audio，停用 custom visual/animation/
-H.264；有 JPEG source 時使用 bounded low-resolution MJPEG。modern iOS 依賴 supervised SAM 與 runtime
-supervisor，簽署期限也必須列入維運。iOS 5 safe mode 保留 Core/MiniSIP audio/ringer/SOS/control，停用
+H.264；有 JPEG source 時使用 bounded low-resolution MJPEG。modern iOS 僅在 foreground 由 background queue
+發送 bounded main-thread probe。連續三次約五秒失敗會記錄 `main_run_loop_stall_3x5s`；若實測 Guided Access
+啟用，便以 `SIGABRT` 結束 process，讓 supervised kiosk 帶著 crash evidence 重新拉起。sentinel 在 background
+disarm。依 Apple TN2448，`UIAccessibility.isGuidedAccessEnabled` 可量測 Guided Access 與 Single App
+Mode；client 監聽其狀態變更通知、在 launch 兩秒後再次檢查，並維持有界的十秒複測。`auto` 保留已設定的
+helper mode，量測 active 時續期短 maintenance lease；只有量測 inactive 時 helper supervision 才是 fallback。
+其 modern launcher 仍是獨立 qualification gate。簽署期限也必須列入維運。iOS 5 safe mode 保留 Core/MiniSIP audio/ringer/SOS/control，停用
 H.264 ingest/decode 與 custom visual；設定存在時 direct playback bounded low-resolution HTTP(S) MJPEG/
 snapshot，否則回報 audio-only。JPEG 不 forward 到 Core。本機 crash/OOM safe mode 連續健康運行 5 分鐘
 後自動解除，並在目前 process 恢復實測 media capability；root helper 仍回報 safe mode 時，以 helper 判斷

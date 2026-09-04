@@ -422,6 +422,11 @@ config apply, the platform client sends the fixed local `MODE <value>` command a
 status; the helper atomically persists that mode for helper/OS restart. No generic command or argv
 is derived from configuration.
 
+Modern iOS defaults its local `boot.json` `keepalive_helper` to `off`. An opted-in `auto` keeps the
+configured helper mode, but renews a short maintenance lease while measured Guided Access or
+Single App Mode is active; helper supervision is a fallback only while that measurement is
+inactive. It does not replace the supervised kiosk restart path with an unqualified launcher.
+
 ## One administrator password, announcements, unlock, and appearance
 
 `admin.password_hash` is the single administrator credential for the whole cluster: the same

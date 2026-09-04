@@ -1,7 +1,7 @@
 #import <UIKit/UIKit.h>
 
-// Builds the static image sampled by frosted dashboard plates. The GPU path is
-// attempted first; a bounded CPU implementation produces the same contract.
+// Builds the static image sampled by frosted dashboard plates. Small radii use
+// GPU sampling; large radii use the bounded dense CPU implementation.
 @interface DBFrostedBlur : NSObject
 + (UIImage *)blurredImage:(UIImage *)image radius:(NSUInteger)radius usedGPU:(BOOL *)usedGPU;
 @end

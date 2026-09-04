@@ -1,7 +1,10 @@
 #import <CoreGraphics/CoreGraphics.h>
 #import <Foundation/Foundation.h>
 
+#include <stdlib.h>
+
 #import "DBBackdropCompositor.h"
+#import "DBPixelRows.h"
 #import "DBUiTheme.h"
 
 static void require(BOOL condition, NSString *message) {
@@ -41,6 +44,42 @@ static CGImageRef newSplitImage(size_t side) CF_RETURNS_RETAINED {
   CGImageRef out = CGBitmapContextCreateImage(ctx);
   CGContextRelease(ctx);
   return out;
+}
+
+static void freeFixturePixels(void *info, const void *data, size_t size) {
+  (void)info;
+  (void)size;
+  free((void *)data);
+}
+
+// CGImage data providers define scanline zero as the top row. This fixture is
+// deliberately raw data rather than a bitmap CGContext, so it cannot repeat a
+// source-context coordinate-system mistake in the compositor.
+static CGImageRef newTopWhiteBottomBlackFixture(void) CF_RETURNS_RETAINED {
+  const size_t width = 64, height = 64, rowBytes = width * 4;
+  unsigned char *pixels = (unsigned char *)malloc(height * rowBytes);
+  if (pixels == NULL) return NULL;
+  for (size_t y = 0; y < height; y++) {
+    unsigned char value = y < height / 2 ? 255 : 0;
+    for (size_t x = 0; x < width; x++) {
+      unsigned char *pixel = pixels + y * rowBytes + x * 4;
+      pixel[0] = value;
+      pixel[1] = value;
+      pixel[2] = value;
+      pixel[3] = 255;
+    }
+  }
+  CGColorSpaceRef space = CGColorSpaceCreateDeviceRGB();
+  CGDataProviderRef provider = CGDataProviderCreateWithData(
+      NULL, pixels, height * rowBytes, freeFixturePixels);
+  CGImageRef image = provider ? CGImageCreate(
+      width, height, 8, 32, rowBytes, space,
+      kCGBitmapByteOrder32Big | kCGImageAlphaPremultipliedLast,
+      provider, NULL, false, kCGRenderingIntentDefault) : NULL;
+  if (provider) CGDataProviderRelease(provider);
+  else free(pixels);
+  CGColorSpaceRelease(space);
+  return image;
 }
 
 static BOOL near(CGFloat value, CGFloat want, CGFloat tolerance) {
@@ -107,7 +146,7 @@ int main(void) {
     // opposite origin. Getting this wrong renders the wallpaper upside down, so
     // a source whose top half is white must come back with its top half bright.
     // A square view is used so aspect fill crops nothing.
-    split = newSplitImage(64);
+    split = newTopWhiteBottomBlackFixture();
     backdrop = [DBBackdropCompositor newBackdropFromImage:split
                                                  viewSize:CGSizeMake(256, 256)];
     require(backdrop != NULL, @"a square view composites");
@@ -130,6 +169,19 @@ int main(void) {
     CGImageRelease(bottom);
     CGImageRelease(backdrop);
     CGImageRelease(split);
+
+    // glReadPixels returns bottom-to-top rows. The GPU path reverses those
+    // rows before DBImageFromPixels assigns UIImageOrientationUp, so its
+    // output matches the CPU blur and the upright backdrop.
+    unsigned char gpuReadback[] = {
+      0, 0, 0, 255, 0, 0, 0, 255,
+      255, 255, 255, 255, 255, 255, 255, 255,
+    };
+    DBFlipPixelRows(gpuReadback, 2, 2);
+    require(gpuReadback[0] == 255 && gpuReadback[4] == 255,
+            @"GPU readback restores the white top row before UIImage creation");
+    require(gpuReadback[8] == 0 && gpuReadback[12] == 0,
+            @"GPU readback restores the black bottom row before UIImage creation");
 
     // --- The bounded bitmap. ---
     CGSize prepared = [DBBackdropCompositor preparedSizeForViewSize:CGSizeMake(1024, 768)];

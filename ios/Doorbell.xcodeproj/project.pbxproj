@@ -50,6 +50,8 @@
 		FB0000000000000000000033 /* indoor_update.mp3 in Resources */ = {isa = PBXBuildFile; fileRef = FA000000000000000000001B /* indoor_update.mp3 */; };
 		FB0000000000000000000034 /* title_display.mp3 in Resources */ = {isa = PBXBuildFile; fileRef = FA000000000000000000001C /* title_display.mp3 */; };
 		FB0000000000000000000035 /* RuntimeSupervisor.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA000000000000000000001D /* RuntimeSupervisor.swift */; };
+		AF0000000000000000000001 /* KeepaliveClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF0000000000000000000002 /* KeepaliveClient.swift */; };
+		AF0000000000000000000004 /* MainRunLoopHangSentinel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF0000000000000000000005 /* MainRunLoopHangSentinel.swift */; };
 		FB0000000000000000000036 /* MonitorViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA000000000000000000001E /* MonitorViewController.swift */; };
 		FB000000000000000000003B /* AdaptiveH264MjpegPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000024 /* AdaptiveH264MjpegPlayer.swift */; };
 		FB0000000000000000000037 /* UIStyleApplier.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA000000000000000000001F /* UIStyleApplier.swift */; };
@@ -91,6 +93,8 @@
 		F9000000000000000000002B /* CameraFeeder.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA000000000000000000000C /* CameraFeeder.swift */; };
 		F9000000000000000000002C /* VideoEncoderVT.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA000000000000000000000D /* VideoEncoderVT.swift */; };
 		F90000000000000000000035 /* RuntimeSupervisor.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA000000000000000000001D /* RuntimeSupervisor.swift */; };
+		AF0000000000000000000003 /* KeepaliveClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF0000000000000000000002 /* KeepaliveClient.swift */; };
+		AF0000000000000000000006 /* MainRunLoopHangSentinel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF0000000000000000000005 /* MainRunLoopHangSentinel.swift */; };
 		F90000000000000000000036 /* MonitorViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA000000000000000000001E /* MonitorViewController.swift */; };
 		F9000000000000000000003A /* AdaptiveH264MjpegPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000024 /* AdaptiveH264MjpegPlayer.swift */; };
 		F90000000000000000000037 /* UIStyleApplier.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA000000000000000000001F /* UIStyleApplier.swift */; };
@@ -201,6 +205,8 @@
 		FA000000000000000000001B /* indoor_update.mp3 */ = {isa = PBXFileReference; lastKnownFileType = audio.mp3; path = indoor_update.mp3; sourceTree = "<group>"; };
 		FA000000000000000000001C /* title_display.mp3 */ = {isa = PBXFileReference; lastKnownFileType = audio.mp3; path = title_display.mp3; sourceTree = "<group>"; };
 		FA000000000000000000001D /* RuntimeSupervisor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RuntimeSupervisor.swift; sourceTree = "<group>"; };
+		AF0000000000000000000002 /* KeepaliveClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeepaliveClient.swift; sourceTree = "<group>"; };
+		AF0000000000000000000005 /* MainRunLoopHangSentinel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainRunLoopHangSentinel.swift; sourceTree = "<group>"; };
 		FA000000000000000000001E /* MonitorViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MonitorViewController.swift; sourceTree = "<group>"; };
 		FA000000000000000000001F /* UIStyleApplier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UIStyleApplier.swift; sourceTree = "<group>"; };
 		FA0000000000000000000020 /* IOSAvailability.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IOSAvailability.swift; sourceTree = "<group>"; };
@@ -296,6 +302,8 @@
 				FA0000000000000000000028 /* PairingScannerViewController.swift */,
 				FA0000000000000000000002 /* CoreBridge.swift */,
 				FA000000000000000000001D /* RuntimeSupervisor.swift */,
+				AF0000000000000000000002 /* KeepaliveClient.swift */,
+				AF0000000000000000000005 /* MainRunLoopHangSentinel.swift */,
 				FA000000000000000000001E /* MonitorViewController.swift */,
 				FA000000000000000000001F /* UIStyleApplier.swift */,
 				FA0000000000000000000020 /* IOSAvailability.swift */,
@@ -655,6 +663,8 @@
 				FB0000000000000000000027 /* AdminPinViewController.swift in Sources */,
 				FB0000000000000000000021 /* CoreBridge.swift in Sources */,
 				FB0000000000000000000035 /* RuntimeSupervisor.swift in Sources */,
+				AF0000000000000000000001 /* KeepaliveClient.swift in Sources */,
+				AF0000000000000000000004 /* MainRunLoopHangSentinel.swift in Sources */,
 				FB0000000000000000000036 /* MonitorViewController.swift in Sources */,
 				FB000000000000000000003B /* AdaptiveH264MjpegPlayer.swift in Sources */,
 				FB0000000000000000000037 /* UIStyleApplier.swift in Sources */,
@@ -737,6 +747,8 @@
 				F90000000000000000000027 /* AdminPinViewController.swift in Sources */,
 				F90000000000000000000021 /* CoreBridge.swift in Sources */,
 				F90000000000000000000035 /* RuntimeSupervisor.swift in Sources */,
+				AF0000000000000000000003 /* KeepaliveClient.swift in Sources */,
+				AF0000000000000000000006 /* MainRunLoopHangSentinel.swift in Sources */,
 				F90000000000000000000036 /* MonitorViewController.swift in Sources */,
 				F9000000000000000000003A /* AdaptiveH264MjpegPlayer.swift in Sources */,
 				F90000000000000000000037 /* UIStyleApplier.swift in Sources */,
