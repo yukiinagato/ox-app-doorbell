@@ -178,19 +178,25 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Slider">
-                        <Grid Background="Transparent">
+                        <Grid Margin="5" Background="Transparent">
+                            <Border IsHitTestVisible="False" Background="#24000000"
+                                    CornerRadius="24"/>
+                            <Border IsHitTestVisible="False" Background="#14FFFFFF"
+                                    BorderBrush="#2EFFFFFF" BorderThickness="1"
+                                    CornerRadius="24"/>
                             <Track x:Name="PART_Track">
                                 <Track.Thumb>
-                                    <Thumb Width="52" Cursor="Hand">
+                                    <Thumb Width="48" Height="48" Cursor="Hand">
                                         <Thumb.Template>
                                             <ControlTemplate TargetType="Thumb">
-                                                <Border Background="#FFFFFF" CornerRadius="12"
-                                                        Margin="3" Opacity="0.92">
+                                                <Border Background="#FFF7F5" CornerRadius="24"
+                                                        Margin="1" BorderBrush="#4D6B1410"
+                                                        BorderThickness="1">
                                                     <Viewbox Width="24" Height="24"
                                                              HorizontalAlignment="Center"
                                                              VerticalAlignment="Center">
                                                         <Path Data="{StaticResource IconChevronsRight}"
-                                                              Stroke="#8C0D0A" StrokeThickness="2"
+                                                              Stroke="#981D17" StrokeThickness="2"
                                                               StrokeStartLineCap="Round"
                                                               StrokeEndLineCap="Round"
                                                               StrokeLineJoin="Round"/>

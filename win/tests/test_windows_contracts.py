@@ -1138,6 +1138,10 @@ class WindowsContracts(unittest.TestCase):
         # Five-second stills come from the door station's own snapshot endpoint.
         self.assertIn("TimeSpan.FromSeconds(5)", read("win/DoorbellApp/MainWindow.xaml.cs"))
         self.assertIn('"/snapshot.jpg"', dashboard)
+        # A one-row UniformGrid occupies the viewport; tiles retain their media/caption height.
+        tile = dashboard[dashboard.index("private Border BuildDoorTile"):
+                         dashboard.index("private void OnDoorTileClick")]
+        self.assertIn("VerticalAlignment = VerticalAlignment.Top", tile)
         # Core version and app version are both shown, with the battery in the same line.
         self.assertIn('Texts.T("version.line", label, _coreVersion, _appVersion)', shell)
         self.assertIn('line += " · " + _batteryPct + "%"', shell)
@@ -1265,6 +1269,15 @@ class WindowsContracts(unittest.TestCase):
         icon = window[window.index("private Button MakePurposeButton"):
                       window.index("private void OnPurposeClick")]
         self.assertEqual(icon.count("VerticalAlignment = VerticalAlignment.Center"), 2)
+
+    def test_sos_slider_uses_a_contained_track_and_round_thumb(self):
+        app = read("win/DoorbellApp/App.xaml")
+        window = read("win/DoorbellApp/MainWindow.xaml")
+        self.assertIn('x:Key="SosTrack"', app)
+        self.assertIn('CornerRadius="24"', app)
+        self.assertIn('Thumb Width="48" Height="48"', app)
+        self.assertIn('x:Name="SosButton"', window)
+        self.assertIn('CornerRadius="28"', window)
 
     def test_incoming_screen_controls_notice_chip_and_debug_line(self):
         xaml = read("win/DoorbellApp/MainWindow.xaml")

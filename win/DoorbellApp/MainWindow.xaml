@@ -249,12 +249,13 @@
             <!-- Slide-to-trigger SOS. The semantic id "sos.trigger" keeps addressing this border,
                  so an administrator's style override still applies to the visible control. -->
             <Border x:Name="SosButton" Visibility="Collapsed"
-                    Background="{DynamicResource Danger}" CornerRadius="16"
+                    Background="{DynamicResource Danger}" CornerRadius="28"
+                    BorderBrush="#33FFFFFF" BorderThickness="1"
                     HorizontalAlignment="Right" VerticalAlignment="Bottom"
-                    Margin="0,0,20,16" Width="238" Height="62">
+                    Margin="0,0,20,16" Width="248" Height="62">
                 <Grid>
                     <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center"
-                                IsHitTestVisible="False" Margin="60,6,12,6">
+                                IsHitTestVisible="False" Margin="62,6,16,6">
                         <TextBlock x:Name="SosText" FontSize="17" FontWeight="Bold"
                                    Foreground="{DynamicResource OnDanger}"
                                    HorizontalAlignment="Center"/>
