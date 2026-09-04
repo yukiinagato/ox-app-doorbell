@@ -71,7 +71,9 @@ final class RuntimeSupervisor {
 
     func start() {
         guard heartbeat == nil else {
+            #if os(iOS)
             refreshHelperPolicy()
+            #endif
             noteMainThreadResponsive()
             publishCapabilities()
             publishRuntime()
@@ -248,7 +250,9 @@ final class RuntimeSupervisor {
 
     func updateAudioSessionReady(_ value: Bool) {
         audioSessionReady = value
+        #if os(iOS)
         refreshHelperPolicy()
+        #endif
         publishCapabilities()
         publishRuntime()
     }
@@ -258,7 +262,9 @@ final class RuntimeSupervisor {
             DispatchQueue.main.async { [weak self] in self?.configDidChange() }
             return
         }
+        #if os(iOS)
         refreshHelperPolicy()
+        #endif
         publishCapabilities()
         publishRuntime()
     }
