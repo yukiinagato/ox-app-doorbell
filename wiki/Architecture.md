@@ -40,6 +40,19 @@ UI events flow to the shells as JSON callbacks (`{"t":"chime",...}` etc.).
 Configuration is a flat Last-Writer-Wins Map of "dot-path key → JSON value". Timestamps use HLC (Hybrid Logical Clock) — causal ordering survives even a device with a broken wall clock. Writes on any node resolve deterministically, and all nodes converge to the same result. The admin UI and in-app settings are all just writes into this CRDT. Secrets (`*_ref: "secret:…"`) replicate only the reference; the values live in each device's secure store.
 Implementation: `core/src/crdt/lww_map.cpp` (with property tests).
 
+The HTTP Admin endpoints and native `db_platform_v2` callers use the same Core write path. A native
+settings screen therefore receives the same key validation, resolved semantic-UI contrast warning,
+and result document as Admin rather than calling a loopback HTTP server. A batch contains at most
+256 unique set/delete operations and is one commit only if every operation validates; there is no
+partial fallback. The C ABI also exposes backward call-history paging, the Core's accepted IANA
+time-zone list, persisted microphone mute, and the configured door-unlock action.
+
+`admin.password_hash` replicates a salted BLAKE2b-256 digest, giving Web Admin and native settings
+one cluster credential without replicating plaintext. The rate-limit is not replicated: five bad
+guesses create a ten-minute in-memory lockout shared by Web and ABI checks on the *same Core node*.
+Deployments must not treat it as a fleet-wide brute-force throttle. An unset credential is folded
+into the published SOS policy so it cannot make an active alarm impossible to clear.
+
 ## Event replication and idempotency
 
 Events (press / motion / reply / offline / emergency / visitor_lang …) are replicated by gossip with `(origin_node, origin_seq)` as their ID — receiving the same event any number of times is idempotent. The response state for a press (who claimed it, the Telegram msg_id, which reply answered it) is LWW-merged as notify, so "answered" is consistent across all devices. Persistence is SQLite (`core/src/store/`).
@@ -74,7 +87,17 @@ Camera capture is done by the shell (or inside the core on Windows) and enters t
 ```
 
 - H.264 encoding uses the platform's hardware (MediaCodec / VideoToolbox / Media Foundation). The core just receives AnnexB, boxes it into fMP4, and serves it (an in-house muxer, no external dependencies).
-- `/stream.mp4` spins up the encoder only while subscribers are attached (`db_core_video_encoder_wanted`). go2rtc can consume it with `#video=copy`, eliminating transcoding on the HA side.
+- `/stream.mp4` spins up the encoder only while subscribers are attached (`db_core_video_encoder_wanted`); it is deliberately not pre-warmed. go2rtc can consume it with `#video=copy`, eliminating transcoding on the HA side.
+- Each H.264 access unit becomes an fMP4 fragment immediately rather than waiting for the next
+  frame to establish its duration. The track retains one newest fragment per stream; a slow reader
+  skips intervening fragments and Core counts those skips. Its private `dbts` box carries capture
+  timestamps for the compatibility player's live-edge calculation, while generic fMP4 players
+  safely ignore it.
+- The iOS 5 player keeps MJPEG visible until H.264 has sustained display, then tightens a bounded
+  live-edge gate only after warm-up frames establish that device's latency. It never drops the
+  first or only frame, disables age-based dropping without a trustworthy server clock, and falls
+  back to MJPEG when display stalls. This is a compatibility renderer behavior, not a universal
+  latency promise.
 - For web calls, browser→door-station video uses `getUserMedia → canvas → POST JPEG to /call-frame` ([Decisions](Decisions)).
 
 ## Asset distribution

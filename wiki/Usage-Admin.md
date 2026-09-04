@@ -22,7 +22,36 @@ The admin UI is served by every native node at `http://<device>:47180/admin/`. C
 | Purposes | Editing visitor purpose buttons (labels, icons, ordering) |
 | System | Panel tokens, issuing enrollment PINs, config export/import, logs, raw JSON |
 
+## Shared administrator access
+
+The password set through any current Admin or native settings surface becomes the replicated
+cluster credential; only its salted digest is stored. Changing it invalidates Admin sessions on the
+node that changes it. Five failed checks trigger a ten-minute lockout shared by that node's Web
+login and device-side settings entry. This counter is not replicated to other nodes, so it is not a
+cluster-wide rate limiter. If no password has ever been set, Core does not require one to clear an
+active SOS alarm.
+
 ## Frequently used recipes
+
+### Publish an announcement, expose unlock, or pause a visitor purpose
+
+Use the door's announcement control for a door-specific message, or the global announcement for a
+cluster-wide default; the door message wins without deleting the global one. Announcements may have
+an expiry, and the preset list holds up to eight reusable messages. The door's unlock control is
+shown by default only when its command (or a SIP DTMF `ha_command`) is configured. If pressed
+without a configured action, Core returns an explicit failure rather than a false success.
+
+In the Purposes tab, turn a purpose off to remove it from new visitor choices while retaining its
+labels, icon, order, history, and existing rule references. A stale door station can still submit
+the old button; its press becomes a generic ring, so a visitor is not blocked by propagation delay.
+
+### Choose a readable fleet theme
+
+Choose light, dark, system-following, or scheduled appearance. Core resolves scheduled appearance
+in the cluster time zone and supplies automatic ink and call-button colors per semantic region.
+When a background image makes the pixels under text device-specific, shells may sample locally;
+explicit regional overrides still win. A low-contrast color is saved with a measured WCAG warning,
+not silently changed or rejected.
 
 ### Auto "leave the package" for parcel delivery only (no phone ringing)
 

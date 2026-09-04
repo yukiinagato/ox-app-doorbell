@@ -111,6 +111,48 @@ dispatch or Push-provider acceptance), not proof that a person saw an alert.
 Native clients separately report per-channel presentation, permission, expiry,
 and limitation results in runtime status.
 
+## Current control and media behavior
+
+The current Core exposes one configuration-write implementation to both HTTP
+Admin and native shells. Native writes use the C ABI rather than a loopback
+request, but retain the same validation, atomic batch semantics, result
+document, and advisory contrast warnings. A batch contains at most 256 unique
+set/delete operations and commits only when every operation validates. This
+keeps a device-side settings screen from becoming a second, subtly different
+configuration path.
+
+There is one administrator password for the cluster. Its salted BLAKE2b-256
+digest, not the password, is replicated at `admin.password_hash`; a successful
+password change invalidates sessions on the node that performs it. The five
+failed-attempt lockout is deliberately narrower: it is one in-memory counter
+shared by the Web login and native ABI checks **on that Core node**, for ten
+minutes. It is not a replicated, cluster-wide lockout. An unset password never
+prevents a household from clearing an active SOS alarm.
+
+Administrators can publish an announcement cluster-wide or override it per
+door, keep up to eight reusable announcement presets, and expose a door-unlock
+control only when an unlock command is configured (or explicitly choose to show
+it). Unlock uses the same configured `ha_command` path as a SIP DTMF feature
+code and returns an explicit `unlock_not_configured` result rather than
+pretending success. A visitor purpose can also be disabled without deleting its
+wording, icon, order, history, or rules; a stale station that submits that
+purpose still rings, but as a generic call.
+
+The Core resolves scheduled appearance in the configured cluster time zone and
+publishes automatic ink/accent choices by semantic screen region. Shells may
+sample an image locally where its geometry matters, while explicit per-region
+overrides take precedence. Low WCAG contrast is reported as a measured warning,
+not silently rewritten or rejected.
+
+The H.264 path is intentionally live rather than a growing buffer: each fMP4
+fragment is emitted as soon as its access unit arrives, and a lagging subscriber
+skips to the newest fragment. Encoding starts only when a subscriber is present;
+it is not pre-warmed. On the iOS 5 compatibility player, MJPEG remains visible
+until H.264 proves a sustained display rate, then an adaptive live-edge gate
+learns a bounded device-specific latency and falls back to MJPEG on a display
+stall. This avoids replacing usable video with a frozen H.264 frame on the
+original iPad while preserving a low-latency path where it works.
+
 ## Build and test
 
 ```sh

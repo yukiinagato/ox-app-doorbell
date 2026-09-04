@@ -24,6 +24,10 @@ Web 手動応答は一つの `dialog_id` owner に限定され、recovery は ri
 宅配員は「宅配便」1 タップで押鈴まで完了します。用件は室内機・TV・Telegram・HA・管理画面の
 すべてに表示され、ルールの分岐条件 (`when.purposes`) にも使えます。→ [Usage-Visitors](Usage-Visitors-ja)
 
+管理者は `visit_purposes.<id>.enabled` を off にしても、ラベル、icon、並び順、履歴、rule を削除せずに
+用件を一時停止できます。off の用件は新しい訪客に提示されず、呼出にも付けられません。更新未受信の
+門口機が古いボタンを送っても、Core は訪客の押鈴を拒否せず、用件なしの汎用呼出にします。
+
 ## 訪客言語切替
 
 門口機に言語ボタン (日/英/中 — `ui.languages` で選択) を表示。訪客が切り替えると
@@ -35,6 +39,10 @@ Web 手動応答は一つの `dialog_id` owner に限定され、recovery は ri
 Asterisk 非経由の直接 SIP (UDP 47190) で、(1) 音声のみ、(2) 門口映像 + 双方向音声、
 (3) 室内外双方向映像 (対称 MJPEG) の三態。電話に出た後でも室内機の「応答」で
 電話腿を切って室内対講に**接管**できます。PBX が落ちても動きます。→ [Architecture](Architecture-ja)
+
+実装済みの応答 shell では Core 経由で microphone mute も操作できます。設定は通話をまたいで保持され、
+media が有効になった時に再適用されます。SIP backend のない development/display build でも状態は記録
+されますが、それで通話が利用可能になるわけではありません。
 
 ## 監聴 (モニタ)
 
@@ -90,6 +98,13 @@ subscription は CRDT 内で XChaCha20-Poly1305 seal され、plaintext config/e
 HW エンコード fMP4 (`/stream.mp4`) を配信 — 通話画質が滑らかになり、HA 側の転码も不要に
 なります (go2rtc `#video=copy`)。購読者ゼロならエンコーダは止まる省電力設計。→ [Decisions](Decisions-ja)
 
+live fMP4 track は access unit ごとに直ちに fragment を出し、遅い subscriber には最新 fragment だけを
+残すため、遅延を貯めずに追い付きます。encoder は subscriber が付いてから起動し、pre-warm はしません。
+iOS 5 compatibility player は H.264 が実際に連続表示できるまで MJPEG を前面に残します。その後、端末の
+displayed frame から範囲を限定した live-edge を学習し、新しい frame が待っている時だけ古い frame を
+skip、表示 stall 時には MJPEG に戻します。これは host test と限定的な iPad 1 smoke evidence を持つ path
+であり、一般的な hardware certification の主張ではありません。
+
 ## HomeKit 連携
 
 go2rtc + HA の HomeKit Bridge 経由で、iPhone の家庭 App に門鈴通知とライブ映像。
@@ -101,6 +116,11 @@ go2rtc + HA の HomeKit Bridge 経由で、iPhone の家庭 App に門鈴通知�
 背景色 / 背景画像・文言 (i18n_overrides) ・用件・クイック返信・カスタム音声を
 室内機や管理画面から変更すると、CRDT で全端末にミリ秒同期。夜間モード (減光 + 赤色化)、
 スクリーンセーバ、焼付対策の pixel shift も設定できます。
+
+Core は cluster time zone で `auto_system`、`auto_schedule`、light、dark の外観を解決し、semantic region
+ごとに自動の text/accent 色を配信します。背景画像で文字の背後の pixel が端末ごとに異なる場合は shell が
+local に sample できますが、明示的な region override が優先です。低 contrast は保存を拒否せず、測定済み
+WCAG warning として返ります。
 
 端末別 semantic size/color override は renderer manifest の制限内で適用します。native client は
 top-level `ui_manifest`、配信中 Core は別の local `web_ui.manifest` を公開します。last-valid native peer

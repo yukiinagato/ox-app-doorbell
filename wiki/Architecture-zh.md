@@ -49,6 +49,17 @@ native client 透過 [doorbell.h](https://github.com/yukiinagato/ox-app-doorbell
 秘密（`*_ref: "secret:…"`）只复制引用，实体放在各设备的 secure store 中。
 实现: `core/src/crdt/lww_map.cpp`（附属性测试）。
 
+HTTP Admin endpoint 与 native `db_platform_v2` caller 使用同一条 Core write path。因此 native settings
+screen 不必调用 loopback HTTP，也能取得和 Admin 相同的 key validation、已解析的 semantic-UI contrast warning
+及 result document。batch 最多包含 256 个互不重复的 set/delete operation，只有所有 operation 都通过
+validation 时才作为一个 commit 写入。C ABI 还公开 backward call-history paging、Core 接受的 IANA time-zone
+list、持久的 microphone mute，以及已配置的 door-unlock action。
+
+`admin.password_hash` 复制 salted BLAKE2b-256 digest，让 Web Admin 和 native settings 使用同一个
+credential 而不复制 plaintext。但 rate-limit 不会复制：五次 bad guess 只会在**同一个 Core node**的 Web 与
+ABI check 之间创建十分钟的 in-memory lockout。部署时不可把它当作 fleet-wide 的 brute-force throttle。
+unset credential 会被纳入 published SOS policy，避免 active SOS 无法 clear。
+
 schema-v2 call lifecycle 以 `(door, call_id, stage_revision)` 為範圍。訪客只能在 ringing 時 cancel；
 進入 `answered` / `in_call` 後，hangup 才會發出 `call_ended`。Web 手動接聽以一個隨機
 `dialog_id` claim 並取得 opaque `dialog_owner`，競爭失敗的 SIP dialog 必須終止。restart 時 ringing
@@ -91,8 +102,14 @@ Core 只發出一次冪等的全域 cancel。
 
 - H.264 的编码用平台的 HW (MediaCodec / VideoToolbox / Media Foundation)。
   核心只是接收 AnnexB、装箱成 fMP4 再分发（自制 muxer，无外部依赖）。
-- `/stream.mp4` 只在有订阅者时才转编码器 (`db_core_video_encoder_wanted`)。
+- `/stream.mp4` 只在有订阅者时才转编码器 (`db_core_video_encoder_wanted`)，并且刻意不 pre-warm。
   go2rtc 可以用 `#video=copy` 接收，HA 侧无需转码。
+- 每个 H.264 access unit 都立即成为 fMP4 fragment，不等待下一 frame 再确定 duration。track 每条 stream
+  只保留一个最新 fragment；慢 reader 会跳过中间 fragment，Core 会记录跳过次数。private `dbts` box 携带
+  compatibility player 计算 live-edge 所需的 capture timestamp，generic fMP4 player 可安全忽略它。
+- iOS 5 player 在 H.264 持续显示前保留 MJPEG；只在 warm-up frame 得到该设备的 latency 后才收紧有界的
+  live-edge gate。它绝不会丢弃 first/only frame，在没有可信 server clock 时禁用 age drop，并在 display
+  stall 时回退 MJPEG。这是 compatibility renderer 的行为，不是 universal latency promise。
 - 网页通话中浏览器→门口机的影像不是 WebRTC，而是「getUserMedia → canvas → 把 JPEG
   POST 到 `/call-frame`」这一成熟老办法（[决策记录](Decisions-zh)）。
 
