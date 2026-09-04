@@ -16,18 +16,21 @@ struct BootConfig {
     var debugScreenshots = false
     /// Logs a periodic summary of main-thread cost per home-page section. Off by default.
     var debugTimings = false
+    /// The optional root helper is never assumed present. Modern iOS defaults to off until an
+    /// operator has provisioned and qualified the matching fixed launcher on this device.
+    var keepaliveHelperPolicy = "off"
 
     #if os(tvOS)
     private static let defaultJson =
         "{ \"name\": \"doorbell-tv\", \"role\": \"indoor_panel\", \"door\": \"\", " +
         "\"listen_port\": 47172, \"http_port\": 47180, \"ui_lang\": \"ja\", " +
-        "\"kiosk\": false, \"setup_complete\": true }"
+        "\"kiosk\": false, \"keepalive_helper\": \"off\", \"setup_complete\": true }"
     private static let defaultsKey = "boot_json"
     #else
     private static let defaultJson =
         "{ \"name\": \"doorbell-ios\", \"role\": \"door_station\", \"door\": \"\", " +
         "\"listen_port\": 47172, \"http_port\": 47180, \"ui_lang\": \"ja\", " +
-        "\"kiosk\": false, \"setup_complete\": false }"
+        "\"kiosk\": false, \"keepalive_helper\": \"off\", \"setup_complete\": false }"
     #endif
 
     static func dataDir() -> String {
@@ -93,6 +96,10 @@ struct BootConfig {
             if let complete = d["setup_complete"] as? Bool { setupComplete = complete }
             c.debugScreenshots = d["debug_screenshots"] as? Bool ?? false
             c.debugTimings = d["debug_timings"] as? Bool ?? false
+            if let policy = d["keepalive_helper"] as? String,
+               policy == "off" || policy == "auto" || policy == "on" {
+                c.keepaliveHelperPolicy = policy
+            }
         }
         c.suggestedDoor = validDoor(c.door) ? c.door : suggestedDoorId()
         c.setupRequired = !setupComplete || !validRole(c.role) ||

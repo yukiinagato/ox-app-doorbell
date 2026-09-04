@@ -1390,9 +1390,15 @@ final class MainViewController: UIViewController {
                 setVisitorLang(ConfigUtil.evStr(ev, "lang"))
             }
         case "asset_ready":
-            // The theme picture may be the asset that just finished arriving; re-applying is a
-            // no-op unless it is, because the background view remembers what it already holds.
-            if themeBg.image == nil { scheduleHomeRefresh() }
+            // A replacement can arrive while the old picture is still on screen. Match the
+            // effective configured hash rather than image == nil so that arrival retries the
+            // replacement without refreshing for unrelated assets.
+            let hash = ConfigUtil.evStr(ev, "hash")
+            let configured = ConfigUtil.str(displayDoc, "theme.bg_image")
+                ?? (!nodeId.isEmpty
+                    ? ConfigUtil.str(cfg, "devices.\(nodeId).local.theme.bg_image") : nil)
+                ?? ConfigUtil.str(cfg, "display.theme.bg_image")
+            if !hash.isEmpty, hash == configured { scheduleHomeRefresh() }
         case "display":
             applyDisplayValues(ev)
             scheduleHomeRefresh()

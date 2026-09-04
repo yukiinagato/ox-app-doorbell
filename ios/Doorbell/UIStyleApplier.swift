@@ -6,18 +6,24 @@ final class UIStyleApplier {
     static let reportChanged = Notification.Name("DoorbellUIStyleReportChanged")
 
     private struct Baseline {
-        let transform: CGAffineTransform
-        let background: UIColor?
-        let validationBackground: UIColor?
-        let foreground: UIColor?
-        let tint: UIColor?
-        let border: CGColor?
-        let borderWidth: CGFloat
-        let radius: CGFloat
-        let fontSize: CGFloat?
+        var transform: CGAffineTransform
+        var background: UIColor?
+        var validationBackground: UIColor?
+        var foreground: UIColor?
+        var tint: UIColor?
+        var border: CGColor?
+        var borderWidth: CGFloat
+        var radius: CGFloat
+        var fontSize: CGFloat?
     }
 
-    private var baselines: [ObjectIdentifier: Baseline] = [:]
+    private struct StyleState {
+        var baseline: Baseline
+        var active = false
+        var lastApplied: Baseline?
+    }
+
+    private var states: [ObjectIdentifier: StyleState] = [:]
     private var minimumSizeConstraints:
         [ObjectIdentifier: (width: NSLayoutConstraint, height: NSLayoutConstraint)] = [:]
     private let safetyIds = Set(["cancel.call", "call.end", "sos.trigger", "sos.cancel",
@@ -62,9 +68,20 @@ final class UIStyleApplier {
                offered: Bool = true) {
         guard offered else { return }
         guard !nodeId.isEmpty else { return }
-        let base = captureBaseline(for: view)
-        let key = "devices.\(nodeId).local.ui.elements.\(semanticId)"
-        let proposed = ConfigUtil.dig(config, key) as? [String: Any]
+        let identity = ObjectIdentifier(view)
+        var state = states[identity] ?? StyleState(baseline: snapshot(of: view))
+        if state.active {
+            rebaseOwnerValues(in: &state, from: view)
+        } else {
+            // With no semantic override the screen owns its colours. Keep this current so a
+            // later override restores the theme the screen actually rendered, not its startup
+            // appearance.
+            state.baseline = snapshot(of: view)
+        }
+        let base = state.baseline
+        let elements = ConfigUtil.dig(config, "devices.\(nodeId).local.ui.elements")
+            as? [String: Any]
+        let proposed = elements?[semanticId] as? [String: Any]
         let style: [String: Any]?
         var source = "default"
         var rejected = false
@@ -91,31 +108,32 @@ final class UIStyleApplier {
         } else {
             style = nil
         }
-        apply(style ?? [:], semanticId: semanticId, to: view)
+        if let style = style {
+            apply(style, baseline: base, semanticId: semanticId, to: view)
+            state.active = true
+            state.lastApplied = snapshot(of: view)
+        } else {
+            if state.active { restore(base, to: view) }
+            state.active = false
+            state.lastApplied = nil
+            enforceSafety(semanticId: semanticId, on: view)
+            ensureMinimumHitTarget(on: view, scale: 1)
+        }
+        states[identity] = state
         record(semanticId: semanticId, source: source, applied: style != nil,
                rejected: rejected, persisted: persisted, error: error)
     }
 
-    private func apply(_ style: [String: Any], semanticId: String, to view: UIView) {
-        let identity = ObjectIdentifier(view)
-        let base = captureBaseline(for: view)
-        view.transform = base.transform
-        view.backgroundColor = base.background
-        view.tintColor = base.tint
-        view.layer.borderColor = base.border
-        view.layer.borderWidth = base.borderWidth
-        view.layer.cornerRadius = base.radius
-        setForeground(base.foreground, on: view)
-        setFontSize(base.fontSize, on: view)
+    private func apply(_ style: [String: Any], baseline base: Baseline, semanticId: String,
+                       to view: UIView) {
+        restore(base, to: view)
 
         var scale = number(style["scale"]) ?? 1
         scale = min(2, max(0.75, scale))
         if safetyIds.contains(semanticId) {
             let smallest = min(view.bounds.width, view.bounds.height)
             if smallest > 0 { scale = max(scale, min(2, 44 / smallest)) }
-            view.alpha = max(view.alpha, 0.8)
-            view.isHidden = false
-            view.isUserInteractionEnabled = true
+            enforceSafety(semanticId: semanticId, on: view)
         }
         view.transform = base.transform.scaledBy(x: CGFloat(scale), y: CGFloat(scale))
 
@@ -132,7 +150,31 @@ final class UIStyleApplier {
         if let radius = number(style["radius"]) {
             view.layer.cornerRadius = CGFloat(min(64, max(0, radius)))
         }
+        ensureMinimumHitTarget(on: view, scale: scale)
+    }
+
+    private func restore(_ base: Baseline, to view: UIView) {
+        view.transform = base.transform
+        view.backgroundColor = base.background
+        view.tintColor = base.tint
+        view.layer.borderColor = base.border
+        view.layer.borderWidth = base.borderWidth
+        view.layer.cornerRadius = base.radius
+        setForeground(base.foreground, on: view)
+        setFontSize(base.fontSize, on: view)
+    }
+
+    private func enforceSafety(semanticId: String, on view: UIView) {
+        if safetyIds.contains(semanticId) {
+            view.alpha = max(view.alpha, 0.8)
+            view.isHidden = false
+            view.isUserInteractionEnabled = true
+        }
+    }
+
+    private func ensureMinimumHitTarget(on view: UIView, scale: Double) {
         if view is UIControl {
+            let identity = ObjectIdentifier(view)
             // UIView transforms also shrink hit testing. Compensate the pre-transform layout
             // whenever an administrator selects scale < 1 so the effective target stays 44pt.
             let minimumHitTarget = CGFloat(scale < 1 ? 44 / scale : 44)
@@ -151,9 +193,7 @@ final class UIStyleApplier {
         }
     }
 
-    private func captureBaseline(for view: UIView) -> Baseline {
-        let identity = ObjectIdentifier(view)
-        if let base = baselines[identity] { return base }
+    private func snapshot(of view: UIView) -> Baseline {
         let foreground: UIColor?
         let fontSize: CGFloat?
         if let button = view as? UIButton {
@@ -166,16 +206,46 @@ final class UIStyleApplier {
             foreground = nil
             fontSize = nil
         }
-        let base = Baseline(transform: view.transform,
-                            background: view.backgroundColor,
-                            validationBackground: effectiveBackground(for: view),
-                            foreground: foreground, tint: view.tintColor,
-                            border: view.layer.borderColor,
-                            borderWidth: view.layer.borderWidth,
-                            radius: view.layer.cornerRadius,
-                            fontSize: fontSize)
-        baselines[identity] = base
-        return base
+        return Baseline(transform: view.transform,
+                        background: view.backgroundColor,
+                        validationBackground: effectiveBackground(for: view),
+                        foreground: foreground, tint: view.tintColor,
+                        border: view.layer.borderColor,
+                        borderWidth: view.layer.borderWidth,
+                        radius: view.layer.cornerRadius,
+                        fontSize: fontSize)
+    }
+
+    private func rebaseOwnerValues(in state: inout StyleState, from view: UIView) {
+        guard let last = state.lastApplied else { return }
+        let current = snapshot(of: view)
+        if current.transform != last.transform { state.baseline.transform = current.transform }
+        if !same(current.background, last.background) {
+            state.baseline.background = current.background
+            state.baseline.validationBackground = current.validationBackground
+        }
+        if !same(current.foreground, last.foreground) { state.baseline.foreground = current.foreground }
+        if !same(current.tint, last.tint) { state.baseline.tint = current.tint }
+        if !same(current.border, last.border) { state.baseline.border = current.border }
+        if current.borderWidth != last.borderWidth { state.baseline.borderWidth = current.borderWidth }
+        if current.radius != last.radius { state.baseline.radius = current.radius }
+        if current.fontSize != last.fontSize { state.baseline.fontSize = current.fontSize }
+    }
+
+    private func same(_ first: UIColor?, _ second: UIColor?) -> Bool {
+        switch (first, second) {
+        case (nil, nil): return true
+        case let (a?, b?): return a.isEqual(b)
+        default: return false
+        }
+    }
+
+    private func same(_ first: CGColor?, _ second: CGColor?) -> Bool {
+        switch (first, second) {
+        case (nil, nil): return true
+        case let (a?, b?): return a == b
+        default: return false
+        }
     }
 
     private func validate(_ style: [String: Any], semanticId: String,

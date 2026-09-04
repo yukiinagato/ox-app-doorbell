@@ -62,6 +62,11 @@ CFLAGS=(-std=c99 -Wall -Wextra -Werror -O2 -I"$MINISIP")
 
 "$CC" -fobjc-arc -Wall -Wextra -Werror -O2 -isysroot "$MACOS_SDK" \
   -I"$REPO_ROOT/ios-kiosk/src/Core" \
+  "$REPO_ROOT/ios-compat/tests/blur_kernel_test.m" \
+  -framework Foundation -o "$OUT/blur_kernel_test"
+
+"$CC" -fobjc-arc -Wall -Wextra -Werror -O2 -isysroot "$MACOS_SDK" \
+  -I"$REPO_ROOT/ios-kiosk/src/Core" \
   "$REPO_ROOT/ios-kiosk/src/Core/DBCallEventTracker.m" \
   "$REPO_ROOT/ios-compat/tests/call_event_tracker_test.m" \
   -framework Foundation -o "$OUT/call_event_tracker_test"
@@ -149,6 +154,7 @@ swiftc \
 "$OUT/fleet_counts_test"
 "$OUT/admin_address_test"
 "$OUT/backdrop_compositor_test"
+"$OUT/blur_kernel_test"
 "$OUT/call_event_tracker_test"
 [[ $MODERN_CALL_TEST -eq 1 ]] && "$OUT/modern_call_revision_test"
 "$OUT/mjpeg_part_assembler_test"
@@ -163,10 +169,12 @@ python3 "$REPO_ROOT/ios-compat/tests/ios9_armv7_profile_test.py"
 python3 "$REPO_ROOT/ios-compat/tests/semantic_ui_contract_test.py"
 python3 "$REPO_ROOT/ios-compat/tests/sos_presentation_contract_test.py"
 python3 "$REPO_ROOT/ios-compat/tests/recovery_safe_mode_contract_test.py"
+python3 "$REPO_ROOT/ios-compat/tests/modern_keepalive_contract_test.py"
 python3 "$REPO_ROOT/ios-compat/tests/native_settings_contract_test.py"
 python3 "$REPO_ROOT/ios-compat/tests/pairing_flow_contract_test.py"
 python3 "$REPO_ROOT/ios-compat/tests/icon_asset_contract_test.py"
 python3 "$REPO_ROOT/ios-compat/tests/pairing_flow_contract_swift_test.py"
+python3 "$REPO_ROOT/ios-compat/tests/frosted_blur_orientation_contract_test.py"
 # Root keepalive helper: daemon behaviour plus the staged-package/installer rails.
 if [[ -n "${DB_SKIP_HELPER_HOST_TESTS:-}" ]]; then
   echo "helper host tests skipped (DB_SKIP_HELPER_HOST_TESTS set; the keepalive-helper job owns them)"

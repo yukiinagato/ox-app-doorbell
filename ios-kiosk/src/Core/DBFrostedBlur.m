@@ -1,4 +1,6 @@
 #import "DBFrostedBlur.h"
+#import "DBBlurKernel.h"
+#import "DBPixelRows.h"
 
 #import <OpenGLES/ES2/gl.h>
 #import <OpenGLES/ES2/glext.h>
@@ -24,6 +26,13 @@ static UIImage *DBImageFromPixels(unsigned char *pixels, size_t width, size_t he
   else free(pixels);
   CGColorSpaceRelease(space);
   return image;
+}
+
+// Both the bitmap CPU path and glReadPixels provide their first row at the
+// bottom. Normalize exactly once before UIImageOrientationUp interprets it.
+static UIImage *DBImageFromBottomUpPixels(unsigned char *pixels, size_t width, size_t height) {
+  DBFlipPixelRows(pixels, width, height);
+  return DBImageFromPixels(pixels, width, height);
 }
 
 static unsigned char *DBCopyPixels(UIImage *image, size_t *outWidth, size_t *outHeight) {
@@ -173,53 +182,18 @@ static UIImage *DBGpuBlur(unsigned char *input, size_t width, size_t height, NSU
     free(output);
     return nil;
   }
-  return DBImageFromPixels(output, width, height);
+  return DBImageFromBottomUpPixels(output, width, height);
 }
 
 static UIImage *DBCpuBlur(unsigned char *input, size_t width, size_t height, NSUInteger radius) {
   size_t count = width * height * 4;
-  unsigned char *horizontal = (unsigned char *)malloc(count);
   unsigned char *output = (unsigned char *)malloc(count);
-  if (!horizontal || !output) {
-    free(horizontal);
+  if (output == NULL) return nil;
+  if (!DBBoxBlurRGBA(input, output, width, height, radius)) {
     free(output);
     return nil;
   }
-  NSUInteger span = radius * 2 + 1;
-  for (size_t y = 0; y < height; y++) {
-    NSUInteger sums[4] = {0,0,0,0};
-    for (NSInteger x = -(NSInteger)radius; x <= (NSInteger)radius; x++) {
-      size_t column = (size_t)MAX(0, MIN((NSInteger)width - 1, x));
-      for (size_t c = 0; c < 4; c++) sums[c] += input[(y * width + column) * 4 + c];
-    }
-    for (size_t x = 0; x < width; x++) {
-      for (size_t c = 0; c < 4; c++) horizontal[(y * width + x) * 4 + c] = sums[c] / span;
-      size_t remove = (size_t)MAX(0, (NSInteger)x - (NSInteger)radius);
-      size_t add = (size_t)MIN((NSInteger)width - 1, (NSInteger)x + (NSInteger)radius + 1);
-      for (size_t c = 0; c < 4; c++) {
-        sums[c] += input[(y * width + add) * 4 + c];
-        sums[c] -= input[(y * width + remove) * 4 + c];
-      }
-    }
-  }
-  for (size_t x = 0; x < width; x++) {
-    NSUInteger sums[4] = {0,0,0,0};
-    for (NSInteger y = -(NSInteger)radius; y <= (NSInteger)radius; y++) {
-      size_t row = (size_t)MAX(0, MIN((NSInteger)height - 1, y));
-      for (size_t c = 0; c < 4; c++) sums[c] += horizontal[(row * width + x) * 4 + c];
-    }
-    for (size_t y = 0; y < height; y++) {
-      for (size_t c = 0; c < 4; c++) output[(y * width + x) * 4 + c] = sums[c] / span;
-      size_t remove = (size_t)MAX(0, (NSInteger)y - (NSInteger)radius);
-      size_t add = (size_t)MIN((NSInteger)height - 1, (NSInteger)y + (NSInteger)radius + 1);
-      for (size_t c = 0; c < 4; c++) {
-        sums[c] += horizontal[(add * width + x) * 4 + c];
-        sums[c] -= horizontal[(remove * width + x) * 4 + c];
-      }
-    }
-  }
-  free(horizontal);
-  return DBImageFromPixels(output, width, height);
+  return DBImageFromBottomUpPixels(output, width, height);
 }
 
 @implementation DBFrostedBlur
@@ -232,8 +206,11 @@ static UIImage *DBCpuBlur(unsigned char *input, size_t width, size_t height, NSU
   size_t width = 0, height = 0;
   unsigned char *pixels = DBCopyPixels(image, &width, &height);
   if (pixels == NULL) return nil;
-  UIImage *blurred = DBGpuBlur(pixels, width, height, radius);
-  if (blurred && usedGPU) *usedGPU = YES;
+  UIImage *blurred = nil;
+  if (DBFrostedBlurUsesGPUForRadius(radius)) {
+    blurred = DBGpuBlur(pixels, width, height, radius);
+    if (blurred && usedGPU) *usedGPU = YES;
+  }
   if (!blurred) blurred = DBCpuBlur(pixels, width, height, radius);
   free(pixels);
   return blurred;

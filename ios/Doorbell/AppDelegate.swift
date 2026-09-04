@@ -31,6 +31,11 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
                      didFinishLaunchingWithOptions launchOptions:
                         [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         boot = BootConfig.load()
+        // Bootstrap setup can remain on screen while an opted-in root helper starts. Announce the
+        // main run loop before setup so the helper adopts this process instead of waiting for a
+        // configured Core instance that may never be reached after a UI stall.
+        runtime = RuntimeSupervisor(core: core, boot: boot)
+        runtime?.start()
         IOSAvailability.cacheScreenScale()
         IOSAvailability.PerfProbe.enabled = boot.debugTimings
         ShellLog.enabled = boot.debugTimings
@@ -128,14 +133,22 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         // Keep the UI available in offline mode if Core cannot start.
         let coreStarted = core.start(dataDir: BootConfig.dataDir(), bootJson: boot.rawJson)
         ShellLog.note("core.start ok=\(coreStarted)")
-        runtime = RuntimeSupervisor(core: core, boot: boot,
-                                    audioSessionReady: audioSessionReady)
+        if let runtime = runtime {
+            runtime.updateAudioSessionReady(audioSessionReady)
+        } else {
+            let restartedRuntime = RuntimeSupervisor(core: core, boot: boot,
+                                                     audioSessionReady: audioSessionReady)
+            runtime = restartedRuntime
+            restartedRuntime.start()
+        }
         // Ask before the first capability document goes out. The prompt is asynchronous, so the
         // first document may still say not_determined; what matters is that the ask is already in
         // flight, and that the answer republishes the capabilities and starts capture.
         AvPermissions.requestAtLaunch(role: boot.role) { [weak self] in
             self?.runtime?.permissionsDidChange()
         }
+        // This refreshes post-Core configuration and measurements without a second generation
+        // or timer; `RuntimeSupervisor.start` is explicitly idempotent after its first call.
         runtime?.start()
         if boot.role == "indoor_panel" {
             AdaptiveH264MjpegPlayer.prewarm()
@@ -348,6 +361,7 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         }
         if eventKind == "config_changed" {
             soundConfig = core.config()
+            runtime?.configDidChange()
             _ = applyReplicatedIdentity()
         }
         if eventKind == "emergency" {

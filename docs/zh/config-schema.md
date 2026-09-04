@@ -381,6 +381,10 @@ degraded/error，不是 supervision 成功證據。atomic config apply 後，pla
 `MODE <value>` 並驗證 helper status；helper 原子保存 mode，供 helper/OS restart 復原。config 不會衍生
 generic command/argv。
 
+modern iOS 的本機 `boot.json` `keepalive_helper` 預設為 `off`。明確 opt-in 的 `auto` 保留已設定的 helper
+mode，但實測 Guided Access 或 Single App Mode 啟用時會續期短 maintenance lease；只有量測 inactive 時 helper
+supervision 才是 fallback。它不會以未 qualification 的 launcher 取代 supervised kiosk restart 路徑。
+
 ## 统一的管理密码、公告、开锁与外观
 
 `admin.password_hash` 是整个集群唯一的管理员凭据：Web 管理界面与每台设备的设置界面使用同一个密钥。

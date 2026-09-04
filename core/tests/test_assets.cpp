@@ -24,6 +24,49 @@ using namespace db;
 
 namespace {
 
+uint32_t tinyPngCrc(const uint8_t* data, size_t len) {
+  uint32_t crc = 0xFFFFFFFFu;
+  for (size_t i = 0; i < len; ++i) {
+    crc ^= data[i];
+    for (int bit = 0; bit < 8; ++bit) crc = (crc >> 1) ^ (0xEDB88320u & -(crc & 1));
+  }
+  return crc ^ 0xFFFFFFFFu;
+}
+
+void tinyPngBe(Bytes& out, uint32_t value) {
+  out.push_back(static_cast<uint8_t>(value >> 24));
+  out.push_back(static_cast<uint8_t>(value >> 16));
+  out.push_back(static_cast<uint8_t>(value >> 8));
+  out.push_back(static_cast<uint8_t>(value));
+}
+
+void tinyPngChunk(Bytes& out, const char tag[4], const Bytes& payload) {
+  tinyPngBe(out, static_cast<uint32_t>(payload.size()));
+  Bytes body(tag, tag + 4);
+  body.insert(body.end(), payload.begin(), payload.end());
+  out.insert(out.end(), body.begin(), body.end());
+  tinyPngBe(out, tinyPngCrc(body.data(), body.size()));
+}
+
+// A real one-pixel greyscale PNG. Stored deflate keeps this regression fixture deterministic
+// without adding a compressor to the asset-transfer test.
+Bytes tinyGreyPng(uint8_t value) {
+  Bytes raw{0, value};
+  const uint32_t adler = (static_cast<uint32_t>(value) + 2) << 16 |
+                         (static_cast<uint32_t>(value) + 1);
+  Bytes zlib{0x78, 0x01, 0x01, 0x02, 0x00, 0xFD, 0xFF, 0x00, value};
+  tinyPngBe(zlib, adler);
+  Bytes ihdr;
+  tinyPngBe(ihdr, 1);
+  tinyPngBe(ihdr, 1);
+  ihdr.insert(ihdr.end(), {8, 0, 0, 0, 0});
+  Bytes png{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A};
+  tinyPngChunk(png, "IHDR", ihdr);
+  tinyPngChunk(png, "IDAT", zlib);
+  tinyPngChunk(png, "IEND", {});
+  return png;
+}
+
 struct AFleet {
   SimClock clock{1'700'000'000'000LL, 0};
   Runloop loop{clock};
@@ -204,6 +247,45 @@ TEST_CASE("assets: addAsset replicates config and other nodes prefetch automatic
     CHECK(json::getString(theme, "bg_color") == "#223344");
     CHECK(json::getString(theme, "bg_image") == hash);
   }
+
+  a.node->stop();
+  b.node->stop();
+}
+
+TEST_CASE("assets: a transferred theme image refreshes automatic background sampling") {
+  AFleet f;
+  auto& a = f.add("A:1", "front", "door_station", "d_front", true);
+  auto& b = f.add("B:1", "kitchen", "indoor_panel", "", false);
+  REQUIRE(a.node->start());
+  REQUIRE(b.node->start());
+  f.run(1500);
+
+  const Bytes image = tinyGreyPng(0xC8);
+  const std::string hash = sha256Hex(image);
+  a.node->setConfigKey("display.theme.bg_image", "\"" + hash + "\"");
+  f.run(300);
+  {
+    auto status = json::parse(b.node->statusJson());
+    REQUIRE(status);
+    const cJSON* theme = json::get(json::get(status.get(), "display"), "theme");
+    REQUIRE(theme);
+    const cJSON* automatic = json::get(theme, "auto_background");
+    REQUIRE(automatic);
+    CHECK(json::getString(automatic, "source") == "image_unsampled");
+    CHECK(json::getString(automatic, "reason") == "missing");
+  }
+
+  REQUIRE(a.node->addAsset(image, "image/png", "theme.png") == hash);
+  f.run(1500);
+  CHECK(b.lastAssetReady() == hash);
+  auto status = json::parse(b.node->statusJson());
+  REQUIRE(status);
+  const cJSON* theme = json::get(json::get(status.get(), "display"), "theme");
+  REQUIRE(theme);
+  const cJSON* automatic = json::get(theme, "auto_background");
+  REQUIRE(automatic);
+  CHECK(json::getString(automatic, "source") == "image");
+  CHECK(json::getString(automatic, "color") == "#C8C8C8");
 
   a.node->stop();
   b.node->stop();
