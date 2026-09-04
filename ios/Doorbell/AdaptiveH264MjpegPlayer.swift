@@ -3,13 +3,13 @@ import Foundation
 import UIKit
 
 /// Plays MJPEG continuously as the availability layer and promotes H.264 only after it renders.
+/// H.264 goes through `H264SampleLayerPlayer` (demuxed fMP4 on an AVSampleBufferDisplayLayer);
+/// AVPlayer was the previous route and never opened the door station's endless live stream.
 final class AdaptiveH264MjpegPlayer: NSObject {
     private let h264Host: UIView
     private let mjpegView: UIImageView
     private let noVideoLabel: UILabel
-    private let playerLayer: AVPlayerLayer
-    private let player: AVPlayer
-    private var playerItem: AVPlayerItem?
+    private var h264Player: H264SampleLayerPlayer?
     private var mjpeg: MjpegClient?
     private var h264URL: URL?
     private var mjpegURL = ""
@@ -19,9 +19,8 @@ final class AdaptiveH264MjpegPlayer: NSObject {
     private var h264Attempt = 0
     private var h264Visible = false
     private var running = false
-    private var observingReady = false
-    private var observingItem = false
     private var rotation = 0
+    private var h264Size: CGSize = .zero
 
     /// Reported whenever the source's picture geometry becomes known or changes, already rotated
     /// the way it is displayed. The incoming screen sizes its video box from this so a portrait
@@ -42,70 +41,25 @@ final class AdaptiveH264MjpegPlayer: NSObject {
 
     private static let firstFrameTimeout: TimeInterval = 3
     private static let retryInterval: TimeInterval = 5
-    private static let warmLock = NSLock()
-    private static var warmResources: (AVPlayer, AVPlayerLayer)?
 
-    static func prewarm() {
-        let prepare = {
-            warmLock.lock()
-            defer { warmLock.unlock() }
-            guard warmResources == nil else { return }
-            let player = AVPlayer()
-            let layer = AVPlayerLayer(player: player)
-            layer.videoGravity = .resizeAspect
-            layer.isHidden = true
-            warmResources = (player, layer)
-        }
-        if Thread.isMainThread { prepare() }
-        else { DispatchQueue.main.async(execute: prepare) }
-    }
+    /// Measured decode outcome for the runtime supervisor: (verified, state). Set once by the
+    /// main view controller; "verified" only after a frame was actually shown.
+    static var onDecodeState: ((Bool, String) -> Void)?
 
-    static func purgeWarmResources() {
-        warmLock.lock()
-        let resources = warmResources
-        warmResources = nil
-        warmLock.unlock()
-        resources?.0.replaceCurrentItem(with: nil)
-        resources?.1.player = nil
-        resources?.1.removeFromSuperlayer()
-    }
-
-    private static func takeWarmResources() -> (AVPlayer, AVPlayerLayer) {
-        warmLock.lock()
-        defer { warmLock.unlock() }
-        if let resources = warmResources {
-            warmResources = nil
-            return resources
-        }
-        let player = AVPlayer()
-        return (player, AVPlayerLayer(player: player))
-    }
-
-    private static func recycle(_ player: AVPlayer, layer: AVPlayerLayer) {
-        warmLock.lock()
-        defer { warmLock.unlock() }
-        guard warmResources == nil else { return }
-        warmResources = (player, layer)
-    }
+    /// Kept for the app delegates: the sample-buffer player has nothing to warm up.
+    static func prewarm() {}
+    static func purgeWarmResources() {}
 
     init(h264Host: UIView, mjpegView: UIImageView, noVideoLabel: UILabel) {
-        let resources = Self.takeWarmResources()
         self.h264Host = h264Host
         self.mjpegView = mjpegView
         self.noVideoLabel = noVideoLabel
-        player = resources.0
-        playerLayer = resources.1
         super.init()
         h264Host.clipsToBounds = true
-        playerLayer.videoGravity = .resizeAspect
-        playerLayer.isHidden = true
-        h264Host.layer.addSublayer(playerLayer)
     }
 
     deinit {
         stop()
-        playerLayer.removeFromSuperlayer()
-        Self.recycle(player, layer: playerLayer)
     }
 
     func start(h264URLString: String, mjpegURL: String, h264Enabled: Bool) {
@@ -135,7 +89,6 @@ final class AdaptiveH264MjpegPlayer: NSObject {
         tearDownH264()
         h264URL = nil
         h264Visible = false
-        playerLayer.isHidden = true
     }
 
     func layout() {
@@ -163,27 +116,28 @@ final class AdaptiveH264MjpegPlayer: NSObject {
         retryTimer?.invalidate()
         tearDownH264()
         h264Visible = false
-        playerLayer.isHidden = true
         mjpegView.isHidden = false
 
-        let item = AVPlayerItem(url: url)
-        player.replaceCurrentItem(with: item)
-        player.actionAtItemEnd = .none
-        if #available(iOS 10.0, tvOS 10.0, *) {
-            player.automaticallyWaitsToMinimizeStalling = false
+        let player = H264SampleLayerPlayer(url: url)
+        player.layer.isHidden = true
+        player.layer.frame = h264Host.bounds
+        h264Host.layer.addSublayer(player.layer)
+        player.onVideoSize = { [weak self] size in
+            guard let self = self, self.running else { return }
+            self.h264Size = size
+            self.applyH264Transform()
+            if self.h264Visible { self.reportSize(size, degrees: self.rotation) }
         }
-        playerItem = item
-        playerLayer.player = player
-        playerLayer.addObserver(self, forKeyPath: "readyForDisplay", options: [.new], context: nil)
-        observingReady = true
-        item.addObserver(self, forKeyPath: "status", options: [.new], context: nil)
-        observingItem = true
-        NotificationCenter.default.addObserver(self, selector: #selector(h264Stalled(_:)),
-                                               name: .AVPlayerItemPlaybackStalled, object: item)
-        NotificationCenter.default.addObserver(self, selector: #selector(h264Ended(_:)),
-                                               name: .AVPlayerItemFailedToPlayToEndTime, object: item)
-        applyH264Transform()
-        player.play()
+        player.onFirstFrame = { [weak self] in
+            guard let self = self, self.running, self.h264Attempt == attempt else { return }
+            self.showH264()
+        }
+        player.onFailure = { [weak self] reason in
+            guard let self = self, self.running, self.h264Attempt == attempt else { return }
+            self.h264Failed(reason)
+        }
+        h264Player = player
+        player.start()
         firstFrameTimer = IOSAvailability.scheduledTimer(
             withTimeInterval: Self.firstFrameTimeout, repeats: false
         ) { [weak self] _ in
@@ -196,58 +150,36 @@ final class AdaptiveH264MjpegPlayer: NSObject {
     private func tearDownH264() {
         firstFrameTimer?.invalidate()
         firstFrameTimer = nil
-        if observingReady {
-            playerLayer.removeObserver(self, forKeyPath: "readyForDisplay")
-            observingReady = false
+        if let player = h264Player {
+            player.onFirstFrame = nil
+            player.onFailure = nil
+            player.onVideoSize = nil
+            player.stop()
+            player.layer.removeFromSuperlayer()
         }
-        if observingItem, let item = playerItem {
-            item.removeObserver(self, forKeyPath: "status")
-            observingItem = false
-        }
-        NotificationCenter.default.removeObserver(self)
-        player.pause()
-        player.replaceCurrentItem(with: nil)
-        playerItem = nil
-        playerLayer.player = player
+        h264Player = nil
+        h264Size = .zero
     }
 
-    override func observeValue(forKeyPath keyPath: String?, of object: Any?,
-                               change: [NSKeyValueChangeKey: Any]?, context: UnsafeMutableRawPointer?) {
-        if keyPath == "readyForDisplay", object as AnyObject? === playerLayer {
-            DispatchQueue.main.async { [weak self] in self?.showH264IfReady() }
-        } else if keyPath == "status", let item = object as? AVPlayerItem, item === playerItem,
-                  item.status == .failed {
-            DispatchQueue.main.async { [weak self] in
-                self?.h264Failed(item.error?.localizedDescription ?? "H.264 playback failed")
-            }
-        }
-    }
-
-    private func showH264IfReady() {
-        guard running, playerLayer.isReadyForDisplay else { return }
+    private func showH264() {
+        guard running, let player = h264Player else { return }
         firstFrameTimer?.invalidate()
         firstFrameTimer = nil
         h264Visible = true
-        playerLayer.isHidden = false
+        player.layer.isHidden = false
         mjpegView.isHidden = true
         noVideoLabel.isHidden = true
         applyH264Transform()
-    }
-
-    @objc private func h264Stalled(_ notification: Notification) {
-        guard notification.object as? AVPlayerItem === playerItem else { return }
-        h264Failed("H.264 playback stalled")
-    }
-
-    @objc private func h264Ended(_ notification: Notification) {
-        guard notification.object as? AVPlayerItem === playerItem else { return }
-        h264Failed("H.264 playback ended")
+        Self.onDecodeState?(true, "verified")
+        if h264Size.width > 0 { reportSize(h264Size, degrees: rotation) }
+        // The MJPEG availability layer has done its job; a later H.264 failure restarts it.
+        mjpeg?.stop()
+        mjpeg = nil
     }
 
     private func h264Failed(_ reason: String) {
         guard running, h264URL != nil else { return }
         h264Visible = false
-        playerLayer.isHidden = true
         mjpegView.isHidden = false
         tearDownH264()
         startMjpeg()
@@ -256,6 +188,8 @@ final class AdaptiveH264MjpegPlayer: NSObject {
             withTimeInterval: Self.retryInterval, repeats: false
         ) { [weak self] _ in self?.startH264() }
         NSLog("[doorbell] H.264 fallback to MJPEG: %@", reason)
+        Self.onDecodeState?(false, reason.hasPrefix("display_layer_failed") ||
+                                   reason.hasPrefix("format_description") ? "failed" : "runtime_failed")
     }
 
     private func startRotationPolling() {
@@ -279,8 +213,13 @@ final class AdaptiveH264MjpegPlayer: NSObject {
                   let value = json["rotation"] as? Int else { return }
             DispatchQueue.main.async {
                 guard self.running else { return }
-                self.rotation = ((value % 360) + 360) % 360
+                let normalized = ((value % 360) + 360) % 360
+                let changed = normalized != self.rotation
+                self.rotation = normalized
                 self.applyH264Transform()
+                if changed, self.h264Visible, self.h264Size.width > 0 {
+                    self.reportSize(self.h264Size, degrees: normalized)
+                }
             }
         }.resume()
     }
@@ -308,31 +247,25 @@ final class AdaptiveH264MjpegPlayer: NSObject {
     func statsSnapshot() -> Stats {
         var stats = Stats()
         stats.codec = h264Visible ? "h264" : (mjpeg != nil ? "mjpeg" : "-")
-        if frameTimestamps.count >= 2 {
-            let intervals = zip(frameTimestamps.dropFirst(), frameTimestamps).map { $0 - $1 }
+        var intervals: [Double] = []
+        if h264Visible, let player = h264Player {
+            intervals = player.recentIntervals()
+            let snapshot = player.snapshot()
+            stats.dropped = snapshot.dropped
+            if snapshot.latencyMs >= 0 { stats.latencyMs = snapshot.latencyMs }
+        } else if frameTimestamps.count >= 2 {
+            intervals = zip(frameTimestamps.dropFirst(), frameTimestamps).map { $0 - $1 }
+            if let last = frameTimestamps.last {
+                stats.latencyMs = Int(((CACurrentMediaTime() - last) * 1000).rounded())
+            }
+        }
+        if !intervals.isEmpty {
             let mean = intervals.reduce(0, +) / Double(intervals.count)
             if mean > 0 { stats.fps = Int((1 / mean).rounded()) }
             let variance = intervals.reduce(0) { $0 + ($1 - mean) * ($1 - mean) }
                 / Double(intervals.count)
             stats.jitterMs = Int((variance.squareRoot() * 1000).rounded())
-            if let last = frameTimestamps.last {
-                stats.latencyMs = Int(((CACurrentMediaTime() - last) * 1000).rounded())
-            }
         }
-        guard h264Visible, let item = playerItem else { return stats }
-        if let event = item.accessLog()?.events.last {
-            stats.dropped = max(0, event.numberOfDroppedVideoFrames)
-        }
-        // Distance from the live edge is the only latency AVPlayer exposes for a live fMP4 feed.
-        if let range = item.seekableTimeRanges.last?.timeRangeValue {
-            let edge = CMTimeGetSeconds(CMTimeRangeGetEnd(range))
-            let now = CMTimeGetSeconds(item.currentTime())
-            if edge.isFinite, now.isFinite, edge >= now {
-                stats.latencyMs = Int(((edge - now) * 1000).rounded())
-            }
-        }
-        let size = item.presentationSize
-        if size.width > 0, size.height > 0 { reportSize(size, degrees: rotation) }
         return stats
     }
 
@@ -352,16 +285,20 @@ final class AdaptiveH264MjpegPlayer: NSObject {
     }
 
     private func applyH264Transform() {
-        playerLayer.setAffineTransform(.identity)
-        playerLayer.frame = h264Host.bounds
-        guard (rotation == 90 || rotation == 270), playerLayer.bounds.width > 0,
-              playerLayer.bounds.height > 0 else { return }
-        let size = playerItem?.presentationSize ?? .zero
+        guard let layer = h264Player?.layer else { return }
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        defer { CATransaction.commit() }
+        layer.setAffineTransform(.identity)
+        layer.frame = h264Host.bounds
+        guard (rotation == 90 || rotation == 270), layer.bounds.width > 0,
+              layer.bounds.height > 0 else { return }
+        let size = h264Size
         guard size.width > 0, size.height > 0 else { return }
-        let base = min(playerLayer.bounds.width / size.width, playerLayer.bounds.height / size.height)
-        let rotated = min(playerLayer.bounds.width / size.height, playerLayer.bounds.height / size.width)
+        let base = min(layer.bounds.width / size.width, layer.bounds.height / size.height)
+        let rotated = min(layer.bounds.width / size.height, layer.bounds.height / size.width)
         let scale = base > 0 ? rotated / base : 1
-        playerLayer.setAffineTransform(
+        layer.setAffineTransform(
             CGAffineTransform(rotationAngle: CGFloat(rotation) * .pi / 180).scaledBy(x: scale, y: scale)
         )
     }

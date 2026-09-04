@@ -147,6 +147,9 @@ final class MainViewController: UIViewController {
         self.core = core
         self.boot = boot
         self.runtime = runtime
+        AdaptiveH264MjpegPlayer.onDecodeState = { [weak runtime] verified, state in
+            runtime?.recordH264Decode(verified: verified, state: state)
+        }
         super.init(nibName: nil, bundle: nil)
     }
 

@@ -44,7 +44,9 @@ final class RuntimeSupervisor {
     #endif
     // The modern shell currently renders bounded MJPEG. Do not infer H.264 decode support from
     // VideoToolbox being present until an integrated decoder has completed a real frame test.
-    private let h264DecodeState = "unsupported_no_decoder_path"
+    // Measured by H264SampleLayerPlayer through AdaptiveH264MjpegPlayer.onDecodeState: "verified"
+    // once a frame has actually been shown, a failure state otherwise.
+    private var h264DecodeState = "not_tested"
 
     private(set) var safeMode = false
 
@@ -364,6 +366,20 @@ final class RuntimeSupervisor {
         publishRuntime()
     }
 
+    func recordH264Decode(verified: Bool, state: String) {
+        if !Thread.isMainThread {
+            DispatchQueue.main.async { [weak self] in
+                self?.recordH264Decode(verified: verified, state: state)
+            }
+            return
+        }
+        let next = verified ? "verified" : measuredState(state, fallback: "failed")
+        guard next != h264DecodeState else { return }
+        h264DecodeState = next
+        publishCapabilities()
+        publishRuntime()
+    }
+
     private func measuredState(_ value: String, fallback: String) -> String {
         let allowed = Set(["not_started", "starting", "permission_denied", "restricted",
                            "no_device", "input_failed", "configuration_failed",
@@ -426,7 +442,7 @@ final class RuntimeSupervisor {
             "camera_permission": cameraPermission,
             "microphone_permission": microphonePermission,
             "h264_encode": h264Encode,
-            "h264_decode": false,
+            "h264_decode": h264DecodeState == "verified" && !safeMode,
             "sip_backend": core.sipBackend,
             "sip": core.sipBackend == "pjsip",
             "native_kiosk": nativeKiosk,

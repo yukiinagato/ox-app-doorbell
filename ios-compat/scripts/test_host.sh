@@ -95,6 +95,13 @@ swiftc \
   "$REPO_ROOT/ios-compat/tests/mjpeg_part_assembler_test.swift" \
   -o "$OUT/mjpeg_part_assembler_test"
 
+# Fmp4Demuxer feeds the Swift shell's AVSampleBufferDisplayLayer player; Foundation-only so the
+# box parsing is covered here against a synthesized copy of core's stream layout.
+swiftc \
+  "$REPO_ROOT/ios/Doorbell/Fmp4Demuxer.swift" \
+  "$REPO_ROOT/ios-compat/tests/fmp4_demuxer_test.swift" \
+  -o "$OUT/fmp4_demuxer_test"
+
 "$CC" -fobjc-arc -Wall -Wextra -Werror -O2 -isysroot "$MACOS_SDK" \
   -I"$REPO_ROOT/ios-kiosk/src/Net" \
   "$REPO_ROOT/ios-kiosk/src/Net/DBHTTPMediaSupport.m" \
@@ -158,6 +165,7 @@ swiftc \
 "$OUT/call_event_tracker_test"
 [[ $MODERN_CALL_TEST -eq 1 ]] && "$OUT/modern_call_revision_test"
 "$OUT/mjpeg_part_assembler_test"
+"$OUT/fmp4_demuxer_test"
 "$OUT/http_media_test"
 "$OUT/rtsp_h264_test"
 "$OUT/compatibility_profile_test"

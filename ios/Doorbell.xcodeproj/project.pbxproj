@@ -32,6 +32,8 @@
 		AD0000000000000000000002 /* ConfigUtilColors.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD0000000000000000000004 /* ConfigUtilColors.swift */; };
 		AD0000000000000000000003 /* ConfigUtilColors.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD0000000000000000000004 /* ConfigUtilColors.swift */; };
 		FB0000000000000000000025 /* MjpegClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000006 /* MjpegClient.swift */; };
+		FB00000000000000000000B3 /* H264SampleLayerPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA00000000000000000000A9 /* H264SampleLayerPlayer.swift */; };
+		FB00000000000000000000B0 /* Fmp4Demuxer.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA00000000000000000000A8 /* Fmp4Demuxer.swift */; };
 		FB00000000000000000000A7 /* MjpegPartAssembler.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA00000000000000000000A7 /* MjpegPartAssembler.swift */; };
 		FB0000000000000000000026 /* SirenPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000007 /* SirenPlayer.swift */; };
 		FB0000000000000000000027 /* AdminPinViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000008 /* AdminPinViewController.swift */; };
@@ -63,6 +65,8 @@
 		FB0000000000000000000043 /* Texts.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000004 /* Texts.swift */; };
 		FB0000000000000000000044 /* ConfigUtil.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000005 /* ConfigUtil.swift */; };
 		FB0000000000000000000045 /* MjpegClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000006 /* MjpegClient.swift */; };
+		FB00000000000000000000B4 /* H264SampleLayerPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA00000000000000000000A9 /* H264SampleLayerPlayer.swift */; };
+		FB00000000000000000000B1 /* Fmp4Demuxer.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA00000000000000000000A8 /* Fmp4Demuxer.swift */; };
 		FB00000000000000000000A8 /* MjpegPartAssembler.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA00000000000000000000A7 /* MjpegPartAssembler.swift */; };
 		FB0000000000000000000046 /* SirenPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000007 /* SirenPlayer.swift */; };
 		FB0000000000000000000047 /* AdminPinViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000008 /* AdminPinViewController.swift */; };
@@ -86,6 +90,8 @@
 		F90000000000000000000023 /* Texts.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000004 /* Texts.swift */; };
 		F90000000000000000000024 /* ConfigUtil.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000005 /* ConfigUtil.swift */; };
 		F90000000000000000000025 /* MjpegClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000006 /* MjpegClient.swift */; };
+		FB00000000000000000000B5 /* H264SampleLayerPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA00000000000000000000A9 /* H264SampleLayerPlayer.swift */; };
+		FB00000000000000000000B2 /* Fmp4Demuxer.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA00000000000000000000A8 /* Fmp4Demuxer.swift */; };
 		FB00000000000000000000A9 /* MjpegPartAssembler.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA00000000000000000000A7 /* MjpegPartAssembler.swift */; };
 		F90000000000000000000026 /* SirenPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000007 /* SirenPlayer.swift */; };
 		F90000000000000000000027 /* AdminPinViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000008 /* AdminPinViewController.swift */; };
@@ -184,6 +190,8 @@
 		AD0000000000000000000004 /* ConfigUtilColors.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigUtilColors.swift; sourceTree = "<group>"; };
 		AE0000000000000000000004 /* ClusterCounters.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClusterCounters.swift; sourceTree = "<group>"; };
 		FA0000000000000000000006 /* MjpegClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MjpegClient.swift; sourceTree = "<group>"; };
+		FA00000000000000000000A9 /* H264SampleLayerPlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = H264SampleLayerPlayer.swift; sourceTree = "<group>"; };
+		FA00000000000000000000A8 /* Fmp4Demuxer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Fmp4Demuxer.swift; sourceTree = "<group>"; };
 		FA00000000000000000000A7 /* MjpegPartAssembler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MjpegPartAssembler.swift; sourceTree = "<group>"; };
 		FA0000000000000000000007 /* SirenPlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SirenPlayer.swift; sourceTree = "<group>"; };
 		FA0000000000000000000008 /* AdminPinViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdminPinViewController.swift; sourceTree = "<group>"; };
@@ -317,6 +325,8 @@
 				AD0000000000000000000004 /* ConfigUtilColors.swift */,
 				AE0000000000000000000004 /* ClusterCounters.swift */,
 				FA0000000000000000000006 /* MjpegClient.swift */,
+				FA00000000000000000000A9 /* H264SampleLayerPlayer.swift */,
+				FA00000000000000000000A8 /* Fmp4Demuxer.swift */,
 				FA00000000000000000000A7 /* MjpegPartAssembler.swift */,
 				FA0000000000000000000007 /* SirenPlayer.swift */,
 				FA000000000000000000000C /* CameraFeeder.swift */,
@@ -681,6 +691,8 @@
 				AD0000000000000000000001 /* ConfigUtilColors.swift in Sources */,
 				AE0000000000000000000001 /* ClusterCounters.swift in Sources */,
 				FB0000000000000000000025 /* MjpegClient.swift in Sources */,
+				FB00000000000000000000B3 /* H264SampleLayerPlayer.swift in Sources */,
+				FB00000000000000000000B0 /* Fmp4Demuxer.swift in Sources */,
 				FB00000000000000000000A7 /* MjpegPartAssembler.swift in Sources */,
 				FB0000000000000000000026 /* SirenPlayer.swift in Sources */,
 				FB000000000000000000002B /* CameraFeeder.swift in Sources */,
@@ -723,6 +735,8 @@
 				AD0000000000000000000002 /* ConfigUtilColors.swift in Sources */,
 				AE0000000000000000000002 /* ClusterCounters.swift in Sources */,
 				FB0000000000000000000045 /* MjpegClient.swift in Sources */,
+				FB00000000000000000000B4 /* H264SampleLayerPlayer.swift in Sources */,
+				FB00000000000000000000B1 /* Fmp4Demuxer.swift in Sources */,
 				FB00000000000000000000A8 /* MjpegPartAssembler.swift in Sources */,
 				FB0000000000000000000046 /* SirenPlayer.swift in Sources */,
 			);
@@ -766,6 +780,8 @@
 				AD0000000000000000000003 /* ConfigUtilColors.swift in Sources */,
 				AE0000000000000000000003 /* ClusterCounters.swift in Sources */,
 				F90000000000000000000025 /* MjpegClient.swift in Sources */,
+				FB00000000000000000000B5 /* H264SampleLayerPlayer.swift in Sources */,
+				FB00000000000000000000B2 /* Fmp4Demuxer.swift in Sources */,
 				FB00000000000000000000A9 /* MjpegPartAssembler.swift in Sources */,
 				F90000000000000000000026 /* SirenPlayer.swift in Sources */,
 				F9000000000000000000002B /* CameraFeeder.swift in Sources */,
