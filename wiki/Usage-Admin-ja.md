@@ -25,7 +25,33 @@
 | 用件 | 訪客の用件ボタン (ラベル・アイコン・並び順) の編集 |
 | システム | パネル token・追加 PIN 発行・設定エクスポート/インポート・ログ・生 JSON |
 
+## 共有される管理者 access
+
+現在の Admin または native settings surface で設定した password は、salted digest だけを保存する
+replicated cluster credential になります。変更すると、その変更を行った node の Admin session は無効です。
+5 回の失敗で ten-minute lockout になりますが、共有範囲はその node の Web login と device-side settings entry
+だけです。この counter は他 node には複製されないため、cluster-wide rate limiter ではありません。一度も
+password が設定されていない場合、Core は active SOS の clear に password を要求しません。
+
 ## よく使うレシピ集
+
+### announcement、unlock、用件の一時停止
+
+door の announcement control は door-specific message 用、global announcement は cluster-wide default 用です。
+door message は global を消さずに優先されます。announcement には expiry を設定でき、preset list には再利用
+message を最大 8 件置けます。door unlock control は command（または SIP DTMF `ha_command`）が設定済みの時に
+既定で表示されます。action 未設定で押した場合、Core は成功を装わず明示的な failure を返します。
+
+用件 tab で purpose を off にすると、label、icon、order、history、既存 rule reference を残したまま新しい
+訪客の選択肢から外せます。更新が遅れた門口機が古い button を送っても、その press は generic ring になり、
+訪客が propagation delay のために拒否されることはありません。
+
+### 読みやすい fleet theme を選ぶ
+
+light、dark、system-following、scheduled appearance を選べます。Core は cluster time zone で scheduled
+appearance を解決し、semantic region ごとの automatic ink と call-button color を供給します。background image
+で text 背後の pixel が device-specific になる場合は shell が local に sample できますが、explicit regional
+override が優先です。low-contrast color は保存され、silently change/reject されず measured WCAG warning が出ます。
 
 ### 宅配便だけ自動「置き配」応答 (電話を鳴らさない)
 

@@ -395,8 +395,9 @@ argv を生成しません。
 `admin.password_hash` はクラスタ全体で唯一の管理者資格情報で、Web 管理画面と各端末の設定画面は
 同じ秘密を使う。`{"salt":"<hex>","hash":"<hex>","algo":"blake2b-256","updated_ms":…}` として複製し、
 平文は決して保存しない。したがってオフラインの端末も手元の複製で照合できる。どの画面でも最初に
-入力されたパスワードがクラスタのものになる (Web ログインの既存の TOFU 経路)。どこかで 5 回失敗すると
-すべての画面が 10 分間停止する。カウンタは `POST /api/login` と `db_core_admin_password_verify` で共有する。
+入力されたパスワードがクラスタのものになる (Web ログインの既存の TOFU 経路)。5 回の失敗で、それを受けた
+Core node に ten-minute in-memory lockout が生じる。カウンタはその node の `POST /api/login` と
+`db_core_admin_password_verify` で共有する。他 node へ複製されないため、cluster-wide rate limiter ではない。
 
 このキーが無かった頃は各ノードがローカルにダイジェストを持ち、キオスクは別の終了コードを持っていた。
 そのローカルダイジェストは最初の照合成功まで有効で、成功した時点でクラスタのパスワードとして複製する。

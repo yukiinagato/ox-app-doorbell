@@ -72,6 +72,16 @@ Web Push subscription は plaintext config/export に出しません。Core は 
 import と raw-key editor もこの endpoint を使う。旧 `/api/config/import` は互換 endpoint に残せるが、
 現行 Web UI の保存経路には使わない。
 
+## 単一の管理パスワード
+
+`POST /api/login` は cluster-wide credential である `admin.password_hash` を照合します。最初の successful
+login まではこの node の legacy local digest に fallback し、最初に任意 surface で提示された password が
+cluster password になります。5 回の失敗は、試行を受けた Core node で ten-minute lockout を作り
+`429 {"ok":false,"err":"locked"}` を返します。counter はその node の
+`db_core_admin_password_verify` と共有されるため、同一 node の native settings screen と Web page を
+別々に攻撃できません。ただし counter は他 node へ複製されません。password を変更すると、変更した
+node の既存 Admin session は無効になります。
+
 端末別 recovery mode は complete value として
 `devices.<node_id>.local.recovery.helper_mode` に書く。有効値は `off|auto|on` のみで、Admin の既定は
 `auto`。partial save を防ぐため認証済み batch endpoint を使う。設定 mode は root helper の install、

@@ -49,6 +49,19 @@ UI イベントは JSON callback (`{"t":"chime",...}` 等) で shell へ流れ�
 秘密 (`*_ref: "secret:…"`) は参照だけを複製し、実体は各端末の secure store に置きます。
 実装: `core/src/crdt/lww_map.cpp` (プロパティテスト付き)。
 
+HTTP Admin endpoint と native `db_platform_v2` caller は同じ Core write path を使います。したがって
+native settings screen も loopback HTTP を呼ばず、Admin と同じ key validation、解決済み semantic-UI
+contrast warning、result document を得ます。batch は最大 256 個の重複しない set/delete operation で、
+全 operation が validation を通った場合だけ一つの commit になります。C ABI は backward call-history
+paging、Core が受け付ける IANA time-zone list、保持される microphone mute、設定済み door-unlock action
+も公開します。
+
+`admin.password_hash` は salted BLAKE2b-256 digest を複製し、plaintext を複製せず Web Admin と native
+settings の credential を一つにします。ただし rate-limit は複製されません。bad guess が 5 回あると、
+同じ Core node の Web と ABI check で共有する ten-minute in-memory lockout になります。fleet-wide の
+brute-force throttle と見なしてはいけません。unset credential は、active SOS を clear 不能にしないよう
+published SOS policy に織り込まれます。
+
 schema-v2 call lifecycle は `(door, call_id, stage_revision)` 単位です。訪客が cancel できるのは
 ringing 中だけで、`answered` / `in_call` 後は hangup が `call_ended` を発行します。Web の手動応答は
 乱数 `dialog_id` を一つ claim して opaque な `dialog_owner` を受け取り、競合に負けた SIP dialog は
@@ -92,8 +105,16 @@ dialog owner だけが復元できます。10 秒以内に証明できなけれ�
 
 - H.264 のエンコードは平台の HW (MediaCodec / VideoToolbox / Media Foundation)。
   コアは AnnexB を受け取って fMP4 に箱詰めして配るだけです (自前マキサ、外部依存なし)。
-- `/stream.mp4` は購読者が付いた時だけエンコーダを回します (`db_core_video_encoder_wanted`)。
-  go2rtc は `#video=copy` で受けられるため HA 側の転码が不要になります。
+- `/stream.mp4` は購読者が付いた時だけエンコーダを回し (`db_core_video_encoder_wanted`)、意図的に
+  pre-warm しません。go2rtc は `#video=copy` で受けられるため HA 側の転码が不要になります。
+- 各 H.264 access unit は次の frame を待たずに即時 fMP4 fragment になります。track は stream ごとに
+  最新 fragment 一つだけを保持し、遅い reader は中間 fragment を skip、Core はその回数を数えます。
+  private `dbts` box は compatibility player の live-edge 計算用 capture timestamp を持ち、generic fMP4
+  player は安全に無視できます。
+- iOS 5 player は H.264 が持続表示するまで MJPEG を残し、warm-up frame でその端末の latency を得てから
+  有界の live-edge gate を tighten します。first/only frame は drop せず、信頼できる server clock がなければ
+  age drop を無効化し、display stall 時には MJPEG に戻ります。これは compatibility renderer の振舞いで、
+  universal latency promise ではありません。
 - 網頁通話のブラウザ→門口機映像は WebRTC ではなく「getUserMedia → canvas → JPEG を
   `/call-frame` へ POST」という枯れた方式です ([Decisions](Decisions-ja))。
 

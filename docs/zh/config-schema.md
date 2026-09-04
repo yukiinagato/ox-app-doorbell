@@ -386,8 +386,9 @@ generic command/argv。
 `admin.password_hash` 是整个集群唯一的管理员凭据：Web 管理界面与每台设备的设置界面使用同一个密钥。
 它以 `{"salt":"<hex>","hash":"<hex>","algo":"blake2b-256","updated_ms":…}` 的形式复制，绝不保存明文，
 因此离线设备也能用手上已有的副本校验。任何界面上第一次输入的密码即成为集群密码（沿用 Web 登录既有的
-首次信任流程）。任一界面连续 5 次失败会让所有界面暂停 10 分钟；该计数由 `POST /api/login` 与
-`db_core_admin_password_verify` 共享。
+首次信任流程）。连续 5 次失败会在接收这些尝试的 Core node 上产生十分钟的 in-memory lockout；该计数由
+该 node 的 `POST /api/login` 与 `db_core_admin_password_verify` 共享。它不会复制到其他 node，因此不是
+cluster-wide rate limiter。
 
 在此键出现之前，每个节点各自保存摘要，信息亭还另有退出码。该本地摘要在第一次校验成功前仍然有效，
 成功后即作为集群密码被复制。仍持有自己 `exit_pin.txt` 摘要的外壳，应在

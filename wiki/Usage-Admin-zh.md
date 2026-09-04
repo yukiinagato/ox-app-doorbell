@@ -25,7 +25,32 @@
 | 事由 | 编辑访客的事由按钮（标签、图标、排序） |
 | 系统 | 面板 token、签发添加 PIN、配置导出/导入、日志、原始 JSON |
 
+## 共享的管理员 access
+
+在当前 Admin 或 native settings surface 中设置的 password 会成为 replicated cluster credential，只保存其
+salted digest。修改 password 会使执行修改的 node 上的 Admin session 失效。五次失败会触发十分钟 lockout，
+但它只在该 node 的 Web login 和 device-side settings entry 间共享。这个 counter 不会复制到其他 node，
+因此不是 cluster-wide rate limiter。若从未设置过 password，Core 不会要求 password 才能 clear active SOS。
+
 ## 常用配方集
+
+### 发布 announcement、显示 unlock 或暂停事由
+
+door 的 announcement control 用于 door-specific message，global announcement 用于 cluster-wide default；door
+message 会优先显示但不会删除 global one。announcement 可设 expiry，preset list 最多可保留八条复用 message。
+door unlock control 默认只在其 command（或 SIP DTMF `ha_command`）已配置时显示；若无 action 而被按下，Core
+会返回明确 failure，而不会伪装成功。
+
+在事由 tab 关闭一个 purpose，可把它从新的访客选项中移除，同时保留 labels、icon、order、history 和已有的
+rule reference。更新滞后的门口机仍可能提交旧 button；该 press 会成为 generic ring，不会因 propagation delay
+拒绝访客。
+
+### 选择易读的 fleet theme
+
+可选择 light、dark、system-following 或 scheduled appearance。Core 在 cluster time zone 中解析 scheduled
+appearance，并按 semantic region 提供 automatic ink 和 call-button color。background image 令 text 背后的
+pixel 因 device 而异时，shell 可在 local 取样；explicit regional override 仍优先。low-contrast color 会保存并
+返回 measured WCAG warning，不会被 silent change 或 reject。
 
 ### 只对快递自动「放门口」应答（不响电话）
 

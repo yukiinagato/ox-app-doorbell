@@ -23,6 +23,10 @@ recovery 在 origin 還原 ringing，而 in-call 僅由該 owner 還原。
 快递员点一下「快递」即完成按铃。事由会显示在室内机、TV、Telegram、HA、管理界面的
 所有地方，也可以用作规则的分支条件 (`when.purposes`)。→ [访客体验](Usage-Visitors-zh)
 
+管理员可关闭 `visit_purposes.<id>.enabled`，而不删除其标签、图标、排序、历史或规则。关闭后的事由
+不会再提供给访客，也不能附加到新呼叫。尚未收到更新的门口机即使提交旧按钮，Core 也不会拒绝访客按铃，
+而是将其作为不带事由的通用呼叫。
+
 ## 访客语言切换
 
 在门口机上显示语言按钮（日/英/中 —— 由 `ui.languages` 选择）。访客切换后
@@ -34,6 +38,9 @@ recovery 在 origin 還原 ringing，而 in-call 僅由該 owner 還原。
 通过不经 Asterisk 的直连 SIP (UDP 47190)，提供 (1) 仅语音、(2) 门口影像 + 双向语音、
 (3) 室内外双向影像（对称 MJPEG）三种形态。即使已经用电话接听，之后按室内机的「应答」
 也能挂断电话腿并**接管**为室内对讲。PBX 宕机也照常运转。→ [架构](Architecture-zh)
+
+已实现应答的 shell 还能经由 Core 控制麦克风静音。该状态跨呼叫保存，并在媒体激活时重新应用；即便
+development/display build 没有 SIP backend，也会记录该状态，但这不代表该构建能够通话。
 
 ## 监听（监视）
 
@@ -89,6 +96,12 @@ action 會到所有對象。完整 Push subscription 在 CRDT 中以 XChaCha20-P
 分发 HW 编码 fMP4 (`/stream.mp4`) —— 通话画质变得流畅，HA 侧也不再需要转码
 (go2rtc `#video=copy`)。零订阅者时编码器停转，属于省电设计。→ [决策记录](Decisions-zh)
 
+live fMP4 track 每个 access unit 到达后立即输出 fragment，对慢 subscriber 只保留最新 fragment，因此会
+追上直播而不累积延迟。encoder 只在 subscriber 连接后启动，并不 pre-warm。iOS 5 compatibility player 在
+H.264 证明可持续显示前始终将 MJPEG 留在前层；之后从设备自身 displayed frame 学习有界的 live-edge，只有
+有更新 frame 排队时才跳过旧 frame，显示 stall 后会退回 MJPEG。这条路径有 host test 和有限的 iPad 1
+smoke evidence，并非通用硬件认证声明。
+
 ## HomeKit 联动
 
 经由 go2rtc + HA 的 HomeKit Bridge，在 iPhone 的家庭 App 收到门铃通知和实时影像。
@@ -100,6 +113,10 @@ action 會到所有對象。完整 Push subscription 在 CRDT 中以 XChaCha20-P
 背景色 / 背景图片、文案 (i18n_overrides)、事由、快捷回复、自定义语音
 从室内机或管理界面修改后，通过 CRDT 毫秒级同步到所有设备。还可以配置夜间模式
 （减光 + 偏红）、屏保、防烧屏的 pixel shift。
+
+Core 会在 cluster time zone 中解析 `auto_system`、`auto_schedule`、light 或 dark 外观，并按 semantic region
+发布自动 text/accent 色。若背景图片使文字背后的实际 pixel 因设备而异，shell 可在本机取样；显式的
+region override 仍优先。低 contrast 不会被拒绝保存，而会返回已测量的 WCAG warning。
 
 每裝置 semantic size/color override 受 renderer manifest 約束。native client 公開 top-level
 `ui_manifest`，配信中的 Core 另行公開 local `web_ui.manifest`。last-valid native peer contract 會永久

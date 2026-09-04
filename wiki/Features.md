@@ -17,6 +17,11 @@ cannot both own the call; recovery restores ringing at the origin and in-call on
 
 Purpose choices are editable and can be used as rule conditions (`when.purposes`). Presentation in a shell or integration depends on that target's implemented UI/action path. → [Usage-Visitors](Usage-Visitors)
 
+An administrator can switch `visit_purposes.<id>.enabled` off without deleting its label, icon,
+order, history, or rules. Disabled purposes are not offered to visitors and cannot be selected for
+a new call. A door station that has not received the change still rings, but Core removes the now
+disabled purpose rather than rejecting the visitor's press.
+
 ## Visitor language switching
 
 The door station can show configured language buttons. Visitor-language state is replicated and quick-reply labels/TTS select that language with fallback. The configurable idle timer reverts to Japanese. → [Usage-Visitors](Usage-Visitors)
@@ -24,6 +29,10 @@ The door station can show configured language buttons. Visitor-language state is
 ## Intercom (three modes) and answer takeover
 
 Direct SIP (UDP 47190) can bypass Asterisk for implemented monitor/answer paths when both exact artifacts link real SIP and media is available. PBX-independent operation must be commissioned on the deployment hardware. → [Architecture](Architecture)
+
+Implemented answer shells also expose microphone mute through Core. The setting is kept across
+calls and reapplied when media becomes active; it is recorded even in a development/display build
+without a SIP backend, but that does not make calling available in such an artifact.
 
 ## Monitoring
 
@@ -69,7 +78,13 @@ Motion is detected from the door station camera's frame bus and fed into rules (
 
 ## Video — MJPEG baseline + H.264 smooth tier
 
-MJPEG is the compatibility baseline. A platform may publish fMP4 (`/stream.mp4`) only after its encoder path is active and runtime status says it is ready; hardware certification is device-specific. → [Decisions](Decisions)
+MJPEG is the compatibility baseline. A platform may publish fMP4 (`/stream.mp4`) only after its encoder path is active and runtime status says it is ready; hardware certification is device-specific. The live fMP4 track emits each access unit immediately and retains only the newest fragment for a slow subscriber, so it catches up instead of building delay. The encoder starts on demand when a subscriber attaches; it is not pre-warmed. → [Decisions](Decisions)
+
+The iOS 5 compatibility player keeps MJPEG in front until H.264 has sustained a real display rate.
+It then learns a bounded live-edge allowance from that device's displayed frames, skips only a
+superseded old frame when a newer one is already queued, and returns to MJPEG after a display
+stall. This path is host-tested and has bounded iPad 1 smoke evidence, not a general hardware
+certification claim.
 
 ## HomeKit integration
 
@@ -78,7 +93,7 @@ Via go2rtc + HA's HomeKit Bridge, doorbell notifications and live video appear i
 
 ## Theme push, text editing, personalization
 
-Change background colors / background images, text strings (i18n_overrides), purposes, quick replies, and custom recordings from an indoor station or the admin UI, and the CRDT syncs them to every device in milliseconds. Night mode (dimming + red shift), a screensaver, and burn-in-protection pixel shift are also configurable.
+Change background colors / background images, text strings (i18n_overrides), purposes, quick replies, and custom recordings from an indoor station or the admin UI, and the CRDT syncs them to every device in milliseconds. Night mode (dimming + red shift), a screensaver, and burn-in-protection pixel shift are also configurable. Core resolves `auto_system`, `auto_schedule`, light, or dark appearance in the cluster time zone, and publishes automatic text/accent choices per semantic region. A shell can still sample an image locally where the actual pixels behind text differ; an explicit regional override wins. Low contrast is an advisory, measured WCAG warning rather than a rejected save.
 
 Per-device semantic sizing/color overrides are constrained by each renderer's manifest. Native
 clients publish top-level `ui_manifest`; the serving Core publishes a distinct local

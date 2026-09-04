@@ -413,10 +413,11 @@ property the current request did not touch.
 
 `POST /api/login` verifies against `admin.password_hash`, the cluster-wide credential, falling back
 to this node's legacy local digest until the first successful login republishes it. The first
-password offered on any surface becomes the cluster's. Five failures pause every surface for ten
-minutes and the endpoint answers `429 {"ok":false,"err":"locked"}`; the counter is shared with
-`db_core_admin_password_verify`, so a native settings screen and the web page cannot be attacked
-independently. Changing the password invalidates every existing Admin session.
+password offered on any surface becomes the cluster's. Five failures create a ten-minute lockout
+on the Core node that received them and the endpoint answers `429 {"ok":false,"err":"locked"}`;
+the counter is shared with that node's `db_core_admin_password_verify`, so its native settings
+screen and web page cannot be attacked independently. The counter is not replicated to other
+nodes. Changing the password invalidates every existing Admin session on the node that changes it.
 
 `status.emergency.cancel_requires_password` is what gates the SOS clear control: core computes it
 as `emergency.cancel_requires_pin` AND a password actually being set, so a cluster that never

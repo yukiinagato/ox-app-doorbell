@@ -429,8 +429,9 @@ secret opens the web admin and every device's settings screen. It replicates as
 `{"salt":"<hex>","hash":"<hex>","algo":"blake2b-256","updated_ms":…}` and never as plaintext, so
 an offline device verifies against the copy it already holds. The first password offered on any
 surface becomes the cluster's (the web login's existing trust-on-first-use path). Five failed
-attempts on any surface pause every surface for ten minutes; the counter is shared between
-`POST /api/login` and `db_core_admin_password_verify`.
+attempts create a ten-minute in-memory lockout on the Core node that received them; the counter is
+shared between that node's `POST /api/login` and `db_core_admin_password_verify`. It is not
+replicated to other nodes and is therefore not a cluster-wide rate limiter.
 
 Before this key existed each node kept its own digest in local storage, and a kiosk kept a
 separate exit code. That local digest stays authoritative until the first successful
