@@ -749,6 +749,7 @@ struct Mesh::Impl {
   bool pair_keys_ready_ = false;
   struct Pending {
     std::string id, addr, name, role, pk;
+    std::vector<std::string> addrs;
     std::string model, platform, sw;
     int64_t last_seen = 0;
     // none | sent | acked | joined | failed
@@ -773,6 +774,7 @@ struct Mesh::Impl {
     std::string key;  // pending id, or "addr:<addr>" for a direct (QR) invitation
     std::string id;   // pending id; empty until a direct invitation is acknowledged
     std::string addr, pk;
+    std::vector<std::string> addrs;
     int attempts = 0;
     bool manual = false;
     bool finished = false;
@@ -2279,10 +2281,13 @@ struct Mesh::Impl {
     auto it = pending_.find(pb.id);
     const bool isNew = it == pending_.end();
     Pending& p = pending_[pb.id];
-    const bool changed = isNew || p.addr != pb.addr || p.name != pb.name || p.role != pb.role ||
-                         p.model != pb.model || p.platform != pb.platform || p.sw != pb.sw;
+    const auto addrs = pb.addrs.empty() ? std::vector<std::string>{pb.addr} : pb.addrs;
+    const bool changed = isNew || p.addr != pb.addr || p.addrs != addrs || p.name != pb.name ||
+                         p.role != pb.role || p.model != pb.model || p.platform != pb.platform ||
+                         p.sw != pb.sw;
     p.id = pb.id;
     p.addr = pb.addr;
+    p.addrs = addrs;
     p.name = pb.name;
     p.role = pb.role;
     p.pk = pb.pk;
@@ -2340,7 +2345,7 @@ struct Mesh::Impl {
       if (!manual) return;
       finishInvite(run->second, false, "superseded");
     }
-    startInvite(id, it->second.addr, it->second.pk, manual);
+    startInvite(id, it->second.addrs, it->second.pk, manual);
   }
 
 
@@ -2352,7 +2357,7 @@ struct Mesh::Impl {
     const std::string key = "addr:" + addr;
     auto run = invites_.find(key);
     if (run != invites_.end()) finishInvite(run->second, false, "superseded");
-    startInvite("", addr, pk, /*manual=*/true);
+    startInvite("", {addr}, pk, /*manual=*/true);
   }
 
 
@@ -2364,22 +2369,24 @@ struct Mesh::Impl {
   }
 
 
-  void startInvite(const std::string& id, const std::string& addr, const std::string& pk,
+  void startInvite(const std::string& id, const std::vector<std::string>& addrs,
+                   const std::string& pk,
                    bool manual) {
-    if (addr.empty()) {
+    if (addrs.empty() || addrs.front().empty()) {
       if (manual && cbs.on_invite_result) cbs.on_invite_result(id, false, "no_addr");
       return;
     }
     Bytes decoded;
     if (!hexDecode(pk, decoded) || decoded.size() != 32) {
-      if (manual && cbs.on_invite_result) cbs.on_invite_result(id.empty() ? addr : id, false,
+      if (manual && cbs.on_invite_result) cbs.on_invite_result(id.empty() ? addrs.front() : id, false,
                                                                "bad_pk");
       return;
     }
     auto run = std::make_shared<InviteRun>();
-    run->key = id.empty() ? ("addr:" + addr) : id;
+    run->key = id.empty() ? ("addr:" + addrs.front()) : id;
     run->id = id;
-    run->addr = addr;
+    run->addr = addrs.front();
+    run->addrs = addrs;
     run->pk = pk;
     run->manual = manual;
     invites_[run->key] = run;
@@ -2396,7 +2403,7 @@ struct Mesh::Impl {
       it->second.last_error.clear();
       if (cbs.on_pending_changed) cbs.on_pending_changed();
     }
-    sendInvite(run->addr, run->pk, run);
+    for (const auto& addr : run->addrs) sendInvite(addr, run->pk, run);
     std::weak_ptr<char> w = alive;
     run->timer = loop.postDelayed(kInviteAckMs, [this, w, run] {
       if (w.expired()) return;
@@ -2507,6 +2514,7 @@ struct Mesh::Impl {
     ensurePairKeys();
     PairAnnounce a;
     a.on = true;
+    a.addrs = st.advertise_addrs;
     a.name = pairName();
     a.role = st.role;
     a.pk = hexEncode(pair_pk_.data(), pair_pk_.size());

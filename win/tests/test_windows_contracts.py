@@ -601,6 +601,17 @@ class WindowsContracts(unittest.TestCase):
         self.assertIn("IF_TYPE_SOFTWARE_LOOPBACK", sockets)
         self.assertIn("0.0.0.0 is valid for bind(), but never for pairing", sockets)
         self.assertIn("::closesocket(fd)", sockets)
+        primary = sockets[sockets.index("inline std::string primaryIPv4()"):
+                          sockets.index("// WSAStartup/WSACleanup")]
+        self.assertLess(primary.index("primaryIPv4ViaRoute()"),
+                        primary.index("localAddresses(false)"))
+        beacon = read("core/src/mesh/udp_beacon.cpp")
+        self.assertIn("for (const auto& host : interfaces)", beacon)
+        self.assertIn("withBeaconSource(source, addr)", beacon)
+        self.assertIn('json::get(doc.get(), "addrs")', beacon)
+        mesh = read("core/src/mesh/mesh.cpp")
+        self.assertIn("a.addrs = st.advertise_addrs", mesh)
+        self.assertIn("for (const auto& addr : run->addrs)", mesh)
 
     def test_windows_firewall_rules_require_consent_before_uac_repair(self):
         firewall = read("win/DoorbellApp/Core/WindowsFirewall.cs")

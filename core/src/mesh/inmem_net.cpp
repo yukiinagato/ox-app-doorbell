@@ -236,7 +236,8 @@ class InMemDiscovery : public IDiscovery {
         if (kv.first == addr_ || !kv.second) continue;
         if (!net_->reachable(addr_, kv.first)) continue;
         if (net_->dropFrame()) continue;
-        PairBeacon pb{node_id_, adv_addr_, pair_.name, pair_.role,
+        const auto addrs = pair_.addrs.empty() ? std::vector<std::string>{adv_addr_} : pair_.addrs;
+        PairBeacon pb{node_id_, adv_addr_, addrs, pair_.name, pair_.role,
                       pair_.pk,  pair_.model, pair_.platform, pair_.sw};
         auto cb = kv.second;
         net_->loop.post([cb, pb]() { cb(pb); });

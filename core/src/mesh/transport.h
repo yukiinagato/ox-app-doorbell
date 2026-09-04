@@ -13,6 +13,7 @@
 #include <functional>
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "util/common.h"
 
@@ -58,6 +59,7 @@ struct DiscoveredPeer {
 struct PairBeacon {
   std::string id;
   std::string addr;
+  std::vector<std::string> addrs;
   std::string name;
   std::string role;
   std::string pk;
@@ -70,6 +72,7 @@ struct PairBeacon {
 // What an unpaired device announces about itself. Announcing stops as soon as the device pairs.
 struct PairAnnounce {
   bool on = false;
+  std::vector<std::string> addrs;
   std::string name;
   std::string role;
   std::string pk;
