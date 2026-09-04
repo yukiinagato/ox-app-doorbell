@@ -282,9 +282,14 @@ inline std::vector<std::string> localAddresses(bool includeV6) {
 
 
 inline std::string primaryIPv4() {
+  // The adapter list can start with a Hyper-V, VPN, or container interface. Prefer the source
+  // selected by the default route for legacy single-address consumers. Multi-interface pairing
+  // keeps the complete candidate list separately.
+  std::string route = primaryIPv4ViaRoute();
+  if (!route.empty()) return route;
   auto v = localAddresses(false);
   if (!v.empty()) return v.front();
-  return primaryIPv4ViaRoute();
+  return std::string();
 }
 
 
@@ -450,12 +455,13 @@ inline int sendTo(socket_t s, const void* buf, size_t len, const sockaddr* addr,
 #endif
 }
 
-inline int recvFrom(socket_t s, void* buf, size_t len) {
+inline int recvFrom(socket_t s, void* buf, size_t len, sockaddr* from = nullptr,
+                    socklen_v* from_len = nullptr) {
   if (len > INT_MAX) len = INT_MAX;
 #if defined(_WIN32)
-  return ::recvfrom(s, static_cast<char*>(buf), static_cast<int>(len), 0, nullptr, nullptr);
+  return ::recvfrom(s, static_cast<char*>(buf), static_cast<int>(len), 0, from, from_len);
 #else
-  return static_cast<int>(::recvfrom(s, buf, len, 0, nullptr, nullptr));
+  return static_cast<int>(::recvfrom(s, buf, len, 0, from, from_len));
 #endif
 }
 

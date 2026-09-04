@@ -1,7 +1,9 @@
 
 #include "mesh/udp_beacon.h"
 
+#include <algorithm>
 #include <cstring>
+#include <vector>
 
 #include "monocypher.h"
 #include "util/json.h"
@@ -31,6 +33,18 @@ bool pskUsable(const std::array<uint8_t, 32>& psk) {
   for (uint8_t b : psk)
     if (b) return true;
   return false;
+}
+
+void addUnique(std::vector<std::string>* values, const std::string& value) {
+  if (!value.empty() && std::find(values->begin(), values->end(), value) == values->end())
+    values->push_back(value);
+}
+
+std::string withBeaconSource(const sockaddr_in& source, const std::string& advertised) {
+  char host[INET_ADDRSTRLEN] = {0};
+  if (!::inet_ntop(AF_INET, &source.sin_addr, host, sizeof(host))) return std::string();
+  const auto colon = advertised.rfind(':');
+  return std::string(host) + (colon == std::string::npos ? "" : advertised.substr(colon));
 }
 
 }  // namespace
@@ -72,10 +86,17 @@ bool UdpBeacon::openSockets_() {
 
     return true;
   }
-  ip_mreq mreq{};
-  ::inet_pton(AF_INET, group_.c_str(), &mreq.imr_multiaddr);
-  mreq.imr_interface.s_addr = htonl(INADDR_ANY);
-  if (!net::setSockOpt(recv_fd_, IPPROTO_IP, IP_ADD_MEMBERSHIP, &mreq, sizeof(mreq))) {
+  bool joined = false;
+  auto interfaces = net::localAddresses(false);
+  if (interfaces.empty()) interfaces.push_back("");
+  for (const auto& host : interfaces) {
+    ip_mreq mreq{};
+    ::inet_pton(AF_INET, group_.c_str(), &mreq.imr_multiaddr);
+    if (host.empty()) mreq.imr_interface.s_addr = htonl(INADDR_ANY);
+    else if (::inet_pton(AF_INET, host.c_str(), &mreq.imr_interface) != 1) continue;
+    joined = net::setSockOpt(recv_fd_, IPPROTO_IP, IP_ADD_MEMBERSHIP, &mreq, sizeof(mreq)) || joined;
+  }
+  if (!joined) {
     DB_LOGW("beacon", "multicast join failed");
   }
 
@@ -128,6 +149,27 @@ void UdpBeacon::setPsk(const std::array<uint8_t, 32>& psk) {
   psk_ = psk;
 }
 
+void UdpBeacon::sendMulticast_(const std::string& packet) {
+  sockaddr_in dst{};
+  dst.sin_family = AF_INET;
+  dst.sin_port = htons(port_);
+  ::inet_pton(AF_INET, group_.c_str(), &dst.sin_addr);
+  auto interfaces = net::localAddresses(false);
+  if (interfaces.empty()) interfaces.push_back("");
+  for (const auto& host : interfaces) {
+    in_addr source{};
+    if (!host.empty() && ::inet_pton(AF_INET, host.c_str(), &source) != 1) continue;
+    if (!net::setSockOpt(send_fd_, IPPROTO_IP, IP_MULTICAST_IF, &source, sizeof(source))) {
+      send_err_++;
+      continue;
+    }
+    int n = net::sendTo(send_fd_, packet.data(), packet.size(),
+                        reinterpret_cast<sockaddr*>(&dst), sizeof(dst));
+    if (n == static_cast<int>(packet.size())) sent_++;
+    else send_err_++;
+  }
+}
+
 void UdpBeacon::sendHello_() {
 
   if (pair_on_.load()) {
@@ -148,17 +190,7 @@ void UdpBeacon::sendHello_() {
   json::set(o.get(), "addr", adv_addr);
   json::set(o.get(), "mac", mac);
   const std::string pkt = json::dump(o.get());
-  sockaddr_in dst{};
-  dst.sin_family = AF_INET;
-  dst.sin_port = htons(port_);
-  ::inet_pton(AF_INET, group_.c_str(), &dst.sin_addr);
-  int n = net::sendTo(send_fd_, pkt.data(), pkt.size(),
-                      reinterpret_cast<sockaddr*>(&dst), sizeof(dst));
-  if (n == static_cast<int>(pkt.size())) {
-    sent_++;
-  } else {
-    send_err_++;
-  }
+  sendMulticast_(pkt);
 }
 
 void UdpBeacon::sendPairAnnounce_() {
@@ -175,6 +207,9 @@ void UdpBeacon::sendPairAnnounce_() {
   json::set(o.get(), "pair", int64_t{1});
   json::set(o.get(), "id", node_id);
   json::set(o.get(), "addr", adv_addr);
+  cJSON* addrs = json::addArr(o.get(), "addrs");
+  for (const auto& addr : pair.addrs)
+    json::push(addrs, json::Doc(cJSON_CreateString(addr.c_str())));
   json::set(o.get(), "name", pair.name);
   json::set(o.get(), "role", pair.role);
   json::set(o.get(), "pk", pair.pk);
@@ -182,23 +217,16 @@ void UdpBeacon::sendPairAnnounce_() {
   json::set(o.get(), "platform", pair.platform);
   json::set(o.get(), "sw", pair.sw);
   const std::string pkt = json::dump(o.get());
-  sockaddr_in dst{};
-  dst.sin_family = AF_INET;
-  dst.sin_port = htons(port_);
-  ::inet_pton(AF_INET, group_.c_str(), &dst.sin_addr);
-  int n = net::sendTo(send_fd_, pkt.data(), pkt.size(), reinterpret_cast<sockaddr*>(&dst),
-                      sizeof(dst));
-  if (n == static_cast<int>(pkt.size())) {
-    sent_++;
-  } else {
-    send_err_++;
-  }
+  sendMulticast_(pkt);
 }
 
 void UdpBeacon::recvLoop_() {
   char buf[2048];
   while (!stopping_) {
-    int n = net::recvFrom(recv_fd_, buf, sizeof(buf) - 1);
+    sockaddr_in source{};
+    net::socklen_v source_len = sizeof(source);
+    int n = net::recvFrom(recv_fd_, buf, sizeof(buf) - 1,
+                          reinterpret_cast<sockaddr*>(&source), &source_len);
     if (n <= 0) continue;
     buf[n] = '\0';
     json::Doc doc = json::parse(buf);
@@ -215,11 +243,18 @@ void UdpBeacon::recvLoop_() {
         cb = on_pair_found_;
       }
       if (cb) {
-        PairBeacon pb{id, addr, json::getString(doc.get(), "name"),
+        std::vector<std::string> addrs;
+        addUnique(&addrs, withBeaconSource(source, addr));
+        addUnique(&addrs, addr);
+        cJSON* item = nullptr;
+        cJSON_ArrayForEach(item, json::get(doc.get(), "addrs")) {
+          if (addrs.size() == 16) break;
+          if (cJSON_IsString(item) && item->valuestring) addUnique(&addrs, item->valuestring);
+        }
+        PairBeacon pb{id, addrs.front(), std::move(addrs), json::getString(doc.get(), "name"),
                       json::getString(doc.get(), "role"), json::getString(doc.get(), "pk"),
                       json::getString(doc.get(), "model"),
-                      json::getString(doc.get(), "platform"),
-                      json::getString(doc.get(), "sw")};
+                      json::getString(doc.get(), "platform"), json::getString(doc.get(), "sw")};
         loop_.post([cb, pb]() { cb(pb); });
       }
       continue;

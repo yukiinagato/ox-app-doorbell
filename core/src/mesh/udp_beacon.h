@@ -40,6 +40,7 @@ class UdpBeacon : public IDiscovery {
  private:
   void sendHello_();
   void sendPairAnnounce_();
+  void sendMulticast_(const std::string& packet);
   void recvLoop_();
   bool openSockets_();
 
