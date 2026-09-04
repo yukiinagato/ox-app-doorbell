@@ -445,6 +445,40 @@ class WindowsContracts(unittest.TestCase):
         self.assertIn("DateTime.UtcNow.AddMilliseconds(250)", mjpeg)
         self.assertIn("Decode(frame, _lowResource ? 640 : 0)", mjpeg)
 
+    def test_h264_playback_failures_are_logged_and_retries_are_bounded(self):
+        # The panel used to stay on MJPEG with no record of why MediaElement never opened:
+        # MediaFailed went to Debug.WriteLine and the 3-second fallback retried forever.
+        diagnostics = read("win/DoorbellApp/Core/VideoDiagnostics.cs")
+        window = read("win/DoorbellApp/MainWindow.xaml.cs")
+        contracts = read("win/DoorbellApp/Core/RuntimeContracts.cs")
+        readme = read("win/README.md")
+        self.assertIn('private const string LogName = "video.log";', diagnostics)
+        self.assertIn("public static void RecordFailure(string surface, string url, "
+                      "string reason, Exception error)", diagnostics)
+        self.assertIn('e.HResult.ToString("X8")', diagnostics)
+        self.assertIn("// Diagnostics must never take the panel down.", diagnostics)
+        for surface, url in (("incoming", "_incomingStreamMp4Url"),
+                             ("in_call", "_inCallH264Url")):
+            self.assertIn('VideoDiagnostics.RecordAttempt("%s", %s);' % (surface, url), window)
+            self.assertIn('VideoDiagnostics.RecordSuccess("%s", %s);' % (surface, url), window)
+            self.assertIn('VideoDiagnostics.RecordFailure("%s", %s,\n'
+                          '                    "media_failed", e.ErrorException);'
+                          % (surface, url) if surface == "incoming" else
+                          'VideoDiagnostics.RecordFailure("in_call", _inCallH264Url, '
+                          '"media_failed",\n                    e.ErrorException);', window)
+            self.assertIn('"no_media_opened_within_3s", null);', window)
+        self.assertIn("private const int H264RetryBudget = 3;", window)
+        for counter in ("_incomingH264Failures", "_inCallH264Failures"):
+            self.assertIn(counter + "++;", window)
+            self.assertIn("if (" + counter + " >= H264RetryBudget)", window)
+            self.assertIn(counter + " = 0;", window)
+        self.assertEqual(window.count('"retry_budget_exhausted_mjpeg_only", null);'), 2)
+        self.assertIn("_h264Fallback.Interval = TimeSpan.FromSeconds(3);", window)
+        self.assertIn('{ "h264_playback_diagnostics", VideoDiagnostics.Snapshot() }', contracts)
+        self.assertIn("within three seconds", readme)
+        self.assertIn("`video.log`", readme)
+        self.assertNotIn("eight seconds", readme)
+
     def test_manual_call_lifecycle_is_owned_and_monitor_never_claims_it(self):
         interop = read("win/DoorbellApp/Core/CoreInterop.cs")
         client = read("win/DoorbellApp/Core/CoreClient.cs")

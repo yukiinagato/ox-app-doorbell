@@ -180,6 +180,7 @@ static BOOL DBHTTPURLQueryContainsCredential(NSURL *url) {
 @property(nonatomic, readwrite, copy) NSString *errorReason;
 @property(nonatomic, readwrite) int64_t lastCaptureTimeMs;
 @property(nonatomic, readwrite) int64_t lastServerTimeMs;
+@property(nonatomic, readwrite) NSUInteger partsAnnounced;
 @end
 
 @implementation DBMJPEGMultipartParser {
@@ -215,7 +216,36 @@ static BOOL DBHTTPURLQueryContainsCredential(NSURL *url) {
   _partServerTimeMs = 0;
   self.lastCaptureTimeMs = 0;
   self.lastServerTimeMs = 0;
+  self.partsAnnounced = 0;
   self.errorReason = @"";
+}
+
+- (void)beginPartWithContentLength:(long long)contentLength
+                     captureTimeMs:(int64_t)captureTimeMs
+                      serverTimeMs:(int64_t)serverTimeMs {
+  self.partsAnnounced = self.partsAnnounced + 1;
+  // A marker-delimited body that already ended is emitted before the new part
+  // replaces it; whatever else is buffered belongs to an interrupted part.
+  if (_markerDelimitedBody && [_buffer length] > 0) {
+    BOOL needsMore = NO;
+    (void)[self extractMarkerDelimitedJPEG:&needsMore];
+  }
+  [_buffer setLength:0];
+  _partCaptureTimeMs = captureTimeMs;
+  _partServerTimeMs = serverTimeMs;
+  if (contentLength > 0 && contentLength <= (long long)DBMJPEGMaximumFrameBytes) {
+    _expectedBodyBytes = (NSInteger)contentLength;
+    _markerDelimitedBody = NO;
+  } else {
+    _expectedBodyBytes = -1;
+    _markerDelimitedBody = YES;
+  }
+}
+
+- (BOOL)bufferStartsWithJPEG {
+  if ([_buffer length] < 2) return NO;
+  const uint8_t *bytes = [_buffer bytes];
+  return bytes[0] == 0xff && bytes[1] == 0xd8;
 }
 
 - (BOOL)fail:(NSString *)reason {
@@ -339,6 +369,12 @@ static BOOL DBHTTPURLQueryContainsCredential(NSURL *url) {
       continue;
     }
     if (_expectedBodyBytes < 0) {
+      if ([self bufferStartsWithJPEG]) {
+        // The part headers were consumed by the network stack (CFNetwork does
+        // this for x-mixed-replace); the body runs up to its EOI marker.
+        _markerDelimitedBody = YES;
+        continue;
+      }
       NSRange delimiter = [self headerDelimiter];
       if (delimiter.location == NSNotFound) {
         if ([_buffer length] > DBMJPEGMaximumHeaderBytes)

@@ -122,6 +122,9 @@ namespace DoorbellApp.Core
                         { "sip_available", string.Equals(sipBackend, "pjsip", StringComparison.Ordinal) },
                         { "h264_playback", safeMode ? "disabled_safe_mode" :
                             (H264PlaybackCertified() ? "certified" : "uncertified_fallback") },
+                        // Why the last MediaElement attempt did or did not open; the full
+                        // history is in video.log next to the data directory.
+                        { "h264_playback_diagnostics", VideoDiagnostics.Snapshot() },
                         { "mjpeg_playback", safeMode ? "low_resolution_fallback" : "available" },
                         { "audio_calling", string.Equals(sipBackend, "pjsip",
                                                          StringComparison.Ordinal) ?

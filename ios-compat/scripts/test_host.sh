@@ -83,6 +83,13 @@ swiftc \
   "$REPO_ROOT/ios-compat/tests/modern_call_revision_test.swift" \
   -o "$OUT/modern_call_revision_test"
 
+# MjpegPartAssembler is the Swift shell's MJPEG frame reassembly; it stays Foundation-only so the
+# CFNetwork per-part delivery (the iPad mini 3 black-video case) is covered on the host.
+swiftc \
+  "$REPO_ROOT/ios/Doorbell/MjpegPartAssembler.swift" \
+  "$REPO_ROOT/ios-compat/tests/mjpeg_part_assembler_test.swift" \
+  -o "$OUT/mjpeg_part_assembler_test"
+
 "$CC" -fobjc-arc -Wall -Wextra -Werror -O2 -isysroot "$MACOS_SDK" \
   -I"$REPO_ROOT/ios-kiosk/src/Net" \
   "$REPO_ROOT/ios-kiosk/src/Net/DBHTTPMediaSupport.m" \
@@ -144,6 +151,7 @@ swiftc \
 "$OUT/backdrop_compositor_test"
 "$OUT/call_event_tracker_test"
 [[ $MODERN_CALL_TEST -eq 1 ]] && "$OUT/modern_call_revision_test"
+"$OUT/mjpeg_part_assembler_test"
 "$OUT/http_media_test"
 "$OUT/rtsp_h264_test"
 "$OUT/compatibility_profile_test"

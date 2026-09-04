@@ -39,6 +39,7 @@ static void DBMjpegTrace(NSString *stage, CFAbsoluteTime started) {
   volatile BOOL _running;
   NSURLConnection *_connection;
   DBMJPEGMultipartParser *_parser;
+  NSUInteger _responsesSeen;
   BOOL _attemptFinished;
   BOOL _attemptHadFrame;
   NSString *_attemptReason;
@@ -151,6 +152,7 @@ static void DBMjpegTrace(NSString *stage, CFAbsoluteTime started) {
 
       _attemptFinished = NO;
       _attemptHadFrame = NO;
+      _responsesSeen = 0;
       _attemptReason = @"stream_eof";
       _lastNetworkDataAt = CFAbsoluteTimeGetCurrent();
       __weak DBMjpegClient *weakSelf = self;
@@ -223,7 +225,8 @@ static void DBMjpegTrace(NSString *stage, CFAbsoluteTime started) {
     [_connection cancel];
     return;
   }
-  NSInteger status = [(NSHTTPURLResponse *)response statusCode];
+  NSHTTPURLResponse *http = (NSHTTPURLResponse *)response;
+  NSInteger status = [http statusCode];
   if (!_tracedResponse) {
     _tracedResponse = YES;
     DBMjpegTrace(@"http_response_headers", _startupAt);
@@ -232,7 +235,29 @@ static void DBMjpegTrace(NSString *stage, CFAbsoluteTime started) {
     _attemptReason = [NSString stringWithFormat:@"http_status_%ld", (long)status];
     _attemptFinished = YES;
     [_connection cancel];
+    return;
   }
+  // CFNetwork announces every part of a multipart/x-mixed-replace body as its
+  // own response, with the part headers, and then delivers the bare JPEG bytes.
+  _responsesSeen += 1;
+  NSString *mime = [[response MIMEType] lowercaseString];
+  if (_responsesSeen > 1 || [mime isEqualToString:@"image/jpeg"]) {
+    NSDictionary *headers = [http allHeaderFields];
+    [_parser beginPartWithContentLength:[response expectedContentLength]
+                          captureTimeMs:[self longLongHeader:@"x-doorbell-capture-time-ms"
+                                                          in:headers]
+                           serverTimeMs:[self longLongHeader:@"x-doorbell-server-time-ms"
+                                                          in:headers]];
+  }
+}
+
+- (int64_t)longLongHeader:(NSString *)wanted in:(NSDictionary *)headers {
+  for (NSString *key in headers) {
+    if (![[key lowercaseString] isEqualToString:wanted]) continue;
+    long long value = [[headers objectForKey:key] longLongValue];
+    return value > 0 ? value : 0;
+  }
+  return 0;
 }
 
 - (void)connection:(NSURLConnection *)connection didReceiveData:(NSData *)data {

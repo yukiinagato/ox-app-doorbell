@@ -39,6 +39,13 @@ namespace DoorbellApp
         private readonly DispatcherTimer _peerPoll = new DispatcherTimer();
         private readonly DispatcherTimer _h264Fallback = new DispatcherTimer();
         private readonly DispatcherTimer _peerH264Retry = new DispatcherTimer();
+        // MediaElement gets this many tries per screen before the panel settles on MJPEG for the
+        // rest of the call. Every retry re-subscribes the door station's H.264 encoder, so an
+        // endless 3-second loop is not free for the station either. Why an attempt failed is
+        // written by VideoDiagnostics (video.log + runtime status).
+        private const int H264RetryBudget = 3;
+        private int _incomingH264Failures;
+        private int _inCallH264Failures;
         private readonly DispatcherTimer _pairingPoll = new DispatcherTimer();
         private readonly Random _rng = new Random();
 
@@ -256,30 +263,62 @@ namespace DoorbellApp
             _h264Fallback.Tick += (s, e) =>
             {
                 _h264Fallback.Stop();
-                if (IncomingView.Visibility == Visibility.Visible &&
-                    IncomingH264.Visibility == Visibility.Visible) ScheduleIncomingH264Retry();
+                if (IncomingView.Visibility != Visibility.Visible) return;
+                if (IncomingH264.Visibility == Visibility.Visible)
+                {
+                    // Still no MediaOpened after the fallback interval: count it as a failure.
+                    VideoDiagnostics.RecordFailure("incoming", _incomingStreamMp4Url,
+                        "no_media_opened_within_3s", null);
+                    ScheduleIncomingH264Retry();
+                    return;
+                }
+                // The MJPEG fallback is showing; the retry budget allowed another attempt.
+                StartIncomingH264();
             };
             IncomingH264.MediaOpened += (s, e) =>
             {
                 _h264Fallback.Stop();
+                _incomingH264Failures = 0;
+                VideoDiagnostics.RecordSuccess("incoming", _incomingStreamMp4Url);
                 IncomingH264.Opacity = 1;
                 IncomingLive.Visibility = Visibility.Collapsed;
                 IncomingNoVideo.Visibility = Visibility.Collapsed;
             };
-            IncomingH264.MediaFailed += (s, e) => ScheduleIncomingH264Retry();
+            IncomingH264.MediaFailed += (s, e) =>
+            {
+                VideoDiagnostics.RecordFailure("incoming", _incomingStreamMp4Url,
+                    "media_failed", e.ErrorException);
+                ScheduleIncomingH264Retry();
+            };
             _peerH264Retry.Interval = TimeSpan.FromSeconds(3);
             _peerH264Retry.Tick += (s, e) =>
             {
                 _peerH264Retry.Stop();
-                if (InCallView.Visibility == Visibility.Visible) StartInCallH264();
+                if (InCallView.Visibility != Visibility.Visible) return;
+                if (PeerH264.Visibility == Visibility.Visible)
+                {
+                    // Still no MediaOpened after the retry interval: count it like a failure.
+                    VideoDiagnostics.RecordFailure("in_call", _inCallH264Url,
+                        "no_media_opened_within_3s", null);
+                    ScheduleInCallH264Retry();
+                    return;
+                }
+                StartInCallH264();
             };
             PeerH264.MediaOpened += (s, e) =>
             {
                 _peerH264Retry.Stop();
+                _inCallH264Failures = 0;
+                VideoDiagnostics.RecordSuccess("in_call", _inCallH264Url);
                 PeerH264.Opacity = 1;
                 PeerVideo.Visibility = Visibility.Collapsed;
             };
-            PeerH264.MediaFailed += (s, e) => ScheduleInCallH264Retry();
+            PeerH264.MediaFailed += (s, e) =>
+            {
+                VideoDiagnostics.RecordFailure("in_call", _inCallH264Url, "media_failed",
+                    e.ErrorException);
+                ScheduleInCallH264Retry();
+            };
 
             PreviewMouseDown += (s, e) => OnActivity();
             PreviewTouchDown += (s, e) => OnActivity();
@@ -2303,6 +2342,7 @@ namespace DoorbellApp
         {
             StopIncomingVideo();
             IncomingNoVideo.Visibility = Visibility.Visible;
+            _incomingH264Failures = 0;
             StartIncomingMjpeg(true);
             StartIncomingH264();
         }
@@ -2312,6 +2352,7 @@ namespace DoorbellApp
             if (App.SafeMode || string.IsNullOrEmpty(_incomingStreamMp4Url)) return;
             try
             {
+                VideoDiagnostics.RecordAttempt("incoming", _incomingStreamMp4Url);
                 IncomingH264.Opacity = 0;
                 IncomingH264.Source = new Uri(_incomingStreamMp4Url, UriKind.Absolute);
                 IncomingH264.Visibility = Visibility.Visible;
@@ -2322,6 +2363,8 @@ namespace DoorbellApp
             catch (Exception ex)
             {
                 Debug.WriteLine("H.264 start failed: " + ex.Message);
+                VideoDiagnostics.RecordFailure("incoming", _incomingStreamMp4Url,
+                    "start_exception", ex);
                 ScheduleIncomingH264Retry();
             }
         }
@@ -2334,8 +2377,17 @@ namespace DoorbellApp
             IncomingH264.Visibility = Visibility.Collapsed;
             IncomingH264.Opacity = 1;
             IncomingLive.Visibility = Visibility.Visible;
-            if (IncomingView.Visibility == Visibility.Visible && !App.SafeMode &&
-                !string.IsNullOrEmpty(_incomingStreamMp4Url)) _h264Fallback.Start();
+            if (IncomingView.Visibility != Visibility.Visible || App.SafeMode ||
+                string.IsNullOrEmpty(_incomingStreamMp4Url)) return;
+            _incomingH264Failures++;
+            if (_incomingH264Failures >= H264RetryBudget)
+            {
+                if (_incomingH264Failures == H264RetryBudget)
+                    VideoDiagnostics.RecordFailure("incoming", _incomingStreamMp4Url,
+                        "retry_budget_exhausted_mjpeg_only", null);
+                return;
+            }
+            _h264Fallback.Start();
         }
 
         private void StartIncomingMjpeg(bool keepH264 = false)
@@ -2959,6 +3011,7 @@ namespace DoorbellApp
                 ? streamUrl : _incomingStreamMp4Url;
             _inCallMjpegUrl = streamIsMp4
                 ? _incomingStreamUrl : streamUrl;
+            _inCallH264Failures = 0;
             StartInCallMjpeg();
             StartInCallH264();
             InCallView.Visibility = Visibility.Visible;
@@ -2987,6 +3040,7 @@ namespace DoorbellApp
             if (App.SafeMode || string.IsNullOrEmpty(_inCallH264Url)) return;
             try
             {
+                VideoDiagnostics.RecordAttempt("in_call", _inCallH264Url);
                 PeerH264.Opacity = 0;
                 PeerH264.Source = new Uri(_inCallH264Url, UriKind.Absolute);
                 PeerH264.Visibility = Visibility.Visible;
@@ -2994,7 +3048,11 @@ namespace DoorbellApp
                 _peerH264Retry.Stop();
                 _peerH264Retry.Start();
             }
-            catch { ScheduleInCallH264Retry(); }
+            catch (Exception ex)
+            {
+                VideoDiagnostics.RecordFailure("in_call", _inCallH264Url, "start_exception", ex);
+                ScheduleInCallH264Retry();
+            }
         }
 
         private void ScheduleInCallH264Retry()
@@ -3005,8 +3063,17 @@ namespace DoorbellApp
             PeerH264.Visibility = Visibility.Collapsed;
             PeerH264.Opacity = 1;
             StartInCallMjpeg();
-            if (InCallView.Visibility == Visibility.Visible && !App.SafeMode &&
-                !string.IsNullOrEmpty(_inCallH264Url)) _peerH264Retry.Start();
+            if (InCallView.Visibility != Visibility.Visible || App.SafeMode ||
+                string.IsNullOrEmpty(_inCallH264Url)) return;
+            _inCallH264Failures++;
+            if (_inCallH264Failures >= H264RetryBudget)
+            {
+                if (_inCallH264Failures == H264RetryBudget)
+                    VideoDiagnostics.RecordFailure("in_call", _inCallH264Url,
+                        "retry_budget_exhausted_mjpeg_only", null);
+                return;
+            }
+            _peerH264Retry.Start();
         }
 
         private void CloseInCall()

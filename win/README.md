@@ -143,10 +143,14 @@ Implemented in the shell and covered by host/static contract tests:
 
 Conditional/scaffolded pending a Windows certification run:
 
-- WPF `MediaElement` attempts remote fMP4/H.264 and falls back to MJPEG after
-  eight seconds. Runtime capabilities remain false until the installer writes
-  `h264-playback.certified`; encoder capability likewise needs
-  `h264-encode.certified` after hardware/driver certification.
+- WPF `MediaElement` attempts remote fMP4/H.264 and falls back to MJPEG when
+  `MediaOpened` has not fired within three seconds (or on `MediaFailed`), with
+  at most three attempts per incoming/in-call screen. Every attempt and its
+  failure reason (HRESULT and message) is appended to `video.log` in the data
+  directory and the last outcome is published as
+  `runtime.windows.h264_playback_diagnostics`. Runtime capabilities remain false
+  until the installer writes `h264-playback.certified`; encoder capability
+  likewise needs `h264-encode.certified` after hardware/driver certification.
 - Real microphone/speaker/AEC, PJSIP registration and DTMF unlock must be tested
   with the deployment PJSIP archives, SIP server and door controller.
 - The service install, cross-session WTS launch, heartbeat ACL, DPAPI machine

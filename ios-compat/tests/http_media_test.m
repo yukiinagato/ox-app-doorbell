@@ -115,6 +115,62 @@ int main(void) {
             [bounded.errorReason isEqualToString:@"multipart_content_length_invalid"],
             @"oversized JPEG part rejected before allocation");
 
+    // CFNetwork strips the part headers of multipart/x-mixed-replace and announces
+    // each part as its own response. The parser must therefore take bare JPEG
+    // bodies: by their SOI when nothing was announced, and by the announced
+    // Content-Length when the client forwards the per-part response.
+    NSMutableArray *bareFrames = [NSMutableArray array];
+    DBMJPEGMultipartParser *bare = [[DBMJPEGMultipartParser alloc]
+        initWithFrameHandler:^(NSData *jpeg) { [bareFrames addObject:jpeg]; }];
+    NSMutableData *bareStream = [NSMutableData data];
+    [bareStream appendData:first];
+    [bareStream appendData:second];
+    const uint8_t *bareBytes = [bareStream bytes];
+    for (NSUInteger index = 0; index < [bareStream length]; index++) {
+      Require([bare appendData:Bytes(bareBytes + index, 1)],
+              @"header-less JPEG bodies accepted byte by byte");
+    }
+    Require([bareFrames count] == 2 && [[bareFrames objectAtIndex:0] isEqualToData:first] &&
+            [[bareFrames objectAtIndex:1] isEqualToData:second],
+            @"bodies without part headers are split on JPEG markers");
+
+    NSMutableArray *announcedFrames = [NSMutableArray array];
+    NSMutableArray *announcedCapture = [NSMutableArray array];
+    __block DBMJPEGMultipartParser *announced = nil;
+    announced = [[DBMJPEGMultipartParser alloc] initWithFrameHandler:^(NSData *jpeg) {
+      [announcedFrames addObject:jpeg];
+      [announcedCapture addObject:@(announced.lastCaptureTimeMs)];
+    }];
+    [announced beginPartWithContentLength:(long long)[first length]
+                            captureTimeMs:700 serverTimeMs:800];
+    Require([announced appendData:first], @"announced Content-Length part accepted");
+    // A marker-delimited part (no Content-Length) whose tail is flushed by the next
+    // announcement, followed by an interrupted part that must be dropped.
+    [announced beginPartWithContentLength:-1 captureTimeMs:900 serverTimeMs:1000];
+    Require([announced appendData:[second subdataWithRange:NSMakeRange(0, 3)]],
+            @"partial announced body held");
+    Require([announced appendData:[second subdataWithRange:
+                NSMakeRange(3, [second length] - 3)]], @"announced body completed");
+    Require([announced appendData:[first subdataWithRange:NSMakeRange(0, 4)]],
+            @"trailing junk after an announced frame is buffered, not rejected");
+    [announced beginPartWithContentLength:(long long)[first length]
+                            captureTimeMs:1100 serverTimeMs:1200];
+    Require([announced appendData:first], @"part after an interrupted one accepted");
+    Require([announcedFrames count] == 3 &&
+            [[announcedFrames objectAtIndex:0] isEqualToData:first] &&
+            [[announcedFrames objectAtIndex:1] isEqualToData:second] &&
+            [[announcedFrames objectAtIndex:2] isEqualToData:first],
+            @"announced parts emit exactly their JPEGs and drop the interrupted body");
+    Require([[announcedCapture objectAtIndex:0] longLongValue] == 700 &&
+            [[announcedCapture objectAtIndex:1] longLongValue] == 900 &&
+            [[announcedCapture objectAtIndex:2] longLongValue] == 1100,
+            @"per-part response timing is attached to the announced frames");
+    Require(announced.partsAnnounced == 3, @"announcements counted");
+    [announced beginPartWithContentLength:(4LL * 1024 * 1024) + 1
+                            captureTimeMs:0 serverTimeMs:0];
+    Require([announced appendData:first] && [announcedFrames count] == 4,
+            @"an oversized announced length falls back to marker delimiting");
+
     puts("PASS: secure HTTP media requests and bounded multipart parsing");
   }
   return 0;
