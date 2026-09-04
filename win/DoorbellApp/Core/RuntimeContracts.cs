@@ -55,9 +55,10 @@ namespace DoorbellApp.Core
                 { "device_alert_channel_support", DeviceAlertChannelSupport(systemNotifications) },
                 { "mjpeg_http_preview", true },
                 { "mjpeg_low_resolution", safeMode },
-                // MediaElement fMP4 is wired as a guarded fallback, but hardware/driver support
-                // is advertised only after an installer leaves the certification marker.
-                { "h264_fmp4_playback", !safeMode && H264PlaybackCertified() },
+                // Core's own fMP4/H.264 player (Media Foundation decoder, H264LiveStreamer) is
+                // used whenever the loaded Core exports it; the MediaElement fallback stays
+                // guarded behind the installer's certification marker.
+                { "h264_fmp4_playback", !safeMode && (NativeH264Available() || H264PlaybackCertified()) },
                 { "h264_media_foundation_encode", !safeMode && H264EncodeCertified() },
                 { "features", new Dictionary<string, object>
                     {
@@ -121,7 +122,8 @@ namespace DoorbellApp.Core
                         { "sip_backend", sipBackend ?? "unknown" },
                         { "sip_available", string.Equals(sipBackend, "pjsip", StringComparison.Ordinal) },
                         { "h264_playback", safeMode ? "disabled_safe_mode" :
-                            (H264PlaybackCertified() ? "certified" : "uncertified_fallback") },
+                            (NativeH264Available() ? "native_decoder" :
+                             (H264PlaybackCertified() ? "certified" : "uncertified_fallback")) },
                         // Why the last MediaElement attempt did or did not open; the full
                         // history is in video.log next to the data directory.
                         { "h264_playback_diagnostics", VideoDiagnostics.Snapshot() },
@@ -173,7 +175,8 @@ namespace DoorbellApp.Core
             status["helper_available"] = false;
             status["state_persisted"] = process.StatePersisted;
             status["codec_health"] = safeMode ? "safe_mode_low_resolution_mjpeg" :
-                (H264PlaybackCertified() ? "certified_h264_or_mjpeg" : "mjpeg_fallback");
+                (NativeH264Available() ? "native_h264_or_mjpeg" :
+                 (H264PlaybackCertified() ? "certified_h264_or_mjpeg" : "mjpeg_fallback"));
             status["process_recovery"] = new Dictionary<string, object>
             {
                 { "schema_version", 1 },
@@ -293,6 +296,11 @@ namespace DoorbellApp.Core
                 { "border", border },
                 { "radius", radius },
             };
+        }
+
+        private static bool NativeH264Available()
+        {
+            return H264LiveStreamer.Available;
         }
 
         private static bool H264PlaybackCertified()

@@ -52,15 +52,18 @@ namespace DoorbellApp
             if (!_showVideoStats || CallOverlay.Visibility != Visibility.Visible) return;
             bool inCall = InCallView.Visibility == Visibility.Visible;
             MjpegStreamer streamer = inCall ? _inCallStreamer : _incomingStreamer;
+            H264LiveStreamer native = inCall ? _inCallNative : _incomingNative;
+            bool nativeActive = native != null && native.HasFrames;
             MediaElement h264 = inCall ? PeerH264 : IncomingH264;
             bool h264Active = h264.Visibility == Visibility.Visible && h264.Opacity > 0.5;
-            if (streamer == null && !h264Active)
+            if (streamer == null && !h264Active && !nativeActive)
             {
                 VideoStatsText.Text = "";
                 return;
             }
-            VideoStats stats = streamer == null ? null : streamer.Stats();
-            string codec = h264Active ? "h264" : "mjpeg";
+            VideoStats stats = nativeActive ? native.Stats() :
+                (streamer == null ? null : streamer.Stats());
+            string codec = nativeActive || h264Active ? "h264" : "mjpeg";
             if (App.SafeMode) codec += "/safe";
             string latency = stats != null && stats.LatencyMs >= 0 ?
                 stats.LatencyMs.ToString() : "—";

@@ -60,6 +60,10 @@ namespace DoorbellApp
         private bool _pairingSkipped;
 
         private MjpegStreamer _incomingStreamer;
+        // Core-hosted fMP4/H.264 players (H264LiveStreamer). When the loaded Core exports
+        // db_h264_player_*, these replace the MediaElement attempts below entirely.
+        private H264LiveStreamer _incomingNative;
+        private H264LiveStreamer _inCallNative;
         private MjpegStreamer _inCallStreamer;
         private string _inCallMjpegUrl = "";
         private string _inCallH264Url = "";
@@ -2356,6 +2360,11 @@ namespace DoorbellApp
         private void StartIncomingH264()
         {
             if (App.SafeMode || string.IsNullOrEmpty(_incomingStreamMp4Url)) return;
+            if (H264LiveStreamer.Available)
+            {
+                StartIncomingNativeH264();
+                return;
+            }
             try
             {
                 VideoDiagnostics.RecordAttempt("incoming", _incomingStreamMp4Url);
@@ -2374,6 +2383,47 @@ namespace DoorbellApp
                     "start_exception", ex);
                 ScheduleIncomingH264Retry();
             }
+        }
+
+        private void StartIncomingNativeH264()
+        {
+            if (_incomingNative != null) return;
+            string url = _incomingStreamMp4Url;
+            VideoDiagnostics.RecordAttempt("incoming_native", url);
+            H264LiveStreamer native = null;
+            native = new H264LiveStreamer(url, Dispatcher, (bmp, rotation) =>
+            {
+                if (_incomingNative != native) return;
+                if (!ReferenceEquals(IncomingH264Image.Source, bmp)) IncomingH264Image.Source = bmp;
+                IncomingH264Image.LayoutTransform = new RotateTransform(rotation);
+                if (IncomingH264Image.Visibility != Visibility.Visible)
+                {
+                    IncomingH264Image.Visibility = Visibility.Visible;
+                    IncomingLive.Visibility = Visibility.Collapsed;
+                    IncomingNoVideo.Visibility = Visibility.Collapsed;
+                    VideoDiagnostics.RecordSuccess("incoming_native", url + " first_frame_ms=" +
+                        native.FirstFrameMs + " decoder=" + native.DecoderLabel);
+                    // The MJPEG availability layer has done its job.
+                    if (_incomingStreamer != null) { _incomingStreamer.Stop(); _incomingStreamer = null; }
+                }
+            }, reason =>
+            {
+                if (_incomingNative != native) return;
+                VideoDiagnostics.RecordFailure("incoming_native", url, reason, null);
+                StopIncomingNative();
+                if (IncomingView.Visibility == Visibility.Visible) StartIncomingMjpeg(true);
+            });
+            _incomingNative = native;
+            native.Start();
+        }
+
+        private void StopIncomingNative()
+        {
+            if (_incomingNative != null) { _incomingNative.Stop(); _incomingNative = null; }
+            IncomingH264Image.Source = null;
+            IncomingH264Image.Visibility = Visibility.Collapsed;
+            IncomingH264Image.LayoutTransform = Transform.Identity;
+            IncomingLive.Visibility = Visibility.Visible;
         }
 
         private void ScheduleIncomingH264Retry()
@@ -2424,6 +2474,7 @@ namespace DoorbellApp
         private void StopIncomingVideo()
         {
             _h264Fallback.Stop();
+            StopIncomingNative();
             if (_incomingStreamer != null) { _incomingStreamer.Stop(); _incomingStreamer = null; }
             try { IncomingH264.Stop(); } catch { }
             IncomingH264.Source = null;
@@ -3006,6 +3057,7 @@ namespace DoorbellApp
             IdleView.Visibility = Visibility.Collapsed;
             CallingView.Visibility = Visibility.Collapsed;
             if (_inCallStreamer != null) { _inCallStreamer.Stop(); _inCallStreamer = null; }
+            StopInCallNative();
             try { PeerH264.Stop(); } catch { }
             PeerH264.Source = null;
             PeerH264.Visibility = Visibility.Collapsed;
@@ -3046,6 +3098,11 @@ namespace DoorbellApp
         private void StartInCallH264()
         {
             if (App.SafeMode || string.IsNullOrEmpty(_inCallH264Url)) return;
+            if (H264LiveStreamer.Available)
+            {
+                StartInCallNativeH264();
+                return;
+            }
             try
             {
                 VideoDiagnostics.RecordAttempt("in_call", _inCallH264Url);
@@ -3062,6 +3119,45 @@ namespace DoorbellApp
                 VideoDiagnostics.RecordFailure("in_call", _inCallH264Url, "start_exception", ex);
                 ScheduleInCallH264Retry();
             }
+        }
+
+        private void StartInCallNativeH264()
+        {
+            if (_inCallNative != null) return;
+            string url = _inCallH264Url;
+            VideoDiagnostics.RecordAttempt("in_call_native", url);
+            H264LiveStreamer native = null;
+            native = new H264LiveStreamer(url, Dispatcher, (bmp, rotation) =>
+            {
+                if (_inCallNative != native) return;
+                if (!ReferenceEquals(PeerH264Image.Source, bmp)) PeerH264Image.Source = bmp;
+                PeerH264Image.LayoutTransform = new RotateTransform(rotation);
+                if (PeerH264Image.Visibility != Visibility.Visible)
+                {
+                    PeerH264Image.Visibility = Visibility.Visible;
+                    PeerVideo.Visibility = Visibility.Collapsed;
+                    VideoDiagnostics.RecordSuccess("in_call_native", url + " first_frame_ms=" +
+                        native.FirstFrameMs + " decoder=" + native.DecoderLabel);
+                    if (_inCallStreamer != null) { _inCallStreamer.Stop(); _inCallStreamer = null; }
+                }
+            }, reason =>
+            {
+                if (_inCallNative != native) return;
+                VideoDiagnostics.RecordFailure("in_call_native", url, reason, null);
+                StopInCallNative();
+                if (InCallView.Visibility == Visibility.Visible) StartInCallMjpeg();
+            });
+            _inCallNative = native;
+            native.Start();
+        }
+
+        private void StopInCallNative()
+        {
+            if (_inCallNative != null) { _inCallNative.Stop(); _inCallNative = null; }
+            PeerH264Image.Source = null;
+            PeerH264Image.Visibility = Visibility.Collapsed;
+            PeerH264Image.LayoutTransform = Transform.Identity;
+            PeerVideo.Visibility = Visibility.Visible;
         }
 
         private void ScheduleInCallH264Retry()
@@ -3090,6 +3186,7 @@ namespace DoorbellApp
         {
             _peerPoll.Stop();
             _peerH264Retry.Stop();
+            StopInCallNative();
             if (IncomingView.Visibility != Visibility.Visible) _statsRefresh.Stop();
             if (_inCallStreamer != null) { _inCallStreamer.Stop(); _inCallStreamer = null; }
             try { PeerH264.Stop(); } catch { }

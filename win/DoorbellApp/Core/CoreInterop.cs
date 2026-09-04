@@ -129,6 +129,29 @@ namespace DoorbellApp.Core
         public delegate IntPtr CallLogJsonV2Fn(IntPtr core, long sinceMs, long beforeMs,
                                                int limit);
 
+        // Live fMP4/H.264 player hosted by Core (db_h264_player_*). The frame callback runs on
+        // a Core thread with a BGRA buffer valid only for the call; the state callback carries
+        // configured / first_frame / error / parse_error JSON.
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        public delegate void H264FrameCb(IntPtr user, IntPtr bgra, int width, int height,
+                                         int stride, long captureMs);
+
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        public delegate void H264StateCb(IntPtr user, IntPtr stateJsonUtf8);
+
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        public delegate IntPtr H264PlayerCreateFn(H264FrameCb frameCb, H264StateCb stateCb,
+                                                  IntPtr user);
+
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        public delegate int H264PlayerFeedFn(IntPtr player, byte[] data, UIntPtr len);
+
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        public delegate IntPtr H264PlayerStatsJsonFn(IntPtr player);
+
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        public delegate void H264PlayerDestroyFn(IntPtr player);
+
         /// <summary>
         /// Binds an export that is optional in this Core generation. A missing export returns
         /// null instead of throwing at the first call site, so the shell can hide the control.

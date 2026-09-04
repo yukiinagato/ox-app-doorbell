@@ -141,19 +141,22 @@ Implemented in the shell and covered by host/static contract tests:
   `radius`; unknown/unsafe values are rejected and a valid atomic LKG is used
   after a corrupt transient update.
 
-Conditional/scaffolded pending a Windows certification run:
+Live H.264 (`/stream.mp4`):
 
-- WPF `MediaElement` attempts remote fMP4/H.264 and falls back to MJPEG when
-  `MediaOpened` has not fired within eight seconds (or on `MediaFailed`), with
-  at most three attempts per incoming/in-call screen, three seconds apart.
-  Measured on the Toughpad: MediaOpened arrives about 4.5 s after Open for the
-  door station's live stream, once WMP has buffered, so a shorter wait never
-  lets H.264 come up. Every attempt and its
-  failure reason (HRESULT and message) is appended to `video.log` in the data
-  directory and the last outcome is published as
-  `runtime.windows.h264_playback_diagnostics`. Runtime capabilities remain false
-  until the installer writes `h264-playback.certified`; encoder capability
-  likewise needs `h264-encode.certified` after hardware/driver certification.
+- `Core/H264LiveStreamer.cs` downloads the door station's fMP4 and feeds it to
+  Core's `db_h264_player_*` (fMP4 demuxer + Media Foundation H.264 decoder in
+  low-latency mode). Decoded BGRA frames are blitted into a `WriteableBitmap`
+  (`IncomingH264Image` / `PeerH264Image`), so the first picture follows the
+  first decoded keyframe instead of a download heuristic. MJPEG keeps running
+  until that first frame and is stopped afterwards; a player failure restarts
+  MJPEG. Every attempt, first-frame time and failure is appended to `video.log`
+  and the last outcome is published as `runtime.windows.h264_playback_diagnostics`.
+- The WPF `MediaElement` path remains only for a Core without the player
+  exports: it needs about 4.5 s to open the live stream on the Toughpad (WMP
+  buffers first), so it waits eight seconds for `MediaOpened`, retries three
+  seconds apart at most three times per screen, and is advertised only after
+  the installer writes `h264-playback.certified`. Encoder capability likewise
+  needs `h264-encode.certified` after hardware/driver certification.
 - Real microphone/speaker/AEC, PJSIP registration and DTMF unlock must be tested
   with the deployment PJSIP archives, SIP server and door controller.
 - The service install, cross-session WTS launch, heartbeat ACL, DPAPI machine

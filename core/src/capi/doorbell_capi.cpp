@@ -14,7 +14,11 @@
 #include <thread>
 #include <vector>
 
+#include "media/fmp4_demux.h"
 #include "media/qr_scanner.h"
+#ifdef _WIN32
+#include "media/decoder_win.h"
+#endif
 #include "node/node.h"
 #include "sipctl/sipctl.h"
 #include "util/common.h"
@@ -656,6 +660,112 @@ DB_API void db_core_on_encoded_frame(db_core* c, const uint8_t* annexb, size_t l
   if (!c || !c->node || !annexb || len == 0) return;
   c->node->pushEncodedFrame(annexb, len, is_keyframe != 0, ts_ms);
 }
+
+#ifdef _WIN32
+struct db_h264_player {
+  db_h264_frame_cb frame_cb = nullptr;
+  db_h264_state_cb state_cb = nullptr;
+  void* user = nullptr;
+  fmp4::Demuxer demux;
+  std::unique_ptr<DecoderWin> decoder;
+  std::mutex state_mu;
+
+  void emitState(const json::Doc& doc) {
+    std::string text = json::dump(doc.get());
+    std::lock_guard<std::mutex> lk(state_mu);
+    if (state_cb) state_cb(user, text.c_str());
+  }
+  void emitSimple(const char* t, const char* key, const std::string& value) {
+    json::Doc d = json::obj();
+    json::set(d.get(), "t", t);
+    json::set(d.get(), key, value);
+    emitState(d);
+  }
+};
+
+DB_API db_h264_player* db_h264_player_create(db_h264_frame_cb frame_cb,
+                                             db_h264_state_cb state_cb, void* user) {
+  auto* p = new db_h264_player();
+  p->frame_cb = frame_cb;
+  p->state_cb = state_cb;
+  p->user = user;
+  db_h264_player* raw = p;
+  p->decoder = std::make_unique<DecoderWin>(
+      [raw](const DecoderWin::Frame& f) {
+        if (raw->frame_cb)
+          raw->frame_cb(raw->user, f.bgra, f.width, f.height, f.stride, f.capture_ms);
+      },
+      [raw](const std::string& state, const std::string& detail) {
+        if (state == "configured") {
+          DecoderWin::Stats st = raw->decoder->stats();
+          json::Doc d = json::obj();
+          json::set(d.get(), "t", "configured");
+          json::set(d.get(), "width", static_cast<int64_t>(st.width));
+          json::set(d.get(), "height", static_cast<int64_t>(st.height));
+          json::set(d.get(), "decoder", detail);
+          raw->emitState(d);
+        } else if (state == "first_frame") {
+          json::Doc d = json::obj();
+          json::set(d.get(), "t", "first_frame");
+          json::set(d.get(), "ms", static_cast<int64_t>(std::atoll(detail.c_str())));
+          raw->emitState(d);
+        } else {
+          raw->emitSimple("error", "reason", detail);
+        }
+      });
+  p->demux.on_config = [raw](const fmp4::Demuxer::Config& cfg) {
+    raw->decoder->configure(cfg);
+  };
+  p->demux.on_sample = [raw](fmp4::Demuxer::AccessUnit&& au) {
+    raw->decoder->feed(std::move(au));
+  };
+  p->decoder->start();
+  return p;
+}
+
+DB_API int db_h264_player_feed(db_h264_player* p, const uint8_t* data, size_t len) {
+  if (!p) return -1;
+  if (!p->demux.feed(data, len)) {
+    p->emitSimple("parse_error", "reason", p->demux.error());
+    return -1;
+  }
+  return p->decoder && p->decoder->running() ? 0 : -1;
+}
+
+DB_API char* db_h264_player_stats_json(db_h264_player* p) {
+  if (!p || !p->decoder) return nullptr;
+  DecoderWin::Stats st = p->decoder->stats();
+  json::Doc d = json::obj();
+  json::set(d.get(), "received", static_cast<int64_t>(st.received));
+  json::set(d.get(), "decoded", static_cast<int64_t>(st.decoded));
+  json::set(d.get(), "dropped", static_cast<int64_t>(st.dropped));
+  json::set(d.get(), "errors", static_cast<int64_t>(st.errors));
+  json::set(d.get(), "width", static_cast<int64_t>(st.width));
+  json::set(d.get(), "height", static_cast<int64_t>(st.height));
+  json::set(d.get(), "first_frame_ms", static_cast<int64_t>(st.first_frame_ms));
+  json::set(d.get(), "buffered", static_cast<int64_t>(p->demux.buffered()));
+  json::set(d.get(), "decoder", st.decoder);
+  return dupString(json::dump(d.get()));
+}
+
+DB_API void db_h264_player_destroy(db_h264_player* p) {
+  if (!p) return;
+  {
+    std::lock_guard<std::mutex> lk(p->state_mu);
+    p->state_cb = nullptr;
+    p->frame_cb = nullptr;
+  }
+  if (p->decoder) p->decoder->stop();
+  delete p;
+}
+#else
+DB_API db_h264_player* db_h264_player_create(db_h264_frame_cb, db_h264_state_cb, void*) {
+  return nullptr;
+}
+DB_API int db_h264_player_feed(db_h264_player*, const uint8_t*, size_t) { return -1; }
+DB_API char* db_h264_player_stats_json(db_h264_player*) { return nullptr; }
+DB_API void db_h264_player_destroy(db_h264_player*) {}
+#endif
 
 DB_API int db_core_video_encoder_wanted(db_core* c) {
   if (!c || !c->node) return 0;

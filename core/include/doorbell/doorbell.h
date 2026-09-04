@@ -585,6 +585,30 @@ DB_API int db_core_video_encoder_wanted(db_core* c);
  * platform encoder should request an IDR immediately. Poll at most every 100 ms while encoding. */
 DB_API int db_core_take_video_keyframe_request(db_core* c);
 
+/* Live fMP4 player for shells whose media framework cannot open an endless /stream.mp4 quickly
+ * (WPF MediaElement needs seconds). Core demuxes the bytes the shell downloads and decodes them
+ * with the platform decoder it hosts (Media Foundation on Windows); the shell only blits BGRA.
+ * Both callbacks run on core threads: frame_cb on the decoder thread with a buffer that is
+ * valid only for the call, state_cb with one of
+ *   {"t":"configured","width":w,"height":h,"decoder":"..."}
+ *   {"t":"first_frame","ms":<ms since create>}
+ *   {"t":"error","reason":"..."}          (decoder gone; destroy and fall back)
+ *   {"t":"parse_error","reason":"..."}    (stream corrupt; feed returned -1, reconnect)
+ * create returns NULL where core hosts no decoder for this platform. */
+typedef struct db_h264_player db_h264_player;
+typedef void (*db_h264_frame_cb)(void* user, const uint8_t* bgra, int width, int height,
+                                 int stride, int64_t capture_ms);
+typedef void (*db_h264_state_cb)(void* user, const char* state_json);
+DB_API db_h264_player* db_h264_player_create(db_h264_frame_cb frame_cb,
+                                             db_h264_state_cb state_cb, void* user);
+/* Append downloaded /stream.mp4 bytes. Returns 0, or -1 on a fatal parse error after which the
+ * player must be destroyed (the shell reconnects with a fresh one). */
+DB_API int db_h264_player_feed(db_h264_player* p, const uint8_t* data, size_t len);
+/* {"received":n,"decoded":n,"dropped":n,"errors":n,"width":w,"height":h,
+ *  "first_frame_ms":ms,"decoder":"..."}; release with db_free. */
+DB_API char* db_h264_player_stats_json(db_h264_player* p);
+DB_API void db_h264_player_destroy(db_h264_player* p);
+
 #ifdef __cplusplus
 }
 #endif

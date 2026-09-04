@@ -148,6 +148,7 @@ if(NOT WIN32)
   # Windows-only Media Foundation camera capture and H.264 encoding.
   list(REMOVE_ITEM DB_CORE_SRC ${CMAKE_CURRENT_SOURCE_DIR}/src/media/camera_win.cpp)
   list(REMOVE_ITEM DB_CORE_SRC ${CMAKE_CURRENT_SOURCE_DIR}/src/media/encoder_win.cpp)
+  list(REMOVE_ITEM DB_CORE_SRC ${CMAKE_CURRENT_SOURCE_DIR}/src/media/decoder_win.cpp)
 endif()
 # Link exactly one sipctl backend: the implementation or the stub.
 if(DB_PJSIP_OK)

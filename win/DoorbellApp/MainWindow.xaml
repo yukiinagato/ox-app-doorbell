@@ -367,6 +367,8 @@
                               LoadedBehavior="Manual" UnloadedBehavior="Manual"
                               ScrubbingEnabled="False"/>
                 <Image x:Name="IncomingLive" Stretch="Uniform"/>
+                <!-- Core-decoded H.264 (H264LiveStreamer); shown once the first frame lands. -->
+                <Image x:Name="IncomingH264Image" Stretch="Uniform" Visibility="Collapsed"/>
                 <TextBlock x:Name="IncomingNoVideo" FontSize="24" Foreground="#8A97A5"
                            HorizontalAlignment="Center" VerticalAlignment="Center"/>
             </Grid>
@@ -415,6 +417,7 @@
                               LoadedBehavior="Manual" UnloadedBehavior="Manual"
                               ScrubbingEnabled="False"/>
                 <Image x:Name="PeerVideo" Stretch="Uniform"/>
+                <Image x:Name="PeerH264Image" Stretch="Uniform" Visibility="Collapsed"/>
             </Grid>
             <WrapPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Center"
                        Margin="20,10,20,18">

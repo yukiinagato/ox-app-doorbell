@@ -398,7 +398,8 @@ class WindowsContracts(unittest.TestCase):
                            contracts.index("public static Dictionary<string, object> UiManifest")]
         self.assertIn('{ "mjpeg_http_preview", true }', capabilities)
         self.assertIn('{ "mjpeg_low_resolution", safeMode }', capabilities)
-        self.assertIn('!safeMode && H264PlaybackCertified()', capabilities)
+        self.assertIn('!safeMode && (NativeH264Available() || H264PlaybackCertified())',
+                      capabilities)
         self.assertIn('!safeMode && H264EncodeCertified()', capabilities)
         for retained in ('{ "core", "running" }', '{ "ringer", "available" }',
                          '{ "sos", "available" }', '{ "controls", "available" }'):
@@ -484,8 +485,56 @@ class WindowsContracts(unittest.TestCase):
         self.assertIn("_peerH264Retry.Interval = H264OpenTimeout;", window)
         self.assertEqual(window.count("Interval = H264RetryDelay;"), 2)
         self.assertIn('{ "h264_playback_diagnostics", VideoDiagnostics.Snapshot() }', contracts)
-        self.assertIn("within eight seconds", readme)
+        self.assertIn("waits eight seconds for `MediaOpened`", readme)
         self.assertIn("`video.log`", readme)
+
+    def test_native_h264_player_replaces_media_element_when_core_exports_it(self):
+        # /stream.mp4 is an endless, unseekable live fMP4; WMP needs ~4.5 s to open it. When the
+        # loaded Core exports db_h264_player_*, the shell feeds the bytes to Core's demuxer +
+        # Media Foundation decoder and blits BGRA into an Image instead.
+        streamer = read("win/DoorbellApp/Core/H264LiveStreamer.cs")
+        interop = read("win/DoorbellApp/Core/CoreInterop.cs")
+        window = read("win/DoorbellApp/MainWindow.xaml.cs")
+        xaml = read("win/DoorbellApp/MainWindow.xaml")
+        contracts = read("win/DoorbellApp/Core/RuntimeContracts.cs")
+        header = read("core/include/doorbell/doorbell.h")
+        call_screen = read("win/DoorbellApp/MainWindow.CallScreen.cs")
+        for export in ("db_h264_player_create", "db_h264_player_feed",
+                       "db_h264_player_stats_json", "db_h264_player_destroy"):
+            self.assertIn("DB_API", header)
+            self.assertIn(export, header)
+            self.assertIn('"%s"' % export, streamer)
+        for delegate in ("H264FrameCb", "H264StateCb", "H264PlayerCreateFn",
+                         "H264PlayerFeedFn", "H264PlayerStatsJsonFn", "H264PlayerDestroyFn"):
+            self.assertIn("public delegate", interop)
+            self.assertIn(delegate, interop)
+        # Native frames are blitted on the dispatcher into a reused WriteableBitmap; the decoder
+        # thread never touches WPF objects, and a burst of frames collapses into one blit.
+        self.assertIn("new WriteableBitmap(width, height, 96, 96, PixelFormats.Bgra32, null)",
+                      streamer)
+        self.assertIn("_dispatcher.BeginInvoke(new Action(Blit), DispatcherPriority.Render)",
+                      streamer)
+        self.assertIn("schedule = !_blitScheduled;", streamer)
+        # Both screens prefer the native player and keep MediaElement only as the fallback.
+        for surface in ("Incoming", "InCall"):
+            self.assertIn("if (H264LiveStreamer.Available)\n            {\n"
+                          "                Start%sNativeH264();" % surface, window)
+        self.assertIn('x:Name="IncomingH264Image"', xaml)
+        self.assertIn('x:Name="PeerH264Image"', xaml)
+        # The MJPEG availability layer stops once the first native frame is shown, and a
+        # native failure restarts it.
+        self.assertIn('VideoDiagnostics.RecordSuccess("incoming_native", url + " first_frame_ms="',
+                      window)
+        self.assertIn('VideoDiagnostics.RecordFailure("incoming_native", url, reason, null);',
+                      window)
+        self.assertIn("StopIncomingNative();\n                if (IncomingView.Visibility == "
+                      "Visibility.Visible) StartIncomingMjpeg(true);", window)
+        self.assertIn("StopInCallNative();", window)
+        self.assertIn("bool nativeActive = native != null && native.HasFrames;", call_screen)
+        self.assertIn('{ "h264_playback", safeMode ? "disabled_safe_mode" :\n'
+                      '                            (NativeH264Available() ? "native_decoder" :',
+                      contracts)
+        self.assertIn("return H264LiveStreamer.Available;", contracts)
 
     def test_manual_call_lifecycle_is_owned_and_monitor_never_claims_it(self):
         interop = read("win/DoorbellApp/Core/CoreInterop.cs")
