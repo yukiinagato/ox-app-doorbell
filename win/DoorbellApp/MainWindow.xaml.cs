@@ -44,6 +44,12 @@ namespace DoorbellApp
         // endless 3-second loop is not free for the station either. Why an attempt failed is
         // written by VideoDiagnostics (video.log + runtime status).
         private const int H264RetryBudget = 3;
+        // Measured on the Toughpad (2026-09-05): MediaElement raises MediaOpened for the door
+        // station's live fMP4 about 4.5 s after Open, after WMP has buffered a few seconds. A 3 s
+        // wait therefore gave up on every attempt; MJPEG keeps showing until MediaOpened anyway.
+        private static readonly TimeSpan H264OpenTimeout = TimeSpan.FromSeconds(8);
+        private static readonly TimeSpan H264RetryDelay = TimeSpan.FromSeconds(3);
+        private const string H264OpenTimeoutReason = "no_media_opened_within_8s";
         private int _incomingH264Failures;
         private int _inCallH264Failures;
         private readonly DispatcherTimer _pairingPoll = new DispatcherTimer();
@@ -259,16 +265,16 @@ namespace DoorbellApp
             _answerDelay.Tick += (s, e) => { _answerDelay.Stop(); PlaceAnswerCall(); };
             _peerPoll.Interval = TimeSpan.FromMilliseconds(500);
             _peerPoll.Tick += (s, e) => PollPeerFrame();
-            _h264Fallback.Interval = TimeSpan.FromSeconds(3);
+            _h264Fallback.Interval = H264OpenTimeout;
             _h264Fallback.Tick += (s, e) =>
             {
                 _h264Fallback.Stop();
                 if (IncomingView.Visibility != Visibility.Visible) return;
                 if (IncomingH264.Visibility == Visibility.Visible)
                 {
-                    // Still no MediaOpened after the fallback interval: count it as a failure.
+                    // Still no MediaOpened after the open timeout: count it as a failure.
                     VideoDiagnostics.RecordFailure("incoming", _incomingStreamMp4Url,
-                        "no_media_opened_within_3s", null);
+                        H264OpenTimeoutReason, null);
                     ScheduleIncomingH264Retry();
                     return;
                 }
@@ -290,16 +296,16 @@ namespace DoorbellApp
                     "media_failed", e.ErrorException);
                 ScheduleIncomingH264Retry();
             };
-            _peerH264Retry.Interval = TimeSpan.FromSeconds(3);
+            _peerH264Retry.Interval = H264OpenTimeout;
             _peerH264Retry.Tick += (s, e) =>
             {
                 _peerH264Retry.Stop();
                 if (InCallView.Visibility != Visibility.Visible) return;
                 if (PeerH264.Visibility == Visibility.Visible)
                 {
-                    // Still no MediaOpened after the retry interval: count it like a failure.
+                    // Still no MediaOpened after the open timeout: count it like a failure.
                     VideoDiagnostics.RecordFailure("in_call", _inCallH264Url,
-                        "no_media_opened_within_3s", null);
+                        H264OpenTimeoutReason, null);
                     ScheduleInCallH264Retry();
                     return;
                 }
@@ -2358,6 +2364,7 @@ namespace DoorbellApp
                 IncomingH264.Visibility = Visibility.Visible;
                 IncomingH264.Play();
                 _h264Fallback.Stop();
+                _h264Fallback.Interval = H264OpenTimeout;
                 _h264Fallback.Start();
             }
             catch (Exception ex)
@@ -2387,6 +2394,7 @@ namespace DoorbellApp
                         "retry_budget_exhausted_mjpeg_only", null);
                 return;
             }
+            _h264Fallback.Interval = H264RetryDelay;
             _h264Fallback.Start();
         }
 
@@ -3046,6 +3054,7 @@ namespace DoorbellApp
                 PeerH264.Visibility = Visibility.Visible;
                 PeerH264.Play();
                 _peerH264Retry.Stop();
+                _peerH264Retry.Interval = H264OpenTimeout;
                 _peerH264Retry.Start();
             }
             catch (Exception ex)
@@ -3073,6 +3082,7 @@ namespace DoorbellApp
                         "retry_budget_exhausted_mjpeg_only", null);
                 return;
             }
+            _peerH264Retry.Interval = H264RetryDelay;
             _peerH264Retry.Start();
         }
 

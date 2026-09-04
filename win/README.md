@@ -144,8 +144,11 @@ Implemented in the shell and covered by host/static contract tests:
 Conditional/scaffolded pending a Windows certification run:
 
 - WPF `MediaElement` attempts remote fMP4/H.264 and falls back to MJPEG when
-  `MediaOpened` has not fired within three seconds (or on `MediaFailed`), with
-  at most three attempts per incoming/in-call screen. Every attempt and its
+  `MediaOpened` has not fired within eight seconds (or on `MediaFailed`), with
+  at most three attempts per incoming/in-call screen, three seconds apart.
+  Measured on the Toughpad: MediaOpened arrives about 4.5 s after Open for the
+  door station's live stream, once WMP has buffered, so a shorter wait never
+  lets H.264 come up. Every attempt and its
   failure reason (HRESULT and message) is appended to `video.log` in the data
   directory and the last outcome is published as
   `runtime.windows.h264_playback_diagnostics`. Runtime capabilities remain false

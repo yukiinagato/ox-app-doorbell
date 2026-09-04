@@ -71,7 +71,8 @@ namespace DoorbellApp.Core
                 _failures++;
                 _lastOutcome = "failed";
                 _lastReason = detail;
-                if (error != null || reason == "no_media_opened_within_3s") _lastMediaReason = detail;
+                if (error != null || (reason ?? "").StartsWith("no_media_opened_within_"))
+                    _lastMediaReason = detail;
                 _lastUrl = url ?? "";
                 _lastAtMs = NowMs();
             }

@@ -469,18 +469,23 @@ class WindowsContracts(unittest.TestCase):
                           % (surface, url) if surface == "incoming" else
                           'VideoDiagnostics.RecordFailure("in_call", _inCallH264Url, '
                           '"media_failed",\n                    e.ErrorException);', window)
-            self.assertIn('"no_media_opened_within_3s", null);', window)
+            self.assertIn('H264OpenTimeoutReason, null);', window)
         self.assertIn("private const int H264RetryBudget = 3;", window)
         for counter in ("_incomingH264Failures", "_inCallH264Failures"):
             self.assertIn(counter + "++;", window)
             self.assertIn("if (" + counter + " >= H264RetryBudget)", window)
             self.assertIn(counter + " = 0;", window)
         self.assertEqual(window.count('"retry_budget_exhausted_mjpeg_only", null);'), 2)
-        self.assertIn("_h264Fallback.Interval = TimeSpan.FromSeconds(3);", window)
+        # MediaOpened needs ~4.5 s on the Toughpad; the open timeout must exceed that while the
+        # retry cadence stays short.
+        self.assertIn("H264OpenTimeout = TimeSpan.FromSeconds(8);", window)
+        self.assertIn("H264RetryDelay = TimeSpan.FromSeconds(3);", window)
+        self.assertIn("_h264Fallback.Interval = H264OpenTimeout;", window)
+        self.assertIn("_peerH264Retry.Interval = H264OpenTimeout;", window)
+        self.assertEqual(window.count("Interval = H264RetryDelay;"), 2)
         self.assertIn('{ "h264_playback_diagnostics", VideoDiagnostics.Snapshot() }', contracts)
-        self.assertIn("within three seconds", readme)
+        self.assertIn("within eight seconds", readme)
         self.assertIn("`video.log`", readme)
-        self.assertNotIn("eight seconds", readme)
 
     def test_manual_call_lifecycle_is_owned_and_monitor_never_claims_it(self):
         interop = read("win/DoorbellApp/Core/CoreInterop.cs")
