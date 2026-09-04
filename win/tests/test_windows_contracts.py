@@ -457,6 +457,9 @@ class WindowsContracts(unittest.TestCase):
                       "string reason, Exception error)", diagnostics)
         self.assertIn('e.HResult.ToString("X8")', diagnostics)
         self.assertIn("// Diagnostics must never take the panel down.", diagnostics)
+        # The retry-budget marker must not hide the MediaElement error from /api/status readers.
+        self.assertIn('{ "last_media_reason", _lastMediaReason }', diagnostics)
+        self.assertIn('{ "recent", Recent.ToArray() }', diagnostics)
         for surface, url in (("incoming", "_incomingStreamMp4Url"),
                              ("in_call", "_inCallH264Url")):
             self.assertIn('VideoDiagnostics.RecordAttempt("%s", %s);' % (surface, url), window)

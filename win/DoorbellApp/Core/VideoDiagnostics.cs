@@ -23,8 +23,13 @@ namespace DoorbellApp.Core
         private static int _successes;
         private static string _lastOutcome = "";
         private static string _lastReason = "";
+        private static string _lastMediaReason = "";
         private static string _lastUrl = "";
         private static long _lastAtMs;
+        // The newest entries, oldest first, so a remote reader of /api/status sees the actual
+        // MediaFailed reason even after the retry-budget marker was recorded on top of it.
+        private static readonly List<string> Recent = new List<string>();
+        private const int RecentLimit = 8;
 
         public static string LogPath
         {
@@ -66,6 +71,7 @@ namespace DoorbellApp.Core
                 _failures++;
                 _lastOutcome = "failed";
                 _lastReason = detail;
+                if (error != null || reason == "no_media_opened_within_3s") _lastMediaReason = detail;
                 _lastUrl = url ?? "";
                 _lastAtMs = NowMs();
             }
@@ -85,8 +91,10 @@ namespace DoorbellApp.Core
                     { "successes", _successes },
                     { "last_outcome", _lastOutcome },
                     { "last_reason", _lastReason },
+                    { "last_media_reason", _lastMediaReason },
                     { "last_url", _lastUrl },
                     { "last_at_ms", _lastAtMs },
+                    { "recent", Recent.ToArray() },
                     { "log", LogPath },
                 };
             }
@@ -118,6 +126,11 @@ namespace DoorbellApp.Core
             string line = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + " h264 " + outcome +
                 " surface=" + (surface ?? "") + " url=" + (url ?? "") +
                 (string.IsNullOrEmpty(detail) ? "" : " reason=" + detail) + Environment.NewLine;
+            lock (Gate)
+            {
+                Recent.Add(line.TrimEnd());
+                if (Recent.Count > RecentLimit) Recent.RemoveAt(0);
+            }
             try
             {
                 lock (Gate)
