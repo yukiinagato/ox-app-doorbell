@@ -77,10 +77,11 @@ namespace DoorbellApp
 
         private void ApplyMonitorLabel()
         {
-            MonitorButton.Content = _monitorAudioOn ? Texts.T("ring.monitor_on")
-                                                    : Texts.T("ring.monitor_off");
+            Brush ink = _monitorAudioOn ? (Brush)FindResource("OnAccent") : null;
+            MonitorButton.Content = IconStack(_monitorAudioOn ? "IconEye" : "IconEyeOff",
+                _monitorAudioOn ? Texts.T("ring.monitor_on") : Texts.T("ring.monitor_off"), ink);
             MonitorButton.Background = _monitorAudioOn ?
-                (Brush)FindResource("Accent") : (Brush)FindResource("Card");
+                (Brush)FindResource("Accent") : (Brush)FindResource("Pill");
             MonitorButton.Foreground = _monitorAudioOn ?
                 (Brush)FindResource("OnAccent") : (Brush)FindResource("Fg");
         }
@@ -88,10 +89,11 @@ namespace DoorbellApp
         private void ApplyMicLabel()
         {
             string label = _micMuted ? Texts.T("ring.mic_off") : Texts.T("ring.mic_on");
-            MicButton.Content = label;
-            InCallMicButton.Content = label;
+            Brush micInk = _micMuted ? (Brush)FindResource("OnDanger") : null;
+            MicButton.Content = IconStack(_micMuted ? "IconMicrophoneOff" : "IconMicrophone", label, micInk);
+            InCallMicButton.Content = IconStack(_micMuted ? "IconMicrophoneOff" : "IconMicrophone", label, micInk);
             Brush background = _micMuted ?
-                (Brush)FindResource("Danger") : (Brush)FindResource("Card");
+                (Brush)FindResource("Danger") : (Brush)FindResource("Pill");
             Brush foreground = _micMuted ?
                 (Brush)FindResource("OnDanger") : (Brush)FindResource("Fg");
             MicButton.Background = background;

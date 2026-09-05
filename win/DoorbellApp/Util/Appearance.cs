@@ -21,7 +21,7 @@ namespace DoorbellApp.Util
         private static readonly string[] TokenOrder =
         {
             "Bg", "Card", "Fg", "Dim", "Accent", "Warn", "Line", "Danger", "Ok", "Notice",
-            "OnAccent", "OnDanger", "Track",
+            "OnAccent", "OnDanger", "Track", "Plate", "PlateLine", "Pill", "Row",
         };
 
         private static readonly Dictionary<string, string> DarkPalette =
@@ -32,6 +32,9 @@ namespace DoorbellApp.Util
                 { "Line", "#2A333D" }, { "Danger", "#C0392B" }, { "Ok", "#5DD39E" },
                 { "Notice", "#B7791F" }, { "OnAccent", "#04121F" }, { "OnDanger", "#FFFFFF" },
                 { "Track", "#802A21" },
+                // Frosted plates (spec 5.7): dark appearance = dark translucent plate, light ink.
+                { "Plate", "#A6161C23" }, { "PlateLine", "#26FFFFFF" }, { "Pill", "#B31F262E" },
+                { "Row", "#14FFFFFF" },
             };
 
         private static readonly Dictionary<string, string> LightPalette =
@@ -42,6 +45,8 @@ namespace DoorbellApp.Util
                 { "Line", "#D2DAE2" }, { "Danger", "#B3261E" }, { "Ok", "#1E7F55" },
                 { "Notice", "#8A5A00" }, { "OnAccent", "#FFFFFF" }, { "OnDanger", "#FFFFFF" },
                 { "Track", "#E4C9C6" },
+                { "Plate", "#A6F7F8FA" }, { "PlateLine", "#1F000000" }, { "Pill", "#CCFFFFFF" },
+                { "Row", "#14000000" },
             };
 
         private static DateTime _systemProbedAt = DateTime.MinValue;

@@ -63,7 +63,8 @@ struct Mft {
   DWORD in_id = 0, out_id = 0;
   DWORD out_size = 0;
   bool provides_samples = false;
-  int width = 0, height = 0;
+  int width = 0, height = 0;      // buffer (coded) size reported by the transform
+  int crop_w = 0, crop_h = 0;     // picture size from the SPS: what is actually shown
   LONG stride = 0;
   std::string label;
   void reset() {
@@ -73,6 +74,7 @@ struct Mft {
     out_size = 0;
     provides_samples = false;
     width = height = 0;
+    crop_w = crop_h = 0;
     stride = 0;
     label.clear();
   }
@@ -206,6 +208,11 @@ bool createMft(Mft* m, const fmp4::Demuxer::Config& cfg) {
     return false;
   }
   if (!selectOutputType(m)) return false;
+  // The decoder hands out the coded picture (macroblock-aligned, e.g. 640x368 for a 640x360
+  // stream); the SPS cropping window from the demuxer is the picture to display. Without this
+  // the padding rows come through as a green band along one edge.
+  m->crop_w = cfg.width;
+  m->crop_h = cfg.height;
   m->xf->ProcessMessage(MFT_MESSAGE_NOTIFY_BEGIN_STREAMING, 0);
   m->xf->ProcessMessage(MFT_MESSAGE_NOTIFY_START_OF_STREAM, 0);
   return true;
@@ -357,14 +364,16 @@ void DecoderWin::run() {
         if (pitch <= 0) pitch = mft.width;
       }
       if (scan0 && mft.width > 0 && mft.height > 0) {
+        int show_w = (mft.crop_w > 0 && mft.crop_w <= mft.width) ? mft.crop_w : mft.width;
+        int show_h = (mft.crop_h > 0 && mft.crop_h <= mft.height) ? mft.crop_h : mft.height;
         const uint8_t* y = scan0;
         const uint8_t* uv = scan0 + static_cast<size_t>(pitch) * mft.height;
-        nv12ToBgra(y, uv, pitch, mft.width, mft.height, &bgra);
+        nv12ToBgra(y, uv, pitch, show_w, show_h, &bgra);
         Frame f;
         f.bgra = bgra.data();
-        f.width = mft.width;
-        f.height = mft.height;
-        f.stride = mft.width * 4;
+        f.width = show_w;
+        f.height = show_h;
+        f.stride = show_w * 4;
         f.dts = static_cast<uint64_t>(ts100 / 10000);
         // Output order equals input order (low-latency mode, no B-frames), so the capture time
         // of a decoded frame is the one queued with the same decode time.
@@ -377,8 +386,8 @@ void DecoderWin::run() {
         {
           std::lock_guard<std::mutex> lk(mu_);
           stats_.decoded++;
-          stats_.width = mft.width;
-          stats_.height = mft.height;
+          stats_.width = show_w;
+          stats_.height = show_h;
           if (!first_delivered) {
             first_delivered = true;
             stats_.first_frame_ms = static_cast<int>(

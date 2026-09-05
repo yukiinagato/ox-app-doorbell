@@ -357,6 +357,7 @@
 "cluster.devices_a11y" = "集群设备 %@ 台";
 "cluster.door_stations_a11y" = "门口机 %@/%@ 台在线";
 "cluster.indoor_panels_a11y" = "室内机 %@/%@ 台在线";
+"dash.address_count" = "%@ 个地址";
 "dash.admin" = "管理";
 "dash.count_cluster" = "集群设备 %@ 台";
 "dash.count_devices" = "设备 %@ 台";
@@ -371,6 +372,7 @@
 "dash.recent_calls" = "呼叫记录";
 "dash.see_all" = "查看全部";
 "dash.tile_no_station" = "无门口机";
+"dash.tile_no_still" = "暂无静止画";
 "dash.tile_offline" = "离线";
 "dash.tile_open" = "查看";
 "dash.tile_watch" = "查看";

@@ -398,25 +398,29 @@ namespace DoorbellApp
             EmergencyTitle.Text = Texts.T("emergency.title");
             EmergencyNote.Text = Texts.T("emergency.notified");
             EmergencyCancelButton.Content = Texts.T("emergency.cancel");
-            AnswerButton.Content = Texts.T(_inCall && IncomingView.Visibility == Visibility.Visible
-                ? "incall.end_call" : "ring.answer");
-            MonitorButton.Content = Texts.T("ring.monitor");
-            OpenDoorButton.Content = Texts.T("ring.open_door");
-            InCallOpenDoorButton.Content = Texts.T("ring.open_door");
-            IgnoreButton.Content = Texts.T("ring.ignore");
+            bool ending = _inCall && IncomingView.Visibility == Visibility.Visible;
+            AnswerButton.Content = IconStack(ending ? "IconPhoneOff" : "IconPhone",
+                Texts.T(ending ? "incall.end_call" : "ring.answer"), Brushes.White);
+            MonitorButton.Content = IconStack("IconEye", Texts.T("ring.monitor"));
+            OpenDoorButton.Content = IconStack("IconDoor", Texts.T("ring.open_door"), Brushes.White);
+            InCallOpenDoorButton.Content = IconStack("IconDoor", Texts.T("ring.open_door"), Brushes.White);
+            IgnoreButton.Content = IconStack("IconX", Texts.T("ring.ignore"), (Brush)FindResource("Danger"));
             IncomingNoVideo.Text = Texts.T("ring.no_video");
             InCallTitle.Text = Texts.T("incall.title");
-            EndCallButton.Content = Texts.T("incall.end_call");
-            QuickReplyToggle.Content = Texts.T("ring.quick_replies");
+            EndCallButton.Content = IconStack("IconPhoneOff", Texts.T("incall.end_call"), Brushes.White);
+            QuickReplyToggle.Content = IconStack("IconMessageReply", Texts.T("ring.quick_replies"));
             NoticeChipText.Text = Texts.T("notice.chip");
             NoticeEditButton.Content = Texts.T("notice.edit");
             NoticeClearButton.Content = Texts.T("notice.clear");
             NoticePopoverClose.Content = Texts.T("monitor.close");
-            AdminEntryButton.Content = Texts.T("admin.title");
-            AdminLinkTitle.Text = Texts.T("web_admin.open");
-            NoticeGlobalButton.Content = Texts.T("dash.notice_global");
+            AdminEntryButton.Content = IconLabel("IconSettings", Texts.T("admin.title"));
+            AdminLinkTitle.Text = Texts.T("web_admin.title");
+            NoticeGlobalButton.Content = IconLabel("IconBell", Texts.T("dash.notice_global"));
             RecentCallsTitle.Text = Texts.T("history.title");
-            SeeAllCallsButton.Content = Texts.T("dash.see_all");
+            SeeAllCallsButton.Content = Texts.T("dash.see_all") + " ›";
+            DoorCounterLabel.Text = Texts.T("admin.role_door");
+            PanelCounterLabel.Text = Texts.T("admin.role_indoor");
+            if (DoorsSectionTitle.Text.Length == 0) DoorsSectionTitle.Text = Texts.T("dash.doors");
             HistoryTitle.Text = Texts.T("history.title");
             HistoryCloseButton.Content = Texts.T("monitor.close");
             HistoryFilterAll.Content = Texts.T("history.filter_all");
@@ -426,7 +430,7 @@ namespace DoorbellApp
             HistoryNote.Text = Texts.T("history.page_limit");
             ApplyMicLabel();
             ApplyMonitorLabel();
-            OpenMonitorButton.Content = Texts.T("monitor.open");
+            OpenMonitorButton.Content = IconLabel("IconEye", Texts.T("monitor.open"));
             MonitorPickerTitle.Text = Texts.T("monitor.choose");
             MonitorPickerClose.Content = Texts.T("monitor.close");
             CallingPurposeHint.Text = Texts.T("idle.choose_purpose");
@@ -465,7 +469,9 @@ namespace DoorbellApp
             string date = now.ToString("yyyy年M月d日") + " (" + Weekday((int)now.DayOfWeek) + ")";
             ClockText.Text = time;
             DateText.Text = date;
-            DashClock.Text = time;
+            // Dashboard: hours and minutes large, the seconds small beside them (iPad 1 layout).
+            DashClock.Text = now.ToString("HH:mm");
+            DashClockSeconds.Text = ":" + now.ToString("ss");
             DashDate.Text = date;
             if (_screensaverOn)
             {
@@ -2333,7 +2339,9 @@ namespace DoorbellApp
             bool unlock = UnlockShown(_incomingDoor);
             OpenDoorButton.Visibility = unlock ? Visibility.Visible : Visibility.Collapsed;
             InCallOpenDoorButton.Visibility = OpenDoorButton.Visibility;
-            IgnoreButton.Content = monitorOnly ? Texts.T("monitor.close") : Texts.T("ring.ignore");
+            IgnoreButton.Content = IconStack("IconX",
+                monitorOnly ? Texts.T("monitor.close") : Texts.T("ring.ignore"),
+                (Brush)FindResource("Danger"));
 
             StartIncomingVideo();
 
@@ -2708,7 +2716,7 @@ namespace DoorbellApp
             _quickRepliesOpen = false;
             ApplyQuickReplyVisibility();
             QuickReplyToggle.Visibility = Visibility.Collapsed;
-            IgnoreButton.Content = Texts.T("monitor.close");
+            IgnoreButton.Content = IconStack("IconX", Texts.T("monitor.close"), (Brush)FindResource("Danger"));
             IncomingHint.Text = message ?? "";
             IncomingHint.Visibility = string.IsNullOrEmpty(message) ?
                 Visibility.Collapsed : Visibility.Visible;
@@ -2738,7 +2746,7 @@ namespace DoorbellApp
             AnswerButton.Visibility = Visibility.Visible;
             MonitorButton.Visibility = Visibility.Visible;
             IgnoreButton.Visibility = Visibility.Visible;
-            IgnoreButton.Content = Texts.T("ring.ignore");
+            IgnoreButton.Content = IconStack("IconX", Texts.T("ring.ignore"), (Brush)FindResource("Danger"));
             OpenDoorButton.IsEnabled = false;
         }
 
@@ -2988,7 +2996,7 @@ namespace DoorbellApp
             QuickReplyToggle.Visibility = Visibility.Collapsed;
             MonitorButton.Visibility = Visibility.Visible;
             IgnoreButton.Visibility = Visibility.Visible;
-            IgnoreButton.Content = Texts.T("monitor.close");
+            IgnoreButton.Content = IconStack("IconX", Texts.T("monitor.close"), (Brush)FindResource("Danger"));
             IncomingTitle.Text = Texts.T("monitor.title", DoorLabel(_incomingDoor));
             IncomingHint.Visibility = Visibility.Collapsed;
             AnswerButton.Content = Texts.T("ring.answer");

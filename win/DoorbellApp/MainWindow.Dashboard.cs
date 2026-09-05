@@ -7,6 +7,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using System.Windows.Shapes;
 using DoorbellApp.Core;
 using DoorbellApp.Util;
 
@@ -48,6 +49,7 @@ namespace DoorbellApp
                     streams[door] = DictStr(peer, "stream");
                 }
 
+            DoorsSectionTitle.Text = Texts.T("dash.doors") + " · " + doors.Count;
             bool sameDoors = doors.Count == _tileDoors.Count;
             if (sameDoors)
                 for (int i = 0; i < doors.Count; i++)
@@ -59,6 +61,9 @@ namespace DoorbellApp
                 _tileImages.Clear();
                 _tileNoticeChips.Clear();
                 _tileLabels.Clear();
+                _tilePlaceholders.Clear();
+                _tileDots.Clear();
+                _tileRotations.Clear();
                 DoorTileGrid.Children.Clear();
                 foreach (string door in doors) DoorTileGrid.Children.Add(BuildDoorTile(door));
                 if (doors.Count == 0)
@@ -89,9 +94,20 @@ namespace DoorbellApp
                 bool up;
                 if (!online.TryGetValue(door, out up)) up = false;
                 Image image;
-                // A door station that is gone keeps its last still, dimmed.
+                // A door station that is gone keeps its last still, dimmed, and says so.
                 if (_tileImages.TryGetValue(door, out image)) image.Opacity = up ? 1.0 : 0.35;
                 if (!up) _tileSnapshotUrls.Remove(door);
+                TilePlaceholder placeholder;
+                if (_tilePlaceholders.TryGetValue(door, out placeholder))
+                {
+                    bool hasStill = image != null && image.Source != null;
+                    placeholder.Show(!up ? "IconCameraOff" : "IconPhoto",
+                                     !up ? Texts.T("dash.tile_offline") : Texts.T("dash.tile_no_still"),
+                                     !up || !hasStill);
+                }
+                Ellipse dot;
+                if (_tileDots.TryGetValue(door, out dot))
+                    dot.SetResourceReference(Shape.FillProperty, up ? "Ok" : "Dim");
                 RefreshTileNoticeChip(door);
             }
 
@@ -146,7 +162,13 @@ namespace DoorbellApp
                           ref panelsOnline, ref panelsTotal);
             }
 
-            ClusterCountText.Text = total.ToString();
+            ClusterCountText.Text = Texts.T("dash.count_devices", total);
+            int online = doorsOnline + panelsOnline + (total - doorsTotal - panelsTotal);
+            int offline = total - online;
+            ClusterOnlineText.Text = Texts.T("pair.membership_connected", online) +
+                (offline > 0 ? " · " + offline + " " + Texts.T("dash.tile_offline") : "");
+            ClusterOnlineText.SetResourceReference(TextBlock.ForegroundProperty,
+                                                   offline > 0 ? "Warn" : "Ok");
             DoorCountText.Text = doorsOnline + "/" + doorsTotal;
             PanelCountText.Text = panelsOnline + "/" + panelsTotal;
             AutomationProperties.SetName(ClusterCounter, Texts.T("dash.count_cluster", total));
@@ -172,15 +194,64 @@ namespace DoorbellApp
             }
         }
 
+        /// <summary>The icon + caption shown in a tile's media area instead of a still.</summary>
+        private sealed class TilePlaceholder
+        {
+            public StackPanel Root;
+            public System.Windows.Shapes.Path Icon;
+            public TextBlock Text;
+            public void Show(string iconKey, string text, bool visible)
+            {
+                Icon.Data = (Geometry)Application.Current.FindResource(iconKey);
+                Text.Text = text;
+                Root.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+            }
+        }
+
+        private readonly Dictionary<string, TilePlaceholder> _tilePlaceholders =
+            new Dictionary<string, TilePlaceholder>(StringComparer.Ordinal);
+        private readonly Dictionary<string, Ellipse> _tileDots =
+            new Dictionary<string, Ellipse>(StringComparer.Ordinal);
+        private readonly Dictionary<string, int> _tileRotations =
+            new Dictionary<string, int>(StringComparer.Ordinal);
+
         private Border BuildDoorTile(string door)
         {
             var image = new Image
             {
                 Stretch = Stretch.UniformToFill,
-                MinHeight = 120,
                 Opacity = 1.0,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
             };
             _tileImages[door] = image;
+
+            var placeholderIcon = new System.Windows.Shapes.Path
+            {
+                Data = (Geometry)FindResource("IconPhoto"),
+                StrokeThickness = 1.6,
+                StrokeStartLineCap = PenLineCap.Round,
+                StrokeEndLineCap = PenLineCap.Round,
+                StrokeLineJoin = PenLineJoin.Round,
+            };
+            placeholderIcon.SetResourceReference(Shape.StrokeProperty, "Dim");
+            var placeholderText = new TextBlock
+            {
+                Text = Texts.T("dash.tile_no_still"),
+                FontSize = 15,
+                Margin = new Thickness(0, 10, 0, 0),
+                HorizontalAlignment = HorizontalAlignment.Center,
+            };
+            placeholderText.SetResourceReference(TextBlock.ForegroundProperty, "Dim");
+            var placeholderRoot = new StackPanel
+            {
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+            };
+            placeholderRoot.Children.Add(new Viewbox { Width = 40, Height = 40, Child = placeholderIcon });
+            placeholderRoot.Children.Add(placeholderText);
+            _tilePlaceholders[door] = new TilePlaceholder
+            { Root = placeholderRoot, Icon = placeholderIcon, Text = placeholderText };
 
             var noticeChip = new Border
             {
@@ -203,17 +274,47 @@ namespace DoorbellApp
             noticeChip.MouseLeftButtonDown += OnTileNoticeChipClick;
             _tileNoticeChips[door] = noticeChip;
 
-            var media = new Grid { MinHeight = 120 };
+            // Media area: a 16:10 window that a rotated still fills (UniformToFill), the
+            // placeholder in front until a still arrives, the notice chip on top.
+            var media = new Grid { ClipToBounds = true, MinHeight = 150 };
+            media.SetBinding(FrameworkElement.HeightProperty, new System.Windows.Data.Binding("ActualWidth")
+            {
+                RelativeSource = System.Windows.Data.RelativeSource.Self,
+                Converter = new ScaleConverter(0.62),
+            });
             media.Children.Add(image);
+            media.Children.Add(placeholderRoot);
             media.Children.Add(noticeChip);
+            var mediaFrame = new Border
+            {
+                CornerRadius = new CornerRadius(14, 14, 0, 0),
+                ClipToBounds = true,
+                Child = media,
+            };
+            mediaFrame.SetResourceReference(Border.BackgroundProperty, "Row");
 
-            var caption = new Grid { Margin = new Thickness(10, 8, 10, 8) };
-            var labels = new StackPanel { HorizontalAlignment = HorizontalAlignment.Left };
+            var caption = new Grid { Margin = new Thickness(14, 10, 14, 10) };
+            var labels = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                HorizontalAlignment = HorizontalAlignment.Left,
+                VerticalAlignment = VerticalAlignment.Center,
+            };
+            var dot = new Ellipse
+            {
+                Width = 8, Height = 8,
+                Margin = new Thickness(0, 0, 8, 0),
+                VerticalAlignment = VerticalAlignment.Center,
+            };
+            dot.SetResourceReference(Shape.FillProperty, "Dim");
+            _tileDots[door] = dot;
+            labels.Children.Add(dot);
             var title = new TextBlock
             {
                 Text = DoorLabel(door),
                 FontSize = 17,
                 FontWeight = FontWeights.Bold,
+                VerticalAlignment = VerticalAlignment.Center,
                 Foreground = (Brush)FindResource("Fg"),
             };
             _tileLabels.Add(title);
@@ -221,32 +322,53 @@ namespace DoorbellApp
             var watch = new TextBlock
             {
                 Text = Texts.T("dash.tile_watch") + " ›",
-                FontSize = 14,
+                FontSize = 15,
                 HorizontalAlignment = HorizontalAlignment.Right,
                 VerticalAlignment = VerticalAlignment.Center,
-                Foreground = (Brush)FindResource("Accent"),
             };
+            watch.SetResourceReference(TextBlock.ForegroundProperty, "Accent");
             caption.Children.Add(labels);
             caption.Children.Add(watch);
 
             var body = new StackPanel();
-            body.Children.Add(media);
+            body.Children.Add(mediaFrame);
             body.Children.Add(caption);
 
+            var plate = new Border { CornerRadius = new CornerRadius(16), Child = body };
+            plate.SetResourceReference(Border.BackgroundProperty, "Plate");
             var tile = new Border
             {
-                Background = (Brush)FindResource("Card"),
-                BorderBrush = (Brush)FindResource("Line"),
                 BorderThickness = new Thickness(1),
-                CornerRadius = new CornerRadius(12),
-                Margin = new Thickness(5),
+                CornerRadius = new CornerRadius(16),
+                Margin = new Thickness(4, 4, 8, 12),
                 VerticalAlignment = VerticalAlignment.Top,
+                ClipToBounds = true,
                 Cursor = Cursors.Hand,
                 Tag = door,
-                Child = body,
+                Child = plate,
             };
+            tile.SetResourceReference(Border.BorderBrushProperty, "PlateLine");
+            Ui.Frost.SetEnabled(tile, true);
             tile.MouseLeftButtonDown += OnDoorTileClick;
             return tile;
+        }
+
+        /// <summary>Height = width × factor, for the tile's media window.</summary>
+        private sealed class ScaleConverter : System.Windows.Data.IValueConverter
+        {
+            private readonly double _factor;
+            public ScaleConverter(double factor) { _factor = factor; }
+            public object Convert(object value, Type targetType, object parameter,
+                                  System.Globalization.CultureInfo culture)
+            {
+                double width = value is double ? (double)value : 0;
+                return width > 0 ? width * _factor : 150.0;
+            }
+            public object ConvertBack(object value, Type targetType, object parameter,
+                                      System.Globalization.CultureInfo culture)
+            {
+                return System.Windows.Data.Binding.DoNothing;
+            }
         }
 
         private void OnDoorTileClick(object sender, MouseButtonEventArgs e)
@@ -275,10 +397,18 @@ namespace DoorbellApp
                 Task.Run(() =>
                 {
                     byte[] jpeg = null;
+                    int rotation = -1;
                     try
                     {
                         using (var client = new System.Net.WebClient())
+                        {
                             jpeg = client.DownloadData(url);
+                            // The still is the raw sensor frame; the station says how it is held.
+                            string meta = client.DownloadString(
+                                url.Substring(0, url.Length - "/snapshot.jpg".Length) + "/video-meta");
+                            var m = System.Text.RegularExpressions.Regex.Match(meta, "\"rotation\"\\s*:\\s*(-?\\d+)");
+                            if (m.Success) rotation = ((int.Parse(m.Groups[1].Value) % 360) + 360) % 360;
+                        }
                     }
                     catch (Exception ex)
                     {
@@ -294,6 +424,14 @@ namespace DoorbellApp
                         if (bitmap == null || !_tileImages.TryGetValue(door, out target)) return;
                         target.Source = bitmap;
                         target.Opacity = 1.0;
+                        if (rotation >= 0) _tileRotations[door] = rotation;
+                        int degrees;
+                        if (_tileRotations.TryGetValue(door, out degrees))
+                            target.LayoutTransform = degrees == 0 ? Transform.Identity
+                                                                  : new RotateTransform(degrees);
+                        TilePlaceholder placeholder;
+                        if (_tilePlaceholders.TryGetValue(door, out placeholder))
+                            placeholder.Root.Visibility = Visibility.Collapsed;
                     }));
                 });
             }
@@ -336,8 +474,24 @@ namespace DoorbellApp
             else
             {
                 _latestCallHlc = DictStr(rows[0], "hlc");
+                string lastDay = null;
                 foreach (Dictionary<string, object> row in rows)
+                {
+                    string day = DayLabelOf(DictLong(row, "ts", 0));
+                    if (day != lastDay)
+                    {
+                        lastDay = day;
+                        var header = new TextBlock
+                        {
+                            Text = day,
+                            FontSize = 13,
+                            Margin = new Thickness(2, 8, 2, 4),
+                        };
+                        header.SetResourceReference(TextBlock.ForegroundProperty, "Dim");
+                        RecentCallsList.Children.Add(header);
+                    }
                     RecentCallsList.Children.Add(BuildCallRow(row, false));
+                }
             }
             _unreadMissed = log == null ? 0 : DictInt(log, "unread_missed", 0);
             MissedBadgeText.Text = Texts.T("history.missed_badge", _unreadMissed);
@@ -360,9 +514,21 @@ namespace DoorbellApp
         }
 
         /// <summary>One history line: time, door and purpose, then the outcome.</summary>
+        /// <summary>今日 / 昨日 / a date, for the day headers in the call lists.</summary>
+        private string DayLabelOf(long tsMs)
+        {
+            if (tsMs <= 0) return "";
+            DateTime when = new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc)
+                .AddMilliseconds(tsMs).ToLocalTime().Date;
+            DateTime today = CorrectedNow().Date;
+            if (when == today) return Texts.T("history.today");
+            if (when == today.AddDays(-1)) return Texts.T("history.yesterday");
+            return when.ToString("M月d日");
+        }
+
         private Grid BuildCallRow(Dictionary<string, object> row, bool detailed)
         {
-            var grid = new Grid { Margin = new Thickness(0, 5, 0, 5) };
+            var grid = new Grid { Margin = new Thickness(0, 4, 0, 4) };
             grid.ColumnDefinitions.Add(new ColumnDefinition
             { Width = new GridLength(64) });
             grid.ColumnDefinitions.Add(new ColumnDefinition
@@ -405,16 +571,31 @@ namespace DoorbellApp
             Grid.SetColumn(what, 1);
             grid.Children.Add(what);
 
-            var result = new TextBlock
+            // Outcome pill: missed calls in the danger colour, everything else on a quiet pill.
+            var resultText = new TextBlock
             {
                 Text = OutcomeText(row, outcome),
-                FontSize = detailed ? 15 : 13,
+                FontSize = detailed ? 14 : 13,
+                VerticalAlignment = VerticalAlignment.Center,
+            };
+            resultText.SetResourceReference(TextBlock.ForegroundProperty, missed ? "OnDanger" : "Fg");
+            var result = new Border
+            {
+                CornerRadius = new CornerRadius(8),
+                Padding = new Thickness(10, 4, 10, 4),
                 Margin = new Thickness(8, 0, 0, 0),
                 VerticalAlignment = VerticalAlignment.Center,
-                Foreground = (Brush)FindResource(missed ? "Danger" : "Dim"),
+                Child = resultText,
             };
+            result.SetResourceReference(Border.BackgroundProperty, missed ? "Danger" : "Row");
             Grid.SetColumn(result, 2);
             grid.Children.Add(result);
+            // Hairline under each row, as on the kiosk list.
+            var rule = new Border { Height = 1, VerticalAlignment = VerticalAlignment.Bottom,
+                                    Margin = new Thickness(0, 0, 0, -4) };
+            rule.SetResourceReference(Border.BackgroundProperty, "PlateLine");
+            Grid.SetColumnSpan(rule, 3);
+            grid.Children.Add(rule);
             return grid;
         }
 

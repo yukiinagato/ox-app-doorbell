@@ -93,86 +93,148 @@
                 </Grid>
             </Grid>
 
-            <!-- A · indoor dashboard. -->
-            <Grid x:Name="DashboardHome" Margin="22,18,22,16" Visibility="Collapsed">
+            <!-- A · indoor dashboard, after the iPad 1 layout: clock with small seconds, action
+                 chips and the counter strip top-right, section titles above the door tiles and
+                 the call list, frosted plates (ui:Frost) for the list and the footer. -->
+            <Grid x:Name="DashboardHome" Margin="24,16,24,16" Visibility="Collapsed">
                 <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="*"/>
                     <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
 
                 <Grid Grid.Row="0">
-                    <StackPanel HorizontalAlignment="Left">
-                        <TextBlock x:Name="DashClock" FontSize="52" FontWeight="Light"
-                                   Foreground="{DynamicResource Fg}"/>
-                        <TextBlock x:Name="DashDate" FontSize="16"
-                                   Foreground="{DynamicResource Dim}" Margin="0,2,0,0"/>
+                    <StackPanel HorizontalAlignment="Left" VerticalAlignment="Top">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock x:Name="DashClock" FontSize="66" FontWeight="Light"
+                                       Foreground="{DynamicResource Fg}"/>
+                            <TextBlock x:Name="DashClockSeconds" FontSize="28" FontWeight="Light"
+                                       Margin="6,0,0,12" VerticalAlignment="Bottom"
+                                       Foreground="{DynamicResource Dim}"/>
+                        </StackPanel>
+                        <TextBlock x:Name="DashDate" FontSize="18"
+                                   Foreground="{DynamicResource Dim}" Margin="2,0,0,0"/>
                     </StackPanel>
-                    <WrapPanel x:Name="DashboardChips" Orientation="Horizontal"
-                               HorizontalAlignment="Right" VerticalAlignment="Bottom">
+                    <StackPanel HorizontalAlignment="Right" VerticalAlignment="Top">
+                        <WrapPanel x:Name="DashboardChips" Orientation="Horizontal"
+                                   HorizontalAlignment="Right">
+                            <Border x:Name="MissedBadge" Visibility="Collapsed" Cursor="Hand"
+                                    Background="{DynamicResource Danger}" CornerRadius="10"
+                                    Padding="14,8" Margin="8,0,0,0" MinHeight="40"
+                                    MouseLeftButtonDown="OnMissedBadgeClick">
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <Viewbox Width="18" Height="18" VerticalAlignment="Center">
+                                        <Path Data="{StaticResource IconCalendarTime}"
+                                              Stroke="{DynamicResource OnDanger}" StrokeThickness="2"
+                                              StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                                              StrokeLineJoin="Round"/>
+                                    </Viewbox>
+                                    <TextBlock x:Name="MissedBadgeText" FontSize="16" FontWeight="Bold"
+                                               Margin="8,0,0,0" VerticalAlignment="Center"
+                                               Foreground="{DynamicResource OnDanger}"/>
+                                </StackPanel>
+                            </Border>
+                            <Button x:Name="NoticeGlobalButton" Style="{StaticResource ChipButton}"
+                                    Click="OnGlobalNoticeClick"/>
+                            <Button x:Name="OpenMonitorButton" Style="{StaticResource ChipButton}"
+                                    Visibility="Collapsed" Click="OnOpenMonitorClick"/>
+                            <Button x:Name="AdminEntryButton" Style="{StaticResource ChipButton}"
+                                    Click="OnAdminEntryClick"/>
+                        </WrapPanel>
+                        <!-- Counter strip: cluster size, door stations and indoor panels online,
+                             battery. Vector icons take the ink colour; no plate behind the
+                             numbers beyond this one translucent pill (spec 5.7). -->
                         <Border x:Name="MembershipStatus" Visibility="Collapsed" Cursor="Hand"
-                                Background="{DynamicResource Card}" CornerRadius="10"
-                                Padding="12,6" BorderBrush="{DynamicResource Line}"
-                                BorderThickness="1" Margin="5,0,0,0"
+                                Background="{DynamicResource Pill}" CornerRadius="10"
+                                Padding="14,7" BorderBrush="{DynamicResource PlateLine}"
+                                BorderThickness="1" Margin="0,8,0,0"
+                                HorizontalAlignment="Right"
                                 MouseLeftButtonDown="OnMembershipClick">
-                            <!-- Three compact counters: the cluster, then how many door stations
-                                 and indoor panels are online. Vector icons, never emoji, so they
-                                 take the ink colour and stay crisp at any scale. -->
                             <StackPanel Orientation="Horizontal">
                                 <StackPanel x:Name="ClusterCounter" Orientation="Horizontal"
                                             VerticalAlignment="Center">
-                                    <Viewbox Width="16" Height="16" VerticalAlignment="Center">
+                                    <Viewbox Width="17" Height="17" VerticalAlignment="Center">
                                         <Path Data="{StaticResource IconTopologyStar3}" Stroke="{DynamicResource Dim}"
                                               StrokeThickness="2" StrokeStartLineCap="Round"
                                               StrokeEndLineCap="Round" StrokeLineJoin="Round"/>
                                     </Viewbox>
-                                    <TextBlock x:Name="ClusterCountText" FontSize="14"
+                                    <TextBlock x:Name="ClusterCountText" FontSize="15"
                                                Margin="6,0,0,0" VerticalAlignment="Center"
                                                Foreground="{DynamicResource Fg}"/>
+                                    <TextBlock x:Name="ClusterOnlineText" FontSize="15"
+                                               Margin="8,0,0,0" VerticalAlignment="Center"
+                                               Foreground="{DynamicResource Ok}"/>
                                 </StackPanel>
+                                <Rectangle Width="1" Margin="12,2,12,2" Fill="{DynamicResource PlateLine}"/>
                                 <StackPanel x:Name="DoorCounter" Orientation="Horizontal"
-                                            Margin="14,0,0,0" VerticalAlignment="Center">
-                                    <Viewbox Width="16" Height="16" VerticalAlignment="Center">
+                                            VerticalAlignment="Center">
+                                    <Viewbox Width="17" Height="17" VerticalAlignment="Center">
                                         <Path Data="{StaticResource IconDoor}" Stroke="{DynamicResource Dim}"
                                               StrokeThickness="2" StrokeStartLineCap="Round"
                                               StrokeEndLineCap="Round" StrokeLineJoin="Round"/>
                                     </Viewbox>
-                                    <TextBlock x:Name="DoorCountText" FontSize="14"
+                                    <TextBlock x:Name="DoorCounterLabel" FontSize="15"
+                                               Margin="6,0,0,0" VerticalAlignment="Center"
+                                               Foreground="{DynamicResource Dim}"/>
+                                    <TextBlock x:Name="DoorCountText" FontSize="15" FontWeight="Bold"
                                                Margin="6,0,0,0" VerticalAlignment="Center"
                                                Foreground="{DynamicResource Fg}"/>
                                 </StackPanel>
+                                <Rectangle Width="1" Margin="12,2,12,2" Fill="{DynamicResource PlateLine}"/>
                                 <StackPanel x:Name="PanelCounter" Orientation="Horizontal"
-                                            Margin="14,0,0,0" VerticalAlignment="Center">
-                                    <Viewbox Width="16" Height="16" VerticalAlignment="Center">
+                                            VerticalAlignment="Center">
+                                    <Viewbox Width="17" Height="17" VerticalAlignment="Center">
                                         <Path Data="{StaticResource IconDeviceTablet}" Stroke="{DynamicResource Dim}"
                                               StrokeThickness="2" StrokeStartLineCap="Round"
                                               StrokeEndLineCap="Round" StrokeLineJoin="Round"/>
                                     </Viewbox>
-                                    <TextBlock x:Name="PanelCountText" FontSize="14"
+                                    <TextBlock x:Name="PanelCounterLabel" FontSize="15"
+                                               Margin="6,0,0,0" VerticalAlignment="Center"
+                                               Foreground="{DynamicResource Dim}"/>
+                                    <TextBlock x:Name="PanelCountText" FontSize="15" FontWeight="Bold"
                                                Margin="6,0,0,0" VerticalAlignment="Center"
                                                Foreground="{DynamicResource Fg}"/>
                                 </StackPanel>
+                                <StackPanel x:Name="BatteryCounter" Orientation="Horizontal"
+                                            VerticalAlignment="Center" Visibility="Collapsed">
+                                    <Rectangle Width="1" Margin="12,2,12,2" Fill="{DynamicResource PlateLine}"/>
+                                    <Viewbox Width="17" Height="17" VerticalAlignment="Center">
+                                        <Path x:Name="BatteryIcon" Data="{StaticResource IconBattery}"
+                                              Stroke="{DynamicResource Dim}" StrokeThickness="2"
+                                              StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                                              StrokeLineJoin="Round"/>
+                                    </Viewbox>
+                                    <TextBlock x:Name="BatteryText" FontSize="15"
+                                               Margin="6,0,0,0" VerticalAlignment="Center"
+                                               Foreground="{DynamicResource Fg}"/>
+                                </StackPanel>
+                                <Ellipse x:Name="MeshDot" Width="9" Height="9"
+                                         Fill="{DynamicResource Ok}" Margin="12,0,0,0"
+                                         VerticalAlignment="Center"/>
                             </StackPanel>
                         </Border>
-                        <Border x:Name="MissedBadge" Visibility="Collapsed" Cursor="Hand"
-                                Background="{DynamicResource Danger}" CornerRadius="10"
-                                Padding="12,6" Margin="5,0,0,0"
-                                MouseLeftButtonDown="OnMissedBadgeClick">
-                            <TextBlock x:Name="MissedBadgeText" FontSize="14" FontWeight="Bold"
-                                       Foreground="{DynamicResource OnDanger}"/>
-                        </Border>
-                        <Button x:Name="OpenMonitorButton" Style="{StaticResource ChipButton}"
-                                BorderBrush="{DynamicResource Line}" Visibility="Collapsed"
-                                Click="OnOpenMonitorClick"/>
-                        <Button x:Name="AdminEntryButton" Style="{StaticResource ChipButton}"
-                                BorderBrush="{DynamicResource Line}" Click="OnAdminEntryClick"/>
-                        <Ellipse x:Name="MeshDot" Width="12" Height="12"
-                                 Fill="{DynamicResource Ok}" Margin="10,0,0,0"
-                                 VerticalAlignment="Center"/>
-                    </WrapPanel>
+                    </StackPanel>
                 </Grid>
 
-                <Grid x:Name="DashboardContent" Grid.Row="1" Margin="0,14,0,10">
+                <Grid Grid.Row="1" Margin="0,16,0,8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition x:Name="DashboardTitleLeftColumn" Width="1.4*"/>
+                        <ColumnDefinition x:Name="DashboardTitleRightColumn" Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <Grid Grid.Column="0" Margin="4,0,12,0">
+                        <TextBlock x:Name="DoorsSectionTitle" FontSize="15" FontWeight="Bold"
+                                   VerticalAlignment="Center" Foreground="{DynamicResource Fg}"/>
+                    </Grid>
+                    <Grid Grid.Column="1" Margin="12,0,4,0">
+                        <TextBlock x:Name="RecentCallsTitle" FontSize="15" FontWeight="Bold"
+                                   VerticalAlignment="Center" Foreground="{DynamicResource Fg}"/>
+                        <Button x:Name="SeeAllCallsButton" Style="{StaticResource LinkButton}"
+                                HorizontalAlignment="Right" Click="OnOpenHistoryClick"/>
+                    </Grid>
+                </Grid>
+
+                <Grid x:Name="DashboardContent" Grid.Row="2">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition x:Name="DashboardLeftColumn" Width="1.4*"/>
                         <ColumnDefinition x:Name="DashboardRightColumn" Width="*"/>
@@ -184,36 +246,25 @@
 
                     <ScrollViewer x:Name="DoorTilesPanel" Grid.Row="0" Grid.Column="0"
                                   VerticalScrollBarVisibility="Auto"
-                                  HorizontalScrollBarVisibility="Disabled" Margin="0,0,8,0">
-                        <UniformGrid x:Name="DoorTileGrid" Columns="2"/>
+                                  HorizontalScrollBarVisibility="Disabled" Margin="0,0,12,0">
+                        <UniformGrid x:Name="DoorTileGrid" Columns="2" VerticalAlignment="Top"/>
                     </ScrollViewer>
 
                     <Border x:Name="RecentCallsPanel" Grid.Row="0" Grid.Column="1"
-                            BorderBrush="{DynamicResource Line}" BorderThickness="1"
-                            CornerRadius="12" Padding="12,10" Margin="8,0,0,0">
-                        <Grid>
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="*"/>
-                            </Grid.RowDefinitions>
-                            <Grid Grid.Row="0" Margin="0,0,0,6">
-                                <TextBlock x:Name="RecentCallsTitle" FontSize="16"
-                                           FontWeight="Bold" HorizontalAlignment="Left"
-                                           Foreground="{DynamicResource Fg}"/>
-                                <Button x:Name="SeeAllCallsButton"
-                                        Style="{StaticResource ChipButton}"
-                                        BorderBrush="{DynamicResource Line}"
-                                        HorizontalAlignment="Right" Click="OnOpenHistoryClick"/>
-                            </Grid>
-                            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto"
+                            ui:Frost.Enabled="True" CornerRadius="16" Margin="12,4,4,0"
+                            BorderBrush="{DynamicResource PlateLine}" BorderThickness="1"
+                            ClipToBounds="True" VerticalAlignment="Top">
+                        <Border Background="{DynamicResource Plate}" CornerRadius="16"
+                                Padding="14,6,14,8">
+                            <ScrollViewer VerticalScrollBarVisibility="Auto"
                                           HorizontalScrollBarVisibility="Disabled">
                                 <StackPanel x:Name="RecentCallsList"/>
                             </ScrollViewer>
-                        </Grid>
+                        </Border>
                     </Border>
                 </Grid>
 
-                <Grid x:Name="DashboardFooter" Grid.Row="2">
+                <Grid x:Name="DashboardFooter" Grid.Row="3" Margin="0,16,0,0">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*"/>
@@ -221,28 +272,40 @@
                         <!-- Width is reserved at runtime from the SOS slider's real footprint. -->
                         <ColumnDefinition x:Name="DashboardSosColumn" Width="0"/>
                     </Grid.ColumnDefinitions>
+                    <!-- Footer plate: QR, admin address, then the name · versions · battery
+                         line — left-aligned lines beside the QR (spec 5.7). -->
                     <Border x:Name="AdminLinkCard" Grid.Column="0" Cursor="Hand"
-                            Background="{DynamicResource Card}" CornerRadius="10" Padding="12,6"
-                            BorderBrush="{DynamicResource Line}" BorderThickness="1"
+                            ui:Frost.Enabled="True" CornerRadius="14" ClipToBounds="True"
+                            BorderBrush="{DynamicResource PlateLine}" BorderThickness="1"
+                            MinWidth="320" MaxWidth="560" HorizontalAlignment="Left"
                             MouseLeftButtonDown="OnWebAdminClick">
-                        <StackPanel Orientation="Horizontal">
-                            <Image x:Name="AdminQrImage" Width="52" Height="52"
-                                   RenderOptions.BitmapScalingMode="NearestNeighbor"/>
-                            <StackPanel Margin="10,0,0,0" VerticalAlignment="Center">
-                                <TextBlock x:Name="AdminLinkTitle" FontSize="13"
-                                           Foreground="{DynamicResource Dim}"/>
-                                <TextBlock x:Name="AdminUrlText" FontSize="14"
-                                           Foreground="{DynamicResource Fg}"/>
+                        <Border Background="{DynamicResource Plate}" CornerRadius="14"
+                                Padding="12,8">
+                            <StackPanel Orientation="Horizontal">
+                                <Border Background="#FFFFFF" CornerRadius="8" Padding="3">
+                                    <Image x:Name="AdminQrImage" Width="66" Height="66"
+                                           RenderOptions.BitmapScalingMode="NearestNeighbor"/>
+                                </Border>
+                                <StackPanel Margin="12,0,6,0" VerticalAlignment="Center">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock x:Name="AdminLinkTitle" FontSize="15" FontWeight="Bold"
+                                                   Foreground="{DynamicResource Fg}"/>
+                                        <TextBlock x:Name="AdminAddressCount" FontSize="14"
+                                                   Margin="6,0,0,0" VerticalAlignment="Bottom"
+                                                   Foreground="{DynamicResource Dim}"/>
+                                    </StackPanel>
+                                    <Border Background="{DynamicResource Row}" CornerRadius="7"
+                                            Padding="12,6" Margin="0,4,0,0" HorizontalAlignment="Left">
+                                        <TextBlock x:Name="AdminUrlText" FontSize="14"
+                                                   Foreground="{DynamicResource Fg}"/>
+                                    </Border>
+                                    <TextBlock x:Name="NodeInfo" FontSize="13" Margin="0,4,0,0"
+                                               TextWrapping="Wrap" MaxWidth="440"
+                                               Foreground="{DynamicResource Dim}"/>
+                                </StackPanel>
                             </StackPanel>
-                        </StackPanel>
+                        </Border>
                     </Border>
-                    <TextBlock x:Name="NodeInfo" Grid.Column="1" FontSize="14"
-                               Margin="14,0,10,0" TextWrapping="Wrap"
-                               Foreground="{DynamicResource Dim}" VerticalAlignment="Center"/>
-                    <Button x:Name="NoticeGlobalButton" Grid.Column="2"
-                            Style="{StaticResource ChipButton}"
-                            BorderBrush="{DynamicResource Line}" VerticalAlignment="Center"
-                            Click="OnGlobalNoticeClick"/>
                 </Grid>
             </Grid>
 
@@ -311,26 +374,30 @@
         </Border>
 
         <!-- A2 · incoming / monitor screen. -->
-        <Grid x:Name="IncomingView" Visibility="Collapsed" Background="#000000">
+        <!-- Incoming / monitor screen, after the iPad 1 layout: title with the return countdown at
+             the far right, the video in a rounded black frame that takes the door camera's aspect,
+             quick replies, then one control row of icon buttons. Surfaces follow the appearance. -->
+        <Grid x:Name="IncomingView" Visibility="Collapsed" Background="{DynamicResource Bg}">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
-            <Grid Grid.Row="0" Margin="20,16,20,8">
+            <Grid Grid.Row="0" Margin="24,18,24,8">
                 <StackPanel HorizontalAlignment="Left">
                     <StackPanel Orientation="Horizontal">
-                        <TextBlock x:Name="IncomingTitle" FontSize="32" FontWeight="Bold"
-                                   VerticalAlignment="Center" Foreground="#F2F5F8"/>
+                        <TextBlock x:Name="IncomingTitle" FontSize="30" FontWeight="Bold"
+                                   VerticalAlignment="Center" Foreground="{DynamicResource Fg}"/>
                         <!-- Seconds until the panel returns home. Tapping it stops the return
                              and leaves the live view up. -->
                         <Border x:Name="ReturnCountdown" Visibility="Collapsed" Cursor="Hand"
-                                Margin="10,0,0,0" CornerRadius="10" Padding="12,6"
-                                VerticalAlignment="Center" Background="#40FFFFFF"
+                                Margin="12,0,0,0" CornerRadius="10" Padding="12,6"
+                                VerticalAlignment="Center" Background="{DynamicResource Pill}"
+                                BorderBrush="{DynamicResource PlateLine}" BorderThickness="1"
                                 MouseLeftButtonDown="OnReturnCountdownClick">
-                            <TextBlock x:Name="ReturnCountdownText" FontSize="22"
-                                       VerticalAlignment="Center" Foreground="#F2F5F8"/>
+                            <TextBlock x:Name="ReturnCountdownText" FontSize="20"
+                                       VerticalAlignment="Center" Foreground="{DynamicResource Dim}"/>
                         </Border>
                     </StackPanel>
                     <!-- Fixed-height purpose slot: a purpose that arrives later never moves the
@@ -338,96 +405,108 @@
                     <Grid x:Name="PurposeSlot" Height="36" Margin="0,6,0,0">
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                             <Border x:Name="PurposeBadge" Visibility="Collapsed"
-                                    Background="#2A3A4C" CornerRadius="8" Padding="12,6">
+                                    Background="{DynamicResource Pill}" CornerRadius="8" Padding="12,6"
+                                    BorderBrush="{DynamicResource PlateLine}" BorderThickness="1">
                                 <StackPanel x:Name="PurposeBadgeContent"
                                             Orientation="Horizontal"/>
                             </Border>
-                            <Border x:Name="LangBadge" Visibility="Collapsed" Background="#2A3A4C"
-                                    CornerRadius="8" Padding="12,6" Margin="10,0,0,0">
+                            <Border x:Name="LangBadge" Visibility="Collapsed"
+                                    Background="{DynamicResource Pill}" CornerRadius="8" Padding="12,6"
+                                    BorderBrush="{DynamicResource PlateLine}" BorderThickness="1"
+                                    Margin="10,0,0,0">
                                 <StackPanel Orientation="Horizontal">
                                     <Viewbox Width="18" Height="18" VerticalAlignment="Center">
                                         <Path Data="{StaticResource IconWorld}"
-                                              Stroke="#F2F5F8" StrokeThickness="2"
+                                              Stroke="{DynamicResource Fg}" StrokeThickness="2"
                                               StrokeStartLineCap="Round"
                                               StrokeEndLineCap="Round" StrokeLineJoin="Round"/>
                                     </Viewbox>
-                                    <TextBlock x:Name="LangBadgeText" FontSize="18"
+                                    <TextBlock x:Name="LangBadgeText" FontSize="17"
                                                Margin="8,0,0,0" VerticalAlignment="Center"
-                                               Foreground="#F2F5F8"/>
+                                               Foreground="{DynamicResource Fg}"/>
                                 </StackPanel>
                             </Border>
                         </StackPanel>
                     </Grid>
-                    <TextBlock x:Name="IncomingHint" FontSize="17" Foreground="#B6C1CC"
+                    <TextBlock x:Name="IncomingHint" FontSize="16" Foreground="{DynamicResource Dim}"
                                Margin="0,4,0,0" Visibility="Collapsed"/>
                 </StackPanel>
             </Grid>
-            <Grid Grid.Row="1" ClipToBounds="True">
-                <MediaElement x:Name="IncomingH264" Stretch="Uniform" Visibility="Collapsed"
-                              LoadedBehavior="Manual" UnloadedBehavior="Manual"
-                              ScrubbingEnabled="False"/>
-                <Image x:Name="IncomingLive" Stretch="Uniform"/>
-                <!-- Core-decoded H.264 (H264LiveStreamer); shown once the first frame lands. -->
-                <Image x:Name="IncomingH264Image" Stretch="Uniform" Visibility="Collapsed"/>
-                <TextBlock x:Name="IncomingNoVideo" FontSize="24" Foreground="#8A97A5"
-                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            <Grid Grid.Row="1" Margin="24,4,24,0">
+                <Border x:Name="IncomingVideoFrame" CornerRadius="16" Background="#000000"
+                        ClipToBounds="True" HorizontalAlignment="Center" VerticalAlignment="Center">
+                    <Grid x:Name="IncomingVideoArea" ClipToBounds="True">
+                        <MediaElement x:Name="IncomingH264" Stretch="Uniform" Visibility="Collapsed"
+                                      LoadedBehavior="Manual" UnloadedBehavior="Manual"
+                                      ScrubbingEnabled="False"/>
+                        <Image x:Name="IncomingLive" Stretch="Uniform"/>
+                        <!-- Core-decoded H.264 (H264LiveStreamer); shown once the first frame lands. -->
+                        <Image x:Name="IncomingH264Image" Stretch="Uniform" Visibility="Collapsed"/>
+                        <TextBlock x:Name="IncomingNoVideo" FontSize="22" Foreground="#8A97A5"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Grid>
+                </Border>
             </Grid>
             <WrapPanel x:Name="QuickReplyPanel" Grid.Row="2" Orientation="Horizontal"
-                       HorizontalAlignment="Center" Margin="30,6,30,0" MaxWidth="1200"/>
+                       HorizontalAlignment="Center" Margin="30,8,30,0" MaxWidth="1200"/>
             <WrapPanel x:Name="IncomingControlRow" Grid.Row="3" Orientation="Horizontal"
-                       HorizontalAlignment="Center" Margin="20,10,20,18">
+                       HorizontalAlignment="Center" Margin="20,12,20,18">
                 <Button x:Name="MonitorButton" Style="{StaticResource ActionButton}"
-                        BorderBrush="{DynamicResource Line}" Click="OnMonitorClick"/>
+                        Click="OnMonitorClick"/>
                 <Button x:Name="AnswerButton" Style="{StaticResource ActionButton}"
-                        FontWeight="Bold" Background="#187A3C" Foreground="#FFFFFF"
-                        BorderBrush="#187A3C" Click="OnAnswerClick"/>
+                        Background="#1E8E4B" Foreground="#FFFFFF" BorderBrush="#1E8E4B"
+                        Click="OnAnswerClick"/>
                 <Button x:Name="MicButton" Style="{StaticResource ActionButton}"
-                        BorderBrush="{DynamicResource Line}" Visibility="Collapsed"
-                        Click="OnMicClick"/>
+                        Visibility="Collapsed" Click="OnMicClick"/>
                 <Button x:Name="OpenDoorButton" Style="{StaticResource ActionButton}"
                         Background="#B7791F" Foreground="#FFFFFF" BorderBrush="#B7791F"
                         Click="OnOpenDoorClick"/>
                 <Button x:Name="QuickReplyToggle" Style="{StaticResource ActionButton}"
-                        BorderBrush="{DynamicResource Line}" Click="OnQuickReplyToggleClick"/>
+                        Click="OnQuickReplyToggleClick"/>
                 <Button x:Name="IgnoreButton" Style="{StaticResource ActionButton}"
-                        Foreground="#B6C1CC" BorderBrush="{DynamicResource Line}"
+                        Foreground="{DynamicResource Danger}" BorderBrush="{DynamicResource Danger}"
                         Click="OnIgnoreClick"/>
             </WrapPanel>
         </Grid>
 
-        <Grid x:Name="InCallView" Visibility="Collapsed" Background="#000000">
+        <Grid x:Name="InCallView" Visibility="Collapsed" Background="{DynamicResource Bg}">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
                 <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
-            <StackPanel Grid.Row="0" Margin="20,16,20,8" HorizontalAlignment="Left">
+            <StackPanel Grid.Row="0" Margin="24,18,24,8" HorizontalAlignment="Left">
                 <TextBlock x:Name="InCallTitle" FontSize="30" FontWeight="Bold"
-                           Foreground="#F2F5F8"/>
+                           Foreground="{DynamicResource Fg}"/>
                 <Grid x:Name="InCallPurposeSlot" Height="34" Margin="0,6,0,0">
                     <Border x:Name="InCallPurposeBadge" Visibility="Collapsed"
-                            Background="#2A3A4C" CornerRadius="8" Padding="12,6"
+                            Background="{DynamicResource Pill}" CornerRadius="8" Padding="12,6"
+                            BorderBrush="{DynamicResource PlateLine}" BorderThickness="1"
                             HorizontalAlignment="Left" VerticalAlignment="Center">
                         <StackPanel x:Name="InCallPurposeContent" Orientation="Horizontal"/>
                     </Border>
                 </Grid>
             </StackPanel>
-            <Grid Grid.Row="1" ClipToBounds="True">
-                <MediaElement x:Name="PeerH264" Stretch="Uniform" Visibility="Collapsed"
-                              LoadedBehavior="Manual" UnloadedBehavior="Manual"
-                              ScrubbingEnabled="False"/>
-                <Image x:Name="PeerVideo" Stretch="Uniform"/>
-                <Image x:Name="PeerH264Image" Stretch="Uniform" Visibility="Collapsed"/>
+            <Grid Grid.Row="1" Margin="24,4,24,0">
+                <Border CornerRadius="16" Background="#000000" ClipToBounds="True"
+                        HorizontalAlignment="Center" VerticalAlignment="Center">
+                    <Grid ClipToBounds="True">
+                        <MediaElement x:Name="PeerH264" Stretch="Uniform" Visibility="Collapsed"
+                                      LoadedBehavior="Manual" UnloadedBehavior="Manual"
+                                      ScrubbingEnabled="False"/>
+                        <Image x:Name="PeerVideo" Stretch="Uniform"/>
+                        <Image x:Name="PeerH264Image" Stretch="Uniform" Visibility="Collapsed"/>
+                    </Grid>
+                </Border>
             </Grid>
             <WrapPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Center"
-                       Margin="20,10,20,18">
+                       Margin="20,12,20,18">
                 <Button x:Name="EndCallButton" Style="{StaticResource ActionButton}"
-                        FontWeight="Bold" Background="{DynamicResource Danger}"
+                        Background="{DynamicResource Danger}"
                         Foreground="{DynamicResource OnDanger}"
                         BorderBrush="{DynamicResource Danger}" Click="OnEndCallClick"/>
                 <Button x:Name="InCallMicButton" Style="{StaticResource ActionButton}"
-                        BorderBrush="{DynamicResource Line}" Visibility="Collapsed"
-                        Click="OnMicClick"/>
+                        Visibility="Collapsed" Click="OnMicClick"/>
                 <Button x:Name="InCallOpenDoorButton" Style="{StaticResource ActionButton}"
                         Background="#B7791F" Foreground="#FFFFFF" BorderBrush="#B7791F"
                         Click="OnOpenDoorClick"/>
@@ -438,26 +517,35 @@
              the unobtrusive player statistics line. -->
         <Grid x:Name="CallOverlay" Visibility="Collapsed">
             <Border x:Name="NoticeChip" HorizontalAlignment="Right" VerticalAlignment="Top"
-                    Margin="0,18,20,0" Cursor="Hand" CornerRadius="10" Padding="12,6"
-                    Background="#C0141B22" BorderBrush="#3A4551" BorderThickness="1"
-                    MouseLeftButtonDown="OnNoticeChipClick">
+                    Margin="0,20,24,0" Cursor="Hand" CornerRadius="10" Padding="14,8"
+                    Background="{DynamicResource Pill}" BorderBrush="{DynamicResource PlateLine}"
+                    BorderThickness="1" MouseLeftButtonDown="OnNoticeChipClick">
                 <StackPanel Orientation="Horizontal">
+                    <Viewbox Width="17" Height="17" VerticalAlignment="Center" Margin="0,0,8,0">
+                        <Path Data="{StaticResource IconBell}" Stroke="{DynamicResource Fg}"
+                              StrokeThickness="2" StrokeStartLineCap="Round"
+                              StrokeEndLineCap="Round" StrokeLineJoin="Round"/>
+                    </Viewbox>
                     <Ellipse x:Name="NoticeChipDot" Width="9" Height="9" Margin="0,0,8,0"
                              VerticalAlignment="Center" Fill="{DynamicResource Warn}"
                              Visibility="Collapsed"/>
-                    <TextBlock x:Name="NoticeChipText" FontSize="15" Foreground="#F2F5F8"/>
+                    <TextBlock x:Name="NoticeChipText" FontSize="15" FontWeight="Bold"
+                               Foreground="{DynamicResource Fg}"/>
                 </StackPanel>
             </Border>
             <Border x:Name="CallAdminQrCard" HorizontalAlignment="Left" VerticalAlignment="Bottom"
-                    Margin="20,0,0,112" CornerRadius="8" Padding="6" Background="#C0141B22"
+                    Margin="24,0,0,118" CornerRadius="8" Padding="5" Background="#FFFFFF"
                     Cursor="Hand" MouseLeftButtonDown="OnWebAdminClick">
-                <Image x:Name="CallAdminQrImage" Width="46" Height="46"
+                <Image x:Name="CallAdminQrImage" Width="44" Height="44"
                        RenderOptions.BitmapScalingMode="NearestNeighbor"/>
             </Border>
+            <!-- Player statistics: a quiet monospace line in the bottom-right corner, never over
+                 the picture's centre; tap to hide. -->
             <Border x:Name="VideoStatsCard" HorizontalAlignment="Right" VerticalAlignment="Bottom"
-                    Margin="0,0,20,112" CornerRadius="8" Padding="12,6" Background="#80101418"
-                    Cursor="Hand" MouseLeftButtonDown="OnVideoStatsClick">
-                <TextBlock x:Name="VideoStatsText" FontSize="11" Foreground="#8A97A5"
+                    Margin="0,0,24,118" CornerRadius="8" Padding="12,6"
+                    Background="{DynamicResource Pill}" BorderBrush="{DynamicResource PlateLine}"
+                    BorderThickness="1" Cursor="Hand" MouseLeftButtonDown="OnVideoStatsClick">
+                <TextBlock x:Name="VideoStatsText" FontSize="11" Foreground="{DynamicResource Dim}"
                            FontFamily="Consolas, Courier New"/>
             </Border>
 

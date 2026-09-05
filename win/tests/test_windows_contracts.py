@@ -939,7 +939,7 @@ class WindowsContracts(unittest.TestCase):
         clock = window[window.index("private void UpdateClock"):
                        window.index("private static string Weekday")]
         self.assertIn("DateTime now = CorrectedNow();", clock)
-        self.assertIn("DashClock.Text = time;", clock)
+        self.assertIn('DashClock.Text = now.ToString("HH:mm");', clock)
         self.assertNotIn("App.Core", clock)
         self.assertNotIn("LocalTime", clock)
         corrected = window[window.index("private DateTime CorrectedNow()"):
@@ -1178,10 +1178,11 @@ class WindowsContracts(unittest.TestCase):
         for name in ("ClusterCounter", "ClusterCountText", "DoorCounter", "DoorCountText",
                      "PanelCounter", "PanelCountText"):
             self.assertIn('x:Name="%s"' % name, xaml)
+        # The counter strip: cluster, door stations, indoor panels, battery — vector icons only.
         pill = xaml[xaml.index('<Border x:Name="MembershipStatus"'):
-                    xaml.index('<Border x:Name="MissedBadge"')]
-        self.assertEqual(pill.count("<Path "), 3)
-        for key in ("IconTopologyStar3", "IconDoor", "IconDeviceTablet"):
+                    xaml.index('<Ellipse x:Name="MeshDot"')]
+        self.assertEqual(pill.count("<Path "), 4)
+        for key in ("IconTopologyStar3", "IconDoor", "IconDeviceTablet", "IconBattery"):
             self.assertIn("{StaticResource %s}" % key, pill)
         for glyph in pill:
             self.assertLess(ord(glyph), 0x2190, "counter icons must be vector paths, not emoji")

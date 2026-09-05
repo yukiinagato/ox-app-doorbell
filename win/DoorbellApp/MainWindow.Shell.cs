@@ -102,7 +102,9 @@ namespace DoorbellApp
                 PlaceDashboard(DoorTilesPanel, 0, 0, 2);
                 PlaceDashboard(RecentCallsPanel, 1, 0, 2);
                 DoorTilesPanel.Margin = new Thickness(0, 0, 0, 8);
-                RecentCallsPanel.Margin = new Thickness(0, 8, 0, 0);
+                RecentCallsPanel.Margin = new Thickness(4, 8, 4, 0);
+                DashboardTitleLeftColumn.Width = new GridLength(1, GridUnitType.Star);
+                DashboardTitleRightColumn.Width = new GridLength(0);
             }
             else
             {
@@ -112,18 +114,88 @@ namespace DoorbellApp
                 DashboardBottomRow.Height = new GridLength(0);
                 PlaceDashboard(DoorTilesPanel, 0, 0, 1);
                 PlaceDashboard(RecentCallsPanel, 0, 1, 1);
-                DoorTilesPanel.Margin = new Thickness(0, 0, 8, 0);
-                RecentCallsPanel.Margin = new Thickness(8, 0, 0, 0);
+                DoorTilesPanel.Margin = new Thickness(0, 0, 12, 0);
+                RecentCallsPanel.Margin = new Thickness(12, 4, 4, 0);
+                DashboardTitleLeftColumn.Width = new GridLength(1.4, GridUnitType.Star);
+                DashboardTitleRightColumn.Width = new GridLength(1, GridUnitType.Star);
             }
             DoorTileGrid.Columns = portrait ? 2 : (large ? 2 : 1);
 
             LayOutSosAndFooters(width, portrait);
+            RefreshFrost();
             // Sampling the background under an element needs its arranged bounds, so the ink pass
             // waits for the layout this call just requested.
             QueueInkPass();
         }
 
         private bool _inkPassQueued;
+
+        /// <summary>A chip's content: a Tabler outline icon followed by its label.</summary>
+        internal UIElement IconLabel(string iconKey, string text, double iconSize = 18,
+                                     Brush ink = null)
+        {
+            var row = new StackPanel { Orientation = Orientation.Horizontal };
+            row.Children.Add(IconGlyph(iconKey, iconSize, ink));
+            row.Children.Add(new TextBlock
+            {
+                Text = text,
+                Margin = new Thickness(8, 0, 0, 0),
+                VerticalAlignment = VerticalAlignment.Center,
+                Foreground = ink,
+            });
+            if (ink == null) ((TextBlock)row.Children[1]).SetResourceReference(TextBlock.ForegroundProperty, "Fg");
+            return row;
+        }
+
+        /// <summary>An action button's content: the icon above a short label (call screens).</summary>
+        internal UIElement IconStack(string iconKey, string text, Brush ink = null)
+        {
+            var column = new StackPanel { Orientation = Orientation.Vertical };
+            var glyph = IconGlyph(iconKey, 22, ink);
+            glyph.HorizontalAlignment = HorizontalAlignment.Center;
+            column.Children.Add(glyph);
+            var label = new TextBlock
+            {
+                Text = text,
+                FontSize = 14,
+                Margin = new Thickness(0, 6, 0, 0),
+                HorizontalAlignment = HorizontalAlignment.Center,
+                TextAlignment = TextAlignment.Center,
+                Foreground = ink,
+            };
+            if (ink == null) label.SetResourceReference(TextBlock.ForegroundProperty, "Fg");
+            column.Children.Add(label);
+            return column;
+        }
+
+        internal FrameworkElement IconGlyph(string iconKey, double size, Brush ink = null)
+        {
+            var path = new System.Windows.Shapes.Path
+            {
+                Data = (Geometry)FindResource(iconKey),
+                StrokeThickness = 2,
+                StrokeStartLineCap = PenLineCap.Round,
+                StrokeEndLineCap = PenLineCap.Round,
+                StrokeLineJoin = PenLineJoin.Round,
+                Stroke = ink,
+            };
+            if (ink == null) path.SetResourceReference(System.Windows.Shapes.Shape.StrokeProperty, "Fg");
+            return new Viewbox
+            {
+                Width = size,
+                Height = size,
+                VerticalAlignment = VerticalAlignment.Center,
+                Child = path,
+            };
+        }
+
+        /// <summary>Re-renders the frosted material behind the plates from the current wallpaper.</summary>
+        private void RefreshFrost()
+        {
+            var bitmap = ThemeBgImage.Visibility == Visibility.Visible ?
+                ThemeBgImage.Source as BitmapSource : null;
+            Ui.Frost.SetWallpaper(this, bitmap, _backdropColour, _backdropAlpha);
+        }
 
         /// <summary>Runs one coalesced ink pass once the pending layout has been arranged.</summary>
         private void QueueInkPass()
@@ -241,6 +313,7 @@ namespace DoorbellApp
             ThemeBackdrop.Visibility = draw ? Visibility.Visible : Visibility.Collapsed;
             ThemeBackdrop.Background = draw ? ThemeContrast.Brush(colour) : null;
             ThemeBackdrop.Opacity = _backdropAlpha;
+            RefreshFrost();
         }
 
         /// <summary>
@@ -552,6 +625,9 @@ namespace DoorbellApp
             NodeInfo.Text = line;
             VisitorVersionLine.Text = line;
             NodeInfo.ToolTip = _batteryCharging ? Texts.T("power.charging") : null;
+            BatteryCounter.Visibility = _batteryPct >= 0 ? Visibility.Visible : Visibility.Collapsed;
+            BatteryText.Text = _batteryPct >= 0 ? _batteryPct + "%" : "";
+            BatteryIcon.Data = (Geometry)FindResource(_batteryCharging ? "IconBatteryCharging" : "IconBattery");
         }
 
         private static string AppVersion()
@@ -573,6 +649,9 @@ namespace DoorbellApp
             _adminUrl = url;
             bool available = !string.IsNullOrEmpty(url);
             AdminUrlText.Text = available ? url : Texts.T("web_admin.none");
+            int hosts = 0;
+            try { hosts = AdminLink.Hosts().Count; } catch { }
+            AdminAddressCount.Text = hosts > 1 ? "· " + Texts.T("dash.address_count", hosts) : "";
             if (!available)
             {
                 _renderedAdminQr = "";

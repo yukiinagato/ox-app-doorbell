@@ -364,6 +364,7 @@
   <data name="cluster_devices_a11y" xml:space="preserve"><value>集群设备 {0} 台</value></data>
   <data name="cluster_door_stations_a11y" xml:space="preserve"><value>门口机 {0}/{1} 台在线</value></data>
   <data name="cluster_indoor_panels_a11y" xml:space="preserve"><value>室内机 {0}/{1} 台在线</value></data>
+  <data name="dash_address_count" xml:space="preserve"><value>{0} 个地址</value></data>
   <data name="dash_admin" xml:space="preserve"><value>管理</value></data>
   <data name="dash_count_cluster" xml:space="preserve"><value>集群设备 {0} 台</value></data>
   <data name="dash_count_devices" xml:space="preserve"><value>设备 {0} 台</value></data>
@@ -378,6 +379,7 @@
   <data name="dash_recent_calls" xml:space="preserve"><value>呼叫记录</value></data>
   <data name="dash_see_all" xml:space="preserve"><value>查看全部</value></data>
   <data name="dash_tile_no_station" xml:space="preserve"><value>无门口机</value></data>
+  <data name="dash_tile_no_still" xml:space="preserve"><value>暂无静止画</value></data>
   <data name="dash_tile_offline" xml:space="preserve"><value>离线</value></data>
   <data name="dash_tile_open" xml:space="preserve"><value>查看</value></data>
   <data name="dash_tile_watch" xml:space="preserve"><value>查看</value></data>

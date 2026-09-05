@@ -22,6 +22,11 @@
         <SolidColorBrush x:Key="Notice" Color="#B7791F"/>
         <SolidColorBrush x:Key="OnAccent" Color="#04121F"/>
         <SolidColorBrush x:Key="OnDanger" Color="#FFFFFF"/>
+        <!-- Frosted plates: tint over the blurred wallpaper (ui:Frost), hairline, pills. -->
+        <SolidColorBrush x:Key="Plate" Color="#A6161C23"/>
+        <SolidColorBrush x:Key="PlateLine" Color="#26FFFFFF"/>
+        <SolidColorBrush x:Key="Pill" Color="#B31F262E"/>
+        <SolidColorBrush x:Key="Row" Color="#14FFFFFF"/>
         <SolidColorBrush x:Key="Track" Color="#802A21"/>
 
         <Style x:Key="BigButton" TargetType="Button">
@@ -108,17 +113,19 @@
         <!-- One control row on the incoming/monitor screen. Every coloured label keeps at least
              6 units of vertical and 12 units of horizontal padding with a radius (spec 5, rule 7). -->
         <Style x:Key="ActionButton" TargetType="Button">
-            <Setter Property="Background" Value="{DynamicResource Card}"/>
+            <Setter Property="Background" Value="{DynamicResource Pill}"/>
             <Setter Property="Foreground" Value="{DynamicResource Fg}"/>
-            <Setter Property="FontSize" Value="22"/>
-            <Setter Property="Padding" Value="26,12"/>
-            <Setter Property="MinHeight" Value="56"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource PlateLine}"/>
+            <Setter Property="FontSize" Value="17"/>
+            <Setter Property="Padding" Value="22,10"/>
+            <Setter Property="MinHeight" Value="72"/>
+            <Setter Property="MinWidth" Value="150"/>
             <Setter Property="Margin" Value="6,0,6,0"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
-                        <Border Background="{TemplateBinding Background}" CornerRadius="12"
+                        <Border Background="{TemplateBinding Background}" CornerRadius="14"
                                 BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1"
                                 Padding="{TemplateBinding Padding}">
                             <ContentPresenter HorizontalAlignment="Center"
@@ -136,13 +143,38 @@
                 </Setter.Value>
             </Setter>
         </Style>
-        <Style x:Key="ChipButton" TargetType="Button">
-            <Setter Property="Background" Value="{DynamicResource Card}"/>
-            <Setter Property="Foreground" Value="{DynamicResource Fg}"/>
+        <!-- Section-title link, e.g. 「すべて見る ›」: accent text, no plate. -->
+        <Style x:Key="LinkButton" TargetType="Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{DynamicResource Accent}"/>
             <Setter Property="FontSize" Value="15"/>
-            <Setter Property="Padding" Value="14,6"/>
-            <Setter Property="MinHeight" Value="34"/>
-            <Setter Property="Margin" Value="5,0,0,0"/>
+            <Setter Property="Padding" Value="8,4"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}" CornerRadius="8"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter Property="Opacity" Value="0.7"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="ChipButton" TargetType="Button">
+            <Setter Property="Background" Value="{DynamicResource Pill}"/>
+            <Setter Property="Foreground" Value="{DynamicResource Fg}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource PlateLine}"/>
+            <Setter Property="FontSize" Value="16"/>
+            <Setter Property="Padding" Value="16,8"/>
+            <Setter Property="MinHeight" Value="40"/>
+            <Setter Property="Margin" Value="8,0,0,0"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Template">
                 <Setter.Value>

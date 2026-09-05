@@ -1040,6 +1040,8 @@ door.camera_denied: { ja: "カメラの使用が許可されていません — 
 dash.see_all: { ja: "すべて見る", en: "See all", zh: "查看全部" }
 dash.recent_calls: { ja: "呼出履歴", en: "Recent calls", zh: "呼叫记录" }
 dash.tile_offline: { ja: "オフライン", en: "Offline", zh: "离线" }
+dash.tile_no_still: { ja: "静止画なし", en: "No still yet", zh: "暂无静止画" }
+dash.address_count: { ja: "{n} アドレス", en: "{n} addresses", zh: "{n} 个地址" }
 dash.tile_no_station: { ja: "門口機なし", en: "No door station", zh: "无门口机" }
 dash.count_indoor_panels: { ja: "室内機 {online}/{total} 台オンライン", en: "{online} of {total} indoor panels online", zh: "室内机 {online}/{total} 台在线" }
 dash.tile_open: { ja: "見る", en: "View", zh: "查看" }
