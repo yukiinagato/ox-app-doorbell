@@ -143,7 +143,7 @@
                 </Setter.Value>
             </Setter>
         </Style>
-        <!-- Section-title link, e.g. 「すべて見る ›」: accent text, no plate. -->
+        <!-- Section-title link ("see all"): accent text, no plate. -->
         <Style x:Key="LinkButton" TargetType="Button">
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="Foreground" Value="{DynamicResource Accent}"/>

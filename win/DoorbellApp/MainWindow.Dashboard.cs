@@ -163,9 +163,9 @@ namespace DoorbellApp
             }
 
             ClusterCountText.Text = Texts.T("dash.count_devices", total);
-            int online = doorsOnline + panelsOnline + (total - doorsTotal - panelsTotal);
-            int offline = total - online;
-            ClusterOnlineText.Text = Texts.T("pair.membership_connected", online) +
+            int onlineTotal = doorsOnline + panelsOnline + (total - doorsTotal - panelsTotal);
+            int offline = total - onlineTotal;
+            ClusterOnlineText.Text = Texts.T("pair.membership_connected", onlineTotal) +
                 (offline > 0 ? " · " + offline + " " + Texts.T("dash.tile_offline") : "");
             ClusterOnlineText.SetResourceReference(TextBlock.ForegroundProperty,
                                                    offline > 0 ? "Warn" : "Ok");
@@ -514,7 +514,7 @@ namespace DoorbellApp
         }
 
         /// <summary>One history line: time, door and purpose, then the outcome.</summary>
-        /// <summary>今日 / 昨日 / a date, for the day headers in the call lists.</summary>
+        /// <summary>Today / yesterday / a date, for the day headers in the call lists.</summary>
         private string DayLabelOf(long tsMs)
         {
             if (tsMs <= 0) return "";
