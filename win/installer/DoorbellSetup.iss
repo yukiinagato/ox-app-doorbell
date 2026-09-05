@@ -210,11 +210,11 @@ begin
 end;
 
 function RandomHex(Count: Integer): String;
-const
-  Digits = '0123456789abcdef';
 var
+  Digits: String;
   I: Integer;
 begin
+  Digits := '0123456789abcdef';
   Result := '';
   for I := 1 to Count do
     Result := Result + Digits[Random(16) + 1];
