@@ -371,7 +371,11 @@ procedure InstallOrRestartService();
 var
   ResultCode: Integer;
 begin
-  { --install returns 4 when the service already exists; then it only needs starting. }
+  { Re-register rather than reuse: a service left by a manual bundle install points at the
+    old directory, and --install returns 4 without touching an existing registration.
+    --uninstall returns 0 when there is nothing to remove. }
+  Exec(ExpandConstant('{app}\{#WatchdogExe}'), '--uninstall', '', SW_HIDE, ewWaitUntilTerminated,
+       ResultCode);
   Exec(ExpandConstant('{app}\{#WatchdogExe}'), '--install "' +
        ExpandConstant('{app}\app\{#MyAppExeName}') + '"', '', SW_HIDE, ewWaitUntilTerminated,
        ResultCode);
