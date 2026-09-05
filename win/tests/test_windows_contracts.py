@@ -536,6 +536,72 @@ class WindowsContracts(unittest.TestCase):
                       contracts)
         self.assertIn("return H264LiveStreamer.Available;", contracts)
 
+    def test_installer_sets_up_role_service_firewall_and_upgrades_in_place(self):
+        iss = read("win/installer/DoorbellSetup.iss")
+        build = read("win/build.cmd")
+        readme = read("win/README.md")
+        # One AppId across versions is what makes a later installer an in-place upgrade.
+        self.assertIn("AppId={{7D2E3B60-5B1E-4C7A-9C8B-6C1D3F0A5E21}", iss)
+        self.assertIn("PrivilegesRequired=admin", iss)
+        self.assertIn("MinVersion=6.1sp1", iss)
+        # First-run pages: role, name, door id; skipped once boot.json says setup_complete.
+        self.assertIn("CreateInputOptionPage(wpSelectTasks", iss)
+        self.assertIn("RolePage.Add(CustomMessage('RoleDoor'))", iss)
+        self.assertIn("RolePage.Add(CustomMessage('RoleIndoor'))", iss)
+        self.assertIn("Result := not NeedsDeviceSetup();", iss)
+        self.assertIn('"setup_complete": true', iss)
+        self.assertIn("if Copy(Value, 1, 5) <> 'door-' then Exit;", iss)
+        self.assertIn('{commonappdata}\\Doorbell\\boot.json', iss)
+        # Service = autostart at boot; Run key only as the no-service alternative.
+        self.assertIn('Name: "service"; Description: "{cm:TaskService}"', iss)
+        self.assertIn("'--install \"' +", iss)
+        self.assertIn("if ResultCode = 4 then", iss)
+        self.assertIn('Subkey: "Software\\Microsoft\\Windows\\CurrentVersion\\Run"', iss)
+        # Firewall goes through the shell's own elevated repair mode plus RTP/mDNS.
+        self.assertIn("--configure-firewall --firewall-mesh=47172 --firewall-admin=47180 "
+                      "--firewall-discovery=47171 --firewall-sip=47190", iss)
+        self.assertIn('name=""Doorbell RTP"" dir=in action=allow protocol=UDP localport=4000-4099', iss)
+        # Upgrade: stop service + shell before copying, keep ProgramData, restart the service.
+        self.assertIn("function PrepareToInstall(var NeedsRestart: Boolean): String;", iss)
+        self.assertIn("Exec('sc.exe', 'stop {#ServiceName}'", iss)
+        self.assertIn("if WillRunService() then InstallOrRestartService();", iss)
+        self.assertIn("KeepDataPrompt", iss)
+        self.assertNotIn("DelTree(ExpandConstant('{commonappdata}\\Doorbell'), True, True, True);\n  end;", iss)
+        # Uninstall removes what install added.
+        self.assertIn('Parameters: "--uninstall"', iss)
+        self.assertIn('delete rule name=""Doorbell Cluster TCP""', iss)
+        # build.cmd produces the installer and its checksum next to the bundle.
+        self.assertIn("DoorbellSetup.iss", build)
+        self.assertIn("DB_REQUIRE_INSTALLER", build)
+        self.assertIn("'.sha256'", build)
+        self.assertIn("## Installer", readme)
+
+    def test_in_app_updater_verifies_the_checksum_before_running_the_installer(self):
+        updater = read("win/DoorbellApp/Core/UpdateChecker.cs")
+        window = read("win/DoorbellApp/WebAdminWindow.xaml.cs")
+        xaml = read("win/DoorbellApp/WebAdminWindow.xaml")
+        workflow = read(".github/workflows/release.yml")
+        self.assertIn('private const string RegistryKey = @"Software\\Doorbell";', updater)
+        self.assertIn("releases/latest", updater)
+        self.assertIn('key?.GetValue("UpdateFeed")', updater)
+        self.assertIn('@"^DoorbellSetup-.+\\.exe$"', updater)
+        # No download runs without a published checksum, and a mismatch deletes the file.
+        self.assertIn("the release publishes no .sha256 for the installer", updater)
+        self.assertIn('throw new InvalidOperationException("installer checksum mismatch");', updater)
+        self.assertIn("/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS", updater)
+        self.assertIn('Verb = "runas"', updater)
+        self.assertIn("ServicePointManager.SecurityProtocol |= (SecurityProtocolType)0xC00;", updater)
+        # Same build id is never "newer"; an older tag is never offered.
+        self.assertIn("if (string.Equals(release.BuildId, installed.BuildId, StringComparison.OrdinalIgnoreCase))",
+                      updater)
+        self.assertIn("tagVersion < installedVersion", updater)
+        # The card lives behind the admin password and is disabled for non-installer copies.
+        self.assertIn('x:Name="UpdateCard"', xaml)
+        self.assertIn('UpdateStatus.Text = Texts.T("web_admin.update_not_installer");', window)
+        self.assertIn("UpdateChecker.DownloadAndApply(release, stage =>", window)
+        self.assertIn("gh release upload $tag", workflow)
+        self.assertIn("DB_REQUIRE_INSTALLER", workflow)
+
     def test_manual_call_lifecycle_is_owned_and_monitor_never_claims_it(self):
         interop = read("win/DoorbellApp/Core/CoreInterop.cs")
         client = read("win/DoorbellApp/Core/CoreClient.cs")

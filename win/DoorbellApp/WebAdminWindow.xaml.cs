@@ -1,4 +1,5 @@
 using System;
+using DoorbellApp.Core;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Windows;
@@ -30,6 +31,7 @@ namespace DoorbellApp
             HintText.Text = Texts.T("web_admin.hint");
             OpenButton.Content = Texts.T("web_admin.open_browser");
             CloseButton.Content = Texts.T("monitor.close");
+            InitializeUpdateCard();
             BuildAddressButtons();
             Render();
         }
@@ -110,6 +112,95 @@ namespace DoorbellApp
                 ErrorText.Text = Texts.T("web_admin.open_failed");
                 ErrorText.Visibility = Visibility.Visible;
             }
+        }
+
+        // ---- in-app updates -------------------------------------------------------------
+
+        private UpdateChecker.Release _pendingRelease;
+        private bool _updateBusy;
+
+        private void InitializeUpdateCard()
+        {
+            UpdateTitle.Text = Texts.T("web_admin.update_title");
+            UpdateCheckButton.Content = Texts.T("web_admin.update_check");
+            UpdateApplyButton.Content = Texts.T("web_admin.update_apply");
+            var installed = UpdateChecker.ReadInstalled();
+            if (!installed.FromInstaller)
+            {
+                UpdateStatus.Text = Texts.T("web_admin.update_not_installer");
+                UpdateCheckButton.IsEnabled = false;
+                return;
+            }
+            UpdateStatus.Text = installed.Version + " (" + installed.BuildId + ")";
+        }
+
+        private void OnUpdateCheckClick(object sender, RoutedEventArgs e)
+        {
+            if (_updateBusy) return;
+            _updateBusy = true;
+            UpdateApplyButton.Visibility = Visibility.Collapsed;
+            UpdateStatus.Text = Texts.T("web_admin.update_checking");
+            var installed = UpdateChecker.ReadInstalled();
+            System.Threading.ThreadPool.QueueUserWorkItem(_ =>
+            {
+                UpdateChecker.Release release = null;
+                string error = null;
+                try { release = UpdateChecker.Check(installed); }
+                catch (Exception ex) { error = ex.Message; }
+                Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    _updateBusy = false;
+                    if (error != null)
+                    {
+                        UpdateStatus.Text = Texts.T("web_admin.update_failed", error);
+                        return;
+                    }
+                    _pendingRelease = release.IsNewer ? release : null;
+                    if (release.IsNewer)
+                    {
+                        UpdateStatus.Text = Texts.T("web_admin.update_available", release.Tag,
+                                                    installed.BuildId);
+                        UpdateApplyButton.Visibility = Visibility.Visible;
+                    }
+                    else
+                    {
+                        UpdateStatus.Text = Texts.T("web_admin.update_latest", installed.BuildId);
+                    }
+                }));
+            });
+        }
+
+        private void OnUpdateApplyClick(object sender, RoutedEventArgs e)
+        {
+            var release = _pendingRelease;
+            if (_updateBusy || release == null) return;
+            _updateBusy = true;
+            UpdateApplyButton.IsEnabled = false;
+            UpdateCheckButton.IsEnabled = false;
+            System.Threading.ThreadPool.QueueUserWorkItem(_ =>
+            {
+                string error = null;
+                try
+                {
+                    UpdateChecker.DownloadAndApply(release, stage =>
+                        Dispatcher.BeginInvoke(new Action(() =>
+                        {
+                            UpdateStatus.Text = Texts.T(stage == "download"
+                                ? "web_admin.update_downloading"
+                                : stage == "verify" ? "web_admin.update_verifying"
+                                                    : "web_admin.update_installing");
+                        })));
+                }
+                catch (Exception ex) { error = ex.Message; }
+                Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    _updateBusy = false;
+                    UpdateApplyButton.IsEnabled = true;
+                    UpdateCheckButton.IsEnabled = true;
+                    if (error != null)
+                        UpdateStatus.Text = Texts.T("web_admin.update_failed", error);
+                }));
+            });
         }
 
         private void OnCloseClick(object sender, RoutedEventArgs e)

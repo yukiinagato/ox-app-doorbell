@@ -1031,5 +1031,16 @@
  "web_admin.other_address": "其他地址",
  "web_admin.scan": "请用手机扫描",
  "web_admin.scan_hint": "扫描此二维码即可打开管理页面",
- "web_admin.title": "网页管理"
+ "web_admin.title": "网页管理",
+ "web_admin.update_apply": "立即更新",
+ "web_admin.update_available": "可更新到 {tag}（当前：{build}）",
+ "web_admin.update_check": "检查更新",
+ "web_admin.update_checking": "正在检查…",
+ "web_admin.update_downloading": "正在下载…",
+ "web_admin.update_failed": "无法检查：{reason}",
+ "web_admin.update_installing": "安装程序已启动，应用会自动重启",
+ "web_admin.update_latest": "已是最新（{build}）",
+ "web_admin.update_not_installer": "此副本不是通过安装程序安装的，无法自动更新",
+ "web_admin.update_title": "更新",
+ "web_admin.update_verifying": "正在校验下载…"
 }

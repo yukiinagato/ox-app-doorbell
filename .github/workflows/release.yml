@@ -1,0 +1,74 @@
+# Publishes a Windows installer as a GitHub Release, which is what the in-app updater
+# (win/DoorbellApp/Core/UpdateChecker.cs) polls: the latest release's DoorbellSetup-<build>.exe
+# plus its .sha256. Triggered by a v* tag or by hand.
+#
+# The hosted runner has no PJSIP archives, so its bundle carries the SIP stub and is published
+# as a pre-release. A commissioned runner with DB_PJSIP_ROOT_X64/X86 and the signing
+# certificate produces the real one: dispatch with `runner` set to its label.
+name: Windows release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      runner:
+        description: Runner label (windows-2022 = hosted, SIP stub, pre-release)
+        required: false
+        default: windows-2022
+        type: string
+      tag:
+        description: Release tag to publish to (defaults to the pushed tag)
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  installer:
+    runs-on: ${{ inputs.runner || 'windows-2022' }}
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: microsoft/setup-msbuild@v2
+      - name: Resolve release tag and SIP mode
+        id: meta
+        shell: pwsh
+        run: |
+          $tag = '${{ inputs.tag }}'
+          if (-not $tag) { $tag = '${{ github.ref_name }}' }
+          $hosted = ('${{ inputs.runner }}' -eq '' -or '${{ inputs.runner }}' -eq 'windows-2022')
+          "tag=$tag" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "stub=$($hosted.ToString().ToLower())" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "build_id=$tag-${{ github.run_attempt }}" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+      - name: Build bundle and installer
+        shell: cmd
+        env:
+          DB_ALLOW_SIP_STUB: ${{ steps.meta.outputs.stub == 'true' && '1' || '' }}
+          DB_BUILD_ID: ${{ steps.meta.outputs.build_id }}
+          DB_REQUIRE_INSTALLER: "1"
+          DB_PJSIP_ROOT_X64: ${{ vars.DB_PJSIP_ROOT_X64 }}
+          DB_PJSIP_ROOT_X86: ${{ vars.DB_PJSIP_ROOT_X86 }}
+          DB_SIGN_CERT_SHA1: ${{ secrets.DB_SIGN_CERT_SHA1 }}
+        run: win\build.cmd
+      - name: Zip the bundle next to the installer
+        shell: pwsh
+        run: |
+          $dist = "win/dist/${{ steps.meta.outputs.build_id }}"
+          Compress-Archive -Path "$dist/app", "$dist/doorbell-watchdog.exe", "$dist/checks", "$dist/SHA256SUMS" -DestinationPath "$dist/installer/doorbell-windows-${{ steps.meta.outputs.build_id }}.zip"
+          Get-ChildItem "$dist/installer"
+      - name: Publish the release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $dist = "win/dist/${{ steps.meta.outputs.build_id }}/installer"
+          $tag = '${{ steps.meta.outputs.tag }}'
+          $pre = if ('${{ steps.meta.outputs.stub }}' -eq 'true') { '--prerelease' } else { '' }
+          $notes = "Windows installer ${{ steps.meta.outputs.build_id }}. " + $(if ($pre) { 'Hosted-runner build with the SIP stub: display and cluster functions only, no SIP calling.' } else { 'Release build with real PJSIP.' })
+          $exists = (gh release view $tag 2>$null) -ne $null
+          if (-not $exists) { gh release create $tag --title "Doorbell $tag" --notes $notes $pre }
+          gh release upload $tag (Get-ChildItem $dist -File | ForEach-Object { $_.FullName }) --clobber

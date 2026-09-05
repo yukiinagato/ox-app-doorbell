@@ -95,6 +95,38 @@ means "not published yet" and never shows onboarding.
   removes `mesh.psk` instead of orphaning it, and `boot.json` loses `psk_ref` and
   `seed_peers` on unpair or revoke.
 
+## Installer
+
+`win\installer\DoorbellSetup.iss` (Inno Setup 6) wraps a finished bundle into
+`win\dist\<build-id>\installer\DoorbellSetup-<build-id>.exe` (+ `.sha256`);
+`build.cmd` runs ISCC when it is installed and fails only with
+`DB_REQUIRE_INSTALLER=1`. The installer:
+
+- asks for the device role (door station / indoor panel), device name and door
+  ID on a fresh machine and writes `%ProgramData%\Doorbell\boot.json` with
+  `setup_complete: true`; a machine whose boot.json is already complete skips
+  those pages (upgrade);
+- registers and starts the `DoorbellWatchdog` service (task, default on), which
+  is the boot autostart, or a HKLM Run entry when the service is not wanted;
+- adds the inbound firewall rules through the shell's own elevated repair mode
+  (`--configure-firewall`, ports 47172/47180 TCP and 47171/47190 UDP) plus RTP
+  4000-4099 and mDNS 5353 (task, default on);
+- optionally runs `provision.cmd` (NTP, power, WER, Windows Update policies)
+  and ships `kiosk-enable.cmd` / `kiosk-disable.cmd` under `{app}\provision`;
+- upgrades in place under the same AppId: stops the service and the shell,
+  replaces the files, keeps `%ProgramData%\Doorbell`, restarts the service if
+  it was installed. `/VERYSILENT /SUPPRESSMSGBOXES /NORESTART` is the unattended
+  form; uninstall asks whether to keep the data directory.
+- records `InstallDir`, `BuildId` and `Version` under `HKLM\Software\Doorbell`.
+
+In-app updates (`Core/UpdateChecker.cs`, behind the admin password in the Web
+admin window): the feed is the repository's latest GitHub Release
+(`HKLM\Software\Doorbell\UpdateFeed` overrides it), the installer asset is
+downloaded to `%ProgramData%\Doorbell\updates`, verified against its `.sha256`
+and run silently with elevation. `.github/workflows/release.yml` publishes a
+release from a `v*` tag; the hosted runner produces a SIP-stub pre-release,
+a commissioned runner with the PJSIP archives produces the real one.
+
 ## Watchdog service
 
 Install from an elevated prompt after placing the artifact in its permanent

@@ -1031,5 +1031,16 @@
  "web_admin.other_address": "別のアドレス",
  "web_admin.scan": "スマートフォンで読み取ってください",
  "web_admin.scan_hint": "この QR を読み取ると管理ページが開きます",
- "web_admin.title": "Web 管理ページ"
+ "web_admin.title": "Web 管理ページ",
+ "web_admin.update_apply": "今すぐ更新",
+ "web_admin.update_available": "{tag} が利用できます（インストール済み: {build}）",
+ "web_admin.update_check": "更新を確認",
+ "web_admin.update_checking": "確認しています…",
+ "web_admin.update_downloading": "ダウンロードしています…",
+ "web_admin.update_failed": "確認できませんでした: {reason}",
+ "web_admin.update_installing": "インストーラーを起動しました。アプリは自動的に再起動します",
+ "web_admin.update_latest": "最新です（{build}）",
+ "web_admin.update_not_installer": "インストーラーで導入されていない環境のため、自動更新は使えません",
+ "web_admin.update_title": "アップデート",
+ "web_admin.update_verifying": "ダウンロードを検証しています…"
 }

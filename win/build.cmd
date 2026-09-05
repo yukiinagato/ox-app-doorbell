@@ -135,6 +135,30 @@ if not "%DB_ALLOW_SIP_STUB%"=="1" (
 powershell -NoProfile -ExecutionPolicy Bypass -File win\tools\write-manifest.ps1 -ArtifactRoot "!DB_STAGE!" -BuildId "!DB_BUILD_ID!" -SourceDateEpoch "!SOURCE_DATE_EPOCH!" -SigningMode "!DB_SIGNING_MODE!" || exit /b 1
 move "!DB_STAGE!" "!DB_DIST!" >nul || exit /b 1
 
+echo ==== installer (Inno Setup) ====
+rem The installer wraps the finished bundle: role/name/door first-run page, watchdog service,
+rem firewall rules, optional kiosk provisioning, in-place upgrades. It is optional locally
+rem (no Inno Setup -> skipped) and required on the release runners, which ship ISCC.
+set "DB_ISCC="
+if exist "%ProgramFiles(x86)%\Inno Setup 6\ISCC.exe" set "DB_ISCC=%ProgramFiles(x86)%\Inno Setup 6\ISCC.exe"
+if exist "%ProgramFiles%\Inno Setup 6\ISCC.exe" set "DB_ISCC=%ProgramFiles%\Inno Setup 6\ISCC.exe"
+if "!DB_ISCC!"=="" (
+  if "%DB_REQUIRE_INSTALLER%"=="1" (
+    echo ERROR: Inno Setup 6 was not found and DB_REQUIRE_INSTALLER=1.
+    exit /b 1
+  )
+  echo Inno Setup 6 not found; skipping the installer.
+) else (
+  set "DB_APP_VERSION=0.2.0"
+  for /f "tokens=3 delims=<>" %%V in ('findstr /c:"<Version>" win\DoorbellApp\DoorbellApp.csproj') do set "DB_APP_VERSION=%%V"
+  "!DB_ISCC!" /Q "/DSourceDir=%CD%\!DB_DIST!" "/DBuildId=!DB_BUILD_ID!" "/DAppVersion=!DB_APP_VERSION!" "/DProvisionDir=%CD%\deploy\provision\windows" win\installer\DoorbellSetup.iss || exit /b 1
+  if not "%DB_ALLOW_SIP_STUB%"=="1" (
+    powershell -NoProfile -ExecutionPolicy Bypass -File win\tools\sign-bundle.ps1 -ArtifactRoot "!DB_DIST!\installer" -CertificateThumbprint "%DB_SIGN_CERT_SHA1%" || exit /b 1
+  )
+  powershell -NoProfile -ExecutionPolicy Bypass -Command "Get-ChildItem -LiteralPath '!DB_DIST!\installer' -Filter DoorbellSetup-*.exe | ForEach-Object { (Get-FileHash -Algorithm SHA256 $_.FullName).Hash.ToLowerInvariant() + ' *' + $_.Name | Set-Content -Encoding ascii ($_.FullName + '.sha256') }" || exit /b 1
+  echo installer: !DB_DIST!\installer
+)
+
 echo.
 echo ==== complete ====
 echo artifact: !DB_DIST!

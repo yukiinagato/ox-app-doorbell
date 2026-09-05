@@ -1046,4 +1046,15 @@ PIN: %2$s</string>
     <string name="web_admin_scan">スマートフォンで読み取ってください</string>
     <string name="web_admin_scan_hint">この QR を読み取ると管理ページが開きます</string>
     <string name="web_admin_title">Web 管理ページ</string>
+    <string name="web_admin_update_apply">今すぐ更新</string>
+    <string name="web_admin_update_available">%1$s が利用できます（インストール済み: %2$s）</string>
+    <string name="web_admin_update_check">更新を確認</string>
+    <string name="web_admin_update_checking">確認しています…</string>
+    <string name="web_admin_update_downloading">ダウンロードしています…</string>
+    <string name="web_admin_update_failed">確認できませんでした: %1$s</string>
+    <string name="web_admin_update_installing">インストーラーを起動しました。アプリは自動的に再起動します</string>
+    <string name="web_admin_update_latest">最新です（%1$s）</string>
+    <string name="web_admin_update_not_installer">インストーラーで導入されていない環境のため、自動更新は使えません</string>
+    <string name="web_admin_update_title">アップデート</string>
+    <string name="web_admin_update_verifying">ダウンロードを検証しています…</string>
 </resources>

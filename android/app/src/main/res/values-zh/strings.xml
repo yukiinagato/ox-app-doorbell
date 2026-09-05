@@ -1046,4 +1046,15 @@ PIN：%2$s</string>
     <string name="web_admin_scan">请用手机扫描</string>
     <string name="web_admin_scan_hint">扫描此二维码即可打开管理页面</string>
     <string name="web_admin_title">网页管理</string>
+    <string name="web_admin_update_apply">立即更新</string>
+    <string name="web_admin_update_available">可更新到 %1$s（当前：%2$s）</string>
+    <string name="web_admin_update_check">检查更新</string>
+    <string name="web_admin_update_checking">正在检查…</string>
+    <string name="web_admin_update_downloading">正在下载…</string>
+    <string name="web_admin_update_failed">无法检查：%1$s</string>
+    <string name="web_admin_update_installing">安装程序已启动，应用会自动重启</string>
+    <string name="web_admin_update_latest">已是最新（%1$s）</string>
+    <string name="web_admin_update_not_installer">此副本不是通过安装程序安装的，无法自动更新</string>
+    <string name="web_admin_update_title">更新</string>
+    <string name="web_admin_update_verifying">正在校验下载…</string>
 </resources>

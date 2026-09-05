@@ -1032,3 +1032,14 @@
 "web_admin.scan" = "Scan this with a phone";
 "web_admin.scan_hint" = "Scan this QR to open the admin page";
 "web_admin.title" = "Web admin page";
+"web_admin.update_apply" = "Update now";
+"web_admin.update_available" = "%@ is available (installed: %@)";
+"web_admin.update_check" = "Check for updates";
+"web_admin.update_checking" = "Checking…";
+"web_admin.update_downloading" = "Downloading…";
+"web_admin.update_failed" = "Couldn't check: %@";
+"web_admin.update_installing" = "The installer has started. The app will restart on its own";
+"web_admin.update_latest" = "Up to date (%@)";
+"web_admin.update_not_installer" = "This copy wasn't set up by the installer, so automatic updates aren't available";
+"web_admin.update_title" = "Updates";
+"web_admin.update_verifying" = "Verifying the download…";

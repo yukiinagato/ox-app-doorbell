@@ -1048,4 +1048,15 @@ PIN：{1}</value></data>
   <data name="web_admin_scan" xml:space="preserve"><value>请用手机扫描</value></data>
   <data name="web_admin_scan_hint" xml:space="preserve"><value>扫描此二维码即可打开管理页面</value></data>
   <data name="web_admin_title" xml:space="preserve"><value>网页管理</value></data>
+  <data name="web_admin_update_apply" xml:space="preserve"><value>立即更新</value></data>
+  <data name="web_admin_update_available" xml:space="preserve"><value>可更新到 {0}（当前：{1}）</value></data>
+  <data name="web_admin_update_check" xml:space="preserve"><value>检查更新</value></data>
+  <data name="web_admin_update_checking" xml:space="preserve"><value>正在检查…</value></data>
+  <data name="web_admin_update_downloading" xml:space="preserve"><value>正在下载…</value></data>
+  <data name="web_admin_update_failed" xml:space="preserve"><value>无法检查：{0}</value></data>
+  <data name="web_admin_update_installing" xml:space="preserve"><value>安装程序已启动，应用会自动重启</value></data>
+  <data name="web_admin_update_latest" xml:space="preserve"><value>已是最新（{0}）</value></data>
+  <data name="web_admin_update_not_installer" xml:space="preserve"><value>此副本不是通过安装程序安装的，无法自动更新</value></data>
+  <data name="web_admin_update_title" xml:space="preserve"><value>更新</value></data>
+  <data name="web_admin_update_verifying" xml:space="preserve"><value>正在校验下载…</value></data>
 </root>

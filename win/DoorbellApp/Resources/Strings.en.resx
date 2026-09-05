@@ -1048,4 +1048,15 @@ Sends in {0}s</value></data>
   <data name="web_admin_scan" xml:space="preserve"><value>Scan this with a phone</value></data>
   <data name="web_admin_scan_hint" xml:space="preserve"><value>Scan this QR to open the admin page</value></data>
   <data name="web_admin_title" xml:space="preserve"><value>Web admin page</value></data>
+  <data name="web_admin_update_apply" xml:space="preserve"><value>Update now</value></data>
+  <data name="web_admin_update_available" xml:space="preserve"><value>{0} is available (installed: {1})</value></data>
+  <data name="web_admin_update_check" xml:space="preserve"><value>Check for updates</value></data>
+  <data name="web_admin_update_checking" xml:space="preserve"><value>Checking…</value></data>
+  <data name="web_admin_update_downloading" xml:space="preserve"><value>Downloading…</value></data>
+  <data name="web_admin_update_failed" xml:space="preserve"><value>Couldn't check: {0}</value></data>
+  <data name="web_admin_update_installing" xml:space="preserve"><value>The installer has started. The app will restart on its own</value></data>
+  <data name="web_admin_update_latest" xml:space="preserve"><value>Up to date ({0})</value></data>
+  <data name="web_admin_update_not_installer" xml:space="preserve"><value>This copy wasn't set up by the installer, so automatic updates aren't available</value></data>
+  <data name="web_admin_update_title" xml:space="preserve"><value>Updates</value></data>
+  <data name="web_admin_update_verifying" xml:space="preserve"><value>Verifying the download…</value></data>
 </root>

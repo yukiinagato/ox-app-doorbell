@@ -874,6 +874,17 @@ web_admin.none: { ja: "管理アドレスが見つかりません", en: "No admi
 web_admin.open_browser: { ja: "この端末のブラウザーで開く", en: "Open in this device's browser", zh: "在本机浏览器中打开" }
 web_admin.open_failed: { ja: "ブラウザーを開けませんでした", en: "Couldn't open the browser", zh: "无法打开浏览器" }
 web_admin.other_address: { ja: "別のアドレス", en: "Another address", zh: "其他地址" }
+web_admin.update_title: { ja: "アップデート", en: "Updates", zh: "更新" }
+web_admin.update_check: { ja: "更新を確認", en: "Check for updates", zh: "检查更新" }
+web_admin.update_apply: { ja: "今すぐ更新", en: "Update now", zh: "立即更新" }
+web_admin.update_checking: { ja: "確認しています…", en: "Checking…", zh: "正在检查…" }
+web_admin.update_latest: { ja: "最新です（{build}）", en: "Up to date ({build})", zh: "已是最新（{build}）" }
+web_admin.update_available: { ja: "{tag} が利用できます（インストール済み: {build}）", en: "{tag} is available (installed: {build})", zh: "可更新到 {tag}（当前：{build}）" }
+web_admin.update_failed: { ja: "確認できませんでした: {reason}", en: "Couldn't check: {reason}", zh: "无法检查：{reason}" }
+web_admin.update_not_installer: { ja: "インストーラーで導入されていない環境のため、自動更新は使えません", en: "This copy wasn't set up by the installer, so automatic updates aren't available", zh: "此副本不是通过安装程序安装的，无法自动更新" }
+web_admin.update_downloading: { ja: "ダウンロードしています…", en: "Downloading…", zh: "正在下载…" }
+web_admin.update_verifying: { ja: "ダウンロードを検証しています…", en: "Verifying the download…", zh: "正在校验下载…" }
+web_admin.update_installing: { ja: "インストーラーを起動しました。アプリは自動的に再起動します", en: "The installer has started. The app will restart on its own", zh: "安装程序已启动，应用会自动重启" }
 dash.doors: { ja: "門口機", en: "Door stations", zh: "门口机" }
 dash.tile_watch: { ja: "見る", en: "View", zh: "查看" }
 dash.last_answer: { ja: "最終応答 {when}", en: "Last answered {when}", zh: "上次接听：{when}" }

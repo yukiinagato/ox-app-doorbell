@@ -1048,4 +1048,15 @@ PIN: {1}</value></data>
   <data name="web_admin_scan" xml:space="preserve"><value>スマートフォンで読み取ってください</value></data>
   <data name="web_admin_scan_hint" xml:space="preserve"><value>この QR を読み取ると管理ページが開きます</value></data>
   <data name="web_admin_title" xml:space="preserve"><value>Web 管理ページ</value></data>
+  <data name="web_admin_update_apply" xml:space="preserve"><value>今すぐ更新</value></data>
+  <data name="web_admin_update_available" xml:space="preserve"><value>{0} が利用できます（インストール済み: {1}）</value></data>
+  <data name="web_admin_update_check" xml:space="preserve"><value>更新を確認</value></data>
+  <data name="web_admin_update_checking" xml:space="preserve"><value>確認しています…</value></data>
+  <data name="web_admin_update_downloading" xml:space="preserve"><value>ダウンロードしています…</value></data>
+  <data name="web_admin_update_failed" xml:space="preserve"><value>確認できませんでした: {0}</value></data>
+  <data name="web_admin_update_installing" xml:space="preserve"><value>インストーラーを起動しました。アプリは自動的に再起動します</value></data>
+  <data name="web_admin_update_latest" xml:space="preserve"><value>最新です（{0}）</value></data>
+  <data name="web_admin_update_not_installer" xml:space="preserve"><value>インストーラーで導入されていない環境のため、自動更新は使えません</value></data>
+  <data name="web_admin_update_title" xml:space="preserve"><value>アップデート</value></data>
+  <data name="web_admin_update_verifying" xml:space="preserve"><value>ダウンロードを検証しています…</value></data>
 </root>

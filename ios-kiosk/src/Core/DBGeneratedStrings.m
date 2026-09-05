@@ -1040,6 +1040,17 @@ static NSDictionary *DBGeneratedJapaneseStrings(void) {
       @"スマートフォンで読み取ってください", @"web_admin.scan",
       @"この QR を読み取ると管理ページが開きます", @"web_admin.scan_hint",
       @"Web 管理ページ", @"web_admin.title",
+      @"今すぐ更新", @"web_admin.update_apply",
+      @"{tag} が利用できます（インストール済み: {build}）", @"web_admin.update_available",
+      @"更新を確認", @"web_admin.update_check",
+      @"確認しています…", @"web_admin.update_checking",
+      @"ダウンロードしています…", @"web_admin.update_downloading",
+      @"確認できませんでした: {reason}", @"web_admin.update_failed",
+      @"インストーラーを起動しました。アプリは自動的に再起動します", @"web_admin.update_installing",
+      @"最新です（{build}）", @"web_admin.update_latest",
+      @"インストーラーで導入されていない環境のため、自動更新は使えません", @"web_admin.update_not_installer",
+      @"アップデート", @"web_admin.update_title",
+      @"ダウンロードを検証しています…", @"web_admin.update_verifying",
       nil];
   });
   return strings;
@@ -2083,6 +2094,17 @@ static NSDictionary *DBGeneratedEnglishStrings(void) {
       @"Scan this with a phone", @"web_admin.scan",
       @"Scan this QR to open the admin page", @"web_admin.scan_hint",
       @"Web admin page", @"web_admin.title",
+      @"Update now", @"web_admin.update_apply",
+      @"{tag} is available (installed: {build})", @"web_admin.update_available",
+      @"Check for updates", @"web_admin.update_check",
+      @"Checking…", @"web_admin.update_checking",
+      @"Downloading…", @"web_admin.update_downloading",
+      @"Couldn't check: {reason}", @"web_admin.update_failed",
+      @"The installer has started. The app will restart on its own", @"web_admin.update_installing",
+      @"Up to date ({build})", @"web_admin.update_latest",
+      @"This copy wasn't set up by the installer, so automatic updates aren't available", @"web_admin.update_not_installer",
+      @"Updates", @"web_admin.update_title",
+      @"Verifying the download…", @"web_admin.update_verifying",
       nil];
   });
   return strings;
@@ -3126,6 +3148,17 @@ static NSDictionary *DBGeneratedChineseStrings(void) {
       @"请用手机扫描", @"web_admin.scan",
       @"扫描此二维码即可打开管理页面", @"web_admin.scan_hint",
       @"网页管理", @"web_admin.title",
+      @"立即更新", @"web_admin.update_apply",
+      @"可更新到 {tag}（当前：{build}）", @"web_admin.update_available",
+      @"检查更新", @"web_admin.update_check",
+      @"正在检查…", @"web_admin.update_checking",
+      @"正在下载…", @"web_admin.update_downloading",
+      @"无法检查：{reason}", @"web_admin.update_failed",
+      @"安装程序已启动，应用会自动重启", @"web_admin.update_installing",
+      @"已是最新（{build}）", @"web_admin.update_latest",
+      @"此副本不是通过安装程序安装的，无法自动更新", @"web_admin.update_not_installer",
+      @"更新", @"web_admin.update_title",
+      @"正在校验下载…", @"web_admin.update_verifying",
       nil];
   });
   return strings;
