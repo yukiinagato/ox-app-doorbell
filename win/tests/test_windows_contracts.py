@@ -556,6 +556,8 @@ class WindowsContracts(unittest.TestCase):
         self.assertIn('Name: "service"; Description: "{cm:TaskService}"', iss)
         self.assertIn("'--install \"' +", iss)
         self.assertIn("if ResultCode = 4 then", iss)
+        # A service left by a manual bundle install points at the old directory: re-register.
+        self.assertIn("'--uninstall', '', SW_HIDE, ewWaitUntilTerminated,", iss)
         self.assertIn('Subkey: "Software\\Microsoft\\Windows\\CurrentVersion\\Run"', iss)
         # Firewall goes through the shell's own elevated repair mode plus RTP/mDNS.
         self.assertIn("--configure-firewall --firewall-mesh=47172 --firewall-admin=47180 "
