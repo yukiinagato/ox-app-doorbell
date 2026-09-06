@@ -1,6 +1,9 @@
 
 #include "events/events.h"
 
+#include <algorithm>
+#include <utility>
+
 #include "store/store.h"
 #include "util/json.h"
 #include "util/log.h"
@@ -13,6 +16,7 @@ EventLog::EventLog(std::string self_id, HlcClock& hlc, Store& store)
 void EventLog::loadHeads() {
   frontiers_ = store_.eventHeads();
   dispatch_queue_.clear();
+  backfill_pending_.clear();
   dispatching_ = false;
   std::vector<std::string> origins;
   origins.reserve(frontiers_.size());
@@ -24,6 +28,10 @@ void EventLog::loadHeads() {
 }
 
 void EventLog::replayRecovered() { dispatchPending(); }
+
+void EventLog::onEvent(EventCb cb) {
+  on_event_ = [cb = std::move(cb)](const EventRecord& e, bool is_local, bool) { cb(e, is_local); };
+}
 
 EventRecord EventLog::append(const std::string& type, const std::string& door,
                              const std::string& device, const std::string& payload_json) {
@@ -49,13 +57,41 @@ EventRecord EventLog::append(const std::string& type, const std::string& door,
   return *persisted;
 }
 
-bool EventLog::applyRemote(const EventRecord& e,
-                           std::vector<EventRecord>* newly_applied) {
+bool EventLog::applyRemote(const EventRecord& e, std::vector<EventRecord>* newly_applied,
+                           bool backfill) {
   if (newly_applied) newly_applied->clear();
-  const bool inserted = store_.eventIngest(e);
-  if (inserted) hlc_.observe(e.hlc);
+  const bool inserted = ingestRemote(e, backfill);
   drainContiguous(e.origin, newly_applied);
   return inserted;
+}
+
+std::vector<bool> EventLog::applyRemoteBatch(const std::vector<EventRecord>& records,
+                                             std::vector<EventRecord>* newly_applied,
+                                             bool backfill) {
+  if (newly_applied) newly_applied->clear();
+  std::vector<bool> inserted;
+  inserted.reserve(records.size());
+  std::vector<std::string> origins;
+  for (const auto& record : records) {
+    inserted.push_back(ingestRemote(record, backfill));
+    if (std::find(origins.begin(), origins.end(), record.origin) == origins.end())
+      origins.push_back(record.origin);
+  }
+  for (const auto& origin : origins) {
+    std::vector<EventRecord> applied;
+    drainContiguous(origin, &applied);
+    if (newly_applied)
+      newly_applied->insert(newly_applied->end(), applied.begin(), applied.end());
+  }
+  return inserted;
+}
+
+bool EventLog::ingestRemote(const EventRecord& e, bool backfill) {
+  // A duplicate of a record that already arrived some other way keeps its original path.
+  if (!store_.eventIngest(e)) return false;
+  hlc_.observe(e.hlc);
+  if (backfill) backfill_pending_.insert({e.origin, e.seq});
+  return true;
 }
 
 void EventLog::drainContiguous(const std::string& origin,
@@ -81,13 +117,15 @@ bool EventLog::dispatchPending() {
         for (auto& record : pending) dispatch_queue_.push_back(std::move(record));
       }
       const EventRecord& record = dispatch_queue_.front();
-      on_event_(record, record.origin == self_id_);
+      const std::pair<std::string, uint64_t> key{record.origin, record.seq};
+      on_event_(record, record.origin == self_id_, backfill_pending_.count(key) > 0);
       if (!store_.eventAckDispatched(record.origin, record.seq)) {
         DB_LOGE("events", "event dispatch acknowledgement failed for " + record.origin + ":" +
                               std::to_string(record.seq));
         ok = false;
         break;
       }
+      backfill_pending_.erase(key);
       dispatch_queue_.pop_front();
     }
   } catch (...) {

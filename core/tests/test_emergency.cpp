@@ -494,3 +494,66 @@ TEST_CASE("emergency API: panels may activate, while only admins may clear") {
 
   node.stop();
 }
+
+TEST_CASE("emergency: a node joining after a cancelled SOS never re-enacts the alarm") {
+  EmFleet f;
+  auto& a = f.add("A:1", "front", "door_station", "d_front", true);
+  auto& b = f.add("B:1", "kitchen", "indoor_panel", "", false);
+  REQUIRE(a.node->start());
+  REQUIRE(b.node->start());
+  f.run(1500);
+
+  // The activation and its clearing come from two different origins. Anti-entropy hands a
+  // newcomer the history per origin, so the stale activation can be dispatched while the
+  // newer clearing is still on its way; nothing about that pair is an alarm.
+  b.node->setEmergency(true, "panel");
+  f.run(500);
+  a.node->setEmergency(false, "admin");
+  f.run(800);
+  REQUIRE(statusEmergency(*a.node) == false);
+  REQUIRE(statusEmergency(*b.node) == false);
+  const size_t a_active = a.emCount(true), b_active = b.emCount(true);
+
+  auto& c = f.add("C:1", "bedroom", "indoor_panel", "", false);
+  REQUIRE(c.node->start());
+  f.run(3000);
+
+  CHECK(statusEmergency(*c.node) == false);
+  CHECK(c.emCount(true) == 0);
+  CHECK(a.emCount(true) == a_active);
+  CHECK(b.emCount(true) == b_active);
+
+  a.node->stop();
+  b.node->stop();
+  c.node->stop();
+}
+
+TEST_CASE("emergency: a node joining during an active SOS alarms once, after its history converged") {
+  EmFleet f;
+  auto& a = f.add("A:1", "front", "door_station", "d_front", true);
+  auto& b = f.add("B:1", "kitchen", "indoor_panel", "", false);
+  REQUIRE(a.node->start());
+  REQUIRE(b.node->start());
+  f.run(1500);
+
+  b.node->setEmergency(true, "panel");
+  f.run(800);
+  REQUIRE(statusEmergency(*a.node) == true);
+
+  auto& c = f.add("C:1", "bedroom", "indoor_panel", "", false);
+  REQUIRE(c.node->start());
+  f.run(3000);
+
+  CHECK(statusEmergency(*c.node) == true);
+  CHECK(c.emCount(true) == 1);
+
+  // The clearing reaches the newcomer as a live event and is presented like one.
+  a.node->setEmergency(false, "admin");
+  f.run(800);
+  CHECK(statusEmergency(*c.node) == false);
+  CHECK(c.emCount(true) == 1);
+
+  a.node->stop();
+  b.node->stop();
+  c.node->stop();
+}

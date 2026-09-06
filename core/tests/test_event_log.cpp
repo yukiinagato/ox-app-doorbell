@@ -569,3 +569,66 @@ TEST_CASE("event_log: loadHeads restores the applied event HLC before a wall-clo
   CHECK(next.seq == 2);
   CHECK(next.hlc > previous_hlc);
 }
+
+TEST_CASE("event_log: anti-entropy records are dispatched as backfill, live and local ones are not") {
+  SimClock clock(1000);
+  HlcClock hlc(clock, "aaaaaaaa");
+  Store store;
+  REQUIRE(store.open(":memory:"));
+  EventLog log("aaaaaaaa0000", hlc, store);
+  log.loadHeads();
+
+  std::vector<std::tuple<std::string, uint64_t, bool, bool>> got;
+  log.onDispatch([&](const EventRecord& e, bool is_local, bool backfill) {
+    got.emplace_back(e.origin, e.seq, is_local, backfill);
+  });
+
+  CHECK(log.applyRemote(mkRemote("bbbbbbbb0000", 1, 1000), nullptr, /*backfill=*/true));
+  CHECK(log.applyRemote(mkRemote("bbbbbbbb0000", 2, 1010), nullptr, /*backfill=*/false));
+  log.append("motion", "d_back", "aaaaaaaa0000", "{}");
+  // A repeat of a record that already arrived live is not backfill, whatever path repeats it.
+  CHECK_FALSE(log.applyRemote(mkRemote("bbbbbbbb0000", 2, 1010), nullptr, /*backfill=*/true));
+
+  REQUIRE(got.size() == 3);
+  CHECK(std::get<2>(got[0]) == false);
+  CHECK(std::get<3>(got[0]) == true);
+  CHECK(std::get<3>(got[1]) == false);
+  CHECK(std::get<2>(got[2]) == true);
+  CHECK(std::get<3>(got[2]) == false);
+}
+
+TEST_CASE("event_log: a batch is stored completely before its first record is dispatched") {
+  SimClock clock(1000);
+  HlcClock hlc(clock, "aaaaaaaa");
+  Store store;
+  REQUIRE(store.open(":memory:"));
+  EventLog log("aaaaaaaa0000", hlc, store);
+  log.loadHeads();
+
+  std::vector<bool> other_seen;
+  log.onDispatch([&](const EventRecord& e, bool, bool backfill) {
+    CHECK(backfill);
+    // Whichever origin drains first, the other origin's record is already in the store.
+    const std::string other = e.origin == "bbbbbbbb0000" ? "cccccccc0000" : "bbbbbbbb0000";
+    other_seen.push_back(store.eventExists(other, 1));
+  });
+
+  const std::vector<EventRecord> batch{mkRemote("bbbbbbbb0000", 1, 1000),
+                                       mkRemote("cccccccc0000", 1, 1005)};
+  std::vector<EventRecord> applied;
+  const std::vector<bool> inserted = log.applyRemoteBatch(batch, &applied, /*backfill=*/true);
+  REQUIRE(inserted.size() == 2);
+  CHECK(inserted[0]);
+  CHECK(inserted[1]);
+  CHECK(applied.size() == 2);
+  REQUIRE(other_seen.size() == 2);
+  CHECK(other_seen[0]);
+  CHECK(other_seen[1]);
+
+  // Repeating the batch inserts nothing and dispatches nothing more.
+  const std::vector<bool> again = log.applyRemoteBatch(batch, &applied, /*backfill=*/true);
+  CHECK_FALSE(again[0]);
+  CHECK_FALSE(again[1]);
+  CHECK(applied.empty());
+  CHECK(other_seen.size() == 2);
+}

@@ -2202,6 +2202,13 @@ struct Node::Impl {
 
   bool emergency_active = false;
   std::string emergency_hlc;
+  // The SOS winner is presented at most once per event identity: history converging through
+  // anti-entropy and a live event that was already shown must not present the same activation
+  // twice. emergency_settle_pending is set by backfilled emergency events and cleared when the
+  // converged winner has been presented.
+  std::string emergency_presented_identity;
+  bool emergency_settle_pending = false;
+  uint64_t emergency_settle_timer = 0;
 
 
   std::mutex cb_mu;
@@ -4667,6 +4674,7 @@ struct Node::Impl {
 
   void restoreEmergencyPresentation() {
     auto ev = store.latestEventOfTypes("emergency", "emergency_cancel");
+    emergency_presented_identity = ev ? eventIdentity(*ev) : "";
     if (!ev) {
       auto state = json::obj();
       json::set(state.get(), "schema_version", static_cast<int64_t>(2));
@@ -4685,6 +4693,32 @@ struct Node::Impl {
 
 
 
+
+  // Presents the converged SOS winner once. Backfilled emergency events only update state; this
+  // runs when anti-entropy reports convergence with a peer, or after the backfill has been idle
+  // long enough that convergence is not going to be reported (a peer that dropped mid-sync).
+  void settleEmergencyPresentation() {
+    emergency_settle_pending = false;
+    if (emergency_settle_timer) {
+      loop->cancel(emergency_settle_timer);
+      emergency_settle_timer = 0;
+    }
+    auto winner = store.latestEventOfTypes("emergency", "emergency_cancel");
+    const std::string identity = winner ? eventIdentity(*winner) : "";
+    if (identity == emergency_presented_identity) return;
+    restoreEmergency();
+    restoreEmergencyPresentation();
+  }
+
+  static constexpr int64_t kEmergencySettleIdleMs = 30'000;
+
+  void armEmergencySettleFallback() {
+    if (emergency_settle_timer) loop->cancel(emergency_settle_timer);
+    emergency_settle_timer = loop->postDelayed(kEmergencySettleIdleMs, [this] {
+      emergency_settle_timer = 0;
+      if (emergency_settle_pending) settleEmergencyPresentation();
+    });
+  }
 
   void restoreEmergency() {
     auto ev = store.latestEventOfTypes("emergency", "emergency_cancel");
@@ -5914,7 +5948,9 @@ struct Node::Impl {
     config->onCommit([this](const std::vector<LwwEntry>& entries, bool is_local, bool batch) {
       return onConfigChanges(entries, is_local, batch);
     });
-    events->onEvent([this](const EventRecord& ev, bool is_local) { onEvent(ev, is_local); });
+    events->onDispatch([this](const EventRecord& ev, bool is_local, bool backfill) {
+      onEvent(ev, is_local, backfill);
+    });
 
 
     if (!transport) transport.reset(new TcpTransport(*loop));
@@ -6053,6 +6089,9 @@ struct Node::Impl {
       uiNotify(json::dump(o.get()));
     };
     cbs.on_unpaired = [this] { pairing_joining = false; };
+    cbs.on_sync_converged = [this](const std::string&) {
+      if (emergency_settle_pending) settleEmergencyPresentation();
+    };
     mesh.reset(new Mesh(*loop, *clock, *hlc, *transport, discovery.get(), store, *config,
                         *events, ms, cbs));
 
@@ -7128,7 +7167,7 @@ struct Node::Impl {
   }
 
 
-  void onEvent(const EventRecord& ev, bool is_local) {
+  void onEvent(const EventRecord& ev, bool is_local, bool backfill) {
     bool emergency_transition = true;
     bool emergency_winner = true;
     if (is_local && mesh) mesh->broadcastEvent(ev);
@@ -7188,6 +7227,22 @@ struct Node::Impl {
       if (callLifecycleType(ev.type)) notifyCallLogChanged();
       return;
     }
+    // Replicated history that reaches this node through anti-entropy updates state and nothing
+    // else: a joining node must not re-enact an alarm, a chime, a Telegram push or an MQTT
+    // publish for an event the cluster already lived through. Call events keep the freshness
+    // rule above, because a press still inside its ring window is live however it travelled.
+    // The SOS winner is presented once the peer's history has converged
+    // (settleEmergencyPresentation), which is what a restart does as well.
+    if (backfill && !callLifecycleType(ev.type)) {
+      if (ev.type == "emergency" || ev.type == "emergency_cancel") {
+        applyEmergencyEvent(ev);
+        emergency_settle_pending = true;
+      } else if (ev.type == "visitor_lang") {
+        applyVisitorLangEvent(ev, is_local);
+      }
+      if (emergency_settle_pending) armEmergencySettleFallback();
+      return;
+    }
     if (ev.type == "press") {
       last_press_door = ev.door;
       last_press_by_door[ev.door] = {ev.origin, ev.seq};
@@ -7212,6 +7267,7 @@ struct Node::Impl {
     } else if (ev.type == "emergency" || ev.type == "emergency_cancel") {
       emergency_winner = isCurrentEmergencyWinner(ev);
       emergency_transition = emergency_winner && applyEmergencyEvent(ev);
+      if (emergency_transition) emergency_presented_identity = eventIdentity(ev);
     } else if (ev.type == "visitor_lang") {
 
       applyVisitorLangEvent(ev, is_local);
@@ -10554,6 +10610,10 @@ void Node::stop() {
     if (impl_->snapshot_timer) {
       impl_->loop->cancel(impl_->snapshot_timer);
       impl_->snapshot_timer = 0;
+    }
+    if (impl_->emergency_settle_timer) {
+      impl_->loop->cancel(impl_->emergency_settle_timer);
+      impl_->emergency_settle_timer = 0;
     }
     if (impl_->asset_prefetch_timer) {
       impl_->loop->cancel(impl_->asset_prefetch_timer);
