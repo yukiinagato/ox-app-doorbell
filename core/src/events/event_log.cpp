@@ -1,7 +1,6 @@
 
 #include "events/events.h"
 
-#include <algorithm>
 #include <utility>
 
 #include "store/store.h"
@@ -71,15 +70,12 @@ std::vector<bool> EventLog::applyRemoteBatch(const std::vector<EventRecord>& rec
   if (newly_applied) newly_applied->clear();
   std::vector<bool> inserted;
   inserted.reserve(records.size());
-  std::vector<std::string> origins;
+  for (const auto& record : records) inserted.push_back(ingestRemote(record, backfill));
+  // Draining in payload order keeps the dispatch order the sender chose (shallowest-first
+  // across origins, then HLC); a drain for an origin already emptied is a no-op.
   for (const auto& record : records) {
-    inserted.push_back(ingestRemote(record, backfill));
-    if (std::find(origins.begin(), origins.end(), record.origin) == origins.end())
-      origins.push_back(record.origin);
-  }
-  for (const auto& origin : origins) {
     std::vector<EventRecord> applied;
-    drainContiguous(origin, &applied);
+    drainContiguous(record.origin, &applied);
     if (newly_applied)
       newly_applied->insert(newly_applied->end(), applied.begin(), applied.end());
   }

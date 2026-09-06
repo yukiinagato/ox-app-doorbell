@@ -6742,6 +6742,8 @@ struct Node::Impl {
       active->second.recovery_deadline_mono = 0;
       const std::string retry_reason = active->second.recovery_reason;
       if (doCancelCall(door, call_id, retry_reason)) return;
+      active = active_calls.find(door);
+      if (active == active_calls.end() || active->second.call_id != call_id) return;
 
       const int64_t retry_delay = callWriteRetryDelay(active->second.recovery_retry_step);
       if (active->second.recovery_retry_step < 4)
@@ -6912,6 +6914,8 @@ struct Node::Impl {
           !isCallTimeoutAuthority(active->second))
         return;
       if (doCancelCall(door, id, "timeout")) return;
+      active = active_calls.find(door);
+      if (active == active_calls.end() || active->second.call_id != id) return;
       const int64_t retry_delay = callWriteRetryDelay(active->second.timeout_retry_step);
       if (active->second.timeout_retry_step < 4) ++active->second.timeout_retry_step;
       armCallTimeout(active->second, retry_delay, /*reset_retry=*/false);
@@ -7156,10 +7160,15 @@ struct Node::Impl {
       call.recovery_timer = 0;
       call.recovery_deadline_mono = 0;
       call.recovery_reason = "recovery_failed";
-      if (doCancelCall(call.door, call.call_id, call.recovery_reason)) return true;
-      const int64_t retry_delay = callWriteRetryDelay(call.recovery_retry_step);
-      if (call.recovery_retry_step < 4) ++call.recovery_retry_step;
-      armRecoveryCancellation(call, RecoveryLeaseKind::LocalProcess, call.recovery_reason,
+      const std::string door = call.door;
+      if (doCancelCall(door, call.call_id, call.recovery_reason)) return true;
+      // A cancellation that did not settle may still have dispatched and erased this entry.
+      auto again = active_calls.find(door);
+      if (again == active_calls.end() || again->second.call_id != call_id) return true;
+      ActiveCall& live = again->second;
+      const int64_t retry_delay = callWriteRetryDelay(live.recovery_retry_step);
+      if (live.recovery_retry_step < 4) ++live.recovery_retry_step;
+      armRecoveryCancellation(live, RecoveryLeaseKind::LocalProcess, live.recovery_reason,
                               retry_delay, /*reset_retry=*/false);
       return true;
     }
@@ -10344,8 +10353,11 @@ struct Node::Impl {
            projection->updated_hlc == selected.hlc;
   }
 
-  bool doCancelCall(const std::string& door_arg, const std::string& call_id,
-                    const std::string& reason) {
+  // call_id and reason are taken by value on purpose: callers pass references into the
+  // active_calls entry, and appending the terminal event dispatches synchronously through
+  // applyCallEvent -> clearActiveCall, which erases that entry before this function reads the
+  // strings again.
+  bool doCancelCall(const std::string& door_arg, std::string call_id, std::string reason) {
     const std::string door = door_arg.empty() ? opts.door : door_arg;
     if (call_id.empty()) return false;
     if (cancelled_call_ids.count(call_id)) return true;
@@ -10370,8 +10382,7 @@ struct Node::Impl {
            projection->updated_hlc == cancelled.hlc;
   }
 
-  bool doEndCall(const std::string& door_arg, const std::string& call_id,
-                 const std::string& reason) {
+  bool doEndCall(const std::string& door_arg, std::string call_id, std::string reason) {
     const std::string door = door_arg.empty() ? opts.door : door_arg;
     if (call_id.empty()) return false;
     auto it = active_calls.find(door);
