@@ -743,6 +743,16 @@ final class CoreBridge {
         String(value.prefix(limit))
     }
 
+    // ProcessInfo.hostName resolves the name through NSHost, which blocks the calling
+    // thread on the resolver; on a device whose local-network consent is still pending
+    // that outlasts the scene-create watchdog. gethostname(3) reads the same kernel
+    // value without touching DNS or mDNS.
+    private static func localHostName() -> String {
+        var buffer = [CChar](repeating: 0, count: 256)
+        guard gethostname(&buffer, buffer.count - 1) == 0 else { return "" }
+        return String(cString: buffer)
+    }
+
     private static func makeDeviceInfoJSONOnMainThread() -> String? {
         guard Thread.isMainThread else { return nil }
         #if os(tvOS)
@@ -766,7 +776,7 @@ final class CoreBridge {
             "system": boundedDeviceInfoString(UIDevice.current.systemName, limit: 64),
             "system_version": boundedDeviceInfoString(UIDevice.current.systemVersion, limit: 64),
             "model": boundedDeviceInfoString(UIDevice.current.model, limit: 128),
-            "machine": boundedDeviceInfoString(ProcessInfo.processInfo.hostName, limit: 128),
+            "machine": boundedDeviceInfoString(localHostName(), limit: 128),
             "battery_state": batteryState,
             "battery_percent": batteryPercent,
             "low_power_mode": ProcessInfo.processInfo.isLowPowerModeEnabled,
