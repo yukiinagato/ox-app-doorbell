@@ -7,7 +7,9 @@
 #include <deque>
 #include <functional>
 #include <map>
+#include <set>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "util/hlc.h"
@@ -36,6 +38,10 @@ class EventLog {
  public:
 
   using EventCb = std::function<void(const EventRecord&, bool is_local)>;
+  // backfill is true for a record that reached this node through anti-entropy (a SYNC_RESP)
+  // rather than a live EVENT push or a local append. Replicated history must update state but
+  // never re-enact presentation, so a consumer that actuates anything needs this distinction.
+  using DispatchCb = std::function<void(const EventRecord&, bool is_local, bool backfill)>;
 
   EventLog(std::string self_id, HlcClock& hlc, Store& store);
 
@@ -47,8 +53,13 @@ class EventLog {
   // A zero-sequence record reports that durable local emission failed.
   EventRecord append(const std::string& type, const std::string& door,
                      const std::string& device, const std::string& payload_json);
-  bool applyRemote(const EventRecord& e,
-                   std::vector<EventRecord>* newly_applied = nullptr);
+  bool applyRemote(const EventRecord& e, std::vector<EventRecord>* newly_applied = nullptr,
+                   bool backfill = false);
+  // Stores every record before dispatching any of them, so a batch that carries both halves of
+  // a state pair (an emergency and its cancellation) has the whole pair in the store when the
+  // first half is dispatched. Returns, per input record, whether it was newly inserted.
+  std::vector<bool> applyRemoteBatch(const std::vector<EventRecord>& records,
+                                     std::vector<EventRecord>* newly_applied, bool backfill);
 
   std::map<std::string, uint64_t> heads() const;
 
@@ -58,7 +69,8 @@ class EventLog {
 
   bool mergeNotify(const std::string& origin, uint64_t seq, const std::string& notify_json);
 
-  void onEvent(EventCb cb) { on_event_ = std::move(cb); }
+  void onEvent(EventCb cb);
+  void onDispatch(DispatchCb cb) { on_event_ = std::move(cb); }
   const std::string& selfId() const { return self_id_; }
 
  private:
@@ -67,13 +79,16 @@ class EventLog {
   Store& store_;
   std::map<std::string, uint64_t> frontiers_;
   std::deque<EventRecord> dispatch_queue_;
-  EventCb on_event_;
+  DispatchCb on_event_;
+  // Identities ingested through anti-entropy and not yet dispatched.
+  std::set<std::pair<std::string, uint64_t>> backfill_pending_;
   bool dispatching_ = false;
 
   void drainContiguous(const std::string& origin,
                        std::vector<EventRecord>* newly_applied = nullptr,
                        bool dispatch = true);
   bool dispatchPending();
+  bool ingestRemote(const EventRecord& e, bool backfill);
 };
 
 

@@ -109,6 +109,11 @@ class Mesh {
     std::function<void(const std::string& reason)> on_invite_rejected;
 
     std::function<void()> on_unpaired;
+
+    // Anti-entropy with `peer` has left this node holding every event that peer advertised.
+    // Fires after each such SYNC_RESP. A consumer that withheld presentation for backfilled
+    // history presents the converged state here, once, instead of replaying it event by event.
+    std::function<void(const std::string& peer)> on_sync_converged;
   };
 
   Mesh(Runloop& loop, IClock& clock, HlcClock& hlc, ITransport& transport,

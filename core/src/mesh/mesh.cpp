@@ -699,6 +699,8 @@ struct Mesh::Impl {
 
 
   std::map<std::string, std::shared_ptr<SecureChannel>> chans;
+  // Heads a peer advertised in its last SYNC_REQ, consumed when its closing SYNC_RESP arrives.
+  std::map<std::string, std::map<std::string, uint64_t>> sync_req_heads;
   std::vector<std::shared_ptr<SecureChannel>> pending;
   std::set<std::string> dialing;
   std::set<std::string> known_addrs;
@@ -1535,7 +1537,7 @@ struct Mesh::Impl {
     return o;
   }
 
-  bool applySyncPayload(const cJSON* doc) {
+  bool applySyncPayload(const std::string& peer, const cJSON* doc) {
     ConfigWirePayload config_payload;
     if (!configPayloadFromJson(doc, &config_payload)) return false;
 
@@ -1560,19 +1562,48 @@ struct Mesh::Impl {
     }
     if (!config.lastMutationCommitted()) return false;
 
-    for (const EventRecord& rec : event_payload) {
-      std::vector<EventRecord> applied;
-      const bool inserted = events.applyRemote(rec, &applied);
-      if (cbs.on_event)
-        for (const auto& record : applied) cbs.on_event(record);
-      if (!inserted && !rec.notify_json.empty()) {
+    // Every record is stored before any is dispatched, and all of them are flagged as backfill:
+    // this is replicated history, and a consumer must not re-enact it as if it just happened.
+    std::vector<EventRecord> applied;
+    const std::vector<bool> inserted =
+        events.applyRemoteBatch(event_payload, &applied, /*backfill=*/true);
+    if (cbs.on_event)
+      for (const auto& record : applied) cbs.on_event(record);
+    for (size_t i = 0; i < event_payload.size(); i++) {
+      const EventRecord& rec = event_payload[i];
+      if (!inserted[i] && !rec.notify_json.empty())
         events.mergeNotify(rec.origin, rec.seq, rec.notify_json);
-      }
     }
+    noteSyncProgress(peer, remote_heads);
     return true;
   }
 
+  // Convergence with one peer is judged against the heads that peer advertised: in the SYNC_RESP
+  // that answered our request, or in the SYNC_REQ it sent when the roles were reversed. A peer
+  // that is itself behind can report convergence early; the consumer keys its presentation on
+  // the winner identity, so the next converged sync corrects that rather than repeating it.
+  void noteSyncProgress(const std::string& peer, const cJSON* advertised_heads) {
+    std::map<std::string, uint64_t> peer_heads;
+    if (advertised_heads) {
+      if (!mapFromJson(advertised_heads, &peer_heads)) return;
+    } else {
+      auto it = sync_req_heads.find(peer);
+      if (it == sync_req_heads.end()) return;
+      peer_heads = std::move(it->second);
+      sync_req_heads.erase(it);
+    }
+    const auto mine = events.heads();
+    for (const auto& kv : peer_heads) {
+      auto it = mine.find(kv.first);
+      if (it == mine.end() || it->second < kv.second) return;
+    }
+    if (cbs.on_sync_converged) cbs.on_sync_converged(peer);
+  }
+
   void handleSyncReq(SecureChannel& ch, const cJSON* doc) {
+    std::map<std::string, uint64_t> heads;
+    if (mapFromJson(json::get(doc, "heads"), &heads))
+      sync_req_heads[ch.peerId()] = std::move(heads);
     auto resp = buildSyncResp(doc, /*fin=*/false);
     if (!resp) {
       DB_LOGW("mesh", "rejected malformed sync request from " + ch.peerId());
@@ -1582,7 +1613,7 @@ struct Mesh::Impl {
   }
 
   void handleSyncResp(SecureChannel& ch, const cJSON* doc) {
-    if (!applySyncPayload(doc)) {
+    if (!applySyncPayload(ch.peerId(), doc)) {
       DB_LOGW("mesh", "rejected malformed sync response from " + ch.peerId());
       return;
     }
