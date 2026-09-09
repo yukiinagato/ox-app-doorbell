@@ -166,6 +166,7 @@ namespace DoorbellApp
                 BorderThickness = new Thickness(1),
                 CornerRadius = new CornerRadius(12),
                 Margin = new Thickness(5),
+                VerticalAlignment = VerticalAlignment.Top,
                 Cursor = Cursors.Hand,
                 Tag = door,
                 Child = body,
