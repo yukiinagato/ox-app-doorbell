@@ -1,17 +1,21 @@
 #import "DBBootConfig.h"
+#import <sys/sysctl.h>
 
 
 static NSString *DBSuggestedDoor(void) {
-  return [NSString stringWithFormat:@"door-%08x", arc4random()];
+  return [DBBootConfig suggestedDeviceNameForRole:@"door_station" identifier:nil];
 }
 
 static NSString *DBDefaultJson(void) {
+  NSString *token = [NSString stringWithFormat:@"%08x", arc4random()];
   return [NSString stringWithFormat:
-      @"{ \"name\": \"ipad1-monitor\", \"role\": \"indoor_panel\", \"door\": \"%@\", "
+      @"{ \"name\": \"%@\", \"role\": \"indoor_panel\", \"door\": \"%@\", "
       "\"listen_port\": 47172, \"http_port\": 47180, \"ui_lang\": \"ja\", \"kiosk\": true, "
       "\"door_host\": \"\", \"sip\": { \"direct_port\": 47190 }, \"mic\": false, "
       "\"media_source\": { \"type\": \"auto\" }, \"keepalive_helper\": \"auto\", "
-      "\"setup_complete\": false }", DBSuggestedDoor()];
+      "\"setup_complete\": false }",
+      [DBBootConfig suggestedDeviceNameForRole:@"indoor_panel" identifier:token],
+      [DBBootConfig suggestedDeviceNameForRole:@"door_station" identifier:token]];
 }
 
 static BOOL DBValidDoor(NSString *value) {
@@ -328,6 +332,24 @@ static BOOL DBValidPskHex(NSString *value) {
       ([c.role isEqualToString:@"door_station"] && !DBValidDoor(c.door)))
     c.setupRequired = YES;
   return c;
+}
+
++ (NSString *)suggestedDeviceNameForRole:(NSString *)role identifier:(NSString *)identifier {
+  char machine[128] = {0};
+  size_t length = sizeof(machine);
+  NSString *model = @"iPad";
+  if (sysctlbyname("hw.machine", machine, &length, NULL, 0) == 0) {
+    NSString *hardware = [NSString stringWithUTF8String:machine];
+    if ([hardware isEqualToString:@"iPad2,5"] || [hardware isEqualToString:@"iPad2,6"] ||
+        [hardware isEqualToString:@"iPad2,7"]) model = @"iPad-mini";
+    else if ([hardware hasPrefix:@"iPad"] || [hardware hasPrefix:@"iPhone"] ||
+             [hardware hasPrefix:@"iPod"])
+      model = [hardware stringByReplacingOccurrencesOfString:@"," withString:@"-"];
+  }
+  NSString *token = [identifier length] == 8 ? identifier :
+      [NSString stringWithFormat:@"%08x", arc4random()];
+  NSString *roleName = [role isEqualToString:@"door_station"] ? @"door" : @"indoor";
+  return [NSString stringWithFormat:@"%@-%@-%@", model, roleName, token];
 }
 
 + (BOOL)isValidRole:(NSString *)role {

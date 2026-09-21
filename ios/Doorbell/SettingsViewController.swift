@@ -324,6 +324,15 @@ final class DeviceSettingsViewController: SettingsChildViewController {
                                   self?.write([.set(key, value)])
                               })
 
+        if boot.role == "door_station", let key = deviceKey("local.visitor_layout") {
+            result.append(.choice(title: texts.t("settings.visitor_layout"),
+                                  value: ConfigUtil.str(config, key) ?? "standard",
+                                  options: ["standard", "left", "right", "edges"].map {
+                                      ($0, texts.t("settings.visitor_layout_" + $0))
+                                  }, identifier: "visitor_layout") { [weak self] value in
+                                      self?.write([.set(key, value)])
+                                  })
+        }
         result.append(.header(texts.t("settings.appearance")))
         let appearance = ConfigUtil.str(config, "display.appearance") ?? "auto_system"
         result.append(.choice(title: texts.t("settings.appearance"), value: appearance,

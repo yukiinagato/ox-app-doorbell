@@ -410,6 +410,17 @@ std::string LwwMap::materializeJson(const std::string& prefix) const {
     if (it->first.compare(0, prefix.size(), prefix) != 0) break;
     const LwwEntry& e = it->second;
     if (e.deleted) continue;
+    bool hidden = false;
+    for (size_t dot = e.key.find('.'); dot != std::string::npos;
+         dot = e.key.find('.', dot + 1)) {
+      auto ancestor = map_.find(e.key.substr(0, dot));
+      if (ancestor != map_.end() && ancestor->second.deleted &&
+          std::tie(ancestor->second.hlc, ancestor->second.author) >= std::tie(e.hlc, e.author)) {
+        hidden = true;
+        break;
+      }
+    }
+    if (hidden) continue;
     std::string rest = it->first.substr(prefix.size());
     if (!rest.empty() && rest[0] == '.') rest.erase(0, 1);
 
@@ -432,10 +443,43 @@ std::string LwwMap::materializeJson(const std::string& prefix) const {
       node = child;
     }
     const char* leaf = segs.back().c_str();
-    cJSON* existing = json::get(node, leaf);
-    if (existing && cJSON_IsObject(existing)) continue;
+    bool newer_parent_object = false;
+    if (cJSON_IsObject(json::get(node, leaf))) {
+      for (size_t dot = e.key.find('.'); dot != std::string::npos;
+           dot = e.key.find('.', dot + 1)) {
+        auto ancestor = map_.find(e.key.substr(0, dot));
+        if (ancestor == map_.end() || ancestor->second.deleted || !wins(ancestor->second, e))
+          continue;
+        auto value = json::parse(ancestor->second.value_json);
+        const cJSON* embedded = value.get();
+        size_t begin = dot + 1;
+        while (embedded && begin < e.key.size()) {
+          size_t end = e.key.find('.', begin);
+          embedded = json::get(embedded, e.key.substr(begin, end - begin).c_str());
+          if (end == std::string::npos) break;
+          begin = end + 1;
+        }
+        if (cJSON_IsObject(embedded)) { newer_parent_object = true; break; }
+      }
+    }
+    if (newer_parent_object) continue;
     json::Doc val = json::parse(e.value_json);
     if (!val) val = json::Doc(cJSON_CreateString(e.value_json.c_str()));
+    // A child tombstone also removes a member embedded in an older parent object.
+    const std::string child_prefix = e.key + ".";
+    for (auto child = map_.lower_bound(child_prefix); child != map_.end() &&
+         child->first.compare(0, child_prefix.size(), child_prefix) == 0; ++child) {
+      if (!child->second.deleted ||
+          std::tie(child->second.hlc, child->second.author) < std::tie(e.hlc, e.author)) continue;
+      std::string path = child->first.substr(child_prefix.size());
+      cJSON* parent = val.get();
+      size_t dot;
+      while (parent && (dot = path.find('.')) != std::string::npos) {
+        parent = json::get(parent, path.substr(0, dot).c_str());
+        path.erase(0, dot + 1);
+      }
+      if (cJSON_IsObject(parent)) cJSON_DeleteItemFromObjectCaseSensitive(parent, path.c_str());
+    }
     json::setItem(node, leaf, std::move(val));
   }
   return json::dump(root.get());

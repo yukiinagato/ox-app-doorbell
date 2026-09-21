@@ -189,10 +189,10 @@ TEST_CASE("assets: addAsset replicates config and other nodes prefetch automatic
 
 
   f.run(1000);
-  CHECK(b.node->assetPath(hash) == "");
+  CHECK(b.node->assetPath(hash) != "");
   {
     auto [cached, total] = assetCounts(*b.node);
-    CHECK(cached == 0);
+    CHECK(cached == 1);
     CHECK(total == 1);
   }
 
@@ -506,4 +506,26 @@ TEST_CASE("assets: HTTP API (POST /api/assets / GET /asset/<hash>)") {
   }
 
   node.stop();
+}
+
+TEST_CASE("assets: late join downloads the full resource library without a theme reference") {
+  AFleet f;
+  auto& source = f.add("library:1", "source", "door_station", "d_front", true);
+  REQUIRE(source.node->start());
+  const Bytes image = tinyGreyPng(77);
+  const std::string hash = source.node->addAsset(image, "image/png", "library.png");
+  REQUIRE_FALSE(hash.empty());
+  auto& joiner = f.add("new:1", "new", "door_station", "d_front", false);
+  f.net.partition({{"library:1"}, {"new:1"}});
+  REQUIRE(joiner.node->start());
+  f.run(1000);
+  CHECK(joiner.node->assetPath(hash).empty());
+  f.net.heal();
+  f.run(5000);
+  Bytes received;
+  REQUIRE(readFileBytes(joiner.node->assetPath(hash), received));
+  CHECK(received == image);
+  CHECK(assetCounts(*joiner.node).first == 1);
+  source.node->stop();
+  joiner.node->stop();
 }

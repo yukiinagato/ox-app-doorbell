@@ -12,28 +12,28 @@ typedef struct {
 static void DBRingReset(DBRing *r) { r->head = r->tail = 0; }
 
 static int DBRingWrite(DBRing *r, const short *src, int n) {
-  uint32_t tail = r->tail;
-  uint32_t head = r->head;
+  uint32_t tail = __atomic_load_n(&r->tail, __ATOMIC_ACQUIRE);
+  uint32_t head = __atomic_load_n(&r->head, __ATOMIC_ACQUIRE);
   uint32_t space = DB_RING_CAP - (uint32_t)(tail - head);
   int wrote = 0;
   while ((uint32_t)wrote < (uint32_t)n && (uint32_t)wrote < space) {
     r->buf[(tail + wrote) & (DB_RING_CAP - 1)] = src[wrote];
     wrote++;
   }
-  r->tail = tail + wrote;
+  __atomic_store_n(&r->tail, tail + wrote, __ATOMIC_RELEASE);
   return wrote;
 }
 
 static int DBRingRead(DBRing *r, short *dst, int n) {
-  uint32_t head = r->head;
-  uint32_t tail = r->tail;
+  uint32_t head = __atomic_load_n(&r->head, __ATOMIC_ACQUIRE);
+  uint32_t tail = __atomic_load_n(&r->tail, __ATOMIC_ACQUIRE);
   uint32_t used = (uint32_t)(tail - head);
   int got = 0;
   while ((uint32_t)got < (uint32_t)n && (uint32_t)got < used) {
     dst[got] = r->buf[(head + got) & (DB_RING_CAP - 1)];
     got++;
   }
-  r->head = head + got;
+  __atomic_store_n(&r->head, head + got, __ATOMIC_RELEASE);
   return got;
 }
 
@@ -43,6 +43,14 @@ static int DBRingRead(DBRing *r, short *dst, int n) {
   DBRing _rx;
   DBRing _tx;
   AudioBufferList *_inList;
+  volatile uint32_t _renderedFrames;
+  volatile uint32_t _inputFrames;
+  volatile OSStatus _inputStatus;
+  uint32_t _receivedFrames;
+  uint32_t _sentFrames;
+  int _receivePeak;
+  int _sendPeak;
+  CFAbsoluteTime _nextStatsAt;
 }
 
 @synthesize micEnabled = _micEnabled;
@@ -55,6 +63,7 @@ static OSStatus DBRenderCb(void *inRefCon, AudioUnitRenderActionFlags *ioActionF
   (void)inTimeStamp;
   (void)inBusNumber;
   DBAudioIO *self = (__bridge DBAudioIO *)inRefCon;
+  self->_renderedFrames += inNumberFrames;
   for (UInt32 b = 0; b < ioData->mNumberBuffers; b++) {
     short *out = (short *)ioData->mBuffers[b].mData;
     int frames = (int)inNumberFrames;
@@ -70,13 +79,16 @@ static OSStatus DBInputCb(void *inRefCon, AudioUnitRenderActionFlags *ioActionFl
                           UInt32 inNumberFrames, AudioBufferList *ioData) {
   (void)ioData;
   DBAudioIO *self = (__bridge DBAudioIO *)inRefCon;
+  if (inNumberFrames > DB_RING_CAP) return kAudio_ParamError;
   AudioBufferList *list = self->_inList;
   list->mNumberBuffers = 1;
   list->mBuffers[0].mNumberChannels = 1;
   list->mBuffers[0].mDataByteSize = inNumberFrames * sizeof(short);
   OSStatus st = AudioUnitRender(self->_unit, ioActionFlags, inTimeStamp, inBusNumber,
                                 inNumberFrames, list);
+  self->_inputStatus = st;
   if (st == noErr) {
+    self->_inputFrames += inNumberFrames;
     DBRingWrite(&self->_tx, (const short *)list->mBuffers[0].mData, (int)inNumberFrames);
   }
   return st;
@@ -195,6 +207,10 @@ static AudioStreamBasicDescription DBFormat8k(void) {
     AudioSessionSetActive(false);
     return NO;
   }
+  Float32 outputVolume = 0;
+  UInt32 volumeSize = sizeof(outputVolume);
+  AudioSessionGetProperty(kAudioSessionProperty_CurrentHardwareOutputVolume, &volumeSize, &outputVolume);
+  NSLog(@"[doorbell] audio started mic=%d output_volume=%.2f", _micEnabled, outputVolume);
   _running = YES;
   return YES;
 }
@@ -215,11 +231,25 @@ static AudioStreamBasicDescription DBFormat8k(void) {
 }
 
 - (void)enqueueRx:(const short *)pcm count:(int)n {
-  if (n > 0) DBRingWrite(&_rx, pcm, n);
+  if (n > 0) {
+    _receivedFrames += n;
+    for (int i = 0; i < n; ++i) _receivePeak = MAX(_receivePeak, abs(pcm[i]));
+    DBRingWrite(&_rx, pcm, n);
+  }
 }
 
 - (int)dequeueTx:(short *)pcm max:(int)n {
-  return DBRingRead(&_tx, pcm, n);
+  int got = DBRingRead(&_tx, pcm, n);
+  _sentFrames += got;
+  for (int i = 0; i < got; ++i) _sendPeak = MAX(_sendPeak, abs(pcm[i]));
+  CFAbsoluteTime now = CFAbsoluteTimeGetCurrent();
+  if (now >= _nextStatsAt) {
+    NSLog(@"[doorbell] audio PCM rx=%u tx=%u render=%u input=%u peaks=%d/%d input_status=%ld",
+        (unsigned)_receivedFrames, (unsigned)_sentFrames, (unsigned)_renderedFrames,
+        (unsigned)_inputFrames, _receivePeak, _sendPeak, (long)_inputStatus);
+    _receivePeak = 0; _sendPeak = 0; _nextStatsAt = now + 2;
+  }
+  return got;
 }
 
 @end

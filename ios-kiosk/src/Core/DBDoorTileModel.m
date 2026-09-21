@@ -11,6 +11,7 @@
 @property(nonatomic, readwrite) BOOL online;
 @property(nonatomic, readwrite, copy) NSString *snapshotURL;
 @property(nonatomic, readwrite, copy) NSString *streamURL;
+@property(nonatomic, readwrite, copy) NSString *videoMetaURL;
 @end
 
 @implementation DBDoorTileInfo
@@ -23,6 +24,7 @@
     _servedBy = @"";
     _snapshotURL = @"";
     _streamURL = @"";
+    _videoMetaURL = @"";
   }
   return self;
 }
@@ -30,6 +32,17 @@
 @end
 
 @implementation DBDoorTileModel
+
++ (NSInteger)videoRotationFromMetadata:(id)metadata fallback:(NSInteger)fallback {
+  if (![metadata isKindOfClass:[NSDictionary class]]) return fallback;
+  id value = [metadata objectForKey:@"rotation"];
+  if (![value isKindOfClass:[NSNumber class]]) return fallback;
+  double degrees = [value doubleValue];
+  if (!(degrees >= -360 && degrees <= 360)) return fallback;
+  NSInteger whole = (NSInteger)degrees;
+  if (degrees != (double)whole || whole % 90 != 0) return fallback;
+  return ((whole % 360) + 360) % 360;
+}
 
 + (NSDictionary *)dictionary:(NSDictionary *)root key:(NSString *)key {
   if (![root isKindOfClass:[NSDictionary class]]) return nil;
@@ -90,6 +103,7 @@
   for (id candidate in (NSArray *)peers) {
     if (![candidate isKindOfClass:[NSDictionary class]]) continue;
     NSString *identifier = [self peerID:candidate];
+    if ([self isRemovedStation:identifier config:config]) continue;
     if ([servedBy length] > 0 && [identifier isEqualToString:servedBy]) return candidate;
     NSDictionary *device = [self dictionary:devices key:identifier];
     NSString *role = [self string:device key:@"role"];
@@ -101,6 +115,34 @@
     if (fallback == nil) fallback = candidate;
   }
   return fallback;
+}
+
++ (BOOL)isRemovedStation:(NSString *)identifier config:(NSDictionary *)config {
+  return [self flag:[self dictionary:config key:@"removed_devices"] key:identifier def:NO];
+}
+
+// A seeded door outlives its device in replicated configuration. It is not a
+// video source after revocation unless another retained station uses that door.
++ (BOOL)isOrphanedDoor:(NSString *)doorId status:(NSDictionary *)status
+                config:(NSDictionary *)config {
+  NSDictionary *door = [self dictionary:[self dictionary:config key:@"doors"] key:doorId];
+  if (![self isRemovedStation:[self string:door key:@"seeded_by"] config:config]) return NO;
+  NSDictionary *devices = [self dictionary:config key:@"devices"];
+  for (NSString *identifier in devices) {
+    if ([self isRemovedStation:identifier config:config]) continue;
+    NSDictionary *device = [self dictionary:devices key:identifier];
+    if ([[self string:device key:@"role"] isEqualToString:@"door_station"] &&
+        [[self string:device key:@"door"] isEqualToString:doorId]) return NO;
+  }
+  id peers = [status objectForKey:@"peers"];
+  if ([peers isKindOfClass:[NSArray class]]) {
+    for (NSDictionary *peer in peers) {
+      if ([self isRemovedStation:[self peerID:peer] config:config]) continue;
+      if ([[self string:peer key:@"role"] isEqualToString:@"door_station"] &&
+          [[self string:peer key:@"door"] isEqualToString:doorId]) return NO;
+    }
+  }
+  return YES;
 }
 
 + (NSInteger)orderOf:(NSString *)doorId doors:(NSDictionary *)doors {
@@ -119,6 +161,7 @@
   NSDictionary *configured = [self dictionary:config key:@"doors"];
   for (id candidate in (NSArray *)peers) {
     if (![candidate isKindOfClass:[NSDictionary class]]) continue;
+    if ([self isRemovedStation:[self peerID:candidate] config:config]) continue;
     if (![[self string:candidate key:@"role"] isEqualToString:@"door_station"]) continue;
     NSString *door = [self string:candidate key:@"door"];
     if ([door length] == 0 || [doors objectForKey:door] != nil) continue;
@@ -137,7 +180,7 @@
                       config:(NSDictionary *)config
                         boot:(DBBootConfig *)boot {
   NSDictionary *doors = [self dictionary:status key:@"doors"];
-  if ([doors count] == 0) doors = [self doorsFromPeers:status config:config];
+  if (doors == nil) doors = [self doorsFromPeers:status config:config];
   if ([doors count] == 0) return @[];
 
   NSDictionary *configuredDoors = [self dictionary:config key:@"doors"];
@@ -152,6 +195,7 @@
   NSMutableArray *out = [NSMutableArray array];
   for (NSString *doorId in ids) {
     if (![doorId isKindOfClass:[NSString class]] || [doorId length] == 0) continue;
+    if ([self isOrphanedDoor:doorId status:status config:config]) continue;
     NSDictionary *entry = [self dictionary:doors key:doorId];
     DBDoorTileInfo *tile = [[DBDoorTileInfo alloc] init];
     tile.doorId = doorId;
@@ -160,6 +204,7 @@
     // omits the flag still render a named door.
     tile.configured = [self flag:entry key:@"configured" def:YES];
     tile.servedBy = [self string:entry key:@"served_by"];
+    if ([self isRemovedStation:tile.servedBy config:config]) tile.servedBy = @"";
     // A station with no camera has nothing to watch. The door is still reachable
     // from the door list and still carries notices; only the still tile goes.
     NSDictionary *station = [self stationForDoor:status config:config door:doorId
@@ -177,6 +222,7 @@
                                                     door:doorId deviceID:tile.servedBy];
     tile.snapshotURL = source.snapshotURL ?: @"";
     tile.streamURL = source.mjpegURL ?: @"";
+    tile.videoMetaURL = source.videoMetaURL ?: @"";
     [out addObject:tile];
   }
   return out;

@@ -87,6 +87,20 @@ TEST_CASE("event_log: append advances sequence and HLC and invokes the local cal
   CHECK(std::get<2>(got[2]) == true);
 }
 
+TEST_CASE("event_log: a future peer preserves ordering without shifting local event time") {
+  SimClock clock(10000);
+  HlcClock hlc(clock, "aaaaaaaa");
+  Store store;
+  REQUIRE(store.open(":memory:"));
+  EventLog log("aaaaaaaa0000", hlc, store);
+  const std::string future = HlcClock::format(15500, 0, "bbbbbbbb");
+  hlc.observe(future);
+  clock.setWallOffsetMs(-1000);
+  const auto event = log.append("press", "d_front", "aaaaaaaa0000", "{}");
+  CHECK(event.hlc > future);
+  CHECK(event.wall_ms == 9000);
+}
+
 TEST_CASE("event_log: nested local append waits for the source dispatch acknowledgement") {
   SimClock clock(1000);
   HlcClock hlc(clock, "aaaaaaaa");

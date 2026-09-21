@@ -456,3 +456,19 @@ final class TablerIconTests: XCTestCase {
         XCTAssertEqual(ClusterIconView.Kind.indoorPanel.iconName, "TablerDeviceTablet")
     }
 }
+
+final class CameraFrameRotationTests: XCTestCase {
+    func testPortraitNormalizedFrontCameraHardwarePoses() {
+        // Mini 3 hardware qualification: Home below/above and on either side.
+        XCTAssertEqual(IOSAvailability.cameraFrameRotation(for: .portrait), 0)
+        XCTAssertEqual(IOSAvailability.cameraFrameRotation(for: .portraitUpsideDown), 180)
+        XCTAssertEqual(IOSAvailability.cameraFrameRotation(for: .landscapeLeft), 90)
+        XCTAssertEqual(IOSAvailability.cameraFrameRotation(for: .landscapeRight), 270)
+    }
+
+    func testAmbiguousPosesPreserveLastKnownRotation() {
+        XCTAssertNil(IOSAvailability.cameraFrameRotation(for: .unknown))
+        XCTAssertNil(IOSAvailability.cameraFrameRotation(for: .faceUp))
+        XCTAssertNil(IOSAvailability.cameraFrameRotation(for: .faceDown))
+    }
+}

@@ -228,8 +228,11 @@ var AdminLogic = (function () {
     camera.h264_fps = num(f.cam_h264_fps, 30);
     camera.h264_bitrate_kbps = num(f.cam_h264_bitrate, 700);
     e.push({ key: base + ".local.camera", value: camera });
+    if (["standard", "left", "right", "edges"].indexOf(f.visitor_layout) >= 0)
+      e.push({ key: base + ".local.visitor_layout", value: f.visitor_layout });
     var motion = editableClone(local.motion);
     motion.enabled = !!f.motion_enabled;
+    motion.wake_screen = f.motion_wake_screen === undefined ? !!motion.wake_screen : !!f.motion_wake_screen;
     motion.sensitivity = num(f.motion_sensitivity, 40);
     motion.min_interval_s = num(f.motion_interval, 30);
     e.push({ key: base + ".local.motion", value: motion });
@@ -1521,6 +1524,39 @@ var AdminLogic = (function () {
   }
 
   var BACKDROP_DEFAULTS = { enabled: true, color: "#000000", opacity: 62 };
+  function screensaverModel(cfg, scope) {
+    var base = isObj(cfg.display) ? cfg.display : {};
+    var device = scope && cfg.devices && cfg.devices[scope] || {};
+    var local = device.local && device.local.display || {};
+    var legacy = local.screensaver_after_s === undefined ? base.screensaver_after_s : local.screensaver_after_s;
+    var result = { enabled: legacy !== 0, after_s: legacy > 0 ? legacy : 120,
+                   brightness: 10, mode: "dim", schedule: "always", from: "22:00", to: "06:00" };
+    [base.screensaver, local.screensaver].forEach(function (values) {
+      if (!isObj(values)) return;
+      Object.keys(result).forEach(function (key) {
+        if (values[key] !== undefined && values[key] !== null) result[key] = values[key];
+      });
+    });
+    result.overridden = isObj(local.screensaver);
+    return result;
+  }
+
+  function screensaverEntries(scope, fields) {
+    var key = (scope ? "devices." + scope + ".local.display" : "display") + ".screensaver";
+    if (scope && !fields.override) return { entries: [], dels: [key] };
+    var value = { enabled: !!fields.enabled, mode: String(fields.mode),
+                  schedule: String(fields.schedule), from: String(fields.from), to: String(fields.to),
+                  after_s: Number(fields.after_s), brightness: Number(fields.brightness) };
+    if (["dim", "minimal", "clock"].indexOf(value.mode) < 0 ||
+        ["always", "daily"].indexOf(value.schedule) < 0 ||
+        !/^(?:[01][0-9]|2[0-3]):[0-5][0-9]$/.test(value.from) ||
+        !/^(?:[01][0-9]|2[0-3]):[0-5][0-9]$/.test(value.to) ||
+        (value.schedule === "daily" && value.from === value.to) ||
+        !isFinite(value.after_s) || value.after_s < 1 || value.after_s > 86400 || value.after_s % 1 ||
+        !isFinite(value.brightness) || value.brightness < 1 || value.brightness > 100 || value.brightness % 1)
+      throw new Error("screensaver_invalid");
+    return { entries: [{ key: key, value: value }], dels: [] };
+  }
   var GLASS_BLUR_DEFAULT = 32;
 
   /* Opacity as core validates it: a whole number 0-100. Throws rather than silently falling back
@@ -2604,6 +2640,7 @@ var AdminLogic = (function () {
     INK_REGIONS: INK_REGIONS, APPEARANCE_MODES: APPEARANCE_MODES,
     autoInk: autoInk, autoAccent: autoAccent, themeAutoModel: themeAutoModel,
     appearanceEntries: appearanceEntries, appearanceModel: appearanceModel,
+    screensaverModel: screensaverModel, screensaverEntries: screensaverEntries,
     themeColorEntries: themeColorEntries,
     backdropModel: backdropModel, backdropStatusModel: backdropStatusModel,
     backdropOpacityValue: backdropOpacityValue,
@@ -3111,6 +3148,14 @@ if (typeof document !== "undefined") (function () {
       return ok({ ok: true });
     }
     if (p === "/api/secrets") return ok({ ok: true });
+    if (p === "/api/devices/remove") {
+      if (!body || !body.id || body.id === MOCK_STATUS.node.id)
+        return setTimeout(function () { cb(400, { ok: false, err: "invalid_device" }); }, 0);
+      L.deleteKey(MOCK_CFG, "devices." + body.id);
+      L.applyKey(MOCK_CFG, "removed_devices." + body.id, "true");
+      MOCK_STATUS.peers = MOCK_STATUS.peers.filter(function (peer) { return peer.id !== body.id; });
+      return ok({ ok: true });
+    }
     if (p === "/api/emergency") {
       MOCK_STATUS.emergency = { active: !!(body && body.active), device: MOCK_ID1,
                                 wall_ms: new Date().getTime() };
@@ -4279,8 +4324,16 @@ if (typeof document !== "undefined") (function () {
       { id: "cam_h264_bitrate", label: t("admin.cam_h264_bitrate"),
         type: "number",
         value: cam.h264_bitrate_kbps !== undefined ? cam.h264_bitrate_kbps : 700 },
+      { id: "visitor_layout", label: t("settings.visitor_layout"), type: "select",
+        value: (d.local || {}).visitor_layout || "standard",
+        options: [{ v: "standard", label: t("settings.visitor_layout_standard") },
+                  { v: "left", label: t("settings.visitor_layout_left") },
+                  { v: "right", label: t("settings.visitor_layout_right") },
+                  { v: "edges", label: t("settings.visitor_layout_edges") }] },
       { id: "motion_enabled", label: t("admin.motion"), type: "check",
         value: mo.enabled !== false },
+      { id: "motion_wake_screen", label: t("admin.motion_wake_screen"), type: "check",
+        value: mo.wake_screen === true },
       { id: "motion_sensitivity", label: t("admin.motion_sensitivity"), type: "number",
         value: mo.sensitivity !== undefined ? mo.sensitivity : 40 },
       { id: "motion_interval", label: t("admin.motion_interval"),
@@ -4593,10 +4646,11 @@ if (typeof document !== "undefined") (function () {
     var el = $("#tab-devices");
     var ds = cfgObj("devices");
     var ids = [];
-    for (var id in ds) ids.push(id);
+    var removed = cfgObj("removed_devices");
+    for (var id in ds) if (!removed[id]) ids.push(id);
 
     (S.status.peers || []).forEach(function (p) {
-      if (ids.indexOf(p.id) < 0) ids.push(p.id);
+      if (!removed[p.id] && ids.indexOf(p.id) < 0) ids.push(p.id);
     });
     var h = "<div class='card'><table><thead><tr><th>" + esc(t("admin.dev_name")) +
             "</th><th>ID</th><th>" + esc(t("admin.dev_role")) + "</th><th>" +
@@ -4644,7 +4698,9 @@ if (typeof document !== "undefined") (function () {
            esc(t("admin.native_ui")) + "</button>" +
            (nid === ((S.status.node || {}).id || "") ?
              " <button class='btn2' data-act='webui' data-id='" + esc(nid) + "'>" +
-             esc(t("admin.web_ui")) + "</button>" : "") + "</td></tr>";
+             esc(t("admin.web_ui")) + "</button>" : "") +
+           (nid !== selfId ? " <button class='btn2 danger' data-act='remove' data-id='" +
+             esc(nid) + "'>" + esc(t("admin.remove_device")) + "</button>" : "") + "</td></tr>";
     });
     h += "</tbody></table></div>";
 
@@ -4683,7 +4739,13 @@ if (typeof document !== "undefined") (function () {
     }
     h += "</div>";
     el.innerHTML = h;
-    bindActs(el, { edit: function (id) { editDevice(id); },
+    bindActs(el, { remove: function (id) {
+                    if (!window.confirm(fmt(t("admin.remove_device_confirm"), { device: deviceName(id) + " (" + id.slice(0, 8) + ")" }))) return;
+                    api("POST", "/api/devices/remove", { id: id }, function (st, j) {
+                      if (st === 200 && j && j.ok) refreshAll();
+                      else msg(t("admin.save_failed", j && j.err || "NG"));
+                    });
+                  }, edit: function (id) { editDevice(id); },
                   vol: function (id) { editDeviceVolume(id); },
                   ui: function (id) { editDeviceUi(id, "native"); },
                   webui: function (id) { editDeviceUi(id, "web"); } });
@@ -5269,16 +5331,20 @@ if (typeof document !== "undefined") (function () {
     var flowSupport = L.callFlowCompatibility(configuredFlow, S.status);
     var h = "<div class='card'><h2>" + esc(t("admin.call_flow")) +
             "</h2><div style='display:flex;gap:8px;align-items:center;flex-wrap:wrap'>" +
-            "<select id='callFlowMode'><option value='purpose_first'" +
-            (configuredFlow === "purpose_first" ? " selected" : "") + ">purpose_first</option>" +
+            "<select id='callFlowMode' style='max-width:100%' aria-label='" + esc(t("admin.call_flow")) +
+            "'><option value='purpose_first'" +
+            (configuredFlow === "purpose_first" ? " selected" : "") + ">" +
+            esc(t("admin.call_flow_purpose_first_label")) + "</option>" +
             "<option value='ring_then_purpose'" +
             (configuredFlow === "ring_then_purpose" ? " selected" : "") +
-            ">ring_then_purpose</option></select><button class='btn small' id='callFlowSave'>" +
-            esc(t("admin.save")) + "</button></div><div class='dim fhint'>" +
-            esc(t("admin.call_flow_purpose_first")) +
+            ">" + esc(t("admin.call_flow_ring_then_purpose_label")) +
+            "</option></select><button class='btn small' id='callFlowSave'>" +
+            esc(t("admin.save")) + "</button></div><div class='dim fhint' id='callFlowHint'>" +
+            esc(t(configuredFlow === "ring_then_purpose" ?
+                "admin.call_flow_ring_then_purpose" : "admin.call_flow_purpose_first")) +
             "</div>";
     if (flowSupport.warning || flowSupport.unknown_fleet) {
-      var unsupported = flowSupport.unsupported.join(", ") || "capability data unavailable";
+      var unsupported = flowSupport.unsupported.map(deviceName).join(", ") || t("admin.call_flow_unknown");
       h += "<div class='warn' role='alert' style='font-weight:600;margin-top:8px'>⚠ " +
            esc(t("admin.call_flow_mixed_warning")) +
            " " + esc(unsupported) + "</div>";
@@ -5356,6 +5422,8 @@ if (typeof document !== "undefined") (function () {
       saveAndRefresh([{ key: "ui.call_flow", value: mode }], null);
     };
     $("#callFlowMode").onchange = function () {
+      $("#callFlowHint").textContent = t($("#callFlowMode").value === "ring_then_purpose" ?
+          "admin.call_flow_ring_then_purpose" : "admin.call_flow_purpose_first");
       var selected = L.callFlowCompatibility($("#callFlowMode").value, S.status);
       if (selected.warning || selected.unknown_fleet) {
         msg(t("admin.call_flow_mixed_warning"));
@@ -5419,6 +5487,112 @@ if (typeof document !== "undefined") (function () {
     bindAudioPlay(m);
   }
 
+  function editSpeechSettings() {
+    var current = cfgObj("speech"), voices = current.voices || {};
+    var fields = [
+      { id: "provider", label: t("speech.provider"), type: "select", value: current.provider || "system",
+        options: [{v:"system", label:t("speech.system")}, {v:"google", label:"Google Cloud TTS"}] },
+      { id: "key", label: t("speech.api_key"), type: "password", value: "",
+        ph: current.google_key_ref ? t("admin.secret_unchanged") : "" },
+      { id: "ja", label: t("speech.voice") + " — " + langName("ja"), value: voices.ja || "ja-JP-Standard-A" },
+      { id: "en", label: t("speech.voice") + " — " + langName("en"), value: voices.en || "en-US-Standard-A" },
+      { id: "zh", label: t("speech.voice") + " — " + langName("zh"), value: voices.zh || "cmn-CN-Standard-A" },
+      { id: "rate", label: t("speech.rate"), type: "number", value: current.speaking_rate || 1 },
+      { id: "auto_cache", label: t("speech.auto_cache"), type: "check", value: current.auto_cache !== false }
+    ];
+    openForm(t("speech.settings"), fields, function (v) {
+      var rate = Number(v.rate);
+      if (!isFinite(rate) || rate < 0.25 || rate > 4) return t("speech.rate_invalid");
+      var node = S.status && ((S.status.self && S.status.self.id) || (S.status.node && S.status.node.id));
+      if (!node) return t("admin.save_failed");
+      var next = JSON.parse(JSON.stringify(current));
+      next.provider = v.provider;
+      next.voices = {ja:v.ja, en:v.en, zh:v.zh};
+      next.speaking_rate = rate;
+      next.auto_cache = !!v.auto_cache;
+      var plan = { entries: [], secrets: [], retire_secret_refs: [] };
+      if (v.key) {
+        var ref = "secret:speech.google." + L.newId("key", {});
+        next.google_key_ref = ref;
+        next.generator_node = node;
+        plan.secrets.push({secret_ref:ref, value:v.key});
+        if (current.google_key_ref && current.generator_node === node)
+          plan.retire_secret_refs.push(current.google_key_ref);
+      }
+      if (v.provider === "google" && !next.google_key_ref) return t("speech.key_required");
+      if (!next.generator_node) next.generator_node = node;
+      ["provider", "voices", "speaking_rate", "auto_cache", "generator_node", "google_key_ref"].forEach(function (key) {
+        if (next[key] !== undefined) plan.entries.push({key:"speech." + key, value:next[key]});
+      });
+      savePlanAndRefresh(plan);
+    });
+  }
+
+  function renderSpeechPanel(root) {
+    if (!root || !document.body.contains(root)) return;
+    api("GET", "/api/tts", null, function (st, status) {
+      if (!document.body.contains(root)) return;
+      if (st !== 200 || !status) { root.textContent = t("speech.unavailable"); return; }
+      var google = status.provider === "google", replies = cfgObj("quick_replies");
+      var h = "<div class='chead'><h2>" + esc(t("speech.settings")) + "</h2>" +
+        "<button class='btn small' data-tts='settings'>" + esc(t("admin.edit")) + "</button></div>" +
+        "<p>" + esc(t(google ? "speech.cloud_hint" : "speech.system_hint")) + "</p>";
+      if (google) {
+        h += "<p class='dim'>" + esc(t("speech.generator") + ": " + deviceName(status.generator_node)) + "</p>";
+        if (status.is_generator && !status.key_ready) h += "<p>" + esc(t("speech.key_required")) + "</p>";
+        h += "<button class='btn2' data-tts='refresh'>" + esc(t("speech.refresh")) + "</button> ";
+        if (status.is_generator)
+          h += "<button class='btn2' data-tts='cache'>" + esc(t("speech.retry")) + "</button>";
+      }
+      var rows = google ? status.items || [] : [];
+      if (!google) {
+        sortedQrIds().forEach(function (id) {
+          ["ja", "en", "zh"].forEach(function (lang) {
+            if (replies[id].speak !== false && replies[id].label && replies[id].label[lang])
+              rows.push({reply_id:id, lang:lang, state:"system"});
+          });
+        });
+      }
+      h += "<table><thead><tr><th>" + esc(t("admin.quick_replies")) + "</th><th>" +
+        esc(t("speech.voice")) + "</th><th>" + esc(t("speech.status")) + "</th><th></th></tr></thead><tbody>";
+      rows.forEach(function (row, index) {
+        var reply = replies[row.reply_id] || {}, label = (reply.label || {})[row.lang] || row.reply_id;
+        h += "<tr><td>" + esc(label) + "</td><td>" + esc(langName(row.lang)) + "</td><td>" +
+          esc(t(({ready:"speech.state_ready", syncing:"speech.state_syncing", generating:"speech.state_generating", failed:"speech.state_failed", pending:"speech.state_pending", system:"speech.state_system"})[row.state] || "speech.state_pending")) + (row.error ? " · " + esc(row.error) : "") + "</td><td>";
+        if (row.state === "ready" || row.state === "system")
+          h += "<button class='btn2' data-tts-play='" + index + "'>▶ " + esc(t("speech.preview")) + "</button>";
+        h += "</td></tr>";
+      });
+      root.innerHTML = h + "</tbody></table>";
+      root.querySelector("[data-tts='settings']").onclick = editSpeechSettings;
+      var refresh = root.querySelector("[data-tts='refresh']");
+      if (refresh) refresh.onclick = function () { renderSpeechPanel(root); };
+      var cache = root.querySelector("[data-tts='cache']");
+      if (cache) cache.onclick = function () {
+        api("POST", "/api/tts/cache", {}, function (code, result) {
+          if (code !== 200) msg((result && result.err) || t("admin.save_failed"));
+          renderSpeechPanel(root);
+        });
+      };
+      $all("[data-tts-play]", root).forEach(function (button) {
+        button.onclick = function () {
+          var row = rows[Number(button.getAttribute("data-tts-play"))];
+          if (row.hash) { playAsset(row.hash); return; }
+          if (!window.speechSynthesis || typeof SpeechSynthesisUtterance === "undefined") {
+            msg(t("speech.unavailable")); return;
+          }
+          var utterance = new SpeechSynthesisUtterance((replies[row.reply_id].label || {})[row.lang]);
+          utterance.lang = {ja:"ja-JP", en:"en-US", zh:"zh-CN"}[row.lang];
+          window.speechSynthesis.cancel();
+          window.speechSynthesis.speak(utterance);
+        };
+      });
+      if (google && rows.some(function (r) { return r.state === "generating" || r.state === "syncing" ||
+          (r.state === "pending" && status.is_generator && status.key_ready && status.auto_cache); }))
+        setTimeout(function () { renderSpeechPanel(root); }, 2000);
+    });
+  }
+
   function renderQuickReplies() {
     var el = $("#tab-qr");
     var qrs = cfgObj("quick_replies");
@@ -5446,7 +5620,8 @@ if (typeof document !== "undefined") (function () {
            esc(id) + "'>" + esc(t("admin.delete")) + "</button></td></tr>";
     });
     h += "</tbody></table></div>";
-    el.innerHTML = h;
+    el.innerHTML = "<div class='card' id='speechPanel'></div>" + h;
+    renderSpeechPanel(el.querySelector("#speechPanel"));
     function move(id, dir) {
       var order = sortedQrIds();
       var i = order.indexOf(id), j = i + dir;
@@ -5724,14 +5899,24 @@ if (typeof document !== "undefined") (function () {
       }, push));
     };
     $("#tgTest").onclick = function () {
-      api("POST", "/api/test/telegram", { chat_id: $("#tgTestChat").value }, function (st, j) {
-        if (st === 200 && j && j.ok) { msg(t("admin.test_sent")); return; }
+      var button = $("#tgTest"), attempts = 0;
+      button.disabled = true;
+      function result(st, j) {
+        if (st === 200 && j && j.pending && attempts++ < 22) {
+          var request = j.request || button.getAttribute("data-request");
+          button.setAttribute("data-request", request);
+          setTimeout(function () { api("GET", "/api/test/telegram/" + encodeURIComponent(request), null, result); }, 500);
+          return;
+        }
+        button.disabled = false;
+        if (st === 200 && j && j.ok && !j.pending) { msg(t("admin.test_sent")); return; }
         var err = j && j.err;
         var key = err === "not_leader" ? "admin.err_not_leader" :
                   err === "no_token" ? "admin.err_no_token" :
                   err === "no_chat" ? "admin.err_no_chat" : "admin.save_failed";
         msg(t(key, err || "NG"));
-      });
+      }
+      api("POST", "/api/test/telegram", { chat_id: $("#tgTestChat").value }, result);
     };
     $("#sipSave").onclick = function () {
       var entries = L.sipEntries({ server: $("#sipServer").value, port: $("#sipPort").value,
@@ -7106,6 +7291,34 @@ if (typeof document !== "undefined") (function () {
 
     // Automatic contrast: core publishes one answer for the whole cluster, and the operator may
     // override the call button or any single text region.
+    var saver = L.screensaverModel(S.cfg, scope);
+    h += "<fieldset class='frow'><legend>" + esc(t("display.saver_title")) + "</legend>";
+    if (scope)
+      h += "<label class='mc'><input type='checkbox' id='thSaverOverride'" +
+           (saver.overridden ? " checked" : "") + "> " + esc(t("admin.theme_override_here")) + "</label><br>";
+    h += "<label class='mc'><input type='checkbox' id='thSaverEnabled'" +
+         (saver.enabled ? " checked" : "") + "> " + esc(t("display.saver_enabled")) + "</label>" +
+         "<div class='frow'><label class='flab' for='thSaverMode'>" + esc(t("display.saver_content")) +
+         "</label><select id='thSaverMode'>";
+    ["dim", "minimal", "clock"].forEach(function (mode) {
+      h += "<option value='" + mode + "'" + (saver.mode === mode ? " selected" : "") + ">" +
+           esc(t({dim: "display.saver_mode_dim", minimal: "display.saver_mode_minimal", clock: "display.saver_mode_clock"}[mode])) + "</option>";
+    });
+    h += "</select></div><div class='frow'><label class='flab' for='thSaverSchedule'>" +
+         esc(t("display.saver_schedule")) + "</label><select id='thSaverSchedule'>";
+    ["always", "daily"].forEach(function (schedule) {
+      h += "<option value='" + schedule + "'" + (saver.schedule === schedule ? " selected" : "") + ">" +
+           esc(t({always: "display.saver_schedule_always", daily: "display.saver_schedule_daily"}[schedule])) + "</option>";
+    });
+    h += "</select></div><div class='frow' id='thSaverTimes'><label for='thSaverFrom'>" +
+         esc(t("display.saver_from")) + "</label> <input type='time' id='thSaverFrom' value='" + esc(saver.from) + "'> " +
+         "<label for='thSaverTo'>" + esc(t("display.saver_to")) + "</label> " +
+         "<input type='time' id='thSaverTo' value='" + esc(saver.to) + "'></div>" +
+         "<div class='frow'><label class='flab' for='thSaverAfter'>" + esc(t("display.saver_after")) + "</label>" +
+         "<input type='number' id='thSaverAfter' min='1' max='86400' step='1' value='" + esc(saver.after_s) + "'></div>" +
+         "<div class='frow'><label class='flab' for='thSaverBrightness'>" + esc(t("display.saver_brightness")) + "</label>" +
+         "<input type='number' id='thSaverBrightness' min='1' max='100' step='1' value='" + esc(saver.brightness) + "'>%</div>" +
+         "<div class='dim fhint'>" + esc(t("display.saver_help")) + "</div></fieldset>";
     var autoModel = L.themeAutoModel(S.status, eff.bg_color);
     var buttonOverride = own.call_button_bg || (themeCur("").call_button_bg || "");
     var inkOverrides = isObj(own.ink_override) ? own.ink_override :
@@ -7234,7 +7447,29 @@ if (typeof document !== "undefined") (function () {
     paint();
 
     $("#thScope").onchange = function () { themeScope = this.value; renderTheme(); };
+    function saverFields() {
+      var override = !scope || $("#thSaverOverride").checked;
+      var enabled = override && $("#thSaverEnabled").checked;
+      $("#thSaverEnabled").disabled = !override;
+      ["thSaverMode", "thSaverSchedule", "thSaverFrom", "thSaverTo", "thSaverAfter", "thSaverBrightness"].forEach(function (id) {
+        $("#" + id).disabled = !enabled;
+      });
+      $("#thSaverTimes").hidden = $("#thSaverSchedule").value !== "daily";
+    }
+    ["thSaverOverride", "thSaverEnabled", "thSaverSchedule"].forEach(function (id) {
+      if ($("#" + id)) $("#" + id).onchange = saverFields;
+    });
+    saverFields();
     $("#thSave").onclick = function () {
+      var saverChanges;
+      try {
+        saverChanges = L.screensaverEntries(scope, {
+          override: !scope || $("#thSaverOverride").checked,
+          enabled: $("#thSaverEnabled").checked, mode: $("#thSaverMode").value,
+          schedule: $("#thSaverSchedule").value, from: $("#thSaverFrom").value, to: $("#thSaverTo").value,
+          after_s: $("#thSaverAfter").value, brightness: $("#thSaverBrightness").value
+        });
+      } catch (err) { msg(t("display.saver_invalid")); return; }
       var f = { bg_color: $("#thColor").value, bg_image: $("#thImage").value,
                 color_on: !scope || $("#thColorOn").checked,
                 image_on: !scope || $("#thImageOn").checked };
@@ -7279,7 +7514,8 @@ if (typeof document !== "undefined") (function () {
                                      dark_from: $("#thDarkFrom") ? $("#thDarkFrom").value : "",
                                      light_from: $("#thLightFrom") ? $("#thLightFrom").value
                                                                    : "" }));
-      var dels = e.dels.slice();
+      entries = entries.concat(saverChanges.entries);
+      var dels = e.dels.concat(saverChanges.dels);
       if (!colors.entries.length) colors.dels.forEach(function (key) {
         if (dels.indexOf(key) < 0) dels.push(key);
       });

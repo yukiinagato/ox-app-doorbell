@@ -159,6 +159,37 @@ endif()
 add_library(doorbell_core STATIC ${DB_CORE_SRC} ${WEBUI_GEN})
 target_include_directories(doorbell_core PUBLIC include src)
 target_link_libraries(doorbell_core PUBLIC db_third_party)
+# Direct CMake builds must identify their source just like the platform build scripts.
+if(NOT DEFINED DB_BUILD_ID_ARG)
+  execute_process(COMMAND git rev-parse --git-path HEAD
+    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+    OUTPUT_VARIABLE DB_GIT_HEAD OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+  execute_process(COMMAND git symbolic-ref -q HEAD
+    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+    OUTPUT_VARIABLE DB_GIT_REF OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+  if(DB_GIT_REF)
+    execute_process(COMMAND git rev-parse --git-path "${DB_GIT_REF}"
+      WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+      OUTPUT_VARIABLE DB_GIT_REF_FILE OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+  endif()
+  foreach(DB_GIT_STATE IN ITEMS "${DB_GIT_HEAD}" "${DB_GIT_REF_FILE}")
+    if(DB_GIT_STATE)
+      get_filename_component(DB_GIT_STATE "${DB_GIT_STATE}" ABSOLUTE
+        BASE_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
+      set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${DB_GIT_STATE}")
+    endif()
+  endforeach()
+  execute_process(COMMAND git rev-parse --short=12 HEAD
+    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+    OUTPUT_VARIABLE DB_BUILD_ID_ARG OUTPUT_STRIP_TRAILING_WHITESPACE
+    ERROR_QUIET)
+  if(NOT DB_BUILD_ID_ARG)
+    if(CMAKE_BUILD_TYPE STREQUAL "Release")
+      message(FATAL_ERROR "Release source archives require DB_BUILD_ID_ARG")
+    endif()
+    set(DB_BUILD_ID_ARG "dev")
+  endif()
+endif()
 # Inject the build ID only into the C API so changes rebuild one translation unit.
 if(DEFINED DB_BUILD_ID_ARG)
   set_property(SOURCE src/capi/doorbell_capi.cpp APPEND

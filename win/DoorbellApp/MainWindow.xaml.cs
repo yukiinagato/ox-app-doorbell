@@ -100,12 +100,15 @@ namespace DoorbellApp
         private bool _night;
         private bool _redTint;
         private int _screensaverAfterS = 120;
+        private int _screensaverBrightness = 10;
+        private string _screensaverMode = "dim";
+        private bool SaverHidesImage { get { return _screensaverOn && _screensaverMode == "minimal"; } }
         private int _pixelShiftS = 300;
         private int _lastBrightnessSet = -1;
         private DateTime _lastActivity = DateTime.Now;
         private bool _screensaverOn;
         private static readonly Brush NightClockBrush = Frozen(new SolidColorBrush(Color.FromRgb(0x8B, 0x24, 0x1C)));
-        private static readonly Brush SaverClockBrush = Frozen(new SolidColorBrush(Color.FromRgb(0x39, 0x42, 0x4C)));
+        private static readonly Brush SaverClockBrush = Frozen(new SolidColorBrush(Color.FromRgb(0xD9, 0xD9, 0xD9)));
 
         // Core republishes peers_changed and config_changed far faster than a person can read
         // them. Every handler asks for a refresh; the timer runs at most one a second, and that
@@ -152,6 +155,8 @@ namespace DoorbellApp
         private MediaPlayer _launchAudio;
         private Action _audioFallback;
         private string _callTitleOverride;
+        private string _purposeChosenCallId = "";
+        private string _activeCallFlow = "purpose_first";
         private string _incomingPurpose = "";
         private string _incomingLang = "";
         private SemanticUiOverrides _semanticStyles;
@@ -385,7 +390,7 @@ namespace DoorbellApp
             Title = Texts.T("app.name");
             // A visitor is not told which door or device they are standing at; the button says
             // only what it does.
-            CallButton.Content = Texts.T("idle.call");
+            CallButton.Content = Texts.T(ShowsHomePurposes() ? "door.call_direct" : "idle.call");
             TouchHint.Text = Texts.T("idle.touch_to_call");
             PurposeHint.Text = Texts.T("idle.choose_purpose");
             CallingText.Text = Texts.T("calling.title");
@@ -435,7 +440,10 @@ namespace DoorbellApp
             MonitorPickerClose.Content = Texts.T("monitor.close");
             CallingPurposeHint.Text = Texts.T("idle.choose_purpose");
             PairBannerText.Text = Texts.T("pair.not_set_up_banner");
-            if (App.Boot.Role == "door_station") TouchHint.Text = Texts.T("door.hint_call");
+            SaverHint.Text = Texts.T(App.Boot.Role == "door_station"
+                ? "display.saver_door_hint" : "display.saver_panel_hint");
+            if (App.Boot.Role == "door_station") TouchHint.Text = Texts.T(
+                ShowsHomePurposes() ? "door.hint_purpose_first" : "door.hint_call");
             PairingOverlay.ApplyStrings();
         }
 
@@ -819,7 +827,7 @@ namespace DoorbellApp
                         bmp.EndInit();
                         bmp.Freeze();
                         ThemeBgImage.Source = bmp;
-                        ThemeBgImage.Visibility = Visibility.Visible;
+                        ThemeBgImage.Visibility = SaverHidesImage ? Visibility.Collapsed : Visibility.Visible;
                         ApplyThemeBackdrop();
                         QueueInkPass();
                     }
@@ -871,6 +879,18 @@ namespace DoorbellApp
             return fallback;
         }
 
+        private bool ShowsHomePurposes()
+        {
+            return App.Boot.Role == "door_station" && _callFlow == "purpose_first" &&
+                PurposeGrid.Children.Count > 0;
+        }
+
+        private bool ShowsCallingPurposes()
+        {
+            return _activeCallFlow == "ring_then_purpose" && CallingPurposeGrid.Children.Count > 0 &&
+                !string.IsNullOrEmpty(_activeCallId) && _purposeChosenCallId != _activeCallId;
+        }
+
         private void BuildPurposeButtons()
         {
             PurposeGrid.Children.Clear();
@@ -885,6 +905,8 @@ namespace DoorbellApp
             foreach (var id in SortedByOrder(purposes))
             {
                 var entry = purposes[id] as Dictionary<string, object>;
+                if (entry != null && entry.ContainsKey("enabled") && entry["enabled"] is bool &&
+                    !(bool)entry["enabled"]) continue;
                 string label = LabelOf(entry, Texts.Lang, id);
                 object icon;
                 string iconText = entry != null && entry.TryGetValue("icon", out icon) && icon != null
@@ -892,9 +914,8 @@ namespace DoorbellApp
                 PurposeGrid.Children.Add(MakePurposeButton(id, iconText, label));
                 CallingPurposeGrid.Children.Add(MakePurposeButton(id, iconText, label));
             }
-            PurposeSection.Visibility = Visibility.Visible;
-            CallingPurposeSection.Visibility = _callFlow == "ring_then_purpose" &&
-                !string.IsNullOrEmpty(_activeCallId) ? Visibility.Visible : Visibility.Collapsed;
+            PurposeSection.Visibility = ShowsHomePurposes() ? Visibility.Visible : Visibility.Collapsed;
+            CallingPurposeSection.Visibility = ShowsCallingPurposes() ? Visibility.Visible : Visibility.Collapsed;
         }
 
         /// <summary>
@@ -990,6 +1011,8 @@ namespace DoorbellApp
 
         private void OnPurposeClick(object sender, RoutedEventArgs e)
         {
+            if (!string.IsNullOrEmpty(_activeCallId) && !ShowsCallingPurposes()) return;
+            if (string.IsNullOrEmpty(_activeCallId) && !ShowsHomePurposes()) return;
             var b = sender as Button;
             if (b == null) return;
             string id = b.Tag as string;
@@ -998,7 +1021,7 @@ namespace DoorbellApp
             var entry = purposes != null && purposes.ContainsKey(id)
                 ? purposes[id] as Dictionary<string, object> : null;
             string label = LabelOf(entry, Texts.Lang, id);
-            if (_callFlow == "ring_then_purpose" && !string.IsNullOrEmpty(_activeCallId))
+            if (!string.IsNullOrEmpty(_activeCallId))
             {
                 if (!App.Core.SelectPurpose(App.Boot.Door, _activeCallId, id))
                 {
@@ -1006,9 +1029,11 @@ namespace DoorbellApp
                     return;
                 }
                 CallingPurposeSection.Visibility = Visibility.Collapsed;
+                _purposeChosenCallId = _activeCallId;
             }
             else
             {
+                _activeCallFlow = "purpose_first";
                 _activeCallId = App.Core.PressPurpose(App.Boot.Door, id) ?? "";
                 if (string.IsNullOrEmpty(_activeCallId))
                 {
@@ -1274,6 +1299,11 @@ namespace DoorbellApp
 
         private void ApplyDisplay()
         {
+            var saver = CoreClient.Dig(_display, "screensaver") as Dictionary<string, object>;
+            _screensaverBrightness = DictInt(saver, "brightness", 10);
+            _screensaverMode = DictStr(saver, "mode");
+            if (_screensaverAfterS <= 0) ExitScreensaver();
+            UpdateScreensaverPresentation();
             NightTint.Visibility = (_night && _redTint) ? Visibility.Visible : Visibility.Collapsed;
             ClockText.Foreground = _night ? NightClockBrush : (Brush)FindResource("Fg");
             DateText.Foreground = _night ? NightClockBrush : (Brush)FindResource("Dim");
@@ -1294,7 +1324,7 @@ namespace DoorbellApp
             }
 
             if (!_emergencyActive)
-                SetBrightnessAsync(_screensaverOn ? Math.Min(_brightness, 10) : _brightness);
+                SetBrightnessAsync(_screensaverOn ? Math.Min(_brightness, _screensaverBrightness) : _brightness);
             ApplyThemeBackdrop();
             ApplyAutoInk();
         }
@@ -1339,10 +1369,21 @@ namespace DoorbellApp
             if (_screensaverOn) return;
             _screensaverOn = true;
             UpdateClock();
-            ScreensaverView.Visibility = Visibility.Visible;
+            UpdateScreensaverPresentation();
             MoveSaverClock();
             if (!App.SafeMode) _saverDrift.Start();
-            SetBrightnessAsync(Math.Min(_brightness, 10));
+            SetBrightnessAsync(Math.Min(_brightness, _screensaverBrightness));
+        }
+
+        private void UpdateScreensaverPresentation()
+        {
+            ScreensaverView.Visibility = _screensaverOn && _screensaverMode == "clock"
+                ? Visibility.Visible : Visibility.Collapsed;
+            ThemeBgImage.Visibility = !SaverHidesImage && ThemeBgImage.Source != null
+                ? Visibility.Visible : Visibility.Collapsed;
+            ApplyThemeBackdrop();
+            ApplyAutoInk();
+            QueueInkPass();
         }
 
         private void ExitScreensaver()
@@ -1350,7 +1391,7 @@ namespace DoorbellApp
             if (!_screensaverOn) return;
             _screensaverOn = false;
             _saverDrift.Stop();
-            ScreensaverView.Visibility = Visibility.Collapsed;
+            UpdateScreensaverPresentation();
             if (!_emergencyActive) SetBrightnessAsync(_brightness);
         }
 
@@ -1775,6 +1816,7 @@ namespace DoorbellApp
         {
             StopPlayer(ref _callFeedback);
             _callTitleOverride = null;
+            _purposeChosenCallId = "";
             CallingView.Visibility = Visibility.Collapsed;
             CallingPurposeSection.Visibility = Visibility.Collapsed;
             OfflineView.Visibility = Visibility.Collapsed;
@@ -1814,8 +1856,7 @@ namespace DoorbellApp
             CallingText.Text = _callTitleOverride ?? Texts.T("calling.title");
             IdleView.Visibility = Visibility.Collapsed;
             CallingView.Visibility = Visibility.Visible;
-            CallingPurposeSection.Visibility = _callFlow == "ring_then_purpose" &&
-                !string.IsNullOrEmpty(_activeCallId) ? Visibility.Visible : Visibility.Collapsed;
+            CallingPurposeSection.Visibility = ShowsCallingPurposes() ? Visibility.Visible : Visibility.Collapsed;
             _callTimeout.Stop();
             if (expiresAtMs > 0) _activeCallExpiresAtMs = expiresAtMs;
             if (_activeCallExpiresAtMs <= 0)
@@ -1857,6 +1898,9 @@ namespace DoorbellApp
                     else if (stv == "degraded" && App.Boot.Role == "door_station")
                         CallingText.Text = Texts.T("sip.unavailable");
                     else if (stv == "offline") ShowOffline();
+                    break;
+                case "wake_screen":
+                    if (App.Boot.Role == "door_station") OnActivity();
                     break;
                 case "event":
                     string eventType = ev.Str("type");
@@ -2225,9 +2269,10 @@ namespace DoorbellApp
 
             _activeCallId = callId;
             _activeCallExpiresAtMs = expiry;
+            if (!string.IsNullOrEmpty(DictStr(active, "purpose"))) _purposeChosenCallId = callId;
             string callFlow = DictStr(active, "call_flow");
             if (callFlow == "ring_then_purpose" || callFlow == "purpose_first")
-                _callFlow = callFlow;
+                _activeCallFlow = callFlow;
             _callFeedback = PlayConfigured(_callFeedback,
                 SoundValue("call_sound", "outdoor_call_alert"),
                 ConfigBool("ui.call_sound_loop", false), null, _volumeCall);
@@ -3238,6 +3283,8 @@ namespace DoorbellApp
 
         private void OnCallClick(object sender, RoutedEventArgs e)
         {
+            if (!string.IsNullOrEmpty(_activeCallId)) return;
+            _activeCallFlow = _callFlow;
             _callFeedback = PlayConfigured(_callFeedback,
                 SoundValue("call_sound", "outdoor_call_alert"),
                 ConfigBool("ui.call_sound_loop", false), null, _volumeCall);

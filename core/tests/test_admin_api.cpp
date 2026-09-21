@@ -1782,3 +1782,176 @@ TEST_CASE("admin API: the pairing QR payload comes from core, on every surface t
 
   node.stop();
 }
+
+TEST_CASE("admin API: a follower forwards Telegram tests to the elected node") {
+  std::mt19937 rng(2042);
+  NodeOptions source;
+  source.data_dir = ":memory:";
+  source.name = "telegram-source";
+  source.role = "indoor_panel";
+  source.listen_addr = "127.0.0.1:" + std::to_string(adminFreePort(rng));
+  source.advertise_addr = source.listen_addr;
+  source.http_port = adminFreePort(rng);
+  source.psk.fill(0x71);
+  source.enable_beacon = false;
+  source.caps_json = adminTgCaps();
+  source.mesh_timing_template = adminTiming();
+  source.use_mesh_timing_template = true;
+  NodeOptions follower = source;
+  follower.name = "telegram-follower";
+  follower.role = "door_station";
+  follower.listen_addr = "127.0.0.1:" + std::to_string(adminFreePort(rng));
+  follower.advertise_addr = follower.listen_addr;
+  follower.http_port = adminFreePort(rng);
+  follower.seed_peers = {source.listen_addr};
+  follower.seed_default_config = false;
+  follower.caps_json = "{}";
+  Node a(source), b(follower);
+  AdminMockHttps https;
+  a.setHttpsFn(https.fn());
+  a.setSecureStore([](const std::string& key) {
+    return key == "telegram.forward" ? std::string("TESTTOKEN") : std::string();
+  }, [](const std::string&, const std::string&) { return true; });
+  REQUIRE(a.start());
+  a.setConfigKey("integrations.telegram.bot_token_ref", "\"secret:telegram.forward\"");
+  REQUIRE(b.start());
+  bool ready = false;
+  for (int i = 0; i < 120 && !ready; ++i) {
+    auto state = json::parse(b.statusJson());
+    ready = json::getString(json::get(state.get(), "leaders"), "telegram") == a.nodeId();
+    if (!ready) std::this_thread::sleep_for(std::chrono::milliseconds(50));
+  }
+  REQUIRE(ready);
+  const std::string session = adminLogin(follower.http_port);
+  auto pending = bodyJson(adminReq(follower.http_port, "POST", "/api/test/telegram",
+                                   R"({"chat_id":"999"})", session));
+  REQUIRE(json::getBool(pending.get(), "pending"));
+  const std::string request = json::getString(pending.get(), "request");
+  REQUIRE(request.size() == 32);
+  bool complete = false;
+  for (int i = 0; i < 100 && !complete; ++i) {
+    auto result = bodyJson(adminReq(follower.http_port, "GET", "/api/test/telegram/" + request,
+                                   "", session));
+    complete = !json::getBool(result.get(), "pending") && json::getBool(result.get(), "ok");
+    if (!complete) std::this_thread::sleep_for(std::chrono::milliseconds(50));
+  }
+  REQUIRE(complete);
+  CHECK(https.count("sendMessage", "\"chat_id\":\"999\"") == 1);
+  b.stop();
+  a.stop();
+}
+
+TEST_CASE("admin API: device removal requires a session and cannot remove self") {
+  std::mt19937 rng(3042);
+  NodeOptions options;
+  options.data_dir = ":memory:";
+  options.listen_addr = "127.0.0.1:" + std::to_string(adminFreePort(rng));
+  options.http_port = adminFreePort(rng);
+  options.psk.fill(0x72);
+  options.enable_beacon = false;
+  Node node(options);
+  REQUIRE(node.start());
+  const std::string old = "0123456789abcdef0123456789abcdef";
+  const std::string body = "{\"id\":\"" + old + "\"}";
+  node.setConfigKey("devices." + old + ".name", "\"old\"");
+  CHECK(adminReq(options.http_port, "POST", "/api/devices/remove", body).find("HTTP/1.1 401") == 0);
+  const std::string session = adminLogin(options.http_port);
+  auto result = bodyJson(adminReq(options.http_port, "POST", "/api/devices/remove", body, session));
+  CHECK(json::getBool(result.get(), "ok"));
+  auto cfg = json::parse(node.configJson());
+  CHECK(json::get(json::get(cfg.get(), "devices"), old.c_str()) == nullptr);
+  CHECK(adminReq(options.http_port, "POST", "/api/devices/remove",
+                 "{\"id\":\"" + node.nodeId() + "\"}", session).find("HTTP/1.1 400") == 0);
+  node.stop();
+}
+
+TEST_CASE("admin API: cloud speech caches, deduplicates and invalidates generated replies") {
+  std::mt19937 rng(static_cast<uint32_t>(::getpid()) ^ 0x7713u);
+  const std::string dir = adminTempDir();
+  NodeOptions o;
+  o.data_dir = dir;
+  o.role = "door_station";
+  o.door = "front";
+  o.listen_addr = "127.0.0.1:" + std::to_string(adminFreePort(rng));
+  o.http_port = adminFreePort(rng);
+  o.enable_beacon = false;
+  o.psk.fill(0x32);
+  Node node(o);
+  std::atomic<int> requests{0};
+  std::atomic<bool> fail{false};
+  std::atomic<bool> credentials_ok{true};
+  std::atomic<int> cached_playback{0}, system_speech{0};
+  node.setTtsCb([&](const std::string&, const std::string&) { system_speech++; });
+  node.setUiEventCb([&](const std::string& value) {
+    auto ev = json::parse(value);
+    if (json::getString(ev.get(), "t") == "reply" &&
+        !json::getString(ev.get(), "audio_path").empty()) cached_playback++;
+  });
+  node.setSecureStore([](const std::string& key) {
+    return key == "speech.test" ? "test-cloud-key" : "";
+  }, [](const std::string&, const std::string&) { return true; });
+  node.setHttpsFn([&](const std::string& method, const std::string& url, const std::string& headers,
+                      const Bytes& body, std::function<void(int, std::string)> done) {
+    if (url != "https://texttospeech.googleapis.com/v1/text:synthesize") { done(503, ""); return; }
+    requests++;
+    auto h = json::parse(headers);
+    auto request = json::parse(std::string(body.begin(), body.end()));
+    if (method != "POST" || json::getString(h.get(), "X-Goog-Api-Key") != "test-cloud-key" ||
+        json::getString(json::get(request.get(), "audioConfig"), "audioEncoding") != "MP3")
+      credentials_ok = false;
+    done(fail ? 429 : 200, fail ? "provider details must not leak" : "{\"audioContent\":\"SUQzbW9jay1hdWRpbw==\"}");
+  });
+  REQUIRE(node.start());
+  const std::string session = adminLogin(o.http_port);
+  auto cfg = json::parse(node.configJson());
+  cJSON* reply = nullptr;
+  cJSON_ArrayForEach(reply, json::get(cfg.get(), "quick_replies")) {
+    if (reply->string) node.deleteConfigKeyJson("quick_replies." + std::string(reply->string));
+  }
+  node.setConfigKey("quick_replies.test", R"({"label":{"en":"Please wait."},"speak":true})");
+  node.setConfigKey("speech", "{\"provider\":\"google\",\"generator_node\":\"" + node.nodeId() +
+      "\",\"google_key_ref\":\"secret:speech.test\",\"auto_cache\":true}");
+  auto status = [&]() { return adminReq(o.http_port, "GET", "/api/tts", "", session); };
+  auto waitFor = [&](const std::string& expected) {
+    for (int i = 0; i < 100; ++i) {
+      if (status().find(expected) != std::string::npos) return true;
+      usleep(50000);
+    }
+    return false;
+  };
+  REQUIRE(waitFor("\"state\":\"ready\""));
+  CHECK(requests == 1);
+  CHECK(credentials_ok);
+  node.setVisitorLang("front", "en");
+  node.sendQuickReply("test", "", "front", "app");
+  for (int i = 0; i < 100 && cached_playback == 0; ++i) usleep(10000);
+  CHECK(cached_playback == 1);
+  CHECK(system_speech == 0);
+  CHECK(status().find("test-cloud-key") == std::string::npos);
+  CHECK(adminReq(o.http_port, "GET", "/api/tts").find("HTTP/1.1 200") != 0);
+  // Identical text, voice and language reuse one synthesis even across reply IDs.
+  node.setConfigKey("quick_replies.copy", R"({"label":{"en":"Please wait."},"speak":true})");
+  usleep(1200000);
+  CHECK(requests == 1);
+  node.setConfigKey("speech.speaking_rate", "1.2");
+  REQUIRE(waitFor("\"state\":\"ready\""));
+  CHECK(requests == 2);
+  fail = true;
+  node.setConfigKey("quick_replies.test.label.en", "\"Changed reply.\"");
+  REQUIRE(waitFor("provider_http_429"));
+  node.sendQuickReply("test", "", "front", "app");
+  for (int i = 0; i < 100 && system_speech == 0; ++i) usleep(10000);
+  CHECK(system_speech == 1);
+  const int failed_count = requests;
+  usleep(1500000);
+  CHECK(requests == failed_count);
+  CHECK(status().find("provider details") == std::string::npos);
+  fail = false;
+  CHECK(adminReq(o.http_port, "POST", "/api/tts/cache", "{}", session).find("HTTP/1.1 200") == 0);
+  for (int i = 0; i < 100 && requests == failed_count; ++i) usleep(50000);
+  REQUIRE(waitFor("\"state\":\"ready\""));
+  CHECK(status().find("Changed reply.") == std::string::npos);
+  CHECK(status().find("\"state\":\"failed\"") == std::string::npos);
+  CHECK(requests == failed_count + 1);
+  node.stop();
+}

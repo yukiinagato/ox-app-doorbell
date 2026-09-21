@@ -250,7 +250,7 @@ static const CGFloat kPurposeIconSide = 28;
       UIViewAutoresizingFlexibleHeight;
   _cameraPreviewView.contentMode = UIViewContentModeScaleAspectFill;
   _cameraPreviewView.clipsToBounds = YES;
-  _cameraPreviewView.alpha = 0.18;
+  _cameraPreviewView.alpha = 0;
   _cameraPreviewView.hidden = YES;
   _cameraPreviewView.accessibilityIdentifier = @"door_camera_local_preview";
   [self addSubview:_cameraPreviewView];
@@ -584,7 +584,9 @@ static const CGFloat kPurposeIconSide = 28;
   NSDictionary *power = [_core powerStateNow];
   NSString *appVersion = [[NSBundle mainBundle]
       objectForInfoDictionaryKey:@"CFBundleShortVersionString"] ?: @"";
-  _versionLabel.text = [DBUiTheme versionLineForName:[self doorLabel]
+  NSString *deviceName = [DBConfigUtil str:_cfg path:[NSString stringWithFormat:
+      @"devices.%@.name", _deviceID]] ?: _boot.name;
+  _versionLabel.text = [DBUiTheme versionLineForName:deviceName
                                          coreVersion:[_core coreVersion]
                                           appVersion:appVersion
                                           batteryPct:[DBConfigUtil intVal:power
@@ -643,7 +645,12 @@ static const CGFloat kPurposeIconSide = 28;
       [screen->_texts setLang:screen->_visitorLang];
       NSString *selfID = [DBConfigUtil str:status path:@"node.id"];
       screen->_deviceID = [selfID copy];
-      screen->_mediaSource = [DBMediaSource sourceForPeer:nil config:config
+      NSDictionary *localCamera = core.cameraActive ? @{
+          @"id": selfID ?: @"", @"role": @"door_station",
+          @"stream_mjpeg": [NSString stringWithFormat:@"http://127.0.0.1:%ld/stream.mjpeg", (long)screen->_boot.httpPort],
+          @"snapshot_url": [NSString stringWithFormat:@"http://127.0.0.1:%ld/snapshot.jpg", (long)screen->_boot.httpPort]
+      } : nil;
+      screen->_mediaSource = [DBMediaSource sourceForPeer:localCamera config:config
                                                       boot:screen->_boot door:screen->_boot.door
                                                   deviceID:selfID];
       [screen configureRTSPSource];
@@ -692,7 +699,9 @@ static const CGFloat kPurposeIconSide = 28;
   if (!_mediaSource) return;
   NSString *state = nil;
   NSString *reason = @"";
-  if (_rtspForwardingMeasured) {
+  if (_core.h264CameraActive) {
+    state = @"ready";
+  } else if (_rtspForwardingMeasured) {
     state = @"ready";
   } else if (_mediaSource.h264SourceAvailable) {
     state = @"degraded";
@@ -795,6 +804,10 @@ static const CGFloat kPurposeIconSide = 28;
 }
 
 - (void)configureLocalPreview {
+  if (_core.cameraActive && [_mediaSource.kind isEqualToString:@"node"]) {
+    [self stopLocalPreview];
+    return;
+  }
   BOOL sameSource = [_previewSourceRef isEqualToString:_mediaSource.sourceRef] &&
       [_previewMjpegURL isEqualToString:_mediaSource.mjpegURL] &&
       [_previewSnapshotURL isEqualToString:_mediaSource.snapshotURL] &&
@@ -953,14 +966,23 @@ static const CGFloat kPurposeIconSide = 28;
   return [label length] ? label : _boot.name;
 }
 
+- (NSString *)callFlowMode {
+  id value = [DBConfigUtil dig:_cfg path:@"ui.call_flow"];
+  if ([value isKindOfClass:[NSDictionary class]]) value = [value objectForKey:@"mode"];
+  return [value isKindOfClass:[NSString class]] && [value isEqualToString:@"ring_then_purpose"]
+      ? @"ring_then_purpose" : @"purpose_first";
+}
+
+- (BOOL)showsHomePurposes {
+  return [[self callFlowMode] isEqualToString:@"purpose_first"] && [_purposeIds count] > 0;
+}
+
 - (void)applyStrings {
   NSString *doorLabel = [self doorLabel];
   _titleLabel.text = doorLabel;
-  _touchHint.text = [_texts ts:@"door.hint_call"];
-  // A visitor is not told which device they are standing at: the button says
-  // only what it does (owner decision, batch 3).
-  [_callButton setTitle:[_texts ts:@"idle.call"] forState:UIControlStateNormal];
-  // Round 5 dropped the purpose explainer; a control shows only what it does.
+  _touchHint.text = [_texts ts:[self showsHomePurposes] ? @"door.hint_purpose_first" : @"door.hint_call"];
+  [_callButton setTitle:[_texts ts:[self showsHomePurposes] ? @"door.call_direct" : @"idle.call"]
+              forState:UIControlStateNormal];
   _purposeHint.text = @"";
   _callingLabel.text = _flowState == DBDoorFlowInCall
       ? [_texts ts:@"incall.title"]
@@ -974,7 +996,10 @@ static const CGFloat kPurposeIconSide = 28;
 
   _mediaBadge.accessibilityValue = [_mediaSource.sourceRef length]
       ? [NSString stringWithFormat:@"source_ref=%@", _mediaSource.sourceRef] : @"";
-  if (_rtspForwardingMeasured) {
+  if (_core.h264CameraActive) {
+    _mediaBadge.text = @" H.264 ";
+    _mediaBadge.textColor = [UIColor colorWithRed:0.55 green:1 blue:0.65 alpha:1];
+  } else if (_rtspForwardingMeasured) {
     _mediaBadge.text = @" IP CAMERA · H.264 ";
     _mediaBadge.textColor = [UIColor colorWithRed:0.55 green:1 blue:0.65 alpha:1];
   } else if ([_mediaSource.kind isEqualToString:@"ip_camera"] && _previewMeasured) {
@@ -1085,8 +1110,8 @@ static const CGFloat kPurposeIconSide = 28;
     }
     [_purposeIcons addObject:(iconView ?: (id)[NSNull null])];
   }
-  _purposeHint.hidden = [_purposeButtons count] == 0;
-  _purposeScroll.hidden = [_purposeButtons count] == 0;
+  _purposeHint.hidden = YES;
+  _purposeScroll.hidden = ![self showsHomePurposes];
 }
 
 - (void)rebuildLanguages {
@@ -1214,15 +1239,12 @@ static const CGFloat kPurposeIconSide = 28;
 }
 
 - (void)restoreIdleHint {
-  _touchHint.text = [_texts ts:@"idle.touch_to_call"];
+  _touchHint.text = [_texts ts:[self showsHomePurposes] ? @"door.hint_purpose_first" : @"door.hint_call"];
 }
 
 - (void)onCall {
-  NSString *flow = [DBConfigUtil str:_cfg path:@"ui.call_flow"];
-  if (![flow isEqualToString:@"ring_then_purpose"] && [_purposeIds count] > 0) {
-    [self presentPurposeAlertForActiveCall:NO];
-    return;
-  }
+  if (_flowState != DBDoorFlowIdle) return;
+  NSString *flow = [self callFlowMode];
   if (![self beginCallWithPurpose:@""]) return;
   [self showCallingWithTitle:nil];
   if ([flow isEqualToString:@"ring_then_purpose"] && [_purposeIds count] > 0)
@@ -1230,19 +1252,13 @@ static const CGFloat kPurposeIconSide = 28;
 }
 
 - (void)onPurpose:(UIButton *)sender {
+  if (![self showsHomePurposes] || _flowState != DBDoorFlowIdle) return;
   if (sender.tag < 0 || sender.tag >= (NSInteger)[_purposeIds count]) return;
   NSString *identifier = [_purposeIds objectAtIndex:(NSUInteger)sender.tag];
   NSDictionary *entry = [DBConfigUtil dig:_cfg
       path:[NSString stringWithFormat:@"visit_purposes.%@", identifier]];
   NSString *label = [DBConfigUtil labelOf:entry lang:_visitorLang fallback:identifier];
-  NSString *flow = [DBConfigUtil str:_cfg path:@"ui.call_flow"];
-  if ([flow isEqualToString:@"ring_then_purpose"]) {
-    if (![self beginCallWithPurpose:@""]) return;
-    if ([_core selectPurposeV2:_boot.door ?: @"" callID:_activeCallID purpose:identifier])
-      _activeStageRevision = 1;
-  } else if (![self beginCallWithPurpose:identifier]) {
-    return;
-  }
+  if (![self beginCallWithPurpose:identifier]) return;
   [self showCallingWithTitle:[_texts t:@"purpose.sent", label, nil]];
 }
 

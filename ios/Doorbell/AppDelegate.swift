@@ -517,7 +517,8 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
     }
 }
 
-private final class BootstrapSetupViewController: UIViewController {
+private final class BootstrapSetupViewController: UIViewController, UITextFieldDelegate,
+                                                  UIGestureRecognizerDelegate {
     var onSave: ((String, String, String) -> Bool)?
 
     private let initial: BootConfig
@@ -529,6 +530,8 @@ private final class BootstrapSetupViewController: UIViewController {
     private let doorField = UITextField()
     private let doorRow = UIStackView()
     private let errorLabel = UILabel()
+    private let scroll = UIScrollView()
+    private var keyboardInset: NSLayoutConstraint?
 
     init(boot: BootConfig) {
         initial = boot
@@ -537,10 +540,12 @@ private final class BootstrapSetupViewController: UIViewController {
 
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+    }
+
     override func viewDidLoad() {
         super.viewDidLoad()
-        // Same dark/amber theme as the pairing screens that follow it, so first-run setup does
-        // not flash a foreign white/blue page.
         view.backgroundColor = PairingTheme.background
 
         let title = UILabel()
@@ -556,9 +561,18 @@ private final class BootstrapSetupViewController: UIViewController {
         message.numberOfLines = 0
         message.textColor = PairingTheme.dim
 
+        let keyboardToolbar = UIToolbar()
+        keyboardToolbar.items = [
+            UIBarButtonItem(barButtonSystemItem: .flexibleSpace, target: nil, action: nil),
+            UIBarButtonItem(barButtonSystemItem: .done, target: self,
+                            action: #selector(dismissKeyboard))
+        ]
+        keyboardToolbar.sizeToFit()
         for field in [nameField, doorField] {
             field.backgroundColor = UIColor(white: 1, alpha: 0.12)
             field.textColor = PairingTheme.foreground
+            field.delegate = self
+            field.inputAccessoryView = keyboardToolbar
         }
         roleControl.tintColor = PairingTheme.accent
 
@@ -567,6 +581,7 @@ private final class BootstrapSetupViewController: UIViewController {
         nameField.text = initial.name
         nameField.autocorrectionType = .no
         nameField.autocapitalizationType = .none
+        nameField.accessibilityIdentifier = "setup_name"
 
         roleControl.selectedSegmentIndex = initial.role == "indoor_panel" ? 1 : 0
         roleControl.addTarget(self, action: #selector(roleChanged), for: .valueChanged)
@@ -576,6 +591,8 @@ private final class BootstrapSetupViewController: UIViewController {
         doorField.text = initial.suggestedDoor
         doorField.autocorrectionType = .no
         doorField.autocapitalizationType = .none
+        doorField.returnKeyType = .done
+        doorField.accessibilityIdentifier = "setup_door"
 
         let doorLabel = UILabel()
         doorLabel.text = NSLocalizedString("setup.door", comment: "")
@@ -601,26 +618,112 @@ private final class BootstrapSetupViewController: UIViewController {
         save.layer.cornerRadius = 8
         save.heightAnchor.constraint(greaterThanOrEqualToConstant: 52).isActive = true
         save.addTarget(self, action: #selector(saveTapped), for: .touchUpInside)
+        save.accessibilityIdentifier = "setup_save"
 
         let stack = UIStackView(arrangedSubviews: [title, message, nameField, roleControl,
                                                    doorRow, errorLabel, save])
         stack.axis = .vertical
         stack.spacing = 18
         stack.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(stack)
+        scroll.translatesAutoresizingMaskIntoConstraints = false
+        scroll.keyboardDismissMode = .interactive
+        scroll.accessibilityIdentifier = "setup_scroll"
+        view.addSubview(scroll)
+        let content = UIView()
+        content.translatesAutoresizingMaskIntoConstraints = false
+        scroll.addSubview(content)
+        content.addSubview(stack)
+        let guide = IOSAvailability.safeAreaLayoutGuide(for: view)
+        let bottom = scroll.bottomAnchor.constraint(equalTo: guide.bottomAnchor)
+        keyboardInset = bottom
         NSLayoutConstraint.activate([
-            stack.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            stack.centerYAnchor.constraint(equalTo: view.centerYAnchor),
-            stack.leadingAnchor.constraint(greaterThanOrEqualTo: view.leadingAnchor, constant: 36),
-            stack.trailingAnchor.constraint(lessThanOrEqualTo: view.trailingAnchor, constant: -36),
+            scroll.topAnchor.constraint(equalTo: guide.topAnchor),
+            scroll.leadingAnchor.constraint(equalTo: guide.leadingAnchor),
+            scroll.trailingAnchor.constraint(equalTo: guide.trailingAnchor),
+            bottom,
+            content.topAnchor.constraint(equalTo: scroll.topAnchor),
+            content.bottomAnchor.constraint(equalTo: scroll.bottomAnchor),
+            content.leadingAnchor.constraint(equalTo: scroll.leadingAnchor),
+            content.trailingAnchor.constraint(equalTo: scroll.trailingAnchor),
+            content.widthAnchor.constraint(equalTo: scroll.widthAnchor),
+            content.heightAnchor.constraint(greaterThanOrEqualTo: scroll.heightAnchor),
+            stack.centerXAnchor.constraint(equalTo: content.centerXAnchor),
+            stack.centerYAnchor.constraint(equalTo: content.centerYAnchor),
+            stack.topAnchor.constraint(greaterThanOrEqualTo: content.topAnchor, constant: 24),
+            stack.bottomAnchor.constraint(lessThanOrEqualTo: content.bottomAnchor, constant: -24),
             stack.widthAnchor.constraint(lessThanOrEqualToConstant: 560)
         ])
+        let preferredHeight = content.heightAnchor.constraint(equalTo: scroll.heightAnchor)
+        preferredHeight.priority = .defaultLow
+        preferredHeight.isActive = true
+        let columnWidth = stack.widthAnchor.constraint(equalTo: content.widthAnchor, constant: -48)
+        columnWidth.priority = UILayoutPriority(999)
+        columnWidth.isActive = true
+        let dismissTap = UITapGestureRecognizer(target: self, action: #selector(dismissKeyboard))
+        dismissTap.cancelsTouchesInView = false
+        dismissTap.delegate = self
+        scroll.addGestureRecognizer(dismissTap)
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(keyboardWillChange(_:)),
+            name: UIResponder.keyboardWillChangeFrameNotification, object: nil)
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(keyboardWillChange(_:)),
+            name: UIResponder.keyboardWillHideNotification, object: nil)
         roleChanged()
     }
 
     @objc private func roleChanged() {
         doorRow.isHidden = roleControl.selectedSegmentIndex == 1
+        nameField.returnKeyType = doorRow.isHidden ? .done : .next
+        if nameField.isFirstResponder { nameField.reloadInputViews() }
+        if doorRow.isHidden { doorField.resignFirstResponder() }
         errorLabel.isHidden = true
+    }
+
+    @objc private func dismissKeyboard() {
+        view.endEditing(true)
+    }
+
+    func textFieldShouldReturn(_ textField: UITextField) -> Bool {
+        if textField === nameField && !doorRow.isHidden {
+            doorField.becomeFirstResponder()
+        } else {
+            dismissKeyboard()
+        }
+        return true
+    }
+
+    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
+                           shouldReceive touch: UITouch) -> Bool {
+        var touchedView = touch.view
+        while let current = touchedView {
+            if current is UIControl { return false }
+            touchedView = current.superview
+        }
+        return true
+    }
+
+    @objc private func keyboardWillChange(_ note: Notification) {
+        guard let frame = (note.userInfo?[UIResponder.keyboardFrameEndUserInfoKey]
+                           as? NSValue)?.cgRectValue else { return }
+        let keyboardFrame = view.convert(frame, from: nil)
+        let visibleFrame = IOSAvailability.safeAreaLayoutGuide(for: view).layoutFrame
+        let overlap = note.name == UIResponder.keyboardWillHideNotification
+            ? 0 : visibleFrame.intersection(keyboardFrame).height
+        keyboardInset?.constant = -overlap
+        let duration = (note.userInfo?[UIResponder.keyboardAnimationDurationUserInfoKey]
+                        as? NSNumber)?.doubleValue ?? 0.25
+        let curve = (note.userInfo?[UIResponder.keyboardAnimationCurveUserInfoKey]
+                     as? NSNumber)?.uintValue ?? 0
+        UIView.animate(withDuration: duration, delay: 0,
+                       options: [.beginFromCurrentState,
+                                 UIView.AnimationOptions(rawValue: curve << 16)], animations: {
+            self.view.layoutIfNeeded()
+            if let field = [self.nameField, self.doorField].first(where: { $0.isFirstResponder }) {
+                self.scroll.scrollRectToVisible(field.convert(field.bounds, to: self.scroll)
+                    .insetBy(dx: 0, dy: -16), animated: false)
+            }
+        })
     }
 
     @objc private func saveTapped() {

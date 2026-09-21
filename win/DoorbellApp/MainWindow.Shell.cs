@@ -482,6 +482,7 @@ namespace DoorbellApp
                     // Not connected to this window's visual tree yet; the shared value applies.
                 }
             }
+            if (SaverHidesImage) decideLocally = true;
             return BackgroundSample.Uniform(EffectiveBackground());
         }
 
@@ -510,7 +511,7 @@ namespace DoorbellApp
         {
             Color contract;
             // Core measured this once for the whole cluster, image averaging included.
-            if (ThemeContrast.TryContractBackground(_display, out contract))
+            if (!SaverHidesImage && ThemeContrast.TryContractBackground(_display, out contract))
                 return OverBackdrop(contract);
             Color average;
             var bitmap = ThemeBgImage.Source as BitmapSource;

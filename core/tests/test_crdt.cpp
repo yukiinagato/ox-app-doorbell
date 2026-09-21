@@ -617,3 +617,24 @@ TEST_CASE("load avoids callbacks, continues local sequence, and prevents HLC reg
   for (const auto& e : snapshot) max_hlc = std::max(max_hlc, e.hlc);
   CHECK(e4.hlc > max_hlc);
 }
+
+TEST_CASE("subtree tombstones hide stale leaves and embedded parent members across replicas") {
+  Replica a(kIdA, 1000), b(kIdB, 1000);
+  a.map.set("visit_purposes", R"({"visit":{"label":{"en":"Visit"}},"mail":{"order":2}})");
+  a.map.set("visit_purposes.visit.enabled", "false");
+  a.map.set("visit_purposes.visit.order", "3");
+  b.map.applyRemoteBatch(a.map.all());
+  a.map.remove("visit_purposes.visit");
+  auto current = json::parse(a.map.materializeJson());
+  CHECK(json::get(json::get(current.get(), "visit_purposes"), "visit") == nullptr);
+  b.map.applyRemoteBatch(a.map.all());
+  CHECK(b.map.materializeJson() == a.map.materializeJson());
+  a.map.applyRemoteBatch(b.map.all());
+  a.map.remove("visit_purposes.mail");
+  current = json::parse(a.map.materializeJson());
+  CHECK(cJSON_GetArraySize(json::get(current.get(), "visit_purposes")) == 0);
+  a.map.set("visit_purposes.visit", R"({"label":{"en":"New visit"}})");
+  current = json::parse(a.map.materializeJson());
+  CHECK(json::getString(json::get(json::get(json::get(current.get(), "visit_purposes"),
+                                           "visit"), "label"), "en") == "New visit");
+}

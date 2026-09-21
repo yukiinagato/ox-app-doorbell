@@ -2038,3 +2038,25 @@ TEST_CASE("mesh: gossip about a partitioned peer never revives it") {
   // Not one flap: a dead peer that is really gone stays dead.
   CHECK(f.at(kIdA).alive_changes.empty());
 }
+
+TEST_CASE("mesh: a leader losing its credentials cannot retain a live lease") {
+  Fleet fleet;
+  fleet.add(kIdA, "only", capsJson(99));
+  fleet.run(100);
+  REQUIRE(fleet.at(kIdA).mesh->isLeader("telegram"));
+  auto caps = json::parse(capsJson(99));
+  json::setBool(caps.get(), "telegram_ready", false);
+  fleet.at(kIdA).mesh->setCaps(json::dump(caps.get()));
+  CHECK(fleet.at(kIdA).mesh->leaderFor("telegram").empty());
+}
+
+TEST_CASE("mesh: measured Telegram reachability does not qualify unrelated WAN duties") {
+  Fleet fleet;
+  auto caps = json::parse(capsJson(99));
+  json::setBool(caps.get(), "wan", false);
+  json::setBool(caps.get(), "telegram_reachable", true);
+  fleet.add(kIdA, "telegram-only", json::dump(caps.get()));
+  fleet.run(100);
+  CHECK(fleet.at(kIdA).mesh->isLeader("telegram"));
+  CHECK(fleet.at(kIdA).mesh->leaderFor("web_push").empty());
+}

@@ -327,6 +327,19 @@ static void DBUiEventCb(void *user, const char *event_json) {
   BOOL _localTimeRefreshing;
   NSUInteger _pendingEncodedFrames;
   NSUInteger _pendingEncodedBytes;
+  BOOL _pendingCameraFrame;
+  BOOL _videoControlRefreshPending;
+  BOOL _videoWanted;
+  BOOL _videoKeyframeRequested;
+  CFAbsoluteTime _videoControlRefreshedAt;
+}
+@synthesize cameraActive = _cameraActive;
+@synthesize h264CameraActive = _h264CameraActive;
+
+- (void)setVideoSensorRotation:(int)degrees {
+  dispatch_async(_coreQueue, ^{
+    if (self->_core) db_core_set_video_sensor_rotation(self->_core, degrees);
+  });
 }
 
 - (id)init {
@@ -351,6 +364,27 @@ static void DBUiEventCb(void *user, const char *event_json) {
 
 - (BOOL)isRunning {
   return _core != NULL;
+}
+
+- (void)pushCameraFrame:(NSData *)data format:(int)format width:(int)width height:(int)height stride:(int)stride {
+  if (width <= 0 || height <= 0 || (format != 1 && format != 3) ||
+      stride < width * (format == 3 ? 4 : 1)) return;
+  NSUInteger size = (NSUInteger)stride * (format == 3 ? height : height + (height + 1) / 2);
+  if ([data length] < size) return;
+  [_encodedFrameLock lock];
+  BOOL accepted = !_pendingCameraFrame;
+  if (accepted) _pendingCameraFrame = YES;
+  [_encodedFrameLock unlock];
+  if (!accepted) return;
+  NSData *copy = [data copy];
+  int64_t timestamp = (int64_t)([[NSDate date] timeIntervalSince1970] * 1000);
+  dispatch_async(_coreQueue, ^{
+    if (self->_core) db_core_on_camera_frame(self->_core, [copy bytes], format,
+        width, height, stride, timestamp);
+    [self->_encodedFrameLock lock];
+    self->_pendingCameraFrame = NO;
+    [self->_encodedFrameLock unlock];
+  });
 }
 - (BOOL)startWithDataDir:(NSString *)dataDir bootJson:(NSString *)bootJson {
   if (_core != NULL) return YES;
@@ -762,21 +796,32 @@ static void DBUiEventCb(void *user, const char *event_json) {
 }
 
 - (BOOL)videoEncoderWanted {
-  __block BOOL wanted = NO;
-  dispatch_sync(_coreQueue, ^{
-    if (self->_core) wanted = db_core_video_encoder_wanted(self->_core) != 0;
+  CFAbsoluteTime now = CFAbsoluteTimeGetCurrent();
+  [_encodedFrameLock lock];
+  BOOL refresh = !_videoControlRefreshPending && now - _videoControlRefreshedAt >= 0.2;
+  if (refresh) _videoControlRefreshPending = YES;
+  BOOL wanted = _videoWanted;
+  [_encodedFrameLock unlock];
+  if (refresh) dispatch_async(_coreQueue, ^{
+    BOOL current = self->_core && db_core_video_encoder_wanted(self->_core) != 0;
+    BOOL keyframe = self->_core && db_core_take_video_keyframe_request(self->_core) != 0;
+    [self->_encodedFrameLock lock];
+    self->_videoWanted = current;
+    self->_videoKeyframeRequested |= keyframe;
+    self->_videoControlRefreshedAt = CFAbsoluteTimeGetCurrent();
+    self->_videoControlRefreshPending = NO;
+    [self->_encodedFrameLock unlock];
   });
   return wanted;
 }
 
 - (BOOL)takeVideoKeyframeRequest {
-  __block BOOL requested = NO;
-  dispatch_sync(_coreQueue, ^{
-    if (self->_core) requested = db_core_take_video_keyframe_request(self->_core) != 0;
-  });
+  [_encodedFrameLock lock];
+  BOOL requested = _videoKeyframeRequested;
+  _videoKeyframeRequested = NO;
+  [_encodedFrameLock unlock];
   return requested;
 }
-
 
 - (NSDictionary *)lastConfig {
   [_cfgLock lock];

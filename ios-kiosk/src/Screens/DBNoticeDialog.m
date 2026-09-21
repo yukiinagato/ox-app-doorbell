@@ -37,8 +37,7 @@
   UIButton *_publish;
   UIButton *_clear;
   UIButton *_cancel;
-  // Numbers are entered with the drawn keypad: the iOS 5 system keyboard has no
-  // usable IME here and would cover the field.
+  CGFloat _numberKeyboardHeight;
   UIView *_keypadOverlay;
   UILabel *_keypadTitle;
   DBNumericKeypad *_keypad;
@@ -141,6 +140,10 @@
   [_cancel addTarget:self action:@selector(onCancel) forControlEvents:UIControlEventTouchUpInside];
   [_panel addSubview:_cancel];
 
+  [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(numberKeyboardChanged:)
+      name:UIKeyboardWillChangeFrameNotification object:nil];
+  [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(numberKeyboardChanged:)
+      name:UIKeyboardWillHideNotification object:nil];
   _keypadOverlay = [[UIView alloc] init];
   _keypadOverlay.backgroundColor = [UIColor colorWithWhite:0 alpha:0.86];
   _keypadOverlay.hidden = YES;
@@ -161,8 +164,12 @@
     if (!dialog) return;
     NSInteger hours = [value integerValue];
     dialog->_customHours = MAX(1, MIN(168, hours));
-    dialog->_keypadOverlay.hidden = YES;
+    if (dialog) dialog->_keypadOverlay.hidden = YES;
     [dialog updateExpirySelection];
+  };
+  _keypad.onCancel = ^{
+    DBNoticeDialog *dialog = weakSelf;
+    dialog->_keypadOverlay.hidden = YES;
   };
   [_keypadOverlay addSubview:_keypad];
 }
@@ -351,6 +358,7 @@
   [_keypad setSubmitTitle:[_texts ts:@"admin.save"]];
   [_keypad clear];
   _keypadOverlay.hidden = NO;
+  [_keypad beginEditing];
   [self bringSubviewToFront:_keypadOverlay];
   [self setNeedsLayout];
 }
@@ -448,6 +456,16 @@
   if ([buttons count] > 0) *y += rowHeight + 14;
 }
 
+- (void)dealloc { [[NSNotificationCenter defaultCenter] removeObserver:self]; }
+
+- (void)numberKeyboardChanged:(NSNotification *)note {
+  CGRect keyboard = [self convertRect:[[note.userInfo objectForKey:UIKeyboardFrameEndUserInfoKey] CGRectValue] fromView:nil];
+  CGRect overlap = CGRectIntersection(self.bounds, keyboard);
+  _numberKeyboardHeight = [note.name isEqualToString:UIKeyboardWillHideNotification] || CGRectIsNull(overlap)
+      ? 0 : CGRectGetHeight(overlap);
+  [self setNeedsLayout];
+}
+
 - (void)layoutSubviews {
   [super layoutSubviews];
   CGSize size = self.bounds.size;
@@ -497,7 +515,7 @@
   _keypadOverlay.frame = self.bounds;
   CGFloat keypadWidth = MIN(320, size.width - 80);
   CGFloat keypadHeight = [DBNumericKeypad heightForWidth:keypadWidth];
-  CGFloat keypadY = MAX(60, (size.height - keypadHeight) / 2);
+  CGFloat keypadY = MAX(60, (size.height - _numberKeyboardHeight - keypadHeight) / 2);
   _keypadTitle.frame = CGRectMake(0, keypadY - 46, size.width, 34);
   _keypad.frame = CGRectMake((size.width - keypadWidth) / 2, keypadY, keypadWidth, keypadHeight);
 }

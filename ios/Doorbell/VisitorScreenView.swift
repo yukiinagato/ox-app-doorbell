@@ -1,11 +1,5 @@
 import UIKit
 
-/// Door-station visitor screen. It hosts the controls `MainViewController` already owns — the call
-/// button, the language row and the purpose buttons — and adds the layout the owner approved:
-/// a large `HH:MM:SS` clock with the date, a text-only announcement, the language row in the
-/// middle in portrait and directly above the call button in landscape, a single-sentence hint, and
-/// a footer with the door name, both versions and the battery. There is no way into settings from
-/// here; the hidden corner plus the admin password remains the only route.
 final class VisitorScreenView: UIView {
 
     private let texts: Texts
@@ -32,13 +26,30 @@ final class VisitorScreenView: UIView {
     private var noticeExpanded = false
     private var noticeText = ""
     private var isLandscape = false
+    private var layoutStyle = "standard"
+    private var lastLayoutSize = CGSize.zero
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        if bounds.width > 0, bounds.height > 0, bounds.size != lastLayoutSize {
+            applyLayout(for: bounds.size)
+        }
+    }
+
+    func setLayoutStyle(_ value: String) {
+        let next = ["standard", "left", "right", "edges"].contains(value) ? value : "standard"
+        guard next != layoutStyle else { return }
+        layoutStyle = next
+        applyLayout(for: bounds.size)
+    }
     /// Whether this device's role offers the SOS slider. Remembered because `applyLayout` takes
     /// the whole stack apart and puts it back.
     private var sosVisible = true
+    private var columnWidth: NSLayoutConstraint?
     private var callWidth: NSLayoutConstraint?
     /// The call button may not hug its label: the verb is two characters in Japanese, and a
     /// button barely wider than a finger is not what a visitor should have to hunt for.
-    private static let callButtonMinimumColumnShare: CGFloat = 0.6
+    private static let callButtonMinimumColumnShare: CGFloat = 0.8
     private var skin = DoorbellSkin.plain(.dark)
 
     init(texts: Texts, callButton: UIButton, langBar: UIView, purposeSection: UIView,
@@ -63,8 +74,10 @@ final class VisitorScreenView: UIView {
         clockLabel.minimumScaleFactor = 0.4
         clockLabel.accessibilityIdentifier = "visitor_clock"
 
-        dateLabel.font = .systemFont(ofSize: 24)
+        dateLabel.font = .systemFont(ofSize: 24, weight: .medium)
         dateLabel.textAlignment = .center
+        clockLabel.inkCompanion = dateLabel
+        dateLabel.inkCompanion = clockLabel
 
         // A visitor is shown the message and nothing else: no author, no expiry.
         noticeLabel.font = .systemFont(ofSize: 22)
@@ -127,13 +140,12 @@ final class VisitorScreenView: UIView {
         applyLayout(for: CGSize(width: 768, height: 1024))
     }
 
-    /// Both orientations are computed from the current size, never fixed. Portrait stacks
-    /// clock → notice → language → call → hint → footer; landscape splits the notice into the left
-    /// column and keeps the language row immediately above the call button on the right.
     func applyLayout(for size: CGSize) {
+        lastLayoutSize = size
         let landscape = size.width > size.height
         let wide = min(size.width, size.height) >= 768
         isLandscape = landscape
+        columnWidth?.isActive = false
 
         for view in root.arrangedSubviews.reversed() {
             root.removeArrangedSubview(view)
@@ -148,7 +160,7 @@ final class VisitorScreenView: UIView {
 
         let clockColumn = UIStackView(arrangedSubviews: [clockLabel, dateLabel])
         clockColumn.axis = .vertical
-        clockColumn.spacing = 4
+        clockColumn.spacing = 8
 
         let noticeRow = UIStackView(arrangedSubviews: [noticeLabel, noticeExpand])
         noticeRow.axis = .horizontal
@@ -157,21 +169,58 @@ final class VisitorScreenView: UIView {
         noticeColumn.addArrangedSubview(noticeRow)
 
         clockLabel.font = UIFont.monospacedDigitSystemFont(
-            ofSize: wide ? 108 : (landscape ? 72 : 76), weight: .light)
-        hintLabel.font = .systemFont(ofSize: wide ? 22 : 18)
-        callButton.titleLabel?.font = .systemFont(ofSize: wide ? 40 : 30, weight: .bold)
+            ofSize: wide ? 104 : (landscape ? 80 : 84), weight: .regular)
+        hintLabel.font = .systemFont(ofSize: wide ? 18 : 16, weight: .regular)
+        callButton.titleLabel?.font = .systemFont(ofSize: wide ? 44 : 38, weight: .semibold)
         #if !os(tvOS)
         let vertical: CGFloat = wide ? 34 : 24
         callButton.contentEdgeInsets = UIEdgeInsets(top: vertical, left: 60, bottom: vertical,
                                                     right: 60)
         #endif
 
-        if landscape {
-            // With a notice on screen, the language row belongs directly above the call button.
-            actionColumn.addArrangedSubview(langBar)
+        if layoutStyle == "left" || layoutStyle == "right" {
+            clockLabel.font = .monospacedDigitSystemFont(ofSize: wide ? 80 : 68, weight: .regular)
+            #if !os(tvOS)
+            callButton.contentEdgeInsets = UIEdgeInsets(top: 30, left: 28, bottom: 30, right: 28)
+            #endif
+            actionColumn.addArrangedSubview(clockColumn)
+            actionColumn.addArrangedSubview(noticeColumn)
             actionColumn.addArrangedSubview(callButtonRow())
             actionColumn.addArrangedSubview(hintLabel)
             actionColumn.addArrangedSubview(purposeSection)
+            actionColumn.addArrangedSubview(langBar)
+            let space = UIView()
+            let columns = UIStackView(arrangedSubviews: layoutStyle == "left"
+                ? [actionColumn, space] : [space, actionColumn])
+            columns.axis = .horizontal
+            columns.spacing = 24
+            columns.alignment = .center
+            columnWidth = actionColumn.widthAnchor.constraint(equalTo: columns.widthAnchor,
+                multiplier: landscape ? 0.46 : 0.70)
+            columnWidth?.isActive = true
+            root.addArrangedSubview(columns)
+            root.addArrangedSubview(footerLabel)
+            if sosVisible { root.addArrangedSubview(sosControl) }
+            return
+        }
+        if layoutStyle == "edges" {
+            clockLabel.font = .monospacedDigitSystemFont(ofSize: wide ? 80 : 68, weight: .regular)
+            root.addArrangedSubview(clockColumn)
+            root.addArrangedSubview(noticeColumn)
+            root.addArrangedSubview(UIView())
+            root.addArrangedSubview(callButtonRow())
+            root.addArrangedSubview(hintLabel)
+            root.addArrangedSubview(purposeSection)
+            root.addArrangedSubview(langBar)
+            root.addArrangedSubview(footerLabel)
+            if sosVisible { root.addArrangedSubview(sosControl) }
+            return
+        }
+        if landscape {
+            actionColumn.addArrangedSubview(callButtonRow())
+            actionColumn.addArrangedSubview(hintLabel)
+            actionColumn.addArrangedSubview(purposeSection)
+            actionColumn.addArrangedSubview(langBar)
             let columns = UIStackView(arrangedSubviews: [
                 stackVertically([clockColumn, noticeColumn, UIView()]), actionColumn])
             columns.axis = .horizontal
@@ -186,10 +235,10 @@ final class VisitorScreenView: UIView {
 
         root.addArrangedSubview(clockColumn)
         root.addArrangedSubview(noticeColumn)
-        root.addArrangedSubview(langBar)
         actionColumn.addArrangedSubview(callButtonRow())
         actionColumn.addArrangedSubview(hintLabel)
         actionColumn.addArrangedSubview(purposeSection)
+        actionColumn.addArrangedSubview(langBar)
         root.addArrangedSubview(actionColumn)
         root.addArrangedSubview(UIView())
         root.addArrangedSubview(footerLabel)
@@ -229,6 +278,14 @@ final class VisitorScreenView: UIView {
     }
 
     // MARK: - Content
+
+    func setCallFlow(_ mode: String, hasPurposes: Bool) {
+        let chooseOnHome = mode != "ring_then_purpose" && hasPurposes
+        purposeSection.isHidden = !chooseOnHome
+        callButton.setTitle(texts.t(chooseOnHome ? "door.call_direct" : "idle.call_button_verb"),
+                            for: .normal)
+        updateHint(texts.t(chooseOnHome ? "door.hint_purpose_first" : "door.hint_call"))
+    }
 
     func updateClock(_ reading: DoorbellClock.Reading, lang: String) {
         clockLabel.text = reading.hhmmss
@@ -294,7 +351,7 @@ final class VisitorScreenView: UIView {
                                             ("hint", hintLabel), ("footer", footerLabel),
                                             ("notice", noticeLabel)]
         for (region, label) in regions {
-            skin.apply(region, to: label, quiet: region == "footer" || region == "date")
+            skin.apply(region, to: label, quiet: region == "footer")
         }
         noticeExpand.setTitleColor(noticeLabel.textColor, for: .normal)
         applyCameraWarningSkin()

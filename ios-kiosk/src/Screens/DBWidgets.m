@@ -41,6 +41,36 @@ NSString *DBHexFromColor(UIColor *color) {
   return [DBUiTheme hexFromRgb:rgb];
 }
 
+@implementation DBReadableLabel
+@synthesize readabilityShadow = _readabilityShadow;
+
+- (void)setReadabilityShadow:(UIColor *)color {
+  if ([_readabilityShadow isEqual:color]) return;
+  _readabilityShadow = color;
+  [self setNeedsDisplay];
+}
+
+- (void)drawTextInRect:(CGRect)rect {
+  CGContextRef context = UIGraphicsGetCurrentContext();
+  if (_readabilityShadow != nil && context != NULL) {
+    CGFloat radius = MAX(2, MIN(8, self.font.pointSize * 0.075));
+    // A wide falloff softens the silhouette; a denser inner shadow protects
+    // strokes over bright patches without placing a rectangle over the image.
+    CGContextSaveGState(context);
+    CGContextSetShadowWithColor(context, CGSizeMake(0, 1), radius * 1.6,
+        [_readabilityShadow colorWithAlphaComponent:0.7].CGColor);
+    [super drawTextInRect:rect];
+    CGContextRestoreGState(context);
+    CGContextSaveGState(context);
+    CGContextSetShadowWithColor(context, CGSizeMake(0, 1), radius * 0.55,
+        [_readabilityShadow colorWithAlphaComponent:0.95].CGColor);
+    [super drawTextInRect:rect];
+    CGContextRestoreGState(context);
+  }
+  [super drawTextInRect:rect];
+}
+@end
+
 #pragma mark - theme backdrop
 
 @implementation DBThemeBackdrop
@@ -139,42 +169,12 @@ static const NSInteger kProxyEdge = 64;
 @synthesize viewSize = _viewSize;
 
 + (DBBackgroundSampler *)samplerWithImage:(UIImage *)image viewSize:(CGSize)viewSize {
-  if (image == nil || image.CGImage == NULL) return nil;
-  if (viewSize.width <= 0 || viewSize.height <= 0) return nil;
-  size_t edge = (size_t)kProxyEdge;
-  size_t bytesPerRow = edge * 4;
-  void *buffer = calloc(edge * bytesPerRow, 1);
-  if (buffer == NULL) return nil;
-  CGColorSpaceRef space = CGColorSpaceCreateDeviceRGB();
-  CGContextRef ctx = CGBitmapContextCreate(buffer, edge, edge, 8, bytesPerRow, space,
-                                           (CGBitmapInfo)kCGImageAlphaPremultipliedLast);
-  CGColorSpaceRelease(space);
-  if (ctx == NULL) {
-    free(buffer);
-    return nil;
-  }
-  // The proxy is the view, not the image: the image is placed into it with the
-  // same aspect-fill mapping the theme image view uses, so proxy coordinates
-  // and view coordinates are the same space up to a constant scale.
-  NSArray *draw = [DBUiTheme aspectFillDrawRectForImageWidth:image.size.width
-                                                 imageHeight:image.size.height
-                                                   viewWidth:viewSize.width
-                                                  viewHeight:viewSize.height];
-  double scaleX = (double)edge / viewSize.width;
-  double scaleY = (double)edge / viewSize.height;
-  CGRect target = CGRectMake((CGFloat)([[draw objectAtIndex:0] doubleValue] * scaleX),
-                             (CGFloat)([[draw objectAtIndex:1] doubleValue] * scaleY),
-                             (CGFloat)([[draw objectAtIndex:2] doubleValue] * scaleX),
-                             (CGFloat)([[draw objectAtIndex:3] doubleValue] * scaleY));
-  // CoreGraphics draws bottom-up; flip so proxy rows match view rows.
-  CGContextTranslateCTM(ctx, 0, (CGFloat)edge);
-  CGContextScaleCTM(ctx, 1, -1);
-  CGContextDrawImage(ctx, target, image.CGImage);
-  CGContextRelease(ctx);
-
+  if (image == nil) return nil;
+  NSData *pixels = [DBBackdropCompositor rgbaProxyForImage:image.CGImage
+                                                viewSize:viewSize edge:(NSUInteger)kProxyEdge];
+  if (pixels == nil) return nil;
   DBBackgroundSampler *sampler = [[DBBackgroundSampler alloc] init];
-  sampler->_pixels = [NSData dataWithBytesNoCopy:buffer length:edge * bytesPerRow
-                                    freeWhenDone:YES];
+  sampler->_pixels = pixels;
   sampler->_viewSize = viewSize;
   return sampler;
 }
@@ -265,6 +265,7 @@ static const NSInteger kProxyEdge = 64;
   NSString *_surfaceHex;
   DBBackgroundSampler *_sampler;
   BOOL _usesThemeBackground;
+  BOOL _usesRenderedFlatBackground;
   NSString *_requestedBackgroundHex;  // What the caller said its ground is.
 }
 
@@ -335,7 +336,8 @@ static const NSInteger kProxyEdge = 64;
 // nothing paints it, so it stays the appearance's own surface rather than the
 // wallpaper average core measured for the ink rule.
 - (UIColor *)surface {
-  NSString *hex = _usesThemeBackground ? [DBUiTheme surfaceHexForMode:_mode] : _surfaceHex;
+  NSString *hex = _usesThemeBackground && !_usesRenderedFlatBackground
+      ? [DBUiTheme surfaceHexForMode:_mode] : _surfaceHex;
   return DBColorFromHex(hex, [UIColor blackColor]);
 }
 
@@ -398,6 +400,14 @@ static const NSInteger kProxyEdge = 64;
   _sampler = sampler;
 }
 
+- (void)setRenderedFlatBackgroundHex:(NSString *)backgroundHex {
+  DBRgb rgb;
+  _surfaceHex = [DBUiTheme parseHex:backgroundHex into:&rgb]
+      ? [backgroundHex copy] : [[DBUiTheme surfaceHexForMode:_mode] copy];
+  _usesRenderedFlatBackground = YES;
+  _sampler = nil;
+}
+
 - (void)setUsesThemeBackground:(BOOL)usesThemeBackground {
   _usesThemeBackground = usesThemeBackground;
   // Core's measured theme background describes the wallpaper, not this
@@ -421,7 +431,7 @@ static const NSInteger kProxyEdge = 64;
 }
 
 - (NSString *)inkHexForRegion:(NSString *)region {
-  if (!_usesThemeBackground) {
+  if (!_usesThemeBackground || _usesRenderedFlatBackground) {
     // This screen's ground is its own chrome, so only an administrator's
     // override outranks the measurement of that colour.
     NSString *override = [DBUiTheme adminInkOverrideHexForRegion:region config:_config
@@ -511,6 +521,25 @@ static const NSInteger kProxyEdge = 64;
   // has not been resampled yet falls back instead of reading the wrong pixels.
   CGSize viewSize = label.superview ? label.superview.bounds.size : CGSizeZero;
   NSString *ink = [self inkHexForRegion:region frame:frame viewSize:viewSize];
+  if ([label isKindOfClass:[DBReadableLabel class]]) {
+    DBReadableLabel *readable = (DBReadableLabel *)label;
+    BOOL wallpaper = [self samplerForViewSize:viewSize] != nil;
+    if (wallpaper) {
+      NSString *override = [DBUiTheme adminInkOverrideHexForRegion:region config:_config
+                                                          deviceId:_deviceId display:_display];
+      // Keep the clock stable while changing wallpapers cross the ink threshold.
+      // Administrator ink still wins and takes a contrasting shadow.
+      ink = [override length] > 0 ? override : [DBUiTheme lightInkHex];
+      readable.readabilityShadow = [DBUiTheme contrastBetweenHex:ink andHex:@"#000000"] >=
+          [DBUiTheme contrastBetweenHex:ink andHex:@"#FFFFFF"] ? [UIColor blackColor] : [UIColor whiteColor];
+    } else {
+      readable.readabilityShadow = nil;
+    }
+    label.textColor = DBColorFromHex(ink, [self ink]);
+    label.shadowColor = nil;
+    label.shadowOffset = CGSizeZero;
+    return;
+  }
   label.textColor = DBColorFromHex(ink, [self ink]);
   NSDictionary *sample = [self backgroundSampleForRegion:region frame:frame viewSize:viewSize];
   // The ink follows the average; the shadow follows the worst patch, so a line

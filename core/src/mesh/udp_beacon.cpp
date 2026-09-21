@@ -2,6 +2,7 @@
 #include "mesh/udp_beacon.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cstring>
 #include <vector>
 
@@ -227,7 +228,13 @@ void UdpBeacon::recvLoop_() {
     net::socklen_v source_len = sizeof(source);
     int n = net::recvFrom(recv_fd_, buf, sizeof(buf) - 1,
                           reinterpret_cast<sockaddr*>(&source), &source_len);
-    if (n <= 0) continue;
+    if (n < 0) {
+      // iOS may reject a socket immediately after network/background transitions. A receive
+      // timeout does not pace that failure path; bound retries to avoid spinning a CPU core.
+      if (!stopping_) std::this_thread::sleep_for(std::chrono::milliseconds(50));
+      continue;
+    }
+    if (n == 0) continue;
     buf[n] = '\0';
     json::Doc doc = json::parse(buf);
     if (!doc) continue;

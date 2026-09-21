@@ -34,8 +34,7 @@ network loss を再確認します。
 ## platform 注記
 
 Android の process 内復旧は全 force-stop を救えません。Windows watchdog は実装済みですが elevated
-VM/実機検証待ちです。Windows safe mode は Core/ringer/SOS/control/real-PJSIP audio を保持し、custom
-visual/animation/H.264 を止め、JPEG source があれば bounded low-resolution MJPEG を使います。modern
+VM/実機検証待ちです。Windows App は旧 `--safe-mode` 引数を無視します。modern
 iOS は foreground の間だけ background queue から bounded main-thread probe を送ります。約 5 秒の probe
 が 3 回連続で失敗すると `main_run_loop_stall_3x5s` を記録し、実測した Guided Access が active なら
 `SIGABRT` で process を終了して supervised kiosk の crash evidence を伴う再起動に委ねます。sentinel は
@@ -43,12 +42,7 @@ background で disarm します。Apple TN2448 により、`UIAccessibility.isGu
 Access と Single App Mode の両方を測定できます。client は状態変更通知を監視し、launch の 2 秒後に再確認し、
 有界な 10 秒再測定も継続します。`auto` は設定済み helper mode を保ち、測定が active の間は短い maintenance
 lease を更新します。helper supervision が fallback になるのは測定が inactive の場合だけです。modern launcher は
-独立した qualification gate です。署名期限も障害として管理します。iOS 5 safe
-mode は Core/MiniSIP audio/ringer/SOS/control を保持し、H.264 ingest/decode と custom visual を止め、
-設定済みなら bounded low-resolution HTTP(S) MJPEG/snapshot direct playback、無ければ audio-only を
-報告します。JPEG は Core に forward しません。local crash/OOM safe mode は 5 分間連続して正常動作
-すると解除され、実測 media capability を running process 内で復元します。root helper が safe mode を
-通知している間は helper の判断を優先します。optional iOS 5/rooted-Android helper は実装・host test
+独立した qualification gate です。署名期限も障害として管理します。Android と両 iOS App のセーフモードは無効です。保存済みフラグを消去または無視し、クラッシュ履歴や helper の通知で H.264 や背景を無効にしません。メモリ警告ではリソースを解放できますが、縮退状態を固定しません。診断、再起動 backoff、実際の codec エラー、外部 helper の再起動制限は独立して維持します。optional iOS 5/rooted-Android helper は実装・host test
 済みです。iOS 5 lane には launchd を無効のままにする再現可能な staged DEB がありますが、両 platform
 とも別 provisioning で実機 qualification は未完了です。root service、UID/socket、maintenance lease、
 safe mode、rollback、soak が合格するまで依存しません。

@@ -213,6 +213,7 @@ info.version: { ja: "バージョン", en: "Version", zh: "版本" }
 info.microphone: { ja: "マイク", en: "Microphone", zh: "麦克风" }
 info.camera: { ja: "カメラ", en: "Camera", zh: "摄像头" }
 info.external_present: { ja: "有（外付け）", en: "Present (external)", zh: "有（外接）" }
+info.builtin_present: { ja: "有（内蔵）", en: "Present (built-in)", zh: "有（内置）" }
 info.absent: { ja: "無", en: "Absent", zh: "无" }
 info.camera_absent_ipad1: { ja: "無（iPad 1 はカメラ非搭載）", en: "Absent (iPad 1 has no camera)", zh: "无（iPad 1 未配备摄像头）" }
 info.network: { ja: "ネットワーク", en: "Network", zh: "网络" }
@@ -509,7 +510,7 @@ admin.call_sound_loop: { ja: "呼出音を繰り返す", en: "Loop the call soun
 admin.button_sound: { ja: "ボタン音", en: "Button sound", zh: "按键音" }
 admin.indoor_ringtone: { ja: "室内機の着信音", en: "Indoor ringtone", zh: "室内机铃声" }
 admin.update_sound: { ja: "更新音", en: "Update sound", zh: "更新提示音" }
-admin.theme: { ja: "テーマ (背景)", en: "Theme", zh: "主题 (背景)" }
+admin.theme: { ja: "テーマと画面", en: "Theme and display", zh: "主题与屏幕" }
 admin.theme_bg_color: { ja: "背景色", en: "Background color", zh: "背景色" }
 admin.theme_bg_image: { ja: "背景画像", en: "Background image", zh: "背景图片" }
 admin.theme_preview: { ja: "プレビュー", en: "Preview", zh: "预览" }
@@ -548,9 +549,15 @@ admin.alert_ttl: { ja: "TTL（秒）", en: "TTL seconds", zh: "TTL 秒数" }
 admin.alert_visual: { ja: "画面表示", en: "Visual", zh: "画面显示" }
 admin.alert_volume: { ja: "音量 (0–100)", en: "Volume (0–100)", zh: "音量 (0–100)" }
 admin.call_flow: { ja: "訪客呼出フロー", en: "Visitor call flow", zh: "访客呼叫流程" }
-admin.call_flow_mixed_warning: { ja: "ring_then_purpose は全 peer でサポートされていません。旧版または未計測の client は purpose_first のままです。", en: "ring_then_purpose is not supported by every reported peer. Older or unmeasured clients remain on purpose_first behavior.", zh: "并非所有已报告节点都支持 ring_then_purpose；旧版或未测量客户端仍使用 purpose_first。" }
-admin.call_flow_purpose_first: { ja: "purpose_first は呼出前に用件を選択します。ring_then_purpose は先に呼び出し、後から用件を更新できます。", en: "purpose_first asks for a purpose before emitting a call; ring_then_purpose rings first and permits a later purpose revision.", zh: "purpose_first 在呼叫前询问来意；ring_then_purpose 先响铃，并允许之后更新来意。" }
-admin.call_flow_supported: { ja: "現在報告中の全 peer が call_flow_v2 を宣言しています。", en: "Every currently reported peer declares call_flow_v2.", zh: "当前所有已报告节点均声明支持 call_flow_v2。" }
+admin.call_flow_mixed_warning: { ja: "一部の端末は呼出後の用件選択に未対応です。更新までは従来の画面と動作を使います。", en: "Some devices do not support choosing a purpose after ringing. They keep their existing screen and behavior until updated.", zh: "部分设备尚不支持呼叫后选择目的，升级前仍使用原有界面和流程。" }
+admin.call_flow_purpose_first_label: { ja: "用件を選んで呼び出す", en: "Choose purpose, then ring", zh: "先选目的，再呼叫" }
+admin.call_flow_ring_then_purpose_label: { ja: "呼び出してから用件を選ぶ", en: "Ring, then choose purpose", zh: "先呼叫，再选目的" }
+admin.call_flow_purpose_first: { ja: "門口機のホームに用件を表示し、選ぶとその用件で呼び出します。「直接呼出」は用件を選ばず呼び出します。呼出後に用件画面は開きません。", en: "The door-station home shows purposes. Selecting one rings with that purpose; Direct call rings without one. No purpose screen opens after ringing.", zh: "门口机首页显示目的菜单，点击目的即发出呼叫；「直接呼叫」可跳过目的。呼叫后不再打开目的页面。" }
+admin.call_flow_ring_then_purpose: { ja: "ホームには呼出ボタンを表示し、用件メニューは表示しません。押すとすぐに呼び出し、その後の用件画面で用件を追加できます。用件を選ばなくても呼出は続きます。", en: "The home shows the call button without a purpose menu. Pressing it rings immediately, then opens the purpose screen. The call continues if the visitor skips the purpose.", zh: "首页只显示呼叫按钮，不显示目的菜单。点击后立即呼叫，再进入目的页面；不选目的也会继续呼叫。" }
+admin.call_flow_supported: { ja: "現在確認できる全端末が呼出後の用件選択に対応しています。", en: "All currently reported devices support choosing a purpose after ringing.", zh: "当前已报告的设备均支持呼叫后选择目的。" }
+admin.call_flow_unknown: { ja: "端末の対応状況をまだ確認できません。", en: "Device support has not been reported yet.", zh: "尚未获取设备的支持情况。" }
+door.call_direct: { ja: "直接呼出", en: "Direct call", zh: "直接呼叫" }
+door.hint_purpose_first: { ja: "用件を選ぶか、そのまま呼び出してください", en: "Choose a purpose below, or call directly", zh: "请选择下方目的，或直接呼叫" }
 admin.channel_in_app: { ja: "アプリ内", en: "In-app", zh: "应用内" }
 admin.channel_system_notification: { ja: "システム通知", en: "System notification", zh: "系统通知" }
 admin.channel_web_push: { ja: "Web Push", en: "Web Push", zh: "Web Push" }
@@ -1103,3 +1110,58 @@ pair.invitation_invalid: { ja: "この招待を読み取れませんでした", 
 dash.count_cluster: { ja: "クラスタの機器 {n} 台", en: "{n} devices in the cluster", zh: "集群设备 {n} 台" }
 dash.count_doors: { ja: "門口機 {online}/{total} 台が接続中", en: "{online} of {total} door stations online", zh: "门口机 {online}/{total} 台在线" }
 dash.count_panels: { ja: "室内機 {online}/{total} 台が接続中", en: "{online} of {total} indoor panels online", zh: "室内机 {online}/{total} 台在线" }
+
+admin.remove_device_confirm: { ja: "{device} を削除しますか？オフラインの記録も削除され、再接続時にはクラスタから退出します。", en: "Remove {device}? Its offline record will be removed, and it will leave the cluster if it reconnects.", zh: "移出 {device}？离线记录也会删除，该设备重新连接时将退出集群。" }
+admin.motion_wake_screen: { ja: "動体検知で画面を点灯し、スクリーンセーバーを終了", en: "Wake screen and exit screensaver on motion", zh: "检测到移动时点亮屏幕并退出屏保" }
+
+settings.visitor_layout: { en: "Visitor screen layout", ja: "来訪者画面の配置", zh: "訪客畫面佈局" }
+settings.visitor_layout_standard: { en: "Standard", ja: "標準", zh: "標準" }
+settings.visitor_layout_left: { en: "Controls on left", ja: "操作を左側に", zh: "控制項靠左" }
+settings.visitor_layout_right: { en: "Controls on right", ja: "操作を右側に", zh: "控制項靠右" }
+settings.visitor_layout_edges: { en: "Clock above, controls below", ja: "時計を上、操作を下に", zh: "時鐘在上、控制項在下" }
+
+purpose.waiting_hint: { ja: "呼び出し中です。ご用件をお知らせください。", en: "Calling now. Let us know what brings you here.", zh: "正在呼叫，您可以選擇此次來訪的目的。" }
+purpose.choose_hint: { ja: "項目をタップすると呼び出します。", en: "Tap an option to ring the doorbell.", zh: "點選下方任一選項，即可呼叫住戶。" }
+speech.settings: { en: "Reply voice and audio cache", ja: "返信音声と音声キャッシュ", zh: "回覆語音與音頻快取" }
+speech.provider: { en: "Voice provider", ja: "音声サービス", zh: "語音供應商" }
+speech.system: { en: "System text to speech", ja: "システム音声", zh: "系統語音" }
+speech.api_key: { en: "Google Cloud API key (stored on this device)", ja: "Google Cloud API キー（この端末に保存）", zh: "Google Cloud API Key（保存在本機）" }
+speech.voice: { en: "Voice / language", ja: "声・言語", zh: "聲線／語言" }
+speech.rate: { en: "Speaking rate (0.25–4)", ja: "読み上げ速度（0.25–4）", zh: "語速（0.25–4）" }
+speech.auto_cache: { en: "Pre-generate audio when replies or voices change", ja: "返信文・声の変更時に音声を事前生成", zh: "回覆文字或聲線變更時預先生成音頻" }
+speech.rate_invalid: { en: "Use a speaking rate between 0.25 and 4.", ja: "速度は 0.25〜4 にしてください。", zh: "語速須介於 0.25 至 4。" }
+speech.key_required: { en: "Enter an API key on the device that will generate audio.", ja: "音声を生成する端末で API キーを入力してください。", zh: "請在負責生成音頻的設備輸入 API Key。" }
+speech.cloud_hint: { en: "Google audio is generated once, cached and synced. Standard voices have a monthly free allowance; billing must be enabled and excess usage is chargeable. Missing audio falls back to system speech. Uploaded audio takes priority.", ja: "Google 音声は事前生成・保存・同期されます。Standard 音声には月間無料枠がありますが、課金の有効化が必要で超過分は有料です。未取得時はシステム音声、アップロード音声は優先されます。", zh: "Google 音頻預先生成、快取並同步。Standard 聲線有每月免費額度，但須啟用帳單，超額會收費。未取得音頻時使用系統語音；手動上傳音頻優先。" }
+speech.system_hint: { en: "Replies use the door station's system voice. Preview uses this browser's voice and may sound different.", ja: "返信は門口機のシステム音声です。試聴にはこのブラウザーの音声を使うため、声が異なる場合があります。", zh: "回覆使用門口機的系統語音。試聽使用目前瀏覽器的聲線，可能與門口機不同。" }
+speech.generator: { en: "Audio generation device", ja: "音声生成端末", zh: "音頻生成設備" }
+speech.refresh: { en: "Refresh status", ja: "状態を更新", zh: "更新狀態" }
+speech.retry: { en: "Generate missing audio / retry", ja: "不足音声を生成・再試行", zh: "生成缺少音頻／重試" }
+speech.status: { en: "Cache status", ja: "キャッシュ状態", zh: "快取狀態" }
+speech.preview: { en: "Listen", ja: "試聴", zh: "試聽" }
+speech.unavailable: { en: "Voice preview is unavailable here.", ja: "ここでは音声を試聴できません。", zh: "目前無法試聽語音。" }
+speech.state_ready: { en: "Ready", ja: "準備完了", zh: "已快取" }
+speech.state_syncing: { en: "Syncing", ja: "同期中", zh: "同步中" }
+speech.state_generating: { en: "Generating", ja: "生成中", zh: "生成中" }
+speech.state_failed: { en: "Failed; system voice remains available", ja: "失敗・システム音声で代替", zh: "失敗，仍可使用系統語音" }
+speech.state_pending: { en: "Not generated", ja: "未生成", zh: "尚未生成" }
+speech.state_system: { en: "Browser system voice", ja: "ブラウザーの音声", zh: "瀏覽器系統語音" }
+
+notify.answered_by: { ja: "{device} が {time} に応答しました", en: "Answered by {device} at {time}", zh: "{device} 于 {time} 接听" }
+notify.replied_by: { ja: "{device} が {time} に返信: {text}", en: "{device} replied at {time}: {text}", zh: "{device} 于 {time} 回应：{text}" }
+display.saver_title: { ja: "待機中の画面", en: "Idle screen", zh: "暗屏与待机显示" }
+display.saver_enabled: { ja: "待機画面を有効にする", en: "Enable idle screen", zh: "启用暗屏" }
+display.saver_content: { ja: "表示内容", en: "Display mode", zh: "显示内容" }
+display.saver_mode_dim: { ja: "ドアホン画面を保ったまま減光（推奨）", en: "Dim the full doorbell interface (recommended)", zh: "保留完整门铃界面并调暗（推荐）" }
+display.saver_mode_minimal: { ja: "壁紙を隠し、ドアホンの操作部を表示", en: "Hide wallpaper, keep doorbell controls", zh: "隐藏背景图片，保留门铃操作界面" }
+display.saver_mode_clock: { ja: "黒背景に時計とドアホンの案内を表示", en: "Black background with clock and doorbell hint", zh: "黑底时钟与门铃提示" }
+display.saver_schedule: { ja: "有効な時間帯", en: "When to enable", zh: "启用时间段" }
+display.saver_schedule_always: { ja: "終日", en: "All day", zh: "全天" }
+display.saver_schedule_daily: { ja: "毎日の指定時間帯", en: "Daily time window", zh: "每天指定时间段" }
+display.saver_from: { ja: "開始", en: "From", zh: "开始" }
+display.saver_to: { ja: "終了", en: "Until", zh: "结束" }
+display.saver_after: { ja: "操作がない時間（秒）", en: "Idle delay (seconds)", zh: "无操作等待时间（秒）" }
+display.saver_brightness: { ja: "待機中の明るさ", en: "Idle brightness", zh: "暗屏亮度" }
+display.saver_help: { ja: "クラスタのタイムゾーンを使用し、日付をまたぐ時間帯にも対応します。待機中の明るさは通常時を超えません。タッチ・着信・緊急時は通常の画面に戻ります。現行 iOS と Windows に対応し、その他の端末は現在の表示動作を維持します。", en: "Uses the cluster time zone; a window may cross midnight. Brightness never exceeds active brightness. Touch, calls and emergencies restore the screen. Available on modern iOS and Windows; other clients keep their current display behavior.", zh: "使用集群时区，支持跨午夜；暗屏亮度不高于正常亮度。触摸、来电和紧急事件会恢复屏幕。支持现代 iOS 和 Windows，其他客户端保持现有显示方式。" }
+display.saver_invalid: { ja: "開始・終了は異なる時刻、待機時間は1～86400秒、明るさは1～100%を指定してください。", en: "Enter distinct start/end times, an idle delay of 1–86400 seconds, and brightness of 1–100%.", zh: "开始与结束时间不能相同，等待时间应为 1–86400 秒，亮度应为 1–100%。" }
+display.saver_door_hint: { ja: "ドアホン · タッチして呼び出す", en: "Doorbell · Touch to wake and ring", zh: "门铃 · 触摸唤醒后呼叫" }
+display.saver_panel_hint: { ja: "ドアホン親機 · タッチして表示", en: "Doorbell panel · Touch to wake", zh: "室内门铃面板 · 触摸唤醒" }

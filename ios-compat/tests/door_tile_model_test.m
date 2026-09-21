@@ -65,6 +65,18 @@ static DBDoorTileInfo *onlyTile(NSArray *tiles) {
 int main(void) {
   @autoreleasepool {
     DBBootConfig *boot = panelBoot();
+    for (NSNumber *degrees in @[ @0, @90, @180, @270 ]) {
+      require([DBDoorTileModel videoRotationFromMetadata:@{@"rotation": degrees}
+                                               fallback:180] == [degrees integerValue],
+              @"every measured quarter-turn is preserved");
+    }
+    require([DBDoorTileModel videoRotationFromMetadata:@{@"rotation": @-90} fallback:0] == 270,
+            @"negative rotation is normalized");
+    for (id invalid in @[ @{}, @[], @{@"rotation": @"90"}, @{@"rotation": @90.5},
+                         @{@"rotation": @45}, @{@"rotation": @1e20} ]) {
+      require([DBDoorTileModel videoRotationFromMetadata:invalid fallback:90] == 90,
+              @"unusable metadata keeps the last measured rotation");
+    }
 
     // --- Origin resolution: the still follows the peer's advertised base. ---
     require([[DBMediaSource originForPeer:aliveStation(@"alive")]
@@ -98,6 +110,8 @@ int main(void) {
             @"the still is fetched from the serving peer's stream base");
     require([tile.streamURL isEqualToString:@"http://10.10.38.79:47180/stream.mjpeg"],
             @"the tile exposes the peer's advertised MJPEG stream");
+    require([tile.videoMetaURL isEqualToString:@"http://10.10.38.79:47180/video-meta"],
+            @"the tile follows the serving camera's orientation endpoint");
 
     // A station whose HTTP origin is not the mesh address must still resolve:
     // this is the shape that made the fixed 47180-on-addrs[0] guess wrong.
@@ -113,6 +127,8 @@ int main(void) {
     tile = onlyTile([DBDoorTileModel tilesFromStatus:movedStatus config:config() boot:boot]);
     require([tile.snapshotURL isEqualToString:@"http://10.10.38.79:8080/snapshot.jpg"],
             @"the still follows the advertised origin, not addrs[0] on a fixed port");
+    require([tile.videoMetaURL isEqualToString:@"http://10.10.38.79:8080/video-meta"],
+            @"orientation follows a non-default camera HTTP port");
 
     // --- State 2: configured, but no alive station -> offline. ---
     NSDictionary *offline = @{
@@ -231,6 +247,25 @@ int main(void) {
     };
     require([[DBDoorTileModel tilesFromStatus:downStatus config:config() boot:boot] count] == 0,
             @"a camera-less station gets no tile even while it is offline");
+
+    NSDictionary *removedConfig = @{
+      @"doors": @{@"door-mini3": @{@"seeded_by": @"c0ffee1122334455"}},
+      @"removed_devices": @{@"c0ffee1122334455": @YES}, @"devices": @{}
+    };
+    require([[DBDoorTileModel tilesFromStatus:offline config:removedConfig boot:boot] count] == 0,
+            @"deleting a station suppresses its orphaned auto-created preview");
+    require([[DBDoorTileModel tilesFromStatus:online config:removedConfig boot:boot] count] == 0,
+            @"a stale peer snapshot cannot revive a removed station");
+    require([[DBDoorTileModel tilesFromStatus:
+        @{@"doors": @{}, @"peers": @[aliveStation(@"alive")]} config:config() boot:boot] count] == 0,
+            @"an authoritative empty doors map must not fall back to stale peers");
+    NSMutableDictionary *replacementConfig = [removedConfig mutableCopy];
+    [replacementConfig setObject:@{@"replacement": @{@"role": @"door_station",
+        @"door": @"door-mini3"}} forKey:@"devices"];
+    require([[DBDoorTileModel tilesFromStatus:offline config:replacementConfig boot:boot] count] == 1,
+            @"a replacement station retains the shared door even when offline");
+    require([[DBDoorTileModel tilesFromStatus:legacy config:removedConfig boot:boot] count] == 0,
+            @"legacy peer fallback excludes removed stations");
 
     puts("PASS: DBDoorTileModel online/offline/no-station states");
   }

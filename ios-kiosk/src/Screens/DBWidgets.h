@@ -26,6 +26,11 @@ NSString *DBHexFromColor(UIColor *color);
 // backdrop is therefore decoded once per (image, size), scaled to the panel
 // with aspect fill and darkened, then reused. The same darkened image is what
 // the ink sampler measures, so the contrast decision matches what is on screen.
+// A wallpaper label with a soft, two-radius shadow around the glyphs.
+@interface DBReadableLabel : UILabel
+@property(nonatomic, strong) UIColor *readabilityShadow;
+@end
+
 @interface DBThemeBackdrop : NSObject
 
 // Decodes and prepares off the main thread. key identifies the picture, which
@@ -108,6 +113,9 @@ NSString *DBHexFromColor(UIColor *color);
 // override still wins, and core's per-region value is used when the background
 // is a flat colour, where core's answer is exact.
 - (void)setBackgroundSampler:(DBBackgroundSampler *)sampler;
+// A missing wallpaper must use the actual flat ground for both paint and ink,
+// while card chrome continues to follow the configured appearance.
+- (void)setRenderedFlatBackgroundHex:(NSString *)backgroundHex;
 // NO for a screen that paints its own chrome instead of the cluster's theme
 // picture, such as the incoming/monitor page. Core's published per-region ink
 // describes the theme background, so a screen that does not draw it must not

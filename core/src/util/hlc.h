@@ -1,4 +1,4 @@
-// Thread-safe hybrid logical clock with wall-clock correction from observed remote timestamps.
+// Thread-safe hybrid logical clock. Remote timestamps affect ordering, never physical time.
 
 
 
@@ -24,6 +24,7 @@ class HlcClock {
 
 
 
+  // Physical time with the time-service correction, independent of the logical ordering floor.
   int64_t correctedWallMs();
 
 

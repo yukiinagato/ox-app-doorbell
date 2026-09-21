@@ -68,6 +68,19 @@ final class CameraFeeder: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate
             return false
         }
         s.addOutput(out)
+        // Rotation metadata uses portrait pixels as its reference, independent of the
+        // front/back sensor's native mounting. Keep this fixed while the device moves.
+        if let connection = out.connection(with: .video), connection.isVideoOrientationSupported {
+            connection.videoOrientation = .portrait
+            if connection.isVideoMirroringSupported {
+                connection.automaticallyAdjustsVideoMirroring = false
+                connection.isVideoMirrored = false
+            }
+        } else {
+            s.commitConfiguration()
+            reportRuntime(active: false, state: "configuration_failed")
+            return false
+        }
         s.commitConfiguration()
 
         previewLayer = AVCaptureVideoPreviewLayer(session: s)

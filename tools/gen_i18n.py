@@ -280,8 +280,20 @@ def render_windows(entries, outputs):
         )
 
 
+CORE_NOTIFICATION_KEYS = ('event.press', 'event.motion', 'event.offline', 'event.online', 'emergency.title', 'emergency.notified', 'emergency.notify_on', 'emergency.notify_off', 'emergency.active_detail', 'reply.answered', 'notify.test', 'notify.answered_by', 'notify.replied_by')
+
+
+def render_core_notifications(entries, outputs):
+    lines = []
+    for key in CORE_NOTIFICATION_KEYS:
+        values = [key] + [text(entries, key, lang) for lang in LANGS]
+        lines.append("    {" + ", ".join(json.dumps(v, ensure_ascii=False) for v in values) + "},")
+    add_output(outputs, "core/src/node/generated_notification_strings.inc", "\n".join(lines) + "\n")
+
+
 def render_all(entries):
     outputs = {}
+    render_core_notifications(entries, outputs)
     render_web(entries, outputs)
     render_android(entries, outputs)
     render_ios(entries, outputs)

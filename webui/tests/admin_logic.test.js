@@ -670,3 +670,31 @@ assert.deepStrictEqual(L.runtimeHealthRows({
 ]);
 
 console.log("admin logic tests: ok");
+
+const motionWake = L.deviceEntries("dev", { name: "Door", role: "door_station", door: "front",
+  motion_enabled: true, motion_wake_screen: true }, {});
+assert.strictEqual(motionWake.find(e => e.key === "devices.dev.local.motion").value.wake_screen, true);
+
+for (const layout of ["standard", "left", "right", "edges"]) {
+  const entries = L.deviceEntries("dev", { name: "Door", role: "door_station", door: "front", visitor_layout: layout }, {});
+  assert.strictEqual(entries.find(e => e.key === "devices.dev.local.visitor_layout").value, layout);
+}
+
+{
+  const cfg = { display: { screensaver: { enabled: true, mode: "clock", brightness: 30 } },
+    devices: { hall: { local: { display: { screensaver: { brightness: 15 } } } } } };
+  const saver = L.screensaverModel(cfg, "hall");
+  assert.strictEqual(saver.mode, "clock");
+  assert.strictEqual(saver.brightness, 15);
+  assert.strictEqual(saver.after_s, 120);
+  const form = { override: true, enabled: true, mode: "minimal", schedule: "daily",
+    from: "23:00", to: "06:00", after_s: "45", brightness: "20" };
+  const changes = L.screensaverEntries("hall", form);
+  assert.strictEqual(changes.entries[0].key, "devices.hall.local.display.screensaver");
+  assert.strictEqual(changes.entries[0].value.brightness, 20);
+  assert.deepStrictEqual(L.screensaverEntries("hall", { override: false }).dels,
+    ["devices.hall.local.display.screensaver"]);
+  for (const bad of [{ brightness: 101 }, { after_s: "" }, { mode: "unknown" },
+                     { from: "26:00" }, { to: "23:00" }, { after_s: 2.5 }])
+    assert.throws(() => L.screensaverEntries("", Object.assign({}, form, bad)), /screensaver_invalid/);
+}

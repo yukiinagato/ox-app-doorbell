@@ -2381,3 +2381,131 @@ TEST_CASE("peers: a quiet cluster stops emitting peers_changed") {
   b.node->stop();
   c.node->stop();
 }
+
+TEST_CASE("node: purpose deletion removes edited descendants and converges to an empty list") {
+  NFleet f;
+  auto& a = f.add("delete-a:1", "a", "indoor_panel", "", true);
+  auto& b = f.add("delete-b:1", "b", "door_station", "d_front", false);
+  REQUIRE(a.node->start());
+  REQUIRE(b.node->start());
+  f.run(1000);
+  a.node->setConfigKey("visit_purposes.p_visit.enabled", "false");
+  a.node->setConfigKey("visit_purposes.p_visit.order", "90");
+  auto cfg = json::parse(a.node->configJson());
+  const cJSON* purpose = nullptr;
+  cJSON_ArrayForEach(purpose, json::get(cfg.get(), "visit_purposes")) {
+    REQUIRE(purpose->string);
+    auto result = json::parse(a.node->deleteConfigKeyJson("visit_purposes." + std::string(purpose->string)));
+    REQUIRE(json::getBool(result.get(), "ok"));
+  }
+  f.run(1000);
+  for (Node* node : {a.node.get(), b.node.get()}) {
+    cfg = json::parse(node->configJson());
+    CHECK(cJSON_GetArraySize(json::get(cfg.get(), "visit_purposes")) == 0);
+  }
+  a.node->stop();
+  b.node->stop();
+}
+
+TEST_CASE("node: removal forgets an offline identity without deleting its replacement") {
+  NFleet f;
+  auto& a = f.add("remove-a:1", "admin", "indoor_panel", "", true);
+  auto& b = f.add("remove-b:1", "replacement", "door_station", "d_front", false);
+  REQUIRE(a.node->start());
+  REQUIRE(b.node->start());
+  const std::string old = "0123456789abcdef0123456789abcdef";
+  a.node->setConfigKey("devices." + old, R"({"name":"old","role":"door_station","door":"d_front"})");
+  a.node->setConfigKey("devices." + old + ".local.theme.bg_color", "\"#101418\"");
+  f.run(1000);
+  a.node->removeDevice(old);
+  f.run(1000);
+  for (Node* node : {a.node.get(), b.node.get()}) {
+    auto cfg = json::parse(node->configJson());
+    CHECK(json::get(json::get(cfg.get(), "devices"), old.c_str()) == nullptr);
+    CHECK(json::get(json::get(cfg.get(), "devices"), b.node->nodeId().c_str()) != nullptr);
+    CHECK(json::getBool(json::get(cfg.get(), "removed_devices"), old.c_str()));
+  }
+  a.node->removeDevice(a.node->nodeId());
+  f.run(100);
+  auto cfg = json::parse(a.node->configJson());
+  CHECK(json::get(json::get(cfg.get(), "removed_devices"), a.node->nodeId().c_str()) == nullptr);
+  a.node->stop();
+  b.node->stop();
+}
+
+TEST_CASE("node: Telegram credentials synchronize only to secure storage and rotate by reference") {
+  NFleet f;
+  auto& a = f.add("secret-a:1", "source", "indoor_panel", "", true);
+  auto& b = f.add("secret-b:1", "joiner", "door_station", "d_front", false);
+  std::map<std::string, std::string> source{{"telegram.one", "test-token-one"}}, target;
+  a.node->setSecureStore([&](const std::string& key) { return source[key]; },
+                        [&](const std::string& key, const std::string& value) { source[key] = value; return true; });
+  b.node->setSecureStore([&](const std::string& key) { return target[key]; },
+                        [&](const std::string& key, const std::string& value) { target[key] = value; return true; });
+  REQUIRE(a.node->start());
+  a.node->setConfigKey("integrations.telegram.bot_token_ref", "\"secret:telegram.one\"");
+  REQUIRE(b.node->start());
+  f.run(8000);
+  CHECK(target["telegram.one"] == "test-token-one");
+  auto status = json::parse(b.node->capabilitiesJson());
+  CHECK(json::getBool(json::get(status.get(), "caps"), "telegram_ready"));
+  source["telegram.two"] = "test-token-two";
+  a.node->setConfigKey("integrations.telegram.bot_token_ref", "\"secret:telegram.two\"");
+  f.run(8000);
+  CHECK(target["telegram.two"] == "test-token-two");
+  for (Node* node : {a.node.get(), b.node.get()}) {
+    CHECK(node->configJson().find("test-token-") == std::string::npos);
+    CHECK(node->statusJson().find("test-token-") == std::string::npos);
+  }
+  for (const auto& event : b.ui) CHECK(event.find("test-token-") == std::string::npos);
+  a.node->stop();
+  b.node->stop();
+}
+
+TEST_CASE("node: motion wakes only its entrance when the option is enabled") {
+  NFleet f;
+  auto& door = f.add("motion:1", "front", "door_station", "d_front", true);
+  REQUIRE(door.node->start());
+  const std::string key = "devices." + door.node->nodeId() + ".local.motion";
+  auto trigger = [&] {
+    for (int i = 0; i < 10; ++i) {
+      std::vector<uint8_t> frame(32 * 24 * 4, i % 2 ? 220 : 0);
+      door.node->pushCameraFrame(frame.data(), 3, 32, 24, 32 * 4, f.clock.wallMs());
+      f.run(100);
+    }
+  };
+  door.node->setConfigKey(key, R"({"enabled":true,"sensitivity":100,"min_interval_s":1})");
+  trigger();
+  REQUIRE(door.uiCount("event", "motion") > 0);
+  CHECK(door.uiCount("wake_screen") == 0);
+  door.node->setConfigKey(key + ".wake_screen", "true");
+  f.run(2000);
+  trigger();
+  REQUIRE(door.uiCount("wake_screen") > 0);
+  const size_t wakes = door.uiCount("wake_screen");
+  door.node->setConfigKey(key + ".wake_screen", "false");
+  f.run(2000);
+  trigger();
+  CHECK(door.uiCount("wake_screen") == wakes);
+  door.node->stop();
+}
+
+TEST_CASE("node: an offline removed member leaves after reconnecting") {
+  NFleet f;
+  auto& admin = f.add("offline-admin:1", "admin", "indoor_panel", "", true);
+  auto& old = f.add("offline-old:1", "old", "door_station", "d_front", false);
+  REQUIRE(admin.node->start());
+  REQUIRE(old.node->start());
+  f.run(1000);
+  f.net.partition({{"offline-admin:1"}, {"offline-old:1"}});
+  f.run(1000);
+  admin.node->removeDevice(old.node->nodeId());
+  f.run(500);
+  CHECK(pairingState(*old.node) == "ready");
+  f.net.heal();
+  f.run(5000);
+  CHECK(pairingState(*old.node) == "unpaired");
+  CHECK(old.uiCount("pairing_revoked") > 0);
+  admin.node->stop();
+  old.node->stop();
+}

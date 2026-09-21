@@ -570,6 +570,7 @@ TEST_CASE("telegram: leader fetches a JPEG snapshot from the originating node") 
   TgFleet f;
 
   auto& a = f.add("A:1", "front", "door_station", "d_front", true, tgCaps(20, /*wan=*/false));
+  a.https.fail_status = 503;
   auto& b = f.add("B:1", "kitchen", "indoor_panel", "", false, tgCaps(10));
   REQUIRE(a.node->start());
   REQUIRE(b.node->start());
@@ -818,4 +819,96 @@ TEST_CASE("telegram: i18n overrides replace motion and offline text through Node
   CHECK(a.node->text("event.online", "ja", {{"device", "front"}}) == "front 復帰");
 
   a.node->stop();
+}
+
+TEST_CASE("telegram: indoor answers and replies edit the original notification with the device name") {
+  for (bool answer : {false, true}) {
+    TgFleet f;
+    auto& door = f.add("A:1", "front", "door_station", "d_front", true, tgCaps(20));
+    auto& indoor = f.add("B:1", "living-room", "indoor_panel", "", false, tgCaps(1));
+    REQUIRE(door.node->start());
+    REQUIRE(indoor.node->start());
+    seedTgConfig(*door.node, false);
+    door.node->setConfigKey("integrations.telegram.lang", "\"en\"");
+    door.node->setConfigKey("devices." + indoor.node->nodeId() + ".name", "\"Living room\"");
+    f.run(1500);
+    const std::string call = door.node->pressV2("d_front", "");
+    REQUIRE(!call.empty());
+    REQUIRE(f.runUntil([&] { return door.https.count("sendMessage") == 1; }, 3000));
+    door.https.respond_by_api["editMessageCaption"] =
+        {400, R"({"ok":false,"description":"there is no caption in the message to edit"})"};
+    if (answer) REQUIRE(indoor.node->reportCallAnsweredV2("d_front", call, 0));
+    else REQUIRE(indoor.node->sendQuickReplyV2("qr_away", "", "d_front", call, 0));
+    REQUIRE(f.runUntil([&] { return door.https.count("editMessageText") >= 1; }, 3000));
+    auto body = json::parse(door.https.last("editMessageText")->body);
+    REQUIRE(body);
+    CHECK(json::getInt(body.get(), "message_id") == 100);
+    CHECK(json::getString(body.get(), "text").find("Living room") != std::string::npos);
+    CHECK(json::getString(body.get(), "text").find(answer ? "Answered by" : "replied at") != std::string::npos);
+    CHECK(cJSON_GetArraySize(json::get(json::get(body.get(), "reply_markup"), "inline_keyboard")) == 0);
+    CHECK(door.https.count("sendMessage") == 1);
+    CHECK(indoor.https.count("editMessageText") == 0);
+    door.node->stop();
+    indoor.node->stop();
+  }
+}
+
+TEST_CASE("telegram: a response during snapshot capture survives send completion and edit retry") {
+  SimClock clock{1'700'000'000'000LL, 0};
+  Runloop loop{clock};
+  Store store;
+  REQUIRE(store.open(":memory:"));
+  HlcClock hlc{clock, "response-test"};
+  EventLog events{"response-test", hlc, store};
+  events.loadHeads();
+  MockHttps https;
+  std::function<void(Bytes)> snapshot;
+  TelegramBridge::Hooks hooks;
+  hooks.https = https.fn();
+  hooks.get_event = [&store](const std::string& origin, uint64_t seq) { return store.eventGet(origin, seq); };
+  hooks.merge_notify = [&events](const std::string& origin, uint64_t seq, const std::string& notify) {
+    events.mergeNotify(origin, seq, notify);
+  };
+  hooks.hlc_tick = [&hlc] { return hlc.tick(); };
+  hooks.fetch_snapshot = [&snapshot](const std::string&, std::function<void(Bytes)> done) { snapshot = done; };
+  hooks.text = [](const std::string& key, const std::string&,
+                  const std::vector<std::pair<std::string, std::string>>& args) {
+    std::string result = key;
+    for (const auto& arg : args) result += " " + arg.second;
+    return result;
+  };
+  TelegramBridge bridge{loop, store, std::move(hooks)};
+  bridge.configure(R"({"integrations":{"telegram":{"bot_token":"TESTTOKEN"}},"households":{"h":{"telegram_chat_ids":[111,222]}},"devices":{"indoor":{"name":"Kitchen"}}})", "response-test", true);
+  auto press = events.append("press", "front", "door", R"({"call_id":"first-call"})");
+  bridge.onEvent(press);
+  bridge.onAction(press, R"({"households":["h"],"with_snapshot":true})");
+  clock.advance(300);
+  loop.pumpDue();
+  REQUIRE(static_cast<bool>(snapshot));
+  auto reply = events.append("reply", "front", "indoor", R"({"call_id":"first-call","text":"Please wait"})");
+  bridge.onEvent(reply);
+  CHECK(https.count("editMessageCaption") == 0);
+  https.respond_by_api["editMessageCaption"] = {503, R"({"ok":false})"};
+  snapshot(Bytes{0xff, 0xd8, 0xff});
+  loop.pumpDue();
+  CHECK(https.count("sendPhoto") == 2);
+  CHECK(https.count("editMessageCaption") == 2);
+  REQUIRE(https.last("editMessageCaption"));
+  CHECK(https.last("editMessageCaption")->body.find("Kitchen") != std::string::npos);
+  CHECK(https.last("editMessageCaption")->body.find("Please wait") != std::string::npos);
+  CHECK(store.tgQueueCount() == 2);
+  https.respond_by_api.erase("editMessageCaption");
+  clock.advance(30'000);
+  loop.pumpDue();
+  CHECK(store.tgQueueCount() == 0);
+  CHECK(https.count("sendPhoto") == 2);
+  bridge.configure(R"({"integrations":{"telegram":{"bot_token":"TESTTOKEN"}}})", "response-test", false);
+  auto answered = events.append("call_answered", "front", "indoor", R"({"call_id":"first-call"})");
+  bridge.onEvent(answered);
+  const size_t before_leadership = https.count("editMessageCaption");
+  bridge.configure(R"({"integrations":{"telegram":{"bot_token":"TESTTOKEN"}}})", "response-test", true);
+  loop.pumpDue();
+  CHECK(https.count("editMessageCaption") == before_leadership + 2);
+  CHECK(https.last("editMessageCaption")->body.find("notify.answered_by") != std::string::npos);
+  CHECK(https.count("sendPhoto") == 2);
 }

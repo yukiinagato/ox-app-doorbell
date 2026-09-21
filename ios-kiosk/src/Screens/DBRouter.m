@@ -83,6 +83,9 @@ static BOOL DBCoreSipBackendCompiled(void) {
   DBIncomingScreen *_incoming;
   DBInfoScreen *_info;
   DBSettingsScreen *_settings;
+  BOOL _infoFromSettings;
+  BOOL _historyFromSettings;
+  BOOL _addDeviceFromSettings;
   DBHistoryScreen *_history;
   DBPairingScreen *_pairing;
   DBAddDeviceScreen *_addDevice;
@@ -643,13 +646,26 @@ static BOOL DBCoreSipBackendCompiled(void) {
   [self showHomeAnimated:animated];
 }
 
+- (void)closeSettingsChildAnimated:(BOOL)animated returnToSettings:(BOOL)returnToSettings {
+  if (returnToSettings) {
+    [[self settings] reload];
+    [self transitionTo:_settings animated:animated];
+  } else {
+    [self showHomeAnimated:animated];
+  }
+}
+
 - (void)showInfo {
+  _infoFromSettings = _current == _settings;
   [[self info] reload];
   [self transitionTo:_info animated:YES];
 }
 
 - (void)closeInfoAnimated:(BOOL)animated {
-  if (_current == _info) [self showHomeAnimated:animated];
+  if (_current != _info) return;
+  BOOL returnToSettings = _infoFromSettings;
+  _infoFromSettings = NO;
+  [self closeSettingsChildAnimated:animated returnToSettings:returnToSettings];
 }
 
 - (void)showDebugStartScreen:(NSString *)name {
@@ -689,16 +705,16 @@ static BOOL DBCoreSipBackendCompiled(void) {
 }
 
 - (void)showHistory {
+  _historyFromSettings = _current == _settings;
   [[self history] reload];
   [self transitionTo:_history animated:YES];
 }
 
 - (void)closeHistoryAnimated:(BOOL)animated {
   if (_current != _history) return;
-  // Settings owns the history entry when it opened it; otherwise the dashboard
-  // does. Returning to the primary screen is correct in both cases because the
-  // settings screen reloads itself when it reappears.
-  [self showHomeAnimated:animated];
+  BOOL returnToSettings = _historyFromSettings;
+  _historyFromSettings = NO;
+  [self closeSettingsChildAnimated:animated returnToSettings:returnToSettings];
 }
 
 - (void)factoryResetForRevocation:(NSString *)reason {
@@ -738,6 +754,7 @@ static BOOL DBCoreSipBackendCompiled(void) {
 }
 
 - (void)showAddDevice {
+  _addDeviceFromSettings = _current == _settings;
   [[self addDevice] startPolling];
   [self transitionTo:_addDevice animated:YES];
 }
@@ -745,7 +762,9 @@ static BOOL DBCoreSipBackendCompiled(void) {
 - (void)closeAddDeviceAnimated:(BOOL)animated {
   if (_current != _addDevice) return;
   [_addDevice stopPolling];
-  [self showHomeAnimated:animated];
+  BOOL returnToSettings = _addDeviceFromSettings;
+  _addDeviceFromSettings = NO;
+  [self closeSettingsChildAnimated:animated returnToSettings:returnToSettings];
 }
 
 - (NSString *)currentScreenName {
@@ -1298,6 +1317,16 @@ static BOOL DBCoreSipBackendCompiled(void) {
       [self refreshSelfDeviceIdentity];
     if ([t isEqualToString:@"config_changed"] || [t isEqualToString:@"asset_ready"])
       [self refreshSoundConfig];
+    if ([t isEqualToString:@"config_changed"] && _current == _settings) {
+      __weak DBRouter *weakSelf = self;
+      dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.3 * NSEC_PER_SEC)),
+          dispatch_get_main_queue(), ^{
+        DBRouter *router = weakSelf;
+        if (router && router->_current == router->_settings) [router->_settings reload];
+        if (router && router->_home) [router->_home refreshFromCore];
+        if (router && router->_door) [router->_door refreshFromCore];
+      });
+    }
     // Refresh Home even while it is covered: its door list is what the idle
     // 「門口を見る」 picker renders the moment the user returns to it.
     if (_home) [_home refreshFromCore];

@@ -17,6 +17,7 @@
 @property(nonatomic, readonly) BOOL online;                // served_by names an alive peer.
 @property(nonatomic, readonly, copy) NSString *snapshotURL;  // Empty unless online.
 @property(nonatomic, readonly, copy) NSString *streamURL;    // Empty unless online.
+@property(nonatomic, readonly, copy) NSString *videoMetaURL;
 
 @end
 
@@ -37,5 +38,8 @@
 // that reports no camera capability at all is assumed to have one: an older
 // shell that never published the key must not lose its tile.
 + (BOOL)peerHasCamera:(NSDictionary *)peer;
+
+// Retain the last measured orientation when metadata is missing or malformed.
++ (NSInteger)videoRotationFromMetadata:(id)metadata fallback:(NSInteger)fallback;
 
 @end

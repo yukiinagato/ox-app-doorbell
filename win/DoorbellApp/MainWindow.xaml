@@ -634,9 +634,12 @@
         <Canvas x:Name="ScreensaverView" Visibility="Collapsed" Background="#000000">
             <StackPanel x:Name="SaverBlock" Canvas.Left="120" Canvas.Top="120">
                 <TextBlock x:Name="SaverClock" FontSize="64" FontWeight="Light"
-                           Foreground="#39424C"/>
-                <TextBlock x:Name="SaverDate" FontSize="20" Foreground="#242B33"
+                           Foreground="#D9D9D9"/>
+                <TextBlock x:Name="SaverDate" FontSize="20" Foreground="#D9D9D9"
                            Margin="0,6,0,0"/>
+                <TextBlock x:Name="SaverHint" FontSize="28" FontWeight="SemiBold"
+                           Foreground="#FFFFFF" TextWrapping="Wrap" MaxWidth="600"
+                           Margin="0,16,0,0"/>
             </StackPanel>
         </Canvas>
 

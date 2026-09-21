@@ -1,122 +1,106 @@
 #import "DBNumericKeypad.h"
 
-static const CGFloat kKeyGap = 8;
-static const CGFloat kKeyHeight = 56;
+@interface DBNumericKeypad () <UITextFieldDelegate>
+@end
 
 @implementation DBNumericKeypad {
-  NSMutableString *_digits;
-  NSMutableArray *_buttons;
+  UITextField *_field;
   UIButton *_submit;
 }
 
-@synthesize maxLength = _maxLength;
-@synthesize onChange = _onChange;
-@synthesize onSubmit = _onSubmit;
-
 + (CGFloat)heightForWidth:(CGFloat)width {
   (void)width;
-  return 4 * kKeyHeight + 3 * kKeyGap;
-}
-
-- (UIButton *)keyButton {
-  UIButton *b = [UIButton buttonWithType:UIButtonTypeCustom];
-  b.titleLabel.font = [UIFont boldSystemFontOfSize:26];
-  [b setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-  [b setTitleColor:[UIColor whiteColor] forState:UIControlStateHighlighted];
-  [b setTitleColor:[UIColor colorWithWhite:1 alpha:0.35] forState:UIControlStateDisabled];
-  b.backgroundColor = [UIColor colorWithRed:0.24 green:0.28 blue:0.35 alpha:1];
-  [b setBackgroundImage:nil forState:UIControlStateNormal];
-  b.layer.borderWidth = 1;
-  b.layer.borderColor = [UIColor colorWithWhite:1 alpha:0.30].CGColor;
-  b.layer.cornerRadius = 10;
-  return b;
+  return 108;
 }
 
 - (id)initWithSubmitTitle:(NSString *)submitTitle {
   self = [super initWithFrame:CGRectZero];
   if (self) {
-    _digits = [[NSMutableString alloc] init];
-    _buttons = [[NSMutableArray alloc] init];
     _maxLength = 6;
-    NSArray *keys = @[@"1", @"2", @"3", @"4", @"5", @"6", @"7", @"8", @"9",
-                      @"back", @"0", @"ok"];
-    for (NSString *key in keys) {
-      UIButton *b = [self keyButton];
-      NSString *label = key;
-      if ([key isEqualToString:@"back"]) {
-        label = @"DEL";
-        [b setTitleColor:[UIColor colorWithRed:1.0 green:0.55 blue:0.45 alpha:1]
-                forState:UIControlStateNormal];
-      } else if ([key isEqualToString:@"ok"]) {
-        label = [submitTitle length] > 0 ? submitTitle : @"OK";
-        b.titleLabel.font = [UIFont boldSystemFontOfSize:19];
-        b.backgroundColor = [UIColor colorWithRed:0.13 green:0.55 blue:0.28 alpha:1];
-        b.layer.borderColor = [UIColor clearColor].CGColor;
-        _submit = b;
-      }
-      [b setTitle:label forState:UIControlStateNormal];
-      b.accessibilityIdentifier = key;
-      [b addTarget:self action:@selector(onKey:) forControlEvents:UIControlEventTouchUpInside];
-      [self addSubview:b];
-      [_buttons addObject:b];
-    }
+    _field = [[UITextField alloc] init];
+    _field.keyboardType = UIKeyboardTypeNumberPad;
+    _field.font = [UIFont systemFontOfSize:24];
+    _field.textColor = [UIColor blackColor];
+    _field.backgroundColor = [UIColor whiteColor];
+    _field.borderStyle = UITextBorderStyleRoundedRect;
+    _field.textAlignment = NSTextAlignmentCenter;
+    _field.contentVerticalAlignment = UIControlContentVerticalAlignmentCenter;
+    _field.delegate = self;
+    _field.accessibilityIdentifier = @"numeric_input";
+    [_field addTarget:self action:@selector(valueChanged) forControlEvents:UIControlEventEditingChanged];
+    [self addSubview:_field];
+    _submit = [UIButton buttonWithType:UIButtonTypeCustom];
+    _submit.backgroundColor = [UIColor colorWithRed:0.05 green:0.30 blue:0.65 alpha:1];
+    _submit.layer.cornerRadius = 8;
+    _submit.titleLabel.font = [UIFont boldSystemFontOfSize:17];
+    [_submit setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+    [_submit addTarget:self action:@selector(submitValue) forControlEvents:UIControlEventTouchUpInside];
+    [self addSubview:_submit];
+    [self setSubmitTitle:submitTitle];
+    UIToolbar *toolbar = [[UIToolbar alloc] init];
+    toolbar.items = @[
+      [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemCancel
+          target:self action:@selector(cancelEditing)],
+      [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemFlexibleSpace
+          target:nil action:nil],
+      [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemDone
+          target:self action:@selector(submitValue)]];
+    [toolbar sizeToFit];
+    _field.inputAccessoryView = toolbar;
   }
   return self;
 }
 
 - (void)setSubmitTitle:(NSString *)title {
-  if ([title length] > 0) [_submit setTitle:title forState:UIControlStateNormal];
+  [_submit setTitle:title forState:UIControlStateNormal];
 }
 
 - (void)setKeysEnabled:(BOOL)enabled {
-  for (UIButton *b in _buttons) {
-    b.enabled = enabled;
-    b.alpha = enabled ? 1.0 : 0.45;
-  }
+  _field.enabled = enabled;
+  _submit.enabled = enabled;
+  if (!enabled) [_field resignFirstResponder];
 }
 
-- (NSString *)value {
-  return [_digits copy];
-}
+- (NSString *)value { return _field.text ?: @""; }
 
 - (void)setValue:(NSString *)value {
-  [_digits setString:@""];
-  for (NSUInteger i = 0; i < [value length] && [_digits length] < _maxLength; i++) {
+  NSMutableString *digits = [NSMutableString string];
+  for (NSUInteger i = 0; i < [value length] && [digits length] < _maxLength; i++) {
     unichar c = [value characterAtIndex:i];
-    if (c >= '0' && c <= '9') [_digits appendFormat:@"%C", c];
+    if (c >= '0' && c <= '9') [digits appendFormat:@"%C", c];
   }
-  if (_onChange) _onChange([_digits copy]);
+  _field.text = digits;
+  [self valueChanged];
 }
 
-- (void)clear {
-  [self setValue:@""];
+- (void)clear { self.value = @""; }
+- (void)beginEditing { [_field becomeFirstResponder]; }
+
+- (void)valueChanged {
+  if (_onChange) _onChange(self.value);
 }
 
-- (void)onKey:(UIButton *)sender {
-  NSString *identifier = sender.accessibilityIdentifier;
-  if ([identifier isEqualToString:@"ok"]) {
-    if (_onSubmit) _onSubmit([_digits copy]);
-    return;
-  }
-  if ([identifier isEqualToString:@"back"]) {
-    if ([_digits length] > 0)
-      [_digits deleteCharactersInRange:NSMakeRange([_digits length] - 1, 1)];
-  } else if ([_digits length] < _maxLength) {
-    [_digits appendString:identifier];
-  }
-  if (_onChange) _onChange([_digits copy]);
+- (void)submitValue {
+  [_field resignFirstResponder];
+  if (_onSubmit) _onSubmit(self.value);
+}
+
+- (void)cancelEditing {
+  [_field resignFirstResponder];
+  if (_onCancel) _onCancel();
+}
+
+- (BOOL)textField:(UITextField *)field shouldChangeCharactersInRange:(NSRange)range
+ replacementString:(NSString *)string {
+  NSString *next = [field.text ?: @"" stringByReplacingCharactersInRange:range withString:string];
+  NSCharacterSet *invalid = [[NSCharacterSet characterSetWithCharactersInString:@"0123456789"] invertedSet];
+  return [next length] <= _maxLength && [next rangeOfCharacterFromSet:invalid].location == NSNotFound;
 }
 
 - (void)layoutSubviews {
   [super layoutSubviews];
   CGFloat width = self.bounds.size.width;
-  CGFloat keyW = (width - 2 * kKeyGap) / 3;
-  for (NSUInteger i = 0; i < [_buttons count]; i++) {
-    NSUInteger row = i / 3, col = i % 3;
-    UIButton *b = [_buttons objectAtIndex:i];
-    b.frame = CGRectMake(col * (keyW + kKeyGap), row * (kKeyHeight + kKeyGap),
-                         keyW, kKeyHeight);
-  }
+  _field.frame = CGRectMake(0, 0, width, 52);
+  _submit.frame = CGRectMake(0, 64, width, 44);
 }
-
 @end

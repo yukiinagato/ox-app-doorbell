@@ -1385,7 +1385,9 @@ struct Mesh::Impl {
   static bool capsEligible(const cJSON* caps, const std::string& duty) {
     if (duty == "telegram" || duty == "web_push") {
       const char* ready = duty == "telegram" ? "telegram_ready" : "web_push_ready";
-      return json::getBool(caps, "tls12") && json::getBool(caps, "wan") &&
+      return json::getBool(caps, "tls12") &&
+             (json::getBool(caps, "wan") ||
+              (duty == "telegram" && json::getBool(caps, "telegram_reachable"))) &&
              json::getBool(caps, "mains_power") && json::getBool(caps, "wall_clock_sane") &&
              json::getBool(caps, ready);
     }
@@ -1415,6 +1417,7 @@ struct Mesh::Impl {
     int64_t best_rank = 0;
     for (const auto& kv : peers) {
       const Peer& p = kv.second;
+      if (config.get("removed_devices." + p.info.id)) continue;
       if (p.info.id != st.node_id && p.info.status == "dead") continue;
       json::Doc caps = json::parse(p.info.caps_json);
       if (!caps || !capsEligible(caps.get(), duty)) continue;
@@ -1434,6 +1437,13 @@ struct Mesh::Impl {
     if (cbs.on_leader_changed) cbs.on_leader_changed(duty, id);
   }
 
+  bool eligibleLeader(const std::string& id, const std::string& duty) const {
+    auto it = peers.find(id);
+    if (it == peers.end() || !notDead(id) || config.get("removed_devices." + id)) return false;
+    auto caps = json::parse(it->second.info.caps_json);
+    return caps && capsEligible(caps.get(), duty);
+  }
+
   void leaderTick() {
     for (const char* duty : kDuties) {
       DutyState& d = duties[duty];
@@ -1445,7 +1455,7 @@ struct Mesh::Impl {
         d.last_claim_mono = now();
         broadcastClaim(duty);
       } else {
-        const bool lease_ok = !d.leader.empty() && notDead(d.leader) &&
+        const bool lease_ok = !d.leader.empty() && eligibleLeader(d.leader, duty) &&
                               (now() - d.last_claim_mono) < st.claim_ttl_ms;
         if (!lease_ok) setLeader(duty, w);
       }
@@ -1472,6 +1482,8 @@ struct Mesh::Impl {
         !wireSignedInteger(json::get(doc, "rank"), &rank) ||
         !wireSequence(json::get(doc, "term"), true, &term))
       return;
+    if (!eligibleLeader(leader, duty)) return;
+    rank = rankOf(leader);
     DutyState& d = duties[duty];
     if (leader == d.leader) {
       d.last_claim_mono = now();
@@ -1479,7 +1491,7 @@ struct Mesh::Impl {
       return;
     }
     if (!notDead(leader)) return;
-    const bool lease_expired = d.leader.empty() || !notDead(d.leader) ||
+    const bool lease_expired = d.leader.empty() || !eligibleLeader(d.leader, duty) ||
                                (now() - d.last_claim_mono) >= st.claim_ttl_ms;
 
     if (lease_expired ||

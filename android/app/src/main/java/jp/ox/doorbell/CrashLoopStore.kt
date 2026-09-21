@@ -58,8 +58,7 @@ internal class CrashLoopStore(private val file: File) {
         state = ProcessRecoveryState(
             generation = nextGeneration(state.generation),
             crashWallMs = crashes,
-            safeMode = !buildChanged &&
-                (state.safeMode || crashes.size >= RecoveryPolicy.SAFE_MODE_THRESHOLD),
+            safeMode = false,
             restartAttempt = attempt,
             lastExitReason = runtimeToken(reason),
             sessionOpen = true,
@@ -76,7 +75,7 @@ internal class CrashLoopStore(private val file: File) {
         val crashes = (RecoveryPolicy.recent(state.crashWallMs, nowWallMs) + nowWallMs).takeLast(16)
         state = state.copy(
             crashWallMs = crashes,
-            safeMode = state.safeMode || crashes.size >= RecoveryPolicy.SAFE_MODE_THRESHOLD,
+            safeMode = false,
             restartAttempt = state.restartAttempt + 1,
             lastExitReason = runtimeToken(reason),
             sessionOpen = false,
@@ -149,7 +148,7 @@ internal class CrashLoopStore(private val file: File) {
             ProcessRecoveryState(
                 generation = root.optLong("generation").coerceIn(0L, MAX_GENERATION),
                 crashWallMs = crashes.takeLast(16),
-                safeMode = root.optBoolean("safe_mode"),
+                safeMode = false,
                 restartAttempt = root.optInt("restart_attempt").coerceIn(0, 1_000),
                 lastExitReason = runtimeToken(root.optString("last_exit_reason")),
                 sessionOpen = root.optBoolean("session_open"),

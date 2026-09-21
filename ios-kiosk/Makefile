@@ -9,6 +9,7 @@
 #   make clean
 
 ROOT      := $(abspath $(dir $(lastword $(MAKEFILE_LIST)))/..)
+.DEFAULT_GOAL := all
 KIOSK     := $(ROOT)/ios-kiosk
 SRC_DIR   := $(KIOSK)/src
 MINISIP   := $(KIOSK)/mini_sip
@@ -33,11 +34,11 @@ MINVER    := -miphoneos-version-min=5.1
 SYSROOT   := -isysroot $(SDK)
 
 # Objective-C uses ARC, which is supported by the iOS 5.1 target.
-OBJCFLAGS := $(ARCH) $(MINVER) $(SYSROOT) -Wall -O2 -fobjc-arc \
+OBJCFLAGS := $(ARCH) $(MINVER) $(SYSROOT) -Wall -O2 -fobjc-arc -MMD -MP \
              -I$(SRC_DIR) -I$(SRC_DIR)/Support -I$(SRC_DIR)/Core -I$(SRC_DIR)/Net \
              -I$(SRC_DIR)/Media -I$(SRC_DIR)/Screens \
              -I$(CORE_INC) -I$(MINISIP) -I$(QR)
-CFLAGS    := $(ARCH) $(MINVER) $(SYSROOT) -Wall -O2 -I$(MINISIP) -I$(CORE_INC) -I$(QR)
+CFLAGS    := $(ARCH) $(MINVER) $(SYSROOT) -Wall -O2 -MMD -MP -I$(MINISIP) -I$(CORE_INC) -I$(QR)
 
 FRAMEWORKS := -framework Foundation -framework UIKit -framework CoreGraphics \
               -framework QuartzCore -framework CFNetwork -framework AudioToolbox \
@@ -59,8 +60,10 @@ CPP_OBJS  := $(patsubst $(SRC_DIR)/%.cpp,$(OBJ)/%.o,$(CPP_SRCS))
 C_OBJS    := $(patsubst $(MINISIP)/%.c,$(OBJ)/minisip_%.o,$(C_SRCS))
 QR_OBJS   := $(patsubst $(QR)/%.c,$(OBJ)/qr_%.o,$(QR_SRCS))
 ALL_OBJS  := $(OBJC_OBJS) $(CPP_OBJS) $(C_OBJS) $(QR_OBJS)
+-include $(ALL_OBJS:.o=.d)
 
 EXE := $(APP)/Doorbell
+RELAUNCH := $(APP)/DoorbellRelaunch
 HOST_TS_TEST := $(BUILD)/host/test_ts_mux
 
 .PHONY: all app test verify clean
@@ -76,7 +79,7 @@ $(OBJ)/%.o: $(SRC_DIR)/%.m | $(OBJ)
 
 $(OBJ)/%.o: $(SRC_DIR)/%.cpp | $(OBJ)
 	@mkdir -p $(dir $@)
-	$(CLANG) $(ARCH) $(MINVER) $(SYSROOT) -Wall -O2 -std=c++11 -I$(CORE_INC) -c $< -o $@
+	$(CLANG) $(ARCH) $(MINVER) $(SYSROOT) -Wall -O2 -MMD -MP -std=c++11 -I$(CORE_INC) -c $< -o $@
 
 $(OBJ)/minisip_%.o: $(MINISIP)/%.c | $(OBJ)
 	$(CLANG) $(CFLAGS) -c $< -o $@
@@ -90,7 +93,12 @@ $(EXE): $(ALL_OBJS) $(LIB_DIR)/libdoorbell_all.a $(ENTITLEMENTS)
 	$(CLANG) $(ARCH) $(MINVER) $(SYSROOT) -o $@ \
 	  $(ALL_OBJS) $(LIB_DIR)/libdoorbell_all.a $(RTLIBS) $(FRAMEWORKS)
 
-app: $(EXE)
+$(RELAUNCH): $(KIOSK)/tools/relaunch.c $(ENTITLEMENTS)
+	@mkdir -p $(APP)
+	$(CLANG) $(ARCH) $(MINVER) $(SYSROOT) -Wall -Wextra -O2 $< -o $@
+	@$(LDID) -S$(ENTITLEMENTS) $@
+
+app: $(EXE) $(RELAUNCH)
 	@cp $(SRC_DIR)/Info.plist $(APP)/Info.plist
 	@cp $(SRC_DIR)/Resources/*.png $(APP)/ 2>/dev/null || true
 	@cp $(KIOSK)/resources/icons/*.png $(APP)/ 2>/dev/null || true

@@ -41,9 +41,7 @@ EventRecord EventLog::append(const std::string& type, const std::string& door,
   ev.device = device;
   ev.hlc = hlc_.tick();
 
-  int64_t ms = 0;
-  HlcClock::parse(ev.hlc, &ms, nullptr, nullptr);
-  ev.wall_ms = ms;
+  ev.wall_ms = hlc_.correctedWallMs();
   ev.payload_json = payload_json;
   std::vector<EventRecord> applied;
   auto persisted = store_.eventAppendLocal(std::move(ev), &applied);

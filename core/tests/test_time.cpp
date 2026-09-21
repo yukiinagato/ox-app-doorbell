@@ -41,6 +41,7 @@ int offsetOf(const std::string& zone, int64_t at_ms) {
 class FakeNtpServer {
  public:
   explicit FakeNtpServer(int64_t skew_ms) : skew_ms_(skew_ms) {}
+  ~FakeNtpServer() { stop(); }
 
   bool start() {
     fd_ = ::socket(AF_INET, SOCK_DGRAM, 0);
@@ -422,6 +423,49 @@ TEST_CASE("node: the time service adopts a measured offset and falls back when i
   node.stop();
   server.stop();
   CHECK(server.requests() >= 1);
+}
+
+TEST_CASE("node: a backward NTP correction reaches displayed time immediately") {
+  FakeNtpServer server(-5500);
+  REQUIRE(server.start());
+  RealClock clock;
+  Runloop loop(clock);
+  NodeOptions options;
+  options.data_dir = ":memory:";
+  options.name = "backward-time-sync";
+  options.role = "indoor_panel";
+  options.listen_addr = "127.0.0.1:0";
+  options.enable_beacon = false;
+  options.http_port = 0;
+  NodeDeps deps;
+  deps.clock = &clock;
+  deps.loop = &loop;
+  Node node(options, std::move(deps));
+  REQUIRE(node.start());
+  node.setConfigKey("time.ntp.servers",
+                    "[\"127.0.0.1:" + std::to_string(server.port()) + "\"]");
+  node.setConfigKey("time.ntp.enabled", "true");
+  for (int i = 0; i < 200 && clock.wallOffsetMs() == 0; ++i) {
+    loop.pumpDue();
+    std::this_thread::sleep_for(std::chrono::milliseconds(5));
+  }
+  REQUIRE(clock.wallOffsetMs() < -5400);
+  REQUIRE(clock.wallOffsetMs() > -5600);
+
+  const int64_t before = clock.wallMs();
+  auto local = json::parse(node.localTimeJson(0));
+  const int64_t after = clock.wallMs();
+  REQUIRE(local);
+  CHECK(json::getInt(local.get(), "wall_ms") >= before);
+  CHECK(json::getInt(local.get(), "wall_ms") <= after);
+
+  node.setConfigKey("time.zone", "\"UTC\"");
+  loop.pumpDue();
+  auto status = json::parse(node.statusJson());
+  const auto* status_local = json::get(json::get(status.get(), "time"), "local");
+  CHECK(json::getInt(status_local, "wall_ms") >= before);
+  CHECK(json::getInt(status_local, "wall_ms") <= clock.wallMs());
+  node.stop();
 }
 
 TEST_CASE("node: the configured zone drives local time and the derived compatibility offset") {

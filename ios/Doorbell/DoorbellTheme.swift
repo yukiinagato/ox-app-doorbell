@@ -67,10 +67,24 @@ struct DoorbellPalette {
     }
 }
 
-/// Historical name retained so the shared screens do not need a mechanical rename. On the Swift
-/// indoor app it is deliberately a plain label: automatic light/dark ink is used without an
-/// outline or shadow.
-final class HaloLabel: UILabel {}
+/// A soft opposite-color shadow separates wallpaper text without changing the glyph shape.
+final class HaloLabel: UILabel {
+    weak var inkCompanion: UILabel?
+    var outlineColor: UIColor? { didSet { setNeedsDisplay() } }
+
+    override func drawText(in rect: CGRect) {
+        guard let contrastColor = outlineColor,
+              let context = UIGraphicsGetCurrentContext() else {
+            super.drawText(in: rect)
+            return
+        }
+        context.saveGState()
+        context.setShadow(offset: CGSize(width: 0, height: 1), blur: 3,
+                          color: contrastColor.withAlphaComponent(0.9).cgColor)
+        super.drawText(in: rect)
+        context.restoreGState()
+    }
+}
 
 /// Where one region's ink came from. Every batch-2 shell names the same four sources, so a panel
 /// that came back with white text over a light picture is diagnosed the same way everywhere.
@@ -100,10 +114,11 @@ struct BackgroundSample {
         return BackgroundSample(average: color, minLuminance: level, maxLuminance: level)
     }
 
-    /// The worst contrast an ink reaches anywhere in the region. Contrast falls away on both
-    /// sides of the ink's own luminance, so the worst patch is always one of the two extremes.
+    /// An ink inside the sampled luminance interval may disappear on an intermediate patch.
+    /// Outside that interval, the nearest extreme gives its minimum contrast.
     func worstContrast(_ ink: UIColor) -> CGFloat {
         let level = DoorbellTheme.luminance(ink)
+        if level >= minLuminance && level <= maxLuminance { return 1 }
         return min(DoorbellTheme.ratio(level, minLuminance),
                    DoorbellTheme.ratio(level, maxLuminance))
     }
@@ -146,7 +161,7 @@ struct InkDecision {
     let ink: UIColor
     let background: UIColor
     let source: InkSource
-    /// The 40 % opposite-ink shadow, or nil when the pair already reaches AA on its own.
+    /// The opposite-color outline, or nil when the ink reaches AA across the sampled interval.
     let shadow: UIColor?
 }
 
@@ -242,7 +257,11 @@ struct DoorbellSkin {
     /// Paints one label from the geometry it has right now, including the quiet variant, against
     /// the whole ground rather than only its average.
     func paint(_ region: String, to label: UILabel, quiet: Bool) {
-        let rect = sampler?.regionRect(of: label)
+        var rect = sampler?.regionRect(of: label)
+        if let companion = (label as? HaloLabel)?.inkCompanion,
+           let companionRect = sampler?.regionRect(of: companion) {
+            rect = rect.map { $0.union(companionRect) } ?? companionRect
+        }
         let ground = self.ground(in: rect)
         let decision = self.decision(region, on: ground)
         DoorbellTheme.applyInk(quiet ? muted(decision, on: ground) : decision.ink, over: ground,
@@ -388,6 +407,7 @@ struct BackdropStyle: Equatable {
 /// Every full-screen surface owns one — both home screens, the incoming screen, the monitor page —
 /// so no two of them can end up disagreeing about what is behind their text.
 final class ThemeBackgroundView: UIImageView {
+    private var imageSuppressed = false
 
     typealias ImageLoader = (_ hash: String, _ path: String?, _ httpPort: Int,
                              _ completion: @escaping (UIImage?, String) -> Void) -> Void
@@ -466,7 +486,9 @@ final class ThemeBackgroundView: UIImageView {
 
     @discardableResult
     func apply(display: [String: Any]?, config: [String: Any]?, nodeId: String,
-               palette: DoorbellPalette, httpPort: Int, host: UIView) -> DoorbellSkin {
+               palette: DoorbellPalette, httpPort: Int, host: UIView,
+               hideImage: Bool = false) -> DoorbellSkin {
+        imageSuppressed = hideImage
         let color = ThemeBackgroundView.value("bg_color", display: display, config: config,
                                               nodeId: nodeId)
         let key = (color ?? "") + "/" + palette.appearance.rawValue
@@ -479,8 +501,8 @@ final class ThemeBackgroundView: UIImageView {
             }
         }
         setBackdrop(BackdropStyle.resolve(display: display, config: config, nodeId: nodeId))
-        let hash = ThemeBackgroundView.value("bg_image", display: display, config: config,
-                                             nodeId: nodeId) ?? ""
+        let hash = hideImage ? "" : (ThemeBackgroundView.value("bg_image", display: display, config: config,
+                                                               nodeId: nodeId) ?? "")
         if hash.isEmpty {
             requestedHash = nil
             loadingHash = nil
@@ -572,6 +594,13 @@ final class ThemeBackgroundView: UIImageView {
     /// picture Core says it sampled.
     private func skin(display: [String: Any]?, config: [String: Any]?, nodeId: String,
                       palette: DoorbellPalette, host: UIView, decorated: Bool) -> DoorbellSkin {
+        var display = display
+        if imageSuppressed, var theme = display?["theme"] as? [String: Any] {
+            for key in ["auto_background", "auto_ink", "auto_accent", "call_button_bg", "call_button_ink"] {
+                theme.removeValue(forKey: key)
+            }
+            display?["theme"] = theme
+        }
         var background = host.backgroundColor ?? palette.background
         if drawsImage, let sampled = sample(in: nil) {
             background = sampled.average
@@ -904,7 +933,12 @@ enum DoorbellTheme {
         case .palette:
             return decision(ink: palette.ink, ground: ground, source: .local)
         case .sampled:
-            return decision(ink: automaticInk(on: background), ground: ground,
+            let dark = DoorbellPalette.light.ink, light = DoorbellPalette.dark.ink
+            let darkScore = ground.worstContrast(dark)
+            let lightScore = ground.worstContrast(light)
+            let ink = abs(darkScore - lightScore) < 0.1
+                ? automaticInk(on: background) : (darkScore > lightScore ? dark : light)
+            return decision(ink: ink, ground: ground,
                             source: .localRegion)
         case .themeColor:
             switch ConfigUtil.str(display, "theme.auto_ink.\(region)") {
@@ -931,7 +965,7 @@ enum DoorbellTheme {
     /// The outline is added when the chosen ink misses the 4.5:1 body-text target against any
     /// patch of the region, not merely against its average: a hint line crossing a pale wall and
     /// a dark jacket averaged fine on the device and disappeared over the jacket. It is the
-    /// opposite ink at 40 %.
+    /// opposite ink.
     private static func decision(ink: UIColor, ground: InkGround,
                                  source: InkSource) -> InkDecision {
         let background = ground.color
@@ -972,11 +1006,11 @@ enum DoorbellTheme {
         return color(hex: ConfigUtil.str(display, "theme.auto_background.color"))
     }
 
-    /// Applies the selected automatic ink without decorating the glyphs. The Swift indoor app
-    /// intentionally leaves both UILabel shadow properties disabled.
+    /// Preserve bare text on uniform backgrounds; outline glyphs only on low-contrast patches.
     static func applyInk(_ ink: UIColor, over ground: InkGround, to label: UILabel) {
         let decided = decision(ink: ink, ground: ground, source: .local)
         label.textColor = decided.ink
+        (label as? HaloLabel)?.outlineColor = decided.shadow
         label.shadowColor = nil
         label.shadowOffset = .zero
     }

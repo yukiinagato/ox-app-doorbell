@@ -787,8 +787,10 @@ static UIColor *DBPairOk(void) {
   UIEdgeInsets insets = UIEdgeInsetsMake(0, 0, _keyboardInset, 0);
   _scroll.contentInset = insets;
   _scroll.scrollIndicatorInsets = insets;
-  if (_keyboardInset > 0 && !_hostField.hidden)
-    [_scroll scrollRectToVisible:CGRectInset(_hostField.frame, 0, -20) animated:YES];
+  if (_keyboardInset > 0) {
+    CGRect field = [_hostField isFirstResponder] ? _hostField.frame : _keypad.frame;
+    [_scroll scrollRectToVisible:CGRectInset(field, 0, -20) animated:YES];
+  }
 }
 
 #pragma mark - layout
@@ -873,8 +875,7 @@ static UIColor *DBPairOk(void) {
     y += 48;
     _codeLabel.frame = CGRectMake(pad, y, width, 18);
     y += 20;
-    _codeDisplay.frame = CGRectMake(pad, y, width, 54);
-    y += 62;
+    _codeDisplay.hidden = YES;
     CGFloat keypadWidth = MIN(width, 330);
     CGFloat keypadHeight = [DBNumericKeypad heightForWidth:keypadWidth];
     _keypad.frame = CGRectMake((size.width - keypadWidth) / 2, y, keypadWidth, keypadHeight);

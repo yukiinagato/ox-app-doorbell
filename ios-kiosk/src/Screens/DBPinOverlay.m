@@ -10,14 +10,18 @@ static const NSInteger kMaxLen = 6;
 static NSInteger sFails = 0;
 static NSTimeInterval sLockedUntil = 0;
 
+@interface DBPinOverlay () <UITextFieldDelegate>
+@end
+
 @implementation DBPinOverlay {
   DBTexts *_texts;
   DBCoreBridge *_core;
   NSMutableString *_pin;
-  UILabel *_display;
+  UITextField *_display;
+  CGFloat _keyboardHeight;
+  UIButton *_submitButton;
   UILabel *_errorLabel;
   UIView *_card;
-  NSMutableArray *_keyButtons;
   UIButton *_cancelButton;
   UILabel *_title;
   void (^_onUnlocked)(void);
@@ -29,24 +33,10 @@ static NSTimeInterval sLockedUntil = 0;
     _texts = router.texts;
     _core = router.core;
     _pin = [[NSMutableString alloc] init];
-    _keyButtons = [[NSMutableArray alloc] init];
     self.backgroundColor = [UIColor colorWithWhite:0 alpha:0.75];
     [self buildUi];
   }
   return self;
-}
-
-- (UIButton *)keyButton {
-  UIButton *b = [UIButton buttonWithType:UIButtonTypeCustom];
-  b.titleLabel.font = [UIFont boldSystemFontOfSize:30];
-  [b setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-  [b setTitleColor:[UIColor whiteColor] forState:UIControlStateHighlighted];
-  b.backgroundColor = [UIColor colorWithRed:0.24 green:0.28 blue:0.35 alpha:1];
-  [b setBackgroundImage:nil forState:UIControlStateNormal];
-  b.layer.borderWidth = 1;
-  b.layer.borderColor = [UIColor colorWithWhite:1 alpha:0.30].CGColor;
-  b.layer.cornerRadius = 12;
-  return b;
 }
 
 - (void)buildUi {
@@ -57,52 +47,62 @@ static NSTimeInterval sLockedUntil = 0;
 
   _title = [[UILabel alloc] init];
   _title.text = [_texts ts:@"admin.pin_prompt"];
-  _title.font = [UIFont boldSystemFontOfSize:26];
+  _title.font = [UIFont boldSystemFontOfSize:18];
+  _title.numberOfLines = 0;
   _title.textColor = [UIColor whiteColor];
   _title.textAlignment = NSTextAlignmentCenter;
   [_card addSubview:_title];
 
-  _display = [[UILabel alloc] init];
-  _display.font = [UIFont boldSystemFontOfSize:48];
-  _display.textColor = [UIColor whiteColor];
+  _display = [[UITextField alloc] init];
+  _display.secureTextEntry = YES;
+  _display.keyboardType = UIKeyboardTypeNumberPad;
+  _display.contentVerticalAlignment = UIControlContentVerticalAlignmentCenter;
+  _display.delegate = self;
+  [_display addTarget:self action:@selector(pinChanged) forControlEvents:UIControlEventEditingChanged];
+  _display.font = [UIFont systemFontOfSize:24];
+  _display.textColor = [UIColor colorWithWhite:0.12 alpha:1];
   _display.textAlignment = NSTextAlignmentCenter;
-  _display.backgroundColor = [UIColor colorWithWhite:1 alpha:0.06];
+  _display.backgroundColor = [UIColor whiteColor];
   _display.layer.cornerRadius = 8;
   _display.clipsToBounds = YES;
   [_card addSubview:_display];
 
   _errorLabel = [[UILabel alloc] init];
-  _errorLabel.font = [UIFont boldSystemFontOfSize:18];
+  _errorLabel.font = [UIFont systemFontOfSize:14];
+  _errorLabel.numberOfLines = 0;
   _errorLabel.textColor = [UIColor colorWithRed:1.0 green:0.45 blue:0.38 alpha:1];
   _errorLabel.textAlignment = NSTextAlignmentCenter;
   _errorLabel.text = @" ";
   [_card addSubview:_errorLabel];
 
-  NSArray *keys = @[@"1", @"2", @"3", @"4", @"5", @"6", @"7", @"8", @"9", @"back", @"0", @"ok"];
-  for (NSString *key in keys) {
-    UIButton *b = [self keyButton];
-    NSString *label = key;
-    if ([key isEqualToString:@"back"]) {
-      label = @"DEL";
-      [b setTitleColor:[UIColor colorWithRed:1.0 green:0.55 blue:0.45 alpha:1]
-              forState:UIControlStateNormal];
-    } else if ([key isEqualToString:@"ok"]) {
-      label = @"OK";
-      b.backgroundColor = [UIColor colorWithRed:0.13 green:0.55 blue:0.28 alpha:1];
-      b.layer.borderColor = [UIColor clearColor].CGColor;
-    }
-    [b setTitle:label forState:UIControlStateNormal];
-    b.titleLabel.font = [UIFont boldSystemFontOfSize:28];
-    b.accessibilityIdentifier = key;
-    [b addTarget:self action:@selector(onKey:) forControlEvents:UIControlEventTouchUpInside];
-    [_card addSubview:b];
-    [_keyButtons addObject:b];
-  }
+  _submitButton = [UIButton buttonWithType:UIButtonTypeCustom];
+  [_submitButton setTitle:[_texts ts:@"admin.login"] forState:UIControlStateNormal];
+  [_submitButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+  _submitButton.backgroundColor = [UIColor colorWithRed:0.05 green:0.30 blue:0.65 alpha:1];
+  _submitButton.titleLabel.font = [UIFont boldSystemFontOfSize:17];
+  _submitButton.layer.cornerRadius = 8;
+  [_submitButton addTarget:self action:@selector(submit) forControlEvents:UIControlEventTouchUpInside];
+  [_card addSubview:_submitButton];
+  UIToolbar *toolbar = [[UIToolbar alloc] init];
+  toolbar.items = @[
+      [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemCancel target:self action:@selector(onCancel)],
+      [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemFlexibleSpace target:nil action:nil],
+      [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemDone target:self action:@selector(submit)]];
+  [toolbar sizeToFit];
+  _display.inputAccessoryView = toolbar;
+  [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(keyboardChanged:)
+      name:UIKeyboardWillChangeFrameNotification object:nil];
+  [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(keyboardChanged:)
+      name:UIKeyboardWillHideNotification object:nil];
 
   _cancelButton = [UIButton buttonWithType:UIButtonTypeCustom];
   [_cancelButton setTitle:[_texts ts:@"calling.cancel"] forState:UIControlStateNormal];
-  _cancelButton.titleLabel.font = [UIFont systemFontOfSize:19];
-  [_cancelButton setTitleColor:[UIColor colorWithWhite:1 alpha:0.75] forState:UIControlStateNormal];
+  _cancelButton.titleLabel.font = [UIFont systemFontOfSize:17];
+  _cancelButton.backgroundColor = [UIColor colorWithRed:0.18 green:0.20 blue:0.25 alpha:1];
+  _cancelButton.layer.cornerRadius = 8;
+  _cancelButton.layer.borderWidth = 1;
+  _cancelButton.layer.borderColor = [UIColor colorWithWhite:1 alpha:0.14].CGColor;
+  [_cancelButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
   [_cancelButton addTarget:self action:@selector(onCancel)
           forControlEvents:UIControlEventTouchUpInside];
   [_card addSubview:_cancelButton];
@@ -112,34 +112,42 @@ static NSTimeInterval sLockedUntil = 0;
   [self clearLabelBackgrounds:self];
 
 
-  _display.backgroundColor = [UIColor colorWithWhite:1 alpha:0.07];
+  _display.backgroundColor = [UIColor whiteColor];
 }
 - (void)layoutSubviews {
   [super layoutSubviews];
-  self.frame = self.superview.bounds;
-  CGFloat cardW = 380, cardH = 500;
+  CGFloat cardW = MIN(380, self.bounds.size.width - 40), cardH = 230;
+  CGFloat available = MAX(cardH, self.bounds.size.height - _keyboardHeight);
   _card.frame = CGRectMake((self.bounds.size.width - cardW) / 2,
-                           (self.bounds.size.height - cardH) / 2, cardW, cardH);
-  CGFloat pad = 22, y = 20;
-  _title.frame = CGRectMake(pad, y, cardW - 2 * pad, 32);
-  y += 40;
-  _display.frame = CGRectMake(pad + 8, y, cardW - 2 * pad - 16, 60);
-  y += 68;
-  _errorLabel.frame = CGRectMake(pad, y, cardW - 2 * pad, 24);
-  y += 30;
-  CGFloat gap = 8;
-  CGFloat keyW = (cardW - 2 * pad - 2 * gap) / 3;
-  CGFloat keyH = 64;
-  for (NSUInteger i = 0; i < [_keyButtons count]; i++) {
-    NSUInteger row = i / 3, col = i % 3;
-    UIButton *b = [_keyButtons objectAtIndex:i];
-    b.frame = CGRectMake(pad + col * (keyW + gap), y + row * (keyH + gap), keyW, keyH);
-  }
-  y += 4 * (keyH + gap) + 6;
-  _cancelButton.frame = CGRectMake(pad, y, cardW - 2 * pad, 34);
+      MAX(10, (available - cardH) / 2), cardW, cardH);
+  _title.frame = CGRectMake(20, 16, cardW - 40, 44);
+  _display.frame = CGRectMake(20, 72, cardW - 40, 48);
+  _errorLabel.frame = CGRectMake(20, 124, cardW - 40, 28);
+  CGFloat buttonWidth = (cardW - 52) / 2;
+  _cancelButton.frame = CGRectMake(20, 166, buttonWidth, 44);
+  _submitButton.frame = CGRectMake(32 + buttonWidth, 166, buttonWidth, 44);
 }
 
+- (void)keyboardChanged:(NSNotification *)note {
+  CGRect keyboard = [self convertRect:[[note.userInfo objectForKey:UIKeyboardFrameEndUserInfoKey] CGRectValue] fromView:nil];
+  CGRect overlap = CGRectIntersection(self.bounds, keyboard);
+  _keyboardHeight = [note.name isEqualToString:UIKeyboardWillHideNotification] || CGRectIsNull(overlap)
+      ? 0 : CGRectGetHeight(overlap);
+  [self setNeedsLayout];
+}
 
+- (void)dealloc { [[NSNotificationCenter defaultCenter] removeObserver:self]; }
+
+- (BOOL)textField:(UITextField *)field shouldChangeCharactersInRange:(NSRange)range replacementString:(NSString *)string {
+  NSString *next = [field.text ?: @"" stringByReplacingCharactersInRange:range withString:string];
+  NSCharacterSet *invalid = [[NSCharacterSet characterSetWithCharactersInString:@"0123456789"] invertedSet];
+  return [next length] <= kMaxLen && [next rangeOfCharacterFromSet:invalid].location == NSNotFound;
+}
+
+- (void)pinChanged {
+  [_pin setString:_display.text ?: @""];
+  _errorLabel.text = @" ";
+}
 
 - (void)presentInView:(UIView *)parent then:(void (^)(void))onUnlocked {
   if (self.superview) {
@@ -147,6 +155,7 @@ static NSTimeInterval sLockedUntil = 0;
     [_pin setString:@""];
     _display.text = @"";
     _errorLabel.text = @" ";
+    [_display becomeFirstResponder];
     return;
   }
   _onUnlocked = onUnlocked;
@@ -156,11 +165,13 @@ static NSTimeInterval sLockedUntil = 0;
   self.frame = parent.bounds;
   self.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
   [parent addSubview:self];
+  [_display becomeFirstResponder];
   self.alpha = 0.0;
   [UIView animateWithDuration:0.2 animations:^{ self.alpha = 1.0; }];
 }
 
 - (void)dismiss {
+  [_display resignFirstResponder];
   __weak DBPinOverlay *wself = self;
   [UIView animateWithDuration:0.2
       animations:^{ wself.alpha = 0.0; }
@@ -175,22 +186,6 @@ static NSTimeInterval sLockedUntil = 0;
 - (void)onCancel {
   _onUnlocked = nil;
   [self dismiss];
-}
-
-- (void)onKey:(UIButton *)sender {
-  _errorLabel.text = @" ";
-  NSString *identifier = sender.accessibilityIdentifier;
-  if ([identifier isEqualToString:@"back"]) {
-    if ([_pin length] > 0) [_pin deleteCharactersInRange:NSMakeRange([_pin length] - 1, 1)];
-  } else if ([identifier isEqualToString:@"ok"]) {
-    [self submit];
-    return;
-  } else if ([_pin length] < (NSUInteger)kMaxLen) {
-    [_pin appendString:identifier];
-  }
-  NSMutableString *dots = [NSMutableString string];
-  for (NSUInteger i = 0; i < [_pin length]; i++) [dots appendString:@"●"];
-  _display.text = dots;
 }
 
 // The device 管理パスワード and the web admin password are one cluster-wide

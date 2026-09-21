@@ -2,6 +2,17 @@ import AudioToolbox
 import AVFoundation
 import UIKit
 
+private final class PurposeButton: UIButton {
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        let iconSize: CGFloat = 24
+        imageView?.frame = CGRect(x: (bounds.width - iconSize) / 2, y: 14,
+                                  width: iconSize, height: iconSize)
+        titleLabel?.frame = CGRect(x: 6, y: 44, width: bounds.width - 12,
+                                   height: bounds.height - 50)
+    }
+}
+
 final class MainViewController: UIViewController {
 
     private let core: CoreBridge
@@ -21,6 +32,8 @@ final class MainViewController: UIViewController {
     private var night = false
     private var redTint = false
     private var screensaverAfterS = 120
+    private var screensaverBrightness = 10
+    private var screensaverMode = "dim"
     private var pixelShiftS = 300
     private var lastActivity = Date()
     private var screensaverOn = false
@@ -30,10 +43,11 @@ final class MainViewController: UIViewController {
 
     private var inCall = false
     private var peerPollBusy = false
+    private weak var purposeChoice: PurposeChoiceViewController?
     private var activeCallId = ""
     private var activeCallExpiresAtMs: Int64 = 0
     private var reportedRecoveryCallId = ""
-    private var safeMode = UserDefaults.standard.bool(forKey: "runtime.safe_mode")
+    private let safeMode = false
     private var chimeGate = CallChimeRevisionGate()
     private var h264EncoderFailed = false
     private var lastEncoderDemand: Bool?
@@ -127,6 +141,7 @@ final class MainViewController: UIViewController {
     private let offlineTitle = UILabel()
     private let offlineBody = UILabel()
     private let screensaverView = UIView()
+    private let saverHint = UILabel()
     private let saverClock = UILabel()
     private let saverDate = UILabel()
     private let nightTint = UIView()
@@ -141,7 +156,7 @@ final class MainViewController: UIViewController {
     private static let cardColor = UIColor(white: 1, alpha: 0.10)
     private static let accentColor = UIColor(red: 1.0, green: 0.80, blue: 0.25, alpha: 1)
     private static let nightClock = UIColor(red: 0.545, green: 0.141, blue: 0.110, alpha: 1)
-    private static let saverClockColor = UIColor(red: 0.224, green: 0.259, blue: 0.298, alpha: 1)
+    private static let saverClockColor = UIColor(white: 0.85, alpha: 1)
 
     init(core: CoreBridge, boot: BootConfig, runtime: RuntimeSupervisor?) {
         self.core = core
@@ -214,7 +229,6 @@ final class MainViewController: UIViewController {
     }
 
     func enterSafeModeForMemoryPressure() {
-        safeMode = true
         camera.encoder = nil
         videoEncoder.stop()
         camera.stop()
@@ -587,14 +601,21 @@ final class MainViewController: UIViewController {
         saverClock.textColor = MainViewController.saverClockColor
         saverDate.font = .systemFont(ofSize: 20)
         saverDate.textColor = MainViewController.saverClockColor
-        let stack = UIStackView(arrangedSubviews: [saverClock, saverDate])
+        saverHint.font = .systemFont(ofSize: 28, weight: .semibold)
+        saverHint.textColor = .white
+        saverHint.textAlignment = .center
+        saverHint.numberOfLines = 0
+        let stack = UIStackView(arrangedSubviews: [saverClock, saverDate, saverHint])
         stack.axis = .vertical
+        stack.spacing = 16
         stack.alignment = .center
         stack.translatesAutoresizingMaskIntoConstraints = false
         screensaverView.addSubview(stack)
         saverCenterX = stack.centerXAnchor.constraint(equalTo: screensaverView.centerXAnchor)
         saverCenterY = stack.centerYAnchor.constraint(equalTo: screensaverView.centerYAnchor)
-        NSLayoutConstraint.activate([saverCenterX!, saverCenterY!])
+        NSLayoutConstraint.activate([saverCenterX!, saverCenterY!,
+                                     stack.widthAnchor.constraint(lessThanOrEqualTo: screensaverView.widthAnchor,
+                                                                  multiplier: 0.7)])
     }
 
     private var saverCenterX: NSLayoutConstraint?
@@ -632,6 +653,7 @@ final class MainViewController: UIViewController {
 
 
     private func applyStrings() {
+        saverHint.text = texts.t(boot.role == "door_station" ? "display.saver_door_hint" : "display.saver_panel_hint")
         // The visitor is standing at this unit, so naming it on the button says nothing they do
         // not already know, and on a narrow panel the id is what pushes the label onto a second
         // line. The button carries the verb alone; the door's name stays in the footer.
@@ -644,7 +666,7 @@ final class MainViewController: UIViewController {
         offlineTitle.text = texts.t("offline.title")
         offlineBody.text = texts.t("offline.body")
         sosSlider.refreshStrings()
-        visitorScreen?.updateHint(texts.t("door.hint_call"))
+        visitorScreen?.setCallFlow(callFlowMode(), hasPurposes: !availablePurposeIds().isEmpty)
         inCallTitle.text = texts.t("incall.title")
         endCallButton.setTitle(texts.t("incall.end"), for: .normal)
         emergencyTitle.text = texts.t("emergency.title")
@@ -786,11 +808,12 @@ final class MainViewController: UIViewController {
             dashboard.reload(config: cfg, skin: skin)
         }
         if let visitor = visitorScreen {
+            visitor.setLayoutStyle(ConfigUtil.str(cfg, "devices.\(nodeId).local.visitor_layout") ?? "standard")
             let notice = DoorbellNotice.effective(status: status, config: cfg,
                                                   door: boot.door,
                                                   nowMs: reading?.wallMs ?? DoorbellClock.nowMs(core))
             visitor.updateNotice(notice)
-            visitor.updateHint(texts.t("door.hint_call"))
+            visitor.setCallFlow(callFlowMode(), hasPurposes: !availablePurposeIds().isEmpty)
             let power = (status?["self"] as? [String: Any])?["power"] as? [String: Any]
             let label = doorLabel(boot.door)
             visitor.updateFooter(DoorbellTheme.versionLine(
@@ -937,7 +960,8 @@ final class MainViewController: UIViewController {
     /// automatic contrast keeps the bare text legible on whatever picture is behind it.
     private func applyTheme() -> DoorbellSkin {
         return themeBg.apply(display: displayDoc, config: cfg, nodeId: nodeId, palette: palette,
-                             httpPort: boot.httpPort, host: view)
+                             httpPort: boot.httpPort, host: view,
+                             hideImage: screensaverOn && screensaverMode == "minimal")
     }
 
     /// Only the purposes an administrator left switched on are offered here; the settings 用件
@@ -947,7 +971,7 @@ final class MainViewController: UIViewController {
         for v in purposeGrid.arrangedSubviews { v.removeFromSuperview() }
         let purposes = (ConfigUtil.dig(cfg, "visit_purposes") as? [String: Any]) ?? [:]
         let ids = ConfigUtil.enabledPurposeIds(cfg)
-        guard boot.role == "door_station", !ids.isEmpty else {
+        guard boot.role == "door_station", callFlowMode() == "purpose_first", !ids.isEmpty else {
             purposeSection.isHidden = true
             return
         }
@@ -962,33 +986,26 @@ final class MainViewController: UIViewController {
             }
             let entry = purposes[id] as? [String: Any]
             let label = ConfigUtil.labelOf(entry, texts.lang, id)
-            // Core's seeded purposes wear a vendored Tabler glyph; a purpose an administrator
-            // invented has none, so the shell falls back to whatever text they configured --
-            // the same rule the Windows shell follows.
             let icon = entry?["icon"] as? String ?? ""
-            let b = UIButton(type: .system)
-            if let glyph = TablerIcon.purpose(id) {
-                b.setImage(glyph, for: .normal)
-                b.tintColor = idleSkin.cardInk("tile_label")
-                b.setTitle(label, for: .normal)
-                b.imageView?.contentMode = .scaleAspectFit
-                b.titleEdgeInsets = UIEdgeInsets(top: 34, left: -28, bottom: 0, right: 0)
-                b.imageEdgeInsets = UIEdgeInsets(top: -22, left: 0, bottom: 0, right: -28)
-            } else {
-                b.setTitle(icon.isEmpty ? label : "\(icon)\n\(label)", for: .normal)
-            }
-            b.titleLabel?.font = .systemFont(ofSize: 20)
-            b.titleLabel?.numberOfLines = 3
+            let b = PurposeButton(type: .system)
+            let glyph = TablerIcon.purpose(id) ?? TablerIcon.image("TablerNote")
+            b.setImage(glyph, for: .normal)
+            b.tintColor = idleSkin.cardInk("tile_label")
+            b.imageView?.contentMode = .scaleAspectFit
+            b.setTitle(TablerIcon.purpose(id) != nil || icon.isEmpty ? label : "\(icon) \(label)",
+                       for: .normal)
+            b.titleLabel?.font = .systemFont(ofSize: 16, weight: .medium)
+            b.titleLabel?.numberOfLines = 2
             b.titleLabel?.textAlignment = .center
             b.setTitleColor(idleSkin.cardInk("tile_label"), for: .normal)
             b.backgroundColor = idleSkin.surface
-            b.layer.cornerRadius = 12
+            b.layer.cornerRadius = 14
             // The row divides its width equally, so a button only needs a floor it may not
             // shrink below and a fixed height.
             let minimum = b.widthAnchor.constraint(greaterThanOrEqualToConstant: 96)
             minimum.priority = UILayoutPriority(999)
             minimum.isActive = true
-            b.heightAnchor.constraint(equalToConstant: 92).isActive = true
+            b.heightAnchor.constraint(equalToConstant: 88).isActive = true
             b.accessibilityIdentifier = "purpose_\(id)"
             b.addTarget(self, action: #selector(onPurposeClick(_:)), for: .touchUpInside)
             row!.addArrangedSubview(b)
@@ -1002,20 +1019,14 @@ final class MainViewController: UIViewController {
     }
 
     @objc private func onPurposeClick(_ sender: UIButton) {
+        guard callFlowMode() == "purpose_first", activeCallId.isEmpty else { return }
         guard let id = sender.accessibilityIdentifier?.dropFirst("purpose_".count) else { return }
         let purposeId = String(id)
+        guard availablePurposeIds().contains(purposeId) else { return }
         let purposes = ConfigUtil.dig(cfg, "visit_purposes") as? [String: Any]
         let label = ConfigUtil.labelOf(purposes?[purposeId] as? [String: Any], texts.lang,
                                        purposeId)
-        if activeCallId.isEmpty {
-            beginCall(purpose: purposeId, title: texts.t("purpose.sent", label))
-            return
-        } else if !core.selectPurpose(door: boot.door, callId: activeCallId,
-                                      purpose: purposeId) {
-            showIdle(hint: texts.t("calling.no_answer"))
-            return
-        }
-        showCalling(title: texts.t("purpose.sent", label))
+        beginCall(purpose: purposeId, title: texts.t("purpose.sent", label))
     }
 
     private func buildLangBar() {
@@ -1088,6 +1099,10 @@ final class MainViewController: UIViewController {
         night = ConfigUtil.evBool(d, "night")
         redTint = ConfigUtil.evBool(d, "red_tint")
         screensaverAfterS = ConfigUtil.int(d, "screensaver_after_s", screensaverAfterS)
+        screensaverBrightness = ConfigUtil.int(d, "screensaver.brightness", 10)
+        screensaverMode = ConfigUtil.str(d, "screensaver.mode") ?? "dim"
+        if screensaverAfterS <= 0 { exitScreensaver() }
+        if screensaverOn { updateScreensaverPresentation() }
         pixelShiftS = ConfigUtil.int(d, "pixel_shift_s", pixelShiftS)
         applyDisplay()
     }
@@ -1114,7 +1129,7 @@ final class MainViewController: UIViewController {
         }
 
         if !emergencyActive {
-            setBrightness(screensaverOn ? min(brightness, 10) : brightness)
+            setBrightness(screensaverOn ? min(brightness, screensaverBrightness) : brightness)
         }
     }
 
@@ -1127,12 +1142,17 @@ final class MainViewController: UIViewController {
         guard !screensaverOn else { return }
         screensaverOn = true
         updateClock()
-        screensaverView.isHidden = false
+        updateScreensaverPresentation()
         moveSaverClock()
         saverDriftTimer = IOSAvailability.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
             self?.moveSaverClock()
         }
-        setBrightness(min(brightness, 10))
+        setBrightness(min(brightness, screensaverBrightness))
+    }
+
+    private func updateScreensaverPresentation() {
+        screensaverView.isHidden = !screensaverOn || screensaverMode != "clock"
+        refreshHomeSurfaces()
     }
 
     private func exitScreensaver() {
@@ -1140,7 +1160,7 @@ final class MainViewController: UIViewController {
         screensaverOn = false
         saverDriftTimer?.invalidate()
         saverDriftTimer = nil
-        screensaverView.isHidden = true
+        updateScreensaverPresentation()
         if !emergencyActive { setBrightness(brightness) }
     }
 
@@ -1254,7 +1274,21 @@ final class MainViewController: UIViewController {
     }
 
 
+    private func dismissPurposeChoice() {
+        guard let alert = purposeChoice else { return }
+        purposeChoice = nil
+        alert.invalidate()
+        if alert.isBeingPresented, let transition = alert.transitionCoordinator {
+            transition.animate(alongsideTransition: nil) { _ in
+                alert.dismiss(animated: false)
+            }
+        } else {
+            alert.dismiss(animated: false)
+        }
+    }
+
     private func showIdle(hint: String? = nil) {
+        dismissPurposeChoice()
         callFeedbackAudio.stop()
         callTitleOverride = nil
         callTimeoutTimer?.invalidate()
@@ -1366,6 +1400,8 @@ final class MainViewController: UIViewController {
             }
             callTimeoutTimer?.invalidate()
             showIdle()
+        case "wake_screen":
+            if boot.role == "door_station" { onActivity() }
         case "event":
             let type = ConfigUtil.evStr(ev, "type")
             if type == "motion" || type == "press" {
@@ -1432,6 +1468,7 @@ final class MainViewController: UIViewController {
 
 
     private func onSipInCall(_ ev: [String: Any]) {
+        dismissPurposeChoice()
         inCall = true
         callingText.text = texts.t("incall.title")
         guard boot.role == "door_station" else { return }
@@ -1520,10 +1557,7 @@ final class MainViewController: UIViewController {
 
 
     @objc private func onCallClick() {
-        if callFlowMode() == "purpose_first", availablePurposeIds().isEmpty == false {
-            showPurposeChoice(afterRing: false)
-            return
-        }
+        guard activeCallId.isEmpty else { return }
         beginCall(purpose: "", title: nil)
         if !activeCallId.isEmpty, callFlowMode() == "ring_then_purpose",
            availablePurposeIds().isEmpty == false {
@@ -1545,10 +1579,9 @@ final class MainViewController: UIViewController {
     }
 
     private func callFlowMode() -> String {
-        if let mode = ConfigUtil.dig(cfg, "ui.call_flow") as? String { return mode }
-        if let object = ConfigUtil.dig(cfg, "ui.call_flow") as? [String: Any],
-           let mode = object["mode"] as? String { return mode }
-        return "purpose_first"
+        let value = ConfigUtil.dig(cfg, "ui.call_flow")
+        let mode = value as? String ?? (value as? [String: Any])?["mode"] as? String
+        return mode == "ring_then_purpose" ? "ring_then_purpose" : "purpose_first"
     }
 
     private func availablePurposeIds() -> [String] {
@@ -1558,35 +1591,34 @@ final class MainViewController: UIViewController {
     private func showPurposeChoice(afterRing: Bool) {
         let purposes = (ConfigUtil.dig(cfg, "visit_purposes") as? [String: Any]) ?? [:]
         guard presentedViewController == nil, !availablePurposeIds().isEmpty else { return }
-        let alert = UIAlertController(title: texts.t("idle.choose_purpose"), message: nil,
-                                      preferredStyle: .alert)
-        for purposeId in availablePurposeIds() {
-            let label = ConfigUtil.labelOf(purposes[purposeId] as? [String: Any], texts.lang,
+        let items = availablePurposeIds().map { id in
+            PurposeChoiceViewController.Item(id: id,
+                title: ConfigUtil.labelOf(purposes[id] as? [String: Any], texts.lang, id),
+                image: TablerIcon.purpose(id) ?? TablerIcon.image("TablerNote"))
+        }
+        let screen = PurposeChoiceViewController(items: items, palette: idleSkin.palette,
+                                                afterRing: afterRing, texts: texts)
+        let choiceCallId = activeCallId
+        screen.onSelect = { [weak self] purposeId in
+            guard let self = self else { return }
+            let label = ConfigUtil.labelOf(purposes[purposeId] as? [String: Any], self.texts.lang,
                                            purposeId)
-            alert.addAction(UIAlertAction(title: label, style: .default) { [weak self] _ in
-                guard let self = self else { return }
-                if afterRing {
-                    if self.core.selectPurpose(door: self.boot.door, callId: self.activeCallId,
-                                               purpose: purposeId) {
-                        self.showCalling(title: self.texts.t("purpose.sent", label))
-                    }
-                } else {
-                    self.beginCall(purpose: purposeId,
-                                   title: self.texts.t("purpose.sent", label))
+            if afterRing {
+                guard !choiceCallId.isEmpty, self.activeCallId == choiceCallId else { return }
+                if self.core.selectPurpose(door: self.boot.door, callId: choiceCallId,
+                                           purpose: purposeId) {
+                    self.showCalling(title: self.texts.t("purpose.sent", label))
                 }
-            })
+            } else {
+                self.beginCall(purpose: purposeId, title: self.texts.t("purpose.sent", label))
+            }
         }
-        if afterRing {
-            alert.addAction(UIAlertAction(title: texts.t("purpose.skip"), style: .default))
-            alert.addAction(UIAlertAction(title: texts.t("purpose.cancel_call"),
-                                          style: .destructive) { [weak self] _ in
-                self?.onCancelClick()
-            })
-        } else {
-            // Before emission, cancel is strictly local and produces no Core event.
-            alert.addAction(UIAlertAction(title: texts.t("admin.cancel"), style: .cancel))
+        screen.onCancel = { [weak self] in
+            guard afterRing, let self = self, self.activeCallId == choiceCallId else { return }
+            self.onCancelClick()
         }
-        present(alert, animated: true)
+        purposeChoice = screen
+        present(screen, animated: true)
     }
 
     @objc private func onCancelClick() {
@@ -1782,5 +1814,199 @@ final class MainViewController: UIViewController {
     func debugRefreshH264() {
         IOSAvailability.logDebug("h264 debug refresh requested")
         encoderPoll()
+    }
+}
+
+final class PurposeChoiceViewController: UIViewController {
+    struct Item {
+        let id: String
+        let title: String
+        let image: UIImage?
+    }
+
+    var onSelect: ((String) -> Void)?
+    var onCancel: (() -> Void)?
+    private let items: [Item]
+    private let colors: DoorbellPalette
+    private let afterRing: Bool
+    private let texts: Texts
+    private let heading = UILabel()
+    private let hint = UILabel()
+    private let scroll = UIScrollView()
+    private let footer = UIView()
+    private let cancel = UIButton(type: .system)
+    private let skip = UIButton(type: .system)
+    private var cards: [PurposeChoiceCard] = []
+    private var finished = false
+
+    init(items: [Item], palette: DoorbellPalette, afterRing: Bool, texts: Texts) {
+        self.items = items
+        colors = palette
+        self.afterRing = afterRing
+        self.texts = texts
+        super.init(nibName: nil, bundle: nil)
+        modalPresentationStyle = .fullScreen
+        modalTransitionStyle = .crossDissolve
+    }
+
+    required init?(coder: NSCoder) { fatalError("not supported") }
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        view.backgroundColor = colors.background
+        view.accessibilityIdentifier = "purpose_choice_screen"
+        heading.text = texts.t("idle.choose_purpose")
+        heading.textColor = colors.ink
+        heading.numberOfLines = 2
+        heading.accessibilityTraits = .header
+        hint.text = texts.t(afterRing ? "purpose.waiting_hint" : "purpose.choose_hint")
+        hint.textColor = colors.inkMuted
+        hint.numberOfLines = 2
+        view.addSubview(heading)
+        view.addSubview(hint)
+        scroll.alwaysBounceVertical = false
+        scroll.delaysContentTouches = false
+        view.addSubview(scroll)
+        view.addSubview(footer)
+        for (index, item) in items.enumerated() {
+            let card = PurposeChoiceCard(type: .custom)
+            card.configure(item: item, colors: colors)
+            card.tag = index
+            card.addTarget(self, action: #selector(choose(_:)), for: .touchUpInside)
+            scroll.addSubview(card)
+            cards.append(card)
+        }
+        cancel.setTitle(texts.t(afterRing ? "purpose.cancel_call" : "admin.cancel"), for: .normal)
+        cancel.setTitleColor(colors.ink, for: .normal)
+        cancel.backgroundColor = colors.surfaceSolid
+        cancel.accessibilityIdentifier = "purpose_choice_cancel"
+        cancel.addTarget(self, action: #selector(cancelChoice), for: .touchUpInside)
+        skip.setTitle(texts.t("purpose.skip"), for: .normal)
+        skip.setTitleColor(colors.onAccent, for: .normal)
+        skip.backgroundColor = colors.accent
+        skip.isHidden = !afterRing
+        skip.accessibilityIdentifier = "purpose_choice_skip"
+        skip.addTarget(self, action: #selector(skipChoice), for: .touchUpInside)
+        for button in [cancel, skip] {
+            button.layer.cornerRadius = 18
+            button.titleLabel?.font = .systemFont(ofSize: 22, weight: .semibold)
+            button.titleLabel?.numberOfLines = 2
+            button.titleLabel?.textAlignment = .center
+            button.contentEdgeInsets = UIEdgeInsets(top: 10, left: 18, bottom: 10, right: 18)
+            footer.addSubview(button)
+        }
+    }
+
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        var safe = UIEdgeInsets.zero
+        if #available(iOS 11.0, *) { safe = view.safeAreaInsets }
+        let bounds = view.bounds.inset(by: safe)
+        let margin: CGFloat = bounds.width < 500 ? 20 : 36
+        let width = min(1100, bounds.width - margin * 2)
+        let left = bounds.midX - width / 2
+        heading.font = .systemFont(ofSize: bounds.width < 500 ? 30 : 38, weight: .semibold)
+        hint.font = .systemFont(ofSize: 20, weight: .regular)
+        let headingHeight = heading.sizeThatFits(CGSize(width: width, height: 120)).height
+        heading.frame = CGRect(x: left, y: bounds.minY + 28, width: width, height: headingHeight)
+        let hintHeight = hint.sizeThatFits(CGSize(width: width, height: 80)).height
+        hint.frame = CGRect(x: left, y: heading.frame.maxY + 10, width: width, height: hintHeight)
+        let footerHeight: CGFloat = 68
+        footer.frame = CGRect(x: left, y: bounds.maxY - footerHeight - 24,
+                              width: width, height: footerHeight)
+        let gap: CGFloat = 16
+        let actionWidth = afterRing ? (width - gap) / 2 : width
+        cancel.frame = CGRect(x: 0, y: 0, width: actionWidth, height: footerHeight)
+        skip.frame = CGRect(x: actionWidth + gap, y: 0, width: actionWidth, height: footerHeight)
+        let top = hint.frame.maxY + 28
+        scroll.frame = CGRect(x: left, y: top, width: width,
+                              height: max(0, footer.frame.minY - top - 24))
+        let columns = width >= 820 ? 3 : (width >= 440 ? 2 : 1)
+        let rows = max(1, (items.count + columns - 1) / columns)
+        let cardWidth = (width - CGFloat(columns - 1) * gap) / CGFloat(columns)
+        let cardHeight = max(150, min(210,
+            (scroll.bounds.height - CGFloat(rows - 1) * gap) / CGFloat(rows)))
+        for (index, card) in cards.enumerated() {
+            card.frame = CGRect(x: CGFloat(index % columns) * (cardWidth + gap),
+                                y: CGFloat(index / columns) * (cardHeight + gap),
+                                width: cardWidth, height: cardHeight)
+        }
+        scroll.contentSize = CGSize(width: width, height: CGFloat(rows) * (cardHeight + gap) - gap)
+    }
+
+    // A remote reply may arrive during presentation or before a queued touch callback.
+    func invalidate() {
+        finished = true
+        onSelect = nil
+        onCancel = nil
+        viewIfLoaded?.isUserInteractionEnabled = false
+    }
+
+    @objc private func choose(_ sender: UIButton) {
+        guard !finished, items.indices.contains(sender.tag) else { return }
+        finished = true
+        let id = items[sender.tag].id
+        dismiss(animated: true) { self.onSelect?(id) }
+    }
+
+    @objc private func cancelChoice() {
+        guard !finished else { return }
+        finished = true
+        dismiss(animated: true) { self.onCancel?() }
+    }
+
+    @objc private func skipChoice() {
+        guard !finished else { return }
+        finished = true
+        dismiss(animated: true)
+    }
+}
+
+private final class PurposeChoiceCard: UIButton {
+    private let badge = UIView()
+    private let glyph = UIImageView()
+    private let label = UILabel()
+    private var colors = DoorbellPalette.dark
+
+    func configure(item: PurposeChoiceViewController.Item, colors: DoorbellPalette) {
+        self.colors = colors
+        backgroundColor = colors.surfaceSolid
+        layer.cornerRadius = 24
+        layer.borderWidth = 1
+        layer.borderColor = colors.separator.cgColor
+        badge.backgroundColor = colors.accent.withAlphaComponent(0.12)
+        badge.layer.cornerRadius = 18
+        badge.isUserInteractionEnabled = false
+        glyph.image = item.image?.withRenderingMode(.alwaysTemplate)
+        glyph.tintColor = colors.accent
+        glyph.contentMode = .scaleAspectFit
+        label.text = item.title
+        label.textColor = colors.ink
+        label.font = .systemFont(ofSize: 26, weight: .medium)
+        label.numberOfLines = 3
+        label.adjustsFontSizeToFitWidth = true
+        label.minimumScaleFactor = 0.7
+        addSubview(badge)
+        badge.addSubview(glyph)
+        addSubview(label)
+        isAccessibilityElement = true
+        accessibilityLabel = item.title
+        accessibilityIdentifier = "purpose_choice_" + item.id
+        accessibilityTraits = .button
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        badge.frame = CGRect(x: 22, y: 20, width: 56, height: 56)
+        glyph.frame = CGRect(x: 12, y: 12, width: 32, height: 32)
+        label.frame = CGRect(x: 22, y: 86, width: bounds.width - 44, height: bounds.height - 102)
+    }
+
+    override var isHighlighted: Bool {
+        didSet {
+            backgroundColor = isHighlighted ? colors.surfaceStrongSolid : colors.surfaceSolid
+            layer.borderColor = (isHighlighted ? colors.accent : colors.separator).cgColor
+            layer.borderWidth = isHighlighted ? 2 : 1
+        }
     }
 }

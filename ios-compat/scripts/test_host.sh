@@ -62,6 +62,13 @@ CFLAGS=(-std=c99 -Wall -Wextra -Werror -O2 -I"$MINISIP")
 
 "$CC" -fobjc-arc -Wall -Wextra -Werror -O2 -isysroot "$MACOS_SDK" \
   -I"$REPO_ROOT/ios-kiosk/src/Core" \
+  "$REPO_ROOT/ios-kiosk/src/Core/DBUiTheme.m" \
+  "$REPO_ROOT/ios-kiosk/src/Core/DBBackdropCompositor.m" \
+  "$REPO_ROOT/ios-compat/tests/background_sampler_test.m" \
+  -framework Foundation -framework CoreGraphics -o "$OUT/background_sampler_test"
+
+"$CC" -fobjc-arc -Wall -Wextra -Werror -O2 -isysroot "$MACOS_SDK" \
+  -I"$REPO_ROOT/ios-kiosk/src/Core" \
   "$REPO_ROOT/ios-compat/tests/blur_kernel_test.m" \
   -framework Foundation -o "$OUT/blur_kernel_test"
 
@@ -161,6 +168,7 @@ swiftc \
 "$OUT/fleet_counts_test"
 "$OUT/admin_address_test"
 "$OUT/backdrop_compositor_test"
+"$OUT/background_sampler_test"
 "$OUT/blur_kernel_test"
 "$OUT/call_event_tracker_test"
 [[ $MODERN_CALL_TEST -eq 1 ]] && "$OUT/modern_call_revision_test"

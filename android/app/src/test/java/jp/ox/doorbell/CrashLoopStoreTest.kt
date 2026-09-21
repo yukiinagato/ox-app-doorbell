@@ -9,7 +9,7 @@ import org.junit.Test
 
 class CrashLoopStoreTest {
     @Test
-    fun threeCrashesWithinFiveMinutesPersistSafeMode() {
+    fun threeCrashesKeepDiagnosticsWithoutDisablingMedia() {
         val root = Files.createTempDirectory("doorbell-crash-").toFile()
         try {
             val file = File(root, "recovery.json")
@@ -24,12 +24,12 @@ class CrashLoopStoreTest {
             store = CrashLoopStore(file)
             store.beginSession(1_040_000L)
             val state = store.recordCrash("third", 1_050_000L)
-            assertTrue(state.safeMode)
+            assertFalse(state.safeMode)
             assertEquals(3, state.crashWallMs.size)
             assertEquals(10_000L, state.restartBackoffMs)
 
             val restored = CrashLoopStore(file).beginSession(1_060_000L)
-            assertTrue(restored.safeMode)
+            assertFalse(restored.safeMode)
         } finally {
             root.deleteRecursively()
         }

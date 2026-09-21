@@ -2,6 +2,9 @@
 #import "DBRecoveryClient.h"
 #import <UIKit/UIKit.h>
 #import <unistd.h>
+#import <spawn.h>
+
+extern char **environ;
 
 static volatile int gWdPong = 0;
 static int gWdFail = 0;
@@ -17,13 +20,17 @@ static unsigned int DBNextRelaunchDelay(void) {
 }
 
 static void DBScheduleFixedRelaunch(unsigned int delaySeconds) {
-  pid_t child = fork();
-  if (child != 0) return;
-  sleep(delaySeconds);
-  const char *tool = "/usr/bin/uiopen";
-  char *const args[] = {(char *)tool, (char *)"doorbell://", NULL};
-  execv(tool, args);
-  _exit(127);
+  unlink("/var/mobile/Documents/.doorbell-relaunch-ready");
+  NSString *helper = [[[NSBundle mainBundle] bundlePath]
+      stringByAppendingPathComponent:@"DoorbellRelaunch"];
+  char delay[16];
+  snprintf(delay, sizeof(delay), "%u", delaySeconds);
+  char *const args[] = {"/bin/launchctl", "submit", "-l", "jp.ox.doorbell.relaunch",
+      "--", (char *)[helper fileSystemRepresentation], delay, NULL};
+  pid_t child;
+  // launchd owns the helper so iOS does not terminate it with the exiting app's process group.
+  int status = posix_spawn(&child, args[0], NULL, NULL, args, environ);
+  if (status != 0) NSLog(@"[doorbell] relaunch helper could not start (%d)", status);
 }
 
 static void WDAppendLog(NSString *line) {
@@ -65,6 +72,10 @@ static void WDAppendLog(NSString *line) {
 }
 
 - (void)start {
+  dispatch_async(dispatch_get_main_queue(), ^{
+    [@"ready\n" writeToFile:@"/var/mobile/Documents/.doorbell-relaunch-ready"
+                  atomically:YES encoding:NSUTF8StringEncoding error:NULL];
+  });
   [NSThread detachNewThreadSelector:@selector(wdThreadMain) toTarget:self withObject:nil];
 }
 

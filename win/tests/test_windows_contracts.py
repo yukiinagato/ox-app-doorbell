@@ -1284,7 +1284,7 @@ class WindowsContracts(unittest.TestCase):
         window = read("win/DoorbellApp/MainWindow.xaml.cs")
         catalog = read("i18n/strings.yaml")
         # The button says only what it does; no device or door identity reaches a visitor.
-        self.assertIn('CallButton.Content = Texts.T("idle.call");', window)
+        self.assertIn('CallButton.Content = Texts.T(ShowsHomePurposes() ? "door.call_direct" : "idle.call");', window)
         self.assertNotIn('Texts.T("idle.call_button"', window)
         self.assertNotIn("DoorLabel(App.Boot.Door)", window)
         entry = re.search(r'^idle\.call: \{([^}]*)\}', catalog, re.M)

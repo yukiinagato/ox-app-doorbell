@@ -257,7 +257,9 @@ DB_API int db_core_delete_config_key(db_core* c, const char* key);
 /* ---- Time service ----
  * Core never sets the operating-system clock. When time.ntp.enabled is on and a sync succeeded
  * within three intervals, core adds its measured offset to every wall-clock reading: the HLC,
- * event and call-history timestamps, rule schedules, and quiet hours. status.time reports
+ * event and call-history timestamps, rule schedules, and quiet hours. HLC ordering remains
+ * monotonic, but its logical floor never overrides displayed time or physical timestamps;
+ * backward corrections apply immediately. status.time reports
  *   {"zone":"Asia/Tokyo","zone_known":true,"source":"system|ntp","enabled":bool,"ok":bool,
  *    "offset_ms":0,"measured_offset_ms":0,"last_sync_ms":0,"rtt_ms":0,"server":"",
  *    "interval_s":900,"offset_min":540,"syncing":false,"err":"…","local":{…}}
@@ -456,8 +458,9 @@ DB_API char* db_core_mint_join_token_json(db_core* c, int seconds);
  * atomic on the shared clock, so this call is safe from any thread and does not enter the run
  * loop either -- a camera callback can validate a code inline. Release with db_free. */
 DB_API char* db_core_parse_pair_uri_json(db_core* c, const char* uri);
-/* Request that an indoor-panel administrator remove one connected peer. The peer receives an
- * authenticated local-reset command and acknowledges it through its UI. */
+/* Remove another device from an indoor-panel administrator session, including offline records.
+ * Persist and replicate subtree deletion and a removal marker; upgraded peers reset pairing
+ * on reconnect. The current device cannot remove itself. */
 DB_API void db_core_remove_device(db_core* c, const char* node_id);
 /* Approve and invite one pending node. */
 DB_API void db_core_invite_device(db_core* c, const char* id);

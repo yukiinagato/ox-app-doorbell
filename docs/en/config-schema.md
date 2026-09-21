@@ -14,6 +14,12 @@ pre-filled with a random `door-xxxxxxxx` value that may be accepted unchanged. V
 or `-`. A successful save writes `setup_complete:true` atomically. tvOS is intentionally fixed to
 the `indoor_panel` profile because it has no supported door-camera role.
 
+The iOS compatibility app instead suggests `<model>-<role>-<8-hex-token>` for both the device
+name and door ID (for example, `iPad-mini-door-a3f29c10`). The role component is `door` or
+`indoor`; a door ID always uses `door`. Both suggestions share one random token. Before setup
+is confirmed, selecting a role updates an untouched automatic name; typing a name or ID preserves
+that input. Confirmed names and IDs survive upgrades and restarts unchanged.
+
 After a device joins a cluster, `devices.<self>.name`, `.role`, and `.door` are its remotely
 editable desired identity. Android and iOS/iPadOS target shells validate a changed identity and
 write it to local
@@ -207,7 +213,7 @@ the plaintext subscription. Startup reseals a legacy raw record or removes it fa
     "brightness": 70,                           // 0-100 (remote adjustment — slider in the admin UI)
     "night": { "enabled": true, "from": "22:00", "to": "06:00",
                "brightness": 15, "red_tint": true },   // night mode (evaluated with the corrected clock)
-    "screensaver_after_s": 120,                 // screensaver after idle (clock drift, low brightness)
+    "screensaver_after_s": 120,                 // legacy idle timeout; see display.screensaver
     "pixel_shift_s": 300                        // periodically shift idle-screen elements by a few px (burn-in protection)
   },
 
@@ -639,6 +645,11 @@ a stale measurement. `POST /api/time/sync` (admin session) starts one immediate 
 `status.time` reports the result and `time_changed` is emitted when the source flips or the applied
 offset moves by more than 500 ms.
 
+The HLC preserves causal ordering separately from physical time. Observing a future peer
+timestamp or retaining an older, fast local timestamp cannot advance the displayed clock,
+local event `wall_ms`, or schedule and expiry checks. A backward NTP correction applies
+immediately; HLC identifiers remain monotonic so replicated writes retain their ordering.
+
 Power state comes from the optional `db_platform_v2.power_state` callback, polled once a minute.
 It is published as `status.self.power` (and the identical `status.node.power`), gossiped into
 `peers[].power` through the bounded runtime projection, and reported as `power_changed` when the
@@ -902,3 +913,84 @@ overridden at `devices.<id>.local.theme.glass.blur_radius`. Core publishes the r
 its `default|admin|device` source in `status.display.theme.glass`. Only a client advertising
 `frosted_glass_radius_v1` applies it. Modern iOS deliberately does not advertise that capability:
 it keeps `UIBlurEffect`, whose radius is system-managed and has no public numeric setting.
+
+## Membership cleanup, resource synchronization, and motion wake
+
+`POST /api/devices/remove` accepts `{ "id": "<node-id>" }` in an authenticated administrator session. It refuses the current device, deletes the target device subtree and its video playback overrides atomically, and replicates `removed_devices.<id>: true`. Offline records disappear immediately; an upgraded removed node resets pairing when it reconnects. The marker prevents stale peer entries from returning to the device list or winning a notification duty. This is membership cleanup, not rotation of the shared cluster key.
+
+Configuration deletion removes the complete stored subtree. Tombstones also mask older descendants and members embedded in parent objects, so deleting all visit purposes leaves an empty list after synchronization. Recreating a purpose explicitly is supported.
+
+Each node downloads all entries in the `assets` library as well as referenced assets, verifies their SHA-256 before saving, and retries missing resources while running. The source or another complete replica must remain reachable until transfer finishes.
+
+Telegram configuration still contains only `bot_token_ref`. Upgraded peers request the currently referenced token over authenticated encrypted mesh channels and save it through platform secure storage; no token value is added to config, UI events, or boot files. Rotation uses a new reference. At least one reachable upgraded peer must retain the token. Other integration credentials retain their existing provisioning policy. Telegram duty eligibility requires local token readiness and measured TLS, power, and clock capability, plus WAN evidence or a successful periodic HTTPS probe of `https://api.telegram.org/`. This probe does not qualify Web Push. Losing eligibility invalidates a leader lease. Administrator test sends on a connected follower are forwarded to the elected node; a pending response includes `request`, polled at `GET /api/test/telegram/<request>` until accepted or failed. Acceptance means queued for sending, not confirmed delivery by Telegram.
+
+`devices.<id>.local.motion.wake_screen` is an optional boolean, default `false`. Enable it in Admin → Devices → Edit to wake the entrance screen and exit its screensaver on a live motion event for that door. Historical synchronization and motion at other doors do not wake it. iOS and Windows screensaver clients restore their configured active brightness and restart the idle timer.
+
+On modern iOS door stations, `devices.<id>.local.visitor_layout` selects `standard` (default), `left`, `right`, or `edges`. Side layouts reserve background space on the opposite side; edges places the clock above and controls below. Choose it in native Settings or Admin → Devices → Edit. Other clients ignore this preference. Low-contrast wallpaper text gains an soft opposite-color shadow; automatic ink compares the darkest and lightest patches under each label.
+
+On the modern iOS visitor screen, the language row follows the purpose buttons. Clock and date share a sampled background region and automatic ink without date dimming; explicit per-region color overrides still apply.
+
+
+## Reply speech providers and pre-generated audio
+
+`speech.provider` is `system` (default) or `google`. System synthesis remains the fallback
+when a reply has no locally cached audio. Free-text replies continue to use system speech.
+Uploaded `quick_replies.<id>.audio.<lang>` audio takes priority over generated speech.
+
+Google settings:
+
+- `speech.generator_node`: node ID of the single device that generates audio.
+- `speech.google_key_ref`: `secret:<name>` referencing its local secure storage.
+- `speech.voices`: voice names keyed by `ja`, `en`, and `zh`; defaults are
+  `ja-JP-Standard-A`, `en-US-Standard-A`, and `cmn-CN-Standard-A`.
+- `speech.speaking_rate`: 0.25–4, default 1.
+- `speech.auto_cache`: defaults to true; generate after configuration changes.
+- `speech.cache.<fingerprint>`: generated MP3 asset hash. Fingerprints cover the text,
+  language, voice, rate, and encoding. Do not edit this generated index manually.
+
+The generator processes one request at a time. It scans up to 256 nonempty localized reply
+texts, each at most 3,000 UTF-8 bytes. Identical requests share a cache entry. A changed or
+deleted reply cannot receive stale generation results. Assets use the existing verified mesh
+transfer and remain playable offline. Failed requests require an explicit retry or a new
+request fingerprint; restarting the app also clears transient failures. No provider error
+body or API key is exposed through runtime status. There is no automatic cloud synthesis
+on the critical path of an incoming visitor reply.
+
+Authenticated `GET /api/tts` returns provider, generator, local credential readiness, and
+per-reply/language states (`pending`, `generating`, `ready`, `syncing`, `failed`). Authenticated
+`POST /api/tts/cache` on the generator requests missing audio and retries failures, even with
+`auto_cache:false`; it does not regenerate matching cached content.
+
+In Web Admin, open **Quick replies → Reply voice and audio cache** on the generation device.
+Select Google, enter an API key and choose voices, then save. Saving a key selects that device
+as generator. API keys are written to secure storage before references are committed. Other
+devices receive audio and references, not the key. The preview plays the generated asset;
+System mode instead previews the browser's own voice, which can differ from the door station.
+
+Enable Cloud Text-to-Speech and billing in a Google Cloud project, create an API key restricted
+to that API, and enter it only in Web Admin. Google Standard voices currently have a monthly
+free allowance of 4 million characters; billing activation is required and excess usage is
+chargeable. Other voice families have different prices. Configure provider quotas to suit
+your budget; the app does not enforce the provider's free allowance. See
+[setup](https://docs.cloud.google.com/text-to-speech/docs/get-started) and
+[pricing](https://cloud.google.com/text-to-speech/pricing).
+
+## Idle screen policy and Telegram response updates
+
+Admin → Theme and display → Idle screen writes `display.screensaver`. Each device can override individual leaves under `devices.<id>.local.display.screensaver`; deleting that object restores inheritance. The schema is:
+
+```json
+{"enabled":true,"schedule":"daily","from":"22:00","to":"06:00","after_s":120,"brightness":20,"mode":"dim"}
+```
+
+`enabled` defaults to true unless the legacy idle timeout is zero. `schedule` is `always` (default) or `daily`; daily windows use the cluster time zone, include the start and exclude the end, and support crossing midnight. Equal endpoints produce an empty window; use `always` for all day. Core refreshes eligibility at least every 30 seconds. `after_s` is an integer from 1 to 86400 and falls back to `screensaver_after_s` (120 seconds). `brightness` is an integer from 1 to 100, defaults to 10, and is capped at active brightness by the shell. Disabling the policy or leaving the window immediately restores the active display when the shell receives the new state.
+
+Modes on modern iOS and Windows are `dim` (default: retain the complete interface), `minimal` (hide wallpaper while retaining controls and recompute contrast against the flat background), and `clock` (black background, clock/date, and a visible localized doorbell/wake hint). Touch, incoming calls and emergencies restore the active display. Android, tvOS and iOS 5 clients retain their existing display behavior; configuration does not claim those clients implement idle modes. Runtime `display.screensaver` includes resolved settings and `eligible`. The legacy runtime `screensaver_after_s` becomes zero outside the enabled window.
+
+For a live indoor-panel `call_answered` or scoped `reply`, the elected Telegram sender edits the existing visitor notification, retains the visitor context, adds the responding device name and time (plus reply text for quick replies), and removes obsolete reply buttons. Only accepted lifecycle events update their own `call_id`; they do not change the next visitor's notification. Updates use the persistent retry queue, including when a response arrives before snapshot delivery completes. Telegram-originated callbacks retain their existing callback flow. Mock HTTPS tests cover these operations; they do not send messages to household chats.
+
+## Visitor call-flow presentation
+
+`ui.call_flow` selects one of two door-station paths. `purpose_first` shows enabled purposes on the home screen; tapping a purpose creates a single call with that purpose. The **Direct call** button skips the purpose and creates the call immediately. There is no second purpose screen after ringing. `ring_then_purpose` hides the home purpose menu: the call button first creates the call and then opens the purpose screen. Selecting a purpose updates that same call; skipping it leaves the call ringing, and cancelling ends that call. When no purposes are enabled, both modes call directly without opening an empty chooser.
+
+The native iOS, iOS 5 compatibility, Android and Windows door stations follow these paths. The Web panel first selects a destination door, then uses the selected flow to order purpose selection and ringing. Switching the setting updates the home screen without starting a call. Existing calls keep their identity and deadline. The stored values stay unchanged; the admin menu displays localized names and an explanation of the selected flow.

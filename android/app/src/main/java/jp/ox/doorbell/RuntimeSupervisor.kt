@@ -529,15 +529,8 @@ class RuntimeSupervisor(private val app: App) {
     }
 
     private fun refreshSafeMode() {
-        val local = app.processRecoveryState()
-        val helperSafe = kioskController.helperSafeMode
-        val desired = local.safeMode || helperSafe
-        val reason = when {
-            local.safeMode && helperSafe -> "local_crash_loop_and_helper"
-            local.safeMode -> "local_crash_loop"
-            helperSafe -> "root_helper"
-            else -> ""
-        }
+        val desired = false
+        val reason = ""
         if (desired != safeMode) {
             safeMode = desired
             safeModeReason = reason

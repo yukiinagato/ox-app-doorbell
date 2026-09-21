@@ -224,3 +224,42 @@ TEST_CASE("display: periodic timer emits uiNotify when entering the night interv
 
   f.node->stop();
 }
+
+TEST_CASE("display: idle policy follows midnight windows and restores at the end") {
+  DispFleet f;
+  REQUIRE(f.node->start());
+  f.node->setConfigKey("display.screensaver",
+      R"({"enabled":true,"schedule":"daily","from":"23:00","to":"07:15","after_s":45,"brightness":24,"mode":"minimal"})");
+  f.loop.pumpDue();
+  auto display = f.lastDisplay();
+  REQUIRE(display);
+  CHECK(json::getInt(display.get(), "screensaver_after_s") == 45);
+  CHECK(json::getBool(json::get(display.get(), "screensaver"), "eligible"));
+  CHECK(json::getString(json::get(display.get(), "screensaver"), "mode") == "minimal");
+  CHECK(json::getInt(json::get(display.get(), "screensaver"), "brightness") == 24);
+  f.run(150'000);
+  display = f.lastDisplay();
+  CHECK(json::getInt(display.get(), "screensaver_after_s") == 0);
+  CHECK_FALSE(json::getBool(json::get(display.get(), "screensaver"), "eligible"));
+  f.node->stop();
+}
+
+TEST_CASE("display: device idle settings inherit leaves and can disable the global policy") {
+  DispFleet f;
+  REQUIRE(f.node->start());
+  f.node->setConfigKey("display.screensaver",
+      R"({"enabled":true,"schedule":"always","mode":"clock","after_s":60,"brightness":30})");
+  const std::string key = "devices." + f.node->nodeId() + ".local.display.screensaver";
+  f.node->setConfigKey(key, R"({"brightness":18,"mode":"minimal"})");
+  f.loop.pumpDue();
+  auto display = f.lastDisplay();
+  REQUIRE(display);
+  CHECK(json::getInt(display.get(), "screensaver_after_s") == 60);
+  CHECK(json::getInt(json::get(display.get(), "screensaver"), "brightness") == 18);
+  CHECK(json::getString(json::get(display.get(), "screensaver"), "mode") == "minimal");
+  f.node->setConfigKey(key + ".enabled", "false");
+  f.loop.pumpDue();
+  display = f.lastDisplay();
+  CHECK(json::getInt(display.get(), "screensaver_after_s") == 0);
+  f.node->stop();
+}

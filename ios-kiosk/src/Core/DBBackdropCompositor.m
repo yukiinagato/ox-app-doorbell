@@ -4,6 +4,34 @@
 
 @implementation DBBackdropCompositor
 
++ (NSData *)rgbaProxyForImage:(CGImageRef)image viewSize:(CGSize)viewSize edge:(NSUInteger)edge {
+  if (image == NULL || viewSize.width <= 0 || viewSize.height <= 0 || edge == 0 || edge > 256)
+    return nil;
+  size_t rowBytes = edge * 4;
+  void *buffer = calloc(edge * rowBytes, 1);
+  if (buffer == NULL) return nil;
+  CGColorSpaceRef space = CGColorSpaceCreateDeviceRGB();
+  CGContextRef ctx = CGBitmapContextCreate(buffer, edge, edge, 8, rowBytes, space,
+      kCGBitmapByteOrder32Big | kCGImageAlphaPremultipliedLast);
+  CGColorSpaceRelease(space);
+  if (ctx == NULL) {
+    free(buffer);
+    return nil;
+  }
+  CGSize content = CGSizeMake(CGImageGetWidth(image), CGImageGetHeight(image));
+  CGRect draw = [self aspectFillRectForContentSize:content viewSize:viewSize];
+  CGFloat scaleX = (CGFloat)edge / viewSize.width;
+  CGFloat scaleY = (CGFloat)edge / viewSize.height;
+  CGRect target = CGRectMake(draw.origin.x * scaleX, draw.origin.y * scaleY,
+                            draw.size.width * scaleX, draw.size.height * scaleY);
+  // Bitmap scanline zero already matches the upright CGImage's top row.
+  // A UIKit-style CTM flip here would sample the opposite side of the wallpaper.
+  CGContextDrawImage(ctx, target, image);
+  CGContextRelease(ctx);
+  return [NSData dataWithBytesNoCopy:buffer length:edge * rowBytes freeWhenDone:YES];
+}
+
+
 // Spec 5.1 wants the picture, not a wash, and still wants the cards and text
 // over it to read. Just over 60 % black is where both hold on the wallpapers
 // this cluster ships.

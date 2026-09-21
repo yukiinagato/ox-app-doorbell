@@ -16,6 +16,7 @@ final class VisitorScreenLayoutTests: XCTestCase {
         let sos: SosSlideControl
         let purposeHint: UILabel
         let purposeButtons: [UIButton]
+        let purposeSection: UIStackView
         let callButton: UIButton
     }
 
@@ -88,7 +89,49 @@ final class VisitorScreenLayoutTests: XCTestCase {
         view.applyLayout(for: size)
         host.layoutIfNeeded()
         return Screen(view: view, langBar: langBar, sos: sos, purposeHint: purposeHint,
-                      purposeButtons: buttons, callButton: callButton)
+                      purposeButtons: buttons, purposeSection: purposeSection, callButton: callButton)
+    }
+
+    func testCallFlowSwitchRemovesHomePurposesAcrossLayoutsAndOrientations() {
+        for size in [portrait, landscape] {
+            let screen = makeScreen(size)
+            for style in ["standard", "left", "right", "edges"] {
+                screen.view.setLayoutStyle(style)
+                for mode in ["purpose_first", "ring_then_purpose", "purpose_first"] {
+                    screen.view.setCallFlow(mode, hasPurposes: true)
+                    screen.view.superview?.layoutIfNeeded()
+                    XCTAssertEqual(screen.purposeSection.isHidden, mode == "ring_then_purpose")
+                    XCTAssertEqual(screen.callButton.title(for: .normal), Texts().t(
+                        mode == "purpose_first" ? "door.call_direct" : "idle.call_button_verb"))
+                    XCTAssertGreaterThan(screen.callButton.bounds.width, 100)
+                    XCTAssertFalse(screen.langBar.isHidden)
+                    XCTAssertFalse(screen.callButton.isHidden)
+                }
+            }
+        }
+    }
+
+    func testEmptyPurposesUseTheDirectCallHomeInEitherMode() {
+        let screen = makeScreen(portrait)
+        for mode in ["purpose_first", "ring_then_purpose"] {
+            screen.view.setCallFlow(mode, hasPurposes: false)
+            screen.view.superview?.layoutIfNeeded()
+            XCTAssertTrue(screen.purposeSection.isHidden)
+            XCTAssertEqual(screen.callButton.title(for: .normal), Texts().t("idle.call_button_verb"))
+            XCTAssertFalse(screen.callButton.isHidden)
+        }
+    }
+
+    func testLayoutChoiceCanSwitchRepeatedlyWithoutLosingControls() {
+        let screen = makeScreen(landscape)
+        for style in ["left", "right", "edges", "standard", "left"] {
+            screen.view.setLayoutStyle(style)
+            screen.view.superview?.layoutIfNeeded()
+            XCTAssertNotNil(screen.callButton.window ?? screen.callButton.superview)
+            XCTAssertGreaterThan(screen.callButton.bounds.width, 0)
+            XCTAssertFalse(screen.langBar.isHidden)
+            XCTAssertEqual(screen.sos.frame.maxY, landscape.height, accuracy: 1)
+        }
     }
 
     // MARK: - The SOS bar is a bar
@@ -211,5 +254,76 @@ final class VisitorScreenLayoutTests: XCTestCase {
             found += visibleLabels(in: child)
         }
         return found
+    }
+}
+
+final class PurposeChoiceLayoutTests: XCTestCase {
+    private func screen(_ size: CGSize, count: Int = 6) -> PurposeChoiceViewController {
+        let labels = ["Visit resident", "Parcel delivery", "Mail", "Business visit", "Maintenance", "Other purpose"]
+        let items = (0..<count).map {
+            PurposeChoiceViewController.Item(id: "item\($0)", title: labels[$0 % labels.count],
+                                             image: TablerIcon.purpose(["p_visit", "p_delivery", "p_mail", "p_sales", "p_work", "p_other"][$0 % 6]))
+        }
+        XCTAssertTrue(items.allSatisfy { $0.image != nil })
+        let screen = PurposeChoiceViewController(items: items, palette: .light,
+                                                afterRing: true, texts: Texts())
+        screen.loadViewIfNeeded()
+        screen.view.frame = CGRect(origin: .zero, size: size)
+        screen.view.setNeedsLayout()
+        screen.view.layoutIfNeeded()
+        return screen
+    }
+
+    private func descendants(_ view: UIView) -> [UIView] {
+        return view.subviews.flatMap { [$0] + descendants($0) }
+    }
+
+    func testPortraitAndLandscapeKeepLargeAlignedTargets() {
+        for size in [CGSize(width: 768, height: 1024), CGSize(width: 1024, height: 768)] {
+            let controller = screen(size)
+            let all = descendants(controller.view)
+            let cards = all.filter { ($0.accessibilityIdentifier ?? "").hasPrefix("purpose_choice_item") }
+            XCTAssertEqual(cards.count, 6)
+            XCTAssertGreaterThanOrEqual(cards[0].bounds.width, 200)
+            XCTAssertGreaterThanOrEqual(cards[0].bounds.height, 150)
+            for (index, card) in cards.enumerated() {
+                XCTAssertEqual(card.bounds.size, cards[0].bounds.size)
+                for other in cards.dropFirst(index + 1) { XCTAssertFalse(card.frame.intersects(other.frame)) }
+            }
+            let cancel = all.first { $0.accessibilityIdentifier == "purpose_choice_cancel" }!
+            let scroll = all.compactMap { $0 as? UIScrollView }.first!
+            XCTAssertGreaterThanOrEqual(cancel.bounds.height, 64)
+            XCTAssertLessThan(scroll.frame.maxY, cancel.convert(cancel.bounds, to: controller.view).minY)
+            UIGraphicsBeginImageContextWithOptions(size, true, 1)
+            controller.view.layer.render(in: UIGraphicsGetCurrentContext()!)
+            let image = UIGraphicsGetImageFromCurrentImageContext()!
+            UIGraphicsEndImageContext()
+            let path = NSTemporaryDirectory() + "purpose-choice-\(Int(size.width)).png"
+            try? image.pngData()?.write(to: URL(fileURLWithPath: path))
+            print("PURPOSE_SCREENSHOT " + path)
+        }
+    }
+
+    func testManyOptionsScrollWithoutShrinkingTargets() {
+        let controller = screen(CGSize(width: 390, height: 844), count: 20)
+        let all = descendants(controller.view)
+        let scroll = all.compactMap { $0 as? UIScrollView }.first!
+        XCTAssertGreaterThan(scroll.contentSize.height, scroll.bounds.height)
+        let cards = all.filter { ($0.accessibilityIdentifier ?? "").hasPrefix("purpose_choice_item") }
+        XCTAssertEqual(cards.count, 20)
+        XCTAssertTrue(cards.allSatisfy { $0.bounds.height >= 150 })
+    }
+
+    func testRemoteReplyInvalidatesPendingChoice() {
+        let controller = screen(CGSize(width: 768, height: 1024))
+        controller.onSelect = { _ in XCTFail("A resolved call must not submit a purpose") }
+        controller.onCancel = { XCTFail("A resolved call must not cancel a later call") }
+        controller.invalidate()
+        XCTAssertNil(controller.onSelect)
+        XCTAssertNil(controller.onCancel)
+        XCTAssertFalse(controller.view.isUserInteractionEnabled)
+        for button in descendants(controller.view).compactMap({ $0 as? UIButton }) {
+            button.sendActions(for: .touchUpInside)
+        }
     }
 }

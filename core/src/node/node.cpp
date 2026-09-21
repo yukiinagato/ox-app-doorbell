@@ -1382,6 +1382,44 @@ bool hhmmValid(const cJSON* value) {
   return cJSON_IsString(value) && parseHhmm(value->valuestring) >= 0;
 }
 
+bool screensaverValid(const std::string& key, const cJSON* value, std::string* error) {
+  const std::string marker = "display.screensaver";
+  const size_t at = key.find(marker);
+  if (at != std::string::npos &&
+      (key.size() == at + marker.size() || key[at + marker.size()] == '.')) {
+    if (cJSON_IsNull(value)) return true;
+    const std::string field = key.size() == at + marker.size() ? "" :
+        key.substr(at + marker.size() + 1);
+    if (field.empty()) {
+      if (!objectHasOnly(value, {"enabled", "schedule", "from", "to", "after_s", "brightness", "mode"}, key, error))
+        return false;
+      const cJSON* child = nullptr;
+      cJSON_ArrayForEach(child, value)
+        if (!screensaverValid(key + "." + child->string, child, error)) return false;
+      return true;
+    }
+    bool valid = false;
+    if (field == "enabled") valid = cJSON_IsBool(value);
+    if (field == "from" || field == "to") valid = hhmmValid(value);
+    if (field == "brightness" || field == "after_s") {
+      const int max = field == "brightness" ? 100 : 86400;
+      valid = cJSON_IsNumber(value) && value->valuedouble >= 1 && value->valuedouble <= max &&
+              value->valuedouble == static_cast<int>(value->valuedouble);
+    }
+    const std::string text = cJSON_IsString(value) ? value->valuestring : "";
+    if (field == "mode") valid = text == "dim" || text == "minimal" || text == "clock";
+    if (field == "schedule") valid = text == "always" || text == "daily";
+    if (!valid) *error = "invalid screensaver setting: " + key;
+    return valid;
+  }
+  if (cJSON_IsObject(value)) {
+    const cJSON* child = nullptr;
+    cJSON_ArrayForEach(child, value)
+      if (!screensaverValid(key + "." + child->string, child, error)) return false;
+  }
+  return true;
+}
+
 // display.appearance and its schedule, at cluster scope and per device.
 bool appearanceValid(const std::string& key, const cJSON* value, std::string* error) {
   auto mode_valid = [&error](const cJSON* mode) {
@@ -1668,6 +1706,13 @@ bool configWriteValid(const std::string& key, const cJSON* value, std::string* e
   if (!callReturnValid(key, value, error)) return false;
   if (!secretContractValid(key, value, error)) return false;
   if (!visitPurposeValid(key, value, error)) return false;
+  const std::string wake_suffix = ".motion.wake_screen";
+  if (key.size() >= wake_suffix.size() &&
+      key.compare(key.size() - wake_suffix.size(), wake_suffix.size(), wake_suffix) == 0 &&
+      !cJSON_IsBool(value)) {
+    *error = "motion.wake_screen must be a boolean";
+    return false;
+  }
   if (!eventRetentionValid(key, value, error)) return false;
   if (!timeConfigValid(key, value, error)) return false;
   if (!audioVolumeValid(key, value, error)) return false;
@@ -1675,6 +1720,7 @@ bool configWriteValid(const std::string& key, const cJSON* value, std::string* e
   if (!noticeConfigValid(key, value, error)) return false;
   if (!doorUnlockValid(key, value, error)) return false;
   if (!appearanceValid(key, value, error)) return false;
+  if (!screensaverValid(key, value, error)) return false;
   if (!themeOverrideValid(key, value, error)) return false;
   if (!emergencyTriggerValid(key, value, error)) return false;
   if (!panelTokenGenerationValid(key, value, error)) return false;
@@ -1904,22 +1950,7 @@ struct BuiltinText {
   const char* zh;
 };
 constexpr BuiltinText kBuiltinTexts[] = {
-    {"event.press", "{door} に来客です ({time})", "Visitor at {door} ({time})",
-     "{door} 有访客 ({time})"},
-    {"event.motion", "{door} で動きを検知 ({time})", "Motion at {door} ({time})",
-     "{door} 检测到移动 ({time})"},
-    {"event.offline", "⚠ {device} オフライン (最終応答 {time})",
-     "⚠ {device} offline (last seen {time})", "⚠ {device} 离线 (最后在线 {time})"},
-    {"event.online", "{device} オンライン復帰", "{device} back online", "{device} 恢复在线"},
-    {"emergency.title", "緊急事態", "EMERGENCY", "紧急情况"},
-    {"emergency.notified", "家族に通知しました", "Family has been notified", "已通知家人"},
-    {"emergency.notify_on", "🚨 緊急事態です — {device} から発報 ({time})",
-     "🚨 Emergency — triggered by {device} ({time})", "🚨 紧急情况 — 由 {device} 触发 ({time})"},
-    {"emergency.notify_off", "✅ 緊急解除", "✅ Emergency cleared", "✅ 警报已解除"},
-    {"emergency.active_detail", "緊急モードが発報されています", "Emergency mode is active",
-     "紧急模式已触发"},
-    {"reply.answered", "応答済み ({text})", "Replied ({text})", "已回复 ({text})"},
-    {"notify.test", "ドアホン テスト通知", "Doorbell test notification", "门铃测试通知"},
+#include "node/generated_notification_strings.inc"
 };
 
 
@@ -2133,9 +2164,6 @@ struct Node::Impl {
     // Correction currently applied to the platform clock, and when it was last measured.
     int64_t offset_ms = 0;
     int64_t last_sync_wall_ms = 0;
-    // The HLC's monotonic floor, so a rendered clock keeps the same lower bound it had when the
-    // value was read on the loop. It only ever rises, so a slightly old copy is harmless.
-    int64_t hlc_floor_ms = 0;
   };
   std::shared_ptr<const TimeSnapshot> time_snap{std::make_shared<TimeSnapshot>()};
 
@@ -2215,6 +2243,11 @@ struct Node::Impl {
   UiEventCb ui_cb;
   TtsCb tts_cb;
   HttpsFn https_fn;
+  uint64_t speech_timer = 0;
+  uint64_t speech_request_id = 0;
+  std::string speech_pending;
+  bool speech_force = false;
+  std::map<std::string, std::string> speech_errors;
   SecureGetFn secure_get_fn;
   SecurePutFn secure_put_fn;
   Node::SecureDeleteFn secure_delete_fn;
@@ -2758,7 +2791,7 @@ struct Node::Impl {
 
   // Pure: the caller supplies the instant, so this runs on any thread from a published record.
   static std::string renderLocalTime(const TimeSnapshot& snap, int64_t wall_ms, int64_t now_ms) {
-    const int64_t at = wall_ms > 0 ? wall_ms : std::max(now_ms, snap.hlc_floor_ms);
+    const int64_t at = wall_ms > 0 ? wall_ms : now_ms;
     return tz::localTimeJson(snap.zone, at, snap.legacy_offset_min);
   }
 
@@ -2770,7 +2803,6 @@ struct Node::Impl {
     snap->source = active ? "ntp" : "system";
     snap->offset_ms = active ? time_state.offset_ms : 0;
     snap->last_sync_wall_ms = time_state.ever_synced ? time_state.last_sync_wall_ms : 0;
-    snap->hlc_floor_ms = hlc ? hlc->correctedWallMs() : clock->wallMs();
     return snap;
   }
 
@@ -3666,10 +3698,11 @@ struct Node::Impl {
 
   void schedulePrefetch() {
     if (!started) return;
-    if (asset_prefetch_timer) loop->cancel(asset_prefetch_timer);
+    if (asset_prefetch_timer) return;
     asset_prefetch_timer = loop->postDelayed(200, [this] {
       asset_prefetch_timer = 0;
       prefetchAssets();
+    scheduleSpeechCache();
     });
   }
 
@@ -3701,7 +3734,7 @@ struct Node::Impl {
       }
     }
 
-    for (const std::string& hash : refs) {
+    for (const std::string& hash : keep) {
       if (assetCached(hash) || asset_fetching.count(hash)) continue;
       asset_fetching.insert(hash);
       std::weak_ptr<char> w = alive;
@@ -3851,6 +3884,13 @@ struct Node::Impl {
     bool night = false;
     bool red_tint = false;
     int screensaver_after_s = 120;
+    bool saver_enabled = true;
+    bool saver_eligible = true;
+    int saver_brightness = 10;
+    std::string saver_mode = "dim";
+    std::string saver_schedule = "always";
+    std::string saver_from = "22:00";
+    std::string saver_to = "06:00";
     int pixel_shift_s = 300;
     std::string bg_color = "#101418";
     std::string bg_image;
@@ -3975,6 +4015,32 @@ struct Node::Impl {
     d.screensaver_after_s = static_cast<int>(num("screensaver_after_s", 120));
     d.pixel_shift_s = static_cast<int>(num("pixel_shift_s", 300));
     {
+      const cJSON* saver = json::get(base, "screensaver");
+      const cJSON* local = json::get(ovr, "screensaver");
+      auto leaf = [&](const char* name) {
+        const cJSON* value = json::get(local, name);
+        return value && !cJSON_IsNull(value) ? value : json::get(saver, name);
+      };
+      auto effective = json::obj();
+      for (const char* name : {"enabled", "schedule", "from", "to", "after_s", "brightness", "mode"}) {
+        const cJSON* value = leaf(name);
+        if (value && !cJSON_IsNull(value))
+          json::setItem(effective.get(), name, json::Doc(cJSON_Duplicate(value, 1)));
+      }
+      const cJSON* s = effective.get();
+      d.saver_enabled = json::getBool(s, "enabled", d.screensaver_after_s > 0);
+      d.screensaver_after_s = static_cast<int>(json::getInt(s, "after_s", d.screensaver_after_s));
+      d.saver_brightness = std::max(1, std::min(100, static_cast<int>(json::getInt(s, "brightness", 10))));
+      d.saver_mode = json::getString(s, "mode", "dim");
+      if (d.saver_mode != "clock" && d.saver_mode != "minimal") d.saver_mode = "dim";
+      d.saver_schedule = json::getString(s, "schedule", "always");
+      d.saver_from = json::getString(s, "from", "22:00");
+      d.saver_to = json::getString(s, "to", "06:00");
+      d.saver_eligible = d.saver_enabled && d.screensaver_after_s > 0 &&
+          (d.saver_schedule == "always" ||
+           scheduledAppearance(d.saver_from, d.saver_to) == "dark");
+    }
+    {
       cJSON* tbase = json::get(base, "theme");
       cJSON* tovr = cfgAt("devices." + node_id + ".local.theme");
       auto str = [&](const char* key) {
@@ -4032,7 +4098,16 @@ struct Node::Impl {
     json::set(o.get(), "brightness", static_cast<int64_t>(d.brightness));
     json::setBool(o.get(), "night", d.night);
     json::setBool(o.get(), "red_tint", d.red_tint);
-    json::set(o.get(), "screensaver_after_s", static_cast<int64_t>(d.screensaver_after_s));
+    json::set(o.get(), "screensaver_after_s", static_cast<int64_t>(d.saver_eligible ? d.screensaver_after_s : 0));
+    cJSON* saver = json::addObj(o.get(), "screensaver");
+    json::setBool(saver, "enabled", d.saver_enabled);
+    json::setBool(saver, "eligible", d.saver_eligible);
+    json::set(saver, "after_s", static_cast<int64_t>(d.screensaver_after_s));
+    json::set(saver, "brightness", static_cast<int64_t>(d.saver_brightness));
+    json::set(saver, "mode", d.saver_mode);
+    json::set(saver, "schedule", d.saver_schedule);
+    json::set(saver, "from", d.saver_from);
+    json::set(saver, "to", d.saver_to);
     json::set(o.get(), "pixel_shift_s", static_cast<int64_t>(d.pixel_shift_s));
     {
       cJSON* appearance = json::addObj(o.get(), "appearance");
@@ -4884,6 +4959,124 @@ struct Node::Impl {
     });
   }
 
+  bool telegram_probe_reachable = false;
+  bool telegram_probe_pending = false;
+  int64_t telegram_probe_at = -60000;
+
+  void probeTelegramEndpoint() {
+    if (telegram_probe_pending && clock->monoMs() - telegram_probe_at >= 15000) {
+      telegram_probe_pending = false;
+      telegram_probe_reachable = false;
+      applyEffectiveCaps();
+    }
+    if (!started || !opts.has_https || telegramToken().empty() || telegram_probe_pending ||
+        clock->monoMs() - telegram_probe_at < 60000) return;
+    telegram_probe_pending = true;
+    telegram_probe_at = clock->monoMs();
+    const int64_t attempt = telegram_probe_at;
+    httpsCall("GET", "https://api.telegram.org/", "{}", {}, [this, attempt](int status, std::string) {
+      if (!telegram_probe_pending || attempt != telegram_probe_at) return;
+      telegram_probe_pending = false;
+      telegram_probe_reachable = status >= 200 && status < 400;
+      applyEffectiveCaps();
+    });
+  }
+
+  int64_t telegram_secret_request_at = -5000;
+  std::string telegram_secret_request;
+
+  void syncTelegramSecret() {
+    if (!started || !mesh || !mesh->isPaired() || !secureStoreReadWrite()) return;
+    const std::string ref = json::getString(cfgAt("integrations.telegram"), "bot_token_ref");
+    if (!secretRefValid(ref) || !secretValue(ref).empty()) return;
+    if (clock->monoMs() - telegram_secret_request_at < 5000) return;
+    telegram_secret_request_at = clock->monoMs();
+    telegram_secret_request = genTokenHex(16);
+    auto request = json::obj();
+    json::set(request.get(), "cmd", "telegram_secret_request");
+    json::set(request.get(), "ref", ref);
+    json::set(request.get(), "request", telegram_secret_request);
+    mesh->broadcastCommand(json::dump(request.get()));
+  }
+
+  struct TelegramTestRequest {
+    std::string leader;
+    int64_t started_ms = 0;
+    std::string error;
+    bool complete = false;
+  };
+  std::map<std::string, TelegramTestRequest> telegram_tests;
+
+  std::string sendTelegramTest(const std::string& chat) {
+    if (telegramToken().empty()) return "no_token";
+    if (!tg || !mesh || !mesh->isLeader("telegram")) return "not_leader";
+    if (chat.empty()) {
+      bool any = false;
+      const cJSON* household = nullptr;
+      cJSON_ArrayForEach(household, cfgAt("households")) {
+        if (cJSON_GetArraySize(json::get(household, "telegram_chat_ids")) > 0) any = true;
+      }
+      if (!any) return "no_chat";
+    }
+    reevalTelegram();
+    tg->sendTestMessage(chat);
+    return "";
+  }
+
+  bool handleTelegramTest(const std::string& from, const cJSON* command) {
+    const std::string kind = json::getString(command, "cmd");
+    if (kind != "telegram_test_request" && kind != "telegram_test_response") return false;
+    const std::string request = json::getString(command, "request");
+    if (!mesh || request.size() != 32 || cfgAt("removed_devices." + from)) return true;
+    if (kind == "telegram_test_request") {
+      const std::string chat = json::getString(command, "chat_id");
+      if (chat.size() > 128) return true;
+      const std::string error = sendTelegramTest(chat);
+      auto response = json::obj();
+      json::set(response.get(), "cmd", "telegram_test_response");
+      json::set(response.get(), "request", request);
+      json::set(response.get(), "err", error);
+      mesh->sendCommand(from, json::dump(response.get()));
+    } else {
+      auto pending = telegram_tests.find(request);
+      if (pending == telegram_tests.end() || pending->second.leader != from ||
+          pending->second.complete) return true;
+      pending->second.error = json::getString(command, "err");
+      pending->second.complete = true;
+    }
+    return true;
+  }
+
+  bool handleTelegramSecret(const std::string& from, const cJSON* command) {
+    const std::string kind = json::getString(command, "cmd");
+    if (kind != "telegram_secret_request" && kind != "telegram_secret_response") return false;
+    if (!mesh || !mesh->isPaired() || cfgAt("removed_devices." + from)) return true;
+    const std::string ref = json::getString(command, "ref");
+    if (!secretRefValid(ref) ||
+        ref != json::getString(cfgAt("integrations.telegram"), "bot_token_ref")) return true;
+    const std::string request = json::getString(command, "request");
+    if (request.size() != 32) return true;
+    if (kind == "telegram_secret_request") {
+      const std::string value = secretValue(ref);
+      if (value.empty()) return true;
+      auto response = json::obj();
+      json::set(response.get(), "cmd", "telegram_secret_response");
+      json::set(response.get(), "ref", ref);
+      json::set(response.get(), "request", request);
+      json::set(response.get(), "value", value);
+      mesh->sendCommand(from, json::dump(response.get()));
+    } else if (request == telegram_secret_request &&
+               clock->monoMs() - telegram_secret_request_at <= 5000 && secretValue(ref).empty()) {
+      const std::string value = json::getString(command, "value");
+      if (!value.empty() && value.size() <= 4096 && putSecret(ref, value)) {
+        telegram_secret_request.clear();
+        applyEffectiveCaps();
+        scheduleBridgeReapply();
+      }
+    }
+    return true;
+  }
+
   std::string telegramToken() {
     return referencedSecret(cfgAt("integrations.telegram"), "bot_token_ref");
   }
@@ -4939,6 +5132,150 @@ struct Node::Impl {
         if (!w.expired()) done(status, resp);
       });
     });
+  }
+
+  struct SpeechItem {
+    std::string reply, lang, text, key, request;
+  };
+
+  std::vector<SpeechItem> speechItems() {
+    std::vector<SpeechItem> out;
+    cJSON* settings = cfgAt("speech");
+    if (json::getString(settings, "provider", "system") != "google") return out;
+    cJSON* replies = cfgAt("quick_replies");
+    cJSON* reply = nullptr;
+    cJSON_ArrayForEach(reply, replies) {
+      if (!reply->string || !json::getBool(reply, "speak", true)) continue;
+      for (const char* lang : {"ja", "en", "zh"}) {
+        SpeechItem item;
+        item.reply = reply->string;
+        item.lang = lang;
+        item.text = json::getString(json::get(reply, "label"), lang);
+        if (item.text.empty() || item.text.size() > 3000 || out.size() >= 256) continue;
+        auto req = json::obj();
+        json::set(json::addObj(req.get(), "input"), "text", item.text);
+        cJSON* voice = json::addObj(req.get(), "voice");
+        const std::string code = item.lang == "ja" ? "ja-JP" : item.lang == "zh" ? "cmn-CN" : "en-US";
+        json::set(voice, "languageCode", code);
+        json::set(voice, "name", json::getString(json::get(settings, "voices"), lang,
+            code + "-Standard-A"));
+        cJSON* audio = json::addObj(req.get(), "audioConfig");
+        json::set(audio, "audioEncoding", "MP3");
+        cJSON* rate = json::get(settings, "speaking_rate");
+        cJSON_AddNumberToObject(audio, "speakingRate", cJSON_IsNumber(rate)
+            ? std::max(0.25, std::min(4.0, rate->valuedouble)) : 1.0);
+        item.request = json::dump(req.get());
+        item.key = sha256Hex(Bytes(item.request.begin(), item.request.end()));
+        out.push_back(item);
+      }
+    }
+    return out;
+  }
+
+  std::string speechHash(const SpeechItem& item) {
+    const std::string hash = json::getString(cfgAt("speech.cache"), item.key.c_str());
+    return isSha256HexStr(hash) ? hash : "";
+  }
+
+  std::string speechAudio(const std::string& reply, const std::string& lang,
+                          const std::string& text) {
+    for (const auto& item : speechItems())
+      if (item.reply == reply && item.lang == lang && item.text == text) return speechHash(item);
+    return "";
+  }
+
+  bool isSpeechGenerator() {
+    return json::getString(cfgAt("speech"), "generator_node") == node_id;
+  }
+
+  void scheduleSpeechCache() {
+    if (speech_timer || !started) return;
+    std::weak_ptr<char> w = alive;
+    speech_timer = loop->postDelayed(1000, [this, w] {
+      if (w.expired()) return;
+      speech_timer = 0;
+      generateNextSpeech();
+    });
+  }
+
+  void generateNextSpeech() {
+    if (!speech_pending.empty() || !isSpeechGenerator() ||
+        (!speech_force && !json::getBool(cfgAt("speech"), "auto_cache", true))) return;
+    const std::string secret = referencedSecret(cfgAt("speech"), "google_key_ref");
+    if (secret.empty() || !opts.has_https) return;
+    for (const auto& item : speechItems()) {
+      // A published hash can be fetched from the mesh; do not charge for synthesizing it again.
+      if (!speechHash(item).empty() || speech_errors.count(item.key)) continue;
+      speech_pending = item.key;
+      const uint64_t request_id = ++speech_request_id;
+      auto headers = json::obj();
+      json::set(headers.get(), "Content-Type", "application/json");
+      json::set(headers.get(), "X-Goog-Api-Key", secret);
+      std::weak_ptr<char> w = alive;
+      loop->postDelayed(45000, [this, w, request_id, item] {
+        if (w.expired() || request_id != speech_request_id || speech_pending != item.key) return;
+        speech_errors[item.key] = "timeout";
+        speech_pending.clear();
+        ++speech_request_id;
+        scheduleSpeechCache();
+      });
+      httpsCall("POST", "https://texttospeech.googleapis.com/v1/text:synthesize",
+          json::dump(headers.get()), Bytes(item.request.begin(), item.request.end()),
+          [this, item, request_id](int status, std::string response) {
+        if (request_id != speech_request_id || speech_pending != item.key) return;
+        speech_pending.clear();
+        std::string error;
+        if (status != 200) error = "provider_http_" + std::to_string(status);
+        Bytes audio;
+        if (error.empty()) {
+          auto body = response.size() <= 4 * 1024 * 1024 ? json::parse(response) : json::Doc();
+          const std::string encoded = json::getString(body.get(), "audioContent");
+          if (!base64Decode(encoded, audio) || audio.size() < 3 || audio.size() > 2 * 1024 * 1024 ||
+              !((audio[0] == 'I' && audio[1] == 'D' && audio[2] == '3') ||
+                (audio[0] == 0xff && (audio[1] & 0xe0) == 0xe0))) error = "invalid_audio";
+        }
+        bool current = false;
+        for (const auto& next : speechItems()) if (next.key == item.key) current = true;
+        if (error.empty() && current && isSpeechGenerator()) {
+          const std::string hash = addAssetOnLoop(audio, "audio/mpeg", "TTS " + item.reply + " " + item.lang);
+          if (hash.empty()) error = "store_failed";
+          else {
+            auto value = json::Doc(cJSON_CreateString(hash.c_str()));
+            auto result = json::parse(setConfigJsonOnLoop("speech.cache." + item.key, json::dump(value.get()), nullptr));
+            if (!json::getBool(result.get(), "ok", false)) error = "store_failed";
+          }
+        }
+        if (!error.empty()) {
+          if (speech_errors.size() >= 256) speech_errors.erase(speech_errors.begin());
+          speech_errors[item.key] = error;
+        }
+        scheduleSpeechCache();
+      });
+      return;
+    }
+    speech_force = false;
+  }
+
+  std::string speechStatus() {
+    auto out = json::obj();
+    json::set(out.get(), "provider", json::getString(cfgAt("speech"), "provider", "system"));
+    json::set(out.get(), "generator_node", json::getString(cfgAt("speech"), "generator_node"));
+    json::setBool(out.get(), "auto_cache", speech_force || json::getBool(cfgAt("speech"), "auto_cache", true));
+    json::setBool(out.get(), "is_generator", isSpeechGenerator());
+    json::setBool(out.get(), "key_ready", !referencedSecret(cfgAt("speech"), "google_key_ref").empty());
+    auto rows = json::addArr(out.get(), "items");
+    for (const auto& item : speechItems()) {
+      auto row = json::pushObj(rows);
+      json::set(row, "reply_id", item.reply);
+      json::set(row, "lang", item.lang);
+      const std::string hash = speechHash(item);
+      json::set(row, "hash", hash);
+      const auto error = speech_errors.find(item.key);
+      json::set(row, "state", !hash.empty() ? (assetCached(hash) ? "ready" : "syncing") :
+          speech_pending == item.key ? "generating" : error != speech_errors.end() ? "failed" : "pending");
+      if (error != speech_errors.end()) json::set(row, "error", error->second);
+    }
+    return json::dump(out.get());
   }
 
   void onSipReg(SipRegState st, const std::string& reason) {
@@ -5190,6 +5527,7 @@ struct Node::Impl {
     json::setBool(measured.get(), "mqtt_ready",
                   !mqtt_host.empty() && (mqtt_ref.empty() || !referencedSecret(mqtt, "pass_ref").empty()));
     json::setBool(measured.get(), "telegram_ready", !telegramToken().empty());
+    json::setBool(measured.get(), "telegram_reachable", telegram_probe_reachable);
     cJSON* web_push = cfgAt("integrations.web_push");
     const std::string push_sender_ref = json::getString(web_push, "sender_secret_ref");
     const bool push_sender_secret_ready =
@@ -5812,6 +6150,16 @@ struct Node::Impl {
       }
     }
     rebuildCfg();
+    if (mesh && mesh->isPaired() && cfgAt("removed_devices." + node_id)) {
+      std::weak_ptr<char> w = alive;
+      loop->post([this, w] {
+        if (w.expired() || !mesh || !mesh->isPaired() || !cfgAt("removed_devices." + node_id)) return;
+        uiNotify("{\"t\":\"pairing_revoked\"}");
+        pairing_revoked = true;
+        emitPairingState();
+        unpairOnLoop();
+      });
+    }
     bool values_changed = is_local;
     if (!is_local) {
       for (const auto& e : effective_entries) {
@@ -5863,6 +6211,7 @@ struct Node::Impl {
       applyVideoRotation();
       applyEffectiveCaps();
     }
+    scheduleSpeechCache();
     if (sip_changed) scheduleSipReapply();
     if (integrations_changed) applyEffectiveCaps();
     if (started && integrations_changed) netRefreshSnapshot();
@@ -6023,6 +6372,8 @@ struct Node::Impl {
       cachePeerContracts();
       updateSipAllowedSources();
       schedulePrefetch();
+      syncTelegramSecret();
+      sendPendingRevocations();
       rearmCallTimeouts();
       rearmCallRecoveryTakeovers();
       notifyPeersChanged();
@@ -6277,11 +6628,17 @@ struct Node::Impl {
     events->replayRecovered();
     restoreEmergency();
     notifyPendingRecoveries();
-    snapshot_timer = loop->postEvery(2'000, [this] { refreshSnapshots(); });
+    snapshot_timer = loop->postEvery(2'000, [this] {
+      refreshSnapshots();
+      syncTelegramSecret();
+      probeTelegramEndpoint();
+      schedulePrefetch();
+    });
     refreshSnapshots();
     evalDisplay(/*force=*/true);
     restoreEmergencyPresentation();
     prefetchAssets();
+    scheduleSpeechCache();
     pruneEventsTick();
     DB_LOGI(kTag, "node " + node_id.substr(0, 8) + " (" + opts.name + ") started");
     return true;
@@ -7252,6 +7609,10 @@ struct Node::Impl {
       if (emergency_settle_pending) armEmergencySettleFallback();
       return;
     }
+    if (ev.type == "motion" && opts.role == "door_station" && ev.door == opts.door &&
+        json::getBool(cfgAt("devices." + node_id + ".local.motion"), "wake_screen", false)) {
+      uiNotify("{\"t\":\"wake_screen\",\"reason\":\"motion\"}");
+    }
     if (ev.type == "press") {
       last_press_door = ev.door;
       last_press_by_door[ev.door] = {ev.origin, ev.seq};
@@ -7461,6 +7822,7 @@ struct Node::Impl {
     auto c = json::parse(cmd_json);
     if (!c) return;
     std::string cmd = json::getString(c.get(), "cmd");
+    if (handleTelegramSecret(from, c.get()) || handleTelegramTest(from, c.get())) return;
     if (cmd == "pairing_revoked") {
       if (json::getString(c.get(), "target") != node_id) return;
       const auto peers = mesh ? mesh->peers() : std::vector<PeerInfo>{};
@@ -7533,6 +7895,7 @@ struct Node::Impl {
         }
       }
     }
+    if (audio.empty() && speak) audio = speechAudio(reply_id, lang, text);
     if (text.empty()) {
       DB_LOGW(kTag, "quickReply has no body (reply_id=" + reply_id + ")");
       return false;
@@ -8326,7 +8689,8 @@ struct Node::Impl {
       auto& liveness = status_peer_status;
       liveness.clear();
       if (mesh) {
-        for (const auto& peer : mesh->peers()) liveness[peer.id] = peer.status;
+        for (const auto& peer : mesh->peers())
+          if (!cfgAt("removed_devices." + peer.id)) liveness[peer.id] = peer.status;
       }
       liveness[node_id] = "alive";
       {
@@ -8334,7 +8698,8 @@ struct Node::Impl {
         const cJSON* known = json::get(cfg.get(), "devices");
         const cJSON* device = nullptr;
         cJSON_ArrayForEach(device, known) {
-          if (device->string && !liveness.count(device->string))
+          if (device->string && !cfgAt("removed_devices." + std::string(device->string)) &&
+              !liveness.count(device->string))
             liveness[device->string] = "offline";
         }
       }
@@ -8429,6 +8794,7 @@ struct Node::Impl {
     std::set<std::string> visible_peers;
     if (mesh) {
       for (const auto& p : mesh->peers()) {
+        if (cfgAt("removed_devices." + p.id)) continue;
         visible_peers.insert(p.id);
         cJSON* e = json::pushObj(arr);
         json::set(e, "id", p.id);
@@ -8505,7 +8871,7 @@ struct Node::Impl {
     cJSON_ArrayForEach(configured_device, configured_devices) {
       if (!configured_device->string) continue;
       const std::string id = configured_device->string;
-      if (id == node_id || visible_peers.count(id)) continue;
+      if (id == node_id || visible_peers.count(id) || cfgAt("removed_devices." + id)) continue;
       cJSON* e = json::pushObj(arr);
       json::set(e, "id", id);
       json::set(e, "status", status_peer_status.count(id) ? status_peer_status[id]
@@ -8750,6 +9116,14 @@ struct Node::Impl {
       }
       mutations.push_back(std::move(mutation));
     }
+    std::vector<LwwMutation> descendants;
+    for (const auto& mutation : mutations) {
+      if (!mutation.deleted) continue;
+      for (const auto& entry : config->byPrefix(mutation.key + ".")) {
+        if (keys.insert(entry.first).second) descendants.push_back({entry.first, "", true});
+      }
+    }
+    mutations.insert(mutations.end(), descendants.begin(), descendants.end());
     const auto changed = config->mutate(mutations);
     if (!config->lastMutationCommitted()) return fail("config_persistence_failed", 500);
     if (status_out) *status_out = 200;
@@ -8764,6 +9138,40 @@ struct Node::Impl {
     return json::dump(result.get());
   }
 
+  bool removeDeviceOnLoop(const std::string& target) {
+    if (!mesh || target == node_id || target.size() != 32 ||
+        target.find_first_not_of("0123456789abcdef") != std::string::npos) return false;
+    std::vector<LwwMutation> removals = {{"removed_devices." + target, "true", false},
+                                       {"devices." + target, "", true}};
+    for (const auto& entry : config->byPrefix("devices." + target + "."))
+      removals.push_back({entry.first, "", true});
+    const auto pairs = cfgAt("video_playback.pairs");
+    const cJSON* receiver = nullptr;
+    cJSON_ArrayForEach(receiver, pairs) {
+      if (!receiver->string) continue;
+      const std::string key = "video_playback.pairs." + std::string(receiver->string);
+      const std::string removed = target == receiver->string ? key : key + "." + target;
+      removals.push_back({removed, "", true});
+      for (const auto& entry : config->byPrefix(removed + "."))
+        removals.push_back({entry.first, "", true});
+    }
+    config->mutate(removals);
+    if (!config->lastMutationCommitted()) return false;
+    sendPendingRevocations();
+    return true;
+  }
+
+  void sendPendingRevocations() {
+    if (!mesh || opts.role != "indoor_panel") return;
+    for (const auto& peer : mesh->peers()) {
+      if (peer.id == node_id || !peer.connected || !cfgAt("removed_devices." + peer.id)) continue;
+      auto command = json::obj();
+      json::set(command.get(), "cmd", "pairing_revoked");
+      json::set(command.get(), "target", peer.id);
+      mesh->sendCommand(peer.id, json::dump(command.get()));
+    }
+  }
+
   std::string deleteConfigKeyJsonOnLoop(const std::string& key, int* status_out) {
     auto fail = [&](const char* error, int status) {
       if (status_out) *status_out = status;
@@ -8773,7 +9181,10 @@ struct Node::Impl {
       return json::dump(out.get());
     };
     if (key.empty()) return fail("no key", 400);
-    config->remove(key);
+    std::vector<LwwMutation> removals = {{key, "", true}};
+    for (const auto& entry : config->byPrefix(key + "."))
+      removals.push_back({entry.first, "", true});
+    config->mutate(removals);
     if (!config->lastMutationCommitted()) return fail("config_persistence_failed", 500);
     if (status_out) *status_out = 200;
     return "{\"ok\":true}";
@@ -9048,6 +9459,17 @@ struct Node::Impl {
       return HttpResp::json(config->materializeJson());
     });
 
+    httpd->route("POST", "/api/devices/remove", [this](const HttpReq& req) {
+      auto body = json::parse(req.body);
+      const std::string target = body ? json::getString(body.get(), "id") : "";
+      if (target == node_id || target.size() != 32 ||
+          target.find_first_not_of("0123456789abcdef") != std::string::npos)
+        return HttpResp::json("{\"ok\":false,\"err\":\"invalid_device\"}", 400);
+      if (!removeDeviceOnLoop(target))
+        return HttpResp::json("{\"ok\":false,\"err\":\"config_persistence_failed\"}", 500);
+      return HttpResp::json("{\"ok\":true}");
+    });
+
     httpd->route("POST", "/api/secrets", [this](const HttpReq& req) {
       if (!secureStoreAvailable(true))
         return HttpResp::json("{\"ok\":false,\"err\":\"secure_store_unavailable\"}", 501);
@@ -9065,6 +9487,8 @@ struct Node::Impl {
       applyEffectiveCaps();
       scheduleBridgeReapply();
       scheduleSipReapply();
+      speech_errors.clear();
+      scheduleSpeechCache();
       return HttpResp::json("{\"ok\":true}");
     });
 
@@ -9316,24 +9740,50 @@ struct Node::Impl {
 
     httpd->route("POST", "/api/test/telegram", [this](const HttpReq& req) {
       auto b = json::parse(req.body);
-      std::string chat = b ? json::getString(b.get(), "chat_id") : "";
-      if (telegramToken().empty())
-        return HttpResp::json("{\"ok\":false,\"err\":\"no_token\"}");
-      if (!tg || !mesh || !mesh->isLeader("telegram"))
-        return HttpResp::json("{\"ok\":false,\"err\":\"not_leader\"}");
-      if (chat.empty()) {
-
-        bool any = false;
-        cJSON* hs = json::get(cfg.get(), "households");
-        cJSON* h = nullptr;
-        cJSON_ArrayForEach(h, hs) {
-          cJSON* ids = json::get(h, "telegram_chat_ids");
-          if (ids && cJSON_GetArraySize(ids) > 0) any = true;
+      const std::string chat = b ? json::getString(b.get(), "chat_id") : "";
+      if (chat.size() > 128) return HttpResp::json("{\"ok\":false,\"err\":\"bad_chat\"}", 400);
+      const std::string leader = mesh ? mesh->leaderFor("telegram") : "";
+      if (!leader.empty() && leader != node_id) {
+        bool connected = false;
+        for (const auto& peer : mesh->peers())
+          if (peer.id == leader && peer.connected) connected = true;
+        if (!connected) return HttpResp::json("{\"ok\":false,\"err\":\"not_leader\"}");
+        for (auto it = telegram_tests.begin(); it != telegram_tests.end();) {
+          if (clock->monoMs() - it->second.started_ms > 30000) it = telegram_tests.erase(it);
+          else ++it;
         }
-        if (!any) return HttpResp::json("{\"ok\":false,\"err\":\"no_chat\"}");
+        if (telegram_tests.size() >= 32)
+          return HttpResp::json("{\"ok\":false,\"err\":\"busy\"}", 429);
+        const std::string id = genTokenHex(16);
+        telegram_tests[id] = {leader, clock->monoMs(), "", false};
+        auto command = json::obj();
+        json::set(command.get(), "cmd", "telegram_test_request");
+        json::set(command.get(), "request", id);
+        json::set(command.get(), "chat_id", chat);
+        mesh->sendCommand(leader, json::dump(command.get()));
+        auto result = json::obj();
+        json::setBool(result.get(), "ok", true);
+        json::setBool(result.get(), "pending", true);
+        json::set(result.get(), "request", id);
+        return HttpResp::json(json::dump(result.get()));
       }
-      tg->sendTestMessage(chat);
-      return HttpResp::json("{\"ok\":true}");
+      const std::string error = sendTelegramTest(chat);
+      auto result = json::obj();
+      json::setBool(result.get(), "ok", error.empty());
+      if (!error.empty()) json::set(result.get(), "err", error);
+      return HttpResp::json(json::dump(result.get()));
+    });
+    httpd->route("GET", "/api/test/telegram/*", [this](const HttpReq& req) {
+      const std::string id = req.uri.substr(std::string("/api/test/telegram/").size());
+      auto it = telegram_tests.find(id);
+      if (it == telegram_tests.end()) return HttpResp::notFound();
+      const bool expired = clock->monoMs() - it->second.started_ms > 10000;
+      auto result = json::obj();
+      json::setBool(result.get(), "ok", it->second.complete && it->second.error.empty());
+      json::setBool(result.get(), "pending", !it->second.complete && !expired);
+      if (!it->second.error.empty()) json::set(result.get(), "err", it->second.error);
+      else if (expired && !it->second.complete) json::set(result.get(), "err", "timeout");
+      return HttpResp::json(json::dump(result.get()));
     });
 
     // Rotate a panel bearer in secure storage. Only its opaque reference is replicated/exported.
@@ -9428,6 +9878,20 @@ struct Node::Impl {
     });
 
 
+
+    httpd->route("GET", "/api/tts", [this](const HttpReq&) {
+      return HttpResp::json(speechStatus());
+    });
+    httpd->route("POST", "/api/tts/cache", [this](const HttpReq&) {
+      if (!isSpeechGenerator())
+        return HttpResp::json("{\"ok\":false,\"err\":\"not_generator\"}", 409);
+      if (referencedSecret(cfgAt("speech"), "google_key_ref").empty())
+        return HttpResp::json("{\"ok\":false,\"err\":\"missing_key\"}", 400);
+      speech_errors.clear();
+      speech_force = true;
+      scheduleSpeechCache();
+      return HttpResp::json("{\"ok\":true}");
+    });
 
     httpd->route("POST", "/api/assets", [this](const HttpReq& req) {
       const std::string type = req.param("type");
@@ -10626,6 +11090,10 @@ void Node::stop() {
       impl_->loop->cancel(impl_->emergency_settle_timer);
       impl_->emergency_settle_timer = 0;
     }
+    if (impl_->speech_timer) {
+      impl_->loop->cancel(impl_->speech_timer);
+      impl_->speech_timer = 0;
+    }
     if (impl_->asset_prefetch_timer) {
       impl_->loop->cancel(impl_->asset_prefetch_timer);
       impl_->asset_prefetch_timer = 0;
@@ -11132,18 +11600,7 @@ bool Node::inviteFromQrText(const std::string& text) {
 
 void Node::removeDevice(const std::string& target) {
   impl_->loop->post([this, target] {
-    if (!impl_->mesh || impl_->opts.role != "indoor_panel" || target.empty() ||
-        target == node_id_)
-      return;
-    const auto peers = impl_->mesh->peers();
-    const auto it = std::find_if(peers.begin(), peers.end(), [&](const PeerInfo& peer) {
-      return peer.id == target && peer.connected;
-    });
-    if (it == peers.end()) return;
-    auto command = json::obj();
-    json::set(command.get(), "cmd", "pairing_revoked");
-    json::set(command.get(), "target", target);
-    impl_->mesh->sendCommand(target, json::dump(command.get()));
+    if (impl_->opts.role == "indoor_panel") impl_->removeDeviceOnLoop(target);
   });
 }
 

@@ -61,9 +61,7 @@ void HlcClock::observe(const std::string& remote_hlc) {
 }
 
 int64_t HlcClock::correctedWallMs() {
-  int64_t wall = clock_.wallMs();
-  std::lock_guard<std::mutex> lk(mu_);
-  return wall > last_ms_ ? wall : last_ms_;
+  return clock_.wallMs();
 }
 
 }  // namespace db

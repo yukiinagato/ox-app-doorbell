@@ -91,7 +91,7 @@ final class RuntimeSupervisor {
             unexpectedLaunches.append(now)
             defaults.set("unexpected_termination", forKey: Key.lastReason)
         }
-        safeMode = defaults.bool(forKey: Key.safeMode) || unexpectedLaunches.count >= 3
+        safeMode = false
         defaults.set(unexpectedLaunches, forKey: Key.launches)
         defaults.set(safeMode, forKey: Key.safeMode)
         defaults.set(false, forKey: Key.cleanExit)
@@ -215,8 +215,8 @@ final class RuntimeSupervisor {
         #if os(iOS)
         keepalive?.noteMemoryPressure()
         #endif
-        safeMode = true
-        defaults.set(true, forKey: Key.safeMode)
+        safeMode = false
+        defaults.set(false, forKey: Key.safeMode)
         defaults.set("memory_pressure", forKey: Key.lastReason)
         publishRuntime()
         publishCapabilities()

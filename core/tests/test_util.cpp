@@ -268,7 +268,7 @@ TEST_CASE("hlc monotonic + lexicographic order") {
   CHECK(HlcClock::format(ms, cnt, node) == d);
 }
 
-TEST_CASE("hlc observe merges remote and corrects wall") {
+TEST_CASE("hlc observe merges logical order without changing wall time") {
   SimClock clock(1000);
   HlcClock hlc(clock, "aa");
   hlc.observe(HlcClock::format(999'999, 3, "bb"));
@@ -278,7 +278,10 @@ TEST_CASE("hlc observe merges remote and corrects wall") {
   REQUIRE(HlcClock::parse(t, &ms, &cnt, nullptr));
   CHECK(ms == 999'999);
   CHECK(cnt == 4);
-  CHECK(hlc.correctedWallMs() == 999'999);
+  CHECK(hlc.correctedWallMs() == 1000);
+  clock.setWallOffsetMs(-500);
+  CHECK(hlc.correctedWallMs() == 500);
+  CHECK(hlc.tick() > t);
 }
 
 TEST_CASE("json helpers") {

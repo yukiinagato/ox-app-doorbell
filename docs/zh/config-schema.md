@@ -10,6 +10,11 @@
 ASCII 字母或数字，后续仅允许字母、数字、`_`、`-`。仅保存成功后才原子写入
 `setup_complete:true`。tvOS 没有受支持的门口摄像头角色，因此固定为 `indoor_panel`。
 
+iOS 兼容版为设备名称和门口 ID 预填 `<型号>-<角色>-<8位十六进制编号>`，例如
+`iPad-mini-door-a3f29c10`。角色部分使用 `door` 或 `indoor`；门口 ID 始终使用
+`door`。两项建议共用一个随机编号。首次确认前，切换角色仅更新未经编辑的自动名称，
+手动输入会保留。已确认的名称和 ID 在升级和重启后保持不变。
+
 设备加入 cluster 后，`devices.<self>.name`、`.role` 和 `.door` 是可远程编辑的目标身份。
 Android 与 iOS/iPadOS 目标 shell 会验证变更，将其原子写入本机 `boot.json`，然后重启 UI 与 Core，使新角色用于广播
 和平台运行时。在重启完成前，其他节点使用目标设备的实时签名广播，而不会让目标设备尚未应用的
@@ -189,7 +194,7 @@ mesh-PSK-derived key 和 XChaCha20-Poly1305 seal 成 schema-v2 CRDT record；mat
     "brightness": 70,                           // 0-100（远程调节 — 管理页面的滑块）
     "night": { "enabled": true, "from": "22:00", "to": "06:00",
                "brightness": 15, "red_tint": true },   // 夜间模式（用校正后的时钟判定）
-    "screensaver_after_s": 120,                 // 无操作后进入屏保（时钟漂移显示、低亮度）
+    "screensaver_after_s": 120,                 // 旧空闲等待时间，参见 display.screensaver
     "pixel_shift_s": 300                        // 待机画面元素周期性移动数 px（防烧屏）
   },
 
@@ -582,6 +587,10 @@ core 就会在启动时、时区变更时以及每分钟的 tick 中由时区重
 `POST /api/time/sync`（管理会话）启动一次立即同步；结果见 `status.time`，
 当时间源翻转或已应用的偏移变动超过 500 ms 时送出 `time_changed`。
 
+HLC 将因果顺序与实际时间分开维护。接收到偏快节点的时间戳，或保留校准前偏快的本地时间戳，
+都不会把界面时钟、本地事件的 `wall_ms`、计划与到期判断推到未来。NTP 向后校准会立即生效；
+HLC 标识仍保持单调递增，因此复制写入的顺序不受影响。
+
 电源状态来自可选的 `db_platform_v2.power_state` 回调，每分钟轮询一次。它作为
 `status.self.power`（以及内容相同的 `status.node.power`）发布，经受限的 runtime 射影
 gossip 到 `peers[].power`，并在电量变动达到 5 个百分点或充电/外部供电翻转时送出 `power_changed`。
@@ -719,3 +728,65 @@ remote/offline Web surface。
   （purpose/visitor_lang 仅在适用时出现）。向 `<base>/<door_id>/attrs` 以 retain 发布
   `{"visitor_lang":"ja|en|zh"}`，并以 `sensor.doorbell_<door>_visitor_lang` 做
   discovery。Telegram 的 press 通知首行为 `{icon} {事由名}` 加访客语言徽标 `🌐 EN`。
+
+## 终端移除、资源同步与移动唤醒
+
+在已认证的管理员会话中向 `POST /api/devices/remove` 提交 `{ "id": "<node-id>" }`，会原子删除目标终端的配置子树与视频播放覆盖，并同步 `removed_devices.<id>: true`。不能移除当前终端。离线记录立即隐藏，升级后的被移除终端重新连接时会退出配对。旧节点不会重新出现在设备列表或当选通知角色。此操作清理成员关系，不轮换集群共享密钥。
+
+删除配置会覆盖全部已存储子项。删除标记也会隐藏旧子字段以及嵌在父对象中的成员，因此删除全部访问目的后，同步不会恢复残留值；仍可明确重新创建目的。
+
+每台终端下载整个 `assets` 资源库及被引用资源，保存前验证 SHA-256，并在运行期间重试缺失文件。传输完成前，来源终端或拥有完整副本的终端须保持可连接。
+
+Telegram 配置仍只保存 `bot_token_ref`。升级后的节点通过认证、加密的集群连接请求当前引用的 token，再写入平台安全存储；配置、UI 事件和启动文件不包含 token 明文。轮换时使用新引用，且至少一台可连接的升级节点必须持有 token。其他集成凭据沿用既有配置方式。推送角色要求本地 token 就绪及实测 TLS、电源、时钟能力，再加上 WAN 依据或定期访问 `https://api.telegram.org/` 的 HTTPS 检查成功；该检查不会赋予 Web Push 资格。失去资格的节点不能继续持有领导租约。在已连接的非推送节点上测试发送时，会转交当选节点；待处理响应返回 `request`，通过 `GET /api/test/telegram/<request>` 查询结果。成功表示已进入发送队列，不表示 Telegram 已确认送达。
+
+`devices.<id>.local.motion.wake_screen` 是可选布尔值，默认 `false`。在管理页的设备编辑中启用后，本门口的新移动侦测事件会点亮屏幕并退出屏保；历史同步事件及其他门口的事件不会触发。iOS 和 Windows 屏保客户端恢复配置的活动亮度，并重新计算闲置时间。
+
+modern iOS 門口機的 `devices.<id>.local.visitor_layout` 可選 `standard`（預設）、`left`、`right` 或 `edges`。靠左或靠右會保留另一側背景；edges 將時鐘置頂、控制項置底。可在原生設定或管理 → 裝置 → 編輯中選擇，其他客戶端忽略此設定。自動文字顏色比較每個標籤下方最暗與最亮區域，對比不足時加入柔和的反色陰影。
+
+modern iOS 訪客畫面的語言列位於訪問目的按鈕下方。時間與日期共用背景取樣區域和自動字色，日期不再淡化；手動指定的各區域顏色仍優先。
+
+
+## 回覆語音供應商與預先生成音頻
+
+`speech.provider` 支援 `system`（預設）和 `google`。定型文優先播放手動上傳音頻，
+其次是已同步的雲端 MP3，缺少本機音頻時使用系統 TTS。自由文字回覆仍使用系統語音。
+在生成設備的 Web 後台「定型文回覆 → 回覆語音與音頻快取」選擇 Google、填入 Key 並儲存。
+Key 保存在該機的安全儲存；只有引用與音頻在設備間同步。系統語音試聽使用瀏覽器聲線，
+可能與門口機不同；Google 試聽播放同一份快取音頻。
+
+設定欄位：`speech.generator_node` 指定唯一生成設備，`speech.google_key_ref` 是密鑰引用；
+`speech.voices` 以 `ja/en/zh` 配置聲線，預設分別為 `ja-JP-Standard-A`、
+`en-US-Standard-A`、`cmn-CN-Standard-A`。`speech.speaking_rate` 為 0.25–4（預設 1），
+`speech.auto_cache` 預設開啟。`speech.cache.<fingerprint>` 是自動生成的 MP3 資源索引，勿手動修改。
+
+依文字、語言、聲線、語速及編碼去重；修改或刪除回覆後不會套用過期結果。生成工作循序執行，
+最多掃描 256 份翻譯，每份最多 3,000 UTF-8 位元組。失敗後須手動重試、更改內容或重新啟動 App；
+回覆播放不會等待雲端請求。音頻透過既有雜湊驗證同步，可離線播放。
+已登入的 `GET /api/tts` 提供狀態；生成設備上的 `POST /api/tts/cache` 生成缺少的音頻並重試，
+即使關閉自動生成也可使用。狀態不包含 API Key 或供應商錯誤正文。
+
+Google Cloud 須啟用 Text-to-Speech API 及帳單，建立限制於此 API 的 Key。
+Standard 聲線目前每月有 400 萬字元免費額度，超额收費；其他聲線價格不同。
+App 不保證免費額度，請在供應商設定配額。詳見
+[設定](https://docs.cloud.google.com/text-to-speech/docs/get-started)及
+[價格](https://cloud.google.com/text-to-speech/pricing)。
+
+## 暗屏策略与 Telegram 回应同步
+
+在管理 → 主题与屏幕 → 暗屏与待机显示中配置 `display.screensaver`。每台设备可在 `devices.<id>.local.display.screensaver` 下逐项覆盖，删除该对象即可恢复继承。配置格式：
+
+```json
+{"enabled":true,"schedule":"daily","from":"22:00","to":"06:00","after_s":120,"brightness":20,"mode":"dim"}
+```
+
+`enabled` 默认 true，旧空闲等待时间为零时默认 false。`schedule` 为 `always`（默认，全天）或 `daily`。每日时段采用集群时区，包含开始时刻、不含结束时刻，支持跨午夜；相同起止时间表示空时段，全天请使用 `always`。核心至少每30秒重新计算是否允许暗屏。`after_s` 为1～86400的整数，未设置则沿用 `screensaver_after_s`（默认120秒）。`brightness` 为1～100的整数，默认10，客户端将其限制在正常亮度以内。关闭功能或时段结束后，客户端收到新状态即恢复正常显示。
+
+现代 iOS 和 Windows 提供三种模式：`dim`（默认，完整门铃界面调暗）、`minimal`（隐藏壁纸、保留操作控件，并依据纯色背景重新计算文字对比度）、`clock`（黑底时钟、日期及明确的门铃唤醒提示）。触摸、来电和紧急事件会恢复屏幕。Android、tvOS 和 iOS 5 保持现有显示方式，不宣称支持这些暗屏模式。运行状态 `display.screensaver` 返回解析后的配置及 `eligible`；未启用或时段之外，兼容字段 `screensaver_after_s` 返回0。
+
+室内机产生有效的 `call_answered` 或绑定呼叫的 `reply` 后，Telegram 职责节点会编辑对应的原始来访通知，保留来访信息、加上回应设备名称和时间（快捷回应还包含回复内容），并移除过期的回复按钮。仅已接受且 `call_id` 匹配的事件会更新，不会改到下一位访客的通知。更新使用持久重试队列，也覆盖“回应早于照片发送完成”的情况。来自 Telegram 的回复继续使用现有回调流程。HTTPS 测试使用模拟服务，不向真实家庭群发送测试消息。
+
+## 访客呼叫流程显示
+
+`ui.call_flow` 将门口机分为两条独立路径。`purpose_first` 在首页显示已启用的目的，点击目的即发出一次带有该目的的呼叫。**直接呼叫** 按钮可跳过目的并立即呼叫，呼叫后不再打开目的页面。`ring_then_purpose` 隐藏首页目的菜单，点击呼叫按钮后先发出呼叫，再打开目的页面；选择目的只更新同一次呼叫，跳过目的会继续呼叫，取消则结束该次呼叫。没有已启用的目的时，两种模式都直接呼叫，不打开空选单。
+
+iOS、iOS 5 兼容版、Android 和 Windows 原生门口机遵循上述流程。Web 面板先选择目标门，再按所选模式安排目的选择与呼叫的顺序。切换设置只更新首页，不会发起呼叫；已有呼叫保留其标识和截止时间。配置存储值不变，管理菜单显示翻译后的名称和所选流程说明。

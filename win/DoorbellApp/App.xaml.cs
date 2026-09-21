@@ -30,7 +30,7 @@ namespace DoorbellApp
                 Shutdown(WindowsFirewall.Configure(WindowsFirewall.PortsFromArguments(e.Args)) ? 0 : 1);
                 return;
             }
-            SafeMode = e.Args != null && Array.IndexOf(e.Args, "--safe-mode") >= 0;
+            SafeMode = false;
 
             DataDir = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "Doorbell");

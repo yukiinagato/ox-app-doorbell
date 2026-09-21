@@ -301,8 +301,21 @@ void TelegramBridge::configure(const std::string& cfg_json, const std::string& n
     return;
   }
 
-  if (!active_) DB_LOGI(kTag, "bridge started as Telegram leader");
+  const bool became_active = !active_;
+  if (became_active) DB_LOGI(kTag, "bridge started as Telegram leader");
   active_ = true;
+  if (became_active) {
+    for (const auto& event : store_.recentEvents(4096)) {
+      if (event.type != "press" || event.wall_ms < nowWallMs() - kQueueTtlMs) continue;
+      press_source_by_call_[callIdOf(event)] = {event.origin, event.seq, event.wall_ms};
+      auto notify = json::parse(event.notify_json);
+      const cJSON* id = nullptr;
+      cJSON_ArrayForEach(id, json::get(notify.get(), "telegram_msg_ids")) {
+        if (id->string && cJSON_IsNumber(id))
+          enqueueResponse(event, id->string, static_cast<int64_t>(id->valuedouble));
+      }
+    }
+  }
   if (!pump_timer_) {
     pump_timer_ = loop_.postEvery(kPumpPeriodMs, [this] { pump(); });
     std::weak_ptr<char> w = alive_;
@@ -444,6 +457,10 @@ void TelegramBridge::editCaptionOrText(const std::string& chat_id, int64_t messa
 
 
 void TelegramBridge::onEvent(const EventRecord& ev) {
+  if ((ev.type == "call_answered" || ev.type == "reply") && payloadString(ev, "via") != "telegram") {
+    recordResponse(ev);
+    return;
+  }
   if (ev.type == "press") {
     const std::string call_id = callIdOf(ev);
     if (!call_id.empty()) {
@@ -603,7 +620,8 @@ void TelegramBridge::enqueuePress(const EventRecord& ev, const std::vector<std::
 }
 
 void TelegramBridge::recordNotified(const std::string& origin, uint64_t seq,
-                                    const std::string& chat_id, int64_t message_id) {
+                                    const std::string& chat_id, int64_t message_id,
+                                    const std::string& message_text) {
   if (!hooks_.get_event || !hooks_.merge_notify || !hooks_.hlc_tick) return;
   auto cur = hooks_.get_event(origin, seq);
   if (!cur) return;
@@ -620,7 +638,74 @@ void TelegramBridge::recordNotified(const std::string& origin, uint64_t seq,
       json::set(ids, it->string, static_cast<int64_t>(it->valuedouble));
   }
   if (message_id > 0) json::set(ids, chat_id.c_str(), message_id);
+  const cJSON* old_texts = n ? json::get(n.get(), "telegram_msg_texts") : nullptr;
+  auto texts = cJSON_IsObject(old_texts) ? json::Doc(cJSON_Duplicate(old_texts, 1)) : json::obj();
+  json::set(texts.get(), chat_id.c_str(), message_text);
+  json::setItem(upd.get(), "telegram_msg_texts", std::move(texts));
   hooks_.merge_notify(origin, seq, json::dump(upd.get()));
+  auto latest = hooks_.get_event(origin, seq);
+  if (latest && message_id > 0) enqueueResponse(*latest, chat_id, message_id);
+}
+
+void TelegramBridge::recordResponse(const EventRecord& ev) {
+  if (!hooks_.get_event || !hooks_.merge_notify || !hooks_.hlc_tick) return;
+  const std::string call_id = callIdOf(ev);
+  if (call_id.empty()) return;
+  auto source = press_source_by_call_.find(call_id);
+  std::optional<EventRecord> press;
+  if (source != press_source_by_call_.end())
+    press = hooks_.get_event(source->second.origin, source->second.seq);
+  if (!press) {
+    for (const auto& candidate : store_.recentEvents(4096)) {
+      if (candidate.type == "press" && callIdOf(candidate) == call_id) {
+        press = candidate;
+        break;
+      }
+    }
+  }
+  if (!press || press->door != ev.door) return;
+  const std::string text = payloadString(ev, "text");
+  if (ev.type == "reply" && text.empty()) return;
+  const std::string response = ev.type == "call_answered"
+      ? tr("notify.answered_by", {{"device", deviceName(ev.device)}, {"time", hhmm(ev.wall_ms)}})
+      : tr("notify.replied_by", {{"device", deviceName(ev.device)}, {"text", text},
+                                 {"time", hhmm(ev.wall_ms)}});
+  // Node dispatches the authoritative call projection; an earlier competing answer can win.
+  auto update = json::obj();
+  json::set(update.get(), "hlc", hooks_.hlc_tick());
+  json::set(update.get(), "telegram_response_hlc", ev.hlc);
+  json::set(update.get(), "telegram_response", response);
+  hooks_.merge_notify(press->origin, press->seq, json::dump(update.get()));
+  press = hooks_.get_event(press->origin, press->seq);
+  if (!press || !active_) return;
+  auto notify = json::parse(press->notify_json);
+  const cJSON* id = nullptr;
+  cJSON_ArrayForEach(id, json::get(notify.get(), "telegram_msg_ids")) {
+    if (id->string && cJSON_IsNumber(id))
+      enqueueResponse(*press, id->string, static_cast<int64_t>(id->valuedouble));
+  }
+  pump();
+}
+
+void TelegramBridge::enqueueResponse(const EventRecord& press, const std::string& chat,
+                                     int64_t message_id) {
+  if (!active_) return;
+  const std::string caption = responseCaption(press, chat);
+  if (caption.empty()) return;
+  auto payload = json::obj();
+  json::set(payload.get(), "message_id", message_id);
+  json::set(payload.get(), "source_origin", press.origin);
+  json::set(payload.get(), "source_seq", static_cast<int64_t>(press.seq));
+  json::set(payload.get(), "text", caption);
+  enqueue("edit", chat, json::dump(payload.get()), Bytes());
+}
+
+std::string TelegramBridge::responseCaption(const EventRecord& press, const std::string& chat) const {
+  auto notify = json::parse(press.notify_json);
+  const std::string response = json::getString(notify.get(), "telegram_response");
+  if (response.empty()) return "";
+  const std::string original = json::getString(json::get(notify.get(), "telegram_msg_texts"), chat.c_str());
+  return (original.empty() ? pressCaption(press) : original) + "\n✅ " + response;
 }
 
 
@@ -670,6 +755,40 @@ void TelegramBridge::sendItem(const Store::TgQueueItem& item) {
     onSendDone(item, status, resp);
   };
 
+  if (item.kind == "edit") {
+    if (hooks_.get_event) {
+      auto source = hooks_.get_event(json::getString(p.get(), "source_origin"),
+          static_cast<uint64_t>(json::getInt(p.get(), "source_seq")));
+      if (source) {
+        const std::string current = responseCaption(*source, item.chat_id);
+        if (!current.empty()) json::set(p.get(), "text", current);
+      }
+    }
+    auto body = json::obj();
+    json::set(body.get(), "chat_id", item.chat_id);
+    json::set(body.get(), "message_id", json::getInt(p.get(), "message_id"));
+    json::set(body.get(), "caption", json::getString(p.get(), "text"));
+    json::addArr(json::addObj(body.get(), "reply_markup"), "inline_keyboard");
+    const std::string text_body = [&] {
+      auto text = json::Doc(cJSON_Duplicate(body.get(), 1));
+      cJSON_DeleteItemFromObjectCaseSensitive(text.get(), "caption");
+      json::set(text.get(), "text", json::getString(p.get(), "text"));
+      return json::dump(text.get());
+    }();
+    hooks_.https("POST", apiUrl("editMessageCaption"), "{\"Content-Type\":\"application/json\"}",
+        toBytes(json::dump(body.get())),
+        [this, w, done, text_body](int status, std::string response) {
+          if (w.expired()) return;
+          if (status == 400 && response.find("message is not modified") == std::string::npos) {
+            hooks_.https("POST", apiUrl("editMessageText"),
+                         "{\"Content-Type\":\"application/json\"}", toBytes(text_body), done);
+          } else {
+            done(status, std::move(response));
+          }
+        });
+    return;
+  }
+
   if (item.kind == "photo") {
 
     const std::string boundary = "----doorbellTg" + hexEncode(randomBytes(8));
@@ -711,7 +830,9 @@ void TelegramBridge::onSendDone(const Store::TgQueueItem& item, int status,
   sending_ = false;
   inflight_item_id_ = 0;
   auto r = json::parse(resp);
-  const bool ok = status >= 200 && status < 300 && r && json::getBool(r.get(), "ok");
+  const bool ok = (status >= 200 && status < 300 && r && json::getBool(r.get(), "ok")) ||
+      (item.kind == "edit" && status == 400 &&
+       resp.find("message is not modified") != std::string::npos);
   if (ok) {
     store_.tgQueueDelete(item.id);
     forgetQueueItem(item.id);
@@ -719,7 +840,13 @@ void TelegramBridge::onSendDone(const Store::TgQueueItem& item, int status,
     const std::string origin = p ? json::getString(p.get(), "origin") : "";
     if (!origin.empty()) {
       recordNotified(origin, static_cast<uint64_t>(json::getInt(p.get(), "seq")), item.chat_id,
-                     messageIdOf(resp));
+                     messageIdOf(resp), json::getString(p.get(), item.kind == "photo" ? "caption" : "text"));
+      const std::string source_origin = json::getString(p.get(), "source_origin");
+      const auto source_seq = static_cast<uint64_t>(json::getInt(p.get(), "source_seq"));
+      if (!source_origin.empty() && source_seq > 0 &&
+          (source_origin != origin || source_seq != static_cast<uint64_t>(json::getInt(p.get(), "seq"))))
+        recordNotified(source_origin, source_seq, item.chat_id, messageIdOf(resp),
+                       json::getString(p.get(), item.kind == "photo" ? "caption" : "text"));
     }
     std::weak_ptr<char> w = alive_;
     loop_.post([this, w] {

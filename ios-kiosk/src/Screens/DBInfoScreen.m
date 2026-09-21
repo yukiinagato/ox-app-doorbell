@@ -12,6 +12,7 @@
 #import <netinet/in.h>
 #import <sys/socket.h>
 #import <unistd.h>
+#import <AVFoundation/AVFoundation.h>
 
 
 static BOOL DBPortListening(int port) {
@@ -217,7 +218,8 @@ static BOOL DBPortListening(int port) {
   [info appendFormat:@"%@ : %@\n", [texts ts:@"info.microphone"],
                       [texts ts:_boot.micEnabled ? @"info.external_present" : @"info.absent"]];
   [info appendFormat:@"%@ : %@\n", [texts ts:@"info.camera"],
-                      [texts ts:@"info.camera_absent_ipad1"]];
+                      [texts ts:[[AVCaptureDevice devicesWithMediaType:AVMediaTypeVideo] count] > 0
+                          ? @"info.builtin_present" : @"info.absent"]];
 
 
   NSDictionary *device = [_core deviceInfoNow];

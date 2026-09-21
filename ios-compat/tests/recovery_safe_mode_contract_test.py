@@ -24,7 +24,6 @@ class RecoverySafeModeContracts(unittest.TestCase):
         self.assertIn("DBSuggestedDoor()", boot)
         self.assertIn("if (_boot.setupRequired)", app)
         self.assertIn("showBootstrapSetup:application", app)
-        self.assertIn('initWithItems:@[', app)
         self.assertIn('admin.role_door', app)
         self.assertIn('admin.role_indoor', app)
 
@@ -179,6 +178,16 @@ class RecoverySafeModeContracts(unittest.TestCase):
         self.assertIn("timeoutMs = 5000", incoming)
         self.assertIn("return @[h264, mjpeg]", incoming)
 
+    def test_application_safe_mode_cannot_latch_after_crashes_or_memory_pressure(self):
+        modern = (ROOT / "ios/Doorbell/RuntimeSupervisor.swift").read_text()
+        main = (ROOT / "ios/Doorbell/MainViewController.swift").read_text()
+        legacy = (ROOT / "ios-kiosk/src/Support/DBAppDelegate.m").read_text()
+        self.assertNotIn("safeMode = true", modern)
+        self.assertIn("private let safeMode = false", main)
+        self.assertNotIn("_localSafeMode = YES", legacy)
+        self.assertIn("BOOL safeMode = NO", legacy)
+        self.assertNotIn('setBool:YES forKey:DBRecoverySafeModeKey', legacy)
+
     def test_ios5_memory_warning_and_diagnostic_trigger_share_one_handler(self):
         app = read("ios-kiosk/src/Support/DBAppDelegate.m")
         uikit_start = app.index("- (void)applicationDidReceiveMemoryWarning:")
@@ -194,7 +203,9 @@ class RecoverySafeModeContracts(unittest.TestCase):
         self.assertIn('isEqualToString:@"diagnostic_url"', handler)
         self.assertIn("[_router releaseMediaForMemoryPressure]", handler)
         self.assertIn("[_recovery noteMemoryPressure]", handler)
-        self.assertIn('[_router setSafeMode:YES reason:@"memory_pressure"]', handler)
+        self.assertNotIn('[_router setSafeMode:YES', handler)
+        self.assertIn("_localSafeMode = NO", handler)
+        self.assertIn("setBool:NO forKey:DBRecoverySafeModeKey", handler)
         self.assertIn("[self publishRuntimeHealth:nil]", handler)
 
         self.assertIn('@"memorypressure"', urls)

@@ -154,6 +154,8 @@ static const NSInteger kRecentCallLimit = 20;
 @property(nonatomic, copy) NSString *doorId;
 @property(nonatomic, strong) NSDictionary *peer;
 @property(nonatomic, copy) NSString *snapshotURL;
+@property(nonatomic, copy) NSString *videoMetaURL;
+@property(nonatomic) NSInteger videoRotation;
 @property(nonatomic) BOOL online;
 @property(nonatomic, readonly) UIImageView *still;
 @property(nonatomic, readonly) DBPillLabel *caption;
@@ -359,12 +361,12 @@ static const NSInteger kRecentCallLimit = 20;
   _historyScrim = [self newScrimView];
   _footerScrim = [self newScrimView];
 
-  _clockLabel = [[UILabel alloc] init];
+  _clockLabel = [[DBReadableLabel alloc] init];
   _clockLabel.backgroundColor = [UIColor clearColor];
   _clockLabel.font = [UIFont systemFontOfSize:96];
   [self addSubview:_clockLabel];
 
-  _dateLabel = [[UILabel alloc] init];
+  _dateLabel = [[DBReadableLabel alloc] init];
   _dateLabel.backgroundColor = [UIColor clearColor];
   _dateLabel.font = [UIFont systemFontOfSize:28];
   [self addSubview:_dateLabel];
@@ -415,7 +417,7 @@ static const NSInteger kRecentCallLimit = 20;
         forControlEvents:UIControlEventTouchUpInside];
   [self addSubview:_pairBanner];
 
-  _doorsCaption = [[UILabel alloc] init];
+  _doorsCaption = [[DBReadableLabel alloc] init];
   _doorsCaption.backgroundColor = [UIColor clearColor];
   _doorsCaption.font = [UIFont systemFontOfSize:20];
   _doorsCaption.userInteractionEnabled = YES;
@@ -423,7 +425,7 @@ static const NSInteger kRecentCallLimit = 20;
       initWithTarget:self action:@selector(onNextDoorPreviewPage)]];
   [self addSubview:_doorsCaption];
 
-  _recentCaption = [[UILabel alloc] init];
+  _recentCaption = [[DBReadableLabel alloc] init];
   _recentCaption.backgroundColor = [UIColor clearColor];
   _recentCaption.font = [UIFont systemFontOfSize:20];
   [self addSubview:_recentCaption];
@@ -715,11 +717,14 @@ static const NSInteger kRecentCallLimit = 20;
   NSString *background = _themeAverageHex ?: [self themeValue:@"bg_color"];
   _palette = [DBUiPalette paletteForConfig:_cfg deviceId:_nodeId display:_display
                              backgroundHex:background minuteOfDay:[self minuteOfDay]];
-  if (_themeBg.hidden) self.backgroundColor = _palette.surface;
+  if (_themeBg.hidden) {
+    [_palette setRenderedFlatBackgroundHex:_safeMode ? nil : [self themeValue:@"bg_color"]];
+    self.backgroundColor = _palette.surface;
+  }
 
   // The per-region colours are applied after layout, when each label's frame is
   // known; this only refreshes what does not depend on geometry.
-  [_palette setBackgroundSampler:_sampler];
+  [_palette setBackgroundSampler:_themeBg.hidden ? nil : _sampler];
   [self applyRegionInk];
 
   _missedBadge.backgroundColor = _palette.danger;
@@ -786,12 +791,10 @@ static const CGFloat kFooterGlassAlpha = 0.65;
     _themeBg.image = nil;
     _themeBg.hidden = YES;
     [self refreshBackgroundSampler];
-    self.backgroundColor = _palette.surface;
+    [self applyPalette];
     [self applyScrimTone];
     return;
   }
-  NSString *color = [self themeValue:@"bg_color"];
-  UIColor *parsed = color ? [DBConfigUtil parseHexColor:color] : nil;
   NSString *hash = [self themeValue:@"bg_image"];
   if ([hash length] == 0) {
     [self noteThemeFallback:@"no_theme_image_configured"];
@@ -802,11 +805,11 @@ static const CGFloat kFooterGlassAlpha = 0.65;
     _themeBg.image = nil;
     _themeBg.hidden = YES;
     [self refreshBackgroundSampler];
-    self.backgroundColor = parsed ?: _palette.surface;
+    [self applyPalette];
     [self applyScrimTone];
     return;
   }
-  self.backgroundColor = parsed ?: _palette.surface;
+  self.backgroundColor = _palette.surface;
   [self applyScrimTone];
   NSDictionary *overlay = [DBUiTheme backdropOverlayForConfig:_cfg deviceId:_nodeId
                                                       display:_display];
@@ -911,7 +914,9 @@ static const CGFloat kFooterGlassAlpha = 0.65;
   BOOL charging = [DBConfigUtil boolVal:power path:@"charging" def:NO];
   NSString *appVersion = [[NSBundle mainBundle]
       objectForInfoDictionaryKey:@"CFBundleShortVersionString"] ?: @"";
-  [_qr setVersionLine:[DBUiTheme versionLineForName:_boot.name
+  NSString *deviceName = [DBConfigUtil str:_cfg path:[NSString stringWithFormat:
+      @"devices.%@.name", _nodeId]] ?: _boot.name;
+  [_qr setVersionLine:[DBUiTheme versionLineForName:deviceName
                                         coreVersion:[_core coreVersion]
                                          appVersion:appVersion
                                          batteryPct:battery charging:charging]];
@@ -998,7 +1003,13 @@ static const CGFloat kFooterGlassAlpha = 0.65;
     }
     [live addObject:tile];
     tile.peer = info.peer;
+    if (![tile.snapshotURL isEqualToString:info.snapshotURL] ||
+        ![tile.videoMetaURL isEqualToString:info.videoMetaURL]) {
+      tile.videoRotation = 0;
+      tile.still.image = nil;
+    }
     tile.snapshotURL = info.snapshotURL;
+    tile.videoMetaURL = info.videoMetaURL;
     tile.online = info.online;
     tile.tag = index++;
     tile.backgroundColor = _palette.elevated;
@@ -1011,7 +1022,9 @@ static const CGFloat kFooterGlassAlpha = 0.65;
     tile.caption.text = name;
     tile.caption.backgroundColor = [UIColor colorWithWhite:0 alpha:0.55];
     tile.caption.textColor = [UIColor whiteColor];
-    tile.offlineLabel.textColor = _palette.mutedInk;
+    // The video placeholder is black regardless of the dashboard appearance.
+    tile.offlineLabel.textColor = DBColorFromHex([DBUiTheme mutedInkHexForMode:@"dark"],
+                                               [UIColor lightGrayColor]);
     tile.offlineLabel.text = [_texts ts:@"dash.tile_offline"];
     // The badge reports the door station, never the state of the still cache.
     // A tile whose first JPEG has not landed yet is online with a black frame.
@@ -1117,12 +1130,29 @@ static const CGFloat kFooterGlassAlpha = 0.65;
     if (!tile.online || [tile.snapshotURL length] == 0) continue;
     NSURL *url = [NSURL URLWithString:tile.snapshotURL];
     if (url == nil) continue;
+    NSString *snapshotURL = tile.snapshotURL;
+    NSString *metaURL = tile.videoMetaURL;
+    NSInteger previousRotation = tile.videoRotation;
     __weak DBDoorTile *weakTile = tile;
     __weak DBHomeScreen *weakSelf = self;
     // One still per door every five seconds (fifteen in safe mode), fetched and
     // downscaled entirely off the main thread: a full-size JPEG decode on the
     // main run loop of an iPad 1 is visible as a dropped clock second.
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_LOW, 0), ^{
+      NSInteger rotation = previousRotation;
+      NSURL *metadataURL = [metaURL length] > 0 ? [NSURL URLWithString:metaURL] : nil;
+      if (metadataURL != nil) {
+        NSURLRequest *metadataRequest = [NSURLRequest requestWithURL:metadataURL
+            cachePolicy:NSURLRequestReloadIgnoringLocalCacheData timeoutInterval:1.0];
+        NSURLResponse *metadataResponse = nil;
+        NSData *metadataData = [NSURLConnection sendSynchronousRequest:metadataRequest
+            returningResponse:&metadataResponse error:NULL];
+        if ([metadataResponse isKindOfClass:[NSHTTPURLResponse class]] &&
+            [(NSHTTPURLResponse *)metadataResponse statusCode] == 200 && metadataData != nil) {
+          id metadata = [NSJSONSerialization JSONObjectWithData:metadataData options:0 error:NULL];
+          rotation = [DBDoorTileModel videoRotationFromMetadata:metadata fallback:rotation];
+        }
+      }
       NSURLRequest *request = [NSURLRequest requestWithURL:url
                                               cachePolicy:NSURLRequestReloadIgnoringLocalCacheData
                                           timeoutInterval:3.0];
@@ -1131,7 +1161,7 @@ static const CGFloat kFooterGlassAlpha = 0.65;
       NSData *data = [NSURLConnection sendSynchronousRequest:request returningResponse:&response
                                                        error:&error];
       UIImage *image = data ? [UIImage imageWithData:data] : nil;
-      UIImage *thumbnail = [DBHomeScreen thumbnailForImage:image maxSide:maxSide];
+      UIImage *thumbnail = [DBHomeScreen thumbnailForImage:image maxSide:maxSide rotation:rotation];
       // A door that is online but never shows a picture is otherwise silent.
       if (thumbnail == nil) {
         NSLog(@"[doorbell] still fetch failed for %@: %lu bytes, image=%d, %@", url,
@@ -1141,21 +1171,32 @@ static const CGFloat kFooterGlassAlpha = 0.65;
         DBHomeScreen *screen = weakSelf;
         DBDoorTile *strongTile = weakTile;
         if (!screen || !strongTile || screen->_snapshotGeneration != generation) return;
-        if (thumbnail != nil && strongTile.online) strongTile.still.image = thumbnail;
+        if (![strongTile.snapshotURL isEqualToString:snapshotURL] ||
+            ![strongTile.videoMetaURL isEqualToString:metaURL]) return;
+        if (thumbnail != nil && strongTile.online) {
+          strongTile.videoRotation = rotation;
+          strongTile.still.image = thumbnail;
+        }
       });
     });
   }
 }
 
-+ (UIImage *)thumbnailForImage:(UIImage *)image maxSide:(CGFloat)maxSide {
++ (UIImage *)thumbnailForImage:(UIImage *)image maxSide:(CGFloat)maxSide
+                    rotation:(NSInteger)rotation {
   if (image == nil) return nil;
   CGSize size = image.size;
   if (size.width <= 0 || size.height <= 0) return nil;
   CGFloat scale = MIN(1.0, maxSide / MAX(size.width, size.height));
   CGSize target = CGSizeMake(floor(size.width * scale), floor(size.height * scale));
   if (target.width < 1 || target.height < 1) return nil;
-  UIGraphicsBeginImageContext(target);
-  [image drawInRect:CGRectMake(0, 0, target.width, target.height)];
+  BOOL quarterTurn = rotation == 90 || rotation == 270;
+  CGSize canvas = quarterTurn ? CGSizeMake(target.height, target.width) : target;
+  UIGraphicsBeginImageContext(canvas);
+  CGContextRef context = UIGraphicsGetCurrentContext();
+  CGContextTranslateCTM(context, canvas.width / 2, canvas.height / 2);
+  CGContextRotateCTM(context, (CGFloat)rotation * (CGFloat)3.14159265358979323846 / 180.0f);
+  [image drawInRect:CGRectMake(-target.width / 2, -target.height / 2, target.width, target.height)];
   UIImage *out = UIGraphicsGetImageFromCurrentImageContext();
   UIGraphicsEndImageContext();
   return out;
@@ -1364,7 +1405,7 @@ static const CGFloat kFooterGlassAlpha = 0.65;
 // invalidate layout, so this cannot loop.
 - (void)applyRegionInk {
   if (_palette == nil) return;
-  [_palette setBackgroundSampler:_sampler];
+  [_palette setBackgroundSampler:_themeBg.hidden ? nil : _sampler];
   [_palette applyInkToLabel:_clockLabel region:DBUiRegionClock];
   [_palette applyInkToLabel:_dateLabel region:DBUiRegionDate];
   [_palette applyInkToLabel:_doorsCaption region:DBUiRegionStatusLine];

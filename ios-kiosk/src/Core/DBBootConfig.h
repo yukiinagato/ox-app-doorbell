@@ -56,6 +56,7 @@
 // named +load because the Objective-C runtime invokes that selector before
 // main(), when no application autorelease pool exists.
 + (DBBootConfig *)loadConfiguration;
++ (NSString *)suggestedDeviceNameForRole:(NSString *)role identifier:(NSString *)identifier;
 + (BOOL)isValidRole:(NSString *)role;
 + (BOOL)isValidDoor:(NSString *)door;
 + (BOOL)persistSetupName:(NSString *)name role:(NSString *)role door:(NSString *)door;

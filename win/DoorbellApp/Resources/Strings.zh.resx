@@ -65,9 +65,13 @@
   <data name="admin_buildings" xml:space="preserve"><value>建筑</value></data>
   <data name="admin_button_sound" xml:space="preserve"><value>按键音</value></data>
   <data name="admin_call_flow" xml:space="preserve"><value>访客呼叫流程</value></data>
-  <data name="admin_call_flow_mixed_warning" xml:space="preserve"><value>并非所有已报告节点都支持 ring_then_purpose；旧版或未测量客户端仍使用 purpose_first。</value></data>
-  <data name="admin_call_flow_purpose_first" xml:space="preserve"><value>purpose_first 在呼叫前询问来意；ring_then_purpose 先响铃，并允许之后更新来意。</value></data>
-  <data name="admin_call_flow_supported" xml:space="preserve"><value>当前所有已报告节点均声明支持 call_flow_v2。</value></data>
+  <data name="admin_call_flow_mixed_warning" xml:space="preserve"><value>部分设备尚不支持呼叫后选择目的，升级前仍使用原有界面和流程。</value></data>
+  <data name="admin_call_flow_purpose_first" xml:space="preserve"><value>门口机首页显示目的菜单，点击目的即发出呼叫；「直接呼叫」可跳过目的。呼叫后不再打开目的页面。</value></data>
+  <data name="admin_call_flow_purpose_first_label" xml:space="preserve"><value>先选目的，再呼叫</value></data>
+  <data name="admin_call_flow_ring_then_purpose" xml:space="preserve"><value>首页只显示呼叫按钮，不显示目的菜单。点击后立即呼叫，再进入目的页面；不选目的也会继续呼叫。</value></data>
+  <data name="admin_call_flow_ring_then_purpose_label" xml:space="preserve"><value>先呼叫，再选目的</value></data>
+  <data name="admin_call_flow_supported" xml:space="preserve"><value>当前已报告的设备均支持呼叫后选择目的。</value></data>
+  <data name="admin_call_flow_unknown" xml:space="preserve"><value>尚未获取设备的支持情况。</value></data>
   <data name="admin_call_log" xml:space="preserve"><value>呼叫记录</value></data>
   <data name="admin_call_sound_loop" xml:space="preserve"><value>循环呼叫音</value></data>
   <data name="admin_cam_codec" xml:space="preserve"><value>视频编码</value></data>
@@ -170,6 +174,7 @@
   <data name="admin_motion" xml:space="preserve"><value>移动侦测</value></data>
   <data name="admin_motion_interval" xml:space="preserve"><value>最小间隔 (秒)</value></data>
   <data name="admin_motion_sensitivity" xml:space="preserve"><value>灵敏度</value></data>
+  <data name="admin_motion_wake_screen" xml:space="preserve"><value>检测到移动时点亮屏幕并退出屏保</value></data>
   <data name="admin_native_ui" xml:space="preserve"><value>原生 UI</value></data>
   <data name="admin_native_ui_apply_report" xml:space="preserve"><value>原生客户端应用结果</value></data>
   <data name="admin_never_suppress" xml:space="preserve"><value>始终允许</value></data>
@@ -220,6 +225,7 @@
   <data name="admin_raw_config" xml:space="preserve"><value>配置 (原始 JSON，只读)</value></data>
   <data name="admin_ready" xml:space="preserve"><value>就绪</value></data>
   <data name="admin_remove_device" xml:space="preserve"><value>移出设备</value></data>
+  <data name="admin_remove_device_confirm" xml:space="preserve"><value>移出 {0}？离线记录也会删除，该设备重新连接时将退出集群。</value></data>
   <data name="admin_removed" xml:space="preserve"><value>此设备已被移出集群</value></data>
   <data name="admin_role_door" xml:space="preserve"><value>门口机</value></data>
   <data name="admin_role_indoor" xml:space="preserve"><value>室内机</value></data>
@@ -288,7 +294,7 @@
   <data name="admin_texts_placeholder_mismatch" xml:space="preserve"><value>占位符不一致</value></data>
   <data name="admin_texts_show_all" xml:space="preserve"><value>显示所有文案</value></data>
   <data name="admin_tg_chat_ids" xml:space="preserve"><value>Telegram chat ID (逗号分隔)</value></data>
-  <data name="admin_theme" xml:space="preserve"><value>主题 (背景)</value></data>
+  <data name="admin_theme" xml:space="preserve"><value>主题与屏幕</value></data>
   <data name="admin_theme_bg_color" xml:space="preserve"><value>背景色</value></data>
   <data name="admin_theme_bg_image" xml:space="preserve"><value>背景图片</value></data>
   <data name="admin_theme_device_hint" xml:space="preserve"><value>仅适用于此设备的主题覆盖</value></data>
@@ -392,9 +398,28 @@
   <data name="day_tue" xml:space="preserve"><value>二</value></data>
   <data name="day_wed" xml:space="preserve"><value>三</value></data>
   <data name="degraded_notified" xml:space="preserve"><value>已通知，请稍候</value></data>
+  <data name="display_saver_after" xml:space="preserve"><value>无操作等待时间（秒）</value></data>
+  <data name="display_saver_brightness" xml:space="preserve"><value>暗屏亮度</value></data>
+  <data name="display_saver_content" xml:space="preserve"><value>显示内容</value></data>
+  <data name="display_saver_door_hint" xml:space="preserve"><value>门铃 · 触摸唤醒后呼叫</value></data>
+  <data name="display_saver_enabled" xml:space="preserve"><value>启用暗屏</value></data>
+  <data name="display_saver_from" xml:space="preserve"><value>开始</value></data>
+  <data name="display_saver_help" xml:space="preserve"><value>使用集群时区，支持跨午夜；暗屏亮度不高于正常亮度。触摸、来电和紧急事件会恢复屏幕。支持现代 iOS 和 Windows，其他客户端保持现有显示方式。</value></data>
+  <data name="display_saver_invalid" xml:space="preserve"><value>开始与结束时间不能相同，等待时间应为 1–86400 秒，亮度应为 1–100%。</value></data>
+  <data name="display_saver_mode_clock" xml:space="preserve"><value>黑底时钟与门铃提示</value></data>
+  <data name="display_saver_mode_dim" xml:space="preserve"><value>保留完整门铃界面并调暗（推荐）</value></data>
+  <data name="display_saver_mode_minimal" xml:space="preserve"><value>隐藏背景图片，保留门铃操作界面</value></data>
+  <data name="display_saver_panel_hint" xml:space="preserve"><value>室内门铃面板 · 触摸唤醒</value></data>
+  <data name="display_saver_schedule" xml:space="preserve"><value>启用时间段</value></data>
+  <data name="display_saver_schedule_always" xml:space="preserve"><value>全天</value></data>
+  <data name="display_saver_schedule_daily" xml:space="preserve"><value>每天指定时间段</value></data>
+  <data name="display_saver_title" xml:space="preserve"><value>暗屏与待机显示</value></data>
+  <data name="display_saver_to" xml:space="preserve"><value>结束</value></data>
   <data name="door_call_action" xml:space="preserve"><value>呼叫</value></data>
+  <data name="door_call_direct" xml:space="preserve"><value>直接呼叫</value></data>
   <data name="door_camera_denied" xml:space="preserve"><value>未允许使用摄像头 — 设置 › 隐私</value></data>
   <data name="door_hint_call" xml:space="preserve"><value>按下按钮即可呼叫住户</value></data>
+  <data name="door_hint_purpose_first" xml:space="preserve"><value>请选择下方目的，或直接呼叫</value></data>
   <data name="door_lang_switch" xml:space="preserve"><value>语言</value></data>
   <data name="door_notice_for_this" xml:space="preserve"><value>在此门口机发布公告</value></data>
   <data name="door_unlock_not_configured" xml:space="preserve"><value>尚未配置开锁动作</value></data>
@@ -453,6 +478,7 @@
   <data name="info_addresses_loading" xml:space="preserve"><value>正在获取… 网络可能未连接</value></data>
   <data name="info_app_version" xml:space="preserve"><value>应用</value></data>
   <data name="info_battery" xml:space="preserve"><value>电池</value></data>
+  <data name="info_builtin_present" xml:space="preserve"><value>有（内置）</value></data>
   <data name="info_camera" xml:space="preserve"><value>摄像头</value></data>
   <data name="info_camera_absent_ipad1" xml:space="preserve"><value>无（iPad 1 未配备摄像头）</value></data>
   <data name="info_capabilities" xml:space="preserve"><value>能力</value></data>
@@ -547,6 +573,8 @@
   <data name="notice_title" xml:space="preserve"><value>公告</value></data>
   <data name="notice_too_long" xml:space="preserve"><value>内容最多 200 个字符（当前 {0} 个）</value></data>
   <data name="notice_write" xml:space="preserve"><value>在此门口发布公告</value></data>
+  <data name="notify_answered_by" xml:space="preserve"><value>{0} 于 {1} 接听</value></data>
+  <data name="notify_replied_by" xml:space="preserve"><value>{0} 于 {1} 回应：{2}</value></data>
   <data name="notify_test" xml:space="preserve"><value>门铃测试通知</value></data>
   <data name="offline_body" xml:space="preserve"><value>无法呼叫，请直接敲门。</value></data>
   <data name="offline_reconnect" xml:space="preserve"><value>{0} 秒后重连</value></data>
@@ -757,11 +785,13 @@
   <data name="power_title" xml:space="preserve"><value>电量</value></data>
   <data name="power_unknown" xml:space="preserve"><value>未上报</value></data>
   <data name="purpose_cancel_call" xml:space="preserve"><value>取消呼叫</value></data>
+  <data name="purpose_choose_hint" xml:space="preserve"><value>點選下方任一選項，即可呼叫住戶。</value></data>
   <data name="purpose_disabled" xml:space="preserve"><value>隐藏</value></data>
   <data name="purpose_enabled" xml:space="preserve"><value>显示</value></data>
   <data name="purpose_select_failed" xml:space="preserve"><value>无法发送来访目的</value></data>
   <data name="purpose_sent" xml:space="preserve"><value>正在呼叫（{0}）</value></data>
   <data name="purpose_skip" xml:space="preserve"><value>跳过来访目的</value></data>
+  <data name="purpose_waiting_hint" xml:space="preserve"><value>正在呼叫，您可以選擇此次來訪的目的。</value></data>
   <data name="reply_answered" xml:space="preserve"><value>已回复（{0}）</value></data>
   <data name="reply_banner" xml:space="preserve"><value>住户留言</value></data>
   <data name="reply_choose" xml:space="preserve"><value>选择快捷回复</value></data>
@@ -884,6 +914,11 @@
   <data name="settings_value_unset" xml:space="preserve"><value>未设置</value></data>
   <data name="settings_video_playback" xml:space="preserve"><value>视频播放</value></data>
   <data name="settings_video_rotation" xml:space="preserve"><value>画面方向</value></data>
+  <data name="settings_visitor_layout" xml:space="preserve"><value>訪客畫面佈局</value></data>
+  <data name="settings_visitor_layout_edges" xml:space="preserve"><value>時鐘在上、控制項在下</value></data>
+  <data name="settings_visitor_layout_left" xml:space="preserve"><value>控制項靠左</value></data>
+  <data name="settings_visitor_layout_right" xml:space="preserve"><value>控制項靠右</value></data>
+  <data name="settings_visitor_layout_standard" xml:space="preserve"><value>標準</value></data>
   <data name="settings_volume_inherit" xml:space="preserve"><value>使用集群默认值</value></data>
   <data name="settings_web_only" xml:space="preserve"><value>此项请在网页管理中修改</value></data>
   <data name="settings_web_only_labels" xml:space="preserve"><value>文案覆盖</value></data>
@@ -948,6 +983,29 @@ PIN：{1}</value></data>
   <data name="sound_outdoor_call_alert" xml:space="preserve"><value>警报音 1（门口机呼叫）</value></data>
   <data name="sound_school_chime" xml:space="preserve"><value>学校铃声</value></data>
   <data name="sound_title_display" xml:space="preserve"><value>标题显示（启动）</value></data>
+  <data name="speech_api_key" xml:space="preserve"><value>Google Cloud API Key（保存在本機）</value></data>
+  <data name="speech_auto_cache" xml:space="preserve"><value>回覆文字或聲線變更時預先生成音頻</value></data>
+  <data name="speech_cloud_hint" xml:space="preserve"><value>Google 音頻預先生成、快取並同步。Standard 聲線有每月免費額度，但須啟用帳單，超額會收費。未取得音頻時使用系統語音；手動上傳音頻優先。</value></data>
+  <data name="speech_generator" xml:space="preserve"><value>音頻生成設備</value></data>
+  <data name="speech_key_required" xml:space="preserve"><value>請在負責生成音頻的設備輸入 API Key。</value></data>
+  <data name="speech_preview" xml:space="preserve"><value>試聽</value></data>
+  <data name="speech_provider" xml:space="preserve"><value>語音供應商</value></data>
+  <data name="speech_rate" xml:space="preserve"><value>語速（0.25–4）</value></data>
+  <data name="speech_rate_invalid" xml:space="preserve"><value>語速須介於 0.25 至 4。</value></data>
+  <data name="speech_refresh" xml:space="preserve"><value>更新狀態</value></data>
+  <data name="speech_retry" xml:space="preserve"><value>生成缺少音頻／重試</value></data>
+  <data name="speech_settings" xml:space="preserve"><value>回覆語音與音頻快取</value></data>
+  <data name="speech_state_failed" xml:space="preserve"><value>失敗，仍可使用系統語音</value></data>
+  <data name="speech_state_generating" xml:space="preserve"><value>生成中</value></data>
+  <data name="speech_state_pending" xml:space="preserve"><value>尚未生成</value></data>
+  <data name="speech_state_ready" xml:space="preserve"><value>已快取</value></data>
+  <data name="speech_state_syncing" xml:space="preserve"><value>同步中</value></data>
+  <data name="speech_state_system" xml:space="preserve"><value>瀏覽器系統語音</value></data>
+  <data name="speech_status" xml:space="preserve"><value>快取狀態</value></data>
+  <data name="speech_system" xml:space="preserve"><value>系統語音</value></data>
+  <data name="speech_system_hint" xml:space="preserve"><value>回覆使用門口機的系統語音。試聽使用目前瀏覽器的聲線，可能與門口機不同。</value></data>
+  <data name="speech_unavailable" xml:space="preserve"><value>目前無法試聽語音。</value></data>
+  <data name="speech_voice" xml:space="preserve"><value>聲線／語言</value></data>
   <data name="theme_appearance" xml:space="preserve"><value>外观</value></data>
   <data name="theme_appearance_auto_schedule" xml:space="preserve"><value>按时段切换</value></data>
   <data name="theme_appearance_auto_system" xml:space="preserve"><value>跟随设备</value></data>

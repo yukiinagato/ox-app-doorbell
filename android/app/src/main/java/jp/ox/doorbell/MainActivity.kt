@@ -879,8 +879,9 @@ class MainActivity : Activity(), DoorbellCore.Listener {
     private fun applyStrings() {
         // Just the verb. A visitor has no use for the device or door identifier, and it made the
         // button read "DOORBELL-ANDROID 呼出" on the Moto; the door name lives in the footer.
-        callButton.text = texts.t("door.call_action", R.string.door_call_action)
-        touchHint.text = texts.t("door.hint_call", R.string.door_hint_call)
+        callButton.text = if (showsHomePurposes()) texts.t("door.call_direct", R.string.door_call_direct)
+            else texts.t("door.call_action", R.string.door_call_action)
+        touchHint.text = homeCallHint()
         purposeHint.text = texts.t("idle.choose_purpose", R.string.idle_choose_purpose)
         purposeAutoHint.text = texts.t("calling.title", R.string.calling_title)
         purposeSkipButton.text = texts.t("purpose.skip", R.string.purpose_skip)
@@ -1017,7 +1018,7 @@ class MainActivity : Activity(), DoorbellCore.Listener {
         val ids = VisitPurposes.enabled(cfg)
         if (ids.isEmpty()) {
             purposeGrid.columnCount = 1
-            purposeSection.visibility = if (choosingPurpose) View.VISIBLE else View.GONE
+            updatePurposeVisibility()
             return
         }
         val widthDp = resources.displayMetrics.widthPixels / resources.displayMetrics.density
@@ -1058,10 +1059,32 @@ class MainActivity : Activity(), DoorbellCore.Listener {
             lp.setMargins(dp(4), dp(3), dp(4), dp(3))
             purposeGrid.addView(b, lp)
         }
-        purposeSection.visibility = if (choosingPurpose) View.VISIBLE else View.GONE
+        updatePurposeVisibility()
+    }
+
+    private fun showsHomePurposes(): Boolean = app.boot.role == "door_station" &&
+        callFlowMode == CallFlowMode.PURPOSE_FIRST && VisitPurposes.enabled(cfg).isNotEmpty()
+
+    private fun homeCallHint(): String = if (showsHomePurposes())
+        texts.t("door.hint_purpose_first", R.string.door_hint_purpose_first)
+        else texts.t("door.hint_call", R.string.door_hint_call)
+
+    private fun updatePurposeVisibility() {
+        purposeSection.visibility = if (choosingPurpose || showsHomePurposes()) View.VISIBLE else View.GONE
+        purposeHint.visibility = if (choosingPurpose) View.VISIBLE else View.GONE
+        purposeAutoHint.visibility = if (choosingPurpose && uiCallId.isNotEmpty()) View.VISIBLE else View.GONE
+        (purposeSkipButton.parent as View).visibility = if (choosingPurpose) View.VISIBLE else View.GONE
     }
 
     private fun onPurposeClick(id: String, label: String) {
+        if (!VisitPurposes.enabled(cfg).contains(id)) return
+        if (!choosingPurpose) {
+            if (!showsHomePurposes() || app.callFlow.current() != null) return
+            if (!app.coreOk) { showOffline(); return }
+            val pending = app.callFlow.begin(app.boot.door)
+            if (!pending.accepted || pending.call != null) return
+            playCallFeedback()
+        }
         playButtonSound()
         val transition = app.callFlow.selectPurpose(id)
         if (!transition.accepted || transition.call == null) {
@@ -1174,10 +1197,10 @@ class MainActivity : Activity(), DoorbellCore.Listener {
         idleView.visibility = View.VISIBLE
         idleHeader.visibility = View.VISIBLE
         callSection.visibility = View.VISIBLE
-        purposeSection.visibility = View.GONE
+        updatePurposeVisibility()
         langBar.visibility = if (langBar.childCount > 0) View.VISIBLE else View.GONE
         purposeCancelButton.visibility = View.GONE
-        touchHint.text = hint ?: texts.t("door.hint_call", R.string.door_hint_call)
+        touchHint.text = hint ?: homeCallHint()
         updateCallActionLabel()
     }
 
@@ -1190,6 +1213,8 @@ class MainActivity : Activity(), DoorbellCore.Listener {
         idleHeader.visibility = View.GONE
         callSection.visibility = View.GONE
         purposeSection.visibility = View.VISIBLE
+        purposeHint.visibility = View.VISIBLE
+        (purposeSkipButton.parent as View).visibility = View.VISIBLE
         purposeAutoHint.visibility =
             if (uiCallId.isNotEmpty()) View.VISIBLE else View.GONE
         purposeCancelButton.visibility =
@@ -1669,6 +1694,7 @@ class MainActivity : Activity(), DoorbellCore.Listener {
     // Visitor actions.
 
     private fun onCallClick() {
+        if (choosingPurpose || app.callFlow.current() != null) return
         if (!app.coreOk) {
             showOffline()
             return
@@ -1681,7 +1707,9 @@ class MainActivity : Activity(), DoorbellCore.Listener {
             return
         }
         applyCallProjection(transition)
-        showPurposeChooser()
+        if (callFlowMode == CallFlowMode.PURPOSE_FIRST || VisitPurposes.enabled(cfg).isEmpty())
+            continueWithoutPurpose(false)
+        else showPurposeChooser()
     }
 
     private fun continueWithoutPurpose(playSound: Boolean) {

@@ -13,9 +13,12 @@
 #import "../Screens/DBPairingScreen.h"
 #import "../Screens/DBRouter.h"
 #import "../Screens/DBIncomingScreen.h"
+#import "../Screens/DBDoorScreen.h"
 #import "DBWatchdog.h"
 #import "DBRecoveryClient.h"
 #import "DBSafeModeRecovery.h"
+#import "../Media/DBCameraFeeder.h"
+#import "../Media/DBCameraEncoder.h"
 #import "doorbell/doorbell.h"
 #import <math.h>
 
@@ -55,11 +58,11 @@ static BOOL DBPrepareLocalRecoveryState(void) {
       ? nil : @([defaults boolForKey:DBRecoveryCleanExitKey]);
   if (maintenanceRestart) previousClean = @YES;
   NSArray *recent = nil;
-  BOOL crashLoop = [DBRecoveryClient
+  [DBRecoveryClient
       shouldEnterSafeModeWithPreviousCleanExit:previousClean
                                       launches:[defaults arrayForKey:DBRecoveryLaunchesKey] ?: @[]
                                            now:now updatedLaunches:&recent];
-  BOOL safeMode = [defaults boolForKey:DBRecoverySafeModeKey] || crashLoop;
+  BOOL safeMode = NO;
   NSInteger previousGeneration = [defaults integerForKey:DBRecoveryGenerationKey];
   NSInteger generation = previousGeneration >= 0 && previousGeneration < NSIntegerMax
       ? previousGeneration + 1 : 1;
@@ -261,8 +264,7 @@ static NSDictionary *DBShellCapabilities(DBBootConfig *boot, BOOL secureStoreAva
     @"microphone" : @YES,
     @"microphone_enabled" : @(boot.micEnabled),
     @"speaker" : @YES,
-    // Both keys: "camera" is what the cluster reads now, "camera_capture" is
-    // what older shells look for. The iPad 1 has no camera either way.
+    // Both camera keys remain false until the capture callback delivers a frame.
     @"camera" : @NO,
     @"camera_capture" : @NO,
     @"mjpeg_http_preview" : @YES,
@@ -299,15 +301,28 @@ static BOOL DBNativeKioskHealthy(void) {
 }
 @end
 
-@interface DBBootstrapSetupController : UIViewController
-@property(nonatomic, copy) void (^onSave)(NSString *role, NSString *door);
+@interface DBBootstrapSetupController : UIViewController <UITextFieldDelegate>
+@property(nonatomic, copy) BOOL (^onSave)(NSString *name, NSString *role, NSString *door);
 - (id)initWithBoot:(DBBootConfig *)boot;
 @end
 
 @implementation DBBootstrapSetupController {
   DBBootConfig *_boot;
   DBTexts *_texts;
-  UISegmentedControl *_role;
+  UIScrollView *_scroll;
+  UIView *_form;
+  UILabel *_title;
+  UILabel *_message;
+  UILabel *_roleLabel;
+  UIButton *_saveButton;
+  UIButton *_doorRole;
+  UIButton *_indoorRole;
+  NSInteger _selectedRole;
+  BOOL _automaticName;
+  BOOL _automaticDoor;
+  NSString *_nameIdentifier;
+  UILabel *_nameLabel;
+  UITextField *_name;
   UITextField *_door;
   UILabel *_doorLabel;
   UILabel *_doorHint;
@@ -319,6 +334,25 @@ static BOOL DBNativeKioskHealthy(void) {
     _boot = boot;
     _texts = [[DBTexts alloc] init];
     [_texts setLang:boot.uiLang];
+    NSString *suffix = [[boot.name componentsSeparatedByString:@"-"] lastObject];
+    NSCharacterSet *nonHex = [[NSCharacterSet characterSetWithCharactersInString:
+        @"0123456789abcdef"] invertedSet];
+    BOOL generated = [suffix length] == 8 &&
+        [suffix rangeOfCharacterFromSet:nonHex].location == NSNotFound &&
+        ([boot.name rangeOfString:@"-door-"].location != NSNotFound ||
+         [boot.name rangeOfString:@"-indoor-"].location != NSNotFound);
+    NSString *doorSuffix = [[boot.suggestedDoor componentsSeparatedByString:@"-"] lastObject];
+    BOOL generatedDoor = [doorSuffix length] == 8 &&
+        [doorSuffix rangeOfCharacterFromSet:nonHex].location == NSNotFound &&
+        ([boot.suggestedDoor hasPrefix:@"door-"] ||
+         [boot.suggestedDoor isEqualToString:[DBBootConfig suggestedDeviceNameForRole:
+             @"door_station" identifier:doorSuffix]]);
+    _nameIdentifier = generated ? suffix : generatedDoor ? doorSuffix :
+        [NSString stringWithFormat:@"%08x", arc4random()];
+    _automaticDoor = boot.setupRequired && generatedDoor;
+    _automaticName = boot.setupRequired && (generated ||
+        [boot.name isEqualToString:@"ipad1-monitor"] || [boot.name isEqualToString:@"doorbell"] ||
+        [boot.name length] == 0);
   }
   return self;
 }
@@ -326,67 +360,221 @@ static BOOL DBNativeKioskHealthy(void) {
 - (UILabel *)label:(NSString *)text size:(CGFloat)size {
   UILabel *label = [[UILabel alloc] init];
   label.text = text;
-  label.textColor = [UIColor whiteColor];
+  label.textColor = [UIColor colorWithWhite:0.12 alpha:1];
+  label.backgroundColor = [UIColor clearColor];
   label.font = [UIFont systemFontOfSize:size];
   label.numberOfLines = 0;
   return label;
 }
 
 - (void)loadView {
-  UIView *root = [[UIView alloc] initWithFrame:[UIScreen mainScreen].bounds];
-  root.backgroundColor = [UIColor colorWithRed:0.055 green:0.086 blue:0.129 alpha:1];
-  self.view = root;
-  CGFloat width = CGRectGetWidth(root.bounds) - 40.0;
-  CGFloat y = 38.0;
-  UILabel *title = [self label:[_texts ts:@"setup.title"] size:26];
-  title.font = [UIFont boldSystemFontOfSize:26];
-  title.textAlignment = NSTextAlignmentCenter;
-  title.frame = CGRectMake(20, y, width, 40); [root addSubview:title]; y += 56;
-  UILabel *message = [self label:[_texts ts:@"setup.message"] size:15];
-  message.textColor = [UIColor colorWithWhite:0.72 alpha:1];
-  message.textAlignment = NSTextAlignmentCenter;
-  message.frame = CGRectMake(20, y, width, 62); [root addSubview:message]; y += 80;
-  UILabel *roleLabel = [self label:[_texts ts:@"setup.role"] size:16];
-  roleLabel.frame = CGRectMake(20, y, width, 24); [root addSubview:roleLabel]; y += 30;
-  _role = [[UISegmentedControl alloc] initWithItems:@[
-      [_texts ts:@"admin.role_door"], [_texts ts:@"admin.role_indoor"] ]];
-  _role.selectedSegmentIndex = [_boot.role isEqualToString:@"indoor_panel"] ? 1 : 0;
-  _role.frame = CGRectMake(20, y, width, 36);
-  [_role addTarget:self action:@selector(roleChanged) forControlEvents:UIControlEventValueChanged];
-  [root addSubview:_role]; y += 52;
-  _doorLabel = [self label:[_texts ts:@"setup.door"] size:16];
-  _doorLabel.frame = CGRectMake(20, y, width, 24); [root addSubview:_doorLabel]; y += 28;
-  _door = [[UITextField alloc] initWithFrame:CGRectMake(20, y, width, 36)];
-  _door.text = _boot.suggestedDoor;
-  _door.placeholder = [_texts ts:@"setup.door_hint"];
-  _door.borderStyle = UITextBorderStyleRoundedRect;
-  _door.autocapitalizationType = UITextAutocapitalizationTypeNone;
-  _door.autocorrectionType = UITextAutocorrectionTypeNo;
-  [root addSubview:_door]; y += 44;
-  _doorHint = [self label:[_texts ts:@"setup.door_hint"] size:13];
-  _doorHint.textColor = [UIColor colorWithWhite:0.55 alpha:1];
-  _doorHint.frame = CGRectMake(20, y, width, 22); [root addSubview:_doorHint]; y += 42;
-  UIButton *save = [UIButton buttonWithType:UIButtonTypeCustom];
-  [save setTitle:[_texts ts:@"setup.finish"] forState:UIControlStateNormal];
-  [save setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-  save.titleLabel.font = [UIFont boldSystemFontOfSize:18];
-  save.backgroundColor = [UIColor colorWithRed:0.13 green:0.45 blue:0.85 alpha:1];
-  save.layer.cornerRadius = 10;
-  save.frame = CGRectMake(20, y, width, 48);
-  [save addTarget:self action:@selector(save) forControlEvents:UIControlEventTouchUpInside];
-  [root addSubview:save];
+  self.view = [[UIView alloc] initWithFrame:[UIScreen mainScreen].bounds];
+  self.view.backgroundColor = [UIColor colorWithWhite:0.96 alpha:1];
+  _scroll = [[UIScrollView alloc] initWithFrame:self.view.bounds];
+  _scroll.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+  _scroll.alwaysBounceVertical = YES;
+  [self.view addSubview:_scroll];
+  _form = [[UIView alloc] init];
+  [_scroll addSubview:_form];
+  _title = [self label:[_texts ts:@"setup.title"] size:32];
+  _title.font = [UIFont boldSystemFontOfSize:32];
+  [_form addSubview:_title];
+  _message = [self label:[_texts ts:@"setup.message"] size:20];
+  _message.textColor = [UIColor colorWithWhite:0.30 alpha:1];
+  [_form addSubview:_message];
+  _nameLabel = [self label:[_texts ts:@"setup.name"] size:22];
+  _nameLabel.font = [UIFont boldSystemFontOfSize:22];
+  [_form addSubview:_nameLabel];
+  _name = [self textField:_boot.name];
+  _name.accessibilityIdentifier = @"setup_name";
+  [_name addTarget:self action:@selector(nameEdited) forControlEvents:UIControlEventEditingChanged];
+  [_form addSubview:_name];
+  _roleLabel = [self label:[_texts ts:@"setup.role"] size:22];
+  _roleLabel.font = [UIFont boldSystemFontOfSize:22];
+  [_form addSubview:_roleLabel];
+  _selectedRole = [_boot.role isEqualToString:@"indoor_panel"] ? 1 : 0;
+  _doorRole = [self roleButton:[_texts ts:@"admin.role_door"] index:0];
+  _indoorRole = [self roleButton:[_texts ts:@"admin.role_indoor"] index:1];
+  _doorLabel = [self label:[_texts ts:@"setup.door"] size:22];
+  _doorLabel.font = [UIFont boldSystemFontOfSize:22];
+  [_form addSubview:_doorLabel];
+  _door = [self textField:_boot.suggestedDoor];
+  _door.accessibilityIdentifier = @"setup_door";
+  [_door addTarget:self action:@selector(doorEdited) forControlEvents:UIControlEventEditingChanged];
+  [_form addSubview:_door];
+  _doorHint = [self label:[_texts ts:@"setup.door_hint"] size:18];
+  _doorHint.textColor = [UIColor colorWithWhite:0.30 alpha:1];
+  [_form addSubview:_doorHint];
+  _saveButton = [UIButton buttonWithType:UIButtonTypeCustom];
+  [_saveButton setTitle:[_texts ts:@"setup.finish"] forState:UIControlStateNormal];
+  [_saveButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+  _saveButton.titleLabel.font = [UIFont boldSystemFontOfSize:22];
+  _saveButton.titleLabel.numberOfLines = 0;
+  _saveButton.titleLabel.textAlignment = NSTextAlignmentCenter;
+  _saveButton.backgroundColor = [UIColor colorWithRed:0.05 green:0.30 blue:0.65 alpha:1];
+  _saveButton.layer.cornerRadius = 8;
+  [_saveButton addTarget:self action:@selector(save) forControlEvents:UIControlEventTouchUpInside];
+  _saveButton.accessibilityIdentifier = @"setup_save";
+  [_form addSubview:_saveButton];
+  [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(keyboardChanged:)
+      name:UIKeyboardWillChangeFrameNotification object:nil];
+  [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(keyboardChanged:)
+      name:UIKeyboardWillHideNotification object:nil];
+  [self roleChanged];
+}
+
+- (CGFloat)layoutLabel:(UILabel *)label y:(CGFloat)y width:(CGFloat)width {
+  CGFloat height = ceil([label sizeThatFits:CGSizeMake(width, CGFLOAT_MAX)].height);
+  label.frame = CGRectMake(0, y, width, height);
+  return y + height;
+}
+
+- (void)viewDidLayoutSubviews {
+  [super viewDidLayoutSubviews];
+  CGFloat width = MIN(640.0, CGRectGetWidth(self.view.bounds) - 48.0);
+  CGFloat y = 0;
+  y = [self layoutLabel:_title y:y width:width] + 18;
+  y = [self layoutLabel:_message y:y width:width] + 28;
+  y = [self layoutLabel:_nameLabel y:y width:width] + 12;
+  _name.frame = CGRectMake(0, y, width, 60); y += 88;
+  y = [self layoutLabel:_roleLabel y:y width:width] + 12;
+  CGFloat roleWidth = (width - 12) / 2;
+  CGFloat roleHeight = MAX(60.0, MAX([_doorRole.titleLabel sizeThatFits:
+      CGSizeMake(roleWidth - 24, CGFLOAT_MAX)].height, [_indoorRole.titleLabel sizeThatFits:
+      CGSizeMake(roleWidth - 24, CGFLOAT_MAX)].height) + 24);
+  _doorRole.frame = CGRectMake(0, y, roleWidth, roleHeight);
+  _indoorRole.frame = CGRectMake(roleWidth + 12, y, roleWidth, roleHeight);
+  y += roleHeight + 28;
+  if (!_door.hidden) {
+    y = [self layoutLabel:_doorLabel y:y width:width] + 12;
+    _door.frame = CGRectMake(0, y, width, 60); y += 72;
+    y = [self layoutLabel:_doorHint y:y width:width] + 32;
+  }
+  CGFloat buttonHeight = MAX(60.0, [_saveButton.titleLabel sizeThatFits:
+      CGSizeMake(width - 32, CGFLOAT_MAX)].height + 24);
+  _saveButton.frame = CGRectMake(0, y, width, buttonHeight); y += buttonHeight;
+  CGFloat top = MAX(32.0, (CGRectGetHeight(self.view.bounds) - y) / 2.0);
+  _form.frame = CGRectMake((CGRectGetWidth(self.view.bounds) - width) / 2.0, top, width, y);
+  _scroll.contentSize = CGSizeMake(CGRectGetWidth(self.view.bounds), top + y + 32);
+}
+
+- (BOOL)shouldAutorotateToInterfaceOrientation:(UIInterfaceOrientation)orientation {
+  return YES;
+}
+
+- (void)keyboardChanged:(NSNotification *)notification {
+  CGRect keyboard = [self.view convertRect:
+      [[notification.userInfo objectForKey:UIKeyboardFrameEndUserInfoKey] CGRectValue]
+      fromView:nil];
+  CGRect overlap = CGRectIntersection(self.view.bounds, keyboard);
+  CGFloat bottom = [notification.name isEqualToString:UIKeyboardWillHideNotification] ||
+      CGRectIsNull(overlap) ? 0 : CGRectGetHeight(overlap);
+  _scroll.contentInset = UIEdgeInsetsMake(0, 0, bottom, 0);
+  _scroll.scrollIndicatorInsets = _scroll.contentInset;
+  UITextField *active = [_name isFirstResponder] ? _name : _door;
+  if ([active isFirstResponder]) {
+    CGRect field = [_form convertRect:CGRectInset(active.frame, 0, -16) toView:_scroll];
+    [_scroll scrollRectToVisible:field animated:YES];
+  }
+}
+
+- (BOOL)textFieldShouldReturn:(UITextField *)textField {
+  if (textField == _name && !_door.hidden) [_door becomeFirstResponder];
+  else [self.view endEditing:YES];
+  return YES;
+}
+
+- (void)dealloc {
+  [[NSNotificationCenter defaultCenter] removeObserver:self];
+}
+
+- (UITextField *)textField:(NSString *)text {
+  UITextField *field = [[UITextField alloc] init];
+  field.text = text;
+  field.textColor = [UIColor colorWithWhite:0.12 alpha:1];
+  field.backgroundColor = [UIColor whiteColor];
+  field.font = [UIFont systemFontOfSize:24];
+  field.contentVerticalAlignment = UIControlContentVerticalAlignmentCenter;
+  field.layer.cornerRadius = 8;
+  field.layer.borderWidth = 1;
+  field.layer.borderColor = [UIColor colorWithWhite:0.45 alpha:1].CGColor;
+  field.leftView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 16, 1)];
+  field.leftViewMode = UITextFieldViewModeAlways;
+  field.autocapitalizationType = UITextAutocapitalizationTypeNone;
+  field.autocorrectionType = UITextAutocorrectionTypeNo;
+  field.returnKeyType = UIReturnKeyDone;
+  field.delegate = self;
+  UIToolbar *toolbar = [[UIToolbar alloc] init];
+  toolbar.items = @[
+      [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemFlexibleSpace
+          target:nil action:nil],
+      [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemDone
+          target:self action:@selector(dismissKeyboard)]];
+  [toolbar sizeToFit];
+  field.inputAccessoryView = toolbar;
+  return field;
+}
+
+- (void)dismissKeyboard {
+  [self.view endEditing:YES];
+}
+
+- (UIButton *)roleButton:(NSString *)title index:(NSInteger)index {
+  UIButton *button = [UIButton buttonWithType:UIButtonTypeCustom];
+  button.tag = index;
+  [button setTitle:title forState:UIControlStateNormal];
+  button.titleLabel.font = [UIFont boldSystemFontOfSize:22];
+  button.titleLabel.numberOfLines = 0;
+  button.titleLabel.textAlignment = NSTextAlignmentCenter;
+  button.layer.cornerRadius = 8;
+  [button addTarget:self action:@selector(selectRole:) forControlEvents:UIControlEventTouchUpInside];
+  [_form addSubview:button];
+  return button;
+}
+
+- (void)doorEdited {
+  _automaticDoor = NO;
+}
+
+- (void)nameEdited {
+  _automaticName = NO;
+}
+
+- (void)selectRole:(UIButton *)button {
+  _selectedRole = button.tag;
   [self roleChanged];
 }
 
 - (void)roleChanged {
-  BOOL isDoor = _role.selectedSegmentIndex == 0;
+  UIColor *blue = [UIColor colorWithRed:0.05 green:0.30 blue:0.65 alpha:1];
+  for (UIButton *button in @[_doorRole, _indoorRole]) {
+    BOOL selected = button.tag == _selectedRole;
+    button.selected = selected;
+    button.backgroundColor = selected ? blue : [UIColor whiteColor];
+    [button setTitleColor:selected ? [UIColor whiteColor] : blue forState:UIControlStateNormal];
+    [button setTitleColor:[UIColor whiteColor] forState:UIControlStateSelected];
+    button.layer.borderColor = blue.CGColor;
+    button.layer.borderWidth = selected ? 3 : 1;
+    button.accessibilityTraits = UIAccessibilityTraitButton |
+        (selected ? UIAccessibilityTraitSelected : 0);
+  }
+  BOOL isDoor = _selectedRole == 0;
+  if (_automaticDoor) _door.text = [DBBootConfig suggestedDeviceNameForRole:
+      @"door_station" identifier:_nameIdentifier];
+  if (_automaticName) _name.text = [DBBootConfig suggestedDeviceNameForRole:
+      isDoor ? @"door_station" : @"indoor_panel" identifier:_nameIdentifier];
+  _name.returnKeyType = isDoor ? UIReturnKeyNext : UIReturnKeyDone;
+  if ([_name isFirstResponder]) [_name reloadInputViews];
+  if (!isDoor) [_door resignFirstResponder];
   _door.hidden = !isDoor;
   _doorLabel.hidden = !isDoor;
   _doorHint.hidden = !isDoor;
+  [self.view setNeedsLayout];
 }
 
 - (void)save {
-  NSString *role = _role.selectedSegmentIndex == 0 ? @"door_station" : @"indoor_panel";
+  [self.view endEditing:YES];
+  NSString *role = _selectedRole == 0 ? @"door_station" : @"indoor_panel";
   NSString *door = [[_door text] stringByTrimmingCharactersInSet:
       [NSCharacterSet whitespaceAndNewlineCharacterSet]];
   if ([role isEqualToString:@"door_station"] && ![DBBootConfig isValidDoor:door]) {
@@ -395,7 +583,11 @@ static BOOL DBNativeKioskHealthy(void) {
                                delegate:nil cancelButtonTitle:@"OK" otherButtonTitles:nil] show];
     return;
   }
-  if (_onSave) _onSave(role, door);
+  if (_onSave && !_onSave(_name.text ?: @"", role, door)) {
+    [[[UIAlertView alloc] initWithTitle:[_texts ts:@"setup.title"]
+                                message:[_texts ts:@"setup.invalid_door"]
+                               delegate:nil cancelButtonTitle:@"OK" otherButtonTitles:nil] show];
+  }
 }
 @end
 
@@ -434,6 +626,7 @@ static BOOL DBNativeKioskHealthy(void) {
 @end
 
 @implementation DBAppDelegate {
+  DBCameraFeeder *_camera;
   DBCoreBridge *_core;
   DBBootConfig *_boot;
   DBRouter *_router;
@@ -510,7 +703,8 @@ static BOOL DBNativeKioskHealthy(void) {
   __weak DBAppDelegate *identityDelegate = self;
   [_core addHandler:@"identity-sync" handler:^(NSDictionary *ev) {
     if ([[DBConfigUtil evStr:ev key:@"t"] isEqualToString:@"config_changed"])
-      [identityDelegate applyReplicatedIdentity];
+      dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.3 * NSEC_PER_SEC)),
+          dispatch_get_main_queue(), ^{ [identityDelegate applyReplicatedIdentity]; });
   }];
 
   // Keep the shell available in offline mode if Core cannot start.
@@ -586,24 +780,7 @@ static BOOL DBNativeKioskHealthy(void) {
   _recovery.statusHandler = ^(NSDictionary *status) {
     [recoveryCore setRuntimeStatusSection:@"recovery" value:status];
     DBAppDelegate *delegate = recoveryDelegate;
-    id measured = [status objectForKey:@"measured"];
-    id helper = [measured isKindOfClass:[NSDictionary class]]
-        ? [(NSDictionary *)measured objectForKey:@"helper_status"] : nil;
-    BOOL helperSafe = [helper isKindOfClass:[NSDictionary class]] &&
-        [[(NSDictionary *)helper objectForKey:@"safe_mode"] boolValue];
-    BOOL helperWasSafe = delegate ? delegate->_helperSafeModeActive : NO;
-    if (delegate) delegate->_helperSafeModeActive = helperSafe;
-    if (helperSafe) {
-      if (delegate) delegate->_safeModeRecoveryGeneration++;
-      [[NSUserDefaults standardUserDefaults] setBool:YES forKey:DBRecoverySafeModeKey];
-      if (delegate) {
-        delegate->_localSafeMode = YES;
-        delegate->_safeModeEnteredAt = [[NSDate date] timeIntervalSince1970];
-      }
-      [recoveryRouter setSafeMode:YES reason:@"root_helper_crash_loop"];
-    } else if (delegate && helperWasSafe && delegate->_localSafeMode) {
-      [delegate armLocalSafeModeRecovery];
-    }
+    if (delegate) delegate->_helperSafeModeActive = NO;
     [delegate publishRuntimeHealth:nil];
   };
   _recoveryRequestedMode = [_boot.keepaliveHelperPolicy copy] ?: @"off";
@@ -635,6 +812,31 @@ static BOOL DBNativeKioskHealthy(void) {
     return recovery.helperSupervising;
   }];
   [_watchdog start];
+  __weak DBAppDelegate *cameraDelegate = self;
+  DBCoreBridge *cameraCore = _core;
+  _camera = [[DBCameraFeeder alloc] initWithFrameHandler:^(NSData *data, int format, int width, int height, int stride) {
+    [cameraCore pushCameraFrame:data format:format width:width height:height stride:stride];
+  } stateHandler:^(BOOL active, NSString *reason) {
+    DBAppDelegate *delegate = cameraDelegate;
+    if (!delegate) return;
+    cameraCore.cameraActive = active;
+    [cameraCore setRuntimeCapability:@"camera" enabled:active];
+    [cameraCore setRuntimeCapability:@"camera_capture" enabled:active];
+    [cameraCore setRuntimeStatusSection:@"camera" value:@{@"active": @(active), @"state": reason}];
+    [[delegate->_router door] refreshFromCore];
+  }];
+  DBCameraEncoder *cameraEncoder = [[DBCameraEncoder alloc] initWithCore:cameraCore];
+  cameraEncoder.onStateChanged = ^(BOOL active) {
+    (void)active;
+    DBAppDelegate *delegate = cameraDelegate;
+    if (delegate) [[delegate->_router door] refreshFromCore];
+  };
+  _camera.onPixelBuffer = ^(CVPixelBufferRef pixels, CMTime timestamp) { [cameraEncoder feed:pixels timestamp:timestamp]; };
+  _camera.onCaptureStopped = ^{ [cameraEncoder stop]; };
+  [[UIDevice currentDevice] beginGeneratingDeviceOrientationNotifications];
+  [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(updateCameraOrientation:)
+      name:UIDeviceOrientationDidChangeNotification object:nil];
+  [self updateCameraOrientation:nil];
   _runtimeHeartbeatTimer = [NSTimer scheduledTimerWithTimeInterval:10.0
       target:self selector:@selector(publishRuntimeHealth:) userInfo:nil repeats:YES];
   [self startScreenshotHookIfEnabled];
@@ -662,9 +864,7 @@ static BOOL DBNativeKioskHealthy(void) {
   return YES;
 }
 
-// devices.<self>.name/role/door is remotely editable. Persist the replicated value before
-// crossing a clean process boundary so Core, the router, media and recovery all reopen with the
-// same operational identity.
+// Name edits refresh the shared boot model; role or door edits require a clean process boundary.
 - (BOOL)applyReplicatedIdentity {
   if (_identityRestartPending) return YES;
   NSDictionary *node = [[_core status] objectForKey:@"node"];
@@ -689,6 +889,11 @@ static BOOL DBNativeKioskHealthy(void) {
     return NO;
   if (![DBBootConfig persistSetupName:name role:role door:door]) {
     NSLog(@"[doorbell] replicated identity could not be persisted");
+    return NO;
+  }
+  if ([role isEqualToString:_boot.role] && [door isEqualToString:_boot.door]) {
+    _boot.name = name;
+    _boot.rawJson = [DBBootConfig loadConfiguration].rawJson;
     return NO;
   }
   _identityRestartPending = YES;
@@ -794,13 +999,14 @@ static BOOL DBNativeKioskHealthy(void) {
 - (void)showBootstrapSetup:(UIApplication *)application {
   DBBootstrapSetupController *setup = [[DBBootstrapSetupController alloc] initWithBoot:_boot];
   __weak DBAppDelegate *weakSelf = self;
-  setup.onSave = ^(NSString *role, NSString *door) {
+  setup.onSave = ^BOOL(NSString *name, NSString *role, NSString *door) {
     DBAppDelegate *delegate = weakSelf;
-    if (!delegate) return;
-    if (![DBBootConfig persistSetupName:delegate->_boot.name role:role door:door]) return;
+    if (!delegate) return NO;
+    if (![DBBootConfig persistSetupName:name role:role door:door]) return NO;
     // No Core or watchdog has started on this branch, so entering the normal
     // launch path is equivalent to a fresh, configured process start.
     [delegate application:application didFinishLaunchingWithOptions:nil];
+    return YES;
   };
   UIWindow *window = [[DBEffectWindow alloc] initWithFrame:[UIScreen mainScreen].bounds];
   window.rootViewController = setup;
@@ -1039,16 +1245,41 @@ static NSString *const DBScreenshotOutputPath = @"/var/mobile/Documents/screensh
   [_core stop];
 }
 
+- (void)updateCameraOrientation:(NSNotification *)notification {
+  int degrees = -1;
+  switch ([UIDevice currentDevice].orientation) {
+    case UIDeviceOrientationPortrait: degrees = 0; break;
+    case UIDeviceOrientationLandscapeLeft: degrees = 90; break;
+    case UIDeviceOrientationPortraitUpsideDown: degrees = 180; break;
+    case UIDeviceOrientationLandscapeRight: degrees = 270; break;
+    default: break;
+  }
+  if (degrees < 0 && !notification) {
+    switch ([UIApplication sharedApplication].statusBarOrientation) {
+      case UIInterfaceOrientationPortrait: degrees = 0; break;
+      case UIInterfaceOrientationLandscapeLeft: degrees = 270; break;
+      case UIInterfaceOrientationPortraitUpsideDown: degrees = 180; break;
+      case UIInterfaceOrientationLandscapeRight: degrees = 90; break;
+      default: break;
+    }
+  }
+  if (degrees >= 0) [_core setVideoSensorRotation:degrees];
+}
+
 - (void)applicationDidBecomeActive:(UIApplication *)application {
   (void)application;
   [self refreshNativeKioskMeasurement];
   [_router resumeMediaAfterBackground];
+  [self updateCameraOrientation:nil];
+  if (_core.isRunning && [_boot.role isEqualToString:@"door_station"] &&
+      [_boot.videoSource isEqualToString:@"auto"]) [_camera start];
   [self publishRuntimeHealth:nil];
 }
 
 - (void)applicationDidEnterBackground:(UIApplication *)application {
   (void)application;
   [_router suspendMediaForBackground];
+  [_camera stop];
 }
 
 - (void)applicationDidReceiveMemoryWarning:(UIApplication *)application {
@@ -1077,15 +1308,12 @@ static NSString *const DBScreenshotOutputPath = @"/var/mobile/Documents/screensh
   _mjpegTestView = nil;
   [[NSURLCache sharedURLCache] removeAllCachedResponses];
   [_recovery noteMemoryPressure];
-  _localSafeMode = YES;
-  _safeModeEnteredAt = [[NSDate date] timeIntervalSince1970];
+  _localSafeMode = NO;
   NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
-  [defaults setBool:YES forKey:DBRecoverySafeModeKey];
+  [defaults setBool:NO forKey:DBRecoverySafeModeKey];
   [defaults setObject:@"memory_pressure" forKey:DBRecoveryLastExitReasonKey];
   [defaults synchronize];
-  [_router setSafeMode:YES reason:@"memory_pressure"];
-  [self armLocalSafeModeRecovery];
-  [_core setRuntimeCapabilities:DBShellCapabilities(_boot, _secureStoreAvailable, YES)];
+  [_core setRuntimeCapabilities:DBShellCapabilities(_boot, _secureStoreAvailable, NO)];
   [self publishRuntimeHealth:nil];
   NSLog(@"[doorbell][recovery] released optional media after memory warning source=%@ count=%lu",
         _lastMemoryPressureSource, (unsigned long)_memoryPressureCount);

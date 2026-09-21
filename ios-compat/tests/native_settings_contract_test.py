@@ -211,8 +211,11 @@ for shell, name in ((main, "MainViewController"), (tv, "TVMainViewController"),
 assert 'boot.role == "door_station"' not in main.split("private func applyTheme")[1][:400], \
     "the theme background is no longer gated on the door station"
 assert 'skin.apply("clock", to: clockLabel)' in dashboard
-assert "final class HaloLabel: UILabel {}" in theme and "override func drawText" not in theme, \
-    "the Swift indoor app uses automatic ink without text outlines"
+assert "final class HaloLabel: UILabel" in theme and "override func drawText" in theme, \
+    "wallpaper labels can protect low-contrast text with an opposite-color shadow"
+assert "guard let contrastColor = outlineColor" in theme and \
+    "(label as? HaloLabel)?.outlineColor = decided.shadow" in theme, \
+    "text decoration follows the contrast decision and clears on readable backgrounds"
 assert "backgroundColor = .black" in incoming, "the video keeps its own black frame"
 
 # --- visit_purposes.<id>.enabled -------------------------------------------

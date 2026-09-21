@@ -11,6 +11,10 @@
 // mean luminance, so the mean luminance is what the tests assert.
 @interface DBBackdropCompositor : NSObject
 
+// RGBA scanlines in UIKit view order, for an upright prepared wallpaper.
+// The bounded square proxy uses the same aspect-fill crop as the image view.
++ (NSData *)rgbaProxyForImage:(CGImageRef)image viewSize:(CGSize)viewSize edge:(NSUInteger)edge;
+
 // Fraction of black composited over the picture, 0..1.
 + (CGFloat)darkeningAlpha;
 // The prepared bitmap never exceeds this on its long side.

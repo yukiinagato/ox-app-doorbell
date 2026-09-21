@@ -132,7 +132,10 @@ class TelegramBridge {
   void sendItem(const Store::TgQueueItem& item);
   void onSendDone(const Store::TgQueueItem& item, int status, const std::string& resp);
   void recordNotified(const std::string& origin, uint64_t seq, const std::string& chat_id,
-                      int64_t message_id);
+                      int64_t message_id, const std::string& message_text);
+  void recordResponse(const EventRecord& ev);
+  void enqueueResponse(const EventRecord& press, const std::string& chat, int64_t message_id);
+  std::string responseCaption(const EventRecord& press, const std::string& chat) const;
 
 
   void schedulePoll(int64_t delay_ms);

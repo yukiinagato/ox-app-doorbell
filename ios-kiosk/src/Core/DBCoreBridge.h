@@ -8,6 +8,10 @@
 typedef void (^DBUiEventHandler)(NSDictionary *ev);
 
 @interface DBCoreBridge : NSObject
+@property(atomic, assign) BOOL cameraActive;
+@property(atomic, assign) BOOL h264CameraActive;
+- (void)pushCameraFrame:(NSData *)data format:(int)format width:(int)width height:(int)height stride:(int)stride;
+- (void)setVideoSensorRotation:(int)degrees;
 
 @property(nonatomic, readonly) BOOL isRunning;
 

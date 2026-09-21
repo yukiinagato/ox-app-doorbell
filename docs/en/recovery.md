@@ -42,10 +42,8 @@ app. Android `DISABLE` is a transient disarm permitted in `auto`, not a persiste
 - Android's foreground service, alarm, boot receiver, and crash marker are in-process/OS-managed
   defenses; they do not recover from every force-stop. A helper is separate provisioning and must
   be commissioned per device.
-- Windows has a watchdog service implementation with bounded restart/safe mode, but elevated VM and
-  target-device validation remains a release gate. Its safe mode keeps Core, ringer, SOS, controls,
-  and real-PJSIP audio available; it disables custom visuals/animation and H.264 and uses bounded
-  low-resolution MJPEG when a JPEG source exists.
+- Windows has a watchdog service implementation with bounded restart, but elevated VM and
+  target-device validation remains a release gate. The app ignores the legacy `--safe-mode` flag.
 - Modern iOS sends bounded main-thread probes from a background queue only while foregrounded. Three
   consecutive five-second probe failures record `main_run_loop_stall_3x5s` and, when Guided Access
   is measured active, end the process with `SIGABRT` so the supervised kiosk can relaunch it with
@@ -56,12 +54,11 @@ app. Android `DISABLE` is a transient disarm permitted in `auto`, not a persiste
   short maintenance lease while that measurement is active; helper supervision is the fallback
   only while it is inactive. Its modern launcher is a separate qualification gate. Signing expiry
   is an operational failure and must be scheduled.
-- iOS 5 safe mode keeps Core, MiniSIP audio, ringer, SOS, and controls. It disables H.264
-  ingest/decode and custom visuals, then uses bounded low-resolution HTTP(S) MJPEG/snapshot direct
-  playback when configured, otherwise reports audio-only. JPEG remains local and is not forwarded
-  into Core. A local crash/OOM safe mode exits after five uninterrupted healthy minutes and restores
-  the measured media capabilities in the running process. A root-helper safe-mode assertion remains
-  authoritative until the helper clears it.
+- Application safe mode is disabled on Android and both iOS clients. Persisted safe-mode flags
+  are cleared or ignored, and crash history or helper reports do not disable H.264 or custom
+  visuals. Memory-pressure handlers may release resources without latching a degraded mode.
+  Crash diagnostics, restart backoff, actual codec failures, and external-helper restart limits
+  remain independent of this application policy.
 - The optional iOS 5/rooted-Android helper is implemented and host-tested. The iOS 5 lane has a
   reproducible staged DEB that deliberately leaves launchd disabled; both platforms remain
   separately provisioned and hardware-unqualified. Do not depend on it until the exact root-owned

@@ -37,6 +37,8 @@ ALLOWED = [
     ("win/DoorbellApp/Resources/Icons.xaml", "the generated Tabler geometry dictionary"),
     ("webui/icons/tabler-sprite.svg", "the generated Tabler sprite"),
     ("webui/admin/index.html", "carries the generated sprite between its markers"),
+    ("ios-kiosk/src/Screens/DBSettingsScreen.m",
+     "rounded masks for grouped settings cell backgrounds, not icon geometry"),
     ("android/app/src/main/res/drawable/banner_tv.xml",
      "the Android TV launcher banner: artwork with a title, not a UI icon"),
 ]

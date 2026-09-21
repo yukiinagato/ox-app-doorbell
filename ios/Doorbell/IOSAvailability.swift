@@ -11,19 +11,19 @@ enum IOSAvailability {
     private static let timerDispatcher = LegacyTimerDispatcher()
 
 #if os(iOS)
-    /// Returns the clockwise transform receivers need for an unrotated camera sample buffer.
-    /// `UIDeviceOrientation` names the physical edge facing left/right, so its landscape values
-    /// are the inverse of the transform that makes the captured pixels upright remotely.
+    /// Returns the clockwise transform receivers need for a portrait-normalized camera sample buffer.
+    /// Landscape names are device poses, not AVCaptureVideoOrientation values.
+    /// With portrait-normalized, unmirrored pixels, left needs +90 and right needs -90.
     static func cameraFrameRotation(for orientation: UIDeviceOrientation) -> Int32? {
         switch orientation {
         case .portrait:
             return 0
         case .landscapeLeft:
-            return 270
+            return 90
         case .portraitUpsideDown:
             return 180
         case .landscapeRight:
-            return 90
+            return 270
         default:
             return nil
         }
@@ -432,7 +432,10 @@ enum TablerIcon {
     /// the Windows shell does.
     static let purposeIcons = ["p_visit": "TablerHome",
                                "p_delivery": "TablerPackage",
-                               "p_mail": "TablerMail"]
+                               "p_mail": "TablerMail",
+                               "p_sales": "TablerBuildingCommunity",
+                               "p_work": "TablerSettings",
+                               "p_other": "TablerInfoCircle"]
 
     static func purpose(_ id: String) -> UIImage? {
         guard let name = purposeIcons[id] else { return nil }

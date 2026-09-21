@@ -219,11 +219,14 @@ final class ThemeInkTests: XCTestCase {
         XCTAssertEqual(Double(white), 1, accuracy: 0.001, "a dark ink is outlined in white")
     }
 
-    func testApplyingAutomaticInkLeavesTextUndecorated() {
+    func testApplyingAutomaticInkOutlinesOnlyLowContrastText() {
         let label = HaloLabel()
         let midGround = UIColor(white: 0.5, alpha: 1)
         DoorbellTheme.applyInk(DoorbellPalette.light.ink,
                                over: .sampled(.uniform(midGround)), to: label)
+        XCTAssertNotNil(label.outlineColor)
+        DoorbellTheme.applyInk(.black, over: .sampled(.uniform(.white)), to: label)
+        XCTAssertNil(label.outlineColor)
         XCTAssertNil(label.shadowColor)
         XCTAssertEqual(label.shadowOffset, .zero)
     }
@@ -306,10 +309,6 @@ final class ThemeInkTests: XCTestCase {
         XCTAssertNil(decision.shadow)
     }
 
-    /// The device finding: a hint line crossing a pale wall and a dark jacket. The average is the
-    /// same #BBBBB4 wall that needs no outline on its own, and the ink chosen from that average is
-    /// still right — but it disappears over the jacket, so the outline has to come from the
-    /// darkest and lightest patch rather than the average.
     func testARegionSpanningLightAndDarkTakesTheOutline() {
         let wall = UIColor(red: 0xBB / 255, green: 0xBB / 255, blue: 0xB4 / 255, alpha: 1)
         let jacket = UIColor(white: 0.08, alpha: 1)
@@ -318,10 +317,10 @@ final class ThemeInkTests: XCTestCase {
                                       maxLuminance: DoorbellTheme.luminance(wall))
         let decision = decide(nil, ground: .sampled(sample))
 
-        assertColor(decision.ink, DoorbellPalette.light.ink,
-                    "the average still chooses the ink")
-        XCTAssertGreaterThan(Double(DoorbellTheme.contrast(decision.ink, wall)), 4.5,
-                             "against the average alone this pair would have looked settled")
+        assertColor(decision.ink, DoorbellPalette.dark.ink,
+                    "the worst patch takes precedence over the average")
+        XCTAssertGreaterThan(sample.worstContrast(decision.ink),
+                             sample.worstContrast(DoorbellPalette.light.ink))
         XCTAssertLessThan(Double(sample.worstContrast(decision.ink)), 4.5,
                           "over the jacket it is not")
 
@@ -332,7 +331,7 @@ final class ThemeInkTests: XCTestCase {
         XCTAssertTrue(shadow.getWhite(&white, alpha: &alpha))
         XCTAssertEqual(Double(alpha), 1, accuracy: 0.001,
                        "the halo colour is opaque; its strength is the layer's opacity")
-        XCTAssertEqual(Double(white), 1, accuracy: 0.001, "a dark ink is outlined in white")
+        XCTAssertEqual(Double(white), 0, accuracy: 0.001, "a light ink is outlined in black")
     }
 
     /// The same rule off a real picture: a band straddling the light and dark halves is outlined,
@@ -452,6 +451,27 @@ final class ThemeInkTests: XCTestCase {
 }
 
 final class ThemeBackgroundLoadTests: XCTestCase {
+
+    func testIdleModeSuppressesPendingWallpaperAndRestoresItOnWake() {
+        var completions: [(UIImage?, String) -> Void] = []
+        let view = ThemeBackgroundView { _, _, _, completion in completions.append(completion) }
+        let host = UIView()
+        let wallpaper = image(.white)
+        let document = display("wallpaper")
+        view.apply(display: document, config: nil, nodeId: "panel", palette: .dark,
+                   httpPort: 0, host: host)
+        XCTAssertEqual(completions.count, 1)
+        view.apply(display: document, config: nil, nodeId: "panel", palette: .dark,
+                   httpPort: 0, host: host, hideImage: true)
+        completions[0](wallpaper, "disk")
+        XCTAssertNil(view.image, "a pending image must not reappear over the idle interface")
+        XCTAssertEqual(completions.count, 1)
+        view.apply(display: document, config: nil, nodeId: "panel", palette: .dark,
+                   httpPort: 0, host: host)
+        XCTAssertEqual(completions.count, 2)
+        completions[1](wallpaper, "disk")
+        XCTAssertTrue(view.image === wallpaper)
+    }
 
     private func display(_ hash: String) -> [String: Any] {
         return ["theme": ["bg_color": "#101418", "bg_image": hash]]
