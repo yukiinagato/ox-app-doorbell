@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "source_revision": "0955c3088c0fc3f95a39c3b05ddc9ed4585170ca",
+  "working_tree": "review-and-parity repairs in progress",
+  "inventory_status": "PARTIAL_M0_BASELINE",
+  "policy": "An absent mapping is unknown, not unsupported. This file is the production-entrypoint index; feature-parity.json remains the 44-by-12 acceptance matrix.",
+  "entries": [
+    {"type":"public_abi","entry":"db_core_set_ui_callback","source":"core/include/doorbell/doorbell.h","features":["F34"],"adapters":["ios/Doorbell/CoreBridge.swift"],"tests":["core/tests/test_capi_abi.cpp [R2]"],"status":"HOST_TESTED"},
+    {"type":"public_abi","entry":"db_core_config_batch_json","source":"core/include/doorbell/doorbell.h","features":["F03"],"adapters":["ios/Doorbell/CoreBridge.swift"],"tests":["ios-compat/tests/config_batch_fallback_policy_test.swift"],"status":"HOST_POLICY_TESTED"},
+    {"type":"public_abi","entry":"db_core_take_video_keyframe_request","source":"core/include/doorbell/doorbell.h","features":["F18"],"adapters":["core/src/node/node.cpp"],"tests":["core/tests/test_fmp4.cpp [V01]"],"status":"HOST_TESTED"},
+    {"type":"public_abi","entry":"db_core_capabilities_json","source":"core/include/doorbell/doorbell.h","features":["F40"],"adapters":["android","ios/Doorbell/CoreBridge.swift","windows"],"tests":[],"status":"NOT_FULLY_AUDITED"},
+    {"type":"http_route","entry":"POST /api/login","source":"core/src/node/node.cpp","features":["F04"],"adapters":["webui/admin/app.js"],"tests":["webui/tests/admin_runtime.test.js"],"status":"VM_TESTED_NO_BROWSER"},
+    {"type":"http_route","entry":"POST /api/config/batch","source":"core/src/node/node.cpp","features":["F03"],"adapters":["webui/admin/app.js","ios/Doorbell/ConfigWriter.swift"],"tests":["ios-compat/tests/config_batch_fallback_policy_test.swift"],"status":"HOST_POLICY_TESTED"},
+    {"type":"http_route","entry":"GET/POST /api/pairing/*","source":"core/src/node/node.cpp","features":["F02"],"adapters":["webui/admin/app.js"],"tests":["webui/tests/admin_runtime.test.js","webui/tests/pairing.test.js"],"status":"VM_TESTED_NO_BROWSER"},
+    {"type":"http_route","entry":"GET /api/panel/state and POST /api/panel/call-lifecycle","source":"core/src/node/node.cpp","features":["F07","F10","F22"],"adapters":["webui/panel/call.html"],"tests":["webui/tests/call_flow.test.js"],"status":"UNIT_TESTED_NO_BROWSER"},
+    {"type":"platform_ui","entry":"CoreEventDispatchGate","source":"ios/Doorbell/CoreEventDispatchGate.swift","features":["F34"],"adapters":["iOS modern","iOS9 arm64"],"tests":["ios-compat/tests/core_event_dispatch_gate_test.swift"],"status":"HOST_TESTED_TARGET_NOT_RUN"},
+    {"type":"platform_ui","entry":"ConfigBatchFallbackPolicy","source":"ios/Doorbell/ConfigBatchFallbackPolicy.swift","features":["F03"],"adapters":["iOS modern","iOS9 arm64"],"tests":["ios-compat/tests/config_batch_fallback_policy_test.swift"],"status":"HOST_TESTED_TARGET_NOT_RUN"},
+    {"type":"web_panel","entry":"DoorbellPanelVideo.create","source":"webui/panel/video-session.js","features":["F20","F34"],"adapters":["webui/panel/call.html"],"tests":["webui/tests/video_session.test.js"],"status":"NODE_TESTED_NO_BROWSER_OR_CAMERA"},
+    {"type":"web_panel","entry":"DoorbellCallFlow.projectDoor","source":"webui/panel/call-flow.js","features":["F10"],"adapters":["webui/panel/call.html"],"tests":["webui/tests/call_flow.test.js"],"status":"NODE_TESTED_NO_BROWSER"},
+    {"type":"config_schema","entry":"docs/en/config-schema.md","source":"docs/en/config-schema.md","features":["F01","F03","F28","F44"],"adapters":[],"tests":[],"status":"NOT_FULLY_AUDITED"},
+    {"type":"capability_declaration","entry":"capabilities and runtime status","source":"core/src/node/node.cpp","features":["F40"],"adapters":["android","ios","windows","webui"],"tests":[],"status":"NOT_FULLY_AUDITED"}
+  ],
+  "unmapped_entry_classes": ["complete exported ABI enumeration", "complete HTTP route enumeration", "all platform UI actions", "rules/actions", "all capability declarations"],
+  "next_action": "Expand entries from every production entry class before treating any feature/profile cell as fully inventoried."
+}

@@ -163,6 +163,8 @@
   <data name="admin_local_addrs" xml:space="preserve"><value>本機アドレス</value></data>
   <data name="admin_locked" xml:space="preserve"><value>管理パスワードの入力を 10 分間ロックしました</value></data>
   <data name="admin_login" xml:space="preserve"><value>ログイン</value></data>
+  <data name="admin_login_network" xml:space="preserve"><value>ネットワークに接続できません。接続を確認して再試行してください</value></data>
+  <data name="admin_login_server" xml:space="preserve"><value>ログインを完了できませんでした。もう一度お試しください</value></data>
   <data name="admin_logs" xml:space="preserve"><value>ログ</value></data>
   <data name="admin_menu_add_device" xml:space="preserve"><value>デバイスを追加</value></data>
   <data name="admin_menu_boot_setup" xml:space="preserve"><value>初期設定</value></data>

@@ -128,6 +128,12 @@ DB_API int db_core_start(db_core* c);
 DB_API void db_core_stop(db_core* c);
 DB_API void db_core_destroy(db_core* c);
 
+/* Register or replace the UI callback. Registration, replacement, and destruction are owned by
+ * one host thread, while delivery may run concurrently on Core threads. After this function
+ * unregisters or replaces a callback from outside that callback, no old callback is running and
+ * its user pointer may be released. Self-unregistration only disables new delivery; an owner must
+ * later unregister or destroy from outside the callback before releasing user. event_json is valid
+ * only during the callback and must be copied before asynchronous UI dispatch. */
 DB_API void db_core_set_ui_callback(db_core* c, db_ui_event_cb cb, void* user);
 
 /* Report a call-button press for a configured door ID. */

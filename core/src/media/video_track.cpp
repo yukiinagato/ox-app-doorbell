@@ -65,6 +65,7 @@ struct VideoTrack::State {
   Bytes key_frag;
   uint64_t base_dt = 0;
   bool keyframe_request_pending = false;
+  bool keyframe_request_in_flight = false;
 
   // Counters for the debug line. They are cumulative for the life of the track and are not
   // cleared by resetLocked(), so a mid-stream SPS change does not look like a restart.
@@ -88,7 +89,14 @@ struct VideoTrack::State {
     key_frag_seq = 0;
     key_frag.clear();
     keyframe_request_pending = false;
+    keyframe_request_in_flight = false;
     base_dt = 0;
+  }
+
+  void requestKeyframeLocked() {
+    if (keyframe_request_pending || keyframe_request_in_flight) return;
+    keyframe_request_pending = true;
+    keyframe_requests++;
   }
 };
 
@@ -119,17 +127,27 @@ void VideoTrack::push(const uint8_t* annexb, size_t len, bool key, int64_t ts_ms
   State& s = *st_;
   if (!s.enabled || s.stopped) return;
 
-  const Bytes old_sps = s.sps;
-  fmp4::Sample sample = fmp4::toSample(annexb, len, &s.sps, &s.pps);
-
-
-  if (!s.init.empty() && !old_sps.empty() && s.sps != old_sps) {
-    Bytes new_sps = s.sps, new_pps = s.pps;
+  Bytes next_sps = s.sps, next_pps = s.pps;
+  fmp4::Sample sample = fmp4::toSample(annexb, len, &next_sps, &next_pps);
+  int width = 0, height = 0;
+  const bool valid_config = !next_sps.empty() && next_pps.size() > 1 &&
+      (next_pps[0] & 0x1f) == 8 &&
+      fmp4::parseSpsDims(next_sps.data(), next_sps.size(), &width, &height);
+  const bool config_changed = next_sps != s.sps || next_pps != s.pps;
+  if (config_changed && !valid_config) {
+    DB_LOGW(kTag, "discarded an invalid H.264 parameter-set update");
+  } else if (!s.init.empty() && config_changed) {
+    // A changed PPS is as significant as a changed SPS: avcC carries both. Ending the old
+    // generation prevents a player from combining the old init with samples for the new config.
+    Bytes new_sps = std::move(next_sps), new_pps = std::move(next_pps);
     s.resetLocked();
     s.sps = std::move(new_sps);
     s.pps = std::move(new_pps);
     s.cv.notify_all();
-    DB_LOGI(kTag, "SPS changed; restarting the H.264 stream");
+    DB_LOGI(kTag, "H.264 parameter sets changed; restarting the stream");
+  } else if (config_changed) {
+    s.sps = std::move(next_sps);
+    s.pps = std::move(next_pps);
   }
   if (s.init.empty() && !s.sps.empty() && !s.pps.empty()) {
     s.init = fmp4::buildInit(s.sps, s.pps);
@@ -138,7 +156,16 @@ void VideoTrack::push(const uint8_t* annexb, size_t len, bool key, int64_t ts_ms
     DB_LOGI(kTag, "generated H.264 init segment (" + s.codec_str + ")");
   }
   if (sample.data.empty()) return;
-  sample.key = sample.key || key;
+  // A producer hint is useful for telemetry, but only an IDR parsed from the access unit is a
+  // safe recovery point after a reader has missed reference frames.
+  const bool is_idr = sample.key;
+  sample.key = is_idr || key;
+  if (is_idr) {
+    // A real random-access point satisfies both an edge that the encoder has not consumed and a
+    // request already handed to it. A producer key hint is deliberately not enough here.
+    s.keyframe_request_pending = false;
+    s.keyframe_request_in_flight = false;
+  }
   sample.ts_ms = ts_ms;
   s.frames++;
   if (sample.key) s.keyframes++;
@@ -157,7 +184,7 @@ void VideoTrack::push(const uint8_t* annexb, size_t len, bool key, int64_t ts_ms
   s.frag = withCaptureTimes(
       fmp4::buildFragment(static_cast<uint32_t>(++s.frag_seq), s.base_dt, current),
       current);
-  if (current[0].key) {
+  if (is_idr) {
     s.key_frag_seq = s.frag_seq;
     s.key_frag = s.frag;
   }
@@ -169,6 +196,7 @@ bool VideoTrack::takeKeyframeRequest() {
   std::lock_guard<std::mutex> lk(st_->mu);
   if (!st_->keyframe_request_pending) return false;
   st_->keyframe_request_pending = false;
+  st_->keyframe_request_in_flight = true;
   return true;
 }
 
@@ -198,8 +226,7 @@ std::shared_ptr<VideoTrack::Reader> VideoTrack::subscribe() {
   {
     std::lock_guard<std::mutex> lk(st_->mu);
     if (st_->enabled && !st_->stopped) {
-      st_->keyframe_request_pending = true;
-      st_->keyframe_requests++;
+      st_->requestKeyframeLocked();
     }
   }
   st_->cv.notify_all();
@@ -215,6 +242,17 @@ VideoTrack::Reader::Reader(std::shared_ptr<State> st) : st_(std::move(st)) {
   st_->subscribers++;
 }
 
+void VideoTrack::Reader::accountDiscardedLocked(uint64_t through) {
+  if (through <= accounted_through_seq_) return;
+  st_->dropped_forward += through - accounted_through_seq_;
+  accounted_through_seq_ = through;
+}
+
+void VideoTrack::Reader::markDeliveredLocked(uint64_t sequence) {
+  last_frag_ = sequence;
+  if (sequence > accounted_through_seq_) accounted_through_seq_ = sequence;
+}
+
 VideoTrack::Reader::~Reader() {
   std::lock_guard<std::mutex> lk(st_->mu);
   st_->subscribers--;
@@ -228,7 +266,7 @@ Bytes VideoTrack::Reader::pull(int timeout_ms, bool* ended) {
     if (s.stopped || s.generation != generation_ || !s.enabled) return true;
     if (!init_sent_) return !s.init.empty();
     if (key_pending_) return !s.key_frag.empty();
-    if (waiting_for_fresh_key_) return s.key_frag_seq > last_frag_;
+    if (waiting_for_fresh_key_) return s.key_frag_seq > resume_after_seq_;
     return s.frag_seq > last_frag_;
   };
   if (!ready()) s.cv.wait_for(lk, std::chrono::milliseconds(timeout_ms), ready);
@@ -244,23 +282,39 @@ Bytes VideoTrack::Reader::pull(int timeout_ms, bool* ended) {
   if (key_pending_) {
     if (s.key_frag.empty()) return {};
     key_pending_ = false;
-    last_frag_ = s.key_frag_seq;
+    markDeliveredLocked(s.key_frag_seq);
     // If this random-access point predates the subscription, keep it on screen as the immediate
     // preview but do not feed dependency-breaking delta frames. Resume on the requested fresh IDR.
     waiting_for_fresh_key_ = subscribed_key_seq_ != 0 && s.key_frag_seq <= subscribed_key_seq_;
+    if (waiting_for_fresh_key_) resume_after_seq_ = last_frag_;
     return s.key_frag;
   }
   if (waiting_for_fresh_key_) {
-    if (s.key_frag_seq <= last_frag_) return {};
+    if (s.key_frag_seq <= resume_after_seq_) {
+      accountDiscardedLocked(s.frag_seq);
+      return {};
+    }
+    accountDiscardedLocked(s.key_frag_seq - 1);
     waiting_for_fresh_key_ = false;
-    last_frag_ = s.key_frag_seq;
+    markDeliveredLocked(s.key_frag_seq);
     return s.key_frag;
   }
   if (s.frag_seq > last_frag_) {
     // Only the newest fragment is retained, so a subscriber that fell behind skips the ones in
     // between. That is the design, and counting the skips is what makes it visible.
-    if (s.frag_seq > last_frag_ + 1) s.dropped_forward += s.frag_seq - last_frag_ - 1;
-    last_frag_ = s.frag_seq;
+    if (s.frag_seq > last_frag_ + 1) {
+      if (s.key_frag_seq == s.frag_seq) {
+        accountDiscardedLocked(s.frag_seq - 1);
+        markDeliveredLocked(s.frag_seq);
+        return s.frag;
+      }
+      accountDiscardedLocked(s.frag_seq);
+      resume_after_seq_ = s.frag_seq;
+      waiting_for_fresh_key_ = true;
+      s.requestKeyframeLocked();
+      return {};
+    }
+    markDeliveredLocked(s.frag_seq);
     return s.frag;
   }
   return {};

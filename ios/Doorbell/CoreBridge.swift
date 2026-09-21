@@ -9,6 +9,16 @@ import UIKit
 
 typealias UiEventHandler = ([String: Any]) -> Void
 
+private final class CoreUiCallbackRegistration {
+    weak var bridge: CoreBridge?
+    let generation: UInt64
+
+    init(bridge: CoreBridge, generation: UInt64) {
+        self.bridge = bridge
+        self.generation = generation
+    }
+}
+
 final class CoreBridge {
 
     private var core: OpaquePointer?
@@ -18,6 +28,8 @@ final class CoreBridge {
         "{\"schema_version\":1,\"platform\":\"apple\",\"battery_state\":\"unknown\"}"
     private let powerStateCacheLock = NSLock()
     private var powerStateCacheJSON = CoreBridge.noBatteryPowerJSON
+    private let uiEventDispatchGate = CoreEventDispatchGate()
+    private var uiCallbackRegistration: CoreUiCallbackRegistration?
 
     private var handlers: [String: UiEventHandler] = [:]
 
@@ -97,17 +109,30 @@ final class CoreBridge {
 
         core = db_core_create_v2(&plat, dataDir, bootJson)
         guard let c = core else { return false }
+        let registration = CoreUiCallbackRegistration(
+            bridge: self, generation: uiEventDispatchGate.begin())
+        uiCallbackRegistration = registration
         db_core_set_ui_callback(c, { user, evJson in
             guard let user = user, let evJson = evJson else { return }
-            let me = Unmanaged<CoreBridge>.fromOpaque(user).takeUnretainedValue()
+            let registration = Unmanaged<CoreUiCallbackRegistration>
+                .fromOpaque(user).takeUnretainedValue()
+            guard let me = registration.bridge else { return }
             let data = Data(bytes: UnsafeRawPointer(evJson), count: strlen(evJson))
             guard let obj = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
             else { return }
-            DispatchQueue.main.async { me.dispatch(obj) }
-        }, user)
+            DispatchQueue.main.async { [weak me] in
+                guard let me = me,
+                      me.uiEventDispatchGate.isCurrent(registration.generation) else {
+                    return
+                }
+                me.dispatch(obj)
+            }
+        }, Unmanaged.passUnretained(registration).toOpaque())
         if db_core_start(c) != 0 {
+            uiEventDispatchGate.invalidate()
             db_core_destroy(c)
             core = nil
+            uiCallbackRegistration = nil
             return false
         }
         // Only now is the run loop Running and the node built, so only now may anything else in
@@ -121,7 +146,9 @@ final class CoreBridge {
         // Closed before the teardown, so a reader that is already on its way in turns back at the
         // gate rather than racing `db_core_stop`.
         started = false
+        uiEventDispatchGate.invalidate()
         db_core_set_ui_callback(c, nil, nil)
+        uiCallbackRegistration = nil
         db_core_stop(c)
         db_core_destroy(c)
         core = nil
@@ -530,8 +557,7 @@ final class CoreBridge {
         let warnings: [[String: Any]]
     }
 
-    /// Applies the batch through Core. Returns nil when Core cannot do it, so the caller can fall
-    /// back; the batch entry point is preferred because it is the only atomic one.
+    /// Applies the batch through Core. Returns nil only when no local write capability exists.
     func applyConfigBatch(_ opsJson: String,
                           operations: [(key: String, value: String?)]) -> WriteOutcome? {
         guard let c = core else { return nil }
@@ -548,8 +574,11 @@ final class CoreBridge {
         }
         guard let set = CoreBridge.setConfigKeyFn,
               let remove = CoreBridge.deleteConfigKeyFn else { return nil }
-        // Without the batch entry point the writes are no longer atomic, so the first refusal
-        // stops the run rather than leaving half a change behind.
+        guard ConfigBatchFallbackPolicy.allowsLegacyWrite(operationCount: operations.count) else {
+            return WriteOutcome(ok: false, error: "batch_unavailable", warnings: [])
+        }
+        // This is intentionally one operation only. Multi-key changes must use Core's atomic
+        // batch entry point; a client-side compensating write cannot undo a replicated update.
         for operation in operations {
             let code = operation.value.map { set(c, operation.key, $0) }
                 ?? remove(c, operation.key)

@@ -161,6 +161,8 @@ Delete it?</string>
     <string name="admin_local_addrs">Local addresses</string>
     <string name="admin_locked">Admin password entry locked for 10 minutes</string>
     <string name="admin_login">Log in</string>
+    <string name="admin_login_network">Can\'t reach the server. Check the network and try again</string>
+    <string name="admin_login_server">The server could not complete sign-in. Try again</string>
     <string name="admin_logs">Logs</string>
     <string name="admin_menu_add_device">Add a device</string>
     <string name="admin_menu_boot_setup">Initial setup</string>

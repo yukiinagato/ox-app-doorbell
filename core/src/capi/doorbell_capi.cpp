@@ -3,6 +3,7 @@
 
 #include "qrcodegen.h"
 
+#include <algorithm>
 #include <condition_variable>
 #include <ctime>
 #include <cstddef>
@@ -10,6 +11,7 @@
 #include <cstring>
 #include <memory>
 #include <mutex>
+#include <pthread.h>
 #include <string>
 #include <thread>
 #include <vector>
@@ -63,13 +65,150 @@ struct HttpsInflight {
   }
 };
 
+struct UiCallbackSlot;
+
+// The iOS 5 armv7 C++ runtime rejects language-level TLS. pthread keys provide the same
+// per-thread nesting information without importing emulated TLS into the ABI library.
+using ActiveUiCallbackStack = std::vector<UiCallbackSlot*>;
+static pthread_key_t active_ui_callback_key;
+static pthread_once_t active_ui_callback_key_once = PTHREAD_ONCE_INIT;
+
+static void deleteActiveUiCallbackStack(void* value) {
+  delete static_cast<ActiveUiCallbackStack*>(value);
+}
+
+static void createActiveUiCallbackKey() {
+  pthread_key_create(&active_ui_callback_key, deleteActiveUiCallbackStack);
+}
+
+static ActiveUiCallbackStack* activeUiCallbackStack(bool create) {
+  pthread_once(&active_ui_callback_key_once, createActiveUiCallbackKey);
+  auto* stack = static_cast<ActiveUiCallbackStack*>(pthread_getspecific(active_ui_callback_key));
+  if (!stack && create) {
+    stack = new ActiveUiCallbackStack();
+    pthread_setspecific(active_ui_callback_key, stack);
+  }
+  return stack;
+}
+
+static bool isUiCallbackActiveOnThisThread(UiCallbackSlot* slot) {
+  const auto* stack = activeUiCallbackStack(false);
+  return stack && std::find(stack->begin(), stack->end(), slot) != stack->end();
+}
+
+// A slot keeps a callback and its user pointer paired for its entire lifetime.  Node may have
+// copied the dispatch lambda before an owner unregisters it, so disabling and entering a callback
+// share this lock; an already-entered callback is drained before external unregistration returns.
+struct UiCallbackSlot {
+  std::mutex mu;
+  std::condition_variable cv;
+  db_ui_event_cb cb = nullptr;
+  void* user = nullptr;
+  bool enabled = true;
+  size_t in_flight = 0;
+
+  UiCallbackSlot(db_ui_event_cb callback, void* context) : cb(callback), user(context) {}
+
+  void invoke(const std::string& event_json) {
+    {
+      std::lock_guard<std::mutex> lk(mu);
+      if (!enabled) return;
+      ++in_flight;
+    }
+    struct Lease {
+      UiCallbackSlot* slot;
+      ~Lease() {
+        {
+          std::lock_guard<std::mutex> lk(slot->mu);
+          --slot->in_flight;
+        }
+        slot->cv.notify_all();
+      }
+    } lease{this};
+    struct ActiveScope {
+      ActiveUiCallbackStack* stack;
+      explicit ActiveScope(UiCallbackSlot* slot) : stack(activeUiCallbackStack(true)) {
+        stack->push_back(slot);
+      }
+      ~ActiveScope() { stack->pop_back(); }
+    } active(this);
+    cb(user, event_json.c_str());
+  }
+
+  void disable() {
+    std::lock_guard<std::mutex> lk(mu);
+    enabled = false;
+  }
+
+  bool isActiveOnThisThread() const {
+    return isUiCallbackActiveOnThisThread(const_cast<UiCallbackSlot*>(this));
+  }
+
+  void drain() {
+    std::unique_lock<std::mutex> lk(mu);
+    cv.wait(lk, [this] { return in_flight == 0; });
+  }
+
+  bool drained() const {
+    std::lock_guard<std::mutex> lk(const_cast<std::mutex&>(mu));
+    return in_flight == 0;
+  }
+};
+
 struct db_core {
   std::unique_ptr<Node> node;
   db_platform_v2 plat{};
-  db_ui_event_cb ui_cb = nullptr;
-  void* ui_user = nullptr;
+  std::mutex ui_callback_mu;
+  std::shared_ptr<UiCallbackSlot> ui_callback;
+  std::vector<std::shared_ptr<UiCallbackSlot>> retired_ui_callbacks;
   std::shared_ptr<HttpsInflight> https_inflight = std::make_shared<HttpsInflight>();
 };
+
+static void drainRetiredUiCallbacks(db_core* c) {
+  std::vector<std::shared_ptr<UiCallbackSlot>> retired;
+  {
+    std::lock_guard<std::mutex> lk(c->ui_callback_mu);
+    retired = c->retired_ui_callbacks;
+  }
+  bool active_on_this_thread = false;
+  for (const auto& slot : retired) {
+    if (slot->isActiveOnThisThread()) {
+      active_on_this_thread = true;
+      continue;
+    }
+    slot->drain();
+  }
+  if (active_on_this_thread) return;
+  std::lock_guard<std::mutex> lk(c->ui_callback_mu);
+  auto& all = c->retired_ui_callbacks;
+  all.erase(std::remove_if(all.begin(), all.end(), [](const std::shared_ptr<UiCallbackSlot>& slot) {
+    return slot->drained();
+  }), all.end());
+}
+
+static void setUiCallback(db_core* c, db_ui_event_cb cb, void* user) {
+  if (!c || !c->node) return;
+  std::shared_ptr<UiCallbackSlot> retired;
+  std::shared_ptr<UiCallbackSlot> published;
+  {
+    std::lock_guard<std::mutex> lk(c->ui_callback_mu);
+    retired = c->ui_callback;
+    if (retired) {
+      retired->disable();
+      c->retired_ui_callbacks.push_back(retired);
+    }
+    if (cb) published = std::make_shared<UiCallbackSlot>(cb, user);
+    c->ui_callback = published;
+  }
+  if (published) {
+    c->node->setUiEventCb([published](const std::string& event_json) {
+      published->invoke(event_json);
+    });
+  } else {
+    c->node->setUiEventCb(nullptr);
+  }
+  drainRetiredUiCallbacks(c);
+}
 
 static char* dupString(const std::string& s) {
   char* p = static_cast<char*>(std::malloc(s.size() + 1));
@@ -297,23 +436,13 @@ DB_API void db_core_stop(db_core* c) {
 DB_API void db_core_destroy(db_core* c) {
   if (!c) return;
   setLogSink(nullptr);
-
-
+  setUiCallback(c, nullptr, nullptr);
   c->https_inflight->waitIdle();
   delete c;
 }
 
 DB_API void db_core_set_ui_callback(db_core* c, db_ui_event_cb cb, void* user) {
-  if (!c || !c->node) return;
-  c->ui_cb = cb;
-  c->ui_user = user;
-  if (cb) {
-    c->node->setUiEventCb([c](const std::string& ev) {
-      if (c->ui_cb) c->ui_cb(c->ui_user, ev.c_str());
-    });
-  } else {
-    c->node->setUiEventCb(nullptr);
-  }
+  setUiCallback(c, cb, user);
 }
 
 DB_API void db_core_press(db_core* c, const char* door_id) {

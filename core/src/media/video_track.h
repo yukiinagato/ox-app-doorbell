@@ -86,7 +86,12 @@ class VideoTrack {
     bool init_sent_ = false;
     bool key_pending_ = true;
     bool waiting_for_fresh_key_ = false;
+    uint64_t resume_after_seq_ = 0;
     uint64_t last_frag_ = 0;
+    uint64_t accounted_through_seq_ = 0;
+
+    void accountDiscardedLocked(uint64_t through);
+    void markDeliveredLocked(uint64_t sequence);
   };
   std::shared_ptr<Reader> subscribe();
 

@@ -2,7 +2,12 @@
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
+#include <atomic>
+#include <chrono>
+#include <condition_variable>
+#include <mutex>
 #include <string>
+#include <thread>
 
 #include "doctest.h"
 #include "doorbell/doorbell.h"
@@ -438,6 +443,148 @@ TEST_CASE("capi: one cluster administrator password, shared lockout, SOS never b
 
   db_core_stop(core);
   db_core_destroy(core);
+}
+
+TEST_CASE("[R1] capi serializes concurrent administrator password changes") {
+  db_platform_v2 platform{};
+  platform.struct_size = sizeof(platform);
+  platform.version = DB_PLATFORM_V2_VERSION;
+  db_core* core = db_core_create_v2(
+      &platform, ":memory:",
+      "{\"name\":\"auth-serial\",\"role\":\"indoor_panel\",\"listen_port\":0,\"http_port\":0}");
+  REQUIRE(core != nullptr);
+  REQUIRE(db_core_start(core) == 0);
+  REQUIRE(db_core_admin_password_set(core, "", "original-password") == 0);
+
+  std::atomic<int> ready{0};
+  std::atomic<bool> release{false};
+  int first = -99, second = -99;
+  auto change = [&](const char* replacement, int* result) {
+    ready.fetch_add(1);
+    while (!release.load()) std::this_thread::yield();
+    *result = db_core_admin_password_set(core, "original-password", replacement);
+  };
+  std::thread a(change, "replacement-one", &first);
+  std::thread b(change, "replacement-two", &second);
+  while (ready.load() != 2) std::this_thread::yield();
+  release.store(true);
+  a.join();
+  b.join();
+
+  CHECK((first == 0) != (second == 0));
+  CHECK(db_core_admin_password_verify(core, "original-password") == 0);
+  const bool first_replacement_works =
+      db_core_admin_password_verify(core, "replacement-one") == 1;
+  const bool second_replacement_works =
+      db_core_admin_password_verify(core, "replacement-two") == 1;
+  const bool replacement_works = first_replacement_works || second_replacement_works;
+  CHECK(replacement_works);
+  db_core_stop(core);
+  // A stopped loop must not turn a rejected dispatch into the "not configured" result.
+  CHECK(db_core_admin_password_verify(core, "replacement-one") == 0);
+  db_core_destroy(core);
+}
+
+TEST_CASE("[R2] capi unregister drains an entered UI callback") {
+  struct CallbackGate {
+    std::mutex mu;
+    std::condition_variable cv;
+    bool entered = false;
+    bool release = false;
+  } gate;
+  db_platform_v2 platform{};
+  platform.struct_size = sizeof(platform);
+  platform.version = DB_PLATFORM_V2_VERSION;
+  db_core* core = db_core_create_v2(
+      &platform, ":memory:",
+      "{\"name\":\"callback-drain\",\"role\":\"indoor_panel\",\"listen_port\":0,\"http_port\":0}");
+  REQUIRE(core != nullptr);
+  REQUIRE(db_core_start(core) == 0);
+  db_core_set_ui_callback(core, [](void* context, const char*) {
+    auto* gate = static_cast<CallbackGate*>(context);
+    std::unique_lock<std::mutex> lk(gate->mu);
+    gate->entered = true;
+    gate->cv.notify_all();
+    gate->cv.wait(lk, [&] { return gate->release; });
+  }, &gate);
+
+  std::thread emit([&] { db_core_qr_scan_start(core); });
+  {
+    std::unique_lock<std::mutex> lk(gate.mu);
+    REQUIRE(gate.cv.wait_for(lk, std::chrono::seconds(2), [&] { return gate.entered; }));
+  }
+  std::atomic<bool> unregistered{false};
+  std::thread unregister([&] {
+    db_core_set_ui_callback(core, nullptr, nullptr);
+    unregistered.store(true);
+  });
+  {
+    std::unique_lock<std::mutex> lk(gate.mu);
+    CHECK_FALSE(gate.cv.wait_for(lk, std::chrono::milliseconds(25), [&] {
+      return unregistered.load();
+    }));
+    gate.release = true;
+  }
+  gate.cv.notify_all();
+  unregister.join();
+  emit.join();
+  CHECK(unregistered.load());
+  db_core_stop(core);
+  db_core_destroy(core);
+}
+
+TEST_CASE("[R2] capi callback can unregister itself without waiting") {
+  struct SelfUnregister {
+    db_core* core = nullptr;
+    std::atomic<int> calls{0};
+    std::mutex mu;
+    std::condition_variable cv;
+    bool self_unregistered = false;
+    bool release = false;
+  } context;
+  db_platform_v2 platform{};
+  platform.struct_size = sizeof(platform);
+  platform.version = DB_PLATFORM_V2_VERSION;
+  context.core = db_core_create_v2(
+      &platform, ":memory:",
+      "{\"name\":\"callback-self-unregister\",\"role\":\"indoor_panel\",\"listen_port\":0,\"http_port\":0}");
+  REQUIRE(context.core != nullptr);
+  REQUIRE(db_core_start(context.core) == 0);
+  db_core_set_ui_callback(context.core, [](void* raw, const char*) {
+    auto* context = static_cast<SelfUnregister*>(raw);
+    context->calls.fetch_add(1);
+    db_core_set_ui_callback(context->core, nullptr, nullptr);
+    std::unique_lock<std::mutex> lk(context->mu);
+    context->self_unregistered = true;
+    context->cv.notify_all();
+    context->cv.wait(lk, [&] { return context->release; });
+  }, &context);
+  std::thread emit([&] { db_core_qr_scan_start(context.core); });
+  {
+    std::unique_lock<std::mutex> lk(context.mu);
+    REQUIRE(context.cv.wait_for(lk, std::chrono::seconds(2), [&] {
+      return context.self_unregistered;
+    }));
+  }
+  std::atomic<bool> external_unregister_returned{false};
+  std::thread unregister([&] {
+    db_core_set_ui_callback(context.core, nullptr, nullptr);
+    external_unregister_returned.store(true);
+  });
+  {
+    std::unique_lock<std::mutex> lk(context.mu);
+    CHECK_FALSE(context.cv.wait_for(lk, std::chrono::milliseconds(25), [&] {
+      return external_unregister_returned.load();
+    }));
+    context.release = true;
+  }
+  context.cv.notify_all();
+  unregister.join();
+  emit.join();
+  CHECK(context.calls.load() == 1);
+  CHECK(external_unregister_returned.load());
+  db_core_stop(context.core);
+  db_core_destroy(context.core);
 }
 
 TEST_CASE("capi: mic mute, call-log paging, and the bundled zone list") {

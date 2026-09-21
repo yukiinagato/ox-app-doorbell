@@ -109,6 +109,18 @@ swiftc \
   "$REPO_ROOT/ios-compat/tests/fmp4_demuxer_test.swift" \
   -o "$OUT/fmp4_demuxer_test"
 
+# CoreBridge uses this gate to reject callbacks queued before stop/start. It is Foundation-only,
+# so exercise the production implementation directly on the host.
+swiftc \
+  "$REPO_ROOT/ios/Doorbell/CoreEventDispatchGate.swift" \
+  "$REPO_ROOT/ios-compat/tests/core_event_dispatch_gate_test.swift" \
+  -o "$OUT/core_event_dispatch_gate_test"
+
+swiftc \
+  "$REPO_ROOT/ios/Doorbell/ConfigBatchFallbackPolicy.swift" \
+  "$REPO_ROOT/ios-compat/tests/config_batch_fallback_policy_test.swift" \
+  -o "$OUT/config_batch_fallback_policy_test"
+
 "$CC" -fobjc-arc -Wall -Wextra -Werror -O2 -isysroot "$MACOS_SDK" \
   -I"$REPO_ROOT/ios-kiosk/src/Net" \
   "$REPO_ROOT/ios-kiosk/src/Net/DBHTTPMediaSupport.m" \
@@ -174,6 +186,8 @@ swiftc \
 [[ $MODERN_CALL_TEST -eq 1 ]] && "$OUT/modern_call_revision_test"
 "$OUT/mjpeg_part_assembler_test"
 "$OUT/fmp4_demuxer_test"
+"$OUT/core_event_dispatch_gate_test"
+"$OUT/config_batch_fallback_policy_test"
 "$OUT/http_media_test"
 "$OUT/rtsp_h264_test"
 "$OUT/compatibility_profile_test"

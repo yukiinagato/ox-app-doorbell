@@ -1,0 +1,15 @@
+error: --signing stock|jailbreak is required
+usage: ios-compat/scripts/build_ios9_armv7.sh [options]
+  --static-only                 run the untrusted CI/profile checks only
+  --signing stock|jailbreak     select the isolated packaging lane
+  --preflight-only              validate the commissioned runner without building
+
+Formal lanes require DB_IOS9_SDK_LICENSE_ATTESTED=1 and:
+  DB_IOS9_DEVELOPER_DIR         licensed Xcode 7 Developer directory
+  DB_IOS9_SDK_ROOT              its selected iPhoneOS 9.x SDK (optional if selected)
+  DB_IOS9_SIGNING_IDENTITY      stock lane identity name or SHA-1
+  DB_IOS9_PROVISIONING_PROFILE  stock lane provisioning profile
+
+Optional numeric version overrides:
+  DB_IOS9_SHORT_VERSION         major.minor.patch
+  DB_IOS9_BUILD_VERSION         positive integer

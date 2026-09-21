@@ -1,0 +1,21 @@
+Command line invocation:
+    /Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild -list -project ios/Doorbell.xcodeproj
+
+Information about project "Doorbell":
+    Targets:
+        Doorbell
+        DoorbellTV
+        DoorbellIOS9
+        DoorbellTests
+
+    Build Configurations:
+        Debug
+        Release
+
+    If no build configuration is specified and -scheme is not passed then "Release" is used.
+
+    Schemes:
+        Doorbell
+        DoorbellIOS9
+        DoorbellTV
+
