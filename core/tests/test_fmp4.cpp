@@ -21,6 +21,7 @@
 #include "doctest.h"
 #include "test_env.h"
 #include "media/fmp4.h"
+#include "media/fmp4_demux.h"
 #include "media/video_track.h"
 #include "node/node.h"
 #include "util/json.h"
@@ -104,10 +105,10 @@ Bytes makeSps(int mbs_w, int map_h, uint32_t crop_bottom) {
   return makeNal(0x67, bw.out);  // nal_ref_idc=3, type=7
 }
 
-Bytes makePps() {
+Bytes makePps(uint32_t pps_id = 0, uint32_t sps_id = 0) {
   BitWriter bw;
-  bw.ue(0);    // pic_parameter_set_id
-  bw.ue(0);    // seq_parameter_set_id
+  bw.ue(pps_id);    // pic_parameter_set_id
+  bw.ue(sps_id);    // seq_parameter_set_id
   bw.u(0, 1);  // entropy_coding_mode_flag (CAVLC)
   bw.u(0, 1);  // bottom_field_pic_order_in_frame_present_flag
   bw.ue(0);    // num_slice_groups_minus1
@@ -126,9 +127,13 @@ Bytes makePps() {
 }
 
 
-Bytes makeSlice(bool idr, size_t payload) {
-  Bytes nal;
-  nal.push_back(idr ? 0x65 : 0x41);  // type 5 (IDR) / 1 (non-IDR)
+Bytes makeSlice(bool idr, size_t payload, uint32_t pps_id = 0) {
+  BitWriter bw;
+  bw.ue(0);  // first_mb_in_slice
+  bw.ue(2);  // I slice; enough header syntax to identify the PPS safely
+  bw.ue(pps_id);  // pic_parameter_set_id
+  bw.trailing();
+  Bytes nal = makeNal(idr ? 0x65 : 0x41, bw.out);  // type 5 (IDR) / 1 (non-IDR)
   for (size_t i = 0; i < payload; i++) nal.push_back(static_cast<uint8_t>(0x80 + (i % 0x40)));
   return nal;
 }
@@ -619,7 +624,7 @@ TEST_CASE("[V01] VideoTrack counts every undisplayed fragment once per reader") 
   CHECK(track.stats().dropped_forward == 3);
 }
 
-TEST_CASE("[B3] VideoTrack replaces the init segment after a PPS-only update") {
+TEST_CASE("[B3][M05] VideoTrack commits a PPS update only at its matching IDR") {
   VideoTrack track;
   track.setEnabled(true);
   const Bytes sps = makeSps(80, 45, 0), pps = makePps();
@@ -629,11 +634,19 @@ TEST_CASE("[B3] VideoTrack replaces the init segment after a PPS-only update") {
   bool ended = false;
   Bytes old_init = old_reader->pull(0, &ended);
   REQUIRE_FALSE(old_init.empty());
+  REQUIRE_FALSE(old_reader->pull(0, &ended).empty());
 
   Bytes changed_pps = pps;
   changed_pps.push_back(0);
   Bytes pps_update = annexb({changed_pps});
   track.push(pps_update.data(), pps_update.size(), false, 1040);
+  CHECK(old_reader->pull(0, &ended).empty());
+  CHECK_FALSE(ended);
+
+  // The staged pair cannot use the old random-access point. A matching parsed IDR is the
+  // commit point, after which the old reader ends and the new init is decoder-consumable.
+  Bytes changed_idr = annexb({makeSlice(true, 16)});
+  track.push(changed_idr.data(), changed_idr.size(), true, 1080);
   CHECK(old_reader->pull(0, &ended).empty());
   CHECK(ended);
 
@@ -641,6 +654,83 @@ TEST_CASE("[B3] VideoTrack replaces the init segment after a PPS-only update") {
   Bytes new_init = new_reader->pull(0, &ended);
   REQUIRE_FALSE(new_init.empty());
   CHECK(new_init != old_init);
+  fmp4::Demuxer software_decoder;
+  CHECK(software_decoder.feed(new_init.data(), new_init.size()));
+  CHECK(software_decoder.configured());
+}
+
+TEST_CASE("[M05] VideoTrack retains the last valid configuration after malformed parameters") {
+  VideoTrack track;
+  track.setEnabled(true);
+  const Bytes sps = makeSps(80, 45, 0), pps = makePps();
+  const Bytes idr = annexb({sps, pps, makeSlice(true, 16)});
+  auto reader = track.subscribe();
+  track.push(idr.data(), idr.size(), true, 1000);
+  bool ended = false;
+  const Bytes old_init = reader->pull(0, &ended);
+  REQUIRE_FALSE(old_init.empty());
+  REQUIRE_FALSE(reader->pull(0, &ended).empty());
+
+  const Bytes bad_pps = {0x68, 0x00};
+  const Bytes unsafe = annexb({bad_pps, makeSlice(true, 16)});
+  track.push(unsafe.data(), unsafe.size(), true, 1040);
+  CHECK(reader->pull(0, &ended).empty());
+  CHECK_FALSE(ended);
+
+  const Bytes next = annexb({makeSlice(true, 16)});
+  track.push(next.data(), next.size(), true, 1080);
+  CHECK_FALSE(reader->pull(0, &ended).empty());
+  CHECK(track.active());
+  CHECK(track.codecString() == "avc1.42001E");
+}
+
+TEST_CASE("[M05] VideoTrack drops an invalid parameter update with a delta frame") {
+  VideoTrack track;
+  track.setEnabled(true);
+  const Bytes sps = makeSps(80, 45, 0), pps = makePps();
+  auto reader = track.subscribe();
+  const Bytes initial = annexb({sps, pps, makeSlice(true, 16)});
+  track.push(initial.data(), initial.size(), true, 1000);
+  bool ended = false;
+  REQUIRE_FALSE(reader->pull(0, &ended).empty());
+  REQUIRE_FALSE(reader->pull(0, &ended).empty());
+
+  const Bytes bad_pps = {0x68, 0x00};
+  const Bytes unsafe_delta = annexb({bad_pps, makeSlice(false, 16)});
+  track.push(unsafe_delta.data(), unsafe_delta.size(), false, 1040);
+  CHECK(reader->pull(0, &ended).empty());
+  CHECK_FALSE(ended);
+
+  const Bytes recovery = annexb({makeSlice(true, 16)});
+  track.push(recovery.data(), recovery.size(), true, 1080);
+  CHECK_FALSE(reader->pull(0, &ended).empty());
+}
+
+TEST_CASE("[M05] VideoTrack does not reset for an identical valid configuration") {
+  VideoTrack track;
+  track.setEnabled(true);
+  const Bytes sps = makeSps(80, 45, 0), pps = makePps();
+  const Bytes initial = annexb({sps, pps, makeSlice(true, 16)});
+  auto reader = track.subscribe();
+  track.push(initial.data(), initial.size(), true, 1000);
+  bool ended = false;
+  REQUIRE_FALSE(reader->pull(0, &ended).empty());
+  REQUIRE_FALSE(reader->pull(0, &ended).empty());
+
+  track.push(initial.data(), initial.size(), true, 1040);
+  CHECK_FALSE(reader->pull(0, &ended).empty());
+  CHECK_FALSE(ended);
+  CHECK(track.active());
+}
+
+TEST_CASE("[M05] H.264 parameter and slice association rejects a mismatched PPS") {
+  const Bytes sps = makeSps(80, 45, 0);
+  const Bytes pps = makePps(1, 0);
+  CHECK(fmp4::validParameterSets(sps, pps));
+  Bytes idr = annexb({makeSlice(true, 16, 0)});
+  CHECK_FALSE(fmp4::idrReferencesPps(idr.data(), idr.size(), pps));
+  idr = annexb({makeSlice(true, 16, 1)});
+  CHECK(fmp4::idrReferencesPps(idr.data(), idr.size(), pps));
 }
 
 TEST_CASE("video_track: ignores pushes while the H.264 track is disabled") {

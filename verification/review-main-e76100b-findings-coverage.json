@@ -1,0 +1,78 @@
+{
+  "schema_version": 1,
+  "source": {
+    "archive": "/Users/ox/Downloads/ox-app-doorbell-e76100b-main-review.zip",
+    "archive_member": "ox-app-doorbell-e76100b-main-review/findings.json",
+    "sha256_verified": true,
+    "source_sha": "e76100b7582ef7dd4b898c881c36d2f0b5046373"
+  },
+  "policy": "A PASS below is limited to the named production-path regression. PARTIAL and NOT_RUN are not closure.",
+  "groups": [
+    {"id":"M01","scenarios":[
+      {"id":"M01-T01","status":"PARTIAL_CROSS_BUILD_PASS_NO_NATIVE_WINDOWS","evidence":"build/review-main-win64-r3/doorbell.dll"},
+      {"id":"M01-T02","status":"PARTIAL_TRANSLATION_UNIT_PASS_FULL_CORE_BLOCKED_IN_CIVETWEB","evidence":"build/review-main-win32/doorbell_capi_m01.obj"},
+      {"id":"M01-T03","status":"PARTIAL_IOS5_CORE_STATIC_PASS_FINAL_LINK_NOT_RUN","evidence":"verification/logs/review-main-e76100b-summary.log"},
+      {"id":"M01-T04","status":"PARTIAL_HOST_R2_REGRESSION","evidence":"core/tests/test_capi_abi.cpp [R2]"},
+      {"id":"M01-T05","status":"NOT_RUN_FAILURE_INJECTION_MISSING","evidence":null},
+      {"id":"M01-T06","status":"NOT_RUN_THREAD_EXIT_LIFECYCLE_MISSING","evidence":null}
+    ]},
+    {"id":"M02","scenarios":[
+      {"id":"M02-T01","status":"PASS_NODE_PRODUCTION_CONTROLLER","evidence":"webui/tests/call_recovery_controller.test.js"},
+      {"id":"M02-T02","status":"PASS_NODE_PRODUCTION_CONTROLLER","evidence":"webui/tests/call_recovery_controller.test.js"},
+      {"id":"M02-T03","status":"PASS_NODE_PRODUCTION_CONTROLLER","evidence":"webui/tests/call_recovery_controller.test.js"},
+      {"id":"M02-T04","status":"NOT_RUN","evidence":null},
+      {"id":"M02-T05","status":"NOT_RUN","evidence":null},
+      {"id":"M02-T06","status":"NOT_RUN","evidence":null}
+    ]},
+    {"id":"M03","scenarios":[
+      {"id":"M03-T01","status":"PARTIAL_NODE_OWNER_RETRY","evidence":"webui/tests/video_session.test.js"},
+      {"id":"M03-T02","status":"NOT_RUN","evidence":null},
+      {"id":"M03-T03","status":"PASS_NODE_PRODUCTION_PAGE_WIRING","evidence":"webui/tests/call_recovery_controller.test.js"},
+      {"id":"M03-T04","status":"PASS_NODE_HELPER","evidence":"webui/tests/video_session.test.js"},
+      {"id":"M03-T05","status":"NOT_RUN","evidence":null}
+    ]},
+    {"id":"M04","scenarios":[
+      {"id":"M04-T01","status":"PARTIAL_NODE_PAGE_EPOCH","evidence":"webui/tests/admin_runtime.test.js"},
+      {"id":"M04-T02","status":"PASS_NODE_PAGE_EPOCH","evidence":"webui/tests/admin_runtime.test.js"},
+      {"id":"M04-T03","status":"NOT_RUN_OVERLAPPING_PROBES","evidence":null},
+      {"id":"M04-T04","status":"PASS_NODE_PAGE_EPOCH","evidence":"webui/tests/admin_runtime.test.js"},
+      {"id":"M04-T05","status":"PASS_NODE_BOUNDED_RETRY","evidence":"webui/tests/admin_runtime.test.js"},
+      {"id":"M04-T06","status":"NOT_RUN_STATUS500_NETWORK_TIMEOUT","evidence":null},
+      {"id":"M04-T07","status":"PARTIAL_NODE_VISIT_INVALIDATION","evidence":"webui/tests/admin_runtime.test.js"},
+      {"id":"M04-T08","status":"PASS_NODE_RETIRED_VISIT","evidence":"webui/tests/admin_runtime.test.js"},
+      {"id":"M04-T09","status":"PASS_NODE_ABORT_CLASSIFICATION","evidence":"webui/tests/admin_runtime.test.js"},
+      {"id":"M04-T10","status":"PASS_NODE_TIMEOUT_OPEN_SEND_CLASSIFICATION","evidence":"webui/tests/admin_runtime.test.js"},
+      {"id":"M04-T11","status":"PARTIAL_NODE_STALE_CALLBACKS","evidence":"webui/tests/admin_runtime.test.js"}
+    ]},
+    {"id":"M05","scenarios":[
+      {"id":"M05-T01","status":"PASS_HOST_PRODUCTION_TRACK","evidence":"core/tests/test_fmp4.cpp [M05]"},
+      {"id":"M05-T02","status":"PASS_HOST_PRODUCTION_TRACK","evidence":"core/tests/test_fmp4.cpp [M05]"},
+      {"id":"M05-T03","status":"PASS_HOST_PRODUCTION_TRACK","evidence":"core/tests/test_fmp4.cpp [M05]"},
+      {"id":"M05-T04","status":"NOT_RUN_SEMANTIC_PPS_AND_TARGET_DECODE","evidence":null},
+      {"id":"M05-T05","status":"PASS_HOST_PARAMETER_ASSOCIATION","evidence":"core/tests/test_fmp4.cpp [M05]"},
+      {"id":"M05-T06","status":"PASS_HOST_PRODUCTION_TRACK","evidence":"core/tests/test_fmp4.cpp [M05]"},
+      {"id":"M05-T07","status":"NOT_RUN_REAL_DECODER_AND_FRAME_IDENTITIES","evidence":null}
+    ]},
+    {"id":"M06","scenarios":[
+      {"id":"M06-T01","status":"PARTIAL_BACKOFF_CLEARED_BEFORE_COUNTED_SEND_NO_WORKER_GATE","evidence":"core/tests/test_time.cpp"},
+      {"id":"M06-T02","status":"PASS_HOST_TARGET_COUNT_AND_COMPLETION","evidence":"core/tests/test_time.cpp"},
+      {"id":"M06-T03","status":"NOT_RUN_PARENT_COMPARISON","evidence":null},
+      {"id":"M06-T04","status":"PASS_HOST_OWNED_BLACKHOLE","evidence":"core/tests/test_time.cpp"},
+      {"id":"M06-T05","status":"PARTIAL_SINGLE_FULL_CTEST_PASS_NO_REPEAT_LOOP","evidence":"build/review3-host/Testing/Temporary/LastTest.log"}
+    ]},
+    {"id":"M07","scenarios":[
+      {"id":"M07-T01","status":"PASS_HOST_CONFIG_GENERATION","evidence":"core/tests/test_time.cpp"},
+      {"id":"M07-T02","status":"NOT_RUN_A_TO_B_TO_C_COALESCING","evidence":null},
+      {"id":"M07-T03","status":"NOT_RUN_DISABLE_OR_STOP_WHILE_BUSY","evidence":null},
+      {"id":"M07-T04","status":"PASS_HOST_INTERVAL_ONLY_NO_IMMEDIATE_SYNC","evidence":"core/tests/test_time.cpp"},
+      {"id":"M07-T05","status":"NOT_RUN_OLD_FAILURE_VS_NEW_SUCCESS","evidence":null}
+    ]},
+    {"id":"M08","scenarios":[
+      {"id":"M08-T01","status":"PASS_CURRENT_EXPLICIT_COVERAGE_MAP","evidence":"verification/review-main-e76100b-findings-coverage.json"},
+      {"id":"M08-T02","status":"PASS_HISTORICAL_TRACE_PRESERVED","evidence":"verification/r1-r6-traceability.json"},
+      {"id":"M08-T03","status":"PARTIAL_DIRTY_TREE_TO_LOCAL_EVIDENCE_ONLY","evidence":"verification/review-main-e76100b-overlay.json"},
+      {"id":"M08-T04","status":"PARTIAL_PROFILE_MATRIX_REMAINS_INCOMPLETE","evidence":"feature-parity.json"},
+      {"id":"M08-T05","status":"PASS_PLATFORM_LIMITS_EXPLICIT","evidence":"verification/review-main-e76100b-overlay.json"}
+    ]}
+  ]
+}

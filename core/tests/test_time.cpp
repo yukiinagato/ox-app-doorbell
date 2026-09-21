@@ -40,7 +40,7 @@ int offsetOf(const std::string& zone, int64_t at_ms) {
 // Minimal loopback SNTP server that answers with a clock shifted by skew_ms.
 class FakeNtpServer {
  public:
-  explicit FakeNtpServer(int64_t skew_ms) : skew_ms_(skew_ms) {}
+  explicit FakeNtpServer(int64_t skew_ms, bool reply = true) : skew_ms_(skew_ms), reply_(reply) {}
   ~FakeNtpServer() { stop(); }
 
   bool start() {
@@ -80,6 +80,7 @@ class FakeNtpServer {
                                           reinterpret_cast<sockaddr*>(&from), &from_length);
       if (received < static_cast<ssize_t>(sntp::kPacketSize)) continue;
       requests_++;
+      if (!reply_) continue;  // Controlled blackhole: proves the worker actually sent UDP.
       const int64_t now = std::chrono::duration_cast<std::chrono::milliseconds>(
                               std::chrono::system_clock::now().time_since_epoch())
                               .count() +
@@ -101,6 +102,7 @@ class FakeNtpServer {
   }
 
   int64_t skew_ms_;
+  bool reply_;
   int fd_ = -1;
   int port_ = 0;
   std::atomic<bool> running_{false};
@@ -594,7 +596,8 @@ TEST_CASE("node: NTP syncs once a day, once on a change, and backs off after a f
   REQUIRE(server.start());
   FakeNtpServer other(2500);
   REQUIRE(other.start());
-  const int dead_port = server.port() == 65535 ? 65534 : server.port() + 1;
+  FakeNtpServer blackhole(0, false);
+  REQUIRE(blackhole.start());
 
   // The sim clock starts at real wall time so a measured offset stays inside SNTP's sanity
   // bounds while the test moves hours at a time.
@@ -698,10 +701,35 @@ TEST_CASE("node: NTP syncs once a day, once on a change, and backs off after a f
   REQUIRE(settle([&] { return other.requests() > other_now; }, 8000));
   quiet();
 
-  // A server that never answers: the round fails and the retry is a minute away, not a day.
+  // Change the server while a deliberately blocked round owns the worker. The old result is
+  // generation-stale, so it cannot claim success/failure for the new server; completion starts
+  // the newest endpoint immediately rather than leaving it behind the daily interval.
+  const int blackhole_busy_before = blackhole.requests();
   node.setConfigKey("time.ntp.servers",
-                    "[\"127.0.0.1:" + std::to_string(dead_port) + "\"]");
+                    "[\"127.0.0.1:" + std::to_string(blackhole.port()) + "\"]");
   loop.pumpDue();
+  REQUIRE(settle([&] { return blackhole.requests() > blackhole_busy_before; }, 8000));
+  const int server_latest_before = server.requests();
+  node.setConfigKey("time.ntp.servers",
+                    "[\"127.0.0.1:" + std::to_string(server.port()) + "\"]");
+  loop.pumpDue();
+  REQUIRE(settle([&] { return server.requests() > server_latest_before; }, 8000));
+  REQUIRE(settle([&] {
+    return json::getBool(time_status().get(), "ok", false) &&
+        json::getString(time_status().get(), "server") ==
+            "127.0.0.1:" + std::to_string(server.port());
+  }, 8000));
+  quiet();
+
+  // A controlled blackhole proves the worker sent its new UDP request. Do not use a nearby
+  // unused port: another process could claim it, and retry_in_s becomes visible before any
+  // packet is necessarily sent.
+  const int blackhole_before = blackhole.requests();
+  node.setConfigKey("time.ntp.servers",
+                    "[\"127.0.0.1:" + std::to_string(blackhole.port()) + "\"]");
+  loop.pumpDue();
+  CHECK(retry_in_s() == 0);  // Scheduling cleared backoff before the worker's first UDP packet.
+  REQUIRE(settle([&] { return blackhole.requests() > blackhole_before; }, 8000));
   REQUIRE(settle([&] { return retry_in_s() > 0; }, 30000));
   CHECK(retry_in_s() == 60);
   CHECK(json::getString(time_status().get(), "err") != "");
@@ -717,13 +745,15 @@ TEST_CASE("node: NTP syncs once a day, once on a change, and backs off after a f
   CHECK(retry_in_s() == 120);
 
   // A server that answers again clears the backoff.
+  const int server_before_recovery = server.requests();
   node.setConfigKey("time.ntp.servers",
                     "[\"127.0.0.1:" + std::to_string(server.port()) + "\"]");
   loop.pumpDue();
+  REQUIRE(settle([&] { return server.requests() > server_before_recovery; }, 15000));
   REQUIRE(settle([&] { return retry_in_s() == 0; }, 15000));
-  CHECK(server.requests() > seen);
 
   node.stop();
   server.stop();
   other.stop();
+  blackhole.stop();
 }

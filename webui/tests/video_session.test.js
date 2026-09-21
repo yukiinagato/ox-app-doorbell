@@ -9,7 +9,7 @@ function deferred() {
   return { promise, resolve, reject };
 }
 
-function fixture() {
+function fixture(onError) {
   const timers = new Map();
   let nextTimer = 1;
   let current = null;
@@ -26,13 +26,26 @@ function fixture() {
     setInterval(fn) { const id = nextTimer++; timers.set(id, fn); return id; },
     clearInterval(id) { timers.delete(id); },
     isCurrent(binding) { return current === binding; },
-    postFrame() { posts++; return Promise.resolve(); }, onError(error) { throw error; }
+    postFrame() { posts++; return Promise.resolve(); },
+    onError(error, binding) { if (onError) onError(error, binding); else throw error; }
   });
   return { session, media, preview, timers, blobs, setCurrent(v) { current = v; },
     canvases: () => canvases, posts: () => posts };
 }
 
 (async function main() {
+  {
+    let failedBinding = null;
+    const f = fixture((_error, binding) => { failedBinding = binding; });
+    const binding = { target: "A" };
+    f.setCurrent(binding); f.session.start(binding);
+    f.media[0].reject({ name: "NotAllowedError" });
+    await Promise.resolve(); await Promise.resolve();
+    assert.strictEqual(failedBinding, binding,
+      "an asynchronous camera failure reports the binding that may be cleared by its owner");
+    assert(f.session.start(binding), "camera failure leaves the helper retryable");
+  }
+
   {
     const f = fixture(), binding = { target: "A" };
     f.setCurrent(binding);

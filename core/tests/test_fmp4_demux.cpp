@@ -90,8 +90,12 @@ Bytes makePps() {
 }
 
 Bytes makeSlice(bool idr, size_t payload, uint8_t seed) {
-  Bytes nal;
-  nal.push_back(idr ? 0x65 : 0x41);
+  BitWriter bw;
+  bw.ue(0);  // first_mb_in_slice
+  bw.ue(2);  // slice_type
+  bw.ue(0);  // pic_parameter_set_id
+  bw.trailing();
+  Bytes nal = makeNal(idr ? 0x65 : 0x41, bw.out);
   for (size_t i = 0; i < payload; i++) nal.push_back(static_cast<uint8_t>(seed + (i % 0x40)));
   return nal;
 }

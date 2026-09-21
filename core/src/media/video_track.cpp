@@ -53,6 +53,9 @@ struct VideoTrack::State {
   int subscribers = 0;
 
   Bytes sps, pps;
+  // Parameter sets are staged until an IDR explicitly names the staged PPS. Keeping the last
+  // accepted pair live avoids feeding a decoder a VCL access unit under an untrusted avcC.
+  Bytes pending_sps, pending_pps;
   Bytes init;
   std::string codec_str;
 
@@ -79,6 +82,8 @@ struct VideoTrack::State {
     generation++;
     sps.clear();
     pps.clear();
+    pending_sps.clear();
+    pending_pps.clear();
     init.clear();
     codec_str.clear();
     last_ts_ms = 0;
@@ -127,29 +132,30 @@ void VideoTrack::push(const uint8_t* annexb, size_t len, bool key, int64_t ts_ms
   State& s = *st_;
   if (!s.enabled || s.stopped) return;
 
-  Bytes next_sps = s.sps, next_pps = s.pps;
+  Bytes next_sps = s.pending_sps.empty() ? s.sps : s.pending_sps;
+  Bytes next_pps = s.pending_pps.empty() ? s.pps : s.pending_pps;
   fmp4::Sample sample = fmp4::toSample(annexb, len, &next_sps, &next_pps);
-  int width = 0, height = 0;
-  const bool valid_config = !next_sps.empty() && next_pps.size() > 1 &&
-      (next_pps[0] & 0x1f) == 8 &&
-      fmp4::parseSpsDims(next_sps.data(), next_sps.size(), &width, &height);
   const bool config_changed = next_sps != s.sps || next_pps != s.pps;
-  if (config_changed && !valid_config) {
+  if (config_changed && !fmp4::validParameterSets(next_sps, next_pps)) {
     DB_LOGW(kTag, "discarded an invalid H.264 parameter-set update");
-  } else if (!s.init.empty() && config_changed) {
-    // A changed PPS is as significant as a changed SPS: avcC carries both. Ending the old
-    // generation prevents a player from combining the old init with samples for the new config.
-    Bytes new_sps = std::move(next_sps), new_pps = std::move(next_pps);
-    s.resetLocked();
+    return;
+  }
+  if (config_changed) {
+    s.pending_sps = std::move(next_sps);
+    s.pending_pps = std::move(next_pps);
+  }
+  if (!s.pending_sps.empty() || !s.pending_pps.empty()) {
+    // Do not publish a sample from the update access unit under the prior configuration. A
+    // matching IDR is the only safe point to replace avcC and begin the next generation.
+    if (!fmp4::idrReferencesPps(annexb, len, s.pending_pps)) return;
+    Bytes new_sps = std::move(s.pending_sps), new_pps = std::move(s.pending_pps);
+    const bool had_init = !s.init.empty();
+    if (had_init) s.resetLocked();
     s.sps = std::move(new_sps);
     s.pps = std::move(new_pps);
-    s.cv.notify_all();
-    DB_LOGI(kTag, "H.264 parameter sets changed; restarting the stream");
-  } else if (config_changed) {
-    s.sps = std::move(next_sps);
-    s.pps = std::move(next_pps);
+    if (had_init) DB_LOGI(kTag, "H.264 parameter sets changed; restarting the stream");
   }
-  if (s.init.empty() && !s.sps.empty() && !s.pps.empty()) {
+  if (s.init.empty()) {
     s.init = fmp4::buildInit(s.sps, s.pps);
     s.codec_str = fmp4::codecString(s.sps);
     s.cv.notify_all();

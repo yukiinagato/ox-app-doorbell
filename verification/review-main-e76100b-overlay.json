@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "kind": "current_review_overlay",
+  "baseline_sha": "e76100b7582ef7dd4b898c881c36d2f0b5046373",
+  "initial_head_sha": "e76100b7582ef7dd4b898c881c36d2f0b5046373",
+  "initial_dirty_tree": "clean",
+  "tracked_source_diff_sha256_excluding_verification": "fdb8545866390811c7f659e78547f2437773b85b6735b8b03a3345bddbdd70cf",
+  "historical_traceability": {
+    "path": "verification/r1-r6-traceability.json",
+    "source_revision": "0955c3088c0fc3f95a39c3b05ddc9ed4585170ca",
+    "treatment": "preserved_as_run_not_rewritten"
+  },
+  "input_status": {
+    "review_main_document": "/Users/ox/Downloads/review-main-e76100b.zh.md",
+    "findings_json": "verified_in_ox-app-doorbell-e76100b-main-review.zip"
+  },
+  "findings_coverage": "verification/review-main-e76100b-findings-coverage.json",
+  "issues": [
+    {"id":"M01","implementation":"portable FLS on Windows and checked pthread TLS on POSIX; callback skips safely if TLS allocation fails","tests":["[R2] host callback regression","iOS5 armv7 PJSIP-off Core build"],"status":"HOST_PASS_WINDOWS_TARGET_BLOCKED"},
+    {"id":"M02","implementation":"recovery completion captures its call binding and expected SIP session","tests":["webui/tests/call_recovery_controller.test.js"],"status":"NODE_PRODUCTION_SOURCE_PASS_NO_BROWSER"},
+    {"id":"M03","implementation":"video owner receives the failing binding and only the current page binding is cleared","tests":["webui/tests/video_session.test.js"],"status":"NODE_PRODUCTION_HELPER_PASS_NO_CAMERA"},
+    {"id":"M04","implementation":"page epoch, single probe/login identity, bounded boot retry, visit token, and abort intent wrapper","tests":["webui/tests/admin_runtime.test.js"],"status":"NODE_PRODUCTION_APP_VM_PASS_NO_AUTHENTICATED_BROWSER"},
+    {"id":"M05","implementation":"stage parameter sets and commit only at matching parsed IDR; retain prior valid configuration","tests":["core/tests/test_fmp4.cpp [B3][M05]","fMP4 software demux configuration feed"],"status":"HOST_PASS_NO_TARGET_DECODER"},
+    {"id":"M06","implementation":"NTP regression waits for counted UDP receipt at a controlled blackhole fixture","tests":["core/tests/test_time.cpp NTP schedule"],"status":"HOST_PASS"},
+    {"id":"M07","implementation":"desired configuration generations discard old worker results and start the latest endpoint after an in-flight round","tests":["core/tests/test_time.cpp NTP schedule"],"status":"HOST_PASS"},
+    {"id":"M08","implementation":"current overlay and updated entrypoint/parity references preserve the historical trace unchanged","tests":["jq JSON validation"],"status":"PASS"}
+  ],
+  "log": "verification/logs/review-main-e76100b-summary.log",
+  "platform_qualification": {
+    "host_core": "PASS",
+    "ios5_armv7_core_pjsip_off": "PASS_STATIC_LIBRARY_ONLY",
+    "windows_x86": "M01_TRANSLATION_UNIT_CROSS_COMPILE_PASS_FULL_CORE_BLOCKED_IN_PREEXISTING_CIVETWEB",
+    "windows_x64": "CROSS_CORE_DLL_BUILD_PASS_NO_WINDOWS_RUNTIME",
+    "ipad_mini_1_ios_9_3_6_armv7": "NOT_RUN",
+    "real_browser_camera_webrtc": "NOT_RUN",
+    "target_h264_decoder": "NOT_RUN"
+  }
+}

@@ -7,7 +7,10 @@ const vm = require("vm");
 
 class Element {
   constructor() {
-    this.classList = { add() {}, remove() {} }; this.style = {}; this.attributes = {};
+    const classes = new Set();
+    this.classList = { add(name) { classes.add(name); }, remove(name) { classes.delete(name); },
+      contains(name) { return classes.has(name); } };
+    this.style = {}; this.attributes = {};
     this.parentNode = null; this.children = []; this.textContent = ""; this.innerHTML = "";
     this.value = ""; this.disabled = false;
   }
@@ -36,7 +39,9 @@ function makeRuntime(options) {
   };
   let nextTimer = 1;
   const timers = new Map(), listeners = {};
-  const server = { login: { status: 401, body: { ok: false } }, status: 200, config: 200,
+  const server = { login: options.login || { status: 401, body: { ok: false } },
+    status: options.status === undefined ? 200 : options.status,
+    config: options.config === undefined ? 200 : options.config,
     deferred: new Set(options.deferred || []), requests: [], pending: [], throwSend: new Set() };
   function responseFor(url) {
     if (url === "/locale/en.json") return [200, JSON.parse(
@@ -80,9 +85,9 @@ function makeRuntime(options) {
       return options.detect ? options.detect() : Promise.resolve([]);
     } },
     addEventListener(name, fn) { (listeners[name] || (listeners[name] = [])).push(fn); },
-    setTimeout(fn) { const id = nextTimer++; timers.set(id, fn); return id; },
+    setTimeout(fn) { const id = nextTimer++; timers.set(id, { fn, repeat: false }); return id; },
     clearTimeout(id) { timers.delete(id); },
-    setInterval(fn) { const id = nextTimer++; timers.set(id, fn); return id; },
+    setInterval(fn) { const id = nextTimer++; timers.set(id, { fn, repeat: true }); return id; },
     clearInterval(id) { timers.delete(id); }
   };
   const context = { window, document, navigator, XMLHttpRequest: Xhr,
@@ -100,11 +105,16 @@ function makeRuntime(options) {
     fire(name) { (listeners[name] || []).slice().forEach((fn) => fn()); },
     runOneTimer() {
       const entry = timers.entries().next().value;
-      assert(entry, "expected a pending timer"); entry[1]();
+      assert(entry, "expected a pending timer");
+      if (!entry[1].repeat) timers.delete(entry[0]);
+      entry[1].fn();
     },
     runLastTimer() {
       const entries = Array.from(timers.entries());
-      assert(entries.length, "expected a pending timer"); entries[entries.length - 1][1]();
+      assert(entries.length, "expected a pending timer");
+      const entry = entries[entries.length - 1];
+      if (!entry[1].repeat) timers.delete(entry[0]);
+      entry[1].fn();
     }
   };
 }
@@ -129,12 +139,37 @@ function enterPair(runtime) { runtime.hooks.adminRuntime.switchTab("pair"); }
     assert.strictEqual(runtime.timers.size, 1,
       "only the in-flight initialization timeout exists before config/status initialize");
     runtime.respond("/api/config", 500, {});
-    assert.strictEqual(runtime.timers.size, 0, "failed initialization leaves no dead poller");
+    assert(runtime.timers.size >= 1, "failed initialization schedules a bounded retry");
+    assert(runtime.elements.get("#msg").textContent,
+      "failed initialization leaves an operator-visible server error");
     runtime.server.deferred.delete("/api/config");
-    runtime.fire("pageshow");
-    assert.strictEqual(runtime.timers.size, 1, "pageshow recovers a failed runtime");
+    runtime.runLastTimer();
+    assert(runtime.server.requests.filter((r) => r.url === "/api/config").length >= 2,
+      "the bounded retry re-enters the production boot path");
     runtime.hooks.adminRuntime.stop();
-    assert.strictEqual(runtime.timers.size, 0, "stop clears the runtime timer");
+  }
+
+  {
+    const runtime = makeRuntime({ deferred: ["/api/status"] });
+    const initialProbes = runtime.server.requests.filter((r) => r.url === "/api/status").length;
+    runtime.fire("pagehide");
+    runtime.server.deferred.delete("/api/status");
+    runtime.fire("pageshow");
+    const beforeStale = runtime.server.requests.filter((r) => r.url === "/api/config").length;
+    runtime.respond("/api/status", 401, {});
+    assert.strictEqual(runtime.server.requests.filter((r) => r.url === "/api/config").length, beforeStale,
+      "a stale auth probe cannot hide the new page or start another boot");
+    assert.strictEqual(initialProbes, 1, "the initial activation creates one effective probe");
+  }
+
+  {
+    const runtime = makeRuntime({ deferred: ["/api/login"], status: 401 });
+    runtime.elements.get("#loginBtn").onclick();
+    runtime.fire("pagehide");
+    runtime.fire("pageshow");
+    runtime.respond("/api/login", 200, { ok: true });
+    assert.strictEqual(runtime.server.requests.filter((r) => r.url === "/api/config").length, 0,
+      "a login response from an old page activation cannot boot the new page");
   }
 
   {
@@ -149,6 +184,16 @@ function enterPair(runtime) { runtime.hooks.adminRuntime.switchTab("pair"); }
   }
 
   {
+    const runtime = makeRuntime({ deferred: ["/api/pairing"] });
+    enterPair(runtime);
+    enterPair(runtime);
+    runtime.respond("/api/pairing", 200, { state: "unpaired", pending: { devices: [] } });
+    assert.strictEqual(runtime.server.pending.filter((xhr) => xhr.url === "/api/pairing").length, 1,
+      "a response from the retired pair-tab visit cannot consume or replace the new visit");
+    runtime.respond("/api/pairing", 200, { state: "unpaired", pending: { devices: [] } });
+  }
+
+  {
     const runtime = makeRuntime({ deferred: ["/api/delayed"] });
     const outcomes = [];
     runtime.hooks.adminRuntime.api("GET", "/api/delayed", null,
@@ -160,6 +205,11 @@ function enterPair(runtime) { runtime.hooks.adminRuntime.switchTab("pair"); }
     runtime.hooks.adminRuntime.api("GET", "/api/send-failure", null,
       (status, _body, detail) => outcomes.push([status, detail.reason]));
     assert.deepStrictEqual(outcomes[1], [0, "send"], "synchronous send failure settles once");
+    const request = runtime.hooks.adminRuntime.api("GET", "/api/delayed", null,
+      (status, _body, detail) => outcomes.push([status, detail.reason]));
+    request.abort();
+    assert.deepStrictEqual(outcomes[2], [0, "abort"],
+      "an external XHR.abort reports abort rather than a spurious network failure");
   }
 
   {

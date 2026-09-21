@@ -3308,6 +3308,7 @@ if (typeof document !== "undefined") (function () {
       options.generation = options.context.generation;
     }
     function callback(status, json, detail) {
+      if (options.pageEpoch !== undefined && !pageCurrent(options.pageEpoch)) return;
       if (options.context && !runtimeCurrent(options.context)) return;
       cb(status, json, detail);
     }
@@ -3347,6 +3348,13 @@ if (typeof document !== "undefined") (function () {
       finish(0, null, { reason: abortReason, request: x });
       try { x.abort(); } catch (e) {}
     }, options.timeout_ms);
+    // Native XHR may deliver DONE/status=0 synchronously inside abort(). Record the caller's
+    // intent before invoking the native method so that this terminal path remains "abort".
+    var nativeAbort = x.abort;
+    x.abort = function () {
+      if (!abortReason) abortReason = "abort";
+      return nativeAbort.apply(x, arguments);
+    };
     try { x.send(body ? JSON.stringify(body) : null); }
     catch (e) { finish(0, null, { reason: "send", request: x }); }
     return x;
@@ -3454,8 +3462,11 @@ if (typeof document !== "undefined") (function () {
 
 
   var S = { cfg: {}, status: {}, events: [], tab: "dash", locales: {}, panelToken: "" };
-  var AUTH = { generation: 0, authenticated: false, booting: false, runtime: null,
+  var AUTH = { generation: 0, pageEpoch: 0, authenticated: false, booting: false, runtime: null,
+               probe: null, loginAttempt: null, initRetryTimer: 0, initFailures: 0,
                pollTimer: 0, pollBusy: false, loginPending: false };
+
+  function pageCurrent(epoch) { return AUTH.pageEpoch === epoch; }
 
   function generationCurrent(generation) {
     return generation === undefined || !!(AUTH.runtime &&
@@ -3464,7 +3475,7 @@ if (typeof document !== "undefined") (function () {
 
   function runtimeCurrent(runtime) {
     return !!runtime && AUTH.runtime === runtime &&
-      (AUTH.authenticated || AUTH.booting);
+      pageCurrent(runtime.pageEpoch) && (AUTH.authenticated || AUTH.booting);
   }
 
   function authInvalidated(generation) {
@@ -3475,12 +3486,18 @@ if (typeof document !== "undefined") (function () {
   }
 
   function stopAdminRuntime() {
+    AUTH.pageEpoch++;
     AUTH.generation++;
     AUTH.authenticated = false;
     AUTH.booting = false;
     AUTH.runtime = null;
+    AUTH.probe = null;
+    AUTH.loginAttempt = null;
+    AUTH.loginPending = false;
+    AUTH.initFailures = 0;
     AUTH.pollBusy = false;
     if (AUTH.pollTimer) { clearTimeout(AUTH.pollTimer); AUTH.pollTimer = 0; }
+    if (AUTH.initRetryTimer) { clearTimeout(AUTH.initRetryTimer); AUTH.initRetryTimer = 0; }
     pairTabLeave();
   }
 
@@ -6492,10 +6509,11 @@ if (typeof document !== "undefined") (function () {
    */
 
   var PAIR = { snap: null, rows: {}, form: {}, poll: 0, tick: 0, scan: null, err: "",
-               joinErr: "", hadToken: false, created: false, runtime: null };
+               joinErr: "", hadToken: false, created: false, runtime: null, visit: 0 };
 
-  function pairRuntimeCurrent(runtime) {
-    return !!runtime && PAIR.runtime === runtime && runtimeCurrent(runtime) && S.tab === "pair";
+  function pairRuntimeCurrent(runtime, visit) {
+    return !!runtime && PAIR.runtime === runtime && PAIR.visit === visit &&
+      runtimeCurrent(runtime) && S.tab === "pair";
   }
 
   function pairPeerIds() {
@@ -6504,11 +6522,12 @@ if (typeof document !== "undefined") (function () {
     return out;
   }
 
-  function refreshPairing(cb, runtime) {
+  function refreshPairing(cb, runtime, visit) {
     runtime = runtime || PAIR.runtime;
-    if (!pairRuntimeCurrent(runtime)) return;
+    if (visit === undefined) visit = PAIR.visit;
+    if (!pairRuntimeCurrent(runtime, visit)) return;
     api("GET", "/api/pairing", null, function (st, j) {
-      if (!pairRuntimeCurrent(runtime)) return;
+      if (!pairRuntimeCurrent(runtime, visit)) return;
       if (st === 200 && j) {
         PAIR.snap = j;
         PAIR.rows = L.pairMergeRows(PAIR.rows, j, pairPeerIds(), new Date().getTime());
@@ -6524,16 +6543,17 @@ if (typeof document !== "undefined") (function () {
     PAIR.err = L.pairErrKey((j && j.err) || (st === 0 ? "connect_failed" : ""));
   }
 
-  function pairPost(path, body, done, runtime) {
+  function pairPost(path, body, done, runtime, visit) {
     runtime = runtime || PAIR.runtime;
-    if (!pairRuntimeCurrent(runtime)) return;
+    if (visit === undefined) visit = PAIR.visit;
+    if (!pairRuntimeCurrent(runtime, visit)) return;
     api("POST", path, body, function (st, j) {
-      if (!pairRuntimeCurrent(runtime)) return;
+      if (!pairRuntimeCurrent(runtime, visit)) return;
       var ok = st === 200 && (!j || j.ok !== false);
       if (ok) PAIR.err = "";
       else pairFail(st, j);
       if (done) done(ok, j);
-      refreshPairing(null, runtime);
+      refreshPairing(null, runtime, visit);
     }, { authenticated: true, generation: runtime.generation, context: runtime, timeout_ms: 10000 });
   }
 
@@ -6782,7 +6802,7 @@ if (typeof document !== "undefined") (function () {
   }
 
   function pairAct(act, id, btn) {
-    if (!pairRuntimeCurrent(PAIR.runtime)) return;
+    if (!pairRuntimeCurrent(PAIR.runtime, PAIR.visit)) return;
     var m = L.pairPanelModel(PAIR.snap || {}, PAIR.rows);
     if (act === "add") {
       PAIR.rows[id] = { state: "adding", at: new Date().getTime(),
@@ -6862,9 +6882,10 @@ if (typeof document !== "undefined") (function () {
     return {};
   }
 
-  function pairScanSubmit(text, runtime) {
+  function pairScanSubmit(text, runtime, visit) {
     runtime = runtime || PAIR.runtime;
-    if (!pairRuntimeCurrent(runtime)) return;
+    if (visit === undefined) visit = PAIR.visit;
+    if (!pairRuntimeCurrent(runtime, visit)) return;
     var parsed = L.pairQrParse(text);
     if (parsed && parsed.id)
       PAIR.rows[parsed.id] = { state: "adding", at: new Date().getTime(), label: parsed.addr };
@@ -6875,7 +6896,7 @@ if (typeof document !== "undefined") (function () {
       PAIR.err = "";
       PAIR.rows[parsed.id] = { state: "failed", err: (j && j.err) || "",
                                at: new Date().getTime(), label: parsed.addr };
-    }, runtime);
+    }, runtime, visit);
   }
 
   /* The camera path needs a secure context; on a plain-http LAN the paste field is the fallback. */
@@ -6911,7 +6932,7 @@ if (typeof document !== "undefined") (function () {
   }
 
   function pairScanOpen() {
-    if (PAIR.scan || !pairRuntimeCurrent(PAIR.runtime)) return;
+    if (PAIR.scan || !pairRuntimeCurrent(PAIR.runtime, PAIR.visit)) return;
     var box = document.createElement("div");
     box.className = "pairscan";
     box.innerHTML = "<video id='pairScanVideo' autoplay playsinline muted></video>" +
@@ -6922,14 +6943,14 @@ if (typeof document !== "undefined") (function () {
     document.body.appendChild(box);
     var s = { box: box, video: null, message: null, stream: null, timer: 0, detector: null,
               busy: false, closed: false, submitted: false, failures: 0,
-              generation: AUTH.generation, runtime: PAIR.runtime };
+              generation: AUTH.generation, runtime: PAIR.runtime, visit: PAIR.visit };
     s.video = box.querySelector("#pairScanVideo");
     s.message = box.querySelector("#pairScanMsg");
     PAIR.scan = s;
     pairBind(box);
     navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } }).then(
       function (stream) {
-        if (PAIR.scan !== s || s.closed || !pairRuntimeCurrent(s.runtime)) {
+        if (PAIR.scan !== s || s.closed || !pairRuntimeCurrent(s.runtime, s.visit)) {
           var ts = stream.getTracks ? stream.getTracks() : [];
           for (var i = 0; i < ts.length; i++) { try { ts[i].stop(); } catch (e) {} }
           return;
@@ -6942,14 +6963,14 @@ if (typeof document !== "undefined") (function () {
           if (playing && playing.catch) playing.catch(function () { disposeScanSession(s); });
         } catch (e) { disposeScanSession(s); return; }
         s.timer = setInterval(function () {
-          if (s.busy || PAIR.scan !== s || s.closed || !pairRuntimeCurrent(s.runtime)) return;
+          if (s.busy || PAIR.scan !== s || s.closed || !pairRuntimeCurrent(s.runtime, s.visit)) return;
           s.busy = true;
           var detected;
           try { detected = s.detector.detect(s.video); }
           catch (e) { scanDetectFailed(s); return; }
           Promise.resolve(detected).then(function (codes) {
             s.busy = false;
-            if (PAIR.scan !== s || s.closed || !pairRuntimeCurrent(s.runtime) || s.submitted) return;
+            if (PAIR.scan !== s || s.closed || !pairRuntimeCurrent(s.runtime, s.visit) || s.submitted) return;
             s.failures = 0;
             for (var i = 0; i < codes.length; i++) {
               if (!L.pairQrTextValid(codes[i].rawValue)) continue;
@@ -6957,21 +6978,21 @@ if (typeof document !== "undefined") (function () {
               s.submitted = true;
               disposeScanSession(s);
               msg(t("pair.scanning"));
-              pairScanSubmit(text, s.runtime);
+              pairScanSubmit(text, s.runtime, s.visit);
               return;
             }
           }, function () { scanDetectFailed(s); });
         }, 300);
       },
       function () {
-        if (PAIR.scan === s && !s.closed && pairRuntimeCurrent(s.runtime) && s.message)
+        if (PAIR.scan === s && !s.closed && pairRuntimeCurrent(s.runtime, s.visit) && s.message)
           s.message.textContent = t("pair.scan_denied");
       });
   }
 
   function scanDetectFailed(s) {
     s.busy = false;
-    if (PAIR.scan !== s || s.closed || !pairRuntimeCurrent(s.runtime)) return;
+    if (PAIR.scan !== s || s.closed || !pairRuntimeCurrent(s.runtime, s.visit)) return;
     s.failures++;
     if (s.failures < 3) return;
     if (s.message) s.message.textContent = t("pair.scan_denied");
@@ -6979,7 +7000,7 @@ if (typeof document !== "undefined") (function () {
   }
 
   function pairTick() {
-    if (!pairRuntimeCurrent(PAIR.runtime) || !PAIR.snap) return;
+    if (!pairRuntimeCurrent(PAIR.runtime, PAIR.visit) || !PAIR.snap) return;
     var m = L.pairPanelModel(PAIR.snap, PAIR.rows);
     var left = $("#pairCodeLeft");
     if (left && m.token.active) {
@@ -6998,19 +7019,21 @@ if (typeof document !== "undefined") (function () {
   function pairTabEnter() {
     var runtime = AUTH.runtime;
     if (!runtimeCurrent(runtime)) return;
+    var visit = ++PAIR.visit;
     PAIR.runtime = runtime;
     renderPair();
-    refreshPairing(null, runtime);
+    refreshPairing(null, runtime, visit);
     // Peers come along for the ride: a pending device that has left the list and turned into a
     // peer is the confirmation the row shows as "Added".
     if (!PAIR.poll) PAIR.poll = setInterval(function () {
-      if (!pairRuntimeCurrent(runtime)) return;
-      refreshStatus(function () { refreshPairing(null, runtime); }, runtime.generation);
+      if (!pairRuntimeCurrent(runtime, visit)) return;
+      refreshStatus(function () { refreshPairing(null, runtime, visit); }, runtime.generation);
     }, 2000);
     if (!PAIR.tick) PAIR.tick = setInterval(pairTick, 1000);
   }
 
   function pairTabLeave() {
+    PAIR.visit++;
     PAIR.runtime = null;
     pairScanClose();
     if (PAIR.poll) { clearInterval(PAIR.poll); PAIR.poll = 0; }
@@ -7966,7 +7989,9 @@ if (typeof document !== "undefined") (function () {
       b.classList[b.getAttribute("data-tab") === name ? "add" : "remove"]("on");
     });
     for (var k in TABS) show($("#tab-" + k), k === name);
-    if (was === "pair" && name !== "pair") pairTabLeave();
+    // A second activation of Pair (including a click on its already-selected nav item) is a
+    // new visit. Retire the previous visit's poll/scan state before issuing its replacement.
+    if (was === "pair") pairTabLeave();
     if (name === "pair") { refreshStatus(pairTabEnter); return; }
     if (name === "events") refreshEvents(renderTab);
     else refreshConfig(function () { refreshStatus(renderTab); });
@@ -8052,31 +8077,38 @@ if (typeof document !== "undefined") (function () {
   /* ---- login ---- */
   $("#loginBtn").onclick = function () {
     if (AUTH.loginPending) return;
+    var pageEpoch = AUTH.pageEpoch;
+    var attempt = { pageEpoch: pageEpoch };
     AUTH.loginPending = true;
+    AUTH.loginAttempt = attempt;
     var button = $("#loginBtn"), error = $("#loginErr");
     button.disabled = true;
     error.textContent = "";
     api("POST", "/api/login", { password: $("#pw").value }, function (st, result, detail) {
+      if (AUTH.loginAttempt !== attempt || !pageCurrent(pageEpoch)) return;
+      AUTH.loginAttempt = null;
       AUTH.loginPending = false;
       button.disabled = false;
       if (st === 200 && result && result.ok === true) {
-        show($("#login"), false); show($("#app"), true); boot();
+        show($("#login"), false); show($("#app"), true); boot(pageEpoch);
       } else if (st === 429) error.textContent = t("admin.locked");
       else if (st === 401) error.textContent = t("admin.pin_wrong");
       else if (detail && (detail.reason === "network" || detail.reason === "timeout"))
         error.textContent = t("admin.login_network");
       else error.textContent = t("admin.login_server");
-    }, { timeout_ms: 10000 });
+    }, { timeout_ms: 10000, pageEpoch: pageEpoch });
   };
   $("#pw").addEventListener("keydown", function (e) {
     if (e.key === "Enter") $("#loginBtn").click();
   });
 
-  function boot() {
+  function boot(pageEpoch) {
+    if (pageEpoch === undefined) pageEpoch = AUTH.pageEpoch;
+    if (!pageCurrent(pageEpoch)) return;
     if (AUTH.authenticated || AUTH.booting) return;
     AUTH.booting = true;
     var generation = ++AUTH.generation;
-    var runtime = { generation: generation };
+    var runtime = { generation: generation, pageEpoch: pageEpoch };
     AUTH.runtime = runtime;
     var info = $("#nodeInfo");
     refreshConfig(function (configStatus) {
@@ -8103,20 +8135,34 @@ if (typeof document !== "undefined") (function () {
     AUTH.pollBusy = false;
     if (AUTH.pollTimer) { clearTimeout(AUTH.pollTimer); AUTH.pollTimer = 0; }
     pairTabLeave();
+    AUTH.initFailures++;
+    msg(t("admin.login_server"));
+    if (AUTH.initFailures >= 3 || AUTH.initRetryTimer || !pageCurrent(runtime.pageEpoch)) return;
+    AUTH.initRetryTimer = setTimeout(function () {
+      AUTH.initRetryTimer = 0;
+      if (!pageCurrent(runtime.pageEpoch) || AUTH.authenticated || AUTH.booting) return;
+      boot(runtime.pageEpoch);
+    }, 1000 * AUTH.initFailures);
   }
 
   function recoverAdminRuntime() {
     if (AUTH.authenticated || AUTH.booting) return;
+    var pageEpoch = AUTH.pageEpoch;
+    if (AUTH.probe && AUTH.probe.pageEpoch === pageEpoch) return;
+    var probe = { pageEpoch: pageEpoch };
+    AUTH.probe = probe;
     api("GET", "/api/status", null, function (st) {
+      if (AUTH.probe !== probe || !pageCurrent(pageEpoch)) return;
+      AUTH.probe = null;
       if (st === 200 || MOCK) {
         show($("#login"), false);
         show($("#app"), true);
-        boot();
+        boot(pageEpoch);
       } else {
         show($("#app"), false);
         show($("#login"), true);
       }
-    }, { timeout_ms: 10000 });
+    }, { timeout_ms: 10000, pageEpoch: pageEpoch });
   }
 
 

@@ -67,6 +67,46 @@ Bytes unescapeRbsp(const uint8_t* nal, size_t len) {
   return out;
 }
 
+bool parseSpsId(const uint8_t* sps, size_t len, uint32_t* id) {
+  if (!sps || len < 4 || (sps[0] & 0x1f) != 7) return false;
+  Bytes rbsp = unescapeRbsp(sps, len);
+  if (rbsp.size() < 4) return false;
+  BitReader br(rbsp.data(), rbsp.size());
+  br.u(8);  // profile_idc
+  br.u(8);  // constraint flags + reserved
+  br.u(8);  // level_idc
+  const uint32_t parsed = br.ue();
+  if (br.bad || parsed > 31) return false;
+  *id = parsed;
+  return true;
+}
+
+bool parsePpsIds(const uint8_t* pps, size_t len, uint32_t* pps_id, uint32_t* sps_id) {
+  if (!pps || len < 2 || (pps[0] & 0x1f) != 8) return false;
+  Bytes rbsp = unescapeRbsp(pps, len);
+  if (rbsp.empty()) return false;
+  BitReader br(rbsp.data(), rbsp.size());
+  const uint32_t parsed_pps = br.ue();
+  const uint32_t parsed_sps = br.ue();
+  if (br.bad || parsed_pps > 255 || parsed_sps > 31) return false;
+  *pps_id = parsed_pps;
+  *sps_id = parsed_sps;
+  return true;
+}
+
+bool parseSlicePpsId(const NalView& nal, uint32_t* pps_id) {
+  if (!nal.p || nal.n < 2 || (nal.type != 1 && nal.type != 5)) return false;
+  Bytes rbsp = unescapeRbsp(nal.p, nal.n);
+  if (rbsp.empty()) return false;
+  BitReader br(rbsp.data(), rbsp.size());
+  br.ue();  // first_mb_in_slice
+  br.ue();  // slice_type
+  const uint32_t parsed = br.ue();  // pic_parameter_set_id
+  if (br.bad || parsed > 255) return false;
+  *pps_id = parsed;
+  return true;
+}
+
 
 void skipScalingList(BitReader& br, int size) {
   int last = 8, next = 8;
@@ -219,6 +259,26 @@ bool parseSpsDims(const uint8_t* sps, size_t len, int* w, int* h) {
   *w = static_cast<int>(width);
   *h = static_cast<int>(height);
   return true;
+}
+
+bool validParameterSets(const Bytes& sps, const Bytes& pps) {
+  int width = 0, height = 0;
+  uint32_t sps_id = 0, pps_id = 0, pps_sps_id = 0;
+  return parseSpsDims(sps.data(), sps.size(), &width, &height) &&
+      parseSpsId(sps.data(), sps.size(), &sps_id) &&
+      parsePpsIds(pps.data(), pps.size(), &pps_id, &pps_sps_id) &&
+      sps_id == pps_sps_id;
+}
+
+bool idrReferencesPps(const uint8_t* annexb, size_t len, const Bytes& pps) {
+  uint32_t configured_pps = 0, configured_sps = 0;
+  if (!parsePpsIds(pps.data(), pps.size(), &configured_pps, &configured_sps)) return false;
+  for (const NalView& nal : splitAnnexB(annexb, len)) {
+    if (nal.type != 5) continue;
+    uint32_t slice_pps = 0;
+    if (parseSlicePpsId(nal, &slice_pps) && slice_pps == configured_pps) return true;
+  }
+  return false;
 }
 
 std::string codecString(const Bytes& sps) {

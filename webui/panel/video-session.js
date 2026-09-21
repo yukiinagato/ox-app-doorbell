@@ -37,7 +37,11 @@
       active = state;  // Reserve the lifecycle before permission is requested.
       var requested;
       try { requested = deps.getUserMedia(); }
-      catch (error) { if (stillCurrent(state)) deps.onError(error); dispose(state); return false; }
+      catch (error) {
+        if (stillCurrent(state)) deps.onError(error, state.binding);
+        dispose(state);
+        return false;
+      }
       Promise.resolve(requested).then(function (stream) {
         if (!stillCurrent(state)) { stopTracks(stream); return; }
         state.stream = stream;
@@ -60,11 +64,12 @@
             }, "image/jpeg", 0.7);
           } catch (error) {
             state.busy = false;
-            if (stillCurrent(state)) deps.onError(error);
+            if (stillCurrent(state)) deps.onError(error, state.binding);
+            dispose(state);
           }
         }, 500);
       }, function (error) {
-        if (stillCurrent(state)) deps.onError(error);
+        if (stillCurrent(state)) deps.onError(error, state.binding);
         dispose(state);
       });
       return true;

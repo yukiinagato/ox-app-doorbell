@@ -11,10 +11,18 @@
 #include <cstring>
 #include <memory>
 #include <mutex>
-#include <pthread.h>
+#include <new>
 #include <string>
 #include <thread>
 #include <vector>
+#ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#else
+#include <pthread.h>
+#endif
 
 #include "media/fmp4_demux.h"
 #include "media/qr_scanner.h"
@@ -67,29 +75,61 @@ struct HttpsInflight {
 
 struct UiCallbackSlot;
 
-// The iOS 5 armv7 C++ runtime rejects language-level TLS. pthread keys provide the same
-// per-thread nesting information without importing emulated TLS into the ABI library.
+// The iOS 5 armv7 C++ runtime rejects language-level TLS. Use OS thread-local storage instead
+// of language TLS: pthread keys on POSIX and FLS on Windows, where this ABI library has no
+// pthread dependency.
 using ActiveUiCallbackStack = std::vector<UiCallbackSlot*>;
+#ifdef _WIN32
+static DWORD active_ui_callback_key = FLS_OUT_OF_INDEXES;
+static INIT_ONCE active_ui_callback_key_once = INIT_ONCE_STATIC_INIT;
+
+static VOID CALLBACK deleteActiveUiCallbackStack(PVOID value) {
+  delete static_cast<ActiveUiCallbackStack*>(value);
+}
+
+static BOOL CALLBACK createActiveUiCallbackKey(PINIT_ONCE, PVOID, PVOID*) {
+  active_ui_callback_key = FlsAlloc(deleteActiveUiCallbackStack);
+  return active_ui_callback_key != FLS_OUT_OF_INDEXES;
+}
+
+static ActiveUiCallbackStack* activeUiCallbackStack(bool create) {
+  if (!InitOnceExecuteOnce(&active_ui_callback_key_once, createActiveUiCallbackKey, nullptr,
+                           nullptr))
+    return nullptr;
+  auto* stack = static_cast<ActiveUiCallbackStack*>(FlsGetValue(active_ui_callback_key));
+  if (!stack && create) {
+    auto owned = std::unique_ptr<ActiveUiCallbackStack>(new (std::nothrow) ActiveUiCallbackStack());
+    if (!owned || !FlsSetValue(active_ui_callback_key, owned.get())) return nullptr;
+    stack = owned.release();
+  }
+  return stack;
+}
+#else
 static pthread_key_t active_ui_callback_key;
 static pthread_once_t active_ui_callback_key_once = PTHREAD_ONCE_INIT;
+static int active_ui_callback_key_status = -1;
 
 static void deleteActiveUiCallbackStack(void* value) {
   delete static_cast<ActiveUiCallbackStack*>(value);
 }
 
 static void createActiveUiCallbackKey() {
-  pthread_key_create(&active_ui_callback_key, deleteActiveUiCallbackStack);
+  active_ui_callback_key_status = pthread_key_create(&active_ui_callback_key,
+                                                      deleteActiveUiCallbackStack);
 }
 
 static ActiveUiCallbackStack* activeUiCallbackStack(bool create) {
   pthread_once(&active_ui_callback_key_once, createActiveUiCallbackKey);
+  if (active_ui_callback_key_status != 0) return nullptr;
   auto* stack = static_cast<ActiveUiCallbackStack*>(pthread_getspecific(active_ui_callback_key));
   if (!stack && create) {
-    stack = new ActiveUiCallbackStack();
-    pthread_setspecific(active_ui_callback_key, stack);
+    auto owned = std::unique_ptr<ActiveUiCallbackStack>(new (std::nothrow) ActiveUiCallbackStack());
+    if (!owned || pthread_setspecific(active_ui_callback_key, owned.get()) != 0) return nullptr;
+    stack = owned.release();
   }
   return stack;
 }
+#endif
 
 static bool isUiCallbackActiveOnThisThread(UiCallbackSlot* slot) {
   const auto* stack = activeUiCallbackStack(false);
@@ -126,12 +166,21 @@ struct UiCallbackSlot {
       }
     } lease{this};
     struct ActiveScope {
-      ActiveUiCallbackStack* stack;
+      ActiveUiCallbackStack* stack = nullptr;
+      bool entered = false;
       explicit ActiveScope(UiCallbackSlot* slot) : stack(activeUiCallbackStack(true)) {
+        if (!stack) return;
         stack->push_back(slot);
+        entered = true;
       }
-      ~ActiveScope() { stack->pop_back(); }
+      ~ActiveScope() {
+        if (entered) stack->pop_back();
+      }
     } active(this);
+    if (!active.entered) {
+      DB_LOGE("capi", "cannot allocate callback thread-local state; event callback skipped");
+      return;
+    }
     cb(user, event_json.c_str());
   }
 

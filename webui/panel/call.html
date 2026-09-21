@@ -436,7 +436,15 @@ async function reportRecovery(binding, restored) {
   }
 }
 
-function endCall(reason) {
+function finishRecovery(binding, expectedSession, ok) {
+  binding.recoveryPending = false;
+  if (ok || activeLifecycle !== binding || session !== expectedSession || !sessionConfirmed) return false;
+  setStatus(t("panel.recovery_failed"), true);
+  return endCall("recovery_failed", binding, expectedSession);
+}
+
+function endCall(reason, expectedBinding, expectedSession) {
+  if (expectedBinding && (activeLifecycle !== expectedBinding || session !== expectedSession)) return false;
   const binding = activeLifecycle;
   if (session) { try { if (!session.isEnded()) session.terminate(); } catch (e) { } }
   session = null;
@@ -446,6 +454,7 @@ function endCall(reason) {
   stopSendingVideo();
   els.call.classList.remove("hang");
   updateCallButton();
+  return true;
 }
 
 els.call.onclick = () => {
@@ -506,8 +515,12 @@ const videoSession = DoorbellPanelVideo.create({
     binding.door === selected.id && els.sendVideo.checked,
   postFrame: (target, blob) => fetch(target, { method: "POST", body: blob,
     headers: { "Content-Type": "image/jpeg", "Authorization": "Bearer " + K } }),
-  onError: error => { setStatus(t("panel.camera_failed", { reason: error.name || "error" }), true);
-    els.sendVideo.checked = false; }
+  onError: (error, binding) => {
+    if (videoBinding !== binding) return;
+    videoBinding = null;
+    setStatus(t("panel.camera_failed", { reason: error.name || "error" }), true);
+    els.sendVideo.checked = false;
+  }
 });
 
 els.sendVideo.onchange = () => {
@@ -570,13 +583,13 @@ async function load() {
     }
     if (refreshed && refreshed.recovery_required && activeLifecycle && sessionConfirmed &&
         refreshed.call_id === activeLifecycle.callId && !activeLifecycle.recoveryPending) {
-      activeLifecycle.recoveryPending = true;
-      reportRecovery(activeLifecycle, true).then(ok => {
-        if (activeLifecycle) activeLifecycle.recoveryPending = false;
-        if (!ok && session) {
-          setStatus(t("panel.recovery_failed"), true);
-          endCall("recovery_failed");
-        }
+      const recoveryBinding = activeLifecycle;
+      const recoverySession = session;
+      recoveryBinding.recoveryPending = true;
+      reportRecovery(recoveryBinding, true).then(ok => {
+        // This completion owns only the lifecycle and SIP session captured at request time. A
+        // later call can reuse the same door and must never be ended by an old recovery result.
+        finishRecovery(recoveryBinding, recoverySession, ok);
       });
     }
     heartbeatLifecycle(activeLifecycle);

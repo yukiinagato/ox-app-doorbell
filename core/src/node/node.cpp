@@ -2035,6 +2035,10 @@ struct Node::Impl {
   std::string time_sync_servers_key;
   std::thread time_sync_thread;
   bool time_sync_busy = false;
+  // A configuration generation belongs to the desired server list, not to a worker. A result
+  // from an older generation must never make the newly configured service look synchronized.
+  uint64_t time_sync_config_generation = 0;
+  bool time_sync_resync_pending = false;
   std::atomic<bool> time_sync_abort{false};
   std::string reported_time_source = "system";
   int64_t reported_time_offset_ms = 0;
@@ -2941,6 +2945,9 @@ struct Node::Impl {
   void reapplyTimeSchedule() {
     if (!ntpEnabled()) {
       cancelTimeSyncTimer();
+      ++time_sync_config_generation;
+      time_sync_resync_pending = false;
+      time_sync_abort.store(true);
       time_sync_armed = false;
       time_sync_servers_key.clear();
       time_sync_backoff_s = 0;
@@ -2957,6 +2964,15 @@ struct Node::Impl {
       return;
     }
     time_sync_backoff_s = 0;
+    ++time_sync_config_generation;
+    if (time_sync_busy) {
+      // Do not wait for the old interval or allow its result to overwrite the new endpoint.
+      // The worker observes this flag between bounded exchanges; its completion starts exactly
+      // one fresh round for the latest generation.
+      time_sync_resync_pending = true;
+      time_sync_abort.store(true);
+      return;
+    }
     // A round in flight arms the next timer when it completes; one that refused to start still
     // needs a schedule.
     if (!startTimeSync()) armTimeSyncTimer();
@@ -2971,12 +2987,13 @@ struct Node::Impl {
     time_sync_busy = true;
     time_sync_abort.store(false);
     auto servers = ntpServers();
-    time_sync_thread = std::thread([this, servers] { timeSyncWorker(servers); });
+    const uint64_t generation = time_sync_config_generation;
+    time_sync_thread = std::thread([this, servers, generation] { timeSyncWorker(servers, generation); });
     scheduleSnapshotRefresh();
     return true;
   }
 
-  void timeSyncWorker(const std::vector<std::string>& servers) {
+  void timeSyncWorker(const std::vector<std::string>& servers, uint64_t generation) {
     const int64_t deadline_mono = clock->monoMs() + 5000;
     bool ok = false;
     sntp::Sample best{};
@@ -3018,8 +3035,16 @@ struct Node::Impl {
     }
     const int64_t offset = best.offset_ms;
     const int64_t rtt = best.rtt_ms;
-    loop->post([this, ok, offset, rtt, best_server, last_error] {
+    loop->post([this, ok, offset, rtt, best_server, last_error, generation] {
       time_sync_busy = false;
+      if (generation != time_sync_config_generation || time_sync_resync_pending) {
+        time_sync_resync_pending = false;
+        if (started && ntpEnabled()) {
+          if (!startTimeSync()) armTimeSyncTimer();
+        }
+        scheduleSnapshotRefresh();
+        return;
+      }
       if (ok) {
         time_state.ok = true;
         time_state.ever_synced = true;

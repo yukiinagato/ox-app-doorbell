@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "document_version": "3.0",
+  "document_version": "3.1",
   "as_of": "2026-09-22",
   "repository": "yukiinagato/ox-app-doorbell",
-  "visible_baseline": "0955c3088c0fc3f95a39c3b05ddc9ed4585170ca",
-  "pushed_revision": "0955c3088c0fc3f95a39c3b05ddc9ed4585170ca",
+  "visible_baseline": "e76100b7582ef7dd4b898c881c36d2f0b5046373",
+  "pushed_revision": "e76100b7582ef7dd4b898c881c36d2f0b5046373",
   "review_status": "PARTIAL_STATIC_REVIEW_WITH_ISOLATED_EXPERIMENTS",
   "purpose": "Full-platform acceptance catalog and audit overlays. NOT a completed inventory or a certificate of all-platform parity.",
   "policy": {
@@ -14,12 +14,24 @@
     "same_role_same_capability_same_deployment_requires_semantic_parity": true
   },
   "current_inventory_overlay": {
-    "source_revision": "0955c3088c0fc3f95a39c3b05ddc9ed4585170ca",
-    "working_tree_status": "M1 repairs applied locally; no target/device qualification inferred",
+    "source_revision": "e76100b7582ef7dd4b898c881c36d2f0b5046373",
+    "working_tree_status": "M01-M08 repairs applied locally; no target/device qualification inferred",
     "production_entrypoints": "verification/production-entrypoints.json",
     "preserved_traceability": "verification/r1-r6-traceability.json",
     "newly_mapped_features": ["F03", "F04", "F10", "F18", "F20", "F34", "F40"],
     "unmapped_entries_remain": true
+  },
+  "review_main_e76100b_overlay": {
+    "baseline": "e76100b7582ef7dd4b898c881c36d2f0b5046373",
+    "status": "LOCAL_IMPLEMENTED_AND_HOST_TESTED",
+    "issues": ["M01", "M02", "M03", "M04", "M05", "M06", "M07", "M08"],
+    "evidence": "verification/review-main-e76100b-overlay.json",
+    "platform_qualification": {
+      "windows_x86": "M01_CROSS_TRANSLATION_UNIT_PASS_FULL_CORE_BLOCKED_IN_CIVETWEB",
+      "windows_x64": "CROSS_CORE_DLL_BUILD_PASS_NO_WINDOWS_RUNTIME",
+      "ipad_mini_1_ios_9_3_6_armv7": "NOT_RUN_NO_DEVICE_OR_SIGNING_LANE",
+      "ios5_armv7_core": "PASS_PJSIP_OFF_STATIC_LIBRARY_ONLY"
+    }
   },
   "profiles": [
     {

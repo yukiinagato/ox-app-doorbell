@@ -1,0 +1,31 @@
+review-main-e76100b verification summary
+baseline: e76100b7582ef7dd4b898c881c36d2f0b5046373
+tracked-source-diff-sha256-excluding-verification: fdb8545866390811c7f659e78547f2437773b85b6735b8b03a3345bddbdd70cf
+
+PASS (exit 0): cmake --build build/review3-host --parallel 4
+PASS (exit 0): build/review3-host/doorbell_tests --test-case='[R2]*' --no-skip --duration=true
+PASS (exit 0): build/review3-host/doorbell_tests --test-case='*M05*' --no-skip --duration=true
+PASS (exit 0): build/review3-host/doorbell_tests --test-case='*NTP syncs once*' --no-skip --duration=true
+PASS (exit 0): ctest --test-dir build/review3-host --output-on-failure
+  core: 413 test cases, 10639 assertions, 0 failures, 131.51 seconds
+PASS (exit 0): for test in webui/tests/*.test.js; do node "$test"; done
+  production admin/panel lifecycle tests passed, including call_recovery_controller.test.js
+PASS (exit 0): node webui/tests/admin_runtime.test.js && node webui/tests/call_recovery_controller.test.js
+  includes the retired pair-tab visit and production call.html video-owner assertions.
+PASS (exit 0): python3 tools/gen_i18n.py --check
+PASS (exit 0): python3 tools/check_english_source.py
+PASS (exit 0): DB_ALLOW_DIRTY=1 DB_BUILD_ID=review-main-e76100b-m01 ios-compat/scripts/build_core_ios5.sh
+  iOS 5.1 armv7 PJSIP-off Core static library built successfully
+PASS (exit 0): jq empty feature-parity.json verification/production-entrypoints.json
+PASS (exit 0): build/review3-host/doorbell_tests --test-case='*M05*,*NTP syncs once*' --no-skip --duration=true
+  6 test cases, 70 assertions, 0 failures after findings.json coverage additions.
+PASS (exit 0): MinGW x86_64 Windows cross build, build/review-main-win64-r3/doorbell.dll
+  PE32+ x86-64 Core DLL built with the M01 FLS path.
+PASS (exit 0): MinGW i686 compilation of core/src/capi/doorbell_capi.cpp
+  build/review-main-win32/doorbell_capi_m01.obj is an Intel 80386 COFF object.
+
+BLOCKED: MinGW i686 full Core build stops in pre-existing third_party/civetweb/civetweb.c
+  InterlockedIncrement/InterlockedDecrement pointer-type incompatibility, before M01 source.
+NOT RUN: Windows native runner, WPF artifact, and runtime tests for x86/x64.
+NOT RUN: iPad mini 1 / iOS 9.3.6 / armv7 signed app and device media qualification.
+NOT RUN: authenticated real browser, camera, WebRTC, or target H.264 decoder qualification.
