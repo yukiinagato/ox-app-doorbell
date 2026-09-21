@@ -214,6 +214,40 @@ TEST_CASE("fmp4_demux: a new init segment replaces the configuration") {
   CHECK(got.configs[1].sps == sps_b);
 }
 
+TEST_CASE("[R3] VideoTrack waits for a parsed IDR after a reader gap") {
+  const Bytes sps = makeSps(40, 23), pps = makePps();
+  VideoTrack track;
+  track.setEnabled(true);
+  auto reader = track.subscribe();
+  CHECK(track.takeKeyframeRequest());
+
+  Bytes idr = annexb({sps, pps, makeSlice(true, 80, 0x80)});
+  track.push(idr.data(), idr.size(), true, 1000);
+  bool ended = false;
+  CHECK_FALSE(reader->pull(0, &ended).empty());  // init
+  CHECK_FALSE(reader->pull(0, &ended).empty());  // initial IDR
+
+  for (int i = 0; i < 3; ++i) {
+    Bytes delta = annexb({makeSlice(false, 80, static_cast<uint8_t>(0x90 + i))});
+    track.push(delta.data(), delta.size(), false, 1040 + i * 40);
+  }
+  CHECK(reader->pull(0, &ended).empty());
+  CHECK_FALSE(ended);
+  CHECK(track.takeKeyframeRequest());
+  CHECK_FALSE(track.takeKeyframeRequest());
+
+  // A caller-provided key hint cannot repair a missing dependency chain: the NAL is not an IDR.
+  Bytes fake_key = annexb({makeSlice(false, 80, 0xa0)});
+  track.push(fake_key.data(), fake_key.size(), true, 1160);
+  CHECK(reader->pull(0, &ended).empty());
+  CHECK_FALSE(ended);
+
+  Bytes recovery = annexb({makeSlice(true, 80, 0xb0)});
+  track.push(recovery.data(), recovery.size(), false, 1200);
+  CHECK_FALSE(reader->pull(0, &ended).empty());
+  CHECK_FALSE(ended);
+}
+
 TEST_CASE("fmp4_demux: rejects corrupt or oversized input instead of buffering it") {
   const Bytes sps = makeSps(40, 23), pps = makePps();
   Bytes init = fmp4::buildInit(sps, pps);

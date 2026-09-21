@@ -161,6 +161,8 @@
     <string name="admin_local_addrs">本机地址</string>
     <string name="admin_locked">管理密码输入已锁定 10 分钟</string>
     <string name="admin_login">登录</string>
+    <string name="admin_login_network">无法连接服务器。请检查网络后重试</string>
+    <string name="admin_login_server">服务器无法完成登录。请重试</string>
     <string name="admin_logs">日志</string>
     <string name="admin_menu_add_device">添加设备</string>
     <string name="admin_menu_boot_setup">初始设置</string>

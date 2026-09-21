@@ -68,6 +68,8 @@ admin.ui_style: { ja: "UI スタイル", en: "UI style", zh: "UI 样式" }
 admin.pin_prompt: { ja: "管理パスワードを入力してください", en: "Enter the admin password", zh: "请输入管理密码" }
 admin.pin_wrong: { ja: "管理パスワードが違います", en: "Wrong admin password", zh: "管理密码错误" }
 admin.locked: { ja: "管理パスワードの入力を 10 分間ロックしました", en: "Admin password entry locked for 10 minutes", zh: "管理密码输入已锁定 10 分钟" }
+admin.login_network: { ja: "ネットワークに接続できません。接続を確認して再試行してください", en: "Can't reach the server. Check the network and try again", zh: "无法连接服务器。请检查网络后重试" }
+admin.login_server: { ja: "ログインを完了できませんでした。もう一度お試しください", en: "The server could not complete sign-in. Try again", zh: "服务器无法完成登录。请重试" }
 # 管理パスワード解除後に出るメンテナンスメニュー (Android キオスク)。
 admin.menu_title: { ja: "メンテナンス", en: "Maintenance", zh: "维护" }
 admin.menu_info: { ja: "本機情報 / Debug", en: "Device information / Debug", zh: "本机信息 / 调试" }

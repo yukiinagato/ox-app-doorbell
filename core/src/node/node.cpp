@@ -2268,7 +2268,6 @@ struct Node::Impl {
 
 
   std::mutex sess_mu;
-  std::mutex admin_credential_mu;
   // One lockout counter for every surface that checks the administrator password: the web login,
   // the C ABI a native settings screen uses, and anything else added later. Five failures buy a
   // ten-minute pause, so a four-digit code cannot be walked through from the LAN.
@@ -8950,12 +8949,6 @@ struct Node::Impl {
     return out;
   }
 
-  AdminCredential adminCredential() {
-    AdminCredential out;
-    loop->callSync([&] { out = adminCredentialOnLoop(); });
-    return out;
-  }
-
   // Replicate the digest and keep the local meta copy in step, so a downgrade to an older build
   // still finds a working password on this node.
   bool storeAdminCredentialOnLoop(const std::string& password) {
@@ -8980,9 +8973,8 @@ struct Node::Impl {
   }
 
   // 1 accepted, 0 wrong, -1 locked out, -2 no cluster password set yet.
-  int verifyAdminPassword(const std::string& password) {
-    const AdminCredential credential = adminCredential();
-    std::lock_guard<std::mutex> lk(admin_credential_mu);
+  int verifyAdminPasswordOnLoop(const std::string& password, bool migrate) {
+    const AdminCredential credential = adminCredentialOnLoop();
     const int64_t now = clock->monoMs();
     if (admin_lockout_until_mono > now) return -1;
     if (!credential.present) return -2;
@@ -8997,37 +8989,52 @@ struct Node::Impl {
     }
     admin_auth_failures = 0;
     admin_lockout_until_mono = 0;
-    if (credential.from_local_meta) {  // first correct entry after the upgrade
+    if (migrate && credential.from_local_meta) {  // first correct entry after the upgrade
       // First correct entry after the upgrade: publish the digest so every device shares it.
       const std::string accepted = password;
-      loop->callSync([&] { storeAdminCredentialOnLoop(accepted); });
-      DB_LOGI(kTag, "migrated the local administrator digest to replicated configuration");
+      if (storeAdminCredentialOnLoop(accepted))
+        DB_LOGI(kTag, "migrated the local administrator digest to replicated configuration");
+      else
+        DB_LOGW(kTag, "administrator digest migration will be retried after a storage failure");
     }
     return 1;
   }
 
+  int verifyAdminPassword(const std::string& password) {
+    int result = 0;
+    if (!loop->callSync([&] { result = verifyAdminPasswordOnLoop(password, true); })) {
+      DB_LOGW(kTag, "administrator password verification was not scheduled");
+      return 0;
+    }
+    return result;
+  }
+
   // 0 changed, -1 bad arguments, -2 current password wrong, -3 locked out, -4 not persisted.
-  int setAdminPassword(const std::string& current, const std::string& next) {
+  int setAdminPasswordOnLoop(const std::string& current, const std::string& next) {
     if (next.size() < 4 || next.size() > 128) return -1;
-    const AdminCredential credential = adminCredential();
+    const AdminCredential credential = adminCredentialOnLoop();
     if (credential.present) {
       // An empty current password is accepted only while the cluster has none.
-      const int verified = verifyAdminPassword(current);
+      const int verified = verifyAdminPasswordOnLoop(current, false);
       if (verified == -1) return -3;
       if (verified <= 0) return -2;
     }
-    bool ok = false;
-    loop->callSync([&] { ok = storeAdminCredentialOnLoop(next); });
-    if (!ok) return -4;
-    {
-      std::lock_guard<std::mutex> lk(admin_credential_mu);
-      admin_auth_failures = 0;
-      admin_lockout_until_mono = 0;
-    }
+    if (!storeAdminCredentialOnLoop(next)) return -4;
+    admin_auth_failures = 0;
+    admin_lockout_until_mono = 0;
     // A password change invalidates every session established with the old one.
     std::lock_guard<std::mutex> lk(sess_mu);
     sessions.clear();
     return 0;
+  }
+
+  int setAdminPassword(const std::string& current, const std::string& next) {
+    int result = -4;
+    if (!loop->callSync([&] { result = setAdminPasswordOnLoop(current, next); })) {
+      DB_LOGW(kTag, "administrator password update was not scheduled");
+      return -4;
+    }
+    return result;
   }
 
   // ---------- configuration writes ----------
@@ -9342,9 +9349,7 @@ struct Node::Impl {
         return HttpResp::json("{\"ok\":false,\"err\":\"locked\"}", 429);
       if (verified == -2) {
         // Trust on first use: the first password offered on any surface becomes the cluster's.
-        bool stored = false;
-        loop->callSync([&] { stored = storeAdminCredentialOnLoop(pw); });
-        if (!stored)
+        if (!storeAdminCredentialOnLoop(pw))
           return HttpResp::json(
               "{\"ok\":false,\"err\":\"credential_persistence_failed\"}", 500);
         DB_LOGI(kTag, "initialized the cluster administrator password");

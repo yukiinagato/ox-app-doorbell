@@ -156,6 +156,8 @@
 "admin.local_addrs" = "本機アドレス";
 "admin.locked" = "管理パスワードの入力を 10 分間ロックしました";
 "admin.login" = "ログイン";
+"admin.login_network" = "ネットワークに接続できません。接続を確認して再試行してください";
+"admin.login_server" = "ログインを完了できませんでした。もう一度お試しください";
 "admin.logs" = "ログ";
 "admin.menu_add_device" = "デバイスを追加";
 "admin.menu_boot_setup" = "初期設定";

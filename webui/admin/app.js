@@ -3296,20 +3296,41 @@ if (typeof document !== "undefined") (function () {
   }
 
   /* ---------------- API ---------------- */
-  function api(method, path, body, cb) {
+  function api(method, path, body, cb, options) {
     if (MOCK && path.indexOf("/locale/") !== 0) return mockApi(method, path, body, cb);
+    options = options || {};
+    if (options.authenticated === undefined && AUTH.authenticated &&
+        path.indexOf("/locale/") !== 0 && path !== "/api/login") {
+      options.authenticated = true;
+      options.generation = AUTH.generation;
+    }
     var x = new XMLHttpRequest();
+    var settled = false, timer = 0;
+    function finish(status, json, detail) {
+      if (settled) return;
+      settled = true;
+      if (timer) clearTimeout(timer);
+      cb(status, json, detail || {});
+    }
     x.open(method, path, true);
     x.setRequestHeader("X-Requested-With", "doorbell-admin");
     if (body) x.setRequestHeader("Content-Type", "application/json");
     x.onreadystatechange = function () {
       if (x.readyState !== 4) return;
-      if (x.status === 401) { show($("#app"), false); show($("#login"), true); return; }
       var j = null;
       try { j = JSON.parse(x.responseText); } catch (e) {}
-      cb(x.status, j);
+      if (x.status === 401 && options.authenticated) authInvalidated(options.generation);
+      finish(x.status, j, { reason: "http", request: x });
     };
+    x.onerror = function () { finish(0, null, { reason: "network", request: x }); };
+    x.onabort = function () { finish(0, null, { reason: "abort", request: x }); };
+    if (options.timeout_ms) timer = setTimeout(function () {
+      if (settled) return;
+      try { x.abort(); } catch (e) {}
+      finish(0, null, { reason: "timeout", request: x });
+    }, options.timeout_ms);
     x.send(body ? JSON.stringify(body) : null);
+    return x;
   }
 
   // Commit every set/delete in one request and preserve values as JSON. The server validates
@@ -3414,6 +3435,27 @@ if (typeof document !== "undefined") (function () {
 
 
   var S = { cfg: {}, status: {}, events: [], tab: "dash", locales: {}, panelToken: "" };
+  var AUTH = { generation: 0, authenticated: false, pollTimer: 0, pollBusy: false,
+               loginPending: false };
+
+  function generationCurrent(generation) {
+    return generation === undefined || (AUTH.authenticated && AUTH.generation === generation);
+  }
+
+  function authInvalidated(generation) {
+    if (generation !== undefined && generation !== AUTH.generation) return;
+    stopAdminRuntime();
+    show($("#app"), false);
+    show($("#login"), true);
+  }
+
+  function stopAdminRuntime() {
+    AUTH.generation++;
+    AUTH.authenticated = false;
+    AUTH.pollBusy = false;
+    if (AUTH.pollTimer) { clearTimeout(AUTH.pollTimer); AUTH.pollTimer = 0; }
+    pairTabLeave();
+  }
 
   function cfgObj(k) { return (S.cfg && S.cfg[k]) || {}; }
   function doorLabel(id) { return L.labelOf(cfgObj("doors")[id], LANG, id); }
@@ -3428,23 +3470,26 @@ if (typeof document !== "undefined") (function () {
     return null;
   }
 
-  function refreshConfig(cb) {
-    api("GET", "/api/config", null, function (st, j) {
-      if (st === 200 && j) S.cfg = j;
-      if (cb) cb();
-    });
+  function refreshConfig(cb, generation) {
+    if (generation === undefined && AUTH.authenticated) generation = AUTH.generation;
+    return api("GET", "/api/config", null, function (st, j) {
+      if (generationCurrent(generation) && st === 200 && j) S.cfg = j;
+      if (cb) cb(st, j);
+    }, { authenticated: generation !== undefined, generation: generation, timeout_ms: 10000 });
   }
-  function refreshStatus(cb) {
-    api("GET", "/api/status", null, function (st, j) {
-      if (st === 200 && j) S.status = j;
-      if (cb) cb();
-    });
+  function refreshStatus(cb, generation) {
+    if (generation === undefined && AUTH.authenticated) generation = AUTH.generation;
+    return api("GET", "/api/status", null, function (st, j) {
+      if (generationCurrent(generation) && st === 200 && j) S.status = j;
+      if (cb) cb(st, j);
+    }, { authenticated: generation !== undefined, generation: generation, timeout_ms: 10000 });
   }
-  function refreshEvents(cb) {
-    api("GET", "/api/events?limit=100", null, function (st, j) {
-      if (st === 200 && j) S.events = j.events || [];
-      if (cb) cb();
-    });
+  function refreshEvents(cb, generation) {
+    if (generation === undefined && AUTH.authenticated) generation = AUTH.generation;
+    return api("GET", "/api/events?limit=100", null, function (st, j) {
+      if (generationCurrent(generation) && st === 200 && j) S.events = j.events || [];
+      if (cb) cb(st, j);
+    }, { authenticated: generation !== undefined, generation: generation, timeout_ms: 10000 });
   }
 
 
@@ -6795,14 +6840,28 @@ if (typeof document !== "undefined") (function () {
 
   function pairScanClose() {
     var s = PAIR.scan;
-    PAIR.scan = null;
     if (!s) return;
-    if (s.timer) clearInterval(s.timer);
+    disposeScanSession(s);
+  }
+
+  function disposeScanSession(s) {
+    if (!s || s.closed) return;
+    s.closed = true;
+    if (PAIR.scan === s) PAIR.scan = null;
+    if (s.timer) { clearInterval(s.timer); s.timer = 0; }
+    if (s.video) {
+      try { s.video.pause(); } catch (e) {}
+      try { s.video.srcObject = null; } catch (e) {}
+    }
     if (s.stream) {
       var tracks = s.stream.getTracks ? s.stream.getTracks() : [];
-      for (var i = 0; i < tracks.length; i++) tracks[i].stop();
+      for (var i = 0; i < tracks.length; i++) {
+        try { tracks[i].stop(); } catch (e) {}
+      }
     }
     if (s.box && s.box.parentNode) s.box.parentNode.removeChild(s.box);
+    s.stream = null;
+    s.detector = null;
   }
 
   function pairScanOpen() {
@@ -6815,39 +6874,50 @@ if (typeof document !== "undefined") (function () {
       "</span><button class='btn small' data-pair='scanstop'>" + esc(t("pair.scan_cancel")) +
       "</button></div>";
     document.body.appendChild(box);
-    PAIR.scan = { box: box, stream: null, timer: 0 };
+    var s = { box: box, video: null, message: null, stream: null, timer: 0, detector: null,
+              busy: false, closed: false, submitted: false, generation: AUTH.generation };
+    s.video = box.querySelector("#pairScanVideo");
+    s.message = box.querySelector("#pairScanMsg");
+    PAIR.scan = s;
     pairBind(box);
-    var video = $("#pairScanVideo");
     navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } }).then(
       function (stream) {
-        if (!PAIR.scan) {
+        if (PAIR.scan !== s || s.closed || !generationCurrent(s.generation)) {
           var ts = stream.getTracks ? stream.getTracks() : [];
-          for (var i = 0; i < ts.length; i++) ts[i].stop();
+          for (var i = 0; i < ts.length; i++) { try { ts[i].stop(); } catch (e) {} }
           return;
         }
-        PAIR.scan.stream = stream;
-        video.srcObject = stream;
-        var detector = new window.BarcodeDetector({ formats: ["qr_code"] });
-        var busy = false;
-        PAIR.scan.timer = setInterval(function () {
-          if (busy || !PAIR.scan) return;
-          busy = true;
-          detector.detect(video).then(function (codes) {
-            busy = false;
+        s.stream = stream;
+        try {
+          s.video.srcObject = stream;
+          s.detector = new window.BarcodeDetector({ formats: ["qr_code"] });
+          var playing = s.video.play ? s.video.play() : null;
+          if (playing && playing.catch) playing.catch(function () { disposeScanSession(s); });
+        } catch (e) { disposeScanSession(s); return; }
+        s.timer = setInterval(function () {
+          if (s.busy || PAIR.scan !== s || s.closed || !generationCurrent(s.generation)) return;
+          s.busy = true;
+          Promise.resolve(s.detector.detect(s.video)).then(function (codes) {
+            s.busy = false;
+            if (PAIR.scan !== s || s.closed || !generationCurrent(s.generation) || s.submitted) return;
             for (var i = 0; i < codes.length; i++) {
               if (!L.pairQrTextValid(codes[i].rawValue)) continue;
               var text = codes[i].rawValue;
-              pairScanClose();
+              s.submitted = true;
+              disposeScanSession(s);
               msg(t("pair.scanning"));
               pairScanSubmit(text);
               return;
             }
-          }, function () { busy = false; });
+          }, function () {
+            s.busy = false;
+            if (PAIR.scan !== s || s.closed || !generationCurrent(s.generation)) return;
+          });
         }, 300);
       },
       function () {
-        var el = $("#pairScanMsg");
-        if (el) el.textContent = t("pair.scan_denied");
+        if (PAIR.scan === s && !s.closed && generationCurrent(s.generation) && s.message)
+          s.message.textContent = t("pair.scan_denied");
       });
   }
 
@@ -7845,12 +7915,34 @@ if (typeof document !== "undefined") (function () {
   });
 
 
-  function poll() {
+  function poll(generation) {
+    if (!generationCurrent(generation) || AUTH.pollBusy) return;
+    AUTH.pollBusy = true;
+    var remaining = S.tab === "events" ? 2 : 1;
+    function complete() {
+      if (--remaining) return;
+      AUTH.pollBusy = false;
+      if (generationCurrent(generation)) schedulePoll(generation);
+    }
     refreshStatus(function () {
-      if (S.tab === "dash") renderDash();
-      if (S.tab === "devices") renderDevices();
-    });
-    if (S.tab === "events") refreshEvents(renderEvents);
+      if (generationCurrent(generation)) {
+        if (S.tab === "dash") renderDash();
+        if (S.tab === "devices") renderDevices();
+      }
+      complete();
+    }, generation);
+    if (S.tab === "events") refreshEvents(function () {
+      if (generationCurrent(generation)) renderEvents();
+      complete();
+    }, generation);
+  }
+
+  function schedulePoll(generation) {
+    if (!generationCurrent(generation) || AUTH.pollTimer) return;
+    AUTH.pollTimer = setTimeout(function () {
+      AUTH.pollTimer = 0;
+      poll(generation);
+    }, 5000);
   }
 
   /* ---- i18n ---- */
@@ -7897,30 +7989,56 @@ if (typeof document !== "undefined") (function () {
 
   /* ---- login ---- */
   $("#loginBtn").onclick = function () {
-    api("POST", "/api/login", { password: $("#pw").value }, function (st) {
-      if (st === 200) { show($("#login"), false); show($("#app"), true); boot(); }
-      else $("#loginErr").textContent = t("admin.pin_wrong");
-    });
+    if (AUTH.loginPending) return;
+    AUTH.loginPending = true;
+    var button = $("#loginBtn"), error = $("#loginErr");
+    button.disabled = true;
+    error.textContent = "";
+    api("POST", "/api/login", { password: $("#pw").value }, function (st, result, detail) {
+      AUTH.loginPending = false;
+      button.disabled = false;
+      if (st === 200 && result && result.ok === true) {
+        show($("#login"), false); show($("#app"), true); boot();
+      } else if (st === 429) error.textContent = t("admin.locked");
+      else if (st === 401) error.textContent = t("admin.pin_wrong");
+      else if (detail && (detail.reason === "network" || detail.reason === "timeout"))
+        error.textContent = t("admin.login_network");
+      else error.textContent = t("admin.login_server");
+    }, { timeout_ms: 10000 });
   };
   $("#pw").addEventListener("keydown", function (e) {
     if (e.key === "Enter") $("#loginBtn").click();
   });
 
   function boot() {
+    if (AUTH.authenticated) return;
+    AUTH.authenticated = true;
+    var generation = ++AUTH.generation;
     var info = $("#nodeInfo");
-    refreshConfig(function () {
-      refreshStatus(function () {
+    refreshConfig(function (configStatus) {
+      if (!generationCurrent(generation) || configStatus !== 200) return;
+      refreshStatus(function (statusCode) {
+        if (!generationCurrent(generation) || statusCode !== 200) return;
         var n = S.status.node || {};
         info.textContent = (n.name || n.id || "") + " · v" + (n.version || "?");
         switchTab("dash");
-      });
-    });
-    setInterval(poll, 5000);
+        schedulePoll(generation);
+      }, generation);
+    }, generation);
   }
 
+
+  window.addEventListener("pagehide", stopAdminRuntime);
 
   api("GET", "/api/status", null, function (st) {
     if (st === 200 || MOCK) { show($("#app"), true); boot(); }
     else show($("#login"), true);
   });
+
+  // The browser-runtime regression harness opts in before loading this production asset. This is
+  // intentionally absent in normal pages and exposes only lifecycle entry points, not state.
+  if (window.__DOORBELL_TEST_HOOKS) window.__DOORBELL_TEST_HOOKS.adminRuntime = {
+    api: api, boot: boot, stop: stopAdminRuntime, pairScanOpen: pairScanOpen,
+    pairScanClose: pairScanClose
+  };
 })();

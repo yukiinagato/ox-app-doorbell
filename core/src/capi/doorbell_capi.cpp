@@ -63,13 +63,84 @@ struct HttpsInflight {
   }
 };
 
+struct UiCallbackSlot;
+thread_local UiCallbackSlot* active_ui_callback_slot = nullptr;
+
+// A slot keeps a callback and its user pointer paired for its entire lifetime.  Node may have
+// copied the dispatch lambda before an owner unregisters it, so disabling and entering a callback
+// share this lock; an already-entered callback is drained before external unregistration returns.
+struct UiCallbackSlot {
+  std::mutex mu;
+  std::condition_variable cv;
+  db_ui_event_cb cb = nullptr;
+  void* user = nullptr;
+  bool enabled = true;
+  size_t in_flight = 0;
+
+  UiCallbackSlot(db_ui_event_cb callback, void* context) : cb(callback), user(context) {}
+
+  void invoke(const std::string& event_json) {
+    {
+      std::lock_guard<std::mutex> lk(mu);
+      if (!enabled) return;
+      ++in_flight;
+    }
+    struct Lease {
+      UiCallbackSlot* slot;
+      ~Lease() {
+        {
+          std::lock_guard<std::mutex> lk(slot->mu);
+          --slot->in_flight;
+        }
+        slot->cv.notify_all();
+      }
+    } lease{this};
+    UiCallbackSlot* previous = active_ui_callback_slot;
+    active_ui_callback_slot = this;
+    cb(user, event_json.c_str());
+    active_ui_callback_slot = previous;
+  }
+
+  void disable() {
+    std::lock_guard<std::mutex> lk(mu);
+    enabled = false;
+  }
+
+  void drainUnlessActiveOnThisThread() {
+    if (active_ui_callback_slot == this) return;
+    std::unique_lock<std::mutex> lk(mu);
+    cv.wait(lk, [this] { return in_flight == 0; });
+  }
+};
+
 struct db_core {
   std::unique_ptr<Node> node;
   db_platform_v2 plat{};
-  db_ui_event_cb ui_cb = nullptr;
-  void* ui_user = nullptr;
+  std::mutex ui_callback_mu;
+  std::shared_ptr<UiCallbackSlot> ui_callback;
   std::shared_ptr<HttpsInflight> https_inflight = std::make_shared<HttpsInflight>();
 };
+
+static void setUiCallback(db_core* c, db_ui_event_cb cb, void* user) {
+  if (!c || !c->node) return;
+  std::shared_ptr<UiCallbackSlot> retired;
+  std::shared_ptr<UiCallbackSlot> published;
+  {
+    std::lock_guard<std::mutex> lk(c->ui_callback_mu);
+    retired = c->ui_callback;
+    if (retired) retired->disable();
+    if (cb) published = std::make_shared<UiCallbackSlot>(cb, user);
+    c->ui_callback = published;
+  }
+  if (published) {
+    c->node->setUiEventCb([published](const std::string& event_json) {
+      published->invoke(event_json);
+    });
+  } else {
+    c->node->setUiEventCb(nullptr);
+  }
+  if (retired) retired->drainUnlessActiveOnThisThread();
+}
 
 static char* dupString(const std::string& s) {
   char* p = static_cast<char*>(std::malloc(s.size() + 1));
@@ -297,23 +368,13 @@ DB_API void db_core_stop(db_core* c) {
 DB_API void db_core_destroy(db_core* c) {
   if (!c) return;
   setLogSink(nullptr);
-
-
+  setUiCallback(c, nullptr, nullptr);
   c->https_inflight->waitIdle();
   delete c;
 }
 
 DB_API void db_core_set_ui_callback(db_core* c, db_ui_event_cb cb, void* user) {
-  if (!c || !c->node) return;
-  c->ui_cb = cb;
-  c->ui_user = user;
-  if (cb) {
-    c->node->setUiEventCb([c](const std::string& ev) {
-      if (c->ui_cb) c->ui_cb(c->ui_user, ev.c_str());
-    });
-  } else {
-    c->node->setUiEventCb(nullptr);
-  }
+  setUiCallback(c, cb, user);
 }
 
 DB_API void db_core_press(db_core* c, const char* door_id) {

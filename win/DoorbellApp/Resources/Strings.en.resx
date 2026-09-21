@@ -163,6 +163,8 @@ Delete it?</value></data>
   <data name="admin_local_addrs" xml:space="preserve"><value>Local addresses</value></data>
   <data name="admin_locked" xml:space="preserve"><value>Admin password entry locked for 10 minutes</value></data>
   <data name="admin_login" xml:space="preserve"><value>Log in</value></data>
+  <data name="admin_login_network" xml:space="preserve"><value>Can't reach the server. Check the network and try again</value></data>
+  <data name="admin_login_server" xml:space="preserve"><value>The server could not complete sign-in. Try again</value></data>
   <data name="admin_logs" xml:space="preserve"><value>Logs</value></data>
   <data name="admin_menu_add_device" xml:space="preserve"><value>Add a device</value></data>
   <data name="admin_menu_boot_setup" xml:space="preserve"><value>Initial setup</value></data>

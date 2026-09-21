@@ -156,6 +156,8 @@
 "admin.local_addrs" = "本机地址";
 "admin.locked" = "管理密码输入已锁定 10 分钟";
 "admin.login" = "登录";
+"admin.login_network" = "无法连接服务器。请检查网络后重试";
+"admin.login_server" = "服务器无法完成登录。请重试";
 "admin.logs" = "日志";
 "admin.menu_add_device" = "添加设备";
 "admin.menu_boot_setup" = "初始设置";

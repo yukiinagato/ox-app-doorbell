@@ -138,7 +138,10 @@ void VideoTrack::push(const uint8_t* annexb, size_t len, bool key, int64_t ts_ms
     DB_LOGI(kTag, "generated H.264 init segment (" + s.codec_str + ")");
   }
   if (sample.data.empty()) return;
-  sample.key = sample.key || key;
+  // A producer hint is useful for telemetry, but only an IDR parsed from the access unit is a
+  // safe recovery point after a reader has missed reference frames.
+  const bool is_idr = sample.key;
+  sample.key = is_idr || key;
   sample.ts_ms = ts_ms;
   s.frames++;
   if (sample.key) s.keyframes++;
@@ -157,7 +160,7 @@ void VideoTrack::push(const uint8_t* annexb, size_t len, bool key, int64_t ts_ms
   s.frag = withCaptureTimes(
       fmp4::buildFragment(static_cast<uint32_t>(++s.frag_seq), s.base_dt, current),
       current);
-  if (current[0].key) {
+  if (is_idr) {
     s.key_frag_seq = s.frag_seq;
     s.key_frag = s.frag;
   }
@@ -228,7 +231,7 @@ Bytes VideoTrack::Reader::pull(int timeout_ms, bool* ended) {
     if (s.stopped || s.generation != generation_ || !s.enabled) return true;
     if (!init_sent_) return !s.init.empty();
     if (key_pending_) return !s.key_frag.empty();
-    if (waiting_for_fresh_key_) return s.key_frag_seq > last_frag_;
+    if (waiting_for_fresh_key_) return s.key_frag_seq > resume_after_seq_;
     return s.frag_seq > last_frag_;
   };
   if (!ready()) s.cv.wait_for(lk, std::chrono::milliseconds(timeout_ms), ready);
@@ -248,10 +251,11 @@ Bytes VideoTrack::Reader::pull(int timeout_ms, bool* ended) {
     // If this random-access point predates the subscription, keep it on screen as the immediate
     // preview but do not feed dependency-breaking delta frames. Resume on the requested fresh IDR.
     waiting_for_fresh_key_ = subscribed_key_seq_ != 0 && s.key_frag_seq <= subscribed_key_seq_;
+    if (waiting_for_fresh_key_) resume_after_seq_ = last_frag_;
     return s.key_frag;
   }
   if (waiting_for_fresh_key_) {
-    if (s.key_frag_seq <= last_frag_) return {};
+    if (s.key_frag_seq <= resume_after_seq_) return {};
     waiting_for_fresh_key_ = false;
     last_frag_ = s.key_frag_seq;
     return s.key_frag;
@@ -259,7 +263,20 @@ Bytes VideoTrack::Reader::pull(int timeout_ms, bool* ended) {
   if (s.frag_seq > last_frag_) {
     // Only the newest fragment is retained, so a subscriber that fell behind skips the ones in
     // between. That is the design, and counting the skips is what makes it visible.
-    if (s.frag_seq > last_frag_ + 1) s.dropped_forward += s.frag_seq - last_frag_ - 1;
+    if (s.frag_seq > last_frag_ + 1) {
+      s.dropped_forward += s.frag_seq - last_frag_ - 1;
+      if (s.key_frag_seq == s.frag_seq) {
+        last_frag_ = s.frag_seq;
+        return s.frag;
+      }
+      resume_after_seq_ = s.frag_seq;
+      waiting_for_fresh_key_ = true;
+      if (!s.keyframe_request_pending) {
+        s.keyframe_request_pending = true;
+        s.keyframe_requests++;
+      }
+      return {};
+    }
     last_frag_ = s.frag_seq;
     return s.frag;
   }

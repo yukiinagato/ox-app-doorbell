@@ -163,6 +163,8 @@
   <data name="admin_local_addrs" xml:space="preserve"><value>本机地址</value></data>
   <data name="admin_locked" xml:space="preserve"><value>管理密码输入已锁定 10 分钟</value></data>
   <data name="admin_login" xml:space="preserve"><value>登录</value></data>
+  <data name="admin_login_network" xml:space="preserve"><value>无法连接服务器。请检查网络后重试</value></data>
+  <data name="admin_login_server" xml:space="preserve"><value>服务器无法完成登录。请重试</value></data>
   <data name="admin_logs" xml:space="preserve"><value>日志</value></data>
   <data name="admin_menu_add_device" xml:space="preserve"><value>添加设备</value></data>
   <data name="admin_menu_boot_setup" xml:space="preserve"><value>初始设置</value></data>
