@@ -68,6 +68,7 @@
 <script src="/panel/playback.js"></script>
 <script src="/panel/call-flow.js"></script>
 <script src="/panel/runtime.js"></script>
+<script src="/panel/video-session.js"></script>
 <script>
 "use strict";
 const qs = new URLSearchParams(location.search);
@@ -173,7 +174,7 @@ let sessionConfirmed = false;
 let activeLifecycle = null;
 let registered = false;
 let frameTimer = null;
-let camStream = null;
+let videoBinding = null;
 let playback = null;
 let latestPanelState = null;
 let sessionRefreshPending = false;
@@ -465,6 +466,7 @@ els.call.onclick = () => {
 };
 
 window.addEventListener("pagehide", () => {
+  stopSendingVideo();
   const binding = activeLifecycle;
   if (!binding || !binding.answered || binding.ended || MOCK) return;
   binding.ended = true;
@@ -481,46 +483,32 @@ window.addEventListener("pagehide", () => {
 
 
 async function startSendingVideo() {
-  if (frameTimer || !selected) return;
-  try {
-    camStream = await navigator.mediaDevices.getUserMedia({
-      video: { width: { ideal: 320 }, height: { ideal: 240 } }, audio: false });
-  } catch (e) {
-    setStatus(t("panel.camera_failed", { reason: e.name }), true);
-    els.sendVideo.checked = false;
-    return;
-  }
-  els.self.srcObject = camStream;
-  els.self.style.display = "block";
-  const canvas = document.createElement("canvas");
-  const target = (selected.station || "") + "/call-frame?door=" +
-      encodeURIComponent(selected.id);
-  let busy = false;
-  frameTimer = setInterval(() => {
-    if (busy || !session) return;
-    const v = els.self;
-    if (!v.videoWidth) return;
-    canvas.width = 320;
-    canvas.height = Math.round(320 * v.videoHeight / v.videoWidth) || 240;
-    canvas.getContext("2d").drawImage(v, 0, 0, canvas.width, canvas.height);
-    canvas.toBlob((blob) => {
-      if (!blob) return;
-      busy = true;
-      fetch(target, { method: "POST", body: blob,
-                      headers: { "Content-Type": "image/jpeg",
-                                 "Authorization": "Bearer " + K } })
-        .catch(() => { })
-        .finally(() => { busy = false; });
-    }, "image/jpeg", 0.7);
-  }, 500);
+  if (videoBinding || frameTimer || !selected || (!session && !MOCK)) return;
+  const binding = { session: session, door: selected.id,
+    target: (selected.station || "") + "/call-frame?door=" + encodeURIComponent(selected.id) };
+  videoBinding = binding;
+  if (!videoSession.start(binding)) videoBinding = null;
 }
 
 function stopSendingVideo() {
-  if (frameTimer) { clearInterval(frameTimer); frameTimer = null; }
-  if (camStream) { for (const t of camStream.getTracks()) t.stop(); camStream = null; }
-  els.self.style.display = "none";
-  els.self.srcObject = null;
+  videoBinding = null;
+  videoSession.stop();
 }
+
+const videoSession = DoorbellPanelVideo.create({
+  getUserMedia: () => navigator.mediaDevices.getUserMedia({
+    video: { width: { ideal: 320 }, height: { ideal: 240 } }, audio: false }),
+  preview: els.self,
+  createCanvas: () => document.createElement("canvas"),
+  setInterval: (fn, delay) => { frameTimer = setInterval(fn, delay); return frameTimer; },
+  clearInterval: timer => { clearInterval(timer); if (frameTimer === timer) frameTimer = null; },
+  isCurrent: binding => videoBinding === binding && binding.session === session && selected &&
+    binding.door === selected.id && els.sendVideo.checked,
+  postFrame: (target, blob) => fetch(target, { method: "POST", body: blob,
+    headers: { "Content-Type": "image/jpeg", "Authorization": "Bearer " + K } }),
+  onError: error => { setStatus(t("panel.camera_failed", { reason: error.name || "error" }), true);
+    els.sendVideo.checked = false; }
+});
 
 els.sendVideo.onchange = () => {
   if (els.sendVideo.checked) { if (session || MOCK) startSendingVideo(); }
@@ -564,20 +552,7 @@ async function load() {
     latestPanelState = st;
     els.offline.style.display = "none";
     webrtc = ci.webrtc || null;
-    doors = (st.doors || []).map(d => {
-      const info = (ci.doors || {})[d.id] || {};
-      return { id: d.id, label: d.label, extension: info.extension || "",
-               station: info.station || "", online: info.online !== false,
-               source_node_id: info.source_node_id || d.source_node_id || "",
-               stream_mjpeg: info.stream_mjpeg || d.stream_mjpeg || "",
-               stream_mp4: info.stream_mp4 || d.stream_mp4 || "",
-               playback_profile: info.playback_profile || d.playback_profile || null,
-               calling: !!d.calling, call_id: d.call_id || "",
-               call_state: d.call_state || "", stage_revision: Number(d.stage_revision) || 0,
-               visitor_lang: d.visitor_lang || "",
-               dialog_owner: d.dialog_owner || "",
-               expires_at_ms: Number(d.expires_at_ms) || 0 };
-    });
+    doors = (st.doors || []).map(d => DoorbellCallFlow.projectDoor(d, (ci.doors || {})[d.id] || {}));
     renderTabs();
     const refreshed = oldSelected ? doors.find(d => d.id === oldSelected.id) : null;
     if (!oldSelected && doors.length)

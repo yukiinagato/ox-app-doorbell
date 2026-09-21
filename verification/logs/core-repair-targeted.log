@@ -1,0 +1,48 @@
+09-22 02:26:05 I [node] addr-detect: local v4=1 all=5 route=10.10.38.24 advertise=10.10.38.24:0
+09-22 02:26:05 D [store] event pruning refused because no replicated coverage snapshot exists
+09-22 02:26:05 I [node] node a7996e6f (callback-drain) started
+09-22 02:26:05 I [node] addr-detect: local v4=1 all=5 route=10.10.38.24 advertise=10.10.38.24:0
+09-22 02:26:05 D [store] event pruning refused because no replicated coverage snapshot exists
+09-22 02:26:05 I [node] node d57af909 (callback-self-unregister) started
+09-22 02:26:05 I [video] generated H.264 init segment (avc1.42001E)
+09-22 02:26:05 I [video] generated H.264 init segment (avc1.42001E)
+09-22 02:26:05 I [video] generated H.264 init segment (avc1.42001E)
+09-22 02:26:05 I [video] H.264 parameter sets changed; restarting the stream
+09-22 02:26:05 I [video] generated H.264 init segment (avc1.42001E)
+09-22 02:26:05 I [video] generated H.264 init segment (avc1.42001E)
+[doctest] doctest version is "2.4.11"
+[doctest] run with "--help" for options
+===============================================================================
+/Users/ox/Documents/project/app-doorbell/core/tests/test_capi_abi.cpp:488:
+TEST CASE:  [R2] capi unregister drains an entered UI callback
+
+0.205468 s: [R2] capi unregister drains an entered UI callback
+===============================================================================
+/Users/ox/Documents/project/app-doorbell/core/tests/test_capi_abi.cpp:536:
+TEST CASE:  [R2] capi callback can unregister itself without waiting
+
+0.204461 s: [R2] capi callback can unregister itself without waiting
+===============================================================================
+/Users/ox/Documents/project/app-doorbell/core/tests/test_fmp4.cpp:561:
+TEST CASE:  [V01] VideoTrack merges in-flight recovery requests and counts each discarded fragment
+
+0.000271 s: [V01] VideoTrack merges in-flight recovery requests and counts each discarded fragment
+===============================================================================
+/Users/ox/Documents/project/app-doorbell/core/tests/test_fmp4.cpp:601:
+TEST CASE:  [V01] VideoTrack counts every undisplayed fragment once per reader
+
+0.000072 s: [V01] VideoTrack counts every undisplayed fragment once per reader
+===============================================================================
+/Users/ox/Documents/project/app-doorbell/core/tests/test_fmp4.cpp:622:
+TEST CASE:  [B3] VideoTrack replaces the init segment after a PPS-only update
+
+0.000114 s: [B3] VideoTrack replaces the init segment after a PPS-only update
+===============================================================================
+/Users/ox/Documents/project/app-doorbell/core/tests/test_fmp4_demux.cpp:217:
+TEST CASE:  [R3] VideoTrack waits for a parsed IDR after a reader gap
+
+0.000268 s: [R3] VideoTrack waits for a parsed IDR after a reader gap
+===============================================================================
+[doctest] test cases:  6 |  6 passed | 0 failed | 405 skipped
+[doctest] assertions: 48 | 48 passed | 0 failed |
+[doctest] Status: SUCCESS!

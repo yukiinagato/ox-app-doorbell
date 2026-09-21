@@ -537,6 +537,10 @@ TEST_CASE("[R2] capi callback can unregister itself without waiting") {
   struct SelfUnregister {
     db_core* core = nullptr;
     std::atomic<int> calls{0};
+    std::mutex mu;
+    std::condition_variable cv;
+    bool self_unregistered = false;
+    bool release = false;
   } context;
   db_platform_v2 platform{};
   platform.struct_size = sizeof(platform);
@@ -550,9 +554,35 @@ TEST_CASE("[R2] capi callback can unregister itself without waiting") {
     auto* context = static_cast<SelfUnregister*>(raw);
     context->calls.fetch_add(1);
     db_core_set_ui_callback(context->core, nullptr, nullptr);
+    std::unique_lock<std::mutex> lk(context->mu);
+    context->self_unregistered = true;
+    context->cv.notify_all();
+    context->cv.wait(lk, [&] { return context->release; });
   }, &context);
-  db_core_qr_scan_start(context.core);
+  std::thread emit([&] { db_core_qr_scan_start(context.core); });
+  {
+    std::unique_lock<std::mutex> lk(context.mu);
+    REQUIRE(context.cv.wait_for(lk, std::chrono::seconds(2), [&] {
+      return context.self_unregistered;
+    }));
+  }
+  std::atomic<bool> external_unregister_returned{false};
+  std::thread unregister([&] {
+    db_core_set_ui_callback(context.core, nullptr, nullptr);
+    external_unregister_returned.store(true);
+  });
+  {
+    std::unique_lock<std::mutex> lk(context.mu);
+    CHECK_FALSE(context.cv.wait_for(lk, std::chrono::milliseconds(25), [&] {
+      return external_unregister_returned.load();
+    }));
+    context.release = true;
+  }
+  context.cv.notify_all();
+  unregister.join();
+  emit.join();
   CHECK(context.calls.load() == 1);
+  CHECK(external_unregister_returned.load());
   db_core_stop(context.core);
   db_core_destroy(context.core);
 }

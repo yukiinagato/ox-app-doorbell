@@ -3297,39 +3297,58 @@ if (typeof document !== "undefined") (function () {
 
   /* ---------------- API ---------------- */
   function api(method, path, body, cb, options) {
-    if (MOCK && path.indexOf("/locale/") !== 0) return mockApi(method, path, body, cb);
     options = options || {};
-    if (options.authenticated === undefined && AUTH.authenticated &&
+    if (options.context === undefined && AUTH.runtime &&
+        (AUTH.authenticated || AUTH.booting) &&
+        path.indexOf("/locale/") !== 0 && path !== "/api/login")
+      options.context = AUTH.runtime;
+    if (options.authenticated === undefined && options.context &&
         path.indexOf("/locale/") !== 0 && path !== "/api/login") {
       options.authenticated = true;
-      options.generation = AUTH.generation;
+      options.generation = options.context.generation;
     }
+    function callback(status, json, detail) {
+      if (options.context && !runtimeCurrent(options.context)) return;
+      cb(status, json, detail);
+    }
+    if (MOCK && path.indexOf("/locale/") !== 0) return mockApi(method, path, body, callback);
     var x = new XMLHttpRequest();
-    var settled = false, timer = 0;
+    var settled = false, timer = 0, abortReason = "";
     function finish(status, json, detail) {
       if (settled) return;
       settled = true;
       if (timer) clearTimeout(timer);
-      cb(status, json, detail || {});
+      callback(status, json, detail || {});
     }
-    x.open(method, path, true);
-    x.setRequestHeader("X-Requested-With", "doorbell-admin");
-    if (body) x.setRequestHeader("Content-Type", "application/json");
+    try {
+      x.open(method, path, true);
+      x.setRequestHeader("X-Requested-With", "doorbell-admin");
+      if (body) x.setRequestHeader("Content-Type", "application/json");
+    } catch (e) {
+      finish(0, null, { reason: "open", request: x });
+      return x;
+    }
     x.onreadystatechange = function () {
       if (x.readyState !== 4) return;
+      if (abortReason) return;
+      if (x.status === 0) { finish(0, null, { reason: "network", request: x }); return; }
       var j = null;
       try { j = JSON.parse(x.responseText); } catch (e) {}
       if (x.status === 401 && options.authenticated) authInvalidated(options.generation);
       finish(x.status, j, { reason: "http", request: x });
     };
     x.onerror = function () { finish(0, null, { reason: "network", request: x }); };
-    x.onabort = function () { finish(0, null, { reason: "abort", request: x }); };
+    x.onabort = function () {
+      finish(0, null, { reason: abortReason || "abort", request: x });
+    };
     if (options.timeout_ms) timer = setTimeout(function () {
       if (settled) return;
+      abortReason = "timeout";
+      finish(0, null, { reason: abortReason, request: x });
       try { x.abort(); } catch (e) {}
-      finish(0, null, { reason: "timeout", request: x });
     }, options.timeout_ms);
-    x.send(body ? JSON.stringify(body) : null);
+    try { x.send(body ? JSON.stringify(body) : null); }
+    catch (e) { finish(0, null, { reason: "send", request: x }); }
     return x;
   }
 
@@ -3435,11 +3454,17 @@ if (typeof document !== "undefined") (function () {
 
 
   var S = { cfg: {}, status: {}, events: [], tab: "dash", locales: {}, panelToken: "" };
-  var AUTH = { generation: 0, authenticated: false, pollTimer: 0, pollBusy: false,
-               loginPending: false };
+  var AUTH = { generation: 0, authenticated: false, booting: false, runtime: null,
+               pollTimer: 0, pollBusy: false, loginPending: false };
 
   function generationCurrent(generation) {
-    return generation === undefined || (AUTH.authenticated && AUTH.generation === generation);
+    return generation === undefined || !!(AUTH.runtime &&
+      (AUTH.authenticated || AUTH.booting) && AUTH.runtime.generation === generation);
+  }
+
+  function runtimeCurrent(runtime) {
+    return !!runtime && AUTH.runtime === runtime &&
+      (AUTH.authenticated || AUTH.booting);
   }
 
   function authInvalidated(generation) {
@@ -3452,6 +3477,8 @@ if (typeof document !== "undefined") (function () {
   function stopAdminRuntime() {
     AUTH.generation++;
     AUTH.authenticated = false;
+    AUTH.booting = false;
+    AUTH.runtime = null;
     AUTH.pollBusy = false;
     if (AUTH.pollTimer) { clearTimeout(AUTH.pollTimer); AUTH.pollTimer = 0; }
     pairTabLeave();
@@ -3471,25 +3498,31 @@ if (typeof document !== "undefined") (function () {
   }
 
   function refreshConfig(cb, generation) {
-    if (generation === undefined && AUTH.authenticated) generation = AUTH.generation;
+    if (generation === undefined && AUTH.runtime) generation = AUTH.generation;
+    var runtime = AUTH.runtime && AUTH.runtime.generation === generation ? AUTH.runtime : null;
     return api("GET", "/api/config", null, function (st, j) {
       if (generationCurrent(generation) && st === 200 && j) S.cfg = j;
       if (cb) cb(st, j);
-    }, { authenticated: generation !== undefined, generation: generation, timeout_ms: 10000 });
+    }, { authenticated: generation !== undefined, generation: generation, context: runtime,
+          timeout_ms: 10000 });
   }
   function refreshStatus(cb, generation) {
-    if (generation === undefined && AUTH.authenticated) generation = AUTH.generation;
+    if (generation === undefined && AUTH.runtime) generation = AUTH.generation;
+    var runtime = AUTH.runtime && AUTH.runtime.generation === generation ? AUTH.runtime : null;
     return api("GET", "/api/status", null, function (st, j) {
       if (generationCurrent(generation) && st === 200 && j) S.status = j;
       if (cb) cb(st, j);
-    }, { authenticated: generation !== undefined, generation: generation, timeout_ms: 10000 });
+    }, { authenticated: generation !== undefined, generation: generation, context: runtime,
+          timeout_ms: 10000 });
   }
   function refreshEvents(cb, generation) {
-    if (generation === undefined && AUTH.authenticated) generation = AUTH.generation;
+    if (generation === undefined && AUTH.runtime) generation = AUTH.generation;
+    var runtime = AUTH.runtime && AUTH.runtime.generation === generation ? AUTH.runtime : null;
     return api("GET", "/api/events?limit=100", null, function (st, j) {
       if (generationCurrent(generation) && st === 200 && j) S.events = j.events || [];
       if (cb) cb(st, j);
-    }, { authenticated: generation !== undefined, generation: generation, timeout_ms: 10000 });
+    }, { authenticated: generation !== undefined, generation: generation, context: runtime,
+          timeout_ms: 10000 });
   }
 
 
@@ -6459,7 +6492,11 @@ if (typeof document !== "undefined") (function () {
    */
 
   var PAIR = { snap: null, rows: {}, form: {}, poll: 0, tick: 0, scan: null, err: "",
-               joinErr: "", hadToken: false, created: false };
+               joinErr: "", hadToken: false, created: false, runtime: null };
+
+  function pairRuntimeCurrent(runtime) {
+    return !!runtime && PAIR.runtime === runtime && runtimeCurrent(runtime) && S.tab === "pair";
+  }
 
   function pairPeerIds() {
     var ps = S.status.peers || [], out = [], i;
@@ -6467,8 +6504,11 @@ if (typeof document !== "undefined") (function () {
     return out;
   }
 
-  function refreshPairing(cb) {
+  function refreshPairing(cb, runtime) {
+    runtime = runtime || PAIR.runtime;
+    if (!pairRuntimeCurrent(runtime)) return;
     api("GET", "/api/pairing", null, function (st, j) {
+      if (!pairRuntimeCurrent(runtime)) return;
       if (st === 200 && j) {
         PAIR.snap = j;
         PAIR.rows = L.pairMergeRows(PAIR.rows, j, pairPeerIds(), new Date().getTime());
@@ -6477,21 +6517,24 @@ if (typeof document !== "undefined") (function () {
       }
       if (S.tab === "pair") renderPair();
       if (cb) cb();
-    });
+    }, { authenticated: true, generation: runtime.generation, context: runtime, timeout_ms: 10000 });
   }
 
   function pairFail(st, j) {
     PAIR.err = L.pairErrKey((j && j.err) || (st === 0 ? "connect_failed" : ""));
   }
 
-  function pairPost(path, body, done) {
+  function pairPost(path, body, done, runtime) {
+    runtime = runtime || PAIR.runtime;
+    if (!pairRuntimeCurrent(runtime)) return;
     api("POST", path, body, function (st, j) {
+      if (!pairRuntimeCurrent(runtime)) return;
       var ok = st === 200 && (!j || j.ok !== false);
       if (ok) PAIR.err = "";
       else pairFail(st, j);
       if (done) done(ok, j);
-      refreshPairing();
-    });
+      refreshPairing(null, runtime);
+    }, { authenticated: true, generation: runtime.generation, context: runtime, timeout_ms: 10000 });
   }
 
   function drawPairQr(canvas, text) {
@@ -6739,6 +6782,7 @@ if (typeof document !== "undefined") (function () {
   }
 
   function pairAct(act, id, btn) {
+    if (!pairRuntimeCurrent(PAIR.runtime)) return;
     var m = L.pairPanelModel(PAIR.snap || {}, PAIR.rows);
     if (act === "add") {
       PAIR.rows[id] = { state: "adding", at: new Date().getTime(),
@@ -6818,7 +6862,9 @@ if (typeof document !== "undefined") (function () {
     return {};
   }
 
-  function pairScanSubmit(text) {
+  function pairScanSubmit(text, runtime) {
+    runtime = runtime || PAIR.runtime;
+    if (!pairRuntimeCurrent(runtime)) return;
     var parsed = L.pairQrParse(text);
     if (parsed && parsed.id)
       PAIR.rows[parsed.id] = { state: "adding", at: new Date().getTime(), label: parsed.addr };
@@ -6829,7 +6875,7 @@ if (typeof document !== "undefined") (function () {
       PAIR.err = "";
       PAIR.rows[parsed.id] = { state: "failed", err: (j && j.err) || "",
                                at: new Date().getTime(), label: parsed.addr };
-    });
+    }, runtime);
   }
 
   /* The camera path needs a secure context; on a plain-http LAN the paste field is the fallback. */
@@ -6865,7 +6911,7 @@ if (typeof document !== "undefined") (function () {
   }
 
   function pairScanOpen() {
-    if (PAIR.scan) return;
+    if (PAIR.scan || !pairRuntimeCurrent(PAIR.runtime)) return;
     var box = document.createElement("div");
     box.className = "pairscan";
     box.innerHTML = "<video id='pairScanVideo' autoplay playsinline muted></video>" +
@@ -6875,14 +6921,15 @@ if (typeof document !== "undefined") (function () {
       "</button></div>";
     document.body.appendChild(box);
     var s = { box: box, video: null, message: null, stream: null, timer: 0, detector: null,
-              busy: false, closed: false, submitted: false, generation: AUTH.generation };
+              busy: false, closed: false, submitted: false, failures: 0,
+              generation: AUTH.generation, runtime: PAIR.runtime };
     s.video = box.querySelector("#pairScanVideo");
     s.message = box.querySelector("#pairScanMsg");
     PAIR.scan = s;
     pairBind(box);
     navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } }).then(
       function (stream) {
-        if (PAIR.scan !== s || s.closed || !generationCurrent(s.generation)) {
+        if (PAIR.scan !== s || s.closed || !pairRuntimeCurrent(s.runtime)) {
           var ts = stream.getTracks ? stream.getTracks() : [];
           for (var i = 0; i < ts.length; i++) { try { ts[i].stop(); } catch (e) {} }
           return;
@@ -6895,34 +6942,44 @@ if (typeof document !== "undefined") (function () {
           if (playing && playing.catch) playing.catch(function () { disposeScanSession(s); });
         } catch (e) { disposeScanSession(s); return; }
         s.timer = setInterval(function () {
-          if (s.busy || PAIR.scan !== s || s.closed || !generationCurrent(s.generation)) return;
+          if (s.busy || PAIR.scan !== s || s.closed || !pairRuntimeCurrent(s.runtime)) return;
           s.busy = true;
-          Promise.resolve(s.detector.detect(s.video)).then(function (codes) {
+          var detected;
+          try { detected = s.detector.detect(s.video); }
+          catch (e) { scanDetectFailed(s); return; }
+          Promise.resolve(detected).then(function (codes) {
             s.busy = false;
-            if (PAIR.scan !== s || s.closed || !generationCurrent(s.generation) || s.submitted) return;
+            if (PAIR.scan !== s || s.closed || !pairRuntimeCurrent(s.runtime) || s.submitted) return;
+            s.failures = 0;
             for (var i = 0; i < codes.length; i++) {
               if (!L.pairQrTextValid(codes[i].rawValue)) continue;
               var text = codes[i].rawValue;
               s.submitted = true;
               disposeScanSession(s);
               msg(t("pair.scanning"));
-              pairScanSubmit(text);
+              pairScanSubmit(text, s.runtime);
               return;
             }
-          }, function () {
-            s.busy = false;
-            if (PAIR.scan !== s || s.closed || !generationCurrent(s.generation)) return;
-          });
+          }, function () { scanDetectFailed(s); });
         }, 300);
       },
       function () {
-        if (PAIR.scan === s && !s.closed && generationCurrent(s.generation) && s.message)
+        if (PAIR.scan === s && !s.closed && pairRuntimeCurrent(s.runtime) && s.message)
           s.message.textContent = t("pair.scan_denied");
       });
   }
 
+  function scanDetectFailed(s) {
+    s.busy = false;
+    if (PAIR.scan !== s || s.closed || !pairRuntimeCurrent(s.runtime)) return;
+    s.failures++;
+    if (s.failures < 3) return;
+    if (s.message) s.message.textContent = t("pair.scan_denied");
+    disposeScanSession(s);
+  }
+
   function pairTick() {
-    if (S.tab !== "pair" || !PAIR.snap) return;
+    if (!pairRuntimeCurrent(PAIR.runtime) || !PAIR.snap) return;
     var m = L.pairPanelModel(PAIR.snap, PAIR.rows);
     var left = $("#pairCodeLeft");
     if (left && m.token.active) {
@@ -6939,17 +6996,22 @@ if (typeof document !== "undefined") (function () {
   }
 
   function pairTabEnter() {
+    var runtime = AUTH.runtime;
+    if (!runtimeCurrent(runtime)) return;
+    PAIR.runtime = runtime;
     renderPair();
-    refreshPairing();
+    refreshPairing(null, runtime);
     // Peers come along for the ride: a pending device that has left the list and turned into a
     // peer is the confirmation the row shows as "Added".
     if (!PAIR.poll) PAIR.poll = setInterval(function () {
-      if (S.tab === "pair") refreshStatus(refreshPairing);
+      if (!pairRuntimeCurrent(runtime)) return;
+      refreshStatus(function () { refreshPairing(null, runtime); }, runtime.generation);
     }, 2000);
     if (!PAIR.tick) PAIR.tick = setInterval(pairTick, 1000);
   }
 
   function pairTabLeave() {
+    PAIR.runtime = null;
     pairScanClose();
     if (PAIR.poll) { clearInterval(PAIR.poll); PAIR.poll = 0; }
     if (PAIR.tick) { clearInterval(PAIR.tick); PAIR.tick = 0; }
@@ -8011,34 +8073,63 @@ if (typeof document !== "undefined") (function () {
   });
 
   function boot() {
-    if (AUTH.authenticated) return;
-    AUTH.authenticated = true;
+    if (AUTH.authenticated || AUTH.booting) return;
+    AUTH.booting = true;
     var generation = ++AUTH.generation;
+    var runtime = { generation: generation };
+    AUTH.runtime = runtime;
     var info = $("#nodeInfo");
     refreshConfig(function (configStatus) {
-      if (!generationCurrent(generation) || configStatus !== 200) return;
+      if (!runtimeCurrent(runtime)) return;
+      if (configStatus !== 200) { bootFailed(runtime); return; }
       refreshStatus(function (statusCode) {
-        if (!generationCurrent(generation) || statusCode !== 200) return;
+        if (!runtimeCurrent(runtime)) return;
+        if (statusCode !== 200) { bootFailed(runtime); return; }
         var n = S.status.node || {};
         info.textContent = (n.name || n.id || "") + " · v" + (n.version || "?");
+        AUTH.booting = false;
+        AUTH.authenticated = true;
         switchTab("dash");
         schedulePoll(generation);
       }, generation);
     }, generation);
   }
 
+  function bootFailed(runtime) {
+    if (AUTH.runtime !== runtime) return;
+    AUTH.booting = false;
+    AUTH.authenticated = false;
+    AUTH.runtime = null;
+    AUTH.pollBusy = false;
+    if (AUTH.pollTimer) { clearTimeout(AUTH.pollTimer); AUTH.pollTimer = 0; }
+    pairTabLeave();
+  }
+
+  function recoverAdminRuntime() {
+    if (AUTH.authenticated || AUTH.booting) return;
+    api("GET", "/api/status", null, function (st) {
+      if (st === 200 || MOCK) {
+        show($("#login"), false);
+        show($("#app"), true);
+        boot();
+      } else {
+        show($("#app"), false);
+        show($("#login"), true);
+      }
+    }, { timeout_ms: 10000 });
+  }
+
 
   window.addEventListener("pagehide", stopAdminRuntime);
+  window.addEventListener("pageshow", recoverAdminRuntime);
 
-  api("GET", "/api/status", null, function (st) {
-    if (st === 200 || MOCK) { show($("#app"), true); boot(); }
-    else show($("#login"), true);
-  });
+  recoverAdminRuntime();
 
   // The browser-runtime regression harness opts in before loading this production asset. This is
   // intentionally absent in normal pages and exposes only lifecycle entry points, not state.
   if (window.__DOORBELL_TEST_HOOKS) window.__DOORBELL_TEST_HOOKS.adminRuntime = {
     api: api, boot: boot, stop: stopAdminRuntime, pairScanOpen: pairScanOpen,
-    pairScanClose: pairScanClose
+    pairScanClose: pairScanClose, recover: recoverAdminRuntime, switchTab: switchTab,
+    pairAct: pairAct
   };
 })();

@@ -22,6 +22,8 @@
 		AC0000000000000000000018 /* SosVisibilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC0000000000000000000017 /* SosVisibilityTests.swift */; };
 		AC000000000000000000001A /* ClusterAndClockTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC0000000000000000000019 /* ClusterAndClockTests.swift */; };
 		FB0000000000000000000021 /* CoreBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000002 /* CoreBridge.swift */; };
+		FB00000000000000000000C0 /* CoreEventDispatchGate.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA00000000000000000000C0 /* CoreEventDispatchGate.swift */; };
+		FB00000000000000000000C2 /* ConfigBatchFallbackPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA00000000000000000000C1 /* ConfigBatchFallbackPolicy.swift */; };
 		FB0000000000000000000022 /* BootConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000003 /* BootConfig.swift */; };
 		FB0000000000000000000023 /* Texts.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000004 /* Texts.swift */; };
 		FB0000000000000000000024 /* ConfigUtil.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000005 /* ConfigUtil.swift */; };
@@ -61,6 +63,8 @@
 		FB0000000000000000000038 /* IOSAvailability.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000020 /* IOSAvailability.swift */; };
 		FB000000000000000000003A /* DebugInfoViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000023 /* DebugInfoViewController.swift */; };
 		FB0000000000000000000041 /* CoreBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000002 /* CoreBridge.swift */; };
+		FB00000000000000000000C1 /* CoreEventDispatchGate.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA00000000000000000000C0 /* CoreEventDispatchGate.swift */; };
+		FB00000000000000000000C3 /* ConfigBatchFallbackPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA00000000000000000000C1 /* ConfigBatchFallbackPolicy.swift */; };
 		FB0000000000000000000042 /* BootConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000003 /* BootConfig.swift */; };
 		FB0000000000000000000043 /* Texts.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000004 /* Texts.swift */; };
 		FB0000000000000000000044 /* ConfigUtil.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000005 /* ConfigUtil.swift */; };
@@ -86,6 +90,8 @@
 		FB0000000000000000000057 /* UIStyleApplier.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA000000000000000000001F /* UIStyleApplier.swift */; };
 		FB0000000000000000000058 /* IOSAvailability.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000020 /* IOSAvailability.swift */; };
 		F90000000000000000000021 /* CoreBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000002 /* CoreBridge.swift */; };
+		F900000000000000000000C0 /* CoreEventDispatchGate.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA00000000000000000000C0 /* CoreEventDispatchGate.swift */; };
+		F900000000000000000000C1 /* ConfigBatchFallbackPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA00000000000000000000C1 /* ConfigBatchFallbackPolicy.swift */; };
 		F90000000000000000000022 /* BootConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000003 /* BootConfig.swift */; };
 		F90000000000000000000023 /* Texts.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000004 /* Texts.swift */; };
 		F90000000000000000000024 /* ConfigUtil.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000005 /* ConfigUtil.swift */; };
@@ -184,6 +190,8 @@
 		AC0000000000000000000019 /* ClusterAndClockTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClusterAndClockTests.swift; sourceTree = "<group>"; };
 		FA0000000000000000000001 /* BridgingHeader.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = BridgingHeader.h; sourceTree = "<group>"; };
 		FA0000000000000000000002 /* CoreBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoreBridge.swift; sourceTree = "<group>"; };
+		FA00000000000000000000C0 /* CoreEventDispatchGate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoreEventDispatchGate.swift; sourceTree = "<group>"; };
+		FA00000000000000000000C1 /* ConfigBatchFallbackPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigBatchFallbackPolicy.swift; sourceTree = "<group>"; };
 		FA0000000000000000000003 /* BootConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BootConfig.swift; sourceTree = "<group>"; };
 		FA0000000000000000000004 /* Texts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Texts.swift; sourceTree = "<group>"; };
 		FA0000000000000000000005 /* ConfigUtil.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigUtil.swift; sourceTree = "<group>"; };
@@ -313,6 +321,8 @@
 				FA0000000000000000000027 /* AddDeviceViewController.swift */,
 				FA0000000000000000000028 /* PairingScannerViewController.swift */,
 				FA0000000000000000000002 /* CoreBridge.swift */,
+				FA00000000000000000000C0 /* CoreEventDispatchGate.swift */,
+				FA00000000000000000000C1 /* ConfigBatchFallbackPolicy.swift */,
 				FA000000000000000000001D /* RuntimeSupervisor.swift */,
 				AF0000000000000000000002 /* KeepaliveClient.swift */,
 				AF0000000000000000000005 /* MainRunLoopHangSentinel.swift */,
@@ -677,6 +687,8 @@
 				FB0000000000000000000039 /* CallRevisionLifecycle.swift in Sources */,
 				FB0000000000000000000027 /* AdminPinViewController.swift in Sources */,
 				FB0000000000000000000021 /* CoreBridge.swift in Sources */,
+				FB00000000000000000000C0 /* CoreEventDispatchGate.swift in Sources */,
+				FB00000000000000000000C2 /* ConfigBatchFallbackPolicy.swift in Sources */,
 				FB0000000000000000000035 /* RuntimeSupervisor.swift in Sources */,
 				AF0000000000000000000001 /* KeepaliveClient.swift in Sources */,
 				AF0000000000000000000004 /* MainRunLoopHangSentinel.swift in Sources */,
@@ -724,6 +736,8 @@
 				FB0000000000000000000059 /* CallRevisionLifecycle.swift in Sources */,
 				FB0000000000000000000047 /* AdminPinViewController.swift in Sources */,
 				FB0000000000000000000041 /* CoreBridge.swift in Sources */,
+				FB00000000000000000000C1 /* CoreEventDispatchGate.swift in Sources */,
+				FB00000000000000000000C3 /* ConfigBatchFallbackPolicy.swift in Sources */,
 				FB0000000000000000000055 /* RuntimeSupervisor.swift in Sources */,
 				FB0000000000000000000056 /* MonitorViewController.swift in Sources */,
 				FB000000000000000000005A /* AdaptiveH264MjpegPlayer.swift in Sources */,
@@ -767,6 +781,8 @@
 				F90000000000000000000039 /* CallRevisionLifecycle.swift in Sources */,
 				F90000000000000000000027 /* AdminPinViewController.swift in Sources */,
 				F90000000000000000000021 /* CoreBridge.swift in Sources */,
+				F900000000000000000000C0 /* CoreEventDispatchGate.swift in Sources */,
+				F900000000000000000000C1 /* ConfigBatchFallbackPolicy.swift in Sources */,
 				F90000000000000000000035 /* RuntimeSupervisor.swift in Sources */,
 				AF0000000000000000000003 /* KeepaliveClient.swift in Sources */,
 				AF0000000000000000000006 /* MainRunLoopHangSentinel.swift in Sources */,

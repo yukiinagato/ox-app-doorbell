@@ -1,0 +1,10 @@
+== configure ios5-armv7-pjsip-off (build id: review-20260922-c03) ==
+-- PJSIP: disabled (using the sipctl stub)
+-- Configuring done (0.2s)
+-- Generating done (0.0s)
+-- Build files have been written to: /Users/ox/Documents/project/app-doorbell/build/ios-compat/ios5-armv7-pjsip-off
+== build core ==
+[ 25%] Built target db_third_party
+[100%] Built target doorbell_core
+artifact: /Users/ox/Documents/project/app-doorbell/build/ios-compat/artifacts/ios5-armv7-pjsip-off/libdoorbell_all.a
+67551d389488a0f1155c7c1a861d1eef9cf66324f69ecbb8ab6c464511a4839a  /Users/ox/Documents/project/app-doorbell/build/ios-compat/artifacts/ios5-armv7-pjsip-off/libdoorbell_all.a

@@ -558,6 +558,91 @@ TEST_CASE("video_track: a late subscriber receives the cached keyframe and reque
   CHECK(track.stats().keyframe_requests == 1);
 }
 
+TEST_CASE("[V01] VideoTrack merges in-flight recovery requests and counts each discarded fragment") {
+  VideoTrack track;
+  track.setEnabled(true);
+  const Bytes sps = makeSps(80, 45, 0), pps = makePps();
+  const Bytes idr = annexb({sps, pps, makeSlice(true, 16)});
+  const Bytes delta = annexb({makeSlice(false, 16)});
+  track.push(idr.data(), idr.size(), true, 1000);
+
+  auto first = track.subscribe();
+  auto second = track.subscribe();
+  CHECK(track.takeKeyframeRequest());
+  CHECK_FALSE(track.takeKeyframeRequest());
+  bool ended = false;
+  REQUIRE_FALSE(first->pull(0, &ended).empty());
+  REQUIRE_FALSE(first->pull(0, &ended).empty());
+  REQUIRE_FALSE(second->pull(0, &ended).empty());
+  REQUIRE_FALSE(second->pull(0, &ended).empty());
+
+  Bytes first_fresh = annexb({makeSlice(true, 16)});
+  track.push(first_fresh.data(), first_fresh.size(), false, 1040);
+  REQUIRE_FALSE(first->pull(0, &ended).empty());
+  REQUIRE_FALSE(second->pull(0, &ended).empty());
+
+  for (int i = 0; i < 3; ++i)
+    track.push(delta.data(), delta.size(), false, 1080 + i * 40);
+  CHECK(first->pull(0, &ended).empty());
+  CHECK(track.takeKeyframeRequest());
+  CHECK(second->pull(0, &ended).empty());
+  CHECK_FALSE(track.takeKeyframeRequest());
+
+  Bytes recovery = annexb({makeSlice(true, 16)});
+  track.push(recovery.data(), recovery.size(), false, 1240);
+  CHECK_FALSE(first->pull(0, &ended).empty());
+
+  track.push(delta.data(), delta.size(), false, 1280);
+  track.push(delta.data(), delta.size(), false, 1320);
+  CHECK(first->pull(0, &ended).empty());
+  CHECK(track.takeKeyframeRequest());
+}
+
+TEST_CASE("[V01] VideoTrack counts every undisplayed fragment once per reader") {
+  VideoTrack track;
+  track.setEnabled(true);
+  const Bytes sps = makeSps(80, 45, 0), pps = makePps();
+  const Bytes idr = annexb({sps, pps, makeSlice(true, 16)});
+  const Bytes delta = annexb({makeSlice(false, 16)});
+  auto reader = track.subscribe();
+  track.push(idr.data(), idr.size(), true, 1000);
+  bool ended = false;
+  REQUIRE_FALSE(reader->pull(0, &ended).empty());
+  REQUIRE_FALSE(reader->pull(0, &ended).empty());
+  for (int i = 0; i < 3; ++i)
+    track.push(delta.data(), delta.size(), false, 1040 + i * 40);
+  Bytes recovery = annexb({makeSlice(true, 16)});
+  track.push(recovery.data(), recovery.size(), false, 1160);
+  REQUIRE_FALSE(reader->pull(0, &ended).empty());
+  CHECK(track.stats().dropped_forward == 3);
+  CHECK(reader->pull(0, &ended).empty());
+  CHECK(track.stats().dropped_forward == 3);
+}
+
+TEST_CASE("[B3] VideoTrack replaces the init segment after a PPS-only update") {
+  VideoTrack track;
+  track.setEnabled(true);
+  const Bytes sps = makeSps(80, 45, 0), pps = makePps();
+  const Bytes idr = annexb({sps, pps, makeSlice(true, 16)});
+  auto old_reader = track.subscribe();
+  track.push(idr.data(), idr.size(), true, 1000);
+  bool ended = false;
+  Bytes old_init = old_reader->pull(0, &ended);
+  REQUIRE_FALSE(old_init.empty());
+
+  Bytes changed_pps = pps;
+  changed_pps.push_back(0);
+  Bytes pps_update = annexb({changed_pps});
+  track.push(pps_update.data(), pps_update.size(), false, 1040);
+  CHECK(old_reader->pull(0, &ended).empty());
+  CHECK(ended);
+
+  auto new_reader = track.subscribe();
+  Bytes new_init = new_reader->pull(0, &ended);
+  REQUIRE_FALSE(new_init.empty());
+  CHECK(new_init != old_init);
+}
+
 TEST_CASE("video_track: ignores pushes while the H.264 track is disabled") {
   VideoTrack track;
   Bytes sps = makeSps(80, 45, 0), pps = makePps();

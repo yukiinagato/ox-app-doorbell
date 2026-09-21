@@ -67,8 +67,23 @@
     if (!isFinite(expires) || expires <= 0 || !isFinite(now)) return 0;
     return Math.max(1, expires - now);
   }
+  function projectDoor(stateDoor, callInfoDoor) {
+    stateDoor = stateDoor || {}; callInfoDoor = callInfoDoor || {};
+    return { id: stateDoor.id || "", label: stateDoor.label || "",
+      extension: callInfoDoor.extension || "", station: callInfoDoor.station || "",
+      online: callInfoDoor.online !== false,
+      source_node_id: callInfoDoor.source_node_id || stateDoor.source_node_id || "",
+      stream_mjpeg: callInfoDoor.stream_mjpeg || stateDoor.stream_mjpeg || "",
+      stream_mp4: callInfoDoor.stream_mp4 || stateDoor.stream_mp4 || "",
+      playback_profile: callInfoDoor.playback_profile || stateDoor.playback_profile || null,
+      calling: stateDoor.calling === true, call_id: stateDoor.call_id || "",
+      call_state: stateDoor.call_state || "", stage_revision: Number(stateDoor.stage_revision) || 0,
+      visitor_lang: stateDoor.visitor_lang || "", dialog_owner: stateDoor.dialog_owner || "",
+      expires_at_ms: Number(stateDoor.expires_at_ms) || 0,
+      recovery_required: stateDoor.recovery_required === true };
+  }
   return { flowMode: flowMode, form: form, pressForm: pressForm, cancelForm: cancelForm,
            purposeForm: purposeForm, recoveryForm: recoveryForm, lifecycleForm: lifecycleForm,
            mergeState: mergeState, residentDisposition: residentDisposition,
-           deadlineDelay: deadlineDelay };
+           deadlineDelay: deadlineDelay, projectDoor: projectDoor };
 });

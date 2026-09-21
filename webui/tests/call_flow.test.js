@@ -49,4 +49,11 @@ assert.strictEqual(C.deadlineDelay(61000, 1000), 60000);
 assert.strictEqual(C.deadlineDelay(999, 1000), 1);
 assert.strictEqual(C.deadlineDelay(0, 1000), 0);
 
+const projected = C.projectDoor({ id: "front", recovery_required: true, calling: true,
+  call_id: "call-a", stage_revision: 3 }, { station: "https://station" });
+assert.strictEqual(projected.recovery_required, true);
+assert.strictEqual(projected.call_id, "call-a");
+assert.strictEqual(C.projectDoor({ id: "front", recovery_required: "true" }, {}).recovery_required,
+                   false, "non-boolean recovery flags must not claim a recovery lifecycle");
+
 console.log("call flow tests: ok");
